@@ -215,6 +215,10 @@ export async function POST(request) {
       refund_montant: refundMontant,
       refund_error: refundError,
       bon_rendu: arr(bonRendu),
+      // 🔴 ET LE NOMBRE DE BONS (01/09). Cette réponse est ce que le tableau de
+      // bord repasse à `/api/emails/rdv-annule` : sans ce compte, l'email
+      // annonce « sur ton bon » alors que trois bons ont été recrédités.
+      nb_bons: lignesBonsDe(rdv).length + lignesBonsDe(commandeLiee || {}).length,
       recompense_rendue: arr(recompenseRendue),
       produits_montant: produitsPayesCarte,
     })

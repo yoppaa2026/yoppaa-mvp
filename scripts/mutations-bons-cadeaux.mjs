@@ -1232,6 +1232,53 @@ const MUTATIONS = [
     banc: 'verif:bons', fichier: 'lib/bons-cadeaux-server.js',
     de: '    if (!res.ok) return { ok: false, status: 400, error: res.error, bon_refuse: true }',
     vers: '    if (!res.ok) continue' },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LES EMAILS QUI DISENT CE QUI REVIENT (Alex, 01/09, commande #CC2)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Son email d annulation annoncait « ta recompense de 5,00 EUR t est rendue »
+  // et NE DISAIT PAS UN MOT des 145 EUR revenus sur ses trois bons. L argent
+  // etait bel et bien recredite : c est l email qui se taisait.
+  { nom: '🔴 l’email de commande annulée se retait sur les bons rendus',
+    banc: 'verif:livraison', fichier: 'lib/resend.js',
+    de: '    retours.push(`<strong>${euros(bonMnt)}</strong> ${plusieurs ? \'sont recrédités sur tes\' : \'sont recrédités sur ton\'} ${motBon}, utilisables dès maintenant.`)',
+    vers: '    void bonMnt' },
+
+  // 🔴 LE PLURIEL. « ton bon gourmand » devant TROIS bons : le Yopper en
+  // cherche un, il en a trois, et le compte ne tombe jamais juste.
+  // ⚠️ L ANCRE PORTE LA LIGNE SUIVANTE, ET CE N EST PAS DU CONFORT. Ecrite
+  // seule, `  const plusieurs = Number(nb_bons) > 1` se retrouvait AUSSI a
+  // l interieur de la ligne indentee du gabarit RENDEZ-VOUS, quatre cents
+  // lignes plus haut : le harnais mutait l autre gabarit, et le banc de ce
+  // gabarit-ci restait vert. Une ancre qui matche deux endroits ne mesure pas
+  // celui qu on croit.
+  { nom: '🔴 la commande annulée redit « ton bon » devant trois bons',
+    banc: 'verif:livraison', fichier: 'lib/resend.js',
+    de: '  const plusieurs = Number(nb_bons) > 1\n  const motBon = libelleBon(commercant_categorie, { pluriel: plusieurs })',
+    vers: '  const plusieurs = false\n  const motBon = libelleBon(commercant_categorie, { pluriel: plusieurs })' },
+
+  { nom: '🔴 la route d’annulation ne compte plus les bons',
+    banc: 'verif:livraison', fichier: 'app/api/emails/commande-annulee/route.js',
+    de: '        fidelite_remise, bon_cadeau_montant, bons_utilises,',
+    vers: '        fidelite_remise, bon_cadeau_montant,' },
+
+  // 🔴 ET LE FRERE COTE RENDEZ-VOUS, dont la phrase existait depuis le 29/08
+  // mais restait au singulier.
+  { nom: '🔴 le rendez-vous annulé redit « ton bon » devant trois bons',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/resend.js',
+    de: '          const plusieurs = Number(nb_bons) > 1',
+    vers: '          const plusieurs = false' },
+
+  { nom: '🔴 le no-show redit « ton bon » devant trois bons',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/resend.js',
+    de: '  const plusieursBons = Number(nb_bons) > 1',
+    vers: '  const plusieursBons = false' },
+
+  { nom: '🔴 la route du no-show ne charge plus la liste des bons',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/emails/rdv-no-show/route.js',
+    de: '        client_email, client_prenom, bons_utilises,',
+    vers: '        client_email, client_prenom,' },
 ]
 
 function lancer(banc) {

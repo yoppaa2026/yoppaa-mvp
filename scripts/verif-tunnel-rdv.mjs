@@ -789,6 +789,22 @@ for (const chemin of [
   verifie('l’email annonce ce qui revient sur la carte', html.includes('43,80'))
   verifie('l’email annonce le bon recrédité', html.includes('35,00') && /bon cadeau/i.test(html))
   verifie('et il le dit utilisable tout de suite', /dès maintenant/i.test(html))
+  // ⚠️ UN SEUL BON RESTE AU SINGULIER : « tes bons » devant un seul est aussi
+  // faux que l'inverse.
+  verifie('un seul bon reste au singulier', /sur ton bon cadeau/.test(html) && !/tes bons/.test(html))
+
+  // 🔴 ET LA PHRASE SE MET AU PLURIEL (01/09). Un rendez-vous peut être couvert
+  // par cinq bons : « sur ton bon cadeau » en annonce un, le Yopper en cherche
+  // un, et croit avoir perdu les autres.
+  const troisBons = emailRdvAnnule({
+    yopper_prenom: 'Alexandre', commercant_nom: 'Ciseaux et Soins', commercant_slug: 'ciseaux',
+    prestation_nom: 'Coupe femme', date_rdv: '2026-08-31', heure_debut: '11:30',
+    acompte_paye: false, acompte_montant: 0, refund_en_cours: true, raison_annulation: 'yopper',
+    refund_montant: 0, bon_rendu: 145, nb_bons: 3,
+  })
+  verifie('🔴 trois bons recrédités se disent au PLURIEL',
+    /sur tes bons cadeaux/.test(troisBons), troisBons.slice(0, 0))
+  verifie('et le montant annoncé est la SOMME des trois', troisBons.includes('145,00'))
 
   // Le client garde ses produits : on lui dit qu'ils l'attendent.
   const garde = emailRdvAnnule({
@@ -1281,6 +1297,26 @@ for (const chemin of [
   verifie('et la récompense avec', html.includes('10,00') && /fidélité/.test(html))
   // ⚠️ IL N'ANNONCE JAMAIS LE MONTANT POSÉ, qui n'est ni l'un ni l'autre.
   verifie('le montant posé de 40 € n’apparaît nulle part', !html.includes('40,00'), 'bon_garde + bon_restitue')
+
+  // 🔴 ET LES DEUX PHRASES SE METTENT AU PLURIEL (01/09). Ce gabarit dit ce qui
+  // reste acquis ET ce qui revient : les deux parlaient « du bon », et un
+  // rendez-vous peut en porter cinq.
+  const multi = emailRdvNoShow({
+    yopper_prenom: 'Alexandre', commercant_nom: 'Ciseaux et Soins',
+    prestation_nom: 'Coupe', date_rdv: '2026-09-02', heure_debut: '15:30',
+    acompte_paye: false, acompte_montant: 0,
+    bon_garde: 25, bon_restitue: 120, nb_bons: 3,
+  })
+  verifie('🔴 no-show : ce qui reste acquis se dit au pluriel', /de tes bons cadeaux/.test(multi))
+  verifie('🔴 no-show : ce qui revient aussi', /sur tes bons cadeaux/.test(multi))
+  verifie('et un seul bon reste au singulier des deux côtés',
+    /de ton bon cadeau/.test(html) && /sur ton bon cadeau/.test(html) && !/tes bons/.test(html))
+  verifie('la route du no-show relaie le nombre de bons',
+    /nb_bons:\s+\(rdv\.bons_utilises \|\| \[\]\)\.length/.test(lireCode('app/api/emails/rdv-no-show/route.js')))
+  // ⚠️ ET ELLE CHARGE LA COLONNE : sans elle le compte vaut zéro, donc le
+  // singulier, en silence. C'est LE défaut le plus fréquent du projet.
+  verifie('et elle charge bons_utilises dans son select',
+    /client_email, client_prenom, bons_utilises/.test(lireCode('app/api/emails/rdv-no-show/route.js')))
   const rien = emailRdvNoShow({
     yopper_prenom: 'Alexandre', commercant_nom: 'X',
     prestation_nom: 'Coupe', date_rdv: '2026-09-02', heure_debut: '15:30',

@@ -46,7 +46,7 @@ export async function POST(request) {
       .from('rdv_reservations')
       .select(`
         id, date_rdv, heure_debut, acompte_paye_en_ligne, acompte_montant,
-        client_email, client_prenom,
+        client_email, client_prenom, bons_utilises,
         commercant:commercants(nom, slug, categorie),
         prestation:rdv_prestations(nom)
       `)
@@ -73,6 +73,10 @@ export async function POST(request) {
         heure_debut:      rdv.heure_debut,
         acompte_paye:     !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),
         acompte_montant:  rdv.acompte_montant,
+        // 🔴 COMBIEN DE BONS ONT PAYÉ (01/09) : ce gabarit dit ce qui reste
+        // acquis ET ce qui revient. Les deux phrases parlent « du bon », et un
+        // rendez-vous peut en porter cinq.
+        nb_bons:          (rdv.bons_utilises || []).length,
         // 🔴 LE BON CADEAU RESTE CHEZ LE COMMERÇANT LUI AUSSI, et rien ne le
         // disait. Sur un rendez-vous dont l'acompte vaut zéro parce qu'un bon
         // de 40 € a payé la prestation, le bloc entier disparaissait : le

@@ -273,6 +273,10 @@ export async function POST(request) {
           // pas fini, aucune erreur, juste une ligne qui ne sort pas.
           fidelite_remise:    cmd.fidelite_remise,
           bon_cadeau_montant: cmd.bon_cadeau_montant,
+          // 🔴 ET COMBIEN DE BONS (Alex, 01/09). Sa commande #CC2 était payée
+          // par TROIS bons, et l'email disait « ton bon gourmand ». Il en
+          // cherche un, il en a trois : le compte ne tombe jamais juste.
+          nb_bons:            (cmd.bons_utilises || []).length,
           refund_manuel:   refundManuel,
           paye_en_ligne:   !!cmd.paye_en_ligne,
         })
@@ -306,6 +310,7 @@ export async function POST(request) {
           heure_fin:       details?.creneau?.heure_fin,
           fidelite_remise:    cmd.fidelite_remise,
           bon_cadeau_montant: cmd.bon_cadeau_montant,
+          nb_bons:            (cmd.bons_utilises || []).length,
           refund_manuel:   refundManuel,
           paye_en_ligne:   !!cmd.paye_en_ligne,
         })

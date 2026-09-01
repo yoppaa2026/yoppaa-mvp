@@ -58,7 +58,7 @@ export async function POST(request) {
       .from('rdv_reservations')
       .select(`
         id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, duree_minutes,
-        prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant,
+        prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant, bons_utilises,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
         annulation_token, lieu_id, lieu_libelle, lieu_adresse,
         commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques, categorie),
@@ -129,6 +129,7 @@ export async function POST(request) {
           // réclame le tarif plein. Le gabarit la retranche via `soldeRdv`.
           fidelite_remise:         rdv.fidelite_remise || 0,
       bon_cadeau_montant:      rdv.bon_cadeau_montant || 0,
+      nb_bons:                 (rdv.bons_utilises || []).length,
           delai_annulation_heures: rdv.commercant?.rdv_delai_annulation_heures || 24,
           annulation_token:        rdv.annulation_token,
           praticien_prenom:        rdv.praticien?.prenom || null,

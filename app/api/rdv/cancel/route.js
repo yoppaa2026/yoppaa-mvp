@@ -380,6 +380,10 @@ export async function POST(request) {
           // et rien ne le disait.
           refund_montant:    refundMontant != null ? refundMontant : (refundError ? null : 0),
           bon_rendu:         bonRendu,
+          // 🔴 ET LE NOMBRE DE BONS, pour que la phrase se mette au pluriel. Un
+          // rendez-vous peut en porter cinq : « sur ton bon » en annonce un, le
+          // Yopper en cherche un, et croit avoir perdu les autres.
+          nb_bons:           lignesBonsDe(rdv).length + (gardeSesProduits ? 0 : lignesBonsDe(commandeLiee || {}).length),
           recompense_rendue: recompenseRendue,
           produits_gardes:   gardeSesProduits,
           produits_montant:  produitsPayesCarte,

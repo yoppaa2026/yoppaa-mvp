@@ -768,11 +768,69 @@ verifier('et range la commande du bon côté',
   // ⚠️ SA SEULE QUESTION : « et ma récompense ? » Une récompense se rend en
   // récompense, jamais en argent, et le taire la ferait croire perdue.
   verifier('le Yopper apprend que sa récompense lui revient', mailYop.includes('t’est rendue'))
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 ET SES BONS ? L'EMAIL SE TAISAIT SUR 145 € (Alex, 01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Sur sa commande #CC2 : 156 €, dont 5 € de récompense et 145 € sur TROIS
+  // bons. L'email annonçait « ta récompense de 5,00 € t'est rendue » et **pas
+  // un mot des 145 €**. L'argent était bel et bien recrédité : c'est l'email
+  // qui se taisait, et un Yopper qui ne voit pas revenir 145 € appelle.
+  //
+  // ⚠️ C'ÉTAIT LE FRÈRE NON TRAITÉ. L'email d'annulation d'un RENDEZ-VOUS dit
+  // cette phrase depuis le 29/08 ; celui de la commande ne l'a jamais reçue.
+  const cas = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'Alexandre', commercant_nom: 'Kebabistro', numero_commande: 'CC2',
+    total: 156, fidelite_remise: 5, bon_cadeau_montant: 145, nb_bons: 3,
+    commercant_categorie: 'alimentaire',
+  })
+  verifier('🔴 le Yopper apprend que ses bons lui reviennent', /145,00\s*€<\/strong> sont recrédités/.test(cas), cas.slice(0, 0))
+  verifier('🔴 et la phrase se met au PLURIEL sur trois bons',
+    /sur tes bons gourmands/.test(cas))
+  verifier('le montant récapitulé se met au pluriel lui aussi',
+    /avec tes bons gourmands/.test(cas))
+  verifier('la récompense reste annoncée à côté', cas.includes('t’est rendue'))
+  verifier('et le bloc s\'intitule « ce qui te revient »', /Ce qui te revient/.test(cas))
+  // ⚠️ ET IL RESTE JUSTE AU SINGULIER : un seul bon ne doit pas devenir « tes ».
+  const seul = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'CC3',
+    total: 50, bon_cadeau_montant: 20, nb_bons: 1, commercant_categorie: 'alimentaire',
+  })
+  verifier('un seul bon reste au singulier',
+    /sur ton bon gourmand/.test(seul) && !/tes bons/.test(seul))
+  // ⚠️ ET LE MÉTIER DÉCIDE DU MOT : « bon cadeau » hors alimentaire.
+  const coiffeur = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'CC4',
+    total: 50, bon_cadeau_montant: 20, nb_bons: 2, commercant_categorie: 'coiffeur',
+  })
+  verifier('le métier décide du mot, au pluriel aussi', /sur tes bons cadeaux/.test(coiffeur))
+  // ⚠️ SANS BON, AUCUNE LIGNE : « 0,00 € recrédités » se lirait comme une perte.
+  const sansBon = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'CC5', total: 50, fidelite_remise: 5,
+  })
+  verifier('sans bon, aucune ligne de bon', !/recrédités/.test(sansBon))
+  const sansRien = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'CC6', total: 50,
+  })
+  verifier('sans avantage, pas de bloc « ce qui te revient »', !/Ce qui te revient/.test(sansRien))
+
   // ⚠️ ET LA ROUTE DOIT CHARGER LES COLONNES, sinon les gabarits se taisent
-  // sans lever la moindre erreur.
+  // sans lever la moindre erreur. C'est LE défaut le plus fréquent du projet.
   const routeAnn = lire('app/api/emails/commande-annulee/route.js')
   verifier('la route d\'annulation charge la remise et le bon',
     /fidelite_remise, bon_cadeau_montant/.test(routeAnn))
+  verifier('🔴 et la LISTE des bons, pour compter combien il y en a',
+    /bon_cadeau_montant, bons_utilises/.test(routeAnn))
+  // 🔴 LES DEUX ROUTES D'ANNULATION PASSENT LE COMPTE. Elles composent chacune
+  // leurs appels : le 30/08, une correction n'en avait touché qu'une, et le
+  // gabarit se taisait en silence de l'autre côté.
+  for (const f of ['app/api/emails/commande-annulee/route.js', 'app/api/commande/cancel/route.js']) {
+    const src = lire(f)
+    verifier(`${f} : passe le nombre de bons aux DEUX gabarits`,
+      (src.match(/nb_bons:\s+\(cmd\.bons_utilises \|\| \[\]\)\.length/g) || []).length === 2,
+      `${(src.match(/nb_bons:/g) || []).length} occurrences`)
+  }
 }
 
 

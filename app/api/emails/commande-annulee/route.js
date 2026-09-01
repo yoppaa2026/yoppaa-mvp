@@ -47,7 +47,7 @@ export async function POST(request) {
       .select(`
         id, numero_commande, numero_prefixe, total, date_commande, paye_en_ligne,
         client_email, client_nom,
-        fidelite_remise, bon_cadeau_montant,
+        fidelite_remise, bon_cadeau_montant, bons_utilises,
         commercant:commercants(id, nom, email, notif_mode, categorie),
         creneau:creneaux(heure_debut, heure_fin),
         articles:commande_articles(quantite, prix_unitaire, prix_total, option_libelle, article:articles(nom))
@@ -82,6 +82,10 @@ export async function POST(request) {
           // personne ne voit d'erreur. Le select ci-dessus les charge.
           fidelite_remise:    cmd.fidelite_remise,
           bon_cadeau_montant: cmd.bon_cadeau_montant,
+          // 🔴 COMBIEN DE BONS, pour que la phrase se mette au pluriel. Sans ce
+          // nombre, une commande payée par trois bons annonce « ton bon » : le
+          // Yopper en cherche un seul et croit avoir perdu les deux autres.
+          nb_bons:            (cmd.bons_utilises || []).length,
           refund_ok:       refund_status === 'succeeded' || refund_status === 'pending',
           refund_manuel:   refundManuel,
           paye_en_ligne:   !!cmd.paye_en_ligne,
@@ -115,6 +119,7 @@ export async function POST(request) {
           heure_fin:       cmd.creneau?.heure_fin,
           fidelite_remise:    cmd.fidelite_remise,
           bon_cadeau_montant: cmd.bon_cadeau_montant,
+          nb_bons:            (cmd.bons_utilises || []).length,
           refund_manuel:   refundManuel,
           paye_en_ligne:   !!cmd.paye_en_ligne,
         })

@@ -1811,6 +1811,10 @@ export default function Dashboard() {
         refund_montant: j.refund_montant,
         refund_en_cours: !!j.refund_id && !j.refund_error,
         bon_rendu: j.bon_rendu,
+        // 🔴 AJOUTÉ LE 01/09 : combien de bons ont payé. Sans ce compte, l'email
+        // écrit « sur ton bon » là où trois bons viennent d'être recrédités, et
+        // le Yopper en cherche un seul.
+        nb_bons: j.nb_bons,
         // 🔴 AJOUTÉ LE 30/08 : la récompense revenait sur la carte du Yopper
         // sans que rien ne le lui dise. Frère du bon cadeau, corrigé la veille.
         recompense_rendue: j.recompense_rendue,

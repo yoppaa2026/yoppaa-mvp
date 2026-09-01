@@ -26,6 +26,9 @@ export async function POST(request) {
     const {
       rdv_id, raison_annulation = 'commercant', refund_en_cours = false,
       refund_montant = null, bon_rendu = 0, recompense_rendue = 0, produits_montant = 0,
+      // 🔴 COMBIEN DE BONS ONT PAYÉ (01/09), pour le pluriel de la phrase du
+      // retour. Absent, le gabarit reste au singulier : c'est faux dès deux.
+      nb_bons = 0,
     } = body
     if (!rdv_id) return NextResponse.json({ ok: false, error: 'rdv_id requis' }, { status: 400 })
 
@@ -102,6 +105,7 @@ export async function POST(request) {
       raison_annulation,
       refund_montant,
       bon_rendu,
+      nb_bons,
       // 🔴 AJOUTÉE LE 30/08 : la récompense revenait sans que rien ne le dise.
       // Frère exact du bon cadeau, corrigé la veille et jamais porté à côté.
       recompense_rendue,

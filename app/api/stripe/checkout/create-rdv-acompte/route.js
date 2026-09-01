@@ -26,8 +26,8 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
-import { chargerBonValide } from '@/lib/bons-cadeaux-server'
-import { normaliserCodeBon } from '@/lib/bons-cadeaux'
+import { chargerBonsValides } from '@/lib/bons-cadeaux-server'
+import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { verdictForfait } from '@/lib/garde-forfait'
@@ -46,7 +46,9 @@ export async function POST(request) {
       fidelite_recompense_id,
       // ⚠️ MÊME RÈGLE : un code envoyé n'autorise rien, il est revalidé plus bas
       // contre le commerçant, le statut, l'expiration et le solde.
+      // 🔴 UNE LISTE DEPUIS LE 01/09, l'ancien champ au singulier reste accepté.
       bon_cadeau_code,
+      bons_cadeaux_codes = null,
     } = body
 
     // Validations basiques
@@ -163,20 +165,20 @@ export async function POST(request) {
     // commerçant, le statut, l'expiration et le solde. Le montant réellement
     // déduit est recalculé, jamais celui que l'écran a annoncé.
     // « L'écran calcule, le serveur décide. »
-    let bonCadeau = null
     let remiseBonEUR = 0
     const baseApresRecompense = Math.round((prixBase - remiseRecompenseEUR) * 100) / 100
-    if (bon_cadeau_code) {
-      const codeBon = normaliserCodeBon(bon_cadeau_code)
-      if (!codeBon) {
-        return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
-      }
-      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
-      if (!resBon.ok) {
-        return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
-      }
-      bonCadeau = resBon.bon
+    // ⚠️ MÊME VALIDATION QUE LES TROIS AUTRES ROUTES, par le même module.
+    const resBons = await chargerBonsValides(supabase, {
+      codes: bons_cadeaux_codes,
+      codeUnique: bon_cadeau_code,
+      commercant_id: commercant.id,
+      categorie: commercant.categorie,
+    })
+    if (!resBons.ok) {
+      return NextResponse.json({ ok: false, error: resBons.error }, { status: resBons.status || 400 })
     }
+    const bonsValides = resBons.bons
+    const soldeBonTotal = bonsValides.reduce((s, b) => s + Number(b.solde || 0), 0)
 
     // ⚠️ LA VENTILATION VIT DANS UN SEUL MODULE DEPUIS LE 29/08, et cette route
     // s'en sert comme les deux autres. Ce même calcul était recopié à trois
@@ -190,9 +192,15 @@ export async function POST(request) {
       acompteEnLigne: true,
       totalProduits: 0,
       remiseRecompense: remiseRecompenseEUR,
-      soldeBon: bonCadeau ? Number(bonCadeau.solde) : 0,
+      soldeBon: soldeBonTotal,
     })
-    remiseBonEUR = vent.bonSurPresta
+    // ⚠️ QUI PAIE QUOI. Sans produits ici : tout tombe sur la prestation.
+    const partsBons = repartirBonsRdv(bonsValides, { surPresta: vent.bonSurPresta, surProduits: 0 })
+    const bonsUtilises = partsBons.presta.map(l => ({ id: l.id, montant: l.montant }))
+    // ⚠️ `bon_cadeau_id` GARDE LE PREMIER BON SERVI pour les lectures qui
+    // existent déjà. Le débit, lui, se fait depuis la LISTE, au webhook.
+    const bonCadeau = bonsValides.find(b => b.id === bonsUtilises[0]?.id) || null
+    remiseBonEUR = partsBons.totalPresta
     const prixNet = vent.prestaNette
     const acompteMontant = vent.acompte                                      // EUR, 2 décimales
     const acompteCents = Math.round(acompteMontant * 100)                    // centimes pour Stripe
@@ -270,9 +278,17 @@ export async function POST(request) {
             // ça le webhook créerait le rendez-vous au tarif plein et ne
             // débiterait jamais le bon : le client aurait payé un acompte
             // réduit, et le comptoir lui réclamerait la différence.
-            ...(bonCadeau ? {
-              bon_cadeau_id: String(bonCadeau.id),
+            // 🔴 ET LA LISTE VOYAGE AVEC, parce que le rendez-vous N'EXISTE PAS
+            // ENCORE : contrairement à une commande, il n'y a aucune ligne en
+            // base où lire `bons_utilises`. Les métadonnées sont le SEUL canal,
+            // et sans elles le webhook ne débiterait que le premier bon.
+            //
+            // ⚠️ CINQ BONS TIENNENT LARGEMENT DANS LES 500 CARACTÈRES d'une
+            // valeur Stripe : c'est aussi la raison d'être de la borne à cinq.
+            ...(bonsUtilises.length > 0 ? {
+              bon_cadeau_id: String(bonCadeau?.id || ''),
               bon_cadeau_montant: String(remiseBonEUR),
+              bons_utilises: JSON.stringify(bonsUtilises),
             } : {}),
             client_email,
             client_prenom,

@@ -33,15 +33,14 @@
 // règle, écrite dans `ventilerTunnelRdv`.
 
 import { NextResponse } from 'next/server'
-import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { verdictForfait } from '@/lib/garde-forfait'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
-import { chargerBonValide } from '@/lib/bons-cadeaux-server'
-import { normaliserCodeBon } from '@/lib/bons-cadeaux'
+import { chargerBonsValides } from '@/lib/bons-cadeaux-server'
+import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { creerReservationRdv, appliquerAvantagesRdv } from '@/lib/rdv-creation-server'
 import { normaliserEmail } from '@/lib/email-normalise'
@@ -83,7 +82,11 @@ export async function POST(request) {
       // ⚠️ DÉSIGNÉS PAR LE CLIENT, DONC REVÉRIFIÉS INTÉGRALEMENT plus bas. Un
       // identifiant envoyé n'autorise rien, un code envoyé n'autorise rien.
       fidelite_recompense_id = null,
+      // 🔴 UNE LISTE DEPUIS LE 01/09, et l'ancien champ au singulier reste
+      // accepté : les écrans et le serveur ne se déploient pas à la seconde
+      // près, et une réservation déjà partie ne doit pas se faire refuser.
       bon_cadeau_code = null,
+      bons_cadeaux_codes = null,
     } = body || {}
 
     if (!commercant_id || !prestation_id || !DATE.test(String(date_rdv)) || !HEURE.test(String(heure_debut))) {
@@ -216,14 +219,19 @@ export async function POST(request) {
       recompense = resRec.recompense
     }
 
-    let bonCadeau = null
-    if (bon_cadeau_code) {
-      const codeBon = normaliserCodeBon(bon_cadeau_code)
-      if (!codeBon) return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
-      const resBon = await chargerBonValide(db, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
-      if (!resBon.ok) return NextResponse.json({ ok: false, error: resBon.error, bon_refuse: true }, { status: 400 })
-      bonCadeau = resBon.bon
+    // ⚠️ MÊME VALIDATION QUE LES TROIS AUTRES ROUTES DE PAIEMENT, par le même
+    // module : cinq au plus, doublon refusé, chaque code revalidé en base.
+    const resBons = await chargerBonsValides(db, {
+      codes: bons_cadeaux_codes,
+      codeUnique: bon_cadeau_code,
+      commercant_id: commercant.id,
+      categorie: commercant.categorie,
+    })
+    if (!resBons.ok) {
+      return NextResponse.json({ ok: false, error: resBons.error, bon_refuse: true }, { status: resBons.status || 400 })
     }
+    const bonsValides = resBons.bons
+    const soldeBonTotal = bonsValides.reduce((s, b) => s + Number(b.solde || 0), 0)
 
     // ─── LA VENTILATION, LA MÊME QUE PARTOUT ───────────────────────────────
     //
@@ -243,8 +251,17 @@ export async function POST(request) {
       acompteEnLigne,
       totalProduits: 0,
       remiseRecompense: remiseRecompenseEUR,
-      soldeBon: bonCadeau ? Number(bonCadeau.solde) : 0,
+      soldeBon: soldeBonTotal,
     })
+
+    // ⚠️ QUI PAIE QUOI, une fois que la ventilation a dit COMBIEN. Sans produits
+    // ici : tout ce que les bons couvrent tombe sur la prestation.
+    const partsBons = repartirBonsRdv(bonsValides, { surPresta: vent.bonSurPresta, surProduits: 0 })
+    const bonsUtilises = partsBons.presta.map(l => ({ id: l.id, montant: l.montant }))
+    // ⚠️ `bon_cadeau_id` GARDE LE PREMIER BON SERVI, pour les lectures qui
+    // existent déjà. Il ne sert plus JAMAIS au débit ni au recrédit : c'est
+    // `bons_utilises` qui fait foi, et lui seul connaît les cinq.
+    const bonCadeau = bonsValides.find(b => b.id === bonsUtilises[0]?.id) || null
 
     // 🔴 LA GARDE QUI FAIT TENIR TOUT LE RESTE. Si un acompte encaissable
     // subsiste, cette route N'EST PAS le bon chemin : le commerçant a demandé un
@@ -325,9 +342,13 @@ export async function POST(request) {
           fidelite_recompense_id: recompense.id,
           fidelite_remise: vent.recompenseSurPresta,
         } : {}),
-        ...(bonCadeau && vent.bonSurPresta > 0 ? {
-          bon_cadeau_id: bonCadeau.id,
-          bon_cadeau_montant: vent.bonSurPresta,
+        // ⚠️ `bon_cadeau_montant` PORTE LE TOTAL DES CINQ, jamais celui du
+        // premier : c'est lui que lisent l'export comptable, les emails et le
+        // solde à payer au comptoir. `bons_utilises` porte le détail.
+        ...(bonsUtilises.length > 0 ? {
+          bon_cadeau_id: bonCadeau?.id || null,
+          bon_cadeau_montant: partsBons.totalPresta,
+          bons_utilises: bonsUtilises,
         } : {}),
       },
     })
@@ -349,8 +370,7 @@ export async function POST(request) {
     const bilan = await appliquerAvantagesRdv(db, {
       rdvId: res.rdv.id,
       recompenseId: recompense?.id || null,
-      bonCadeauId: (bonCadeau && vent.bonSurPresta > 0) ? bonCadeau.id : null,
-      bonMontant: vent.bonSurPresta,
+      bonsUtilises,
     })
 
     return NextResponse.json({
@@ -374,7 +394,7 @@ export async function POST(request) {
         client_nom,
         client_telephone,
         fidelite_remise: recompense ? vent.recompenseSurPresta : 0,
-        bon_cadeau_montant: vent.bonSurPresta,
+        bon_cadeau_montant: partsBons.totalPresta,
         lieu_libelle: res.payload.lieu_libelle ?? null,
         lieu_adresse: res.payload.lieu_adresse ?? null,
       },
@@ -382,7 +402,7 @@ export async function POST(request) {
       // réellement déduit, et sur quoi il reste à payer au comptoir.
       avantages: {
         recompense: bilan.recompense ? vent.recompenseSurPresta : 0,
-        bon: bilan.bon ? vent.bonSurPresta : 0,
+        bon: bilan.bon ? partsBons.totalPresta : 0,
         solde_sur_place: vent.soldeSurPlace,
       },
     })

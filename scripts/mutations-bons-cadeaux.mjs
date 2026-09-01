@@ -70,17 +70,45 @@ const MUTATIONS = [
     de: '    const vent = ventilerTunnelRdv({',
     vers: '    const vent = calculMaison({' },
 
-  { nom: '🔴 tunnel PRODUITS : le bon n’est plus revalidé',
+  // ⚠️ RE-ANCREE LE 31/08 : l appel a recu la categorie du commerce.
+  // ⚠️ RE-ANCREE LE 01/09 : la validation a demenage dans le module partage
+  // `chargerBonsValides`, parce que le rendez-vous cumule desormais lui aussi
+  // et que QUATRE copies de la meme regle d argent auraient diverge.
+  { nom: '🔴 tunnel PRODUITS : les bons ne sont plus revalidés',
     banc: 'verif:bons', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    // ⚠️ RE-ANCREE LE 31/08 : l appel a recu la categorie du commerce, et
-    // l ancre litterale rendait TEXTE INTROUVABLE, c est-a-dire une NON-mesure.
-    de: '      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })',
-    vers: '      const resBon = { ok: true, bon: { id: bon_cadeau_code, solde: 999 } }' },
+    de: '    const resBons = await chargerBonsValides(supabase, {',
+    vers: '    const resBons = { ok: true, bons: [{ id: bon_cadeau_code, solde: 999 }] } || await chargerBonsValides(supabase, {' },
 
-  { nom: '🔴 tunnel PRODUITS : le bon ne part plus vers le webhook',
+  // 🔴 LA LISTE EST LE SEUL CANAL vers le webhook : le rendez-vous n existe pas
+  // encore, il n y a aucune ligne en base ou lire `bons_utilises`. Sans elle,
+  // le webhook ne debite QUE le premier bon, et les autres restent credites
+  // alors que leur porteur les a depenses.
+  { nom: '🔴 tunnel PRODUITS : seul le premier bon part vers le webhook',
     banc: 'verif:bons', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: '              bon_cadeau_id: String(bonCadeau.id),',
-    vers: '              bon_cadeau_ref: String(bonCadeau.id),' },
+    de: '              bons_utilises: JSON.stringify(bonsPresta),',
+    vers: '              bons_utilises: JSON.stringify(bonsPresta.slice(0, 1)),' },
+
+  { nom: '🔴 tunnel ACOMPTE : la liste des bons ne part plus vers le webhook',
+    banc: 'verif:bons', fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    de: '              bons_utilises: JSON.stringify(bonsUtilises),',
+    vers: '              bon_cadeau_montant: String(remiseBonEUR),' },
+
+  // 🔴 LES DEUX PARTS SORTENT DU MEME PARTAGE. Les calculer separement les
+  // laisserait se recouvrir : un bon de 50 EUR paierait 50 EUR de prestation ET
+  // 50 EUR de produits, soit 100 EUR pris sur un solde de 50.
+  { nom: '🔴 les deux parts se calculent séparément et se recouvrent',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '    const bonsProduits = partsBons.produits.map(l => ({ id: l.id, montant: l.montant }))',
+    vers: '    const bonsProduits = repartirBonsRdv(bonsValides, { surPresta: vent.bonSurProduits, surProduits: 0 }).presta.map(l => ({ id: l.id, montant: l.montant }))' },
+
+  // 🔴 « COUVERT » NE PEUT PAS S ACCROCHER A `bonCadeau`. Celui-ci est le
+  // premier bon servi SUR LA PRESTATION : quand les bons ne paient que les
+  // produits, il vaut `null` alors que des bons ont bien paye, et le rendez-vous
+  // entierement couvert repart au comptoir.
+  { nom: '🔴 « couvert » retombe sur le premier bon de la prestation',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '    const couvertSansPaiement = totalCents === 0 && (bonsValides.length > 0 || !!recompense)',
+    vers: '    const couvertSansPaiement = totalCents === 0 && (!!bonCadeau || !!recompense)' },
 
   { nom: '🔴 SÉCURITÉ : mes-bons lit l’adresse dans un PARAMÈTRE',
     banc: 'verif:bons', fichier: 'app/api/yopper/mes-bons/route.js',
@@ -91,15 +119,33 @@ const MUTATIONS = [
   // récompense : les trois chemins qui créent un rendez-vous font les deux
   // gestes par le même appel. La mutation suit, sinon elle mesurerait du code
   // que plus personne n'exécute.
-  { nom: '🔴 le bon d’un rendez-vous est débité en « commande »',
+  // ⚠️ RE-ANCREES LE 01/09 : le module debite maintenant une LISTE.
+  { nom: '🔴 les bons d’un rendez-vous sont débités en « commande »',
     banc: 'verif:bons', fichier: 'lib/rdv-creation-server.js',
-    de: "      const deb = await debiterBon(db, bonCadeauId, Number(bonMontant), { source: 'rdv', rdv_id: rdvId })",
-    vers: "      const deb = await debiterBon(db, bonCadeauId, Number(bonMontant), { source: 'commande', rdv_id: rdvId })" },
+    de: "      const deb = await debiterBons(db, lignesBons, { source: 'rdv', rdv_id: rdvId })",
+    vers: "      const deb = await debiterBons(db, lignesBons, { source: 'commande', rdv_id: rdvId })" },
+
+  // 🔴 SEUL LE PREMIER BON EST DEBITE. Les autres restent credites alors que
+  // leur porteur les a depenses : le commercant sert une prestation qu il n a
+  // encaissee qu en partie, et personne ne s en apercoit.
+  { nom: '🔴 le rendez-vous ne débite que le premier de ses bons',
+    banc: 'verif:bons', fichier: 'lib/rdv-creation-server.js',
+    de: '  const lignesBons = Array.isArray(bonsUtilises) ? bonsUtilises : []',
+    vers: '  const lignesBons = (Array.isArray(bonsUtilises) ? bonsUtilises : []).slice(0, 1)' },
 
   { nom: '🔴 le module cesse de LIRE le résultat du débit',
     banc: 'verif:bons', fichier: 'lib/rdv-creation-server.js',
-    de: "      if (!deb?.ok) console.error('[rdv/creation] débit bon cadeau KO', deb?.error, { rdvId })\n      else bilan.bon = true",
+    de: "      if (!deb?.ok) console.error('[rdv/creation] débit des bons KO', deb?.echecs, { rdvId })\n      else bilan.bon = true",
     vers: '      bilan.bon = true' },
+
+  // 🔴 LE REPLI SUR L ANCIENNE PAIRE. Des paiements partis AVANT ce
+  // deploiement arrivent APRES : leur session Stripe ne porte que
+  // `bon_cadeau_id`, et sans repli leur bon n est JAMAIS debite alors que le
+  // client a paye un acompte reduit.
+  { nom: '🔴 un paiement parti avant le cumul perd son bon',
+    banc: 'verif:bons', fichier: 'lib/rdv-creation-server.js',
+    de: '  if (meta?.bon_cadeau_id && Number(meta?.bon_cadeau_montant) > 0) {',
+    vers: '  if (false && meta?.bon_cadeau_id && Number(meta?.bon_cadeau_montant) > 0) {' },
 
   // ⚠️ ET LE WEBHOOK DOIT LUI PASSER LE BON REÇU DE STRIPE, sinon les deux
   // mutations ci-dessus mesurent du code qu'on appelle à vide.
@@ -108,10 +154,21 @@ const MUTATIONS = [
   // qu'elle est écrite ainsi. Elle neutralisait l'appel en gardant son NOM en
   // place : la garde cherchait le nom, elle ne voyait rien. Elle vide
   // maintenant l'ARGUMENT, ce qu'aucune recherche de mot ne peut ignorer.
-  { nom: '🔴 le webhook appelle le module sans lui passer le bon',
+  //
+  // ⚠️ RE-ANCREE LE 01/09 : le module prend une LISTE. L argument vide reste
+  // le bon moyen de mesurer, pour la meme raison qu en aout.
+  { nom: '🔴 le webhook appelle le module sans lui passer les bons',
     banc: 'verif:bons', fichier: 'app/api/stripe/webhook/route.js',
-    de: '      bonCadeauId: meta.bon_cadeau_id || null,',
-    vers: '      bonCadeauId: null,' },
+    de: '      bonsUtilises: champs.bons_utilises,',
+    vers: '      bonsUtilises: [],' },
+
+  // 🔴 ET LE RENDEZ-VOUS NAIT SANS SA LISTE. La colonne resterait vide, et
+  // l annulation ne rendrait pas un centime : c est le defaut du 29/08,
+  // « bon jamais recredite », sur toutes les reservations payees par Stripe.
+  { nom: '🔴 le rendez-vous naît sans la liste de ses bons',
+    banc: 'verif:bons', fichier: 'app/api/stripe/webhook/route.js',
+    de: '      bons_utilises: lignesBonsDeMeta(meta),',
+    vers: '      bons_utilises: [],' },
 
   { nom: '🔴 ni la récompense',
     banc: 'verif:bons', fichier: 'app/api/stripe/webhook/route.js',
@@ -168,10 +225,14 @@ const MUTATIONS = [
     de: '                                  {b.code}\n                                </span>',
     vers: '                                  {b.id}\n                                </span>' },
 
-  { nom: '🔴 le bloc informatif se met à débiter le bon',
+  // 🔴 CETTE MUTATION EST RESTÉE VERTE LE 01/09, et c'est la même leçon que le
+  // 30/08 : elle injectait `setBonChoisi(`, un nom que le tunnel n'emploie plus
+  // depuis qu'il cumule. Elle n'avait donc plus rien à faire tomber. Une
+  // mutation qui vise un nom mort ne mesure rien, elle rassure.
+  { nom: '🔴 le bloc informatif se met à retenir le bon',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
     de: '                              {mesBonsIci.map(b => (\n                                <span key={b.id}',
-    vers: '                              {mesBonsIci.map(b => (\n                                <span onClick={() => setBonChoisi(b)} key={b.id}' },
+    vers: '                              {mesBonsIci.map(b => (\n                                <span onClick={() => setBonsAppliques([b])} key={b.id}' },
 
   // 🔴 LA PHRASE IMPOSSIBLE : le bon éteint la prestation AVANT de déborder sur
   // les produits, donc « le reste soldera ta presta au comptoir » décrit un cas
@@ -186,10 +247,19 @@ const MUTATIONS = [
     de: 'acompte_montant, fidelite_remise, bon_cadeau_montant,',
     vers: 'acompte_montant, fidelite_remise,' },
 
-  { nom: '🔴 l’écran de rendez-vous n’envoie plus le code du bon',
+  // ⚠️ RE-ANCREE LE 01/09 : le tunnel rendez-vous envoie une LISTE de codes.
+  { nom: '🔴 l’écran de rendez-vous n’envoie plus les codes des bons',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '              ...(bonChoisi ? { bon_cadeau_code: bonChoisi.code } : {}),',
-    vers: '              ...(bonChoisi ? { bon_choisi: bonChoisi.code } : {}),' },
+    de: '              ...(bonsAppliques.length > 0 ? { bons_cadeaux_codes: bonsAppliques.map(b => b.code) } : {}),',
+    vers: '              ...(bonsAppliques.length > 0 ? { bons_choisis: bonsAppliques.map(b => b.code) } : {}),' },
+
+  // 🔴 UNE SEULE DES TROIS SORTIES CUMULE. Le tunnel rendez-vous a TROIS
+  // sorties, et le 27/08 un seul des deux tunnels connaissait la fidelite :
+  // c est exactement ce defaut-la que la garde des TROIS occurrences attrape.
+  { nom: '🔴 une sortie du rendez-vous n’envoie plus qu’un seul bon',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '            ...(bonsAppliques.length > 0 ? { bons_cadeaux_codes: bonsAppliques.map(b => b.code) } : {}),',
+    vers: '            ...(bonsAppliques.length > 0 ? { bon_cadeau_code: bonsAppliques[0].code } : {}),' },
 
   { nom: '🔴 le serveur accepte de nouveau un cadeau anonyme',
     banc: 'verif:bons', fichier: 'app/api/bons-cadeaux/checkout/route.js',
@@ -406,8 +476,24 @@ const MUTATIONS = [
 
   { nom: '🔴 le bloc s’affiche mais ne propose plus de l’utiliser',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
-    de: 'onClick={() => setBonChoisi(actif ? null : b)}',
-    vers: 'onClick={() => {}}' },
+    de: '                                      if (actif) setBonsAppliques(l => l.filter(a => a.code !== b.code))',
+    vers: '                                      if (actif) return' },
+
+  // 🔴 RETENIR UN BON EFFACE LES AUTRES. C est LE defaut qu Alex a signale sur
+  // 180 EUR et trois bons : en choisir un faisait disparaitre les deux autres,
+  // et on pouvait en conclure qu ils etaient perdus.
+  { nom: '🔴 retenir un bon efface les autres dans le tunnel rendez-vous',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '          return [...liste, { id: j.code, code: j.code, solde: j.solde }]',
+    vers: '          return [{ id: j.code, code: j.code, solde: j.solde }]' },
+
+  // 🔴 CHAQUE BON ANNONCE CE QU IL FINANCERAIT SEUL. Sur trois bons, chacun
+  // afficherait le montant que seul le premier obtient : l ecran promettrait
+  // trois fois la meme deduction, et le total serait faux a l ecran.
+  { nom: '🔴 chaque bon annonce ce qu’il paierait tout seul',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                              const partsIci = repartirBonsRdv(bonsAppliques, {',
+    vers: '                              const partsIci = repartirBonsRdv([b], {' },
 
   { nom: '🔴 le repli informatif reprend la place de l’actionnable',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
@@ -932,18 +1018,29 @@ const MUTATIONS = [
   // n importe qui s attribuer le montant qu il veut.
   { nom: '🔴 le solde du bon saisi vient de l’écran au lieu du serveur',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '      else { setBonChoisi({ id: `saisi-${j.code}`, code: j.code, solde: j.solde }); setBonInput(\'\') }',
-    vers: '      else { setBonChoisi({ id: `saisi-${code}`, code, solde: 9999 }); setBonInput(\'\') }' },
+    de: '          return [...liste, { id: j.code, code: j.code, solde: j.solde }]',
+    vers: '          return [...liste, { id: code, code, solde: 9999 }]' },
+
+  // 🔴 UN MEME CODE DEUX FOIS COMPTERAIT SON SOLDE DEUX FOIS. Le serveur le
+  // refuse aussi, mais l ecran promettrait alors une deduction que la
+  // reservation ne retiendrait pas.
+  { nom: '🔴 le même code peut être appliqué deux fois au rendez-vous',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '          if (liste.some(b => b.code === j.code)) {',
+    vers: '          if (false) {' },
 
   { nom: '🔴 la saisie n’est plus normalisée avant vérification',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
     de: '    const code = normaliserCodeBon(source)',
     vers: '    const code = source' },
 
-  { nom: '🔴 le champ de code reste offert alors qu’un bon est déjà appliqué',
+  // 🔴 LE CHAMP SE REFERME AU PREMIER BON. C est lui, et lui seul, qui permet
+  // d AJOUTER un bon recu ailleurs par-dessus ceux du compte : le fermer rend
+  // le cumul inaccessible a qui n a pas de compte Yoppaa.
+  { nom: '🔴 le champ de code se referme dès le premier bon retenu',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '                        {!seanceSurAbo && prixBase != null && !bonChoisi && (',
-    vers: '                        {!seanceSurAbo && prixBase != null && (' },
+    de: '                        {!seanceSurAbo && prixBase != null && bonsAppliques.length < BONS_MAX_PAR_COMMANDE && (',
+    vers: '                        {!seanceSurAbo && prixBase != null && bonsAppliques.length === 0 && (' },
 
   { nom: '🔴 le tunnel rendez-vous cesse de lire le code du lien',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
@@ -1019,6 +1116,122 @@ const MUTATIONS = [
     banc: 'verif:session', fichier: 'app/commander/page.js',
     de: "                    // a plus d'email.\r\n                    viderEtatPersonnel()",
     vers: "                    // a plus d'email." },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LES TROIS CHEMINS QUI RENDENT L ARGENT D UN RENDEZ-VOUS (01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Ils lisaient la paire `bon_cadeau_id` / `bon_cadeau_montant`. Sur trois bons
+  // ayant finance 145 EUR, cela remettait 145 EUR sur le PREMIER et RIEN sur les
+  // deux autres : de l argent cree d un cote, detruit de l autre, et sur un
+  // instrument au porteur que le Yopper detient encore.
+  //
+  // ⚠️ ILS N ETAIENT MUTES NULLE PART jusqu ici. Trois routes d argent sans une
+  // seule mutation, c est trois routes non mesurees.
+  { nom: '🔴 l’annulation par le client ne rend que le premier bon',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/cancel/route.js',
+    de: '      bonsUtilises: lignesBonsDe(rdv),',
+    vers: '      bonsUtilises: lignesBonsDe(rdv).slice(0, 1),' },
+
+  { nom: '🔴 l’annulation par le client oublie les bons de la commande liée',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/cancel/route.js',
+    de: '        bonsUtilises: lignesBonsDe(commandeLiee),',
+    vers: '        bonsUtilises: [],' },
+
+  { nom: '🔴 l’annulation par le commerçant ne rend que le premier bon',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '      bonsUtilises: lignesBonsDe(rdv),',
+    vers: '      bonsUtilises: lignesBonsDe(rdv).slice(0, 1),' },
+
+  // 🔴 LA COLONNE ABSENTE D UN SELECT, LE DEFAUT LE PLUS FREQUENT DE CE PROJET
+  // et le plus SILENCIEUX : la liste arriverait vide, le repli prendrait la
+  // main, et un rendez-vous a trois bons n en rendrait qu un.
+  { nom: '🔴 l’annulation ne demande plus la liste des bons en base',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/cancel/route.js',
+    de: '      prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,',
+    vers: '      prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant,' },
+
+  // 🔴 LE NO-SHOW REND UNE PART, PAS LES BONS. La reposer entiere sur le
+  // premier creerait de l argent sur celui-la et en detruirait sur les autres.
+  { nom: '🔴 le no-show repose toute la part sur le premier bon',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/no-show/route.js',
+    de: '      bonsUtilises: repartirRestitution(lignesBonsDe(rdv), part.bonRestitue),',
+    vers: '      bonsUtilises: [{ id: rdv.bon_cadeau_id, montant: part.bonRestitue }],' },
+
+  // 🔴 ET LE MODULE ANNONCE LA SOMME, pas le premier. Un email qui dit « 50 EUR
+  // te reviennent » quand 145 EUR reviennent declenche un appel au commercant.
+  { nom: '🔴 le module n’annonce que le premier bon rendu',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/rdv-annulation-server.js',
+    de: '    else rendu.bon = arr(lignes.reduce((s, l) => s + Number(l.montant), 0))',
+    vers: '    else rendu.bon = arr(lignes[0].montant)' },
+
+  // 🔴 ET IL RECREDITE VRAIMENT LES CINQ.
+  { nom: '🔴 le module ne recrédite que le premier bon',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/rdv-annulation-server.js',
+    de: '    const rec = await recrediterBons(db, lignes, refs)',
+    vers: '    const rec = await recrediterBons(db, lignes.slice(0, 1), refs)' },
+
+  // 🔴 LE REPLI SUR L ANCIENNE PAIRE, dans l autre sens : des rendez-vous ecrits
+  // AVANT ce deploiement n ont que `bon_cadeau_id`. Les ignorer, c est le defaut
+  // du 29/08 sur toutes les lignes existantes.
+  { nom: '🔴 un rendez-vous d’avant le cumul ne récupère plus son bon',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/rdv-annulation-server.js',
+    de: '  if (objet?.bon_cadeau_id && Number(objet?.bon_cadeau_montant) > 0) {',
+    vers: '  if (false && objet?.bon_cadeau_id && Number(objet?.bon_cadeau_montant) > 0) {' },
+
+  // 🔴 ET LA LISTE FAIT FOI DES QU ELLE EXISTE : lire les deux additionnerait le
+  // premier bon deux fois, donc rendrait plus que ce qui a ete pris.
+  { nom: '🔴 la liste et l’ancienne paire se cumulent',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/rdv-annulation-server.js',
+    de: '  if (liste.length > 0) return liste',
+    vers: '  // la liste ne fait plus foi' },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LA RÉPARTITION SUR LES DEUX CIBLES, ET LA RESTITUTION PARTIELLE
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Ces deux fonctions decident de l argent. Elles sont EXECUTEES au banc, cas
+  // par cas, et mesurees ici.
+  { nom: '🔴 un bon paie la prestation ET les produits au-delà de son solde',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '      dispo -= partPresta',
+    vers: '      // le solde n est plus decompte' },
+
+  { nom: '🔴 les produits sont servis avant la prestation',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '    const partPresta = Math.min(dispo, restePresta)',
+    vers: '    const partPresta = Math.min(dispo, restePresta) * 0' },
+
+  { nom: '🔴 un seau qui ne se remplit pas est annoncé plein',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '    restePresta: Math.max(0, restePresta) / 100,',
+    vers: '    restePresta: 0,' },
+
+  { nom: '🔴 la restitution repart du premier bon servi',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '  for (let i = liste.length - 1; i >= 0 && reste > 0; i--) {',
+    vers: '  for (let i = 0; i < liste.length && reste > 0; i++) {' },
+
+  { nom: '🔴 la restitution rend plus que ce que le bon avait payé',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '    const rend = Math.min(paye, reste)',
+    vers: '    const rend = reste' },
+
+  // 🔴 ET LA VALIDATION PARTAGEE, qui gouverne QUATRE routes de paiement.
+  { nom: '🔴 la borne des cinq bons saute',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux-server.js',
+    de: '  if (recus.length > BONS_MAX_PAR_COMMANDE) {',
+    vers: '  if (false) {' },
+
+  { nom: '🔴 un doublon de code est dédupliqué en silence au lieu d’être refusé',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux-server.js',
+    de: '    if (normalises.includes(code)) {',
+    vers: '    if (false) {' },
+
+  { nom: '🔴 un code invalide passe sans être rechargé en base',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux-server.js',
+    de: '    if (!res.ok) return { ok: false, status: 400, error: res.error, bon_refuse: true }',
+    vers: '    if (!res.ok) continue' },
 ]
 
 function lancer(banc) {
@@ -1073,9 +1286,19 @@ for (const m of MUTATIONS) {
 console.log(`\n${attrapees}/${MUTATIONS.length} mutations attrapées.`)
 if (manquees.length) { console.log('\nNON ATTRAPÉES :'); manquees.forEach(x => console.log('   • ' + x)) }
 
+// ⚠️ ET ON DIT POURQUOI. Ce contrôle final annonçait « ROUGE APRÈS
+// RESTAURATION » sans un mot de plus : impossible de distinguer un vrai défaut
+// d'un aléa d'exécution, et un verdict qu'on ne peut pas instruire finit par
+// se faire ignorer. Le 01/09, `verif:comptable` est sorti rouge ici et VERT au
+// lancement suivant : sans l'extrait, il aurait fallu deviner.
 let finalRouge = false
 for (const banc of [...new Set(MUTATIONS.map(m => m.banc))]) {
-  if (lancer(banc).rouge) { finalRouge = true; console.log(`🔴 ${banc} ROUGE APRÈS RESTAURATION.`) }
+  const res = lancer(banc)
+  if (res.rouge) {
+    finalRouge = true
+    console.log(`🔴 ${banc} ROUGE APRÈS RESTAURATION.`)
+    console.log(`   ${res.plante ? 'PLANTAGE' : 'ÉCHEC DE BANC'} — ${(res.extrait || '').trim().split('\n').slice(-6).join('\n   ')}`)
+  }
 }
 console.log(finalRouge ? '' : '\nBancs verts après restauration. Dépôt intact.')
 process.exit(manquees.length || finalRouge ? 1 : 0)

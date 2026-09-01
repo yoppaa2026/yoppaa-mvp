@@ -23,7 +23,7 @@ import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
 import { adresseRendezVous } from '@/lib/lieu-fige'
-import { rendreAvantagesRdv } from '@/lib/rdv-annulation-server'
+import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 
 export async function POST(request) {
@@ -54,7 +54,7 @@ export async function POST(request) {
       date_rdv, heure_debut, heure_fin, duree_minutes, motif_annulation,
       commercant_id, rappel_push_id, commande_id, fidelite_recompense_id,
       lieu_id, lieu_libelle, lieu_adresse,
-      prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant,
+      prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
       commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures, categorie),
       prestation:rdv_prestations(nom)
     `
@@ -124,7 +124,7 @@ export async function POST(request) {
         // tarif BRUT : un bon cadeau ou une récompense posés dessus n'ont
         // jamais été payés par carte, et les rembourser reviendrait à rendre
         // au client de l'argent qu'il n'a pas sorti.
-        .select('id, statut, total, paye_en_ligne, bon_cadeau_id, bon_cadeau_montant, fidelite_remise, fidelite_recompense_id')
+        .select('id, statut, total, paye_en_ligne, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_remise, fidelite_recompense_id')
         .eq('id', rdv.commande_id)
         .maybeSingle()
       // Une commande déjà annulée ne pose plus de question.
@@ -214,8 +214,10 @@ export async function POST(request) {
     // 10 € reviennent.
     const rendu = await rendreAvantagesRdv(supabase, {
       ou: 'rdv/cancel',
-      bonId: rdv.bon_cadeau_id,
-      bonMontant: rdv.bon_cadeau_montant,
+      // 🔴 TOUS LES BONS DU RENDEZ-VOUS. Lire la paire `bon_cadeau_id` /
+      // `bon_cadeau_montant` remettrait le TOTAL sur le PREMIER bon : de
+      // l'argent créé sur celui-là, perdu sur les autres.
+      bonsUtilises: lignesBonsDe(rdv),
       recompenseId: recompenseSurProduitsGardes ? null : rdv.fidelite_recompense_id,
       recompenseMontant: arr(Number(rdv.fidelite_remise || 0)
         + (gardeSesProduits ? 0 : Number(commandeLiee?.fidelite_remise || 0))),
@@ -234,8 +236,7 @@ export async function POST(request) {
         && String(commandeLiee.fidelite_recompense_id) === String(rdv.fidelite_recompense_id || '')
       const rc = await rendreAvantagesRdv(supabase, {
         ou: 'rdv/cancel',
-        bonId: commandeLiee.bon_cadeau_id,
-        bonMontant: commandeLiee.bon_cadeau_montant,
+        bonsUtilises: lignesBonsDe(commandeLiee),
         recompenseId: memeRecompense ? null : commandeLiee.fidelite_recompense_id,
         recompenseMontant: Number(commandeLiee.fidelite_remise || 0),
         refs: { commande_id: commandeLiee.id },

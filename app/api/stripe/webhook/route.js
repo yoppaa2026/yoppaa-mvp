@@ -39,7 +39,7 @@ import { contratDepuisFormule, resumeContratAchete } from '@/lib/abonnements'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { normaliserEmail } from '@/lib/email-normalise'
-import { creerReservationRdv, appliquerAvantagesRdv } from '@/lib/rdv-creation-server'
+import { creerReservationRdv, appliquerAvantagesRdv, lignesBonsDeMeta } from '@/lib/rdv-creation-server'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -197,8 +197,14 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       // acompte réduit : le comptoir lui réclamerait la différence, et le bon
       // ne serait jamais débité. Le débit lui-même se fait plus bas, APRÈS
       // l'insertion, pour que le mouvement puisse désigner le rendez-vous.
+      //
+      // 🔴 ET LA LISTE DES BONS, DEPUIS LE 01/09. Un rendez-vous peut être
+      // couvert par cinq bons : `bon_cadeau_id` n'en garde qu'un, et c'est
+      // `bons_utilises` qui fait foi pour le débit comme pour le recrédit.
+      // Sans cette colonne, une annulation rendrait le TOTAL au PREMIER bon.
       bon_cadeau_id: meta.bon_cadeau_id || null,
       bon_cadeau_montant: Number(meta.bon_cadeau_montant) || 0,
+      bons_utilises: lignesBonsDeMeta(meta),
       acompte_montant: Number(meta.acompte_montant) || null,
       // ⚠️ L'ACOMPTE *DÛ*, figé comme la TVA et le lieu. `null` s'il n'a pas
       // voyagé : « on ne sait pas » n'est pas « zéro », et le no-show le lit
@@ -284,8 +290,7 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
     await appliquerAvantagesRdv(supabase, {
       rdvId: rdvId || meta.yoppaa_rdv_id || null,
       recompenseId: meta.fidelite_recompense_id || null,
-      bonCadeauId: meta.bon_cadeau_id || null,
-      bonMontant: Number(meta.bon_cadeau_montant) || 0,
+      bonsUtilises: champs.bons_utilises,
     })
 
     // Tunnel unique : la commande de produits existe déjà en

@@ -35,7 +35,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { restitutionNoShow } from '@/lib/rdv-paiement'
-import { rendreAvantagesRdv } from '@/lib/rdv-annulation-server'
+import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
+import { repartirRestitution } from '@/lib/bons-cadeaux'
 import { annulerPush } from '@/lib/onesignal'
 import { stripe, requireStripe } from '@/lib/stripe'
 
@@ -70,7 +71,7 @@ export async function POST(request) {
       .from('rdv_reservations')
       .select(`
         id, statut, acompte_paye, acompte_paye_en_ligne, acompte_montant, acompte_du,
-        bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id, fidelite_remise,
+        bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id, fidelite_remise,
         rappel_push_id, commercant_id,
         stripe_payment_intent_id, stripe_refund_id,
         commercant:commercants(stripe_account_id)
@@ -127,10 +128,14 @@ export async function POST(request) {
     // ⚠️ LE MONTANT PASSÉ EST LA PART RESTITUÉE, PAS LE BON ENTIER. Le module
     // recrédite ce qu'on lui donne : lui passer `bon_cadeau_montant` rendrait
     // au client une garantie que le commerçant a le droit de garder.
+    //
+    // ⚠️ ET LA PART SE RÉPARTIT SUR LES BONS QUI ONT PAYÉ, en commençant par le
+    // dernier servi : c'est le miroir du débit, donc l'argent revient sur le bon
+    // qui expire le plus tard. La reposer entière sur le premier créerait de
+    // l'argent d'un côté et en détruirait de l'autre.
     const rendu = await rendreAvantagesRdv(supabase, {
       ou: 'rdv/no-show',
-      bonId: part.bonRestitue > 0 ? rdv.bon_cadeau_id : null,
-      bonMontant: part.bonRestitue,
+      bonsUtilises: repartirRestitution(lignesBonsDe(rdv), part.bonRestitue),
       recompenseId: rdv.fidelite_recompense_id,
       recompenseMontant: part.recompenseRendue,
       refs: { rdv_id: rdv.id },

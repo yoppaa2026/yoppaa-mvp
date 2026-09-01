@@ -306,15 +306,28 @@ for (const [nom, chemin] of [
   // exactement ce qui a produit le défaut qu'elles étaient censées garder.
   //
   // ⚠️ ON MESURE LA DÉLÉGATION, et le CONTENU s'exécute plus bas, section 9.
-  verifie(`${nom} : passe le bon du rendez-vous au module`,
-    /bonId: rdv\.bon_cadeau_id/.test(src))
+  // 🔴 TOUS LES BONS DU RENDEZ-VOUS, ET PLUS UN SEUL (01/09). Passer la paire
+  // `bon_cadeau_id` / `bon_cadeau_montant` remettrait le TOTAL sur le PREMIER
+  // bon : de l'argent créé sur celui-là, détruit sur les autres.
+  //
+  // ⚠️ LA VIRGULE FINALE FAIT LA MOITIÉ DE LA GARDE. Sans elle, un
+  // `lignesBonsDe(rdv).slice(0, 1)` la laissait VERTE : la mutation « ne rend
+  // que le premier bon » passait sans être vue.
+  verifie(`${nom} : passe TOUS les bons du rendez-vous au module`,
+    /bonsUtilises: lignesBonsDe\(rdv\),\n/.test(src))
   verifie(`${nom} : et sa récompense`, /recompenseId: [^\n]*rdv\.fidelite_recompense_id/.test(src))
   verifie(`${nom} : avec le montant qu'elle valait`,
     /recompenseMontant: [\s\S]{0,120}fidelite_remise/.test(src))
   // ⚠️ ET LA COMMANDE LIÉE PORTE SES PROPRES AVANTAGES depuis que le bon paie
   // les produits : les oublier laisserait la moitié du bon dans le vide.
   verifie(`${nom} : traite les avantages de la commande liée`,
-    /commandeLiee\.bon_cadeau_id/.test(src))
+    /bonsUtilises: lignesBonsDe\(commandeLiee\),\n/.test(src))
+  // ⚠️ ET LA COLONNE EST DEMANDÉE DANS LES DEUX SELECT. Une colonne absente
+  // d'un select est LE défaut le plus fréquent de ce projet, et il est
+  // SILENCIEUX : la liste arriverait vide et pas un centime ne serait rendu.
+  verifie(`${nom} : charge bons_utilises pour le rendez-vous ET la commande`,
+    (src.match(/bons_utilises/g) || []).length >= 2,
+    `${(src.match(/bons_utilises/g) || []).length} occurrences`)
   // 🔴 ET LE REMBOURSEMENT NE PORTE QUE SUR LA PART CARTE. Rembourser le brut
   // reviendrait à rendre au client un argent qu'il n'a jamais sorti.
   //
@@ -451,9 +464,31 @@ for (const chemin of [
   // ⚠️ DEUX CIBLES, DEUX MOUVEMENTS. La contrainte
   // `bons_cadeaux_mouvements_une_cible` interdit un mouvement qui désignerait
   // à la fois une commande et un rendez-vous.
-  verifie('la part produits vit sur la commande', /bon_cadeau_montant: vent\.bonSurProduits/.test(src))
+  //
+  // 🔴 ET DEPUIS LE 01/09, DEUX LISTES : un même bon peut financer les deux
+  // parts, mais chaque objet ne porte QUE ce qui lui revient. Les confondre
+  // ferait rendre deux fois à l'annulation.
+  verifie('la part produits vit sur la commande',
+    /bon_cadeau_montant: partsBons\.totalProduits/.test(src)
+    && /bons_utilises: bonsProduits/.test(src))
   verifie('la part prestation part dans les métadonnées du rendez-vous',
-    /bon_cadeau_montant: String\(vent\.bonSurPresta\)/.test(src))
+    /bon_cadeau_montant: String\(partsBons\.totalPresta\)/.test(src)
+    && /bons_utilises: JSON\.stringify\(bonsPresta\)/.test(src))
+  // 🔴 ET LES DEUX LISTES SORTENT DU MÊME PARTAGE, calculé UNE FOIS. Deux
+  // appels séparés se recouvriraient : un bon de 50 € paierait 50 € de
+  // prestation ET 50 € de produits, soit 100 € pris sur un solde de 50.
+  //
+  // ⚠️ LES DEUX LISTES SONT NOMMÉES, pas seulement l'appel : la mutation qui
+  // recalculait `bonsProduits` de son côté laissait l'appel d'origine en place,
+  // et une garde qui ne visait que lui restait verte.
+  verifie('les deux parts viennent du même partage',
+    /repartirBonsRdv\(bonsValides, \{[\s\S]{0,120}surPresta: vent\.bonSurPresta[\s\S]{0,120}surProduits: vent\.bonSurProduits/.test(src)
+    && /const bonsPresta = partsBons\.presta\.map/.test(src)
+    && /const bonsProduits = partsBons\.produits\.map/.test(src))
+  // ⚠️ UN SEAU QUI NE SE REMPLIT PAS EST UNE INCOHÉRENCE INTERNE : la
+  // ventilation et le partage ne seraient pas d'accord. On le crie.
+  verifie('un partage incomplet est journalisé, pas avalé',
+    /repartition des bons incomplète/.test(src))
   // ⚠️ STRIPE N'ACCEPTE AUCUN MONTANT NÉGATIF : garder le détail au prix plein
   // ferait payer au client ce que son bon vient de couvrir.
   verifie('le détail laisse la place à une ligne unique quand un avantage mord',
@@ -466,9 +501,15 @@ for (const chemin of [
   // d'annoncer « c'est couvert » pour réserver sans payer. On mesure la
   // DÉFINITION, pas le nom : la remplacer par `true` gardait le nom en place.
   const defCouvert = (src.match(/const couvertSansPaiement = [^\n]*/) || [''])[0]
+  //
+  // 🔴 ET IL TESTE LES BONS REÇUS, PAS `bonCadeau`. Celui-ci est le premier bon
+  // servi SUR LA PRESTATION : quand les bons ne paient que les produits (prix
+  // sur devis, ou récompense qui couvre déjà la prestation), il vaut `null`
+  // alors que des bons ont bien payé. Y accrocher cette garde renverrait au
+  // comptoir un rendez-vous entièrement couvert.
   verifie('« couvert » se déduit du total ET d’un avantage réel',
     /totalCents === 0/.test(defCouvert)
-    && /bonCadeau/.test(defCouvert) && /recompense/.test(defCouvert), defCouvert)
+    && /bonsValides\.length > 0/.test(defCouvert) && /recompense/.test(defCouvert), defCouvert)
   verifie('et il n’est jamais reçu du navigateur',
     !/couvertSansPaiement\s*[,}]/.test(src.split('const body =')[1]?.split('}')[0] || ''))
   verifie('le rendez-vous se crée alors côté serveur',
@@ -476,14 +517,17 @@ for (const chemin of [
   // ⚠️ ET LES DEUX MOUVEMENTS DU BON PARTENT, un par cible : la contrainte
   // `bons_cadeaux_mouvements_une_cible` interdit un mouvement qui désignerait
   // les deux à la fois.
-  verifie('le bon est débité sur la prestation ET sur les produits',
-    /debiterBon\(supabase, bonCadeau\.id, vent\.bonSurPresta, \{ source: 'rdv'/.test(src)
-    && /debiterBon\(supabase, bonCadeau\.id, vent\.bonSurProduits, \{ source: 'commande'/.test(src))
+  verifie('les bons sont débités sur la prestation ET sur les produits',
+    /debiterBons\(supabase, bonsPresta, \{ source: 'rdv'/.test(src)
+    && /debiterBons\(supabase, bonsProduits, \{ source: 'commande'/.test(src))
   // ⚠️ ET ON REND CE QU'ON VIENT DE PRENDRE si le second débit échoue : laisser
   // la part prestation dépensée ferait perdre de l'argent au porteur du bon
   // pour une réservation qui n'a pas eu lieu.
-  verifie('un second débit raté recrédite le premier',
-    /recrediterBon\(supabase, bonCadeau\.id, vent\.bonSurPresta, \{ rdv_id: idRdv \}\)/.test(src))
+  //
+  // ⚠️ TOUS LES BONS, PAS LE PREMIER : la liste qui a servi au débit est
+  // exactement celle qui sert au retour.
+  verifie('un second débit raté recrédite TOUS les premiers',
+    /recrediterBons\(supabase, bonsPresta, \{ rdv_id: idRdv \}\)/.test(src))
   verifie('et la commande couverte est marquée payée en ligne',
     /paye_en_ligne: true/.test(src) && /rdv_reservation_id: idRdv/.test(src))
 }
@@ -707,7 +751,10 @@ for (const chemin of [
   verifie('la récompense exige une identité prouvée',
     /const identite = await identiteProuvee\(request\)/.test(src)
     && /recompense_refusee: 'non_connecte'/.test(src))
-  verifie('et le bon est rechargé en base', /chargerBonValide\(db, \{ code: codeBon/.test(src))
+  // ⚠️ « L'ÉCRAN CALCULE, LE SERVEUR DÉCIDE » : les bons sont rechargés EN BASE,
+  // et depuis le 01/09 par le module partagé, qui en accepte jusqu'à cinq.
+  verifie('et les bons sont rechargés en base',
+    /await chargerBonsValides\(db, \{/.test(src) && /soldeBon: soldeBonTotal/.test(src))
   // ⚠️ LE CRÉNEAU EST REVÉRIFIÉ CÔTÉ SERVEUR : passé, jour de fermeture, pause.
   // ⚠️ L'HEURE MURALE BELGE, jamais l'horloge du serveur : Vercel tourne en
   // temps universel, et un rendez-vous d'hier matin passerait.
@@ -881,7 +928,7 @@ for (const chemin of [
 // dans un module, et ON L'EXÉCUTE : une garde qui cherche un mot dans un fichier
 // de route n'aurait jamais vu la différence.
 {
-  const { rendreAvantagesRdv } = await import('../lib/rdv-annulation-server.js')
+  const { rendreAvantagesRdv, lignesBonsDe } = await import('../lib/rdv-annulation-server.js')
 
   // Une base qui répond ce qu'on lui dit, et qui GARDE ce qu'on lui écrit.
   function baseAvantages({ recompense = null, mouvementEnDoublon = false }) {
@@ -927,7 +974,7 @@ for (const chemin of [
   {
     const db = baseAvantages({ recompense: { id: 'r1', carte_id: 'ca1', utilisee_at: '2026-08-30T15:00:00Z' } })
     const rendu = await rendreAvantagesRdv(db, {
-      bonId: 'b1', bonMontant: 40, recompenseId: 'r1', recompenseMontant: 10,
+      bonsUtilises: [{ id: 'b1', montant: 40 }], recompenseId: 'r1', recompenseMontant: 10,
       refs: { rdv_id: 'rdv1' },
     })
     egal('le bon recrédité est annoncé', rendu.bon, 40)
@@ -958,7 +1005,7 @@ for (const chemin of [
     let rendu
     try {
       rendu = await rendreAvantagesRdv(db, {
-        bonId: 'b1', bonMontant: 40, recompenseId: 'r1', recompenseMontant: 10,
+        bonsUtilises: [{ id: 'b1', montant: 40 }], recompenseId: 'r1', recompenseMontant: 10,
         refs: { rdv_id: 'rdv1' },
       })
     } finally {
@@ -977,7 +1024,7 @@ for (const chemin of [
   {
     const db = baseAvantages({ recompense: null })
     const rendu = await rendreAvantagesRdv(db, {
-      bonId: null, bonMontant: 0, recompenseId: 'inconnue', recompenseMontant: 10,
+      bonsUtilises: [], recompenseId: 'inconnue', recompenseMontant: 10,
       refs: { rdv_id: 'rdv1' },
     })
     egal('une récompense introuvable n’annonce rien', rendu.recompense, 0)
@@ -987,10 +1034,55 @@ for (const chemin of [
   {
     const db = baseAvantages({ recompense: { id: 'r1', carte_id: 'ca1', utilisee_at: 'x' } })
     const rendu = await rendreAvantagesRdv(db, {
-      bonId: 'b1', bonMontant: 0, recompenseId: null, refs: { rdv_id: 'rdv1' },
+      bonsUtilises: [{ id: 'b1', montant: 0 }], recompenseId: null, refs: { rdv_id: 'rdv1' },
     })
     egal('un bon à zéro ne s’annonce pas', rendu.bon, 0)
     egal('et une récompense non demandée non plus', rendu.recompense, 0)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 PLUSIEURS BONS SUR UN MÊME RENDEZ-VOUS (01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Ce module recréditait UN bon avec le montant TOTAL. Sur trois bons ayant
+  // financé 145 €, cela aurait remis 145 € sur le premier et RIEN sur les deux
+  // autres : de l'argent créé d'un côté, détruit de l'autre, sur un instrument
+  // au porteur que le Yopper détient encore.
+  {
+    const db = baseAvantages({ recompense: null })
+    const rendu = await rendreAvantagesRdv(db, {
+      bonsUtilises: [{ id: 'b1', montant: 50 }, { id: 'b2', montant: 75 }, { id: 'b3', montant: 20 }],
+      refs: { rdv_id: 'rdv1' },
+    })
+    egal('🔴 trois bons : la somme des trois est annoncée', rendu.bon, 145)
+    const mvts = db._vu.mouvements.filter(m => m.table === 'bons_cadeaux_mouvements')
+    egal('🔴 trois bons : TROIS mouvements, un par bon', mvts.length, 3)
+    verifie('🔴 trois bons : chacun reçoit SON montant, pas le total',
+      mvts.map(m => `${m.bon_id}:${m.montant}`).sort().join(' ') === 'b1:50 b2:75 b3:20',
+      mvts.map(m => `${m.bon_id}:${m.montant}`).join(' '))
+    verifie('trois bons : les trois mouvements désignent le rendez-vous',
+      mvts.every(m => m.rdv_id === 'rdv1'))
+  }
+  // ⚠️ ET LE REPLI SUR L'ANCIENNE PAIRE, exécuté : des rendez-vous écrits avant
+  // ce déploiement n'ont que `bon_cadeau_id` et `bon_cadeau_montant`. Les
+  // ignorer, ce serait le défaut du 29/08 sur toutes les lignes existantes.
+  {
+    egal('un rendez-vous d’avant garde son bon',
+      lignesBonsDe({ bons_utilises: [], bon_cadeau_id: 'vieux', bon_cadeau_montant: 40 }).length, 1)
+    // ⚠️ `?.` ET NON `[0].` : sans lui, la mutation qui retire le repli fait
+    // PLANTER le banc au lieu de le faire ROUGIR.
+    egal('et son montant',
+      lignesBonsDe({ bons_utilises: [], bon_cadeau_id: 'vieux', bon_cadeau_montant: 40 })[0]?.montant, 40)
+    // 🔴 MAIS LA LISTE FAIT FOI DÈS QU'ELLE EXISTE : lire les deux additionnerait
+    // le premier bon deux fois.
+    egal('dès que la liste existe, elle seule compte',
+      lignesBonsDe({ bons_utilises: [{ id: 'a', montant: 10 }, { id: 'b', montant: 5 }], bon_cadeau_id: 'a', bon_cadeau_montant: 15 }).length, 2)
+    egal('un rendez-vous sans aucun bon ne rend rien',
+      lignesBonsDe({ bons_utilises: [], bon_cadeau_id: null, bon_cadeau_montant: 0 }).length, 0)
+    // ⚠️ UN MONTANT NUL SUR L'ANCIENNE PAIRE N'EST PAS UN BON : écrire un
+    // mouvement à zéro salirait l'historique du bon pour rien.
+    egal('un montant nul n’est pas un repli',
+      lignesBonsDe({ bons_utilises: [], bon_cadeau_id: 'x', bon_cadeau_montant: 0 }).length, 0)
   }
 }
 {
@@ -1045,8 +1137,13 @@ for (const chemin of [
     /acompte se calcule sur ce qui reste/.test(blocRecompense))
   // ⚠️ ET LE BON, LUI, LE DIT : c'est vrai à la lettre depuis le 30/08 au soir.
   verifie('le bon annonce la baisse de l’acompte', /Ton acompte baisse d’autant/.test(ecran))
+  // ⚠️ RÉANCRÉE LE 01/09 : la phrase parlait d'UN bon (« il couvre déjà ton
+  // acompte »). Avec plusieurs, ce n'est plus « il » qui couvre, c'est
+  // l'ensemble — et la ventilation qui décide porte sur le TOTAL, pas sur un
+  // bon isolé. La règle défendue est la même : un acompte ramené à zéro se DIT,
+  // au lieu de laisser un zéro sans explication.
   verifie('et dit quand il l’efface entièrement',
-    /couvre déjà ton acompte/.test(ecran) && /ventBon\.acompte === 0/.test(ecran))
+    /Ton acompte est déjà couvert/.test(ecran) && /vent\.acompte === 0/.test(ecran))
 }
 
 // ═══ 10) LE COMMERÇANT LIT CE QU'IL DÉCLENCHE ═════════════════════════════
@@ -1437,12 +1534,18 @@ for (const chemin of [
     /gardeSurLigne\(request, supabase, 'rdv_reservations', rdv_id\)/.test(src))
   // 🔴 LES COLONNES DU PARTAGE DOIVENT ARRIVER JUSQU'À LA ROUTE.
   const selectRdv = (src.match(/\.select\(`([^`]*)`\)/) || ['', ''])[1]
-  for (const col of ['acompte_du', 'acompte_montant', 'bon_cadeau_id', 'bon_cadeau_montant', 'fidelite_recompense_id', 'fidelite_remise']) {
+  for (const col of ['acompte_du', 'acompte_montant', 'bon_cadeau_id', 'bon_cadeau_montant', 'bons_utilises', 'fidelite_recompense_id', 'fidelite_remise']) {
     verifie(`le select du no-show charge ${col}`, new RegExp(col).test(selectRdv), selectRdv.slice(0, 200))
   }
   // ⚠️ ON RESTITUE LA PART QUI DÉPASSE, JAMAIS LE BON ENTIER.
+  //
+  // 🔴 ET DEPUIS LE 01/09, CETTE PART SE RÉPARTIT SUR LES BONS QUI ONT PAYÉ, en
+  // commençant par le dernier servi : miroir du débit, donc l'argent revient sur
+  // le bon qui expire le plus tard. La reposer entière sur le premier créerait
+  // de l'argent d'un côté et en détruirait de l'autre.
   verifie('la route restitue la part qui dépasse, pas le bon entier',
-    /bonMontant: part\.bonRestitue/.test(src) && !/bonMontant: rdv\.bon_cadeau_montant/.test(src))
+    /repartirRestitution\(lignesBonsDe\(rdv\), part\.bonRestitue\)/.test(src)
+    && !/bonMontant: rdv\.bon_cadeau_montant/.test(src))
   // ⚠️ ET UN RENDEZ-VOUS ANNULÉ NE SE MARQUE PAS ABSENT : il n'a pas eu lieu,
   // et lui appliquer la garantie ferait garder un acompte déjà remboursé.
   verifie('un rendez-vous annulé ne peut pas être noté absent',

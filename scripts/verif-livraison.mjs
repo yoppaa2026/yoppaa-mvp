@@ -145,8 +145,23 @@ verifier('la route applique le minimum', /minimumAtteint\(/.test(routeCode))
 verifier('le minimum porte sur le total des articles',
   /minimumAtteint\(\{ total: totalEUR/.test(routeCode))
 // Et il doit être vérifié AVANT que le bon cadeau ne réduise le montant.
-verifier('le minimum est vérifié avant le bon cadeau',
-  routeCode.indexOf('minimumAtteint(') < routeCode.indexOf('chargerBonValide('))
+//
+// ⚠️ LES DEUX ANCRES DOIVENT EXISTER, et c'est la moitié de la garde. Écrite
+// en comparant deux `indexOf` nus, elle passait au VERT dès que le premier
+// disparaissait : `-1 < n` est vrai. Une garde qui verdit quand la règle
+// s'évapore ne garde rien.
+//
+// ⚠️ Et elle a rougi le 01/09 pour la bonne raison : `chargerBonValide` est
+// devenu `chargerBonsValides` quand le rendez-vous s'est mis à cumuler. Une
+// garde qui vise un NOM survit mal ; celle-ci vise en plus un ORDRE, qui est la
+// vraie règle, donc on la garde en la réancrant.
+{
+  const posMinimum = routeCode.indexOf('minimumAtteint(')
+  const posBons = routeCode.indexOf('chargerBonsValides(')
+  verifier('la route charge les bons par le module partagé', posBons !== -1)
+  verifier('le minimum est vérifié avant les bons cadeaux',
+    posMinimum !== -1 && posBons !== -1 && posMinimum < posBons)
+}
 
 // La route des statuts n'accepte que les deux états connus.
 const routeStatut = lire('app/api/livraison/statut/route.js')

@@ -42,9 +42,9 @@ import { normaliserEmail } from '@/lib/email-normalise'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
-import { chargerBonValide, debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
+import { chargerBonsValides, debiterBons, recrediterBons } from '@/lib/bons-cadeaux-server'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
-import { normaliserCodeBon } from '@/lib/bons-cadeaux'
+import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { euros } from '@/lib/montants'
 
@@ -70,7 +70,9 @@ export async function POST(request) {
       // avait rien à refuser, juste une remise qui n'arrivait pas.
       fidelite_recompense_id,
       // Revalide plus bas : un code envoye n autorise rien.
+      // 🔴 UNE LISTE DEPUIS LE 01/09, l'ancien champ au singulier reste accepté.
       bon_cadeau_code,
+      bons_cadeaux_codes = null,
     } = body
 
     if (!commercant_id || !prestation_id || !date_rdv || !heure_debut || !heure_fin) {
@@ -179,18 +181,20 @@ export async function POST(request) {
     // Il ne mordait que sur la prestation : le client voyait son bon fondre de
     // 35 € sans que le montant à payer bouge d'un centime. C'est de l'argent
     // déjà versé chez ce commerçant, il paie ce qu'il y a dans le panier.
-    let bonCadeau = null
-    if (bon_cadeau_code) {
-      const codeBon = normaliserCodeBon(bon_cadeau_code)
-      if (!codeBon) {
-        return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
-      }
-      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
-      if (!resBon.ok) {
-        return NextResponse.json({ ok: false, error: resBon.error, bon_refuse: true }, { status: 400 })
-      }
-      bonCadeau = resBon.bon
+    //
+    // 🔴 PLUSIEURS BONS DEPUIS LE 01/09, et c'est le seul tunnel où ils se
+    // répartissent sur DEUX cibles : la prestation et les produits.
+    const resBons = await chargerBonsValides(supabase, {
+      codes: bons_cadeaux_codes,
+      codeUnique: bon_cadeau_code,
+      commercant_id: commercant.id,
+      categorie: commercant.categorie,
+    })
+    if (!resBons.ok) {
+      return NextResponse.json({ ok: false, error: resBons.error, bon_refuse: true }, { status: resBons.status || 400 })
     }
+    const bonsValides = resBons.bons
+    const soldeBonTotal = bonsValides.reduce((s, b) => s + Number(b.solde || 0), 0)
 
     // ─── Produits : prix, remises et TVA calculés SERVEUR ──────────────────
     const articleIds = [...new Set(articles.map(a => a.id).filter(Boolean))]
@@ -266,8 +270,32 @@ export async function POST(request) {
       acompteEnLigne: !!commercant.rdv_acompte_en_ligne_actif,
       totalProduits: produitsCents / 100,
       remiseRecompense: remiseRecompenseEUR,
-      soldeBon: bonCadeau ? Number(bonCadeau.solde) : 0,
+      soldeBon: soldeBonTotal,
     })
+
+    // ─── QUI PAIE QUOI, une fois que la ventilation a dit COMBIEN ──────────
+    //
+    // ⚠️ DEUX LISTES, PARCE QU'IL Y A DEUX CIBLES. La part prestation s'écrit
+    // sur le rendez-vous, la part produits sur la commande : la contrainte
+    // `bons_cadeaux_mouvements_une_cible` interdit un mouvement qui désignerait
+    // les deux, et les deux objets ont leur propre annulation.
+    const partsBons = repartirBonsRdv(bonsValides, {
+      surPresta: vent.bonSurPresta,
+      surProduits: vent.bonSurProduits,
+    })
+    const bonsPresta = partsBons.presta.map(l => ({ id: l.id, montant: l.montant }))
+    const bonsProduits = partsBons.produits.map(l => ({ id: l.id, montant: l.montant }))
+    // ⚠️ SI UN RESTE N'EST PAS NUL, la ventilation et la répartition ne sont pas
+    // d'accord : c'est une incohérence interne, jamais à avaler en silence.
+    if (partsBons.restePresta > 0 || partsBons.resteProduits > 0) {
+      console.error('[create-rdv-commande] repartition des bons incomplète', {
+        restePresta: partsBons.restePresta, resteProduits: partsBons.resteProduits,
+      })
+    }
+    // ⚠️ `bon_cadeau_id` GARDE LE PREMIER BON SERVI de chaque côté, pour les
+    // lectures existantes. Le débit et le recrédit passent par les LISTES.
+    const bonCadeau = bonsValides.find(b => b.id === bonsPresta[0]?.id) || null
+    const bonCadeauProduits = bonsValides.find(b => b.id === bonsProduits[0]?.id) || null
     const acompteMontant = vent.acompte
     const acompteCents = Math.round(acompteMontant * 100)
     const produitsAPayerCents = Math.round(vent.produitsAPayer * 100)
@@ -295,7 +323,13 @@ export async function POST(request) {
     // d'annoncer « c'est couvert » pour réserver sans payer. Le bon et la
     // récompense viennent d'être rechargés en base, c'est leur solde qui décide.
     const totalCents = acompteCents + produitsAPayerCents
-    const couvertSansPaiement = totalCents === 0 && (!!bonCadeau || !!recompense)
+    // ⚠️ ON TESTE LES BONS REÇUS, PAS `bonCadeau`. Celui-ci est le premier bon
+    // servi SUR LA PRESTATION : quand les bons ne paient que les produits (prix
+    // sur devis, ou récompense qui couvre déjà la prestation), il vaut `null`
+    // alors que des bons ont bien payé. Y accrocher cette garde renverrait au
+    // comptoir un rendez-vous entièrement couvert, le cas le plus favorable au
+    // client, et c'est exactement le refus qu'on a retiré le 30/08.
+    const couvertSansPaiement = totalCents === 0 && (bonsValides.length > 0 || !!recompense)
     if (totalCents < 50 && !couvertSansPaiement) {
       return NextResponse.json({ ok: false, error: 'Total trop faible (minimum 0,50 € Stripe).' }, { status: 400 })
     }
@@ -346,9 +380,14 @@ export async function POST(request) {
         // lui revient alors pas, alors que la part prestation revient toujours.
         // Le webhook la débite tout seul depuis ces deux colonnes, avec
         // `source:'commande'`, comme pour n'importe quelle commande.
-        ...(bonCadeau && vent.bonSurProduits > 0 ? {
-          bon_cadeau_id: bonCadeau.id,
-          bon_cadeau_montant: vent.bonSurProduits,
+        //
+        // ⚠️ ET C'EST LA LISTE DE LA PART PRODUITS, pas celle du rendez-vous :
+        // un même bon peut financer les deux, mais chaque objet ne porte QUE ce
+        // qui lui revient. Confondre les deux ferait rendre deux fois.
+        ...(bonsProduits.length > 0 ? {
+          bon_cadeau_id: bonCadeauProduits?.id || null,
+          bon_cadeau_montant: partsBons.totalProduits,
+          bons_utilises: bonsProduits,
         } : {}),
         // ⚠️ ET LA PART DE RÉCOMPENSE QUI TOMBE SUR LES PRODUITS, depuis
         // qu'elle paie le panier entier (30/08). Sans elle, `commandes.total`
@@ -468,9 +507,10 @@ export async function POST(request) {
             fidelite_recompense_id: recompense.id,
             fidelite_remise: vent.recompenseSurPresta,
           } : {}),
-          ...(bonCadeau && vent.bonSurPresta > 0 ? {
-            bon_cadeau_id: bonCadeau.id,
-            bon_cadeau_montant: vent.bonSurPresta,
+          ...(bonsPresta.length > 0 ? {
+            bon_cadeau_id: bonCadeau?.id || null,
+            bon_cadeau_montant: partsBons.totalPresta,
+            bons_utilises: bonsPresta,
           } : {}),
         },
       })
@@ -499,28 +539,31 @@ export async function POST(request) {
       // interdit un mouvement qui désignerait à la fois un rendez-vous et une
       // commande, et les index uniques partiels sont posés par cible : c'est ce
       // qui garde l'idempotence des deux côtés.
-      if (bonCadeau && vent.bonSurPresta > 0) {
-        const deb = await debiterBon(supabase, bonCadeau.id, vent.bonSurPresta, { source: 'rdv', rdv_id: idRdv })
+      if (bonsPresta.length > 0) {
+        const deb = await debiterBons(supabase, bonsPresta, { source: 'rdv', rdv_id: idRdv })
         if (!deb?.ok) {
           if (recompense) await rendreRecompense(supabase, recompense)
           await supabase.from('rdv_reservations').delete().eq('id', idRdv)
           await toutDefaire()
-          console.error('[create-rdv-commande] débit bon (prestation) KO', deb?.error)
+          console.error('[create-rdv-commande] débit des bons (prestation) KO', deb?.echecs)
           return NextResponse.json({ ok: false, error: `Ce ${libelleBon(commercant.categorie)} vient d’être utilisé, vérifie son solde et réessaie.` }, { status: 409 })
         }
       }
-      if (bonCadeau && vent.bonSurProduits > 0) {
-        const deb = await debiterBon(supabase, bonCadeau.id, vent.bonSurProduits, { source: 'commande', commande_id: commande.id })
+      if (bonsProduits.length > 0) {
+        const deb = await debiterBons(supabase, bonsProduits, { source: 'commande', commande_id: commande.id })
         if (!deb?.ok) {
           // ⚠️ ON REND CE QU'ON VIENT DE PRENDRE. La part prestation a été
           // débitée trois lignes plus haut pour un rendez-vous qui n'aura pas
           // lieu : la laisser dépensée ferait perdre de l'argent au porteur du
           // bon à cause d'une course qu'il n'a pas provoquée.
-          if (vent.bonSurPresta > 0) await recrediterBon(supabase, bonCadeau.id, vent.bonSurPresta, { rdv_id: idRdv })
+          //
+          // ⚠️ ET ON REND LES CINQ, pas le premier : la liste qui a servi au
+          // débit est exactement celle qui sert au retour.
+          if (bonsPresta.length > 0) await recrediterBons(supabase, bonsPresta, { rdv_id: idRdv })
           if (recompense) await rendreRecompense(supabase, recompense)
           await supabase.from('rdv_reservations').delete().eq('id', idRdv)
           await toutDefaire()
-          console.error('[create-rdv-commande] débit bon (produits) KO', deb?.error)
+          console.error('[create-rdv-commande] débit des bons (produits) KO', deb?.echecs)
           return NextResponse.json({ ok: false, error: `Ce ${libelleBon(commercant.categorie)} vient d’être utilisé, vérifie son solde et réessaie.` }, { status: 409 })
         }
       }
@@ -670,9 +713,14 @@ export async function POST(request) {
             // RENDEZ-VOUS. La part produits vit sur la commande, qui a ses
             // propres colonnes et son propre débit : deux mouvements, deux
             // cibles, comme l'impose `bons_cadeaux_mouvements_une_cible`.
-            ...(bonCadeau && vent.bonSurPresta > 0 ? {
-              bon_cadeau_id: String(bonCadeau.id),
-              bon_cadeau_montant: String(vent.bonSurPresta),
+            //
+            // 🔴 ET LA LISTE VOYAGE AVEC : le rendez-vous n'existe pas encore,
+            // il n'y a aucune ligne en base où lire `bons_utilises`. Sans elle
+            // le webhook ne débiterait que le premier bon.
+            ...(bonsPresta.length > 0 ? {
+              bon_cadeau_id: String(bonCadeau?.id || ''),
+              bon_cadeau_montant: String(partsBons.totalPresta),
+              bons_utilises: JSON.stringify(bonsPresta),
             } : {}),
             produits_montant: String(produitsCents / 100),
             // Le rendez-vous naît de ces métadonnées au webhook : sans

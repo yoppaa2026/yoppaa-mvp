@@ -25,7 +25,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
-import { rendreAvantagesRdv } from '@/lib/rdv-annulation-server'
+import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { annulerPush } from '@/lib/onesignal'
 
@@ -52,7 +52,7 @@ export async function POST(request) {
       .from('rdv_reservations')
       .select(`
         id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id,
-        commande_id, fidelite_recompense_id, fidelite_remise, bon_cadeau_id, bon_cadeau_montant,
+        commande_id, fidelite_recompense_id, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
         rappel_push_id, commercant_id,
         commercant:commercants(stripe_account_id)
       `)
@@ -75,7 +75,7 @@ export async function POST(request) {
     if (rdv.commande_id) {
       const { data: cmd } = await supabase
         .from('commandes')
-        .select('id, statut, total, bon_cadeau_id, bon_cadeau_montant, fidelite_remise, fidelite_recompense_id')
+        .select('id, statut, total, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_remise, fidelite_recompense_id')
         .eq('id', rdv.commande_id)
         .maybeSingle()
       if (cmd && !['annulee_client_refund', 'annulee_paiement_ko'].includes(cmd.statut)) commandeLiee = cmd
@@ -117,7 +117,9 @@ export async function POST(request) {
     // c'est lui qui renonce à la vente.
     const rendu = await rendreAvantagesRdv(supabase, {
       ou: 'rdv/annuler-commercant',
-      bonId: rdv.bon_cadeau_id, bonMontant: rdv.bon_cadeau_montant,
+      // 🔴 TOUS LES BONS, pas le premier avec le total : ce serait de l'argent
+      // créé sur l'un et détruit sur les autres.
+      bonsUtilises: lignesBonsDe(rdv),
       recompenseId: rdv.fidelite_recompense_id,
       recompenseMontant: arr(Number(rdv.fidelite_remise || 0)
         + Number(commandeLiee?.fidelite_remise || 0)),
@@ -136,7 +138,7 @@ export async function POST(request) {
         && String(commandeLiee.fidelite_recompense_id) === String(rdv.fidelite_recompense_id || '')
       const rc = await rendreAvantagesRdv(supabase, {
         ou: 'rdv/annuler-commercant',
-        bonId: commandeLiee.bon_cadeau_id, bonMontant: commandeLiee.bon_cadeau_montant,
+        bonsUtilises: lignesBonsDe(commandeLiee),
         recompenseId: memeRecompense ? null : commandeLiee.fidelite_recompense_id,
         recompenseMontant: Number(commandeLiee.fidelite_remise || 0),
         refs: { commande_id: commandeLiee.id },

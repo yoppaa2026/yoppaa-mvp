@@ -37,8 +37,8 @@ import { geocoderAdresse } from '@/lib/geocode'
 import { coordonneesPlausibles, requeteGeocodage, NOTE_MAX } from '@/lib/adresse-livraison'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
-import { normaliserCodeBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
-import { chargerBonValide, debiterBons } from '@/lib/bons-cadeaux-server'
+import { repartirBons } from '@/lib/bons-cadeaux'
+import { chargerBonsValides, debiterBons } from '@/lib/bons-cadeaux-server'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts } from '@/lib/modes-paiement'
 import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
@@ -482,38 +482,21 @@ export async function POST(request) {
     let bonCadeau = null
     let remiseBonEUR = 0
     let bonsUtilises = []
-    const codesRecus = Array.isArray(bons_cadeaux_codes) && bons_cadeaux_codes.length > 0
-      ? bons_cadeaux_codes
-      : (bon_cadeau_code ? [bon_cadeau_code] : [])
-    if (codesRecus.length > 0) {
-      if (codesRecus.length > BONS_MAX_PAR_COMMANDE) {
-        return NextResponse.json({ ok: false, error: `Cinq ${libelleBon(commercant.categorie, { pluriel: true })} au maximum par commande.` }, { status: 400 })
-      }
-      // ⚠️ LES DOUBLONS SONT REFUSÉS, PAS DÉDUPLIQUÉS EN SILENCE. Le même code
-      // envoyé deux fois compterait son solde deux fois : c'est une erreur à
-      // dire, pas à rattraper sans le signaler.
-      const normalises = []
-      for (const brut of codesRecus) {
-        const codeBon = normaliserCodeBon(brut)
-        if (!codeBon) {
-          return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
-        }
-        if (normalises.includes(codeBon)) {
-          return NextResponse.json({ ok: false, error: `Le même ${libelleBon(commercant.categorie)} est proposé deux fois.` }, { status: 400 })
-        }
-        normalises.push(codeBon)
-      }
-      // 🔴 CHAQUE BON EST REVALIDÉ CÔTÉ SERVEUR : l'écran propose, le serveur
-      // décide. Un seul code invalide fait échouer toute la commande, plutôt
-      // que d'en appliquer trois sur quatre sans le dire.
-      const valides = []
-      for (const codeBon of normalises) {
-        const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
-        if (!resBon.ok) {
-          return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
-        }
-        valides.push(resBon.bon)
-      }
+    // ⚠️ LA VALIDATION VIT DANS LE MODULE depuis que le rendez-vous cumule
+    // aussi : quatre routes suivent exactement la même règle (cinq au plus,
+    // doublon refusé, chaque code revalidé en base), et une règle d'argent
+    // recopiée quatre fois est une règle qui divergera.
+    const resBons = await chargerBonsValides(supabase, {
+      codes: bons_cadeaux_codes,
+      codeUnique: bon_cadeau_code,
+      commercant_id: commercant.id,
+      categorie: commercant.categorie,
+    })
+    if (!resBons.ok) {
+      return NextResponse.json({ ok: false, error: resBons.error }, { status: resBons.status || 400 })
+    }
+    if (resBons.bons.length > 0) {
+      const valides = resBons.bons
       // La répartition est PURE et benchée : plus proche expiration d'abord,
       // minimum Stripe appliqué au TOTAL et non à chaque bon.
       const rep = repartirBons(valides, baseApresRecompense)

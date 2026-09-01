@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { euros, eurosNus } from '../lib/montants.js'
 import { elisionDe } from '../lib/francais.js'
 import { doitMontrerFlottant, SEUIL_CACHER, SEUIL_MONTRER } from '../lib/bouton-flottant.js'
-import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon, libelleBon, confirmationDepuisBon, ETATS_CONFIRMATION, repartirBons, BONS_MAX_PAR_COMMANDE } from '../lib/bons-cadeaux.js'
+import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon, libelleBon, confirmationDepuisBon, ETATS_CONFIRMATION, repartirBons, repartirBonsRdv, repartirRestitution, BONS_MAX_PAR_COMMANDE } from '../lib/bons-cadeaux.js'
 import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages, etatPaiementClient } from '../lib/rdv-paiement.js'
 import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant } from '../lib/resend.js'
 import { texteBonVendu } from '../lib/bons-vendus.js'
@@ -211,7 +211,10 @@ const egal = (nom, obtenu, attendu) =>
   ]) {
     const src = lireCode(chemin)
     verifie(`tunnel ${nom} : lit le code envoyé`, /bon_cadeau_code/.test(src))
-    verifie(`tunnel ${nom} : le REVALIDE côté serveur`, /chargerBonValide\(/.test(src))
+    // ⚠️ ET DEPUIS LE 01/09, UNE LISTE : le rendez-vous cumule comme la
+    // boutique, et le serveur revalide chaque code par le module partagé.
+    verifie(`tunnel ${nom} : accepte une LISTE de codes`, /bons_cadeaux_codes/.test(src))
+    verifie(`tunnel ${nom} : les REVALIDE côté serveur`, /chargerBonsValides\(/.test(src))
     // ⚠️ LE CALCUL A DÉMÉNAGÉ LE 29/08 dans `lib/tunnel-rdv-montants.js`, seul
     // endroit du projet où l'on ventile un rendez-vous. Ces deux gardes
     // recopiaient l'appel littéral `calculerRemiseBon(bonCadeau.solde,
@@ -228,10 +231,19 @@ const egal = (nom, obtenu, attendu) =>
       !/calculerRemiseBon\(/.test(src))
     // ⚠️ ET LE SOLDE DU BON VIENT DE LA BASE, jamais de l'écran : « l'écran
     // calcule, le serveur décide ».
-    verifie(`tunnel ${nom} : le solde vient du bon rechargé`,
-      /soldeBon: bonCadeau \? Number\(bonCadeau\.solde\) : 0/.test(src))
-    verifie(`tunnel ${nom} : transmet le bon au webhook`,
-      /bon_cadeau_id: String\(bonCadeau\.id\)/.test(src))
+    //
+    // ⚠️ CES DEUX GARDES ONT ROUGI LE 01/09 SUR DU CODE JUSTE, une fois de
+    // plus parce qu'elles décrivaient une FORME au singulier. Ce qui compte est
+    // la RÈGLE : le solde vient des bons RECHARGÉS EN BASE, additionnés, jamais
+    // d'un nombre envoyé par l'écran.
+    verifie(`tunnel ${nom} : le solde vient des bons rechargés`,
+      /soldeBon: soldeBonTotal/.test(src)
+      && /soldeBonTotal = bonsValides\.reduce/.test(src))
+    // 🔴 ET LA LISTE VOYAGE JUSQU'AU WEBHOOK, parce que le rendez-vous n'existe
+    // pas encore : il n'y a aucune ligne en base où lire `bons_utilises`. Sans
+    // elle, le webhook ne débiterait que le premier bon.
+    verifie(`tunnel ${nom} : transmet la LISTE des bons au webhook`,
+      /bons_utilises: JSON\.stringify\(bons(Presta|Utilises)\)/.test(src))
   }
 
   // ⚠️ ET L'ÉCRAN N'ENVOIE QUE LE CODE, jamais le montant : le 27/08, les DEUX
@@ -242,8 +254,16 @@ const egal = (nom, obtenu, attendu) =>
   // Se contenter d'« au moins une occurrence » laissait passer la mutation qui
   // n'en cassait qu'une : exactement le défaut du 27/08, où un seul des deux
   // tunnels connaissait la fidélité.
-  const envois = (ecran.match(/bon_cadeau_code: bonChoisi\.code/g) || []).length
-  egal('l\'écran envoie le code du bon dans les TROIS sorties', envois, 3)
+  //
+  // 🔴 ET C'EST UNE LISTE DEPUIS LE 01/09 : le tunnel rendez-vous cumule comme
+  // la boutique. La règle des TROIS sorties, elle, ne bouge pas — c'est elle
+  // qui a attrapé le défaut du 27/08, où un seul des deux tunnels savait.
+  const envois = (ecran.match(/bons_cadeaux_codes: bonsAppliques\.map\(b => b\.code\)/g) || []).length
+  egal('l\'écran envoie les codes des bons dans les TROIS sorties', envois, 3)
+  // ⚠️ ET PLUS AUCUNE SORTIE AU SINGULIER : une seule oubliée et ce
+  // rendez-vous-là n'accepterait toujours qu'un bon, en silence.
+  verifie('🔴 plus aucun bon unique dans le tunnel rendez-vous',
+    !/bonChoisi/.test(ecran))
   // ⚠️ CETTE GARDE CHERCHAIT UN MOT DANS TOUT LE FICHIER, et elle a rougi le
   // 30/08 sur du code juste : l'écran de confirmation AFFICHE désormais
   // `bon_cadeau_montant`, que le serveur vient de lui rendre. Afficher un
@@ -307,9 +327,23 @@ const egal = (nom, obtenu, attendu) =>
   })()
   verifie('le webhook applique les avantages par le module', appelAvantages.length > 60,
     `${appelAvantages.length} caractères`)
-  verifie('et il lui passe le bon reçu de Stripe, pas un vide',
-    /bonCadeauId: meta\.bon_cadeau_id/.test(appelAvantages)
-    && /bonMontant: Number\(meta\.bon_cadeau_montant\)/.test(appelAvantages))
+  // ⚠️ RÉANCRÉE LE 01/09 : le module prend maintenant une LISTE. La règle est la
+  // même — un appel qui passe un vide au lieu des bons reçus de Stripe ne
+  // débite rien — mais elle porte désormais sur `bons_utilises`.
+  verifie('et il lui passe les bons reçus de Stripe, pas un vide',
+    /bonsUtilises: champs\.bons_utilises/.test(appelAvantages))
+  // 🔴 ET `champs.bons_utilises` VIENT VRAIMENT DES MÉTADONNÉES. Sans cette
+  // garde, la précédente resterait verte sur une clé toujours vide.
+  verifie('et cette liste est bien lue dans les métadonnées Stripe',
+    /bons_utilises: lignesBonsDeMeta\(meta\)/.test(wh))
+  // ⚠️ LE REPLI SUR L'ANCIENNE PAIRE EXISTE, et il n'est pas décoratif : des
+  // paiements partis AVANT ce déploiement arriveront APRÈS. Leur session ne
+  // porte que `bon_cadeau_id`, et sans repli leur bon ne serait jamais débité.
+  {
+    const modCreation = lireCode('lib/rdv-creation-server.js')
+    verifie('un paiement parti avant le cumul garde son repli',
+      /meta\?\.bon_cadeau_id && Number\(meta\?\.bon_cadeau_montant\) > 0/.test(modCreation))
+  }
   verifie('ainsi que la récompense',
     /recompenseId: meta\.fidelite_recompense_id/.test(appelAvantages))
 
@@ -720,9 +754,12 @@ const egal = (nom, obtenu, attendu) =>
     blocActif.length > 800 && blocInfo.length > 300,
     `${blocActif.length} / ${blocInfo.length} caractères`)
 
+  // ⚠️ RÉANCRÉE LE 01/09 : `setBonChoisi` est devenu `setBonsAppliques` quand le
+  // tunnel rendez-vous s'est mis à cumuler. La règle défendue n'a pas bougé —
+  // le bloc actionnable AGIT, le repli informatif ne touche à rien.
   verifie('🔴 le bloc actionnable propose bien de l’utiliser',
-    /setBonChoisi\(/.test(blocActif))
-  verifie('et le repli, lui, ne débite rien', !/setBonChoisi\(/.test(blocInfo))
+    /setBonsAppliques\(/.test(blocActif))
+  verifie('et le repli, lui, ne débite rien', !/setBonsAppliques\(/.test(blocInfo))
   // ⚠️ DEUXIÈME GARDE DE LA JOURNÉE À AVOIR SURVEILLÉ LE MOT. Elle cherchait
   // « sur ton bon cadeau ici. » et a rougi le jour où le libellé s'est mis à
   // suivre le métier, alors que la phrase disait toujours exactement la même
@@ -1230,11 +1267,27 @@ const egal = (nom, obtenu, attendu) =>
     verifie('🔴 le solde vient du SERVEUR, jamais de l\'écran',
       /\/api\/bons-cadeaux\/verifier/.test(rdv))
     verifie('le bon saisi prend la forme des bons de la liste',
-      /setBonChoisi\(\{ id: `saisi-\$\{j\.code\}`, code: j\.code, solde: j\.solde \}\)/.test(rdv))
-    // ⚠️ LE CHAMP S'EFFACE DÈS QU'UN BON EST RETENU : proposer d'en saisir un
-    // second n'aurait pas de sens, et laisserait croire qu'on peut cumuler.
-    verifie('le champ disparaît quand un bon est déjà appliqué',
-      /!seanceSurAbo && prixBase != null && !bonChoisi && \(/.test(rdv))
+      /return \[\.\.\.liste, \{ id: j\.code, code: j\.code, solde: j\.solde \}\]/.test(rdv))
+    // 🔴 ET IL S'AJOUTE, IL NE REMPLACE PAS. C'est LE défaut qu'Alex a signalé
+    // sur 180 € et trois bons : en retenir un faisait disparaître les autres.
+    verifie('🔴 un bon retenu s’AJOUTE aux précédents',
+      /return \[\.\.\.liste,/.test(rdv))
+    // 🔴 UN MÊME CODE DEUX FOIS COMPTERAIT SON SOLDE DEUX FOIS.
+    verifie('🔴 un doublon est refusé dans le tunnel rendez-vous',
+      /if \(liste\.some\(b => b\.code === j\.code\)\)/.test(rdv)
+      && /est déjà appliqué/.test(rdv))
+    verifie('et la borne des cinq s’applique aussi ici',
+      /if \(liste\.length >= BONS_MAX_PAR_COMMANDE\)/.test(rdv))
+    // 🔴 CHAQUE BON AFFICHE CE QU'IL FINANCE UNE FOIS LA RÉPARTITION FAITE, et
+    // non ce qu'il financerait tout seul : sur trois bons, chacun annoncerait
+    // sinon le montant que seul le premier obtient.
+    verifie('🔴 chaque bon affiche sa part de la répartition ENTIÈRE',
+      /repartirBonsRdv\(bonsAppliques, \{/.test(rdv))
+    // 🔴 LE CHAMP RESTE OFFERT TANT QU'IL Y A DE LA PLACE (01/09). Il
+    // s'effaçait au premier bon retenu, et c'est précisément lui qui permet
+    // d'AJOUTER un bon reçu ailleurs par-dessus ceux du compte.
+    verifie('le champ reste offert tant qu’il reste de la place',
+      /!seanceSurAbo && prixBase != null && bonsAppliques\.length < BONS_MAX_PAR_COMMANDE && \(/.test(rdv))
     // ⚠️ ET LES DEUX TUNNELS LISENT LE LIEN, pas seulement la boutique : la
     // page du bon renvoie ICI pour tous les commerces de service.
     verifie('le tunnel rendez-vous lit aussi le code du lien',
@@ -1346,6 +1399,109 @@ const egal = (nom, obtenu, attendu) =>
   verifie('les centimes tombent juste', Number.isInteger(Math.round(centimes.reste * 100)))
   verifie('les centimes : rien ne se perd', boucle(centimes, 1.00))
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LA RÉPARTITION SUR LES DEUX CIBLES D'UN RENDEZ-VOUS (01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Un rendez-vous n'a pas une cible, il en a DEUX : la prestation, qui vit sur
+  // `rdv_reservations`, et les produits, qui vivent sur `commandes`. À
+  // l'annulation, le Yopper peut GARDER ses produits : cette part-là ne lui
+  // revient pas, l'autre si. Un seul montant global rendrait ce choix impossible
+  // à honorer, et c'est pour ça que le partage est calculé, pas approximé.
+  {
+    const c = repartirBonsRdv([bon(50), bon(75), bon(20)], { surPresta: 100, surProduits: 45 })
+    verifie('RDV : la prestation reçoit exactement ce qui lui revient', c.totalPresta === 100)
+    verifie('RDV : les produits reçoivent exactement ce qui leur revient', c.totalProduits === 45)
+    verifie('RDV : les deux seaux se vident, aucun reste', c.restePresta === 0 && c.resteProduits === 0)
+    // 🔴 AUCUN BON N'EST DÉBITÉ AU-DELÀ DE SON SOLDE, sur les DEUX listes
+    // additionnées. C'est l'invariant qui empêche de créer de l'argent : un bon
+    // qui paie 50 € de prestation ET 50 € de produits alors qu'il n'en porte
+    // que 50 aurait payé deux fois.
+    const parBon = new Map()
+    for (const l of [...c.presta, ...c.produits]) {
+      parBon.set(l.id, Math.round(((parBon.get(l.id) || 0) + l.montant) * 100) / 100)
+    }
+    const soldes = { b50: 50, b75: 75, b20: 20 }
+    verifie('🔴 RDV : aucun bon ne paie plus que son solde',
+      [...parBon.entries()].every(([id, m]) => m <= soldes[id] + 1e-9),
+      [...parBon.entries()].map(([i, m]) => `${i}=${m}`).join(' '))
+    verifie('RDV : le total des deux cibles vaut le total des bons servis',
+      Math.round(c.total * 100) === Math.round((c.totalPresta + c.totalProduits) * 100))
+
+    // ⚠️ LA PRESTATION EST SERVIE EN PREMIER, et ce n'est pas cosmétique : ce
+    // qui tombe sur la prestation allège l'ACOMPTE, donc ce que le Yopper sort
+    // le jour du rendez-vous.
+    const p = repartirBonsRdv([bon(30)], { surPresta: 20, surProduits: 10 })
+    verifie('RDV : la prestation passe avant les produits',
+      p.presta[0]?.montant === 20 && p.produits[0]?.montant === 10)
+
+    // Un bon épuisé par la prestation ne réapparaît pas côté produits.
+    const epuise = repartirBonsRdv([bon(20, null, 'petit'), bon(80, null, 'gros')], { surPresta: 20, surProduits: 30 })
+    verifie('RDV : un bon épuisé par la prestation ne repaie pas les produits',
+      !epuise.produits.some(l => l.id === 'petit'))
+    verifie('RDV : le suivant prend le relais sur les produits',
+      epuise.produits.length === 1 && epuise.produits[0].montant === 30)
+
+    // Les cas nuls, qui existent pour de vrai : prestation sur devis (rien à
+    // couvrir côté prestation), ou rendez-vous sans produits.
+    const sansPresta = repartirBonsRdv([bon(40)], { surPresta: 0, surProduits: 25 })
+    verifie('RDV : sans part prestation, tout va aux produits',
+      sansPresta.presta.length === 0 && sansPresta.totalProduits === 25)
+    const rien = repartirBonsRdv([bon(40)], { surPresta: 0, surProduits: 0 })
+    verifie('RDV : rien à couvrir, rien n\'est débité', rien.total === 0)
+    verifie('RDV : aucun bon, aucune ligne', repartirBonsRdv([], { surPresta: 10, surProduits: 5 }).total === 0)
+    // ⚠️ ET LE SEAU RESTE ANNONCÉ QUAND IL NE PEUT PAS SE REMPLIR : c'est une
+    // incohérence interne, que la route journalise au lieu de l'avaler.
+    const court = repartirBonsRdv([bon(10)], { surPresta: 30, surProduits: 5 })
+    verifie('RDV : un seau qui ne peut pas se remplir est ANNONCÉ',
+      court.restePresta === 20 && court.resteProduits === 5)
+
+    // Le tableau reçu n'est pas réordonné, ici non plus.
+    const src2 = [bon(30, '2028-01-01', 'tard'), bon(30, '2026-01-01', 'tot')]
+    repartirBonsRdv(src2, { surPresta: 30, surProduits: 30 })
+    verifie('RDV : le tableau reçu n\'est pas réordonné', src2[0].id === 'tard')
+    // ⚠️ ET LE PLUS PROCHE DE L'EXPIRATION SERT EN PREMIER, comme en boutique :
+    // c'est le même ordre, par la même fonction.
+    const ordreRdv = repartirBonsRdv(
+      [bon(30, '2028-01-01', 'tard'), bon(30, '2026-01-01', 'tot')],
+      { surPresta: 30, surProduits: 0 })
+    verifie('RDV : le plus proche de l\'expiration paie en premier', ordreRdv.presta[0]?.id === 'tot')
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LA RESTITUTION PARTIELLE DU NO-SHOW (01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Le no-show ne rend pas les bons, il rend CE QUI DÉPASSE LA GARANTIE. Le
+  // commerçant garde l'équivalent de l'acompte. Reste à décider à QUI on rend.
+  {
+    const paye = [{ id: 'tot', montant: 50 }, { id: 'moyen', montant: 75 }, { id: 'tard', montant: 20 }]
+    // 🔴 ON REND EN COMMENÇANT PAR LA FIN : miroir du débit, donc l'argent
+    // revient sur le bon qui expire LE PLUS TARD, celui que le Yopper a le plus
+    // de temps pour dépenser.
+    const r = repartirRestitution(paye, 30)
+    verifie('no-show : 30 € rendus sur 145 € payés',
+      Math.round(r.reduce((s, l) => s + l.montant, 0) * 100) === 3000)
+    verifie('no-show : le bon qui expire le plus tard est servi en entier d\'abord',
+      r.some(l => l.id === 'tard' && l.montant === 20) && r.some(l => l.id === 'moyen' && l.montant === 10))
+    // ⚠️ LES LIGNES SORTENT DANS L'ORDRE DU DÉBIT : on rend à l'envers, on ne
+    // RACONTE pas à l'envers.
+    verifie('no-show : les lignes rendues gardent l\'ordre du débit',
+      r.map(l => l.id).join(',') === 'moyen,tard')
+    // 🔴 ON NE REND JAMAIS PLUS QUE CE QUI A ÉTÉ PRIS, sur aucun bon.
+    const tropRendu = repartirRestitution(paye, 500)
+    verifie('🔴 no-show : on ne rend jamais plus que ce qui a été pris',
+      Math.round(tropRendu.reduce((s, l) => s + l.montant, 0) * 100) === 14500)
+    verifie('no-show : aucune ligne ne dépasse ce que son bon avait payé',
+      tropRendu.every(l => l.montant <= (paye.find(p => p.id === l.id)?.montant ?? 0)))
+    // Rien à rendre : aucune ligne, donc aucun mouvement à zéro dans l'historique.
+    verifie('no-show : rien à rendre, aucune ligne', repartirRestitution(paye, 0).length === 0)
+    verifie('no-show : rien de payé, aucune ligne', repartirRestitution([], 30).length === 0)
+    // ⚠️ UNE LIGNE BANCALE EST ÉCARTÉE, elle ne devient pas un mouvement nul.
+    verifie('no-show : une ligne sans identifiant est écartée',
+      repartirRestitution([{ id: null, montant: 10 }, { id: 'ok', montant: 10 }], 20).length === 1)
+  }
+
   // ─── 🔴 LE CÂBLAGE SERVEUR, AUX DEUX BOUTS DU FIL ─────────────────────────
   //
   // ⚠️ CINQ ENDROITS DÉBITENT OU RECRÉDITENT UN BON. Si un seul reste sur
@@ -1356,6 +1512,157 @@ const egal = (nom, obtenu, attendu) =>
   verifie('la boucle de recrédit aussi', /export async function recrediterBons/.test(serveur))
   verifie('une ligne bancale est un échec NOMMÉ, pas un tour sauté',
     /ligne de bon invalide/.test(serveur))
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LA VALIDATION DES CODES, EXÉCUTÉE (01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 TROIS MUTATIONS SONT RESTÉES VERTES sur ce bloc. Les gardes cherchaient
+  // le MESSAGE de refus (« est proposé deux fois », `BONS_MAX_PAR_COMMANDE`), et
+  // ces mots survivent parfaitement à un `if (false)`. Le refus disparaissait,
+  // la phrase restait, le banc applaudissait.
+  //
+  // ⚠️ ON EXÉCUTE DONC LA FONCTION. C'est la seule façon de mesurer un REFUS :
+  // une garde qui lit le texte d'un message ne sait pas si la porte est fermée.
+  {
+    const { chargerBonsValides } = await import('../lib/bons-cadeaux-server.js')
+    const CID = 'commerce-1'
+    const enBase = {
+      'BC-AAAA-AAAA': { id: 'b1', commercant_id: CID, code: 'BC-AAAA-AAAA', solde: 50, statut: 'actif', expires_at: null },
+      'BC-BBBB-BBBB': { id: 'b2', commercant_id: CID, code: 'BC-BBBB-BBBB', solde: 75, statut: 'actif', expires_at: null },
+      'BC-CCCC-CCCC': { id: 'b3', commercant_id: CID, code: 'BC-CCCC-CCCC', solde: 20, statut: 'actif', expires_at: null },
+      'BC-DDDD-DDDD': { id: 'b4', commercant_id: CID, code: 'BC-DDDD-DDDD', solde: 10, statut: 'actif', expires_at: null },
+      'BC-EEEE-EEEE': { id: 'b5', commercant_id: CID, code: 'BC-EEEE-EEEE', solde: 10, statut: 'actif', expires_at: null },
+      'BC-FFFF-FFFF': { id: 'b6', commercant_id: CID, code: 'BC-FFFF-FFFF', solde: 10, statut: 'actif', expires_at: null },
+      'BC-9999-9999': { id: 'bx', commercant_id: 'autre-commerce', code: 'BC-9999-9999', solde: 99, statut: 'actif', expires_at: null },
+    }
+    const faussebase = {
+      from: () => ({
+        select: () => ({
+          eq: (_col, code) => ({
+            maybeSingle: async () => ({ data: enBase[code] || null, error: null }),
+          }),
+        }),
+      }),
+    }
+    const charger = (codes, codeUnique = null) => chargerBonsValides(faussebase, {
+      codes, codeUnique, commercant_id: CID, categorie: 'coiffeur',
+    })
+
+    const trois = await charger(['BC-AAAA-AAAA', 'BC-BBBB-BBBB', 'BC-CCCC-CCCC'])
+    verifie('trois codes valides sont acceptés', trois.ok && trois.bons.length === 3)
+    verifie('et rendus dans l’ordre reçu',
+      trois.ok && trois.bons.map(b => b.id).join(',') === 'b1,b2,b3')
+
+    // 🔴 LA BORNE DES CINQ. Elle garde les métadonnées Stripe sous leur limite,
+    // et une réservation lisible.
+    const six = await charger(Object.keys(enBase).filter(c => c !== 'BC-9999-9999'))
+    verifie('🔴 six codes sont REFUSÉS', six.ok === false, JSON.stringify(six).slice(0, 120))
+    verifie('et le refus nomme la borne', /maximum/.test(six.error || ''), six.error)
+    const cinq = await charger(['BC-AAAA-AAAA', 'BC-BBBB-BBBB', 'BC-CCCC-CCCC', 'BC-DDDD-DDDD', 'BC-EEEE-EEEE'])
+    verifie('cinq passent encore', cinq.ok && cinq.bons.length === 5)
+
+    // 🔴 LE DOUBLON EST REFUSÉ, PAS DÉDUPLIQUÉ EN SILENCE : le même code compté
+    // deux fois vaudrait deux fois son solde.
+    const doublon = await charger(['BC-AAAA-AAAA', 'bc-aaaa-aaaa'])
+    verifie('🔴 le même code deux fois est REFUSÉ', doublon.ok === false)
+    verifie('et le refus le dit', /deux fois/.test(doublon.error || ''), doublon.error)
+
+    // 🔴 UN SEUL CODE INVALIDE FAIT ÉCHOUER TOUT, plutôt que d'en appliquer
+    // trois sur quatre sans le dire.
+    const inconnu = await charger(['BC-AAAA-AAAA', 'BC-ZZZZ-ZZZZ'])
+    verifie('🔴 un code inconnu fait échouer TOUTE la liste', inconnu.ok === false)
+    verifie('et aucun bon n’est rendu au passage', inconnu.bons === undefined)
+    // ⚠️ LE BON D'UN AUTRE COMMERCE EST INCONNU ICI, et le message ne confirme
+    // pas son existence : un code, c'est de l'argent.
+    const ailleurs = await charger(['BC-9999-9999'])
+    verifie('🔴 le bon d’un autre commerce est refusé', ailleurs.ok === false)
+    verifie('et le refus ne confirme pas son existence',
+      /inconnu/.test(ailleurs.error || ''), ailleurs.error)
+    const malforme = await charger(['pas-un-code'])
+    verifie('un code malformé est refusé', malforme.ok === false)
+
+    // ⚠️ L'ANCIENNE FORME AU SINGULIER RESTE ACCEPTÉE : les écrans et le serveur
+    // ne se déploient pas à la seconde près.
+    const seul = await charger(null, 'BC-BBBB-BBBB')
+    verifie('l’ancien champ au singulier reste accepté', seul.ok && seul.bons.length === 1)
+    const rien = await charger(null, null)
+    verifie('aucun code : aucun bon, et aucun refus', rien.ok === true && rien.bons.length === 0)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LE DÉBIT DES BONS D'UN RENDEZ-VOUS, EXÉCUTÉ (01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 LA MUTATION « le rendez-vous ne débite que le premier de ses bons » EST
+  // RESTÉE VERTE. Aucun banc n'exécutait `appliquerAvantagesRdv` : on lisait son
+  // texte. Or c'est cette fonction qui dépense l'argent des trois autres bons.
+  {
+    const { appliquerAvantagesRdv, lignesBonsDeMeta } = await import('../lib/rdv-creation-server.js')
+    const mouvements = []
+    const db = {
+      from: (table) => ({
+        insert: (l) => { mouvements.push({ table, ...l }); return { then: (s) => Promise.resolve({ error: null }).then(s) } },
+        select: () => ({
+          eq: () => ({
+            single: async () => ({ data: { solde: 100 } }),
+            maybeSingle: async () => ({ data: null }),
+          }),
+        }),
+        update: () => ({ eq: () => ({ then: (s) => Promise.resolve({ error: null }).then(s) }) }),
+      }),
+    }
+    const bilan = await appliquerAvantagesRdv(db, {
+      rdvId: 'rdv1',
+      bonsUtilises: [{ id: 'b1', montant: 50 }, { id: 'b2', montant: 75 }, { id: 'b3', montant: 20 }],
+    })
+    const mvts = mouvements.filter(m => m.table === 'bons_cadeaux_mouvements')
+    egal('🔴 trois bons donnent TROIS mouvements de débit', mvts.length, 3)
+    verifie('🔴 chacun est débité de SON montant, pas du total',
+      mvts.map(m => `${m.bon_id}:${m.montant}`).join(' ') === 'b1:-50 b2:-75 b3:-20',
+      mvts.map(m => `${m.bon_id}:${m.montant}`).join(' '))
+    verifie('les trois mouvements désignent le rendez-vous',
+      mvts.every(m => m.rdv_id === 'rdv1' && m.source === 'rdv'))
+    verifie('et le bilan dit que le débit a eu lieu', bilan.bon === true)
+
+    // 🔴 LE CANAL DES MÉTADONNÉES, EXÉCUTÉ LUI AUSSI. Le rendez-vous n'existe
+    // pas encore quand le webhook arrive : c'est le SEUL endroit où la liste a
+    // pu voyager.
+    egal('les métadonnées rendent les trois bons',
+      lignesBonsDeMeta({ bons_utilises: '[{"id":"b1","montant":50},{"id":"b2","montant":75},{"id":"b3","montant":20}]' }).length, 3)
+    // ⚠️ ET LE REPLI SUR L'ANCIENNE PAIRE : des paiements partis AVANT ce
+    // déploiement arrivent APRÈS. Sans repli, leur bon n'est jamais débité.
+    egal('un paiement parti avant le cumul garde son bon',
+      lignesBonsDeMeta({ bon_cadeau_id: 'vieux', bon_cadeau_montant: '40' }).length, 1)
+    // ⚠️ `?.` ET NON `[0].` : sans lui, la mutation qui retire le repli fait
+    // PLANTER le banc au lieu de le faire ROUGIR. Un banc qui plante est une
+    // détection, mais illisible — et le harnais la compte comme manquée.
+    egal('et son montant',
+      lignesBonsDeMeta({ bon_cadeau_id: 'vieux', bon_cadeau_montant: '40' })[0]?.montant, 40)
+    // ⚠️ UNE LIGNE BANCALE VENUE DE STRIPE EST ÉCARTÉE : ces valeurs ont fait
+    // l'aller-retour en texte, et une ligne fausse écrite dans la colonne
+    // d'argent y resterait pour toujours.
+    egal('une ligne sans identifiant est écartée',
+      lignesBonsDeMeta({ bons_utilises: '[{"montant":50},{"id":"b2","montant":75}]' }).length, 1)
+    // ⚠️ ON INTERCEPTE LES CRIS AU LIEU DE LES LAISSER SALIR LA SORTIE, et
+    // surtout on les MESURE : des métadonnées illisibles sont un cas anormal,
+    // et un silence ici laisserait passer un bon jamais débité.
+    const errOriginal = console.error
+    const cris = []
+    console.error = (...a) => cris.push(a.join(' '))
+    let vide, illisible
+    try {
+      vide = lignesBonsDeMeta({ bons_utilises: '[{"id":"b1","montant":0}]', bon_cadeau_id: '', bon_cadeau_montant: '0' })
+      illisible = lignesBonsDeMeta({ bons_utilises: '{pas du json' })
+    } finally {
+      console.error = errOriginal
+    }
+    egal('un montant nul est écarté', vide.length, 0)
+    egal('des métadonnées illisibles ne font rien débiter', illisible.length, 0)
+    verifie('et l’anomalie est criée dans les journaux',
+      cris.some(c => /non analysable|illisible/.test(c)), cris.join(' | '))
+    egal('aucune métadonnée, aucun bon', lignesBonsDeMeta({}).length, 0)
+  }
 
   const ARGENT = {
     'app/api/stripe/checkout/create-commande/route.js': ['debiterBons'],
@@ -1381,17 +1688,50 @@ const egal = (nom, obtenu, attendu) =>
 
   const creation = lireCode('app/api/stripe/checkout/create-commande/route.js')
   verifie('la commande accepte une LISTE de codes', /bons_cadeaux_codes/.test(creation))
-  verifie('l\'ancien champ au singulier reste accepté', /bon_cadeau_code \? \[bon_cadeau_code\]/.test(creation))
   verifie('la répartition passe par le module pur', /repartirBons\(valides, baseApresRecompense\)/.test(creation))
   verifie('la liste est écrite sur la commande', /bons_utilises: bonsUtilises/.test(creation))
+
+  // ⚠️ CES QUATRE GARDES ONT ROUGI LE 01/09, ET SUR DU CODE JUSTE. Elles
+  // lisaient la validation des codes DANS `create-commande` ; le rendez-vous
+  // s'étant mis à cumuler lui aussi, cette validation a déménagé dans
+  // `chargerBonsValides` pour ne pas exister en QUATRE copies. La règle n'a pas
+  // bougé d'un iota, seul son domicile a changé.
+  //
+  // 🔴 ELLES SUIVENT DONC LA RÈGLE À SON NOUVEAU DOMICILE, et une garde
+  // supplémentaire vérifie que les quatre routes y passent VRAIMENT : sans
+  // elle, on mesurerait un module que plus personne n'appelle.
+  verifie('l\'ancien champ au singulier reste accepté',
+    /codeUnique \? \[codeUnique\]/.test(serveur))
   // 🔴 UN MÊME CODE DEUX FOIS COMPTERAIT SON SOLDE DEUX FOIS.
   verifie('🔴 un doublon de code est refusé, pas dédupliqué en silence',
-    /est proposé deux fois/.test(creation))
+    /est proposé deux fois/.test(serveur))
   verifie('la borne des cinq bons est appliquée côté serveur',
-    /BONS_MAX_PAR_COMMANDE/.test(creation))
+    /BONS_MAX_PAR_COMMANDE/.test(serveur))
   // ⚠️ CHAQUE BON EST REVALIDÉ : l'écran propose, le serveur décide.
   verifie('chaque bon est revalidé un par un',
-    /for \(const codeBon of normalises\)[\s\S]{0,200}chargerBonValide/.test(creation))
+    /for \(const code of normalises\)[\s\S]{0,200}chargerBonValide/.test(serveur))
+  // 🔴 ET LES QUATRE ROUTES DE PAIEMENT Y PASSENT, sans exception : c'est la
+  // garde qui empêche une cinquième copie de renaître demain.
+  for (const f of [
+    'app/api/stripe/checkout/create-commande/route.js',
+    'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    'app/api/stripe/checkout/create-rdv-commande/route.js',
+    'app/api/rdv/reserver/route.js',
+  ]) {
+    const src = lireCode(f)
+    verifie(`${f} : valide ses codes par le module partagé`,
+      /const resBons = await chargerBonsValides\(/.test(src))
+    verifie(`${f} : ne revalide plus un code à la main`,
+      !/await chargerBonValide\(/.test(src))
+    // ⚠️ ET LE REFUS EST RELAYÉ. Charger sans lire le résultat laisserait passer
+    // un code expiré ou vidé : « l'écran propose, le serveur décide » ne vaut
+    // que si le serveur dit non.
+    verifie(`${f} : relaie le refus du module`,
+      /if \(!resBons\.ok\)/.test(src))
+    // 🔴 ET LES BONS RETENUS SORTENT DE CE RÉSULTAT, de nulle part ailleurs.
+    verifie(`${f} : les bons retenus viennent de ce résultat`,
+      /const bonsValides = resBons\.bons/.test(src) || /const valides = resBons\.bons/.test(src))
+  }
 
   // ─── 🔴 L'ÉCRAN DU CUMUL (01/09) ──────────────────────────────────────────
   //

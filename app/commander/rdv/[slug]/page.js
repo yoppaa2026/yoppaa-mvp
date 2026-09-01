@@ -41,7 +41,7 @@ import { capacitePrestation, estCoursCollectif, libellePlaces } from '@/lib/cour
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
 // boutique : deux écritures d'une même phrase finissent toujours par dire deux
 // choses.
-import { libelleResteBon, libelleBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
+import { libelleResteBon, libelleBon, normaliserCodeBon, repartirBonsRdv, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -351,9 +351,18 @@ export default function CommanderRdvSlug() {
   // bons : son bénéficiaire recevait un email promettant l'usage en ligne, et
   // arrivait sur cette fiche qui n'en connaissait aucun. Cul-de-sac.
   const [mesBonsIci, setMesBonsIci] = useState([])
-  // Le bon retenu pour ce rendez-vous. Comme la récompense, il n'est PAS actif
-  // d'office : un bon de 50 € posé sur une prestation à 20 € brûlerait 30 €.
-  const [bonChoisi, setBonChoisi] = useState(null)
+  // 🔴 LES BONS RETENUS POUR CE RENDEZ-VOUS, UNE LISTE DEPUIS LE 01/09.
+  //
+  // C'était un bon unique, et en retenir un faisait DISPARAÎTRE les autres.
+  // Alex l'a vu en boutique sur 180 € et trois bons ; le tunnel rendez-vous
+  // avait exactement le même défaut, au même endroit du parcours.
+  //
+  // ⚠️ COMME LA RÉCOMPENSE, AUCUN N'EST ACTIF D'OFFICE : un bon de 50 € posé
+  // sur une prestation à 20 € en brûlerait 30. C'est le Yopper qui décide.
+  const [bonsAppliques, setBonsAppliques] = useState([])   // [{ id, code, solde }]
+  // Le solde total offert par les bons retenus : c'est ce que la ventilation
+  // plafonne, et jamais un montant que l'écran déciderait de son côté.
+  const soldeBonsRetenus = bonsAppliques.reduce((s, b) => s + Number(b.solde || 0), 0)
 
   // ═══════════════════════════════════════════════════════════════════════════
   // « J'AI UN CODE » — LA SAISIE QUI N'EXISTAIT PAS ICI (01/09)
@@ -392,10 +401,29 @@ export default function CommanderRdvSlug() {
         body: JSON.stringify({ commercant_id: commercant.id, code }),
       })
       const j = await r.json()
-      if (!r.ok || !j.ok) { setBonErreur(j.error || 'Vérification impossible.'); setBonChoisi(null) }
-      // `bonChoisi` porte `{ code, solde }` : la même forme que les bons de la
-      // liste, pour que tout le calcul en aval ne connaisse qu'un seul cas.
-      else { setBonChoisi({ id: `saisi-${j.code}`, code: j.code, solde: j.solde }); setBonInput('') }
+      // ⚠️ UN CODE REFUSÉ NE VIDE PLUS LA LISTE. Avant, un mauvais code effaçait
+      // le bon déjà retenu : le Yopper perdait sa remise pour une faute de
+      // frappe. On dit l'erreur, on ne défait rien.
+      if (!r.ok || !j.ok) { setBonErreur(j.error || 'Vérification impossible.') }
+      else {
+        setBonsAppliques(liste => {
+          // 🔴 UN MÊME CODE DEUX FOIS COMPTERAIT SON SOLDE DEUX FOIS. Le serveur
+          // le refuse aussi, mais autant le dire ici que de laisser partir une
+          // réservation qui sera rejetée.
+          if (liste.some(b => b.code === j.code)) {
+            setBonErreur(`Ce ${libelleBon(commercant?.categorie)} est déjà appliqué.`)
+            return liste
+          }
+          if (liste.length >= BONS_MAX_PAR_COMMANDE) {
+            setBonErreur(`Cinq ${libelleBon(commercant?.categorie, { pluriel: true })} au maximum par réservation.`)
+            return liste
+          }
+          // Les lignes portent `{ id, code, solde }` : la même forme que les
+          // bons du compte, pour que le calcul en aval ne connaisse qu'un cas.
+          return [...liste, { id: j.code, code: j.code, solde: j.solde }]
+        })
+        setBonInput('')
+      }
     } catch {
       setBonErreur('Vérification impossible, réessaie.')
     }
@@ -1538,7 +1566,7 @@ export default function CommanderRdvSlug() {
           // paie la prestation ET les produits, comme le bon, et comme elle le
           // faisait déjà dans le tunnel boutique depuis toujours.
           ? calculerRemiseRecompense(recompenseFid, assietteRecompense) : 0,
-        soldeBon: bonChoisi ? Number(bonChoisi.solde) : 0,
+        soldeBon: soldeBonsRetenus,
       })
       // ⚠️ `null` ET NON `0` QUAND IL N'Y A PAS D'ACOMPTE : l'écran de
       // confirmation teste la présence de ce champ pour afficher sa ligne, et
@@ -1738,7 +1766,7 @@ export default function CommanderRdvSlug() {
               // recharge le bon, revérifie le commerçant, le statut,
               // l'expiration et le solde, puis recalcule ce qui est déduit.
               // L'écran calcule pour montrer, le serveur décide.
-              ...(bonChoisi ? { bon_cadeau_code: bonChoisi.code } : {}),
+              ...(bonsAppliques.length > 0 ? { bons_cadeaux_codes: bonsAppliques.map(b => b.code) } : {}),
             }),
           })
           const j = await res.json()
@@ -1853,7 +1881,7 @@ export default function CommanderRdvSlug() {
               // recharge le bon, revérifie le commerçant, le statut,
               // l'expiration et le solde, puis recalcule ce qui est déduit.
               // L'écran calcule pour montrer, le serveur décide.
-              ...(bonChoisi ? { bon_cadeau_code: bonChoisi.code } : {}),
+              ...(bonsAppliques.length > 0 ? { bons_cadeaux_codes: bonsAppliques.map(b => b.code) } : {}),
             }),
           })
           const j = await res.json()
@@ -1919,7 +1947,7 @@ export default function CommanderRdvSlug() {
             // recalcule ce qui est déduit. L'écran calcule pour montrer, le
             // serveur décide.
             ...(recompenseFid && recompenseActive ? { fidelite_recompense_id: recompenseFid.id } : {}),
-            ...(bonChoisi ? { bon_cadeau_code: bonChoisi.code } : {}),
+            ...(bonsAppliques.length > 0 ? { bons_cadeaux_codes: bonsAppliques.map(b => b.code) } : {}),
           }),
         })
         j = await res.json().catch(() => ({}))
@@ -3341,7 +3369,7 @@ export default function CommanderRdvSlug() {
                       acompteEnLigne,
                       totalProduits,
                       remiseRecompense: remiseFid,
-                      soldeBon: bonChoisi ? Number(bonChoisi.solde) : 0,
+                      soldeBon: soldeBonsRetenus,
                     })
                     const remiseBon = vent.bonTotal
                     const prixNet = vent.prestaNette
@@ -3481,25 +3509,35 @@ export default function CommanderRdvSlug() {
 
                             ⚠️ ET IL N'EST PAS ACTIF D'OFFICE : un bon de 50 €
                             posé sur une prestation à 20 € en brûlerait 30. */}
+                        {/* 🔴 LA LISTE NE DISPARAÎT PLUS QUAND UN BON EST RETENU
+                            (01/09). Elle s'effaçait entièrement : en retenir un
+                            faisait disparaître les autres, et on pouvait en
+                            conclure qu'ils étaient perdus. Frère exact du défaut
+                            qu'Alex a vu en boutique sur 180 € et trois bons. */}
                         {mesBonsIci.length > 0 && !seanceSurAbo && prixBase != null && (
-                          <div style={{ background: bonChoisi ? '#F0FDF4' : '#fff', border: `1.5px solid ${bonChoisi ? '#86EFAC' : T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
+                          <div style={{ background: bonsAppliques.length > 0 ? '#F0FDF4' : '#fff', border: `1.5px solid ${bonsAppliques.length > 0 ? '#86EFAC' : T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
                             <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
                               {mesBonsIci.length > 1 ? `Tes ${nomBons} ici` : `Ton ${nomBon} ici`}
                             </p>
                             {mesBonsIci.map(b => {
-                              const actif = bonChoisi?.code === b.code
-                              // ⚠️ CE QUE CE BON PRÉCIS DÉDUIRAIT, calculé avec
-                              // le même module que le reste : sur la prestation
-                              // ET sur les produits depuis le 29/08.
-                              const ventBon = ventilerTunnelRdv({
-                                prixPrestation: prixBase,
-                                acomptePourcent: prestationChoisie?.acompte_pourcent || 0,
-                                acompteEnLigne,
-                                totalProduits,
-                                remiseRecompense: remiseFid,
-                                soldeBon: Number(b.solde),
+                              const actif = bonsAppliques.some(a => a.code === b.code)
+                              // 🔴 CE QUE CE BON PRÉCIS FINANCE UNE FOIS LA
+                              // RÉPARTITION FAITE, et non ce qu'il financerait
+                              // tout seul. Avec trois bons sur une prestation,
+                              // le dernier ne sert peut-être qu'à moitié : le
+                              // calculer isolément annoncerait à chacun le
+                              // montant que seul le premier obtient.
+                              //
+                              // ⚠️ LE MÊME MODULE QUE LE SERVEUR, sinon l'écran
+                              // promettrait une déduction que la réservation ne
+                              // retiendrait pas.
+                              const partsIci = repartirBonsRdv(bonsAppliques, {
+                                surPresta: vent.bonSurPresta,
+                                surProduits: vent.bonSurProduits,
                               })
-                              const deduit = ventBon.bonTotal
+                              const surPresta = partsIci.presta.find(l => l.code === b.code)?.montant || 0
+                              const surProduits = partsIci.produits.find(l => l.code === b.code)?.montant || 0
+                              const deduit = Math.round((surPresta + surProduits) * 100) / 100
                               const reste = Math.round((Number(b.solde) - deduit) * 100) / 100
                               // 🔴 LA PHRASE ÉTAIT LE VRAI DÉFAUT (Alex, 29/08).
                               // Elle disait « ton acompte baisse d'autant »
@@ -3508,8 +3546,13 @@ export default function CommanderRdvSlug() {
                               // déduits » et voyait le montant à payer ne pas
                               // bouger d'un centime. Elle dit maintenant ce que
                               // le bon paie, et sur quoi.
-                              const surQuoi = ventBon.bonSurProduits > 0
-                                ? (ventBon.bonSurPresta > 0
+                              //
+                              // ⚠️ ET CE QUE CE BON-CI PAIE, pas ce que paie le
+                              // groupe : sur trois bons, le premier peut couvrir
+                              // toute la prestation et le dernier ne toucher que
+                              // les produits.
+                              const surQuoi = surProduits > 0
+                                ? (surPresta > 0
                                   ? 'Sur ta prestation et tes produits.'
                                   : 'Sur tes produits.')
                                 : 'Sur ta prestation.'
@@ -3521,11 +3564,15 @@ export default function CommanderRdvSlug() {
                               // il l'efface, on le DIT au lieu de laisser un zéro
                               // sans explication : c'est la bonne nouvelle du
                               // parcours, elle mérite sa phrase.
-                              const motAcompte = ventBon.acompteDu <= 0
+                              //
+                              // ⚠️ CELUI-CI PORTE SUR LE TOTAL, et c'est voulu :
+                              // l'acompte ne se divise pas par bon, il tombe une
+                              // fois pour la réservation entière.
+                              const motAcompte = vent.acompteDu <= 0
                                 ? ''
-                                : ventBon.acompte === 0
-                                  ? ' Il couvre déjà ton acompte : tu n’avances rien en ligne.'
-                                  : ventBon.bonSurPresta > 0
+                                : vent.acompte === 0
+                                  ? ' Ton acompte est déjà couvert : tu n’avances rien en ligne.'
+                                  : surPresta > 0
                                     ? ' Ton acompte baisse d’autant.'
                                     : ''
                               return (
@@ -3550,7 +3597,17 @@ export default function CommanderRdvSlug() {
                                     </p>
                                   </div>
                                   {/* ⚠️ LE BOUTON DIT LE GESTE, pas l'état. */}
-                                  <button type="button" onClick={() => setBonChoisi(actif ? null : b)}
+                                  <button type="button"
+                                    onClick={() => {
+                                      setBonErreur(null)
+                                      if (actif) setBonsAppliques(l => l.filter(a => a.code !== b.code))
+                                      // ⚠️ ON PASSE PAR LA MÊME PORTE QUE LA
+                                      // SAISIE : le serveur revérifie le solde,
+                                      // et la borne des cinq s'applique aussi
+                                      // aux bons du compte.
+                                      else appliquerBon(b.code)
+                                    }}
+                                    disabled={bonLoading}
                                     style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 12, border: actif ? '1.5px solid #059669' : 'none', background: actif ? '#fff' : 'linear-gradient(135deg, #059669, #10B981)', color: actif ? '#059669' : '#fff', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                                     {actif ? 'Retirer' : 'Utiliser'}
                                   </button>
@@ -3575,10 +3632,13 @@ export default function CommanderRdvSlug() {
                             boutique a ce champ depuis le début — deux tunnels
                             pour un même geste finissent toujours par diverger.
 
-                            ⚠️ IL S'EFFACE DÈS QU'UN BON EST RETENU : proposer de
-                            saisir un code alors qu'un bon est déjà appliqué ne
-                            ferait qu'ouvrir une question sans objet. */}
-                        {!seanceSurAbo && prixBase != null && !bonChoisi && (
+                            🔴 ET IL RESTE OFFERT TANT QU'IL Y A DE LA PLACE
+                            (01/09). Il s'effaçait dès le premier bon retenu :
+                            c'est précisément lui qui permet d'AJOUTER un bon
+                            reçu ailleurs par-dessus ceux du compte. Il ne se
+                            ferme qu'à la cinquième, la borne que le serveur
+                            applique aussi. */}
+                        {!seanceSurAbo && prixBase != null && bonsAppliques.length < BONS_MAX_PAR_COMMANDE && (
                           <div style={{ background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
                             <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
                               J&rsquo;ai un {nomBon}

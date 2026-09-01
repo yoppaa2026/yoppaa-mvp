@@ -40,6 +40,7 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { creerReservationRdv, appliquerAvantagesRdv, lignesBonsDeMeta } from '@/lib/rdv-creation-server'
+import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -1078,23 +1079,16 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
   // Tunnel unique : les produits achetés avec le rendez-vous vivent dans CET
   // email. Le client ne reçoit pas de confirmation de commande séparée, et le
   // commerçant lit dans le même message ce qu'il doit préparer.
-  let produits = null
-  if (rdv?.commande_id) {
-    const { data: lignes } = await supabase
-      .from('commande_articles')
-      .select('quantite, prix_unitaire, article:articles(nom)')
-      .eq('commande_id', rdv.commande_id)
-    if (lignes && lignes.length > 0) {
-      produits = {
-        lignes: lignes.map(l => ({
-          nom: l.article?.nom || 'Article',
-          quantite: l.quantite,
-          total: Number(l.prix_unitaire) * l.quantite,
-        })),
-        total: lignes.reduce((s, l) => s + Number(l.prix_unitaire) * l.quantite, 0),
-      }
-    }
-  }
+  //
+  // ⚠️ LE CHARGEMENT A DÉMÉNAGÉ DANS UN MODULE LE 01/09. Il vivait ICI et
+  // NULLE PART AILLEURS : `/api/emails/rdv-confirme` envoie le MÊME email et
+  // ne chargeait rien, donc son message se taisait sur les produits. Alex l'a
+  // vu sur son Head Spa accompagné d'un shampoing.
+  //
+  // 🔴 ET CE CHEMIN-LÀ EST CELUI DES BONS : quand ils couvrent tout, il n'y a
+  // aucun paiement Stripe, donc aucun webhook, donc c'est l'autre route qui
+  // envoie. Le seul chemin muet était exactement celui que le cumul a ouvert.
+  const produits = await chargerProduitsDuRdv(supabase, rdv?.commande_id)
 
   // Fallback : si le RDV n'est pas (encore) findable, on construit depuis le payload.
   // Mais sans nom commercant ni presta, on ne peut pas envoyer un email decent → skip.

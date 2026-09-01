@@ -1279,6 +1279,43 @@ const MUTATIONS = [
     banc: 'verif:tunnel-rdv', fichier: 'app/api/emails/rdv-no-show/route.js',
     de: '        client_email, client_prenom, bons_utilises,',
     vers: '        client_email, client_prenom,' },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LE PRODUIT ACHETÉ AVEC LE RENDEZ-VOUS (Alex, 01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Head Spa a 60 EUR ET shampoing a 21,90 EUR, le tout couvert par ses bons.
+  // L email confirmait le rendez-vous et ne disait RIEN du shampoing.
+  //
+  // ⚠️ CE CHEMIN EST CELUI DES BONS : quand ils couvrent tout, il n y a aucun
+  // paiement Stripe, donc aucun webhook, donc c est cette route-ci qui envoie.
+  { nom: '🔴 l’email de RDV se retait sur les produits achetés avec',
+    banc: 'verif:logique', fichier: 'app/api/emails/rdv-confirme/route.js',
+    de: '    const produits = await chargerProduitsDuRdv(supabase, rdv.commande_id)',
+    vers: '    const produits = null' },
+
+  // 🔴 LA COLONNE ABSENTE DU SELECT : le module recoit `undefined`, rend
+  // `null`, et l email se tait SANS la moindre erreur. Le defaut le plus
+  // frequent du projet, et le plus silencieux.
+  { nom: '🔴 la route d’email ne charge plus commande_id',
+    banc: 'verif:logique', fichier: 'app/api/emails/rdv-confirme/route.js',
+    de: '        annulation_token, lieu_id, lieu_libelle, lieu_adresse, commande_id,',
+    vers: '        annulation_token, lieu_id, lieu_libelle, lieu_adresse,' },
+
+  // 🔴 « PAYE EN LIGNE » AFFIRME SUR LE TOTAL BRUT. Quand un bon paie les
+  // produits, la carte n encaisse rien : l email fait chercher un debit
+  // bancaire qui n existe pas.
+  { nom: '🔴 le bloc produits réaffirme « payé en ligne » sur le total brut',
+    banc: 'verif:logique', fichier: 'lib/resend.js',
+    de: "            const enLigne = produits.paye_en_ligne === undefined\n              ? Number(produits.total) || 0\n              : Number(produits.paye_en_ligne) || 0",
+    vers: '            const enLigne = Number(produits.total) || 0' },
+
+  // 🔴 ET LE WEBHOOK PASSE PAR LE MEME MODULE. Deux chargements ecrits a la
+  // main, c est exactement la divergence qu on vient de reparer.
+  { nom: '🔴 le webhook recharge les produits de son côté',
+    banc: 'verif:logique', fichier: 'app/api/stripe/webhook/route.js',
+    de: '  const produits = await chargerProduitsDuRdv(supabase, rdv?.commande_id)',
+    vers: '  const produits = null' },
 ]
 
 function lancer(banc) {

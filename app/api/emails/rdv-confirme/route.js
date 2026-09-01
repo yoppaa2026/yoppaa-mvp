@@ -20,6 +20,7 @@ import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { referenceRdv } from '@/lib/numero-commande'
 import { adresseRendezVous } from '@/lib/lieu-fige'
+import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
 
 export async function POST(request) {
   try {
@@ -60,7 +61,7 @@ export async function POST(request) {
         id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, duree_minutes,
         prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant, bons_utilises,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
-        annulation_token, lieu_id, lieu_libelle, lieu_adresse,
+        annulation_token, lieu_id, lieu_libelle, lieu_adresse, commande_id,
         commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques, categorie),
         prestation:rdv_prestations(nom, duree_minutes),
         praticien:rdv_praticiens(prenom, nom, couleur_hex)
@@ -72,6 +73,13 @@ export async function POST(request) {
       console.error('[emails/rdv-confirme] RDV introuvable', { rdv_id, errRdv })
       return NextResponse.json({ ok: false, error: 'RDV introuvable' }, { status: 404 })
     }
+
+    // 🔴 LES PRODUITS DU TUNNEL UNIQUE (Alex, 01/09). Cette route ne les
+    // chargeait PAS : son email annonçait le rendez-vous et se taisait sur le
+    // shampoing acheté avec. Le webhook Stripe, lui, le faisait depuis
+    // toujours — et c'est précisément ce chemin-ci qui sert quand des bons
+    // couvrent tout, puisqu'alors il n'y a aucun paiement Stripe.
+    const produits = await chargerProduitsDuRdv(supabase, rdv.commande_id)
 
     // 1) Email Yopper avec iCal joint
     if (rdv.client_email) {
@@ -139,6 +147,7 @@ export async function POST(request) {
           deplace,
           ancienne_date,
           ancienne_heure,
+          produits,
         })
 
         await envoyerAuCommercant({   // helper reutilise, accepte n'importe quel 'to'

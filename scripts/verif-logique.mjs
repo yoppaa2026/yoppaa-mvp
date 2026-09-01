@@ -2690,6 +2690,78 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   const htmlSansNum = emailRdvConfirme({ ...rdv, numero_rdv: null })
   verifier('sans numéro, pas de ligne « Rendez-vous # » vide', !/Rendez-vous <strong/.test(htmlSansNum))
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LE PRODUIT ACHETÉ AVEC LE RENDEZ-VOUS (Alex, 01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Head Spa à 60 € ET shampoing à 21,90 €, le tout couvert par ses bons.
+  // L'email confirmait le rendez-vous et **ne disait pas un mot du shampoing**.
+  // Il ne le retrouvait que dans l'onglet Commandes.
+  //
+  // 🔴 ET LE BLOC AFFIRMAIT « PAYÉ EN LIGNE » sur le total BRUT. Quand un bon
+  // paie les produits, la carte n'encaisse rien : l'email faisait chercher un
+  // débit bancaire qui n'existe pas.
+  {
+    const avecProduits = emailRdvConfirme({
+      ...rdv, commercant_categorie: 'coiffeur',
+      produits: {
+        lignes: [{ nom: 'Shampoing apaisant', quantite: 1, total: 21.90 }],
+        total: 21.90, bon: 21.90, recompense: 0, paye_en_ligne: 0, nb_bons: 2,
+      },
+    })
+    verifier('🔴 le produit acheté avec le RDV apparaît dans l’email',
+      /Shampoing apaisant/.test(avecProduits))
+    verifier('et son montant avec', avecProduits.includes('21,90'))
+    verifier('🔴 il ne dit PAS « payé en ligne » quand un bon a tout payé',
+      !/Payé en ligne/.test(avecProduits))
+    verifier('il dit ce qui est vrai : c’est déjà couvert',
+      /Rien, c’est déjà couvert/.test(avecProduits))
+    verifier('et il nomme les bons qui ont payé, au pluriel',
+      /Bons cadeaux/.test(avecProduits))
+
+    // ⚠️ ET QUAND LA CARTE A VRAIMENT PAYÉ, il le dit — c'est l'ancien cas, qui
+    // ne doit pas se casser en réparant l'autre.
+    const payeCarte = emailRdvConfirme({
+      ...rdv,
+      produits: {
+        lignes: [{ nom: 'Shampoing', quantite: 1, total: 21.90 }],
+        total: 21.90, bon: 0, recompense: 0, paye_en_ligne: 21.90, nb_bons: 0,
+      },
+    })
+    verifier('un produit payé par carte dit bien « payé en ligne »',
+      /Payé en ligne/.test(payeCarte) && payeCarte.includes('21,90'))
+
+    // 🔴 LE REPLI SUR L'ANCIENNE FORME. Un appelant qui ne passe que `total`
+    // garde exactement le comportement d'avant : un champ absent ne doit pas
+    // transformer un email juste en email muet.
+    const ancienneForme = emailRdvConfirme({
+      ...rdv,
+      produits: { lignes: [{ nom: 'Shampoing', quantite: 1, total: 21.90 }], total: 21.90 },
+    })
+    verifier('l’ancienne forme sans détail de paiement reste juste',
+      /Payé en ligne/.test(ancienneForme) && ancienneForme.includes('21,90'))
+
+    // ⚠️ SANS PRODUIT, AUCUN BLOC : un rendez-vous seul n'invente rien.
+    verifier('sans produit, aucun bloc de produits',
+      !/prêts pour ce jour-là/.test(htmlRdv))
+  }
+
+  // 🔴 ET LES DEUX ROUTES QUI ENVOIENT CET EMAIL LE REMPLISSENT. C'est le cœur
+  // du défaut : le webhook chargeait les produits, `/api/emails/rdv-confirme`
+  // non — et c'est CE chemin-là qui sert quand des bons couvrent tout, puisque
+  // alors il n'y a aucun paiement Stripe donc aucun webhook.
+  const lireSrc = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')
+  for (const f of ['app/api/stripe/webhook/route.js', 'app/api/emails/rdv-confirme/route.js']) {
+    const src = lireSrc(f)
+    verifier(`${f} : charge les produits par le module partagé`,
+      /await chargerProduitsDuRdv\(supabase, rdv\??\.commande_id\)/.test(src))
+    verifier(`${f} : et les passe au gabarit`, /^\s+produits,$/m.test(src))
+  }
+  // ⚠️ LA COLONNE DOIT ÊTRE DEMANDÉE : sans `commande_id`, le module reçoit
+  // `undefined`, rend `null`, et l'email se tait SANS la moindre erreur.
+  verifier('la route d’email charge commande_id, sinon elle se tait en silence',
+    /annulation_token, lieu_id, lieu_libelle, lieu_adresse, commande_id/.test(lireSrc('app/api/emails/rdv-confirme/route.js')))
+
   // La commande : même exigence, et c'est la référence qui doit voyager.
   const htmlCmd = emailCommandeConfirmee({
     yopper_prenom: 'Luc', commercant_nom: 'La Mie', commercant_adresse: 'Rue Y',

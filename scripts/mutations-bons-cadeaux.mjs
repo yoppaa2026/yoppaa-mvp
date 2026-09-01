@@ -791,6 +791,37 @@ const MUTATIONS = [
     de: "!/^cs_[A-Za-z0-9_]{10,}$/.test(sessionId)",
     vers: 'false' },
 
+  // ─── LE CODE ARRIVÉ PAR LE LIEN DU BON (01/09) ────────────────────────────
+
+  { nom: '🔴 le lien « Découvrir » n’emporte plus le code',
+    banc: 'verif:bons', fichier: 'app/cadeau/[token]/page.js',
+    de: '<a href={`${ficheUrl}?bon_code=${encodeURIComponent(bon.code)}`}',
+    vers: '<a href={ficheUrl}' },
+
+  { nom: '🔴 le code du lien est lu mais jamais appliqué',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '    appliquerBon(code)',
+    vers: '    // appliquerBon(code)' },
+
+  // 🔴 UN CODE EST UN SECRET AU PORTEUR : le laisser dans la barre d'adresse,
+  // c'est le laisser se partager, se photographier et s'archiver.
+  { nom: '🔴 le code reste dans la barre d’adresse',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: "      url.searchParams.delete('bon_code')",
+    vers: '      // rien' },
+
+  // ⚠️ SANS L'IDENTIFIANT DU COMMERCE, la vérification part avec `undefined`
+  // et refuse un code parfaitement bon. Défaut muet côté serveur.
+  { nom: '🔴 on n’attend plus que le commerce soit chargé',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '    if (bonDuLienFait.current || !commercant?.id) return',
+    vers: '    if (bonDuLienFait.current) return' },
+
+  { nom: '🔴 le code du lien se rejoue à chaque rendu',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '    bonDuLienFait.current = true',
+    vers: '    // une seule fois, vraiment ?' },
+
   // ─── L'ÉCRAN SÉPARÉ (01/09) ───────────────────────────────────────────────
 
   { nom: '🔴 la confirmation redevient une carte perdue au milieu de la fiche',

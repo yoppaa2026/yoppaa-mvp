@@ -2525,6 +2525,46 @@ export default function CommanderSlug() {
     setBonLoading(false)
   }
 
+  // ─── LE CODE ARRIVÉ PAR LE LIEN DU BON ────────────────────────────────────
+  //
+  // 🔴 LE TESTEUR D'ALEX A FAIT DES ALLERS-RETOURS POUR RIEN (01/09). Il est
+  // arrivé depuis `/cadeau/<jeton>`, a cliqué sur « Découvrir », puis a dû
+  // revenir lire son code et le retaper à la main. L'information était sous ses
+  // yeux une seconde plus tôt.
+  //
+  // ⚠️ ON ATTEND QUE LE COMMERCE SOIT CHARGÉ : `appliquerBon` a besoin de
+  // `commercant.id` pour vérifier le code. Lancer trop tôt enverrait `undefined`
+  // au serveur, qui répondrait « code invalide » sur un code parfaitement bon.
+  //
+  // ⚠️ ET ON NE LE FAIT QU'UNE FOIS : `commercant` se rafraîchit, l'effet se
+  // rejouerait et redemanderait la vérification à chaque tour.
+  const bonDuLienFait = useRef(false)
+  useEffect(() => {
+    if (bonDuLienFait.current || !commercant?.id) return
+    if (typeof window === 'undefined') return
+    let code = null
+    try {
+      const params = new URLSearchParams(window.location.search)
+      code = params.get('bon_code')
+      if (!code) return
+      // 🔴 ON NETTOIE L'ADRESSE TOUT DE SUITE. Un code de bon est un secret au
+      // porteur : il n'a rien à faire dans une barre d'adresse qui se partage,
+      // se photographie ou se retrouve dans un historique. Même geste que pour
+      // la session Stripe du retour de paiement.
+      const url = new URL(window.location.href)
+      url.searchParams.delete('bon_code')
+      window.history.replaceState({}, '', url.toString())
+    } catch { return }
+    bonDuLienFait.current = true
+    // `appliquerBon` normalise, vérifie côté serveur et affiche son propre
+    // message si le bon ne convient pas : on ne double pas sa garde ici.
+    appliquerBon(code)
+    // ⚠️ `appliquerBon` est recréée à chaque rendu : la mettre en dépendance
+    // relancerait l'effet en boucle. Le garde-fou est `bonDuLienFait`, qui rend
+    // l'opération unique quoi qu'il arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commercant?.id])
+
   // Change d'étape ET remonte en haut du conteneur scrollable. Centralisé pour une
   // UX fluide : sans ça, on arrive en bas de la nouvelle étape (scroll conservé).
   function allerEtape(n) {

@@ -116,7 +116,18 @@ export default async function CadeauPage({ params }) {
                     <strong>En ligne :</strong> commande sur sa fiche Yoppaa et applique le code au moment de payer. En une ou plusieurs fois, le solde reste sur le bon.
                   </p>
                 </div>
-                <a href={ficheUrl} style={{ display: 'block', padding: '13px 16px', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 15, textDecoration: 'none', boxShadow: `0 6px 22px ${T.main}66` }}>
+                {/* 🔴 LE CODE PART AVEC LE LIEN (Alex, 01/09). Son testeur est
+                    arrivé ici, a cliqué, puis a dû REVENIR lire son code et le
+                    retaper à la main dans le tunnel. Des allers-retours pour
+                    une information qu'on avait déjà sous les yeux.
+
+                    ⚠️ UN CODE DANS UNE URL EST UN SECRET AU PORTEUR, et on ne
+                    l'y laisse pas traîner : la fiche l'applique puis NETTOIE
+                    l'adresse aussitôt, comme elle le fait déjà pour la session
+                    Stripe. La fenêtre se compte en millisecondes, et cette
+                    adresse-ci ne quitte jamais le téléphone de son porteur,
+                    qui tient déjà le lien du bon dans le même email. */}
+                <a href={`${ficheUrl}?bon_code=${encodeURIComponent(bon.code)}`} style={{ display: 'block', padding: '13px 16px', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 15, textDecoration: 'none', boxShadow: `0 6px 22px ${T.main}66` }}>
                   Découvrir {bon.commercant?.nom}
                 </a>
               </>

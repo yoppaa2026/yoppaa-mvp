@@ -1158,6 +1158,35 @@ const egal = (nom, obtenu, attendu) =>
     ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']
       .every(f => /onContinuer=\{\(\) => setBonRetour\(null\)\}/.test(lireCode(f))))
 
+  // ─── LE CODE ARRIVÉ PAR LE LIEN DU BON (01/09) ────────────────────────────
+  //
+  // 🔴 Le testeur d'Alex a dû REVENIR lire son code et le retaper à la main,
+  // alors qu'il arrivait de la page qui l'affiche.
+  {
+    const cadeau = lireCode('app/cadeau/[token]/page.js')
+    verifie('🔴 le lien « Découvrir » emporte le code du bon',
+      /\$\{ficheUrl\}\?bon_code=\$\{encodeURIComponent\(bon\.code\)\}/.test(cadeau))
+
+    const fiche = lireCode('app/commander/[slug]/page.js')
+    verifie('la fiche lit le code du lien', /params\.get\('bon_code'\)/.test(fiche))
+    verifie('et l\'applique vraiment', /appliquerBon\(code\)/.test(fiche))
+
+    // 🔴 UN CODE EST UN SECRET AU PORTEUR : il ne reste pas dans la barre
+    // d'adresse, qui se partage, se photographie et s'archive.
+    verifie('🔴 l\'adresse est nettoyée du code',
+      /searchParams\.delete\('bon_code'\)/.test(fiche))
+    // ⚠️ ET LE NETTOYAGE PASSE AVANT L'APPLICATION, sinon une page qui
+    // s'interromprait entre les deux laisserait le code affiché.
+    verifie('le nettoyage précède l\'application',
+      fiche.indexOf("searchParams.delete('bon_code')") < fiche.indexOf('appliquerBon(code)'))
+
+    // ⚠️ ON ATTEND LE COMMERCE : sans son identifiant, la vérification part
+    // avec `undefined` et refuse un code parfaitement bon.
+    verifie('on attend que le commerce soit chargé',
+      /if \(bonDuLienFait\.current \|\| !commercant\?\.id\) return/.test(fiche))
+    verifie('et on ne le fait qu\'une fois', /bonDuLienFait\.current = true/.test(fiche))
+  }
+
   // ⚠️ ET LE REFUS NE PREND PAS L'ÉCRAN. Rien n'a été débité : barrer l'écran de
   // quelqu'un qui vient de renoncer serait le punir de son choix. La branche
   // « annule » doit rendre AVANT toute la mécanique du plein écran.

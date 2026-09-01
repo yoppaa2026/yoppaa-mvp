@@ -791,6 +791,62 @@ const MUTATIONS = [
     de: "!/^cs_[A-Za-z0-9_]{10,}$/.test(sessionId)",
     vers: 'false' },
 
+  // ─── LE CUMUL DE PLUSIEURS BONS (01/09) ───────────────────────────────────
+  //
+  // ⚠️ CETTE FONCTION DÉCIDE DE L'ARGENT. Chaque règle qu'elle porte doit
+  // pouvoir faire rougir le banc quand on la retire.
+
+  { nom: '🔴 le bon le plus proche de l’expiration ne part plus en premier',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '      if (ea !== eb) return ea - eb',
+    vers: '      if (ea !== eb) return eb - ea' },
+
+  // 🔴 LA VRAIE ERREUR QUE J'AI FAITE : corriger le minimum Stripe UNE SEULE
+  // fois laisse un reste que Stripe refuse quand la dernière ligne saute.
+  { nom: '🔴 le minimum Stripe n’est corrigé qu’une fois (mon erreur du 01/09)',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '  while (reste > 0 && reste < MINIMUM_STRIPE_CENTS && lignes.length > 0) {',
+    vers: '  if (reste > 0 && reste < MINIMUM_STRIPE_CENTS && lignes.length > 0) {' },
+
+  { nom: '🔴 le minimum Stripe n’est plus respecté du tout',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '  while (reste > 0 && reste < MINIMUM_STRIPE_CENTS && lignes.length > 0) {',
+    vers: '  while (false) {' },
+
+  { nom: '🔴 le minimum Stripe descend a un centime',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: 'const MINIMUM_STRIPE_CENTS = 50',
+    vers: 'const MINIMUM_STRIPE_CENTS = 1' },
+
+  { nom: '🔴 la borne des cinq bons saute',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '    .slice(0, BONS_MAX_PAR_COMMANDE)',
+    vers: '' },
+
+  // ⚠️ DEUX MUTATIONS RETIREES ICI, ET C'EST LE HARNAIS QUI LES A DEMASQUEES.
+  //
+  // « des lignes de debit a zero entrent dans la commande » (retrait de
+  // `if (pris <= 0) continue`) et « la repartition reordonne le tableau de
+  // l appelant » (retrait de `[...bons]`) sont restees VERTES : ces deux
+  // lignes ne changeaient RIEN. La premiere etait couverte par le `filter` sur
+  // le solde, la seconde par le fait que `filter` rend deja une copie.
+  //
+  // 🔴 DEUX GARDES QUI SE COUVRENT L UNE L AUTRE, C EST ZERO GARDE MESURABLE.
+  // Le code a ete simplifie : une seule regle, a un seul endroit, et c est la
+  // mutation du `filter` ci-dessous qui la mesure vraiment.
+
+  // 🔴 L'INVARIANT : ce qui est pris plus ce qui reste fait ce qui etait du.
+  // S il se rompt, de l argent apparait ou disparait.
+  { nom: '🔴 l’invariant se rompt : de l’argent disparait',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '    reste -= pris',
+    vers: '    reste -= pris / 2' },
+
+  { nom: '🔴 un bon au solde nul entre quand meme dans la repartition',
+    banc: 'verif:bons', fichier: 'lib/bons-cadeaux.js',
+    de: '    .filter(b => Number(b?.solde) > 0)',
+    vers: '    .filter(() => true)' },
+
   // ─── LE CODE ARRIVÉ PAR LE LIEN DU BON (01/09) ────────────────────────────
 
   { nom: '🔴 le lien « Découvrir » n’emporte plus le code',

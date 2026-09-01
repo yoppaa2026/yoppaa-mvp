@@ -37,8 +37,8 @@ import { geocoderAdresse } from '@/lib/geocode'
 import { coordonneesPlausibles, requeteGeocodage, NOTE_MAX } from '@/lib/adresse-livraison'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
-import { normaliserCodeBon, calculerRemiseBon } from '@/lib/bons-cadeaux'
-import { chargerBonValide, debiterBon } from '@/lib/bons-cadeaux-server'
+import { normaliserCodeBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
+import { chargerBonValide, debiterBons } from '@/lib/bons-cadeaux-server'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts } from '@/lib/modes-paiement'
 import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
@@ -72,6 +72,10 @@ export async function POST(request) {
       // les suggestions, et son mot au livreur.
       adresse_geocodage, livraison_lat, livraison_lng, note_livraison,
       paiement_mode, bon_cadeau_code,
+      // 🔴 LA LISTE DES BONS (01/09). L'ancien champ au singulier reste
+      // accepté : les deux tunnels ne se déploient pas à la seconde près, et
+      // une requête à l'ancienne forme ne doit pas se faire refuser sa commande.
+      bons_cadeaux_codes,
       // ⚠️ UN IDENTIFIANT ENVOYÉ PAR LE CLIENT N'EST JAMAIS UNE AUTORISATION.
       // Il désigne seulement CE QU'IL DEMANDE ; tout est revérifié plus bas
       // contre son identité PROUVÉE (voir 4.4).
@@ -469,19 +473,56 @@ export async function POST(request) {
     // laisser un reste à payer de 0 ou >= 0,50 € (minimum Stripe). Le DÉBIT
     // du bon n'a lieu qu'à la confirmation (sur place / dû 0 : tout de suite,
     // en ligne : au webhook paiement OK) — un checkout abandonné ne brûle rien.
+    //
+    // 🔴 PLUSIEURS BONS DEPUIS LE 01/09. Une commande de 180 € face à trois
+    // bons de 50, 75 et 20 € n'en acceptait qu'UN. Le corps accepte donc une
+    // LISTE, et garde l'ancien champ au singulier : les deux tunnels ne se
+    // déploient pas à la seconde près, et une requête à l'ancienne forme ne
+    // doit pas se faire refuser sa commande.
     let bonCadeau = null
     let remiseBonEUR = 0
-    if (bon_cadeau_code) {
-      const codeBon = normaliserCodeBon(bon_cadeau_code)
-      if (!codeBon) {
-        return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
+    let bonsUtilises = []
+    const codesRecus = Array.isArray(bons_cadeaux_codes) && bons_cadeaux_codes.length > 0
+      ? bons_cadeaux_codes
+      : (bon_cadeau_code ? [bon_cadeau_code] : [])
+    if (codesRecus.length > 0) {
+      if (codesRecus.length > BONS_MAX_PAR_COMMANDE) {
+        return NextResponse.json({ ok: false, error: `Cinq ${libelleBon(commercant.categorie, { pluriel: true })} au maximum par commande.` }, { status: 400 })
       }
-      const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
-      if (!resBon.ok) {
-        return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
+      // ⚠️ LES DOUBLONS SONT REFUSÉS, PAS DÉDUPLIQUÉS EN SILENCE. Le même code
+      // envoyé deux fois compterait son solde deux fois : c'est une erreur à
+      // dire, pas à rattraper sans le signaler.
+      const normalises = []
+      for (const brut of codesRecus) {
+        const codeBon = normaliserCodeBon(brut)
+        if (!codeBon) {
+          return NextResponse.json({ ok: false, error: `Code de ${libelleBon(commercant.categorie)} invalide.` }, { status: 400 })
+        }
+        if (normalises.includes(codeBon)) {
+          return NextResponse.json({ ok: false, error: `Le même ${libelleBon(commercant.categorie)} est proposé deux fois.` }, { status: 400 })
+        }
+        normalises.push(codeBon)
       }
-      bonCadeau = resBon.bon
-      remiseBonEUR = calculerRemiseBon(bonCadeau.solde, baseApresRecompense)
+      // 🔴 CHAQUE BON EST REVALIDÉ CÔTÉ SERVEUR : l'écran propose, le serveur
+      // décide. Un seul code invalide fait échouer toute la commande, plutôt
+      // que d'en appliquer trois sur quatre sans le dire.
+      const valides = []
+      for (const codeBon of normalises) {
+        const resBon = await chargerBonValide(supabase, { code: codeBon, commercant_id: commercant.id, categorie: commercant.categorie })
+        if (!resBon.ok) {
+          return NextResponse.json({ ok: false, error: resBon.error }, { status: 400 })
+        }
+        valides.push(resBon.bon)
+      }
+      // La répartition est PURE et benchée : plus proche expiration d'abord,
+      // minimum Stripe appliqué au TOTAL et non à chaque bon.
+      const rep = repartirBons(valides, baseApresRecompense)
+      remiseBonEUR = rep.total
+      bonsUtilises = rep.lignes.map(l => ({ id: l.id, montant: l.montant }))
+      // ⚠️ `bon_cadeau_id` garde le PREMIER bon, pour toutes les lectures qui
+      // existent déjà. Il ne sert plus JAMAIS au débit ni au recrédit : c'est
+      // `bons_utilises` qui fait foi.
+      bonCadeau = valides.find(b => b.id === bonsUtilises[0]?.id) || null
     }
     const duEUR = Math.round((baseApresRecompense - remiseBonEUR) * 100) / 100
     const duCents = Math.round(duEUR * 100)
@@ -745,6 +786,10 @@ export async function POST(request) {
         total: totalEUR + fraisLivraisonEUR,
         bon_cadeau_id: bonCadeau?.id || null,
         bon_cadeau_montant: remiseBonEUR,
+        // 🔴 LA LISTE FAIT FOI POUR L'ARGENT. `bon_cadeau_id` ne garde que le
+        // premier bon, pour les lectures qui existent déjà ; le débit et le
+        // recrédit ne lisent QUE cette colonne.
+        bons_utilises: bonsUtilises,
         // ⚠️ LA REMISE EST FIGÉE SUR LA COMMANDE, pas recalculée à la lecture.
         // C'est ce qui permet à la comptabilité de montrer, des années plus
         // tard, ce que le commerçant a réellement offert ce jour-là. La
@@ -886,8 +931,10 @@ export async function POST(request) {
       }
     }
 
-    if (bonCadeau && remiseBonEUR > 0 && confirmeSansStripe) {
-      const deb = await debiterBon(supabase, bonCadeau.id, remiseBonEUR, { source: 'commande', commande_id: commande.id })
+    if (bonsUtilises.length > 0 && remiseBonEUR > 0 && confirmeSansStripe) {
+      // 🔴 TOUS LES BONS, PAS LE PREMIER. La boucle vit dans le module serveur,
+      // pour que les cinq endroits qui débitent ne divergent jamais.
+      const deb = await debiterBons(supabase, bonsUtilises, { source: 'commande', commande_id: commande.id })
       if (!deb.ok) {
         // ⚠️ ON REND LA RÉCOMPENSE. Elle vient d'être prise trois lignes plus
         // haut pour une commande qui n'aura pas lieu : la laisser dépensée

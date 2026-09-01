@@ -19,7 +19,7 @@ import { stripe, requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCommercant } from '@/lib/resend'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
-import { recrediterBon } from '@/lib/bons-cadeaux-server'
+import { recrediterBons } from '@/lib/bons-cadeaux-server'
 import { rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { referenceCommande } from '@/lib/numero-commande'
@@ -50,7 +50,7 @@ export async function POST(request) {
       id, statut, paye_en_ligne, total, stripe_payment_intent_id,
       client_email, client_nom, annulation_token, created_at, commercant_id,
       numero_commande, numero_prefixe, date_commande, creneau_id, rappel_push_id,
-      bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id, fidelite_remise,
+      bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id, fidelite_remise,
       commercants:commercant_id (id, nom, slug, stripe_account_id, delai_annulation_heures, categorie),
       creneau:creneaux!creneau_id (heure_debut)
     `
@@ -191,9 +191,16 @@ export async function POST(request) {
     // SUR le bon (le refund Stripe ne couvre que la part carte). Idempotent
     // via l'index unique source='annulation' — le webhook charge.refunded
     // fait le même appel en backup, un seul des deux passe.
-    if (cmd.bon_cadeau_id && Number(cmd.bon_cadeau_montant) > 0) {
-      const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, { commande_id: cmd.id })
-      if (!rec.ok) console.error('[commande/cancel] re-crédit bon cadeau KO', rec.error, { commande_id: cmd.id })
+    //
+    // 🔴 TOUS LES BONS DEPUIS LE 01/09, ET C'EST CE RECRÉDIT QUI JUSTIFIAIT LA
+    // MIGRATION. Lire `bon_cadeau_id` ne rendrait que le PREMIER bon : les
+    // autres seraient débités et jamais rendus. C'est le défaut du 29/08,
+    // « bon jamais recrédité », et il coûterait ici l'argent du Yopper.
+    if (Array.isArray(cmd.bons_utilises) && cmd.bons_utilises.length > 0) {
+      const rec = await recrediterBons(supabase, cmd.bons_utilises, { commande_id: cmd.id })
+      // ⚠️ ON NOMME CHAQUE BON QUI N'A PAS ÉTÉ RENDU : sans son identifiant, le
+      // support ne peut ni le rejouer, ni expliquer au client ce qui manque.
+      if (!rec.ok) console.error('[commande/cancel] re-crédit bons KO', rec.echecs, { commande_id: cmd.id })
     }
 
     // ⚠️ ET LA RÉCOMPENSE DE FIDÉLITÉ AVEC, pour la même raison exactement :

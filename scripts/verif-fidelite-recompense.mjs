@@ -252,8 +252,13 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
 
   // ⚠️ L'ORDRE DES DEUX PRISES : la récompense d'abord, parce qu'elle se rend
   // et que le bon cadeau, lui, ne se rend pas d'un revers de main.
+  // ⚠️ CETTE GARDE CHERCHAIT `debiterBon(supabase`, AU SINGULIER. Le 01/09 le
+  // débit est passé en boucle pour cumuler plusieurs bons sur une commande, la
+  // fonction s'appelle `debiterBons`, et la garde a rougi alors que l'ORDRE
+  // qu'elle défend n'avait pas changé d'une ligne. On vise le préfixe commun,
+  // qui reste vrai que le débit soit unitaire ou groupé.
   const posRec = cc.indexOf('consommerRecompense(supabase')
-  const posBon = cc.indexOf('debiterBon(supabase')
+  const posBon = cc.search(/debiterBons?\(supabase/)
   verifie('🔴 la récompense est prise AVANT le bon cadeau',
     posRec > 0 && posBon > 0 && posRec < posBon,
     `récompense ${posRec}, bon ${posBon}`)

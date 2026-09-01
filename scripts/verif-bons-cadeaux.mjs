@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { euros, eurosNus } from '../lib/montants.js'
 import { elisionDe } from '../lib/francais.js'
 import { doitMontrerFlottant, SEUIL_CACHER, SEUIL_MONTRER } from '../lib/bouton-flottant.js'
-import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon, libelleBon, confirmationDepuisBon, ETATS_CONFIRMATION } from '../lib/bons-cadeaux.js'
+import { calculerRemiseBon, normaliserCodeBon, bonExpire, libelleResteBon, libelleBon, confirmationDepuisBon, ETATS_CONFIRMATION, repartirBons, BONS_MAX_PAR_COMMANDE } from '../lib/bons-cadeaux.js'
 import { resteAEncaisser, soldeRdv, etatPaiementRdv, caDesRdvs, montantNetCommande, phraseAvantages, etatPaiementClient } from '../lib/rdv-paiement.js'
 import { emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant } from '../lib/resend.js'
 import { texteBonVendu } from '../lib/bons-vendus.js'
@@ -317,9 +317,21 @@ const egal = (nom, obtenu, attendu) =>
   const srv = lireCode('lib/bons-cadeaux-server.js')
   verifie('recrediterBon refuse l\'ancienne forme au lieu de l\'ignorer',
     /typeof refs === 'string'/.test(srv))
+  // ⚠️ CETTE GARDE VISAIT `recrediterBon(` AU SINGULIER, donc une FORME. Le
+  // 01/09 le recrédit est passé en boucle pour cumuler plusieurs bons, la
+  // fonction s'appelle `recrediterBons`, et la garde a rougi alors que la
+  // règle qu'elle défend n'avait pas bougé d'un iota.
+  //
+  // Ce qui ne doit pas changer : la RÉFÉRENCE reste un OBJET nommé. Passée nue,
+  // elle serait ignorée et le bon jamais recrédité, EN SILENCE — c'est ce qui
+  // avait justifié cette garde en août.
   for (const chemin of ['app/api/commande/cancel/route.js', 'app/api/stripe/webhook/route.js']) {
-    verifie(`${chemin.split('/').slice(-2).join('/')} passe un objet`,
-      /recrediterBon\(supabase, [^)]*\{ commande_id/.test(lireCode(chemin)))
+    const src = lireCode(chemin)
+    verifie(`${chemin.split('/').slice(-2).join('/')} passe une référence nommée`,
+      /recrediterBons\(supabase, [^)]*\{ (commande_id|rdv_id)/.test(src))
+    // ⚠️ ET AUCUN IDENTIFIANT NU N'EST PASSÉ EN QUATRIÈME ARGUMENT.
+    verifie(`${chemin.split('/').slice(-2).join('/')} ne passe jamais un identifiant nu`,
+      !/recrediterBons?\(supabase, [^)]*, (cmd|rdv)\.id\)/.test(src))
   }
 }
 
@@ -1217,6 +1229,151 @@ const egal = (nom, obtenu, attendu) =>
   verifie('un paiement annulé garde son bandeau discret',
     comp.indexOf("etat === 'annule'") > 0
     && comp.indexOf("etat === 'annule'") < comp.indexOf("position: 'fixed'"))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CUMULER PLUSIEURS BONS SUR UNE COMMANDE (01/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ALEX A VU : 180 € chez Kebabistro, trois bons de 50, 75 et 20 €, et
+// l'écran n'en acceptait QU'UN — en faisant disparaître les autres.
+//
+// ⚠️ CETTE FONCTION DÉCIDE DE L'ARGENT. Elle est donc EXÉCUTÉE ici, cas par
+// cas, et pas seulement relue.
+{
+  const bon = (solde, exp = null, id = `b${solde}`) => ({ id, code: `BC-${id}`, solde, expires_at: exp })
+  // Invariant vrai de TOUTE répartition : ce qui est pris plus ce qui reste
+  // fait exactement ce qui était dû. S'il se rompt, de l'argent apparaît ou
+  // disparaît.
+  const boucle = (r, du) => Math.round((r.total + r.reste) * 100) === Math.round(du * 100)
+
+  // ─── LE CAS D'ALEX ────────────────────────────────────────────────────────
+  const cas = repartirBons([bon(50), bon(75), bon(20)], 180)
+  verifie('180 € et trois bons : les trois servent', cas.lignes.length === 3)
+  verifie('180 € et trois bons : 145 € pris', cas.total === 145)
+  verifie('180 € et trois bons : 35 € restent à payer', cas.reste === 35)
+  verifie('180 € et trois bons : rien ne se perd', boucle(cas, 180))
+
+  // ─── UN BON QUI COUVRE TOUT ───────────────────────────────────────────────
+  const tout = repartirBons([bon(100)], 40)
+  verifie('un bon qui couvre tout : rien à payer', tout.reste === 0)
+  verifie('un bon qui couvre tout : on ne prend que le dû', tout.total === 40)
+  verifie('un bon qui couvre tout : rien ne se perd', boucle(tout, 40))
+
+  // ─── 🔴 LE MINIMUM STRIPE, AU TOTAL ET PAS PAR BON ────────────────────────
+  //
+  // C'est là que `calculerRemiseBon` appelée en boucle aurait été fausse :
+  // elle aurait laissé 0,50 € sur CHAQUE bon.
+  const juste = repartirBons([bon(0.59)], 0.60)
+  verifie('reste sous le minimum : le bon rend ce qu\'il faut', juste.total === 0.10)
+  verifie('reste sous le minimum : il reste exactement 0,50 €', juste.reste === 0.50)
+  verifie('reste sous le minimum : rien ne se perd', boucle(juste, 0.60))
+
+  // 🔴 LE CAS QUI A FAIT ROUGIR MA PREMIÈRE VERSION. Corriger une seule fois
+  // laissait un reste de 0,40 €, que Stripe aurait refusé.
+  const deux = repartirBons([bon(0.20, '2027-01-01'), bon(0.39, '2027-06-01')], 0.60)
+  verifie('🔴 deux petits bons : le reste ne descend JAMAIS sous 0,50 €',
+    deux.reste >= 0.50, `reste = ${deux.reste}`)
+  verifie('deux petits bons : rien ne se perd', boucle(deux, 0.60))
+
+  // Un bon trop petit pour rendre le manque ne sert pas du tout.
+  const trop = repartirBons([bon(0.10)], 0.45)
+  verifie('un bon trop petit ne sert pas', trop.lignes.length === 0)
+  verifie('un bon trop petit : le dû reste entier', trop.reste === 0.45)
+
+  // ─── 🔴 LE PLUS PROCHE DE L'EXPIRATION PART EN PREMIER ────────────────────
+  // On dépense d'abord ce qui risquait d'être perdu.
+  const ordre = repartirBons([
+    bon(30, '2028-01-01', 'tard'),
+    bon(30, '2026-01-01', 'tot'),
+  ], 30)
+  verifie('🔴 le bon le plus proche de l\'expiration part en premier',
+    ordre.lignes[0]?.id === 'tot', `premier = ${ordre.lignes[0]?.id}`)
+
+  // ⚠️ ET UN BON SANS DATE PASSE EN DERNIER : il ne presse pas.
+  const sansDate = repartirBons([bon(30, null, 'jamais'), bon(30, '2027-01-01', 'date')], 30)
+  verifie('un bon sans expiration passe en dernier',
+    sansDate.lignes[0]?.id === 'date')
+
+  // ─── LES BORNES ───────────────────────────────────────────────────────────
+  const beaucoup = repartirBons(Array.from({ length: 9 }, (_, i) => bon(10, null, `b${i}`)), 500)
+  verifie(`jamais plus de ${BONS_MAX_PAR_COMMANDE} bons sur une commande`,
+    beaucoup.lignes.length === BONS_MAX_PAR_COMMANDE, `${beaucoup.lignes.length} lignes`)
+  verifie('la borne vaut cinq', BONS_MAX_PAR_COMMANDE === 5)
+
+  verifie('aucun bon : rien n\'est pris', repartirBons([], 50).total === 0)
+  verifie('aucun bon : le dû reste entier', repartirBons([], 50).reste === 50)
+  verifie('rien à payer : rien n\'est pris', repartirBons([bon(50)], 0).total === 0)
+  verifie('un solde nul est ignoré', repartirBons([bon(0), bon(20)], 50).lignes.length === 1)
+
+  // ⚠️ AUCUNE LIGNE À ZÉRO : un débit nul salirait la commande et l'historique
+  // du bon sans rien financer.
+  for (const du of [0.60, 1, 12.34, 45, 180, 999]) {
+    const r = repartirBons([bon(0.20), bon(7.5), bon(50), bon(0.39)], du)
+    verifie(`aucune ligne à zéro (dû ${du} €)`, r.lignes.every(l => l.montant > 0))
+    verifie(`rien ne se perd (dû ${du} €)`, boucle(r, du))
+    verifie(`le reste est payable ou nul (dû ${du} €)`,
+      r.reste === 0 || r.reste >= 0.50, `reste = ${r.reste}`)
+  }
+
+  // ⚠️ ON NE MUTE PAS LE TABLEAU REÇU : il est affiché à l'écran de l'appelant,
+  // le réordonner changerait sa liste sans qu'il l'ait demandé.
+  const source = [bon(30, '2028-01-01', 'tard'), bon(30, '2026-01-01', 'tot')]
+  repartirBons(source, 60)
+  verifie('le tableau reçu n\'est pas réordonné', source[0].id === 'tard')
+
+  // ⚠️ ET LES CENTIMES TOMBENT JUSTE. Trois additions de flottants suffisent à
+  // produire un reste de 0,004 €, que Stripe refuse sans expliquer.
+  const centimes = repartirBons([bon(0.10), bon(0.20), bon(0.30)], 1.00)
+  verifie('les centimes tombent juste', Number.isInteger(Math.round(centimes.reste * 100)))
+  verifie('les centimes : rien ne se perd', boucle(centimes, 1.00))
+
+  // ─── 🔴 LE CÂBLAGE SERVEUR, AUX DEUX BOUTS DU FIL ─────────────────────────
+  //
+  // ⚠️ CINQ ENDROITS DÉBITENT OU RECRÉDITENT UN BON. Si un seul reste sur
+  // `bon_cadeau_id`, il ne traitera QUE le premier bon : les autres seront
+  // débités et jamais rendus. C'est le défaut du 29/08 démultiplié.
+  const serveur = lireCode('lib/bons-cadeaux-server.js')
+  verifie('la boucle de débit vit dans le module serveur', /export async function debiterBons/.test(serveur))
+  verifie('la boucle de recrédit aussi', /export async function recrediterBons/.test(serveur))
+  verifie('une ligne bancale est un échec NOMMÉ, pas un tour sauté',
+    /ligne de bon invalide/.test(serveur))
+
+  const ARGENT = {
+    'app/api/stripe/checkout/create-commande/route.js': ['debiterBons'],
+    'app/api/stripe/webhook/route.js': ['debiterBons', 'recrediterBons'],
+    'app/api/commande/cancel/route.js': ['recrediterBons'],
+  }
+  for (const [f, attendus] of Object.entries(ARGENT)) {
+    const src = lireCode(f)
+    for (const fn of attendus) {
+      verifie(`${f} : appelle ${fn}`, new RegExp(`await ${fn}\\(`).test(src))
+    }
+    // 🔴 ET PLUS AUCUN APPEL AU SINGULIER : c'est LA garde de ce chantier.
+    verifie(`🔴 ${f} : plus aucun débit ni recrédit au singulier`,
+      !/await (debiterBon|recrediterBon)\(/.test(src))
+    // ⚠️ LA COLONNE DOIT ÊTRE DEMANDÉE. Une colonne absente d'un select est le
+    // défaut le plus fréquent de ce projet, et il est SILENCIEUX : la liste
+    // arriverait vide, et pas un centime ne serait rendu.
+    if (f !== 'app/api/stripe/checkout/create-commande/route.js') {
+      verifie(`⚠️ ${f} : demande bien bons_utilises dans son select`,
+        /bons_utilises/.test(src))
+    }
+  }
+
+  const creation = lireCode('app/api/stripe/checkout/create-commande/route.js')
+  verifie('la commande accepte une LISTE de codes', /bons_cadeaux_codes/.test(creation))
+  verifie('l\'ancien champ au singulier reste accepté', /bon_cadeau_code \? \[bon_cadeau_code\]/.test(creation))
+  verifie('la répartition passe par le module pur', /repartirBons\(valides, baseApresRecompense\)/.test(creation))
+  verifie('la liste est écrite sur la commande', /bons_utilises: bonsUtilises/.test(creation))
+  // 🔴 UN MÊME CODE DEUX FOIS COMPTERAIT SON SOLDE DEUX FOIS.
+  verifie('🔴 un doublon de code est refusé, pas dédupliqué en silence',
+    /est proposé deux fois/.test(creation))
+  verifie('la borne des cinq bons est appliquée côté serveur',
+    /BONS_MAX_PAR_COMMANDE/.test(creation))
+  // ⚠️ CHAQUE BON EST REVALIDÉ : l'écran propose, le serveur décide.
+  verifie('chaque bon est revalidé un par un',
+    /for \(const codeBon of normalises\)[\s\S]{0,200}chargerBonValide/.test(creation))
 }
 
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)

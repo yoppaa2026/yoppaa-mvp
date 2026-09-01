@@ -25,7 +25,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
-import { debiterBon, recrediterBon } from '@/lib/bons-cadeaux-server'
+import { debiterBons, recrediterBons } from '@/lib/bons-cadeaux-server'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
@@ -701,7 +701,7 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
   // ET paye_en_ligne déjà true), on skip.
   const { data: existing } = await supabase
     .from('commandes')
-    .select('id, statut, paye_en_ligne, commercant_id, bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id')
+    .select('id, statut, paye_en_ligne, commercant_id, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id')
     .eq('id', commandeId)
     .maybeSingle()
   if (!existing) {
@@ -767,12 +767,18 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
   // Bon cadeau utilisé sur la commande : débit du solde MAINTENANT (le
   // paiement du reste est confirmé). Idempotent via l'index unique
   // (bon_id, commande_id) : un webhook rejoué ne débite pas deux fois.
-  if (existing.bon_cadeau_id && Number(existing.bon_cadeau_montant) > 0) {
-    const deb = await debiterBon(supabase, existing.bon_cadeau_id, existing.bon_cadeau_montant, {
+  //
+  // 🔴 TOUS LES BONS DEPUIS LE 01/09, et `bons_utilises` fait foi. Lire
+  // `bon_cadeau_id` ne débiterait que le premier : les autres seraient
+  // décomptés à l'écran et jamais retirés du solde réel.
+  if (Array.isArray(existing.bons_utilises) && existing.bons_utilises.length > 0) {
+    const deb = await debiterBons(supabase, existing.bons_utilises, {
       source: 'commande',
       commande_id: commandeId,
     })
-    if (!deb.ok) console.error('[webhook/commande] débit bon cadeau KO', deb.error, { commandeId })
+    // ⚠️ ON NOMME CHAQUE BON QUI A ÉCHOUÉ. Un « débit KO » sans identifiant ne
+    // se rejoue pas et ne se raconte pas au support.
+    if (!deb.ok) console.error('[webhook/commande] débit bons KO', deb.echecs, { commandeId })
   }
 
   // ─── RÉCOMPENSE DE FIDÉLITÉ : consommée ICI, et nulle part avant ─────────
@@ -921,16 +927,18 @@ async function handleChargeRefunded(charge, supabase) {
   // On traite maintenant les deux, dans l'ordre, et on ne sort plus.
   const { data: rdv } = await supabase
     .from('rdv_reservations')
-    .select('id, bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id')
+    .select('id, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
   if (rdv) {
     await supabase.from('rdv_reservations').update(updateData).eq('id', rdv.id)
-    if (rdv.bon_cadeau_id && Number(rdv.bon_cadeau_montant) > 0) {
+    if (Array.isArray(rdv.bons_utilises) && rdv.bons_utilises.length > 0) {
       // Idempotent via l'index unique (bon_id, rdv_id) sur source='annulation' :
       // déjà fait si /api/rdv/cancel est passée avant ce webhook.
-      const rec = await recrediterBon(supabase, rdv.bon_cadeau_id, rdv.bon_cadeau_montant, { rdv_id: rdv.id })
-      if (!rec.ok) console.error('[webhook/refund] re-crédit bon cadeau RDV KO', rec.error, { rdvId: rdv.id })
+      // 🔴 TOUS LES BONS : `bons_utilises` fait foi, `bon_cadeau_id` n'en
+      // aurait rendu qu'un.
+      const rec = await recrediterBons(supabase, rdv.bons_utilises, { rdv_id: rdv.id })
+      if (!rec.ok) console.error('[webhook/refund] re-crédit bons RDV KO', rec.echecs, { rdvId: rdv.id })
     }
     if (rdv.fidelite_recompense_id) {
       const { data: recFid } = await supabase
@@ -946,7 +954,7 @@ async function handleChargeRefunded(charge, supabase) {
   // ─── Et la commande, qui peut porter le MÊME paiement ──────────────────
   const { data: cmd } = await supabase
     .from('commandes')
-    .select('id, statut, bon_cadeau_id, bon_cadeau_montant, fidelite_recompense_id')
+    .select('id, statut, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
   if (cmd) {
@@ -962,9 +970,11 @@ async function handleChargeRefunded(charge, supabase) {
     // Stripe ne rembourse que la part carte, la part bon revient SUR le bon.
     // Idempotent (index unique source='annulation'), déjà fait si la route
     // /api/commande/cancel est passée avant ce webhook.
-    if (isRefundTotal && cmd.bon_cadeau_id && Number(cmd.bon_cadeau_montant) > 0) {
-      const rec = await recrediterBon(supabase, cmd.bon_cadeau_id, cmd.bon_cadeau_montant, { commande_id: cmd.id })
-      if (!rec.ok) console.error('[webhook/refund] re-crédit bon cadeau KO', rec.error, { cmdId: cmd.id })
+    if (isRefundTotal && Array.isArray(cmd.bons_utilises) && cmd.bons_utilises.length > 0) {
+      // 🔴 TOUS LES BONS, ici aussi. C'est le chemin de SECOURS : si la route
+      // d'annulation n'est jamais passée, c'est lui qui rend l'argent.
+      const rec = await recrediterBons(supabase, cmd.bons_utilises, { commande_id: cmd.id })
+      if (!rec.ok) console.error('[webhook/refund] re-crédit bons KO', rec.echecs, { cmdId: cmd.id })
     }
     // ⚠️ MÊME RAISONNEMENT POUR LA RÉCOMPENSE, et c'est le frère du correctif
     // ci-dessus : une commande intégralement remboursée n'a jamais eu lieu. La

@@ -370,8 +370,18 @@ for (const [nom, chemin] of [
   // privait la seconde de son remboursement, de son statut et de son bon.
   verifie('le webhook ne sort plus après avoir trouvé le rendez-vous',
     !/console\.info\('\[stripe\/webhook\] refund enregistré sur RDV'[^)]*\)\s*\n\s*return/.test(finBloc))
-  verifie('il recrédite le bon du rendez-vous',
-    /recrediterBon\(supabase, rdv\.bon_cadeau_id/.test(finBloc))
+  // ⚠️ CETTE GARDE VISAIT `recrediterBon(supabase, rdv.bon_cadeau_id`, donc la
+  // FORME d'un recrédit unitaire. Le 01/09 le rendez-vous peut porter
+  // PLUSIEURS bons, et c'est `rdv.bons_utilises` qui fait foi : la garde a
+  // rougi alors que la promesse — le webhook rend bien le bon du rendez-vous —
+  // n'avait pas bougé. Ce qui ne doit pas changer, c'est qu'un recrédit parte
+  // d'ici avec la référence du rendez-vous.
+  verifie('il recrédite les bons du rendez-vous',
+    /recrediterBons\(supabase, rdv\.bons_utilises, \{ rdv_id: rdv\.id \}\)/.test(finBloc))
+  // 🔴 ET IL LIT LA LISTE, PAS L'IDENTIFIANT UNIQUE : sur trois bons, lire
+  // `bon_cadeau_id` n'en rendrait qu'un et les deux autres seraient perdus.
+  verifie('🔴 et il part de la LISTE, jamais du seul bon_cadeau_id',
+    /rdv\.bons_utilises/.test(finBloc) && !/recrediterBons?\(supabase, rdv\.bon_cadeau_id/.test(finBloc))
   verifie('il rend la récompense du rendez-vous',
     /rdv\.fidelite_recompense_id/.test(finBloc))
   verifie('et il traite toujours la commande', /from\('commandes'\)/.test(finBloc))

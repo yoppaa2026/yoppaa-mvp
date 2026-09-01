@@ -1185,6 +1185,30 @@ const egal = (nom, obtenu, attendu) =>
     verifie('on attend que le commerce soit chargé',
       /if \(bonDuLienFait\.current \|\| !commercant\?\.id\) return/.test(fiche))
     verifie('et on ne le fait qu\'une fois', /bonDuLienFait\.current = true/.test(fiche))
+
+    // ─── 🔴 LE CHAMP DE CODE DU TUNNEL RENDEZ-VOUS (01/09) ─────────────────
+    //
+    // Il N'EXISTAIT PAS. Le seul chemin était `mesBonsIci`, qui exige une
+    // identité prouvée : quelqu'un qui recevait un bon pour un coiffeur et qui
+    // n'était pas connecté ne pouvait PAS l'utiliser en ligne. Le serveur
+    // acceptait pourtant `bon_cadeau_code` depuis longtemps.
+    const rdv = lireCode('app/commander/rdv/[slug]/page.js')
+    verifie('🔴 le tunnel rendez-vous a un champ de code',
+      /placeholder="BC-XXXX-XXXX"/.test(rdv))
+    verifie('il normalise la saisie comme le tunnel boutique',
+      /normaliserCodeBon\(source\)/.test(rdv))
+    verifie('🔴 le solde vient du SERVEUR, jamais de l\'écran',
+      /\/api\/bons-cadeaux\/verifier/.test(rdv))
+    verifie('le bon saisi prend la forme des bons de la liste',
+      /setBonChoisi\(\{ id: `saisi-\$\{j\.code\}`, code: j\.code, solde: j\.solde \}\)/.test(rdv))
+    // ⚠️ LE CHAMP S'EFFACE DÈS QU'UN BON EST RETENU : proposer d'en saisir un
+    // second n'aurait pas de sens, et laisserait croire qu'on peut cumuler.
+    verifie('le champ disparaît quand un bon est déjà appliqué',
+      /!seanceSurAbo && prixBase != null && !bonChoisi && \(/.test(rdv))
+    // ⚠️ ET LES DEUX TUNNELS LISENT LE LIEN, pas seulement la boutique : la
+    // page du bon renvoie ICI pour tous les commerces de service.
+    verifie('le tunnel rendez-vous lit aussi le code du lien',
+      /params\.get\('bon_code'\)/.test(rdv) && /searchParams\.delete\('bon_code'\)/.test(rdv))
   }
 
   // ⚠️ ET LE REFUS NE PREND PAS L'ÉCRAN. Rien n'a été débité : barrer l'écran de

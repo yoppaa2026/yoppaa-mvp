@@ -41,7 +41,7 @@ import { capacitePrestation, estCoursCollectif, libellePlaces } from '@/lib/cour
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
 // boutique : deux écritures d'une même phrase finissent toujours par dire deux
 // choses.
-import { libelleResteBon, libelleBon } from '@/lib/bons-cadeaux'
+import { libelleResteBon, libelleBon, normaliserCodeBon } from '@/lib/bons-cadeaux'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -354,6 +354,53 @@ export default function CommanderRdvSlug() {
   // Le bon retenu pour ce rendez-vous. Comme la récompense, il n'est PAS actif
   // d'office : un bon de 50 € posé sur une prestation à 20 € brûlerait 30 €.
   const [bonChoisi, setBonChoisi] = useState(null)
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // « J'AI UN CODE » — LA SAISIE QUI N'EXISTAIT PAS ICI (01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 CE TUNNEL N'AVAIT AUCUN CHAMP DE CODE. Le seul chemin vers un bon était
+  // la liste `mesBonsIci`, qui vient de `/api/yopper/mes-bons` et exige une
+  // identité PROUVÉE. Quelqu'un qui recevait un bon pour un coiffeur et qui
+  // n'était pas connecté ne pouvait donc PAS l'utiliser en ligne : il payait
+  // son acompte plein et devait se présenter au comptoir avec son code.
+  //
+  // ⚠️ ET LE SERVEUR, LUI, SAVAIT DÉJÀ LE FAIRE : les trois routes de
+  // réservation acceptent `bon_cadeau_code` depuis longtemps. C'était l'écran
+  // qui manquait, pas la mécanique. Le tunnel boutique a ce champ, celui-ci
+  // ne l'a jamais eu : deux tunnels pour un même geste finissent toujours par
+  // diverger, et c'est le motif le plus tenace de ce projet.
+  const [bonInput, setBonInput] = useState('')
+  const [bonErreur, setBonErreur] = useState(null)
+  const [bonLoading, setBonLoading] = useState(false)
+
+  // ⚠️ ON N'ACCEPTE QU'UNE CHAÎNE. Ce bouton s'écrit aussi `onClick={appliquerBon}`
+  // ailleurs, et React passe alors l'ÉVÉNEMENT en premier argument : sans ce
+  // test, un clic normaliserait un objet React et échouerait sur un format.
+  // Même garde que dans le tunnel boutique, d'où elle vient.
+  async function appliquerBon(codeDirect = null) {
+    const source = typeof codeDirect === 'string' ? codeDirect : bonInput
+    const code = normaliserCodeBon(source)
+    if (!code) { setBonErreur('Format attendu : BC-XXXX-XXXX'); return }
+    if (!commercant?.id) return
+    setBonLoading(true); setBonErreur(null)
+    try {
+      // ⚠️ LE SOLDE VIENT DU SERVEUR, JAMAIS DE L'ÉCRAN. C'est lui qui sait ce
+      // qui reste sur le bon et s'il vaut pour CE commerce.
+      const r = await fetch('/api/bons-cadeaux/verifier', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commercant_id: commercant.id, code }),
+      })
+      const j = await r.json()
+      if (!r.ok || !j.ok) { setBonErreur(j.error || 'Vérification impossible.'); setBonChoisi(null) }
+      // `bonChoisi` porte `{ code, solde }` : la même forme que les bons de la
+      // liste, pour que tout le calcul en aval ne connaisse qu'un seul cas.
+      else { setBonChoisi({ id: `saisi-${j.code}`, code: j.code, solde: j.solde }); setBonInput('') }
+    } catch {
+      setBonErreur('Vérification impossible, réessaie.')
+    }
+    setBonLoading(false)
+  }
   const [praticienChoisi, setPraticienChoisi] = useState(null)  // null = "Sans préférence" (V1 : garde null en base)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
@@ -688,6 +735,37 @@ export default function CommanderRdvSlug() {
     } catch { /* ignore */ }
     return () => { vivant = false }
   }, [])
+
+  // ─── LE CODE ARRIVÉ PAR LE LIEN DU BON ────────────────────────────────────
+  //
+  // Jumeau exact de la fiche commerce. Il compte ici AUSSI : la page
+  // `/cadeau/<jeton>` renvoie vers ce tunnel pour tous les commerces de
+  // service, et c'est précisément là que le code ne pouvait pas être saisi
+  // avant aujourd'hui.
+  //
+  // ⚠️ ON ATTEND LE COMMERCE, sinon la vérification part avec `undefined`.
+  // ⚠️ ET ON NE LE FAIT QU'UNE FOIS.
+  const bonDuLienFait = useRef(false)
+  useEffect(() => {
+    if (bonDuLienFait.current || !commercant?.id) return
+    if (typeof window === 'undefined') return
+    let code = null
+    try {
+      const params = new URLSearchParams(window.location.search)
+      code = params.get('bon_code')
+      if (!code) return
+      // 🔴 ON NETTOIE L'ADRESSE AVANT D'APPLIQUER : un code est un secret au
+      // porteur, il n'a rien à faire dans une barre d'adresse.
+      const url = new URL(window.location.href)
+      url.searchParams.delete('bon_code')
+      window.history.replaceState({}, '', url.toString())
+    } catch { return }
+    bonDuLienFait.current = true
+    appliquerBon(code)
+    // ⚠️ `appliquerBon` est recréée à chaque rendu : la mettre en dépendance
+    // relancerait l'effet en boucle. `bonDuLienFait` rend l'opération unique.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commercant?.id])
 
   // ⚠️ LE RETOUR D'UN ACHAT D'ABONNEMENT N'ÉTAIT LU PAR PERSONNE (défaut trouvé
   // par Alex le 16/08, en payant réellement 400 €). Stripe renvoie bien sur
@@ -3481,6 +3559,54 @@ export default function CommanderRdvSlug() {
                             })}
                           </div>
                         )}
+
+                        {/* ─── 🔴 « J'AI UN CODE » — CE CHAMP N'EXISTAIT PAS ICI
+                            (Alex, 01/09) ─────────────────────────────────────
+
+                            Le bloc ci-dessus ne montre que `mesBonsIci`, qui
+                            vient d'une identité PROUVÉE. Quelqu'un qui reçoit un
+                            bon pour un coiffeur et qui n'est pas connecté ne
+                            pouvait donc PAS l'utiliser en ligne : il payait son
+                            acompte plein et devait se présenter au comptoir.
+
+                            ⚠️ LE SERVEUR SAVAIT DÉJÀ LE FAIRE : les trois routes
+                            de réservation acceptent `bon_cadeau_code` depuis
+                            longtemps. C'était l'écran qui manquait. Le tunnel
+                            boutique a ce champ depuis le début — deux tunnels
+                            pour un même geste finissent toujours par diverger.
+
+                            ⚠️ IL S'EFFACE DÈS QU'UN BON EST RETENU : proposer de
+                            saisir un code alors qu'un bon est déjà appliqué ne
+                            ferait qu'ouvrir une question sans objet. */}
+                        {!seanceSurAbo && prixBase != null && !bonChoisi && (
+                          <div style={{ background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
+                            <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                              J&rsquo;ai un {nomBon}
+                            </p>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <input
+                                value={bonInput}
+                                onChange={e => { setBonInput(e.target.value); setBonErreur(null) }}
+                                placeholder="BC-XXXX-XXXX"
+                                autoCapitalize="characters"
+                                autoCorrect="off"
+                                spellCheck={false}
+                                style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${bonErreur ? '#FCA5A5' : T.pale}`, fontSize: '0.88rem', fontFamily: 'monospace', letterSpacing: '1px', color: T.ink, background: '#fff' }}
+                              />
+                              <button type="button" onClick={() => appliquerBon()} disabled={bonLoading || !bonInput.trim()}
+                                style={{ flexShrink: 0, padding: '10px 16px', borderRadius: 12, border: 'none', background: (bonLoading || !bonInput.trim()) ? T.pale : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (bonLoading || !bonInput.trim()) ? T.muted : '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: (bonLoading || !bonInput.trim()) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                                {bonLoading ? '…' : 'Appliquer'}
+                              </button>
+                            </div>
+                            {/* ⚠️ L'ERREUR VIENT DU SERVEUR ET SE LIT TELLE
+                                QUELLE : c'est lui qui sait si le bon vaut pour
+                                CE commerce, s'il est expiré ou épuisé. */}
+                            {bonErreur && (
+                              <p style={{ margin: '6px 0 0', fontSize: '0.76rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.45 }}>{bonErreur}</p>
+                            )}
+                          </div>
+                        )}
+
                         {/* ─── 🔴 LE BON INVISIBLE, QUAND RIEN NE SE PAIE EN
                             LIGNE (Alex, 30/08) ───────────────────────────────
 

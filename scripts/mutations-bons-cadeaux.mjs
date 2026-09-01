@@ -822,6 +822,35 @@ const MUTATIONS = [
     de: '    bonDuLienFait.current = true',
     vers: '    // une seule fois, vraiment ?' },
 
+  // ─── LE CHAMP DE CODE DU TUNNEL RENDEZ-VOUS (01/09) ───────────────────────
+
+  { nom: '🔴 le tunnel rendez-vous reperd son champ de code',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                                placeholder="BC-XXXX-XXXX"',
+    vers: '                                placeholder="ton code"' },
+
+  // 🔴 LE SOLDE NE SE DÉCIDE PAS À L'ÉCRAN. Le prendre de la saisie laisserait
+  // n importe qui s attribuer le montant qu il veut.
+  { nom: '🔴 le solde du bon saisi vient de l’écran au lieu du serveur',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '      else { setBonChoisi({ id: `saisi-${j.code}`, code: j.code, solde: j.solde }); setBonInput(\'\') }',
+    vers: '      else { setBonChoisi({ id: `saisi-${code}`, code, solde: 9999 }); setBonInput(\'\') }' },
+
+  { nom: '🔴 la saisie n’est plus normalisée avant vérification',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '    const code = normaliserCodeBon(source)',
+    vers: '    const code = source' },
+
+  { nom: '🔴 le champ de code reste offert alors qu’un bon est déjà appliqué',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                        {!seanceSurAbo && prixBase != null && !bonChoisi && (',
+    vers: '                        {!seanceSurAbo && prixBase != null && (' },
+
+  { nom: '🔴 le tunnel rendez-vous cesse de lire le code du lien',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "      code = params.get('bon_code')",
+    vers: '      code = null' },
+
   // ─── L'ÉCRAN SÉPARÉ (01/09) ───────────────────────────────────────────────
 
   { nom: '🔴 la confirmation redevient une carte perdue au milieu de la fiche',

@@ -3703,7 +3703,7 @@ export default function CommanderSlug() {
                       Reste EN HAUT alors que le bouton est descendu : celui qui
                       revient de sa banque doit voir l'accusé de réception sans
                       avoir à faire défiler toute la fiche. */}
-                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>
+                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie} onContinuer={() => setBonRetour(null)}/>
                 </div>
 
                 {/* Toutes les photos, couverture comprise : elle ne sert plus

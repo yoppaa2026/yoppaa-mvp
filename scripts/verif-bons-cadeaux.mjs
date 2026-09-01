@@ -1133,6 +1133,37 @@ const egal = (nom, obtenu, attendu) =>
     /if \(!bon\)/.test(comp))
   verifie('le lien vers la page du bon ne part que pour le porteur',
     /bon\.pour_moi && bon\.token/.test(comp))
+
+  // ─── L'ÉCRAN SÉPARÉ (demande d'Alex, 01/09) ───────────────────────────────
+  //
+  // « L'écran s'affiche et ensuite le Yopper choisit de retourner vers
+  // l'accueil ou commander autre chose. » Une carte glissée au milieu d'une
+  // fiche se rate : on la fait défiler sans la lire.
+  verifie('la confirmation prend tout l\'écran', /position: 'fixed', inset: 0/.test(comp))
+  // ⚠️ SUR IPHONE, SANS MARGES DE SÉCURITÉ, l'encoche et la barre du bas
+  // mangent le contenu. Le défaut est invisible sur un écran de bureau.
+  verifie('l\'écran respecte les marges de sécurité iPhone',
+    /safe-area-inset-top/.test(comp) && /safe-area-inset-bottom/.test(comp))
+
+  // 🔴 UN PLEIN ÉCRAN SANS SORTIE SERAIT PIRE QUE LE BANDEAU : le Yopper
+  // resterait enfermé sur sa confirmation.
+  // ⚠️ CETTE GARDE A ÉTÉ MESURÉE MUETTE AU PREMIER TOUR. Elle cherchait
+  // `onContinuer` dans tout le fichier : le mot survit dans la signature et
+  // dans le repli, donc débrancher le bouton la laissait VERTE. On vise
+  // maintenant la CONDITION qui monte le bouton, et le bouton lui-même.
+  verifie('🔴 l\'écran a une sortie vers la fiche',
+    /\{onContinuer && \(/.test(comp) && /onClick=\{onContinuer\}/.test(comp))
+  verifie('🔴 et une sortie vers l\'accueil', /href="\/commander"/.test(comp))
+  verifie('les deux tunnels passent la sortie',
+    ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']
+      .every(f => /onContinuer=\{\(\) => setBonRetour\(null\)\}/.test(lireCode(f))))
+
+  // ⚠️ ET LE REFUS NE PREND PAS L'ÉCRAN. Rien n'a été débité : barrer l'écran de
+  // quelqu'un qui vient de renoncer serait le punir de son choix. La branche
+  // « annule » doit rendre AVANT toute la mécanique du plein écran.
+  verifie('un paiement annulé garde son bandeau discret',
+    comp.indexOf("etat === 'annule'") > 0
+    && comp.indexOf("etat === 'annule'") < comp.indexOf("position: 'fixed'"))
 }
 
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)

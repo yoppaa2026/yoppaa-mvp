@@ -2430,7 +2430,7 @@ export default function CommanderRdvSlug() {
                     revient : Stripe recharge la page à neuf, le tunnel repart
                     donc toujours de son premier écran. */}
                 {etape === 1 && (
-                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>
+                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie} onContinuer={() => setBonRetour(null)}/>
                 )}
 
                 {/* Le bouton « Offrir un bon cadeau » est descendu sous les

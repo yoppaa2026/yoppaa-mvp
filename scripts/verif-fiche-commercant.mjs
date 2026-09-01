@@ -193,7 +193,10 @@ for (const chemin of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/
   // ⚠️ ET IL DOIT RECEVOIR DE QUOI PARLER. Un `<BonConfirmation/>` sans son
   // état ni sa catégorie serait bien placé et muet : la garde de position
   // resterait verte sur un écran vide, et le mot ne suivrait plus le métier.
-  const appel = /<BonConfirmation[^>]*\/>/.exec(src)?.[0] || ''
+  // ⚠️ `[^>]*` NE MARCHE PAS ICI, et c'est le genre de détail qui rend une
+  // garde muette : une propriété comme `onContinuer={() => …}` contient un
+  // `>` dans sa flèche, et le motif s'arrêtait dessus. On coupe au `/>`.
+  const appel = /<BonConfirmation[\s\S]*?\/>/.exec(src)?.[0] || ''
   verifier(`${chemin} : la confirmation reçoit l'état, le bon et la catégorie`,
     /etat=\{bonRetour\}/.test(appel) && /bon=\{bonConfirme\}/.test(appel)
     && /categorie=\{commercant\?\.categorie\}/.test(appel),

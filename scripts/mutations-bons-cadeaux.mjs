@@ -748,24 +748,24 @@ const MUTATIONS = [
 
   { nom: '🔴 la fiche commerce cesse de monter la confirmation',
     banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
-    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>',
+    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie} onContinuer={() => setBonRetour(null)}/>',
     vers: '                  {null}' },
 
   { nom: '🔴 la fiche rendez-vous cesse de monter la confirmation',
     banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>',
+    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie} onContinuer={() => setBonRetour(null)}/>',
     vers: '                  {null}' },
 
   // ⚠️ CELLE-CI EST LE JUMEAU DU DÉFAUT MUET DU 31/08 : le composant reste
   // monté, bien placé, et le mot cesse de suivre le métier. Rien ne se voit.
   { nom: '🔴 la confirmation ne reçoit plus la catégorie du commerce',
     banc: 'verif:fiche', fichier: 'app/commander/[slug]/page.js',
-    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>',
+    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie} onContinuer={() => setBonRetour(null)}/>',
     vers: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme}/>' },
 
   { nom: '🔴 la confirmation ne reçoit plus le détail du bon acheté',
     banc: 'verif:fiche', fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie}/>',
+    de: '                  <BonConfirmation etat={bonRetour} bon={bonConfirme} categorie={commercant?.categorie} onContinuer={() => setBonRetour(null)}/>',
     vers: '                  <BonConfirmation etat={bonRetour} categorie={commercant?.categorie}/>' },
 
   // ⚠️ L'ORDRE EST LA RÈGLE : nettoyer l'URL avant d'avoir lu la session jette
@@ -790,6 +790,35 @@ const MUTATIONS = [
     banc: 'verif:bons', fichier: 'app/api/bons-cadeaux/confirmation/route.js',
     de: "!/^cs_[A-Za-z0-9_]{10,}$/.test(sessionId)",
     vers: 'false' },
+
+  // ─── L'ÉCRAN SÉPARÉ (01/09) ───────────────────────────────────────────────
+
+  { nom: '🔴 la confirmation redevient une carte perdue au milieu de la fiche',
+    banc: 'verif:bons', fichier: 'app/commander/BonConfirmation.js',
+    de: "    position: 'fixed', inset: 0, zIndex: 10000,",
+    vers: '    zIndex: 10000,' },
+
+  { nom: '🔴 le plein écran n’a plus de sortie vers la fiche',
+    banc: 'verif:bons', fichier: 'app/commander/BonConfirmation.js',
+    de: '            {onContinuer && (',
+    vers: '            {false && (' },
+
+  { nom: '🔴 le plein écran perd les marges de sécurité de l’iPhone',
+    banc: 'verif:bons', fichier: 'app/commander/BonConfirmation.js',
+    de: "    padding: 'calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px))',",
+    vers: "    padding: '24px 16px'," },
+
+  { nom: '🔴 un tunnel cesse de passer la sortie de l’écran',
+    banc: 'verif:bons', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: ' onContinuer={() => setBonRetour(null)}/>',
+    vers: '/>' },
+
+  // ⚠️ SUR-CORRECTION : barrer l'écran de quelqu'un qui vient de RENONCER
+  // reviendrait à le punir de son choix. Rien n'a été débité.
+  { nom: '🔴 SUR-CORRECTION : un paiement annulé prend tout l’écran',
+    banc: 'verif:bons', fichier: 'app/commander/BonConfirmation.js',
+    de: "  if (etat === 'annule') {",
+    vers: "  if (false) {" },
 
   // ─── CE QUI RESTE À L'ÉCRAN QUAND LA PERSONNE PART (01/09) ────────────────
   //

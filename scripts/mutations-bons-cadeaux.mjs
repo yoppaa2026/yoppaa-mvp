@@ -141,8 +141,14 @@ const MUTATIONS = [
 
   { nom: '🔴 le tunnel boutique réécrit la phrase dans son coin',
     banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
-    de: "                              {' '}{libelleResteBon(Number(bonApplique.solde) - remiseBonEffective(), commercant?.nom)}",
-    vers: '                              {remiseBonEffective() < Number(bonApplique.solde) && ` · il restera ${euros(Number(bonApplique.solde) - remiseBonEffective())} sur ton bon`}' },
+    // ⚠️ ANCRE REMISE À JOUR LE 01/09 : l'écran cumule désormais plusieurs bons,
+    // et le reliquat porte sur LEUR SOMME. L'ancienne visait `bonApplique` au
+    // singulier et ressortait en TEXTE INTROUVABLE, c'est-à-dire une NON-mesure
+    // qui passait pour une mesure.
+    de: `                              {' '}{libelleResteBon(
+                                bonsAppliques.reduce((s, b) => s + Number(b.solde || 0), 0) - remiseBonEffective(),
+                                commercant?.nom)}`,
+    vers: '                              {remiseBonEffective() > 0 && ` · il restera quelque chose sur ton bon`}' },
 
   // ─── LE BON INVISIBLE SANS ACOMPTE (30/08, puis 31/08) ───────────────
   //
@@ -877,6 +883,43 @@ const MUTATIONS = [
     banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
     de: '    bonDuLienFait.current = true',
     vers: '    // une seule fois, vraiment ?' },
+
+  // ─── L'ÉCRAN DU CUMUL (01/09) ─────────────────────────────────────────────
+
+  // 🔴 LE DÉFAUT EXACT VU PAR ALEX : choisir un bon faisait disparaître les
+  // autres, et on pouvait en conclure qu'ils étaient perdus.
+  { nom: '🔴 la liste des bons se cache de nouveau quand un bon est retenu',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '                      {mesBonsIci.length > 0 && (',
+    vers: '                      {bonsAppliques.length === 0 && mesBonsIci.length > 0 && (' },
+
+  { nom: '🔴 l’écran envoie de nouveau UN SEUL code au serveur',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '          ...(bonsAppliques.length > 0 ? { bons_cadeaux_codes: bonsAppliques.map(b => b.code) } : {}),',
+    vers: '          ...(bonsAppliques.length > 0 ? { bon_cadeau_code: bonsAppliques[0].code } : {}),' },
+
+  // 🔴 L'ÉCRAN NE DOIT PAS ANNONCER UN MONTANT QUE LA COMMANDE NE RETIENDRA
+  // PAS : il répartit avec le MÊME module que le serveur.
+  { nom: '🔴 l’écran recalcule la remise à sa façon',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '  function repartitionBons() { return repartirBons(bonsAppliques, baseApresRecompense()) }',
+    vers: '  function repartitionBons() { return { lignes: [], total: bonsAppliques.reduce((s, b) => s + Number(b.solde), 0), reste: 0 } }' },
+
+  { nom: '🔴 un même code peut être appliqué deux fois',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '          if (liste.some(b => b.code === j.code)) {',
+    vers: '          if (false) {' },
+
+  { nom: '🔴 le champ de code se referme dès le premier bon',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '                      {bonsCfg?.actif && bonsAppliques.length < BONS_MAX_PAR_COMMANDE && (',
+    vers: '                      {bonsCfg?.actif && bonsAppliques.length === 0 && (' },
+
+  // ⚠️ AVEC TROIS BONS DONT UN ENTAMÉ, ne parler que du premier serait faux.
+  { nom: '🔴 le reliquat annoncé ne porte que sur le premier bon',
+    banc: 'verif:bons', fichier: 'app/commander/[slug]/page.js',
+    de: '                                bonsAppliques.reduce((s, b) => s + Number(b.solde || 0), 0) - remiseBonEffective(),',
+    vers: '                                Number(bonsAppliques[0]?.solde || 0) - remiseBonEffective(),' },
 
   // ─── LE CHAMP DE CODE DU TUNNEL RENDEZ-VOUS (01/09) ───────────────────────
 

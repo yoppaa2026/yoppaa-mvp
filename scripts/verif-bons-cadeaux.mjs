@@ -389,8 +389,26 @@ const egal = (nom, obtenu, attendu) =>
   // ⚠️ AUCUNE GARDE SUR `bons_cadeaux_actif` : un commerçant peut avoir fermé
   // la vente après avoir vendu, ces bons-là restent dépensables.
   const tunnel = lireCode('app/commander/[slug]/page.js')
+  // ⚠️ CETTE GARDE VISAIT `{!bonApplique && mesBonsIci.length > 0 &&`, donc la
+  // FORME exacte de la condition d'affichage — y compris le `!bonApplique` qui
+  // était justement le DÉFAUT vu par Alex le 01/09. Elle a rougi quand ce
+  // défaut a été corrigé.
+  //
+  // Ce qu'elle défend vraiment : le bloc ne doit dépendre QUE d'avoir des bons
+  // ici, jamais de `bons_cadeaux_actif`. Un commerçant peut avoir fermé la
+  // vente après avoir vendu, et ces bons-là restent dépensables.
+  //
+  // ⚠️ ON DÉCOUPE DE LA CONDITION D'AFFICHAGE JUSQU'AU BOUTON, sans deviner
+  // l'indentation de la fermeture : un motif qui compte les espaces se casse au
+  // premier reformatage et rend une chaîne VIDE, donc une garde qui ne mesure
+  // plus rien. Ma première version l'a fait, et le banc me l'a dit.
+  const debutBloc = tunnel.indexOf('{mesBonsIci.length > 0 && (')
+  const finBloc = tunnel.indexOf("'Utiliser'", debutBloc)
+  const blocMesBons = debutBloc > 0 && finBloc > debutBloc ? tunnel.slice(debutBloc, finBloc) : ''
+  verifie('le bloc des bons va bien jusqu\'à son bouton', blocMesBons.length > 400,
+    `${blocMesBons.length} caractères`)
   verifie('le bouton « Utiliser » ne dépend pas de la vente encore ouverte',
-    /\{!bonApplique && mesBonsIci\.length > 0 &&/.test(tunnel))
+    blocMesBons.length > 400 && !/bonsCfg\?\.actif/.test(blocMesBons))
 
   // ⚠️ ET LE COMPTE LES LISTE, sinon perdre l'email reste perdre le bon.
   const compte = lireCode('app/commander/page.js')
@@ -1374,6 +1392,43 @@ const egal = (nom, obtenu, attendu) =>
   // ⚠️ CHAQUE BON EST REVALIDÉ : l'écran propose, le serveur décide.
   verifie('chaque bon est revalidé un par un',
     /for \(const codeBon of normalises\)[\s\S]{0,200}chargerBonValide/.test(creation))
+
+  // ─── 🔴 L'ÉCRAN DU CUMUL (01/09) ──────────────────────────────────────────
+  //
+  // Alex : 180 € et trois bons de 50, 75 et 20 €. En choisir un faisait
+  // DISPARAÎTRE les deux autres, et on pouvait en conclure qu'ils étaient
+  // perdus.
+  const tunnel = lireCode('app/commander/[slug]/page.js')
+  verifie('🔴 l\'écran garde une LISTE de bons', /const \[bonsAppliques, setBonsAppliques\] = useState\(\[\]\)/.test(tunnel))
+  verifie('🔴 plus aucun bon unique à l\'écran', !/bonApplique\b/.test(tunnel))
+  // ⚠️ LE MÊME MODULE QUE LE SERVEUR : sinon l'écran annoncerait un montant que
+  // la commande ne retiendrait pas.
+  verifie('l\'écran répartit avec le module du serveur',
+    /repartirBons\(bonsAppliques, baseApresRecompense\(\)\)/.test(tunnel))
+  verifie('🔴 et jamais avec calculerRemiseBon en boucle',
+    !/calculerRemiseBon\(/.test(tunnel))
+  verifie('l\'écran envoie la LISTE des codes',
+    /bons_cadeaux_codes: bonsAppliques\.map\(b => b\.code\)/.test(tunnel))
+
+  // 🔴 LA LISTE NE DISPARAÎT PLUS : c'est le défaut exact qu'Alex a vu.
+  verifie('🔴 la liste des bons ne se cache plus quand un bon est retenu',
+    /\{mesBonsIci\.length > 0 && \(/.test(tunnel))
+  verifie('chaque bon de la liste se retire aussi',
+    /if \(retenu\) setBonsAppliques\(l => l\.filter\(a => a\.code !== b\.code\)\)/.test(tunnel))
+  // ⚠️ LE CHAMP RESTE OFFERT tant qu'il y a de la place : c'est lui qui permet
+  // d'ajouter un bon reçu ailleurs par-dessus ceux du compte.
+  verifie('le champ de code reste offert sous la borne',
+    /bonsAppliques\.length < BONS_MAX_PAR_COMMANDE && \(/.test(tunnel))
+  // 🔴 UN DOUBLON COMPTERAIT SON SOLDE DEUX FOIS.
+  verifie('🔴 l\'écran refuse un code déjà appliqué',
+    /liste\.some\(b => b\.code === j\.code\)/.test(tunnel))
+  // ⚠️ UN CODE REFUSÉ NE DOIT PAS EFFACER CE QUI EST DÉJÀ APPLIQUÉ : une faute
+  // de frappe ferait perdre sa remise au Yopper.
+  verifie('⚠️ un code refusé ne vide pas la liste',
+    !/setBonErreur\(j\.error[^)]*\); setBonsAppliques\(\[\]\)/.test(tunnel))
+  // ⚠️ LE RELIQUAT PORTE SUR TOUS LES BONS RETENUS, pas sur le premier.
+  verifie('le reliquat annoncé est celui de TOUS les bons',
+    /bonsAppliques\.reduce\(\(s, b\) => s \+ Number\(b\.solde \|\| 0\), 0\) - remiseBonEffective\(\)/.test(tunnel))
 }
 
 console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.`)

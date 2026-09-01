@@ -7,7 +7,7 @@ import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine, planEffectif } from '@/lib/plans'
-import { calculerRemiseBon, normaliserCodeBon, libelleResteBon, libelleBon } from '@/lib/bons-cadeaux'
+import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
@@ -1086,7 +1086,12 @@ export default function CommanderSlug() {
   const nomBon = libelleBon(commercant?.categorie)
   const nomBons = libelleBon(commercant?.categorie, { pluriel: true })
   const [bonInput, setBonInput] = useState('')
-  const [bonApplique, setBonApplique] = useState(null)   // { code, solde }
+  // 🔴 UN TABLEAU DEPUIS LE 01/09. Alex : 180 € et trois bons de 50, 75 et
+  // 20 € — l'écran n'en acceptait qu'UN et faisait disparaître les autres.
+  // La répartition entre eux est décidée par `repartirBons`, la même fonction
+  // pure que le serveur applique, pour que l'écran ne puisse pas annoncer un
+  // montant que la commande ne retiendra pas.
+  const [bonsAppliques, setBonsAppliques] = useState([])   // [{ id, code, solde }]
   // Récompense de fidélité du Yopper CONNECTÉ chez CE commerçant, et son choix
   // de l'utiliser ou non sur cette commande.
   const [recompenseFid, setRecompenseFid] = useState(null)      // { id, type, valeur, libelle }
@@ -1524,7 +1529,7 @@ export default function CommanderSlug() {
           }
           if (snap?.creneauChoisi) setCreneauChoisi(snap.creneauChoisi)
           if (snap?.modePaiement) setModePaiement(snap.modePaiement)
-          if (snap?.bonApplique) setBonApplique(snap.bonApplique)
+          if (Array.isArray(snap?.bonsAppliques)) setBonsAppliques(snap.bonsAppliques)
           // ⚠️ La récompense se recoche toute seule, sinon le Yopper qui
           // revient ne penserait pas à la reprendre et paierait le prix plein.
           if (snap?.recompenseActive) setRecompenseActive(true)
@@ -2495,7 +2500,11 @@ export default function CommanderSlug() {
   // récompense est une remise du commerçant, le bon est de l'argent déjà payé
   // par quelqu'un : dans l'autre ordre, le porteur du bon perdrait du solde
   // sur une part qui était offerte de toute façon.
-  function remiseBonEffective() { return bonApplique ? calculerRemiseBon(bonApplique.solde, baseApresRecompense()) : 0 }
+  // ⚠️ LE MÊME MODULE QUE LE SERVEUR, et surtout PAS `calculerRemiseBon`
+  // appelée en boucle : elle laisserait 0,50 € sur CHAQUE bon au lieu de
+  // l'appliquer une seule fois au total.
+  function repartitionBons() { return repartirBons(bonsAppliques, baseApresRecompense()) }
+  function remiseBonEffective() { return repartitionBons().total }
   function totalDuApresBon() { return Math.max(0, Math.round((baseApresRecompense() - remiseBonEffective()) * 100) / 100) }
 
   // ⚠️ `codeDirect` SERT LE YOPPER CONNECTÉ, qui n'a pas à retaper de mémoire
@@ -2517,8 +2526,27 @@ export default function CommanderSlug() {
         body: JSON.stringify({ commercant_id: commercant.id, code }),
       })
       const j = await r.json()
-      if (!r.ok || !j.ok) { setBonErreur(j.error || 'Vérification impossible.'); setBonApplique(null) }
-      else { setBonApplique({ code: j.code, solde: j.solde }); setBonInput('') }
+      // ⚠️ UN CODE REFUSÉ NE VIDE PLUS LA LISTE. Avant, un mauvais code effaçait
+      // le bon déjà appliqué : le Yopper perdait sa remise pour une faute de
+      // frappe. On dit l'erreur, on ne défait rien.
+      if (!r.ok || !j.ok) { setBonErreur(j.error || 'Vérification impossible.') }
+      else {
+        setBonsAppliques(liste => {
+          // 🔴 UN MÊME CODE DEUX FOIS COMPTERAIT SON SOLDE DEUX FOIS. Le serveur
+          // le refuse aussi, mais autant le dire ici plutôt que de laisser
+          // partir une commande qui sera rejetée.
+          if (liste.some(b => b.code === j.code)) {
+            setBonErreur(`Ce ${libelleBon(commercant?.categorie)} est déjà appliqué.`)
+            return liste
+          }
+          if (liste.length >= BONS_MAX_PAR_COMMANDE) {
+            setBonErreur(`Cinq ${libelleBon(commercant?.categorie, { pluriel: true })} au maximum par commande.`)
+            return liste
+          }
+          return [...liste, { id: j.code, code: j.code, solde: j.solde }]
+        })
+        setBonInput('')
+      }
     } catch {
       setBonErreur('Vérification impossible, réessaie.')
     }
@@ -2693,7 +2721,7 @@ export default function CommanderSlug() {
       // ⚠️ LA RÉCOMPENSE COMPTE ICI AUSSI. Tant que la condition ne regardait
       // que le bon cadeau, une récompense couvrant tout le panier laissait
       // l'écran réclamer un mode de paiement pour 0 €.
-      const couvertParBon = totalDuApresBon() === 0 && (!!bonApplique || remiseRecompenseEffective() > 0)
+      const couvertParBon = totalDuApresBon() === 0 && (bonsAppliques.length > 0 || remiseRecompenseEffective() > 0)
       const modeEffectif = modePaiementEffectif({
         choix: modePaiement, stripeOK, cashOK, couvert: couvertParBon,
       })
@@ -2720,7 +2748,7 @@ export default function CommanderSlug() {
           client_nom: client.nom,
           client_telephone: client.telephone,
           rgpd_marketing: rgpdMarketing,
-          ...(bonApplique ? { bon_cadeau_code: bonApplique.code } : {}),
+          ...(bonsAppliques.length > 0 ? { bons_cadeaux_codes: bonsAppliques.map(b => b.code) } : {}),
           ...(recompenseFid && recompenseActive ? { fidelite_recompense_id: recompenseFid.id } : {}),
           ...(estDetail
             ? {
@@ -2782,7 +2810,7 @@ export default function CommanderSlug() {
         sessionStorage.setItem(cleReprisePanier(slug), JSON.stringify({
           panier, creneauChoisi, modePaiement,
           recompenseActive,
-          bonApplique,
+          bonsAppliques,
         }))
       } catch { /* quota plein ou navigation privée : on part quand même */ }
 
@@ -4284,13 +4312,15 @@ export default function CommanderSlug() {
                       <span style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem' }}>−{euros(remiseRecompenseEffective())}</span>
                     </div>
                   )}
-                  {bonApplique && remiseBonEffective() > 0 && (
+                  {bonsAppliques.length > 0 && remiseBonEffective() > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-                      <span style={{ fontWeight: 700, color: '#10B981', fontSize: '0.82rem' }}>{libelleBon(commercant?.categorie, { majuscule: true })} ({bonApplique.code})</span>
+                      {/* ⚠️ ON NOMME LES CODES, PAS « 3 bons » : le Yopper doit
+                          pouvoir rapprocher la ligne de ce qu'il a en main. */}
+                      <span style={{ fontWeight: 700, color: '#10B981', fontSize: '0.82rem' }}>{bonsAppliques.length > 1 ? libelleBon(commercant?.categorie, { pluriel: true, majuscule: true }) : libelleBon(commercant?.categorie, { majuscule: true })} ({bonsAppliques.map(b => b.code).join(', ')})</span>
                       <span style={{ fontWeight: 800, color: '#10B981', fontSize: '0.9rem' }}>−{euros(remiseBonEffective())}</span>
                     </div>
                   )}
-                  {(remiseRecompenseEffective() > 0 || (bonApplique && remiseBonEffective() > 0)) && (
+                  {(remiseRecompenseEffective() > 0 || (bonsAppliques.length > 0 && remiseBonEffective() > 0)) && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                       <span style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem' }}>Reste à payer</span>
                       <span style={{ fontWeight: 900, color: T.main, fontSize: '1.1rem' }}>{euros(totalDuApresBon())}</span>
@@ -4711,7 +4741,7 @@ export default function CommanderSlug() {
                   const surPlaceOu = modeCommande === 'livraison' ? 'au livreur' : estDetail ? 'au comptoir, au retrait' : 'au retrait'
                   // Avantages couvrant tout : plus rien à payer, pas de choix
                   // de mode. ⚠️ La récompense de fidélité peut y suffire seule.
-                  const couvert = totalDuApresBon() === 0 && (!!bonApplique || remiseRecompenseEffective() > 0)
+                  const couvert = totalDuApresBon() === 0 && (bonsAppliques.length > 0 || remiseRecompenseEffective() > 0)
                   const modeEffectif = modePaiementEffectif({
                     choix: modePaiement, stripeOK, cashOK, couvert,
                   })
@@ -4788,32 +4818,54 @@ export default function CommanderSlug() {
                           peut avoir FERMÉ la vente de nouveaux bons après en
                           avoir vendu. Ceux-là restent dépensables, et
                           `/api/bons-cadeaux/verifier` les accepte toujours. */}
-                      {!bonApplique && mesBonsIci.length > 0 && (
+                      {/* 🔴 LA LISTE NE DISPARAÎT PLUS QUAND UN BON EST RETENU
+                          (Alex, 01/09). Elle s'effaçait entièrement : avec 180 €
+                          à payer et trois bons de 50, 75 et 20 €, en choisir un
+                          faisait disparaître les deux autres, et on pouvait en
+                          conclure qu'ils étaient perdus. */}
+                      {mesBonsIci.length > 0 && (
                         <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 10 }}>
                           <p style={{ fontSize: '0.68rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>
                             {mesBonsIci.length > 1 ? `Tes ${nomBons} ici` : `Ton ${nomBon} ici`}
                           </p>
-                          {mesBonsIci.map(b => (
-                            <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
-                              <div style={{ minWidth: 0 }}>
-                                <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#065F46', margin: 0 }}>
-                                  {euros(b.solde)} disponibles
-                                </p>
-                                <p style={{ fontSize: '0.7rem', color: '#047857', fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace', letterSpacing: '0.5px' }}>{b.code}</p>
+                          {mesBonsIci.map(b => {
+                            const retenu = bonsAppliques.some(a => a.code === b.code)
+                            // ⚠️ CE QUE CE BON PRÉCIS FINANCE, une fois la
+                            // répartition faite : sur 180 € avec trois bons, le
+                            // dernier ne sert peut-être qu'à moitié.
+                            const pris = repartitionBons().lignes.find(l => l.code === b.code)?.montant || 0
+                            return (
+                              <div key={b.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 6 }}>
+                                <div style={{ minWidth: 0 }}>
+                                  <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#065F46', margin: 0 }}>
+                                    {retenu && pris > 0 ? `−${euros(pris)} déduits` : `${euros(b.solde)} disponibles`}
+                                  </p>
+                                  <p style={{ fontSize: '0.7rem', color: '#047857', fontWeight: 600, margin: '2px 0 0', fontFamily: 'monospace', letterSpacing: '0.5px' }}>{b.code}</p>
+                                </div>
+                                {/* ⚠️ LE BOUTON DIT LE GESTE, pas l'état. */}
+                                <button type="button"
+                                  onClick={() => {
+                                    setBonErreur(null)
+                                    if (retenu) setBonsAppliques(l => l.filter(a => a.code !== b.code))
+                                    else appliquerBon(b.code)
+                                  }}
+                                  disabled={bonLoading}
+                                  style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 100, border: retenu ? '1.5px solid #059669' : 'none', background: retenu ? '#fff' : 'linear-gradient(135deg, #059669, #10B981)', color: retenu ? '#059669' : '#fff', fontWeight: 800, fontSize: '0.8rem', cursor: bonLoading ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', opacity: bonLoading ? 0.6 : 1 }}>
+                                  {bonLoading ? '…' : retenu ? 'Retirer' : 'Utiliser'}
+                                </button>
                               </div>
-                              {/* ⚠️ LE BOUTON DIT LE GESTE, pas l'état. */}
-                              <button type="button" onClick={() => appliquerBon(b.code)} disabled={bonLoading}
-                                style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 100, border: 'none', background: 'linear-gradient(135deg, #059669, #10B981)', color: '#fff', fontWeight: 800, fontSize: '0.8rem', cursor: bonLoading ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', opacity: bonLoading ? 0.6 : 1 }}>
-                                {bonLoading ? '…' : 'Utiliser'}
-                              </button>
-                            </div>
-                          ))}
+                            )
+                          })}
                           {bonErreur && <p style={{ fontSize: '0.74rem', color: '#DC2626', fontWeight: 700, margin: '6px 0 0' }}>{bonErreur}</p>}
                         </div>
                       )}
 
                       {/* Bon cadeau : champ code (si le commerçant a activé le module) */}
-                      {bonsCfg?.actif && !bonApplique && (
+                      {/* ⚠️ LE CHAMP RESTE OFFERT TANT QU'IL Y A DE LA PLACE :
+                          c'est lui qui permet d'AJOUTER un bon reçu ailleurs
+                          par-dessus ceux du compte. Il ne se ferme qu'à la
+                          cinquième, la borne que le serveur applique aussi. */}
+                      {bonsCfg?.actif && bonsAppliques.length < BONS_MAX_PAR_COMMANDE && (
                         <div style={{ background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 10 }}>
                           <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>J&rsquo;ai un {nomBon}</p>
                           <div style={{ display: 'flex', gap: 8 }}>
@@ -4828,11 +4880,13 @@ export default function CommanderSlug() {
                           {bonErreur && <p style={{ fontSize: '0.74rem', color: '#DC2626', fontWeight: 700, margin: '6px 0 0' }}>{bonErreur}</p>}
                         </div>
                       )}
-                      {bonApplique && (
+                      {bonsAppliques.length > 0 && (
                         <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 14, padding: '10px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                           <div style={{ minWidth: 0 }}>
                             <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#065F46', margin: 0 }}>
-                              {libelleBon(commercant?.categorie, { majuscule: true })} appliqué : −{euros(remiseBonEffective())}
+                              {bonsAppliques.length > 1
+                                ? `${bonsAppliques.length} ${libelleBon(commercant?.categorie, { pluriel: true })} appliqués`
+                                : `${libelleBon(commercant?.categorie, { majuscule: true })} appliqué`} : −{euros(remiseBonEffective())}
                             </p>
                             {/* ⚠️ LA PHRASE DU RESTE VIT DANS LE MODULE (30/08),
                                 avec celle du tunnel rendez-vous. Elle s'arrêtait
@@ -4844,10 +4898,15 @@ export default function CommanderSlug() {
                               {couvert
                                 ? 'Ta commande est entièrement couverte 🟣'
                                 : `Reste à payer : ${euros(totalDuApresBon())}`}
-                              {' '}{libelleResteBon(Number(bonApplique.solde) - remiseBonEffective(), commercant?.nom)}
+                              {/* ⚠️ LE RELIQUAT EST CELUI DE TOUS LES BONS RETENUS,
+                                  pas d'un seul : avec trois bons dont un entamé,
+                                  ne parler que du premier serait faux. */}
+                              {' '}{libelleResteBon(
+                                bonsAppliques.reduce((s, b) => s + Number(b.solde || 0), 0) - remiseBonEffective(),
+                                commercant?.nom)}
                             </p>
                           </div>
-                          <button type="button" onClick={() => { setBonApplique(null); setBonErreur(null) }}
+                          <button type="button" onClick={() => { setBonsAppliques([]); setBonErreur(null) }}
                             style={{ flexShrink: 0, border: 'none', background: 'transparent', color: '#047857', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"DM Sans", sans-serif' }}>
                             Retirer
                           </button>

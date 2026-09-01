@@ -353,10 +353,18 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
 
   // ⚠️ LE CALCUL DE L'ÉCRAN SUIT LE MÊME ORDRE QUE LE SERVEUR, sinon le prix
   // affiché et le prix facturé divergent.
-  verifie('l\'écran calcule le bon cadeau SUR la base d\'après récompense',
-    /calculerRemiseBon\(bonApplique\.solde, baseApresRecompense\(\)\)/.test(page))
+  //
+  // ⚠️ CES DEUX GARDES NOMMAIENT `bonApplique`, AU SINGULIER. Le 01/09 l'écran
+  // accepte PLUSIEURS bons (`bonsAppliques`) et répartit avec `repartirBons` :
+  // elles ont rougi alors que la règle qu'elles défendent — le bon se calcule
+  // APRÈS la récompense, jamais avant — n'a pas bougé d'une ligne.
+  //
+  // 🔴 ET C'EST BIEN CETTE RÈGLE QUI COMPTE : dans l'autre ordre, le porteur du
+  // bon perdrait du solde sur une part qui lui était offerte de toute façon.
+  verifie('l\'écran répartit les bons SUR la base d\'après récompense',
+    /repartirBons\(bonsAppliques, baseApresRecompense\(\)\)/.test(page))
   verifie('et le dû couvert tient compte de la récompense',
-    /totalDuApresBon\(\) === 0 && \(!!bonApplique \|\| remiseRecompenseEffective\(\) > 0\)/.test(page))
+    /totalDuApresBon\(\) === 0 && \(bonsAppliques\.length > 0 \|\| remiseRecompenseEffective\(\) > 0\)/.test(page))
 }
 
 // ═══ 10) LE RENDEZ-VOUS ═══════════════════════════════════════════════════
@@ -756,8 +764,12 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
 
   // ⚠️ La récompense repart avec le panier : sans elle, le Yopper qui revient
   // ne penserait pas à la recocher et paierait le prix plein.
+  // ⚠️ TROISIÈME GARDE DU MÊME LOT À AVOIR ROUGI POUR LE MÊME MOTIF : elle
+  // nommait `bonApplique`, au singulier. Ce qu'elle défend, c'est que la
+  // récompense ET les bons partent ENSEMBLE dans le panier mis de côté avant
+  // Stripe — sinon celui qui revient d'un paiement annulé les perd.
   verifie('la récompense fait partie de ce qu\'on met de côté',
-    /recompenseActive,\s*\n\s*bonApplique/.test(tun))
+    /recompenseActive,\s*\n\s*bonsAppliques/.test(tun))
   verifie('et elle se recoche toute seule au retour',
     /snap\?\.recompenseActive\) setRecompenseActive\(true\)/.test(tun))
 

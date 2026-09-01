@@ -815,6 +815,78 @@ verifier('et range la commande du bon côté',
   })
   verifier('sans avantage, pas de bloc « ce qui te revient »', !/Ce qui te revient/.test(sansRien))
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 « LE REMBOURSEMENT EST LANCÉ » SUR UNE CARTE JAMAIS DÉBITÉE (01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Commande #RE4 d'Alex : 21,90 €, couverts EN ENTIER par ses bons. L'email
+  // promettait « le montant revient sur ton moyen de paiement dans 5 à 10
+  // jours ». Stripe n'avait rien encaissé : il aurait guetté un virement qui
+  // ne serait jamais venu.
+  //
+  // 🔴 LA CAUSE : `paye_en_ligne` vaut `true` sur une commande couverte par des
+  // avantages, exprès. Ce drapeau répond à « le client doit-il encore payer »,
+  // PAS à « la carte a-t-elle été débitée ». On lui demandait la mauvaise
+  // question depuis le début.
+  const toutBon = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'Alexandre', commercant_nom: 'Ciseaux et Soins', numero_commande: 'RE4',
+    total: 21.90, bon_cadeau_montant: 21.90, nb_bons: 2, paye_en_ligne: true,
+    commercant_categorie: 'coiffeur',
+  })
+  verifier('🔴 rien sur la carte : aucune promesse de remboursement',
+    !/Le remboursement est lancé/.test(toutBon))
+  verifier('mais le retour des bons reste annoncé', /sur tes bons cadeaux/.test(toutBon))
+  // ⚠️ ET LA RÉCOMPENSE COMPTE DANS LA DÉDUCTION ELLE AUSSI : une commande
+  // qu'elle couvre entièrement n'a rien laissé sur la carte non plus.
+  const toutRecompense = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'CC11',
+    total: 10, fidelite_remise: 10, paye_en_ligne: true,
+  })
+  verifier('🔴 une commande couverte par la récompense non plus',
+    !/Le remboursement est lancé/.test(toutRecompense))
+  // ⚠️ ET LE CAS OÙ LA CARTE A VRAIMENT PAYÉ NE DOIT PAS SE CASSER.
+  const mixte = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'CC7',
+    total: 50, bon_cadeau_montant: 20, nb_bons: 1, paye_en_ligne: true,
+  })
+  verifier('une part payée par carte garde sa promesse de remboursement',
+    /Le remboursement est lancé/.test(mixte))
+  const sansAvantage = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'CC8', total: 50, paye_en_ligne: true,
+  })
+  verifier('et une commande payée entièrement par carte aussi',
+    /Le remboursement est lancé/.test(sansAvantage))
+  // ⚠️ LE PIÈGE DU ZÉRO : sans `total`, on ne SAIT pas, et « on ne sait pas »
+  // n'est pas « rien ». On garde l'ancien comportement plutôt que de taire un
+  // vrai virement.
+  const sansTotal = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'CC9', paye_en_ligne: true,
+  })
+  verifier('sans total connu, la promesse reste affichée',
+    /Le remboursement est lancé/.test(sansTotal))
+  // ⚠️ ET UNE COMMANDE PAYÉE SUR PLACE N'EN PARLE TOUJOURS PAS.
+  const surPlace = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'A', commercant_nom: 'X', numero_commande: 'CC10', total: 50, paye_en_ligne: false,
+  })
+  verifier('une commande payée sur place n’annonce aucun remboursement',
+    !/Le remboursement est lancé/.test(surPlace))
+
+  // 🔴 LE FRÈRE CÔTÉ COMMERÇANT, ET IL EST PIRE : le même bloc lui disait
+  // « rembourse manuellement depuis ton Stripe Dashboard » sur un paiement que
+  // Stripe n'a jamais vu. Il chercherait une transaction inexistante.
+  const proToutBon = emailCommandeAnnuleeCommercant({
+    nom_commercant: 'Ciseaux et Soins', yopper_prenom: 'Alexandre', numero_commande: 'RE4',
+    total: 21.90, bon_cadeau_montant: 21.90, nb_bons: 2, paye_en_ligne: true, refund_manuel: true,
+  })
+  verifier('🔴 le commerçant n’est pas envoyé rembourser un paiement inexistant',
+    !/Stripe Dashboard/.test(proToutBon))
+  const proMixte = emailCommandeAnnuleeCommercant({
+    nom_commercant: 'X', yopper_prenom: 'A', numero_commande: 'CC7',
+    total: 50, bon_cadeau_montant: 20, paye_en_ligne: true,
+  })
+  verifier('mais il reste informé quand la carte a vraiment payé',
+    /remboursement automatique/.test(proMixte))
+
   // ⚠️ ET LA ROUTE DOIT CHARGER LES COLONNES, sinon les gabarits se taisent
   // sans lever la moindre erreur. C'est LE défaut le plus fréquent du projet.
   const routeAnn = lire('app/api/emails/commande-annulee/route.js')

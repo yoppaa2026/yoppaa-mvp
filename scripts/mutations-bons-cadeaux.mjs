@@ -1316,6 +1316,46 @@ const MUTATIONS = [
     banc: 'verif:logique', fichier: 'app/api/stripe/webhook/route.js',
     de: '  const produits = await chargerProduitsDuRdv(supabase, rdv?.commande_id)',
     vers: '  const produits = null' },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 « LE REMBOURSEMENT EST LANCÉ » SUR UNE CARTE JAMAIS DÉBITÉE (01/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Commande #RE4 : 21,90 EUR couverts en entier par les bons. L email
+  // promettait un virement de 5 a 10 jours que Stripe n aurait jamais fait.
+  //
+  // ⚠️ `paye_en_ligne` repond a « le client doit-il encore payer », PAS a
+  // « la carte a-t-elle ete debitee ». On lui demandait la mauvaise question.
+  { nom: '🔴 l’email promet à nouveau un virement sur une carte jamais débitée',
+    banc: 'verif:livraison', fichier: 'lib/resend.js',
+    de: '  const surCarte = part === null ? paye_en_ligne : part > 0',
+    vers: '  const surCarte = paye_en_ligne' },
+
+  // 🔴 ET LE FRERE COMMERCANT, PIRE : on l envoyait rembourser depuis Stripe
+  // une transaction que Stripe n a jamais vue.
+  { nom: '🔴 le commerçant est renvoyé rembourser un paiement inexistant',
+    banc: 'verif:livraison', fichier: 'lib/resend.js',
+    de: '  const surCartePro = partPro === null ? paye_en_ligne : partPro > 0',
+    vers: '  const surCartePro = paye_en_ligne' },
+
+  // ⚠️ LE PIEGE DU ZERO : sans total, on ne SAIT pas, et « on ne sait pas »
+  // n est pas « rien ». Taire un vrai virement serait le defaut inverse.
+  { nom: '🔴 sans total connu, l’email tait un vrai remboursement',
+    banc: 'verif:livraison', fichier: 'lib/resend.js',
+    de: '  if (!Number.isFinite(t)) return null',
+    vers: '  if (!Number.isFinite(t)) return 0' },
+
+  // 🔴 ET LA DEDUCTION PORTE SUR LES DEUX AVANTAGES. En oublier un ferait
+  // promettre un virement sur une commande que cet avantage a couverte.
+  { nom: '🔴 la part carte oublie les BONS',
+    banc: 'verif:livraison', fichier: 'lib/resend.js',
+    de: '  return Math.max(0, arr(t - arr(fidelite_remise) - arr(bon_cadeau_montant)))',
+    vers: '  return Math.max(0, arr(t - arr(fidelite_remise)))' },
+
+  { nom: '🔴 la part carte oublie la RÉCOMPENSE',
+    banc: 'verif:livraison', fichier: 'lib/resend.js',
+    de: '  return Math.max(0, arr(t - arr(fidelite_remise) - arr(bon_cadeau_montant)))\n}',
+    vers: '  return Math.max(0, arr(t - arr(bon_cadeau_montant)))\n}' },
 ]
 
 function lancer(banc) {

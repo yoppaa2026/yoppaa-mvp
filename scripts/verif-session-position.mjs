@@ -497,6 +497,73 @@ function egale(nom, recu, attendu) {
     /onAuthStateChange\(\s*\n?\s*construireRappelAuth\(/.test(srcSession))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CE QUI RESTE À L'ÉCRAN QUAND LA PERSONNE PART (01/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ALEX A VU EN PRODUCTION : après s'être déconnecté, son profil
+// affichait « Se connecter » en haut, et « MES BONS 291,00 € » juste en
+// dessous, avec les CODES en clair. Un code de bon est un instrument au
+// porteur : la personne suivante qui prend le téléphone pouvait le dépenser.
+//
+// 🔴 ET CE N'ÉTAIT PAS LA PREMIÈRE FOIS. Le même défaut avait été corrigé le
+// 12/08 pour les rendez-vous, les cartes de fidélité et la commune. Les bons
+// sont arrivés le 28/08, les abonnements avant, et personne ne les a ajoutés :
+// **une liste tenue à la main finit toujours par mentir**.
+//
+// ⚠️ CETTE GARDE NE SURVEILLE DONC PAS UNE LISTE, ELLE APPLIQUE UNE RÈGLE :
+// tout état qui porte de la donnée personnelle passe par `viderEtatPersonnel`,
+// ou figure ci-dessous AVEC SA RAISON. Aucun ne reste sans décision.
+{
+  const racine2 = new URL('../', import.meta.url)
+  const src = readFileSync(new URL('app/commander/page.js', racine2), 'utf8')
+
+  // Ce qui porte un nom de donnée personnelle. Volontairement LARGE : mieux
+  // vaut une garde qui réclame une raison écrite qu'une garde qui laisse
+  // passer.
+  const PERSONNEL = /bons|commande|rdv|favori|carte|fid|client|commune|abonnement|avis|pickup/i
+
+  // ⚠️ CHAQUE EXCLUSION PORTE SA RAISON, comme les routes publiques assumées.
+  const HORS_PERIMETRE = {
+    avis: 'avis PUBLICS d\'un commerce, affichés à tout le monde et rendus par un sous-composant, pas par le profil',
+    setAvis: 'le setter du précédent',
+    avisSessionRef: 'garde-fou anti-boucle, ne porte aucune donnée',
+    editProfilSignal: 'compteur qui déclenche l\'ouverture du formulaire, pas une donnée',
+    showConfirmCommune: 'ouverture d\'une modale, pas une donnée',
+    sousOngletCmd: 'onglet choisi, remis à sa place par le rendu invité',
+    commercantsProches: 'commerces PUBLICS autour de la position, aucun lien avec le compte',
+    avisCommercant: 'avis publics d\'une fiche',
+    commandeEnCours: 'panier en cours de saisie, jamais chargé depuis le compte',
+  }
+
+  const etats = [...src.matchAll(/const \[(\w+), (set\w+)\] = useState/g)]
+    .map(m => ({ etat: m[1], setter: m[2] }))
+  verifie('les états de l\'écran Yopper se lisent', etats.length > 30, `${etats.length} trouvés`)
+
+  // Le corps de `viderEtatPersonnel`, découpé, jamais cherché dans tout le
+  // fichier : un `setMesBons([])` écrit ailleurs ne compte pas.
+  const iVider = src.indexOf('const viderEtatPersonnel = () => {')
+  verifie('🔴 la remise à zéro existe et porte un nom', iVider > 0)
+  const corpsVider = src.slice(iVider, src.indexOf('\n  }', iVider))
+
+  const suspects = etats.filter(e => PERSONNEL.test(e.etat) && !HORS_PERIMETRE[e.etat])
+  verifie('des états personnels sont bien détectés', suspects.length >= 8, `${suspects.length}`)
+  for (const s of suspects) {
+    verifie(`🔴 « ${s.etat} » est effacé quand la personne part`,
+      corpsVider.includes(`${s.setter}(`), 'absent de viderEtatPersonnel')
+  }
+
+  // ⚠️ ET LES DEUX SORTIES PASSENT PAR LÀ. La déconnexion ET la suppression de
+  // compte : c'est leur divergence qui a laissé le défaut vivre.
+  const nbAppels = (src.match(/viderEtatPersonnel\(\)/g) || []).length
+  verifie('🔴 la déconnexion ET la suppression de compte l\'appellent',
+    nbAppels >= 2, `${nbAppels} appel(s)`)
+  verifie('la suppression de compte l\'appelle',
+    /onSupprime=\{\(\) => \{[\s\S]{0,600}viderEtatPersonnel\(\)/.test(src))
+  verifie('la déconnexion l\'appelle',
+    /marquerDeconnexionVoulue\(\)[\s\S]{0,900}viderEtatPersonnel\(\)/.test(src))
+}
+
 console.log(`\nSession + position : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

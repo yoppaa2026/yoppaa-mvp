@@ -1658,6 +1658,40 @@ export default function Commander() {
   // (le refresh des commandes relançait l'effet sur la commande d'après).
   const avisSessionRef = useRef(false)
   const [pickupCommande, setPickupCommande] = useState(null)
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOUT CE QUI APPARTIENT À LA PERSONNE QUI PART
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 CETTE REMISE À ZÉRO VIVAIT EN DEUX EXEMPLAIRES, un pour la déconnexion
+  // et un pour la suppression de compte, et ils avaient DÉJÀ divergé : le
+  // correctif du 12/08 (rendez-vous, cartes de fidélité, commune) n'a été porté
+  // que sur le premier pendant un temps, et NI L'UN NI L'AUTRE n'a jamais connu
+  // les bons, arrivés le 28/08.
+  //
+  // 🔴 CE QU'ALEX A VU LE 01/09 : « Se connecter » en haut de son profil, et
+  // « MES BONS 291,00 € » juste en dessous, avec les CODES en clair. Un code de
+  // bon est un instrument au porteur : la personne suivante qui prend le
+  // téléphone pouvait le noter et dépenser l'argent.
+  //
+  // ⚠️ UNE COPIE DE PLUS AURAIT REDIVERGÉ. C'est le motif le plus tenace de ce
+  // projet, et la seule réponse est de n'avoir qu'un seul endroit à corriger.
+  // `verif:session` vérifie en plus que CHAQUE état personnel passe par ici.
+  const viderEtatPersonnel = () => {
+    setClient({ nom: '', email: '', telephone: '', prenom: '' })
+    setClientId(null)
+    setFavoris([]); setCommercantsFavoris([])
+    setClientCommandes([]); setClientRdvs([]); setClientAbonnements([])
+    setMesCartesFid([]); setMesBons([])
+    setCommune(null)
+    // Les deux modales portent une commande nominative : ouvertes, elles
+    // resteraient affichées par-dessus l'écran d'invité.
+    setAvisCommande(null); setPickupCommande(null)
+    // Retour à sa valeur de départ, sinon l'invitation à relier sa carte de
+    // fidélité s'affiche à quelqu'un qui n'a plus de compte du tout.
+    setFidConnecte(true)
+  }
+
   // Tick minute pour rafraichir le compteur "Plus que X min avant ton créneau"
   const [, setNowTick] = useState(0)
   useEffect(() => {
@@ -4293,16 +4327,11 @@ export default function Commander() {
                     ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
                     // Efface aussi le cookie serveur (vrai logout : get-own ne doit plus rien renvoyer).
                     fetch('/api/yopper/session', { method: 'DELETE' }).catch(() => {})
-                    // ⚠️ LES RENDEZ-VOUS RESTAIENT À L'ÉCRAN. Cette remise à zéro
-                    // oubliait `clientRdvs`, `mesCartesFid` et `commune` : après
-                    // déconnexion, les rendez-vous de la personne qui venait de
-                    // partir restaient affichés, et la pastille du pied de page
-                    // continuait de les compter. Le relevé toutes les cinq
-                    // secondes ne les effaçait pas non plus, il saute le tour
-                    // quand il n'y a plus d'email.
-                    setClient({ nom:'', email:'', telephone:'', prenom:'' }); setClientId(null)
-                    setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
-                    setClientRdvs([]); setMesCartesFid([]); setCommune(null)
+                    // ⚠️ TOUT CE QUI EST À ELLE S'EFFACE ICI, en un seul endroit :
+                    // voir `viderEtatPersonnel`. Le relevé toutes les cinq
+                    // secondes ne s'en charge pas, il saute le tour quand il n'y
+                    // a plus d'email.
+                    viderEtatPersonnel()
                     // On reste sur l'onglet Profil (état invité + CTA connexion) et on remonte en haut.
                     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
                   }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '0.875rem', background: 'transparent', color: '#DC2626', border: '1.5px solid #DC262633', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}>
@@ -4322,16 +4351,10 @@ export default function Commander() {
                 {client.email && (
                   <SupprimerCompte email={client.email} onSupprime={() => {
                     ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
-                    // ⚠️ LES RENDEZ-VOUS RESTAIENT À L'ÉCRAN. Cette remise à zéro
-                    // oubliait `clientRdvs`, `mesCartesFid` et `commune` : après
-                    // déconnexion, les rendez-vous de la personne qui venait de
-                    // partir restaient affichés, et la pastille du pied de page
-                    // continuait de les compter. Le relevé toutes les cinq
-                    // secondes ne les effaçait pas non plus, il saute le tour
-                    // quand il n'y a plus d'email.
-                    setClient({ nom:'', email:'', telephone:'', prenom:'' }); setClientId(null)
-                    setFavoris([]); setCommercantsFavoris([]); setClientCommandes([])
-                    setClientRdvs([]); setMesCartesFid([]); setCommune(null)
+                    // ⚠️ LE MÊME EFFACEMENT QUE LA DÉCONNEXION, et à plus forte
+                    // raison : le compte vient d'être supprimé, rien de ce qui
+                    // lui appartenait n'a le droit de rester à l'écran.
+                    viderEtatPersonnel()
                     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
                   }}/>
                 )}

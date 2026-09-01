@@ -132,8 +132,17 @@ export default function BonCadeauModal({ commercant, validiteMois = 12, onClose 
                 <input value={benef.prenom} onChange={e => setBenef(p => ({ ...p, prenom: e.target.value }))} placeholder="Son prénom *" style={{ ...inputSt, flex: '0 0 38%' }}/>
                 <input type="email" value={benef.email} onChange={e => setBenef(p => ({ ...p, email: e.target.value }))} placeholder="Son email *" style={{ ...inputSt, flex: 1 }}/>
               </div>
+              {/* ⚠️ « JOYEUX ANNIVERSAIRE » NE VA PAS À TOUS LES MÉTIERS
+                  (Alex, 01/09). Chez un coiffeur ou un libraire, l'exemple
+                  tombe juste ; dans l'alimentaire, beaucoup moins : on offre un
+                  repas, une tarte, de quoi tenir la semaine, et rarement pour
+                  un anniversaire.
+                  ⚠️ ET ON NE VA PAS FAIRE VARIER L'EXEMPLE AVEC LE MÉTIER : un
+                  exemple juste une fois sur deux vaut moins qu'une invitation
+                  vraie partout. Même raisonnement que le titre « Mes bons » de
+                  l'accueil, tranché le 31/08. */}
               <textarea value={message} onChange={e => setMessage(e.target.value.slice(0, 300))} rows={2}
-                placeholder="Ton petit mot (optionnel) : Joyeux anniversaire !"
+                placeholder="Ton petit mot (optionnel) : un message sympa pour la personne à qui tu offres ce bon"
                 style={{ ...inputSt, resize: 'vertical', marginBottom: 12, lineHeight: 1.5 }}/>
             </>
           )}

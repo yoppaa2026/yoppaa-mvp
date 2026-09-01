@@ -2636,7 +2636,16 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   verifier('la recherche ignore les accents', /sansAccents\(c\.nom\)/.test(accueil))
   verifier('le jour des deals est le jour BELGE', !/new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/.test(accueil),
     (accueil.match(/.*new Date\(\)\.toISOString\(\)\.slice\(0, 10\).*/) || [])[0])
-  verifier('la déconnexion efface aussi les rendez-vous', /setClientRdvs\(\[\]\); setMesCartesFid/.test(accueil))
+  // ⚠️ CETTE GARDE CHERCHAIT `setClientRdvs([]); setMesCartesFid` — TROIS ÉTATS
+  // NOMMÉS EN DUR, collés l'un à l'autre. Elle est restée verte pendant que les
+  // BONS et les ABONNEMENTS, arrivés plus tard, n'étaient effacés nulle part :
+  // Alex a vu ses codes de bons rester à l'écran après s'être déconnecté
+  // (01/09). Une garde qui surveille une LISTE ne protège que la liste.
+  //
+  // Ici on ne garde plus que l'existence du point de passage unique. Le vrai
+  // travail — vérifier que CHAQUE état personnel y passe — est fait par
+  // `verif:session`, qui les énumère depuis le code au lieu de les citer.
+  verifier('la déconnexion passe par le vidage unique', /viderEtatPersonnel\(\)/.test(accueil))
 
   const fiche = sansCommentaires(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
   verifier('la fiche n\'a plus de verrou horaire', !/heure_ouverture_resa|resaOuverte/.test(fiche),

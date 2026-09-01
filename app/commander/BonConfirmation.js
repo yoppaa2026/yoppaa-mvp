@@ -137,11 +137,27 @@ export default function BonConfirmation({ etat = null, bon = null, categorie = n
           </p>
         )}
 
+        {/* 🔴 CE TEXTE AFFIRMAIT L'INVERSE DE LA VÉRITÉ (Alex, 01/09) : il
+            disait « ton code est dans ton email de confirmation », alors que
+            l'email envoyé à l'acheteur d'un cadeau dit lui-même « le code est
+            dans SON email » (`lib/resend.js`). Le code ne part QUE chez le
+            destinataire. J'avais écrit une phrase utile sans vérifier ce que
+            l'email contenait.
+            ⚠️ ET ON DIT CE QUI EST ARRIVÉ À L'AUTRE, pas ce qui manque à
+            l'acheteur : ce qu'il veut savoir, c'est que son cadeau est bien
+            parti et que la personne saura s'en servir.
+            ⚠️ AUCUN PRONOM DE GENRE : on ne connaît pas celui du destinataire,
+            et un prénom ne le dit pas. */}
         <p style={{ margin: '0 0 4px', fontSize: '0.82rem', color: T.deep, lineHeight: 1.55 }}>
           {bon.pour_moi
             ? <>Tu le retrouves dans <strong>ton profil</strong>, et il t&rsquo;attend aussi par email.</>
-            : <>{bon.beneficiaire_prenom || 'La personne'} reçoit son {nomBon} par email{chezQui ? '' : ''}, avec ton message. <strong>Ton code est dans ton email de confirmation</strong> si tu veux l&rsquo;écrire sur une carte.</>}
+            : <><strong>{bon.beneficiaire_prenom || 'La personne à qui tu l\'offres'}</strong> reçoit tout par email : ton message, le montant et le code. Au comptoir, il suffit de montrer ce code{chezQui ? ` chez ${chezQui}` : ''} ; en ligne, il s&rsquo;applique au moment de payer, en une ou plusieurs fois.</>}
         </p>
+        {!bon.pour_moi && (
+          <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: T.muted, lineHeight: 1.55 }}>
+            Ton reçu part sur ton adresse.
+          </p>
+        )}
 
         {echeance && (
           <p style={{ margin: '0 0 12px', fontSize: '0.75rem', color: T.muted, lineHeight: 1.5 }}>

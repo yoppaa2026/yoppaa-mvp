@@ -790,6 +790,47 @@ const MUTATIONS = [
     banc: 'verif:bons', fichier: 'app/api/bons-cadeaux/confirmation/route.js',
     de: "!/^cs_[A-Za-z0-9_]{10,}$/.test(sessionId)",
     vers: 'false' },
+
+  // ─── CE QUI RESTE À L'ÉCRAN QUAND LA PERSONNE PART (01/09) ────────────────
+  //
+  // 🔴 LE DÉFAUT VU PAR ALEX : après déconnexion, « MES BONS 291,00 € » et les
+  // CODES restaient affichés sous le bouton « Se connecter ».
+
+  { nom: '🔴 LES BONS RESTENT À L’ÉCRAN APRÈS LA DÉCONNEXION (codes en clair)',
+    banc: 'verif:session', fichier: 'app/commander/page.js',
+    de: '    setMesCartesFid([]); setMesBons([])',
+    vers: '    setMesCartesFid([])' },
+
+  { nom: '🔴 les abonnements restent à l’écran après la déconnexion',
+    banc: 'verif:session', fichier: 'app/commander/page.js',
+    de: '    setClientCommandes([]); setClientRdvs([]); setClientAbonnements([])',
+    vers: '    setClientCommandes([]); setClientRdvs([])' },
+
+  { nom: '🔴 les cartes de fidélité redeviennent oubliées (défaut du 12/08)',
+    banc: 'verif:session', fichier: 'app/commander/page.js',
+    de: '    setMesCartesFid([]); setMesBons([])',
+    vers: '    setMesBons([])' },
+
+  { nom: '🔴 la modale de retrait reste ouverte par-dessus l’écran d’invité',
+    banc: 'verif:session', fichier: 'app/commander/page.js',
+    de: '    setAvisCommande(null); setPickupCommande(null)',
+    vers: '    setAvisCommande(null)' },
+
+  // ⚠️ LA DIVERGENCE EST LE VRAI DÉFAUT : c'est parce que l'effacement vivait
+  // en DEUX exemplaires qu'il a pu être juste d'un côté et faux de l'autre.
+  // ⚠️ LE PIÈGE CRLF, DEUXIÈME FOIS. `app/commander/page.js` est en CRLF
+  // (mesuré : 4536 CRLF, zéro LF seul). Un `\n` nu dans l'ancre ne trouve
+  // RIEN, et la mutation ressort « TEXTE INTROUVABLE » : une NON-mesure qui
+  // passe pour une mesure. Les deux ancres ci-dessous portent donc `\r\n`.
+  { nom: '🔴 la SUPPRESSION DE COMPTE n’efface plus rien à l’écran',
+    banc: 'verif:session', fichier: 'app/commander/page.js',
+    de: "                    // lui appartenait n'a le droit de rester à l'écran.\r\n                    viderEtatPersonnel()",
+    vers: "                    // lui appartenait n'a le droit de rester à l'écran." },
+
+  { nom: '🔴 la DÉCONNEXION n’efface plus rien à l’écran',
+    banc: 'verif:session', fichier: 'app/commander/page.js',
+    de: "                    // a plus d'email.\r\n                    viderEtatPersonnel()",
+    vers: "                    // a plus d'email." },
 ]
 
 function lancer(banc) {

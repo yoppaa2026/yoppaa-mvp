@@ -65,31 +65,146 @@ export async function GET(request) {
     // Bornes inclusives : `au` doit couvrir toute la journée.
     const auFin = `${au}T23:59:59.999Z`
 
-    const { data: commandes } = await admin
+    // ⚠️ LES BORNES DES REMBOURSEMENTS SONT ÉLARGIES D'UN JOUR DE CHAQUE CÔTÉ,
+    // ET C'EST VOLONTAIRE. Le jour comptable se décide en heure belge : minuit
+    // à Bruxelles, c'est 22h ou 23h la VEILLE en temps universel. Une borne
+    // stricte en UTC raterait tout remboursement des deux premières heures de
+    // la nuit. `dansPeriode` tranche ensuite sur le vrai jour, comme le filtre
+    // des abonnements le fait depuis le 19/08.
+    //
+    // ⚠️ ET LE JOUR SE RECOMPOSE À LA MAIN, PAS AVEC `toISOString()`. Ce
+    // raccourci est ce qui a produit le défaut du 19/08, où une vente de 00h28
+    // tombait la veille : il rend le jour de GREENWICH. Ici on part d'une date
+    // NUE posée à midi universel, donc aucun fuseau ne peut la faire basculer,
+    // mais l'écrire quand même normaliserait le geste juste à côté du code qui
+    // en est mort.
+    const decalerJour = (jour, delta) => {
+      const d = new Date(`${jour}T12:00:00.000Z`)
+      d.setUTCDate(d.getUTCDate() + delta)
+      const mois = String(d.getUTCMonth() + 1).padStart(2, '0')
+      const quantieme = String(d.getUTCDate()).padStart(2, '0')
+      return `${d.getUTCFullYear()}-${mois}-${quantieme}`
+    }
+    const rembDu = `${decalerJour(du, -1)}T00:00:00.000Z`
+    const rembAu = `${decalerJour(au, 1)}T23:59:59.999Z`
+
+    // ⚠️ LES COLONNES VIVENT DANS UNE CONSTANTE, ET C'EST LA LEÇON DU PROJET :
+    // ces `select` servent maintenant DEUX requêtes chacun (les ventes de la
+    // période, puis celles remboursées pendant la période). Deux listes écrites
+    // à la main auraient divergé à la première colonne ajoutée, et une colonne
+    // absente d'un `select` est LE défaut le plus fréquent d'ici, toujours
+    // SILENCIEUX.
+    //
+    // ⚠️ `encaisse_mode` EST INDISPENSABLE : le journal perdrait le moyen de
+    // chaque commande payée sur place, et la réconciliation redeviendrait
+    // impossible sans la moindre erreur.
+    // ⚠️ `stripe_refund_amount` ET `stripe_refund_date` LE SONT DEPUIS LE
+    // 02/09 : sans eux, une vente remboursée reste comptée en entier.
+    const COLS_COMMANDE = 'id, numero_commande, numero_prefixe, numero_semaine, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, creneau_id, regime_tva, paye_en_ligne, bon_cadeau_montant, fidelite_remise, stripe_frais, stripe_net, stripe_refund_amount, stripe_refund_date, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, client_nom, commande_articles(article_id, quantite, prix_unitaire, tva_taux)'
+
+    // ⚠️ `encaisse_*` EST INDISPENSABLE : le journal perdrait tout ce qui a été
+    // encaissé au comptoir sans la moindre erreur, et le commerçant relirait
+    // « 0,00 € au comptoir » sur un document destiné à son comptable.
+    // ⚠️ `bon_cadeau_montant` EST OBLIGATOIRE DEPUIS LE 29/08 : sans lui, la
+    // ligne « Bon cadeau RDV » ne s'écrit jamais et une prestation payée par un
+    // bon disparaît du journal.
+    const COLS_RDV = 'id, numero_rdv, numero_prefixe, numero_semaine, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, bon_cadeau_montant, fidelite_remise, tva_taux, stripe_frais, stripe_net, stripe_refund_amount, stripe_refund_date, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom'
+
+    const { data: commandesPeriode } = await admin
       .from('commandes')
-      // ⚠️ `encaisse_mode` EST INDISPENSABLE, et son absence serait SILENCIEUSE :
-      // le journal perdrait le moyen de chaque commande payée sur place, et la
-      // réconciliation redeviendrait impossible sans la moindre erreur.
-      .select('id, numero_commande, numero_prefixe, numero_semaine, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, creneau_id, regime_tva, paye_en_ligne, bon_cadeau_montant, fidelite_remise, stripe_frais, stripe_net, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, client_nom, commande_articles(article_id, quantite, prix_unitaire, tva_taux)')
+      .select(COLS_COMMANDE)
       .eq('commercant_id', commercantId)
       .gte('created_at', `${du}T00:00:00.000Z`)
       .lte('created_at', auFin)
 
-    const { data: rdvs } = await admin
+    const { data: rdvsPeriode } = await admin
       .from('rdv_reservations')
-      // ⚠️ `encaisse_*` EST INDISPENSABLE, et son absence serait SILENCIEUSE :
-      // le journal perdrait tout ce qui a été encaissé au comptoir sans la
-      // moindre erreur, et le commerçant relirait « 0,00 € au comptoir » sur un
-      // document destiné à son comptable. C'est LE défaut le plus fréquent de
-      // ce projet : une colonne oubliée dans un select.
-      // ⚠️ `bon_cadeau_montant` EST OBLIGATOIRE DEPUIS LE 29/08 : sans lui, la
-      // ligne « Bon cadeau RDV » ne s'écrit jamais et une prestation payée par
-      // un bon disparaît du journal, sans la moindre erreur.
-      .select('id, numero_rdv, numero_prefixe, numero_semaine, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, bon_cadeau_montant, fidelite_remise, tva_taux, stripe_frais, stripe_net, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom')
+      .select(COLS_RDV)
       .eq('commercant_id', commercantId)
       .gte('date_rdv', du)
       .lte('date_rdv', au)
       .is('deleted_at', null)
+
+    // ─── CE QUI EST REPARTI PENDANT LA PÉRIODE ─────────────────────────────
+    //
+    // 🔴 UNE CONTREPASSATION APPARTIENT À SA DATE, PAS À CELLE DE LA VENTE, et
+    // c'est l'arbitrage d'Alex du 31/08 : le relevé bancaire montre DEUX
+    // mouvements, à deux dates. Un rendez-vous du 28 février annulé le 2 mars
+    // doit donc sortir dans l'export de MARS, où sa vente n'est pas chargée.
+    // Sans ces deux requêtes, le remboursement manquerait au mois où l'argent
+    // est réellement parti.
+    const { data: commandesRemb } = await admin
+      .from('commandes')
+      .select(COLS_COMMANDE)
+      .eq('commercant_id', commercantId)
+      .gte('stripe_refund_date', rembDu)
+      .lte('stripe_refund_date', rembAu)
+
+    const { data: rdvsRemb } = await admin
+      .from('rdv_reservations')
+      .select(COLS_RDV)
+      .eq('commercant_id', commercantId)
+      .gte('stripe_refund_date', rembDu)
+      .lte('stripe_refund_date', rembAu)
+      .is('deleted_at', null)
+
+    // ─── ET LES BONS CADEAUX RENDUS, QUI NE SONT DANS AUCUNE COLONNE ───────
+    //
+    // 🔴 `rendreAvantagesRdv` RECRÉDITE LE BON SANS TOUCHER
+    // `bon_cadeau_montant` : cette colonne dit ce que le bon a payé, jamais ce
+    // qu'il a fini par payer. Le mouvement de re-crédit est la SEULE source de
+    // vérité, et il porte sa date, ce qui règle aussi le no-show, où seule une
+    // PART du bon revient.
+    //
+    // ⚠️ LA BORNE DE SÉCURITÉ EST LA JOINTURE, PAS UN FILTRE APRÈS COUP : la
+    // table des mouvements ne porte pas de `commercant_id`, et un bon appartient
+    // à un commerce. `!inner` sur `bons_cadeaux` limite la lecture aux bons de
+    // CE commerce, en base, avant que la moindre ligne ne remonte.
+    const { data: mouvementsBons } = await admin
+      .from('bons_cadeaux_mouvements')
+      .select('bon_id, montant, source, commande_id, rdv_id, created_at, bons_cadeaux!inner(commercant_id)')
+      .eq('bons_cadeaux.commercant_id', commercantId)
+      .eq('source', 'annulation')
+      .gte('created_at', rembDu)
+      .lte('created_at', rembAu)
+
+    // Les ventes visées par un bon rendu, quand elles sont hors période.
+    const dejaLa = new Set([
+      ...(commandesPeriode || []).map(c => c.id),
+      ...(commandesRemb || []).map(c => c.id),
+      ...(rdvsPeriode || []).map(r => r.id),
+      ...(rdvsRemb || []).map(r => r.id),
+    ])
+    const cmdManquantes = [...new Set((mouvementsBons || [])
+      .map(m => m.commande_id).filter(id => id && !dejaLa.has(id)))]
+    const rdvManquants = [...new Set((mouvementsBons || [])
+      .map(m => m.rdv_id).filter(id => id && !dejaLa.has(id)))]
+
+    const { data: commandesBon } = cmdManquantes.length > 0
+      ? await admin.from('commandes').select(COLS_COMMANDE)
+          .eq('commercant_id', commercantId).in('id', cmdManquantes)
+      : { data: [] }
+    const { data: rdvsBon } = rdvManquants.length > 0
+      ? await admin.from('rdv_reservations').select(COLS_RDV)
+          .eq('commercant_id', commercantId).in('id', rdvManquants).is('deleted_at', null)
+      : { data: [] }
+
+    // ⚠️ ON FUSIONNE SANS DOUBLER, et on retient QUI vient d'ailleurs : une
+    // vente chargée seulement pour son remboursement ne doit pas écrire son
+    // chiffre d'affaires ici, il appartient à un export précédent.
+    const fusionner = (...listes) => {
+      const parId = new Map()
+      for (const liste of listes) for (const o of (liste || [])) if (o?.id) parId.set(o.id, o)
+      return [...parId.values()]
+    }
+    const idsPeriode = new Set([
+      ...(commandesPeriode || []).map(c => c.id),
+      ...(rdvsPeriode || []).map(r => r.id),
+    ])
+    const commandes = fusionner(commandesPeriode, commandesRemb, commandesBon)
+    const rdvs = fusionner(rdvsPeriode, rdvsRemb, rdvsBon)
+    const venteHorsPeriode = new Set([...commandes, ...rdvs]
+      .map(o => o.id).filter(id => !idsPeriode.has(id)))
 
     // ⚠️ LES ABONNEMENTS, QUI NE FIGURAIENT DANS AUCUN DOCUMENT (Alex, 17/08).
     // Leur vente n'écrit que dans `abonnements`, jamais une commande.
@@ -137,15 +252,18 @@ export async function GET(request) {
     const tauxDefaut = normaliser(commercant.tva_taux_defaut)
 
     const lignes = construireLignes({
-      commandes: commandes || [],
-      rdvs: rdvs || [],
+      commandes,
+      rdvs,
       abonnements,
       tauxDefaut,
       articlesParId,
+      retoursBons: mouvementsBons || [],
+      periode: { du, au },
+      venteHorsPeriode,
     })
 
     // Signale honnêtement que certaines lignes reposent sur le taux actuel.
-    const avertissementTaux = (commandes || []).some(c =>
+    const avertissementTaux = commandes.some(c =>
       (c.commande_articles || []).some(la => la.tva_taux == null))
 
     if (format === 'json') {

@@ -472,6 +472,66 @@ verifier('l\'onglet Chiffres n\'est pas réservé à un palier',
   /\{ id: 'stats',\s+label: 'Chiffres', icon: 'chart' \}/.test(ecran))
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LE REMBOURSEMENT PARTIEL TRAVERSAIT LE FILTRE PAR STATUT (02/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 LE FRÈRE DU DÉFAUT DU JOURNAL COMPTABLE. Le filtre par statut écarte bien
+// les annulations, mais le webhook Stripe garde VOLONTAIREMENT le statut
+// courant sur un remboursement partiel. Une commande de 60 € remboursée de
+// 20 € s'affichait 60 € au tableau de bord ET 60 € dans le journal : deux
+// écrans, le même mensonge, la même cause.
+{
+  const { valeurCommande } = await import('../lib/statistiques.js')
+
+  egal('une commande remboursée en partie ne compte que ce qui reste',
+    valeurCommande({ total: 60, statut: 'recupere', stripe_refund_amount: 20 }), 40)
+  egal('une commande intacte ne bouge pas',
+    valeurCommande({ total: 60, statut: 'recupere' }), 60)
+  egal('une commande remboursée en entier ne rapporte rien',
+    valeurCommande({ total: 60, statut: 'recupere', stripe_refund_amount: 60 }), 0)
+  // ⚠️ LE PLAFOND : dans le tunnel unique, le rendez-vous et sa commande
+  // partagent un paiement, et le webhook écrit le même montant sur les deux.
+  egal('un remboursement plus gros que la vente ne creuse pas un négatif',
+    valeurCommande({ total: 60, statut: 'recupere', stripe_refund_amount: 200 }), 0)
+  // ⚠️ ET LA RÉCOMPENSE PASSE TOUJOURS AVANT : elle n'est jamais entrée en
+  // caisse, le remboursement se mesure sur ce qui y était.
+  egal('la récompense sort d’abord, le remboursement ensuite',
+    valeurCommande({ total: 60, fidelite_remise: 10, stripe_refund_amount: 20 }), 30)
+
+  egal('un rendez-vous remboursé en partie suit la même règle',
+    valeurRdv({ prix_estime: 50, statut: 'honore', stripe_refund_amount: 15 }), 35)
+  egal('et son acompte encaissé en ligne baisse d’autant',
+    acompteRdv({ acompte_montant: 20, stripe_refund_amount: 8 }), 12)
+  egal('un acompte remboursé en entier ne se rapproche plus de rien',
+    acompteRdv({ acompte_montant: 20, stripe_refund_amount: 20 }), 0)
+
+  // ⚠️ ET LA RÈGLE NE VIT QU'À UN ENDROIT. Le journal comptable et le tableau
+  // de bord répondent à la même question : deux copies auraient divergé au
+  // premier correctif, comme `rendreAvantages` en 2 copies corrigées 3 fois
+  // d'un seul côté.
+  const stats = lireBrut('lib/statistiques.js')
+  verifier('le tableau de bord emprunte la règle, il ne la recopie pas',
+    /from '\.\/remboursements'/.test(stats) && !/Math\.min\(.*refund/i.test(stats))
+  const compta = lireBrut('lib/export-comptable.js')
+  verifier('le journal comptable emprunte la même',
+    /from '\.\/remboursements'/.test(compta))
+
+  // 🔴 ET LA COLONNE DOIT ARRIVER JUSQU'AU CALCUL. Sans elle, tout ce bloc
+  // reste vert et le tableau de bord recommence à compter l'argent rendu : LE
+  // défaut le plus fréquent du projet, et il est silencieux.
+  const routeStats = lireBrut('app/api/dashboard/statistiques/route.js')
+  // ⚠️ ON SAUTE LES COMMENTAIRES PLUTÔT QUE DE COMPTER LES CARACTÈRES : une
+  // fenêtre en nombre de signes rougit dès qu'on ajoute une explication
+  // au-dessus du `select`, ce qui est exactement le contraire du but.
+  const selectDe = (table) => routeStats.match(
+    new RegExp(`from\\('${table}'\\)\\s*(?:\\/\\/[^\\n]*\\n\\s*)*\\.select\\('([^']*)'`))?.[1] || ''
+  verifier('la route des chiffres lit le remboursement des commandes',
+    /\bstripe_refund_amount\b/.test(selectDe('commandes')), selectDe('commandes'))
+  verifier('et celui des rendez-vous',
+    /\bstripe_refund_amount\b/.test(selectDe('rdv_reservations')), selectDe('rdv_reservations'))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

@@ -1165,10 +1165,16 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   // rien si le select ne la demande pas : `Number(undefined || 0)` vaut 0, et la
   // correction serait restée sans effet sans la moindre erreur.
   const routeStats = readFileSync(new URL('../app/api/dashboard/statistiques/route.js', import.meta.url), 'utf8')
+  // ⚠️ LA GARDE VISE LA COLONNE, PAS LA LISTE ENTIÈRE. Ancrée sur le `select`
+  // recopié mot pour mot, elle rougissait le 02/09 pour une colonne AJOUTÉE à
+  // côté (`stripe_refund_amount`), donc pour une amélioration. Une garde qui
+  // punit l'ajout finit par être affaiblie au lieu d'être écoutée.
+  const selectStats = (table) => routeStats.match(
+    new RegExp(`from\\('${table}'\\)\\s*(?:\\/\\/[^\\n]*\\n\\s*)*\\.select\\('([^']*)'`))?.[1] || ''
   verifie('🔴 la route des stats charge la remise des commandes',
-    /select\('id, total, fidelite_remise, statut, created_at'\)/.test(routeStats))
+    /\bfidelite_remise\b/.test(selectStats('commandes')), selectStats('commandes'))
   verifie('🔴 et celle des rendez-vous',
-    /prix_estime, fidelite_remise, prestation_id/.test(routeStats))
+    /\bfidelite_remise\b/.test(selectStats('rdv_reservations')), selectStats('rdv_reservations'))
 }
 
 // ═══ 🔴 LE TUNNEL RDV + PRODUITS CONNAÎT LA FIDÉLITÉ (27/08) ═══════════════

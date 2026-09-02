@@ -26,6 +26,25 @@ const verifier = (nom, cond, detail = '') => {
 }
 const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b), `obtenu ${JSON.stringify(a)}, attendu ${JSON.stringify(b)}`)
 
+// ⚠️ UN `select` PEUT ÊTRE UNE CONSTANTE, ET CES GARDES LE LISAIENT EN DUR.
+// Depuis le 02/09, les colonnes des commandes et des rendez-vous vivent dans
+// `COLS_COMMANDE` / `COLS_RDV`, parce que DEUX requêtes les partagent : les
+// ventes de la période, puis celles remboursées pendant la période. Une garde
+// qui ne sait lire qu'un littéral aurait rougi pour rien, puis aurait été
+// « corrigée » en l'affaiblissant. Elle résout donc la constante.
+//
+// ⚠️ ET ELLE REND VIDE SI ELLE NE TROUVE RIEN : une garde qui ne peut plus
+// rougir ne garde plus rien.
+const selectsDe = (src, table) => {
+  const re = new RegExp(`from\\('${table}'\\)\\s*(?:\\/\\/[^\\n]*\\n\\s*)*\\.select\\(\\s*(?:'([^']*)'|([A-Z_][A-Z0-9_]*))`, 'g')
+  return [...src.matchAll(re)].map(m => ({ litteral: m[1] ?? null, constante: m[2] ?? null }))
+}
+const colonnesDe = (src, table) => selectsDe(src, table)
+  .map(s => s.litteral !== null
+    ? s.litteral
+    : (src.match(new RegExp(`const ${s.constante} = '([^']*)'`))?.[1] || ''))
+  .join(' ')
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. VENTILATION TVA — le prix saisi est TTC, on en extrait la taxe
 // ═══════════════════════════════════════════════════════════════════════════
@@ -754,7 +773,7 @@ egal('et leur somme fait tout le comptoir', jourTroisSeaux.comptoir, 940)
 // faisait rougir alors que rien n'était cassé. Une garde doit tenir à ce qui
 // compte, pas à l'ordre des mots. Corrigée le 19/08 en ajoutant `client_nom`.
 {
-  const selectCommandes = srcExportCompta.match(/from\('commandes'\)\s*(?:\/\/[^\n]*\n\s*)*\.select\('([^']*)'\)/)?.[1] || ''
+  const selectCommandes = colonnesDe(srcExportCompta, 'commandes')
   for (const colonne of ['encaisse_mode', 'encaisse_montant', 'encaisse_le', 'commande_articles']) {
     verifier(`la route charge ${colonne} sur les commandes`,
       new RegExp(`\\b${colonne}\\b`).test(selectCommandes), selectCommandes)
@@ -1210,7 +1229,7 @@ verifier('une commande remise sans moyen garde son rattrapage',
   // les anciennes commandes en retrait en magasin, sans la moindre erreur.
   {
     const srcRoute = readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8')
-    const selectCmd = srcRoute.match(/from\('commandes'\)\s*(?:\/\/[^\n]*\n\s*)*\.select\('([^']*)'\)/)?.[1] || ''
+    const selectCmd = colonnesDe(srcRoute, 'commandes')
     verifier('le créneau arrive jusqu’au calcul du canal', /\bcreneau_id\b/.test(selectCmd), selectCmd)
   }
 
@@ -1234,8 +1253,7 @@ verifier('une commande remise sans moyen garde son rattrapage',
 // anonymes. La garde lit le CONTENU de chaque `select`, jamais son voisinage.
 {
   const srcExport = readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8')
-  const selects = [...srcExport.matchAll(/from\('(\w+)'\)\s*(?:\/\/[^\n]*\n\s*)*\.select\('([^']*)'\)/g)]
-  const selectDe = (table) => selects.find(([, t]) => t === table)?.[2] || ''
+  const selectDe = (table) => colonnesDe(srcExport, table)
 
   verifier('les commandes lisent le nom du client', /\bclient_nom\b/.test(selectDe('commandes')), selectDe('commandes'))
   verifier('les rendez-vous lisent prénom et nom',
@@ -1430,6 +1448,251 @@ verifier('une commande remise sans moyen garde son rattrapage',
   verifier('le ticket du client et le journal du comptable disent la même base',
     Math.abs(baseTicket - baseJournal) < 0.005,
     `ticket ${baseTicket} / journal ${baseJournal}`)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 13. 🔴 CE QUI EST REPARTI NE COMPTE PLUS COMME UNE VENTE (02/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ TOUT CE BLOC EXÉCUTE `construireLignes`. Aucune garde ne cherche un mot :
+// le journal ne ment pas dans son vocabulaire, il ment dans ses montants.
+{
+  const PERIODE = { du: '2026-03-01', au: '2026-03-31' }
+  const somme = (lignes, champ) => arrondi(lignes.reduce((s, l) => s + (Number(l[champ]) || 0), 0))
+
+  // ─── Un rendez-vous annulé et remboursé ───────────────────────────────────
+  //
+  // 🔴 C'EST LE DÉFAUT D'ORIGINE : cette boucle ne filtrait AUCUN statut, et
+  // `STATUTS_EXCLUS` n'en contient aucun de rendez-vous. Une ligne « Acompte
+  // RDV » partait chez le comptable pour de l'argent rendu au client.
+  const RDV_ANNULE = {
+    id: 'r1', statut: 'annule_client', date_rdv: '2026-03-10',
+    acompte_montant: 20, acompte_paye: true, acompte_paye_en_ligne: true,
+    acompte_paye_date: '2026-03-05T10:00:00Z', tva_taux: 21,
+    stripe_frais: 0.5, stripe_net: -0.5,
+    stripe_refund_amount: 20, stripe_refund_date: '2026-03-11T14:30:00Z',
+  }
+  const lAnnule = construireLignes({ rdvs: [RDV_ANNULE], periode: PERIODE })
+  verifier('un acompte remboursé produit sa contrepassation', lAnnule.length === 2, `${lAnnule.length} ligne(s)`)
+  verifier('et le chiffre d’affaires retombe à zéro', somme(lAnnule, 'total') === 0, `${somme(lAnnule, 'total')}`)
+  verifier('l’encaissement en ligne aussi', somme(lAnnule, 'enLigne') === 0)
+
+  // ✅ ARBITRAGE D'ALEX : la ligne à zéro PORTE le frais retenu. Stripe ne le
+  // restitue pas, c'est un coût réel, et il ne figurait dans aucun document.
+  verifier('le frais retenu par Stripe reste visible', somme(lAnnule, 'fraisStripe') === 0.5,
+    `${somme(lAnnule, 'fraisStripe')}`)
+  // ⚠️ ET LE PIÈGE DU CHANTIER : `stripe_net` porte DÉJÀ le remboursement,
+  // `stripe_frais` non. Sans la reconstitution du net d'origine, les deux
+  // lignes auraient déduit deux fois et annoncé -20,50 de perte au lieu de
+  // -0,50.
+  verifier('le net des deux lignes vaut ce que Stripe a gardé', somme(lAnnule, 'netStripe') === -0.5,
+    `${somme(lAnnule, 'netStripe')}`)
+
+  // ✅ ARBITRAGE D'ALEX : une ligne de remboursement à SA date. Le relevé
+  // bancaire montre deux mouvements ; un journal qui n'en montre qu'un ne se
+  // rapproche de rien.
+  // ⚠️ `?.` PARTOUT SUR CETTE LIGNE, ET CE N'EST PAS DE LA COQUETTERIE : une
+  // mutation qui supprime la contrepassation vide le `find`, et un banc qui
+  // PLANTE est compté comme MANQUÉ par le harnais. Il n'a rien prouvé, il a
+  // seulement empêché la mesure.
+  const negative = lAnnule.find(l => l.remboursement)
+  verifier('la contrepassation est datée du remboursement', negative?.date === '2026-03-11', negative?.date)
+  verifier('elle porte son heure, pour le rapprochement', /^\d{2}:\d{2}$/.test(negative?.heure || ''), negative?.heure)
+  verifier('et la même référence que la vente', negative?.reference === lAnnule[0].reference)
+  verifier('un remboursement ne repasse jamais par le tiroir',
+    negative?.comptoir === 0 && negative?.modeEncaissement === null)
+
+  // ─── Une commande PARTIELLEMENT remboursée ────────────────────────────────
+  //
+  // 🔴 LE FRÈRE : le webhook garde volontairement le statut sur un
+  // remboursement partiel. 60 € remboursés de 20 € s'écrivaient 60 €.
+  const CMD_PARTIELLE = {
+    id: 'c1', statut: 'recupere', total: 60, paye_en_ligne: true,
+    date_commande: '2026-03-04', created_at: '2026-03-04T09:00:00Z',
+    commande_articles: [{ prix_unitaire: 60, quantite: 1, tva_taux: 21 }],
+    stripe_frais: 1, stripe_net: 39,
+    stripe_refund_amount: 20, stripe_refund_date: '2026-03-06T11:00:00Z',
+  }
+  const lPartielle = construireLignes({ commandes: [CMD_PARTIELLE], periode: PERIODE })
+  verifier('une commande remboursée en partie ne compte que ce qui reste',
+    somme(lPartielle, 'total') === 40, `${somme(lPartielle, 'total')}`)
+  verifier('et son net rejoint celui de Stripe', somme(lPartielle, 'netStripe') === 39,
+    `${somme(lPartielle, 'netStripe')}`)
+  verifier('la ventilation par taux suit le montant',
+    arrondi(lPartielle.reduce((s, l) => s + (l.parTaux['21'] || 0), 0)) === 40)
+  // ⚠️ ET LA CONTREPASSATION NE SE COMPTE PAS COMME UNE RÉFÉRENCE AMBIGUË DE
+  // PLUS. Sa référence est celle de la vente, déjà signalée en tête de fichier :
+  // la compter deux fois annoncerait plus de transactions douteuses qu'il n'y
+  // en a. La mesure se fait ICI, sur une COMMANDE, parce que c'est la seule
+  // ligne qui porte ce drapeau : posée sur un rendez-vous, la garde ne pouvait
+  // pas rougir.
+  verifier('la vente compte pour une référence ambiguë, pas pour deux',
+    referencesNonQualifiees(lPartielle) === 1, `${referencesNonQualifiees(lPartielle)}`)
+  // ⚠️ L'INVARIANT D'ALEX TIENT LIGNE À LIGNE : CA = en ligne + comptoir + bon
+  // + reste à encaisser. Un remboursement qui ne baisserait qu'une colonne
+  // casserait le fichier sans que rien ne le dise.
+  for (const l of [...lAnnule, ...lPartielle]) {
+    verifier(`invariant tenu sur « ${l.type} »`,
+      arrondi(l.enLigne + l.comptoir + l.bonCadeau + l.resteAEncaisser) === arrondi(l.total),
+      `${l.enLigne} + ${l.comptoir} + ${l.bonCadeau} + ${l.resteAEncaisser} ≠ ${l.total}`)
+  }
+
+  // ─── Un bon cadeau rendu, que AUCUNE colonne ne dit ───────────────────────
+  //
+  // 🔴 `rendreAvantagesRdv` recrédite le bon sans toucher `bon_cadeau_montant` :
+  // une coupe de 35 € réglée par bon puis annulée restait 35 € de CA.
+  const RDV_BON = {
+    id: 'r2', statut: 'annule_client', date_rdv: '2026-03-12',
+    acompte_montant: 0, acompte_paye: false, bon_cadeau_montant: 35, tva_taux: 21,
+    created_at: '2026-03-01T08:00:00Z',
+  }
+  const lBon = construireLignes({
+    rdvs: [RDV_BON], periode: PERIODE,
+    retoursBons: [{ rdv_id: 'r2', montant: 35, source: 'annulation', created_at: '2026-03-13T09:00:00Z' }],
+  })
+  verifier('un bon rendu efface le chiffre d’affaires qu’il portait',
+    somme(lBon, 'total') === 0, `${somme(lBon, 'total')}`)
+  verifier('c’est la colonne « bon cadeau » qui baisse', somme(lBon, 'bonCadeau') === 0)
+  verifier('et rien ne repart par Stripe, qui n’a rien vu passer',
+    somme(lBon, 'enLigne') === 0 && somme(lBon, 'netStripe') === 0)
+  verifier('le retour du bon est daté de son mouvement',
+    lBon.find(l => l.remboursement)?.date === '2026-03-13')
+
+  // ─── Le no-show : la garantie RESTE, le reste revient ─────────────────────
+  //
+  // ⚠️ AUCUN CAS PARTICULIER N'A ÉTÉ ÉCRIT POUR LUI. C'est tout l'intérêt de
+  // compter ce qui est resté plutôt que d'exclure des statuts : la garantie
+  // s'écrit toute seule.
+  const lNoShow = construireLignes({
+    rdvs: [{ id: 'r3', statut: 'no_show', date_rdv: '2026-03-15', acompte_paye: false,
+      bon_cadeau_montant: 50, tva_taux: 21, created_at: '2026-03-02T08:00:00Z' }],
+    periode: PERIODE,
+    retoursBons: [{ rdv_id: 'r3', montant: 35, source: 'annulation', created_at: '2026-03-15T18:00:00Z' }],
+  })
+  verifier('le no-show laisse sa garantie au commerçant', somme(lNoShow, 'total') === 15,
+    `${somme(lNoShow, 'total')}`)
+
+  // ⚠️ ET LE RETOUR D'UN BON EST PLAFONNÉ LUI AUSSI. Un même bon peut avoir
+  // payé le rendez-vous ET les produits du tunnel unique : la ligne du
+  // rendez-vous ne doit rendre que ce qu'ELLE portait, la commande porte le
+  // reste. Sans plafond, un retour plus gros creuserait un chiffre d'affaires
+  // négatif sur une prestation bien rendue.
+  const lTropRendu = construireLignes({
+    rdvs: [{ ...RDV_BON, id: 'r7', bon_cadeau_montant: 20 }], periode: PERIODE,
+    retoursBons: [{ rdv_id: 'r7', montant: 50, source: 'annulation', created_at: '2026-03-13T09:00:00Z' }],
+  })
+  verifier('un retour de bon plus gros que la ligne ne creuse rien',
+    somme(lTropRendu, 'total') === 0 && somme(lTropRendu, 'bonCadeau') === 0,
+    `${somme(lTropRendu, 'total')} / ${somme(lTropRendu, 'bonCadeau')}`)
+
+  // ⚠️ ET UN BON RENDU EN DEUX FOIS DONNE DEUX LIGNES, à leurs deux dates :
+  // c'est ce que montre le compte du client, et c'est ce que le comptable doit
+  // pouvoir rapprocher.
+  const lDeuxRetours = construireLignes({
+    rdvs: [{ ...RDV_BON, id: 'r8' }], periode: PERIODE,
+    retoursBons: [
+      { rdv_id: 'r8', montant: 15, source: 'annulation', created_at: '2026-03-14T09:00:00Z' },
+      { rdv_id: 'r8', montant: 20, source: 'annulation', created_at: '2026-03-20T09:00:00Z' },
+    ],
+  })
+  verifier('un bon rendu en deux fois donne deux lignes datées',
+    lDeuxRetours.filter(l => l.remboursement).map(l => l.date).join(' ') === '2026-03-14 2026-03-20',
+    lDeuxRetours.filter(l => l.remboursement).map(l => l.date).join(' '))
+  verifier('et leur somme ramène le chiffre d’affaires à zéro', somme(lDeuxRetours, 'total') === 0)
+
+  // ─── Une annulation qui GARDE l'acompte en dédommagement ──────────────────
+  const lGarde = construireLignes({
+    rdvs: [{ ...RDV_ANNULE, id: 'r4', stripe_refund_amount: null, stripe_refund_date: null, stripe_net: 19.5 }],
+    periode: PERIODE,
+  })
+  verifier('un acompte gardé reste compté, et c’est juste', lGarde.length === 1 && lGarde[0].total === 20)
+  verifier('son net n’est pas retouché', lGarde[0].netStripe === 19.5)
+
+  // ─── Le tunnel unique : un refund plus gros que la ligne ──────────────────
+  //
+  // ⚠️ LE PLAFOND N'EST PAS UNE PRÉCAUTION. Le rendez-vous et sa commande
+  // partagent un paiement, et le webhook écrit le même montant sur les deux.
+  const lTunnel = construireLignes({
+    rdvs: [{ ...RDV_ANNULE, id: 'r5', stripe_refund_amount: 50 }], periode: PERIODE,
+  })
+  verifier('un remboursement plus gros que la ligne ne creuse pas de trou',
+    somme(lTunnel, 'total') === 0, `${somme(lTunnel, 'total')}`)
+
+  // ─── La période : chaque mouvement à son mois ─────────────────────────────
+  const RDV_AVRIL = { ...RDV_ANNULE, id: 'r6', stripe_refund_date: '2026-04-02T10:00:00Z' }
+  const lMars = construireLignes({ rdvs: [RDV_AVRIL], periode: PERIODE })
+  verifier('un remboursement d’avril ne pollue pas l’export de mars',
+    lMars.length === 1 && lMars[0].total === 20)
+  const lAvril = construireLignes({
+    rdvs: [RDV_AVRIL], periode: { du: '2026-04-01', au: '2026-04-30' },
+    venteHorsPeriode: new Set(['r6']),
+  })
+  verifier('et il sort seul dans l’export d’avril',
+    lAvril.length === 1 && lAvril[0].total === -20, JSON.stringify(lAvril.map(l => l.total)))
+
+  // ─── Ce qui n'a produit AUCUNE ligne ne se contrepasse pas ────────────────
+  //
+  // ⚠️ Soustraire un remboursement d'un chiffre d'affaires jamais écrit
+  // creuserait un trou au lieu d'en combler un.
+  const lExclue = construireLignes({
+    commandes: [{ ...CMD_PARTIELLE, id: 'c2', statut: 'annulee_client_refund', stripe_refund_amount: 60 }],
+    periode: PERIODE,
+  })
+  verifier('une commande annulée ne produit ni vente ni contrepassation', lExclue.length === 0)
+
+  // ─── Le journal du jour et le fichier ─────────────────────────────────────
+  const jours = journalParJour(lAnnule)
+  verifier('le remboursement fait son propre jour', jours.length === 2)
+  verifier('et ce jour est négatif', jours[1]?.total === -20 && jours[1]?.enLigne === -20,
+    JSON.stringify(jours.map(j => j.total)))
+  const csv = csvJournal({ lignes: lAnnule, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
+  verifier('le fichier explique ses montants négatifs', /remboursement/i.test(csv))
+  verifier('et dit que le frais reste sur la ligne de vente', /ne restituant pas ses frais/.test(csv))
+  const detail = csvDetail({ lignes: lAnnule, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
+  verifier('le détail nomme la ligne « Remboursement »', /;Remboursement;/.test(detail))
+  verifier('et l’écrit en négatif', /-20,00/.test(detail))
+
+  // ─── La route charge ce qu'il faut, une seule fois ────────────────────────
+  //
+  // ⚠️ UNE COLONNE ABSENTE D'UN SELECT EST LE DÉFAUT LE PLUS FRÉQUENT D'ICI, et
+  // il est SILENCIEUX : sans ces deux-là, tout ce bloc reste vert et le journal
+  // recommence à compter l'argent reparti.
+  const srcRoute = readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8')
+  for (const col of ['stripe_refund_amount', 'stripe_refund_date']) {
+    verifier(`la route lit ${col} sur les commandes`,
+      new RegExp(`\\b${col}\\b`).test(colonnesDe(srcRoute, 'commandes')))
+    verifier(`la route lit ${col} sur les rendez-vous`,
+      new RegExp(`\\b${col}\\b`).test(colonnesDe(srcRoute, 'rdv_reservations')))
+  }
+  // ⚠️ ET UNE SEULE LISTE DE COLONNES PAR TABLE : ces `select` servent trois
+  // requêtes chacun (la période, les remboursements, les bons rendus). Trois
+  // listes écrites à la main auraient divergé à la première colonne ajoutée, et
+  // le silence aurait fait le reste.
+  for (const [table, nb] of [['commandes', 3], ['rdv_reservations', 3]]) {
+    const lus = selectsDe(srcRoute, table)
+    verifier(`les ${nb} lectures de ${table} partagent la même liste de colonnes`,
+      lus.length === nb && lus.every(s => s.constante && s.litteral === null),
+      JSON.stringify(lus))
+  }
+  verifier('la route va chercher les remboursements de la période',
+    /gte\('stripe_refund_date'/.test(srcRoute) && /lte\('stripe_refund_date'/.test(srcRoute))
+  verifier('et les bons rendus, que nulle colonne ne porte',
+    /bons_cadeaux_mouvements/.test(srcRoute) && /eq\('source', 'annulation'\)/.test(srcRoute))
+  // 🔴 LA BORNE DE SÉCURITÉ EST LA JOINTURE : la table des mouvements ne porte
+  // pas de `commercant_id`. Sans `!inner` sur `bons_cadeaux`, cette lecture
+  // remonterait les mouvements de TOUS les commerces.
+  verifier('les mouvements sont bornés au commerce EN BASE, pas après coup',
+    /bons_cadeaux!inner\(commercant_id\)/.test(srcRoute) &&
+    /eq\('bons_cadeaux\.commercant_id', commercantId\)/.test(srcRoute))
+  // ⚠️ ANCRÉE SUR L'APPEL, ET LA MESURE L'A EXIGÉ : `periode: { du, au }` existe
+  // AUSSI dans la réponse JSON de la route. Une garde qui cherchait le motif
+  // n'importe où restait verte quand `construireLignes` ne le recevait plus.
+  // Le même piège que pour les ancres de mutation, du côté de la garde.
+  verifier('la période est transmise au constructeur de lignes',
+    /construireLignes\(\{[^)]*periode: \{ du, au \}/.test(srcRoute))
+  verifier('et les ventes d’un autre mois y sont désignées',
+    /construireLignes\(\{[^)]*venteHorsPeriode/.test(srcRoute))
+  verifier('comme les bons rendus', /construireLignes\(\{[^)]*retoursBons:/.test(srcRoute))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

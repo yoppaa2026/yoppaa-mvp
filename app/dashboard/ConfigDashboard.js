@@ -9207,8 +9207,14 @@ function TabStatistiques({ commercantId, toast }) {
               </div>
             )}
             <p style={{ margin: '12px 0 0', fontSize: 11.5, color: T.light, lineHeight: 1.5 }}>
+              {/* ⚠️ « À RÉGLER CHEZ TOI » ÉTAIT FAUX, ET DEUX FOIS (02/09). Ce
+                  montant contient aussi ce qui a DÉJÀ été encaissé au comptoir,
+                  et depuis la correction du même jour il contient en plus les
+                  commandes réglées sur place, qui ne figuraient auparavant dans
+                  aucune des deux colonnes. On dit ce qui ne passe pas par
+                  Stripe, sans affirmer que c'est encore dû. */}
               Dont <strong style={{ color: '#fff' }}>{euros(a.encaisse_en_ligne)}</strong> encaissés en ligne
-              {a.au_comptoir > 0 && <> et <strong style={{ color: '#fff' }}>{euros(a.au_comptoir)}</strong> à régler chez toi</>}.
+              {a.au_comptoir > 0 && <> et <strong style={{ color: '#fff' }}>{euros(a.au_comptoir)}</strong> chez toi</>}.
               Le détail, la TVA et les frais sont dans Comptabilité.
             </p>
 

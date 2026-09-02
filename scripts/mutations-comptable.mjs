@@ -179,13 +179,57 @@ const MUTATIONS = [
 
   { nom: '🔴 la route des chiffres n’a plus le remboursement des commandes',
     banc: 'verif:stats', fichier: ROUTE_STATS,
-    de: '\'id, total, fidelite_remise, stripe_refund_amount, statut, created_at\'',
-    vers: '\'id, total, fidelite_remise, statut, created_at\'' },
+    // ⚠️ ANCRE RECALÉE LE 02/09 : deux colonnes ont été ajoutées au même
+    // `select` dans la foulée. Un texte introuvable est une NON-mesure qui
+    // passe pour une mesure, donc le harnais la compte comme manquée.
+    de: 'total, fidelite_remise, stripe_refund_amount, paye_en_ligne',
+    vers: 'total, fidelite_remise, paye_en_ligne' },
 
   { nom: '🔴 la route des chiffres n’a plus celui des rendez-vous',
     banc: 'verif:stats', fichier: ROUTE_STATS,
     de: 'fidelite_remise, stripe_refund_amount, prestation_id',
     vers: 'fidelite_remise, prestation_id' },
+
+  // ─── ET « ENCAISSÉ EN LIGNE » COMPTAIT LE COMPTOIR COMME DU STRIPE ────────
+  { nom: '🔴 un Click and Collect payé au comptoir redevient du Stripe',
+    banc: 'verif:stats', fichier: STATS,
+    de: '  if (!commande.paye_en_ligne) return 0',
+    vers: '  if (false) return 0' },
+
+  { nom: '🔴 la part payée par un bon cadeau repasse pour de la carte',
+    banc: 'verif:stats', fichier: STATS,
+    de: '    - Number(commande.bon_cadeau_montant || 0)\n  return resteApresRemboursement(Math.max(0, brut), commande.stripe_refund_amount)',
+    vers: '\n  return resteApresRemboursement(Math.max(0, brut), commande.stripe_refund_amount)' },
+
+  { nom: '🔴 un acompte réglé sur place redevient du Stripe',
+    banc: 'verif:stats', fichier: STATS,
+    de: '  return rdv.acompte_paye_en_ligne ? acompteRdv(rdv) : 0',
+    vers: '  return acompteRdv(rdv)' },
+
+  { nom: '🔴 le chiffre d’affaires entier repart dans l’encaissé en ligne',
+    banc: 'verif:stats', fichier: STATS,
+    de: '    encaisse_en_ligne: arrondi(produitsSurCarte + acomptes + abosEnLigne),',
+    vers: '    encaisse_en_ligne: arrondi(produits + acomptes + abosEnLigne),' },
+
+  { nom: '🔴 les produits du comptoir redisparaissent des deux colonnes',
+    banc: 'verif:stats', fichier: STATS,
+    de: '    au_comptoir: arrondi(produits + prestations + montantAbos\n      - (produitsSurCarte + acomptes + abosEnLigne)),',
+    vers: '    au_comptoir: arrondi(prestations - acomptes + (montantAbos - abosEnLigne)),' },
+
+  { nom: '🔴 la route des chiffres n’a plus le moyen de paiement',
+    banc: 'verif:stats', fichier: ROUTE_STATS,
+    de: 'stripe_refund_amount, paye_en_ligne, bon_cadeau_montant, statut',
+    vers: 'stripe_refund_amount, statut' },
+
+  { nom: '🔴 la route des chiffres n’a plus celui de l’acompte',
+    banc: 'verif:stats', fichier: ROUTE_STATS,
+    de: 'acompte_paye, acompte_paye_en_ligne, prix_estime',
+    vers: 'acompte_paye, prix_estime' },
+
+  { nom: '🔴 l’écran réannonce « à régler » un montant déjà encaissé',
+    banc: 'verif:stats', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '{euros(a.au_comptoir)}</strong> chez toi',
+    vers: '{euros(a.au_comptoir)}</strong> à régler chez toi' },
 ]
 
 function lancer(banc) {

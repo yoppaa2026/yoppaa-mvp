@@ -84,7 +84,11 @@ export async function GET(request) {
           // une commande partiellement remboursée garde son statut, donc le
           // filtre juste au-dessus ne la voit pas. Sans la colonne, elle compte
           // pour son montant entier, en silence.
-          .select('id, total, fidelite_remise, stripe_refund_amount, statut, created_at')
+          // ⚠️ ET `paye_en_ligne` + `bon_cadeau_montant` DEPUIS LE 02/09 :
+          // « encaissé en ligne » additionnait TOUS les produits, y compris un
+          // Click and Collect réglé en espèces au comptoir. Sans ces deux
+          // colonnes, la correction resterait sans effet, en silence.
+          .select('id, total, fidelite_remise, stripe_refund_amount, paye_en_ligne, bon_cadeau_montant, statut, created_at')
           .eq('commercant_id', commercantId)
           .gte('created_at', depuis),
         // ⚠️ `prix_estime` est INDISPENSABLE : depuis le 09/08 un rendez-vous
@@ -101,7 +105,9 @@ export async function GET(request) {
         // défaut se présente sur ce projet.
         supabase.from('rdv_reservations')
           // Même raison : `valeurRdv` retranche la récompense du prix.
-          .select('id, statut, acompte_montant, acompte_paye, prix_estime, fidelite_remise, stripe_refund_amount, prestation_id, encaisse_mode, abonnement_id, created_at')
+          // ⚠️ `acompte_paye_en_ligne` EST LE FRÈRE DE `paye_en_ligne` : un
+          // acompte réglé sur place n'a jamais vu Stripe.
+          .select('id, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, prix_estime, fidelite_remise, stripe_refund_amount, prestation_id, encaisse_mode, abonnement_id, created_at')
           .eq('commercant_id', commercantId)
           .gte('created_at', depuis),
         supabase.from('avis')

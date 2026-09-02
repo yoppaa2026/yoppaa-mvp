@@ -76,11 +76,16 @@ verifier('une commande jamais payée ne compte pas', !commandeEncaissee({ statut
 verifier('un statut inconnu ne compte pas', !commandeEncaissee({ statut: 'zzz' }))
 verifier('une commande sans statut ne compte pas', !commandeEncaissee({}))
 
+// ⚠️ `paye_en_ligne` FIGURE DANS CES JEUX D'ESSAI DEPUIS LE 02/09, et il ne
+// s'agit pas d'un détail : sans lui, ces commandes décrivaient un état qui
+// n'existe pas en base, et le banc validait « encaissé en ligne » sur des
+// commandes dont personne ne savait comment elles avaient été payées. Un jeu
+// d'essai qui ne ressemble pas à la base valide un monde imaginaire.
 const commandes = [
-  { total: 24.50, statut: 'recupere' },
-  { total: 10.00, statut: 'en_attente' },
-  { total: 99.00, statut: 'annulee_client_refund' },  // exclue
-  { total: 50.00, statut: 'non_retire' },             // exclue
+  { total: 24.50, statut: 'recupere', paye_en_ligne: true },
+  { total: 10.00, statut: 'en_attente', paye_en_ligne: true },
+  { total: 99.00, statut: 'annulee_client_refund', paye_en_ligne: true },  // exclue
+  { total: 50.00, statut: 'non_retire', paye_en_ligne: true },             // exclue
 ]
 egal('le chiffre d\'affaires ignore annulé et non retiré', chiffreAffaires(commandes, []).total, 34.50)
 
@@ -102,10 +107,10 @@ verifier('un RDV annulé par le commerçant ne compte pas', !rdvHonore({ statut:
 verifier('un RDV reporté ne compte pas', !rdvHonore({ statut: 'reporte' }))
 
 const rdvs = [
-  { statut: 'confirme', prix_estime: 35, acompte_montant: 8.75 },
+  { statut: 'confirme', prix_estime: 35, acompte_montant: 8.75, acompte_paye_en_ligne: true },
   { statut: 'confirme', prix_estime: 20, acompte_montant: 0 },   // réglé entièrement au comptoir
-  { statut: 'annule_client', prix_estime: 90, acompte_montant: 20 },  // exclu
-  { statut: 'no_show', prix_estime: 90, acompte_montant: 20 },        // exclu
+  { statut: 'annule_client', prix_estime: 90, acompte_montant: 20, acompte_paye_en_ligne: true },  // exclu
+  { statut: 'no_show', prix_estime: 90, acompte_montant: 20, acompte_paye_en_ligne: true },        // exclu
 ]
 const caRdv = chiffreAffaires([], rdvs)
 egal('les prestations comptent à leur prix complet', caRdv.prestations, 55)
@@ -519,6 +524,65 @@ verifier('l\'onglet Chiffres n\'est pas réservé à un palier',
   // 🔴 ET LA COLONNE DOIT ARRIVER JUSQU'AU CALCUL. Sans elle, tout ce bloc
   // reste vert et le tableau de bord recommence à compter l'argent rendu : LE
   // défaut le plus fréquent du projet, et il est silencieux.
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 « ENCAISSÉ EN LIGNE » COMPTAIT DE L'ARGENT QUI N'A JAMAIS VU STRIPE
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Ce chiffre est présenté comme la clé du rapprochement avec la comptabilité,
+  // et il additionnait TOUS les produits sans regarder le moyen de paiement.
+  const { partCarteCommande, acompteRdvEnLigne } = await import('../lib/statistiques.js')
+
+  egal('un Click and Collect réglé au comptoir n’a rien vu de Stripe',
+    partCarteCommande({ total: 24.50, statut: 'recupere', paye_en_ligne: false }), 0)
+  egal('une commande payée en ligne, si',
+    partCarteCommande({ total: 24.50, statut: 'recupere', paye_en_ligne: true }), 24.50)
+  // ⚠️ LE BON CADEAU A ÉTÉ ENCAISSÉ LE JOUR DE SON ACHAT : sur cette commande,
+  // la carte n'a payé que le reste. Le journal comptable fait cette distinction
+  // depuis le 29/08, elle n'avait jamais été portée jusqu'ici.
+  egal('la part payée par un bon cadeau ne passe pas par la carte',
+    partCarteCommande({ total: 50, paye_en_ligne: true, bon_cadeau_montant: 20 }), 30)
+  egal('la récompense non plus',
+    partCarteCommande({ total: 50, paye_en_ligne: true, fidelite_remise: 10 }), 40)
+  egal('et le remboursement en sort aussi',
+    partCarteCommande({ total: 50, paye_en_ligne: true, stripe_refund_amount: 15 }), 35)
+  egal('une commande entièrement réglée par bon ne rapporte rien à Stripe',
+    partCarteCommande({ total: 20, paye_en_ligne: true, bon_cadeau_montant: 20 }), 0)
+
+  egal('un acompte réglé sur place n’est pas du Stripe',
+    acompteRdvEnLigne({ acompte_montant: 8.75, acompte_paye_en_ligne: false }), 0)
+  egal('un acompte payé en ligne, si',
+    acompteRdvEnLigne({ acompte_montant: 8.75, acompte_paye_en_ligne: true }), 8.75)
+  // ⚠️ ET `acompteRdv` NE BOUGE PAS : `valeurRdv` s'en sert comme repli quand la
+  // prestation n'a pas de prix estimé. Lui faire rendre zéro sur un acompte
+  // réglé au comptoir amputerait le chiffre d'affaires.
+  egal('mais le repli du chiffre d’affaires reste entier',
+    valeurRdv({ acompte_montant: 8.75, acompte_paye_en_ligne: false }), 8.75)
+
+  // 🔴 LE CAS QUI MANQUAIT : le commerçant vend 100 € au comptoir et voyait
+  // « 100 € encaissés en ligne, 0 chez toi ».
+  const caComptoir = chiffreAffaires([
+    { total: 100, statut: 'recupere', paye_en_ligne: false },
+    { total: 40, statut: 'recupere', paye_en_ligne: true },
+  ], [])
+  egal('le chiffre d’affaires reste entier', caComptoir.total, 140)
+  egal('seule la commande en ligne compte comme Stripe', caComptoir.encaisse_en_ligne, 40)
+  egal('et celle du comptoir n’est plus perdue', caComptoir.au_comptoir, 100)
+  // ⚠️ L'INVARIANT QUI FERME LE COMPTE : les deux colonnes redonnent le total.
+  // L'ancienne formule oubliait purement et simplement les produits du comptoir,
+  // qui ne figuraient dans AUCUNE des deux.
+  verifier('les deux colonnes expliquent le chiffre d’affaires en entier',
+    arrondi(caComptoir.encaisse_en_ligne + caComptoir.au_comptoir) === caComptoir.total,
+    `${caComptoir.encaisse_en_ligne} + ${caComptoir.au_comptoir} ≠ ${caComptoir.total}`)
+
+  // ⚠️ ET L'ÉCRAN NE DIT PLUS « À RÉGLER » CE QUI EST DÉJÀ RÉGLÉ. Ce montant
+  // mêle ce qui est encaissé chez le commerçant et ce qui reste dû : il dit
+  // donc ce qui ne passe pas par Stripe, sans affirmer que c'est encore dû.
+  const ecranBord = lireBrut('app/dashboard/ConfigDashboard.js')
+  verifier('l’écran n’annonce plus « à régler » un montant déjà encaissé',
+    !/euros\(a\.au_comptoir\)[^<]*<\/strong> à régler chez toi/.test(ecranBord))
+  verifier('et nomme quand même où il est',
+    /euros\(a\.au_comptoir\)\}<\/strong> chez toi/.test(ecranBord))
+
   const routeStats = lireBrut('app/api/dashboard/statistiques/route.js')
   // ⚠️ ON SAUTE LES COMMENTAIRES PLUTÔT QUE DE COMPTER LES CARACTÈRES : une
   // fenêtre en nombre de signes rougit dès qu'on ajoute une explication
@@ -529,6 +593,14 @@ verifier('l\'onglet Chiffres n\'est pas réservé à un palier',
     /\bstripe_refund_amount\b/.test(selectDe('commandes')), selectDe('commandes'))
   verifier('et celui des rendez-vous',
     /\bstripe_refund_amount\b/.test(selectDe('rdv_reservations')), selectDe('rdv_reservations'))
+  // 🔴 ET LE MOYEN DE PAIEMENT, sans lequel « encaissé en ligne » recommence à
+  // compter le comptoir comme du Stripe, tout le bloc ci-dessus restant vert.
+  for (const col of ['paye_en_ligne', 'bon_cadeau_montant']) {
+    verifier(`la route des chiffres lit ${col} sur les commandes`,
+      new RegExp(`\\b${col}\\b`).test(selectDe('commandes')), selectDe('commandes'))
+  }
+  verifier('et acompte_paye_en_ligne sur les rendez-vous',
+    /\bacompte_paye_en_ligne\b/.test(selectDe('rdv_reservations')), selectDe('rdv_reservations'))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -1353,7 +1353,10 @@ const CANAUX_LIEU = [
   ['l’email d’annulation', 'app/api/emails/rdv-annule/route.js'],
   ['le rappel de la veille', 'app/api/cron/rdv-reminder-9h/route.js'],
   ['« Mes rendez-vous »', 'app/api/rdv/mes-rdvs/route.js'],
-  ['la confirmation de commande', 'app/api/emails/commande-confirmee/route.js'],
+  // ⚠️ `app/api/emails/commande-confirmee/route.js` A ÉTÉ SUPPRIMÉE le 03/09 :
+  // elle composait le même email que `lib/commande-notifs.js` sans avoir aucun
+  // appelant, et avait déjà divergé. Le canal reste couvert par cette dernière,
+  // qui est plus bas dans cette liste.
   ['l’email « commande prête »', 'app/api/emails/commande-prete/route.js'],
   ['le rappel de retrait', 'app/api/cron/rappels-retrait/route.js'],
   ['les notifications de commande', 'lib/commande-notifs.js'],
@@ -1361,7 +1364,15 @@ const CANAUX_LIEU = [
   ['les emails du webhook Stripe', 'app/api/stripe/webhook/route.js'],
 ]
 for (const [nom, chemin] of CANAUX_LIEU) {
-  const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+  // ⚠️ UN FICHIER DISPARU FAISAIT EXPLOSER LE BANC (vécu le 03/09, en
+  // supprimant une route orpheline). Un banc qui plante ne mesure rien : il
+  // s'arrête AVANT les trente vérifications suivantes, et l'écran ne dit pas
+  // « rouge », il dit « ENOENT ». On rougit sur le canal absent, et on
+  // continue avec les autres.
+  let src = null
+  try { src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')) } catch { src = null }
+  verifier(`${nom} : son fichier existe encore`, src !== null, chemin)
+  if (src === null) continue
   verifier(`${nom} annonce le lieu du rendez-vous`, /adresseRendezVous\(/.test(src))
   verifier(`${nom} ne lit plus l’adresse du siège`,
     !/commercant[?]?\.adresse \|\| ''/.test(src))
@@ -2785,14 +2796,20 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
     'app/api/commande/cancel/route.js',
     'app/api/cron/recap-jour-8h/route.js',
     'app/api/emails/commande-annulee/route.js',
-    'app/api/emails/commande-confirmee/route.js',
     'app/api/emails/commande-expediee/route.js',
     'app/api/emails/commande-prete/route.js',
     'app/api/livraison/statut/route.js',
   ]
   for (const chemin of APPELANTS) {
-    const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
-      .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+    // ⚠️ Même précaution que pour les canaux du lieu : un fichier disparu
+    // rougit, il ne fait pas exploser le banc.
+    let src = null
+    try {
+      src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+        .split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+    } catch { src = null }
+    verifier(`${chemin} existe encore`, src !== null, chemin)
+    if (src === null) continue
     verifier(`${chemin} passe la référence, pas le numéro brut`,
       !/numero_commande:\s*cmd\.numero_commande/.test(src), chemin)
     verifier(`${chemin} rapatrie numero_prefixe`, /numero_prefixe/.test(src), chemin)
@@ -2813,13 +2830,15 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
     'lib/rappels.js',
     'app/api/commande/cancel/route.js',
     'app/api/emails/commande-annulee/route.js',
-    'app/api/emails/commande-confirmee/route.js',
     'app/api/emails/commande-expediee/route.js',
     'app/api/emails/commande-prete/route.js',
     'lib/commande-notifs.js',
   ]
   for (const chemin of AU_NUMERO_NU) {
-    const src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+    let src = null
+    try { src = sansCommentaires(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')) } catch { src = null }
+    verifier(`${chemin} existe encore`, src !== null, chemin)
+    if (src === null) continue
     // ⚠️ VISER LA LECTURE, PAS L'AFFICHAGE. Mon premier test ne cherchait que
     // la forme en ligne `#${cmd.numero_commande}`. Or ces fichiers passent par
     // une variable intermédiaire : casser `const num = referenceCommande(cmd)`

@@ -999,7 +999,6 @@ const egal = (nom, obtenu, attendu) =>
     'app/api/emails/rdv-confirme/route.js',
     'app/api/emails/rdv-annule/route.js',
     'app/api/emails/rdv-no-show/route.js',
-    'app/api/emails/commande-confirmee/route.js',
     'app/api/emails/commande-annulee/route.js',
     'app/api/commande/cancel/route.js',
     'app/api/rdv/cancel/route.js',

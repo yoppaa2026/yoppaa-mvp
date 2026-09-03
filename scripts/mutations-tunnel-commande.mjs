@@ -31,6 +31,7 @@ const BANC = 'verif:yopper'
 const TUNNEL = 'app/commander/[slug]/page.js'
 const ROUTE = 'app/api/yopper/commandes/route.js'
 const NOTIFS = 'lib/commande-notifs.js'
+const PRETE = 'app/api/emails/commande-prete/route.js'
 const RESEND = 'lib/resend.js'
 const CREATE = 'app/api/stripe/checkout/create-commande/route.js'
 const AUTH = 'lib/yopper-auth.js'
@@ -84,6 +85,14 @@ const MUTATIONS = [
     fichier: NOTIFS,
     de: 'offrir_mdp_email:        cmd.client_email,',
     vers: 'offrir_mdp_email:        null,' },
+
+  // ⚠️ LE DEUXIÈME COMPOSEUR QUI REVIENT. Une route orpheline composait le même
+  // email et avait déjà divergé : ni TVA, ni remise de fidélité, ni adresse de
+  // livraison. On la fait renaître ailleurs pour vérifier qu'on la voit.
+  { nom: '🔴 un DEUXIÈME endroit se met à composer l’email de confirmation',
+    fichier: PRETE,
+    de: 'const html = emailCommandePrete({',
+    vers: 'const html = emailCommandeConfirmee({' },
 
   // ─── « TU RETROUVES CETTE COMMANDE » ────────────────────────────────────
   { nom: '🔴 la commande enregistre l’adresse telle que tapée',

@@ -923,9 +923,35 @@ for (const chemin of routesAdmin) {
     /offrir_mdp \?/.test(resend) && /commander\/auth\/definir-mdp/.test(resend))
   // ⚠️ Sans l'adresse, le lien ne cible plus rien : il se rabat sur le stockage
   // du navigateur, or ce bouton se clique souvent depuis un AUTRE appareil.
-  for (const emetteur of ['lib/commande-notifs.js', 'app/api/emails/commande-confirmee/route.js']) {
-    verifier(`${emetteur} donne au lien l’adresse à cibler`,
-      /offrir_mdp_email:\s*cmd\.client_email/.test(sansProse(lire(emetteur))))
+  verifier('l’émetteur donne au lien l’adresse à cibler',
+    /offrir_mdp_email:\s*cmd\.client_email/.test(sansProse(lire('lib/commande-notifs.js'))))
+
+  // 🔴 ET IL NE DOIT Y AVOIR QU'UN SEUL ÉMETTEUR (03/09).
+  //
+  // Une deuxième route composait le même email, sans appelant depuis des
+  // semaines, et elle avait DÉJÀ divergé : ni ventilation de TVA, ni remise de
+  // fidélité, ni adresse de livraison, ni bon cadeau. Rebranchée un jour, elle
+  // aurait renvoyé le ticket au total BRUT, le défaut d'argent du 28/08.
+  //
+  // ⚠️ C'est la configuration exacte qui a fait diverger les deux routes
+  // d'annulation. Cette garde compte les composeurs : deux, et elle rougit.
+  {
+    const RACINE_APP = new URL('../', import.meta.url)
+    const composeurs = []
+    const parcourir = (rel) => {
+      for (const e of readdirSync(new URL(rel, RACINE_APP), { withFileTypes: true })) {
+        if (e.name === 'node_modules' || e.name === '.next' || e.name === '.git') continue
+        const chemin = `${rel}${e.name}`
+        if (e.isDirectory()) { parcourir(`${chemin}/`); continue }
+        if (!/\.(js|mjs)$/.test(e.name)) continue
+        // `lib/resend.js` DÉFINIT le gabarit, il ne le compose pas.
+        if (chemin === 'lib/resend.js') continue
+        if (/emailCommandeConfirmee\s*\(/.test(sansProse(lire(chemin)))) composeurs.push(chemin)
+      }
+    }
+    parcourir('app/')
+    parcourir('lib/')
+    egal('🔴 un seul endroit compose l’email de confirmation', composeurs, ['lib/commande-notifs.js'])
   }
 
   // « tu retrouves cette commande » : la liste retrouve par l'ADRESSE. Les deux

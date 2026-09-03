@@ -108,11 +108,6 @@ const MUTATIONS = [
     de: '  if (!periode || !periode.du || !periode.au) return true',
     vers: '  return true\n  // eslint-disable-next-line no-unreachable\n  if (!periode || !periode.du || !periode.au) return true' },
 
-  { nom: '🔴 une vente d’un autre mois réécrit son chiffre d’affaires ici',
-    banc: 'verif:comptable', fichier: MODULE,
-    de: '    if (!horsPeriode.has(id)) lignes.push(ligne)',
-    vers: '    lignes.push(ligne)' },
-
   // ─── ET LA ROUTE, QUI DOIT CHARGER DE QUOI TRAVAILLER ─────────────────────
   //
   // ⚠️ UNE COLONNE ABSENTE D'UN SELECT EST LE DÉFAUT LE PLUS FRÉQUENT D'ICI, et
@@ -127,10 +122,12 @@ const MUTATIONS = [
     de: 'stripe_net, stripe_refund_amount, stripe_refund_date, date_rdv',
     vers: 'stripe_net, stripe_refund_amount, date_rdv' },
 
-  { nom: '🔴 une des trois lectures de commandes se réécrit à la main',
+  { nom: '🔴 une des lectures de commandes se réécrit à la main',
     banc: 'verif:comptable', fichier: ROUTE,
-    de: '      .from(\'commandes\')\n      .select(COLS_COMMANDE)\n      .eq(\'commercant_id\', commercantId)\n      .gte(\'stripe_refund_date\', rembDu)',
-    vers: '      .from(\'commandes\')\n      .select(\'id, statut, total\')\n      .eq(\'commercant_id\', commercantId)\n      .gte(\'stripe_refund_date\', rembDu)' },
+    // ⚠️ ANCRE RECALÉE LE 03/09 : les deux requêtes bornées par date ont fusionné
+    // en une seule qui charge sur toutes les dates d'encaissement.
+    de: '      .from(\'commandes\')\n      .select(COLS_COMMANDE)\n      .eq(\'commercant_id\', commercantId)\n      .or([',
+    vers: '      .from(\'commandes\')\n      .select(\'id, statut, total\')\n      .eq(\'commercant_id\', commercantId)\n      .or([' },
 
   { nom: '🔴 la route ne va plus chercher les bons rendus',
     banc: 'verif:comptable', fichier: ROUTE,
@@ -230,6 +227,61 @@ const MUTATIONS = [
     banc: 'verif:stats', fichier: 'app/dashboard/ConfigDashboard.js',
     de: '{euros(a.au_comptoir)}</strong> chez toi',
     vers: '{euros(a.au_comptoir)}</strong> à régler chez toi' },
+
+  // ─── UNE LIGNE EST DATÉE DU JOUR OÙ L'ARGENT A BOUGÉ (03/09) ─────────────
+  //
+  // 🔴 Sept remboursements apparaissaient AVANT la vente qu'ils annulaient.
+  { nom: '🔴 l’acompte redevient daté du jour du rendez-vous',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      date: jourComptable(r.acompte_paye_date, r.created_at, r.date_rdv),\n      // L acompte est payé en ligne au moment de la réservation.',
+    vers: '      date: (r.date_rdv || \'\').slice(0, 10),\n      // L acompte est payé en ligne au moment de la réservation.' },
+
+  { nom: '🔴 le bon consommé redevient daté du jour du rendez-vous',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '        date: jourComptable(r.acompte_paye_date, r.created_at, r.date_rdv),',
+    vers: '        date: (r.date_rdv || \'\').slice(0, 10),' },
+
+  { nom: '🔴 la commande redevient datée de son créneau de retrait',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      date: jourComptable(\n        c.paye_en_ligne ? c.created_at : c.encaisse_le,',
+    vers: '      date: jourComptable(\n        c.date_commande, c.created_at, c.paye_en_ligne ? c.created_at : c.encaisse_le,' },
+
+  { nom: '🔴 une vente d’un autre mois réécrit son chiffre d’affaires ici',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '    if (dansPeriode(ligne.date, periode)) lignes.push(ligne)',
+    vers: '    lignes.push(ligne)' },
+
+  { nom: '🔴 la route ne charge plus que sur une seule date',
+    banc: 'verif:comptable', fichier: ROUTE,
+    de: '        instant(\'acompte_paye_date\'),  // l\'acompte et le bon, pris à la réservation',
+    vers: '        // instant retire' },
+
+  { nom: '🔴 la route perd le filet des colonnes de date nue',
+    banc: 'verif:comptable', fichier: ROUTE,
+    de: '        jour(\'date_rdv\'),              // filet : un rendez-vous sans aucune de ces dates',
+    vers: '        // filet retire' },
+
+  // ─── LES RÉFÉRENCES NUES DES RENDEZ-VOUS ─────────────────────────────────
+  { nom: '🔴 les références de rendez-vous ne sont plus signalées',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '  return { reference: brute, referenceIncomplete: !/-S\\d{2}$/.test(brute || \'\') }',
+    vers: '  return { reference: brute }' },
+
+  // ─── LES FRAIS COMPTÉS DEUX FOIS SUR UN PAIEMENT PARTAGÉ ─────────────────
+  { nom: '🔴 la commande réécrit les frais du paiement ENTIER',
+    banc: 'verif:comptable', fichier: 'app/api/stripe/webhook/route.js',
+    de: '        const parts = ventilerFrais(total.frais, partageAvec.acompte, partageAvec.produits)\n        frais = parts ? parts.commande : total',
+    vers: '        frais = total' },
+
+  { nom: '🔴 le tunnel ne passe plus de quoi ventiler',
+    banc: 'verif:comptable', fichier: 'app/api/stripe/webhook/route.js',
+    de: '          partageAvec: { acompte: montantAcompte, produits: montantProduits },',
+    vers: '' },
+
+  { nom: '🔴 la ventilation perd un centime au double arrondi',
+    banc: 'verif:comptable', fichier: 'lib/stripe-frais.js',
+    de: '  const fraisCommande = arrondi(Number(fraisTotal) - fraisRdv)',
+    vers: '  const fraisCommande = arrondi(Number(fraisTotal) * (produits / total))' },
 ]
 
 function lancer(banc) {

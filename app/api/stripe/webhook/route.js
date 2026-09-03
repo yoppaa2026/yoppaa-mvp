@@ -306,6 +306,10 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
         await handleCommandeSucceeded(paymentIntent, supabase, eventAccount, {
           sansEmails: true,
           fraisVentiles: fraisPourCommande,
+          // ⚠️ ET DE QUOI VENTILER SEUL SI LA PART N'A PAS PU ÊTRE CALCULÉE
+          // ci-dessus : Stripe met parfois quelques instants à constituer la
+          // transaction de solde, et la commande la retrouvait alors ENTIÈRE.
+          partageAvec: { acompte: montantAcompte, produits: montantProduits },
         })
         await supabase
           .from('commandes')
@@ -695,7 +699,7 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
 // `sansEmails` : la commande est celle d'un tunnel unique, ses produits sont
 // déjà annoncés dans l'email du rendez-vous. Deux confirmations pour un seul
 // paiement font douter le client d'avoir payé deux fois.
-async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = null, { sansEmails = false, fraisVentiles = null } = {}) {
+async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = null, { sansEmails = false, fraisVentiles = null, partageAvec = null } = {}) {
   const meta = paymentIntent.metadata || {}
   const commandeId = meta.yoppaa_commande_id
   if (!commandeId) {
@@ -738,9 +742,34 @@ async function handleCommandeSucceeded(paymentIntent, supabase, eventAccount = n
   // `fraisVentiles` : dans le tunnel unique, le rendez-vous a déjà pris sa part
   // des frais du paiement commun. On écrit ici le complément, jamais le total,
   // sinon l'export comptable compterait deux fois la même dépense.
+  //
+  // 🔴 ET IL MANQUAIT LE CAS OÙ LE RENDEZ-VOUS N'A PAS PU PRENDRE SA PART
+  // (Alex, 03/09, vu sur son export). La transaction de solde n'est pas toujours
+  // constituée à la seconde du paiement : quand la lecture échoue côté
+  // rendez-vous, `fraisVentiles` arrive NUL, et cette ligne relançait la lecture
+  // quelques instants plus tard. Si Stripe répondait cette fois, la commande
+  // écrivait les frais et le net du PAIEMENT ENTIER. Le cron nocturne ventilait
+  // ensuite proprement le rendez-vous, mais ne retouchait plus la commande.
+  //
+  // Résultat mesuré sur deux paiements réels : 0,46 puis 0,47 de frais écrits
+  // pour 0,35 réellement prélevés, et un « net » de 28,11 sur une commande de
+  // 19,71, parce qu'il contenait l'acompte déjà compté sur sa propre ligne.
+  //
+  // ⚠️ LE PARTAGE NE SE DEVINE PAS APRÈS COUP : `rdv_reservation_id` n'est écrit
+  // sur la commande qu'APRÈS cet appel. C'est donc l'appelant, seul à savoir
+  // qu'il est dans le tunnel, qui passe les deux montants.
   try {
     const compte = eventAccount || paymentIntent.on_behalf_of || null
-    const frais = fraisVentiles || await recupererFraisStripe(paymentIntent.id, compte)
+    let frais = fraisVentiles
+    if (!frais) {
+      const total = await recupererFraisStripe(paymentIntent.id, compte)
+      if (total && partageAvec) {
+        const parts = ventilerFrais(total.frais, partageAvec.acompte, partageAvec.produits)
+        frais = parts ? parts.commande : total
+      } else {
+        frais = total
+      }
+    }
     if (frais) {
       await supabase.from('commandes')
         .update({ stripe_frais: frais.frais, stripe_net: frais.net })

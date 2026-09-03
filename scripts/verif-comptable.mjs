@@ -650,10 +650,18 @@ egal('une vente en ligne n’emporte aucun moyen de comptoir', ligneCmdEnLigne.m
       ordre.join(' ') === [...ordre].sort().join(' '), ordre.join(' · '))
 
     // Les jours restent premiers : l'heure ne trie qu'à l'intérieur d'un jour.
+    //
+    // ⚠️ LE JOUR SE FAIT VARIER PAR `created_at`, ET PLUS PAR `date_commande`
+    // (03/09). Une commande payée en ligne est désormais datée du jour du
+    // PAIEMENT, pas du créneau de retrait : ce jeu d'essai décrivait l'ancienne
+    // règle, et il aurait laissé croire que le tri était cassé.
     const jours = construireLignes({
       commandes: [
-        { ...aHeure('08:00', 'x'), date_commande: '2026-08-12' },
-        { ...aHeure('23:00', 'y'), date_commande: '2026-08-11' },
+        // ⚠️ 21:00 UNIVERSEL, PAS 23:00 : à Bruxelles, 23h UTC le 11 août c'est
+        // déjà 01h du matin le 12. Les deux lignes retombaient sur le même jour
+        // et la garde rougissait pour un fuseau, pas pour un tri.
+        { ...aHeure('08:00', 'x'), created_at: '2026-08-12T08:00:00.000Z' },
+        { ...aHeure('21:00', 'y'), created_at: '2026-08-11T21:00:00.000Z' },
       ],
       tauxDefaut: 21,
     }).map(l => l.date)
@@ -1623,12 +1631,112 @@ verifier('une commande remise sans moyen garde son rattrapage',
   const lMars = construireLignes({ rdvs: [RDV_AVRIL], periode: PERIODE })
   verifier('un remboursement d’avril ne pollue pas l’export de mars',
     lMars.length === 1 && lMars[0].total === 20)
+  // ⚠️ AUCUNE LISTE D'EXCLUSION N'EST NÉCESSAIRE : chaque ligne est jugée sur sa
+  // propre date d'écriture, donc la vente de mars s'exclut toute seule d'un
+  // export d'avril. C'est ce qui a remplacé `venteHorsPeriode` le 03/09.
   const lAvril = construireLignes({
     rdvs: [RDV_AVRIL], periode: { du: '2026-04-01', au: '2026-04-30' },
-    venteHorsPeriode: new Set(['r6']),
   })
   verifier('et il sort seul dans l’export d’avril',
     lAvril.length === 1 && lAvril[0].total === -20, JSON.stringify(lAvril.map(l => l.total)))
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 UNE LIGNE EST DATÉE DU JOUR OÙ L'ARGENT A BOUGÉ (03/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Alex, sur son export : SEPT remboursements apparaissaient AVANT la vente
+  // qu'ils annulaient. La ligne de rendez-vous était datée du JOUR DU RENDEZ-
+  // VOUS, son heure de l'instant du PAIEMENT : les deux moitiés de la même case
+  // venaient de deux moments différents. Un rendez-vous du 1er septembre annulé
+  // le 30 août montrait donc son remboursement deux jours avant sa vente, et un
+  // export d'août affichait -45 € sans la vente correspondante.
+  const RDV_PAYE_AVANT = {
+    id: 'd1', statut: 'confirme', date_rdv: '2026-03-20',
+    acompte_montant: 10, acompte_paye: true, acompte_paye_en_ligne: true,
+    acompte_paye_date: '2026-03-02T09:30:00Z', created_at: '2026-03-02T09:29:00Z',
+    bon_cadeau_montant: 15, tva_taux: 21,
+  }
+  const lPaye = construireLignes({ rdvs: [RDV_PAYE_AVANT], periode: PERIODE })
+  verifier('l’acompte est daté du jour du paiement, pas du rendez-vous',
+    lPaye.find(l => l.type === 'Acompte RDV')?.date === '2026-03-02',
+    lPaye.find(l => l.type === 'Acompte RDV')?.date)
+  verifier('le bon consommé aussi, il est débité à la réservation',
+    lPaye.find(l => l.type === 'Bon cadeau RDV')?.date === '2026-03-02')
+  // ⚠️ ET LA DATE ET L'HEURE VIENNENT ENFIN DU MÊME INSTANT. C'était le défaut :
+  // une ligne annonçait « le 20 mars à 09h30 » pour un paiement du 2 mars.
+  for (const l of lPaye) {
+    verifier(`date et heure du même instant sur « ${l.type} »`,
+      l.date === '2026-03-02' && l.heure === '10:30', `${l.date} ${l.heure}`)
+  }
+  // 🔴 LE CAS QUI FAISAIT APPARAÎTRE LE REMBOURSEMENT AVANT LA VENTE.
+  const lInverse = construireLignes({
+    rdvs: [{ ...RDV_PAYE_AVANT, id: 'd2', statut: 'annule_client',
+      stripe_refund_amount: 10, stripe_refund_date: '2026-03-05T11:00:00Z' }],
+    periode: PERIODE,
+  })
+  const datesInverse = lInverse.map(l => l.date)
+  verifier('la vente précède son remboursement, jamais l’inverse',
+    datesInverse.every((d, i) => i === 0 || d >= datesInverse[i - 1]),
+    JSON.stringify(lInverse.map(l => `${l.date} ${l.type}`)))
+
+  // ⚠️ MÊME RÈGLE SUR LES COMMANDES, et c'est le frère : la date venait du
+  // CRÉNEAU DE RETRAIT alors que l'heure venait déjà du paiement.
+  const lCmdRetrait = construireLignes({
+    commandes: [{ id: 'd3', statut: 'recupere', total: 20, paye_en_ligne: true,
+      date_commande: '2026-03-25', created_at: '2026-03-11T08:15:00Z',
+      commande_articles: [{ prix_unitaire: 20, quantite: 1, tva_taux: 21 }] }],
+    periode: PERIODE,
+  })
+  verifier('une commande payée en ligne est datée de son paiement',
+    lCmdRetrait[0]?.date === '2026-03-11', lCmdRetrait[0]?.date)
+  const lCmdComptoir = construireLignes({
+    commandes: [{ id: 'd4', statut: 'recupere', total: 20, paye_en_ligne: false,
+      encaisse_mode: 'especes', encaisse_le: '2026-03-26T16:00:00Z',
+      date_commande: '2026-03-25', created_at: '2026-03-11T08:15:00Z',
+      commande_articles: [{ prix_unitaire: 20, quantite: 1, tva_taux: 21 }] }],
+    periode: PERIODE,
+  })
+  verifier('et une commande réglée au comptoir, du geste du commerçant',
+    lCmdComptoir[0]?.date === '2026-03-26', lCmdComptoir[0]?.date)
+  // ⚠️ NI PAYÉE NI ENCAISSÉE : rien n'est entré en caisse, la ligne ne porte que
+  // du « reste à encaisser ». Elle garde le jour du retrait prévu plutôt que de
+  // disparaître du journal.
+  const lCmdDue = construireLignes({
+    commandes: [{ id: 'd5', statut: 'pret', total: 20, paye_en_ligne: false,
+      date_commande: '2026-03-25', created_at: '2026-03-11T08:15:00Z',
+      commande_articles: [{ prix_unitaire: 20, quantite: 1, tva_taux: 21 }] }],
+    periode: PERIODE,
+  })
+  verifier('une commande qui n’a rien encaissé garde le jour du retrait',
+    lCmdDue[0]?.date === '2026-03-25' && lCmdDue[0]?.resteAEncaisser === 20,
+    lCmdDue[0]?.date)
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LES RÉFÉRENCES NUES DES RENDEZ-VOUS N'ÉTAIENT PAS COMPTÉES (03/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // L'en-tête annonçait « 9 transactions antérieures à la numérotation » sur un
+  // export qui en portait 15 : le drapeau ne vivait que sur les commandes.
+  const lNues = construireLignes({
+    rdvs: [{ ...RDV_PAYE_AVANT, id: 'd6', numero_rdv: 3 }], periode: PERIODE,
+  })
+  verifier('une référence de rendez-vous sans semaine est signalée',
+    referencesNonQualifiees(lNues) === 2, `${referencesNonQualifiees(lNues)}`)
+  const lQualifiees = construireLignes({
+    rdvs: [{ ...RDV_PAYE_AVANT, id: 'd7', numero_rdv: 3, numero_prefixe: 'RV', numero_semaine: '2026-10' }],
+    periode: PERIODE,
+  })
+  verifier('une référence complète ne l’est pas',
+    referencesNonQualifiees(lQualifiees) === 0,
+    JSON.stringify(lQualifiees.map(l => l.reference)))
+  // ⚠️ LES ABONNEMENTS EN SONT EXCLUS, ET C'EST VOULU : leur série est CONTINUE.
+  const lAbo = construireLignes({
+    abonnements: [{ id: 'd8', paye: true, prix: 100, paye_le: '2026-03-04T10:00:00Z',
+      mode_paiement: 'en_ligne', tva_taux: 21, numero_abonnement: 7, numero_prefixe: 'ABT' }],
+    periode: PERIODE,
+  })
+  verifier('un abonnement n’est jamais signalé comme référence ambiguë',
+    referencesNonQualifiees(lAbo) === 0, JSON.stringify(lAbo.map(l => l.reference)))
 
   // ─── Ce qui n'a produit AUCUNE ligne ne se contrepasse pas ────────────────
   //
@@ -1664,18 +1772,25 @@ verifier('une commande remise sans moyen garde son rattrapage',
     verifier(`la route lit ${col} sur les rendez-vous`,
       new RegExp(`\\b${col}\\b`).test(colonnesDe(srcRoute, 'rdv_reservations')))
   }
-  // ⚠️ ET UNE SEULE LISTE DE COLONNES PAR TABLE : ces `select` servent trois
-  // requêtes chacun (la période, les remboursements, les bons rendus). Trois
-  // listes écrites à la main auraient divergé à la première colonne ajoutée, et
-  // le silence aurait fait le reste.
-  for (const [table, nb] of [['commandes', 3], ['rdv_reservations', 3]]) {
+  // ⚠️ ET UNE SEULE LISTE DE COLONNES PAR TABLE : ces `select` servent DEUX
+  // requêtes chacun (les mouvements de la période, puis les ventes visées par
+  // un bon rendu dont aucune date ne tombe dedans). Deux listes écrites à la
+  // main auraient divergé à la première colonne ajoutée, en silence.
+  for (const table of ['commandes', 'rdv_reservations']) {
     const lus = selectsDe(srcRoute, table)
-    verifier(`les ${nb} lectures de ${table} partagent la même liste de colonnes`,
-      lus.length === nb && lus.every(s => s.constante && s.litteral === null),
+    verifier(`les lectures de ${table} partagent la même liste de colonnes`,
+      lus.length === 2 && lus.every(s => s.constante && s.litteral === null),
       JSON.stringify(lus))
   }
-  verifier('la route va chercher les remboursements de la période',
-    /gte\('stripe_refund_date'/.test(srcRoute) && /lte\('stripe_refund_date'/.test(srcRoute))
+  // 🔴 LA ROUTE CHARGE SUR TOUTES LES DATES OÙ DE L'ARGENT A PU BOUGER. Une
+  // seule colonne laisserait des mouvements dehors, maintenant que chaque ligne
+  // est datée du jour de l'encaissement et plus du créneau ni du rendez-vous.
+  for (const col of ['created_at', 'encaisse_le', 'stripe_refund_date', 'acompte_paye_date']) {
+    verifier(`la route charge aussi sur ${col}`,
+      new RegExp(`instant\\('${col}'\\)`).test(srcRoute))
+  }
+  verifier('et garde un filet sur les colonnes de date nue',
+    /jour\('date_commande'\)/.test(srcRoute) && /jour\('date_rdv'\)/.test(srcRoute))
   verifier('et les bons rendus, que nulle colonne ne porte',
     /bons_cadeaux_mouvements/.test(srcRoute) && /eq\('source', 'annulation'\)/.test(srcRoute))
   // 🔴 LA BORNE DE SÉCURITÉ EST LA JOINTURE : la table des mouvements ne porte
@@ -1690,9 +1805,49 @@ verifier('une commande remise sans moyen garde son rattrapage',
   // Le même piège que pour les ancres de mutation, du côté de la garde.
   verifier('la période est transmise au constructeur de lignes',
     /construireLignes\(\{[^)]*periode: \{ du, au \}/.test(srcRoute))
-  verifier('et les ventes d’un autre mois y sont désignées',
-    /construireLignes\(\{[^)]*venteHorsPeriode/.test(srcRoute))
   verifier('comme les bons rendus', /construireLignes\(\{[^)]*retoursBons:/.test(srcRoute))
+  // ⚠️ ET PLUS AUCUNE LISTE D'EXCLUSION : chaque ligne est jugée sur sa propre
+  // date. Deux façons de répondre à la même question finissent toujours par
+  // diverger, c'est le motif qui a produit le plus de défauts sur ce projet.
+  verifier('aucune liste de ventes à exclure ne subsiste',
+    !/venteHorsPeriode/.test(srcRoute))
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LES FRAIS STRIPE COMPTÉS DEUX FOIS SUR UN PAIEMENT PARTAGÉ (03/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Vu par Alex sur son export : une commande de 19,71 € portait un « net » de
+  // 28,11 €, parce qu'il contenait l'acompte du rendez-vous, déjà compté sur sa
+  // propre ligne. Frais écrits 0,46 puis 0,47 pour 0,35 réellement prélevés.
+  //
+  // Cause : quand Stripe n'a pas encore constitué sa transaction de solde, le
+  // rendez-vous n'écrit rien et passe une part NULLE à la commande, qui relance
+  // la lecture et obtient cette fois le total du paiement. Le cron nocturne
+  // ventile ensuite le rendez-vous, mais ne retouche plus la commande.
+  const srcWebhook = readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8')
+  verifier('le tunnel passe de quoi ventiler seul si la part manque',
+    /partageAvec: \{ acompte: montantAcompte, produits: montantProduits \}/.test(srcWebhook))
+  verifier('et la commande ventile plutôt que d’écrire le total du paiement',
+    /ventilerFrais\(total\.frais, partageAvec\.acompte, partageAvec\.produits\)/.test(srcWebhook))
+
+  // ⚠️ ET LA VENTILATION ELLE-MÊME, EXÉCUTÉE : la somme des deux parts doit
+  // rendre EXACTEMENT les frais réels, sans centime perdu par un double
+  // arrondi, sinon le journal ne se recoupe plus avec le relevé Stripe.
+  const { ventilerFrais } = await import('../lib/stripe-frais.js')
+  // ⚠️ LE DERNIER CAS EST CELUI QUI COMPTE, ET LA MESURE PAR MUTATION L'A
+  // EXIGÉ : sur 0,03 € partagés en deux parts égales, les DEUX prorata
+  // s'arrondissent à 0,02 et leur somme vaudrait 0,04. C'est précisément pour
+  // ça que la deuxième part est le RESTE, jamais un second prorata. Sans ce
+  // jeu-là, la garde ne pouvait pas rougir.
+  for (const [total, acompte, produits] of [[0.35, 8.75, 19.71], [0.35, 12, 21.90], [1.83, 10, 90], [0.31, 0.01, 99.99], [0.03, 1, 1]]) {
+    const p = ventilerFrais(total, acompte, produits)
+    verifier(`les deux parts de ${total} redonnent le frais réel`,
+      arrondi(p.rdv.frais + p.commande.frais) === total,
+      `${p.rdv.frais} + ${p.commande.frais}`)
+    verifier(`et chaque net vaut son montant moins sa part (${total})`,
+      arrondi(p.rdv.net) === arrondi(acompte - p.rdv.frais)
+      && arrondi(p.commande.net) === arrondi(produits - p.commande.frais))
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

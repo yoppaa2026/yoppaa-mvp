@@ -62,15 +62,12 @@ export async function GET(request) {
       return NextResponse.json({ ok: false, error: 'export réservé à la formule Vendre' }, { status: 402 })
     }
 
-    // Bornes inclusives : `au` doit couvrir toute la journée.
-    const auFin = `${au}T23:59:59.999Z`
-
-    // ⚠️ LES BORNES DES REMBOURSEMENTS SONT ÉLARGIES D'UN JOUR DE CHAQUE CÔTÉ,
-    // ET C'EST VOLONTAIRE. Le jour comptable se décide en heure belge : minuit
-    // à Bruxelles, c'est 22h ou 23h la VEILLE en temps universel. Une borne
-    // stricte en UTC raterait tout remboursement des deux premières heures de
-    // la nuit. `dansPeriode` tranche ensuite sur le vrai jour, comme le filtre
-    // des abonnements le fait depuis le 19/08.
+    // ⚠️ LES BORNES SUR LES INSTANTS SONT ÉLARGIES D'UN JOUR DE CHAQUE CÔTÉ, ET
+    // C'EST VOLONTAIRE. Le jour comptable se décide en heure belge : minuit à
+    // Bruxelles, c'est 22h ou 23h la VEILLE en temps universel. Une borne
+    // stricte en UTC raterait tout mouvement des deux premières heures de la
+    // nuit. `dansPeriode` tranche ensuite sur le vrai jour, comme le filtre des
+    // abonnements le fait depuis le 19/08.
     //
     // ⚠️ ET LE JOUR SE RECOMPOSE À LA MAIN, PAS AVEC `toISOString()`. Ce
     // raccourci est ce qui a produit le défaut du 19/08, où une vente de 00h28
@@ -110,42 +107,47 @@ export async function GET(request) {
     // bon disparaît du journal.
     const COLS_RDV = 'id, numero_rdv, numero_prefixe, numero_semaine, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, bon_cadeau_montant, fidelite_remise, tva_taux, stripe_frais, stripe_net, stripe_refund_amount, stripe_refund_date, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom'
 
+    // ─── ON CHARGE PAR TOUTES LES DATES OÙ DE L'ARGENT A PU BOUGER ─────────
+    //
+    // 🔴 CHAQUE LIGNE EST DATÉE DU JOUR OÙ L'ARGENT A ÉTÉ CONSTATÉ (03/09), et
+    // plus du créneau de retrait ni du jour du rendez-vous. Charger sur une
+    // seule colonne laisserait donc des mouvements dehors : un rendez-vous du
+    // 15 septembre réservé le 30 août appartient à l'export d'AOÛT.
+    //
+    // ⚠️ ON CHARGE LARGE, ET C'EST `construireLignes` QUI TRANCHE, ligne par
+    // ligne, sur la date d'écriture. Une vente qui n'appartient pas à la période
+    // s'exclut ainsi toute seule, et il n'y a plus deux façons de répondre à la
+    // même question.
+    //
+    // ⚠️ LES BORNES SONT ÉLARGIES D'UN JOUR sur les colonnes d'INSTANT, jamais
+    // sur les colonnes de DATE nue : minuit à Bruxelles, c'est 22h ou 23h la
+    // veille en temps universel.
+    const plage = (col, debut, fin) => `and(${col}.gte.${debut},${col}.lte.${fin})`
+    const instant = (col) => plage(col, rembDu, rembAu)
+    const jour = (col) => plage(col, du, au)
+
     const { data: commandesPeriode } = await admin
       .from('commandes')
       .select(COLS_COMMANDE)
       .eq('commercant_id', commercantId)
-      .gte('created_at', `${du}T00:00:00.000Z`)
-      .lte('created_at', auFin)
+      .or([
+        instant('created_at'),      // payée en ligne : constatée à sa création
+        instant('encaisse_le'),     // réglée au comptoir : au geste du commerçant
+        jour('date_commande'),      // ni l'un ni l'autre : reste à encaisser
+        instant('stripe_refund_date'),
+      ].join(','))
 
     const { data: rdvsPeriode } = await admin
       .from('rdv_reservations')
       .select(COLS_RDV)
       .eq('commercant_id', commercantId)
-      .gte('date_rdv', du)
-      .lte('date_rdv', au)
-      .is('deleted_at', null)
-
-    // ─── CE QUI EST REPARTI PENDANT LA PÉRIODE ─────────────────────────────
-    //
-    // 🔴 UNE CONTREPASSATION APPARTIENT À SA DATE, PAS À CELLE DE LA VENTE, et
-    // c'est l'arbitrage d'Alex du 31/08 : le relevé bancaire montre DEUX
-    // mouvements, à deux dates. Un rendez-vous du 28 février annulé le 2 mars
-    // doit donc sortir dans l'export de MARS, où sa vente n'est pas chargée.
-    // Sans ces deux requêtes, le remboursement manquerait au mois où l'argent
-    // est réellement parti.
-    const { data: commandesRemb } = await admin
-      .from('commandes')
-      .select(COLS_COMMANDE)
-      .eq('commercant_id', commercantId)
-      .gte('stripe_refund_date', rembDu)
-      .lte('stripe_refund_date', rembAu)
-
-    const { data: rdvsRemb } = await admin
-      .from('rdv_reservations')
-      .select(COLS_RDV)
-      .eq('commercant_id', commercantId)
-      .gte('stripe_refund_date', rembDu)
-      .lte('stripe_refund_date', rembAu)
+      .or([
+        instant('acompte_paye_date'),  // l'acompte et le bon, pris à la réservation
+        instant('created_at'),         // réservation sans paiement en ligne
+        instant('encaisse_le'),        // le solde, au comptoir
+        jour('date_rdv'),              // filet : un rendez-vous sans aucune de ces dates
+        instant('stripe_refund_date'),
+      ].join(','))
       .is('deleted_at', null)
 
     // ─── ET LES BONS CADEAUX RENDUS, QUI NE SONT DANS AUCUNE COLONNE ───────
@@ -168,12 +170,12 @@ export async function GET(request) {
       .gte('created_at', rembDu)
       .lte('created_at', rembAu)
 
-    // Les ventes visées par un bon rendu, quand elles sont hors période.
+    // Les ventes visées par un bon rendu, quand aucune de leurs dates ne tombe
+    // dans la période : un rendez-vous réservé en juillet et annulé en septembre
+    // n'est chargé par aucune plage ci-dessus, et son retour de bon serait perdu.
     const dejaLa = new Set([
       ...(commandesPeriode || []).map(c => c.id),
-      ...(commandesRemb || []).map(c => c.id),
       ...(rdvsPeriode || []).map(r => r.id),
-      ...(rdvsRemb || []).map(r => r.id),
     ])
     const cmdManquantes = [...new Set((mouvementsBons || [])
       .map(m => m.commande_id).filter(id => id && !dejaLa.has(id)))]
@@ -189,22 +191,15 @@ export async function GET(request) {
           .eq('commercant_id', commercantId).in('id', rdvManquants).is('deleted_at', null)
       : { data: [] }
 
-    // ⚠️ ON FUSIONNE SANS DOUBLER, et on retient QUI vient d'ailleurs : une
-    // vente chargée seulement pour son remboursement ne doit pas écrire son
-    // chiffre d'affaires ici, il appartient à un export précédent.
+    // ⚠️ ON FUSIONNE SANS DOUBLER : les plages ci-dessus se recouvrent souvent,
+    // et une même vente remontée deux fois s'écrirait deux fois.
     const fusionner = (...listes) => {
       const parId = new Map()
       for (const liste of listes) for (const o of (liste || [])) if (o?.id) parId.set(o.id, o)
       return [...parId.values()]
     }
-    const idsPeriode = new Set([
-      ...(commandesPeriode || []).map(c => c.id),
-      ...(rdvsPeriode || []).map(r => r.id),
-    ])
-    const commandes = fusionner(commandesPeriode, commandesRemb, commandesBon)
-    const rdvs = fusionner(rdvsPeriode, rdvsRemb, rdvsBon)
-    const venteHorsPeriode = new Set([...commandes, ...rdvs]
-      .map(o => o.id).filter(id => !idsPeriode.has(id)))
+    const commandes = fusionner(commandesPeriode, commandesBon)
+    const rdvs = fusionner(rdvsPeriode, rdvsBon)
 
     // ⚠️ LES ABONNEMENTS, QUI NE FIGURAIENT DANS AUCUN DOCUMENT (Alex, 17/08).
     // Leur vente n'écrit que dans `abonnements`, jamais une commande.
@@ -259,7 +254,6 @@ export async function GET(request) {
       articlesParId,
       retoursBons: mouvementsBons || [],
       periode: { du, au },
-      venteHorsPeriode,
     })
 
     // Signale honnêtement que certaines lignes reposent sur le taux actuel.

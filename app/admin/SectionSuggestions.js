@@ -9,15 +9,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Store, Search, RefreshCw, MapPin, Copy } from 'lucide-react'
+import { sansAccents } from '@/lib/texte-normalise'
 
 const T = {
   bg: '#F8F6FF', main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF',
   ink: '#1A0840', deep: '#2D0F6B', muted: '#6B7280', hairline: '#EEE9F5', green: '#10B981',
 }
 
-function norm(s) {
-  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-}
+// Minuscules + sans accents. La fonction vit dans `lib/texte-normalise.js`
+// depuis le 03/09 : elle était recopiée à l'identique dans trois fichiers.
+const norm = sansAccents
 
 function dateCourte(iso) {
   if (!iso) return '—'

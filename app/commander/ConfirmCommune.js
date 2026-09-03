@@ -15,6 +15,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper } from '@/lib/fetch-yopper'
+import ChampCommune from '@/app/components/ChampCommune'
 
 // Tokens design system canonique
 const T = {
@@ -276,22 +277,18 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
                   </p>
                 </div>
               ) : (
-              <>
-              <label style={{ fontSize: 11, fontWeight: 700, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 6 }}>
-                Commune
-              </label>
-              <select
-                value={selectedId || ''}
-                onChange={e => setSelectedId(e.target.value)}
-                style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontFamily: 'inherit', color: T.ink, background: '#fff', cursor: 'pointer', outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}>
-                <option value="">- Sélectionne une commune -</option>
-                {communes.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nom}{c.province ? ` (${c.province})` : ''}
-                  </option>
-                ))}
-              </select>
-              </>
+              // 🔴 C'ÉTAIT UNE LISTE DÉROULANTE DE 260 ENTRÉES (Alex, 01/09).
+              // Toute la Wallonie, dans un menu, sur un téléphone, comme tout
+              // premier geste après la connexion. On la tape désormais, par son
+              // nom ou par son code postal. La règle vit dans
+              // `lib/recherche-commune.js`, elle est mesurée au banc.
+              <div style={{ marginBottom: 16 }}>
+                <ChampCommune
+                  communes={communes}
+                  valeurId={selectedId}
+                  onChoisir={c => setSelectedId(c ? c.id : null)}
+                />
+              </div>
               )}
 
               {error && (

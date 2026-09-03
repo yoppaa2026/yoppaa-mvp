@@ -979,6 +979,90 @@ for (const chemin of routesAdmin) {
     iGetOne > -1 && iGarde > -1 && iGetOne < iGarde)
 }
 
+// ═══ LE CHOIX DE LA COMMUNE — 260 ENTRÉES DANS UN MENU (03/09) ════════════
+//
+// 🔴 C'était une liste déroulante contenant toute la Wallonie, et c'était le
+// tout premier geste demandé à un Yopper qui venait de se connecter.
+//
+// ⚠️ LA LISTE RESTE, LE CHAMP LA RÉTRÉCIT (Alex). Rendre une liste vide tant
+// qu'on n'a pas tapé aurait échangé un mauvais geste contre un autre : celui
+// qui préfère dérouler doit pouvoir dérouler.
+{
+  const { filtrerCommunes } = await import('../lib/recherche-commune.js')
+  const ids = (l) => l.map(c => c.id)
+
+  // ⚠️ Un `codes_postaux` en NOMBRES et un autre à `null` : les deux existent
+  // en base, et `startsWith` sur un nombre ferait tomber toute la recherche.
+  const COMMUNES = [
+    { id: 'met', nom: 'Mettet', province: 'Namur', codes_postaux: ['5640', '5641'] },
+    { id: 'nam', nom: 'Namur', province: 'Namur', codes_postaux: [5000] },
+    { id: 'bra', nom: "Braine-l'Alleud", province: 'Brabant wallon', codes_postaux: ['1420'] },
+    { id: 'ott', nom: 'Ottignies-Louvain-la-Neuve', province: 'Brabant wallon', codes_postaux: ['1340'] },
+    { id: 'cha', nom: 'Châtelet', province: 'Hainaut', codes_postaux: ['6200'] },
+    { id: 'bru', nom: 'La Bruyère', province: 'Namur', codes_postaux: null },
+  ]
+
+  // 🔴 LA GARDE PRINCIPALE : rien de tapé, TOUT est là, dans l'ordre reçu.
+  egal('🔴 sans recherche, la liste entière reste', ids(filtrerCommunes(COMMUNES, '')), ids(COMMUNES))
+  egal('des espaces seuls ne filtrent rien', ids(filtrerCommunes(COMMUNES, '   ')), ids(COMMUNES))
+
+  egal('« met » trouve Mettet', ids(filtrerCommunes(COMMUNES, 'met')), ['met'])
+  // Personne ne tape la majuscule accentuée sur un clavier de téléphone.
+  egal('« MÉT » aussi, accents et casse confondus', ids(filtrerCommunes(COMMUNES, 'MÉT')), ['met'])
+  egal('🔴 et l’accent est retiré du CÔTÉ DONNÉE aussi',
+    ids(filtrerCommunes(COMMUNES, 'chatelet')), ['cha'])
+
+  egal('le code postal cherche aussi', ids(filtrerCommunes(COMMUNES, '5640')), ['met'])
+  egal('🔴 un code postal en NOMBRE ne fait pas tomber la recherche',
+    ids(filtrerCommunes(COMMUNES, '5000')), ['nam'])
+  egal('🔴 une commune SANS code postal ne fait pas tomber la recherche',
+    ids(filtrerCommunes(COMMUNES, 'bruyere')), ['bru'])
+
+  // Un nom composé se découpe : le tiret et l'apostrophe séparent comme un
+  // espace, sinon « alleud » ne trouve jamais Braine-l'Alleud.
+  egal('« alleud » trouve Braine-l’Alleud', ids(filtrerCommunes(COMMUNES, 'alleud')), ['bra'])
+  egal('« neuve » trouve Ottignies-Louvain-la-Neuve', ids(filtrerCommunes(COMMUNES, 'neuve')), ['ott'])
+  egal('deux mots tapés doivent TOUS correspondre',
+    ids(filtrerCommunes(COMMUNES, 'braine alleud')), ['bra'])
+  egal('un mot qui ne correspond à rien annule le reste',
+    ids(filtrerCommunes(COMMUNES, 'braine zzz')), [])
+
+  // ⚠️ PRÉFIXE, PAS MORCEAU. « amur » au milieu de « Namur » ne doit rien
+  // rendre : sinon trois lettres au hasard ramènent la moitié de la Wallonie.
+  //
+  // ⚠️ MON PREMIER EXEMPLE ÉTAIT FAUX, et c'est la mesure par mutation qui l'a
+  // dit. Le test cherchait « net » dans « Mettet », qui ne le contient pas :
+  // il passait aussi bien avec un préfixe qu'avec un morceau, donc il ne
+  // prouvait rien. Une garde qui ne peut pas rougir est une garde absente.
+  egal('🔴 « amur » ne trouve PAS Namur', ids(filtrerCommunes(COMMUNES, 'amur')), [])
+  egal('une recherche sans réponse rend une liste vide',
+    ids(filtrerCommunes(COMMUNES, 'zzz')), [])
+
+  // Ce qui COMMENCE par ce qu'on a tapé passe devant.
+  egal('🔴 le nom qui commence par la recherche passe devant',
+    ids(filtrerCommunes(COMMUNES, 'la')), ['bru', 'ott'])
+
+  // Une liste absente ou mal formée ne doit pas faire tomber l'écran.
+  egal('une liste absente rend une liste vide', filtrerCommunes(undefined, 'met'), [])
+  egal('une liste non tableau rend une liste vide', filtrerCommunes(null, ''), [])
+
+  // ─── L'ÉCRAN UTILISE BIEN LA RÈGLE, ET NE LA REFAIT PAS ─────────────────
+  const modale = sansProse(lire('app/commander/ConfirmCommune.js'))
+  verifier('🔴 la modale n’a plus de liste déroulante de 260 entrées',
+    !/<select/.test(modale))
+  verifier('elle passe par le champ partagé', /<ChampCommune/.test(modale))
+  const champ = sansProse(lire('app/components/ChampCommune.js'))
+  verifier('le champ demande le filtre à la lib au lieu de le refaire',
+    /filtrerCommunes\(communes, requete\)/.test(champ))
+  // ⚠️ ET IL NE COUPE PAS LA LISTE. Une troncature silencieuse ferait conclure,
+  // à celui dont la commune n'est pas dans les premières, qu'elle n'existe pas.
+  verifier('🔴 le champ ne tronque pas la liste',
+    !/resultats\.slice\(/.test(champ))
+  // Le champ est une RECHERCHE, pas la valeur : ce qui est retenu doit rester
+  // affiché même quand la recherche en cours ne le montre plus.
+  verifier('ce qui est retenu reste affiché', /Commune retenue/.test(champ))
+}
+
 // 🔴 LE TOTAL S'IMPRIMAIT AU MILIEU DU FICHIER (trouvé le 31/08).
 //
 // Il vivait cent lignes avant la fin, et ignorait donc tout ce qui suivait :

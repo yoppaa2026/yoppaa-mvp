@@ -10,16 +10,17 @@ import { Search, Check, RefreshCw } from 'lucide-react'
 // Le repli vit à part : d'autres blocs de l'admin sont aussi longs, et un bloc
 // plié doit continuer de dire ce qu'il contient.
 import Repli from './Repli'
+import { sansAccents } from '@/lib/texte-normalise'
 
 const T = {
   bg: '#F8F6FF', main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF',
   ink: '#1A0840', deep: '#2D0F6B', muted: '#6B7280', hairline: '#EEE9F5', green: '#10B981',
 }
 
-// Normalise pour la recherche (minuscules + sans accents).
-function norm(s) {
-  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-}
+// Normalise pour la recherche (minuscules + sans accents). La fonction vit dans
+// `lib/texte-normalise.js` depuis le 03/09 : elle était recopiée à l'identique
+// dans trois fichiers.
+const norm = sansAccents
 
 export default function SectionCommunes() {
   const [communes, setCommunes] = useState([])   // source de vérité (dernières valeurs serveur)

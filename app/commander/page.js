@@ -39,6 +39,7 @@ import { brancherSessionPermanente, marquerDeconnexionVoulue, dejaConnecteIci } 
 // ⚠️ « SESSION EXPIRÉE » ne se dit que si une session a existé ICI : le lien
 // d'email s'ouvre dans le navigateur, où le Yopper n'a jamais été connecté.
 import { libelleAccesPerdu } from '@/lib/retour-app'
+import { sansAccents } from '@/lib/texte-normalise'
 import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
 import CarteNotifications from './CarteNotifications'
 import SupprimerCompte from './SupprimerCompte'
@@ -84,9 +85,8 @@ function parseTypes(type) {
 // résultat là où « Épicerie » en rendait un : personne ne tape la majuscule
 // accentuée sur un clavier de téléphone. On retire les accents des deux côtés
 // de la comparaison, jamais des libellés affichés.
-function sansAccents(v) {
-  return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-}
+// La fonction vit dans `lib/texte-normalise.js` depuis le 03/09 : elle était
+// recopiée à l'identique dans trois fichiers.
 function distanceVolOiseau(lat1, lon1, lat2, lon2) {
   const R = 6371000
   const dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180

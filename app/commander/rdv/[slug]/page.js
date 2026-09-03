@@ -56,6 +56,7 @@ function enGras(texte) {
   )
 }
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
+import { poserIdentiteLocale } from '@/lib/identite-locale'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { euros } from '@/lib/montants'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
@@ -1401,13 +1402,9 @@ export default function CommanderRdvSlug() {
     const id = (await res.json().catch(() => ({})))?.client?.id
     if (!id) return null
     setClientId(id)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('yoppaa_client_id', id)
-      localStorage.setItem('yoppaa_email', email)
-      localStorage.setItem('yoppaa_prenom', prenom)
-      localStorage.setItem('yoppaa_nom', nom)
-      if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
-    }
+    // ⚠️ EN ENTIER, Y COMPRIS EN EFFAÇANT. Même défaut que la fiche boutique :
+    // le `if (telephone)` laissait le numéro du compte précédent en place.
+    poserIdentiteLocale({ client_id: id, email, prenom, nom, telephone })
     return id
   }
 

@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
+import { poserIdentiteLocale } from '@/lib/identite-locale'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine, planEffectif } from '@/lib/plans'
@@ -2701,11 +2702,10 @@ export default function CommanderSlug() {
     const id = (await res.json().catch(() => ({})))?.client?.id
     if (!id) return null
     setClientId(id)
-    localStorage.setItem('yoppaa_client_id', id)
-    localStorage.setItem('yoppaa_email', email)
-    localStorage.setItem('yoppaa_prenom', prenom)
-    localStorage.setItem('yoppaa_nom', nom)
-    if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
+    // ⚠️ EN ENTIER, Y COMPRIS EN EFFAÇANT. Le `if (telephone)` d'avant laissait
+    // en place le numéro du compte précédent quand celui-ci n'en donnait pas.
+    // Voir lib/identite-locale.js : c'est ce mélange qu'Alex a vu le 03/09.
+    poserIdentiteLocale({ client_id: id, email, prenom, nom, telephone })
     return id
   }
 

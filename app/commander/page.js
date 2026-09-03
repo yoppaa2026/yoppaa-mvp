@@ -40,6 +40,7 @@ import { brancherSessionPermanente, marquerDeconnexionVoulue, dejaConnecteIci } 
 // d'email s'ouvre dans le navigateur, où le Yopper n'a jamais été connecté.
 import { libelleAccesPerdu } from '@/lib/retour-app'
 import { sansAccents } from '@/lib/texte-normalise'
+import { poserIdentiteLocale, effacerIdentiteLocale, cacheEtranger } from '@/lib/identite-locale'
 import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
 import CarteNotifications from './CarteNotifications'
 import SupprimerCompte from './SupprimerCompte'
@@ -420,9 +421,11 @@ function EditablePrenom({ client, setClient, clientId, openSignal }) {
     const prenom = vPrenom.trim()
     const nom    = vNom.trim()
     const telephone = vTel.trim()
-    localStorage.setItem('yoppaa_prenom', prenom)
-    if (nom) localStorage.setItem('yoppaa_nom', nom)
-    if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
+    // ⚠️ EN ENTIER, Y COMPRIS EN EFFAÇANT. Le `if (nom)` d'avant gardait
+    // l'ancienne valeur quand le Yopper VIDAIT le champ : la base recevait le
+    // vide, l'écran continuait d'afficher l'ancien, et il revenait au
+    // rechargement suivant.
+    poserIdentiteLocale({ client_id: clientId, email: client.email, prenom, nom, telephone })
     setClient(p => ({ ...p, prenom, nom, telephone }))
     if (clientId) {
       // ⚠️ ENCORE UN `fetch` NU. La route exige une identité PROUVÉE depuis le
@@ -1746,6 +1749,27 @@ export default function Commander() {
     // dernier recours. A chaque hydratation reussie, on re-sync le cookie pour
     // reset son Max-Age.
     async function hydrateYopper() {
+      // 🔴 LA SESSION EST LA VÉRITÉ, LE NAVIGATEUR N'EST QU'UN CACHE (03/09).
+      //
+      // Cette fonction construisait l'identité du Yopper UNIQUEMENT depuis le
+      // navigateur, sans jamais demander à la session Supabase qui était
+      // connecté. Puis elle reposait le cookie serveur à partir de ces mêmes
+      // valeurs. Un cache resté d'un autre compte se propageait donc partout,
+      // et l'écran affichait le nom, le prénom et le téléphone d'une personne
+      // pendant que les commandes venaient de l'autre.
+      //
+      // `getSession` et non `getUser` : le jeton porte déjà l'adresse, aucune
+      // requête réseau n'est nécessaire, et on ne réveille pas le verrou
+      // d'authentification au montage.
+      let emailSession = ''
+      try {
+        const { data } = await supabase.auth.getSession()
+        emailSession = (data?.session?.user?.email || '').toLowerCase()
+      } catch { emailSession = '' }
+      if (cacheEtranger(emailSession, localStorage.getItem('yoppaa_email'))) {
+        effacerIdentiteLocale()
+      }
+
       let email = localStorage.getItem('yoppaa_email')
       let nom = localStorage.getItem('yoppaa_nom')
       let prenom = localStorage.getItem('yoppaa_prenom')
@@ -1756,21 +1780,42 @@ export default function Commander() {
         try {
           const res = await fetch('/api/yopper/session')
           const data = await res.json()
-          if (data.ok && data.identity?.email && data.identity?.client_id) {
+          // ⚠️ ET LE COOKIE AUSSI PEUT DÉSIGNER QUELQU'UN D'AUTRE. Il vit un an
+          // et il est posé depuis le navigateur : le reprendre sans le
+          // confronter à la session rendrait le nettoyage ci-dessus inutile,
+          // puisqu'il se rechargerait aussitôt.
+          const cookieEtranger = cacheEtranger(emailSession, data?.identity?.email)
+          if (data.ok && data.identity?.email && data.identity?.client_id && !cookieEtranger) {
             id       = data.identity.client_id
             email    = data.identity.email
             prenom   = data.identity.prenom || ''
             nom      = data.identity.nom || ''
             telephone= data.identity.telephone || ''
             // Restore localStorage pour les prochains reload rapides
-            localStorage.setItem('yoppaa_client_id', id)
-            localStorage.setItem('yoppaa_email', email)
-            if (prenom)    localStorage.setItem('yoppaa_prenom', prenom)
-            if (nom)       localStorage.setItem('yoppaa_nom', nom)
-            if (telephone) localStorage.setItem('yoppaa_telephone', telephone)
+            poserIdentiteLocale({ client_id: id, email, prenom, nom, telephone })
           }
         } catch (e) {
           console.warn('[hydrate] cookie fallback KO', e?.message)
+        }
+      }
+
+      // Session ouverte et plus aucun cache : on reconstruit depuis le serveur
+      // plutôt que de laisser l'écran en invité. C'est le cas juste après un
+      // changement de compte, et celui d'un navigateur purgé par ITP.
+      if (!email && emailSession) {
+        try {
+          const res = await fetch('/api/yopper/client', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get-or-create', email: emailSession }),
+          })
+          const c = (await res.json().catch(() => ({})))?.client
+          if (c?.id) {
+            id = c.id; email = emailSession
+            prenom = c.prenom || ''; nom = c.nom || ''; telephone = c.telephone || ''
+            poserIdentiteLocale({ client_id: id, email, prenom, nom, telephone })
+          }
+        } catch (e) {
+          console.warn('[hydrate] reconstruction depuis la session KO', e?.message)
         }
       }
       if (email && id) {
@@ -1790,7 +1835,7 @@ export default function Commander() {
       }
       return { email, id, telephone, prenom, nom }
     }
-    hydrateYopper().then(({ id, telephone, prenom, nom }) => {
+    hydrateYopper().then(({ id, email }) => {
       if (!id) return
       // Si telephone manquant en local (cas Magic Link sans signup complet, ou EditablePrenom save sans reload),
       // recharger depuis la DB pour synchroniser le state + localStorage. Sinon le bandeau "Profil incomplet"
@@ -1806,11 +1851,29 @@ export default function Commander() {
         .then(j => {
           const data = j?.client
           if (!data) return  // pas de session serveur : on ne force pas la modale (évite une boucle sans cookie)
-          if (!telephone) {
-            if (data.telephone) { localStorage.setItem('yoppaa_telephone', data.telephone); setClient(p => ({ ...p, telephone: data.telephone })) }
-            if (data.prenom && !prenom) { localStorage.setItem('yoppaa_prenom', data.prenom); setClient(p => ({ ...p, prenom: data.prenom })) }
-            if (data.nom && !nom) { localStorage.setItem('yoppaa_nom', data.nom); setClient(p => ({ ...p, nom: data.nom })) }
-          }
+          // 🔴 CETTE FUSION NE COMBLAIT QUE LES TROUS, JAMAIS LES ERREURS.
+          //
+          // Elle était enfermée dans un `if (!telephone)`, et chaque champ dans
+          // un `&& !prenom` : la réponse du serveur, pourtant PROUVÉE par le
+          // jeton, n'était appliquée que là où le navigateur n'avait rien. Une
+          // valeur héritée d'un AUTRE compte n'était donc jamais corrigée, elle
+          // était au contraire la seule à survivre.
+          //
+          // Le serveur a raison, toujours : il répond à `get-own`, qui exige une
+          // identité prouvée. On applique sa réponse en entier.
+          poserIdentiteLocale({
+            client_id: data.id || id,
+            email,
+            prenom: data.prenom,
+            nom: data.nom,
+            telephone: data.telephone,
+          })
+          setClient(p => ({
+            ...p,
+            prenom: data.prenom || '',
+            nom: data.nom || '',
+            telephone: data.telephone || '',
+          }))
           if (data.commune) setCommune(data.commune)
           else { setCommune(false); setShowConfirmCommune(true) }
         })
@@ -4324,7 +4387,7 @@ export default function Commander() {
                     // Sans lui, la restauration le reconnecterait aussitôt.
                     marquerDeconnexionVoulue()
                     await supabase.auth.signOut()
-                    ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
+                    ;effacerIdentiteLocale(); localStorage.removeItem('yoppaa_onglet')
                     // Efface aussi le cookie serveur (vrai logout : get-own ne doit plus rien renvoyer).
                     fetch('/api/yopper/session', { method: 'DELETE' }).catch(() => {})
                     // ⚠️ TOUT CE QUI EST À ELLE S'EFFACE ICI, en un seul endroit :
@@ -4350,7 +4413,7 @@ export default function Commander() {
                     permettre de le supprimer depuis l'app. */}
                 {client.email && (
                   <SupprimerCompte email={client.email} onSupprime={() => {
-                    ;['yoppaa_email','yoppaa_nom','yoppaa_prenom','yoppaa_telephone','yoppaa_client_id','yoppaa_onglet'].forEach(k => localStorage.removeItem(k))
+                    ;effacerIdentiteLocale(); localStorage.removeItem('yoppaa_onglet')
                     // ⚠️ LE MÊME EFFACEMENT QUE LA DÉCONNEXION, et à plus forte
                     // raison : le compte vient d'être supprimé, rien de ce qui
                     // lui appartenait n'a le droit de rester à l'écran.

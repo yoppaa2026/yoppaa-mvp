@@ -2,6 +2,7 @@
 import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { poserIdentiteLocale, effacerIdentiteLocale } from '@/lib/identite-locale'
 
 const T = { main: '#6B35C4', light: '#C4A0F4', mid: '#9660E0', deep: '#2D0F6B' }
 
@@ -27,12 +28,23 @@ function ConfirmHandler() {
           const email = u.email
           const resClient = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-or-create', email, prenom: md.prenom || null, nom: md.nom_famille || null, telephone: md.telephone || null }) })
           const client = (await resClient.json().catch(() => ({})))?.client
+          // 🔴 ON ÉCRIVAIT L'IDENTITÉ À MOITIÉ, ET ÇA MÉLANGEAIT DEUX PERSONNES.
+          // L'adresse et l'identifiant partaient sans condition ; le prénom, le
+          // nom et le téléphone seulement `if (client.X)`. Un champ vide chez le
+          // nouveau compte laissait donc en place celui de l'ANCIEN. On arrivait
+          // dans la bonne session avec le téléphone de quelqu'un d'autre.
+          //
+          // ⚠️ ET C'EST UN CHANGEMENT DE PERSONNE : on efface d'abord, on pose
+          // ensuite. Voir lib/identite-locale.js.
+          effacerIdentiteLocale()
           if (client) {
-            localStorage.setItem('yoppaa_client_id', client.id)
-            localStorage.setItem('yoppaa_email', email)
-            if (client.prenom) localStorage.setItem('yoppaa_prenom', client.prenom)
-            if (client.nom) localStorage.setItem('yoppaa_nom', client.nom)
-            if (client.telephone) localStorage.setItem('yoppaa_telephone', client.telephone)
+            poserIdentiteLocale({
+              client_id: client.id,
+              email,
+              prenom: client.prenom,
+              nom: client.nom,
+              telephone: client.telephone,
+            })
           }
           localStorage.setItem('yoppaa_onboarding_done', '1'); router.replace(next)
         } else {

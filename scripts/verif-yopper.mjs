@@ -1063,6 +1063,135 @@ for (const chemin of routesAdmin) {
   verifier('ce qui est retenu reste affiché', /Commune retenue/.test(champ))
 }
 
+// ═══ L'IDENTITÉ MÉLANGÉE — DEUX PERSONNES SUR UN MÊME ÉCRAN (03/09) ════════
+//
+// 🔴 Alex arrive dans la bonne session, avec la bonne adresse et le bon mot de
+// passe, mais **le nom, le prénom et le téléphone d'un autre compte**.
+//
+// Trois endroits écrivaient l'identité locale, et AUCUN ne l'écrivait en
+// entier : l'adresse et l'identifiant sans condition, puis le reste en
+// `if (client.X)`. Un champ vide chez le nouveau laissait celui de l'ancien.
+// `app/commander/auth` allait plus loin, avec un repli EXPLICITE sur le prénom
+// du compte précédent.
+//
+// Et l'écran ne demandait jamais à la session qui était connecté : il
+// construisait tout depuis le navigateur, puis reposait le cookie serveur à
+// partir de ce cache. Le mélange se propageait donc jusqu'au serveur.
+{
+  // ⚠️ ON EXÉCUTE LE MODULE, on ne cherche pas ses mots. Il vit dans le
+  // navigateur : on lui en fabrique un, minimal, le temps du banc.
+  const memoire = new Map()
+  globalThis.window = globalThis.window || {}
+  globalThis.localStorage = {
+    getItem: (k) => (memoire.has(k) ? memoire.get(k) : null),
+    setItem: (k, v) => memoire.set(k, String(v)),
+    removeItem: (k) => memoire.delete(k),
+  }
+  const {
+    poserIdentiteLocale, lireIdentiteLocale, effacerIdentiteLocale, cacheEtranger, CLES_IDENTITE,
+  } = await import('../lib/identite-locale.js')
+
+  // ─── « CE CACHE EST-IL CELUI DE QUELQU'UN D'AUTRE ? » ───────────────────
+  verifier('même adresse : le cache est le bon', cacheEtranger('a@b.c', 'a@b.c') === false)
+  verifier('🔴 adresse différente : le cache appartient à un autre', cacheEtranger('a@b.c', 'x@y.z') === true)
+  // ⚠️ UN CACHE VIDE N'EST PAS UN CACHE FAUX : il n'y a rien à jeter, il y a
+  // quelque chose à charger. Et sans session, il n'y a rien à comparer : un
+  // invité a le droit d'avoir ses coordonnées en mémoire.
+  verifier('un cache vide n’est pas un cache étranger', cacheEtranger('a@b.c', '') === false)
+  verifier('sans session, on ne jette rien', cacheEtranger('', 'a@b.c') === false)
+  verifier('la casse ne fabrique pas un étranger', cacheEtranger('A@B.C', 'a@b.c') === false)
+  verifier('les espaces non plus', cacheEtranger(' a@b.c ', 'a@b.c') === false)
+
+  // ─── ÉCRIRE L'IDENTITÉ, C'EST AUSSI EFFACER ────────────────────────────
+  poserIdentiteLocale({ client_id: 'c1', email: 'Ancien@Test.be', prenom: 'Alexandre', nom: 'Verstappen', telephone: '0470111111' })
+  egal('l’identité posée se relit en entier', lireIdentiteLocale(), {
+    client_id: 'c1', email: 'ancien@test.be', prenom: 'Alexandre', nom: 'Verstappen', telephone: '0470111111',
+  })
+
+  // 🔴 LE CŒUR DU DÉFAUT. Le compte suivant n'a pas de téléphone : l'ancien ne
+  // doit PAS survivre. C'est exactement ce qu'Alex a vu.
+  poserIdentiteLocale({ client_id: 'c2', email: 'nouveau@test.be', prenom: 'Carole', nom: '', telephone: '' })
+  egal('🔴 un champ vide chez le nouveau EFFACE celui de l’ancien', lireIdentiteLocale(), {
+    client_id: 'c2', email: 'nouveau@test.be', prenom: 'Carole', nom: '', telephone: '',
+  })
+  verifier('🔴 et la clé est vraiment retirée, pas mise à vide',
+    globalThis.localStorage.getItem('yoppaa_telephone') === null)
+
+  // Sans identifiant ni adresse, on n'a personne : on n'écrit pas la moitié.
+  poserIdentiteLocale({ prenom: 'Fantôme' })
+  egal('sans identifiant, tout est effacé', lireIdentiteLocale(), {
+    client_id: null, email: null, prenom: '', nom: '', telephone: '',
+  })
+
+  poserIdentiteLocale({ client_id: 'c3', email: 'x@y.z', prenom: 'X', nom: 'Y', telephone: '0470' })
+  effacerIdentiteLocale()
+  verifier('l’effacement ne laisse aucune clé',
+    CLES_IDENTITE.every(k => globalThis.localStorage.getItem(k) === null))
+
+  delete globalThis.localStorage
+  delete globalThis.window
+
+  // ─── PLUS AUCUNE ÉCRITURE PARTIELLE DANS L'APPLICATION ─────────────────
+  //
+  // ⚠️ LA GARDE VISE LA FORME FAUTIVE, PAS LE NOM DU MODULE : un fichier peut
+  // très bien importer `poserIdentiteLocale` ET garder une écriture partielle
+  // à côté. C'est le `if (...) localStorage.setItem('yoppaa_...` qu'on
+  // interdit, où qu'il soit.
+  const ECRIVAINS = [
+    'app/commander/auth/confirm/page.js',
+    'app/commander/auth/page.js',
+    'app/commander/page.js',
+    'app/commander/[slug]/page.js',
+    'app/commander/rdv/[slug]/page.js',
+  ]
+  for (const chemin of ECRIVAINS) {
+    const src = sansProse(lire(chemin))
+    verifier(`${chemin} n’écrit plus l’identité à moitié`,
+      !/if\s*\([^)]*\)\s*localStorage\.setItem\('yoppaa_(prenom|nom|telephone|email|client_id)'/.test(src))
+    // ⚠️ `poserIdentiteLocale` EXACTEMENT, et pas « l'un des deux » : une
+    // première version acceptait aussi `effacerIdentiteLocale`, et la mutation
+    // qui retirait la POSE restait donc verte. L'effacement seul ne pose aucune
+    // identité, il n'a jamais prouvé que celle-ci était écrite en entier.
+    verifier(`${chemin} pose l’identité par le module`,
+      /poserIdentiteLocale\(/.test(src))
+  }
+  // 🔴 LE REPLI QUI PRENAIT LE PRÉNOM DE QUELQU'UN D'AUTRE.
+  //
+  // ⚠️ LA GARDE VISE LE GESTE, PAS LE NOM DES VARIABLES. Interdire la chaîne
+  // `prenomDB || prenomLocal` n'aurait rien empêché : il suffisait de renommer.
+  // Ce qu'on interdit, c'est de LIRE l'ancien prénom au moment précis où l'on
+  // change de personne.
+  verifier('🔴 la page de connexion ne lit plus le prénom du compte précédent',
+    !/localStorage\.getItem\('yoppaa_prenom'\)/.test(sansProse(lire('app/commander/auth/page.js'))))
+
+  // ─── LA SESSION EST LA VÉRITÉ, LE NAVIGATEUR N'EST QU'UN CACHE ─────────
+  const accueilIdentite = sansProse(lire('app/commander/page.js'))
+  verifier('🔴 l’hydratation demande à la session qui est connecté',
+    /supabase\.auth\.getSession\(\)/.test(accueilIdentite) && /cacheEtranger\(/.test(accueilIdentite))
+  verifier('🔴 et le cookie d’un an ne réintroduit pas l’autre identité',
+    /cacheEtranger\(emailSession, data\?\.identity\?\.email\)/.test(accueilIdentite))
+  // ⚠️ La fusion avec la réponse du serveur ne doit plus être enfermée dans un
+  // « seulement si le navigateur n'a rien » : c'est ce qui empêchait toute
+  // correction d'une valeur héritée.
+  verifier('🔴 la réponse prouvée du serveur n’est plus réservée aux trous',
+    !/if \(!telephone\) \{/.test(accueilIdentite))
+
+  // ─── LE LIEN FICHE ↔ COMPTE, QUI N'EXISTAIT NULLE PART ─────────────────
+  //
+  // Relevé en production le 03/09 : sur 36 comptes, DEUX portaient une fiche
+  // reliée. Les policies RLS du rendez-vous lisent pourtant
+  // `clients.auth_user_id = auth.uid()` : sans lien, elles ne désignent rien.
+  const auth = sansProse(lire('lib/yopper-auth.js'))
+  verifier('🔴 la fiche trouvée par l’adresse se rattache au compte',
+    /update\(\{ auth_user_id: user\.id \}\)/.test(auth))
+  // ⚠️ ET SEULEMENT SI LE LIEN EST VIDE : une fiche déjà rattachée ne se vole
+  // pas, même quand les adresses se ressemblent.
+  verifier('🔴 mais jamais par-dessus un lien existant',
+    /\.is\('auth_user_id', null\)/.test(auth))
+  // ⚠️ Un `await` dont on ignore l'erreur est un espoir, pas une action.
+  verifier('et l’échec du rattachement se lit', /if \(errLien\) console\.error/.test(auth))
+}
+
 // 🔴 LE TOTAL S'IMPRIMAIT AU MILIEU DU FICHIER (trouvé le 31/08).
 //
 // Il vivait cent lignes avant la fin, et ignorait donc tout ce qui suivait :

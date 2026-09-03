@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TurnstileWidget from '@/app/components/TurnstileWidget'
+import { poserIdentiteLocale, effacerIdentiteLocale } from '@/lib/identite-locale'
 
 const T = {
   bgPanel: '#160636',
@@ -74,15 +75,24 @@ function AuthForm() {
     // Get-or-create côté serveur (RLS clients verrouillé : plus d'accès anon direct).
     const res = await fetch('/api/yopper/client', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-or-create', email: user.email }) })
     const client = (await res.json().catch(() => ({})))?.client
+    // 🔴 CE REPLI PRENAIT LE PRÉNOM DE QUELQU'UN D'AUTRE.
+    //
+    // Il disait « priorité au champ en base, sinon ce qui est en localStorage ».
+    // Or on est ici au moment PRÉCIS où l'on change de personne : « ce qui est
+    // en localStorage », c'est le prénom du compte précédent. Le nom et le
+    // téléphone avaient la même faille en `if (client.X)`. On arrivait dans la
+    // bonne session avec les coordonnées d'un autre.
+    //
+    // On efface d'abord, on pose ensuite, en entier. Voir lib/identite-locale.js.
+    effacerIdentiteLocale()
     if (client) {
-      localStorage.setItem('yoppaa_client_id', client.id)
-      localStorage.setItem('yoppaa_email', user.email)
-      // Priorite : champ prenom dedie en DB, sinon ce qui est en localStorage
-      const prenomDB = (client.prenom || '').trim()
-      const prenomLocal = localStorage.getItem('yoppaa_prenom') || ''
-      localStorage.setItem('yoppaa_prenom', prenomDB || prenomLocal)
-      if (client.nom) localStorage.setItem('yoppaa_nom', client.nom)
-      if (client.telephone) localStorage.setItem('yoppaa_telephone', client.telephone)
+      poserIdentiteLocale({
+        client_id: client.id,
+        email: user.email,
+        prenom: client.prenom,
+        nom: client.nom,
+        telephone: client.telephone,
+      })
     }
     localStorage.setItem('yoppaa_onboarding_done', '1')
   }
@@ -164,12 +174,18 @@ function AuthForm() {
         auth_user_id: data.user.id,
       }, { onConflict: 'email' })
       const { data: client } = await supabase.from('clients').select('id').eq('email', email.trim().toLowerCase()).single()
+      // Ici les cinq champs partaient déjà en entier : c'est le seul des trois
+      // chemins qui était juste. Il passe par le module pour que la règle vive
+      // à UN endroit, et qu'une clé ajoutée demain le soit partout.
+      effacerIdentiteLocale()
       if (client) {
-        localStorage.setItem('yoppaa_client_id', client.id)
-        localStorage.setItem('yoppaa_email', email.trim().toLowerCase())
-        localStorage.setItem('yoppaa_prenom', prenom.trim())
-        localStorage.setItem('yoppaa_nom', nom.trim())
-        localStorage.setItem('yoppaa_telephone', telephone.trim())
+        poserIdentiteLocale({
+          client_id: client.id,
+          email: email.trim().toLowerCase(),
+          prenom: prenom.trim(),
+          nom: nom.trim(),
+          telephone: telephone.trim(),
+        })
       }
       localStorage.setItem('yoppaa_onboarding_done', '1')
     }

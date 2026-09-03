@@ -479,6 +479,21 @@ const MUTATIONS = [
     de: '    j.venteBon = arrondi(j.venteBon + (Number(l.venteBon) || 0))',
     vers: '    j.venteBon = arrondi(j.venteBon)' },
 
+  { nom: '🔴 les lignes à zéro ne s’expliquent plus',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '  if (dejaTaxes > 0) {',
+    vers: '  if (dejaTaxes > 0 && false) {' },
+
+  { nom: '🔴 l’avertissement des lignes à zéro s’affiche même sans objet',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '  if (dejaTaxes > 0) {',
+    vers: '  if (dejaTaxes >= 0) {' },
+
+  { nom: '🔴 la ligne ne dit plus quelle part était déjà taxée',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '        bonDejaTaxe: parBonRdvDejaTaxe,',
+    vers: '        bonDejaTaxe: 0,' },
+
   { nom: '🔴 le fichier n’explique plus que l’égalité gagne un terme',
     banc: 'verif:comptable', fichier: MODULE,
     de: '  if (ventesBons > 0) {',

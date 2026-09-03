@@ -1955,6 +1955,15 @@ verifier('une commande remise sans moyen garde son rattrapage',
   verifier('ni de règlement par bon', ligneRdvUU?.bonCadeau === 0)
   verifier('et l’invariant tient encore', invariantBon(ligneRdvUU))
 
+  // ⚠️ 🔴 UNE LIGNE À ZÉRO SANS EXPLICATION N'EST PAS UNE INFORMATION. Sur
+  // l'export réel d'Alex, DIX lignes « Bon cadeau RDV » étaient entièrement
+  // vides et rien ne disait pourquoi : un comptable y cherche l'erreur.
+  const csvUU = csvDetail({ lignes: lRdvUU, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
+  verifier('le fichier explique ses lignes à zéro', /USAGE UNIQUE/.test(csvUU))
+  verifier('et dit que les recompter doublerait la TVA', /deux fois/.test(csvUU))
+  verifier('la ligne porte la part déjà taxée', ligneRdvUU?.bonDejaTaxe === 40,
+    `${ligneRdvUU?.bonDejaTaxe}`)
+
   // Le même rendez-vous, payé par un bon à usages multiples : rien ne change.
   const lRdvUM = construireLignes({
     rdvs: [{ ...RDV_BON_UU, bons_utilises: [{ id: 'b1', montant: 40 }] }],
@@ -1963,6 +1972,11 @@ verifier('une commande remise sans moyen garde son rattrapage',
   verifier('un bon à usages multiples se taxe bien à l’utilisation',
     ligneRdvUM?.total === 40 && ligneRdvUM?.parTaux?.[21] === 40,
     JSON.stringify([ligneRdvUM?.total, ligneRdvUM?.parTaux]))
+  // ⚠️ ET L'AVERTISSEMENT SE TAIT QUAND IL N'Y A RIEN À DIRE : une phrase qui
+  // s'affiche toujours ne se lit plus.
+  const csvUM = csvDetail({ lignes: lRdvUM, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
+  verifier('et le fichier se tait quand aucune ligne n’est concernée',
+    !/USAGE UNIQUE/.test(csvUM))
 
   // ─── ET UNE COMMANDE PEUT MÉLANGER LES DEUX RÉGIMES ──────────────────────
   const CMD_MIXTE = {

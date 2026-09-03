@@ -9956,6 +9956,7 @@ function TabComptabilite({ commercantId, categorie, toast }) {
     especes: acc.especes + (j.especes || 0),
     virement: acc.virement + (j.virement || 0),
     bonCadeau: acc.bonCadeau + j.bonCadeau,
+    venteBon: acc.venteBon + (j.venteBon || 0),
     // ⚠️ `null` VEUT DIRE « JAMAIS RELEVÉ », ET `|| 0` L'ÉCRASAIT EN ZÉRO. La
     // carte annonçait « 0,00 € de frais Stripe » sur 1600 € encaissés en ligne,
     // ce qui se lit « Stripe ne t'a rien coûté » (Alex, 19/08). Une seule
@@ -9963,7 +9964,7 @@ function TabComptabilite({ commercantId, categorie, toast }) {
     // un total complet.
     fraisStripe: acc.fraisStripe == null || j.fraisStripe == null ? null : acc.fraisStripe + j.fraisStripe,
     netStripe: acc.netStripe == null || j.netStripe == null ? null : acc.netStripe + j.netStripe,
-  }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, resteAEncaisser: 0, terminal: 0, especes: 0, virement: 0, bonCadeau: 0, fraisStripe: 0, netStripe: 0 })
+  }), { nb: 0, total: 0, enLigne: 0, comptoir: 0, resteAEncaisser: 0, terminal: 0, especes: 0, virement: 0, bonCadeau: 0, venteBon: 0, fraisStripe: 0, netStripe: 0 })
 
   // Ventilation cumulée par taux, pour l'aperçu à l'écran.
   const parTaux = {}
@@ -10053,6 +10054,14 @@ function TabComptabilite({ commercantId, categorie, toast }) {
               ...(totaux.especes > 0 ? [{ l: 'Dont espèces', v: eur(totaux.especes) }] : []),
               ...(totaux.virement > 0 ? [{ l: 'Dont virement', v: eur(totaux.virement) }] : []),
               { l: libelleBon(categorie, { pluriel: true, majuscule: true }), v: eur(totaux.bonCadeau) },
+              // ⚠️ 🔴 CE QUE LA VENTE D'UN BON A RAPPORTÉ, ET QUI N'APPARAISSAIT
+              // NULLE PART (03/09). L'argent arrive sur le compte Stripe du
+              // commerçant le jour de l'achat, mais ce n'est pas encore un
+              // chiffre d'affaires : la prestation reste à rendre. Affiché à
+              // part, et seulement quand il y a quelque chose à montrer.
+              ...(totaux.venteBon > 0
+                ? [{ l: `${libelleBon(categorie, { pluriel: true, majuscule: true })} vendus`, v: eur(totaux.venteBon) }]
+                : []),
               // ⚠️ CE QUI N'EST PAS ENCORE RENTRÉ, et ce n'est pas une colonne
               // de plus « pour faire complet » : c'est elle qui ferme le compte.
               // Chiffre TTC = en ligne + au comptoir + bons cadeaux + celle-ci.

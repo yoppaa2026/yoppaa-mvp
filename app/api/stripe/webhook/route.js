@@ -25,13 +25,13 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
-import { debiterBons, recrediterBons } from '@/lib/bons-cadeaux-server'
+import { debiterBons, recrediterBons, regimeBonPourCommerce } from '@/lib/bons-cadeaux-server'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { referenceRdv } from '@/lib/numero-commande'
 import { programmerRappelRdv } from '@/lib/rappels'
-import { recupererFraisStripe, ventilerFrais } from '@/lib/stripe-frais'
+import { recupererFraisStripe, ventilerFrais, instantPaiement } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
 import { jourBruxelles } from '@/lib/timezone'
@@ -574,7 +574,11 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
   }
   const { data: bon } = await supabase
     .from('bons_cadeaux')
-    .select('*, commercant:commercants(id, nom, slug, categorie, email, notif_mode)')
+    // ⚠️ `stripe_account_id`, `tva_taux_defaut` ET `bons_tva_regime` SONT
+    // INDISPENSABLES DEPUIS LE 03/09 : sans le premier, les frais du bon ne se
+    // lisent pas (le paiement vit sur le compte du commerçant) ; sans les deux
+    // autres, le régime de TVA du bon ne se décide pas.
+    .select('*, commercant:commercants(id, nom, slug, categorie, email, notif_mode, stripe_account_id, tva_taux_defaut, bons_tva_regime)')
     .eq('id', bonId)
     .maybeSingle()
   if (!bon) {
@@ -583,13 +587,51 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
   }
   if (bon.statut === 'actif') return  // rejeu : déjà activé, emails déjà partis
 
+  // ─── 🔴 CETTE VENTE N'ÉCRIVAIT RIEN DANS LA COMPTABILITÉ (03/09) ──────────
+  //
+  // Le paiement d'un bon est un DIRECT CHARGE sur le compte Stripe du
+  // commerçant : l'argent arrive réellement chez lui. Cette fonction n'écrivait
+  // pourtant que `statut`, et l'export comptable ne lit que les commandes, les
+  // rendez-vous et les abonnements. Quinze bons vendus, aucune ligne, et la
+  // colonne « encaissé en ligne » présentée au commerçant comme la clé du
+  // rapprochement ne pouvait pas se rapprocher de son relevé Stripe.
+  //
+  // ⚠️ C'EST LE FRÈRE JAMAIS TRAITÉ DES ABONNEMENTS DU 17/08, au mot près : une
+  // vente qui n'écrit pas de commande est une vente que la comptabilité ne voit
+  // pas. Cherché partout ailleurs, jamais ici.
+  //
+  // ⚠️ L'INSTANT VIENT DE STRIPE, PAS DE L'HORLOGE DU SERVEUR. Un webhook
+  // rejoué des heures plus tard daterait la vente du jour du rejeu, et une
+  // vente peut alors changer de mois. `updated_at` ne pouvait pas servir non
+  // plus : chaque débit du solde le réécrit.
+  //
+  // ⚠️ ET LE FRAIS RESTE `null` S'IL N'EST PAS ENCORE LISIBLE. Un zéro écrit en
+  // base ressemble à une transaction sans frais ; le cron nocturne complétera.
+  const compteStripe = bon.commercant?.stripe_account_id || null
+  const fraisBon = await recupererFraisStripe(paymentIntent.id, compteStripe)
+  // Le régime de TVA se décide À LA VENTE et se fige : un commerçant qui change
+  // de catalogue l'an prochain ne doit pas réécrire la TVA de ses bons.
+  const { regime, taux } = await regimeBonPourCommerce(supabase, bon.commercant)
+
   const { error: errUp } = await supabase
     .from('bons_cadeaux')
-    .update({ statut: 'actif', updated_at: new Date().toISOString() })
+    .update({
+      statut: 'actif',
+      updated_at: new Date().toISOString(),
+      paye_le: instantPaiement(paymentIntent),
+      stripe_payment_intent_id: paymentIntent.id,
+      stripe_frais: fraisBon ? fraisBon.frais : null,
+      stripe_net: fraisBon ? fraisBon.net : null,
+      tva_regime: regime,
+      tva_taux: taux,
+    })
     .eq('id', bonId)
+    // ⚠️ LE VERROU DU REJEU EST ICI : un webhook rejoué ne repasse pas par
+    // cette condition, donc il ne peut ni réécrire la date ni changer le
+    // régime d'un bon déjà vendu.
     .eq('statut', 'paiement_en_attente')
   if (errUp) throw errUp
-  console.info('[stripe/webhook] bon cadeau activé', { bonId, montant: bon.montant_initial })
+  console.info('[stripe/webhook] bon cadeau activé', { bonId, montant: bon.montant_initial, regime })
 
   // ─── Fidélité de l'ACHETEUR ───────────────────────────────────────────────
   // Acheter un bon cadeau ne remplissait pas la carte (signalé par Alex le

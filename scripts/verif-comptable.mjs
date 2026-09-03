@@ -14,7 +14,8 @@
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, imputerRemise, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
-import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe, arrondi, referencesNonQualifiees } from '../lib/export-comptable.js'
+import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe, arrondi, referencesNonQualifiees, partDejaTaxee, regimesParBon } from '../lib/export-comptable.js'
+import { regimeBon, regimeDuBon, USAGE_UNIQUE, USAGE_MULTIPLE } from '../lib/bons-tva.js'
 import { calculerRemiseBon, normaliserCodeBon, genererCodeBon, bonExpire, BON_MONTANT_MIN, BON_MONTANT_MAX } from '../lib/bons-cadeaux.js'
 import { brusselsInstant } from '../lib/timezone.js'
 
@@ -1793,6 +1794,189 @@ verifier('une commande remise sans moyen garde son rattrapage',
   const csvFrais = csvDetail({ lignes: lExclue, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
   verifier('le détail nomme la ligne « Frais retenu »', /;Frais retenu;/.test(csvFrais))
   verifier('et le fichier dit pourquoi elle est à zéro', /Seul ce cout subsiste/.test(csvFrais))
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LA VENTE D'UN BON CADEAU N'EXISTAIT DANS AUCUN DOCUMENT (03/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // Trouvée en interrogeant la base, pas au banc : AUCUN contrôle sur un fichier
+  // ne révèle une ligne ABSENTE. Quinze bons vendus, encaissés sur le compte
+  // Stripe du commerçant, sans une seule écriture comptable.
+
+  // ─── La règle du régime, exécutée ─────────────────────────────────────────
+  verifier('un commerce à taux unique émet des bons à usage unique',
+    regimeBon({ tauxArticles: [21, 21], tauxPrestations: [21] }).regime === USAGE_UNIQUE)
+  verifier('et le taux figé est celui-là',
+    regimeBon({ tauxArticles: [21], tauxPrestations: [21] }).taux === 21)
+  verifier('un commerce qui mélange les taux émet des bons à usages multiples',
+    regimeBon({ tauxArticles: [6, 21] }).regime === USAGE_MULTIPLE)
+  verifier('et il ne fige alors aucun taux',
+    regimeBon({ tauxArticles: [6, 21] }).taux === null)
+  verifier('sans catalogue, le taux du commerce décide',
+    regimeBon({ tauxDefaut: 21 }).regime === USAGE_UNIQUE)
+  // ⚠️ SANS AUCUN TAUX CONNU, TAXER À LA VENTE EST IMPOSSIBLE : on ne peut pas
+  // ventiler, et inventer une valeur est exactement ce qu'on s'interdit.
+  verifier('sans aucun taux connu, c’est usages multiples',
+    regimeBon({}).regime === USAGE_MULTIPLE)
+  verifier('le choix du commerçant passe devant la déduction',
+    regimeBon({ tauxArticles: [21], regimeChoisi: USAGE_MULTIPLE }).regime === USAGE_MULTIPLE)
+  verifier('mais il ne crée pas un taux qui n’existe pas',
+    regimeBon({ regimeChoisi: USAGE_UNIQUE }).regime === USAGE_MULTIPLE)
+  // ⚠️ UNE COLONNE VIDE VAUT USAGES MULTIPLES : les bons vendus avant le 03/09
+  // n'ont pas de régime, et leur en donner un rétroactivement déplacerait de la
+  // TVA déjà déclarée.
+  verifier('un bon sans régime écrit vaut usages multiples',
+    regimeDuBon({}) === USAGE_MULTIPLE)
+
+  // ⚠️ `created_at` EST DANS LA PÉRIODE VOLONTAIREMENT : c'est ce qui permet de
+  // mesurer qu'un bon sans date de PAIEMENT ne se voit pas inventer un jour à
+  // partir d'une autre colonne. Sans lui, un repli sur la création passerait
+  // inaperçu.
+  const BON_UM = { id: 'b1', statut: 'actif', montant_initial: 100,
+    paye_le: '2026-03-05T10:00:00Z', created_at: '2026-03-04T08:00:00Z',
+    stripe_frais: 2, stripe_net: 98,
+    tva_regime: USAGE_MULTIPLE, acheteur_prenom: 'Camille', code: 'SECRET42' }
+  const BON_UU = { ...BON_UM, id: 'b2', tva_regime: USAGE_UNIQUE, tva_taux: 21, code: 'SECRET99' }
+
+  // ─── La vente, sous usages multiples : un encaissement SANS chiffre d'affaires
+  const lVenteUM = construireLignes({ bons: [BON_UM], periode: PERIODE })
+  verifier('la vente d’un bon produit enfin une ligne', lVenteUM.length === 1,
+    JSON.stringify(lVenteUM.map(l => l.type)))
+  verifier('et elle est datée du jour du paiement', lVenteUM[0]?.date === '2026-03-05',
+    `${lVenteUM[0]?.date}`)
+  verifier('sous usages multiples elle ne porte AUCUN chiffre d’affaires',
+    lVenteUM[0]?.total === 0, `${lVenteUM[0]?.total}`)
+  verifier('ni la moindre TVA', Object.keys(lVenteUM[0]?.parTaux || {}).length === 0)
+  verifier('mais l’argent encaissé y figure', lVenteUM[0]?.enLigne === 100)
+  verifier('dans sa propre colonne', lVenteUM[0]?.venteBon === 100)
+  verifier('et le frais Stripe de la vente aussi',
+    lVenteUM[0]?.fraisStripe === 2 && lVenteUM[0]?.netStripe === 98)
+
+  // ⚠️ L'INVARIANT GAGNE UN TERME, et il doit tenir sur CHAQUE ligne.
+  //
+  // ⚠️ ET IL NE PLANTE PAS SUR UNE LIGNE ABSENTE. Une mutation qui supprime la
+  // boucle des ventes vide le tableau : sans ces `?.`, le banc lèverait une
+  // exception au lieu de rougir, et une mutation qui fait PLANTER un banc est
+  // comptée MANQUÉE. Une mutation change le RÉSULTAT, jamais la TERMINAISON.
+  const invariantBon = (l) => !!l && arrondi((l?.total || 0) + (Number(l?.venteBon) || 0))
+    === arrondi((l?.enLigne || 0) + (l?.comptoir || 0) + (l?.bonCadeau || 0) + (Number(l?.resteAEncaisser) || 0))
+  verifier('l’invariant étendu tient sur la vente d’un bon', invariantBon(lVenteUM[0]))
+
+  // ─── La vente, sous usage unique : c'est ELLE qui porte la TVA ────────────
+  const lVenteUU = construireLignes({ bons: [BON_UU], periode: PERIODE })
+  verifier('sous usage unique la vente porte le chiffre d’affaires',
+    lVenteUU[0]?.total === 100, `${lVenteUU[0]?.total}`)
+  verifier('et sa TVA, au taux figé', lVenteUU[0]?.parTaux?.[21] === 100,
+    JSON.stringify(lVenteUU[0]?.parTaux))
+  verifier('la colonne « vente de bons » reste alors vide', lVenteUU[0]?.venteBon === 0)
+  verifier('et l’invariant d’origine suffit', invariantBon(lVenteUU[0]))
+
+  // ─── Ce qui ne s'écrit pas ───────────────────────────────────────────────
+  verifier('un bon non payé n’écrit rien',
+    construireLignes({ bons: [{ ...BON_UM, statut: 'paiement_en_attente' }], periode: PERIODE }).length === 0)
+  // ⚠️ LES BONS D'AVANT LE 03/09 N'ONT PAS DE DATE : le cron ira la chercher
+  // dans la session Stripe. On ne les rattache pas à un jour inventé.
+  verifier('un bon sans date de paiement n’écrit rien',
+    construireLignes({ bons: [{ ...BON_UM, paye_le: null }], periode: PERIODE }).length === 0)
+  verifier('un bon vendu hors période s’exclut tout seul',
+    construireLignes({ bons: [{ ...BON_UM, paye_le: '2026-05-05T10:00:00Z' }], periode: PERIODE }).length === 0)
+
+  // ─── 🔴 SÉCURITÉ : LE CODE D'UN BON NE SORT JAMAIS DU SERVEUR ────────────
+  //
+  // Ce fichier quitte l'application. Un code encore chargé qui s'y trouverait
+  // permettrait à quiconque l'ouvre de le dépenser.
+  const csvBonD = csvDetail({ lignes: lVenteUM, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
+  verifier('🔴 le code du bon ne figure PAS dans le fichier', !/SECRET42/.test(csvBonD))
+  verifier('la référence identifie pourtant la vente', /BONb1/.test(csvBonD))
+  verifier('le détail porte la colonne « Vente de bons »', /;Vente de bons;/.test(csvBonD))
+  verifier('et le fichier explique que l’égalité gagne un terme',
+    /CA TTC \+ Vente de bons/.test(csvBonD))
+  const csvBonJ = csvJournal({ lignes: lVenteUM, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
+  verifier('le journal aussi porte la colonne', /;Vente de bons;/.test(csvBonJ))
+  const jourBon = journalParJour(lVenteUM)
+  verifier('le journal du jour agrège la vente de bons', jourBon[0]?.venteBon === 100,
+    `${jourBon[0]?.venteBon}`)
+
+  // ─── L'UTILISATION D'UN BON DÉJÀ TAXÉ NE SE TAXE PAS DEUX FOIS ───────────
+  //
+  // ⚠️ C'EST TOUTE LA RAISON DU RÉGIME. Laisser la TVA aux DEUX bouts la
+  // déclarerait deux fois.
+  const RDV_BON_UU = { id: 'r9', statut: 'honore', bon_cadeau_montant: 40, tva_taux: 21,
+    acompte_paye: false, acompte_montant: 0, date_rdv: '2026-03-10',
+    created_at: '2026-03-08T09:00:00Z', acompte_paye_date: '2026-03-08T09:00:00Z',
+    bons_utilises: [{ id: 'b2', montant: 40 }] }
+  const lRdvUU = construireLignes({ rdvs: [RDV_BON_UU], bons: [BON_UU], periode: PERIODE })
+  // ⚠️ LA LIGNE RESTE ÉCRITE, même vide : un rendez-vous entièrement réglé par
+  // un bon qui disparaît du journal est le défaut corrigé le 29/08.
+  // ⚠️ LA VENTE DU BON SORT AUSSI DANS CE JEU : on vise la ligne du
+  // rendez-vous, jamais la première venue.
+  const ligneRdvUU = lRdvUU.find(l => l.type === 'Bon cadeau RDV')
+  verifier('un rendez-vous payé par un bon déjà taxé garde sa ligne',
+    !!ligneRdvUU, JSON.stringify(lRdvUU.map(l => l.type)))
+  verifier('mais elle ne porte plus de chiffre d’affaires', ligneRdvUU?.total === 0,
+    `${ligneRdvUU?.total}`)
+  verifier('ni de TVA', Object.keys(ligneRdvUU?.parTaux || {}).length === 0)
+  verifier('ni de règlement par bon', ligneRdvUU?.bonCadeau === 0)
+  verifier('et l’invariant tient encore', invariantBon(ligneRdvUU))
+
+  // Le même rendez-vous, payé par un bon à usages multiples : rien ne change.
+  const lRdvUM = construireLignes({
+    rdvs: [{ ...RDV_BON_UU, bons_utilises: [{ id: 'b1', montant: 40 }] }],
+    bons: [BON_UM], periode: PERIODE })
+  const ligneRdvUM = lRdvUM.find(l => l.type === 'Bon cadeau RDV')
+  verifier('un bon à usages multiples se taxe bien à l’utilisation',
+    ligneRdvUM?.total === 40 && ligneRdvUM?.parTaux?.[21] === 40,
+    JSON.stringify([ligneRdvUM?.total, ligneRdvUM?.parTaux]))
+
+  // ─── ET UNE COMMANDE PEUT MÉLANGER LES DEUX RÉGIMES ──────────────────────
+  const CMD_MIXTE = {
+    id: 'cm', statut: 'recupere', total: 100, paye_en_ligne: true,
+    date_commande: '2026-03-12', created_at: '2026-03-12T09:00:00Z',
+    commande_articles: [{ prix_unitaire: 100, quantite: 1, tva_taux: 21 }],
+    bon_cadeau_montant: 70,
+    bons_utilises: [{ id: 'b2', montant: 40 }, { id: 'b1', montant: 30 }],
+  }
+  const lMixte = construireLignes({ commandes: [CMD_MIXTE], bons: [BON_UU, BON_UM], periode: PERIODE })
+  const lCmdMix = lMixte.find(l => l.type === 'Commande')
+  verifier('la part déjà taxée sort du chiffre d’affaires de la commande',
+    lCmdMix?.total === 60, `${lCmdMix?.total}`)
+  verifier('et sort aussi de la colonne « payé par bon »', lCmdMix?.bonCadeau === 30,
+    `${lCmdMix?.bonCadeau}`)
+  verifier('la ventilation suit le chiffre d’affaires réel', lCmdMix?.parTaux?.[21] === 60,
+    JSON.stringify(lCmdMix?.parTaux))
+  verifier('l’invariant tient sur une commande à deux régimes', invariantBon(lCmdMix))
+
+  // ⚠️ ON NE DÉDUIT JAMAIS PLUS QUE CE QUE LA LIGNE PORTE : `bons_utilises` est
+  // un historique, la colonne de montant est ce qui a payé CETTE vente.
+  verifier('la part déjà taxée est plafonnée au montant de la ligne',
+    partDejaTaxee({ bons_utilises: [{ id: 'b2', montant: 999 }] },
+      regimesParBon([BON_UU]), 40) === 40)
+  verifier('un bon inconnu ne compte pas comme déjà taxé',
+    partDejaTaxee({ bons_utilises: [{ id: 'inconnu', montant: 10 }] },
+      regimesParBon([BON_UU]), 40) === 0)
+
+  // ⚠️ UNE COLONNE ABSENTE D'UN SELECT EST LE DÉFAUT LE PLUS FRÉQUENT D'ICI, et
+  // il est SILENCIEUX : sans elles, tout ce bloc reste vert et la vente des bons
+  // redevient invisible.
+  const srcRouteBons = readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8')
+  for (const col of ['tva_regime', 'paye_le', 'montant_initial', 'stripe_frais']) {
+    verifier(`la route lit ${col} sur les bons`,
+      new RegExp(`\\b${col}\\b`).test(colonnesDe(srcRouteBons, 'bons_cadeaux')))
+  }
+  verifier('🔴 la route ne lit JAMAIS le code du bon',
+    !/(^|,\s*)code(\s*,|$)/.test(colonnesDe(srcRouteBons, 'bons_cadeaux')),
+    colonnesDe(srcRouteBons, 'bons_cadeaux'))
+  for (const table of ['commandes', 'rdv_reservations']) {
+    verifier(`la route lit bons_utilises sur ${table}`,
+      /\bbons_utilises\b/.test(colonnesDe(srcRouteBons, table)))
+  }
+  // ⚠️ ET LIRE NE SUFFIT PAS : IL FAUT TRANSMETTRE. Une route qui charge les
+  // bons sans les passer au calcul laisse tout ce bloc vert et la vente des
+  // bons invisible. C'est le maillon exact qui avait manqué le 02/09 sur
+  // `stripe_refund_amount`.
+  verifier('la route transmet les bons au calcul',
+    /construireLignes\(\{[^)]*\bbons:\s*bons\s*\|\|\s*\[\]/.test(srcRouteBons))
+
 
   // ─── Le journal du jour et le fichier ─────────────────────────────────────
   const jours = journalParJour(lAnnule)

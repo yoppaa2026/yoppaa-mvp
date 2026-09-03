@@ -97,7 +97,7 @@ export async function GET(request) {
     // impossible sans la moindre erreur.
     // ⚠️ `stripe_refund_amount` ET `stripe_refund_date` LE SONT DEPUIS LE
     // 02/09 : sans eux, une vente remboursée reste comptée en entier.
-    const COLS_COMMANDE = 'id, numero_commande, numero_prefixe, numero_semaine, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, creneau_id, regime_tva, paye_en_ligne, bon_cadeau_montant, fidelite_remise, stripe_frais, stripe_net, stripe_refund_amount, stripe_refund_date, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, client_nom, commande_articles(article_id, quantite, prix_unitaire, tva_taux)'
+    const COLS_COMMANDE = 'id, numero_commande, numero_prefixe, numero_semaine, statut, total, frais_livraison, tva_taux_livraison, mode_retrait, creneau_id, regime_tva, paye_en_ligne, bon_cadeau_montant, fidelite_remise, stripe_frais, stripe_net, stripe_refund_amount, stripe_refund_date, date_commande, created_at, encaisse_mode, encaisse_montant, encaisse_le, client_nom, bons_utilises, commande_articles(article_id, quantite, prix_unitaire, tva_taux)'
 
     // ⚠️ `encaisse_*` EST INDISPENSABLE : le journal perdrait tout ce qui a été
     // encaissé au comptoir sans la moindre erreur, et le commerçant relirait
@@ -105,7 +105,7 @@ export async function GET(request) {
     // ⚠️ `bon_cadeau_montant` EST OBLIGATOIRE DEPUIS LE 29/08 : sans lui, la
     // ligne « Bon cadeau RDV » ne s'écrit jamais et une prestation payée par un
     // bon disparaît du journal.
-    const COLS_RDV = 'id, numero_rdv, numero_prefixe, numero_semaine, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, bon_cadeau_montant, fidelite_remise, tva_taux, stripe_frais, stripe_net, stripe_refund_amount, stripe_refund_date, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom'
+    const COLS_RDV = 'id, numero_rdv, numero_prefixe, numero_semaine, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, bon_cadeau_montant, fidelite_remise, tva_taux, stripe_frais, stripe_net, stripe_refund_amount, stripe_refund_date, date_rdv, encaisse_mode, encaisse_montant, encaisse_le, acompte_paye_date, created_at, client_prenom, client_nom, bons_utilises'
 
     // ─── ON CHARGE PAR TOUTES LES DATES OÙ DE L'ARGENT A PU BOUGER ─────────
     //
@@ -232,6 +232,27 @@ export async function GET(request) {
       return jour >= du && jour <= au
     })
 
+    // ─── ET LES BONS CADEAUX VENDUS, QUI N'ÉCRIVAIENT AUCUNE LIGNE ────────
+    //
+    // 🔴 TROUVÉ LE 03/09 EN INTERROGEANT LA BASE, jamais par un banc ni par la
+    // lecture d'un export : aucun contrôle sur un fichier ne peut révéler une
+    // ligne ABSENTE. Le paiement d'un bon est un direct charge sur le compte
+    // Stripe du commerçant, donc cet argent est bien arrivé chez lui.
+    //
+    // ⚠️ ON LES CHARGE TOUS, PAS SEULEMENT CEUX DE LA PÉRIODE, et c'est
+    // indispensable : un bon vendu en juin et utilisé en septembre décide du
+    // régime de TVA de la ligne d'utilisation. `construireLignes` écarte
+    // ensuite les ventes hors période par leur propre date, comme tout le
+    // reste. Un commerce a des bons par dizaines, jamais par milliers.
+    //
+    // ⚠️ AUCUNE COORDONNÉE, ET SURTOUT AUCUN CODE. Le prénom de l'acheteur
+    // suffit au rapprochement ; un code de bon encore chargé qui sortirait dans
+    // un fichier permettrait à quiconque l'ouvre de le dépenser.
+    const { data: bons } = await admin
+      .from('bons_cadeaux')
+      .select('id, statut, montant_initial, paye_le, stripe_frais, stripe_net, tva_regime, tva_taux, acheteur_prenom')
+      .eq('commercant_id', commercantId)
+
     // Taux actuels du catalogue : filet pour les commandes antérieures à la
     // migration, dont les lignes n'ont pas de taux figé.
     const { data: articles } = await admin
@@ -253,6 +274,7 @@ export async function GET(request) {
       tauxDefaut,
       articlesParId,
       retoursBons: mouvementsBons || [],
+      bons: bons || [],
       periode: { du, au },
     })
 

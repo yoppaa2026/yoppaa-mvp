@@ -41,7 +41,10 @@ const MUTATIONS = [
 
   { nom: '🔴 le bon rendu ne se contrepasse plus',
     banc: 'verif:comptable', fichier: MODULE,
-    de: '        remboursements: retoursPlafonnes(retours.parRdv.get(r.id), parBonRdv),',
+    // ⚠️ ANCRE RECALÉE LE 03/09 : le plafond est désormais la part À IMPOSER,
+    // parce qu'on ne contrepasse pas un chiffre d'affaires qu'un bon déjà taxé
+    // à sa vente n'a jamais fait entrer dans cette ligne.
+    de: '        remboursements: retoursPlafonnes(retours.parRdv.get(r.id), parBonRdvAImposer),',
     vers: '        remboursements: [],' },
 
   // ─── LE PLAFOND, qui empêche le trou du tunnel unique ─────────────────────
@@ -146,8 +149,9 @@ const MUTATIONS = [
     // ⚠️ ANCRE ÉLARGIE : `periode: { du, au },` existe AUSSI dans la réponse
     // JSON de la route. Une ancre qui matche deux endroits mute le mauvais, et
     // le banc visé reste vert (vécu le 01/09 sur un gabarit d'email).
-    de: '      retoursBons: mouvementsBons || [],\n      periode: { du, au },',
-    vers: '      retoursBons: mouvementsBons || [],\n      periode: null,' },
+    // ⚠️ ANCRE RECALÉE LE 03/09 : `bons` s'est glissé entre les deux.
+    de: '      bons: bons || [],\n      periode: { du, au },',
+    vers: '      bons: bons || [],\n      periode: null,' },
 
   // ─── LE FRÈRE : LE MÊME ARGENT, SUR L'AUTRE ÉCRAN ────────────────────────
   //
@@ -376,6 +380,121 @@ const MUTATIONS = [
     banc: 'verif:comptable', fichier: MODULE,
     de: '  if (fraisRetenus > 0) {',
     vers: '  if (fraisRetenus > 0 && false) {' },
+
+  // ─── LA VENTE D'UN BON CADEAU (03/09) ────────────────────────────────────
+  { nom: '🔴 la vente d’un bon cadeau redevient invisible',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '  for (const b of bons) {',
+    vers: '  for (const b of []) {' },
+
+  { nom: '🔴 l’encaissement d’un bon vendu quitte sa colonne',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      venteBon: usageUnique ? 0 : montant,',
+    vers: '      venteBon: 0,' },
+
+  { nom: '🔴 un bon à usage unique ne porte plus son chiffre d’affaires',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      total: usageUnique ? montant : 0,\n      parTaux: usageUnique ? { [cle]: montant } : {},',
+    vers: '      total: 0,\n      parTaux: {},' },
+
+  { nom: '🔴 un bon à usages multiples se met à porter de la TVA à la vente',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      total: usageUnique ? montant : 0,\n      parTaux: usageUnique ? { [cle]: montant } : {},',
+    vers: '      total: montant,\n      parTaux: { [cle]: montant },' },
+
+  // ⚠️ CELLE-CI EST LA PLUS IMPORTANTE DU LOT : le fichier quitte
+  // l'application, un code encore chargé qui s'y trouverait serait dépensable
+  // par quiconque l'ouvre.
+  { nom: '🔴 SÉCURITÉ : le code du bon part dans le fichier comptable',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      reference: `BON${String(b.id || \'\').slice(0, 8)}`,',
+    vers: '      reference: String(b.code || \'\'),' },
+
+  { nom: '🔴 un bon sans date de paiement se voit inventer un jour',
+    banc: 'verif:comptable', fichier: MODULE,
+    // ⚠️ PREMIÈRE VERSION RESTÉE VERTE : elle repliait sur la date du JOUR, qui
+    // tombe hors de la période du jeu d'essai, donc la ligne s'excluait toute
+    // seule et le banc ne voyait rien. Une mutation doit changer le RÉSULTAT.
+    de: '    const date = jourComptable(b.paye_le)',
+    vers: '    const date = jourComptable(b.paye_le, b.created_at)' },
+
+  { nom: '🔴 un bon jamais payé entre quand même au journal',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: "    if (!b || String(b.statut || '') === 'paiement_en_attente') continue",
+    vers: '    if (!b) continue' },
+
+  // ─── LA TVA COMPTÉE DEUX FOIS ────────────────────────────────────────────
+  { nom: '🔴 la part déjà taxée à la vente est recomptée à l’utilisation',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '    const parBonDejaTaxe = partDejaTaxee(c, regimeParBon, parBon)',
+    vers: '    const parBonDejaTaxe = 0' },
+
+  { nom: '🔴 le chiffre d’affaires de la commande ignore la part déjà taxée',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '    const caLigne = arrondi(totalNet - parBonDejaTaxe)',
+    vers: '    const caLigne = arrondi(totalNet)' },
+
+  { nom: '🔴 la colonne « payé par bon » reprend la part déjà taxée',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      bonCadeau: parBonAImposer,',
+    vers: '      bonCadeau: parBon,' },
+
+  { nom: '🔴 le rendez-vous retaxe un bon déjà taxé à sa vente',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '    const parBonRdvDejaTaxe = partDejaTaxee(r, regimeParBon, parBonRdv)',
+    vers: '    const parBonRdvDejaTaxe = 0' },
+
+  { nom: '🔴 la part déjà taxée n’est plus plafonnée au montant de la ligne',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '  return arrondi(Math.min(arrondi(brut), Math.max(0, arrondi(plafond))))',
+    vers: '  return arrondi(brut)' },
+
+  // ─── LA RÈGLE DU RÉGIME ──────────────────────────────────────────────────
+  { nom: '🔴 un commerce à taux unique n’émet plus de bons à usage unique',
+    banc: 'verif:comptable', fichier: 'lib/bons-tva.js',
+    de: '  if (candidats.length === 1) return { regime: USAGE_UNIQUE, taux: candidats[0] }',
+    vers: '  if (candidats.length === 99) return { regime: USAGE_UNIQUE, taux: candidats[0] }' },
+
+  { nom: '🔴 un bon sans régime écrit bascule en usage unique',
+    banc: 'verif:comptable', fichier: 'lib/bons-tva.js',
+    de: "  return String(bon?.tva_regime || '') === USAGE_UNIQUE ? USAGE_UNIQUE : USAGE_MULTIPLE",
+    vers: '  return USAGE_UNIQUE' },
+
+  { nom: '🔴 l’usage unique se réclame sans qu’aucun taux ne soit connu',
+    banc: 'verif:comptable', fichier: 'lib/bons-tva.js',
+    de: '    return taux === null\n      ? { regime: USAGE_MULTIPLE, taux: null }\n      : { regime: USAGE_UNIQUE, taux }',
+    vers: '    return { regime: USAGE_UNIQUE, taux }' },
+
+  // ─── LE JOURNAL ET LA ROUTE ──────────────────────────────────────────────
+  { nom: '🔴 le journal du jour n’agrège plus la vente de bons',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '    j.venteBon = arrondi(j.venteBon + (Number(l.venteBon) || 0))',
+    vers: '    j.venteBon = arrondi(j.venteBon)' },
+
+  { nom: '🔴 le fichier n’explique plus que l’égalité gagne un terme',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '  if (ventesBons > 0) {',
+    vers: '  if (ventesBons > 0 && false) {' },
+
+  { nom: '🔴 la route ne lit plus le régime de TVA des bons',
+    banc: 'verif:comptable', fichier: ROUTE,
+    de: 'stripe_frais, stripe_net, tva_regime, tva_taux, acheteur_prenom',
+    vers: 'stripe_frais, stripe_net, tva_taux, acheteur_prenom' },
+
+  { nom: '🔴 la route ne sait plus quels bons ont payé une commande',
+    banc: 'verif:comptable', fichier: ROUTE,
+    de: 'client_nom, bons_utilises, commande_articles(',
+    vers: 'client_nom, commande_articles(' },
+
+  { nom: '🔴 la route ne sait plus quels bons ont payé un rendez-vous',
+    banc: 'verif:comptable', fichier: ROUTE,
+    de: 'client_prenom, client_nom, bons_utilises',
+    vers: 'client_prenom, client_nom' },
+
+  { nom: '🔴 les bons ne remontent plus jusqu’au calcul',
+    banc: 'verif:comptable', fichier: ROUTE,
+    de: '      bons: bons || [],',
+    vers: '      bons: [],' },
 ]
 
 function lancer(banc) {

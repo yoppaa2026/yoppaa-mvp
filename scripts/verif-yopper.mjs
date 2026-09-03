@@ -15,6 +15,7 @@ import {
   codesPostauxDe,
 } from '../lib/morning-eligibilite.js'
 import { estSessionPerdue, ERREUR_SESSION } from '../lib/session-perdue.js'
+import { sansProse } from './lire-code.mjs'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -857,6 +858,99 @@ for (const chemin of routesAdmin) {
     /filter\(a => !a\.termine\)/.test(page) && /filter\(a => a\.termine\)/.test(page))
   verifier('et il ne se sert pas de `valable` pour trancher',
     !/a\.valable/.test(page))
+}
+
+// ═══ LA CONFIRMATION DE COMMANDE — L'INVITÉ NE VOYAIT RIEN (03/09) ═════════
+//
+// 🔴 IL PAYAIT, ET IL RETOMBAIT SUR LA FICHE DU COMMERCE. Panier vidé par le
+// rechargement, pas de numéro, pas de « c'est bon », pas de bouton
+// d'annulation. Rien ne lui disait que son argent était parti quelque part.
+//
+// La relecture post-paiement partait par `fetchYopper`, qui REFUSE de partir
+// sans session Supabase : il fabrique un 401 sans appeler personne. Un invité
+// n'a pas de session, la réponse ne portait donc aucune commande, et TOUT
+// l'écran vivait dans un `if (data)`. La route, elle, n'a jamais rien demandé.
+//
+// ⚠️ ET LE COMMENTAIRE AU-DESSUS PROMETTAIT DÉJÀ « on affiche quand même ».
+// Neuvième fois qu'une affirmation en prose ne correspond pas au code : les
+// gardes ci-dessous mesurent la STRUCTURE, pas la phrase.
+{
+  const tunnel = sansProse(lire('app/commander/[slug]/page.js'))
+
+  // ─── L'appel doit accepter de partir sans session ───────────────────────
+  verifier('🔴 la confirmation se relit par un appel qui part SANS session',
+    /fetchAvecPreuveSiConnecte\('\/api\/yopper\/commandes'/.test(tunnel))
+  verifier('et plus par celui qui renonce faute de jeton',
+    !/fetchYopper\('\/api\/yopper\/commandes'/.test(tunnel))
+
+  // ─── L'écran ne dépend plus de la relecture ─────────────────────────────
+  // Stripe a accepté le paiement : c'est LUI la preuve, pas notre relecture.
+  const debut = tunnel.indexOf("if (paiement === 'ok')")
+  const blocOk = debut > -1
+    ? tunnel.slice(debut, tunnel.indexOf('}, [slug])', debut) + 1)
+    : ''
+  verifier('le bloc du retour de paiement a bien été retrouvé', blocOk.length > 200)
+  verifier('🔴 la confirmation s’affiche même quand la relecture échoue',
+    /allerEtape\(4\)/.test(blocOk) && !/if \(data\)/.test(blocOk))
+  verifier('et l’identifiant survit, pour garder l’annulation possible',
+    /\{ id: commandeId \}/.test(blocOk))
+
+  // ─── Les trois états du compte, et surtout le troisième ─────────────────
+  verifier('l’état « connecté » est alimenté par la session',
+    /setEstConnecte\(!!user\)/.test(tunnel))
+  verifier('🔴 l’invité reçoit son encadré',
+    /\{!estConnecte && \(/.test(tunnel))
+  verifier('et le nudge « mot de passe » est réservé à qui a une session',
+    /\{estConnecte && !aMotDePasse && \(/.test(tunnel))
+  // 🔴 LA CONDITION MORTE. `!(client.email && clientId)` ne peut JAMAIS être
+  // vraie à la confirmation : on n'y arrive qu'après avoir donné son adresse,
+  // et `getOuCreerClient` pose `clientId` avant de partir payer. Elle reste
+  // légitime à l'étape 3, où l'adresse n'est pas encore saisie : UNE occurrence,
+  // pas deux.
+  verifier('🔴 la condition morte ne gouverne plus rien à la confirmation',
+    (tunnel.match(/!\(client\.email && clientId\)/g) || []).length === 1)
+  // ⚠️ Et l'invité part définir son mot de passe, PAS créer un deuxième compte
+  // à côté de la fiche client qui existe déjà.
+  verifier('l’encadré de l’invité mène à la définition du mot de passe',
+    /router\.push\(`\/commander\/auth\/definir-mdp/.test(tunnel))
+
+  // ─── CE QUE L'ENCADRÉ PROMET DOIT EXISTER ───────────────────────────────
+  //
+  // Il annonce un lien dans l'email de confirmation, et une commande qu'on
+  // retrouvera dans son compte. Deux promesses, deux vérifications.
+  const resend = sansProse(lire('lib/resend.js'))
+  verifier('🔴 l’email de confirmation porte bien ce lien',
+    /offrir_mdp \?/.test(resend) && /commander\/auth\/definir-mdp/.test(resend))
+  // ⚠️ Sans l'adresse, le lien ne cible plus rien : il se rabat sur le stockage
+  // du navigateur, or ce bouton se clique souvent depuis un AUTRE appareil.
+  for (const emetteur of ['lib/commande-notifs.js', 'app/api/emails/commande-confirmee/route.js']) {
+    verifier(`${emetteur} donne au lien l’adresse à cibler`,
+      /offrir_mdp_email:\s*cmd\.client_email/.test(sansProse(lire(emetteur))))
+  }
+
+  // « tu retrouves cette commande » : la liste retrouve par l'ADRESSE. Les deux
+  // côtés doivent donc l'écrire pareil, sinon une majuscule tapée le jour de la
+  // commande la rend invisible pour toujours.
+  const { normaliserEmail } = await import('../lib/email-normalise.js')
+  egal('une adresse est normalisée à l’écriture', normaliserEmail(' Alex@Gmail.COM '), 'alex@gmail.com')
+  const routeCommandes = sansProse(lire('app/api/yopper/commandes/route.js'))
+  verifier('la liste retrouve les commandes par l’adresse',
+    /\.eq\('client_email', yopper\.email\)/.test(routeCommandes))
+  verifier('🔴 et la commande enregistre une adresse normalisée',
+    /client_email: normaliserEmail\(client_email\)/.test(
+      sansProse(lire('app/api/stripe/checkout/create-commande/route.js'))))
+  verifier('l’identité relit l’adresse en minuscules',
+    /user\.email\.toLowerCase\(\)/.test(sansProse(lire('lib/yopper-auth.js'))))
+
+  // ─── La porte que l'appelant fermait est bien ouverte côté serveur ──────
+  //
+  // `get-one` est placée AVANT la garde d'identité : sa protection est l'UUID
+  // que Stripe vient de rendre au Yopper. Si elle passait un jour derrière la
+  // garde, l'invité redeviendrait aveugle sans que personne ne le voie.
+  const iGetOne = routeCommandes.indexOf("action === 'get-one'")
+  const iGarde = routeCommandes.indexOf('session_yopper_manquante')
+  verifier('🔴 la relecture par UUID est bien AVANT la garde d’identité',
+    iGetOne > -1 && iGarde > -1 && iGetOne < iGarde)
 }
 
 // 🔴 LE TOTAL S'IMPRIMAIT AU MILIEU DU FICHIER (trouvé le 31/08).

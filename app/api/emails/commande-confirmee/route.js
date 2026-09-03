@@ -95,6 +95,15 @@ export async function POST(request) {
           annulation_token:        cmd.annulation_token,
           delai_annulation_heures: cmd.commercant?.delai_annulation_heures ?? 2,
           offrir_mdp:              offrirMdp,
+          // ⚠️ CE PARAMÈTRE MANQUAIT, ET LE BOUTON PERDAIT SA CIBLE. Sans lui,
+          // le lien part sans `?email=` et la page de mot de passe se rabat sur
+          // le stockage du navigateur. Or ce bouton se clique DANS UN EMAIL,
+          // souvent depuis un autre appareil que celui de la commande : là, il
+          // n'y a rien à se rabattre dessus, et le Yopper doit retaper son
+          // adresse. `lib/commande-notifs.js`, le chemin réellement branché, le
+          // passe déjà : les deux émetteurs du même email doivent lui donner
+          // les mêmes champs.
+          offrir_mdp_email:        cmd.client_email,
         })
 
         await envoyerAuCommercant({

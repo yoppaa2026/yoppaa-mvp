@@ -1183,13 +1183,30 @@ export default function CommanderSlug() {
     ...(galerie || []),
   ].filter(Boolean)
   const [actualites, setActualites] = useState([])
-  // Le compte Supabase a-t-il déjà un mot de passe ? L'écran de confirmation
-  // proposait d'en créer un À TOUT LE MONDE, y compris aux Yoppers qui en ont
-  // déjà un : on leur demandait de refaire une chose déjà faite, ce qui fait
-  // douter que le compte existe. Même détection que le Profil.
+  // Où en est ce Yopper avec son compte ? L'écran de confirmation a trois
+  // choses différentes à dire, et il n'en distinguait que deux.
+  //
+  //   • connecté AVEC mot de passe   → rien, il sait revenir ;
+  //   • connecté SANS mot de passe   → « crée-en un », il se reconnectera vite ;
+  //   • INVITÉ, aucune session       → 🔴 CE CAS N'ÉTAIT NULLE PART.
+  //
+  // Le premier a été traité : proposer de créer un mot de passe à quelqu'un qui
+  // en a déjà un lui fait douter que son compte existe. Mais l'invité, lui,
+  // tombait dans le même seau que le connecté sans mot de passe, alors que
+  // c'est à lui qu'il faut le plus expliquer : il ne sait pas que sa commande
+  // est déjà rattachée à son adresse, ni comment y revenir.
+  //
+  // ⚠️ Les deux drapeaux partent à VRAI : tant que la lecture n'a pas répondu,
+  // on ne montre rien plutôt qu'un encadré qui apparaît puis disparaît.
+  const [estConnecte, setEstConnecte] = useState(true)
   const [aMotDePasse, setAMotDePasse] = useState(true)
   useEffect(() => {
-    const check = (user) => setAMotDePasse(!!user?.user_metadata?.has_password)
+    // ⚠️ Rappel volontairement NON `async` : la bibliothèque tient son verrou
+    // pendant l'appel, et l'attendre bloquait l'ouverture de l'application.
+    const check = (user) => {
+      setEstConnecte(!!user)
+      setAMotDePasse(!!user?.user_metadata?.has_password)
+    }
     supabase.auth.getUser().then(({ data }) => check(data?.user)).catch(() => {})
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => check(session?.user))
     return () => { try { sub?.subscription?.unsubscribe() } catch (e) {} }
@@ -1548,29 +1565,55 @@ export default function CommanderSlug() {
       // Statut peut encore être 'paiement_en_attente' si webhook pas encore arrivé :
       // on affiche quand même l'écran de confirmation (Stripe a confirmé le paiement).
       ;(async () => {
-        // Confirmation post-paiement : total + client_nom = PII → API serveur
-        // (get-one par UUID fourni par le retour Stripe du Yopper).
-        const data = await fetchYopper('/api/yopper/commandes', {
+        // 🔴 CET ÉCRAN N'EXISTAIT PAS POUR UN INVITÉ, ET C'EST L'ACHETEUR LE
+        // PLUS FRAGILE QUI NE VOYAIT RIEN.
+        //
+        // `fetchYopper` REFUSE de partir sans session Supabase : il fabrique un
+        // 401 sans même appeler le serveur (voir lib/fetch-yopper.js). Celui qui
+        // commande sans compte n'a pas de session, la relecture rendait donc
+        // `null`, et tout ce qui suit vivait dans un `if (data)`. Il revenait de
+        // Stripe sur la fiche du commerce, panier vidé par le rechargement,
+        // SANS numéro, sans « c'est bon », sans bouton d'annulation. Il venait
+        // de payer et pas un écran ne le lui disait.
+        //
+        // ⚠️ LA ROUTE, ELLE, N'A JAMAIS RIEN DEMANDÉ. `get-one` est placée
+        // AVANT la garde d'identité : sa protection est l'UUID que Stripe vient
+        // de rendre au Yopper lui-même. C'est l'APPELANT qui fermait une porte
+        // que le serveur laisse ouverte, et ce changement n'expose donc rien de
+        // nouveau. `fetchAvecPreuveSiConnecte` porte le jeton quand il existe,
+        // et part quand même sinon : exactement ce que fait déjà la commande.
+        //
+        // Confirmation post-paiement : total + client_nom = PII → API serveur.
+        const data = await fetchAvecPreuveSiConnecte('/api/yopper/commandes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'get-one', commande_id: commandeId }),
         }).then(r => r.json()).then(j => j?.commande).catch(() => null)
-        if (data) {
-          // ⚠️ `numeroSequentiel: data.numero_commande` FIGEAIT LE NUMÉRO NU.
-          // L'écran annonçait « #4 » quand l'email disait « CC4 ». La référence
-          // est désormais formée par la route, avec le préfixe qu'elle rapatrie.
-          setDerniereCommande({ ...data, numeroSequentiel: data.numeroAffiche || data.numero_commande })
-          allerEtape(4)
-          // Moment de plus forte intention : le Yopper vient de commander, on l'invite
-          // à activer les push pour suivre le statut (prêt à retirer, en livraison...).
-          // Sans ça, un Yopper qui ne met jamais de favori n'était jamais sollicité.
-          promptPushOneSignal()
-          try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
-          // ⚠️ ET LE PANIER MIS DE CÔTÉ, sans quoi il ressusciterait au
-          // prochain passage : le Yopper verrait réapparaître une commande
-          // qu'il a déjà payée.
-          try { sessionStorage.removeItem(cleReprisePanier(slug)) } catch(e) {}
-        }
+        // ⚠️ ET LE COMMENTAIRE JUSTE AU-DESSUS PROMETTAIT DÉJÀ « on affiche
+        // quand même », alors que le code faisait le contraire. Une relecture
+        // qui échoue, pour n'importe quelle raison, effaçait la preuve d'un
+        // paiement que Stripe a bel et bien accepté. On confirme TOUJOURS : ce
+        // que la relecture rapporte ne fait qu'enrichir l'écran.
+        //
+        // ⚠️ `numeroSequentiel: data.numero_commande` FIGEAIT LE NUMÉRO NU.
+        // L'écran annonçait « #4 » quand l'email disait « CC4 ». La référence
+        // est désormais formée par la route, avec le préfixe qu'elle rapatrie.
+        setDerniereCommande(data
+          ? { ...data, numeroSequentiel: data.numeroAffiche || data.numero_commande }
+          // Sans relecture, l'identifiant suffit à garder « Annuler ma
+          // commande » vivant. Le numéro, lui, ne s'invente pas : la pastille
+          // est déjà conditionnelle et reste simplement absente.
+          : { id: commandeId })
+        allerEtape(4)
+        // Moment de plus forte intention : le Yopper vient de commander, on l'invite
+        // à activer les push pour suivre le statut (prêt à retirer, en livraison...).
+        // Sans ça, un Yopper qui ne met jamais de favori n'était jamais sollicité.
+        promptPushOneSignal()
+        try { localStorage.removeItem(`yoppaa_commerce_${slug}`) } catch(e) {}
+        // ⚠️ ET LE PANIER MIS DE CÔTÉ, sans quoi il ressusciterait au
+        // prochain passage : le Yopper verrait réapparaître une commande
+        // qu'il a déjà payée.
+        try { sessionStorage.removeItem(cleReprisePanier(slug)) } catch(e) {}
       })()
     }
   }, [slug])
@@ -5041,8 +5084,10 @@ export default function CommanderSlug() {
               {/* Nudge optionnel : créer un mot de passe pour se reconnecter vite.
                   Non bloquant, le magic link reste toujours dispo (voir definir-mdp).
                   Masqué si le compte en a DÉJÀ un : proposer de créer ce qui
-                  existe déjà fait douter que le compte ait été créé. */}
-              {!aMotDePasse && (
+                  existe déjà fait douter que le compte ait été créé.
+                  ⚠️ Et réservé à qui A une session : l'invité reçoit l'encadré
+                  complet plus bas, qui lui explique d'abord où est sa commande. */}
+              {estConnecte && !aMotDePasse && (
               <Link href={`/commander/auth/definir-mdp${client.email ? `?email=${encodeURIComponent(client.email)}` : ''}`} style={{ display: 'block', textDecoration: 'none', background: '#fff', borderRadius: 16, padding: '1rem 1.1rem', marginBottom: '1rem', border: `1.5px solid ${T.main}22` }}>
                 <p style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: T.ink, fontSize: '0.92rem', margin: '0 0 4px' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -5087,29 +5132,53 @@ export default function CommanderSlug() {
                 </div>
               )}
 
-              {/* CTA invite : creation de compte post-commande, cohérent avec /commander/rdv/[slug].
-                  Le bon moment pour pousser l'inscription : la commande est confirmee et stockee. */}
-              {!(client.email && clientId) && (
+              {/* L'ENCADRÉ DE L'INVITÉ, celui qui vient de payer sans compte.
+                  C'est le moment où il a le plus besoin qu'on lui parle, et le
+                  seul où on est sûr de l'avoir sous les yeux.
+
+                  🔴 IL Y AVAIT DÉJÀ UN ENCADRÉ ICI, ET IL NE S'AFFICHAIT JAMAIS.
+                  Sa condition était `!(client.email && clientId)`, or on
+                  n'atteint cet écran qu'après avoir donné son email, et
+                  `getOuCreerClient` pose `clientId` juste avant de partir payer.
+                  Les deux étaient donc TOUJOURS remplis, et l'invitation à
+                  créer un compte était morte depuis le premier jour. La vraie
+                  question n'est pas « a-t-il laissé une adresse », c'est
+                  « a-t-il un moyen de revenir » : c'est `estConnecte`.
+
+                  ⚠️ ET IL ENVOYAIT AU MAUVAIS ENDROIT : `/commander/auth`, la
+                  création de compte, à quelqu'un dont la fiche client existe
+                  déjà. On l'envoie définir son mot de passe, ce qui rattache sa
+                  commande au lieu d'en ouvrir une deuxième à côté.
+
+                  Ce que le texte promet est vérifié : l'email de confirmation
+                  porte bien ce lien (`offrir_mdp` dans lib/resend.js, alimenté
+                  par lib/commande-notifs.js), et « mes commandes » retrouve les
+                  commandes d'invité par l'ADRESSE, normalisée des deux côtés
+                  (lib/email-normalise.js). La commande d'aujourd'hui sera donc
+                  bien là. */}
+              {!estConnecte && (
                 <div style={{ background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 100%)`, borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1rem', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.main}55 0%, transparent 55%)`, pointerEvents: 'none' }}/>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                     <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                        <path d="M2 17l10 5 10-5"/>
-                        <path d="M2 12l10 5 10-5"/>
+                        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                       </svg>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: '0.95rem', fontWeight: 900, color: '#fff', margin: 0, marginBottom: 4, letterSpacing: '-0.3px' }}>
-                        Suis ta commande depuis ton espace 🟣
+                        Ta commande est déjà à ton nom 🟣
                       </p>
+                      {/* Trois choses, dans cet ordre : elle est en sécurité,
+                          voici la clé, voici ce que la clé ouvre. Dire seulement
+                          « crée un compte » laisserait croire qu'il n'a rien
+                          tant qu'il ne l'a pas fait. */}
                       <p style={{ fontSize: '0.78rem', color: T.light, lineHeight: 1.45, margin: 0, marginBottom: 10, opacity: 0.95 }}>
-                        Crée ton compte Yopper en 30s pour suivre tes commandes en temps réel, retrouver tes favoris et économiser ton temps à chaque retrait.
+                        Elle est enregistrée{client.email ? <> sous <strong style={{ color: '#fff' }}>{client.email}</strong></> : null}. Ton email de confirmation contient un lien pour choisir ton mot de passe, et tu peux le faire tout de suite ici. Ensuite, tu retrouves cette commande et les suivantes dans ton compte Yopper.
                       </p>
-                      <button onClick={() => router.push(`/commander/auth?redirect=/commander`)}
+                      <button onClick={() => router.push(`/commander/auth/definir-mdp${client.email ? `?email=${encodeURIComponent(client.email)}` : ''}`)}
                         style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.625rem 1.125rem', background: '#fff', color: T.main, border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px rgba(0,0,0,0.18)' }}>
-                        Créer mon compte Yopper
+                        Choisir mon mot de passe
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
                         </svg>

@@ -495,6 +495,16 @@ const MUTATIONS = [
     banc: 'verif:comptable', fichier: ROUTE,
     de: '      bons: bons || [],',
     vers: '      bons: [],' },
+
+  // ⚠️ CELLE-CI MESURE LE FILET, PAS LE CODE. J'ai écrit `prestations` au lieu
+  // de `rdv_prestations` le 03/09 : Supabase ne lève pas sur une table absente,
+  // elle rend un vide, et la déduction du régime a tourné sans aucune
+  // prestation. L'audit le VOYAIT et affichait « NON JUGÉE ». Il rougit
+  // désormais, et cette mutation le prouve.
+  { nom: '🔴 une table qui n’existe pas repasse en silence',
+    banc: 'audit:colonnes', fichier: 'lib/bons-cadeaux-server.js',
+    de: "      supabase.from('rdv_prestations').select('tva_taux').eq('commercant_id', id),",
+    vers: "      supabase.from('prestations').select('tva_taux').eq('commercant_id', id)," },
 ]
 
 function lancer(banc) {

@@ -164,7 +164,13 @@ const fichiers = []
     if (['node_modules', '.next', '.git', 'public'].includes(nom)) continue
     const p = join(dir, nom)
     if (statSync(p).isDirectory()) parcourir(p)
-    else if (['.js', '.mjs'].includes(extname(nom))) fichiers.push(p)
+    // ⚠️ LES HARNAIS DE MUTATION SONT ÉCARTÉS, ET C'EST INDISPENSABLE. Ils
+    // contiennent, EN CHAÎNES DE CARACTÈRES, le code cassé qu'ils vont écrire
+    // pour vérifier qu'un banc rougit : une table volontairement mal nommée y
+    // figure donc noir sur blanc. Sans cette exclusion, l'audit rougit sur la
+    // description d'une mutation au lieu du code de l'application, et le harnais
+    // ne peut plus mesurer l'audit lui-même. Vécu le 03/09, dans les deux sens.
+    else if (['.js', '.mjs'].includes(extname(nom)) && !/^mutations-/.test(nom)) fichiers.push(p)
   }
 })(racine)
 
@@ -272,7 +278,40 @@ if (!schemaReel) {
   console.log('     résultat collé dans scripts/schema-supabase.txt.\n')
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 UNE TABLE INCONNUE PASSAIT EN SILENCE, ET ELLE A COÛTÉ CHER (03/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// J'ai écrit `.from('prestations')` alors que la table s'appelle
+// `rdv_prestations`, employée seize fois ailleurs. Supabase ne lève pas sur une
+// table absente : elle rend `{ data: null, error }`, et un appelant qui écrit
+// `(data || [])` continue avec une liste vide. La déduction du régime de TVA
+// des bons cadeaux a donc tourné SANS AUCUNE PRESTATION, et classé quinze bons
+// en « usage unique » sur la moitié du catalogue.
+//
+// ⚠️ CET AUDIT LA VOYAIT ET SE TAISAIT. Il affichait « NON JUGÉE », ce qui se
+// lit comme une réserve de prudence alors que c'était le défaut lui-même.
+//
+// ⚠️ ET LE REMÈDE N'EST PAS UN ORDRE, C'EST DE DÉSARMER LE PIÈGE. Quand le
+// schéma vient de la BASE, une table absente n'est pas une lacune de l'analyse :
+// c'est une faute de frappe qui ne peut rien rendre. On rougit.
+//
+// Quand le schéma est reconstruit depuis les migrations, en revanche, vingt-
+// quatre tables lui manquent légitimement : on garde alors la réserve.
 if (tablesInconnues.size > 0) {
+  if (schemaReel) {
+    console.log(`🔴 ${tablesInconnues.size} table(s) INTERROGÉE(S) QUI N'EXISTE(NT) PAS EN BASE :`)
+    console.log(`   ${[...tablesInconnues].sort().join(', ')}`)
+    console.log('\n   Supabase ne lève pas sur une table absente : elle rend un vide.')
+    console.log('   Un appelant qui écrit `(data || [])` continue donc avec une liste')
+    console.log('   vide, et personne ne voit rien. Vérifie le nom exact de la table.\n')
+    // ⚠️ LE MOT « EN ÉCHEC » N'EST PAS DÉCORATIF : le harnais de mutation
+    // distingue un banc qui ROUGIT d'un banc qui PLANTE en le cherchant dans la
+    // sortie. Sans lui, une garde qui fait exactement son travail est comptée
+    // MANQUÉE, et on croit avoir un filet qu'on n'a pas.
+    console.log(`${tablesInconnues.size} table(s) inconnue(s), ${tablesInconnues.size} en échec.`)
+    process.exit(1)
+  }
   console.log(`⏭️  ${tablesInconnues.size} tables dont le CREATE TABLE n'est pas dans les`)
   console.log(`   migrations : NON JUGÉES, ni vertes ni rouges.`)
   console.log(`   ${[...tablesInconnues].sort().join(', ')}\n`)
@@ -307,4 +346,5 @@ for (const [cle, fichiers] of [...parTable].sort()) {
 }
 console.log('\n⚠️ À VÉRIFIER UNE PAR UNE : le schéma vient des migrations, pas de')
 console.log('   la base. Une colonne ajoutée à la main n’y figure pas.')
+console.log(`${manquantes.length} colonne(s) en échec.`)
 process.exit(1)

@@ -192,8 +192,38 @@ async function main() {
 
   // 2. ⚠️ LA GARDE CONTRE LE DOUBLE COMPTAGE. Un paiement qui finance plusieurs
   // objets a des frais VENTILÉS : on n'y touche pas, et on le dit.
+  //
+  // 🔴 ELLE AVAIT UN ANGLE MORT, ET ALEX L'A VU EN BASE LE 03/09. Elle ne
+  // comptait que les CANDIDATS, c'est-à-dire les lignes SANS frais. Or dans le
+  // tunnel unique la commande a très souvent déjà les siens : elle n'était donc
+  // pas candidate, le rendez-vous se croyait seul sur son paiement, et il
+  // s'apprêtait à recevoir les frais ET le net de la commande entière.
+  //
+  // Cinq rendez-vous étaient dans ce cas. Le symptôme était lisible à l'œil
+  // dans la simulation : « rendez-vous de 20,00 € → net 39,07 € ». Un net
+  // supérieur au montant, et ce 39,07 était celui d'une commande de 39,42 €.
+  //
+  // ⚠️ ON COMPTE DONC TOUT CE QUI PORTE CE PAIEMENT, avec frais ou sans.
+  const pis = [...new Set(candidats.map(c => c.pi).filter(Boolean))]
   const parPaiement = new Map()
-  for (const c of candidats) parPaiement.set(c.pi, (parPaiement.get(c.pi) || 0) + 1)
+  for (const t of TABLES) {
+    if (pis.length === 0) break
+    const { data, error } = await db
+      .from(t.nom)
+      .select('id, stripe_payment_intent_id')
+      .in('stripe_payment_intent_id', pis)
+    if (error) {
+      // ⚠️ UNE GARDE QUI NE PEUT PAS LIRE NE DOIT PAS LAISSER PASSER : on
+      // préfère ne rien écrire à écrire des frais doublés.
+      console.error(`  ✕ garde anti-doublon : lecture de ${t.nom} impossible (${error.message})`)
+      console.error('    On s’arrête : mieux vaut ne rien écrire que doubler des frais.')
+      process.exit(1)
+    }
+    for (const l of data || []) {
+      const pi = l.stripe_payment_intent_id
+      parPaiement.set(pi, (parPaiement.get(pi) || 0) + 1)
+    }
+  }
   const partages = candidats.filter(c => parPaiement.get(c.pi) > 1)
   const seuls = candidats.filter(c => parPaiement.get(c.pi) === 1)
   if (partages.length > 0) {

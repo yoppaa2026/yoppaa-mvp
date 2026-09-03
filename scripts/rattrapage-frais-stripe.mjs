@@ -35,7 +35,8 @@
 // contente de DIRE ce qu'il ferait : on regarde d'abord, on écrit ensuite.
 
 import { createClient } from '@supabase/supabase-js'
-import { recupererFraisStripe } from '@/lib/stripe-frais'
+import { recupererFraisStripe, sessionBonCadeau } from '@/lib/stripe-frais'
+import { regimeBonPourCommerce } from '@/lib/bons-cadeaux-server'
 
 const ECRIRE = process.argv.includes('--ecrire')
 
@@ -61,6 +62,111 @@ const TABLES = [
 ]
 
 const euros = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+
+// ─── LES BONS CADEAUX, DONT LA VENTE N'ÉCRIVAIT AUCUNE LIGNE COMPTABLE ──────
+//
+// 🔴 Trouvé le 03/09 : le paiement d'un bon est un direct charge sur le compte
+// Stripe du commerçant, mais la vente n'écrivait que dans `bons_cadeaux`. Quinze
+// bons vendus, aucune écriture, et la colonne « encaissé en ligne » ne pouvait
+// pas se rapprocher du relevé Stripe.
+//
+// ⚠️ CES BONS-LÀ N'ONT QU'UN `stripe_session_id` : ni identifiant de paiement,
+// ni date d'encaissement, puisque les colonnes n'existaient pas. Sans le détour
+// par la session, ils resteraient invisibles pour toujours.
+//
+// ⚠️ LA DATE VIENT DE STRIPE, JAMAIS DE L'HORLOGE DE CETTE MACHINE. Un
+// rattrapage lancé aujourd'hui daterait sinon des ventes d'août d'aujourd'hui,
+// et les ferait changer de mois dans le journal comptable.
+//
+// ⚠️ AUCUNE DONNÉE PERSONNELLE : on ne lit ni l'email de l'acheteur, ni celui du
+// bénéficiaire, ni le code du bon.
+//
+// ⚠️ ET UN BON NE PARTAGE JAMAIS SON PAIEMENT : aucune garde de ventilation
+// n'est nécessaire ici, contrairement au tunnel unique plus haut.
+async function rattraperBons() {
+  console.log('\n── LES BONS CADEAUX ──')
+
+  const { data: bons, error } = await db
+    .from('bons_cadeaux')
+    .select('id, commercant_id, stripe_session_id, stripe_payment_intent_id, paye_le, tva_regime, montant_initial')
+    .neq('statut', 'paiement_en_attente')
+    .is('stripe_frais', null)
+  if (error) {
+    console.error(`  ✕ lecture des bons impossible : ${error.message}`)
+    return
+  }
+  console.log(`${(bons || []).length} bon(s) vendu(s) sans frais relevés.`)
+  if (!bons || bons.length === 0) return
+
+  const ids = [...new Set(bons.map(b => b.commercant_id).filter(Boolean))]
+  const { data: coms } = await db
+    .from('commercants')
+    .select('id, stripe_account_id, tva_taux_defaut, bons_tva_regime')
+    .in('id', ids)
+  const parId = Object.fromEntries((coms || []).map(c => [c.id, c]))
+
+  // Le régime coûte deux lectures de catalogue : on ne le redemande pas pour
+  // chaque bon d'un même commerce.
+  const regimes = new Map()
+  let ecrits = 0, sansCompte = 0, sansReponse = 0
+
+  for (const b of bons) {
+    const com = parId[b.commercant_id]
+    const court = String(b.id).slice(0, 8)
+    if (!com?.stripe_account_id) {
+      console.log(`  · bon ${court} — pas de compte Stripe connecté, ignoré`)
+      sansCompte++
+      continue
+    }
+
+    const maj = {}
+    let pi = b.stripe_payment_intent_id
+    let paye = b.paye_le
+    if ((!pi || !paye) && b.stripe_session_id) {
+      const s = await sessionBonCadeau(b.stripe_session_id, com.stripe_account_id)
+      if (s) {
+        pi = pi || s.paymentIntentId
+        paye = paye || (s.created ? new Date(s.created * 1000).toISOString() : null)
+      }
+    }
+    if (pi && pi !== b.stripe_payment_intent_id) maj.stripe_payment_intent_id = pi
+    if (paye && paye !== b.paye_le) maj.paye_le = paye
+
+    if (!b.tva_regime) {
+      if (!regimes.has(com.id)) regimes.set(com.id, await regimeBonPourCommerce(db, com))
+      const { regime, taux } = regimes.get(com.id)
+      maj.tva_regime = regime
+      maj.tva_taux = taux
+    }
+
+    // ⚠️ ON N'ÉCRIT JAMAIS ZÉRO : `null` veut dire « jamais relevé », et un zéro
+    // ressemblerait à une transaction sans frais.
+    const frais = pi ? await recupererFraisStripe(pi, com.stripe_account_id) : null
+    if (frais) {
+      maj.stripe_frais = frais.frais
+      maj.stripe_net = frais.net
+    } else {
+      sansReponse++
+    }
+
+    if (Object.keys(maj).length === 0) {
+      console.log(`  · bon ${court} — rien à compléter`)
+      continue
+    }
+    const jour = (maj.paye_le || b.paye_le || '').slice(0, 10) || 'date inconnue'
+    console.log(`  ✓ bon ${court} · ${euros(b.montant_initial)} · ${jour}`
+      + ` · ${maj.tva_regime || b.tva_regime || 'régime inchangé'}`
+      + (frais ? ` · frais ${euros(frais.frais)}` : ' · frais non lisibles, laissés vides'))
+    if (ECRIRE) {
+      const { error: errUp } = await db.from('bons_cadeaux').update(maj).eq('id', b.id)
+      if (errUp) { console.log(`      ✕ écriture refusée : ${errUp.message}`); continue }
+    }
+    ecrits++
+  }
+
+  console.log(`\nBons ${ECRIRE ? 'complétés' : 'à compléter'} : ${ecrits}`)
+  console.log(`Frais non lisibles : ${sansReponse} · sans compte connecté : ${sansCompte}`)
+}
 
 async function main() {
   console.log(ECRIRE ? '── ÉCRITURE RÉELLE ──' : '── SIMULATION (ajoute --ecrire pour écrire) ──')
@@ -134,7 +240,10 @@ async function main() {
 
   console.log(`\n${ECRIRE ? 'Écrites' : 'À écrire'} : ${ecrits}`)
   console.log(`Sans réponse de Stripe : ${sansReponse} · sans compte connecté : ${sansCompte} · écartées : ${partages.length}`)
-  if (!ECRIRE && ecrits > 0) console.log('\nRelance avec --ecrire pour appliquer.')
+
+  await rattraperBons()
+
+  if (!ECRIRE) console.log('\nRelance avec --ecrire pour appliquer.')
 }
 
 main().catch(e => { console.error(e?.message || e); process.exit(1) })

@@ -479,6 +479,16 @@ const MUTATIONS = [
     de: '    j.venteBon = arrondi(j.venteBon + (Number(l.venteBon) || 0))',
     vers: '    j.venteBon = arrondi(j.venteBon)' },
 
+  { nom: '🔴 la ligne ne dit plus de quel régime relève son bon',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: "    const cells = [l.date, l.heure || '', l.client || '', l.type, l.canal, l.regime === 'sur_place' ? 'Sur place' : 'A emporter', l.reference, l.statut, l.regimeBon || '', moyen, nombre(l.total)]",
+    vers: "    const cells = [l.date, l.heure || '', l.client || '', l.type, l.canal, l.regime === 'sur_place' ? 'Sur place' : 'A emporter', l.reference, l.statut, moyen, nombre(l.total)]" },
+
+  { nom: '🔴 un règlement à deux régimes n’en annonce plus qu’un',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: "  if (uu && um) return 'UU+UM'",
+    vers: "  if (uu && um) return 'UU'" },
+
   { nom: '🔴 les lignes à zéro ne s’expliquent plus',
     banc: 'verif:comptable', fichier: MODULE,
     de: '  if (dejaTaxes > 0) {',

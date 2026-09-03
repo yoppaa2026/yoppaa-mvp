@@ -14,7 +14,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, imputerRemise, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
-import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe, arrondi, referencesNonQualifiees, partDejaTaxee, regimesParBon } from '../lib/export-comptable.js'
+import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe, arrondi, referencesNonQualifiees, partDejaTaxee, regimesParBon, libelleRegimeBon } from '../lib/export-comptable.js'
 import { regimeBon, regimeDuBon, USAGE_UNIQUE, USAGE_MULTIPLE } from '../lib/bons-tva.js'
 import { calculerRemiseBon, normaliserCodeBon, genererCodeBon, bonExpire, BON_MONTANT_MIN, BON_MONTANT_MAX } from '../lib/bons-cadeaux.js'
 import { brusselsInstant } from '../lib/timezone.js'
@@ -1960,6 +1960,18 @@ verifier('une commande remise sans moyen garde son rattrapage',
   // vides et rien ne disait pourquoi : un comptable y cherche l'erreur.
   const csvUU = csvDetail({ lignes: lRdvUU, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
   verifier('le fichier explique ses lignes à zéro', /USAGE UNIQUE/.test(csvUU))
+  // ⚠️ ET IL LE DIT LIGNE PAR LIGNE, pas seulement en tête : un commerce peut
+  // avoir des bons des DEUX régimes en circulation, le régime étant figé à la
+  // vente de chaque bon. Devant une ligne précise, le comptable devait deviner.
+  verifier('le détail porte la colonne « Regime du bon »', /;Regime du bon;/.test(csvUU))
+  verifier('et la ligne d’un bon déjà taxé est marquée UU', /;UU;/.test(csvUU))
+  // ⚠️ 🔴 ET JAMAIS LE CODE DU BON, contrairement à ce qui a été suggéré : deux
+  // lettres suffisent, un code encore chargé serait dépensable.
+  verifier('🔴 la colonne ne porte pas le code du bon', !/SECRET/.test(csvUU))
+  verifier('un règlement à deux régimes se marque UU+UM',
+    libelleRegimeBon(10, 20) === 'UU+UM')
+  verifier('et une ligne sans bon ne porte aucun régime',
+    libelleRegimeBon(0, 0) === '')
   verifier('et dit que les recompter doublerait la TVA', /deux fois/.test(csvUU))
   verifier('la ligne porte la part déjà taxée', ligneRdvUU?.bonDejaTaxe === 40,
     `${ligneRdvUU?.bonDejaTaxe}`)
@@ -1977,6 +1989,7 @@ verifier('une commande remise sans moyen garde son rattrapage',
   const csvUM = csvDetail({ lignes: lRdvUM, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
   verifier('et le fichier se tait quand aucune ligne n’est concernée',
     !/USAGE UNIQUE/.test(csvUM))
+  verifier('la ligne d’un bon taxé à l’utilisation est marquée UM', /;UM;/.test(csvUM))
 
   // ─── ET UNE COMMANDE PEUT MÉLANGER LES DEUX RÉGIMES ──────────────────────
   const CMD_MIXTE = {

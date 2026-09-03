@@ -1771,15 +1771,22 @@ verifier('une commande remise sans moyen garde son rattrapage',
   verifier('le frais retenu est daté du jour où Stripe l’a prélevé',
     lExclue[0]?.date === '2026-03-04', `${lExclue[0]?.date}`)
 
-  // ⚠️ SANS REMBOURSEMENT ENREGISTRÉ, ON N'ÉCRIT RIEN. On ne sait pas si
-  // l'argent est reparti ou si le commerçant l'a gardé : ce cas-là reste ouvert
-  // et NOMMÉ, plutôt que tranché en silence.
+  // ⚠️ 🔴 CETTE GARDE DISAIT LE CONTRAIRE CE MATIN, ET ELLE AVAIT TORT.
+  // J'exigeais un remboursement enregistré, et la ligne n'est JAMAIS sortie en
+  // production : sept commandes exclues portent un frais Stripe, aucune ne porte
+  // `stripe_refund_amount`, que seul le webhook `charge.refunded` écrit et qui
+  // ne trouve pas toujours la commande dans le tunnel partagé.
+  //
+  // ⚠️ LE FRAIS EST LA PREUVE : Stripe ne prélève que sur un paiement RÉUSSI.
+  // Une garde qui ne se déclenche jamais est pire qu'une garde absente.
   const lExclueSansRemb = construireLignes({
     commandes: [{ ...CMD_PARTIELLE, id: 'c3', statut: 'annulee', stripe_refund_amount: null }],
     periode: PERIODE,
   })
-  verifier('une commande annulée sans remboursement enregistré n’écrit rien',
-    lExclueSansRemb.length === 0, JSON.stringify(lExclueSansRemb.map(l => l.type)))
+  verifier('une commande annulée écrit son frais même sans remboursement enregistré',
+    lExclueSansRemb.length === 1 && lExclueSansRemb[0].type === 'Frais retenu',
+    JSON.stringify(lExclueSansRemb.map(l => l.type)))
+  verifier('et ce frais est bien celui de la vente', lExclueSansRemb[0]?.fraisStripe === 1)
 
   // ⚠️ ET UN FRAIS JAMAIS RELEVÉ NE S'INVENTE PAS DAVANTAGE : `null` veut dire
   // « on ne sait pas », et une ligne à 0,00 affirmerait qu'il n'y en a pas eu.

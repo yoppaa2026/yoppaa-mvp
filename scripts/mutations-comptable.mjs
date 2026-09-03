@@ -356,10 +356,18 @@ const MUTATIONS = [
     de: '      const fraisPerdu = arrondi(c.stripe_frais)',
     vers: '      const fraisPerdu = 0' },
 
-  { nom: '🔴 on écrit un frais sans savoir si l’argent est reparti',
+  // ⚠️ CETTE MUTATION REMET LA GARDE QUE J'AVAIS ÉCRITE LE MATIN MÊME, et qui
+  // ne se déclenchait JAMAIS en production : sept commandes exclues portent un
+  // frais Stripe, aucune ne porte `stripe_refund_amount`.
+  { nom: '🔴 le frais retenu réexige un remboursement enregistré, et ne sort plus jamais',
     banc: 'verif:comptable', fichier: MODULE,
-    de: '      if (fraisPerdu > 0 && Number(c.stripe_refund_amount) > 0) {',
-    vers: '      if (fraisPerdu >= 0) {' },
+    de: '      if (fraisPerdu > 0) {',
+    vers: '      if (fraisPerdu > 0 && Number(c.stripe_refund_amount) > 0) {' },
+
+  { nom: '🔴 une vente jamais payée écrit un frais qu’elle n’a pas eu',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      const fraisPerdu = arrondi(c.stripe_frais)',
+    vers: '      const fraisPerdu = arrondi(c.stripe_frais) || 0.01' },
 
   { nom: '🔴 la ligne de frais ressuscite le chiffre d’affaires de la vente',
     banc: 'verif:comptable', fichier: MODULE,

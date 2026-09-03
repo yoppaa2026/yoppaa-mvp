@@ -1738,15 +1738,61 @@ verifier('une commande remise sans moyen garde son rattrapage',
   verifier('un abonnement n’est jamais signalé comme référence ambiguë',
     referencesNonQualifiees(lAbo) === 0, JSON.stringify(lAbo.map(l => l.reference)))
 
-  // ─── Ce qui n'a produit AUCUNE ligne ne se contrepasse pas ────────────────
+  // ─── Ce qui n'a produit AUCUNE VENTE ne se contrepasse pas ────────────────
   //
   // ⚠️ Soustraire un remboursement d'un chiffre d'affaires jamais écrit
   // creuserait un trou au lieu d'en combler un.
+  //
+  // ⚠️ 🔴 MAIS LE FRAIS RETENU, LUI, EXISTE (03/09). Stripe ne restitue jamais
+  // ses frais : sur une vente annulée et remboursée, ce coût réel ne figurait
+  // dans AUCUN document. Trouvé dans l'export d'Alex par un acompte qui portait
+  // 0,07 € de frais, part d'un paiement qui en avait coûté 0,35.
   const lExclue = construireLignes({
     commandes: [{ ...CMD_PARTIELLE, id: 'c2', statut: 'annulee_client_refund', stripe_refund_amount: 60 }],
     periode: PERIODE,
   })
-  verifier('une commande annulée ne produit ni vente ni contrepassation', lExclue.length === 0)
+  verifier('une commande annulée n’écrit ni vente ni contrepassation',
+    lExclue.length === 1 && lExclue[0].type === 'Frais retenu',
+    JSON.stringify(lExclue.map(l => l.type)))
+  verifier('mais son frais retenu s’écrit', lExclue[0]?.fraisStripe === 1,
+    JSON.stringify(lExclue.map(l => l.fraisStripe)))
+  verifier('sans chiffre d’affaires ni ventilation par taux',
+    lExclue[0]?.total === 0 && Object.keys(lExclue[0]?.parTaux || {}).length === 0,
+    JSON.stringify([lExclue[0]?.total, lExclue[0]?.parTaux]))
+  verifier('et son net vaut le frais en négatif', lExclue[0]?.netStripe === -1,
+    `${lExclue[0]?.netStripe}`)
+  verifier('l’invariant tient sur une ligne à zéro',
+    arrondi((lExclue[0]?.enLigne || 0) + (lExclue[0]?.comptoir || 0)
+      + (lExclue[0]?.bonCadeau || 0) + (lExclue[0]?.resteAEncaisser || 0)) === lExclue[0]?.total)
+  // ⚠️ ET LA LIGNE EST DATÉE DU JOUR DE LA VENTE, pas de celui du remboursement :
+  // c'est ce jour-là que Stripe a prélevé son frais, et c'est là que le
+  // comptable le retrouve sur son relevé.
+  verifier('le frais retenu est daté du jour où Stripe l’a prélevé',
+    lExclue[0]?.date === '2026-03-04', `${lExclue[0]?.date}`)
+
+  // ⚠️ SANS REMBOURSEMENT ENREGISTRÉ, ON N'ÉCRIT RIEN. On ne sait pas si
+  // l'argent est reparti ou si le commerçant l'a gardé : ce cas-là reste ouvert
+  // et NOMMÉ, plutôt que tranché en silence.
+  const lExclueSansRemb = construireLignes({
+    commandes: [{ ...CMD_PARTIELLE, id: 'c3', statut: 'annulee', stripe_refund_amount: null }],
+    periode: PERIODE,
+  })
+  verifier('une commande annulée sans remboursement enregistré n’écrit rien',
+    lExclueSansRemb.length === 0, JSON.stringify(lExclueSansRemb.map(l => l.type)))
+
+  // ⚠️ ET UN FRAIS JAMAIS RELEVÉ NE S'INVENTE PAS DAVANTAGE : `null` veut dire
+  // « on ne sait pas », et une ligne à 0,00 affirmerait qu'il n'y en a pas eu.
+  const lExclueSansFrais = construireLignes({
+    commandes: [{ ...CMD_PARTIELLE, id: 'c4', statut: 'annulee_client_refund', stripe_frais: null }],
+    periode: PERIODE,
+  })
+  verifier('ni une commande annulée dont le frais n’a jamais été relevé',
+    lExclueSansFrais.length === 0, JSON.stringify(lExclueSansFrais.map(l => l.type)))
+
+  // ⚠️ UNE LIGNE À ZÉRO QUI PORTE UN FRAIS S'EXPLIQUE, SINON ELLE INTRIGUE.
+  const csvFrais = csvDetail({ lignes: lExclue, commercant: { nom: 'Test' }, du: PERIODE.du, au: PERIODE.au })
+  verifier('le détail nomme la ligne « Frais retenu »', /;Frais retenu;/.test(csvFrais))
+  verifier('et le fichier dit pourquoi elle est à zéro', /Seul ce cout subsiste/.test(csvFrais))
 
   // ─── Le journal du jour et le fichier ─────────────────────────────────────
   const jours = journalParJour(lAnnule)

@@ -345,6 +345,37 @@ const MUTATIONS = [
     banc: 'verif:stats', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
     de: '            produits_montant: String(vent.produitsAPayer),',
     vers: '            produits_montant: String(produitsCents / 100),' },
+
+  // ─── LE FRAIS RETENU D'UNE VENTE ANNULÉE (03/09) ─────────────────────────
+  { nom: '🔴 le frais retenu d’une vente annulée redisparaît',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      const fraisPerdu = arrondi(c.stripe_frais)',
+    vers: '      const fraisPerdu = 0' },
+
+  { nom: '🔴 on écrit un frais sans savoir si l’argent est reparti',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '      if (fraisPerdu > 0 && Number(c.stripe_refund_amount) > 0) {',
+    vers: '      if (fraisPerdu >= 0) {' },
+
+  { nom: '🔴 la ligne de frais ressuscite le chiffre d’affaires de la vente',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '          total: 0,\n          parTaux: {},',
+    vers: '          total: arrondi(c.total),\n          parTaux: {},' },
+
+  { nom: '🔴 le net d’un frais retenu devient positif',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '          netStripe: arrondi(-fraisPerdu),',
+    vers: '          netStripe: arrondi(fraisPerdu),' },
+
+  { nom: '🔴 le frais retenu est daté du remboursement au lieu de la vente',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '          date: jourComptable(c.created_at, c.date_commande),',
+    vers: '          date: jourComptable(c.stripe_refund_date, c.created_at),' },
+
+  { nom: '🔴 le fichier n’explique plus sa ligne à zéro',
+    banc: 'verif:comptable', fichier: MODULE,
+    de: '  if (fraisRetenus > 0) {',
+    vers: '  if (fraisRetenus > 0 && false) {' },
 ]
 
 function lancer(banc) {

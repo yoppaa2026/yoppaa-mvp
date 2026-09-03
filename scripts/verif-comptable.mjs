@@ -1828,6 +1828,35 @@ verifier('une commande remise sans moyen garde son rattrapage',
   verifier('un bon sans régime écrit vaut usages multiples',
     regimeDuBon({}) === USAGE_MULTIPLE)
 
+  // ─── 🔴 LA CATÉGORIE TRANCHE LE DOUTE (03/09) ────────────────────────────
+  //
+  // Le catalogue de Kebabistro ne portait QUE du 6 %, donc la déduction le
+  // classait « usage unique ». Une friterie vend des boissons : le 21 %
+  // arrivera, et le régime, lui, est FIGÉ POUR TOUJOURS sur les bons vendus.
+  // Un catalogue à un seul taux n'est pas un commerce à un seul taux.
+  verifier('un commerce alimentaire reste en usages multiples malgré un taux unique',
+    regimeBon({ tauxArticles: [6], categorie: 'alimentaire' }).regime === USAGE_MULTIPLE)
+  verifier('et il ne fige alors aucun taux',
+    regimeBon({ tauxArticles: [6], categorie: 'alimentaire' }).taux === null)
+  verifier('un salon à taux unique bascule bien, lui',
+    regimeBon({ tauxArticles: [21], categorie: 'service' }).regime === USAGE_UNIQUE)
+  verifier('une boutique de détail aussi',
+    regimeBon({ tauxArticles: [21], categorie: 'detail' }).regime === USAGE_UNIQUE)
+  // ⚠️ MAIS LE CHOIX EXPLICITE DU COMMERÇANT RESTE AU-DESSUS DE TOUT : lui seul
+  // connaît son commerce, et la catégorie n'est qu'un garde-fou par défaut.
+  verifier('le commerçant peut réclamer l’usage unique malgré sa catégorie',
+    regimeBon({ tauxArticles: [6], categorie: 'alimentaire', regimeChoisi: USAGE_UNIQUE }).regime === USAGE_UNIQUE)
+
+  // ⚠️ ET LA RÈGLE NE VAUT QUE SI LA MATIÈRE LUI PARVIENT. Le lecteur qui
+  // alimente `regimeBon` vit côté serveur : une catégorie oubliée là rendrait
+  // tout le bloc ci-dessus vert pour rien, et c'est exactement le motif du
+  // 02/09, où la correction était juste et le `select` incomplet.
+  const srcBonsServer = readFileSync(new URL('../lib/bons-cadeaux-server.js', import.meta.url), 'utf8')
+  verifier('le lecteur serveur transmet la catégorie à la règle',
+    /regimeBon\(\{[^}]*categorie:\s*commercant\.categorie/s.test(srcBonsServer))
+  verifier('et il lit la vraie table des prestations',
+    /from\('rdv_prestations'\)/.test(srcBonsServer))
+
   // ⚠️ `created_at` EST DANS LA PÉRIODE VOLONTAIREMENT : c'est ce qui permet de
   // mesurer qu'un bon sans date de PAIEMENT ne se voit pas inventer un jour à
   // partir d'une autre colonne. Sans lui, un repli sur la création passerait

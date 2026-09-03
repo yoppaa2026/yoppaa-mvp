@@ -101,7 +101,7 @@ async function rattraperBons() {
   const ids = [...new Set(bons.map(b => b.commercant_id).filter(Boolean))]
   const { data: coms } = await db
     .from('commercants')
-    .select('id, stripe_account_id, tva_taux_defaut, bons_tva_regime')
+    .select('id, stripe_account_id, tva_taux_defaut, bons_tva_regime, categorie')
     .in('id', ids)
   const parId = Object.fromEntries((coms || []).map(c => [c.id, c]))
 

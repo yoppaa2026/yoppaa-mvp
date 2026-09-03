@@ -501,6 +501,16 @@ const MUTATIONS = [
   // elle rend un vide, et la déduction du régime a tourné sans aucune
   // prestation. L'audit le VOYAIT et affichait « NON JUGÉE ». Il rougit
   // désormais, et cette mutation le prouve.
+  { nom: '🔴 l’alimentaire fige un usage unique sur un catalogue inachevé',
+    banc: 'verif:comptable', fichier: 'lib/bons-tva.js',
+    de: "  if (CATEGORIES_A_TAUX_MELANGES.includes(String(categorie || ''))) {",
+    vers: '  if (false) {' },
+
+  { nom: '🔴 la catégorie ne remonte plus jusqu’à la règle',
+    banc: 'verif:comptable', fichier: 'lib/bons-cadeaux-server.js',
+    de: '      categorie: commercant.categorie,',
+    vers: '      categorie: null,' },
+
   { nom: '🔴 une table qui n’existe pas repasse en silence',
     banc: 'audit:colonnes', fichier: 'lib/bons-cadeaux-server.js',
     de: "      supabase.from('rdv_prestations').select('tva_taux').eq('commercant_id', id),",

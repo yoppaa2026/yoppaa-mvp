@@ -55,7 +55,7 @@ async function handle(req) {
   // le leur pose.
   const { data: commercants } = await supabase
     .from('commercants')
-    .select('id, stripe_account_id, tva_taux_defaut, bons_tva_regime')
+    .select('id, stripe_account_id, tva_taux_defaut, bons_tva_regime, categorie')
   const commercantParId = Object.fromEntries((commercants || []).map(c => [c.id, c]))
   const compteParCommercant = Object.fromEntries(
     (commercants || []).map(c => [c.id, c.stripe_account_id])

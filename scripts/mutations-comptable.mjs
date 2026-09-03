@@ -169,11 +169,11 @@ const MUTATIONS = [
     de: '  return resteApresRemboursement(rdv.acompte_montant, rdv.stripe_refund_amount)',
     vers: '  return Number(rdv.acompte_montant || 0)' },
 
-  { nom: '🔴 la règle du remboursement est recopiée au lieu d’être empruntée',
-    banc: 'verif:stats', fichier: STATS,
-    de: 'import { resteApresRemboursement } from \'./remboursements\'',
-    vers: 'const resteApresRemboursement = (e, r) => Math.max(0, Math.min(Number(e) || 0, (Number(e) || 0) - (Number(r) || 0)))' },
-
+  // ⚠️ LA MUTATION « la règle du remboursement est recopiée » A DISPARU LE
+  // 03/09 : son ancre visait la ligne d'import, qui porte désormais TROIS
+  // fonctions. Elle est couverte par « la règle du bon rendu est recopiée »,
+  // plus bas, qui vise la même ligne et stub les trois. Deux mutations sur une
+  // même ancre ne mesurent rien de plus.
   { nom: '🔴 la route des chiffres n’a plus le remboursement des commandes',
     banc: 'verif:stats', fichier: ROUTE_STATS,
     // ⚠️ ANCRE RECALÉE LE 02/09 : deux colonnes ont été ajoutées au même
@@ -184,8 +184,9 @@ const MUTATIONS = [
 
   { nom: '🔴 la route des chiffres n’a plus celui des rendez-vous',
     banc: 'verif:stats', fichier: ROUTE_STATS,
-    de: 'fidelite_remise, stripe_refund_amount, prestation_id',
-    vers: 'fidelite_remise, prestation_id' },
+    // ⚠️ ANCRE RECALÉE : `bon_cadeau_montant` s'est glissé entre les deux.
+    de: 'fidelite_remise, stripe_refund_amount, bon_cadeau_montant',
+    vers: 'fidelite_remise, bon_cadeau_montant' },
 
   // ─── ET « ENCAISSÉ EN LIGNE » COMPTAIT LE COMPTOIR COMME DU STRIPE ────────
   { nom: '🔴 un Click and Collect payé au comptoir redevient du Stripe',
@@ -282,6 +283,68 @@ const MUTATIONS = [
     banc: 'verif:comptable', fichier: 'lib/stripe-frais.js',
     de: '  const fraisCommande = arrondi(Number(fraisTotal) - fraisRdv)',
     vers: '  const fraisCommande = arrondi(Number(fraisTotal) * (produits / total))' },
+
+  // ─── LE NO-SHOW A LAISSÉ DE L'ARGENT (03/09) ─────────────────────────────
+  { nom: '🔴 le no-show redisparaît du chiffre d’affaires',
+    banc: 'verif:stats', fichier: STATS,
+    de: '  const noShows = rdvs.filter(rdvNoShow)',
+    vers: '  const noShows = []' },
+
+  { nom: '🔴 le no-show revaut le prix de la séance',
+    banc: 'verif:stats', fichier: STATS,
+    de: '  return arrondi(acompteRdv(rdv) + bonReste(rdv.bon_cadeau_montant, retoursDuRdv))',
+    vers: '  return arrondi(Number(rdv.prix_estime || 0))' },
+
+  { nom: '🔴 la part gardée sur un bon est oubliée',
+    banc: 'verif:stats', fichier: STATS,
+    de: '  return arrondi(acompteRdv(rdv) + bonReste(rdv.bon_cadeau_montant, retoursDuRdv))',
+    vers: '  return arrondi(acompteRdv(rdv))' },
+
+  { nom: '🔴 un bon rendu ne se déduit plus de la garantie',
+    banc: 'verif:stats', fichier: REGLE,
+    de: '  const rendu = (mouvements || []).reduce((s, m) => s + (Number(m?.montant) || 0), 0)',
+    vers: '  const rendu = 0' },
+
+  { nom: '🔴 un retour plus gros que le bon creuse un négatif',
+    banc: 'verif:stats', fichier: REGLE,
+    de: '  return arrondi(Math.max(0, porte - rendu))',
+    vers: '  return arrondi(porte - rendu)' },
+
+  { nom: '🔴 le no-show gonfle le nombre de rendez-vous honorés',
+    banc: 'verif:stats', fichier: STATS,
+    de: '    nb_rdv: honores.length,',
+    vers: '    nb_rdv: honores.length + noShows.length,' },
+
+  { nom: '🔴 la garantie du no-show ne passe plus pour du Stripe',
+    banc: 'verif:stats', fichier: STATS,
+    de: '  const acomptes = [...honores, ...noShows].reduce((somme, r) => somme + acompteRdvEnLigne(r), 0)',
+    vers: '  const acomptes = honores.reduce((somme, r) => somme + acompteRdvEnLigne(r), 0)' },
+
+  { nom: '🔴 la route des chiffres n’a plus le bon du rendez-vous',
+    banc: 'verif:stats', fichier: ROUTE_STATS,
+    de: 'stripe_refund_amount, bon_cadeau_montant, prestation_id',
+    vers: 'stripe_refund_amount, prestation_id' },
+
+  { nom: '🔴 SÉCURITÉ : les mouvements des stats ne sont plus bornés au commerce',
+    banc: 'verif:stats', fichier: ROUTE_STATS,
+    de: '          .select(\'bon_id, montant, source, commande_id, rdv_id, created_at, bons_cadeaux!inner(commercant_id)\')',
+    vers: '          .select(\'bon_id, montant, source, commande_id, rdv_id, created_at\')' },
+
+  { nom: '🔴 les retours de bons ne remontent plus au calcul',
+    banc: 'verif:stats', fichier: ROUTE_STATS,
+    de: '    const caActuel = chiffreAffaires(cmdActuelles, rdvActuels, aboActuels, retoursBons || [])',
+    vers: '    const caActuel = chiffreAffaires(cmdActuelles, rdvActuels, aboActuels)' },
+
+  { nom: '🔴 la règle du bon rendu est recopiée au lieu d’être empruntée',
+    banc: 'verif:stats', fichier: STATS,
+    de: 'import { resteApresRemboursement, indexerRetoursBons, bonReste } from \'./remboursements\'',
+    vers: 'import { resteApresRemboursement } from \'./remboursements\'\nconst indexerRetoursBons = () => ({ parRdv: new Map(), parCommande: new Map() })\nconst bonReste = (p) => Math.max(0, Number(p) || 0)' },
+
+  // ─── LA MÉTADONNÉE QUI SUR-PONDÉRAIT LA COMMANDE ─────────────────────────
+  { nom: '🔴 la métadonnée reprend le prix brut des produits',
+    banc: 'verif:stats', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '            produits_montant: String(vent.produitsAPayer),',
+    vers: '            produits_montant: String(produitsCents / 100),' },
 ]
 
 function lancer(banc) {

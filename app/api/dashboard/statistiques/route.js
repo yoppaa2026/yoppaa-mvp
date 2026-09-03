@@ -107,7 +107,9 @@ export async function GET(request) {
           // Même raison : `valeurRdv` retranche la récompense du prix.
           // ⚠️ `acompte_paye_en_ligne` EST LE FRÈRE DE `paye_en_ligne` : un
           // acompte réglé sur place n'a jamais vu Stripe.
-          .select('id, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, prix_estime, fidelite_remise, stripe_refund_amount, prestation_id, encaisse_mode, abonnement_id, created_at')
+          // ⚠️ `bon_cadeau_montant` DEPUIS LE 03/09 : sans lui, la garantie qu'un
+          // no-show laisse sur un bon vaut zéro, en silence.
+          .select('id, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, prix_estime, fidelite_remise, stripe_refund_amount, bon_cadeau_montant, prestation_id, encaisse_mode, abonnement_id, created_at')
           .eq('commercant_id', commercantId)
           .gte('created_at', depuis),
         supabase.from('avis')
@@ -190,8 +192,32 @@ export async function GET(request) {
       return jour >= jourDebutPrecedent && jour < jourDebut
     })
 
-    const caActuel = chiffreAffaires(cmdActuelles, rdvActuels, aboActuels)
-    const caPrecedent = chiffreAffaires(cmdPrecedentes, rdvPrecedents, aboPrecedents)
+    // ─── CE QU'UN NO-SHOW A LAISSÉ SUR UN BON ──────────────────────────────
+    //
+    // 🔴 AUCUNE COLONNE NE LE DIT : `bon_cadeau_montant` porte ce que le bon a
+    // payé, jamais ce qu'il a fini par payer. Sans ces mouvements, la garantie
+    // gardée sur un bon resterait invisible au tableau de bord alors que le
+    // journal comptable l'écrit.
+    //
+    // ⚠️ LA BORNE DE SÉCURITÉ EST LA JOINTURE : la table des mouvements ne porte
+    // pas de `commercant_id`. `!inner` limite la lecture aux bons de CE commerce,
+    // en base, avant que la moindre ligne ne remonte.
+    //
+    // ⚠️ ON NE CHARGE QUE POUR LES NO-SHOW : c'est le seul cas où une PART du
+    // bon revient. Une annulation rend tout, et son statut l'exclut déjà.
+    const idsNoShow = [...new Set([...rdvActuels, ...rdvPrecedents]
+      .filter(r => String(r?.statut || '') === 'no_show').map(r => r.id).filter(Boolean))]
+    const { data: retoursBons } = idsNoShow.length > 0
+      ? await supabase
+          .from('bons_cadeaux_mouvements')
+          .select('bon_id, montant, source, commande_id, rdv_id, created_at, bons_cadeaux!inner(commercant_id)')
+          .eq('bons_cadeaux.commercant_id', commercantId)
+          .eq('source', 'annulation')
+          .in('rdv_id', idsNoShow)
+      : { data: [] }
+
+    const caActuel = chiffreAffaires(cmdActuelles, rdvActuels, aboActuels, retoursBons || [])
+    const caPrecedent = chiffreAffaires(cmdPrecedentes, rdvPrecedents, aboPrecedents, retoursBons || [])
     const ventesActuelles = cmdActuelles.filter(commandeEncaissee).length
     const ventesPrecedentes = cmdPrecedentes.filter(commandeEncaissee).length
 

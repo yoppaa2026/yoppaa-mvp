@@ -722,7 +722,17 @@ export async function POST(request) {
               bon_cadeau_montant: String(partsBons.totalPresta),
               bons_utilises: JSON.stringify(bonsPresta),
             } : {}),
-            produits_montant: String(produitsCents / 100),
+            // 🔴 CE QUE LA CARTE PAIE SUR LES PRODUITS, PAS LEUR PRIX AFFICHÉ
+            // (03/09). Cette métadonnée portait `produitsCents`, le total BRUT,
+            // alors qu'un bon cadeau et une récompense peuvent en avoir déduit
+            // une partie : c'est `produitsAPayer` qui part chez Stripe, quelques
+            // lignes plus haut.
+            //
+            // ⚠️ ELLE SERT À VENTILER LES FRAIS ENTRE LE RENDEZ-VOUS ET LA
+            // COMMANDE. Sur-pondérée du montant du bon, la commande prenait une
+            // part de frais trop grande et son net était surévalué d'autant,
+            // dans un document comptable. Frère exact du défaut du 05/08.
+            produits_montant: String(vent.produitsAPayer),
             // Le rendez-vous naît de ces métadonnées au webhook : sans
             // normalisation ici, il repartirait avec l'email tel que tapé.
             client_email: normaliserEmail(client_email),

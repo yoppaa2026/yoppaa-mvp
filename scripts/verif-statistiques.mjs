@@ -113,16 +113,22 @@ const rdvs = [
   { statut: 'no_show', prix_estime: 90, acompte_montant: 20, acompte_paye_en_ligne: true },        // exclu
 ]
 const caRdv = chiffreAffaires([], rdvs)
-egal('les prestations comptent à leur prix complet', caRdv.prestations, 55)
-egal('l\'encaissé en ligne ne retient que les acomptes', caRdv.encaisse_en_ligne, 8.75)
-egal('le reste est annoncé comme réglé au comptoir', caRdv.au_comptoir, 46.25)
+// ⚠️ 55 DE PRESTATIONS **PLUS 20 DE GARANTIE** (03/09). Le no-show du jeu
+// d'essai porte 20 € d'acompte payé en ligne et JAMAIS remboursé : le
+// commerçant les a gardés. Les attendus décrivaient l'époque où cet argent
+// n'apparaissait nulle part, ni au tableau de bord ni dans la compta.
+egal('les prestations comptent leur prix complet, garantie comprise', caRdv.prestations, 75)
+egal('la garantie du no-show est lisible à part', caRdv.garanties_no_show, 20)
+egal('l\'encaissé en ligne retient les acomptes et les garanties', caRdv.encaisse_en_ligne, 28.75)
+egal('le reste est annoncé comme réglé chez le commerçant', caRdv.au_comptoir, 46.25)
+// ⚠️ MAIS LE CARNET NE GROSSIT PAS : un no-show n'a pas rendu de séance.
 egal('le nombre de RDV suit les mêmes exclusions', caRdv.nb_rdv, 2)
 
 const caTout = chiffreAffaires(commandes, rdvs)
-egal('produits et prestations s\'additionnent', caTout.total, 89.50)
+egal('produits et prestations s\'additionnent', caTout.total, 109.50)
 egal('la part produits reste lisible', caTout.produits, 34.50)
-// La clé de rapprochement avec la Comptabilité : produits encaissés + acomptes.
-egal('l\'encaissé en ligne mélange produits et acomptes', caTout.encaisse_en_ligne, 43.25)
+// La clé de rapprochement avec la Comptabilité : ce que Stripe a réellement vu.
+egal('l\'encaissé en ligne mélange produits, acomptes et garanties', caTout.encaisse_en_ligne, 63.25)
 verifier('le total est bien la somme des deux parts',
   arrondi(caTout.produits + caTout.prestations) === caTout.total)
 egal('rien du tout', chiffreAffaires([], []).total, 0)
@@ -583,6 +589,57 @@ verifier('l\'onglet Chiffres n\'est pas réservé à un palier',
   verifier('et nomme quand même où il est',
     /euros\(a\.au_comptoir\)\}<\/strong> chez toi/.test(ecranBord))
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LE NO-SHOW A LAISSÉ DE L'ARGENT, ET IL N'APPARAISSAIT NULLE PART (03/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // `no_show` est absent de `STATUTS_RDV_ENCAISSES` avec ce motif : « le client
+  // n'est pas venu, la prestation n'a pas eu lieu ». C'était vrai AVANT le
+  // 31/08. Depuis, le no-show fait garder une GARANTIE, que le journal
+  // comptable écrit et que le tableau de bord ignorait.
+  const { valeurNoShow } = await import('../lib/statistiques.js')
+
+  // ⚠️ IL NE VAUT PAS SON PRIX, IL VAUT CE QUI EST RESTÉ.
+  egal('un no-show ne vaut jamais le prix de la séance',
+    valeurNoShow({ statut: 'no_show', prix_estime: 90, acompte_montant: 20,
+      acompte_paye_en_ligne: true, stripe_refund_amount: 5 }), 15)
+  egal('une garantie entièrement rendue ne laisse rien',
+    valeurNoShow({ statut: 'no_show', acompte_montant: 20, stripe_refund_amount: 20 }), 0)
+  // ⚠️ LA PART SUR BON NE SE DEVINE PAS : `bon_cadeau_montant` dit ce que le bon
+  // a payé, jamais ce qu'il a fini par payer.
+  egal('la part gardée sur un bon compte aussi',
+    valeurNoShow({ statut: 'no_show', bon_cadeau_montant: 50 },
+      [{ montant: 35, created_at: '2026-03-15T18:00:00Z' }]), 15)
+  egal('un bon entièrement rendu ne laisse rien',
+    valeurNoShow({ statut: 'no_show', bon_cadeau_montant: 50 }, [{ montant: 50 }]), 0)
+  egal('sans mouvement connu, le bon compte pour ce qu’il portait',
+    valeurNoShow({ statut: 'no_show', bon_cadeau_montant: 50 }), 50)
+  egal('un retour plus gros que le bon ne creuse pas de négatif',
+    valeurNoShow({ statut: 'no_show', bon_cadeau_montant: 20 }, [{ montant: 90 }]), 0)
+
+  // 🔴 LE CAS D'ALEX : la garantie entre enfin dans le chiffre d'affaires.
+  const caNoShow = chiffreAffaires([], [
+    { id: 'n1', statut: 'no_show', prix_estime: 90, acompte_montant: 20,
+      acompte_paye_en_ligne: true, stripe_refund_amount: 5 },
+    { id: 'n2', statut: 'honore', prix_estime: 35, acompte_montant: 8.75, acompte_paye_en_ligne: true },
+  ], [], [])
+  egal('la garantie gardée entre dans le chiffre d’affaires', caNoShow.total, 50)
+  egal('elle est lisible à part', caNoShow.garanties_no_show, 15)
+  egal('et elle est bien passée par Stripe', caNoShow.encaisse_en_ligne, 23.75)
+  // ⚠️ MAIS LE CARNET N'EST PAS PLUS REMPLI POUR AUTANT : un no-show a laissé de
+  // l'argent, il n'a pas rendu de séance.
+  egal('le nombre de rendez-vous ne compte que les honorés', caNoShow.nb_rdv, 1)
+  verifier('les deux colonnes expliquent encore le chiffre d’affaires',
+    arrondi(caNoShow.encaisse_en_ligne + caNoShow.au_comptoir) === caNoShow.total)
+
+  // ⚠️ ET LA RÈGLE DU BON RENDU EST LA MÊME QUE CELLE DU JOURNAL, empruntée et
+  // jamais recopiée : les deux écrans répondent à la même question.
+  verifier('le tableau de bord emprunte l’indexation des retours de bons',
+    /indexerRetoursBons/.test(lireBrut('lib/statistiques.js')))
+  verifier('et le journal comptable la même',
+    /from '\.\/remboursements'/.test(lireBrut('lib/export-comptable.js'))
+    && /export \{ indexerRetoursBons \}/.test(lireBrut('lib/export-comptable.js')))
+
   const routeStats = lireBrut('app/api/dashboard/statistiques/route.js')
   // ⚠️ ON SAUTE LES COMMENTAIRES PLUTÔT QUE DE COMPTER LES CARACTÈRES : une
   // fenêtre en nombre de signes rougit dès qu'on ajoute une explication
@@ -601,6 +658,35 @@ verifier('l\'onglet Chiffres n\'est pas réservé à un palier',
   }
   verifier('et acompte_paye_en_ligne sur les rendez-vous',
     /\bacompte_paye_en_ligne\b/.test(selectDe('rdv_reservations')), selectDe('rdv_reservations'))
+  // 🔴 SANS LUI, LA GARANTIE QU'UN NO-SHOW LAISSE SUR UN BON VAUT ZÉRO, en
+  // silence, et tout le bloc ci-dessus reste vert.
+  verifier('et bon_cadeau_montant, sans quoi la garantie sur bon vaut zéro',
+    /\bbon_cadeau_montant\b/.test(selectDe('rdv_reservations')), selectDe('rdv_reservations'))
+  // ⚠️ LA BORNE DE SÉCURITÉ EST LA JOINTURE : la table des mouvements ne porte
+  // pas de `commercant_id`.
+  verifier('les mouvements de bons sont bornés au commerce EN BASE',
+    /bons_cadeaux!inner\(commercant_id\)/.test(routeStats)
+    && /eq\('bons_cadeaux\.commercant_id', commercantId\)/.test(routeStats))
+  verifier('et ils sont transmis au calcul du chiffre d’affaires',
+    /chiffreAffaires\(cmdActuelles, rdvActuels, aboActuels, retoursBons/.test(routeStats))
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 `produits_montant` PORTAIT LE PRIX AFFICHÉ, PAS CE QUE LA CARTE PAIE
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Cette métadonnée sert à ventiler les frais Stripe entre le rendez-vous et
+  // sa commande. Sur-pondérée du montant d'un bon cadeau, la commande prenait
+  // une part de frais trop grande et son net était surévalué d'autant.
+  const srcTunnel = lireBrut('app/api/stripe/checkout/create-rdv-commande/route.js')
+  verifier('la métadonnée porte ce que la carte paie sur les produits',
+    /produits_montant: String\(vent\.produitsAPayer\)/.test(srcTunnel))
+  verifier('et jamais leur prix brut',
+    !/produits_montant: String\(produitsCents/.test(srcTunnel))
+  // ⚠️ ET C'EST BIEN CE MONTANT-LÀ QUI PART CHEZ STRIPE, quelques lignes plus
+  // haut : les deux doivent désigner le même argent.
+  verifier('c’est le même montant que celui envoyé à Stripe',
+    /const produitsAPayerCents = Math\.round\(vent\.produitsAPayer \* 100\)/.test(srcTunnel)
+    && /unit_amount: produitsAPayerCents/.test(srcTunnel))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

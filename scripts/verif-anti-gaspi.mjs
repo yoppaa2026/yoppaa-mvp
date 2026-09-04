@@ -17,7 +17,7 @@ import {
   minutesAvantFermeture, libelleHeure, libelleFenetre, libelleTempsRestant,
   prixCasse, remisePourcent, offreValable, REMISE_MINIMALE, REMISE_CONSEILLEE, CONSEIL_REMISE,
   TITRE_YOPPER, SOUS_TITRE_YOPPER, NOM_FONCTION_COMMERCANT, LIBELLE_BOUTON,
-  creneauxUtilisables, refusDePublication, offrePubliable, dansFenetre,
+  creneauxUtilisables, refusDePublication, offrePubliable, dansFenetre, stockJourAEcrire,
   offresOuvertes,
 } from '../lib/anti-gaspi.js'
 
@@ -354,6 +354,34 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   verifier('🔴 sans heure NI créneau, on parle d’abord de l’heure',
     /heure/i.test(refusDePublication({ prix_deal: 3, prix_original: 6 }, []) || ''))
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6quinquies. CE QU'IL DÉCLARE EST UN RESTE, CE QU'ON ÉCRIT EST UN TOTAL
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 LE PIÈGE QUI AURAIT CASSÉ TOUTE LA FONCTION EN SILENCE.
+//
+// `articles.stock_jour` est le stock du DÉBUT DE JOURNÉE, pas le restant. Le
+// serveur calcule ensuite : disponible = stock du jour − déjà commandé −
+// réservations (voir `lib/lignes-commande.js`).
+//
+// Le boulanger qui a mis 20 ce matin, en a vendu 14, et déclare « il m'en reste
+// 6 » : écrire 6 donnerait 6 − 14 = négatif. Son invendu serait commandable par
+// PERSONNE, et rien ne le lui dirait.
+egal('🔴 14 déjà vendus et 6 restants : on écrit 20', stockJourAEcrire(14, 6), 20)
+egal('rien de vendu : on écrit le reste tel quel', stockJourAEcrire(0, 6), 6)
+egal('les valeurs se lisent aussi en texte', stockJourAEcrire('14', '6'), 20)
+egal('et s’arrondissent', stockJourAEcrire(14.4, 6.4), 20)
+// ⚠️ UN RESTE NUL OU NÉGATIF N'EST PAS UNE OFFRE : il n'y a rien à proposer.
+verifier('🔴 un reste à zéro ne s’écrit pas', stockJourAEcrire(14, 0) === null)
+verifier('un reste négatif non plus', stockJourAEcrire(14, -3) === null)
+verifier('un reste illisible non plus', stockJourAEcrire(14, 'beaucoup') === null)
+// ⚠️ ET UN « DÉJÀ CONSOMMÉ » ILLISIBLE NE S'INVENTE PAS À ZÉRO : on écrirait un
+// stock trop bas et l'offre serait invisible. Sixième fois que le zéro piège ce
+// projet ; ici il rendrait l'offre muette au lieu de la bloquer bruyamment.
+verifier('🔴 un « déjà consommé » inconnu REFUSE, il ne vaut pas zéro',
+  stockJourAEcrire(null, 6) === null)
+verifier('un « déjà consommé » négatif refuse aussi', stockJourAEcrire(-2, 6) === null)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. L'ORDRE DE LECTURE

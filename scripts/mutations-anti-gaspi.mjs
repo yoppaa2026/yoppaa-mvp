@@ -149,6 +149,28 @@ const MUTATIONS = [
     de: "    return 'Aucun créneau de retrait dans cette plage. Ajoute un créneau, sinon personne ne pourra venir chercher.'",
     vers: "    return 'Plage invalide.'" },
 
+  // ─── LE RESTE ANNONCÉ N'EST PAS LE STOCK À ÉCRIRE ───────────────────────
+  //
+  // 🔴 Le piège qui aurait cassé toute la fonction en silence : `stock_jour`
+  // est le stock du DÉBUT de journée, et le serveur en retranche ensuite ce qui
+  // a déjà été commandé.
+  { nom: '🔴 on ecrit le RESTE au lieu du total (offre invisible pour tous)',
+    fichier: MODULE,
+    de: '  return Math.round(deja) + Math.round(reste)',
+    vers: '  return Math.round(reste)' },
+
+  // ⚠️ `Number(null)` vaut ZERO : sans cette garde, un « deja consomme »
+  // absent devient zero et l offre s ecrit trop basse, en silence.
+  { nom: '🔴 un « deja consomme » ABSENT redevient zero',
+    fichier: MODULE,
+    de: '  if (absent(dejaConsomme) || absent(resteAnnonce)) return null',
+    vers: '  if (absent(resteAnnonce) && false) return null' },
+
+  { nom: '🔴 un reste NUL passe pour une offre',
+    fichier: MODULE,
+    de: '  if (!Number.isFinite(reste) || reste <= 0) return null',
+    vers: '  if (!Number.isFinite(reste)) return null' },
+
   // ─── CE QUE L'ÉCRAN ÉCRIT ───────────────────────────────────────────────
   { nom: '🔴 l’heure s’ecrit sans espace (« 19h »)',
     de: "  return min === 0 ? `${h} h` : `${h} h ${String(min).padStart(2, '0')}`",

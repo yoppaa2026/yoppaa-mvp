@@ -15,7 +15,7 @@
 import {
   heureNormalisee, minutesLocales, minutesDeLHeure, porteUneFenetre, fenetreOuverte,
   minutesAvantFermeture, libelleHeure, libelleFenetre, libelleTempsRestant,
-  prixCasse, remisePourcent, offreValable, REMISE_MINIMALE,
+  prixCasse, remisePourcent, offreValable, REMISE_MINIMALE, REMISE_CONSEILLEE, CONSEIL_REMISE,
   TITRE_YOPPER, SOUS_TITRE_YOPPER, NOM_FONCTION_COMMERCANT, LIBELLE_BOUTON,
   offresOuvertes,
 } from '../lib/anti-gaspi.js'
@@ -220,13 +220,30 @@ verifier('🔴 le prix cassé seul ne suffit pas',
 // Sans plancher, une remise de 10 % occuperait l'écran, et celui qui ouvre
 // « Rien ne se perd » n'y trouverait pas d'affaire. Il n'ouvrirait plus, et il
 // n'ouvrirait plus pour personne.
-egal('le plancher est de moitié prix', REMISE_MINIMALE, 50)
-verifier('🔴 une remise de 40 % ne suffit PAS',
-  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 6, prix_original: 10 }) === false)
-verifier('🔴 exactement 50 %, ça passe',
-  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 5, prix_original: 10 }) === true)
+// ⚠️ 30 ET NON 50, ET C'EST UNE QUESTION DE MARGE : une boucherie ou une
+// poissonnerie tournent autour de 25 à 35 % de marge brute, donc à moitié prix
+// elles VENDENT À PERTE. Or ce sont elles qui ont le plus d'invendus
+// périssables. Un plancher à 50 excluait ceux qui en ont le plus besoin.
+egal('le plancher est à trente pour cent', REMISE_MINIMALE, 30)
+verifier('🔴 une remise de 25 % ne suffit PAS',
+  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 75, prix_original: 100 }) === false)
+verifier('🔴 exactement 30 %, ça passe',
+  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 70, prix_original: 100 }) === true)
+verifier('40 % passe désormais',
+  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 6, prix_original: 10 }) === true)
 verifier('70 %, évidemment',
   offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 3, prix_original: 10 }) === true)
+
+// ⚠️ LE CONSEIL EST AU-DESSUS DU PLANCHER, sinon il ne conseille rien.
+verifier('🔴 le conseil vise plus haut que l’obligation', REMISE_CONSEILLEE > REMISE_MINIMALE)
+// ⚠️ ET IL SE CONSTRUIT À PARTIR DU CHIFFRE. Un « -30 % » écrit à la main
+// survivrait au changement du plancher et mentirait au commerçant.
+verifier('🔴 le conseil cite le plancher réel', CONSEIL_REMISE.includes(`-${REMISE_MINIMALE} %`))
+// ⚠️ AUCUNE INJONCTION, ET AUCUNE STATISTIQUE INVENTÉE : aucune offre de fin de
+// journée n'a jamais tourné, on dit le mécanisme, pas un chiffre mesuré.
+for (const mot of ['!', 'dépêche', 'vite !', 'fois plus']) {
+  verifier(`le conseil n’écrit pas « ${mot} »`, !CONSEIL_REMISE.toLowerCase().includes(mot), CONSEIL_REMISE)
+}
 // ⚠️ Et une remise faible reste une VRAIE remise pour `prixCasse` : les deux
 // questions sont distinctes. Confondre « c'est moins cher » et « ça joue le
 // jeu » ferait passer l'une pour l'autre au premier remaniement.

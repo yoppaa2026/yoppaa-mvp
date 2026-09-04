@@ -78,8 +78,23 @@ const MUTATIONS = [
 
   // ─── LE PRIX, ET LE JEU JOUÉ ────────────────────────────────────────────
   { nom: '🔴 le plancher de remise disparait (10 % occuperait l ecran)',
-    de: 'export const REMISE_MINIMALE = 50',
+    de: 'export const REMISE_MINIMALE = 30',
     vers: 'export const REMISE_MINIMALE = 0' },
+
+  // ⚠️ PAS DE MUTATION SUR LA CONSTRUCTION DU CONSEIL, ET C EST DELIBERE.
+  //
+  // Remplacer le gabarit par la chaine ecrite a la main produit EXACTEMENT le
+  // meme texte tant que le plancher vaut 30 : la mutation ne change aucun
+  // resultat, donc elle ne mesure rien. UNE MUTATION QUI NE MUTE RIEN EST UNE
+  // MUTATION MANQUEE, pas une garde faible.
+  //
+  // Le lien est deja mesure par la mutation du plancher ci-dessus : mise a 0,
+  // un conseil ecrit en dur continuerait d annoncer « -30 % » et la garde
+  // « le conseil cite le plancher reel » rougirait.
+
+  { nom: '🔴 le conseil ne vise plus plus haut que l obligation',
+    de: 'export const REMISE_CONSEILLEE = 50',
+    vers: 'export const REMISE_CONSEILLEE = 10' },
 
   { nom: '🔴 le prix plein passe pour une affaire',
     de: '  return casse < plein',

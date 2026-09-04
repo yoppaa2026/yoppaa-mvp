@@ -67,4 +67,4 @@ success_packs: commercant_id,completed_at,created_at,id,montant_ht,notes,rdv_dat
 suggestions_commercants: adresse,client_id,commentaire,created_at,id,nom_commerce,type_commerce
 tva_taux_reference: actif,aide,created_at,id,libelle,ordre,taux
 upgrade_requests: client_id,commercant_id,created_at,id,notif_dashboard_sent,notif_email_sent_3,notif_email_sent_7,type
-yoppaa_deals: actif,article2_id,article_id,categorie_cible,clics,commercant_id,created_at,cta_appeler_reserver,cta_clics,cta_ref_id,cta_type,date_deal,date_debut,date_fin,deal_type,description,description_longue,est_bonne_affaire,id,inclus_morning,photo_url,prix_deal,prix_original,remise_pct,statut_morning,titre,type,unites_par_deal,vues
+yoppaa_deals: actif,article2_id,article_id,categorie_cible,clics,commercant_id,created_at,cta_appeler_reserver,cta_clics,cta_ref_id,cta_type,date_deal,date_debut,date_fin,deal_type,description,description_longue,est_bonne_affaire,heure_debut,heure_fin,id,inclus_morning,photo_url,prix_deal,prix_original,remise_pct,statut_morning,titre,type,unites_par_deal,vues

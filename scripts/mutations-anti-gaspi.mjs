@@ -73,8 +73,33 @@ const MUTATIONS = [
     vers: '      (0)' },
 
   { nom: '🔴 les offres fermees s’affichent aussi',
-    de: '    .filter(o => fenetreOuverte(o, instant))',
-    vers: '    .filter(() => true)' },
+    de: '    .filter(o => offreValable(o) && fenetreOuverte(o, instant))',
+    vers: '    .filter(o => offreValable(o))' },
+
+  // ─── LE PRIX, ET LE JEU JOUÉ ────────────────────────────────────────────
+  { nom: '🔴 le plancher de remise disparait (10 % occuperait l ecran)',
+    de: 'export const REMISE_MINIMALE = 50',
+    vers: 'export const REMISE_MINIMALE = 0' },
+
+  { nom: '🔴 le prix plein passe pour une affaire',
+    de: '  return casse < plein',
+    vers: '  return casse <= plein' },
+
+  { nom: '🔴 un prix ABSENT vaut zero et laisse passer l offre',
+    de: '  if (casse <= 0 || plein <= 0) return false',
+    vers: '  if (false) return false' },
+
+  { nom: '🔴 la lecture cesse de se defendre seule (offres non valables affichees)',
+    de: '    .filter(o => offreValable(o) && fenetreOuverte(o, instant))',
+    vers: '    .filter(o => fenetreOuverte(o, instant))' },
+
+  { nom: '🔴 le titre cote Yopper emprunte le verbe de Too Good To Go',
+    de: "export const TITRE_YOPPER = 'Rien ne se perd'",
+    vers: "export const TITRE_YOPPER = 'A sauver pres de chez toi'" },
+
+  { nom: '🔴 le bouton redevient une injonction',
+    de: "export const LIBELLE_BOUTON = 'Je le prends'",
+    vers: "export const LIBELLE_BOUTON = 'Depeche-toi !'" },
 
   // ─── CE QUE L'ÉCRAN ÉCRIT ───────────────────────────────────────────────
   { nom: '🔴 l’heure s’ecrit sans espace (« 19h »)',

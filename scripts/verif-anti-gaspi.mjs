@@ -15,6 +15,8 @@
 import {
   heureNormalisee, minutesLocales, minutesDeLHeure, porteUneFenetre, fenetreOuverte,
   minutesAvantFermeture, libelleHeure, libelleFenetre, libelleTempsRestant,
+  prixCasse, remisePourcent, offreValable, REMISE_MINIMALE,
+  TITRE_YOPPER, SOUS_TITRE_YOPPER, NOM_FONCTION_COMMERCANT, LIBELLE_BOUTON,
   offresOuvertes,
 } from '../lib/anti-gaspi.js'
 
@@ -180,6 +182,85 @@ egal('zéro n’écrit rien', libelleTempsRestant(0), '')
 egal('null n’écrit rien', libelleTempsRestant(null), '')
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 6bis. LE PRIX EST-IL VRAIMENT CASSÉ ?
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 SANS CETTE RÈGLE, LE SOUS-TITRE MENT. « Les derniers du jour » laisse
+// entendre une affaire, et rien n'empêchait de publier un invendu au prix plein.
+verifier('3 € au lieu de 6 €, c’est cassé', prixCasse({ prix_deal: 3, prix_original: 6 }) === true)
+verifier('🔴 6 € au lieu de 6 €, ce n’est pas une affaire',
+  prixCasse({ prix_deal: 6, prix_original: 6 }) === false)
+verifier('plus cher que le prix plein non plus',
+  prixCasse({ prix_deal: 7, prix_original: 6 }) === false)
+// ⚠️ ZÉRO N'EST PAS UN PRIX, sixième fois dans ce projet. Un prix plein absent
+// vaudrait 0 après conversion, et l'offre passerait pour valable.
+verifier('🔴 un prix plein ABSENT ne rend pas l’offre valable',
+  prixCasse({ prix_deal: 3, prix_original: null }) === false)
+verifier('un prix cassé absent non plus',
+  prixCasse({ prix_deal: null, prix_original: 6 }) === false)
+verifier('un prix à zéro non plus', prixCasse({ prix_deal: 0, prix_original: 6 }) === false)
+verifier('une offre vide non plus', prixCasse({}) === false)
+
+egal('la remise se dit en pourcentage', remisePourcent({ prix_deal: 3, prix_original: 6 }), 50)
+egal('elle s’arrondit', remisePourcent({ prix_deal: 2, prix_original: 3 }), 33)
+verifier('🔴 pas de remise sans prix cassé',
+  remisePourcent({ prix_deal: 6, prix_original: 6 }) === null)
+
+// ⚠️ LA FENÊTRE **ET** LE PRIX. L'écran du commerçant refusera d'enregistrer
+// sans prix cassé, mais une garde d'écran n'est jamais une réponse : des lignes
+// écrites avant cette règle peuvent exister.
+verifier('une offre complète est valable',
+  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 3, prix_original: 6 }) === true)
+verifier('🔴 la fenêtre seule ne suffit pas',
+  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 6, prix_original: 6 }) === false)
+verifier('🔴 le prix cassé seul ne suffit pas',
+  offreValable({ prix_deal: 3, prix_original: 6 }) === false)
+
+// ⚠️ « LE COMMERÇANT QUI VEUT Y FIGURER DOIT JOUER LE JEU » (Alex, 04/09).
+// Sans plancher, une remise de 10 % occuperait l'écran, et celui qui ouvre
+// « Rien ne se perd » n'y trouverait pas d'affaire. Il n'ouvrirait plus, et il
+// n'ouvrirait plus pour personne.
+egal('le plancher est de moitié prix', REMISE_MINIMALE, 50)
+verifier('🔴 une remise de 40 % ne suffit PAS',
+  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 6, prix_original: 10 }) === false)
+verifier('🔴 exactement 50 %, ça passe',
+  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 5, prix_original: 10 }) === true)
+verifier('70 %, évidemment',
+  offreValable({ heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 3, prix_original: 10 }) === true)
+// ⚠️ Et une remise faible reste une VRAIE remise pour `prixCasse` : les deux
+// questions sont distinctes. Confondre « c'est moins cher » et « ça joue le
+// jeu » ferait passer l'une pour l'autre au premier remaniement.
+verifier('40 % reste un prix cassé, ce n’est pas la même question',
+  prixCasse({ prix_deal: 6, prix_original: 10 }) === true)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6ter. CE QUE ÇA S'APPELLE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ DEUX NOMS, ET C'EST VOULU. Le titre côté Yopper porte le sens et se
+// retient ; le nom de la fonction côté commerçant doit être limpide pour celui
+// qui l'achète. Ils vivent dans le module, jamais recopiés dans un écran.
+egal('le titre côté Yopper', TITRE_YOPPER, 'Rien ne se perd')
+egal('le sous-titre', SOUS_TITRE_YOPPER, 'Les derniers du jour, avant la fermeture.')
+egal('le nom de la fonction côté commerçant', NOM_FONCTION_COMMERCANT, 'Avant la fermeture')
+// ⚠️ ON PREND CE QUI RESTE, ON RÉSERVE CE QUI ATTEND.
+egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
+// 🔴 LE VOCABULAIRE DE TOO GOOD TO GO EST INTERDIT ICI. Aucun risque juridique,
+// mais ça ferait passer Yoppaa pour un clone de ce qu'elle refuse d'être.
+{
+  const tousLesTextes = [TITRE_YOPPER, SOUS_TITRE_YOPPER, NOM_FONCTION_COMMERCANT, LIBELLE_BOUTON]
+    .join(' ').toLowerCase()
+  for (const mot of ['sauver', 'sauve', 'panier surprise', 'magic', 'too good']) {
+    verifier(`🔴 aucun texte n’emprunte « ${mot} »`, !tousLesTextes.includes(mot), tousLesTextes)
+  }
+  // ⚠️ ET AUCUNE INJONCTION : « dépêche-toi » affiché tous les soirs se
+  // démonétise en trois jours. L'urgence vient des FAITS, pas du ton.
+  for (const mot of ['dépêche', 'vite', 'urgent', '!']) {
+    verifier(`aucune injonction : « ${mot} »`, !tousLesTextes.includes(mot), tousLesTextes)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 7. L'ORDRE DE LECTURE
 // ═══════════════════════════════════════════════════════════════════════════
 //
@@ -188,18 +269,25 @@ egal('null n’écrit rien', libelleTempsRestant(null), '')
 // se déplace deux fois pour rien, il n'ouvre plus cet écran, et il ne l'ouvre
 // plus pour personne.
 {
+  const P = { prix_deal: 3, prix_original: 6 }   // toutes cassées de moitié
   const OFFRES = [
-    { id: 'tard', heure_debut: '17:00:00', heure_fin: '20:00:00' },   // ferme tard, non réservable
-    { id: 'tot',  heure_debut: '17:00:00', heure_fin: '18:45:00' },   // ferme tôt, non réservable
-    { id: 'resa', heure_debut: '17:00:00', heure_fin: '20:00:00' },   // ferme tard, RÉSERVABLE
-    { id: 'close', heure_debut: '08:00:00', heure_fin: '09:00:00' },  // pas dans sa fenêtre
+    { id: 'tard', ...P, heure_debut: '17:00:00', heure_fin: '20:00:00' },  // ferme tard
+    { id: 'tot',  ...P, heure_debut: '17:00:00', heure_fin: '18:45:00' },  // ferme tôt
+    { id: 'resa', ...P, heure_debut: '17:00:00', heure_fin: '20:00:00' },  // ferme tard, RÉSERVABLE
+    { id: 'close', ...P, heure_debut: '08:00:00', heure_fin: '09:00:00' }, // hors fenêtre
+    // 🔴 Ouverte, mais AU PRIX PLEIN : elle ne doit jamais apparaître.
+    { id: 'plein', prix_deal: 6, prix_original: 6, heure_debut: '17:00:00', heure_fin: '20:00:00' },
   ]
   const rendu = offresOuvertes(OFFRES, a(18, 30), { reservable: o => o.id === 'resa' })
   egal('🔴 le réservable passe devant, puis le plus pressé',
     rendu.map(r => r.offre.id), ['resa', 'tot', 'tard'])
   verifier('l’offre hors fenêtre est écartée', !rendu.some(r => r.offre.id === 'close'))
+  // 🔴 SANS CETTE GARDE, LE SOUS-TITRE MENT. « Les derniers du jour » laisse
+  // entendre une affaire ; une offre au prix plein ne doit jamais s'afficher.
+  verifier('🔴 l’offre au PRIX PLEIN est écartée', !rendu.some(r => r.offre.id === 'plein'))
   egal('le temps restant accompagne chaque offre',
     rendu.map(r => r.restant), [90, 15, 90])
+  egal('et la remise aussi', rendu.map(r => r.remise), [50, 50, 50])
   // Sans indication de réservabilité, on ne PRÉTEND pas qu'elles le sont.
   const nu = offresOuvertes(OFFRES, a(18, 30))
   verifier('🔴 sans règle de réservation, rien n’est réservable',

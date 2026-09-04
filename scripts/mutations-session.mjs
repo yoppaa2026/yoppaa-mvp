@@ -14,8 +14,11 @@
 //    ne SUPPRIME pas le `.catch` : sans lui, la promesse rejetée ferait TOMBER
 //    node au lieu de faire rougir le banc, et un banc qui explose ne mesure
 //    rien. On le fait MENTIR à la place.
-// ⚠️ AUCUN SAUT DE LIGNE DANS LES CIBLES : le dépôt est en CRLF, un `\n` nu ne
-//    correspondrait jamais et la mutation serait « introuvable » en silence.
+// ⚠️ AUCUN SAUT DE LIGNE DANS LES CIBLES. Le dépôt est stocké en LF, mais le
+//    disque peut porter du CRLF là où git n'a pas encore normalisé : une ancre à
+//    cheval sur deux lignes ne vaut alors que sur UNE machine, et le harnais
+//    l'annonce « introuvable » dans un rapport que personne ne relit.
+//    Vérifié par `npm run verif:ancres`.
 //
 //   node scripts/mutations-session.mjs
 

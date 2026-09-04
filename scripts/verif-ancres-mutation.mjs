@@ -40,6 +40,7 @@ verifier('les harnais de mutation sont là', HARNAIS.length >= 16, `${HARNAIS.le
 
 let ancres = 0
 let perimees = 0
+let sautDeLigne = 0
 
 for (const nom of HARNAIS) {
   const src = readFileSync('scripts/' + nom, 'utf8')
@@ -70,6 +71,7 @@ for (const nom of HARNAIS) {
     if (!cible) continue
 
     ancres++
+
     let contenu = null
     try { contenu = readFileSync(cible, 'utf8') } catch { /* fichier disparu */ }
     if (contenu === null) {
@@ -79,12 +81,30 @@ for (const nom of HARNAIS) {
     }
     if (!contenu.includes(de)) {
       perimees++
-      verifier(`${nom} · ${nomM}`, false, `ancre périmée dans ${cible} : ${JSON.stringify(de).slice(0, 120)}`)
+      // 🔴 ET ON NOMME LA CAUSE QUAND C'EST UN SAUT DE LIGNE, parce que celle-là
+      // ne se voit pas à l'œil nu.
+      //
+      // Le dépôt est stocké en LF — un seul fichier sur des centaines porte du
+      // CRLF. Une ancre écrite avec « \r\n » ne trouve donc sa ligne NULLE
+      // PART, et sa garde n'est mesurée sur aucune machine. C'est ce qui a
+      // rendu la CI rouge le 04/09 : deux ancres écrites en CRLF, sur la foi
+      // d'un commentaire d'en-tête qui affirmait « le dépôt est en CRLF ».
+      //
+      // ⚠️ UNE AFFIRMATION EN COMMENTAIRE SE VÉRIFIE COMME DU CODE. Celle-là
+      // était fausse, recopiée dans dix harnais, et elle a fabriqué le défaut.
+      const cibleCRLF = contenu.includes('\r\n')
+      const ancreCRLF = de.includes('\r\n')
+      let cause = ''
+      if (ancreCRLF && !cibleCRLF) { sautDeLigne++; cause = ' — ancre en CRLF, fichier en LF' }
+      else if (/\n/.test(de) && cibleCRLF) { sautDeLigne++; cause = ' — ancre en LF, fichier en CRLF' }
+      verifier(`${nom} · ${nomM}`, false,
+        `ancre périmée dans ${cible}${cause} : ${JSON.stringify(de).slice(0, 120)}`)
     }
   }
 }
 
 verifier('aucune ancre périmée', perimees === 0, `${perimees} sur ${ancres}`)
+verifier('🔴 aucune ancre au mauvais style de saut de ligne', sautDeLigne === 0, `${sautDeLigne} sur ${ancres}`)
 // ⚠️ ET LA SONDE DOIT VRAIMENT AVOIR LU QUELQUE CHOSE. Un découpage cassé
 // rendrait zéro ancre, donc zéro périmée, et ce banc verdirait sans rien avoir
 // regardé. C'est le piège des tests faussement verts, la troisième fois cette

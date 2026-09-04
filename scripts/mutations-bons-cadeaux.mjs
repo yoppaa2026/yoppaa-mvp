@@ -1110,13 +1110,32 @@ const MUTATIONS = [
   // passe pour une mesure. Les deux ancres ci-dessous portent donc `\r\n`.
   { nom: '🔴 la SUPPRESSION DE COMPTE n’efface plus rien à l’écran',
     banc: 'verif:session', fichier: 'app/commander/page.js',
-    de: "                    // lui appartenait n'a le droit de rester à l'écran.\r\n                    viderEtatPersonnel()",
-    vers: "                    // lui appartenait n'a le droit de rester à l'écran." },
+    // 🔴 ANCRE REFAITE LE 04/09, ET ELLE NE MESURAIT RIEN EN CI.
+    //
+    // Elle portait un « \r\n ». Or le dépôt est stocké en LF : sur le disque
+    // d'Alex ces deux lignes-là sont en CRLF, mais git les normalise à
+    // l'enregistrement. L'ancre trouvait donc sa ligne à Namur et JAMAIS sur la
+    // CI, où elle a fini par rendre le banc des ancres rouge.
+    //
+    // ⚠️ ET LA CAUSE EST UNE AFFIRMATION FAUSSE, recopiée dans dix en-têtes de
+    // harnais : « le dépôt est en CRLF ». Un seul fichier sur des centaines
+    // l'est. Une affirmation en commentaire se vérifie comme du code.
+    //
+    // ⚠️ LES DEUX APPELS À `viderEtatPersonnel()` SONT IDENTIQUES au caractère
+    // près : impossible de viser le second sur une seule ligne. On vise donc ce
+    // qui est unique, le branchement du rappel, et c'est un vrai défaut : le
+    // compte est supprimé et plus rien ne s'efface à l'écran.
+    de: '<SupprimerCompte email={client.email} onSupprime={() => {',
+    vers: '<SupprimerCompte email={client.email} onSupprimeX={() => {' },
 
   { nom: '🔴 la DÉCONNEXION n’efface plus rien à l’écran',
     banc: 'verif:session', fichier: 'app/commander/page.js',
-    de: "                    // a plus d'email.\r\n                    viderEtatPersonnel()",
-    vers: "                    // a plus d'email." },
+    // ⚠️ MÊME CORRECTION QUE CI-DESSUS. `String.replace` sur une chaîne ne
+    // remplace que la PREMIÈRE occurrence, et celle de la déconnexion vient en
+    // premier dans le fichier : viser la ligne d'appel nue suffit donc à
+    // neutraliser ce site-là, et lui seul.
+    de: '                    viderEtatPersonnel()',
+    vers: '                    ;' },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 🔴 LES TROIS CHEMINS QUI RENDENT L ARGENT D UN RENDEZ-VOUS (01/09)

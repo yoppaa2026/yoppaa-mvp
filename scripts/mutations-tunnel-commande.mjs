@@ -13,8 +13,11 @@
 // ⚠️ UNE MUTATION CHANGE LE RÉSULTAT, JAMAIS LA TERMINAISON : aucune ne casse
 //    la syntaxe, sinon le banc exploserait au lieu de rougir, et un banc qui
 //    explose ne mesure rien.
-// ⚠️ AUCUN SAUT DE LIGNE DANS LES CIBLES : le dépôt est en CRLF, un `\n` nu ne
-//    correspondrait jamais et la mutation serait « introuvable » en silence.
+// ⚠️ AUCUN SAUT DE LIGNE DANS LES CIBLES. Le dépôt est stocké en LF, mais le
+//    disque peut porter du CRLF là où git n'a pas encore normalisé : une ancre à
+//    cheval sur deux lignes ne vaut alors que sur UNE machine, et le harnais
+//    l'annonce « introuvable » dans un rapport que personne ne relit.
+//    Vérifié par `npm run verif:ancres`.
 // ⚠️ `tous: true` QUAND LA CIBLE EXISTE EN PLUSIEURS EXEMPLAIRES. Une garde qui
 //    cherche un motif N'IMPORTE OÙ reste verte si l'on n'en mute qu'une copie :
 //    la mutation serait comptée manquée alors que la garde est bonne.

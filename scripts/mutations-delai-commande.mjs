@@ -11,7 +11,10 @@
 //
 // ⚠️ INSTANTANÉ DE CONTENU, RESTAURATION CONTRÔLÉE, jamais `git checkout`.
 // ⚠️ UNE MUTATION CHANGE LE RÉSULTAT, JAMAIS LA TERMINAISON.
-// ⚠️ AUCUN SAUT DE LIGNE DANS LES CIBLES : le dépôt est en CRLF.
+// ⚠️ AUCUN SAUT DE LIGNE DANS LES CIBLES. Le dépôt est stocké en LF, mais le
+// disque peut porter du CRLF là où git n a pas encore normalisé : une ancre à
+// cheval sur deux lignes ne vaut alors que sur une machine. Vérifié par
+// npm run verif:ancres.
 //
 //   node scripts/mutations-delai-commande.mjs
 

@@ -15,7 +15,10 @@
 // ⚠️ UNE MUTATION CHANGE LE RÉSULTAT, JAMAIS LA TERMINAISON : c'est pourquoi on
 //    ne SUPPRIME pas la garde des compteurs absents, qui ferait LEVER la boucle
 //    au lieu de faire rougir le banc. On la fait MENTIR à la place.
-// ⚠️ AUCUN SAUT DE LIGNE DANS LES CIBLES : le dépôt est en CRLF.
+// ⚠️ AUCUN SAUT DE LIGNE DANS LES CIBLES. Le dépôt est stocké en LF, mais le
+// disque peut porter du CRLF là où git n a pas encore normalisé : une ancre à
+// cheval sur deux lignes ne vaut alors que sur une machine. Vérifié par
+// npm run verif:ancres.
 //
 //   node scripts/mutations-audit-securite.mjs
 

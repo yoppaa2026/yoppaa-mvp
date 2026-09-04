@@ -211,9 +211,11 @@ function egale(nom, recu, attendu) {
   // ⚠️ ON ISOLE LA FONCTION AVANT DE MESURER. Ces mots vivent ailleurs dans un
   // fichier de 4 500 lignes, et une garde qui les y trouve ne prouve rien.
   //
-  // ⚠️ ET AUCUNE EXPRESSION N'EST ANCRÉE SUR `\n` NU : le dépôt est en CRLF, et
-  // un `\n` seul ne correspond alors JAMAIS. Ce piège-là ne dit rien : il rend
-  // une garde muette, dans le sens qui arrange, sans le moindre message.
+  // ⚠️ ET AUCUNE EXPRESSION N'EST ANCRÉE SUR UN SAUT DE LIGNE. Le dépôt est
+  // stocké en LF, mais le disque peut porter du CRLF là où git n'a pas encore
+  // normalisé : une expression qui traverse une fin de ligne ne vaut alors que
+  // sur une machine. Ce piège-là ne dit rien : il rend une garde muette, dans
+  // le sens qui arrange, sans le moindre message.
   const debut = src.indexOf('async function chargerCommercants')
   const finFinally = src.indexOf('setCommercesEnChargement(false)', debut)
   const relatif = src.slice(finFinally).search(/\r?\n {2}\}\r?\n/)

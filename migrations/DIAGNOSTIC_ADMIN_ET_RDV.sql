@@ -1,7 +1,13 @@
 -- LES DEUX DERNIÈRES QUESTIONS DE L'AUDIT D'ÉCRITURE
 --
+-- ⚠️ CORRIGÉ LE 04/09 : la première version mettait le `union all` À
+-- L'EXTÉRIEUR de la sous-requête. Le bloc du haut ne projetait que trois
+-- colonnes (`controle, valeur, attendu`) là où celui du bas en rendait quatre,
+-- et Postgres a refusé. Tout tient maintenant dans UNE sous-requête, où chaque
+-- branche rend les mêmes quatre colonnes.
+--
 -- ═══════════════════════════════════════════════════════════════════════════
--- CE QUE LE DIAGNOSTIC PRÉCÉDENT A ÉTABLI, LE 04/09.
+-- CE QUE LE DIAGNOSTIC PRÉCÉDENT A ÉTABLI.
 --
 -- ✅ Les onze policies « aveugles à l'identité » ne le sont pas. Neuf appellent
 -- `is_admin()`, une `is_yoppaa_admin()`. Ma recherche visait `auth.`,
@@ -21,19 +27,22 @@
 --    Elle ne vérifie QUE des champs d'argent. N'importe quel visiteur peut
 --    donc insérer un rendez-vous CONFIRMÉ dans l'agenda de n'importe quel
 --    commerçant, à n'importe quelle date, sous n'importe quel nom.
+--
+--    Et « confirmé » est précisément le statut qui OCCUPE le créneau : la ligne
+--    forgée déclenche la contrainte d'exclusion contre les vraies
+--    réservations, et un client légitime s'entend dire que l'heure est prise.
 -- ═══════════════════════════════════════════════════════════════════════════
 --
 -- ⚠️ AVANT DE PROPOSER DE LA SUPPRIMER, IL FAUT SAVOIR QUI S'APPUIE DESSUS.
 -- Le tableau de bord crée des rendez-vous à la main (`ModalNouveauRdv`), en
 -- tant qu'`authenticated`, et cette policy vise `anon+authenticated`. Si elle
 -- est la SEULE à autoriser l'insertion, la retirer casserait le commerçant.
--- C'est la question 2.
 --
--- ⚠️ ET LA QUESTION 1 DÉPLACE SIMPLEMENT LE PROBLÈME : tout repose maintenant
--- sur `is_admin()`. Une fonction qui rendrait `true` sans jeton ouvrirait DIX
--- tables d'un coup, dont `clients`. Deux fonctions d'admin au lieu d'une est
--- d'ailleurs déjà un défaut en soi : deux sources de vérité pour « qui est
--- administrateur ».
+-- ⚠️ ET LA PREMIÈRE QUESTION DÉPLACE SIMPLEMENT LE PROBLÈME : tout repose
+-- maintenant sur `is_admin()`. Une fonction qui rendrait `true` sans jeton
+-- ouvrirait DIX tables d'un coup, dont `clients`. Deux fonctions d'admin au
+-- lieu d'une est d'ailleurs déjà un défaut : deux sources de vérité pour
+-- « qui est administrateur ».
 
 select controle, valeur, attendu from (
 
@@ -49,8 +58,8 @@ select controle, valeur, attendu from (
   -- ⚠️ DEUX FONCTIONS POUR UNE SEULE IDÉE. Laquelle fait foi ? Celle qu'on
   -- oublie de modifier le jour où l'adresse change est celle qui ouvre.
   union all select 2, 'nombre de fonctions d administration',
-    (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.proname in ('is_admin', 'is_yoppaa_admin'))::text,
+    (select count(*) from pg_proc p2 join pg_namespace n2 on n2.oid = p2.pronamespace
+      where n2.nspname = 'public' and p2.proname in ('is_admin', 'is_yoppaa_admin'))::text,
     '2 aujourd hui, 1 souhaitable'
 
   -- ─── 2. QUI PEUT INSÉRER DANS L'AGENDA, ET SOUS QUELLE CONDITION ────────
@@ -59,14 +68,13 @@ select controle, valeur, attendu from (
       and tablename = 'rdv_reservations' and cmd in ('INSERT', 'ALL'))::text,
     'au moins 2 pour pouvoir en retirer une'
 
-) t
-union all
-select
-  10 + row_number() over (order by policyname) as ordre,
-  ('rdv_reservations.' || policyname || ' [' || cmd || '] pour ' || array_to_string(roles, '+')) as controle,
-  left('USING ' || coalesce(qual, '(aucun)') || '   ///   WITH CHECK ' || coalesce(with_check, '(aucun)'), 700) as valeur,
-  'le commercant doit garder un chemin' as attendu
-from pg_policies
-where schemaname = 'public' and tablename = 'rdv_reservations' and cmd in ('INSERT', 'ALL')
+  union all
+  select
+    10 + row_number() over (order by policyname),
+    ('rdv_reservations.' || policyname || ' [' || cmd || '] pour ' || array_to_string(roles, '+')),
+    left('USING ' || coalesce(qual, '(aucun)') || '   ///   WITH CHECK ' || coalesce(with_check, '(aucun)'), 700),
+    'le commercant doit garder un chemin'
+  from pg_policies
+  where schemaname = 'public' and tablename = 'rdv_reservations' and cmd in ('INSERT', 'ALL')
 
-order by 1;
+) t order by ordre;

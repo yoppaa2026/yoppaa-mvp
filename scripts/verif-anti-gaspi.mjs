@@ -17,7 +17,7 @@ import {
   minutesAvantFermeture, libelleHeure, libelleFenetre, libelleTempsRestant,
   prixCasse, remisePourcent, offreValable, REMISE_MINIMALE, REMISE_CONSEILLEE, CONSEIL_REMISE,
   TITRE_YOPPER, SOUS_TITRE_YOPPER, NOM_FONCTION_COMMERCANT, LIBELLE_BOUTON,
-  creneauxUtilisables, refusDePublication, offrePubliable, dansFenetre,
+  creneauxUtilisables, creneauxDansLaFenetre, margeDeCloture, refusDePublication, offrePubliable, dansFenetre,
   offresOuvertes,
 } from '../lib/anti-gaspi.js'
 
@@ -295,14 +295,56 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
     ids(creneauxUtilisables(F, [c('a', '18:00:00', '18:30:00')])), ['a'])
   egal('un créneau du matin ne convient pas',
     ids(creneauxUtilisables(F, [c('matin', '08:00:00', '09:00:00')])), [])
-  // ⚠️ LES DEUX SENS DU CHEVAUCHEMENT SONT NÉCESSAIRES : un créneau qui ENGLOBE
-  // toute la fenêtre serait écarté si l'on ne regardait que son début.
-  egal('🔴 un créneau qui englobe la fenêtre convient aussi',
-    ids(creneauxUtilisables(F, [c('large', '16:00:00', '20:00:00')])), ['large'])
-  egal('un créneau qui finit juste après le début convient',
-    ids(creneauxUtilisables(F, [c('chevauche', '16:30:00', '17:30:00')])), ['chevauche'])
+  // 🔴 CES DEUX ATTENTES ONT ÉTÉ INVERSÉES LE 04/09, ET ELLES ENCODAIENT UN
+  // DÉFAUT. On testait le CHEVAUCHEMENT, c'est-à-dire une forme ; la vraie
+  // règle est « peut-on encore le réserver », c'est-à-dire un comportement.
+  //
+  // Un créneau de 16 h à 20 h chevauche bien la fenêtre de 17 h à 19 h. Mais à
+  // 17 h, quand l'offre s'affiche, il a démarré depuis une heure, et
+  // `creneauCommandable` le refuse côté serveur. L'écran de publication
+  // annonçait donc au commerçant un retrait que le serveur n'accepterait
+  // jamais : l'offre partait, et personne ne pouvait la prendre.
+  //
+  // ⚠️ LE CHEVAUCHEMENT RESTE MESURÉ, sous son vrai nom, parce que le message
+  // de refus s'en sert pour distinguer « ajoute un créneau » de « baisse ta
+  // clôture ». Deux causes, deux gestes.
+  egal('🔴 un créneau DÉJÀ COMMENCÉ à l’ouverture ne convient plus',
+    ids(creneauxUtilisables(F, [c('large', '16:00:00', '20:00:00')])), [])
+  egal('mais il chevauche bien la fenêtre, et on sait le dire',
+    ids(creneauxDansLaFenetre(F, [c('large', '16:00:00', '20:00:00')])), ['large'])
+  egal('🔴 un créneau qui finit juste après le début a commencé avant : non',
+    ids(creneauxUtilisables(F, [c('chevauche', '16:30:00', '17:30:00')])), [])
   egal('un créneau qui finit AVANT le début ne convient pas',
     ids(creneauxUtilisables(F, [c('avant', '15:00:00', '17:00:00')])), [])
+  egal('un créneau qui commence PILE à l’ouverture convient',
+    ids(creneauxUtilisables(F, [c('pile', '17:00:00', '17:30:00')])), ['pile'])
+  egal('un créneau qui commence PILE à la fermeture, non',
+    ids(creneauxUtilisables(F, [c('fin', '19:00:00', '19:30:00')])), [])
+
+  // ─── LA CLÔTURE DU CRÉNEAU ─────────────────────────────────────────────
+  //
+  // 🔴 LE DÉFAUT TROUVÉ EN RELISANT CETTE FONCTION. Elle ne regardait QUE
+  // l'heure du créneau, jamais sa clôture. Une offre publiée à 17 h pour un
+  // créneau de 18 h dont la clôture est réglée à 48 h passait toutes les
+  // vérifications, s'affichait, et n'était réservable par personne : sa porte
+  // s'était fermée l'avant-veille.
+  egal('🔴 une clôture de 48 h rend le créneau inutilisable',
+    ids(creneauxUtilisables(F, [{ id: 'ferme', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 48 }])), [])
+  egal('une clôture d’une heure laisse commander dès l’ouverture',
+    ids(creneauxUtilisables(F, [{ id: 'ok1h', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 1 }])), ['ok1h'])
+  // La borne exacte : le créneau ferme à l'instant où l'offre ouvre. Il reste
+  // un moment pour commander, et `creneauCommandable` accepte l'égalité.
+  egal('la clôture qui tombe PILE à l’ouverture laisse passer',
+    ids(creneauxUtilisables(F, [{ id: 'pile', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 1 }])), ['pile'])
+  egal('une minute de plus, et c’est fermé',
+    ids(creneauxUtilisables(F, [{ id: 'trop', heure_debut: '17:59:00', heure_fin: '18:30:00', cutoff_heures: 1 }])), [])
+  // ⚠️ ZÉRO N'EST PAS UNE CLÔTURE, et une valeur absurde non plus.
+  egal('une clôture à zéro ne change rien',
+    ids(creneauxUtilisables(F, [{ id: 'z', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 0 }])), ['z'])
+  egal('une clôture illisible ne ferme rien',
+    ids(creneauxUtilisables(F, [{ id: 'n', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 'deux' }])), ['n'])
+  egal('un créneau sans heure de fin ne sert à rien',
+    ids(creneauxUtilisables(F, [{ id: 'moitie', heure_debut: '18:00:00' }])), [])
   // ⚠️ ET LE PASSAGE DE MINUIT VAUT AUSSI ICI. La friterie de 22 h à 1 h.
   {
     const NUIT = { heure_debut: '22:00:00', heure_fin: '01:00:00', prix_deal: 3, prix_original: 6 }
@@ -347,6 +389,21 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
     /ajoute un créneau/i.test(refusCreneau || ''), refusCreneau)
   verifier('et dit la conséquence, pas seulement la règle',
     /venir chercher/i.test(refusCreneau || ''), refusCreneau)
+
+  // 🔴 DEUX CAUSES, DEUX GESTES. « Ajoute un créneau » est un mauvais conseil
+  // quand le créneau existe et que c'est sa CLÔTURE qui ferme la porte : le
+  // commerçant en créerait un second, aussi inutilisable que le premier, et
+  // conclurait que la fonction ne marche pas.
+  const refusCloture = refusDePublication(F,
+    [{ id: 'x', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 48 }])
+  verifier('🔴 un créneau dont la clôture est passée fait refuser aussi',
+    refusCloture !== null, String(refusCloture))
+  verifier('🔴 et le message parle de la CLÔTURE',
+    /clôture/i.test(refusCloture || ''), String(refusCloture))
+  verifier('🔴 il ne demande PAS d’ajouter un créneau, il y en a un',
+    !/ajoute un créneau/i.test(refusCloture || ''), String(refusCloture))
+  verifier('et il nomme les deux gestes qui réparent',
+    /baisse/i.test(refusCloture || '') && /plus tôt/i.test(refusCloture || ''), String(refusCloture))
 
   // ⚠️ L'ORDRE DES REFUS COMPTE : on ne reproche pas le créneau à quelqu'un qui
   // n'a pas encore mis d'heure. On lui dit UNE chose à la fois, dans l'ordre où

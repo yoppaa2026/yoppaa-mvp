@@ -26,11 +26,17 @@ const HEURE = 'lib/heure-belge.js'
 const MUTATIONS = [
   // ─── LE FUSEAU, LE PIÈGE PRINCIPAL ──────────────────────────────────────
   //
-  // ⚠️ CES DEUX-LÀ VISENT `lib/heure-belge.js` DEPUIS LE 04/09 : les primitives
-  // d'heure ont été extraites pour que le module des délais de commande les
-  // partage, plutôt que d'en garder une seconde copie qui aurait divergé au
-  // premier changement d'heure. Le harnais l'a signalé sur-le-champ, en
-  // « TEXTE INTROUVABLE ». Quatrième fois qu'un point d'ancrage périme.
+  // ⚠️ QUATRE MUTATIONS VISENT `lib/heure-belge.js` DEPUIS LE 04/09 : les
+  // primitives d'heure y ont été extraites pour que le module des délais de
+  // commande les partage, plutôt que d'en garder une seconde copie qui aurait
+  // divergé au premier changement d'heure. `minutesDeLHeure` et `libelleHeure`
+  // ont suivi le même chemin quelques heures plus tard, et leurs deux mutations
+  // ont périmé à leur tour.
+  //
+  // ✅ ET C'EST LE HARNAIS QUI L'A DIT, en « TEXTE INTROUVABLE ». Une mutation
+  // dont l'ancre a disparu ne s'applique pas, donc le banc reste vert : sans ce
+  // rapport, on aurait compté deux gardes mesurées qui ne l'étaient plus.
+  // Sixième fois qu'un point d'ancrage périme après un déplacement de code.
   { nom: '🔴 le module lit l’heure UNIVERSELLE au lieu de l’heure belge',
     fichier: HEURE,
     de: "  timeZone: FUSEAU, hour: '2-digit', minute: '2-digit', hour12: false,",
@@ -43,10 +49,12 @@ const MUTATIONS = [
 
   // ─── LIRE UNE HEURE ─────────────────────────────────────────────────────
   { nom: '🔴 une heure absente rend ZERO au lieu de rien',
+    fichier: HEURE,
     de: '  if (!m) return null',
     vers: '  if (!m) return 0' },
 
   { nom: '🔴 une heure impossible est acceptee',
+    fichier: HEURE,
     de: '  if (h > 23 || min > 59) return null',
     vers: '  if (false) return null' },
 
@@ -165,8 +173,40 @@ const MUTATIONS = [
 
   // ─── CE QUE L'ÉCRAN ÉCRIT ───────────────────────────────────────────────
   { nom: '🔴 l’heure s’ecrit sans espace (« 19h »)',
+    fichier: HEURE,
     de: "  return min === 0 ? `${h} h` : `${h} h ${String(min).padStart(2, '0')}`",
     vers: "  return min === 0 ? `${h}h` : `${h}h${String(min).padStart(2, '0')}`" },
+
+  // ─── LE CRÉNEAU DOIT RESTER RÉSERVABLE (04/09) ──────────────────────────
+  //
+  // 🔴 CETTE FONCTION NE REGARDAIT QUE LE CHEVAUCHEMENT, c'est-à-dire une
+  // FORME, là où la vraie question est un COMPORTEMENT : peut-on encore le
+  // réserver ? Une offre publiée à 17 h pour un créneau de 18 h dont la
+  // clôture est réglée à 48 h passait toutes les vérifications, s'affichait,
+  // et n'était réservable par personne. Le commerçant aurait accusé Yoppaa.
+  { nom: '🔴 un creneau DEJA COMMENCE redevient reservable',
+    de: '    if (apres >= duree) return false',
+    vers: '    if (false) return false' },
+
+  { nom: '🔴 la cloture du creneau n’est plus regardee a la publication',
+    de: '    return apres >= margeDeCloture(c)',
+    vers: '    return true' },
+
+  { nom: '🔴 la cloture se compte en MINUTES au lieu d’heures',
+    de: "  return (Number.isFinite(h) && h > 0) ? h * 60 : 0",
+    vers: "  return (Number.isFinite(h) && h > 0) ? h : 0" },
+
+  // ⚠️ La friterie ouverte de 22 h à 1 h : comparer deux heures de pendule à
+  // la soustraction se trompe d'une journée entière.
+  { nom: '🔴 le calcul circulaire disparait (la fenetre de nuit casse)',
+    de: '  return (((instant - debutFenetre) % 1440) + 1440) % 1440',
+    vers: '  return instant - debutFenetre' },
+
+  // ⚠️ DEUX CAUSES, DEUX GESTES. « Ajoute un créneau » quand le créneau existe
+  // pousse le commerçant à en créer un second, aussi inutilisable.
+  { nom: '🔴 le refus ne distingue plus la cloture de l’absence de creneau',
+    de: '    if (dansLaPlage.length > 0) {',
+    vers: '    if (false) {' },
 ]
 
 const lancer = () => {

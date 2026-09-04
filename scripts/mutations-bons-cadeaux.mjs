@@ -352,13 +352,13 @@ const MUTATIONS = [
   // ─── LE CA DU JOUR (défaut trouvé par Alex le 28/08) ─────────────────────
   { nom: '🔴 le CA du jour réoublie la récompense (le défaut d’Alex)',
     banc: 'verif:bord', fichier: 'lib/statistiques.js',
-    de: '  const remise = Number(commande.fidelite_remise || 0)\n  return arrondi(Math.max(0, total - remise))',
-    vers: '  return arrondi(Math.max(0, total))' },
+    de: '  return resteApresRemboursement(Math.max(0, total - remise), commande.stripe_refund_amount)',
+    vers: '  return resteApresRemboursement(Math.max(0, total), commande.stripe_refund_amount)' },
 
   { nom: '🔴 SUR-CORRECTION : le CA des commandes retranche le bon cadeau',
     banc: 'verif:bord', fichier: 'lib/statistiques.js',
-    de: '  const remise = Number(commande.fidelite_remise || 0)\n  return arrondi(Math.max(0, total - remise))',
-    vers: '  const remise = Number(commande.fidelite_remise || 0)\n  return arrondi(Math.max(0, total - remise - Number(commande.bon_cadeau_montant || 0)))' },
+    de: '  return resteApresRemboursement(Math.max(0, total - remise), commande.stripe_refund_amount)',
+    vers: '  return resteApresRemboursement(Math.max(0, total - remise - Number(commande.bon_cadeau_montant || 0)), commande.stripe_refund_amount)' },
 
   { nom: '🔴 la marchandise restée sur l’étagère recompte dans le CA',
     banc: 'verif:bord', fichier: 'lib/statistiques.js',

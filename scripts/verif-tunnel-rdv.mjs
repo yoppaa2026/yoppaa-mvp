@@ -526,8 +526,15 @@ for (const chemin of [
   //
   // ⚠️ TOUS LES BONS, PAS LE PREMIER : la liste qui a servi au débit est
   // exactement celle qui sert au retour.
+  // 🔴 ET LA GARDE EXIGE LA CONDITION, PAS SEULEMENT L'APPEL (04/09).
+  //
+  // Elle ne cherchait que `recrediterBons(supabase, bonsPresta, …)`. Neutraliser
+  // la condition en `if (false)` laissait donc le texte en place et la garde au
+  // vert : elle mesurait la PRÉSENCE d'un appel, pas le fait qu'il s'exécute.
+  // C'est la mesure par mutation qui l'a dit — la garde était verte pour une
+  // raison qui n'était pas la bonne.
   verifie('un second débit raté recrédite TOUS les premiers',
-    /recrediterBons\(supabase, bonsPresta, \{ rdv_id: idRdv \}\)/.test(src))
+    /if \(bonsPresta\.length > 0\) await recrediterBons\(supabase, bonsPresta, \{ rdv_id: idRdv \}\)/.test(src))
   verifie('et la commande couverte est marquée payée en ligne',
     /paye_en_ligne: true/.test(src) && /rdv_reservation_id: idRdv/.test(src))
 }

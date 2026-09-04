@@ -26,7 +26,7 @@ const MUTATIONS = [
   // derniers jours n'en ont touché qu'un à chaque fois.
   { nom: '🔴 le bon n’est plus recrédité à l’annulation',
     fichier: 'lib/rdv-annulation-server.js',
-    de: '    const rec = await recrediterBon(db, bonId, Number(bonMontant), refs)',
+    de: '    const rec = await recrediterBons(db, lignes, refs)',
     vers: '    const rec = { ok: true }' },
 
   { nom: '🔴 la colonne du bon disparaît du select d’annulation',
@@ -38,8 +38,8 @@ const MUTATIONS = [
   // bon paie les produits. L'oublier laisse la moitié du bon dans le vide.
   { nom: '🔴 les avantages de la commande liée ne sont plus rendus',
     fichier: 'app/api/rdv/cancel/route.js',
-    de: '        bonId: commandeLiee.bon_cadeau_id,',
-    vers: '        bonId: null,' },
+    de: '        bonsUtilises: lignesBonsDe(commandeLiee),',
+    vers: '        bonsUtilises: [],' },
 
   // ─── 2) LE REMBOURSEMENT QUI RENDRAIT PLUS QUE LE PRÉLÈVEMENT ───────────
   { nom: '🔴 le remboursement porte sur le brut, bon compris',
@@ -111,8 +111,19 @@ const MUTATIONS = [
 
   { nom: '🔴 un bon déjà recrédité par le webhook redevient muet',
     fichier: 'lib/rdv-annulation-server.js',
-    de: '    else rendu.bon = arr(bonMontant)',
-    vers: '    else if (!rec.deja_recredite) rendu.bon = arr(bonMontant)' },
+    // 🔴 CETTE MUTATION NE MUTAIT PLUS RIEN, ET LA MESURE L'A DIT (04/09).
+    //
+    // Elle ajoutait `if (!rec.deja_recredite)`. Or `recrediterBons`, la version
+    // qui rend PLUSIEURS bons, agrège ses résultats par `boucler()` et ne
+    // remonte que `{ ok, nom, resultats, echecs }` : `rec.deja_recredite` vaut
+    // donc `undefined`, la condition est toujours vraie, et rien ne changeait.
+    //
+    // ⚠️ UNE MUTATION QUI NE MUTE RIEN EST UNE MUTATION MANQUÉE, pas une garde
+    // faible. Le drapeau vit maintenant sur CHAQUE ligne de `rec.resultats`,
+    // et le défaut du 30/08 se rejoue en ne comptant que ce qu'on a fait
+    // soi-même au lieu de ce qui est revenu au Yopper.
+    de: '    else rendu.bon = arr(lignes.reduce((s, l) => s + Number(l.montant), 0))',
+    vers: '    else rendu.bon = arr((rec.resultats || []).filter(r => !r.deja_recredite).reduce((s, r) => s + Number(r.montant || 0), 0))' },
 
   // 🔴 L'ORDRE QUI SUPPRIME LA COURSE. Rembourser AVANT de rendre rouvre la
   // fenêtre où le webhook `charge.refunded` rend la récompense entre notre
@@ -145,7 +156,7 @@ const MUTATIONS = [
   // ─── 12) LE COMMERÇANT NE SAIT PAS CE QU'IL DÉCLENCHE (30/08 soir) ───────
   { nom: '🔴 la fenêtre d’annulation reparle du seul acompte',
     fichier: 'lib/confirmation-rdv.js',
-    de: '    const liste = libelleRetours(r)',
+    de: '    const liste = libelleRetours(r, categorie)',
     vers: "    const liste = ''" },
 
   { nom: '🔴 les produits mis de côté ne sont plus comptés',
@@ -167,7 +178,7 @@ const MUTATIONS = [
 
   { nom: '🔴 la fenêtre d’après redevient muette sur l’argent parti',
     fichier: 'lib/confirmation-rdv.js',
-    de: '    return `${base}${retours ? libelleRetoursFaits(retours) : \'\'}`',
+    de: '    return `${base}${retours ? libelleRetoursFaits({ ...retours, categorie }) : \'\'}`',
     vers: '    return base' },
 
   // 🔴 UN REMBOURSEMENT RATÉ QUI SE TAIT EST PIRE QUE PAS DE MESSAGE : le
@@ -179,7 +190,7 @@ const MUTATIONS = [
 
   { nom: '🔴 la fenêtre du no-show ne dit plus la part gardée sur le bon',
     fichier: 'lib/rdv-paiement.js',
-    de: '  if (part.gardeSurBon > 0) morceaux.push(`${euros(part.gardeSurBon)} pris sur son bon cadeau`)',
+    de: '  if (part.gardeSurBon > 0) morceaux.push(`${euros(part.gardeSurBon)} pris sur son ${libelleBon(categorie)}`)',
     vers: '' },
 
   { nom: '🔴 le tableau de bord ne montre plus au commerçant ce qui est parti',
@@ -251,8 +262,8 @@ const MUTATIONS = [
 
   { nom: '🔴 la fenêtre du no-show se tait sur ce qui revient',
     fichier: 'lib/confirmation-rdv.js',
-    de: '    const { garde, rend } = libelleNoShow(part)',
-    vers: "    const { garde } = libelleNoShow(part)\n    const rend = ''" },
+    de: '    const { garde, rend } = libelleNoShow(part, categorie)',
+    vers: "    const { garde } = libelleNoShow(part, categorie)\n    const rend = ''" },
 
   { nom: '🔴 un ancien rendez-vous ne dit plus qu’on ignore sa garantie',
     fichier: 'lib/confirmation-rdv.js',
@@ -273,8 +284,8 @@ const MUTATIONS = [
   // COMMERÇANT A LE DROIT DE GARDER.
   { nom: '🔴 le no-show restitue le bon entier au lieu du surplus',
     fichier: 'app/api/rdv/no-show/route.js',
-    de: '      bonMontant: part.bonRestitue,',
-    vers: '      bonMontant: rdv.bon_cadeau_montant,' },
+    de: '      bonsUtilises: repartirRestitution(lignesBonsDe(rdv), part.bonRestitue),',
+    vers: '      bonsUtilises: lignesBonsDe(rdv),' },
 
   { nom: '🔴 un rendez-vous annulé peut de nouveau être noté absent',
     fichier: 'app/api/rdv/no-show/route.js',
@@ -513,18 +524,18 @@ const MUTATIONS = [
   // ─── 12) LE PANIER ENTIÈREMENT COUVERT ───────────────────────────────
   { nom: '🔴 « couvert sans paiement » n’est plus déduit du total',
     fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: '    const couvertSansPaiement = totalCents === 0 && (!!bonCadeau || !!recompense)',
+    de: '    const couvertSansPaiement = totalCents === 0 && (bonsValides.length > 0 || !!recompense)',
     vers: '    const couvertSansPaiement = false' },
 
   { nom: '🔴 la part produits du bon n’est plus débitée',
     fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: "        const deb = await debiterBon(supabase, bonCadeau.id, vent.bonSurProduits, { source: 'commande', commande_id: commande.id })",
+    de: "        const deb = await debiterBons(supabase, bonsProduits, { source: 'commande', commande_id: commande.id })",
     vers: '        const deb = { ok: true }' },
 
   { nom: '🔴 un second débit raté laisse le premier dépensé',
     fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: '          if (vent.bonSurPresta > 0) await recrediterBon(supabase, bonCadeau.id, vent.bonSurPresta, { rdv_id: idRdv })',
-    vers: '          if (false) await recrediterBon(supabase, bonCadeau.id, 0, {})' },
+    de: '          if (bonsPresta.length > 0) await recrediterBons(supabase, bonsPresta, { rdv_id: idRdv })',
+    vers: '          if (false) await recrediterBons(supabase, bonsPresta, { rdv_id: idRdv })' },
 
   { nom: '🔴 la commande couverte n’est plus marquée payée en ligne',
     fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',

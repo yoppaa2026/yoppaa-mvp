@@ -48,5 +48,21 @@ jobs:
       # ⚠️ SEULES LES DÉPENDANCES DE PRODUCTION COMPTENT ICI. Une faille dans un
       # outil de développement ne part jamais chez un commerçant, et la
       # confondre avec le reste fabrique le bruit qui fait tout ignorer.
+      #
+      # 🔴 ET `npm audit` NE DISTINGUE PAS UNE FAILLE D'UNE PANNE : il rend 1
+      # quand il trouve quelque chose, ET quand il n'a pas pu joindre le service
+      # d'avis de sécurité. Le 04/09, ce service répondait 503, et cette étape
+      # rougissait à CHAQUE poussée depuis des semaines. Alex recevait un
+      # courriel d'échec systématique et avait appris à l'ignorer.
+      #
+      # ⚠️ UNE ALARME QUI SONNE TOUT LE TEMPS NE PROTÈGE PLUS RIEN. Le jour où
+      # une faille réelle apparaîtrait, le signal serait identique à celui de la
+      # veille. C'est pour ça qu'on ne se contente pas de `continue-on-error`,
+      # qui produirait l'inverse : une faille passant sans bruit.
+      #
+      # `scripts/lire-audit.mjs` juge la sortie : failles trouvées → rouge ;
+      # service muet → on le DIT, et on n'échoue pas.
       - name: Aucune faille en production
-        run: npm audit --omit=dev --audit-level=moderate
+        run: |
+          npm audit --omit=dev --json > audit.json 2>&1 || true
+          node scripts/lire-audit.mjs audit.json

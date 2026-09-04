@@ -3924,6 +3924,65 @@ verifier('les écritures partent l’une après l’autre',
 verifier('les échecs sont comptés, pas alertés douze fois',
   /silencieux: true/.test(srcDashPaiement))
 
+// ═══════════════════════════════════════════════════════════════════════════
+// L'AUDIT DE SÉCURITÉ : UNE FAILLE N'EST PAS UNE PANNE (04/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 `npm audit` REND 1 DANS DEUX CAS TOTALEMENT DIFFÉRENTS : il a trouvé une
+// faille, ou il n'a pas pu joindre le service d'avis de sécurité. Le second se
+// produisait à chaque poussée depuis des semaines (503 sur le run #176), et
+// Alex avait appris à ignorer le courriel d'échec.
+//
+// ⚠️ UNE ALARME QUI SONNE TOUT LE TEMPS NE PROTÈGE PLUS RIEN.
+{
+  const { jugerAudit } = await import('./lire-audit.mjs')
+  const audit = (compteurs) => JSON.stringify({ metadata: { vulnerabilities: compteurs } })
+
+  // 🔴 LE CŒUR : une panne ne se lit PAS comme « aucune faille ».
+  verifier('🔴 un service muet n’est pas lisible',
+    jugerAudit('{ "error": "Service Unavailable" }').lisible === false)
+  verifier('une sortie qui n’est pas du JSON non plus',
+    jugerAudit('npm error audit endpoint returned an error').lisible === false)
+  verifier('une sortie vide non plus', jugerAudit('').lisible === false)
+  verifier('ni une absence', jugerAudit(null).lisible === false)
+  // ⚠️ LA PREUVE D'UNE VRAIE RÉPONSE EST LA PRÉSENCE DES COMPTEURS, pas
+  // l'absence d'erreur : un JSON valide mais sans `metadata.vulnerabilities`
+  // n'est pas un audit, quelle qu'en soit la raison.
+  verifier('🔴 un JSON valide SANS compteurs n’est pas un audit',
+    jugerAudit('{"auditReportVersion":2}').lisible === false)
+
+  // Une vraie réponse, elle, se lit.
+  {
+    const propre = jugerAudit(audit({ info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 }))
+    verifier('un audit propre est lisible', propre.lisible === true)
+    verifier('et ne compte aucune faille', propre.compte === 0)
+  }
+  {
+    const modere = jugerAudit(audit({ info: 0, low: 0, moderate: 1, high: 0, critical: 0, total: 1 }))
+    verifier('🔴 une faille modérée est comptée', modere.lisible && modere.compte === 1)
+  }
+  {
+    const grave = jugerAudit(audit({ info: 2, low: 3, moderate: 1, high: 2, critical: 1, total: 9 }))
+    verifier('les trois niveaux retenus s’additionnent', grave.compte === 4, JSON.stringify(grave.detail))
+    verifier('et le total brut reste disponible', grave.total === 9)
+  }
+  // ⚠️ EN DESSOUS DU SEUIL, ON NE RÉVEILLE PERSONNE. Un avis « low » sur une
+  // dépendance de production ne justifie pas de bloquer une poussée.
+  {
+    const bas = jugerAudit(audit({ info: 5, low: 4, moderate: 0, high: 0, critical: 0, total: 9 }))
+    verifier('🔴 « low » et « info » ne font pas rougir', bas.lisible && bas.compte === 0)
+  }
+
+  // Et l'étape du workflow passe bien par ce juge, sinon tout ceci ne garde rien.
+  let flux = ''
+  try { flux = readFileSync(new URL('../.github/workflows/verification.yml', import.meta.url), 'utf8') } catch { flux = '' }
+  verifier('le fichier du workflow existe encore', flux.length > 200)
+  verifier('🔴 le workflow juge l’audit au lieu de lire un code de sortie',
+    /node scripts\/lire-audit\.mjs audit\.json/.test(flux))
+  verifier('et il ne se contente plus de `npm audit --audit-level`',
+    !/run: npm audit --omit=dev --audit-level=moderate\s*$/m.test(flux))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

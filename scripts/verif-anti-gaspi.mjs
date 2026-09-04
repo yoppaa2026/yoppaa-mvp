@@ -19,7 +19,11 @@ import {
   TITRE_YOPPER, SOUS_TITRE_YOPPER, NOM_FONCTION_COMMERCANT, LIBELLE_BOUTON,
   creneauxUtilisables, creneauxDansLaFenetre, margeDeCloture, refusDePublication, offrePubliable, dansFenetre,
   offresOuvertes,
+  fermetureDuJour, fenetreParDefaut, enHeure, prixConseille, lignePublication,
+  MINUTES_UTILES_MINIMUM,
 } from '../lib/anti-gaspi.js'
+import { readFileSync } from 'node:fs'
+import { sansProse } from './lire-code.mjs'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -447,6 +451,170 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   egal('et l’ordre retombe sur le plus pressé',
     nu.map(r => r.offre.id), ['tot', 'tard', 'resa'])
   egal('une liste absente rend une liste vide', offresOuvertes(undefined, a(18, 30)), [])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. LE GESTE DU COMMERÇANT, ET L'ÉCRAN DU YOPPER
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 IL EST 17 H ET IL A LES MAINS DANS LA FARINE. Tout ce qui suit existe pour
+// que publier un invendu tienne en trois gestes. Une fonction qui demande cinq
+// minutes à ce moment-là n'est pas une fonction, c'est une ligne de
+// documentation.
+{
+  const HORAIRES = {
+    mardi: { ouvert: true, debut: '07:00', fin: '18:00' },
+    // Une boulangerie qui ferme le midi : c'est la FIN DE LA DERNIÈRE plage qui
+    // compte, jamais celle de la première.
+    mercredi: { ouvert: true, debut: '07:00', fin: '12:00', debut2: '15:00', fin2: '18:30' },
+    jeudi: { ouvert: false },
+  }
+  const le = (h, m = 0) => instant(`2026-09-08T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`, ETE)
+
+  egal('la fermeture du jour se lit en minutes', fermetureDuJour(HORAIRES, 'mardi'), 18 * 60)
+  // 🔴 UNE JOURNÉE COUPÉE FERME LE SOIR, PAS À MIDI. Se tromper ici publierait
+  // un invendu déjà terminé au moment où il s'affiche.
+  egal('🔴 un horaire à pause ferme à la FIN de la dernière plage',
+    fermetureDuJour(HORAIRES, 'mercredi'), 18 * 60 + 30)
+  verifier('un jour fermé n’a pas d’heure de fermeture', fermetureDuJour(HORAIRES, 'jeudi') === null)
+  verifier('sans horaires du tout, on ne devine pas', fermetureDuJour(undefined, 'mardi') === null)
+
+  // ─── LA FENÊTRE PROPOSÉE ────────────────────────────────────────────────
+  egal('de maintenant à la fermeture',
+    fenetreParDefaut(HORAIRES, 'mardi', le(15, 0)), { heure_debut: '15:00', heure_fin: '18:00' })
+  egal('et l’heure de la pendule est respectée à la minute',
+    fenetreParDefaut(HORAIRES, 'mardi', le(16, 45)), { heure_debut: '16:45', heure_fin: '18:00' })
+  // 🔴 PUBLIER À 17 H 58 POUR 18 H N'ENVOIE PERSONNE : le Yopper n'a pas le
+  // temps de traverser le village, et le commerçant croit avoir publié.
+  verifier('🔴 à moins d’un quart d’heure de la fermeture, on ne propose plus',
+    fenetreParDefaut(HORAIRES, 'mardi', le(17, 55)) === null)
+  egal('mais pile à la limite, ça passe encore',
+    fenetreParDefaut(HORAIRES, 'mardi', le(17, 45)), { heure_debut: '17:45', heure_fin: '18:00' })
+  verifier('après la fermeture, rien', fenetreParDefaut(HORAIRES, 'mardi', le(19, 0)) === null)
+  verifier('un jour de fermeture, rien', fenetreParDefaut(HORAIRES, 'jeudi', le(15, 0)) === null)
+  egal('le seuil est nommé, pas écrit en dur', MINUTES_UTILES_MINIMUM, 15)
+
+  // ─── ÉCRIRE UNE HEURE ───────────────────────────────────────────────────
+  egal('minuit s’écrit 00:00', enHeure(0), '00:00')
+  egal('18 h s’écrit 18:00', enHeure(1080), '18:00')
+  egal('9 h 05 garde son zéro', enHeure(545), '09:05')
+  verifier('1440 n’est pas une heure du jour', enHeure(1440) === null)
+  verifier('un négatif non plus', enHeure(-1) === null)
+  verifier('un illisible non plus', enHeure('midi') === null)
+
+  // ─── LE PRIX SUGGÉRÉ ────────────────────────────────────────────────────
+  //
+  // ⚠️ ON SUGGÈRE, ON N'IMPOSE PAS. Le plancher est une règle, le conseil un
+  // avis : à 40 % il publie, à 20 % non.
+  egal('le conseil applique la remise conseillée', prixConseille(6), 3)
+  egal('et il arrondit au centime', prixConseille(4.99), 2.5)
+  verifier('sans prix, aucun conseil', prixConseille(null) === null)
+  verifier('un prix nul n’est pas un prix', prixConseille(0) === null)
+  verifier('🔴 le conseil SUIT la constante, il ne la recopie pas',
+    prixConseille(100) === Math.round(100 * (100 - REMISE_CONSEILLEE)) / 100)
+
+  // ─── LA LIGNE PUBLIÉE ───────────────────────────────────────────────────
+  const TARTE = { id: 'a2', nom: 'Tarte aux pommes', prix: 18 }
+  const publier = (patch = {}) => lignePublication({
+    article: TARTE, reste: 2, prix: 9, heureDebut: '15:00', heureFin: '18:00',
+    jour: '2026-09-08', commercantId: 'c1', ...patch,
+  })
+
+  {
+    const l = publier()
+    egal('🔴 le titre est le NOM de l’article', l.titre, 'Tarte aux pommes')
+    egal('la quantité déclarée est écrite', l.quantite, 2)
+    egal('le prix cassé et le prix plein voyagent ensemble', [l.prix_deal, l.prix_original], [9, 18])
+    egal('la fenêtre est celle qu’il a choisie', [l.heure_debut, l.heure_fin], ['15:00', '18:00'])
+    // 🔴 UN INVENDU NE SURVIT PAS À SA JOURNÉE, et la lecture des deals du jour
+    // passe par ces colonnes : sans elles, l'offre existerait sans s'afficher.
+    egal('🔴 les trois dates valent le jour même',
+      [l.date_deal, l.date_debut, l.date_fin], ['2026-09-08', '2026-09-08', '2026-09-08'])
+    // 🔴 « lot » AVEC UNE SEULE UNITÉ : c'est le type qui produit une ligne de
+    // panier À PART. Un « remise_pct » aurait remisé TOUT le stock du jour.
+    egal('🔴 c’est une offre séparée, pas une remise sur le catalogue',
+      [l.deal_type, l.unites_par_deal], ['lot', 1])
+    // ⚠️ LE GOOD MORNING PART À 7 H, L'INVENDU VIT À 17 H. L'y pousser
+    // annoncerait la veille ce qui n'existe pas encore.
+    verifier('🔴 jamais dans le Good Morning', l.inclus_morning === false)
+    verifier('et ce n’est pas une bonne affaire préparée', l.est_bonne_affaire === false)
+    verifier('l’offre est publiée active', l.actif === true)
+    // Et elle doit passer les règles du module, sinon elle ne s'affichera pas.
+    verifier('🔴 la ligne publiée est une offre VALABLE', offreValable(l) === true)
+    egal('sa remise est bien celle qu’on annonce', remisePourcent(l), 50)
+  }
+
+  // ⚠️ TOUT CE QUI EST BANCAL SE REFUSE, ET EN SILENCE PLUTÔT QU'EN BASE. La
+  // contrainte de la base dirait la même chose, mais un message d'erreur
+  // Postgres à 17 h n'aide personne.
+  verifier('sans article, aucune ligne', publier({ article: null }) === null)
+  verifier('sans commerce, aucune ligne', publier({ commercantId: null }) === null)
+  verifier('🔴 une quantité nulle ne se publie pas', publier({ reste: 0 }) === null)
+  verifier('une quantité négative non plus', publier({ reste: -3 }) === null)
+  verifier('une quantité illisible non plus', publier({ reste: 'trois' }) === null)
+  verifier('🔴 un prix nul ne se publie pas', publier({ prix: 0 }) === null)
+  verifier('un article sans prix habituel non plus',
+    publier({ article: { id: 'x', nom: 'Sans prix' } }) === null)
+  verifier('une demi-fenêtre non plus', publier({ heureFin: null }) === null)
+  verifier('un jour mal formé non plus', publier({ jour: 'mardi' }) === null)
+  egal('les demi-unités se rabotent', publier({ reste: 2.9 }).quantite, 2)
+  egal('et les centimes s’arrondissent', publier({ prix: 8.999 }).prix_deal, 9)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. LE CÂBLAGE DES DEUX ÉCRANS
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ CES GARDES LISENT DU CODE, faute de pouvoir monter un rendu. Elles sont
+// mesurées par le harnais : une garde textuelle que personne ne fait rougir ne
+// prouve rien.
+{
+  const BORD = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  const ACCUEIL = sansProse(readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
+
+  // ─── LE GESTE DU COMMERÇANT ─────────────────────────────────────────────
+  verifier('🔴 le geste de l’invendu existe dans le tableau de bord',
+    /<AvantLaFermeture /.test(BORD))
+  // 🔴 `peut` APPLIQUE LA CATÉGORIE, et c'est indispensable : en détail le stock
+  // se décrémente en dur, la même offre le compterait deux fois.
+  verifier('🔴 il est réservé au forfait ET à la catégorie',
+    /if \(!peut\(commercant, 'anti_gaspi'\)\) return null/.test(BORD))
+  verifier('la ligne écrite vient du module, pas de l’écran',
+    /lignePublication\(\{/.test(BORD))
+  verifier('🔴 le refus de publication est opposé avant l’envoi',
+    /refusDePublication\(offre, creneaux\)/.test(BORD))
+  // ⚠️ ON LIT LE RÉSULTAT DE L'ÉCRITURE. Un `await` qu'on n'écoute pas est un
+  // espoir, et ici l'espoir vaut une tarte qui finit à la poubelle.
+  verifier('🔴 le résultat de la publication est lu',
+    /const \{ error \} = await supabase\.from\('yoppaa_deals'\)\.insert\(ligne\)/.test(BORD))
+  verifier('la fenêtre par défaut vient du module',
+    /fenetreParDefaut\(commercant\?\.horaires_detail, nomJour\)/.test(BORD))
+  // ⚠️ UN ARTICLE VITRINE N'EST PAS UN INVENDU : rien ne s'y commande.
+  verifier('🔴 la vitrine ne se brade pas',
+    /!a\.est_vitrine && Number\(a\.prix\) > 0/.test(BORD))
+
+  // ─── L'ÉCRAN DU YOPPER ──────────────────────────────────────────────────
+  verifier('🔴 l’accueil affiche « Rien ne se perd »',
+    /\{TITRE_YOPPER\}/.test(ACCUEIL) && /\{SOUS_TITRE_YOPPER\}/.test(ACCUEIL))
+  // ⚠️ LE TITRE VIENT DU MODULE. Recopié dans l'écran, il aurait divergé au
+  // premier changement de formulation, comme le libellé du bon avant le 31/08.
+  verifier('🔴 et il ne le recopie pas en dur',
+    !/Rien ne se perd/.test(ACCUEIL), 'le titre est écrit en dur dans l’écran')
+  // 🔴 LE TRI ET LE FILTRE APPARTIENNENT AU MODULE. Refaits dans l'écran, ils
+  // auraient divergé au premier changement d'heure.
+  verifier('🔴 le filtre et le tri viennent du module',
+    /setInvendusOuverts\(offresOuvertes\(invendus \|\| \[\]\)\)/.test(ACCUEIL))
+  // ⚠️ LA PRÉSENCE DE LA FENÊTRE FAIT L'OFFRE, et le relevé ne demande que ça.
+  verifier('🔴 seules les offres qui portent une fenêtre sont relevées',
+    /\.not\('heure_fin', 'is', null\)/.test(ACCUEIL))
+  verifier('et seulement celles du jour',
+    /\.eq\('date_deal', aujourdhui\)/.test(ACCUEIL))
+  // ⚠️ UNE SECTION VIDE OCCUPERAIT LE HAUT DE L'ÉCRAN POUR NE RIEN ANNONCER.
+  verifier('🔴 la section n’existe que s’il y a quelque chose',
+    /\{invendusOuverts\.length > 0 && \(/.test(ACCUEIL))
+  // ⚠️ ON ANNONCE L'ÉTAT, PAS UNE ALARME.
+  verifier('le temps restant se dit avec les mots du module',
+    /libelleTempsRestant\(restant\)/.test(ACCUEIL))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

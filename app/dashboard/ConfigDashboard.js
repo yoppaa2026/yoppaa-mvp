@@ -47,6 +47,12 @@ import BoutonIaInline from './BoutonIaInline'
 import { champsModifies } from '@/lib/formulaire-modifie'
 import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
 import { choixDeDelai, libelleChoixDelai } from '@/lib/delai-commande'
+import { jourSemaineDe } from '@/lib/creneaux'
+import {
+  NOM_FONCTION_COMMERCANT, TITRE_YOPPER, CONSEIL_REMISE, MINUTES_UTILES_MINIMUM,
+  fenetreParDefaut, fermetureDuJour, prixConseille, lignePublication,
+  refusDePublication, remisePourcent, libelleHeure, libelleFenetre,
+} from '@/lib/anti-gaspi'
 import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './BarreEnregistrer'
 // ⚠️ Le POSTE qui affiche ces fenêtres est monté une seule fois, dans
 // `app/dashboard/page.js`, qui rend cet écran. On n'importe ici que la
@@ -1831,6 +1837,191 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
 //   - Deadline : 23h00 (commercant.heure_limite_morning) la veille
 //   - Si on coche inclus_morning sur deal A, on décoche les autres deals
 //     du même commerçant pour la même date_deal
+// ═══════════════════════════════════════════════════════════════════════════
+// AVANT LA FERMETURE — LE GESTE DE L'INVENDU
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 IL EST 17 H ET IL A LES MAINS DANS LA FARINE. Trois gestes : ce qu'il lui
+// reste, à quel prix, jusqu'à quand. Rien d'autre ne lui est demandé, et le
+// reste se déduit.
+//
+// ⚠️ CE N'EST PAS LE FORMULAIRE DES BONNES AFFAIRES, ET C'EST DÉLIBÉRÉ. Celui-là
+// demande un titre, une accroche, un type, des dates : c'est l'outil de celui
+// qui prépare sa semaine. Un commerçant qui ferme dans une heure ne le remplira
+// jamais, et la fonction n'existerait que dans la documentation.
+//
+// ⚠️ LE TITRE EST LE NOM DE L'ARTICLE. Le Yopper cherche « la tarte aux
+// pommes », pas un slogan.
+function AvantLaFermeture({ commercantId, commercant, articles, toast, onPublie }) {
+  const [creneaux, setCreneaux] = useState([])
+  const [invendus, setInvendus] = useState([])
+  const [articleId, setArticleId] = useState('')
+  const [reste, setReste] = useState('')
+  const [prix, setPrix] = useState('')
+  const [heureFin, setHeureFin] = useState('')
+  const [enCours, setEnCours] = useState(false)
+  const jour = jourBruxelles()
+  const nomJour = jourSemaineDe(jour)
+
+  // Les articles qu'il peut réellement brader : vendables, actifs, avec un prix.
+  // ⚠️ UN ARTICLE VITRINE N'EST PAS UN INVENDU : rien ne s'y commande.
+  const vendables = (articles || []).filter(a => a.actif !== false && !a.est_vitrine && Number(a.prix) > 0)
+  const article = vendables.find(a => String(a.id) === String(articleId)) || null
+
+  const recharger = useCallback(async () => {
+    const [{ data: cr }, { data: inv }] = await Promise.all([
+      supabase.from('creneaux').select('id, jour_semaine, heure_debut, heure_fin, cutoff_heures, actif')
+        .eq('commercant_id', commercantId).eq('actif', true),
+      supabase.from('yoppaa_deals')
+        .select('id, titre, prix_deal, prix_original, quantite, heure_debut, heure_fin, actif')
+        .eq('commercant_id', commercantId).eq('date_deal', jour).eq('actif', true)
+        .not('heure_fin', 'is', null),
+    ])
+    setCreneaux((cr || []).filter(c => !c.jour_semaine || c.jour_semaine === nomJour))
+    setInvendus(inv || [])
+  }, [commercantId, jour, nomJour])
+
+  useEffect(() => { recharger() }, [recharger])
+
+  // ⚠️ LA FENÊTRE SE PROPOSE, ELLE NE SE SAISIT PAS. De maintenant à sa
+  // fermeture : c'est la réponse dans presque tous les cas, et il peut toujours
+  // avancer l'heure de fin s'il veut s'arrêter avant.
+  const fenetre = fenetreParDefaut(commercant?.horaires_detail, nomJour)
+  useEffect(() => {
+    if (fenetre && !heureFin) setHeureFin(fenetre.heure_fin)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- on ne repose le défaut qu'une fois
+  }, [fenetre?.heure_fin])
+
+  // ⚠️ LE PRIX SE SUGGÈRE À CHAQUE CHANGEMENT D'ARTICLE. Le laisser vide
+  // obligerait à calculer une remise de tête, debout derrière le comptoir.
+  function choisirArticle(id) {
+    setArticleId(id)
+    const a = vendables.find(x => String(x.id) === String(id))
+    const suggere = a ? prixConseille(a.prix) : null
+    setPrix(suggere === null ? '' : String(suggere))
+  }
+
+  const offre = article && fenetre ? {
+    heure_debut: fenetre.heure_debut,
+    heure_fin: heureFin || fenetre.heure_fin,
+    prix_deal: Number(prix),
+    prix_original: Number(article.prix),
+  } : null
+  const refus = offre ? refusDePublication(offre, creneaux) : null
+  const remise = offre ? remisePourcent(offre) : null
+  const resteOk = Number.isFinite(parseInt(reste, 10)) && parseInt(reste, 10) >= 1
+
+  async function publier() {
+    if (!article || !fenetre || refus || !resteOk) return
+    setEnCours(true)
+    const ligne = lignePublication({
+      article, reste, prix,
+      heureDebut: fenetre.heure_debut,
+      heureFin: heureFin || fenetre.heure_fin,
+      jour, commercantId,
+    })
+    // ⚠️ ON LIT LE RÉSULTAT. Un `await` qu'on n'écoute pas est un espoir, et
+    // ici l'espoir vaut une tarte qui finit à la poubelle.
+    const { error } = await supabase.from('yoppaa_deals').insert(ligne)
+    setEnCours(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast(`${article.nom} est en ligne jusqu'à ${libelleHeure(ligne.heure_fin)}`)
+    setArticleId(''); setReste(''); setPrix('')
+    recharger(); onPublie?.()
+  }
+
+  async function retirer(id) {
+    const { error } = await supabase.from('yoppaa_deals').update({ actif: false }).eq('id', id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('Offre retirée')
+    recharger(); onPublie?.()
+  }
+
+  // ⚠️ RIEN NE S'AFFICHE QUAND LA FONCTION N'EST PAS AU FORFAIT. `peut` applique
+  // la CATÉGORIE, et c'est indispensable ici : l'anti-gaspi est réservé à
+  // l'alimentaire, où le stock se CALCULE. En détail, le stock se décrémente en
+  // dur et la même offre le compterait deux fois.
+  if (!peut(commercant, 'anti_gaspi')) return null
+
+  return (
+    <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '14px 16px', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+        <strong style={{ fontSize: 14, color: '#78350F' }}>{NOM_FONCTION_COMMERCANT}</strong>
+        <span style={{ fontSize: 11.5, color: '#92400E' }}>
+          Ce qu&rsquo;il te reste, à prix cassé, jusqu&rsquo;à ce soir. Les Yoppers le voient dans «&nbsp;{TITRE_YOPPER}&nbsp;».
+        </span>
+      </div>
+
+      {/* ⚠️ ON DIT POURQUOI C'EST FERMÉ, ON NE GRISE PAS EN SILENCE. Un
+          commerçant devant un bouton mort conclut que l'application est cassée. */}
+      {!fenetre ? (
+        <p style={{ fontSize: 12.5, color: '#92400E', margin: '6px 0 0', lineHeight: 1.5 }}>
+          {fermetureDuJour(commercant?.horaires_detail, nomJour) === null
+            ? 'Renseigne tes horaires du jour : sans heure de fermeture, on ne sait pas jusqu’à quand proposer tes invendus.'
+            : `C'est trop tard pour aujourd'hui : il reste moins de ${MINUTES_UTILES_MINIMUM} minutes avant ta fermeture, personne n'aurait le temps de venir.`}
+        </p>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, marginTop: 8 }}>
+            <div>
+              <label style={s.label}>Qu&rsquo;est-ce qu&rsquo;il te reste&nbsp;?</label>
+              <select value={articleId} onChange={e => choisirArticle(e.target.value)} style={{ ...s.input, width: '100%' }}>
+                <option value="">Choisis un article…</option>
+                {vendables.map(a => <option key={a.id} value={a.id}>{a.nom} · {euros(Number(a.prix))}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <div>
+                <label style={s.label}>Combien&nbsp;?</label>
+                <Input type="number" min="1" step="1" value={reste} onChange={e => setReste(e.target.value)} placeholder="3"/>
+              </div>
+              <div>
+                <label style={s.label}>À quel prix&nbsp;?</label>
+                <Input type="number" min="0" step="0.10" value={prix} onChange={e => setPrix(e.target.value)} placeholder="3.00"/>
+              </div>
+              <div>
+                <label style={s.label}>Jusqu&rsquo;à</label>
+                <Input type="time" value={heureFin} onChange={e => setHeureFin(e.target.value)}/>
+              </div>
+            </div>
+          </div>
+
+          {/* ⚠️ LA REMISE SE DIT PENDANT QU'IL TAPE, pas après avoir cliqué. Le
+              conseil n'a de valeur que tant qu'il peut encore changer d'avis. */}
+          {article && (
+            <p style={{ fontSize: 12, color: refus ? '#B91C1C' : '#166534', margin: '8px 0 0', fontWeight: 700, lineHeight: 1.5 }}>
+              {refus || `-${remise} % sur ${article.nom}. ${CONSEIL_REMISE}`}
+            </p>
+          )}
+
+          <button
+            onClick={publier}
+            disabled={!article || !!refus || !resteOk || enCours}
+            style={{ ...s.btn, ...s.btnPrimary, marginTop: 10, opacity: (!article || !!refus || !resteOk || enCours) ? 0.5 : 1 }}>
+            {enCours ? 'Publication…' : 'Je le mets en ligne'}
+          </button>
+        </>
+      )}
+
+      {invendus.length > 0 && (
+        <div style={{ marginTop: 12, borderTop: '1px solid #FDE68A', paddingTop: 10 }}>
+          <p style={{ fontSize: 11, fontWeight: 800, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+            En ligne en ce moment
+          </p>
+          {invendus.map(d => (
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '5px 0', fontSize: 12.5, color: '#78350F' }}>
+              <span>
+                <strong>{d.titre}</strong> · {d.quantite} restant{d.quantite > 1 ? 's' : ''} à {euros(Number(d.prix_deal))} · {libelleFenetre(d)}
+              </span>
+              <button onClick={() => retirer(d.id)} style={{ ...s.btn, ...s.btnGhost, padding: '3px 9px', fontSize: 11 }}>Retirer</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TabDeals({ commercantId, commercant, toast }) {
   const today = jourBruxelles()
   const [deals, setDeals] = useState([])
@@ -2126,6 +2317,12 @@ function TabDeals({ commercantId, commercant, toast }) {
           <Icon name="plus" size={14}/> Nouveau deal
         </button>
       </div>
+
+      {/* ⚠️ LE GESTE DE L'INVENDU PASSE AVANT TOUT LE RESTE, et ce n'est pas
+          de la décoration : c'est celui qu'on fait à 17 h, en une minute, alors
+          que le formulaire des bonnes affaires se remplit le dimanche soir. */}
+      <AvantLaFermeture commercantId={commercantId} commercant={commercant}
+        articles={articles} toast={toast} onPublie={fetchDeals}/>
 
       {/* Info Good Morning Yoppers */}
       <div style={{ background: '#FFF7ED', borderLeft: `4px solid #EA580C`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#7C2D12', lineHeight: 1.5 }}>

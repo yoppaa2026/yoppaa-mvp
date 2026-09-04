@@ -211,6 +211,113 @@ const MUTATIONS = [
   { nom: '🔴 le refus ne distingue plus la cloture de l’absence de creneau',
     de: '    if (dansLaPlage.length > 0) {',
     vers: '    if (false) {' },
+
+  // ─── LE GESTE DE L'INVENDU (04/09) ──────────────────────────────────────
+  //
+  // 🔴 IL EST 17 H ET IL A LES MAINS DANS LA FARINE. Chacune de ces mutations
+  // remet un defaut qui lui ferait rater une vente ou publier dans le vide.
+
+  // 🔴 Une journee coupee ferme LE SOIR, pas a midi. Se tromper ici publierait
+  // un invendu deja termine au moment ou il s affiche.
+  { nom: '🔴 la fermeture se lit sur la PREMIERE plage (midi au lieu du soir)',
+    fichier: 'lib/ouverture.js',
+    de: '  const fins = plages.map(([, f]) => String(f || \'\')).filter(Boolean).sort()',
+    vers: '  const fins = plages.map(([, f]) => String(f || \'\')).filter(Boolean).sort().reverse()' },
+
+  // 🔴 Publier a 17 h 58 pour 18 h n envoie personne, et le commercant croit
+  // avoir publie.
+  { nom: '🔴 on publie encore deux minutes avant la fermeture',
+    de: '  if (fin - debut < MINUTES_UTILES_MINIMUM) return null',
+    vers: '  if (false) return null' },
+
+  { nom: '🔴 le quart d heure utile tombe a zero',
+    de: 'export const MINUTES_UTILES_MINIMUM = 15',
+    vers: 'export const MINUTES_UTILES_MINIMUM = 0' },
+
+  { nom: '🔴 l heure perd son zero de tete (« 9:05 » au lieu de « 09:05 »)',
+    de: "  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.round(m % 60)).padStart(2, '0')}`",
+    vers: '  return `${Math.floor(m / 60)}:${Math.round(m % 60)}`' },
+
+  { nom: '🔴 minuit-et-un-jour passe pour une heure du jour',
+    de: '  if (!Number.isFinite(m) || m < 0 || m >= 1440) return null',
+    vers: '  if (!Number.isFinite(m)) return null' },
+
+  // ⚠️ Le conseil SUIT la constante, il ne la recopie pas.
+  { nom: '🔴 le prix conseille cesse de suivre la remise conseillee',
+    de: '  return Math.round(plein * (100 - REMISE_CONSEILLEE)) / 100',
+    vers: '  return Math.round(plein * 80) / 100' },
+
+  { nom: '🔴 un prix habituel absent vaut zero et se publie',
+    de: '  if (!Number.isFinite(plein) || plein <= 0) return null',
+    vers: '  if (!Number.isFinite(plein)) return null' },
+
+  // 🔴 Un invendu ne survit pas a sa journee, et la lecture des deals du jour
+  // passe par ces colonnes : sans elles, l offre existerait sans s afficher.
+  { nom: '🔴 l invendu ne porte plus la date du jour',
+    de: '    date_deal: jour,',
+    vers: '    date_deal: null,' },
+
+  // 🔴 « remise_pct » aurait remise TOUT le stock du jour, pas seulement le
+  // reste declare.
+  { nom: '🔴 l invendu remise tout le stock au lieu d etre une offre a part',
+    de: "    deal_type: 'lot',",
+    vers: "    deal_type: 'remise_pct'," },
+
+  // ⚠️ Le Good Morning part a 7 h, l invendu vit a 17 h.
+  { nom: '🔴 l invendu part dans le Good Morning du lendemain',
+    de: '    inclus_morning: false,',
+    vers: '    inclus_morning: true,' },
+
+  { nom: '🔴 une quantite nulle se publie',
+    de: '  if (!Number.isFinite(quantite) || quantite < 1) return null',
+    vers: '  if (!Number.isFinite(quantite)) return null' },
+
+  { nom: '🔴 le titre n est plus le nom de l article',
+    de: '    titre: article.nom,',
+    vers: "    titre: 'Offre du soir'," },
+
+  // ─── LE CÂBLAGE DES DEUX ÉCRANS ─────────────────────────────────────────
+  { nom: '🔴 le geste de l invendu disparait du tableau de bord',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      <AvantLaFermeture commercantId={commercantId} commercant={commercant}',
+    vers: '      <AvantLaFermeterX commercantId={commercantId} commercant={commercant}' },
+
+  // 🔴 `peut` applique la CATEGORIE : en detail le stock se decremente en dur,
+  // la meme offre le compterait deux fois.
+  { nom: '🔴 l invendu s ouvre au detail, ou le stock se compte deux fois',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "  if (!peut(commercant, 'anti_gaspi')) return null",
+    vers: "  if (!canDo(planEffectif(commercant), 'anti_gaspi')) return null" },
+
+  { nom: '🔴 le refus de publication n est plus oppose avant l envoi',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '  const refus = offre ? refusDePublication(offre, creneaux) : null',
+    vers: '  const refus = null' },
+
+  { nom: '🔴 le resultat de la publication n est plus lu',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "    const { error } = await supabase.from('yoppaa_deals').insert(ligne)",
+    vers: "    const error = null; await supabase.from('yoppaa_deals').insert(ligne)" },
+
+  { nom: '🔴 la vitrine se met a se brader',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '  const vendables = (articles || []).filter(a => a.actif !== false && !a.est_vitrine && Number(a.prix) > 0)',
+    vers: '  const vendables = (articles || []).filter(a => a.actif !== false)' },
+
+  { nom: '🔴 le filtre et le tri des invendus se refont dans l ecran',
+    fichier: 'app/commander/page.js',
+    de: '    setInvendusOuverts(offresOuvertes(invendus || []))',
+    vers: '    setInvendusOuverts((invendus || []).map(o => ({ offre: o, restant: 0, remise: 0 })))' },
+
+  { nom: '🔴 l accueil releve des deals qui ne portent aucune fenetre',
+    fichier: 'app/commander/page.js',
+    de: "      .not('heure_fin', 'is', null)",
+    vers: '      .limit(50)' },
+
+  { nom: '🔴 la section « Rien ne se perd » s affiche vide',
+    fichier: 'app/commander/page.js',
+    de: '              {invendusOuverts.length > 0 && (',
+    vers: '              {true && (' },
 ]
 
 const lancer = () => {

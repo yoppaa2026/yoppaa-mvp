@@ -44,6 +44,10 @@ import { poserIdentiteLocale, effacerIdentiteLocale, cacheEtranger } from '@/lib
 import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
 import CarteNotifications from './CarteNotifications'
 import SupprimerCompte from './SupprimerCompte'
+// ⚠️ LE TITRE, LE SOUS-TITRE ET LE TRI VIENNENT DU MODULE, JAMAIS D'ICI.
+// Recopiés dans l'écran, ils auraient divergé au premier changement de
+// formulation, comme le libellé du bon cadeau avant le 31/08.
+import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, libelleTempsRestant } from '@/lib/anti-gaspi'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1579,6 +1583,8 @@ export default function Commander() {
   const [fermetures, setFermetures] = useState({})
   // Set des commerçants qui ont un deal/actu actif aujourd'hui (pour dot LIVE sur pills)
   const [dealsActifs, setDealsActifs] = useState(new Set())
+  // Les invendus ouverts EN CE MOMENT, déjà filtrés et classés par le module.
+  const [invendusOuverts, setInvendusOuverts] = useState([])
   const [actusActives, setActusActives] = useState(new Set())
   const [bonnesAffairesActives, setBonnesAffairesActives] = useState(new Set())
   const [position, setPosition] = useState(null)
@@ -2324,6 +2330,29 @@ export default function Commander() {
         .in('commercant_id', ids)
         .eq('actif', true),
     ])
+    // ═══ LES INVENDUS DU JOUR ═════════════════════════════════════════════
+    //
+    // ⚠️ UN RELEVÉ À PART, ET C'EST VOULU. Celui du dessus ne rapporte qu'un
+    // ENSEMBLE d'identifiants, de quoi allumer une pastille sur une carte.
+    // « Rien ne se perd » a besoin du titre, des deux prix et de la fenêtre :
+    // élargir le premier relevé aurait alourdi chaque ouverture de l'accueil
+    // pour une section qui, la plupart du temps, ne s'affiche pas.
+    //
+    // ⚠️ ON NE DEMANDE QUE CE QUI PORTE UNE FENÊTRE. C'est elle, et rien
+    // d'autre, qui fait un invendu : pas de drapeau à côté qui pourrait dire le
+    // contraire des heures.
+    const { data: invendus } = await supabase.from('yoppaa_deals')
+      .select('id, commercant_id, titre, prix_deal, prix_original, quantite, heure_debut, heure_fin')
+      .in('commercant_id', ids)
+      .eq('actif', true)
+      .eq('date_deal', aujourdhui)
+      .not('heure_fin', 'is', null)
+    // 🔴 LE TRI ET LE FILTRE APPARTIENNENT AU MODULE. `offresOuvertes` écarte
+    // ce qui est fermé ET ce qui n'est pas vraiment cassé, puis classe par
+    // temps restant. Refaire ce calcul ici en fabriquerait une seconde version,
+    // qui aurait divergé au premier changement d'heure.
+    setInvendusOuverts(offresOuvertes(invendus || []))
+
     const dealSet = new Set()
     const bonneAffaireSet = new Set()
     ;(deals || []).forEach(d => {
@@ -3334,6 +3363,55 @@ export default function Commander() {
           {/* ACCUEIL */}
           {onglet === 'accueil' && (
             <div style={{ padding: '0.875rem 1rem 1rem' }}>
+
+              {/* ═══ RIEN NE SE PERD ═══════════════════════════════════════
+                  🔴 LE PULL AVANT LE PUSH, décision d'Alex. Le Yopper vient
+                  voir, on ne le sonne pas. Un push de fin d'après-midi arrive
+                  chez tout le monde en même temps, tous les jours, et se
+                  démonétise en une semaine.
+
+                  ⚠️ LA SECTION N'EXISTE QUE S'IL Y A QUELQUE CHOSE. Un bloc
+                  vide qui dit « aucun invendu aujourd'hui » occuperait le haut
+                  de l'écran pour ne rien annoncer, et le Yopper apprendrait à
+                  sauter la zone.
+
+                  ⚠️ ET ELLE ANNONCE L'ÉTAT, PAS UNE ALARME : « encore 40
+                  minutes » informe, « dépêche-toi » presse, et ce n'est pas
+                  notre rôle. */}
+              {invendusOuverts.length > 0 && (
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 15, fontWeight: 900, color: T.deep, letterSpacing: '-0.3px' }}>{TITRE_YOPPER}</span>
+                    <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>{SOUS_TITRE_YOPPER}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {invendusOuverts.map(({ offre, restant, remise }) => {
+                      const commerce = commercants.find(c => c.id === offre.commercant_id)
+                      return (
+                        <button key={offre.id}
+                          onClick={() => commerce && selectionnerCommercant(commerce)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 14, padding: '0.7rem 0.875rem', cursor: commerce ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontWeight: 800, fontSize: '0.92rem', color: '#78350F', margin: 0, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {offre.titre}
+                            </p>
+                            <p style={{ fontSize: '0.75rem', color: '#92400E', margin: '2px 0 0', fontWeight: 600 }}>
+                              {commerce?.nom || 'Chez un commerçant'} · {libelleTempsRestant(restant)}
+                            </p>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <p style={{ fontSize: '1rem', fontWeight: 900, color: '#B45309', margin: 0, letterSpacing: '-0.3px' }}>{euros(Number(offre.prix_deal))}</p>
+                            <p style={{ fontSize: '0.7rem', color: '#92400E', margin: 0, fontWeight: 700 }}>
+                              <span style={{ textDecoration: 'line-through', opacity: 0.7 }}>{euros(Number(offre.prix_original))}</span> · -{remise} %
+                            </p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {position && commercantsFiltres.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
                   <span style={{ fontSize: 11, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1.2px' }}>

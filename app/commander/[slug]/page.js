@@ -11,6 +11,10 @@ import { canDo, isVitrine, planEffectif } from '@/lib/plans'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
 import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionArticle, libelleMoment, avertissementDelai } from '@/lib/delai-commande'
+// ⚠️ C'EST LA PRÉSENCE DE LA FENÊTRE QUI FAIT L'INVENDU, et on la lit avec la
+// fonction du module : recopier le test ici ferait passer chaque bonne affaire
+// de la semaine pour un invendu de fin de journée.
+import { porteUneFenetre } from '@/lib/anti-gaspi'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -4318,9 +4322,19 @@ export default function CommanderSlug() {
                     ⚠️ ICI ET NULLE PART AILLEURS, et après le catalogue : on
                     ne demande à quelqu'un ce qui lui manque qu'une fois qu'il
                     a vu ce qu'il y a. Avant la bande « autour de toi », qui
-                    est le bouton de sortie de la fiche. */}
+                    est le bouton de sortie de la fiche.
+
+                    🔴 ET ON NE DEMANDE PAS À QUELQU'UN CE QU'IL FAIT DÉJÀ.
+                    `proposeDesInvendus` n'était passé par PERSONNE : le signal
+                    « invendus » s'affichait donc chez tous les commerces
+                    alimentaires, y compris ceux qui publient leurs restes tous
+                    les soirs. Inviter un boulanger à faire ce qu'il fait déjà,
+                    c'est lui dire qu'on ne le connaît pas. */}
                 <SignauxYopper
-                  types={enviesProposables(commercant, { peutCommander })}
+                  types={enviesProposables(commercant, {
+                    peutCommander,
+                    proposeDesInvendus: (dealsActifs || []).some(porteUneFenetre),
+                  })}
                   commercant={commercant}
                 />
 

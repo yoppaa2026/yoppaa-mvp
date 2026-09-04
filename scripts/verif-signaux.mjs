@@ -6,6 +6,7 @@
 // règles-là méritent d'être verrouillées.
 
 import { readFileSync } from 'node:fs'
+import { sansProse } from './lire-code.mjs'
 import {
   libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail,
   LIBELLE_ENVIE, TYPES_ENVIE, envieConnue,
@@ -157,8 +158,13 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
     && ficheCode.indexOf('<SignauxYopper') < ficheCode.indexOf('<BandeAutourDeToi'))
   // ⚠️ ET LA RÈGLE N'EST PLUS DANS LE JSX. Une condition écrite à quatre
   // endroits différents est une condition qu'on ne peut pas mesurer.
+  // ⚠️ L'APPEL PORTE MAINTENANT DEUX RENSEIGNEMENTS (04/09) : ce qu'il peut
+  // vendre, et s'il publie DÉJÀ ses invendus. La garde vise donc le nom de la
+  // fonction et son premier argument, pas la forme exacte de l'objet — sans
+  // quoi elle rougirait au prochain renseignement ajouté, sans qu'aucune règle
+  // n'ait bougé.
   verifier('la règle vient du module, pas de l\'écran',
-    /enviesProposables\(commercant, \{ peutCommander \}\)/.test(ficheCode))
+    /enviesProposables\(commercant, \{/.test(ficheCode))
 
   // La règle elle-même, EXÉCUTÉE.
   const boulangerExister = { categorie: 'alimentaire', plan: 'exister' }
@@ -443,6 +449,33 @@ egal('la commune la plus demandée en tête', communes[0].code_postal, '5640')
 egal('les demandes de la commune sont additionnées', communes[0].demandes, 3)
 egal('un commerce sans code postal ne crée pas de fausse commune',
   parCodePostal([{ code_postal: null, demandes: 5 }]).length, 0)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ON NE DEMANDE PAS À QUELQU'UN CE QU'IL FAIT DÉJÀ (04/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 `proposeDesInvendus` N'ÉTAIT PASSÉ PAR PERSONNE. Le signal s'affichait
+// donc chez TOUS les commerces alimentaires, y compris ceux qui publient leurs
+// restes tous les soirs. Inviter un boulanger à faire ce qu'il fait déjà, c'est
+// lui dire qu'on ne le connaît pas.
+//
+// ⚠️ ET LA RÈGLE ELLE-MÊME S'EXÉCUTE, juste en dessous : la garde de câblage ne
+// dit que si l'argument part, pas ce qu'il produit.
+{
+  const FICHE = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 la fiche dit si le commerçant publie déjà ses invendus',
+    /proposeDesInvendus: \(dealsActifs \|\| \[\]\)\.some\(porteUneFenetre\)/.test(FICHE))
+
+  const BOULANGER = { categorie: 'alimentaire', plan: 'vendre', rdv_actif: true, fidelite_actif: true, livraison_actif: true }
+  verifier('🔴 sans invendu publié, on le lui propose',
+    enviesProposables(BOULANGER, { peutCommander: true, proposeDesInvendus: false }).includes('invendus'))
+  verifier('🔴 quand il en publie déjà, on se tait',
+    !enviesProposables(BOULANGER, { peutCommander: true, proposeDesInvendus: true }).includes('invendus'))
+  // ⚠️ ET JAMAIS HORS DE L'ALIMENTAIRE : en détail le stock se décrémente en
+  // dur, la même offre le compterait deux fois.
+  verifier('un commerce de détail ne se voit pas proposer d’invendus',
+    !enviesProposables({ ...BOULANGER, categorie: 'detail' }, { peutCommander: true }).includes('invendus'))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

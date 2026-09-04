@@ -21,14 +21,23 @@ const RACINE = 'c:/Users/HP/yoppaa-mvp'
 const chemin = (f) => `${RACINE}/${f}`
 const BANC = 'verif:anti-gaspi'
 const MODULE = 'lib/anti-gaspi.js'
+const HEURE = 'lib/heure-belge.js'
 
 const MUTATIONS = [
   // ─── LE FUSEAU, LE PIÈGE PRINCIPAL ──────────────────────────────────────
+  //
+  // ⚠️ CES DEUX-LÀ VISENT `lib/heure-belge.js` DEPUIS LE 04/09 : les primitives
+  // d'heure ont été extraites pour que le module des délais de commande les
+  // partage, plutôt que d'en garder une seconde copie qui aurait divergé au
+  // premier changement d'heure. Le harnais l'a signalé sur-le-champ, en
+  // « TEXTE INTROUVABLE ». Quatrième fois qu'un point d'ancrage périme.
   { nom: '🔴 le module lit l’heure UNIVERSELLE au lieu de l’heure belge',
+    fichier: HEURE,
     de: "  timeZone: FUSEAU, hour: '2-digit', minute: '2-digit', hour12: false,",
     vers: "  timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false," },
 
   { nom: '🔴 minuit redevient 1440 (hors de toutes les fenetres)',
+    fichier: HEURE,
     de: '  return h === 24 ? 0 : h',
     vers: '  return h' },
 
@@ -202,7 +211,7 @@ let attrapees = 0
 const manquees = []
 
 for (const m of MUTATIONS) {
-  const f = chemin(MODULE)
+  const f = chemin(m.fichier || MODULE)
   const original = readFileSync(f, 'utf8')
   if (!original.includes(m.de)) {
     manquees.push(`${m.nom} — TEXTE INTROUVABLE`)

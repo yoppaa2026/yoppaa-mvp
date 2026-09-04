@@ -47,6 +47,8 @@ import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
 import { calculerCapaciteCreneau, creneauCommandable, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
 import { joursRetraitBoutique } from '@/lib/ouverture'
+import { jourPlus } from '@/lib/statut-commerce'
+import { delaiDuPanier, refusDeMelange, pretA, premierJourBoutique, libelleDuree, libelleMoment } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
@@ -128,7 +130,7 @@ export async function POST(request) {
       // boutique n'était vérifiée NULLE PART côté serveur (voir plus bas).
       // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait juste en
       // dessous en dépend, et sans elles elle se trompe EN SILENCE.
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, plan, essai_plan, created_at')
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -173,6 +175,11 @@ export async function POST(request) {
         )
       }
     }
+    // Les congés et fermetures ponctuelles du commerçant. Relevés une seule
+    // fois, lus deux fois : par la date de retrait en boutique, puis par le
+    // délai de préparation, plus bas, quand le panier existe enfin.
+    let fermeturesCommercant = []
+
     if (estBoutique) {
       // Monde boutique : détail ET vitrine (vente de produits au salon, 31/07)
       if (!['detail', 'vitrine'].includes(commercant.categorie)) {
@@ -202,17 +209,22 @@ export async function POST(request) {
       // ⚠️ Un COLIS n'a pas de jour de retrait : il part quand le commerçant
       // l'emballe. On ne lui applique aucune de ces règles.
       if (estRetraitBoutique) {
-        const { data: fermeturesCommercant } = await supabase
+        // ⚠️ ELLES SORTENT DE CE BLOC DEPUIS LE 04/09 : le contrôle du délai
+        // par article en a besoin plus bas, et le panier n'est construit
+        // qu'après. Deux relevés auraient interrogé la base pour la même
+        // réponse, et rien n'aurait garanti qu'ils la lisent au même instant.
+        const { data: lues } = await supabase
           .from('fermetures_exceptionnelles')
           .select('date_debut, date_fin')
           .eq('commercant_id', commercant.id)
+        fermeturesCommercant = lues || []
         // ⚠️ HEURE BELGE, PAS CELLE DU SERVEUR. Vercel tourne en temps
         // universel : `jourLocalISO(new Date())` y rendrait la veille entre
         // minuit et 2h du matin, et refuserait une commande parfaitement
         // valable. C'est le défaut du food truck, transposé au serveur.
         const joursOk = joursRetraitBoutique({
           horairesDetail: commercant.horaires_detail,
-          fermetures: fermeturesCommercant || [],
+          fermetures: fermeturesCommercant,
           depuis: jourBruxelles(),
           maintenant: minutesBruxelles(),
           delaiHeures: commercant.boutique_delai_heures,
@@ -565,6 +577,104 @@ export async function POST(request) {
             ? 'Ce créneau est déjà passé. Choisis-en un autre.'
             : `Il est trop tard pour ce créneau : ${commercant.nom} demande de commander au moins ${etatCreneau.heures} h à l'avance. Choisis un créneau plus tardif.`
         return NextResponse.json({ ok: false, error: message, creneau_indisponible: true }, { status: 409 })
+      }
+    }
+
+    // ─── 4.7) LE DÉLAI DE PRÉPARATION, ET L'HORIZON ────────────────────────
+    //
+    // 🔴 CES DEUX RÈGLES N'EXISTAIENT QUE DANS LE NAVIGATEUR. L'écran masquait
+    // les créneaux trop proches et bornait le calendrier ; le serveur, lui,
+    // acceptait tout. Un onglet ouvert depuis ce matin, un panier restauré au
+    // retour de Stripe ou une requête fabriquée faisaient donc tomber une
+    // commande de tartes à 48 h pour le créneau de midi. Le commerçant la
+    // découvrait déjà impossible.
+    //
+    // ⚠️ C'EST LE MÉTA-DÉFAUT DE CE PROJET, encore une fois : l'écran calcule,
+    // le serveur décide. Ici l'écran calculait et le serveur ne décidait rien.
+    //
+    // ⚠️ ET LE DÉLAI SE LIT SUR L'ARTICLE EN BASE, jamais sur ce que le
+    // navigateur a envoyé. `construireLignesCommande` a résolu chaque ligne
+    // depuis `articles` : un panier trafiqué ne peut pas s'inventer un délai
+    // de zéro.
+    {
+      const { minutes: delaiMinutes, nom: articleLent } = delaiDuPanier(lignes)
+
+      // 🔴 L'INVENDU NE SE REPORTE PAS. Sa fenêtre ferme ce soir ; mélangé à un
+      // article qu'il faut encore préparer, le panier n'a aucun moment de
+      // retrait possible. Laisser passer donnerait un commerçant avec une
+      // commande impossible et un Yopper débité, pour une règle connue
+      // d'avance. C'est de l'argent, pas un imprévu.
+      const refusMelange = refusDeMelange(lignes)
+      if (refusMelange) {
+        return NextResponse.json({ ok: false, error: refusMelange }, { status: 409 })
+      }
+
+      if (delaiMinutes > 0 && creneau && !estBoutique) {
+        const debutCreneau = brusselsInstant(date_commande, creneau.heure_debut)
+        const pret = pretA(delaiMinutes)
+        if (debutCreneau && !isNaN(debutCreneau.getTime()) && pret
+            && debutCreneau.getTime() < pret.getTime()) {
+          // ⚠️ LE MESSAGE NOMME L'ARTICLE COUPABLE. « Ce créneau est trop tôt »
+          // laisserait le Yopper chercher lequel de ses six articles bloque
+          // tout ; il ne cherchera pas, il partira.
+          const quoi = articleLent || 'Un article de ta commande'
+          return NextResponse.json({
+            ok: false,
+            error: `${quoi} demande ${libelleDuree(delaiMinutes)} de préparation. Ce créneau est trop tôt, choisis-en un plus tardif.`,
+            creneau_indisponible: true,
+          }, { status: 409 })
+        }
+      }
+
+      // ⚠️ LA BOUTIQUE N'A PAS DE CRÉNEAU : le Yopper indique un JOUR souhaité.
+      // Le délai décale donc le premier jour possible, et `premierJourBoutique`
+      // sait déjà qu'une préparation finie après la fermeture bascule au
+      // lendemain. Même fonction que l'écran, pour que les deux disent la même
+      // chose.
+      if (delaiMinutes > 0 && estRetraitBoutique) {
+        const premier = premierJourBoutique({
+          minutes: delaiMinutes,
+          horairesDetail: commercant.horaires_detail,
+          fermetures: fermeturesCommercant,
+          delaiHeures: commercant.boutique_delai_heures,
+        })
+        if (!premier || date_commande < premier) {
+          const quoi = articleLent || 'Un article de ta commande'
+          const quand = premier
+            ? ` Le plus tôt possible, c'est ${libelleMoment({ jour: premier, aujourdhui: jourBruxelles() })}.`
+            : ''
+          return NextResponse.json({
+            ok: false,
+            error: `${quoi} demande ${libelleDuree(delaiMinutes)} de préparation.${quand} Choisis un autre jour de retrait.`,
+          }, { status: 400 })
+        }
+      }
+
+      // ─── L'HORIZON, C'EST-À-DIRE LE PLAFOND ──────────────────────────────
+      //
+      // ⚠️ HORIZON ET DÉLAI SONT DEUX BORNES OPPOSÉES. Le délai est un
+      // PLANCHER (« il me faut 48 h »), l'horizon un PLAFOND (« je ne prends
+      // pas de commande au-delà de deux jours »). Un seul mot les désignait
+      // dans le premier brief, et les confondre donne un commerce qui refuse
+      // tout.
+      //
+      // ⚠️ LE DÉFAUT EST 2, aujourd'hui compris, exactement comme la fiche :
+      // « aujourd'hui seulement » n'a de sens que choisi exprès, sans quoi un
+      // commerce devient injoignable dès son dernier créneau passé.
+      //
+      // ⚠️ ET LA BOUTIQUE EN EST EXCLUE : sa borne à elle est
+      // `joursRetraitBoutique`, déjà appliquée plus haut avec ses horaires.
+      if (!estBoutique) {
+        const brut = Number(commercant.horizon_commande)
+        const horizon = Number.isFinite(brut) && brut >= 1 ? Math.floor(brut) : 2
+        const aujourdhui = jourBruxelles()
+        const dernier = jourPlus(aujourdhui, horizon - 1)
+        if (date_commande < aujourdhui || (dernier && date_commande > dernier)) {
+          return NextResponse.json({
+            ok: false,
+            error: `${commercant.nom} ne prend pas encore les commandes pour cette date. Choisis un jour plus proche.`,
+          }, { status: 400 })
+        }
       }
     }
 

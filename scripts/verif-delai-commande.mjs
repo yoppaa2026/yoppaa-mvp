@@ -26,6 +26,7 @@ import {
 import { brusselsInstant } from '../lib/timezone.js'
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
+import { construireLignesCommande, SELECT_ARTICLES, SELECT_DEALS } from '../lib/lignes-commande.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -456,6 +457,117 @@ egal('sans nom d’article, la phrase tient debout',
   verifier('🔴 le champ « Délai » mort des créneaux a disparu du tableau de bord',
     !/delta_minutes/.test(BORD), 'delta_minutes est encore ecrit')
   verifier('et de la fiche client aussi', !/delta_minutes/.test(FICHE))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. CE QUE LE SERVEUR CONSTRUIT VRAIMENT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 C'EST LA SEULE PROTECTION RÉELLE. Tout ce que la fiche affiche explique,
+// rien ne défend : un onglet ouvert depuis ce matin, un panier restauré au
+// retour de Stripe ou une requête fabriquée ne passent par aucune de ses
+// lignes. Le refus appartient à `create-commande`, et il s'appuie sur les
+// lignes que `construireLignesCommande` a résolues EN BASE.
+//
+// ⚠️ ET CELLE-CI S'EXÉCUTE. On appelle la fonction avec un panier et un
+// catalogue, et on regarde ce qu'elle rend. C'est ce qui distingue une garde
+// d'un commentaire.
+{
+  const COMMERCE = { id: 'c1', tva_taux_defaut: 6, categorie: 'alimentaire' }
+  const CATALOGUE = [
+    { id: 'a1', nom: 'Baguette', prix: 1.2, actif: true, commercant_id: 'c1', temps_prepa: 1, delai_minutes: null },
+    { id: 'a2', nom: 'Tarte aux pommes', prix: 18, actif: true, commercant_id: 'c1', temps_prepa: 5, delai_minutes: 2880 },
+  ]
+  const construire = (panier, dealsData = []) => construireLignesCommande({
+    panier, articlesData: CATALOGUE, optionsValeurs: [], variantesData: [],
+    dealsData, commercant: COMMERCE, regime: 'emporter', dateCommande: MARDI,
+  })
+
+  const simple = construire([{ id: 'a1', quantite: 2 }, { id: 'a2', quantite: 1 }])
+  verifier('le panier serveur se construit', simple.ok === true, JSON.stringify(simple).slice(0, 200))
+  // 🔴 LE DÉLAI VOYAGE JUSQU'À LA LIGNE DE COMMANDE. Sans lui, la garde du
+  // serveur lirait zéro partout et laisserait tout passer, en silence.
+  egal('🔴 la ligne de commande porte le délai de son article',
+    simple.lignes.map(l => l.delai_minutes), [0, 2880])
+  // 🔴 ET LE MODULE SAIT LIRE CETTE FORME-LÀ. La ligne serveur nomme son
+  // article `article_nom`, le panier de la fiche le nomme `nom`.
+  egal('🔴 le délai du panier serveur nomme l’article coupable',
+    delaiDuPanier(simple.lignes), { minutes: 2880, nom: 'Tarte aux pommes' })
+
+  // 🔴 LE LOT NE PERD PAS SON DÉLAI CÔTÉ SERVEUR, et c'est structurel : un lot
+  // et une unité passent par le MÊME article résolu en base. C'est exactement
+  // le défaut que la fiche avait, et que le serveur ne pouvait pas avoir.
+  const LOT = {
+    id: 'd1', titre: 'Lot 3 tartes + 1', prix_deal: 54, actif: true, commercant_id: 'c1',
+    deal_type: 'lot', unites_par_deal: 4, article_id: 'a2', date_deal: MARDI,
+  }
+  const avecLot = construire([{ id: 'a2', quantite: 1, deal_id: 'd1' }], [LOT])
+  verifier('le lot se construit', avecLot.ok === true, JSON.stringify(avecLot).slice(0, 200))
+  egal('🔴 la ligne du lot garde les 48 h de sa tarte',
+    avecLot.lignes.map(l => l.delai_minutes), [2880])
+  egal('et un lot ordinaire n’est pas un invendu',
+    avecLot.lignes.map(l => l.offre?.heure_fin ?? null), [null])
+
+  // 🔴 L'INVENDU PORTE SA FENÊTRE JUSQU'AU SERVEUR, et elle annule le délai.
+  const INVENDU = {
+    id: 'd2', titre: 'Tarte aux pommes', prix_deal: 8, actif: true, commercant_id: 'c1',
+    deal_type: 'lot', unites_par_deal: 1, article_id: 'a2', date_deal: MARDI,
+    heure_debut: '15:00:00', heure_fin: '18:00:00',
+  }
+  const avecInvendu = construire([{ id: 'a2', quantite: 1, deal_id: 'd2' }], [INVENDU])
+  verifier('l’invendu se construit', avecInvendu.ok === true, JSON.stringify(avecInvendu).slice(0, 200))
+  egal('🔴 la fenêtre de l’offre arrive jusqu’à la ligne de commande',
+    avecInvendu.lignes.map(l => l.offre?.heure_fin ?? null), ['18:00:00'])
+  egal('🔴 et le serveur en conclut qu’il n’y a plus de délai',
+    delaiDuPanier(avecInvendu.lignes), { minutes: 0, nom: null })
+
+  // 🔴 LE MÉLANGE IMPOSSIBLE EST VU SUR LES LIGNES SERVEUR, pas sur le panier
+  // du navigateur. À 17 h 30 il ne reste que trente minutes de fenêtre, et la
+  // tarte à l'unité en demande 48.
+  const melange = construire(
+    [{ id: 'a2', quantite: 1, deal_id: 'd2' }, { id: 'a2', quantite: 1 }], [INVENDU])
+  const refusServeur = refusDeMelange(melange.lignes, { maintenant: le(MARDI, '17:30') })
+  verifier('🔴 le serveur refuse le mélange invendu + article lent',
+    refusServeur !== null, String(refusServeur))
+  verifier('et son message nomme l’article', /Tarte aux pommes/.test(refusServeur || ''), String(refusServeur))
+
+  // ⚠️ LES COLONNES DOIVENT ÊTRE DEMANDÉES, sans quoi tout ce qui précède lit
+  // `undefined` et conclut « aucun délai ». Une colonne absente d'un select est
+  // LE défaut le plus fréquent de ce projet, six fois.
+  verifier('🔴 le select des articles demande le délai',
+    /\bdelai_minutes\b/.test(SELECT_ARTICLES), SELECT_ARTICLES)
+  verifier('🔴 le select des deals demande la fenêtre',
+    /\bheure_debut\b/.test(SELECT_DEALS) && /\bheure_fin\b/.test(SELECT_DEALS), SELECT_DEALS)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. LE SERVEUR REFUSE VRAIMENT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ CES GARDES-LÀ LISENT LA ROUTE, faute de pouvoir la faire tourner sans
+// Stripe ni base. Elles sont toutes mesurées par le harnais de mutation.
+{
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-commande/route.js', import.meta.url), 'utf8'))
+
+  verifier('🔴 la route calcule le délai du panier',
+    /delaiDuPanier\(lignes\)/.test(ROUTE))
+  verifier('🔴 elle refuse le mélange avant le paiement',
+    /refusDeMelange\(lignes\)/.test(ROUTE) && /refusMelange\)/.test(ROUTE))
+  verifier('🔴 elle compare le début du créneau au moment où ce sera prêt',
+    /debutCreneau\.getTime\(\) < pret\.getTime\(\)/.test(ROUTE))
+  verifier('🔴 elle applique le délai en boutique aussi',
+    /premierJourBoutique\(\{/.test(ROUTE) && /date_commande < premier/.test(ROUTE))
+  // ⚠️ L'HORIZON EST UN PLAFOND, le délai un PLANCHER. Les deux manquaient.
+  verifier('🔴 elle applique l’horizon du commerçant',
+    /commercant\.horizon_commande/.test(ROUTE) && /date_commande > dernier/.test(ROUTE))
+  verifier('et elle refuse aussi une date déjà passée',
+    /date_commande < aujourdhui/.test(ROUTE))
+  verifier('🔴 l’horizon est demandé en base',
+    /horizon_commande, plan/.test(ROUTE), 'absent du select commercant')
+  // ⚠️ UN SEUL RELEVÉ DES FERMETURES, LU DEUX FOIS. Deux relevés auraient
+  // interrogé la base pour la même réponse, sans garantie du même instant.
+  verifier('les fermetures sont relevées une fois et partagées',
+    /let fermeturesCommercant = \[\]/.test(ROUTE))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

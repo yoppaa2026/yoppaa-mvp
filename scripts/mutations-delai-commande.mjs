@@ -24,6 +24,8 @@ const BANC = 'verif:delai'
 const MODULE = 'lib/delai-commande.js'
 const FICHE = 'app/commander/[slug]/page.js'
 const BORD = 'app/dashboard/ConfigDashboard.js'
+const LIGNES = 'lib/lignes-commande.js'
+const ROUTE = 'app/api/stripe/checkout/create-commande/route.js'
 
 const MUTATIONS = [
   // ─── LE DÉLAI D'UNE LIGNE ───────────────────────────────────────────────
@@ -51,9 +53,21 @@ const MUTATIONS = [
 
   // ⚠️ « Cette commande demande 48 h » laisse le Yopper chercher lequel de ses
   // six articles bloque tout. Il ne cherchera pas, il partira.
+  // ⚠️ ANCRE REFAITE LE 04/09 : le module lit maintenant `article_nom` en plus
+  // de `nom`, parce que la ligne construite par le serveur n'a pas la même
+  // forme que celle du panier. Le harnais l'a dit en « TEXTE INTROUVABLE ».
+  // Septième fois qu'un point d'ancrage périme après un déplacement de code, et
+  // septième fois que le harnais le rattrape au lieu de verdir en silence.
   { nom: '🔴 le coupable n’est plus nomme',
-    de: '      nom = ligne?.nom || null',
+    de: '      nom = ligne?.nom || ligne?.article_nom || null',
     vers: '      nom = null' },
+
+  // 🔴 ET LA FORME SERVEUR EN PARTICULIER. Ne lire que `nom` laisserait le
+  // message du serveur dire « un article de ta commande », sans jamais nommer
+  // la tarte : la ligne de commande, elle, s'appelle `article_nom`.
+  { nom: '🔴 le serveur ne sait plus lire le nom de SA propre ligne',
+    de: '      nom = ligne?.nom || ligne?.article_nom || null',
+    vers: '      nom = ligne?.nom || null' },
 
   // ─── L'INVENDU NE SE REPORTE PAS ────────────────────────────────────────
   { nom: '🔴 le melange invendu + article lent n’est plus refuse',
@@ -252,7 +266,118 @@ const MUTATIONS = [
     fichier: BORD,
     de: '      max_commandes: parseInt(form.max_commandes) || 5,',
     vers: '      max_commandes: parseInt(form.max_commandes) || 5,\n      delta_minutes: 0,' },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LE SERVEUR, C'EST-À-DIRE LA SEULE PROTECTION RÉELLE
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 TOUT CE QUI PRÉCÈDE EXPLIQUE, RIEN NE DÉFEND. Un onglet ouvert depuis ce
+  // matin, un panier restauré au retour de Stripe ou une requête fabriquée ne
+  // passent par aucune ligne d'écran. Ces mutations-ci sont donc les seules
+  // dont l'échec se paierait en argent.
+
+  // ─── LA LIGNE DE COMMANDE ───────────────────────────────────────────────
+  //
+  // 🔴 Sans le délai sur la ligne, la garde du serveur lit zéro partout et
+  // laisse tout passer, en silence. Aucune erreur, aucun symptôme.
+  { nom: '🔴 la ligne de commande perd le delai de son article',
+    fichier: LIGNES,
+    de: '      delai_minutes: article.delai_minutes ?? 0,',
+    vers: '      delai_minutes: 0,' },
+
+  { nom: '🔴 la fenetre de l’invendu n’arrive plus jusqu’a la ligne',
+    fichier: LIGNES,
+    de: '      offre: deal ? { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin } : null,',
+    vers: '      offre: null,' },
+
+  // ⚠️ UNE COLONNE ABSENTE D UN SELECT est LE defaut le plus frequent de ce
+  // projet, six fois. Elle ne leve rien : elle rend `undefined`.
+  { nom: '🔴 le select des articles ne demande plus le delai',
+    fichier: LIGNES,
+    de: 'tva_taux, tva_taux_sur_place, delai_minutes\'',
+    vers: 'tva_taux, tva_taux_sur_place\'' },
+
+  { nom: '🔴 le select des deals ne demande plus la fenetre',
+    fichier: LIGNES,
+    de: 'date_deal, date_debut, date_fin, heure_debut, heure_fin\'',
+    vers: 'date_deal, date_debut, date_fin\'' },
+
+  // ─── LA ROUTE QUI CRÉE LA COMMANDE ──────────────────────────────────────
+  { nom: '🔴 le serveur ne calcule plus le delai du panier',
+    fichier: ROUTE,
+    de: '      const { minutes: delaiMinutes, nom: articleLent } = delaiDuPanier(lignes)',
+    vers: '      const { minutes: delaiMinutes, nom: articleLent } = { minutes: 0, nom: null }' },
+
+  { nom: '🔴 le melange impossible passe au paiement',
+    fichier: ROUTE,
+    de: '      if (refusMelange) {',
+    vers: '      if (false) {' },
+
+  { nom: '🔴 le serveur n’oppose plus le delai au creneau choisi',
+    fichier: ROUTE,
+    de: '            && debutCreneau.getTime() < pret.getTime()) {',
+    vers: '            && false) {' },
+
+  { nom: '🔴 la boutique n’applique plus le delai a son jour de retrait',
+    fichier: ROUTE,
+    de: '        if (!premier || date_commande < premier) {',
+    vers: '        if (false) {' },
+
+  // ⚠️ HORIZON ET DÉLAI SONT DEUX BORNES OPPOSÉES : plafond et plancher.
+  { nom: '🔴 l’horizon ne plafonne plus rien cote serveur',
+    fichier: ROUTE,
+    de: '        if (date_commande < aujourdhui || (dernier && date_commande > dernier)) {',
+    vers: '        if (date_commande < aujourdhui) {' },
+
+  { nom: '🔴 une date DEJA PASSEE est acceptee',
+    fichier: ROUTE,
+    de: '        if (date_commande < aujourdhui || (dernier && date_commande > dernier)) {',
+    vers: '        if ((dernier && date_commande > dernier)) {' },
+
+  { nom: '🔴 l’horizon n’est plus demande en base (il vaudra le defaut, en silence)',
+    fichier: ROUTE,
+    de: 'boutique_delai_heures, horizon_commande, plan, essai_plan, created_at\'',
+    vers: 'boutique_delai_heures, plan, essai_plan, created_at\'' },
+
+  { nom: '🔴 les fermetures ne sont plus partagees entre les deux controles',
+    fichier: ROUTE,
+    de: '    let fermeturesCommercant = []',
+    vers: '    let fermeturesCommercant = null' },
 ]
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 ÉCRIRE PEUT ÉCHOUER, ET LE HARNAIS L'IGNORAIT (04/09).
+//
+// `writeFileSync` a levé `UNKNOWN: unknown error, open` en pleine série, sur
+// Windows : un verrou passager, posé par un antivirus ou par le veilleur de
+// fichiers du build. Le dépôt s'en est tiré cette fois-ci parce que l'écriture
+// ratée était celle qui POSE la mutation.
+//
+// ⚠️ MAIS SI C'ÉTAIT LA RESTAURATION QUI AVAIT ÉCHOUÉ, le harnais serait mort
+// en laissant un fichier MUTÉ dans le dépôt, et son contrôle de restauration
+// n'aurait jamais tourné : il vient APRÈS l'écriture, donc après l'exception.
+// Un outil qui vérifie la restauration mais qui meurt avant de la vérifier ne
+// protège de rien.
+//
+// ✅ DEUX REMÈDES, ET IL FAUT LES DEUX :
+//   • on réessaie, parce qu'un verrou passager passe ;
+//   • et la restauration vit dans un `finally`, donc elle s'exécute même si
+//     tout le reste explose.
+const ecrire = (f, contenu) => {
+  let derniere = null
+  for (let essai = 0; essai < 5; essai++) {
+    try { writeFileSync(f, contenu, 'utf8'); return true }
+    catch (e) {
+      derniere = e
+      // Une attente courte et BLOQUANTE : ce script est synchrone de bout en
+      // bout, et un `await` ici ferait repartir la boucle avant l'écriture.
+      const fin = Date.now() + 120
+      while (Date.now() < fin) { /* on laisse le verrou se relâcher */ }
+    }
+  }
+  console.log(`\n🔴 ÉCRITURE IMPOSSIBLE sur ${f} après 5 essais : ${derniere?.message}`)
+  return false
+}
 
 const lancer = () => {
   try {
@@ -286,9 +411,25 @@ for (const m of MUTATIONS) {
     console.log(`  ? introuvable : ${m.nom}`)
     continue
   }
-  writeFileSync(f, original.replace(m.de, m.vers), 'utf8')
-  const res = lancer()
-  writeFileSync(f, original, 'utf8')
+  if (!ecrire(f, original.replace(m.de, m.vers))) {
+    // Le fichier n'a pas bougé : rien à restaurer, on passe.
+    manquees.push(`${m.nom} — ÉCRITURE IMPOSSIBLE`)
+    continue
+  }
+
+  // ⚠️ LA RESTAURATION VIT DANS UN `finally`. Si le banc plante, si `lancer`
+  // lève, si le processus reçoit une interruption au mauvais moment, le
+  // fichier revient quand même. C'est la seule façon de garantir qu'un harnais
+  // ne laisse jamais de mutation derrière lui.
+  let res
+  try {
+    res = lancer()
+  } finally {
+    if (!ecrire(f, original)) {
+      console.log(`\n🔴 RESTAURATION IMPOSSIBLE sur ${m.fichier || MODULE}. Le dépôt est MUTÉ, corrige à la main.`)
+      process.exit(2)
+    }
+  }
 
   if (readFileSync(f, 'utf8') !== original) {
     console.log(`\n🔴 RESTAURATION RATÉE sur ${m.fichier || MODULE}. On s'arrête.`)

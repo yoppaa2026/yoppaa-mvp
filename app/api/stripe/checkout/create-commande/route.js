@@ -50,7 +50,7 @@ import { joursRetraitBoutique } from '@/lib/ouverture'
 import { jourPlus } from '@/lib/statut-commerce'
 import { delaiDuPanier, refusDeMelange, pretA, premierJourBoutique, libelleDuree, libelleMoment } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
-import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
+import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { verdictForfait } from '@/lib/garde-forfait'
 
@@ -805,6 +805,26 @@ export async function POST(request) {
       }, { status: verifStock.status })
     }
     const nomParArticle = verifStock.nomParArticle || {}
+
+    // ─── 5 bis) LE PLAFOND DE L'OFFRE DE FIN DE JOURNÉE ────────────────────
+    //
+    // 🔴 IL PUBLIE TROIS ASSIETTES, LA FICHE EN PROPOSAIT QUINZE. Elle lisait le
+    // stock du jour de l'article, pas la quantité de l'offre : soixante et onze
+    // euros de manque à gagner sur une offre censée écouler trois restes, sans
+    // qu'aucune erreur ne s'affiche nulle part. Alex l'a vu le 04/09 au soir.
+    //
+    // ⚠️ ET C'EST UNE VÉRIFICATION À PART, PAS UN AJOUT AU STOCK. Les deux
+    // plafonds coexistent et ne disent pas la même chose : le stock dit combien
+    // d'assiettes existent aujourd'hui, l'offre dit combien partent À CE PRIX.
+    const verifOffres = await verifierQuantiteOffres({
+      supabase, lignes, dealsData: dealsData || [], commercantId: commercant.id,
+    })
+    if (!verifOffres.ok) {
+      return NextResponse.json({
+        ok: false, error: verifOffres.error,
+        ...(verifOffres.stock_insuffisant ? { stock_insuffisant: true } : {}),
+      }, { status: verifOffres.status })
+    }
     const consoParArticle = verifStock.consoParArticle || {}
     const jourSemaine = verifStock.jourSemaine
 
@@ -956,6 +976,12 @@ export async function POST(request) {
         // porter le même nom après un renommage. Le stock d'une commande
         // abandonnée était donc perdu pour toujours.
         variante_id: l.variante_id || null,
+        // 🔴 L'OFFRE QUI A PRODUIT CETTE LIGNE, et elle était JETÉE. Sans elle,
+        // rien ne peut compter ce qui a été vendu sur une offre de fin de
+        // journée, donc rien ne peut la plafonner. Elle vaut d'ailleurs au-delà
+        // de l'anti-gaspi : ni la comptabilité ni les statistiques ne
+        // distinguaient une ligne vendue en promotion d'une ligne au prix plein.
+        deal_id: l.deal_id || null,
         quantite: l.quantite,
         prix_unitaire: l.prix_unitaire,
         options: l.options,

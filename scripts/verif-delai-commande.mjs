@@ -517,6 +517,13 @@ egal('sans nom d’article, la phrase tient debout',
     avecLot.lignes.map(l => l.delai_minutes), [2880])
   egal('et un lot ordinaire n’est pas un invendu',
     avecLot.lignes.map(l => l.offre?.heure_fin ?? null), [null])
+  // 🔴 L'OFFRE QUI A PRODUIT LA LIGNE, ET ELLE ÉTAIT JETÉE. Sans elle, rien ne
+  // peut compter ce qui a été vendu sur une offre, donc rien ne peut la
+  // plafonner : trois assiettes publiées, quinze proposées à moitié prix.
+  egal('🔴 la ligne retient l’offre qui l’a produite',
+    avecLot.lignes.map(l => l.deal_id), ['d1'])
+  egal('et une ligne sans offre ne s’en invente pas',
+    simple.lignes.map(l => l.deal_id), [null, null])
 
   // 🔴 L'INVENDU PORTE SA FENÊTRE JUSQU'AU SERVEUR, et elle annule le délai.
   const INVENDU = {

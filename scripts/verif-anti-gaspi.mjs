@@ -21,8 +21,10 @@ import {
   offresOuvertes,
   fermetureDuJour, fenetreParDefaut, enHeure, prixConseille, lignePublication,
   MINUTES_UTILES_MINIMUM,
+  plafondDeLOffre, resteSurOffre, refusDeQuantite, libelleReste,
 } from '../lib/anti-gaspi.js'
 import { readFileSync } from 'node:fs'
+import { verifierQuantiteOffres, SELECT_DEALS } from '../lib/lignes-commande.js'
 import { sansProse } from './lire-code.mjs'
 
 let ok = 0, ko = 0
@@ -603,7 +605,18 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   // 🔴 LE TRI ET LE FILTRE APPARTIENNENT AU MODULE. Refaits dans l'écran, ils
   // auraient divergé au premier changement d'heure.
   verifier('🔴 le filtre et le tri viennent du module',
-    /setInvendusOuverts\(offresOuvertes\(invendus \|\| \[\]\)\)/.test(ACCUEIL))
+    /const ouvertes = offresOuvertes\(invendus \|\| \[\]\)/.test(ACCUEIL))
+  // 🔴 `quantite` EST LE TOTAL PUBLIÉ, PAS CE QUI RESTE. L'afficher tel quel
+  // dirait « il en reste 3 » quand deux sont déjà partis, et l'écran ne peut pas
+  // le calculer lui-même : un Yopper n'a pas le droit de lire les lignes de
+  // commande des autres. Une fonction qui rend un AGRÉGAT le peut.
+  verifier('🔴 le reste affiché tient compte de ce qui est déjà vendu',
+    /supabase\.rpc\('vendu_par_offre'/.test(ACCUEIL)
+    && /resteSurOffre\(o\.offre, vendus\[o\.offre\.id\] \|\| 0\)/.test(ACCUEIL))
+  // ⚠️ ET TANT QU'ON NE SAIT PAS, ON N'AFFICHE PAS DE CHIFFRE plutôt que d'en
+  // afficher un faux : le compteur apparaît tout seul quand le relevé revient.
+  verifier('🔴 sans relevé, aucun chiffre inventé',
+    /if \(Array\.isArray\(comptes\)\) \{/.test(ACCUEIL))
   // ⚠️ LA PRÉSENCE DE LA FENÊTRE FAIT L'OFFRE, et le relevé ne demande que ça.
   verifier('🔴 seules les offres qui portent une fenêtre sont relevées',
     /\.not\('heure_fin', 'is', null\)/.test(ACCUEIL))
@@ -615,6 +628,211 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   // ⚠️ ON ANNONCE L'ÉTAT, PAS UNE ALARME.
   verifier('le temps restant se dit avec les mots du module',
     /libelleTempsRestant\(restant\)/.test(ACCUEIL))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. LE PLAFOND DE L'OFFRE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 LE DÉFAUT VU PAR ALEX LE 04/09 AU SOIR. Il publie TROIS assiettes à moitié
+// prix, la fiche en proposait QUINZE : elle lisait le stock du jour de
+// l'ARTICLE, pas la quantité de l'OFFRE. Soixante et onze euros de manque à
+// gagner sur une offre censée écouler trois restes, sans qu'aucune erreur ne
+// s'affiche nulle part.
+{
+  const OFFRE = { titre: 'Assiette kebab', quantite: 3, heure_debut: '15:00:00', heure_fin: '18:00:00', prix_deal: 4.75, prix_original: 9.5 }
+
+  // ⚠️ `null` VEUT DIRE « SANS OBJET », PAS « ZÉRO ». Un lot ou un duo ordinaire
+  // n'a pas de quantité propre : il s'arrête au stock de son article. Confondre
+  // les deux les rendrait tous invendables.
+  egal('une offre plafonnée rend son plafond', plafondDeLOffre(OFFRE), 3)
+  verifier('🔴 un lot ordinaire n’a PAS de plafond', plafondDeLOffre({ titre: 'Lot 3+1' }) === null)
+  verifier('un plafond nul n’est pas un plafond', plafondDeLOffre({ quantite: 0 }) === null)
+  verifier('un plafond négatif non plus', plafondDeLOffre({ quantite: -2 }) === null)
+  egal('les demi-unités se rabotent', plafondDeLOffre({ quantite: 3.9 }), 3)
+
+  egal('sans vente, il reste tout', resteSurOffre(OFFRE, 0), 3)
+  egal('deux vendues, il en reste une', resteSurOffre(OFFRE, 2), 1)
+  egal('tout vendu, il ne reste rien', resteSurOffre(OFFRE, 3), 0)
+  // ⚠️ JAMAIS NÉGATIF. Deux paniers partis en même temps peuvent dépasser le
+  // plafond, et l'écran ne doit pas annoncer « -1 restant » à celui d'après.
+  egal('🔴 un dépassement ne rend jamais un négatif', resteSurOffre(OFFRE, 5), 0)
+  verifier('sans plafond, aucun reste à annoncer', resteSurOffre({ titre: 'Lot' }, 2) === null)
+
+  // ─── LE REFUS, ET IL DIT COMBIEN IL EN RESTE ────────────────────────────
+  //
+  // ⚠️ SANS LE CHIFFRE, le Yopper retire un article au hasard et réessaie
+  // jusqu'à tomber juste, ou abandonne.
+  verifier('trois demandées sur trois, ça passe',
+    refusDeQuantite({ titre: 'Assiette kebab', offre: OFFRE, dejaVendu: 0, demande: 3 }) === null)
+  verifier('une offre sans plafond ne refuse jamais',
+    refusDeQuantite({ titre: 'Lot', offre: { titre: 'Lot' }, dejaVendu: 0, demande: 99 }) === null)
+  {
+    const refus = refusDeQuantite({ titre: 'Assiette kebab', offre: OFFRE, dejaVendu: 1, demande: 5 })
+    verifier('🔴 cinq demandées quand il en reste deux : refus', refus !== null, String(refus))
+    verifier('🔴 et le message dit COMBIEN il en reste', /il n'en reste que 2/.test(refus), String(refus))
+    verifier('et il nomme l’article', /Assiette kebab/.test(refus), String(refus))
+  }
+  {
+    const refus = refusDeQuantite({ titre: 'Assiette kebab', offre: OFFRE, dejaVendu: 3, demande: 1 })
+    verifier('🔴 quand tout est parti, on le dit autrement', /tout est parti/i.test(refus || ''), String(refus))
+  }
+  // ⚠️ ON DIT LA RARETÉ, PAS L'URGENCE. « Il en reste 3 » informe ; « plus que
+  // 3 ! » presse, et ce n'est pas notre rôle.
+  egal('la carte annonce ce qu’il reste', libelleReste(3), 'il en reste 3')
+  egal('et se tait quand il n’y a plus rien', libelleReste(0), '')
+  egal('comme sur une offre sans plafond', libelleReste(null), '')
+  {
+    const textes = [
+      refusDeQuantite({ titre: 'X', offre: OFFRE, dejaVendu: 1, demande: 5 }),
+      refusDeQuantite({ titre: 'X', offre: OFFRE, dejaVendu: 3, demande: 1 }),
+      libelleReste(3),
+    ].join(' ')
+    verifier('aucun tiret cadratin', !textes.includes('—'), textes)
+    verifier('aucune injonction', !textes.includes('!'), textes)
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. LE SERVEUR REFUSE VRAIMENT LE DÉPASSEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 C'EST LA SEULE PROTECTION RÉELLE. La fiche empêche d'en mettre quinze au
+// panier ; un onglet resté ouvert, un panier restauré au retour de Stripe ou
+// une requête fabriquée ne passent par aucune de ses lignes.
+{
+  const OFFRE = { id: 'd1', titre: 'Assiette kebab', quantite: 3, prix_deal: 4.75, prix_original: 9.5 }
+  const LOT = { id: 'd2', titre: 'Lot 3+1' }
+
+  // Une base qui rend ce qu'on lui dit, et qui retient ce qu'on lui demande.
+  const base = (vendues, { plante = false } = {}) => {
+    const vu = {}
+    const chaine = {
+      select: () => chaine,
+      in: (col, ids) => { vu.ids = ids; return chaine },
+      eq: () => chaine,
+      // ⚠️ ELLE RETIENT LE FILTRE, sinon la règle « quels statuts comptent »
+      // n'est mesurable par aucune mutation : la fausse base l'ignorerait.
+      not: (col, op, val) => { vu.exclus = val; return Promise.resolve(plante ? { data: null, error: { message: 'boum' } } : { data: vendues, error: null }) },
+    }
+    return { from: () => chaine, _vu: vu }
+  }
+  const lignes = (q) => [{ article_id: 'a1', article_nom: 'Assiette kebab', deal_id: 'd1', quantite: q }]
+
+  {
+    const r = await verifierQuantiteOffres({
+      supabase: base([{ deal_id: 'd1', quantite: 1 }]), lignes: lignes(2),
+      dealsData: [OFFRE], commercantId: 'c1',
+    })
+    verifier('deux demandées quand une est vendue : ça passe', r.ok === true, JSON.stringify(r))
+  }
+  {
+    const r = await verifierQuantiteOffres({
+      supabase: base([{ deal_id: 'd1', quantite: 1 }]), lignes: lignes(3),
+      dealsData: [OFFRE], commercantId: 'c1',
+    })
+    verifier('🔴 trois demandées quand une est vendue : REFUS', r.ok === false, JSON.stringify(r))
+    egal('et le refus est un conflit, pas une panne', r.status, 409)
+    verifier('le message dit combien il en reste', /il n'en reste que 2/.test(r.error), String(r.error))
+  }
+  // ⚠️ UN LOT ORDINAIRE N'A PAS DE PLAFOND, et on ne va même pas interroger la
+  // base pour lui : c'est `verifierStockDisponible` qui s'en charge.
+  {
+    const b = base([])
+    const r = await verifierQuantiteOffres({
+      supabase: b, lignes: [{ article_id: 'a1', deal_id: 'd2', quantite: 99 }],
+      dealsData: [LOT], commercantId: 'c1',
+    })
+    verifier('🔴 un lot ordinaire n’est pas plafonné', r.ok === true, JSON.stringify(r))
+    verifier('et la base n’est même pas interrogée', b._vu.ids === undefined)
+  }
+  // ⚠️ UNE MÊME OFFRE PEUT ÊTRE SUR PLUSIEURS LIGNES DU MÊME PANIER, et il faut
+  // les additionner : deux lignes de deux dépassent un plafond de trois.
+  {
+    const r = await verifierQuantiteOffres({
+      supabase: base([]), dealsData: [OFFRE], commercantId: 'c1',
+      lignes: [
+        { article_id: 'a1', deal_id: 'd1', quantite: 2 },
+        { article_id: 'a1', deal_id: 'd1', quantite: 2 },
+      ],
+    })
+    verifier('🔴 les lignes d’un même panier s’additionnent', r.ok === false, JSON.stringify(r))
+  }
+  // 🔴 UN RELEVÉ QUI ÉCHOUE NE VAUT PAS ZÉRO VENTE. Le traiter ainsi ouvrirait
+  // le plafond en grand exactement le jour où la base tousse.
+  {
+    const r = await verifierQuantiteOffres({
+      supabase: base([], { plante: true }), lignes: lignes(1),
+      dealsData: [OFFRE], commercantId: 'c1',
+    })
+    verifier('🔴 un relevé en échec REFUSE, il ne laisse pas passer', r.ok === false, JSON.stringify(r))
+    egal('et il le dit comme une panne, pas comme un refus', r.status, 503)
+  }
+  // Sans aucune ligne d'offre, rien à vérifier.
+  {
+    const r = await verifierQuantiteOffres({
+      supabase: base([]), lignes: [{ article_id: 'a1', quantite: 2 }],
+      dealsData: [OFFRE], commercantId: 'c1',
+    })
+    verifier('un panier sans offre passe sans requête', r.ok === true)
+  }
+  // ⚠️ MÊMES STATUTS QUE LE STOCK, MOT POUR MOT. Une commande non retirée rend
+  // sa marchandise, donc elle ne consomme pas l'offre ; une commande en attente
+  // de paiement, si, le temps du passage sur Stripe. Deux règles différentes
+  // pour « qu'est-ce qui est vendu » auraient divergé au premier changement.
+  {
+    const b = base([])
+    await verifierQuantiteOffres({ supabase: b, lignes: lignes(1), dealsData: [OFFRE], commercantId: 'c1' })
+    verifier('🔴 les commandes rendues ou annulées ne consomment pas l’offre',
+      /non_retire/.test(b._vu.exclus || '')
+      && /annulee_paiement_ko/.test(b._vu.exclus || '')
+      && /annulee_client_refund/.test(b._vu.exclus || ''), String(b._vu.exclus))
+    // ⚠️ ET « paiement_en_attente » N'EST PAS EXCLU : le panier parti sur Stripe
+    // tient sa place, sinon deux Yoppers prendraient la même dernière assiette.
+    verifier('🔴 mais un panier en cours de paiement tient sa place',
+      !/paiement_en_attente/.test(b._vu.exclus || ''), String(b._vu.exclus))
+  }
+
+  // ⚠️ ET LA LIGNE DE COMMANDE DOIT PORTER L'OFFRE, sans quoi plus rien ne peut
+  // compter ce qui a été vendu. C'est le maillon qui manquait.
+  verifier('🔴 le select des deals demande la quantité',
+    /\bquantite\b/.test(SELECT_DEALS), SELECT_DEALS)
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-commande/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 la route oppose le plafond de l’offre',
+    /verifierQuantiteOffres\(\{/.test(ROUTE))
+  verifier('🔴 et elle écrit l’offre sur la ligne de commande',
+    /deal_id: l\.deal_id \|\| null,/.test(ROUTE))
+  // ⚠️ ET ELLE REFUSE VRAIMENT. La garde du dessus ne dit que si la
+  // vérification est APPELÉE ; neutraliser son refus laisserait l'appel en
+  // place et la garde au vert. C'est la mesure par mutation qui l'a dit.
+  verifier('🔴 et le refus est réellement opposé',
+    /if \(!verifOffres\.ok\) \{/.test(ROUTE))
+
+  // ─── LES DEUX ÉCRANS DE L'INVENDU ───────────────────────────────────────
+  const FICHE = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+
+  // 🔴 ALEX, 04/09 : « ça devient un deal affiché à deux endroits, ça ne doit
+  // pas être confondu avec un deal classique ». Une bonne affaire se PRÉPARE et
+  // dure la semaine ; un invendu, c'est ce qui reste ce soir.
+  verifier('🔴 le bandeau « deal du jour » écarte les invendus',
+    /const ordinaires = dealsActifs\.filter\(d => !porteUneFenetre\(d\)\)/.test(FICHE))
+  verifier('🔴 et la carte les habille autrement',
+    /const invendu = porteUneFenetre\(deal\)/.test(FICHE))
+
+  // 🔴 TROIS PUBLIÉES, QUINZE PROPOSÉES. La fiche lisait le stock du jour de
+  // l'ARTICLE, pas la quantité de l'OFFRE.
+  verifier('🔴 le panier oppose le plafond de l’offre',
+    /if \(plafond !== null && \(panier\[key\]\?\.quantite \|\| 0\) \+ 1 > plafond\) return/.test(FICHE))
+  // ⚠️ ET LE BOUTON NE MENT PAS quand tout est parti : le laisser cliquable
+  // enverrait le Yopper se faire refuser au paiement, panier rempli.
+  verifier('🔴 le bouton disparaît quand tout est parti',
+    /\{reste === 0 \? \(/.test(FICHE))
+  // ⚠️ LE RESTE VIENT DU RELEVÉ, pas de la quantité publiée.
+  verifier('🔴 la fiche compte ce qui a déjà été vendu',
+    /supabase\.rpc\('vendu_par_offre'/.test(FICHE)
+    && /resteSurOffre\(deal, ventesParOffre\[deal\.id\] \|\| 0\)/.test(FICHE))
+  verifier('🔴 et sans relevé, elle n’annonce aucun chiffre',
+    /if \(!ventesParOffre\) return null/.test(FICHE))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

@@ -47,7 +47,7 @@ import SupprimerCompte from './SupprimerCompte'
 // ⚠️ LE TITRE, LE SOUS-TITRE ET LE TRI VIENNENT DU MODULE, JAMAIS D'ICI.
 // Recopiés dans l'écran, ils auraient divergé au premier changement de
 // formulation, comme le libellé du bon cadeau avant le 31/08.
-import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, libelleTempsRestant } from '@/lib/anti-gaspi'
+import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, libelleTempsRestant, libelleReste, resteSurOffre } from '@/lib/anti-gaspi'
 
 const T = {
   bg:      '#F8F6FF',
@@ -2351,7 +2351,30 @@ export default function Commander() {
     // ce qui est fermé ET ce qui n'est pas vraiment cassé, puis classe par
     // temps restant. Refaire ce calcul ici en fabriquerait une seconde version,
     // qui aurait divergé au premier changement d'heure.
-    setInvendusOuverts(offresOuvertes(invendus || []))
+    // 🔴 `quantite` EST LE TOTAL PUBLIÉ, PAS CE QUI RESTE. L'afficher tel quel
+    // dirait « il en reste 3 » quand deux sont déjà partis. Et l'écran ne peut
+    // PAS le calculer lui-même : un Yopper n'a pas le droit de lire les lignes
+    // de commande des autres, et c'est très bien ainsi.
+    //
+    // ⚠️ UNE FONCTION QUI REND UN AGRÉGAT ne révèle ni qui a commandé, ni quoi,
+    // ni quand : elle rend un nombre. Même patron que
+    // `stock_commande_par_article`, pour la même raison.
+    //
+    // ⚠️ ET SI ELLE N'EST PAS ENCORE POSÉE, ON N'AFFICHE PAS DE CHIFFRE plutôt
+    // que d'en afficher un faux. Le compteur apparaîtra tout seul le jour où la
+    // migration passe.
+    const ouvertes = offresOuvertes(invendus || [])
+    let vendus = {}
+    if (ouvertes.length > 0) {
+      const { data: comptes } = await supabase.rpc('vendu_par_offre', {
+        p_deal_ids: ouvertes.map(o => o.offre.id),
+      })
+      if (Array.isArray(comptes)) {
+        vendus = Object.fromEntries(comptes.map(c => [c.deal_id, Number(c.vendu) || 0]))
+        ouvertes.forEach(o => { o.reste = resteSurOffre(o.offre, vendus[o.offre.id] || 0) })
+      }
+    }
+    setInvendusOuverts(ouvertes)
 
     const dealSet = new Set()
     const bonneAffaireSet = new Set()
@@ -3385,7 +3408,7 @@ export default function Commander() {
                     <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>{SOUS_TITRE_YOPPER}</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {invendusOuverts.map(({ offre, restant, remise }) => {
+                    {invendusOuverts.map(({ offre, restant, remise, reste }) => {
                       const commerce = commercants.find(c => c.id === offre.commercant_id)
                       return (
                         <button key={offre.id}
@@ -3396,7 +3419,7 @@ export default function Commander() {
                               {offre.titre}
                             </p>
                             <p style={{ fontSize: '0.75rem', color: '#92400E', margin: '2px 0 0', fontWeight: 600 }}>
-                              {commerce?.nom || 'Chez un commerçant'} · {libelleTempsRestant(restant)}
+                              {[commerce?.nom || 'Chez un commerçant', libelleReste(reste), libelleTempsRestant(restant)].filter(Boolean).join(' · ')}
                             </p>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>

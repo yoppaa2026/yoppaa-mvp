@@ -296,6 +296,15 @@ const MUTATIONS = [
     de: '      delai_minutes: article.delai_minutes ?? 0,',
     vers: '      delai_minutes: 0,' },
 
+  // 🔴 DÉPLACÉE DEPUIS mutations-anti-gaspi.mjs LE 04/09. Elle y visait
+  // `lib/lignes-commande.js`, mais la garde qui la mesure vit dans CE banc-ci :
+  // elle restait donc verte, faute de tourner sur le bon banc. Une mutation
+  // mesurée par un banc qui ne regarde pas la règle ne mesure rien.
+  { nom: '🔴 l offre qui a produit la ligne est de nouveau jetee',
+    fichier: LIGNES,
+    de: '      deal_id: deal ? deal.id : null,',
+    vers: '      deal_id: null,' },
+
   { nom: '🔴 la fenetre de l’invendu n’arrive plus jusqu’a la ligne',
     fichier: LIGNES,
     de: '      offre: deal ? { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin } : null,',
@@ -310,8 +319,10 @@ const MUTATIONS = [
 
   { nom: '🔴 le select des deals ne demande plus la fenetre',
     fichier: LIGNES,
-    de: 'date_deal, date_debut, date_fin, heure_debut, heure_fin\'',
-    vers: 'date_deal, date_debut, date_fin\'' },
+    // ⚠️ ANCRE REFAITE : `quantite` a rejoint le select le 04/09 au soir, pour
+    // le plafond de l'offre. Le harnais l'a dit en « TEXTE INTROUVABLE ».
+    de: 'heure_debut, heure_fin, quantite\'',
+    vers: 'quantite\'' },
 
   // ─── LA ROUTE QUI CRÉE LA COMMANDE ──────────────────────────────────────
   { nom: '🔴 le serveur ne calcule plus le delai du panier',

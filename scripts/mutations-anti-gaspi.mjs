@@ -306,8 +306,8 @@ const MUTATIONS = [
 
   { nom: '🔴 le filtre et le tri des invendus se refont dans l ecran',
     fichier: 'app/commander/page.js',
-    de: '    setInvendusOuverts(offresOuvertes(invendus || []))',
-    vers: '    setInvendusOuverts((invendus || []).map(o => ({ offre: o, restant: 0, remise: 0 })))' },
+    de: '    const ouvertes = offresOuvertes(invendus || [])',
+    vers: '    const ouvertes = (invendus || []).map(o => ({ offre: o, restant: 0, remise: 0 }))' },
 
   { nom: '🔴 l accueil releve des deals qui ne portent aucune fenetre',
     fichier: 'app/commander/page.js',
@@ -318,6 +318,113 @@ const MUTATIONS = [
     fichier: 'app/commander/page.js',
     de: '              {invendusOuverts.length > 0 && (',
     vers: '              {true && (' },
+
+  // ─── LE PLAFOND DE L'OFFRE (04/09 au soir) ──────────────────────────────
+  //
+  // 🔴 IL PUBLIE TROIS ASSIETTES, LA FICHE EN PROPOSAIT QUINZE. Elle lisait le
+  // stock du jour de l ARTICLE, pas la quantite de l OFFRE : 71 € de manque a
+  // gagner sur une offre censee ecouler trois restes, sans aucune erreur nulle
+  // part. Chacune de ces mutations remet ce defaut.
+
+  { nom: '🔴 un lot ordinaire herite d un plafond et devient invendable',
+    de: '  return Number.isFinite(q) && q > 0 ? Math.floor(q) : null',
+    vers: '  return Number.isFinite(q) ? Math.floor(q) : 0' },
+
+  // ⚠️ Deux paniers partis en meme temps peuvent depasser : l ecran ne doit pas
+  // annoncer « -1 restant » a celui d apres.
+  { nom: '🔴 un depassement affiche un reste NEGATIF',
+    de: '  return Math.max(0, plafond - (Number.isFinite(vendu) && vendu > 0 ? vendu : 0))',
+    vers: '  return plafond - (Number.isFinite(vendu) && vendu > 0 ? vendu : 0)' },
+
+  { nom: '🔴 le refus ne dit plus combien il en reste',
+    de: '  return `${quoi} : il n\'en reste que ${reste} à ce prix.`',
+    vers: '  return `${quoi} : il n\'y en a pas assez.`' },
+
+  { nom: '🔴 le depassement passe au paiement',
+    de: '  if (veut <= reste) return null',
+    vers: '  return null' },
+
+  { nom: '🔴 la carte annonce un reste quand tout est parti',
+    de: '  if (!Number.isFinite(n) || n <= 0) return \'\'',
+    vers: '  if (!Number.isFinite(n)) return \'\'' },
+
+  // ─── LE SERVEUR, C'EST-À-DIRE LA SEULE PROTECTION RÉELLE ────────────────
+  { nom: '🔴 les lignes d un meme panier ne s additionnent plus',
+    fichier: 'lib/lignes-commande.js',
+    de: '    demandeParDeal[l.deal_id] = (demandeParDeal[l.deal_id] || 0) + l.quantite',
+    vers: '    demandeParDeal[l.deal_id] = l.quantite' },
+
+  // 🔴 Un releve en echec traite comme « rien de vendu » ouvrirait le plafond en
+  // grand exactement le jour ou la base tousse.
+  { nom: '🔴 un releve en echec laisse passer au lieu de refuser',
+    fichier: 'lib/lignes-commande.js',
+    de: "    return { ok: false, status: 503, error: 'Impossible de vérifier ce qu\\'il reste sur cette offre. Réessaie dans un instant.' }",
+    vers: '    return { ok: true }' },
+
+  // ⚠️ Memes statuts que le stock, mot pour mot : une commande non retiree rend
+  // sa marchandise, une commande en attente de paiement tient sa place.
+  { nom: '🔴 les commandes annulees se remettent a consommer l offre',
+    fichier: 'lib/lignes-commande.js',
+    // ⚠️ ANCRE SUR UNE SEULE LIGNE. La première portait un saut de ligne, ce
+    // que l'en-tête interdit : elle n'aurait valu que sur une machine.
+    //
+    // ⚠️ ET MA DEUXIÈME TENTATIVE A FAIT PLANTER LE BANC au lieu de le faire
+    // rougir : elle ajoutait un `.limit(0)` que la fausse base ne connaît pas.
+    // UNE MUTATION CHANGE LE RÉSULTAT, JAMAIS LA TERMINAISON.
+    // 🔴 ET LA TROISIÈME TENTATIVE A RÉVÉLÉ LE VRAI DÉFAUT. La liste était
+    // écrite DEUX FOIS dans le même fichier, pour le stock et pour l'offre, avec
+    // un commentaire promettant qu'elles disaient la même chose. `String.replace`
+    // prenait la première — celle du stock — et le banc restait vert à juste
+    // titre. La duplication est retirée : une seule constante, deux lecteurs.
+    de: 'export const STATUTS_QUI_NE_CONSOMMENT_PAS = \'("non_retire","annulee_paiement_ko","annulee_client_refund")\'',
+    vers: 'export const STATUTS_QUI_NE_CONSOMMENT_PAS = \'("non_retire")\'' },
+
+  { nom: '🔴 le select des deals ne demande plus la quantite',
+    fichier: 'lib/lignes-commande.js',
+    de: 'heure_debut, heure_fin, quantite\'',
+    vers: 'heure_debut, heure_fin\'' },
+
+  { nom: '🔴 la route cesse d opposer le plafond de l offre',
+    fichier: 'app/api/stripe/checkout/create-commande/route.js',
+    de: '    if (!verifOffres.ok) {',
+    vers: '    if (false) {' },
+
+  { nom: '🔴 la commande n ecrit plus quelle offre l a produite',
+    fichier: 'app/api/stripe/checkout/create-commande/route.js',
+    de: '        deal_id: l.deal_id || null,',
+    vers: '        deal_id: null,' },
+
+  // ─── LES DEUX ÉCRANS ────────────────────────────────────────────────────
+  { nom: '🔴 l accueil affiche le total publie au lieu de ce qui reste',
+    fichier: 'app/commander/page.js',
+    de: '        ouvertes.forEach(o => { o.reste = resteSurOffre(o.offre, vendus[o.offre.id] || 0) })',
+    vers: '        ouvertes.forEach(o => { o.reste = o.offre.quantite })' },
+
+  { nom: '🔴 l accueil invente un chiffre quand le releve ne repond pas',
+    fichier: 'app/commander/page.js',
+    de: '      if (Array.isArray(comptes)) {',
+    vers: '      if (true) {' },
+
+  { nom: '🔴 le panier n oppose plus le plafond de l offre',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '    if (plafond !== null && (panier[key]?.quantite || 0) + 1 > plafond) return',
+    vers: '    if (false) return' },
+
+  // 🔴 Alex, 04/09 : « ca ne doit pas etre confondu avec un deal classique ».
+  { nom: '🔴 l invendu redevient le « deal du jour » en bandeau',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '    const ordinaires = dealsActifs.filter(d => !porteUneFenetre(d))',
+    vers: '    const ordinaires = dealsActifs' },
+
+  { nom: '🔴 l invendu reprend l habit d un deal ordinaire',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '  const invendu = porteUneFenetre(deal)',
+    vers: '  const invendu = false' },
+
+  { nom: '🔴 le bouton reste cliquable quand tout est parti',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '          {reste === 0 ? (',
+    vers: '          {false ? (' },
 ]
 
 const lancer = () => {

@@ -14,7 +14,7 @@ import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionAr
 // ⚠️ C'EST LA PRÉSENCE DE LA FENÊTRE QUI FAIT L'INVENDU, et on la lit avec la
 // fonction du module : recopier le test ici ferait passer chaque bonne affaire
 // de la semaine pour un invendu de fin de journée.
-import { porteUneFenetre } from '@/lib/anti-gaspi'
+import { porteUneFenetre, plafondDeLOffre, resteSurOffre, libelleReste, libelleFenetre, TITRE_YOPPER } from '@/lib/anti-gaspi'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -769,25 +769,50 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
 //
 // Les remises, elles, ne passent JAMAIS par ici : elles modifient le prix de
 // l'article sur sa propre carte. Voir lib/deals.js.
-function DealOfferCard({ deal, qte = 0, onAjouter, onRetirer }) {
+// ⚠️ DEUX OBJETS, DEUX APPARENCES, UNE SEULE CARTE.
+//
+// 🔴 ALEX, 04/09 : « ça devient un deal affiché à deux endroits, ça ne doit pas
+// être confondu avec un deal classique ». Il avait raison, et pas seulement sur
+// la forme : une bonne affaire se PRÉPARE et dure la semaine ; un invendu, c'est
+// ce qui reste ce soir, en quantité comptée, jusqu'à la fermeture.
+//
+// Les habiller pareil décrédibilise les deux : le Yopper apprend que « Deal du
+// jour » ne veut rien dire de précis, et cesse de regarder les deux.
+function DealOfferCard({ deal, qte = 0, reste = null, onAjouter, onRetirer }) {
   const prixAffiche = deal.prix_deal != null ? Number(deal.prix_deal) : null
   const prixBarre = deal.prix_original != null ? Number(deal.prix_original) : null
+  // C'est la PRÉSENCE DE LA FENÊTRE qui fait l'invendu, et rien d'autre.
+  const invendu = porteUneFenetre(deal)
+  const fond = invendu
+    ? { background: '#FFFBEB', border: '1.5px solid #FCD34D', boxShadow: 'none' }
+    : { background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, border: `1.5px solid ${T.main}55`, boxShadow: `0 4px 16px ${T.main}26` }
+  const encre = invendu ? '#78350F' : '#fff'
+  const encreDouce = invendu ? '#92400E' : 'rgba(255,255,255,0.75)'
   return (
-    <div style={{ background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${T.main}55`, boxShadow: `0 4px 16px ${T.main}26` }}>
+    <div style={{ ...fond, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 800, color: '#FB923C', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="#FB923C"><path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/></svg>
-            Deal du jour
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 800, color: invendu ? '#B45309' : '#FB923C', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill={invendu ? '#B45309' : '#FB923C'}><path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/></svg>
+            {invendu ? TITRE_YOPPER : 'Deal du jour'}
           </span>
-          <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.9rem', letterSpacing: '-0.2px', lineHeight: 1.3, margin: '0 0 3px' }}>{deal.titre}</p>
-          {deal.description && <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', lineHeight: 1.45, margin: '0 0 6px' }}>{deal.description}</p>}
+          <p style={{ fontWeight: 800, color: encre, fontSize: '0.9rem', letterSpacing: '-0.2px', lineHeight: 1.3, margin: '0 0 3px' }}>{deal.titre}</p>
+          {/* ⚠️ SUR UN INVENDU, LA DESCRIPTION LAISSE LA PLACE À CE QUI COMPTE :
+              combien il en reste, et jusqu'à quand. C'est ce qui fait sortir de
+              chez soi ; une accroche, non. */}
+          {invendu ? (
+            <p style={{ fontSize: '0.75rem', color: encreDouce, lineHeight: 1.45, margin: '0 0 6px', fontWeight: 700 }}>
+              {[libelleReste(reste), libelleFenetre(deal)].filter(Boolean).join(' · ')}
+            </p>
+          ) : (
+            deal.description && <p style={{ fontSize: '0.75rem', color: encreDouce, lineHeight: 1.45, margin: '0 0 6px' }}>{deal.description}</p>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {prixAffiche != null && (
-              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{euros(prixAffiche)}</span>
+              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: invendu ? '#B45309' : T.light, letterSpacing: '-0.3px' }}>{euros(prixAffiche)}</span>
             )}
             {prixBarre != null && (
-              <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{euros(prixBarre)}</span>
+              <span style={{ fontSize: '0.75rem', color: invendu ? '#92400E' : 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{euros(prixBarre)}</span>
             )}
           </div>
         </div>
@@ -795,16 +820,23 @@ function DealOfferCard({ deal, qte = 0, onAjouter, onRetirer }) {
           {qte > 0 && (
             <>
               <button onClick={onRetirer} aria-label="Retirer le deal"
-                style={{ width: 30, height: 30, borderRadius: 9, border: '1.5px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#fff', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${invendu ? '#FCD34D' : 'rgba(255,255,255,0.3)'}`, background: 'transparent', color: encre, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round"><path d="M5 12h14"/></svg>
               </button>
-              <span style={{ fontWeight: 900, fontSize: '0.95rem', color: '#fff', minWidth: 18, textAlign: 'center' }}>{qte}</span>
+              <span style={{ fontWeight: 900, fontSize: '0.95rem', color: encre, minWidth: 18, textAlign: 'center' }}>{qte}</span>
             </>
           )}
-          <button onClick={onAjouter} aria-label="Ajouter le deal"
-            style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${T.main}66` }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          </button>
+          {/* ⚠️ QUAND TOUT EST PARTI, LE BOUTON NE MENT PAS. Le laisser
+              cliquable enverrait le Yopper se faire refuser au paiement, après
+              avoir rempli son panier. */}
+          {reste === 0 ? (
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#92400E', whiteSpace: 'nowrap' }}>Tout est parti</span>
+          ) : (
+            <button onClick={onAjouter} aria-label="Ajouter le deal"
+              style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${T.main}66` }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1258,6 +1290,11 @@ export default function CommanderSlug() {
   // lib/deals.js : les lots et duos deviennent des cartes séparées, les remises
   // modifient le prix de l'article, y compris quand elles visent sa catégorie.
   const [dealsActifs, setDealsActifs] = useState([])
+  // 🔴 CE QUI A DÉJÀ ÉTÉ VENDU SUR CHAQUE OFFRE. `yoppaa_deals.quantite` est le
+  // total PUBLIÉ, pas ce qui reste : l'afficher tel quel dirait « il en reste
+  // 3 » quand deux sont partis. Et l'écran ne peut pas le calculer lui-même, un
+  // Yopper n'ayant pas le droit de lire les lignes de commande des autres.
+  const [ventesParOffre, setVentesParOffre] = useState(null)
   // Modale detail deal (titre + description + dates + prix)
   const [dealDetailOuvert, setDealDetailOuvert] = useState(null)
   // Fiche détail d'un article (boutique) : photos galerie + description complète
@@ -1913,7 +1950,16 @@ export default function CommanderSlug() {
     const dealsActifs = (dealsData || []).filter(d => dealActifCeJour(d, aujourdhuiDate))
     // Deal « vedette » affiché en bandeau : le premier deal générique, sinon le
     // premier deal tout court pour ne pas laisser le bandeau vide.
-    const deal = dealsActifs.find(d => !d.article_id && !d.categorie_cible) || dealsActifs[0] || null
+    // 🔴 UN INVENDU N'EST PAS LE DEAL DU JOUR, et Alex l'a vu le 04/09 : son
+    // assiette à moitié prix s'affichait DEUX FOIS, en bandeau « Deal du jour »
+    // et sur sa carte, sous les mêmes mots qu'une promotion préparée.
+    //
+    // Ce ne sont pas la même chose. Une bonne affaire se prépare et dure la
+    // semaine ; un invendu, c'est ce qui reste ce soir, en quantité comptée.
+    // Les confondre décrédibilise les deux : le Yopper apprend que « Deal du
+    // jour » veut dire n'importe quoi.
+    const ordinaires = dealsActifs.filter(d => !porteUneFenetre(d))
+    const deal = ordinaires.find(d => !d.article_id && !d.categorie_cible) || ordinaires[0] || null
 
     // Filtrer les actus actives aujourd'hui (sur la fenêtre date_debut/date_fin)
     // Même piège, même correctif : les actus se filtrent sur le jour BELGE.
@@ -2083,6 +2129,27 @@ export default function CommanderSlug() {
   //
   // Et sur TOUS les jours, plus seulement aujourd'hui : un créneau de demain
   // 8h avec douze heures de délai n'est plus commandable ce soir.
+  // ⚠️ TANT QU'ON NE SAIT PAS, ON N'AFFICHE PAS DE CHIFFRE plutôt que d'en
+  // afficher un faux. Le compteur apparaît tout seul dès que le relevé revient.
+  function resteDeLOffre(deal) {
+    if (!ventesParOffre) return null
+    return resteSurOffre(deal, ventesParOffre[deal.id] || 0)
+  }
+
+  // ⚠️ UNE FONCTION QUI REND UN AGRÉGAT ne révèle ni qui a commandé, ni quoi, ni
+  // quand : elle rend un nombre. Même patron que `stock_commande_par_article`.
+  useEffect(() => {
+    const offres = (dealsActifs || []).filter(d => plafondDeLOffre(d) !== null)
+    if (offres.length === 0) { setVentesParOffre(null); return }
+    let annule = false
+    supabase.rpc('vendu_par_offre', { p_deal_ids: offres.map(d => d.id) })
+      .then(({ data }) => {
+        if (annule || !Array.isArray(data)) return
+        setVentesParOffre(Object.fromEntries(data.map(c => [c.deal_id, Number(c.vendu) || 0])))
+      })
+    return () => { annule = true }
+  }, [dealsActifs])
+
   // ─── LE DÉLAI DU PANIER ────────────────────────────────────────────────
   //
   // ⚠️ LE PLUS CONTRAIGNANT GAGNE, ET ON NOMME LE COUPABLE. Une commande part
@@ -2348,6 +2415,13 @@ export default function CommanderSlug() {
     const stockMax = getStockMax(article.id)
     const unites = deal.unites_par_deal || 1
     if (stockMax !== Infinity && qteTotaleArticle(article.id) + unites > stockMax) return
+    // 🔴 ET LE PLAFOND DE L'OFFRE, QUI N'ÉTAIT NULLE PART. La fiche ne lisait
+    // que le stock du jour de l'article : trois assiettes publiées, quinze
+    // proposées à moitié prix. Le serveur refuse aussi, c'est lui qui protège ;
+    // ici on empêche simplement le Yopper d'en mettre quinze au panier pour se
+    // les voir refuser au paiement.
+    const plafond = plafondDeLOffre(deal)
+    if (plafond !== null && (panier[key]?.quantite || 0) + 1 > plafond) return
     const prixDeal = Number(deal.prix_deal)
     const prixAvant = deal.prix_original != null ? Number(deal.prix_original) : null
     setPanier(prev => ({ ...prev, [key]: {
@@ -4172,6 +4246,7 @@ export default function CommanderSlug() {
                             {/* Lots et duos seulement : une remise vit sur la carte de l'article */}
                             {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
                               <DealOfferCard key={dl.id} deal={dl}
+                                reste={resteDeLOffre(dl)}
                                 qte={panier[`deal_${dl.id}`]?.quantite || 0}
                                 onAjouter={() => ajouterDealAuPanier(dl, a)}
                                 onRetirer={() => retirerDuPanier(`deal_${dl.id}`)}/>
@@ -4202,6 +4277,7 @@ export default function CommanderSlug() {
                             onOpenDetail={() => setArticleDetail(a)}/>
                           {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
                             <DealOfferCard key={dl.id} deal={dl}
+                              reste={resteDeLOffre(dl)}
                               qte={panier[`deal_${dl.id}`]?.quantite || 0}
                               onAjouter={() => ajouterDealAuPanier(dl, a)}
                               onRetirer={() => retirerDuPanier(`deal_${dl.id}`)}/>

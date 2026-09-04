@@ -16,6 +16,7 @@
 //   node scripts/mutations-delai-commande.mjs
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { ecrireSur } from './harnais-mutation.mjs'
 import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
@@ -352,39 +353,12 @@ const MUTATIONS = [
     vers: '    let fermeturesCommercant = null' },
 ]
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🔴 ÉCRIRE PEUT ÉCHOUER, ET LE HARNAIS L'IGNORAIT (04/09).
-//
-// `writeFileSync` a levé `UNKNOWN: unknown error, open` en pleine série, sur
-// Windows : un verrou passager, posé par un antivirus ou par le veilleur de
-// fichiers du build. Le dépôt s'en est tiré cette fois-ci parce que l'écriture
-// ratée était celle qui POSE la mutation.
-//
-// ⚠️ MAIS SI C'ÉTAIT LA RESTAURATION QUI AVAIT ÉCHOUÉ, le harnais serait mort
-// en laissant un fichier MUTÉ dans le dépôt, et son contrôle de restauration
-// n'aurait jamais tourné : il vient APRÈS l'écriture, donc après l'exception.
-// Un outil qui vérifie la restauration mais qui meurt avant de la vérifier ne
-// protège de rien.
-//
-// ✅ DEUX REMÈDES, ET IL FAUT LES DEUX :
-//   • on réessaie, parce qu'un verrou passager passe ;
-//   • et la restauration vit dans un `finally`, donc elle s'exécute même si
-//     tout le reste explose.
-const ecrire = (f, contenu) => {
-  let derniere = null
-  for (let essai = 0; essai < 5; essai++) {
-    try { writeFileSync(f, contenu, 'utf8'); return true }
-    catch (e) {
-      derniere = e
-      // Une attente courte et BLOQUANTE : ce script est synchrone de bout en
-      // bout, et un `await` ici ferait repartir la boucle avant l'écriture.
-      const fin = Date.now() + 120
-      while (Date.now() < fin) { /* on laisse le verrou se relâcher */ }
-    }
-  }
-  console.log(`\n🔴 ÉCRITURE IMPOSSIBLE sur ${f} après 5 essais : ${derniere?.message}`)
-  return false
-}
+// ⚠️ L ÉCRITURE ET LA RESTAURATION PASSENT PAR `scripts/harnais-mutation.mjs`.
+// Le remède du 04/09 y vit pour les SEIZE harnais : réessai sur verrou de
+// fichier, et restauration automatique sur toutes les sorties, y compris
+// celles qu'on n'a pas prévues. Recopié ici, il aurait été corrigé une fois
+// sur seize le jour où il faudra le reprendre.
+const ecrire = (f, contenu) => ecrireSur(f, contenu)
 
 const lancer = () => {
   try {

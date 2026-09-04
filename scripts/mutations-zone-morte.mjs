@@ -10,6 +10,7 @@
 //   node scripts/mutations-zone-morte.mjs
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { ecrireSur } from './harnais-mutation.mjs'
 import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
@@ -76,7 +77,7 @@ for (const m of MUTATIONS) {
     console.log(`  ? introuvable : ${m.nom}`)
     continue
   }
-  writeFileSync(f, original.replace(m.de, m.vers), 'utf8')
+  ecrireSur(f, original.replace(m.de, m.vers))
 
   let res
   if (ATTENDU_VERT.has(m.nom)) {
@@ -84,16 +85,16 @@ for (const m of MUTATIONS) {
     // vert, ce qui prouve que c'est bien cette ligne qui surveille.
     const ff = chemin(FICHE)
     const orig2 = readFileSync(ff, 'utf8')
-    writeFileSync(ff, orig2.replace('  }, [slug])', '  }, [slug, peutCommander])'), 'utf8')
+    ecrireSur(ff, orig2.replace('  }, [slug])', '  }, [slug, peutCommander])'))
     const r = lancer(m.banc)
-    writeFileSync(ff, orig2, 'utf8')
+    ecrireSur(ff, orig2)
     if (readFileSync(ff, 'utf8') !== orig2) { console.log('\n🔴 RESTAURATION RATÉE.'); process.exit(2) }
     res = { rouge: !r.rouge, plante: false }  // vert = la garde est bien morte = mutation attrapée
   } else {
     res = lancer(m.banc)
   }
 
-  writeFileSync(f, original, 'utf8')
+  ecrireSur(f, original)
   if (readFileSync(f, 'utf8') !== original) {
     console.log(`\n🔴 RESTAURATION RATÉE sur ${m.fichier}. On s'arrête.`)
     process.exit(2)

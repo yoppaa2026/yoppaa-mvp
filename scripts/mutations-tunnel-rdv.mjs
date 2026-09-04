@@ -12,6 +12,7 @@
 //   node scripts/mutations-tunnel-rdv.mjs
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { ecrireSur } from './harnais-mutation.mjs'
 import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
@@ -621,9 +622,9 @@ for (const m of MUTATIONS) {
   // soir). Deux fichiers écrivent l'acompte dû à DEUX endroits : n'en muter
   // qu'un laissait la garde verte, parce qu'elle COMPTE. Une mutation partielle
   // sur une règle qui se compte ne mesure rien.
-  writeFileSync(f, m.toutes ? original.split(m.de).join(m.vers) : original.replace(m.de, m.vers), 'utf8')
+  ecrireSur(f, m.toutes ? original.split(m.de).join(m.vers) : original.replace(m.de, m.vers))
   const res = lancer()
-  writeFileSync(f, original, 'utf8')
+  ecrireSur(f, original)
 
   // ⚠️ ON CONTRÔLE LA RESTAURATION. Un harnais qui abîme le dépôt coûte plus
   // cher que tout ce qu'il mesure.

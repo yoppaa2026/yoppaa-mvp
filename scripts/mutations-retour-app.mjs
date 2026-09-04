@@ -17,6 +17,7 @@
 //   node scripts/mutations-retour-app.mjs
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { ecrireSur } from './harnais-mutation.mjs'
 import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
@@ -150,11 +151,11 @@ for (const m of MUTATIONS) {
     console.log(`  ? introuvable : ${m.nom}`)
     continue
   }
-  writeFileSync(f, original.replace(m.de, m.vers))
+  ecrireSur(f, original.replace(m.de, m.vers))
   const r = lancer()
   // ⚠️ RESTAURATION PAR LE CONTENU MÉMORISÉ, et vérifiée : un `git checkout`
   // effacerait le travail non commité du dépôt.
-  writeFileSync(f, original)
+  ecrireSur(f, original)
   if (readFileSync(f, 'utf8') !== original) {
     console.log(`\n🔴 RESTAURATION RATÉE sur ${m.fichier}. Arrêt.`)
     process.exit(1)

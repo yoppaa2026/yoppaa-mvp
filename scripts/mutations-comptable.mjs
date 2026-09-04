@@ -14,6 +14,7 @@
 // PLANTE n'a rien prouvé : il faut qu'il rougisse en disant « en échec ».
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { ecrireSur } from './harnais-mutation.mjs'
 import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
@@ -589,9 +590,9 @@ for (const m of MUTATIONS) {
     console.log(`  ? ancre ambiguë : ${m.nom}`)
     continue
   }
-  writeFileSync(f, original.replace(m.de, m.vers), 'utf8')
+  ecrireSur(f, original.replace(m.de, m.vers))
   const res = lancer(m.banc)
-  writeFileSync(f, original, 'utf8')
+  ecrireSur(f, original)
   if (readFileSync(f, 'utf8') !== original) {
     console.log(`\n🔴 RESTAURATION RATÉE sur ${m.fichier}. On s'arrête.`)
     process.exit(2)

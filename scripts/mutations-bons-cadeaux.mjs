@@ -10,6 +10,7 @@
 // Chaque texte de recherche est ancré pour ne viser qu'un seul endroit.
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { ecrireSur } from './harnais-mutation.mjs'
 import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
@@ -1394,9 +1395,9 @@ for (const m of MUTATIONS) {
     console.log(`  ? introuvable : ${m.nom}`)
     continue
   }
-  writeFileSync(f, original.replace(m.de, m.vers), 'utf8')
+  ecrireSur(f, original.replace(m.de, m.vers))
   const res = lancer(m.banc)
-  writeFileSync(f, original, 'utf8')
+  ecrireSur(f, original)
   if (readFileSync(f, 'utf8') !== original) {
     console.log(`\n🔴 RESTAURATION RATÉE sur ${m.fichier}. On s'arrête.`)
     process.exit(2)

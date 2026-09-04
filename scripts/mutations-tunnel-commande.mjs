@@ -22,6 +22,7 @@
 //   node scripts/mutations-tunnel-commande.mjs
 
 import { readFileSync, writeFileSync } from 'node:fs'
+import { ecrireSur } from './harnais-mutation.mjs'
 import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
@@ -160,9 +161,9 @@ for (const m of MUTATIONS) {
     continue
   }
   const mute = m.tous ? original.split(m.de).join(m.vers) : original.replace(m.de, m.vers)
-  writeFileSync(f, mute, 'utf8')
+  ecrireSur(f, mute)
   const res = lancer()
-  writeFileSync(f, original, 'utf8')
+  ecrireSur(f, original)
 
   if (readFileSync(f, 'utf8') !== original) {
     console.log(`\n🔴 RESTAURATION RATÉE sur ${m.fichier}. On s'arrête.`)

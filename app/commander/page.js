@@ -3060,17 +3060,41 @@ export default function Commander() {
           touch-action: pan-y pinch-zoom !important;
           overscroll-behavior-x: none;
         }
+        /* ⚠️ ON PEINT AUSSI LA RACINE, PAS SEULEMENT LE CORPS. Sans ça, le
+           moindre dépassement laisse voir le fond de globals.css : BLANC en
+           clair, presque noir en sombre. C'est ce trou blanc qu'Alex voyait en
+           bas de l'écran sur iPhone. Le fond de la racine doit être celui de
+           l'application.
+           ⚠️ AUCUN ACCENT GRAVE DANS CES COMMENTAIRES : ce bloc vit dans un
+           gabarit JavaScript, et un accent grave y FERME la chaîne. */
+        html { background: ${T.bg}; }
         body { background: ${T.bg}; font-family: "DM Sans", sans-serif; font-size: 16px; -webkit-text-size-adjust: 100%; position: relative; }
+        /* 🔴 LA HAUTEUR EST FIXE, PAS MINIMALE (04/09).
+           Ce gabarit est une boîte de la taille de l'écran : un bandeau figé,
+           une zone qui défile, une barre de navigation. Avec une hauteur
+           seulement MINIMALE, la boîte pouvait GRANDIR au-delà de l'écran, et
+           le document entier
+           devenait défilant par-dessus le défilement interne. On tombait alors
+           dans le vide sous la page.
+           La fiche boutique portait déjà la bonne règle, hauteur fixe et
+           débordement caché : ce sont les deux autres pages du même gabarit
+           qui avaient dérivé. */
         .page-wrap {
           display: flex; flex-direction: column;
-          min-height: 100dvh; max-width: 760px; margin: 0 auto;
+          height: 100dvh; max-width: 760px; margin: 0 auto;
           background: ${T.bg}; width: 100%;
-          overflow-x: hidden;
+          overflow: hidden;
         }
         /* Force chaque enfant direct du page-wrap à rester dans la largeur. */
         .page-wrap > * { max-width: 100%; }
         .scroll-body {
           flex: 1;
+          /* 🔴 SANS CECI, LE DÉBORDEMENT AUTOMATIQUE NE SERT À RIEN. La
+             hauteur minimale d'un enfant flex vaut « auto », c'est-à-dire
+             « jamais plus petit que mon contenu » : au lieu de défiler à
+             l'intérieur, il POUSSAIT son parent. C'est le piège de flexbox le
+             plus courant, et c'est lui qui fabriquait la hauteur en trop. */
+          min-height: 0;
           overflow-y: auto;
           overflow-x: hidden;
           /* Bloque la propagation du scroll vers la page (rubber-banding) + pan-x interdit */

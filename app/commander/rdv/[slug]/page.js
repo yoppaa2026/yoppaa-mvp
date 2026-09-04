@@ -2152,8 +2152,19 @@ export default function CommanderRdvSlug() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; overflow-x: hidden; max-width: 100vw; }
         body { font-family: "DM Sans", sans-serif; background: ${T.bg}; color: ${T.ink}; position: relative; }
-        .page-wrap { display: flex; flex-direction: column; min-height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; overflow-x: hidden; width: 100%; }
-        .scroll-body { flex: 1; overflow-y: auto; overflow-x: hidden; touch-action: pan-y; }
+        /* ⚠️ Le fond de la RACINE aussi : sinon un dépassement laisse voir le
+           blanc de globals.css. Voir app/commander/page.js.
+           ⚠️ AUCUN ACCENT GRAVE ICI : ce bloc vit dans un gabarit JavaScript,
+           et un accent grave y FERME la chaîne. */
+        html { background: ${T.bg}; }
+        /* 🔴 HAUTEUR FIXE, PAS MINIMALE, ET HAUTEUR MINIMALE NULLE SUR LA ZONE
+           QUI DÉFILE (04/09). Avec une hauteur seulement minimale sur la boîte
+           et la valeur « auto » par défaut sur l'enfant flex, la zone de
+           défilement poussait son parent au lieu de défiler : le document
+           devenait plus haut que l'écran et on tombait dans le vide sous la
+           page. */
+        .page-wrap { display: flex; flex-direction: column; height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; overflow: hidden; width: 100%; }
+        .scroll-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; touch-action: pan-y; }
         .topbar-rdv { overflow: hidden; max-width: 100%; }
         .step-label { display: inline; }
         @media (max-width: 479px) {

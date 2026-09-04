@@ -856,6 +856,67 @@ egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
     !fiche.includes('setCategorieActive') && !fiche.includes('setCatBarVisible'))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LE GABARIT « BOÎTE DE LA TAILLE DE L'ÉCRAN » — LES TROIS PAGES D'ACCORD
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ALEX A VU SUR IPHONE (01/09, diagnostiqué le 04/09) : en revenant
+// par le lien de validation d'email, une bande BLANCHE en bas de l'écran, et
+// la possibilité de défiler indéfiniment dans ce vide. Un rechargement
+// effaçait le symptôme.
+//
+// Trois pages partagent le même gabarit : un bandeau figé, une zone qui
+// défile, une barre de navigation. **Elles ne le déclaraient pas pareil.**
+// La fiche boutique était en `height: 100dvh` + `overflow: hidden` ; l'accueil
+// et la fiche des services en `min-height`, donc libres de GRANDIR.
+//
+// 🔴 Et `.scroll-body` n'avait pas `min-height: 0`. La hauteur minimale d'un
+// enfant flex vaut `auto`, c'est-à-dire « jamais plus petit que mon contenu » :
+// son `overflow-y: auto` ne pouvait pas jouer, il POUSSAIT son parent. C'est le
+// piège de flexbox le plus courant, et c'est lui qui fabriquait la hauteur en
+// trop.
+//
+// ⚠️ ET LE VIDE ÉTAIT BLANC PARCE QUE `html` N'ÉTAIT JAMAIS REPEINT. Les pages
+// peignaient `body` ; la racine gardait le fond de `globals.css`, blanc en
+// clair et presque noir en sombre.
+{
+  const GABARIT = [
+    ['l’accueil Yopper', 'app/commander/page.js'],
+    ['la fiche boutique', 'app/commander/[slug]/page.js'],
+    ['la fiche des services', 'app/commander/rdv/[slug]/page.js'],
+  ]
+  for (const [nom, chemin] of GABARIT) {
+    let src = null
+    // ⚠️ Un fichier disparu rougit, il ne fait pas exploser le banc.
+    // ⚠️ ET LES INTERPOLATIONS SONT NEUTRALISÉES D'ABORD. Ces blocs CSS vivent
+    // dans des gabarits JavaScript : `background: ${T.bg};` porte une ACCOLADE
+    // FERMANTE, et un découpage en `[^}]*` s'arrêtait donc au milieu de la
+    // règle. La garde mesurait un bout de bloc et rougissait sur du vrai code.
+    try {
+      src = lire(chemin).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\$\{[^{}]*\}/g, 'X')
+    } catch { src = null }
+    verifier(`${nom} : son fichier existe encore`, src !== null, chemin)
+    if (src === null) continue
+
+    const wrap = (src.match(/\.page-wrap\s*\{[^}]*\}/) || [''])[0]
+    const corps = (src.match(/\.scroll-body\s*\{[^}]*\}/) || [''])[0]
+
+    // 🔴 LA HAUTEUR EST FIXE, PAS MINIMALE.
+    verifier(`${nom} : la boîte fait la taille de l’écran`,
+      /height:\s*100dvh/.test(wrap) && !/min-height:\s*100dvh/.test(wrap), wrap.slice(0, 120))
+    verifier(`${nom} : la boîte ne peut pas déborder`,
+      /overflow:\s*hidden/.test(wrap), wrap.slice(0, 120))
+    // 🔴 SANS `min-height: 0`, LE DÉFILEMENT INTERNE NE PEUT PAS JOUER.
+    verifier(`${nom} : la zone qui défile peut vraiment rétrécir`,
+      /min-height:\s*0/.test(corps), corps.slice(0, 120))
+    verifier(`${nom} : et elle défile bien elle-même`,
+      /overflow-y:\s*auto/.test(corps), corps.slice(0, 120))
+    // ⚠️ LA RACINE PORTE LE FOND DE L'APP, sinon un dépassement montre du blanc.
+    verifier(`${nom} : la racine est peinte, pas seulement le corps`,
+      /html\s*\{[^}]*background:/.test(src))
+  }
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

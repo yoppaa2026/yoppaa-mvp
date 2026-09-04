@@ -3121,8 +3121,17 @@ export default function CommanderSlug() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; width: 100%; overflow: hidden; }
         body { background: ${T.bg}; font-family: "DM Sans", sans-serif; font-size: 16px; -webkit-text-size-adjust: 100%; }
+        /* ⚠️ Le fond de la RACINE aussi : sinon un dépassement laisse voir le
+           blanc de globals.css. Voir app/commander/page.js.
+           ⚠️ AUCUN ACCENT GRAVE ICI : ce bloc vit dans un gabarit JavaScript,
+           et un accent grave y FERME la chaîne. */
+        html { background: ${T.bg}; }
+        /* Cette page-ci portait DÉJÀ la bonne règle, une hauteur FIXE et non
+           minimale : c'est elle qui a servi de modèle aux deux autres le
+           04/09. La hauteur minimale nulle sur la zone qui défile complète la
+           paire. */
         .page-wrap { display: flex; flex-direction: column; height: 100dvh; max-width: 760px; margin: 0 auto; background: ${T.bg}; overflow: hidden; width: 100%; position: relative; }
-        .scroll-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+        .scroll-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
         .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         @media (min-width: 480px) { .grid3 { grid-template-columns: 1fr 1fr 1fr; } }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }

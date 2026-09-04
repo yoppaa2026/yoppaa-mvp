@@ -116,6 +116,39 @@ const MUTATIONS = [
     de: "export const LIBELLE_BOUTON = 'Je le prends'",
     vers: "export const LIBELLE_BOUTON = 'Depeche-toi !'" },
 
+  // ─── LES CRÉNEAUX, ET LE REFUS QUI DIT POURQUOI ─────────────────────────
+  { nom: '🔴 le chevauchement ne se lit plus que dans un sens',
+    de: '    return dansFenetre(debutC, debutF, finF) || dansFenetre(debutF, debutC, finC)',
+    vers: '    return dansFenetre(debutC, debutF, finF)' },
+
+  // ⚠️ PAS DE DEUXIEME MUTATION SUR LE FILTRE, ET C EST DELIBERE. Ma premiere
+  // tentative enveloppait le filtre dans un `.filter(() => true)` : le filtre
+  // suivant s appliquait quand meme, donc RIEN NE CHANGEAIT. Une mutation qui
+  // ne mute rien est une mutation manquee. La regle du chevauchement est deja
+  // mesuree par la mutation ci-dessus.
+
+  { nom: '🔴 on publie une offre que personne ne peut venir chercher',
+    de: '  if (creneauxUtilisables(offre, creneaux).length === 0) {',
+    vers: '  if (false) {' },
+
+  // ⚠️ CIBLE SUR LA PARTIE STABLE DE LA LIGNE. Le gabarit contient des accents
+  // graves et des `${}` : les faire traverser un shell les detruit, et la
+  // mutation ecrite de travers a fait PLANTER le banc au lieu de le faire
+  // rougir. On ne vise donc que le debut de la phrase.
+  //
+  // ⚠️ ET ON VISE LE CHIFFRE, PAS LA PROSE AUTOUR. Ma deuxieme tentative
+  // remplacait « Ta remise est de » par « Remise insuffisante. » : le message
+  // gardait ses deux nombres, donc la garde, qui mesure les NOMBRES, restait
+  // verte a juste titre. Retirer le chiffre du commercant, la, degrade
+  // vraiment ce qu il lit.
+  { nom: '🔴 le refus cesse de donner la remise obtenue',
+    de: 'Ta remise est de ${remise} %',
+    vers: 'Ta remise est trop faible' },
+
+  { nom: '🔴 le refus du creneau ne nomme plus le geste qui repare',
+    de: "    return 'Aucun créneau de retrait dans cette plage. Ajoute un créneau, sinon personne ne pourra venir chercher.'",
+    vers: "    return 'Plage invalide.'" },
+
   // ─── CE QUE L'ÉCRAN ÉCRIT ───────────────────────────────────────────────
   { nom: '🔴 l’heure s’ecrit sans espace (« 19h »)',
     de: "  return min === 0 ? `${h} h` : `${h} h ${String(min).padStart(2, '0')}`",

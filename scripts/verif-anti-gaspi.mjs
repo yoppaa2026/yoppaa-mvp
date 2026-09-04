@@ -17,6 +17,7 @@ import {
   minutesAvantFermeture, libelleHeure, libelleFenetre, libelleTempsRestant,
   prixCasse, remisePourcent, offreValable, REMISE_MINIMALE, REMISE_CONSEILLEE, CONSEIL_REMISE,
   TITRE_YOPPER, SOUS_TITRE_YOPPER, NOM_FONCTION_COMMERCANT, LIBELLE_BOUTON,
+  creneauxUtilisables, refusDePublication, offrePubliable, dansFenetre,
   offresOuvertes,
 } from '../lib/anti-gaspi.js'
 
@@ -275,6 +276,83 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   for (const mot of ['dépêche', 'vite', 'urgent', '!']) {
     verifier(`aucune injonction : « ${mot} »`, !tousLesTextes.includes(mot), tousLesTextes)
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6quater. LE RETRAIT PASSE PAR LES CRÉNEAUX
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ DÉCISION D'ALEX, 04/09 : « le Yopper connaît, il ne doit pas chercher ses
+// repères ». Une commande d'invendu reste une commande ordinaire, avec son
+// numéro et son créneau. La fenêtre dit jusqu'à quand l'offre est VISIBLE, le
+// créneau dit quand il vient CHERCHER.
+{
+  const F = { heure_debut: '17:00:00', heure_fin: '19:00:00', prix_deal: 3, prix_original: 6 }
+  const c = (id, d, f) => ({ id, heure_debut: d, heure_fin: f })
+  const ids = (l) => l.map(x => x.id)
+
+  egal('un créneau qui commence dans la fenêtre convient',
+    ids(creneauxUtilisables(F, [c('a', '18:00:00', '18:30:00')])), ['a'])
+  egal('un créneau du matin ne convient pas',
+    ids(creneauxUtilisables(F, [c('matin', '08:00:00', '09:00:00')])), [])
+  // ⚠️ LES DEUX SENS DU CHEVAUCHEMENT SONT NÉCESSAIRES : un créneau qui ENGLOBE
+  // toute la fenêtre serait écarté si l'on ne regardait que son début.
+  egal('🔴 un créneau qui englobe la fenêtre convient aussi',
+    ids(creneauxUtilisables(F, [c('large', '16:00:00', '20:00:00')])), ['large'])
+  egal('un créneau qui finit juste après le début convient',
+    ids(creneauxUtilisables(F, [c('chevauche', '16:30:00', '17:30:00')])), ['chevauche'])
+  egal('un créneau qui finit AVANT le début ne convient pas',
+    ids(creneauxUtilisables(F, [c('avant', '15:00:00', '17:00:00')])), [])
+  // ⚠️ ET LE PASSAGE DE MINUIT VAUT AUSSI ICI. La friterie de 22 h à 1 h.
+  {
+    const NUIT = { heure_debut: '22:00:00', heure_fin: '01:00:00', prix_deal: 3, prix_original: 6 }
+    egal('🔴 un créneau après minuit convient à une fenêtre de nuit',
+      ids(creneauxUtilisables(NUIT, [c('minuit', '00:15:00', '00:45:00')])), ['minuit'])
+    egal('un créneau de l’après-midi, non',
+      ids(creneauxUtilisables(NUIT, [c('aprem', '14:00:00', '15:00:00')])), [])
+  }
+  egal('sans fenêtre, aucun créneau ne convient',
+    creneauxUtilisables({}, [c('a', '18:00:00', '18:30:00')]), [])
+  egal('une liste de créneaux absente ne fait pas tomber', creneauxUtilisables(F, undefined), [])
+
+  // ─── LE REFUS, ET IL DIT POURQUOI ──────────────────────────────────────
+  //
+  // 🔴 UNE OFFRE QU'ON LAISSE ENREGISTRER ET QUI NE S'AFFICHE JAMAIS EST LE
+  // PIRE DES DEUX MONDES : le commerçant croit avoir travaillé, personne ne
+  // voit rien, et rien ne le signale.
+  const CRENEAU_OK = [c('a', '18:00:00', '18:30:00')]
+  verifier('une offre complète passe', refusDePublication(F, CRENEAU_OK) === null)
+  verifier('offrePubliable dit la même chose', offrePubliable(F, CRENEAU_OK) === true)
+
+  const refusFenetre = refusDePublication({ prix_deal: 3, prix_original: 6 }, CRENEAU_OK)
+  verifier('🔴 sans heure de fin, on refuse', refusFenetre !== null)
+  verifier('et le message nomme ce qui manque', /heure/i.test(refusFenetre || ''), refusFenetre)
+
+  const refusPrix = refusDePublication({ ...F, prix_deal: 6 }, CRENEAU_OK)
+  verifier('🔴 sans remise, on refuse', refusPrix !== null)
+  verifier('et le message parle du prix', /prix/i.test(refusPrix || ''), refusPrix)
+
+  const refusPlancher = refusDePublication({ ...F, prix_deal: 5, prix_original: 6 }, CRENEAU_OK)
+  verifier('🔴 sous le plancher, on refuse', refusPlancher !== null)
+  // ⚠️ ET IL DONNE LES DEUX CHIFFRES : le sien et celui qu'il faut atteindre.
+  // « Remise insuffisante » n'aide personne à 17 h, les mains dans la farine.
+  verifier('et le message donne la remise obtenue', /17 %/.test(refusPlancher || ''), refusPlancher)
+  verifier('et celle qu’il faut atteindre',
+    refusPlancher?.includes(`${REMISE_MINIMALE} %`), refusPlancher)
+
+  const refusCreneau = refusDePublication(F, [c('matin', '08:00:00', '09:00:00')])
+  verifier('🔴 sans créneau dans la plage, on refuse', refusCreneau !== null)
+  // ⚠️ LE MESSAGE NOMME LE GESTE QUI RÉPARE.
+  verifier('et le message dit d’ajouter un créneau',
+    /ajoute un créneau/i.test(refusCreneau || ''), refusCreneau)
+  verifier('et dit la conséquence, pas seulement la règle',
+    /venir chercher/i.test(refusCreneau || ''), refusCreneau)
+
+  // ⚠️ L'ORDRE DES REFUS COMPTE : on ne reproche pas le créneau à quelqu'un qui
+  // n'a pas encore mis d'heure. On lui dit UNE chose à la fois, dans l'ordre où
+  // il remplit.
+  verifier('🔴 sans heure NI créneau, on parle d’abord de l’heure',
+    /heure/i.test(refusDePublication({ prix_deal: 3, prix_original: 6 }, []) || ''))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

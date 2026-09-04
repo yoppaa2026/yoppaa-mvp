@@ -442,7 +442,11 @@ export default function CommanderRdvSlug() {
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '', notes: '' })
   const [clientId, setClientId] = useState(null)
   const [rgpdCommande, setRgpdCommande] = useState(false)
-  const [rgpdMarketing, setRgpdMarketing] = useState(true)  // pré-coché (cf signup data flow)
+  // 🔴 PRÉ-COCHÉE JUSQU'AU 04/09, DONC SANS VALEUR. Un consentement suppose un
+  // ACTE POSITIF : ni le silence ni l'inaction n'en sont un (arrêt Planet49,
+  // CJUE C-673/17, 2019). Tout ce qui a été récolté ainsi est inexploitable.
+  // Même correction que dans la fiche boutique, qui porte l'explication longue.
+  const [rgpdMarketing, setRgpdMarketing] = useState(false)
   // RDV-4d : insert + confirmation
   const [submitting, setSubmitting] = useState(false)
   // 🔴 MÊME DÉFAUT QUE LE TUNNEL DE COMMANDE, trouvé en cherchant les frères :
@@ -3306,7 +3310,7 @@ export default function CommanderRdvSlug() {
                       // parler de « mon rendez-vous » à quelqu'un qui achète aussi
                       // un shampoing lui fait douter que son produit soit inclus.
                       { key: 'rgpdCommande', val: rgpdCommande, set: setRgpdCommande, label: lignesPanier.length > 0 ? 'Traitement de ma réservation' : 'Traitement de mon RDV', badge: 'Obligatoire', badgeColor: '#DC2626', badgeBg: '#FEE2E2', desc: `J'accepte que mes coordonnées soient transmises à ${commercant.nom} pour le traitement de ${lignesPanier.length > 0 ? 'mon rendez-vous et de ma commande' : 'mon rendez-vous'}.` },
-                      { key: 'rgpdMarketing', val: rgpdMarketing, set: setRgpdMarketing, label: 'Offres et actualités', badge: 'Optionnel', badgeColor: T.main, badgeBg: T.pale, desc: `J'accepte que ${commercant.nom} utilise mes coordonnées pour m'envoyer des offres et actualités.` },
+                      { key: 'rgpdMarketing', val: rgpdMarketing, set: setRgpdMarketing, label: 'Offres et actualités', badge: 'Optionnel', badgeColor: T.main, badgeBg: T.pale, desc: `J'accepte que ${commercant.nom} m'envoie ses offres et ses nouveautés par email. Je peux retirer cet accord quand je veux.` },
                     ].map((item, i) => (
                       <label key={item.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: i === 0 ? `1px solid ${T.pale}` : 'none', background: item.val ? '#F0FDF4' : '#fff' }}>
                         <div onClick={() => item.set(v => !v)}

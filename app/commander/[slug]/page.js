@@ -1112,8 +1112,21 @@ export default function CommanderSlug() {
   const [cancelResult, setCancelResult] = useState(null)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '' })
   const [rgpdCommande, setRgpdCommande] = useState(false)
-  // Marketing pre-coche par defaut : maximise le taux d'opt-in (l'utilisateur peut decocher s'il refuse)
-  const [rgpdMarketing, setRgpdMarketing] = useState(true)
+  // 🔴 CETTE CASE ÉTAIT PRÉ-COCHÉE, ET LE CONSENTEMENT NE VALAIT DONC RIEN.
+  //
+  // Le commentaire disait « maximise le taux d'opt-in ». Il maximisait surtout
+  // un chiffre sans valeur juridique : un consentement suppose un ACTE POSITIF,
+  // et ni le silence ni l'inaction n'en sont un. C'est tranché depuis l'arrêt
+  // Planet49 de la Cour de justice de l'Union européenne (C-673/17, 2019).
+  //
+  // ⚠️ CE N'EST PAS UNE FORMALITÉ : tous les consentements récoltés case
+  // pré-cochée sont INEXPLOITABLES. On ne pouvait rien en faire, donc le
+  // « taux d'opt-in » gagné était du vide compté comme un actif.
+  //
+  // ⚠️ ET IL EST NOMINATIF. Il autorise CE commerce-ci à écrire, personne
+  // d'autre : il ne couvre pas les offres d'un autre commerçant, ni un envoi
+  // groupé par commune.
+  const [rgpdMarketing, setRgpdMarketing] = useState(false)
   const [clientId, setClientId] = useState(null)
   const [joursDispos, setJoursDispos] = useState([])
   const [jourSelectionne, setJourSelectionne] = useState(0)
@@ -4701,7 +4714,7 @@ export default function CommanderSlug() {
                   </div>
                   {[
                     { key: 'rgpdCommande', val: rgpdCommande, set: setRgpdCommande, label: 'Traitement de ma commande', badge: 'Obligatoire', badgeColor: '#DC2626', badgeBg: '#FEE2E2', desc: `J'accepte que mes coordonnées soient transmises à ${commercant.nom} pour le traitement de ma commande.` },
-                    { key: 'rgpdMarketing', val: rgpdMarketing, set: setRgpdMarketing, label: 'Offres et actualités', badge: 'Optionnel', badgeColor: T.main, badgeBg: T.pale, desc: `J'accepte que ${commercant.nom} utilise mes coordonnées pour m'envoyer des offres.` },
+                    { key: 'rgpdMarketing', val: rgpdMarketing, set: setRgpdMarketing, label: 'Offres et actualités', badge: 'Optionnel', badgeColor: T.main, badgeBg: T.pale, desc: `J'accepte que ${commercant.nom} m'envoie ses offres et ses nouveautés par email. Je peux retirer cet accord quand je veux.` },
                   ].map((item, i) => (
                     <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: i === 0 ? `1px solid ${T.pale}` : 'none', background: item.val ? '#F0FDF4' : '#fff' }}>
                       <div onClick={() => item.set(v => !v)}

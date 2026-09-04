@@ -381,6 +381,56 @@ for (const composant of ['Input', 'Textarea']) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// AUCUNE CASE DE CONSENTEMENT N'EST PRÉ-COCHÉE (04/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 LES DEUX TUNNELS PRÉ-COCHAIENT LE CONSENTEMENT MARKETING, avec ce
+// commentaire : « maximise le taux d'opt-in ». Il maximisait un chiffre sans
+// valeur juridique. Un consentement suppose un ACTE POSITIF, et ni le silence
+// ni l'inaction n'en sont un : arrêt Planet49, Cour de justice de l'Union
+// européenne, C-673/17, 2019.
+//
+// ⚠️ CE N'EST PAS UNE FORMALITÉ : tout ce qui a été récolté case pré-cochée est
+// INEXPLOITABLE. Le taux d'opt-in gagné était du vide compté comme un actif.
+//
+// ⚠️ LA GARDE VISE LE DÉFAUT, PAS LE MOT. Elle ne cherche pas la chaîne
+// `useState(true)` au hasard du fichier : elle isole les états de consentement
+// par leur NOM et vérifie leur valeur de départ. Renommer la variable ne la
+// fait pas taire, la déplacer non plus.
+{
+  const PORTEURS = [
+    ['la fiche boutique', 'app/commander/[slug]/page.js'],
+    ['la fiche des services', 'app/commander/rdv/[slug]/page.js'],
+    ['la landing', 'app/components/LandingReveal.js'],
+  ]
+  // Tout état dont le nom parle de consentement, de RGPD ou de marketing.
+  const ETAT = /const\s*\[\s*(\w*(?:rgpd|consent|marketing|optin|newsletter)\w*)\s*,\s*set\w+\s*\]\s*=\s*useState\(\s*(true|false)\s*\)/gi
+  let trouves = 0
+  for (const [nom, chemin] of PORTEURS) {
+    let src = null
+    try { src = lire(chemin).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ') } catch { src = null }
+    verifier(`${nom} : son fichier existe encore`, src !== null, chemin)
+    if (src === null) continue
+    ETAT.lastIndex = 0
+    let m
+    while ((m = ETAT.exec(src)) !== null) {
+      trouves++
+      verifier(`🔴 ${nom} : « ${m[1]} » n’est pas pré-cochée`, m[2] === 'false', `useState(${m[2]})`)
+    }
+    // Un consentement écrit dans un objet de formulaire compte aussi.
+    const champs = src.match(/\b\w*(?:consentement|marketing|newsletter)\w*\s*:\s*(true|false)\b/gi) || []
+    for (const champ of champs) {
+      trouves++
+      verifier(`🔴 ${nom} : « ${champ.split(':')[0].trim()} » démarre à faux`,
+        /:\s*false/i.test(champ), champ)
+    }
+  }
+  // ⚠️ SANS CE COMPTE, LA BOUCLE POUVAIT NE RIEN TROUVER ET RESTER VERTE.
+  // Une garde qui ne s'exécute sur rien est une garde absente.
+  verifier('🔴 des consentements ont bien été examinés', trouves >= 3, `${trouves} trouvé(s)`)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

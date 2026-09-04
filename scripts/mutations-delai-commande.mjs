@@ -172,6 +172,13 @@ const MUTATIONS = [
     de: '  if (Number.isFinite(m) && m > 0 && !liste.includes(m)) liste.push(m)',
     vers: '  if (false) liste.push(m)' },
 
+  // 🔴 ARBITRAGE D'ALEX, 04/09 : les courtes durees sont le travail de la
+  // CLOTURE DU CRENEAU, en production depuis le 09/08. Les remettre sur
+  // l article recreerait deux reglages voisins dont un seul agit.
+  { nom: '🔴 les courtes durees reviennent concurrencer la cloture du creneau',
+    de: 'export const DELAIS_PROPOSES = [0, 1440, 2880, 4320]',
+    vers: 'export const DELAIS_PROPOSES = [0, 30, 60, 120, 240, 1440, 2880, 4320]' },
+
   { nom: '🔴 la liste des delais n’est plus triee',
     de: '  return liste.sort((a, b) => a - b)',
     vers: '  return liste' },

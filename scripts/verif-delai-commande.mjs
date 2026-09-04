@@ -328,14 +328,24 @@ egal('la liste part de « aucun délai »', DELAIS_PROPOSES[0], 0)
 verifier('elle reste dans les bornes de la base',
   DELAIS_PROPOSES.every(m => m >= 0 && m <= 20160), JSON.stringify(DELAIS_PROPOSES))
 verifier('elle est triée', DELAIS_PROPOSES.every((m, i) => i === 0 || m > DELAIS_PROPOSES[i - 1]))
-verifier('elle couvre le sandwich, la tarte et les 72 h',
-  [60, 2880, 4320].every(m => DELAIS_PROPOSES.includes(m)))
+// 🔴 QUATRE CHOIX, ET PAS UN DE PLUS (Alex, 04/09). Les courtes durees sont le
+// travail de la CLOTURE DU CRENEAU, qui vaut pour tout le catalogue et qui est
+// en production depuis le 09/08. Les mettre aussi sur l article fabriquerait
+// deux reglages voisins dont un seul agit : exactement le defaut retire le
+// matin meme avec le champ « Delai » des creneaux.
+egal('🔴 la liste tient en quatre choix', DELAIS_PROPOSES.length, 4)
+egal('et ils se comptent en JOURS, jamais en heures',
+  DELAIS_PROPOSES, [0, 1440, 2880, 4320])
+verifier('🔴 aucune duree courte ne concurrence la cloture du creneau',
+  !DELAIS_PROPOSES.some(m => m > 0 && m < 1440), JSON.stringify(DELAIS_PROPOSES))
+verifier('elle couvre la tarte et les 72 h',
+  [1440, 2880, 4320].every(m => DELAIS_PROPOSES.includes(m)))
 // 🔴 UNE VALEUR HORS LISTE NE DOIT JAMAIS DISPARAÎTRE EN SILENCE. Le commerçant
 // enregistrerait son prix et perdrait son délai sans qu'aucun écran ne le dise.
 egal('🔴 un délai hors liste est ajouté, à sa place',
-  choixDeDelai(2160), [0, 30, 60, 120, 240, 1440, 2160, 2880, 4320])
+  choixDeDelai(2160), [0, 1440, 2160, 2880, 4320])
 egal('une valeur déjà dans la liste ne se duplique pas',
-  choixDeDelai(60), DELAIS_PROPOSES)
+  choixDeDelai(1440), DELAIS_PROPOSES)
 egal('une valeur absente ne change rien', choixDeDelai(null), DELAIS_PROPOSES)
 egal('zéro non plus', choixDeDelai(0), DELAIS_PROPOSES)
 egal('le choix « aucun » se dit en clair',

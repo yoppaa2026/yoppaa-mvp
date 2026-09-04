@@ -31,8 +31,11 @@ const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b
 // d'Alex. C'est le seul signal qui parle d'une habitude plutôt que d'un
 // service : celui qui le pose revient déjà, et personne ne réclame une carte
 // de fidélité au comptoir.
-const TYPES = ['commande', 'rdv', 'livraison', 'prix', 'deals', 'fidelite']
-verifier('les six envies sont nommées', TYPES.every(t => LIBELLE_ENVIE[t]))
+// ⚠️ ET « INVENDUS » EST LA SEPTIÈME, ajoutée le 04/09 sur une idée d'Alex :
+// au lieu de remplir l'écran de fin de journée d'offres incertaines, on remplit
+// la boîte du commerçant avec la demande de ses propres habitants.
+const TYPES = ['commande', 'rdv', 'livraison', 'prix', 'deals', 'fidelite', 'invendus']
+verifier('les sept envies sont nommées', TYPES.every(t => LIBELLE_ENVIE[t]))
 verifier('aucune envie ne manque à l\'appel', TYPES_ENVIE.length === TYPES.length,
   `${TYPES_ENVIE.length} type(s) au module`)
 egal('la carte de fidélité se dit au singulier',
@@ -222,10 +225,15 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
     categorie: 'alimentaire', plan: 'vendre',
     livraison_actif: true, fidelite_actif: true,
   }
+  // ⚠️ « PROPOSE DÉJÀ TOUT » INCLUT LES INVENDUS. L'appelant seul sait si une
+  // offre de fin de journée tourne : le module ne peut pas le deviner depuis la
+  // fiche du commerce.
+  const toutOuvert = { peutCommander: true, proposeDesInvendus: true }
   // ⚠️ RIEN À DEMANDER → LISTE VIDE, et le composant ne rend RIEN. Pas de cadre
   // vide, pas de titre orphelin en bas d'une fiche déjà complète.
   verifier('un commerce qui propose déjà tout ne se fait rien demander',
-    enviesProposables(complet, { peutCommander: true }).length === 0)
+    enviesProposables(complet, toutOuvert).length === 0,
+    enviesProposables(complet, toutOuvert).join(', '))
   verifier('sans commerçant, aucune envie', enviesProposables(null).length === 0)
 
   // ⚠️ CHAQUE ENVIE PROPOSÉE DOIT AVOIR SON BOUTON. Une clé rendue par le

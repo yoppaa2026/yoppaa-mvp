@@ -47,6 +47,10 @@ const BOUTONS = {
   rdv:       'Prendre rendez-vous',
   fidelite:  'Carte de fidélité',
   deals:     'Bonnes affaires, deals et actus',
+  // ⚠️ LE MOT DE L'HABITANT, PAS LE NÔTRE. Il ne réclame pas « l'anti-gaspi »,
+  // qui est du vocabulaire de produit : il aimerait pouvoir passer en fin de
+  // journée récupérer ce qui reste. Proposé aux seuls alimentaires.
+  invendus:  'Invendus de fin de journée',
 }
 
 export default function SignauxYopper({ types = [], commercant }) {

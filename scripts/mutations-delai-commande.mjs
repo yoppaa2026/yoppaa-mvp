@@ -22,6 +22,8 @@ const RACINE = 'c:/Users/HP/yoppaa-mvp'
 const chemin = (f) => `${RACINE}/${f}`
 const BANC = 'verif:delai'
 const MODULE = 'lib/delai-commande.js'
+const FICHE = 'app/commander/[slug]/page.js'
+const BORD = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
   // ─── LE DÉLAI D'UNE LIGNE ───────────────────────────────────────────────
@@ -147,9 +149,109 @@ const MUTATIONS = [
     de: '  if (!moment) return `${quoi}, et aucun créneau ne le permet dans les jours proposés.`',
     vers: '  if (false) return `${quoi}, et aucun créneau ne le permet dans les jours proposés.`' },
 
+  // ─── CE QUE LE COMMERÇANT CHOISIT ───────────────────────────────────────
+  //
+  // 🔴 Un article réglé à 36 h, ouvert dans le formulaire, verrait la liste
+  // retomber sur le premier choix : le commerçant enregistrerait son prix et
+  // perdrait son délai sans qu'aucun écran ne le lui dise.
+  { nom: '🔴 un delai hors liste disparait en silence a l’ouverture du formulaire',
+    de: '  if (Number.isFinite(m) && m > 0 && !liste.includes(m)) liste.push(m)',
+    vers: '  if (false) liste.push(m)' },
+
+  { nom: '🔴 la liste des delais n’est plus triee',
+    de: '  return liste.sort((a, b) => a - b)',
+    vers: '  return liste' },
+
+  { nom: '🔴 « aucun delai » s’affiche comme un delai',
+    de: "  return duree ? `Commande ${duree} à l'avance` : 'Aucun délai, disponible tout de suite'",
+    vers: "  return `Commande ${duree} à l'avance`" },
+
   { nom: '🔴 l’avertissement cesse de nommer l’article',
     de: '  const quoi = nom ? `${nom} demande ${duree} de préparation` : `Cette commande demande ${duree} de préparation`',
     vers: '  const quoi = `Cette commande demande ${duree} de préparation`' },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LE CÂBLAGE DES ÉCRANS
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // ⚠️ CES GARDES-LÀ LISENT DU CODE, faute de pouvoir monter un rendu. Elles
+  // valent donc EXACTEMENT ce que cette section mesure : une garde textuelle
+  // que personne ne fait rougir ne prouve rien du tout. Chaque mutation est
+  // écrite comme une régression plausible, pas comme un changement de texte.
+
+  // ─── LA FICHE CLIENT ────────────────────────────────────────────────────
+  { nom: '🔴 la carte produit n’affiche plus la mention du delai',
+    fichier: FICHE,
+    de: '                {mentionArticle(article.delai_minutes)}',
+    vers: '                {article.delai_minutes}' },
+
+  // ⚠️ Rien ne se commande en vitrine : un delai y serait du decor.
+  { nom: '🔴 la vitrine se met a afficher un delai de commande',
+    fichier: FICHE,
+    de: '            {!article.est_vitrine && !modeVitrine && mentionArticle(article.delai_minutes) && (',
+    vers: '            {mentionArticle(article.delai_minutes) && (' },
+
+  // 🔴 L'ecran mentait au serveur : l'un lisait l'heure machine, l'autre
+  // l'heure belge. Sans effet a Namur, faux des que le Yopper voyage.
+  { nom: '🔴 le selecteur cesse d’appliquer la cloture du creneau',
+    fichier: FICHE,
+    de: '      if (!creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok) return false',
+    vers: '      if (!creneauCommandable(cr, { dateStr }).ok) return false' },
+
+  { nom: '🔴 l’instant du creneau se refabrique a la main, en heure MACHINE',
+    fichier: FICHE,
+    de: '      const debut = brusselsInstant(dateStr, cr.heure_debut)',
+    vers: '      const debut = (() => { const x = new Date(dateStr); const [hh, mm] = String(cr.heure_debut || \'\').split(\':\').map(Number); x.setHours(hh, mm || 0, 0, 0); return x })()' },
+
+  { nom: '🔴 le delai du panier n’ecarte plus aucun creneau a l’ecran',
+    fichier: FICHE,
+    de: '      return !!debut && !isNaN(debut.getTime()) && debut.getTime() >= pret.getTime()',
+    vers: '      return !!debut && !isNaN(debut.getTime())' },
+
+  { nom: '🔴 l’avertissement du selecteur ne nomme plus l’article coupable',
+    fichier: FICHE,
+    de: '                      nom: delaiPanier.nom,',
+    vers: '                      nom: null,' },
+
+  { nom: '🔴 le refus de melange ne s’affiche plus',
+    fichier: FICHE,
+    de: '                {refusMelange && (',
+    vers: '                {false && (' },
+
+  // 🔴 Un lot « 3 tartes + 1 » partait pour le jour meme pendant que la tarte
+  // a l unite demandait ses 48 h.
+  { nom: '🔴 le lot reperd le delai de son article',
+    fichier: FICHE,
+    de: '      delai_minutes: article?.delai_minutes ?? 0,',
+    vers: '      delai_minutes: 0,' },
+
+  { nom: '🔴 la fenetre de l’offre ne voyage plus avec la ligne de panier',
+    fichier: FICHE,
+    de: '      offre: { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin },',
+    vers: '      offre: null,' },
+
+  // ─── LE TABLEAU DE BORD ─────────────────────────────────────────────────
+  { nom: '🔴 un delai hors liste disparait du formulaire commercant',
+    fichier: BORD,
+    de: '                {choixDeDelai(form.delai_minutes).map(m => (',
+    vers: '                {choixDeDelai(0).map(m => (' },
+
+  { nom: '🔴 le delai s’enregistre en CHAINE au lieu d’un nombre',
+    fichier: BORD,
+    de: '      delai_minutes: estVitrine ? 0 : (parseInt(form.delai_minutes, 10) || 0),',
+    vers: '      delai_minutes: form.delai_minutes,' },
+
+  { nom: '🔴 le delai enregistre n’est plus relu a l’ouverture de l’article',
+    fichier: BORD,
+    de: "categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0,",
+    vers: "categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: 0," },
+
+  // 🔴 Il ecrivait `delta_minutes` a cinq endroits et AUCUNE ligne ne le
+  // lisait : le commercant reglait un temps sans le moindre effet.
+  { nom: '🔴 le reglage mort « Delai » revient dans les creneaux',
+    fichier: BORD,
+    de: '      max_commandes: parseInt(form.max_commandes) || 5,',
+    vers: '      max_commandes: parseInt(form.max_commandes) || 5,\n      delta_minutes: 0,' },
 ]
 
 const lancer = () => {

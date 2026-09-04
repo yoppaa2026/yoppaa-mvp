@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +10,7 @@ import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement
 import { canDo, isVitrine, planEffectif } from '@/lib/plans'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
+import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionArticle, libelleMoment, avertissementDelai } from '@/lib/delai-commande'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -20,7 +21,7 @@ import { categorieAtteinte, barreDetachee } from '@/lib/responsive'
 // ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
 // pas si un commerce bouge. C'est `estItinerant`, qui lit les lieux déclarés,
 // qui décide, et une professeure de yoga en profite comme un food truck.
-import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
+import { jourLocalISO, jourBruxelles, brusselsInstant } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
 import { lieuxDuJour, estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
@@ -587,6 +588,28 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
               </>
             ) : (
               <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{euros(Number(article.prix))}</p>
+            )}
+            {/* ⚠️ UNE DURÉE NE PÉRIME JAMAIS, UNE HEURE SI. « Commande 48 h à
+                l'avance » reste vrai à 9 h comme à 17 h : la carte peut donc la
+                porter, y compris dans un onglet ouvert depuis ce matin ou servi
+                depuis le cache. « À partir de jeudi 10 h » deviendrait faux
+                tout seul, et c'est le genre de phrase qu'on croit sur parole.
+                Le moment, lui, s'affiche dans le sélecteur de créneau, qui se
+                redessine à chaque choix.
+
+                ⚠️ ET RIEN SUR UN ARTICLE SANS DÉLAI : une mention sur chaque
+                baguette deviendrait du décor, et plus personne ne la verrait là
+                où elle compte. `mentionArticle` rend `null`, la carte reste nue.
+
+                ⚠️ NI EN VITRINE : rien ne s'y commande, donc rien n'y attend. */}
+            {!article.est_vitrine && !modeVitrine && mentionArticle(article.delai_minutes) && (
+              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: T.main, background: T.pale, padding: '3px 9px', borderRadius: 100, border: `1px solid ${T.main}22`, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+                {mentionArticle(article.delai_minutes)}
+              </span>
             )}
             {hasOptions && (
               <button onClick={e => { e.stopPropagation(); setShowOptions(v => !v) }}
@@ -2056,19 +2079,56 @@ export default function CommanderSlug() {
   //
   // Et sur TOUS les jours, plus seulement aujourd'hui : un créneau de demain
   // 8h avec douze heures de délai n'est plus commandable ce soir.
+  // ─── LE DÉLAI DU PANIER ────────────────────────────────────────────────
+  //
+  // ⚠️ LE PLUS CONTRAIGNANT GAGNE, ET ON NOMME LE COUPABLE. Une commande part
+  // en une seule fois, à un seul créneau : la tarte de 48 h emmène la baguette
+  // avec elle. Dire seulement « cette commande demande 48 h » obligerait le
+  // Yopper à rouvrir ses six articles un par un pour trouver lequel bloque. Il
+  // ne le fera pas, il fermera l'onglet.
+  //
+  // 🔴 ET RIEN DE TOUT CECI N'EST UNE PROTECTION. C'est `create-commande` qui
+  // doit refuser : un onglet ouvert depuis ce matin, un panier restauré au
+  // retour de Stripe ou une requête fabriquée ne passent jamais par ces lignes.
+  const delaiPanier = useMemo(() => delaiDuPanier(panier), [panier])
+
+  // ⚠️ L'INVENDU ANNULE LE DÉLAI DE SON ARTICLE, MAIS NE SE REPORTE PAS. Sa
+  // fenêtre ferme ce soir ; un panier qui le mélange à une tarte de 48 h n'a
+  // aucun moment de retrait possible, et on le dit AVANT le paiement.
+  const refusMelange = useMemo(() => refusDeMelange(panier), [panier])
+
+  const premierRetraitPanier = useMemo(() => {
+    if (delaiPanier.minutes <= 0) return null
+    return premierCreneauPossible({
+      minutes: delaiPanier.minutes,
+      jours: (joursDispos || [])
+        .filter(j => j?.date)
+        .map(j => ({ jour: jourLocalISO(j.date), creneaux: j.creneaux || [] })),
+      instantDebut: brusselsInstant,
+    })
+  }, [delaiPanier, joursDispos])
+
   function creneauxProposables(index = jourSelectionne) {
     const jour = joursDispos[index]
     const liste = jour?.creneaux || creneaux
     if (!jour?.date) return liste
     const dateStr = jourLocalISO(jour.date)
-    const instantDebut = (d, h) => {
-      const [hh, mm] = String(h || '').slice(0, 5).split(':').map(Number)
-      const x = new Date(`${d}T00:00:00`)
-      if (isNaN(x.getTime()) || !Number.isFinite(hh)) return null
-      x.setHours(hh, mm || 0, 0, 0)
-      return x
-    }
-    return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut }).ok)
+    // ⚠️ L'INSTANT SE FABRIQUE EN HEURE BELGE, COMME SUR LE SERVEUR. Cet écran
+    // construisait le sien dans le fuseau de la MACHINE, en posant les heures
+    // sur une date locale. Sans effet sur un navigateur belge, faux dès que le
+    // Yopper voyage : il aurait vu des créneaux que le serveur refuse, ou
+    // l'inverse. Une seule fonction pour les deux côtés, celle qui connaît
+    // l'heure d'été.
+    const pret = pretA(delaiPanier.minutes)
+    return liste.filter(cr => {
+      if (!creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok) return false
+      // ⚠️ ET LE DÉLAI DU PANIER PAR-DESSUS, qui est une borne différente. Un
+      // créneau parfaitement ouvert n'est pas proposable si la tarte qu'on veut
+      // y mettre n'est pas encore faite.
+      if (delaiPanier.minutes <= 0) return true
+      const debut = brusselsInstant(dateStr, cr.heure_debut)
+      return !!debut && !isNaN(debut.getTime()) && debut.getTime() >= pret.getTime()
+    })
   }
 
   useEffect(() => {
@@ -2293,6 +2353,17 @@ export default function CommanderSlug() {
       prix_avant_deal: prixAvant,
       deal_id: deal.id,
       unites_par_deal: unites,
+      // 🔴 LE LOT PERDAIT LE DÉLAI DE SON ARTICLE. Cette ligne se construit à
+      // la main, champ par champ, au lieu d'étaler l'article : un lot
+      // « 3 tartes + 1 » partait donc pour le jour même, pendant que la tarte à
+      // l'unité, elle, demandait ses 48 h. Le commerçant aurait découvert une
+      // commande impossible, sans qu'aucun écran ne l'ait annoncée.
+      delai_minutes: article?.delai_minutes ?? 0,
+      // ⚠️ ET LA FENÊTRE VOYAGE AVEC LA LIGNE. C'est elle, et rien d'autre, qui
+      // fait une offre de fin de journée : pas de drapeau à côté qui pourrait
+      // dire le contraire des heures. Sur un deal ordinaire, les deux valeurs
+      // sont absentes et le module conclut « ce n'est pas un invendu ».
+      offre: { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin },
       options: null,
       quantite: (prev[key]?.quantite || 0) + 1,
     } }))
@@ -4564,6 +4635,42 @@ export default function CommanderSlug() {
                   </span>
                   <div style={{ flex: 1, height: 1, background: T.pale }}/>
                 </div>
+
+                {/* ⚠️ L'AVERTISSEMENT VIT ICI, PAS DANS UNE MODALE À L'AJOUT.
+                    Décision arrêtée avec Alex : une fenêtre qui surgit quand on
+                    clique sur la tarte interrompt la commande pour une règle
+                    qui ne gêne pas encore. C'est au moment de CHOISIR SON
+                    CRÉNEAU que l'information sert, parce que c'est là que le
+                    Yopper se demande pourquoi ce matin n'est pas proposé.
+
+                    Et elle DIT L'ÉTAT, PAS NOTRE GESTE : on n'écrit pas « nous
+                    avons masqué des créneaux », on dit quand il peut venir. */}
+                {delaiPanier.minutes > 0 && (
+                  <p style={{ fontSize: '0.8rem', fontWeight: 700, color: T.deep, background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 12, padding: '0.625rem 0.75rem', margin: '0 0 0.875rem' }}>
+                    {avertissementDelai({
+                      minutes: delaiPanier.minutes,
+                      nom: delaiPanier.nom,
+                      moment: premierRetraitPanier
+                        ? libelleMoment({
+                            jour: premierRetraitPanier.jour,
+                            heure: premierRetraitPanier.creneau?.heure_debut,
+                            aujourdhui: jourLocalISO(new Date()),
+                          })
+                        : null,
+                    })}
+                  </p>
+                )}
+
+                {/* 🔴 CELUI-CI N'EST PAS UN AVERTISSEMENT, C'EST UN REFUS. Le
+                    panier n'a aucun moment de retrait possible, et le laisser
+                    payer donnerait un commerçant avec une commande qu'il ne
+                    peut pas honorer et un Yopper débité. Le message nomme les
+                    deux articles et le geste qui répare. */}
+                {refusMelange && (
+                  <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#B91C1C', background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.625rem 0.75rem', margin: '0 0 0.875rem' }}>
+                    {refusMelange}
+                  </p>
+                )}
 
                 <div className="grid3" style={{ marginBottom: '1.5rem' }}>
                   {[...new Map(

@@ -21,8 +21,11 @@ import {
   delaiDeLaLigne, delaiDuPanier, refusDeMelange, pretA,
   premierCreneauPossible, premierJourBoutique,
   libelleDuree, mentionArticle, libelleMoment, avertissementDelai,
+  DELAIS_PROPOSES, choixDeDelai, libelleChoixDelai,
 } from '../lib/delai-commande.js'
 import { brusselsInstant } from '../lib/timezone.js'
+import { readFileSync } from 'node:fs'
+import { sansProse } from './lire-code.mjs'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -317,6 +320,28 @@ egal('🔴 48 h se disent « 2 jours »', libelleDuree(2880), '2 jours')
 egal('72 h aussi', libelleDuree(4320), '3 jours')
 egal('25 h ne sont pas un jour rond', libelleDuree(1500), '25 h')
 
+// ⚠️ LE COMMERÇANT NE SAISIT PAS DES MINUTES. Il pense « 48 h ». Un champ
+// libre autoriserait 20 000 minutes, et l'article deviendrait commandable par
+// personne, en silence : les deux calculs n'explorent que quatorze jours.
+egal('la liste part de « aucun délai »', DELAIS_PROPOSES[0], 0)
+verifier('elle reste dans les bornes de la base',
+  DELAIS_PROPOSES.every(m => m >= 0 && m <= 20160), JSON.stringify(DELAIS_PROPOSES))
+verifier('elle est triée', DELAIS_PROPOSES.every((m, i) => i === 0 || m > DELAIS_PROPOSES[i - 1]))
+verifier('elle couvre le sandwich, la tarte et les 72 h',
+  [60, 2880, 4320].every(m => DELAIS_PROPOSES.includes(m)))
+// 🔴 UNE VALEUR HORS LISTE NE DOIT JAMAIS DISPARAÎTRE EN SILENCE. Le commerçant
+// enregistrerait son prix et perdrait son délai sans qu'aucun écran ne le dise.
+egal('🔴 un délai hors liste est ajouté, à sa place',
+  choixDeDelai(2160), [0, 30, 60, 120, 240, 1440, 2160, 2880, 4320])
+egal('une valeur déjà dans la liste ne se duplique pas',
+  choixDeDelai(60), DELAIS_PROPOSES)
+egal('une valeur absente ne change rien', choixDeDelai(null), DELAIS_PROPOSES)
+egal('zéro non plus', choixDeDelai(0), DELAIS_PROPOSES)
+egal('le choix « aucun » se dit en clair',
+  libelleChoixDelai(0), 'Aucun délai, disponible tout de suite')
+egal('et les autres disent le geste',
+  libelleChoixDelai(2880), 'Commande 2 jours à l\'avance')
+
 verifier('sans délai, aucune mention sur la carte', mentionArticle(0) === null)
 egal('la mention dit le geste', mentionArticle(60), 'Commande 1 h à l\'avance')
 egal('et pour 48 h aussi', mentionArticle(2880), 'Commande 2 jours à l\'avance')
@@ -364,6 +389,73 @@ egal('sans nom d’article, la phrase tient debout',
   for (const mot of ['dépêche', 'vite', 'urgent', 'erreur', 'invalide']) {
     verifier(`aucun mot de reproche : « ${mot} »`, !textes.toLowerCase().includes(mot), textes)
   }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. LE CÂBLAGE DES ÉCRANS
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ CES GARDES-LÀ LISENT DU CODE, ET C'EST UN PIS-ALLER ASSUMÉ. Un module se
+// mesure en l'exécutant ; une liaison JSX, non, sans monter un rendu complet.
+// Elles sont donc TOUTES mesurées par le harnais de mutation : une garde qui
+// lit du texte et que personne ne fait rougir ne prouve rien.
+//
+// ⚠️ ET ON DÉPOUILLE LA PROSE AVANT DE CHERCHER. Le commentaire qui explique
+// pourquoi `delta_minutes` a été retiré contient forcément `delta_minutes`.
+// Six fois en trois jours une garde a verdi sur mes propres explications.
+{
+  const FICHE = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  const BORD = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+
+  // 🔴 LA MENTION SUR LA CARTE PRODUIT. Sans elle, le Yopper découvre les 48 h
+  // au moment de choisir son créneau, après avoir rempli son panier.
+  verifier('🔴 la carte produit affiche la mention du délai',
+    /\{mentionArticle\(article\.delai_minutes\)\}/.test(FICHE))
+  // ⚠️ RIEN EN VITRINE : rien ne s'y commande, donc rien n'y attend.
+  verifier('et pas en vitrine',
+    /!article\.est_vitrine && !modeVitrine && mentionArticle/.test(FICHE))
+
+  // 🔴 L'HEURE BELGE DES DEUX CÔTÉS. Cet écran fabriquait son instant dans le
+  // fuseau de la MACHINE : il aurait montré des créneaux que le serveur refuse.
+  verifier('🔴 le sélecteur de créneau lit l’heure belge, comme le serveur',
+    /creneauCommandable\(cr, \{ dateStr, instantDebut: brusselsInstant \}\)/.test(FICHE))
+  verifier('🔴 et plus aucun instant fabriqué à la main dans le sélecteur',
+    !/x\.setHours\(hh, mm \|\| 0, 0, 0\)/.test(FICHE))
+
+  // 🔴 LE DÉLAI DU PANIER ÉCARTE LES CRÉNEAUX TROP PROCHES.
+  verifier('🔴 le délai du panier filtre les créneaux',
+    /debut\.getTime\(\) >= pret\.getTime\(\)/.test(FICHE))
+
+  // 🔴 L'AVERTISSEMENT NOMME LE COUPABLE, et le refus de mélange s'affiche.
+  verifier('🔴 le sélecteur affiche l’avertissement du délai',
+    /avertissementDelai\(\{/.test(FICHE))
+  verifier('et il lui passe le nom de l’article coupable',
+    /nom: delaiPanier\.nom/.test(FICHE))
+  verifier('🔴 le refus de mélange s’affiche',
+    /\{refusMelange &&/.test(FICHE))
+
+  // 🔴 LE LOT PERDAIT LE DÉLAI DE SON ARTICLE. `ajouterDealAuPanier` construit
+  // sa ligne à la main : un lot « 3 tartes + 1 » partait pour le jour même.
+  verifier('🔴 la ligne d’un lot recopie le délai de son article',
+    /delai_minutes: article\?\.delai_minutes \?\? 0/.test(FICHE))
+  verifier('🔴 et la fenêtre de l’offre voyage avec elle',
+    /offre: \{ heure_debut: deal\.heure_debut, heure_fin: deal\.heure_fin \}/.test(FICHE))
+
+  // 🔴 LE COMMERÇANT PEUT RÉGLER LE DÉLAI, ET IL EST ENREGISTRÉ.
+  verifier('🔴 le formulaire article propose le délai',
+    /choixDeDelai\(form\.delai_minutes\)/.test(BORD))
+  verifier('🔴 et il l’enregistre en nombre',
+    /delai_minutes: estVitrine \? 0 : \(parseInt\(form\.delai_minutes, 10\) \|\| 0\)/.test(BORD))
+  verifier('🔴 la valeur enregistrée est relue à l’ouverture',
+    /delai_minutes: a\.delai_minutes \?\? 0/.test(BORD))
+
+  // 🔴 LE RÉGLAGE MORT A DISPARU. `delta_minutes` était écrit à cinq endroits
+  // et lu NULLE PART : le commerçant réglait un temps sans le moindre effet, à
+  // côté d'un champ voisin qui, lui, fonctionnait.
+  verifier('🔴 le champ « Délai » mort des créneaux a disparu du tableau de bord',
+    !/delta_minutes/.test(BORD), 'delta_minutes est encore ecrit')
+  verifier('et de la fiche client aussi', !/delta_minutes/.test(FICHE))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

@@ -46,6 +46,7 @@ import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import { champsModifies } from '@/lib/formulaire-modifie'
 import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
+import { choixDeDelai, libelleChoixDelai } from '@/lib/delai-commande'
 import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './BarreEnregistrer'
 // ⚠️ Le POSTE qui affiche ces fenêtres est monté une seule fois, dans
 // `app/dashboard/page.js`, qui rend cet écran. On n'importe ici que la
@@ -509,12 +510,12 @@ function TabMenu({ commercantId, commercant, toast }) {
   }, [])
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: 0, photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '' })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '' })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
@@ -532,6 +533,12 @@ function TabMenu({ commercantId, commercant, toast }) {
       actif: form.actif,
       categorie: form.categorie.trim() || null,
       temps_prepa: (estVitrine || estDetail) ? 0 : (parseFloat(form.temps_prepa) || 0),
+      // ⚠️ RIEN NE SE COMMANDE EN VITRINE, donc aucun délai n'y a de sens.
+      // ⚠️ ET ON ÉCRIT UN NOMBRE, PAS LA CHAÎNE DU <select>. « 2880 » écrit en
+      // texte passerait la contrainte de bornes de la base par conversion
+      // implicite, mais le module, lui, lit `Number()` : autant n'avoir qu'une
+      // seule forme dans la colonne.
+      delai_minutes: estVitrine ? 0 : (parseInt(form.delai_minutes, 10) || 0),
       photo_url: form.photo_url || null,
       // Vitrine : est_vitrine = prix indicatif non commandable (par produit).
       // Détail/alimentaire : toujours false (prix ferme).
@@ -774,6 +781,39 @@ function TabMenu({ commercantId, commercant, toast }) {
                 <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé en mode Temps de préparation</p>
               </div>
             </>
+          )}
+          {/* ⚠️ LE DÉLAI N'EST PAS LE TEMPS DE PRÉPARATION, et les deux champs
+              se suivent exprès pour qu'on ne les confonde pas.
+
+              Le TEMPS DE PRÉPARATION sert à remplir un créneau : cinq minutes
+              par pain, et le créneau de 11 h se déclare complet.
+
+              Le DÉLAI dit à partir de QUAND l'article peut être retiré. La
+              tarte demande 48 h, le sandwich une heure, la baguette rien.
+
+              ⚠️ ET IL NE S'AFFICHE PAS EN VITRINE : rien ne s'y commande, donc
+              rien n'y a de délai. */}
+          {!estVitrine && (
+            <div>
+              <label style={s.label}>Délai de commande</label>
+              {/* ⚠️ UNE LISTE, PAS UN CHAMP LIBRE. Un boulanger pense « 48 h »,
+                  pas « 2880 ». Et un champ libre autorise la faute de frappe qui
+                  rend l'article commandable par personne, en silence : les deux
+                  calculs du premier retrait n'explorent que quatorze jours. */}
+              <select
+                value={String(form.delai_minutes ?? 0)}
+                onChange={e => setForm(p => ({ ...p, delai_minutes: e.target.value }))}
+                style={{ ...s.input, width: '100%' }}
+              >
+                {choixDeDelai(form.delai_minutes).map(m => (
+                  <option key={m} value={m}>{libelleChoixDelai(m)}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>
+                Le temps qu&rsquo;il te faut pour préparer <strong>cet article</strong>. Dans une commande qui en
+                mélange plusieurs, c&rsquo;est le plus long qui compte, et le client voit lequel.
+              </p>
+            </div>
           )}
           {/* TVA. Le prix saisi est TTC : le taux ne change pas ce que paie le
               client, il détermine la part de TVA à l'intérieur. Deux taux pour
@@ -2791,7 +2831,7 @@ function TabCreneaux({ commercantId, toast }) {
   const [jourActif, setJourActif] = useState('lundi')
   const [showForm, setShowForm] = useState(false)
   const [showFermetureForm, setShowFermetureForm] = useState(false)
-  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30, lieu_id: '' })
+  const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, actif: true, capacite_temps: 30, lieu_id: '' })
   const [fermetureForm, setFermetureForm] = useState({ date_debut: '', date_fin: '', motif: '' })
   // Le planning par emplacement, et les emplacements eux-mêmes. Décoché par
   // défaut : l'immense majorité des commerces ne bouge pas.
@@ -2892,13 +2932,6 @@ function TabCreneaux({ commercantId, toast }) {
     setCreneaux(prev => prev.map(c => c.id === id ? { ...c, max_commandes: n } : c))
   }
 
-  async function updateDelta(id, val) {
-    const n = parseInt(val)
-    if (isNaN(n) || n < 0) return
-    await supabase.from('creneaux').update({ delta_minutes: n }).eq('id', id)
-    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, delta_minutes: n } : c))
-  }
-
   // Clôture des commandes, en heures avant le début du créneau.
   //
   // ⚠️ CE RÉGLAGE N'EXISTAIT QUE POUR LA LIVRAISON. Côté Click & Collect, la
@@ -2996,7 +3029,6 @@ function TabCreneaux({ commercantId, toast }) {
       heure_debut: form.heure_debut,
       heure_fin: form.heure_fin,
       max_commandes: parseInt(form.max_commandes) || 5,
-      delta_minutes: parseInt(form.delta_minutes) || 0,
       actif: form.actif,
       capacite_temps: parseFloat(form.capacite_temps) || 30,
       // ⚠️ VIDE NE VEUT PAS DIRE « NULLE PART », il veut dire « là où se passe
@@ -3006,7 +3038,7 @@ function TabCreneaux({ commercantId, toast }) {
     })
     if (error) { toast('Erreur : ' + error.message, 'error'); setSaving(false); return }
     toast('Créneau ajouté'); setSaving(false); setShowForm(false)
-    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, delta_minutes: 0, actif: true, capacite_temps: 30, lieu_id: '' })
+    setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, actif: true, capacite_temps: 30, lieu_id: '' })
     fetchAll()
   }
 
@@ -3067,7 +3099,6 @@ function TabCreneaux({ commercantId, toast }) {
         heure_debut: c.heure_debut,
         heure_fin: c.heure_fin,
         max_commandes: c.max_commandes,
-        delta_minutes: c.delta_minutes || 0,
         actif: c.actif,
         capacite_temps: c.capacite_temps || 30
       }))
@@ -3272,11 +3303,6 @@ function TabCreneaux({ commercantId, toast }) {
                   <label style={s.label}>Commandes max</label>
                   <Input type="number" min="1" max="50" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} />
                 </div>
-                <div>
-                  <label style={s.label}>Délai min (minutes)</label>
-                  <Input type="number" min="0" max="120" value={form.delta_minutes} onChange={e => setForm(p => ({ ...p, delta_minutes: e.target.value }))} />
-                  <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Délai entre commande et retrait</p>
-                </div>
               </div>
               {modeGlobal === 'temps' && (
                 <div style={{ marginBottom: 12 }}>
@@ -3342,16 +3368,21 @@ function TabCreneaux({ commercantId, toast }) {
                             <span style={{ fontSize: 10, color: T.muted }}>min</span>
                           </div>
                         )}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                          <span style={{ fontSize: 11, color: T.muted }}>Délai :</span>
-                          <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateDelta(c.id, Math.max(0, (c.delta_minutes || 0) - 5))}>−</button>
-                          <input type="number" value={c.delta_minutes || 0} min={0} onChange={e => updateDelta(c.id, e.target.value)}
-                            style={{ ...s.input, width: 44, textAlign: 'center', padding: '2px 4px', fontSize: 13, fontWeight: 700 }} />
-                          <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateDelta(c.id, (c.delta_minutes || 0) + 5)}>+</button>
-                          <span style={{ fontSize: 10, color: T.muted }}>min</span>
-                        </div>
                         {/* Clôture des commandes. Zéro = ouvert jusqu'au début
-                            du créneau, exactement comme avant ce réglage. */}
+                            du créneau, exactement comme avant ce réglage.
+
+                            🔴 IL Y AVAIT UN SECOND CHAMP AU-DESSUS, « Délai »,
+                            RETIRÉ LE 04/09. Il écrivait `delta_minutes` à cinq
+                            endroits et AUCUNE ligne de code ne le lisait : le
+                            commerçant réglait un temps de préparation qui
+                            n'avait pas le moindre effet, et deux champs voisins
+                            semblaient dire la même chose alors qu'un seul
+                            fonctionnait.
+
+                            Ce qu'il croyait régler là vit maintenant sur
+                            l'ARTICLE (« Délai de commande »), là où la
+                            contrainte se trouve réellement : une tarte demande
+                            48 h, le sandwich à côté n'en demande qu'une. */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                           <span style={{ fontSize: 11, color: T.muted }}>Clôture :</span>
                           <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateCutoff(c.id, Math.max(0, (c.cutoff_heures || 0) - 1))}>−</button>

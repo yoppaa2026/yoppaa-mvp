@@ -67,10 +67,24 @@ select controle, valeur, attendu from (
     has_column_privilege('authenticated','articles','delai_minutes','SELECT')::text, 'true'
   union all select 5, 'le commercant connecte peut ECRIRE la colonne',
     has_column_privilege('authenticated','articles','delai_minutes','UPDATE')::text, 'true'
-  -- ⚠️ ANON NE DOIT PAS POUVOIR ECRIRE. Un visiteur qui mettrait 14 jours de
-  -- delai sur la baguette d''un commercant le rendrait invendable.
-  union all select 6, 'anon ne peut PAS ecrire la colonne',
-    has_column_privilege('anon','articles','delai_minutes','UPDATE')::text, 'false'
+  -- 🔴 CE CONTROLE POSAIT LA MAUVAISE QUESTION, ET IL EST SORTI ROUGE LE 04/09.
+  --
+  -- Il demandait « anon detient-il le GRANT UPDATE ». La reponse est OUI, et
+  -- elle l est sur TOUTES les tables : Supabase pose par defaut
+  -- `alter default privileges in schema public grant all on tables to anon,
+  -- authenticated, service_role`. Le GRANT est large chez tout le monde, ce
+  -- n est pas lui qui protege.
+  --
+  -- ⚠️ CE QUI PROTEGE, C EST LA RLS. Un GRANT ouvre la porte du batiment, la
+  -- RLS decide de quelles lignes on approche. Mesurer le GRANT, c est mesurer
+  -- une forme la ou la protection est une regle.
+  --
+  -- ⚠️ ET UNE ALARME QUI SONNE TOUT LE TEMPS NE PROTEGE PLUS RIEN. Laisse tel
+  -- quel, ce controle serait rouge sur chaque migration future, et on
+  -- apprendrait a l ignorer. C est exactement ce qui est arrive a la CI le
+  -- 04/09 au matin.
+  union all select 6, 'articles : la RLS est active (c est ELLE qui protege)',
+    (select relrowsecurity from pg_class where oid = 'public.articles'::regclass)::text, 'true'
   union all select 7, 'articles portant deja un delai',
     (select count(*) from articles where delai_minutes is not null and delai_minutes > 0)::text, '0'
   union all select 8, 'aucun delai negatif ou hors bornes',

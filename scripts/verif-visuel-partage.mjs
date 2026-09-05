@@ -372,6 +372,21 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   verifier('🔴 le bouton dit « Partager », jamais « Publier »',
     /Partager le visuel/.test(BOUTON) && !/Publier sur/.test(BOUTON))
 
+  // ⚠️ DEUX BOUTONS, ET CE N'EST PAS UNE REDONDANCE (Alex, 05/09). Le partage
+  // sert à celui qui publie depuis son téléphone, le téléchargement à celui qui
+  // prépare sur ordinateur ou veut garder le fichier.
+  verifier('🔴 le téléchargement existe à côté du partage',
+    /onClick=\{telecharger\}/.test(BOUTON) && /telechargerVisuel\(\{ annonce, format, slug \}\)/.test(BOUTON))
+  // ⚠️ ET IL DIT CE QUI S'EST PASSÉ, y compris quand rien ne s'est passé : un
+  // bouton muet qui ne fait rien est pire que pas de bouton.
+  verifier('🔴 et il annonce son résultat, même négatif',
+    /if \(fait\) toast\?\.\('Image téléchargée\.', 'success'\)/.test(BOUTON)
+    && /else toast\?\.\(/.test(BOUTON))
+  // ⚠️ L'APERÇU EST GRAND : c'est ce que le commerçant va publier, le montrer en
+  // vignette lui demandait de deviner.
+  verifier('🔴 l’aperçu est assez grand pour être jugé',
+    /maxWidth: format === FORMAT_CARRE \? 420 : 560/.test(BOUTON))
+
   // ⚠️ LE GÉNÉRATEUR COMPOSE AVEC LA VERSION COURTE : quatre phrases sur une
   // image ne se lisent pas.
   verifier('🔴 le générateur porte l’aperçu', /<PartageVisuel/.test(GENE))
@@ -385,6 +400,21 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
     /titre: v\.accroche \|\| v\.court/.test(GENE))
   verifier('et le sous-titre passe avant le texte long',
     /description: v\.soustitre \|\| v\.court/.test(GENE))
+
+  // ═══ DEUX NIVEAUX, PUIS LE VISUEL (Alex, 05/09) ══════════════════════════
+  //
+  // 🔴 LE COMMERÇANT DOIT VOIR CE QU'IL COPIE. Les hashtags et le lien
+  // flottaient sous les deux versions sans qu'on sache lesquels partaient avec
+  // quoi : il découvrait le contenu de son presse-papiers une fois publié.
+  verifier('🔴 les deux versions sont nommées',
+    /Version standard/.test(GENE) && /Version courte/.test(GENE))
+  verifier('et chacune a son propre bouton de copie',
+    /Copier la version standard/.test(GENE) && /Copier la version courte/.test(GENE))
+  // 🔴 LA COURTE PORTE LE LIEN ELLE AUSSI. Rien n'empêche de la coller sur
+  // Facebook : sans signature, ce post-là ne ramènerait personne, et c'est
+  // exactement le trou qu'on vient de boucher.
+  egal('🔴 les DEUX copies portent la signature',
+    (GENE.match(/copier\(postAvecSignature\(/g) || []).length, 2)
   // ⚠️ ET LA ROUTE DOIT LES DEMANDER, sinon le repli sert à tous les coups et
   // le titre redevient un post.
   const ROUTE = sansProse(readFileSync(new URL('../app/api/ia/generer-post/route.js', import.meta.url), 'utf8'))

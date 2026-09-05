@@ -160,35 +160,52 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
             <div key={i} style={{ background: '#fff', borderRadius: 16, border: `1px solid ${T.hairline}`, overflow: 'hidden', boxShadow: '0 2px 12px rgba(22,6,54,0.05)' }}>
               <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink}, ${T.main} 60%, ${T.light})` }} />
               <div style={{ padding: 16 }}>
-                {v.long && <p style={{ margin: '0 0 10px', fontSize: 14.5, color: T.ink, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{v.long}</p>}
-                {v.court && (
-                  <p style={{ margin: '0 0 10px', fontSize: 13, color: T.muted, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                    <span style={{ fontWeight: 800, color: T.main }}>Version courte : </span>{v.court}
-                  </p>
-                )}
-                {v.hashtags?.length > 0 && (
-                  <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.mid, fontWeight: 700 }}>{v.hashtags.join(' ')}</p>
-                )}
-                {/* ⚠️ LE LIEN S'AFFICHE, IL NE SE DEVINE PAS. Le commerçant doit
-                    voir ce qu'il va coller : un texte copié qui contient une
-                    ligne qu'il n'a pas vue à l'écran, il la découvre publiée. */}
-                {lien && (
-                  <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.main, fontWeight: 700, wordBreak: 'break-all' }}>
-                    {signatureYoppaa(lien, nomCommerce)}
-                  </p>
-                )}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => copier(postAvecSignature([v.long, v.hashtags?.join(' ')].filter(Boolean).join('\n\n'), lien, nomCommerce), `long-${i}`)}
-                    style={{ padding: '8px 14px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                    {copie === `long-${i}` ? 'Copié !' : 'Copier le post'}
-                  </button>
-                  {v.court && (
-                    <button onClick={() => copier(v.court, `court-${i}`)}
-                      style={{ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                      {copie === `court-${i}` ? 'Copié !' : 'Copier la courte'}
+                {/* ═══ DEUX NIVEAUX, PUIS LE VISUEL (Alex, 05/09) ═══════════
+                    Chaque version est un BLOC COMPLET, montré exactement comme
+                    il sera collé : le texte, les hashtags et la signature.
+
+                    🔴 LE COMMERÇANT DOIT VOIR CE QU'IL COPIE. Avant, les
+                    hashtags et le lien flottaient sous les deux versions sans
+                    qu'on sache lesquels partaient avec quoi : il découvrait le
+                    contenu de son presse-papiers une fois publié. */}
+                {v.long && (
+                  <div style={{ marginBottom: 14 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                      Version standard
+                    </p>
+                    <p style={{ margin: '0 0 8px', fontSize: 14.5, color: T.ink, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{v.long}</p>
+                    {v.hashtags?.length > 0 && (
+                      <p style={{ margin: '0 0 8px', fontSize: 12.5, color: T.mid, fontWeight: 700 }}>{v.hashtags.join(' ')}</p>
+                    )}
+                    {lien && (
+                      <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.main, fontWeight: 700, wordBreak: 'break-all' }}>
+                        {signatureYoppaa(lien, nomCommerce)}
+                      </p>
+                    )}
+                    <button onClick={() => copier(postAvecSignature([v.long, v.hashtags?.join(' ')].filter(Boolean).join('\n\n'), lien, nomCommerce), `long-${i}`)}
+                      style={{ padding: '8px 14px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      {copie === `long-${i}` ? 'Copié !' : 'Copier la version standard'}
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {/* ⚠️ LA COURTE PORTE LE LIEN ELLE AUSSI. Elle est faite pour
+                    une story ou une notification, mais rien n'empêche de la
+                    coller sur Facebook : sans signature, ce post-là ne
+                    ramènerait personne, et c'est exactement le trou qu'on vient
+                    de boucher. */}
+                {v.court && (
+                  <div style={{ marginBottom: 4, paddingTop: 12, borderTop: `1px solid ${T.hairline}` }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.7px' }}>
+                      Version courte
+                    </p>
+                    <p style={{ margin: '0 0 10px', fontSize: 13.5, color: T.ink, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v.court}</p>
+                    <button onClick={() => copier(postAvecSignature(v.court, lien, nomCommerce), `court-${i}`)}
+                      style={{ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      {copie === `court-${i}` ? 'Copié !' : 'Copier la version courte'}
+                    </button>
+                  </div>
+                )}
 
                 {/* 🔴 LE VISUEL A SES PROPRES CHAMPS DEPUIS LE 05/09. Il prenait
                     la version COURTE comme titre : une phrase entière, avec deux

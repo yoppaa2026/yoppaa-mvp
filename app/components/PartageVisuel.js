@@ -67,6 +67,21 @@ export default function PartageVisuel({ annonce, texte = '', slug = '', toast = 
     setOccupe(false)
   }
 
+  async function telecharger() {
+    setOccupe(true)
+    try {
+      const m = await import('@/lib/visuel-partage-canvas')
+      const fait = await m.telechargerVisuel({ annonce, format, slug })
+      // ⚠️ ON DIT CE QUI S'EST PASSÉ, y compris quand rien ne s'est passé. Un
+      // bouton qui ne fait rien sans le dire est pire que pas de bouton.
+      if (fait) toast?.('Image téléchargée.', 'success')
+      else toast?.('Il manque le titre ou le nom du commerce pour composer le visuel.', 'error')
+    } catch (e) {
+      toast?.('La composition du visuel a échoué, réessaie.', 'error')
+    }
+    setOccupe(false)
+  }
+
   if (!contenuVisuel(annonce || {})) return null
 
   const onglet = (cle_, libelle) => (
@@ -95,11 +110,17 @@ export default function PartageVisuel({ annonce, texte = '', slug = '', toast = 
       </div>
 
       {/* ⚠️ L'APERÇU GARDE SA PLACE PENDANT LE DESSIN. Sans hauteur réservée, la
-          carte sautait à l'écran chaque fois qu'on changeait de format. */}
+          carte sautait à l'écran chaque fois qu'on changeait de format.
+
+          ⚠️ ET IL EST GRAND (Alex, 05/09 : « j'aimerais que le visuel soit un
+          peu plus grand pour être mieux vu »). C'est ce que le commerçant va
+          publier : le montrer en vignette lui demandait de deviner. La largeur
+          suit le conteneur et ne dépasse pas la taille réelle du fichier, pour
+          ne jamais l'afficher plus gros qu'il n'est. */}
       <div style={{
         borderRadius: 12, overflow: 'hidden', background: T.pale,
         aspectRatio: format === FORMAT_CARRE ? '1 / 1' : '1200 / 630',
-        maxWidth: format === FORMAT_CARRE ? 260 : 380,
+        width: '100%', maxWidth: format === FORMAT_CARRE ? 420 : 560,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {/* ⚠️ `decoding` ET `loading`, comme toutes les images de l'application.
@@ -113,19 +134,38 @@ export default function PartageVisuel({ annonce, texte = '', slug = '', toast = 
           : <span style={{ fontSize: 12, color: T.main, fontWeight: 700 }}>On compose…</span>}
       </div>
 
-      <button onClick={partager} disabled={occupe || !apercu}
-        style={{
-          marginTop: 10, padding: '9px 16px', borderRadius: 100, border: 'none',
-          background: (occupe || !apercu) ? T.mid : T.main, color: '#fff', fontWeight: 800,
-          fontSize: 12.5, cursor: (occupe || !apercu) ? 'default' : 'pointer',
-          fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 7,
-        }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-          <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
-        </svg>
-        {occupe ? 'On prépare…' : 'Partager le visuel'}
-      </button>
+      {/* ⚠️ DEUX BOUTONS, ET CE N'EST PAS UNE REDONDANCE (Alex, 05/09). Le
+          partage sert au commerçant qui publie depuis son téléphone ; le
+          téléchargement à celui qui prépare ses publications sur ordinateur, ou
+          qui veut garder le fichier pour l'imprimer ou l'envoyer. */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+        <button onClick={partager} disabled={occupe || !apercu}
+          style={{
+            padding: '9px 16px', borderRadius: 100, border: 'none',
+            background: (occupe || !apercu) ? T.mid : T.main, color: '#fff', fontWeight: 800,
+            fontSize: 12.5, cursor: (occupe || !apercu) ? 'default' : 'pointer',
+            fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 7,
+          }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+            <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
+          </svg>
+          {occupe ? 'On prépare…' : 'Partager le visuel'}
+        </button>
+
+        <button onClick={telecharger} disabled={occupe || !apercu}
+          style={{
+            padding: '9px 16px', borderRadius: 100, border: `1.5px solid ${T.hairline}`,
+            background: '#fff', color: T.muted, fontWeight: 800, fontSize: 12.5,
+            cursor: (occupe || !apercu) ? 'default' : 'pointer',
+            fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 7,
+          }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3v12M7 11l5 5 5-5M5 21h14"/>
+          </svg>
+          Télécharger l&apos;image
+        </button>
+      </div>
 
       {/* ⚠️ ON DIT CE QUE LE BOUTON FAIT VRAIMENT. Le commerçant choisit son
           réseau dans la feuille de son téléphone : lui laisser croire que Yoppaa

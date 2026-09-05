@@ -210,6 +210,32 @@ const MUTATIONS = [
     fichier: ROUTE,
     de: '- "accroche" : 2 à 5 MOTS, le titre de l\'affiche.',
     vers: '- "accroche" : ce que tu veux.' },
+
+  // ─── DEUX NIVEAUX ET DEUX BOUTONS (05/09) ───────────────────────────────
+  { nom: '🔴 la version courte perd sa signature : ce post ne ramene personne',
+    fichier: GENE,
+    de: 'onClick={() => copier(postAvecSignature(v.court, lien, nomCommerce), `court-${i}`)}',
+    vers: 'onClick={() => copier(v.court, `court-${i}`)}' },
+
+  { nom: '🔴 les deux versions ne se distinguent plus',
+    fichier: GENE,
+    de: '                      Version standard',
+    vers: '                      Le post' },
+
+  { nom: '🔴 le telechargement disparait, il ne reste que le partage',
+    fichier: BOUTON,
+    de: '        <button onClick={telecharger} disabled={occupe || !apercu}',
+    vers: '        <button onClick={null} disabled={occupe || !apercu}' },
+
+  { nom: '🔴 le telechargement echoue en silence',
+    fichier: BOUTON,
+    de: "      if (fait) toast?.('Image téléchargée.', 'success')",
+    vers: "      if (false) toast?.('Image téléchargée.', 'success')" },
+
+  { nom: '🔴 l apercu redevient une vignette impossible a juger',
+    fichier: BOUTON,
+    de: 'maxWidth: format === FORMAT_CARRE ? 420 : 560,',
+    vers: 'maxWidth: format === FORMAT_CARRE ? 120 : 160,' },
 ]
 
 const lancer = () => {

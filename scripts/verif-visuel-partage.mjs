@@ -17,7 +17,7 @@
 import {
   FORMATS, FORMAT_CARRE, FORMAT_PAYSAGE,
   TYPE_INVENDU, TYPE_DEAL, TYPE_ACTU,
-  habitDe, contenuVisuel, replierTexte, taillePourTenir,
+  habitDe, badgeDe, contenuVisuel, replierTexte, taillePourTenir,
   pointsDuVisuel, largeurDesPoints, adresseLisible, nomFichierVisuel,
   accrocheVisuelle, resumeVisuel, sansEmoji,
   POINTS_SUR_CLAIR, POINTS_SUR_SOMBRE,
@@ -79,6 +79,37 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   // actualité plutôt qu'un objet vide qui ferait tomber le tracé.
   egal('un type inconnu retombe sur l’actualité', habitDe('n’importe quoi').badge, 'NOUVEAUTÉ')
   egal('et un type absent aussi', habitDe(null).badge, 'NOUVEAUTÉ')
+
+  // ═══ LE BADGE DIT L'OCCASION ═════════════════════════════════════════════
+  //
+  // 🔴 DÉFAUT TROUVÉ LE 05/09. Le générateur propose six occasions et le visuel
+  // annonçait « NOUVEAUTÉ » pour les six : un commerçant qui remercie ses
+  // clients publiait une carte qui dit le contraire de son texte.
+  egal('🔴 un remerciement ne s’annonce plus comme une nouveauté',
+    badgeDe(TYPE_ACTU, 'Remerciement'), 'MERCI')
+  egal('un bon plan le dit', badgeDe(TYPE_ACTU, 'Bon plan'), 'BON PLAN')
+  egal('un événement aussi', badgeDe(TYPE_ACTU, 'Événement'), 'ÉVÉNEMENT')
+  egal('et une nouveauté reste une nouveauté', badgeDe(TYPE_ACTU, 'Nouveauté'), 'NOUVEAUTÉ')
+
+  // 🔴 ON NE PREND QUE CE QU'ON CONNAÎT. Un mot venu de l'écran et recopié tel
+  // quel, c'est l'occasion d'écrire n'importe quoi en très gros sur une
+  // publication qui ne se corrige plus.
+  egal('🔴 une occasion inconnue ne s’écrit PAS sur l’image',
+    badgeDe(TYPE_ACTU, 'Achetez maintenant !!!'), 'NOUVEAUTÉ')
+  egal('une occasion absente non plus', badgeDe(TYPE_ACTU, null), 'NOUVEAUTÉ')
+  egal('une occasion vide non plus', badgeDe(TYPE_ACTU, '   '), 'NOUVEAUTÉ')
+
+  // ⚠️ SEULE L'ACTUALITÉ SUIT L'OCCASION. Un invendu porte « Rien ne se perd »
+  // et un deal « Deal du jour » : ce sont des objets de l'application, pas des
+  // intentions de communication, et leur nom ne se négocie pas.
+  egal('🔴 un invendu garde son nom quoi qu’on lui passe',
+    badgeDe(TYPE_INVENDU, 'Remerciement'), 'RIEN NE SE PERD')
+  egal('et un deal aussi', badgeDe(TYPE_DEAL, 'Bon plan'), 'DEAL DU JOUR')
+
+  // ⚠️ ET LA CARTE PORTE LE MOT DÉCIDÉ, pas celui de l'habit.
+  egal('la carte porte le badge de son occasion',
+    contenuVisuel({ type: TYPE_ACTU, enseigne: 'X', titre: 'Y', occasion: 'Coup de cœur', lien: 'https://x.be' }).badge,
+    'COUP DE CŒUR')
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -341,6 +372,23 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   verifier('🔴 le tracé ne charge AUCUNE image distante',
     !/new Image\(|drawImage|\.src\s*=/.test(TRACE))
 
+  // 🔴 LA MARQUE EST EN TÊTE, PAS EN PIED (Alex, 05/09). Une marque se lit en
+  // premier : en bas de carte, elle n'était vue que par ceux qui avaient déjà
+  // décidé de lire, et sur Instagram une carte est regardée moins d'une seconde.
+  //
+  // ⚠️ ON COMPTE, ON NE CHERCHE PAS. Le tracé des points appelait le même code à
+  // deux endroits ; chercher le mot serait resté vert si l'un des deux avait
+  // survécu. Il n'y en a plus qu'un, et c'est celui de l'en-tête.
+  egal('🔴 les points ne sont tracés qu’UNE fois, en tête',
+    (TRACE.match(/pointsDuVisuel\(F\.point, h\.pointsClairs\)\.forEach/g) || []).length, 1)
+  verifier('🔴 et le pied ne porte plus que l’adresse',
+    /const hPied = hAdresse \+ F\.ecart \* 1\.2/.test(TRACE))
+  // ⚠️ LE BADGE EST CALÉ SUR LE BORD DROIT, pas à une distance fixe des points :
+  // son texte change avec l'occasion, et une position calculée depuis la gauche
+  // l'aurait fait sortir du cadre sur « INFOS PRATIQUES ».
+  verifier('🔴 le badge est calé à droite, il ne peut pas déborder',
+    /const xBadge = F\.largeur - F\.marge - lBadge/.test(TRACE))
+
   // ⚠️ ON DEMANDE À `canShare` AVANT D'APPELER `share` : un navigateur peut
   // connaître le partage sans accepter les FICHIERS, et l'appel lèverait.
   verifier('🔴 on vérifie que le fichier est partageable',
@@ -408,6 +456,11 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
     /titre: v\.accroche \|\| v\.court/.test(GENE))
   verifier('et le sous-titre passe avant le texte long',
     /description: v\.soustitre \|\| v\.court/.test(GENE))
+  // 🔴 L'OCCASION CHOISIE ARRIVE JUSQU'AU VISUEL. Elle partait au modèle pour
+  // écrire le texte et s'arrêtait là : un « Remerciement » produisait une carte
+  // qui annonçait « NOUVEAUTÉ », c'est-à-dire le contraire de son propre post.
+  verifier('🔴 l’occasion choisie arrive jusqu’au visuel',
+    /^\s+occasion,$/m.test(GENE))
 
   // ═══ DEUX NIVEAUX, PUIS LE VISUEL (Alex, 05/09) ══════════════════════════
   //

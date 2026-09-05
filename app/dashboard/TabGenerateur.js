@@ -225,6 +225,13 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
                 <PartageVisuel
                   annonce={{
                     type: TYPE_ACTU,
+                    // 🔴 L'OCCASION N'ARRIVAIT PAS JUSQU'AU VISUEL (05/09). Elle
+                    // partait au modèle pour écrire le texte, et s'arrêtait là :
+                    // un « Remerciement » produisait une carte qui annonçait
+                    // « NOUVEAUTÉ », c'est-à-dire le contraire de son propre
+                    // post. Trouvé en répondant à une question d'Alex sur la
+                    // couleur de fond.
+                    occasion,
                     enseigne: nomCommerce || commercant?.nom || '',
                     titre: v.accroche || v.court || v.long || '',
                     description: v.soustitre || v.court || null,

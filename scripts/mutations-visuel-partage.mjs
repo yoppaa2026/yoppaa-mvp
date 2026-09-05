@@ -52,6 +52,28 @@ const MUTATIONS = [
     de: '  return HABITS[type] || HABITS[TYPE_ACTU]',
     vers: '  return HABITS[type] || {}' },
 
+  // ─── LE BADGE DIT L'OCCASION (05/09) ────────────────────────────────────
+  { nom: '🔴 un remerciement s annonce a nouveau comme une nouveaute',
+    de: '  if (type === TYPE_ACTU && mot) return mot',
+    vers: '  if (false) return mot' },
+
+  { nom: '🔴 un mot venu de l ecran s ecrit tel quel en gros sur l image',
+    de: "  const mot = OCCASIONS_BADGE[String(occasion || '').trim()]",
+    vers: "  const mot = String(occasion || '').trim().toUpperCase() || null" },
+
+  { nom: '🔴 un invendu perd son nom au profit d une occasion',
+    de: '  if (type === TYPE_ACTU && mot) return mot',
+    vers: '  if (mot) return mot' },
+
+  { nom: '🔴 la carte reprend le badge de l habit au lieu du mot decide',
+    de: '    badge: badgeDe(type, occasion),',
+    vers: '    badge: habit.badge,' },
+
+  { nom: '🔴 l occasion n arrive plus jusqu au visuel',
+    fichier: GENE,
+    de: '                    occasion,',
+    vers: '                    occasion: null,' },
+
   // ─── LES CINQ POINTS ────────────────────────────────────────────────────
   { nom: '🔴 les points reprennent la palette du fond clair sur un fond sombre',
     de: '  const couleurs = surClair ? POINTS_SUR_CLAIR : POINTS_SUR_SOMBRE',
@@ -158,6 +180,22 @@ const MUTATIONS = [
     fichier: TRACE,
     de: '  try { if (document.fonts && document.fonts.ready) await document.fonts.ready } catch { /* police système */ }',
     vers: '  try { if (false) await document.fonts.ready } catch { /* police système */ }' },
+
+  // ─── LA MARQUE EN TÊTE (05/09) ──────────────────────────────────────────
+  { nom: '🔴 les points redescendent en pied, ou personne ne les voit',
+    fichier: TRACE,
+    de: '  const hPied = hAdresse + F.ecart * 1.2',
+    vers: '  const hPied = hAdresse + hPoints + F.ecart * 1.2' },
+
+  { nom: '🔴 le badge n est plus cale a droite et sort du cadre',
+    fichier: TRACE,
+    de: '  const xBadge = F.largeur - F.marge - lBadge',
+    vers: '  const xBadge = gauche + largeurDesPoints(F.point) + F.ecart * 4' },
+
+  { nom: '🔴 les points sont traces deux fois',
+    fichier: TRACE,
+    de: '  pointsDuVisuel(F.point, h.pointsClairs).forEach(p => {',
+    vers: '  pointsDuVisuel(F.point, h.pointsClairs).forEach(p => {}); pointsDuVisuel(F.point, h.pointsClairs).forEach(p => {' },
 
   { nom: '🔴 on appelle share sans verifier que le fichier passe',
     fichier: TRACE,

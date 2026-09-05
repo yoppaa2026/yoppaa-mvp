@@ -1078,11 +1078,41 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   // ⚠️ ELLE NE SERT QUE L'INVENDU : un deal ordinaire garde sa flamme, sinon les
   // deux redeviennent le même objet, ce qu'Alex a fait corriger le 04/09.
   verifier('🔴 la marque ne coiffe QUE l’invendu',
-    /\{invendu\s*\?\s*<IconeAntiGaspi/.test(FICHE))
-  // ⚠️ LES COULEURS AUSSI VIENNENT DE LÀ : trois codes hexadécimaux recopiés sur
+    /\{invendu \? \([\s\S]{0,600}?<IconeAntiGaspi[\s\S]{0,400}?\) : \([\s\S]{0,500}?Deal du jour/.test(FICHE))
+  // ⚠️ LES COULEURS AUSSI VIENNENT DE LÀ : des codes hexadécimaux recopiés sur
   // deux écrans auraient divergé au premier ajustement.
   verifier('les couleurs du module ne sont pas recopiées',
     /COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI/.test(ACCUEIL))
+
+  // ═══ BANDEAU NUIT, CARTES PAPIER (Alex, 05/09) ══════════════════════════
+  //
+  // 🔴 CHOISI APRÈS COMPARAISON DE SIX HABITS RENDUS À QUATRE CARTES. C'est la
+  // densité réelle qui a tranché : quatre cartes sombres fusionnent en un bloc,
+  // quatre cartes claires se fondent dans la page. Le poids va donc sur le
+  // TITRE DE SECTION, une seule fois.
+  verifier('🔴 le titre de section porte la nuit',
+    /background: NUIT_ANTI_GASPI, borderRadius: 12/.test(ACCUEIL))
+  // ⚠️ ET LA MARQUE PASSE À L'OR DESSUS : l'ambre de la carte n'y tiendrait pas
+  // le contraste.
+  verifier('🔴 et la marque passe à l’or sur la nuit',
+    /<IconeAntiGaspi taille=\{20\} epaisseur=\{2\.2\} couleur=\{OR_ANTI_GASPI\}\/>/.test(ACCUEIL))
+  // ⚠️ LES CARTES, ELLES, RESTENT EN PAPIER. Une seule masse sombre, pas quatre.
+  verifier('🔴 la carte reste en papier',
+    /background: FOND_ANTI_GASPI, border: `1\.5px solid \$\{BORD_ANTI_GASPI\}`/.test(ACCUEIL))
+  egal('🔴 UNE seule masse sombre dans la section, pas une par carte',
+    (ACCUEIL.match(/background: NUIT_ANTI_GASPI/g) || []).length, 1)
+  // ⚠️ LA MÊME IDÉE À DEUX ÉCHELLES. Sur la fiche il n'y a pas de titre de
+  // section : la masse sombre s'y réduit à une pastille, sans quoi le papier se
+  // perdrait sur le fond `#F8F6FF` au milieu d'articles blancs.
+  verifier('🔴 sur la fiche, la nuit se réduit à une pastille',
+    /color: '#fff', background: NUIT_ANTI_GASPI/.test(FICHE))
+  verifier('et la carte de la fiche est en papier elle aussi',
+    /\? \{ background: FOND_ANTI_GASPI, border: `1\.5px solid \$\{BORD_ANTI_GASPI\}`/.test(FICHE))
+  // ⚠️ « TOUT EST PARTI » PRENAIT UNE COULEUR EN DUR. Un deal ordinaire peut
+  // porter une quantité : le brun de l'invendu s'affichait alors en sombre sur
+  // le violet sombre de sa carte, illisible.
+  verifier('🔴 « tout est parti » se lit sur les DEUX habits',
+    /color: encreDouce, whiteSpace: 'nowrap' \}\}>Tout est parti/.test(FICHE))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

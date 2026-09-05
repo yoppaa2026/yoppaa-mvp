@@ -48,7 +48,7 @@ import SupprimerCompte from './SupprimerCompte'
 // Recopiés dans l'écran, ils auraient divergé au premier changement de
 // formulation, comme le libellé du bon cadeau avant le 31/08.
 import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, offresProches, libelleTempsRestant, libelleReste, resteSurOffre, texteDePartage, lienVersOffre, INVENDUS_AFFICHES } from '@/lib/anti-gaspi'
-import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI } from '@/app/components/IconeAntiGaspi'
+import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, OR_ANTI_GASPI } from '@/app/components/IconeAntiGaspi'
 
 const T = {
   bg:      '#F8F6FF',
@@ -908,13 +908,13 @@ function PillPaiementClient({ commande, taille = 'normal' }) {
 // du jour » devenait « Assortiment de pâtis… », c'est-à-dire rien. Deux lignes,
 // puis coupe.
 function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuvrir, onPartager }) {
-  // ⚠️ LES PASTILLES SONT BLANCHES SUR LE FOND CRÈME, pas crème sur crème. Sur
-  // la première version elles se fondaient dans la carte et ne se lisaient plus
+  // ⚠️ LES PASTILLES SONT BLANCHES SUR LE PAPIER, pas papier sur papier. Sur la
+  // première version elles se fondaient dans la carte et ne se lisaient plus
   // comme des pastilles.
   const pastille = {
     display: 'inline-flex', alignItems: 'center', gap: 4,
     background: '#fff', border: `1px solid ${BORD_ANTI_GASPI}`, borderRadius: 100,
-    padding: '3px 8px', fontSize: '0.68rem', fontWeight: 800, color: '#92400E',
+    padding: '3px 8px', fontSize: '0.68rem', fontWeight: 800, color: '#5B4A3A',
     whiteSpace: 'nowrap',
   }
   const tempsRestant = libelleTempsRestant(restant)
@@ -929,28 +929,31 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
           invalide, et Safari y répond en avalant le clic intérieur. */}
       <button onClick={onPartager}
         aria-label={`Partager ${offre?.titre || 'cette offre'}`}
-        style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, width: 28, height: 28, borderRadius: '50%', border: 'none', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '0 1px 3px rgba(120,53,15,0.16)' }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, width: 28, height: 28, borderRadius: '50%', border: 'none', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '0 1px 3px rgba(26,8,64,0.14)' }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={ACCENT_ANTI_GASPI} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
           <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
         </svg>
       </button>
 
-      {/* LE NOM DU COMMERÇANT, EN TÊTE, avec la marque du module en puce. */}
+      {/* LE NOM DU COMMERÇANT, EN TÊTE, avec la marque du module en puce.
+          ⚠️ LA PUCE RESTE AMBRE quand tout le reste est violet : c'est la seule
+          touche chaude de la carte, et c'est elle qui dit la FONCTION pendant
+          que le violet dit la MAISON. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3, paddingRight: 30 }}>
         <IconeAntiGaspi taille={13} epaisseur={2.4}/>
-        <span style={{ fontSize: '0.72rem', fontWeight: 900, color: COULEUR_ANTI_GASPI, textTransform: 'uppercase', letterSpacing: '0.7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: '0.72rem', fontWeight: 900, color: ACCENT_ANTI_GASPI, textTransform: 'uppercase', letterSpacing: '0.7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {commerce?.nom || 'Chez un commerçant'}
         </span>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <p style={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: '1rem', color: '#78350F', margin: 0, letterSpacing: '-0.3px', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        <p style={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: '1rem', color: ENCRE_ANTI_GASPI, margin: 0, letterSpacing: '-0.3px', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {offre.titre}
         </p>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <p style={{ fontSize: '1.1rem', fontWeight: 900, color: COULEUR_ANTI_GASPI, margin: 0, letterSpacing: '-0.3px' }}>{euros(Number(offre.prix_deal))}</p>
-          <p style={{ fontSize: '0.7rem', color: '#92400E', margin: 0, fontWeight: 700 }}>
+          <p style={{ fontSize: '1.1rem', fontWeight: 900, color: ACCENT_ANTI_GASPI, margin: 0, letterSpacing: '-0.3px' }}>{euros(Number(offre.prix_deal))}</p>
+          <p style={{ fontSize: '0.7rem', color: ENCRE_DOUCE_ANTI_GASPI, margin: 0, fontWeight: 700 }}>
             <span style={{ textDecoration: 'line-through', opacity: 0.7 }}>{euros(Number(offre.prix_original))}</span>
             {remise > 0 ? ` · -${remise} %` : ''}
           </p>
@@ -964,7 +967,7 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         {tempsRestant && (
           <span style={pastille}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B4A3A" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>
             </svg>
             {tempsRestant}
@@ -972,7 +975,7 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
         )}
         {quantite && (
           <span style={pastille}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B4A3A" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 8.5h14l-1 10.5a2 2 0 0 1-2 1.8H8a2 2 0 0 1-2-1.8L5 8.5z"/>
               <path d="M8.5 8.5V6.5a3.5 3.5 0 0 1 7 0v2"/>
             </svg>
@@ -981,7 +984,7 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
         )}
         {distance != null && (
           <span style={pastille}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B4A3A" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>
             </svg>
             {formatDistance(distance)}
@@ -3565,13 +3568,23 @@ export default function Commander() {
                   notre rôle. */}
               {invendusProches.length > 0 && (
                 <div style={{ marginBottom: 18 }}>
-                  {/* Le titre de section porte la marque du module, en grand.
-                      C'est le seul endroit où elle a la place de se voir en
-                      entier ; sur les cartes elle sert de puce. */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                    <IconeAntiGaspi taille={20} epaisseur={2.2}/>
-                    <span style={{ fontSize: 15, fontWeight: 900, color: T.deep, letterSpacing: '-0.3px' }}>{TITRE_YOPPER}</span>
-                    <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>{SOUS_TITRE_YOPPER}</span>
+                  {/* ═══ LE BANDEAU NUIT ═══════════════════════════════════
+                      🔴 CHOISI PAR ALEX LE 05/09 après comparaison de six
+                      habits rendus à QUATRE CARTES, la densité réelle de
+                      l'accueil. C'est cette densité, et elle seule, qui a
+                      tranché : quatre cartes sombres FUSIONNENT en un bloc et
+                      les offres cessent de se distinguer entre elles ; quatre
+                      cartes claires se fondent dans la page.
+
+                      ✅ LE POIDS VA SUR LE TITRE, UNE SEULE FOIS. Une masse
+                      sombre attrape l'œil, puis les cartes se lisent au calme.
+
+                      ⚠️ ET LA MARQUE PASSE À L'OR SUR LA NUIT : l'ambre de la
+                      carte n'y tiendrait pas le contraste. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9, flexWrap: 'wrap', background: NUIT_ANTI_GASPI, borderRadius: 12, padding: '0.55rem 0.75rem' }}>
+                    <IconeAntiGaspi taille={20} epaisseur={2.2} couleur={OR_ANTI_GASPI}/>
+                    <span style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>{TITRE_YOPPER}</span>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.66)', fontWeight: 600 }}>{SOUS_TITRE_YOPPER}</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {invendusVisibles.map(({ offre, restant, remise, reste, distance }) => {
@@ -3590,7 +3603,7 @@ export default function Commander() {
                       les 9 » laisse le Yopper décider avant d'agir. */}
                   {invendusCaches > 0 && (
                     <button onClick={() => setInvendusDeplies(v => !v)}
-                      style={{ width: '100%', marginTop: 8, padding: '0.55rem', borderRadius: 100, border: `1.5px solid ${BORD_ANTI_GASPI}`, background: 'transparent', color: COULEUR_ANTI_GASPI, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      style={{ width: '100%', marginTop: 8, padding: '0.55rem', borderRadius: 100, border: `1.5px solid ${BORD_ANTI_GASPI}`, background: 'transparent', color: ACCENT_ANTI_GASPI, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                       {invendusDeplies ? 'Réduire' : `Voir les ${invendusProches.length}`}
                     </button>
                   )}

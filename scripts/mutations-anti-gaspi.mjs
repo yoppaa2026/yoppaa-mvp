@@ -575,10 +575,42 @@ const MUTATIONS = [
     de: '        : new URLSearchParams(window.location.search).get(PARAM_OFFRE)',
     vers: '        : null' },
 
+  // ⚠️ ANCRE REPOINTÉE LE 05/09 : l'en-tête de l'invendu est devenu une pastille
+  // nuit, plus un simple libellé.
   { nom: '🔴 la marque anti-gaspi coiffe aussi le deal ordinaire',
     fichier: 'app/commander/[slug]/page.js',
-    de: '              ? <IconeAntiGaspi taille={11} epaisseur={2.6}/>',
-    vers: '              ? null' },
+    de: '              <IconeAntiGaspi taille={11} epaisseur={2.6} couleur={OR_ANTI_GASPI}/>',
+    vers: '              {null}' },
+
+  // ─── BANDEAU NUIT, CARTES PAPIER (05/09) ────────────────────────────────
+  //
+  // 🔴 CE QUE CES MUTATIONS GARDENT : que le poids reste sur le TITRE, une
+  // seule fois, et jamais sur chacune des quatre cartes. C'est la densité à
+  // quatre qui a tranché entre les six habits.
+  { nom: '🔴 le bandeau perd sa nuit et redevient un titre nu',
+    fichier: 'app/commander/page.js',
+    de: 'background: NUIT_ANTI_GASPI, borderRadius: 12',
+    vers: 'borderRadius: 12' },
+
+  { nom: '🔴 la marque reste en ambre sur la nuit (illisible)',
+    fichier: 'app/commander/page.js',
+    de: '<IconeAntiGaspi taille={20} epaisseur={2.2} couleur={OR_ANTI_GASPI}/>',
+    vers: '<IconeAntiGaspi taille={20} epaisseur={2.2}/>' },
+
+  { nom: '🔴 la carte reprend la nuit : quatre masses sombres au lieu d une',
+    fichier: 'app/commander/page.js',
+    de: "style={{ position: 'relative', background: FOND_ANTI_GASPI",
+    vers: "style={{ position: 'relative', background: NUIT_ANTI_GASPI" },
+
+  { nom: '🔴 la fiche perd sa pastille nuit et le papier s y noie',
+    fichier: 'app/commander/[slug]/page.js',
+    de: "color: '#fff', background: NUIT_ANTI_GASPI",
+    vers: "color: ENCRE_ANTI_GASPI, background: 'transparent'" },
+
+  { nom: '🔴 « tout est parti » redevient illisible sur une carte sombre',
+    fichier: 'app/commander/[slug]/page.js',
+    de: "color: encreDouce, whiteSpace: 'nowrap' }}>Tout est parti",
+    vers: "color: '#92400E', whiteSpace: 'nowrap' }}>Tout est parti" },
 ]
 
 const lancer = () => {

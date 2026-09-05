@@ -15,7 +15,7 @@ import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionAr
 // fonction du module : recopier le test ici ferait passer chaque bonne affaire
 // de la semaine pour un invendu de fin de journée.
 import { porteUneFenetre, plafondDeLOffre, resteSurOffre, libelleReste, libelleFenetre, TITRE_YOPPER, PARAM_OFFRE } from '@/lib/anti-gaspi'
-import IconeAntiGaspi from '@/app/components/IconeAntiGaspi'
+import IconeAntiGaspi, { FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, OR_ANTI_GASPI } from '@/app/components/IconeAntiGaspi'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -785,24 +785,36 @@ function DealOfferCard({ deal, qte = 0, reste = null, onAjouter, onRetirer, ancr
   // C'est la PRÉSENCE DE LA FENÊTRE qui fait l'invendu, et rien d'autre.
   const invendu = porteUneFenetre(deal)
   const fond = invendu
-    ? { background: '#FFFBEB', border: '1.5px solid #FCD34D', boxShadow: 'none' }
+    ? { background: FOND_ANTI_GASPI, border: `1.5px solid ${BORD_ANTI_GASPI}`, boxShadow: 'none' }
     : { background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, border: `1.5px solid ${T.main}55`, boxShadow: `0 4px 16px ${T.main}26` }
-  const encre = invendu ? '#78350F' : '#fff'
-  const encreDouce = invendu ? '#92400E' : 'rgba(255,255,255,0.75)'
+  const encre = invendu ? ENCRE_ANTI_GASPI : '#fff'
+  const encreDouce = invendu ? ENCRE_DOUCE_ANTI_GASPI : 'rgba(255,255,255,0.75)'
   return (
     <div ref={ancre} style={{ ...fond, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* ⚠️ LA MÊME MARQUE QUE SUR L'ACCUEIL, et c'est tout l'intérêt : le
-              Yopper qui a cliqué sur une carte jaune doit RECONNAÎTRE ce qu'il
-              vient chercher au milieu du catalogue. La flamme reste au deal
-              ordinaire, qui n'a rien à voir avec un invendu. */}
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 800, color: invendu ? '#B45309' : '#FB923C', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
-            {invendu
-              ? <IconeAntiGaspi taille={11} epaisseur={2.6}/>
-              : <svg width="10" height="10" viewBox="0 0 24 24" fill="#FB923C"><path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/></svg>}
-            {invendu ? TITRE_YOPPER : 'Deal du jour'}
-          </span>
+              Yopper qui a cliqué sur une carte doit RECONNAÎTRE ce qu'il vient
+              chercher au milieu du catalogue. La flamme reste au deal
+              ordinaire, qui n'a rien à voir avec un invendu.
+
+              🔴 ET SUR L'INVENDU, CE N'EST PLUS UN SIMPLE LIBELLÉ : C'EST UNE
+              PASTILLE NUIT. Le papier choisi le 05/09 se perdrait ici, sur le
+              fond `#F8F6FF` de la fiche, au milieu d'articles blancs : la carte
+              cesserait de se lire comme une offre à part. La masse sombre du
+              bandeau de l'accueil se réduit donc à cette pastille. Même idée,
+              deux échelles. */}
+          {invendu ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 900, color: '#fff', background: NUIT_ANTI_GASPI, textTransform: 'uppercase', letterSpacing: '0.7px', borderRadius: 100, padding: '3px 8px', marginBottom: 5 }}>
+              <IconeAntiGaspi taille={11} epaisseur={2.6} couleur={OR_ANTI_GASPI}/>
+              {TITRE_YOPPER}
+            </span>
+          ) : (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 800, color: '#FB923C', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="#FB923C"><path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/></svg>
+              Deal du jour
+            </span>
+          )}
           <p style={{ fontWeight: 800, color: encre, fontSize: '0.9rem', letterSpacing: '-0.2px', lineHeight: 1.3, margin: '0 0 3px' }}>{deal.titre}</p>
           {/* ⚠️ SUR UN INVENDU, LA DESCRIPTION LAISSE LA PLACE À CE QUI COMPTE :
               combien il en reste, et jusqu'à quand. C'est ce qui fait sortir de
@@ -816,10 +828,10 @@ function DealOfferCard({ deal, qte = 0, reste = null, onAjouter, onRetirer, ancr
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {prixAffiche != null && (
-              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: invendu ? '#B45309' : T.light, letterSpacing: '-0.3px' }}>{euros(prixAffiche)}</span>
+              <span style={{ fontSize: '1.05rem', fontWeight: 900, color: invendu ? ACCENT_ANTI_GASPI : T.light, letterSpacing: '-0.3px' }}>{euros(prixAffiche)}</span>
             )}
             {prixBarre != null && (
-              <span style={{ fontSize: '0.75rem', color: invendu ? '#92400E' : 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{euros(prixBarre)}</span>
+              <span style={{ fontSize: '0.75rem', color: invendu ? ENCRE_DOUCE_ANTI_GASPI : 'rgba(255,255,255,0.55)', fontWeight: 700, textDecoration: 'line-through' }}>{euros(prixBarre)}</span>
             )}
           </div>
         </div>
@@ -827,7 +839,7 @@ function DealOfferCard({ deal, qte = 0, reste = null, onAjouter, onRetirer, ancr
           {qte > 0 && (
             <>
               <button onClick={onRetirer} aria-label="Retirer le deal"
-                style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${invendu ? '#FCD34D' : 'rgba(255,255,255,0.3)'}`, background: 'transparent', color: encre, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${invendu ? BORD_ANTI_GASPI : 'rgba(255,255,255,0.3)'}`, background: 'transparent', color: encre, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round"><path d="M5 12h14"/></svg>
               </button>
               <span style={{ fontWeight: 900, fontSize: '0.95rem', color: encre, minWidth: 18, textAlign: 'center' }}>{qte}</span>
@@ -837,7 +849,10 @@ function DealOfferCard({ deal, qte = 0, reste = null, onAjouter, onRetirer, ancr
               cliquable enverrait le Yopper se faire refuser au paiement, après
               avoir rempli son panier. */}
           {reste === 0 ? (
-            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#92400E', whiteSpace: 'nowrap' }}>Tout est parti</span>
+            /* ⚠️ `encreDouce`, PAS UNE COULEUR EN DUR. Un deal ordinaire peut
+               lui aussi porter une quantité : le brun de l'invendu s'affichait
+               alors en sombre sur le violet sombre de sa carte, illisible. */
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: encreDouce, whiteSpace: 'nowrap' }}>Tout est parti</span>
           ) : (
             <button onClick={onAjouter} aria-label="Ajouter le deal"
               style={{ width: 34, height: 34, borderRadius: 10, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${T.main}66` }}>

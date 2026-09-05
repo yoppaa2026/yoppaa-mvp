@@ -1016,7 +1016,7 @@ function LaTotale() {
     {
       question: 'Vendre ?',
       reponse: `${eur(prix('vendre'))}/mois.`,
-      quoi: 'Click and Collect, livraison, rendez-vous en ligne, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique.',
+      quoi: 'Click and Collect, livraison, rendez-vous en ligne, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique, invendus du soir à prix réduit.',
     },
   ]
 
@@ -1196,6 +1196,10 @@ const FORMULES = [
       'Boutique en ligne et livraison locale',
       'Fidélité automatique : chaque commande et chaque rendez-vous remplit la carte, sans rien faire',
       'Bons cadeaux à offrir : tes clients font découvrir ton commerce à leurs proches',
+      // ⚠️ AUCUN CHIFFRE DANS CETTE LIGNE, et c'est une règle de la landing :
+      // un seul nombre y vit, et c'est cent. « Trois tartes », « -50 % » ou
+      // « 17 h » y seraient des chiffres de plus.
+      'Avant la fermeture : ce qu\'il te reste ce soir repart à prix réduit, au lieu d\'être jeté',
       'Assistant IA complet : rédaction avancée pour tes articles, tes deals et tes actus, avec un usage étendu',
       '0% de commission Yoppaa sur tes ventes',
     ],
@@ -1597,7 +1601,10 @@ export default function LandingReveal({ referent = null }) {
           {[
             'Click & Collect', 'Rendez-vous en ligne', 'Good Morning Yoppers', 'Deals du jour',
             'Cartes de fidélité', 'Bons cadeaux', 'Livraison locale', 'Suivi de commande',
-            'Boutiques de détail',
+            // ⚠️ ICI C'EST LE NOM CÔTÉ YOPPER : ces pastilles s'adressent aux
+            // habitants, pas aux commerçants. « Avant la fermeture » est le nom
+            // de la fonction dans le tableau de bord, il n'a rien à faire ici.
+            'Boutiques de détail', 'Rien ne se perd',
           ].map(b => (
             <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 100, background: '#fff', border: `1.5px solid ${T.pale}`, fontSize: 13, fontWeight: 800, color: T.deep, boxShadow: '0 2px 10px rgba(22,6,54,0.05)' }}>
               <IconCheck size={12}/> {b}

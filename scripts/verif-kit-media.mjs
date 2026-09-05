@@ -351,12 +351,30 @@ const egal = (nom, obtenu, attendu) =>
 
   // Les messages à partager ne portent plus de date : collés sur une page
   // Facebook, ils y restent des mois.
-  const i = kit.indexOf('const TEXTES = [')
-  const bloc = i === -1 ? '' : kit.slice(i, kit.indexOf(']', i))
+  //
+  // 🔴 CETTE GARDE LISAIT LE FICHIER BRUT, ET ELLE A ROUGI SUR UN COMMENTAIRE
+  // (05/09). En ajoutant un quatrième message, j'ai écrit au-dessus de lui
+  // pourquoi il ne doit porter ni date ni chiffre, en citant « le 1er octobre »
+  // et « il en reste 3 » comme contre-exemples. La garde a lu ma PROSE et a
+  // conclu qu'un message nommait un mois.
+  //
+  // ⚠️ UNE GARDE QUI LIT LES COMMENTAIRES NE MESURE PAS LE CODE. C'est le
+  // symétrique exact du dépouilleur : là-bas un commentaire rendait le banc
+  // AVEUGLE, ici il le rend MENTEUR. On dépouille, comme partout ailleurs.
+  const kitCode = lireCode('app/kit/[slug]/KitClient.js')
+  const i = kitCode.indexOf('const TEXTES = [')
+  const bloc = i === -1 ? '' : kitCode.slice(i, kitCode.indexOf(']', i))
   verifie('les messages se découpent', bloc.length > 200, String(bloc.length))
   verifie('🔴 aucun message ne parle d\'une date', !/\$\{ouverture\}|libelleLancement/.test(bloc))
   verifie('et aucun ne nomme un mois', !/octobre|septembre|novembre/i.test(bloc))
-  verifie('il en reste trois', (bloc.match(/cle: '/g) || []).length === 3)
+  // ⚠️ QUATRE DEPUIS LE 05/09 : « Pour tes restes du soir » rejoint les trois
+  // d'origine. C'est le seul qui vise un moment de la journée.
+  verifie('il en reste quatre', (bloc.match(/cle: '/g) || []).length === 4,
+    `${(bloc.match(/cle: '/g) || []).length} trouvé(s)`)
+  // 🔴 ET AUCUN N'ANNONCE UN CHIFFRE. « Il en reste 3 » ou « jusqu'à 18 h »
+  // devient faux dans l'heure, sur une publication qui reste des mois.
+  verifie('🔴 aucun message n\'annonce une quantité, un prix ou une heure',
+    !/\d+\s*(€|h\b|%)|il en reste \d|jusqu.à \d/.test(bloc))
 
   // ⚠️ JAMAIS « AUCUNE COMMISSION » SANS SON SUJET. Yoppaa ne prend pas de
   // commission sur les ventes ; ça ne dit rien des frais du prestataire de

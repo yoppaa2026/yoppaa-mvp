@@ -181,6 +181,7 @@ Légende : ✓ inclus · — non inclus · *(à venir : badge "plan recommandé"
 | Click & Collect *(catégorie alimentaire)* | — | — | ✓ | — |
 | Livraison *(catégorie alimentaire)* | — | — | ✓ | — |
 | Réservation de table *(restaurant alimentaire)* | — | — | ✓ | — |
+| Avant la fermeture *(catégorie alimentaire)* | — | — | ✓ | — |
 | RDV natif *(catégorie service)* | — | — | ✓ | — |
 | Multi-praticiens *(catégorie service)* | — | — | ✓ | — |
 | Réservation produit *(catégorie détail)* | — | — | ✓ | — |
@@ -437,6 +438,19 @@ Cette section sert de copywriting de référence pour toutes les UI.
 **Description officielle** : Tu peux marquer une commande comme *"payée en cash"* depuis ton tableau de bord, pour les Yoppers qui préfèrent payer sur place.
 **Flag** : `paiement_cash`
 **Disponible avec** : Vendre
+
+### Fin de journée
+
+#### Avant la fermeture
+**Description officielle** : Il te reste trois tartes à 17 h ? Tu les republies à prix réduit en trois gestes, pour ce soir seulement : ce qu'il te reste, à quel prix, jusqu'à quelle heure. Les habitants les voient apparaître dans « Rien ne se perd », sur leur accueil, et viennent les chercher sur un créneau comme n'importe quelle commande.
+**Flag** : `anti_gaspi`
+**Disponible avec** : Vendre, **catégorie alimentaire uniquement**
+
+**Deux noms, et c'est voulu** : le commerçant achète et utilise « Avant la fermeture » (onglet Deals) ; le Yopper lit « Rien ne se perd » (bande en tête de son accueil, puis `/rien-ne-se-perd`). Les deux vivent dans `lib/anti-gaspi.js` et nulle part ailleurs.
+
+**Ce qui la distingue d'une bonne affaire** : une bonne affaire se prépare et dure la semaine ; une offre de fin de journée porte une **plage horaire du jour** et une **quantité comptée**. C'est la présence de cette plage, et rien d'autre, qui fait l'offre : aucun drapeau en base ne pourrait dire le contraire des heures.
+
+**Alimentaire uniquement, et pas seulement par bon sens** : un vêtement ne périme pas, une tarte si. Et en boutique de détail le stock est décrémenté en dur avant le paiement : les deux mécanismes compteraient la même vente deux fois.
 
 ### Fidélité
 

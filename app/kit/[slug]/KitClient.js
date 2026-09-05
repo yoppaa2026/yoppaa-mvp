@@ -38,6 +38,22 @@ const TEXTES = [
     texte: 'On est sur Yoppaa, l’app de notre commune : Yoppaa ne prend aucune commission sur nos ventes. Jette un œil :' },
   { cle: 'court', label: 'Version courte',
     texte: 'Tous les commerces de ta commune dans une seule app. Retrouve-nous sur Yoppaa :' },
+  // ⚠️ CELUI-CI SE PUBLIE À 17 H, PAS UNE FOIS POUR TOUTES. C'est le seul des
+  // quatre qui vise un moment précis de la journée, et c'est pour ça qu'il
+  // existe : le commerçant qui vient de publier ses restes veut un texte prêt à
+  // coller sur sa page, pas à écrire.
+  //
+  // ⚠️ AUCUNE QUANTITÉ, AUCUN PRIX, AUCUNE HEURE dans le texte. Un message reste
+  // des mois sur une page Facebook : « il en reste 3 » ou « jusqu'à 18 h »
+  // devient faux dans l'heure, et le commerçant ne repassera pas derrière ses
+  // publications. C'est la même leçon que les dates du 1er octobre, retirées
+  // le 22/08.
+  //
+  // ⚠️ ET SÛREMENT PAS « À SAUVER » : c'est le verbe de Too Good To Go en
+  // français. Aucun risque juridique, mais Yoppaa passerait pour un clone de ce
+  // qu'elle refuse d'être.
+  { cle: 'invendus', label: 'Pour tes restes du soir',
+    texte: 'Il nous reste des choses aujourd’hui, à prix réduit jusqu’à la fermeture. C’est dans « Rien ne se perd », sur Yoppaa :' },
 ]
 
 // ⚠️ LA PAGE N'AVAIT AUCUNE SORTIE (Alex, 22/08 : « quand tu ouvres le kit il

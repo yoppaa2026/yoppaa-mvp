@@ -327,6 +327,11 @@ export default function AbonnementPage() {
                   'Tout Communiquer +',
                   'Transactionnel (commandes, RDV, réservations)',
                   'Paiement en ligne (Stripe Connect)',
+                  // ⚠️ LE MOT DU COMMERÇANT, pas celui du Yopper. Il lira
+                  // « Avant la fermeture » sur son onglet Deals ; « Rien ne se
+                  // perd » est ce que ses clients verront. Les deux noms vivent
+                  // dans `lib/anti-gaspi.js`.
+                  'Avant la fermeture : tes invendus du soir à prix réduit (alimentaire)',
                   'Fidélité configurable',
                   'IA avancée (rédaction, segmentation, benchmarking)',
                   'Export comptable',

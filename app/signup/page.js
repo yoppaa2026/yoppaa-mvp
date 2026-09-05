@@ -22,7 +22,7 @@ import {
   User, Heart, Radio, Sun, Megaphone, Flame, AlertTriangle, Bell, Mail, Sparkles, BarChart3,
   ShoppingCart, Bike, Utensils, Calendar, Briefcase, Clock, Users, Package, CreditCard, Star, Download,
   Smartphone, Printer, Camera, FileText, Pencil, CheckCircle, Check, Circle, Shield, IdCard,
-  MapPin, Gift,
+  MapPin, Gift, Sunset,
 } from 'lucide-react'
 // Logo canonique Yoppaa : wordmark + 5 dots V2-B (spec validee 12/06).
 // Ne JAMAIS redessiner les dots ailleurs : importer YoppaaLogo ou YoppaaDots.
@@ -830,6 +830,21 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     {
       Icon: Bike, titre: 'Livraison',
       desc: 'Module complet : zone géographique configurable, frais paramétrables, créneaux dédiés à la livraison, suivi de la commande côté Yopper.',
+      plan: 'vendre',
+    },
+    {
+      // ⚠️ ELLE VIT DANS LA LISTE ALIMENTAIRE, ET NULLE PART AILLEURS. Un
+      // vêtement ne périme pas, une tarte si : `anti_gaspi` est verrouillée sur
+      // la catégorie alimentaire dans `lib/plans.js`, et cette liste est déjà
+      // choisie par catégorie. La proposer ailleurs vendrait une fonction que
+      // le commerçant ne verrait jamais apparaître.
+      //
+      // ⚠️ ON DIT « AVANT LA FERMETURE », le nom que le commerçant verra dans
+      // son tableau de bord, pas « Rien ne se perd », qui est le nom côté
+      // Yopper. Les deux vivent dans `lib/anti-gaspi.js` : c'est délibéré, et
+      // annoncer le mauvais ferait chercher un onglet qui n'existe pas.
+      Icon: Sunset, titre: 'Avant la fermeture',
+      desc: 'Il te reste trois tartes à 17 h ? Tu les republies à prix réduit en trois gestes, pour ce soir seulement : ce qu\'il te reste, à quel prix, jusqu\'à quelle heure. Les habitants les voient apparaître dans « Rien ne se perd », sur leur accueil, et viennent les chercher sur un créneau comme n\'importe quelle commande. Ce qui ne se vend pas ne se jette pas.',
       plan: 'vendre',
     },
     {

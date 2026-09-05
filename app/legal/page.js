@@ -185,13 +185,22 @@ export default function LegalPage() {
             <P>Les bons cadeaux sont émis par le commerçant chez qui ils sont achetés : le paiement lui est directement versé, et c&rsquo;est lui qui doit la contrepartie. Le montant est libre et la durée de validité, fixée par le commerçant, est indiquée au moment de l&rsquo;achat ainsi que sur le bon.</P>
             <P>Un bon s&rsquo;utilise chez ce commerçant uniquement, en une ou plusieurs fois, en ligne ou sur place, jusqu&rsquo;à épuisement de son solde. Conformément au droit belge, il n&rsquo;est pas remboursable en espèces. Passée la date de validité, le solde restant est perdu. En cas de difficulté pour utiliser un bon, contacter le commerçant ou support@yoppaa.app.</P>
 
-            <H3>8. Avis</H3>
+            {/* ⚠️ SECTION AJOUTÉE LE 05/09, à l'ouverture des offres de fin de
+                journée. Ce que le Client doit savoir AVANT de se déplacer :
+                l'offre est comptée, elle a une heure de fin, et elle peut
+                disparaître entre le moment où il la voit et celui où il paie.
+                Sans ça, il découvre la règle au moment où elle le prive. */}
+            <H3>8. Offres de fin de journée</H3>
+            <P>Certains commerçants proposent, en fin de journée, des articles restants à prix réduit. Ces offres sont limitées en quantité et ne sont visibles que pendant une plage horaire fixée par le commerçant : elles peuvent cesser d&rsquo;être disponibles entre le moment où le Client les consulte et celui où il valide sa commande. Le nombre affiché est celui qui reste au moment de l&rsquo;affichage.</P>
+            <P>Le prix, la composition et la disponibilité relèvent du commerçant. Le retrait s&rsquo;effectue sur créneau horaire, comme pour toute autre commande. S&rsquo;agissant le plus souvent de denrées périssables, le droit de rétractation ne s&rsquo;y applique pas (voir le point 5). En cas d&rsquo;indisponibilité constatée au retrait, le remboursement est effectué par le commerçant.</P>
+
+            <H3>9. Avis</H3>
             <P>Seuls les clients ayant effectivement retiré ou reçu une commande, ou honoré un rendez-vous, peuvent déposer un avis sur le commerçant concerné. Yoppaa se réserve le droit de retirer tout avis contraire à la loi ou manifestement abusif.</P>
 
-            <H3>9. Responsabilité</H3>
+            <H3>10. Responsabilité</H3>
             <P>Yoppaa agit en qualité d'intermédiaire technique. Les commerçants partenaires sont seuls responsables de la qualité, de la conformité et de la disponibilité des produits et prestations proposés, ainsi que des récompenses de fidélité et des bons cadeaux qu&rsquo;ils émettent.</P>
 
-            <H3>10. Modification des CGU</H3>
+            <H3>11. Modification des CGU</H3>
             <P>Avcotech SRL se réserve le droit de modifier les présentes CGU à tout moment. L'utilisation de la plateforme après modification vaut acceptation des nouvelles CGU.</P>
           </Section>
 
@@ -232,12 +241,22 @@ export default function LegalPage() {
             <P>Le Commerçant peut proposer des bons cadeaux digitaux d&rsquo;un montant libre. Le paiement est encaissé directement sur son compte Stripe : le bon constitue donc une créance du porteur envers le Commerçant, et non envers Yoppaa. Le Commerçant s&rsquo;engage à honorer tout bon valide présenté, en ligne comme au comptoir.</P>
             <P>La durée de validité est fixée par le Commerçant (12 mois par défaut, minimum 3 mois) et affichée au moment de l&rsquo;achat ainsi que sur le bon. Le solde est utilisable en plusieurs fois. Conformément au droit belge, un bon cadeau n&rsquo;est pas remboursable en espèces. En cas de cessation d&rsquo;activité, le Commerçant reste tenu d&rsquo;honorer ou de rembourser les bons en circulation.</P>
 
-            <H3>7. Obligations du Commerçant</H3>
+            {/* ⚠️ SECTION AJOUTÉE LE 05/09. Le point qui compte n'est pas
+                commercial, il est légal : vendre un reste en fin de journée
+                NE DISPENSE D'AUCUNE OBLIGATION alimentaire. Un commerçant qui
+                lirait « invendus à prix cassé » sans cette phrase pourrait
+                croire que la règle s'assouplit avec le prix. */}
+            <H3>7. Offres de fin de journée (formule Vendre)</H3>
+            <P>Le Commerçant de catégorie alimentaire peut publier, pour la journée en cours, des articles restants à prix réduit, dans une plage horaire qu&rsquo;il fixe et une quantité qu&rsquo;il détermine. Yoppaa n&rsquo;intervient ni sur le prix, ni sur la composition, ni sur la quantité proposée.</P>
+            <P>L&rsquo;offre cesse d&rsquo;être proposée dès que la quantité publiée est atteinte ou que la plage horaire se referme. Le Commerçant s&rsquo;engage à honorer toute commande payée avant cette limite. Il reste seul responsable du respect de la législation alimentaire, notamment en matière d&rsquo;étiquetage, de conservation et de dates de durabilité minimale ou de consommation : la vente à prix réduit d&rsquo;un article restant ne dispense d&rsquo;aucune de ces obligations.</P>
+
+            <H3>8. Obligations du Commerçant</H3>
             <Ul items={[
               'Proposer des produits et prestations conformes aux descriptions publiées.',
               'Assurer la disponibilité des produits commandés dans les créneaux définis et honorer les rendez-vous réservés.',
               'Respecter la législation applicable à son activité (notamment la vente de produits alimentaires).',
               'Honorer les récompenses de fidélité et les bons cadeaux qu’il a émis.',
+              'Honorer les offres de fin de journée payées avant la fermeture de la plage horaire.',
               'Ne pas utiliser les données des Clients à des fins non autorisées.',
             ]}/>
 
@@ -247,7 +266,7 @@ export default function LegalPage() {
                 prestations d'accompagnement. Aucune occurrence de « Kit »,
                 « imprimante » ou « garantie » n'existait dans cette page
                 pendant que la boutique encaissait des kits à 469 €. */}
-            <H3>8. Boutique Yoppaa : matériel et prestations</H3>
+            <H3>9. Boutique Yoppaa : matériel et prestations</H3>
             <P>Cette section couvre les biens et services vendus par <strong>Avcotech SRL en son nom propre</strong> au Commerçant, et non les produits des commerçants vendus via la plateforme, qui relèvent des conditions Clients ci-dessus.</P>
             <Ul items={SHOP_PRODUCTS.map(p => `${p.label} : ${prixProduitTexte(p.type)} HTVA. ${p.desc}`)}/>
             <P>L&rsquo;encodage d&rsquo;articles au-delà de ceux compris dans le Success Pack est proposé sur demande et fait l&rsquo;objet d&rsquo;un devis préalable.</P>
@@ -286,7 +305,7 @@ export default function LegalPage() {
             <P>Un rendez-vous peut être reporté sans frais jusqu&rsquo;à <strong>48 heures</strong> avant l&rsquo;heure convenue. Passé ce délai, ou en cas d&rsquo;absence du Commerçant au rendez-vous, la prestation est due. Lorsqu&rsquo;une prestation ne peut être exécutée pour une cause imputable à Yoppaa, le Commerçant a le choix entre un report et le remboursement intégral.</P>
             <P>Le Commerçant reste responsable du contenu publié sur sa fiche, y compris des articles encodés avec l&rsquo;aide de Yoppaa : descriptions, prix, allergènes et mentions légales relèvent de sa seule responsabilité.</P>
 
-            <H3>9. Résiliation</H3>
+            <H3>10. Résiliation</H3>
             <P>Le Commerçant peut résilier sa formule payante ou revenir à la formule gratuite Exister moyennant un préavis d&rsquo;un mois calendrier, prenant effet le 1er jour du mois suivant. Pour que le préavis prenne effet le 1er du mois M+1, il doit être notifié au plus tard le 17e jour du mois M (14 jours avant). En cas de retour à Exister, les données du Commerçant sont conservées mais les fonctionnalités payantes (paiement en ligne, rendez-vous ou Click &amp; Collect, boutique, livraison, deals, etc.) sont désactivées.</P>
             <P>Le préavis doit être notifié par courrier recommandé à Avcotech SRL (Rue de Prée 9 G, 5640 Mettet) ou par email à facturation@yoppaa.app.</P>
             <InfoBox>

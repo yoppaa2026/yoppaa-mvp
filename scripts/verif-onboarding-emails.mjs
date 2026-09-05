@@ -248,8 +248,16 @@ const PHASE = avantLancement()
   verifier('le bloc des messages se découpe', blocTextes.length > 200, String(blocTextes.length))
   verifier('🔴 aucun message à partager ne parle d\'une date',
     !/textesAvant|\$\{ouverture\}/.test(blocTextes), 'un message partagé vieillit tout seul')
-  verifier('et les trois messages existent toujours',
-    (blocTextes.match(/cle: '/g) || []).length === 3)
+  // ⚠️ QUATRE DEPUIS LE 05/09 : « Pour tes restes du soir » s'ajoute aux trois
+  // messages d'origine. C'est le seul qui vise un moment de la journée, et il
+  // obéit à la même règle que les autres, celle qui compte vraiment ici : AUCUNE
+  // quantité, AUCUN prix, AUCUNE heure. Un message reste des mois sur une page
+  // Facebook, et « il en reste 3 » devient faux dans l'heure.
+  const nbMessages = (blocTextes.match(/cle: '/g) || []).length
+  verifier('et les quatre messages existent toujours', nbMessages === 4,
+    `${nbMessages} trouvé(s), 4 attendus`)
+  verifier('🔴 aucun message à partager n’annonce une quantité, un prix ou une heure',
+    !/\b\d+\s*(€|h\b|%)|il en reste \d|jusqu.à \d/.test(blocTextes))
 
   // ⚠️ UN ZÉRO N'EST PAS UN COMPTEUR, C'EST UN REPROCHE. « 0 personne inscrite
   // grâce à toi » est la première chose que voit un commerçant qui ouvre son

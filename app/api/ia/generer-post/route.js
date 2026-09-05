@@ -19,6 +19,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getIaConfig, IA_MODELES } from '@/lib/plans'
 import { genererTexte, iaDisponible } from '@/lib/anthropic'
 import { aiLimiter, checkLimit } from '@/lib/ratelimit'
+import { lienFiche } from '@/lib/lien-fiche'
 
 function construireSysteme(nbVariantes) {
   return `Tu es l'assistant de rédaction de Yoppaa, l'application belge qui met en avant les commerces de quartier. Tu écris pour un commerçant qui veut communiquer avec ses clients.
@@ -30,6 +31,7 @@ Règles absolues :
 4. N'utilise jamais le tiret cadratin. Utilise la virgule, les deux-points, les parenthèses ou le point.
 5. Un ou deux emojis maximum, pertinents. Jamais de surcharge.
 6. Texte uniquement. Ne décris aucune image à créer.
+7. N'écris JAMAIS d'adresse web, de lien, de "yoppaa.app" ni de "www". Le lien vers la fiche du commerçant est ajouté automatiquement après ton texte : l'écrire toi-même le mettrait deux fois, et une adresse recopiée de mémoire est une adresse fausse.
 
 Tu proposes ${nbVariantes} variantes distinctes (angles différents). Pour chaque variante :
 - "court" : 1 à 2 phrases (story, notification).
@@ -143,7 +145,7 @@ export async function POST(request) {
     )
     const { data: com } = await admin
       .from('commercants')
-      .select('id, nom, type, plan, categorie, adresse, auth_user_id')
+      .select('id, nom, type, plan, categorie, adresse, auth_user_id, slug')
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com || com.auth_user_id !== user.id) {
@@ -228,9 +230,25 @@ export async function POST(request) {
       console.error('[ia/generer-post] log KO (non-bloquant)', e?.message)
     }
 
+    // 🔴 LE LIEN VERS LA FICHE, ET IL EST CALCULÉ ICI, PAS ÉCRIT PAR LE MODÈLE.
+    //
+    // Sans lui, le générateur travaillait POUR FACEBOOK : Yoppaa payait les
+    // jetons, le commerçant collait le texte sur sa page, et personne
+    // n'arrivait chez nous. Constaté par Alex le 05/09, vérifié dans ce fichier
+    // même : la réponse ne contenait que `court`, `long` et `hashtags`.
+    //
+    // ⚠️ UNE CONSIGNE DE PROMPT EST UNE SUGGESTION, UNE CONCATÉNATION EST UNE
+    // GARANTIE. Le modèle a désormais pour règle de ne jamais écrire d'adresse,
+    // mais c'est le code qui la pose, à tous les coups et sans un jeton.
+    //
+    // ⚠️ ET SEULEMENT POUR UN POST. Une description d'article ou de prestation
+    // s'affiche DANS Yoppaa : y coller un lien vers Yoppaa n'aurait aucun sens.
+    const estFichePourLien = surface === 'article' || surface === 'prestation'
     return NextResponse.json({
       ok: true,
       variantes,
+      lien: estFichePourLien ? null : lienFiche(com.slug),
+      commerce_nom: com.nom || null,
       modele: cfg.modele,
       quota: { utilise: utilise + 1, total: cfg.quota_mois, restant: Math.max(0, cfg.quota_mois - utilise - 1) },
     })

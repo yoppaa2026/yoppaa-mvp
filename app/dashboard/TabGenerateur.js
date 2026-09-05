@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getIaConfig } from '@/lib/plans'
+import { signatureYoppaa, postAvecSignature } from '@/lib/lien-fiche'
 
 const T = {
   bgPanel: '#160636', main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF',
@@ -32,6 +33,12 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
   const [infos, setInfos] = useState('')
   const [loading, setLoading] = useState(false)
   const [variantes, setVariantes] = useState([])
+  // 🔴 LE POST NE RENVOYAIT NULLE PART (Alex, 05/09). Yoppaa payait la
+  // génération, le commerçant collait le texte sur Facebook, et personne ne
+  // revenait : l'outil travaillait pour un autre. Le lien est désormais calculé
+  // par le serveur et collé sous chaque post copié.
+  const [lien, setLien] = useState(null)
+  const [nomCommerce, setNomCommerce] = useState(null)
   const [quota, setQuota] = useState(null)
   const [copie, setCopie] = useState(null)
 
@@ -61,6 +68,10 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
         setLoading(false); return
       }
       setVariantes(j.variantes || [])
+      // 🔴 LE LIEN VIENT DU SERVEUR, il n'est jamais recomposé ici. C'est lui
+      // qui fait revenir vers Yoppaa les gens qui liront ce post sur Facebook.
+      setLien(j.lien || null)
+      setNomCommerce(j.commerce_nom || null)
       setQuota(j.quota || null)
     } catch (e) {
       toast?.('Erreur réseau, réessaie.', 'error')
@@ -156,8 +167,16 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
                 {v.hashtags?.length > 0 && (
                   <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.mid, fontWeight: 700 }}>{v.hashtags.join(' ')}</p>
                 )}
+                {/* ⚠️ LE LIEN S'AFFICHE, IL NE SE DEVINE PAS. Le commerçant doit
+                    voir ce qu'il va coller : un texte copié qui contient une
+                    ligne qu'il n'a pas vue à l'écran, il la découvre publiée. */}
+                {lien && (
+                  <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.main, fontWeight: 700, wordBreak: 'break-all' }}>
+                    {signatureYoppaa(lien, nomCommerce)}
+                  </p>
+                )}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => copier([v.long, v.hashtags?.join(' ')].filter(Boolean).join('\n\n'), `long-${i}`)}
+                  <button onClick={() => copier(postAvecSignature([v.long, v.hashtags?.join(' ')].filter(Boolean).join('\n\n'), lien, nomCommerce), `long-${i}`)}
                     style={{ padding: '8px 14px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                     {copie === `long-${i}` ? 'Copié !' : 'Copier le post'}
                   </button>

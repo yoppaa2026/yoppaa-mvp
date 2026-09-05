@@ -48,6 +48,15 @@ const MUTATIONS = [
     de: "    badge: 'DEAL DU JOUR', marqueSurBadge: false, pointsClairs: false,",
     vers: "    badge: 'DEAL DU JOUR', marqueSurBadge: true, pointsClairs: false," },
 
+  // ─── LES DÉGRADÉS (05/09) ───────────────────────────────────────────────
+  { nom: '🔴 l invendu perd son degrade et redevient un aplat',
+    de: "    fond: '#FFFDF7', fondBas: '#F1E9DA',",
+    vers: "    fond: '#FFFDF7', fondBas: null," },
+
+  { nom: '🔴 le degrade clair s assombrit jusqu a manger le texte',
+    de: "    fond: '#FFFDFF', fondBas: '#EDE6FA',",
+    vers: "    fond: '#FFFDFF', fondBas: '#6B5590'," },
+
   { nom: '🔴 un type inconnu ne retombe sur rien et fait tomber le trace',
     de: '  return HABITS[type] || HABITS[TYPE_ACTU]',
     vers: '  return HABITS[type] || {}' },
@@ -191,6 +200,32 @@ const MUTATIONS = [
     fichier: TRACE,
     de: '  const xBadge = F.largeur - F.marge - lBadge',
     vers: '  const xBadge = gauche + largeurDesPoints(F.point) + F.ecart * 4' },
+
+  // ─── LA MARQUE ET L'ÉQUILIBRE (05/09, sur capture) ──────────────────────
+  { nom: '🔴 la marque anti-gaspi revient a cote du nom du commercant',
+    fichier: TRACE,
+    de: '  ctx.fillText(c.enseigne.toUpperCase(), gauche, y + F.enseigne * 0.55)',
+    vers: '  tracerMarque(ctx, gauche, y, F.enseigne, h.marque); ctx.fillText(c.enseigne.toUpperCase(), gauche + F.enseigne * 1.45, y + F.enseigne * 0.55)' },
+
+  { nom: '🔴 la marque se trace sans que l habit la reclame',
+    fichier: TRACE,
+    de: '  if (h.marqueSurBadge) {',
+    vers: '  if (true) {' },
+
+  { nom: '🔴 la tete redescend avec le corps et le haut se vide',
+    fichier: TRACE,
+    de: '  const yEntete = F.marge + (hEntete - hBadge) / 2',
+    vers: '  const yEntete = y + (hEntete - hBadge) / 2' },
+
+  { nom: '🔴 les points redescendent avec le corps',
+    fichier: TRACE,
+    de: '  const yPoints = F.marge + (hEntete - hPoints) / 2',
+    vers: '  const yPoints = y + (hEntete - hPoints) / 2' },
+
+  { nom: '🔴 le corps remonte ecrire par-dessus les points',
+    fichier: TRACE,
+    de: '  let y = Math.max(hautDuCorps, hautDuCorps + (basDuCorps - hautDuCorps - hCorps) / 2)',
+    vers: '  let y = hautDuCorps + (basDuCorps - hautDuCorps - hCorps) / 2' },
 
   { nom: '🔴 les points sont traces deux fois',
     fichier: TRACE,

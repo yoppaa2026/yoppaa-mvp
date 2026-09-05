@@ -71,6 +71,43 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   egal('le deal porte « Deal du jour »', d.badge, 'DEAL DU JOUR')
   egal('l’actualité porte « Nouveauté »', a.badge, 'NOUVEAUTÉ')
   verifier('🔴 les trois fonds sont différents', i.fond !== d.fond && d.fond !== a.fond && i.fond !== a.fond)
+
+  // ⚠️ LES TROIS PORTENT UN DÉGRADÉ (Alex, 05/09). Un aplat sur deux et un
+  // dégradé sur le troisième se lisait comme un oubli, pas comme un choix.
+  verifier('🔴 les trois fonds sont des dégradés',
+    !!i.fondBas && !!d.fondBas && !!a.fondBas)
+  // 🔴 ET LE CONTRASTE SE MESURE AU POINT LE PLUS FONCÉ, pas au plus clair :
+  // c'est là que le texte souffre. Un dégradé posé sans cette vérification est
+  // la façon la plus discrète de rendre un titre illisible en bas de carte.
+  {
+    const lum = (hex) => {
+      const v = [1, 3, 5].map(i2 => parseInt(hex.slice(i2, i2 + 2), 16) / 255)
+        .map(x => x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4))
+      return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]
+    }
+    const contraste = (a2, b2) => {
+      const [x, y2] = [lum(a2), lum(b2)].sort((p, q) => q - p)
+      return (x + 0.05) / (y2 + 0.05)
+    }
+    // ⚠️ LES COULEURS EN `rgba` SONT ÉCARTÉES : elles se posent sur le fond et
+    // leur contraste réel dépend de lui. Les mesurer comme des opaques donnerait
+    // un chiffre faux, et un chiffre faux rassure plus qu'il ne protège.
+    const opaque = (c2) => /^#[0-9A-Fa-f]{6}$/.test(String(c2 || ''))
+    // 🔴 CETTE GARDE A PLANTÉ AU LIEU DE ROUGIR, et le harnais l'a dit tout de
+    // suite : une mutation qui retirait un `fondBas` la faisait tomber sur un
+    // `null.slice`. Or **une mutation change le RÉSULTAT, jamais la
+    // TERMINAISON** : un banc qui explose n'est pas une mesure, c'est un
+    // accident, et il masque tous les contrôles qui suivaient.
+    ;[[i, 'invendu'], [d, 'deal'], [a, 'actualité']].forEach(([hb, nom]) => {
+      const bas = hb.fondBas
+      if (!opaque(bas)) { verifier(`🔴 ${nom} : le bas du dégradé est une couleur lisible`, false, String(bas)); return }
+      ;[['titre', hb.encre], ['accent', hb.accent], ['douce', hb.douce]].forEach(([quoi, couleur]) => {
+        if (!opaque(couleur)) return
+        const r = contraste(couleur, bas)
+        verifier(`🔴 ${nom} : le ${quoi} tient au bas du dégradé`, r >= 4.5, r.toFixed(2))
+      })
+    })
+  }
   // ⚠️ SEUL L'INVENDU PORTE LA MARQUE SUR SON BADGE : c'est la signature de la
   // rubrique, pas un ornement.
   verifier('🔴 la marque anti-gaspi ne coiffe QUE l’invendu',
@@ -381,6 +418,30 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   // survécu. Il n'y en a plus qu'un, et c'est celui de l'en-tête.
   egal('🔴 les points ne sont tracés qu’UNE fois, en tête',
     (TRACE.match(/pointsDuVisuel\(F\.point, h\.pointsClairs\)\.forEach/g) || []).length, 1)
+
+  // 🔴 LA MARQUE ANTI-GASPI N'EST TRACÉE QU'À UN SEUL ENDROIT, ET SOUS
+  // CONDITION. Je la posais aussi à côté du nom du commerçant, sur LES TROIS
+  // TYPES : une nouveauté portait la signature d'une rubrique qui n'est pas la
+  // sienne. Alex l'a vu sur capture le 05/09.
+  //
+  // ⚠️ ET LA GARDE VOISINE AFFIRMAIT LE CONTRAIRE, parce qu'elle mesurait les
+  // HABITS pendant que le défaut vivait dans le TRACÉ. Une garde qui mesure un
+  // endroit ne dit rien de l'autre. On compte donc les appels, ici.
+  egal('🔴 la marque anti-gaspi n’est tracée qu’UNE fois',
+    (TRACE.match(/^\s+tracerMarque\(/gm) || []).length, 1)
+  verifier('🔴 et seulement quand l’habit la réclame',
+    /if \(h\.marqueSurBadge\) \{\s*tracerMarque\(/.test(TRACE))
+  verifier('🔴 l’enseigne n’a plus aucun pictogramme devant elle',
+    /ctx\.fillText\(c\.enseigne\.toUpperCase\(\), gauche, y \+ F\.enseigne \* 0\.55\)/.test(TRACE))
+
+  // 🔴 TROIS ZONES ANCRÉES, PAS UN BLOC FLOTTANT (Alex : « trop d'espace libre
+  // au-dessus »). La tête est collée à la marge haute, le pied à la marge basse,
+  // et le corps se centre dans ce qui reste.
+  verifier('🔴 la tête est ancrée en haut, elle ne suit pas le corps',
+    /const yEntete = F\.marge \+ \(hEntete - hBadge\) \/ 2/.test(TRACE)
+    && /const yPoints = F\.marge \+ \(hEntete - hPoints\) \/ 2/.test(TRACE))
+  verifier('et le corps se centre dans ce qui reste',
+    /let y = Math\.max\(hautDuCorps, hautDuCorps \+ \(basDuCorps - hautDuCorps - hCorps\) \/ 2\)/.test(TRACE))
   verifier('🔴 et le pied ne porte plus que l’adresse',
     /const hPied = hAdresse \+ F\.ecart \* 1\.2/.test(TRACE))
   // ⚠️ LE BADGE EST CALÉ SUR LE BORD DROIT, pas à une distance fixe des points :

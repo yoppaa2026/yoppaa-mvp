@@ -47,8 +47,9 @@ import SupprimerCompte from './SupprimerCompte'
 // ⚠️ LE TITRE, LE SOUS-TITRE ET LE TRI VIENNENT DU MODULE, JAMAIS D'ICI.
 // Recopiés dans l'écran, ils auraient divergé au premier changement de
 // formulation, comme le libellé du bon cadeau avant le 31/08.
-import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, offresProches, libelleTempsRestant, libelleReste, resteSurOffre, texteDePartage, lienVersOffre, INVENDUS_AFFICHES } from '@/lib/anti-gaspi'
-import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, OR_ANTI_GASPI } from '@/app/components/IconeAntiGaspi'
+import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, offresProches, libelleTempsRestant, libelleReste, resteSurOffre, texteDePartage, lienVersOffre } from '@/lib/anti-gaspi'
+import { libelleDecompte, PARAM_LISTE } from '@/lib/anti-gaspi'
+import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 
 const T = {
   bg:      '#F8F6FF',
@@ -914,7 +915,7 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
   const pastille = {
     display: 'inline-flex', alignItems: 'center', gap: 4,
     background: '#fff', border: `1px solid ${BORD_ANTI_GASPI}`, borderRadius: 100,
-    padding: '3px 8px', fontSize: '0.68rem', fontWeight: 800, color: '#5B4A3A',
+    padding: '3px 8px', fontSize: '0.68rem', fontWeight: 800, color: ENCRE_DOUCE_ANTI_GASPI,
     whiteSpace: 'nowrap',
   }
   const tempsRestant = libelleTempsRestant(restant)
@@ -967,7 +968,7 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         {tempsRestant && (
           <span style={pastille}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B4A3A" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={ENCRE_DOUCE_ANTI_GASPI} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>
             </svg>
             {tempsRestant}
@@ -975,7 +976,7 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
         )}
         {quantite && (
           <span style={pastille}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B4A3A" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={ENCRE_DOUCE_ANTI_GASPI} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 8.5h14l-1 10.5a2 2 0 0 1-2 1.8H8a2 2 0 0 1-2-1.8L5 8.5z"/>
               <path d="M8.5 8.5V6.5a3.5 3.5 0 0 1 7 0v2"/>
             </svg>
@@ -984,7 +985,7 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
         )}
         {distance != null && (
           <span style={pastille}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B4A3A" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={ENCRE_DOUCE_ANTI_GASPI} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>
             </svg>
             {formatDistance(distance)}
@@ -1652,6 +1653,52 @@ export default function Commander() {
     } catch { /* partage annulé par l'utilisateur : silencieux */ }
   }
 
+  // ⚠️ LE BOUTON RETOUR DOIT REFERMER LE PANNEAU, PAS QUITTER L'APPLICATION.
+  // C'est la leçon du retour de Stripe : une page restaurée par le navigateur ne
+  // repasse pas par les chemins qu'on croit. On empile donc une vraie étape
+  // d'historique à l'ouverture, et on écoute `popstate`, qui est le seul
+  // événement que le bouton matériel d'Android déclenche.
+  function ouvrirListeInvendus() {
+    if (listeInvendus) return
+    setListeInvendus(true)
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.set(PARAM_LISTE, '1')
+      window.history.pushState({ yoppaaListe: true }, '', url.toString())
+      listePoussee.current = true
+    } catch { /* historique indisponible : le panneau s'ouvre quand même */ }
+  }
+
+  function fermerListeInvendus() {
+    // 🔴 ON NE REVIENT EN ARRIÈRE QUE SI ON A AVANCÉ. Arrivé par
+    // `/rien-ne-se-perd`, l'étape précédente est HORS de Yoppaa : `back()`
+    // ferait quitter l'application au lieu de refermer le panneau.
+    if (listePoussee.current) { listePoussee.current = false; window.history.back(); return }
+    setListeInvendus(false)
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete(PARAM_LISTE)
+      window.history.replaceState({}, '', url.toString())
+    } catch { /* rien à nettoyer */ }
+  }
+
+  // ⚠️ L'ADRESSE FAIT FOI, PAS L'ÉTAT. Au retour, on relit le paramètre plutôt
+  // que d'inverser un booléen : un aller-retour rapide peut empiler deux étapes,
+  // et une bascule aveugle rouvrirait le panneau qu'on vient de fermer.
+  useEffect(() => {
+    const lireLAdresse = () => {
+      try { return new URLSearchParams(window.location.search).get(PARAM_LISTE) === '1' } catch { return false }
+    }
+    if (lireLAdresse()) setListeInvendus(true)
+    const auRetour = () => {
+      const ouvert = lireLAdresse()
+      listePoussee.current = ouvert && listePoussee.current
+      setListeInvendus(ouvert)
+    }
+    window.addEventListener('popstate', auRetour)
+    return () => window.removeEventListener('popstate', auRetour)
+  }, [])
+
   // Partager UNE OFFRE, pas le commerce.
   //
   // ⚠️ CE N'EST PAS LE MÊME GESTE que partager une fiche, et c'est pour ça qu'il
@@ -1722,7 +1769,26 @@ export default function Commander() {
   // l'état « distance inconnue », et l'écran serait resté trié par urgence même
   // une fois la position acquise.
   const [invendusOuverts, setInvendusOuverts] = useState([])
-  const [invendusDeplies, setInvendusDeplies] = useState(false)
+  // ═══ LA LISTE COMPLÈTE EST UN PANNEAU, ET ELLE EST ADRESSÉE ═══════════════
+  //
+  // 🔴 ALEX, 05/09 : « un habitant qui ouvre Yoppaa pour la première fois voit
+  // d'abord des produits à moins 50 %. Il en conclut que Yoppaa est une
+  // application d'invendus. » L'accroche reste en tête, mais réduite à UNE
+  // LIGNE : la liste part derrière un tap.
+  //
+  // ⚠️ CELA RENVERSE L'ARBITRAGE DE LA VEILLE (« déplier sur place, pas une
+  // page »), et à raison : la question d'hier était OÙ VONT LES CINQ OFFRES DE
+  // PLUS, celle d'aujourd'hui est À QUOI RESSEMBLE YOPPAA À LA PREMIÈRE
+  // OUVERTURE. Deux questions différentes, deux réponses différentes.
+  //
+  // ⚠️ UN PANNEAU, PAS UNE ROUTE. Une page autonome aurait dû recharger les
+  // commerces, les lieux, la position, les distances et le relevé des ventes.
+  // Ici tout est déjà en mémoire : la liste s'ouvre sans une seule requête.
+  const [listeInvendus, setListeInvendus] = useState(false)
+  // ⚠️ A-T-ON EMPILÉ NOUS-MÊMES CETTE ÉTAPE D'HISTORIQUE ? Sur une arrivée
+  // directe par `/rien-ne-se-perd`, un `history.back()` ferait SORTIR DE
+  // L'APPLICATION au lieu de refermer le panneau.
+  const listePoussee = useRef(false)
   const [actusActives, setActusActives] = useState(new Set())
   const [bonnesAffairesActives, setBonnesAffairesActives] = useState(new Set())
   const [position, setPosition] = useState(null)
@@ -3041,12 +3107,10 @@ export default function Commander() {
   const invendusProches = offresProches(invendusOuverts, {
     distanceDe: offre => commercants.find(c => c.id === offre?.commercant_id)?.distance ?? null,
   })
-  // ⚠️ ON REPLIE DÈS QU'IL N'Y A PLUS DE QUOI DÉPLIER. Sans ça, un Yopper qui a
-  // déplié le soir retrouvait le bouton « Réduire » le lendemain matin sur trois
-  // cartes, alors qu'il n'y avait jamais eu de quoi replier.
-  const invendusVisibles = invendusDeplies ? invendusProches : invendusProches.slice(0, INVENDUS_AFFICHES)
-  const invendusCaches = Math.max(0, invendusProches.length - INVENDUS_AFFICHES)
-
+  // ⚠️ PLUS DE PLAFOND D'AFFICHAGE DEPUIS LE 05/09, et plus de « Voir les 9 ».
+  // La bande n'affiche AUCUNE carte : le plafond n'avait de sens que tant que
+  // les cartes occupaient le haut de l'accueil. Le panneau, lui, les montre
+  // toutes, ce que le brief demande explicitement.
   const commercantsFiltres = commercants
     .filter(c => familleActive === 'tous' || familleDe(c) === familleActive)
     .filter(c => !metierActif || parseTypes(c.type).includes(metierActif))
@@ -3184,6 +3248,54 @@ export default function Commander() {
       />
 
       {showSplash && <SplashScreen onDone={onSplashDone}/>}
+
+      {/* ═══ LA LISTE COMPLÈTE DES INVENDUS ══════════════════════════════════
+          Un panneau, pas une route : les offres, les distances et le relevé des
+          ventes sont DÉJÀ en mémoire, la liste s'ouvre sans une seule requête.
+
+          ⚠️ ON RÉUTILISE `CarteInvendu` TELLE QUELLE, comme le brief l'exige.
+          En redessiner une seconde version pour cet écran aurait fabriqué deux
+          cartes à maintenir, et elles auraient divergé au premier ajustement.
+
+          ⚠️ LE SOUS-TITRE VIT ICI DÉSORMAIS. Il a quitté l'accueil avec les
+          cartes ; c'est la seule page où il a la place d'être lu.
+
+          ⚠️ ET LA LISTE NE SE PLAFONNE PLUS : le brief demande TOUTES les
+          offres actives. Le tri par distance reste celui du module. */}
+      {listeInvendus && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: T.bg, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: NUIT_ANTI_GASPI, padding: 'max(env(safe-area-inset-top), 0.75rem) 1rem 0.85rem', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={fermerListeInvendus} aria-label="Revenir à l'accueil"
+                style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.12)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 6l-6 6 6 6"/>
+                </svg>
+              </button>
+              <IconeAntiGaspi taille={20} epaisseur={2.2} couleur={MARQUE_SUR_NUIT}/>
+              <span style={{ fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>{TITRE_YOPPER}</span>
+            </div>
+            <p style={{ margin: '5px 0 0 42px', fontSize: 12.5, fontWeight: 600, color: T.light }}>{SOUS_TITRE_YOPPER}</p>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0.875rem 1rem calc(1.5rem + env(safe-area-inset-bottom))' }}>
+            <p style={{ margin: '0 0 10px', fontSize: 11.5, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '1.1px' }}>
+              {libelleDecompte(invendusProches)}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {invendusProches.map(({ offre, restant, remise, reste, distance }) => {
+                const commerce = commercants.find(c => c.id === offre.commercant_id)
+                return (
+                  <CarteInvendu key={offre.id}
+                    offre={offre} commerce={commerce}
+                    restant={restant} remise={remise} reste={reste} distance={distance}
+                    onOuvrir={() => commerce && selectionnerCommercant(commerce, offre.id)}
+                    onPartager={e => partagerInvendu(offre, commerce, e)}/>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation/changement commune Yopper.
           mode='first' : pas fermable, déclenchée auto si commune_id null
@@ -3566,48 +3678,34 @@ export default function Commander() {
                   ⚠️ ET ELLE ANNONCE L'ÉTAT, PAS UNE ALARME : « encore 40
                   minutes » informe, « dépêche-toi » presse, et ce n'est pas
                   notre rôle. */}
+              {/* ═══ LA BANDE, UNE SEULE LIGNE ═════════════════════════════
+                  🔴 ALEX, 05/09 : « un habitant qui ouvre Yoppaa pour la
+                  première fois voit d'abord des produits à moins 50 %. Il en
+                  conclut que Yoppaa est une application d'invendus. » Or le
+                  descripteur de la marque est « tous les commerces de ta
+                  commune », et l'anti-gaspi n'est qu'une fonction sur sept.
+
+                  ⚠️ CE N'EST PAS SA POSITION QUI POSAIT PROBLÈME, C'EST SON
+                  ENCOMBREMENT. L'accroche reste en tête, elle tient sur une
+                  ligne, et la liste part derrière un tap.
+
+                  ⚠️ ET LE SOUS-TITRE DÉMÉNAGE : il coiffe maintenant la liste,
+                  là où il a la place d'être lu.
+
+                  ⚠️ SUR 360 POINTS, C'EST LE TITRE QUI CÈDE, JAMAIS LE
+                  DÉCOMPTE. Un titre écourté reste compréhensible ; un décompte
+                  tronqué à « 4 offres près de… » ne veut plus rien dire. */}
               {invendusProches.length > 0 && (
-                <div style={{ marginBottom: 18 }}>
-                  {/* ═══ LE BANDEAU NUIT ═══════════════════════════════════
-                      🔴 CHOISI PAR ALEX LE 05/09 après comparaison de six
-                      habits rendus à QUATRE CARTES, la densité réelle de
-                      l'accueil. C'est cette densité, et elle seule, qui a
-                      tranché : quatre cartes sombres FUSIONNENT en un bloc et
-                      les offres cessent de se distinguer entre elles ; quatre
-                      cartes claires se fondent dans la page.
-
-                      ✅ LE POIDS VA SUR LE TITRE, UNE SEULE FOIS. Une masse
-                      sombre attrape l'œil, puis les cartes se lisent au calme.
-
-                      ⚠️ ET LA MARQUE PASSE À L'OR SUR LA NUIT : l'ambre de la
-                      carte n'y tiendrait pas le contraste. */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9, flexWrap: 'wrap', background: NUIT_ANTI_GASPI, borderRadius: 12, padding: '0.55rem 0.75rem' }}>
-                    <IconeAntiGaspi taille={20} epaisseur={2.2} couleur={OR_ANTI_GASPI}/>
-                    <span style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>{TITRE_YOPPER}</span>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.66)', fontWeight: 600 }}>{SOUS_TITRE_YOPPER}</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {invendusVisibles.map(({ offre, restant, remise, reste, distance }) => {
-                      const commerce = commercants.find(c => c.id === offre.commercant_id)
-                      return (
-                        <CarteInvendu key={offre.id}
-                          offre={offre} commerce={commerce}
-                          restant={restant} remise={remise} reste={reste} distance={distance}
-                          onOuvrir={() => commerce && selectionnerCommercant(commerce, offre.id)}
-                          onPartager={e => partagerInvendu(offre, commerce, e)}/>
-                      )
-                    })}
-                  </div>
-                  {/* ⚠️ LE BOUTON DIT LE GESTE ET LE NOMBRE. « Voir plus » ne
-                      dit ni combien il en reste, ni si ça vaut le clic ; « Voir
-                      les 9 » laisse le Yopper décider avant d'agir. */}
-                  {invendusCaches > 0 && (
-                    <button onClick={() => setInvendusDeplies(v => !v)}
-                      style={{ width: '100%', marginTop: 8, padding: '0.55rem', borderRadius: 100, border: `1.5px solid ${BORD_ANTI_GASPI}`, background: 'transparent', color: ACCENT_ANTI_GASPI, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                      {invendusDeplies ? 'Réduire' : `Voir les ${invendusProches.length}`}
-                    </button>
-                  )}
-                </div>
+                <button onClick={ouvrirListeInvendus}
+                  aria-label={`${TITRE_YOPPER} : ${libelleDecompte(invendusProches)}`}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: NUIT_ANTI_GASPI, border: 'none', borderRadius: 12, padding: '0.6rem 0.75rem', marginBottom: 16, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  <IconeAntiGaspi taille={18} epaisseur={2.3} couleur={MARQUE_SUR_NUIT}/>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{TITRE_YOPPER}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: T.light, whiteSpace: 'nowrap', flexShrink: 0, marginLeft: 'auto' }}>{libelleDecompte(invendusProches)}</span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <path d="M9 6l6 6-6 6"/>
+                  </svg>
+                </button>
               )}
 
               {position && commercantsFiltres.length > 0 && (

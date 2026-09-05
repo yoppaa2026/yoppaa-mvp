@@ -22,7 +22,8 @@ import {
   fermetureDuJour, fenetreParDefaut, enHeure, prixConseille, lignePublication,
   MINUTES_UTILES_MINIMUM,
   plafondDeLOffre, resteSurOffre, refusDeQuantite, libelleReste,
-  offresProches, RAYON_INVENDU_M, INVENDUS_AFFICHES, texteDePartage, lienVersOffre, PARAM_OFFRE,
+  offresProches, RAYON_INVENDU_M, texteDePartage, lienVersOffre, PARAM_OFFRE,
+  libelleDecompte, PARAM_LISTE, CHEMIN_LISTE,
 } from '../lib/anti-gaspi.js'
 import { readFileSync } from 'node:fs'
 import { verifierQuantiteOffres, SELECT_DEALS } from '../lib/lignes-commande.js'
@@ -919,9 +920,30 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   egal('et un relais de distance qui lève n’est pas ce qu’on attend',
     offresProches([ligne('x', 100, 10)], { distanceDe: () => 'abc' })[0].distance, null)
 
-  // ⚠️ LE PLAFOND D'AFFICHAGE EST UN NOMBRE, PAS UNE IMPRESSION.
-  verifier('🔴 quatre cartes avant de déplier', INVENDUS_AFFICHES === 4)
-  verifier('et le rayon vaut 25 km', RAYON_INVENDU_M === 25000)
+  verifier('le rayon vaut 25 km', RAYON_INVENDU_M === 25000)
+
+  // ═══ LE DÉCOMPTE DE LA BANDE ══════════════════════════════════════════════
+  //
+  // 🔴 « PRÈS DE TOI » MENT SANS POSITION. Un Yopper qui a refusé la
+  // géolocalisation voit les offres de tout le pays : lui écrire « près de toi »
+  // serait une affirmation fausse, sur l'accueil, à chaque ouverture.
+  egal('🔴 avec une position, le décompte dit « près de toi »',
+    libelleDecompte(parDistance([ligne('a', 500, 60), ligne('b', 2000, 60)])), '2 offres près de toi')
+  egal('🔴 sans aucune position, il ne le dit PAS',
+    libelleDecompte(offresProches([ligne('a', null, 60), ligne('b', null, 30)], {})),
+    '2 offres avant la fermeture')
+  // ⚠️ UNE SEULE DISTANCE CONNUE SUFFIT : la liste est alors bien classée par
+  // proximité, et le libellé est vrai.
+  egal('une seule distance connue suffit à situer la liste',
+    libelleDecompte(parDistance([ligne('a', 500, 60), ligne('b', null, 30)])), '2 offres près de toi')
+  // ⚠️ L'ACCORD SUIT LE NOMBRE : « 1 offres » sur un accueil fait douter du reste.
+  egal('🔴 le singulier existe', libelleDecompte(parDistance([ligne('a', 500, 60)])), '1 offre près de toi')
+  egal('et rien à annoncer ne s’annonce pas', libelleDecompte([]), '')
+  egal('une entrée qui n’est pas une liste ne casse pas l’accueil', libelleDecompte(null), '')
+
+  // ⚠️ L'ADRESSE DE LA LISTE VIT DANS LE MODULE, pas recopiée sur deux écrans.
+  egal('le chemin de la liste se compose depuis le paramètre',
+    CHEMIN_LISTE, `/commander?${PARAM_LISTE}=1`)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -962,6 +984,7 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   const ACCUEIL = sansProse(readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
   const FICHE = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
   const ICONE = sansProse(readFileSync(new URL('../app/components/IconeAntiGaspi.js', import.meta.url), 'utf8'))
+  const REDIRECTION = sansProse(readFileSync(new URL('../app/rien-ne-se-perd/page.js', import.meta.url), 'utf8'))
 
   // 🔴 « LE NOM DU COMMERÇANT DOIT ÊTRE MIEUX MIS EN AVANT ». Il est ce qui
   // déclenche le déplacement : on connaît sa boulangerie, pas son invendu.
@@ -1014,16 +1037,73 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
     !/setInvendusOuverts\(offresProches/.test(ACCUEIL))
   // 🔴 ET IL NE SUIT PAS LES ONGLETS DE LA LISTE. Un Yopper qui tape « coiffeur »
   // ne doit pas voir disparaître les tartes de sa boulangerie.
+  //
+  // ⚠️ CETTE GARDE ÉTAIT FRAGILE ET ELLE A ROUGI À TORT LE 05/09. Elle
+  // interdisait le mot `commercantsFiltres` DANS LES 200 CARACTÈRES qui suivent
+  // l'appel : elle mesurait donc une DISTANCE DANS LE FICHIER, pas un sens. En
+  // raccourcissant le bloc au-dessus, le mot voisin est entré dans sa fenêtre et
+  // elle a crié au loup. On vise maintenant les deux faits eux-mêmes.
   verifier('🔴 le périmètre lit la liste entière, pas la liste filtrée',
-    !/offresProches\(invendusOuverts[\s\S]{0,200}commercantsFiltres/.test(ACCUEIL))
+    /offresProches\(invendusOuverts, \{/.test(ACCUEIL)
+    && /distanceDe: offre => commercants\.find\(/.test(ACCUEIL)
+    && !/offresProches\(commercantsFiltres|distanceDe: offre => commercantsFiltres/.test(ACCUEIL))
 
-  // 🔴 « VOIR PLUS » DÉPLIE SUR PLACE (arbitrage Alex) : pas de route de plus.
-  verifier('🔴 le bouton dit le geste ET le nombre',
-    /invendusDeplies \? 'Réduire' : `Voir les \$\{invendusProches\.length\}`/.test(ACCUEIL))
-  verifier('et il n’apparaît que s’il y a de quoi déplier',
-    /\{invendusCaches > 0 && \(/.test(ACCUEIL))
-  verifier('le plafond vient du module, pas d’un chiffre écrit sur l’écran',
-    /invendusProches\.slice\(0, INVENDUS_AFFICHES\)/.test(ACCUEIL))
+  // ═══ LA BANDE D'UNE LIGNE (Alex, 05/09) ══════════════════════════════════
+  //
+  // 🔴 « UN HABITANT QUI OUVRE YOPPAA POUR LA PREMIÈRE FOIS VOIT D'ABORD DES
+  // PRODUITS À MOINS 50 %. Il en conclut que Yoppaa est une application
+  // d'invendus. » L'accroche reste en tête, mais réduite à une ligne.
+  //
+  // ⚠️ CECI RENVERSE L'ARBITRAGE DU MATIN (« déplier sur place »), et à raison :
+  // la question a changé. Ce n'était plus « où vont les cinq offres de plus »
+  // mais « à quoi ressemble Yoppaa à la première ouverture ».
+  verifier('🔴 l’accueil ne porte plus AUCUNE carte d’invendu',
+    !/invendusVisibles/.test(ACCUEIL) && !/invendusDeplies/.test(ACCUEIL))
+  verifier('🔴 la bande est un bouton d’une seule ligne',
+    /<button onClick=\{ouvrirListeInvendus\}/.test(ACCUEIL))
+  verifier('et elle annonce le décompte du module',
+    /\{libelleDecompte\(invendusProches\)\}/.test(ACCUEIL))
+  // ⚠️ SUR 360 POINTS, C'EST LE TITRE QUI CÈDE, JAMAIS LE DÉCOMPTE. Un titre
+  // écourté reste compréhensible ; « 4 offres près de… » ne veut plus rien dire.
+  verifier('🔴 le décompte ne se tronque pas, le titre oui',
+    /\{TITRE_YOPPER\}<\/span>\s*<span style=\{\{ fontSize: 12, fontWeight: 700, color: T\.light, whiteSpace: 'nowrap', flexShrink: 0/.test(ACCUEIL))
+  // ⚠️ ET LE SOUS-TITRE A QUITTÉ L'ACCUEIL : il coiffe la liste, où il se lit.
+  verifier('🔴 le sous-titre ne s’affiche plus sur l’accueil',
+    (ACCUEIL.match(/SOUS_TITRE_YOPPER/g) || []).length === 2)
+
+  // ═══ LE PANNEAU, ET SON BOUTON RETOUR ════════════════════════════════════
+  verifier('🔴 la liste complète est un panneau, pas une route',
+    /\{listeInvendus && \(/.test(ACCUEIL))
+  // ⚠️ ON RÉUTILISE LA MÊME CARTE. En redessiner une seconde pour cet écran
+  // aurait fabriqué deux cartes à maintenir, qui auraient divergé.
+  egal('🔴 une seule définition de carte, pas deux',
+    (ACCUEIL.match(/function CarteInvendu\(/g) || []).length, 1)
+  // ⚠️ ET LE PANNEAU NE PLAFONNE PLUS : le brief demande TOUTES les offres.
+  verifier('🔴 le panneau montre toutes les offres du rayon',
+    /\{invendusProches\.map\(\(\{ offre, restant, remise, reste, distance \}\) => \{/.test(ACCUEIL))
+  // 🔴 LE BOUTON RETOUR DOIT REFERMER LE PANNEAU, PAS QUITTER L'APPLICATION.
+  verifier('🔴 l’ouverture empile une vraie étape d’historique',
+    /window\.history\.pushState\(\{ yoppaaListe: true \}/.test(ACCUEIL))
+  verifier('et le retour matériel est écouté',
+    /window\.addEventListener\('popstate', auRetour\)/.test(ACCUEIL))
+  // 🔴 ARRIVÉ PAR `/rien-ne-se-perd`, L'ÉTAPE PRÉCÉDENTE EST HORS DE YOPPAA :
+  // un `back()` inconditionnel ferait quitter l'application.
+  verifier('🔴 on ne revient en arrière que si on a avancé',
+    /if \(listePoussee\.current\) \{ listePoussee\.current = false; window\.history\.back\(\); return \}/.test(ACCUEIL))
+  // ⚠️ L'ADRESSE FAIT FOI, PAS UNE BASCULE : un aller-retour rapide peut empiler
+  // deux étapes, et un booléen inversé rouvrirait le panneau qu'on vient de
+  // fermer.
+  verifier('🔴 le retour relit l’adresse au lieu d’inverser un booléen',
+    /const ouvert = lireLAdresse\(\)/.test(ACCUEIL)
+    && !/setListeInvendus\(v => !v\)/.test(ACCUEIL))
+
+  // ═══ L'ADRESSE PARTAGEABLE ═══════════════════════════════════════════════
+  verifier('🔴 /rien-ne-se-perd renvoie vers la liste sans rien dupliquer',
+    /redirect\(CHEMIN_LISTE\)/.test(REDIRECTION))
+  // ⚠️ `replace` PAR DÉFAUT : avec `push`, le bouton retour ramènerait ici, qui
+  // redirigerait aussitôt, et le Yopper serait enfermé dans la liste.
+  verifier('et elle ne s’empile pas dans l’historique',
+    !/RedirectType\.push/.test(REDIRECTION))
 
   // 🔴 « ÇA DOIT ENVOYER DIRECTEMENT À HAUTEUR DU DEAL ».
   verifier('🔴 le clic emporte l’identifiant de l’offre',
@@ -1090,17 +1170,49 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   // densité réelle qui a tranché : quatre cartes sombres fusionnent en un bloc,
   // quatre cartes claires se fondent dans la page. Le poids va donc sur le
   // TITRE DE SECTION, une seule fois.
-  verifier('🔴 le titre de section porte la nuit',
-    /background: NUIT_ANTI_GASPI, borderRadius: 12/.test(ACCUEIL))
-  // ⚠️ ET LA MARQUE PASSE À L'OR DESSUS : l'ambre de la carte n'y tiendrait pas
-  // le contraste.
-  verifier('🔴 et la marque passe à l’or sur la nuit',
-    /<IconeAntiGaspi taille=\{20\} epaisseur=\{2\.2\} couleur=\{OR_ANTI_GASPI\}\/>/.test(ACCUEIL))
-  // ⚠️ LES CARTES, ELLES, RESTENT EN PAPIER. Une seule masse sombre, pas quatre.
-  verifier('🔴 la carte reste en papier',
+  verifier('🔴 la bande de l’accueil porte la nuit',
+    /background: NUIT_ANTI_GASPI, border: 'none', borderRadius: 12/.test(ACCUEIL))
+  verifier('et l’en-tête du panneau aussi',
+    /background: NUIT_ANTI_GASPI, padding: 'max\(env\(safe-area-inset-top\)/.test(ACCUEIL))
+  // ⚠️ ET LA MARQUE PASSE AU LIGHT DESSUS : Mid n'y tiendrait pas le contraste.
+  //
+  // 🔴 ON COMPTE, ON NE CHERCHE PAS. La nuit apparaît à DEUX endroits, la bande
+  // et l'en-tête du panneau ; chercher le mot laissait la garde verte quand un
+  // seul des deux perdait sa couleur, le harnais l'a dit. Troisième fois
+  // aujourd'hui qu'une garde survit grâce à son jumeau.
+  egal('🔴 la marque passe au Light sur les DEUX fonds nuit',
+    (ACCUEIL.match(/couleur=\{MARQUE_SUR_NUIT\}/g) || []).length, 2)
+  // ⚠️ LES CARTES, ELLES, RESTENT EN CRÈME. Le poids va sur la bande, une seule
+  // fois, jamais sur chacune des cartes.
+  verifier('🔴 la carte reste en crème',
     /background: FOND_ANTI_GASPI, border: `1\.5px solid \$\{BORD_ANTI_GASPI\}`/.test(ACCUEIL))
-  egal('🔴 UNE seule masse sombre dans la section, pas une par carte',
-    (ACCUEIL.match(/background: NUIT_ANTI_GASPI/g) || []).length, 1)
+  // ⚠️ ON EXTRAIT LA FONCTION ELLE-MÊME, on ne compte pas des occurrences dans
+  // tout le fichier : la nuit est légitime sur la bande ET sur l'en-tête du
+  // panneau, elle ne l'est jamais sur une carte. Et on vérifie que l'extraction
+  // a réellement trouvé quelque chose, sinon la garde serait verte sur du vide.
+  {
+    const carte = (ACCUEIL.match(/function CarteInvendu\(\{[\s\S]*?\n\}/) || [''])[0]
+    verifier('🔴 aucune carte ne porte la nuit',
+      carte.length > 800 && !/NUIT_ANTI_GASPI/.test(carte) && /FOND_ANTI_GASPI/.test(carte))
+
+    // 🔴 « VÉRIFIER QU'AUCUNE AUTRE COULEUR HORS PALETTE N'A ÉTÉ INTRODUITE
+    // DANS CE MODULE » (Alex, 05/09). Le contrôle a trouvé `#5B4A3A`, un brun
+    // tiède laissé sur les pastilles quelques heures plus tôt : hors palette, et
+    // incohérent avec l'encre douce du module.
+    //
+    // ⚠️ ON INTERDIT LA PRATIQUE, PAS UNE COULEUR. Aucun code hexadécimal en dur
+    // dans la carte, quel qu'il soit : la palette vit dans `IconeAntiGaspi.js`,
+    // et une couleur écrite ici est une couleur qui échappera au prochain
+    // ajustement. `#fff` est admis, c'est le blanc de la pastille, pas une
+    // teinte.
+    //
+    // ⚠️ ET LA GARDE VÉRIFIE D'ABORD QU'ELLE A TROUVÉ LA FONCTION. Sans ça, une
+    // extraction ratée rendrait une chaîne vide, sans couleur, donc verte.
+    const enDur = (carte.match(/#[0-9A-Fa-f]{6}\b/g) || [])
+    verifier('🔴 aucune couleur en dur dans la carte',
+      carte.length > 800 && enDur.length === 0,
+      enDur.length ? `trouvé ${enDur.join(', ')}` : 'fonction introuvable')
+  }
   // ⚠️ LA MÊME IDÉE À DEUX ÉCHELLES. Sur la fiche il n'y a pas de titre de
   // section : la masse sombre s'y réduit à une pastille, sans quoi le papier se
   // perdrait sur le fond `#F8F6FF` au milieu d'articles blancs.

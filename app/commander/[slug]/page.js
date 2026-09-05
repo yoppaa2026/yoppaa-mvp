@@ -15,7 +15,7 @@ import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionAr
 // fonction du module : recopier le test ici ferait passer chaque bonne affaire
 // de la semaine pour un invendu de fin de journée.
 import { porteUneFenetre, plafondDeLOffre, resteSurOffre, libelleReste, libelleFenetre, TITRE_YOPPER, PARAM_OFFRE } from '@/lib/anti-gaspi'
-import IconeAntiGaspi, { FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, OR_ANTI_GASPI } from '@/app/components/IconeAntiGaspi'
+import IconeAntiGaspi, { FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -806,7 +806,7 @@ function DealOfferCard({ deal, qte = 0, reste = null, onAjouter, onRetirer, ancr
               deux échelles. */}
           {invendu ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 900, color: '#fff', background: NUIT_ANTI_GASPI, textTransform: 'uppercase', letterSpacing: '0.7px', borderRadius: 100, padding: '3px 8px', marginBottom: 5 }}>
-              <IconeAntiGaspi taille={11} epaisseur={2.6} couleur={OR_ANTI_GASPI}/>
+              <IconeAntiGaspi taille={11} epaisseur={2.6} couleur={MARQUE_SUR_NUIT}/>
               {TITRE_YOPPER}
             </span>
           ) : (

@@ -486,20 +486,56 @@ const MUTATIONS = [
     de: '    distanceDe: offre => commercants.find(c => c.id === offre?.commercant_id)?.distance ?? null,',
     vers: '    distanceDe: () => null,' },
 
-  { nom: '🔴 le plafond de quatre cartes disparait',
+  // ─── LA BANDE D'UNE LIGNE ET SON PANNEAU (05/09, deuxième passe) ─────────
+  //
+  // ⚠️ TROIS ANCRES RETIRÉES ICI. Le plafond « quatre cartes », le bouton
+  // « Voir les 9 » et le repli n'existent plus : l'accueil ne porte AUCUNE
+  // carte, et le panneau les montre toutes. Une mutation sur du code supprimé
+  // ne mesure rien, elle se contente de faire du bruit dans le rapport.
+  { nom: '🔴 le decompte disparait de la bande',
     fichier: 'app/commander/page.js',
-    de: '  const invendusVisibles = invendusDeplies ? invendusProches : invendusProches.slice(0, INVENDUS_AFFICHES)',
-    vers: '  const invendusVisibles = invendusProches' },
+    de: '<span style={{ fontSize: 12, fontWeight: 700, color: T.light, whiteSpace: \'nowrap\', flexShrink: 0, marginLeft: \'auto\' }}>{libelleDecompte(invendusProches)}</span>',
+    vers: '<span>{null}</span>' },
 
-  { nom: '🔴 le bouton ne dit plus combien il en reste a voir',
+  { nom: '🔴 le decompte se tronque au lieu du titre',
     fichier: 'app/commander/page.js',
-    de: "                      {invendusDeplies ? 'Réduire' : `Voir les ${invendusProches.length}`}",
-    vers: "                      {invendusDeplies ? 'Réduire' : 'Voir plus'}" },
+    de: "color: T.light, whiteSpace: 'nowrap', flexShrink: 0, marginLeft: 'auto'",
+    vers: "color: T.light, overflow: 'hidden', textOverflow: 'ellipsis', marginLeft: 'auto'" },
+
+  { nom: '🔴 le sous-titre revient encombrer l’accueil',
+    fichier: 'app/commander/page.js',
+    de: '                  <IconeAntiGaspi taille={18} epaisseur={2.3} couleur={MARQUE_SUR_NUIT}/>',
+    vers: '                  <span>{SOUS_TITRE_YOPPER}</span>' },
+
+  { nom: '🔴 le panneau se plafonne et cache des offres',
+    fichier: 'app/commander/page.js',
+    de: '              {invendusProches.map(({ offre, restant, remise, reste, distance }) => {',
+    vers: '              {invendusProches.slice(0, 4).map(({ offre, restant, remise, reste, distance }) => {' },
 
   { nom: '🔴 le clic perd l’offre et retombe en haut du catalogue',
     fichier: 'app/commander/page.js',
-    de: '                          onOuvrir={() => commerce && selectionnerCommercant(commerce, offre.id)}',
-    vers: '                          onOuvrir={() => commerce && selectionnerCommercant(commerce)}' },
+    de: '                    onOuvrir={() => commerce && selectionnerCommercant(commerce, offre.id)}',
+    vers: '                    onOuvrir={() => commerce && selectionnerCommercant(commerce)}' },
+
+  { nom: '🔴 le bouton retour quitte l application au lieu de fermer',
+    fichier: 'app/commander/page.js',
+    de: '    if (listePoussee.current) { listePoussee.current = false; window.history.back(); return }',
+    vers: '    window.history.back(); return' },
+
+  { nom: '🔴 l ouverture n empile plus d etape : le retour sort de l app',
+    fichier: 'app/commander/page.js',
+    de: "      window.history.pushState({ yoppaaListe: true }, '', url.toString())",
+    vers: "      window.history.replaceState({ yoppaaListe: true }, '', url.toString())" },
+
+  { nom: '🔴 le retour inverse un booleen au lieu de relire l adresse',
+    fichier: 'app/commander/page.js',
+    de: '      const ouvert = lireLAdresse()',
+    vers: '      const ouvert = !listeInvendus' },
+
+  { nom: '🔴 la redirection s empile et enferme le Yopper dans la liste',
+    fichier: 'app/rien-ne-se-perd/page.js',
+    de: '  redirect(CHEMIN_LISTE)',
+    vers: "  redirect(CHEMIN_LISTE, RedirectType.push)" },
 
   { nom: '🔴 le partage ouvre la fiche sous le doigt',
     fichier: 'app/commander/page.js',
@@ -579,7 +615,7 @@ const MUTATIONS = [
   // nuit, plus un simple libellé.
   { nom: '🔴 la marque anti-gaspi coiffe aussi le deal ordinaire',
     fichier: 'app/commander/[slug]/page.js',
-    de: '              <IconeAntiGaspi taille={11} epaisseur={2.6} couleur={OR_ANTI_GASPI}/>',
+    de: '              <IconeAntiGaspi taille={11} epaisseur={2.6} couleur={MARQUE_SUR_NUIT}/>',
     vers: '              {null}' },
 
   // ─── BANDEAU NUIT, CARTES PAPIER (05/09) ────────────────────────────────
@@ -587,15 +623,35 @@ const MUTATIONS = [
   // 🔴 CE QUE CES MUTATIONS GARDENT : que le poids reste sur le TITRE, une
   // seule fois, et jamais sur chacune des quatre cartes. C'est la densité à
   // quatre qui a tranché entre les six habits.
-  { nom: '🔴 le bandeau perd sa nuit et redevient un titre nu',
+  // ⚠️ ANCRE REPOINTÉE : le bandeau est devenu une bande cliquable d'une ligne.
+  { nom: '🔴 la bande perd sa nuit et redevient un titre nu',
     fichier: 'app/commander/page.js',
-    de: 'background: NUIT_ANTI_GASPI, borderRadius: 12',
-    vers: 'borderRadius: 12' },
+    de: "background: NUIT_ANTI_GASPI, border: 'none', borderRadius: 12",
+    vers: "border: 'none', borderRadius: 12" },
 
-  { nom: '🔴 la marque reste en ambre sur la nuit (illisible)',
+  { nom: '🔴 l en-tete du panneau perd sa nuit',
     fichier: 'app/commander/page.js',
-    de: '<IconeAntiGaspi taille={20} epaisseur={2.2} couleur={OR_ANTI_GASPI}/>',
+    de: "background: NUIT_ANTI_GASPI, padding: 'max(env(safe-area-inset-top)",
+    vers: "padding: 'max(env(safe-area-inset-top)" },
+
+  // ⚠️ CELLE-CI EST RESTÉE VERTE LE 05/09 : la nuit apparaît à DEUX endroits, et
+  // la garde cherchait le MOT. Elle compte désormais les deux.
+  { nom: '🔴 la marque perd son Light sur l en-tete du panneau',
+    fichier: 'app/commander/page.js',
+    de: '<IconeAntiGaspi taille={20} epaisseur={2.2} couleur={MARQUE_SUR_NUIT}/>',
     vers: '<IconeAntiGaspi taille={20} epaisseur={2.2}/>' },
+
+  { nom: '🔴 la marque perd son Light sur la bande',
+    fichier: 'app/commander/page.js',
+    de: '<IconeAntiGaspi taille={18} epaisseur={2.3} couleur={MARQUE_SUR_NUIT}/>',
+    vers: '<IconeAntiGaspi taille={18} epaisseur={2.3}/>' },
+
+  // ⚠️ LA GARDE INTERDIT LA PRATIQUE, PAS UNE COULEUR : n'importe quel code
+  // hexadécimal en dur dans la carte doit la faire rougir.
+  { nom: '🔴 une couleur revient en dur dans la carte',
+    fichier: 'app/commander/page.js',
+    de: 'fontWeight: 800, color: ENCRE_DOUCE_ANTI_GASPI,',
+    vers: "fontWeight: 800, color: '#5B4A3A'," },
 
   { nom: '🔴 la carte reprend la nuit : quatre masses sombres au lieu d une',
     fichier: 'app/commander/page.js',

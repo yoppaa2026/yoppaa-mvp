@@ -56,21 +56,45 @@
 // ⚠️ AUCUN VERT NULLE PART. C'est la couleur de Too Good To Go, et celle de la
 // leçon d'écologie. Yoppaa dit l'anti-gaspi par le geste.
 
-/** La marque elle-même : la seule touche chaude, et elle signe la fonction. */
-export const COULEUR_ANTI_GASPI = '#B45309'
-/** Le papier de la carte. */
+// 🔴 05/09, DEUXIÈME PASSE : L'AMBRE ET L'OR SORTENT, LE VIOLET ENTRE.
+//
+// Alex : « l'icône de minuterie est actuellement orange. Cette couleur
+// n'appartient pas à la palette Yoppaa. »
+//
+// J'avais défendu l'inverse le matin même : l'ambre comme seule touche chaude,
+// disant la FONCTION pendant que le violet dit la MAISON. Son arbitrage est
+// meilleur, et pour une raison qu'il donne ailleurs dans le même brief : Yoppaa
+// ne doit pas se lire comme une application d'invendus. Une couleur propre à
+// cette rubrique en faisait justement une marque dans la marque.
+//
+// LA PALETTE, ET RIEN D'AUTRE :
+//   Ink #1A0840 · Deep #2D0F6B · Main #6B35C4 · Mid #9660E0 · Light #C4A0F4 ·
+//   Pale #EDE0FF
+//
+// ⚠️ DEUX COULEURS RESTENT HORS DE CES SIX, ET C'EST ASSUMÉ. Le fond crème et
+// son bord : les six sont toutes violettes, et l'écart visuel des cartes est
+// justement ce qu'Alex demande de ne pas toucher. Une carte crème n'est pas une
+// entorse à la palette, c'est le fond sur lequel la palette se pose.
+//
+// ⚠️ CONTRASTES MESURÉS, PAS SUPPOSÉS. Light sur Ink : 8,40. Mid sur crème :
+// 3,93, au-dessus du seuil de 3 exigé pour une icône. Main sur crème : 6,76.
+// Ink sur crème : 17,19.
+
+/** La marque sur un fond clair : Mid. */
+export const COULEUR_ANTI_GASPI = '#9660E0'
+/** La marque POSÉE SUR la nuit : Light, parce que Mid n'y tiendrait pas. */
+export const MARQUE_SUR_NUIT = '#C4A0F4'
+/** La nuit : la bande de l'accueil, et la pastille sur la fiche. C'est Ink. */
+export const NUIT_ANTI_GASPI = '#1A0840'
+/** Le prix et l'enseigne du commerçant : Main. */
+export const ACCENT_ANTI_GASPI = '#6B35C4'
+/** Le titre de l'offre : Ink. */
+export const ENCRE_ANTI_GASPI = '#1A0840'
+/** Ce qui accompagne sans crier : le gris de l'application, pas une teinte neuve. */
+export const ENCRE_DOUCE_ANTI_GASPI = '#6B7280'
+/** Le crème de la carte, et son bord. Hors des six, et délibérément. */
 export const FOND_ANTI_GASPI = '#FBF8F2'
 export const BORD_ANTI_GASPI = '#E6DECF'
-/** Le titre de l'offre : l'encre de la maison. */
-export const ENCRE_ANTI_GASPI = '#1A0840'
-/** Ce qui accompagne sans crier : prix barré, secondaire. */
-export const ENCRE_DOUCE_ANTI_GASPI = '#6B5949'
-/** Le prix et l'enseigne du commerçant. */
-export const ACCENT_ANTI_GASPI = '#6B3FA0'
-/** La nuit : le bandeau de section, et la pastille sur la fiche. */
-export const NUIT_ANTI_GASPI = '#241058'
-/** La marque POSÉE SUR la nuit : l'ambre n'y tiendrait pas le contraste. */
-export const OR_ANTI_GASPI = '#FCD34D'
 
 export default function IconeAntiGaspi({ taille = 16, couleur = COULEUR_ANTI_GASPI, epaisseur = 2 }) {
   return (

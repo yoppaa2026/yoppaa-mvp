@@ -7,6 +7,8 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getIaConfig } from '@/lib/plans'
 import { signatureYoppaa, postAvecSignature } from '@/lib/lien-fiche'
+import PartageVisuel from '@/app/components/PartageVisuel'
+import { TYPE_ACTU } from '@/lib/visuel-partage'
 
 const T = {
   bgPanel: '#160636', main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF',
@@ -187,6 +189,27 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
                     </button>
                   )}
                 </div>
+
+                {/* ⚠️ LE VISUEL EST COMPOSÉ AVEC LA VERSION COURTE, pas la
+                    longue : quatre phrases sur une image ne se lisent pas, et
+                    Instagram n'affiche de toute façon que ce que porte l'image.
+                    Le texte long, lui, part dans la légende au partage.
+
+                    ⚠️ ET LE TYPE EST « NOUVEAUTÉ » : le générateur sert à ce qui
+                    n'a pas d'objet dans Yoppaa. Un invendu ou un deal partage
+                    depuis SA carte, avec ses propres données, jamais depuis ici
+                    où le prix serait retapé à la main. */}
+                <PartageVisuel
+                  annonce={{
+                    type: TYPE_ACTU,
+                    enseigne: nomCommerce || commercant?.nom || '',
+                    titre: v.court || v.long || '',
+                    description: v.court && v.long ? v.long : null,
+                    lien,
+                  }}
+                  texte={postAvecSignature([v.long, v.hashtags?.join(' ')].filter(Boolean).join('\n\n'), lien, nomCommerce)}
+                  slug={commercant?.slug || ''}
+                  toast={toast}/>
               </div>
             </div>
           ))}

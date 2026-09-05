@@ -227,10 +227,17 @@ const MUTATIONS = [
     de: '        <button onClick={telecharger} disabled={occupe || !apercu}',
     vers: '        <button onClick={null} disabled={occupe || !apercu}' },
 
+  // ⚠️ ANCRE REPOINTÉE : le message dit « Visuel » depuis qu Alex a aligné le
+  // vocabulaire des deux boutons.
   { nom: '🔴 le telechargement echoue en silence',
     fichier: BOUTON,
-    de: "      if (fait) toast?.('Image téléchargée.', 'success')",
-    vers: "      if (false) toast?.('Image téléchargée.', 'success')" },
+    de: "      if (fait) toast?.('Visuel téléchargé.', 'success')",
+    vers: "      if (false) toast?.('Visuel téléchargé.', 'success')" },
+
+  { nom: '🔴 les deux boutons cessent de nommer le meme objet',
+    fichier: BOUTON,
+    de: '          Télécharger le visuel',
+    vers: '          Télécharger l&apos;image' },
 
   { nom: '🔴 l apercu redevient une vignette impossible a juger',
     fichier: BOUTON,

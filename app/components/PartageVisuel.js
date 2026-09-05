@@ -49,7 +49,7 @@ export default function PartageVisuel({ annonce, texte = '', slug = '', toast = 
     try {
       const m = await import('@/lib/visuel-partage-canvas')
       const issue = await m.partagerVisuel({ annonce, format, texte, slug })
-      if (issue === 'telecharge') toast?.('Image téléchargée. Le texte est dans ton presse-papiers.', 'success')
+      if (issue === 'telecharge') toast?.('Visuel téléchargé. Le texte est dans ton presse-papiers.', 'success')
       else if (issue === 'impossible') toast?.('Il manque le titre ou le nom du commerce pour composer le visuel.', 'error')
       // ⚠️ ON NE DIT RIEN SUR UN PARTAGE RÉUSSI NI SUR UN REFUS. La feuille du
       // système a déjà parlé, et un message de plus après une annulation se lit
@@ -74,7 +74,7 @@ export default function PartageVisuel({ annonce, texte = '', slug = '', toast = 
       const fait = await m.telechargerVisuel({ annonce, format, slug })
       // ⚠️ ON DIT CE QUI S'EST PASSÉ, y compris quand rien ne s'est passé. Un
       // bouton qui ne fait rien sans le dire est pire que pas de bouton.
-      if (fait) toast?.('Image téléchargée.', 'success')
+      if (fait) toast?.('Visuel téléchargé.', 'success')
       else toast?.('Il manque le titre ou le nom du commerce pour composer le visuel.', 'error')
     } catch (e) {
       toast?.('La composition du visuel a échoué, réessaie.', 'error')
@@ -163,7 +163,11 @@ export default function PartageVisuel({ annonce, texte = '', slug = '', toast = 
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 3v12M7 11l5 5 5-5M5 21h14"/>
           </svg>
-          Télécharger l&apos;image
+          {/* ⚠️ « LE VISUEL » DANS LES DEUX BOUTONS, pas « l'image » d'un côté.
+              Deux mots pour un seul objet font hésiter : le commerçant se
+              demande si le fichier téléchargé est bien celui qu'il voit. Le
+              titre de la section dit déjà « Le visuel ». */}
+          Télécharger le visuel
         </button>
       </div>
 
@@ -172,7 +176,7 @@ export default function PartageVisuel({ annonce, texte = '', slug = '', toast = 
           publie à sa place se paierait à la première tentative. */}
       <p style={{ fontSize: 11, color: T.muted, margin: '8px 0 0', lineHeight: 1.5, maxWidth: 380 }}>
         Sur téléphone, tu choisis ton réseau dans la fenêtre qui s&apos;ouvre. Sur ordinateur,
-        l&apos;image se télécharge et le texte part dans ton presse-papiers.
+        le visuel se télécharge et le texte part dans ton presse-papiers.
       </p>
     </div>
   )

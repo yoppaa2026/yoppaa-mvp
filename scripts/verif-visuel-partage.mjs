@@ -377,11 +377,19 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   // prépare sur ordinateur ou veut garder le fichier.
   verifier('🔴 le téléchargement existe à côté du partage',
     /onClick=\{telecharger\}/.test(BOUTON) && /telechargerVisuel\(\{ annonce, format, slug \}\)/.test(BOUTON))
+  // ⚠️ LES DEUX BOUTONS DISENT « LE VISUEL », pas « l'image » d'un côté : deux
+  // mots pour un seul objet font hésiter, et le commerçant se demande si le
+  // fichier téléchargé est bien celui qu'il voit à l'écran.
+  verifier('🔴 les deux boutons nomment le même objet',
+    /Partager le visuel/.test(BOUTON) && /Télécharger le visuel/.test(BOUTON)
+    && !/l&apos;image|l'image/.test(BOUTON))
   // ⚠️ ET IL DIT CE QUI S'EST PASSÉ, y compris quand rien ne s'est passé : un
   // bouton muet qui ne fait rien est pire que pas de bouton.
+  // ⚠️ LA GARDE NE CITE PLUS LE MESSAGE, elle exige la BRANCHE. Écrite avec le
+  // texte exact, elle a rougi dès que j'ai changé « Image » en « Visuel » :
+  // elle mesurait une formulation, pas un comportement.
   verifier('🔴 et il annonce son résultat, même négatif',
-    /if \(fait\) toast\?\.\('Image téléchargée\.', 'success'\)/.test(BOUTON)
-    && /else toast\?\.\(/.test(BOUTON))
+    /if \(fait\) toast\?\.\(/.test(BOUTON) && /else toast\?\.\(/.test(BOUTON))
   // ⚠️ L'APERÇU EST GRAND : c'est ce que le commerçant va publier, le montrer en
   // vignette lui demandait de deviner.
   verifier('🔴 l’aperçu est assez grand pour être jugé',

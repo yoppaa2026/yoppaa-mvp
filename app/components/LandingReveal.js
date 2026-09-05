@@ -1671,6 +1671,19 @@ export default function LandingReveal({ referent = null }) {
                 { titre: 'Tes clients, ta relation', texte: 'Le client qui commande chez toi reste ton client, pas celui d’une plateforme qui te le reloue. Tu vois ce qu’il te faut pour préparer sa commande et l’accueillir, et tu parles aux habitants par des notifications ciblées que Yoppaa envoie pour toi, sans jamais avoir à manipuler de fichier de contacts. Leurs coordonnées restent protégées et ne sont revendues à personne. Nos tarifs, nos frais et nos règles sont écrits noir sur blanc : la transparence est partout.' },
                 { titre: 'Des notifications qui touchent leur cible', texte: 'Ton deal du matin part en notification push vers les habitants de ta commune, pas dans le vide. Le bon message, aux bonnes personnes, au bon moment.' },
                 { titre: 'Ils reviennent, sans que tu y penses', texte: 'La carte de fidélité se remplit toute seule, au comptoir comme en ligne, et le client reçoit un SMS quand sa récompense tombe. Tes bons cadeaux se vendent en ligne et se dépensent chez toi.' },
+                // ⚠️ LE BÉNÉFICE, PAS LE NOM DE LA FONCTION. « Avant la
+                // fermeture » ne dit rien à quelqu'un qui découvre Yoppaa ; ce
+                // qui lui parle, c'est ce qu'il jette chaque soir.
+                //
+                // ⚠️ ET SÛREMENT PAS UNE LEÇON D'ÉCOLOGIE. L'argument est
+                // comptable : une recette de plus au lieu d'une perte sèche.
+                // Le geste dit l'anti-gaspi tout seul, le discours le
+                // rangerait au rayon des applications qui font la morale.
+                //
+                // ⚠️ AUCUN CHIFFRE ÉCRIT EN FIGURES : un seul nombre vit sur
+                // cette page, et c'est cent. Les nombres se disent en toutes
+                // lettres, comme partout ailleurs ici.
+                { titre: 'Ce qui reste ne part plus à la poubelle', texte: 'À l’heure de fermer, tu republies ce qu’il te reste à prix réduit, en trois gestes : ce qui reste, à quel prix, jusqu’à quand. Les habitants le voient apparaître sur leur accueil et viennent le chercher avant que tu ne baisses le rideau. Une recette de plus au lieu d’une perte sèche, et souvent un client qui pousse ta porte pour la première fois.' },
                 { titre: 'Une gestion sans prise de tête', texte: 'Stock du jour, commandes, rendez-vous, tout se pilote en quelques clics depuis ton téléphone. Et quand une commande est prête, le client est prévenu automatiquement.' },
               ].map(a => (
                 <div key={a.titre} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 18, padding: '16px 18px', textAlign: 'left' }}>

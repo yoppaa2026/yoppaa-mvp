@@ -19,6 +19,7 @@ import {
   TYPE_INVENDU, TYPE_DEAL, TYPE_ACTU,
   habitDe, contenuVisuel, replierTexte, taillePourTenir,
   pointsDuVisuel, largeurDesPoints, adresseLisible, nomFichierVisuel,
+  accrocheVisuelle, resumeVisuel, sansEmoji,
   POINTS_SUR_CLAIR, POINTS_SUR_SOMBRE,
 } from '../lib/visuel-partage.js'
 import { readFileSync } from 'node:fs'
@@ -212,6 +213,81 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 5 bis. LE TITRE D'UNE AFFICHE N'EST PAS UNE PHRASE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 ALEX, 05/09, SUR CAPTURE. Le titre du visuel était la version COURTE du
+// post : « Une nouveauté au Centre Respire : le Reiki arrive chez nous ! Séance
+// d'1h à 50€. ✨ ». Ce n'est pas un titre, c'est un post écrit en très gros.
+{
+  // ⚠️ ON COUPE À LA PONCTUATION FORTE, là où la phrase se casse en deux, et
+  // JAMAIS au milieu d'un mot.
+  egal('🔴 le titre s’arrête à la première ponctuation forte',
+    accrocheVisuelle('Une nouveauté au Centre Respire : le Reiki arrive chez nous !'),
+    'Une nouveauté au Centre Respire')
+  egal('un point fait le même office',
+    accrocheVisuelle('Séance de Reiki. Une heure rien que pour vous.'), 'Séance de Reiki')
+  // ⚠️ UN TITRE DÉJÀ COURT N'EST PAS TOUCHÉ, MÊME S'IL CONTIENT UNE PONCTUATION.
+  //
+  // 🔴 SANS CE CAS, LA GARDE NE MESURAIT RIEN : sur un titre court SANS
+  // ponctuation, le raccourci et le chemin long donnent le même résultat, et le
+  // harnais l'a montré en cassant le raccourci sans faire rougir le banc.
+  // C'est ici que les deux chemins divergent.
+  egal('un titre court passe intact', accrocheVisuelle('Séance de Reiki'), 'Séance de Reiki')
+  egal('🔴 et un titre court GARDE sa ponctuation interne',
+    accrocheVisuelle('Reiki : le soin doux'), 'Reiki : le soin doux')
+  egal('la ponctuation finale disparaît', accrocheVisuelle('Nos lunchs à emporter !'), 'Nos lunchs à emporter')
+
+  // 🔴 ET AUCUNE ELLIPSE SUR UN TITRE. « Une nouveauté au Centre Res… » ne veut
+  // plus rien dire : un titre a le droit d'être un fragment, pas d'être coupé.
+  const sansPonctuation = accrocheVisuelle('Assortiment de pâtisseries et de viennoiseries maison du jour préparées ce matin')
+  verifier('🔴 aucune ellipse sur un titre', !/…|\.\.\./.test(sansPonctuation), sansPonctuation)
+  verifier('et il garde des mots entiers',
+    sansPonctuation.split(/\s+/).every(m => 'Assortiment de pâtisseries et de viennoiseries maison du jour préparées ce matin'.includes(m)))
+  verifier('🔴 le nombre de mots est plafonné',
+    sansPonctuation.split(/\s+/).length <= 7, sansPonctuation)
+
+  // ⚠️ SUR UNE AFFICHE, UN EMOJI DÉTONNE : rendu en couleurs par le système au
+  // milieu d'une typographie choisie, la carte cesse d'avoir l'air dessinée.
+  egal('🔴 les emojis sortent du titre', accrocheVisuelle('Séance de Reiki ✨'), 'Séance de Reiki')
+  egal('et du sous-titre', resumeVisuel('Un moment de détente 🙏 profonde'), 'Un moment de détente profonde')
+  egal('sansEmoji ne mange pas le texte', sansEmoji('Pâtisseries à 4,50 €'), 'Pâtisseries à 4,50 €')
+
+  // ⚠️ ICI L'ELLIPSE EST HONNÊTE : une description est de la prose, et les
+  // points de suspension disent qu'elle continue. Mais on coupe à un mot entier.
+  const longue = 'Une séance d’une heure pour vous offrir un moment de détente profonde et de reconnexion à vous-même, dans un cadre apaisant et chaleureux.'
+  const resume = resumeVisuel(longue)
+  verifier('🔴 la description est ramenée à sa place', resume.length <= 122, String(resume.length))
+  verifier('elle porte une ellipse, elle', /…$/.test(resume), resume)
+  // 🔴 CETTE GARDE TESTAIT LA MAUVAISE PROPRIÉTÉ, et le harnais l'a dit : elle
+  // vérifiait que le résumé est un PRÉFIXE de l'original. Une coupe en plein
+  // milieu d'un mot est aussi un préfixe : « un moment de déten » passait.
+  // Ce qui compte est que le DERNIER MOT soit un mot entier de l'original.
+  {
+    const mots = resume.replace(/…$/, '').trim().split(/\s+/)
+    const dernierMot = mots[mots.length - 1]
+    verifier('🔴 et elle ne coupe pas un mot',
+      longue.split(/\s+/).includes(dernierMot), `finit par « ${dernierMot} »`)
+  }
+  egal('une description courte n’est pas touchée',
+    resumeVisuel('Un soin doux.'), 'Un soin doux.')
+
+  // ⚠️ LE FILET S'APPLIQUE À TOUS LES APPELANTS, pas seulement au générateur :
+  // un invendu apporte le titre de son article, qui vient du catalogue.
+  const c = contenuVisuel({
+    type: TYPE_ACTU, enseigne: 'Centre Respire',
+    titre: 'Une nouveauté au Centre Respire : le Reiki arrive chez nous ! ✨',
+    description: 'x'.repeat(400), lien: 'https://www.yoppaa.app/commander/x',
+  })
+  egal('🔴 la carte applique le filet au titre', c.titre, 'Une nouveauté au Centre Respire')
+  verifier('🔴 et à la description', c.description.length <= 122, String(c.description.length))
+  // ⚠️ ET SANS TITRE UTILISABLE, IL N'Y A TOUJOURS PAS DE CARTE : un titre fait
+  // uniquement d'emojis ne devient pas un titre vide qu'on dessinerait quand même.
+  egal('🔴 un titre fait d’emojis ne fait pas une carte',
+    contenuVisuel({ type: TYPE_ACTU, enseigne: 'X', titre: '✨🙏', lien: 'https://x.be' }), null)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 6. L'ADRESSE, LA SEULE CHOSE QUI RAMÈNE
 // ═══════════════════════════════════════════════════════════════════════════
 {
@@ -301,6 +377,24 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   verifier('🔴 le générateur porte l’aperçu', /<PartageVisuel/.test(GENE))
   verifier('et il compose une NOUVEAUTÉ, pas un invendu',
     /type: TYPE_ACTU,/.test(GENE))
+  // 🔴 IL PREND L'ACCROCHE, PAS LA VERSION COURTE. C'est tout le défaut vu par
+  // Alex : la version courte est une phrase entière, avec deux points, un prix
+  // et un emoji. Le repli reste, parce qu'un modèle peut ne pas suivre la
+  // consigne, mais il vient APRÈS.
+  verifier('🔴 le titre du visuel est l’accroche, pas le post',
+    /titre: v\.accroche \|\| v\.court/.test(GENE))
+  verifier('et le sous-titre passe avant le texte long',
+    /description: v\.soustitre \|\| v\.court/.test(GENE))
+  // ⚠️ ET LA ROUTE DOIT LES DEMANDER, sinon le repli sert à tous les coups et
+  // le titre redevient un post.
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/ia/generer-post/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 le prompt demande une accroche faite pour une affiche',
+    /"accroche" : 2 à 5 MOTS, le titre de l'affiche/.test(ROUTE))
+  verifier('et un sous-titre d’une phrase',
+    /"soustitre" : UNE phrase de 12 mots maximum/.test(ROUTE))
+  verifier('et la route les fait suivre à l’écran',
+    /accroche: String\(v\.accroche \|\| ''\)\.trim\(\)/.test(ROUTE)
+    && /soustitre: String\(v\.soustitre \|\| ''\)\.trim\(\)/.test(ROUTE))
   // ⚠️ ET IL PASSE LE LIEN : sans lui, le visuel ne ramène nulle part, ce qu'on
   // vient justement de corriger dans le texte.
   verifier('🔴 le lien est passé au visuel', /lien,\s*\}\}/.test(GENE))

@@ -190,10 +190,16 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
                   )}
                 </div>
 
-                {/* ⚠️ LE VISUEL EST COMPOSÉ AVEC LA VERSION COURTE, pas la
-                    longue : quatre phrases sur une image ne se lisent pas, et
-                    Instagram n'affiche de toute façon que ce que porte l'image.
-                    Le texte long, lui, part dans la légende au partage.
+                {/* 🔴 LE VISUEL A SES PROPRES CHAMPS DEPUIS LE 05/09. Il prenait
+                    la version COURTE comme titre : une phrase entière, avec deux
+                    points, un prix et un emoji. Ce n'est pas un titre, c'est un
+                    post écrit en très gros, et Alex l'a vu sur capture.
+
+                    ⚠️ LE MODÈLE ÉCRIT MAINTENANT POUR L'AFFICHE : une accroche
+                    de deux à cinq mots et un sous-titre d'une phrase. Le repli
+                    sur `court` et `long` vit ICI, pas dans la route : une
+                    réponse d'hier, ou un modèle qui n'a pas suivi la consigne,
+                    ne doit pas laisser la carte vide.
 
                     ⚠️ ET LE TYPE EST « NOUVEAUTÉ » : le générateur sert à ce qui
                     n'a pas d'objet dans Yoppaa. Un invendu ou un deal partage
@@ -203,8 +209,8 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
                   annonce={{
                     type: TYPE_ACTU,
                     enseigne: nomCommerce || commercant?.nom || '',
-                    titre: v.court || v.long || '',
-                    description: v.court && v.long ? v.long : null,
+                    titre: v.accroche || v.court || v.long || '',
+                    description: v.soustitre || v.court || null,
                     lien,
                   }}
                   texte={postAvecSignature([v.long, v.hashtags?.join(' ')].filter(Boolean).join('\n\n'), lien, nomCommerce)}

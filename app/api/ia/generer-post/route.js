@@ -34,12 +34,16 @@ Règles absolues :
 7. N'écris JAMAIS d'adresse web, de lien, de "yoppaa.app" ni de "www". Le lien vers la fiche du commerçant est ajouté automatiquement après ton texte : l'écrire toi-même le mettrait deux fois, et une adresse recopiée de mémoire est une adresse fausse.
 
 Tu proposes ${nbVariantes} variantes distinctes (angles différents). Pour chaque variante :
+- "accroche" : 2 à 5 MOTS, le titre de l'affiche. Pas de phrase, pas de verbe conjugué si possible, pas de ponctuation finale, pas d'emoji, pas de prix. Exemples : "Séance de Reiki", "Trois pains au levain", "Nos lunchs à emporter".
+- "soustitre" : UNE phrase de 12 mots maximum, qui complète l'accroche sans la répéter. Pas d'emoji.
 - "court" : 1 à 2 phrases (story, notification).
 - "long" : 2 à 4 phrases (post réseau social).
 - "hashtags" : 2 à 4 hashtags pertinents et locaux.
 
+L'accroche et le sous-titre sont écrits sur une IMAGE carrée, lue en une seconde sur un téléphone : ils doivent tenir en très gros caractères. Le court et le long sont du texte de publication.
+
 Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte avant ni après :
-{"variantes":[{"court":"...","long":"...","hashtags":["#..."]}]}`
+{"variantes":[{"accroche":"...","soustitre":"...","court":"...","long":"...","hashtags":["#..."]}]}`
 }
 
 // Surfaces 'article' et 'prestation' : description de fiche (catalogue produit
@@ -97,6 +101,15 @@ function parserVariantes(texte) {
     const obj = JSON.parse(t)
     if (Array.isArray(obj?.variantes) && obj.variantes.length) {
       return obj.variantes.slice(0, 3).map(v => ({
+        // ⚠️ DEUX CHAMPS AJOUTÉS LE 05/09 POUR LE VISUEL. Le titre de la carte
+        // était la version COURTE, c'est-à-dire une phrase entière avec deux
+        // points, un prix et un emoji : ce n'est pas un titre, c'est un post.
+        //
+        // ⚠️ ILS PEUVENT MANQUER, et ce n'est pas une erreur. Un modèle rend ce
+        // qu'il veut, et l'écran doit tenir avec une réponse d'hier : le repli
+        // sur `court` vit côté écran, pas ici.
+        accroche: String(v.accroche || '').trim(),
+        soustitre: String(v.soustitre || '').trim(),
         court: String(v.court || '').trim(),
         long: String(v.long || '').trim(),
         hashtags: Array.isArray(v.hashtags) ? v.hashtags.map(h => String(h).trim()).filter(Boolean).slice(0, 6) : [],

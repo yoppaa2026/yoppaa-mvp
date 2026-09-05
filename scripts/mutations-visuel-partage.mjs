@@ -27,6 +27,7 @@ const MODULE = 'lib/visuel-partage.js'
 const TRACE = 'lib/visuel-partage-canvas.js'
 const BOUTON = 'app/components/PartageVisuel.js'
 const GENE = 'app/dashboard/TabGenerateur.js'
+const ROUTE = 'app/api/ia/generer-post/route.js'
 
 const MUTATIONS = [
   // ─── LES DEUX FORMATS ───────────────────────────────────────────────────
@@ -98,9 +99,46 @@ const MUTATIONS = [
     de: '  if (type === TYPE_INVENDU) {',
     vers: '  if (true) {' },
 
+  // ⚠️ ANCRE REPOINTÉE LE 05/09 : la description passe désormais par le filet.
   { nom: '🔴 la description s invite sur un invendu',
-    de: '    description: type === TYPE_ACTU && description ? String(description).trim() : null,',
-    vers: '    description: description ? String(description).trim() : null,' },
+    de: '    description: type === TYPE_ACTU && description ? (resumeVisuel(description) || null) : null,',
+    vers: '    description: description ? (resumeVisuel(description) || null) : null,' },
+
+  // ─── LE TITRE D'AFFICHE (05/09) ─────────────────────────────────────────
+  //
+  // 🔴 ALEX SUR CAPTURE : le titre du visuel était la version COURTE du post,
+  // une phrase entière avec deux points, un prix et un emoji.
+  { nom: '🔴 le titre ne se coupe plus a la ponctuation forte',
+    de: '  const coupe = propre.split(/\\s*[:!?.]\\s+|\\s*[:!?.]$/)[0].trim()',
+    vers: '  const coupe = propre' },
+
+  { nom: '🔴 le titre n est plus plafonne en nombre de mots',
+    de: '  return propre.split(/\\s+/).slice(0, plafond).join(\' \')',
+    vers: '  return propre' },
+
+  { nom: '🔴 un titre court se fait quand meme charcuter',
+    de: '  if (propre.split(/\\s+/).length <= plafond) return propre',
+    vers: '  if (false) return propre' },
+
+  { nom: '🔴 les emojis reviennent sur l affiche',
+    de: "    .replace(/[\\u{1F000}-\\u{1FAFF}\\u{2600}-\\u{27BF}\\u{FE00}-\\u{FE0F}\\u{2190}-\\u{21FF}\\u{2B00}-\\u{2BFF}]/gu, '')",
+    vers: '    .replace(/(?!)/gu, \'\')' },
+
+  { nom: '🔴 la description n est plus ramenee a sa place',
+    de: '  if (propre.length <= plafond) return propre',
+    vers: '  return propre' },
+
+  { nom: '🔴 la description coupe au milieu d un mot',
+    de: '  const dernier = tranche.lastIndexOf(\' \')',
+    vers: '  const dernier = -1' },
+
+  { nom: '🔴 la carte n applique plus le filet au titre',
+    de: '  const quoi = accrocheVisuelle(titre)',
+    vers: "  const quoi = String(titre || '').trim()" },
+
+  { nom: '🔴 la carte n applique plus le filet a la description',
+    de: '    description: type === TYPE_ACTU && description ? (resumeVisuel(description) || null) : null,',
+    vers: "    description: type === TYPE_ACTU && description ? String(description).trim() : null," },
 
   // ─── L'ADRESSE ──────────────────────────────────────────────────────────
   { nom: '🔴 l adresse garde son protocole et mange la largeur',
@@ -162,6 +200,16 @@ const MUTATIONS = [
     fichier: GENE,
     de: '                    lien,\n                  }}',
     vers: '                    lien: null,\n                  }}' },
+
+  { nom: '🔴 le generateur reprend la version COURTE comme titre',
+    fichier: GENE,
+    de: "                    titre: v.accroche || v.court || v.long || '',",
+    vers: "                    titre: v.court || v.long || ''," },
+
+  { nom: '🔴 le prompt cesse de demander une accroche d affiche',
+    fichier: ROUTE,
+    de: '- "accroche" : 2 à 5 MOTS, le titre de l\'affiche.',
+    vers: '- "accroche" : ce que tu veux.' },
 ]
 
 const lancer = () => {

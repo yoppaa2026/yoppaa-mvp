@@ -14,7 +14,8 @@ import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionAr
 // ⚠️ C'EST LA PRÉSENCE DE LA FENÊTRE QUI FAIT L'INVENDU, et on la lit avec la
 // fonction du module : recopier le test ici ferait passer chaque bonne affaire
 // de la semaine pour un invendu de fin de journée.
-import { porteUneFenetre, plafondDeLOffre, resteSurOffre, libelleReste, libelleFenetre, TITRE_YOPPER } from '@/lib/anti-gaspi'
+import { porteUneFenetre, plafondDeLOffre, resteSurOffre, libelleReste, libelleFenetre, TITRE_YOPPER, PARAM_OFFRE } from '@/lib/anti-gaspi'
+import IconeAntiGaspi from '@/app/components/IconeAntiGaspi'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -778,7 +779,7 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
 //
 // Les habiller pareil décrédibilise les deux : le Yopper apprend que « Deal du
 // jour » ne veut rien dire de précis, et cesse de regarder les deux.
-function DealOfferCard({ deal, qte = 0, reste = null, onAjouter, onRetirer }) {
+function DealOfferCard({ deal, qte = 0, reste = null, onAjouter, onRetirer, ancre = null }) {
   const prixAffiche = deal.prix_deal != null ? Number(deal.prix_deal) : null
   const prixBarre = deal.prix_original != null ? Number(deal.prix_original) : null
   // C'est la PRÉSENCE DE LA FENÊTRE qui fait l'invendu, et rien d'autre.
@@ -789,11 +790,17 @@ function DealOfferCard({ deal, qte = 0, reste = null, onAjouter, onRetirer }) {
   const encre = invendu ? '#78350F' : '#fff'
   const encreDouce = invendu ? '#92400E' : 'rgba(255,255,255,0.75)'
   return (
-    <div style={{ ...fond, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem' }}>
+    <div ref={ancre} style={{ ...fond, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
+          {/* ⚠️ LA MÊME MARQUE QUE SUR L'ACCUEIL, et c'est tout l'intérêt : le
+              Yopper qui a cliqué sur une carte jaune doit RECONNAÎTRE ce qu'il
+              vient chercher au milieu du catalogue. La flamme reste au deal
+              ordinaire, qui n'a rien à voir avec un invendu. */}
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 800, color: invendu ? '#B45309' : '#FB923C', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill={invendu ? '#B45309' : '#FB923C'}><path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/></svg>
+            {invendu
+              ? <IconeAntiGaspi taille={11} epaisseur={2.6}/>
+              : <svg width="10" height="10" viewBox="0 0 24 24" fill="#FB923C"><path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/></svg>}
             {invendu ? TITRE_YOPPER : 'Deal du jour'}
           </span>
           <p style={{ fontWeight: 800, color: encre, fontSize: '0.9rem', letterSpacing: '-0.2px', lineHeight: 1.3, margin: '0 0 3px' }}>{deal.titre}</p>
@@ -2799,6 +2806,75 @@ export default function CommanderSlug() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commercant?.id])
 
+  // ═══ ARRIVER À HAUTEUR DE L'OFFRE ═════════════════════════════════════════
+  //
+  // 🔴 ALEX, 05/09 : « quand je clique sur le deal, ça envoie sur la fiche
+  // commerçant mais en haut de page, ça doit envoyer directement à hauteur du
+  // deal ». Sur une boulangerie à quarante articles, l'invendu est à trois
+  // écrans de défilement : le Yopper arrivait devant un catalogue et devait
+  // rechercher lui-même ce qu'il venait de voir sur son accueil.
+  //
+  // ⚠️ CE N'EST PAS UNE ANCRE `#`, ET ÇA NE PEUT PAS L'ÊTRE. Le catalogue se
+  // peint APRÈS le premier rendu : au moment où le navigateur cherche l'ancre,
+  // l'élément n'existe pas, et il ne réessaie jamais. Et la fiche défile dans un
+  // conteneur interne, que `scrollIntoView` ne vise pas.
+  //
+  // 🔴 ET SURTOUT : ON N'ATTEND PAS LA CARTE, C'EST ELLE QUI SE SIGNALE.
+  //
+  // Ma première écriture guettait l'élément avec un `setInterval` de 140 ms,
+  // huit fois. Un banc de la fiche l'a refusée le jour même, et il avait
+  // raison : « aucun relevé plus rapide que quinze secondes ne doit tourner
+  // sans regarder si quelqu'un est là ». Contourner cette garde en changeant de
+  // formulation aurait été de la triche.
+  //
+  // ✅ LE REMÈDE N'EST PAS UN MINUTEUR PLUS LENT, C'EST DE NE PLUS GUETTER. La
+  // fonction de référence d'une carte est appelée AU MOMENT EXACT où elle entre
+  // dans le document : c'est l'instant qu'on cherchait. Plus de minuteur, plus
+  // de tentatives perdues, et ça marche aussi bien sur un catalogue lent.
+  //
+  // 🔴 ET ÇA SUPPRIME LA QUESTION DE SÉCURITÉ AU LIEU DE LA GARDER. L'ancien
+  // code prenait le paramètre de l'adresse comme CLÉ D'UN OBJET : `__proto__`
+  // aurait répondu un objet JavaScript au lieu d'un élément, et la page aurait
+  // défilé vers `NaN`. Ici on COMPARE la cible à l'identifiant d'un deal
+  // réellement affiché ; une valeur inventée ne correspond à rien et il ne se
+  // passe rien.
+  //
+  // ⚠️ ON MESURE AVEC `getBoundingClientRect`, PAS `offsetTop`. `offsetTop` se
+  // compte depuis le premier ancêtre POSITIONNÉ, et la carte d'un deal vit dans
+  // des conteneurs qui peuvent en devenir un : la mesure serait juste tant que
+  // personne ne pose un `position: relative` au-dessus, et fausse le jour où
+  // quelqu'un le fait, sans que rien ne le signale.
+  //
+  // ⚠️ LUE UNE SEULE FOIS, AVANT TOUT RENDU DE CARTE. Un effet s'exécute APRÈS
+  // l'attachement des références : la carte se serait signalée à un guetteur qui
+  // n'existait pas encore.
+  const offreAttendue = useRef(undefined)
+  if (offreAttendue.current === undefined) {
+    let voulue = null
+    try {
+      voulue = typeof window === 'undefined'
+        ? null
+        : new URLSearchParams(window.location.search).get(PARAM_OFFRE)
+    } catch { voulue = null }
+    offreAttendue.current = voulue
+  }
+  function viserOffre(id, el) {
+    if (!el || offreAttendue.current == null) return
+    if (String(offreAttendue.current) !== String(id)) return
+    // ⚠️ UNE SEULE FOIS. Le catalogue se redessine au changement de jour, et la
+    // carte se re-signalerait : le Yopper serait renvoyé en bas de page alors
+    // qu'il lisait autre chose.
+    offreAttendue.current = null
+    const scroll = scrollRef.current
+    if (!scroll) return
+    // ⚠️ ON LAISSE LA MISE EN PAGE SE POSER. Mesurer dans la fonction de
+    // référence donnerait la position d'un document encore en cours de peinture.
+    requestAnimationFrame(() => {
+      const haut = scroll.scrollTop + (el.getBoundingClientRect().top - scroll.getBoundingClientRect().top) - 90
+      scroll.scrollTo({ top: Math.max(0, haut), behavior: 'smooth' })
+    })
+  }
+
   // Change d'étape ET remonte en haut du conteneur scrollable. Centralisé pour une
   // UX fluide : sans ça, on arrive en bas de la nouvelle étape (scroll conservé).
   function allerEtape(n) {
@@ -4247,6 +4323,7 @@ export default function CommanderSlug() {
                             {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
                               <DealOfferCard key={dl.id} deal={dl}
                                 reste={resteDeLOffre(dl)}
+                                ancre={el => viserOffre(dl.id, el)}
                                 qte={panier[`deal_${dl.id}`]?.quantite || 0}
                                 onAjouter={() => ajouterDealAuPanier(dl, a)}
                                 onRetirer={() => retirerDuPanier(`deal_${dl.id}`)}/>
@@ -4278,6 +4355,7 @@ export default function CommanderSlug() {
                           {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
                             <DealOfferCard key={dl.id} deal={dl}
                               reste={resteDeLOffre(dl)}
+                              ancre={el => viserOffre(dl.id, el)}
                               qte={panier[`deal_${dl.id}`]?.quantite || 0}
                               onAjouter={() => ajouterDealAuPanier(dl, a)}
                               onRetirer={() => retirerDuPanier(`deal_${dl.id}`)}/>

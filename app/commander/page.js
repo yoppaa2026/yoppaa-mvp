@@ -47,7 +47,8 @@ import SupprimerCompte from './SupprimerCompte'
 // ⚠️ LE TITRE, LE SOUS-TITRE ET LE TRI VIENNENT DU MODULE, JAMAIS D'ICI.
 // Recopiés dans l'écran, ils auraient divergé au premier changement de
 // formulation, comme le libellé du bon cadeau avant le 31/08.
-import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, libelleTempsRestant, libelleReste, resteSurOffre } from '@/lib/anti-gaspi'
+import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, offresProches, libelleTempsRestant, libelleReste, resteSurOffre, texteDePartage, lienVersOffre, INVENDUS_AFFICHES } from '@/lib/anti-gaspi'
+import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI } from '@/app/components/IconeAntiGaspi'
 
 const T = {
   bg:      '#F8F6FF',
@@ -888,6 +889,109 @@ function PillPaiementClient({ commande, taille = 'normal' }) {
   )
 }
 
+// ─── LA CARTE D'UN INVENDU ──────────────────────────────────────────────────
+//
+// 🔴 ALEX, 05/09, SUR CAPTURE : « le nom du commerçant doit être mieux mis en
+// avant, il faut une pastille de partage, une pastille temps restant et une
+// quantité. Le titre ne donne pas envie, il doit attirer l'œil. »
+//
+// Ce qui n'allait pas : le nom du commerçant, la quantité et le temps restant
+// étaient COLLÉS EN UNE SEULE LIGNE GRISE, séparés par des points médians, sous
+// un titre tronqué à un mot et demi. Trois informations de nature différente
+// habillées pareil : l'œil n'en retient aucune.
+//
+// ⚠️ LE NOM DU COMMERÇANT EST CE QUI DÉCLENCHE LE DÉPLACEMENT, pas le produit.
+// « 3 pains surprise » ne dit rien tant qu'on ne sait pas chez qui ; on connaît
+// sa boulangerie, on ne connaît pas son invendu. Il passe donc EN TÊTE.
+//
+// ⚠️ ET LE TITRE NE SE TRONQUE PLUS À UNE LIGNE. « Assortiment de pâtisseries
+// du jour » devenait « Assortiment de pâtis… », c'est-à-dire rien. Deux lignes,
+// puis coupe.
+function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuvrir, onPartager }) {
+  // ⚠️ LES PASTILLES SONT BLANCHES SUR LE FOND CRÈME, pas crème sur crème. Sur
+  // la première version elles se fondaient dans la carte et ne se lisaient plus
+  // comme des pastilles.
+  const pastille = {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    background: '#fff', border: `1px solid ${BORD_ANTI_GASPI}`, borderRadius: 100,
+    padding: '3px 8px', fontSize: '0.68rem', fontWeight: 800, color: '#92400E',
+    whiteSpace: 'nowrap',
+  }
+  const tempsRestant = libelleTempsRestant(restant)
+  const quantite = libelleReste(reste)
+  return (
+    <div onClick={onOuvrir}
+      style={{ position: 'relative', background: FOND_ANTI_GASPI, border: `1.5px solid ${BORD_ANTI_GASPI}`, borderRadius: 14, padding: '0.75rem 0.875rem', cursor: commerce ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
+
+      {/* ⚠️ LE PARTAGE EST UN BOUTON DANS UNE CARTE CLIQUABLE : `stopPropagation`
+          sinon la fiche s'ouvre sous le doigt au lieu de partager. Et la carte
+          est un `div`, pas un `button` : un bouton dans un bouton est du HTML
+          invalide, et Safari y répond en avalant le clic intérieur. */}
+      <button onClick={onPartager}
+        aria-label={`Partager ${offre?.titre || 'cette offre'}`}
+        style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, width: 28, height: 28, borderRadius: '50%', border: 'none', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '0 1px 3px rgba(120,53,15,0.16)' }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+          <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
+        </svg>
+      </button>
+
+      {/* LE NOM DU COMMERÇANT, EN TÊTE, avec la marque du module en puce. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3, paddingRight: 30 }}>
+        <IconeAntiGaspi taille={13} epaisseur={2.4}/>
+        <span style={{ fontSize: '0.72rem', fontWeight: 900, color: COULEUR_ANTI_GASPI, textTransform: 'uppercase', letterSpacing: '0.7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {commerce?.nom || 'Chez un commerçant'}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <p style={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: '1rem', color: '#78350F', margin: 0, letterSpacing: '-0.3px', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {offre.titre}
+        </p>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <p style={{ fontSize: '1.1rem', fontWeight: 900, color: COULEUR_ANTI_GASPI, margin: 0, letterSpacing: '-0.3px' }}>{euros(Number(offre.prix_deal))}</p>
+          <p style={{ fontSize: '0.7rem', color: '#92400E', margin: 0, fontWeight: 700 }}>
+            <span style={{ textDecoration: 'line-through', opacity: 0.7 }}>{euros(Number(offre.prix_original))}</span>
+            {remise > 0 ? ` · -${remise} %` : ''}
+          </p>
+        </div>
+      </div>
+
+      {/* LES TROIS PASTILLES. Chacune ne s'affiche que si elle a quelque chose
+          à dire : une pastille « il en reste » vide sur une offre sans plafond,
+          ou une distance sur un Yopper sans position, ne feraient qu'occuper la
+          ligne. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        {tempsRestant && (
+          <span style={pastille}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>
+            </svg>
+            {tempsRestant}
+          </span>
+        )}
+        {quantite && (
+          <span style={pastille}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 8.5h14l-1 10.5a2 2 0 0 1-2 1.8H8a2 2 0 0 1-2-1.8L5 8.5z"/>
+              <path d="M8.5 8.5V6.5a3.5 3.5 0 0 1 7 0v2"/>
+            </svg>
+            {quantite}
+          </span>
+        )}
+        {distance != null && (
+          <span style={pastille}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>
+            </svg>
+            {formatDistance(distance)}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetures, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori, onPartager }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
@@ -1545,6 +1649,29 @@ export default function Commander() {
     } catch { /* partage annulé par l'utilisateur : silencieux */ }
   }
 
+  // Partager UNE OFFRE, pas le commerce.
+  //
+  // ⚠️ CE N'EST PAS LE MÊME GESTE que partager une fiche, et c'est pour ça qu'il
+  // ne réutilise pas `partagerCommerce`. Un invendu se partage dans l'heure, à
+  // quelqu'un de précis, et ce qu'on envoie doit atterrir SUR L'OFFRE : le lien
+  // porte donc son identifiant, et la fiche s'ouvrira à sa hauteur.
+  //
+  // ⚠️ ET LE LIEN RESTE VALABLE APRÈS LA FERMETURE. Il mène à la fiche du
+  // commerçant, qui existe toujours ; l'offre, elle, aura simplement disparu du
+  // catalogue. Un lien mort aurait été pire qu'un lien qui arrive trop tard.
+  async function partagerInvendu(offre, commerce, e) {
+    e?.stopPropagation?.()  // toute la carte est cliquable : sans ça, la fiche s'ouvre sous le doigt
+    const chemin = lienVersOffre(commerce?.slug, offre?.id)
+    if (!chemin) return
+    const url = `https://www.yoppaa.app${chemin}`
+    const texte = texteDePartage(offre, commerce?.nom)
+    try {
+      if (navigator.share) { await navigator.share({ title: offre?.titre || TITRE_YOPPER, text: texte, url }); return }
+      await navigator.clipboard.writeText(`${texte} ${url}`)
+      showToast({ type: 'success', msg: 'Lien copié, préviens qui tu veux !' })
+    } catch { /* partage annulé par l'utilisateur : silencieux */ }
+  }
+
   // Modal confirmation custom (remplace window.confirm() qui est bloque/silencieux
   // en PWA installee iPhone). Utilisee pour confirmer annulations RDV et commandes.
   const [confirmModal, setConfirmModal] = useState(null)
@@ -1583,8 +1710,16 @@ export default function Commander() {
   const [fermetures, setFermetures] = useState({})
   // Set des commerçants qui ont un deal/actu actif aujourd'hui (pour dot LIVE sur pills)
   const [dealsActifs, setDealsActifs] = useState(new Set())
-  // Les invendus ouverts EN CE MOMENT, déjà filtrés et classés par le module.
+  // Les invendus ouverts EN CE MOMENT, déjà filtrés par le module.
+  //
+  // ⚠️ CET ÉTAT NE PORTE QUE LES FAITS : ce qui est ouvert, ce qu'il en reste,
+  // combien de temps encore. Le PÉRIMÈTRE et l'ORDRE se calculent au rendu, et
+  // sûrement pas ici. La position arrive presque toujours APRÈS le chargement
+  // des offres : figer le classement au moment du relevé l'aurait gelé sur
+  // l'état « distance inconnue », et l'écran serait resté trié par urgence même
+  // une fois la position acquise.
   const [invendusOuverts, setInvendusOuverts] = useState([])
+  const [invendusDeplies, setInvendusDeplies] = useState(false)
   const [actusActives, setActusActives] = useState(new Set())
   const [bonnesAffairesActives, setBonnesAffairesActives] = useState(new Set())
   const [position, setPosition] = useState(null)
@@ -2815,7 +2950,9 @@ export default function Commander() {
     }
   }
 
-  function selectionnerCommercant(c) {
+  // `offreId` est optionnel : quand il est là, la fiche s'ouvrira à hauteur de
+  // l'offre au lieu du haut du catalogue. Voir `lienVersOffre`.
+  function selectionnerCommercant(c, offreId = null) {
     if (!c.slug) {
       // Defensive : ne devrait jamais arriver depuis l'API admin/valider (auto-genere le slug),
       // mais on log pour debug + toast pour ne pas laisser l'user dans le silence si bug DB.
@@ -2827,7 +2964,12 @@ export default function Commander() {
     // Routing par catégorie :
     //   • vitrine (coiffeur, esthe, etc.) → /commander/rdv/[slug] (module RDV natif)
     //   • alimentaire (boulangerie, etc.) → /commander/[slug] (Click & Collect)
-    const route = c.categorie === 'vitrine' ? `/commander/rdv/${c.slug}` : `/commander/${c.slug}`
+    // ⚠️ L'OFFRE NE VAUT QUE POUR LA FICHE BOUTIQUE. Un commerce vitrine part
+    // sur le module rendez-vous, qui n'a ni catalogue ni offre à viser : lui
+    // coller le paramètre écrirait une adresse qui ne mène à rien.
+    const route = c.categorie === 'vitrine'
+      ? `/commander/rdv/${c.slug}`
+      : (lienVersOffre(c.slug, offreId) || `/commander/${c.slug}`)
     router.push(route)
   }
 
@@ -2881,6 +3023,26 @@ export default function Commander() {
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   })()
+
+  // ═══ LE PÉRIMÈTRE DE « RIEN NE SE PERD » ══════════════════════════════════
+  //
+  // La distance vit sur le commerçant, calculée par `avecDistances` jusqu'à son
+  // lieu ACTIF le plus proche. On la relaie au module, qui décide seul du rayon
+  // et de l'ordre.
+  //
+  // ⚠️ CE N'EST PAS `commercantsFiltres`. Les onglets « Boire un verre », « Se
+  // faire plaisir » et la recherche par mot filtrent la LISTE DES COMMERCES ;
+  // « Rien ne se perd » n'est pas dans cette liste, il est au-dessus. Un Yopper
+  // qui tape « coiffeur » ne doit pas voir disparaître les trois tartes de sa
+  // boulangerie : il n'a jamais demandé à filtrer ça.
+  const invendusProches = offresProches(invendusOuverts, {
+    distanceDe: offre => commercants.find(c => c.id === offre?.commercant_id)?.distance ?? null,
+  })
+  // ⚠️ ON REPLIE DÈS QU'IL N'Y A PLUS DE QUOI DÉPLIER. Sans ça, un Yopper qui a
+  // déplié le soir retrouvait le bouton « Réduire » le lendemain matin sur trois
+  // cartes, alors qu'il n'y avait jamais eu de quoi replier.
+  const invendusVisibles = invendusDeplies ? invendusProches : invendusProches.slice(0, INVENDUS_AFFICHES)
+  const invendusCaches = Math.max(0, invendusProches.length - INVENDUS_AFFICHES)
 
   const commercantsFiltres = commercants
     .filter(c => familleActive === 'tous' || familleDe(c) === familleActive)
@@ -3401,37 +3563,37 @@ export default function Commander() {
                   ⚠️ ET ELLE ANNONCE L'ÉTAT, PAS UNE ALARME : « encore 40
                   minutes » informe, « dépêche-toi » presse, et ce n'est pas
                   notre rôle. */}
-              {invendusOuverts.length > 0 && (
+              {invendusProches.length > 0 && (
                 <div style={{ marginBottom: 18 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {/* Le titre de section porte la marque du module, en grand.
+                      C'est le seul endroit où elle a la place de se voir en
+                      entier ; sur les cartes elle sert de puce. */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                    <IconeAntiGaspi taille={20} epaisseur={2.2}/>
                     <span style={{ fontSize: 15, fontWeight: 900, color: T.deep, letterSpacing: '-0.3px' }}>{TITRE_YOPPER}</span>
                     <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>{SOUS_TITRE_YOPPER}</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {invendusOuverts.map(({ offre, restant, remise, reste }) => {
+                    {invendusVisibles.map(({ offre, restant, remise, reste, distance }) => {
                       const commerce = commercants.find(c => c.id === offre.commercant_id)
                       return (
-                        <button key={offre.id}
-                          onClick={() => commerce && selectionnerCommercant(commerce)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 14, padding: '0.7rem 0.875rem', cursor: commerce ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontWeight: 800, fontSize: '0.92rem', color: '#78350F', margin: 0, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {offre.titre}
-                            </p>
-                            <p style={{ fontSize: '0.75rem', color: '#92400E', margin: '2px 0 0', fontWeight: 600 }}>
-                              {[commerce?.nom || 'Chez un commerçant', libelleReste(reste), libelleTempsRestant(restant)].filter(Boolean).join(' · ')}
-                            </p>
-                          </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            <p style={{ fontSize: '1rem', fontWeight: 900, color: '#B45309', margin: 0, letterSpacing: '-0.3px' }}>{euros(Number(offre.prix_deal))}</p>
-                            <p style={{ fontSize: '0.7rem', color: '#92400E', margin: 0, fontWeight: 700 }}>
-                              <span style={{ textDecoration: 'line-through', opacity: 0.7 }}>{euros(Number(offre.prix_original))}</span> · -{remise} %
-                            </p>
-                          </div>
-                        </button>
+                        <CarteInvendu key={offre.id}
+                          offre={offre} commerce={commerce}
+                          restant={restant} remise={remise} reste={reste} distance={distance}
+                          onOuvrir={() => commerce && selectionnerCommercant(commerce, offre.id)}
+                          onPartager={e => partagerInvendu(offre, commerce, e)}/>
                       )
                     })}
                   </div>
+                  {/* ⚠️ LE BOUTON DIT LE GESTE ET LE NOMBRE. « Voir plus » ne
+                      dit ni combien il en reste, ni si ça vaut le clic ; « Voir
+                      les 9 » laisse le Yopper décider avant d'agir. */}
+                  {invendusCaches > 0 && (
+                    <button onClick={() => setInvendusDeplies(v => !v)}
+                      style={{ width: '100%', marginTop: 8, padding: '0.55rem', borderRadius: 100, border: `1.5px solid ${BORD_ANTI_GASPI}`, background: 'transparent', color: COULEUR_ANTI_GASPI, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      {invendusDeplies ? 'Réduire' : `Voir les ${invendusProches.length}`}
+                    </button>
+                  )}
                 </div>
               )}
 

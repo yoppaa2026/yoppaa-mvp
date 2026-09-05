@@ -22,6 +22,7 @@ import {
   fermetureDuJour, fenetreParDefaut, enHeure, prixConseille, lignePublication,
   MINUTES_UTILES_MINIMUM,
   plafondDeLOffre, resteSurOffre, refusDeQuantite, libelleReste,
+  offresProches, RAYON_INVENDU_M, INVENDUS_AFFICHES, texteDePartage, lienVersOffre, PARAM_OFFRE,
 } from '../lib/anti-gaspi.js'
 import { readFileSync } from 'node:fs'
 import { verifierQuantiteOffres, SELECT_DEALS } from '../lib/lignes-commande.js'
@@ -623,8 +624,11 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   verifier('et seulement celles du jour',
     /\.eq\('date_deal', aujourdhui\)/.test(ACCUEIL))
   // ⚠️ UNE SECTION VIDE OCCUPERAIT LE HAUT DE L'ÉCRAN POUR NE RIEN ANNONCER.
+  // ⚠️ ELLE SE JUGE SUR CE QUI EST DANS LE PÉRIMÈTRE, PAS SUR CE QUI EST OUVERT.
+  // Rester sur `invendusOuverts` aurait affiché le titre « Rien ne se perd »
+  // au-dessus d'une liste vide le jour où la seule offre du pays est à 60 km.
   verifier('🔴 la section n’existe que s’il y a quelque chose',
-    /\{invendusOuverts\.length > 0 && \(/.test(ACCUEIL))
+    /\{invendusProches\.length > 0 && \(/.test(ACCUEIL))
   // ⚠️ ON ANNONCE L'ÉTAT, PAS UNE ALARME.
   verifier('le temps restant se dit avec les mots du module',
     /libelleTempsRestant\(restant\)/.test(ACCUEIL))
@@ -833,6 +837,252 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
     && /resteSurOffre\(deal, ventesParOffre\[deal\.id\] \|\| 0\)/.test(FICHE))
   verifier('🔴 et sans relevé, elle n’annonce aucun chiffre',
     /if \(!ventesParOffre\) return null/.test(FICHE))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. LE PÉRIMÈTRE : QUI S'AFFICHE, DANS QUEL ORDRE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 ALEX, 05/09 : « la card anti gaspi s'affiche sur quels critères ? Distance ?
+// Code postal ? S'il y a 100 commerçants avec des deals jusqu'à 50 km, lesquels
+// s'affichent ? »
+//
+// La réponse était AUCUN CRITÈRE : toute la Belgique publiée, triée par temps
+// restant. Un Yopper de Mettet voyait donc en premier l'offre d'Arlon qui ferme
+// dans dix minutes.
+//
+// ⚠️ TOUT S'EXÉCUTE ICI. Ces gardes appellent `offresProches` avec des distances
+// précises et regardent l'ORDRE qu'elle rend, pas les mots qu'elle contient.
+{
+  // On fabrique la forme que rend `offresOuvertes`, sans passer par elle : ce
+  // qu'on mesure ici est le classement, pas l'ouverture (section 6 s'en charge).
+  const ligne = (id, distance, restant) => ({
+    offre: { id, commercant_id: `c-${id}`, titre: id, prix_deal: 4, prix_original: 10 },
+    reservable: false, restant, remise: 60, reste: null, __distance: distance,
+  })
+  const parDistance = lignes => offresProches(lignes, {
+    distanceDe: o => (lignes.find(l => l.offre.id === o.id) || {}).__distance,
+  })
+
+  const troisVilles = [ligne('loin', 20000, 15), ligne('proche', 1000, 240), ligne('moyen', 8000, 60)]
+  egal('🔴 le plus proche passe en premier, pas le plus urgent',
+    parDistance(troisVilles).map(o => o.offre.id), ['proche', 'moyen', 'loin'])
+
+  // ⚠️ LE PLAFOND EXISTE : personne ne traverse la province pour une tarte.
+  egal('🔴 au-delà du rayon, l’offre ne s’affiche pas',
+    parDistance([ligne('proche', 1000, 60), ligne('tres_loin', RAYON_INVENDU_M + 1, 5)]).map(o => o.offre.id),
+    ['proche'])
+  egal('et la borne exacte du rayon passe encore',
+    parDistance([ligne('pile', RAYON_INVENDU_M, 60)]).map(o => o.offre.id), ['pile'])
+
+  // 🔴 LE PIÈGE DU ZÉRO, SEPTIÈME FOIS. `Number(null)` vaut 0 : une offre sans
+  // distance connue serait passée DEVANT la boulangerie d'en face.
+  egal('🔴 une distance inconnue ne vaut pas zéro mètre',
+    parDistance([ligne('inconnue', null, 5), ligne('a_500m', 500, 240)]).map(o => o.offre.id),
+    ['a_500m', 'inconnue'])
+  egal('et elle passe aussi après la plus lointaine du rayon',
+    parDistance([ligne('inconnue', null, 5), ligne('a_24km', 24000, 240)]).map(o => o.offre.id),
+    ['a_24km', 'inconnue'])
+  // 🔴 IL FAUT TROIS OFFRES POUR MESURER LES DEUX BRANCHES, et c'est le harnais
+  // qui l'a dit le 05/09 : sur une liste de DEUX, le tri de V8 n'appelle le
+  // comparateur que dans un sens, si bien que casser « une distance inconnue
+  // passe après » laissait les deux cas ci-dessus VERTS. Une garde qui ne
+  // couvre qu'une moitié d'une fonction symétrique n'en couvre aucune.
+  egal('🔴 et dans les deux sens de comparaison',
+    parDistance([ligne('a_500m', 500, 60), ligne('inconnue', null, 5), ligne('a_2km', 2000, 240)])
+      .map(o => o.offre.id),
+    ['a_500m', 'a_2km', 'inconnue'])
+
+  // ⚠️ SANS POSITION, ON NE MASQUE RIEN. Un Yopper qui a refusé la
+  // géolocalisation n'a aucune distance : lui cacher la section le priverait de
+  // tout au nom d'un périmètre qu'on est incapable de mesurer.
+  const sansPosition = [ligne('a', null, 200), ligne('b', null, 20), ligne('c', null, 90)]
+  egal('🔴 sans aucune position, tout reste affiché',
+    offresProches(sansPosition, {}).length, 3)
+  egal('et l’ordre retombe sur le temps restant',
+    offresProches(sansPosition, {}).map(o => o.offre.id), ['b', 'c', 'a'])
+
+  // ⚠️ CE QUI SE RÉSERVE PASSE TOUJOURS DEVANT, distance ou pas : c'est la seule
+  // offre sur laquelle le Yopper peut agir tout de suite.
+  const avecReservable = [
+    { ...ligne('loin_reservable', 20000, 15), reservable: true },
+    ligne('proche', 300, 240),
+  ]
+  egal('le réservable garde la priorité sur la proximité',
+    offresProches(avecReservable, { distanceDe: o => (avecReservable.find(l => l.offre.id === o.id) || {}).__distance })
+      .map(o => o.offre.id),
+    ['loin_reservable', 'proche'])
+
+  // ⚠️ ROBUSTESSE : une entrée qui n'est pas une liste ne doit pas faire tomber
+  // l'accueil entier.
+  egal('une entrée qui n’est pas une liste rend une liste vide', offresProches(null, {}).length, 0)
+  egal('et un relais de distance qui lève n’est pas ce qu’on attend',
+    offresProches([ligne('x', 100, 10)], { distanceDe: () => 'abc' })[0].distance, null)
+
+  // ⚠️ LE PLAFOND D'AFFICHAGE EST UN NOMBRE, PAS UNE IMPRESSION.
+  verifier('🔴 quatre cartes avant de déplier', INVENDUS_AFFICHES === 4)
+  verifier('et le rayon vaut 25 km', RAYON_INVENDU_M === 25000)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 11. PARTAGER UNE OFFRE, ET ARRIVER DESSUS
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const offre = { id: 'abc-123', titre: '3 pains surprise', prix_deal: 4, prix_original: 10 }
+  const texte = texteDePartage(offre, 'Boulangerie Dupont')
+  verifier('le partage dit ce que c’est', texte.includes('3 pains surprise'))
+  verifier('et chez qui', texte.includes('Boulangerie Dupont'))
+  verifier('et la remise', texte.includes('-60 %'))
+  verifier('et il porte le titre du module', texte.includes(TITRE_YOPPER))
+  // 🔴 UN CHIFFRE GRAVÉ DANS UN MESSAGE DEVIENT FAUX TOUT SEUL. Entre l'envoi et
+  // la lecture, tout peut être parti.
+  verifier('🔴 le partage ne promet AUCUNE quantité', !/il en reste/.test(texte))
+  verifier('un commerce sans nom ne fabrique pas « chez undefined »',
+    !/undefined|null/.test(texteDePartage(offre, null)))
+  verifier('une offre sans titre reste lisible',
+    texteDePartage({ prix_deal: 4, prix_original: 10 }, 'Chez Nous').includes('Chez Nous'))
+  // ⚠️ AU PRIX PLEIN, PAS DE « -0 % » : le module n'annonce que ce qui existe.
+  verifier('pas de remise annoncée quand il n’y en a pas',
+    !/-0 %/.test(texteDePartage({ titre: 'x', prix_deal: 10, prix_original: 10 }, 'Chez Nous')))
+
+  egal('le lien vise la fiche ET l’offre', lienVersOffre('boulangerie-dupont', 'abc-123'),
+    `/commander/boulangerie-dupont?${PARAM_OFFRE}=abc-123`)
+  egal('sans offre, il vise la fiche', lienVersOffre('boulangerie-dupont', null),
+    '/commander/boulangerie-dupont')
+  egal('sans slug, il ne fabrique pas d’adresse', lienVersOffre(null, 'abc-123'), null)
+  // ⚠️ UN `href` EST UNE CHAÎNE, et une chaîne se compose. Un slug non encodé
+  // fabriquerait un lien mort à la première apostrophe.
+  verifier('le slug est encodé', lienVersOffre('chez l ami', 'x').includes('chez%20l%20ami'))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 12. LA CARTE, TELLE QU'ALEX L'A DEMANDÉE
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const ACCUEIL = sansProse(readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
+  const FICHE = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  const ICONE = sansProse(readFileSync(new URL('../app/components/IconeAntiGaspi.js', import.meta.url), 'utf8'))
+
+  // 🔴 « LE NOM DU COMMERÇANT DOIT ÊTRE MIEUX MIS EN AVANT ». Il est ce qui
+  // déclenche le déplacement : on connaît sa boulangerie, pas son invendu.
+  verifier('🔴 le nom du commerçant a sa propre ligne, en tête',
+    /textTransform: 'uppercase'[^}]*\}\}>\s*\{commerce\?\.nom \|\| 'Chez un commerçant'\}/.test(ACCUEIL))
+  // 🔴 « LE TITRE NE DONNE PAS ENVIE, IL DOIT ATTIRER L'ŒIL ». Il était tronqué
+  // à une ligne : « Assortiment de pâtisseries » devenait « Assortiment de pâ… ».
+  // 🔴 CETTE GARDE ÉTAIT VERTE GRÂCE À UN JUMEAU, attrapé par le harnais le
+  // 05/09 : `WebkitLineClamp: 2` existe aussi sur la description d'une carte de
+  // commerce, ligne 787. Chercher le mot seul restait donc vert même une fois
+  // le clamp de l'invendu ramené à une ligne. On vise la ligne de CETTE carte.
+  verifier('🔴 le titre tient sur deux lignes, il ne se coupe plus à un mot',
+    /lineHeight: 1\.25, display: '-webkit-box', WebkitLineClamp: 2/.test(ACCUEIL))
+  // 🔴 LES TROIS PASTILLES DEMANDÉES.
+  verifier('🔴 pastille temps restant', /\{tempsRestant && \(/.test(ACCUEIL))
+  verifier('🔴 pastille quantité', /\{quantite && \(/.test(ACCUEIL))
+  verifier('🔴 pastille distance', /\{distance != null && \(/.test(ACCUEIL))
+  // ⚠️ ET AUCUNE PASTILLE VIDE : une offre sans plafond n'affiche pas « il en
+  // reste » à blanc, un Yopper sans position n'affiche pas de distance.
+  verifier('les pastilles se taisent quand elles n’ont rien à dire',
+    /const quantite = libelleReste\(reste\)/.test(ACCUEIL)
+    && /const tempsRestant = libelleTempsRestant\(restant\)/.test(ACCUEIL))
+  // 🔴 « IL FAUT UNE PASTILLE DE PARTAGE ».
+  verifier('🔴 la carte se partage', /onClick=\{onPartager\}/.test(ACCUEIL)
+    && /async function partagerInvendu\(offre, commerce, e\)/.test(ACCUEIL))
+  // ⚠️ UN BOUTON DANS UN BOUTON EST DU HTML INVALIDE, et Safari y répond en
+  // avalant le clic intérieur : la carte est un `div`, comme `CarteCommerce`.
+  verifier('🔴 la carte n’est pas un bouton, sinon le partage ne clique plus',
+    /<div onClick=\{onOuvrir\}/.test(ACCUEIL))
+  // ⚠️ `sansProse` NE DÉPOUILLE QUE LES LIGNES ENTIÈREMENT COMMENTÉES : un
+  // commentaire de fin de ligne survit au dépouillage, et cette garde rougissait
+  // pour ça alors que le code était juste. `[^\n]*` le laisse passer.
+  verifier('et le partage n’ouvre pas la fiche sous le doigt',
+    /e\?\.stopPropagation\?\.\(\)[^\n]*\s*const chemin = lienVersOffre/.test(ACCUEIL))
+  // ⚠️ LE TEXTE ET LE LIEN VIENNENT DU MODULE, jamais recomposés sur l'écran.
+  verifier('le partage prend ses mots dans le module',
+    /texteDePartage\(offre, commerce\?\.nom\)/.test(ACCUEIL))
+  // ⚠️ ET IL PARTAGE L'OFFRE, PAS LA FICHE. Un lien vers le haut du catalogue
+  // ferait chercher à celui qui le reçoit ce qu'on vient de lui promettre.
+  verifier('🔴 le lien partagé porte l’offre',
+    /const chemin = lienVersOffre\(commerce\?\.slug, offre\?\.id\)/.test(ACCUEIL))
+
+  // 🔴 LE PÉRIMÈTRE EST APPLIQUÉ PAR L'ÉCRAN, et depuis le module.
+  verifier('🔴 l’accueil passe la distance du commerçant au module',
+    /offresProches\(invendusOuverts, \{[\s\S]{0,200}distanceDe: offre => commercants\.find\(c => c\.id === offre\?\.commercant_id\)\?\.distance/.test(ACCUEIL))
+  // ⚠️ LE CLASSEMENT SE CALCULE AU RENDU, PAS AU RELEVÉ. La position arrive
+  // presque toujours APRÈS les offres : figer l'ordre au moment du relevé
+  // l'aurait gelé sur « distance inconnue » pour toute la session.
+  verifier('🔴 le classement n’est pas figé dans l’état',
+    !/setInvendusOuverts\(offresProches/.test(ACCUEIL))
+  // 🔴 ET IL NE SUIT PAS LES ONGLETS DE LA LISTE. Un Yopper qui tape « coiffeur »
+  // ne doit pas voir disparaître les tartes de sa boulangerie.
+  verifier('🔴 le périmètre lit la liste entière, pas la liste filtrée',
+    !/offresProches\(invendusOuverts[\s\S]{0,200}commercantsFiltres/.test(ACCUEIL))
+
+  // 🔴 « VOIR PLUS » DÉPLIE SUR PLACE (arbitrage Alex) : pas de route de plus.
+  verifier('🔴 le bouton dit le geste ET le nombre',
+    /invendusDeplies \? 'Réduire' : `Voir les \$\{invendusProches\.length\}`/.test(ACCUEIL))
+  verifier('et il n’apparaît que s’il y a de quoi déplier',
+    /\{invendusCaches > 0 && \(/.test(ACCUEIL))
+  verifier('le plafond vient du module, pas d’un chiffre écrit sur l’écran',
+    /invendusProches\.slice\(0, INVENDUS_AFFICHES\)/.test(ACCUEIL))
+
+  // 🔴 « ÇA DOIT ENVOYER DIRECTEMENT À HAUTEUR DU DEAL ».
+  verifier('🔴 le clic emporte l’identifiant de l’offre',
+    /selectionnerCommercant\(commerce, offre\.id\)/.test(ACCUEIL))
+  verifier('et l’adresse se compose dans le module',
+    /lienVersOffre\(c\.slug, offreId\)/.test(ACCUEIL))
+  // ⚠️ UN COMMERCE VITRINE PART SUR LE MODULE RENDEZ-VOUS, qui n'a ni catalogue
+  // ni offre à viser : lui coller le paramètre écrirait une adresse morte.
+  verifier('le paramètre ne part pas sur une fiche rendez-vous',
+    /categorie === 'vitrine'\s*\?\s*`\/commander\/rdv\/\$\{c\.slug\}`/.test(ACCUEIL))
+
+  // 🔴 LA FICHE VA CHERCHER L'OFFRE, et ne se contente pas de charger.
+  verifier('🔴 la fiche lit le paramètre',
+    /new URLSearchParams\(window\.location\.search\)\.get\(PARAM_OFFRE\)/.test(FICHE))
+  // 🔴 ON NE GUETTE PAS L'ÉLÉMENT, C'EST LUI QUI SE SIGNALE. Un `setInterval` de
+  // 140 ms a été refusé par le banc de la fiche le 05/09 : « aucun relevé plus
+  // rapide que quinze secondes ne doit tourner sans regarder si quelqu'un est
+  // là ». La fonction de référence est appelée à l'instant exact où la carte
+  // entre dans le document, ce qui supprime le minuteur au lieu de le déguiser.
+  verifier('🔴 aucun minuteur ne guette la carte',
+    !/setInterval\([\s\S]{0,300}viserOffre/.test(FICHE)
+    && /function viserOffre\(id, el\)/.test(FICHE))
+  // 🔴 ET ÇA SUPPRIME LA QUESTION DE SÉCURITÉ. Le paramètre n'est plus une CLÉ
+  // d'objet — `__proto__` aurait rendu un objet JavaScript au lieu d'un élément
+  // — mais une valeur COMPARÉE à l'identifiant d'un deal réellement affiché.
+  verifier('🔴 la cible est comparée, jamais utilisée comme clé',
+    /String\(offreAttendue\.current\) !== String\(id\)/.test(FICHE)
+    && !/offreRefs/.test(FICHE))
+  // ⚠️ ET UNE SEULE FOIS : le catalogue se redessine au changement de jour, et
+  // la carte se re-signalerait en renvoyant le Yopper en bas de page.
+  verifier('🔴 le saut ne se rejoue pas au redessin',
+    /offreAttendue\.current = null/.test(FICHE))
+  // ⚠️ ON MESURE AVEC `getBoundingClientRect`, PAS `offsetTop` : celui-ci se
+  // compte depuis le premier ancêtre POSITIONNÉ, et deviendrait faux le jour où
+  // quelqu'un pose un `position: relative` au-dessus, sans que rien ne le dise.
+  verifier('🔴 la mesure ne dépend pas d’un ancêtre positionné',
+    /el\.getBoundingClientRect\(\)\.top - scroll\.getBoundingClientRect\(\)\.top/.test(FICHE))
+  verifier('et la carte du deal porte bien l’ancre',
+    /ancre=\{el => viserOffre\(dl\.id, el\)\}/.test(FICHE)
+    && /<div ref=\{ancre\}/.test(FICHE))
+  // ⚠️ LES DEUX RENDUS DE `DealOfferCard` DOIVENT PORTER L'ANCRE. Les articles
+  // sans catégorie sont un second bloc, copié : n'en équiper qu'un aurait rendu
+  // le défilement muet pour la moitié des catalogues.
+  egal('🔴 les DEUX rendus de la carte portent l’ancre',
+    (FICHE.match(/ancre=\{el => viserOffre\(dl\.id, el\)\}/g) || []).length, 2)
+
+  // 🔴 « UNE ICÔNE QUI DEVIENDRAIT UN VISUEL CONNU ANTI GASPI YOPPAA ».
+  verifier('🔴 l’icône a UNE seule définition',
+    /export default function IconeAntiGaspi/.test(ICONE))
+  verifier('et l’accueil comme la fiche la lisent là',
+    /import IconeAntiGaspi/.test(ACCUEIL) && /import IconeAntiGaspi/.test(FICHE))
+  // ⚠️ ELLE NE SERT QUE L'INVENDU : un deal ordinaire garde sa flamme, sinon les
+  // deux redeviennent le même objet, ce qu'Alex a fait corriger le 04/09.
+  verifier('🔴 la marque ne coiffe QUE l’invendu',
+    /\{invendu\s*\?\s*<IconeAntiGaspi/.test(FICHE))
+  // ⚠️ LES COULEURS AUSSI VIENNENT DE LÀ : trois codes hexadécimaux recopiés sur
+  // deux écrans auraient divergé au premier ajustement.
+  verifier('les couleurs du module ne sont pas recopiées',
+    /COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI/.test(ACCUEIL))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

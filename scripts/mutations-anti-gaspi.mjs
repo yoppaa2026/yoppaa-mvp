@@ -89,9 +89,14 @@ const MUTATIONS = [
     vers: '  if (minutes === null || minutes === undefined || !Number.isFinite(minutes) || minutes < 0) return \'\'' },
 
   // ─── L'ORDRE DE LECTURE ─────────────────────────────────────────────────
+  // ⚠️ ANCRE REPOINTÉE LE 05/09. La comparaison vivait en DEUX exemplaires,
+  // identiques au caractère près : `offresOuvertes` et `offresProches`.
+  // `String.replace` visant toujours la première, la seconde n'était pas
+  // mesurable. Elle a donc été extraite dans `dabordLeReservable`, et cette
+  // mutation couvre désormais les deux appelants d'un coup.
   { nom: '🔴 le reservable ne passe plus devant',
-    de: '      (a.reservable === b.reservable ? 0 : (a.reservable ? -1 : 1))',
-    vers: '      (0)' },
+    de: '  return a.reservable ? -1 : 1',
+    vers: '  return 0' },
 
   { nom: '🔴 les offres fermees s’affichent aussi',
     de: '    .filter(o => offreValable(o) && fenetreOuverte(o, instant))',
@@ -314,9 +319,11 @@ const MUTATIONS = [
     de: "      .not('heure_fin', 'is', null)",
     vers: '      .limit(50)' },
 
+  // ⚠️ ANCRE REPOINTÉE LE 05/09 : la section se juge désormais sur le PÉRIMÈTRE,
+  // pas sur ce qui est ouvert dans tout le pays.
   { nom: '🔴 la section « Rien ne se perd » s affiche vide',
     fichier: 'app/commander/page.js',
-    de: '              {invendusOuverts.length > 0 && (',
+    de: '              {invendusProches.length > 0 && (',
     vers: '              {true && (' },
 
   // ─── LE PLAFOND DE L'OFFRE (04/09 au soir) ──────────────────────────────
@@ -425,6 +432,153 @@ const MUTATIONS = [
     fichier: 'app/commander/[slug]/page.js',
     de: '          {reste === 0 ? (',
     vers: '          {false ? (' },
+
+  // ─── LE PÉRIMÈTRE (05/09) ───────────────────────────────────────────────
+  //
+  // 🔴 ALEX : « la card anti gaspi s'affiche sur quels critères ? » La réponse
+  // était AUCUN : toute la Belgique, triée par temps restant. Ces mutations
+  // mesurent que le rayon existe, que l'ordre suit la proximité, et que la
+  // distance inconnue ne se fait pas passer pour zéro mètre.
+  { nom: '🔴 le rayon ne plafonne plus rien (toute la Belgique revient)',
+    de: '    .filter(o => o.distance === null || o.distance <= plafond)',
+    vers: '    .filter(() => true)' },
+
+  { nom: '🔴 l’ordre repasse a l’urgence au lieu de la proximite',
+    de: '      || comparerDistance(a.distance, b.distance)',
+    vers: '      || 0' },
+
+  // 🔴 CELLE-CI A ATTRAPÉ UN VRAI DÉFAUT LE 05/09, dans ce module même.
+  { nom: '🔴 le piege du zero revient : une distance inconnue vaut 0 metre',
+    de: "      const d = brut === null || brut === undefined || brut === '' ? NaN : Number(brut)",
+    vers: '      const d = Number(brut)' },
+
+  // ⚠️ LES DEUX BRANCHES SE MUTENT SÉPARÉMENT. `comparerDistance` est
+  // symétrique, et le tri de V8 n'appelle le comparateur que dans un sens sur
+  // une liste de deux : n'en muter qu'une laissait le banc vert.
+  { nom: '🔴 la distance inconnue repasse devant celle qu’on connait',
+    de: '  if (a === null) return 1',
+    vers: '  if (a === null) return -1' },
+
+  { nom: '🔴 idem dans l’autre sens de comparaison',
+    de: '  if (b === null) return -1',
+    vers: '  if (b === null) return 1' },
+
+  { nom: '🔴 le lien oublie l’offre et renvoie en haut de la fiche',
+    de: '  if (!offreId) return base',
+    vers: '  return base' },
+
+  { nom: '🔴 le slug n’est plus encode dans le lien de l’offre',
+    de: '  const base = `/commander/${encodeURIComponent(slug)}`',
+    vers: '  const base = `/commander/${slug}`' },
+
+  { nom: '🔴 le partage promet une quantite qui aura change en chemin',
+    de: '  return `${quoi}${chez}${combien}, avant la fermeture. ${TITRE_YOPPER}, sur Yoppaa.`',
+    vers: '  return `${quoi}${chez}${combien}, il en reste. ${TITRE_YOPPER}, sur Yoppaa.`' },
+
+  // ─── L'ÉCRAN D'ACCUEIL ──────────────────────────────────────────────────
+  { nom: '🔴 la section se juge sur ce qui est ouvert, pas sur le perimetre',
+    fichier: 'app/commander/page.js',
+    de: '              {invendusProches.length > 0 && (',
+    vers: '              {invendusOuverts.length > 0 && (' },
+
+  { nom: '🔴 l’accueil ne relaie plus la distance du commercant',
+    fichier: 'app/commander/page.js',
+    de: '    distanceDe: offre => commercants.find(c => c.id === offre?.commercant_id)?.distance ?? null,',
+    vers: '    distanceDe: () => null,' },
+
+  { nom: '🔴 le plafond de quatre cartes disparait',
+    fichier: 'app/commander/page.js',
+    de: '  const invendusVisibles = invendusDeplies ? invendusProches : invendusProches.slice(0, INVENDUS_AFFICHES)',
+    vers: '  const invendusVisibles = invendusProches' },
+
+  { nom: '🔴 le bouton ne dit plus combien il en reste a voir',
+    fichier: 'app/commander/page.js',
+    de: "                      {invendusDeplies ? 'Réduire' : `Voir les ${invendusProches.length}`}",
+    vers: "                      {invendusDeplies ? 'Réduire' : 'Voir plus'}" },
+
+  { nom: '🔴 le clic perd l’offre et retombe en haut du catalogue',
+    fichier: 'app/commander/page.js',
+    de: '                          onOuvrir={() => commerce && selectionnerCommercant(commerce, offre.id)}',
+    vers: '                          onOuvrir={() => commerce && selectionnerCommercant(commerce)}' },
+
+  { nom: '🔴 le partage ouvre la fiche sous le doigt',
+    fichier: 'app/commander/page.js',
+    de: "    e?.stopPropagation?.()  // toute la carte est cliquable : sans ça, la fiche s'ouvre sous le doigt",
+    vers: '    const _sansGarde = true' },
+
+  { nom: '🔴 le partage renvoie vers la fiche au lieu de l’offre',
+    fichier: 'app/commander/page.js',
+    de: '    const chemin = lienVersOffre(commerce?.slug, offre?.id)',
+    vers: '    const chemin = lienVersOffre(commerce?.slug, null)' },
+
+  { nom: '🔴 le titre de la carte se retronque a une ligne',
+    fichier: 'app/commander/page.js',
+    de: "lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2",
+    vers: "lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 1" },
+
+  { nom: '🔴 la pastille de temps restant disparait',
+    fichier: 'app/commander/page.js',
+    de: '        {tempsRestant && (',
+    vers: '        {false && (' },
+
+  { nom: '🔴 la pastille de quantite disparait',
+    fichier: 'app/commander/page.js',
+    de: '        {quantite && (',
+    vers: '        {false && (' },
+
+  { nom: '🔴 la pastille de distance disparait',
+    fichier: 'app/commander/page.js',
+    de: '        {distance != null && (',
+    vers: '        {false && (' },
+
+  { nom: '🔴 la carte redevient un bouton (bouton dans bouton)',
+    fichier: 'app/commander/page.js',
+    de: '    <div onClick={onOuvrir}',
+    vers: '    <button onClick={onOuvrir}' },
+
+  // ─── LA FICHE, ARRIVER À HAUTEUR DE L'OFFRE ─────────────────────────────
+  { nom: '🔴 la fiche vise n’importe quel identifiant venu de l’adresse',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '    if (String(offreAttendue.current) !== String(id)) return',
+    vers: '    if (false) return' },
+
+  { nom: '🔴 le saut se rejoue a chaque redessin du catalogue',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '    offreAttendue.current = null',
+    vers: '    offreAttendue.current = offreAttendue.current' },
+
+  { nom: '🔴 la mesure redevient dependante d’un ancetre positionne',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '      const haut = scroll.scrollTop + (el.getBoundingClientRect().top - scroll.getBoundingClientRect().top) - 90',
+    vers: '      const haut = scroll.scrollTop + el.offsetTop - 90' },
+
+  // ⚠️ AUCUN SAUT DE LIGNE DANS L'ANCRE : on remplace la référence par `null`
+  // plutôt que de supprimer la ligne. Le premier des deux rendus perd son
+  // ancre, le compte passe de deux à un, et la garde doit le dire.
+  { nom: '🔴 un seul des deux rendus porte l’ancre',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '                                ancre={el => viserOffre(dl.id, el)}',
+    vers: '                                ancre={null}' },
+
+  // ⚠️ LE MINUTEUR NE DOIT PAS REVENIR. La première écriture guettait la carte
+  // avec un `setInterval` de 140 ms, refusé par le banc de la fiche.
+  { nom: '🔴 le minuteur de guet revient',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '  function viserOffre(id, el) {',
+    vers: '  function viserOffre(id, el) { setInterval(() => viserOffre(id, el), 140)' },
+
+  // ⚠️ ANCRE REPOINTÉE LE 05/09 : la lecture de l'adresse est passée d'un effet
+  // à l'initialisation paresseuse de la référence, pour être faite AVANT que la
+  // première carte ne se signale.
+  { nom: '🔴 la fiche ne lit plus le parametre d’offre',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '        : new URLSearchParams(window.location.search).get(PARAM_OFFRE)',
+    vers: '        : null' },
+
+  { nom: '🔴 la marque anti-gaspi coiffe aussi le deal ordinaire',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '              ? <IconeAntiGaspi taille={11} epaisseur={2.6}/>',
+    vers: '              ? null' },
 ]
 
 const lancer = () => {

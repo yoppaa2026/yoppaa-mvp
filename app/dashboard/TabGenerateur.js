@@ -2,6 +2,33 @@
 // Onglet "Générateur" du dashboard commerçant (Ch3bis) : génère des textes prêts à
 // publier (post réseaux, accroche). TEXTE uniquement. Appelle /api/ia/generer-post
 // (le plan + le quota + le modèle sont gérés côté serveur). Arme du palier Communiquer.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+// SON DOMAINE : CE QUI N'A PAS DE FICHE DANS YOPPAA
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 RECENTRÉ LE 05/09, décision d'Alex, le jour où les invendus, les deals et
+// les actualités ont reçu leur propre bouton de partage. Sa question était
+// exactement la bonne : « est-ce qu'il y a aussi le composeur ? nécessaire ou
+// pas ? »
+//
+// ⚠️ IL RESTE, PARCE QU'UNE ACTUALITÉ SE PUBLIE SUR LA FICHE. Obliger un
+// commerçant à créer une actualité pour obtenir un visuel Facebook qui dit
+// « merci à mes clients » ou « je suis en congé la semaine prochaine »
+// salirait sa fiche avec ce qui n'est pas pour elle. Le générateur écrit vers
+// l'EXTÉRIEUR, l'actualité écrit SUR la fiche. Ce sont deux gestes.
+//
+// 🔴 ET IL NE DOIT PLUS DOUBLER CE QUI A UN OBJET. Un deal, un invendu, une
+// actualité portent leurs chiffres, lus en base, et affichent leur prix EN GROS
+// sur le visuel. Ici, tout passe par un champ libre relu par un modèle : un
+// montant retapé à la main et gravé sur une image publiée ne se corrige plus.
+// C'est pourquoi ce visuel-ci n'affiche aucun prix.
+//
+// ⚠️ LE RENVOI NE S'AFFICHE QUE SUR « BON PLAN », et c'est la seule occasion qui
+// met un PRIX en jeu. « Nouveauté » a bien une actualité pour objet, mais elle
+// ne porte aucun chiffre, et c'est l'occasion SÉLECTIONNÉE PAR DÉFAUT : un
+// panneau visible à chaque ouverture de l'onglet devient un décor qu'on ne lit
+// plus, et il aurait affaibli celui qui compte.
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -25,7 +52,11 @@ const OCCASIONS = [
 ]
 const TONS = ['Chaleureux', 'Dynamique', 'Élégant', 'Décontracté', 'Gourmand']
 
-export default function TabGenerateur({ commercantId, commercant, toast }) {
+// ⚠️ L'OCCASION QUI MET UN PRIX EN JEU, ET ELLE SEULE. Nommée ici plutôt
+// qu'écrite dans le rendu : c'est une règle, et les règles se mesurent.
+export const OCCASION_AVEC_PRIX = 'Bon plan'
+
+export default function TabGenerateur({ commercantId, commercant, toast, onAllerA = null }) {
   const cfg = getIaConfig(commercant?.plan)
   const estExister = (commercant?.plan === 'exister' || commercant?.plan === 'on')
 
@@ -99,8 +130,14 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: 0 }}>Générateur de posts</h2>
+          {/* ⚠️ IL ANNONCE SON DOMAINE. Depuis que les deals, les invendus et les
+              actualités se partagent depuis leur propre ligne, un générateur qui
+              se présente comme « l'outil pour faire un post » envoie ici des
+              gens qui devraient être ailleurs, à retaper à la main un prix qui
+              est déjà en base. */}
           <p style={{ fontSize: 13, color: T.muted, margin: '4px 0 0', lineHeight: 1.5 }}>
-            Décris ton idée, l&apos;IA rédige des posts prêts à publier. Aucun prix ni date inventé.
+            Pour ce qui n&apos;a pas de fiche dans Yoppaa&nbsp;: un remerciement, tes congés, un événement.
+            Tes deals et tes actualités, eux, se partagent depuis leur propre ligne.
           </p>
         </div>
         <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 800, color: T.main, background: T.pale, padding: '6px 12px', borderRadius: 100 }}>
@@ -126,6 +163,42 @@ export default function TabGenerateur({ commercantId, commercant, toast }) {
             </button>
           ))}
         </div>
+
+        {/* ─── LE PANNEAU INDICATEUR ────────────────────────────────────────
+            🔴 UN BON PLAN A UN OBJET, ET CET OBJET PORTE SON PRIX. Ici le
+            montant serait retapé à la main dans « Infos exactes », relu par un
+            modèle, et le visuel ne peut donc pas l'afficher en gros. Dans
+            Deals, il vient de la base : le visuel montre le vrai montant, et le
+            deal existe aussi dans l'application, où on peut le commander.
+
+            ⚠️ C'EST UN PANNEAU, PAS UNE BARRIÈRE (arbitrage Alex, 05/09). Un
+            commerçant qui ne trouve pas son occasion écrit n'importe où : mieux
+            vaut lui montrer la bonne porte que lui fermer celle-ci. Il peut
+            très bien vouloir un post sur une promo qui n'est pas dans Yoppaa.
+
+            ⚠️ ET IL NE S'AFFICHE QUE LÀ. « Nouveauté » a une actualité pour
+            objet, mais aucun chiffre, et c'est l'occasion par défaut : un
+            panneau visible à chaque ouverture aurait cessé d'être lu. */}
+        {occasion === OCCASION_AVEC_PRIX && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: T.pale, border: `1px solid ${T.light}`, borderRadius: 12, padding: '11px 13px', marginBottom: 16 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+              <path d="M20 12l-8.5 8.5a2 2 0 01-2.83 0L2 13.83V4h9.83L20 12z"/><circle cx="7.5" cy="7.5" r="1.5"/>
+            </svg>
+            <p style={{ margin: 0, fontSize: 12.5, color: T.ink, lineHeight: 1.55 }}>
+              Tu annonces une vraie promo&nbsp;? Crée-la dans <strong>Deals</strong>&nbsp;: son prix viendra de ta
+              fiche, le visuel affichera le vrai montant, et tes Yoppers pourront la commander.
+              {onAllerA && (
+                <>
+                  {' '}
+                  <button type="button" onClick={() => onAllerA('deals')}
+                    style={{ background: 'none', border: 'none', padding: 0, color: T.main, fontWeight: 900, fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline', fontFamily: '"DM Sans", sans-serif' }}>
+                    Aller dans Deals
+                  </button>
+                </>
+              )}
+            </p>
+          </div>
+        )}
 
         <p style={{ fontSize: 12, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 8px' }}>Ce que tu veux annoncer</p>
         <textarea value={brief} onChange={e => setBrief(e.target.value.slice(0, 400))} rows={2}

@@ -382,6 +382,36 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '  const url = lienFiche(slug)',
     vers: '  const url = slug ? `https://www.yoppaa.app/commander/${slug}` : null' },
+
+  // ─── LE GENERATEUR RECENTRE (05/09) ─────────────────────────────────────
+  //
+  // 🔴 CE QU ON MESURE : qu il cesse de doubler ce qui a un objet. Ici tout
+  // passe par un champ libre relu par un modele ; un deal, lui, porte son prix
+  // lu en base et l affiche EN GROS.
+  { nom: '🔴 la constante ne designe plus une pastille proposee (panneau muet)',
+    fichier: GENE,
+    de: "export const OCCASION_AVEC_PRIX = 'Bon plan'",
+    vers: "export const OCCASION_AVEC_PRIX = 'Bonne affaire'" },
+
+  { nom: '🔴 le renvoi s affiche sur TOUTES les occasions et devient un decor',
+    fichier: GENE,
+    de: '        {occasion === OCCASION_AVEC_PRIX && (',
+    vers: '        {true && (' },
+
+  { nom: '🔴 l onglet cesse d annoncer son domaine',
+    fichier: GENE,
+    de: "            Pour ce qui n&apos;a pas de fiche dans Yoppaa&nbsp;: un remerciement, tes congés, un événement.",
+    vers: "            Décris ton idée, l&apos;IA rédige des posts prêts à publier." },
+
+  { nom: '🔴 le renvoi ne vise plus l onglet des deals',
+    fichier: GENE,
+    de: "onClick={() => onAllerA('deals')}",
+    vers: 'onClick={() => onAllerA(null)}' },
+
+  { nom: '🔴 le renvoi court-circuite la porte de la barre d onglets',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: 'onAllerA={changerOnglet}',
+    vers: 'onAllerA={setTab}' },
 ]
 
 const lancer = () => {

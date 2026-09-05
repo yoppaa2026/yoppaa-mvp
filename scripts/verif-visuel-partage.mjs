@@ -666,6 +666,46 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   // mesure la décision. Une seule des deux ne prouverait rien.
   egal('et le badge le dit', badgeDe(TYPE_ACTU, 'Infos pratiques'), 'INFOS PRATIQUES')
 
+  // ── LE GÉNÉRATEUR RECENTRÉ (05/09, décision d'Alex) ─────────────────────
+  //
+  // 🔴 IL NE DOIT PLUS DOUBLER CE QUI A UN OBJET. Un deal porte son prix, lu en
+  // base, et l'affiche EN GROS. Ici tout passe par un champ libre relu par un
+  // modèle : un montant retapé à la main et gravé sur une image publiée ne se
+  // corrige plus.
+  const GENE2 = sansProse(readFileSync(new URL('../app/dashboard/TabGenerateur.js', import.meta.url), 'utf8'))
+
+  // 🔴 LA GARDE LA PLUS UTILE DES QUATRE : que la constante désigne une occasion
+  // RÉELLEMENT proposée. Renommer la pastille sans toucher la constante ferait
+  // disparaître le panneau, et rien ne le signalerait — le formulaire
+  // continuerait de fonctionner, simplement sans jamais montrer la bonne porte.
+  const cible = (GENE2.match(/OCCASION_AVEC_PRIX = '([^']+)'/) || [])[1]
+  egal('l’occasion qui met un prix en jeu est nommée', cible, 'Bon plan')
+  verifier('🔴 et elle correspond à une pastille réellement proposée',
+    !!cible && new RegExp(`\\{ cle: '${cible}',`).test(GENE2),
+    `« ${cible} » ne figure pas dans OCCASIONS`)
+
+  // ⚠️ LE PANNEAU NE S'AFFICHE QUE LÀ. « Nouveauté » a une actualité pour objet
+  // mais aucun chiffre, et c'est l'occasion par défaut : un panneau visible à
+  // chaque ouverture cesserait d'être lu, et affaiblirait celui qui compte.
+  verifier('🔴 le renvoi est conditionné à cette seule occasion',
+    /\{occasion === OCCASION_AVEC_PRIX && \(/.test(GENE2))
+  verifier('et il ne s’affiche pas sur l’occasion par défaut',
+    /useState\('Nouveauté'\)/.test(GENE2) && !/occasion === 'Nouveauté'/.test(GENE2))
+
+  // ⚠️ IL ANNONCE SON DOMAINE : sans ça, un générateur qui se présente comme
+  // « l'outil pour faire un post » ramène ici des gens qui devraient être
+  // ailleurs.
+  verifier('🔴 l’onglet dit ce pour quoi il est fait',
+    /n&apos;a pas de fiche dans Yoppaa/.test(GENE2))
+
+  // 🔴 LE RENVOI PASSE PAR LA PORTE DE LA BARRE D'ONGLETS, pas par `setTab`.
+  // `changerOnglet` refuse un onglet hors forfait en ouvrant la proposition, et
+  // retient un formulaire non enregistré. Un raccourci direct aurait déposé le
+  // commerçant sur un onglet qu'il n'a pas, ou effacé sa saisie sans un mot.
+  verifier('🔴 le renvoi emprunte `changerOnglet`, jamais `setTab`',
+    /onAllerA=\{changerOnglet\}/.test(CFG))
+  verifier('et il vise bien l’onglet des deals', /onAllerA\('deals'\)/.test(GENE2))
+
   // ⚠️ L'ADRESSE VIENT DE SA SOURCE UNIQUE, jamais recomposée à la main : c'est
   // la dette qu'on ne rouvre pas.
   egal('🔴 les trois écrans prennent l’adresse de `lienFiche`',

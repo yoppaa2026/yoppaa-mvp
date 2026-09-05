@@ -10974,7 +10974,12 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
           s'afficher, et elles lisent `peut()`, donc l'essai en cours. */}
       {tab === 'deals'    && peut(commercant, 'deals') && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'actus'    && peut(commercant, 'actus_illimitees') && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
-      {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {/* ⚠️ LE RENVOI PASSE PAR `changerOnglet`, PAS PAR `setTab`. C'est la
+          porte de la barre d'onglets : elle refuse un onglet hors forfait en
+          ouvrant la proposition, et elle retient un formulaire non enregistré.
+          Un raccourci direct aurait déposé le commerçant sur un onglet qu'il
+          n'a pas, ou fait disparaître sa saisie sans un mot. */}
+      {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />}
       {tab === 'creneaux' && peut(commercant, 'commande') && <TabCreneaux commercantId={commercantId} toast={showToast} />}
       {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} surModifications={declarerModifications} />}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}

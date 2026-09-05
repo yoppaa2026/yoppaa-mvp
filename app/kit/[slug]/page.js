@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import KitClient from './KitClient'
 import { avantLancement } from '@/lib/lancement'
 import { consigneGoogle } from '@/lib/action-google'
+import { lienFiche } from '@/lib/lien-fiche'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,10 @@ export const metadata = {
   robots: { index: false, follow: false },  // page perso, jamais indexée
 }
 
-const BASE = 'https://www.yoppaa.app'
+// 🔴 `BASE` A ÉTÉ RETIRÉ LE 05/09 : c'était une seconde copie de `BASE_YOPPAA`,
+// et le lien qu'il servait à composer était la troisième fabrique de l'adresse
+// d'une fiche. `lib/lien-fiche.js` est la source unique, et cette page-ci
+// fabrique un QR IMPRIMÉ : un lien mort y est définitif.
 
 async function getKit(slug) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -73,7 +77,7 @@ export default async function KitPage({ params }) {
   //
   // Les messages à partager disent maintenant « commande chez nous » : ils
   // doivent mener là où l'on commande, sans quoi ils mentent.
-  const lien = `${BASE}/commander/${encodeURIComponent(slug)}`
+  const lien = lienFiche(slug)
 
   let qr = null
   try {

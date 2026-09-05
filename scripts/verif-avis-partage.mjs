@@ -139,13 +139,23 @@ const egal = (nom, obtenu, attendu) =>
   verifie('🔴 le clic ne traverse pas jusqu\'à la carte', /e\?\.stopPropagation\?\.\(\)/.test(accueil))
 
   // ⚠️ UN LIEN PARTAGÉ ET UN LIEN IMPRIMÉ QUI DIVERGENT, c'est deux règles à
-  // corriger le jour où la route change. Le QR du kit imprime EXACTEMENT
-  // https://www.yoppaa.app/commander/<slug> : le partage fait pareil.
+  // corriger le jour où la route change.
+  //
+  // 🔴 CES DEUX GARDES ÉTAIENT FAUSSES, ET C'EST INSTRUCTIF. Elles comparaient
+  // DEUX COPIES de la même chaîne écrite à la main. Comparer deux copies ne
+  // prouve pas qu'elles resteront identiques : ça prouve qu'elles le sont
+  // aujourd'hui. Et elles ont rougi le 05/09 sur une AMÉLIORATION, le jour où
+  // les deux sont passées par `lienFiche`.
+  //
+  // ⚠️ ON MESURE DONC LA SOURCE UNIQUE, pas la ressemblance. Une divergence
+  // n'est plus possible, elle n'est plus seulement surveillée.
   const kit = lire('app/kit/[slug]/page.js')
-  verifie('le kit imprime toujours la même forme de lien',
-    /\$\{BASE\}\/commander\/\$\{encodeURIComponent\(slug\)\}/.test(kit))
-  verifie('🔴 le partage emploie la MÊME forme',
-    /https:\/\/www\.yoppaa\.app\/commander\/\$\{encodeURIComponent\(c\.slug\)\}/.test(accueil))
+  verifie('le kit imprime le lien de la source unique',
+    /const lien = lienFiche\(slug\)/.test(kit))
+  verifie('🔴 le partage emploie la MÊME source',
+    /const url = lienFiche\(c\.slug\)/.test(accueil))
+  verifie('🔴 et aucun des deux ne recompose l’adresse à côté',
+    !/yoppaa\.app\/commander\/\$\{/.test(kit) && !/yoppaa\.app\/commander\/\$\{/.test(accueil))
   verifie('🔴 le partage ne devine PAS la route RDV',
     !/partagerCommerce[\s\S]{0,600}commander\/rdv/.test(accueil))
   verifie('un commerce sans slug ne se partage pas', /if \(!c\?\.slug\) return/.test(accueil))

@@ -21,6 +21,7 @@ import {
   pointsDuVisuel, largeurDesPoints, adresseLisible, nomFichierVisuel,
   accrocheVisuelle, resumeVisuel, sansEmoji,
   POINTS_SUR_CLAIR, POINTS_SUR_SOMBRE,
+  partageable, legendeVisuel, prixDuVisuel,
 } from '../lib/visuel-partage.js'
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
@@ -236,13 +237,26 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
 {
   const base = {
     type: TYPE_INVENDU, enseigne: 'Boulangerie Dupont', titre: 'Pâtisseries du jour',
-    prix: 4.5, prixBarre: 9, tempsRestant: "jusqu'à 18 h 30", quantite: 'il en reste 3',
+    prix: 4.5, prixBarre: 9, tempsRestant: "jusqu'à 18 h 30",
     lien: 'https://www.yoppaa.app/commander/boulangerie-dupont',
   }
   const c = contenuVisuel(base)
   egal('la remise se calcule, elle ne se saisit pas', c.remise, '-50 %')
   egal('l’adresse est lisible', c.adresse, 'yoppaa.app/commander/boulangerie-dupont')
-  egal('l’invendu porte ses deux pastilles', c.pastilles.length, 2)
+  egal('l’invendu porte sa pastille d’heure', c.pastilles.length, 1)
+  egal('et elle dit l’heure', c.pastilles[0], { icone: 'horloge', texte: "jusqu'à 18 h 30" })
+
+  // 🔴 LE STOCK NE S'ÉCRIT PAS SUR UNE IMAGE. « Il en reste 3 » n'est vrai qu'à
+  // la seconde du dessin ; la publication, elle, répétera ce chiffre la semaine
+  // prochaine. `texteDePartage` le refuse déjà côté Yopper : deux règles
+  // opposées sur la même donnée dans le même produit, c'en est une de trop.
+  //
+  // ⚠️ ON MESURE QUE LA DONNÉE NE PASSE PAS, pas qu'un mot a disparu du fichier.
+  // Passer `quantite` ne doit RIEN ajouter, même si un appelant l'envoie encore.
+  egal('🔴 une quantité passée n’ajoute AUCUNE pastille',
+    contenuVisuel({ ...base, quantite: 'il en reste 3' }).pastilles.length, 1)
+  verifier('🔴 et aucune pastille ne porte l’icône du sac',
+    contenuVisuel({ ...base, quantite: 12 }).pastilles.every(p => p.icone !== 'sac'))
 
   // 🔴 SANS TITRE NI ENSEIGNE, IL N'Y A PAS DE CARTE. En dessiner une vide
   // enverrait le commerçant publier un rectangle violet.
@@ -550,6 +564,114 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   // ⚠️ ET IL PASSE LE LIEN : sans lui, le visuel ne ramène nulle part, ce qu'on
   // vient justement de corriger dans le texte.
   verifier('🔴 le lien est passé au visuel', /lien,\s*\}\}/.test(GENE))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. LE PARTAGE DEPUIS LES INVENDUS, LES DEALS ET LES ACTUALITÉS
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ON GARDE ICI : qu'un post ne survive pas à ce qu'il annonce, et que
+// les montants viennent de la BASE. C'est toute la différence avec le
+// générateur, qui travaille sur un champ libre et ne peut donc afficher aucun
+// prix en gros.
+{
+  const JOUR = '2026-09-05'
+
+  // ── `partageable` : la même règle que la liste du tableau de bord ────────
+  verifier('🔴 un deal éteint ne se partage pas', partageable(false, JOUR, JOUR) === false)
+  verifier('🔴 un deal d’hier non plus', partageable(true, '2026-09-04', JOUR) === false)
+  // ⚠️ UNE DATE DE FIN EST UNE FIN DE JOURNÉE. C'est exactement la règle de
+  // `dealsActuels` (`>= today`) : un `>` cacherait le bouton du deal du jour.
+  verifier('🔴 le deal DU JOUR se partage toute la journée', partageable(true, JOUR, JOUR) === true)
+  verifier('et celui de demain aussi', partageable(true, '2026-09-06', JOUR) === true)
+  // ⚠️ SANS ÉCHÉANCE, elle vit jusqu'à désactivation : c'est ce que dit le
+  // formulaire des actualités, « date fin vide = pas d'échéance ».
+  verifier('une actualité sans date de fin se partage', partageable(true, null, JOUR) === true)
+  verifier('et une chaîne vide vaut pas d’échéance', partageable(true, '   ', JOUR) === true)
+  // ⚠️ ET SANS REPÈRE DE DATE, ON NE PROPOSE PAS : un bouton absent se signale,
+  // un post vers une offre morte ne se rattrape plus.
+  verifier('🔴 une échéance qu’on ne peut pas juger ferme le partage',
+    partageable(true, JOUR, null) === false)
+
+  // ── Le prix : UN seul format, l'image et la légende ──────────────────────
+  egal('les centimes se taisent quand ils sont nuls', prixDuVisuel(9), '9 €')
+  egal('et parlent quand ils existent', prixDuVisuel(4.5), '4,50 €')
+  egal('la virgule est belge', prixDuVisuel(12.35), '12,35 €')
+  egal('un prix illisible ne rend rien', prixDuVisuel('abc'), '')
+
+  // ── La légende : rien que les données de l'annonce ───────────────────────
+  const inv = legendeVisuel({
+    titre: 'Tarte aux pommes', prix: 4.5, prixBarre: 9,
+    jusqua: "jusqu'à 18 h 30", mention: 'Rien ne se perd',
+  })
+  egal('la légende de l’invendu dit tout, dans l’ordre',
+    inv, "Tarte aux pommes à 4,50 € au lieu de 9 €, jusqu'à 18 h 30.\n\nRien ne se perd.")
+  // 🔴 ELLE NE DIT PAS LE STOCK, et aucun champ ne le lui permet.
+  verifier('🔴 aucun chiffre de stock dans la légende', !/reste/i.test(inv))
+  // ⚠️ AUCUNE URGENCE INVENTÉE : ce serait Yoppaa qui parlerait sur la page du
+  // commerçant, à ses clients.
+  verifier('🔴 et aucune urgence inventée',
+    !/(dépêche|dernière chance|vite|ne manque)/i.test(inv))
+
+  // ⚠️ MÊME RÈGLE QUE SUR L'IMAGE : un prix barré qui ne dépasse pas le prix
+  // n'en est pas un, sinon la légende fait passer une hausse pour une remise.
+  egal('🔴 un prix barré plus bas est écarté de la légende AUSSI',
+    legendeVisuel({ titre: 'Pizza', prix: 14, prixBarre: 10 }), 'Pizza à 14 €.')
+  egal('🔴 et le piège du zéro ne rend pas « 0 € »',
+    legendeVisuel({ titre: 'Pizza', prix: 0, prixBarre: 10 }), 'Pizza.')
+  egal('une actualité pose sa description sous son titre',
+    legendeVisuel({ titre: 'Nouvelle collection', description: 'Des pièces uniques.' }),
+    'Nouvelle collection.\n\nDes pièces uniques.')
+  egal('sans titre, aucune légende', legendeVisuel({ description: 'Perdue' }), '')
+  // ⚠️ LA MENTION NE DOUBLE PAS SON POINT.
+  egal('la mention garde un seul point',
+    legendeVisuel({ titre: 'X', mention: 'Rien ne se perd.' }), 'X.\n\nRien ne se perd.')
+
+  // ── Les trois écrans passent bien ces données ────────────────────────────
+  //
+  // ⚠️ CES GARDES-LÀ LISENT DU CODE, faute de pouvoir monter React ici. Elles
+  // visent donc des FAITS précis, jamais une formulation : un libellé qui change
+  // ne doit pas les faire rougir, et un branchement qui saute doit.
+  const CFG = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+
+  egal('🔴 les TROIS écrans portent un bloc de partage',
+    (CFG.match(/<BlocPartage/g) || []).length, 3)
+  egal('et les trois types y sont, une fois chacun',
+    [/type: TYPE_INVENDU,/.test(CFG), /type: TYPE_DEAL,/.test(CFG), /type: TYPE_ACTU,/.test(CFG)],
+    [true, true, true])
+
+  // 🔴 LE PRIX VIENT DE LA BASE, C'EST TOUT L'INTÉRÊT DE CES BOUTONS. Le
+  // générateur ne peut afficher aucun montant en gros ; ici il est lu dans la
+  // ligne. S'il cessait d'être passé, le visuel redeviendrait une affiche sans
+  // prix sans que rien ne le signale.
+  //
+  // ⚠️ QUATRE, PAS DEUX : deux écrans, et sur chacun l'IMAGE et la LÉGENDE. Les
+  // deux doivent porter le même prix, sinon la publication se contredit
+  // elle-même.
+  egal('🔴 l’invendu ET le deal passent leurs deux prix, à l’image et à la légende',
+    (CFG.match(/prix: d\.prix_deal,\s*prixBarre: d\.prix_original,/g) || []).length, 4)
+
+  // ⚠️ ON NE PARTAGE PAS UNE FENÊTRE FERMÉE : cette liste garde à l'écran les
+  // offres du jour même quand leur heure est passée.
+  verifier('🔴 l’invendu exige sa fenêtre OUVERTE', /\{fenetreOuverte\(d\) && \(/.test(CFG))
+  // ⚠️ ET LES DEUX AUTRES PASSENT PAR LA MÊME RÈGLE, avec le jour courant.
+  verifier('🔴 le deal passe par `partageable`', /partageable\(d\.actif, d\.date_deal, today\)/.test(CFG))
+  verifier('🔴 l’actualité aussi', /partageable\(a\.actif, a\.date_fin, today\)/.test(CFG))
+
+  // 🔴 UNE ALERTE N'EST PAS UNE NOUVEAUTÉ. Sans ce mot, une fermeture
+  // exceptionnelle publie un visuel qui annonce « NOUVEAUTÉ » en grand.
+  verifier('🔴 une alerte ne s’annonce pas comme une nouveauté',
+    /occasion: a\.type === 'alerte' \? 'Infos pratiques' : 'Nouveauté'/.test(CFG))
+  // ⚠️ ET LE BADGE SUIT VRAIMENT : la garde ci-dessus mesure l'écran, celle-ci
+  // mesure la décision. Une seule des deux ne prouverait rien.
+  egal('et le badge le dit', badgeDe(TYPE_ACTU, 'Infos pratiques'), 'INFOS PRATIQUES')
+
+  // ⚠️ L'ADRESSE VIENT DE SA SOURCE UNIQUE, jamais recomposée à la main : c'est
+  // la dette qu'on ne rouvre pas.
+  egal('🔴 les trois écrans prennent l’adresse de `lienFiche`',
+    (CFG.match(/lien: lienFiche\(commercant\?\.slug\),/g) || []).length, 3)
+  verifier('et aucun ne recompose l’adresse à la main',
+    !/['"`]https:\/\/www\.yoppaa\.app\/commander/.test(CFG))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

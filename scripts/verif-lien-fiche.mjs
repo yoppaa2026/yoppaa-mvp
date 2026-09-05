@@ -137,8 +137,16 @@ const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b
   // que le commerçant n'a pas vue, il la découvre publiée.
   verifier('🔴 l’écran montre la signature avant de la copier',
     /\{signatureYoppaa\(lien, nomCommerce\)\}/.test(ECRAN))
-  verifier('🔴 et le bouton copie le post AVEC le lien',
-    /copier\(postAvecSignature\(/.test(ECRAN))
+  // 🔴 GARDE FAUSSE, TROUVÉE PAR LE HARNAIS LE 05/09. Elle cherchait
+  // l'EXISTENCE d'un `copier(postAvecSignature(` : casser celui de la version
+  // standard la laissait VERTE, parce que celui de la version courte restait.
+  // C'est le piège du JUMEAU, troisième fois en deux jours.
+  //
+  // ⚠️ ON COMPTE, ON NE CHERCHE PLUS. Il y a DEUX boutons de copie, et la
+  // version courte porte la signature elle aussi : rien n'empêche de la coller
+  // sur Facebook, et sans lien ce post-là ne ramènerait personne.
+  egal('🔴 et les DEUX boutons copient le post AVEC le lien',
+    (ECRAN.match(/copier\(postAvecSignature\(/g) || []).length, 2)
   // ⚠️ IL NE RECOMPOSE PAS L'ADRESSE : elle vient du serveur, telle quelle.
   verifier('🔴 l’écran ne fabrique aucune adresse lui-même',
     !/yoppaa\.app\/commander/.test(ECRAN) && /setLien\(j\.lien \|\| null\)/.test(ECRAN))

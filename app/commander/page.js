@@ -49,6 +49,10 @@ import SupprimerCompte from './SupprimerCompte'
 // formulation, comme le libellé du bon cadeau avant le 31/08.
 import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, offresProches, libelleTempsRestant, libelleReste, resteSurOffre, texteDePartage, lienVersOffre } from '@/lib/anti-gaspi'
 import { libelleDecompte, PARAM_LISTE } from '@/lib/anti-gaspi'
+// ⚠️ L'ADRESSE PUBLIQUE D'UNE FICHE A UNE SEULE FABRIQUE. Celle du partage et
+// celle qu'imprime le QR du kit doivent être la même : elles l'étaient par
+// recopie, elles le sont désormais par construction.
+import { lienFiche } from '@/lib/lien-fiche'
 import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 
 const T = {
@@ -1638,13 +1642,16 @@ export default function Commander() {
   // ⚠️ LE LIEN PASSE TOUJOURS PAR /commander/<slug>, jamais par /commander/rdv/.
   // Vérifié : la fiche redirige elle-même un commerce vitrine vers sa page RDV
   // (app/commander/[slug]/page.js, `router.replace` sur categorie === 'vitrine').
-  // Une seule forme de lien à maintenir, et c'est EXACTEMENT celle que le QR du
-  // kit média imprime déjà : un lien partagé et un lien imprimé qui divergent,
-  // c'est deux règles à corriger le jour où la route change.
+  //
+  // 🔴 ET IL VIENT DE `lienFiche` DEPUIS LE 05/09, comme le QR imprimé du kit.
+  // Il était écrit à la main ici, et à la main là-bas : deux chaînes identiques
+  // que trois gardes surveillaient en comparant leurs FORMES. Or comparer deux
+  // copies ne prouve pas qu'elles resteront identiques, ça prouve qu'elles le
+  // sont aujourd'hui. Une seule fabrique rend la divergence impossible.
   async function partagerCommerce(c, e) {
     e?.stopPropagation?.()
     if (!c?.slug) return
-    const url = `https://www.yoppaa.app/commander/${encodeURIComponent(c.slug)}`
+    const url = lienFiche(c.slug)
     const texte = `${c.nom} est sur Yoppaa, ton quartier dans ta poche.`
     try {
       if (navigator.share) { await navigator.share({ title: c.nom, text: texte, url }); return }

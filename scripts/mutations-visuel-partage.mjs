@@ -126,9 +126,11 @@ const MUTATIONS = [
     de: '  const barreUtile = p !== null && pb !== null && pb > p ? pb : null',
     vers: '  const barreUtile = pb' },
 
-  { nom: '🔴 un deal recoit les pastilles de l invendu',
-    de: '  if (type === TYPE_INVENDU) {',
-    vers: '  if (true) {' },
+  // ⚠️ ANCRE REPOINTÉE LE 05/09 : la pastille de stock a disparu, la condition
+  // porte désormais aussi sur la présence de l'heure.
+  { nom: '🔴 un deal recoit la pastille de l invendu',
+    de: '  if (type === TYPE_INVENDU && tempsRestant) {',
+    vers: '  if (tempsRestant) {' },
 
   // ⚠️ ANCRE REPOINTÉE LE 05/09 : la description passe désormais par le filet.
   { nom: '🔴 la description s invite sur un invendu',
@@ -316,6 +318,70 @@ const MUTATIONS = [
     fichier: BOUTON,
     de: 'maxWidth: format === FORMAT_CARRE ? 420 : 560,',
     vers: 'maxWidth: format === FORMAT_CARRE ? 120 : 160,' },
+
+  // ─── LE PARTAGE DEPUIS LES TROIS ÉCRANS (05/09) ─────────────────────────
+  //
+  // 🔴 CE QU'ON MESURE : qu'un post ne survive pas a ce qu il annonce, et que
+  // les montants viennent de la BASE. C est toute la difference avec le
+  // generateur, qui travaille sur un champ libre.
+  { nom: '🔴 un deal ETEINT redevient partageable',
+    de: '  if (actif === false) return false',
+    vers: '  if (false) return false' },
+
+  { nom: '🔴 le deal DU JOUR perd son bouton (comparaison stricte)',
+    de: '  return fin >= jour',
+    vers: '  return fin > jour' },
+
+  { nom: '🔴 une echeance qu on ne peut pas juger ouvre le partage',
+    de: '  if (!jour) return false',
+    vers: '  if (!jour) return true' },
+
+  { nom: '🔴 une actualite sans echeance perd son bouton',
+    de: '  if (!fin) return true',
+    vers: '  if (!fin) return false' },
+
+  { nom: '🔴 le stock revient sur l image et vieillit avec elle',
+    de: '  if (type === TYPE_INVENDU && tempsRestant) {',
+    vers: "  if (type === TYPE_INVENDU && tempsRestant) { pastilles.push({ icone: 'sac', texte: '3' });" },
+
+  { nom: '🔴 les centimes nuls reviennent sur l affiche',
+    de: "  return `${v.toFixed(2).replace('.', ',').replace(/,00$/, '')} €`",
+    vers: "  return `${v.toFixed(2).replace('.', ',')} €`" },
+
+  { nom: '🔴 la legende fait passer une hausse pour une remise',
+    de: '  const aBarre = aPrix && Number.isFinite(pb) && pb > p',
+    vers: '  const aBarre = aPrix && Number.isFinite(pb)' },
+
+  { nom: '🔴 le piege du zero dans la legende : « 0 € »',
+    de: '  const aPrix = Number.isFinite(p) && p > 0',
+    vers: '  const aPrix = Number.isFinite(p)' },
+
+  { nom: '🔴 la legende perd sa mention de fin',
+    de: '  if (fin) lignes.push(fin.endsWith(\'.\') ? fin : `${fin}.`)',
+    vers: '  if (false) lignes.push(fin)' },
+
+  // ─── LES TROIS ÉCRANS ───────────────────────────────────────────────────
+  { nom: '🔴 l invendu se partage fenetre FERMEE',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '              {fenetreOuverte(d) && (',
+    vers: '              {true && (' },
+
+  // ⚠️ L'INDENTATION EST LA CIBLE : douze espaces, c'est l'annonce du deal.
+  // Celle de l'invendu en a vingt, et les deux légendes tiennent sur une ligne.
+  { nom: '🔴 le deal ne passe plus son prix barre au visuel',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '            prixBarre: d.prix_original,',
+    vers: '            prixBarre: null,' },
+
+  { nom: '🔴 une alerte s annonce comme une NOUVEAUTE',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "                occasion: a.type === 'alerte' ? 'Infos pratiques' : 'Nouveauté',",
+    vers: "                occasion: 'Nouveauté'," },
+
+  { nom: '🔴 l adresse de la fiche est recomposee a la main',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '  const url = lienFiche(slug)',
+    vers: '  const url = slug ? `https://www.yoppaa.app/commander/${slug}` : null' },
 ]
 
 const lancer = () => {

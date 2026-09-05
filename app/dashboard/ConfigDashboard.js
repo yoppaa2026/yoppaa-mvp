@@ -52,7 +52,18 @@ import {
   NOM_FONCTION_COMMERCANT, TITRE_YOPPER, CONSEIL_REMISE, MINUTES_UTILES_MINIMUM,
   fenetreParDefaut, fermetureDuJour, prixConseille, lignePublication,
   refusDePublication, remisePourcent, libelleHeure, libelleFenetre,
+  fenetreOuverte,
 } from '@/lib/anti-gaspi'
+// ⚠️ LE MÊME COMPOSANT QUE LE GÉNÉRATEUR, et c'est tout l'intérêt. Le visuel, ses
+// deux formats, son aperçu et ses deux boutons sont écrits une fois : quatre
+// copies auraient divergé au premier ajustement.
+import PartageVisuel from '@/app/components/PartageVisuel'
+import {
+  TYPE_INVENDU, TYPE_DEAL, TYPE_ACTU, partageable, legendeVisuel,
+} from '@/lib/visuel-partage'
+// ⚠️ L'ADRESSE PUBLIQUE VIENT DE SA SOURCE UNIQUE. La recomposer ici aurait
+// remis une septième fabrique de la même chaîne dans le projet.
+import { lienFiche, postAvecSignature } from '@/lib/lien-fiche'
 import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './BarreEnregistrer'
 // ⚠️ Le POSTE qui affiche ces fenêtres est monté une seule fois, dans
 // `app/dashboard/page.js`, qui rend cet écran. On n'importe ici que la
@@ -1852,6 +1863,48 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
 //
 // ⚠️ LE TITRE EST LE NOM DE L'ARTICLE. Le Yopper cherche « la tarte aux
 // pommes », pas un slogan.
+// ═══════════════════════════════════════════════════════════════════════════
+// PARTAGER UNE ANNONCE, DEPUIS SA PROPRE LIGNE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 C'EST ICI QUE LE PRIX VIENT DE LA BASE. Le générateur, lui, ne peut afficher
+// aucun montant en gros : il travaille sur un champ libre relu par un modèle, et
+// un prix faux sur une image publiée ne se corrige plus. Une offre, un deal et
+// une actualité portent leurs vrais chiffres, lus dans la ligne qu'on affiche.
+//
+// ⚠️ LE PANNEAU EST REPLIÉ PAR DÉFAUT. L'aperçu fait quatre cents pixels de
+// haut : ouvert d'office sur chaque ligne, la liste des deals deviendrait une
+// galerie d'affiches et le commerçant ne retrouverait plus ses offres.
+//
+// ⚠️ ET IL NE SE DESSINE QU'UNE FOIS OUVERT : `PartageVisuel` compose son aperçu
+// au montage, c'est-à-dire jamais tant que personne ne l'a demandé.
+// ⚠️ IL VIT SOUS LA LIGNE, PAS DANS LA COLONNE DES ACTIONS. Celle-ci porte
+// l'interrupteur, la modification et la suppression : trois gestes sur l'objet.
+// Partager n'agit pas sur l'objet, il en fait sortir une image, et le panneau
+// qui s'ouvre a besoin de toute la largeur.
+//
+// ⚠️ ET LE BOUTON DIT LE GESTE, en toutes lettres. Une icône de partage seule
+// ferait hésiter sur ce qui va se passer : rien ne part sans que le commerçant
+// ait vu son visuel.
+function BlocPartage({ annonce, texte, slug, toast, bordure = null }) {
+  const [ouvert, setOuvert] = useState(false)
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${bordure || T.hairline}` }}>
+      <button type="button" onClick={() => setOuvert(o => !o)}
+        style={{ ...s.btn, ...s.btnGhost, padding: '6px 12px', fontSize: 12 }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.bgPanel} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+          <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
+        </svg>
+        {ouvert ? 'Fermer le partage' : 'Partager sur les réseaux'}
+      </button>
+      {ouvert && (
+        <PartageVisuel annonce={annonce} texte={texte} slug={slug} toast={toast}/>
+      )}
+    </div>
+  )
+}
+
 function AvantLaFermeture({ commercantId, commercant, articles, toast, onPublie }) {
   const [creneaux, setCreneaux] = useState([])
   const [invendus, setInvendus] = useState([])
@@ -2009,11 +2062,43 @@ function AvantLaFermeture({ commercantId, commercant, articles, toast, onPublie 
             En ligne en ce moment
           </p>
           {invendus.map(d => (
-            <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '5px 0', fontSize: 12.5, color: '#78350F' }}>
-              <span>
-                <strong>{d.titre}</strong> · {d.quantite} restant{d.quantite > 1 ? 's' : ''} à {euros(Number(d.prix_deal))} · {libelleFenetre(d)}
-              </span>
-              <button onClick={() => retirer(d.id)} style={{ ...s.btn, ...s.btnGhost, padding: '3px 9px', fontSize: 11 }}>Retirer</button>
+            <div key={d.id} style={{ padding: '5px 0', fontSize: 12.5, color: '#78350F' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <span>
+                  <strong>{d.titre}</strong> · {d.quantite} restant{d.quantite > 1 ? 's' : ''} à {euros(Number(d.prix_deal))} · {libelleFenetre(d)}
+                </span>
+                <button onClick={() => retirer(d.id)} style={{ ...s.btn, ...s.btnGhost, padding: '3px 9px', fontSize: 11 }}>Retirer</button>
+              </div>
+
+              {/* ⚠️ ON NE PARTAGE PAS UNE FENÊTRE FERMÉE. Cette liste garde à
+                  l'écran les offres du jour même quand leur heure est passée,
+                  pour qu'il voie ce qu'il a publié ; en faire un post enverrait
+                  des gens chercher ce soir ce qui s'est arrêté à 18 h.
+
+                  ⚠️ ET LE VISUEL DIT L'HEURE, PAS LE STOCK. « Jusqu'à 18 h 30 »
+                  reste vrai toute la soirée ; « il en reste 3 » est faux dès la
+                  vente suivante, et la publication, elle, ne bouge plus. */}
+              {fenetreOuverte(d) && (
+                <BlocPartage
+                  bordure="#FDE68A"
+                  annonce={{
+                    type: TYPE_INVENDU,
+                    enseigne: commercant?.nom || '',
+                    titre: d.titre,
+                    prix: d.prix_deal,
+                    prixBarre: d.prix_original,
+                    tempsRestant: libelleFenetre(d),
+                    lien: lienFiche(commercant?.slug),
+                  }}
+                  texte={postAvecSignature(
+                    legendeVisuel({
+                      titre: d.titre, prix: d.prix_deal, prixBarre: d.prix_original,
+                      jusqua: libelleFenetre(d), mention: TITRE_YOPPER,
+                    }),
+                    lienFiche(commercant?.slug), commercant?.nom)}
+                  slug={commercant?.slug || ''}
+                  toast={toast}/>
+              )}
             </div>
           ))}
         </div>
@@ -2567,20 +2652,24 @@ function TabDeals({ commercantId, commercant, toast }) {
           </button>
         </div>
       )}
-      {dealsActuels.map(d => <DealRow key={d.id} d={d} today={today} onEdit={openEdit} onToggle={toggleActif} onDelete={deleteDeal}/>)}
+      {dealsActuels.map(d => <DealRow key={d.id} d={d} today={today} onEdit={openEdit} onToggle={toggleActif} onDelete={deleteDeal} commercant={commercant} toast={toast}/>)}
 
       {/* Historique */}
       {dealsPasses.length > 0 && (
         <div style={{ marginTop: 24 }}>
           <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Historique · {dealsPasses.length} deal{dealsPasses.length > 1 ? 's' : ''} passé{dealsPasses.length > 1 ? 's' : ''}</p>
-          {dealsPasses.slice(0, 10).map(d => <DealRow key={d.id} d={d} today={today} onEdit={openEdit} onToggle={toggleActif} onDelete={deleteDeal} passe/>)}
+          {/* ⚠️ L'HISTORIQUE REÇOIT LES MÊMES PROPRIÉTÉS, et c'est délibéré :
+              c'est `partageable` qui décide, pas l'absence d'un commerçant dans
+              les propriétés. Deux raisons de ne pas afficher un bouton, c'est
+              une de trop, et c'est la seconde qui casse en silence. */}
+          {dealsPasses.slice(0, 10).map(d => <DealRow key={d.id} d={d} today={today} onEdit={openEdit} onToggle={toggleActif} onDelete={deleteDeal} commercant={commercant} toast={toast} passe/>)}
         </div>
       )}
     </div>
   )
 }
 
-function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
+function DealRow({ d, today, onEdit, onToggle, onDelete, commercant = null, toast = null, passe = false }) {
   const dateAffichee = d.date_deal
     ? new Date(d.date_deal + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short', day: '2-digit', month: 'short' })
     : '—'
@@ -2636,6 +2725,33 @@ function DealRow({ d, today, onEdit, onToggle, onDelete, passe = false }) {
           </button>
         </div>
       </div>
+
+      {/* ⚠️ UN DEAL ÉTEINT OU PASSÉ NE SE PARTAGE PLUS. La carte disparaît de
+          l'application, la publication, elle, reste sur Facebook : le post
+          enverrait des gens vers une fiche où il n'y a plus rien.
+
+          ⚠️ ET C'EST LA MÊME RÈGLE QUE `dealsActuels` juste au-dessus, écrite
+          une seule fois : deux versions auraient fini par afficher la carte
+          d'un côté et cacher le bouton de l'autre. */}
+      {partageable(d.actif, d.date_deal, today) && (
+        <BlocPartage
+          annonce={{
+            type: TYPE_DEAL,
+            enseigne: commercant?.nom || '',
+            titre: d.titre,
+            prix: d.prix_deal,
+            prixBarre: d.prix_original,
+            lien: lienFiche(commercant?.slug),
+          }}
+          texte={postAvecSignature(
+            legendeVisuel({
+              titre: d.titre, prix: d.prix_deal, prixBarre: d.prix_original,
+              description: d.description,
+            }),
+            lienFiche(commercant?.slug), commercant?.nom)}
+          slug={commercant?.slug || ''}
+          toast={toast}/>
+      )}
     </div>
   )
 }
@@ -3010,6 +3126,33 @@ function TabActus({ commercantId, commercant, toast }) {
               </button>
             </div>
           </div>
+
+          {/* ⚠️ UNE ALERTE N'EST PAS UNE NOUVEAUTÉ. Sans ce mot, une fermeture
+              exceptionnelle publiait un visuel qui annonce « NOUVEAUTÉ » en
+              grand, c'est-à-dire le contraire de son propre texte. C'est le
+              défaut trouvé le 05/09 dans le générateur, qui revenait ici par une
+              autre porte.
+
+              ⚠️ ET LA CORRESPONDANCE EST DÉJÀ CELLE DU FORMULAIRE, juste
+              au-dessus : `occasion={form.type === 'alerte' ? 'Infos pratiques'
+              : 'Nouveauté'}` sert l'IA depuis le 24/08. Une seconde table de
+              traduction aurait fini par dire autre chose que la première. */}
+          {partageable(a.actif, a.date_fin, today) && (
+            <BlocPartage
+              annonce={{
+                type: TYPE_ACTU,
+                occasion: a.type === 'alerte' ? 'Infos pratiques' : 'Nouveauté',
+                enseigne: commercant?.nom || '',
+                titre: a.titre,
+                description: a.contenu,
+                lien: lienFiche(commercant?.slug),
+              }}
+              texte={postAvecSignature(
+                legendeVisuel({ titre: a.titre, description: a.contenu }),
+                lienFiche(commercant?.slug), commercant?.nom)}
+              slug={commercant?.slug || ''}
+              toast={toast}/>
+          )}
         </div>
       ))}
     </div>
@@ -6506,7 +6649,14 @@ function QRCodeSection({ commercantId, toast }) {
   // donnée est une promesse qu'on ne peut plus tenir une fois le papier collé :
   // le seul comportement sûr est celui qui ne dépend d'aucun calendrier.
   const preLancement = avantLancement()
-  const url = slug ? `https://www.yoppaa.app/commander/${slug}` : null
+  // 🔴 CETTE ADRESSE ÉTAIT ÉCRITE À LA MAIN, et c'est la PIRE des sept où elle
+  // l'est encore : elle finit dans un QR code IMPRIMÉ et collé en vitrine. Sans
+  // `encodeURIComponent`, un slug portant une espace ou une apostrophe fabrique
+  // un lien mort qu'on ne corrige plus, puisqu'il est sur du papier.
+  //
+  // ⚠️ TROUVÉE PAR LA GARDE DU PARTAGE, le 05/09 : elle interdit de recomposer
+  // l'adresse d'une fiche dans cet écran, et elle a rougi sur cette ligne-là.
+  const url = lienFiche(slug)
   // Les textes de l'affiche vivent avec elle, dans `lib/affiche-kit.js`.
   const TXT_QR = TEXTES_AFFICHE
 

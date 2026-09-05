@@ -254,13 +254,26 @@ const egal = (nom, obtenu, attendu) =>
   // les fiches auraient pris des commandes pendant que les QR collés en vitrine
   // envoyaient encore s'inscrire. Et un QR est IMPRIMÉ : une destination qui
   // change toute seule est une promesse qu'on ne peut plus tenir.
+  // 🔴 ANCRE REPOINTÉE LE 05/09, ET LA GARDE ÉTAIT FAUSSE. Elle citait la chaîne
+  // écrite à la main : elle a rougi le jour où ces deux adresses sont passées par
+  // `lienFiche`, c'est-à-dire une AMÉLIORATION. Elle mesurait une FORMULATION,
+  // pas le fait — la destination est la fiche, et elle ne dépend d'aucune date.
+  //
+  // ⚠️ ET LES DEUX PASSENT MAINTENANT PAR LA MÊME SOURCE, ce qui vaut mieux que
+  // deux chaînes identiques : le QR est IMPRIMÉ, et `lienFiche` encode le slug,
+  // ce que la version écrite à la main dans le tableau de bord ne faisait pas.
   verifie('🔴 le QR du tableau de bord mène toujours à la fiche',
-    /const url = slug \? `https:\/\/www\.yoppaa\.app\/commander\/\$\{slug\}` : null/.test(dash),
+    /const url = lienFiche\(slug\)/.test(dash),
     'la destination redeviendrait dépendante du calendrier')
   const kitPage = lire('app/kit/[slug]/page.js')
   verifie('🔴 et le lien de la page kit aussi, son frère',
-    /const lien = `\$\{BASE\}\/commander\/\$\{encodeURIComponent\(slug\)\}`/.test(kitPage),
+    /const lien = lienFiche\(slug\)/.test(kitPage),
     'un QR vers la fiche et un lien vers l\'inscription, sur la même page')
+  // ⚠️ ET AUCUNE DES DEUX NE RECOMPOSE L'ADRESSE À CÔTÉ. Sans ça, un ternaire
+  // posé juste après suffirait à rendre la garde ci-dessus décorative.
+  verifie('🔴 et aucune des deux ne recompose l’adresse à la main',
+    !/yoppaa\.app\/commander\/\$\{/.test(dash) && !/yoppaa\.app\/commander\/\$\{/.test(kitPage),
+    'une seconde fabrique de la même adresse, et le QR imprimé peut diverger')
   // ⚠️ AUCUN DES DEUX NE DOIT REPASSER PAR `avantLancement` POUR SA
   // DESTINATION. Une garde sur la seule forme de l'URL laisserait revenir un
   // ternaire posé juste à côté.

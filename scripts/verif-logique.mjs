@@ -15,6 +15,7 @@ import {
   estOffreSeparee, estRemiseSurProduit, dealActifCeJour, dealViseArticle,
   remiseSurArticle, prixEffectif, prixEffectifVariante, offresSepareesPourArticle,
   dealVisePrestation, remiseSurPrestation, prixEffectifPrestation, montantsPrestation,
+  libelleCibleDeal,
 } from '../lib/deals.js'
 import { construireLignesCommande, verifierStockDisponible } from '../lib/lignes-commande.js'
 import { libelleRetrait, estRetraitBoutique } from '../lib/libelle-retrait.js'
@@ -4054,6 +4055,75 @@ verifier('les échecs sont comptés, pas alertés douze fois',
     montantsPrestation({ ...reiki, acompte_pourcent: 300 }, [], JOUR).acompte, 50)
   egal('un acompte négatif vaut zéro',
     montantsPrestation({ ...reiki, acompte_pourcent: -10 }, [], JOUR).acompte, 0)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE DÉROULANT DE CIBLE NE PROMET QUE CE QU'IL CONTIENT (Alex, 06/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 SUR « PRIX PROMO », LE LIBELLÉ DISAIT « ARTICLE CONCERNÉ » pendant que le
+// menu proposait aussi les catégories et les prestations. Le branchement ne
+// connaissait que `remise_pct` et `bundle` : `prix_fixe` tombait dans le cas du
+// lot. Le commerçant lisait donc « article » et voyait ses prestations.
+{
+  const tout = { aProduits: true, aCategories: true, aPrestations: true }
+
+  // ⚠️ UN LOT NE VISE QU'UN PRODUIT. Il crée une offre SÉPARÉE avec son propre
+  // stock : une catégorie n'a pas de stock, et un lot de séances est un carnet
+  // d'abonnement.
+  egal('un lot ne vise qu’un produit',
+    libelleCibleDeal({ type: 'lot', ...tout }).label,
+    'Deal général, ou sur un produit')
+
+  // 🔴 LE DÉFAUT D'ALEX : les deux remises doivent dire la MÊME chose. C'est
+  // `prix_fixe` qui tombait dans le cas du lot.
+  const remise = libelleCibleDeal({ type: 'remise_pct', ...tout }).label
+  const promo = libelleCibleDeal({ type: 'prix_fixe', ...tout }).label
+  egal('🔴 « Prix promo » nomme les trois cibles', promo,
+    'Deal général, ou sur un produit, une catégorie ou une prestation')
+  verifier('🔴 et il dit exactement ce que dit « Remise % »', promo === remise)
+
+  // ⚠️ ON NE NOMME QUE CE QUI EXISTE. Annoncer « ou une prestation » à qui n'en
+  // a aucune envoie chercher une option absente du menu.
+  egal('sans prestation, on ne la propose pas',
+    libelleCibleDeal({ type: 'remise_pct', aProduits: true, aCategories: true }).label,
+    'Deal général, ou sur un produit ou une catégorie')
+  egal('sans catégorie non plus',
+    libelleCibleDeal({ type: 'remise_pct', aProduits: true, aPrestations: true }).label,
+    'Deal général, ou sur un produit ou une prestation')
+  egal('un commerce de services ne parle que de ses prestations',
+    libelleCibleDeal({ type: 'remise_pct', aPrestations: true }).label,
+    'Deal général, ou sur une prestation')
+
+  // ⚠️ RIEN À VISER : l'offre est une annonce, et le champ n'a plus de sens.
+  egal('sans rien à lier, le champ le dit',
+    libelleCibleDeal({ type: 'lot' }),
+    { label: 'Deal général', optionGenerale: '— Annonce sur ta fiche (rien à lier) —' })
+
+  // 🔴 QUAND UNE CIBLE EST OBLIGATOIRE, « DEAL GÉNÉRAL » N'EST PLUS UN CHOIX,
+  // c'est un vide. Le proposer fait cliquer « Enregistrer » pour découvrir un
+  // refus : la première ligne doit dire « choisis ».
+  const requis = libelleCibleDeal({ type: 'remise_pct', ...tout, requis: true })
+  egal('🔴 une cible obligatoire se dit dans le libellé', requis.label,
+    'Ce que ça vise : un produit, une catégorie ou une prestation *')
+  egal('🔴 et la première ligne cesse d’offrir le vide', requis.optionGenerale,
+    '— Choisis un produit, une catégorie ou une prestation —')
+  verifier('🔴 elle ne propose plus « deal général »', !/Deal général/.test(requis.optionGenerale))
+
+  // ⚠️ L'OPTION SUIT LA MÊME LISTE QUE LE LIBELLÉ : « pas lié à un produit »
+  // devant un menu qui propose des prestations laisserait croire que celles-ci,
+  // elles, seraient liées.
+  egal('l’option nomme tout ce qu’on ne lie pas',
+    libelleCibleDeal({ type: 'prix_fixe', ...tout }).optionGenerale,
+    '— Deal général (pas lié à un produit, une catégorie ou une prestation) —')
+
+  // Le duo garde son libellé : il vise deux articles, pas une cible unique.
+  egal('le duo reste le duo', libelleCibleDeal({ type: 'bundle', ...tout }).label,
+    'Premier article du duo')
+
+  // ⚠️ ET L'ÉNUMÉRATION EST FRANÇAISE : « a, b ou c », jamais « a, b, c ».
+  verifier('l’énumération se termine par « ou »',
+    / ou une prestation$/.test(libelleCibleDeal({ type: 'remise_pct', ...tout }).label))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

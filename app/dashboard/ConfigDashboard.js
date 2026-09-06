@@ -24,7 +24,7 @@ import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from 
 // format vivaient d'ailleurs ici même, justes toutes les deux, pendant que
 // vingt-cinq autres montants formataient à la main. Une seule source.
 import { euros } from '@/lib/montants'
-import { estRemiseSurProduit } from '@/lib/deals'
+import { estRemiseSurProduit, libelleCibleDeal } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
@@ -2175,6 +2175,17 @@ function TabDeals({ commercantId, commercant, toast }) {
   // ce soit un produit ou une prestation. Sinon la remise reste « une annonce »
   // chez un commerçant qui a sept prestations tarifées sous la main.
   const cibleRequise = articleRequis || prestationsLiables.length > 0
+  // ⚠️ LE LIBELLÉ DU CHAMP ET SA PREMIÈRE OPTION VIENNENT DU MODULE, pas de
+  // l'écran : ce sont des règles (« que peut viser ce type de deal ? »), et une
+  // règle se mesure au banc.
+  const estRemiseChoisie = estRemiseSurProduit({ deal_type: form.deal_type })
+  const cibleDeal = libelleCibleDeal({
+    type: form.deal_type,
+    aProduits: articlesLiables.length > 0,
+    aCategories: categoriesLiables.length > 0,
+    aPrestations: prestationsLiables.length > 0,
+    requis: cibleRequise && estRemiseChoisie,
+  })
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchDeals(); fetchArticles(); fetchPrestations() }, [commercantId])
@@ -2577,15 +2588,21 @@ function TabDeals({ commercantId, commercant, toast }) {
               </div>
             </div>
             <div>
-              <label style={s.label}>
-                {form.deal_type === 'remise_pct'
-                  ? (cibleRequise ? 'Ce que la remise vise *' : 'Ce que la remise vise (optionnel)')
-                  : form.deal_type === 'bundle' ? 'Premier article du duo' : 'Article concerné (optionnel)'}
-              </label>
+              {/* 🔴 LE LIBELLÉ MENTAIT SUR « PRIX PROMO » (Alex, 06/09). Le
+                  branchement ne connaissait que `remise_pct` et `bundle` :
+                  `prix_fixe` tombait dans le cas du lot et annonçait « Article
+                  concerné » pendant que le déroulant proposait aussi les
+                  catégories et, depuis le matin, les prestations.
+
+                  ⚠️ ET IL NE NOMME QUE CE QUI EXISTE VRAIMENT : annoncer « ou une
+                  prestation » à qui n'en a aucune envoie chercher une option
+                  absente du menu. La règle vit dans `lib/deals.js`, où elle se
+                  mesure. */}
+              <label style={s.label}>{cibleDeal.label}</label>
               <select value={form.categorie_cible ? `cat:${form.categorie_cible}` : form.prestation_id ? `presta:${form.prestation_id}` : form.article_id}
                 onChange={e => onArticleChange(e.target.value)}
                 style={{ ...s.input, cursor: 'pointer' }}>
-                <option value="">— Deal général (pas lié à un produit) —</option>
+                <option value="">{cibleDeal.optionGenerale}</option>
                 {/* Articles à variantes exclus (décision 26/07 : pas de deal sur
                     variantes en V1, stock/choix ingérables) */}
                 {articlesLiables.map(a => (

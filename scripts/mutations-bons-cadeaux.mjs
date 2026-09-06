@@ -1402,6 +1402,51 @@ const MUTATIONS = [
     banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
     de: '<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />',
     vers: '<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={setTab} />' },
+
+  // ─── LE LIBELLE DE LA CIBLE D UN DEAL (Alex, 06/09) ─────────────────────
+  //
+  // 🔴 Sur « Prix promo » il disait « Article concerne » pendant que le menu
+  // proposait aussi les categories et les prestations.
+  { nom: '🔴 « Prix promo » retombe dans le cas du lot',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: '  const remise = type === TYPE_REMISE || type === TYPE_PRIX_FIXE',
+    vers: '  const remise = type === TYPE_REMISE' },
+
+  { nom: '🔴 un LOT se met a viser categories et prestations',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: '  if (remise && aCategories) cibles.push(\'une catégorie\')',
+    vers: '  if (aCategories) cibles.push(\'une catégorie\')' },
+
+  // ⚠️ ON NE NOMME QUE CE QUI EXISTE : annoncer une prestation a qui n en a
+  // aucune envoie chercher une option absente du menu.
+  { nom: '🔴 le libelle annonce des prestations inexistantes',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: '  if (remise && aPrestations) cibles.push(\'une prestation\')',
+    vers: '  cibles.push(\'une prestation\')' },
+
+  // 🔴 QUAND UNE CIBLE EST OBLIGATOIRE, « Deal general » n est plus un choix.
+  { nom: '🔴 le vide reste propose alors qu une cible est obligatoire',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: '    return { label: `Ce que ça vise : ${liste} *`, optionGenerale: `— Choisis ${liste} —` }',
+    vers: '    return { label: `Ce que ça vise : ${liste} *`, optionGenerale: `— Deal général —` }' },
+
+  // ⚠️ L ENUMERATION EST FRANCAISE : « a, b ou c », jamais « a, b, c ».
+  { nom: '🔴 l enumeration perd son « ou »',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: "  return `${mots.slice(0, -1).join(', ')} ou ${mots[mots.length - 1]}`",
+    vers: "  return mots.join(', ')" },
+
+  // ⚠️ ET L ECRAN DOIT VRAIMENT S EN SERVIR : la regle vit dans le module, mais
+  // une garde sur le module seul ne dit rien de l ecran.
+  { nom: '🔴 l ecran reecrit le libelle dans son coin',
+    banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '              <label style={s.label}>{cibleDeal.label}</label>',
+    vers: "              <label style={s.label}>Article concerné (optionnel)</label>" },
+
+  { nom: '🔴 la premiere ligne du menu redevient figee',
+    banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                <option value="">{cibleDeal.optionGenerale}</option>',
+    vers: '                <option value="">— Deal général (pas lié à un produit) —</option>' },
 ]
 
 function lancer(banc) {

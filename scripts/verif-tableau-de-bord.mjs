@@ -440,6 +440,31 @@ const verifie = (nom, cond, detail = '') => {
   verifie('🔴 le renvoi du catalogue emprunte `changerOnglet`',
     /<TabCatalogue[^>]*onAllerA=\{changerOnglet\}/.test(cfg))
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // LE DÉROULANT DE CIBLE D'UN DEAL NE PROMET QUE CE QU'IL CONTIENT (06/09)
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 SUR « PRIX PROMO » LE LIBELLÉ DISAIT « ARTICLE CONCERNÉ » pendant que le
+  // menu proposait aussi les catégories et les prestations : le branchement ne
+  // connaissait que `remise_pct` et `bundle`.
+  //
+  // ⚠️ LE COMPORTEMENT EST PROUVÉ PAR EXÉCUTION dans `verif-logique.mjs`, où
+  // `libelleCibleDeal` est appelée sur douze cas. Ici on vérifie seulement que
+  // l'écran s'en sert au lieu de réécrire la règle dans son coin — deux gardes
+  // pour deux endroits, parce qu'une garde qui mesure le module ne dit rien de
+  // l'écran.
+  verifie('🔴 le libellé de la cible vient du module',
+    /<label style=\{s\.label\}>\{cibleDeal\.label\}<\/label>/.test(cfg),
+    'l’écran réécrirait une règle qui se mesure ailleurs')
+  verifie('🔴 et la première ligne du menu aussi',
+    /<option value="">\{cibleDeal\.optionGenerale\}<\/option>/.test(cfg))
+  // ⚠️ ET IL LUI PASSE CE QUI EXISTE VRAIMENT : sans ces trois-là, le libellé
+  // annoncerait des cibles absentes du menu.
+  verifie('et il lui passe ce que le commerçant a réellement',
+    /aProduits: articlesLiables\.length > 0,/.test(cfg)
+    && /aCategories: categoriesLiables\.length > 0,/.test(cfg)
+    && /aPrestations: prestationsLiables\.length > 0,/.test(cfg))
+
   // ⚠️ RÈGLE 1 — UN DROIT NE SE CALCULE JAMAIS SUR UN `.plan` DÉTACHÉ.
   // C'est en détachant le plan de son commerçant qu'on perd `created_at`, donc
   // l'essai en cours, et qu'un commerçant se retrouve privé en silence de ce

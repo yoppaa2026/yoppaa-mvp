@@ -10565,7 +10565,31 @@ function TabComptabilite({ commercantId, categorie, toast }) {
 // CARTES CADEAUX, qui font déjà le pointage au comptoir sans agenda. Bâtir un
 // second système de pointage à côté du premier aurait produit deux règles
 // jumelles, dont une qu'on oublierait de corriger.
-function TabCatalogue({ commercantId, commercant, toast }) {
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 « PRESTATIONS ET PRODUITS » NE CONTENAIT QUE LES PRODUITS (Alex, 06/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Trois catalogues vivent dans trois tables : `articles` ici, `rdv_prestations`
+// dans Prise de RDV, `abonnement_formules` dans le sous-onglet d'à côté. Le
+// titre en promettait deux et n'en montrait qu'un.
+//
+// 🔴 ET IL MENTAIT EXACTEMENT AUX BONS COMMERÇANTS. Cette barre ne s'affiche
+// QUE si le commerce a la prise de rendez-vous : ce titre ne se montrait donc
+// qu'à ceux qui ont des prestations, c'est-à-dire aux seuls à qui il promettait
+// quelque chose d'absent. Une prof de yoga ouvrait « Prestations et produits »
+// et lisait « 0 produit, aucun article dans le menu » avec ses trois cours
+// juste à côté.
+//
+// ⚠️ LES PRESTATIONS RESTENT DANS PRISE DE RDV, décision d'Alex du 06/09. Une
+// prestation n'est pas une ligne de catalogue, c'est une case d'agenda : elle
+// porte une durée, une capacité, un acompte, ses praticiens rattachés et ses
+// créneaux. La déplacer ici l'aurait séparée des trois réglages avec lesquels
+// on la configure, pour gagner un mot.
+//
+// ⚠️ ON CORRIGE DONC LE MOT, ET ON MONTRE LA PORTE. Un titre juste mais muet
+// laisserait le commerçant chercher ses prestations : il vient de lire qu'elles
+// ne sont pas là, il ne sait toujours pas où elles sont.
+function TabCatalogue({ commercantId, commercant, toast, onAllerA = null }) {
   const [sousOnglet, setSousOnglet] = useState('produits')
   const estVitrine = commercant?.categorie === 'vitrine'
   const peutAbonnements = peut(commercant, 'rdv')
@@ -10577,7 +10601,7 @@ function TabCatalogue({ commercantId, commercant, toast }) {
   }
 
   const sousOnglets = [
-    { id: 'produits', label: 'Prestations et produits' },
+    { id: 'produits', label: 'Produits' },
     { id: 'abonnements', label: 'Abonnements' },
   ]
 
@@ -10595,6 +10619,33 @@ function TabCatalogue({ commercantId, commercant, toast }) {
         ))}
       </BandeDefilante>
 
+      {/* ⚠️ LA PORTE VERS LES PRESTATIONS, et uniquement sur ce sous-onglet.
+          Sur « Abonnements » elle n'aurait rien à voir, et une phrase affichée
+          partout finit par n'être lue nulle part.
+
+          ⚠️ ELLE EMPRUNTE `changerOnglet` comme le renvoi du générateur : c'est
+          la porte qui refuse un onglet hors forfait et qui retient un
+          formulaire non enregistré. */}
+      {sousOnglet === 'produits' && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: T.pale, border: `1px solid ${T.light}`, borderRadius: 12, padding: '11px 13px', marginBottom: 14 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+          </svg>
+          <p style={{ margin: 0, fontSize: 12.5, color: T.ink, lineHeight: 1.55 }}>
+            Ici, tes <strong>produits</strong>. Tes prestations se règlent dans <strong>Prise de RDV</strong>,
+            avec leur durée, leur nombre de places et leurs praticiens.
+            {onAllerA && (
+              <>
+                {' '}
+                <button type="button" onClick={() => onAllerA('rdv')}
+                  style={{ background: 'none', border: 'none', padding: 0, color: T.main, fontWeight: 900, fontSize: 12.5, cursor: 'pointer', textDecoration: 'underline', fontFamily: '"DM Sans", sans-serif' }}>
+                  Aller dans Prise de RDV
+                </button>
+              </>
+            )}
+          </p>
+        </div>
+      )}
       {sousOnglet === 'produits' && <TabMenu commercantId={commercantId} commercant={commercant} toast={toast} />}
       {/* ⚠️ `commercant` n'est plus passé : il ne servait qu'à résoudre le lieu
           des séances générées d'avance, et cette génération a disparu avec le
@@ -10966,7 +11017,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
       </BandeDefilante>
 
       {tab === 'stats'    && <TabStatistiques commercantId={commercantId} toast={showToast} />}
-      {tab === 'menu'     && <TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {tab === 'menu'     && <TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />}
       {/* ⚠️ LE SECOND CONTRÔLE, ET IL RESTE. La barre grise un onglet, mais un
           `tab` peut aussi venir d'ailleurs (un raccourci, une URL, un état
           resté en mémoire). Une garde d'écran n'est jamais une réponse à elle

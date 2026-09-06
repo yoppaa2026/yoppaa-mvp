@@ -1376,6 +1376,32 @@ const MUTATIONS = [
     banc: 'verif:livraison', fichier: 'lib/resend.js',
     de: '  return Math.max(0, arr(t - arr(fidelite_remise) - arr(bon_cadeau_montant)))\n}',
     vers: '  return Math.max(0, arr(t - arr(bon_cadeau_montant)))\n}' },
+
+  // ─── LE CATALOGUE NE PROMET QUE CE QU IL CONTIENT (Alex, 06/09) ──────────
+  //
+  // 🔴 Le sous-onglet s appelait « Prestations et produits » et ne lisait que
+  // `articles`. Et il ne s affichait QU AUX commerces qui ont la prise de
+  // rendez-vous : le titre ne se montrait donc qu a ceux qui ont des
+  // prestations, les seuls a qui il promettait quelque chose d absent.
+  { nom: '🔴 le catalogue repromet les prestations qu il ne montre pas',
+    banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "    { id: 'produits', label: 'Produits' },",
+    vers: "    { id: 'produits', label: 'Prestations et produits' }," },
+
+  { nom: '🔴 le catalogue ne dit plus ou les prestations se reglent',
+    banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '            Ici, tes <strong>produits</strong>. Tes prestations se règlent dans <strong>Prise de RDV</strong>,',
+    vers: '            Ici, tes <strong>produits</strong>.' },
+
+  { nom: '🔴 le renvoi vise un onglet qui n existe pas (bouton mort)',
+    banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "onClick={() => onAllerA('rdv')}",
+    vers: "onClick={() => onAllerA('prestations')}" },
+
+  { nom: '🔴 le renvoi du catalogue court-circuite la porte des onglets',
+    banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />',
+    vers: '<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={setTab} />' },
 ]
 
 function lancer(banc) {

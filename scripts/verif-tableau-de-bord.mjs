@@ -364,7 +364,12 @@ const verifie = (nom, cond, detail = '') => {
     /appliquerBlocage\(c, blocagesDuJour\.has\(c\.creneau\?\.id\)\)/.test(dash))
 }
 
-console.log(`\nTableau de bord : ${ok} vérifications`)
+// 🔴 LE TOTAL S'AFFICHAIT ICI, À LA LIGNE 367 D'UN BANC QUI EN FAIT 580. Les
+// deux cents vérifications suivantes tournaient et pouvaient rougir, mais elles
+// n'étaient PAS COMPTÉES : le banc annonçait « 100 vérifications » et en faisait
+// bien davantage. ⚠️ Un banc qui annonce son total avant d'avoir fini ment sur
+// son propre travail, et c'est ce chiffre-là qu'on recopie dans un commit.
+// Trouvé le 06/09 en ajoutant cinq gardes qui n'ont pas fait bouger le total.
 
 // ═══ LES ONGLETS : LE SEGMENT DÉCIDE QU'ILS EXISTENT, LE FORFAIT LEUR ÉTAT ══
 //
@@ -390,6 +395,50 @@ console.log(`\nTableau de bord : ${ok} vérifications`)
     .split('\n').map(l => (/^\s*\/\//.test(l) ? '' : l)).join('\n')
   const cfg = sansCommentaires(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
   const bord = sansCommentaires(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LE CATALOGUE NE PROMET QUE CE QU'IL CONTIENT (Alex, 06/09)
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 LE SOUS-ONGLET S'APPELAIT « PRESTATIONS ET PRODUITS » ET NE LISAIT QUE
+  // `articles`. Les prestations vivent dans `rdv_prestations`, sous Prise de
+  // RDV. Et cette barre ne s'affiche QUE si le commerce a la prise de
+  // rendez-vous : le titre ne se montrait donc qu'à ceux qui ont des
+  // prestations, les seuls à qui il promettait quelque chose d'absent.
+  verifie('🔴 le catalogue ne promet plus les prestations qu’il ne montre pas',
+    !/label: 'Prestations et produits'/.test(cfg),
+    'le sous-onglet annonce des prestations que `articles` ne contient pas')
+
+  // ⚠️ ET IL MONTRE LA PORTE. Un titre juste mais muet laisse le commerçant
+  // chercher : il vient d'apprendre qu'elles ne sont pas là, il ne sait
+  // toujours pas où elles sont.
+  verifie('et il dit où les prestations se règlent',
+    /Tes prestations se règlent dans <strong>Prise de RDV<\/strong>/.test(cfg))
+
+  // 🔴 LA GARDE QUI COMPTE : que l'onglet visé EXISTE. Renommer l'identifiant
+  // de l'onglet sans toucher ce renvoi rendrait le bouton mort en silence — il
+  // resterait cliquable et ne ferait rien.
+  //
+  // ⚠️ ON DÉCOUPE LA FONCTION, ON NE MESURE PAS UNE DISTANCE. Une première
+  // version cherchait `onAllerA('…')` à moins de deux cents caractères du
+  // libellé du bouton : elle a rougi sur la longueur d'un attribut de style,
+  // c'est-à-dire sur rien. Ce projet s'est déjà fait prendre à mesurer un
+  // écart entre deux lignes plutôt qu'un fait.
+  const iCat = cfg.indexOf('function TabCatalogue(')
+  const finCat = cfg.indexOf('\nfunction ', iCat + 1)
+  const blocCat = iCat === -1 ? '' : cfg.slice(iCat, finCat === -1 ? undefined : finCat)
+  verifie('le bloc du catalogue se découpe', blocCat.length > 500, String(blocCat.length))
+  const cibleRenvoi = (blocCat.match(/onAllerA\('([a-z-]+)'\)/) || [])[1]
+  verifie('🔴 le renvoi vise un onglet qui existe vraiment',
+    !!cibleRenvoi && new RegExp(`\\{ id: '${cibleRenvoi}', label: 'Prise de RDV'`).test(cfg),
+    `« ${cibleRenvoi} » ne correspond à aucun onglet`)
+
+  // ⚠️ ET IL EMPRUNTE LA PORTE DE LA BARRE D'ONGLETS, comme le renvoi du
+  // générateur : `changerOnglet` refuse un onglet hors forfait en ouvrant la
+  // proposition et retient un formulaire non enregistré. `setTab` ferait ni
+  // l'un ni l'autre.
+  verifie('🔴 le renvoi du catalogue emprunte `changerOnglet`',
+    /<TabCatalogue[^>]*onAllerA=\{changerOnglet\}/.test(cfg))
 
   // ⚠️ RÈGLE 1 — UN DROIT NE SE CALCULE JAMAIS SUR UN `.plan` DÉTACHÉ.
   // C'est en détachant le plan de son commerçant qu'on perd `created_at`, donc
@@ -527,6 +576,10 @@ console.log(`\nTableau de bord : ${ok} vérifications`)
       restes.length > 0 ? `${restes.length} reste(s), dont : ${restes[0].trim().slice(0, 70)}` : '')
   }
 }
+
+// ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du
+// fichier et n'annonçait donc qu'un tiers du travail.
+console.log(`\nTableau de bord : ${ok} vérifications`)
 
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

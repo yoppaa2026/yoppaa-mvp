@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import { libelleRecompense } from '@/lib/fidelite'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
+import { lienFiche, LIEN_ACCUEIL } from '@/lib/lien-fiche'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,9 +43,20 @@ export default async function AffichettePage({ params }) {
   const { slug } = await params
   const com = await getCommerce(slug)
 
-  const ficheUrl = com
-    ? `https://www.yoppaa.app${com.categorie === 'vitrine' ? '/commander/rdv/' : '/commander/'}${com.slug}`
-    : 'https://www.yoppaa.app/commander'
+  // 🔴 CETTE AFFICHETTE AMPUTAIT LA BOUTIQUE DES SALONS QUI VENDENT. Elle
+  // branchait sur la catégorie : une vitrine partait vers `/commander/rdv/`,
+  // et un salon qui vend des shampoings voyait donc son QR IMPRIMÉ envoyer ses
+  // clients droit sur l'agenda, en sautant ses produits.
+  //
+  // ⚠️ ET LE KIT, SON FRÈRE DE PAPIER, POINTAIT AILLEURS. Deux affiches du même
+  // commerce, deux destinations : c'est la divergence que la source unique
+  // existe pour tuer, et elle vivait entre deux feuilles qu'on imprime.
+  //
+  // ⚠️ `lienFiche` EST LA SEULE JUSTE ICI, et c'est vérifié : la fiche redirige
+  // elle-même une vitrine SANS aucun article vers sa page de rendez-vous, et
+  // garde sa boutique à celle qui en a une. Un papier ne sait pas ce que vend
+  // le commerçant le jour où on le lit ; l'adresse, si.
+  const ficheUrl = lienFiche(com?.slug) || LIEN_ACCUEIL
 
   let qr = null
   try {

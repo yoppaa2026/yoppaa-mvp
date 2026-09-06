@@ -95,6 +95,47 @@ const MUTATIONS = [
     fichier: ECRAN,
     de: '      setLien(j.lien || null)',
     vers: '      setLien(null)' },
+
+  // ─── DEUX ADRESSES, DEUX INTENTIONS (06/09) ─────────────────────────────
+  //
+  // ⚠️ Un lien GENERIQUE (affiche, QR, post, partage) ne sait pas ce que vend
+  // le commercant : `lienFiche`, qui redirige d elle-meme. Un lien CONTEXTUEL
+  // (« reprends rendez-vous », le bouton Google) vise l agenda et le sait.
+  { nom: '🔴 l agenda recopie l adresse generique : les deux se confondent',
+    de: '  return `${BASE_YOPPAA}/commander/rdv/${encodeURIComponent(s)}`',
+    vers: '  return `${BASE_YOPPAA}/commander/${encodeURIComponent(s)}`' },
+
+  { nom: '🔴 l adresse de l agenda cesse d encoder le slug',
+    de: '  return `${BASE_YOPPAA}/commander/rdv/${encodeURIComponent(s)}`',
+    vers: '  return `${BASE_YOPPAA}/commander/rdv/${s}`' },
+
+  // 🔴 UN EMAIL NE SE CORRIGE PAS UNE FOIS PARTI. L adresse y etait recomposee
+  // a la main, SANS encoder : un slug portant une espace fabriquait un lien
+  // mort chez le client, definitivement.
+  { nom: '🔴 l email de validation recompose son adresse a la main',
+    fichier: 'lib/resend.js',
+    de: '  const ficheUrl     = lienFiche(slug) || LIEN_ACCUEIL',
+    vers: "  const ficheUrl     = slug ? `https://www.yoppaa.app/commander/${slug}` : LIEN_ACCUEIL" },
+
+  // 🔴 L AFFICHETTE AMPUTAIT LA BOUTIQUE DES SALONS QUI VENDENT : son QR est
+  // IMPRIME et colle en vitrine.
+  { nom: '🔴 l affichette rebranche sur la categorie et saute la boutique',
+    fichier: 'app/affichette/[slug]/page.js',
+    de: '  const ficheUrl = lienFiche(com?.slug) || LIEN_ACCUEIL',
+    vers: "  const ficheUrl = com ? `https://www.yoppaa.app${com.categorie === 'vitrine' ? '/commander/rdv/' : '/commander/'}${com.slug}` : LIEN_ACCUEIL" },
+
+  // 🔴 LE MEME COMMERCE AVAIT DEUX ADRESSES selon d ou on le partageait.
+  { nom: '🔴 le partage de la fiche RDV diverge a nouveau de celui de l accueil',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '    const url = lienFiche(slug)',
+    vers: '    const url = lienFicheRdv(slug)' },
+
+  // ⚠️ ET GOOGLE, LUI, DOIT GARDER SON BRANCHEMENT : c est la raison d etre du
+  // fichier, pas de la dette.
+  { nom: '🔴 Google envoie un coiffeur sur sa boutique au lieu de son agenda',
+    fichier: 'lib/action-google.js',
+    de: '      url: lienFicheRdv(slug),',
+    vers: '      url: lienFiche(slug),' },
 ]
 
 const lancer = () => {

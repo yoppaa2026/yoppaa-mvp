@@ -30,6 +30,7 @@ import { supabase } from '@/lib/supabase'
 // `commande` à l'alimentaire alors que cette fiche sert les vitrines.
 import { isVitrine, canDo, planEffectif } from '@/lib/plans'
 import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
+import { lienFiche } from '@/lib/lien-fiche'
 import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
@@ -278,7 +279,16 @@ export default function CommanderRdvSlug() {
   }
 
   async function partagerFiche() {
-    const url = `https://www.yoppaa.app/commander/rdv/${slug}`
+    // 🔴 LE MÊME COMMERCE AVAIT DEUX ADRESSES SELON D'OÙ ON LE PARTAGEAIT.
+    // Depuis l'accueil, `/commander/<slug>` ; depuis cette fiche-ci,
+    // `/commander/rdv/<slug>`. Deux liens pour un salon, et celui d'ici sautait
+    // sa boutique quand il en a une.
+    //
+    // ⚠️ UN PARTAGE EST UN LIEN GÉNÉRIQUE : celui qui le reçoit ne sait pas ce
+    // que vend le commerçant, et l'adresse de fiche redirige d'elle-même vers
+    // l'agenda quand il n'y a rien à acheter. C'est le frère non traité du
+    // partage de l'accueil, converti la veille.
+    const url = lienFiche(slug)
     const texte = `${commercant?.nom} sur Yoppaa`
     try {
       if (navigator.share) {

@@ -13,7 +13,9 @@
 // ⚠️ TOUT S'EXÉCUTE. Les gardes de code ne servent qu'à vérifier que les écrans
 // appellent bien le module plutôt que de recomposer l'adresse dans leur coin.
 
-import { lienFiche, signatureYoppaa, postAvecSignature, BASE_YOPPAA } from '../lib/lien-fiche.js'
+import { lienFiche, lienFicheRdv, LIEN_ACCUEIL, signatureYoppaa, postAvecSignature, BASE_YOPPAA } from '../lib/lien-fiche.js'
+import { actionCommerce } from '../lib/action-google.js'
+import { emailValidationCommercant } from '../lib/resend.js'
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 
@@ -150,6 +152,90 @@ const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b
   // ⚠️ IL NE RECOMPOSE PAS L'ADRESSE : elle vient du serveur, telle quelle.
   verifier('🔴 l’écran ne fabrique aucune adresse lui-même',
     !/yoppaa\.app\/commander/.test(ECRAN) && /setLien\(j\.lien \|\| null\)/.test(ECRAN))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. DEUX ADRESSES, DEUX INTENTIONS (06/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ LA RÈGLE QUI LES SÉPARE : un lien GÉNÉRIQUE (affiche, QR, post, partage)
+// ne sait pas ce que vend le commerçant, donc `lienFiche`, qui redirige d'elle-
+// même ; un lien CONTEXTUEL (« reprends rendez-vous », le bouton Google) vise
+// l'agenda et le sait, donc `lienFicheRdv`.
+{
+  egal('l’agenda a sa propre adresse', lienFicheRdv('le-salon'),
+    'https://www.yoppaa.app/commander/rdv/le-salon')
+  // ⚠️ ELLE ENCODE, comme sa sœur. Un QR ou un email ne se corrige pas.
+  egal('🔴 et elle encode le slug', lienFicheRdv("chez l'ami"),
+    "https://www.yoppaa.app/commander/rdv/chez%20l'ami")
+  egal('sans slug, rien', lienFicheRdv('   '), null)
+  egal('le repli est l’accueil public', LIEN_ACCUEIL, 'https://www.yoppaa.app/commander')
+  // 🔴 LES DEUX NE DOIVENT PAS RENDRE LA MÊME CHOSE. Le jour où l'une recopie
+  // l'autre, tout le raisonnement ci-dessus devient décoratif.
+  verifier('🔴 les deux adresses restent distinctes',
+    lienFiche('x') !== lienFicheRdv('x'))
+
+  // ── Google : le branchement par catégorie EST la raison du fichier ───────
+  //
+  // ⚠️ CE N'EST PAS DE LA DETTE. Une `ReserveAction` doit mener à l'agenda et
+  // une `OrderAction` à la boutique : c'est le seul endroit du projet où viser
+  // l'agenda est délibéré ET annoncé à un tiers.
+  egal('🔴 Google envoie un coiffeur vers son agenda',
+    actionCommerce({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux' })?.url,
+    lienFicheRdv('ciseaux'))
+  egal('et une boulangerie vers sa boutique',
+    actionCommerce({ plan: 'vendre', categorie: 'alimentaire', slug: 'la-mie' })?.url,
+    lienFiche('la-mie'))
+
+  // ── L'EMAIL S'EXÉCUTE, on ne cherche pas un mot dans le fichier ──────────
+  //
+  // 🔴 UN EMAIL NE SE CORRIGE PAS UNE FOIS PARTI. L'adresse y était recomposée
+  // à la main, SANS encoder : un slug portant une espace ou une apostrophe
+  // fabriquait un lien mort chez le client, définitivement.
+  {
+    // 🔴 LE GABARIT REND UNE CHAÎNE, PAS UN OBJET `{ html }`. Ma première
+    // version lisait `?.html` et obtenait `undefined`. La garde POSITIVE a
+    // rougi et me l'a appris — mais celle qui suit, NÉGATIVE, était verte sur
+    // cette même chaîne vide. ⚠️ Une garde négative sur une valeur absente est
+    // toujours verte : on prouve d'abord qu'il y a quelque chose à mesurer.
+    const html = String(emailValidationCommercant({ nom: 'Le Salon', slug: "chez l'ami" }) || '')
+    verifier('l’email de validation rend bien un gabarit',
+      html.length > 1000, `${html.length} caractères`)
+    verifier('🔴 l’email de validation encode le slug de la fiche',
+      html.includes("/commander/chez%20l'ami"),
+      'un slug non encodé fabrique un lien mort dans un email déjà parti')
+    verifier('et il ne porte plus d’adresse recomposée à la main',
+      html.length > 1000 && !/yoppaa\.app\/commander\/chez l/.test(html))
+  }
+
+  // ── LES ÉCRANS QUI ONT CESSÉ DE RECOMPOSER ──────────────────────────────
+  //
+  // 🔴 L'AFFICHETTE AMPUTAIT LA BOUTIQUE DES SALONS QUI VENDENT. Elle branchait
+  // sur la catégorie : une vitrine partait vers `/commander/rdv/`, et un salon
+  // qui vend des shampoings voyait son QR IMPRIMÉ sauter ses produits. Le kit,
+  // son frère de papier, pointait ailleurs : deux affiches du même commerce,
+  // deux destinations.
+  const AFFICHE = sansProse(readFileSync(new URL('../app/affichette/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 l’affichette prend l’adresse générique',
+    /const ficheUrl = lienFiche\(com\?\.slug\) \|\| LIEN_ACCUEIL/.test(AFFICHE))
+  verifier('🔴 et elle ne branche PLUS sur la catégorie pour sa destination',
+    !/categorie === 'vitrine' \? '\/commander\/rdv\//.test(AFFICHE),
+    'un salon qui vend verrait son QR imprimé sauter sa boutique')
+
+  // 🔴 LE MÊME COMMERCE AVAIT DEUX ADRESSES SELON D'OÙ ON LE PARTAGEAIT :
+  // `/commander/<slug>` depuis l'accueil, `/commander/rdv/<slug>` depuis sa
+  // propre fiche. Un partage est un lien générique dans les deux cas.
+  const FICHE_RDV = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 le partage de la fiche RDV emploie l’adresse générique',
+    /async function partagerFiche\(\)[\s\S]{0,400}const url = lienFiche\(slug\)/.test(FICHE_RDV))
+
+  // ⚠️ ET PLUS AUCUN DOMAINE RECOPIÉ dans les trois modules de la source.
+  // `lib/action-google.js` et la page kit avaient chacun leur `BASE`.
+  for (const f of ['lib/action-google.js', 'app/kit/[slug]/page.js', 'app/affichette/[slug]/page.js']) {
+    const src = sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
+    verifier(`aucun domaine Yoppaa recopié dans ${f}`,
+      !/['"`]https:\/\/www\.yoppaa\.app/.test(src))
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

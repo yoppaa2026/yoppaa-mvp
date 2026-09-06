@@ -2638,13 +2638,28 @@ function TabDeals({ commercantId, commercant, toast }) {
                     )}
                   </optgroup>
                 )}
-                {/* Articles à variantes exclus (décision 26/07 : pas de deal sur
-                    variantes en V1, stock/choix ingérables) */}
-                {articlesLiables.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} · {euros(a.prix)}
-                  </option>
-                ))}
+                {/* 🔴 CES OPTIONS ÉTAIENT EN VRAC, SANS GROUPE (Alex, 06/09).
+                    Elles suivaient immédiatement le groupe « Tout d'un coup » :
+                    un commerçant qui n'a qu'un seul produit le voyait donc
+                    collé sous ce titre, et croyait qu'il en faisait partie.
+                    Toutes les autres familles avaient déjà le leur.
+
+                    ⚠️ AUCUNE OPTION HORS D'UN GROUPE, sauf la première ligne
+                    qui est le choix vide. Un menu où certaines entrées sont
+                    coiffées et d'autres pas fait porter le titre du dessus à
+                    celles qui n'en ont pas.
+
+                    Articles à variantes exclus (décision 26/07 : pas de deal
+                    sur variantes en V1, stock et choix ingérables). */}
+                {articlesLiables.length > 0 && (
+                  <optgroup label="Un produit précis">
+                    {articlesLiables.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.nom}{a.categorie ? ` · ${a.categorie}` : ''} · {euros(a.prix)}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
                 {/* Toute une catégorie d'un coup, réservé aux remises : « -20 %
                     sur les shampoings » évite de créer un deal par produit. */}
                 {estRemiseSurProduit({ deal_type: form.deal_type }) && categoriesLiables.length > 0 && (

@@ -1824,6 +1824,32 @@ for (const chemin of [
   verifie('et les trois autres effacent « tout »',
     (CFG.match(/cible_tout: '',/g) || []).length >= 3,
     'un choix précédent traînerait et ferait refuser l’enregistrement')
+
+  // 🔴 AUCUNE OPTION EN VRAC SOUS UN TITRE DE GROUPE (Alex, 06/09). Les
+  // produits étaient listés SANS groupe, juste après « Tout d'un coup » : un
+  // commerçant qui n'a qu'un seul produit le voyait collé sous ce titre et
+  // croyait qu'il en faisait partie. Toutes les autres familles avaient déjà
+  // le leur.
+  //
+  // ⚠️ LA RÈGLE N'EST PAS « TOUJOURS UN GROUPE », c'est « pas de mélange ». Le
+  // menu du second article d'un duo n'a AUCUN groupe et va très bien : rien ne
+  // peut y être pris pour autre chose. Le défaut naît quand certaines entrées
+  // sont coiffées et d'autres pas.
+  const iSel = CFG.indexOf('<select value={form.cible_tout')
+  const finSel = CFG.indexOf('</select>', iSel)
+  const bloc = iSel === -1 ? '' : CFG.slice(iSel, finSel)
+  verifie('le menu de cible se découpe', bloc.length > 300, String(bloc.length))
+  const horsGroupe = bloc.replace(/<optgroup[\s\S]*?<\/optgroup>/g, '')
+  verifie('🔴 une seule option hors groupe : la ligne vide',
+    (horsGroupe.match(/<option/g) || []).length === 1,
+    `${(horsGroupe.match(/<option/g) || []).length} options en vrac sous un titre qui n’est pas le leur`)
+  // ⚠️ ET L'ORDRE SUIT LE LIBELLÉ : « sur tout, ou sur un produit, une
+  // catégorie ou une prestation ». Un menu qui énumère dans un autre ordre que
+  // son propre libellé fait chercher.
+  const ordre = (bloc.match(/<optgroup label="([^"]+)"/g) || []).join(' | ')
+  verifie('🔴 les groupes suivent l’ordre annoncé par le libellé',
+    /Tout d’un coup[\s\S]*Un produit précis[\s\S]*Toute une catégorie[\s\S]*Une prestation/.test(ordre),
+    ordre)
 }
 
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════

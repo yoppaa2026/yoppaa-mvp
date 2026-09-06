@@ -714,6 +714,18 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: "      setForm(p => ({ ...p, article_id: '', prestation_id: '', categorie_cible: '', cible_tout: v.slice(5) }))",
     vers: '      setForm(p => ({ ...p, cible_tout: v.slice(5) }))' },
+
+  // 🔴 LE DEFAUT VU PAR ALEX : les produits en vrac sous « Tout d un coup ».
+  // Un commercant qui n a qu un seul produit le voyait colle sous ce titre.
+  { nom: '🔴 les produits repartent en vrac sous le titre du dessus',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                  <optgroup label="Un produit précis">',
+    vers: '                  <span>' },
+
+  { nom: '🔴 l ordre des groupes ne suit plus le libelle',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                  <optgroup label="Un produit précis">',
+    vers: '                  <optgroup label="Zzz un produit précis">' },
 ]
 
 function lancer() {

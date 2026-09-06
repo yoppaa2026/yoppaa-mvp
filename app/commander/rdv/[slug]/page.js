@@ -39,6 +39,8 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 // le lieu gravé et la première place libre se décident CÔTÉ SERVEUR, dans
 // `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
 import { capacitePrestation, estCoursCollectif, libellePlaces } from '@/lib/cours-collectifs'
+import { attenteOuverte } from '@/lib/attente-rdv'
+import BlocAttente from './BlocAttente'
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
 // boutique : deux écritures d'une même phrase finissent toujours par dire deux
 // choses.
@@ -449,6 +451,8 @@ export default function CommanderRdvSlug() {
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
+  // La séance complète sur laquelle le Yopper a demandé à être prévenu.
+  const [heureAttente, setHeureAttente] = useState(null)
   const [reservationsJour, setReservationsJour] = useState([])  // [{ heure_debut, heure_fin }] pour la section 'Deja pris'
   const [showMiniCal, setShowMiniCal] = useState(false)  // toggle mini-calendrier mensuel pour jours > J+14
   const [reservations60j, setReservations60j] = useState([])  // toutes les resa du commercant sur 60j, pour points dispo mini-cal
@@ -2995,16 +2999,36 @@ export default function CommanderRdvSlug() {
                     </div>
                   )}
 
-                  {dateChoisie && !slotsLoading && slots.filter(s => !s.pris).length === 0 && (
-                    <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', textAlign: 'center' }}>
-                      <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5 }}>
-                        Aucun créneau libre ce jour-là. Essaie un autre jour ↑
-                      </p>
-                    </div>
+                  {/* 🔴 LE VIDE EST LE POINT D'ENTRÉE DU SOLO. Un créneau
+                      individuel pris DISPARAÎT (décision d'Alex du 13/08) :
+                      quand tout est pris, le client ne voit rien à cliquer.
+                      C'est donc ici, et nulle part ailleurs, que se propose la
+                      liste d'attente d'un rendez-vous individuel. */}
+                  {dateChoisie && !slotsLoading && slots.filter(s => !s.pris || s.motif === 'complet').length === 0 && (
+                    <>
+                      <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', textAlign: 'center' }}>
+                        <p style={{ fontSize: '0.85rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5 }}>
+                          Aucun créneau libre ce jour-là. Essaie un autre jour ↑
+                        </p>
+                      </div>
+                      {/* ⚠️ JAMAIS SUR UN COURS : là-bas on attend UNE SÉANCE,
+                          et le serveur refuserait une fenêtre. L'écran ne
+                          propose que le geste que le serveur accepte. */}
+                      {prestationChoisie && !estCoursCollectif(prestationChoisie) && (
+                        <BlocAttente prestation={prestationChoisie} date={isoDate(dateChoisie)} T={T} />
+                      )}
+                    </>
                   )}
 
                   {/* SECTION 1 : SLOTS LIBRES UNIQUEMENT - gros boutons, lecture immediate */}
-                  {dateChoisie && !slotsLoading && slots.filter(s => !s.pris).length > 0 && (
+                  {/* 🔴 CORRIGÉ LE 06/09 : LA GRILLE SE CACHAIT QUAND TOUT ÉTAIT
+                      COMPLET. La condition ne comptait que les créneaux LIBRES,
+                      alors que la ligne juste dessous filtre aussi les complets
+                      pour les afficher grisés. Un jour où les trois cours
+                      étaient pleins n'affichait donc rien du tout, et le
+                      commentaire de 13/08 disait pourtant le contraire. C'est
+                      exactement le jour où la liste d'attente sert le plus. */}
+                  {dateChoisie && !slotsLoading && slots.filter(s => !s.pris || s.motif === 'complet').length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(82px, 1fr))', gap: 8, marginBottom: 14 }}>
                       {/* ⚠️ UN COURS COMPLET RESTE AFFICHÉ, GRISÉ (décision Alex du
                           13/08). Le faire disparaître laisserait croire qu'il n'y a
@@ -3015,17 +3039,27 @@ export default function CommanderRdvSlug() {
                       {slots.filter(s => !s.pris || s.motif === 'complet').map(({ heure, pris, placesTotal, placesPrises }) => {
                         const choisi = heureChoisie === heure
                         const jauge = placesTotal ? libellePlaces({ capacite: placesTotal }, placesPrises || 0) : null
+                        // ⚠️ UNE SÉANCE COMPLÈTE REDEVIENT CLIQUABLE, mais pour
+                        // une autre raison : on ne la réserve pas, on demande à
+                        // être prévenu. Elle reste grise, elle ne prend jamais la
+                        // couleur d'un créneau choisi.
+                        const attenteDispo = pris && attenteOuverte(prestationChoisie)
+                        const enAttente = attenteDispo && heureAttente === heure
                         return (
-                          <button key={heure} onClick={() => { if (!pris) setHeureChoisie(heure) }}
-                            disabled={pris}
-                            aria-label={pris ? `${heure}, complet` : heure}
+                          <button key={heure}
+                            onClick={() => {
+                              if (!pris) { setHeureChoisie(heure); setHeureAttente(null) }
+                              else if (attenteDispo) setHeureAttente(enAttente ? null : heure)
+                            }}
+                            disabled={pris && !attenteDispo}
+                            aria-label={pris ? `${heure}, complet, être prévenu si une place se libère` : heure}
                             style={{
                               padding: jauge ? '0.6rem 0.5rem' : '0.75rem 0.5rem', borderRadius: 12,
-                              border: `1.5px solid ${pris ? '#E5E7EB' : choisi ? T.main : T.pale}`,
+                              border: `1.5px solid ${pris ? (enAttente ? T.main : '#E5E7EB') : choisi ? T.main : T.pale}`,
                               background: pris ? '#F9FAFB' : choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
                               color: pris ? '#9CA3AF' : choisi ? '#fff' : T.ink,
                               fontWeight: 800, fontSize: '0.95rem',
-                              cursor: pris ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif',
+                              cursor: pris ? (attenteDispo ? 'pointer' : 'not-allowed') : 'pointer', fontFamily: '"DM Sans", sans-serif',
                               transition: 'all 0.15s', letterSpacing: '-0.2px',
                               boxShadow: choisi && !pris ? `0 6px 18px ${T.main}55` : 'none',
                               position: 'relative',
@@ -3050,6 +3084,14 @@ export default function CommanderRdvSlug() {
                         )
                       })}
                     </div>
+                  )}
+
+                  {/* 🔴 LE POINT D'ENTRÉE DU COLLECTIF : LA SÉANCE GRISÉE.
+                      Le client voit la séance qu'il veut, il clique dessus, et
+                      le bloc s'ouvre juste dessous. Rien à chercher. */}
+                  {dateChoisie && !slotsLoading && heureAttente && prestationChoisie && (
+                    <BlocAttente prestation={prestationChoisie} date={isoDate(dateChoisie)}
+                      heure={heureAttente} T={T} />
                   )}
 
                   {/* SECTION 2 : DEJA PRIS - info uniquement, jamais cliquable. Affichee seulement

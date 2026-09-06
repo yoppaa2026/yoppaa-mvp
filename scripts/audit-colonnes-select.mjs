@@ -226,6 +226,9 @@ const aConfirmer = []
 const excusees = []
 const tablesInconnues = new Set()
 let selectsLus = 0
+// Le cumul des deux familles d'échec, tables ET colonnes. Voir la correction
+// du 06/09 plus bas : le rapport sortait avant d'avoir regardé les colonnes.
+let enEchec = 0
 
 for (const chemin of fichiers) {
   const rel = chemin.slice(racine.length).replace(/\\/g, '/')
@@ -310,11 +313,25 @@ if (tablesInconnues.size > 0) {
     // sortie. Sans lui, une garde qui fait exactement son travail est comptée
     // MANQUÉE, et on croit avoir un filet qu'on n'a pas.
     console.log(`${tablesInconnues.size} table(s) inconnue(s), ${tablesInconnues.size} en échec.`)
-    process.exit(1)
+    // 🔴 ON NE SORT PLUS ICI, ET C'EST UNE CORRECTION DU 06/09. Ce
+    // `process.exit(1)` arrêtait le rapport AVANT la section des colonnes :
+    // une table absente masquait donc toutes les colonnes manquantes du
+    // dépôt, et l'audit affichait « 1 en échec » alors qu'il en avait
+    // plusieurs sous la main sans les avoir regardées.
+    //
+    // ⚠️ C'est la famille du banc qui annonçait son total à la ligne 367 sur
+    // 580 : un rapport qui s'arrête avant la fin ment sur son propre travail,
+    // et c'est ce chiffre-là qu'on recopie. On cumule, on sort à la fin.
+    enEchec += tablesInconnues.size
+  } else {
+    // ⚠️ LE `else` EST INDISPENSABLE DEPUIS QUE LE `process.exit` EST PARTI.
+    // C'est lui qui séparait les deux cas : sans lui, une table absente
+    // s'annonçait D'ABORD en rouge, PUIS « ni verte ni rouge » deux lignes
+    // plus bas. Deux verdicts contraires sur le même fait.
+    console.log(`⏭️  ${tablesInconnues.size} tables dont le CREATE TABLE n'est pas dans les`)
+    console.log(`   migrations : NON JUGÉES, ni vertes ni rouges.`)
+    console.log(`   ${[...tablesInconnues].sort().join(', ')}\n`)
   }
-  console.log(`⏭️  ${tablesInconnues.size} tables dont le CREATE TABLE n'est pas dans les`)
-  console.log(`   migrations : NON JUGÉES, ni vertes ni rouges.`)
-  console.log(`   ${[...tablesInconnues].sort().join(', ')}\n`)
 }
 
 if (excusees.length > 0) {
@@ -330,7 +347,7 @@ if (aConfirmer.length > 0) {
 
 if (manquantes.length === 0) {
   console.log('\n✅ Aucune colonne demandée qui n’existe pas, sur les tables connues.')
-  process.exit(0)
+  process.exit(enEchec ? 1 : 0)
 }
 
 console.log(`🔴 ${manquantes.length} colonne(s) demandée(s) et absente(s) du schéma :\n`)
@@ -346,5 +363,6 @@ for (const [cle, fichiers] of [...parTable].sort()) {
 }
 console.log('\n⚠️ À VÉRIFIER UNE PAR UNE : le schéma vient des migrations, pas de')
 console.log('   la base. Une colonne ajoutée à la main n’y figure pas.')
+enEchec += manquantes.length
 console.log(`${manquantes.length} colonne(s) en échec.`)
-process.exit(1)
+process.exit(enEchec ? 1 : 0)

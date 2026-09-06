@@ -1329,6 +1329,11 @@ verifier('une commande remise sans moyen garde son rattrapage',
     'lib/abonnements.js',
     'lib/statistiques.js',
     'lib/statut-commerce.js',
+    // `jourPlus` : « aujourd'hui + 7 jours » pour une fenêtre d'attente. Midi
+    // UTC, donc douze heures de marge de chaque côté : ni le passage à l'heure
+    // d'hiver ni celui à l'heure d'été ne peuvent la faire changer de jour, et
+    // le banc de la liste d'attente le vérifie sur les deux dimanches.
+    'lib/attente-rdv.js',
   ]
   const coupables = []
   const parcourirSources = (dossier) => {

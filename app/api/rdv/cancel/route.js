@@ -22,6 +22,7 @@ import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
+import { prevenirLaFile } from '@/lib/attente-rdv-server'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
@@ -52,7 +53,7 @@ export async function POST(request) {
       id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id,
       stripe_refund_id, client_email, client_prenom, client_nom, annulation_token,
       date_rdv, heure_debut, heure_fin, duree_minutes, motif_annulation,
-      commercant_id, rappel_push_id, commande_id, fidelite_recompense_id,
+      commercant_id, prestation_id, rappel_push_id, commande_id, fidelite_recompense_id,
       lieu_id, lieu_libelle, lieu_adresse,
       prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
       commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures, categorie),
@@ -357,6 +358,26 @@ export async function POST(request) {
     // Annule le rappel push programmé (1h avant) s'il existe. Best-effort.
     if (rdv.rappel_push_id) {
       annulerPush(rdv.rappel_push_id).catch(() => {})
+    }
+
+    // ─── 6 bis) LA PLACE EST VRAIMENT LIBRE : ON PRÉVIENT LA FILE ──────────
+    // 🔴 SEULE L'ANNULATION DU CLIENT DÉCLENCHE (décision d'Alex, 06/09).
+    // Quand le commerçant annule, c'est très souvent parce qu'il n'est pas là :
+    // pousser enverrait quelqu'un vers un créneau qu'il n'honorera pas. Sa
+    // route à lui propose un bouton, parce que lui seul sait pourquoi il annule.
+    //
+    // ⚠️ ON ATTEND LE RÉSULTAT ET ON LE LIT. Un appel détaché n'a aucune
+    // garantie de survivre à la fin de la fonction, et un `await` dont on
+    // ignore la réponse est un espoir, pas une action.
+    const fileRes = await prevenirLaFile(supabase, {
+      prestationId: rdv.prestation_id,
+      dateRdv: rdv.date_rdv,
+      heureDebut: rdv.heure_debut,
+    })
+    if (!fileRes.ok) {
+      console.error('[rdv/cancel] liste d’attente non prévenue', fileRes.error)
+    } else if (fileRes.prevenus > 0) {
+      console.log('[rdv/cancel] liste d’attente prévenue', { prevenus: fileRes.prevenus, file: fileRes.file })
     }
 
     // ─── 7) Email annulation Yopper (avec iCal CANCEL en pièce jointe) ─────

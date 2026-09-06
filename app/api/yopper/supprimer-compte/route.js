@@ -124,6 +124,12 @@ export async function POST(request) {
       await admin.from('suggestions_commercants').delete().in('client_id', ids)
       await admin.from('avis').delete().in('client_id', ids)
       await admin.from('fidelite_cartes').delete().in('client_id', ids)
+      // 🔴 ET LA LISTE D'ATTENTE, QUE LA CASCADE NE TOUCHERAIT JAMAIS. La ligne
+      // `clients` est ANONYMISÉE plus bas, pas supprimée (les commandes la
+      // référencent) : un `ON DELETE CASCADE` ne se déclenche donc pas, et
+      // l'attente survivrait à l'effacement du compte. Elle n'a aucune valeur
+      // comptable, rien ne justifie de la garder.
+      await admin.from('rdv_attente').delete().in('client_id', ids)
       // signalements_citoyens : table retirée avec le module des services
       // publics (09/08). Laisser l'appel ici ferait échouer le droit à
       // l'effacement, ce qui serait un comble sur cette route précisément.

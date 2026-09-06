@@ -15,7 +15,10 @@
 
 import { lienFiche, lienFicheRdv, LIEN_ACCUEIL, signatureYoppaa, postAvecSignature, BASE_YOPPAA } from '../lib/lien-fiche.js'
 import { actionCommerce } from '../lib/action-google.js'
-import { emailValidationCommercant } from '../lib/resend.js'
+import {
+  emailValidationCommercant, emailRdvAnnule, emailRdvReminder,
+  emailCommandePrete, emailKitBienvenue,
+} from '../lib/resend.js'
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 
@@ -198,14 +201,51 @@ const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b
     // rougi et me l'a appris — mais celle qui suit, NÉGATIVE, était verte sur
     // cette même chaîne vide. ⚠️ Une garde négative sur une valeur absente est
     // toujours verte : on prouve d'abord qu'il y a quelque chose à mesurer.
-    const html = String(emailValidationCommercant({ nom: 'Le Salon', slug: "chez l'ami" }) || '')
-    verifier('l’email de validation rend bien un gabarit',
-      html.length > 1000, `${html.length} caractères`)
-    verifier('🔴 l’email de validation encode le slug de la fiche',
-      html.includes("/commander/chez%20l'ami"),
-      'un slug non encodé fabrique un lien mort dans un email déjà parti')
-    verifier('et il ne porte plus d’adresse recomposée à la main',
-      html.length > 1000 && !/yoppaa\.app\/commander\/chez l/.test(html))
+    // ⚠️ LES CINQ GABARITS TOUCHÉS SONT EXÉCUTÉS, PAS UN SEUL. Prouver
+    // l'encodage sur celui de validation ne dit RIEN des quatre autres, et
+    // c'est précisément le défaut du jumeau : une garde qui mesure un endroit
+    // ne dit rien de l'autre. Les faire déclencher à la main aurait demandé
+    // cinq parcours réels en production.
+    //
+    // ⚠️ ET CHACUN SAIT OÙ IL DOIT MENER. Un rendez-vous annulé ou rappelé
+    // pointe l'AGENDA, on écrit à quelqu'un qui vient d'en prendre un ; une
+    // validation, une commande prête ou un kit pointent la FICHE, qui redirige
+    // d'elle-même. Une seule adresse pour les cinq aurait perdu l'intention.
+    const SLUG = "chez l'ami"
+    const FICHE = "/commander/chez%20l'ami"
+    const AGENDA = "/commander/rdv/chez%20l'ami"
+    const gabarits = [
+      ['la validation du commerçant', emailValidationCommercant({ nom: 'Le Salon', slug: SLUG }), FICHE, AGENDA],
+      ['le kit de bienvenue', emailKitBienvenue({ nom_commercant: 'Le Salon', slug: SLUG }), FICHE, AGENDA],
+      ['la commande prête', emailCommandePrete({
+        yopper_prenom: 'Marie', commercant_nom: 'Le Salon', commercant_slug: SLUG,
+        numero_commande: 12, heure_debut: '10:00', heure_fin: '11:00',
+      }), FICHE, AGENDA],
+      ['le rendez-vous annulé', emailRdvAnnule({
+        yopper_prenom: 'Marie', commercant_nom: 'Le Salon', commercant_slug: SLUG,
+        prestation_nom: 'Coupe', date_rdv: '2026-09-10', heure_debut: '10:00',
+      }), AGENDA, FICHE],
+      ['le rappel de rendez-vous', emailRdvReminder({
+        yopper_prenom: 'Marie', commercant_nom: 'Le Salon', commercant_slug: SLUG,
+        prestation_nom: 'Coupe', date_rdv: '2026-09-10', heure_debut: '10:00', heure_fin: '11:00',
+      }), AGENDA, FICHE],
+    ]
+    for (const [quoi, rendu, attendu, interdit] of gabarits) {
+      const html = String(rendu || '')
+      // ⚠️ ON PROUVE D'ABORD QU'IL Y A QUELQUE CHOSE À MESURER. Une garde
+      // NÉGATIVE sur une chaîne vide est toujours verte, et j'y suis tombé
+      // le 06/09 : le gabarit rend une CHAÎNE, pas un objet `{ html }`.
+      verifier(`${quoi} rend bien un gabarit`, html.length > 1000, `${html.length} caractères`)
+      verifier(`🔴 ${quoi} encode le slug`, html.length > 1000 && html.includes(attendu),
+        'un slug non encodé fabrique un lien mort dans un email déjà parti')
+      verifier(`🔴 ${quoi} vise la bonne des deux adresses`,
+        html.length > 1000 && !html.includes(interdit),
+        `il pointe ${interdit} au lieu de ${attendu}`)
+    }
+    // ⚠️ ET PLUS UN SEUL `/commander/<slug>` RECOMPOSÉ dans tout le fichier.
+    const RESEND = sansProse(readFileSync(new URL('../lib/resend.js', import.meta.url), 'utf8'))
+    verifier('🔴 aucune adresse de fiche recomposée dans les emails',
+      !/yoppaa\.app\/commander(\/rdv)?\/\$\{/.test(RESEND))
   }
 
   // ── LES ÉCRANS QUI ONT CESSÉ DE RECOMPOSER ──────────────────────────────

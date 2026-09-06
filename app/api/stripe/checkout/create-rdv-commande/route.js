@@ -32,6 +32,7 @@
 // rembourser.
 
 import { NextResponse } from 'next/server'
+import { prixPrestationServeur } from '@/lib/prix-prestation-server'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
@@ -117,7 +118,15 @@ export async function POST(request) {
     // pas activé l'acompte en ligne. Dans ce cas seuls les produits sont
     // encaissés, et le rendez-vous est confirmé quand même.
     // Plus de repli sur une fourchette : les colonnes n'existent plus (27/08).
-    const prixBase = prestation.prix != null ? Number(prestation.prix) : null
+    // 🔴 LE PRIX REMISÉ, PAS CELUI DE LA FICHE (06/09). Un deal peut viser une
+    // prestation depuis aujourd'hui : lire `prestation.prix` afficherait
+    // « -20 % » à l'écran et débiterait la carte du tarif plein.
+    //
+    // ⚠️ ET TOUT LE RESTE SUIT SANS Y TOUCHER : la récompense se calcule sur ce
+    // prix, le bon cadeau paie ce prix, et l'acompte en prend son pourcentage.
+    // Un acompte assis sur le prix plein d'une prestation remisée ferait avancer
+    // au client plus que sa part.
+    const { prix: prixBase } = await prixPrestationServeur(supabase, prestation)
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
 
     // ─── RÉCOMPENSE DE FIDÉLITÉ ────────────────────────────────────────────

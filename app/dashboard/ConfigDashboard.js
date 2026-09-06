@@ -2130,6 +2130,9 @@ function TabDeals({ commercantId, commercant, toast }) {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   // Propositions IA pour l'accroche : le commerçant choisit puis peut modifier
   const [propsIa, setPropsIa] = useState([])
+  // Les prestations remisables (06/09). Vide chez un commerce sans agenda :
+  // aucun groupe ne s'affiche alors dans le déroulant.
+  const [prestations, setPrestations] = useState([])
   const firstLoadRef = useRef(true)
 
   // Heure limite Morning : RÈGLE PRODUIT FIXE 23h00 (la colonne DB
@@ -2147,8 +2150,34 @@ function TabDeals({ commercantId, commercant, toast }) {
   // créerait une promo qui ne s'applique à rien.
   const categoriesLiables = [...new Set(articlesLiables.map(a => a.categorie).filter(Boolean))].sort()
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 LES PRESTATIONS N'ÉTAIENT PAS REMISABLES (Alex, 06/09)
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // Le commentaire juste au-dessus le disait déjà, et s'en accommodait : « ses
+  // prestations vivent dans rdv_prestations, donc lier un article ne peut
+  // jamais être obligatoire chez lui, sa remise est une annonce ». Une prof de
+  // yoga pouvait donc remiser ses shampoings et pas ses cours, c'est-à-dire
+  // l'inverse de son métier.
+  //
+  // ⚠️ SANS PRIX, PAS DE REMISE. `rdv_prestations.prix` est NULLABLE : « Prix
+  // sur demande » est un choix du commerçant, et vingt pour cent de rien ne
+  // veut rien dire. Proposer ces prestations-là fabriquerait un deal qui ne
+  // s'applique à personne.
+  //
+  // ⚠️ ET SEULEMENT SUR UNE REMISE. Un « lot de 3 séances + 1 offerte » existe
+  // déjà chez nous sous la forme d'un CARNET D'ABONNEMENT, qui décompte les
+  // séances et porte une validité. La base l'interdit
+  // (`yoppaa_deals_prestation_type_check`), l'écran ne le propose pas.
+  const prestationsLiables = prestations.filter(p =>
+    p.actif !== false && !p.deleted_at && Number(p.prix) > 0)
+  // ⚠️ UNE CIBLE DEVIENT OBLIGATOIRE DÈS QU'IL Y A QUELQUE CHOSE À VISER, que
+  // ce soit un produit ou une prestation. Sinon la remise reste « une annonce »
+  // chez un commerçant qui a sept prestations tarifées sous la main.
+  const cibleRequise = articleRequis || prestationsLiables.length > 0
+
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
-  useEffect(() => { fetchDeals(); fetchArticles() }, [commercantId])
+  useEffect(() => { fetchDeals(); fetchArticles(); fetchPrestations() }, [commercantId])
 
   async function fetchDeals() {
     if (firstLoadRef.current) setLoading(true)
@@ -2180,12 +2209,34 @@ function TabDeals({ commercantId, commercant, toast }) {
     setArticles(data || [])
   }
 
+  // ⚠️ ON NE CHARGE RIEN CHEZ QUI N'A PAS D'AGENDA. `peut` applique la
+  // CATÉGORIE, et c'est ce qu'on veut : la prise de rendez-vous n'est pas
+  // offerte à tous les métiers, et une lecture inutile sur chaque ouverture de
+  // l'onglet Deals se paierait chez tous les autres.
+  //
+  // ⚠️ ET ON LIT L'ERREUR. Une lecture qui échoue en silence rendrait le
+  // déroulant vide, donc « je ne peux pas remiser mes cours » sans un mot.
+  async function fetchPrestations() {
+    if (!peut(commercant, 'rdv')) { setPrestations([]); return }
+    const { data, error } = await supabase.from('rdv_prestations')
+      .select('id, nom, prix, actif, deleted_at')
+      .eq('commercant_id', commercantId)
+      .eq('actif', true)
+      .is('deleted_at', null)
+      .order('nom')
+    if (error) {
+      console.error('[TabDeals.fetchPrestations]', error)
+      toast(`Lecture des prestations impossible : ${error.message}`, 'error')
+    }
+    setPrestations(data || [])
+  }
+
   function openNew() {
     setForm({ titre: '', description: '', description_longue: '', prix_deal: '', prix_original: '',
       deal_type: 'lot', remise_pct: '', unites_par_deal: '', article2_id: '',
       date_debut: today, date_fin: today,
       heure_debut: '00:00', heure_fin: '23:59',
-      inclus_morning: false, actif: true, article_id: '', categorie_cible: '',
+      inclus_morning: false, actif: true, article_id: '', categorie_cible: '', prestation_id: '',
       cta_appeler_reserver: false,
       photo_url: '', est_bonne_affaire: false })
     setPropsIa([])
@@ -2215,6 +2266,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       actif: d.actif !== false,
       article_id: d.article_id || '',
       categorie_cible: d.categorie_cible || '',
+      prestation_id: d.prestation_id || '',
       cta_appeler_reserver: !!d.cta_appeler_reserver,
       photo_url: d.photo_url || '',
       est_bonne_affaire: !!d.est_bonne_affaire,
@@ -2243,9 +2295,25 @@ function TabDeals({ commercantId, commercant, toast }) {
   // même menu déroulant propose donc les deux, les catégories étant préfixées
   // « cat: » pour les distinguer d'un identifiant d'article.
   // Choisir un article pré-remplit le prix d'origine.
+  // ⚠️ TROIS CIBLES POSSIBLES, UNE SEULE À LA FOIS, et la base le garantit
+  // (`yoppaa_deals_cible_check`). Chaque branche EFFACE les deux autres :
+  // laisser un identifiant traîner d'un choix précédent ferait refuser
+  // l'enregistrement par une contrainte que le commerçant ne peut pas
+  // comprendre.
   function onArticleChange(valeur) {
-    if (String(valeur).startsWith('cat:')) {
-      setForm(p => ({ ...p, article_id: '', categorie_cible: String(valeur).slice(4) }))
+    const v = String(valeur)
+    if (v.startsWith('cat:')) {
+      setForm(p => ({ ...p, article_id: '', prestation_id: '', categorie_cible: v.slice(4) }))
+      return
+    }
+    if (v.startsWith('presta:')) {
+      const id = v.slice(7)
+      const pres = prestations.find(x => x.id === id)
+      setForm(p => ({
+        ...p,
+        article_id: '', categorie_cible: '', prestation_id: id,
+        prix_original: pres && !p.prix_original ? String(pres.prix) : p.prix_original,
+      }))
       return
     }
     const art = articles.find(a => a.id === valeur)
@@ -2253,6 +2321,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       ...p,
       article_id: valeur,
       categorie_cible: '',
+      prestation_id: '',
       prix_original: art && !p.prix_original ? String(art.prix) : p.prix_original,
     }))
   }
@@ -2287,7 +2356,15 @@ function TabDeals({ commercantId, commercant, toast }) {
       // rdv_prestations) : sa remise est une ANNONCE, pas un article en promo.
       // Sans ce garde-fou, aucun deal n'était jamais enregistré côté vitrine
       // (bug signalé par Alex 01/08).
-      if (articleRequis && !form.article_id && !form.categorie_cible) { setSaving(false); return toast('Une remise % doit viser un article ou une catégorie', 'error') }
+      // ⚠️ TROIS CIBLES DEPUIS LE 06/09, et le message les nomme toutes :
+      // « vise un article ou une catégorie » devant un déroulant qui propose
+      // aussi des prestations enverrait chercher ce qui est sous les yeux.
+      if (cibleRequise && !form.article_id && !form.categorie_cible && !form.prestation_id) {
+        setSaving(false)
+        return toast(prestationsLiables.length > 0
+          ? 'Une remise % doit viser un article, une catégorie ou une prestation'
+          : 'Une remise % doit viser un article ou une catégorie', 'error')
+      }
     }
     if (form.deal_type === 'bundle' && !form.article2_id) {
       setSaving(false); return toast('Choisis le second article du duo', 'error')
@@ -2323,6 +2400,10 @@ function TabDeals({ commercantId, commercant, toast }) {
       // promo : un lot « 3 + 1 » sur une catégorie n'aurait aucun sens, on ne
       // saurait pas ce qui est offert.
       categorie_cible: (estRemiseSurProduit({ deal_type: form.deal_type }) && form.categorie_cible) ? form.categorie_cible : null,
+      // ⚠️ RÉSERVÉ AUX REMISES, comme la catégorie. Un lot de séances est un
+      // carnet d'abonnement : la base refuse le contraire, l'écran ne l'envoie
+      // même pas.
+      prestation_id: (estRemiseSurProduit({ deal_type: form.deal_type }) && form.prestation_id) ? form.prestation_id : null,
       cta_appeler_reserver: !!form.cta_appeler_reserver,
       photo_url: form.photo_url || null,
       est_bonne_affaire: !!form.est_bonne_affaire,
@@ -2498,10 +2579,10 @@ function TabDeals({ commercantId, commercant, toast }) {
             <div>
               <label style={s.label}>
                 {form.deal_type === 'remise_pct'
-                  ? (articleRequis ? 'Ce que la remise vise *' : 'Ce que la remise vise (optionnel)')
+                  ? (cibleRequise ? 'Ce que la remise vise *' : 'Ce que la remise vise (optionnel)')
                   : form.deal_type === 'bundle' ? 'Premier article du duo' : 'Article concerné (optionnel)'}
               </label>
-              <select value={form.categorie_cible ? `cat:${form.categorie_cible}` : form.article_id}
+              <select value={form.categorie_cible ? `cat:${form.categorie_cible}` : form.prestation_id ? `presta:${form.prestation_id}` : form.article_id}
                 onChange={e => onArticleChange(e.target.value)}
                 style={{ ...s.input, cursor: 'pointer' }}>
                 <option value="">— Deal général (pas lié à un produit) —</option>
@@ -2521,10 +2602,35 @@ function TabDeals({ commercantId, commercant, toast }) {
                     ))}
                   </optgroup>
                 )}
+                {/* 🔴 LES PRESTATIONS, ABSENTES JUSQU'AU 06/09. Une prof de yoga
+                    pouvait remiser ses shampoings et pas ses cours.
+
+                    ⚠️ RÉSERVÉ AUX REMISES : un lot de séances est un carnet
+                    d'abonnement, qui décompte et porte une validité. Deux
+                    systèmes qui comptent les séances différemment se
+                    découvriraient sur un client qui revient une fois de trop.
+
+                    ⚠️ ET SEULEMENT CELLES QUI ONT UN PRIX. « Prix sur demande »
+                    est un choix du commerçant : vingt pour cent de rien ne veut
+                    rien dire. */}
+                {estRemiseSurProduit({ deal_type: form.deal_type }) && prestationsLiables.length > 0 && (
+                  <optgroup label="Une prestation de rendez-vous">
+                    {prestationsLiables.map(pr => (
+                      <option key={pr.id} value={`presta:${pr.id}`}>
+                        {pr.nom} · {euros(pr.prix)}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
-                {articlesLiables.length === 0
-                  ? 'Tu n’as pas encore de produit à lier : ton offre s’affichera comme une annonce sur ta fiche (le client te contacte ou passe te voir).'
+                {/* ⚠️ CETTE PHRASE MENTAIT CHEZ UN COMMERCE DE SERVICES. Elle
+                    annonçait « pas encore de produit à lier, ton offre sera une
+                    annonce » à une prof de yoga qui a sept prestations tarifées
+                    dans son agenda. On ne dit « annonce » que quand il n'y a
+                    vraiment RIEN à viser. */}
+                {articlesLiables.length === 0 && prestationsLiables.length === 0
+                  ? 'Tu n’as pas encore de produit ni de prestation à lier : ton offre s’affichera comme une annonce sur ta fiche (le client te contacte ou passe te voir).'
                   : estRemiseSurProduit({ deal_type: form.deal_type })
                     ? 'La remise s’applique directement au produit : ton client voit le prix barré et le prix promo, et paie le prix promo. Pas de doublon dans ton catalogue.'
                     : 'Le lot s’affiche comme une carte à part sous l’article : le produit reste achetable à l’unité au prix normal, parce qu’une unité n’est pas un lot.'}

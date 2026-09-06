@@ -595,6 +595,81 @@ const MUTATIONS = [
     fichier: 'app/api/rdv/no-show/route.js',
     de: '      carte_restituee: refundId ? part.carteRestituee : 0,',
     vers: '      carte_restituee: part.carteRestituee,' },
+
+  // ─── LA REMISE SUR UNE PRESTATION (06/09) ────────────────────────────────
+  //
+  // 🔴 CE QU ON MESURE EST DU CODE D ARGENT, ET LE SENS DE L ERREUR COMPTE :
+  // une remise affichee mais non debitee SURFACTURE le client.
+  { nom: '🔴 reserver repart du prix PLEIN de la prestation',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: '    const { prix: prixBase } = await prixPrestationServeur(db, prestation)',
+    vers: '    const prixBase = prestation.prix != null ? Number(prestation.prix) : null' },
+
+  { nom: '🔴 l acompte est calcule sur le prix PLEIN',
+    fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    de: '    const { prix: prixBase } = await prixPrestationServeur(supabase, prestation)',
+    vers: '    const prixBase = prestation.prix != null ? Number(prestation.prix) : null' },
+
+  { nom: '🔴 le tunnel complet repart du prix PLEIN',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '    const { prix: prixBase } = await prixPrestationServeur(supabase, prestation)',
+    vers: '    const prixBase = prestation.prix != null ? Number(prestation.prix) : null' },
+
+  // 🔴 UNE LECTURE EN ECHEC NE DOIT RIEN BRADER : mieux vaut ne pas appliquer
+  // une remise que la deviner.
+  // ⚠️ ANCRE SUR LE JOURNAL, PAS SUR LE REPLI : les deux replis sont
+  // rigoureusement identiques, et un remplacement viserait le premier.
+  { nom: '🔴 une base muette fait disparaitre le prix plein',
+    fichier: 'lib/prix-prestation-server.js',
+    de: "    console.warn('[prix-prestation] lecture des deals KO, prix plein applique', error.message)",
+    vers: '    return { prix: null, remise: null, deals: [] }' },
+
+  { nom: '🔴 le module charge TOUT le catalogue de deals',
+    fichier: 'lib/prix-prestation-server.js',
+    de: "    .eq('prestation_id', prestation.id)",
+    vers: "    .eq('commercant_id', prestation.commercant_id)" },
+
+  // ─── L ECRAN ANNONCE CE QUE LE SERVEUR DEBITE ───────────────────────────
+  { nom: '🔴 la fiche RDV reaffiche le prix plein',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: 'function formatPrix(prestation, deals = []) {',
+    vers: 'function formatPrix(prestation, deals = []) { if (prestation) return prestation.prix != null ? `${Number(prestation.prix).toFixed(2)} €` : "Sur demande";' },
+
+  { nom: '🔴 le prix fige sur le rendez-vous redevient le prix plein',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '      const prixEstime = prixEffectifPrestation(prestationChoisie, deals)',
+    vers: '      const prixEstime = prestationChoisie.prix != null ? Number(prestationChoisie.prix) : null' },
+
+  { nom: '🔴 le prix barre disparait : la remise ne se voit plus',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                                {remiseSurPrestation(p, deals) && (',
+    vers: '                                {false && (' },
+
+  // ─── LE FORMULAIRE DE DEAL ──────────────────────────────────────────────
+  { nom: '🔴 le deroulant cesse de proposer les prestations',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                {estRemiseSurProduit({ deal_type: form.deal_type }) && prestationsLiables.length > 0 && (',
+    vers: '                {false && prestationsLiables.length > 0 && (' },
+
+  { nom: '🔴 un LOT peut viser une prestation (deux systemes de seances)',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                {estRemiseSurProduit({ deal_type: form.deal_type }) && prestationsLiables.length > 0 && (',
+    vers: '                {prestationsLiables.length > 0 && (' },
+
+  { nom: '🔴 une prestation SANS PRIX est proposee a la remise',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '    p.actif !== false && !p.deleted_at && Number(p.prix) > 0)',
+    vers: '    p.actif !== false && !p.deleted_at)' },
+
+  { nom: '🔴 choisir une prestation laisse trainer l article',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "        article_id: '', categorie_cible: '', prestation_id: id,",
+    vers: '        prestation_id: id,' },
+
+  { nom: '🔴 la prestation ne part plus dans le payload',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "      prestation_id: (estRemiseSurProduit({ deal_type: form.deal_type }) && form.prestation_id) ? form.prestation_id : null,",
+    vers: '      prestation_id: null,' },
 ]
 
 function lancer() {

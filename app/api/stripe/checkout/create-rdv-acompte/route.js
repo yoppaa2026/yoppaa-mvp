@@ -21,6 +21,7 @@
 // retry côté webhook handler.
 
 import { NextResponse } from 'next/server'
+import { prixPrestationServeur } from '@/lib/prix-prestation-server'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
@@ -114,7 +115,15 @@ export async function POST(request) {
     // donc la formule est prix * pct / 100. Bug initial : *100 au lieu de /100
     // → un acompte de 20% sur 60€ donnait 1200€ au lieu de 12€ (testé en mode test, fix avant prod).
     // Plus de repli sur une fourchette : les colonnes n'existent plus (27/08).
-    const prixBase = prestation.prix != null ? Number(prestation.prix) : null
+    // 🔴 LE PRIX REMISÉ, PAS CELUI DE LA FICHE (06/09). Un deal peut viser une
+    // prestation depuis aujourd'hui : lire `prestation.prix` afficherait
+    // « -20 % » à l'écran et débiterait la carte du tarif plein.
+    //
+    // ⚠️ ET TOUT LE RESTE SUIT SANS Y TOUCHER : la récompense se calcule sur ce
+    // prix, le bon cadeau paie ce prix, et l'acompte en prend son pourcentage.
+    // Un acompte assis sur le prix plein d'une prestation remisée ferait avancer
+    // au client plus que sa part.
+    const { prix: prixBase } = await prixPrestationServeur(supabase, prestation)
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
     if (!prixBase || acomptePct <= 0) {
       return NextResponse.json({ ok: false, error: 'cette prestation ne demande pas d\'acompte en ligne' }, { status: 400 })

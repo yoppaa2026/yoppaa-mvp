@@ -33,6 +33,7 @@
 // règle, écrite dans `ventilerTunnelRdv`.
 
 import { NextResponse } from 'next/server'
+import { prixPrestationServeur } from '@/lib/prix-prestation-server'
 import { createClient } from '@supabase/supabase-js'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { identiteProuvee } from '@/lib/yopper-auth'
@@ -238,7 +239,15 @@ export async function POST(request) {
     // ⚠️ SANS PRODUITS ICI : ce tunnel n'en porte pas. La récompense et le bon
     // se posent donc entièrement sur la prestation, et l'acompte se calcule sur
     // le NET, règle F22.
-    const prixBase = prestation.prix != null ? Number(prestation.prix) : null
+    // 🔴 LE PRIX REMISÉ, PAS CELUI DE LA FICHE (06/09). Un deal peut viser une
+    // prestation depuis aujourd'hui : lire `prestation.prix` afficherait
+    // « -20 % » à l'écran et débiterait la carte du tarif plein.
+    //
+    // ⚠️ ET TOUT LE RESTE SUIT SANS Y TOUCHER : la récompense se calcule sur ce
+    // prix, le bon cadeau paie ce prix, et l'acompte en prend son pourcentage.
+    // Un acompte assis sur le prix plein d'une prestation remisée ferait avancer
+    // au client plus que sa part.
+    const { prix: prixBase } = await prixPrestationServeur(db, prestation)
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
     const acompteEnLigne = !!(commercant.rdv_acompte_en_ligne_actif && commercant.stripe_account_charges_enabled)
     const remiseRecompenseEUR = (recompense && prixBase != null)

@@ -1657,6 +1657,121 @@ for (const chemin of [
     /meta\.acompte_du === undefined \|\| meta\.acompte_du === ''/.test(wh))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LA REMISE SUR UNE PRESTATION EST CELLE QUI EST DÉBITÉE (06/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ON GARDE, ET C'EST DU CODE D'ARGENT. Depuis le 06/09 un deal peut
+// viser une prestation de rendez-vous. Les trois routes qui décident ce que le
+// client paie lisaient toutes `prestation.prix`, c'est-à-dire le prix PLEIN :
+// l'écran aurait affiché « -20 % » et la carte aurait été débitée du tarif
+// complet. Le sens de l'erreur compte — le client aurait été SURFACTURÉ.
+//
+// ⚠️ ET LE MODULE EST PARTAGÉ. Trois copies du même chargement auraient divergé
+// au premier ajustement : c'est exactement le défaut qui a fait naître
+// `lib/deals.js` le 03/08, quand quatre écrans interprétaient chacun une remise
+// à leur façon.
+{
+  const ROUTES = [
+    'app/api/rdv/reserver/route.js',
+    'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    'app/api/stripe/checkout/create-rdv-commande/route.js',
+  ]
+  for (const r of ROUTES) {
+    const src = lireCode(r)
+    verifie(`🔴 ${r.split('/').slice(-2)[0]} part du prix REMISÉ`,
+      /const \{ prix: prixBase \} = await prixPrestationServeur\(/.test(src),
+      'la carte serait débitée du tarif plein sur une prestation en promotion')
+    // 🔴 ET PLUS AUCUNE LECTURE DU PRIX PLEIN À CÔTÉ. Une ligne oubliée juste
+    // en dessous rendrait la garde ci-dessus décorative.
+    verifie(`et ${r.split('/').slice(-2)[0]} ne relit plus prestation.prix`,
+      !/prestation\??\.prix != null \? Number\(prestation\.prix\) : null/.test(src))
+  }
+
+  // ⚠️ UN SEUL CHARGEMENT, PARTAGÉ PAR LES TROIS. S'il était recopié, les trois
+  // routes finiraient par ne plus filtrer les mêmes deals.
+  const MOD = lireCode('lib/prix-prestation-server.js')
+  verifie('🔴 le module ne lit que les deals de CETTE prestation',
+    /\.eq\('prestation_id', prestation\.id\)/.test(MOD),
+    'charger tout le catalogue sur un chemin d’argent appelé à chaque réservation')
+  verifie('et seulement les deals actifs', /\.eq\('actif', true\)/.test(MOD))
+  // 🔴 UNE LECTURE QUI ÉCHOUE NE BRADE RIEN. Mieux vaut ne pas appliquer une
+  // remise que la deviner : un `error` non lu est un espoir, pas une action.
+  //
+  // ⚠️ ON COMPTE LES DEUX REPLIS, ON NE MESURE PAS UNE DISTANCE. Une première
+  // version cherchait le repli « à moins de deux cents caractères du `if
+  // (error)` » : une ligne glissée entre les deux l'aurait laissée verte, et ce
+  // projet vient de s'y faire prendre le matin même sur le renvoi du catalogue.
+  const replis = MOD.match(/return \{ prix: plein, remise: null, deals: \[\] \}/g) || []
+  verifie('🔴 les DEUX sorties rendent le prix PLEIN', replis.length === 2,
+    `${replis.length} repli(s) au lieu de 2 : sans prix connu ou base muette`)
+  verifie('🔴 et aucune sortie ne rend un prix nul',
+    !/return \{ prix: null/.test(MOD),
+    'une base muette ferait disparaître le prix au lieu de le laisser plein')
+  // ⚠️ ET IL NE TOUCHE À AUCUNE TABLE À DONNÉES PERSONNELLES. Il tourne avec la
+  // clé de service : une lecture de trop y serait invisible.
+  //
+  // ⚠️ ON COMPTE AVANT DE COMPARER. `every` sur un tableau VIDE rend `true` :
+  // si la regex cessait de trouver quoi que ce soit, la garde serait verte sans
+  // rien mesurer. C'est la garde verte pour rien, troisième fois cette semaine.
+  const tables = MOD.match(/\.from\('([a-z_]+)'\)/g) || []
+  verifie('le module lit exactement une table', tables.length === 1, `${tables.length} lecture(s)`)
+  verifie('🔴 et c’est yoppaa_deals, aucune donnée personnelle',
+    tables.length === 1 && tables[0] === ".from('yoppaa_deals')", tables.join(', '))
+
+  // ── L'ÉCRAN AFFICHE CE QUE LE SERVEUR VA DÉBITER ────────────────────────
+  //
+  // ⚠️ L'écran n'engage rien, mais il ne doit pas annoncer autre chose que ce
+  // qui sera prélevé : c'est ainsi qu'on fabrique une réclamation.
+  const FICHE = lireCode('app/commander/rdv/[slug]/page.js')
+  // 🔴 GARDE FAUSSE, TROUVÉE PAR LE HARNAIS. Elle vérifiait la SIGNATURE
+  // `function formatPrix(prestation, deals = [])` : glisser une sortie
+  // anticipée qui relit `prestation.prix` la laissait VERTE, parce que la
+  // signature ne bouge pas. ⚠️ Une garde qui mesure une forme ne dit rien du
+  // corps — c'est la même classe que « la marque ne coiffe que l'invendu », qui
+  // mesurait les habits pendant que le défaut vivait dans le tracé.
+  const iFmt = FICHE.indexOf('function formatPrix(')
+  const finFmt = FICHE.indexOf('\n}', iFmt)
+  const corpsFmt = iFmt === -1 ? '' : FICHE.slice(iFmt, finFmt === -1 ? undefined : finFmt)
+  verifie('le corps de formatPrix se découpe', corpsFmt.length > 40, String(corpsFmt.length))
+  verifie('🔴 la fiche CALCULE le prix remisé de la prestation',
+    /prixEffectifPrestation\(prestation, deals\)/.test(corpsFmt),
+    'la fiche annoncerait le tarif plein sur une prestation en promotion')
+  verifie('🔴 et elle ne relit plus le prix plein au passage',
+    corpsFmt.length > 40 && !/prestation\.prix/.test(corpsFmt),
+    'une sortie anticipée suffirait à rendre le calcul décoratif')
+  verifie('🔴 et le prix figé sur le rendez-vous est le prix remisé',
+    /const prixEstime = prixEffectifPrestation\(prestationChoisie, deals\)/.test(FICHE))
+  verifie('🔴 l’acompte annoncé suit le prix remisé',
+    (FICHE.match(/prixEffectifPrestation\(prestationChoisie, deals\)/g) || []).length >= 3,
+    'un acompte assis sur le prix plein ferait avancer plus que sa part')
+  verifie('et le prix barré se montre',
+    /remiseSurPrestation\(p, deals\) && \(/.test(FICHE))
+
+  // ── LE FORMULAIRE DE DEAL ───────────────────────────────────────────────
+  const CFG = lireCode('app/dashboard/ConfigDashboard.js')
+  verifie('🔴 le déroulant propose les prestations',
+    /<optgroup label="Une prestation de rendez-vous">/.test(CFG))
+  // 🔴 SEULEMENT SUR UNE REMISE. Un lot de séances est un carnet d'abonnement,
+  // qui décompte les séances et porte une validité : deux systèmes qui comptent
+  // différemment se découvriraient sur un client qui revient une fois de trop.
+  verifie('🔴 et seulement sur une remise, jamais sur un lot',
+    /estRemiseSurProduit\(\{ deal_type: form\.deal_type \}\) && prestationsLiables\.length > 0 && \(/.test(CFG))
+  // 🔴 SANS PRIX, PAS DE REMISE. « Prix sur demande » est un choix du
+  // commerçant : vingt pour cent de rien ne veut rien dire.
+  verifie('🔴 une prestation sans prix n’est pas proposée',
+    /prestationsLiables = prestations\.filter\(p =>\s*\n?\s*p\.actif !== false && !p\.deleted_at && Number\(p\.prix\) > 0\)/.test(CFG))
+  // ⚠️ UNE SEULE CIBLE À LA FOIS : chaque branche efface les deux autres, sinon
+  // la contrainte de base refuse l'enregistrement avec un message que le
+  // commerçant ne peut pas comprendre.
+  verifie('🔴 choisir une prestation efface l’article et la catégorie',
+    /article_id: '', categorie_cible: '', prestation_id: id,/.test(CFG))
+  verifie('et choisir un article efface la prestation',
+    /article_id: valeur,\s*\n\s*categorie_cible: '',\s*\n\s*prestation_id: '',/.test(CFG))
+  verifie('la prestation part bien dans le payload',
+    /prestation_id: \(estRemiseSurProduit\(\{ deal_type: form\.deal_type \}\) && form\.prestation_id\) \? form\.prestation_id : null,/.test(CFG))
+}
+
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════
 console.log(`\nTunnel rendez-vous : ${ok + echecs.length} vérifications`)
 if (echecs.length) {

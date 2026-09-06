@@ -14,6 +14,7 @@
 import {
   estOffreSeparee, estRemiseSurProduit, dealActifCeJour, dealViseArticle,
   remiseSurArticle, prixEffectif, prixEffectifVariante, offresSepareesPourArticle,
+  dealVisePrestation, remiseSurPrestation, prixEffectifPrestation, montantsPrestation,
 } from '../lib/deals.js'
 import { construireLignesCommande, verifierStockDisponible } from '../lib/lignes-commande.js'
 import { libelleRetrait, estRetraitBoutique } from '../lib/libelle-retrait.js'
@@ -3981,6 +3982,78 @@ verifier('les échecs sont comptés, pas alertés douze fois',
     /node scripts\/lire-audit\.mjs audit\.json/.test(flux))
   verifier('et il ne se contente plus de `npm audit --audit-level`',
     !/run: npm audit --omit=dev --audit-level=moderate\s*$/m.test(flux))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LES DEALS SUR LES PRESTATIONS DE RENDEZ-VOUS (06/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ON GARDE : qu'une remise AFFICHÉE soit la remise DÉBITÉE. Trois
+// routes serveur calculent ce que le client paie, et toutes lisaient le prix
+// PLEIN de la prestation. Sans ces règles, l'écran aurait annoncé « -20 % » et
+// la carte aurait été débitée du tarif complet.
+{
+  const yoga = { id: 'p1', nom: 'Cours de Yoga', prix: 15, acompte_pourcent: 0 }
+  const reiki = { id: 'p2', nom: 'Séance de Reiki', prix: 50, acompte_pourcent: 50 }
+  const surDemande = { id: 'p3', nom: 'Bilan', prix: null, acompte_pourcent: 50 }
+  const dReiki20 = { id: 'x1', deal_type: 'remise_pct', remise_pct: 20, prestation_id: 'p2', date_deal: JOUR, actif: true }
+  const dReikiFixe = { id: 'x2', deal_type: 'prix_fixe', prix_deal: 35, prestation_id: 'p2', date_deal: JOUR, actif: true }
+
+  verifier('un deal vise une prestation nommément', dealVisePrestation(dReiki20, reiki))
+  verifier('et pas une autre', !dealVisePrestation(dReiki20, yoga))
+
+  // 🔴 UNE PRESTATION N'A PAS DE CATÉGORIE : `categorie_cible` désigne des
+  // catégories d'ARTICLES. Sans ce garde-fou, « -20 % sur les shampoings »
+  // s'appliquerait aussi aux soins du même salon.
+  verifier('🔴 une remise par catégorie ne touche AUCUNE prestation',
+    remiseSurPrestation(reiki, [remise20cat], JOUR) === null)
+  // 🔴 ET UN DEAL D'ARTICLE NON PLUS, même quand les identifiants coïncident.
+  verifier('🔴 un deal d’article ne remise pas une prestation',
+    remiseSurPrestation(reiki, [{ ...remise10, article_id: 'p2' }], JOUR) === null)
+
+  egal('remise 20 % sur 50 €', remiseSurPrestation(reiki, [dReiki20], JOUR)?.prix, 40)
+  egal('et le prix barré est le prix plein', remiseSurPrestation(reiki, [dReiki20], JOUR)?.prixBarre, 50)
+  egal('la plus avantageuse gagne', remiseSurPrestation(reiki, [dReiki20, dReikiFixe], JOUR)?.prix, 35)
+  verifier('une remise expirée est ignorée',
+    remiseSurPrestation(reiki, [{ ...dReiki20, date_deal: '2026-08-04' }], JOUR) === null)
+  verifier('une remise éteinte aussi',
+    remiseSurPrestation(reiki, [{ ...dReiki20, actif: false }], JOUR) === null)
+  verifier('🔴 une « remise » qui augmente le prix est refusée',
+    remiseSurPrestation(reiki, [{ ...dReikiFixe, prix_deal: 99 }], JOUR) === null)
+
+  // 🔴 UN LOT SUR UNE PRESTATION N'EST PAS UNE REMISE, c'est un carnet
+  // d'abonnement, qui décompte les séances et porte une validité. La base
+  // l'interdit depuis le 06/09 ; ce module ne s'y fie pas, des lignes
+  // antérieures à la contrainte peuvent exister.
+  verifier('🔴 un LOT ne remise pas une prestation',
+    remiseSurPrestation(reiki, [{ ...lot, article_id: null, prestation_id: 'p2' }], JOUR) === null)
+
+  // 🔴 LE PIÈGE DU ZÉRO, NEUVIÈME FOIS DANS CE PROJET. `Number(null)` vaut
+  // ZÉRO : une prestation « Prix sur demande » serait passée pour gratuite.
+  verifier('🔴 une prestation sans prix ne se remise pas',
+    remiseSurPrestation(surDemande, [{ ...dReiki20, prestation_id: 'p3' }], JOUR) === null)
+  egal('et son prix effectif reste inconnu', prixEffectifPrestation(surDemande, [], JOUR), null)
+
+  egal('prix effectif sans deal', prixEffectifPrestation(yoga, [], JOUR), 15)
+  egal('prix effectif avec remise', prixEffectifPrestation(reiki, [dReiki20], JOUR), 40)
+
+  // 🔴 L'ACOMPTE SUIT LE PRIX REMISÉ, et c'est tout l'enjeu côté argent. Sur un
+  // soin à 50 € remisé à 40 € avec 50 % d'acompte, c'est 20 € et non 25 : sinon
+  // le client lit « -20 % » et avance un acompte de plein tarif.
+  egal('🔴 l’acompte suit le prix remisé',
+    montantsPrestation(reiki, [dReiki20], JOUR), { prix: 40, acompte: 20, solde: 20 })
+  egal('sans remise, l’acompte reste celui du tarif plein',
+    montantsPrestation(reiki, [], JOUR), { prix: 50, acompte: 25, solde: 25 })
+
+  // ⚠️ LE POURCENTAGE, LUI, NE BOUGE PAS : il vit sur la prestation, pas sur le
+  // deal. Une remise change le montant, pas la politique d'acompte.
+  egal('une prestation sans acompte n’en gagne pas un',
+    montantsPrestation(yoga, [], JOUR), { prix: 15, acompte: 0, solde: 15 })
+  // ⚠️ UN POURCENTAGE ABERRANT EST BORNÉ, jamais propagé tel quel.
+  egal('un acompte de 300 % est ramené à 100',
+    montantsPrestation({ ...reiki, acompte_pourcent: 300 }, [], JOUR).acompte, 50)
+  egal('un acompte négatif vaut zéro',
+    montantsPrestation({ ...reiki, acompte_pourcent: -10 }, [], JOUR).acompte, 0)
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

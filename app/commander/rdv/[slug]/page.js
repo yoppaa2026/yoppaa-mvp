@@ -29,7 +29,7 @@ import { supabase } from '@/lib/supabase'
 // (26/08). ⚠️ Et `canDo` SANS catégorie, jamais `peut()` : la matrice réserve
 // `commande` à l'alimentaire alors que cette fiche sert les vitrines.
 import { isVitrine, canDo, planEffectif } from '@/lib/plans'
-import { dealActifCeJour, remiseSurArticle } from '@/lib/deals'
+import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
 import { lienFiche } from '@/lib/lien-fiche'
 import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
@@ -109,8 +109,13 @@ function formatDuree(min) {
 // de prestation, il l'ajoute à sa caisse. Les colonnes `prix_min` et `prix_max`
 // ont été retirées de la base le même jour, après conversion des fourchettes
 // existantes en prix fixe (au minimum annoncé).
-function formatPrix(prestation) {
-  const { prix } = prestation
+// ⚠️ LES DEALS ENTRENT ICI DEPUIS LE 06/09. Un deal peut viser une prestation :
+// afficher `prestation.prix` montrerait le tarif plein sur un soin remisé, et
+// le client découvrirait la différence sur son ticket. Le paramètre a une
+// valeur par défaut pour que les appelants qui n'ont pas de deals sous la main
+// continuent de rendre le prix plein, sans branchement.
+function formatPrix(prestation, deals = []) {
+  const prix = prixEffectifPrestation(prestation, deals)
   if (prix != null) return `${Number(prix).toFixed(2)} €`
   return 'Sur demande'
 }
@@ -1553,7 +1558,10 @@ export default function CommanderRdvSlug() {
 
       // Le prix, figé sur le rendez-vous. Plus de repli sur une fourchette :
       // elles n'existent plus (27/08).
-      const prixEstime = prestationChoisie.prix != null ? Number(prestationChoisie.prix) : null
+      // 🔴 LE PRIX REMISÉ, FIGÉ SUR LE RENDEZ-VOUS. Le serveur le recalcule
+      // de son côté ; cet écran ne doit pas enregistrer un montant différent de
+      // celui qu'il vient d'afficher.
+      const prixEstime = prixEffectifPrestation(prestationChoisie, deals)
 
       // ─── Acompte (figé) ────────────────────────────────────────────────
       //
@@ -2672,7 +2680,15 @@ export default function CommanderRdvSlug() {
                             )}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6 }}>
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{formatPrix(p)}</span>
+                                <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{formatPrix(p, deals)}</span>
+                                {/* ⚠️ LE PRIX BARRÉ N'EST PAS UN ORNEMENT : sans lui, une
+                                    prestation remisée affiche un prix plus bas sans dire
+                                    pourquoi, et le client ne voit pas qu'il fait une affaire. */}
+                                {remiseSurPrestation(p, deals) && (
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: T.muted, textDecoration: 'line-through', marginLeft: 6 }}>
+                                    {Number(p.prix).toFixed(2)} €
+                                  </span>
+                                )}
                                 {/* La pastille doit dire ce qui se passe VRAIMENT.
                                     Elle annonçait « Acompte 25 % » même quand le
                                     commerçant n'encaisse pas en ligne : le client
@@ -2785,7 +2801,7 @@ export default function CommanderRdvSlug() {
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', color: T.muted, fontWeight: 700 }}>
                           <span>{formatDuree(prestationChoisie.duree_minutes)}</span>
                           <span style={{ opacity: 0.5 }}>·</span>
-                          <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie)}</span>
+                          <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie, deals)}</span>
                         </div>
                       </div>
                       <button onClick={() => { setPrestationChoisie(null); allerEtape(1); setDateChoisie(null); setHeureChoisie(null) }}
@@ -3120,7 +3136,7 @@ export default function CommanderRdvSlug() {
                                   La phrase vient du module, la même que dans
                                   « Mes rendez-vous ». */}
                               <span style={{ color: T.main, fontWeight: 800 }}>
-                                {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie)}
+                                {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie, deals)}
                               </span>
                             </span>
                           </p>
@@ -3141,7 +3157,9 @@ export default function CommanderRdvSlug() {
                         <p style={{ margin: 0, fontSize: '0.74rem', color: T.deep, fontWeight: 700, background: T.pale, borderRadius: 8, padding: '6px 10px' }}>
                           Acompte {prestationChoisie.acompte_pourcent}% {acompteEnLigneDispo ? 'à payer en ligne maintenant' : 'à régler sur place'}
                           {(() => {
-                            const base = prestationChoisie.prix != null ? Number(prestationChoisie.prix) : null
+                            // ⚠️ L'ACOMPTE SUIT LE PRIX REMISÉ : sur un soin à 50 €
+                            // remisé à 40 € avec 50 % d'acompte, c'est 20 € et non 25.
+                            const base = prixEffectifPrestation(prestationChoisie, deals)
                             return base != null ? ` · ${(Math.round(base * prestationChoisie.acompte_pourcent) / 100).toFixed(2)}€` : ''
                           })()}
                         </p>
@@ -3358,7 +3376,7 @@ export default function CommanderRdvSlug() {
                     // bouton aurait annoncé « Payer 12,50 € et confirmer »
                     // devant une séance qui ne coûte rien.
                     const acompteEnLigne = !seanceSurAbo && !!(commercant?.rdv_acompte_en_ligne_actif && commercant?.stripe_account_charges_enabled && prestationChoisie?.acompte_pourcent > 0)
-                    const prixBase = prestationChoisie?.prix != null ? Number(prestationChoisie.prix) : null
+                    const prixBase = prixEffectifPrestation(prestationChoisie, deals)
                     // ⚠️ LA RÉCOMPENSE BAISSE LE TOTAL, ET L'ACOMPTE SE CALCULE
                     // SUR CE TOTAL RÉDUIT (arbitrage d'Alex, 24/08). Sinon le
                     // Yopper avancerait un acompte calculé sur un prix qu'il ne
@@ -3762,7 +3780,7 @@ export default function CommanderRdvSlug() {
                               </p>
                             </div>
                             <span style={{ fontSize: seanceSurAbo ? '0.72rem' : '0.85rem', fontWeight: seanceSurAbo ? 800 : 900, color: seanceSurAbo ? T.main : T.ink, textAlign: 'right', flexShrink: 0 }}>
-                              {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie)}
+                              {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie, deals)}
                             </span>
                           </div>
                           {lignesPanier.map(l => (
@@ -4029,7 +4047,7 @@ export default function CommanderRdvSlug() {
                         {rdvCree.abonnement_id ? 'Paiement' : 'Prix'}
                       </span>
                       <span style={{ fontSize: rdvCree.abonnement_id ? '0.8rem' : '0.95rem', fontWeight: rdvCree.abonnement_id ? 800 : 900, color: T.main, textAlign: 'right' }}>
-                        {libellePrixSeance(rdvCree) || formatPrix(prestationChoisie)}
+                        {libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, deals)}
                       </span>
                     </div>
                     {rdvCree.acompte_montant && (

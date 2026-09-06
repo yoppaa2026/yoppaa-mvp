@@ -624,11 +624,6 @@ const MUTATIONS = [
     de: "    console.warn('[prix-prestation] lecture des deals KO, prix plein applique', error.message)",
     vers: '    return { prix: null, remise: null, deals: [] }' },
 
-  { nom: '🔴 le module charge TOUT le catalogue de deals',
-    fichier: 'lib/prix-prestation-server.js',
-    de: "    .eq('prestation_id', prestation.id)",
-    vers: "    .eq('commercant_id', prestation.commercant_id)" },
-
   // ─── L ECRAN ANNONCE CE QUE LE SERVEUR DEBITE ───────────────────────────
   { nom: '🔴 la fiche RDV reaffiche le prix plein',
     fichier: 'app/commander/rdv/[slug]/page.js',
@@ -663,13 +658,62 @@ const MUTATIONS = [
 
   { nom: '🔴 choisir une prestation laisse trainer l article',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: "        article_id: '', categorie_cible: '', prestation_id: id,",
+    de: "        article_id: '', categorie_cible: '', cible_tout: '', prestation_id: id,",
     vers: '        prestation_id: id,' },
 
   { nom: '🔴 la prestation ne part plus dans le payload',
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: "      prestation_id: (estRemiseSurProduit({ deal_type: form.deal_type }) && form.prestation_id) ? form.prestation_id : null,",
     vers: '      prestation_id: null,' },
+
+  // ─── LA REMISE GLOBALE (Alex, 06/09) ────────────────────────────────────
+  //
+  // 🔴 LA MUTATION QUI REPRODUIT MON PROPRE OUBLI. J avais ecrit ce module le
+  // matin meme et sa requete filtrait sur `prestation_id` : une remise « toutes
+  // mes prestations » n en porte AUCUN, elle serait donc restee invisible au
+  // serveur pendant que la fiche l affichait.
+  { nom: '🔴 les remises GLOBALES redeviennent invisibles au serveur',
+    fichier: 'lib/prix-prestation-server.js',
+    de: '    .or(`prestation_id.eq.${prestation.id},cible_tout.eq.${TOUT_PRESTATIONS}`)',
+    vers: "    .eq('prestation_id', prestation.id)" },
+
+  { nom: '🔴 le module ne charge plus la colonne cible_tout',
+    fichier: 'lib/prix-prestation-server.js',
+    de: "    .select('id, titre, deal_type, remise_pct, prix_deal, prestation_id, cible_tout, actif, date_deal, date_debut, date_fin')",
+    vers: "    .select('id, titre, deal_type, remise_pct, prix_deal, prestation_id, actif, date_deal, date_debut, date_fin')" },
+
+  { nom: '🔴 la lecture cesse d etre bornee au commercant',
+    fichier: 'lib/prix-prestation-server.js',
+    de: "    .eq('commercant_id', prestation.commercant_id)",
+    vers: "    .eq('actif', true)" },
+
+  // ─── L ECRAN ────────────────────────────────────────────────────────────
+  { nom: '🔴 le menu cesse de proposer « tout d un coup »',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                {form.deal_type === TYPE_REMISE && (articlesLiables.length > 0 || prestationsLiables.length > 0) && (',
+    vers: '                {false && (articlesLiables.length > 0 || prestationsLiables.length > 0) && (' },
+
+  // 🔴 « Tous mes produits a 5 EUR » n est pas une promotion : `estRemiseSurProduit`
+  // accepte AUSSI le prix fixe, et c est le piege exact.
+  { nom: '🔴 un PRIX FIXE global devient possible (le magasin brade)',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                {form.deal_type === TYPE_REMISE && (articlesLiables.length > 0 || prestationsLiables.length > 0) && (',
+    vers: '                {estRemiseSurProduit({ deal_type: form.deal_type }) && (articlesLiables.length > 0 || prestationsLiables.length > 0) && (' },
+
+  { nom: '🔴 les deux portees fusionnent en une seule',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                      <option value={`tout:${TOUT_PRESTATIONS}`}>Toutes mes prestations</option>',
+    vers: '                      <option value={`tout:${TOUT_PRODUITS}`}>Toutes mes prestations</option>' },
+
+  { nom: '🔴 la remise globale ne part plus dans le payload',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      cible_tout: (form.deal_type === TYPE_REMISE && form.cible_tout) ? form.cible_tout : null,',
+    vers: '      cible_tout: null,' },
+
+  { nom: '🔴 choisir « tout » laisse trainer les autres cibles',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "      setForm(p => ({ ...p, article_id: '', prestation_id: '', categorie_cible: '', cible_tout: v.slice(5) }))",
+    vers: '      setForm(p => ({ ...p, cible_tout: v.slice(5) }))' },
 ]
 
 function lancer() {

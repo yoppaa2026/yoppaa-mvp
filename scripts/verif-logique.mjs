@@ -15,7 +15,7 @@ import {
   estOffreSeparee, estRemiseSurProduit, dealActifCeJour, dealViseArticle,
   remiseSurArticle, prixEffectif, prixEffectifVariante, offresSepareesPourArticle,
   dealVisePrestation, remiseSurPrestation, prixEffectifPrestation, montantsPrestation,
-  libelleCibleDeal,
+  libelleCibleDeal, porteeGlobale, TOUT_PRODUITS, TOUT_PRESTATIONS,
 } from '../lib/deals.js'
 import { construireLignesCommande, verifierStockDisponible } from '../lib/lignes-commande.js'
 import { libelleRetrait, estRetraitBoutique } from '../lib/libelle-retrait.js'
@@ -4079,21 +4079,29 @@ verifier('les échecs sont comptés, pas alertés douze fois',
   // `prix_fixe` qui tombait dans le cas du lot.
   const remise = libelleCibleDeal({ type: 'remise_pct', ...tout }).label
   const promo = libelleCibleDeal({ type: 'prix_fixe', ...tout }).label
-  egal('🔴 « Prix promo » nomme les trois cibles', promo,
+  egal('🔴 « Prix promo » nomme les trois cibles précises', promo,
     'Deal général, ou sur un produit, une catégorie ou une prestation')
-  verifier('🔴 et il dit exactement ce que dit « Remise % »', promo === remise)
+  // ⚠️ ILS DISENT LA MÊME CHOSE DES CIBLES PRÉCISES, et c'était le défaut
+  // d'Alex. Ils divergent sur un seul point, délibérément : seul le
+  // POURCENTAGE peut être global. « Tous mes produits à 5 € » n'est pas une
+  // promotion, c'est une erreur de saisie qui brade le magasin.
+  verifier('🔴 et il dit la même chose des cibles précises',
+    promo.endsWith('un produit, une catégorie ou une prestation')
+    && remise.endsWith('un produit, une catégorie ou une prestation'))
+  verifier('🔴 mais SEULE la remise % propose « tout »',
+    /sur tout/.test(remise) && !/sur tout/.test(promo))
 
   // ⚠️ ON NE NOMME QUE CE QUI EXISTE. Annoncer « ou une prestation » à qui n'en
   // a aucune envoie chercher une option absente du menu.
   egal('sans prestation, on ne la propose pas',
     libelleCibleDeal({ type: 'remise_pct', aProduits: true, aCategories: true }).label,
-    'Deal général, ou sur un produit ou une catégorie')
+    'Deal général, sur tout, ou sur un produit ou une catégorie')
   egal('sans catégorie non plus',
     libelleCibleDeal({ type: 'remise_pct', aProduits: true, aPrestations: true }).label,
-    'Deal général, ou sur un produit ou une prestation')
+    'Deal général, sur tout, ou sur un produit ou une prestation')
   egal('un commerce de services ne parle que de ses prestations',
     libelleCibleDeal({ type: 'remise_pct', aPrestations: true }).label,
-    'Deal général, ou sur une prestation')
+    'Deal général, sur tout, ou sur une prestation')
 
   // ⚠️ RIEN À VISER : l'offre est une annonce, et le champ n'a plus de sens.
   egal('sans rien à lier, le champ le dit',
@@ -4105,17 +4113,25 @@ verifier('les échecs sont comptés, pas alertés douze fois',
   // refus : la première ligne doit dire « choisis ».
   const requis = libelleCibleDeal({ type: 'remise_pct', ...tout, requis: true })
   egal('🔴 une cible obligatoire se dit dans le libellé', requis.label,
-    'Ce que ça vise : un produit, une catégorie ou une prestation *')
+    'Ce que ça vise : tout, un produit, une catégorie ou une prestation *')
   egal('🔴 et la première ligne cesse d’offrir le vide', requis.optionGenerale,
-    '— Choisis un produit, une catégorie ou une prestation —')
+    '— Choisis tout ou un produit, une catégorie ou une prestation —')
   verifier('🔴 elle ne propose plus « deal général »', !/Deal général/.test(requis.optionGenerale))
 
   // ⚠️ L'OPTION SUIT LA MÊME LISTE QUE LE LIBELLÉ : « pas lié à un produit »
   // devant un menu qui propose des prestations laisserait croire que celles-ci,
   // elles, seraient liées.
-  egal('l’option nomme tout ce qu’on ne lie pas',
+  // 🔴 L'OPTION DIT CE QUE « DEAL GÉNÉRAL » FAIT VRAIMENT, ET C'EST NEUF. Elle
+  // annonçait « pas lié à un produit », ce qui laissait croire à une remise
+  // plus large. Or un deal sans cible NE REMISE RIEN : `dealViseArticle` rend
+  // `false`, vérifié juste en dessous. Un commerçant pouvait enregistrer
+  // « -10 % » en croyant remiser son magasin, et rien ne le lui disait.
+  egal('🔴 l’option dit que « deal général » ne remise rien',
     libelleCibleDeal({ type: 'prix_fixe', ...tout }).optionGenerale,
-    '— Deal général (pas lié à un produit, une catégorie ou une prestation) —')
+    '— Deal général : une annonce, ça ne remise rien —')
+  verifier('🔴 et c’est VRAI : un deal sans cible ne remise rien',
+    remiseSurArticle({ id: 'a1', prix: 50, categorie: 'X' },
+      [{ deal_type: 'remise_pct', remise_pct: 10, date_deal: JOUR, actif: true }], JOUR) === null)
 
   // Le duo garde son libellé : il vise deux articles, pas une cible unique.
   egal('le duo reste le duo', libelleCibleDeal({ type: 'bundle', ...tout }).label,
@@ -4124,6 +4140,99 @@ verifier('les échecs sont comptés, pas alertés douze fois',
   // ⚠️ ET L'ÉNUMÉRATION EST FRANÇAISE : « a, b ou c », jamais « a, b, c ».
   verifier('l’énumération se termine par « ou »',
     / ou une prestation$/.test(libelleCibleDeal({ type: 'remise_pct', ...tout }).label))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA REMISE GLOBALE : « -10 % SUR TOUT » (Alex, 06/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 ELLE N'EXISTAIT PAS. Un deal visait UN article, UNE catégorie ou UNE
+// prestation : des soldes demandaient une promotion par catégorie, et les
+// articles SANS catégorie étaient oubliés EN SILENCE.
+{
+  const glob = { id: 'g1', deal_type: 'remise_pct', remise_pct: 10, cible_tout: 'produits', date_deal: JOUR, actif: true }
+  const globPresta = { ...glob, id: 'g2', cible_tout: 'prestations' }
+  const pull = { id: 'a9', nom: 'Pull', prix: 50, categorie: 'Vetements' }
+  const orphelin = { id: 'a10', nom: 'Divers', prix: 20, categorie: null }
+  const enVitrine = { id: 'a11', nom: 'Coffret', prix: 40, categorie: null, est_vitrine: true }
+  const soinReiki = { id: 'p9', nom: 'Reiki', prix: 50, acompte_pourcent: 50 }
+
+  egal('une remise globale touche un article', remiseSurArticle(pull, [glob], JOUR)?.prix, 45)
+  // 🔴 LE TROU QUE LA REMISE PAR CATÉGORIE LAISSAIT : `categorie_cible` se
+  // compare à `article.categorie`, et `null` n'égale rien. Un article sans
+  // catégorie échappait à toute promotion « sur tout ».
+  egal('🔴 y compris un article SANS catégorie', remiseSurArticle(orphelin, [glob], JOUR)?.prix, 18)
+  // ⚠️ ET LES ARTICLES VITRINE AUSSI, arbitrage d'Alex contre ma proposition :
+  // sauter une partie du catalogue en silence ferait MENTIR le commerçant sur
+  // sa propre fiche, un client verrait un article au prix plein sous
+  // « -10 % sur tout ».
+  egal('et un article vitrine, qui a un prix', remiseSurArticle(enVitrine, [glob], JOUR)?.prix, 36)
+  // ⚠️ UN POURCENTAGE SUIT LES VERSIONS : « -10 % » vaut pour le S comme pour
+  // le XL, et le calcul existait déjà.
+  egal('et toutes les versions d’un article', prixEffectifVariante(80, pull, [glob], JOUR), 72)
+
+  // 🔴 LES DEUX PORTÉES NE SE MÉLANGENT PAS, et c'est toute la raison de les
+  // avoir séparées : un coiffeur qui brade ses shampoings ne brade pas ses
+  // coupes, et il ne le découvre pas sur sa première facture.
+  verifier('🔴 « tous mes produits » ne touche AUCUNE prestation',
+    remiseSurPrestation(soinReiki, [glob], JOUR) === null)
+  verifier('🔴 « toutes mes prestations » ne touche AUCUN article',
+    remiseSurArticle(pull, [globPresta], JOUR) === null)
+  egal('et elle remise bien les prestations', remiseSurPrestation(soinReiki, [globPresta], JOUR)?.prix, 45)
+
+  // 🔴 SEULEMENT EN POURCENTAGE. « Tous mes produits à 5 € » n'est pas une
+  // promotion, c'est une erreur de saisie qui brade le magasin. La base
+  // l'interdit ; ce module ne s'y fie pas.
+  verifier('🔴 un PRIX FIXE global est refusé',
+    remiseSurArticle(pull, [{ ...glob, deal_type: 'prix_fixe', prix_deal: 5 }], JOUR) === null)
+  verifier('🔴 et un LOT global aussi',
+    remiseSurArticle(pull, [{ ...glob, deal_type: 'lot', prix_deal: 5 }], JOUR) === null)
+  // ⚠️ ET UNE VALEUR INCONNUE NE VAUT PAS « TOUT ». Une faute de frappe créerait
+  // une portée silencieuse qui remise le magasin entier.
+  verifier('🔴 une portée inconnue ne remise rien',
+    remiseSurArticle(pull, [{ ...glob, cible_tout: 'toutt' }], JOUR) === null)
+  egal('porteeGlobale ne rend que ce qu’elle connaît',
+    [porteeGlobale(glob), porteeGlobale(globPresta), porteeGlobale({ ...glob, cible_tout: 'x' })],
+    ['produits', 'prestations', null])
+
+  // ⚠️ LA PLUS AVANTAGEUSE GAGNE, comme partout : un article déjà à -30 % ne
+  // remonte pas à -10 % parce qu'une remise globale existe.
+  const cible30 = { id: 'g3', deal_type: 'remise_pct', remise_pct: 30, article_id: 'a9', date_deal: JOUR, actif: true }
+  egal('une remise ciblée plus forte l’emporte',
+    remiseSurArticle(pull, [glob, cible30], JOUR)?.prix, 35)
+
+  // ⚠️ ET ELLE OBÉIT AUX MÊMES DATES.
+  verifier('une remise globale d’hier est ignorée',
+    remiseSurArticle(pull, [{ ...glob, date_deal: '2026-08-04' }], JOUR) === null)
+  verifier('une remise globale éteinte aussi',
+    remiseSurArticle(pull, [{ ...glob, actif: false }], JOUR) === null)
+
+  // ─── LA COLONNE DOIT VOYAGER JUSQU'AU SERVEUR ──────────────────────────
+  //
+  // 🔴 LA GARDE QUI AURAIT ATTRAPÉ MON PROPRE OUBLI. « Une colonne absente d'un
+  // select » est le défaut le plus fréquent de ce projet, sept fois vu, et il
+  // ne lève AUCUNE erreur : la remise serait simplement introuvable côté
+  // serveur, le client verrait « -10 % » et paierait le tarif plein.
+  //
+  // ⚠️ ON LISTE LES QUATRE CIBLES, pas seulement la dernière ajoutée : c'est
+  // cette ligne qu'il faut relire chaque fois qu'une cible naît.
+  const LIGNES = sansCommentaires(readFileSync(new URL('../lib/lignes-commande.js', import.meta.url), 'utf8'))
+  const selDeals = (LIGNES.match(/export const SELECT_DEALS = '([^']+)'/) || [])[1] || ''
+  for (const col of ['article_id', 'categorie_cible', 'prestation_id', 'cible_tout', 'deal_type', 'remise_pct']) {
+    verifier(`🔴 SELECT_DEALS charge ${col}`, selDeals.split(/,\s*/).includes(col),
+      'le serveur facturerait le prix plein sur une remise que l’écran affiche')
+  }
+
+  // ⚠️ ET LE MODULE DES PRESTATIONS DOIT ÉLARGIR SA REQUÊTE. Une remise « toutes
+  // mes prestations » ne porte AUCUN `prestation_id` : filtrer uniquement
+  // dessus l'aurait rendue invisible au serveur.
+  const PPS = sansCommentaires(readFileSync(new URL('../lib/prix-prestation-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le module des prestations charge `cible_tout`', /cible_tout/.test(PPS))
+  verifier('🔴 et il va chercher les remises globales, pas seulement les ciblées',
+    /\.or\(`prestation_id\.eq\.\$\{prestation\.id\},cible_tout\.eq\.\$\{TOUT_PRESTATIONS\}`\)/.test(PPS),
+    'une remise globale serait invisible au serveur, et le client paierait plein tarif')
+  verifier('et il reste borné à ce commerçant',
+    /\.eq\('commercant_id', prestation\.commercant_id\)/.test(PPS))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

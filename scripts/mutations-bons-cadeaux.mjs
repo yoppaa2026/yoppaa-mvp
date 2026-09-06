@@ -1425,10 +1425,13 @@ const MUTATIONS = [
     vers: '  cibles.push(\'une prestation\')' },
 
   // 🔴 QUAND UNE CIBLE EST OBLIGATOIRE, « Deal general » n est plus un choix.
+  // ⚠️ ANCRE REPOINTEE : la remise globale a ajoute « tout » dans les deux
+  // chaines, et `verif:ancres` l a dit avant que la garde ne cesse d etre
+  // mesuree. Une ancre perimee ne rougit jamais, elle disparait.
   { nom: '🔴 le vide reste propose alors qu une cible est obligatoire',
     banc: 'verif:logique', fichier: 'lib/deals.js',
-    de: '    return { label: `Ce que ça vise : ${liste} *`, optionGenerale: `— Choisis ${liste} —` }',
-    vers: '    return { label: `Ce que ça vise : ${liste} *`, optionGenerale: `— Deal général —` }' },
+    de: "      optionGenerale: `— Choisis ${avecTout ? 'tout ou ' : ''}${liste} —`,",
+    vers: '      optionGenerale: `— Deal général —`,' },
 
   // ⚠️ L ENUMERATION EST FRANCAISE : « a, b ou c », jamais « a, b, c ».
   { nom: '🔴 l enumeration perd son « ou »',
@@ -1447,6 +1450,56 @@ const MUTATIONS = [
     banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
     de: '                <option value="">{cibleDeal.optionGenerale}</option>',
     vers: '                <option value="">— Deal général (pas lié à un produit) —</option>' },
+
+  // ─── LA REMISE GLOBALE : LA REGLE (Alex, 06/09) ─────────────────────────
+  //
+  // 🔴 « Tous mes produits a 5 EUR » n est pas une promotion, c est une erreur
+  // de saisie qui brade le magasin.
+  { nom: '🔴 un PRIX FIXE global devient possible dans la regle',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: "  if (!deal || deal.deal_type !== TYPE_REMISE) return null",
+    vers: '  if (!deal) return null' },
+
+  // ⚠️ UNE FAUTE DE FRAPPE NE DOIT PAS CREER UNE PORTEE SILENCIEUSE qui remise
+  // le magasin entier.
+  { nom: '🔴 n importe quelle valeur vaut « tout »',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: '  return p === TOUT_PRODUITS || p === TOUT_PRESTATIONS ? p : null',
+    vers: '  return p || null' },
+
+  // 🔴 LES DEUX PORTEES NE SE MELANGENT PAS : un coiffeur qui brade ses
+  // shampoings ne brade pas ses coupes.
+  { nom: '🔴 « tous mes produits » se met a remiser les prestations',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: '  if (porteeGlobale(deal) === TOUT_PRESTATIONS) return true',
+    vers: '  if (porteeGlobale(deal)) return true' },
+
+  { nom: '🔴 « toutes mes prestations » se met a remiser les articles',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: '  if (porteeGlobale(deal) === TOUT_PRODUITS) return true',
+    vers: '  if (porteeGlobale(deal)) return true' },
+
+  // 🔴 ET L ARTICLE SANS CATEGORIE, LE TROU QU ELLE BOUCHE.
+  // ⚠️ UNE SEULE LIGNE POUR CIBLE, jamais un saut de ligne : `verif:ancres` le
+  // refuse, et une ancre multiligne perime au premier reformatage.
+  { nom: '🔴 la remise globale oublie les articles sans categorie',
+    banc: 'verif:logique', fichier: 'lib/deals.js',
+    de: '  if (porteeGlobale(deal) === TOUT_PRODUITS) return true',
+    vers: '  if (porteeGlobale(deal) === TOUT_PRODUITS) return article.categorie != null' },
+
+  // 🔴 LA MUTATION QUI REPRODUIT LE DEFAUT LE PLUS FREQUENT DU PROJET, sept
+  // fois vu : une colonne absente d un select ne leve AUCUNE erreur. La remise
+  // serait introuvable cote serveur, le client verrait « -10 % » et paierait
+  // le tarif plein.
+  { nom: '🔴 SELECT_DEALS perd la colonne cible_tout',
+    banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: 'categorie_cible, prestation_id, cible_tout, date_deal',
+    vers: 'categorie_cible, prestation_id, date_deal' },
+
+  { nom: '🔴 SELECT_DEALS perd la colonne prestation_id',
+    banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: 'categorie_cible, prestation_id, cible_tout, date_deal',
+    vers: 'categorie_cible, cible_tout, date_deal' },
 ]
 
 function lancer(banc) {

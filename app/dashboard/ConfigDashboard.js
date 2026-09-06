@@ -24,7 +24,7 @@ import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from 
 // format vivaient d'ailleurs ici même, justes toutes les deux, pendant que
 // vingt-cinq autres montants formataient à la main. Une seule source.
 import { euros } from '@/lib/montants'
-import { estRemiseSurProduit, libelleCibleDeal } from '@/lib/deals'
+import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
@@ -2247,7 +2247,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       deal_type: 'lot', remise_pct: '', unites_par_deal: '', article2_id: '',
       date_debut: today, date_fin: today,
       heure_debut: '00:00', heure_fin: '23:59',
-      inclus_morning: false, actif: true, article_id: '', categorie_cible: '', prestation_id: '',
+      inclus_morning: false, actif: true, article_id: '', categorie_cible: '', prestation_id: '', cible_tout: '',
       cta_appeler_reserver: false,
       photo_url: '', est_bonne_affaire: false })
     setPropsIa([])
@@ -2278,6 +2278,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       article_id: d.article_id || '',
       categorie_cible: d.categorie_cible || '',
       prestation_id: d.prestation_id || '',
+      cible_tout: d.cible_tout || '',
       cta_appeler_reserver: !!d.cta_appeler_reserver,
       photo_url: d.photo_url || '',
       est_bonne_affaire: !!d.est_bonne_affaire,
@@ -2313,8 +2314,14 @@ function TabDeals({ commercantId, commercant, toast }) {
   // comprendre.
   function onArticleChange(valeur) {
     const v = String(valeur)
+    // ⚠️ QUATRE CIBLES DEPUIS LA REMISE GLOBALE, et toujours une seule à la
+    // fois : chaque branche efface les trois autres.
+    if (v.startsWith('tout:')) {
+      setForm(p => ({ ...p, article_id: '', prestation_id: '', categorie_cible: '', cible_tout: v.slice(5) }))
+      return
+    }
     if (v.startsWith('cat:')) {
-      setForm(p => ({ ...p, article_id: '', prestation_id: '', categorie_cible: v.slice(4) }))
+      setForm(p => ({ ...p, article_id: '', prestation_id: '', cible_tout: '', categorie_cible: v.slice(4) }))
       return
     }
     if (v.startsWith('presta:')) {
@@ -2322,7 +2329,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       const pres = prestations.find(x => x.id === id)
       setForm(p => ({
         ...p,
-        article_id: '', categorie_cible: '', prestation_id: id,
+        article_id: '', categorie_cible: '', cible_tout: '', prestation_id: id,
         prix_original: pres && !p.prix_original ? String(pres.prix) : p.prix_original,
       }))
       return
@@ -2333,6 +2340,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       article_id: valeur,
       categorie_cible: '',
       prestation_id: '',
+      cible_tout: '',
       prix_original: art && !p.prix_original ? String(art.prix) : p.prix_original,
     }))
   }
@@ -2370,7 +2378,7 @@ function TabDeals({ commercantId, commercant, toast }) {
       // ⚠️ TROIS CIBLES DEPUIS LE 06/09, et le message les nomme toutes :
       // « vise un article ou une catégorie » devant un déroulant qui propose
       // aussi des prestations enverrait chercher ce qui est sous les yeux.
-      if (cibleRequise && !form.article_id && !form.categorie_cible && !form.prestation_id) {
+      if (cibleRequise && !form.article_id && !form.categorie_cible && !form.prestation_id && !form.cible_tout) {
         setSaving(false)
         return toast(prestationsLiables.length > 0
           ? 'Une remise % doit viser un article, une catégorie ou une prestation'
@@ -2415,6 +2423,10 @@ function TabDeals({ commercantId, commercant, toast }) {
       // carnet d'abonnement : la base refuse le contraire, l'écran ne l'envoie
       // même pas.
       prestation_id: (estRemiseSurProduit({ deal_type: form.deal_type }) && form.prestation_id) ? form.prestation_id : null,
+      // 🔴 RÉSERVÉE AU POURCENTAGE. « Tous mes produits à 5 € » n'est pas une
+      // promotion, c'est une erreur de saisie qui brade le magasin. La base le
+      // refuse aussi : une garde d'écran n'est jamais une réponse.
+      cible_tout: (form.deal_type === TYPE_REMISE && form.cible_tout) ? form.cible_tout : null,
       cta_appeler_reserver: !!form.cta_appeler_reserver,
       photo_url: form.photo_url || null,
       est_bonne_affaire: !!form.est_bonne_affaire,
@@ -2599,10 +2611,33 @@ function TabDeals({ commercantId, commercant, toast }) {
                   absente du menu. La règle vit dans `lib/deals.js`, où elle se
                   mesure. */}
               <label style={s.label}>{cibleDeal.label}</label>
-              <select value={form.categorie_cible ? `cat:${form.categorie_cible}` : form.prestation_id ? `presta:${form.prestation_id}` : form.article_id}
+              <select value={form.cible_tout ? `tout:${form.cible_tout}` : form.categorie_cible ? `cat:${form.categorie_cible}` : form.prestation_id ? `presta:${form.prestation_id}` : form.article_id}
                 onChange={e => onArticleChange(e.target.value)}
                 style={{ ...s.input, cursor: 'pointer' }}>
                 <option value="">{cibleDeal.optionGenerale}</option>
+                {/* 🔴 « -10 % SUR TOUT », QUI N'EXISTAIT PAS (Alex, 06/09). Il
+                    fallait une promotion par catégorie, et ⚠️ LES ARTICLES SANS
+                    CATÉGORIE ÉTAIENT OUBLIÉS EN SILENCE : une remise par
+                    catégorie compare à `article.categorie`, et `null` n'égale
+                    rien.
+
+                    ⚠️ DEUX PORTÉES SÉPARÉES : une seule option « tout mon
+                    commerce » ferait qu'un coiffeur qui pense à ses shampoings
+                    braderait aussi ses coupes, et il le verrait sur sa première
+                    facture.
+
+                    🔴 ET SEULEMENT EN POURCENTAGE : « tous mes produits à 5 € »
+                    braderait le magasin. C'est aussi une contrainte de base. */}
+                {form.deal_type === TYPE_REMISE && (articlesLiables.length > 0 || prestationsLiables.length > 0) && (
+                  <optgroup label="Tout d’un coup">
+                    {articlesLiables.length > 0 && (
+                      <option value={`tout:${TOUT_PRODUITS}`}>Tous mes produits</option>
+                    )}
+                    {prestationsLiables.length > 0 && (
+                      <option value={`tout:${TOUT_PRESTATIONS}`}>Toutes mes prestations</option>
+                    )}
+                  </optgroup>
+                )}
                 {/* Articles à variantes exclus (décision 26/07 : pas de deal sur
                     variantes en V1, stock/choix ingérables) */}
                 {articlesLiables.map(a => (

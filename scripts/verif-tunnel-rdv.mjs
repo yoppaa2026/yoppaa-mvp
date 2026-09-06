@@ -1691,9 +1691,34 @@ for (const chemin of [
   // ⚠️ UN SEUL CHARGEMENT, PARTAGÉ PAR LES TROIS. S'il était recopié, les trois
   // routes finiraient par ne plus filtrer les mêmes deals.
   const MOD = lireCode('lib/prix-prestation-server.js')
-  verifie('🔴 le module ne lit que les deals de CETTE prestation',
-    /\.eq\('prestation_id', prestation\.id\)/.test(MOD),
+  // 🔴 GARDE REPOINTÉE LE 06/09, ET ELLE MESURAIT UNE FORME. Elle exigeait un
+  // `.eq('prestation_id', …)` : elle a rougi le jour où la requête s'est
+  // élargie aux remises GLOBALES, c'est-à-dire sur une correction. Son intention
+  // était « ne charge pas tout le catalogue », pas « garde ce filtre-là ».
+  //
+  // ⚠️ ON MESURE DONC LES DEUX FAITS : la lecture reste bornée au commerçant, et
+  // elle ne va chercher que ce qui peut concerner cette prestation.
+  verifie('🔴 la lecture reste bornée à ce commerçant',
+    /\.eq\('commercant_id', prestation\.commercant_id\)/.test(MOD),
     'charger tout le catalogue sur un chemin d’argent appelé à chaque réservation')
+  // 🔴 GARDE VERTE GRÂCE À UN JUMEAU, trouvée par le harnais. Une première
+  // version cherchait `cible_tout` n'importe où dans le fichier : le mot
+  // apparaît AUSSI dans le `.or(…)` juste en dessous, donc le retirer du
+  // `.select()` la laissait verte — et la colonne serait revenue `undefined`,
+  // rendant toute remise globale invisible au serveur.
+  //
+  // ⚠️ ON DÉCOUPE LA LISTE DE COLONNES ET ON Y CHERCHE. Le défaut « colonne
+  // absente d'un select » est le plus fréquent de ce projet, et il ne lève
+  // aucune erreur.
+  const colPPS = ((MOD.match(/\.select\('([^']+)'\)/) || [])[1] || '').split(/,\s*/)
+  verifie('la liste de colonnes du module se découpe', colPPS.length > 5, colPPS.join('|'))
+  for (const c of ['deal_type', 'remise_pct', 'prix_deal', 'prestation_id', 'cible_tout']) {
+    verifie(`🔴 le module charge la colonne ${c}`, colPPS.includes(c),
+      'le serveur facturerait le prix plein sur une remise que la fiche affiche')
+  }
+  verifie('🔴 et elle vise cette prestation OU une remise globale',
+    /prestation_id\.eq\.\$\{prestation\.id\}/.test(MOD) && /cible_tout\.eq\.\$\{TOUT_PRESTATIONS\}/.test(MOD),
+    'une remise globale serait invisible au serveur et le client paierait plein tarif')
   verifie('et seulement les deals actifs', /\.eq\('actif', true\)/.test(MOD))
   // 🔴 UNE LECTURE QUI ÉCHOUE NE BRADE RIEN. Mieux vaut ne pas appliquer une
   // remise que la deviner : un `error` non lu est un espoir, pas une action.
@@ -1764,12 +1789,41 @@ for (const chemin of [
   // ⚠️ UNE SEULE CIBLE À LA FOIS : chaque branche efface les deux autres, sinon
   // la contrainte de base refuse l'enregistrement avec un message que le
   // commerçant ne peut pas comprendre.
-  verifie('🔴 choisir une prestation efface l’article et la catégorie',
-    /article_id: '', categorie_cible: '', prestation_id: id,/.test(CFG))
+  // ⚠️ ANCRE REPOINTÉE : une quatrième cible est née, et cette garde citait la
+  // liste exacte des trois. Elle a rougi sur l'ajout, pas sur un défaut.
+  verifie('🔴 choisir une prestation efface les trois autres cibles',
+    /article_id: '', categorie_cible: '', cible_tout: '', prestation_id: id,/.test(CFG))
   verifie('et choisir un article efface la prestation',
     /article_id: valeur,\s*\n\s*categorie_cible: '',\s*\n\s*prestation_id: '',/.test(CFG))
   verifie('la prestation part bien dans le payload',
     /prestation_id: \(estRemiseSurProduit\(\{ deal_type: form\.deal_type \}\) && form\.prestation_id\) \? form\.prestation_id : null,/.test(CFG))
+
+  // ── LA REMISE GLOBALE (Alex, 06/09) ────────────────────────────────────
+  //
+  // 🔴 « -10 % SUR TOUT » N'EXISTAIT PAS : il fallait une promotion par
+  // catégorie, et les articles sans catégorie étaient oubliés en silence.
+  verifie('🔴 le menu propose « tout d’un coup »',
+    /<optgroup label="Tout d’un coup">/.test(CFG))
+  verifie('avec les deux portées séparées',
+    /<option value=\{`tout:\$\{TOUT_PRODUITS\}`\}>Tous mes produits<\/option>/.test(CFG)
+    && /<option value=\{`tout:\$\{TOUT_PRESTATIONS\}`\}>Toutes mes prestations<\/option>/.test(CFG),
+    'une seule option ferait brader ses coupes à un coiffeur qui pense à ses shampoings')
+  // 🔴 SEULEMENT SUR UNE REMISE EN POURCENTAGE. « Tous mes produits à 5 € »
+  // n'est pas une promotion, c'est une erreur de saisie qui brade le magasin.
+  // `estRemiseSurProduit` ne suffirait PAS : il accepte aussi le prix fixe.
+  verifie('🔴 et seulement sur une remise en POURCENTAGE',
+    /\{form\.deal_type === TYPE_REMISE && \(articlesLiables\.length > 0 \|\| prestationsLiables\.length > 0\) && \(/.test(CFG),
+    '« tous mes produits à 5 € » braderait le magasin')
+  verifie('🔴 le payload la réserve au pourcentage lui aussi',
+    /cible_tout: \(form\.deal_type === TYPE_REMISE && form\.cible_tout\) \? form\.cible_tout : null,/.test(CFG))
+  // ⚠️ QUATRE CIBLES, TOUJOURS UNE SEULE À LA FOIS : chaque branche efface les
+  // trois autres, sinon la contrainte de base refuse l'enregistrement avec un
+  // message que le commerçant ne peut pas comprendre.
+  verifie('🔴 choisir « tout » efface les trois autres cibles',
+    /article_id: '', prestation_id: '', categorie_cible: '', cible_tout: v\.slice\(5\)/.test(CFG))
+  verifie('et les trois autres effacent « tout »',
+    (CFG.match(/cible_tout: '',/g) || []).length >= 3,
+    'un choix précédent traînerait et ferait refuser l’enregistrement')
 }
 
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════

@@ -1995,6 +1995,35 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // qui mentait.
   verifier('⚠️ la grille n’est plus lue en direct pour juger une plage',
     !/horairesDetail: commercant\?\.horaires_detail/.test(CONFIG))
+
+  // ─── L'ONGLET SURVIT AU RECHARGEMENT (Alex, 07/09) ──────────────────────
+  // Un rechargement ou un retour en arrière repartait TOUJOURS sur
+  // « Commandes » : trois clics à refaire à chaque fois pendant une session de
+  // réglages.
+  const PAGE = lire('app/dashboard/page.js')
+  verifier('l’onglet s’écrit dans l’adresse',
+    /url\.searchParams\.set\('onglet', ongletPrincipal\)/.test(PAGE))
+  verifier('et le sous-onglet des paramètres aussi',
+    /url\.searchParams\.set\('config', configTabUrl\)/.test(PAGE))
+  // 🔴 `replaceState` ET PAS `pushState` : un onglet n'est pas une page. Sinon
+  // sortir du tableau de bord demanderait autant de retours que de clics.
+  verifier('🔴 l’adresse se remplace, elle ne s’empile pas',
+    /window\.history\.replaceState\(null, '', url\.toString\(\)\)/.test(PAGE))
+  // ⚠️ UNE ADRESSE SE BRICOLE À LA MAIN : un onglet inconnu afficherait un
+  // écran vide sans rien dire.
+  verifier('⚠️ un onglet inconnu dans l’adresse est ignoré',
+    /ONGLETS_VALIDES\.includes\(o\)/.test(PAGE) && /CONFIG_VALIDES\.includes\(c\)/.test(PAGE))
+  // ⚠️ Le bouton « Précédent » change l'adresse sans que React le sache.
+  verifier('⚠️ le retour en arrière est écouté',
+    /addEventListener\('popstate', lire\)/.test(PAGE) && /removeEventListener\('popstate', lire\)/.test(PAGE))
+  // 🔴 L'ÉTAT DE L'ADRESSE EST SÉPARÉ DE LA CLÉ DU COMPOSANT. `configTab` sert
+  // de `key` à ConfigDashboard : le modifier REMONTE le composant et perd la
+  // saisie en cours.
+  verifier('🔴 l’adresse ne remonte pas le composant des réglages',
+    /const \[configTabUrl, setConfigTabUrl\] = useState/.test(PAGE)
+    && /onOngletChange=\{setConfigTabUrl\}/.test(PAGE))
+  verifier('⚠️ et on n’écrit pas avant d’avoir lu',
+    /if \(!pretUrl\) return/.test(PAGE))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

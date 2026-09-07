@@ -11309,8 +11309,12 @@ function BandeauEssai({ commercant, onEssayer }) {
   )
 }
 
-export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
+export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onOngletChange = null }) {
   const [tab, setTab] = useState(tabInitial)
+  // ⚠️ ON PRÉVIENT LE PARENT POUR L'ADRESSE, ET RIEN DE PLUS. Il ne doit
+  // surtout pas remonter ce composant : sa clé dépend de l'onglet, et un
+  // remontage fermerait le formulaire ouvert en perdant la saisie.
+  const noterOnglet = (id) => { setTab(id); if (onOngletChange) onOngletChange(id) }
   const [toastMsg, setToastMsg] = useState('')
   const [toastType, setToastType] = useState('success')
   const [commercant, setCommercant] = useState(null)
@@ -11348,7 +11352,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
     // Changer d'onglet démonte le formulaire : c'est la sortie qui coûte le
     // plus cher, et la seule qu'aucun bouton ne voit venir.
     if (modifs.modifie) { setOngletVise(id); return }
-    setTab(id)
+    noterOnglet(id)
   }
 
   // ─── LA PROPOSITION ────────────────────────────────────────────────────────
@@ -11412,13 +11416,13 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu' }) {
     // ⚠️ On ne quitte QUE si l'enregistrement a réussi. Un nom vide ou une
     // erreur réseau laisse le commerçant sur son écran, avec son texte.
     if (ok === false) { setOngletVise(null); return }
-    if (ongletVise) setTab(ongletVise)
+    if (ongletVise) noterOnglet(ongletVise)
     setOngletVise(null)
   }
 
   function abandonnerPuisContinuer() {
     actionsModifs.current?.current?.ignorer?.()
-    if (ongletVise) setTab(ongletVise)
+    if (ongletVise) noterOnglet(ongletVise)
     setOngletVise(null)
   }
 

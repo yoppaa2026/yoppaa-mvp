@@ -1013,6 +1013,8 @@ export default function Dashboard() {
   // Onglet de configuration ouvert par les raccourcis « Actions rapides »
   const [configTab, setConfigTab] = useState('menu')
   function ouvrirConfig(tab) { setConfigTab(tab); setOngletPrincipal('config') }
+
+
   const [commercant, setCommercant] = useState(null)
   // Verdict d'accès au tableau de bord. `null` tant qu'on n'a rien décidé,
   // sinon `{ raison, motif, nom }` et on montre l'écran d'attente à la place.
@@ -1020,6 +1022,67 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
+  // ⚠️ `pretUrl` : tant qu'on n'a pas relu l'adresse, on n'y écrit pas. Sans ce
+  // drapeau, le premier rendu écraserait l'onglet de l'adresse par « commandes »
+  // avant même de l'avoir lu.
+  const [pretUrl, setPretUrl] = useState(false)
+
+  // ─── L'ONGLET SURVIT AU RECHARGEMENT (Alex, 07/09) ────────────────────────
+  //
+  // 🔴 CE QUE ÇA CORRIGE. Un rechargement, un retour en arrière, un retour de
+  // paiement : on repartait TOUJOURS sur « Commandes ». Pendant une session de
+  // réglages, c'est trois clics à refaire à chaque fois, et sur un onglet
+  // profond comme Prise de RDV, il faut se rappeler où on était.
+  //
+  // ⚠️ `replaceState` ET PAS `pushState` : un onglet n'est pas une page. Avec
+  // `pushState`, revenir en arrière après dix clics d'onglets demanderait dix
+  // retours pour sortir du tableau de bord. C'est la méthode que Next
+  // recommande pour ce cas précis, et elle s'intègre à son routeur.
+  //
+  // ⚠️ ET LES VALEURS SONT VALIDÉES. Une adresse se bricole à la main : un
+  // onglet inconnu afficherait un écran vide sans rien dire.
+  const ONGLETS_VALIDES = ['commandes', 'rdv', 'config']
+  const CONFIG_VALIDES = ['stats', 'menu', 'deals', 'actus', 'ia', 'creneaux', 'livraison',
+    'rdv', 'fidelite', 'bons', 'paiements', 'comptabilite', 'profil', 'accompagnement',
+    'avis', 'signaux']
+
+  // 🔴 LA LECTURE SE FAIT DANS UN EFFET, PAS DANS L'ÉTAT INITIAL. Lire
+  // `window` au premier rendu ferait diverger le rendu serveur du rendu client,
+  // et l'hydratation casserait.
+  useEffect(() => {
+    const lire = () => {
+      const p = new URLSearchParams(window.location.search)
+      const o = p.get('onglet')
+      const c = p.get('config')
+      if (o && ONGLETS_VALIDES.includes(o)) setOngletPrincipal(o)
+      if (c && CONFIG_VALIDES.includes(c)) setConfigTab(c)
+    }
+    lire()
+    setPretUrl(true)
+    // Le bouton « Précédent » change l'adresse sans que React le sache.
+    window.addEventListener('popstate', lire)
+    return () => window.removeEventListener('popstate', lire)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- au montage seulement, les listes sont des constantes
+  }, [])
+
+  // 🔴 UN ÉTAT SÉPARÉ POUR L'ADRESSE, ET C'EST INDISPENSABLE. `configTab` sert
+  // de `key` à ConfigDashboard : le modifier REMONTE le composant, ce qui
+  // fermerait le formulaire ouvert et perdrait la saisie en cours. On garde
+  // donc à part ce que l'adresse doit refléter, sans jamais toucher à la clé.
+  const [configTabUrl, setConfigTabUrl] = useState('menu')
+  useEffect(() => { setConfigTabUrl(configTab) }, [configTab])
+
+  useEffect(() => {
+    if (!pretUrl) return
+    const url = new URL(window.location.href)
+    url.searchParams.set('onglet', ongletPrincipal)
+    // Le sous-onglet ne s'écrit que là où il veut dire quelque chose.
+    if (ongletPrincipal === 'config') url.searchParams.set('config', configTabUrl)
+    else url.searchParams.delete('config')
+    if (url.toString() !== window.location.href) {
+      window.history.replaceState(null, '', url.toString())
+    }
+  }, [pretUrl, ongletPrincipal, configTabUrl])
 
   // Raccourci d'email : /dashboard?config=signaux ouvre directement le bon
   // onglet de configuration. Sans lui, un email devrait ÉCRIRE le chemin à
@@ -3353,7 +3416,7 @@ export default function Dashboard() {
             )}
 
             {ongletPrincipal === 'config' && commercant && (
-              <ConfigDashboard key={configTab} commercantId={commercant.id} tabInitial={configTab}/>
+              <ConfigDashboard key={configTab} commercantId={commercant.id} tabInitial={configTab} onOngletChange={setConfigTabUrl}/>
             )}
           </div>
         </div>

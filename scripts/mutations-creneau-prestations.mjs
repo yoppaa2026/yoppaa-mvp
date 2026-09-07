@@ -134,6 +134,27 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '                    Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons))',
     vers: '                    Number(p.capacite) > 1)' },
+
+  // 🔴 L ONGLET QUI SURVIT AU RECHARGEMENT (Alex, 07/09).
+  { nom: '🔴 l onglet cesse d etre ecrit dans l adresse',
+    fichier: 'app/dashboard/page.js',
+    de: "    url.searchParams.set('onglet', ongletPrincipal)",
+    vers: '    void 0' },
+
+  { nom: '🔴 l adresse s empile au lieu de se remplacer',
+    fichier: 'app/dashboard/page.js',
+    de: "      window.history.replaceState(null, '', url.toString())",
+    vers: "      window.history.pushState(null, '', url.toString())" },
+
+  { nom: '⚠️ un onglet inconnu de l adresse est accepte',
+    fichier: 'app/dashboard/page.js',
+    de: '      if (o && ONGLETS_VALIDES.includes(o)) setOngletPrincipal(o)',
+    vers: '      if (o) setOngletPrincipal(o)' },
+
+  { nom: '⚠️ on ecrit l adresse avant de l avoir lue',
+    fichier: 'app/dashboard/page.js',
+    de: '    if (!pretUrl) return',
+    vers: '    if (false) return' },
 ]
 
 const lancer = () => {

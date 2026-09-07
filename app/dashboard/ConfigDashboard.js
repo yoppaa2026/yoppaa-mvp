@@ -30,6 +30,7 @@ import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJou
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, coursDejaCoche, creneauHorsOuverture, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
+import BlocAide, { EtapeAide } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
@@ -7361,6 +7362,36 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
   ]
   return (
     <div>
+      {/* 🔴 « COMMENT ÇA MARCHE » (Alex, 07/09). L'objectif est l'autonomie :
+          un commerçant qui s'en sort seul en parle autour de lui. L'aide n'est
+          pas du confort, c'est le canal d'acquisition. */}
+      <BlocAide id="rdv" titre="Comment régler ta prise de rendez-vous" T={T}>
+        <EtapeAide n={1} titre="Tes prestations, d’abord" T={T}>
+          Ce que tu proposes, sa durée et son prix. <strong>La capacité change tout</strong> :
+          laisse-la à 1 pour un rendez-vous en tête à tête, monte-la pour un cours collectif.
+          C’est elle qui décide de la suite, ici et sur ta fiche.
+        </EtapeAide>
+        <EtapeAide n={2} titre="Ton équipe, ensuite" T={T}>
+          Une personne seule ? Passe cette étape. Sinon, ajoute chacun, puis dis
+          sur la prestation qui sait la faire. Sans rien préciser, tout le monde peut tout.
+        </EtapeAide>
+        <EtapeAide n={3} titre="Tes plages : quand, pour qui, pour quoi" T={T}>
+          Une plage dit à quelles heures on peut réserver, <strong>avec qui</strong>, et
+          <strong> ce qui s’y donne</strong>. Un cours à heure fixe mérite sa propre plage :
+          le lundi 10h à 11h, rien que le yoga. Le reste de la journée peut rester ouvert à tout.
+        </EtapeAide>
+        <EtapeAide n={4} titre="Jusqu’à quand on peut réserver" T={T}>
+          Deux mois par défaut. Si tu vends des carnets ou des abonnements, monte à
+          trois ou six mois : dix séances par semaine couvrent déjà plus de deux mois.
+        </EtapeAide>
+        <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.6, margin: '2px 0 0', paddingTop: 10, borderTop: `1px solid ${T.hairline}` }}>
+          <strong style={{ color: T.deep }}>Deux pièges, et l’écran te prévient pour les deux.</strong>{' '}
+          Tes plages ne peuvent pas déborder de tes horaires d’ouverture (Paramètres → Profil) :
+          ce qui dépasse ne sera jamais proposé. Et un cours laissé sur une plage ouverte à tout
+          devient réservable à n’importe quelle heure, pour une personne seule.
+        </p>
+      </BlocAide>
+
       {/* ─── LA BANNIÈRE D'OUVERTURE ────────────────────────────────────────
           Tant que la prise de RDV est fermée, la fiche publique dit au client
           de téléphoner. Le commerçant doit l'apprendre ici, à l'endroit exact

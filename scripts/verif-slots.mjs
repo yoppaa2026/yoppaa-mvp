@@ -1911,6 +1911,35 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // ignorance viderait tous les agendas nommés d'un coup.
   verifier('⚠️ une liste de praticiens vide ne ferme rien',
     /praticiens\.length === 0\s*\n?\s*\? creneauxConfig/.test(FICHE))
+
+  // ─── « COMMENT ÇA MARCHE » (Alex, 07/09) ────────────────────────────────
+  // L'autonomie du commerçant est le canal d'acquisition : celui qui s'en sort
+  // seul en parle autour de lui.
+  const AIDE = lire('app/dashboard/BlocAide.js')
+  verifier('l’onglet rendez-vous porte son mode d’emploi',
+    /<BlocAide id="rdv"/.test(CONFIG))
+  verifier('et il décrit les quatre étapes dans l’ordre',
+    (CONFIG.match(/<EtapeAide n=\{[1-4]\}/g) || []).length === 4)
+  // ⚠️ LES DEUX PIÈGES SONT NOMMÉS, parce que ce sont eux qui coûtent une
+  // journée de compréhension : une plage hors horaires ne propose rien, et un
+  // cours resté sur une plage ouverte se donne à n'importe quelle heure.
+  verifier('⚠️ le mode d’emploi nomme le piège des horaires',
+    /déborder de tes horaires/.test(CONFIG))
+  verifier('⚠️ et celui du cours laissé sur une plage ouverte',
+    /réservable à n’importe quelle heure/.test(CONFIG))
+
+  // 🔴 UN BLOC DÉPLIABLE, PAS UNE MODALE. Une fenêtre qui s'ouvre seule à
+  // chaque visite est la friction que ce produit combat partout ailleurs.
+  verifier('🔴 l’aide se replie et se rouvre, elle ne bloque rien',
+    /setOuvert\(!dejaVu\)/.test(AIDE) && !/createPortal/.test(AIDE))
+  // ⚠️ ON NE MÉMORISE QUE LA FERMETURE : rouvrir pour relire ne doit pas
+  // reprogrammer une ouverture automatique au prochain passage.
+  verifier('⚠️ seule la fermeture se mémorise',
+    /if \(!suivant\) \{ try \{ localStorage\.setItem/.test(AIDE))
+  // ⚠️ UN STOCKAGE INDISPONIBLE NE CASSE RIEN. Navigation privée, quota plein :
+  // on retombe sur « ouvert », le pire cas acceptable.
+  verifier('⚠️ un stockage inaccessible ne casse pas l’écran',
+    (AIDE.match(/catch/g) || []).length >= 2)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

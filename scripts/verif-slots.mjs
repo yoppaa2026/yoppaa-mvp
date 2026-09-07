@@ -10,7 +10,7 @@ import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
   creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
-  prestationAutoriseeSurCreneaux,
+  prestationAutoriseeSurCreneaux, coursDejaCoche,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
@@ -1643,6 +1643,59 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // il montre l'agenda tel quel plutôt que de cacher des plages au hasard.
   egal('sans prestation choisie, on ne cache rien',
     creneauxPourPrestation(CRENEAUX, null, LIAISONS).map(c => c.id), ['k-yoga', 'k-large'])
+
+  // ── UNE PRESTATION VIT SUR PLUSIEURS PLAGES, PLUSIEURS JOURS, PLUSIEURS
+  //    PRATICIENS (question d'Alex, 07/09) ─────────────────────────────────
+  // Rien ne limite une prestation à une seule plage : la liaison est un couple
+  // (plage, prestation), et une plage porte son jour et son praticien.
+  {
+    const LUNDI  = { id: 'k-lun', jour_semaine: 'lundi',    date_specifique: null, heure_debut: '10:00:00', heure_fin: '11:00:00', actif: true, praticien_id: 'sophie' }
+    const MERCRE = { id: 'k-mer', jour_semaine: 'mercredi', date_specifique: null, heure_debut: '19:00:00', heure_fin: '20:00:00', actif: true, praticien_id: 'marc' }
+    const DEUX = [
+      { creneau_id: 'k-lun', prestation_id: 'yoga' },
+      { creneau_id: 'k-mer', prestation_id: 'yoga' },
+    ]
+    verifier('le même cours vit sur deux plages', creneauAccepte('k-lun', 'yoga', DEUX) && creneauAccepte('k-mer', 'yoga', DEUX))
+    egal('et la fiche propose les deux',
+      creneauxPourPrestation([LUNDI, MERCRE], 'yoga', DEUX).map(c => c.id), ['k-lun', 'k-mer'])
+    // Deux jours, deux praticiens : c'est la plage qui les porte, la liaison ne
+    // fait que dire ce qui s'y donne.
+    egal('deux jours différents', [LUNDI.jour_semaine, MERCRE.jour_semaine], ['lundi', 'mercredi'])
+    egal('deux praticiens différents', [LUNDI.praticien_id, MERCRE.praticien_id], ['sophie', 'marc'])
+    // ⚠️ ET UNE PLAGE ACCEPTE PLUSIEURS PRESTATIONS INDIVIDUELLES : un salon
+    // propose coupe, couleur et head spa toute la journée, et le client choisit
+    // son heure. Une seule s'y donne à la fois, `conflitReservation` s'en charge.
+    const MULTI_SOLO = [
+      { creneau_id: 'k-lun', prestation_id: 'coupe' },
+      { creneau_id: 'k-lun', prestation_id: 'couleur' },
+    ]
+    verifier('une plage accepte plusieurs prestations individuelles',
+      creneauAccepte('k-lun', 'coupe', MULTI_SOLO) && creneauAccepte('k-lun', 'couleur', MULTI_SOLO))
+    verifier('et refuse le reste', !creneauAccepte('k-lun', 'reiki', MULTI_SOLO))
+  }
+
+  // ── 🔴 UN SEUL COURS PAR PLAGE (Alex, 07/09) ────────────────────────────
+  // À 10h il y a UN cours, pas deux. En accepter deux ferait décider le premier
+  // client lequel a lieu : le défaut du 07/09 reproduit à l'intérieur du
+  // réglage censé le corriger.
+  {
+    const CATALOGUE = [
+      { id: 'yoga',    nom: 'Cours de Yoga',    capacite: 12 },
+      { id: 'pilates', nom: 'Cours de pilates', capacite: 10 },
+      { id: 'reiki',   nom: 'Séance de Reiki',  capacite: 1 },
+      { id: 'coupe',   nom: 'Coupe',            capacite: 1 },
+    ]
+    egal('aucun cours coché', coursDejaCoche([], CATALOGUE), null)
+    egal('que des soins individuels : aucun cours',
+      coursDejaCoche(['reiki', 'coupe'], CATALOGUE), null)
+    egal('🔴 un cours coché est reconnu',
+      coursDejaCoche(['reiki', 'yoga'], CATALOGUE)?.id, 'yoga')
+    // ⚠️ Le piège du zéro : une capacité absente n'est pas un cours.
+    egal('une capacité absente n’est pas un cours',
+      coursDejaCoche(['inconnu'], CATALOGUE), null)
+    egal('une liste absente ne dit rien', coursDejaCoche(null, CATALOGUE), null)
+    egal('un catalogue absent ne dit rien', coursDejaCoche(['yoga'], null), null)
+  }
 
   // ── L'avertissement du commerçant ───────────────────────────────────────
   verifier('un cours rattaché nulle part est signalé', prestationSansCreneauDedie('pilates', LIAISONS))

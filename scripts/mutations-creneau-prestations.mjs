@@ -67,6 +67,11 @@ const MUTATIONS = [
     de: '  if (!Array.isArray(liaisons) || !prestationId) return creneaux || []',
     vers: '  if (!Array.isArray(liaisons)) return creneaux || []' },
 
+
+  // 🔴 UN SEUL COURS PAR PLAGE (Alex, 07/09).
+  { nom: '🔴 deux cours redeviennent possibles sur la meme plage',
+    de: '    if (p && Number(p.capacite) > 1) return p',
+    vers: '    if (false) return p' },
 ]
 
 const lancer = () => {

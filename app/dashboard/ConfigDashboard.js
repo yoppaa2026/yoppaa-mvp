@@ -29,7 +29,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
-import { prestationSansCreneauDedie } from '@/lib/rdv-slots'
+import { prestationSansCreneauDedie, coursDejaCoche } from '@/lib/rdv-slots'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
@@ -9102,7 +9102,41 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       pause_fin: c.pause_fin,
       actif: c.actif,
     })))
-    const { error } = await supabase.from('rdv_creneaux').insert(lignes)
+    // ⚠️ `.select()` PARCE QU'IL FAUT LES NOUVEAUX IDENTIFIANTS. Sans eux, on
+    // n'aurait rien à quoi rattacher les prestations acceptées.
+    const { data: creees, error } = await supabase.from('rdv_creneaux').insert(lignes)
+      .select('id, jour_semaine, heure_debut, heure_fin, praticien_id')
+
+    // 🔴 LA COPIE EMPORTE AUSSI CE QUE LA PLAGE ACCEPTE (07/09, question
+    // d'Alex). Elle recopiait l'heure, le pas, la pause et le praticien, et
+    // laissait les prestations derrière : un cours copié du lundi au mercredi
+    // n'aurait PAS été proposé le mercredi, et le commerçant, voyant sa plage
+    // dupliquée, aurait cherché longtemps pourquoi.
+    if (!error && (creees || []).length > 0) {
+      // Appariement par ce qui identifie une plage dans une copie : l'heure,
+      // la fin et le praticien. Se fier à l'ordre du retour serait un pari.
+      const cle = (c) => `${c.heure_debut}|${c.heure_fin}|${c.praticien_id || ''}`
+      const parSource = new Map()
+      for (const c of source) {
+        const prestas = liaisons.filter(l => l.creneau_id === c.id).map(l => l.prestation_id)
+        if (prestas.length > 0) parSource.set(cle(c), prestas)
+      }
+      const nouvellesLiaisons = []
+      for (const neuf of creees) {
+        for (const prestation_id of (parSource.get(cle(neuf)) || [])) {
+          nouvellesLiaisons.push({ creneau_id: neuf.id, prestation_id })
+        }
+      }
+      if (nouvellesLiaisons.length > 0) {
+        const { error: errLien } = await supabase
+          .from('rdv_creneau_prestations').insert(nouvellesLiaisons)
+        // ⚠️ ON LIT LE RÉSULTAT ET ON LE DIT. Des plages copiées sans leurs
+        // prestations acceptent tout : c'est le défaut d'origine qui revient,
+        // en silence, sur les jours qu'il vient de dupliquer.
+        if (errLien) toast('Créneaux copiés, mais pas les prestations acceptées.', 'error')
+      }
+    }
+
     setCopieLoading(false)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
     setCopieCibles(new Set())
@@ -9433,20 +9467,28 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                   {prestationsRdv.map(p => {
                     const choisie = (form.prestations || []).includes(p.id)
                     const cours = Number(p.capacite) > 1
+                    // 🔴 UN SEUL COURS PAR PLAGE. À cette heure-là il n'y en a
+                    // qu'un : en accepter deux ferait décider le premier client,
+                    // c'est-à-dire le défaut qu'on vient de corriger.
+                    const dejaUnCours = coursDejaCoche(form.prestations, prestationsRdv)
+                    const bloque = cours && !choisie && dejaUnCours && dejaUnCours.id !== p.id
                     return (
-                      <button key={p.id} type="button"
-                        onClick={() => setForm({
+                      <button key={p.id} type="button" disabled={bloque}
+                        title={bloque ? `Cette plage donne déjà ${dejaUnCours.nom}. Un cours à la fois : ouvre une autre plage, avec son praticien ou son lieu.` : undefined}
+                        onClick={() => { if (bloque) return; setForm({
                           ...form,
                           prestations: choisie
                             ? (form.prestations || []).filter(x => x !== p.id)
                             : [...(form.prestations || []), p.id],
-                        })}
+                        }) }}
                         style={{
                           padding: '6px 10px', borderRadius: 999,
                           border: `1.5px solid ${choisie ? T.main : T.hairline}`,
                           background: choisie ? T.main : '#fff',
-                          color: choisie ? '#fff' : T.deep,
-                          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                          color: choisie ? '#fff' : bloque ? '#C4C4C4' : T.deep,
+                          fontSize: 12, fontWeight: 700,
+                          cursor: bloque ? 'not-allowed' : 'pointer',
+                          opacity: bloque ? 0.55 : 1,
                           fontFamily: '"DM Sans", sans-serif',
                         }}>
                         {p.nom}
@@ -9459,6 +9501,13 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                     )
                   })}
                 </div>
+                {coursDejaCoche(form.prestations, prestationsRdv) && (
+                  <p style={{ fontSize: 10.5, color: T.muted, lineHeight: 1.5, marginTop: 6 }}>
+                    Cette plage donne <strong>{coursDejaCoche(form.prestations, prestationsRdv).nom}</strong>.
+                    Un seul cours par plage : pour un second cours à la même heure, ouvre une autre
+                    plage avec son praticien ou son emplacement.
+                  </p>
+                )}
               </div>
             )}
 

@@ -128,6 +128,12 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '  const joursFermesProfil = JOURS_SEMAINE.filter(j => horairesReference?.[j]?.ouvert === false)',
     vers: '  const joursFermesProfil = JOURS_SEMAINE.filter(j => commercant?.horaires_detail?.[j]?.ouvert === false)' },
+
+  // 🔴 L AVERTISSEMENT QUI NOMME LE MAUVAIS COUPABLE (Alex, 07/09).
+  { nom: '🔴 l avertissement renomme les cours qui ont deja leur plage',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                    Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons))',
+    vers: '                    Number(p.capacite) > 1)' },
 ]
 
 const lancer = () => {

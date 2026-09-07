@@ -9647,17 +9647,32 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                     fixe n'a rien à faire sur une plage ouverte à tout : il y
                     serait réservable à n'importe quelle heure, et le commerçant
                     devrait l'assurer. C'est LE cas où « toutes » est un piège. */}
-                {form.toutesPrestations && prestationsRdv.some(p => Number(p.capacite) > 1) && (
-                  <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 9, padding: '8px 10px', marginBottom: 8 }}>
-                    <p style={{ fontSize: 11, color: '#92400E', lineHeight: 1.5, margin: 0 }}>
-                      <strong>{prestationsRdv.filter(p => Number(p.capacite) > 1).map(p => p.nom).join(', ')}</strong>
-                      {prestationsRdv.filter(p => Number(p.capacite) > 1).length > 1 ? ' sont des cours' : ' est un cours'} :
-                      sur cette plage, {prestationsRdv.filter(p => Number(p.capacite) > 1).length > 1 ? 'ils seront réservables' : 'il sera réservable'} à
-                      n’importe quelle heure. Si tu {prestationsRdv.filter(p => Number(p.capacite) > 1).length > 1 ? 'les donnes' : 'le donnes'} à
-                      heure fixe, ouvre-{prestationsRdv.filter(p => Number(p.capacite) > 1).length > 1 ? 'leur' : 'lui'} une plage à part.
-                    </p>
-                  </div>
-                )}
+                {/* 🔴 SEULS LES COURS QUI N'ONT PAS DÉJÀ LEUR PLAGE (07/09,
+                    trouvé par Alex sur une capture). La première version nommait
+                    TOUS les cours du catalogue : elle annonçait donc que le Yoga
+                    serait réservable à n'importe quelle heure alors qu'il était
+                    rattaché à la plage de 10h, et que son heure lui est même
+                    réservée. Un avertissement qui nomme le mauvais coupable
+                    envoie corriger ce qui était juste. */}
+                {(() => {
+                  if (!form.toutesPrestations) return null
+                  const exposes = prestationsRdv.filter(p =>
+                    Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons))
+                  if (exposes.length === 0) return null
+                  const plusieurs = exposes.length > 1
+                  return (
+                    <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 9, padding: '8px 10px', marginBottom: 8 }}>
+                      <p style={{ fontSize: 11, color: '#92400E', lineHeight: 1.5, margin: 0 }}>
+                        <strong>{exposes.map(p => p.nom).join(', ')}</strong>
+                        {plusieurs ? ' sont des cours' : ' est un cours'} et {plusieurs ? 'n’ont' : 'n’a'} encore
+                        aucune plage à {plusieurs ? 'eux' : 'lui'} : sur cette plage,
+                        {plusieurs ? ' ils seront réservables' : ' il sera réservable'} à n’importe quelle heure.
+                        Si tu {plusieurs ? 'les donnes' : 'le donnes'} à heure fixe,
+                        ouvre-{plusieurs ? 'leur' : 'lui'} une plage à part.
+                      </p>
+                    </div>
+                  )
+                })()}
 
                 <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, marginBottom: 8 }}>
                   {form.toutesPrestations

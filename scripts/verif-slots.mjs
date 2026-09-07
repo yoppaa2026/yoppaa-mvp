@@ -1927,8 +1927,19 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
 
   // ⚠️ LA REMARQUE QU'ALEX A DEMANDÉE : un cours sur une plage ouverte à tout
   // serait réservable à n'importe quelle heure.
-  verifier('⚠️ « toutes » avertit quand il y a des cours',
-    /form\.toutesPrestations && prestationsRdv\.some\(p => Number\(p\.capacite\) > 1\)/.test(CONFIG))
+  // 🔴 ET IL NE NOMME QUE LES COURS SANS PLAGE À EUX. La première version
+  // nommait tout le catalogue : elle annonçait que le Yoga serait réservable à
+  // n'importe quelle heure alors qu'il avait déjà sa plage de 10h, et que son
+  // heure lui est même réservée. Un avertissement qui nomme le mauvais coupable
+  // envoie corriger ce qui était juste.
+  // ⚠️ ON VISE `exposes`, PAS L'EXPRESSION SEULE. La mutation a montré que la
+  // garde restait verte : la même expression vit AUSSI dans le bandeau des
+  // cours orphelins, deux cents lignes plus bas. C'est le piège du JUMEAU, déjà
+  // rencontré le 06/09 sur `cible_tout`. Un nom unique le désamorce.
+  verifier('⚠️ « toutes » avertit sur les cours restés sans plage',
+    /const exposes = prestationsRdv\.filter\(p =>\s*Number\(p\.capacite\) > 1 && prestationSansCreneauDedie\(p\.id, liaisons\)\)/.test(CONFIG))
+  verifier('🔴 et plus sur tout le catalogue de cours',
+    !/prestationsRdv\.filter\(p => Number\(p\.capacite\) > 1\)\.map\(p => p\.nom\)/.test(CONFIG))
 
   // 🔴 Le bloc se cachait quand il n'y avait pas de prestation : le commerçant
   // qui crée ses plages en premier ne le voyait jamais.

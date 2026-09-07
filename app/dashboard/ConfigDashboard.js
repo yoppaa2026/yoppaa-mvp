@@ -8895,6 +8895,9 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     actif: true,
     // Vide = cette plage accepte tout, sauf ce qui est rattaché ailleurs.
     prestations: [],
+    // ⚠️ LE MODE EST EXPLICITE : « toutes » par défaut, comme le comportement
+    // historique. On ne déduit plus l'intention d'une liste vide.
+    toutesPrestations: true,
   }
   const [form, setForm] = useState(initialForm)
 
@@ -9009,6 +9012,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       pause_fin: (c.pause_fin || '13:00').slice(0,5),
       actif: c.actif !== false,
       prestations: liaisons.filter(l => l.creneau_id === c.id).map(l => l.prestation_id),
+      toutesPrestations: liaisons.filter(l => l.creneau_id === c.id).length === 0,
     })
     setEditId(c.id); setShowForm(true)
   }
@@ -9016,6 +9020,12 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   async function save() {
     if (form.heure_fin <= form.heure_debut) return toast('Heure de fin doit être après l\'heure de début', 'error')
     if (form.avec_pause && form.pause_fin <= form.pause_debut) return toast('La pause est mal définie', 'error')
+    // ⚠️ « Seulement celles que je choisis » SANS RIEN CHOISIR n'est pas un
+    // état : ça donnerait une plage identique à « toutes », en croyant l'avoir
+    // restreinte. On refuse au lieu d'interpréter.
+    if (!form.toutesPrestations && (form.prestations || []).length === 0) {
+      return toast('Choisis au moins une prestation, ou reviens à « Toutes mes prestations ».', 'error')
+    }
     // Jour fermé au Profil : le créneau ne servira à rien tant que les horaires
     // ne sont pas ouverts (le moteur de slots croise les deux). On prévient.
     if (joursFermesProfil.includes(form.jour_semaine) &&
@@ -9077,7 +9087,9 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       const { error: errDel } = await supabase
         .from('rdv_creneau_prestations').delete().eq('creneau_id', idCreneau)
       if (errDel) console.warn('[creneaux] nettoyage des prestations KO', errDel.message)
-      const choisies = (form.prestations || []).filter(Boolean)
+      // « Toutes » s'ecrit ZERO ligne : c'est le meme etat en base qu'avant,
+      // seul l'ecran a cesse de le deviner.
+      const choisies = form.toutesPrestations ? [] : (form.prestations || []).filter(Boolean)
       if (choisies.length > 0) {
         const { error: errIns } = await supabase
           .from('rdv_creneau_prestations')
@@ -9536,15 +9548,77 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                 acceptait tout : un cours de yoga à douze places s'y proposait
                 à la même heure qu'un soin individuel, et le premier client
                 décidait de ce que devenait le créneau. */}
+            {/* 🔴 CE BLOC SE CACHAIT QUAND IL N'Y AVAIT PAS DE PRESTATION, et
+                c'était un défaut de ma part (07/09). Un commerçant qui crée ses
+                plages AVANT ses prestations, ce qui est un ordre naturel, ne
+                voyait jamais ce réglage et ne pouvait pas savoir qu'il existe.
+                On le montre toujours, et on dit quoi faire. */}
+            {prestationsRdv.length === 0 && (
+              <div style={{ marginBottom: 12, padding: 10, background: T.bg, borderRadius: 10 }}>
+                <p style={{ fontSize: 12, fontWeight: 800, color: T.deep, marginBottom: 2 }}>
+                  Pour quoi ? Ce que cette plage accepte
+                </p>
+                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5 }}>
+                  Tu n’as pas encore de prestation. Crée-les dans l’onglet
+                  <strong> Prestations</strong>, puis reviens ici pour dire lesquelles
+                  se donnent sur cette plage. En attendant, elle les acceptera toutes.
+                </p>
+              </div>
+            )}
+
             {prestationsRdv.length > 0 && (
               <div style={{ marginBottom: 12, padding: 10, background: T.bg, borderRadius: 10 }}>
                 <p style={{ fontSize: 12, fontWeight: 800, color: T.deep, marginBottom: 2 }}>
-                  Ce que cette plage accepte
+                  Pour quoi ? Ce que cette plage accepte
                 </p>
+
+                {/* 🔴 LE CHOIX DEVIENT EXPLICITE (Alex, 07/09). « Rien de coché
+                    = toutes » était un état IMPLICITE : le commerçant ne pouvait
+                    pas savoir s'il avait choisi ou oublié. Une absence qu'on
+                    interprète n'est pas une décision. */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {[
+                    { tout: true,  libelle: 'Toutes mes prestations' },
+                    { tout: false, libelle: 'Seulement celles que je choisis' },
+                  ].map(m => (
+                    <button key={String(m.tout)} type="button"
+                      onClick={() => setForm({ ...form, toutesPrestations: m.tout, prestations: m.tout ? [] : (form.prestations || []) })}
+                      style={{
+                        padding: '6px 11px', borderRadius: 999,
+                        border: `1.5px solid ${form.toutesPrestations === m.tout ? T.main : T.hairline}`,
+                        background: form.toutesPrestations === m.tout ? T.main : '#fff',
+                        color: form.toutesPrestations === m.tout ? '#fff' : T.deep,
+                        fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        fontFamily: '"DM Sans", sans-serif',
+                      }}>
+                      {m.libelle}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ⚠️ LA REMARQUE QU'ALEX A DEMANDÉE. Un cours donné à heure
+                    fixe n'a rien à faire sur une plage ouverte à tout : il y
+                    serait réservable à n'importe quelle heure, et le commerçant
+                    devrait l'assurer. C'est LE cas où « toutes » est un piège. */}
+                {form.toutesPrestations && prestationsRdv.some(p => Number(p.capacite) > 1) && (
+                  <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 9, padding: '8px 10px', marginBottom: 8 }}>
+                    <p style={{ fontSize: 11, color: '#92400E', lineHeight: 1.5, margin: 0 }}>
+                      <strong>{prestationsRdv.filter(p => Number(p.capacite) > 1).map(p => p.nom).join(', ')}</strong>
+                      {prestationsRdv.filter(p => Number(p.capacite) > 1).length > 1 ? ' sont des cours' : ' est un cours'} :
+                      sur cette plage, {prestationsRdv.filter(p => Number(p.capacite) > 1).length > 1 ? 'ils seront réservables' : 'il sera réservable'} à
+                      n’importe quelle heure. Si tu {prestationsRdv.filter(p => Number(p.capacite) > 1).length > 1 ? 'les donnes' : 'le donnes'} à
+                      heure fixe, ouvre-{prestationsRdv.filter(p => Number(p.capacite) > 1).length > 1 ? 'leur' : 'lui'} une plage à part.
+                    </p>
+                  </div>
+                )}
+
                 <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, marginBottom: 8 }}>
-                  Ne coche rien et elle accepte tout. Coche un cours, et il ne sera plus
-                  proposé que sur les plages où tu l’as coché.
+                  {form.toutesPrestations
+                    ? 'Sauf aux heures que tu as réservées à un cours sur une autre plage.'
+                    : 'Ce que tu coches ici ne sera plus proposé ailleurs, et cette plage n’acceptera rien d’autre.'}
                 </p>
+
+                {!form.toutesPrestations && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {prestationsRdv.map(p => {
                     const choisie = (form.prestations || []).includes(p.id)
@@ -9583,7 +9657,8 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                     )
                   })}
                 </div>
-                {coursDejaCoche(form.prestations, prestationsRdv) && (
+                )}
+                {!form.toutesPrestations && coursDejaCoche(form.prestations, prestationsRdv) && (
                   <p style={{ fontSize: 10.5, color: T.muted, lineHeight: 1.5, marginTop: 6 }}>
                     Cette plage donne <strong>{coursDejaCoche(form.prestations, prestationsRdv).nom}</strong>.
                     Un seul cours par plage : pour un second cours à la même heure, ouvre une autre

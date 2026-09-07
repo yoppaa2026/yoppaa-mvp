@@ -1869,6 +1869,51 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LES TROIS CORRECTIONS DE PARCOURS DU 07/09 (demandes d'Alex)
+//
+// ⚠️ CE SONT DES GARDES D'ÉCRAN, et elles le disent : la règle qu'elles
+// protègent n'est pas calculable ici, elle est dans du JSX. Ce qu'elles
+// mesurent, c'est qu'une décision prise avec Alex n'a pas été défaite.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const lire = (f) => sansCommentaires(readFileSync(new URL('../' + f, import.meta.url), 'utf8'))
+  const CONFIG = lire('app/dashboard/ConfigDashboard.js')
+  const FICHE = lire('app/commander/rdv/[slug]/page.js')
+
+  // 🔴 « Rien de coché = toutes » était un état IMPLICITE : le commerçant ne
+  // pouvait pas savoir s'il avait choisi ou oublié.
+  verifier('🔴 le choix « toutes mes prestations » est explicite',
+    /toutesPrestations: true/.test(CONFIG) && /Toutes mes prestations/.test(CONFIG))
+  verifier('et « seulement celles que je choisis » aussi',
+    /Seulement celles que je choisis/.test(CONFIG))
+  // ⚠️ Un mode restreint sans rien de coché serait une plage « toutes » qu'on
+  // croit restreinte. On refuse au lieu d'interpréter.
+  verifier('⚠️ restreindre sans rien choisir est refusé',
+    /!form\.toutesPrestations && \(form\.prestations \|\| \[\]\)\.length === 0/.test(CONFIG))
+  // ⚠️ Et « toutes » s'écrit ZÉRO ligne : le même état en base qu'avant.
+  verifier('« toutes » n’écrit aucune liaison',
+    /form\.toutesPrestations \? \[\] : \(form\.prestations \|\| \[\]\)\.filter\(Boolean\)/.test(CONFIG))
+
+  // ⚠️ LA REMARQUE QU'ALEX A DEMANDÉE : un cours sur une plage ouverte à tout
+  // serait réservable à n'importe quelle heure.
+  verifier('⚠️ « toutes » avertit quand il y a des cours',
+    /form\.toutesPrestations && prestationsRdv\.some\(p => Number\(p\.capacite\) > 1\)/.test(CONFIG))
+
+  // 🔴 Le bloc se cachait quand il n'y avait pas de prestation : le commerçant
+  // qui crée ses plages en premier ne le voyait jamais.
+  verifier('🔴 sans prestation, le réglage se montre quand même',
+    /prestationsRdv\.length === 0 && \(/.test(CONFIG))
+
+  // 🔴 Les plages d'un praticien parti ne proposent plus rien.
+  verifier('🔴 les plages d’un praticien parti sont écartées',
+    /creneauxVivants[\s\S]{0,200}praticiens\.some\(p => p\.id === c\.praticien_id\)/.test(FICHE))
+  // ⚠️ Sauf si la liste des praticiens n'a pas pu être lue : fermer sur une
+  // ignorance viderait tous les agendas nommés d'un coup.
+  verifier('⚠️ une liste de praticiens vide ne ferme rien',
+    /praticiens\.length === 0\s*\n?\s*\? creneauxConfig/.test(FICHE))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

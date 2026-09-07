@@ -1332,9 +1332,22 @@ export default function CommanderRdvSlug() {
   // Filtre les créneaux config selon le praticien choisi :
   //   • praticienChoisi = null (Sans préférence ou pas encore choisi) : tous créneaux
   //   • praticienChoisi = X : créneaux de X + créneaux communs (praticien_id = null)
+  // 🔴 LES PLAGES D'UN PRATICIEN PARTI NE PROPOSENT PLUS RIEN (07/09, trouvé en
+  // répondant à Alex sur la réattribution). « Retirer cette personne de ton
+  // équipe » posait une date de suppression et ne touchait à rien d'autre : ses
+  // plages restaient ACTIVES, et un client pouvait encore réserver sur les
+  // heures de quelqu'un qui n'est plus là. Il se serait déplacé pour rien.
+  //
+  // ⚠️ ET SI LA LISTE DES PRATICIENS EST VIDE, ON NE FILTRE PAS. Un chargement
+  // en échec fermerait sinon TOUTES les plages nommées d'un coup, sans une
+  // seule erreur : le remède serait pire que le mal.
+  const creneauxVivants = praticiens.length === 0
+    ? creneauxConfig
+    : creneauxConfig.filter(c => !c.praticien_id || praticiens.some(p => p.id === c.praticien_id))
+
   const creneauxFiltres = praticienChoisi
-    ? creneauxConfig.filter(c => c.praticien_id === praticienChoisi.id || c.praticien_id === null)
-    : creneauxConfig
+    ? creneauxVivants.filter(c => c.praticien_id === praticienChoisi.id || c.praticien_id === null)
+    : creneauxVivants
 
   // Helper Sess 6 : est-ce que la date ISO est dans une fermeture applicable ?
   // Fermeture applicable = globale (praticien_id null) OU celle du praticien choisi.

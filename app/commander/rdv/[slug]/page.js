@@ -248,6 +248,10 @@ export default function CommanderRdvSlug() {
   // social, donc le domicile de qui s'est inscrit chez lui.
   const [lieuxActivite, setLieuxActivite] = useState([])
   const [creneauxConfig, setCreneauxConfig] = useState([])  // les rdv_creneaux du commerçant
+  // Quelles prestations chaque créneau accepte. `null` = pas encore su, et le
+  // moteur ne filtre alors rien : mieux vaut proposer trop que fermer l'agenda
+  // le temps d'une requête.
+  const [liaisonsCreneaux, setLiaisonsCreneaux] = useState(null)
   const [praticiens, setPraticiens] = useState([])          // rdv_praticiens actifs
   const [junctionMap, setJunctionMap] = useState({})        // { prestation_id: [praticien_id, ...] }
   const [fermetures, setFermetures] = useState([])          // Sess 6 : rdv_fermetures futures (date_fin >= today)
@@ -1182,6 +1186,33 @@ export default function CommanderRdvSlug() {
           setFormulesAbo((data || []).filter(formuleVendableEnLigne))
         })
       setCreneauxConfig(cren || [])
+
+      // ⚠️ QUELLES PRESTATIONS CHAQUE CRÉNEAU ACCEPTE (07/09). Chargé À PART et
+      // BORNÉ aux créneaux de ce commerce : la table de liaison ne porte pas de
+      // `commercant_id`, et la lire en entier ferait descendre les réglages de
+      // tout le parc dans le navigateur d'un visiteur.
+      //
+      // 🔴 EN CAS D'ÉCHEC, ON LAISSE `null`, PAS UN TABLEAU VIDE. Les deux ne
+      // disent pas la même chose : `null` veut dire « on ne sait pas », et le
+      // moteur retombe alors sur le comportement d'avant, qui propose trop mais
+      // laisse réserver. Un tableau vide dirait « ce commerce n'a rien réglé »,
+      // ce qui serait faux et tout aussi ouvert — mais la distinction compte le
+      // jour où l'on voudra fermer par défaut.
+      const idsCreneaux = (cren || []).map(k => k.id).filter(Boolean)
+      if (idsCreneaux.length > 0) {
+        supabase
+          .from('rdv_creneau_prestations')
+          .select('creneau_id, prestation_id')
+          .in('creneau_id', idsCreneaux)
+          .then(({ data, error }) => {
+            if (annule) return
+            if (error) { console.warn('[fiche rdv] liaisons créneaux KO', error.message); return }
+            setLiaisonsCreneaux(data || [])
+          })
+      } else {
+        setLiaisonsCreneaux([])
+      }
+
       setPraticiens(prat || [])
       // Build junction map : prestation_id -> [praticien_id, ...]
       const jm = {}
@@ -1246,6 +1277,7 @@ export default function CommanderRdvSlug() {
         // le premier inscrit.
         capacite: capacitePrestation(prestationChoisie),
         prestationId: prestationChoisie?.id || null,
+        liaisonsCreneaux,
       })
       setSlots(list)
       // Tri des reservations par heure_debut pour la section info 'Deja pris'
@@ -1254,8 +1286,14 @@ export default function CommanderRdvSlug() {
       setSlotsLoading(false)
     })()
     return () => { annule = true }
+  // 🔴 `liaisonsCreneaux` EST DANS LES DÉPENDANCES, ET C'EST INDISPENSABLE.
+  // Elles arrivent APRÈS le premier rendu, dans leur propre requête : sans
+  // elles ici, la grille resterait celle calculée SANS filtre, et le cours de
+  // yoga s'afficherait encore à toutes les heures. L'écran serait faux, et
+  // seulement pour quelques centaines de millisecondes au premier chargement,
+  // c'est-à-dire exactement le genre de défaut qu'on ne reproduit jamais.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
-  }, [etape, dateChoisie, prestationChoisie, praticienChoisi, commercant, creneauxConfig])
+  }, [etape, dateChoisie, prestationChoisie, praticienChoisi, commercant, creneauxConfig, liaisonsCreneaux])
 
   function choisirPrestation(p) {
     setPrestationChoisie(p)
@@ -1340,6 +1378,7 @@ export default function CommanderRdvSlug() {
       // cours apparaîtrait complet alors qu'il reste neuf places.
       capacite: capacitePrestation(prestationChoisie),
       prestationId: prestationChoisie?.id || null,
+      liaisonsCreneaux,
     })
     return { ...j, nbLibres: list.filter(s => !s.pris).length }
   })

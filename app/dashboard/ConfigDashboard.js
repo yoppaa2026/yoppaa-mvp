@@ -29,6 +29,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
+import { prestationSansCreneauDedie } from '@/lib/rdv-slots'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
@@ -8857,6 +8858,13 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   // Biesme le jeudi : ses plages de réservation ne sont pas les mêmes.
   const [parLieuRdv, setParLieuRdv] = useState(false)
   const [lieuxDispo, setLieuxDispo] = useState([])
+  // 🔴 CE QU'UNE PLAGE ACCEPTE (07/09, demande d'Alex). Sans ça, une plage
+  // ouverte acceptait TOUT : chez Centre Respire, le créneau 08:00-18:00
+  // prenait aussi bien un Reiki à une personne qu'un cours de yoga à douze, et
+  // le premier client décidait de la nature du créneau. Le cours de yoga était
+  // en plus proposé cinquante fois par semaine.
+  const [prestationsRdv, setPrestationsRdv] = useState([])
+  const [liaisons, setLiaisons] = useState([])
   // Copie d'un jour vers d'autres jours (demande Alex 01/08, même geste que la
   // duplication des horaires du Profil) : on REMPLACE les créneaux des jours
   // cibles, sinon les copies successives s'empilent en doublons.
@@ -8880,6 +8888,8 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     pause_debut: '12:00',
     pause_fin: '13:00',
     actif: true,
+    // Vide = cette plage accepte tout, sauf ce qui est rattaché ailleurs.
+    prestations: [],
   }
   const [form, setForm] = useState(initialForm)
 
@@ -8888,7 +8898,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: cren }, { data: prat }, { data: comm }, { data: lieuxRdv }] = await Promise.all([
+    const [{ data: cren }, { data: prat }, { data: comm }, { data: lieuxRdv }, { data: prestas }] = await Promise.all([
       supabase
         .from('rdv_creneaux')
         .select('*')
@@ -8906,9 +8916,32 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       supabase.from('commercant_lieux')
         .select('id, type, jour_semaine, libelle, heure_debut, heure_fin, actif')
         .eq('commercant_id', commercantId).eq('actif', true),
+      // ⚠️ `capacite` EST OBLIGATOIRE ICI. C'est elle qui distingue un cours
+      // d'un rendez-vous individuel, et donc ce qu'on avertit plus bas.
+      supabase.from('rdv_prestations')
+        .select('id, nom, capacite, duree_minutes')
+        .eq('commercant_id', commercantId)
+        .eq('actif', true)
+        .is('deleted_at', null)
+        .order('ordre', { ascending: true }),
     ])
     setCreneaux(cren || [])
     setPraticiens(prat || [])
+    setPrestationsRdv(prestas || [])
+
+    // Les liaisons créneau/prestations, bornées aux créneaux de ce commerce :
+    // la table n'a pas de `commercant_id`, et sans ce `in` on descendrait les
+    // réglages de tout le parc dans le navigateur.
+    const idsCren = (cren || []).map(k => k.id).filter(Boolean)
+    if (idsCren.length > 0) {
+      const { data: liens } = await supabase
+        .from('rdv_creneau_prestations')
+        .select('creneau_id, prestation_id')
+        .in('creneau_id', idsCren)
+      setLiaisons(liens || [])
+    } else {
+      setLiaisons([])
+    }
     // ⚠️ Les emplacements ne servent QUE si le commerçant a coché « mes
     // horaires changent selon l'endroit ». Sans ce drapeau, aucun sélecteur
     // n'apparaît et les plages ne désignent aucun lieu, comme avant.
@@ -8967,6 +9000,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       pause_debut: (c.pause_debut || '12:00').slice(0,5),
       pause_fin: (c.pause_fin || '13:00').slice(0,5),
       actif: c.actif !== false,
+      prestations: liaisons.filter(l => l.creneau_id === c.id).map(l => l.prestation_id),
     })
     setEditId(c.id); setShowForm(true)
   }
@@ -8994,11 +9028,40 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       actif: !!form.actif,
     }
     setSaving(true)
-    const { error } = editId
-      ? await supabase.from('rdv_creneaux').update(payload).eq('id', editId)
-      : await supabase.from('rdv_creneaux').insert(payload)
+    // ⚠️ ON RÉCUPÈRE L'IDENTIFIANT, MÊME À LA CRÉATION. Sans `.select().single()`
+    // une insertion ne rend rien, et il n'y aurait aucun créneau auquel
+    // rattacher les prestations qu'on vient de cocher : elles seraient perdues
+    // en silence, sur le geste même où le commerçant les a choisies.
+    const { data: creneauEcrit, error } = editId
+      ? await supabase.from('rdv_creneaux').update(payload).eq('id', editId).select('id').single()
+      : await supabase.from('rdv_creneaux').insert(payload).select('id').single()
     setSaving(false)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
+
+    // Les prestations acceptées, réécrites à plat : on efface puis on repose.
+    // Un différentiel serait plus fin et se tromperait plus souvent, pour une
+    // poignée de lignes.
+    const idCreneau = creneauEcrit?.id || editId
+    if (idCreneau) {
+      const { error: errDel } = await supabase
+        .from('rdv_creneau_prestations').delete().eq('creneau_id', idCreneau)
+      if (errDel) console.warn('[creneaux] nettoyage des prestations KO', errDel.message)
+      const choisies = (form.prestations || []).filter(Boolean)
+      if (choisies.length > 0) {
+        const { error: errIns } = await supabase
+          .from('rdv_creneau_prestations')
+          .insert(choisies.map(prestation_id => ({ creneau_id: idCreneau, prestation_id })))
+        // 🔴 ON LIT LE RÉSULTAT ET ON LE DIT. Une écriture ratée ici laisserait
+        // la plage ouverte à tout, c'est-à-dire exactement le défaut qu'on
+        // vient de corriger, et le commerçant croirait l'avoir réglé.
+        if (errIns) {
+          toast('Le créneau est enregistré, mais les prestations cochées n’ont pas pu l’être.', 'error')
+          setShowForm(false); setEditId(null); setForm(initialForm); fetchAll()
+          return
+        }
+      }
+    }
+
     toast(editId ? 'Créneau mis à jour' : 'Créneau créé')
     setShowForm(false); setEditId(null); setForm(initialForm)
     fetchAll()
@@ -9160,6 +9223,33 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         </div>
       )}
 
+      {/* ⚠️ L'AVERTISSEMENT, JAMAIS UN BLOCAGE (arbitrage d'Alex, 07/09). Un
+          cours qu'aucune plage ne vise reste proposé à TOUTES les heures de
+          toutes les plages : c'est le comportement d'origine, et il est
+          rarement voulu. On le dit, il décide. Bloquer la mise en ligne
+          laisserait un cours invisible sans qu'il comprenne pourquoi. */}
+      {(() => {
+        const orphelins = prestationsRdv.filter(p =>
+          Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons))
+        if (orphelins.length === 0) return null
+        return (
+          <div style={{ margin: '0 0 12px', padding: '10px 12px', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 10 }}>
+            <p style={{ fontSize: 12, fontWeight: 800, color: '#92400E', marginBottom: 3 }}>
+              {orphelins.length > 1
+                ? `${orphelins.length} cours sont proposés à toutes tes heures`
+                : `${orphelins[0].nom} est proposé à toutes tes heures`}
+            </p>
+            <p style={{ fontSize: 11.5, color: '#92400E', lineHeight: 1.5 }}>
+              {orphelins.map(p => p.nom).join(', ')}
+              {orphelins.length > 1 ? ' n’apparaissent' : ' n’apparaît'} sur aucune plage en
+              particulier, donc {orphelins.length > 1 ? 'ils sont réservables' : 'il est réservable'} à
+              n’importe quelle heure de n’importe quel jour ouvert. Ouvre une plage à l’heure du
+              cours et coche-{orphelins.length > 1 ? 'les' : 'le'} dessus.
+            </p>
+          </div>
+        )
+      })()}
+
       {/* Liste des créneaux du jour actif */}
       {creneauxAffiches.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
@@ -9199,6 +9289,22 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                         {nomLieuRdv(c.lieu_id) || 'Partout ce jour-là'}
                       </span>
                     )}
+                    {/* ⚠️ CE QUE LA PLAGE ACCEPTE SE LIT SANS L'OUVRIR. Un
+                        réglage qu'il faut aller chercher dans un formulaire
+                        pour savoir s'il est posé n'est pas un réglage, c'est
+                        une devinette. */}
+                    {(() => {
+                      const noms = liaisons
+                        .filter(l => l.creneau_id === c.id)
+                        .map(l => prestationsRdv.find(p => p.id === l.prestation_id)?.nom)
+                        .filter(Boolean)
+                      if (noms.length === 0) return null
+                      return (
+                        <span style={{ color: T.main, fontWeight: 700 }}>
+                          {noms.join(' · ')}
+                        </span>
+                      )
+                    })()}
                     {!c.actif && <span style={{ color: '#DC2626', fontWeight: 700 }}>Inactif</span>}
                   </div>
                 </div>
@@ -9309,6 +9415,52 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                 </div>
               )}
             </div>
+
+            {/* 🔴 CE QUE CETTE PLAGE ACCEPTE (07/09). Sans ce réglage, une plage
+                acceptait tout : un cours de yoga à douze places s'y proposait
+                à la même heure qu'un soin individuel, et le premier client
+                décidait de ce que devenait le créneau. */}
+            {prestationsRdv.length > 0 && (
+              <div style={{ marginBottom: 12, padding: 10, background: T.bg, borderRadius: 10 }}>
+                <p style={{ fontSize: 12, fontWeight: 800, color: T.deep, marginBottom: 2 }}>
+                  Ce que cette plage accepte
+                </p>
+                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, marginBottom: 8 }}>
+                  Ne coche rien et elle accepte tout. Coche un cours, et il ne sera plus
+                  proposé que sur les plages où tu l’as coché.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {prestationsRdv.map(p => {
+                    const choisie = (form.prestations || []).includes(p.id)
+                    const cours = Number(p.capacite) > 1
+                    return (
+                      <button key={p.id} type="button"
+                        onClick={() => setForm({
+                          ...form,
+                          prestations: choisie
+                            ? (form.prestations || []).filter(x => x !== p.id)
+                            : [...(form.prestations || []), p.id],
+                        })}
+                        style={{
+                          padding: '6px 10px', borderRadius: 999,
+                          border: `1.5px solid ${choisie ? T.main : T.hairline}`,
+                          background: choisie ? T.main : '#fff',
+                          color: choisie ? '#fff' : T.deep,
+                          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                          fontFamily: '"DM Sans", sans-serif',
+                        }}>
+                        {p.nom}
+                        {/* La capacité est ce qui distingue un cours d'un
+                            rendez-vous : elle se dit, elle ne se devine pas. */}
+                        {cours && (
+                          <span style={{ fontWeight: 600, opacity: 0.75 }}> · {p.capacite} places</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             <div style={{ marginBottom: 16 }}>
               <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Créneau actif"/>

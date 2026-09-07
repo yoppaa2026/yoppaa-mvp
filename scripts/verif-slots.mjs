@@ -9,6 +9,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
+  creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
+  prestationAutoriseeSurCreneaux,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
@@ -1597,6 +1599,128 @@ egal('et une semaine à cheval sur deux mois porte les deux',
 egal('une fenêtre d’un seul jour garde son nom de jour',
   libellePeriodeStats({ jour: '2026-08-16', fin: '2026-08-16', aujourdhui: '2026-08-16' }),
   'Aujourd’hui · dimanche 16 août')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CE QU'UN CRÉNEAU ACCEPTE (07/09, défaut trouvé par Alex)
+//
+// 🔴 UN CRÉNEAU NE DISAIT RIEN DES PRESTATIONS. Chez Centre Respire, la plage
+// du lundi 08:00-18:00 acceptait aussi bien une Séance de Reiki (une personne)
+// qu'un Cours de Yoga (douze) : le premier client décidait de la nature du
+// créneau, et le cours de yoga était proposé cinquante fois par semaine.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const K_YOGA  = { id: 'k-yoga',  jour_semaine: 'lundi', date_specifique: null, heure_debut: '10:00:00', heure_fin: '11:00:00', actif: true }
+  const K_LARGE = { id: 'k-large', jour_semaine: 'lundi', date_specifique: null, heure_debut: '08:00:00', heure_fin: '18:00:00', actif: true }
+  const CRENEAUX = [K_YOGA, K_LARGE]
+  const LIAISONS = [{ creneau_id: 'k-yoga', prestation_id: 'yoga' }]
+
+  // ── La règle de base ────────────────────────────────────────────────────
+  verifier('le créneau du yoga accepte le yoga', creneauAccepte('k-yoga', 'yoga', LIAISONS))
+  verifier('il n’accepte pas le reiki', !creneauAccepte('k-yoga', 'reiki', LIAISONS))
+
+  // 🔴 LA MOITIÉ DE LA RÈGLE QUE J'AVAIS OUBLIÉE, ET QUE LE BANC A DITE. Sans
+  // elle, cocher « Yoga » sur la plage de 10h ne changeait RIEN : la plage
+  // large n'avait rien de coché, donc elle acceptait le yoga à toute heure. Le
+  // commerçant aurait fait le réglage et constaté qu'il ne servait à rien.
+  verifier('🔴 une plage libre n’accepte PAS ce qui est rattaché ailleurs',
+    !creneauAccepte('k-large', 'yoga', LIAISONS))
+  verifier('mais elle accepte tout le reste', creneauAccepte('k-large', 'reiki', LIAISONS))
+
+  // ⚠️ SANS AUCUNE LIAISON, RIEN NE CHANGE. La garantie de non-régression pour
+  // tout le parc : douze créneaux actifs le jour de la migration.
+  verifier('⚠️ sans liaison, la plage accepte tout', creneauAccepte('k-large', 'yoga', []))
+  // 🔴 ET UNE LIAISON NON CHARGÉE OUVRE, ELLE NE FERME PAS. Fermer sur une
+  // ignorance viderait tous les agendas sans une seule erreur.
+  verifier('🔴 liaisons non chargées : on ouvre, on ne ferme pas',
+    creneauAccepte('k-large', 'yoga', null) && creneauAccepte('k-yoga', 'reiki', undefined))
+
+  // ── Le filtre de l'écran ────────────────────────────────────────────────
+  egal('la fiche ne propose le yoga que sur sa plage',
+    creneauxPourPrestation(CRENEAUX, 'yoga', LIAISONS).map(c => c.id), ['k-yoga'])
+  egal('et le reiki que sur la plage libre',
+    creneauxPourPrestation(CRENEAUX, 'reiki', LIAISONS).map(c => c.id), ['k-large'])
+  // ⚠️ L'écran ne juge pas ce qu'il ne connaît pas : sans prestation choisie,
+  // il montre l'agenda tel quel plutôt que de cacher des plages au hasard.
+  egal('sans prestation choisie, on ne cache rien',
+    creneauxPourPrestation(CRENEAUX, null, LIAISONS).map(c => c.id), ['k-yoga', 'k-large'])
+
+  // ── L'avertissement du commerçant ───────────────────────────────────────
+  verifier('un cours rattaché nulle part est signalé', prestationSansCreneauDedie('pilates', LIAISONS))
+  verifier('un cours rattaché ne l’est pas', !prestationSansCreneauDedie('yoga', LIAISONS))
+
+  // ── La garde du serveur ─────────────────────────────────────────────────
+  const garde = (prestationId, debutMin, finMin, liaisons = LIAISONS) =>
+    prestationAutoriseeSurCreneaux({
+      creneaux: CRENEAUX, liaisons, prestationId,
+      dateStr: '2026-09-07', jour: 'lundi', debutMin, finMin,
+    })
+
+  verifier('le yoga passe à 10h', garde('yoga', 600, 660))
+  // 🔴 LA GARDE QUI COMPTE. 13h est bien dans une plage du lundi, mais pas dans
+  // une plage QUI ACCEPTE le yoga. Sans le contrôle de l'heure, elle serait
+  // décorative : un créneau du lundi accepte bien le yoga... à 10h.
+  verifier('🔴 le yoga est refusé à 13h', !garde('yoga', 780, 840))
+  verifier('le yoga est refusé s’il déborde de sa plage', !garde('yoga', 630, 690))
+  verifier('le reiki passe à 13h', garde('reiki', 780, 840))
+  verifier('le reiki est refusé avant l’ouverture', !garde('reiki', 420, 480))
+  // ⚠️ DEUX SORTIES QUI PROTÈGENT L'EXISTANT.
+  verifier('⚠️ un commerce sans aucune liaison n’est pas jugé', garde('yoga', 780, 840, []))
+  // 🔴 ET C'EST BIEN LA SORTIE ANTICIPÉE QUI LE PROTÈGE, pas le hasard. Sans
+  // elle, ce rendez-vous à 7h — hors de TOUTE plage — serait refusé, alors
+  // qu'aujourd'hui le parc entier l'accepte. La mutation l'a montré : mon
+  // premier test passait aussi bien avec la sortie que sans, il ne mesurait
+  // donc rien.
+  verifier('🔴 sans liaison, même un horaire hors plage reste accepté',
+    garde('yoga', 420, 480, []))
+
+  // ⚠️ ET LA PAUSE COMPTE. Une plage 08:00-18:00 qui déjeune de 12h à 13h ne
+  // doit pas accepter un rendez-vous à 12h30, liaisons ou pas.
+  const AVEC_PAUSE = [{ ...K_LARGE, pause_debut: '12:00:00', pause_fin: '13:00:00' }]
+  const gardePause = (debutMin, finMin) => prestationAutoriseeSurCreneaux({
+    creneaux: AVEC_PAUSE, liaisons: LIAISONS, prestationId: 'reiki',
+    dateStr: '2026-09-07', jour: 'lundi', debutMin, finMin,
+  })
+  verifier('🔴 un rendez-vous pendant la pause est refusé', !gardePause(750, 810))
+  verifier('un rendez-vous qui mord sur la pause est refusé', !gardePause(690, 750))
+  verifier('un rendez-vous juste avant la pause passe', gardePause(660, 720))
+  verifier('un rendez-vous juste après la pause passe', gardePause(780, 840))
+  verifier('⚠️ ni un commerce dont les liaisons n’ont pas été lues', garde('yoga', 780, 840, null))
+  verifier('un jour sans aucune plage n’est pas jugé non plus',
+    prestationAutoriseeSurCreneaux({ creneaux: CRENEAUX, liaisons: LIAISONS, prestationId: 'yoga',
+      dateStr: '2026-09-08', jour: 'mardi', debutMin: 600, finMin: 660 }))
+  // ⚠️ Des minutes absentes ne doivent pas ouvrir la porte en grand.
+  verifier('des heures illisibles sont refusées', !garde('yoga', null, undefined))
+
+  // ── Et le moteur lui-même ───────────────────────────────────────────────
+  const slotsYoga = genererSlots({
+    dateChoisie: new Date('2027-09-13T12:00:00'), dureeMinutes: 60,
+    creneaux: CRENEAUX, reservations: [], horairesDetail: null,
+    capacite: 12, prestationId: 'yoga', liaisonsCreneaux: LIAISONS,
+  })
+  egal('🔴 le cours n’est plus proposé qu’à son heure',
+    slotsYoga.map(s => s.heure), ['10:00'])
+  const slotsReiki = genererSlots({
+    dateChoisie: new Date('2027-09-13T12:00:00'), dureeMinutes: 60,
+    creneaux: CRENEAUX, reservations: [], horairesDetail: null,
+    capacite: 1, prestationId: 'reiki', liaisonsCreneaux: LIAISONS,
+  })
+  verifier('le soin individuel garde toute la journée', slotsReiki.length >= 9)
+  // ⚠️ ET IL GARDE AUSSI L'HEURE DU COURS, ce qui est juste : les liaisons
+  // disent QUI PEUT être proposé, pas QUAND c'est occupé. Tant que personne ne
+  // s'est inscrit au yoga de 10h, la salle est libre et le soin peut s'y
+  // donner. C'est `conflitReservation` qui fermera l'heure dès la première
+  // inscription, et il le faisait déjà. Confondre les deux aurait fermé un
+  // créneau vide toute l'année.
+  verifier('⚠️ et l’heure du cours reste ouverte au soin tant que personne ne s’inscrit',
+    slotsReiki.some(s => s.heure === '10:00'))
+  // ⚠️ SANS LIAISONS, LE MOTEUR REND EXACTEMENT CE QU'IL RENDAIT AVANT.
+  const slotsAvant = genererSlots({
+    dateChoisie: new Date('2027-09-13T12:00:00'), dureeMinutes: 60,
+    creneaux: CRENEAUX, reservations: [], horairesDetail: null,
+    capacite: 12, prestationId: 'yoga',
+  })
+  verifier('⚠️ sans liaisons, le moteur ne change rien', slotsAvant.length >= 10)
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

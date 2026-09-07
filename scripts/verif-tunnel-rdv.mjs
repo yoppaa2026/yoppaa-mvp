@@ -551,7 +551,8 @@ for (const chemin of [
 {
   const { creerReservationRdv } = await import('../lib/rdv-creation-server.js')
 
-  function baseSimulee({ prestation, lieux = [], placesPrises = [], erreurInsert = null }) {
+  function baseSimulee({ prestation, lieux = [], placesPrises = [], erreurInsert = null,
+                         creneaux = [], liaisons = [] }) {
     const vu = { payload: null, filtresPlaces: {} }
     const table = (nom) => {
       const filtres = {}
@@ -560,6 +561,12 @@ for (const chemin of [
         eq: (col, val) => { filtres[col] = val; return chaine },
         in: (col, val) => { filtres[col] = val; return chaine },
         is: () => chaine,
+        // ⚠️ AJOUTÉ LE 07/09, PARCE QUE CETTE FAUSSE BASE MENTAIT. `placePrise`
+        // appelle `.neq`, qui n'existait pas ici : l'appel levait, l'erreur
+        // était avalée par le `catch` du module, et le banc restait vert sur un
+        // chemin qui n'avait jamais tourné. Une fausse base incomplète est un
+        // banc qui se croit plus large qu'il n'est.
+        neq: (col, val) => { filtres[col] = val; return chaine },
         maybeSingle: async () => ({
           data: nom === 'rdv_prestations' ? prestation
             : nom === 'commercants' ? { id: 'c1', nom: 'Ciseaux et Soins', adresse: 'Rue du Siège 1' }
@@ -574,6 +581,8 @@ for (const chemin of [
         // doit donc être « thenable », comme l'est un client Supabase.
         then: (resoudre) => resoudre(
           nom === 'commercant_lieux' ? { data: lieux }
+          : nom === 'rdv_creneaux' ? { data: creneaux }
+          : nom === 'rdv_creneau_prestations' ? { data: liaisons }
           : nom === 'rdv_reservations' ? (vu.filtresPlaces = filtres, { data: placesPrises.map(place_no => ({ place_no })) })
           : { data: [] }
         ),
@@ -698,6 +707,76 @@ for (const chemin of [
     })
     verifie('une prestation introuvable est refusée',
       res.ok === false && res.code === 'prestation_introuvable')
+  }
+
+  // ── UN CRÉNEAU N'ACCEPTE QUE LES PRESTATIONS QU'IL A ACCEPTÉES (07/09) ───
+  //
+  // 🔴 LE DÉFAUT D'ORIGINE, TROUVÉ PAR ALEX. Un créneau ne disait rien des
+  // prestations : le cours de yoga de Centre Respire était donc proposé à
+  // toutes les heures de tous les jours, et une personne réservant un Reiki à
+  // 10h annulait de fait le cours de 10h. L'écran filtre désormais, mais un
+  // écran ne décide de rien : c'est ici que ça se refuse.
+  {
+    // Lundi 10:00-11:00 réservé au yoga ; lundi 08:00-18:00 pour le reste.
+    const CRENEAUX = [
+      { id: 'k-yoga', jour_semaine: 'lundi', date_specifique: null, heure_debut: '10:00:00', heure_fin: '11:00:00', actif: true },
+      { id: 'k-libre', jour_semaine: 'lundi', date_specifique: null, heure_debut: '08:00:00', heure_fin: '18:00:00', actif: true },
+    ]
+    const LIAISONS = [{ creneau_id: 'k-yoga', prestation_id: 'p2' }]
+
+    {
+      const db = baseSimulee({ prestation: PRESTA_COURS, creneaux: CRENEAUX, liaisons: LIAISONS })
+      const res = await creerReservationRdv(db, {
+        commercantId: 'c1', prestationId: 'p2',
+        dateRdv: '2026-09-07', heureDebut: '10:00', champs: {},
+      })
+      verifie('le cours passe à l’heure de SON créneau', res.ok === true)
+    }
+    {
+      // 🔴 LA GARDE QUI COMPTE. 13h est bien dans un créneau du lundi, mais pas
+      // dans un créneau QUI ACCEPTE le yoga. Sans le contrôle de l'heure, ce
+      // rendez-vous passerait et le commerçant devrait l'assurer.
+      const db = baseSimulee({ prestation: PRESTA_COURS, creneaux: CRENEAUX, liaisons: LIAISONS })
+      const res = await creerReservationRdv(db, {
+        commercantId: 'c1', prestationId: 'p2',
+        dateRdv: '2026-09-07', heureDebut: '13:00', champs: {},
+      })
+      verifie('🔴 le cours est refusé HORS de son créneau',
+        res.ok === false && res.code === 'prestation_hors_creneau')
+      verifie('et rien n’est écrit', db._vu.payload === null)
+    }
+    {
+      // ⚠️ SON AGENDA RESTE LE SIEN. Le commerçant a toujours pu poser un
+      // rendez-vous hors de ses horaires, typiquement pour un client qui
+      // appelle. Lui refuser ferait de cette correction une régression sur le
+      // geste qu'il fait le plus souvent.
+      const db = baseSimulee({ prestation: PRESTA_COURS, creneaux: CRENEAUX, liaisons: LIAISONS })
+      const res = await creerReservationRdv(db, {
+        commercantId: 'c1', prestationId: 'p2',
+        dateRdv: '2026-09-07', heureDebut: '13:00', champs: { source: 'commercant' },
+      })
+      verifie('⚠️ la saisie du commerçant passe quand même', res.ok === true)
+    }
+    {
+      // ⚠️ ET UN COMMERCE QUI N'A RIEN RÉGLÉ NE CHANGE PAS DE COMPORTEMENT.
+      // C'est la garantie de non-régression pour tout le parc.
+      const db = baseSimulee({ prestation: PRESTA_COURS, creneaux: CRENEAUX, liaisons: [] })
+      const res = await creerReservationRdv(db, {
+        commercantId: 'c1', prestationId: 'p2',
+        dateRdv: '2026-09-07', heureDebut: '13:00', champs: {},
+      })
+      verifie('⚠️ sans aucune liaison, tout passe comme avant', res.ok === true)
+    }
+    {
+      // Le Reiki, lui, n'est visé par aucune liaison : le créneau large
+      // l'accepte, celui du yoga non. Il passe donc à 13h, pas à 10h.
+      const db = baseSimulee({ prestation: PRESTA_SOLO, creneaux: CRENEAUX, liaisons: LIAISONS })
+      const res = await creerReservationRdv(db, {
+        commercantId: 'c1', prestationId: 'p1',
+        dateRdv: '2026-09-07', heureDebut: '13:00', champs: {},
+      })
+      verifie('une prestation non visée garde les créneaux libres', res.ok === true)
+    }
   }
 
   // ── LE DOUBLE-BOOKING EST NOMMÉ, PAS AVALÉ ──────────────────────────────

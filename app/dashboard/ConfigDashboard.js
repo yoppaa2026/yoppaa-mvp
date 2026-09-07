@@ -29,7 +29,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
-import { prestationSansCreneauDedie, coursDejaCoche, creneauHorsOuverture, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
+import { prestationSansCreneauDedie, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import BlocAide, { EtapeAide } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
@@ -3516,12 +3516,31 @@ function TabCreneaux({ commercantId, toast }) {
     if (!form.heure_debut || !form.heure_fin) return toast('Heures obligatoires', 'error')
     if (form.heure_fin <= form.heure_debut) return toast('Heure de fin invalide', 'error')
 
-    // Vérif hors horaires
-    if (jourOuvert(jourActif) && horaires?.[jourActif]) {
-      const h = horaireJour(jourActif)
-      if (form.heure_debut < h.debut || form.heure_fin > h.fin) {
-        if (!await confirme(confirmationSimple({ titre: 'Ce créneau sort de tes heures d’ouverture', message: `Tu ouvres de ${h.debut} à ${h.fin} ce jour-là.`, action: 'Le créer quand même', ton: 'principal' }))) return
-      }
+    // 🔴 LA MÊME RÈGLE QUE LE RENDEZ-VOUS, ET PAS UNE DEUXIÈME ÉCRITURE
+    // (Alex, 07/09 : « check chez les frères en alimentaire et détail »).
+    //
+    // ⚠️ CELLE D'AVANT MENTAIT AUX COMMERCES À DEUX SERVICES. Elle comparait à
+    // `horaireJour`, qui ne rend que la PREMIÈRE plage : une friterie ouverte
+    // 11:00-14:00 puis 18:00-22:00 se faisait donc alerter sur un créneau de
+    // 19h, avec « tu ouvres de 11:00 à 14:00 ». C'est le cœur de cible
+    // alimentaire, et le message était faux pour eux.
+    const dehorsCmd = creneauHorsOuverture({
+      jour: jourActif,
+      heureDebut: form.heure_debut,
+      heureFin: form.heure_fin,
+      horairesDetail: horaires,
+    })
+    if (dehorsCmd && dehorsCmd.raison !== 'jour_ferme') {
+      const heures = dehorsCmd.plages.join(' et ')
+      const message = dehorsCmd.raison === 'hors_ouverture'
+        ? `Le ${jourActif}, tu es ouvert ${heures}. Ce créneau tombe entièrement en dehors : aucune commande ne pourra s’y poser.`
+        : `Le ${jourActif}, tu es ouvert ${heures}. Ce qui dépasse ne sera pas proposé à tes clients.`
+      if (!await confirme(confirmationSimple({
+        titre: 'Ce créneau sort de tes heures d’ouverture',
+        message,
+        action: 'Le créer quand même',
+        ton: 'principal',
+      }))) return
     }
 
     // Superposition sur ce jour.
@@ -3602,23 +3621,53 @@ function TabCreneaux({ commercantId, toast }) {
     if (!joursCibles.length) return toast('Sélectionne au moins un jour cible', 'error')
 
     let total = 0
+    const raccourcisCopie = []
+    const ignoresCopie = []
     for (const cible of joursCibles) {
       if (!jourOuvert(cible)) { toast(`${cible} est fermé, ignoré`, 'error'); continue }
       // Supprimer existants sur la cible
       const existants = creneaux.filter(c => c.jour_semaine === cible)
       for (const c of existants) await supabase.from('creneaux').delete().eq('id', c.id)
-      // Insérer copies
-      const copies = source.map(c => ({
-        commercant_id: commercantId,
-        jour_semaine: cible,
-        heure_debut: c.heure_debut,
-        heure_fin: c.heure_fin,
-        max_commandes: c.max_commandes,
-        actif: c.actif,
-        capacite_temps: c.capacite_temps || 30
-      }))
-      await supabase.from('creneaux').insert(copies)
+      // 🔴 CHAQUE JOUR CIBLE A SES PROPRES HEURES (Alex, 07/09). Cette copie
+      // vérifiait si le jour était FERMÉ, jamais s'il fermait plus tôt : un
+      // créneau 08:00-18:00 copié sur un jour qui ferme à 12:00 y restait en
+      // entier, invisible pour les clients, et rien ne le disait. Exactement le
+      // défaut trouvé sur la copie des plages de rendez-vous, dans le module
+      // d'à côté et sur la même règle.
+      const copies = []
+      for (const c of source) {
+        const ajuste = ajusterPlagePourJour(c, horaires?.[cible])
+        if (ajuste.statut === 'ignoree') { ignoresCopie.push(`${cible} ${String(c.heure_debut).slice(0,5)}`); continue }
+        if (ajuste.statut === 'raccourcie') {
+          raccourcisCopie.push(`${cible} : ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} devient ${ajuste.debut}–${ajuste.fin}`)
+        }
+        copies.push({
+          commercant_id: commercantId,
+          jour_semaine: cible,
+          heure_debut: ajuste.debut,
+          heure_fin: ajuste.fin,
+          max_commandes: c.max_commandes,
+          actif: c.actif,
+          capacite_temps: c.capacite_temps || 30,
+        })
+      }
+      if (copies.length > 0) await supabase.from('creneaux').insert(copies)
       total += copies.length
+    }
+    // ⚠️ ON DIT CE QU'ON A AJUSTÉ. Un créneau raccourci sans un mot, c'est un
+    // commerçant qui cherchera pourquoi son agenda ne propose pas ce qu'il a
+    // écrit. Dit après plutôt qu'avant, parce qu'ici la copie remplace jour par
+    // jour et qu'un aller-retour de confirmation par jour serait pénible.
+    if (raccourcisCopie.length > 0 || ignoresCopie.length > 0) {
+      await confirme(confirmationSimple({
+        titre: 'Ajusté à tes heures d’ouverture',
+        message: 'Ce qui dépassait aurait été invisible pour tes clients.',
+        details: [
+          ...raccourcisCopie.map(r => `Raccourci — ${r}`),
+          ...ignoresCopie.map(i => `Non copié — ${i}`),
+        ].join('\n'),
+        action: 'J’ai compris',
+      }))
     }
     toast(`${total} créneau(x) copiés`); setShowCopier(false); setJoursCibles([]); fetchAll()
   }
@@ -9181,17 +9230,55 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         .update({ deleted_at: new Date().toISOString() }).in('id', idsARemplacer)
       if (errDel) { setCopieLoading(false); return toast(`Erreur : ${errDel.message}`, 'error') }
     }
-    const lignes = cibles.flatMap(j => source.map(c => ({
-      commercant_id: commercantId,
-      praticien_id: c.praticien_id,
-      jour_semaine: j,
-      heure_debut: c.heure_debut,
-      heure_fin: c.heure_fin,
-      pas_minutes: c.pas_minutes,
-      pause_debut: c.pause_debut,
-      pause_fin: c.pause_fin,
-      actif: c.actif,
-    })))
+    // 🔴 CHAQUE JOUR CIBLE A SES PROPRES HORAIRES (Alex, 07/09). Centre Respire
+    // est à Mettet le lundi jusqu'à 17:00 et à Nalinnes le mercredi jusqu'à
+    // 12:00 : copier le lundi vers le mercredi y posait une plage 08:00-17:00,
+    // cinq heures au-delà de la fermeture, SANS UN MOT. L'alerte existait sur
+    // la création d'une plage, et pas sur sa copie : le frère non traité.
+    const lignes = []
+    const raccourcies = []
+    const ignorees = []
+    for (const j of cibles) {
+      for (const c of source) {
+        const ajuste = ajusterPlagePourJour(c, horairesReference?.[j])
+        if (ajuste.statut === 'ignoree') { ignorees.push(`${j} ${String(c.heure_debut).slice(0,5)}`); continue }
+        if (ajuste.statut === 'raccourcie') {
+          raccourcies.push(`${j} : ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} devient ${ajuste.debut}–${ajuste.fin}`)
+        }
+        lignes.push({
+          commercant_id: commercantId,
+          praticien_id: c.praticien_id,
+          jour_semaine: j,
+          heure_debut: `${ajuste.debut}:00`,
+          heure_fin: `${ajuste.fin}:00`,
+          pas_minutes: c.pas_minutes,
+          pause_debut: c.pause_debut,
+          pause_fin: c.pause_fin,
+          actif: c.actif,
+        })
+      }
+    }
+
+    // ⚠️ TOUT SE DIT AVANT. Ajuster en silence donnerait des plages qu'il n'a
+    // pas écrites, et il les découvrirait en cherchant pourquoi son agenda ne
+    // propose pas ce qu'il croit.
+    if (raccourcies.length > 0 || ignorees.length > 0) {
+      const details = [
+        ...raccourcies.map(r => `Raccourci — ${r}`),
+        ...ignorees.map(i => `Non copié — ${i}, tu es fermé`),
+      ].join('\n')
+      if (!await confirme(confirmationSimple({
+        titre: 'Tes horaires ne sont pas les mêmes ces jours-là',
+        message: 'Ce qui dépasse serait invisible pour tes clients. Yoppaa ajuste à tes heures d’ouverture réelles.',
+        details,
+        action: 'Copier en ajustant',
+        ton: 'principal',
+      }))) { setCopieLoading(false); return }
+    }
+    if (lignes.length === 0) {
+      setCopieLoading(false)
+      return toast('Rien à copier : tu es fermé sur les jours choisis.', 'error')
+    }
     // ⚠️ `.select()` PARCE QU'IL FAUT LES NOUVEAUX IDENTIFIANTS. Sans eux, on
     // n'aurait rien à quoi rattacher les prestations acceptées.
     const { data: creees, error } = await supabase.from('rdv_creneaux').insert(lignes)

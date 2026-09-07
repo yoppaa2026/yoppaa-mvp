@@ -160,6 +160,24 @@ const MUTATIONS = [
     fichier: 'app/dashboard/page.js',
     de: '    if (!pretUrl) return',
     vers: '    if (false) return' },
+
+  // 🔴 LA COPIE QUI DEBORDAIT (Alex, 07/09), DES DEUX COTES.
+  { nom: '🔴 une plage trop longue n est plus raccourcie',
+    de: "    statut: (debut === d && fin === f) ? 'inchangee' : 'raccourcie',",
+    vers: "    statut: 'inchangee'," },
+
+  { nom: '🔴 une plage hors ouverture est copiee quand meme',
+    de: "  if (!meilleur) return { statut: 'ignoree', debut: null, fin: null }",
+    vers: "  if (!meilleur) return { statut: 'inchangee', debut: minutesToTime(d), fin: minutesToTime(f) }" },
+
+  { nom: '⚠️ le second service est oublie a la copie',
+    de: '  if (horaireJour.debut2 && horaireJour.fin2) plages.push([timeToMinutes(horaireJour.debut2), timeToMinutes(horaireJour.fin2)])',
+    vers: '  void 0' },
+
+  { nom: '🔴 la copie des creneaux de commande cesse d ajuster',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '        const ajuste = ajusterPlagePourJour(c, horaires?.[cible])',
+    vers: "        const ajuste = { statut: 'inchangee', debut: String(c.heure_debut).slice(0,5), fin: String(c.heure_fin).slice(0,5) }" },
 ]
 
 const lancer = () => {

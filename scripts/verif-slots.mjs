@@ -11,7 +11,7 @@ import {
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
   creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
   prestationAutoriseeSurCreneaux, coursDejaCoche, creneauHorsOuverture,
-  horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV,
+  horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV, ajusterPlagePourJour,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
@@ -1751,6 +1751,49 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     // ne doit pas s'en mêler et ajouter un second message.
     egal('une fin avant le début ne dit rien ici', dehors('18:00', '10:00'), null)
 
+    // ── COPIER UNE PLAGE VERS UN AUTRE JOUR (Alex, 07/09) ─────────────────
+    // 🔴 Centre Respire est à Mettet le lundi jusqu'à 17:00 et à Nalinnes le
+    // mercredi jusqu'à 12:00 : copier le lundi vers le mercredi y posait une
+    // plage 08:00-17:00, cinq heures au-delà de la fermeture, SANS UN MOT.
+    // L'alerte existait sur la CRÉATION, pas sur la COPIE : le frère non traité.
+    {
+      const MERCREDI = { ouvert: true, debut: '08:00', fin: '12:00' }
+      const plage = (a, b) => ({ heure_debut: a, heure_fin: b })
+
+      egal('🔴 une plage trop longue est raccourcie',
+        ajusterPlagePourJour(plage('08:00:00', '17:00:00'), MERCREDI),
+        { statut: 'raccourcie', debut: '08:00', fin: '12:00' })
+      egal('une plage qui tient ne bouge pas',
+        ajusterPlagePourJour(plage('09:00:00', '11:00:00'), MERCREDI),
+        { statut: 'inchangee', debut: '09:00', fin: '11:00' })
+      egal('🔴 une plage entièrement après la fermeture est écartée',
+        ajusterPlagePourJour(plage('14:00:00', '17:00:00'), MERCREDI),
+        { statut: 'ignoree', debut: null, fin: null })
+      egal('un jour fermé n’en reçoit aucune',
+        ajusterPlagePourJour(plage('09:00:00', '11:00:00'), { ouvert: false }),
+        { statut: 'ignoree', debut: null, fin: null })
+      // ⚠️ HORAIRES INCONNUS : ON NE TOUCHE À RIEN. Ajuster sur une ignorance
+      // raccourcirait des plages parfaitement valables.
+      egal('⚠️ sans horaires, la plage est copiée telle quelle',
+        ajusterPlagePourJour(plage('08:00:00', '17:00:00'), null),
+        { statut: 'inchangee', debut: '08:00', fin: '17:00' })
+      // Un commerce à deux services : on retient l'ouverture qui recouvre le
+      // plus, sinon une plage du soir serait raccourcie sur le service du midi.
+      const DEUX = { ouvert: true, debut: '11:00', fin: '14:00', debut2: '18:00', fin2: '22:00' }
+      egal('⚠️ une plage du soir suit le service du soir',
+        ajusterPlagePourJour(plage('17:00:00', '23:00:00'), DEUX),
+        { statut: 'raccourcie', debut: '18:00', fin: '22:00' })
+      egal('et une plage du midi le service du midi',
+        ajusterPlagePourJour(plage('10:00:00', '13:00:00'), DEUX),
+        { statut: 'raccourcie', debut: '11:00', fin: '13:00' })
+      egal('l’après-midi fermé n’en reçoit aucune',
+        ajusterPlagePourJour(plage('15:00:00', '17:00:00'), DEUX),
+        { statut: 'ignoree', debut: null, fin: null })
+      egal('une plage incohérente est écartée',
+        ajusterPlagePourJour(plage('17:00:00', '09:00:00'), MERCREDI),
+        { statut: 'ignoree', debut: null, fin: null })
+    }
+
     // 🔴 LE CAS DE CENTRE RESPIRE, TROUVÉ PAR ALEX EN TESTANT (07/09). Ce
     // commerce a répondu « je change d'endroit » : ses horaires vivent dans ses
     // EMPLACEMENTS, et `horaires_detail` n'en est qu'un dérivé qui peut avoir
@@ -2034,6 +2077,27 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     && /onOngletChange=\{setConfigTabUrl\}/.test(PAGE))
   verifier('⚠️ et on n’écrit pas avant d’avoir lu',
     /if \(!pretUrl\) return/.test(PAGE))
+
+  // ─── LES DEUX COPIES AJUSTENT, ET LES FRÈRES AUSSI (Alex, 07/09) ────────
+  // 🔴 « Check chez les frères en alimentaire et détail aussi » : le module des
+  // commandes avait le MÊME trou sur sa copie, et son alerte de création
+  // mentait en plus aux commerces à DEUX SERVICES.
+  verifier('🔴 la copie des plages de rendez-vous ajuste',
+    /const ajuste = ajusterPlagePourJour\(c, horairesReference\?\.\[j\]\)/.test(CONFIG))
+  verifier('🔴 et celle des créneaux de commande aussi',
+    /const ajuste = ajusterPlagePourJour\(c, horaires\?\.\[cible\]\)/.test(CONFIG))
+  // ⚠️ ON DIT CE QU'ON A AJUSTÉ, DES DEUX CÔTÉS. Un créneau raccourci en
+  // silence, c'est un commerçant qui cherchera pourquoi son agenda ne propose
+  // pas ce qu'il a écrit.
+  verifier('⚠️ les deux copies annoncent ce qu’elles ont ajusté',
+    /Copier en ajustant/.test(CONFIG) && /Ajusté à tes heures d’ouverture/.test(CONFIG))
+  // 🔴 L'ALERTE DE CRÉATION DES COMMANDES PASSE PAR LA MÊME RÈGLE. L'ancienne
+  // comparait à `horaireJour`, qui ne rend que la PREMIÈRE plage : une friterie
+  // ouverte 11:00-14:00 puis 18:00-22:00 était alertée sur un créneau de 19h.
+  verifier('🔴 l’alerte des créneaux de commande connaît les deux services',
+    /const dehorsCmd = creneauHorsOuverture\(\{/.test(CONFIG))
+  verifier('⚠️ et ne compare plus à la première plage seule',
+    !/form\.heure_debut < h\.debut \|\| form\.heure_fin > h\.fin/.test(CONFIG))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

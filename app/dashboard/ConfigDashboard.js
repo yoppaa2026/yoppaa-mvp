@@ -9241,7 +9241,16 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     for (const j of cibles) {
       for (const c of source) {
         const ajuste = ajusterPlagePourJour(c, horairesReference?.[j])
-        if (ajuste.statut === 'ignoree') { ignorees.push(`${j} ${String(c.heure_debut).slice(0,5)}`); continue }
+        if (ajuste.statut === 'ignoree') {
+          // ⚠️ ON DIT LEQUEL DES DEUX. « Tu es fermé » sur un jour bien ouvert
+          // qui ferme simplement plus tôt, c'est un message que le commerçant
+          // ne peut que contester : Alex l'a fait dans la minute.
+          const heure = `${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)}`
+          ignorees.push(ajuste.raison === 'jour_ferme'
+            ? `${j} ${heure} : tu es fermé ce jour-là`
+            : `${j} ${heure} : tu es ouvert ${(ajuste.heures || []).join(' et ')}`)
+          continue
+        }
         if (ajuste.statut === 'raccourcie') {
           raccourcies.push(`${j} : ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} devient ${ajuste.debut}–${ajuste.fin}`)
         }
@@ -9259,13 +9268,25 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       }
     }
 
+    // ⚠️ ET L'EMPLACEMENT NE SE COPIE PAS (question d'Alex, 07/09 : « le lundi
+    // et le mercredi ne sont pas au même endroit, il devrait me le signaler ? »).
+    //
+    // Oui. Le résultat est juste — « partout ce jour-là » vaut là où il est, et
+    // recopier « Salle de Mettet » sur un jour passé à Nalinnes désignerait une
+    // salle où il n'est pas — mais une information disparaissait en silence, et
+    // il l'aurait découverte en relisant sa liste.
+    const perdLeLieu = parLieuRdv && source.some(c => c.lieu_id)
+    if (perdLeLieu) {
+      raccourcies.push('L’emplacement n’est pas repris : les copies valent « partout où tu es ce jour-là », ce qui est le réglage juste quand tu changes de salle.')
+    }
+
     // ⚠️ TOUT SE DIT AVANT. Ajuster en silence donnerait des plages qu'il n'a
     // pas écrites, et il les découvrirait en cherchant pourquoi son agenda ne
     // propose pas ce qu'il croit.
     if (raccourcies.length > 0 || ignorees.length > 0) {
       const details = [
-        ...raccourcies.map(r => `Raccourci — ${r}`),
-        ...ignorees.map(i => `Non copié — ${i}, tu es fermé`),
+        ...raccourcies.map(r => r.startsWith('L’emplacement') ? r : `Raccourci — ${r}`),
+        ...ignorees.map(i => `Non copié — ${i}`),
       ].join('\n')
       if (!await confirme(confirmationSimple({
         titre: 'Tes horaires ne sont pas les mêmes ces jours-là',

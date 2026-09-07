@@ -167,8 +167,8 @@ const MUTATIONS = [
     vers: "    statut: 'inchangee'," },
 
   { nom: '🔴 une plage hors ouverture est copiee quand meme',
-    de: "  if (!meilleur) return { statut: 'ignoree', debut: null, fin: null }",
-    vers: "  if (!meilleur) return { statut: 'inchangee', debut: minutesToTime(d), fin: minutesToTime(f) }" },
+    de: "      statut: 'ignoree',\n      raison: 'hors_ouverture',",
+    vers: "      statut: 'inchangee',\n      raison: 'hors_ouverture'," },
 
   { nom: '⚠️ le second service est oublie a la copie',
     de: '  if (horaireJour.debut2 && horaireJour.fin2) plages.push([timeToMinutes(horaireJour.debut2), timeToMinutes(horaireJour.fin2)])',
@@ -178,6 +178,20 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '        const ajuste = ajusterPlagePourJour(c, horaires?.[cible])',
     vers: "        const ajuste = { statut: 'inchangee', debut: String(c.heure_debut).slice(0,5), fin: String(c.heure_fin).slice(0,5) }" },
+
+  // 🔴 LE MOTIF DU REFUS (Alex, 07/09 : « je ne suis pas ferme le mercredi »).
+  { nom: '🔴 un jour ouvert qui ferme tot redevient un jour ferme',
+    de: "      raison: 'hors_ouverture',",
+    vers: "      raison: 'jour_ferme'," },
+
+  { nom: '⚠️ le message cesse de citer les heures reelles',
+    de: '      heures: plages.map(([a, b]) => `${minutesToTime(a)}–${minutesToTime(b)}`),',
+    vers: '      heures: [],' },
+
+  { nom: '⚠️ la perte de l emplacement redevient silencieuse',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '    const perdLeLieu = parLieuRdv && source.some(c => c.lieu_id)',
+    vers: '    const perdLeLieu = false' },
 ]
 
 const lancer = () => {

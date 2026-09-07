@@ -1762,36 +1762,44 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
 
       egal('🔴 une plage trop longue est raccourcie',
         ajusterPlagePourJour(plage('08:00:00', '17:00:00'), MERCREDI),
-        { statut: 'raccourcie', debut: '08:00', fin: '12:00' })
+        { statut: 'raccourcie', raison: null, debut: '08:00', fin: '12:00' })
       egal('une plage qui tient ne bouge pas',
         ajusterPlagePourJour(plage('09:00:00', '11:00:00'), MERCREDI),
-        { statut: 'inchangee', debut: '09:00', fin: '11:00' })
-      egal('🔴 une plage entièrement après la fermeture est écartée',
-        ajusterPlagePourJour(plage('14:00:00', '17:00:00'), MERCREDI),
-        { statut: 'ignoree', debut: null, fin: null })
-      egal('un jour fermé n’en reçoit aucune',
-        ajusterPlagePourJour(plage('09:00:00', '11:00:00'), { ouvert: false }),
-        { statut: 'ignoree', debut: null, fin: null })
+        { statut: 'inchangee', raison: null, debut: '09:00', fin: '11:00' })
+
+      // 🔴 DEUX MOTIFS DE REFUS QUI NE SE CONFONDENT PAS (Alex, 07/09). Mon
+      // premier message disait « tu es fermé » dans les deux cas, et il a
+      // répondu « je ne comprends pas, je ne suis pas fermé le mercredi ». Il
+      // avait raison : le mercredi ferme à 12:00, ce n'est pas être fermé.
+      const apresFermeture = ajusterPlagePourJour(plage('14:00:00', '17:00:00'), MERCREDI)
+      egal('🔴 une plage après la fermeture est écartée', apresFermeture.statut, 'ignoree')
+      egal('🔴 et le motif n’est PAS « jour fermé »', apresFermeture.raison, 'hors_ouverture')
+      egal('⚠️ le message peut citer les heures réelles', apresFermeture.heures, ['08:00–12:00'])
+
+      const jourFerme = ajusterPlagePourJour(plage('09:00:00', '11:00:00'), { ouvert: false })
+      egal('un jour fermé n’en reçoit aucune', jourFerme.statut, 'ignoree')
+      egal('et là, le motif est bien « jour fermé »', jourFerme.raison, 'jour_ferme')
+
       // ⚠️ HORAIRES INCONNUS : ON NE TOUCHE À RIEN. Ajuster sur une ignorance
       // raccourcirait des plages parfaitement valables.
       egal('⚠️ sans horaires, la plage est copiée telle quelle',
         ajusterPlagePourJour(plage('08:00:00', '17:00:00'), null),
-        { statut: 'inchangee', debut: '08:00', fin: '17:00' })
+        { statut: 'inchangee', raison: null, debut: '08:00', fin: '17:00' })
       // Un commerce à deux services : on retient l'ouverture qui recouvre le
       // plus, sinon une plage du soir serait raccourcie sur le service du midi.
       const DEUX = { ouvert: true, debut: '11:00', fin: '14:00', debut2: '18:00', fin2: '22:00' }
       egal('⚠️ une plage du soir suit le service du soir',
         ajusterPlagePourJour(plage('17:00:00', '23:00:00'), DEUX),
-        { statut: 'raccourcie', debut: '18:00', fin: '22:00' })
+        { statut: 'raccourcie', raison: null, debut: '18:00', fin: '22:00' })
       egal('et une plage du midi le service du midi',
         ajusterPlagePourJour(plage('10:00:00', '13:00:00'), DEUX),
-        { statut: 'raccourcie', debut: '11:00', fin: '13:00' })
-      egal('l’après-midi fermé n’en reçoit aucune',
-        ajusterPlagePourJour(plage('15:00:00', '17:00:00'), DEUX),
-        { statut: 'ignoree', debut: null, fin: null })
+        { statut: 'raccourcie', raison: null, debut: '11:00', fin: '13:00' })
+      const entreDeux = ajusterPlagePourJour(plage('15:00:00', '17:00:00'), DEUX)
+      egal('l’après-midi fermé n’en reçoit aucune', entreDeux.statut, 'ignoree')
+      egal('⚠️ et les DEUX services sont cités', entreDeux.heures, ['11:00–14:00', '18:00–22:00'])
       egal('une plage incohérente est écartée',
-        ajusterPlagePourJour(plage('17:00:00', '09:00:00'), MERCREDI),
-        { statut: 'ignoree', debut: null, fin: null })
+        ajusterPlagePourJour(plage('17:00:00', '09:00:00'), MERCREDI).raison,
+        'heures_invalides')
     }
 
     // 🔴 LE CAS DE CENTRE RESPIRE, TROUVÉ PAR ALEX EN TESTANT (07/09). Ce
@@ -2091,6 +2099,17 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // pas ce qu'il a écrit.
   verifier('⚠️ les deux copies annoncent ce qu’elles ont ajusté',
     /Copier en ajustant/.test(CONFIG) && /Ajusté à tes heures d’ouverture/.test(CONFIG))
+  // 🔴 « TU ES FERMÉ » NE SE DIT QUE SI C'EST VRAI (Alex, 07/09). Un jour bien
+  // ouvert qui ferme plus tôt n'est pas un jour fermé, et il l'a contesté dans
+  // la minute.
+  verifier('🔴 le refus dit lequel des deux motifs',
+    /ajuste\.raison === 'jour_ferme'\s*\n?\s*\? `\$\{j\} \$\{heure\} : tu es fermé ce jour-là`/.test(CONFIG))
+  verifier('⚠️ et cite les heures réelles quand le jour est ouvert',
+    /tu es ouvert \$\{\(ajuste\.heures \|\| \[\]\)\.join\(' et '\)\}/.test(CONFIG))
+  // ⚠️ L'EMPLACEMENT NE SE COPIE PAS, ET ÇA SE DIT (question d'Alex). Le
+  // résultat est juste, mais une information disparaissait en silence.
+  verifier('⚠️ la perte de l’emplacement est annoncée',
+    /const perdLeLieu = parLieuRdv && source\.some\(c => c\.lieu_id\)/.test(CONFIG))
   // 🔴 L'ALERTE DE CRÉATION DES COMMANDES PASSE PAR LA MÊME RÈGLE. L'ancienne
   // comparait à `horaireJour`, qui ne rend que la PREMIÈRE plage : une friterie
   // ouverte 11:00-14:00 puis 18:00-22:00 était alertée sur un créneau de 19h.

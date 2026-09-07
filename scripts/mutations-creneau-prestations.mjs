@@ -72,6 +72,19 @@ const MUTATIONS = [
   { nom: '🔴 deux cours redeviennent possibles sur la meme plage',
     de: '    if (p && Number(p.capacite) > 1) return p',
     vers: '    if (false) return p' },
+
+  // 🔴 LA PLAGE HORS HORAIRES, DEFAUT SILENCIEUX TROUVE PAR ALEX LE 07/09.
+  { nom: '🔴 une plage entierement hors horaires ne se signale plus',
+    de: "    return { raison: 'hors_ouverture', plages: lisible }",
+    vers: '    return null' },
+
+  { nom: '🔴 une plage a cheval sur la fermeture ne se signale plus',
+    de: "    return { raison: 'deborde', plages: lisible }",
+    vers: '    return null' },
+
+  { nom: '⚠️ le second service du jour est oublie',
+    de: "  if (h.debut2 && h.fin2) plages.push([timeToMinutes(h.debut2), timeToMinutes(h.fin2)])",
+    vers: '  void 0' },
 ]
 
 const lancer = () => {

@@ -29,7 +29,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
-import { prestationSansCreneauDedie, coursDejaCoche } from '@/lib/rdv-slots'
+import { prestationSansCreneauDedie, coursDejaCoche, creneauHorsOuverture } from '@/lib/rdv-slots'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
@@ -9012,6 +9012,29 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     // ne sont pas ouverts (le moteur de slots croise les deux). On prévient.
     if (joursFermesProfil.includes(form.jour_semaine) &&
         !await confirme(confirmationSimple({ titre: `Tu es déclaré fermé le ${form.jour_semaine}`, message: 'C’est ce que disent tes horaires dans le Profil. Tant que tu ne les ouvres pas, ce créneau ne s’affichera pas chez tes clients.', action: 'Le créer quand même', ton: 'principal' }))) return
+
+    // 🔴 ET LES HEURES, QUE PERSONNE NE VÉRIFIAIT (Alex, 07/09). Une plage
+    // 20:00-22:00 dans un commerce qui ferme à 19h s'enregistrait sans un mot
+    // et ne proposait JAMAIS rien : le moteur écrête aux horaires réels. Le
+    // commerçant croyait avoir ouvert ses soirées.
+    const dehors = creneauHorsOuverture({
+      jour: form.jour_semaine,
+      heureDebut: form.heure_debut,
+      heureFin: form.heure_fin,
+      horairesDetail: commercant?.horaires_detail,
+    })
+    if (dehors && dehors.raison !== 'jour_ferme') {
+      const heures = dehors.plages.join(' et ')
+      const message = dehors.raison === 'hors_ouverture'
+        ? `Le ${form.jour_semaine}, tu es ouvert ${heures}. Cette plage tombe entièrement en dehors : aucun rendez-vous ne sera proposé dessus.`
+        : `Le ${form.jour_semaine}, tu es ouvert ${heures}. Ce qui dépasse ne sera pas proposé à tes clients.`
+      if (!await confirme(confirmationSimple({
+        titre: 'Cette plage sort de tes heures d’ouverture',
+        message,
+        action: 'La créer quand même',
+        ton: 'principal',
+      }))) return
+    }
     const payload = {
       commercant_id: commercantId,
       praticien_id: form.praticien_id === 'tous' ? null : form.praticien_id,

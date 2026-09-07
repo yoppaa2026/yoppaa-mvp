@@ -10,7 +10,7 @@ import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
   creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
-  prestationAutoriseeSurCreneaux, coursDejaCoche,
+  prestationAutoriseeSurCreneaux, coursDejaCoche, creneauHorsOuverture,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
@@ -1672,6 +1672,51 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     verifier('une plage accepte plusieurs prestations individuelles',
       creneauAccepte('k-lun', 'coupe', MULTI_SOLO) && creneauAccepte('k-lun', 'couleur', MULTI_SOLO))
     verifier('et refuse le reste', !creneauAccepte('k-lun', 'reiki', MULTI_SOLO))
+  }
+
+  // ── 🔴 UNE PLAGE HORS DES HEURES D'OUVERTURE (Alex, 07/09) ──────────────
+  // Le défaut le plus silencieux de l'écran : une plage 20:00-22:00 dans un
+  // commerce qui ferme à 19h s'enregistrait sans un mot et ne proposait JAMAIS
+  // rien, parce que le moteur écrête aux horaires réels.
+  {
+    const H = { lundi: { ouvert: true, debut: '09:00', fin: '19:00' } }
+    const dehors = (heureDebut, heureFin, horairesDetail = H, jour = 'lundi') =>
+      creneauHorsOuverture({ jour, heureDebut, heureFin, horairesDetail })
+
+    egal('une plage dans les heures ne dit rien', dehors('09:00', '18:00'), null)
+    egal('une plage exactement aux heures ne dit rien', dehors('09:00', '19:00'), null)
+    egal('🔴 une plage du soir est signalée', dehors('20:00', '22:00')?.raison, 'hors_ouverture')
+    egal('🔴 une plage du petit matin aussi', dehors('06:00', '08:00')?.raison, 'hors_ouverture')
+    egal('⚠️ une plage à cheval est signalée autrement', dehors('17:00', '21:00')?.raison, 'deborde')
+    egal('à cheval au début aussi', dehors('07:00', '12:00')?.raison, 'deborde')
+    // ⚠️ LE MESSAGE CITE LES HEURES. Dire « c'est hors horaires » sans dire
+    // lesquels oblige le commerçant à aller chercher ailleurs.
+    egal('et il dit lesquelles', dehors('20:00', '22:00')?.plages, ['09:00–19:00'])
+
+    // Un jour fermé se signale à part : l'écran a déjà son propre message.
+    egal('un jour fermé se dit à part',
+      dehors('10:00', '12:00', { lundi: { ouvert: false } })?.raison, 'jour_ferme')
+
+    // ⚠️ SANS HORAIRES CONNUS, ON NE JUGE PAS. Avertir sur une ignorance
+    // apprendrait à cliquer « continuer » sans lire.
+    egal('sans horaires, aucun avertissement', dehors('20:00', '22:00', {}), null)
+    egal('sans horaires du tout non plus', dehors('20:00', '22:00', null), null)
+    egal('un jour absent des horaires ne dit rien', dehors('20:00', '22:00', H, 'dimanche'), null)
+
+    // Les commerces à deux services : la plage doit tenir dans l'un OU l'autre.
+    const DEUX = { lundi: { ouvert: true, debut: '11:00', fin: '14:00', debut2: '18:00', fin2: '22:00' } }
+    egal('le service du midi passe', dehors('11:00', '14:00', DEUX), null)
+    egal('celui du soir aussi', dehors('18:00', '22:00', DEUX), null)
+    egal('🔴 une plage à cheval sur la coupure est signalée',
+      dehors('13:00', '19:00', DEUX)?.raison, 'deborde')
+    egal('et l’après-midi fermé est entièrement dehors',
+      dehors('15:00', '17:00', DEUX)?.raison, 'hors_ouverture')
+    egal('les deux services sont cités', dehors('15:00', '17:00', DEUX)?.plages,
+      ['11:00–14:00', '18:00–22:00'])
+
+    // Une saisie incohérente est déjà refusée par une autre garde : celle-ci
+    // ne doit pas s'en mêler et ajouter un second message.
+    egal('une fin avant le début ne dit rien ici', dehors('18:00', '10:00'), null)
   }
 
   // ── 🔴 UN SEUL COURS PAR PLAGE (Alex, 07/09) ────────────────────────────

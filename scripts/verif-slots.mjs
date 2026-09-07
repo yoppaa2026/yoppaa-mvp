@@ -2106,10 +2106,33 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     /ajuste\.raison === 'jour_ferme'\s*\n?\s*\? `\$\{j\} \$\{heure\} : tu es fermé ce jour-là`/.test(CONFIG))
   verifier('⚠️ et cite les heures réelles quand le jour est ouvert',
     /tu es ouvert \$\{\(ajuste\.heures \|\| \[\]\)\.join\(' et '\)\}/.test(CONFIG))
-  // ⚠️ L'EMPLACEMENT NE SE COPIE PAS, ET ÇA SE DIT (question d'Alex). Le
-  // résultat est juste, mais une information disparaissait en silence.
-  verifier('⚠️ la perte de l’emplacement est annoncée',
-    /const perdLeLieu = parLieuRdv && source\.some\(c => c\.lieu_id\)/.test(CONFIG))
+  // 🔴 L'EMPLACEMENT EST UNE QUESTION, PAS UNE NOTE (Alex, 07/09 : « il doit
+  // spécifier que l'emplacement ne correspond pas au jour, et demander ce que
+  // tu veux faire »). Il y a un vrai choix derrière, et c'est lui qui sait.
+  verifier('🔴 un emplacement qui ne colle pas au jour pose une question',
+    /confirmationDeuxGestes\(\{[\s\S]{0,400}?Tu n’es pas au même endroit ces jours-là/.test(CONFIG))
+  verifier('⚠️ avec ses deux gestes nommés',
+    /premier: 'Copier sur l’emplacement du jour'/.test(CONFIG)
+    && /second: 'Ne pas copier ces plages'/.test(CONFIG))
+  // ⚠️ ET LE CONFLIT NE SE DÉCLENCHE QUE S'IL Y EN A UN : une plage dont la
+  // salle existe bien le jour cible garde la sienne, sans une question inutile.
+  verifier('⚠️ aucune question quand la salle existe ce jour-là',
+    /if \(duJour\.some\(l => l\.id === c\.lieu_id\)\) continue/.test(CONFIG))
+  // 🔴 ET L'EMPLACEMENT EST DÉSORMAIS COPIÉ, là où il disparaissait.
+  verifier('🔴 la copie emporte un emplacement',
+    /lieu_id: parLieuRdv \? lieuCopie : null,/.test(CONFIG))
+
+  // 🔴 UN PAVÉ NE SE LIT PAS (Alex : « plus clair et plus aéré »). Les détails
+  // arrivaient collés : le HTML ignore les retours à la ligne d'une chaîne.
+  const MODALE = lire('app/dashboard/ModaleConfirmation.js')
+  // ⚠️ ON VISE LE TERNAIRE ENTIER, PAS LE MOT. La mutation l'a montré :
+  // `Array.isArray(details)` reste présent même quand on le neutralise d'un
+  // `false &&` devant. Une garde qui cherche un mot mesure une PRÉSENCE, pas
+  // un comportement.
+  verifier('🔴 les détails s’affichent ligne par ligne',
+    /\{Array\.isArray\(details\)\s*\n?\s*\? details\.map\(\(ligne, i\) =>/.test(MODALE))
+  verifier('⚠️ et une chaîne continue de marcher',
+    /\)\)\s*\n?\s*: details\}/.test(MODALE))
   // 🔴 L'ALERTE DE CRÉATION DES COMMANDES PASSE PAR LA MÊME RÈGLE. L'ancienne
   // comparait à `horaireJour`, qui ne rend que la PREMIÈRE plage : une friterie
   // ouverte 11:00-14:00 puis 18:00-22:00 était alertée sur un créneau de 19h.

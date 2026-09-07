@@ -71,7 +71,7 @@ import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './Bar
 // `app/dashboard/page.js`, qui rend cet écran. On n'importe ici que la
 // fonction qui pose la question.
 import { confirme, confirmer } from './PosteConfirmation'
-import { confirmationSimple } from '@/lib/confirmations'
+import { confirmationSimple, confirmationDeuxGestes } from '@/lib/confirmations'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BoutonIaFiche from './BoutonIaFiche'
 import { MIN_DESCRIPTION, descriptionRefusee, jaugeDescription, motsInspirationDescription, MOTS_INSPIRATION_INFOS, astuceRedaction } from '@/lib/fiche-redaction'
@@ -9235,6 +9235,45 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     // 12:00 : copier le lundi vers le mercredi y posait une plage 08:00-17:00,
     // cinq heures au-delà de la fermeture, SANS UN MOT. L'alerte existait sur
     // la création d'une plage, et pas sur sa copie : le frère non traité.
+    // ─── L'EMPLACEMENT : UNE QUESTION, PAS UNE NOTE (Alex, 07/09) ─────────
+    //
+    // 🔴 « IL DOIT SPÉCIFIER QUE L'EMPLACEMENT NE CORRESPOND PAS AU JOUR OÙ TU
+    // SOUHAITES LE COPIER, ET DEMANDER CE QUE TU VEUX FAIRE. » Il a raison :
+    // ma version se contentait de prévenir que le lieu disparaissait, alors
+    // qu'il y a un vrai choix derrière, et que c'est LUI qui sait.
+    //
+    // Le conflit n'existe que si la plage source désigne une salle où il n'est
+    // PAS le jour cible. Copier « Mettet » sur un mercredi passé à Nalinnes
+    // désignerait une salle vide.
+    let lieuxParJour = {}
+    let recalerLesLieux = null
+    if (parLieuRdv) {
+      const conflits = []
+      for (const j of cibles) {
+        const duJour = lieuxDuJourRdv(j)
+        lieuxParJour[j] = duJour
+        for (const c of source) {
+          if (!c.lieu_id) continue
+          if (duJour.some(l => l.id === c.lieu_id)) continue
+          const ou = duJour.length === 1 ? duJour[0].libelle : (duJour.length === 0 ? 'aucun emplacement' : `${duJour.length} emplacements`)
+          conflits.push(`${j} · tu es à « ${ou} », la plage désigne « ${nomLieuRdv(c.lieu_id) || 'un autre endroit'} »`)
+        }
+      }
+      if (conflits.length > 0) {
+        const choix = await confirmer(confirmationDeuxGestes({
+          titre: 'Tu n’es pas au même endroit ces jours-là',
+          message: 'Une plage qui désigne une salle où tu n’es pas ne proposera rien à personne.',
+          details: conflits,
+          premier: 'Copier sur l’emplacement du jour',
+          second: 'Ne pas copier ces plages',
+          tonPremier: 'principal',
+          tonSecond: 'neutre',
+        }))
+        if (choix !== 'premier' && choix !== 'second') { setCopieLoading(false); return }
+        recalerLesLieux = choix
+      }
+    }
+
     const lignes = []
     const raccourcies = []
     const ignorees = []
@@ -9254,9 +9293,21 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         if (ajuste.statut === 'raccourcie') {
           raccourcies.push(`${j} : ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} devient ${ajuste.debut}–${ajuste.fin}`)
         }
+        // L'emplacement, selon ce qu'il a choisi plus haut. Sans conflit, la
+        // plage garde le sien ; un seul emplacement ce jour-là le remplace ;
+        // plusieurs, ou aucun, valent « partout où je suis ce jour-là ».
+        let lieuCopie = c.lieu_id || null
+        if (parLieuRdv && c.lieu_id) {
+          const duJour = lieuxParJour[j] || []
+          if (!duJour.some(l => l.id === c.lieu_id)) {
+            if (recalerLesLieux === 'second') { ignorees.push(`${j} ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} : tu n’es pas au même endroit ce jour-là`); continue }
+            lieuCopie = duJour.length === 1 ? duJour[0].id : null
+          }
+        }
         lignes.push({
           commercant_id: commercantId,
           praticien_id: c.praticien_id,
+          lieu_id: parLieuRdv ? lieuCopie : null,
           jour_semaine: j,
           heure_debut: `${ajuste.debut}:00`,
           heure_fin: `${ajuste.fin}:00`,
@@ -9268,31 +9319,25 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       }
     }
 
-    // ⚠️ ET L'EMPLACEMENT NE SE COPIE PAS (question d'Alex, 07/09 : « le lundi
-    // et le mercredi ne sont pas au même endroit, il devrait me le signaler ? »).
-    //
-    // Oui. Le résultat est juste — « partout ce jour-là » vaut là où il est, et
-    // recopier « Salle de Mettet » sur un jour passé à Nalinnes désignerait une
-    // salle où il n'est pas — mais une information disparaissait en silence, et
-    // il l'aurait découverte en relisant sa liste.
-    const perdLeLieu = parLieuRdv && source.some(c => c.lieu_id)
-    if (perdLeLieu) {
-      raccourcies.push('L’emplacement n’est pas repris : les copies valent « partout où tu es ce jour-là », ce qui est le réglage juste quand tu changes de salle.')
-    }
-
     // ⚠️ TOUT SE DIT AVANT. Ajuster en silence donnerait des plages qu'il n'a
     // pas écrites, et il les découvrirait en cherchant pourquoi son agenda ne
     // propose pas ce qu'il croit.
+    //
+    // 🔴 ET ON DIT LEQUEL DES DEUX MOTIFS (Alex, 07/09). « Tu es fermé » sur un
+    // jour bien ouvert qui ferme simplement plus tôt, c'est un message qu'il ne
+    // peut que contester.
     if (raccourcies.length > 0 || ignorees.length > 0) {
       const details = [
-        ...raccourcies.map(r => r.startsWith('L’emplacement') ? r : `Raccourci — ${r}`),
-        ...ignorees.map(i => `Non copié — ${i}`),
-      ].join('\n')
+        ...raccourcies.map(r => `Raccourci · ${r}`),
+        ...ignorees.map(i => `Non copié · ${i}`),
+      ]
       if (!await confirme(confirmationSimple({
-        titre: 'Tes horaires ne sont pas les mêmes ces jours-là',
-        message: 'Ce qui dépasse serait invisible pour tes clients. Yoppaa ajuste à tes heures d’ouverture réelles.',
+        titre: ignorees.length > 0 && raccourcies.length === 0
+          ? 'Certaines plages ne peuvent pas être copiées'
+          : 'Tes horaires ne sont pas les mêmes ces jours-là',
+        message: 'Ce qui dépasse tes heures d’ouverture serait invisible pour tes clients.',
         details,
-        action: 'Copier en ajustant',
+        action: raccourcies.length > 0 ? 'Copier en ajustant' : 'Copier le reste',
         ton: 'principal',
       }))) { setCopieLoading(false); return }
     }

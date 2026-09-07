@@ -89,9 +89,20 @@ export default function ModaleConfirmation({
             {message && (
               <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.55, margin: '0 0 12px' }}>{message}</p>
             )}
+            {/* 🔴 UNE LISTE SE LIT, UN PAVÉ NON (Alex, 07/09 : « le texte doit
+                être plus clair et plus aéré »). Les détails arrivaient souvent
+                en plusieurs lignes séparées par des retours à la ligne, et le
+                HTML les COLLE : trois refus distincts s'affichaient en une
+                seule phrase illisible. On accepte désormais un tableau, et
+                chaque entrée est une ligne. Une chaîne continue de marcher,
+                donc aucune confirmation existante ne change. */}
             {details && (
               <div style={{ background: T.pale, borderRadius: 12, padding: '10px 12px', marginBottom: 16, fontSize: 12.5, fontWeight: 700, color: T.deep, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
-                {details}
+                {Array.isArray(details)
+                  ? details.map((ligne, i) => (
+                      <p key={i} style={{ margin: i === 0 ? 0 : '7px 0 0' }}>{ligne}</p>
+                    ))
+                  : details}
               </div>
             )}
 

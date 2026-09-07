@@ -188,10 +188,20 @@ const MUTATIONS = [
     de: '      heures: plages.map(([a, b]) => `${minutesToTime(a)}–${minutesToTime(b)}`),',
     vers: '      heures: [],' },
 
-  { nom: '⚠️ la perte de l emplacement redevient silencieuse',
+  { nom: '🔴 l emplacement qui ne colle pas ne pose plus de question',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '    const perdLeLieu = parLieuRdv && source.some(c => c.lieu_id)',
-    vers: '    const perdLeLieu = false' },
+    de: "          premier: 'Copier sur l’emplacement du jour',",
+    vers: "          premier: 'Copier'," },
+
+  { nom: '🔴 une question se pose meme quand la salle existe ce jour-la',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '          if (duJour.some(l => l.id === c.lieu_id)) continue',
+    vers: '          if (false) continue' },
+
+  { nom: '🔴 les details redeviennent un pave illisible',
+    fichier: 'app/dashboard/ModaleConfirmation.js',
+    de: '                {Array.isArray(details)',
+    vers: '                {false && Array.isArray(details)' },
 ]
 
 const lancer = () => {

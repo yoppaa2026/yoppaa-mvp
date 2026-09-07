@@ -141,15 +141,20 @@ const MUTATIONS = [
     de: "    url.searchParams.set('onglet', ongletPrincipal)",
     vers: '    void 0' },
 
-  { nom: '🔴 l adresse s empile au lieu de se remplacer',
+  { nom: '🔴 aucun onglet n entre plus dans l historique',
     fichier: 'app/dashboard/page.js',
-    de: "      window.history.replaceState(null, '', url.toString())",
-    vers: "      window.history.pushState(null, '', url.toString())" },
+    de: "    const methode = premiereEcriture.current ? 'replaceState' : 'pushState'",
+    vers: "    const methode = 'replaceState'" },
+
+  { nom: '🔴 un retour en arriere empile une entree en avant',
+    fichier: 'app/dashboard/page.js',
+    de: '    if (viensDeLHistorique.current) { viensDeLHistorique.current = false; return }',
+    vers: '    if (false) { viensDeLHistorique.current = false; return }' },
 
   { nom: '⚠️ un onglet inconnu de l adresse est accepte',
     fichier: 'app/dashboard/page.js',
-    de: '      if (o && ONGLETS_VALIDES.includes(o)) setOngletPrincipal(o)',
-    vers: '      if (o) setOngletPrincipal(o)' },
+    de: "      setOngletPrincipal(o && ONGLETS_VALIDES.includes(o) ? o : 'commandes')",
+    vers: "      setOngletPrincipal(o || 'commandes')" },
 
   { nom: '⚠️ on ecrit l adresse avant de l avoir lue',
     fichier: 'app/dashboard/page.js',

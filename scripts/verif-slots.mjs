@@ -2005,17 +2005,27 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     /url\.searchParams\.set\('onglet', ongletPrincipal\)/.test(PAGE))
   verifier('et le sous-onglet des paramètres aussi',
     /url\.searchParams\.set\('config', configTabUrl\)/.test(PAGE))
-  // 🔴 `replaceState` ET PAS `pushState` : un onglet n'est pas une page. Sinon
-  // sortir du tableau de bord demanderait autant de retours que de clics.
-  verifier('🔴 l’adresse se remplace, elle ne s’empile pas',
-    /window\.history\.replaceState\(null, '', url\.toString\(\)\)/.test(PAGE))
+  // 🔴 UNE ENTRÉE D'HISTORIQUE PAR ONGLET VISITÉ (corrigé le 07/09, testé par
+  // Alex). Ma première version employait `replaceState` partout : aucun onglet
+  // n'entrait dans l'historique, donc « Précédent » sautait à l'entrée
+  // d'origine et ramenait à « Commandes ». La toute première écriture, elle,
+  // REMPLACE : elle ne fait que compléter l'adresse d'arrivée.
+  verifier('🔴 chaque onglet visité entre dans l’historique',
+    /const methode = premiereEcriture\.current \? 'replaceState' : 'pushState'/.test(PAGE))
+  verifier('⚠️ et un retour en arrière n’empile rien',
+    /if \(viensDeLHistorique\.current\) \{ viensDeLHistorique\.current = false; return \}/.test(PAGE))
+  // ⚠️ L'entrée d'origine n'a aucun paramètre : sans repli, « Précédent »
+  // n'aurait l'air de rien faire.
+  verifier('⚠️ une adresse sans onglet ramène au défaut',
+    /ONGLETS_VALIDES\.includes\(o\) \? o : 'commandes'\)/.test(PAGE))
   // ⚠️ UNE ADRESSE SE BRICOLE À LA MAIN : un onglet inconnu afficherait un
   // écran vide sans rien dire.
   verifier('⚠️ un onglet inconnu dans l’adresse est ignoré',
     /ONGLETS_VALIDES\.includes\(o\)/.test(PAGE) && /CONFIG_VALIDES\.includes\(c\)/.test(PAGE))
   // ⚠️ Le bouton « Précédent » change l'adresse sans que React le sache.
   verifier('⚠️ le retour en arrière est écouté',
-    /addEventListener\('popstate', lire\)/.test(PAGE) && /removeEventListener\('popstate', lire\)/.test(PAGE))
+    /window\.addEventListener\('popstate', auRetour\)/.test(PAGE)
+    && /window\.removeEventListener\('popstate', auRetour\)/.test(PAGE))
   // 🔴 L'ÉTAT DE L'ADRESSE EST SÉPARÉ DE LA CLÉ DU COMPOSANT. `configTab` sert
   // de `key` à ConfigDashboard : le modifier REMONTE le composant et perd la
   // saisie en cours.

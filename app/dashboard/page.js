@@ -1026,6 +1026,11 @@ export default function Dashboard() {
   // drapeau, le premier rendu écraserait l'onglet de l'adresse par « commandes »
   // avant même de l'avoir lu.
   const [pretUrl, setPretUrl] = useState(false)
+  // Deux drapeaux qui ne doivent JAMAIS déclencher de rendu, d'où les refs :
+  // l'un empêche d'empiler une entrée d'historique pour un changement qui vient
+  // de l'historique, l'autre distingue la première écriture d'une navigation.
+  const viensDeLHistorique = useRef(false)
+  const premiereEcriture = useRef(true)
 
   // ─── L'ONGLET SURVIT AU RECHARGEMENT (Alex, 07/09) ────────────────────────
   //
@@ -1054,14 +1059,22 @@ export default function Dashboard() {
       const p = new URLSearchParams(window.location.search)
       const o = p.get('onglet')
       const c = p.get('config')
-      if (o && ONGLETS_VALIDES.includes(o)) setOngletPrincipal(o)
+      // ⚠️ ON REPLIE SUR LE DÉFAUT QUAND L'ADRESSE NE DIT RIEN. Sans ça, un
+      // retour vers l'entrée d'origine, qui n'a aucun paramètre, laisserait
+      // l'écran sur l'onglet courant : le bouton « Précédent » n'aurait l'air
+      // de rien faire.
+      setOngletPrincipal(o && ONGLETS_VALIDES.includes(o) ? o : 'commandes')
       if (c && CONFIG_VALIDES.includes(c)) setConfigTab(c)
     }
     lire()
     setPretUrl(true)
     // Le bouton « Précédent » change l'adresse sans que React le sache.
-    window.addEventListener('popstate', lire)
-    return () => window.removeEventListener('popstate', lire)
+    // ⚠️ On marque le coup : l'effet d'écriture ne doit PAS empiler une entrée
+    // pour un changement qui vient justement de l'historique, sinon revenir en
+    // arrière ajouterait un pas en avant et on n'en sortirait jamais.
+    const auRetour = () => { viensDeLHistorique.current = true; lire() }
+    window.addEventListener('popstate', auRetour)
+    return () => window.removeEventListener('popstate', auRetour)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- au montage seulement, les listes sont des constantes
   }, [])
 
@@ -1074,14 +1087,29 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!pretUrl) return
+    // Le changement vient de l'historique : l'adresse est déjà la bonne, et y
+    // toucher ferait un pas en avant à chaque pas en arrière.
+    if (viensDeLHistorique.current) { viensDeLHistorique.current = false; return }
+
     const url = new URL(window.location.href)
     url.searchParams.set('onglet', ongletPrincipal)
     // Le sous-onglet ne s'écrit que là où il veut dire quelque chose.
     if (ongletPrincipal === 'config') url.searchParams.set('config', configTabUrl)
     else url.searchParams.delete('config')
-    if (url.toString() !== window.location.href) {
-      window.history.replaceState(null, '', url.toString())
-    }
+    if (url.toString() === window.location.href) return
+
+    // 🔴 `pushState` POUR UN CHANGEMENT D'ONGLET, `replaceState` POUR LE
+    // PREMIER PASSAGE (corrigé le 07/09 : Alex a testé le retour en arrière et
+    // il ramenait à « Commandes »). Avec `replaceState` partout, aucun onglet
+    // n'entrait dans l'historique : le bouton « Précédent » sautait donc à
+    // l'entrée d'origine, celle sans paramètre. Il faut une entrée PAR onglet
+    // visité pour que revenir en arrière veuille dire quelque chose.
+    //
+    // ⚠️ Et la toute première écriture REMPLACE : elle ne fait que compléter
+    // l'adresse d'arrivée, ce n'est pas une navigation.
+    const methode = premiereEcriture.current ? 'replaceState' : 'pushState'
+    premiereEcriture.current = false
+    window.history[methode](null, '', url.toString())
   }, [pretUrl, ongletPrincipal, configTabUrl])
 
   // Raccourci d'email : /dashboard?config=signaux ouvre directement le bon

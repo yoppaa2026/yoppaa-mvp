@@ -451,6 +451,23 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
   verifier('🔴 on ne peut effacer que SA propre attente',
     /\.delete\(\)[\s\S]{0,80}\.in\('client_id'/.test(suppression))
 
+  // 🔴 LES DEUX SÉLECTEURS DE JOURS DOIVENT S'ACCORDER (07/09, question
+  // d'Alex). La bande des quatorze premiers jours laissait déjà entrer sur un
+  // jour COMPLET ; le mini-calendrier, lui, le verrouillait comme un jour
+  // FERMÉ. Au-delà de J+14, la liste d'attente était donc inatteignable, et
+  // rien ne le disait : le jour s'affichait, en rouge, et ne s'ouvrait pas.
+  const FICHE = lire('app/commander/rdv/[slug]/page.js')
+  verifier('🔴 le mini-calendrier ouvre un jour complet',
+    /onClick=\{\(\) => ouvert && onSelect\(c\.j\.date\)\} disabled=\{!ouvert\}/.test(FICHE))
+  verifier('⚠️ et garde un jour fermé verrouillé : rien à y attendre',
+    !/disabled=\{!ouvert \|\| nbLibres === 0\}/.test(FICHE))
+  verifier('la bande de jours laisse entrer sur un jour complet',
+    /disabled=\{!j\.ouvert\}/.test(FICHE))
+  // ⚠️ ET LE POINT CESSE DE CONFONDRE LES DEUX. Même rouge pour « fermé » et
+  // « complet », le client ne pouvait pas savoir lequel s'ouvre.
+  verifier('⚠️ fermé et complet ne portent plus le même point',
+    /const dotColor = !ouvert \? '#D1D5DB'/.test(FICHE))
+
   // ⚠️ ON NE PROMET PAS UNE PLACE GARDÉE. Le créneau reste réservable par
   // n'importe qui pendant la fenêtre de priorité : l'écrire serait promettre
   // ce que le code ne tient pas (arbitrage d'Alex, 06/09).

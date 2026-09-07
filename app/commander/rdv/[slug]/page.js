@@ -190,19 +190,31 @@ function MiniCalendrier({ jours, dateChoisie, onSelect }) {
                 // Dot d'etat : vert si jour ouvert ET au moins 1 creneau libre, rouge sinon
                 // (jour ferme du shop OU complet). Reflete la dispo POUR LA PRESTATION CHOISIE.
                 const nbLibres = c.j.nbLibres || 0
-                const dotColor = !ouvert ? '#FCA5A5' : (nbLibres > 0 ? '#10B981' : '#FCA5A5')
+                // 🔴 UN JOUR COMPLET S'OUVRE, UN JOUR FERMÉ NON (corrigé le
+                // 07/09). Ces deux cas partageaient le même point rouge ET le
+                // même verrou : au-delà de J+14, un jour plein était donc
+                // impossible à ouvrir, et la liste d'attente inatteignable.
+                // La bande des quatorze premiers jours, elle, laissait déjà
+                // entrer. ⚠️ Deux sélecteurs de jours, deux règles, et c'est
+                // celui qu'on regarde le moins qui fermait la porte.
+                //
+                // Un jour FERMÉ reste verrouillé : il n'y a rien à y attendre,
+                // personne ne peut s'y désister. Il passe au gris pour qu'on
+                // cesse de le confondre avec un jour plein.
+                const complet = ouvert && nbLibres === 0
+                const dotColor = !ouvert ? '#D1D5DB' : (nbLibres > 0 ? '#10B981' : '#FCA5A5')
                 return (
-                  <button key={i} onClick={() => ouvert && nbLibres > 0 && onSelect(c.j.date)} disabled={!ouvert || nbLibres === 0}
-                    title={!ouvert ? 'Fermé' : nbLibres === 0 ? 'Complet' : `${nbLibres} créneau${nbLibres>1?'x':''} libre${nbLibres>1?'s':''}`}
+                  <button key={i} onClick={() => ouvert && onSelect(c.j.date)} disabled={!ouvert}
+                    title={!ouvert ? 'Fermé' : complet ? 'Complet, être prévenu si une place se libère' : `${nbLibres} créneau${nbLibres>1?'x':''} libre${nbLibres>1?'s':''}`}
                     style={{
                       aspectRatio: '1',
                       borderRadius: 8,
                       border: choisi ? '1.5px solid #6B35C4' : '1px solid transparent',
-                      background: choisi ? '#6B35C4' : (ouvert && nbLibres > 0 ? '#fff' : '#F9FAFB'),
-                      color: choisi ? '#fff' : (ouvert && nbLibres > 0 ? '#1A0840' : '#D1D5DB'),
-                      fontWeight: choisi ? 900 : (ouvert && nbLibres > 0 ? 700 : 500),
+                      background: choisi ? '#6B35C4' : (ouvert ? '#fff' : '#F9FAFB'),
+                      color: choisi ? '#fff' : (nbLibres > 0 ? '#1A0840' : ouvert ? '#9CA3AF' : '#D1D5DB'),
+                      fontWeight: choisi ? 900 : (nbLibres > 0 ? 700 : 500),
                       fontSize: 13, fontFamily: '"DM Sans", sans-serif',
-                      cursor: (ouvert && nbLibres > 0) ? 'pointer' : 'not-allowed',
+                      cursor: ouvert ? 'pointer' : 'not-allowed',
                       padding: 0,
                       transition: 'all 0.12s',
                       position: 'relative',

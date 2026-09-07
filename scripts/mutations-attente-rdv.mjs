@@ -151,6 +151,19 @@ const MUTATIONS = [
     de: 'Tu es prévenu avant les autres.',
     vers: 'Ta place est gardée 15 minutes.' },
 
+  // 🔴 LE DEFAUT TROUVE PAR UNE QUESTION D'ALEX, 07/09. Le mini-calendrier
+  // verrouillait un jour COMPLET comme un jour FERME : au-dela de J+14, la
+  // liste d attente etait inatteignable, et rien ne le disait.
+  { nom: '🔴 le mini-calendrier reverrouille les jours complets',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '<button key={i} onClick={() => ouvert && onSelect(c.j.date)} disabled={!ouvert}',
+    vers: '<button key={i} onClick={() => ouvert && nbLibres > 0 && onSelect(c.j.date)} disabled={!ouvert || nbLibres === 0}' },
+
+  { nom: '🔴 un jour ferme et un jour complet reprennent le meme point rouge',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "                const dotColor = !ouvert ? '#D1D5DB' : (nbLibres > 0 ? '#10B981' : '#FCA5A5')",
+    vers: "                const dotColor = !ouvert ? '#FCA5A5' : (nbLibres > 0 ? '#10B981' : '#FCA5A5')" },
+
   { nom: '🔴 la route accepte la portee envoyee par le navigateur',
     fichier: 'app/api/rdv/attente/route.js',
     de: '      duree: corps?.duree,',

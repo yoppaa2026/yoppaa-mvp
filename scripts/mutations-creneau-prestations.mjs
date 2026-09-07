@@ -98,6 +98,25 @@ const MUTATIONS = [
   { nom: '⚠️ le defaut du parc cesse d etre 60 jours',
     de: 'export const HORIZON_RDV_DEFAUT = 60',
     vers: 'export const HORIZON_RDV_DEFAUT = 90' },
+
+  // 🔴 LA DEMI-CORRECTION, TROUVEE PAR ALEX EN TESTANT. Empecher le cours
+  // d aller ailleurs sans reserver son heure ne corrigeait RIEN : le premier
+  // client a prendre un soin a 10h fermait le cours pour tout le monde.
+  { nom: '🔴 l heure du cours redevient ouverte aux autres prestations',
+    de: '      if (tombeDansUneTrancheReservee(t, slotEnd, reservees)) continue',
+    vers: '      if (false) continue' },
+
+  { nom: '🔴 une plage dediee cesse de reserver son heure',
+    de: '    out.push([timeToMinutes(c.heure_debut), timeToMinutes(c.heure_fin)])',
+    vers: '    void 0' },
+
+  { nom: '🔴 une plage qui m accepte se met a se reserver contre moi',
+    de: '    if (prestationId && duCreneau.some(l => String(l.prestation_id) === String(prestationId))) continue',
+    vers: '    if (false) continue' },
+
+  { nom: '⚠️ une plage libre se met a reserver son heure',
+    de: '    if (duCreneau.length === 0) continue',
+    vers: '    if (false) continue' },
 ]
 
 const lancer = () => {

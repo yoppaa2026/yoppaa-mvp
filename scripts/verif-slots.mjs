@@ -1787,6 +1787,16 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     })
 
   verifier('le yoga passe à 10h', garde('yoga', 600, 660))
+  // 🔴 ET LE SERVEUR REFUSE UN SOIN À L'HEURE DU COURS. L'écran ne le propose
+  // plus, mais un écran ne décide de rien.
+  verifier('🔴 le serveur refuse un soin à l’heure du cours', !garde('reiki', 600, 660))
+  verifier('même à cheval sur le début du cours', !garde('reiki', 570, 630))
+  verifier('même à cheval sur la fin', !garde('reiki', 630, 690))
+  verifier('juste avant le cours, ça passe', garde('reiki', 540, 600))
+  verifier('juste après aussi', garde('reiki', 660, 720))
+  // ⚠️ ET SANS AUCUNE LIAISON, PERSONNE NE RÉSERVE RIEN À PERSONNE : le parc
+  // entier continue comme avant.
+  verifier('⚠️ sans liaison, aucune heure n’est réservée', garde('reiki', 600, 660, []))
   // 🔴 LA GARDE QUI COMPTE. 13h est bien dans une plage du lundi, mais pas dans
   // une plage QUI ACCEPTE le yoga. Sans le contrôle de l'heure, elle serait
   // décorative : un créneau du lundi accepte bien le yoga... à 10h.
@@ -1835,15 +1845,20 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     creneaux: CRENEAUX, reservations: [], horairesDetail: null,
     capacite: 1, prestationId: 'reiki', liaisonsCreneaux: LIAISONS,
   })
-  verifier('le soin individuel garde toute la journée', slotsReiki.length >= 9)
-  // ⚠️ ET IL GARDE AUSSI L'HEURE DU COURS, ce qui est juste : les liaisons
-  // disent QUI PEUT être proposé, pas QUAND c'est occupé. Tant que personne ne
-  // s'est inscrit au yoga de 10h, la salle est libre et le soin peut s'y
-  // donner. C'est `conflitReservation` qui fermera l'heure dès la première
-  // inscription, et il le faisait déjà. Confondre les deux aurait fermé un
-  // créneau vide toute l'année.
-  verifier('⚠️ et l’heure du cours reste ouverte au soin tant que personne ne s’inscrit',
-    slotsReiki.some(s => s.heure === '10:00'))
+  verifier('le soin individuel garde la journée', slotsReiki.length >= 8)
+  // 🔴 LA GARDE QUE J'AVAIS ÉCRITE À L'ENVERS, ET QU'ALEX A CORRIGÉE. Elle
+  // affirmait que l'heure du cours restait ouverte au soin, « parce que les
+  // liaisons disent qui peut être proposé, pas quand c'est occupé ». C'était
+  // faux : une plage dédiée à un cours n'est pas libre, elle est RÉSERVÉE. Un
+  // client qui prenait un Reiki à 10h fermait le cours de yoga pour tout le
+  // monde, et c'est exactement le défaut qu'on prétendait corriger.
+  //
+  // ⚠️ Une garde qui décrit le comportement observé au lieu du comportement
+  // VOULU ne garde rien : elle grave le défaut.
+  verifier('🔴 l’heure du cours est réservée au cours, salle vide ou non',
+    !slotsReiki.some(s => s.heure === '10:00'))
+  verifier('mais l’heure d’avant reste au soin', slotsReiki.some(s => s.heure === '09:00'))
+  verifier('et celle d’après aussi', slotsReiki.some(s => s.heure === '11:00'))
   // ⚠️ SANS LIAISONS, LE MOTEUR REND EXACTEMENT CE QU'IL RENDAIT AVANT.
   const slotsAvant = genererSlots({
     dateChoisie: new Date('2027-09-13T12:00:00'), dureeMinutes: 60,

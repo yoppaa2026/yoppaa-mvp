@@ -117,6 +117,17 @@ const MUTATIONS = [
   { nom: '⚠️ une plage libre se met a reserver son heure',
     de: '    if (duCreneau.length === 0) continue',
     vers: '    if (false) continue' },
+
+  // 🔴 LE CHIFFRE FAUX DANS L ALERTE, TROUVE PAR ALEX EN TESTANT (07/09).
+  { nom: '🔴 l alerte relit la grille perimee au lieu des emplacements',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      horairesDetail: horairesReference,',
+    vers: '      horairesDetail: commercant?.horaires_detail,' },
+
+  { nom: '🔴 les jours fermes se relisent sur la grille perimee',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '  const joursFermesProfil = JOURS_SEMAINE.filter(j => horairesReference?.[j]?.ouvert === false)',
+    vers: '  const joursFermesProfil = JOURS_SEMAINE.filter(j => commercant?.horaires_detail?.[j]?.ouvert === false)' },
 ]
 
 const lancer = () => {

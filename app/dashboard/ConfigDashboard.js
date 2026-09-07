@@ -8909,7 +8909,23 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   // Jours où le commerce est déclaré FERMÉ dans les horaires du Profil : on
   // avertit avant d'y ouvrir des créneaux RDV (demande Alex 01/08), car un
   // créneau sur un jour fermé ne s'affiche jamais côté client.
-  const joursFermesProfil = JOURS_SEMAINE.filter(j => commercant?.horaires_detail?.[j]?.ouvert === false)
+  // 🔴 LA BONNE RÉFÉRENCE D'HORAIRES DÉPEND DU MÉTIER (Alex, 07/09). Un commerce
+  // qui a répondu « je change d'endroit » tient ses horaires dans ses
+  // EMPLACEMENTS : `horaires_detail` n'en est qu'un dérivé, et il peut avoir
+  // vieilli. Centre Respire ouvrait le mardi jusqu'à 20:00 sur sa salle, et mon
+  // alerte annonçait 17:00 en lisant la grille.
+  //
+  // ⚠️ UNE ALERTE QUI CITE UN CHIFFRE FAUX EST PIRE QU'UNE ALERTE ABSENTE : on
+  // la croit, et on va « corriger » un horaire qui était bon.
+  //
+  // ⚠️ Et on ne recopie pas le calcul : `horairesDepuisLieux` le fait déjà, et
+  // `lieuxDispo` est rechargé à chaque ouverture de l'onglet, là où l'objet
+  // `commercant` vient du parent et peut dater.
+  const horairesReference = parLieuRdv
+    ? horairesDepuisLieux(lieuxDispo)
+    : commercant?.horaires_detail
+
+  const joursFermesProfil = JOURS_SEMAINE.filter(j => horairesReference?.[j]?.ouvert === false)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -9070,7 +9086,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       jour: form.jour_semaine,
       heureDebut: form.heure_debut,
       heureFin: form.heure_fin,
-      horairesDetail: commercant?.horaires_detail,
+      horairesDetail: horairesReference,
     })
     if (dehors && dehors.raison !== 'jour_ferme') {
       const heures = dehors.plages.join(' et ')

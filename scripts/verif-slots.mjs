@@ -1750,6 +1750,37 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     // Une saisie incohérente est déjà refusée par une autre garde : celle-ci
     // ne doit pas s'en mêler et ajouter un second message.
     egal('une fin avant le début ne dit rien ici', dehors('18:00', '10:00'), null)
+
+    // 🔴 LE CAS DE CENTRE RESPIRE, TROUVÉ PAR ALEX EN TESTANT (07/09). Ce
+    // commerce a répondu « je change d'endroit » : ses horaires vivent dans ses
+    // EMPLACEMENTS, et `horaires_detail` n'en est qu'un dérivé qui peut avoir
+    // vieilli. Il ouvrait le mardi jusqu'à 20:00 sur sa salle, et l'alerte
+    // annonçait 17:00 en lisant la grille.
+    //
+    // ⚠️ UNE ALERTE QUI CITE UN CHIFFRE FAUX EST PIRE QU'UNE ALERTE ABSENTE :
+    // on la croit, et on va « corriger » un horaire qui était bon.
+    {
+      const LIEUX = [
+        { type: 'hebdo', actif: true, jour_semaine: 'lundi', heure_debut: '08:00:00', heure_fin: '17:00:00' },
+        { type: 'hebdo', actif: true, jour_semaine: 'mardi', heure_debut: '08:00:00', heure_fin: '20:00:00' },
+      ]
+      const depuisLieux = horairesDepuisLieux(LIEUX)
+      egal('le mardi des emplacements va bien jusqu’à 20:00', depuisLieux.mardi?.fin, '20:00')
+      // Le cours de pilates de 18:00 à 19:00, celui qu'Alex créait.
+      egal('🔴 un cours de 18h à 19h le mardi ne déclenche RIEN',
+        creneauHorsOuverture({ jour: 'mardi', heureDebut: '18:00', heureFin: '19:00', horairesDetail: depuisLieux }),
+        null)
+      // Et le lundi, qui ferme à 17:00, la même plage est bien signalée.
+      egal('mais le lundi, qui ferme à 17h, elle l’est',
+        creneauHorsOuverture({ jour: 'lundi', heureDebut: '18:00', heureFin: '19:00', horairesDetail: depuisLieux })?.raison,
+        'hors_ouverture')
+      // ⚠️ Un emplacement présent SANS heures déclarées ne permet de juger de
+      // rien : mieux vaut se taire que d'inventer des bornes.
+      const SANS_HEURES = [{ type: 'hebdo', actif: true, jour_semaine: 'jeudi' }]
+      egal('⚠️ un emplacement sans heures ne fait juger de rien',
+        creneauHorsOuverture({ jour: 'jeudi', heureDebut: '22:00', heureFin: '23:00', horairesDetail: horairesDepuisLieux(SANS_HEURES) }),
+        null)
+    }
   }
 
   // ── 🔴 UN SEUL COURS PAR PLAGE (Alex, 07/09) ────────────────────────────
@@ -1940,6 +1971,19 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // on retombe sur « ouvert », le pire cas acceptable.
   verifier('⚠️ un stockage inaccessible ne casse pas l’écran',
     (AIDE.match(/catch/g) || []).length >= 2)
+
+  // 🔴 ET L'ÉCRAN LIT LA BONNE SOURCE D'HORAIRES (Alex, 07/09). Un commerce
+  // « je change d'endroit » tient ses horaires dans ses emplacements.
+  verifier('🔴 l’alerte lit les emplacements quand le planning en dépend',
+    /const horairesReference = parLieuRdv\s*\n?\s*\? horairesDepuisLieux\(lieuxDispo\)/.test(CONFIG))
+  verifier('🔴 et l’alerte des heures s’appuie dessus',
+    /horairesDetail: horairesReference/.test(CONFIG))
+  verifier('⚠️ comme la détection des jours fermés',
+    /joursFermesProfil = JOURS_SEMAINE\.filter\(j => horairesReference/.test(CONFIG))
+  // ⚠️ Plus aucune lecture directe de la grille dans ce composant : c'est elle
+  // qui mentait.
+  verifier('⚠️ la grille n’est plus lue en direct pour juger une plage',
+    !/horairesDetail: commercant\?\.horaires_detail/.test(CONFIG))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

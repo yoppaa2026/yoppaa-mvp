@@ -29,7 +29,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
-import { prestationSansCreneauDedie, coursDejaCoche, creneauHorsOuverture } from '@/lib/rdv-slots'
+import { prestationSansCreneauDedie, coursDejaCoche, creneauHorsOuverture, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
@@ -8865,6 +8865,11 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   // en plus proposé cinquante fois par semaine.
   const [prestationsRdv, setPrestationsRdv] = useState([])
   const [liaisons, setLiaisons] = useState([])
+  // Jusqu'à quand un client peut réserver. Écrit en dur à 60 jours dans la
+  // fiche jusqu'au 07/09 : un carnet de dix séances hebdomadaires couvre 70
+  // jours, donc l'abonné ne pouvait pas poser ses deux dernières.
+  const [horizonRdv, setHorizonRdv] = useState(HORIZON_RDV_DEFAUT)
+  const [horizonSaving, setHorizonSaving] = useState(false)
   // Copie d'un jour vers d'autres jours (demande Alex 01/08, même geste que la
   // duplication des horaires du Profil) : on REMPLACE les créneaux des jours
   // cibles, sinon les copies successives s'empilent en doublons.
@@ -8912,7 +8917,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         .eq('commercant_id', commercantId)
         .is('deleted_at', null)
         .order('ordre', { ascending: true }),
-      supabase.from('commercants').select('planning_par_lieu').eq('id', commercantId).maybeSingle(),
+      supabase.from('commercants').select('planning_par_lieu, rdv_horizon_jours').eq('id', commercantId).maybeSingle(),
       supabase.from('commercant_lieux')
         .select('id, type, jour_semaine, libelle, heure_debut, heure_fin, actif')
         .eq('commercant_id', commercantId).eq('actif', true),
@@ -8946,6 +8951,9 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     // horaires changent selon l'endroit ». Sans ce drapeau, aucun sélecteur
     // n'apparaît et les plages ne désignent aucun lieu, comme avant.
     setParLieuRdv(comm?.planning_par_lieu === true)
+    // ⚠️ 60 EST LE REPLI, PAS UNE VALEUR ARBITRAIRE : c'est ce que l'agenda a
+    // toujours fait, écrit en dur dans la fiche jusqu'au 07/09.
+    setHorizonRdv(Number(comm?.rdv_horizon_jours) || HORIZON_RDV_DEFAUT)
     setLieuxDispo(lieuxRdv || [])
     setLoading(false)
   }
@@ -9279,6 +9287,57 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
           )}
         </div>
       )}
+
+      {/* 🔴 JUSQU'À QUAND ON PEUT RÉSERVER (Alex, 07/09). Soixante jours
+          étaient écrits en dur, et ça bloquait déjà les abonnements : un carnet
+          de dix séances hebdomadaires couvre soixante-dix jours. */}
+      <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
+        <p style={{ fontSize: 11.5, fontWeight: 800, color: T.ink, margin: '0 0 3px' }}>
+          Jusqu’à quand tes clients peuvent réserver
+        </p>
+        <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: '0 0 8px' }}>
+          Au-delà, l’agenda ne propose plus rien. Un carnet de dix séances par semaine
+          demande au moins trois mois.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {HORIZONS_RDV.map(h => (
+            <button key={h.jours} type="button" disabled={horizonSaving}
+              onClick={async () => {
+                if (h.jours === horizonRdv) return
+                setHorizonSaving(true)
+                const { error } = await supabase.from('commercants')
+                  .update({ rdv_horizon_jours: h.jours }).eq('id', commercantId)
+                setHorizonSaving(false)
+                // ⚠️ ON LIT LE RÉSULTAT. Un réglage qui n'a pas pris et un écran
+                // qui l'affiche quand même, c'est un commerçant qui croit avoir
+                // ouvert son trimestre.
+                if (error) return toast(`Erreur : ${error.message}`, 'error')
+                setHorizonRdv(h.jours)
+                toast(`Réservations ouvertes sur ${h.libelle.toLowerCase()} 🟣`)
+              }}
+              style={{
+                padding: '6px 12px', borderRadius: 999,
+                border: `1.5px solid ${horizonRdv === h.jours ? T.main : T.hairline}`,
+                background: horizonRdv === h.jours ? T.main : '#fff',
+                color: horizonRdv === h.jours ? '#fff' : T.deep,
+                fontSize: 12, fontWeight: 700,
+                cursor: horizonSaving ? 'wait' : 'pointer',
+                fontFamily: '"DM Sans", sans-serif',
+              }}>
+              {h.libelle}
+            </button>
+          ))}
+        </div>
+        {/* ⚠️ LE COÛT SE DIT AVANT LE CLIC, pas après. La fiche charge toutes
+            les réservations de la période d'un coup pour colorer son calendrier :
+            sur un studio très rempli, une année pèse lourd chez le visiteur. */}
+        {horizonRdv > 180 && (
+          <p style={{ fontSize: 10.5, color: '#92400E', lineHeight: 1.5, marginTop: 7 }}>
+            Sur un agenda très chargé, un an peut ralentir l’affichage de ta fiche
+            chez tes clients. Six mois suffisent à la plupart des abonnements.
+          </p>
+        )}
+      </div>
 
       {/* ⚠️ L'AVERTISSEMENT, JAMAIS UN BLOCAGE (arbitrage d'Alex, 07/09). Un
           cours qu'aucune plage ne vise reste proposé à TOUTES les heures de

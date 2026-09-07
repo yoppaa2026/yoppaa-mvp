@@ -85,6 +85,19 @@ const MUTATIONS = [
   { nom: '⚠️ le second service du jour est oublie',
     de: "  if (h.debut2 && h.fin2) plages.push([timeToMinutes(h.debut2), timeToMinutes(h.fin2)])",
     vers: '  void 0' },
+
+  // 🔴 L HORIZON DE L AGENDA (Alex, 07/09).
+  { nom: '🔴 le piege du zero ferme l agenda au lieu de le laisser a 60 jours',
+    de: '  if (n < HORIZON_RDV_MIN || n > HORIZON_RDV_MAX) return HORIZON_RDV_DEFAUT',
+    vers: '  if (false) return HORIZON_RDV_DEFAUT' },
+
+  { nom: '🔴 un commercant absent n a plus d horizon du tout',
+    de: '  if (!Number.isFinite(n)) return HORIZON_RDV_DEFAUT',
+    vers: '  if (false) return HORIZON_RDV_DEFAUT' },
+
+  { nom: '⚠️ le defaut du parc cesse d etre 60 jours',
+    de: 'export const HORIZON_RDV_DEFAUT = 60',
+    vers: 'export const HORIZON_RDV_DEFAUT = 90' },
 ]
 
 const lancer = () => {

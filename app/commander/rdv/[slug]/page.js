@@ -122,11 +122,13 @@ function formatPrix(prestation, deals = []) {
   return 'Sur demande'
 }
 
-import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation } from '@/lib/rdv-slots'
+import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv } from '@/lib/rdv-slots'
 
 // ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
-// Affiche les 60 jours regroupes par mois. Cellules cliquables si ouvert, gris si ferme.
-// Cellules hors fenetre 60j ou avant aujourd'hui : grisees non cliquables.
+// Affiche les jours de l'horizon, regroupes par mois. ⚠️ L'HORIZON N'EST PLUS
+// FIXE depuis le 07/09 : il vient de `rdv_horizon_jours`, et ce composant s'y
+// adapte tout seul puisqu'il construit ses mois A PARTIR des jours recus.
+// Cellules hors horizon ou avant aujourd'hui : grisees non cliquables.
 // Tap sur un jour ouvert -> onSelect(date) + ferme le mini-cal.
 function MiniCalendrier({ jours, dateChoisie, onSelect }) {
   // Group jours by month-year, en ordre chronologique
@@ -1235,7 +1237,8 @@ export default function CommanderRdvSlug() {
     let annule = false
     ;(async () => {
       const today = new Date(); today.setHours(0,0,0,0)
-      const end = new Date(today); end.setDate(today.getDate() + 60)
+      // ⚠️ L'HORIZON VIENT DU COMMERÇANT, plus d'une constante écrite ici.
+      const end = new Date(today); end.setDate(today.getDate() + horizonRdv(commercant))
       const { data, error } = await supabase.rpc('rdv_slots_busy_range', {
         p_commercant_id: commercant.id,
         p_date_start: isoDate(today),
@@ -1352,7 +1355,7 @@ export default function CommanderRdvSlug() {
   // Sess 6 : filtre les fermetures exceptionnelles (marque ouvert:false pour ces jours).
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   const joursDispos = commercant && creneauxFiltres.length > 0
-    ? genererJoursDispos({ nbJours: 60, horairesDetail: commercant.horaires_detail, creneaux: creneauxFiltres })
+    ? genererJoursDispos({ nbJours: horizonRdv(commercant), horairesDetail: commercant.horaires_detail, creneaux: creneauxFiltres })
         .map(j => estFerme(j.iso) ? { ...j, ouvert: false, motifFerme: 'Fermeture' } : j)
     : []
 

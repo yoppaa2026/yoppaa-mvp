@@ -11,6 +11,7 @@ import {
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
   creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
   prestationAutoriseeSurCreneaux, coursDejaCoche, creneauHorsOuverture,
+  horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
@@ -1672,6 +1673,38 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     verifier('une plage accepte plusieurs prestations individuelles',
       creneauAccepte('k-lun', 'coupe', MULTI_SOLO) && creneauAccepte('k-lun', 'couleur', MULTI_SOLO))
     verifier('et refuse le reste', !creneauAccepte('k-lun', 'reiki', MULTI_SOLO))
+  }
+
+  // ── 🔴 JUSQU'À QUAND ON PEUT RÉSERVER (Alex, 07/09) ─────────────────────
+  // Soixante jours étaient écrits en dur, et ça bloquait déjà les abonnements :
+  // un carnet de dix séances hebdomadaires couvre soixante-dix jours.
+  {
+    egal('le défaut reste soixante jours', horizonRdv({}), 60)
+    egal('et vaut soixante pour tout le parc', HORIZON_RDV_DEFAUT, 60)
+    egal('un horizon choisi est respecté', horizonRdv({ rdv_horizon_jours: 180 }), 180)
+    egal('le maximum passe', horizonRdv({ rdv_horizon_jours: 365 }), 365)
+    egal('le minimum aussi', horizonRdv({ rdv_horizon_jours: 7 }), 7)
+    // 🔴 LE PIÈGE DU ZÉRO. `Number(null)` vaut 0 : sans le contrôle des bornes,
+    // un horizon absent fermerait l'agenda au lieu de le laisser à soixante
+    // jours, et plus personne ne pourrait réserver nulle part.
+    egal('🔴 un horizon absent ne ferme pas l’agenda', horizonRdv({ rdv_horizon_jours: null }), 60)
+    egal('🔴 zéro non plus', horizonRdv({ rdv_horizon_jours: 0 }), 60)
+    egal('un horizon négatif retombe sur le défaut', horizonRdv({ rdv_horizon_jours: -30 }), 60)
+    egal('un horizon délirant aussi', horizonRdv({ rdv_horizon_jours: 5000 }), 60)
+    egal('un texte aussi', horizonRdv({ rdv_horizon_jours: 'six mois' }), 60)
+    // ⚠️ ET UN COMMERÇANT ABSENT NE FERME RIEN : c'est exactement l'état de la
+    // fiche pendant le chargement, et entre l'étape 1 et l'étape 2 de la
+    // migration, où la vue publique ne porte pas encore la colonne.
+    egal('⚠️ un commerçant absent garde le défaut', horizonRdv(null), 60)
+    egal('une colonne absente de la vue garde le défaut', horizonRdv({ nom: 'Ciseaux' }), 60)
+    // Un carnet de dix séances hebdomadaires : c'est le cas qui a motivé le
+    // réglage, il doit tenir dans au moins un des choix proposés.
+    verifier('🔴 un carnet de dix séances hebdomadaires tient dans un choix proposé',
+      HORIZONS_RDV.some(h => h.jours >= 70))
+    verifier('chaque choix porte un libellé lisible',
+      HORIZONS_RDV.length >= 3 && HORIZONS_RDV.every(h => typeof h.libelle === 'string' && h.libelle.length > 2))
+    verifier('et tous tiennent dans les bornes de la base',
+      HORIZONS_RDV.every(h => h.jours >= 7 && h.jours <= 365))
   }
 
   // ── 🔴 UNE PLAGE HORS DES HEURES D'OUVERTURE (Alex, 07/09) ──────────────

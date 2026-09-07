@@ -3413,10 +3413,29 @@ function TabCreneaux({ commercantId, toast }) {
   function creneauxNull() {
     return creneaux.filter(c => c.jour_semaine === null)
   }
+  // Les heures d'ouverture du jour, lisibles, LES DEUX SERVICES COMPRIS.
+  function heuresLisibles(jour) {
+    const h = horaires?.[jour]
+    if (!h) return ''
+    const p = []
+    if (h.debut && h.fin) p.push(`${String(h.debut).slice(0,5)}–${String(h.fin).slice(0,5)}`)
+    if (h.debut2 && h.fin2) p.push(`${String(h.debut2).slice(0,5)}–${String(h.fin2).slice(0,5)}`)
+    return p.join(' et ')
+  }
+  // 🔴 LE BANDEAU ORANGE IGNORAIT LE SECOND SERVICE (07/09, frère de Eb2).
+  // `horaireJour` ne rend que la PREMIÈRE plage : chez une friterie ouverte
+  // 11:00-14:00 puis 18:00-22:00, TOUS les créneaux du soir étaient comptés
+  // « hors des horaires d'ouverture », et le bandeau ne s'éteignait jamais.
+  // Une alarme qui sonne tout le temps ne protège plus rien. Même règle que la
+  // création et que le rendez-vous, une seule écriture : `creneauHorsOuverture`.
   function creneauxHorsHoraires(jour, cren) {
     if (!horaires || !horaires[jour]?.ouvert) return []
-    const h = horaireJour(jour)
-    return cren.filter(c => c.heure_debut.slice(0,5) < h.debut || c.heure_fin.slice(0,5) > h.fin)
+    return cren.filter(c => creneauHorsOuverture({
+      jour,
+      heureDebut: String(c.heure_debut).slice(0,5),
+      heureFin: String(c.heure_fin).slice(0,5),
+      horairesDetail: horaires,
+    }))
   }
 
   async function saveHorizon(val) {
@@ -3620,26 +3639,38 @@ function TabCreneaux({ commercantId, toast }) {
     if (!source.length) return toast('Aucun créneau à copier', 'error')
     if (!joursCibles.length) return toast('Sélectionne au moins un jour cible', 'error')
 
-    let total = 0
+    // 🔴 ON CALCULE TOUT AVANT D'ÉCRIRE QUOI QUE CE SOIT (Alex, 07/09, Eb4).
+    // L'ancienne version supprimait les créneaux du jour cible AVANT de savoir
+    // si la copie donnerait quelque chose : un jour dont toutes les plages
+    // tombaient hors des heures se retrouvait VIDE, sans un mot. Et un jour
+    // fermé n'était même pas sélectionnable : le bouton ne faisait rien et ne
+    // disait rien. « Copie impossible sur jour fermé, pas de message. »
+    //
+    // 🔴 CHAQUE JOUR CIBLE A SES PROPRES HEURES (Alex, 07/09). Cette copie
+    // vérifiait si le jour était FERMÉ, jamais s'il fermait plus tôt : un
+    // créneau 08:00-18:00 copié sur un jour qui ferme à 12:00 y restait en
+    // entier, invisible pour les clients, et rien ne le disait. Exactement le
+    // défaut trouvé sur la copie des plages de rendez-vous, dans le module
+    // d'à côté et sur la même règle.
     const raccourcisCopie = []
     const ignoresCopie = []
+    const parJour = new Map()
     for (const cible of joursCibles) {
-      if (!jourOuvert(cible)) { toast(`${cible} est fermé, ignoré`, 'error'); continue }
-      // Supprimer existants sur la cible
-      const existants = creneaux.filter(c => c.jour_semaine === cible)
-      for (const c of existants) await supabase.from('creneaux').delete().eq('id', c.id)
-      // 🔴 CHAQUE JOUR CIBLE A SES PROPRES HEURES (Alex, 07/09). Cette copie
-      // vérifiait si le jour était FERMÉ, jamais s'il fermait plus tôt : un
-      // créneau 08:00-18:00 copié sur un jour qui ferme à 12:00 y restait en
-      // entier, invisible pour les clients, et rien ne le disait. Exactement le
-      // défaut trouvé sur la copie des plages de rendez-vous, dans le module
-      // d'à côté et sur la même règle.
       const copies = []
       for (const c of source) {
+        const heure = `${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)}`
         const ajuste = ajusterPlagePourJour(c, horaires?.[cible])
-        if (ajuste.statut === 'ignoree') { ignoresCopie.push(`${cible} ${String(c.heure_debut).slice(0,5)}`); continue }
+        if (ajuste.statut === 'ignoree') {
+          // ⚠️ ON DIT LEQUEL DES DEUX MOTIFS, comme en rendez-vous. « Tu es
+          // fermé » sur un jour bien ouvert qui ferme simplement plus tôt est
+          // un message que le commerçant ne peut que contester.
+          ignoresCopie.push(ajuste.raison === 'jour_ferme'
+            ? `${cible} ${heure} : tu es fermé ce jour-là`
+            : `${cible} ${heure} : tu es ouvert ${(ajuste.heures || []).join(' et ')}`)
+          continue
+        }
         if (ajuste.statut === 'raccourcie') {
-          raccourcisCopie.push(`${cible} : ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} devient ${ajuste.debut}–${ajuste.fin}`)
+          raccourcisCopie.push(`${cible} : ${heure} devient ${ajuste.debut}–${ajuste.fin}`)
         }
         copies.push({
           commercant_id: commercantId,
@@ -3651,23 +3682,50 @@ function TabCreneaux({ commercantId, toast }) {
           capacite_temps: c.capacite_temps || 30,
         })
       }
-      if (copies.length > 0) await supabase.from('creneaux').insert(copies)
-      total += copies.length
+      if (copies.length > 0) parJour.set(cible, copies)
     }
-    // ⚠️ ON DIT CE QU'ON A AJUSTÉ. Un créneau raccourci sans un mot, c'est un
-    // commerçant qui cherchera pourquoi son agenda ne propose pas ce qu'il a
-    // écrit. Dit après plutôt qu'avant, parce qu'ici la copie remplace jour par
-    // jour et qu'un aller-retour de confirmation par jour serait pénible.
+
+    // ⚠️ ON DIT CE QU'ON VA AJUSTER, ET ON LE DIT AVANT. Un créneau raccourci
+    // sans un mot, c'est un commerçant qui cherchera pourquoi son agenda ne
+    // propose pas ce qu'il a écrit.
+    //
+    // ⚠️ UN TABLEAU, JAMAIS UNE CHAÎNE AVEC DES RETOURS À LA LIGNE : le HTML
+    // les ignore, et les motifs s'affichaient collés en une seule phrase.
     if (raccourcisCopie.length > 0 || ignoresCopie.length > 0) {
-      await confirme(confirmationSimple({
-        titre: 'Ajusté à tes heures d’ouverture',
-        message: 'Ce qui dépassait aurait été invisible pour tes clients.',
-        details: [
-          ...raccourcisCopie.map(r => `Raccourci — ${r}`),
-          ...ignoresCopie.map(i => `Non copié — ${i}`),
-        ].join('\n'),
-        action: 'J’ai compris',
-      }))
+      const rienACopier = parJour.size === 0
+      const details = [
+        ...raccourcisCopie.map(r => `Raccourci · ${r}`),
+        ...ignoresCopie.map(i => `Non copié · ${i}`),
+      ]
+      if (!await confirme(confirmationSimple({
+        titre: rienACopier
+          ? 'Rien ne peut être copié sur ces jours'
+          : (raccourcisCopie.length > 0 ? 'Tes horaires ne sont pas les mêmes ces jours-là' : 'Certains créneaux ne seront pas copiés'),
+        message: 'Ce qui dépasse tes heures d’ouverture serait invisible pour tes clients.',
+        details,
+        action: rienACopier ? 'J’ai compris' : (raccourcisCopie.length > 0 ? 'Copier en ajustant' : 'Copier le reste'),
+        ton: 'principal',
+      }))) return
+    }
+    if (parJour.size === 0) { setShowCopier(false); setJoursCibles([]); return }
+
+    // Le remplacement se dit, et il ne touche QUE les jours qui vont recevoir
+    // quelque chose : un jour dont rien n'a pu être copié garde ses créneaux.
+    const dejaRemplis = [...parJour.keys()].filter(j => creneaux.some(c => c.jour_semaine === j))
+    if (dejaRemplis.length > 0 &&
+        !await confirme(confirmationSimple({ titre: 'Des créneaux vont être remplacés', message: `Ceux du ${dejaRemplis.join(', ')} laisseront la place à ceux du ${jourActif}.`, action: 'Oui, les remplacer' }))) return
+
+    let total = 0
+    for (const [cible, copies] of parJour) {
+      // ⚠️ ON LIT CHAQUE RÉSULTAT. Une suppression qui passe et une insertion
+      // qui échoue laisseraient le jour VIDE en annonçant « copiés ».
+      for (const c of creneaux.filter(x => x.jour_semaine === cible)) {
+        const { error } = await supabase.from('creneaux').delete().eq('id', c.id)
+        if (error) { toast(`Erreur : ${error.message}`, 'error'); fetchAll(); return }
+      }
+      const { error } = await supabase.from('creneaux').insert(copies)
+      if (error) { toast(`Erreur : ${error.message}`, 'error'); fetchAll(); return }
+      total += copies.length
     }
     toast(`${total} créneau(x) copiés`); setShowCopier(false); setJoursCibles([]); fetchAll()
   }
@@ -3805,7 +3863,7 @@ function TabCreneaux({ commercantId, toast }) {
           {horsHoraires.length > 0 && (
             <div style={{ background: '#FEF3C7', border: '1.5px solid #F59E0B44', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: '#92400E' }}>
-                <AlertTriangle size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {horsHoraires.length} créneau(x) hors des horaires d'ouverture ({horaireJour(jourActif).debut}–{horaireJour(jourActif).fin})
+                <AlertTriangle size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {horsHoraires.length} créneau(x) hors des horaires d'ouverture{heuresLisibles(jourActif) ? ` (${heuresLisibles(jourActif)})` : ''}
               </p>
             </div>
           )}
@@ -3815,13 +3873,22 @@ function TabCreneaux({ commercantId, toast }) {
             <div style={{ ...s.cardActive, marginBottom: 12 }}>
               <p style={{ fontWeight: 700, fontSize: 13, color: T.ink, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Copy size={14} strokeWidth={1.8}/> Copier les créneaux de {jourActif} vers :</p>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                {/* 🔴 UN JOUR FERMÉ SE CHOISIT, ET C'EST LA COPIE QUI RÉPOND
+                    (Alex, 07/09, Eb4 : « copie impossible sur jour fermé, pas
+                    de message, le jour fermé n'est pas cliquable »). Un bouton
+                    qui ne fait rien et ne dit rien est le pire des deux : on
+                    clique, on recommence, on cherche. Il est cliquable, il
+                    porte la mention « fermé » avant le clic, et la copie dit
+                    ensuite pourquoi rien n'y est allé. C'est exactement ce que
+                    fait le module rendez-vous d'à côté. */}
                 {JOURS_SEMAINE.filter(j => j !== jourActif).map(jour => {
                   const ouvert = jourOuvert(jour)
                   const selec = joursCibles.includes(jour)
                   return (
-                    <button key={jour} onClick={() => ouvert && setJoursCibles(prev => selec ? prev.filter(j => j !== jour) : [...prev, jour])}
-                      style={{ ...s.btn, padding: '5px 12px', fontSize: 12, background: selec ? T.main : ouvert ? T.pale : '#F3F4F6', color: selec ? '#fff' : ouvert ? T.main : T.muted, opacity: ouvert ? 1 : 0.5, cursor: ouvert ? 'pointer' : 'not-allowed', textTransform: 'capitalize' }}>
-                      {jour}
+                    <button key={jour} onClick={() => setJoursCibles(prev => selec ? prev.filter(j => j !== jour) : [...prev, jour])}
+                      style={{ ...s.btn, padding: '5px 12px', fontSize: 12, background: selec ? T.main : ouvert ? T.pale : '#F3F4F6', color: selec ? '#fff' : ouvert ? T.main : T.muted, cursor: 'pointer' }}>
+                      <span style={{ textTransform: 'capitalize' }}>{jour}</span>
+                      {!ouvert && <span style={{ fontSize: 10.5, fontWeight: 700, marginLeft: 5, opacity: 0.85 }}>fermé</span>}
                     </button>
                   )
                 })}
@@ -9224,12 +9291,13 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     if (dejaRemplis.length > 0 &&
         !await confirme(confirmationSimple({ titre: 'Des créneaux vont être remplacés', message: `Ceux du ${dejaRemplis.join(', ')} laisseront la place à ceux du ${jourActif}.`, action: 'Oui, les remplacer' }))) return
     setCopieLoading(true)
-    const idsARemplacer = creneaux.filter(c => cibles.includes(c.jour_semaine)).map(c => c.id)
-    if (idsARemplacer.length > 0) {
-      const { error: errDel } = await supabase.from('rdv_creneaux')
-        .update({ deleted_at: new Date().toISOString() }).in('id', idsARemplacer)
-      if (errDel) { setCopieLoading(false); return toast(`Erreur : ${errDel.message}`, 'error') }
-    }
+    // 🔴 ON NE SUPPRIME RIEN AVANT D'AVOIR TOUT DEMANDÉ (trouvé le 07/09 en
+    // vérifiant le frère du module Commandes). La suppression se faisait ICI,
+    // avant la question sur l'emplacement et avant celle sur l'ajustement :
+    // répondre « non » à l'une des deux VIDAIT les jours cibles et rendait la
+    // main. Un geste d'annulation qui détruit est le pire de tous. Elle est
+    // maintenant plus bas, après les questions, et uniquement sur les jours qui
+    // reçoivent vraiment quelque chose.
     // 🔴 CHAQUE JOUR CIBLE A SES PROPRES HORAIRES (Alex, 07/09). Centre Respire
     // est à Mettet le lundi jusqu'à 17:00 et à Nalinnes le mercredi jusqu'à
     // 12:00 : copier le lundi vers le mercredi y posait une plage 08:00-17:00,
@@ -9344,6 +9412,16 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     if (lignes.length === 0) {
       setCopieLoading(false)
       return toast('Rien à copier : tu es fermé sur les jours choisis.', 'error')
+    }
+    // TOUT EST DEMANDÉ, TOUT EST RÉPONDU : on peut remplacer. Et seulement sur
+    // les jours qui reçoivent une plage — un jour dont rien n'a pu être copié
+    // garde les siennes plutôt que de se retrouver vide.
+    const joursEcrits = new Set(lignes.map(l => l.jour_semaine))
+    const idsARemplacer = creneaux.filter(c => joursEcrits.has(c.jour_semaine)).map(c => c.id)
+    if (idsARemplacer.length > 0) {
+      const { error: errDel } = await supabase.from('rdv_creneaux')
+        .update({ deleted_at: new Date().toISOString() }).in('id', idsARemplacer)
+      if (errDel) { setCopieLoading(false); return toast(`Erreur : ${errDel.message}`, 'error') }
     }
     // ⚠️ `.select()` PARCE QU'IL FAUT LES NOUVEAUX IDENTIFIANTS. Sans eux, on
     // n'aurait rien à quoi rattacher les prestations acceptées.

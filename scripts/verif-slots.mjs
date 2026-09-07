@@ -2097,8 +2097,12 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // ⚠️ ON DIT CE QU'ON A AJUSTÉ, DES DEUX CÔTÉS. Un créneau raccourci en
   // silence, c'est un commerçant qui cherchera pourquoi son agenda ne propose
   // pas ce qu'il a écrit.
+  // ⚠️ LA GARDE COMPTE DEUX EXEMPLAIRES, elle ne cherche plus deux libellés
+  // différents : les deux copies disent maintenant LA MÊME PHRASE, et une
+  // garde qui pointait le libellé de l'une aurait laissé l'autre partir.
   verifier('⚠️ les deux copies annoncent ce qu’elles ont ajusté',
-    /Copier en ajustant/.test(CONFIG) && /Ajusté à tes heures d’ouverture/.test(CONFIG))
+    (CONFIG.match(/Copier en ajustant/g) || []).length >= 2
+    && (CONFIG.match(/Tes horaires ne sont pas les mêmes ces jours-là/g) || []).length >= 2)
   // 🔴 « TU ES FERMÉ » NE SE DIT QUE SI C'EST VRAI (Alex, 07/09). Un jour bien
   // ouvert qui ferme plus tôt n'est pas un jour fermé, et il l'a contesté dans
   // la minute.
@@ -2140,6 +2144,68 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     /const dehorsCmd = creneauHorsOuverture\(\{/.test(CONFIG))
   verifier('⚠️ et ne compare plus à la première plage seule',
     !/form\.heure_debut < h\.debut \|\| form\.heure_fin > h\.fin/.test(CONFIG))
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // Eb4, ET LES QUATRE FRÈRES TROUVÉS AVEC LUI (Alex, 07/09 : « copie
+  // impossible sur jour fermé, pas de message, le jour fermé n'est pas
+  // cliquable »).
+  // ═════════════════════════════════════════════════════════════════════════
+
+  // 🔴 LE BANDEAU ORANGE MENTAIT AUX COMMERCES À DEUX SERVICES, exactement
+  // comme l'alerte de création avant Eb2 : il comptait « hors des horaires »
+  // tous les créneaux du soir d'une friterie et ne s'éteignait jamais.
+  verifier('🔴 le bandeau hors horaires connaît les deux services',
+    /function creneauxHorsHoraires\(jour, cren\) \{[\s\S]{0,300}?creneauHorsOuverture\(\{/.test(CONFIG))
+  verifier('⚠️ et il ne compare plus à la première plage seule',
+    !/c\.heure_debut\.slice\(0,5\) < h\.debut \|\| c\.heure_fin\.slice\(0,5\) > h\.fin/.test(CONFIG))
+  verifier('⚠️ et il cite les heures des deux services',
+    /hors des horaires d'ouverture\{heuresLisibles\(jourActif\)/.test(CONFIG))
+
+  // 🔴 UN BOUTON QUI NE FAIT RIEN ET NE DIT RIEN est le pire des deux. Le jour
+  // fermé se choisit, et c'est la copie qui répond.
+  verifier('🔴 un jour fermé se choisit dans la copie des commandes',
+    /onClick=\{\(\) => setJoursCibles\(prev => selec/.test(CONFIG))
+  verifier('⚠️ le clic n’est plus avalé par une garde muette',
+    !/onClick=\{\(\) => ouvert && setJoursCibles/.test(CONFIG))
+  verifier('⚠️ et la puce dit « fermé » AVANT le clic',
+    /\{!ouvert && <span[^>]*>fermé<\/span>\}/.test(CONFIG))
+
+  // ⚠️ ET LE REFUS DIT LEQUEL DES DEUX MOTIFS, comme en rendez-vous.
+  //
+  // ⚠️ LA GARDE VISE `${cible}`, LE NOM DE VARIABLE DE CE MODULE-CI. Le module
+  // rendez-vous écrit exactement les mêmes phrases avec `${j}` : une garde qui
+  // n'aurait cherché que les phrases serait restée VERTE grâce au jumeau, en
+  // ne mesurant plus rien. C'est le piège du 07/09, deuxième fois.
+  verifier('⚠️ la copie des commandes dit fermé OU hors des heures',
+    /\? `\$\{cible\} \$\{heure\} : tu es fermé ce jour-là`[\s\S]{0,140}?: `\$\{cible\} \$\{heure\} : tu es ouvert \$\{\(ajuste\.heures \|\| \[\]\)\.join\(' et '\)\}`/.test(CONFIG))
+
+  // 🔴 LE PAVÉ COLLÉ, le frère non traité du 07/09 : le HTML ignore les
+  // retours à la ligne d'une chaîne.
+  const iCmdCalcul = CONFIG.indexOf('const parJour = new Map()')
+  const iCmdSuppression = CONFIG.indexOf("supabase.from('creneaux').delete()", iCmdCalcul)
+  const blocCopieCmd = iCmdCalcul > 0 && iCmdSuppression > iCmdCalcul
+    ? CONFIG.slice(iCmdCalcul, iCmdSuppression) : ''
+  verifier('🔴 les détails de la copie des commandes sont un tableau',
+    blocCopieCmd.length > 0 && !/\]\.join\('\\n'\)/.test(blocCopieCmd))
+
+  // 🔴 RIEN N'EST DÉTRUIT AVANT QUE TOUT SOIT DEMANDÉ. La suppression vivait
+  // avant les questions : répondre « non » vidait les jours cibles et rendait
+  // la main. Un geste d'annulation qui détruit est le pire de tous.
+  verifier('🔴 la copie des commandes ne supprime qu’après les questions',
+    /confirmationSimple/.test(blocCopieCmd) && /Des créneaux vont être remplacés/.test(blocCopieCmd))
+  verifier('⚠️ et elle lit le résultat de chaque écriture',
+    /const \{ error \} = await supabase\.from\('creneaux'\)\.insert\(copies\)[\s\S]{0,160}?if \(error\)/.test(CONFIG))
+
+  // Le même défaut vivait dans la copie des plages de rendez-vous, et il y
+  // était pire : la suppression précédait DEUX questions.
+  const iRdvQuestion = CONFIG.indexOf('Certaines plages ne peuvent pas être copiées')
+  const iRdvSuppression = CONFIG.indexOf('joursEcrits.has(c.jour_semaine)')
+  verifier('🔴 la copie des rendez-vous ne supprime qu’après les questions',
+    iRdvQuestion > 0 && iRdvSuppression > iRdvQuestion)
+  verifier('⚠️ et plus juste après setCopieLoading',
+    !/setCopieLoading\(true\)\s*const idsARemplacer/.test(CONFIG))
+  verifier('⚠️ et seulement sur les jours qui reçoivent une plage',
+    /const joursEcrits = new Set\(lignes\.map\(l => l\.jour_semaine\)\)/.test(CONFIG))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

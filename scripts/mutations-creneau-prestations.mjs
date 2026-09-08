@@ -163,7 +163,7 @@ const MUTATIONS = [
 
   // 🔴 LA COPIE QUI DEBORDAIT (Alex, 07/09), DES DEUX COTES.
   { nom: '🔴 une plage trop longue n est plus raccourcie',
-    de: "    statut: (debut === d && fin === f) ? 'inchangee' : 'raccourcie',",
+    de: "    statut: (morceaux.length === 1 && debut === d && fin === f) ? 'inchangee' : 'raccourcie',",
     vers: "    statut: 'inchangee'," },
 
   { nom: '🔴 une plage hors ouverture est copiee quand meme',

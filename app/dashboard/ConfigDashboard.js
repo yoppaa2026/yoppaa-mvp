@@ -71,7 +71,7 @@ import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './Bar
 // `app/dashboard/page.js`, qui rend cet écran. On n'importe ici que la
 // fonction qui pose la question.
 import { confirme, confirmer } from './PosteConfirmation'
-import { confirmationSimple, confirmationDeuxGestes } from '@/lib/confirmations'
+import { confirmationSimple, confirmationDeuxGestes, confirmationInfo } from '@/lib/confirmations'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BoutonIaFiche from './BoutonIaFiche'
 import { MIN_DESCRIPTION, descriptionRefusee, jaugeDescription, motsInspirationDescription, MOTS_INSPIRATION_INFOS, astuceRedaction } from '@/lib/fiche-redaction'
@@ -3413,14 +3413,20 @@ function TabCreneaux({ commercantId, toast }) {
   function creneauxNull() {
     return creneaux.filter(c => c.jour_semaine === null)
   }
-  // Les heures d'ouverture du jour, lisibles, LES DEUX SERVICES COMPRIS.
-  function heuresLisibles(jour) {
+  // Les services du jour, en heures courtes. Une seule lecture, et TOUT ce qui
+  // parle des heures d'ouverture ici en descend : le sous-titre, le bandeau, la
+  // pastille de chaque carte, la génération automatique. Le 08/09, ces quatre
+  // endroits lisaient chacun la première plage seule.
+  function plagesDuJour(jour) {
     const h = horaires?.[jour]
-    if (!h) return ''
+    if (!h) return []
     const p = []
-    if (h.debut && h.fin) p.push(`${String(h.debut).slice(0,5)}–${String(h.fin).slice(0,5)}`)
-    if (h.debut2 && h.fin2) p.push(`${String(h.debut2).slice(0,5)}–${String(h.fin2).slice(0,5)}`)
-    return p.join(' et ')
+    if (h.debut && h.fin) p.push([String(h.debut).slice(0,5), String(h.fin).slice(0,5)])
+    if (h.debut2 && h.fin2) p.push([String(h.debut2).slice(0,5), String(h.fin2).slice(0,5)])
+    return p
+  }
+  function heuresLisibles(jour) {
+    return plagesDuJour(jour).map(([a, b]) => `${a}–${b}`).join(' et ')
   }
   // 🔴 LE BANDEAU ORANGE IGNORAIT LE SECOND SERVICE (07/09, frère de Eb2).
   // `horaireJour` ne rend que la PREMIÈRE plage : chez une friterie ouverte
@@ -3598,17 +3604,26 @@ function TabCreneaux({ commercantId, toast }) {
   // ─── Générer auto sur le jour actif ───────────────────────────────────────
   async function genererJour() {
     if (!jourOuvert(jourActif)) return toast(`${jourActif} est fermé, modifie les horaires dans Profil`, 'error')
+    // 🔴 LA GÉNÉRATION AUSSI NE VOYAIT QUE LE PREMIER SERVICE (Alex, 08/09).
+    // Chez un restaurant ouvert 11:00-13:00 puis 18:00-22:00, elle proposait
+    // 11:00 à 13:00 par défaut et REFUSAIT toute génération du soir avec
+    // « hors horaires d'ouverture (11:00–13:00) ». Elle couvre maintenant la
+    // journée entière et saute le creux entre les deux services.
+    const services = plagesDuJour(jourActif)
     const h = horaireJour(jourActif)
-    const debut = prompt(`Heure d'ouverture (défaut: ${h.debut}) :`) || h.debut
-    const fin   = prompt(`Heure de fermeture (défaut: ${h.fin}) :`) || h.fin
+    const ouvertureJour = services.length > 0 ? services[0][0] : h.debut
+    const fermetureJour = services.length > 0 ? services[services.length - 1][1] : h.fin
+    const debut = prompt(`Heure d'ouverture (défaut: ${ouvertureJour}) :`) || ouvertureJour
+    const fin   = prompt(`Heure de fermeture (défaut: ${fermetureJour}) :`) || fermetureJour
     const duree = parseInt(prompt('Durée en minutes (ex: 15) :') || '15')
     const max   = parseInt(prompt('Commandes max par créneau (ex: 5) :') || '5')
     const cap   = parseFloat(prompt(`Capacité temps (min) par créneau (ex: ${duree}) :`) || String(duree))
     if (!debut || !fin || !duree) return
 
-    // Vérif hors horaires
-    if (debut < h.debut || fin > h.fin) {
-      toast(`Hors horaires d'ouverture (${h.debut}–${h.fin}), génération annulée`, 'error'); return
+    // Vérif hors horaires : on ne refuse que si RIEN de ce qu'il demande ne
+    // tombe dans un service. Ce qui déborde sera simplement sauté.
+    if (services.length > 0 && !services.some(([a, b]) => debut < b && fin > a)) {
+      toast(`Hors horaires d'ouverture (${heuresLisibles(jourActif)}), génération annulée`, 'error'); return
     }
 
     const slots = []
@@ -3618,7 +3633,10 @@ function TabCreneaux({ commercantId, toast }) {
       const totalMin = hh * 60 + mm + duree
       const next = `${String(Math.floor(totalMin/60)).padStart(2,'0')}:${String(totalMin%60).padStart(2,'0')}`
       if (next > fin) break
-      slots.push({ commercant_id: commercantId, jour_semaine: jourActif, heure_debut: current, heure_fin: next, max_commandes: max, actif: true, capacite_temps: cap })
+      // Le creux entre deux services n'est pas une heure de commande.
+      if (services.length === 0 || services.some(([a, b]) => current >= a && next <= b)) {
+        slots.push({ commercant_id: commercantId, jour_semaine: jourActif, heure_debut: current, heure_fin: next, max_commandes: max, actif: true, capacite_temps: cap })
+      }
       current = next
     }
     if (!slots.length) return toast('Aucun créneau généré', 'error')
@@ -3669,18 +3687,24 @@ function TabCreneaux({ commercantId, toast }) {
             : `${cible} ${heure} : tu es ouvert ${(ajuste.heures || []).join(' et ')}`)
           continue
         }
+        // 🔴 UN MORCEAU PAR SERVICE (Alex, 08/09). Un créneau 08:00-23:00 copié
+        // sur une journée 11:00-13:00 puis 18:00-22:00 donne DEUX créneaux :
+        // avant, il ne gardait que le plus long et le midi disparaissait.
+        const morceaux = ajuste.morceaux || [{ debut: ajuste.debut, fin: ajuste.fin }]
         if (ajuste.statut === 'raccourcie') {
-          raccourcisCopie.push(`${cible} : ${heure} devient ${ajuste.debut}–${ajuste.fin}`)
+          raccourcisCopie.push(`${cible} : ${heure} devient ${morceaux.map(m => `${m.debut}–${m.fin}`).join(' et ')}`)
         }
-        copies.push({
-          commercant_id: commercantId,
-          jour_semaine: cible,
-          heure_debut: ajuste.debut,
-          heure_fin: ajuste.fin,
-          max_commandes: c.max_commandes,
-          actif: c.actif,
-          capacite_temps: c.capacite_temps || 30,
-        })
+        for (const m of morceaux) {
+          copies.push({
+            commercant_id: commercantId,
+            jour_semaine: cible,
+            heure_debut: m.debut,
+            heure_fin: m.fin,
+            max_commandes: c.max_commandes,
+            actif: c.actif,
+            capacite_temps: c.capacite_temps || 30,
+          })
+        }
       }
       if (copies.length > 0) parJour.set(cible, copies)
     }
@@ -3697,15 +3721,22 @@ function TabCreneaux({ commercantId, toast }) {
         ...raccourcisCopie.map(r => `Raccourci · ${r}`),
         ...ignoresCopie.map(i => `Non copié · ${i}`),
       ]
-      if (!await confirme(confirmationSimple({
-        titre: rienACopier
-          ? 'Rien ne peut être copié sur ces jours'
-          : (raccourcisCopie.length > 0 ? 'Tes horaires ne sont pas les mêmes ces jours-là' : 'Certains créneaux ne seront pas copiés'),
-        message: 'Ce qui dépasse tes heures d’ouverture serait invisible pour tes clients.',
-        details,
-        action: rienACopier ? 'J’ai compris' : (raccourcisCopie.length > 0 ? 'Copier en ajustant' : 'Copier le reste'),
-        ton: 'principal',
-      }))) return
+      // ⚠️ RIEN À DÉCIDER, UN SEUL BOUTON. « J'ai compris » et « Ne rien faire »
+      // côte à côte, pour le même effet, sont deux boutons de trop.
+      const question = rienACopier
+        ? confirmationInfo({
+            titre: 'Rien ne peut être copié sur ces jours',
+            message: 'Ce qui dépasse tes heures d’ouverture serait invisible pour tes clients.',
+            details,
+          })
+        : confirmationSimple({
+            titre: raccourcisCopie.length > 0 ? 'Tes horaires ne sont pas les mêmes ces jours-là' : 'Certains créneaux ne seront pas copiés',
+            message: 'Ce qui dépasse tes heures d’ouverture serait invisible pour tes clients.',
+            details,
+            action: raccourcisCopie.length > 0 ? 'Copier en ajustant' : 'Copier le reste',
+            ton: 'principal',
+          })
+      if (!await confirme(question)) return
     }
     if (parJour.size === 0) { setShowCopier(false); setJoursCibles([]); return }
 
@@ -3843,7 +3874,7 @@ function TabCreneaux({ commercantId, toast }) {
               <h2 style={{ ...s.h2, margin: 0, textTransform: 'capitalize' }}>{jourActif}</h2>
               {horaires?.[jourActif] && (
                 <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
-                  <Clock size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {horaireJour(jourActif).debut} – {horaireJour(jourActif).fin}
+                  <Clock size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> {heuresLisibles(jourActif) || `${horaireJour(jourActif).debut} – ${horaireJour(jourActif).fin}`}
                 </p>
               )}
             </div>
@@ -3962,7 +3993,17 @@ function TabCreneaux({ commercantId, toast }) {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10, marginBottom: 16 }}>
               {crensJourActif.sort((a,b) => a.heure_debut.localeCompare(b.heure_debut)).map(c => {
-                const horsH = horaires?.[jourActif]?.ouvert && (c.heure_debut.slice(0,5) < horaireJour(jourActif).debut || c.heure_fin.slice(0,5) > horaireJour(jourActif).fin)
+                // 🔴 LA PASTILLE MENTAIT AUSSI (Alex, 08/09, capture) : un
+                // créneau 18:00-22:00 chez La Table d'Essai, en plein dans son
+                // service du soir, portait « Hors horaires ». Elle comparait à
+                // la première plage seule, comme le bandeau et comme l'alerte
+                // de création avant elles. Même règle, une seule écriture.
+                const horsH = horaires?.[jourActif]?.ouvert && Boolean(creneauHorsOuverture({
+                  jour: jourActif,
+                  heureDebut: String(c.heure_debut).slice(0,5),
+                  heureFin: String(c.heure_fin).slice(0,5),
+                  horairesDetail: horaires,
+                }))
                 return (
                   <div key={c.id} style={{ ...s.card, marginBottom: 0, opacity: c.actif ? 1 : 0.55, borderLeft: `4px solid ${horsH ? '#F59E0B' : c.actif ? T.main : '#E5E7EB'}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -9345,6 +9386,11 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     const lignes = []
     const raccourcies = []
     const ignorees = []
+    // ⚠️ LA CLÉ SE CALCULE SUR LA PLAGE ÉCRITE, jamais sur la plage source :
+    // c'est ce que la base rendra. Le jour en fait partie, une même heure
+    // pouvant être copiée sur plusieurs jours.
+    const cleLigne = (l) => `${l.jour_semaine}|${String(l.heure_debut).slice(0,5)}|${String(l.heure_fin).slice(0,5)}|${l.praticien_id || ''}`
+    const prestasParCle = new Map()
     for (const j of cibles) {
       for (const c of source) {
         const ajuste = ajusterPlagePourJour(c, horairesReference?.[j])
@@ -9358,8 +9404,12 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
             : `${j} ${heure} : tu es ouvert ${(ajuste.heures || []).join(' et ')}`)
           continue
         }
+        // 🔴 UN MORCEAU PAR SERVICE (Alex, 08/09). Une plage qui couvrait la
+        // journée entière ne gardait que le recouvrement le plus long : sur un
+        // commerce à deux services, le midi disparaissait en silence.
+        const morceaux = ajuste.morceaux || [{ debut: ajuste.debut, fin: ajuste.fin }]
         if (ajuste.statut === 'raccourcie') {
-          raccourcies.push(`${j} : ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} devient ${ajuste.debut}–${ajuste.fin}`)
+          raccourcies.push(`${j} : ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} devient ${morceaux.map(m => `${m.debut}–${m.fin}`).join(' et ')}`)
         }
         // L'emplacement, selon ce qu'il a choisi plus haut. Sans conflit, la
         // plage garde le sien ; un seul emplacement ce jour-là le remplace ;
@@ -9372,18 +9422,31 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
             lieuCopie = duJour.length === 1 ? duJour[0].id : null
           }
         }
-        lignes.push({
-          commercant_id: commercantId,
-          praticien_id: c.praticien_id,
-          lieu_id: parLieuRdv ? lieuCopie : null,
-          jour_semaine: j,
-          heure_debut: `${ajuste.debut}:00`,
-          heure_fin: `${ajuste.fin}:00`,
-          pas_minutes: c.pas_minutes,
-          pause_debut: c.pause_debut,
-          pause_fin: c.pause_fin,
-          actif: c.actif,
-        })
+        // 🔴 ET LES PRESTATIONS SUIVENT CHAQUE MORCEAU (08/09). L'appariement
+        // se faisait sur l'heure de la plage SOURCE : dès qu'une plage était
+        // raccourcie, plus aucune clé ne correspondait et la copie perdait ce
+        // qu'elle accepte, EN SILENCE. C'est le défaut que la correction du
+        // 07/09 croyait fermer, rouvert par l'ajustement écrit le même jour.
+        const prestasSource = liaisons.filter(l => l.creneau_id === c.id).map(l => l.prestation_id)
+        for (const m of morceaux) {
+          const ligne = {
+            commercant_id: commercantId,
+            praticien_id: c.praticien_id,
+            lieu_id: parLieuRdv ? lieuCopie : null,
+            jour_semaine: j,
+            heure_debut: `${m.debut}:00`,
+            heure_fin: `${m.fin}:00`,
+            pas_minutes: c.pas_minutes,
+            pause_debut: c.pause_debut,
+            pause_fin: c.pause_fin,
+            actif: c.actif,
+          }
+          lignes.push(ligne)
+          if (prestasSource.length > 0) {
+            const k = cleLigne(ligne)
+            prestasParCle.set(k, [...new Set([...(prestasParCle.get(k) || []), ...prestasSource])])
+          }
+        }
       }
     }
 
@@ -9399,19 +9462,29 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         ...raccourcies.map(r => `Raccourci · ${r}`),
         ...ignorees.map(i => `Non copié · ${i}`),
       ]
-      if (!await confirme(confirmationSimple({
-        titre: ignorees.length > 0 && raccourcies.length === 0
-          ? 'Certaines plages ne peuvent pas être copiées'
-          : 'Tes horaires ne sont pas les mêmes ces jours-là',
-        message: 'Ce qui dépasse tes heures d’ouverture serait invisible pour tes clients.',
-        details,
-        action: raccourcies.length > 0 ? 'Copier en ajustant' : 'Copier le reste',
-        ton: 'principal',
-      }))) { setCopieLoading(false); return }
+      // ⚠️ RIEN À DÉCIDER, UN SEUL BOUTON (Alex, 08/09). Proposer « Copier le
+      // reste » quand il n'y a pas de reste, avec une sortie sans effet juste
+      // dessous, c'est deux boutons pour le même résultat.
+      const question = lignes.length === 0
+        ? confirmationInfo({
+            titre: 'Rien ne peut être copié sur ces jours',
+            message: 'Ce qui dépasse tes heures d’ouverture serait invisible pour tes clients.',
+            details,
+          })
+        : confirmationSimple({
+            titre: ignorees.length > 0 && raccourcies.length === 0
+              ? 'Certaines plages ne peuvent pas être copiées'
+              : 'Tes horaires ne sont pas les mêmes ces jours-là',
+            message: 'Ce qui dépasse tes heures d’ouverture serait invisible pour tes clients.',
+            details,
+            action: raccourcies.length > 0 ? 'Copier en ajustant' : 'Copier le reste',
+            ton: 'principal',
+          })
+      if (!await confirme(question)) { setCopieLoading(false); return }
     }
     if (lignes.length === 0) {
       setCopieLoading(false)
-      return toast('Rien à copier : tu es fermé sur les jours choisis.', 'error')
+      return toast('Rien à copier sur les jours choisis.', 'error')
     }
     // TOUT EST DEMANDÉ, TOUT EST RÉPONDU : on peut remplacer. Et seulement sur
     // les jours qui reçoivent une plage — un jour dont rien n'a pu être copié
@@ -9434,17 +9507,12 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     // n'aurait PAS été proposé le mercredi, et le commerçant, voyant sa plage
     // dupliquée, aurait cherché longtemps pourquoi.
     if (!error && (creees || []).length > 0) {
-      // Appariement par ce qui identifie une plage dans une copie : l'heure,
-      // la fin et le praticien. Se fier à l'ordre du retour serait un pari.
-      const cle = (c) => `${c.heure_debut}|${c.heure_fin}|${c.praticien_id || ''}`
-      const parSource = new Map()
-      for (const c of source) {
-        const prestas = liaisons.filter(l => l.creneau_id === c.id).map(l => l.prestation_id)
-        if (prestas.length > 0) parSource.set(cle(c), prestas)
-      }
+      // Appariement sur la plage TELLE QU'ELLE A ÉTÉ ÉCRITE. Se fier à l'ordre
+      // du retour serait un pari, et se fier à l'heure de la source était faux
+      // dès qu'elle avait été raccourcie.
       const nouvellesLiaisons = []
       for (const neuf of creees) {
-        for (const prestation_id of (parSource.get(cle(neuf)) || [])) {
+        for (const prestation_id of (prestasParCle.get(cleLigne(neuf)) || [])) {
           nouvellesLiaisons.push({ creneau_id: neuf.id, prestation_id })
         }
       }

@@ -1762,10 +1762,10 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
 
       egal('🔴 une plage trop longue est raccourcie',
         ajusterPlagePourJour(plage('08:00:00', '17:00:00'), MERCREDI),
-        { statut: 'raccourcie', raison: null, debut: '08:00', fin: '12:00' })
+        { statut: 'raccourcie', raison: null, debut: '08:00', fin: '12:00', morceaux: [{ debut: '08:00', fin: '12:00' }] })
       egal('une plage qui tient ne bouge pas',
         ajusterPlagePourJour(plage('09:00:00', '11:00:00'), MERCREDI),
-        { statut: 'inchangee', raison: null, debut: '09:00', fin: '11:00' })
+        { statut: 'inchangee', raison: null, debut: '09:00', fin: '11:00', morceaux: [{ debut: '09:00', fin: '11:00' }] })
 
       // 🔴 DEUX MOTIFS DE REFUS QUI NE SE CONFONDENT PAS (Alex, 07/09). Mon
       // premier message disait « tu es fermé » dans les deux cas, et il a
@@ -1784,16 +1784,35 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
       // raccourcirait des plages parfaitement valables.
       egal('⚠️ sans horaires, la plage est copiée telle quelle',
         ajusterPlagePourJour(plage('08:00:00', '17:00:00'), null),
-        { statut: 'inchangee', raison: null, debut: '08:00', fin: '17:00' })
-      // Un commerce à deux services : on retient l'ouverture qui recouvre le
-      // plus, sinon une plage du soir serait raccourcie sur le service du midi.
+        { statut: 'inchangee', raison: null, debut: '08:00', fin: '17:00', morceaux: [{ debut: '08:00', fin: '17:00' }] })
+      // Un commerce à deux services : chaque service touché donne un morceau.
       const DEUX = { ouvert: true, debut: '11:00', fin: '14:00', debut2: '18:00', fin2: '22:00' }
       egal('⚠️ une plage du soir suit le service du soir',
         ajusterPlagePourJour(plage('17:00:00', '23:00:00'), DEUX),
-        { statut: 'raccourcie', raison: null, debut: '18:00', fin: '22:00' })
+        { statut: 'raccourcie', raison: null, debut: '18:00', fin: '22:00', morceaux: [{ debut: '18:00', fin: '22:00' }] })
       egal('et une plage du midi le service du midi',
         ajusterPlagePourJour(plage('10:00:00', '13:00:00'), DEUX),
-        { statut: 'raccourcie', raison: null, debut: '11:00', fin: '13:00' })
+        { statut: 'raccourcie', raison: null, debut: '11:00', fin: '13:00', morceaux: [{ debut: '11:00', fin: '13:00' }] })
+
+      // 🔴 LE DÉFAUT VU PAR ALEX LE 08/09, CAPTURE À L'APPUI. La Table d'Essai
+      // ouvre 11:00-13:00 puis 18:00-22:00. Copier un créneau 08:00-23:00 y
+      // annonçait « devient 18:00–22:00 » : le service du MIDI disparaissait,
+      // parce que la fonction ne gardait que le recouvrement le plus long.
+      const journee = ajusterPlagePourJour(plage('08:00:00', '23:00:00'), DEUX)
+      egal('🔴 une plage sur la journée entière donne UN MORCEAU PAR SERVICE',
+        journee.morceaux,
+        [{ debut: '11:00', fin: '14:00' }, { debut: '18:00', fin: '22:00' }])
+      egal('⚠️ et elle est annoncée comme raccourcie', journee.statut, 'raccourcie')
+      // ⚠️ ET LES MORCEAUX SONT DANS L'ORDRE DE LA JOURNÉE, quel que soit
+      // l'ordre des services : le message se lit de gauche à droite.
+      egal('⚠️ le premier morceau est le plus matinal',
+        ajusterPlagePourJour(plage('08:00:00', '23:00:00'),
+          { ouvert: true, debut: '18:00', fin: '22:00', debut2: '11:00', fin2: '14:00' }).morceaux[0],
+        { debut: '11:00', fin: '14:00' })
+      // ⚠️ Le creux entre deux services n'est PAS un morceau : personne ne
+      // commande à 15h chez un restaurant fermé l'après-midi.
+      egal('⚠️ le creux entre les services n’en est pas un',
+        journee.morceaux.some(m => m.debut === '14:00' || m.fin === '18:00'), false)
       const entreDeux = ajusterPlagePourJour(plage('15:00:00', '17:00:00'), DEUX)
       egal('l’après-midi fermé n’en reçoit aucune', entreDeux.statut, 'ignoree')
       egal('⚠️ et les DEUX services sont cités', entreDeux.heures, ['11:00–14:00', '18:00–22:00'])
@@ -2206,6 +2225,68 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     !/setCopieLoading\(true\)\s*const idsARemplacer/.test(CONFIG))
   verifier('⚠️ et seulement sur les jours qui reçoivent une plage',
     /const joursEcrits = new Set\(lignes\.map\(l => l\.jour_semaine\)\)/.test(CONFIG))
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // LES CINQ ANOMALIES DE LA CAPTURE DU 08/09 (La Table d'Essai, 11:00-13:00
+  // puis 18:00-22:00). La MÊME lecture fausse vivait dans QUATRE endroits de
+  // cet écran, et la copie perdait un service.
+  // ═════════════════════════════════════════════════════════════════════════
+
+  // ⚠️ UNE SEULE LECTURE DES HEURES, et tout en descend.
+  verifier('⚠️ les heures du jour se lisent en un seul endroit',
+    /function plagesDuJour\(jour\) \{[\s\S]{0,400}?h\.debut2 && h\.fin2/.test(CONFIG)
+    && /function heuresLisibles\(jour\) \{\s*return plagesDuJour\(jour\)/.test(CONFIG))
+
+  // 🔴 LA PASTILLE DE LA CARTE : un créneau 18:00-22:00 en plein service du
+  // soir portait « Hors horaires ».
+  verifier('🔴 la pastille d’un créneau connaît les deux services',
+    /const horsH = horaires\?\.\[jourActif\]\?\.ouvert && Boolean\(creneauHorsOuverture\(\{/.test(CONFIG))
+  verifier('⚠️ et elle ne compare plus à la première plage seule',
+    !/c\.heure_debut\.slice\(0,5\) < horaireJour\(jourActif\)\.debut/.test(CONFIG))
+
+  // 🔴 LE SOUS-TITRE DU JOUR annonçait « 11:00 – 13:00 » à un restaurant qui
+  // sert aussi le soir.
+  verifier('🔴 le sous-titre du jour cite tous les services',
+    /\/> \{heuresLisibles\(jourActif\) \|\| `\$\{horaireJour\(jourActif\)\.debut\} – \$\{horaireJour\(jourActif\)\.fin\}`\}/.test(CONFIG))
+
+  // 🔴 LA GÉNÉRATION AUTOMATIQUE refusait tout créneau du soir.
+  verifier('🔴 la génération couvre la journée entière',
+    /const ouvertureJour = services\.length > 0 \? services\[0\]\[0\] : h\.debut/.test(CONFIG)
+    && /const fermetureJour = services\.length > 0 \? services\[services\.length - 1\]\[1\] : h\.fin/.test(CONFIG))
+  verifier('⚠️ elle ne refuse que si RIEN ne tombe dans un service',
+    /if \(services\.length > 0 && !services\.some\(\(\[a, b\]\) => debut < b && fin > a\)\)/.test(CONFIG))
+  verifier('⚠️ et elle saute le creux entre deux services',
+    /if \(services\.length === 0 \|\| services\.some\(\(\[a, b\]\) => current >= a && next <= b\)\)/.test(CONFIG))
+  verifier('⚠️ le refus de génération cite tous les services',
+    /génération annulée`, 'error'\); return/.test(CONFIG)
+    && /Hors horaires d'ouverture \(\$\{heuresLisibles\(jourActif\)\}\)/.test(CONFIG))
+
+  // 🔴 LA COPIE PERDAIT UN SERVICE. Les DEUX copies posent un créneau par
+  // morceau, et les deux l'annoncent.
+  verifier('🔴 la copie des commandes pose un créneau par service',
+    /for \(const m of morceaux\) \{\s*copies\.push\(\{/.test(CONFIG))
+  verifier('🔴 la copie des rendez-vous pose une plage par service',
+    /for \(const m of morceaux\) \{\s*const ligne = \{/.test(CONFIG))
+  verifier('⚠️ et les deux annoncent tous les morceaux',
+    (CONFIG.match(/devient \$\{morceaux\.map\(m => `\$\{m\.debut\}–\$\{m\.fin\}`\)\.join\(' et '\)\}/g) || []).length >= 2)
+
+  // 🔴 ET LES PRESTATIONS SUIVENT LA PLAGE ÉCRITE, PAS LA PLAGE SOURCE. Dès
+  // qu'une plage était raccourcie, l'appariement par l'heure de la source ne
+  // trouvait plus rien et la copie perdait ce qu'elle accepte, EN SILENCE.
+  verifier('🔴 l’appariement des prestations se fait sur la plage écrite',
+    /const cleLigne = \(l\) => `\$\{l\.jour_semaine\}\|\$\{String\(l\.heure_debut\)\.slice\(0,5\)\}/.test(CONFIG)
+    && /prestasParCle\.get\(cleLigne\(neuf\)\)/.test(CONFIG))
+  verifier('⚠️ et plus sur l’heure de la plage source',
+    !/const cle = \(c\) => `\$\{c\.heure_debut\}\|\$\{c\.heure_fin\}\|\$\{c\.praticien_id \|\| ''\}`/.test(CONFIG))
+
+  // 🔴 QUAND IL N'Y A RIEN À DÉCIDER, UN SEUL BOUTON. « J'ai compris » et
+  // « Ne rien faire » côte à côte pour le même effet, vus sur la capture.
+  const CONFIRMATIONS = lire('lib/confirmations.js')
+  verifier('🔴 une annonce sans décision n’a qu’un bouton',
+    /export function confirmationInfo\(\{[\s\S]{0,400}?actions: \[\s*\{ valeur: 'oui', ton: 'principal', label: action \},\s*\],/.test(CONFIRMATIONS))
+  verifier('⚠️ et les deux copies s’en servent quand rien ne passe',
+    (CONFIG.match(/confirmationInfo\(\{/g) || []).length >= 2
+    && (CONFIG.match(/titre: 'Rien ne peut être copié sur ces jours',/g) || []).length >= 2)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

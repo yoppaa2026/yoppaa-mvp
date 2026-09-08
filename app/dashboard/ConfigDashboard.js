@@ -3790,17 +3790,54 @@ function TabCreneaux({ commercantId, toast }) {
     }
     if (parJour.size === 0) { setShowCopier(false); setJoursCibles([]); return }
 
-    // Le remplacement se dit, et il ne touche QUE les jours qui vont recevoir
-    // quelque chose : un jour dont rien n'a pu être copié garde ses créneaux.
-    const dejaRemplis = [...parJour.keys()].filter(j => creneaux.some(c => c.jour_semaine === j))
-    if (dejaRemplis.length > 0 &&
-        !await confirme(confirmationSimple({ titre: 'Des créneaux vont être remplacés', message: `Ceux du ${dejaRemplis.join(', ')} laisseront la place à ceux du ${jourActif}.`, action: 'Oui, les remplacer' }))) return
+    // 🔴 ON NE REMPLACE QUE CE QUI OCCUPE LA MÊME HEURE (Alex, 08/09). La copie
+    // effaçait TOUS les créneaux du jour cible : copier un service du midi
+    // emportait celui du soir, qui ne le gênait en rien.
+    const memeSillon = (ex, neuf) =>
+      ex.jour_semaine === neuf.jour_semaine
+      && (!parLieu || String(ex.lieu_id || '') === String(neuf.lieu_id || ''))
+      // ⚠️ CINQ CARACTÈRES : la base rend « 11:00:00 », les copies « 11:00 ».
+      // Comparés entiers, deux créneaux qui se TOUCHENT passeraient pour un
+      // chevauchement, et le premier serait supprimé.
+      && String(ex.heure_debut).slice(0,5) < String(neuf.heure_fin).slice(0,5)
+      && String(ex.heure_fin).slice(0,5) > String(neuf.heure_debut).slice(0,5)
+    const toutesCopies = [...parJour.values()].flat()
+    const aRemplacer = creneaux.filter(ex => toutesCopies.some(n => memeSillon(ex, n)))
 
+    // 🔴 ET UN CRÉNEAU QUI PORTE DES COMMANDES NE SE REMPLACE PAS. La
+    // suppression à l'unité le refuse depuis longtemps ; la copie, elle,
+    // effaçait sans regarder, et les clients déjà inscrits perdaient leur
+    // heure. `commandes.creneau_id` devenait un lien mort.
+    let occupes = []
+    if (aRemplacer.length > 0) {
+      const { data: liees, error: errLect } = await supabase.from('commandes')
+        .select('creneau_id').in('creneau_id', aRemplacer.map(c => c.id))
+        .not('statut', 'in', '(recupere,non_retire,annulee_client,annulee_commercant)')
+      if (errLect) { toast('Erreur : ' + errLect.message, 'error'); return }
+      const avecCmd = new Set((liees || []).map(l => l.creneau_id))
+      occupes = aRemplacer.filter(c => avecCmd.has(c.id))
+    }
+    const remplacables = aRemplacer.filter(c => !occupes.includes(c))
+
+    if (aRemplacer.length > 0) {
+      const details = [
+        ...remplacables.map(c => `Remplacé · ${c.jour_semaine} ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)}`),
+        ...occupes.map(c => `Gardé · ${c.jour_semaine} ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} : des clients y ont commandé`),
+      ]
+      if (!await confirme(confirmationSimple({
+        titre: remplacables.length === 1 ? 'Un créneau va être remplacé' : `${remplacables.length} créneaux vont être remplacés`,
+        message: 'Ils occupent la même heure que ce que tu copies. Le reste de ces journées ne bouge pas.',
+        details,
+        action: remplacables.length > 0 ? 'Oui, les remplacer' : 'Copier le reste',
+      }))) return
+    }
+
+    const gardes = new Set(occupes.map(c => c.id))
     let total = 0
     for (const [cible, copies] of parJour) {
       // ⚠️ ON LIT CHAQUE RÉSULTAT. Une suppression qui passe et une insertion
       // qui échoue laisseraient le jour VIDE en annonçant « copiés ».
-      for (const c of creneaux.filter(x => x.jour_semaine === cible)) {
+      for (const c of remplacables.filter(x => x.jour_semaine === cible && !gardes.has(x.id))) {
         const { error } = await supabase.from('creneaux').delete().eq('id', c.id)
         if (error) { toast(`Erreur : ${error.message}`, 'error'); fetchAll(); return }
       }
@@ -9441,6 +9478,31 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     if (!lieuId) return null
     return lieuxDispo.find(l => l.id === lieuId)?.libelle || null
   }
+  // 🔴 « LE MESSAGE S'AFFICHE POUR UN EMPLACEMENT IDENTIQUE » (Alex, 08/09).
+  // Un commerce qui a répondu « je change d'endroit » a UNE LIGNE PAR JOUR :
+  // la « Salle Respire Mettet » du mardi et celle du jeudi sont deux lignes
+  // avec le même nom et deux identifiants différents. Comparer les
+  // identifiants annonçait donc un déménagement entre deux jours passés au
+  // même endroit, et la fenêtre citait le même nom des deux côtés, ce qui la
+  // rendait incompréhensible.
+  //
+  // ⚠️ ON COMPARE CE QUE LE COMMERÇANT VOIT, c'est-à-dire le nom, à la casse
+  // et aux espaces près. C'est ce qui fait dire « même endroit » à deux lignes
+  // qui décrivent la même salle.
+  function memeEndroit(a, b) {
+    const n = (x) => String(x || '').trim().toLowerCase()
+    return n(a) !== '' && n(a) === n(b)
+  }
+  // La ligne de CE jour qui décrit le même endroit que la plage source, s'il y
+  // en a une. C'est elle qu'il faut viser : garder l'identifiant du mardi sur
+  // une plage du jeudi désignerait une salle que le jeudi ne connaît pas.
+  function memeLieuCeJour(lieuId, duJour) {
+    if (!lieuId) return null
+    const exact = (duJour || []).find(l => l.id === lieuId)
+    if (exact) return exact
+    const nom = nomLieuRdv(lieuId)
+    return (duJour || []).find(l => memeEndroit(l.libelle, nom)) || null
+  }
 
   // Helper : récupère le nom d'un praticien à partir de son id (pour affichage)
   function praticienLabel(praticien_id) {
@@ -9594,9 +9656,14 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     const cibles = [...copieCibles]
     if (cibles.length === 0) return
     if (source.length === 0) return toast('Aucun créneau à copier sur ce jour', 'error')
-    const dejaRemplis = cibles.filter(j => creneaux.some(c => c.jour_semaine === j))
-    if (dejaRemplis.length > 0 &&
-        !await confirme(confirmationSimple({ titre: 'Des créneaux vont être remplacés', message: `Ceux du ${dejaRemplis.join(', ')} laisseront la place à ceux du ${jourActif}.`, action: 'Oui, les remplacer' }))) return
+    // 🔴 LA QUESTION DU REMPLACEMENT A DESCENDU (Alex, 08/09 : « j'essaie de
+    // copier de mardi à jeudi et vendredi sur des créneaux libres et il me dit
+    // qu'il remplace... et effectivement il supprime les anciens »). Elle se
+    // posait AVANT de savoir quoi que ce soit, et la suppression emportait
+    // TOUTES les plages du jour cible : copier un pilates de 14h effaçait le
+    // cours de yoga de 10h, qui n'a rien à voir avec lui. On ne remplace plus
+    // que ce qui occupe VRAIMENT la même place, et on le demande plus bas,
+    // quand on sait le dire.
     setCopieLoading(true)
     // 🔴 ON NE SUPPRIME RIEN AVANT D'AVOIR TOUT DEMANDÉ (trouvé le 07/09 en
     // vérifiant le frère du module Commandes). La suppression se faisait ICI,
@@ -9629,7 +9696,12 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         lieuxParJour[j] = duJour
         for (const c of source) {
           if (!c.lieu_id) continue
-          if (duJour.some(l => l.id === c.lieu_id)) continue
+          // ⚠️ MÊME ENDROIT, MÊME S'IL PORTE UN AUTRE IDENTIFIANT. Une salle
+          // saisie jour par jour a une ligne par jour : comparer les
+          // identifiants annonçait un déménagement entre deux jours passés au
+          // même endroit, et la fenêtre citait alors le même nom des deux
+          // côtés. Aucune question à poser dans ce cas.
+          if (memeLieuCeJour(c.lieu_id, duJour)) continue
           const ou = duJour.length === 1 ? duJour[0].libelle : (duJour.length === 0 ? 'aucun emplacement' : `${duJour.length} emplacements`)
           conflits.push(`${j} · tu es à « ${ou} », la plage désigne « ${nomLieuRdv(c.lieu_id) || 'un autre endroit'} »`)
         }
@@ -9683,7 +9755,14 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         let lieuCopie = c.lieu_id || null
         if (parLieuRdv && c.lieu_id) {
           const duJour = lieuxParJour[j] || []
-          if (!duJour.some(l => l.id === c.lieu_id)) {
+          // ⚠️ ON VISE LA LIGNE DE CE JOUR-LÀ. Garder l'identifiant du mardi sur
+          // une plage du jeudi désignerait une salle que le jeudi ne connaît
+          // pas, et la plage ne proposerait rien : c'est le même endroit, mais
+          // pas la même ligne.
+          const jumeau = memeLieuCeJour(c.lieu_id, duJour)
+          if (jumeau) {
+            lieuCopie = jumeau.id
+          } else {
             if (recalerLesLieux === 'second') { ignorees.push(`${j} ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} : tu n’es pas au même endroit ce jour-là`); continue }
             lieuCopie = duJour.length === 1 ? duJour[0].id : null
           }
@@ -9752,14 +9831,39 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       setCopieLoading(false)
       return toast('Rien à copier sur les jours choisis.', 'error')
     }
-    // TOUT EST DEMANDÉ, TOUT EST RÉPONDU : on peut remplacer. Et seulement sur
-    // les jours qui reçoivent une plage — un jour dont rien n'a pu être copié
-    // garde les siennes plutôt que de se retrouver vide.
-    const joursEcrits = new Set(lignes.map(l => l.jour_semaine))
-    const idsARemplacer = creneaux.filter(c => joursEcrits.has(c.jour_semaine)).map(c => c.id)
-    if (idsARemplacer.length > 0) {
+    // 🔴 ON NE REMPLACE QUE CE QUI OCCUPE VRAIMENT LA MÊME PLACE (Alex, 08/09).
+    // La copie effaçait TOUTES les plages du jour cible : copier un pilates de
+    // 14h emportait le cours de yoga de 10h, qui ne le gênait en rien, avec ses
+    // prestations et son praticien. Une plage n'est remplacée que si une plage
+    // entrante lui prend son heure, chez le même praticien et au même endroit.
+    // Deux praticiens à la même heure, ou deux salles, ne se gênent pas : c'est
+    // ainsi qu'on donne deux cours en même temps.
+    const memeSillon = (ex, neuf) =>
+      ex.jour_semaine === neuf.jour_semaine
+      && String(ex.praticien_id || '') === String(neuf.praticien_id || '')
+      && String(ex.lieu_id || '') === String(neuf.lieu_id || '')
+      // ⚠️ ON COMPARE SUR CINQ CARACTÈRES. La base rend « 11:00:00 » et les
+      // lignes qu'on vient d'écrire portent « 11:00 » : comparées entières,
+      // deux plages qui se TOUCHENT (l'une finit quand l'autre commence)
+      // passeraient pour un chevauchement, et la première serait supprimée.
+      && String(ex.heure_debut).slice(0,5) < String(neuf.heure_fin).slice(0,5)
+      && String(ex.heure_fin).slice(0,5) > String(neuf.heure_debut).slice(0,5)
+    const aRemplacer = creneaux.filter(ex => lignes.some(n => memeSillon(ex, n)))
+    if (aRemplacer.length > 0) {
+      // ⚠️ ET ON DIT LESQUELLES, PAS « celles du jeudi ». Le commerçant doit
+      // pouvoir reconnaître ce qu'il perd avant de le perdre.
+      const details = aRemplacer.map(c =>
+        `${c.jour_semaine} ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)}`
+        + (parLieuRdv && c.lieu_id ? ` · ${nomLieuRdv(c.lieu_id) || 'autre endroit'}` : '')
+        + (c.praticien_id ? ` · ${praticienLabel(c.praticien_id)}` : ''))
+      if (!await confirme(confirmationSimple({
+        titre: aRemplacer.length === 1 ? 'Une plage va être remplacée' : `${aRemplacer.length} plages vont être remplacées`,
+        message: 'Elles occupent la même heure que ce que tu copies. Le reste de ces journées ne bouge pas.',
+        details,
+        action: 'Oui, les remplacer',
+      }))) { setCopieLoading(false); return }
       const { error: errDel } = await supabase.from('rdv_creneaux')
-        .update({ deleted_at: new Date().toISOString() }).in('id', idsARemplacer)
+        .update({ deleted_at: new Date().toISOString() }).in('id', aRemplacer.map(c => c.id))
       if (errDel) { setCopieLoading(false); return toast(`Erreur : ${errDel.message}`, 'error') }
     }
     // ⚠️ `.select()` PARCE QU'IL FAUT LES NOUVEAUX IDENTIFIANTS. Sans eux, on

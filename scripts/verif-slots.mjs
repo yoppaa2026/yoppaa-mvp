@@ -2147,10 +2147,20 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('⚠️ avec ses deux gestes nommés',
     /premier: 'Copier sur l’emplacement du jour'/.test(CONFIG)
     && /second: 'Ne pas copier ces plages'/.test(CONFIG))
-  // ⚠️ ET LE CONFLIT NE SE DÉCLENCHE QUE S'IL Y EN A UN : une plage dont la
-  // salle existe bien le jour cible garde la sienne, sans une question inutile.
-  verifier('⚠️ aucune question quand la salle existe ce jour-là',
-    /if \(duJour\.some\(l => l\.id === c\.lieu_id\)\) continue/.test(CONFIG))
+  // ⚠️ ET LE CONFLIT NE SE DÉCLENCHE QUE S'IL Y EN A UN.
+  //
+  // 🔴 « LE MESSAGE S'AFFICHE POUR UN EMPLACEMENT IDENTIQUE » (Alex, 08/09).
+  // Un commerce qui change d'endroit a UNE LIGNE PAR JOUR : la salle du mardi
+  // et celle du jeudi portent le même nom et deux identifiants différents. La
+  // garde d'avant mesurait la comparaison par identifiant, c'est-à-dire
+  // exactement le défaut, et elle est restée verte pendant qu'il se produisait.
+  verifier('⚠️ aucune question quand c’est le même endroit ce jour-là',
+    /if \(memeLieuCeJour\(c\.lieu_id, duJour\)\) continue/.test(CONFIG))
+  verifier('⚠️ et « même endroit » se juge sur le nom, pas sur l’identifiant',
+    /function memeEndroit\(a, b\) \{[\s\S]{0,220}?return n\(a\) !== '' && n\(a\) === n\(b\)/.test(CONFIG))
+  verifier('⚠️ la copie vise la ligne de CE jour-là',
+    /const jumeau = memeLieuCeJour\(c\.lieu_id, duJour\)/.test(CONFIG)
+    && /lieuCopie = jumeau\.id/.test(CONFIG))
   // 🔴 ET L'EMPLACEMENT EST DÉSORMAIS COPIÉ, là où il disparaissait.
   verifier('🔴 la copie emporte un emplacement',
     /lieu_id: parLieuRdv \? lieuCopie : null,/.test(CONFIG))
@@ -2221,20 +2231,52 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // avant les questions : répondre « non » vidait les jours cibles et rendait
   // la main. Un geste d'annulation qui détruit est le pire de tous.
   verifier('🔴 la copie des commandes ne supprime qu’après les questions',
-    /confirmationSimple/.test(blocCopieCmd) && /Des créneaux vont être remplacés/.test(blocCopieCmd))
+    /confirmationSimple/.test(blocCopieCmd) && /vont être remplacés/.test(blocCopieCmd))
+
+  // 🔴 ET ELLE NE REMPLACE QUE CE QUI OCCUPE LA MÊME HEURE (Alex, 08/09 :
+  // « j'essaie de copier de mardi à jeudi sur des créneaux libres et il me dit
+  // qu'il remplace... et effectivement il supprime les anciens »). Copier un
+  // service du midi emportait celui du soir, qui ne le gênait en rien.
+  verifier('🔴 la copie des commandes ne remplace que le même sillon',
+    /const memeSillon = \(ex, neuf\) =>[\s\S]{0,600}?String\(ex\.heure_debut\)\.slice\(0,5\) < String\(neuf\.heure_fin\)\.slice\(0,5\)/.test(blocCopieCmd)
+    && /const aRemplacer = creneaux\.filter\(ex => toutesCopies\.some\(n => memeSillon\(ex, n\)\)\)/.test(CONFIG))
+  // ⚠️ ET UN CRÉNEAU QUI PORTE DES COMMANDES SE GARDE. La suppression à
+  // l'unité le refuse depuis longtemps ; la copie effaçait sans regarder.
+  verifier('🔴 un créneau qui porte des commandes n’est pas écrasé par une copie',
+    /\.select\('creneau_id'\)\.in\('creneau_id', aRemplacer\.map\(c => c\.id\)\)/.test(CONFIG)
+    && /const remplacables = aRemplacer\.filter\(c => !occupes\.includes\(c\)\)/.test(CONFIG))
+  verifier('⚠️ et le message dit ce qui est gardé et pourquoi',
+    /Gardé · \$\{c\.jour_semaine\}[^`]*: des clients y ont commandé/.test(CONFIG))
   verifier('⚠️ et elle lit le résultat de chaque écriture',
     /const \{ error \} = await supabase\.from\('creneaux'\)\.insert\(copies\)[\s\S]{0,160}?if \(error\)/.test(CONFIG))
 
   // Le même défaut vivait dans la copie des plages de rendez-vous, et il y
   // était pire : la suppression précédait DEUX questions.
   const iRdvQuestion = CONFIG.indexOf('Certaines plages ne peuvent pas être copiées')
-  const iRdvSuppression = CONFIG.indexOf('joursEcrits.has(c.jour_semaine)')
+  // ⚠️ L'ANCRE VISE LA SUPPRESSION DU MODULE RENDEZ-VOUS, pas celle des
+  // commandes : `aRemplacer.map(c => c.id)` existe des DEUX côtés, et
+  // `indexOf` rendait la première, c'est-à-dire le voisin. La garde mesurait
+  // donc l'autre module. Le piège du jumeau, troisième fois en deux jours.
+  const iRdvSuppression = CONFIG.indexOf(".in('id', aRemplacer.map(c => c.id))")
   verifier('🔴 la copie des rendez-vous ne supprime qu’après les questions',
     iRdvQuestion > 0 && iRdvSuppression > iRdvQuestion)
   verifier('⚠️ et plus juste après setCopieLoading',
     !/setCopieLoading\(true\)\s*const idsARemplacer/.test(CONFIG))
-  verifier('⚠️ et seulement sur les jours qui reçoivent une plage',
-    /const joursEcrits = new Set\(lignes\.map\(l => l\.jour_semaine\)\)/.test(CONFIG))
+  // 🔴 ET SEULEMENT CE QUI OCCUPE LA MÊME PLACE : même jour, même praticien,
+  // même endroit, et une heure qui se chevauche. Deux praticiens à la même
+  // heure ne se gênent pas, c'est ainsi qu'on donne deux cours en même temps.
+  verifier('🔴 la copie des rendez-vous ne remplace que le même sillon',
+    /String\(ex\.praticien_id \|\| ''\) === String\(neuf\.praticien_id \|\| ''\)/.test(CONFIG)
+    && /String\(ex\.lieu_id \|\| ''\) === String\(neuf\.lieu_id \|\| ''\)/.test(CONFIG)
+    && /const aRemplacer = creneaux\.filter\(ex => lignes\.some\(n => memeSillon\(ex, n\)\)\)/.test(CONFIG))
+  verifier('⚠️ et la question NOMME les plages remplacées',
+    /titre: aRemplacer\.length === 1 \? 'Une plage va être remplacée'/.test(CONFIG)
+    && /Le reste de ces journées ne bouge pas\./.test(CONFIG))
+  // ⚠️ DEUX PLAGES QUI SE TOUCHENT NE SE CHEVAUCHENT PAS. La base rend
+  // « 11:00:00 » et les lignes écrites « 11:00 » : comparées entières, la
+  // première serait supprimée par la seconde.
+  verifier('⚠️ deux plages qui se touchent ne s’écrasent pas',
+    (CONFIG.match(/String\(ex\.heure_fin\)\.slice\(0,5\) > String\(neuf\.heure_debut\)\.slice\(0,5\)/g) || []).length === 2)
 
   // ═════════════════════════════════════════════════════════════════════════
   // LES CINQ ANOMALIES DE LA CAPTURE DU 08/09 (La Table d'Essai, 11:00-13:00

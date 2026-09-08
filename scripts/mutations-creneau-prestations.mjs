@@ -195,7 +195,7 @@ const MUTATIONS = [
 
   { nom: '🔴 une question se pose meme quand la salle existe ce jour-la',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '          if (duJour.some(l => l.id === c.lieu_id)) continue',
+    de: '          if (memeLieuCeJour(c.lieu_id, duJour)) continue',
     vers: '          if (false) continue' },
 
   { nom: '🔴 les details redeviennent un pave illisible',

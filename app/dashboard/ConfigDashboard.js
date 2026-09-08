@@ -3555,17 +3555,51 @@ function TabCreneaux({ commercantId, toast }) {
       heureFin: form.heure_fin,
       horairesDetail: horaires,
     })
+    // 🔴 ET LE MESSAGE DISAIT UNE CHOSE FAUSSE (Alex, 08/09 : « il me dit tu
+    // auras un créneau de 11 à 13 et 18 à 22, et ensuite il affiche ça »).
+    //
+    // ⚠️ CÔTÉ COMMANDES, RIEN N'ÉCRÊTE. En rendez-vous, le moteur découpe la
+    // plage aux heures d'ouverture, donc « ce qui dépasse ne sera pas proposé »
+    // y est vrai. Ici, la fiche propose le créneau TEL QUEL : un 11:00-22:00
+    // est offert en entier, et un client peut choisir de venir à 15h quand le
+    // restaurant est fermé. J'avais recopié la phrase du module d'à côté sans
+    // vérifier qu'elle y était encore vraie.
+    //
+    // ✅ ON PROPOSE LE GESTE UTILE : découper aux services, comme le fait déjà
+    // la copie. « Le créer tel quel » reste possible, avec la vraie phrase.
+    let aCreer = [{ debut: form.heure_debut, fin: form.heure_fin }]
     if (dehorsCmd && dehorsCmd.raison !== 'jour_ferme') {
       const heures = dehorsCmd.plages.join(' et ')
-      const message = dehorsCmd.raison === 'hors_ouverture'
-        ? `Le ${jourActif}, tu es ouvert ${heures}. Ce créneau tombe entièrement en dehors : aucune commande ne pourra s’y poser.`
-        : `Le ${jourActif}, tu es ouvert ${heures}. Ce qui dépasse ne sera pas proposé à tes clients.`
-      if (!await confirme(confirmationSimple({
-        titre: 'Ce créneau sort de tes heures d’ouverture',
-        message,
-        action: 'Le créer quand même',
-        ton: 'principal',
-      }))) return
+      const ajuste = ajusterPlagePourJour(
+        { heure_debut: form.heure_debut, heure_fin: form.heure_fin }, horaires?.[jourActif])
+      const morceaux = ajuste.statut === 'ignoree' ? [] : (ajuste.morceaux || [])
+
+      if (morceaux.length > 0) {
+        const propose = morceaux.map(m => `${m.debut}–${m.fin}`).join(' et ')
+        const choix = await confirmer(confirmationDeuxGestes({
+          titre: 'Ce créneau déborde de tes heures d’ouverture',
+          message: `Le ${jourActif}, tu es ouvert ${heures}.`,
+          details: [
+            `Découpé, tu obtiens ${propose}.`,
+            'Tel quel, tes clients pourront choisir une heure où tu es fermé.',
+          ],
+          premier: morceaux.length > 1 ? `Créer ${propose}` : `Créer ${propose} seulement`,
+          second: 'Le créer tel quel',
+          tonPremier: 'principal',
+          tonSecond: 'neutre',
+        }))
+        if (choix !== 'premier' && choix !== 'second') return
+        if (choix === 'premier') aCreer = morceaux
+      } else {
+        // Entièrement dehors : il n'y a rien à découper, et là non plus rien
+        // n'empêchera un client de le choisir.
+        if (!await confirme(confirmationSimple({
+          titre: 'Ce créneau est hors de tes heures d’ouverture',
+          message: `Le ${jourActif}, tu es ouvert ${heures}. Ce créneau sera quand même proposé à tes clients, qui pourront le choisir alors que tu es fermé.`,
+          action: 'Le créer quand même',
+          ton: 'principal',
+        }))) return
+      }
     }
 
     // Superposition sur ce jour.
@@ -3576,17 +3610,19 @@ function TabCreneaux({ commercantId, toast }) {
     const existants = creneauxDuJour(jourActif)
       .filter(e => !parLieu || (e.lieu_id || null) === (form.lieu_id || null))
     for (const e of existants) {
-      if (form.heure_debut < e.heure_fin.slice(0,5) && form.heure_fin > e.heure_debut.slice(0,5)) {
+      // ⚠️ CHAQUE MORCEAU EST VÉRIFIÉ. Un découpage qui poserait une heure déjà
+      // prise doit être refusé comme le serait une saisie à la main.
+      if (aCreer.some(n => n.debut < e.heure_fin.slice(0,5) && n.fin > e.heure_debut.slice(0,5))) {
         toast('Ce créneau chevauche un créneau existant', 'error'); return
       }
     }
 
     setSaving(true)
-    const { error } = await supabase.from('creneaux').insert({
+    const { error } = await supabase.from('creneaux').insert(aCreer.map(n => ({
       commercant_id: commercantId,
       jour_semaine: jourActif,
-      heure_debut: form.heure_debut,
-      heure_fin: form.heure_fin,
+      heure_debut: n.debut,
+      heure_fin: n.fin,
       max_commandes: parseInt(form.max_commandes) || 5,
       actif: form.actif,
       capacite_temps: parseFloat(form.capacite_temps) || 30,
@@ -3594,9 +3630,9 @@ function TabCreneaux({ commercantId, toast }) {
       // l'activité ». C'est ce qui protège tous les commerces qui n'ont pas
       // activé le planning par emplacement, c'est-à-dire presque tous.
       lieu_id: parLieu ? (form.lieu_id || null) : null,
-    })
+    })))
     if (error) { toast('Erreur : ' + error.message, 'error'); setSaving(false); return }
-    toast('Créneau ajouté'); setSaving(false); setShowForm(false)
+    toast(aCreer.length > 1 ? `${aCreer.length} créneaux ajoutés` : 'Créneau ajouté'); setSaving(false); setShowForm(false)
     setForm({ heure_debut: '', heure_fin: '', max_commandes: 5, actif: true, capacite_temps: 30, lieu_id: '' })
     fetchAll()
   }
@@ -3616,8 +3652,12 @@ function TabCreneaux({ commercantId, toast }) {
     const debut = prompt(`Heure d'ouverture (défaut: ${ouvertureJour}) :`) || ouvertureJour
     const fin   = prompt(`Heure de fermeture (défaut: ${fermetureJour}) :`) || fermetureJour
     const duree = parseInt(prompt('Durée en minutes (ex: 15) :') || '15')
-    const max   = parseInt(prompt('Commandes max par créneau (ex: 5) :') || '5')
-    const cap   = parseFloat(prompt(`Capacité temps (min) par créneau (ex: ${duree}) :`) || String(duree))
+    // ⚠️ « PAR CRÉNEAU » EST AMBIGU QUAND ON VIENT D'EN DEMANDER LA DURÉE
+    // (Alex, 08/09). Ici, un créneau est une tranche : le nombre vaut pour
+    // CHACUNE, pas pour la journée.
+    const tranche = Number.isFinite(duree) ? `${duree} min` : 'chaque tranche'
+    const max   = parseInt(prompt(`Commandes max par tranche de ${tranche} (ex: 5) :`) || '5')
+    const cap   = parseFloat(prompt(`Capacité temps (min) par tranche (ex: ${duree}) :`) || String(duree))
     if (!debut || !fin || !duree) return
 
     // Vérif hors horaires : on ne refuse que si RIEN de ce qu'il demande ne
@@ -3964,6 +4004,14 @@ function TabCreneaux({ commercantId, toast }) {
                 <div>
                   <label style={s.label}>Commandes max</label>
                   <Input type="number" min="1" max="50" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} />
+                  {/* ⚠️ « MAX, C'EST POUR TOUT LE CRÉNEAU OU PAR TRANCHE ? »
+                      (Alex, 08/09). Le nombre vaut pour CE créneau, quelle que
+                      soit sa longueur : 5 sur un 11:00-22:00, c'est cinq
+                      commandes pour onze heures. Écrit une fois ici, la
+                      question ne se pose plus. */}
+                  <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>
+                    Pour ce créneau entier. Un 11:00–22:00 à 5, c’est 5 commandes sur toute la plage.
+                  </p>
                 </div>
               </div>
               {modeGlobal === 'temps' && (

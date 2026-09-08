@@ -2279,6 +2279,37 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('⚠️ et plus sur l’heure de la plage source',
     !/const cle = \(c\) => `\$\{c\.heure_debut\}\|\$\{c\.heure_fin\}\|\$\{c\.praticien_id \|\| ''\}`/.test(CONFIG))
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 « CE QUI DÉPASSE NE SERA PAS PROPOSÉ » ÉTAIT FAUX CÔTÉ COMMANDES
+  // (Alex, 08/09). En rendez-vous, le moteur écrête aux heures d'ouverture,
+  // donc la phrase y est vraie. Côté commandes, RIEN n'écrête : la fiche
+  // propose le créneau tel quel, et un client peut choisir 15h chez un
+  // restaurant fermé l'après-midi. J'avais recopié la phrase du module d'à
+  // côté sans vérifier qu'elle y était encore vraie.
+  // ═════════════════════════════════════════════════════════════════════════
+  verifier('🔴 la création d’un créneau de commande propose de découper',
+    /titre: 'Ce créneau déborde de tes heures d’ouverture',/.test(CONFIG)
+    && /second: 'Le créer tel quel',/.test(CONFIG))
+  verifier('⚠️ et elle dit ce qui se passe si on le garde tel quel',
+    /Tel quel, tes clients pourront choisir une heure où tu es fermé\./.test(CONFIG))
+  verifier('🔴 elle ne promet plus que le dépassement sera écarté',
+    !/Le \$\{jourActif\}, tu es ouvert \$\{heures\}\. Ce qui dépasse ne sera pas proposé/.test(CONFIG))
+  verifier('🔴 ni qu’aucune commande ne pourra s’y poser',
+    !/aucune commande ne pourra s’y poser/.test(CONFIG)
+    && /Ce créneau sera quand même proposé à tes clients/.test(CONFIG))
+  verifier('🔴 le découpage crée un créneau par morceau',
+    /await supabase\.from\('creneaux'\)\.insert\(aCreer\.map\(n => \(\{/.test(CONFIG))
+  verifier('⚠️ et chaque morceau est vérifié contre les créneaux existants',
+    /if \(aCreer\.some\(n => n\.debut < e\.heure_fin\.slice\(0,5\) && n\.fin > e\.heure_debut\.slice\(0,5\)\)\)/.test(CONFIG))
+  // ⚠️ ET LA PHRASE RESTE, LÀ OÙ ELLE EST VRAIE : le moteur de rendez-vous
+  // écrête vraiment. La retirer des deux modules aurait été aussi faux.
+  verifier('⚠️ le rendez-vous garde sa phrase, qui y est vraie',
+    /Le \$\{form\.jour_semaine\}, tu es ouvert \$\{heures\}\. Ce qui dépasse ne sera pas proposé/.test(CONFIG))
+  const MOTEUR = lire('lib/rdv-slots.js')
+  verifier('⚠️ et c’est vrai parce que le moteur écrête',
+    /if \(shopOpen     !== null\) debut = Math\.max\(debut, shopOpen\)/.test(MOTEUR)
+    && /if \(shopRanges\.length > 1 && !shopRanges\.some\(\(\[a, b\]\) => t >= a && slotEnd <= b\)\) continue/.test(MOTEUR))
+
   // 🔴 QUAND IL N'Y A RIEN À DÉCIDER, UN SEUL BOUTON. « J'ai compris » et
   // « Ne rien faire » côte à côte pour le même effet, vus sur la capture.
   const CONFIRMATIONS = lire('lib/confirmations.js')

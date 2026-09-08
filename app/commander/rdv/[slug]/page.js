@@ -1129,7 +1129,7 @@ export default function CommanderRdvSlug() {
 
       // 2. Fetch prestations + créneaux config + praticiens + junction + fermetures en parallèle
       const todayISO = jourBruxelles()
-      const [{ data: prest }, { data: cren }, { data: prat }, { data: junction }, { data: ferm }, { data: photosData }] = await Promise.all([
+      const [{ data: prest }, { data: cren }, { data: prat }, { data: ferm }, { data: photosData }] = await Promise.all([
         supabase
           .from('rdv_prestations')
           .select('*')
@@ -1151,11 +1151,6 @@ export default function CommanderRdvSlug() {
           .eq('actif', true)
           .is('deleted_at', null)
           .order('ordre', { ascending: true }),
-        // Junction : quelles prestations sont limitées à quels praticiens.
-        // Junction vide pour une prestation = TOUS les praticiens peuvent (pattern Yoppaa).
-        supabase
-          .from('rdv_prestation_praticiens')
-          .select('prestation_id, praticien_id'),
         // Sess 6 : fermetures exceptionnelles futures uniquement (date_fin >= today).
         // Filtrage cote client sur date_debut/date_fin pour bloquer les jours concernes.
         supabase
@@ -1232,13 +1227,34 @@ export default function CommanderRdvSlug() {
       }
 
       setPraticiens(prat || [])
-      // Build junction map : prestation_id -> [praticien_id, ...]
-      const jm = {}
-      ;(junction || []).forEach(row => {
-        if (!jm[row.prestation_id]) jm[row.prestation_id] = []
-        jm[row.prestation_id].push(row.praticien_id)
-      })
-      setJunctionMap(jm)
+
+      // Qui fait quoi. Junction vide pour une prestation = TOUS les praticiens
+      // peuvent, c'est le comportement d'origine et il protège les commerces
+      // qui n'ont jamais touché ce réglage.
+      //
+      // 🔴 CETTE REQUÊTE N'ÉTAIT BORNÉE À RIEN (08/09). La table ne porte pas de
+      // `commercant_id`, et elle descendait donc les réglages de TOUT le parc
+      // dans le navigateur de chaque visiteur, en grossissant à chaque commerce
+      // inscrit. Même défaut et même remède que pour `rdv_creneau_prestations`,
+      // corrigé le 07/09 : on borne aux prestations de cette fiche. Elle sort
+      // donc du `Promise.all`, puisqu'elle a besoin de leurs identifiants.
+      const idsPrestations = (prest || []).map(p => p.id).filter(Boolean)
+      if (idsPrestations.length > 0) {
+        const { data: junction, error: errJunction } = await supabase
+          .from('rdv_prestation_praticiens')
+          .select('prestation_id, praticien_id')
+          .in('prestation_id', idsPrestations)
+        if (annule) return
+        if (errJunction) console.warn('[fiche rdv] junction praticiens KO', errJunction.message)
+        const jm = {}
+        ;(junction || []).forEach(row => {
+          if (!jm[row.prestation_id]) jm[row.prestation_id] = []
+          jm[row.prestation_id].push(row.praticien_id)
+        })
+        setJunctionMap(jm)
+      } else {
+        setJunctionMap({})
+      }
       setFermetures(ferm || [])
       setLoading(false)
     })()

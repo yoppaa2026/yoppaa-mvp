@@ -53,6 +53,45 @@ const MUTATIONS = [
     de: '    const idsCreneaux = (creneauxCom || []).filter(c => c.actif !== false).map(c => c.id)',
     vers: '    const idsCreneaux = (creneauxCom || []).map(c => c.id)' },
 
+  // ─── LE PRATICIEN (Alex, 08/09) ────────────────────────────────────────────
+  //
+  // 🔴 `praticien_id` arrivait du corps de la requete et partait en base sans
+  // aucun controle. La base porte une contrainte d exclusion sur le praticien
+  // et l horaire : l identifiant d une praticienne d UN AUTRE COMMERCE fermait
+  // son agenda depuis un formulaire public.
+  { nom: '🔴 n importe quel praticien refait la prestation',
+    de: '  return duMetier.some(l => String(l.praticien_id) === String(praticienId))',
+    vers: '  return true' },
+
+  // ⚠️ UNE ALARME QUI SONNE TOUT LE TEMPS NE PROTEGE PLUS RIEN : chez un
+  // independant seul, la question de « qui fait quoi » n existe pas.
+  { nom: '⚠️ l avertissement praticien sonne chez un independant seul',
+    de: '  if (Number(nbPraticiens) < 2) return false',
+    vers: '  if (false) return false' },
+
+  { nom: '🔴 le serveur accepte un praticien eteint ou d une autre maison',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    if (!prat || prat.actif === false || prat.deleted_at) {',
+    vers: '    if (false) {' },
+
+  // 🔴 LA JUNCTION QUI DESCENDAIT TOUT LE PARC dans le navigateur du visiteur.
+  { nom: '🔴 la fiche publique relit la junction de tout le parc',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "          .in('prestation_id', idsPrestations)",
+    vers: '          .limit(5000)' },
+
+  { nom: '🔴 le tableau de bord relit la junction de tout le parc',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "          .in('prestation_id', idsPrestations)",
+    vers: '          .limit(5000)' },
+
+  // 🔴 UN REFUS DE REGLE N EST PAS UNE PANNE : le client relancait a l infini
+  // une demande que le serveur ne pouvait pas accepter.
+  { nom: '🔴 un praticien refuse redevient une erreur serveur muette',
+    fichier: 'app/api/rdv/reserver/route.js',
+    de: "      if (res.code === 'praticien_hors_commerce' || res.code === 'praticien_hors_prestation') {",
+    vers: '      if (false) {' },
+
   // 🔴 FERMER SUR UNE IGNORANCE VIDERAIT TOUS LES AGENDAS, sans une erreur.
   { nom: '🔴 des liaisons non chargees FERMENT au lieu d ouvrir',
     de: '  if (!Array.isArray(liaisons)) return true\n  if (!creneauId) return false',

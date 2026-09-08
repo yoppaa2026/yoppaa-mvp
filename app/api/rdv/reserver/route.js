@@ -369,6 +369,16 @@ export async function POST(request) {
       if (res.code === 'prestation_hors_commerce' || res.code === 'prestation_introuvable') {
         return NextResponse.json({ ok: false, error: 'Prestation introuvable.' }, { status: 404 })
       }
+      // ⚠️ UN REFUS DE RÈGLE N'EST PAS UNE PANNE. Ces trois-là tombaient dans
+      // le 500 générique « Réessaie » : le client relançait indéfiniment une
+      // demande que le serveur ne pouvait pas accepter, sans jamais savoir
+      // pourquoi, et nous recevions des erreurs serveur pour des refus normaux.
+      if (res.code === 'prestation_hors_creneau') {
+        return NextResponse.json({ ok: false, error: 'Cet horaire n’est pas ouvert à cette prestation. Choisis-en un autre.' }, { status: 409 })
+      }
+      if (res.code === 'praticien_hors_commerce' || res.code === 'praticien_hors_prestation') {
+        return NextResponse.json({ ok: false, error: 'Cette personne ne peut pas assurer ce rendez-vous. Choisis quelqu’un d’autre, ou « sans préférence ».' }, { status: 409 })
+      }
       console.error('[rdv/reserver] insert KO', res.error)
       return NextResponse.json({ ok: false, error: 'Ta réservation n\'a pas pu être enregistrée. Réessaie.' }, { status: 500 })
     }

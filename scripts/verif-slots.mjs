@@ -10,6 +10,7 @@ import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
   creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
+  praticienAutorisePourPrestation, prestationSansPraticienDit,
   prestationAutoriseeSurCreneaux, coursDejaCoche, creneauHorsOuverture, coursSansHoraire,
   horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV, ajusterPlagePourJour,
 } from '../lib/rdv-slots.js'
@@ -2701,6 +2702,83 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   const SRV = sansCommentaires(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
   verifier('🔴 le serveur borne ses liaisons aux plages vivantes',
     /const idsCreneaux = \(creneauxCom \|\| \[\]\)\.filter\(c => c\.actif !== false\)\.map\(c => c\.id\)/.test(SRV))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 LE PRATICIEN N'ÉTAIT VÉRIFIÉ NULLE PART (Alex, 08/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Alex, en testant : « ni Carole ni Emily n'étaient cochées » sur la Séance de
+// Reiki, et les deux étaient proposées. C'est « vide = tous », voulu. Mais en
+// cherchant, le serveur ne vérifiait RIEN : `praticien_id` arrivait du corps
+// de la requête et partait en base tel quel.
+//
+// 🔴 ET CE N'EST PAS UN CONFORT D'ÉCRAN. La base porte une contrainte
+// d'exclusion sur le praticien et l'horaire : poser un rendez-vous avec
+// l'identifiant d'une praticienne d'un AUTRE commerce fermait son agenda à
+// cette heure-là, depuis un formulaire public.
+{
+  const L = [
+    { prestation_id: 'coupe', praticien_id: 'emily' },
+    { prestation_id: 'coupe', praticien_id: 'carole' },
+    { prestation_id: 'reiki', praticien_id: 'emily' },
+  ]
+
+  verifier('un praticien coché sur la prestation passe',
+    praticienAutorisePourPrestation('emily', 'reiki', L))
+  verifier('🔴 un praticien NON coché est refusé',
+    !praticienAutorisePourPrestation('carole', 'reiki', L))
+  // ⚠️ VIDE = TOUS, comme pour les plages : c'est ce qui protège tout le parc.
+  verifier('⚠️ une prestation que personne ne réclame est faite par tous',
+    praticienAutorisePourPrestation('carole', 'massage', L))
+  verifier('sans préférence, on ne juge rien',
+    praticienAutorisePourPrestation(null, 'reiki', L))
+  // 🔴 NON CHARGÉ OUVRE, comme partout ailleurs dans ce fichier : fermer sur
+  // une ignorance viderait des agendas que personne ne saurait rouvrir.
+  verifier('🔴 des liaisons non chargées ouvrent, elles ne ferment pas',
+    praticienAutorisePourPrestation('carole', 'reiki', null))
+
+  // L'avertissement au commerçant, et son seuil.
+  verifier('une prestation muette est signalée dans une équipe',
+    prestationSansPraticienDit('massage', L, 3))
+  verifier('une prestation qui dit qui la fait ne l’est pas',
+    !prestationSansPraticienDit('reiki', L, 3))
+  // ⚠️ UNE ALARME QUI SONNE TOUT LE TEMPS NE PROTÈGE PLUS RIEN : chez un
+  // indépendant seul, la question n'existe pas.
+  verifier('🔴 rien n’est signalé chez un praticien seul',
+    !prestationSansPraticienDit('massage', L, 1))
+  verifier('ni sans aucun praticien', !prestationSansPraticienDit('massage', L, 0))
+
+  // ── La garde du serveur, et l'appartenance au commerce ──────────────────
+  const SRV2 = sansCommentaires(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur vérifie que le praticien est de CE commerce',
+    /\.from\('rdv_praticiens'\)[\s\S]{0,200}\.eq\('commercant_id', commercantId\)/.test(SRV2))
+  verifier('🔴 et il refuse un praticien éteint ou supprimé',
+    /if \(!prat \|\| prat\.actif === false \|\| prat\.deleted_at\)/.test(SRV2))
+  verifier('🔴 l’appartenance vaut AUSSI pour la saisie du commerçant',
+    /if \(champs\?\.praticien_id\) \{[\s\S]{0,400}praticien_hors_commerce/.test(SRV2))
+  verifier('le métier, lui, n’est exigé que du client',
+    /praticien_hors_commerce[\s\S]{0,300}if \(champs\?\.source !== 'commercant'\)/.test(SRV2))
+  verifier('et la junction du serveur est bornée à la prestation',
+    /\.from\('rdv_prestation_praticiens'\)[\s\S]{0,150}\.eq\('prestation_id', prestationId\)/.test(SRV2))
+
+  // ── Un refus de règle n'est pas une panne ───────────────────────────────
+  const ROUTE_RDV = sansCommentaires(readFileSync(new URL('../app/api/rdv/reserver/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 un praticien refusé rend un 409, pas un 500 « réessaie »',
+    /praticien_hors_commerce' \|\| res\.code === 'praticien_hors_prestation'/.test(ROUTE_RDV)
+    && /Cette personne ne peut pas assurer ce rendez-vous/.test(ROUTE_RDV))
+  verifier('🔴 et un horaire fermé à cette prestation aussi',
+    /res\.code === 'prestation_hors_creneau'/.test(ROUTE_RDV))
+
+  // ── 🔴 LA REQUÊTE QUI DESCENDAIT TOUT LE PARC ───────────────────────────
+  // `rdv_prestation_praticiens` ne porte pas de `commercant_id` : sans `in`,
+  // les réglages de chaque commerce inscrit partaient chez chaque visiteur.
+  const FICHE_RDV = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  for (const [nom, src] of [['la fiche publique', FICHE_RDV], ['le tableau de bord', srcConfig]]) {
+    const req = src.match(/\.from\('rdv_prestation_praticiens'\)\s*\.select\([^)]*\)([\s\S]{0,80})/g) || []
+    verifier(`🔴 ${nom} borne la junction aux prestations du commerce`,
+      req.length > 0 && req.every(r => r.includes('.in(\'prestation_id\'')))
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

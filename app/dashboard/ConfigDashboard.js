@@ -29,7 +29,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
-import { prestationSansCreneauDedie, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
+import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import BlocAide, { EtapeAide } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
@@ -7962,7 +7962,7 @@ function TabRdvPrestations({ commercantId, toast }) {
 
   async function fetchAll() {
     if (firstLoadRef.current) setLoading(true)
-    const [{ data: prest }, { data: prat }, { data: junction }] = await Promise.all([
+    const [{ data: prest }, { data: prat }] = await Promise.all([
       supabase
         .from('rdv_prestations')
         .select('*')
@@ -7977,12 +7977,24 @@ function TabRdvPrestations({ commercantId, toast }) {
         .eq('actif', true)
         .is('deleted_at', null)
         .order('ordre', { ascending: true }),
-      supabase
-        .from('rdv_prestation_praticiens')
-        .select('prestation_id, praticien_id'),
     ])
     setPrestations(prest || [])
     setPraticiens(prat || [])
+
+    // Qui fait quoi.
+    //
+    // 🔴 CETTE REQUÊTE N'ÉTAIT BORNÉE À RIEN (08/09), ici comme sur la fiche
+    // publique. La table ne porte pas de `commercant_id` : elle descendait les
+    // réglages de TOUT le parc, et grossissait à chaque commerce inscrit. Elle
+    // sort du `Promise.all` puisqu'elle a besoin des identifiants de
+    // prestations pour se borner.
+    const idsPrestations = (prest || []).map(p => p.id).filter(Boolean)
+    const { data: junction } = idsPrestations.length > 0
+      ? await supabase
+          .from('rdv_prestation_praticiens')
+          .select('prestation_id, praticien_id')
+          .in('prestation_id', idsPrestations)
+      : { data: [] }
     // Build junction map : prestation_id -> Set(praticien_id)
     const jm = {}
     ;(junction || []).forEach(row => {
@@ -8101,6 +8113,36 @@ function TabRdvPrestations({ commercantId, toast }) {
           + Ajouter une prestation
         </button>
       </div>
+
+      {/* 🔴 UNE PRESTATION QUI NE DIT PAS QUI LA FAIT EST FAITE PAR TOUT LE
+          MONDE (Alex, 08/09). C'est le comportement d'origine et il protège
+          les commerces qui n'ont jamais touché ce réglage, mais dans une
+          équipe il fait réserver un soin chez quelqu'un qui ne le pratique
+          pas. Le client ne peut pas le deviner, et c'est le commerçant qui
+          rattrape au téléphone.
+          ⚠️ SEULEMENT À PARTIR DE DEUX PRATICIENS : chez un indépendant seul,
+          la question n'existe pas, et une alarme qui sonne tout le temps ne
+          protège plus rien. */}
+      {(() => {
+        const liens = Object.entries(junctionMap).flatMap(([pid, set]) =>
+          [...(set || [])].map(praticien_id => ({ prestation_id: pid, praticien_id })))
+        const muettes = prestations.filter(p =>
+          p.actif !== false && prestationSansPraticienDit(p.id, liens, praticiens.length))
+        if (muettes.length === 0) return null
+        return (
+          <div style={{ margin: '0 0 12px', padding: '10px 12px', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 10 }}>
+            <p style={{ fontSize: 12, fontWeight: 800, color: '#92400E', marginBottom: 3 }}>
+              {muettes.length > 1
+                ? `${muettes.length} prestations ne disent pas qui les fait`
+                : `${muettes[0].nom} ne dit pas qui la fait`}
+            </p>
+            <p style={{ fontSize: 11.5, color: '#92400E', lineHeight: 1.5 }}>
+              {muettes.map(p => p.nom).join(', ')} : tes {praticiens.length} praticiens sont donc tous
+              proposés au client. Ouvre {muettes.length > 1 ? 'chacune' : 'la'} et coche qui {muettes.length > 1 ? 'les' : 'la'} pratique.
+            </p>
+          </div>
+        )
+      })()}
 
       {prestations.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>

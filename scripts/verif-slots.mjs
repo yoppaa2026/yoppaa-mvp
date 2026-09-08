@@ -2337,13 +2337,34 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     /Commandes max ou Temps de préparation \?/.test(CONFIG)
     && (blocAide('creneaux').match(/<strong>Exemple :<\/strong>/g) || []).length === 2)
   verifier('🔴 et l’ambiguïté du « max » est levée',
-    /Le nombre vaut pour la tranche, pas pour la journée/.test(CONFIG)
+    /le réglage vaut pour UN créneau,\s*\n?\s*jamais pour la journée/.test(CONFIG)
     && /Pour ce créneau entier\. Un 11:00–22:00 à 5/.test(CONFIG)
-    && /Commandes max par tranche de \$\{tranche\}/.test(CONFIG))
+    && /Commandes max par créneau\$\{duree_lisible\}/.test(CONFIG))
+  // 🔴 UN SEUL MOT POUR UNE SEULE CHOSE (Alex, 08/09 : « tranche équivaut à
+  // créneau, on utilise créneau partout mais tu parles de tranche dans tes
+  // explications »). Deux mots pour la même chose, c'est une chose de plus à
+  // comprendre, et l'aide était censée en retirer.
+  //
+  // ⚠️ ET LA GARDE NE REGARDE QUE CE QUE LE COMMERÇANT LIT : le bloc d'aide et
+  // les questions posées. Écrite sur le fichier entier, elle rougissait sur un
+  // COMMENTAIRE qui cite la question d'Alex — le dépouilleur du banc ne coupe
+  // pas les commentaires JSX. Une garde qui rougit sans qu'aucune règle n'ait
+  // bougé finit par être désarmée.
+  {
+    const questions = (CONFIG.match(/prompt\(`[^`]*`\)/g) || []).join(' ')
+    verifier('🔴 l’écran ne dit jamais « tranche » là où il dit « créneau »',
+      !/tranche/i.test(blocAide('creneaux') + questions))
+  }
   verifier('⚠️ la copie est expliquée, remplacement compris',
     /sur les jours reçus sont <strong>remplacés<\/strong>/.test(blocAide('creneaux')))
   verifier('⚠️ l’horizon aussi, avec le piège du « 1 jour »',
-    /dès ta dernière tranche\s*\n?\s*passée, tu n’as plus rien à vendre/.test(blocAide('creneaux')))
+    /dès ton dernier créneau\s*\n?\s*passé, tu n’as plus rien à vendre/.test(blocAide('creneaux')))
+  // ⚠️ L'EXEMPLE DU TEMPS DE PRÉPARATION DOIT SE SUIVRE DE BOUT EN BOUT : le
+  // premier était un calcul mental sans énoncé, et Alex l'a dit tel quel.
+  verifier('⚠️ l’exemple du temps de préparation se suit de bout en bout',
+    /tes pizzas demandent 10 minutes chacune et vous êtes\s*\n?\s*deux en cuisine/.test(CONFIG)
+    && /tu\s*\n?\s*règles le créneau à <strong>60 minutes<\/strong>/.test(CONFIG)
+    && /commande 4 pizzas\s*\n?\s*en prend 40, il en reste 20/.test(CONFIG))
 
   // 🔴 « CLÔTURE : 0 H AVANT » NE SE DEVINE PAS. Et le sens change à zéro :
   // ce n'est pas « rien de réglé », c'est « jusqu'à la dernière minute ».

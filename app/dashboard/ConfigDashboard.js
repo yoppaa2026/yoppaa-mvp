@@ -3666,11 +3666,16 @@ function TabCreneaux({ commercantId, toast }) {
     const fin   = prompt(`Heure de fermeture (défaut: ${fermetureJour}) :`) || fermetureJour
     const duree = parseInt(prompt('Durée en minutes (ex: 15) :') || '15')
     // ⚠️ « PAR CRÉNEAU » EST AMBIGU QUAND ON VIENT D'EN DEMANDER LA DURÉE
-    // (Alex, 08/09). Ici, un créneau est une tranche : le nombre vaut pour
-    // CHACUNE, pas pour la journée.
-    const tranche = Number.isFinite(duree) ? `${duree} min` : 'chaque tranche'
-    const max   = parseInt(prompt(`Commandes max par tranche de ${tranche} (ex: 5) :`) || '5')
-    const cap   = parseFloat(prompt(`Capacité temps (min) par tranche (ex: ${duree}) :`) || String(duree))
+    // (Alex, 08/09). On répète donc la durée dans la question : le nombre vaut
+    // pour CHAQUE créneau créé, pas pour la journée.
+    //
+    // ⚠️ ET LE MOT RESTE « CRÉNEAU », PARTOUT (Alex, 08/09 : « tranche équivaut
+    // à créneau, on utilise créneau partout mais tu parles de tranche dans tes
+    // explications »). Deux mots pour une chose, c'est une chose de plus à
+    // comprendre.
+    const duree_lisible = Number.isFinite(duree) ? ` de ${duree} min` : ''
+    const max   = parseInt(prompt(`Commandes max par créneau${duree_lisible} (ex: 5) :`) || '5')
+    const cap   = parseFloat(prompt(`Capacité temps (min) par créneau${duree_lisible} (ex: ${duree}) :`) || String(duree))
     if (!debut || !fin || !duree) return
 
     // Vérif hors horaires : on ne refuse que si RIEN de ce qu'il demande ne
@@ -3871,10 +3876,11 @@ function TabCreneaux({ commercantId, toast }) {
           sauter ton après-midi.
         </EtapeAide>
         <EtapeAide n={2} titre="Génère ta journée plutôt que de la saisir" T={T}>
-          <strong>Générer</strong> te demande une heure de début, une de fin, la durée d’une
-          tranche, puis crée les tranches d’affilée. Un 11:00 → 22:00 par 30 minutes chez un
-          restaurant ouvert 11:00–13:00 et 18:00–22:00 donne <strong>12 tranches</strong>,
-          et <strong>rien entre 13:00 et 18:00</strong>. <strong>+ Ajouter</strong> sert au cas
+          <strong>Générer</strong> te demande une heure de début, une de fin, puis la durée d’un
+          créneau, et il découpe ta journée en créneaux qui se suivent. Un 11:00 → 22:00 par
+          30 minutes chez un restaurant ouvert 11:00–13:00 et 18:00–22:00 donne
+          <strong> 12 créneaux</strong>, et <strong>rien entre 13:00 et 18:00</strong>.
+          <strong> + Ajouter</strong> sert au cas
           particulier : une seule plage, à la main. Si elle déborde, il la ramène à tes heures ;
           si elle tombe entièrement dehors, <strong>il la refuse</strong> et te dit où élargir
           tes horaires. <strong>Aucun créneau ne peut exister quand tu es fermé</strong> : ton
@@ -3882,7 +3888,7 @@ function TabCreneaux({ commercantId, toast }) {
         </EtapeAide>
         <EtapeAide n={3} titre="Choisis ta façon de compter" T={T}>
           C’est le <strong>Mode de capacité</strong>, juste en dessous. Il décide de ce qui
-          rend une tranche complète. Les deux exemples sont détaillés plus bas.
+          rend un créneau complet. Les deux façons sont détaillées plus bas, avec un exemple.
         </EtapeAide>
         <EtapeAide n={4} titre="Copie sur tes autres jours" T={T}>
           <strong>Copier vers…</strong>, puis coche les jours. Ce qui dépasse leurs horaires
@@ -3893,8 +3899,8 @@ function TabCreneaux({ commercantId, toast }) {
         </EtapeAide>
         <EtapeAide n={5} titre="Jusqu’à quand on peut commander" T={T}>
           C’est l’<strong>horizon</strong>, tout en haut. <strong>2 jours</strong> convient à
-          presque tout le monde. Attention à <strong>1 jour</strong> : dès ta dernière tranche
-          passée, tu n’as plus rien à vendre jusqu’au lendemain matin. Monte à 5 ou 7 jours si
+          presque tout le monde. Attention à <strong>1 jour</strong> : dès ton dernier créneau
+          passé, tu n’as plus rien à vendre jusqu’au lendemain matin. Monte à 5 ou 7 jours si
           tu prends des commandes préparées à l’avance.
         </EtapeAide>
 
@@ -3909,32 +3915,36 @@ function TabCreneaux({ commercantId, toast }) {
             <div style={{ background: T.pale, borderRadius: 10, padding: '10px 12px' }}>
               <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, margin: '0 0 4px' }}>Commandes max</p>
               <p style={{ fontSize: 11.5, color: T.deep, lineHeight: 1.55, margin: 0 }}>
-                Un nombre de commandes <strong>par tranche</strong>. Simple, et juste quand tes
-                commandes se ressemblent.<br/>
-                <strong>Exemple :</strong> tranches de 15 min à 10 → dix commandes toutes les
-                quinze minutes, et la onzième voit « complet ».
+                Tu comptes <strong>des commandes</strong>. C’est le plus simple, et c’est juste
+                quand tes commandes se ressemblent.<br/>
+                <strong>Exemple :</strong> des créneaux de 15 minutes réglés à 10. Dix clients
+                peuvent commander pour 12:00, le onzième voit « complet » et prend 12:15.
               </p>
             </div>
             <div style={{ background: T.pale, borderRadius: 10, padding: '10px 12px' }}>
               <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, margin: '0 0 4px' }}>Temps de préparation</p>
               <p style={{ fontSize: 11.5, color: T.deep, lineHeight: 1.55, margin: 0 }}>
-                Un <strong>budget de minutes</strong> par tranche, que chaque article consomme
-                selon son temps de préparation.<br/>
-                <strong>Exemple :</strong> tranche de 30 min, deux personnes en cuisine → 60
-                minutes de capacité, donc six pizzas à 10 min. Une commande de vingt pièces en
-                mange autant que six clients pressés.
+                Tu comptes <strong>des minutes de travail</strong>. Chaque créneau reçoit un
+                budget, et chaque article commandé y prend son temps de préparation. À préférer
+                quand une commande peut être un pain ou un buffet.<br/>
+                <strong>Exemple :</strong> tes pizzas demandent 10 minutes chacune et vous êtes
+                deux en cuisine. Sur un créneau de 30 minutes, tu peux donc en sortir 6 : tu
+                règles le créneau à <strong>60 minutes</strong>. Un client qui commande 4 pizzas
+                en prend 40, il en reste 20 pour les suivants.
               </p>
             </div>
           </div>
           <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.6, margin: '10px 0 0' }}>
-            <strong style={{ color: T.deep }}>Le nombre vaut pour la tranche, pas pour la journée.</strong>{' '}
-            Un créneau unique 11:00–22:00 réglé à 5, c’est cinq commandes pour onze heures.
-            Douze tranches à 10, c’est cent vingt commandes possibles, jamais plus de dix à la fois.
-            Tu peux corriger chaque tranche après coup avec les boutons − et + de sa carte.
+            <strong style={{ color: T.deep }}>Dans les deux cas, le réglage vaut pour UN créneau,
+            jamais pour la journée.</strong>{' '}
+            Un seul créneau 11:00–22:00 réglé à 5, ce sont cinq commandes pour onze heures.
+            Douze créneaux à 10, ce sont cent vingt commandes possibles sur la journée, et jamais
+            plus de dix à la même heure. Tu peux corriger chaque créneau après coup avec les
+            boutons − et + de sa carte.
           </p>
           <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.6, margin: '8px 0 0' }}>
-            <strong style={{ color: T.deep }}>Et la clôture, sur chaque carte</strong>, ferme la
-            tranche un nombre d’heures avant son début. À 0, on peut commander jusqu’à la
+            <strong style={{ color: T.deep }}>Et la clôture, sur chaque carte</strong>, ferme le
+            créneau un nombre d’heures avant son début. À 0, on peut commander jusqu’à la
             dernière minute. Un boulanger met 2, une friterie reste souvent à 0.
           </p>
         </div>

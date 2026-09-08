@@ -11,8 +11,27 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { lireIdentiteYopper } from '@/lib/yopper-session'
-import { globalLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
+import { globalLimiter, formulairesLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envieConnue } from '@/lib/signaux'
+import { envoyerAuAdmin, emailSuggestionCommerce, emailSignalementFiche } from '@/lib/resend'
+
+// Prévenir l'administration, SANS jamais faire échouer le geste de l'habitant.
+//
+// ⚠️ SA SUGGESTION EST DÉJÀ ENREGISTRÉE quand on arrive ici : si notre email ne
+// part pas, c'est notre problème, pas le sien, et l'écran /admin reste la
+// source de vérité. Mais on LIT le résultat : un envoi dont personne ne lit la
+// réponse est un espoir, pas une action, et c'est exactement ce silence qui a
+// fait qu'aucune des suggestions déjà reçues n'a jamais été annoncée.
+async function prevenirLAdmin(sujet, html) {
+  try {
+    const r = await envoyerAuAdmin({ subject: sujet, html })
+    if (!r?.ok) console.error('[signaux] alerte admin NON partie', { sujet, erreur: r?.error })
+    return r?.ok === true
+  } catch (e) {
+    console.error('[signaux] alerte admin en exception', { sujet, e: e?.message || String(e) })
+    return false
+  }
+}
 
 const TYPES = ['signalement', 'suggestion', 'envie']
 
@@ -45,32 +64,75 @@ export async function POST(request) {
       { auth: { persistSession: false } }
     )
 
+    // ⚠️ LES DEUX FORMULAIRES ONT LEUR PROPRE BORNE. Chacun déclenche un email
+    // vers l'administration : la limite large de l'API laisserait un robot
+    // remplir une boîte mail aussi vite qu'une table. Les envies, qui sont des
+    // clics sans email, gardent la borne générale.
+    if (type === 'signalement' || type === 'suggestion') {
+      const borne = await checkLimit(formulairesLimiter, clientIp(request),
+        { cle: 'form', max: 5, fenetreMs: 600000 })
+      if (!borne.success) {
+        return NextResponse.json({ ok: false, error: 'Trop d’envois d’un coup, réessaie dans un moment.' }, { status: 429 })
+      }
+    }
+
     if (type === 'signalement') {
       if (!body.commercant_id && !body.service_id) {
         return NextResponse.json({ ok: false, error: 'cible manquante' }, { status: 400 })
       }
+      const motif = texte(body.motif, 60) || 'autre'
+      const description = texte(body.description, 1000)
       const { error } = await supabase.from('signalements').insert({
-        type: texte(body.motif, 60) || 'autre',
-        description: texte(body.description, 1000),
+        type: motif,
+        description,
         yopper_id: clientId,
         commercant_id: body.commercant_id || null,
         service_id: body.service_id || null,
       })
       if (error) throw error
+
+      // Le nom de la fiche visée, pour que l'email dise de qui on parle. Son
+      // absence ne doit rien empêcher : le gabarit s'en passe.
+      let cibleNom = null
+      if (body.commercant_id) {
+        const { data } = await supabase.from('commercants').select('nom').eq('id', body.commercant_id).maybeSingle()
+        cibleNom = data?.nom || null
+      }
+      await prevenirLAdmin(
+        `Signalement · ${cibleNom || 'une fiche'}`,
+        emailSignalementFiche({ motif, description, cible_nom: cibleNom, commercant_id: body.commercant_id, service_id: body.service_id }),
+      )
       return NextResponse.json({ ok: true })
     }
 
     if (type === 'suggestion') {
       const nom = texte(body.nom_commerce, 120)
       if (!nom) return NextResponse.json({ ok: false, error: 'nom du commerce requis' }, { status: 400 })
-      const { error } = await supabase.from('suggestions_commercants').insert({
-        client_id: clientId,
-        nom_commerce: nom,
+      const champs = {
         adresse: texte(body.adresse, 200),
         type_commerce: texte(body.type_commerce, 80),
         commentaire: texte(body.commentaire, 500),
+      }
+      const { error } = await supabase.from('suggestions_commercants').insert({
+        client_id: clientId,
+        nom_commerce: nom,
+        ...champs,
       })
       if (error) throw error
+
+      // Combien de fois ce commerce a-t-il déjà été réclamé, celle-ci comprise ?
+      // C'est l'ordre de prospection : le plus demandé se visite en premier.
+      //
+      // ⚠️ `eq` ET NON `ilike` : un nom contenant « % » ou « _ » deviendrait un
+      // motif à jokers et compterait des enseignes qui n'ont rien à voir.
+      const { count } = await supabase
+        .from('suggestions_commercants')
+        .select('id', { count: 'exact', head: true })
+        .eq('nom_commerce', nom)
+      await prevenirLAdmin(
+        `Commerce réclamé · ${nom}`,
+        emailSuggestionCommerce({ nom_commerce: nom, ...champs, deja: count || 1 }),
+      )
       return NextResponse.json({ ok: true })
     }
 
@@ -110,7 +172,11 @@ export async function POST(request) {
     if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (e) {
+    // ⚠️ LE DÉTAIL RESTE ICI. Le message d'une erreur de base nomme des tables,
+    // des colonnes et des contraintes : cette route est ouverte aux visiteurs
+    // sans compte, et ces trois formulaires sont la porte d'entrée du spam.
+    // Le navigateur reçoit un refus, la cause reste dans le journal serveur.
     console.error('[signaux]', e)
-    return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })
+    return NextResponse.json({ ok: false, error: 'envoi impossible' }, { status: 500 })
   }
 }

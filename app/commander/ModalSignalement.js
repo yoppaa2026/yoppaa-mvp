@@ -8,6 +8,7 @@
 //  - onSent  : callback succès
 
 import { useState } from 'react'
+import { envoyerSignal } from '@/lib/signaux'
 
 const T = {
   ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -40,27 +41,18 @@ export default function ModalSignalement({ target, onClose, onSent }) {
     setError(null)
     // Route serveur : la table était insérable par n'importe qui, donc par
     // n'importe quel robot. L'auteur est repris du cookie côté serveur.
-    let err = null
-    try {
-      const r = await fetch('/api/signaux', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'signalement',
-          motif: type,
-          description: description.trim() || null,
-          commercant_id: target.kind === 'commerce' ? target.id : null,
-          service_id:    target.kind === 'service'  ? target.id : null,
-        }),
-      })
-      const j = await r.json()
-      if (!j?.ok) err = { message: j?.error || 'Envoi impossible.' }
-    } catch {
-      err = { message: 'Erreur réseau, réessaie.' }
-    }
+    // ⚠️ MÊME LECTURE QUE LES DEUX AUTRES FORMULAIRES, et surtout le même
+    // message : celui du serveur n'est jamais recopié tel quel à l'écran.
+    const r = await envoyerSignal({
+      type: 'signalement',
+      motif: type,
+      description: description.trim() || null,
+      commercant_id: target.kind === 'commerce' ? target.id : null,
+      service_id:    target.kind === 'service'  ? target.id : null,
+    })
     setSubmitting(false)
-    if (err) {
-      setError(err.message)
+    if (!r.ok) {
+      setError(r.message)
       return
     }
     setDone(true)

@@ -15,6 +15,7 @@ import { euros } from '@/lib/montants'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
 import { libelleOptions } from '@/lib/options-ligne'
+import { envoyerSignal } from '@/lib/signaux'
 import IconeRetrait from '@/app/components/IconeRetrait'
 // ⚠️ `planEffectif` ET NON `c.plan` : sans lui, un commerçant en essai de
 // Vendre restait « vitrine » dans la liste des commerces (26/08).
@@ -370,16 +371,27 @@ function SuggestionForm() {
   const [form, setForm] = useState({ nom: '', adresse: '', type: '', commentaire: '' })
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [erreur, setErreur] = useState(null)
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
   async function envoyer() {
-    if (!form.nom.trim()) return; setSending(true)
+    if (!form.nom.trim()) return
+    setSending(true); setErreur(null)
     // Route serveur : la table n'accepte plus d'insertion directe, elle était
     // ouverte à tous et donc à n'importe quel robot.
-    await fetch('/api/signaux', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'suggestion', nom_commerce: form.nom.trim(), adresse: form.adresse.trim() || null, type_commerce: form.type.trim() || null, commentaire: form.commentaire.trim() || null }),
-    }).catch(() => {})
-    setSent(true); setSending(false)
+    //
+    // ⚠️ ON LIT LA RÉPONSE, et le formulaire reste rempli si elle est mauvaise.
+    // Cet envoi affichait « Merci pour ta suggestion ! » quoi qu'il arrive :
+    // quatre champs écrits à la main disparaissaient en silence.
+    const r = await envoyerSignal({
+      type: 'suggestion',
+      nom_commerce: form.nom.trim(),
+      adresse: form.adresse.trim() || null,
+      type_commerce: form.type.trim() || null,
+      commentaire: form.commentaire.trim() || null,
+    })
+    setSending(false)
+    if (!r.ok) { setErreur(r.message); return }
+    setSent(true)
   }
   if (sent) return (
     <div style={{ background: '#F0FDF4', borderRadius: 16, padding: '1.5rem', textAlign: 'center', border: '1.5px solid #10B98133' }}>
@@ -402,6 +414,11 @@ function SuggestionForm() {
         style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '1rem', background: form.nom.trim() ? T.main : '#E5E7EB', color: '#fff', cursor: form.nom.trim() ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         {sending ? 'Envoi...' : (<><IconHandshake size={18} color="#fff"/> Suggérer ce commerçant</>)}
       </button>
+      {erreur && (
+        <p role="alert" style={{ margin: '10px 0 0', fontSize: '0.8125rem', fontWeight: 700, color: '#B91C1C', background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '10px 12px', lineHeight: 1.45 }}>
+          {erreur} Ce que tu as écrit est toujours là.
+        </p>
+      )}
     </div>
   )
 }

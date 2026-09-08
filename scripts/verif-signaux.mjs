@@ -10,10 +10,12 @@ import { sansProse } from './lire-code.mjs'
 import {
   libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail,
   LIBELLE_ENVIE, TYPES_ENVIE, envieConnue,
+  envoyerSignal, messageEchecSignal, MESSAGE_SIGNAL_RESEAU,
   ENVIE_VERS_FONCTION, fonctionDeLEnvie, envieDeLaFonction, phraseEnvieFonction,
   enviesProposables,
 } from '../lib/signaux.js'
 import { PLAN_FEATURES } from '../lib/plans.js'
+import { emailSuggestionCommerce, emailSignalementFiche } from '../lib/resend.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -475,6 +477,137 @@ egal('un commerce sans code postal ne crée pas de fausse commune',
   // dur, la même offre le compterait deux fois.
   verifier('un commerce de détail ne se voit pas proposer d’invendus',
     !enviesProposables({ ...BOULANGER, categorie: 'detail' }, { peutCommander: true }).includes('invendus'))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 UN ENVOI DONT PERSONNE NE LIT LA RÉPONSE (08/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Le formulaire de la Tribu écrivait `await fetch(...).catch(() => {})` puis
+// affichait « Merci pour ta suggestion ! ». Un 429, un 403, un 500 donnaient
+// le même écran : quatre champs remplis à la main disparaissaient en silence,
+// et personne, ni l'habitant ni nous, n'apprenait que rien n'était parti.
+//
+// ⚠️ ON EXÉCUTE LA FONCTION. Une garde qui chercherait le mot `envoyerSignal`
+// dans les écrans ne dirait rien de ce que cette fonction rend vraiment.
+{
+  const reponse = (statut, corps) => async () => ({
+    ok: statut >= 200 && statut < 300,
+    status: statut,
+    json: async () => corps,
+  })
+
+  const succes = await envoyerSignal({ type: 'suggestion' }, { fetchImpl: reponse(200, { ok: true }) })
+  verifier('un envoi accepté rend bien ok', succes.ok === true)
+
+  for (const statut of [400, 401, 403, 429, 500, 502]) {
+    const r = await envoyerSignal({ type: 'suggestion' }, { fetchImpl: reponse(statut, { ok: false, error: 'x' }) })
+    verifier(`🔴 un ${statut} n’est PAS un succès`, r.ok === false)
+    verifier(`un ${statut} porte une phrase pour l’habitant`, typeof r.message === 'string' && r.message.length > 12)
+  }
+
+  // ⚠️ 200 AVEC `ok: false`. Cette route refuse parfois en rendant 200 (l'envie
+  // déjà exprimée). Ne lire que le code HTTP prendrait un refus pour une
+  // réussite : les deux conditions comptent.
+  const refusPoli = await envoyerSignal({}, { fetchImpl: reponse(200, { ok: false, error: 'type invalide' }) })
+  verifier('🔴 un 200 qui dit ok:false reste un échec', refusPoli.ok === false)
+
+  const coupure = await envoyerSignal({}, { fetchImpl: async () => { throw new Error('offline') } })
+  verifier('🔴 une coupure réseau ne passe pas pour un envoi', coupure.ok === false)
+  verifier('et elle le dit sans jargon', coupure.message === MESSAGE_SIGNAL_RESEAU)
+
+  // Un corps illisible : page HTML d'un proxy, réponse tronquée. `json()` jette.
+  const illisible = await envoyerSignal({}, {
+    fetchImpl: async () => ({ ok: false, status: 502, json: async () => { throw new Error('pas du json') } }),
+  })
+  verifier('un corps illisible reste un échec propre', illisible.ok === false && illisible.statut === 502)
+
+  // ⚠️ CE QUE LE SERVEUR DIT N'EST PAS CE QUE L'HABITANT LIT. Le message d'une
+  // erreur de base nomme des tables, des colonnes et des contraintes, et ces
+  // formulaires sont ouverts à des visiteurs sans compte.
+  const fuite = messageEchecSignal(500, 'null value in column "client_id" of relation "suggestions_commercants"')
+  verifier('🔴 aucun détail interne ne sort en erreur serveur',
+    !fuite.includes('client_id') && !fuite.includes('relation') && !fuite.includes('suggestions_commercants'))
+  verifier('🔴 un 400 inconnu ne recopie rien non plus',
+    !messageEchecSignal(400, 'duplicate key value violates unique constraint "x"').includes('constraint'))
+  verifier('un refus que nous écrivons se dit tel quel',
+    messageEchecSignal(400, 'nom du commerce requis').startsWith('Nom du commerce requis'))
+  verifier('un 429 invite à patienter', /instant|attends/i.test(messageEchecSignal(429)))
+
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/signaux/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 la route ne renvoie plus le message de l’erreur interne',
+    !/error:\s*e\?\.message/.test(ROUTE) && /error:\s*'envoi impossible'/.test(ROUTE))
+
+  const TRIBU = sansProse(readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
+  // ⚠️ ON MESURE L'ORDRE, pas la présence. Une première version de cette garde
+  // cherchait `setErreur(r.message)` quelque part dans le fichier : neutraliser
+  // le test qui y mène la laissait VERTE. C'est du JSX, on ne peut pas
+  // l'exécuter ici, alors la garde exige le refus AVANT l'annonce du succès.
+  verifier('🔴 la suggestion ne s’annonce plus reçue sans lire la réponse',
+    /await envoyerSignal\(/.test(TRIBU)
+    && /if \(!r\.ok\) \{ setErreur\(r\.message\); return \}\s*setSent\(true\)/.test(TRIBU))
+  verifier('🔴 et le formulaire ne se vide pas sur un échec',
+    /Ce que tu as écrit est toujours là/.test(TRIBU))
+  verifier('l’ancien envoi muet a bien disparu',
+    !/\}\)\.catch\(\(\) => \{\}\)\s*setSent\(true\)/.test(TRIBU))
+
+  const MODAL = sansProse(readFileSync(new URL('../app/commander/ModalSignalement.js', import.meta.url), 'utf8'))
+  verifier('le signalement passe par le même envoi',
+    /await envoyerSignal\(\{/.test(MODAL) && !/fetch\('\/api\/signaux'/.test(MODAL))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 CE QU'ON NOUS DIT, ET QUE PERSONNE N'APPRENAIT (08/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Deux suggestions de commerces dormaient en base sans que personne le sache.
+// La table était saine, les droits bons, l'écran /admin les affichait : il
+// fallait juste penser à aller voir. Une porte à frapper vaut le jour où elle
+// arrive.
+{
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/signaux/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 une suggestion prévient l’administration',
+    /await prevenirLAdmin\(\s*`Commerce réclamé/.test(ROUTE))
+  verifier('🔴 un signalement aussi',
+    /await prevenirLAdmin\(\s*`Signalement/.test(ROUTE))
+  verifier('🔴 et l’envoi de l’alerte est LU, pas espéré',
+    /if \(!r\?\.ok\) console\.error\('\[signaux\] alerte admin NON partie'/.test(ROUTE))
+  verifier('un email raté ne perd pas la suggestion de l’habitant',
+    /return r\?\.ok === true/.test(ROUTE) && !/if \(!r\?\.ok\) return NextResponse/.test(ROUTE))
+  // ⚠️ `ilike` transformerait « 100% Pizza » en motif à jokers.
+  verifier('le compteur de demandes compare le nom à l’identique',
+    /\.eq\('nom_commerce', nom\)/.test(ROUTE) && !/ilike\('nom_commerce'/.test(ROUTE))
+  verifier('🔴 les deux formulaires ont leur propre borne',
+    /checkLimit\(formulairesLimiter, clientIp\(request\)/.test(ROUTE))
+  verifier('et cette borne a un filet quand Upstash manque',
+    /\{ cle: 'form', max: 5, fenetreMs: 600000 \}/.test(ROUTE))
+  // Les envies sont des clics : elles gardent la borne large.
+  verifier('la borne des formulaires ne s’applique pas aux envies',
+    /if \(type === 'signalement' \|\| type === 'suggestion'\) \{/.test(ROUTE))
+
+  // ⚠️ CE TEXTE EST ÉCRIT PAR UN VISITEUR SANS COMPTE et arrive dans une boîte
+  // mail signée par yoppaa.app. Les clients mail retirent les `<script>`, mais
+  // pas les ancres ni les images : ON EXÉCUTE LE GABARIT pour le vérifier.
+  const POISON = '<img src=x onerror="alert(1)"><a href="http://faux.example">clique</a>'
+  const htmlSuggestion = emailSuggestionCommerce({
+    nom_commerce: POISON, adresse: POISON, type_commerce: POISON, commentaire: POISON, deja: 3,
+  })
+  verifier('🔴 le nom d’un commerce suggéré ne peut pas injecter de HTML',
+    !htmlSuggestion.includes('<img src=x') && !htmlSuggestion.includes('href="http://faux.example"'))
+  verifier('mais le texte reste lisible une fois échappé',
+    htmlSuggestion.includes('&lt;img src=x'))
+  verifier('l’email dit combien de fois le commerce a été réclamé',
+    /3<sup>e<\/sup> fois/.test(htmlSuggestion))
+  verifier('une seule demande ne prétend pas qu’il y en a eu plusieurs',
+    !/fois/.test(emailSuggestionCommerce({ nom_commerce: 'Chez Test', deja: 1 })))
+
+  const htmlSignalement = emailSignalementFiche({
+    motif: POISON, description: POISON, cible_nom: POISON, commercant_id: 'abc',
+  })
+  verifier('🔴 un signalement ne peut pas injecter de HTML non plus',
+    !htmlSignalement.includes('<img src=x') && !htmlSignalement.includes('href="http://faux.example"'))
+  verifier('l’email rappelle que le commerçant n’est pas prévenu',
+    /pas prévenu/.test(htmlSignalement))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

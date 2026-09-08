@@ -21,7 +21,7 @@ import { useState, useEffect } from 'react'
 
 const CLE = (id) => `yoppaa_aide_${id}`
 
-export default function BlocAide({ id, titre, T, children }) {
+export default function BlocAide({ id, titre, resume = null, T, children }) {
   // ⚠️ ON COMMENCE FERMÉ, PAS OUVERT. Le serveur ne connaît pas le stockage du
   // navigateur : ouvrir par défaut ferait clignoter le bloc chez tous ceux qui
   // l'ont déjà lu, à chaque chargement.
@@ -45,35 +45,68 @@ export default function BlocAide({ id, titre, T, children }) {
 
   if (!pret) return null
 
+  // 🔴 IL SE FONDAIT DANS LA PAGE (Alex, 08/09 : « ça se fond trop avec le
+  // reste, c'est un élément important pour l'utilisateur, plus visible mais pas
+  // envahissant, un peu comme les alertes dans le menu »). Une carte blanche à
+  // filet gris sur un fond presque blanc : rien ne disait qu'il y avait
+  // quelque chose à ouvrir, et une aide qu'on ne voit pas ne sert personne.
+  //
+  // ⚠️ ET LE TON RESTE CELUI DE LA MARQUE, PAS CELUI D'UNE ALARME. L'ambre du
+  // menu dit « il te manque quelque chose, agis » ; ici il n'y a rien à
+  // réparer, seulement quelque chose à lire. Le violet fait le même travail de
+  // visibilité sans faire craindre un problème.
   return (
     <div style={{
-      background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14,
-      padding: ouvert ? '14px 16px' : '10px 14px', marginBottom: 16,
+      background: ouvert ? '#fff' : 'linear-gradient(135deg, #F5EEFF, #FBF8FF)',
+      border: `1.5px solid ${ouvert ? `${T.main}44` : `${T.main}66`}`,
+      boxShadow: ouvert ? 'none' : `0 2px 10px ${T.main}1F`,
+      borderRadius: 14,
+      padding: ouvert ? '14px 16px' : '11px 14px', marginBottom: 16,
+      transition: 'background 0.2s, box-shadow 0.2s',
     }}>
       <button type="button" onClick={basculer}
         style={{
-          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+          display: 'flex', alignItems: 'center', gap: 9, width: '100%',
           background: 'none', border: 'none', padding: 0, cursor: 'pointer',
           textAlign: 'left', fontFamily: '"DM Sans", sans-serif',
         }}>
+        {/* La pastille est PLEINE : à plat sur le pâle, elle disparaissait. */}
         <span style={{
-          width: 20, height: 20, borderRadius: '50%', background: T.pale,
+          width: 22, height: 22, borderRadius: '50%', background: T.main,
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
+          flexShrink: 0, boxShadow: `0 2px 6px ${T.main}55`,
         }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.main}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff"
                strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 9a3 3 0 1 1 4 2.8c-.7.3-1 .9-1 1.7v.5"/><path d="M12 17.5v.01"/>
           </svg>
         </span>
-        <span style={{ flex: 1, fontSize: 13, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px' }}>
-          {titre}
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 13.5, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px' }}>
+            {titre}
+          </span>
+          {/* Fermé, il dit ce qu'il contient : « ouvrir pour voir » n'est pas
+              une raison d'ouvrir. */}
+          {!ouvert && resume && (
+            <span style={{ display: 'block', fontSize: 11.5, color: T.main, fontWeight: 600, lineHeight: 1.45, marginTop: 1 }}>
+              {resume}
+            </span>
+          )}
         </span>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.muted}
-             strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-             style={{ transform: ouvert ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}>
-          <path d="M6 9l6 6 6-6"/>
-        </svg>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
+          padding: '4px 10px', borderRadius: 100,
+          background: ouvert ? 'transparent' : '#fff',
+          border: `1px solid ${ouvert ? 'transparent' : `${T.main}55`}`,
+          fontSize: 11.5, fontWeight: 800, color: T.main,
+        }}>
+          {ouvert ? 'Replier' : 'Lire'}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main}
+               strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+               style={{ transform: ouvert ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </span>
       </button>
       {ouvert && <div style={{ marginTop: 10 }}>{children}</div>}
     </div>

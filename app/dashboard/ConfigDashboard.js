@@ -3859,7 +3859,9 @@ function TabCreneaux({ commercantId, toast }) {
           commandes et temps de préparation avec exemples, infos copie etc.
           Très important »). L'ordre compte et il est vrai : sans horaires
           d'ouverture, tout le reste se fait prévenir ou écarter. */}
-      <BlocAide id="creneaux" titre="Comment régler tes créneaux de commande" T={T}>
+      <BlocAide id="creneaux" titre="Comment régler tes créneaux de commande"
+        resume="Générer une journée, choisir ta façon de compter, copier, fixer l’horizon : 5 étapes avec des exemples"
+        T={T}>
         <EtapeAide n={1} titre="Tes horaires d’ouverture, d’abord" T={T}>
           Ils sont dans <strong>Paramètres → Profil</strong>, et tout part de là : un créneau
           qui en sort se fait signaler, une copie s’y ajuste, la génération s’y adosse.
@@ -7784,7 +7786,9 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
       {/* 🔴 « COMMENT ÇA MARCHE » (Alex, 07/09). L'objectif est l'autonomie :
           un commerçant qui s'en sort seul en parle autour de lui. L'aide n'est
           pas du confort, c'est le canal d'acquisition. */}
-      <BlocAide id="rdv" titre="Comment régler ta prise de rendez-vous" T={T}>
+      <BlocAide id="rdv" titre="Comment régler ta prise de rendez-vous"
+        resume="Tes prestations, ton équipe, tes plages et jusqu’à quand on réserve : l’ordre à suivre en 4 étapes"
+        T={T}>
         <EtapeAide n={1} titre="Tes prestations, d’abord" T={T}>
           Ce que tu proposes, sa durée et son prix. <strong>La capacité change tout</strong> :
           laisse-la à 1 pour un rendez-vous en tête à tête, monte-la pour un cours collectif.

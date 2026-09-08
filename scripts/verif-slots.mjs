@@ -2329,6 +2329,18 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // ═════════════════════════════════════════════════════════════════════════
   verifier('l’onglet créneaux porte son mode d’emploi',
     /<BlocAide id="creneaux"/.test(CONFIG))
+  // 🔴 UNE AIDE QU'ON NE VOIT PAS NE SERT PERSONNE (Alex, 08/09 : « ça se fond
+  // trop avec le reste »). Le bloc se voit maintenant fermé, et il dit ce
+  // qu'il contient : « ouvrir pour voir » n'est pas une raison d'ouvrir.
+  const AIDE_COMPOSANT = lire('app/dashboard/BlocAide.js')
+  verifier('🔴 le bloc d’aide se voit quand il est fermé',
+    /background: ouvert \? '#fff' : 'linear-gradient\(135deg, #F5EEFF, #FBF8FF\)'/.test(AIDE_COMPOSANT)
+    && /boxShadow: ouvert \? 'none' : `0 2px 10px \$\{T\.main\}1F`/.test(AIDE_COMPOSANT))
+  verifier('⚠️ et il porte un geste nommé, pas un simple chevron',
+    /\{ouvert \? 'Replier' : 'Lire'\}/.test(AIDE_COMPOSANT))
+  verifier('⚠️ fermé, il dit ce qu’il contient',
+    /\{!ouvert && resume && \(/.test(AIDE_COMPOSANT)
+    && (CONFIG.match(/\s+resume="/g) || []).length >= 2)
   verifier('⚠️ et il commence par les heures d’ouverture',
     /<EtapeAide n=\{1\} titre="Tes horaires d’ouverture, d’abord"/.test(blocAide('creneaux')))
   verifier('⚠️ ses cinq étapes sont dans l’ordre',

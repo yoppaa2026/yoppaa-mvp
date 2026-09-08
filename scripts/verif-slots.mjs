@@ -1619,13 +1619,17 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('le créneau du yoga accepte le yoga', creneauAccepte('k-yoga', 'yoga', LIAISONS))
   verifier('il n’accepte pas le reiki', !creneauAccepte('k-yoga', 'reiki', LIAISONS))
 
-  // 🔴 LA MOITIÉ DE LA RÈGLE QUE J'AVAIS OUBLIÉE, ET QUE LE BANC A DITE. Sans
-  // elle, cocher « Yoga » sur la plage de 10h ne changeait RIEN : la plage
-  // large n'avait rien de coché, donc elle acceptait le yoga à toute heure. Le
-  // commerçant aurait fait le réglage et constaté qu'il ne servait à rien.
-  verifier('🔴 une plage libre n’accepte PAS ce qui est rattaché ailleurs',
-    !creneauAccepte('k-large', 'yoga', LIAISONS))
-  verifier('mais elle accepte tout le reste', creneauAccepte('k-large', 'reiki', LIAISONS))
+  // 🔴 UNE PLAGE LIBRE REFUSE UN COURS RATTACHÉ AILLEURS, ET SEULEMENT LUI.
+  //
+  // La garde disait avant « elle refuse TOUT ce qui est rattaché ailleurs », et
+  // ça cassait le métier du coiffeur (Alex, 08/09) : réserver son jeudi 14h-16h
+  // au soin du visage faisait disparaître ce soin de TOUTES ses autres plages.
+  // Un cours, lui, n'a pas d'horaire hors de sa plage : la restriction reste.
+  verifier('🔴 une plage libre n’accepte pas un COURS rattaché ailleurs',
+    !creneauAccepte('k-large', 'yoga', LIAISONS, { estCours: true }))
+  verifier('🔴 mais elle accepte une prestation SOLO cochée ailleurs',
+    creneauAccepte('k-large', 'yoga', LIAISONS))
+  verifier('et elle accepte tout le reste', creneauAccepte('k-large', 'reiki', LIAISONS))
 
   // ⚠️ SANS AUCUNE LIAISON, RIEN NE CHANGE. La garantie de non-régression pour
   // tout le parc : douze créneaux actifs le jour de la migration.
@@ -1636,8 +1640,12 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     creneauAccepte('k-large', 'yoga', null) && creneauAccepte('k-yoga', 'reiki', undefined))
 
   // ── Le filtre de l'écran ────────────────────────────────────────────────
-  egal('la fiche ne propose le yoga que sur sa plage',
-    creneauxPourPrestation(CRENEAUX, 'yoga', LIAISONS).map(c => c.id), ['k-yoga'])
+  egal('la fiche ne propose un COURS que sur sa plage',
+    creneauxPourPrestation(CRENEAUX, 'yoga', LIAISONS, { estCours: true }).map(c => c.id), ['k-yoga'])
+  // 🔴 UN SOLO GARDE LES DEUX. Sa plage dédiée ET les plages libres : c'est le
+  // coiffeur qui bloque deux heures pour un soin sans le retirer de son agenda.
+  egal('🔴 un SOLO coché garde aussi les plages libres',
+    creneauxPourPrestation(CRENEAUX, 'yoga', LIAISONS).map(c => c.id), ['k-yoga', 'k-large'])
   egal('et le reiki que sur la plage libre',
     creneauxPourPrestation(CRENEAUX, 'reiki', LIAISONS).map(c => c.id), ['k-large'])
   // ⚠️ L'écran ne juge pas ce qu'il ne connaît pas : sans prestation choisie,
@@ -1958,10 +1966,10 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('un cours rattaché ne l’est pas', !prestationSansCreneauDedie('yoga', LIAISONS))
 
   // ── La garde du serveur ─────────────────────────────────────────────────
-  const garde = (prestationId, debutMin, finMin, liaisons = LIAISONS) =>
+  const garde = (prestationId, debutMin, finMin, liaisons = LIAISONS, estCours = false) =>
     prestationAutoriseeSurCreneaux({
       creneaux: CRENEAUX, liaisons, prestationId,
-      dateStr: '2026-09-07', jour: 'lundi', debutMin, finMin,
+      dateStr: '2026-09-07', jour: 'lundi', debutMin, finMin, estCours,
     })
 
   verifier('le yoga passe à 10h', garde('yoga', 600, 660))
@@ -1978,8 +1986,14 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // 🔴 LA GARDE QUI COMPTE. 13h est bien dans une plage du lundi, mais pas dans
   // une plage QUI ACCEPTE le yoga. Sans le contrôle de l'heure, elle serait
   // décorative : un créneau du lundi accepte bien le yoga... à 10h.
-  verifier('🔴 le yoga est refusé à 13h', !garde('yoga', 780, 840))
-  verifier('le yoga est refusé s’il déborde de sa plage', !garde('yoga', 630, 690))
+  verifier('🔴 le yoga est refusé à 13h', !garde('yoga', 780, 840, LIAISONS, true))
+  verifier('le yoga est refusé s’il déborde de sa plage', !garde('yoga', 630, 690, LIAISONS, true))
+  // 🔴 ET LE SOLO, LUI, PASSE À 13h (Alex, 08/09). Le soin du visage réservé au
+  // jeudi 14h-16h ne doit pas disparaître des grandes plages de l'esthéticienne.
+  // La plage dédiée reste protégée par l'heure, pas par la confiscation.
+  verifier('🔴 une prestation SOLO cochée sur une plage passe encore ailleurs',
+    garde('yoga', 780, 840))
+  verifier('mais jamais à l’heure qu’elle s’est réservée', !garde('reiki', 600, 660))
   verifier('le reiki passe à 13h', garde('reiki', 780, 840))
   verifier('le reiki est refusé avant l’ouverture', !garde('reiki', 420, 480))
   // ⚠️ DEUX SORTIES QUI PROTÈGENT L'EXISTANT.
@@ -2084,7 +2098,7 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // cours orphelins, deux cents lignes plus bas. C'est le piège du JUMEAU, déjà
   // rencontré le 06/09 sur `cible_tout`. Un nom unique le désamorce.
   verifier('⚠️ « toutes » avertit sur les cours restés sans plage',
-    /const exposes = prestationsRdv\.filter\(p =>\s*Number\(p\.capacite\) > 1 && prestationSansCreneauDedie\(p\.id, liaisons\)\)/.test(CONFIG))
+    /const exposes = prestationsRdv\.filter\(p =>\s*Number\(p\.capacite\) > 1 && prestationSansCreneauDedie\(p\.id, liaisons, creneaux\)\)/.test(CONFIG))
   verifier('🔴 et plus sur tout le catalogue de cours',
     !/prestationsRdv\.filter\(p => Number\(p\.capacite\) > 1\)\.map\(p => p\.nom\)/.test(CONFIG))
 
@@ -2639,6 +2653,54 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('⚠️ et les deux copies s’en servent quand rien ne passe',
     (CONFIG.match(/confirmationInfo\(\{/g) || []).length >= 2
     && (CONFIG.match(/titre: 'Rien ne peut être copié sur ces jours',/g) || []).length >= 2)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 UNE PLAGE ÉTEINTE NE PORTE PLUS RIEN (Alex, 08/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Alex désactive les deux plages du mardi de son centre de yoga. Côté client,
+// le cours passe correctement en « Dates à venir ». Côté tableau de bord,
+// AUCUN avertissement : il éteint sa plage, son cours sort de la vente, et
+// rien ne le lui dit.
+//
+// La cause : le tableau de bord charge les plages inactives pour permettre de
+// les rallumer, la fiche publique ne lit que les actives. Les deux écrans
+// lisaient donc deux vérités.
+{
+  const CRENEAUX = [
+    { id: 'c-actif', actif: true, deleted_at: null },
+    { id: 'c-eteint', actif: false, deleted_at: null },
+    { id: 'c-supprime', actif: true, deleted_at: '2026-09-01' },
+  ]
+  const lien = (creneau_id, prestation_id) => ({ creneau_id, prestation_id })
+
+  verifier('🔴 un cours dont la seule plage est ÉTEINTE est signalé orphelin',
+    prestationSansCreneauDedie('pilates', [lien('c-eteint', 'pilates')], CRENEAUX))
+  verifier('🔴 et si sa plage est SUPPRIMÉE aussi',
+    prestationSansCreneauDedie('pilates', [lien('c-supprime', 'pilates')], CRENEAUX))
+  verifier('un cours porté par une plage vivante n’est pas signalé',
+    !prestationSansCreneauDedie('yoga', [lien('c-actif', 'yoga')], CRENEAUX))
+  // ⚠️ UNE SEULE PLAGE VIVANTE SUFFIT : on ne réclame pas que toutes le soient.
+  verifier('une plage vivante parmi des mortes suffit',
+    !prestationSansCreneauDedie('yoga', [lien('c-eteint', 'yoga'), lien('c-actif', 'yoga')], CRENEAUX))
+  // Sans la liste des plages, la fonction ne peut pas juger : comportement d'avant.
+  verifier('sans la liste des plages, le comportement d’avant est intact',
+    !prestationSansCreneauDedie('pilates', [lien('c-eteint', 'pilates')]))
+
+  // ⚠️ ET LES DEUX APPELANTS DOIVENT LA PASSER, sinon la correction ne sert à
+  // rien : la fonction compterait de nouveau les plages mortes.
+  const appels = srcConfig.match(/prestationSansCreneauDedie\([^)]*\)/g) || []
+  verifier('🔴 les deux appels du tableau de bord passent les plages',
+    appels.length === 2 && appels.every(a => a.includes('liaisons, creneaux')))
+
+  // 🔴 LE FRÈRE SERVEUR. `creneauxDuJour` écartait bien les plages éteintes
+  // pour CHOISIR, mais les liaisons partaient complètes : le serveur tenait
+  // pour « nommée » une prestation que seule une plage morte nommait, et
+  // refusait ce que la fiche publique proposait.
+  const SRV = sansCommentaires(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur borne ses liaisons aux plages vivantes',
+    /const idsCreneaux = \(creneauxCom \|\| \[\]\)\.filter\(c => c\.actif !== false\)\.map\(c => c\.id\)/.test(SRV))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

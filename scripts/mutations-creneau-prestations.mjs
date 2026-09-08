@@ -21,13 +21,37 @@ const BANC = 'verif:slots'
 const MODULE = 'lib/rdv-slots.js'
 
 const MUTATIONS = [
-  // 🔴 LA MOITIE DE LA REGLE QUE LE BANC M A FAIT TROUVER. Sans elle, cocher
-  // « Yoga » sur la plage de 10h ne change RIEN : la plage large n a rien de
-  // coche, donc elle accepte le yoga a toute heure. Le commercant aurait fait
-  // le reglage et constate qu il ne sert a rien.
-  { nom: '🔴 une plage libre reaccepte ce qui est rattache ailleurs',
-    de: '  return !liaisons.some(l => String(l.prestation_id) === String(prestationId))',
-    vers: '  return true' },
+  // 🔴 UN COURS N A PAS D HORAIRE HORS DE SA PLAGE (Alex, 08/09).
+  //
+  // ⚠️ CETTE MUTATION VISAIT AVANT `return !liaisons.some(...)`, la ligne qui
+  // retirait AUSSI les prestations solo des plages libres. Elle cassait le
+  // metier du coiffeur et a ete supprimee ; c est `verif:ancres` qui a dit que
+  // l ancre ne mesurait plus rien. La seule restriction qui reste, et qu il
+  // faut donc mesurer, est celle des cours.
+  { nom: '🔴 une plage libre reaccepte un COURS rattache ailleurs',
+    de: '  if (estCours) return false',
+    vers: '  if (false) return false' },
+
+  // 🔴 ET DANS L AUTRE SENS : la confiscation qu Alex a fait tomber le 08/09.
+  // Une plage libre qui refuse un SOLO coche ailleurs, c est le soin du visage
+  // qui disparait de tout l agenda de l esthéticienne.
+  { nom: '🔴 une plage libre reconfisque une prestation SOLO',
+    de: '  if (estCours) return false',
+    vers: '  if (true) return false' },
+
+  // 🔴 UNE PLAGE ETEINTE NE PORTE PLUS RIEN (Alex, 08/09). Sans ce filtre, le
+  // tableau de bord ne prevenait PAS que le cours etait sorti de la vente,
+  // pendant que la fiche publique affichait « Dates a venir ».
+  { nom: '🔴 les plages eteintes redeviennent porteuses',
+    de: '    ? new Set(creneaux.filter(c => c && c.actif !== false && !c.deleted_at).map(c => String(c.id)))',
+    vers: '    ? new Set(creneaux.map(c => String(c.id)))' },
+
+  // 🔴 ET LE FRERE SERVEUR : l ecran calcule, le serveur decide, et les deux
+  // doivent lire les memes plages.
+  { nom: '🔴 le serveur relit les liaisons des plages mortes',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    const idsCreneaux = (creneauxCom || []).filter(c => c.actif !== false).map(c => c.id)',
+    vers: '    const idsCreneaux = (creneauxCom || []).map(c => c.id)' },
 
   // 🔴 FERMER SUR UNE IGNORANCE VIDERAIT TOUS LES AGENDAS, sans une erreur.
   { nom: '🔴 des liaisons non chargees FERMENT au lieu d ouvrir',
@@ -132,7 +156,7 @@ const MUTATIONS = [
   // 🔴 L AVERTISSEMENT QUI NOMME LE MAUVAIS COUPABLE (Alex, 07/09).
   { nom: '🔴 l avertissement renomme les cours qui ont deja leur plage',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '                    Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons))',
+    de: '                    Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons, creneaux))',
     vers: '                    Number(p.capacite) > 1)' },
 
   // 🔴 L ONGLET QUI SURVIT AU RECHARGEMENT (Alex, 07/09).

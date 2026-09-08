@@ -10112,7 +10112,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
           à 1 ne voit rien changer. */}
       {(() => {
         const orphelins = prestationsRdv.filter(p =>
-          Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons))
+          Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons, creneaux))
         if (orphelins.length === 0) return null
         return (
           <div style={{ margin: '0 0 12px', padding: '10px 12px', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 10 }}>
@@ -10365,7 +10365,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                 {(() => {
                   if (!form.toutesPrestations) return null
                   const exposes = prestationsRdv.filter(p =>
-                    Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons))
+                    Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons, creneaux))
                   if (exposes.length === 0) return null
                   const plusieurs = exposes.length > 1
                   return (
@@ -10383,9 +10383,14 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                 })()}
 
                 <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, marginBottom: 8 }}>
+                  {/* 🔴 CETTE PHRASE PROMETTAIT LE DÉFAUT (Alex, 08/09). Elle
+                      disait « ne sera plus proposé ailleurs », et c'est bien ce
+                      que le moteur faisait : réserver deux heures à un soin le
+                      retirait de toutes les autres plages. Une esthéticienne
+                      n'a jamais demandé ça. */}
                   {form.toutesPrestations
-                    ? 'Sauf aux heures que tu as réservées à un cours sur une autre plage.'
-                    : 'Ce que tu coches ici ne sera plus proposé ailleurs, et cette plage n’acceptera rien d’autre.'}
+                    ? 'Sauf aux heures que tu as réservées à une prestation précise sur une autre plage.'
+                    : 'Cette plage n’acceptera que ce que tu coches. Le reste de ton catalogue continue d’être proposé sur tes autres plages.'}
                 </p>
 
                 {!form.toutesPrestations && (

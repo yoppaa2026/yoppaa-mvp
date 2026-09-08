@@ -3428,14 +3428,6 @@ function TabCreneaux({ commercantId, toast }) {
   function heuresLisibles(jour) {
     return plagesDuJour(jour).map(([a, b]) => `${a}–${b}`).join(' et ')
   }
-  // L'heure à laquelle les commandes se ferment, dite en clair. Un délai plus
-  // grand que l'heure de début renvoie à la veille : le dire vaut mieux que
-  // d'afficher une heure négative.
-  function heureCloture(heureDebut, heures) {
-    const total = timeToMinutes(heureDebut) - (Number(heures) || 0) * 60
-    if (total < 0) return `la veille à ${minutesToTime(((total % 1440) + 1440) % 1440)}`
-    return `à ${minutesToTime(total)}`
-  }
   // 🔴 LE BANDEAU ORANGE IGNORAIT LE SECOND SERVICE (07/09, frère de Eb2).
   // `horaireJour` ne rend que la PREMIÈRE plage : chez une friterie ouverte
   // 11:00-14:00 puis 18:00-22:00, TOUS les créneaux du soir étaient comptés
@@ -4495,6 +4487,20 @@ const JOURS_LIV = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 
 const JOURS_LIV_LABELS = { lundi: 'Lundi', mardi: 'Mardi', mercredi: 'Mercredi', jeudi: 'Jeudi', vendredi: 'Vendredi', samedi: 'Samedi', dimanche: 'Dimanche' }
 
 // Gestion des créneaux de livraison (tournées). Calqué sur le principe du C&C :
+// L'heure à laquelle les commandes se ferment, dite en clair. Un délai plus
+// grand que l'heure de début renvoie à la veille : le dire vaut mieux que
+// d'afficher une heure négative.
+//
+// ⚠️ AU NIVEAU DU MODULE, PAS DANS UN ONGLET : la même phrase sert aux créneaux
+// de retrait et aux tournées de livraison. Deux écritures auraient divergé, et
+// c'est exactement ce qui vient de coûter une journée sur les heures
+// d'ouverture, lues à quatre endroits différents.
+function heureCloture(heureDebut, heures) {
+  const total = timeToMinutes(heureDebut) - (Number(heures) || 0) * 60
+  if (total < 0) return `la veille à ${minutesToTime(((total % 1440) + 1440) % 1440)}`
+  return `à ${minutesToTime(total)}`
+}
+
 // capacité = nb de commandes par tournée (max_commandes). Table livraison_creneaux.
 function SectionCreneauxLivraison({ commercantId, toast }) {
   const [creneaux, setCreneaux] = useState([])
@@ -4537,20 +4543,56 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
     charger()
   }
 
-  async function supprimer(id) {
-    await supabase.from('livraison_creneaux').delete().eq('id', id)
-    setCreneaux(prev => prev.filter(c => c.id !== id))
+  // 🔴 UNE TOURNÉE SE SUPPRIMAIT SANS RIEN DEMANDER, ET SANS REGARDER LES
+  // COMMANDES (08/09, contrôle demandé par Alex). Les créneaux de retrait, eux,
+  // refusent depuis longtemps de partir avec des commandes actives : ici, les
+  // clients déjà inscrits sur la tournée perdaient leur horaire, et le
+  // commerçant ne l'apprenait nulle part. `commandes.creneau_livraison_id`
+  // devenait un lien mort, donc plus d'heure dans l'email ni dans le suivi.
+  async function supprimer(c) {
+    const { data: liees, error: errLect } = await supabase.from('commandes')
+      .select('id').eq('creneau_livraison_id', c.id)
+      .not('statut', 'in', '(recupere,non_retire,annulee_client,annulee_commercant)')
+    if (errLect) { toast('Erreur : ' + errLect.message, 'error'); return }
+    if ((liees || []).length > 0) {
+      toast(`Impossible : ${liees.length} commande(s) active(s) sur cette tournée`, 'error'); return
+    }
+    const heures = `${(c.heure_debut || '').slice(0,5)}–${(c.heure_fin || '').slice(0,5)}`
+    if (!await confirme(confirmationSimple({
+      titre: 'Supprimer cette tournée ?',
+      message: 'Tes clients ne pourront plus la choisir.',
+      details: `${JOURS_LIV_LABELS[c.jour_semaine] || c.jour_semaine} ${heures}`,
+      action: 'Oui, supprimer cette tournée',
+    }))) return
+    // ⚠️ ON LIT LE RÉSULTAT. Retirer la ligne de l'écran sans savoir si la base
+    // a suivi, c'est une tournée qui réapparaît au prochain chargement.
+    const { error } = await supabase.from('livraison_creneaux').delete().eq('id', c.id)
+    if (error) { toast('Erreur : ' + error.message, 'error'); return }
+    setCreneaux(prev => prev.filter(x => x.id !== c.id))
+    toast('Tournée supprimée')
   }
 
   async function toggleActif(c) {
-    await supabase.from('livraison_creneaux').update({ actif: !c.actif }).eq('id', c.id)
+    const { error } = await supabase.from('livraison_creneaux').update({ actif: !c.actif }).eq('id', c.id)
+    if (error) { toast('Erreur : ' + error.message, 'error'); return }
     setCreneaux(prev => prev.map(x => x.id === c.id ? { ...x, actif: !x.actif } : x))
   }
 
   async function majMax(id, val) {
     const n = Math.max(1, Number(val) || 1)
-    await supabase.from('livraison_creneaux').update({ max_commandes: n }).eq('id', id)
+    const { error } = await supabase.from('livraison_creneaux').update({ max_commandes: n }).eq('id', id)
+    if (error) { toast('Erreur : ' + error.message, 'error'); return }
     setCreneaux(prev => prev.map(c => c.id === id ? { ...c, max_commandes: n } : c))
+  }
+
+  // 🔴 LA LIMITE SE RÉGLAIT À LA CRÉATION, ET PLUS JAMAIS. Elle décide de
+  // l'heure à laquelle les commandes de la tournée se ferment : la corriger
+  // demandait de supprimer la tournée et de la refaire.
+  async function majCutoff(id, val) {
+    const n = Math.max(0, parseInt(val, 10) || 0)
+    const { error } = await supabase.from('livraison_creneaux').update({ cutoff_heures: n }).eq('id', id)
+    if (error) { toast('Erreur : ' + error.message, 'error'); return }
+    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, cutoff_heures: n } : c))
   }
 
   const tries = [...creneaux].sort((a, b) => {
@@ -4564,7 +4606,12 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
   return (
     <div style={card}>
       <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: T.ink }}>Créneaux de livraison (tournées)</h3>
-      <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted }}>Tes fenêtres de tournée. La capacité limite le nombre de commandes par tournée.</p>
+      <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>
+        Tes fenêtres de tournée. <strong>Max</strong> est le nombre de commandes que tu emportes
+        dans <strong>une</strong> tournée, pas dans la journée. <strong>Limite</strong> ferme les
+        commandes un nombre d’heures avant ton départ, le temps de préparer et de charger.
+        À 0, on peut commander jusqu’à la minute où tu pars.
+      </p>
 
       {/* Formulaire d'ajout */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 14 }}>
@@ -4607,11 +4654,24 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
                   max
                   <input type="number" min="1" value={c.max_commandes ?? 1} onChange={e => majMax(c.id, e.target.value)} style={{ ...field, width: 52, padding: '4px 6px' }} />
                 </span>
+                {/* La limite, modifiable ici comme le reste, et dite en clair
+                    juste dessous : « 2 h avant » ne se traduit pas tout seul en
+                    heure de fermeture. */}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: T.muted, flexShrink: 0 }}>
+                  limite
+                  <input type="number" min="0" value={c.cutoff_heures ?? 0} onChange={e => majCutoff(c.id, e.target.value)} style={{ ...field, width: 52, padding: '4px 6px' }} />
+                  h
+                </span>
+                <span style={{ fontSize: 10.5, color: T.muted, flexBasis: '100%', lineHeight: 1.45 }}>
+                  {(c.cutoff_heures || 0) === 0
+                    ? `Commandes acceptées jusqu’au départ, à ${(c.heure_debut || '').slice(0,5)}.`
+                    : `Commandes fermées ${c.cutoff_heures} h avant le départ, soit ${heureCloture(c.heure_debut, c.cutoff_heures)}.`}
+                </span>
                 <div style={{ flex: 1 }} />
                 <button onClick={() => toggleActif(c)} title={c.actif ? 'Désactiver' : 'Activer'} style={{ width: 34, height: 19, borderRadius: 100, background: c.actif ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
                   <span style={{ position: 'absolute', top: 2, left: c.actif ? 17 : 2, width: 15, height: 15, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                 </button>
-                <button onClick={() => supprimer(c.id)} aria-label="Supprimer" style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex', padding: 4, color: '#DC2626', flexShrink: 0 }}>
+                <button onClick={() => supprimer(c)} aria-label="Supprimer" style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'inline-flex', padding: 4, color: '#DC2626', flexShrink: 0 }}>
                   <Icon name="trash" size={15} color="#DC2626" />
                 </button>
               </div>
@@ -5993,7 +6053,7 @@ const SOUS_ONGLETS_PROFIL = [
   { id: 'reglages', label: 'Réglages' },
 ]
 
-function TabProfil({ commercantId, toast, onSaved, surModifications }) {
+function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = null, surAncreLue = null }) {
   const [form, setForm] = useState(null)
   // ⚠️ L'ÉTAT TEL QU'IL EST EN BASE, figé au chargement et re-figé après chaque
   // enregistrement. C'est LUI qui permet de dire si quelque chose a changé, et
@@ -6007,6 +6067,37 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
   const [propsIaDescription, setPropsIaDescription] = useState([])
   const [propsIaInfos, setPropsIaInfos] = useState([])
   const [sousOnglet, setSousOnglet] = useState('fiche')
+  // 🔴 ARRIVER AU BON ENDROIT, PAS SEULEMENT AU BON ONGLET (Alex, 08/09 :
+  // « il faut diriger vers l'onglet profil À L'ENDROIT où il faut activer la
+  // livraison »). Le Profil est long : y déposer quelqu'un tout en haut sans
+  // rien lui montrer, c'est le renvoyer chercher.
+  const [ancreVue, setAncreVue] = useState(null)
+  // 🔴 ET LA CASE VIT DANS LE SOUS-ONGLET « RÉGLAGES ». Ouvrir le Profil sans
+  // changer de sous-onglet n'aurait RIEN montré : la case n'y est même pas
+  // rendue. Vérifié avant d'écrire, parce qu'un bouton qui ouvre le bon onglet
+  // sur la mauvaise section est pire que pas de bouton du tout.
+  useEffect(() => {
+    if (!ancre || loading) return
+    if (ancre === 'activer-livraison') setSousOnglet('reglages')
+    let essais = 0
+    let minuteur = null
+    const chercher = () => {
+      const el = typeof document !== 'undefined' ? document.getElementById(ancre) : null
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // On le SIGNALE aussi : un écran qui a défilé tout seul laisse le
+        // lecteur chercher ce qui a bougé.
+        setAncreVue(ancre)
+        minuteur = setTimeout(() => setAncreVue(null), 2600)
+        surAncreLue?.()
+        return
+      }
+      if (++essais < 20) { minuteur = setTimeout(chercher, 60); return }
+      surAncreLue?.()
+    }
+    minuteur = setTimeout(chercher, 60)
+    return () => { if (minuteur) clearTimeout(minuteur) }
+  }, [ancre, loading, surAncreLue])
   // ⚠️ `null` tant qu'on ne sait pas : afficher la grille des horaires puis la
   // retirer une seconde plus tard ferait clignoter l'écran, et un commerçant
   // qui commence à saisir verrait son champ disparaître sous ses doigts.
@@ -6740,12 +6831,18 @@ function TabProfil({ commercantId, toast, onSaved, surModifications }) {
           <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
             <p style={{ ...s.label, marginBottom: 12 }}>Fonctionnalités activables (plan Vendre)</p>
 
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.livraison_actif ? T.main : T.pale}`, background: form.livraison_actif ? T.pale : '#fff', cursor: 'pointer', marginBottom: 10, transition: 'all 0.15s' }}>
+            <label id="activer-livraison"
+              style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${ancreVue === 'activer-livraison' ? '#F59E0B' : form.livraison_actif ? T.main : T.pale}`, background: ancreVue === 'activer-livraison' ? '#FEF3C7' : form.livraison_actif ? T.pale : '#fff', boxShadow: ancreVue === 'activer-livraison' ? '0 0 0 4px #F59E0B33' : 'none', cursor: 'pointer', marginBottom: 10, transition: 'all 0.3s', scrollMarginTop: 90 }}>
               <input type="checkbox" checked={!!form.livraison_actif} onChange={e => setForm(p => ({ ...p, livraison_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Bike size={15} strokeWidth={1.8}/> Activer la livraison</p>
+                {/* ⚠️ « CONFIGURATION COMPLÈTE À VENIR » N'ÉTAIT PLUS VRAI. La
+                    zone, les frais et les créneaux se règlent dans l'onglet
+                    Livraison depuis longtemps : la phrase disait au commerçant
+                    de ne pas chercher ce qui l'attendait déjà. */}
                 <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
-                  Affiche la pill « LIVRAISON » sur ta fiche. Configuration complète (zone, frais, créneaux) à venir.
+                  Affiche la pastille « LIVRAISON » sur ta fiche, et ouvre l’onglet <strong>Livraison</strong>,
+                  où tu règles ta zone, tes frais et tes créneaux. N’oublie pas d’enregistrer.
                 </p>
               </div>
             </label>
@@ -11773,8 +11870,40 @@ function BandeauEssai({ commercant, onEssayer }) {
   )
 }
 
+// ─── UN ONGLET QUI NE PEUT RIEN MONTRER LE DIT, ET DIT OÙ ALLER ────────────
+//
+// 🔴 « ONGLET LIVRAISON VIDE QUAND ELLE N'EST PAS ACTIVÉE DEPUIS L'ONGLET
+// PROFIL. IL FAUT DIRIGER VERS L'ONGLET PROFIL À L'ENDROIT OÙ IL FAUT ACTIVER
+// LA LIVRAISON, NE PAS RESTER SUR UNE PAGE VIDE » (Alex, 08/09).
+//
+// ⚠️ UNE PAGE BLANCHE SE LIT COMME UNE PANNE. Le commerçant ne conclut pas
+// « il me manque un réglage », il conclut que c'est cassé, et il appelle. Sur
+// un produit dont l'argument est l'autonomie, c'est le contraire du but.
+function OngletAEteFerme({ titre, message, action, onAction, T }) {
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 22, textAlign: 'center' }}>
+      <span style={{ width: 40, height: 40, borderRadius: '50%', background: T.pale, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0"/>
+        </svg>
+      </span>
+      <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, margin: '0 0 6px', letterSpacing: '-0.2px' }}>{titre}</p>
+      <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6, margin: '0 auto 16px', maxWidth: 420 }}>{message}</p>
+      <button type="button" onClick={onAction}
+        style={{ padding: '11px 20px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: `0 4px 14px ${T.main}55` }}>
+        {action}
+      </button>
+    </div>
+  )
+}
+
 export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onOngletChange = null }) {
   const [tab, setTab] = useState(tabInitial)
+  // L'endroit précis où déposer le commerçant dans le Profil, quand un autre
+  // onglet l'y envoie. Oublié dès qu'il y est arrivé : revenir au Profil de
+  // lui-même ne doit pas refaire défiler l'écran sous ses yeux.
+  const [ancreProfil, setAncreProfil] = useState(null)
+  const oublierAncre = useCallback(() => setAncreProfil(null), [])
   // ⚠️ ON PRÉVIENT LE PARENT POUR L'ADRESSE, ET RIEN DE PLUS. Il ne doit
   // surtout pas remonter ce composant : sa clé dépend de l'onglet, et un
   // remontage fermerait le formulaire ouvert en perdant la saisie.
@@ -12094,15 +12223,48 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
       {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />}
       {tab === 'creneaux' && peut(commercant, 'commande') && <TabCreneaux commercantId={commercantId} toast={showToast} />}
       {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} surModifications={declarerModifications} />}
+      {/* 🔴 UN ONGLET VIDE N'EST PAS UNE RÉPONSE (Alex, 08/09). Tant que la
+          livraison n'était pas cochée dans le Profil, cet onglet n'affichait
+          RIEN : ni ce qui manquait, ni où le régler. Le commerçant conclut que
+          c'est cassé, ou que la fonction n'existe pas. */}
+      {tab === 'livraison' && peut(commercant, 'livraison') && !commercant?.livraison_actif && (
+        <OngletAEteFerme
+          titre="La livraison n’est pas encore activée"
+          message="Elle fait partie de ton forfait, il te reste un interrupteur à mettre. Une fois activée, tu règles ici ta zone, tes frais et tes créneaux de tournée, et ta fiche porte la pastille « LIVRAISON »."
+          action="M’emmener à l’interrupteur"
+          onAction={() => { setAncreProfil('activer-livraison'); changerOnglet('profil') }}
+          T={T}
+        />
+      )}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
       {tab === 'fidelite' && peut(commercant, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'bons' && peut(commercant, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'comptabilite' && peut(commercant, 'export_comptable') && <TabComptabilite commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} />}
-      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
+      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} ancre={ancreProfil} surAncreLue={oublierAncre} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signaux' && <TabSignaux commercantId={commercantId} toast={showToast} signalementsEnAttente={signalementsEnAttente} />}
+
+      {/* ⚠️ ET LE FRÈRE DE L'ONGLET VIDE : LE HORS-FORFAIT. La barre grise ces
+          onglets et `changerOnglet` les intercepte, mais l'adresse, elle, ne
+          passe par personne : `?config=deals` chez un commerce en Exister
+          affichait une page blanche. Depuis que l'onglet vit dans l'URL
+          (07/09), ce chemin est atteignable pour de bon. */}
+      {(() => {
+        const cible = tabs.find(t => t.id === tab)
+        if (!cible || !cible.feature) return null
+        if (cible.etat === FONCTION_INCLUSE || cible.etat === FONCTION_EN_ESSAI) return null
+        return (
+          <OngletAEteFerme
+            titre={`« ${cible.label} » ne fait pas partie de ta formule`}
+            message="Rien n’est perdu : ce que tu as déjà réglé ici t’attend. Regarde ce que cette fonction change pour ton commerce, et ce que tes habitants en disent."
+            action="Voir ce que ça change"
+            onAction={() => proposerFonction(cible)}
+            T={T}
+          />
+        )
+      })()}
 
       <Toast message={toastMsg} type={toastType} />
 

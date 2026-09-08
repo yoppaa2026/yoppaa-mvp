@@ -2386,6 +2386,56 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     /if \(shopOpen     !== null\) debut = Math\.max\(debut, shopOpen\)/.test(MOTEUR)
     && /if \(shopRanges\.length > 1 && !shopRanges\.some\(\(\[a, b\]\) => t >= a && slotEnd <= b\)\) continue/.test(MOTEUR))
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 UN ONGLET VIDE N'EST PAS UNE RÉPONSE (Alex, 08/09 : « onglet livraison
+  // vide quand elle n'est pas activée depuis l'onglet profil, il faut diriger
+  // vers l'onglet profil À L'ENDROIT où il faut activer la livraison »).
+  // Une page blanche se lit comme une panne, sur un produit dont l'argument
+  // est l'autonomie.
+  // ═════════════════════════════════════════════════════════════════════════
+  verifier('🔴 l’onglet livraison inactif explique au lieu de rester vide',
+    /tab === 'livraison' && peut\(commercant, 'livraison'\) && !commercant\?\.livraison_actif && \(/.test(CONFIG)
+    && /titre="La livraison n’est pas encore activée"/.test(CONFIG))
+  verifier('🔴 et son bouton emmène à l’interrupteur, pas seulement à l’onglet',
+    /setAncreProfil\('activer-livraison'\); changerOnglet\('profil'\)/.test(CONFIG)
+    && /<label id="activer-livraison"/.test(CONFIG))
+  // ⚠️ LA CASE VIT DANS LE SOUS-ONGLET « RÉGLAGES ». Sans ce geste, le bouton
+  // ouvrait le bon onglet sur une section où la case n'est même pas rendue.
+  verifier('⚠️ et il ouvre le sous-onglet où la case existe vraiment',
+    /if \(ancre === 'activer-livraison'\) setSousOnglet\('reglages'\)/.test(CONFIG))
+  verifier('⚠️ le frère hors forfait ne laisse pas non plus de page blanche',
+    /titre=\{`« \$\{cible\.label\} » ne fait pas partie de ta formule`\}/.test(CONFIG))
+  // ⚠️ « CONFIGURATION COMPLÈTE À VENIR » n'était plus vrai depuis longtemps.
+  verifier('⚠️ et la case ne promet plus une configuration « à venir »',
+    !/Configuration complète \(zone, frais, créneaux\) à venir/.test(CONFIG))
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // LES TOURNÉES DE LIVRAISON, contrôlées avec le reste (Alex, 08/09).
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 UNE TOURNÉE PARTAIT SANS RIEN DEMANDER ET SANS REGARDER LES COMMANDES,
+  // là où les créneaux de retrait refusent depuis longtemps.
+  verifier('🔴 une tournée avec des commandes actives ne se supprime pas',
+    /\.eq\('creneau_livraison_id', c\.id\)/.test(CONFIG)
+    && /Impossible : \$\{liees\.length\} commande\(s\) active\(s\) sur cette tournée/.test(CONFIG))
+  verifier('⚠️ et la suppression se confirme',
+    /titre: 'Supprimer cette tournée \?',/.test(CONFIG))
+  // ⚠️ TROIS ÉCRITURES NE LISAIENT PAS LEUR RÉSULTAT : la ligne disparaissait
+  // de l'écran et revenait au chargement suivant.
+  verifier('🔴 les écritures des tournées lisent leur résultat',
+    /const \{ error \} = await supabase\.from\('livraison_creneaux'\)\.delete\(\)/.test(CONFIG)
+    && /const \{ error \} = await supabase\.from\('livraison_creneaux'\)\.update\(\{ actif: !c\.actif \}\)/.test(CONFIG)
+    && /const \{ error \} = await supabase\.from\('livraison_creneaux'\)\.update\(\{ max_commandes: n \}\)/.test(CONFIG))
+  // 🔴 LA LIMITE SE RÉGLAIT À LA CRÉATION ET PLUS JAMAIS.
+  verifier('🔴 la limite d’une tournée se corrige après coup',
+    /async function majCutoff\(id, val\) \{/.test(CONFIG)
+    && /onChange=\{e => majCutoff\(c\.id, e\.target\.value\)\}/.test(CONFIG))
+  verifier('⚠️ et elle se lit en clair, comme celle des créneaux de retrait',
+    /Commandes fermées \$\{c\.cutoff_heures\} h avant le départ, soit \$\{heureCloture\(c\.heure_debut, c\.cutoff_heures\)\}/.test(CONFIG))
+  // ⚠️ UNE SEULE ÉCRITURE DE LA PHRASE, AU NIVEAU DU MODULE. Deux copies
+  // auraient divergé, comme les heures d'ouverture lues à quatre endroits.
+  verifier('⚠️ la phrase de clôture n’existe qu’en un exemplaire',
+    (CONFIG.match(/function heureCloture\(heureDebut, heures\)/g) || []).length === 1)
+
   // 🔴 QUAND IL N'Y A RIEN À DÉCIDER, UN SEUL BOUTON. « J'ai compris » et
   // « Ne rien faire » côte à côte pour le même effet, vus sur la capture.
   const CONFIRMATIONS = lire('lib/confirmations.js')

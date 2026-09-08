@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
-import { retourArriereAutorise, alerteAutreOnglet, indexBlocages, appliquerBlocage, etatCreneau } from '@/lib/tableau-de-bord'
+import { retourArriereAutorise, alerteAutreOnglet, indexBlocages, appliquerBlocage, etatCreneau, ongletDouverture } from '@/lib/tableau-de-bord'
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
@@ -1021,8 +1021,15 @@ export default function Dashboard() {
   const [impersonating, setImpersonating] = useState(false)
   const [_impersonationId, setImpersonationId] = useState(null)
   const [activationRdv, setActivationRdv] = useState(false)
-  // Onglet de configuration ouvert par les raccourcis « Actions rapides »
-  const [configTab, setConfigTab] = useState('menu')
+  // Onglet de configuration ouvert par les raccourcis « Actions rapides ».
+  //
+  // 🔴 ET C'EST AUSSI CELUI QUI S'OUVRE QUAND ON CLIQUE « PARAMÈTRES » : il
+  // valait « Catalogue », c'est-à-dire un choix arbitraire, et il revenait à
+  // chaque aller-retour même si le commerçant travaillait dans « Prise de RDV »
+  // dix secondes plus tôt. On ne prend donc rien à personne en le remplaçant
+  // par le Profil général, qui est le début de la marche à suivre (Alex,
+  // 08/09). ⚠️ Un lien qui porte `?config=` gagne toujours : c'est une adresse.
+  const [configTab, setConfigTab] = useState('profil')
   function ouvrirConfig(tab) { setConfigTab(tab); setOngletPrincipal('config') }
 
 
@@ -1093,8 +1100,28 @@ export default function Dashboard() {
   // de `key` à ConfigDashboard : le modifier REMONTE le composant, ce qui
   // fermerait le formulaire ouvert et perdrait la saisie en cours. On garde
   // donc à part ce que l'adresse doit refléter, sans jamais toucher à la clé.
-  const [configTabUrl, setConfigTabUrl] = useState('menu')
+  const [configTabUrl, setConfigTabUrl] = useState('profil')
   useEffect(() => { setConfigTabUrl(configTab) }, [configTab])
+
+  // 🔴 ON OUVRE SUR CE QUE LE COMMERCE REÇOIT (Alex, 08/09). Tout le monde
+  // tombait sur « Commandes », y compris un centre de yoga dont la journée
+  // entière est dans son agenda.
+  //
+  // ⚠️ UNE SEULE FOIS, ET JAMAIS CONTRE L'ADRESSE. Un lien qui porte déjà un
+  // onglet est une intention explicite ; et rejouer ce choix à chaque
+  // rechargement du commerçant ramènerait l'écran sous les doigts de celui qui
+  // vient d'en changer.
+  const ouvertureFaite = useRef(false)
+  useEffect(() => {
+    if (!commercant || !pretUrl || ouvertureFaite.current) return
+    ouvertureFaite.current = true
+    if (new URLSearchParams(window.location.search).get('onglet')) return
+    const commandesVisibles = commercant.categorie !== 'vitrine'
+      || canDo(planEffectif(commercant), 'commande')
+    const cible = ongletDouverture(commercant, { commandesVisibles })
+    if (cible !== ongletPrincipal) setOngletPrincipal(cible)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule fois, à l'arrivée du commerce
+  }, [commercant, pretUrl])
 
   useEffect(() => {
     if (!pretUrl) return

@@ -6,7 +6,7 @@
 //   npm run verif:bord
 
 import { readFileSync } from 'node:fs'
-import { retourArriereAutorise, alerteAutreOnglet, travailEnAttente, indexBlocages, appliquerBlocage, etatCreneau } from '../lib/tableau-de-bord.js'
+import { retourArriereAutorise, alerteAutreOnglet, travailEnAttente, indexBlocages, appliquerBlocage, etatCreneau, ongletDouverture } from '../lib/tableau-de-bord.js'
 import { calculerCapaciteCreneau } from '../lib/creneaux.js'
 import { chiffreAffaires } from '../lib/statistiques.js'
 
@@ -600,6 +600,52 @@ const verifie = (nom, cond, detail = '') => {
       restes.length === 0,
       restes.length > 0 ? `${restes.length} reste(s), dont : ${restes[0].trim().slice(0, 70)}` : '')
   }
+}
+
+// ═══ SUR QUOI LE TABLEAU DE BORD S'OUVRE (Alex, 08/09) ═══════════════════
+//
+// Tout le monde ouvrait sur « Commandes », y compris un centre de yoga dont la
+// journée entière est dans son agenda.
+{
+  const yoga  = { categorie: 'vitrine', rdv_actif: true }
+  const salon = { categorie: 'vitrine', rdv_actif: true }   // vend aussi des produits
+  const boulangerie = { categorie: 'alimentaire', rdv_actif: false }
+  const detail = { categorie: 'detail', rdv_actif: false }
+
+  verifie('🔴 un service avec agenda ouvre sur ses rendez-vous',
+    ongletDouverture(yoga) === 'rdv')
+  verifie('⚠️ même s’il vend aussi des produits : c’est sa journée',
+    ongletDouverture(salon, { commandesVisibles: true }) === 'rdv')
+  verifie('un alimentaire ouvre sur ses commandes',
+    ongletDouverture(boulangerie) === 'commandes')
+  verifie('un commerce de détail aussi',
+    ongletDouverture(detail) === 'commandes')
+  // ⚠️ UN SERVICE SANS AGENDA GARDE LES COMMANDES : il vend au comptoir, et
+  // c'est là que ça se passe.
+  verifie('⚠️ un service sans agenda garde ses commandes',
+    ongletDouverture({ categorie: 'vitrine', rdv_actif: false }) === 'commandes')
+  // ⚠️ ET ON N'OUVRE JAMAIS SUR UN ONGLET QUE LA BARRE NE MONTRE PAS.
+  verifie('⚠️ sans onglet commandes, l’agenda prend le relais',
+    ongletDouverture({ categorie: 'alimentaire', rdv_actif: true }, { commandesVisibles: false }) === 'rdv')
+  verifie('⚠️ et sans agenda non plus, on ouvre les réglages',
+    ongletDouverture({ categorie: 'vitrine', rdv_actif: false }, { commandesVisibles: false }) === 'config')
+  // ⚠️ PENDANT LE CHARGEMENT, RIEN NE BOUGE : le commerce n'est pas encore là.
+  verifie('⚠️ un commerce inconnu ne déplace rien',
+    ongletDouverture(null) === 'commandes')
+
+  const PAGE_OUVERTURE = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+  // 🔴 UNE SEULE FOIS, ET JAMAIS CONTRE L'ADRESSE. Un lien qui porte un onglet
+  // est une intention explicite ; et rejouer le choix à chaque rechargement du
+  // commerce ramènerait l'écran sous les doigts de celui qui vient d'en changer.
+  verifie('🔴 l’ouverture ne se joue qu’une fois',
+    /const ouvertureFaite = useRef\(false\)/.test(PAGE_OUVERTURE)
+    && /if \(!commercant \|\| !pretUrl \|\| ouvertureFaite\.current\) return/.test(PAGE_OUVERTURE))
+  verifie('🔴 et jamais contre un onglet écrit dans l’adresse',
+    /if \(new URLSearchParams\(window\.location\.search\)\.get\('onglet'\)\) return/.test(PAGE_OUVERTURE))
+  // Et « Paramètres » ouvre sur le début de la marche à suivre.
+  verifie('⚠️ les réglages ouvrent sur le Profil général',
+    /const \[configTab, setConfigTab\] = useState\('profil'\)/.test(PAGE_OUVERTURE)
+    && /const \[configTabUrl, setConfigTabUrl\] = useState\('profil'\)/.test(PAGE_OUVERTURE))
 }
 
 // ═══ LA COLONNE DE GAUCHE : LOGO, CONTRASTES, ET LE BOUTON QUI APPELLE ════

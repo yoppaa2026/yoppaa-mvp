@@ -60,7 +60,7 @@ const MUTATIONS = [
 
   // 🔴 LE MOTEUR CESSE DE FILTRER : on revient au 06/09 exactement.
   { nom: '🔴 le moteur ne filtre plus les creneaux par prestation',
-    de: '  const creneauxRetenus = creneauxPourPrestation(creneauxJour, prestationId, liaisonsCreneaux)',
+    de: '  const creneauxRetenus = creneauxPourPrestation(creneauxJour, prestationId, liaisonsCreneaux, { estCours })',
     vers: '  const creneauxRetenus = creneauxJour' },
 
   { nom: '🔴 l ecran cache des plages alors qu aucune prestation n est choisie',

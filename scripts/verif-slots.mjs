@@ -10,7 +10,7 @@ import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
   creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
-  prestationAutoriseeSurCreneaux, coursDejaCoche, creneauHorsOuverture,
+  prestationAutoriseeSurCreneaux, coursDejaCoche, creneauHorsOuverture, coursSansHoraire,
   horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV, ajusterPlagePourJour,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
@@ -1675,6 +1675,83 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     verifier('et refuse le reste', !creneauAccepte('k-lun', 'reiki', MULTI_SOLO))
   }
 
+  // ── 🔴 PAS DE PLAGE, PAS DE DISPO (Alex, 08/09) ─────────────────────────
+  //
+  // « Je ne trouve pas normal que les cours collectifs soient disponibles toute
+  // la journée s'ils ne sont pas attribués à une plage horaire. » Il a raison,
+  // et c'est la seconde moitié de la correction du 07/09 : j'avais rendu
+  // possible de rattacher un cours à une plage, et je continuais à le proposer
+  // partout. Un cours est une heure que le COMMERÇANT fixe ; une prestation
+  // solo est un service dont le CLIENT choisit l'heure.
+  {
+    const LARGE = { id: 'k-large', jour_semaine: 'mardi', date_specifique: null, heure_debut: '08:00:00', heure_fin: '18:00:00', actif: true, praticien_id: null }
+    const AUCUNE = []
+    const AILLEURS = [{ creneau_id: 'k-autre', prestation_id: 'pilates' }]
+
+    verifier('🔴 un cours sans aucune plage n’est accepté nulle part',
+      !creneauAccepte('k-large', 'yoga', AUCUNE, { estCours: true }))
+    verifier('🔴 même quand d’autres plages sont réglées',
+      !creneauAccepte('k-large', 'yoga', AILLEURS, { estCours: true }))
+    verifier('⚠️ mais une prestation SOLO garde la plage ouverte',
+      creneauAccepte('k-large', 'reiki', AUCUNE, { estCours: false })
+      && creneauAccepte('k-large', 'reiki', AILLEURS, { estCours: false }))
+    verifier('⚠️ et un cours QUI A sa plage y reste accepté',
+      creneauAccepte('k-yoga2', 'yoga', [{ creneau_id: 'k-yoga2', prestation_id: 'yoga' }], { estCours: true }))
+    egal('🔴 la fiche ne retient aucune plage pour un cours sans horaire',
+      creneauxPourPrestation([LARGE], 'yoga', AUCUNE, { estCours: true }).map(c => c.id), [])
+    egal('⚠️ et toutes pour la même prestation en solo',
+      creneauxPourPrestation([LARGE], 'reiki', AUCUNE, { estCours: false }).map(c => c.id), ['k-large'])
+
+    // 🔴 LA GARDE SERVEUR PORTE LA MÊME RÈGLE. L'écran ne le propose plus, mais
+    // un écran ne décide de rien : une requête forgée poserait encore le cours.
+    const commun = { creneaux: [LARGE], dateStr: '2026-09-15', jour: 'mardi', debutMin: 600, finMin: 660 }
+    verifier('🔴 le serveur refuse un cours sans plage',
+      !prestationAutoriseeSurCreneaux({ ...commun, liaisons: AILLEURS, prestationId: 'yoga', estCours: true }))
+    verifier('⚠️ et laisse passer la même heure en solo',
+      prestationAutoriseeSurCreneaux({ ...commun, liaisons: AILLEURS, prestationId: 'reiki', estCours: false }))
+    // ⚠️ ET LES DEUX SORTIES QUI PROTÈGENT L'EXISTANT RESTENT DEVANT : un
+    // commerce qui n'a RIEN réglé n'est pas jugé, cours ou pas.
+    verifier('⚠️ un commerce sans aucune liaison n’est pas jugé',
+      prestationAutoriseeSurCreneaux({ ...commun, liaisons: [], prestationId: 'yoga', estCours: true }))
+    verifier('⚠️ une lecture en échec n’est pas jugée non plus',
+      prestationAutoriseeSurCreneaux({ ...commun, liaisons: null, prestationId: 'yoga', estCours: true }))
+
+    // 🔴 ET LE MOTEUR ENTIER LE DIT AUSSI, pas seulement le filtre.
+    //
+    // ⚠️ CES DEUX APPELS SONT NÉS FAUSSEMENT VERTS. Je leur avais passé
+    // `dateStr` et `jour`, que `genererSlots` n'attend pas : il sort sur
+    // `!dateChoisie` et rend un tableau vide. Le test du cours était donc vert
+    // sans rien mesurer, et c'est SON JUMEAU, celui du solo, qui a rougi et
+    // l'a démasqué. Un test qui vérifie une ABSENCE doit toujours voyager avec
+    // celui qui vérifie la PRÉSENCE.
+    const slotsCours = genererSlots({
+      creneaux: [LARGE], dateChoisie: new Date('2026-09-15T12:00:00'), dureeMinutes: 60,
+      reservations: [], horairesDetail: { mardi: { ouvert: true, debut: '08:00', fin: '18:00' } },
+      prestationId: 'yoga', liaisonsCreneaux: AILLEURS, capacite: 12,
+    })
+    egal('🔴 aucun créneau pour un cours sans plage', slotsCours.length, 0)
+    const slotsSolo = genererSlots({
+      creneaux: [LARGE], dateChoisie: new Date('2026-09-15T12:00:00'), dureeMinutes: 60,
+      reservations: [], horairesDetail: { mardi: { ouvert: true, debut: '08:00', fin: '18:00' } },
+      prestationId: 'reiki', liaisonsCreneaux: AILLEURS, capacite: 1,
+    })
+    verifier('⚠️ et la journée entière pour un solo', slotsSolo.length > 5)
+
+    // 🔴 LA FICHE NE LISTE PLUS UN COURS SANS HORAIRE : le client le
+    // choisirait pour tomber sur « aucun créneau » tous les jours.
+    verifier('🔴 un cours sans plage n’est pas listé',
+      coursSansHoraire({ id: 'yoga', capacite: 12 }, AILLEURS))
+    verifier('⚠️ un cours avec sa plage est listé',
+      !coursSansHoraire({ id: 'yoga', capacite: 12 }, [{ creneau_id: 'k1', prestation_id: 'yoga' }]))
+    verifier('⚠️ une prestation solo est toujours listée',
+      !coursSansHoraire({ id: 'reiki', capacite: 1 }, AILLEURS))
+    // ⚠️ SANS LIAISONS CHARGÉES, ON NE CACHE RIEN. Faire disparaître tous les
+    // cours du parc le jour où la table n'est pas lue serait le pire remède,
+    // et personne ne verrait d'erreur.
+    verifier('⚠️ liaisons non chargées : rien ne disparaît',
+      !coursSansHoraire({ id: 'yoga', capacite: 12 }, null))
+  }
+
   // ── 🔴 JUSQU'À QUAND ON PEUT RÉSERVER (Alex, 07/09) ─────────────────────
   // Soixante jours étaient écrits en dur, et ça bloquait déjà les abonnements :
   // un carnet de dix séances hebdomadaires couvre soixante-dix jours.
@@ -2411,6 +2488,29 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   }
   verifier('⚠️ la copie est expliquée, remplacement compris',
     /sur les jours reçus sont <strong>remplacés<\/strong>/.test(blocAide('creneaux')))
+  // 🔴 PAS DE PLAGE, PAS DE DISPO : les deux écrans le disent (Alex, 08/09).
+  verifier('🔴 la fiche ne liste pas un cours sans horaire',
+    /const prestationsProposables = \(prestations \|\| \[\]\)\.filter\(p => !coursSansHoraire\(p, liaisonsCreneaux\)\)/.test(FICHE)
+    && !/\{prestations\.map\(p => \(/.test(FICHE))
+  verifier('⚠️ et le bouton « réserver » suit la même liste',
+    /const peutReserverIci = !commercant\?\._rdvDesactive && prestationsProposables\.length > 0/.test(FICHE))
+  // 🔴 ET LA ROUTE DE CRÉATION DIT AU SERVEUR S'IL S'AGIT D'UN COURS.
+  //
+  // ⚠️ CETTE GARDE MANQUAIT, ET LA MUTATION L'A DIT : mes tests appelaient
+  // `prestationAutoriseeSurCreneaux` avec `estCours: true` à la main, donc
+  // couper le drapeau CHEZ L'APPELANT ne faisait rougir personne. La règle
+  // était juste dans le moteur et morte à l'entrée.
+  const CREATION_RDV = lire('lib/rdv-creation-server.js')
+  verifier('🔴 la route de création dit au serveur si c’est un cours',
+    /estCours: capacitePrestation\(prestation\) > 1,/.test(CREATION_RDV))
+
+  // ⚠️ ET L'AVERTISSEMENT DÉCRIT LA RÈGLE, plus le défaut qu'elle remplace.
+  verifier('🔴 l’avertissement ne dit plus « proposés à toutes tes heures »',
+    !/proposés à toutes tes heures/.test(CONFIG)
+    && /n’ont pas encore d’horaire/.test(CONFIG))
+  verifier('⚠️ et il dit que le cours ne figure pas sur la fiche',
+    /ne figurent pas' : ' il ne figure pas'\} sur ta fiche/.test(CONFIG))
+
   verifier('⚠️ l’horizon aussi, avec le piège du « 1 jour »',
     /dès ton dernier créneau\s*\n?\s*passé, tu n’as plus rien à vendre/.test(blocAide('creneaux')))
   // ⚠️ L'EXEMPLE DU TEMPS DE PRÉPARATION DOIT SE SUIVRE DE BOUT EN BOUT : le

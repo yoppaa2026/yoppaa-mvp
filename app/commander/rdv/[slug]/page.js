@@ -122,7 +122,7 @@ function formatPrix(prestation, deals = []) {
   return 'Sur demande'
 }
 
-import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv } from '@/lib/rdv-slots'
+import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire } from '@/lib/rdv-slots'
 
 // ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
 // Affiche les jours de l'horizon, regroupes par mois. ⚠️ L'HORIZON N'EST PLUS
@@ -621,10 +621,17 @@ export default function CommanderRdvSlug() {
   // des produits, c'est décrire un calcul que le client ne retrouvera pas.
   const motAssiette = (lignesPanier.length > 0 && produitsAchetables) ? 'ton panier' : 'ta prestation'
 
+  // 🔴 UN COURS SANS PLAGE NE SE PROPOSE PAS (décision d'Alex, 08/09 : « pas de
+  // plage, pas de dispo »). Un cours qu'aucune plage ne nomme n'a pas d'horaire :
+  // le client le choisirait pour tomber sur « aucun créneau » tous les jours,
+  // c'est-à-dire sur une impasse. Il revient dans la liste dès qu'une plage le
+  // nomme. ⚠️ Tant que les liaisons ne sont pas chargées, on ne cache RIEN.
+  const prestationsProposables = (prestations || []).filter(p => !coursSansHoraire(p, liaisonsCreneaux))
+
   // Réserver n'est proposé que si c'est réellement possible : module de
   // rendez-vous actif ET au moins une prestation. Sinon la barre n'affiche que
   // la sortie boutique, plutôt qu'un bouton qui ne mène nulle part.
-  const peutReserverIci = !commercant?._rdvDesactive && prestations.length > 0
+  const peutReserverIci = !commercant?._rdvDesactive && prestationsProposables.length > 0
 
   // La barre est en position fixe : sans réserve en bas de page, elle
   // recouvrirait le dernier produit et le bouton « Offrir un bon cadeau ».
@@ -2712,12 +2719,12 @@ export default function CommanderRdvSlug() {
                       Choisis ta prestation
                     </span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
-                    {prestations.length > 0 && (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{prestations.length} dispo</span>
+                    {prestationsProposables.length > 0 && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{prestationsProposables.length} dispo</span>
                     )}
                   </div>
 
-                  {prestations.length === 0 ? (
+                  {prestationsProposables.length === 0 ? (
                     <div style={{ background: '#fff', border: `1px dashed ${T.pale}`, borderRadius: 14, padding: '2rem 1rem', textAlign: 'center' }}>
                       <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune prestation disponible pour le moment</p>
                       <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.5 }}>
@@ -2726,7 +2733,7 @@ export default function CommanderRdvSlug() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {prestations.map(p => (
+                      {prestationsProposables.map(p => (
                         <button key={p.id} className="prest-card" onClick={() => choisirPrestation(p)}
                           style={{ width: '100%', textAlign: 'left', background: '#fff', borderRadius: 14, overflow: 'hidden', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 4px rgba(107,53,196,0.04)', cursor: 'pointer', padding: 0, fontFamily: '"DM Sans", sans-serif' }}>
                           {/* Bande 3px canonique en haut de chaque card prestation */}

@@ -10067,11 +10067,17 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         )}
       </div>
 
-      {/* ⚠️ L'AVERTISSEMENT, JAMAIS UN BLOCAGE (arbitrage d'Alex, 07/09). Un
-          cours qu'aucune plage ne vise reste proposé à TOUTES les heures de
-          toutes les plages : c'est le comportement d'origine, et il est
-          rarement voulu. On le dit, il décide. Bloquer la mise en ligne
-          laisserait un cours invisible sans qu'il comprenne pourquoi. */}
+      {/* 🔴 PAS DE PLAGE, PAS DE DISPO (Alex, 08/09). L'avertissement du 07/09
+          DÉCRIVAIT le défaut au lieu de l'empêcher : un cours qu'aucune plage
+          ne vise restait proposé à toutes les heures de tous les jours
+          ouverts, donc le premier client décidait qu'un cours avait lieu à
+          13h, à une personne, sans que le professeur l'ait prévu. Un cours est
+          une heure que le commerçant FIXE, pas un service dont le client
+          choisit l'horaire. Il n'est donc plus réservable nulle part tant
+          qu'une plage ne le nomme pas, et la fiche publique ne le liste plus :
+          une prestation qu'on peut choisir sans jamais voir un créneau est une
+          impasse. ⚠️ Ça ne touche QUE les cours : un catalogue sans capacité
+          supérieure à 1 ne voit rien changer. */}
       {(() => {
         const orphelins = prestationsRdv.filter(p =>
           Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons))
@@ -10080,15 +10086,15 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
           <div style={{ margin: '0 0 12px', padding: '10px 12px', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 10 }}>
             <p style={{ fontSize: 12, fontWeight: 800, color: '#92400E', marginBottom: 3 }}>
               {orphelins.length > 1
-                ? `${orphelins.length} cours sont proposés à toutes tes heures`
-                : `${orphelins[0].nom} est proposé à toutes tes heures`}
+                ? `${orphelins.length} cours n’ont pas encore d’horaire`
+                : `${orphelins[0].nom} n’a pas encore d’horaire`}
             </p>
             <p style={{ fontSize: 11.5, color: '#92400E', lineHeight: 1.5 }}>
               {orphelins.map(p => p.nom).join(', ')}
-              {orphelins.length > 1 ? ' n’apparaissent' : ' n’apparaît'} sur aucune plage en
-              particulier, donc {orphelins.length > 1 ? 'ils sont réservables' : 'il est réservable'} à
-              n’importe quelle heure de n’importe quel jour ouvert. Ouvre une plage à l’heure du
-              cours et coche-{orphelins.length > 1 ? 'les' : 'le'} dessus.
+              {orphelins.length > 1 ? ' n’apparaissent' : ' n’apparaît'} sur aucune plage, donc
+              {orphelins.length > 1 ? ' ils ne sont proposés' : ' il n’est proposé'} nulle part et
+              {orphelins.length > 1 ? ' ils ne figurent pas' : ' il ne figure pas'} sur ta fiche.
+              Ouvre une plage à l’heure du cours et coche-{orphelins.length > 1 ? 'les' : 'le'} dessus.
             </p>
           </div>
         )

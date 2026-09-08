@@ -19,6 +19,10 @@ import { confirmationSimple } from '@/lib/confirmations'
 import { etatPaiementRdv, etatPaiementCommande, couleurPaiement, caDesRdvs, resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import ModaleExpedition from './ModaleExpedition'
+// ⚠️ LE LOGO NE SE REDESSINE PAS À LA MAIN. Trois copies vivaient dans ce
+// fichier, toutes fausses de la même façon : trois dots au lieu de cinq, au
+// mauvais endroit, et le premier à 35 % d'opacité, c'est-à-dire gris.
+import YoppaaLogo from '@/app/components/YoppaaLogo'
 import { libelleExpedition, suiviUrl } from '@/lib/transporteurs'
 import { Reply, ClipboardList } from 'lucide-react'
 // ⚠️ `planEffectif` ET NON `commercant.plan` : c'est ce qui fait qu'un essai en
@@ -62,6 +66,13 @@ const T = {
   orange:  { border: '#EA580C', badge: '#EA580C', cardBg: '#FFF7ED' },
   vert:    { border: '#10B981', badge: '#10B981', cardBg: '#F0FDF4' },
   bleu:    { border: '#2563EB', badge: '#2563EB', cardBg: '#EFF6FF' },
+  // 🔴 LE TEXTE DE LA COLONNE ÉTAIT DÉLAVÉ (Alex, 08/09 : « revois un peu les
+  // contrastes du texte et des onglets, plus de blanc »). Tout y était écrit
+  // en violet clair SOUS 60 à 75 % D'OPACITÉ, sur un fond presque noir : à
+  // 0,65 le libellé d'un commerce tombe autour de 3:1, c'est-à-dire sous le
+  // seuil lisible. Ces deux tons sont faits pour ce fond, à pleine opacité.
+  colTexte:       '#EFE7FD',
+  colTexteFaible: '#CDBAEE',
 }
 
 const STATUTS = {
@@ -2426,13 +2437,8 @@ export default function Dashboard() {
       <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 80% 20%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 20% 80%, ${T.light}18 0%, transparent 50%)`, pointerEvents: 'none' }}/>
       <div style={{ width: '100%', maxWidth: 400, position: 'relative' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', gap: 7, justifyContent: 'center', marginBottom: 12 }}>
-            {[{c:'#fff',o:0.35},{c:T.light,o:1},{c:T.mid,o:1}].map((d,i) => (
-              <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: d.c, opacity: d.o }}/>
-            ))}
-          </div>
-          <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2rem', letterSpacing: '-0.05em', color: '#fff', marginBottom: 4, lineHeight: 1 }}>yoppaa</p>
-          <p style={{ color: T.light, fontSize: '0.82rem', fontWeight: 600, opacity: 0.8 }}>Choisir un commerce</p>
+          <YoppaaLogo size={34} mode="dark" style={{ marginBottom: 10 }} />
+          <p style={{ color: T.colTexte, fontSize: '0.82rem', fontWeight: 600 }}>Choisir un commerce</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {listeCommercants.map(c => (
@@ -2816,20 +2822,21 @@ export default function Dashboard() {
 
         {/* ── SIDEBAR PC ── */}
         <aside className="sidebar">
-          <div style={{ marginBottom: '2rem' }}>
-            <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
-              {[{c:'#fff',o:0.35},{c:T.light,o:1},{c:T.mid,o:1}].map((d,i) => (
-                <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: d.c, opacity: d.o }}/>
-              ))}
-            </div>
-            <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.05em', color: '#fff', marginBottom: 2, lineHeight: 1 }}>yoppaa</p>
-            <p style={{ fontSize: '0.6rem', color: T.light, fontWeight: 700, opacity: 0.7, letterSpacing: '0.5px', textTransform: 'uppercase' }}>Pro</p>
+          {/* 🔴 LE LOGO OFFICIEL, ENFIN (Alex, 08/09 : « logo actualisé + les 5
+              dots »). Il y avait ici TROIS dots, POSÉS AU-DESSUS du wordmark,
+              dont le premier à 35 % d'opacité, c'est-à-dire gris. La spec du
+              12/06 dit cinq dots, EN DESSOUS, centrés, et JAMAIS d'opacité
+              partielle : c'est précisément ce qui les rendait gris. Le
+              composant canonique porte les proportions, on ne les recopie pas. */}
+          <div style={{ marginBottom: '2rem', display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <YoppaaLogo size={30} mode="dark" />
+            <p style={{ fontSize: '0.6rem', color: T.colTexteFaible, fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase' }}>Pro</p>
           </div>
 
           <div style={{ background: `${T.main}22`, borderRadius: 12, padding: '0.75rem 0.875rem', marginBottom: '1.25rem', border: `1px solid ${T.main}33` }}>
-            <p style={{ fontSize: '0.6rem', color: T.light, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4, opacity: 0.7 }}>Commerce actif</p>
+            <p style={{ fontSize: '0.6rem', color: T.colTexteFaible, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Commerce actif</p>
             <p style={{ fontWeight: 800, color: '#fff', fontSize: '0.9rem', letterSpacing: '-0.2px' }}>{commercant?.nom}</p>
-            <p style={{ fontSize: '0.7rem', color: T.light, opacity: 0.65, marginTop: 2 }}>{commercant?.type}</p>
+            <p style={{ fontSize: '0.7rem', color: T.colTexteFaible, marginTop: 2 }}>{commercant?.type}</p>
           </div>
 
           <nav style={{ flex: 1 }}>
@@ -2843,10 +2850,13 @@ export default function Dashboard() {
             ].filter(t => t.visible).map(({ key, label, Icon }) => {
               const actif = ongletPrincipal === key
               const badgeCount = key === 'commandes' ? stats.nouvelles : key === 'rdv' ? statsRdv.aujourdhui : 0
+              // ⚠️ UN ONGLET AU REPOS RESTE UN BOUTON. À 0,6 d'opacité sur ce
+              // fond, « Commandes » se lisait comme un élément désactivé plutôt
+              // que comme l'autre moitié du tableau de bord.
               return (
                 <button key={key} className="sidebar-nav-btn" onClick={() => setOngletPrincipal(key)}
-                  style={{ background: actif ? `linear-gradient(135deg, ${T.main}55, ${T.mid}33)` : 'transparent', color: actif ? '#fff' : T.light, borderLeft: `3px solid ${actif ? T.main : 'transparent'}`, boxShadow: actif ? `0 4px 16px ${T.main}33` : 'none' }}>
-                  <Icon size={18} color={actif ? '#fff' : T.light} opacity={actif ? 1 : 0.6}/>
+                  style={{ background: actif ? `linear-gradient(135deg, ${T.main}55, ${T.mid}33)` : 'transparent', color: actif ? '#fff' : T.colTexte, borderLeft: `3px solid ${actif ? T.main : 'transparent'}`, boxShadow: actif ? `0 4px 16px ${T.main}33` : 'none' }}>
+                  <Icon size={18} color={actif ? '#fff' : T.colTexte} opacity={1}/>
                   {label}
                   {badgeCount > 0 && (
                     <span style={{ marginLeft: 'auto', background: key === 'rdv' ? '#10B981' : '#DC2626', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100, animation: key === 'commandes' ? 'pulse 2s ease infinite' : 'none' }}>{badgeCount}</span>
@@ -2857,26 +2867,46 @@ export default function Dashboard() {
           </nav>
 
           <div style={{ background: `${T.main}18`, borderRadius: 12, padding: '0.875rem', margin: '1rem 0', border: `1px solid ${T.main}28` }}>
-            <p style={{ fontSize: '0.58rem', color: T.light, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10, opacity: 0.7 }}>
+            <p style={{ fontSize: '0.58rem', color: T.colTexteFaible, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
               {jourActif ? dateLabel(jourActif + 'T00:00:00') : "Aujourd'hui"}
             </p>
+            {/* ⚠️ UN CHIFFRE SE LIT OU NE SERT À RIEN. Le montant du jour était
+                en `mid` et « Récupérées » en `light` : les deux valeurs que le
+                commerçant vient chercher étaient les moins lisibles de la
+                colonne. Les libellés s'effacent, les chiffres non. */}
             {[
-              { label: 'CA', value: euros(stats.ca), color: T.mid },
+              { label: 'CA', value: euros(stats.ca), color: '#fff' },
               { label: 'Commandes', value: commandesDuJour.length, color: '#fff' },
-              { label: 'Récupérées', value: stats.recuperees, color: T.light },
+              { label: 'Récupérées', value: stats.recuperees, color: '#fff' },
             ].map((s, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <span style={{ fontSize: '0.72rem', color: T.light, opacity: 0.7 }}>{s.label}</span>
+                <span style={{ fontSize: '0.72rem', color: T.colTexteFaible }}>{s.label}</span>
                 <span style={{ fontSize: '0.72rem', fontWeight: 900, color: s.color }}>{s.value}</span>
               </div>
             ))}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {/* 🔴 « ALERTES DÉSACTIVÉES » CONSTATE, IL N'INVITE PAS (Alex,
+                08/09). Le bouton éteint était le plus discret de la colonne :
+                il annonçait un manque avec l'apparence d'un réglage au repos,
+                et personne ne clique sur un constat. C'est pourtant le réglage
+                qui décide si le commerçant apprend qu'une commande est tombée.
+                Éteint, il appelle ; allumé, il se contente de confirmer. */}
             <button onClick={activerNotifications}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.875rem', borderRadius: 10, border: `1px solid ${notificationsActives ? T.main : T.main+'44'}`, background: notificationsActives ? `${T.main}33` : 'transparent', color: notificationsActives ? '#fff' : T.light, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.78rem', transition: 'all 0.15s' }}>
-              <IconBell size={15} color={notificationsActives ? '#fff' : T.light} active={notificationsActives}/>
-              {notificationsActives ? 'Alertes actives' : 'Alertes désactivées'}
+              title={notificationsActives ? 'Tu es prévenu à chaque commande' : 'Active les alertes pour être prévenu'}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left', padding: '0.6rem 0.875rem', borderRadius: 10, border: `1.5px solid ${notificationsActives ? '#10B98166' : '#F59E0B99'}`, background: notificationsActives ? '#10B9811F' : '#F59E0B22', color: notificationsActives ? '#D1FAE5' : '#FDE68A', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.15s' }}>
+              <IconBell size={15} color={notificationsActives ? '#6EE7B7' : '#FCD34D'} active={notificationsActives}/>
+              {notificationsActives ? (
+                <span>Alertes actives</span>
+              ) : (
+                <span style={{ minWidth: 0 }}>
+                  Activer les alertes
+                  <span style={{ display: 'block', fontWeight: 600, fontSize: '0.68rem', color: '#FCD34D', lineHeight: 1.4, marginTop: 1 }}>
+                    Sinon, personne ne te prévient d’une commande
+                  </span>
+                </span>
+              )}
             </button>
             <button onClick={seDeconnecter}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.875rem', borderRadius: 10, border: '1px solid #DC262633', background: '#DC262611', color: '#FCA5A5', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.78rem' }}>
@@ -2895,7 +2925,7 @@ export default function Dashboard() {
                 { href: '/legal#dpa', label: 'DPA' },
               ].map(l => (
                 <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
-                  style={{ fontSize: '0.7rem', fontWeight: 600, color: T.light, opacity: 0.75, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                  style={{ fontSize: '0.7rem', fontWeight: 600, color: T.colTexteFaible, textDecoration: 'underline', textUnderlineOffset: 3 }}>
                   {l.label}
                 </a>
               ))}
@@ -2911,16 +2941,16 @@ export default function Dashboard() {
             <div className="topbar-deco"/>
             <div className="topbar-inner">
               <div style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
+                {/* ⚠️ ICI, LE WORDMARK SEUL, ET C'EST UN CHOIX. La barre est
+                    haute de deux lignes serrées : les cinq dots se posent SOUS
+                    le wordmark, jamais à côté, et les glisser à côté aurait
+                    fabriqué une troisième version du logo. Mieux vaut le
+                    wordmark nu qu'un logo faux. */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {[{c:'#fff',o:0.35},{c:T.light,o:1},{c:T.mid,o:1}].map((d,i) => (
-                      <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: d.c, opacity: d.o }}/>
-                    ))}
-                  </div>
                   <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1 }}>yoppaa</p>
-                  <span style={{ fontSize: '0.55rem', fontWeight: 700, color: T.light, background: `${T.main}44`, padding: '2px 6px', borderRadius: 100, border: `1px solid ${T.light}33` }}>PRO</span>
+                  <span style={{ fontSize: '0.55rem', fontWeight: 700, color: T.colTexte, background: `${T.main}66`, padding: '2px 6px', borderRadius: 100, border: `1px solid ${T.light}55` }}>PRO</span>
                 </div>
-                <p style={{ color: T.light, fontWeight: 600, fontSize: '0.68rem', opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'clamp(100px, 25vw, 240px)' }}>{commercant?.nom}</p>
+                <p style={{ color: T.colTexte, fontWeight: 600, fontSize: '0.68rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'clamp(100px, 25vw, 240px)' }}>{commercant?.nom}</p>
               </div>
 
               {/* ⚠️ LE LIBELLÉ NE S'AFFICHE QUE SUR L'ONGLET OUVERT. Trois mots
@@ -2938,8 +2968,8 @@ export default function Dashboard() {
                   const badgeCount = key === 'commandes' ? stats.nouvelles : key === 'rdv' ? statsRdv.aujourdhui : 0
                   return (
                     <button key={key} onClick={() => setOngletPrincipal(key)} title={titre} aria-label={titre} aria-current={actif ? 'page' : undefined}
-                      style={{ display: 'flex', alignItems: 'center', gap: actif ? 5 : 0, padding: actif ? '0.35rem 0.625rem' : '0.35rem 0.5rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.72rem', transition: 'all 0.2s', background: actif ? T.main : 'transparent', color: actif ? '#fff' : T.light, boxShadow: actif ? `0 3px 12px ${T.main}55` : 'none', position: 'relative', whiteSpace: 'nowrap' }}>
-                      <Icon size={13} color={actif ? '#fff' : T.light}/>
+                      style={{ display: 'flex', alignItems: 'center', gap: actif ? 5 : 0, padding: actif ? '0.35rem 0.625rem' : '0.35rem 0.5rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.72rem', transition: 'all 0.2s', background: actif ? T.main : 'transparent', color: actif ? '#fff' : T.colTexte, boxShadow: actif ? `0 3px 12px ${T.main}55` : 'none', position: 'relative', whiteSpace: 'nowrap' }}>
+                      <Icon size={13} color={actif ? '#fff' : T.colTexte}/>
                       {actif && label}
                       {badgeCount > 0 && (
                         <span style={{ position: 'absolute', top: -4, right: -4, background: key === 'rdv' ? '#10B981' : '#DC2626', color: '#fff', fontSize: '0.55rem', fontWeight: 800, padding: '1px 5px', borderRadius: 100, animation: key === 'commandes' ? 'pulse 2s ease infinite' : 'none' }}>{badgeCount}</span>
@@ -2950,9 +2980,18 @@ export default function Dashboard() {
               </div>
 
               <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                {/* ⚠️ MÊME RÈGLE QUE DANS LA COLONNE : éteint, il appelle. Le
+                    petit rond ambre est ce qui distingue « rien à faire » de
+                    « il te manque quelque chose » sur une barre où tout est
+                    déjà petit. */}
                 <button onClick={activerNotifications}
-                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${notificationsActives ? T.main : 'rgba(255,255,255,0.15)'}`, background: notificationsActives ? `${T.main}44` : 'rgba(255,255,255,0.08)', cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}>
-                  <IconBell size={15} color={notificationsActives ? '#fff' : T.light} active={notificationsActives}/>
+                  title={notificationsActives ? 'Alertes actives' : 'Activer les alertes'}
+                  aria-label={notificationsActives ? 'Alertes actives' : 'Activer les alertes'}
+                  style={{ position: 'relative', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1.5px solid ${notificationsActives ? '#10B98166' : '#F59E0B99'}`, background: notificationsActives ? '#10B9811F' : '#F59E0B22', cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}>
+                  <IconBell size={15} color={notificationsActives ? '#6EE7B7' : '#FCD34D'} active={notificationsActives}/>
+                  {!notificationsActives && (
+                    <span style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', border: '1.5px solid #160636' }}/>
+                  )}
                 </button>
                 <button onClick={seDeconnecter}
                   style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: '1px solid #DC262333', background: '#DC262311', cursor: 'pointer', flexShrink: 0 }}>

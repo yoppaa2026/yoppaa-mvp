@@ -602,6 +602,57 @@ const verifie = (nom, cond, detail = '') => {
   }
 }
 
+// ═══ LA COLONNE DE GAUCHE : LOGO, CONTRASTES, ET LE BOUTON QUI APPELLE ════
+//
+// Alex, 08/09 : « revois un peu les contrastes du texte et des onglets, plus de
+// blanc, alertes activées doit se voir, si pas active ça doit inviter à
+// l'activation, logo actualisé + les 5 dots ».
+{
+  const PAGE = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+
+  // 🔴 LE LOGO NE SE REDESSINE PAS À LA MAIN. Trois copies vivaient dans ce
+  // fichier, fausses de la même façon : TROIS dots au lieu de cinq, AU-DESSUS
+  // du wordmark au lieu d'en dessous, et le premier à 35 % d'opacité, donc
+  // gris. La spec du 12/06 interdit précisément l'opacité partielle.
+  verifie('le tableau de bord passe par le composant du logo',
+    /import YoppaaLogo from '@\/app\/components\/YoppaaLogo'/.test(PAGE)
+    && (PAGE.match(/<YoppaaLogo /g) || []).length >= 2)
+  verifie('et plus aucun dot n’y est dessiné à la main',
+    !/\{c:'#fff',o:0\.35\}/.test(PAGE))
+
+  // ⚠️ LES CONTRASTES DE LA COLONNE. Tout y était en violet clair sous 60 à
+  // 75 % d'opacité, sur un fond presque noir. On découpe la colonne pour ne
+  // mesurer QUE ce qui s'y trouve : ailleurs, un texte à 0,7 sur fond blanc
+  // est parfaitement lisible, et une garde qui l'interdirait partout serait
+  // une alarme qui sonne tout le temps.
+  const iCol = PAGE.indexOf('{/* ── SIDEBAR PC ── */}')
+  const colonne = iCol > 0 ? PAGE.slice(iCol, PAGE.indexOf('</aside>', iCol)) : ''
+  verifie('la colonne de gauche a bien été trouvée', colonne.length > 500)
+  const opacitesFaibles = (colonne.match(/opacity: 0\.[0-8]\d?/g) || [])
+  verifie('aucun texte de la colonne ne se cache sous une opacité faible',
+    opacitesFaibles.length === 0,
+    opacitesFaibles.length > 0 ? `${opacitesFaibles.length} reste(s) : ${opacitesFaibles.join(', ')}` : '')
+  verifie('elle écrit avec les deux tons faits pour ce fond',
+    /colTexte:\s*'#EFE7FD'/.test(PAGE) && /colTexteFaible:\s*'#CDBAEE'/.test(PAGE)
+    && colonne.includes('T.colTexte'))
+
+  // 🔴 UN BOUTON ÉTEINT QUI CONSTATE N'APPELLE PERSONNE. « Alertes
+  // désactivées » annonçait un manque avec l'apparence d'un réglage au repos,
+  // sur le réglage qui décide si le commerçant apprend qu'une commande est
+  // tombée.
+  verifie('le bouton d’alertes éteint invite à agir',
+    colonne.includes('Activer les alertes')
+    && !colonne.includes('Alertes désactivées'))
+  verifie('et il dit ce qu’on perd à le laisser éteint',
+    /Sinon, personne ne te prévient d’une commande/.test(colonne))
+  verifie('allumé, il se contente de confirmer',
+    /notificationsActives \? \(\s*<span>Alertes actives<\/span>/.test(colonne))
+  // ⚠️ ET LA BARRE MOBILE PORTE LA MÊME RÈGLE : la cloche y était un carré
+  // gris de plus au milieu d'autres carrés gris.
+  verifie('la barre mobile marque aussi les alertes éteintes',
+    /\{!notificationsActives && \(\s*\n?\s*<span style=\{\{ position: 'absolute', top: -3, right: -3/.test(PAGE))
+}
+
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du
 // fichier et n'annonçait donc qu'un tiers du travail.
 console.log(`\nTableau de bord : ${ok} vérifications`)

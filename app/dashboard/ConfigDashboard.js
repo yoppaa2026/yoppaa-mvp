@@ -29,7 +29,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
-import { prestationSansCreneauDedie, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
+import { prestationSansCreneauDedie, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import BlocAide, { EtapeAide } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
@@ -3428,6 +3428,14 @@ function TabCreneaux({ commercantId, toast }) {
   function heuresLisibles(jour) {
     return plagesDuJour(jour).map(([a, b]) => `${a}–${b}`).join(' et ')
   }
+  // L'heure à laquelle les commandes se ferment, dite en clair. Un délai plus
+  // grand que l'heure de début renvoie à la veille : le dire vaut mieux que
+  // d'afficher une heure négative.
+  function heureCloture(heureDebut, heures) {
+    const total = timeToMinutes(heureDebut) - (Number(heures) || 0) * 60
+    if (total < 0) return `la veille à ${minutesToTime(((total % 1440) + 1440) % 1440)}`
+    return `à ${minutesToTime(total)}`
+  }
   // 🔴 LE BANDEAU ORANGE IGNORAIT LE SECOND SERVICE (07/09, frère de Eb2).
   // `horaireJour` ne rend que la PREMIÈRE plage : chez une friterie ouverte
   // 11:00-14:00 puis 18:00-22:00, TOUS les créneaux du soir étaient comptés
@@ -3567,38 +3575,43 @@ function TabCreneaux({ commercantId, toast }) {
     //
     // ✅ ON PROPOSE LE GESTE UTILE : découper aux services, comme le fait déjà
     // la copie. « Le créer tel quel » reste possible, avec la vraie phrase.
+    // 🔴 ET « LE CRÉER TEL QUEL » A DISPARU (Alex, 08/09) : « pas de créneaux
+    // quand le commerce est fermé ». Il a raison, et c'est une règle de
+    // commandes, pas de rendez-vous : là-bas le moteur écrête, donc une plage
+    // qui déborde ne propose rien de faux. Ici, un créneau hors horaires est
+    // offert en entier, et un client vient sonner devant une porte close.
+    // Avertir ne suffit pas quand le geste refusé n'a aucun usage légitime.
     let aCreer = [{ debut: form.heure_debut, fin: form.heure_fin }]
-    if (dehorsCmd && dehorsCmd.raison !== 'jour_ferme') {
-      const heures = dehorsCmd.plages.join(' et ')
+    if (dehorsCmd) {
+      const heures = (dehorsCmd.plages || []).join(' et ')
       const ajuste = ajusterPlagePourJour(
         { heure_debut: form.heure_debut, heure_fin: form.heure_fin }, horaires?.[jourActif])
       const morceaux = ajuste.statut === 'ignoree' ? [] : (ajuste.morceaux || [])
 
       if (morceaux.length > 0) {
+        // Il déborde, mais une partie tient : on propose CE QU'IL VOULAIT,
+        // ramené à ses heures. L'autre bouton est la sortie sans effet.
         const propose = morceaux.map(m => `${m.debut}–${m.fin}`).join(' et ')
-        const choix = await confirmer(confirmationDeuxGestes({
-          titre: 'Ce créneau déborde de tes heures d’ouverture',
-          message: `Le ${jourActif}, tu es ouvert ${heures}.`,
-          details: [
-            `Découpé, tu obtiens ${propose}.`,
-            'Tel quel, tes clients pourront choisir une heure où tu es fermé.',
-          ],
-          premier: morceaux.length > 1 ? `Créer ${propose}` : `Créer ${propose} seulement`,
-          second: 'Le créer tel quel',
-          tonPremier: 'principal',
-          tonSecond: 'neutre',
-        }))
-        if (choix !== 'premier' && choix !== 'second') return
-        if (choix === 'premier') aCreer = morceaux
-      } else {
-        // Entièrement dehors : il n'y a rien à découper, et là non plus rien
-        // n'empêchera un client de le choisir.
         if (!await confirme(confirmationSimple({
-          titre: 'Ce créneau est hors de tes heures d’ouverture',
-          message: `Le ${jourActif}, tu es ouvert ${heures}. Ce créneau sera quand même proposé à tes clients, qui pourront le choisir alors que tu es fermé.`,
-          action: 'Le créer quand même',
+          titre: 'Ce créneau déborde de tes heures d’ouverture',
+          message: `Le ${jourActif}, tu es ouvert ${heures}. Un créneau en dehors serait proposé à tes clients, qui viendraient devant une porte fermée.`,
+          details: [`Ramené à tes heures, tu obtiens ${propose}.`],
+          action: `Créer ${propose}`,
           ton: 'principal',
         }))) return
+        aCreer = morceaux
+      } else {
+        // Entièrement dehors, ou jour fermé : il n'y a rien à créer. On dit
+        // pourquoi, et on dit où le changer.
+        await confirme(confirmationInfo({
+          titre: dehorsCmd.raison === 'jour_ferme'
+            ? `Tu es fermé le ${jourActif}`
+            : 'Ce créneau est hors de tes heures d’ouverture',
+          message: dehorsCmd.raison === 'jour_ferme'
+            ? `Ouvre d’abord ce jour dans Paramètres → Profil, et ce créneau deviendra possible.`
+            : `Le ${jourActif}, tu es ouvert ${heures}. Élargis tes horaires dans Paramètres → Profil si tu veux vendre à cette heure-là.`,
+        }))
+        return
       }
     }
 
@@ -3844,6 +3857,89 @@ function TabCreneaux({ commercantId, toast }) {
 
   return (
     <div>
+      {/* 🔴 « COMMENT ÇA MARCHE », ICI AUSSI (Alex, 08/09 : « il faut la
+          fenêtre d'information sur la méthode de génération des créneaux, Max
+          commandes et temps de préparation avec exemples, infos copie etc.
+          Très important »). L'ordre compte et il est vrai : sans horaires
+          d'ouverture, tout le reste se fait prévenir ou écarter. */}
+      <BlocAide id="creneaux" titre="Comment régler tes créneaux de commande" T={T}>
+        <EtapeAide n={1} titre="Tes horaires d’ouverture, d’abord" T={T}>
+          Ils sont dans <strong>Paramètres → Profil</strong>, et tout part de là : un créneau
+          qui en sort se fait signaler, une copie s’y ajuste, la génération s’y adosse.
+          Si tu fais deux services, saisis-les avec la ligne <strong>« puis »</strong> :
+          11:00–13:00 <em>puis</em> 18:00–22:00. C’est ce qui permet à tout le reste de
+          sauter ton après-midi.
+        </EtapeAide>
+        <EtapeAide n={2} titre="Génère ta journée plutôt que de la saisir" T={T}>
+          <strong>Générer</strong> te demande une heure de début, une de fin, la durée d’une
+          tranche, puis crée les tranches d’affilée. Un 11:00 → 22:00 par 30 minutes chez un
+          restaurant ouvert 11:00–13:00 et 18:00–22:00 donne <strong>12 tranches</strong>,
+          et <strong>rien entre 13:00 et 18:00</strong>. <strong>+ Ajouter</strong> sert au cas
+          particulier : une seule plage, à la main. Si elle déborde, il la ramène à tes heures ;
+          si elle tombe entièrement dehors, <strong>il la refuse</strong> et te dit où élargir
+          tes horaires. <strong>Aucun créneau ne peut exister quand tu es fermé</strong> : ton
+          client viendrait devant une porte close.
+        </EtapeAide>
+        <EtapeAide n={3} titre="Choisis ta façon de compter" T={T}>
+          C’est le <strong>Mode de capacité</strong>, juste en dessous. Il décide de ce qui
+          rend une tranche complète. Les deux exemples sont détaillés plus bas.
+        </EtapeAide>
+        <EtapeAide n={4} titre="Copie sur tes autres jours" T={T}>
+          <strong>Copier vers…</strong>, puis coche les jours. Ce qui dépasse leurs horaires
+          est <strong>raccourci</strong>, ce qui n’y tient pas n’est <strong>pas copié</strong>,
+          et il te dit tout <strong>avant</strong> d’écrire. Un jour fermé se coche aussi : il
+          te répondra qu’il est fermé plutôt que de t’ignorer. ⚠️ Les créneaux déjà présents
+          sur les jours reçus sont <strong>remplacés</strong>, il te le demande d’abord.
+        </EtapeAide>
+        <EtapeAide n={5} titre="Jusqu’à quand on peut commander" T={T}>
+          C’est l’<strong>horizon</strong>, tout en haut. <strong>2 jours</strong> convient à
+          presque tout le monde. Attention à <strong>1 jour</strong> : dès ta dernière tranche
+          passée, tu n’as plus rien à vendre jusqu’au lendemain matin. Monte à 5 ou 7 jours si
+          tu prends des commandes préparées à l’avance.
+        </EtapeAide>
+
+        {/* Les deux façons de compter, côte à côte, avec un exemple chacune.
+            C'est la question qu'Alex a posée en testant, et elle ne se devine
+            pas depuis les deux mots du réglage. */}
+        <div style={{ paddingTop: 10, borderTop: `1px solid ${T.hairline}` }}>
+          <p style={{ fontSize: 12.5, fontWeight: 800, color: T.deep, margin: '0 0 8px' }}>
+            Commandes max ou Temps de préparation ?
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+            <div style={{ background: T.pale, borderRadius: 10, padding: '10px 12px' }}>
+              <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, margin: '0 0 4px' }}>Commandes max</p>
+              <p style={{ fontSize: 11.5, color: T.deep, lineHeight: 1.55, margin: 0 }}>
+                Un nombre de commandes <strong>par tranche</strong>. Simple, et juste quand tes
+                commandes se ressemblent.<br/>
+                <strong>Exemple :</strong> tranches de 15 min à 10 → dix commandes toutes les
+                quinze minutes, et la onzième voit « complet ».
+              </p>
+            </div>
+            <div style={{ background: T.pale, borderRadius: 10, padding: '10px 12px' }}>
+              <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, margin: '0 0 4px' }}>Temps de préparation</p>
+              <p style={{ fontSize: 11.5, color: T.deep, lineHeight: 1.55, margin: 0 }}>
+                Un <strong>budget de minutes</strong> par tranche, que chaque article consomme
+                selon son temps de préparation.<br/>
+                <strong>Exemple :</strong> tranche de 30 min, deux personnes en cuisine → 60
+                minutes de capacité, donc six pizzas à 10 min. Une commande de vingt pièces en
+                mange autant que six clients pressés.
+              </p>
+            </div>
+          </div>
+          <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.6, margin: '10px 0 0' }}>
+            <strong style={{ color: T.deep }}>Le nombre vaut pour la tranche, pas pour la journée.</strong>{' '}
+            Un créneau unique 11:00–22:00 réglé à 5, c’est cinq commandes pour onze heures.
+            Douze tranches à 10, c’est cent vingt commandes possibles, jamais plus de dix à la fois.
+            Tu peux corriger chaque tranche après coup avec les boutons − et + de sa carte.
+          </p>
+          <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.6, margin: '8px 0 0' }}>
+            <strong style={{ color: T.deep }}>Et la clôture, sur chaque carte</strong>, ferme la
+            tranche un nombre d’heures avant son début. À 0, on peut commander jusqu’à la
+            dernière minute. Un boulanger met 2, une friterie reste souvent à 0.
+          </p>
+        </div>
+      </BlocAide>
+
       {/* ─── Horizon ─── */}
       <div style={{ ...s.card, marginBottom: 16, background: T.pale, border: `1.5px solid ${T.main}22`, boxShadow: 'none' }}>
         <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Calendar size={15} strokeWidth={1.8}/> Horizon de réservation</h3>
@@ -4111,6 +4207,17 @@ function TabCreneaux({ commercantId, toast }) {
                           <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateCutoff(c.id, (c.cutoff_heures || 0) + 1)}>+</button>
                           <span style={{ fontSize: 10, color: T.muted }}>h avant</span>
                         </div>
+                        {/* ⚠️ « CLÔTURE : 0 H AVANT » NE SE DEVINE PAS (Alex,
+                            08/09). Le chiffre dit combien d'heures avant le
+                            début on cesse d'accepter des commandes, et la
+                            phrase change de sens à zéro : ce n'est pas
+                            « aucune clôture réglée », c'est « ouvert jusqu'à
+                            la dernière minute ». */}
+                        <p style={{ fontSize: 10, color: T.muted, lineHeight: 1.45, marginTop: 3 }}>
+                          {(c.cutoff_heures || 0) === 0
+                            ? `Commandes acceptées jusqu’à ${String(c.heure_debut).slice(0,5)}.`
+                            : `Commandes fermées ${c.cutoff_heures} h avant, soit ${heureCloture(c.heure_debut, c.cutoff_heures)}.`}
+                        </p>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                         <Toggle value={c.actif} onChange={() => toggleCreneau(c)} />

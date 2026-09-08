@@ -2030,8 +2030,18 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   const AIDE = lire('app/dashboard/BlocAide.js')
   verifier('l’onglet rendez-vous porte son mode d’emploi',
     /<BlocAide id="rdv"/.test(CONFIG))
+  // ⚠️ LA GARDE COMPTE DANS SON PROPRE BLOC. Elle comptait les `EtapeAide` du
+  // fichier entier : le jour où un second onglet a reçu son mode d'emploi
+  // (08/09), elle a rougi sans qu'aucune règle n'ait bougé. Une garde qui
+  // mesure le fichier au lieu du bloc mesure le voisin.
+  const blocAide = (id) => {
+    const i = CONFIG.indexOf(`<BlocAide id="${id}"`)
+    if (i < 0) return ''
+    const j = CONFIG.indexOf('</BlocAide>', i)
+    return j < 0 ? '' : CONFIG.slice(i, j)
+  }
   verifier('et il décrit les quatre étapes dans l’ordre',
-    (CONFIG.match(/<EtapeAide n=\{[1-4]\}/g) || []).length === 4)
+    (blocAide('rdv').match(/<EtapeAide n=\{[1-4]\}/g) || []).length === 4)
   // ⚠️ LES DEUX PIÈGES SONT NOMMÉS, parce que ce sont eux qui coûtent une
   // journée de compréhension : une plage hors horaires ne propose rien, et un
   // cours resté sur une plage ouverte se donne à n'importe quelle heure.
@@ -2287,16 +2297,61 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // restaurant fermé l'après-midi. J'avais recopié la phrase du module d'à
   // côté sans vérifier qu'elle y était encore vraie.
   // ═════════════════════════════════════════════════════════════════════════
-  verifier('🔴 la création d’un créneau de commande propose de découper',
+  // 🔴 « SUPPRIMER AUSSI LE TEL QUEL : PAS DE CRÉNEAUX QUAND LE COMMERCE EST
+  // FERMÉ » (Alex, 08/09). Sa règle, et elle vaut pour les COMMANDES : rien
+  // n'écrête ici, donc un créneau hors horaires envoie un client devant une
+  // porte close. Avertir ne suffit pas quand le geste n'a aucun usage.
+  verifier('🔴 la création d’un créneau de commande ramène à tes heures',
     /titre: 'Ce créneau déborde de tes heures d’ouverture',/.test(CONFIG)
-    && /second: 'Le créer tel quel',/.test(CONFIG))
-  verifier('⚠️ et elle dit ce qui se passe si on le garde tel quel',
-    /Tel quel, tes clients pourront choisir une heure où tu es fermé\./.test(CONFIG))
+    && /action: `Créer \$\{propose\}`,/.test(CONFIG))
+  verifier('🔴 et « le créer tel quel » n’existe plus',
+    !/'Le créer tel quel'/.test(CONFIG)
+    && !/Tel quel, tes clients pourront choisir une heure où tu es fermé/.test(CONFIG))
+  verifier('🔴 un créneau entièrement dehors est REFUSÉ, pas créé',
+    /await confirme\(confirmationInfo\(\{\s*titre: dehorsCmd\.raison === 'jour_ferme'/.test(CONFIG)
+    && /\}\)\)\s*return\s*\}\s*\}/.test(CONFIG))
+  verifier('⚠️ et un jour fermé aussi, ce qui ne se disait pas du tout',
+    /if \(dehorsCmd\) \{/.test(CONFIG)
+    && !/if \(dehorsCmd && dehorsCmd\.raison !== 'jour_ferme'\) \{\s*const heures/.test(CONFIG))
+  verifier('⚠️ le refus dit où élargir les horaires',
+    /Élargis tes horaires dans Paramètres → Profil/.test(CONFIG)
+    && /Ouvre d’abord ce jour dans Paramètres → Profil/.test(CONFIG))
   verifier('🔴 elle ne promet plus que le dépassement sera écarté',
     !/Le \$\{jourActif\}, tu es ouvert \$\{heures\}\. Ce qui dépasse ne sera pas proposé/.test(CONFIG))
   verifier('🔴 ni qu’aucune commande ne pourra s’y poser',
     !/aucune commande ne pourra s’y poser/.test(CONFIG)
-    && /Ce créneau sera quand même proposé à tes clients/.test(CONFIG))
+    && /Un créneau en dehors serait proposé à tes clients, qui viendraient devant une porte fermée/.test(CONFIG))
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // LE MODE D'EMPLOI DES CRÉNEAUX DE COMMANDE (Alex, 08/09 : « très
+  // important »). L'ordre y porte une information vraie : sans horaires
+  // d'ouverture, tout le reste se fait refuser ou ajuster.
+  // ═════════════════════════════════════════════════════════════════════════
+  verifier('l’onglet créneaux porte son mode d’emploi',
+    /<BlocAide id="creneaux"/.test(CONFIG))
+  verifier('⚠️ et il commence par les heures d’ouverture',
+    /<EtapeAide n=\{1\} titre="Tes horaires d’ouverture, d’abord"/.test(blocAide('creneaux')))
+  verifier('⚠️ ses cinq étapes sont dans l’ordre',
+    (blocAide('creneaux').match(/<EtapeAide n=\{[1-5]\}/g) || []).length === 5)
+  verifier('🔴 les deux façons de compter sont expliquées AVEC un exemple',
+    /Commandes max ou Temps de préparation \?/.test(CONFIG)
+    && (blocAide('creneaux').match(/<strong>Exemple :<\/strong>/g) || []).length === 2)
+  verifier('🔴 et l’ambiguïté du « max » est levée',
+    /Le nombre vaut pour la tranche, pas pour la journée/.test(CONFIG)
+    && /Pour ce créneau entier\. Un 11:00–22:00 à 5/.test(CONFIG)
+    && /Commandes max par tranche de \$\{tranche\}/.test(CONFIG))
+  verifier('⚠️ la copie est expliquée, remplacement compris',
+    /sur les jours reçus sont <strong>remplacés<\/strong>/.test(blocAide('creneaux')))
+  verifier('⚠️ l’horizon aussi, avec le piège du « 1 jour »',
+    /dès ta dernière tranche\s*\n?\s*passée, tu n’as plus rien à vendre/.test(blocAide('creneaux')))
+
+  // 🔴 « CLÔTURE : 0 H AVANT » NE SE DEVINE PAS. Et le sens change à zéro :
+  // ce n'est pas « rien de réglé », c'est « jusqu'à la dernière minute ».
+  verifier('🔴 la clôture d’un créneau se lit en clair sous le champ',
+    /Commandes acceptées jusqu’à \$\{String\(c\.heure_debut\)\.slice\(0,5\)\}/.test(CONFIG)
+    && /Commandes fermées \$\{c\.cutoff_heures\} h avant, soit \$\{heureCloture\(c\.heure_debut, c\.cutoff_heures\)\}/.test(CONFIG))
+  verifier('⚠️ et une clôture plus longue que la matinée renvoie à la veille',
+    /if \(total < 0\) return `la veille à \$\{minutesToTime\(\(\(total % 1440\) \+ 1440\) % 1440\)\}`/.test(CONFIG))
   verifier('🔴 le découpage crée un créneau par morceau',
     /await supabase\.from\('creneaux'\)\.insert\(aCreer\.map\(n => \(\{/.test(CONFIG))
   verifier('⚠️ et chaque morceau est vérifié contre les créneaux existants',

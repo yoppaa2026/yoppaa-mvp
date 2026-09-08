@@ -10074,10 +10074,14 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
           13h, à une personne, sans que le professeur l'ait prévu. Un cours est
           une heure que le commerçant FIXE, pas un service dont le client
           choisit l'horaire. Il n'est donc plus réservable nulle part tant
-          qu'une plage ne le nomme pas, et la fiche publique ne le liste plus :
-          une prestation qu'on peut choisir sans jamais voir un créneau est une
-          impasse. ⚠️ Ça ne touche QUE les cours : un catalogue sans capacité
-          supérieure à 1 ne voit rien changer. */}
+          qu'une plage ne le nomme pas.
+          ⚠️ MAIS IL RESTE VISIBLE SUR LA FICHE (Alex, revenu dessus le même
+          jour, et il a bien fait) : le retirer confondrait « pas encore
+          réservable en ligne » avec « ça n'existe pas », et le client d'un
+          centre de yoga conclurait qu'ils ont arrêté le yoga. La carte porte
+          « Dates à venir » et n'est pas cliquable.
+          ⚠️ Ça ne touche QUE les cours : un catalogue sans capacité supérieure
+          à 1 ne voit rien changer. */}
       {(() => {
         const orphelins = prestationsRdv.filter(p =>
           Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons))
@@ -10092,9 +10096,10 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
             <p style={{ fontSize: 11.5, color: '#92400E', lineHeight: 1.5 }}>
               {orphelins.map(p => p.nom).join(', ')}
               {orphelins.length > 1 ? ' n’apparaissent' : ' n’apparaît'} sur aucune plage, donc
-              {orphelins.length > 1 ? ' ils ne sont proposés' : ' il n’est proposé'} nulle part et
-              {orphelins.length > 1 ? ' ils ne figurent pas' : ' il ne figure pas'} sur ta fiche.
-              Ouvre une plage à l’heure du cours et coche-{orphelins.length > 1 ? 'les' : 'le'} dessus.
+              {orphelins.length > 1 ? ' ils restent visibles' : ' il reste visible'} sur ta fiche
+              mais {orphelins.length > 1 ? 'ne sont pas réservables' : 'n’est pas réservable'} :
+              tes clients lisent « dates à venir ». Ouvre une plage à l’heure du cours et
+              coche-{orphelins.length > 1 ? 'les' : 'le'} dessus.
             </p>
           </div>
         )

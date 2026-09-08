@@ -2488,12 +2488,22 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   }
   verifier('⚠️ la copie est expliquée, remplacement compris',
     /sur les jours reçus sont <strong>remplacés<\/strong>/.test(blocAide('creneaux')))
-  // 🔴 PAS DE PLAGE, PAS DE DISPO : les deux écrans le disent (Alex, 08/09).
-  verifier('🔴 la fiche ne liste pas un cours sans horaire',
-    /const prestationsProposables = \(prestations \|\| \[\]\)\.filter\(p => !coursSansHoraire\(p, liaisonsCreneaux\)\)/.test(FICHE)
-    && !/\{prestations\.map\(p => \(/.test(FICHE))
-  verifier('⚠️ et le bouton « réserver » suit la même liste',
+  // 🔴 PAS DE PLAGE, PAS DE DISPO — MAIS LE COURS RESTE VISIBLE (Alex, 08/09,
+  // après réflexion). Ma première réponse le RETIRAIT de la fiche. C'était
+  // confondre « pas encore réservable en ligne » avec « ça n'existe pas » :
+  // une fiche est d'abord une vitrine, et le client qui connaît le studio
+  // conclurait qu'ils ont arrêté le yoga.
+  verifier('🔴 un cours sans horaire reste VISIBLE sur la fiche',
+    /\{\(prestations \|\| \[\]\)\.map\(p => \{ const sansDates = coursSansHoraire\(p, liaisonsCreneaux\); return \(/.test(FICHE))
+  verifier('🔴 mais il n’est pas cliquable',
+    /disabled=\{sansDates\} onClick=\{\(\) => \{ if \(!sansDates\) choisirPrestation\(p\) \}\}/.test(FICHE)
+    && /\{sansDates \? 'Dates à venir' : 'Réserver'\}/.test(FICHE))
+  verifier('⚠️ et la carte dit quoi faire',
+    /Pas encore de date en ligne pour ce cours\. Contacte le commerce/.test(FICHE))
+  verifier('⚠️ le bouton « réserver » ne compte que ce qui est réservable',
     /const peutReserverIci = !commercant\?\._rdvDesactive && prestationsProposables\.length > 0/.test(FICHE))
+  verifier('⚠️ et le vide reste le vide : zéro prestation, pas zéro réservable',
+    /\{\(prestations \|\| \[\]\)\.length === 0 \? \(/.test(FICHE))
   // 🔴 ET LA ROUTE DE CRÉATION DIT AU SERVEUR S'IL S'AGIT D'UN COURS.
   //
   // ⚠️ CETTE GARDE MANQUAIT, ET LA MUTATION L'A DIT : mes tests appelaient
@@ -2508,8 +2518,9 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('🔴 l’avertissement ne dit plus « proposés à toutes tes heures »',
     !/proposés à toutes tes heures/.test(CONFIG)
     && /n’ont pas encore d’horaire/.test(CONFIG))
-  verifier('⚠️ et il dit que le cours ne figure pas sur la fiche',
-    /ne figurent pas' : ' il ne figure pas'\} sur ta fiche/.test(CONFIG))
+  verifier('⚠️ et il dit exactement ce que le client voit',
+    /restent visibles' : ' il reste visible'\} sur ta fiche/.test(CONFIG)
+    && /tes clients lisent « dates à venir »/.test(CONFIG))
 
   verifier('⚠️ l’horizon aussi, avec le piège du « 1 jour »',
     /dès ton dernier créneau\s*\n?\s*passé, tu n’as plus rien à vendre/.test(blocAide('creneaux')))

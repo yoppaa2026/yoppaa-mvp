@@ -621,11 +621,20 @@ export default function CommanderRdvSlug() {
   // des produits, c'est décrire un calcul que le client ne retrouvera pas.
   const motAssiette = (lignesPanier.length > 0 && produitsAchetables) ? 'ton panier' : 'ta prestation'
 
-  // 🔴 UN COURS SANS PLAGE NE SE PROPOSE PAS (décision d'Alex, 08/09 : « pas de
-  // plage, pas de dispo »). Un cours qu'aucune plage ne nomme n'a pas d'horaire :
-  // le client le choisirait pour tomber sur « aucun créneau » tous les jours,
-  // c'est-à-dire sur une impasse. Il revient dans la liste dès qu'une plage le
-  // nomme. ⚠️ Tant que les liaisons ne sont pas chargées, on ne cache RIEN.
+  // 🔴 UN COURS SANS PLAGE N'EST PAS RÉSERVABLE, MAIS IL RESTE VISIBLE
+  // (Alex, 08/09, après réflexion — et il a eu raison de revenir dessus).
+  //
+  // Ma première réponse était de le RETIRER de la fiche : « une prestation
+  // qu'on choisit sans jamais voir de créneau est une impasse ». Vrai côté
+  // réservation, et faux sur le reste : une fiche Yoppaa est d'abord une
+  // VITRINE. Retirer le cours de yoga d'un centre de yoga parce qu'il n'a pas
+  // encore d'horaire, c'est confondre « pas encore réservable en ligne » avec
+  // « ça n'existe pas » — et le client qui connaît le studio en conclut qu'ils
+  // ont arrêté. L'application sait déjà dire « ça existe, mais pas ici » :
+  // c'est exactement ce que fait le bandeau quand le module est éteint.
+  //
+  // Il est donc affiché, NON CLIQUABLE, avec ce qu'il faut savoir.
+  // ⚠️ Tant que les liaisons ne sont pas chargées, aucun cours n'est marqué.
   const prestationsProposables = (prestations || []).filter(p => !coursSansHoraire(p, liaisonsCreneaux))
 
   // Réserver n'est proposé que si c'est réellement possible : module de
@@ -2724,7 +2733,7 @@ export default function CommanderRdvSlug() {
                     )}
                   </div>
 
-                  {prestationsProposables.length === 0 ? (
+                  {(prestations || []).length === 0 ? (
                     <div style={{ background: '#fff', border: `1px dashed ${T.pale}`, borderRadius: 14, padding: '2rem 1rem', textAlign: 'center' }}>
                       <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune prestation disponible pour le moment</p>
                       <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.5 }}>
@@ -2733,9 +2742,9 @@ export default function CommanderRdvSlug() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {prestationsProposables.map(p => (
-                        <button key={p.id} className="prest-card" onClick={() => choisirPrestation(p)}
-                          style={{ width: '100%', textAlign: 'left', background: '#fff', borderRadius: 14, overflow: 'hidden', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 4px rgba(107,53,196,0.04)', cursor: 'pointer', padding: 0, fontFamily: '"DM Sans", sans-serif' }}>
+                      {(prestations || []).map(p => { const sansDates = coursSansHoraire(p, liaisonsCreneaux); return (
+                        <button key={p.id} className={sansDates ? undefined : 'prest-card'} disabled={sansDates} onClick={() => { if (!sansDates) choisirPrestation(p) }}
+                          style={{ width: '100%', textAlign: 'left', background: '#fff', borderRadius: 14, overflow: 'hidden', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 4px rgba(107,53,196,0.04)', cursor: sansDates ? 'default' : 'pointer', opacity: sansDates ? 0.92 : 1, padding: 0, fontFamily: '"DM Sans", sans-serif' }}>
                           {/* Bande 3px canonique en haut de chaque card prestation */}
                           <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
                           <div style={{ padding: '0.875rem 1rem' }}>
@@ -2751,6 +2760,14 @@ export default function CommanderRdvSlug() {
                                 {formatDuree(p.duree_minutes)}
                               </span>
                             </div>
+                            {/* Ce cours existe, il n'a simplement pas encore d'horaire
+                                en ligne. On le DIT, plutot que de le faire disparaitre : une
+                                fiche est d'abord une vitrine. */}
+                            {sansDates && (
+                              <p style={{ fontSize: '0.75rem', color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '6px 9px', lineHeight: 1.45, margin: '0 0 8px' }}>
+                                Pas encore de date en ligne pour ce cours. Contacte le commerce pour connaitre les prochaines.
+                              </p>
+                            )}
                             {p.description && (
                               <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.4, margin: '0 0 8px' }}>
                                 {p.description}
@@ -2810,16 +2827,18 @@ export default function CommanderRdvSlug() {
                                   )
                                 })()}
                               </div>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, padding: '6px 14px', borderRadius: 100, boxShadow: `0 4px 14px ${T.main}33` }}>
-                                Réserver
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
-                                </svg>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 800, color: sansDates ? T.muted : '#fff', background: sansDates ? T.pale : `linear-gradient(135deg, ${T.main}, ${T.mid})`, padding: '6px 14px', borderRadius: 100, boxShadow: sansDates ? 'none' : `0 4px 14px ${T.main}33` }}>
+                                {sansDates ? 'Dates à venir' : 'Réserver'}
+                                {!sansDates && (
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
+                                  </svg>
+                                )}
                               </span>
                             </div>
                           </div>
                         </button>
-                      ))}
+                      ) })}
                     </div>
                   )}
                 </div>

@@ -2448,6 +2448,36 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // ═════════════════════════════════════════════════════════════════════════
   verifier('l’onglet créneaux porte son mode d’emploi',
     /<BlocAide id="creneaux"/.test(CONFIG))
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 L'ORDRE DES ONGLETS SUIT CE QU'IL Y A À FAIRE (Alex, 08/09 : « le profil
+  // me semble être la base d'une chronologie adaptée aux étapes suivantes »).
+  // Le Profil était TREIZIÈME alors que tout en dépend : les horaires décident
+  // des créneaux, l'adresse décide de la livraison, les emplacements décident
+  // des plages de rendez-vous.
+  // ═════════════════════════════════════════════════════════════════════════
+  {
+    const i = (id) => CONFIG.indexOf(`{ id: '${id}',`)
+    const iProfil = CONFIG.indexOf(`{ id: 'profil', label: 'Profil général'`)
+    verifier('🔴 le Profil ouvre la marche',
+      iProfil > 0 && iProfil < i('menu') && iProfil < i('rdv') && iProfil < i('stats'))
+    verifier('⚠️ et il s’appelle « Profil général »',
+      /label: 'Profil général', icon: 'shop', mention: 'À faire en premier'/.test(CONFIG))
+    verifier('⚠️ ce qu’on règle vient avant ce qui fait venir',
+      i('menu') < i('deals') && i('rdv') < i('deals') && i('paiements') < i('fidelite'))
+    verifier('⚠️ et ce qui fait venir avant ce qui se mesure',
+      i('deals') < i('stats') && i('bons') < i('comptabilite'))
+    verifier('⚠️ l’aide ferme la marche',
+      i('accompagnement') > i('signaux'))
+    // ⚠️ LA MENTION S'EFFACE QUAND ON EST DESSUS : elle n'y apprendrait plus
+    // rien, et elle prendrait la place du libellé sur un écran étroit.
+    verifier('🔴 la mention « à faire en premier » s’affiche, sauf sur l’onglet ouvert',
+      /\{t\.mention && !actif && \(/.test(CONFIG))
+    // Et l'écran lui-même dit POURQUOI, pas seulement QU'IL faut commencer là.
+    verifier('⚠️ le Profil explique de quoi le reste dépend',
+      /<BlocAide id="profil" titre="Pourquoi tout commence ici"/.test(CONFIG)
+      && /<h2 style=\{s\.h2\}>Profil général<\/h2>/.test(CONFIG))
+  }
   // 🔴 UNE AIDE QU'ON NE VOIT PAS NE SERT PERSONNE (Alex, 08/09 : « ça se fond
   // trop avec le reste »). Le bloc se voit maintenant fermé, et il dit ce
   // qu'il contient : « ouvrir pour voir » n'est pas une raison d'ouvrir.

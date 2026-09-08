@@ -6405,7 +6405,35 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
 
   return (
     <div>
-      <h2 style={s.h2}>Profil du commerce</h2>
+      <h2 style={s.h2}>Profil général</h2>
+
+      {/* 🔴 C'EST LA BASE, ET ÇA SE DIT ICI AUSSI (Alex, 08/09 : « le profil me
+          semble être la base d'une chronologie adaptée aux étapes suivantes »).
+          La mention dans la barre dit QU'IL faut commencer ici ; ce bloc dit
+          POURQUOI, c'est-à-dire ce qui dépend vraiment de cet écran. Sans lui,
+          le commerçant croit à un ordre arbitraire. */}
+      <BlocAide id="profil" titre="Pourquoi tout commence ici"
+        resume="Tes horaires, ton adresse et tes emplacements décident de ce que les autres onglets peuvent faire"
+        T={T}>
+        <EtapeAide n={1} titre="Tes horaires d’ouverture" T={T}>
+          Ils commandent <strong>tes créneaux de commande</strong> et <strong>tes plages de
+          rendez-vous</strong> : ce qui tombe en dehors se fait signaler, ou refuser. Deux
+          services par jour se saisissent avec la ligne <strong>« puis »</strong>.
+        </EtapeAide>
+        <EtapeAide n={2} titre="Ton adresse, ou tes emplacements" T={T}>
+          Elle décide de <strong>la livraison</strong> et de ce que ta fiche affiche. Si tu
+          changes d’endroit selon les jours, coche-le dans <strong>Mes lieux</strong> :
+          ce sont alors <em>tes emplacements</em> qui donnent tes horaires, jour par jour.
+        </EtapeAide>
+        <EtapeAide n={3} titre="Ce que tu actives" T={T}>
+          La <strong>livraison</strong> s’allume ici, et l’onglet du même nom s’ouvre ensuite.
+          Un onglet qui semble vide attend presque toujours un interrupteur de cet écran.
+        </EtapeAide>
+        <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.6, margin: '2px 0 0', paddingTop: 10, borderTop: `1px solid ${T.hairline}` }}>
+          <strong style={{ color: T.deep }}>Ensuite seulement</strong>, remplis ton catalogue,
+          ouvre tes créneaux, puis tes rendez-vous. Les onglets sont rangés dans cet ordre.
+        </p>
+      </BlocAide>
 
       {/* ─── LES QUATRE SOUS-ONGLETS ─────────────────────────────────────────
           ⚠️ CET ECRAN FAISAIT 647 LIGNES ET MELANGEAIT QUATRE SUJETS SANS
@@ -12231,16 +12259,27 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
   // ne retire que ce qui est SANS OBJET pour le métier (`etat: null`). Un
   // onglet hors forfait reste donc à sa place, et c'est son état qui décide de
   // son apparence.
+  // 🔴 L'ORDRE SUIT CE QU'IL Y A À FAIRE, DANS L'ORDRE (Alex, 08/09 : « il y a
+  // une logique, le profil me semble être la base d'une chronologie adaptée aux
+  // étapes suivantes »). Il avait raison : les onglets étaient rangés par
+  // famille de fonction, et le Profil se trouvait en treizième position alors
+  // que TOUT en dépend. Les horaires décident des créneaux, l'adresse décide de
+  // la livraison, les emplacements décident des plages de rendez-vous. Un
+  // commerçant qui remplit son catalogue avant ses horaires se fait prévenir
+  // trois écrans plus loin qu'il aurait dû commencer ailleurs.
+  //
+  // Quatre temps : RÉGLER (ce que je suis, ce que je vends, comment on
+  // l'obtient), FAIRE VENIR, SUIVRE, et l'aide.
+  //
+  // ⚠️ LES CHIFFRES PERDENT LEUR PREMIÈRE PLACE, ET C'EST ASSUMÉ. Ils y
+  // étaient parce qu'un commerçant vient voir ce que sa fiche produit — mais
+  // ça, c'est l'onglet « Commandes » du tableau de bord, pas l'écran des
+  // réglages. Ici, on vient régler quelque chose.
   const tabs = [
-    // Les chiffres en premier : c'est ce qu'un commerçant vient voir en
-    // ouvrant son tableau de bord, et la landing les lui promet depuis le
-    // premier jour. Ouverts à TOUS les paliers, y compris le gratuit : voir
-    // ce que sa fiche produit est ce qui donne envie d'en faire plus.
-    { id: 'stats',    label: 'Chiffres', icon: 'chart' },
+    // ── RÉGLER ───────────────────────────────────────────────────────────
+    // Le socle. Nom, horaires, adresse, emplacements : le reste en descend.
+    { id: 'profil', label: 'Profil général', icon: 'shop', mention: 'À faire en premier' },
     { id: 'menu',     label: commercant?.categorie === 'detail' ? 'Boutique' : estVitrine ? 'Catalogue' : 'Menu', icon: 'menu' },
-    { id: 'deals', label: 'Deals', icon: 'tag', feature: 'deals' },
-    { id: 'actus', label: 'Actus', icon: 'sliders', feature: 'actus_illimitees' },
-    iaActif && { id: 'ia', label: 'Générateur', icon: 'sparkles' },
     // Créneaux de retrait C&C : alimentaire uniquement (le retrait boutique détail
     // sera cadré au Module 2 étape 5).
     // ⚠️ CET ONGLET ÉCHAPPAIT AU FORFAIT : il s'affichait pour tout commerce
@@ -12252,22 +12291,35 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // « RDV » ne disait pas ce qu'on y règle (prestations, praticiens, horaires
     // de réservation) : renommé « Prise de RDV » (demande Alex 01/08).
     { id: 'rdv', label: 'Prise de RDV', icon: 'calendar', feature: 'rdv' },
+    { id: 'paiements', label: 'Paiements', icon: 'tag', feature: 'paiement_ligne' },
+
+    // ── FAIRE VENIR ──────────────────────────────────────────────────────
+    { id: 'deals', label: 'Deals', icon: 'tag', feature: 'deals' },
+    { id: 'actus', label: 'Actus', icon: 'sliders', feature: 'actus_illimitees' },
+    // Le générateur travaille SUR le catalogue et les deals : il n'a rien à
+    // dire tant qu'ils sont vides.
+    iaActif && { id: 'ia', label: 'Générateur', icon: 'sparkles' },
     // Fidélité : Communiquer (comptoir) et Vendre (comptoir + crédit auto)
     { id: 'fidelite', label: 'Fidélité', icon: 'heart', feature: 'fidelite' },
     // Bons cadeaux : Vendre uniquement (l'achat passe par Stripe)
     { id: 'bons', label: libelleBon(commercant?.categorie, { pluriel: true, majuscule: true }), icon: 'gift', feature: 'bons_cadeaux' },
-    { id: 'paiements', label: 'Paiements', icon: 'tag', feature: 'paiement_ligne' },
+
+    // ── SUIVRE ───────────────────────────────────────────────────────────
+    // Ouverts à TOUS les paliers, y compris le gratuit : voir ce que sa fiche
+    // produit est ce qui donne envie d'en faire plus.
+    { id: 'stats',    label: 'Chiffres', icon: 'chart' },
     // Journal des transactions et export : promis par la formule Vendre.
     { id: 'comptabilite', label: 'Comptabilité', icon: 'tag', feature: 'export_comptable' },
-    { id: 'profil',   label: 'Profil',   icon: 'shop' },
-    // Accompagnement sur place et matériel : accessible à tout moment, plus
-    // seulement à l'inscription (l'étape 5 le promettait déjà).
-    { id: 'accompagnement', label: 'Accompagnement', icon: 'box' },
     { id: 'avis',     label: 'Avis',     icon: 'star' },
     // « Signalements » ne disait que la moitié de ce qu'on y trouve désormais :
     // les envies des habitants y vivent aussi, et ce sont elles qui portent
     // l'argument. Renommé « Signaux » (05/08).
     { id: 'signaux', label: 'Signaux', icon: 'signal', badge: signalementsEnAttente, dot: enviesNouvelles > 0 },
+
+    // ── L'AIDE, EN DERNIER ───────────────────────────────────────────────
+    // Accompagnement sur place et matériel : accessible à tout moment, plus
+    // seulement à l'inscription (l'étape 5 le promettait déjà).
+    { id: 'accompagnement', label: 'Accompagnement', icon: 'box' },
   ].filter(Boolean)
     // ⚠️ L'ÉTAT SE CALCULE ICI, UNE FOIS, ET LE FILTRE NE PORTE QUE SUR `null`.
     // Un onglet sans `feature` est toujours à lui (Chiffres, Profil, Avis…).
@@ -12312,6 +12364,16 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
                 ? <Lock size={15} strokeWidth={2} color={couleur}/>
                 : <Icon name={t.icon} size={16} color={couleur}/>}
               {t.label}
+              {/* ⚠️ « INDISPENSABLE AVANT DE FAIRE LA SUITE » (Alex, 08/09).
+                  L'ordre seul ne le dit pas : un commerçant lit une barre
+                  d'onglets comme un menu, pas comme une marche à suivre. La
+                  mention le dit en trois mots, et elle s'efface dès qu'il est
+                  dessus, où elle n'apprendrait plus rien. */}
+              {t.mention && !actif && (
+                <span style={{ background: T.pale, color: T.main, fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+                  {t.mention}
+                </span>
+              )}
               {t.badge > 0 && (
                 <span style={{ background: '#DC2626', color: '#fff', fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 100, minWidth: 16, textAlign: 'center', boxShadow: '0 0 0 2px #fff' }}>
                   {t.badge}

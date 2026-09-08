@@ -85,6 +85,20 @@ const MUTATIONS = [
     de: "          .in('prestation_id', idsPrestations)",
     vers: '          .limit(5000)' },
 
+  // 🔴 UN PRATICIEN COCHE MAIS PLUS ACTIF (Alex, 08/09). La liaison survit,
+  // le moteur refuse tous les autres, et PLUS PERSONNE ne peut assurer la
+  // prestation. Afficher « tout le monde » serait le contraire de la verite.
+  { nom: '🔴 un praticien parti passe pour « tout le monde »',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                    if (ids.length > 0 && eux.length === 0) return (',
+    vers: '                    if (false) return (' },
+
+  // ⚠️ UNE LIGNE QUI NE SERT A RIEN CHEZ UN INDEPENDANT SEUL EST DU BRUIT.
+  { nom: '⚠️ la ligne des praticiens s affiche chez un praticien seul',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                  {praticiens.length >= 2 && (() => {',
+    vers: '                  {praticiens.length >= 0 && (() => {' },
+
   // 🔴 UN REFUS DE REGLE N EST PAS UNE PANNE : le client relancait a l infini
   // une demande que le serveur ne pouvait pas accepter.
   { nom: '🔴 un praticien refuse redevient une erreur serveur muette',

@@ -8162,8 +8162,44 @@ function TabRdvPrestations({ commercantId, toast }) {
                     <span><strong style={{ color: T.deep }}>{p.duree_minutes} min</strong></span>
                     <span><strong style={{ color: T.main }}>{prixLabel}</strong></span>
                     {p.acompte_pourcent > 0 && <span>Acompte <strong style={{ color: T.ink }}>{p.acompte_pourcent}%</strong></span>}
+                    {Number(p.capacite) > 1 && <span>Jusqu&rsquo;à <strong style={{ color: T.ink }}>{p.capacite}</strong> places</span>}
                     {!p.actif && <span style={{ color: '#DC2626', fontWeight: 700 }}>Inactif</span>}
                   </div>
+
+                  {/* QUI FAIT CETTE PRESTATION (Alex, 08/09). Le réglage vivait
+                      dans le formulaire de modification : il fallait ouvrir
+                      chaque prestation pour savoir qui la pratique.
+                      ⚠️ SEULEMENT DANS UNE ÉQUIPE : chez un indépendant seul,
+                      la question n'existe pas et la ligne serait du bruit. */}
+                  {praticiens.length >= 2 && (() => {
+                    const ids = [...(junctionMap[p.id] || [])]
+                    const eux = praticiens.filter(k => ids.includes(k.id))
+                    // 🔴 COCHÉ MAIS PLUS LÀ. Si le seul praticien nommé a quitté
+                    // le commerce, la liaison survit et plus PERSONNE ne peut
+                    // assurer la prestation : le moteur refuse tous les autres,
+                    // et la fiche n'a plus un seul créneau. Dire « tout le
+                    // monde » ici serait exactement le contraire de la vérité.
+                    if (ids.length > 0 && eux.length === 0) return (
+                      <p style={{ fontSize: 11.5, fontWeight: 800, color: '#B91C1C', marginTop: 5 }}>
+                        Plus personne ne peut l&rsquo;assurer : qui la pratiquait n&rsquo;est plus dans l&rsquo;équipe active. Ouvre-la et coche quelqu&rsquo;un.
+                      </p>
+                    )
+                    if (eux.length === 0) return (
+                      <p style={{ fontSize: 11.5, color: '#B45309', marginTop: 5, fontWeight: 700 }}>
+                        Tes {praticiens.length} praticiens sont proposés
+                      </p>
+                    )
+                    return (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 5 }}>
+                        {eux.map(k => (
+                          <span key={k.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: T.deep, background: T.bg, borderRadius: 100, padding: '2px 9px' }}>
+                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: k.couleur_hex || T.main, flexShrink: 0 }}/>
+                            {k.prenom}
+                          </span>
+                        ))}
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                   <button onClick={() => toggleActif(p)} title={p.actif ? 'Désactiver' : 'Activer'}

@@ -2770,6 +2770,28 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('🔴 et un horaire fermé à cette prestation aussi',
     /res\.code === 'prestation_hors_creneau'/.test(ROUTE_RDV))
 
+  // ── QUI FAIT QUOI, LISIBLE SANS OUVRIR LA PRESTATION (Alex, 08/09) ──────
+  //
+  // Le réglage vivait dans le formulaire de modification : il fallait ouvrir
+  // chaque prestation une par une pour savoir qui la pratique.
+  verifier('la liste des prestations nomme les praticiens assignés',
+    /const eux = praticiens\.filter\(k => ids\.includes\(k\.id\)\)/.test(srcConfig))
+  // ⚠️ SEULEMENT DANS UNE ÉQUIPE : chez un indépendant seul, la question
+  // n'existe pas et la ligne ne serait que du bruit.
+  verifier('⚠️ et se tait chez un praticien seul',
+    /praticiens\.length >= 2 && \(\(\) => \{\s*const ids = \[\.\.\.\(junctionMap\[p\.id\] \|\| \[\]\)\]/.test(srcConfig))
+  // 🔴 COCHÉ MAIS PLUS LÀ. Si le seul praticien nommé n'est plus actif, la
+  // liaison survit et PLUS PERSONNE ne peut assurer la prestation : le moteur
+  // refuse tous les autres. Afficher « tout le monde » serait le contraire de
+  // la vérité, et le commerçant chercherait ailleurs pendant des jours.
+  verifier('🔴 un praticien coché mais parti ne passe pas pour « tout le monde »',
+    /if \(ids\.length > 0 && eux\.length === 0\) return/.test(srcConfig)
+    && /Plus personne ne peut l&rsquo;assurer/.test(srcConfig))
+  verifier('et le cas « personne de coché » reste distinct',
+    /Tes \{praticiens\.length\} praticiens sont proposés/.test(srcConfig))
+  verifier('la capacité d’un cours se lit dans la liste',
+    /Number\(p\.capacite\) > 1 && <span>Jusqu&rsquo;à <strong[^>]*>\{p\.capacite\}<\/strong> places/.test(srcConfig))
+
   // ── 🔴 LA REQUÊTE QUI DESCENDAIT TOUT LE PARC ───────────────────────────
   // `rdv_prestation_praticiens` ne porte pas de `commercant_id` : sans `in`,
   // les réglages de chaque commerce inscrit partaient chez chaque visiteur.

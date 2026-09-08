@@ -17,7 +17,12 @@ import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
 const chemin = (f) => `${RACINE}/${f}`
-const BANC = 'verif:slots'
+// ⚠️ DEUX BANCS, ET C'EST INDISPENSABLE DEPUIS LE 08/09. Ce harnais mute aussi
+// `app/dashboard/page.js`, dont les gardes d'ouverture vivent dans
+// `verif:bord`. Avec le seul `verif:slots`, ces mutations-là auraient été
+// déclarées « non attrapées » alors que la garde existait : le harnais aurait
+// mesuré avec le mauvais instrument, ce qui est pire que ne pas mesurer.
+const BANC = 'verif:slots && npm run verif:bord'
 const MODULE = 'lib/rdv-slots.js'
 
 const MUTATIONS = [
@@ -98,6 +103,26 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '                  {praticiens.length >= 2 && (() => {',
     vers: '                  {praticiens.length >= 0 && (() => {' },
+
+  // 🔴 L OUVERTURE QUI SE TAISAIT CONTRE SA PROPRE ECRITURE (Alex, 08/09 :
+  // « Centre Respire s ouvre sur les commandes, pas sur l agenda »).
+  //
+  // `pretUrl` passe a vrai au montage, le commerce arrive plus tard, et entre
+  // les deux l effet d ecriture pose `?onglet=commandes` tout seul. L ouverture
+  // relisait l adresse et y trouvait NOTRE ecriture, prise pour une intention
+  // de l utilisateur. Elle n a jamais fonctionne pour personne.
+  { nom: '🔴 l ouverture relit l adresse au lieu de l arrivee',
+    fichier: 'app/dashboard/page.js',
+    de: '    if (ongletDeLArrivee.current) return',
+    vers: "    if (new URLSearchParams(window.location.search).get('onglet')) return" },
+
+  // ⚠️ ET C EST L ORDRE DES DEUX LIGNES QUI EST LA CORRECTION : des que
+  // l ecriture est autorisee, l adresse ne dit plus ce que l utilisateur
+  // demandait, elle dit ce que nous avons ecrit.
+  { nom: '⚠️ l onglet de l arrivee cesse d etre capture',
+    fichier: 'app/dashboard/page.js',
+    de: "    ongletDeLArrivee.current = new URLSearchParams(window.location.search).get('onglet')",
+    vers: '    ongletDeLArrivee.current = null' },
 
   // 🔴 UN REFUS DE REGLE N EST PAS UNE PANNE : le client relancait a l infini
   // une demande que le serveur ne pouvait pas accepter.

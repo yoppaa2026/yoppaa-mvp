@@ -1044,6 +1044,19 @@ export default function Dashboard() {
   // drapeau, le premier rendu écraserait l'onglet de l'adresse par « commandes »
   // avant même de l'avoir lu.
   const [pretUrl, setPretUrl] = useState(false)
+  // 🔴 CE QUE L'ADRESSE DEMANDAIT À L'ARRIVÉE, ET RIEN D'AUTRE (Alex, 08/09 :
+  // « Centre Respire s'ouvre sur les commandes, pas sur l'agenda »).
+  //
+  // `pretUrl` passe à vrai AU MONTAGE, mais le commerce arrive d'un chargement
+  // asynchrone, donc plus tard. Entre les deux, l'effet d'écriture d'adresse
+  // pose `?onglet=commandes` tout seul. Quand le commerce arrivait enfin,
+  // l'ouverture automatique relisait l'adresse, y trouvait l'onglet QUE NOUS
+  // VENIONS D'ÉCRIRE, le prenait pour une intention de l'utilisateur, et se
+  // taisait. Elle n'a donc jamais fonctionné pour personne.
+  //
+  // ⚠️ ON CAPTURE AVANT D'AUTORISER L'ÉCRITURE. C'est l'ordre qui compte, pas
+  // la présence du garde-fou : celui-ci existait et se déclenchait à tort.
+  const ongletDeLArrivee = useRef(null)
   // Deux drapeaux qui ne doivent JAMAIS déclencher de rendu, d'où les refs :
   // l'un empêche d'empiler une entrée d'historique pour un changement qui vient
   // de l'historique, l'autre distingue la première écriture d'une navigation.
@@ -1085,6 +1098,10 @@ export default function Dashboard() {
       if (c && CONFIG_VALIDES.includes(c)) setConfigTab(c)
     }
     lire()
+    // ⚠️ AVANT `setPretUrl`, et l'ordre de ces deux lignes est la correction
+    // elle-même : dès que l'écriture d'adresse est autorisée, l'adresse ne dit
+    // plus ce que l'utilisateur demandait, elle dit ce que nous avons écrit.
+    ongletDeLArrivee.current = new URLSearchParams(window.location.search).get('onglet')
     setPretUrl(true)
     // Le bouton « Précédent » change l'adresse sans que React le sache.
     // ⚠️ On marque le coup : l'effet d'écriture ne doit PAS empiler une entrée
@@ -1115,7 +1132,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!commercant || !pretUrl || ouvertureFaite.current) return
     ouvertureFaite.current = true
-    if (new URLSearchParams(window.location.search).get('onglet')) return
+    if (ongletDeLArrivee.current) return
     const commandesVisibles = commercant.categorie !== 'vitrine'
       || canDo(planEffectif(commercant), 'commande')
     const cible = ongletDouverture(commercant, { commandesVisibles })

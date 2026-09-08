@@ -6,6 +6,10 @@
 //   npm run verif:bord
 
 import { readFileSync } from 'node:fs'
+// ⚠️ LE DÉPOUILLEUR PARTAGÉ, jamais une expression écrite à la main : un `/*`
+// dans un `//` avalait deux mille caractères en silence et rendait les bancs
+// aveugles (03/09).
+import { sansProse } from './lire-code.mjs'
 import { retourArriereAutorise, alerteAutreOnglet, travailEnAttente, indexBlocages, appliquerBlocage, etatCreneau, ongletDouverture } from '../lib/tableau-de-bord.js'
 import { calculerCapaciteCreneau } from '../lib/creneaux.js'
 import { chiffreAffaires } from '../lib/statistiques.js'
@@ -640,8 +644,25 @@ const verifie = (nom, cond, detail = '') => {
   verifie('🔴 l’ouverture ne se joue qu’une fois',
     /const ouvertureFaite = useRef\(false\)/.test(PAGE_OUVERTURE)
     && /if \(!commercant \|\| !pretUrl \|\| ouvertureFaite\.current\) return/.test(PAGE_OUVERTURE))
+  // 🔴 ET « L'ADRESSE » VEUT DIRE CELLE DE L'ARRIVÉE, PAS CELLE D'APRÈS.
+  //
+  // Alex, 08/09 : « Centre Respire s'ouvre sur les commandes, pas sur
+  // l'agenda ». `pretUrl` passe à vrai au montage, le commerce arrive plus
+  // tard, et entre les deux l'effet d'écriture pose `?onglet=commandes` tout
+  // seul. L'ouverture relisait alors `window.location.search` et y trouvait
+  // NOTRE PROPRE ÉCRITURE, qu'elle prenait pour une intention de
+  // l'utilisateur. Elle n'a jamais fonctionné pour personne.
+  //
+  // ⚠️ MA GARDE PRÉCÉDENTE NE POUVAIT PAS LE VOIR : elle vérifiait que le
+  // garde-fou existe. Il existait, il marchait, il se déclenchait à tort.
+  // C'est l'ORDRE des deux lignes qui est la correction, alors c'est l'ordre
+  // qu'on mesure.
   verifie('🔴 et jamais contre un onglet écrit dans l’adresse',
-    /if \(new URLSearchParams\(window\.location\.search\)\.get\('onglet'\)\) return/.test(PAGE_OUVERTURE))
+    /if \(ongletDeLArrivee\.current\) return/.test(PAGE_OUVERTURE)
+    && !/if \(new URLSearchParams\(window\.location\.search\)\.get\('onglet'\)\) return/.test(PAGE_OUVERTURE))
+  verifie('🔴 l’onglet demandé est capturé AVANT d’autoriser l’écriture',
+    /ongletDeLArrivee\.current = new URLSearchParams\(window\.location\.search\)\.get\('onglet'\)\s*setPretUrl\(true\)/
+      .test(sansProse(PAGE_OUVERTURE)))
   // Et « Paramètres » ouvre sur le début de la marche à suivre.
   verifie('⚠️ les réglages ouvrent sur le Profil général',
     /const \[configTab, setConfigTab\] = useState\('profil'\)/.test(PAGE_OUVERTURE)

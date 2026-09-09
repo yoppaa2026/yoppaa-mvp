@@ -1574,6 +1574,35 @@ egal('accord féminin en boutique', textesConfirmation('boutique').titre, 'Ta co
 egal('accord féminin en livraison', textesConfirmation('livraison').titre, 'Ta commande est Yoppée ! 🟣')
 egal('accord féminin en expédition', textesConfirmation('expedition').titre, 'Ta commande est Yoppée ! 🟣')
 egal('accord masculin pour un rendez-vous', textesConfirmation('rdv').titre, 'Ton RDV est Yoppé ! 🟣')
+
+// 🔴 ET FÉMININ POUR UNE TABLE (Alex, 09/09) : « Ton RDV est Yoppé » s'affichait
+// après une réservation de table. La règle d'accord était écrite en commentaire
+// juste au-dessus de la fonction, et la table ne l'avait jamais vue appliquer.
+//
+// ⚠️ ON EXÉCUTE avec un vrai restaurant, on ne cherche pas la chaîne dans le
+// fichier : c'est le RÉSULTAT qui doit s'accorder.
+const RESTO = { categorie: 'alimentaire', plan: 'vendre', rdv_actif: true }
+const SALON = { categorie: 'vitrine', plan: 'vendre', rdv_actif: true }
+egal('accord féminin pour une table',
+  textesConfirmation('rdv', { commercant: RESTO }).titre, 'Ta réservation est Yoppée ! 🟣')
+egal('et le salon ne change pas d’un mot',
+  textesConfirmation('rdv', { commercant: SALON }).titre, 'Ton RDV est Yoppé ! 🟣')
+verifier('les étapes de la table parlent de table, jamais de rendez-vous',
+  textesConfirmation('rdv', { commercant: RESTO }).etapes.some(e => /table/i.test(e))
+  && !textesConfirmation('rdv', { commercant: RESTO }).etapes.some(e => /rendez-vous/i.test(e)),
+  textesConfirmation('rdv', { commercant: RESTO }).etapes.join(' | '))
+verifier('et le sous-titre suit, avec ou sans produits',
+  textesConfirmation('rdv', { commercant: RESTO, avecProduits: true }).sousTitre.includes('Ta table')
+  && textesConfirmation('rdv', { commercant: RESTO, avecProduits: false }).sousTitre.includes('Ta table'))
+
+// 🔴 ET SEUL LE RENDEZ-VOUS BOUGE (Alex : « pas pour les éventuelles commandes
+// C&C ou anti-gaspi »). Une commande à emporter chez ce même restaurateur reste
+// une COMMANDE : ce n'est pas une table, et lui donner le mot de la table
+// mentirait sur ce que le client vient de faire.
+for (const contexte of ['alimentaire', 'boutique', 'livraison', 'expedition']) {
+  egal(`« ${contexte} » reste une commande chez un restaurant`,
+    textesConfirmation(contexte, { commercant: RESTO }).titre, 'Ta commande est Yoppée ! 🟣')
+}
 // Le 🟣 signe chaque confirmation.
 verifier('le point violet partout', CONTEXTES.every(c => textesConfirmation(c).titre.includes('🟣')))
 // Le nom du commerce doit vraiment être injecté, pas rester un gabarit.

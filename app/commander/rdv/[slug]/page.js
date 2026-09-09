@@ -4202,7 +4202,7 @@ export default function CommanderRdvSlug() {
                     {/* Le titre vient du module partagé : écrit en dur ici, il
                         finirait par diverger de celui de la commande. */}
                     <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>
-                      {textesConfirmation(RETRAIT_RDV, { avecProduits: lignesPanier.length > 0 }).titre}
+                      {textesConfirmation(RETRAIT_RDV, { avecProduits: lignesPanier.length > 0, commercant }).titre}
                     </h2>
                     <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
                     <p style={{ color: T.muted, fontSize: '0.875rem' }}>
@@ -4248,6 +4248,7 @@ export default function CommanderRdvSlug() {
                           ...textesConfirmation(RETRAIT_RDV, {
                             commercantNom: commercant.nom,
                             avecProduits: lignesPanier.length > 0,
+                            commercant,
                           }).etapes,
                           `Tu peux annuler ou reporter depuis ton espace Yoppaa jusqu'à **${commercant.rdv_delai_annulation_heures || 24}h avant**.`,
                         ].map((texte, i) => (

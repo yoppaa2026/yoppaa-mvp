@@ -1011,8 +1011,27 @@ const egal = (nom, obtenu, attendu) =>
     verifie(`${fichier} passe la catégorie au gabarit`,
       /commercant_categorie:|libelleBon\(/.test(src))
     // Le select du commerçant doit charger la colonne, sinon on passe `undefined`.
-    const selects = src.match(/commercants?[^\n]*\(([^)]*)\)/g) || []
-    const commercantSelects = selects.filter(s => /nom|email|slug/.test(s))
+    //
+    // 🔴 ET CETTE GARDE ÉTAIT MUETTE SUR LA MOITIÉ DES FICHIERS (09/09). Elle
+    // ne voyait qu'une jointure écrite sur UNE ligne, `commercants(nom, ...)`.
+    // Un `.from('commercants')` suivi d'un `.select(...)` sur les lignes
+    // suivantes ne rendait AUCUN candidat, et `length === 0` la faisait passer
+    // au vert : elle ne mesurait rien, et rien ne le disait. Elle s'est
+    // réveillée sur un faux positif, un ternaire entre parenthèses après le mot
+    // « commercant » — la preuve qu'elle regardait la FORME du texte.
+    //
+    // Deux formes reconnues, désormais : la jointure en ligne, et le select
+    // d'une requête `from('commercants')`, fût-il sur dix lignes.
+    // ⚠️ `commercants:commercant_id (…)` EST UNE JOINTURE VALIDE, et resserrer
+    // la regex à `commercants\s*\(` la perdait. On tolère un alias entre le nom
+    // et la parenthèse, mais RIEN qui ressemble à du code : ni point, ni
+    // virgule, ni point d'interrogation. C'est ce qui sépare une jointure d'un
+    // `{ commercant: c.nom, type: x ? (…) }`.
+    const jointures = (src.match(/commercants?[:a-zA-Z_ ]*\(([^)]*)\)/g) || [])
+      .filter(s => /\bnom\b|\bemail\b|\bslug\b/.test(s))
+    const requetes = [...src.matchAll(/from\(\s*['"]commercants['"]\s*\)[\s\S]{0,400}?\.select\(\s*(['"`])([\s\S]*?)\1/g)]
+      .map(m => m[2])
+    const commercantSelects = [...jointures, ...requetes]
     verifie(`${fichier} demande bien « categorie » dans son select`,
       commercantSelects.length === 0 || commercantSelects.some(s => /\bcategorie\b/.test(s)),
       `aucun des ${commercantSelects.length} select(s) ne la charge`)

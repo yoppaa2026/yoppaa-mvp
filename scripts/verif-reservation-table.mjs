@@ -658,6 +658,54 @@ egal('la réservation d’un restaurant s’atteint quand même',
       `${chemin} → ${valeurs.join(' | ') || 'aucune'}`)
   }
 
+  // ─── LE RÉCAPITULATIF DU MATIN, COMBINÉ (arbitrage d'Alex, 09/09) ────────
+  //
+  // 🔴 UN RESTAURANT A UNE SALLE ET UN COMPTOIR, et le cron n'en voyait qu'un :
+  // il aiguillait sur la seule CATÉGORIE. Le Bistrologue aurait lu « Aucune
+  // commande aujourd'hui » un matin où trente couverts l'attendaient le soir.
+  const { emailRecapCommandesJour } = await import('../lib/resend.js')
+  const journee = {
+    nom_commercant: 'Le Bistrologue', date_jour: '2026-09-12',
+    commandes: [], bons_vendus: [], commercant_categorie: 'alimentaire',
+  }
+  const tablesDuSoir = [
+    { heure_debut: '19:30:00', couverts: 4, yopper_prenom: 'Camille', prestation_nom: 'Table de 4' },
+    { heure_debut: '20:00:00', couverts: 2, yopper_prenom: 'Sacha', prestation_nom: 'Table de 2' },
+  ]
+
+  // ⚠️ ON COMPTE LES COUVERTS, PAS LES LIGNES. « 2 réservations » ne dit rien à
+  // un restaurateur ; « 6 couverts » lui dit s'il sort quelqu'un en cuisine.
+  const avecSalle = emailRecapCommandesJour({ ...journee, rdvs: tablesDuSoir })
+  verifier('🔴 le récapitulatif du matin annonce les COUVERTS, pas les lignes',
+    /6 couverts/.test(texteVu(avecSalle)), (texteVu(avecSalle).match(/.{0,30}couvert.{0,30}/) || [''])[0])
+  verifier('⚠️ et il nomme les deux tables du soir',
+    /19:30/.test(avecSalle) && /20:00/.test(avecSalle) && /Camille/.test(avecSalle))
+
+  // 🔴 `null` ET `[]` NE DISENT PAS LA MÊME CHOSE. Une boulangerie qui n'a
+  // jamais eu de salle ne doit pas lire « Aucune table réservée » : la section
+  // n'existe pas chez elle. Un restaurant sans réservation du jour, si.
+  const sansSalle = emailRecapCommandesJour({ ...journee, rdvs: null })
+  verifier('🔴 une boulangerie ne voit AUCUNE section « tables »',
+    !/couvert|table réservée/i.test(texteVu(sansSalle)))
+  const salleVide = emailRecapCommandesJour({ ...journee, rdvs: [] })
+  verifier('⚠️ mais un restaurant sans réservation le lit noir sur blanc',
+    /Aucune table réservée/i.test(texteVu(salleVide)))
+
+  // ⚠️ ET LA JOURNÉE SANS COMMANDE N'EST PLUS UNE JOURNÉE VIDE. C'est le cas du
+  // Bistrologue : il ne fait presque que des tables.
+  verifier('🔴 zéro commande mais six couverts ne se dit pas « journée vide »',
+    /6 couverts/.test(texteVu(avecSalle)) && !/Bonne journée/.test(texteVu(avecSalle)))
+
+  // Le cron doit vraiment charger la salle, et `couverts` avec.
+  const CRON = sansProse(readFileSync(new URL('../app/api/cron/recap-jour-8h/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 le cron ouvre la salle aux commerces qui en ont une',
+    /const aUneSalle = !estVitrine && reservationActive\(c\)/.test(CRON))
+  verifier('🔴 et il lit la colonne « couverts »', /numero_prefixe, couverts,/.test(CRON))
+  verifier('⚠️ une seule lecture des tables, partagée par les deux emails',
+    (CRON.match(/from\('rdv_reservations'\)/g) || []).length === 1)
+  verifier('⚠️ et `null` quand il n’y a pas de salle, jamais un tableau vide',
+    /const tablesFlat = aUneSalle \? await lireTablesDuJour\(\) : null/.test(CRON))
+
   // La notification du tableau de bord, celle que le restaurateur entend.
   verifier('🔴 l’alerte du tableau de bord suit le métier',
     texteAlerteRdv({ client_prenom: 'Camille', date_rdv: '2026-09-12', heure_debut: '19:30' },

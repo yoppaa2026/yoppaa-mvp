@@ -13,7 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRecapRdvJour, emailRecapCommandesJour } from '@/lib/resend'
 import { resolvePlan } from '@/lib/plans'
 import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
-import { motsReservation } from '@/lib/reservation-metier'
+import { motsReservation, reservationActive } from '@/lib/reservation-metier'
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization') || ''
@@ -52,11 +52,56 @@ export async function GET(request) {
       // Alimentaire ET détail (boutique, Module 2) reçoivent le récap commandes
       const estAlim    = (c.categorie === 'alimentaire' || c.categorie === 'detail') && resolvePlan(c.plan) === 'vendre'
 
+      // 🔴 UN RESTAURANT A UNE SALLE ET UN COMPTOIR, ET CE CRON N'EN VOYAIT
+      // QU'UN (trouvé le 09/09 en traitant le vocabulaire, arbitré par Alex).
+      // L'aiguillage se faisait sur la seule CATÉGORIE : commandes pour un
+      // alimentaire, rendez-vous pour une vitrine. Le Bistrologue aurait lu
+      // « Aucune commande aujourd'hui » un matin où trente couverts
+      // l'attendaient le soir, et rien ne le lui aurait dit.
+      //
+      // ⚠️ `reservationActive` PLUTÔT QUE `rdv_actif` SEUL : l'interrupteur
+      // allumé chez qui n'a plus le forfait remplirait la section de tables que
+      // personne ne peut plus réserver.
+      const aUneSalle = !estVitrine && reservationActive(c)
+
       if (estVitrine && !c.rdv_actif) {
         continue  // pas concerne
       }
       if (!estVitrine && !estAlim) {
         continue  // ni RDV vitrine, ni C&C alim FULL
+      }
+
+      // ⚠️ UNE SEULE LECTURE, DEUX USAGES. La vitrine en fait son email entier,
+      // le restaurant en fait la seconde section du sien. Recopier la requête
+      // aurait garanti qu'un jour l'une charge `couverts` et pas l'autre.
+      async function lireTablesDuJour() {
+        const { data: rdvs, error: errRdvs } = await supabase
+          .from('rdv_reservations')
+          .select(`
+            id, heure_debut, heure_fin, duree_minutes, numero_rdv, numero_prefixe, couverts,
+            client_prenom, client_nom, client_telephone,
+            prestation:rdv_prestations(nom)
+          `)
+          .eq('commercant_id', c.id)
+          .eq('date_rdv', dateJour)
+          .eq('statut', 'confirme')
+          .is('deleted_at', null)
+          .order('heure_debut', { ascending: true })
+        if (errRdvs) {
+          console.error('[cron/recap-jour-8h] fetch rdvs KO', { commercant: c.nom, error: errRdvs.message })
+          throw new Error(errRdvs.message)
+        }
+        return (rdvs || []).map(r => ({
+          heure_debut:    r.heure_debut,
+          heure_fin:      r.heure_fin,
+          duree_minutes:  r.duree_minutes,
+          couverts:       r.couverts,
+          numero_rdv:     referenceRdv(r),
+          yopper_prenom:  r.client_prenom,
+          yopper_nom:     r.client_nom,
+          yopper_telephone: r.client_telephone,
+          prestation_nom: r.prestation?.nom,
+        }))
       }
 
       try {
@@ -65,35 +110,7 @@ export async function GET(request) {
         let total = 0
 
         if (estVitrine) {
-          // RDV du jour confirmes pour ce commercant
-          const { data: rdvs, error: errRdvs } = await supabase
-            .from('rdv_reservations')
-            .select(`
-              id, heure_debut, heure_fin, duree_minutes, numero_rdv, numero_prefixe,
-              client_prenom, client_nom, client_telephone,
-              prestation:rdv_prestations(nom)
-            `)
-            .eq('commercant_id', c.id)
-            .eq('date_rdv', dateJour)
-            .eq('statut', 'confirme')
-            .is('deleted_at', null)
-            .order('heure_debut', { ascending: true })
-          if (errRdvs) {
-            console.error('[cron/recap-jour-8h] fetch rdvs KO', { commercant: c.nom, error: errRdvs.message })
-            throw new Error(errRdvs.message)
-          }
-
-          const rdvsFlat = (rdvs || []).map(r => ({
-            heure_debut:    r.heure_debut,
-            heure_fin:      r.heure_fin,
-            duree_minutes:  r.duree_minutes,
-            numero_rdv:     referenceRdv(r),
-            yopper_prenom:  r.client_prenom,
-            yopper_nom:     r.client_nom,
-            yopper_telephone: r.client_telephone,
-            prestation_nom: r.prestation?.nom,
-          }))
-
+          const rdvsFlat = await lireTablesDuJour()
           total = rdvsFlat.length
           html = emailRecapRdvJour({
             nom_commercant: c.nom,
@@ -151,6 +168,14 @@ export async function GET(request) {
             .gte('created_at', `${dateJour}T00:00:00`)
             .lte('created_at', `${dateJour}T23:59:59`)
 
+          // ⚠️ `null` QUAND CE COMMERCE N'A PAS DE SALLE, jamais `[]` : le
+          // gabarit distingue « pas concerné » (aucune section) de « concerné,
+          // mais rien aujourd'hui » (une section qui le dit). Une boulangerie
+          // ne doit pas lire « Aucune table réservée ».
+          const tablesFlat = aUneSalle ? await lireTablesDuJour() : null
+          const couverts = (tablesFlat || []).reduce(
+            (s, r) => s + (Number(r?.couverts) > 0 ? Number(r.couverts) : 1), 0)
+
           total = cmdsFlat.length
           html = emailRecapCommandesJour({
             nom_commercant: c.nom,
@@ -158,15 +183,21 @@ export async function GET(request) {
             date_jour:      dateJour,
             commandes:      cmdsFlat,
             bons_vendus:    bonsVeille || [],
+            rdvs:           tablesFlat,
           })
-          subject = total === 0
+          // Le sujet dit CE QUI ATTEND, et une journée sans commande mais avec
+          // vingt couverts n'est pas une journée vide.
+          const partCmd = total === 0 ? `Aucune commande` : `${total} commande${total > 1 ? 's' : ''}`
+          const partTables = couverts > 0 ? ` et ${couverts} couvert${couverts > 1 ? 's' : ''}` : ''
+          subject = total === 0 && !partTables
             ? `Aucune commande aujourd'hui`
-            : `${total} commande${total > 1 ? 's' : ''} aujourd'hui — Yoppaa`
+            : `${partCmd}${partTables} aujourd'hui — Yoppaa`
         }
 
         await envoyerAuCommercant({ to: c.email, subject, html })
         sent++
-        details.push({ commercant: c.nom, type: estVitrine ? 'rdv' : 'commande', total })
+        const typeEnvoye = estVitrine ? 'rdv' : aUneSalle ? 'commande+tables' : 'commande'
+        details.push({ commercant: c.nom, type: typeEnvoye, total })
       } catch (e) {
         console.error('[cron/recap-jour-8h] envoi KO', { commercant: c.nom, error: e?.message })
         failed++

@@ -25,6 +25,9 @@ import {
 // le 09/09 précisément pour être exécutable ici. Node ne sait pas lire un
 // fichier qui contient du JSX, et c'est ainsi qu'elle n'a jamais été mesurée.
 import { calculerStatutOuverture, limiteRetraitCeJour } from '../lib/ouverture.js'
+// ⚠️ ET DEPUIS LE MODULE BAS pour la règle de minuit : `rdv-slots` la republie,
+// mais c'est `deplacement-rdv` qui l'écrit, et c'est là qu'il faut la mesurer.
+import { plagesOuverture } from '../lib/deplacement-rdv.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -523,6 +526,41 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /plagesShop\.push\(\[a1, finApresMinuit\(a1, timeToMinutes\(horaireJour\.fin\)\)\]\)/.test(TUNNEL2))
   verifier('🔴 et la grille de l’agenda aussi',
     (AGENDA.match(/finApresMinuit\(/g) || []).length >= 3)
+
+  // 🔴 LE DERNIER MAILLON, ET LE SEUL QUI BLOQUAIT VRAIMENT (Alex, 09/09,
+  // en production, une heure avant sa démonstration : « Bug, impossible de
+  // finaliser une résa »).
+  //
+  // La grille proposait 19:30, le client le choisissait, remplissait tout le
+  // formulaire, et LE SERVEUR le refusait. Cinq écrans savaient lire une
+  // fermeture à minuit ; la route qui décide, non. Le message ne portait même
+  // pas les mêmes mots que celui de l'écran, et c'est ce qui l'a trahi.
+  //
+  // ⚠️ ON EXÉCUTE, on ne cherche pas le nom de la fonction : c'est le
+  // RÉSULTAT qui compte, et une garde qui lirait `finApresMinuit` dans le
+  // fichier resterait verte devant un `>` inversé.
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/rdv/reserver/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur qui pose le rendez-vous connaît minuit lui aussi',
+    /finMin <= finApresMinuit\(ouvre, timeToMinutes\(f\)\)/.test(ROUTE))
+
+  // Et la règle elle-même, exécutée sur le cas d'Alex : Le Bistrologue ouvre
+  // à 09:00 et ferme à 00:00 ; une table à 19:30 pour 90 minutes finit à 21:00.
+  const soir = plagesOuverture({ debut: '09:00', fin: '00:00' })
+  verifier('🔴 une brasserie 09:00-00:00 rend UNE plage, pas zéro',
+    soir.length === 1 && soir[0][0] === 540 && soir[0][1] === 1440)
+  verifier('🔴 et une table à 19:30 pour 90 min y tient',
+    soir.some(([a, b]) => 1170 >= a && 1260 <= b))
+  // ⚠️ CE QUI DOIT ENCORE ÊTRE REFUSÉ : la garde ne sert à rien si elle accepte
+  // tout. Une table à 08:00 tombe avant l'ouverture.
+  verifier('⚠️ mais une table à 08:00 reste refusée',
+    !soir.some(([a, b]) => 480 >= a && 570 <= b))
+  // ⚠️ ET LA GARDE ÉTAIT MUETTE, pas seulement fausse : `b > a` JETAIT la plage,
+  // la liste rendue était vide, et l'appelant qui teste `length > 0` ne
+  // vérifiait plus rien du tout chez toute brasserie.
+  verifier('🔴 une fermeture à 02:00 ne vide pas la liste non plus',
+    plagesOuverture({ debut: '18:00', fin: '02:00' }).length === 1)
+  verifier('⚠️ et un jour fermé rend toujours zéro plage',
+    plagesOuverture({ ouvert: false, debut: '09:00', fin: '00:00' }).length === 0)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

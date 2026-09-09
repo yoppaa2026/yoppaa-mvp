@@ -14,7 +14,7 @@ import {
   peut, planEffectif, statutFonction, planPourGarder, planEnEssai, essaiProposable,
   FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
 } from '@/lib/plans'
-import { peutReserver, motReservation, fonctionReservation } from '@/lib/reservation-metier'
+import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
@@ -7942,10 +7942,16 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
   // séance d'abonnement EST un rendez-vous, avec sa place dans l'agenda et son
   // rappel. Les autres métiers ont les cartes cadeaux, qui font déjà le
   // pointage au comptoir sans agenda.
+  // 🔴 ET LES QUATRE ONGLETS PARLAIENT LE MÊME MÉTIER À TOUT LE MONDE. Alex,
+  // devant l'écran d'un restaurant : « c'est un peu le bordel dans les
+  // intitulés, praticiens, assigner un praticien à une table à une presta ».
+  // Un restaurateur ouvre des SERVICES dans des SALLES, avec des TABLES. Les
+  // colonnes ne bougent pas d'un pouce, les mots oui.
+  const mots = motsReservation(commercant)
   const subTabs = [
-    { id: 'prestations', label: 'Prestations' },
-    { id: 'praticiens',  label: 'Praticiens' },
-    { id: 'creneaux',    label: 'Créneaux' },
+    { id: 'prestations', label: mots.prestations },
+    { id: 'praticiens',  label: mots.praticiens },
+    { id: 'creneaux',    label: mots.creneaux },
     { id: 'fermetures',  label: 'Fermetures' },
   ]
   return (
@@ -7953,8 +7959,8 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
       {/* 🔴 « COMMENT ÇA MARCHE » (Alex, 07/09). L'objectif est l'autonomie :
           un commerçant qui s'en sort seul en parle autour de lui. L'aide n'est
           pas du confort, c'est le canal d'acquisition. */}
-      <BlocAide id="rdv" titre="Comment régler ta prise de rendez-vous"
-        resume="Tes prestations, ton équipe, tes plages et jusqu’à quand on réserve : l’ordre à suivre en 4 étapes"
+      <BlocAide id="rdv" titre={mots.reglages}
+        resume={`${mots.prestations}, ton équipe, tes plages et jusqu’à quand on réserve : l’ordre à suivre en 4 étapes`}
         T={T}>
         <EtapeAide n={1} titre="Tes prestations, d’abord" T={T}>
           Ce que tu proposes, sa durée et son prix. <strong>La capacité change tout</strong> :
@@ -8025,9 +8031,9 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
       {/* `commercant` : la case « c'est une table » ne s'affiche que chez un
           alimentaire qui a droit à la réservation de table. */}
       {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} commercant={commercant} toast={toast} />}
-      {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} toast={toast} />}
+      {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} commercant={commercant} toast={toast} />}
       {subTab === 'creneaux'    && <TabRdvCreneaux commercantId={commercantId} commercant={commercant} toast={toast} />}
-      {subTab === 'fermetures'  && <TabRdvFermetures commercantId={commercantId} toast={toast} />}
+      {subTab === 'fermetures'  && <TabRdvFermetures commercantId={commercantId} commercant={commercant} toast={toast} />}
     </div>
   )
 }
@@ -8039,6 +8045,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   // Une table, ça n'existe que chez un alimentaire qui a droit à la
   // réservation de table. Partout ailleurs la case n'aurait aucun sens.
   const estTable = isAlimentaire(commercant) && peutReserver(commercant)
+  const mots = motsReservation(commercant)
   const [prestations, setPrestations] = useState([])
   const [praticiens, setPraticiens] = useState([])
   // Sess 5d : junction prestation ↔ praticien. Aucun coché = tous les praticiens
@@ -8226,12 +8233,12 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       {/* Header avec bouton "Ajouter" */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Prestations</p>
-          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{prestations.length} prestation{prestations.length > 1 ? 's' : ''}</p>
+          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>{mots.prestations}</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{prestations.length} {mots.prestation}{prestations.length > 1 ? 's' : ''}</p>
         </div>
         <button onClick={openNew}
           style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
-          + Ajouter une prestation
+          + {mots.ajouter}
         </button>
       </div>
 
@@ -8267,8 +8274,8 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
 
       {prestations.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune prestation</p>
-          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>Crée ta première prestation (ex : "Coupe femme · 30 min · 35 €") pour permettre aux clients de réserver chez toi.</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>{mots.prestationAucune}</p>
+          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{mots.prestationAide}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -8347,9 +8354,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
         <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90svh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
-            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier la prestation' : 'Nouvelle prestation'}</p>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? mots.prestationModifier : mots.prestationNouvelle}</p>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Nom *</label>
-            <Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Coupe femme" style={{ marginBottom: 10 }}/>
+            <Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder={estTable ? 'Table de 4' : 'Coupe femme'} style={{ marginBottom: 10 }}/>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted }}>Description (optionnel)</label>
               <BoutonIaInline commercantId={commercantId} surface="prestation" brief={form.nom}
@@ -8474,9 +8481,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
             {/* Junction prestation ↔ praticiens : optionnel, aucun coché = tous éligibles */}
             {praticiens.length > 0 && (
               <div style={{ marginBottom: 14, padding: 12, background: T.bg, borderRadius: 10 }}>
-                <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, marginBottom: 2 }}>Praticiens autorisés</p>
+                <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, marginBottom: 2 }}>{mots.praticiensAutorises}</p>
                 <p style={{ fontSize: 11, color: T.muted, marginBottom: 10, lineHeight: 1.4 }}>
-                  Coche uniquement les praticiens qui peuvent réaliser cette prestation. Aucun coché = tous les praticiens peuvent la faire.
+                  {mots.praticiensAutorisesAide}
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {praticiens.map(p => {
@@ -9370,7 +9377,12 @@ function TabRdvAbonnements({ commercantId, toast }) {
 // Sess 5b : CRUD Praticiens RDV. prenom, nom, description, couleur_hex,
 // photo_url (bucket Supabase Storage 'logos' avec naming praticien-{id}-{ts}),
 // ordre, actif. Soft delete via deleted_at (compteurs RDV reservations preserves).
-function TabRdvPraticiens({ commercantId, toast }) {
+function TabRdvPraticiens({ commercantId, commercant, toast }) {
+  // ⚠️ CHEZ UN RESTAURANT, UN PRATICIEN EST UNE SALLE. Même table, même
+  // colonne, même écran : seul le mot change. La terrasse et la salle du fond
+  // n'ouvrent pas les mêmes services, et c'est exactement ce que ce réglage
+  // sait déjà faire pour deux coiffeuses.
+  const mots = motsReservation(commercant)
   const [praticiens, setPraticiens] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -9473,19 +9485,19 @@ function TabRdvPraticiens({ commercantId, toast }) {
       {/* Header avec bouton "Ajouter" */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Praticiens</p>
-          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{praticiens.length} praticien{praticiens.length > 1 ? 's' : ''}</p>
+          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>{mots.praticiens}</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{praticiens.length} {mots.praticien}{praticiens.length > 1 ? 's' : ''}</p>
         </div>
         <button onClick={openNew}
           style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
-          + Ajouter un praticien
+          + Ajouter {mots.praticienUn}
         </button>
       </div>
 
       {praticiens.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucun praticien</p>
-          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>Ajoute tes praticiens (ex : Sophie, Pierre) pour permettre aux clients de choisir avec qui ils prennent RDV. Si tu travailles seul, crée juste un praticien.</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>{mots.praticienAucun}</p>
+          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{mots.praticienAide}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -9530,7 +9542,7 @@ function TabRdvPraticiens({ commercantId, toast }) {
         <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90svh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
-            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier le praticien' : 'Nouveau praticien'}</p>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? mots.praticienModifier : mots.praticienNouveau}</p>
 
             {/* Photo + couleur en haut */}
             <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14, padding: 12, background: T.bg, borderRadius: 12 }}>
@@ -9577,7 +9589,7 @@ function TabRdvPraticiens({ commercantId, toast }) {
             <Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Spécialiste coupe femme, 10 ans d'expérience" rows={2} style={{ marginBottom: 14 }}/>
 
             <div style={{ marginBottom: 16 }}>
-              <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Praticien actif (visible côté client)"/>
+              <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label={mots.praticienActifLabel}/>
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
@@ -9587,7 +9599,7 @@ function TabRdvPraticiens({ commercantId, toast }) {
               </button>
               <button onClick={save} disabled={saving}
                 style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
-                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer le praticien')}
+                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : mots.praticienCreer)}
               </button>
             </div>
           </div>
@@ -9606,6 +9618,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   const JOURS_SEMAINE = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
   const JOURS_LABELS  = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dim.']
   const PAS_OPTIONS = [5, 10, 15, 30, 60]
+  const mots = motsReservation(commercant)
 
   const [creneaux, setCreneaux] = useState([])
   const [praticiens, setPraticiens] = useState([])
@@ -9774,9 +9787,9 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
 
   // Helper : récupère le nom d'un praticien à partir de son id (pour affichage)
   function praticienLabel(praticien_id) {
-    if (!praticien_id) return 'Tous les praticiens'
+    if (!praticien_id) return mots.tousPraticiens
     const p = praticiens.find(x => x.id === praticien_id)
-    return p ? `${p.prenom}${p.nom ? ' ' + p.nom : ''}` : 'Praticien inconnu'
+    return p ? `${p.prenom}${p.nom ? ' ' + p.nom : ''}` : `${mots.praticien} inconnu`
   }
   function praticienCouleur(praticien_id) {
     if (!praticien_id) return '#6B35C4'
@@ -10190,12 +10203,12 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       {/* Header avec bouton "Ajouter" */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Créneaux RDV</p>
-          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>Horaires hebdomadaires, avec ou sans praticien spécifique</p>
+          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>{mots.creneauxTitre}</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>Horaires hebdomadaires, avec ou sans {mots.praticien} spécifique</p>
         </div>
         <button onClick={openNew}
           style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
-          + Ajouter un créneau
+          + {mots.ajouterCreneau}
         </button>
       </div>
 
@@ -10376,7 +10389,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       {/* Liste des créneaux du jour actif */}
       {creneauxAffiches.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucun créneau ce jour</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>{mots.creneauAucun}</p>
           <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
             Ajoute un créneau pour ouvrir tes RDV ce jour-là. Tu peux créer des créneaux globaux (tous les praticiens) ou spécifiques à un praticien.
           </p>
@@ -10456,13 +10469,13 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90svh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
-            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier le créneau' : 'Nouveau créneau'}</p>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? mots.creneauModifier : mots.creneauNouveau}</p>
 
             {/* Praticien */}
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Pour qui ?</label>
             <select value={form.praticien_id} onChange={e => setForm({ ...form, praticien_id: e.target.value })}
               style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${T.hairline}`, borderRadius: 8, fontSize: 14, fontFamily: '"DM Sans", sans-serif', marginBottom: 10, background: '#fff' }}>
-              <option value="tous">Tous les praticiens (créneau commun)</option>
+              <option value="tous">{mots.creneauCommun}</option>
               {praticiensActifs.map(p => (
                 <option key={p.id} value={p.id}>{p.prenom}{p.nom ? ' ' + p.nom : ''}</option>
               ))}

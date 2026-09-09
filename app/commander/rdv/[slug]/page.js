@@ -641,6 +641,14 @@ export default function CommanderRdvSlug() {
   // ⚠️ Tant que les liaisons ne sont pas chargées, aucun cours n'est marqué.
   const prestationsProposables = (prestations || []).filter(p => !coursSansHoraire(p, liaisonsCreneaux))
 
+  // 🔴 LE VOCABULAIRE DU MÉTIER, ET IL ÉTAIT IMPORTÉ SANS ÊTRE JAMAIS LU. Un
+  // restaurateur lisait « Choisis ta prestation », « Confirmer mon RDV » et
+  // « pas encore de date pour ce cours » sur la fiche de son restaurant. La
+  // fonction existait depuis ce matin, la ligne d'import aussi ; personne ne
+  // s'en était servi. Un module de libellés qu'aucun écran n'appelle ne
+  // renomme rien.
+  const mots = motsReservation(commercant)
+
   // Réserver n'est proposé que si c'est réellement possible : module de
   // rendez-vous actif ET au moins une prestation. Sinon la barre n'affiche que
   // la sortie boutique, plutôt qu'un bouton qui ne mène nulle part.
@@ -2770,7 +2778,7 @@ export default function CommanderRdvSlug() {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 3l1.9 5.8H20l-5 3.6L17 18l-5-3.6L7 18l2-5.6-5-3.6h6.1L12 3z"/>
                       </svg>
-                      Choisis ta prestation
+                      {mots.choisir}
                     </span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                     {prestationsProposables.length > 0 && (
@@ -2810,7 +2818,7 @@ export default function CommanderRdvSlug() {
                                 fiche est d'abord une vitrine. */}
                             {sansDates && (
                               <p style={{ fontSize: '0.75rem', color: '#92400E', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '6px 9px', lineHeight: 1.45, margin: '0 0 8px' }}>
-                                Pas encore de date en ligne pour ce cours. Contacte le commerce pour connaitre les prochaines.
+                                {mots.sansDate}
                               </p>
                             )}
                             {p.description && (
@@ -3561,7 +3569,7 @@ export default function CommanderRdvSlug() {
                       // Le libellé suit ce que contient réellement la réservation :
                       // parler de « mon rendez-vous » à quelqu'un qui achète aussi
                       // un shampoing lui fait douter que son produit soit inclus.
-                      { key: 'rgpdCommande', val: rgpdCommande, set: setRgpdCommande, label: lignesPanier.length > 0 ? 'Traitement de ma réservation' : 'Traitement de mon RDV', badge: 'Obligatoire', badgeColor: '#DC2626', badgeBg: '#FEE2E2', desc: `J'accepte que mes coordonnées soient transmises à ${commercant.nom} pour le traitement de ${lignesPanier.length > 0 ? 'mon rendez-vous et de ma commande' : 'mon rendez-vous'}.` },
+                      { key: 'rgpdCommande', val: rgpdCommande, set: setRgpdCommande, label: lignesPanier.length > 0 ? 'Traitement de ma réservation' : mots.traitement, badge: 'Obligatoire', badgeColor: '#DC2626', badgeBg: '#FEE2E2', desc: `J'accepte que mes coordonnées soient transmises à ${commercant.nom} pour le traitement de ${lignesPanier.length > 0 ? `${mots.laMienne} et de ma commande` : mots.laMienne}.` },
                       { key: 'rgpdMarketing', val: rgpdMarketing, set: setRgpdMarketing, label: 'Offres et actualités', badge: 'Optionnel', badgeColor: T.main, badgeBg: T.pale, desc: `J'accepte que ${commercant.nom} m'envoie ses offres et ses nouveautés par email. Je peux retirer cet accord quand je veux.` },
                     ].map((item, i) => (
                       <label key={item.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '0.875rem 1rem', cursor: 'pointer', borderBottom: i === 0 ? `1px solid ${T.pale}` : 'none', background: item.val ? '#F0FDF4' : '#fff' }}>
@@ -4117,7 +4125,7 @@ export default function CommanderRdvSlug() {
                           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: (!formValide || submitting) ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (!formValide || submitting) ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: (!formValide || submitting) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: (!formValide || submitting) ? 'none' : `0 6px 24px ${T.main}55`, opacity: (!formValide || submitting) ? 0.6 : 1, transition: 'all 0.2s' }}>
                           {submitting ? 'Réservation en cours…' : (
                             <>
-                              {aPayerMaintenant > 0 ? `Payer ${euros(aPayerMaintenant)} et confirmer` : 'Confirmer mon RDV'}
+                              {aPayerMaintenant > 0 ? `Payer ${euros(aPayerMaintenant)} et confirmer` : mots.confirmer}
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
                               </svg>
@@ -4144,7 +4152,7 @@ export default function CommanderRdvSlug() {
                     </p>
                   )}
                   <p style={{ fontSize: '0.7rem', color: T.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
-                    Tu pourras annuler ou reporter jusqu&apos;à {commercant.rdv_delai_annulation_heures || 24}h avant le RDV.
+                    Tu pourras annuler ou reporter jusqu&apos;à {commercant.rdv_delai_annulation_heures || 24}h {mots.avant}.
                   </p>
                 </div>
               )}

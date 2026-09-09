@@ -197,14 +197,19 @@ const MUTATIONS = [
   //
   // 🔴 SIX JOURS SUR SEPT ETAIENT MUETS chez une brasserie ouverte jusqu a
   // minuit ou 02:00, et aucune erreur ne le disait.
+  // ⚠️ LA REGLE A CHANGE DE FICHIER LE 09/09, ET LES ANCRES ONT SUIVI. Elle vit
+  // dans le module bas, `deplacement-rdv`, parce que l agenda du commercant en
+  // a besoin lui aussi et que `rdv-slots` importe deja de la-bas. Sans ce
+  // deplacement d ancre, les deux mutations auraient continue de passer en
+  // silence sur un fichier qui ne porte plus la fonction.
   { nom: '🔴 une fermeture apres minuit retombe avant l ouverture',
-    fichier: 'lib/rdv-slots.js',
+    fichier: 'lib/deplacement-rdv.js',
     de: '  return franchitMinuit(debutMin, finMin) ? finMin + 1440 : finMin',
     vers: '  return finMin' },
 
   // ⚠️ L EGALITE COMPTE : 09:00-09:00 veut dire vingt-quatre heures, pas zero.
   { nom: '⚠️ une fermeture a l heure d ouverture cesse de faire le tour',
-    fichier: 'lib/rdv-slots.js',
+    fichier: 'lib/deplacement-rdv.js',
     de: '  return Number.isFinite(debutMin) && Number.isFinite(finMin) && finMin <= debutMin',
     vers: '  return Number.isFinite(debutMin) && Number.isFinite(finMin) && finMin < debutMin' },
 

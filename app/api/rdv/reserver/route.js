@@ -48,7 +48,7 @@ import { normaliserEmail } from '@/lib/email-normalise'
 import { creneauxDuJour } from '@/lib/ouverture'
 import { jourSemaineDe } from '@/lib/creneaux'
 import { brusselsInstant } from '@/lib/timezone'
-import { timeToMinutes, minutesToTime } from '@/lib/rdv-slots'
+import { timeToMinutes, minutesToTime, finApresMinuit } from '@/lib/rdv-slots'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const HEURE = /^\d{2}:\d{2}(:\d{2})?$/
@@ -169,7 +169,18 @@ export async function POST(request) {
         if (plages.length === 0) {
           return NextResponse.json({ ok: false, error: `${commercant.nom} est fermé ce jour-là. Choisis un autre jour.`, creneau_refuse: true }, { status: 409 })
         }
-        const tient = plages.some(([d, f]) => debutMin >= timeToMinutes(d) && finMin <= timeToMinutes(f))
+        // 🔴 LA FERMETURE APRÈS MINUIT, TROISIÈME FRÈRE, ET LE SEUL QUI BLOQUAIT
+        // VRAIMENT. La grille, la fiche et l'agenda savent depuis ce matin
+        // qu'une brasserie qui ferme à `00:00` reste ouverte le soir ; ce
+        // contrôle-ci l'ignorait, et il est le DERNIER de la chaîne. Le client
+        // voyait donc 19:30 proposé, le choisissait, remplissait tout le
+        // formulaire, et se faisait refuser à la seconde d'après par un serveur
+        // qui lisait « ferme à zéro minute ». Un créneau proposé puis refusé
+        // coûte plus cher qu'un créneau jamais proposé.
+        const tient = plages.some(([d, f]) => {
+          const ouvre = timeToMinutes(d)
+          return debutMin >= ouvre && finMin <= finApresMinuit(ouvre, timeToMinutes(f))
+        })
         if (!tient) {
           return NextResponse.json({ ok: false, error: 'Ce créneau tombe en dehors des heures d\'ouverture. Choisis-en un autre.', creneau_refuse: true }, { status: 409 })
         }

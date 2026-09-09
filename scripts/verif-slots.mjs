@@ -2072,6 +2072,7 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   const lire = (f) => sansCommentaires(readFileSync(new URL('../' + f, import.meta.url), 'utf8'))
   const CONFIG = lire('app/dashboard/ConfigDashboard.js')
   const FICHE = lire('app/commander/rdv/[slug]/page.js')
+  const METIER = lire('lib/reservation-metier.js')
 
   // 🔴 « Rien de coché = toutes » était un état IMPLICITE : le commerçant ne
   // pouvait pas savoir s'il avait choisi ou oublié.
@@ -2543,8 +2544,17 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('🔴 mais il n’est pas cliquable',
     /disabled=\{sansDates\} onClick=\{\(\) => \{ if \(!sansDates\) choisirPrestation\(p\) \}\}/.test(FICHE)
     && /\{sansDates \? 'Dates à venir' : 'Réserver'\}/.test(FICHE))
+  // ⚠️ LE TEXTE A DÉMÉNAGÉ DANS LE MODULE DE VOCABULAIRE, ET LA GARDE LE SUIT.
+  // Elle mesurait une CHAÎNE dans l'écran ; l'écran lit maintenant le mot de
+  // son métier, parce qu'un restaurateur ne montre pas « ce cours » à ses
+  // clients. On vérifie donc les DEUX bouts : la carte affiche bien la phrase
+  // du métier, et le module en porte une pour chacun des deux — dont celle du
+  // restaurant, qui ne doit jamais parler de cours.
   verifier('⚠️ et la carte dit quoi faire',
-    /Pas encore de date en ligne pour ce cours\. Contacte le commerce/.test(FICHE))
+    /\{mots\.sansDate\}/.test(FICHE))
+  verifier('⚠️ et chaque métier a SA phrase, celle du resto sans « cours »',
+    /sansDate: 'Pas encore de date en ligne pour ce cours\. Contacte le commerce/.test(METIER)
+    && /sansDate: 'Pas encore de service ouvert pour cette table\./.test(METIER))
   verifier('⚠️ le bouton « réserver » ne compte que ce qui est réservable',
     /const peutReserverIci = !commercant\?\._rdvDesactive && prestationsProposables\.length > 0/.test(FICHE))
   verifier('⚠️ et le vide reste le vide : zéro prestation, pas zéro réservable',

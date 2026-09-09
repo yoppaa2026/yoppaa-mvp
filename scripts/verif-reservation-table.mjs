@@ -145,8 +145,13 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 la vitrine en dur a bien disparu des deux onglets',
     !/categorie === 'vitrine' && canDo\(planEffectif\(commercant\), 'rdv'\)/.test(BORD))
 
+  // ⚠️ ON VISE LA DÉFINITION, PAS LA CONDITION D'AFFICHAGE (09/09). Les
+  // interrupteurs ont été regroupés dans un bloc unique et la condition a migré
+  // dans une variable : une garde qui décrit la forme d'hier interdit celle de
+  // demain, et rougit sur un code juste.
   verifier('🔴 l’interrupteur s’ouvre au restaurant',
-    /\{peutReserver\(form\) && \(/.test(CONFIG))
+    /const aResa\s+= peutReserver\(form\)/.test(CONFIG)
+    && /\{aResa && \(/.test(CONFIG))
 
   // ── LE COMMERÇANT DÉCLARE SA SALLE ──────────────────────────────────────
   //
@@ -171,8 +176,11 @@ egal('la réservation d’un restaurant s’atteint quand même',
     && /couverts_max: estTable && form\.par_couverts && form\.couverts_max !== '' \? Number\(form\.couverts_max\) : null,/.test(CONFIG))
   verifier('et le libellé de la capacité suit le métier',
     /form\.par_couverts \? 'Couverts en salle sur un service' : 'Personnes par créneau'/.test(CONFIG))
+  // ⚠️ SANS L'APOSTROPHE : le texte est passé en propriété JavaScript depuis le
+  // regroupement des interrupteurs, donc il porte une vraie apostrophe et non
+  // l'entité `&rsquo;` du JSX. Viser la phrase, pas son encodage.
   verifier('et il rassure sur la carte à emporter',
-    /la réservation s&rsquo;ajoute à ta fiche, elle ne la remplace pas/.test(CONFIG))
+    /ajoute à ta fiche, elle ne la remplace pas/.test(CONFIG))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

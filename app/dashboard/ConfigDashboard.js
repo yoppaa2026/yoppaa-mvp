@@ -102,6 +102,7 @@ import {
   Sun, Star, Settings, Package, Lightbulb, Camera, Store, Scissors, Croissant,
   BellOff, ClipboardList, Bike, ShoppingBag, MapPin, FileText, Printer, Download,
   Eye, Globe, Users, MessageCircle, Sparkles, Reply,
+  CalendarClock, Heart, Gift, Leaf,
 } from 'lucide-react'
 
 const T = {
@@ -6093,7 +6094,7 @@ const SOUS_ONGLETS_PROFIL = [
   { id: 'reglages', label: 'Réglages' },
 ]
 
-function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = null, surAncreLue = null }) {
+function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = null, surAncreLue = null, onAllerA = null }) {
   const [form, setForm] = useState(null)
   // ⚠️ L'ÉTAT TEL QU'IL EST EN BASE, figé au chargement et re-figé après chaque
   // enregistrement. C'est LUI qui permet de dire si quelque chose a changé, et
@@ -6301,7 +6302,13 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
         // passage ses infos pratiques, qui s'affichent sur ses DEUX fiches et
         // dans l'email de confirmation de rendez-vous. Rien ne le prévenait.
         infos_pratiques: data.infos_pratiques || '',
-        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, commande_actif: data.commande_actif !== false, plan: data.plan || 'exister', created_at: data.created_at, notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 }
+        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, commande_actif: data.commande_actif !== false,
+        // ⚠️ LU, JAMAIS ÉCRIT D'ICI. Le bloc « Ce que tes clients peuvent
+        // faire » affiche l'état des bons cadeaux et de la fidélité, et renvoie
+        // vers leur onglet pour les régler. Les remettre dans l'enregistrement
+        // du profil recréerait l'écrasement qui a fait retirer la fidélité de
+        // cet écran le 31/07.
+        bons_cadeaux_actif: !!data.bons_cadeaux_actif, plan: data.plan || 'exister', created_at: data.created_at, notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 }
       setForm(profil)
       // ⚠️ LE MÊME OBJET DANS LES DEUX ÉTATS, ET C'EST VOULU. `setForm` ne
       // modifie jamais en place (toujours `{ ...p, … }`), donc la référence
@@ -6843,25 +6850,137 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
             réservation, même en formule Vendre où la matrice la lui accorde
             depuis toujours. `peutReserver` lit la bonne fonction selon le
             métier, et le mot suit. */}
-        {peutReserver(form) && (
-          <div style={{ marginBottom: 18, paddingBottom: 16, borderBottom: `1px solid ${T.pale}` }}>
-            <p style={{ ...s.label, marginBottom: 10 }}>{motReservation(form, 'onglet')}</p>
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.rdv_actif ? T.main : T.pale}`, background: form.rdv_actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
-              <input type="checkbox" checked={!!form.rdv_actif} onChange={e => setForm(p => ({ ...p, rdv_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
+        {/* ═══ CE QUE TES CLIENTS PEUVENT FAIRE (Alex, 09/09) ═══════════════
+            🔴 LES INTERRUPTEURS ÉTAIENT ÉPARPILLÉS, et leur logique de
+            dispersion n'était compréhensible que de l'intérieur du code : la
+            réservation avait son bloc, la commande et la livraison en avaient
+            un autre réservé à l'alimentaire, la fidélité et les bons cadeaux
+            vivaient dans leurs onglets. Le commerçant, lui, cherche « ce que
+            mes clients peuvent faire » et n'a aucune raison de deviner que
+            trois de ces réponses sont ailleurs.
+
+            ⚠️ ET LA NUANCE QUI ÉVITE DE RECRÉER UN DÉFAUT CONNU : un
+            INTERRUPTEUR pour ce qui n'a qu'un interrupteur, un ÉTAT plus un
+            LIEN pour ce qui a de vrais réglages ailleurs. La fidélité a déjà
+            été pilotée depuis deux écrans, et elle s'écrasait. Une seule
+            source écrit chaque valeur ; celle-ci ne fait que montrer et
+            conduire. */}
+        {(() => {
+          const planVivant = planEffectif(form)
+          // ⚠️ `canDo` ET NON `peut` POUR LA COMMANDE. La matrice réserve
+          // `commande` à l'alimentaire, alors que toute l'application l'accorde
+          // aussi au détail et à la vitrine qui vendent leurs produits. Passer
+          // par `peut` ici couperait l'interrupteur de tout commerce de détail,
+          // et le laisserait allumé sans moyen de l'éteindre.
+          const aCommande  = canDo(planVivant, 'commande')
+          const aLivraison = peut(form, 'livraison')
+          const aResa      = peutReserver(form)
+          const aFidelite  = canDo(planVivant, 'fidelite')
+          const aBons      = canDo(planVivant, 'bons_cadeaux')
+          const aInvendus  = peut(form, 'anti_gaspi')
+          if (!aCommande && !aLivraison && !aResa && !aFidelite && !aBons && !aInvendus) return null
+
+          const Interrupteur = ({ id, icone, titre, texte, coche, onChange, note, alerte }) => (
+            <label id={id}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${ancreVue === id ? '#F59E0B' : coche ? T.main : T.pale}`, background: ancreVue === id ? '#FEF3C7' : coche ? T.pale : '#fff', boxShadow: ancreVue === id ? '0 0 0 4px #F59E0B33' : 'none', cursor: 'pointer', marginBottom: 8, transition: 'all 0.3s', scrollMarginTop: 90 }}>
+              <input type="checkbox" checked={coche} onChange={onChange} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>Mes clients peuvent réserver en ligne</p>
-                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
-                  Décoche pendant tes congés : ta fiche reste visible, mais elle invite tes clients à t&rsquo;appeler plutôt qu&rsquo;à réserver.
-                </p>
-                {isAlimentaire(form) && (
-                  <p style={{ fontSize: 11, color: T.main, lineHeight: 1.5, margin: '4px 0 0', fontWeight: 700 }}>
-                    Tes clients garderont ta carte à emporter : la réservation s&rsquo;ajoute à ta fiche, elle ne la remplace pas.
-                  </p>
-                )}
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>{icone} {titre}</p>
+                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>{texte}</p>
+                {note && <p style={{ fontSize: 11, color: T.main, lineHeight: 1.5, margin: '4px 0 0', fontWeight: 700 }}>{note}</p>}
+                {alerte && <p style={{ fontSize: 11, color: '#B45309', lineHeight: 1.5, margin: '4px 0 0', fontWeight: 700 }}>{alerte}</p>}
               </div>
             </label>
-          </div>
-        )}
+          )
+
+          // ⚠️ CE QUI SE RÈGLE AILLEURS NE SE COMMANDE PAS D'ICI : on montre
+          // l'état et on conduit. Le bouton dit l'endroit, pas « configurer ».
+          const Renvoi = ({ icone, titre, actif, texte, onglet, libelle }) => (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${T.pale}`, background: '#fff', marginBottom: 8 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: actif ? '#10B981' : T.pale, flexShrink: 0, marginTop: 6 }}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {icone} {titre}
+                  <span style={{ fontSize: 10, fontWeight: 800, color: actif ? '#10B981' : T.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{actif ? 'activé' : 'éteint'}</span>
+                </p>
+                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>{texte}</p>
+              </div>
+              {onAllerA && (
+                <button type="button" onClick={() => onAllerA(onglet)}
+                  style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 100, border: `1px solid ${T.main}44`, background: '#fff', color: T.main, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  {libelle}
+                </button>
+              )}
+            </div>
+          )
+
+          return (
+            <div style={{ marginBottom: 18, paddingBottom: 16, borderBottom: `1px solid ${T.pale}` }}>
+              <p style={{ ...s.label, marginBottom: 4 }}>Ce que tes clients peuvent faire</p>
+              <p style={{ fontSize: 11, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>
+                Tout ce que ta fiche propose, au même endroit. Ce qui se règle ailleurs porte un lien.
+              </p>
+
+              {aCommande && (
+                <Interrupteur id="activer-commande" icone={<ShoppingBag size={15} strokeWidth={1.8}/>}
+                  titre="Accepter les commandes en ligne"
+                  coche={form.commande_actif !== false}
+                  onChange={e => setForm(p => ({ ...p, commande_actif: e.target.checked }))}
+                  texte={form.commande_actif !== false
+                    ? 'Tes clients commandent et paient à l’avance, puis viennent chercher. Décoche si tu ne fais pas d’emporté : ta fiche, tes horaires et le reste de tes services restent en ligne.'
+                    : 'Ta fiche reste visible avec tes horaires et tes autres services, mais personne ne peut commander à emporter.'}
+                  alerte={form.commande_actif === false && form.livraison_actif
+                    ? 'Ta livraison est encore allumée, et elle ne servira à rien : on ne livre pas une commande qui ne peut pas être passée.'
+                    : null}/>
+              )}
+
+              {aLivraison && (
+                <Interrupteur id="activer-livraison" icone={<Bike size={15} strokeWidth={1.8}/>}
+                  titre="Activer la livraison"
+                  coche={!!form.livraison_actif}
+                  onChange={e => setForm(p => ({ ...p, livraison_actif: e.target.checked }))}
+                  texte={<>Affiche la pastille « LIVRAISON » sur ta fiche, et ouvre l&rsquo;onglet <strong>Livraison</strong>, où tu règles ta zone, tes frais et tes créneaux. N&rsquo;oublie pas d&rsquo;enregistrer.</>}/>
+              )}
+
+              {aResa && (
+                <Interrupteur id="activer-resa" icone={<CalendarClock size={15} strokeWidth={1.8}/>}
+                  titre={motReservation(form, 'action')}
+                  coche={!!form.rdv_actif}
+                  onChange={e => setForm(p => ({ ...p, rdv_actif: e.target.checked }))}
+                  texte="Décoche pendant tes congés : ta fiche reste visible, mais elle invite tes clients à t’appeler plutôt qu’à réserver."
+                  note={isAlimentaire(form)
+                    ? 'Tes clients garderont ta carte à emporter : la réservation s’ajoute à ta fiche, elle ne la remplace pas.'
+                    : null}/>
+              )}
+
+              {aFidelite && (
+                <Renvoi icone={<Heart size={15} strokeWidth={1.8}/>} titre="Carte de fidélité"
+                  actif={!!form.fidelite_actif} onglet="fidelite" libelle="Régler"
+                  texte="Le nombre de passages, la récompense et son libellé se règlent dans l’onglet Fidélité."/>
+              )}
+
+              {/* ⚠️ LE NOM DU BON SUIT LE MÉTIER (31/07) : chez un restaurant
+                  on n'offre pas un « bon cadeau », et un banc de rédaction
+                  refuse ce libellé écrit en dur. */}
+              {aBons && (
+                <Renvoi icone={<Gift size={15} strokeWidth={1.8}/>}
+                  titre={libelleBon(form.categorie, { pluriel: true, majuscule: true })}
+                  actif={!!form.bons_cadeaux_actif} onglet="bons" libelle="Régler"
+                  texte={`Les montants et la durée de validité se règlent dans l’onglet ${libelleBon(form.categorie, { pluriel: true, majuscule: true })}.`}/>
+              )}
+
+              {/* ⚠️ L'ANTI-GASPI N'A PAS D'INTERRUPTEUR, et c'est voulu : il
+                  existe dès qu'une offre « avant la fermeture » est publiée. La
+                  ligne le dit plutôt que de laisser chercher un réglage qui
+                  n'existe pas. */}
+              {aInvendus && (
+                <Renvoi icone={<Leaf size={15} strokeWidth={1.8}/>} titre="Invendus du soir"
+                  actif={false} onglet="deals" libelle="Publier"
+                  texte="Il n’y a rien à activer : tes invendus apparaissent dès que tu publies une offre « avant la fermeture » dans tes Deals."/>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ─── Notifications RDV ou Commandes ─── */}
         {/* Toggle unique notif_mode (chaque/recap_jour/aucun) qui s'applique aux RDV
@@ -6902,60 +7021,6 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
           )
         })()}
 
-        {/* ─── Toggles Vendre (alimentaire uniquement) ─── */}
-        {/* Les commerçants Vendre alim peuvent choisir d'activer/désactiver
-            certaines features (livraison, fidelite). La pill client reflete l'etat. */}
-        {peut(form, 'commande') && form.categorie === 'alimentaire' && (
-          <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
-            <p style={{ ...s.label, marginBottom: 12 }}>Fonctionnalités activables (plan Vendre)</p>
-
-            {/* 🔴 LA COMMANDE EN LIGNE S'ÉTEINT AUSSI (Alex, 09/09). C'était le
-                seul module sans interrupteur : la livraison, les rendez-vous,
-                la fidélité et les bons cadeaux ont tous le leur. Un restaurant
-                qui ne fait pas de plats à emporter, un traiteur qui ne travaille
-                que sur appel, une boucherie qui refuse le click and collect :
-                tous se voyaient imposer un bouton « Commander » à expliquer à
-                leurs clients.
-                ⚠️ IL VIENT EN PREMIER, avant la livraison : on ne livre pas ce
-                qu'on ne peut pas commander. */}
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.commande_actif !== false ? T.main : T.pale}`, background: form.commande_actif !== false ? T.pale : '#fff', cursor: 'pointer', marginBottom: 10, transition: 'all 0.3s' }}>
-              <input type="checkbox" checked={form.commande_actif !== false} onChange={e => setForm(p => ({ ...p, commande_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><ShoppingBag size={15} strokeWidth={1.8}/> Accepter les commandes en ligne</p>
-                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
-                  {form.commande_actif !== false
-                    ? 'Tes clients commandent et paient à l’avance, puis viennent chercher. Décoche si tu ne fais pas d’emporté : ta fiche, tes horaires et le reste de tes services restent en ligne.'
-                    : 'Ta fiche reste visible avec tes horaires et tes autres services, mais personne ne peut commander à emporter.'}
-                </p>
-                {form.commande_actif === false && form.livraison_actif && (
-                  <p style={{ fontSize: 11, color: '#B45309', fontWeight: 700, lineHeight: 1.5, margin: '4px 0 0' }}>
-                    Ta livraison est encore allumée, et elle ne servira à rien : on ne livre pas une commande qui ne peut pas être passée.
-                  </p>
-                )}
-              </div>
-            </label>
-
-            <label id="activer-livraison"
-              style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${ancreVue === 'activer-livraison' ? '#F59E0B' : form.livraison_actif ? T.main : T.pale}`, background: ancreVue === 'activer-livraison' ? '#FEF3C7' : form.livraison_actif ? T.pale : '#fff', boxShadow: ancreVue === 'activer-livraison' ? '0 0 0 4px #F59E0B33' : 'none', cursor: 'pointer', marginBottom: 10, transition: 'all 0.3s', scrollMarginTop: 90 }}>
-              <input type="checkbox" checked={!!form.livraison_actif} onChange={e => setForm(p => ({ ...p, livraison_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Bike size={15} strokeWidth={1.8}/> Activer la livraison</p>
-                {/* ⚠️ « CONFIGURATION COMPLÈTE À VENIR » N'ÉTAIT PLUS VRAI. La
-                    zone, les frais et les créneaux se règlent dans l'onglet
-                    Livraison depuis longtemps : la phrase disait au commerçant
-                    de ne pas chercher ce qui l'attendait déjà. */}
-                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
-                  Affiche la pastille « LIVRAISON » sur ta fiche, et ouvre l’onglet <strong>Livraison</strong>,
-                  où tu règles ta zone, tes frais et tes créneaux. N’oublie pas d’enregistrer.
-                </p>
-              </div>
-            </label>
-
-            {/* L'ancien toggle « fidélité » vivait ici : la fidélité se pilote
-                désormais UNIQUEMENT depuis l'onglet Fidélité (B.6, 31/07),
-                double commande retirée pour éviter les écrasements. */}
-          </div>
-        )}
 
         {/* ─── Mode de vente boutique (détail + vitrine depuis le 31/07 : les
             services vendent leurs produits au salon avec la même machine) ─── */}
@@ -12602,7 +12667,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
       {tab === 'bons' && peut(commercant, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'comptabilite' && peut(commercant, 'export_comptable') && <TabComptabilite commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} />}
-      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} ancre={ancreProfil} surAncreLue={oublierAncre} />}
+      {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} ancre={ancreProfil} surAncreLue={oublierAncre} onAllerA={changerOnglet} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signaux' && <TabSignaux commercantId={commercantId} toast={showToast} signalementsEnAttente={signalementsEnAttente} />}

@@ -2606,9 +2606,15 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('🔴 l’onglet livraison inactif explique au lieu de rester vide',
     /tab === 'livraison' && peut\(commercant, 'livraison'\) && !commercant\?\.livraison_actif && \(/.test(CONFIG)
     && /titre="La livraison n’est pas encore activée"/.test(CONFIG))
+  // ⚠️ ON MESURE QUE L'ANCRE EXISTE ET QU'ELLE EST POSÉE, pas la balise qui la
+  // porte (09/09). Cette garde exigeait `<label id="activer-livraison"` en dur ;
+  // le jour où les interrupteurs ont été regroupés dans un composant qui reçoit
+  // son identifiant en propriété, elle a rougi sur un code parfaitement juste.
+  // Une garde qui décrit la FORME d'hier interdit la forme de demain.
   verifier('🔴 et son bouton emmène à l’interrupteur, pas seulement à l’onglet',
     /setAncreProfil\('activer-livraison'\); changerOnglet\('profil'\)/.test(CONFIG)
-    && /<label id="activer-livraison"/.test(CONFIG))
+    && /id="activer-livraison"/.test(CONFIG)
+    && /<label id=\{id\}/.test(CONFIG))
   // ⚠️ LA CASE VIT DANS LE SOUS-ONGLET « RÉGLAGES ». Sans ce geste, le bouton
   // ouvrait le bon onglet sur une section où la case n'est même pas rendue.
   verifier('⚠️ et il ouvre le sous-onglet où la case existe vraiment',

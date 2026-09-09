@@ -82,10 +82,12 @@ const MUTATIONS = [
     de: 'visible: !!commercant?.rdv_actif || peutReserver(commercant) }',
     vers: 'visible: !!commercant?.rdv_actif }' },
 
+  // ⚠️ ANCRE REMISE LE 09/09 : les interrupteurs ont ete regroupes dans un seul
+  // bloc, et la condition a migre dans une variable. On vise la DEFINITION.
   { nom: '🔴 l interrupteur se referme sur la vitrine',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '        {peutReserver(form) && (',
-    vers: "        {form.categorie === 'vitrine' && peut(form, 'rdv') && (" },
+    de: '          const aResa      = peutReserver(form)',
+    vers: "          const aResa      = form.categorie === 'vitrine' && peut(form, 'rdv')" },
 
   // ─── LOT 2 : LES COUVERTS ─────────────────────────────────────────────────
   //

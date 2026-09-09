@@ -81,6 +81,60 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '        {peutReserver(form) && (',
     vers: "        {form.categorie === 'vitrine' && peut(form, 'rdv') && (" },
+
+  // ─── LOT 2 : LES COUVERTS ─────────────────────────────────────────────────
+  //
+  // 🔴 UNE TABLE N EST PAS UNE PLACE. Compter les lignes ferait entrer vingt
+  // tables dans une salle de vingt couverts.
+  { nom: '🔴 la salle recompte des lignes au lieu des couverts',
+    fichier: 'lib/cours-collectifs.js',
+    de: '  return (reservations || []).reduce((s, r) => s + (enCouverts ? couvertsDe(r) : 1), 0)',
+    vers: '  return (reservations || []).length' },
+
+  // 🔴 LE MAXIMUM NE DOIT JAMAIS DEPASSER LA SALLE : sinon le client choisit
+  // douze couverts dans une salle de huit et va jusqu au bout pour lire
+  // « complet ».
+  { nom: '🔴 le maximum de couverts cesse d etre borne par la salle',
+    fichier: 'lib/cours-collectifs.js',
+    de: '  return { min: Math.min(min, capacite), max: Math.max(Math.min(min, capacite), Math.min(max, capacite)) }',
+    vers: '  return { min, max }' },
+
+  { nom: '🔴 le serveur accepte n importe quel nombre de couverts',
+    fichier: 'lib/cours-collectifs.js',
+    de: '  return n >= min && n <= max ? n : null',
+    vers: '  return n' },
+
+  // 🔴 DEUX TABLES NE SONT PAS DEUX SEANCES. Avec l egalite stricte des bornes,
+  // une table a 20h30 tombait dans « les autres » et etait refusee pour
+  // occupation : un restaurant n aurait pris qu une table par heure ronde.
+  { nom: '🔴 les tables qui se chevauchent se bloquent de nouveau',
+    de: '      ? plages.filter(p => (prestationId === null || p.prestation_id === prestationId)',
+    vers: '      ? plages.filter(p => p.start === debut && p.end === fin && (prestationId === null || p.prestation_id === prestationId)',
+    fichier: 'lib/rdv-slots.js' },
+
+  { nom: '🔴 la salle recompte des lignes dans le moteur',
+    fichier: 'lib/rdv-slots.js',
+    de: '    ? memeSeance.reduce((s, p) => s + p.couverts, 0)',
+    vers: '    ? memeSeance.length' },
+
+  // 🔴 CE QU ON DEMANDE COMPTE AUSSI : une salle ou il reste deux couverts
+  // n est pas libre pour une table de six.
+  { nom: '🔴 la taille de la table demandee cesse de compter',
+    fichier: 'lib/rdv-slots.js',
+    de: '  if (places > 1 && occupes + demandes > places) {',
+    vers: '  if (places > 1 && occupes >= places) {' },
+
+  // 🔴 L INDEX UNIQUE NE PROTEGE PAS CETTE JAUGE : sans ce controle, une
+  // requete forgee reserve cinquante couverts.
+  { nom: '🔴 le serveur cesse de compter la salle',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    if (occupes + couvertsRetenus > capacite) {',
+    vers: '    if (false) {' },
+
+  { nom: '🔴 l appelant peut imposer son propre nombre de couverts',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    couverts: couvertsRetenus,',
+    vers: '    ...(null || {}),' },
 ]
 
 const lancer = () => {

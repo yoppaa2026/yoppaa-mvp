@@ -16,6 +16,8 @@ import {
   motsReservation, motReservation, ficheDuCommerce, pageReservation,
 } from '../lib/reservation-metier.js'
 import { getPillsStatut, peut } from '../lib/plans.js'
+import { couvertsDe, occupationDe, bornesCouverts, couvertsValides } from '../lib/cours-collectifs.js'
+import { conflitReservation } from '../lib/rdv-slots.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -144,6 +146,150 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /\{peutReserver\(form\) && \(/.test(CONFIG))
   verifier('et il rassure sur la carte à emporter',
     /la réservation s&rsquo;ajoute à ta fiche, elle ne la remplace pas/.test(CONFIG))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 COMPTER DES COUVERTS, PAS DES LIGNES
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Une table, c'est UNE réservation pour QUATRE personnes. Le moteur comptait
+// des lignes : une salle de vingt couverts aurait accepté vingt tables.
+//
+// ⚠️ ET LA MOITIÉ DE CE BLOC DIT CE QUI NE CHANGE PAS. `couverts` vaut 1 par
+// défaut et `par_couverts` vaut faux partout : pour un cours, la somme des
+// couverts EST le compte des lignes.
+{
+  const TABLE = { id: 'p-table', capacite: 20, par_couverts: true, couverts_min: 1, couverts_max: 8, duree_minutes: 120 }
+  const COURS = { id: 'p-yoga', capacite: 12, duree_minutes: 60 }
+
+  egal('une réservation sans couverts en vaut un', couvertsDe({}), 1)
+  egal('une valeur absurde en vaut un aussi', couvertsDe({ couverts: -3 }), 1)
+  egal('quatre couverts en valent quatre', couvertsDe({ couverts: 4 }), 4)
+
+  // 🔴 LE CŒUR : deux modes de comptage sur le même moteur.
+  const trois = [{ couverts: 4 }, { couverts: 2 }, { couverts: 6 }]
+  egal('🔴 une salle compte ses COUVERTS', occupationDe(TABLE, trois), 12)
+  egal('🔴 un cours compte ses LIGNES', occupationDe(COURS, trois), 3)
+  // ⚠️ LA GARANTIE DE NON-RÉGRESSION, dite en une ligne : sans le drapeau, un
+  // enregistrement portant des couverts compte quand même pour un.
+  egal('⚠️ sans le drapeau, rien ne change', occupationDe({ capacite: 12 }, trois), 3)
+
+  // Les bornes du « pour combien de personnes ? »
+  egal('les bornes déclarées sont respectées', bornesCouverts(TABLE), { min: 1, max: 8 })
+  // 🔴 JAMAIS AU-DELÀ DE LA CAPACITÉ : proposer des tables de douze dans une
+  // salle de huit, c'est laisser le client aller au bout pour lire « complet ».
+  egal('🔴 le maximum ne dépasse jamais la salle',
+    bornesCouverts({ capacite: 6, par_couverts: true, couverts_max: 12 }), { min: 1, max: 6 })
+  egal('sans maximum déclaré, c’est la salle', bornesCouverts({ capacite: 30, par_couverts: true }), { min: 1, max: 30 })
+  egal('un minimum de deux est tenu',
+    bornesCouverts({ capacite: 20, par_couverts: true, couverts_min: 2, couverts_max: 8 }), { min: 2, max: 8 })
+
+  egal('un nombre dans les bornes passe', couvertsValides(TABLE, 4), 4)
+  egal('🔴 au-delà du maximum, refusé', couvertsValides(TABLE, 9), null)
+  egal('🔴 en dessous du minimum, refusé',
+    couvertsValides({ ...TABLE, couverts_min: 2 }, 1), null)
+  egal('une saisie qui n’est pas un nombre est refusée', couvertsValides(TABLE, 'quatre'), null)
+  // ⚠️ Un cours ne demande jamais de couverts : il en vaut toujours un.
+  egal('⚠️ un cours vaut toujours un', couvertsValides(COURS, 8), 1)
+
+  // ── LE COMPTAGE DANS LE MOTEUR ─────────────────────────────────────────
+  const conflit = (opts) => conflitReservation({
+    debut: 1200, fin: 1320, prestationId: 'p-table', capacite: 20, parCouverts: true, ...opts,
+  })
+
+  // 🔴 DEUX TABLES NE SONT PAS DEUX SÉANCES. Une à 20h00, une à 20h30 : elles
+  // coexistent. Avec l'égalité stricte des bornes, la seconde était refusée
+  // pour « occupation » et un restaurant n'aurait pris qu'une table par heure.
+  const chevauche = conflit({
+    couvertsDemandes: 4,
+    reservations: [{ start: 1230, end: 1350, prestation_id: 'p-table', couverts: 4, place_no: 1 }],
+  })
+  verifier('🔴 une table qui chevauche une autre n’est PAS un conflit', !chevauche.conflit)
+  egal('et la salle compte bien quatre couverts pris', chevauche.inscrits, 4)
+
+  // La jauge, en couverts.
+  const presque = [
+    { start: 1200, end: 1320, prestation_id: 'p-table', couverts: 8, place_no: 1 },
+    { start: 1230, end: 1350, prestation_id: 'p-table', couverts: 10, place_no: 1 },
+  ]
+  verifier('une table de deux entre dans les deux qui restent',
+    !conflit({ couvertsDemandes: 2, reservations: presque }).conflit)
+  // 🔴 CE QU'ON DEMANDE COMPTE AUSSI : une salle où il reste deux couverts
+  // n'est pas « libre », elle l'est pour deux personnes.
+  verifier('🔴 une table de six ne rentre pas dans deux places',
+    conflit({ couvertsDemandes: 6, reservations: presque }).conflit)
+  egal('et le refus dit « complet »',
+    conflit({ couvertsDemandes: 6, reservations: presque }).raison, 'complet')
+
+  // ⚠️ ET LE COURS NE BOUGE PAS D'UN POUCE.
+  const seance = (n) => Array.from({ length: n }, (_, i) => ({
+    start: 600, end: 660, prestation_id: 'p-yoga', couverts: 1, place_no: i + 1,
+  }))
+  const coursConflit = (opts) => conflitReservation({
+    debut: 600, fin: 660, prestationId: 'p-yoga', capacite: 12, ...opts,
+  })
+  verifier('⚠️ un cours à onze inscrits accepte la douzième',
+    !coursConflit({ reservations: seance(11) }).conflit)
+  verifier('⚠️ et refuse la treizième', coursConflit({ reservations: seance(12) }).conflit)
+  egal('⚠️ et il compte toujours ses inscrits',
+    coursConflit({ reservations: seance(5) }).inscrits, 5)
+  // 🔴 UN COURS DÉCALÉ RESTE BLOQUANT : c'est la règle d'origine, et elle ne
+  // doit surtout pas hériter de la tolérance des tables.
+  verifier('🔴 un cours qui chevauche sans coïncider bloque toujours',
+    coursConflit({ reservations: [{ start: 630, end: 690, prestation_id: 'p-yoga', place_no: 1 }] }).conflit)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE SERVEUR COMPTE LA SALLE, L'ÉCRAN NE FAIT QUE PROPOSER
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const SRV = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur valide le nombre de couverts',
+    /couvertsRetenus = couvertsValides\(prestation, champs\?\.couverts\)/.test(SRV)
+    && /if \(couvertsRetenus === null\) return \{ ok: false, code: 'couverts_invalides' \}/.test(SRV))
+  verifier('🔴 et il compte la salle lui-même',
+    /if \(occupes \+ couvertsRetenus > capacite\)/.test(SRV))
+  // ⚠️ LES CHEVAUCHEMENTS, PAS L'ÉGALITÉ D'HEURE : sinon un service entier
+  // décalé d'une demi-heure passe à travers.
+  verifier('🔴 en comptant les chevauchements, pas les heures identiques',
+    /debutMin < timeToMinutes\(r\.heure_fin\) && finMin > timeToMinutes\(r\.heure_debut\)/.test(SRV))
+  // 🔴 APRÈS `champs`, sinon un appelant impose son propre nombre et contourne
+  // toute la validation qu'on vient de faire.
+  verifier('🔴 le module impose sa valeur, l’appelant ne l’écrase pas',
+    /place_no: placeNo,\s*couverts: couvertsRetenus,/.test(SRV))
+
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/rdv/reserver/route.js', import.meta.url), 'utf8'))
+  verifier('la route lit le nombre de personnes', /couverts = 1,/.test(ROUTE))
+  verifier('🔴 et une salle pleine dit COMBIEN il reste',
+    /Il ne reste que \$\{res\.restants\}/.test(ROUTE))
+
+  // ── LE TUNNEL ──────────────────────────────────────────────────────────
+  const TUNNEL = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('le tunnel demande pour combien de personnes',
+    /\{estParCouverts\(prestationChoisie\) && \(\(\) => \{/.test(TUNNEL)
+    && /Nous serons/.test(TUNNEL))
+  // 🔴 AVANT LE CHOIX DU JOUR, et ce n'est pas cosmétique : la taille de la
+  // table décide de ce qui reste ouvert. Demander l'heure d'abord ferait
+  // proposer 20h à une table de six dans une salle où il reste deux couverts.
+  verifier('🔴 et il le demande AVANT le choix du jour',
+    TUNNEL.indexOf('Nous serons') < TUNNEL.indexOf('Je viens le'))
+  // ⚠️ ON DIT QUOI FAIRE, pas seulement la borne.
+  verifier('⚠️ au-delà du maximum, on donne une sortie',
+    /les grandes tablées se réservent de vive voix/.test(TUNNEL))
+  verifier('🔴 les deux grilles comptent en couverts',
+    (TUNNEL.match(/parCouverts: estParCouverts\(prestationChoisie\)/g) || []).length === 2
+    && (TUNNEL.match(/couvertsDemandes: couverts/g) || []).length === 2)
+  // 🔴 LES TROIS ENVOIS, pas deux : le paiement d'acompte, le bon cadeau et la
+  // réservation directe passent par des chemins différents, et un seul oublié
+  // écrirait une table d'une personne pour un groupe de six.
+  //
+  // ⚠️ `[^\n]*` ET NON `\s*` : `sansProse` ne retire QUE les commentaires en
+  // début de ligne, jamais ceux de fin, parce qu'une URL porte deux barres
+  // obliques et qu'un dépouilleur trop zélé mangerait le code. Un de ces trois
+  // envois traîne un « // null = Sans préférence » qui a fait rougir cette
+  // garde alors que le code était juste.
+  verifier('🔴 les trois envois portent le nombre de personnes',
+    (TUNNEL.match(/praticien_id: praticienChoisi\?\.id \|\| null,[^\n]*\s*couverts,/g) || []).length === 3)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

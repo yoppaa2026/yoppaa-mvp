@@ -451,8 +451,11 @@ const MUTATIONS = [
   // et on recrée exactement la divergence que le module existe pour tuer.
   { nom: '🔴 l’appelant peut imposer sa place, sa capacité et sa TVA',
     fichier: 'lib/rdv-creation-server.js',
-    de: '    capacite_creneau: capacite,\n    place_no: placeNo,\n  }',
-    vers: '    capacite_creneau: capacite,\n    place_no: placeNo,\n    ...champs,\n  }' },
+    // ⚠️ ANCRE REMISE LE 09/09 : `couverts` s'est glissé entre `place_no` et
+    // l'accolade, et `verif:ancres` l'a dit. On vise la DERNIÈRE ligne du
+    // payload, celle qui décide de l'ordre du spread.
+    de: '    couverts: couvertsRetenus,\n  }',
+    vers: '    couverts: couvertsRetenus,\n    ...champs,\n  }' },
 
   // 🔴 CROISER DEUX IDENTIFIANTS SANS VÉRIFIER LEUR LIEN : la prestation d’un
   // salon se réserverait dans l’agenda d’un autre.

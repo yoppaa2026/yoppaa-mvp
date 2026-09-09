@@ -39,7 +39,7 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 // ⚠️ `champsLieuPour` et `premierePlaceLibre` ont quitté cet écran le 30/08 :
 // le lieu gravé et la première place libre se décident CÔTÉ SERVEUR, dans
 // `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
-import { capacitePrestation, estCoursCollectif, libellePlaces } from '@/lib/cours-collectifs'
+import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts } from '@/lib/cours-collectifs'
 import { attenteOuverte } from '@/lib/attente-rdv'
 import BlocAttente from './BlocAttente'
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
@@ -467,6 +467,9 @@ export default function CommanderRdvSlug() {
     setBonLoading(false)
   }
   const [praticienChoisi, setPraticienChoisi] = useState(null)  // null = "Sans préférence" (V1 : garde null en base)
+  // Le nombre de personnes, pour une réservation de table. Vaut 1 partout
+  // ailleurs, et c'est ce qui fait qu'aucun rendez-vous existant ne change.
+  const [couverts, setCouverts] = useState(1)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
@@ -1321,6 +1324,8 @@ export default function CommanderRdvSlug() {
         capacite: capacitePrestation(prestationChoisie),
         prestationId: prestationChoisie?.id || null,
         liaisonsCreneaux,
+        parCouverts: estParCouverts(prestationChoisie),
+        couvertsDemandes: couverts,
       })
       setSlots(list)
       // Tri des reservations par heure_debut pour la section info 'Deja pris'
@@ -1435,6 +1440,10 @@ export default function CommanderRdvSlug() {
       capacite: capacitePrestation(prestationChoisie),
       prestationId: prestationChoisie?.id || null,
       liaisonsCreneaux,
+      // Une salle se remplit en couverts : ce que le client demande décide de
+      // ce qui lui reste ouvert.
+      parCouverts: estParCouverts(prestationChoisie),
+      couvertsDemandes: couverts,
     })
     return { ...j, nbLibres: list.filter(s => !s.pris).length }
   })
@@ -1869,6 +1878,7 @@ export default function CommanderRdvSlug() {
               commercant_id: commercant.id,
               prestation_id: prestationChoisie.id,
               praticien_id: praticienChoisi?.id || null,
+              couverts,
               date_rdv: dateStr,
               heure_debut: heureChoisie,
               heure_fin: heureFin,
@@ -1996,6 +2006,7 @@ export default function CommanderRdvSlug() {
               commercant_id: commercant.id,
               prestation_id: prestationChoisie.id,
               praticien_id: praticienChoisi?.id || null,
+              couverts,
               date_rdv: dateStr,
               heure_debut: heureChoisie,
               heure_fin: heureFin,
@@ -2063,6 +2074,7 @@ export default function CommanderRdvSlug() {
             commercant_id: commercant.id,
             prestation_id: prestationChoisie.id,
             praticien_id: praticienChoisi?.id || null,  // null = Sans préférence
+            couverts,
             date_rdv: dateStr,
             heure_debut: heureChoisie,
             client_email: email,
@@ -2993,6 +3005,50 @@ export default function CommanderRdvSlug() {
                       </div>
                     </>
                   )}
+
+                  {/* 🔴 POUR COMBIEN DE PERSONNES (09/09). Il vient AVANT le
+                      choix du jour, et ce n'est pas cosmétique : la taille de
+                      la table décide de ce qui reste ouvert. Demander l'heure
+                      d'abord, puis le nombre, ferait proposer 20h à une table
+                      de six dans une salle où il reste deux couverts, et le
+                      refus tomberait à la fin du tunnel. */}
+                  {estParCouverts(prestationChoisie) && (() => {
+                    const { min, max } = bornesCouverts(prestationChoisie)
+                    const choix = []
+                    for (let n = min; n <= max; n++) choix.push(n)
+                    return (
+                      <div style={{ marginBottom: 18 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                              <circle cx="9" cy="7" r="4"/>
+                              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                            Nous serons
+                          </span>
+                          <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {choix.map(n => {
+                            const actif = couverts === n
+                            return (
+                              <button key={n} onClick={() => setCouverts(n)}
+                                style={{ minWidth: 46, padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${actif ? T.main : T.pale}`, background: actif ? T.main : '#fff', color: actif ? '#fff' : T.deep, fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                                {n}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {/* ⚠️ ON DIT QUOI FAIRE, PAS SEULEMENT LA BORNE. « Maximum
+                            8 » laisse un groupe de dix sans solution ; l'inviter
+                            à appeler lui en donne une. */}
+                        <p style={{ fontSize: '0.75rem', color: T.muted, marginTop: 8, lineHeight: 1.5 }}>
+                          Au-delà de {max} personne{max > 1 ? 's' : ''}, appelle {commercant.nom} : les grandes tablées se réservent de vive voix.
+                        </p>
+                      </div>
+                    )
+                  })()}
 
                   {/* Section : choix du jour */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>

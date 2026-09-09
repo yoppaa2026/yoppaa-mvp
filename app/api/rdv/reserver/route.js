@@ -80,6 +80,10 @@ export async function POST(request) {
       client_email, client_prenom, client_nom, client_telephone,
       notes_client = null, rgpd_marketing = false,
       lieu_id = null,
+      // Le nombre de personnes, pour une réservation de table. Il est REVÉRIFIÉ
+      // par `creerReservationRdv` : bornes de la prestation, et place réelle
+      // dans la salle à cette heure-là.
+      couverts = 1,
       // ⚠️ DÉSIGNÉS PAR LE CLIENT, DONC REVÉRIFIÉS INTÉGRALEMENT plus bas. Un
       // identifiant envoyé n'autorise rien, un code envoyé n'autorise rien.
       fidelite_recompense_id = null,
@@ -321,6 +325,7 @@ export async function POST(request) {
       champs: {
         client_id: clientId,
         praticien_id: praticien_id || null,
+        couverts,
         client_email: email,
         client_prenom,
         client_nom,
@@ -378,6 +383,20 @@ export async function POST(request) {
       }
       if (res.code === 'praticien_hors_commerce' || res.code === 'praticien_hors_prestation') {
         return NextResponse.json({ ok: false, error: 'Cette personne ne peut pas assurer ce rendez-vous. Choisis quelqu’un d’autre, ou « sans préférence ».' }, { status: 409 })
+      }
+      // ⚠️ LE NOMBRE DE COUVERTS EST DIT AU CLIENT, PAS DEVINÉ. « Complet »
+      // tout court le laisse choisir une autre heure au hasard ; « il reste
+      // deux places » lui dit s'il peut venir à trois.
+      if (res.code === 'salle_complete') {
+        return NextResponse.json({
+          ok: false,
+          error: Number(res.restants) > 0
+            ? `Il ne reste que ${res.restants} place${res.restants > 1 ? 's' : ''} à cette heure-là.`
+            : 'C’est complet à cette heure-là. Choisis un autre horaire.',
+        }, { status: 409 })
+      }
+      if (res.code === 'couverts_invalides') {
+        return NextResponse.json({ ok: false, error: 'Ce nombre de personnes n’est pas accepté pour cette réservation.' }, { status: 400 })
       }
       console.error('[rdv/reserver] insert KO', res.error)
       return NextResponse.json({ ok: false, error: 'Ta réservation n\'a pas pu être enregistrée. Réessaie.' }, { status: 500 })

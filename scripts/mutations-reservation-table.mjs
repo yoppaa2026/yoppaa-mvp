@@ -256,6 +256,33 @@ const MUTATIONS = [
     fichier: 'app/commander/[slug]/page.js',
     de: '                {peutPrendreRdv && !choisitSonParcours && (() => {',
     vers: '                {peutPrendreRdv && (() => {' },
+
+  // ─── « OUVERT OU FERME » AUX TROIS AUTRES ENDROITS ────────────────────────
+  //
+  // 🔴 LE DEFAUT QU ALEX A VU A 11h20 : « Ferme · ouvre demain a 09:00 » sur un
+  // commerce ouvert de 09:00 a 00:00.
+  { nom: '🔴 la pastille de fiche oublie minuit',
+    fichier: 'lib/ouverture.js',
+    de: '  const finDe = (d, f) => finApresMinuit(parseHHMM(d), parseHHMM(f))',
+    vers: '  const finDe = (d, f) => parseHHMM(f)' },
+
+  // ⚠️ A UNE HEURE DU MATIN, C EST LA VEILLE QUI COURT ENCORE.
+  { nom: '⚠️ la nuit d avant cesse de compter',
+    fichier: 'lib/ouverture.js',
+    de: '    if (fin > 1440 && minNow + 1440 < fin) {',
+    vers: '    if (false) {' },
+
+  // 🔴 LA LIMITE DE COMMANDE TRIAIT DES CHAINES : entre « 00:00 » et « 14:00 »
+  // elle rendait 14:00, et sur une seule plage 09:00-00:00 elle rendait ZERO.
+  { nom: '🔴 la limite de commande retombe a zero a minuit',
+    fichier: 'lib/ouverture.js',
+    de: '  const derniere = Math.max(...fins)',
+    vers: '  const derniere = Math.min(...fins)' },
+
+  { nom: '🔴 le statut de la liste oublie minuit',
+    fichier: 'app/commander/page.js',
+    de: '      if (nowMin >= heureEnMinutes(d) && nowMin < finMin(d, f)) {',
+    vers: '      if (nowMin >= heureEnMinutes(d) && nowMin < heureEnMinutes(f)) {' },
 ]
 
 const lancer = () => {

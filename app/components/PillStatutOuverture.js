@@ -16,85 +16,27 @@
 //   Cas 24/24 (urgences, garde, distributeurs, parkings, ...) :
 //     { always_open: true }
 //
-// Helpers (getDayBrussels, getCreneauxJour, calculerStatutOuverture) exportés
-// pour pouvoir construire la section "Horaires" détaillée d'une fiche avec la
-// même logique que celle qui pilote la pill.
+// Helpers (getDayBrussels, calculerStatutOuverture) réexportés pour pouvoir
+// construire la section « Horaires » détaillée d'une fiche avec la même logique
+// que celle qui pilote la pastille.
 
 import { useState, useEffect } from 'react'
-import { creneauxDuJour } from '@/lib/ouverture'
 
-const JOURS_ORDRE = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
-
-export function getDayBrussels(date) {
-  const en = date.toLocaleString('en-US', { weekday: 'long', timeZone: 'Europe/Brussels' }).toLowerCase()
-  const map = { monday: 'lundi', tuesday: 'mardi', wednesday: 'mercredi', thursday: 'jeudi', friday: 'vendredi', saturday: 'samedi', sunday: 'dimanche' }
-  return map[en] || 'lundi'
-}
-
-function getMinutesBrussels(date) {
-  const t = date.toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Brussels' })
-  const [h, m] = t.split(':').map(n => parseInt(n, 10))
-  return h * 60 + m
-}
-
-function parseHHMM(s) {
-  const [h, m] = s.split(':').map(n => parseInt(n, 10))
-  return h * 60 + m
-}
-
-// La lecture des plages d'un jour vit désormais dans `lib/ouverture.js` : le
-// tunnel de commande en a besoin lui aussi, pour ne plus proposer un retrait un
-// jour de fermeture. Deux lectures différentes du même réglage, et les deux
-// écrans finiraient par ne plus dire la même chose. Réexporté sous son ancien
-// nom pour ne rien casser chez les appelants.
-export { creneauxDuJour as getCreneauxJour }
-
-export function calculerStatutOuverture(horaires, now) {
-  if (!horaires || Object.keys(horaires).length === 0) return null
-
-  // Cas 24/24 (numéros nationaux d'urgence, garde, distributeurs, ...)
-  if (horaires.always_open === true) {
-    return { etat: 'always', label: '24h/24', sousTitre: null, is24: true }
-  }
-
-  const jour = getDayBrussels(now)
-  const minNow = getMinutesBrussels(now)
-  const creneauxAuj = creneauxDuJour(horaires[jour])
-
-  // 1) Dans un créneau → OUVERT (ou « Ferme bientôt » à moins de 30 min)
-  for (const [d, f] of creneauxAuj) {
-    if (minNow >= parseHHMM(d) && minNow < parseHHMM(f)) {
-      if (parseHHMM(f) - minNow <= 30) {
-        return { etat: 'pause', label: 'Ferme bientôt', sousTitre: `à ${f}` }
-      }
-      return { etat: 'ouvert', label: 'Ouvert', sousTitre: `Ferme à ${f}` }
-    }
-  }
-  // 2) Entre 2 créneaux du jour → PAUSE
-  for (let i = 0; i < creneauxAuj.length - 1; i++) {
-    if (minNow >= parseHHMM(creneauxAuj[i][1]) && minNow < parseHHMM(creneauxAuj[i+1][0])) {
-      return { etat: 'pause', label: 'En pause', sousTitre: `Réouvre à ${creneauxAuj[i+1][0]}` }
-    }
-  }
-  // 3) Avant l'ouverture du jour (« Ouvre bientôt » à moins de 30 min)
-  if (creneauxAuj.length > 0 && minNow < parseHHMM(creneauxAuj[0][0])) {
-    if (parseHHMM(creneauxAuj[0][0]) - minNow <= 30) {
-      return { etat: 'pause', label: 'Ouvre bientôt', sousTitre: `à ${creneauxAuj[0][0]}` }
-    }
-    return { etat: 'ferme', label: 'Fermé', sousTitre: `Ouvre aujourd'hui à ${creneauxAuj[0][0]}` }
-  }
-  // 4) Fermé maintenant : on cherche le prochain jour ouvert
-  const idx = JOURS_ORDRE.indexOf(jour)
-  for (let i = 1; i <= 7; i++) {
-    const next = JOURS_ORDRE[(idx + i) % 7]
-    const c = creneauxDuJour(horaires[next])
-    if (c.length > 0) {
-      const labelJour = i === 1 ? 'demain' : next
-      return { etat: 'ferme', label: 'Fermé', sousTitre: `Ouvre ${labelJour} à ${c[0][0]}` }
-    }
-  }
-  return { etat: 'ferme', label: 'Fermé', sousTitre: null }
-}
+// ⚠️ LA RÈGLE A DÉMÉNAGÉ DANS `lib/ouverture.js` (09/09), et le déménagement
+// EST la correction. Elle vivait ici, dans un fichier que les bancs ne
+// peuvent pas lire : Node bute sur le premier `<span>`. Elle décidait
+// pourtant de ce que chaque visiteur lit en tête de fiche, et rien ne
+// l'exécutait jamais — c'est ainsi qu'une brasserie ouverte jusqu'à minuit a
+// pu porter « Fermé » en pleine journée sans que rien ne rougisse.
+//
+// ⚠️ UN IMPORT **ET** UNE RÉEXPORTATION, PAS UN `export … from` SEUL. La
+// seconde forme republie le nom sans jamais le lier dans ce module : le
+// composant s'en sert dix lignes plus bas, et l'appel aurait visé une variable
+// inexistante. C'est `npm run verif:undef` qui l'a dit, et personne d'autre —
+// `no-undef` est éteint dans la configuration principale. Même défaut qu'en
+// août dans `lib/resend.js`.
+import { getDayBrussels, calculerStatutOuverture } from '@/lib/ouverture'
+export { getDayBrussels, calculerStatutOuverture }
 
 // Couleurs semantiques universelles : portees uniquement par le dot.
 // Le label/bg restent dans la palette Yoppaa (glass translucide).

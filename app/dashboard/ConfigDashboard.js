@@ -14,7 +14,7 @@ import {
   peut, planEffectif, statutFonction, planPourGarder, planEnEssai, essaiProposable,
   FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
 } from '@/lib/plans'
-import { peutReserver, motReservation } from '@/lib/reservation-metier'
+import { peutReserver, motReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
@@ -12535,7 +12535,17 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     !estVitrine && { id: 'livraison', label: 'Livraison', icon: 'box', feature: 'livraison' },
     // « RDV » ne disait pas ce qu'on y règle (prestations, praticiens, horaires
     // de réservation) : renommé « Prise de RDV » (demande Alex 01/08).
-    { id: 'rdv', label: 'Prise de RDV', icon: 'calendar', feature: 'rdv' },
+    //
+    // 🔴 ET IL ÉTAIT INVISIBLE CHEZ UN RESTAURANT (09/09). Son `feature` valait
+    // `rdv`, que la matrice réserve à la vitrine : un alimentaire pouvait
+    // allumer sa réservation dans le Profil, et n'avait ensuite AUCUN écran
+    // pour déclarer ses tables et ses services. Le réglage existait, la porte
+    // était fermée.
+    //
+    // ⚠️ ET LE NOM SUIT LE MÉTIER : un restaurateur cherche « Réservations »,
+    // pas « Prise de RDV ». `fonctionReservation` et `motReservation` lisent la
+    // même source que la fiche publique et le Profil.
+    { id: 'rdv', label: motReservation(commercant, 'onglet'), icon: 'calendar', feature: fonctionReservation(commercant) },
     { id: 'paiements', label: 'Paiements', icon: 'tag', feature: 'paiement_ligne' },
 
     // ── FAIRE VENIR ──────────────────────────────────────────────────────

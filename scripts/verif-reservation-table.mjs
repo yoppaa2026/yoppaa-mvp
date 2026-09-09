@@ -21,6 +21,10 @@ import {
   conflitReservation, genererSlots, finApresMinuit, franchitMinuit,
   creneauHorsOuverture, ajusterPlagePourJour,
 } from '../lib/rdv-slots.js'
+// ⚠️ DEPUIS `lib/ouverture.js`, PAS DEPUIS LE COMPOSANT : la règle a déménagé
+// le 09/09 précisément pour être exécutable ici. Node ne sait pas lire un
+// fichier qui contient du JSX, et c'est ainsi qu'elle n'a jamais été mesurée.
+import { calculerStatutOuverture, limiteRetraitCeJour } from '../lib/ouverture.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -179,6 +183,15 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // interrupteurs ont été regroupés dans un bloc unique et la condition a migré
   // dans une variable : une garde qui décrit la forme d'hier interdit celle de
   // demain, et rougit sur un code juste.
+  // 🔴 ET L'ONGLET OÙ IL DÉCLARE SES TABLES (09/09). Son `feature` valait
+  // `rdv`, que la matrice réserve à la vitrine : un restaurant pouvait allumer
+  // sa réservation dans le Profil et n'avait ensuite AUCUN écran pour déclarer
+  // ses services. Le réglage existait, la porte était fermée.
+  verifier('🔴 l’onglet de réglage s’ouvre au restaurant',
+    /\{ id: 'rdv', label: motReservation\(commercant, 'onglet'\), icon: 'calendar', feature: fonctionReservation\(commercant\) \}/.test(CONFIG))
+  verifier('⚠️ et le libellé « Prise de RDV » en dur a disparu',
+    !/label: 'Prise de RDV'/.test(CONFIG))
+
   verifier('🔴 l’interrupteur s’ouvre au restaurant',
     /const aResa\s+= peutReserver\(form\)/.test(CONFIG)
     && /\{aResa && \(/.test(CONFIG))
@@ -427,6 +440,62 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // ⚠️ CE QUI RESTE REFUSÉ : un créneau vraiment hors des heures.
   verifier('⚠️ un créneau du matin reste refusé un samedi qui ouvre à 14:00',
     creneauHorsOuverture({ jour: 'samedi', heureDebut: '09:00', heureFin: '10:00', horairesDetail: BAR })?.raison === 'hors_ouverture')
+
+  // 🔴 « OUVERT OU FERMÉ » SE CALCULAIT ENCORE À TROIS AUTRES ENDROITS.
+  //
+  // Alex, capture à l'appui : « Fermé · ouvre demain à 09:00 » à 11h20, sur un
+  // commerce ouvert de 09:00 à 00:00. J'avais corrigé CINQ endroits le matin
+  // même, tous dans le moteur de rendez-vous et ses écrans, et j'ai cherché les
+  // frères là où je venais de travailler. Ceux-ci vivent dans le statut de la
+  // liste, la pastille de la fiche et la limite de commande du jour : trois
+  // modules que la réservation ne touche jamais.
+  //
+  // ⚠️ CHERCHER LES FRÈRES, C'EST BALAYER LE DÉPÔT, PAS LE DOSSIER OÙ L'ON EST.
+  {
+    const BRASSERIE = {
+      mercredi: { ouvert: true, debut: '09:00', fin: '00:00' },
+      vendredi: { ouvert: true, debut: '09:00', fin: '02:00' },
+      samedi:   { ouvert: true, debut: '14:00', fin: '02:00' },
+    }
+    // Mercredi 11h20, exactement la capture d'Alex.
+    const mercrediMidi = new Date('2026-09-16T11:20:00')
+    const st = calculerStatutOuverture(BRASSERIE, mercrediMidi)
+    egal('🔴 à 11h20, une brasserie ouverte jusqu’à minuit est OUVERTE', st?.etat, 'ouvert')
+    // ⚠️ ET LA NUIT D'AVANT COMPTE : samedi 01h00, c'est le vendredi qui court.
+    egal('🔴 à une heure du matin, c’est la veille qui est encore ouverte',
+      calculerStatutOuverture(BRASSERIE, new Date('2026-09-19T01:00:00'))?.etat, 'ouvert')
+    // ⚠️ CE QUI RESTE FERMÉ : mercredi 03h00, la nuit de mardi n'existe pas.
+    verifier('⚠️ à trois heures du matin un mercredi, c’est bien fermé',
+      calculerStatutOuverture(BRASSERIE, new Date('2026-09-16T03:00:00'))?.etat !== 'ouvert')
+
+    // La limite de commande du jour : elle triait des CHAÎNES.
+    egal('🔴 la limite de commande ne retombe plus à zéro à minuit',
+      limiteRetraitCeJour(BRASSERIE, 'mercredi', 0), 1440)
+    egal('🔴 ni avant l’ouverture chez un bar de nuit',
+      limiteRetraitCeJour(BRASSERIE, 'vendredi', 0), 1560)
+    // 🔴 ET AVEC DEUX SERVICES, C'EST LA FIN LA PLUS TARDIVE. Sans ce cas, une
+    // garde ne distingue pas « la plus grande » de « la plus petite » : ma
+    // première version avait trois commerces à une seule plage, et la mutation
+    // qui remplaçait le maximum par le minimum passait sans être vue.
+    const DEUX_SERVICES = {
+      jeudi: { ouvert: true, debut: '12:00', fin: '14:30', debut2: '18:00', fin2: '00:00' },
+    }
+    egal('🔴 avec deux services, la limite est celle du SOIR',
+      limiteRetraitCeJour(DEUX_SERVICES, 'jeudi', 0), 1440)
+    egal('⚠️ et sans minuit, elle reste la fin du second service',
+      limiteRetraitCeJour({ jeudi: { ouvert: true, debut: '12:00', fin: '14:30', debut2: '18:00', fin2: '22:00' } }, 'jeudi', 0), 1320)
+
+    // ⚠️ UNE JOURNÉE ORDINAIRE NE BOUGE PAS, et c'est la moitié qui compte.
+    egal('⚠️ une boulangerie 07:00-18:00 garde sa limite',
+      limiteRetraitCeJour({ lundi: { ouvert: true, debut: '07:00', fin: '18:00' } }, 'lundi', 0), 1080)
+    egal('⚠️ et la marge de préparation se retranche toujours',
+      limiteRetraitCeJour({ lundi: { ouvert: true, debut: '07:00', fin: '18:00' } }, 'lundi', 2), 960)
+
+    const LISTE = sansProse(readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
+    verifier('🔴 le statut de la liste connaît minuit',
+      /const finMin = \(d, f\) => finApresMinuit\(heureEnMinutes\(d\), heureEnMinutes\(f\)\)/.test(LISTE)
+      && /nowMin >= heureEnMinutes\(d\) && nowMin < finMin\(d, f\)/.test(LISTE))
+  }
 
   // Les trois écrans qui refaisaient ce calcul à la main.
   const TUNNEL2 = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))

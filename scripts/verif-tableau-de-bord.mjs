@@ -433,8 +433,13 @@ const verifie = (nom, cond, detail = '') => {
   const blocCat = iCat === -1 ? '' : cfg.slice(iCat, finCat === -1 ? undefined : finCat)
   verifie('le bloc du catalogue se découpe', blocCat.length > 500, String(blocCat.length))
   const cibleRenvoi = (blocCat.match(/onAllerA\('([a-z-]+)'\)/) || [])[1]
+  // ⚠️ ON CHERCHE L'IDENTIFIANT, PAS LE LIBELLÉ (09/09). Cette garde exigeait
+  // `label: 'Prise de RDV'` : le jour où ce nom a suivi le métier — un
+  // restaurateur cherche « Réservations », pas un rendez-vous — elle a rougi
+  // sur un renvoi parfaitement valable. Un libellé change, un identifiant non,
+  // et c'est l'identifiant que le renvoi vise.
   verifie('🔴 le renvoi vise un onglet qui existe vraiment',
-    !!cibleRenvoi && new RegExp(`\\{ id: '${cibleRenvoi}', label: 'Prise de RDV'`).test(cfg),
+    !!cibleRenvoi && new RegExp(`\\{ id: '${cibleRenvoi}', label:`).test(cfg),
     `« ${cibleRenvoi} » ne correspond à aucun onglet`)
 
   // ⚠️ ET IL EMPRUNTE LA PORTE DE LA BARRE D'ONGLETS, comme le renvoi du

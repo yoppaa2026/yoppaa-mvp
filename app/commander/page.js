@@ -25,6 +25,10 @@ import { canDo, bandeauCategorie, planEffectif } from '@/lib/plans'
 import { resumeAvis } from '@/lib/avis-affichage'
 import { STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
 import { statutCreneaux, pastilleCreneaux, jourPlus } from '@/lib/statut-commerce'
+// ⚠️ La règle de minuit vit en UN exemplaire dans le moteur de créneaux : une
+// brasserie ouverte jusqu'à 02:00 n'est pas fermée, et six endroits le
+// calculaient chacun à leur façon.
+import { finApresMinuit } from '@/lib/rdv-slots'
 import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
@@ -1060,10 +1064,36 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
     }
     const plages = plagesJour(h)
 
+    // 🔴 UNE BRASSERIE OUVERTE JUSQU'À MINUIT S'AFFICHAIT FERMÉE (Alex, 09/09,
+    // capture à l'appui : « Fermé · ouvre demain à 09:00 » à 11h20 sur un
+    // commerce ouvert de 09:00 à 00:00). En minutes, `00:00` vaut ZÉRO et
+    // `02:00` en vaut 120 : la fin tombait avant l'ouverture, et la comparaison
+    // `nowMin < fin` était fausse à toute heure de la journée.
+    //
+    // ⚠️ CINQUIÈME ET SIXIÈME ENDROIT DU MÊME DÉFAUT. J'en avais corrigé cinq
+    // ce matin dans le moteur de rendez-vous et ses écrans, et j'ai cherché les
+    // frères là où je venais de travailler. Celui-ci vit dans le statut de la
+    // liste des commerces, que le module de rendez-vous ne touche jamais.
+    const finMin = (d, f) => finApresMinuit(heureEnMinutes(d), heureEnMinutes(f))
+
     // Dans une plage → OUVERT (affiche la plage en cours)
     for (const [d, f] of plages) {
-      if (nowMin >= heureEnMinutes(d) && nowMin < heureEnMinutes(f)) {
+      if (nowMin >= heureEnMinutes(d) && nowMin < finMin(d, f)) {
         return { dot: '#10B981', label: `Ouvert · ${d.slice(0,5)}–${f.slice(0,5)}`, color: '#10B981', bg: '#F0FDF4', pulse: true }
+      }
+    }
+
+    // ⚠️ ET LA NUIT D'AVANT COMPTE. À une heure du matin un samedi, c'est le
+    // VENDREDI qui est encore ouvert jusqu'à 02:00 : ne lire que le samedi
+    // afficherait « fermé » devant une salle pleine, au moment précis où
+    // quelqu'un cherche où finir sa soirée.
+    {
+      const hier = c.horaires_detail?.[JOURS_MAP[(todayIdx + 6) % 7]]
+      for (const [d, f] of plagesJour(hier)) {
+        const fin = finMin(d, f)
+        if (fin > 1440 && nowMin + 1440 < fin) {
+          return { dot: '#10B981', label: `Ouvert · jusqu’à ${f.slice(0,5)}`, color: '#10B981', bg: '#F0FDF4', pulse: true }
+        }
       }
     }
     // Entre deux plages → EN PAUSE

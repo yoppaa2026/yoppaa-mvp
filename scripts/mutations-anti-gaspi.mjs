@@ -224,10 +224,14 @@ const MUTATIONS = [
 
   // 🔴 Une journee coupee ferme LE SOIR, pas a midi. Se tromper ici publierait
   // un invendu deja termine au moment ou il s affiche.
+  // ⚠️ ANCRE REMISE LE 09/09 : le tri portait sur des CHAINES, et « 00:00 »
+  // passait pour la plus petite fin chez un bar qui ferme a minuit. Le calcul
+  // compare desormais des MINUTES. La mutation vise le meme fait : prendre la
+  // premiere fin de la journee au lieu de la derniere.
   { nom: '🔴 la fermeture se lit sur la PREMIERE plage (midi au lieu du soir)',
     fichier: 'lib/ouverture.js',
-    de: '  const fins = plages.map(([, f]) => String(f || \'\')).filter(Boolean).sort()',
-    vers: '  const fins = plages.map(([, f]) => String(f || \'\')).filter(Boolean).sort().reverse()' },
+    de: '  const derniere = Math.max(...fins)',
+    vers: '  const derniere = Math.min(...fins)' },
 
   // 🔴 Publier a 17 h 58 pour 18 h n envoie personne, et le commercant croit
   // avoir publie.

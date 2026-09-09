@@ -768,7 +768,14 @@ egal('la réservation d’un restaurant s’atteint quand même',
     ['app/api/rdv/reserver/route.js', 'la route de réservation'],
   ]) {
     const src = sansProse(readFileSync(new URL('../' + chemin, import.meta.url), 'utf8'))
-    const selects = [...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,200}?\.select\(\s*(['"`])([\s\S]*?)\1/g)].map(m => m[2])
+    // ⚠️ SEULS LES SELECTS QUI LISENT LA PRESTATION POUR DÉCIDER. Un select qui
+    // ne rapporte que des identifiants — celui qui liste les formats de table de
+    // la salle — n'a pas besoin de ces colonnes, et l'exiger de lui ferait
+    // rougir du code juste. `duree_minutes` sert de marqueur : un select qui la
+    // demande s'apprête à calculer une occupation.
+    const selects = [...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,200}?\.select\(\s*(['"`])([\s\S]*?)\1/g)]
+      .map(m => m[2])
+      .filter(s => /\bduree_minutes\b/.test(s))
     verifier(`🔴 ${nom} charge « par_couverts »`,
       selects.length > 0 && selects.every(s => /\bpar_couverts\b/.test(s)), selects.join(' | '))
     verifier(`🔴 et ${nom} charge « duree_paliers »`,
@@ -776,6 +783,19 @@ egal('la réservation d’un restaurant s’atteint quand même',
     verifier(`⚠️ et ${nom} charge les bornes de couverts`,
       selects.length > 0 && selects.every(s => /\bcouverts_min\b/.test(s) && /\bcouverts_max\b/.test(s)), selects.join(' | '))
   }
+
+  // 🔴 UNE SALLE EST UNE SALLE, PAS UNE PAR FORMAT DE TABLE. La jauge filtrait
+  // sur `prestation_id` : juste pour un cours, faux pour une salle. Deux formats
+  // de table se voyaient accorder QUARANTE couverts CHACUN, et la grille du
+  // client, elle, comptait déjà toute la salle. L'écran refusait, le serveur
+  // acceptait : c'est le sens inverse du défaut habituel, et le pire des deux.
+  verifier('🔴 la jauge de salle compte TOUS les formats de table',
+    /\.eq\('par_couverts', true\)/.test(CREATION)
+    && /\.in\('prestation_id', idsSalle\.length > 0 \? idsSalle : \[prestation\.id\]\)/.test(CREATION))
+  verifier('⚠️ et un `in\\(\\)` vide ne vide pas la jauge',
+    /idsSalle\.length > 0 \? idsSalle : \[prestation\.id\]/.test(CREATION))
+  verifier('⚠️ le cours garde sa capacité à lui : la requête vit sous « estParCouverts »',
+    /if \(estParCouverts\(prestation\)\) \{[\s\S]*?from\('rdv_reservations'\)/.test(CREATION))
 
   // L'écran, lui, lit la durée UNE fois et jamais la colonne en direct.
   const TUNNEL = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))

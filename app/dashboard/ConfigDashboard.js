@@ -7931,7 +7931,9 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
           </button>
         ))}
       </BandeDefilante>
-      {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} toast={toast} />}
+      {/* `commercant` : la case « c'est une table » ne s'affiche que chez un
+          alimentaire qui a droit à la réservation de table. */}
+      {subTab === 'prestations' && <TabRdvPrestations commercantId={commercantId} commercant={commercant} toast={toast} />}
       {subTab === 'praticiens'  && <TabRdvPraticiens commercantId={commercantId} toast={toast} />}
       {subTab === 'creneaux'    && <TabRdvCreneaux commercantId={commercantId} commercant={commercant} toast={toast} />}
       {subTab === 'fermetures'  && <TabRdvFermetures commercantId={commercantId} toast={toast} />}
@@ -7942,7 +7944,10 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
 // Sess 5a : CRUD Prestations RDV. nom, description, durée_minutes, prix
 // (fixe, ou vide = sur demande), acompte_pourcent, ordre, actif.
 // Soft delete via deleted_at (conformité 7 ans Belgique).
-function TabRdvPrestations({ commercantId, toast }) {
+function TabRdvPrestations({ commercantId, commercant, toast }) {
+  // Une table, ça n'existe que chez un alimentaire qui a droit à la
+  // réservation de table. Partout ailleurs la case n'aurait aucun sens.
+  const estTable = isAlimentaire(commercant) && peutReserver(commercant)
   const [prestations, setPrestations] = useState([])
   const [praticiens, setPraticiens] = useState([])
   // Sess 5d : junction prestation ↔ praticien. Aucun coché = tous les praticiens
@@ -7953,7 +7958,7 @@ function TabRdvPrestations({ commercantId, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
-  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1' }
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '' }
   const [form, setForm] = useState(initialForm)
   // Propositions IA pour la description de la prestation (surface 'prestation')
   const [propsIa, setPropsIa] = useState([])
@@ -8032,6 +8037,12 @@ function TabRdvPrestations({ commercantId, toast }) {
       // Une prestation d'avant la bascule n'a pas de capacité : elle vaut 1,
       // c'est-à-dire ce qu'elle a toujours été.
       capacite: String(capacitePrestation(p)),
+      // ⚠️ Les bornes restent VIDES quand elles ne sont pas réglées, jamais à
+      // zéro : une borne à zéro passerait la contrainte de base pour une
+      // valeur voulue, et le client se verrait proposer « 0 personne ».
+      par_couverts: p.par_couverts === true,
+      couverts_min: p.couverts_min != null ? String(p.couverts_min) : '',
+      couverts_max: p.couverts_max != null ? String(p.couverts_max) : '',
     })
     setEditId(p.id)
     // Précharge les praticiens autorisés depuis la junction existante
@@ -8069,6 +8080,14 @@ function TabRdvPrestations({ commercantId, toast }) {
       // des métiers à rendez-vous. Au-delà, c'est un cours collectif : dix
       // personnes de 10h à 11h chez une professeure de yoga.
       capacite: capacitePrestation({ capacite: form.capacite }),
+      // 🔴 UNE TABLE COMPTE DES COUVERTS. Le drapeau ne se pose que chez un
+      // alimentaire qui y a droit : sans cette garde, décocher la catégorie
+      // laisserait une prestation en mode table dans un salon de coiffure.
+      par_couverts: estTable ? !!form.par_couverts : false,
+      // ⚠️ VIDE VAUT NULL, PAS ZÉRO. Une borne à zéro passe la contrainte de
+      // base et proposerait « 0 personne » au client.
+      couverts_min: estTable && form.par_couverts && form.couverts_min !== '' ? Number(form.couverts_min) : null,
+      couverts_max: estTable && form.par_couverts && form.couverts_max !== '' ? Number(form.couverts_max) : null,
     }
     setSaving(true)
     // INSERT/UPDATE prestation
@@ -8274,18 +8293,59 @@ function TabRdvPrestations({ commercantId, toast }) {
                 décrit bien un coiffeur et pas du tout un cours de yoga de dix
                 personnes à 10h. Le champ vaut 1 par défaut : le commerçant qui
                 ne le touche pas ne voit aucune différence. */}
+            {/* 🔴 UNE TABLE N'EST PAS UNE PLACE (09/09). Chez un restaurant, une
+                réservation vaut PLUSIEURS couverts : la salle se remplit en
+                personnes, pas en lignes d'agenda. La case ne s'affiche que pour
+                un alimentaire qui a droit à la réservation de table : partout
+                ailleurs, elle n'aurait aucun sens et ferait douter. */}
+            {estTable && (
+              <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.par_couverts ? T.main : T.pale}`, background: form.par_couverts ? T.pale : '#fff' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!form.par_couverts}
+                    onChange={e => setForm(p => ({ ...p, par_couverts: e.target.checked }))}
+                    style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px' }}>C&rsquo;est une table, pas une place</p>
+                    <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+                      Tes clients diront combien ils sont, et ta salle se remplira en couverts. Sans ça, une table de quatre ne compterait que pour une.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            )}
+
             <div style={{ marginBottom: 12 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
-                Personnes par créneau
+                {form.par_couverts ? 'Couverts en salle sur un service' : 'Personnes par créneau'}
               </label>
               <Input type="number" min="1" max="100" value={form.capacite}
                 onChange={e => setForm({ ...form, capacite: e.target.value })}/>
               <p style={{ fontSize: 11, color: T.muted, margin: '4px 0 0', lineHeight: 1.45 }}>
-                {capacitePrestation({ capacite: form.capacite }) > 1
-                  ? `Cours collectif : ${capacitePrestation({ capacite: form.capacite })} personnes peuvent réserver le même horaire, et tes clients voient les places restantes.`
-                  : 'Rendez-vous individuel : une seule personne par horaire. Augmente pour un cours collectif.'}
+                {form.par_couverts
+                  ? `Ta salle accueille ${capacitePrestation({ capacite: form.capacite })} personnes en même temps. Quand elles sont assises, l'horaire se ferme.`
+                  : capacitePrestation({ capacite: form.capacite }) > 1
+                    ? `Cours collectif : ${capacitePrestation({ capacite: form.capacite })} personnes peuvent réserver le même horaire, et tes clients voient les places restantes.`
+                    : 'Rendez-vous individuel : une seule personne par horaire. Augmente pour un cours collectif.'}
               </p>
             </div>
+
+            {/* ⚠️ LES BORNES DE LA TABLE, et le maximum n'est pas décoratif : au
+                delà, la fiche invite à appeler plutôt que de laisser le client
+                buter sur un refus en fin de tunnel. */}
+            {form.par_couverts && (
+              <div style={{ marginBottom: 12, display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>À partir de</label>
+                  <Input type="number" min="1" max="100" value={form.couverts_min}
+                    onChange={e => setForm({ ...form, couverts_min: e.target.value })}/>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Jusqu&rsquo;à</label>
+                  <Input type="number" min="1" max="100" value={form.couverts_max}
+                    onChange={e => setForm({ ...form, couverts_max: e.target.value })}/>
+                </div>
+              </div>
+            )}
             {/* TVA de la prestation. Le prix affiché reste celui que paie le
                 client : le taux détermine seulement la part de TVA à l'intérieur. */}
             <div style={{ marginBottom: 12 }}>

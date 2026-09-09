@@ -144,6 +144,30 @@ egal('la réservation d’un restaurant s’atteint quand même',
 
   verifier('🔴 l’interrupteur s’ouvre au restaurant',
     /\{peutReserver\(form\) && \(/.test(CONFIG))
+
+  // ── LE COMMERÇANT DÉCLARE SA SALLE ──────────────────────────────────────
+  //
+  // Sans cet écran, `par_couverts` n'était réglable qu'en SQL : la colonne
+  // existait, le client pouvait choisir ses couverts, et personne ne pouvait
+  // dire à Yoppaa que la prestation était une table.
+  verifier('la case « c’est une table » existe',
+    /C&rsquo;est une table, pas une place/.test(CONFIG))
+  // ⚠️ SEULEMENT CHEZ UN ALIMENTAIRE QUI Y A DROIT : ailleurs, elle n'aurait
+  // aucun sens et ferait douter le commerçant de ce qu'il lit.
+  verifier('⚠️ et seulement chez un alimentaire qui y a droit',
+    /const estTable = isAlimentaire\(commercant\) && peutReserver\(commercant\)/.test(CONFIG)
+    && /\{estTable && \(/.test(CONFIG))
+  // 🔴 LE SERVEUR DE CET ÉCRAN, C'EST LA SAUVEGARDE : décocher la catégorie ne
+  // doit pas laisser une prestation en mode table dans un salon de coiffure.
+  verifier('🔴 le drapeau ne se pose jamais hors de l’alimentaire',
+    /par_couverts: estTable \? !!form\.par_couverts : false,/.test(CONFIG))
+  // ⚠️ VIDE VAUT NULL, PAS ZÉRO. Une borne à zéro passe la contrainte de base
+  // et proposerait « 0 personne » au client.
+  verifier('⚠️ une borne vide vaut null, jamais zéro',
+    /couverts_min: estTable && form\.par_couverts && form\.couverts_min !== '' \? Number\(form\.couverts_min\) : null,/.test(CONFIG)
+    && /couverts_max: estTable && form\.par_couverts && form\.couverts_max !== '' \? Number\(form\.couverts_max\) : null,/.test(CONFIG))
+  verifier('et le libellé de la capacité suit le métier',
+    /form\.par_couverts \? 'Couverts en salle sur un service' : 'Personnes par créneau'/.test(CONFIG))
   verifier('et il rassure sur la carte à emporter',
     /la réservation s&rsquo;ajoute à ta fiche, elle ne la remplace pas/.test(CONFIG))
 }

@@ -135,6 +135,26 @@ const MUTATIONS = [
     fichier: 'lib/rdv-creation-server.js',
     de: '    couverts: couvertsRetenus,',
     vers: '    ...(null || {}),' },
+
+  // 🔴 LA CASE « C EST UNE TABLE » NE DOIT PAS SORTIR DE L ALIMENTAIRE : un
+  // salon de coiffure garderait une prestation en mode table apres un
+  // changement de categorie.
+  { nom: '🔴 le mode table se pose hors de l alimentaire',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      par_couverts: estTable ? !!form.par_couverts : false,',
+    vers: '      par_couverts: !!form.par_couverts,' },
+
+  { nom: '🔴 la case table s affiche chez tout le monde',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '  const estTable = isAlimentaire(commercant) && peutReserver(commercant)',
+    vers: '  const estTable = true' },
+
+  // ⚠️ UNE BORNE VIDE VAUT NULL, PAS ZERO : zero passe la contrainte de base
+  // et proposerait « 0 personne » au client.
+  { nom: '⚠️ une borne vide devient zero',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "      couverts_min: estTable && form.par_couverts && form.couverts_min !== '' ? Number(form.couverts_min) : null,",
+    vers: '      couverts_min: Number(form.couverts_min) || 0,' },
 ]
 
 const lancer = () => {

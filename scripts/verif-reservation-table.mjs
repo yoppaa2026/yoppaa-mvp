@@ -697,6 +697,94 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /complet/.test(texteResumeSeance(table4et2, 6, { mots: MOTS_TABLE_TEST, parCouverts: true }))
     && !/complet/.test(texteResumeSeance(table4et2, 6)))
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // LOT 1 : LA DURÉE SUIT LA TAILLE DU GROUPE
+  // ═══════════════════════════════════════════════════════════════════════
+  const { dureeSelonCouverts, palierNettoyes } = await import('../lib/cours-collectifs.js')
+  const TABLE = {
+    par_couverts: true, duree_minutes: 90, capacite: 40, couverts_min: 1, couverts_max: 8,
+    duree_paliers: [{ des: 3, minutes: 120 }, { des: 5, minutes: 150 }],
+  }
+  verifier('🔴 deux personnes prennent la durée de base', dureeSelonCouverts(TABLE, 2) === 90)
+  verifier('🔴 quatre personnes passent au palier de 120', dureeSelonCouverts(TABLE, 4) === 120)
+  verifier('🔴 six personnes passent au palier de 150', dureeSelonCouverts(TABLE, 6) === 150)
+  verifier('⚠️ le palier s’applique DÈS son seuil, pas après',
+    dureeSelonCouverts(TABLE, 3) === 120 && dureeSelonCouverts(TABLE, 5) === 150)
+  verifier('⚠️ au-delà du dernier palier, on garde le dernier',
+    dureeSelonCouverts(TABLE, 20) === 150)
+
+  // 🔴 LA MOITIÉ QUI COMPTE : LE PARC EXISTANT NE BOUGE PAS. La colonne est
+  // nulle sur les neuf prestations en base, donc chaque agenda calcule
+  // aujourd'hui exactement ce qu'il calculait hier.
+  const SANS = { par_couverts: true, duree_minutes: 90, duree_paliers: null }
+  const COURS = { par_couverts: false, duree_minutes: 60, duree_paliers: [{ des: 2, minutes: 999 }] }
+  verifier('🔴 sans palier, la durée de base pour tout le monde',
+    dureeSelonCouverts(SANS, 1) === 90 && dureeSelonCouverts(SANS, 8) === 90)
+  verifier('🔴 un cours ignore les paliers, même s’il en porte',
+    dureeSelonCouverts(COURS, 12) === 60)
+  verifier('⚠️ une prestation sans durée retombe sur soixante minutes',
+    dureeSelonCouverts({ par_couverts: true }, 4) === 60)
+
+  // ⚠️ UN PALIER ILLISIBLE EST IGNORÉ, JAMAIS INTERPRÉTÉ : mieux vaut la durée
+  // de base qu'une table bloquée trois heures par un `NaN`.
+  verifier('⚠️ un palier abîmé ne bloque pas la table',
+    dureeSelonCouverts({ ...TABLE, duree_paliers: [{ des: 'x', minutes: 150 }, { des: 3, minutes: null }] }, 6) === 90)
+  // 🔴 LE CAS QUE SEULE `Number.isFinite` ATTRAPE, et que mon premier banc
+  // ratait : une DURÉE illisible sur un seuil valable. `Number('bientôt')` vaut
+  // NaN, `NaN <= 0` est faux, donc le contrôle des bornes le laisse passer et la
+  // durée retenue devient NaN. Une table dont la fin ne se calcule plus n'est
+  // pas une table longue, c'est une table qui disparaît de l'agenda.
+  // Mesuré par mutation : sans cette ligne, la mutation passait inaperçue.
+  verifier('🔴 une durée illisible ne devient jamais la durée retenue',
+    dureeSelonCouverts({ ...TABLE, duree_paliers: [{ des: 1, minutes: 'bientôt' }] }, 6) === 90)
+  verifier('⚠️ et le nettoyage à l’écriture la refuse aussi',
+    palierNettoyes([{ des: 1, minutes: 'bientôt' }]).length === 0)
+  verifier('⚠️ un jsonb qui n’est pas un tableau ne fait pas tomber l’écran',
+    dureeSelonCouverts({ ...TABLE, duree_paliers: { des: 3, minutes: 120 } }, 6) === 90)
+
+  // La normalisation à l'écriture : trié, dédoublonné, nettoyé.
+  const propres = palierNettoyes([{ des: '5', minutes: '150' }, { des: 3, minutes: 120 }, { des: 3, minutes: 130 }, { des: 0, minutes: 90 }, { des: 4, minutes: -1 }])
+  verifier('⚠️ les paliers sont triés et dédoublonnés à l’écriture',
+    JSON.stringify(propres) === JSON.stringify([{ des: 3, minutes: 130 }, { des: 5, minutes: 150 }]),
+    JSON.stringify(propres))
+
+  // 🔴 ET LE SERVEUR RECALCULE, il ne reçoit pas. Une table de huit contrôlée
+  // sur 150 minutes puis ENREGISTRÉE sur 90 libérerait une table encore occupée.
+  const CREATION = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le module écrit LUI-MÊME la durée et la fin',
+    /duree_minutes: dureeSelonCouverts\(prestation, couvertsRetenus\),/.test(CREATION)
+    && /heure_fin: minutesToTime\(timeToMinutes\(heure\) \+ dureeSelonCouverts\(prestation, couvertsRetenus\)\)/.test(CREATION))
+  verifier('🔴 et ses gardes mesurent la MÊME durée',
+    (CREATION.match(/dureeSelonCouverts\(prestation, champs\?\.couverts\)/g) || []).length === 2)
+
+  // 🔴 LE DÉFAUT QUI RENDAIT TOUT LE MODULE MUET (09/09 au soir).
+  //
+  // Le bloc entier des couverts est gardé par `estParCouverts(prestation)`, et
+  // `par_couverts` ne figurait pas dans le select : la garde rendait faux, la
+  // jauge de salle ne tournait JAMAIS, et chaque table s'écrivait à un couvert.
+  // Une liste de colonnes désarmait une garde de sécurité, sans une erreur.
+  for (const [chemin, nom] of [
+    ['lib/rdv-creation-server.js', 'le module de création'],
+    ['app/api/rdv/reserver/route.js', 'la route de réservation'],
+  ]) {
+    const src = sansProse(readFileSync(new URL('../' + chemin, import.meta.url), 'utf8'))
+    const selects = [...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,200}?\.select\(\s*(['"`])([\s\S]*?)\1/g)].map(m => m[2])
+    verifier(`🔴 ${nom} charge « par_couverts »`,
+      selects.length > 0 && selects.every(s => /\bpar_couverts\b/.test(s)), selects.join(' | '))
+    verifier(`🔴 et ${nom} charge « duree_paliers »`,
+      selects.length > 0 && selects.every(s => /\bduree_paliers\b/.test(s)), selects.join(' | '))
+    verifier(`⚠️ et ${nom} charge les bornes de couverts`,
+      selects.length > 0 && selects.every(s => /\bcouverts_min\b/.test(s) && /\bcouverts_max\b/.test(s)), selects.join(' | '))
+  }
+
+  // L'écran, lui, lit la durée UNE fois et jamais la colonne en direct.
+  const TUNNEL = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 le tunnel dérive la durée du nombre de personnes',
+    /const dureeRetenue = dureeSelonCouverts\(prestationChoisie, couverts\)/.test(TUNNEL))
+  verifier('⚠️ et plus aucun endroit ne lit la durée brute de la prestation choisie',
+    !/prestationChoisie\.duree_minutes/.test(TUNNEL),
+    (TUNNEL.match(/.{0,40}prestationChoisie\.duree_minutes.{0,20}/) || [''])[0])
+
   // ⚠️ ET LE COMPTEUR DU BLOC, celui qu'on lit d'un coup d'œil sur la grille
   // sans rien ouvrir : « 1/2 » sur une table de deux personnes déjà pleine.
   // C'est le chiffre le plus regardé de l'agenda, et il n'était gardé par rien.

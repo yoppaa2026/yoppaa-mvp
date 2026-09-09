@@ -39,7 +39,7 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 // ⚠️ `champsLieuPour` et `premierePlaceLibre` ont quitté cet écran le 30/08 :
 // le lieu gravé et la première place libre se décident CÔTÉ SERVEUR, dans
 // `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
-import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts } from '@/lib/cours-collectifs'
+import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts, dureeSelonCouverts } from '@/lib/cours-collectifs'
 import { attenteOuverte } from '@/lib/attente-rdv'
 import BlocAttente from './BlocAttente'
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
@@ -470,6 +470,15 @@ export default function CommanderRdvSlug() {
   // Le nombre de personnes, pour une réservation de table. Vaut 1 partout
   // ailleurs, et c'est ce qui fait qu'aucun rendez-vous existant ne change.
   const [couverts, setCouverts] = useState(1)
+  // 🔴 LA DURÉE SUIT LE GROUPE (lot 1). Elle se lit ICI, une fois, et jamais
+  // `prestationChoisie.duree_minutes` en direct : onze endroits de cet écran la
+  // lisaient chacun de leur côté, et il aurait suffi d'en oublier un pour que la
+  // grille propose des créneaux qu'un autre bout de l'écran refuse ensuite.
+  //
+  // ⚠️ ELLE DÉPEND DE `couverts`, ET LE NOMBRE EST DEMANDÉ AVANT LE JOUR : c'est
+  // la raison pour laquelle ce sélecteur avait été placé en tête le 09/09 au
+  // matin. Sans cet ordre, la grille aurait dû se recalculer après coup.
+  const dureeRetenue = dureeSelonCouverts(prestationChoisie, couverts)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
@@ -1322,7 +1331,7 @@ export default function CommanderRdvSlug() {
       const reservationsFiltrees = filtrerReservationsPourSlots(reservations, praticienChoisi, praticiensEligibles)
       const list = genererSlots({
         dateChoisie,
-        dureeMinutes: prestationChoisie.duree_minutes,
+        dureeMinutes: dureeRetenue,
         creneaux: creneauxFiltres,
         reservations: reservationsFiltrees,
         horairesDetail: commercant.horaires_detail,
@@ -1439,7 +1448,7 @@ export default function CommanderRdvSlug() {
     const resaFiltree = filtrerReservationsPourSlots(resaDuJour, praticienChoisi, praticiensEligibles)
     const list = genererSlots({
       dateChoisie: j.date,
-      dureeMinutes: prestationChoisie.duree_minutes,
+      dureeMinutes: dureeRetenue,
       creneaux: creneauxFiltres,
       reservations: resaFiltree,
       horairesDetail: commercant?.horaires_detail,
@@ -1574,7 +1583,7 @@ export default function CommanderRdvSlug() {
       console.info('[rdv] client id =', cid)
 
       const debutMin = timeToMinutes(heureChoisie)
-      const finMin   = debutMin + prestationChoisie.duree_minutes
+      const finMin   = debutMin + dureeRetenue
       const heureFin = minutesToTime(finMin)
       const dateStr  = isoDate(dateChoisie)
 
@@ -1813,7 +1822,7 @@ export default function CommanderRdvSlug() {
             ...rdv,
             commercant_id: commercant.id,
             client_email: email, client_prenom: prenom, client_nom: nom,
-            duree_minutes: prestationChoisie.duree_minutes,
+            duree_minutes: dureeRetenue,
             statut: 'confirme',
             _surAbonnement: true,
           })
@@ -1899,7 +1908,7 @@ export default function CommanderRdvSlug() {
               date_rdv: dateStr,
               heure_debut: heureChoisie,
               heure_fin: heureFin,
-              duree_minutes: prestationChoisie.duree_minutes,
+              duree_minutes: dureeRetenue,
               client_email: email,
               client_prenom: prenom,
               client_nom: nom,
@@ -1942,7 +1951,7 @@ export default function CommanderRdvSlug() {
               praticien_id: praticienChoisi?.id || null,
               client_email: email, client_prenom: prenom, client_nom: nom, client_telephone: telephone,
               date_rdv: dateStr, heure_debut: heureChoisie, heure_fin: heureFin,
-              duree_minutes: prestationChoisie.duree_minutes,
+              duree_minutes: dureeRetenue,
               prix_estime: prixEstime,
               acompte_montant: null,
               acompte_paye: false,
@@ -2027,7 +2036,7 @@ export default function CommanderRdvSlug() {
               date_rdv: dateStr,
               heure_debut: heureChoisie,
               heure_fin: heureFin,
-              duree_minutes: prestationChoisie.duree_minutes,
+              duree_minutes: dureeRetenue,
               client_email: email,
               client_prenom: prenom,
               client_nom: nom,
@@ -2949,7 +2958,7 @@ export default function CommanderRdvSlug() {
                         <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>Prestation choisie</p>
                         <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.92rem', letterSpacing: '-0.2px', lineHeight: 1.2, marginBottom: 4 }}>{prestationChoisie.nom}</p>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', color: T.muted, fontWeight: 700 }}>
-                          <span>{formatDuree(prestationChoisie.duree_minutes)}</span>
+                          <span>{formatDuree(dureeRetenue)}</span>
                           <span style={{ opacity: 0.5 }}>·</span>
                           <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie, deals)}</span>
                         </div>
@@ -3360,7 +3369,7 @@ export default function CommanderRdvSlug() {
                           <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, lineHeight: 1.45 }}>
                             {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} · {heureChoisie}<br/>
                             <span style={{ color: T.muted, fontWeight: 500 }}>
-                              {formatDuree(prestationChoisie.duree_minutes)} ·{' '}
+                              {formatDuree(dureeRetenue)} ·{' '}
                               {/* ⚠️ LE PRIX SUIT LE MOYEN DE PAIEMENT. Annoncer
                                   le tarif plein à quelqu'un qui pose une séance
                                   déjà payée est un mensonge, et « 0 € » en est
@@ -4269,7 +4278,7 @@ export default function CommanderRdvSlug() {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: `1px solid ${T.pale}` }}>
                       <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Durée</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.ink }}>{formatDuree(prestationChoisie.duree_minutes)}</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.ink }}>{formatDuree(dureeRetenue)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: rdvCree.acompte_montant ? 8 : 0, paddingBottom: rdvCree.acompte_montant ? 8 : 0, borderBottom: rdvCree.acompte_montant ? `1px solid ${T.pale}` : 'none' }}>
                       {/* ⚠️ « PRIX ESTIMÉ : 45 € » SUR UNE SÉANCE DÉJÀ PAYÉE

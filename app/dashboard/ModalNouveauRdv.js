@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
 import { euros } from '@/lib/montants'
-import { capacitePrestation, premierePlaceLibre, estParCouverts, bornesCouverts, couvertsValides } from '@/lib/cours-collectifs'
+import { capacitePrestation, premierePlaceLibre, estParCouverts, bornesCouverts, couvertsValides, dureeSelonCouverts } from '@/lib/cours-collectifs'
 import { motsReservation } from '@/lib/reservation-metier'
 import { creneauAcceptable, creneauxDuJour } from '@/lib/deplacement-rdv'
 // ⚠️ LES RÈGLES DE L'ABONNEMENT NE SONT PAS RÉÉCRITES ICI, elles sont APPELÉES.
@@ -146,7 +146,14 @@ export default function ModalNouveauRdv({
 
   const dateLabel = `${JOURS_LONG[jourIdxLun(dateInit)]} ${dateInit.getDate()} ${MOIS_LONG[dateInit.getMonth()]}`
   const presta = prestations.find(p => String(p.id) === String(prestationId))
-  const dureeMin = presta?.duree_minutes
+  // ⚠️ LA DURÉE SUIT LE GROUPE ICI AUSSI. Une table de huit prise au téléphone
+  // occupe la salle aussi longtemps qu'une table de huit prise en ligne : c'est
+  // la même règle, lue au même endroit. Tant que le nombre n'est pas saisi, on
+  // affiche la durée du plus petit groupe possible, celle qui sera juste si le
+  // commerçant valide sans y toucher.
+  const dureeMin = presta
+    ? dureeSelonCouverts(presta, couverts === '' ? bornesCouverts(presta).min : couverts)
+    : undefined
   const debutMin = timeToMinutes(heureInit)
   const finMin = dureeMin ? debutMin + dureeMin : null
   const heureFin = finMin != null ? minutesToTime(finMin) : null

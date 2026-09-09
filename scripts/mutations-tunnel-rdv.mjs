@@ -454,8 +454,12 @@ const MUTATIONS = [
     // ⚠️ ANCRE REMISE LE 09/09 : `couverts` s'est glissé entre `place_no` et
     // l'accolade, et `verif:ancres` l'a dit. On vise la DERNIÈRE ligne du
     // payload, celle qui décide de l'ordre du spread.
-    de: '    couverts: couvertsRetenus,\n  }',
-    vers: '    couverts: couvertsRetenus,\n    ...champs,\n  }' },
+    // ⚠️ REMISE UNE SECONDE FOIS LE 09/09 AU SOIR : la durée et l'heure de fin
+    // sont venues s'ajouter sous `couverts` quand le module a cessé de les
+    // recevoir de l'écran. Une ancre qui vise la dernière ligne d'un bloc suit
+    // ce bloc à chaque fois qu'il grandit ; c'est le prix d'une ancre juste.
+    de: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeSelonCouverts(prestation, couvertsRetenus)),\n  }',
+    vers: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeSelonCouverts(prestation, couvertsRetenus)),\n    ...champs,\n  }' },
 
   // 🔴 CROISER DEUX IDENTIFIANTS SANS VÉRIFIER LEUR LIEN : la prestation d’un
   // salon se réserverait dans l’agenda d’un autre.

@@ -36,7 +36,7 @@ import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
-import { capacitePrestation } from '@/lib/cours-collectifs'
+import { capacitePrestation, palierNettoyes } from '@/lib/cours-collectifs'
 import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ⚠️ Trois fonctions de moins depuis le 18/08, et le lieu avec elles : cet écran
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
@@ -8056,7 +8056,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
-  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '' }
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [] }
   const [form, setForm] = useState(initialForm)
   // Propositions IA pour la description de la prestation (surface 'prestation')
   const [propsIa, setPropsIa] = useState([])
@@ -8141,6 +8141,12 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       par_couverts: p.par_couverts === true,
       couverts_min: p.couverts_min != null ? String(p.couverts_min) : '',
       couverts_max: p.couverts_max != null ? String(p.couverts_max) : '',
+      // ⚠️ EN CHAÎNES DANS LE FORMULAIRE, en nombres en base. Un champ contrôlé
+      // par un nombre refuse la saisie intermédiaire : effacer « 90 » pour taper
+      // « 120 » passe par une chaîne vide, que `Number('')` transforme en zéro.
+      duree_paliers: Array.isArray(p.duree_paliers)
+        ? p.duree_paliers.map(x => ({ des: String(x?.des ?? ''), minutes: String(x?.minutes ?? '') }))
+        : [],
     })
     setEditId(p.id)
     // Précharge les praticiens autorisés depuis la junction existante
@@ -8186,6 +8192,18 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       // base et proposerait « 0 personne » au client.
       couverts_min: estTable && form.par_couverts && form.couverts_min !== '' ? Number(form.couverts_min) : null,
       couverts_max: estTable && form.par_couverts && form.couverts_max !== '' ? Number(form.couverts_max) : null,
+      // 🔴 ON NORMALISE À L'ÉCRITURE : trié, dédoublonné, débarrassé des lignes
+      // incomplètes. Un tableau propre en base se relit partout pareil ; un
+      // tableau sale se réinterprète dans chaque écran qui le touche, et c'est
+      // ainsi qu'on obtient deux durées pour une même table.
+      // ⚠️ `null` PLUTÔT QU'UN TABLEAU VIDE quand il n'y a rien à dire : c'est
+      // ce que la colonne porte sur tout le parc, et deux façons d'écrire
+      // « aucun palier » finiraient par diverger à la lecture.
+      duree_paliers: (() => {
+        if (!estTable || !form.par_couverts) return null
+        const propres = palierNettoyes(form.duree_paliers)
+        return propres.length > 0 ? propres : null
+      })(),
     }
     setSaving(true)
     // INSERT/UPDATE prestation
@@ -8442,6 +8460,50 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                   <Input type="number" min="1" max="100" value={form.couverts_max}
                     onChange={e => setForm({ ...form, couverts_max: e.target.value })}/>
                 </div>
+              </div>
+            )}
+            {/* 🔴 LA DURÉE SUIT LE GROUPE (lot 1). Une durée unique fait mentir
+                l'agenda dans les deux sens : une table de deux libérée après
+                deux heures coûte un service, une table de huit reprise après
+                quatre-vingt-dix minutes met un client debout à côté de sa
+                chaise. Les ordres du métier sont les mêmes partout, et ce sont
+                ceux que le bouton propose.
+                ⚠️ VIDE PAR DÉFAUT : sans palier, la durée ci-dessus vaut pour
+                tout le monde, exactement comme avant. */}
+            {form.par_couverts && (
+              <div style={{ marginBottom: 14, padding: 12, background: T.bg, borderRadius: 10 }}>
+                <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, marginBottom: 2 }}>Les grandes tablées restent plus longtemps</p>
+                <p style={{ fontSize: 11, color: T.muted, marginBottom: 10, lineHeight: 1.45 }}>
+                  Au-delà d&rsquo;un certain nombre de personnes, compte plus de temps à table.
+                  Sans rien ici, la durée du dessus vaut pour tout le monde.
+                </p>
+                {(form.duree_paliers || []).map((p, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 3 }}>À partir de</label>
+                      <Input type="number" min="1" max="100" value={p.des}
+                        onChange={e => setForm(f => ({ ...f, duree_paliers: f.duree_paliers.map((x, j) => j === i ? { ...x, des: e.target.value } : x) }))}/>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 3 }}>Minutes à table</label>
+                      <Input type="number" min="5" max="600" step="15" value={p.minutes}
+                        onChange={e => setForm(f => ({ ...f, duree_paliers: f.duree_paliers.map((x, j) => j === i ? { ...x, minutes: e.target.value } : x) }))}/>
+                    </div>
+                    <button onClick={() => setForm(f => ({ ...f, duree_paliers: f.duree_paliers.filter((_, j) => j !== i) }))}
+                      style={{ padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${T.hairline}`, background: '#fff', color: '#DC2626', cursor: 'pointer', fontWeight: 700, fontSize: 12, fontFamily: '"DM Sans", sans-serif' }}>
+                      Retirer
+                    </button>
+                  </div>
+                ))}
+                <button onClick={() => setForm(f => ({ ...f, duree_paliers: [...(f.duree_paliers || []), { des: '', minutes: '' }] }))}
+                  style={{ padding: '8px 12px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, cursor: 'pointer', fontWeight: 800, fontSize: 12, fontFamily: '"DM Sans", sans-serif' }}>
+                  + Ajouter un palier
+                </button>
+                <p style={{ fontSize: 10.5, color: T.muted, marginTop: 8, lineHeight: 1.45 }}>
+                  L&rsquo;usage du métier : <strong style={{ color: T.ink }}>90 min</strong> à deux,
+                  <strong style={{ color: T.ink }}> 120</strong> à quatre,
+                  <strong style={{ color: T.ink }}> 150</strong> à six et plus.
+                </p>
               </div>
             )}
             {/* TVA de la prestation. Le prix affiché reste celui que paie le

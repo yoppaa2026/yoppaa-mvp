@@ -49,6 +49,7 @@ import { creneauxDuJour } from '@/lib/ouverture'
 import { jourSemaineDe } from '@/lib/creneaux'
 import { brusselsInstant } from '@/lib/timezone'
 import { timeToMinutes, minutesToTime, finApresMinuit } from '@/lib/rdv-slots'
+import { dureeSelonCouverts } from '@/lib/cours-collectifs'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const HEURE = /^\d{2}:\d{2}(:\d{2})?$/
@@ -112,7 +113,11 @@ export async function POST(request) {
         .select('id, nom, slug, categorie, rdv_actif, rdv_acompte_en_ligne_actif, rdv_acompte_global, stripe_account_id, stripe_account_charges_enabled, horaires_detail, plan, essai_plan, created_at')
         .eq('id', commercant_id).maybeSingle(),
       db.from('rdv_prestations')
-        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id')
+        // ⚠️ `par_couverts` ET `duree_paliers` : sans elles, la durée retombe sur
+        // la base en silence et ce contrôle-ci accepterait un créneau que le
+        // module de création refusera trois lignes plus loin. Deux calculs de la
+        // même chose doivent lire les mêmes colonnes.
+        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max, duree_paliers')
         .eq('id', prestation_id).maybeSingle(),
     ])
 
@@ -146,7 +151,7 @@ export async function POST(request) {
     // ⚠️ L'HEURE MURALE BELGE, jamais l'horloge du serveur : Vercel tourne en
     // temps universel, et `toISOString()` rendrait la veille entre minuit et
     // deux heures du matin. Un rendez-vous d'hier matin serait accepté.
-    const dureeMinutes = Number(prestation.duree_minutes) || 60
+    const dureeMinutes = dureeSelonCouverts(prestation, couverts)
     const debutMin = timeToMinutes(heure)
     const finMin = debutMin + dureeMinutes
     const heureFin = minutesToTime(finMin)

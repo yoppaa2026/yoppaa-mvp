@@ -191,6 +191,19 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /\{ id: 'rdv', label: motReservation\(commercant, 'onglet'\), icon: 'calendar', feature: fonctionReservation\(commercant\) \}/.test(CONFIG))
   verifier('⚠️ et le libellé « Prise de RDV » en dur a disparu',
     !/label: 'Prise de RDV'/.test(CONFIG))
+  // 🔴 ET SON CONTENU AUSSI. Deux gardes pour une seule porte, et elles
+  // disaient le contraire : la barre s'ouvrait, l'écran restait blanc. Le
+  // restaurateur cliquait sur « Réservations » et ne trouvait rien, sans un mot
+  // pour dire pourquoi.
+  verifier('🔴 le CONTENU de l’onglet s’ouvre au restaurant',
+    /const peutRdv\s+= peutReserver\(commercant\)/.test(CONFIG))
+  // ⚠️ CE QUI RESTE FERMÉ, ET C'EST VOULU : remiser une « table » dans les
+  // deals ou vendre un carnet de tables n'a aucun sens. Ces deux contrôles-là
+  // gardent `rdv`, et les toucher aurait été « corriger » ce qui marche.
+  verifier('⚠️ les deals ne proposent pas de remiser une table',
+    /if \(!peut\(commercant, 'rdv'\)\) \{ setPrestations\(\[\]\); return \}/.test(CONFIG))
+  verifier('⚠️ et on ne vend pas de carnet de tables',
+    /const peutAbonnements = peut\(commercant, 'rdv'\)/.test(CONFIG))
 
   verifier('🔴 l’interrupteur s’ouvre au restaurant',
     /const aResa\s+= peutReserver\(form\)/.test(CONFIG)
@@ -457,16 +470,22 @@ egal('la réservation d’un restaurant s’atteint quand même',
       vendredi: { ouvert: true, debut: '09:00', fin: '02:00' },
       samedi:   { ouvert: true, debut: '14:00', fin: '02:00' },
     }
+    // 🔴 LE FUSEAU EST ÉCRIT, ET C'EST OBLIGATOIRE. Une date sans décalage vaut
+    // l'heure LOCALE de la machine : sur mon poste elle disait 01:00 belge, sur
+    // l'intégration continue elle disait 01:00 UTC, c'est-à-dire 03:00 à
+    // Bruxelles, après la fermeture. La garde passait ici et rougissait
+    // là-bas, sur un code identique. En septembre la Belgique est à UTC+2.
+    const belge = (iso) => new Date(`${iso}+02:00`)
+
     // Mercredi 11h20, exactement la capture d'Alex.
-    const mercrediMidi = new Date('2026-09-16T11:20:00')
-    const st = calculerStatutOuverture(BRASSERIE, mercrediMidi)
-    egal('🔴 à 11h20, une brasserie ouverte jusqu’à minuit est OUVERTE', st?.etat, 'ouvert')
+    egal('🔴 à 11h20, une brasserie ouverte jusqu’à minuit est OUVERTE',
+      calculerStatutOuverture(BRASSERIE, belge('2026-09-16T11:20:00'))?.etat, 'ouvert')
     // ⚠️ ET LA NUIT D'AVANT COMPTE : samedi 01h00, c'est le vendredi qui court.
     egal('🔴 à une heure du matin, c’est la veille qui est encore ouverte',
-      calculerStatutOuverture(BRASSERIE, new Date('2026-09-19T01:00:00'))?.etat, 'ouvert')
+      calculerStatutOuverture(BRASSERIE, belge('2026-09-19T01:00:00'))?.etat, 'ouvert')
     // ⚠️ CE QUI RESTE FERMÉ : mercredi 03h00, la nuit de mardi n'existe pas.
     verifier('⚠️ à trois heures du matin un mercredi, c’est bien fermé',
-      calculerStatutOuverture(BRASSERIE, new Date('2026-09-16T03:00:00'))?.etat !== 'ouvert')
+      calculerStatutOuverture(BRASSERIE, belge('2026-09-16T03:00:00'))?.etat !== 'ouvert')
 
     // La limite de commande du jour : elle triait des CHAÎNES.
     egal('🔴 la limite de commande ne retombe plus à zéro à minuit',

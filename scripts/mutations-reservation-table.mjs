@@ -283,6 +283,13 @@ const MUTATIONS = [
     fichier: 'app/commander/page.js',
     de: '      if (nowMin >= heureEnMinutes(d) && nowMin < finMin(d, f)) {',
     vers: '      if (nowMin >= heureEnMinutes(d) && nowMin < heureEnMinutes(f)) {' },
+
+  // 🔴 L ONGLET S OUVRAIT SUR DU VIDE : la barre etait ouverte au restaurant,
+  // le CONTENU gardait la fonction reservee a la vitrine.
+  { nom: '🔴 l onglet Reservations redevient blanc chez un restaurant',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '  const peutRdv       = peutReserver(commercant)',
+    vers: "  const peutRdv       = peut(commercant, 'rdv')" },
 ]
 
 const lancer = () => {

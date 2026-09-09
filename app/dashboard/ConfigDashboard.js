@@ -12495,7 +12495,17 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
 
   // Ce que le commerçant a VRAIMENT en main, pour le rendu du contenu.
   const peutPaiements = peut(commercant, 'paiement_ligne')
-  const peutRdv       = peut(commercant, 'rdv')
+  // 🔴 L'ONGLET S'OUVRAIT SUR DU VIDE (Alex, 09/09). Le libellé et l'entrée de
+  // la barre ont été ouverts au restaurant, mais le CONTENU gardait
+  // `peut(commercant, 'rdv')`, une fonction que la matrice réserve à la
+  // vitrine : le restaurateur cliquait sur « Réservations » et trouvait un
+  // écran blanc, sans un mot pour dire pourquoi.
+  //
+  // ⚠️ DEUX GARDES POUR UNE SEULE PORTE, ET ELLES DISAIENT LE CONTRAIRE. J'ai
+  // corrigé celle de la barre sans chercher la seconde, dans le même fichier,
+  // à cent-cinquante lignes de là. Le frère se cherche d'abord dans l'écran
+  // qu'on vient de toucher.
+  const peutRdv       = peutReserver(commercant)
   const peutLivraison = peut(commercant, 'livraison') && commercant?.livraison_actif
 
   // Vitrine : on parle de "Vitrine" plutôt que "Menu", et on masque "Créneaux" (pas de C&C)

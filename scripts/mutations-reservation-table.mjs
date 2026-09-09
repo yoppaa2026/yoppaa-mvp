@@ -186,10 +186,12 @@ const MUTATIONS = [
     de: '      if (!commandeAllumee(commercant)) {',
     vers: '      if (false) {' },
 
+  // ⚠️ ANCRE REMISE LE 09/09 : la variable a change de nom quand « ce que le
+  // commerce accepte » a ete distingue de « ce que le client fait maintenant ».
   { nom: '🔴 la fiche publique ignore l interrupteur',
     fichier: 'app/commander/[slug]/page.js',
-    de: "  const peutCommander = canDo(forfaitVivant, 'commande') && commandeAllumee(commercant)",
-    vers: "  const peutCommander = canDo(forfaitVivant, 'commande')" },
+    de: "  const commerceAccepteCommandes = canDo(forfaitVivant, 'commande') && commandeAllumee(commercant)",
+    vers: "  const commerceAccepteCommandes = canDo(forfaitVivant, 'commande')" },
 
   // ─── LA JOURNEE QUI FINIT APRES MINUIT ────────────────────────────────────
   //
@@ -226,6 +228,34 @@ const MUTATIONS = [
     fichier: 'app/commander/rdv/[slug]/page.js',
     de: '        plagesShop.push([a1, finApresMinuit(a1, timeToMinutes(horaireJour.fin))])',
     vers: '        plagesShop.push([a1, timeToMinutes(horaireJour.fin)])' },
+
+  // ─── EMPORTER OU S ASSEOIR ────────────────────────────────────────────────
+  //
+  // 🔴 LE COEUR DE LA CORRECTION : sans cette ligne, le choix ne serait qu un
+  // bandeau de plus, et la carte se remplirait quand meme. Le client venu
+  // reserver une table croirait devoir composer son repas.
+  { nom: '🔴 la carte se remplit avant que le client ait choisi',
+    fichier: 'app/commander/[slug]/page.js',
+    de: "  const peutCommander = commerceAccepteCommandes && (!choisitSonParcours || intentionResto === 'emporter')",
+    vers: '  const peutCommander = commerceAccepteCommandes' },
+
+  // ⚠️ ET LE CHOIX NE S IMPOSE PAS HORS DU RESTAURANT : chez un salon, acheter
+  // son shampoing en prenant son rendez-vous est le geste le plus naturel.
+  { nom: '⚠️ le choix s impose aussi aux salons',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire(commercant)',
+    vers: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv' },
+
+  // ⚠️ CE QUI DECRIT LE COMMERCE NE SUIT PAS L INTENTION DU CLIENT.
+  { nom: '🔴 on reclame l activation de la commande a qui l a activee',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '                {!commerceAccepteCommandes && !vitrine && (',
+    vers: '                {!peutCommander && !vitrine && (' },
+
+  { nom: '🔴 le bouton qui transporte le panier reapparait au restaurant',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '                {peutPrendreRdv && !choisitSonParcours && (() => {',
+    vers: '                {peutPrendreRdv && (() => {' },
 ]
 
 const lancer = () => {

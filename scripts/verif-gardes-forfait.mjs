@@ -337,8 +337,12 @@ for (const r of ROUTES) {
     /const verdict = verdictForfait\(commercant, 'commande'\)/.test(CREATE))
 
   const FICHE = codeSeul(lire('app/commander/[slug]/page.js'))
+  // ⚠️ LA VARIABLE A CHANGÉ DE NOM LE 09/09, et le nom dit la nuance : ce que
+  // le COMMERCE accepte, distinct de ce que le CLIENT peut faire maintenant.
+  // Chez un restaurant qui propose l'emporté ET les tables, la carte ne se
+  // remplit qu'une fois qu'il a dit ce qu'il venait faire.
   verifier('la fiche publique lit l’interrupteur',
-    /const peutCommander = canDo\(forfaitVivant, 'commande'\) && commandeAllumee\(commercant\)/.test(FICHE))
+    /const commerceAccepteCommandes = canDo\(forfaitVivant, 'commande'\) && commandeAllumee\(commercant\)/.test(FICHE))
 
   const CONFIG = codeSeul(lire('app/dashboard/ConfigDashboard.js'))
   verifier('l’interrupteur existe dans le profil',

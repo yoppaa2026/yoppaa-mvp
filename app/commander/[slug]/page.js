@@ -7,7 +7,7 @@ import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { poserIdentiteLocale } from '@/lib/identite-locale'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
-import { canDo, isVitrine, planEffectif, commandeAllumee } from '@/lib/plans'
+import { canDo, isVitrine, isAlimentaire, planEffectif, commandeAllumee } from '@/lib/plans'
 import { reservationActive, motReservation } from '@/lib/reservation-metier'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
@@ -3324,10 +3324,13 @@ export default function CommanderSlug() {
   // viennent de la vue `commercants_public` (voir MIGRATION_VUE_PUBLIQUE_ESSAI).
   const vitrine = isVitrine(commercant)
   const forfaitVivant = planEffectif(commercant)
+  // Ce que le client est venu faire, quand son restaurant propose les deux.
+  // `null` tant qu'il ne l'a pas dit : la carte est alors consultable.
+  const [intentionResto, setIntentionResto] = useState(null)
   // ⚠️ ET L'INTERRUPTEUR DU COMMERÇANT (09/09). Le forfait dit ce qu'il a le
   // droit de faire, pas ce qu'il veut faire : un restaurant sans plats à
   // emporter éteint sa commande en ligne comme il éteint sa livraison.
-  const peutCommander = canDo(forfaitVivant, 'commande') && commandeAllumee(commercant)
+  const commerceAccepteCommandes = canDo(forfaitVivant, 'commande') && commandeAllumee(commercant)
   // Module RDV natif : si vitrine FULL avec rdv_actif=true, on propose le bouton "Prendre RDV"
   // 🔴 ET LE RESTAURANT PASSE PAR LE MÊME BOUTON (09/09). Cette ligne testait
   // la vitrine, donc un alimentaire n'avait aucun chemin vers sa réservation,
@@ -3338,6 +3341,24 @@ export default function CommanderSlug() {
   // bouton, elle ne la remplace pas. Un restaurant a une carte à emporter ET
   // des tables ; lui faire choisir serait le renvoyer chez le concurrent.
   const peutPrendreRdv = reservationActive(commercant)
+
+  // ═══ EMPORTER OU S'ASSEOIR : DEUX PARCOURS, PAS UN MÉLANGE (Alex, 09/09) ══
+  //
+  // 🔴 CE QU'ALEX A VU AVANT MOI. Chez un restaurant qui fait les deux, le
+  // client qui vient juste réserver une table arrivait sur une carte couverte
+  // de boutons « ajouter » : il croyait devoir composer son repas pour obtenir
+  // une table, et celui qui abandonnait là ne le disait à personne.
+  //
+  // ⚠️ ET CE N'EST VRAI QUE DE L'ALIMENTAIRE. Chez un salon, acheter son
+  // shampoing EN PRENANT son rendez-vous est le geste le plus naturel qui
+  // soit : le panier voyage avec le client, et c'est voulu. Au restaurant, on
+  // emporte OU on s'assoit ; réserver une table ne veut pas dire payer ses
+  // plats à l'avance.
+  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire(commercant)
+  // `peutCommander` garde son nom et son sens pour tout l'écran : « le client
+  // peut mettre des choses au panier MAINTENANT ». Tant qu'il n'a pas dit ce
+  // qu'il vient faire, la carte se lit, elle ne se remplit pas.
+  const peutCommander = commerceAccepteCommandes && (!choisitSonParcours || intentionResto === 'emporter')
 
   // ═══════════════════════════════════════════════════════════════════════
   // 🔴 CET EFFET EST ICI, ET SA PLACE EST LE CORRECTIF (29/08).
@@ -4163,7 +4184,53 @@ export default function CommanderSlug() {
                 )}
 
                 {/* Bouton Prendre RDV - module natif Yoppaa pour vitrine FULL avec rdv_actif */}
-                {peutPrendreRdv && (() => {
+                {/* ═══ QUE VENEZ-VOUS FAIRE ? (Alex, 09/09) ═══════════════════
+                    Ce choix n'apparaît QUE lorsqu'il y en a un : un restaurant
+                    qui fait les deux. Partout ailleurs, la fiche ne change pas
+                    d'un pixel.
+                    ⚠️ ET IL DISPARAÎT DÈS QU'IL EST FAIT : une question déjà
+                    répondue qui reste à l'écran donne l'impression de n'avoir
+                    pas été entendue. */}
+                {choisitSonParcours && intentionResto === null && (
+                  <div style={{ margin: '0 12px 12px', padding: '14px 16px', borderRadius: 16, background: '#fff', border: `1.5px solid ${T.pale}` }}>
+                    <p style={{ fontSize: '0.95rem', fontWeight: 800, color: T.deep, margin: '0 0 3px' }}>Que veux-tu faire&nbsp;?</p>
+                    <p style={{ fontSize: '0.78rem', color: T.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
+                      La carte est juste en dessous, tu peux la lire avant de choisir.
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <a href={`/commander/rdv/${commercant.slug}`}
+                        style={{ flex: '1 1 150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 16px', borderRadius: 12, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '0.9rem', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                          <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/>
+                        </svg>
+                        Réserver une table
+                      </a>
+                      <button onClick={() => setIntentionResto('emporter')}
+                        style={{ flex: '1 1 150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 16px', borderRadius: 12, background: '#fff', border: `1.5px solid ${T.main}`, color: T.main, fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>
+                        </svg>
+                        Commander à emporter
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Il a choisi d'emporter : on le lui rappelle, et on lui laisse
+                    la porte pour changer d'avis sans repartir de zéro. */}
+                {choisitSonParcours && intentionResto === 'emporter' && (
+                  <div style={{ margin: '0 12px 12px', padding: '10px 14px', borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 800, color: T.deep, flex: 1, minWidth: 0 }}>Tu commandes à emporter</span>
+                    <a href={`/commander/rdv/${commercant.slug}`}
+                      style={{ fontSize: '0.78rem', fontWeight: 800, color: T.main, textDecoration: 'underline' }}>
+                      Je préfère réserver une table
+                    </a>
+                  </div>
+                )}
+
+                {/* ⚠️ LE BOUTON HABITUEL S'EFFACE QUAND LE CHOIX EST POSÉ : deux
+                    invitations à réserver sur le même écran, c'est une de trop. */}
+                {peutPrendreRdv && !choisitSonParcours && (() => {
                   // Le panier PART AVEC le client vers le tunnel de rendez-vous.
                   // Avant, ce bouton était un simple lien : le client mettait
                   // son shampoing, cliquait pour réserver sa coupe, et son
@@ -4207,12 +4274,18 @@ export default function CommanderSlug() {
                 {commercant.horaires_detail && !commerceItinerant && <HorairesSection horaires={commercant.horaires_detail}/>}
 
                 {/* Mention discrete + signal Yopper si le plan/feature n'est pas active */}
-                {!peutCommander && !vitrine && (
+                {/* ⚠️ `commerceAccepteCommandes` ET NON `peutCommander` (09/09) :
+                    le second dit « le client peut remplir son panier
+                    maintenant », et il est faux tant qu'un client de restaurant
+                    n'a pas dit ce qu'il venait faire. Réclamer l'activation de
+                    la commande à un commerçant qui vient de l'activer serait le
+                    genre de message qui fait douter de tout le reste. */}
+                {!commerceAccepteCommandes && !vitrine && (
                   <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
                     Envie de commander à l&rsquo;avance&nbsp;? Demandez à <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> d&rsquo;activer Yoppaa Click &amp; Collect.
                   </div>
                 )}
-                {vitrine && !peutPrendreRdv && !peutCommander && (
+                {vitrine && !peutPrendreRdv && !commerceAccepteCommandes && (
                   <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
                     Passe directement à la boutique ou appelle <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> pour plus d&rsquo;infos. Tu peux aussi signaler que tu aimerais prendre RDV en ligne.
                   </div>
@@ -4515,7 +4588,10 @@ export default function CommanderSlug() {
                     c'est lui dire qu'on ne le connaît pas. */}
                 <SignauxYopper
                   types={enviesProposables(commercant, {
-                    peutCommander,
+                    // ⚠️ CE QUE LE COMMERCE ACCEPTE, pas ce que le client est en
+                    // train de faire : sinon on proposerait de réclamer la
+                    // commande en ligne à quelqu'un qui la propose déjà.
+                    peutCommander: commerceAccepteCommandes,
                     proposeDesInvendus: (dealsActifs || []).some(porteUneFenetre),
                   })}
                   commercant={commercant}

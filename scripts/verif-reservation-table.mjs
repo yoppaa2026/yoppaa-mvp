@@ -133,6 +133,36 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('⚠️ et renvoie les autres vers leur fiche, pas vers une erreur',
     /router\.replace\(`\/commander\/\$\{slug\}`\)/.test(FICHE_RDV))
 
+  // ── EMPORTER OU S'ASSEOIR : DEUX PARCOURS, PAS UN MÉLANGE (09/09) ───────
+  //
+  // 🔴 Chez un restaurant qui fait les deux, le client venu réserver une table
+  // arrivait sur une carte couverte de boutons « ajouter » : il croyait devoir
+  // composer son repas pour obtenir une table.
+  verifier('🔴 un restaurant qui fait les deux demande ce qu’on vient faire',
+    /const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire\(commercant\)/.test(FICHE)
+    && /Que veux-tu faire/.test(FICHE))
+  // 🔴 ET LA CARTE NE SE REMPLIT PAS TANT QU'IL N'A PAS DIT. C'est le cœur de
+  // la correction : sans ça, le choix ne serait qu'un bandeau de plus.
+  verifier('🔴 et la carte se lit sans se remplir avant le choix',
+    /const peutCommander = commerceAccepteCommandes && \(!choisitSonParcours \|\| intentionResto === 'emporter'\)/.test(FICHE))
+  // ⚠️ CE QUI DÉCRIT LE COMMERCE NE DOIT PAS SUIVRE L'INTENTION DU CLIENT :
+  // réclamer l'activation de la commande à qui vient de l'activer ferait douter
+  // de tout le reste de l'écran.
+  verifier('⚠️ le message « demandez-lui d’activer » lit le COMMERCE',
+    /\{!commerceAccepteCommandes && !vitrine && \(/.test(FICHE))
+  verifier('⚠️ et le signal Yopper aussi',
+    /peutCommander: commerceAccepteCommandes,/.test(FICHE))
+  // ⚠️ CHEZ UN SALON, RIEN NE CHANGE : le panier voyage avec le client vers son
+  // rendez-vous, et c'est le geste le plus naturel qui soit.
+  verifier('⚠️ le bouton qui transporte le panier reste, hors restaurant',
+    /\{peutPrendreRdv && !choisitSonParcours && \(\(\) => \{/.test(FICHE)
+    && /deposerPanierPourRdv\(commercant\.slug, panier\)/.test(FICHE))
+  // 🔴 ET LE CHOIX DISPARAIT DES QU'IL EST FAIT : une question déjà répondue
+  // qui reste affichée donne l'impression de n'avoir pas été entendue.
+  verifier('🔴 le choix s’efface une fois posé',
+    /\{choisitSonParcours && intentionResto === null && \(/.test(FICHE)
+    && /Je préfère réserver une table/.test(FICHE))
+
   verifier('🔴 la fiche du restaurant mène à sa réservation',
     /const peutPrendreRdv = reservationActive\(commercant\)/.test(FICHE))
   verifier('et le bouton porte le mot du métier',

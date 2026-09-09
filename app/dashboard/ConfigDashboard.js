@@ -37,6 +37,7 @@ import { classerProduitsParCategorie, produitParType } from '@/lib/produits-bout
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation, palierNettoyes } from '@/lib/cours-collectifs'
+import { enModeInventaire, formatsSansQuantite, tablesTotales, couvertsTotaux } from '@/lib/inventaire-salle'
 import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ⚠️ Trois fonctions de moins depuis le 18/08, et le lieu avec elles : cet écran
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
@@ -8056,7 +8057,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
-  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [] }
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [], quantite: '' }
   const [form, setForm] = useState(initialForm)
   // Propositions IA pour la description de la prestation (surface 'prestation')
   const [propsIa, setPropsIa] = useState([])
@@ -8147,6 +8148,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       duree_paliers: Array.isArray(p.duree_paliers)
         ? p.duree_paliers.map(x => ({ des: String(x?.des ?? ''), minutes: String(x?.minutes ?? '') }))
         : [],
+      quantite: p.quantite != null ? String(p.quantite) : '',
     })
     setEditId(p.id)
     // Précharge les praticiens autorisés depuis la junction existante
@@ -8204,6 +8206,10 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
         const propres = palierNettoyes(form.duree_paliers)
         return propres.length > 0 ? propres : null
       })(),
+      // ⚠️ VIDE VAUT NULL, PAS ZÉRO, comme les bornes. Zéro table n'est pas
+      // « pas d'inventaire », c'est un format qui n'existe pas, et la contrainte
+      // de base le refuse.
+      quantite: estTable && form.par_couverts && form.quantite !== '' ? Number(form.quantite) : null,
     }
     setSaving(true)
     // INSERT/UPDATE prestation
@@ -8285,6 +8291,40 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
             <p style={{ fontSize: 11.5, color: '#92400E', lineHeight: 1.5 }}>
               {muettes.map(p => p.nom).join(', ')} : tes {praticiens.length} praticiens sont donc tous
               proposés au client. Ouvre {muettes.length > 1 ? 'chacune' : 'la'} et coche qui {muettes.length > 1 ? 'les' : 'la'} pratique.
+            </p>
+          </div>
+        )
+      })()}
+
+      {/* 🔴 LE MODE DE CALCUL SE DIT (lot 2a). Deux façons de compter une salle
+          coexistent le temps que le restaurateur encode son inventaire, et un
+          mode implicite est exactement ce qui produit deux réponses
+          contradictoires selon l'écran qui pose la question. On nomme celui qui
+          s'applique, et ce qu'il reste à faire pour changer. */}
+      {estTable && prestations.some(p => p.par_couverts === true && p.actif !== false) && (() => {
+        const tables = prestations.filter(p => p.par_couverts === true && p.actif !== false)
+        const enInventaire = enModeInventaire(tables)
+        const manquent = formatsSansQuantite(tables)
+        return enInventaire ? (
+          <div style={{ background: '#ECFDF5', border: '1px solid #10B981', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+            <p style={{ fontSize: 12.5, fontWeight: 800, color: '#065F46', marginBottom: 3 }}>
+              Ta salle : {tablesTotales(tables)} tables, {couvertsTotaux(tables)} couverts
+            </p>
+            <p style={{ fontSize: 11.5, color: '#047857', lineHeight: 1.5 }}>
+              Yoppaa attribue la plus petite table qui convient et garde les grandes
+              pour les grands groupes. Un groupe ne passe que si une vraie table est libre.
+            </p>
+          </div>
+        ) : (
+          <div style={{ background: '#FFFBEB', border: '1px solid #F59E0B', borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+            <p style={{ fontSize: 12.5, fontWeight: 800, color: '#92400E', marginBottom: 3 }}>
+              Ta salle se compte en couverts
+            </p>
+            <p style={{ fontSize: 11.5, color: '#92400E', lineHeight: 1.5 }}>
+              Dis combien tu as de tables de chaque format et Yoppaa comptera ta salle
+              table par table. Sans ça, un groupe de six passe tant qu&rsquo;il reste six
+              places, même éparpillées.
+              {manquent.length > 0 && <> Il manque le nombre sur <strong>{manquent.join(', ')}</strong>.</>}
             </p>
           </div>
         )
@@ -8460,6 +8500,22 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                   <Input type="number" min="1" max="100" value={form.couverts_max}
                     onChange={e => setForm({ ...form, couverts_max: e.target.value })}/>
                 </div>
+              </div>
+            )}
+            {/* 🔴 COMBIEN DE TABLES DE CE FORMAT (lot 2a). C'est ce qui fait
+                passer la salle d'une jauge en couverts à un vrai inventaire :
+                un groupe de six ne passe plus parce qu'il reste six places
+                éparpillées, mais parce qu'une table de six est libre. */}
+            {form.par_couverts && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Combien en as-tu ?</label>
+                <Input type="number" min="1" max="500" value={form.quantite}
+                  onChange={e => setForm({ ...form, quantite: e.target.value })} placeholder="6"/>
+                <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>
+                  Le nombre de tables de ce format dans ta salle. Tant qu&rsquo;une seule
+                  de tes tables n&rsquo;a pas ce nombre, Yoppaa continue de compter ta
+                  salle en couverts.
+                </p>
               </div>
             )}
             {/* 🔴 LA DURÉE SUIT LE GROUPE (lot 1). Une durée unique fait mentir

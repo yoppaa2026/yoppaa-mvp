@@ -698,6 +698,111 @@ egal('la réservation d’un restaurant s’atteint quand même',
     && !/complet/.test(texteResumeSeance(table4et2, 6)))
 
   // ═══════════════════════════════════════════════════════════════════════
+  // LOT 2a : COMPTER LA SALLE EN TABLES, PAS EN COUVERTS
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // La salle du Bistrologue, telle qu'il la décrit : six tables de quatre, deux
+  // de deux, deux de six. Quarante couverts, dix tables.
+  const {
+    enModeInventaire, formatsSansQuantite, formatsPourGroupe, occupationParFormat,
+    formatLibrePour, couvertsTotaux, tablesTotales, quantiteDe,
+  } = await import('../lib/inventaire-salle.js')
+  const { timeToMinutes } = await import('../lib/rdv-slots.js')
+
+  const T2 = { id: 't2', nom: 'Table de 2', par_couverts: true, actif: true, couverts_min: 1, couverts_max: 2, quantite: 2 }
+  const T4 = { id: 't4', nom: 'Table de 4', par_couverts: true, actif: true, couverts_min: 1, couverts_max: 4, quantite: 6 }
+  const T6 = { id: 't6', nom: 'Table de 6', par_couverts: true, actif: true, couverts_min: 1, couverts_max: 6, quantite: 2 }
+  const SALLE = [T4, T2, T6]   // ⚠️ volontairement dans le désordre
+
+  verifier('🔴 la salle du Bistrologue fait 40 couverts sur 10 tables',
+    couvertsTotaux(SALLE) === 40 && tablesTotales(SALLE) === 10,
+    `${couvertsTotaux(SALLE)} couverts / ${tablesTotales(SALLE)} tables`)
+
+  // 🔴 LA PLUS PETITE TABLE QUI CONVIENT, la règle qui garde les grandes tables
+  // pour les grands groupes. Sans elle, un couple prend la table de six à 19h et
+  // le groupe de six s'entend dire non à 20h.
+  verifier('🔴 un couple prend la table de deux, pas celle de six',
+    formatsPourGroupe(SALLE, 2)[0].id === 't2')
+  verifier('🔴 trois personnes prennent la table de quatre',
+    formatsPourGroupe(SALLE, 3)[0].id === 't4')
+  verifier('🔴 six personnes prennent la table de six',
+    formatsPourGroupe(SALLE, 6)[0].id === 't6')
+  verifier('⚠️ et l’ordre ne dépend pas de celui de la base',
+    JSON.stringify(formatsPourGroupe(SALLE, 2).map(f => f.id))
+    === JSON.stringify(formatsPourGroupe([T6, T4, T2], 2).map(f => f.id)),
+    formatsPourGroupe(SALLE, 2).map(f => f.id).join(','))
+  verifier('⚠️ une table trop petite n’est jamais proposée',
+    formatsPourGroupe(SALLE, 5).every(f => f.couverts_max >= 5))
+  verifier('🔴 un groupe de dix ne trouve aucune table seule',
+    formatsPourGroupe(SALLE, 10).length === 0)
+
+  // L'occupation compte des TABLES : six personnes sur une table de six, c'est
+  // UN exemplaire immobilisé, pas six.
+  const resas = [
+    { prestation_id: 't6', heure_debut: '19:30', heure_fin: '22:00', couverts: 6 },
+    { prestation_id: 't4', heure_debut: '20:00', heure_fin: '22:00', couverts: 4 },
+  ]
+  const pris = occupationParFormat(resas, timeToMinutes('20:30'), timeToMinutes('22:30'))
+  verifier('🔴 une réservation prend UNE table, quel que soit le nombre de convives',
+    pris.get('t6') === 1 && pris.get('t4') === 1)
+  verifier('⚠️ on compte les chevauchements, pas les heures égales',
+    occupationParFormat(resas, timeToMinutes('22:00'), timeToMinutes('23:30')).size === 0)
+
+  // Le choix complet, sur une salle qui se remplit.
+  const deuxSix = [
+    { prestation_id: 't6', heure_debut: '19:30', heure_fin: '22:00' },
+    { prestation_id: 't6', heure_debut: '19:45', heure_fin: '22:15' },
+  ]
+  const choix = formatLibrePour({ formats: SALLE, couverts: 5, reservations: deuxSix, debutMin: timeToMinutes('20:00'), finMin: timeToMinutes('22:30') })
+  verifier('🔴 les deux tables de six prises, un groupe de cinq n’a plus rien',
+    choix.format === null && choix.raison === 'complet', JSON.stringify(choix.raison))
+  const choix4 = formatLibrePour({ formats: SALLE, couverts: 4, reservations: deuxSix, debutMin: timeToMinutes('20:00'), finMin: timeToMinutes('22:30') })
+  verifier('⚠️ mais un groupe de quatre a toujours ses six tables de quatre',
+    choix4.format?.id === 't4')
+
+  // 🔴 « AUCUNE TABLE À CETTE TAILLE » N'EST PAS « COMPLET », et l'écran doit
+  // pouvoir le dire autrement : c'est le lot 3 qui répondra par le couplage.
+  const dix = formatLibrePour({ formats: SALLE, couverts: 10, reservations: [], debutMin: 0, finMin: 90 })
+  verifier('🔴 un groupe de dix n’est pas « complet », il est trop grand',
+    dix.format === null && dix.raison === 'aucune_table_a_cette_taille', dix.raison)
+
+  // ─── LE MODE, ET IL SE DIT ───────────────────────────────────────────────
+  //
+  // ⚠️ TOUS LES FORMATS, PAS AU MOINS UN. Un inventaire à moitié rempli
+  // compterait les uns en tables et les autres en couverts, dans la même salle
+  // et pour le même service.
+  verifier('🔴 le mode inventaire demande TOUS les formats renseignés',
+    enModeInventaire(SALLE) === true
+    && enModeInventaire([T4, { ...T2, quantite: null }]) === false)
+  verifier('⚠️ et il nomme ce qui manque au commerçant',
+    JSON.stringify(formatsSansQuantite([T4, { ...T2, quantite: null }])) === JSON.stringify(['Table de 2']))
+  verifier('⚠️ un format désactivé ne bloque pas la bascule',
+    enModeInventaire([T4, { ...T2, quantite: null, actif: false }]) === true)
+  verifier('⚠️ un commerce sans aucune table n’est pas « en inventaire »',
+    enModeInventaire([]) === false && enModeInventaire([{ par_couverts: false, actif: true }]) === false)
+  verifier('⚠️ zéro exemplaire ne compte pas comme une quantité',
+    quantiteDe({ quantite: 0 }) === null && quantiteDe({ quantite: 3 }) === 3)
+
+  // Le branchement serveur : le mode se décide sur la SALLE, et le calcul en
+  // couverts reste intact tant que l'inventaire n'est pas complet.
+  const CREA = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur bascule en tables quand l’inventaire est complet',
+    /if \(enModeInventaire\(formatsTable\)\) \{/.test(CREA))
+  verifier('🔴 et il compte les exemplaires du format demandé',
+    /occupationParFormat\(autour \|\| \[\], debutMin, finMin\)\.get\(String\(prestation\.id\)\)/.test(CREA))
+  // ⚠️ COMPTER NE SUFFIT PAS, IL FAUT REFUSER. Mesuré par mutation : remplacer
+  // le test par `false` laissait la garde ci-dessus verte, puisque le calcul
+  // restait écrit. Une valeur calculée que personne ne lit ne protège personne.
+  verifier('🔴 et il REFUSE quand tous les exemplaires sont pris',
+    /if \(total !== null && pris >= total\) \{[\s\S]{0,120}?code: 'salle_complete'/.test(CREA))
+  verifier('⚠️ le calcul en couverts survit dans la branche « sinon »',
+    /\} else \{[\s\S]{0,400}?occupes \+ couvertsRetenus > capacite/.test(CREA))
+  verifier('⚠️ et il charge les colonnes que le mode réclame',
+    /\.select\('id, nom, actif, par_couverts, couverts_min, couverts_max, quantite'\)/.test(CREA))
+  verifier('⚠️ la liste des réservations porte son format, sinon on ne peut rien compter',
+    /\.select\('prestation_id, heure_debut, heure_fin, couverts'\)/.test(CREA))
+
+  // ═══════════════════════════════════════════════════════════════════════
   // LOT 1 : LA DURÉE SUIT LA TAILLE DU GROUPE
   // ═══════════════════════════════════════════════════════════════════════
   const { dureeSelonCouverts, palierNettoyes } = await import('../lib/cours-collectifs.js')

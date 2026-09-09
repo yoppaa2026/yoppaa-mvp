@@ -12,7 +12,8 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
 import { euros } from '@/lib/montants'
-import { capacitePrestation, premierePlaceLibre } from '@/lib/cours-collectifs'
+import { capacitePrestation, premierePlaceLibre, estParCouverts, bornesCouverts, couvertsValides } from '@/lib/cours-collectifs'
+import { motsReservation } from '@/lib/reservation-metier'
 import { creneauAcceptable, creneauxDuJour } from '@/lib/deplacement-rdv'
 // ⚠️ LES RÈGLES DE L'ABONNEMENT NE SONT PAS RÉÉCRITES ICI, elles sont APPELÉES.
 // Le solde, le plafond hebdomadaire, la fenêtre de validité et l'ordre de
@@ -58,7 +59,15 @@ export default function ModalNouveauRdv({
   dateInit, heureInit,
   onClose, onCreated,
 }) {
+  // 🔴 LE TÉLÉPHONE EST LE PREMIER CANAL D'UN RESTAURANT, ET CETTE MODALE
+  // COMPTAIT CHAQUE APPEL POUR UNE PERSONNE. Une table de six prise de vive
+  // voix entrait en base avec `couverts` à sa valeur par défaut : la jauge de
+  // la salle voyait un couvert au lieu de six, et le service se remplissait de
+  // réservations que la salle ne pouvait pas tenir. Ce n'est pas un libellé,
+  // c'est la donnée qui fait tenir la salle.
+  const mots = motsReservation(commercant)
   const [prestationId, setPrestationId] = useState('')
+  const [couverts, setCouverts] = useState('')
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
   const [tel, setTel] = useState('')
@@ -214,6 +223,21 @@ export default function ModalNouveauRdv({
       // il dit maintenant « ton commerce est fermé ce jour-là », ce qui est la
       // vraie raison.
       const capacite = capacitePrestation(presta)
+
+      // ⚠️ LE NOMBRE SE VALIDE AVANT D'ÊTRE ÉCRIT, avec la même fonction que le
+      // tunnel client : `couvertsValides` rend `null` hors des bornes. Accepter
+      // « 12 » sur une table de quatre remplirait la salle d'un service qui ne
+      // peut pas se tenir, et personne ne s'en apercevrait avant le coup de feu.
+      const couvertsRetenus = estParCouverts(presta)
+        ? couvertsValides(presta, couverts === '' ? bornesCouverts(presta).min : couverts)
+        : 1
+      if (couvertsRetenus === null) {
+        const { min, max } = bornesCouverts(presta)
+        setError(`Cette table accueille de ${min} à ${max} personnes. Corrige le nombre.`)
+        setSubmitting(false)
+        return
+      }
+
       const verdict = creneauAcceptable({
         dateStr,
         heureDebut: heureInit,
@@ -343,6 +367,10 @@ export default function ModalNouveauRdv({
         // 1, bloquait le deuxième inscrit dès qu'un praticien était nommé.
         place_no: placeParDate[dateStr],
         capacite_creneau: capacite,
+        // ⚠️ APRÈS le reste, jamais avant : une clé écrite plus haut serait
+        // écrasée par un `...champs` qui suit, et le couvert retomberait à 1
+        // sans un mot. Même précaution que dans `rdv-creation-server`.
+        couverts: couvertsRetenus,
       }
       // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION, ici aussi. Un rendez-vous pris
       // au comptoir par le commerçant doit dire où aller comme les autres.
@@ -424,7 +452,7 @@ export default function ModalNouveauRdv({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: '0.6rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', margin: 0, marginBottom: 4, opacity: 0.85 }}>
-                Nouveau RDV manuel
+                {mots.manuelTitre}
               </p>
               <p style={{ fontSize: '1.05rem', fontWeight: 900, color: '#fff', margin: 0, letterSpacing: '-0.3px', lineHeight: 1.2 }}>
                 {dateLabel}<br/>
@@ -442,9 +470,9 @@ export default function ModalNouveauRdv({
         <div style={{ padding: '1.125rem 1.125rem 0' }}>
           {/* Prestation */}
           <div style={{ marginBottom: 12 }}>
-            <label htmlFor="mn-rdv-presta" style={labelSt}>Prestation *</label>
+            <label htmlFor="mn-rdv-presta" style={labelSt}>{mots.prestationLigne} *</label>
             <select id="mn-rdv-presta" value={prestationId} onChange={(e) => setPrestationId(e.target.value)} style={inputSt}>
-              <option value="">— Choisir une prestation —</option>
+              <option value="">— Choisir {mots.prestationUne} —</option>
               {(prestations || []).map(p => {
                 const prix = p.prix != null ? `${Number(p.prix).toFixed(0)}€` : ''
                 return (
@@ -456,10 +484,31 @@ export default function ModalNouveauRdv({
             </select>
             {presta && heureFin && (
               <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, marginTop: 5 }}>
-                RDV de {dureeMin}min : {heureInit} → {heureFin}{prixEstime != null ? ` · ${prixEstime.toFixed(0)}€` : ''}
+                {mots.numeroLabel} de {dureeMin}min : {heureInit} → {heureFin}{prixEstime != null ? ` · ${prixEstime.toFixed(0)}€` : ''}
               </p>
             )}
           </div>
+
+          {/* 🔴 COMBIEN DE PERSONNES, ET IL N'Y AVAIT AUCUN CHAMP POUR LE DIRE.
+              Le téléphone est le premier canal d'un restaurant : une table de
+              six prise de vive voix entrait à un seul couvert, et la salle se
+              croyait vide alors qu'elle était pleine.
+              ⚠️ N'APPARAÎT QUE SUR UNE PRESTATION DÉCLARÉE « TABLE ». Un
+              rendez-vous de coiffure n'a pas de couverts, et lui poser la
+              question serait aussi faux que de ne pas la poser au restaurant. */}
+          {presta && estParCouverts(presta) && (
+            <div style={{ marginBottom: 12 }}>
+              <label htmlFor="mn-rdv-couverts" style={labelSt}>Combien de personnes ? *</label>
+              <input id="mn-rdv-couverts" type="number" inputMode="numeric"
+                min={bornesCouverts(presta).min} max={bornesCouverts(presta).max}
+                value={couverts} onChange={(e) => setCouverts(e.target.value)}
+                placeholder={String(bornesCouverts(presta).min)} style={inputSt}/>
+              <p style={{ fontSize: '0.72rem', color: T.muted, marginTop: 5, lineHeight: 1.45 }}>
+                De {bornesCouverts(presta).min} à {bornesCouverts(presta).max} personnes pour cette table.
+                C&rsquo;est ce nombre qui remplit ta salle.
+              </p>
+            </div>
+          )}
 
           {/* ─── L'ABONNÉE, S'IL Y EN A UNE ────────────────────────────────
               ⚠️ CE BLOC N'APPARAÎT QUE S'IL A QUELQUE CHOSE À DIRE : un cours
@@ -590,7 +639,7 @@ export default function ModalNouveauRdv({
             <p style={{ fontSize: '0.68rem', color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
               {email.trim()
                 ? 'Ton client recevra sa confirmation, son rappel de la veille et son fichier calendrier.'
-                : 'Sans email, pas de confirmation ni de rappel : le rendez-vous ne vit que dans ton agenda. C’est parfait pour quelqu’un qui te réserve par téléphone.'}
+                : `Sans email, pas de confirmation ni de rappel : ${mots.laReservationDe} ne vit que dans ton agenda. C’est parfait pour quelqu’un qui te réserve par téléphone.`}
             </p>
           </div>
 
@@ -623,7 +672,7 @@ export default function ModalNouveauRdv({
               fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif',
               boxShadow: (!formValide || submitting) ? 'none' : `0 4px 16px ${T.main}55`,
             }}>
-            {submitting ? 'Enregistrement…' : 'Confirmer le RDV ✓'}
+            {submitting ? 'Enregistrement…' : `${mots.manuelConfirmer} ✓`}
           </button>
         </div>
       </div>

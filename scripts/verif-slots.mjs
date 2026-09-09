@@ -443,6 +443,9 @@ egal('et aucune de ses deux écritures ne le recopie',
 // Ça doit lui prendre 1 seconde. » C'est le même module qui répond aux deux, et
 // il est EXÉCUTÉ ici plutôt que cherché dans le JSX.
 const srcAgenda = sansCommentaires(readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
+// Le dictionnaire du métier : les écrans portent la clé, lui porte le texte.
+// Une garde qui ne regarderait que l'écran laisserait vider la moitié vitrine.
+const srcMetier = sansCommentaires(readFileSync(new URL('../lib/reservation-metier.js', import.meta.url), 'utf8'))
 const { etatPaiementRdv: etatPaiementAgenda } = await import('../lib/rdv-paiement.js')
 verifier('l’agenda distingue une abonnée d’une séance à l’unité',
   etatPaiementAgenda({ abonnement_id: 'abo-1', prix_estime: 0 }).cle === 'abonnement'
@@ -826,8 +829,13 @@ verifier('et elle rafraîchit le commerçant pour que la bannière disparaisse',
 // personne. Un cours de douze places où l'on ne peut en inscrire qu'une seule
 // ne sert à rien : c'est tout le module qui tombait.
 
+// ⚠️ LE LIBELLÉ A DÉMÉNAGÉ DANS LE MODULE DU MÉTIER (09/09) : un restaurant lit
+// « Ajouter des couverts » là où un salon lit « Inscrire quelqu'un ». La garde
+// vise donc la CLÉ dans l'écran, et le texte du salon dans le module : les deux
+// bouts, sinon on laisserait passer un dictionnaire vidé de sa moitié vitrine.
 verifier('le panneau des inscrits sait ajouter quelqu’un',
-  /Inscrire quelqu&rsquo;un/.test(srcAgenda))
+  /\{mots\.agendaInscrire\}/.test(srcAgenda)
+  && /agendaInscrire: 'Inscrire quelqu’un',/.test(srcMetier))
 // Le bouton appelle le MÊME chemin que la création depuis une case libre : une
 // seconde façon de créer un rendez-vous finirait par diverger de la première.
 verifier('et il passe par la création de rendez-vous existante',
@@ -847,17 +855,24 @@ verifier('et le bouton ne s’affiche pas sans lui',
 // ligne du correctif : la même comparaison existe vingt lignes plus haut, dans
 // l'en-tête du panneau qui affiche « · complet ». Mesuré par mutation, il était
 // muet. C'est le piège du test qui CHERCHE au lieu de situer.
+// 🔴 ET LA COMPARAISON SE FAIT SUR L'OCCUPATION, PAS SUR LE NOMBRE DE LIGNES
+// (09/09) : `inscrits.length` faisait peser une table de quatre pour un, et
+// comptait les annulés comme occupants. Le test lui-même a changé de nature,
+// la garde le suit.
 verifier('un cours complet n’offre pas le bouton mais une explication',
-  /jourDate && \(\s*seanceOuverte\.inscrits\.length >= seanceOuverte\.capacite \?/.test(srcAgenda))
+  /const occupation = resumeSeance\(seanceOuverte\.inscrits\)\.couverts/.test(srcAgenda)
+  && /return occupation >= seanceOuverte\.capacite \?/.test(srcAgenda))
 verifier('et l’explication dit comment libérer une place',
-  /Libère une place en annulant une inscription/.test(srcAgenda))
+  /\{mots\.agendaComplet\}/.test(srcAgenda)
+  && /Libère une place en annulant une inscription/.test(srcMetier))
 
 // Le nombre de places libres est annoncé : c'est ce qui dit à la commerçante
 // combien de personnes elle peut encore prendre au téléphone.
 // ⚠️ Le `} place` fait tout le travail : sans lui, le test tombait sur les deux
 // ternaires de pluriel du même bouton et restait vert.
 verifier('le bouton annonce les places restantes',
-  /seanceOuverte\.capacite - seanceOuverte\.inscrits\.length\} place/.test(srcAgenda))
+  /const libres = Math\.max\(0, seanceOuverte\.capacite - occupation\)/.test(srcAgenda)
+  && /\{libres\} \{libres > 1 \? mots\.agendaOccupes : mots\.agendaOccupe\} libre/.test(srcAgenda))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DEMANDER AVANT D'AGIR, PUIS CONFIRMER CE QUI A ÉTÉ FAIT
@@ -2806,7 +2821,8 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('et le cas « personne de coché » reste distinct',
     /Tes \{praticiens\.length\} praticiens sont proposés/.test(srcConfig))
   verifier('la capacité d’un cours se lit dans la liste',
-    /Number\(p\.capacite\) > 1 && <span>Jusqu&rsquo;à <strong[^>]*>\{p\.capacite\}<\/strong> places/.test(srcConfig))
+    /Number\(p\.capacite\) > 1 && <span>Jusqu&rsquo;à <strong[^>]*>\{p\.capacite\}<\/strong> \{mots\.agendaOccupes\}/.test(srcConfig)
+    && /agendaOccupes: 'inscrits',/.test(srcMetier))
 
   // ── 🔴 LA REQUÊTE QUI DESCENDAIT TOUT LE PARC ───────────────────────────
   // `rdv_prestation_praticiens` ne porte pas de `commercant_id` : sans `in`,

@@ -8290,7 +8290,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                     <span><strong style={{ color: T.deep }}>{p.duree_minutes} min</strong></span>
                     <span><strong style={{ color: T.main }}>{prixLabel}</strong></span>
                     {p.acompte_pourcent > 0 && <span>Acompte <strong style={{ color: T.ink }}>{p.acompte_pourcent}%</strong></span>}
-                    {Number(p.capacite) > 1 && <span>Jusqu&rsquo;à <strong style={{ color: T.ink }}>{p.capacite}</strong> places</span>}
+                    {Number(p.capacite) > 1 && <span>Jusqu&rsquo;à <strong style={{ color: T.ink }}>{p.capacite}</strong> {mots.agendaOccupes}</span>}
                     {!p.actif && <span style={{ color: '#DC2626', fontWeight: 700 }}>Inactif</span>}
                   </div>
 
@@ -8373,7 +8373,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                   onFermer={() => setPropsIa([])} />
               </div>
             ) : (
-              <p style={{ fontSize: 10, color: T.muted, margin: '0 0 10px' }}>Astuce : note ce que comprend la prestation en vrac (shampoing, massage du cuir chevelu…) puis clique sur Rédiger avec l’IA.</p>
+              <p style={{ fontSize: 10, color: T.muted, margin: '0 0 10px' }}>{mots.astuceIA}</p>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
@@ -8475,7 +8475,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prix (€)</label>
               <Input type="number" min="0" step="0.50" value={form.prix} onChange={e => setForm({ ...form, prix: e.target.value })} placeholder="35.00"/>
               <p style={{ fontSize: 11, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
-                Laisse vide si le tarif se fixe de vive voix : ta prestation s&rsquo;affichera « Prix sur demande ».
+                {mots.prixSurDemande}
               </p>
             </div>
             {/* Junction prestation ↔ praticiens : optionnel, aucun coché = tous éligibles */}
@@ -8515,7 +8515,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
             )}
 
             <div style={{ marginBottom: 16 }}>
-              <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Prestation active (visible côté client)"/>
+              <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label={mots.prestationActive}/>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setShowForm(false)}
@@ -9383,6 +9383,9 @@ function TabRdvPraticiens({ commercantId, commercant, toast }) {
   // n'ouvrent pas les mêmes services, et c'est exactement ce que ce réglage
   // sait déjà faire pour deux coiffeuses.
   const mots = motsReservation(commercant)
+  // La même règle que pour les tables : c'est une salle chez qui a droit à la
+  // réservation de table, un praticien partout ailleurs.
+  const estSalle = isAlimentaire(commercant) && peutReserver(commercant)
   const [praticiens, setPraticiens] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -9575,12 +9578,18 @@ function TabRdvPraticiens({ commercantId, commercant, toast }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            {/* 🔴 UNE SALLE N'A PAS DE NOM DE FAMILLE. Le formulaire demandait
+                « Prénom » et « Nom », avec « Sophie » et « Martin » en exemple :
+                le restaurateur devait taper « Terrasse » dans une case marquée
+                Prénom, et se demander ce qu'on attendait dans l'autre.
+                ⚠️ LA COLONNE `nom` RESTE, on cache seulement le champ : la
+                retirer casserait les praticiens du parc, qui s'en servent. */}
+            <div style={{ display: 'grid', gridTemplateColumns: estSalle ? '1fr' : '1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prénom *</label>
-                <Input value={form.prenom} onChange={e => setForm({ ...form, prenom: e.target.value })} placeholder="Sophie"/>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>{estSalle ? 'Nom de la salle *' : 'Prénom *'}</label>
+                <Input value={form.prenom} onChange={e => setForm({ ...form, prenom: e.target.value })} placeholder={estSalle ? 'Terrasse' : 'Sophie'}/>
               </div>
-              <div>
+              <div style={{ display: estSalle ? 'none' : 'block' }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Nom</label>
                 <Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder="Martin"/>
               </div>
@@ -10217,7 +10226,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
           {[
             { key: 'all', label: 'Tous' },
-            { key: 'tous', label: 'Communs (tous prat.)' },
+            { key: 'tous', label: mots.servicesCommuns },
             ...praticiens.map(p => ({ key: p.id, label: `${p.prenom}${p.nom ? ' ' + p.nom[0] : ''}.`, color: p.couleur_hex })),
           ].map(opt => (
             <button key={opt.key} onClick={() => setPraticienFiltre(opt.key)}
@@ -10254,7 +10263,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '10px 12px', marginBottom: 14 }}>
           <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#78350F', lineHeight: 1.5 }}>
             Ton commerce est déclaré <strong>fermé le {jourActif}</strong> dans tes horaires (Paramètres → Profil).
-            Les créneaux créés ici resteront invisibles pour tes clients tant que ce jour n&rsquo;est pas ouvert.
+            {mots.servicesInvisibles}
           </p>
         </div>
       )}
@@ -10305,8 +10314,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
           Jusqu’à quand tes clients peuvent réserver
         </p>
         <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: '0 0 8px' }}>
-          Au-delà, l’agenda ne propose plus rien. Un carnet de dix séances par semaine
-          demande au moins trois mois.
+          {mots.horizonAide}
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {HORIZONS_RDV.map(h => (
@@ -10391,7 +10399,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>{mots.creneauAucun}</p>
           <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
-            Ajoute un créneau pour ouvrir tes RDV ce jour-là. Tu peux créer des créneaux globaux (tous les praticiens) ou spécifiques à un praticien.
+            {mots.servicesVideAide}
           </p>
         </div>
       ) : (
@@ -10679,7 +10687,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                         {/* La capacité est ce qui distingue un cours d'un
                             rendez-vous : elle se dit, elle ne se devine pas. */}
                         {cours && (
-                          <span style={{ fontWeight: 600, opacity: 0.75 }}> · {p.capacite} places</span>
+                          <span style={{ fontWeight: 600, opacity: 0.75 }}> · {p.capacite} {mots.agendaOccupes}</span>
                         )}
                       </button>
                     )
@@ -10721,7 +10729,8 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
 // Une fermeture bloque une plage de dates pour tous les praticiens (praticien_id = null)
 // ou pour un praticien spécifique. Impact : l'app Yopper ne propose plus ces jours à
 // la réservation, et l'AgendaRdv commerçant grise les cellules concernées.
-function TabRdvFermetures({ commercantId, toast }) {
+function TabRdvFermetures({ commercantId, commercant, toast }) {
+  const mots = motsReservation(commercant)
   const [fermetures, setFermetures] = useState([])
   const [praticiens, setPraticiens] = useState([])
   const [loading, setLoading] = useState(true)
@@ -10811,7 +10820,7 @@ function TabRdvFermetures({ commercantId, toast }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
           <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Fermetures exceptionnelles</p>
-          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>Congés, jours fériés, formation, autre. Bloque les RDV côté client.</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{mots.fermetureResume}</p>
         </div>
         <button onClick={openNew}
           style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
@@ -10822,7 +10831,7 @@ function TabRdvFermetures({ commercantId, toast }) {
       {fermetures.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune fermeture prévue</p>
-          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>Note tes prochains congés ou jours de fermeture ici. Les clients ne pourront pas prendre RDV sur ces dates.</p>
+          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{mots.fermetureAide}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

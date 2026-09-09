@@ -3507,6 +3507,7 @@ export default function Dashboard() {
                     creneaux={creneauxRdv}
                     praticiens={praticiensRdv}
                     horairesDetail={commercant?.horaires_detail}
+                    commercant={commercant}
                     onSelectRdv={(r) => setRdvSelectionne(r)}
                     onNouveauRdv={(date, heure) => setNouveauRdvSlot({ date, heure })}
                     onHonorerSeance={(inscrits) => setSeanceAHonorer(inscrits)}

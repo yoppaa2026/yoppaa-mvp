@@ -25,6 +25,7 @@ import { finApresMinuit } from '@/lib/rdv-slots'
 import { contenuBlocRdv } from '@/lib/agenda-bloc'
 import { statutRdv, resumeSeance, texteResumeSeance, estAClore, compterAClore } from '@/lib/rdv-statut'
 import { etatPaiementRdv, couleurPaiement } from '@/lib/rdv-paiement'
+import { motsReservation } from '@/lib/reservation-metier'
 
 const T = {
   bg:      '#F8F6FF',
@@ -78,7 +79,10 @@ function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 // La logique est sortie d'ici pour être testable : le calcul du contraste du
 // texte, en particulier, décide de la lisibilité de tout l'écran.
 
-export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDetail, onSelectRdv, onNouveauRdv, onHonorerSeance, onFenetreChange }) {
+export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onFenetreChange }) {
+  // ⚠️ `commercant` FACULTATIF : sans lui, le vocabulaire du rendez-vous, donc
+  // l'agenda d'un salon ne bouge pas d'un mot.
+  const mots = motsReservation(commercant)
   // Filtre praticien : 'all' = tous les praticiens, ou un praticien_id specifique.
   // Sess 5f : le commercant multi-prat peut isoler l'agenda d'un praticien pour
   // voir uniquement les RDV pris avec lui/elle.
@@ -596,15 +600,18 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                       const hauteur = (dureeM / PAS_MINUTES) * HAUTEUR_CELLULE - 2
                       const premier = seance.inscrits[0]
                       const couleurs = couleurRdv({ statut: premier?.statut, couleurPraticien: premier?.praticien?.couleur_hex })
-                      const nom = premier?.prestation?.nom || 'Cours'
-                      const complet = seance.inscrits.length >= seance.capacite
+                      const nom = premier?.prestation?.nom || mots.blocSansNom
+                      // Même règle qu'au panneau : ce que la salle porte, pas
+                      // le nombre de lignes, et les annulés ne pèsent plus.
+                      const occupationBloc = resumeSeance(seance.inscrits).couverts
+                      const complet = occupationBloc >= seance.capacite
                       // ⚠️ LE JOUR VOYAGE AVEC LE COURS. Sans lui, le panneau
                       // des inscrits ne saurait pas quelle date proposer pour
                       // en ajouter un de plus : le bloc ne porte que des heures.
                       return (
                         <div key={seance.cle}
                           onClick={(e) => { e.stopPropagation(); setSeanceOuverte({ ...seance, jourDate: j.date }) }}
-                          title={`${seance.heure_debut?.slice(0, 5)}–${seance.heure_fin?.slice(0, 5)} · ${nom} · ${seance.inscrits.length} inscrit${seance.inscrits.length > 1 ? 's' : ''} sur ${seance.capacite}`}
+                          title={`${seance.heure_debut?.slice(0, 5)}–${seance.heure_fin?.slice(0, 5)} · ${nom} · ${occupationBloc} ${occupationBloc > 1 ? mots.agendaOccupes : mots.agendaOccupe} sur ${seance.capacite}`}
                           style={{
                             position: 'absolute', top: 1, ...colonneSeance, height: hauteur,
                             background: couleurs.bg, color: couleurs.text,
@@ -624,7 +631,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
                             </svg>
-                            {seance.inscrits.length}/{seance.capacite}{complet ? ' · complet' : ''}
+                            {occupationBloc}/{seance.capacite}{complet ? ' · complet' : ''}
                           </div>
                           {/* ⚠️ CE QUI ATTEND UN GESTE, SANS AVOIR À OUVRIR LE
                               COURS (Alex, 17/08). La jauge dit « 3/12 » et rien
@@ -750,7 +757,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                 <span key={p.id} style={{ width: 10, height: 10, borderRadius: 3, background: p.couleur_hex || COULEUR_DEFAUT }}/>
               ))}
             </span>
-            Chaque couleur, une praticienne
+            {mots.agendaLegende}
           </span>
         ) : (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -770,7 +777,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
           <span style={{ width: 10, height: 10, borderRadius: 3, background: '#F3F4F6' }}/>Fermé
         </span>
         <span style={{ marginLeft: 'auto', color: T.main, fontWeight: 700 }}>
-          Tap sur une case blanche pour ajouter un RDV
+          {mots.agendaAjouter}
         </span>
       </div>
 
@@ -800,7 +807,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                 nommée, y compris les absents et les annulés. */}
             <p style={{ margin: '0 0 14px', fontSize: 12.5, color: T.muted, fontWeight: 600 }}>
               {seanceOuverte.heure_debut?.slice(0, 5)}–{seanceOuverte.heure_fin?.slice(0, 5)}
-              {' · '}{texteResumeSeance(seanceOuverte.inscrits, seanceOuverte.capacite)}
+              {' · '}{texteResumeSeance(seanceOuverte.inscrits, seanceOuverte.capacite, { mots, parCouverts: true })}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -876,7 +883,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 6L9 17l-5-5"/>
                 </svg>
-                Tout le monde était là ({resumeSeance(seanceOuverte.inscrits).aCloturer.length})
+                {mots.agendaTousLa} ({resumeSeance(seanceOuverte.inscrits).aCloturer.length})
               </button>
             )}
 
@@ -890,10 +897,18 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                 peut inscrire qu'une seule personne ne sert à rien.
                 Le geste est ici, à l'endroit où elle constate qu'il reste de la
                 place, et pas ailleurs. */}
-            {onNouveauRdv && seanceOuverte.jourDate && (
-              seanceOuverte.inscrits.length >= seanceOuverte.capacite ? (
+            {/* 🔴 ON COMPTE CE QUE LA SALLE PORTE, PAS LE NOMBRE DE LIGNES.
+                `inscrits.length` faisait deux erreurs à la fois : il ignorait
+                les COUVERTS (une table de quatre pesait un) et il comptait les
+                ANNULÉS comme occupants, alors qu'une annulation libère la
+                place. Chez une vitrine sans annulation, le nombre est
+                rigoureusement le même qu'avant. */}
+            {onNouveauRdv && seanceOuverte.jourDate && (() => {
+              const occupation = resumeSeance(seanceOuverte.inscrits).couverts
+              const libres = Math.max(0, seanceOuverte.capacite - occupation)
+              return occupation >= seanceOuverte.capacite ? (
                 <p style={{ margin: '14px 0 0', padding: '10px 12px', borderRadius: 12, background: '#FEF3C7', border: '1.5px solid #F59E0B', fontSize: 12, fontWeight: 700, color: '#92400E', lineHeight: 1.45 }}>
-                  Ce cours est complet. Libère une place en annulant une inscription pour en ajouter une autre.
+                  {mots.agendaComplet}
                 </p>
               ) : (
                 <button
@@ -907,10 +922,10 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>
                   </svg>
-                  Inscrire quelqu&rsquo;un ({seanceOuverte.capacite - seanceOuverte.inscrits.length} place{seanceOuverte.capacite - seanceOuverte.inscrits.length > 1 ? 's' : ''} libre{seanceOuverte.capacite - seanceOuverte.inscrits.length > 1 ? 's' : ''})
+                  {mots.agendaInscrire} ({libres} {libres > 1 ? mots.agendaOccupes : mots.agendaOccupe} libre{libres > 1 ? 's' : ''})
                 </button>
               )
-            )}
+            })()}
 
             <button onClick={() => setSeanceOuverte(null)}
               style={{ width: '100%', marginTop: 10, padding: '11px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.deep, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>

@@ -583,6 +583,10 @@ egal('la réservation d’un restaurant s’atteint quand même',
   const { libelleRetrait } = await import('../lib/libelle-retrait.js')
   const { libelleAutresRecompenses } = await import('../lib/fidelite-recompense.js')
 
+  const { motsReservation } = await import('../lib/reservation-metier.js')
+  const MOTS_TABLE_TEST = motsReservation({ categorie: 'alimentaire' })
+  const MOTS_SALON_TEST = motsReservation({ categorie: 'vitrine' })
+
   const socle = {
     yopper_prenom: 'Camille', commercant_nom: 'Le Bistrologue', commercant_slug: 'bistrologue',
     nom_commercant: 'Le Bistrologue',
@@ -657,6 +661,138 @@ egal('la réservation d’un restaurant s’atteint quand même',
       valeurs.length > 0 && valeurs.some(v => v !== 'null' && v !== 'undefined'),
       `${chemin} → ${valeurs.join(' | ') || 'aucune'}`)
   }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LA JAUGE DE LA SALLE : DES COUVERTS, PAS DES LIGNES
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 L'AGENDA COMPTAIT LES RÉSERVATIONS ET LES COMPARAIT À UNE CAPACITÉ EN
+  // COUVERTS. Une table de quatre pesait UN dans une salle de quarante :
+  // l'agenda affichait « 1/40 » avec quatre personnes assises, et le
+  // restaurateur aurait accepté dix fois trop de monde. Trouvé en relisant les
+  // captures d'Alex, pas par un banc.
+  //
+  // ⚠️ ET LES ANNULÉS COMPTAIENT COMME OCCUPANTS. Une place annulée restait
+  // bloquée jusqu'à la fin des temps.
+  const { resumeSeance, texteResumeSeance } = await import('../lib/rdv-statut.js')
+  const table4 = [{ id: 'a', statut: 'confirme', couverts: 4 }]
+  const table4et2 = [...table4, { id: 'b', statut: 'confirme', couverts: 2 }]
+  verifier('🔴 une table de quatre pèse quatre, pas une',
+    resumeSeance(table4).couverts === 4 && resumeSeance(table4).presents === 1)
+  verifier('🔴 deux tables font six couverts',
+    resumeSeance(table4et2).couverts === 6)
+  verifier('⚠️ une réservation annulée ne pèse plus rien',
+    resumeSeance([...table4, { id: 'c', statut: 'annule_client', couverts: 8 }]).couverts === 4)
+
+  // 🔴 LA MOITIÉ QUI COMPTE AUTANT : LE PARC EXISTANT NE BOUGE PAS.
+  // Sans `couverts`, chaque ligne vaut un, exactement comme avant.
+  const coursDouze = Array.from({ length: 3 }, (_, i) => ({ id: `x${i}`, statut: 'confirme' }))
+  verifier('⚠️ un cours sans couverts compte ligne pour ligne, comme avant',
+    resumeSeance(coursDouze).couverts === 3 && resumeSeance(coursDouze).presents === 3)
+  verifier('⚠️ et le texte du salon est identique au mot près',
+    texteResumeSeance(coursDouze, 12) === '3 inscrits sur 12')
+  verifier('🔴 tandis que la salle parle en couverts',
+    texteResumeSeance(table4et2, 40, { mots: MOTS_TABLE_TEST, parCouverts: true }) === '6 couverts sur 40')
+  verifier('⚠️ et « complet » se déclenche sur les COUVERTS',
+    /complet/.test(texteResumeSeance(table4et2, 6, { mots: MOTS_TABLE_TEST, parCouverts: true }))
+    && !/complet/.test(texteResumeSeance(table4et2, 6)))
+
+  // ⚠️ ET LE COMPTEUR DU BLOC, celui qu'on lit d'un coup d'œil sur la grille
+  // sans rien ouvrir : « 1/2 » sur une table de deux personnes déjà pleine.
+  // C'est le chiffre le plus regardé de l'agenda, et il n'était gardé par rien.
+  const AGENDA = sansProse(readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
+  verifier('🔴 le compteur du bloc compte des couverts',
+    /const occupationBloc = resumeSeance\(seance\.inscrits\)\.couverts/.test(AGENDA)
+    && /\{occupationBloc\}\/\{seance\.capacite\}/.test(AGENDA))
+  verifier('⚠️ et « complet » sur le bloc suit la même occupation',
+    /const complet = occupationBloc >= seance\.capacite/.test(AGENDA))
+  verifier('⚠️ plus aucun compteur ne lit « inscrits.length » face à une capacité',
+    !/inscrits\.length >= seance\w*\.capacite/.test(AGENDA),
+    (AGENDA.match(/.{0,50}inscrits\.length >= .{0,30}/) || [''])[0])
+
+  // La réservation prise au téléphone doit demander le nombre de personnes.
+  const MODALE = sansProse(readFileSync(new URL('../app/dashboard/ModalNouveauRdv.js', import.meta.url), 'utf8'))
+  verifier('🔴 la réservation manuelle demande combien de personnes',
+    /Combien de personnes \?/.test(MODALE))
+  verifier('🔴 et elle ÉCRIT le nombre en base',
+    /couverts: couvertsRetenus,/.test(MODALE))
+  verifier('🔴 le nombre est validé avant d’être écrit',
+    /couvertsValides\(presta,/.test(MODALE) && /couvertsRetenus === null/.test(MODALE))
+  verifier('⚠️ et le champ ne s’affiche que sur une table',
+    /presta && estParCouverts\(presta\) && \(/.test(MODALE))
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 LE PARC EXISTANT NE BOUGE PAS D'UN MOT (demande d'Alex, 09/09)
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // « Attention de ne rien casser côté VITRINE ou ailleurs s'il y a des liens. »
+  //
+  // Trente-deux libellés passent désormais par le module du métier. Chacun a un
+  // jumeau côté vitrine, et c'est ce jumeau qui doit rester LETTRE POUR LETTRE
+  // ce qu'il était : Centre Respire et Ciseaux et Soins lisent ces phrases tous
+  // les jours. Un dictionnaire est exactement le genre d'endroit où une
+  // reformulation « au passage » se glisse sans que personne la voie.
+  //
+  // ⚠️ ON FIGE LES CHAÎNES, PAS LEUR PRÉSENCE. Vérifier qu'une clé existe
+  // laisserait passer un texte réécrit.
+  const HISTORIQUE_VITRINE = {
+    prestations: 'Prestations', praticiens: 'Praticiens', creneaux: 'Créneaux',
+    choisir: 'Choisis ta prestation', ajouter: 'Ajouter une prestation',
+    prestationAucune: 'Aucune prestation', prestationNouvelle: 'Nouvelle prestation',
+    prestationModifier: 'Modifier la prestation', prestationActive: 'Prestation active (visible côté client)',
+    praticienAucun: 'Aucun praticien', praticienNouveau: 'Nouveau praticien',
+    praticienModifier: 'Modifier le praticien', praticienCreer: 'Créer le praticien',
+    praticienActifLabel: 'Praticien actif (visible côté client)',
+    praticiensAutorises: 'Praticiens autorisés',
+    tousPraticiens: 'Tous les praticiens', creneauCommun: 'Tous les praticiens (créneau commun)',
+    creneauxTitre: 'Créneaux RDV', creneauAucun: 'Aucun créneau ce jour',
+    creneauNouveau: 'Nouveau créneau', creneauModifier: 'Modifier le créneau',
+    reglages: 'Comment régler ta prise de rendez-vous',
+    confirmer: 'Confirmer mon RDV', traitement: 'Traitement de mon RDV', avant: 'avant le RDV',
+    yoppe: 'Ton RDV est Yoppé ! 🟣',
+    emailConfirme: 'Ton RDV est confirmé', emailAnnule: 'Ton RDV a été annulé',
+    emailDeplace: 'Ton RDV a été déplacé', emailLieuChange: 'Ton RDV change d’endroit',
+    emailNoShow: 'Ton RDV a été marqué non honoré', emailRappelDemain: 'Rappel — RDV demain',
+    ctaVoir: 'Voir mon RDV', ctaVoirTout: 'Voir mes RDV', ctaReprendre: 'Reprendre un RDV',
+    numeroLabel: 'Rendez-vous', prestationLigne: 'Prestation',
+    manuelTitre: 'Nouveau RDV manuel', manuelConfirmer: 'Confirmer le RDV',
+    agendaLegende: 'Chaque couleur, une praticienne',
+    agendaAjouter: 'Tap sur une case blanche pour ajouter un RDV',
+    agendaOccupe: 'inscrit', agendaOccupes: 'inscrits',
+    agendaTousLa: 'Tout le monde était là', agendaInscrire: 'Inscrire quelqu’un',
+    blocSansNom: 'Cours',
+    recapLesTiennes: 'tes RDV', sujetRecapAucun: 'Aucun RDV',
+    alerteNouvelle: 'Nouveau rendez-vous 🟣', alerteNouvelleTitre: 'Nouveau RDV reçu',
+    avecLaSienne: 'avec ton rendez-vous', prochaineFois: 'ton prochain rendez-vous',
+    laSienne: 'ton rendez-vous', laMienne: 'mon rendez-vous', uneSienne: 'un rendez-vous',
+    participeConfirme: 'confirmé', participeAnnule: 'annulé', participeHonore: 'honoré',
+  }
+  let derives = 0
+  for (const [cle, attendu] of Object.entries(HISTORIQUE_VITRINE)) {
+    if (MOTS_SALON_TEST[cle] !== attendu) {
+      derives++
+      verifier(`🔴 le salon a DÉRIVÉ sur « ${cle} »`, false,
+        `attendu ${JSON.stringify(attendu)}, obtenu ${JSON.stringify(MOTS_SALON_TEST[cle])}`)
+    }
+  }
+  verifier(`🔴 les ${Object.keys(HISTORIQUE_VITRINE).length} libellés de la vitrine sont intacts`, derives === 0)
+
+  // ⚠️ ET AUCUNE CLÉ DE LA TABLE NE DOIT ÊTRE ÉGALE À CELLE DU SALON sur ce qui
+  // fait la différence : une clé oubliée dans MOTS_TABLE hériterait en silence
+  // du vocabulaire du rendez-vous, et le restaurateur lirait « RDV » sans que
+  // rien ne rougisse.
+  const DOIVENT_DIFFERER = ['prestations', 'praticiens', 'creneaux', 'choisir', 'yoppe',
+    'emailConfirme', 'ctaVoir', 'manuelTitre', 'agendaOccupe', 'agendaLegende', 'blocSansNom']
+  const identiques = DOIVENT_DIFFERER.filter(c => MOTS_TABLE_TEST[c] === MOTS_SALON_TEST[c])
+  verifier('🔴 chaque mot du restaurant diffère vraiment de celui du salon',
+    identiques.length === 0, identiques.join(', '))
+
+  // ⚠️ ET AUCUN MOT DE LA TABLE NE PARLE DE RENDEZ-VOUS. Une clé recopiée du
+  // salon par distraction se lirait ici.
+  const fuites = Object.entries(MOTS_TABLE_TEST)
+    .filter(([, v]) => typeof v === 'string' && /rendez-vous|\bRDV\b/i.test(v))
+  verifier('🔴 aucun libellé du restaurant ne dit « rendez-vous »',
+    fuites.length === 0, fuites.map(([k, v]) => `${k}: ${v}`).join(' | '))
 
   // ─── LE RÉCAPITULATIF DU MATIN, COMBINÉ (arbitrage d'Alex, 09/09) ────────
   //

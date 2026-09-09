@@ -883,10 +883,25 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // leçon reste, l'endroit où elle s'applique a bougé.
   verifier('🔴 et le comptage des exemplaires vit dans le module, pas ici',
     /formatLibrePour\(\{/.test(CREA) && !/occupationParFormat\(/.test(CREA))
+
+  // 🔴 LA TABLE RETENUE PORTE TOUT CE QU'ELLE DÉCIDE. C'est le défaut du 09/09
+  // au soir : le select des formats ne rapportait ni la durée, ni la TVA, ni la
+  // capacité, et le serveur écrivait une réservation de soixante minutes sur une
+  // table réglée à quatre-vingt-dix.
+  verifier('🔴 les deux requêtes de prestation lisent la MÊME liste de colonnes',
+    (CREA.match(/\.select\(COLONNES_PRESTATION_DECIDE\)/g) || []).length === 2
+    && !/\.select\('id, nom, actif, par_couverts/.test(CREA))
+  for (const colonne of ['duree_minutes', 'duree_paliers', 'tva_taux', 'capacite', 'par_couverts', 'quantite']) {
+    verifier(`⚠️ la liste porte « ${colonne} », dont dépend la table retenue`,
+      new RegExp(`COLONNES_PRESTATION_DECIDE =[\\s\\S]{0,300}?\\b${colonne}\\b`).test(CREA))
+  }
   verifier('⚠️ le calcul en couverts survit dans la branche « sinon »',
     /\} else \{[\s\S]{0,400}?occupes \+ couvertsRetenus > capacite/.test(CREA))
-  verifier('⚠️ et il charge les colonnes que le mode réclame',
-    /\.select\('id, nom, actif, par_couverts, couverts_min, couverts_max, quantite'\)/.test(CREA))
+  // ⚠️ CETTE GARDE FIGEAIT LE SELECT MINIMAL QUI A CAUSÉ LE DÉFAUT : elle
+  // vérifiait qu'il portait bien les colonnes du MODE, sans voir qu'il lui
+  // manquait celles de la DÉCISION. Une garde peut être verte et complice.
+  verifier('⚠️ et il charge la liste complète, pas un extrait',
+    /\.select\(COLONNES_PRESTATION_DECIDE\)[\s\S]{0,200}?\.eq\('par_couverts', true\)/.test(CREA))
   verifier('⚠️ la liste des réservations porte son format, sinon on ne peut rien compter',
     /\.select\('prestation_id, heure_debut, heure_fin, couverts'\)/.test(CREA))
 
@@ -965,14 +980,28 @@ egal('la réservation d’un restaurant s’atteint quand même',
     ['app/api/rdv/reserver/route.js', 'la route de réservation'],
   ]) {
     const src = sansProse(readFileSync(new URL('../' + chemin, import.meta.url), 'utf8'))
-    // ⚠️ SEULS LES SELECTS QUI LISENT LA PRESTATION POUR DÉCIDER. Un select qui
-    // ne rapporte que des identifiants — celui qui liste les formats de table de
-    // la salle — n'a pas besoin de ces colonnes, et l'exiger de lui ferait
-    // rougir du code juste. `duree_minutes` sert de marqueur : un select qui la
-    // demande s'apprête à calculer une occupation.
-    const selects = [...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,200}?\.select\(\s*(['"`])([\s\S]*?)\1/g)]
-      .map(m => m[2])
-      .filter(s => /\bduree_minutes\b/.test(s))
+    // 🔴 J'AI DÉSARMÉ CETTE GARDE, ET LE DÉFAUT EST PASSÉ PAR LÀ (Alex, 09/09 :
+    // « 60 min alors que la table est sur 90 »).
+    //
+    // Elle exigeait ces colonnes de TOUS les selects de prestations. Un select
+    // d'inventaire l'a fait rougir, et plutôt que de compléter le select, j'ai
+    // ajouté un filtre pour l'exempter : « il ne sert qu'à compter ». Il servait
+    // à DÉCIDER — c'est lui qui alimente la table retenue — et sans
+    // `duree_minutes`, la durée retombait sur son défaut de soixante minutes.
+    //
+    // ⚠️ ON NE DÉSARME PAS UNE GARDE POUR FAIRE PASSER DU CODE. Si elle rougit
+    // sur quelque chose de légitime, c'est la garde qu'on précise, jamais son
+    // périmètre qu'on rogne — sinon on retire exactement le filet qui tenait.
+    // Les deux selects lisent désormais la MÊME constante, et c'est ce que la
+    // garde vérifie : une liste, un seul endroit où elle est écrite.
+    // ⚠️ ET LA GARDE SUIT LA CONSTANTE, sinon elle ne lit plus qu'un nom de
+    // variable et se croit satisfaite. Un select nommé se résout avant d'être
+    // mesuré : c'est ce que fait un lecteur humain, la garde doit faire pareil.
+    const constante = (src.match(/COLONNES_PRESTATION_DECIDE\s*=\s*\n?\s*'([^']+)'/) || [])[1] || ''
+    const selects = [
+      ...[...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,200}?\.select\(\s*(['"`])([\s\S]*?)\1/g)].map(m => m[2]),
+      ...[...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,300}?\.select\(COLONNES_PRESTATION_DECIDE\)/g)].map(() => constante),
+    ]
     verifier(`🔴 ${nom} charge « par_couverts »`,
       selects.length > 0 && selects.every(s => /\bpar_couverts\b/.test(s)), selects.join(' | '))
     verifier(`🔴 et ${nom} charge « duree_paliers »`,

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { postPro } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import {
-  canDo, getIaConfig, getPlanLabel, getPrixPlan,
+  canDo, getIaConfig, getPlanLabel, getPrixPlan, isAlimentaire,
   // ⚠️ `peut` APPLIQUE LA CATÉGORIE, `planEffectif` NON, ET LA NUANCE COÛTE
   // CHER. La matrice réserve `commande` à l'alimentaire, alors que toute
   // l'application l'accorde aussi au détail et au salon qui vendent leurs
@@ -14,6 +14,7 @@ import {
   peut, planEffectif, statutFonction, planPourGarder, planEnEssai, essaiProposable,
   FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
 } from '@/lib/plans'
+import { peutReserver, motReservation } from '@/lib/reservation-metier'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
@@ -6837,9 +6838,14 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
             Prise de RDV, qui vérifie qu'il y a bien une prestation et un
             créneau. Ici, c'est l'interrupteur de tous les jours : on referme
             avant de partir, on rouvre en rentrant. */}
-        {form.categorie === 'vitrine' && peut(form, 'rdv') && (
+        {/* 🔴 ET L'INTERRUPTEUR S'OUVRE AUSSI AU RESTAURANT (09/09). Il testait
+            la vitrine, donc un alimentaire ne pouvait jamais allumer sa
+            réservation, même en formule Vendre où la matrice la lui accorde
+            depuis toujours. `peutReserver` lit la bonne fonction selon le
+            métier, et le mot suit. */}
+        {peutReserver(form) && (
           <div style={{ marginBottom: 18, paddingBottom: 16, borderBottom: `1px solid ${T.pale}` }}>
-            <p style={{ ...s.label, marginBottom: 10 }}>Prise de rendez-vous</p>
+            <p style={{ ...s.label, marginBottom: 10 }}>{motReservation(form, 'onglet')}</p>
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.rdv_actif ? T.main : T.pale}`, background: form.rdv_actif ? T.pale : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
               <input type="checkbox" checked={!!form.rdv_actif} onChange={e => setForm(p => ({ ...p, rdv_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -6847,6 +6853,11 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
                 <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
                   Décoche pendant tes congés : ta fiche reste visible, mais elle invite tes clients à t&rsquo;appeler plutôt qu&rsquo;à réserver.
                 </p>
+                {isAlimentaire(form) && (
+                  <p style={{ fontSize: 11, color: T.main, lineHeight: 1.5, margin: '4px 0 0', fontWeight: 700 }}>
+                    Tes clients garderont ta carte à emporter : la réservation s&rsquo;ajoute à ta fiche, elle ne la remplace pas.
+                  </p>
+                )}
               </div>
             </label>
           </div>

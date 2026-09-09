@@ -8,6 +8,7 @@ import { poserIdentiteLocale } from '@/lib/identite-locale'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine, planEffectif } from '@/lib/plans'
+import { reservationActive, motReservation } from '@/lib/reservation-metier'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
 import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionArticle, libelleMoment, avertissementDelai } from '@/lib/delai-commande'
@@ -3325,7 +3326,15 @@ export default function CommanderSlug() {
   const forfaitVivant = planEffectif(commercant)
   const peutCommander = canDo(forfaitVivant, 'commande')
   // Module RDV natif : si vitrine FULL avec rdv_actif=true, on propose le bouton "Prendre RDV"
-  const peutPrendreRdv = vitrine && canDo(forfaitVivant, 'rdv') && commercant?.rdv_actif === true
+  // 🔴 ET LE RESTAURANT PASSE PAR LE MÊME BOUTON (09/09). Cette ligne testait
+  // la vitrine, donc un alimentaire n'avait aucun chemin vers sa réservation,
+  // même en Vendre où la matrice lui accorde `reservation_table` depuis
+  // toujours. `reservationActive` lit la bonne fonction selon le métier.
+  //
+  // ⚠️ ET SA FICHE RESTE CELLE DES COMMANDES : la réservation s'y ajoute par ce
+  // bouton, elle ne la remplace pas. Un restaurant a une carte à emporter ET
+  // des tables ; lui faire choisir serait le renvoyer chez le concurrent.
+  const peutPrendreRdv = reservationActive(commercant)
 
   // ═══════════════════════════════════════════════════════════════════════
   // 🔴 CET EFFET EST ICI, ET SA PLACE EST LE CORRECTIF (29/08).
@@ -4169,7 +4178,9 @@ export default function CommanderSlug() {
                           <path d="M3 9h18M8 3v4M16 3v4"/>
                         </svg>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {nbPanier > 0 ? 'Prendre RDV et garder mon panier' : 'Prendre rendez-vous'}
+                          {nbPanier > 0
+                            ? `${motReservation(commercant, 'action')} et garder mon panier`
+                            : motReservation(commercant, 'action')}
                         </span>
                       </span>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>

@@ -29,6 +29,7 @@ import { supabase } from '@/lib/supabase'
 // (26/08). ⚠️ Et `canDo` SANS catégorie, jamais `peut()` : la matrice réserve
 // `commande` à l'alimentaire alors que cette fiche sert les vitrines.
 import { isVitrine, canDo, planEffectif } from '@/lib/plans'
+import { reservationActive, motsReservation } from '@/lib/reservation-metier'
 import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
 import { lienFiche } from '@/lib/lien-fiche'
 import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-partage'
@@ -1048,9 +1049,16 @@ export default function CommanderRdvSlug() {
         setLoading(false)
         return
       }
-      // Garde-fous métier : doit être vitrine + publié
-      if (!isVitrine(c)) {
-        // C'est un alimentaire → rediriger vers la bonne route
+      // Garde-fous métier : doit prendre des réservations, et être publié.
+      //
+      // 🔴 CETTE PAGE N'ÉTAIT PLUS RÉSERVÉE AUX VITRINES (09/09). Un restaurant
+      // est ALIMENTAIRE et réserve pourtant des tables : `reservation_table`
+      // était déclarée dans la matrice depuis longtemps, et lue nulle part.
+      //
+      // ⚠️ ON RENVOIE VERS SA FICHE, PAS VERS UNE PAGE D'ERREUR. Un alimentaire
+      // sans réservation a une carte à emporter, et c'est ça que le visiteur
+      // cherchait en arrivant ici.
+      if (!isVitrine(c) && !reservationActive(c)) {
         router.replace(`/commander/${slug}`)
         return
       }

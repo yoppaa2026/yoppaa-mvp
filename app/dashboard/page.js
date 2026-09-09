@@ -7,6 +7,7 @@ import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { retourArriereAutorise, alerteAutreOnglet, indexBlocages, appliquerBlocage, etatCreneau, ongletDouverture } from '@/lib/tableau-de-bord'
+import { peutReserver, motReservation } from '@/lib/reservation-metier'
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
@@ -2889,7 +2890,11 @@ export default function Dashboard() {
               // Services : l'onglet Rendez-vous reste visible même module non
               // activé (l'agenda explique alors comment l'activer), sinon un
               // salon qui vend aussi des produits ne voyait que Commandes.
-              { key: 'rdv',       label: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(planEffectif(commercant), 'rdv')) },
+              // 🔴 L'ONGLET S'OUVRE AUSSI AU RESTAURANT (09/09) : il testait la
+              // vitrine, alors que la matrice accorde `reservation_table` à
+              // l'alimentaire en Vendre. Et son nom suit le métier : un
+              // restaurateur ne prend pas des rendez-vous, il place des tables.
+              { key: 'rdv',       label: motReservation(commercant, 'onglet'), Icon: IconRdv,       visible: !!commercant?.rdv_actif || peutReserver(commercant) },
               { key: 'config',    label: 'Paramètres',  Icon: IconConfig,    visible: true },
             ].filter(t => t.visible).map(({ key, label, Icon }) => {
               const actif = ongletPrincipal === key
@@ -3005,7 +3010,7 @@ export default function Dashboard() {
               <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
                 {[
                   { key: 'commandes', label: 'Cmd',    titre: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(planEffectif(commercant), 'commande') },
-                  { key: 'rdv',       label: 'RDV',    titre: 'Rendez-vous', Icon: IconRdv,       visible: !!commercant?.rdv_actif || (commercant?.categorie === 'vitrine' && canDo(planEffectif(commercant), 'rdv')) },
+                  { key: 'rdv',       label: motReservation(commercant, 'ongletCourt'),    titre: motReservation(commercant, 'onglet'), Icon: IconRdv,       visible: !!commercant?.rdv_actif || peutReserver(commercant) },
                   { key: 'config',    label: 'Config', titre: 'Paramètres',  Icon: IconConfig,    visible: true },
                 ].filter(t => t.visible).map(({ key, label, titre, Icon }) => {
                   const actif = ongletPrincipal === key

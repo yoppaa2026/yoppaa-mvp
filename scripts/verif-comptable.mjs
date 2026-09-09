@@ -218,13 +218,42 @@ egal('les 31 caractères sortent tous', vus.size, 31)
 // Ce qui trahit le biais, c'est la comparaison des DEUX GROUPES : les huit
 // premiers caractères contre les vingt-trois autres. Le bruit s'y annule, et
 // le rapport saute à 1,13 là où un tirage sain reste à 1,00.
-const compte = (c) => tousCaracteres.split(c).length - 1
+// 🔴 ET CE TEST SONNAIT AU HASARD, une exécution sur trois cents (CI rouge du
+// 09/09, rapport 0,9584 sur un générateur parfaitement sain).
+//
+// La cause n'était pas le générateur, c'était la TAILLE DE L'ÉCHANTILLON.
+// Trois mille codes font vingt-quatre mille caractères : mesuré sur trois cents
+// tirages sains, l'écart-type du rapport vaut 0,0145. La fenêtre ±0,04 ne pose
+// donc la barre qu'à 2,7 écarts-types, et le bruit la franchit régulièrement.
+//
+// ⚠️ ET LE SIGNE LE DISAIT DÉJÀ : un tirage biaisé fait sortir les huit
+// premiers PLUS souvent, donc au-DESSUS de 1. Un rapport de 0,9584 ne pouvait
+// pas être le défaut recherché.
+//
+// ⚠️ LE REMÈDE N'EST PAS D'ÉLARGIR LA FENÊTRE : ça reviendrait à laisser
+// passer un biais plus léger pour acheter la paix. C'est l'échantillon qu'on
+// agrandit. À vingt mille codes l'écart-type tombe à 0,0047, la même fenêtre
+// vaut 8,5 écarts-types, et le tirage biaisé reste attrapé 20 fois sur 20, à
+// vingt-quatre écarts-types de la barre. Le test devient PLUS sévère, pas
+// moins.
+//
+// ⚠️ ON NE TIRE PAS LES VINGT MILLE POUR LA COLLISION, et c'est délibéré : à ce
+// volume, deux codes identiques deviennent attendus une fois sur quatre mille
+// exécutions, et on aurait remplacé une alarme capricieuse par une autre.
+// Chaque test garde l'échantillon que SA question demande.
+//
+// 🔴 UNE ALARME QUI SONNE AU HASARD EST PIRE QU'UNE ALARME ABSENTE : elle
+// apprend à passer outre, et le jour où elle a raison, personne ne la lit.
+const POUR_DISTRIBUTION = Array.from({ length: 20000 }, () => genererCodeBon())
+  .map(c => c.replace(/BC-|-/g, '')).join('')
+const compte = (c) => POUR_DISTRIBUTION.split(c).length - 1
 const moyenne = (liste) => liste.reduce((a, b) => a + b, 0) / liste.length
 const debutAlphabet = moyenne([...'23456789'].map(compte))
 const finAlphabet = moyenne([...'ABCDEFGHJKMNPQRSTUVWXYZ'].map(compte))
 const rapport = debutAlphabet / finAlphabet
 verifier('les huit premiers caractères ne sortent pas plus que les autres',
-  rapport > 0.96 && rapport < 1.04, `rapport ${rapport.toFixed(4)} (biaisé = 1,13)`)
+  rapport > 0.96 && rapport < 1.04,
+  `rapport ${rapport.toFixed(4)} sur 20 000 codes (biaisé = 1,12 ; bruit sain = 0,005)`)
 
 // Le tirage doit venir d'une source cryptographique. C'est LA règle : le
 // nombre de combinaisons ne protège de rien si la suite est prévisible.

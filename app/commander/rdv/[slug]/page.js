@@ -123,7 +123,7 @@ function formatPrix(prestation, deals = []) {
   return 'Sur demande'
 }
 
-import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire } from '@/lib/rdv-slots'
+import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit } from '@/lib/rdv-slots'
 
 // ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
 // Affiche les jours de l'horizon, regroupes par mois. ⚠️ L'HORIZON N'EST PLUS
@@ -1633,9 +1633,18 @@ export default function CommanderRdvSlug() {
       }
       // Le RDV doit tenir ENTIÈREMENT dans une des plages d'ouverture du jour
       // (horaires à pause : ex. 11:00-14:00 puis 18:00-22:00).
+      // 🔴 ET LA FERMETURE APRÈS MINUIT (09/09). Sans elle, ce contrôle refusait
+      // à la dernière seconde un créneau que la grille venait de proposer, chez
+      // toute brasserie ouverte jusqu'à minuit ou 02:00.
       const plagesShop = []
-      if (horaireJour.debut && horaireJour.fin) plagesShop.push([timeToMinutes(horaireJour.debut), timeToMinutes(horaireJour.fin)])
-      if (horaireJour.debut2 && horaireJour.fin2) plagesShop.push([timeToMinutes(horaireJour.debut2), timeToMinutes(horaireJour.fin2)])
+      if (horaireJour.debut && horaireJour.fin) {
+        const a1 = timeToMinutes(horaireJour.debut)
+        plagesShop.push([a1, finApresMinuit(a1, timeToMinutes(horaireJour.fin))])
+      }
+      if (horaireJour.debut2 && horaireJour.fin2) {
+        const a2 = timeToMinutes(horaireJour.debut2)
+        plagesShop.push([a2, finApresMinuit(a2, timeToMinutes(horaireJour.fin2))])
+      }
       if (plagesShop.length > 0 && !plagesShop.some(([a, b]) => debutMin >= a && finMin <= b)) {
         console.warn('[rdv] hors plages shop', { debutMin, finMin, plagesShop })
         const plagesTxt = plagesShop.map(([a, b]) => `${minutesToTime(a)}-${minutesToTime(b)}`).join(' et ')

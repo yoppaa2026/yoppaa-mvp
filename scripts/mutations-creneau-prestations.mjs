@@ -184,9 +184,11 @@ const MUTATIONS = [
     de: "    return { raison: 'deborde', plages: lisible }",
     vers: '    return null' },
 
+  // ⚠️ ANCRE REMISE LE 09/09 : la ligne s est ouverte en bloc quand la regle de
+  // minuit y est entree. On vise le `push` lui-meme, pas la condition.
   { nom: '⚠️ le second service du jour est oublie',
-    de: "  if (h.debut2 && h.fin2) plages.push([timeToMinutes(h.debut2), timeToMinutes(h.fin2)])",
-    vers: '  void 0' },
+    de: '    plages.push([d2, finApresMinuit(d2, timeToMinutes(h.fin2))])',
+    vers: '    void 0' },
 
   // 🔴 L HORIZON DE L AGENDA (Alex, 07/09).
   { nom: '🔴 le piege du zero ferme l agenda au lieu de le laisser a 60 jours',
@@ -273,8 +275,8 @@ const MUTATIONS = [
     vers: "      statut: 'inchangee',\n      raison: 'hors_ouverture'," },
 
   { nom: '⚠️ le second service est oublie a la copie',
-    de: '  if (horaireJour.debut2 && horaireJour.fin2) plages.push([timeToMinutes(horaireJour.debut2), timeToMinutes(horaireJour.fin2)])',
-    vers: '  void 0' },
+    de: '    plages.push([a2, finApresMinuit(a2, timeToMinutes(horaireJour.fin2))])',
+    vers: '    void 0' },
 
   { nom: '🔴 la copie des creneaux de commande cesse d ajuster',
     fichier: 'app/dashboard/ConfigDashboard.js',

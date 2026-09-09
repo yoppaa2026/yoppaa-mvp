@@ -19,6 +19,9 @@ import { useState, useMemo, useEffect, Fragment } from 'react'
 import BandeDefilante from '@/app/components/BandeDefilante'
 import { couleurRdv, COULEUR_DEFAUT } from '@/lib/agenda-couleurs'
 import { blocsAgenda } from '@/lib/cours-collectifs'
+// ⚠️ Ce fichier a sa PROPRE copie de `timeToMinutes` (plus bas). On n'importe
+// donc que la règle de minuit, qui elle ne doit exister qu'en un exemplaire.
+import { finApresMinuit } from '@/lib/rdv-slots'
 import { contenuBlocRdv } from '@/lib/agenda-bloc'
 import { statutRdv, resumeSeance, texteResumeSeance, estAClore, compterAClore } from '@/lib/rdv-statut'
 import { etatPaiementRdv, couleurPaiement } from '@/lib/rdv-paiement'
@@ -138,8 +141,11 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
     joursAffiches.forEach(j => {
       const h = horairesDetail?.[j.keyJour]
       if (h?.ouvert && h?.debut && h?.fin) {
+        // 🔴 UNE FERMETURE APRÈS MINUIT (09/09) : sans elle, un bar ouvert de
+        // 14:00 à 02:00 bornait sa grille à 02:00 du matin, et le commerçant
+        // ne voyait plus une seule de ses heures d'ouverture.
         min = Math.min(min, timeToMinutes(h.debut))
-        max = Math.max(max, timeToMinutes(h.fin))
+        max = Math.max(max, finApresMinuit(timeToMinutes(h.debut), timeToMinutes(h.fin)))
         // Horaires à pause : la 2e plage étend la fenêtre affichée (ex. soir 18-22)
         if (h.debut2 && h.fin2) {
           min = Math.min(min, timeToMinutes(h.debut2))
@@ -185,8 +191,12 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
     const h = horairesDetail?.[jour.keyJour]
     if (!h?.ouvert || !h?.debut || !h?.fin) return 'ferme'
     // Plages du jour (1 ou 2 avec les horaires à pause debut2/fin2)
-    const plages = [[timeToMinutes(h.debut), timeToMinutes(h.fin)]]
-    if (h.debut2 && h.fin2) plages.push([timeToMinutes(h.debut2), timeToMinutes(h.fin2)])
+    const a1 = timeToMinutes(h.debut)
+    const plages = [[a1, finApresMinuit(a1, timeToMinutes(h.fin))]]
+    if (h.debut2 && h.fin2) {
+      const a2 = timeToMinutes(h.debut2)
+      plages.push([a2, finApresMinuit(a2, timeToMinutes(h.fin2))])
+    }
     if (!plages.some(([a, b]) => slotMin >= a && slotMin < b)) {
       // Entre deux plages shop → affiché comme pause (plutôt que fermé)
       return plages.length > 1 && slotMin >= plages[0][1] && slotMin < plages[1][0] ? 'pause' : 'ferme'

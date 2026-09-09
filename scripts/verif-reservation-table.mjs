@@ -17,7 +17,10 @@ import {
 } from '../lib/reservation-metier.js'
 import { getPillsStatut, peut } from '../lib/plans.js'
 import { couvertsDe, occupationDe, bornesCouverts, couvertsValides } from '../lib/cours-collectifs.js'
-import { conflitReservation } from '../lib/rdv-slots.js'
+import {
+  conflitReservation, genererSlots, finApresMinuit, franchitMinuit,
+  creneauHorsOuverture, ajusterPlagePourJour,
+} from '../lib/rdv-slots.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -314,6 +317,86 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // garde alors que le code était juste.
   verifier('🔴 les trois envois portent le nombre de personnes',
     (TUNNEL.match(/praticien_id: praticienChoisi\?\.id \|\| null,[^\n]*\s*couverts,/g) || []).length === 3)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 UNE JOURNÉE QUI FINIT APRÈS MINUIT (09/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Trouvé sur les VRAIES heures du restaurant qu'Alex démarche : une brasserie
+// ouverte de 09:00 à 00:00, et jusqu'à 02:00 le vendredi et le samedi.
+//
+// 🔴 EN MINUTES, LA FERMETURE TOMBAIT AVANT L'OUVERTURE. `02:00` vaut 120,
+// `14:00` en vaut 840 : le clip ramenait la fin de journée à deux heures du
+// matin, et la boucle des créneaux ne tournait pas une fois. SIX JOURS SUR SEPT
+// étaient muets, sans une seule erreur pour le dire. Et `00:00` est le pire des
+// cas parce que c'est le plus fréquent : il vaut ZÉRO.
+{
+  egal('une journée ordinaire ne bouge pas', finApresMinuit(540, 1080), 1080)
+  egal('🔴 une fermeture à 02:00 se compte après l’ouverture', finApresMinuit(840, 120), 1560)
+  egal('🔴 et « minuit » aussi, qui vaut zéro', finApresMinuit(540, 0), 1440)
+  // ⚠️ ÉGALITÉ COMPRISE : 09:00-09:00 veut dire vingt-quatre heures, pas zéro.
+  egal('⚠️ une fermeture à l’heure d’ouverture fait le tour', finApresMinuit(540, 540), 1980)
+  verifier('franchitMinuit ne juge pas ce qu’il ne sait pas',
+    !franchitMinuit(null, 120) && !franchitMinuit(540, null))
+
+  // Les VRAIES heures du Bistrologue, et ses deux services de cuisine.
+  const BAR = {
+    mardi:    { ouvert: true, debut: '09:00', fin: '00:00' },
+    vendredi: { ouvert: true, debut: '09:00', fin: '02:00' },
+    samedi:   { ouvert: true, debut: '14:00', fin: '02:00' },
+    dimanche: { ouvert: true, debut: '10:00', fin: '23:00' },
+    lundi:    { ouvert: false },
+  }
+  const TABLE_SOIR = { id: 'p-soir', capacite: 40, par_couverts: true, duree_minutes: 120 }
+  const PLAGE_SOIR = [{ id: 'k-soir', jour_semaine: 'mardi', date_specifique: null, heure_debut: '18:00', heure_fin: '23:00', actif: true, pas_minutes: 30 }]
+
+  const slotsMardi = genererSlots({
+    dateChoisie: new Date('2026-09-15T12:00:00'), // un mardi
+    dureeMinutes: 120, creneaux: PLAGE_SOIR, reservations: [],
+    horairesDetail: BAR, capacite: 40, prestationId: 'p-soir',
+    parCouverts: true, couvertsDemandes: 2,
+  })
+  verifier('🔴 un bar qui ferme à minuit propose enfin ses créneaux', slotsMardi.length > 0)
+  egal('et la dernière arrivée tombe à 21:00',
+    slotsMardi.filter(s => !s.pris).map(s => s.heure).pop(), '21:00')
+
+  const PLAGE_SAM = [{ ...PLAGE_SOIR[0], id: 'k-sam', jour_semaine: 'samedi', heure_fin: '23:30' }]
+  const slotsSamedi = genererSlots({
+    dateChoisie: new Date('2026-09-19T12:00:00'), // un samedi
+    dureeMinutes: 120, creneaux: PLAGE_SAM, reservations: [],
+    horairesDetail: BAR, capacite: 40, prestationId: 'p-soir',
+    parCouverts: true, couvertsDemandes: 2,
+  })
+  verifier('🔴 un bar qui ferme à 02:00 aussi', slotsSamedi.length > 0)
+
+  // ⚠️ ET LE JOUR FERMÉ RESTE FERMÉ : la correction ne doit pas ouvrir ce qui
+  // était clos.
+  const PLAGE_LUN = [{ ...PLAGE_SOIR[0], id: 'k-lun', jour_semaine: 'lundi' }]
+  egal('⚠️ le lundi fermé n’a toujours aucun créneau',
+    genererSlots({
+      dateChoisie: new Date('2026-09-14T12:00:00'), // un lundi
+      dureeMinutes: 120, creneaux: PLAGE_LUN, reservations: [],
+      horairesDetail: BAR, capacite: 40, prestationId: 'p-soir',
+    }).length, 0)
+
+  // L'alerte du tableau de bord, et la copie de plages : mêmes horaires, même
+  // piège. Une alerte qui se déclenche sur TOUT ne protège plus rien.
+  verifier('🔴 une plage du soir n’est plus « hors horaires » chez un bar de nuit',
+    creneauHorsOuverture({ jour: 'samedi', heureDebut: '18:00', heureFin: '23:30', horairesDetail: BAR }) === null)
+  egal('🔴 et la copie vers ce jour-là ne la rabote plus',
+    ajusterPlagePourJour({ heure_debut: '18:00', heure_fin: '23:30' }, BAR.samedi).statut, 'inchangee')
+  // ⚠️ CE QUI RESTE REFUSÉ : un créneau vraiment hors des heures.
+  verifier('⚠️ un créneau du matin reste refusé un samedi qui ouvre à 14:00',
+    creneauHorsOuverture({ jour: 'samedi', heureDebut: '09:00', heureFin: '10:00', horairesDetail: BAR })?.raison === 'hors_ouverture')
+
+  // Les trois écrans qui refaisaient ce calcul à la main.
+  const TUNNEL2 = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  const AGENDA = sansProse(readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
+  verifier('🔴 le contrôle final du tunnel connaît minuit',
+    /plagesShop\.push\(\[a1, finApresMinuit\(a1, timeToMinutes\(horaireJour\.fin\)\)\]\)/.test(TUNNEL2))
+  verifier('🔴 et la grille de l’agenda aussi',
+    (AGENDA.match(/finApresMinuit\(/g) || []).length >= 3)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -188,6 +188,42 @@ const MUTATIONS = [
     fichier: 'app/commander/[slug]/page.js',
     de: "  const peutCommander = canDo(forfaitVivant, 'commande') && commandeAllumee(commercant)",
     vers: "  const peutCommander = canDo(forfaitVivant, 'commande')" },
+
+  // ─── LA JOURNEE QUI FINIT APRES MINUIT ────────────────────────────────────
+  //
+  // 🔴 SIX JOURS SUR SEPT ETAIENT MUETS chez une brasserie ouverte jusqu a
+  // minuit ou 02:00, et aucune erreur ne le disait.
+  { nom: '🔴 une fermeture apres minuit retombe avant l ouverture',
+    fichier: 'lib/rdv-slots.js',
+    de: '  return franchitMinuit(debutMin, finMin) ? finMin + 1440 : finMin',
+    vers: '  return finMin' },
+
+  // ⚠️ L EGALITE COMPTE : 09:00-09:00 veut dire vingt-quatre heures, pas zero.
+  { nom: '⚠️ une fermeture a l heure d ouverture cesse de faire le tour',
+    fichier: 'lib/rdv-slots.js',
+    de: '  return Number.isFinite(debutMin) && Number.isFinite(finMin) && finMin <= debutMin',
+    vers: '  return Number.isFinite(debutMin) && Number.isFinite(finMin) && finMin < debutMin' },
+
+  { nom: '🔴 le moteur reclippe la journee a deux heures du matin',
+    fichier: 'lib/rdv-slots.js',
+    de: '    ? finApresMinuit(shopOpen, timeToMinutes(horaireJour.fin))',
+    vers: '    ? timeToMinutes(horaireJour.fin)' },
+
+  // ⚠️ UNE ALERTE QUI SE DECLENCHE SUR TOUT NE PROTEGE PLUS RIEN.
+  { nom: '🔴 l alerte hors horaires redevient aveugle a minuit',
+    fichier: 'lib/rdv-slots.js',
+    de: '    plages.push([d1, finApresMinuit(d1, timeToMinutes(h.fin))])',
+    vers: '    plages.push([d1, timeToMinutes(h.fin)])' },
+
+  { nom: '🔴 la copie de plages rabote chez un bar de nuit',
+    fichier: 'lib/rdv-slots.js',
+    de: '    plages.push([a1, finApresMinuit(a1, timeToMinutes(horaireJour.fin))])',
+    vers: '    plages.push([a1, timeToMinutes(horaireJour.fin)])' },
+
+  { nom: '🔴 le controle final du tunnel oublie minuit',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '        plagesShop.push([a1, finApresMinuit(a1, timeToMinutes(horaireJour.fin))])',
+    vers: '        plagesShop.push([a1, timeToMinutes(horaireJour.fin)])' },
 ]
 
 const lancer = () => {

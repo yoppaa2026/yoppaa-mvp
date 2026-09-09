@@ -53,6 +53,7 @@ import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { verdictForfait } from '@/lib/garde-forfait'
+import { commandeAllumee } from '@/lib/plans'
 
 export async function POST(request) {
   try {
@@ -160,6 +161,17 @@ export async function POST(request) {
         return NextResponse.json(
           { ok: false, error: 'Ce commerçant n\'accepte pas encore de commandes.', code: verdict.code },
           { status: verdict.statut }
+        )
+      }
+      // 🔴 ET L'INTERRUPTEUR DU COMMERÇANT (09/09). Le forfait dit ce qu'il a
+      // le DROIT de faire, pas ce qu'il VEUT faire. Un restaurant sans plats à
+      // emporter éteint sa commande en ligne ; sans cette ligne, sa fiche
+      // n'affiche plus rien mais un lien direct vers le tunnel passe encore, et
+      // il découvre une commande qu'il ne peut pas honorer.
+      if (!commandeAllumee(commercant)) {
+        return NextResponse.json(
+          { ok: false, error: 'Ce commerçant ne prend pas de commande en ligne. Contacte-le directement.', code: 'commande_eteinte' },
+          { status: 403 }
         )
       }
     }

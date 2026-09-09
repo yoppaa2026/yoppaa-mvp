@@ -19,7 +19,7 @@
 
 import { readFileSync } from 'node:fs'
 import { verdictForfait, forfaitOuvre, premierPlanQuiOuvre, COLONNES_GARDE } from '../lib/garde-forfait.js'
-import { PLAN_FEATURES } from '../lib/plans.js'
+import { PLAN_FEATURES, commandeAllumee, getPillsStatut } from '../lib/plans.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 // ⚠️ ON CHERCHE DANS LE CODE, PAS DANS LA PROSE. Les commentaires de ces
@@ -287,6 +287,74 @@ for (const r of ROUTES) {
     !/^\s*essai_demande_le,?$/m.test(migration))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 LA COMMANDE EN LIGNE S'ÉTEINT (Alex, 09/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// C'était le SEUL module sans interrupteur : la livraison, les rendez-vous, la
+// fidélité et les bons cadeaux ont tous le leur. Un restaurant qui ne fait pas
+// de plats à emporter se voyait imposer un bouton « Commander ».
+//
+// ⚠️ ET LE FORFAIT NE SUFFIT PAS À DÉCIDER : il dit ce que le commerçant a le
+// DROIT de faire, pas ce qu'il VEUT faire. Les deux conditions vivent côte à
+// côte, jamais l'une à la place de l'autre.
+{
+  verifier('un commerce qui n’a rien réglé accepte les commandes',
+    commandeAllumee({ categorie: 'alimentaire', plan: 'vendre' }))
+  verifier('un commerce qui a coché accepte aussi',
+    commandeAllumee({ commande_actif: true }))
+  verifier('🔴 un commerce qui a décoché refuse',
+    !commandeAllumee({ commande_actif: false }))
+  // 🔴 LE PIÈGE QUI AURAIT COUPÉ LE PARC ENTIER. La colonne s'ajoute à la table
+  // AVANT d'exister dans la vue publique : pendant ce temps-là elle vaut
+  // `undefined` chez chaque visiteur. Avec `=== true`, la commande en ligne
+  // aurait disparu partout le temps d'une migration, sans une seule erreur.
+  verifier('🔴 une colonne pas encore lue OUVRE, elle ne ferme pas',
+    commandeAllumee({}) && commandeAllumee(null) && commandeAllumee({ commande_actif: undefined }))
+  verifier('et le code le dit dans ce sens-là',
+    /commercant\?\.commande_actif !== false/.test(lire('lib/plans.js')))
+
+  // Les pastilles, dans les trois catégories.
+  {
+    const cles = (c) => getPillsStatut(c, {}).map(p => p.key)
+    for (const categorie of ['alimentaire', 'detail', 'vitrine']) {
+      const base = { categorie, plan: 'vendre', fidelite_actif: false, bons_cadeaux_actif: false }
+      verifier(`un ${categorie} en Vendre propose de commander`,
+        cles(base).includes('commande'))
+      verifier(`🔴 et il ne le propose plus quand il éteint`,
+        !cles({ ...base, commande_actif: false }).includes('commande'))
+    }
+  }
+
+  // 🔴 LE SERVEUR, SINON CE N'EST QU'UN ÉCRAN. Une garde d'écran n'est jamais
+  // une réponse : sans cette ligne, la fiche n'affiche plus rien mais un lien
+  // direct vers le tunnel passe encore.
+  const CREATE = codeSeul(lire('app/api/stripe/checkout/create-commande/route.js'))
+  verifier('🔴 la route de création refuse une commande éteinte',
+    /if \(!commandeAllumee\(commercant\)\) \{/.test(CREATE)
+    && /code: 'commande_eteinte'/.test(CREATE))
+  verifier('⚠️ et elle garde AUSSI la garde de forfait',
+    /const verdict = verdictForfait\(commercant, 'commande'\)/.test(CREATE))
+
+  const FICHE = codeSeul(lire('app/commander/[slug]/page.js'))
+  verifier('la fiche publique lit l’interrupteur',
+    /const peutCommander = canDo\(forfaitVivant, 'commande'\) && commandeAllumee\(commercant\)/.test(FICHE))
+
+  const CONFIG = codeSeul(lire('app/dashboard/ConfigDashboard.js'))
+  verifier('l’interrupteur existe dans le profil',
+    /Accepter les commandes en ligne/.test(CONFIG))
+  // ⚠️ IL VIENT AVANT LA LIVRAISON : on ne livre pas ce qu'on ne peut pas
+  // commander, et l'ordre des cases raconte cette dépendance.
+  verifier('⚠️ et il vient avant celui de la livraison',
+    CONFIG.indexOf('Accepter les commandes en ligne') < CONFIG.indexOf('Activer la livraison'))
+  verifier('🔴 il prévient quand la livraison reste allumée pour rien',
+    /Ta livraison est encore allumée, et elle ne servira à rien/.test(CONFIG))
+  verifier('et il se relit comme il s’écrit',
+    /commande_actif: data\.commande_actif !== false,/.test(CONFIG)
+    && /commande_actif: form\.commande_actif !== false,/.test(CONFIG))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

@@ -11,7 +11,12 @@ import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
 const chemin = (f) => `${RACINE}/${f}`
-const BANC = 'verif:table'
+// ⚠️ DEUX BANCS, ET C EST LA LECON DU MATIN. Ce harnais mute aussi les gardes
+// de la commande en ligne, dont les verifications vivent dans `verif:gardes`.
+// Avec le seul `verif:table`, ces mutations auraient ete declarees NON
+// ATTRAPEES alors que la garde existait : un harnais qui mesure avec le mauvais
+// instrument fait douter d un code juste.
+const BANC = 'verif:table && npm run verif:gardes'
 const MODULE = 'lib/reservation-metier.js'
 
 const MUTATIONS = [
@@ -155,6 +160,34 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: "      couverts_min: estTable && form.par_couverts && form.couverts_min !== '' ? Number(form.couverts_min) : null,",
     vers: '      couverts_min: Number(form.couverts_min) || 0,' },
+
+  // ─── L INTERRUPTEUR DE LA COMMANDE EN LIGNE ───────────────────────────────
+  //
+  // 🔴 LE PIEGE QUI AURAIT COUPE LE PARC ENTIER. La colonne s ajoute a la table
+  // AVANT d exister dans la vue publique : pendant ce temps-la elle vaut
+  // `undefined` chez chaque visiteur. Avec `=== true`, la commande en ligne
+  // disparaissait partout le temps d une migration, sans une seule erreur.
+  { nom: '🔴 une colonne pas encore lue FERME au lieu d ouvrir',
+    fichier: 'lib/plans.js',
+    de: '  return commercant?.commande_actif !== false',
+    vers: '  return commercant?.commande_actif === true' },
+
+  { nom: '🔴 la pastille Commander ignore l interrupteur',
+    fichier: 'lib/plans.js',
+    de: "    if (canDoAvecCategorie(plan, 'commande', categorie) && commandeAllumee(commercant)) {",
+    vers: "    if (canDoAvecCategorie(plan, 'commande', categorie)) {" },
+
+  // 🔴 UNE GARDE D ECRAN N EST JAMAIS UNE REPONSE : sans le serveur, la fiche
+  // n affiche plus rien mais un lien direct vers le tunnel passe encore.
+  { nom: '🔴 le serveur accepte une commande chez qui l a eteinte',
+    fichier: 'app/api/stripe/checkout/create-commande/route.js',
+    de: '      if (!commandeAllumee(commercant)) {',
+    vers: '      if (false) {' },
+
+  { nom: '🔴 la fiche publique ignore l interrupteur',
+    fichier: 'app/commander/[slug]/page.js',
+    de: "  const peutCommander = canDo(forfaitVivant, 'commande') && commandeAllumee(commercant)",
+    vers: "  const peutCommander = canDo(forfaitVivant, 'commande')" },
 ]
 
 const lancer = () => {

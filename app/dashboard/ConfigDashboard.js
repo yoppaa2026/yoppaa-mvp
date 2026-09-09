@@ -100,7 +100,7 @@ import { LARGEUR_CHAMP, LARGEUR_TEXTE_LONG } from '@/lib/responsive'
 import {
   Check, AlertTriangle, Calendar, Clock, Lock, Trash2, Copy, Zap, Phone,
   Sun, Star, Settings, Package, Lightbulb, Camera, Store, Scissors, Croissant,
-  BellOff, ClipboardList, Bike, MapPin, FileText, Printer, Download,
+  BellOff, ClipboardList, Bike, ShoppingBag, MapPin, FileText, Printer, Download,
   Eye, Globe, Users, MessageCircle, Sparkles, Reply,
 } from 'lucide-react'
 
@@ -6301,7 +6301,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
         // passage ses infos pratiques, qui s'affichent sur ses DEUX fiches et
         // dans l'email de confirmation de rendez-vous. Rien ne le prévenait.
         infos_pratiques: data.infos_pratiques || '',
-        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, plan: data.plan || 'exister', created_at: data.created_at, notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 }
+        horaires: data.horaires || '', horaires_detail: data.horaires_detail || defaultHoraires, categorie: data.categorie || 'alimentaire', livraison_actif: !!data.livraison_actif, fidelite_actif: !!data.fidelite_actif, commande_actif: data.commande_actif !== false, plan: data.plan || 'exister', created_at: data.created_at, notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 }
       setForm(profil)
       // ⚠️ LE MÊME OBJET DANS LES DEUX ÉTATS, ET C'EST VOULU. `setForm` ne
       // modifie jamais en place (toujours `{ ...p, … }`), donc la référence
@@ -6354,7 +6354,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
       return false
     }
     setSaving(true)
-    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, rdv_actif: !!form.rdv_actif, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des), boutique_delai_heures: Math.max(0, parseInt(form.boutique_delai_heures, 10) || 0) }).eq('id', commercantId)
+    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, rdv_actif: !!form.rdv_actif, commande_actif: form.commande_actif !== false, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des), boutique_delai_heures: Math.max(0, parseInt(form.boutique_delai_heures, 10) || 0) }).eq('id', commercantId)
     setSaving(false)
     if (error) {
       console.error('[ConfigDashboard.saveProfil]', error)
@@ -6908,6 +6908,32 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
         {peut(form, 'commande') && form.categorie === 'alimentaire' && (
           <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
             <p style={{ ...s.label, marginBottom: 12 }}>Fonctionnalités activables (plan Vendre)</p>
+
+            {/* 🔴 LA COMMANDE EN LIGNE S'ÉTEINT AUSSI (Alex, 09/09). C'était le
+                seul module sans interrupteur : la livraison, les rendez-vous,
+                la fidélité et les bons cadeaux ont tous le leur. Un restaurant
+                qui ne fait pas de plats à emporter, un traiteur qui ne travaille
+                que sur appel, une boucherie qui refuse le click and collect :
+                tous se voyaient imposer un bouton « Commander » à expliquer à
+                leurs clients.
+                ⚠️ IL VIENT EN PREMIER, avant la livraison : on ne livre pas ce
+                qu'on ne peut pas commander. */}
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.commande_actif !== false ? T.main : T.pale}`, background: form.commande_actif !== false ? T.pale : '#fff', cursor: 'pointer', marginBottom: 10, transition: 'all 0.3s' }}>
+              <input type="checkbox" checked={form.commande_actif !== false} onChange={e => setForm(p => ({ ...p, commande_actif: e.target.checked }))} style={{ width: 18, height: 18, accentColor: T.main, cursor: 'pointer', marginTop: 2 }}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 800, color: T.ink, margin: '0 0 2px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><ShoppingBag size={15} strokeWidth={1.8}/> Accepter les commandes en ligne</p>
+                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+                  {form.commande_actif !== false
+                    ? 'Tes clients commandent et paient à l’avance, puis viennent chercher. Décoche si tu ne fais pas d’emporté : ta fiche, tes horaires et le reste de tes services restent en ligne.'
+                    : 'Ta fiche reste visible avec tes horaires et tes autres services, mais personne ne peut commander à emporter.'}
+                </p>
+                {form.commande_actif === false && form.livraison_actif && (
+                  <p style={{ fontSize: 11, color: '#B45309', fontWeight: 700, lineHeight: 1.5, margin: '4px 0 0' }}>
+                    Ta livraison est encore allumée, et elle ne servira à rien : on ne livre pas une commande qui ne peut pas être passée.
+                  </p>
+                )}
+              </div>
+            </label>
 
             <label id="activer-livraison"
               style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${ancreVue === 'activer-livraison' ? '#F59E0B' : form.livraison_actif ? T.main : T.pale}`, background: ancreVue === 'activer-livraison' ? '#FEF3C7' : form.livraison_actif ? T.pale : '#fff', boxShadow: ancreVue === 'activer-livraison' ? '0 0 0 4px #F59E0B33' : 'none', cursor: 'pointer', marginBottom: 10, transition: 'all 0.3s', scrollMarginTop: 90 }}>

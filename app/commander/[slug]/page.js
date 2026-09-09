@@ -7,7 +7,7 @@ import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { poserIdentiteLocale } from '@/lib/identite-locale'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
-import { canDo, isVitrine, planEffectif } from '@/lib/plans'
+import { canDo, isVitrine, planEffectif, commandeAllumee } from '@/lib/plans'
 import { reservationActive, motReservation } from '@/lib/reservation-metier'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
@@ -3324,7 +3324,10 @@ export default function CommanderSlug() {
   // viennent de la vue `commercants_public` (voir MIGRATION_VUE_PUBLIQUE_ESSAI).
   const vitrine = isVitrine(commercant)
   const forfaitVivant = planEffectif(commercant)
-  const peutCommander = canDo(forfaitVivant, 'commande')
+  // ⚠️ ET L'INTERRUPTEUR DU COMMERÇANT (09/09). Le forfait dit ce qu'il a le
+  // droit de faire, pas ce qu'il veut faire : un restaurant sans plats à
+  // emporter éteint sa commande en ligne comme il éteint sa livraison.
+  const peutCommander = canDo(forfaitVivant, 'commande') && commandeAllumee(commercant)
   // Module RDV natif : si vitrine FULL avec rdv_actif=true, on propose le bouton "Prendre RDV"
   // 🔴 ET LE RESTAURANT PASSE PAR LE MÊME BOUTON (09/09). Cette ligne testait
   // la vitrine, donc un alimentaire n'avait aucun chemin vers sa réservation,

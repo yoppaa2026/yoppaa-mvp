@@ -40,6 +40,7 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 // le lieu gravé et la première place libre se décident CÔTÉ SERVEUR, dans
 // `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
 import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts, dureeSelonCouverts } from '@/lib/cours-collectifs'
+import { enModeInventaire, plusGrandeTable, formatPourAffichage } from '@/lib/inventaire-salle'
 import { attenteOuverte } from '@/lib/attente-rdv'
 import BlocAttente from './BlocAttente'
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
@@ -479,6 +480,13 @@ export default function CommanderRdvSlug() {
   // la raison pour laquelle ce sélecteur avait été placé en tête le 09/09 au
   // matin. Sans cet ordre, la grille aurait dû se recalculer après coup.
   const dureeRetenue = dureeSelonCouverts(prestationChoisie, couverts)
+
+  // 🔴 CE COMMERCE COMPTE-T-IL SA SALLE EN TABLES ? Un restaurant qui a déclaré
+  // son inventaire ne fait plus choisir un format à son client : il lui demande
+  // combien ils sont. Tant que l'inventaire est incomplet, le parcours ne bouge
+  // pas — c'est la même règle que le serveur, lue au même endroit, et les deux
+  // doivent dire la même chose sous peine de proposer ce que l'autre refuse.
+  const salleParInventaire = enModeInventaire(prestations)
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
@@ -2779,8 +2787,56 @@ export default function CommanderRdvSlug() {
                 </div>
               )}
 
+              {/* ─── ÉTAPE 1, VERSION SALLE : « NOUS SERONS COMBIEN ? » ───
+                  🔴 PERSONNE NE RÉSERVE « UNE TABLE DE QUATRE ». On réserve pour
+                  quatre, et c'est au restaurant de savoir quelle table sortir.
+                  Demander le format au client, c'est lui demander de connaître
+                  un inventaire qu'il n'a jamais vu, et de deviner si « deux
+                  tables de deux accolées » comptent comme une table de quatre.
+                  Aucun spécialiste de la table ne le fait.
+                  ⚠️ ET C'EST CE QUI MET LA RÈGLE DU PLUS PETIT ÉCART EN SERVICE :
+                  tant que le client désignait sa table, lui en donner une autre
+                  aurait été changer sa commande. Maintenant qu'il dit seulement
+                  combien ils sont, le serveur peut garder la table de six pour
+                  un groupe de six.
+                  ⚠️ RIEN NE CHANGE POUR UNE VITRINE : un salon vend des
+                  prestations distinctes, une coupe n'est pas un balayage, et
+                  c'est bien au client de choisir. La bascule tient à l'inventaire
+                  de salle, que seul un restaurant remplit. */}
+              {!commercant._rdvDesactive && etape === 1 && salleParInventaire && (
+                <div id="prestations-rdv" style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                      </svg>
+                      Nous serons
+                    </span>
+                    <div style={{ flex: 1, height: 1, background: T.pale }}/>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                    {Array.from({ length: plusGrandeTable(prestations) }, (_, i) => i + 1).map(n => (
+                      <button key={n}
+                        onClick={() => { setCouverts(n); const f = formatPourAffichage(prestations, n); if (f) choisirPrestation(f) }}
+                        style={{ minWidth: 52, padding: '14px 16px', borderRadius: 14, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.deep, fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  {/* ⚠️ ON DIT QUOI FAIRE AU-DELÀ, on ne laisse pas le client
+                      conclure que le restaurant ne veut pas de son groupe. */}
+                  <p style={{ fontSize: '0.8rem', color: T.muted, lineHeight: 1.55 }}>
+                    Plus de {plusGrandeTable(prestations)} personnes ? Appelle
+                    directement <strong style={{ color: T.ink }}>{commercant.nom}</strong>
+                    {commercant.telephone ? <> au <strong style={{ color: T.ink }}>{commercant.telephone}</strong></> : null} :
+                    les grandes tablées se préparent.
+                  </p>
+                </div>
+              )}
+
               {/* ─── ÉTAPE 1 - LISTE PRESTATIONS ─── */}
-              {!commercant._rdvDesactive && etape === 1 && (
+              {!commercant._rdvDesactive && etape === 1 && !salleParInventaire && (
                 <div id="prestations-rdv" style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -3038,7 +3094,11 @@ export default function CommanderRdvSlug() {
                       d'abord, puis le nombre, ferait proposer 20h à une table
                       de six dans une salle où il reste deux couverts, et le
                       refus tomberait à la fin du tunnel. */}
-                  {estParCouverts(prestationChoisie) && (() => {
+                  {/* ⚠️ EN MODE INVENTAIRE, LA QUESTION A DÉJÀ ÉTÉ POSÉE à
+                      l'étape précédente, et c'est elle qui a choisi la table. La
+                      reposer ici laisserait le client changer de nombre sans
+                      changer de table, et la salle compterait faux. */}
+                  {estParCouverts(prestationChoisie) && !salleParInventaire && (() => {
                     const { min, max } = bornesCouverts(prestationChoisie)
                     const choix = []
                     for (let n = min; n <= max; n++) choix.push(n)

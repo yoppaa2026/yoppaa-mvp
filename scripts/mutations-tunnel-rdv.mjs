@@ -439,12 +439,12 @@ const MUTATIONS = [
 
   { nom: '🔴 la capacité gravée retombe à 1, la contrainte bloque le 2e inscrit',
     fichier: 'lib/rdv-creation-server.js',
-    de: '    capacite_creneau: capacite,',
+    de: '    capacite_creneau: capacitePrestation(prestationRetenue),',
     vers: '    capacite_creneau: 1,' },
 
   { nom: '🔴 la TVA n’est plus figée à la réservation',
     fichier: 'lib/rdv-creation-server.js',
-    de: '    tva_taux: prestation.tva_taux ?? null,',
+    de: '    tva_taux: prestationRetenue.tva_taux ?? null,',
     vers: '    tva_taux: null,' },
 
   // 🔴 L'ORDRE DU SPREAD : un appelant pourrait alors imposer sa propre place,
@@ -458,8 +458,8 @@ const MUTATIONS = [
     // sont venues s'ajouter sous `couverts` quand le module a cessé de les
     // recevoir de l'écran. Une ancre qui vise la dernière ligne d'un bloc suit
     // ce bloc à chaque fois qu'il grandit ; c'est le prix d'une ancre juste.
-    de: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeSelonCouverts(prestation, couvertsRetenus)),\n  }',
-    vers: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeSelonCouverts(prestation, couvertsRetenus)),\n    ...champs,\n  }' },
+    de: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeSelonCouverts(prestationRetenue, couvertsRetenus)),\n  }',
+    vers: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeSelonCouverts(prestationRetenue, couvertsRetenus)),\n    ...champs,\n  }' },
 
   // 🔴 CROISER DEUX IDENTIFIANTS SANS VÉRIFIER LEUR LIEN : la prestation d’un
   // salon se réserverait dans l’agenda d’un autre.

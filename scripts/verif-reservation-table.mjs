@@ -365,8 +365,13 @@ egal('la réservation d’un restaurant s’atteint quand même',
 
   // ── LE TUNNEL ──────────────────────────────────────────────────────────
   const TUNNEL = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  // ⚠️ LA QUESTION EST TOUJOURS POSÉE, À DEUX ENDROITS SELON LE MODE (2b). Avec
+  // un inventaire complet, elle ouvre le tunnel et désigne la table ; sans lui,
+  // elle reste à l'étape du jour, après le choix du format. Ce qui ne doit
+  // jamais arriver, c'est qu'elle disparaisse.
   verifier('le tunnel demande pour combien de personnes',
-    /\{estParCouverts\(prestationChoisie\) && \(\(\) => \{/.test(TUNNEL)
+    /\{estParCouverts\(prestationChoisie\) && !salleParInventaire && \(\(\) => \{/.test(TUNNEL)
+    && /etape === 1 && salleParInventaire && \(/.test(TUNNEL)
     && /Nous serons/.test(TUNNEL))
   // 🔴 AVANT LE CHOIX DU JOUR, et ce n'est pas cosmétique : la taille de la
   // table décide de ce qui reste ouvert. Demander l'heure d'abord ferait
@@ -789,6 +794,63 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('⚠️ zéro exemplaire ne compte pas comme une quantité',
     quantiteDe({ quantite: 0 }) === null && quantiteDe({ quantite: 3 }) === 3)
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // LOT 2b : LE CLIENT DIT COMBIEN ILS SONT, LE SERVEUR TROUVE LA TABLE
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 PERSONNE NE RÉSERVE « UNE TABLE DE QUATRE ». On réserve pour quatre, et
+  // c'est au restaurant de savoir quelle table sortir. Demander le format au
+  // client, c'est lui demander de connaître un inventaire qu'il n'a jamais vu.
+  const { formatPourAffichage, plusGrandeTable } = await import('../lib/inventaire-salle.js')
+  verifier('🔴 le format montré est le plus petit qui convient',
+    formatPourAffichage(SALLE, 2)?.id === 't2' && formatPourAffichage(SALLE, 5)?.id === 't6')
+  verifier('⚠️ et rien n’est montré au-delà de la plus grande table',
+    formatPourAffichage(SALLE, 12) === null && plusGrandeTable(SALLE) === 6)
+
+  const FICHE2B = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 le tunnel demande le nombre de personnes AVANT tout',
+    /etape === 1 && salleParInventaire && \(/.test(FICHE2B)
+    && /Nous serons/.test(FICHE2B))
+  verifier('🔴 et le choix du nombre désigne la table tout seul',
+    /setCouverts\(n\); const f = formatPourAffichage\(prestations, n\); if \(f\) choisirPrestation\(f\)/.test(FICHE2B))
+  verifier('⚠️ au-delà de la plus grande table, on invite à téléphoner',
+    /Plus de \{plusGrandeTable\(prestations\)\} personnes \?/.test(FICHE2B))
+  verifier('⚠️ et la question n’est plus reposée à l’étape suivante',
+    /estParCouverts\(prestationChoisie\) && !salleParInventaire && \(\(\) => \{/.test(FICHE2B))
+
+  // 🔴 LA MOITIÉ QUI COMPTE : LE PARCOURS D'UNE VITRINE NE BOUGE PAS D'UN ÉCRAN.
+  // Un salon vend des prestations distinctes — une coupe n'est pas un balayage —
+  // et c'est bien au client de choisir. La bascule tient à l'inventaire de
+  // salle, que seul un restaurant remplit, et la liste doit rester la voie par
+  // défaut de tout le parc.
+  verifier('🔴 la liste des prestations reste le parcours par défaut',
+    /etape === 1 && !salleParInventaire && \(/.test(FICHE2B))
+  verifier('🔴 et un salon n’est JAMAIS en mode inventaire',
+    enModeInventaire([{ par_couverts: false, actif: true, quantite: 4 }]) === false)
+  verifier('🔴 ni un restaurant dont l’inventaire est incomplet',
+    enModeInventaire([T4, { ...T2, quantite: null }]) === false)
+
+  // Le serveur applique enfin la règle, et distingue les deux refus.
+  const SRV = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur choisit la table, il ne se contente plus de vérifier',
+    /const choix = formatLibrePour\(\{/.test(SRV) && /prestationRetenue = choix\.format/.test(SRV))
+  // ⚠️ LA DISTINCTION DOIT ÊTRE FAITE SUR LA RAISON, pas seulement écrite
+  // quelque part. Mesuré par mutation : chercher les deux codes dans le fichier
+  // laissait passer un ternaire qui rendait toujours le même, l'autre branche
+  // restant morte. On vise le test qui choisit.
+  verifier('🔴 « trop grand » et « complet » sont deux refus distincts',
+    /choix\.raison === 'aucune_table_a_cette_taille'\s*\n?\s*\? \{ ok: false, code: 'groupe_trop_grand'/.test(SRV)
+    && /: \{ ok: false, code: 'salle_complete', restants: 0 \}/.test(SRV))
+  verifier('🔴 et c’est la table RETENUE qui s’écrit, pas celle qu’on a reçue',
+    /prestation_id: prestationRetenue\.id,/.test(SRV)
+    && /duree_minutes: dureeSelonCouverts\(prestationRetenue, couvertsRetenus\),/.test(SRV)
+    && /capacite_creneau: capacitePrestation\(prestationRetenue\),/.test(SRV))
+  // ⚠️ LE RANG N'A DE SENS QU'À L'INTÉRIEUR D'UN FORMAT. Calculé sur la table
+  // proposée puis écrit sur une autre, il désigne un rang du mauvais format et
+  // l'index unique le rejette — ou laisse passer une collision d'à côté.
+  verifier('🔴 la place se refait quand la table change',
+    /if \(String\(prestationRetenue\.id\) !== String\(prestation\.id\)\) \{[\s\S]{0,600}?premierePlaceLibre\(prestationRetenue,/.test(SRV))
+
   // 🔴 LA CAPACITÉ DE SALLE NE SE DEMANDE PLUS DEUX FOIS (Alex, 09/09 : « à quoi
   // sert ce champ ? »). Elle était la jauge de l'ancien modèle ; elle se déduit
   // désormais de l'inventaire. La laisser à l'écran, c'est poser deux fois la
@@ -814,13 +876,13 @@ egal('la réservation d’un restaurant s’atteint quand même',
   const CREA = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
   verifier('🔴 le serveur bascule en tables quand l’inventaire est complet',
     /if \(enModeInventaire\(formatsTable\)\) \{/.test(CREA))
-  verifier('🔴 et il compte les exemplaires du format demandé',
-    /occupationParFormat\(autour \|\| \[\], debutMin, finMin\)\.get\(String\(prestation\.id\)\)/.test(CREA))
-  // ⚠️ COMPTER NE SUFFIT PAS, IL FAUT REFUSER. Mesuré par mutation : remplacer
-  // le test par `false` laissait la garde ci-dessus verte, puisque le calcul
-  // restait écrit. Une valeur calculée que personne ne lit ne protège personne.
-  verifier('🔴 et il REFUSE quand tous les exemplaires sont pris',
-    /if \(total !== null && pris >= total\) \{[\s\S]{0,120}?code: 'salle_complete'/.test(CREA))
+  // ⚠️ CES DEUX GARDES VISAIENT LE COMPTAGE DE 2a, où le serveur se contentait
+  // de vérifier le format reçu. Depuis 2b il CHOISIT la table, et c'est
+  // `formatLibrePour` qui compte les exemplaires : le refus est tenu par les
+  // gardes du lot 2b, plus haut. Compter ne suffit pas, il faut refuser — la
+  // leçon reste, l'endroit où elle s'applique a bougé.
+  verifier('🔴 et le comptage des exemplaires vit dans le module, pas ici',
+    /formatLibrePour\(\{/.test(CREA) && !/occupationParFormat\(/.test(CREA))
   verifier('⚠️ le calcul en couverts survit dans la branche « sinon »',
     /\} else \{[\s\S]{0,400}?occupes \+ couvertsRetenus > capacite/.test(CREA))
   verifier('⚠️ et il charge les colonnes que le mode réclame',
@@ -883,8 +945,12 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // sur 150 minutes puis ENREGISTRÉE sur 90 libérerait une table encore occupée.
   const CREATION = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
   verifier('🔴 le module écrit LUI-MÊME la durée et la fin',
-    /duree_minutes: dureeSelonCouverts\(prestation, couvertsRetenus\),/.test(CREATION)
-    && /heure_fin: minutesToTime\(timeToMinutes\(heure\) \+ dureeSelonCouverts\(prestation, couvertsRetenus\)\)/.test(CREATION))
+    // ⚠️ SUR LA TABLE RETENUE depuis 2b : le serveur choisit le format, et la
+    // durée doit être celle de la table qu'il donne, pas de celle qu'on lui a
+    // proposée. Écrire la durée d'une table pour en occuper une autre est le
+    // même défaut que vérifier une valeur puis en écrire une autre.
+    /duree_minutes: dureeSelonCouverts\(prestationRetenue, couvertsRetenus\),/.test(CREATION)
+    && /heure_fin: minutesToTime\(timeToMinutes\(heure\) \+ dureeSelonCouverts\(prestationRetenue, couvertsRetenus\)\)/.test(CREATION))
   verifier('🔴 et ses gardes mesurent la MÊME durée',
     (CREATION.match(/dureeSelonCouverts\(prestation, champs\?\.couverts\)/g) || []).length === 2)
 

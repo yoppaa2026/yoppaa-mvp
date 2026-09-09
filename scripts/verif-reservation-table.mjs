@@ -564,6 +564,124 @@ egal('la réservation d’un restaurant s’atteint quand même',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LE VOCABULAIRE DES EMAILS ET DES NOTIFICATIONS (09/09, le soir)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 UN ÉCRAN SE REFERME, UN EMAIL RESTE. L'après-midi avait corrigé l'écran de
+// confirmation ; le client d'un restaurant recevait toujours « Ton RDV est
+// confirmé » dans sa boîte, et le relisait la veille du repas.
+//
+// ⚠️ ON EXÉCUTE LES GABARITS, on ne cherche pas un mot dans le fichier. Un
+// gabarit qui compose son HTML par concaténation peut porter le bon libellé
+// dans une branche jamais atteinte : seule la sortie fait foi.
+{
+  const {
+    emailRdvConfirme, emailRdvAnnule, emailRdvNoShow, emailRdvReminder,
+    emailNouveauRdvCommercant, emailRecapRdvJour,
+  } = await import('../lib/resend.js')
+  const { texteAlerteRdv } = await import('../lib/alerte-rdv.js')
+  const { libelleRetrait } = await import('../lib/libelle-retrait.js')
+  const { libelleAutresRecompenses } = await import('../lib/fidelite-recompense.js')
+
+  const socle = {
+    yopper_prenom: 'Camille', commercant_nom: 'Le Bistrologue', commercant_slug: 'bistrologue',
+    nom_commercant: 'Le Bistrologue',
+    prestation_nom: 'Table de 4', date_rdv: '2026-09-12', heure_debut: '19:30:00',
+    heure_fin: '21:30:00', duree_minutes: 120, numero_rdv: 'RV42',
+    date_jour: '2026-09-12', rdvs: [],
+  }
+  const GABARITS = [
+    ['confirmation', emailRdvConfirme],
+    ['annulation', emailRdvAnnule],
+    ['non honoré', emailRdvNoShow],
+    ['rappel de la veille', emailRdvReminder],
+    ['alerte au commerçant', emailNouveauRdvCommercant],
+    ['récapitulatif du matin', emailRecapRdvJour],
+  ]
+
+  // ⚠️ « rendez-vous » ET « RDV » : le second est celui qu'on oublie, parce
+  // qu'il ne ressemble pas au premier.
+  //
+  // 🔴 ET ON NE LIT QUE LE TEXTE, JAMAIS LE BALISAGE. Ma première version a
+  // rougi sur `href="/commander/rdv/bistrologue"` : une URL technique, que
+  // personne ne lit, et que personne ne doit renommer. Une garde qui mesure la
+  // FORME du fichier au lieu du texte VU accuse du code juste, et on finit par
+  // l'éteindre. On retire donc les balises avant de chercher.
+  const texteVu = (html) => String(html || '').replace(/<[^>]*>/g, ' ')
+  const parleRdv = (html) => /rendez-vous|\bRDV\b/i.test(texteVu(html))
+
+  for (const [nom, gabarit] of GABARITS) {
+    const chezResto = gabarit({ ...socle, commercant_categorie: 'alimentaire' })
+    verifier(`🔴 l’email « ${nom} » ne parle plus de rendez-vous à un restaurant`,
+      !parleRdv(chezResto),
+      (texteVu(chezResto).match(/.{0,45}(rendez-vous|\bRDV\b).{0,45}/i) || [''])[0].replace(/\s+/g, ' ').trim())
+
+    // ⚠️ ET LE SALON NE BOUGE PAS D'UN MOT. C'est la moitié qui compte : le parc
+    // existant reçoit ces emails tous les jours.
+    const chezSalon = gabarit({ ...socle, commercant_categorie: 'vitrine' })
+    verifier(`⚠️ et « ${nom} » dit toujours rendez-vous à un salon`, parleRdv(chezSalon))
+
+    // 🔴 SANS CATÉGORIE, RIEN NE CHANGE. Un email qui part avant que la colonne
+    // soit jointe doit rendre EXACTEMENT ce qu'il rendait avant.
+    verifier(`🔴 « ${nom} » sans catégorie reste identique au salon`,
+      String(gabarit({ ...socle })) === String(chezSalon))
+  }
+
+  // 🔴 ET LE CÂBLAGE, PAS SEULEMENT LES GABARITS. Mesuré par mutation : couper
+  // `commercant_categorie` dans la route du rappel laissait TOUT vert, parce
+  // que les gardes du dessus appellent les gabarits directement. Un gabarit
+  // juste qu'aucune route n'alimente rend exactement le texte d'avant, en
+  // silence — c'est le défaut du 09/09 en plus petit.
+  //
+  // ⚠️ LES DEUX BOUTS : la colonne doit être CHARGÉE (sinon elle vaut
+  // `undefined`) et PASSÉE (sinon le gabarit ne la voit pas). En manquer un
+  // suffit à rendre l'autre inutile.
+  for (const [chemin, quoi] of [
+    ['app/api/emails/rdv-confirme/route.js', 'la confirmation'],
+    ['app/api/emails/rdv-annule/route.js', 'l’annulation'],
+    ['app/api/emails/rdv-no-show/route.js', 'le non-honoré'],
+    ['app/api/cron/rdv-reminder-9h/route.js', 'le rappel de la veille'],
+    ['app/api/cron/recap-jour-8h/route.js', 'le récapitulatif du matin'],
+  ]) {
+    const src = sansProse(readFileSync(new URL('../' + chemin, import.meta.url), 'utf8'))
+    verifier(`🔴 ${quoi} CHARGE la catégorie du commerçant`,
+      /commercants\([^)]*\bcategorie\b[^)]*\)/.test(src) || /select\([^)]*\bcategorie\b/.test(src), chemin)
+    // ⚠️ ON CAPTURE LA VALEUR, ON NE LA NIE PAS. Ma première écriture disait
+    // `commercant_categorie\s*:\s*(?!null\b)` et se faisait CONTOURNER PAR LE
+    // RETOUR ARRIÈRE : devant `commercant_categorie:    null`, le moteur cède
+    // un espace au `\s*`, l'anticipation négative tombe alors sur une espace au
+    // lieu de « null », et la garde verdissait sur exactement ce qu'elle
+    // interdisait. Mesuré par mutation, pas deviné.
+    const valeurs = [...src.matchAll(/commercant_categorie\s*:\s*([^,\n]+)/g)].map(m => m[1].trim())
+    verifier(`🔴 et ${quoi} la PASSE au gabarit`,
+      valeurs.length > 0 && valeurs.some(v => v !== 'null' && v !== 'undefined'),
+      `${chemin} → ${valeurs.join(' | ') || 'aucune'}`)
+  }
+
+  // La notification du tableau de bord, celle que le restaurateur entend.
+  verifier('🔴 l’alerte du tableau de bord suit le métier',
+    texteAlerteRdv({ client_prenom: 'Camille', date_rdv: '2026-09-12', heure_debut: '19:30' },
+      { commercant: { categorie: 'alimentaire' } }).titre === 'Nouvelle réservation 🟣')
+  verifier('⚠️ et reste « Nouveau rendez-vous » ailleurs',
+    texteAlerteRdv({ client_prenom: 'Camille' }, { commercant: { categorie: 'vitrine' } }).titre === 'Nouveau rendez-vous 🟣'
+    && texteAlerteRdv({ client_prenom: 'Camille' }).titre === 'Nouveau rendez-vous 🟣')
+
+  // Les produits emportés avec la table, dans le fil du Yopper.
+  const cmdResto = { rdv_reservation_id: 'r1', date_commande: '2026-09-12', mode_retrait: 'retrait', commercant: { categorie: 'alimentaire' } }
+  verifier('🔴 les produits s’emportent « avec ta réservation »',
+    /avec ta réservation/.test(libelleRetrait(cmdResto)))
+  verifier('⚠️ et « avec ton rendez-vous » chez une vitrine',
+    /avec ton rendez-vous/.test(libelleRetrait({ ...cmdResto, commercant: { categorie: 'vitrine' } })))
+
+  // La fidélité, qui promet la fois d'après.
+  verifier('🔴 la récompense suivante se promet pour une réservation',
+    /ta prochaine réservation/.test(libelleAutresRecompenses(2, 'rdv', { categorie: 'alimentaire' })))
+  verifier('⚠️ et pour un rendez-vous ailleurs',
+    /ton prochain rendez-vous/.test(libelleAutresRecompenses(2, 'rdv', { categorie: 'vitrine' }))
+    && /ton prochain rendez-vous/.test(libelleAutresRecompenses(2, 'rdv')))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

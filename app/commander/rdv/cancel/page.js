@@ -129,7 +129,7 @@ export default function RdvCancelPage() {
                 </svg>
               </div>
               <h1 style={{ fontWeight: 900, fontSize: '1.5rem', color: T.ink, marginBottom: 8, letterSpacing: '-0.5px' }}>
-                Annuler ton RDV ?
+                Annuler ta réservation ?
               </h1>
               {/* ⚠️ CETTE PHRASE NE PARLAIT QUE DE L'ACOMPTE (Alex, 30/08). Sur
                   un rendez-vous payé par bon cadeau et par récompense, elle
@@ -150,7 +150,7 @@ export default function RdvCancelPage() {
               {loading ? 'Annulation en cours…' : 'Confirmer l\'annulation'}
             </button>
             <button onClick={() => router.push('/commander')} style={btnSecondary}>
-              Garder mon RDV
+              Garder ma place
             </button>
           </>
         )}
@@ -166,7 +166,7 @@ export default function RdvCancelPage() {
                 Tu gardes tes produits ?
               </h1>
               <p style={{ color: T.muted, fontSize: '0.92rem', lineHeight: 1.55 }}>
-                Tu avais acheté des produits avec ce rendez-vous. Ils sont déjà payés et mis de côté.
+                Tu avais acheté des produits avec cette réservation. Ils sont déjà payés et mis de côté.
               </p>
             </div>
 
@@ -210,10 +210,10 @@ export default function RdvCancelPage() {
                 </svg>
               </div>
               <h1 style={{ fontWeight: 900, fontSize: '1.5rem', color: T.ink, marginBottom: 12, letterSpacing: '-0.5px' }}>
-                RDV annulé 🟣
+                C&rsquo;est annulé 🟣
               </h1>
               <p style={{ color: T.deep, fontSize: '0.95rem', lineHeight: 1.55, fontWeight: 600 }}>
-                {resultat?.message || 'Ton RDV est annulé.'}
+                {resultat?.message || 'Ta réservation est annulée.'}
               </p>
             </div>
 

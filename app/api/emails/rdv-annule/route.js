@@ -13,6 +13,7 @@ import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { annulerPush } from '@/lib/onesignal'
+import { motsReservation } from '@/lib/reservation-metier'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 
 export async function POST(request) {
@@ -114,7 +115,7 @@ export async function POST(request) {
 
     await envoyerAuCommercant({
       to: rdv.client_email,
-      subject: `Ton RDV chez ${rdv.commercant?.nom || ''} a été annulé`,
+      subject: `${motsReservation(rdv.commercant).sujetAnnule} ${rdv.commercant?.nom || ''} a été ${motsReservation(rdv.commercant).participeAnnule}`,
       html,
       attachments: [attachment],
     })

@@ -866,7 +866,11 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   // bloc muet : les deux comptent.
   for (const [f, appel, minimum] of [
     ['app/commander/[slug]/page.js', 'libelleAutresRecompenses(recompensesTotal)', 2],
-    ['app/commander/rdv/[slug]/page.js', "libelleAutresRecompenses(recompensesTotal, 'rdv')", 2],
+    // ⚠️ L'APPEL PORTE LE COMMERÇANT DEPUIS LE 09/09 : la phrase promet « ta
+    // prochaine réservation » chez un restaurant et « ton prochain rendez-vous
+    // » ailleurs. La garde vise l'appel COMPLET, sinon elle verdirait sur une
+    // version qui a perdu le métier en route.
+    ['app/commander/rdv/[slug]/page.js', "libelleAutresRecompenses(recompensesTotal, 'rdv', commercant)", 2],
     ['app/commander/CarteFideliteFiche.js', 'libelleCarteRecompenses(nbRecompenses, libelle)', 1],
     ['app/commander/page.js', 'libelleCarteRecompenses(nbRecompenses, libelle, { court: true })', 1],
   ]) {

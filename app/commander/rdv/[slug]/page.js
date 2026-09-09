@@ -3732,9 +3732,9 @@ export default function CommanderRdvSlug() {
                                   Une seule récompense se dépense par rendez-vous,
                                   c'est un choix protecteur, mais tu ne peux pas
                                   demander au Yopper de le deviner. */}
-                              {libelleAutresRecompenses(recompensesTotal, 'rdv') && (
+                              {libelleAutresRecompenses(recompensesTotal, 'rdv', commercant) && (
                                 <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: T.main, fontWeight: 700 }}>
-                                  {libelleAutresRecompenses(recompensesTotal, 'rdv')}
+                                  {libelleAutresRecompenses(recompensesTotal, 'rdv', commercant)}
                                 </p>
                               )}
                             </div>

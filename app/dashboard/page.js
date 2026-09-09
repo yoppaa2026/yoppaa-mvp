@@ -7,7 +7,7 @@ import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { retourArriereAutorise, alerteAutreOnglet, indexBlocages, appliquerBlocage, etatCreneau, ongletDouverture } from '@/lib/tableau-de-bord'
-import { peutReserver, motReservation } from '@/lib/reservation-metier'
+import { peutReserver, motReservation, motsReservation } from '@/lib/reservation-metier'
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
@@ -1567,12 +1567,13 @@ export default function Dashboard() {
           const aAnnoncer = [...nouveaux].sort((a, b) =>
             String(a.date_rdv || '').localeCompare(String(b.date_rdv || ''))
             || String(a.heure_debut || '').localeCompare(String(b.heure_debut || '')))[0]
-          const { titre, corps } = texteAlerteRdv(aAnnoncer, { aujourdhui, demain: dateKey(demainD) })
+          const { titre, corps } = texteAlerteRdv(aAnnoncer, { aujourdhui, demain: dateKey(demainD), commercant })
+          const motsAlerte = motsReservation(commercant)
           if (notificationsActives) {
             // ⚠️ Le point médian sépare des éléments, il ne coordonne pas :
             // « · et » mélangeait les deux rôles, et « 2 autres » tout court
             // laissait deviner 2 autres QUOI, juste après un nom de prestation.
-            envoyerNotification(titre, nouveaux.length > 1 ? `${corps} · ${nouveaux.length - 1} autre${nouveaux.length > 2 ? 's' : ''} rendez-vous` : corps, 'yoppaa-rdv')
+            envoyerNotification(titre, nouveaux.length > 1 ? `${corps} · ${nouveaux.length - 1} autre${nouveaux.length > 2 ? 's' : ''} ${motsAlerte.nomPluriel}` : corps, 'yoppaa-rdv')
           }
           setNouveauRdv({ titre, corps, nombre: nouveaux.length })
           setTimeout(() => setNouveauRdv(null), 8000)

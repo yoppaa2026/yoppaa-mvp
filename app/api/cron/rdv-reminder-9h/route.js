@@ -17,6 +17,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRdvReminder } from '@/lib/resend'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { soldeRdv } from '@/lib/rdv-paiement'
+import { motsReservation } from '@/lib/reservation-metier'
 
 export async function GET(request) {
   // 1) Securite : verifie Bearer token
@@ -49,7 +50,7 @@ export async function GET(request) {
         prix_estime, acompte_paye_en_ligne, acompte_montant, fidelite_remise,
         client_email, client_prenom,
         lieu_id, lieu_libelle, lieu_adresse,
-        commercant:commercants(nom, slug, adresse, rdv_delai_annulation_heures),
+        commercant:commercants(nom, slug, adresse, rdv_delai_annulation_heures, categorie),
         prestation:rdv_prestations(nom)
       `)
       .eq('date_rdv', dateRdv)
@@ -89,11 +90,12 @@ export async function GET(request) {
           duree_minutes:           r.duree_minutes,
           solde_a_prevoir:         solde,
           delai_annulation_heures: r.commercant.rdv_delai_annulation_heures || 24,
+          commercant_categorie:    r.commercant.categorie || null,
         })
 
         await envoyerAuCommercant({
           to: r.client_email,
-          subject: `Rappel — RDV demain chez ${r.commercant.nom} à ${r.heure_debut?.slice(0,5)}`,
+          subject: `${motsReservation(r.commercant).sujetRappel} ${r.commercant.nom} à ${r.heure_debut?.slice(0,5)}`,
           html,
         })
         sent++

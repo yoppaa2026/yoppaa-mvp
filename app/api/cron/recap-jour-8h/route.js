@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRecapRdvJour, emailRecapCommandesJour } from '@/lib/resend'
 import { resolvePlan } from '@/lib/plans'
 import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
+import { motsReservation } from '@/lib/reservation-metier'
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization') || ''
@@ -96,12 +97,14 @@ export async function GET(request) {
           total = rdvsFlat.length
           html = emailRecapRdvJour({
             nom_commercant: c.nom,
+            commercant_categorie: c.categorie || null,
             date_jour:      dateJour,
             rdvs:           rdvsFlat,
           })
+          const motsRecap = motsReservation(c)
           subject = total === 0
-            ? `Aucun RDV aujourd'hui`
-            : `${total} RDV${total > 1 ? 's' : ''} aujourd'hui — Yoppaa`
+            ? `${motsRecap.sujetRecapAucun} aujourd'hui`
+            : `${total} ${total > 1 ? motsRecap.recapPluriel : motsRecap.recapSingulier} aujourd'hui — Yoppaa`
         } else {
           // Commandes du jour pour ce commercant.
           // ⚠️ La table commandes n'a PAS de colonne client_prenom (nom complet

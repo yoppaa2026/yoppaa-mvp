@@ -8185,7 +8185,19 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       // individuel, c'est-à-dire tout le parc existant et l'immense majorité
       // des métiers à rendez-vous. Au-delà, c'est un cours collectif : dix
       // personnes de 10h à 11h chez une professeure de yoga.
-      capacite: capacitePrestation({ capacite: form.capacite }),
+      // 🔴 POUR UNE TABLE, LA CAPACITÉ SE DÉDUIT : le nombre d'exemplaires
+      // multiplié par la taille de la table. Elle n'est plus saisie, donc elle
+      // ne peut plus contredire l'inventaire. Elle reste écrite parce que le
+      // calcul en couverts s'en sert tant que l'inventaire est incomplet, et
+      // parce qu'une colonne qu'on cesse d'alimenter garde sa vieille valeur.
+      capacite: (() => {
+        if (!estTable || !form.par_couverts) return capacitePrestation({ capacite: form.capacite })
+        const q = Number(form.quantite)
+        const t = Number(form.couverts_max)
+        return Number.isFinite(q) && q >= 1 && Number.isFinite(t) && t >= 1
+          ? q * t
+          : capacitePrestation({ capacite: form.capacite })
+      })(),
       // 🔴 UNE TABLE COMPTE DES COUVERTS. Le drapeau ne se pose que chez un
       // alimentaire qui y a droit : sans cette garde, décocher la catégorie
       // laisserait une prestation en mode table dans un salon de coiffure.
@@ -8348,7 +8360,24 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                     <span><strong style={{ color: T.deep }}>{p.duree_minutes} min</strong></span>
                     <span><strong style={{ color: T.main }}>{prixLabel}</strong></span>
                     {p.acompte_pourcent > 0 && <span>Acompte <strong style={{ color: T.ink }}>{p.acompte_pourcent}%</strong></span>}
-                    {Number(p.capacite) > 1 && <span>Jusqu&rsquo;à <strong style={{ color: T.ink }}>{p.capacite}</strong> {mots.agendaOccupes}</span>}
+                    {/* 🔴 LA CARTE DISAIT LA CAPACITÉ DE SALLE, PAS LA TABLE. Une
+                        table de quatre s'annonçait « jusqu'à 6 couverts », parce
+                        que `capacite` portait tout autre chose. Pour une table,
+                        on dit ce qu'elle est : combien on en a, et pour combien
+                        de personnes. */}
+                    {p.par_couverts === true
+                      ? (
+                        <span>
+                          {Number(p.quantite) > 0 && (
+                            <>
+                              <strong style={{ color: T.ink }}>{p.quantite}</strong> table{Number(p.quantite) > 1 ? 's' : ''}
+                              {' · '}
+                            </>
+                          )}
+                          jusqu&rsquo;à <strong style={{ color: T.ink }}>{p.couverts_max || '?'}</strong> personne{Number(p.couverts_max) > 1 ? 's' : ''}
+                        </span>
+                      )
+                      : Number(p.capacite) > 1 && <span>Jusqu&rsquo;à <strong style={{ color: T.ink }}>{p.capacite}</strong> {mots.agendaOccupes}</span>}
                     {!p.actif && <span style={{ color: '#DC2626', fontWeight: 700 }}>Inactif</span>}
                   </div>
 
@@ -8423,7 +8452,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                 onVariantes={vs => setPropsIa(vs)}
                 toast={toast} />
             </div>
-            <Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Shampoing, coupe, brushing" rows={2} style={{ marginBottom: propsIa.length > 0 ? 4 : 10 }}/>
+            <Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder={mots.descriptionExemple} rows={2} style={{ marginBottom: propsIa.length > 0 ? 4 : 10 }}/>
             {propsIa.length > 0 ? (
               <div style={{ marginBottom: 10 }}>
                 <PropositionsIa propositions={propsIa}
@@ -8470,20 +8499,30 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
               </div>
             )}
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
-                {form.par_couverts ? 'Couverts en salle sur un service' : 'Personnes par créneau'}
-              </label>
-              <Input type="number" min="1" max="100" value={form.capacite}
-                onChange={e => setForm({ ...form, capacite: e.target.value })}/>
-              <p style={{ fontSize: 11, color: T.muted, margin: '4px 0 0', lineHeight: 1.45 }}>
-                {form.par_couverts
-                  ? `Ta salle accueille ${capacitePrestation({ capacite: form.capacite })} personnes en même temps. Quand elles sont assises, l'horaire se ferme.`
-                  : capacitePrestation({ capacite: form.capacite }) > 1
+            {/* 🔴 LA CAPACITÉ DE SALLE DISPARAÎT DÈS QU'ON DÉCLARE SES TABLES
+                (Alex, 09/09 : « à quoi sert ce champ ? »). Elle était la jauge
+                de l'ancien modèle. Maintenant que le commerçant dit combien il a
+                de tables de chaque format, la capacité SE DÉDUIT : six tables de
+                quatre plus deux de deux plus deux de six font quarante couverts.
+                La redemander, c'est demander deux fois la même chose et obtenir
+                deux réponses — Alex y a mis sa quantité, et la carte affichait
+                « Table de 4 · jusqu'à 6 couverts ».
+                ⚠️ ELLE RESTE VISIBLE POUR UN COURS, où elle est la vraie
+                question : douze places au yoga, ce n'est pas douze tables. */}
+            {!form.par_couverts && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
+                  Personnes par créneau
+                </label>
+                <Input type="number" min="1" max="100" value={form.capacite}
+                  onChange={e => setForm({ ...form, capacite: e.target.value })}/>
+                <p style={{ fontSize: 11, color: T.muted, margin: '4px 0 0', lineHeight: 1.45 }}>
+                  {capacitePrestation({ capacite: form.capacite }) > 1
                     ? `Cours collectif : ${capacitePrestation({ capacite: form.capacite })} personnes peuvent réserver le même horaire, et tes clients voient les places restantes.`
                     : 'Rendez-vous individuel : une seule personne par horaire. Augmente pour un cours collectif.'}
-              </p>
-            </div>
+                </p>
+              </div>
+            )}
 
             {/* ⚠️ LES BORNES DE LA TABLE, et le maximum n'est pas décoratif : au
                 delà, la fiche invite à appeler plutôt que de laisser le client

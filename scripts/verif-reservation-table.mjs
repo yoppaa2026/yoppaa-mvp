@@ -233,8 +233,14 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('⚠️ une borne vide vaut null, jamais zéro',
     /couverts_min: estTable && form\.par_couverts && form\.couverts_min !== '' \? Number\(form\.couverts_min\) : null,/.test(CONFIG)
     && /couverts_max: estTable && form\.par_couverts && form\.couverts_max !== '' \? Number\(form\.couverts_max\) : null,/.test(CONFIG))
-  verifier('et le libellé de la capacité suit le métier',
-    /form\.par_couverts \? 'Couverts en salle sur un service' : 'Personnes par créneau'/.test(CONFIG))
+  // ⚠️ CETTE GARDE SURVEILLAIT UN LIBELLÉ QUI N'EXISTE PLUS (09/09). Le champ
+  // disait « Couverts en salle sur un service » pour une table ; il ne s'affiche
+  // plus du tout, puisque la capacité se déduit de l'inventaire. L'intention
+  // n'a pas changé — le commerçant ne doit pas se voir poser une question qui
+  // ne le concerne pas — mais la façon de la tenir, si.
+  verifier('la capacité de salle ne se demande plus sur une table',
+    !/'Couverts en salle sur un service'/.test(CONFIG)
+    && /\{!form\.par_couverts && \(/.test(CONFIG))
   // ⚠️ SANS L'APOSTROPHE : le texte est passé en propriété JavaScript depuis le
   // regroupement des interrupteurs, donc il porte une vraie apostrophe et non
   // l'entité `&rsquo;` du JSX. Viser la phrase, pas son encodage.
@@ -783,6 +789,26 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('⚠️ zéro exemplaire ne compte pas comme une quantité',
     quantiteDe({ quantite: 0 }) === null && quantiteDe({ quantite: 3 }) === 3)
 
+  // 🔴 LA CAPACITÉ DE SALLE NE SE DEMANDE PLUS DEUX FOIS (Alex, 09/09 : « à quoi
+  // sert ce champ ? »). Elle était la jauge de l'ancien modèle ; elle se déduit
+  // désormais de l'inventaire. La laisser à l'écran, c'est poser deux fois la
+  // même question et obtenir deux réponses : Alex y a mis sa quantité, et la
+  // carte annonçait « Table de 4 · jusqu'à 6 couverts ».
+  const CFG = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 le champ « personnes par créneau » disparaît sur une table',
+    /\{!form\.par_couverts && \([\s\S]{0,200}?Personnes par créneau/.test(CFG))
+  verifier('🔴 et la capacité d’une table se DÉDUIT de son inventaire',
+    /return Number\.isFinite\(q\) && q >= 1 && Number\.isFinite\(t\) && t >= 1\s*\n?\s*\? q \* t/.test(CFG))
+  verifier('⚠️ le cours garde sa question à lui',
+    /Cours collectif : \$\{capacitePrestation/.test(CFG))
+  verifier('🔴 la carte annonce la taille de la table, pas la jauge de salle',
+    /jusqu&rsquo;à <strong style=\{\{ color: T\.ink \}\}>\{p\.couverts_max \|\| '\?'\}<\/strong> personne/.test(CFG))
+  verifier('⚠️ et elle dit combien il y en a',
+    /<strong style=\{\{ color: T\.ink \}\}>\{p\.quantite\}<\/strong> table/.test(CFG))
+  verifier('⚠️ l’exemple de description parle du métier du commerce',
+    MOTS_TABLE_TEST.descriptionExemple === 'Près de la fenêtre, banquette confortable'
+    && MOTS_SALON_TEST.descriptionExemple === 'Shampoing, coupe, brushing')
+
   // Le branchement serveur : le mode se décide sur la SALLE, et le calcul en
   // couverts reste intact tant que l'inventaire n'est pas complet.
   const CREA = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
@@ -979,6 +1005,7 @@ egal('la réservation d’un restaurant s’atteint quand même',
     avecLaSienne: 'avec ton rendez-vous', prochaineFois: 'ton prochain rendez-vous',
     laSienne: 'ton rendez-vous', laMienne: 'mon rendez-vous', uneSienne: 'un rendez-vous',
     participeConfirme: 'confirmé', participeAnnule: 'annulé', participeHonore: 'honoré',
+    descriptionExemple: 'Shampoing, coupe, brushing',
   }
   let derives = 0
   for (const [cle, attendu] of Object.entries(HISTORIQUE_VITRINE)) {

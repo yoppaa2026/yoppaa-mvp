@@ -29,7 +29,7 @@ import { supabase } from '@/lib/supabase'
 // (26/08). ⚠️ Et `canDo` SANS catégorie, jamais `peut()` : la matrice réserve
 // `commande` à l'alimentaire alors que cette fiche sert les vitrines.
 import { isVitrine, canDo, planEffectif } from '@/lib/plans'
-import { reservationActive, motsReservation } from '@/lib/reservation-metier'
+import { reservationActive, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
 import { lienFiche } from '@/lib/lien-fiche'
 import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-partage'
@@ -644,9 +644,24 @@ export default function CommanderRdvSlug() {
         .filter(x => x.lieux.length > 0)
     : []
 
+  // ✅ PAS DE PRODUITS SUR UNE RÉSERVATION DE TABLE (Alex, 10/09 au soir) :
+  // « pas de produit affiché pour la résa de table, il les voit quand il est
+  // sur la fiche du commerçant ; ils restent si à emporter, ils partent si résa
+  // table ». Au restaurant, on emporte OU on s'assoit, c'est la règle que la
+  // fiche applique déjà depuis le 09/09. Ici, le bloc « Ses produits »
+  // proposait encore d'acheter la carte avec la table, « à emporter le jour J ».
+  //
+  // ⚠️ `!!commercant` D'ABORD : sans catégorie, `fonctionReservation` rend la
+  // table, et un salon verrait ses produits disparaître le temps du chargement.
+  const resaDeTable = !!commercant && fonctionReservation(commercant) === 'reservation_table'
+
   const produitsAchetables = canDo(planEffectif(commercant), 'commande')
     && commercant?.stripe_account_charges_enabled === true
     && !commercant?._rdvDesactive
+    // ⚠️ ET RIEN NE S'ACHÈTE AVEC UNE TABLE : ni ajout, ni panier repris de la
+    // boutique, ni paiement groupé. Sans cette ligne, masquer le bloc laissait
+    // encore passer un panier déposé par la boutique.
+    && !resaDeTable
 
   // ⚠️ L'ASSIETTE DE LA RÉCOMPENSE VIT ICI, ET NULLE PART AILLEURS.
   //
@@ -3009,7 +3024,9 @@ export default function CommanderRdvSlug() {
                 <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations} client={client}/>
               )}
 
-              {etape === 1 && produits.length > 0 && renderProduits()}
+              {/* ✅ PAS DE PRODUITS SUR UNE RÉSERVATION DE TABLE (Alex, 10/09) :
+                  la carte se lit sur la fiche du restaurant. */}
+              {etape === 1 && produits.length > 0 && !resaDeTable && renderProduits()}
 
               {/* ─── Offrir un bon cadeau ─────────────────────────────────────
                   APRÈS les prestations et les produits (Alex, 05/08), à la même
@@ -3623,7 +3640,7 @@ export default function CommanderRdvSlug() {
                   {/* Les produits restent atteignables jusqu'au bout : le client
                       se décide souvent en voyant le total. Placés SOUS le
                       rendez-vous, qui reste le cœur de la page. */}
-                  {produits.length > 0 && renderProduits()}
+                  {produits.length > 0 && !resaDeTable && renderProduits()}
 
                   {/* Encart Yopper connecté vs invité.
                       Wording : on rassure d'abord (PAS besoin de compte) puis on offre

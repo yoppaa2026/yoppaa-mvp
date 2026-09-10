@@ -33,6 +33,7 @@
 
 import { NextResponse } from 'next/server'
 import { prixPrestationServeur } from '@/lib/prix-prestation-server'
+import { estParCouverts } from '@/lib/cours-collectifs'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
@@ -110,6 +111,13 @@ export async function POST(request) {
     if (!commercant) return NextResponse.json({ ok: false, error: 'Commerçant introuvable.' }, { status: 404 })
     if (!prestation || prestation.commercant_id !== commercant.id) {
       return NextResponse.json({ ok: false, error: 'Prestation introuvable.' }, { status: 404 })
+    }
+    // ✅ RIEN NE S'ACHÈTE AVEC UNE TABLE (Alex, 10/09 au soir) : « ils restent si
+    // à emporter, ils partent si résa table ». La page de réservation ne le
+    // propose plus ; cette route le REFUSE, parce qu'un écran ne décide de rien
+    // et qu'ici on encaisse. La carte se commande à emporter depuis la fiche.
+    if (estParCouverts(prestation)) {
+      return NextResponse.json({ ok: false, error: 'Une réservation de table ne s’accompagne d’aucun achat. Pour emporter, commande depuis la fiche du restaurant.' }, { status: 400 })
     }
     if (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled) {
       return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas encore activé chez ce commerçant.' }, { status: 400 })

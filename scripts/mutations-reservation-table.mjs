@@ -745,6 +745,37 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '  const formEstTable = estTable && form.par_couverts === true',
     vers: '  const formEstTable = estTable' },
+
+  // ═══ PAS DE PRODUITS SUR UNE RESERVATION DE TABLE (Alex, 10/09 au soir) ═
+  { nom: '🔴 les produits redeviennent achetables avec une table',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '    && !resaDeTable',
+    vers: '' },
+
+  { nom: '🔴 le bloc des produits revient au choix de la table',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '{etape === 1 && produits.length > 0 && !resaDeTable && renderProduits()}',
+    vers: '{etape === 1 && produits.length > 0 && renderProduits()}' },
+
+  { nom: '🔴 le bloc des produits revient au recapitulatif',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '{produits.length > 0 && !resaDeTable && renderProduits()}',
+    vers: '{produits.length > 0 && renderProduits()}' },
+
+  { nom: '⚠️ un salon perd ses produits le temps du chargement',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "const resaDeTable = !!commercant && fonctionReservation(commercant) === 'reservation_table'",
+    vers: "const resaDeTable = fonctionReservation(commercant) === 'reservation_table'" },
+
+  { nom: '🔴 le serveur encaisse un achat avec une table',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '    if (estParCouverts(prestation)) {',
+    vers: '    if (false) {' },
+
+  { nom: '⚠️ la fiche du restaurant emporte le panier vers la table',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire(commercant)',
+    vers: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && false' },
 ]
 
 const lancer = () => {

@@ -2071,6 +2071,41 @@ egal('la réservation d’un restaurant s’atteint quand même',
     && /\{p\.par_couverts !== true && p\.acompte_pourcent > 0 &&/.test(CFG_P))
   verifier('⚠️ la règle vaut pour une table, pas pour tout le restaurant',
     /const formEstTable = estTable && form\.par_couverts === true/.test(CFG_P))
+
+  // ─── ✅ PAS DE PRODUITS SUR UNE RÉSERVATION DE TABLE (Alex, 10/09 au soir) ─
+  //
+  // « Pas de produit affiché pour la résa de table, il les voit quand il est
+  // sur la fiche du commerçant ; ils restent si à emporter, ils partent si résa
+  // table. »
+  verifier('🔴 la page de réservation sait qu’elle réserve une table, une fois le commerce connu',
+    /const resaDeTable = !!commercant && fonctionReservation\(commercant\) === 'reservation_table'/.test(FICHE_P))
+  verifier('🔴 rien ne s’y achète : ni ajout, ni panier repris, ni paiement groupé',
+    /const produitsAchetables = canDo\(planEffectif\(commercant\), 'commande'\)[\s\S]{0,200}?&& !resaDeTable/.test(FICHE_P))
+  verifier('🔴 et le bloc des produits ne s’affiche ni au choix ni au récapitulatif',
+    /\{etape === 1 && produits\.length > 0 && !resaDeTable && renderProduits\(\)\}/.test(FICHE_P)
+    && /\{produits\.length > 0 && !resaDeTable && renderProduits\(\)\}/.test(FICHE_P)
+    && (FICHE_P.match(/renderProduits\(\)\}/g) || []).length === 2)
+  // ⚠️ LE SERVEUR LE REFUSE AUSSI : un écran ne décide de rien, et cette route
+  // encaisse. Le refus vient AVANT la commande, le stock et Stripe.
+  const GROUPE = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-rdv-commande/route.js', import.meta.url), 'utf8'))
+  const iRefus = GROUPE.indexOf('if (estParCouverts(prestation)) {')
+  const iAvant = [GROUPE.indexOf("from('commandes')"), GROUPE.indexOf('construireLignesCommande('), GROUPE.indexOf('stripe.')]
+    .filter(i => i !== -1)
+  verifier('🔴 la route du paiement groupé refuse un achat avec une table, avant tout le reste',
+    iRefus !== -1 && iAvant.length === 3 && iAvant.every(i => iRefus < i)
+    && /if \(estParCouverts\(prestation\)\) \{\s*return NextResponse\.json\(\{ ok: false,[^}]*\}, \{ status: 400 \}\)/.test(GROUPE),
+    `refus à ${iRefus}, suivants à ${iAvant.join(', ')}`)
+  // ⚠️ LA FICHE DU RESTAURANT NE CHANGE PAS : sa carte reste à emporter, et son
+  // lien « Réserver une table » n'emporte pas le panier.
+  const FICHE_R = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  // ⚠️ ON COMPTE LES DÉPÔTS, ON NE MESURE PAS UNE DISTANCE : un seul endroit
+  // dépose le panier pour la réservation, et il vit sous `!choisitSonParcours`,
+  // c'est-à-dire jamais chez un restaurant qui fait les deux.
+  verifier('⚠️ témoin : chez un restaurant, « Réserver une table » n’emporte pas le panier',
+    (FICHE_R.match(/deposerPanierPourRdv\(/g) || []).length === 1
+    && /\{peutPrendreRdv && !choisitSonParcours && \(\(\) => \{[\s\S]{0,2000}?deposerPanierPourRdv\(commercant\.slug, panier\)/.test(FICHE_R)
+    && /const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire\(commercant\)/.test(FICHE_R),
+    `${(FICHE_R.match(/deposerPanierPourRdv\(/g) || []).length} dépôt(s)`)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

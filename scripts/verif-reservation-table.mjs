@@ -1748,8 +1748,12 @@ egal('la réservation d’un restaurant s’atteint quand même',
   const { questionSeanceHonoree: qCloture } = await import('../lib/confirmation-rdv.js')
   verifier('🔴 et la question dit « ces 4 tables », pas « ces 4 personnes »',
     qCloture(4, { table: true }).titre === 'Marquer ces 4 tables comme venues ?')
+  // ⚠️ SUR LES DEUX PHRASES, TABLE ET COURS (10/09 au soir). Depuis qu'une table
+  // a sa propre phrase, sans montant, cette garde ne lisait plus que la sienne :
+  // la promesse d'email pouvait revenir dans celle des cours sans rien rougir.
   verifier('🔴 sans promettre un email qui ne part plus',
-    !/email/i.test(qCloture(1, { table: true }).message) && !/email/i.test(qCloture(4, { table: true }).message))
+    [qCloture(1, { table: true }), qCloture(4, { table: true }), qCloture(1), qCloture(4)]
+      .every(q => q && !/email/i.test(q.message)))
 
   verifier('🔴 la carte de la table montre le minimum : « de 3 à 4 personnes »',
     /\{Number\(p\.couverts_min\) > 1\s*\?\s*<>de <strong[^>]*>\{p\.couverts_min\}<\/strong> à <\/>\s*:\s*<>jusqu&rsquo;à <\/>\}/.test(CFG_MIN))
@@ -1936,6 +1940,137 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /salleAlerte \? 'Déplacer quand même ✓'/.test(DEPLACE))
   verifier('⚠️ tant que la salle n’est pas lue, ni « Libre » ni bouton',
     /!salleAttend && !salleAlerte && \(/.test(DEPLACE) && /&& !submitting && !salleAttend\)/.test(DEPLACE))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ UNE TABLE N'A PAS DE PRIX (décision d'Alex, 10/09 au soir)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// « Il n'y a pas de prix pour les articles dans les résas de table. La seule
+// qu'on va faire payer (acompte ou empreinte), c'est un montant forfaitaire par
+// personne à partir d'un certain nombre de personnes. »
+//
+// Tout est EXÉCUTÉ sur une table qui garde un prix et un acompte d'avant la
+// décision : c'est le cas réel de La Table d'Essai, et c'est celui qui piège.
+{
+  const { sansPrixSiTable } = await import('../lib/cours-collectifs.js')
+  const { prixEffectifPrestation, remiseSurPrestation, montantsPrestation } = await import('../lib/deals.js')
+  const { prixPrestationServeur } = await import('../lib/prix-prestation-server.js')
+  const { ventilerTunnelRdv } = await import('../lib/tunnel-rdv-montants.js')
+  const { etatPaiementRdv, resteAEncaisser } = await import('../lib/rdv-paiement.js')
+  const { questionSeanceHonoree, confirmationSeanceHonoree } = await import('../lib/confirmation-rdv.js')
+
+  const TABLE_AVEC_PRIX = { id: 't4', commercant_id: 'c1', nom: 'Table de 4 personnes', par_couverts: true, prix: 25, acompte_pourcent: 30, duree_minutes: 120 }
+  const SOIN = { id: 's1', commercant_id: 'c1', nom: 'Soin visage', par_couverts: false, prix: 50, acompte_pourcent: 30, duree_minutes: 60 }
+  // ⚠️ AVEC SA DATE : une remise sans date n'est active aucun jour, et le témoin
+  // du soin remisé ne mesurerait alors rien.
+  const TOUT = { id: 'd1', deal_type: 'remise_pct', remise_pct: 20, cible_tout: 'prestations', actif: true, date_deal: '2026-09-15' }
+
+  // ─── La règle, à l'arrivée des données ───────────────────────────────────
+  const nettoyee = sansPrixSiTable(TABLE_AVEC_PRIX)
+  egal('🔴 une table arrive sans prix ni acompte', [nettoyee.prix, nettoyee.acompte_pourcent], [null, 0])
+  egal('⚠️ et garde tout le reste', [nettoyee.nom, nettoyee.duree_minutes, nettoyee.par_couverts], ['Table de 4 personnes', 120, true])
+  verifier('⚠️ ce qui n’est pas une table ne bouge pas d’un octet', sansPrixSiTable(SOIN) === SOIN)
+  verifier('⚠️ et la table d’origine n’est pas modifiée en place', TABLE_AVEC_PRIX.prix === 25)
+
+  // ─── Le calcul du prix, écran et serveur ─────────────────────────────────
+  egal('🔴 le prix effectif d’une table est nul, même avec 25 € en base', prixEffectifPrestation(TABLE_AVEC_PRIX, []), null)
+  egal('🔴 et aucune remise ne lui fabrique un tarif barré', remiseSurPrestation(TABLE_AVEC_PRIX, [TOUT], '2026-09-15'), null)
+  egal('⚠️ donc ni prix ni acompte au calcul complet', montantsPrestation(TABLE_AVEC_PRIX, [TOUT], '2026-09-15'), { prix: 0, acompte: 0, solde: 0 })
+  egal('⚠️ témoin : le soin garde son prix', prixEffectifPrestation(SOIN, []), 50)
+  const vent = ventilerTunnelRdv({ prixPrestation: prixEffectifPrestation(TABLE_AVEC_PRIX, []), acomptePourcent: 30, acompteEnLigne: true, remiseRecompense: 10, soldeBon: 50 })
+  egal('🔴 ni acompte, ni bon, ni récompense sur une table', [vent.acompte, vent.bonTotal, vent.remiseRecompense, vent.aPayerMaintenant], [0, 0, 0, 0])
+  {
+    const lectures = []
+    const faux = { from: (t) => { lectures.push(t); const c = { select: () => c, or: () => c, eq: () => c, then: (r) => r({ data: [TOUT], error: null }) }; return c } }
+    const serveur = await prixPrestationServeur(faux, TABLE_AVEC_PRIX, '2026-09-15')
+    egal('🔴 le serveur ne débite rien sur une table', serveur.prix, null)
+    egal('⚠️ et ne va même pas lire les remises', lectures, [])
+    const temoin = await prixPrestationServeur(faux, SOIN, '2026-09-15')
+    egal('⚠️ témoin : le soin, lui, est remisé par le serveur', temoin.prix, 40)
+  }
+
+  // 🔴 LA RÈGLE DU SERVEUR NE VOIT UNE TABLE QUE SI LA COLONNE ARRIVE. Deux des
+  // trois routes chargeaient la prestation sans `par_couverts` : la règle se
+  // serait tue, et le prix resté en base serait parti sur Stripe.
+  {
+    const { readdirSync, statSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const racine = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+    const sansColonne = []
+    let routes = 0
+    const parcourir = (d) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e)
+        if (statSync(p).isDirectory()) { parcourir(p); continue }
+        if (!/\.js$/.test(e)) continue
+        const src = sansProse(readFileSync(p, 'utf8'))
+        if (!/prixPrestationServeur\(/.test(src)) continue
+        routes++
+        const selects = [...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,300}?\.select\(\s*(['"`])([\s\S]*?)\1/g)].map(m => m[2])
+        if (selects.length === 0 || !selects.every(s => /\bpar_couverts\b/.test(s))) {
+          sansColonne.push(`${p.split(/[\\/]/).slice(-3).join('/')} → ${selects.join(' | ') || 'aucun select'}`)
+        }
+      }
+    }
+    parcourir(join(racine, 'app', 'api'))
+    verifier('🔴 toute route qui calcule un prix de prestation charge `par_couverts`',
+      routes >= 3 && sansColonne.length === 0, `routes : ${routes} · ${sansColonne.join(' · ')}`)
+  }
+
+  // ─── L'agenda et la clôture ──────────────────────────────────────────────
+  const demain = new Date(Date.now() + 86400000)
+  const jourDemain = `${demain.getFullYear()}-${String(demain.getMonth() + 1).padStart(2, '0')}-${String(demain.getDate()).padStart(2, '0')}`
+  const resaTable = { statut: 'confirme', date_rdv: jourDemain, heure_debut: '19:00', heure_fin: '21:00', prix_estime: null, prestation: { nom: 'Table de 4 personnes', par_couverts: true } }
+  egal('🔴 une table ne réclame plus « À payer » dans l’agenda', etatPaiementRdv(resaTable), null)
+  egal('🔴 même avec un prix resté d’avant la décision', etatPaiementRdv({ ...resaTable, prix_estime: 25 }), null)
+  verifier('⚠️ mais un acompte, lui, se suivra (le forfait du lot 4)',
+    etatPaiementRdv({ ...resaTable, acompte_montant: 30, acompte_paye: true }) !== null)
+  verifier('⚠️ témoin : un rendez-vous sans prix qui n’est pas une table dit toujours « À payer »',
+    etatPaiementRdv({ ...resaTable, prestation: { nom: 'Coupe', par_couverts: false } })?.libelle === 'À payer')
+  egal('🔴 rien à encaisser sur une table, même avec un vieux prix', resteAEncaisser({ ...resaTable, prix_estime: 25 }), 0)
+  egal('⚠️ témoin : le soin, lui, a 50 € à encaisser', resteAEncaisser({ ...resaTable, prix_estime: 50, prestation: { par_couverts: false } }), 50)
+
+  const q1 = questionSeanceHonoree(1, { table: true })
+  const q4 = questionSeanceHonoree(4, { table: true })
+  verifier('🔴 clore une table ne parle ni de montant ni de chiffre d’affaires',
+    [q1, q4].every(q => q && !/montant|chiffre d’affaires/i.test(q.message)), `${q1?.message} | ${q4?.message}`)
+  verifier('⚠️ elle parle du passage sur la carte de fidélité', /carte de fidélité/.test(q1?.message || '') && /carte de fidélité/.test(q4?.message || ''))
+  verifier('⚠️ témoin : un cours parle toujours de son chiffre d’affaires', /chiffre d’affaires/.test(questionSeanceHonoree(4)?.message || ''))
+  egal('🔴 et la confirmation ne promet aucun montant', confirmationSeanceHonoree({ faits: 2, table: true }), '2 tables sont marquées comme venues.')
+  verifier('⚠️ témoin : celle d’un cours, si',
+    /chiffre d’affaires/.test(confirmationSeanceHonoree({ faits: 2 })))
+
+  // ─── Les écrans, qui ne s'exécutent pas hors navigateur ──────────────────
+  const FICHE_P = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 la fiche du client reçoit ses tables sans prix, dès le chargement',
+    /setPrestations\(\(prest \|\| \[\]\)\.map\(sansPrixSiTable\)\)/.test(FICHE_P))
+  const corpsPrix = (() => { const i = FICHE_P.indexOf('function formatPrix('); return i === -1 ? '' : FICHE_P.slice(i, FICHE_P.indexOf('\n}', i)) })()
+  verifier('🔴 elle n’affiche ni prix ni « Sur demande » pour une table',
+    /if \(estParCouverts\(prestation\)\) return null/.test(corpsPrix))
+  verifier('⚠️ ni un point de séparation seul après la durée',
+    /\{formatPrix\(prestationChoisie, deals\) && \(/.test(FICHE_P)
+    && /\{\(seanceSurAbo \|\| formatPrix\(prestationChoisie, deals\)\) && \(/.test(FICHE_P))
+  verifier('⚠️ ni une ligne « Prix » vide après la réservation',
+    /\{\(libellePrixSeance\(rdvCree\) \|\| formatPrix\(prestationChoisie, deals\)\) && \(/.test(FICHE_P))
+
+  const BORD_P = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 le tableau de bord reçoit ses tables sans prix (saisie et déplacement)',
+    /setPrestationsRdv\(\(pData \|\| \[\]\)\.map\(sansPrixSiTable\)\)/.test(BORD_P))
+
+  const CFG_P = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 une table s’enregistre sans prix, sans acompte, sans TVA',
+    /prix: formEstTable \? null : form\.prix \? Number\(form\.prix\) : null,/.test(CFG_P)
+    && /acompte_pourcent: formEstTable \? 0 :/.test(CFG_P)
+    && /tva_taux: formEstTable \|\| form\.tva_taux === ''/.test(CFG_P))
+  verifier('🔴 son formulaire n’affiche plus ces trois champs',
+    /\{!formEstTable && \(\s*<div>\s*<label[^>]*>Acompte \(%\)<\/label>/.test(CFG_P)
+    && /\{formEstTable \? \(\s*<p[^>]*>\s*Une table n&rsquo;a pas de prix/.test(CFG_P))
+  verifier('⚠️ et sa carte ne montre ni prix ni acompte',
+    /\{p\.par_couverts !== true && <span><strong style=\{\{ color: T\.main \}\}>\{prixLabel\}<\/strong><\/span>\}/.test(CFG_P)
+    && /\{p\.par_couverts !== true && p\.acompte_pourcent > 0 &&/.test(CFG_P))
+  verifier('⚠️ la règle vaut pour une table, pas pour tout le restaurant',
+    /const formEstTable = estTable && form\.par_couverts === true/.test(CFG_P))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

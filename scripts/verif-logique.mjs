@@ -3837,9 +3837,18 @@ verifier('et elle dit ce qui arrive : le chiffre d’affaires et la carte de fid
 verifier('un service de restaurant se clôture en tables',
   questionSeanceHonoree(3, { table: true }).titre === 'Marquer ces 3 tables comme venues ?'
   && questionSeanceHonoree(1, { table: true }).titre === 'Marquer cette table comme venue ?')
+// ✅ UNE TABLE N'A PAS DE PRIX (décision d'Alex, 10/09 au soir). Cette garde
+// exigeait « Leur montant entre dans ton chiffre d'affaires du jour » au
+// caractère près : elle gravait une phrase que la décision rend fausse. Elle
+// exige maintenant ce qui est vrai, et le dit dans les deux sens : la table ne
+// parle d'aucun montant, le cours garde le sien.
 verifier('avec ses propres boutons et sa propre confirmation',
   questionSeanceHonoree(3, { table: true }).actions[0].label === 'Oui, toutes les tables étaient là'
-  && confirmationSeanceHonoree({ faits: 2, table: true }) === '2 tables sont marquées comme venues. Leur montant entre dans ton chiffre d’affaires du jour.')
+  && confirmationSeanceHonoree({ faits: 2, table: true }) === '2 tables sont marquées comme venues.')
+verifier('✅ une table clôturée n’annonce aucun montant, un cours garde le sien',
+  !/chiffre d’affaires|montant/.test(questionSeanceHonoree(3, { table: true }).message)
+  && !/chiffre d’affaires|montant/.test(confirmationSeanceHonoree({ faits: 2, table: true }))
+  && /chiffre d’affaires/.test(confirmationSeanceHonoree({ faits: 2 })))
 verifier('⚠️ et un cours garde ses mots au caractère près',
   questionSeanceHonoree(1).titre === 'Marquer cette personne comme venue ?'
   && questionSeanceHonoree(1).actions[0].label === 'Oui, elle était là')

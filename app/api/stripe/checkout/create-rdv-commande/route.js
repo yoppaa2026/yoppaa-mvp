@@ -101,7 +101,9 @@ export async function POST(request) {
         .select('id, nom, slug, categorie, plan, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, tva_taux_defaut')
         .eq('id', commercant_id).single(),
       supabase.from('rdv_prestations')
-        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id')
+        // ⚠️ `par_couverts` (10/09 au soir) : une table n'a pas de prix, et
+        // `prixPrestationServeur` ne le sait que si la colonne arrive jusqu'à lui.
+        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, par_couverts')
         .eq('id', prestation_id).single(),
     ])
 

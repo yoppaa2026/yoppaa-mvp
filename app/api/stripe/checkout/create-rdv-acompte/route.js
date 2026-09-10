@@ -71,7 +71,10 @@ export async function POST(request) {
     const [{ data: commercant }, { data: prestation }] = await Promise.all([
       // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait en dépend.
       supabase.from('commercants').select('id, nom, slug, categorie, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, rdv_actif, plan, essai_plan, created_at').eq('id', commercant_id).single(),
-      supabase.from('rdv_prestations').select('id, nom, prix, acompte_pourcent, duree_minutes').eq('id', prestation_id).single(),
+      // ⚠️ `par_couverts` (10/09 au soir) : une table n'a pas de prix, et
+      // `prixPrestationServeur` ne le sait que si la colonne arrive jusqu'à lui.
+      // Sans elle, le prix resté en base sur une table partait en acompte.
+      supabase.from('rdv_prestations').select('id, nom, prix, acompte_pourcent, duree_minutes, par_couverts').eq('id', prestation_id).single(),
     ])
 
     if (!commercant) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })

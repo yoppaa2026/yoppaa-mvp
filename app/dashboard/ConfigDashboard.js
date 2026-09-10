@@ -8059,6 +8059,12 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   const [saving, setSaving] = useState(false)
   const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [], quantite: '' }
   const [form, setForm] = useState(initialForm)
+  // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : « la seule qu'on va
+  // faire payer, c'est un montant forfaitaire par personne à partir d'un
+  // certain nombre de personnes ». Le prix, l'acompte en pourcentage et la TVA
+  // disparaissent du formulaire d'une table, et s'enregistrent vides. Le
+  // forfait par personne aura ses propres réglages (lot 4).
+  const formEstTable = estTable && form.par_couverts === true
   // Propositions IA pour la description de la prestation (surface 'prestation')
   const [propsIa, setPropsIa] = useState([])
   const firstLoadRef = useRef(true)
@@ -8175,12 +8181,15 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       description: form.description.trim() || null,
       duree_minutes: duree,
       // Vide = tarif de vive voix, la fiche affiche « Prix sur demande ».
-      prix: form.prix ? Number(form.prix) : null,
-      acompte_pourcent: Math.max(0, Math.min(100, parseInt(form.acompte_pourcent, 10) || 0)),
+      // ✅ UNE TABLE N'A PAS DE PRIX : vide d'office, quoi que contienne le
+      // formulaire, y compris la valeur d'avant la décision du 10/09.
+      prix: formEstTable ? null : form.prix ? Number(form.prix) : null,
+      acompte_pourcent: formEstTable ? 0 : Math.max(0, Math.min(100, parseInt(form.acompte_pourcent, 10) || 0)),
       actif: !!form.actif,
       // Vide = pas renseigné : null, jamais 0, sinon la prestation passerait
       // pour exonérée alors qu'elle n'a simplement pas été réglée.
-      tva_taux: form.tva_taux === '' || form.tva_taux == null ? null : Number(form.tva_taux),
+      // ✅ Sans prix, pas de TVA à ventiler : une table l'enregistre vide.
+      tva_taux: formEstTable || form.tva_taux === '' || form.tva_taux == null ? null : Number(form.tva_taux),
       // ⚠️ COMBIEN DE PERSONNES SUR UN MÊME CRÉNEAU. 1 = rendez-vous
       // individuel, c'est-à-dire tout le parc existant et l'immense majorité
       // des métiers à rendez-vous. Au-delà, c'est un cours collectif : dix
@@ -8358,8 +8367,11 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                   {p.description && <p style={{ fontSize: 12, color: T.muted, marginBottom: 4, lineHeight: 1.4 }}>{p.description}</p>}
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: T.muted }}>
                     <span><strong style={{ color: T.deep }}>{p.duree_minutes} min</strong></span>
-                    <span><strong style={{ color: T.main }}>{prixLabel}</strong></span>
-                    {p.acompte_pourcent > 0 && <span>Acompte <strong style={{ color: T.ink }}>{p.acompte_pourcent}%</strong></span>}
+                    {/* ✅ UNE TABLE N'A PAS DE PRIX (10/09) : ni prix, ni
+                        « Prix sur demande », ni acompte en pourcentage sur sa
+                        carte, même si un ancien réglage en garde un en base. */}
+                    {p.par_couverts !== true && <span><strong style={{ color: T.main }}>{prixLabel}</strong></span>}
+                    {p.par_couverts !== true && p.acompte_pourcent > 0 && <span>Acompte <strong style={{ color: T.ink }}>{p.acompte_pourcent}%</strong></span>}
                     {/* 🔴 LA CARTE DISAIT LA CAPACITÉ DE SALLE, PAS LA TABLE. Une
                         table de quatre s'annonçait « jusqu'à 6 couverts », parce
                         que `capacite` portait tout autre chose. Pour une table,
@@ -8475,10 +8487,15 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Durée (min) *</label>
                 <Input type="number" min="5" step="5" value={form.duree_minutes} onChange={e => setForm({ ...form, duree_minutes: e.target.value })}/>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Acompte (%)</label>
-                <Input type="number" min="0" max="100" value={form.acompte_pourcent} onChange={e => setForm({ ...form, acompte_pourcent: e.target.value })}/>
-              </div>
+              {/* ✅ PAS D'ACOMPTE EN POURCENTAGE SUR UNE TABLE : sans prix, il
+                  n'y a rien dont prendre un pourcentage. Le forfait par
+                  personne aura ses propres réglages (lot 4). */}
+              {!formEstTable && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Acompte (%)</label>
+                  <Input type="number" min="0" max="100" value={form.acompte_pourcent} onChange={e => setForm({ ...form, acompte_pourcent: e.target.value })}/>
+                </div>
+              )}
             </div>
 
             {/* ⚠️ COMBIEN DE PERSONNES SUR UN MÊME CRÉNEAU. Yoppaa ne
@@ -8627,7 +8644,16 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
               </div>
             )}
             {/* TVA de la prestation. Le prix affiché reste celui que paie le
-                client : le taux détermine seulement la part de TVA à l'intérieur. */}
+                client : le taux détermine seulement la part de TVA à l'intérieur.
+                ✅ UNE TABLE N'A NI PRIX NI TVA (Alex, 10/09 au soir) : ces deux
+                blocs ne s'affichent pas pour elle, une ligne dit pourquoi. */}
+            {formEstTable ? (
+              <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5, margin: '0 0 12px', padding: '10px 12px', background: T.bg, borderRadius: 10 }}>
+                Une table n&rsquo;a pas de prix : l&rsquo;addition se règle à ta caisse, comme d&rsquo;habitude.
+                Yoppaa ne demande rien au client pour réserver.
+              </p>
+            ) : (
+            <>
             <div style={{ marginBottom: 12 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>TVA</label>
               <select value={form.tva_taux ?? ''} onChange={e => setForm({ ...form, tva_taux: e.target.value })}
@@ -8660,6 +8686,8 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                 {mots.prixSurDemande}
               </p>
             </div>
+            </>
+            )}
             {/* Junction prestation ↔ praticiens : optionnel, aucun coché = tous éligibles */}
             {praticiens.length > 0 && (
               <div style={{ marginBottom: 14, padding: 12, background: T.bg, borderRadius: 10 }}>

@@ -1809,9 +1809,17 @@ for (const chemin of [
   const replis = MOD.match(/return \{ prix: plein, remise: null, deals: \[\] \}/g) || []
   verifie('🔴 les DEUX sorties rendent le prix PLEIN', replis.length === 2,
     `${replis.length} repli(s) au lieu de 2 : sans prix connu ou base muette`)
-  verifie('🔴 et aucune sortie ne rend un prix nul',
-    !/return \{ prix: null/.test(MOD),
-    'une base muette ferait disparaître le prix au lieu de le laisser plein')
+  // ✅ SAUF UNE TABLE (décision d'Alex, 10/09 au soir) : elle n'a pas de prix,
+  // et c'est la SEULE sortie qui rende `null`. Cette garde est PRÉCISÉE, pas
+  // désarmée : il en faut exactement une, gardée par `estParCouverts`, et placée
+  // AVANT toute lecture des remises. Une base muette, elle, rend toujours le
+  // prix plein, et le compte des deux replis juste au-dessus le vérifie encore.
+  const sortiesNulles = MOD.match(/return \{ prix: null/g) || []
+  const iTable = MOD.indexOf('if (estParCouverts(prestation)) return { prix: null, remise: null, deals: [] }')
+  const iLecture = MOD.indexOf(".from('yoppaa_deals')")
+  verifie('🔴 et aucune sortie ne rend un prix nul, sauf celle d’une table, avant toute lecture',
+    sortiesNulles.length === 1 && iTable !== -1 && iLecture !== -1 && iTable < iLecture,
+    `${sortiesNulles.length} sortie(s) nulle(s), table à ${iTable}, lecture à ${iLecture} : une base muette ferait disparaître le prix au lieu de le laisser plein`)
   // ⚠️ ET IL NE TOUCHE À AUCUNE TABLE À DONNÉES PERSONNELLES. Il tourne avec la
   // clé de service : une lecture de trop y serait invisible.
   //

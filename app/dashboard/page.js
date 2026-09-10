@@ -48,7 +48,7 @@ import { chiffreAffaires } from '@/lib/statistiques'
 import { peutMarquerNonRetire, ancienneteCommande } from '@/lib/rappels-retrait'
 import { libellePeriodeStats } from '@/lib/agenda-bloc'
 import { compterAClore } from '@/lib/rdv-statut'
-import { estReservationDeTable } from '@/lib/cours-collectifs'
+import { estReservationDeTable, sansPrixSiTable } from '@/lib/cours-collectifs'
 import { accesDashboard } from '@/lib/statut-commercant'
 import EcranValidation from './EcranValidation'
 
@@ -1345,7 +1345,10 @@ export default function Dashboard() {
     ])
     setRdvs(rdvData || [])
     setCreneauxRdv(crData || [])
-    setPrestationsRdv(pData || [])
+    // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : un prix resté en base
+    // sur une table ne s'affiche plus au téléphone et ne s'écrit plus sur la
+    // réservation. Même règle, même fonction que la fiche du client.
+    setPrestationsRdv((pData || []).map(sansPrixSiTable))
     setPraticiensRdv(praData || [])
   }, [])
 

@@ -39,7 +39,7 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 // ⚠️ `champsLieuPour` et `premierePlaceLibre` ont quitté cet écran le 30/08 :
 // le lieu gravé et la première place libre se décident CÔTÉ SERVEUR, dans
 // `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
-import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts, dureeSelonCouverts } from '@/lib/cours-collectifs'
+import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts, dureeSelonCouverts, sansPrixSiTable } from '@/lib/cours-collectifs'
 import { enModeInventaire, plusGrandeTable, formatPourAffichage } from '@/lib/inventaire-salle'
 import { attenteOuverte } from '@/lib/attente-rdv'
 import BlocAttente from './BlocAttente'
@@ -119,6 +119,9 @@ function formatDuree(min) {
 // valeur par défaut pour que les appelants qui n'ont pas de deals sous la main
 // continuent de rendre le prix plein, sans branchement.
 function formatPrix(prestation, deals = []) {
+  // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : ni montant, ni « Sur
+  // demande », qui laisserait croire qu'un tarif se discute. Rien ne s'affiche.
+  if (estParCouverts(prestation)) return null
   const prix = prixEffectifPrestation(prestation, deals)
   if (prix != null) return `${Number(prix).toFixed(2)} €`
   return 'Sur demande'
@@ -1241,7 +1244,11 @@ export default function CommanderRdvSlug() {
 
       if (annule) return
       setPhotos(photosData || [])
-      setPrestations(prest || [])
+      // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir), et c'est appliqué ICI,
+      // à l'arrivée des données : un prix ou un acompte restés en base sur une
+      // table ne s'affichent plus nulle part dans cette page, et ne se calculent
+      // plus. Le serveur applique la même règle de son côté.
+      setPrestations((prest || []).map(sansPrixSiTable))
       // ⚠️ LES FORMULES SONT CHARGÉES À PART, ET C'EST VOLONTAIRE. Une erreur
       // sur cette lecture ne doit pas emporter la fiche entière : un commerce
       // sans abonnement, c'est-à-dire l'immense majorité, doit continuer de
@@ -3046,8 +3053,14 @@ export default function CommanderRdvSlug() {
                         <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.92rem', letterSpacing: '-0.2px', lineHeight: 1.2, marginBottom: 4 }}>{prestationChoisie.nom}</p>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', color: T.muted, fontWeight: 700 }}>
                           <span>{formatDuree(dureeRetenue)}</span>
-                          <span style={{ opacity: 0.5 }}>·</span>
-                          <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie, deals)}</span>
+                          {/* ✅ UNE TABLE N'A PAS DE PRIX : ni montant, ni point
+                              de séparation qui resterait seul après la durée. */}
+                          {formatPrix(prestationChoisie, deals) && (
+                            <>
+                              <span style={{ opacity: 0.5 }}>·</span>
+                              <span style={{ color: T.main, fontWeight: 800 }}>{formatPrix(prestationChoisie, deals)}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <button onClick={() => { setPrestationChoisie(null); allerEtape(1); setDateChoisie(null); setHeureChoisie(null) }}
@@ -3460,16 +3473,23 @@ export default function CommanderRdvSlug() {
                           <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 600, lineHeight: 1.45 }}>
                             {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} · {heureChoisie}<br/>
                             <span style={{ color: T.muted, fontWeight: 500 }}>
-                              {formatDuree(dureeRetenue)} ·{' '}
+                              {formatDuree(dureeRetenue)}
                               {/* ⚠️ LE PRIX SUIT LE MOYEN DE PAIEMENT. Annoncer
                                   le tarif plein à quelqu'un qui pose une séance
                                   déjà payée est un mensonge, et « 0 € » en est
                                   un autre : ce n'est pas gratuit, c'est compris.
                                   La phrase vient du module, la même que dans
-                                  « Mes rendez-vous ». */}
-                              <span style={{ color: T.main, fontWeight: 800 }}>
-                                {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie, deals)}
-                              </span>
+                                  « Mes rendez-vous ».
+                                  ✅ ET UNE TABLE N'A PAS DE PRIX (10/09) : la
+                                  durée reste seule, sans point qui traîne. */}
+                              {(seanceSurAbo || formatPrix(prestationChoisie, deals)) && (
+                                <>
+                                  {' · '}
+                                  <span style={{ color: T.main, fontWeight: 800 }}>
+                                    {seanceSurAbo ? 'Compris dans ton abonnement' : formatPrix(prestationChoisie, deals)}
+                                  </span>
+                                </>
+                              )}
                             </span>
                           </p>
                         </div>
@@ -4371,6 +4391,9 @@ export default function CommanderRdvSlug() {
                       <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Durée</span>
                       <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.ink }}>{formatDuree(dureeRetenue)}</span>
                     </div>
+                    {/* ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : la
+                        ligne « Prix » disparaît, plutôt que de s'afficher vide. */}
+                    {(libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, deals)) && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: rdvCree.acompte_montant ? 8 : 0, paddingBottom: rdvCree.acompte_montant ? 8 : 0, borderBottom: rdvCree.acompte_montant ? `1px solid ${T.pale}` : 'none' }}>
                       {/* ⚠️ « PRIX ESTIMÉ : 45 € » SUR UNE SÉANCE DÉJÀ PAYÉE
                           ferait croire à un second paiement, et « 0 € » ferait
@@ -4383,6 +4406,7 @@ export default function CommanderRdvSlug() {
                         {libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, deals)}
                       </span>
                     </div>
+                    )}
                     {rdvCree.acompte_montant && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acompte</span>

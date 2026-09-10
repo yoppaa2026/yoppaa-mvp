@@ -644,6 +644,107 @@ const MUTATIONS = [
     fichier: 'app/dashboard/page.js',
     de: 'couverts_min, couverts_max, duree_paliers, quantite',
     vers: 'couverts_min, couverts_max, duree_paliers' },
+
+  // ═══ UNE TABLE N A PAS DE PRIX (decision d Alex, 10/09 au soir) ═════════
+  { nom: '🔴 une table arrive encore avec son prix',
+    fichier: 'lib/cours-collectifs.js',
+    de: '  return { ...prestation, prix: null, acompte_pourcent: 0 }',
+    vers: '  return prestation' },
+
+  { nom: '🔴 le prix effectif d une table redevient celui de la base',
+    fichier: 'lib/deals.js',
+    de: '  if (estParCouverts(prestation)) return null',
+    vers: '  void 0' },
+
+  { nom: '🔴 un deal fabrique un tarif barre sur une table',
+    fichier: 'lib/deals.js',
+    de: '  if (!prestation || estParCouverts(prestation)) return null',
+    vers: '  if (!prestation) return null' },
+
+  { nom: '🔴 le serveur va relire le prix d une table',
+    fichier: 'lib/prix-prestation-server.js',
+    de: '  if (estParCouverts(prestation)) return { prix: null, remise: null, deals: [] }',
+    vers: '' },
+
+  { nom: '🔴 la route d acompte oublie par_couverts',
+    fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    de: "select('id, nom, prix, acompte_pourcent, duree_minutes, par_couverts')",
+    vers: "select('id, nom, prix, acompte_pourcent, duree_minutes')" },
+
+  { nom: '🔴 la route du tunnel unique oublie par_couverts',
+    fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: ".select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, par_couverts')",
+    vers: ".select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id')" },
+
+  { nom: '🔴 une table reclame de nouveau « A payer »',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  if (rdv.prestation?.par_couverts === true && !aUnAcompte) return null',
+    vers: '' },
+
+  { nom: '⚠️ l acompte d une table disparait de l agenda',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  if (rdv.prestation?.par_couverts === true && !aUnAcompte) return null',
+    vers: '  if (rdv.prestation?.par_couverts === true) return null' },
+
+  { nom: '🔴 la cloture d une table demande comment elle a paye',
+    fichier: 'lib/rdv-paiement.js',
+    de: '  if (rdv.prestation?.par_couverts === true) return 0',
+    vers: '' },
+
+  { nom: '🔴 clore une table reparle de chiffre d affaires',
+    fichier: 'lib/confirmation-rdv.js',
+    de: "          ? 'Le passage est compté sur la carte de fidélité quand il y en a une. Ce geste ne se défait pas.'",
+    vers: "          ? 'Le montant entre dans ton chiffre d’affaires. Ce geste ne se défait pas.'" },
+
+  { nom: '🔴 la confirmation d une table promet un montant',
+    fichier: 'lib/confirmation-rdv.js',
+    de: '  return table ? debut : `${debut} Leur montant entre dans ton chiffre d’affaires du jour.`',
+    vers: '  return `${debut} Leur montant entre dans ton chiffre d’affaires du jour.`' },
+
+  { nom: '🔴 la fiche du client recoit ses tables avec leur prix',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '      setPrestations((prest || []).map(sansPrixSiTable))',
+    vers: '      setPrestations(prest || [])' },
+
+  { nom: '🔴 la fiche affiche « Sur demande » sur une table',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '  if (estParCouverts(prestation)) return null',
+    vers: '  void 0' },
+
+  { nom: '⚠️ la ligne « Prix » vide revient apres la reservation',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '{(libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, deals)) && (',
+    vers: '{true && (' },
+
+  { nom: '🔴 le tableau de bord recoit ses tables avec leur prix',
+    fichier: 'app/dashboard/page.js',
+    de: '    setPrestationsRdv((pData || []).map(sansPrixSiTable))',
+    vers: '    setPrestationsRdv(pData || [])' },
+
+  { nom: '🔴 une table s enregistre avec son prix',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      prix: formEstTable ? null : form.prix ? Number(form.prix) : null,',
+    vers: '      prix: form.prix ? Number(form.prix) : null,' },
+
+  { nom: '🔴 une table s enregistre avec son acompte',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: 'acompte_pourcent: formEstTable ? 0 :',
+    vers: 'acompte_pourcent:' },
+
+  { nom: '⚠️ le champ acompte revient sur une table',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '              {!formEstTable && (',
+    vers: '              {true && (' },
+
+  { nom: '⚠️ la carte d une table remontre son prix',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '{p.par_couverts !== true && <span><strong style={{ color: T.main }}>{prixLabel}</strong></span>}',
+    vers: '<span><strong style={{ color: T.main }}>{prixLabel}</strong></span>' },
+
+  { nom: '⚠️ la regle de la table s etend a tout le restaurant',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '  const formEstTable = estTable && form.par_couverts === true',
+    vers: '  const formEstTable = estTable' },
 ]
 
 const lancer = () => {

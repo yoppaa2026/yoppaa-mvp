@@ -76,21 +76,31 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Accès refusé : token ou email invalide.' }, { status: 403 })
     }
 
+    // 🔴 LES PHRASES DE CET ÉCRAN, DANS LES MOTS DU MÉTIER (11/09). L'écran
+    // d'annulation et l'espace du client affichent tels quels les messages de
+    // cette route, et le client d'un restaurant lisait « Ton RDV est annulé. ».
+    // Un salon garde ses phrases d'avant, lettre pour lettre.
+    const mots = motsReservation(rdv.commercant)
+
     // ─── 3) Idempotence ────────────────────────────────────────────────────
     if (rdv.statut === 'annule_client' || rdv.statut === 'annule_commercant') {
       return NextResponse.json({
         ok: true,
         already_canceled: true,
         rdv_id: rdv.id,
-        message: 'Ce RDV est déjà annulé.',
+        message: mots.ecranDejaAnnule,
       })
     }
 
     // Statuts non annulables : honore (déjà passé), no_show (déjà manqué)
+    // ⚠️ PLUS LE STATUT BRUT : « ce RDV est au statut "no_show" » est une valeur
+    // de base de données, pas une phrase, et elle s'affichait au client.
     if (['honore', 'no_show'].includes(rdv.statut)) {
       return NextResponse.json({
         ok: false,
-        error: `Annulation impossible : ce RDV est au statut "${rdv.statut}".`,
+        error: rdv.statut === 'honore'
+          ? mots.ecranDejaEuLieu
+          : `${mots.ecranNonHonore} Contacte directement ${rdv.commercant?.nom || 'le commerçant'}.`,
       }, { status: 400 })
     }
 
@@ -109,7 +119,7 @@ export async function POST(request) {
         ok: false,
         cutoff_expired: true,
         cutoff_date: cutoffDate.toISOString(),
-        error: `Délai d'annulation dépassé. Tu pouvais annuler jusqu'à ${delaiH}h avant ton RDV (${heureFR}). Contacte directement ${commercant?.nom || 'le commerçant'}.`,
+        error: `Délai d'annulation dépassé. Tu pouvais annuler jusqu'à ${delaiH}h ${mots.ecranAvant} (${heureFR}). Contacte directement ${commercant?.nom || 'le commerçant'}.`,
       }, { status: 403 })
     }
 
@@ -388,7 +398,9 @@ export async function POST(request) {
     // calendrier : c'est le même email que `/api/emails/rdv-annule`, et il
     // redisait le format quand la confirmation disait le groupe.
     const table = rdv.prestation?.par_couverts === true
-    const mots = motsReservation(commercant)
+    // Combien de bons ont payé ce qui revient. L'email ET l'écran le disent, au
+    // pluriel dès deux (01/09) : compté une fois, pour les deux.
+    const nbBonsRendus = lignesBonsDe(rdv).length + (gardeSesProduits ? 0 : lignesBonsDe(commandeLiee || {}).length)
     if (rdv.client_email) {
       try {
         const html = emailRdvAnnule({
@@ -412,7 +424,7 @@ export async function POST(request) {
           // 🔴 ET LE NOMBRE DE BONS, pour que la phrase se mette au pluriel. Un
           // rendez-vous peut en porter cinq : « sur ton bon » en annonce un, le
           // Yopper en cherche un, et croit avoir perdu les autres.
-          nb_bons:           lignesBonsDe(rdv).length + (gardeSesProduits ? 0 : lignesBonsDe(commandeLiee || {}).length),
+          nb_bons:           nbBonsRendus,
           recompense_rendue: recompenseRendue,
           produits_gardes:   gardeSesProduits,
           produits_montant:  produitsPayesCarte,
@@ -471,8 +483,11 @@ export async function POST(request) {
     // sans cette phrase, le Yopper lit « 43,80 € reviennent » et croit avoir
     // perdu les 35 € de son bon. Il faut ouvrir sa fiche pour découvrir qu'ils
     // y sont revenus, et personne ne va vérifier ce qu'on ne lui annonce pas.
+    // 🔴 ET AU PLURIEL QUAND PLUSIEURS BONS ONT PAYÉ (11/09), comme l'email : « de
+    // ton bon » devant trois bons en fait chercher un, et croire les autres perdus.
+    const plusieursBons = nbBonsRendus > 1
     const phraseBon = bonRendu > 0
-      ? ` Les ${euros(bonRendu)} de ton ${libelleBon(commercant?.categorie)} sont recrédités dessus, utilisables tout de suite.`
+      ? ` Les ${euros(bonRendu)} de ${plusieursBons ? 'tes' : 'ton'} ${libelleBon(commercant?.categorie, { pluriel: plusieursBons })} sont recrédités dessus, utilisables tout de suite.`
       : ''
     // 🔴 ET LA RÉCOMPENSE, QUI REVENAIT SANS QUE PERSONNE NE LE DISE (Alex,
     // 30/08). Exactement le défaut du bon cadeau, un jour plus tard : le geste
@@ -486,15 +501,15 @@ export async function POST(request) {
 
     let message
     if (refundError) {
-      message = `Ton RDV est annulé. Le remboursement sera traité manuellement par le commerçant sous quelques jours.${retours}`
+      message = `${mots.ecranAnnule} Le remboursement sera traité manuellement par le commerçant sous quelques jours.${retours}`
     } else if (gardeSesProduits) {
       message = refundMontant > 0
-        ? `Ton RDV est annulé. Tes ${euros(refundMontant)} d'acompte reviennent sur ton moyen de paiement dans 5 à 10 jours, et tes produits t'attendent en boutique.${retours}`
-        : `Ton RDV est annulé. Tes produits t'attendent en boutique.${retours}`
+        ? `${mots.ecranAnnule} Tes ${euros(refundMontant)} d'acompte reviennent sur ton moyen de paiement dans 5 à 10 jours, et tes produits t'attendent en boutique.${retours}`
+        : `${mots.ecranAnnule} Tes produits t'attendent en boutique.${retours}`
     } else if (refundMontant > 0) {
-      message = `Ton RDV est annulé. ${euros(refundMontant)} reviennent sur ton moyen de paiement dans 5 à 10 jours.${retours}`
+      message = `${mots.ecranAnnule} ${euros(refundMontant)} reviennent sur ton moyen de paiement dans 5 à 10 jours.${retours}`
     } else {
-      message = `Ton RDV est annulé.${retours}`
+      message = `${mots.ecranAnnule}${retours}`
     }
 
     return NextResponse.json({

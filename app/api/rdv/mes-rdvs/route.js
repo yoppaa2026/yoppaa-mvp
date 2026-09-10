@@ -28,6 +28,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { adresseRendezVous } from '@/lib/lieu-fige'
+import { intituleReservation } from '@/lib/reservation-metier'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -58,10 +59,10 @@ export async function GET(request) {
       fidelite_remise, bon_cadeau_montant,
       acompte_paye_en_ligne, acompte_montant, acompte_paye_date,
       annulation_token, client_email,
-      abonnement_id,
+      abonnement_id, couverts,
       lieu_id, lieu_libelle, lieu_adresse,
       commercant:commercants(nom, slug, type, categorie, adresse, rdv_delai_annulation_heures),
-      prestation:rdv_prestations(nom, duree_minutes),
+      prestation:rdv_prestations(nom, duree_minutes, par_couverts),
       praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url)
     `)
     .eq('client_email', email)
@@ -80,7 +81,17 @@ export async function GET(request) {
   // commerçante inscrite chez elle mais qui donne cours en salle.
   const enriched = (data || []).map(r => ({
     ...r,
-    prestation_nom: r.prestation?.nom || null,
+    // 🔴 UNE TABLE SE DIT EN PERSONNES ICI AUSSI (11/09) : la carte du client
+    // affichait « Table de 6 personnes » pour un groupe de quatre, le format
+    // où la salle les a assis. « Table pour 4 personnes », comme le rappel de
+    // la veille et l'événement de son calendrier.
+    // ⚠️ `couverts` et `par_couverts` sont demandés plus haut : sans eux, la
+    // carte retombe sur le format, sans erreur.
+    prestation_nom: intituleReservation({
+      prestation_nom: r.prestation?.nom,
+      table: r.prestation?.par_couverts === true,
+      couverts: r.couverts,
+    }) || null,
     lieu_affiche: adresseRendezVous(r),
   }))
 

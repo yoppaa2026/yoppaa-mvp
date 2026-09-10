@@ -1253,6 +1253,10 @@ egal('la réservation d’un restaurant s’atteint quand même',
     laSienne: 'ton rendez-vous', laMienne: 'mon rendez-vous', uneSienne: 'un rendez-vous',
     participeConfirme: 'confirmé', participeAnnule: 'annulé', participeHonore: 'honoré',
     descriptionExemple: 'Shampoing, coupe, brushing',
+    // L'écran d'annulation et l'espace du client (11/09) : les phrases d'avant,
+    // lettre pour lettre, telles que la route et la carte les écrivaient en dur.
+    ecranAnnule: 'Ton RDV est annulé.', ecranDejaAnnule: 'Ce RDV est déjà annulé.', ecranAvant: 'avant ton RDV',
+    annulerLien: 'Annuler ce RDV', annulerTitre: 'Annuler ce RDV ?', annulerBouton: 'Annuler le RDV',
   }
   let derives = 0
   for (const [cle, attendu] of Object.entries(HISTORIQUE_VITRINE)) {
@@ -1269,7 +1273,9 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // du vocabulaire du rendez-vous, et le restaurateur lirait « RDV » sans que
   // rien ne rougisse.
   const DOIVENT_DIFFERER = ['prestations', 'praticiens', 'creneaux', 'choisir', 'yoppe',
-    'emailConfirme', 'ctaVoir', 'manuelTitre', 'agendaOccupe', 'agendaLegende', 'blocSansNom']
+    'emailConfirme', 'ctaVoir', 'manuelTitre', 'agendaOccupe', 'agendaLegende', 'blocSansNom',
+    'ecranAnnule', 'ecranDejaAnnule', 'ecranAvant', 'ecranDejaEuLieu', 'ecranNonHonore',
+    'annulerLien', 'annulerTitre', 'annulerBouton']
   const identiques = DOIVENT_DIFFERER.filter(c => MOTS_TABLE_TEST[c] === MOTS_SALON_TEST[c])
   verifier('🔴 chaque mot du restaurant diffère vraiment de celui du salon',
     identiques.length === 0, identiques.join(', '))
@@ -2732,6 +2738,99 @@ egal('la réservation d’un restaurant s’atteint quand même',
   const iPrevenir = MODALE_DEPLACER.indexOf('if (prevenir && rdv.client_email)')
   verifier('🔴 le déplacement replanifie le rappel, que le client soit prévenu par email ou non',
     iMaj !== -1 && iReplanif > iMaj && iPrevenir !== -1 && iReplanif < iPrevenir, `maj ${iMaj}, rappel ${iReplanif}, prévenir ${iPrevenir}`)
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 L'ÉCRAN D'ANNULATION ET L'ESPACE DU CLIENT, DANS LES MOTS DU MÉTIER (11/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // L'email d'annulation disait « Ta réservation a été annulée » ; l'écran qui
+  // venait de l'annuler répondait « Ton RDV est annulé. », et l'espace du
+  // client proposait « Annuler ce RDV » sur une carte « Table de 6 personnes »
+  // pour un groupe de quatre. Et un statut de base de données (« au statut
+  // "no_show" ») s'affichait tel quel, chez tout le monde.
+  //
+  // ⚠️ LES MOTS SONT EXÉCUTÉS, LES FICHIERS LUS : la route et la page ne
+  // s'exécutent pas hors du serveur. Le salon est figé plus haut, dans
+  // HISTORIQUE_VITRINE ; le restaurant l'est ici.
+  egal('🔴 le restaurant lit ses phrases d’annulation',
+    ['ecranAnnule', 'ecranDejaAnnule', 'ecranAvant', 'ecranDejaEuLieu', 'ecranNonHonore', 'annulerLien', 'annulerTitre', 'annulerBouton'].map(k => MT[k]),
+    ['Ta réservation est annulée.', 'Ta réservation est déjà annulée.', 'avant ta réservation',
+      'Ta réservation a déjà eu lieu : il n’y a plus rien à annuler.',
+      'Ta réservation a été marquée non honorée : elle ne peut plus être annulée.',
+      'Annuler cette réservation', 'Annuler cette réservation ?', 'Annuler la réservation'])
+  egal('⚠️ le salon lit une phrase, plus un statut de base',
+    [MS.ecranDejaEuLieu, MS.ecranNonHonore],
+    ['Ce RDV a déjà eu lieu : il n’y a plus rien à annuler.', 'Ce RDV a été marqué non honoré : il ne peut plus être annulé.'])
+
+  // La route : les mots sont lus AVANT la première réponse, et plus aucune
+  // phrase d'écran n'est écrite en dur.
+  const iMots = CANCEL.indexOf('const mots = motsReservation(rdv.commercant)')
+  verifier('🔴 la route lit les mots du métier avant sa première réponse au client',
+    iMots !== -1 && iMots < CANCEL.indexOf('already_canceled: true') && (CANCEL.match(/const mots = /g) || []).length === 1,
+    `mots ${iMots}, idempotence ${CANCEL.indexOf('already_canceled: true')}`)
+  verifier('🔴 « déjà annulée » dans les mots du métier', /message: mots\.ecranDejaAnnule,/.test(CANCEL))
+  verifier('🔴 un rendez-vous passé ou non honoré se dit en phrase, plus en statut',
+    /\? mots\.ecranDejaEuLieu\s*:\s*`\$\{mots\.ecranNonHonore\} /.test(CANCEL) && !/\$\{rdv\.statut\}/.test(CANCEL))
+  verifier('🔴 le délai dépassé dit « avant ta réservation »', /\$\{delaiH\}h \$\{mots\.ecranAvant\} \(/.test(CANCEL))
+  const enDurCancel = ['Ton RDV est annulé', 'Ce RDV est déjà annulé', 'avant ton RDV', 'au statut'].filter(s => CANCEL.includes(s))
+  verifier('🔴 plus aucune phrase d’écran en dur dans la route', enDurCancel.length === 0, enDurCancel.join(' | '))
+  const blocMessage = CANCEL.slice(CANCEL.indexOf('let message'), CANCEL.indexOf('return NextResponse.json({', CANCEL.indexOf('let message')))
+  const phrasesFinales = [...blocMessage.matchAll(/`([^`]*)`/g)].map(m => m[1])
+  verifier('🔴 les cinq phrases de fin commencent par « Ta réservation est annulée. » chez un restaurant',
+    phrasesFinales.length === 5 && phrasesFinales.every(p => p.startsWith('${mots.ecranAnnule}')), phrasesFinales.map(p => p.slice(0, 24)).join(' | '))
+  // Le bon au pluriel, compté une fois pour l'email ET pour l'écran.
+  verifier('🔴 l’écran dit « tes bons » quand plusieurs ont payé, comme l’email',
+    /const plusieursBons = nbBonsRendus > 1/.test(CANCEL)
+    && /\$\{plusieursBons \? 'tes' : 'ton'\} \$\{libelleBon\(commercant\?\.categorie, \{ pluriel: plusieursBons \}\)\}/.test(CANCEL)
+    && /\n\s*nb_bons:\s*nbBonsRendus,/.test(argumentDe(CANCEL, 'emailRdvAnnule')))
+  const { libelleBon } = await import('../lib/bons-cadeaux.js')
+  egal('⚠️ et le mot du pluriel existe', [libelleBon('vitrine', { pluriel: true }), libelleBon('alimentaire', { pluriel: true })], ['bons cadeaux', 'bons gourmands'])
+
+  // L'espace du client : la carte dit le groupe, comme l'email et le calendrier.
+  const MES = lire('app/api/rdv/mes-rdvs/route.js')
+  const colsMes = colonnesRdv(MES)
+  verifier('🔴 l’espace du client charge le nombre de personnes et sait ce qu’est une table',
+    /(^|,)\s*couverts\s*(,|$)/m.test(colsMes) && /prestation:rdv_prestations\([^)]*\bpar_couverts\b[^)]*\)/.test(colsMes), colsMes.slice(0, 120))
+  verifier('🔴 et sa carte dit « Table pour 4 personnes »',
+    /prestation_nom: intituleReservation\(\{[^}]*table: r\.prestation\?\.par_couverts === true,[^}]*couverts: r\.couverts,[^}]*\}\)/.test(MES)
+    && /import \{ intituleReservation \} from '@\/lib\/reservation-metier'/.test(MES))
+  // ⚠️ ET TOUT CE QUE LA FENÊTRE D'ANNULATION LIT : une colonne absente ne lève
+  // rien, elle rend la phrase muette.
+  const manquantes = ['acompte_paye_en_ligne', 'acompte_montant', 'bon_cadeau_montant', 'fidelite_remise', 'abonnement_id']
+    .filter(c => !new RegExp(`(^|[,\\s])${c}\\s*(,|$)`, 'm').test(colsMes))
+  verifier('🔴 l’espace du client charge ce que la fenêtre d’annulation annonce', manquantes.length === 0, manquantes.join(', '))
+
+  // La fenêtre d'annulation de l'espace du client : ce qui revient VRAIMENT.
+  const { annonceRetoursClient } = await import('../lib/rdv-paiement.js')
+  egal('🔴 une table réservée sans rien payer ne lit rien sur un acompte qu’elle n’a pas',
+    annonceRetoursClient({ acompte_montant: null, bon_cadeau_montant: 0, fidelite_remise: 0 }, { categorie: 'alimentaire' }), '')
+  egal('⚠️ les trois retours, quand les trois existent',
+    annonceRetoursClient({ acompte_montant: 15, acompte_paye_en_ligne: true, bon_cadeau_montant: 20, fidelite_remise: 5 }, { categorie: 'vitrine' }),
+    'Ton acompte, ton bon cadeau et ta récompense fidélité te reviennent automatiquement.')
+  egal('⚠️ l’acompte seul, au singulier',
+    annonceRetoursClient({ acompte_montant: 15, acompte_paye_en_ligne: true }, { categorie: 'vitrine' }), 'Ton acompte te revient automatiquement.')
+  egal('🔴 un acompte à payer sur place n’est pas annoncé comme rendu',
+    annonceRetoursClient({ acompte_montant: 15, acompte_paye_en_ligne: false }, { categorie: 'vitrine' }), '')
+  egal('⚠️ le bon d’un restaurant est un bon gourmand',
+    annonceRetoursClient({ bon_cadeau_montant: 30 }, { categorie: 'alimentaire' }), 'Ton bon gourmand te revient automatiquement.')
+  egal('⚠️ une séance d’abonnement revient au solde',
+    annonceRetoursClient({ abonnement_id: 'abo-1', acompte_montant: 0 }, { categorie: 'vitrine' }), 'Ta séance revient sur ton abonnement.')
+
+  const PAGE = lire('app/commander/page.js')
+  const iAnnuler = PAGE.indexOf('async function annulerRdv(rdv)')
+  const ANNULER_RDV = PAGE.slice(iAnnuler, PAGE.indexOf('\n  }\n', PAGE.indexOf("onConfirm: () => executer(),", iAnnuler)))
+  verifier('la fonction d’annulation de l’espace du client se découpe', iAnnuler !== -1 && ANNULER_RDV.length > 1500, String(ANNULER_RDV.length))
+  verifier('🔴 la fenêtre d’annulation parle le métier de la réservation',
+    /const mots = motsReservation\(rdv\.commercant\)/.test(ANNULER_RDV)
+    && /title: mots\.annulerTitre,/.test(ANNULER_RDV) && /confirmLabel: mots\.annulerBouton,/.test(ANNULER_RDV)
+    && /\$\{data\.message \|\| mots\.ecranAnnule\}/.test(ANNULER_RDV))
+  verifier('🔴 elle n’annonce que ce que la réservation porte',
+    /message: annonceRetoursClient\(rdv, \{ categorie: rdv\.commercant\?\.categorie \}\),/.test(ANNULER_RDV))
+  verifier('⚠️ et le bouton qui renonce ne s’appelle plus « Annuler »', /cancelLabel: 'Garder ma place',/.test(ANNULER_RDV))
+  verifier('🔴 le montant promis sur les produits est celui que la carte peut rendre',
+    /euros\(p\.rembourse != null \? Number\(p\.rembourse\)/.test(ANNULER_RDV))
+  verifier('🔴 la carte du client propose « Annuler cette réservation » chez un restaurant',
+    /\{motsReservation\(r\.commercant\)\.annulerLien\}/.test(PAGE) && !/Annuler ce RDV/.test(PAGE))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

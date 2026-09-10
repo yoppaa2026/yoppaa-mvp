@@ -10,7 +10,7 @@ import { libelleRetrait } from '@/lib/libelle-retrait'
 // pure et testée : un voile éteint au mauvais moment cache du contenu.
 import { bordsDefilement } from '@/lib/responsive'
 import { referenceCommande } from '@/lib/numero-commande'
-import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement, montantNetCommande, montantNetRdv, phraseAvantages } from '@/lib/rdv-paiement'
+import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement, montantNetCommande, montantNetRdv, phraseAvantages, annonceRetoursClient } from '@/lib/rdv-paiement'
 import { euros } from '@/lib/montants'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { contexteRetrait, textesRetrait, RETRAIT_RDV, RETRAIT_BOUTIQUE } from '@/lib/ecran-retrait'
@@ -20,6 +20,8 @@ import IconeRetrait from '@/app/components/IconeRetrait'
 // ⚠️ `planEffectif` ET NON `c.plan` : sans lui, un commerçant en essai de
 // Vendre restait « vitrine » dans la liste des commerces (26/08).
 import { canDo, bandeauCategorie, planEffectif } from '@/lib/plans'
+// Les mots du métier : « Annuler cette réservation » chez un restaurant.
+import { motsReservation } from '@/lib/reservation-metier'
 // Une note sans son nombre d'avis ne dit rien, et cinq étoiles vides se lisent
 // comme un zéro. La règle vit en fonction pure et testée.
 import { resumeAvis } from '@/lib/avis-affichage'
@@ -2810,6 +2812,9 @@ export default function Commander() {
   // Refund Stripe automatique côté serveur si acompte payé en ligne + avant cutoff.
   async function annulerRdv(rdv) {
     if (!rdv?.id || !rdv?.client_email) return
+    // 🔴 « ANNULER CE RDV ? » AU CLIENT D'UN RESTAURANT (11/09) : les mots du
+    // métier, comme l'écran d'annulation. Un salon garde les siens.
+    const mots = motsReservation(rdv.commercant)
 
     // `produitsChoix` n'est renseigné qu'au second passage, quand le
     // rendez-vous portait des produits payés et que le client a dit ce qu'il
@@ -2829,7 +2834,12 @@ export default function Commander() {
           const p = data.produits
           askConfirm({
             title: 'Tu gardes tes produits ?',
-            message: `Tu avais acheté ${p.lignes.map(l => `${l.quantite} × ${l.nom}`).join(', ')} pour ${Number(p.total).toFixed(2)}€, déjà payés et mis de côté.\n\nSi tu les gardes, ils t'attendent en boutique${p.acompte > 0 ? ` et seul ton acompte de ${Number(p.acompte).toFixed(2)}€ te revient` : ''}. Sinon, ${(Number(p.total) + Number(p.acompte)).toFixed(2)}€ te sont remboursés.`,
+            // 🔴 LE MONTANT PROMIS EST CELUI QUE STRIPE PEUT RENDRE (11/09), frère
+            // de l'écran d'annulation corrigé le 30/08 : un bon ou une
+            // récompense posés sur les produits n'ont jamais été payés par
+            // carte. La route le calcule (`rembourse`) ; le total brut promettait
+            // plus que le prélèvement.
+            message: `Tu avais acheté ${p.lignes.map(l => `${l.quantite} × ${l.nom}`).join(', ')} pour ${euros(Number(p.total))}, déjà payés et mis de côté.\n\nSi tu les gardes, ils t'attendent en boutique${p.acompte > 0 ? ` et seul ton acompte de ${euros(Number(p.acompte))} te revient` : ''}. Sinon, ${euros(p.rembourse != null ? Number(p.rembourse) : Number(p.total) + Number(p.acompte))} reviennent sur ton moyen de paiement.`,
             confirmLabel: 'Je garde mes produits',
             cancelLabel: 'Je rends tout',
             onConfirm: () => executer('garde'),
@@ -2846,7 +2856,7 @@ export default function Commander() {
         // temps est RENDUE (décision du 15/08) : sans ce rechargement, la
         // cliente lit encore l'ancien solde et croit avoir perdu sa séance.
         await chargerAbonnementsClient()
-        showToast({ msg: `C'est noté ! ${data.message || 'Ton RDV est annulé'} 🟣`, type: 'success' })
+        showToast({ msg: `C'est noté ! ${data.message || mots.ecranAnnule} 🟣`, type: 'success' })
       } catch (e) {
         console.error('[annulerRdv] erreur', e)
         alert(`Erreur : ${e?.message || 'inconnue'}`)
@@ -2854,9 +2864,18 @@ export default function Commander() {
     }
 
     askConfirm({
-      title: 'Annuler ce RDV ?',
-      message: 'L\'acompte sera remboursé automatiquement si tu en as payé un.',
-      confirmLabel: 'Annuler le RDV',
+      title: mots.annulerTitre,
+      // ⚠️ CE QUI REVIENT VRAIMENT, ET RIEN D'AUTRE (11/09). Cette phrase ne
+      // parlait que de l'acompte, et laissait croire le bon et la récompense
+      // perdus ; la phrase fixe de l'écran ouvert depuis l'email les nomme tous
+      // les trois, même à une table réservée sans rien payer. Ici on connaît
+      // la réservation : on ne nomme que ce qu'elle porte.
+      message: annonceRetoursClient(rdv, { categorie: rdv.commercant?.categorie }),
+      confirmLabel: mots.annulerBouton,
+      // ⚠️ ET LE BOUTON QUI RENONCE NE S'APPELLE PLUS « ANNULER » : sous
+      // « Annuler la réservation », il se lisait comme le même geste. Le mot
+      // de l'écran ouvert depuis l'email.
+      cancelLabel: 'Garder ma place',
       danger: true,
       onConfirm: () => executer(),
     })
@@ -4259,11 +4278,14 @@ export default function Commander() {
                                 </span>
                               )}
                             </div>
-                            {/* Lien discret "Annuler ce RDV". La route vérifie le cutoff
-                                (rdv_delai_annulation_heures) et refund l'acompte si OK. */}
+                            {/* Lien discret d'annulation. La route vérifie le cutoff
+                                (rdv_delai_annulation_heures) et refund l'acompte si OK.
+                                ⚠️ Dans les mots du métier (11/09) : « Annuler cette
+                                réservation » chez un restaurant, comme la fenêtre qu'il
+                                ouvre. Un salon garde « Annuler ce RDV ». */}
                             <button onClick={() => annulerRdv(r)}
                               style={{ marginTop: 10, padding: '6px 12px', background: 'transparent', color: '#DC2626', border: '1px solid #DC262644', borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif' }}>
-                              Annuler ce RDV
+                              {motsReservation(r.commercant).annulerLien}
                             </button>
                           </div>
                         </div>

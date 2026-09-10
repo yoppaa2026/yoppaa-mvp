@@ -18,6 +18,13 @@
 --     compte, pas l'ancienne.
 --
 -- Sûre à rejouer. Peut se passer avant ou après le déploiement.
+--
+-- ✅ PASSÉE PAR ALEX LE 10/09/2026 AU SOIR, avant le push de `3acd223` :
+-- fonction 1 (attendu 1), déclencheur posé et actif 1 (attendu 1), seuil
+-- « 2026-09-10 19:00 » à l'heure de Bruxelles, et les cinq essais conformes :
+-- hier refusé, quart d'heure précédent refusé, quart d'heure en cours accepté,
+-- report d'un rendez-vous d'hier accepté, clôture d'un rendez-vous passé
+-- acceptée.
 
 -- 1) La garde.
 CREATE OR REPLACE FUNCTION public.rdv_refuse_deplacement_dans_le_passe()

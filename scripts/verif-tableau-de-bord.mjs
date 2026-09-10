@@ -438,9 +438,15 @@ const verifie = (nom, cond, detail = '') => {
   // restaurateur cherche « Réservations », pas un rendez-vous — elle a rougi
   // sur un renvoi parfaitement valable. Un libellé change, un identifiant non,
   // et c'est l'identifiant que le renvoi vise.
+  // 🔴 PRÉCISÉE LE 11/09 : UN SOUS-ONGLET N'EST PAS UN ONGLET. Cette garde
+  // acceptait tout `{ id: '…', label:` du fichier, y compris les sous-onglets
+  // de l'agenda (« prestations », « praticiens »). La mutation qui envoyait le
+  // renvoi vers « prestations » restait verte : `changerOnglet` ne connaît que
+  // la barre du haut, et le bouton n'aurait rien ouvert. Les onglets de la barre
+  // portent une icône, les sous-onglets non : c'est elle qu'on exige.
   verifie('🔴 le renvoi vise un onglet qui existe vraiment',
-    !!cibleRenvoi && new RegExp(`\\{ id: '${cibleRenvoi}', label:`).test(cfg),
-    `« ${cibleRenvoi} » ne correspond à aucun onglet`)
+    !!cibleRenvoi && new RegExp(`\\{ id: '${cibleRenvoi}', label: [^\\n]*?icon: '`).test(cfg),
+    `« ${cibleRenvoi} » ne correspond à aucun onglet de la barre`)
 
   // ⚠️ ET IL EMPRUNTE LA PORTE DE LA BARRE D'ONGLETS, comme le renvoi du
   // générateur : `changerOnglet` refuse un onglet hors forfait en ouvrant la

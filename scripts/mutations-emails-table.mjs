@@ -168,6 +168,29 @@ const MUTATIONS = [
   { nom: '🔴 le non-honoré rembourse sans écrire son statut', banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/no-show/route.js',
     de: ".update({ statut: 'no_show', motif_annulation: 'commercant' })",
     vers: ".update({ motif_annulation: 'commercant' })" },
+
+  // ─── LE RAPPEL PUSH SUIT LE RENDEZ-VOUS QU'ON DÉPLACE ───────────────────
+  { nom: '🔴 l’ancien rappel n’est plus annulé', banc: 'verif:table', fichier: 'lib/rappels.js',
+    de: '    const ancien = await annulerPush(rdv.rappel_push_id)',
+    vers: '    const ancien = { ok: true }' },
+  { nom: '🔴 la case n’est plus libérée : rien n’est reprogrammé', banc: 'verif:table', fichier: 'lib/rappels.js',
+    de: '      .update({ rappel_push_id: null })',
+    vers: '      .update({})' },
+  { nom: '⚠️ un déplacement invente un rappel qui n’existait pas', banc: 'verif:table', fichier: 'lib/rappels.js',
+    de: "    if (!rdv.rappel_push_id) return { ok: true, skipped: 'aucun_rappel' }",
+    vers: '    void 0' },
+  { nom: '⚠️ un ancien rappel déjà parti bloque le nouveau', banc: 'verif:table', fichier: 'lib/rappels.js',
+    de: "    if (!ancien?.ok) console.warn('[rappels] ancien rappel non annulé', { rdvId, error: ancien?.error })",
+    vers: '    if (!ancien?.ok) return { ok: false, error: ancien?.error }' },
+  { nom: '⚠️ on efface le rappel qu’un autre geste vient de poser', banc: 'verif:table', fichier: 'lib/rappels.js',
+    de: "      .eq('rappel_push_id', rdv.rappel_push_id)",
+    vers: '' },
+  { nom: '🔴 la route replanifie sans vérifier qui demande', banc: 'verif:table', fichier: 'app/api/rdv/replanifier-rappel/route.js',
+    de: "    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)",
+    vers: '    const verdict = { ok: true }' },
+  { nom: '🔴 le déplacement ne replanifie plus le rappel', banc: 'verif:table', fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: "      prevenirClient('/api/rdv/replanifier-rappel', { rdv_id: rdv.id }, 'le rappel du client')",
+    vers: '      Promise.resolve({ ok: true })' },
 ]
 
 const lancer = (banc) => {

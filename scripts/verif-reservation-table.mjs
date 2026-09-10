@@ -2613,6 +2613,125 @@ egal('la réservation d’un restaurant s’atteint quand même',
     parcourir(join(racine, 'lib'))
     verifier('⚠️ aucune séquence de calendrier calculée à la main hors de lib/ical.js', aLaMain.length === 0, aLaMain.join(' | '))
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LE RAPPEL PUSH SUIT LE RENDEZ-VOUS QU'ON DÉPLACE (11/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Programmé à la réservation avec l'heure dans son texte, le rappel d'une
+  // heure avant ne bougeait pas avec le rendez-vous : « dans 1h, à 19:00 » à
+  // 18:00, pour une table passée à 20:30. EXÉCUTÉ sur une base à ÉTAT (une
+  // écriture filtrée ne s'applique que si ses filtres correspondent, comme en
+  // base) et un OneSignal simulé qui note chaque appel.
+  const baseAEtat = (ligne) => {
+    const etat = { ligne: { ...ligne } }
+    return {
+      etat,
+      from(table) {
+        let colonnes = ''
+        const chaine = {
+          select(c) { colonnes = c; return chaine },
+          eq() { return chaine },
+          single: async () => table === 'rdv_reservations'
+            ? { data: projeter(etat.ligne, colonnes), error: null }
+            : table === 'clients' ? { data: { id: 'client-1' }, error: null } : { data: null, error: { message: table } },
+          update(valeurs) {
+            const filtres = []
+            const suite = {
+              eq(col, val) { filtres.push([col, val]); return suite },
+              then(ok, ko) {
+                if (filtres.every(([c, x]) => etat.ligne[c] === x)) Object.assign(etat.ligne, valeurs)
+                return Promise.resolve({ error: null }).then(ok, ko)
+              },
+            }
+            return suite
+          },
+        }
+        return chaine
+      },
+    }
+  }
+  const appelsOneSignal = []
+  const envAvantR = { app: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID, cle: process.env.ONESIGNAL_REST_API_KEY }
+  const fetchAvantR = globalThis.fetch
+  let dejaParti = false
+  let remplacePendant = null
+  process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID = 'app-du-banc'
+  process.env.ONESIGNAL_REST_API_KEY = 'cle-du-banc'
+  globalThis.fetch = async (url, init) => {
+    const methode = init?.method || 'GET'
+    appelsOneSignal.push({ methode, url: String(url), corps: init?.body ? JSON.parse(init.body) : null })
+    // Un autre geste pose son propre rappel pendant qu'on annule l'ancien.
+    if (methode === 'DELETE' && remplacePendant) remplacePendant.etat.ligne.rappel_push_id = 'rappel-d-un-autre-geste'
+    if (methode === 'DELETE' && dejaParti) return new Response(JSON.stringify({ errors: ['Notification has already been sent'] }), { status: 400 })
+    return new Response(JSON.stringify(methode === 'DELETE' ? { success: true } : { id: `push-${appelsOneSignal.length}`, recipients: 1 }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  const resultats = {}
+  const DEPLACEE = { ...RESA_PUSH, heure_debut: '20:30:00', rappel_push_id: 'ancien-rappel' }
+  try {
+    const { replanifierRappelRdv } = await import('../lib/rappels.js')
+    // 1) Déplacée à 20:30, avec son rappel d'origine.
+    let base = baseAEtat(DEPLACEE)
+    resultats.deplacee = { res: await replanifierRappelRdv('r-push', base), appels: appelsOneSignal.splice(0), ligne: base.etat.ligne }
+    // 2) Posée au téléphone : jamais eu de rappel.
+    base = baseAEtat({ ...DEPLACEE, rappel_push_id: null })
+    resultats.sansRappel = { res: await replanifierRappelRdv('r-push', base), appels: appelsOneSignal.splice(0), ligne: base.etat.ligne }
+    // 3) L'ancien rappel est déjà parti : OneSignal refuse de l'annuler.
+    dejaParti = true
+    base = baseAEtat(DEPLACEE)
+    resultats.dejaParti = { res: await replanifierRappelRdv('r-push', base), appels: appelsOneSignal.splice(0), ligne: base.etat.ligne }
+    dejaParti = false
+    // 4) Déplacée à moins d'une heure : plus rien à programmer.
+    const maintenant = new Date(Date.now() + 20 * 60000)
+    const bxl = new Intl.DateTimeFormat('fr-BE', { timeZone: 'Europe/Brussels', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(maintenant)
+    const p = Object.fromEntries(bxl.map(x => [x.type, x.value]))
+    base = baseAEtat({ ...DEPLACEE, date_rdv: `${p.year}-${p.month}-${p.day}`, heure_debut: `${p.hour}:${p.minute}:00` })
+    resultats.tropTard = { res: await replanifierRappelRdv('r-push', base), appels: appelsOneSignal.splice(0), ligne: base.etat.ligne }
+    // 5) Un autre geste a remplacé le rappel entre la lecture et l'effacement.
+    base = baseAEtat(DEPLACEE)
+    remplacePendant = base
+    resultats.remplace = { res: await replanifierRappelRdv('r-push', base), appels: appelsOneSignal.splice(0), ligne: base.etat.ligne }
+    remplacePendant = null
+  } finally {
+    globalThis.fetch = fetchAvantR
+    if (envAvantR.app === undefined) delete process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID; else process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID = envAvantR.app
+    if (envAvantR.cle === undefined) delete process.env.ONESIGNAL_REST_API_KEY; else process.env.ONESIGNAL_REST_API_KEY = envAvantR.cle
+  }
+  const annule = (r) => r.appels.some(a => a.methode === 'DELETE' && /\/notifications\/ancien-rappel\?/.test(a.url))
+  const programme = (r) => r.appels.filter(a => a.methode === 'POST')
+  const d = resultats.deplacee
+  verifier('🔴 le rappel d’origine est annulé chez OneSignal', annule(d), JSON.stringify(d.appels.map(a => a.methode)))
+  verifier('🔴 et un nouveau est programmé, avec la nouvelle heure dans son texte',
+    programme(d).length === 1 && /à 20:30/.test(programme(d)[0]?.corps?.contents?.fr || ''), programme(d)[0]?.corps?.contents?.fr || 'aucun')
+  const { brusselsInstant } = await import('../lib/timezone.js')
+  egal('🔴 à la nouvelle heure moins une heure, à l’heure de Bruxelles',
+    programme(d)[0]?.corps?.send_after || null,
+    new Date(brusselsInstant(DEPLACEE.date_rdv, '20:30:00').getTime() - 3600000).toISOString())
+  verifier('⚠️ et le rendez-vous retient le nouveau rappel', d.res?.ok === true && d.ligne.rappel_push_id && d.ligne.rappel_push_id !== 'ancien-rappel', String(d.ligne.rappel_push_id))
+  const s = resultats.sansRappel
+  verifier('⚠️ une réservation qui n’avait pas de rappel n’en reçoit pas', s.res?.skipped === 'aucun_rappel' && s.appels.length === 0, JSON.stringify(s.res))
+  const dp = resultats.dejaParti
+  verifier('⚠️ un ancien rappel déjà parti n’empêche pas le nouveau', programme(dp).length === 1 && dp.res?.ok === true, JSON.stringify(dp.res))
+  const tt = resultats.tropTard
+  verifier('⚠️ à moins d’une heure, l’ancien est annulé et rien n’est reprogrammé',
+    annule(tt) && programme(tt).length === 0 && tt.ligne.rappel_push_id === null, JSON.stringify(tt.res))
+  const rp = resultats.remplace
+  verifier('⚠️ le rappel qu’un autre geste vient de poser n’est pas effacé',
+    rp.ligne.rappel_push_id === 'rappel-d-un-autre-geste' && programme(rp).length === 0, `${rp.ligne.rappel_push_id} · ${JSON.stringify(rp.res)}`)
+
+  // Le câblage : la route garde, le tableau de bord appelle APRÈS le
+  // déplacement et HORS du bloc « prévenir par email ».
+  const ROUTE_RAPPEL = lire('app/api/rdv/replanifier-rappel/route.js')
+  const iGarde = ROUTE_RAPPEL.indexOf('gardeSurLigne(request')
+  const iAppel = ROUTE_RAPPEL.indexOf('replanifierRappelRdv(rdv_id')
+  verifier('🔴 la route vérifie que c’est le commerçant du rendez-vous, AVANT de toucher au rappel',
+    /from '@\/lib\/api-auth'/.test(ROUTE_RAPPEL) && iGarde !== -1 && iAppel > iGarde && /if \(nonAutorise\) return nonAutorise/.test(ROUTE_RAPPEL))
+  const MODALE_DEPLACER = lire('app/dashboard/ModalDeplacerRdv.js')
+  const iMaj = MODALE_DEPLACER.indexOf('.update(maj)')
+  const iReplanif = MODALE_DEPLACER.indexOf("prevenirClient('/api/rdv/replanifier-rappel'")
+  const iPrevenir = MODALE_DEPLACER.indexOf('if (prevenir && rdv.client_email)')
+  verifier('🔴 le déplacement replanifie le rappel, que le client soit prévenu par email ou non',
+    iMaj !== -1 && iReplanif > iMaj && iPrevenir !== -1 && iReplanif < iPrevenir, `maj ${iMaj}, rappel ${iReplanif}, prévenir ${iPrevenir}`)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

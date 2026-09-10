@@ -22,7 +22,7 @@
 // pure et partagée avec la création manuelle : deux copies auraient divergé.
 
 import { useState, useEffect, useMemo } from 'react'
-import { postPro } from '@/lib/fetch-pro'
+import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
@@ -354,6 +354,15 @@ export default function ModalDeplacerRdv({
         setSubmitting(false)
         return
       }
+
+      // 🔴 LE RAPPEL PUSH SUIT LE RENDEZ-VOUS (11/09). Programmé à la
+      // réservation, il gardait l'ancienne heure : le client recevait « dans
+      // 1h, à 19:00 » pour une table passée à 20:30. Replanifié que le client
+      // soit prévenu par email ou non, l'ancien rappel est faux dans les deux
+      // cas. Non bloquant, mais LU : `postPro` seul avalerait un refus.
+      prevenirClient('/api/rdv/replanifier-rappel', { rdv_id: rdv.id }, 'le rappel du client')
+        .then(r => { if (!r.ok) console.warn('[ModalDeplacerRdv] rappel push non replanifié', r.statut, r.erreur) })
+        .catch(e => console.warn('[ModalDeplacerRdv] rappel push non replanifié', e?.message))
 
       // ⚠️ LE CLIENT DOIT L'APPRENDRE, sinon il vient à l'ancienne heure. Envoi
       // non bloquant : le déplacement est fait, l'email ne doit pas pouvoir

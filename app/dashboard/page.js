@@ -2161,7 +2161,7 @@ export default function Dashboard() {
     setActionEnCours(false)
     setConfirmationSeanceTexte(confirmationSeanceHonoree({
       faits, echecs,
-      table: seanceAHonorer.length > 0 && seanceAHonorer.every(estReservationDeTable),
+      table: seanceAHonorer.length > 0 && seanceAHonorer.every(r => estReservationDeTable(r)),
     }))
   }
 
@@ -3654,7 +3654,7 @@ export default function Dashboard() {
               // paiement ne se pose même pas.
               montant: seanceAHonorer.reduce((somme, r) => somme + (resteAEncaisser(r) || 0), 0),
               // Un service de restaurant clôture des TABLES, pas des personnes.
-              table: seanceAHonorer.length > 0 && seanceAHonorer.every(estReservationDeTable),
+              table: seanceAHonorer.length > 0 && seanceAHonorer.every(r => estReservationDeTable(r)),
             }) || {})
           : {})}
         enCours={actionEnCours}

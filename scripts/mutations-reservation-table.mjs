@@ -453,8 +453,20 @@ const MUTATIONS = [
 
   { nom: '🔴 le service cloture aussi les tables pas encore parties',
     fichier: 'app/dashboard/AgendaRdv.js',
-    de: '        const aClore = tables.filter(estAClore)',
+    de: '        const aClore = tables.filter(r => estAClore(r))',
     vers: '        const aClore = tables' },
+
+  // 🔴 L ECRAN BLANC DU 10/09 : la fonction passee par reference recevait
+  // l index du tableau comme « maintenant ».
+  { nom: '🔴 l agenda repasse estAClore par reference a filter',
+    fichier: 'app/dashboard/AgendaRdv.js',
+    de: '        const aClore = tables.filter(r => estAClore(r))',
+    vers: '        const aClore = tables.filter(estAClore)' },
+
+  { nom: '🔴 estAClore fait de nouveau confiance a son second argument',
+    fichier: 'lib/rdv-statut.js',
+    de: '  const reference = maintenant instanceof Date && !Number.isNaN(maintenant.getTime()) ? maintenant : new Date()',
+    vers: '  const reference = maintenant' },
 
   { nom: '🔴 la jointure des reservations perd par_couverts',
     fichier: 'app/dashboard/page.js',
@@ -463,7 +475,7 @@ const MUTATIONS = [
 
   { nom: '🔴 la cloture d un service reparle de personnes',
     fichier: 'app/dashboard/page.js',
-    de: '              table: seanceAHonorer.length > 0 && seanceAHonorer.every(estReservationDeTable),',
+    de: '              table: seanceAHonorer.length > 0 && seanceAHonorer.every(r => estReservationDeTable(r)),',
     vers: '              table: false,' },
 
   { nom: '🔴 la question dit de nouveau ces personnes a une salle',

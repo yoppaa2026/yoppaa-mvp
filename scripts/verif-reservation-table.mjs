@@ -1695,8 +1695,45 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 le service s’ouvre sur la liste de TOUTES ses tables',
     /setServiceOuvert\(\{ \.\.\.service, jourDate: j\.date \}\)/.test(AGENDA_S)
     && /const tables = serviceOuvert\.tables \|\| \[\]/.test(AGENDA_S) && /\{tables\.map\(i => \{/.test(AGENDA_S))
+  // 🔴 CETTE GARDE A FIGÉ UN ÉCRAN BLANC (Alex, 10/09 : « écran blanc quand je
+  // clique sur le détail des résas »). Elle exigeait `tables.filter(estAClore)`
+  // au caractère près : le tableau passait son INDEX comme « maintenant »,
+  // `0.getTime()` levait, et la page tombait. Elle était verte et complice.
+  // Elle exige maintenant l'appel fléché, et le banc EXÉCUTE l'appel par `filter`.
   verifier('⚠️ et seules les tables déjà parties se clôturent d’un geste',
-    /const aClore = tables\.filter\(estAClore\)/.test(AGENDA_S) && /onHonorerSeance\(aClore\)/.test(AGENDA_S))
+    /const aClore = tables\.filter\(r => estAClore\(r\)\)/.test(AGENDA_S) && /onHonorerSeance\(aClore\)/.test(AGENDA_S))
+  const { estAClore: estACloreT } = await import('../lib/rdv-statut.js')
+  const tablePassee = { statut: 'confirme', date_rdv: '2020-01-01', heure_fin: '19:30' }
+  let parFilter = null
+  try { parFilter = [tablePassee, { ...tablePassee, statut: 'honore' }].filter(estACloreT).length } catch { parFilter = 'LÈVE' }
+  verifier('🔴 `estAClore` appelée par `filter` ne lève plus, et trie juste',
+    parFilter === 1, `obtenu ${parFilter}`)
+  // 🔴 ET LE PIÈGE EST FERMÉ PARTOUT : aucune fonction de statut à second
+  // paramètre ne se passe par référence à une méthode de tableau, dans tout le
+  // dépôt. Le durcissement couvre `estAClore` ; cette garde couvre la suivante.
+  {
+    const { readdirSync, statSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const racine = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+    const pieges = []
+    const parcourir = (d) => {
+      for (const e of readdirSync(d)) {
+        if (e === 'node_modules' || e === '.next' || e.startsWith('.')) continue
+        const p = join(d, e)
+        if (statSync(p).isDirectory()) parcourir(p)
+        else if (/\.jsx?$/.test(e)) {
+          const src = sansProse(readFileSync(p, 'utf8'))
+          for (const m of src.matchAll(/\.(filter|map|some|every|find|findIndex|forEach)\((estAClore|compterAClore|texteResumeSeance|premierePlaceLibre|dureeSelonCouverts|couvertsValides|placesRestantes|estComplet)\)/g)) {
+            pieges.push(`${p.split(/[\\/]/).slice(-2).join('/')} → ${m[0]}`)
+          }
+        }
+      }
+    }
+    parcourir(join(racine, 'app'))
+    parcourir(join(racine, 'lib'))
+    verifier('🔴 aucune fonction à second paramètre n’est passée par référence à un tableau',
+      pieges.length === 0, pieges.join(' | '))
+  }
   verifier('⚠️ une table s’ajoute depuis le service, avec l’heure d’arrivée au choix',
     /onNouveauRdv\(jour, h\)/.test(AGENDA_S))
 
@@ -1705,7 +1742,7 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 la prestation jointe aux réservations porte `par_couverts`',
     /const SELECT_RDVS = `\*, prestation:rdv_prestations\(nom, duree_minutes, prix, par_couverts\)/.test(BORD_S))
   verifier('🔴 la clôture d’un service parle en tables',
-    (BORD_S.match(/table: seanceAHonorer\.length > 0 && seanceAHonorer\.every\(estReservationDeTable\)/g) || []).length === 2)
+    (BORD_S.match(/table: seanceAHonorer\.length > 0 && seanceAHonorer\.every\(r => estReservationDeTable\(r\)\)/g) || []).length === 2)
   const { questionSeanceHonoree: qCloture } = await import('../lib/confirmation-rdv.js')
   verifier('🔴 et la question dit « ces 4 tables », pas « ces 4 personnes »',
     qCloture(4, { table: true }).titre === 'Marquer ces 4 tables comme venues ?')

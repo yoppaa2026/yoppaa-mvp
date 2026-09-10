@@ -874,7 +874,10 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
           `position: fixed` dans un conteneur qui défile se place mal. */}
       {serviceOuvert && (() => {
         const tables = serviceOuvert.tables || []
-        const aClore = tables.filter(estAClore)
+        // 🔴 UNE FONCTION FLÉCHÉE, JAMAIS `filter(estAClore)` : le tableau
+        // passerait son index comme « maintenant », et l'agenda tombait en
+        // écran blanc au premier clic sur un service (Alex, 10/09).
+        const aClore = tables.filter(r => estAClore(r))
         const jour = serviceOuvert.jourDate
         const libelleJour = jour
           ? `${JOURS_LONG[jourIdxLun(jour)].toLowerCase()} ${jour.getDate()} ${MOIS_LONG[jour.getMonth()]}`

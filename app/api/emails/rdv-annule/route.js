@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
-import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
+import { generateRdvIcs, icsToBase64Attachment, sequenceAnnulation } from '@/lib/ical'
 import { annulerPush } from '@/lib/onesignal'
 import { motsReservation } from '@/lib/reservation-metier'
 import { adresseRendezVous } from '@/lib/lieu-fige'
@@ -100,7 +100,9 @@ export async function POST(request) {
       couverts: rdv.couverts,
       status: 'CANCELLED',
       method: 'CANCEL',
-      sequence: 1,
+      // 🔴 PAS 1 : un rendez-vous déplacé porte déjà une séquence de trente
+      // millions, et le calendrier aurait tenu cette annulation pour périmée.
+      sequence: sequenceAnnulation(),
     })
     const attachment = icsToBase64Attachment(ics, `rdv-${rdv.id}-cancel.ics`)
 

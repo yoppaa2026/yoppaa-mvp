@@ -137,6 +137,29 @@ const MUTATIONS = [
   { nom: '⚠️ un objet réécrit « RDV » en dur ailleurs', banc: 'verif:table', fichier: 'app/api/cron/rdv-reminder-9h/route.js',
     de: 'subject: `${motsReservation(r.commercant).sujetRappel} ${r.commercant.nom} à ${r.heure_debut?.slice(0,5)}`,',
     vers: 'subject: `Rappel — RDV demain chez ${r.commercant.nom} à ${r.heure_debut?.slice(0,5)}`,' },
+
+  // ─── LE FICHIER D'ANNULATION RETIRE VRAIMENT L'ÉVÉNEMENT ────────────────
+  { nom: '🔴 l’annulation arrive à égalité avec un déplacement de la même minute', banc: 'verif:table', fichier: 'lib/ical.js',
+    de: '  return sequenceIcs(maintenant) + 1',
+    vers: '  return sequenceIcs(maintenant)' },
+  { nom: '⚠️ un instant illisible donne une séquence fausse', banc: 'verif:table', fichier: 'lib/ical.js',
+    de: "  const t = typeof maintenant === 'number' && Number.isFinite(maintenant) ? maintenant : Date.now()",
+    vers: '  const t = maintenant === undefined ? Date.now() : maintenant' },
+  { nom: '🔴 l’annulation du commerçant repart en séquence 1', banc: 'verif:table', fichier: 'app/api/emails/rdv-annule/route.js',
+    de: '      sequence: sequenceAnnulation(),',
+    vers: '      sequence: 1,' },
+  { nom: '🔴 l’annulation du client repart en séquence 1', banc: 'verif:table', fichier: 'app/api/rdv/cancel/route.js',
+    de: '          sequence: sequenceAnnulation(),',
+    vers: '          sequence: 1,' },
+  { nom: '🔴 l’annulation du client perd l’organisateur', banc: 'verif:table', fichier: 'app/api/rdv/cancel/route.js',
+    de: '          commercant_email: commercant?.email,',
+    vers: '' },
+  { nom: '🔴 l’annulation du client ne charge plus l’adresse du commerce', banc: 'verif:table', fichier: 'app/api/rdv/cancel/route.js',
+    de: 'adresse, telephone, email, stripe_account_id',
+    vers: 'adresse, telephone, stripe_account_id' },
+  { nom: '⚠️ le déplacement recalcule l’horloge à la main', banc: 'verif:table', fichier: 'app/api/emails/rdv-confirme/route.js',
+    de: '          sequence: deplace ? sequenceIcs() : 0,',
+    vers: '          sequence: deplace ? Math.floor(Date.now() / 60000) : 0,' },
 ]
 
 const lancer = (banc) => {

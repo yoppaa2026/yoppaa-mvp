@@ -2552,6 +2552,67 @@ egal('la réservation d’un restaurant s’atteint quand même',
     parcourir(join(racine, 'lib'))
     verifier('🔴 aucun objet d’email n’écrit « RDV » en dur', enDur.length === 0, enDur.join(' | '))
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LE FICHIER D'ANNULATION RETIRE VRAIMENT L'ÉVÉNEMENT (11/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Trouvé en vérifiant l'annulation d'une table. Les deux annulations
+  // partaient en SEQUENCE:1, alors qu'un déplacement numérote avec les minutes
+  // écoulées depuis 1970 (trente millions) : sur un rendez-vous déplacé puis
+  // annulé, le calendrier tenait l'annulation pour PÉRIMÉE et gardait
+  // l'événement. Et l'annulation par le client partait sans l'adresse du
+  // commerce : son ORGANIZER n'était plus celui de la création.
+  const { sequenceIcs, sequenceAnnulation } = await import('../lib/ical.js')
+  const T0 = Date.UTC(2026, 8, 12, 17, 0, 30)
+  egal('⚠️ un déplacement numérote avec les minutes depuis 1970', sequenceIcs(T0), Math.floor(T0 / 60000))
+  verifier('🔴 une annulation passe après un déplacement envoyé la même minute',
+    sequenceAnnulation(T0 + 20000) > sequenceIcs(T0))
+  verifier('🔴 et après un déplacement de la veille', sequenceAnnulation(T0) > sequenceIcs(T0 - 86400000))
+  verifier('⚠️ un instant illisible vaut maintenant, jamais NaN',
+    [undefined, null, 'abc', NaN].every(x => Number.isFinite(sequenceIcs(x)) && sequenceIcs(x) >= sequenceIcs(Date.UTC(2026, 0, 1))))
+  verifier('⚠️ loin sous le plafond de la norme, même en l’an 3000', sequenceAnnulation(Date.UTC(3000, 0, 1)) < 2147483647)
+  const icsCancel = generateRdvIcs({
+    id: 'r10', date_rdv: '2026-09-12', heure_debut: '19:30', heure_fin: '21:30',
+    prestation_nom: 'Table de 4', commercant_nom: 'Le Bistrologue', commercant_adresse: 'Mettet',
+    commercant_email: 'resto@exemple.be', client_email: 'camille@exemple.be',
+    rappel_24h: false, status: 'CANCELLED', method: 'CANCEL', sequence: sequenceAnnulation(T0),
+  })
+  verifier('🔴 le fichier d’annulation porte la séquence d’après', icsCancel.includes(`SEQUENCE:${Math.floor(T0 / 60000) + 1}`))
+  verifier('⚠️ et l’organisateur de la création', /ORGANIZER;CN=Le Bistrologue:mailto:resto@exemple\.be/.test(icsCancel))
+
+  const CONFIRME = lire('app/api/emails/rdv-confirme/route.js')
+  verifier('🔴 le déplacement numérote avec la même horloge que l’annulation',
+    /sequence: deplace \? sequenceIcs\(\) : 0,/.test(CONFIRME))
+  for (const [src, quoi] of [[ANNULE, 'l’annulation par le commerçant'], [CANCEL, 'l’annulation par le client']]) {
+    const arg = argumentDe(src, 'generateRdvIcs')
+    verifier(`🔴 ${quoi} numérote son fichier après le dernier déplacement`,
+      /\n\s*sequence: sequenceAnnulation\(\),/.test(arg) && !/sequence:\s*\d/.test(arg), (arg.match(/sequence:[^\n]*/) || ['absent'])[0])
+  }
+  egal('🔴 les deux annulations remplissent le fichier calendrier pareil',
+    clesDe(CANCEL, 'generateRdvIcs'), clesDe(ANNULE, 'generateRdvIcs'))
+  verifier('🔴 l’annulation par le client charge l’adresse du commerce, son ORGANIZER',
+    /commercant:commercants\([^)]*\bemail\b[^)]*\)/.test(colonnesRdv(CANCEL)))
+  // ⚠️ ET PERSONNE NE RECALCULE L'HORLOGE À LA MAIN : une seconde formule
+  // finirait par ne plus compter comme la première.
+  {
+    const { readdirSync, statSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const racine = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+    const aLaMain = []
+    const parcourir = (d) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e)
+        if (statSync(p).isDirectory()) { parcourir(p); continue }
+        if (!/\.jsx?$/.test(e) || /[\\/]lib[\\/]ical\.js$/.test(p)) continue
+        const src = sansProse(readFileSync(p, 'utf8'))
+        if (/sequence:[^\n]*Date\.now\(\)/.test(src)) aLaMain.push(p.split(/[\\/]/).slice(-3).join('/'))
+      }
+    }
+    parcourir(join(racine, 'app'))
+    parcourir(join(racine, 'lib'))
+    verifier('⚠️ aucune séquence de calendrier calculée à la main hors de lib/ical.js', aLaMain.length === 0, aLaMain.join(' | '))
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

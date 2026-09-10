@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne } from '@/lib/api-auth'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
-import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
+import { generateRdvIcs, icsToBase64Attachment, sequenceIcs } from '@/lib/ical'
 import { referenceRdv } from '@/lib/numero-commande'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
@@ -126,9 +126,9 @@ export async function POST(request) {
           // ⚠️ ET UN SIMPLE 1 NE SUFFIT PAS : un rendez-vous déplacé DEUX fois
           // repartirait à 1, et le deuxième déplacement serait perdu. Les
           // minutes écoulées depuis 1970 sont le compteur le plus simple qui
-          // grandisse tout seul, et il reste très loin du plafond de la norme
-          // (2 147 483 647, atteint vers l'an 6053).
-          sequence: deplace ? Math.floor(Date.now() / 60000) : 0,
+          // grandisse tout seul (`sequenceIcs`). L'annulation lit la MÊME
+          // horloge, un cran plus loin : sans quoi elle arrivait « périmée ».
+          sequence: deplace ? sequenceIcs() : 0,
         })
         const attachment = icsToBase64Attachment(ics, `rdv-${rdv.id}.ics`)
 

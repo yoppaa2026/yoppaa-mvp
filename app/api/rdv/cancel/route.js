@@ -19,7 +19,7 @@ import { euros } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
-import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
+import { generateRdvIcs, icsToBase64Attachment, sequenceAnnulation } from '@/lib/ical'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
 import { prevenirLaFile } from '@/lib/attente-rdv-server'
@@ -58,7 +58,7 @@ export async function POST(request) {
       lieu_id, lieu_libelle, lieu_adresse,
       prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
       couverts,
-      commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures, categorie),
+      commercant:commercants(id, nom, slug, adresse, telephone, email, stripe_account_id, rdv_delai_annulation_heures, categorie),
       prestation:rdv_prestations(nom, par_couverts)
     `
     const query = supabase.from('rdv_reservations').select(selectCols).is('deleted_at', null)
@@ -425,14 +425,20 @@ export async function POST(request) {
         // générateur levait donc une exception à tous les coups, avalée par le
         // try qui entoure tout le bloc : le client n'a JAMAIS reçu son email
         // d'annulation. Le champ obligatoire porte maintenant le bon nom.
+        // 🔴 LE MÊME FICHIER QUE L'AUTRE ANNULATION (11/09). Celui-ci partait
+        // sans l'adresse du commerce : l'ORGANIZER devenait celle de Yoppaa, et
+        // un calendrier peut refuser l'annulation d'un événement qu'un autre
+        // organisateur a créé. Et sa séquence valait 1 : sur un rendez-vous
+        // déplacé, l'annulation arrivait « périmée » et l'événement restait.
         const ics = generateRdvIcs({
           id:           rdv.id,
           date_rdv:     rdv.date_rdv,
           heure_debut:  rdv.heure_debut,
           heure_fin:    rdv.heure_fin,
-          duree_minutes:rdv.duree_minutes,
           commercant_nom:commercant?.nom || 'Yoppaa',
           commercant_adresse: adresseRendezVous({ ...rdv, commercant }),
+          commercant_telephone: commercant?.telephone,
+          commercant_email: commercant?.email,
           prestation_nom: rdv.prestation?.nom || 'Rendez-vous',
           client_email: rdv.client_email,
           client_nom:   [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
@@ -441,7 +447,7 @@ export async function POST(request) {
           couverts:     rdv.couverts,
           status:       'CANCELLED',
           method: 'CANCEL',
-          sequence: 1,
+          sequence: sequenceAnnulation(),
         })
         const attachments = ics ? [icsToBase64Attachment(ics, `yoppaa-rdv-annulation-${rdv.id}.ics`)] : null
         await envoyerAuCommercant({

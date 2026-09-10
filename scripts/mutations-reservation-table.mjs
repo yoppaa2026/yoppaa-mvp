@@ -403,6 +403,23 @@ const MUTATIONS = [
     de: ", capacite, par_couverts, couverts_min, couverts_max, duree_paliers')",
     vers: ", capacite')" },
 
+  // ✅ DECISION D ALEX DU 10/09 : le minimum d une table reste STRICT, et
+  // l ecran le dit la ou on le regle et sur la carte.
+  { nom: '🔴 le moteur ignore le minimum d une table',
+    fichier: 'lib/inventaire-salle.js',
+    de: '      return taille !== null && n >= minimumDe(f) && n <= taille',
+    vers: '      return taille !== null && n <= taille' },
+
+  { nom: '🔴 le formulaire ne dit plus ce que fait le minimum',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                {Number(form.couverts_min) > 1',
+    vers: '                {false' },
+
+  { nom: '🔴 la carte cache de nouveau le minimum',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                          {Number(p.couverts_min) > 1',
+    vers: '                          {false' },
+
   { nom: '⚠️ la garde structurelle relit le code AVEC sa prose',
     fichier: 'scripts/verif-reservation-table.mjs',
     de: "      const src = sansProse(readFileSync(f, 'utf8'))",

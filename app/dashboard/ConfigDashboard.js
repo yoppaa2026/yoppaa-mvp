@@ -8374,7 +8374,15 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                               {' · '}
                             </>
                           )}
-                          jusqu&rsquo;à <strong style={{ color: T.ink }}>{p.couverts_max || '?'}</strong> personne{Number(p.couverts_max) > 1 ? 's' : ''}
+                          {/* 🔴 LE MINIMUM SE VOIT SANS OUVRIR LA TABLE (Alex, 10/09).
+                              Sa table de 4 était réglée « à partir de 3 », la carte
+                              ne disait que « jusqu'à 4 », et le troisième couple
+                              refusé à 18h lui a paru un bug. Le moteur suivait son
+                              réglage ; l'écran le cachait. */}
+                          {Number(p.couverts_min) > 1
+                            ? <>de <strong style={{ color: T.ink }}>{p.couverts_min}</strong> à </>
+                            : <>jusqu&rsquo;à </>}
+                          <strong style={{ color: T.ink }}>{p.couverts_max || '?'}</strong> personne{Number(p.couverts_max) > 1 ? 's' : ''}
                         </span>
                       )
                       : Number(p.capacite) > 1 && <span>Jusqu&rsquo;à <strong style={{ color: T.ink }}>{p.capacite}</strong> {mots.agendaOccupes}</span>}
@@ -8540,6 +8548,23 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                     onChange={e => setForm({ ...form, couverts_max: e.target.value })}/>
                 </div>
               </div>
+            )}
+            {/* 🔴 CE QUE FAIT LE MINIMUM, DIT LÀ OÙ ON LE RÈGLE (Alex, 10/09 : « on
+                part là-dessus »). « À partir de » se lisait comme une indication de
+                confort : une table de 4 « de 3 à 4 personnes ». C'est une RÈGLE —
+                un groupe plus petit n'a jamais cette table, même quand les petites
+                sont pleines — et c'est voulu, c'est le levier du restaurateur pour
+                garder ses grandes tables aux groupes. Encore faut-il qu'il le
+                sache avant de découvrir un couple refusé dans une salle à moitié
+                vide. La phrase change avec la valeur saisie : elle dit la
+                conséquence du réglage en cours, pas une généralité. */}
+            {form.par_couverts && (
+              <p style={{ fontSize: 11, color: T.muted, margin: '-6px 0 12px', lineHeight: 1.45 }}>
+                Yoppaa installe toujours un groupe à la plus petite table libre qui lui convient.{' '}
+                {Number(form.couverts_min) > 1
+                  ? `Réglée à partir de ${Number(form.couverts_min)}, cette table ne sera jamais donnée à moins de ${Number(form.couverts_min)} personnes, même quand les plus petites sont prises. Mets 1 pour qu’un plus petit groupe puisse s’y asseoir dans ce cas.`
+                  : 'Quand les plus petites sont prises, elle peut accueillir un groupe plus petit, un couple par exemple. Monte « À partir de » pour la garder aux groupes.'}
+              </p>
             )}
             {/* 🔴 COMBIEN DE TABLES DE CE FORMAT (lot 2a). C'est ce qui fait
                 passer la salle d'une jauge en couverts à un vrai inventaire :

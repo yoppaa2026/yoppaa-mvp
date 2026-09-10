@@ -999,8 +999,10 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /return Number\.isFinite\(q\) && q >= 1 && Number\.isFinite\(t\) && t >= 1\s*\n?\s*\? q \* t/.test(CFG))
   verifier('⚠️ le cours garde sa question à lui',
     /Cours collectif : \$\{capacitePrestation/.test(CFG))
+  // ⚠️ DEPUIS LE 10/09, « jusqu'à » ou « de 3 à » selon le minimum : on exige
+  // toujours que le nombre affiché soit la TAILLE de la table, `couverts_max`.
   verifier('🔴 la carte annonce la taille de la table, pas la jauge de salle',
-    /jusqu&rsquo;à <strong style=\{\{ color: T\.ink \}\}>\{p\.couverts_max \|\| '\?'\}<\/strong> personne/.test(CFG))
+    /<>jusqu&rsquo;à <\/>\}\s*<strong style=\{\{ color: T\.ink \}\}>\{p\.couverts_max \|\| '\?'\}<\/strong> personne/.test(CFG))
   verifier('⚠️ et elle dit combien il y en a',
     /<strong style=\{\{ color: T\.ink \}\}>\{p\.quantite\}<\/strong> table/.test(CFG))
   verifier('⚠️ l’exemple de description parle du métier du commerce',
@@ -1614,6 +1616,34 @@ egal('la réservation d’un restaurant s’atteint quand même',
     (FICHE_T.match(/setSubmitError\(estParCouverts\(prestationChoisie\) \? phraseTablePrise : j\.collectif/g) || []).length === 3)
   verifier('⚠️ et le contrôle d’avant envoi parle de table, pas de cours',
     /conflit\.raison === 'complet' \|\| conflit\.raison === 'trop_grand'\s*\?\s*\(estParCouverts\(prestationChoisie\)\s*\?\s*'La dernière table libre/.test(FICHE_T))
+
+  // ─── LE MINIMUM D'UNE TABLE EST UNE RÈGLE (décision d'Alex, 10/09) ────────
+  //
+  // Son test : table de 4 réglée « à partir de 3 », deux tables de 2 prises à
+  // 18h, le troisième couple refusé. Ce n'était pas le moteur : c'était son
+  // réglage. Décision : le minimum RESTE STRICT — c'est le levier du
+  // restaurateur pour garder ses grandes tables aux groupes — mais l'écran le
+  // dit. Ce test fige la décision : quiconque « corrigerait » le moteur en
+  // ignorant le minimum le verra rougir.
+  const A4min3 = { ...A4, couverts_min: 3 }
+  const A6min5 = { ...A6, couverts_min: 5 }
+  const strict = conflitSalle({ formats: [A2, A4min3, A6min5], couverts: 2, reservations: deuxCouples, debut: H19, fin: H19 + 90 })
+  verifier('🔴 une table de 4 « à partir de 3 » ne se donne jamais à un couple, même salle pleine',
+    strict.conflit === true && strict.raison === 'complet', JSON.stringify(strict))
+  const souple = conflitSalle({ formats: [A2, { ...A4, couverts_min: 1 }, A6min5], couverts: 2, reservations: deuxCouples, debut: H19, fin: H19 + 90 })
+  verifier('⚠️ et « à partir de 1 » la lui ouvre quand les tables de 2 sont prises',
+    souple.conflit === false && souple.format?.id === 'a4', JSON.stringify(souple))
+  verifier('⚠️ un groupe de 3 reste le bienvenu à cette table de 4',
+    conflitSalle({ formats: [A2, A4min3, A6min5], couverts: 3, reservations: deuxCouples, debut: H19, fin: H19 + 120 }).format?.id === 'a4')
+
+  // Et l'écran le dit, à deux endroits : là où on le règle, et sur la carte.
+  const CFG_MIN = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 le formulaire dit ce que fait « À partir de », selon la valeur saisie',
+    /\{form\.par_couverts && \(\s*<p[^>]*>\s*Yoppaa installe toujours un groupe à la plus petite table libre qui lui convient\.\{' '\}\s*\{Number\(form\.couverts_min\) > 1\s*\?\s*`Réglée à partir de \$\{Number\(form\.couverts_min\)\}, cette table ne sera jamais donnée à moins de/.test(CFG_MIN))
+  verifier('⚠️ et sans minimum, il dit qu’un couple peut y être installé',
+    /: 'Quand les plus petites sont prises, elle peut accueillir un groupe plus petit, un couple par exemple\./.test(CFG_MIN))
+  verifier('🔴 la carte de la table montre le minimum : « de 3 à 4 personnes »',
+    /\{Number\(p\.couverts_min\) > 1\s*\?\s*<>de <strong[^>]*>\{p\.couverts_min\}<\/strong> à <\/>\s*:\s*<>jusqu&rsquo;à <\/>\}/.test(CFG_MIN))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

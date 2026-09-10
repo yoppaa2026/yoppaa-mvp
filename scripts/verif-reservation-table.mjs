@@ -1602,7 +1602,9 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // dixième colonne absente d'un select était celle-ci.
   const BORD = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
   const selBord = (BORD.match(/from\('rdv_prestations'\)[\s\S]{0,160}?\.select\('([^']*)'\)/) || [])[1] || ''
-  const manquantes = ['capacite', 'par_couverts', 'couverts_min', 'couverts_max', 'duree_minutes', 'duree_paliers']
+  // ⚠️ `quantite` DEPUIS LE 10/09 AU SOIR : sans elle, `enModeInventaire` rend
+  // faux, et la saisie au téléphone ne compte jamais la salle, sans un mot.
+  const manquantes = ['capacite', 'par_couverts', 'couverts_min', 'couverts_max', 'duree_minutes', 'duree_paliers', 'quantite']
     .filter(c => !new RegExp(`\\b${c}\\b`).test(selBord))
   verifier('🔴 le tableau de bord charge tout ce que lisent les modales d’une table',
     selBord !== '' && manquantes.length === 0, `manque : ${manquantes.join(', ')} · select : ${selBord}`)
@@ -1751,6 +1753,189 @@ egal('la réservation d’un restaurant s’atteint quand même',
 
   verifier('🔴 la carte de la table montre le minimum : « de 3 à 4 personnes »',
     /\{Number\(p\.couverts_min\) > 1\s*\?\s*<>de <strong[^>]*>\{p\.couverts_min\}<\/strong> à <\/>\s*:\s*<>jusqu&rsquo;à <\/>\}/.test(CFG_MIN))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 « QUAND ON AJOUTE UNE RÉSA MANUELLEMENT, IL TIENT COMPTE DES DISPOS ? »
+//    (Alex, 10/09 au soir)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Non : la saisie au téléphone vérifiait les horaires, jamais la salle. Le
+// restaurateur choisissait un format à l'aveugle, pouvait poser une troisième
+// table de deux là où il n'en a que deux, et la durée était celle de la table,
+// pas du groupe. Le déplacement avait le même trou.
+//
+// ✅ DÉCISION D'ALEX : « prévenir, puis laisser poser ». Tout est EXÉCUTÉ ici
+// sur la salle de sa capture du jeudi 10 : deux couples à 18:00, un couple sur
+// une table de 4 à 18:15, une table de 6 à 18:30, Valentin à 19:00.
+{
+  const {
+    dureeDuGroupe, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour, STATUTS_QUI_OCCUPENT,
+  } = await import('../lib/inventaire-salle.js')
+  const { champsDuDeplacement } = await import('../lib/deplacement-rdv.js')
+
+  const T2 = { id: 'a2', nom: 'Table pour 2 personnes', par_couverts: true, actif: true, couverts_min: 1, couverts_max: 2, quantite: 2, capacite: 4, duree_minutes: 90, tva_taux: 12 }
+  const T4 = { id: 'a4', nom: 'Table de 4 personnes', par_couverts: true, actif: true, couverts_min: 1, couverts_max: 4, quantite: 6, capacite: 24, duree_minutes: 120, tva_taux: 12 }
+  const T6 = { id: 'a6', nom: 'Table de 6 personnes', par_couverts: true, actif: true, couverts_min: 1, couverts_max: 6, quantite: 2, capacite: 12, duree_minutes: 150, tva_taux: 12 }
+  const SALLE = [T4, T2, T6]
+  const jeudi = [
+    { id: 'r1', prestation_id: 'a2', heure_debut: '18:00:00', heure_fin: '19:30:00', statut: 'confirme' },
+    { id: 'r2', prestation_id: 'a2', heure_debut: '18:00:00', heure_fin: '19:30:00', statut: 'confirme' },
+    { id: 'r3', prestation_id: 'a4', heure_debut: '18:15:00', heure_fin: '19:45:00', statut: 'confirme' },
+    { id: 'r4', prestation_id: 'a6', heure_debut: '18:30:00', heure_fin: '21:00:00', statut: 'confirme' },
+    { id: 'r5', prestation_id: 'a4', heure_debut: '19:00:00', heure_fin: '21:00:00', statut: 'confirme' },
+  ]
+  const H19 = 19 * 60
+  const choixDe = (c) => [c?.format?.id ?? null, c?.forcer, c?.raison]
+
+  // ─── La durée : celle du groupe, écrite une seule fois ───────────────────
+  egal('🔴 au téléphone, un couple sur une table de 4 dure 90 minutes, comme en ligne',
+    dureeDuGroupe({ prestation: T4, formats: SALLE, couverts: 2 }), 90)
+  egal('⚠️ et un groupe de quatre sur la même table, 120', dureeDuGroupe({ prestation: T4, formats: SALLE, couverts: 4 }), 120)
+  egal('⚠️ sans inventaire, la durée reste celle de la table désignée',
+    dureeDuGroupe({ prestation: T4, formats: [T4, { ...T2, quantite: null }], couverts: 2 }), 120)
+  egal('⚠️ et un rendez-vous qui n’est pas une table garde la sienne',
+    dureeDuGroupe({ prestation: { id: 'coupe', duree_minutes: 45 }, formats: SALLE, couverts: 2 }), 45)
+  const CREA = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur prend sa durée à la même fonction que la saisie',
+    /dureeRetenue = dureeDuGroupe\(\{ prestation, formats: formatsTable, couverts: couvertsRetenus \}\)/.test(CREA)
+    && !/formatPourAffichage\(formatsTable/.test(CREA))
+
+  // ─── La salle à 19:00, pour un couple ────────────────────────────────────
+  const etat = etatSalle({ formats: SALLE, couverts: 2, reservations: jeudi, debutMin: H19, finMin: H19 + 90 })
+  egal('🔴 à 19:00, un couple reçoit une table de 4 : les tables de 2 sont prises', etat.proposition?.id, 'a4')
+  egal('🔴 et la salle se lit comme sur la capture : 0 sur 2, 4 sur 6, 1 sur 2',
+    etat.parFormat.map(l => `${l.format.id}:${l.libres}/${l.total}`), ['a2:0/2', 'a4:4/6', 'a6:1/2'])
+  egal('⚠️ la référence reste la table de 2, celle qui donne la durée', etat.reference?.id, 'a2')
+  const sansR1 = etatSalle({ formats: SALLE, couverts: 2, reservations: jeudi, debutMin: 18 * 60, finMin: 18 * 60 + 90, exclureId: 'r1' })
+  egal('🔴 une réservation qu’on déplace ne se gêne pas elle-même',
+    sansR1.parFormat.find(l => l.format.id === 'a2')?.libres, 1)
+  const min3 = etatSalle({ formats: [T2, { ...T4, couverts_min: 3 }, T6], couverts: 2, reservations: jeudi, debutMin: H19, finMin: H19 + 90 })
+  verifier('⚠️ une table « à partir de 3 » ne convient pas à un couple, au téléphone non plus',
+    min3.parFormat.find(l => l.format.id === 'a4')?.convient === false && min3.proposition?.id === 'a6',
+    JSON.stringify(min3.parFormat.map(l => [l.format.id, l.convient])))
+
+  // ─── La table à poser, et quand demander son accord ──────────────────────
+  egal('🔴 sans choix, la table proposée, sans rien forcer', choixDe(tableAPoser(etat)), ['a4', false, 'ok'])
+  egal('⚠️ une table désignée et libre est gardée', choixDe(tableAPoser(etat, { prefere: 'a6' })), ['a6', false, 'ok'])
+  egal('🔴 une table désignée mais prise demande son accord, sans le corriger dans son dos',
+    choixDe(tableAPoser(etat, { prefere: 'a2' })), ['a2', true, 'complet'])
+  egal('🔴 au déplacement, une table prise passe sur la libre',
+    choixDe(tableAPoser(etat, { prefere: 'a2', basculer: true })), ['a4', false, 'ok'])
+  const pleine = etatSalle({ formats: [T2, { ...T4, quantite: 2 }, { ...T6, quantite: 1 }], couverts: 2, reservations: jeudi, debutMin: H19, finMin: H19 + 90 })
+  egal('🔴 salle pleine : la plus petite table, et son accord est demandé (prévenir, puis laisser poser)',
+    choixDe(tableAPoser(pleine)), ['a2', true, 'complet'])
+  egal('⚠️ un groupe plus grand que toute table ne se force pas',
+    choixDe(tableAPoser(etatSalle({ formats: SALLE, couverts: 8, reservations: [], debutMin: H19, finMin: H19 + 150 }))), [null, false, 'trop_grand'])
+  egal('⚠️ tant que la salle n’est pas lue, rien n’est décidé', choixDe(tableAPoser(null)), [null, false, 'inconnu'])
+
+  // ─── Ce que l'écran en dit ───────────────────────────────────────────────
+  const dit = (choix, e, extra = {}) => phraseSalle({ formats: SALLE, etat: e, choix, couverts: 2, debut: '19:00', fin: '20:30', ...extra })
+  const m1 = dit(tableAPoser(etat), etat)
+  egal('🔴 l’écran dit la table et le repas', m1?.titre, 'Table de 4 personnes · 19:00 → 20:30')
+  egal('🔴 et pourquoi pas la plus petite', m1?.detail, '« Table pour 2 personnes » : aucune n’est libre de 19:00 à 20:30.')
+  const m2 = dit(tableAPoser(pleine), pleine)
+  verifier('🔴 salle pleine : l’écran prévient et propose de poser quand même',
+    m2?.ton === 'alerte' && m2.titre === 'Plus aucune table pour 2 personnes n’est libre de 19:00 à 20:30.'
+    && /poser quand même/.test(m2.detail), JSON.stringify(m2))
+  const m3 = dit(tableAPoser(etat, { prefere: 'a2' }), etat, { manuel: true })
+  verifier('⚠️ une table désignée et prise : il le dit, et nomme celle qui est libre',
+    m3?.ton === 'alerte' && /^« Table pour 2 personnes » : aucune n’est libre/.test(m3.titre)
+    && /« Table de 4 personnes » l’est\./.test(m3.detail), JSON.stringify(m3))
+  const m4 = phraseSalle({ formats: SALLE, etat: null, choix: { format: null, forcer: false, raison: 'trop_grand' }, couverts: 8, debut: '19:00', fin: null })
+  verifier('⚠️ un groupe de huit : aucune table, et la plus grande est nommée',
+    m4?.ton === 'refus' && m4.titre === 'Aucune de tes tables n’accueille 8 personnes.' && m4.detail === 'La plus grande en accueille 6.',
+    JSON.stringify(m4))
+  const md = dit(tableAPoser(etat, { prefere: 'a2', basculer: true }), etat, { deplacement: true, actuel: T2 })
+  verifier('🔴 au déplacement, la table qui change se dit',
+    md?.titre === 'Elle passe sur « Table de 4 personnes ».' && md.detail === 'Aucune « Table pour 2 personnes » n’est libre de 19:00 à 20:30.',
+    JSON.stringify(md))
+  verifier('⚠️ et une table qui ne change pas n’ajoute rien à « Libre »',
+    dit(tableAPoser(etat, { prefere: 'a4', basculer: true }), etat, { deplacement: true, actuel: T4 }) === null)
+  const mdTrop = phraseSalle({ formats: SALLE, etat: null, choix: { format: null, forcer: false, raison: 'trop_grand' }, couverts: 8, debut: '19:00', fin: '21:30', deplacement: true, actuel: T6 })
+  verifier('⚠️ une réservation devenue trop grande pour les tables se déplace quand même, prévenu',
+    mdTrop?.ton === 'alerte' && /déplacer quand même/.test(mdTrop.detail), JSON.stringify(mdTrop))
+  verifier('⚠️ aucun tiret cadratin dans ce que dit la salle',
+    [m1, m2, m3, m4, md, mdTrop].every(m => !/—/.test(`${m?.titre} ${m?.detail}`)))
+
+  // ─── La lecture de la salle, une seule pour les deux fenêtres ────────────
+  {
+    const vu = { table: null, select: null, eq: {}, in: {}, is: {} }
+    const faux = {
+      from: (t) => {
+        vu.table = t
+        const c = {
+          select: (s) => { vu.select = s; return c },
+          eq: (k, v) => { vu.eq[k] = v; return c },
+          in: (k, v) => { vu.in[k] = v; return c },
+          is: (k, v) => { vu.is[k] = v; return c },
+          then: (r) => r({ data: [{ id: 'x' }], error: null }),
+        }
+        return c
+      },
+    }
+    const lu = await lireSalleDuJour(faux, { commercantId: 'c1', dateStr: '2026-09-10' })
+    verifier('🔴 la salle se lit sur les réservations du commerce, ce jour-là',
+      vu.table === 'rdv_reservations' && vu.eq.commercant_id === 'c1' && vu.eq.date_rdv === '2026-09-10', JSON.stringify(vu))
+    egal('🔴 seulement ce qui occupe une table', vu.in.statut, ['confirme', 'honore'])
+    verifier('🔴 et jamais ce qui est supprimé', 'deleted_at' in vu.is && vu.is.deleted_at === null)
+    verifier('⚠️ avec les colonnes que compte la salle',
+      ['id', 'prestation_id', 'heure_debut', 'heure_fin'].every(c => new RegExp(`\\b${c}\\b`).test(vu.select || '')), vu.select)
+    egal('⚠️ et elle rend ce qu’elle a lu', lu.reservations.map(r => r.id), ['x'])
+    const enPanne = { from: () => { const c = { select: () => c, eq: () => c, in: () => c, is: () => c, then: (r) => r({ data: null, error: { message: 'réseau' } }) }; return c } }
+    const ko2 = await lireSalleDuJour(enPanne, { commercantId: 'c1', dateStr: '2026-09-10' })
+    verifier('⚠️ une lecture en échec le dit, elle ne rend pas une salle vide sans un mot',
+      ko2.error?.message === 'réseau' && ko2.reservations.length === 0)
+  }
+  const statutsServeur = (CREA.match(/const STATUTS_OCCUPENT = (\[[^\]]*\])/) || [])[1]
+  egal('🔴 l’écran compte les mêmes statuts que le serveur',
+    statutsServeur ? JSON.parse(statutsServeur.replace(/'/g, '"')) : null, STATUTS_QUI_OCCUPENT)
+
+  // ─── Le déplacement écrit la nouvelle table ──────────────────────────────
+  egal('🔴 un déplacement qui change de table écrit la nouvelle',
+    champsDuDeplacement({ date: '2026-09-10', heure: '20:00', dureeMinutes: 90, placeNo: 2, capacite: 24, prestationId: 'a4' }).prestation_id, 'a4')
+  verifier('⚠️ et sans table nouvelle, la prestation n’est pas touchée',
+    !('prestation_id' in champsDuDeplacement({ date: '2026-09-10', heure: '20:00', dureeMinutes: 90, placeNo: 2, capacite: 24 })))
+
+  // ─── Les deux fenêtres : elles ne s'exécutent pas hors navigateur ────────
+  // On vérifie qu'elles demandent tout à la règle, et qu'elles relisent la
+  // salle au moment d'écrire.
+  const SAISIE = sansProse(readFileSync(new URL('../app/dashboard/ModalNouveauRdv.js', import.meta.url), 'utf8'))
+  verifier('🔴 la saisie compte la salle en tables dès que l’inventaire est là',
+    /const salleEnTables = enModeInventaire\(prestations\)/.test(SAISIE))
+  verifier('🔴 elle demande la table à la règle, pas au menu',
+    /tableAPoser\(etat, \{ prefere: formatManuelId \}\)/.test(SAISIE))
+  verifier('🔴 la durée du repas est celle du groupe, par la fonction du serveur',
+    /const dureeMin = enTable\s*\?\s*\(dureeGroupe \|\| undefined\)/.test(SAISIE)
+    && /dureeDuGroupe\(\{ prestation: presta, formats: prestations,/.test(SAISIE)
+    && !/dureeSelonCouverts\(/.test(SAISIE))
+  verifier('🔴 elle relit la salle en base au moment d’écrire, et n’écrit rien si la réponse a changé',
+    /if \(enTable\) \{\s*const frais = await lireSalle\(commercant\.id, dateStr\)[\s\S]{0,700}?choixFrais\.forcer !== choixTable\.forcer\)\s*\{\s*setSalle\(/.test(SAISIE))
+  verifier('🔴 sa lecture de la salle est celle du module, pas une copie',
+    /const lireSalle = \(commercantId, dateStr\) => lireSalleDuJour\(supabase, \{ commercantId, dateStr \}\)/.test(SAISIE))
+  verifier('🔴 le bouton dit « Poser quand même » quand aucune table n’est libre',
+    /choixTable\?\.forcer \? 'Poser quand même ✓'/.test(SAISIE))
+  verifier('⚠️ « une table » ne part pas chercher des abonnés en base',
+    /if \(!prestationId \|\| prestationId === UNE_TABLE\)/.test(SAISIE))
+  verifier('⚠️ elle montre ce qui reste libre sur tout le repas',
+    /Libres de \{heureInit\} à \{heureFin\}/.test(SAISIE) && /\{l\.libres\} sur \{l\.total\}/.test(SAISIE))
+
+  const DEPLACE = sansProse(readFileSync(new URL('../app/dashboard/ModalDeplacerRdv.js', import.meta.url), 'utf8'))
+  verifier('🔴 le déplacement compte la salle en tables',
+    /const salleEnTables = estTable && enModeInventaire\(prestations\)/.test(DEPLACE))
+  verifier('🔴 la table suit l’heure : prise, elle passe sur la libre, sans se gêner elle-même',
+    /exclureId: rdv\?\.id,\s*\}\)\s*return \{ \.\.\.tableAPoser\(etat, \{ prefere: rdv\?\.prestation_id, basculer: true \}\), etat \}/.test(DEPLACE))
+  verifier('🔴 et la nouvelle table s’écrit, avec sa capacité',
+    /prestationId: tableChange \? tableFinale\.id : null,/.test(DEPLACE)
+    && /capacite: tableChange \? capacitePrestation\(tableFinale\) : capacite,/.test(DEPLACE))
+  verifier('🔴 la salle se relit au moment d’écrire',
+    /if \(salleEnTables\) \{\s*const frais = await lireSalleDuJour\(supabase, \{ commercantId: commercant\.id, dateStr: date \}\)[\s\S]{0,900}?if \(!pareil\) \{\s*setSalle\(/.test(DEPLACE))
+  verifier('🔴 « Créneaux libres » ne propose plus une heure sans table',
+    /if \(salleEnTables && !salleConnue\) return \[\]/.test(DEPLACE) && /if \(!t\?\.format \|\| t\.forcer\) continue/.test(DEPLACE))
+  verifier('🔴 le bouton dit « Déplacer quand même » quand la salle n’a plus rien',
+    /salleAlerte \? 'Déplacer quand même ✓'/.test(DEPLACE))
+  verifier('⚠️ tant que la salle n’est pas lue, ni « Libre » ni bouton',
+    /!salleAttend && !salleAlerte && \(/.test(DEPLACE) && /&& !submitting && !salleAttend\)/.test(DEPLACE))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

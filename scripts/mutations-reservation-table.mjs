@@ -316,10 +316,17 @@ const MUTATIONS = [
     de: '    duree_minutes: dureeRetenue,',
     vers: '    duree_minutes: dureeSelonCouverts(prestationRetenue, couvertsRetenus),' },
 
+  // ⚠️ LA DUREE DU GROUPE VIT DANS `dureeDuGroupe` DEPUIS LE 10/09 AU SOIR,
+  // partagee par le serveur et la saisie au telephone : l ancre a suivi.
   { nom: '🔴 la table designee par la requete decide de la duree',
+    fichier: 'lib/inventaire-salle.js',
+    de: '  return reference ? dureeSelonCouverts(reference, couverts) : duree',
+    vers: '  return duree' },
+
+  { nom: '🔴 le serveur recalcule sa duree dans son coin',
     fichier: 'lib/rdv-creation-server.js',
-    de: '      if (reference) dureeRetenue = dureeSelonCouverts(reference, couvertsRetenus)',
-    vers: '      void reference' },
+    de: '    dureeRetenue = dureeDuGroupe({ prestation, formats: formatsTable, couverts: couvertsRetenus })',
+    vers: '    void formatsTable' },
 
   { nom: '🔴 le controle du creneau mesure une autre duree que celle ecrite',
     fichier: 'lib/rdv-creation-server.js',
@@ -398,10 +405,12 @@ const MUTATIONS = [
     vers: '  const estCours = capacite > 1' },
 
   // 🔴 LA DIXIEME COLONNE ABSENTE, et la garde qui ne la voyait pas.
+  // ⚠️ L ANCRE A SUIVI `quantite` (10/09 au soir), perimee sinon : c est
+  // `verif:ancres` qui l a vu.
   { nom: '🔴 le tableau de bord recharge ses prestations sans par_couverts',
     fichier: 'app/dashboard/page.js',
-    de: ", capacite, par_couverts, couverts_min, couverts_max, duree_paliers')",
-    vers: ", capacite')" },
+    de: ", capacite, par_couverts, couverts_min, couverts_max, duree_paliers, quantite')",
+    vers: ", capacite, quantite')" },
 
   // ✅ DECISION D ALEX DU 10/09 : le minimum d une table reste STRICT, et
   // l ecran le dit la ou on le regle et sur la carte.
@@ -492,6 +501,149 @@ const MUTATIONS = [
     fichier: 'scripts/verif-reservation-table.mjs',
     de: "      const src = sansProse(readFileSync(f, 'utf8'))",
     vers: "      const src = readFileSync(f, 'utf8')" },
+
+  // ═══ LA SAISIE AU TELEPHONE COMPTE LA SALLE (Alex, 10/09 au soir) ═══════
+  // « Quand on ajoute une resa manuellement, il tient compte des dispos ? »
+  // Decision : prevenir, puis laisser poser.
+  { nom: '🔴 la reservation deplacee se gene elle-meme',
+    fichier: 'lib/inventaire-salle.js',
+    de: '  const autres = exclureId == null',
+    vers: '  const autres = true' },
+
+  { nom: '🔴 une table designee et prise bascule dans son dos',
+    fichier: 'lib/inventaire-salle.js',
+    de: "      if (!basculer || !etat.proposition) return { format: ligne.format, forcer: true, raison: 'complet' }",
+    vers: "      if (!etat.proposition) return { format: ligne.format, forcer: true, raison: 'complet' }" },
+
+  { nom: '🔴 la salle pleine ne demande plus son accord',
+    fichier: 'lib/inventaire-salle.js',
+    de: "  return { format: etat.reference, forcer: true, raison: 'complet' }",
+    vers: "  return { format: etat.reference, forcer: false, raison: 'complet' }" },
+
+  { nom: '⚠️ une table designee et libre n est plus gardee',
+    fichier: 'lib/inventaire-salle.js',
+    de: "      if (ligne.libres > 0) return { format: ligne.format, forcer: false, raison: 'ok' }",
+    vers: '      void 0' },
+
+  { nom: '🔴 la salle affiche libres des tables prises',
+    fichier: 'lib/inventaire-salle.js',
+    de: 'libres: Math.max(0, total - occupes)',
+    vers: 'libres: total' },
+
+  { nom: '⚠️ toute table convient a tout groupe',
+    fichier: 'lib/inventaire-salle.js',
+    de: 'convient: convient.has(String(f.id))',
+    vers: 'convient: true' },
+
+  { nom: '🔴 la salle compte aussi les annulations',
+    fichier: 'lib/inventaire-salle.js',
+    de: "    .in('statut', STATUTS_QUI_OCCUPENT)",
+    vers: "    .in('statut', ['confirme', 'honore', 'annule_client'])" },
+
+  { nom: '🔴 les statuts de l ecran divergent de ceux du serveur',
+    fichier: 'lib/inventaire-salle.js',
+    de: "export const STATUTS_QUI_OCCUPENT = ['confirme', 'honore']",
+    vers: "export const STATUTS_QUI_OCCUPENT = ['confirme']" },
+
+  { nom: '🔴 la salle compte les reservations supprimees',
+    fichier: 'lib/inventaire-salle.js',
+    de: "    .is('deleted_at', null)",
+    vers: '' },
+
+  { nom: '🔴 l ecran ne propose plus de poser quand meme',
+    fichier: 'lib/inventaire-salle.js',
+    de: '`Tu peux ${poser} quand même si',
+    vers: '`Tu peux ${poser} autrement si' },
+
+  { nom: '⚠️ un deplacement qui garde sa table repete « Libre »',
+    fichier: 'lib/inventaire-salle.js',
+    de: '    if (!actuel || String(actuel.id) === String(choix.format.id)) return null',
+    vers: '    if (!actuel) return null' },
+
+  { nom: '🔴 le deplacement n ecrit pas la nouvelle table (regle)',
+    fichier: 'lib/deplacement-rdv.js',
+    de: '    ...(prestationId != null ? { prestation_id: prestationId } : {}),',
+    vers: '' },
+
+  { nom: '🔴 la saisie ne compte plus la salle',
+    fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '  const salleEnTables = enModeInventaire(prestations)',
+    vers: '  const salleEnTables = false' },
+
+  { nom: '🔴 la saisie ne relit plus la salle avant d ecrire',
+    fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '        const frais = await lireSalle(commercant.id, dateStr)',
+    vers: '        const frais = { reservations: salle.reservations, error: null }' },
+
+  { nom: '🔴 la saisie reprend la duree de la table',
+    fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '    ? (dureeGroupe || undefined)',
+    vers: '    ? (presta ? Number(presta.duree_minutes) : undefined)' },
+
+  { nom: '🔴 la saisie dit « confirmer » sur une salle pleine',
+    fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: "choixTable?.forcer ? 'Poser quand même ✓' : ",
+    vers: '' },
+
+  { nom: '🔴 la saisie oublie la table designee',
+    fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '    : tableAPoser(etat, { prefere: formatManuelId })',
+    vers: '    : tableAPoser(etat)' },
+
+  { nom: '⚠️ « une table » part chercher des abonnes en base',
+    fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: 'if (!prestationId || prestationId === UNE_TABLE)',
+    vers: 'if (!prestationId)' },
+
+  { nom: '🔴 le deplacement ne compte plus la salle',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '  const salleEnTables = estTable && enModeInventaire(prestations)',
+    vers: '  const salleEnTables = false' },
+
+  { nom: '🔴 le deplacement garde une table prise',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '{ prefere: rdv?.prestation_id, basculer: true }',
+    vers: '{ prefere: rdv?.prestation_id }' },
+
+  { nom: '🔴 le deplacement se gene lui-meme',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '      debutMin: d, finMin: d + dureeMinutes, exclureId: rdv?.id,',
+    vers: '      debutMin: d, finMin: d + dureeMinutes,' },
+
+  { nom: '🔴 le deplacement n ecrit pas la nouvelle table (ecran)',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '        prestationId: tableChange ? tableFinale.id : null,',
+    vers: '        prestationId: null,' },
+
+  { nom: '🔴 le deplacement ne relit plus la salle',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '        const frais = await lireSalleDuJour(supabase, { commercantId: commercant.id, dateStr: date })',
+    vers: '        const frais = { reservations: salle.reservations, error: null }' },
+
+  { nom: '🔴 « Creneaux libres » propose une heure sans table',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '          if (!t?.format || t.forcer) continue',
+    vers: '          void t' },
+
+  { nom: '⚠️ « Creneaux libres » avant d avoir lu la salle',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '    if (salleEnTables && !salleConnue) return []',
+    vers: '' },
+
+  { nom: '🔴 le deplacement dit « deplacer » sur une salle pleine',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: "salleAlerte ? 'Déplacer quand même ✓' : ",
+    vers: '' },
+
+  { nom: '⚠️ le bouton de deplacement s ouvre avant la lecture de la salle',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '&& !submitting && !salleAttend)',
+    vers: '&& !submitting)' },
+
+  { nom: '🔴 le tableau de bord perd la quantite des tables',
+    fichier: 'app/dashboard/page.js',
+    de: 'couverts_min, couverts_max, duree_paliers, quantite',
+    vers: 'couverts_min, couverts_max, duree_paliers' },
 ]
 
 const lancer = () => {

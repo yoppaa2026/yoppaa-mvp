@@ -12,9 +12,13 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
 import { euros } from '@/lib/montants'
-import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, bornesCouverts, couvertsValides, dureeSelonCouverts } from '@/lib/cours-collectifs'
+import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, bornesCouverts, couvertsValides } from '@/lib/cours-collectifs'
 import { motsReservation } from '@/lib/reservation-metier'
 import { creneauAcceptable, creneauxDuJour } from '@/lib/deplacement-rdv'
+import {
+  enModeInventaire, formatPourAffichage, plusGrandeTable,
+  dureeDuGroupe, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour,
+} from '@/lib/inventaire-salle'
 // ⚠️ LES RÈGLES DE L'ABONNEMENT NE SONT PAS RÉÉCRITES ICI, elles sont APPELÉES.
 // Le solde, le plafond hebdomadaire, la fenêtre de validité et l'ordre de
 // consommation vivent dans `lib/abonnements.js` depuis le premier jour, éprouvés
@@ -54,6 +58,15 @@ function isoDate(d) {
 }
 function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 
+// Le choix « une table » du menu, quand la salle se compte en tables : la table
+// précise, c'est la salle qui la donne, pas le menu.
+const UNE_TABLE = '__table__'
+
+// ⚠️ LA SALLE SE LIT EN BASE, JAMAIS DANS L'ÉTAT DE L'AGENDA (10/09 au soir).
+// Une table réservée en ligne pendant que le restaurateur est au téléphone doit
+// compter, et l'agenda ouvert depuis vingt minutes ne la connaît pas.
+const lireSalle = (commercantId, dateStr) => lireSalleDuJour(supabase, { commercantId, dateStr })
+
 export default function ModalNouveauRdv({
   commercant, prestations, creneaux, rdvsExistants,
   dateInit, heureInit,
@@ -66,8 +79,28 @@ export default function ModalNouveauRdv({
   // réservations que la salle ne pouvait pas tenir. Ce n'est pas un libellé,
   // c'est la donnée qui fait tenir la salle.
   const mots = motsReservation(commercant)
-  const [prestationId, setPrestationId] = useState('')
+
+  // 🔴 LA SALLE N'ÉTAIT PAS COMPTÉE ICI (Alex, 10/09 au soir : « quand on ajoute
+  // une résa manuellement, il tient compte des dispos ? »). Le restaurateur
+  // choisissait un format à l'aveugle, sans rien voir de ce qui était pris.
+  // Désormais, comme sur la fiche en ligne : il dit combien ils sont, Yoppaa
+  // propose la plus petite table libre, et montre ce qui reste.
+  //
+  // ⚠️ SEULEMENT QUAND LA SALLE SE COMPTE EN TABLES, c'est-à-dire quand chaque
+  // format a sa quantité. Sans inventaire, rien ne permet de dire « libre », et
+  // la saisie reste celle d'avant, format choisi à la main.
+  const salleEnTables = enModeInventaire(prestations)
+  const autresPrestations = (prestations || []).filter(p => !estParCouverts(p))
+  // Un restaurant qui ne propose que des tables n'a rien à choisir dans un menu.
+  const tableSeule = salleEnTables && autresPrestations.length === 0
+  const [prestationId, setPrestationId] = useState(tableSeule ? UNE_TABLE : '')
   const [couverts, setCouverts] = useState('')
+  // La table désignée par le restaurateur, quand il ne veut pas celle proposée.
+  const [formatManuelId, setFormatManuelId] = useState(null)
+  const [changerTable, setChangerTable] = useState(false)
+  const [salle, setSalle] = useState({ etat: 'repos', reservations: [] })
+  const [relire, setRelire] = useState(0)
+  const enTable = salleEnTables && prestationId === UNE_TABLE
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
   const [tel, setTel] = useState('')
@@ -94,7 +127,9 @@ export default function ModalNouveauRdv({
   useEffect(() => {
     let annule = false
     setAboChoisiId(null); setRepeter(0)
-    if (!prestationId) { setAbonnes([]); return }
+    // ⚠️ « Une table » n'est pas une prestation : la chercher en base ferait
+    // échouer la requête sur un identifiant qui n'existe pas.
+    if (!prestationId || prestationId === UNE_TABLE) { setAbonnes([]); return }
     ;(async () => {
       const { data: contrats } = await supabase
         .from('abonnements')
@@ -131,11 +166,30 @@ export default function ModalNouveauRdv({
     return () => { annule = true }
   }, [prestationId, commercant.id])
 
-  // Focus auto sur le select prestation à l'ouverture
+  // Focus auto à l'ouverture : sur le menu, ou sur le nombre de personnes quand
+  // il n'y a pas de menu, chez un restaurant qui ne propose que des tables.
   useEffect(() => {
-    const el = document.getElementById('mn-rdv-presta')
+    const el = document.getElementById('mn-rdv-presta') || document.getElementById('mn-rdv-couverts')
     if (el) el.focus()
   }, [])
+
+  // La salle du jour, relue à l'ouverture et à chaque « Réessayer ».
+  const dateSalle = isoDate(dateInit)
+  useEffect(() => {
+    if (!enTable) return
+    let annule = false
+    setSalle({ etat: 'lecture', reservations: [] })
+    lireSalle(commercant.id, dateSalle).then(({ reservations, error }) => {
+      if (annule) return
+      setSalle(error
+        ? { etat: 'erreur', reservations: [], message: error.message }
+        : { etat: 'ok', reservations })
+    }).catch(e => {
+      // ⚠️ UNE LECTURE QUI LÈVE NE LAISSE PAS « JE REGARDE TA SALLE » À VIE.
+      if (!annule) setSalle({ etat: 'erreur', reservations: [], message: e?.message || String(e) })
+    })
+    return () => { annule = true }
+  }, [enTable, commercant.id, dateSalle, relire])
 
   // ESC pour fermer
   useEffect(() => {
@@ -145,18 +199,46 @@ export default function ModalNouveauRdv({
   }, [onClose])
 
   const dateLabel = `${JOURS_LONG[jourIdxLun(dateInit)]} ${dateInit.getDate()} ${MOIS_LONG[dateInit.getMonth()]}`
-  const presta = prestations.find(p => String(p.id) === String(prestationId))
-  // ⚠️ LA DURÉE SUIT LE GROUPE ICI AUSSI. Une table de huit prise au téléphone
-  // occupe la salle aussi longtemps qu'une table de huit prise en ligne : c'est
-  // la même règle, lue au même endroit. Tant que le nombre n'est pas saisi, on
-  // affiche la durée du plus petit groupe possible, celle qui sera juste si le
-  // commerçant valide sans y toucher.
-  const dureeMin = presta
-    ? dureeSelonCouverts(presta, couverts === '' ? bornesCouverts(presta).min : couverts)
-    : undefined
   const debutMin = timeToMinutes(heureInit)
+
+  // ─── LA TABLE QUE LA SALLE DONNE ───────────────────────────────────────────
+  //
+  // ⚠️ DANS CET ORDRE, ET IL N'Y EN A PAS D'AUTRE : la durée du repas d'abord,
+  // qui ne dépend que du groupe ; puis ce qui est libre sur toute cette durée ;
+  // puis la table. Choisir la table avant de connaître la durée compterait la
+  // salle sur une fenêtre fausse.
+  const nCouverts = Math.floor(Number(couverts))
+  const nombreSaisi = couverts !== '' && Number.isFinite(nCouverts) && nCouverts >= 1
+  const referenceGroupe = enTable && nombreSaisi ? formatPourAffichage(prestations, nCouverts) : null
+  const dureeGroupe = referenceGroupe
+    ? dureeDuGroupe({ prestation: referenceGroupe, formats: prestations, couverts: nCouverts })
+    : null
+  const etat = dureeGroupe && salle.etat === 'ok'
+    ? etatSalle({ formats: prestations, couverts: nCouverts, reservations: salle.reservations, debutMin, finMin: debutMin + dureeGroupe })
+    : null
+  const choixTable = !enTable || !nombreSaisi ? null
+    : !referenceGroupe ? { format: null, forcer: false, raison: 'trop_grand' }
+    : tableAPoser(etat, { prefere: formatManuelId })
+
+  const presta = enTable
+    ? (choixTable?.format || null)
+    : prestations.find(p => String(p.id) === String(prestationId))
+  // ⚠️ LA DURÉE SUIT LE GROUPE ICI AUSSI, et c'est la fonction du serveur,
+  // `dureeDuGroupe`. Elle calculait la sienne sur la table choisie : un couple
+  // posé au téléphone sur une table de quatre bloquait deux heures, le même
+  // couple réservé en ligne une heure et demie. Hors inventaire, tant que le
+  // nombre n'est pas saisi, on affiche la durée du plus petit groupe possible,
+  // celle qui sera juste si le commerçant valide sans y toucher.
+  const dureeMin = enTable
+    ? (dureeGroupe || undefined)
+    : presta
+    ? dureeDuGroupe({ prestation: presta, formats: prestations, couverts: couverts === '' ? bornesCouverts(presta).min : couverts })
+    : undefined
   const finMin = dureeMin ? debutMin + dureeMin : null
   const heureFin = finMin != null ? minutesToTime(finMin) : null
+  const messageSalle = choixTable
+    ? phraseSalle({ formats: prestations, etat, choix: choixTable, couverts: nCouverts, debut: heureInit, fin: heureFin, manuel: !!formatManuelId })
+    : null
 
   // Le prix de la prestation. Plus de fourchette depuis le 27/08 : le prix est
   // le prix, et ce qu'on ajoute se règle à la caisse.
@@ -190,7 +272,9 @@ export default function ModalNouveauRdv({
   // ⚠️ L'IDENTITÉ VIENT DU CONTRAT quand on pose sur un abonnement : le nom et
   // le téléphone sont ceux de la souscription, et le formulaire n'a plus à être
   // rempli. Un abonné sans téléphone existe, la garde ne doit donc pas l'exiger.
-  const formValide = !!(prestationId && (
+  // ⚠️ `presta` ET PAS SEULEMENT `prestationId` : « une table » n'est choisie
+  // qu'une fois la salle lue et le nombre saisi. Avant, il n'y a rien à écrire.
+  const formValide = !!(prestationId && presta && (
     aboChoisi ? true : (prenom.trim() && nom.trim() && tel.trim())
   ))
 
@@ -264,6 +348,32 @@ export default function ModalNouveauRdv({
         setError(verdict.message)
         setSubmitting(false)
         return
+      }
+
+      // ─── LA SALLE, RELUE AU MOMENT D'ÉCRIRE ─────────────────────────────────
+      //
+      // ⚠️ CE QUE L'ÉCRAN A MONTRÉ N'EST PAS UNE PREUVE. Entre l'ouverture de la
+      // fenêtre et ce clic, un client a pu réserver en ligne la dernière table
+      // de quatre. Si la décision change, on n'écrit RIEN : on montre la salle
+      // telle qu'elle est, et le restaurateur confirme en connaissance de cause.
+      // C'est aussi ce qui fait du « poser quand même » un vrai second geste
+      // quand la salle se remplit pendant l'appel.
+      if (enTable) {
+        const frais = await lireSalle(commercant.id, dateStr)
+        if (frais.error) {
+          setError(`Impossible de lire ta salle : ${frais.error.message}`)
+          setSubmitting(false)
+          return
+        }
+        const choixFrais = tableAPoser(etatSalle({
+          formats: prestations, couverts: nCouverts, reservations: frais.reservations, debutMin, finMin,
+        }), { prefere: formatManuelId })
+        if (String(choixFrais.format?.id) !== String(presta.id) || choixFrais.forcer !== choixTable.forcer) {
+          setSalle({ etat: 'ok', reservations: frais.reservations })
+          setError('Ta salle a changé pendant la saisie. Relis la table proposée, puis confirme.')
+          setSubmitting(false)
+          return
+        }
       }
 
       // ⚠️ LES PLACES SE LISENT EN BASE, JAMAIS DANS L'ÉTAT DE L'ÉCRAN. L'agenda
@@ -470,6 +580,15 @@ export default function ModalNouveauRdv({
     background: '#fff', outline: 'none', boxSizing: 'border-box',
   }
   const labelSt = { fontSize: '0.65rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: 4 }
+  // Les trois tons de ce que la salle répond : une table, un avertissement, un refus.
+  const TONS = {
+    ok:     { fond: `${T.main}0D`, bord: `${T.main}33`, texte: T.deep },
+    alerte: { fond: '#FFFBEB', bord: '#FCD34D', texte: '#92400E' },
+    refus:  { fond: '#FEF2F2', bord: '#FCA5A5', texte: '#DC2626' },
+  }
+  const boiteSt = (ton) => ({ background: (TONS[ton] || TONS.ok).fond, border: `1.5px solid ${(TONS[ton] || TONS.ok).bord}`, borderRadius: 10, padding: '0.625rem 0.875rem' })
+  const titreBoiteSt = (ton) => ({ fontSize: '0.84rem', fontWeight: 800, color: (TONS[ton] || TONS.ok).texte, margin: 0, lineHeight: 1.4 })
+  const lienSt = { background: 'none', border: 'none', padding: 0, color: T.main, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"DM Sans", sans-serif' }
 
   // React Portal : rend la modale au niveau document.body, ce qui la fait sortir de tous
   // les stacking contexts du dashboard (sidebar, topbar, ancestors avec transform/filter).
@@ -506,26 +625,32 @@ export default function ModalNouveauRdv({
 
         {/* Body — form */}
         <div style={{ padding: '1.125rem 1.125rem 0' }}>
-          {/* Prestation */}
-          <div style={{ marginBottom: 12 }}>
-            <label htmlFor="mn-rdv-presta" style={labelSt}>{mots.prestationLigne} *</label>
-            <select id="mn-rdv-presta" value={prestationId} onChange={(e) => setPrestationId(e.target.value)} style={inputSt}>
-              <option value="">— Choisir {mots.prestationUne} —</option>
-              {(prestations || []).map(p => {
-                const prix = p.prix != null ? `${Number(p.prix).toFixed(0)}€` : ''
-                return (
-                  <option key={p.id} value={p.id}>
-                    {p.nom} · {p.duree_minutes}min{prix ? ` · ${prix}` : ''}
-                  </option>
-                )
-              })}
-            </select>
-            {presta && heureFin && (
-              <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, marginTop: 5 }}>
-                {mots.numeroLabel} de {dureeMin}min : {heureInit} → {heureFin}{prixEstime != null ? ` · ${prixEstime.toFixed(0)}€` : ''}
-              </p>
-            )}
-          </div>
+          {/* Prestation. ⚠️ PAS DE MENU chez un restaurant qui ne propose que
+              des tables : la table, c'est la salle qui la donne. Quand la salle
+              se compte en tables, ses formats se rangent sous « Une table ». */}
+          {!tableSeule && (
+            <div style={{ marginBottom: 12 }}>
+              <label htmlFor="mn-rdv-presta" style={labelSt}>{mots.prestationLigne} *</label>
+              <select id="mn-rdv-presta" value={prestationId}
+                onChange={(e) => { setPrestationId(e.target.value); setFormatManuelId(null); setChangerTable(false) }} style={inputSt}>
+                <option value="">Choisir {mots.prestationUne}</option>
+                {salleEnTables && <option value={UNE_TABLE}>Une table</option>}
+                {(salleEnTables ? autresPrestations : (prestations || [])).map(p => {
+                  const prix = p.prix != null ? `${Number(p.prix).toFixed(0)}€` : ''
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {p.nom} · {p.duree_minutes}min{prix ? ` · ${prix}` : ''}
+                    </option>
+                  )
+                })}
+              </select>
+              {!enTable && presta && heureFin && (
+                <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, marginTop: 5 }}>
+                  {mots.numeroLabel} de {dureeMin}min : {heureInit} → {heureFin}{prixEstime != null ? ` · ${prixEstime.toFixed(0)}€` : ''}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* 🔴 COMBIEN DE PERSONNES, ET IL N'Y AVAIT AUCUN CHAMP POUR LE DIRE.
               Le téléphone est le premier canal d'un restaurant : une table de
@@ -533,8 +658,23 @@ export default function ModalNouveauRdv({
               croyait vide alors qu'elle était pleine.
               ⚠️ N'APPARAÎT QUE SUR UNE PRESTATION DÉCLARÉE « TABLE ». Un
               rendez-vous de coiffure n'a pas de couverts, et lui poser la
-              question serait aussi faux que de ne pas la poser au restaurant. */}
-          {presta && estParCouverts(presta) && (
+              question serait aussi faux que de ne pas la poser au restaurant.
+              ⚠️ ET QUAND LA SALLE SE COMPTE EN TABLES, IL VIENT EN PREMIER : c'est
+              lui qui choisit la table, comme sur la fiche en ligne. */}
+          {enTable ? (
+            <div style={{ marginBottom: 12 }}>
+              <label htmlFor="mn-rdv-couverts" style={labelSt}>Combien de personnes ? *</label>
+              <input id="mn-rdv-couverts" type="number" inputMode="numeric"
+                min={1} max={plusGrandeTable(prestations) || undefined}
+                value={couverts} onChange={(e) => { setCouverts(e.target.value); setFormatManuelId(null) }}
+                placeholder="Par exemple 2" style={inputSt}/>
+              {!nombreSaisi && (
+                <p style={{ fontSize: '0.72rem', color: T.muted, marginTop: 5, lineHeight: 1.45 }}>
+                  Yoppaa te propose ensuite la plus petite table libre, et te montre ce qui reste dans ta salle.
+                </p>
+              )}
+            </div>
+          ) : presta && estParCouverts(presta) && (
             <div style={{ marginBottom: 12 }}>
               <label htmlFor="mn-rdv-couverts" style={labelSt}>Combien de personnes ? *</label>
               <input id="mn-rdv-couverts" type="number" inputMode="numeric"
@@ -545,6 +685,72 @@ export default function ModalNouveauRdv({
                 De {bornesCouverts(presta).min} à {bornesCouverts(presta).max} personnes pour cette table.
                 C&rsquo;est ce nombre qui remplit ta salle.
               </p>
+            </div>
+          )}
+
+          {/* ─── LA SALLE, TELLE QU'ELLE EST À CETTE HEURE ─────────────────────
+              La table proposée, pourquoi celle-là, et ce qui reste libre sur
+              TOUTE la durée du repas. Le restaurateur au téléphone voit sa
+              salle au lieu de la deviner. */}
+          {enTable && nombreSaisi && (
+            <div style={{ marginBottom: 12 }}>
+              {salle.etat === 'lecture' && choixTable?.raison !== 'trop_grand' && (
+                <p style={{ fontSize: '0.78rem', color: T.muted, margin: 0 }}>Je regarde ta salle…</p>
+              )}
+              {salle.etat === 'erreur' && choixTable?.raison !== 'trop_grand' && (
+                <div style={boiteSt('refus')}>
+                  <p style={titreBoiteSt('refus')}>Impossible de lire ta salle{salle.message ? ` : ${salle.message}` : ''}.</p>
+                  <button type="button" onClick={() => setRelire(n => n + 1)} style={lienSt}>Réessayer</button>
+                </div>
+              )}
+              {messageSalle && (
+                <div style={boiteSt(messageSalle.ton)}>
+                  <p style={titreBoiteSt(messageSalle.ton)}>{messageSalle.titre}</p>
+                  {messageSalle.detail && (
+                    <p style={{ fontSize: '0.75rem', color: T.deep, margin: '4px 0 0', lineHeight: 1.5 }}>{messageSalle.detail}</p>
+                  )}
+                </div>
+              )}
+              {etat && etat.parFormat.length > 0 && heureFin && (
+                <div style={{ marginTop: 10 }}>
+                  <span style={labelSt}>Libres de {heureInit} à {heureFin}</span>
+                  <div style={{ display: 'grid', gap: 4 }}>
+                    {etat.parFormat.map(l => {
+                      const retenue = presta && String(presta.id) === String(l.format.id)
+                      return (
+                        <div key={l.format.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: '0.8rem', color: l.libres > 0 ? T.deep : T.muted, fontWeight: retenue ? 800 : 600 }}>
+                          <span>{l.format.nom}</span>
+                          <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{l.libres} sur {l.total}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* ⚠️ LE RESTAURATEUR GARDE LA MAIN : un habitué qui aime la
+                  table du fond passe avant la règle. Mais on lui dit ce que
+                  vaut chaque table, sans quoi il choisirait à l'aveugle comme
+                  avant. Une table trop petite ou trop grande pour le groupe ne
+                  se choisit pas : c'est la même borne qu'en ligne. */}
+              {etat && choixTable?.format && (
+                changerTable ? (
+                  <div style={{ marginTop: 10 }}>
+                    <label htmlFor="mn-rdv-table" style={labelSt}>Table</label>
+                    <select id="mn-rdv-table" value={formatManuelId || ''} onChange={(e) => setFormatManuelId(e.target.value || null)} style={inputSt}>
+                      <option value="">La table proposée par Yoppaa</option>
+                      {etat.parFormat.map(l => (
+                        <option key={l.format.id} value={l.format.id} disabled={!l.convient}>
+                          {l.format.nom} · {!l.convient
+                            ? `pas pour ${nCouverts} personne${nCouverts > 1 ? 's' : ''}`
+                            : l.libres > 0 ? `${l.libres} libre${l.libres > 1 ? 's' : ''}` : 'aucune libre'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setChangerTable(true)} style={{ ...lienSt, marginTop: 8 }}>Changer de table</button>
+                )
+              )}
             </div>
           )}
 
@@ -710,7 +916,9 @@ export default function ModalNouveauRdv({
               fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif',
               boxShadow: (!formValide || submitting) ? 'none' : `0 4px 16px ${T.main}55`,
             }}>
-            {submitting ? 'Enregistrement…' : `${mots.manuelConfirmer} ✓`}
+            {/* ⚠️ LE BOUTON DIT LE GESTE : quand aucune table n'est libre, il ne
+                dit plus « Confirmer » comme si de rien n'était. */}
+            {submitting ? 'Enregistrement…' : choixTable?.forcer ? 'Poser quand même ✓' : `${mots.manuelConfirmer} ✓`}
           </button>
         </div>
       </div>

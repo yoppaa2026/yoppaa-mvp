@@ -26,11 +26,12 @@ import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
-import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts } from '@/lib/cours-collectifs'
+import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, couvertsDe } from '@/lib/cours-collectifs'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
   heureDeFin, heureDeMinutes, minutesDeLHeure, jourCle, formatJour,
 } from '@/lib/deplacement-rdv'
+import { enModeInventaire, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour } from '@/lib/inventaire-salle'
 
 const T = {
   main:  '#6B35C4',
@@ -84,6 +85,49 @@ export default function ModalDeplacerRdv({
   const estTable = presta ? estParCouverts(presta) : false
   const estCours = !estTable && capacite > 1
 
+  // 🔴 LA SALLE SE COMPTE AUSSI QUAND ON DÉPLACE (10/09 au soir). Décaler une
+  // table de quatre à une heure où elles sont toutes prises passait sans un
+  // mot : elle se comptait sur des tables pleines, et celle où elle s'assiéra
+  // vraiment restait « libre » pour la fiche en ligne. Même règle que la saisie
+  // au téléphone, mêmes fonctions que le serveur, lecture fraîche en base.
+  //
+  // ⚠️ SEULEMENT QUAND LA SALLE SE COMPTE EN TABLES : sans inventaire, rien ne
+  // permet de dire « libre », et le déplacement reste celui d'avant.
+  const salleEnTables = estTable && enModeInventaire(prestations)
+  const couvertsRdv = couvertsDe(rdv)
+  const [salle, setSalle] = useState({ etat: 'repos', reservations: [], date: null })
+  const [relire, setRelire] = useState(0)
+  useEffect(() => {
+    if (!salleEnTables || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return
+    let annule = false
+    setSalle({ etat: 'lecture', reservations: [], date })
+    lireSalleDuJour(supabase, { commercantId: commercant.id, dateStr: date }).then(({ reservations, error }) => {
+      if (annule) return
+      setSalle(error
+        ? { etat: 'erreur', reservations: [], date, message: error.message }
+        : { etat: 'ok', reservations, date })
+    }).catch(e => {
+      // ⚠️ UNE LECTURE QUI LÈVE NE LAISSE PAS « JE REGARDE TA SALLE » À VIE.
+      if (!annule) setSalle({ etat: 'erreur', reservations: [], date, message: e?.message || String(e) })
+    })
+    return () => { annule = true }
+  }, [salleEnTables, commercant.id, date, relire])
+  const salleConnue = salleEnTables && salle.etat === 'ok' && salle.date === date
+
+  // La table que la salle donne à cette réservation, à cette heure-là.
+  // ⚠️ `basculer` : personne n'a choisi de table en déplaçant, seulement une
+  // heure. Si la sienne est prise et qu'une autre convient, elle y passe.
+  // ⚠️ `exclureId` : à son ancienne heure, elle ne se gêne pas elle-même.
+  const tablePour = (h, reservations) => {
+    const d = minutesDeLHeure(h)
+    if (d === null || !(dureeMinutes > 0)) return null
+    const etat = etatSalle({
+      formats: prestations, couverts: couvertsRdv, reservations,
+      debutMin: d, finMin: d + dureeMinutes, exclureId: rdv?.id,
+    })
+    return { ...tableAPoser(etat, { prefere: rdv?.prestation_id, basculer: true }), etat }
+  }
+
   const jour = useMemo(() => (
     /^\d{4}-\d{2}-\d{2}$/.test(date) ? jourCle(new Date(`${date}T12:00:00`)) : null
   ), [date])
@@ -115,8 +159,15 @@ export default function ModalDeplacerRdv({
 
   // LES HEURES QUI RESTENT LIBRES CE JOUR-LÀ, proposées d'un tap.
   // Zéro friction : le commerçant ne devine pas ses propres trous, il les voit.
+  //
+  // 🔴 « LIBRES » DOIT ÊTRE VRAI POUR UNE TABLE AUSSI (10/09 au soir). Ces
+  // pastilles ne regardaient que les horaires : elles proposaient d'un tap une
+  // heure où toutes les tables étaient prises. Une heure ne s'affiche donc
+  // qu'une fois la salle lue, et seulement si une table y est libre sur tout
+  // le repas. Un message qui affirme sans avoir vérifié est pire qu'absent.
   const heuresLibres = useMemo(() => {
     if (!dureeMinutes || creneauxJour.length === 0) return []
+    if (salleEnTables && !salleConnue) return []
     const trouvees = []
     for (const c of creneauxJour) {
       const debut = minutesDeLHeure(c?.heure_debut)
@@ -125,16 +176,32 @@ export default function ModalDeplacerRdv({
       for (let m = debut; m + dureeMinutes <= fin; m += 15) {
         const h = heureDeMinutes(m)
         if (!h || trouvees.includes(h)) continue
-        if (creneauAcceptable({ ...contexte, heureDebut: h }).ok) trouvees.push(h)
+        if (!creneauAcceptable({ ...contexte, heureDebut: h }).ok) continue
+        if (salleEnTables) {
+          const t = tablePour(h, salle.reservations)
+          if (!t?.format || t.forcer) continue
+        }
+        trouvees.push(h)
       }
     }
     return trouvees.sort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations])
+  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, salleEnTables, salleConnue, salle])
 
   const utile = deplacementUtile(rdv, { date, heure })
-  const peutValider = !!(date && heure && verdict.ok && utile && dureeMinutes > 0 && !submitting)
   const heureFin = heureDeFin(heure, dureeMinutes)
+
+  // Ce que la salle répond à cette heure-là, et ce qu'elle empêche de dire.
+  // ⚠️ TANT QU'ELLE N'EST PAS LUE, ON NE DIT PAS « LIBRE » : c'est précisément
+  // ce qu'on ne sait pas encore.
+  const choixTable = salleConnue ? tablePour(heure, salle.reservations) : null
+  const messageSalle = choixTable
+    ? phraseSalle({ formats: prestations, etat: choixTable.etat, choix: choixTable, couverts: couvertsRdv, debut: heure, fin: heureFin, deplacement: true, actuel: presta })
+    : null
+  const salleAttend = salleEnTables && verdict.ok && utile && !salleConnue
+  // ✅ DÉCISION D'ALEX, 10/09 : prévenir, puis laisser faire.
+  const salleAlerte = salleEnTables && verdict.ok && utile && !!choixTable && (choixTable.forcer || choixTable.raison === 'trop_grand')
+  const peutValider = !!(date && heure && verdict.ok && utile && dureeMinutes > 0 && !submitting && !salleAttend)
   const nomClient = [rdv?.client_prenom, rdv?.client_nom].filter(Boolean).join(' ') || 'ce client'
 
   async function valider() {
@@ -142,6 +209,34 @@ export default function ModalDeplacerRdv({
     setSubmitting(true)
     setError(null)
     try {
+      // ─── LA SALLE, RELUE AU MOMENT D'ÉCRIRE ─────────────────────────────────
+      //
+      // ⚠️ CE QUE L'ÉCRAN A MONTRÉ N'EST PAS UNE PREUVE : une table a pu être
+      // réservée en ligne depuis. Si la réponse de la salle change, on n'écrit
+      // RIEN, on montre la salle telle qu'elle est.
+      let tableFinale = presta
+      if (salleEnTables) {
+        const frais = await lireSalleDuJour(supabase, { commercantId: commercant.id, dateStr: date })
+        if (frais.error) {
+          setError(`Impossible de lire ta salle : ${frais.error.message}`)
+          setSubmitting(false)
+          return
+        }
+        const choixFrais = tablePour(heure, frais.reservations)
+        const pareil = !!choixFrais && !!choixTable
+          && String(choixFrais.format?.id ?? '') === String(choixTable.format?.id ?? '')
+          && choixFrais.forcer === choixTable.forcer
+          && choixFrais.raison === choixTable.raison
+        if (!pareil) {
+          setSalle({ etat: 'ok', reservations: frais.reservations, date })
+          setError('Ta salle a changé pendant la saisie. Relis ce qui est proposé, puis confirme.')
+          setSubmitting(false)
+          return
+        }
+        // Aucune table n'accueille plus ce groupe : elle garde la sienne.
+        tableFinale = choixFrais.format || presta
+      }
+
       // ⚠️ LA PLACE SE LIT EN BASE, jamais dans l'état de l'écran, qui peut
       // avoir quelques minutes de retard. Et on s'EXCLUT de la lecture : sur un
       // déplacement à l'intérieur du même cours, on compterait sinon sa propre
@@ -198,7 +293,17 @@ export default function ModalDeplacerRdv({
 
       const ancienneDate = rdv.date_rdv
       const ancienneHeure = rdv.heure_debut
-      const maj = champsDuDeplacement({ date, heure, dureeMinutes, placeNo, capacite, champsLieu: lieu })
+      // 🔴 LA TABLE SUIT LA SALLE (10/09 au soir) : si la sienne est prise à la
+      // nouvelle heure, elle passe sur celle qui est libre, avec sa capacité.
+      // ⚠️ LE PRIX ET LA TVA NE BOUGENT PAS : ils sont figés à la réservation, et
+      // un déplacement ne renégocie rien avec le client.
+      const tableChange = salleEnTables && tableFinale && String(tableFinale.id) !== String(rdv.prestation_id)
+      const maj = champsDuDeplacement({
+        date, heure, dureeMinutes, placeNo,
+        capacite: tableChange ? capacitePrestation(tableFinale) : capacite,
+        champsLieu: lieu,
+        prestationId: tableChange ? tableFinale.id : null,
+      })
 
       const { error: errMaj } = await supabase
         .from('rdv_reservations')
@@ -321,8 +426,11 @@ export default function ModalDeplacerRdv({
             </div>
           )}
 
-          {/* LE VERDICT, AVANT DE CONFIRMER */}
-          {heure && dureeMinutes > 0 && (
+          {/* LE VERDICT, AVANT DE CONFIRMER.
+              ⚠️ PAS DE « LIBRE » POUR UNE TABLE tant que la salle n'est pas lue,
+              ni quand elle n'a plus rien : c'est l'encadré de la salle, juste
+              en dessous, qui parle alors. */}
+          {heure && dureeMinutes > 0 && !salleAttend && !salleAlerte && (
             <div style={{
               borderRadius: 10, padding: '0.625rem 0.875rem', marginBottom: 12,
               background: verdict.ok ? (utile ? '#ECFDF5' : '#F9FAFB') : '#FEF2F2',
@@ -335,6 +443,36 @@ export default function ModalDeplacerRdv({
                   : `Libre : ${formatJour(date)} de ${heure} à ${heureFin}${estCours ? ` · cours de ${capacite} places` : ''}`}
               </p>
             </div>
+          )}
+
+          {/* ─── LA SALLE, QUAND C'EST UNE TABLE ───────────────────────────── */}
+          {salleEnTables && verdict.ok && utile && heure && dureeMinutes > 0 && (
+            salle.etat === 'erreur' ? (
+              <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 10, padding: '0.625rem 0.875rem', marginBottom: 12 }}>
+                <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.45, margin: 0 }}>
+                  Impossible de lire ta salle{salle.message ? ` : ${salle.message}` : ''}.
+                </p>
+                <button type="button" onClick={() => setRelire(n => n + 1)}
+                  style={{ background: 'none', border: 'none', padding: 0, marginTop: 6, color: T.main, fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline', fontFamily: '"DM Sans", sans-serif' }}>
+                  Réessayer
+                </button>
+              </div>
+            ) : salleAttend ? (
+              <p style={{ fontSize: '0.78rem', color: T.muted, margin: '0 0 12px' }}>Je regarde ta salle…</p>
+            ) : messageSalle ? (
+              <div style={{
+                borderRadius: 10, padding: '0.625rem 0.875rem', marginBottom: 12,
+                background: messageSalle.ton === 'ok' ? `${T.main}0D` : '#FFFBEB',
+                border: `1.5px solid ${messageSalle.ton === 'ok' ? `${T.main}33` : '#FCD34D'}`,
+              }}>
+                <p style={{ fontSize: '0.82rem', fontWeight: 800, lineHeight: 1.45, margin: 0, color: messageSalle.ton === 'ok' ? T.deep : '#92400E' }}>
+                  {messageSalle.titre}
+                </p>
+                {messageSalle.detail && (
+                  <p style={{ fontSize: '0.75rem', color: T.deep, margin: '4px 0 0', lineHeight: 1.5 }}>{messageSalle.detail}</p>
+                )}
+              </div>
+            ) : null
           )}
 
           {/* Prévenir le client */}
@@ -369,7 +507,7 @@ export default function ModalDeplacerRdv({
               fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif',
               boxShadow: !peutValider ? 'none' : `0 4px 16px ${T.main}55`,
             }}>
-            {submitting ? 'Déplacement…' : 'Déplacer le RDV ✓'}
+            {submitting ? 'Déplacement…' : salleAlerte ? 'Déplacer quand même ✓' : 'Déplacer le RDV ✓'}
           </button>
         </div>
       </div>

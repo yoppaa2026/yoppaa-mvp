@@ -1324,7 +1324,12 @@ export default function Dashboard() {
         // l'exigeait : la garde « capacite et par_couverts voyagent ensemble »
         // cherchait le `select` à 160 caractères du `from`, et ce commentaire-ci
         // l'en éloignait. Elle lit maintenant le code sans sa prose.
-        .select('id, nom, duree_minutes, prix, acompte_pourcent, ordre, tva_taux, capacite, par_couverts, couverts_min, couverts_max, duree_paliers')
+        //
+        // ⚠️ ET `quantite` (10/09 au soir) : la saisie au téléphone compte
+        // désormais la salle en tables, et `enModeInventaire` exige la quantité
+        // de chaque format. Sans elle, la salle ne se comptait jamais ici, sans
+        // un mot, et la saisie restait aveugle.
+        .select('id, nom, duree_minutes, prix, acompte_pourcent, ordre, tva_taux, capacite, par_couverts, couverts_min, couverts_max, duree_paliers, quantite')
         .eq('commercant_id', id)
         .eq('actif', true)
         .is('deleted_at', null)

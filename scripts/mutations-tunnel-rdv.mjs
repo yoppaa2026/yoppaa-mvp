@@ -522,7 +522,7 @@ const MUTATIONS = [
 
   { nom: '🔴 un créneau déjà passé est accepté',
     fichier: 'app/api/rdv/reserver/route.js',
-    de: '    if (isNaN(instant.getTime()) || instant.getTime() <= Date.now()) {',
+    de: '    if (creneauDejaCommence(date_rdv, heure)) {',
     vers: '    if (false) {' },
 
   // 🔴 UN `client_id` FOURNI PAR L’APPELANT rattacherait le rendez-vous à la

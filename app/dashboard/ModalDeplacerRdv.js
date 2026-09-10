@@ -26,10 +26,11 @@ import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
-import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, couvertsDe } from '@/lib/cours-collectifs'
+import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, couvertsDe, coursAPlace } from '@/lib/cours-collectifs'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
-  heureDeFin, heureDeMinutes, minutesDeLHeure, jourCle, formatJour,
+  heureDeFin, minutesDeLHeure, jourCle, formatJour,
+  heuresLibresDuJour, premiereMinuteOuverte,
 } from '@/lib/deplacement-rdv'
 import { enModeInventaire, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour } from '@/lib/inventaire-salle'
 
@@ -55,12 +56,26 @@ export default function ModalDeplacerRdv({
   commercant, rdv, prestations = [], creneaux = [], rdvsExistants = [],
   onClose, onDeplace,
 }) {
-  const [date, setDate] = useState(rdv?.date_rdv || aujourdhuiIso())
+  // ⚠️ UN RENDEZ-VOUS D'HIER QU'ON REPORTE part d'aujourd'hui, pas de sa propre
+  // date : on ne peut plus le poser là, et le champ la marquerait invalide.
+  const [date, setDate] = useState(() => {
+    const auj = aujourdhuiIso()
+    return rdv?.date_rdv && rdv.date_rdv >= auj ? rdv.date_rdv : auj
+  })
   const [heure, setHeure] = useState(String(rdv?.heure_debut || '').slice(0, 5))
   const [prevenir, setPrevenir] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const [mounted, setMounted] = useState(false)
+
+  // 🔴 L'HEURE QU'IL EST (10/09 tard) : sans elle, la règle ne savait pas ce qui
+  // est passé, et midi se proposait d'un tap à sept heures du soir. Elle avance
+  // pendant que la fenêtre reste ouverte, et se relit encore au clic.
+  const [maintenant, setMaintenant] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setMaintenant(new Date()), 30000)
+    return () => clearInterval(t)
+  }, [])
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
@@ -149,13 +164,16 @@ export default function ModalDeplacerRdv({
     // 🔴 ET DEUX TABLES NE SE GÊNENT PAS : sans le catalogue, décaler une table
     // de 19h à 19h30 était refusé dès qu'une autre était assise à 19h.
     prestations,
+    // 🔴 ET ON NE DÉPLACE PAS DANS LE PASSÉ (Alex, 10/09 tard : « ça ne doit
+    // pas être possible »).
+    maintenant,
   }
 
   // LE VERDICT S'AFFICHE AVANT DE CONFIRMER, il ne sanctionne pas après coup.
   // Même principe que l'aperçu des abonnements : l'écran est le garde-fou.
   const verdict = useMemo(() => creneauAcceptable({ ...contexte, heureDebut: heure }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [date, heure, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations])
+    [date, heure, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, maintenant])
 
   // LES HEURES QUI RESTENT LIBRES CE JOUR-LÀ, proposées d'un tap.
   // Zéro friction : le commerçant ne devine pas ses propres trous, il les voit.
@@ -165,28 +183,28 @@ export default function ModalDeplacerRdv({
   // heure où toutes les tables étaient prises. Une heure ne s'affiche donc
   // qu'une fois la salle lue, et seulement si une table y est libre sur tout
   // le repas. Un message qui affirme sans avoir vérifié est pire qu'absent.
+  //
+  // 🔴 ET POUR UN COURS (10/09 tard) : un cours complet ne se propose plus.
+  // ⚠️ La boucle vit dans le module, partagée avec la saisie au téléphone ; elle
+  // part du quart d'heure en cours, jamais d'une heure déjà passée.
   const heuresLibres = useMemo(() => {
-    if (!dureeMinutes || creneauxJour.length === 0) return []
     if (salleEnTables && !salleConnue) return []
-    const trouvees = []
-    for (const c of creneauxJour) {
-      const debut = minutesDeLHeure(c?.heure_debut)
-      const fin = minutesDeLHeure(c?.heure_fin)
-      if (debut === null || fin === null) continue
-      for (let m = debut; m + dureeMinutes <= fin; m += 15) {
-        const h = heureDeMinutes(m)
-        if (!h || trouvees.includes(h)) continue
-        if (!creneauAcceptable({ ...contexte, heureDebut: h }).ok) continue
+    return heuresLibresDuJour({
+      creneauxJour,
+      dureeMinutes,
+      depuis: premiereMinuteOuverte(date, maintenant),
+      accepte: (h) => {
+        if (!creneauAcceptable({ ...contexte, heureDebut: h }).ok) return false
+        if (estCours && !coursAPlace({ id: rdv?.prestation_id, capacite }, rdvsExistants, { dateStr: date, heure: h, exclureId: rdv?.id })) return false
         if (salleEnTables) {
           const t = tablePour(h, salle.reservations)
-          if (!t?.format || t.forcer) continue
+          if (!t?.format || t.forcer) return false
         }
-        trouvees.push(h)
-      }
-    }
-    return trouvees.sort()
+        return true
+      },
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, salleEnTables, salleConnue, salle])
+  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, salleEnTables, salleConnue, salle, maintenant])
 
   const utile = deplacementUtile(rdv, { date, heure })
   const heureFin = heureDeFin(heure, dureeMinutes)
@@ -206,6 +224,14 @@ export default function ModalDeplacerRdv({
 
   async function valider() {
     if (!peutValider) return
+    // ⚠️ L'HEURE SE RELIT AU CLIC : la fenêtre a pu rester ouverte pendant que
+    // l'heure choisie passait. Ce que l'écran a montré n'est pas une preuve.
+    const verdictAuClic = creneauAcceptable({ ...contexte, heureDebut: heure, maintenant: new Date() })
+    if (!verdictAuClic.ok) {
+      setMaintenant(new Date())
+      setError(verdictAuClic.message)
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
@@ -311,7 +337,12 @@ export default function ModalDeplacerRdv({
         .eq('id', rdv.id)
 
       if (errMaj) {
-        if (errMaj.code === '23505') {
+        // ⚠️ LA BASE REFUSE AUSSI LE PASSÉ, à l'heure de Bruxelles
+        // (MIGRATION_RDV_PAS_DEPLACE_DANS_LE_PASSE). Si l'écran a laissé passer,
+        // c'est que la pendule de l'appareil retarde : on le dit.
+        if (String(errMaj.message || '').includes('RDV_DEPLACE_DANS_LE_PASSE')) {
+          setError('Cette heure est déjà passée. Vérifie l’heure de ton appareil, puis choisis une heure à venir.')
+        } else if (errMaj.code === '23505') {
           setError(estTable
             ? 'Une autre table vient d\'être posée à la même heure pendant ta saisie. Réessaie, le rang suivant sera calculé.'
             : estCours

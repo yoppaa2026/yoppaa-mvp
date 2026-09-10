@@ -32,6 +32,7 @@ import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { verdictForfait } from '@/lib/garde-forfait'
+import { creneauDejaCommence } from '@/lib/timezone'
 
 export async function POST(request) {
   try {
@@ -58,6 +59,12 @@ export async function POST(request) {
     }
     if (!client_email || !client_prenom || !client_nom || !client_telephone) {
       return NextResponse.json({ ok: false, error: 'coordonnées client incomplètes' }, { status: 400 })
+    }
+    // 🔴 UN ACOMPTE POUR UN CRÉNEAU D'HIER PASSAIT (10/09 tard) : cette route ne
+    // regardait pas l'heure, et le webhook aurait créé le rendez-vous après le
+    // paiement, dans le passé. On refuse AVANT d'ouvrir la moindre session.
+    if (creneauDejaCommence(date_rdv, String(heure_debut))) {
+      return NextResponse.json({ ok: false, error: 'Ce créneau est déjà passé. Choisis-en un autre.', creneau_refuse: true }, { status: 409 })
     }
 
     // Supabase service_role (cette route est appelée publiquement par les Yoppers, y compris invités)

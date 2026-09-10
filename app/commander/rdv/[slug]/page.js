@@ -1862,6 +1862,14 @@ export default function CommanderRdvSlug() {
               setSubmitting(false)
               setTimeout(() => allerEtape(2), 1200)
               return
+            } else if (j?.error === 'creneau_passe') {
+              // ⚠️ L'HEURE A PASSÉ PENDANT QUE LA FICHE RESTAIT OUVERTE : on le
+              // dit, et on renvoie choisir, comme pour une place prise.
+              setSubmitError('Ce créneau est déjà passé. Choisis-en un autre.')
+              setHeureChoisie(null)
+              setSubmitting(false)
+              setTimeout(() => allerEtape(2), 1200)
+              return
             } else if (j?.error === 'non_authentifie') {
               setSubmitError('Reconnecte-toi pour utiliser ton abonnement, ou décoche la case pour payer cette séance.')
             } else {
@@ -2048,6 +2056,16 @@ export default function CommanderRdvSlug() {
             setTimeout(() => allerEtape(2), 1200)
             return
           }
+          // ⚠️ LE CRÉNEAU A PASSÉ PENDANT LA SAISIE (10/09 tard) : le serveur le
+          // refuse désormais, on renvoie choisir au lieu d'afficher « Erreur
+          // paiement ».
+          if (!j.ok && j.creneau_refuse) {
+            setSubmitError(j.error)
+            setHeureChoisie(null)
+            setSubmitting(false)
+            setTimeout(() => allerEtape(2), 1200)
+            return
+          }
 
           if (!j.ok || !j.url) throw new Error(j.error || 'Erreur création du paiement')
           redirectTop(j.url)
@@ -2113,6 +2131,15 @@ export default function CommanderRdvSlug() {
             }),
           })
           const j = await res.json()
+          // ⚠️ LE CRÉNEAU A PASSÉ PENDANT LA SAISIE (10/09 tard) : même geste
+          // que sur les autres chemins, on renvoie choisir une autre heure.
+          if (!j.ok && j.creneau_refuse) {
+            setSubmitError(j.error)
+            setHeureChoisie(null)
+            setSubmitting(false)
+            setTimeout(() => allerEtape(2), 1200)
+            return
+          }
           if (!j.ok || !j.url) {
             throw new Error(j.error || 'Erreur création Checkout')
           }

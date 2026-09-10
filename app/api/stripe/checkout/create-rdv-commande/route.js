@@ -49,6 +49,7 @@ import { creerReservationRdv } from '@/lib/rdv-creation-server'
 import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { euros } from '@/lib/montants'
+import { creneauDejaCommence } from '@/lib/timezone'
 
 const arrondiEuros = (n) => Math.round(Number(n || 0) * 100) / 100
 
@@ -87,6 +88,12 @@ export async function POST(request) {
       // Sans produit, c'est le tunnel d'acompte classique qui s'applique : il a
       // sa propre route et ne crée aucune commande.
       return NextResponse.json({ ok: false, error: 'Aucun produit dans ce panier.' }, { status: 400 })
+    }
+    // 🔴 UN CRÉNEAU D'HIER PASSAIT ICI AUSSI (10/09 tard). On refuse AVANT de
+    // réserver le moindre stock, de créer la commande ou d'ouvrir un paiement :
+    // après, il faudrait tout défaire.
+    if (creneauDejaCommence(date_rdv, String(heure_debut))) {
+      return NextResponse.json({ ok: false, error: 'Ce créneau est déjà passé. Choisis-en un autre.', creneau_refuse: true }, { status: 409 })
     }
 
     // service_role : cette route est appelée publiquement, y compris par un

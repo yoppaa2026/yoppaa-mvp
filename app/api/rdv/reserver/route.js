@@ -47,7 +47,7 @@ import { creerReservationRdv, appliquerAvantagesRdv } from '@/lib/rdv-creation-s
 import { normaliserEmail } from '@/lib/email-normalise'
 import { creneauxDuJour } from '@/lib/ouverture'
 import { jourSemaineDe } from '@/lib/creneaux'
-import { brusselsInstant } from '@/lib/timezone'
+import { creneauDejaCommence } from '@/lib/timezone'
 import { timeToMinutes, minutesToTime, finApresMinuit } from '@/lib/rdv-slots'
 import { dureeSelonCouverts } from '@/lib/cours-collectifs'
 
@@ -156,8 +156,9 @@ export async function POST(request) {
     const finMin = debutMin + dureeMinutes
     const heureFin = minutesToTime(finMin)
 
-    const instant = brusselsInstant(date_rdv, heure)
-    if (isNaN(instant.getTime()) || instant.getTime() <= Date.now()) {
+    // ⚠️ LA MÊME FONCTION SUR LES QUATRE PORTES (10/09 tard) : les trois autres
+    // n'avaient pas cette garde.
+    if (creneauDejaCommence(date_rdv, heure)) {
       return NextResponse.json({ ok: false, error: 'Ce créneau est déjà passé. Choisis-en un autre.', creneau_refuse: true }, { status: 409 })
     }
 

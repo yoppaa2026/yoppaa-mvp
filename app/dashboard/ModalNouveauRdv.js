@@ -6,15 +6,15 @@
 // Pas de création de row clients : juste les champs RDV (decision Alex 2026-06-01).
 // Validations server-side : overlap RDV existants + horaires shop + pause.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
 import { euros } from '@/lib/montants'
-import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, bornesCouverts, couvertsValides } from '@/lib/cours-collectifs'
+import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, bornesCouverts, couvertsValides, coursAPlace, occupationDe } from '@/lib/cours-collectifs'
 import { motsReservation } from '@/lib/reservation-metier'
-import { creneauAcceptable, creneauxDuJour } from '@/lib/deplacement-rdv'
+import { creneauAcceptable, creneauxDuJour, heuresLibresDuJour, premiereMinuteOuverte, dejaPasse } from '@/lib/deplacement-rdv'
 import {
   enModeInventaire, formatPourAffichage, plusGrandeTable,
   dureeDuGroupe, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour,
@@ -57,6 +57,10 @@ function isoDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
+const DATE_ISO = /^\d{4}-\d{2}-\d{2}$/
+const HEURE_HM = /^\d{2}:\d{2}/
+// Les statuts qui occupent une place, comme partout ailleurs dans l'agenda.
+const OCCUPENT = ['confirme', 'honore']
 
 // Le choix « une table » du menu, quand la salle se compte en tables : la table
 // précise, c'est la salle qui la donne, pas le menu.
@@ -98,9 +102,27 @@ export default function ModalNouveauRdv({
   // La table désignée par le restaurateur, quand il ne veut pas celle proposée.
   const [formatManuelId, setFormatManuelId] = useState(null)
   const [changerTable, setChangerTable] = useState(false)
-  const [salle, setSalle] = useState({ etat: 'repos', reservations: [] })
+  // ⚠️ LA SALLE PORTE LA DATE QU'ELLE DÉCRIT : quand le jour change, celle de
+  // la veille ne doit pas répondre pour le lendemain le temps d'une lecture.
+  const [salle, setSalle] = useState({ etat: 'repos', reservations: [], date: null })
   const [relire, setRelire] = useState(0)
   const enTable = salleEnTables && prestationId === UNE_TABLE
+
+  // 🔴 LA DATE ET L'HEURE SE CHOISISSENT ICI (Alex, 10/09 tard : « quand un
+  // client sonne, on choisit une heure mais dans la discussion elle peut
+  // changer, et il ne doit pas sortir de la modale pour voir les dispos à un
+  // autre créneau »). La case tapée dans l'agenda n'est plus qu'un départ : le
+  // restaurateur au téléphone voit les heures libres, en tape une autre, change
+  // de jour, sans rien refermer.
+  const [date, setDate] = useState(() => isoDate(dateInit))
+  const [heure, setHeure] = useState(heureInit)
+  // L'heure qu'il est : c'est elle qui dit ce qui est déjà passé. Elle avance
+  // pendant que la fenêtre reste ouverte, et se relit encore au clic.
+  const [maintenant, setMaintenant] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setMaintenant(new Date()), 30000)
+    return () => clearInterval(t)
+  }, [])
   const [prenom, setPrenom] = useState('')
   const [nom, setNom] = useState('')
   const [tel, setTel] = useState('')
@@ -173,23 +195,24 @@ export default function ModalNouveauRdv({
     if (el) el.focus()
   }, [])
 
-  // La salle du jour, relue à l'ouverture et à chaque « Réessayer ».
-  const dateSalle = isoDate(dateInit)
+  // La salle du jour choisi, relue à l'ouverture, à chaque changement de date
+  // et à chaque « Réessayer ».
   useEffect(() => {
-    if (!enTable) return
+    if (!enTable || !DATE_ISO.test(date)) return
     let annule = false
-    setSalle({ etat: 'lecture', reservations: [] })
-    lireSalle(commercant.id, dateSalle).then(({ reservations, error }) => {
+    setSalle({ etat: 'lecture', reservations: [], date })
+    lireSalle(commercant.id, date).then(({ reservations, error }) => {
       if (annule) return
       setSalle(error
-        ? { etat: 'erreur', reservations: [], message: error.message }
-        : { etat: 'ok', reservations })
+        ? { etat: 'erreur', reservations: [], date, message: error.message }
+        : { etat: 'ok', reservations, date })
     }).catch(e => {
       // ⚠️ UNE LECTURE QUI LÈVE NE LAISSE PAS « JE REGARDE TA SALLE » À VIE.
-      if (!annule) setSalle({ etat: 'erreur', reservations: [], message: e?.message || String(e) })
+      if (!annule) setSalle({ etat: 'erreur', reservations: [], date, message: e?.message || String(e) })
     })
     return () => { annule = true }
-  }, [enTable, commercant.id, dateSalle, relire])
+  }, [enTable, commercant.id, date, relire])
+  const salleConnue = salle.etat === 'ok' && salle.date === date
 
   // ESC pour fermer
   useEffect(() => {
@@ -198,8 +221,27 @@ export default function ModalNouveauRdv({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const dateLabel = `${JOURS_LONG[jourIdxLun(dateInit)]} ${dateInit.getDate()} ${MOIS_LONG[dateInit.getMonth()]}`
-  const debutMin = timeToMinutes(heureInit)
+  // Le jour et l'heure choisis. ⚠️ UN CHAMP VIDÉ NE VAUT PAS MINUIT : sans date
+  // ou sans heure lisible, rien ne se calcule et rien ne s'écrit.
+  const dateValide = DATE_ISO.test(date)
+  const jourDate = dateValide ? new Date(`${date}T12:00:00`) : null
+  const jourKey = jourDate ? JOURS_KEY[jourIdxLun(jourDate)] : null
+  const dateLabel = jourDate
+    ? `${JOURS_LONG[jourIdxLun(jourDate)]} ${jourDate.getDate()} ${MOIS_LONG[jourDate.getMonth()]}`
+    : 'Choisis une date'
+  const heureValide = HEURE_HM.test(String(heure || ''))
+  const debutMin = heureValide ? timeToMinutes(heure) : 0
+  const horaireJour = jourKey ? commercant.horaires_detail?.[jourKey] : null
+  const creneauxJour = useMemo(() => (dateValide ? creneauxDuJour(creneaux, { dateStr: date, jour: jourKey }) : []),
+    [creneaux, date, jourKey, dateValide])
+  // 0 un jour à venir, le quart d'heure en cours aujourd'hui, `Infinity` hier.
+  const depuis = dateValide ? premiereMinuteOuverte(date, maintenant) : null
+  // ✅ UN RENDEZ-VOUS PEUT SE NOTER APRÈS COUP (décision d'Alex, 10/09 tard) :
+  // la séance d'une abonnée venue sans réserver, qu'on ajoute après le cours
+  // pour que son solde descende. Mais on le DIT, et aucun email ne part.
+  // Déplacer dans le passé, en revanche, reste interdit : on déplace pour que
+  // le client vienne, et il ne peut pas venir hier.
+  const passe = heureValide && dejaPasse({ dateStr: date, heure, maintenant })
 
   // ─── LA TABLE QUE LA SALLE DONNE ───────────────────────────────────────────
   //
@@ -213,7 +255,7 @@ export default function ModalNouveauRdv({
   const dureeGroupe = referenceGroupe
     ? dureeDuGroupe({ prestation: referenceGroupe, formats: prestations, couverts: nCouverts })
     : null
-  const etat = dureeGroupe && salle.etat === 'ok'
+  const etat = dureeGroupe && salleConnue && heureValide
     ? etatSalle({ formats: prestations, couverts: nCouverts, reservations: salle.reservations, debutMin, finMin: debutMin + dureeGroupe })
     : null
   const choixTable = !enTable || !nombreSaisi ? null
@@ -234,11 +276,67 @@ export default function ModalNouveauRdv({
     : presta
     ? dureeDuGroupe({ prestation: presta, formats: prestations, couverts: couverts === '' ? bornesCouverts(presta).min : couverts })
     : undefined
-  const finMin = dureeMin ? debutMin + dureeMin : null
+  const finMin = dureeMin && heureValide ? debutMin + dureeMin : null
   const heureFin = finMin != null ? minutesToTime(finMin) : null
   const messageSalle = choixTable
-    ? phraseSalle({ formats: prestations, etat, choix: choixTable, couverts: nCouverts, debut: heureInit, fin: heureFin, manuel: !!formatManuelId })
+    ? phraseSalle({ formats: prestations, etat, choix: choixTable, couverts: nCouverts, debut: heure, fin: heureFin, manuel: !!formatManuelId })
     : null
+
+  // ─── LES HEURES LIBRES CE JOUR-LÀ, PROPOSÉES D'UN TAP ─────────────────────
+  //
+  // 🔴 LA SAISIE N'EN MONTRAIT AUCUNE (Alex, 10/09 tard). Le restaurateur au
+  // téléphone devait refermer la fenêtre, regarder son agenda, et rouvrir une
+  // case pour chaque heure que le client proposait.
+  //
+  // ⚠️ « LIBRE » VEUT DIRE LIBRE, et un message qui affirme sans avoir vérifié
+  // est pire qu'absent. Une heure ne s'affiche que si :
+  //   • la règle des créneaux l'accepte (ouverture, pause, chevauchement) ;
+  //   • pour une table en inventaire, une table pour CE groupe est libre sur
+  //     tout le repas, dans la salle relue en base ;
+  //   • pour une table sans inventaire, la salle a encore ces couverts, comptés
+  //     comme le serveur les compte ;
+  //   • pour un cours, il reste une place.
+  // Et jamais avant le quart d'heure en cours : on ne propose pas hier à
+  // quelqu'un qui appelle. La boucle est celle du déplacement, dans le module.
+  const heuresLibres = useMemo(() => {
+    if (!dateValide || depuis === null) return []
+    const regle = (h, p, duree) => creneauAcceptable({
+      dateStr: date, heureDebut: h, dureeMinutes: duree, horaireJour, creneauxJour,
+      rdvsExistants, capacite: capacitePrestation(p), prestationId: p.id, prestations,
+    }).ok
+    if (enTable) {
+      if (!nombreSaisi || !referenceGroupe || !dureeGroupe || !salleConnue) return []
+      return heuresLibresDuJour({
+        creneauxJour, dureeMinutes: dureeGroupe, depuis,
+        accepte: (h) => {
+          if (!regle(h, referenceGroupe, dureeGroupe)) return false
+          const m = timeToMinutes(h)
+          const t = tableAPoser(etatSalle({ formats: prestations, couverts: nCouverts, reservations: salle.reservations, debutMin: m, finMin: m + dureeGroupe }))
+          return !!t.format && !t.forcer
+        },
+      })
+    }
+    if (!presta || !dureeMin) return []
+    const idsSalle = (prestations || []).filter(estParCouverts).map(p => String(p.id))
+    const groupe = couverts === '' ? bornesCouverts(presta).min : Math.floor(Number(couverts)) || 1
+    return heuresLibresDuJour({
+      creneauxJour, dureeMinutes: dureeMin, depuis,
+      accepte: (h) => {
+        if (!regle(h, presta, dureeMin)) return false
+        if (estParCouverts(presta)) {
+          // ⚠️ LA MÊME JAUGE QUE LE SERVEUR SANS INVENTAIRE : les couverts de
+          // TOUTE la salle qui chevauchent le repas, contre la capacité.
+          const m = timeToMinutes(h)
+          const occupes = occupationDe(presta, (rdvsExistants || []).filter(r => r
+            && idsSalle.includes(String(r.prestation_id)) && r.date_rdv === date && OCCUPENT.includes(r.statut)
+            && m < timeToMinutes(r.heure_fin) && m + dureeMin > timeToMinutes(r.heure_debut)))
+          return occupes + groupe <= capacitePrestation(presta)
+        }
+        if (capacitePrestation(presta) > 1) return coursAPlace(presta, rdvsExistants, { dateStr: date, heure: h })
+        return true
+      },
+    })
+  }, [dateValide, depuis, date, horaireJour, creneauxJour, rdvsExistants, prestations, enTable, nombreSaisi, referenceGroupe, dureeGroupe, salleConnue, salle, nCouverts, presta, dureeMin, couverts])
 
   // Le prix de la prestation. Plus de fourchette depuis le 27/08 : le prix est
   // le prix, et ce qu'on ajoute se règle à la caisse.
@@ -247,7 +345,7 @@ export default function ModalNouveauRdv({
   // ⚠️ LE VERDICT EST CALCULÉ ICI ET RÉUTILISÉ PARTOUT : l'encadré, le libellé du
   // bouton et l'écriture posent la MÊME question. Deux calculs auraient fini par
   // proposer un geste que l'enregistrement refuse.
-  const dateChoisie = isoDate(dateInit)
+  const dateChoisie = date
   const aboChoisi = abonnes.find(a => a.contrat.id === aboChoisiId) || null
   const verdictAbo = aboChoisi
     ? peutReserverSurAbonnement(aboChoisi.contrat, {
@@ -274,7 +372,7 @@ export default function ModalNouveauRdv({
   // rempli. Un abonné sans téléphone existe, la garde ne doit donc pas l'exiger.
   // ⚠️ `presta` ET PAS SEULEMENT `prestationId` : « une table » n'est choisie
   // qu'une fois la salle lue et le nombre saisi. Avant, il n'y a rien à écrire.
-  const formValide = !!(prestationId && presta && (
+  const formValide = !!(prestationId && presta && dateValide && heureValide && (
     aboChoisi ? true : (prenom.trim() && nom.trim() && tel.trim())
   ))
 
@@ -283,13 +381,12 @@ export default function ModalNouveauRdv({
     setSubmitting(true)
     setError(null)
     try {
-      const dateStr = isoDate(dateInit)
-      const jourKey = JOURS_KEY[jourIdxLun(dateInit)]
-      const horaireJour = commercant.horaires_detail?.[jourKey]
+      // Le jour et l'heure CHOISIS dans la fenêtre, plus la case de départ.
+      const dateStr = date
       // Logs diag : si la modale accepte un RDV qui chevauche pause/fermeture, on saura
       // immediatement quel input est manquant (creneaux vide, horaireJour null, etc.)
       console.info('[ModalNouveauRdv] valider — context', {
-        dateStr, jourKey, heureInit, dureeMin, debutMin, finMin,
+        dateStr, jourKey, heure, dureeMin, debutMin, finMin,
         horaireJour,
         nbCreneaux: (creneaux || []).length,
         nbRdvsExistants: (rdvsExistants || []).length,
@@ -329,9 +426,12 @@ export default function ModalNouveauRdv({
         return
       }
 
+      // ⚠️ SANS `maintenant`, ET C'EST VOULU : la saisie peut noter un
+      // rendez-vous après coup (décision d'Alex, 10/09 tard). Le déplacement,
+      // lui, la passe toujours.
       const verdict = creneauAcceptable({
         dateStr,
-        heureDebut: heureInit,
+        heureDebut: heure,
         dureeMinutes: dureeMin,
         horaireJour,
         creneauxJour: creneauxDuJour(creneaux, { dateStr, jour: jourKey }),
@@ -369,7 +469,7 @@ export default function ModalNouveauRdv({
           formats: prestations, couverts: nCouverts, reservations: frais.reservations, debutMin, finMin,
         }), { prefere: formatManuelId })
         if (String(choixFrais.format?.id) !== String(presta.id) || choixFrais.forcer !== choixTable.forcer) {
-          setSalle({ etat: 'ok', reservations: frais.reservations })
+          setSalle({ etat: 'ok', reservations: frais.reservations, date: dateStr })
           setError('Ta salle a changé pendant la saisie. Relis la table proposée, puis confirme.')
           setSubmitting(false)
           return
@@ -398,7 +498,7 @@ export default function ModalNouveauRdv({
           .select('date_rdv, place_no')
           .eq('commercant_id', commercant.id)
           .in('date_rdv', toutesLesDates)
-          .eq('heure_debut', heureInit)
+          .eq('heure_debut', heure)
           .in('statut', ['confirme', 'honore'])
           .is('deleted_at', null)
         if (errRangs) {
@@ -418,7 +518,7 @@ export default function ModalNouveauRdv({
           .eq('commercant_id', commercant.id)
           .eq('prestation_id', presta.id)
           .in('date_rdv', toutesLesDates)
-          .eq('heure_debut', heureInit)
+          .eq('heure_debut', heure)
           .in('statut', ['confirme', 'honore'])
           .is('deleted_at', null)
         const prisesParDate = {}
@@ -481,7 +581,7 @@ export default function ModalNouveauRdv({
         prestation_id: presta.id,
         ...identite,
         date_rdv: dateStr,
-        heure_debut: heureInit,
+        heure_debut: heure,
         heure_fin: heureFin,
         duree_minutes: dureeMin,
         // ⚠️ LE LIEN AVEC LE CONTRAT, sans lequel le solde ne descend jamais et
@@ -520,7 +620,7 @@ export default function ModalNouveauRdv({
       }
       // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION, ici aussi. Un rendez-vous pris
       // au comptoir par le commerçant doit dire où aller comme les autres.
-      Object.assign(payload, await champsLieuPour(supabase, commercant, { jour: dateStr, heure: heureInit }))
+      Object.assign(payload, await champsLieuPour(supabase, commercant, { jour: dateStr, heure }))
 
       // ⚠️ LES SEMAINES RÉPÉTÉES SONT DES SÉANCES À PART ENTIÈRE, pas des copies.
       // Chacune a SA place, calculée plus haut, et SON lieu : le module LIEUX
@@ -535,7 +635,7 @@ export default function ModalNouveauRdv({
           id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : undefined,
           date_rdv: d,
           place_no: placeParDate[d],
-          ...(await champsLieuPour(supabase, commercant, { jour: d, heure: heureInit })),
+          ...(await champsLieuPour(supabase, commercant, { jour: d, heure })),
         })
       }
       const { error: errInsert } = await supabase.from('rdv_reservations').insert(lignes)
@@ -558,7 +658,13 @@ export default function ModalNouveauRdv({
 
       // 4) Email de confirmation au Yopper (non-bloquant, fire-and-forget).
       //    Pas d'email commercant (c'est lui qui cree le RDV, il sait deja).
-      if (rdvId && (email.trim() || null)) {
+      //
+      // ✅ JAMAIS POUR UN RENDEZ-VOUS DÉJÀ PASSÉ (décision d'Alex, 10/09 tard).
+      // Le client recevait « ton RDV est confirmé », un fichier calendrier et un
+      // rappel pour un moment déjà écoulé. ⚠️ L'heure se relit AU CLIC : la
+      // fenêtre a pu rester ouverte pendant que celle choisie passait.
+      const passeAuClic = dejaPasse({ dateStr, heure, maintenant: new Date() })
+      if (rdvId && (email.trim() || null) && !passeAuClic) {
         postPro('/api/emails/rdv-confirme', { rdv_id: rdvId }).catch(e => console.warn('[ModalNouveauRdv] emails fire-and-forget KO', e))
       }
 
@@ -613,7 +719,7 @@ export default function ModalNouveauRdv({
               </p>
               <p style={{ fontSize: '1.05rem', fontWeight: 900, color: '#fff', margin: 0, letterSpacing: '-0.3px', lineHeight: 1.2 }}>
                 {dateLabel}<br/>
-                <span style={{ color: T.light }}>à {heureInit}{heureFin ? ` – ${heureFin}` : ''}</span>
+                <span style={{ color: T.light }}>{heureValide ? `à ${heure}${heureFin ? ` – ${heureFin}` : ''}` : 'Choisis une heure'}</span>
               </p>
             </div>
             <button onClick={onClose} aria-label="Fermer"
@@ -646,7 +752,7 @@ export default function ModalNouveauRdv({
               </select>
               {!enTable && presta && heureFin && (
                 <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, marginTop: 5 }}>
-                  {mots.numeroLabel} de {dureeMin}min : {heureInit} → {heureFin}{prixEstime != null ? ` · ${prixEstime.toFixed(0)}€` : ''}
+                  {mots.numeroLabel} de {dureeMin}min : {heure} → {heureFin}{prixEstime != null ? ` · ${prixEstime.toFixed(0)}€` : ''}
                 </p>
               )}
             </div>
@@ -670,7 +776,7 @@ export default function ModalNouveauRdv({
                 placeholder="Par exemple 2" style={inputSt}/>
               {!nombreSaisi && (
                 <p style={{ fontSize: '0.72rem', color: T.muted, marginTop: 5, lineHeight: 1.45 }}>
-                  Yoppaa te propose ensuite la plus petite table libre, et te montre ce qui reste dans ta salle.
+                  Yoppaa te montre ensuite les heures où une table est libre pour eux, propose la plus petite, et te montre ce qui reste dans ta salle.
                 </p>
               )}
             </div>
@@ -684,6 +790,72 @@ export default function ModalNouveauRdv({
               <p style={{ fontSize: '0.72rem', color: T.muted, marginTop: 5, lineHeight: 1.45 }}>
                 De {bornesCouverts(presta).min} à {bornesCouverts(presta).max} personnes pour cette table.
                 C&rsquo;est ce nombre qui remplit ta salle.
+              </p>
+            </div>
+          )}
+
+          {/* ─── QUAND : LE JOUR, L'HEURE, ET CE QUI EST LIBRE ────────────────
+              🔴 Alex, 10/09 tard : « il ne doit pas sortir de la modale pour
+              voir les dispos à un autre créneau ». Le client change d'heure au
+              téléphone : le restaurateur tape la nouvelle, ou change de jour,
+              et lit tout de suite ce qui est libre.
+              ⚠️ Elles s'enroulent, elles ne défilent pas, comme au déplacement. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div>
+              <label htmlFor="mn-rdv-date" style={labelSt}>Date *</label>
+              <input id="mn-rdv-date" type="date" value={date}
+                onChange={(e) => { setDate(e.target.value); setError(null) }} style={inputSt}/>
+            </div>
+            <div>
+              <label htmlFor="mn-rdv-heure" style={labelSt}>Heure *</label>
+              <input id="mn-rdv-heure" type="time" value={heure} step={900}
+                onChange={(e) => { setHeure(e.target.value); setError(null) }} style={inputSt}/>
+            </div>
+          </div>
+          {dateValide && depuis !== Infinity && (() => {
+            // ⚠️ ON NE DIT « AUCUNE HEURE LIBRE » QUE QUAND ON A PU REGARDER : le
+            // groupe saisi, la salle lue. Avant, on se tait ; le champ au-dessus
+            // dit déjà ce qu'il manque.
+            const pourGroupe = enTable && nombreSaisi ? ` pour ${nCouverts} personne${nCouverts > 1 ? 's' : ''}` : ''
+            const aRegarde = enTable ? (nombreSaisi && !!referenceGroupe && salleConnue) : !!(presta && dureeMin)
+            if (heuresLibres.length > 0) {
+              return (
+                <div style={{ marginBottom: 12 }}>
+                  <span style={labelSt}>Heures libres le {jourKey}{pourGroupe}</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {heuresLibres.map(h => {
+                      const actif = h === String(heure || '').slice(0, 5)
+                      return (
+                        <button key={h} type="button" onClick={() => { setHeure(h); setError(null) }}
+                          style={{
+                            padding: '5px 11px', borderRadius: 100, cursor: 'pointer',
+                            border: `1.5px solid ${actif ? T.main : T.pale}`,
+                            background: actif ? T.main : '#fff',
+                            color: actif ? '#fff' : T.deep,
+                            fontWeight: 800, fontSize: '0.78rem', fontFamily: '"DM Sans", sans-serif',
+                          }}>
+                          {h}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            }
+            if (creneauxJour.length === 0) {
+              return <p style={{ fontSize: '0.72rem', color: T.muted, margin: '0 0 12px', lineHeight: 1.45 }}>{mots.creneauAucun}.</p>
+            }
+            if (!aRegarde) return null
+            return <p style={{ fontSize: '0.72rem', color: T.muted, margin: '0 0 12px', lineHeight: 1.45 }}>Plus aucune heure libre le {jourKey}{pourGroupe}. Essaie un autre jour.</p>
+          })()}
+
+          {/* ✅ UN RENDEZ-VOUS PASSÉ SE NOTE, ET ÇA SE DIT (décision d'Alex,
+              10/09 tard). Rien ne part au client : ni email, ni rappel. */}
+          {passe && (
+            <div style={{ ...boiteSt('alerte'), marginBottom: 12 }}>
+              <p style={titreBoiteSt('alerte')}>{depuis === Infinity ? 'Ce jour est déjà passé.' : 'Cette heure est déjà passée.'}</p>
+              <p style={{ fontSize: '0.75rem', color: T.deep, margin: '4px 0 0', lineHeight: 1.5 }}>
+                Tu peux noter {mots.laReservationDe} après coup, pour ton historique : aucun email ni rappel ne part au client.
               </p>
             </div>
           )}
@@ -713,7 +885,7 @@ export default function ModalNouveauRdv({
               )}
               {etat && etat.parFormat.length > 0 && heureFin && (
                 <div style={{ marginTop: 10 }}>
-                  <span style={labelSt}>Libres de {heureInit} à {heureFin}</span>
+                  <span style={labelSt}>Libres de {heure} à {heureFin}</span>
                   <div style={{ display: 'grid', gap: 4 }}>
                     {etat.parFormat.map(l => {
                       const retenue = presta && String(presta.id) === String(l.format.id)
@@ -881,7 +1053,11 @@ export default function ModalNouveauRdv({
                 Le mot tient donc enfin, et l'écran dit ce qu'on perd sans lui
                 plutôt que de promettre vaguement quelque chose en plus. */}
             <p style={{ fontSize: '0.68rem', color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
-              {email.trim()
+              {/* ⚠️ CETTE PHRASE PROMETTAIT UN EMAIL QUI NE PART PLUS sur une heure
+                  déjà passée : elle dit ce qui est vrai. */}
+              {passe && email.trim()
+                ? 'Rien ne part au client pour une heure déjà passée : son adresse reste simplement notée.'
+                : email.trim()
                 ? 'Ton client recevra sa confirmation, son rappel de la veille et son fichier calendrier.'
                 : `Sans email, pas de confirmation ni de rappel : ${mots.laReservationDe} ne vit que dans ton agenda. C’est parfait pour quelqu’un qui te réserve par téléphone.`}
             </p>
@@ -917,8 +1093,9 @@ export default function ModalNouveauRdv({
               boxShadow: (!formValide || submitting) ? 'none' : `0 4px 16px ${T.main}55`,
             }}>
             {/* ⚠️ LE BOUTON DIT LE GESTE : quand aucune table n'est libre, il ne
-                dit plus « Confirmer » comme si de rien n'était. */}
-            {submitting ? 'Enregistrement…' : choixTable?.forcer ? 'Poser quand même ✓' : `${mots.manuelConfirmer} ✓`}
+                dit plus « Confirmer » comme si de rien n'était. Et sur une heure
+                déjà passée, on ne confirme rien à personne : on note. */}
+            {submitting ? 'Enregistrement…' : passe ? 'Noter après coup ✓' : choixTable?.forcer ? 'Poser quand même ✓' : `${mots.manuelConfirmer} ✓`}
           </button>
         </div>
       </div>

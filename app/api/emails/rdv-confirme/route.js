@@ -21,6 +21,8 @@ import { generateRdvIcs, icsToBase64Attachment } from '@/lib/ical'
 import { referenceRdv } from '@/lib/numero-commande'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
+import { motsReservation, objetReservation } from '@/lib/reservation-metier'
+import { rappelVeillePossible } from '@/lib/timezone'
 
 export async function POST(request) {
   try {
@@ -62,8 +64,9 @@ export async function POST(request) {
         prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant, bons_utilises,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
         annulation_token, lieu_id, lieu_libelle, lieu_adresse, commande_id,
+        couverts,
         commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques, categorie),
-        prestation:rdv_prestations(nom, duree_minutes),
+        prestation:rdv_prestations(nom, duree_minutes, par_couverts),
         praticien:rdv_praticiens(prenom, nom, couleur_hex)
       `)
       .eq('id', rdv_id)
@@ -73,6 +76,15 @@ export async function POST(request) {
       console.error('[emails/rdv-confirme] RDV introuvable', { rdv_id, errRdv })
       return NextResponse.json({ ok: false, error: 'RDV introuvable' }, { status: 404 })
     }
+
+    // 🔴 CE QUE L'EMAIL D'ALEX A MONTRÉ (10/09 tard) : une table annoncée par son
+    // format et non par le groupe, « Avec » devant une salle, « même prix » sur
+    // ce qui n'en a pas, et une alarme promise pour une table du soir même.
+    // ⚠️ `couverts` ET `par_couverts` DOIVENT ÊTRE DEMANDÉS : absents du select,
+    // ils valent `undefined`, et l'email retombe sur l'ancien texte SANS erreur.
+    const table = rdv.prestation?.par_couverts === true
+    const rappel24h = rappelVeillePossible(rdv.date_rdv, rdv.heure_debut)
+    const mots = motsReservation({ categorie: rdv.commercant?.categorie || null })
 
     // 🔴 LES PRODUITS DU TUNNEL UNIQUE (Alex, 01/09). Cette route ne les
     // chargeait PAS : son email annonçait le rendez-vous et se taisait sur le
@@ -98,7 +110,10 @@ export async function POST(request) {
           client_email: rdv.client_email,
           client_nom: [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
           prix_estime: rdv.prix_estime,
-          rappel_24h: true,
+          // ⚠️ L'ALARME DE LA VEILLE SEULEMENT SI ELLE PEUT ENCORE SONNER.
+          rappel_24h: rappel24h,
+          table,
+          couverts: rdv.couverts,
           status: 'CONFIRMED',
           method: 'REQUEST',
           // ⚠️ SANS SEQUENCE QUI AUGMENTE, LE CALENDRIER DU CLIENT IGNORE LA
@@ -148,13 +163,18 @@ export async function POST(request) {
           ancienne_date,
           ancienne_heure,
           produits,
+          table,
+          couverts:                rdv.couverts,
+          rappel_24h:              rappel24h,
         })
 
         await envoyerAuCommercant({   // helper reutilise, accepte n'importe quel 'to'
           to: rdv.client_email,
+          // ⚠️ L'OBJET DANS LES MOTS DU MÉTIER : le titre disait « Ta réservation
+          // a été déplacée » sous un objet « Ton RDV … a été déplacé ».
           subject: deplace
-            ? `Ton RDV chez ${rdv.commercant?.nom || 'le commerçant'} a été déplacé`
-            : `Ton RDV chez ${rdv.commercant?.nom || 'le commerçant'} est confirmé`,
+            ? `${mots.sujetChez} ${rdv.commercant?.nom || 'le commerçant'} a été ${mots.participeDeplace}`
+            : `${mots.sujetChez} ${rdv.commercant?.nom || 'le commerçant'} est ${mots.participeConfirme}`,
           html,
           attachments: [attachment],
         })
@@ -190,11 +210,21 @@ export async function POST(request) {
           bon_cadeau_montant: rdv.bon_cadeau_montant || 0,
           acompte_montant: rdv.acompte_montant,
           notes_client:    rdv.notes_client,
+          // 🔴 LES PRODUITS À PRÉPARER MANQUAIENT ICI (trouvé le 10/09 tard, en
+          // alignant les deux expéditeurs) : le webhook les passait, cette route
+          // non. Or c'est elle qui envoie quand des bons couvrent tout, et le
+          // commerçant découvrait le shampoing à préparer en voyant le client.
+          produits,
+          table,
+          couverts:        rdv.couverts,
         })
 
+        // ⚠️ LE GROUPE DANS L'OBJET, pour une table : c'est la première chose
+        // qu'un restaurateur veut lire, avant même d'ouvrir l'email.
+        const groupe = table ? objetReservation({ table, couverts: rdv.couverts }) : ''
         await envoyerAuCommercant({
           to: rdv.commercant.email,
-          subject: `Nouveau RDV — ${rdv.client_prenom || 'Yopper'} ${formatDateCourte(rdv.date_rdv)} à ${rdv.heure_debut?.slice(0,5)}`,
+          subject: `${mots.sujetNouveau} — ${rdv.client_prenom || 'Yopper'}${groupe ? `, ${groupe},` : ''} ${formatDateCourte(rdv.date_rdv)} à ${rdv.heure_debut?.slice(0,5)}`,
           html,
         })
       } catch (e) {

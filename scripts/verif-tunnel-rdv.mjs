@@ -844,8 +844,11 @@ for (const chemin of [
   // ⚠️ LE CRÉNEAU EST REVÉRIFIÉ CÔTÉ SERVEUR : passé, jour de fermeture, pause.
   // ⚠️ L'HEURE MURALE BELGE, jamais l'horloge du serveur : Vercel tourne en
   // temps universel, et un rendez-vous d'hier matin passerait.
+  // ⚠️ PRÉCISÉE LE 10/09 TARD : la garde est devenue UNE fonction, à l'heure
+  // belge, appelée par les quatre portes. Elle est EXÉCUTÉE dans la section
+  // « Aucune porte n'accepte un créneau passé », été comme hiver.
   verifie('un créneau déjà passé est refusé',
-    /brusselsInstant\(date_rdv, heure\)/.test(src) && /instant\.getTime\(\) <= Date\.now\(\)/.test(src))
+    /if \(creneauDejaCommence\(date_rdv, heure\)\) \{\s*return NextResponse\.json\(\{ ok: false, error: 'Ce créneau est déjà passé\. Choisis-en un autre\.', creneau_refuse: true \}, \{ status: 409 \}\)/.test(src))
   verifie('un jour de fermeture aussi', /est fermé ce jour-là/.test(src))
   verifie('et une pause aussi', /tombe pendant une pause/.test(src))
   // 🔴 LA FICHE CLIENT EST RÉSOLUE, PAS REÇUE. Un `client_id` fourni par
@@ -1937,6 +1940,80 @@ for (const chemin of [
   verifie('🔴 les groupes suivent l’ordre annoncé par le libellé',
     /Tout d’un coup[\s\S]*Un produit précis[\s\S]*Toute une catégorie[\s\S]*Une prestation/.test(ordre),
     ordre)
+}
+
+// ═══ AUCUNE PORTE N'ACCEPTE UN CRÉNEAU PASSÉ (10/09 tard) ═════════════════
+//
+// 🔴 TROIS PORTES SUR QUATRE PRENAIENT UNE DATE D'HIER. Trouvé en cherchant
+// les frères du déplacement dans le passé (Alex : « ça ne doit pas être
+// possible »). Seule `/api/rdv/reserver` avait la garde ; l'acompte en ligne,
+// le rendez-vous avec produits et la séance sur abonnement l'ignoraient.
+// La règle est EXÉCUTÉE à des instants choisis, été comme hiver.
+{
+  const { creneauDejaCommence, rappelVeillePossible } = await import('../lib/timezone.js')
+  const t = (iso) => new Date(iso)
+  // En septembre, Bruxelles vit à UTC+2 : 19:00 chez nous, 17:00 en UTC.
+  verifie('🔴 une minute après le début, le créneau est commencé',
+    creneauDejaCommence('2026-09-10', '19:00', t('2026-09-10T17:01:00Z')) === true)
+  verifie('⚠️ une minute avant, il ne l’est pas',
+    creneauDejaCommence('2026-09-10', '19:00', t('2026-09-10T16:59:00Z')) === false)
+  verifie('⚠️ à l’heure pile, il l’est : on ne peut plus y arriver à l’heure',
+    creneauDejaCommence('2026-09-10', '19:00', t('2026-09-10T17:00:00Z')) === true)
+  verifie('⚠️ l’heure d’hiver compte : 19:00 en janvier, c’est 18:00 en UTC',
+    creneauDejaCommence('2027-01-15', '19:00', t('2027-01-15T17:30:00Z')) === false
+    && creneauDejaCommence('2027-01-15', '19:00', t('2027-01-15T18:01:00Z')) === true)
+  verifie('⚠️ les secondes que la base écrit sont lues',
+    creneauDejaCommence('2026-09-10', '19:00:00', t('2026-09-10T16:00:00Z')) === false)
+  verifie('🔴 une date illisible compte comme passée : dans le doute, on refuse',
+    creneauDejaCommence('hier', '19:00', t('2026-09-10T10:00:00Z')) === true)
+  verifie('🔴 une heure absente aussi',
+    creneauDejaCommence('2026-09-12', undefined, t('2026-09-10T10:00:00Z')) === true)
+  verifie('⚠️ sans horloge fournie, c’est maintenant qui compte',
+    creneauDejaCommence('2020-01-01', '10:00') === true && creneauDejaCommence('2099-01-01', '10:00') === false)
+
+  // L'alarme de la veille, promise par l'email de confirmation.
+  verifie('🔴 à 23 h du rendez-vous, l’alarme de la veille ne sonnera plus',
+    rappelVeillePossible('2026-09-11', '19:00', t('2026-09-10T18:00:00Z')) === false)
+  verifie('⚠️ à 25 h, elle sonnera',
+    rappelVeillePossible('2026-09-11', '19:00', t('2026-09-10T16:00:00Z')) === true)
+  verifie('⚠️ une date illisible ne promet rien',
+    rappelVeillePossible(null, '19:00', t('2026-09-10T10:00:00Z')) === false)
+
+  // Les quatre portes l'appellent AVANT leur première écriture : un refus
+  // après la commande, le stock ou la session de paiement laisserait tout à
+  // défaire.
+  const PORTES = [
+    ['app/api/rdv/reserver/route.js', 'creneauDejaCommence(date_rdv, heure)', '.insert('],
+    ['app/api/stripe/checkout/create-rdv-acompte/route.js', 'creneauDejaCommence(date_rdv, String(heure_debut))', 'stripe.checkout.sessions.create('],
+    ['app/api/stripe/checkout/create-rdv-commande/route.js', 'creneauDejaCommence(date_rdv, String(heure_debut))', '.insert('],
+    ['app/api/rdv/reserver-abonnement/route.js', 'creneauDejaCommence(dateRdv, heure)', 'creerReservationRdv(db, {'],
+  ]
+  for (const [chemin, appel, ecriture] of PORTES) {
+    const s = lireCode(chemin)
+    const pa = s.indexOf(`if (${appel}) {`)
+    const pe = s.indexOf(ecriture)
+    verifie(`🔴 ${chemin.split('/').slice(-2, -1)[0]} refuse un créneau passé avant d’écrire quoi que ce soit`,
+      pa !== -1 && pe !== -1 && pa < pe, `garde en ${pa}, première écriture en ${pe}`)
+  }
+  verifie('⚠️ les trois routes de la fiche le disent avec le même drapeau',
+    ['app/api/rdv/reserver/route.js', 'app/api/stripe/checkout/create-rdv-acompte/route.js', 'app/api/stripe/checkout/create-rdv-commande/route.js']
+      .every(c => /error: 'Ce créneau est déjà passé\. Choisis-en un autre\.', creneau_refuse: true \}, \{ status: 409 \}/.test(lireCode(c))))
+  verifie('⚠️ et la séance sur abonnement par son code',
+    /return NextResponse\.json\(\{ ok: false, error: 'creneau_passe' \}, \{ status: 409 \}\)/.test(lireCode('app/api/rdv/reserver-abonnement/route.js')))
+
+  // La fiche comprend chacun de ces refus et renvoie choisir une autre heure,
+  // au lieu d'afficher « Erreur paiement ».
+  const FICHE = lireCode('app/commander/rdv/[slug]/page.js')
+  const iCommande = FICHE.indexOf("'/api/stripe/checkout/create-rdv-commande'")
+  const iAcompte = FICHE.indexOf("'/api/stripe/checkout/create-rdv-acompte'")
+  const iReserver = FICHE.indexOf("'/api/rdv/reserver'")
+  const RENVOI = /if \(!j\.ok && j\.creneau_refuse\) \{\s*setSubmitError\(j\.error\)\s*setHeureChoisie\(null\)\s*setSubmitting\(false\)\s*setTimeout\(\(\) => allerEtape\(2\), 1200\)\s*return/
+  verifie('🔴 la fiche renvoie choisir une heure quand le rendez-vous avec produits refuse',
+    iCommande !== -1 && iAcompte > iCommande && RENVOI.test(FICHE.slice(iCommande, iAcompte)))
+  verifie('🔴 et quand l’acompte refuse',
+    iReserver > iAcompte && RENVOI.test(FICHE.slice(iAcompte, iReserver)))
+  verifie('🔴 et quand la séance sur abonnement refuse',
+    /j\?\.error === 'creneau_passe'\) \{[\s\S]{0,200}?setHeureChoisie\(null\)[\s\S]{0,120}?allerEtape\(2\)/.test(FICHE))
 }
 
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════

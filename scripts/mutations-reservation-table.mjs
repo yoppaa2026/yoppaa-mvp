@@ -622,7 +622,7 @@ const MUTATIONS = [
 
   { nom: '🔴 « Creneaux libres » propose une heure sans table',
     fichier: 'app/dashboard/ModalDeplacerRdv.js',
-    de: '          if (!t?.format || t.forcer) continue',
+    de: '          if (!t?.format || t.forcer) return false',
     vers: '          void t' },
 
   { nom: '⚠️ « Creneaux libres » avant d avoir lu la salle',

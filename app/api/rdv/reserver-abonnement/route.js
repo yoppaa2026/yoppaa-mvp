@@ -26,6 +26,7 @@ import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { peutReserverSurAbonnement, seancesConsommees, datesConsommees } from '@/lib/abonnements'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
+import { creneauDejaCommence } from '@/lib/timezone'
 
 function admin() {
   return createClient(
@@ -58,6 +59,12 @@ export async function POST(request) {
     return NextResponse.json({ ok: false, error: 'requete_incomplete' }, { status: 400 })
   }
   const heure = String(heureDebut).slice(0, 5)
+  // 🔴 UNE SÉANCE D'HIER SE POSAIT SUR L'ABONNEMENT (10/09 tard) : cette route
+  // ne regardait pas l'heure, et une séance du contrat partait pour un cours
+  // déjà donné. Même garde que les trois autres portes, à l'heure de Bruxelles.
+  if (creneauDejaCommence(dateRdv, heure)) {
+    return NextResponse.json({ ok: false, error: 'creneau_passe' }, { status: 409 })
+  }
 
   const db = admin()
 

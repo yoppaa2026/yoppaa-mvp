@@ -34,7 +34,8 @@ import { programmerRappelRdv } from '@/lib/rappels'
 import { recupererFraisStripe, ventilerFrais, instantPaiement } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo } from '@/lib/plans'
-import { jourBruxelles } from '@/lib/timezone'
+import { jourBruxelles, rappelVeillePossible } from '@/lib/timezone'
+import { motsReservation, objetReservation } from '@/lib/reservation-metier'
 import { contratDepuisFormule, resumeContratAchete } from '@/lib/abonnements'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
@@ -1140,12 +1141,21 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       client_email, client_prenom, client_nom, client_telephone, notes_client,
       annulation_token, commande_id,
       lieu_id, lieu_libelle, lieu_adresse,
-      commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques),
-      prestation:rdv_prestations(nom),
+      couverts,
+      commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques, categorie),
+      prestation:rdv_prestations(nom, par_couverts),
       praticien:rdv_praticiens(prenom, nom, couleur_hex)
     `)
     .eq('id', rdvId)
     .maybeSingle()
+  // 🔴 CE CHEMIN NE CHARGEAIT PAS LA CATÉGORIE (trouvé le 10/09 tard, en
+  // alignant les deux expéditeurs de cet email). Ses emails parlaient donc
+  // « RDV » et « bon cadeau » à tout le monde, là où `/api/emails/rdv-confirme`
+  // disait « réservation » et « bon gourmand » depuis le 31/08. Même email,
+  // deux vocabulaires selon le chemin : il suffisait d'un acompte.
+  const table = rdv?.prestation?.par_couverts === true
+  const categorie = rdv?.commercant?.categorie || null
+  const mots = motsReservation({ categorie })
 
   // Tunnel unique : les produits achetés avec le rendez-vous vivent dans CET
   // email. Le client ne reçoit pas de confirmation de commande séparée, et le
@@ -1184,7 +1194,10 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       client_email: rdv.client_email,
       client_nom: [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
       prix_estime: rdv.prix_estime,
-      rappel_24h: true,
+      // ⚠️ L'ALARME DE LA VEILLE SEULEMENT SI ELLE PEUT ENCORE SONNER.
+      rappel_24h: rappelVeillePossible(rdv.date_rdv, rdv.heure_debut),
+      table,
+      couverts: rdv.couverts,
       status: 'CONFIRMED',
       method: 'REQUEST',
       sequence: 0,
@@ -1218,11 +1231,15 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       praticien_couleur:       rdv.praticien?.couleur_hex || null,
       infos_pratiques:         rdv.commercant?.infos_pratiques || null,
       produits,
+      commercant_categorie:    categorie,
+      table,
+      couverts:                rdv.couverts,
+      rappel_24h:              rappelVeillePossible(rdv.date_rdv, rdv.heure_debut),
     })
 
     await envoyerAuCommercant({
       to: rdv.client_email,
-      subject: `Ton RDV chez ${rdv.commercant.nom} est confirmé`,
+      subject: `${mots.sujetChez} ${rdv.commercant.nom} est ${mots.participeConfirme}`,
       html,
       attachments: [attachment],
     })
@@ -1249,11 +1266,15 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       acompte_montant: rdv.acompte_montant,
       notes_client:    rdv.notes_client,
       produits,
+      commercant_categorie: categorie,
+      table,
+      couverts:        rdv.couverts,
     })
 
+    const groupe = table ? objetReservation({ table, couverts: rdv.couverts }) : ''
     await envoyerAuCommercant({
       to: rdv.commercant.email,
-      subject: `Nouveau RDV — ${rdv.client_prenom || 'Yopper'} ${rdv.date_rdv}`,
+      subject: `${mots.sujetNouveau} — ${rdv.client_prenom || 'Yopper'}${groupe ? `, ${groupe},` : ''} ${rdv.date_rdv}`,
       html,
     })
   }

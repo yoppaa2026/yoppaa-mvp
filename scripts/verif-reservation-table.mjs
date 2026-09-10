@@ -1588,10 +1588,14 @@ egal('la réservation d’un restaurant s’atteint quand même',
   const MODALE_D = sansProse(readFileSync(new URL('../app/dashboard/ModalDeplacerRdv.js', import.meta.url), 'utf8'))
   verifier('🔴 la saisie au téléphone donne le catalogue à la règle',
     /const verdict = creneauAcceptable\(\{[\s\S]{0,600}?prestationId: presta\.id,\s*prestations,\s*\}\)/.test(MODALE_N))
+  // ⚠️ PRÉCISÉE LE 10/09 TARD : le contexte du déplacement porte aussi l'heure
+  // qu'il est, pour refuser le passé. Le catalogue doit toujours y être.
   verifier('🔴 et le déplacement aussi',
-    /exclureId: rdv\?\.id \?\? null,\s*prestations,\s*\}/.test(MODALE_D))
+    /exclureId: rdv\?\.id \?\? null,\s*prestations,\s*maintenant,\s*\}/.test(MODALE_D))
+  // ⚠️ PRÉCISÉE LE 10/09 TARD : l'heure se choisit dans la fenêtre (`heure`) ;
+  // la case de départ (`heureInit`) ne doit plus décider du rang.
   verifier('🔴 la saisie cherche le rang d’une table sur toute l’heure',
-    /if \(estParCouverts\(presta\)\) \{[\s\S]{0,300}?\.from\('rdv_reservations'\)\s*\.select\('date_rdv, place_no'\)\s*\.eq\('commercant_id', commercant\.id\)\s*\.in\('date_rdv', toutesLesDates\)\s*\.eq\('heure_debut', heureInit\)[\s\S]{0,700}?rangLibre\(/.test(MODALE_N))
+    /if \(estParCouverts\(presta\)\) \{[\s\S]{0,300}?\.from\('rdv_reservations'\)\s*\.select\('date_rdv, place_no'\)\s*\.eq\('commercant_id', commercant\.id\)\s*\.in\('date_rdv', toutesLesDates\)\s*\.eq\('heure_debut', heure\)[\s\S]{0,700}?rangLibre\(/.test(MODALE_N))
   verifier('🔴 et le déplacement aussi, en s’excluant lui-même',
     /if \(estTable\) \{[\s\S]{0,300}?\.from\('rdv_reservations'\)\s*\.select\('id, place_no'\)\s*\.eq\('commercant_id', commercant\.id\)\s*\.eq\('date_rdv', date\)\s*\.eq\('heure_debut', heure\)[\s\S]{0,500}?rangLibre\(\(memeHeure \|\| \[\]\)\.filter\(r => String\(r\.id\) !== String\(rdv\.id\)\)/.test(MODALE_D))
   verifier('🔴 et une table déplacée n’est plus un « cours de 24 places »',
@@ -1922,7 +1926,19 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('⚠️ « une table » ne part pas chercher des abonnés en base',
     /if \(!prestationId \|\| prestationId === UNE_TABLE\)/.test(SAISIE))
   verifier('⚠️ elle montre ce qui reste libre sur tout le repas',
-    /Libres de \{heureInit\} à \{heureFin\}/.test(SAISIE) && /\{l\.libres\} sur \{l\.total\}/.test(SAISIE))
+    /Libres de \{heure\} à \{heureFin\}/.test(SAISIE) && /\{l\.libres\} sur \{l\.total\}/.test(SAISIE))
+  // 🔴 LES HEURES LIBRES DE LA SAISIE (Alex, 10/09 tard : « il ne doit pas
+  // sortir de la modale pour voir les dispos à un autre créneau »). « Libre »
+  // doit être vrai : pour chaque heure, la salle relue en base donne une
+  // table à CE groupe sur tout le repas, sans avoir à la forcer.
+  verifier('🔴 une heure ne s’y propose que si une table est libre pour ce groupe, sans forcer',
+    /if \(!nombreSaisi \|\| !referenceGroupe \|\| !dureeGroupe \|\| !salleConnue\) return \[\]/.test(SAISIE)
+    && /const t = tableAPoser\(etatSalle\(\{ formats: prestations, couverts: nCouverts, reservations: salle\.reservations, debutMin: m, finMin: m \+ dureeGroupe \}\)\)\s*return !!t\.format && !t\.forcer/.test(SAISIE))
+  verifier('🔴 et sans inventaire, si la salle a encore ces couverts, comptés comme le serveur',
+    /const occupes = occupationDe\(presta, \(rdvsExistants \|\| \[\]\)\.filter\(r => r\s*&& idsSalle\.includes\(String\(r\.prestation_id\)\) && r\.date_rdv === date && OCCUPENT\.includes\(r\.statut\)\s*&& m < timeToMinutes\(r\.heure_fin\) && m \+ dureeMin > timeToMinutes\(r\.heure_debut\)\)\)\s*return occupes \+ groupe <= capacitePrestation\(presta\)/.test(SAISIE))
+  verifier('⚠️ « aucune heure libre » ne se dit qu’après avoir regardé',
+    /const aRegarde = enTable \? \(nombreSaisi && !!referenceGroupe && salleConnue\) : !!\(presta && dureeMin\)/.test(SAISIE)
+    && /if \(!aRegarde\) return null/.test(SAISIE))
 
   const DEPLACE = sansProse(readFileSync(new URL('../app/dashboard/ModalDeplacerRdv.js', import.meta.url), 'utf8'))
   verifier('🔴 le déplacement compte la salle en tables',
@@ -1934,8 +1950,12 @@ egal('la réservation d’un restaurant s’atteint quand même',
     && /capacite: tableChange \? capacitePrestation\(tableFinale\) : capacite,/.test(DEPLACE))
   verifier('🔴 la salle se relit au moment d’écrire',
     /if \(salleEnTables\) \{\s*const frais = await lireSalleDuJour\(supabase, \{ commercantId: commercant\.id, dateStr: date \}\)[\s\S]{0,900}?if \(!pareil\) \{\s*setSalle\(/.test(DEPLACE))
+  // ⚠️ PRÉCISÉE LE 10/09 TARD : la boucle a déménagé dans le module
+  // (`heuresLibresDuJour`), partagée avec la saisie ; la question de la salle
+  // est devenue un refus de l'`accepte` au lieu d'un `continue`.
   verifier('🔴 « Créneaux libres » ne propose plus une heure sans table',
-    /if \(salleEnTables && !salleConnue\) return \[\]/.test(DEPLACE) && /if \(!t\?\.format \|\| t\.forcer\) continue/.test(DEPLACE))
+    /if \(salleEnTables && !salleConnue\) return \[\]/.test(DEPLACE)
+    && /return heuresLibresDuJour\(\{[\s\S]{0,700}?if \(salleEnTables\) \{\s*const t = tablePour\(h, salle\.reservations\)\s*if \(!t\?\.format \|\| t\.forcer\) return false/.test(DEPLACE))
   verifier('🔴 le bouton dit « Déplacer quand même » quand la salle n’a plus rien',
     /salleAlerte \? 'Déplacer quand même ✓'/.test(DEPLACE))
   verifier('⚠️ tant que la salle n’est pas lue, ni « Libre » ni bouton',
@@ -2163,6 +2183,112 @@ egal('la réservation d’un restaurant s’atteint quand même',
     }
     parcourir(join(racine, 'app'))
     verifier('⚠️ plus aucun « Menu » ne désigne la liste des produits', restes.length === 0, restes.join(' | '))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 CE QUE L'EMAIL DE DÉPLACEMENT DISAIT D'UNE TABLE (Alex, 10/09 tard)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Sa capture : « Table : Table de 6 personnes », « Avec : Salle principale »,
+// « même table, même prix », et « Rappel automatique 24h avant » sur une table
+// déplacée au jour même. Tout est EXÉCUTÉ sur les gabarits.
+{
+  const { emailRdvConfirme, emailNouveauRdvCommercant } = await import('../lib/resend.js')
+  const { generateRdvIcs } = await import('../lib/ical.js')
+  const { objetReservation } = await import('../lib/reservation-metier.js')
+
+  egal('🔴 une table se dit en personnes', objetReservation({ prestation_nom: 'Table de 6 personnes', table: true, couverts: 4 }), '4 personnes')
+  egal('⚠️ au singulier pour une seule', objetReservation({ prestation_nom: 'Table de 2', table: true, couverts: 1 }), '1 personne')
+  egal('⚠️ sans nombre lisible, elle garde son nom : on n’invente pas', objetReservation({ prestation_nom: 'Table de 6 personnes', table: true, couverts: null }), 'Table de 6 personnes')
+  egal('⚠️ une prestation garde le sien', objetReservation({ prestation_nom: 'Coupe femme', table: false, couverts: 4 }), 'Coupe femme')
+
+  const DEPLACE_TABLE = {
+    yopper_prenom: 'Alexandre', commercant_nom: 'La Table d’Essai', commercant_adresse: 'Place Joseph Meunier 18, 5640 Mettet',
+    commercant_categorie: 'alimentaire',
+    prestation_nom: 'Table de 6 personnes', date_rdv: '2026-09-10', heure_debut: '19:30:00', heure_fin: '22:00:00', duree_minutes: 150,
+    prix_estime: null, acompte_paye: false, acompte_montant: null,
+    numero_rdv: 'RV8', praticien_prenom: 'Salle principale',
+    deplace: true, ancienne_date: '2026-09-10', ancienne_heure: '18:30:00',
+    table: true, couverts: 6, rappel_24h: false,
+  }
+  const html = emailRdvConfirme(DEPLACE_TABLE)
+  verifier('🔴 la table déplacée dit combien ils sont', />6 personnes</.test(html))
+  verifier('🔴 et plus le nom du format', !/Table de 6 personnes/.test(html))
+  verifier('🔴 une salle n’est pas quelqu’un « avec » qui l’on vient', />Salle</.test(html) && !/>Avec</.test(html))
+  verifier('🔴 ni « même table », ni « même prix » : le nombre de personnes et la référence',
+    /Rien d'autre ne change : même nombre de personnes, même référence/.test(html) && !/même prix/.test(html) && !/même table/.test(html))
+  verifier('🔴 pas d’alarme promise à moins de 24 heures', !/Rappel automatique 24h avant/.test(html))
+  verifier('⚠️ le titre parle de réservation', /Ta réservation a été déplacée/.test(html))
+
+  // Les témoins : un salon ne perd rien de ce qu'il avait.
+  const SALON = { ...DEPLACE_TABLE, commercant_categorie: 'vitrine', prestation_nom: 'Coupe femme', praticien_prenom: 'Sophie', prix_estime: 35, table: false, couverts: null, rappel_24h: true }
+  const htmlSalon = emailRdvConfirme(SALON)
+  verifier('⚠️ témoin : un salon garde sa prestation, « Avec » et son prix',
+    />Coupe femme</.test(htmlSalon) && />Avec</.test(htmlSalon) && /même prestation, même prix, même référence/.test(htmlSalon))
+  verifier('⚠️ témoin : sans prix, pas de « même prix » non plus',
+    /même prestation, même référence/.test(emailRdvConfirme({ ...SALON, prix_estime: null })))
+  verifier('⚠️ témoin : l’alarme reste promise quand elle sonnera', /Rappel automatique 24h avant/.test(htmlSalon))
+  verifier('⚠️ et sans rien savoir, la phrase d’avant reste', /Rappel automatique 24h avant/.test(emailRdvConfirme({ ...SALON, rappel_24h: undefined })))
+
+  const htmlPro = emailNouveauRdvCommercant({
+    nom_commercant: 'La Table d’Essai', commercant_categorie: 'alimentaire',
+    yopper_prenom: 'Alexandre', yopper_nom: 'V', yopper_email: 'client@exemple.be', yopper_telephone: '0470 00 00 00',
+    prestation_nom: 'Table de 6 personnes', date_rdv: '2026-09-12', heure_debut: '19:30:00', heure_fin: '22:00:00', duree_minutes: 150,
+    prix_estime: null, table: true, couverts: 4,
+  })
+  verifier('🔴 le restaurateur lit le groupe, puis la table où il l’assied', /4 personnes · Table de 6 personnes/.test(htmlPro))
+  verifier('⚠️ témoin : un salon lit sa prestation seule',
+    />Coupe femme</.test(emailNouveauRdvCommercant({ nom_commercant: 'Ciseaux', prestation_nom: 'Coupe femme', date_rdv: '2026-09-12', heure_debut: '10:00', heure_fin: '10:30', duree_minutes: 30 })))
+
+  // Le fichier calendrier, déplié : une ligne longue y est pliée à 75 octets.
+  const ICS_TABLE = { id: 'r1', date_rdv: '2026-09-12', heure_debut: '19:30', heure_fin: '22:00', prestation_nom: 'Table de 6 personnes', praticien_nom: 'Salle principale', commercant_nom: 'La Table d’Essai', commercant_adresse: 'Mettet', table: true, couverts: 4, rappel_24h: true }
+  const deplie = (s) => s.replace(/\r\n /g, '')
+  const ics = deplie(generateRdvIcs(ICS_TABLE))
+  verifier('🔴 le calendrier du client dit « Table pour 4 personnes »', /SUMMARY:Table pour 4 personnes chez La Table d’Essai/.test(ics))
+  verifier('🔴 ni « RDV », ni le format', !/SUMMARY:RDV/.test(ics) && !/Table de 6 personnes/.test(ics))
+  verifier('🔴 « Salle : », pas « Avec : »', /Salle : Salle principale/.test(ics) && !/Avec :/.test(ics))
+  verifier('⚠️ et son alarme parle de la table', /Rappel — ta table demain chez/.test(ics))
+  verifier('🔴 sans alarme quand elle ne sonnerait plus', !/BEGIN:VALARM/.test(generateRdvIcs({ ...ICS_TABLE, rappel_24h: false })))
+  verifier('⚠️ témoin : un rendez-vous garde son titre et son « Avec »',
+    /SUMMARY:RDV Coupe femme chez Ciseaux/.test(deplie(generateRdvIcs({ id: 'r2', date_rdv: '2026-09-12', heure_debut: '10:00', heure_fin: '10:30', prestation_nom: 'Coupe femme', praticien_nom: 'Sophie', commercant_nom: 'Ciseaux', commercant_adresse: 'Mettet' })))
+    && /Avec : Sophie/.test(deplie(generateRdvIcs({ id: 'r2', date_rdv: '2026-09-12', heure_debut: '10:00', heure_fin: '10:30', prestation_nom: 'Coupe femme', praticien_nom: 'Sophie', commercant_nom: 'Ciseaux', commercant_adresse: 'Mettet' }))))
+
+  // ─── LES DEUX EXPÉDITEURS DE CET EMAIL LE REMPLISSENT PAREIL ─────────────
+  //
+  // 🔴 ILS AVAIENT DIVERGÉ DEUX FOIS : le webhook ne chargeait pas la
+  // catégorie (emails en « RDV » et « bon cadeau » chez un restaurant), la
+  // route ne passait pas les produits au commerçant. Même email, deux
+  // contenus selon qu'il y avait un paiement ou non.
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/emails/rdv-confirme/route.js', import.meta.url), 'utf8'))
+  const WH_TOUT = sansProse(readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8'))
+  const iWh = WH_TOUT.indexOf('async function envoyerEmailsRdvConfirme(')
+  const WH = iWh === -1 ? '' : WH_TOUT.slice(iWh, WH_TOUT.indexOf('\n}\n', iWh))
+  const argument = (src, nom) => {
+    const i = src.indexOf(`${nom}({`)
+    if (i === -1) return ''
+    let p = 0
+    for (let j = i + nom.length; j < src.length; j++) {
+      if (src[j] === '(') p++
+      else if (src[j] === ')') { p--; if (p === 0) return src.slice(i, j) }
+    }
+    return ''
+  }
+  const cles = (src, nom) => [...argument(src, nom).matchAll(/^\s*([a-z_0-9]+)\s*[:,]/gim)].map(m => m[1]).sort()
+  const PROPRES_AU_DEPLACEMENT = ['deplace', 'ancienne_date', 'ancienne_heure']
+  const clientRoute = cles(ROUTE, 'emailRdvConfirme').filter(k => !PROPRES_AU_DEPLACEMENT.includes(k))
+  const clientWh = cles(WH, 'emailRdvConfirme')
+  verifier('le webhook se découpe', WH.length > 1000 && clientWh.length > 15, String(WH.length))
+  egal('🔴 les deux chemins passent les mêmes champs à l’email du client', clientWh, clientRoute)
+  egal('🔴 et à l’email du commerçant', cles(WH, 'emailNouveauRdvCommercant'), cles(ROUTE, 'emailNouveauRdvCommercant'))
+  for (const [nom, src] of [['la route de confirmation', ROUTE], ['le webhook Stripe', WH]]) {
+    verifier(`🔴 ${nom} charge le nombre de personnes et sait ce qu’est une table`,
+      /^\s*couverts,\s*$/m.test(src) && /prestation:rdv_prestations\([^)]*\bpar_couverts\b[^)]*\)/.test(src))
+    verifier(`🔴 ${nom} charge la catégorie du commerce`, /commercant:commercants\([^)]*\bcategorie\b[^)]*\)/.test(src))
+    verifier(`🔴 ${nom} ne promet l’alarme que si elle sonnera`,
+      /rappel_24h: (rappel24h|rappelVeillePossible\(rdv\.date_rdv, rdv\.heure_debut\)),/.test(src) && !/rappel_24h: true/.test(src))
+    verifier(`⚠️ ${nom} parle la langue du métier dans l’objet`, /\$\{mots\.sujetChez\}/.test(src) && !/Ton RDV chez/.test(src))
+    verifier(`⚠️ ${nom} met le groupe dans l’objet du restaurateur`, /subject: `\$\{mots\.sujetNouveau\} — /.test(src))
   }
 }
 

@@ -17,10 +17,11 @@ import {
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
 import { nomClient, quandRdv, questionRdv, confirmationRdv, statutDepuisChoix } from '../lib/confirmation-rdv.js'
-import { capacitePrestation, blocsAgenda, regrouperEnSeances } from '../lib/cours-collectifs.js'
+import { capacitePrestation, blocsAgenda, regrouperEnSeances, coursAPlace } from '../lib/cours-collectifs.js'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
   heureDeFin, minutesDeLHeure,
+  premiereMinuteOuverte, dejaPasse, heuresLibresDuJour, QUART_D_HEURE,
 } from '../lib/deplacement-rdv.js'
 
 let ok = 0, ko = 0
@@ -392,8 +393,11 @@ for (const chemin of CHEMINS_ECRITURE) {
 const srcModale = readFileSync(new URL('../app/dashboard/ModalNouveauRdv.js', import.meta.url), 'utf8')
 verifier('la création manuelle demande la première place LIBRE',
   /premierePlaceLibre\(/.test(srcModale))
+// ⚠️ PRÉCISÉE LE 10/09 TARD : l'heure se choisit désormais DANS la fenêtre
+// (`heure`), la case tapée n'est plus qu'un départ (`heureInit`). Lire les
+// places à l'heure de départ les lirait à la mauvaise heure.
 verifier('et lit les places en base, pas dans l’état de l’écran',
-  /\.eq\('heure_debut', heureInit\)/.test(srcModale))
+  /\.eq\('heure_debut', heure\)/.test(srcModale) && !/\.eq\('heure_debut', heureInit\)/.test(srcModale))
 // ⚠️ LE CHEVAUCHEMENT NE DOIT PLUS REFUSER UN CO-INSCRIT du même cours. Ce
 // test cherchait `memeSeance` dans la modale ; la règle a déménagé le 15/08
 // dans `lib/deplacement-rdv.js` pour être partagée avec le déplacement, et elle
@@ -603,6 +607,96 @@ const duLundi = creneauxDuJour(TOUS_CRENEAUX, { dateStr: '2026-09-07', jour: 'lu
 egal('le jour retient sa règle hebdo et sa date précise, jamais l’inactif', duLundi.length, 2)
 egal('un créneau désactivé ne compte pas', duLundi.filter(c => c.actif === false).length, 0)
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 LE PASSÉ (Alex, 10/09 tard : « y a moyen de déplacer un rendez-vous dans
+// le passé, ça ne doit pas être possible »)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Une table de 18h30 est partie à midi le jour même, en soirée, et le client a
+// reçu « Nouvelle date : jeudi 10 septembre à 12:00 ». La règle est EXÉCUTÉE à
+// une heure choisie, en heure locale, comme l'écran la lit.
+// ⚠️ `Infinity` et `null` se comparent avec `===` : `JSON.stringify` rend
+// « null » pour les deux, et `egal` les confondrait.
+const A_19H05 = new Date(2026, 8, 10, 19, 5)   // jeudi 10 septembre, 19h05
+egal('un jour à venir s’ouvre dès minuit', premiereMinuteOuverte('2026-09-11', A_19H05), 0)
+egal('🔴 aujourd’hui, le quart d’heure en cours reste ouvert', premiereMinuteOuverte('2026-09-10', A_19H05), 19 * 60)
+egal('⚠️ à 19h15, 19h00 est passé', premiereMinuteOuverte('2026-09-10', new Date(2026, 8, 10, 19, 15)), 19 * 60 + 15)
+verifier('🔴 un jour passé ne s’ouvre plus du tout', premiereMinuteOuverte('2026-09-09', A_19H05) === Infinity)
+verifier('⚠️ une date illisible : on ne sait pas, on ne juge pas', premiereMinuteOuverte('hier', A_19H05) === null)
+verifier('⚠️ une horloge illisible non plus', premiereMinuteOuverte('2026-09-10', new Date('x')) === null)
+egal('le quart d’heure vaut quinze minutes, comme la base', QUART_D_HEURE, 15)
+
+verifier('🔴 midi, à 19h05, est déjà passé', dejaPasse({ dateStr: '2026-09-10', heure: '12:00', maintenant: A_19H05 }) === true)
+verifier('⚠️ 19h00, à 19h05, ne l’est pas encore : la table qui arrive maintenant',
+  dejaPasse({ dateStr: '2026-09-10', heure: '19:00', maintenant: A_19H05 }) === false)
+verifier('⚠️ 18h45 l’est', dejaPasse({ dateStr: '2026-09-10', heure: '18:45', maintenant: A_19H05 }) === true)
+verifier('⚠️ demain 8h ne l’est pas', dejaPasse({ dateStr: '2026-09-11', heure: '08:00', maintenant: A_19H05 }) === false)
+verifier('🔴 hier soir l’est', dejaPasse({ dateStr: '2026-09-09', heure: '23:00', maintenant: A_19H05 }) === true)
+verifier('⚠️ une heure vidée ne crie pas au passé', dejaPasse({ dateStr: '2026-09-10', heure: '', maintenant: A_19H05 }) === false)
+
+const AU_PASSE = juger({ dateStr: '2026-09-10', heureDebut: '10:00', maintenant: A_19H05 })
+egal('🔴 déplacer à 10h, à 19h05 le même jour, est refusé', AU_PASSE.raison, 'passe')
+verifier('🔴 et le refus nomme le plus tôt possible', /le plus tôt possible est 19:00/.test(AU_PASSE.message), AU_PASSE.message)
+egal('🔴 un jour passé est nommé comme tel',
+  juger({ dateStr: '2026-09-09', heureDebut: '10:00', maintenant: A_19H05 }).message, 'Ce jour est déjà passé. Choisis une date à venir.')
+egal('⚠️ le passé est jugé AVANT le chevauchement : c’est la vraie raison',
+  juger({ dateStr: '2026-09-07', heureDebut: '10:30', rdvsExistants: DEJA_LA, maintenant: A_19H05 }).raison, 'passe')
+egal('⚠️ l’avenir, lui, est jugé comme avant', juger({ dateStr: '2026-09-11', heureDebut: '10:00', maintenant: A_19H05 }).ok, true)
+egal('✅ SANS horloge, rien ne change : la saisie peut noter après coup (décision d’Alex)',
+  juger({ dateStr: '2026-09-09', heureDebut: '10:00' }).ok, true)
+
+// ─── LES HEURES QU'UN JOUR PROPOSE ENCORE ──────────────────────────────────
+const SERVICE_SOIR = [{ heure_debut: '18:00', heure_fin: '21:00' }]
+egal('les heures d’un service, au quart d’heure, repas compris',
+  heuresLibresDuJour({ creneauxJour: SERVICE_SOIR, dureeMinutes: 90 }),
+  ['18:00', '18:15', '18:30', '18:45', '19:00', '19:15', '19:30'])
+egal('🔴 elles partent du quart d’heure en cours, jamais d’une heure passée',
+  heuresLibresDuJour({ creneauxJour: SERVICE_SOIR, dureeMinutes: 90, depuis: premiereMinuteOuverte('2026-09-10', A_19H05) }),
+  ['19:00', '19:15', '19:30'])
+egal('🔴 un jour passé n’en propose aucune',
+  heuresLibresDuJour({ creneauxJour: SERVICE_SOIR, dureeMinutes: 90, depuis: premiereMinuteOuverte('2026-09-09', A_19H05) }), [])
+egal('⚠️ la question de l’appelant écarte ce qu’elle refuse',
+  heuresLibresDuJour({ creneauxJour: SERVICE_SOIR, dureeMinutes: 90, accepte: h => h !== '18:30' }),
+  ['18:00', '18:15', '18:45', '19:00', '19:15', '19:30'])
+egal('⚠️ deux services qui se recouvrent ne doublent aucune heure',
+  heuresLibresDuJour({ creneauxJour: [{ heure_debut: '12:00', heure_fin: '13:00' }, { heure_debut: '12:30', heure_fin: '13:30' }], dureeMinutes: 30 }),
+  ['12:00', '12:15', '12:30', '12:45', '13:00'])
+egal('🔴 un service qui finit après minuit propose ses heures jusqu’à minuit, plus aucune',
+  heuresLibresDuJour({ creneauxJour: [{ heure_debut: '22:00', heure_fin: '02:00' }], dureeMinutes: 90 }),
+  ['22:00', '22:15', '22:30'])
+egal('⚠️ sans durée, aucune heure : on n’invente pas', heuresLibresDuJour({ creneauxJour: SERVICE_SOIR, dureeMinutes: 0 }), [])
+
+// ─── UN COURS COMPLET NE SE PROPOSE PLUS ───────────────────────────────────
+const YOGA_2 = { id: 'y1', capacite: 2 }
+const INSCRITS_YOGA = [
+  { id: 'i1', prestation_id: 'y1', date_rdv: '2026-09-14', heure_debut: '10:00:00', statut: 'confirme', place_no: 1 },
+  { id: 'i2', prestation_id: 'y1', date_rdv: '2026-09-14', heure_debut: '10:00:00', statut: 'honore', place_no: 2 },
+]
+verifier('🔴 un cours plein ne se propose plus', coursAPlace(YOGA_2, INSCRITS_YOGA, { dateStr: '2026-09-14', heure: '10:00' }) === false)
+verifier('⚠️ une annulation libère sa place',
+  coursAPlace(YOGA_2, [INSCRITS_YOGA[0], { ...INSCRITS_YOGA[1], statut: 'annule_client' }], { dateStr: '2026-09-14', heure: '10:00' }) === true)
+verifier('⚠️ un inscrit qu’on déplace dans son propre cours ne se prend pas sa place',
+  coursAPlace(YOGA_2, INSCRITS_YOGA, { dateStr: '2026-09-14', heure: '10:00', exclureId: 'i2' }) === true)
+verifier('⚠️ un autre jour ne compte pas', coursAPlace(YOGA_2, INSCRITS_YOGA, { dateStr: '2026-09-21', heure: '10:00' }) === true)
+verifier('⚠️ un autre cours non plus', coursAPlace({ id: 'p9', capacite: 2 }, INSCRITS_YOGA, { dateStr: '2026-09-14', heure: '10:00' }) === true)
+
+// ─── ET LA BASE TRANCHE, À L'HEURE DE BRUXELLES ────────────────────────────
+// Le déplacement s'écrit depuis le navigateur : une garde d'écran n'est jamais
+// une réponse. La migration est lue, elle ne s'exécute pas ici ; son essai sur
+// table temporaire, lui, tourne dans l'éditeur SQL.
+{
+  const MIG = readFileSync(new URL('../migrations/MIGRATION_RDV_PAS_DEPLACE_DANS_LE_PASSE.sql', import.meta.url), 'utf8')
+  const garde = MIG.split('-- 2)')[0]
+  verifier('🔴 la base refuse le passé au déplacement, à l’heure de Bruxelles',
+    /BEFORE UPDATE OF date_rdv, heure_debut ON public\.rdv_reservations/.test(garde) && /now\(\) AT TIME ZONE 'Europe\/Brussels'/.test(garde))
+  verifier('⚠️ seulement si la date ou l’heure bouge vraiment : une clôture passe',
+    /IF NEW\.date_rdv IS NOT DISTINCT FROM OLD\.date_rdv\s*AND NEW\.heure_debut IS NOT DISTINCT FROM OLD\.heure_debut THEN\s*RETURN NEW;/.test(garde))
+  verifier('⚠️ jamais à la création : le webhook crée le rendez-vous après le paiement',
+    !/INSERT/i.test(garde.replace(/^--.*$/gm, '')))
+  verifier('⚠️ le même quart d’heure qu’à l’écran', /floor\(extract\(minute FROM maintenant\) \/ 15\) \* 15/.test(garde))
+  verifier('⚠️ et un refus que l’écran reconnaît', /RAISE EXCEPTION 'RDV_DEPLACE_DANS_LE_PASSE'/.test(garde))
+}
+
 // ─── LA MISE À JOUR PASSE PAR LA RÈGLE, ELLE NE LA RECOPIE PAS ─────────────
 // ⚠️ CE QUI EST TESTÉ ICI EST LE SEUL POINT QUE L'EXÉCUTION NE PEUT PAS
 // ATTEINDRE : que l'écran appelle bien la fonction, et ne rebâtisse pas son
@@ -623,6 +717,56 @@ verifier('il prévient le client du changement', /deplace: true/.test(srcDeplace
 // obtenu un créneau par une porte et un refus par l'autre.
 verifier('la création manuelle juge avec la même règle',
   /creneauAcceptable\(/.test(sansCommentaires(srcModale)))
+
+// ─── 🔴 LE PASSÉ, DANS LES DEUX FENÊTRES (10/09 tard) ──────────────────────
+// Elles ne s'exécutent pas hors navigateur : on vérifie qu'elles donnent à la
+// règle ce qu'elle exécute plus haut, et qu'elles relisent l'heure au clic.
+verifier('🔴 le déplacement donne l’heure qu’il est à la règle', /prestations,\s*maintenant,\s*\}/.test(srcDeplacer))
+verifier('🔴 et la relit au clic, avant d’écrire quoi que ce soit',
+  /async function valider\(\) \{\s*if \(!peutValider\) return\s*const verdictAuClic = creneauAcceptable\(\{ \.\.\.contexte, heureDebut: heure, maintenant: new Date\(\) \}\)\s*if \(!verdictAuClic\.ok\) \{/.test(srcDeplacer))
+verifier('⚠️ et l’heure avance pendant que la fenêtre reste ouverte',
+  /setInterval\(\(\) => setMaintenant\(new Date\(\)\), 30000\)/.test(srcDeplacer))
+verifier('🔴 ses « créneaux libres » partent du quart d’heure en cours',
+  /depuis: premiereMinuteOuverte\(date, maintenant\),/.test(srcDeplacer))
+verifier('⚠️ par la boucle du module, pas une copie',
+  /return heuresLibresDuJour\(\{/.test(srcDeplacer) && !/m \+= 15/.test(srcDeplacer))
+verifier('🔴 un cours complet ne s’y propose plus',
+  /if \(estCours && !coursAPlace\(\{ id: rdv\?\.prestation_id, capacite \}, rdvsExistants, \{ dateStr: date, heure: h, exclureId: rdv\?\.id \}\)\) return false/.test(srcDeplacer))
+verifier('⚠️ un rendez-vous d’hier qu’on reporte part d’aujourd’hui',
+  /return rdv\?\.date_rdv && rdv\.date_rdv >= auj \? rdv\.date_rdv : auj/.test(srcDeplacer))
+verifier('⚠️ si la base refuse le passé, l’écran dit pourquoi',
+  /includes\('RDV_DEPLACE_DANS_LE_PASSE'\)/.test(srcDeplacer))
+
+{
+  const SAISIE_S = sansCommentaires(srcModale)
+  verifier('🔴 la saisie choisit sa date et son heure dans la fenêtre',
+    /<input id="mn-rdv-date" type="date" value=\{date\}/.test(SAISIE_S) && /<input id="mn-rdv-heure" type="time" value=\{heure\} step=\{900\}/.test(SAISIE_S))
+  verifier('🔴 et propose ses heures libres d’un tap',
+    /heuresLibres\.map\(h => \{/.test(SAISIE_S) && /onClick=\{\(\) => \{ setHeure\(h\); setError\(null\) \}\}/.test(SAISIE_S))
+  verifier('⚠️ par la boucle du module, à partir du quart d’heure en cours',
+    (SAISIE_S.match(/creneauxJour, dureeMinutes: (dureeGroupe|dureeMin), depuis,/g) || []).length === 2
+    && /const depuis = dateValide \? premiereMinuteOuverte\(date, maintenant\) : null/.test(SAISIE_S))
+  verifier('🔴 un cours complet n’y figure pas',
+    /if \(capacitePrestation\(presta\) > 1\) return coursAPlace\(presta, rdvsExistants, \{ dateStr: date, heure: h \}\)/.test(SAISIE_S))
+  // ✅ DÉCISION D'ALEX : un rendez-vous se note après coup. L'argument de la
+  // règle, lu en entier, ne doit donc PAS porter l'heure qu'il est.
+  const iVerdict = SAISIE_S.indexOf('const verdict = creneauAcceptable(')
+  const argVerdict = iVerdict === -1 ? '' : argumentDeLAppel(SAISIE_S, SAISIE_S.indexOf('(', iVerdict))
+  verifier('✅ la saisie peut noter après coup : sa règle ne reçoit pas l’heure qu’il est',
+    argVerdict.length > 80 && /prestations,/.test(argVerdict) && !/maintenant/.test(argVerdict), argVerdict.slice(0, 120))
+  verifier('🔴 mais aucun email ne part pour une heure déjà passée, relue au clic',
+    /const passeAuClic = dejaPasse\(\{ dateStr, heure, maintenant: new Date\(\) \}\)\s*if \(rdvId && \(email\.trim\(\) \|\| null\) && !passeAuClic\) \{/.test(SAISIE_S))
+  verifier('⚠️ et l’écran le dit, bouton compris',
+    /passe \? 'Noter après coup ✓'/.test(SAISIE_S) && /aucun email ni rappel ne part au client/.test(SAISIE_S)
+    && /Rien ne part au client pour une heure déjà passée/.test(SAISIE_S))
+  verifier('⚠️ l’écran sait ce qui est passé, à l’heure qu’il est',
+    /const passe = heureValide && dejaPasse\(\{ dateStr: date, heure, maintenant \}\)/.test(SAISIE_S))
+  verifier('⚠️ la salle porte la date qu’elle décrit', /const salleConnue = salle\.etat === 'ok' && salle\.date === date/.test(SAISIE_S))
+  verifier('⚠️ une date ou une heure vidée ne s’enregistre pas',
+    /const formValide = !!\(prestationId && presta && dateValide && heureValide &&/.test(SAISIE_S))
+  verifier('⚠️ plus rien ne s’écrit ni ne s’affiche à l’heure de la case de départ',
+    !/\bheureInit\b/.test(SAISIE_S.split('async function valider()')[1] || 'heureInit'))
+}
 
 // ⚠️ ET AUCUN AUTRE ÉCRAN NE DÉPLACE UN RENDEZ-VOUS DANS SON COIN. Un chemin
 // qui réécrirait `date_rdv` sans repasser par la règle retomberait exactement
@@ -730,8 +874,16 @@ egal('avec la capacité, elle passe',
 const srcRouteConfirme = sansCommentaires(readFileSync(new URL('../app/api/emails/rdv-confirme/route.js', import.meta.url), 'utf8'))
 verifier('un déplacement incrémente la séquence du fichier calendrier',
   /sequence: deplace \?/.test(srcRouteConfirme))
-verifier('et le sujet de l’email dit « déplacé », pas « confirmé »',
-  /deplace[\s\S]{0,120}déplacé/.test(srcRouteConfirme))
+// ⚠️ PRÉCISÉE LE 10/09 TARD : l'objet parle la langue du métier (« Ta
+// réservation … a été déplacée » chez un restaurant). La garde lit donc la
+// branche du déplacement ET les mots qu'elle emploie, pour les deux métiers.
+{
+  const { motsReservation } = await import('../lib/reservation-metier.js')
+  verifier('et le sujet de l’email dit « déplacé », pas « confirmé »',
+    /subject: deplace\s*\?\s*`\$\{mots\.sujetChez\}[^`]*a été \$\{mots\.participeDeplace\}`\s*:\s*`\$\{mots\.sujetChez\}[^`]*est \$\{mots\.participeConfirme\}`/.test(srcRouteConfirme)
+    && motsReservation({ categorie: 'vitrine' }).participeDeplace === 'déplacé'
+    && motsReservation({ categorie: 'alimentaire' }).participeDeplace === 'déplacée')
+}
 verifier('le commerçant ne s’auto-notifie pas de son propre déplacement',
   /!deplace && rdv\.commercant\?\.notif_mode/.test(srcRouteConfirme))
 

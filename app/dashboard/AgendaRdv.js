@@ -18,7 +18,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import BandeDefilante from '@/app/components/BandeDefilante'
 import { couleurRdv, COULEUR_DEFAUT } from '@/lib/agenda-couleurs'
-import { blocsAgenda } from '@/lib/cours-collectifs'
+import { blocsAgenda, servicesDeSalle, estReservationDeTable, caseDeDepart, couvertsDe } from '@/lib/cours-collectifs'
 // ⚠️ Ce fichier a sa PROPRE copie de `timeToMinutes` (plus bas). On n'importe
 // donc que la règle de minuit, qui elle ne doit exister qu'en un exemplaire.
 import { finApresMinuit } from '@/lib/rdv-slots'
@@ -42,6 +42,7 @@ const JOURS_KEY  = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dima
 const JOURS_CRT  = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 const JOURS_LONG = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche']
 const MOIS_CRT   = ['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc']
+const MOIS_LONG  = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre']
 
 // Les libellés de statut vivent désormais dans `lib/rdv-statut.js`, avec leurs
 // couleurs : la liste d'un cours et la bande Historique disent la même chose du
@@ -91,6 +92,10 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
   // fiche d'un rendez-vous, il ouvre SA LISTE : c'est de là qu'on choisit
   // ensuite la personne dont on veut le détail.
   const [seanceOuverte, setSeanceOuverte] = useState(null)
+  // 🔴 LE SERVICE D'UNE SALLE (Alex, 10/09 : « quand je clique il ne me donne
+  // pas le résumé complet »). Toutes les tables de la soirée qui se chevauchent,
+  // quels que soient leur format et leur heure d'arrivée, dans UNE liste.
+  const [serviceOuvert, setServiceOuvert] = useState(null)
   // refDate : 1er jour visible. Sur desktop = aujourd'hui (vue semaine glissante).
   // Sur mobile = jour actif (vue 1 jour avec nav prev/next).
   const today = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d }, [])
@@ -237,6 +242,15 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
     })
     return m
   }, [joursAffiches, rdvsVisibles])
+
+  // Les services de salle de chaque jour : les tables qui se chevauchent, en un
+  // seul bloc. Chez un salon ou un studio, aucune réservation n'est une table,
+  // la liste est vide et rien ne change.
+  const servicesParJour = useMemo(() => {
+    const m = {}
+    joursAffiches.forEach(j => { m[j.iso] = servicesDeSalle(rdvsParJour[j.iso] || []) })
+    return m
+  }, [joursAffiches, rdvsParJour])
 
   // ─── L'HISTORIQUE ─────────────────────────────────────────────────────────
   //
@@ -529,7 +543,20 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                 const state = getSlotState(j, slotMin)
                 const rdvsDuJour = rdvsParJour[j.iso] || []
                 // Un RDV est rendu SUR sa cellule de départ uniquement (positionnement absolu, hauteur = durée).
-                const rdvsCommencantIci = rdvsDuJour.filter(r => timeToMinutes(r.heure_debut) === slotMin)
+                // 🔴 LA CELLULE QUI CONTIENT SON HEURE, PAS CELLE QUI L'ÉGALE (10/09).
+                // Avec l'égalité stricte, un rendez-vous à 18h15 ou 18h45 ne
+                // tombait dans AUCUNE case d'une grille en demi-heures : il
+                // existait, comptait dans « À venir », et ne se dessinait nulle
+                // part. Le bloc est maintenant posé dans sa case, décalé des
+                // minutes qui l'en séparent.
+                const commenceIci = (debutMin) => caseDeDepart(debutMin, heureMin, PAS_MINUTES).caseMin === slotMin
+                const decalagePx = (debutMin) => ((debutMin - slotMin) / PAS_MINUTES) * HAUTEUR_CELLULE
+                const debutsIci = rdvsDuJour.filter(r => commenceIci(timeToMinutes(r.heure_debut)))
+                // ⚠️ LES TABLES SE RANGENT DANS LEUR SERVICE, pas dans un bloc de
+                // cours par format : deux blocs partis à 18h00 et 18h30 se
+                // recouvraient, et chacun n'ouvrait que son format.
+                const rdvsCommencantIci = debutsIci.filter(r => !estReservationDeTable(r))
+                const servicesIci = (servicesParJour[j.iso] || []).filter(s => commenceIci(s.debutMin))
                 // Détecte si cette cellule est COUVERTE par un RDV qui a démarré plus tôt (pour ne pas la rendre clicable)
                 const couvert = rdvsDuJour.some(r => {
                   const debut = timeToMinutes(r.heure_debut)
@@ -537,7 +564,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                   return debut < slotMin && fin > slotMin
                 })
 
-                const peutCreer = state === 'libre' && !couvert && rdvsCommencantIci.length === 0
+                const peutCreer = state === 'libre' && !couvert && debutsIci.length === 0
 
                 // ⚠️ DEUX BLOCS À LA MÊME HEURE SE CACHAIENT L'UN L'AUTRE (trouvé
                 // par Alex le 16/08). Le regroupement des cours réglait le cas de
@@ -555,7 +582,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                 //
                 // Les blocs se partagent donc la largeur de la cellule. Trois
                 // colonnes étroites valent mieux qu'une seule qui ment.
-                const blocsIci = blocsAgenda(rdvsCommencantIci)
+                const blocsIci = [...servicesIci, ...blocsAgenda(rdvsCommencantIci)]
                 const nbColonnes = Math.max(1, blocsIci.length)
                 function colonne(index) {
                   const largeur = 100 / nbColonnes
@@ -594,6 +621,49 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                         n'aurait vu qu'un seul nom, celui du dernier rendu.
                         Le regroupement se lit sur `capacite_creneau`, gravé
                         dans la réservation : aucune jointure nécessaire. */}
+                    {/* 🔴 LE SERVICE D'UNE SALLE : UN BLOC, TOUTES LES TABLES (10/09).
+                        De la première arrivée au dernier départ, quels que
+                        soient les formats. Le bloc dit d'un coup d'œil combien
+                        de tables et de couverts, et qui arrive à quelle heure ;
+                        il ouvre la liste complète du service. */}
+                    {blocsIci.filter(b => b.type === 'service').map(service => {
+                      const colonneService = colonne(blocsIci.indexOf(service))
+                      const hauteur = (((service.finMin - service.debutMin) || PAS_MINUTES) / PAS_MINUTES) * HAUTEUR_CELLULE - 2
+                      const resume = resumeSeance(service.tables)
+                      const couleurs = couleurRdv({ statut: resume.aVenir > 0 ? 'confirme' : 'honore' })
+                      const nbTables = service.tables.length
+                      const aClore = compterAClore(service.tables)
+                      return (
+                        <div key={service.cle}
+                          onClick={(e) => { e.stopPropagation(); setServiceOuvert({ ...service, jourDate: j.date }) }}
+                          title={`${service.heure_debut}–${service.heure_fin} · ${nbTables} table${nbTables > 1 ? 's' : ''} · ${resume.couverts} couvert${resume.couverts > 1 ? 's' : ''}`}
+                          style={{
+                            position: 'absolute', top: 1 + decalagePx(service.debutMin), ...colonneService, height: hauteur,
+                            background: couleurs.bg, color: couleurs.text,
+                            borderRadius: 6, padding: '3px 5px', fontSize: 10, fontWeight: 700,
+                            cursor: 'pointer', overflow: 'hidden',
+                            boxShadow: `0 2px 6px ${couleurs.border}44`,
+                            border: `1px solid ${couleurs.border}`,
+                            zIndex: 2, display: 'flex', flexDirection: 'column', gap: 1,
+                          }}>
+                          <div style={{ fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {nbTables} table{nbTables > 1 ? 's' : ''} · {resume.couverts} couvert{resume.couverts > 1 ? 's' : ''}
+                          </div>
+                          {service.arrivees.map(a => (
+                            <div key={a.heure} style={{ display: 'flex', gap: 4, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <span style={{ fontWeight: 900 }}>{a.heure}</span>
+                              <span>{a.tables} table{a.tables > 1 ? 's' : ''} · {a.couverts} couvert{a.couverts > 1 ? 's' : ''}</span>
+                            </div>
+                          ))}
+                          {aClore > 0 && (
+                            <span style={{ position: 'absolute', top: 2, right: 2, background: '#DC2626', color: '#fff', fontSize: 9, fontWeight: 900, lineHeight: 1, padding: '2px 5px', borderRadius: 100, boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }}>
+                              {aClore} à clôturer
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+
                     {blocsIci.filter(b => b.type === 'seance').map(seance => {
                       const colonneSeance = colonne(blocsIci.indexOf(seance))
                       const dureeM = (timeToMinutes(seance.heure_fin) - timeToMinutes(seance.heure_debut)) || PAS_MINUTES
@@ -613,7 +683,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                           onClick={(e) => { e.stopPropagation(); setSeanceOuverte({ ...seance, jourDate: j.date }) }}
                           title={`${seance.heure_debut?.slice(0, 5)}–${seance.heure_fin?.slice(0, 5)} · ${nom} · ${occupationBloc} ${occupationBloc > 1 ? mots.agendaOccupes : mots.agendaOccupe} sur ${seance.capacite}`}
                           style={{
-                            position: 'absolute', top: 1, ...colonneSeance, height: hauteur,
+                            position: 'absolute', top: 1 + decalagePx(timeToMinutes(seance.heure_debut)), ...colonneSeance, height: hauteur,
                             background: couleurs.bg, color: couleurs.text,
                             borderRadius: 6, padding: '3px 5px', fontSize: 10, fontWeight: 700,
                             cursor: 'pointer', overflow: 'hidden',
@@ -668,7 +738,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                           onClick={(e) => { e.stopPropagation(); if (onSelectRdv) onSelectRdv(r) }}
                           style={{
                             position: 'absolute',
-                            top: 1, ...colonneRdv,
+                            top: 1 + decalagePx(timeToMinutes(r.heure_debut)), ...colonneRdv,
                             height: hauteur,
                             background: couleurs.bg,
                             color: couleurs.text,
@@ -792,6 +862,129 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
           `position: fixed`, l'élément se plaçant alors par rapport au
           conteneur qui défile et non par rapport à l'écran. C'est le défaut
           corrigé le 12/08 sur la modale de détail, il ne doit pas revenir. */}
+      {/* ─── LE SERVICE D'UNE SALLE, EN ENTIER (10/09) ───────────────────────
+          🔴 Alex : « quand je clique il ne me donne pas le résumé complet, je
+          dois cliquer sur les tables de 2 pour le récap des tables de 2, idem
+          pour 6 ». Ici, toutes les tables de la soirée qui se chevauchent, par
+          ordre d'arrivée, chacune avec son format, ses couverts et son statut.
+          ⚠️ PAS DE « COMPLET » NI DE « COUVERTS LIBRES » PAR FORMAT : la
+          capacité d'un format ne dit rien de la salle, et « ce service est
+          complet » devant trente couverts libres envoyait refuser des clients.
+          ⚠️ RENDUE EN FIN DE COMPOSANT, comme la liste d'un cours : sur iOS,
+          `position: fixed` dans un conteneur qui défile se place mal. */}
+      {serviceOuvert && (() => {
+        const tables = serviceOuvert.tables || []
+        const aClore = tables.filter(estAClore)
+        const jour = serviceOuvert.jourDate
+        const libelleJour = jour
+          ? `${JOURS_LONG[jourIdxLun(jour)].toLowerCase()} ${jour.getDate()} ${MOIS_LONG[jour.getMonth()]}`
+          : null
+        // Ajouter une table pendant le service : les cases qu'il couvre ne
+        // sont plus cliquables dans la grille, le geste doit donc vivre ici,
+        // avec l'heure d'arrivée au choix.
+        const arriveesPossibles = []
+        for (let m = Math.floor(serviceOuvert.debutMin / PAS_MINUTES) * PAS_MINUTES; m < serviceOuvert.finMin; m += PAS_MINUTES) {
+          arriveesPossibles.push(minutesToTime(m))
+        }
+        return (
+          <div onClick={() => setServiceOuvert(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 9998, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background: '#fff', width: '100%', maxWidth: 520, borderRadius: '18px 18px 0 0', padding: '18px 18px 26px', maxHeight: '80svh', overflowY: 'auto' }}>
+              <div style={{ width: 38, height: 4, borderRadius: 100, background: T.pale, margin: '0 auto 14px' }}/>
+              <p style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 900, color: T.ink }}>
+                Service de {serviceOuvert.heure_debut} à {serviceOuvert.heure_fin}
+              </p>
+              <p style={{ margin: '0 0 14px', fontSize: 12.5, color: T.muted, fontWeight: 600 }}>
+                {libelleJour ? `${libelleJour} · ` : ''}{tables.length} table{tables.length > 1 ? 's' : ''}
+                {' · '}{texteResumeSeance(tables, null, { mots, parCouverts: true })}
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {tables.map(i => {
+                  const st = statutRdv(i)
+                  const pai = etatPaiementRdv(i)
+                  const passe = st.cle !== 'confirme'
+                  const nb = couvertsDe(i)
+                  return (
+                    <button key={i.id}
+                      onClick={() => { setServiceOuvert(null); if (onSelectRdv) onSelectRdv(i) }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: '#fff', border: `1px solid ${passe ? '#F3F4F6' : T.pale}`, borderRadius: 12, padding: '10px 12px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      {/* Le nombre de couverts de la table, ce que le restaurateur
+                          regarde en premier pour dresser. */}
+                      <span aria-label={`${nb} couvert${nb > 1 ? 's' : ''}`}
+                        style={{ width: 30, height: 30, borderRadius: '50%', background: st.fond, color: st.texte, fontSize: 12, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {nb}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {[i.client_prenom, i.client_nom].filter(Boolean).join(' ') || 'Client'}
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 900, color: st.texte, background: st.fond, border: `1px solid ${st.bord}`, borderRadius: 100, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                            {st.icone} {st.label}
+                          </span>
+                        </span>
+                        <span style={{ display: 'block', fontSize: 11.5, color: T.deep, fontWeight: 700, marginTop: 2 }}>
+                          {String(i.heure_debut || '').slice(0, 5)}–{String(i.heure_fin || '').slice(0, 5)}
+                          {' · '}{i.prestation?.nom || 'Table'}{' · '}{nb} couvert{nb > 1 ? 's' : ''}
+                        </span>
+                        {pai && (
+                          <span style={{ display: 'inline-block', marginTop: 3, fontSize: 10.5, fontWeight: 900, color: couleurPaiement(pai).texte, background: couleurPaiement(pai).fond, border: `1px solid ${couleurPaiement(pai).bord}`, borderRadius: 100, padding: '1px 8px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                            {pai.libelle}
+                          </span>
+                        )}
+                        {i.client_telephone && (
+                          <span style={{ display: 'block', fontSize: 11.5, color: T.muted, fontWeight: 600, marginTop: 2 }}>{i.client_telephone}</span>
+                        )}
+                      </span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M9 18l6-6-6-6"/>
+                      </svg>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* ⚠️ SEULES LES TABLES DÉJÀ PARTIES se clôturent d'un geste : une
+                  table de 20h ne se marque pas « venue » à 18h30 parce qu'on
+                  clôture celles de 18h. Chaque ligne reste cliquable pour le
+                  cas particulier. */}
+              {onHonorerSeance && aClore.length > 0 && (
+                <button
+                  onClick={() => { setServiceOuvert(null); onHonorerSeance(aClore) }}
+                  style={{ width: '100%', marginTop: 12, padding: '12px 14px', borderRadius: 100, border: 'none', background: 'linear-gradient(135deg, #059669, #10B981)', color: '#fff', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, boxShadow: '0 3px 12px rgba(16,185,129,0.35)' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6L9 17l-5-5"/>
+                  </svg>
+                  {mots.agendaTousLa} ({aClore.length})
+                </button>
+              )}
+
+              {onNouveauRdv && jour && arriveesPossibles.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 800, color: T.deep }}>Ajouter une table, arrivée à :</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {arriveesPossibles.map(h => (
+                      <button key={h}
+                        onClick={() => { setServiceOuvert(null); onNouveauRdv(jour, h) }}
+                        style={{ padding: '7px 12px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        {h}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => setServiceOuvert(null)}
+                style={{ width: '100%', marginTop: 12, padding: '11px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.deep, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                Fermer
+              </button>
+            </div>
+          </div>
+        )
+      })()}
+
       {seanceOuverte && (
         <div onClick={() => setSeanceOuverte(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 9998, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0 }}>

@@ -3788,8 +3788,11 @@ verifier('sans capacité connue, on n’invente pas de dénominateur',
 // ⚠️ ON COMPTE : la règle du paiement sert DEUX fois dans ce fichier, la liste
 // d'un cours et la bande Historique. Chercher son nom laissait l'import, ou le
 // premier usage, satisfaire la garde.
-egal('l’agenda passe par la règle du paiement aux deux endroits',
-  (srcAgenda.match(/etatPaiementRdv\(/g) || []).length, 2)
+// ⚠️ TROIS DEPUIS LE 10/09 : le service d'une salle est une troisième liste,
+// chaque table y porte sa pastille de paiement comme un inscrit de cours. Le
+// compte reste la garde : si l'une des trois perd la règle, il descend.
+egal('l’agenda passe par la règle du paiement aux trois endroits',
+  (srcAgenda.match(/etatPaiementRdv\(/g) || []).length, 3)
 verifier('la ligne d’un inscrit porte son statut', /statutRdv\(i\)/.test(srcAgenda))
 verifier('et le résumé du cours remplace le comptage à la main',
   /texteResumeSeance\(seanceOuverte\.inscrits/.test(srcAgenda))
@@ -3817,8 +3820,29 @@ verifier('douze se demandent au pluriel, avec leur nombre',
 // retour). Douze d'un coup n'est plus un réflexe : ça se dit avant.
 verifier('la question prévient que le geste ne se défait pas',
   /ne se défait pas/.test(questionSeanceHonoree(12).message))
-verifier('elle prévient aussi que chacun reçoit son email',
-  /email/.test(questionSeanceHonoree(12).message))
+// 🔴 CETTE GARDE EXIGEAIT LE MOT « EMAIL », ET ELLE FIGEAIT UNE PHRASE FAUSSE
+// (10/09). Depuis le 27/08, clôturer n'envoie plus aucun email (l'email de
+// l'ancienne fidélité a été retiré, voir `changerStatutRdv`). La question
+// promettait donc à chaque commerçant un message que ses clients ne recevaient
+// jamais. Une garde qui vérifie la PRÉSENCE d'un mot peut graver un mensonge ;
+// elle vérifie maintenant ce qui se passe VRAIMENT.
+verifier('elle ne promet plus d’email : aucun ne part à la clôture',
+  !/email/i.test(questionSeanceHonoree(12).message)
+  && !/email/i.test(questionSeanceHonoree(1).message)
+  && !/email/i.test(questionSeanceHonoree(12, { montant: 45 }).message))
+verifier('et elle dit ce qui arrive : le chiffre d’affaires et la carte de fidélité',
+  /chiffre d’affaires/.test(questionSeanceHonoree(12).message)
+  && /carte de fidélité/.test(questionSeanceHonoree(12).message))
+// 🔴 UNE SALLE CLÔTURE DES TABLES, PAS DES PERSONNES (10/09).
+verifier('un service de restaurant se clôture en tables',
+  questionSeanceHonoree(3, { table: true }).titre === 'Marquer ces 3 tables comme venues ?'
+  && questionSeanceHonoree(1, { table: true }).titre === 'Marquer cette table comme venue ?')
+verifier('avec ses propres boutons et sa propre confirmation',
+  questionSeanceHonoree(3, { table: true }).actions[0].label === 'Oui, toutes les tables étaient là'
+  && confirmationSeanceHonoree({ faits: 2, table: true }) === '2 tables sont marquées comme venues. Leur montant entre dans ton chiffre d’affaires du jour.')
+verifier('⚠️ et un cours garde ses mots au caractère près',
+  questionSeanceHonoree(1).titre === 'Marquer cette personne comme venue ?'
+  && questionSeanceHonoree(1).actions[0].label === 'Oui, elle était là')
 // Et elle ouvre la porte du cas particulier plutôt que de le laisser deviner.
 verifier('elle dit quoi faire si quelqu’un manquait',
   /absence/.test(questionSeanceHonoree(12).details || ''))

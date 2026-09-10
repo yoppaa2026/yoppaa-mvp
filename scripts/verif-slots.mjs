@@ -1393,8 +1393,11 @@ const srcAgendaBlocs = sansCommentaires(readFileSync(new URL('../app/dashboard/A
 
 // La liste est calculée UNE fois : c'est elle qui donne l'indice de colonne, et
 // deux appels séparés à `blocsAgenda` rendraient des indices incomparables.
+// ⚠️ DEPUIS LE 10/09, LES SERVICES D'UNE SALLE ENTRENT DANS LA MÊME LISTE : une
+// seule liste par cellule, services puis blocs de cours, et c'est toujours elle
+// qui donne l'indice de colonne.
 verifier('les blocs d’une cellule sont calculés une seule fois',
-  /const blocsIci = blocsAgenda\(rdvsCommencantIci\)/.test(srcAgendaBlocs))
+  /const blocsIci = \[\.\.\.servicesIci, \.\.\.blocsAgenda\(rdvsCommencantIci\)\]/.test(srcAgendaBlocs))
 egal('et plus aucun appel séparé ne subsiste',
   (srcAgendaBlocs.match(/blocsAgenda\(/g) || []).length, 1)
 
@@ -1402,10 +1405,15 @@ egal('et plus aucun appel séparé ne subsiste',
 // calculée qui cohabiterait avec `right: 2` serait ignorée en silence.
 verifier('aucun bloc ne s’étale plus sur toute la cellule',
   !/top: 1, left: 2, right: 2/.test(srcAgendaBlocs))
+// ⚠️ LE `top` PORTE DÉSORMAIS LE DÉCALAGE DANS LA CASE (10/09) : un rendez-vous
+// à 18h15 se dessine un quart d'heure sous le haut de la case de 18h00. La
+// colonne, elle, vient toujours de `colonne(...)`, jamais d'un `right: 2`.
 verifier('les séances prennent leur colonne',
-  /top: 1, \.\.\.colonneSeance/.test(srcAgendaBlocs))
+  /top: 1 \+ decalagePx\(timeToMinutes\(seance\.heure_debut\)\), \.\.\.colonneSeance/.test(srcAgendaBlocs))
 verifier('les rendez-vous individuels aussi',
-  /top: 1, \.\.\.colonneRdv/.test(srcAgendaBlocs))
+  /top: 1 \+ decalagePx\(timeToMinutes\(r\.heure_debut\)\), \.\.\.colonneRdv/.test(srcAgendaBlocs))
+verifier('et les services d’une salle aussi',
+  /top: 1 \+ decalagePx\(service\.debutMin\), \.\.\.colonneService/.test(srcAgendaBlocs))
 
 // La largeur se partage entre TOUS les blocs de la cellule, séances et
 // rendez-vous confondus : compter les séances seules laisserait un cours et une
@@ -1554,8 +1562,14 @@ verifier('la grille et l’historique n’ont plus de hauteur maximale',
 // en `position: fixed` par-dessus la page, pas un morceau de son flux : la
 // règle du défilement unique vaut pour ce qui vit DANS la page. Mes deux
 // premiers tests l'avaient oublié et rougissaient sur du code correct.
-egal('une seule zone garde un défilement interne',
-  (srcAgendaScroll.match(/overflowY: 'auto'/g) || []).length, 1)
+// ⚠️ DEUX MODALES DEPUIS LE 10/09 : la liste d'un cours et le service d'une
+// salle. La règle ne change pas — rien de ce qui vit DANS la page ne défile
+// pour son compte — et elle se mesure donc ainsi : chaque défilement interne
+// est celui d'une modale à `maxHeight: '80svh'`, aucun autre.
+verifier('seules les modales gardent un défilement interne',
+  (srcAgendaScroll.match(/overflowY: 'auto'/g) || []).length >= 1
+  && (srcAgendaScroll.match(/overflowY: 'auto'/g) || []).length
+     === (srcAgendaScroll.match(/maxHeight: '80svh', overflowY: 'auto'/g) || []).length)
 verifier('et c’est la modale, pas la grille',
   /maxHeight: '80svh', overflowY: 'auto'/.test(srcAgendaScroll))
 verifier('plus de défilement tactile hérité d’avant iOS 13',

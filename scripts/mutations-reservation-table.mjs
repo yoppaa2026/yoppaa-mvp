@@ -420,6 +420,62 @@ const MUTATIONS = [
     de: '                          {Number(p.couverts_min) > 1',
     vers: '                          {false' },
 
+  // ═══ 10/09 : L AGENDA D UNE SALLE ════════════════════════════════════════
+  { nom: '🔴 un rendez-vous a 18h15 ne trouve plus sa case',
+    fichier: 'lib/cours-collectifs.js',
+    de: '  const rang = Math.floor((Number(debutMin) - Number(heureMin)) / pas)',
+    vers: '  const rang = (Number(debutMin) - Number(heureMin)) / pas' },
+
+  { nom: '🔴 l agenda repose ses blocs sur l egalite stricte',
+    fichier: 'app/dashboard/AgendaRdv.js',
+    de: '                const commenceIci = (debutMin) => caseDeDepart(debutMin, heureMin, PAS_MINUTES).caseMin === slotMin',
+    vers: '                const commenceIci = (debutMin) => debutMin === slotMin' },
+
+  { nom: '🔴 chaque table redevient son propre service',
+    fichier: 'lib/cours-collectifs.js',
+    de: '    if (!courant || t.debut >= courant.finMin) {',
+    vers: '    if (true) {' },
+
+  { nom: '🔴 le service ne s allonge plus jusqu au dernier depart',
+    fichier: 'lib/cours-collectifs.js',
+    de: '    courant.finMin = Math.max(courant.finMin, t.fin)',
+    vers: '    void 0' },
+
+  { nom: '🔴 tout rendez-vous passe pour une table',
+    fichier: 'lib/cours-collectifs.js',
+    de: '  return reservation?.prestation?.par_couverts === true',
+    vers: '  return !!reservation?.prestation' },
+
+  { nom: '🔴 les tables retournent dans les blocs de cours',
+    fichier: 'app/dashboard/AgendaRdv.js',
+    de: '                const rdvsCommencantIci = debutsIci.filter(r => !estReservationDeTable(r))',
+    vers: '                const rdvsCommencantIci = debutsIci' },
+
+  { nom: '🔴 le service cloture aussi les tables pas encore parties',
+    fichier: 'app/dashboard/AgendaRdv.js',
+    de: '        const aClore = tables.filter(estAClore)',
+    vers: '        const aClore = tables' },
+
+  { nom: '🔴 la jointure des reservations perd par_couverts',
+    fichier: 'app/dashboard/page.js',
+    de: 'prestation:rdv_prestations(nom, duree_minutes, prix, par_couverts)',
+    vers: 'prestation:rdv_prestations(nom, duree_minutes, prix)' },
+
+  { nom: '🔴 la cloture d un service reparle de personnes',
+    fichier: 'app/dashboard/page.js',
+    de: '              table: seanceAHonorer.length > 0 && seanceAHonorer.every(estReservationDeTable),',
+    vers: '              table: false,' },
+
+  { nom: '🔴 la question dit de nouveau ces personnes a une salle',
+    fichier: 'lib/confirmation-rdv.js',
+    de: "    ? (n === 1 ? 'Marquer cette table comme venue ?' : `Marquer ces ${n} tables comme venues ?`)",
+    vers: "    ? (n === 1 ? 'Marquer cette personne comme venue ?' : `Marquer ces ${n} personnes comme venues ?`)" },
+
+  { nom: '🔴 la question repromet un email qui ne part plus',
+    fichier: 'lib/confirmation-rdv.js',
+    de: "        ? 'Le montant entre dans ton chiffre d’affaires, et le passage est compté sur la carte de fidélité quand il y en a une. Ce geste ne se défait pas.'",
+    vers: "        ? 'Chacune reçoit son email de fin de séance. Ce geste ne se défait pas.'" },
+
   { nom: '⚠️ la garde structurelle relit le code AVEC sa prose',
     fichier: 'scripts/verif-reservation-table.mjs',
     de: "      const src = sansProse(readFileSync(f, 'utf8'))",

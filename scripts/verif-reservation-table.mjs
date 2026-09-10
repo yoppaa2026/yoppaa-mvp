@@ -1642,6 +1642,76 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /\{form\.par_couverts && \(\s*<p[^>]*>\s*Yoppaa installe toujours un groupe à la plus petite table libre qui lui convient\.\{' '\}\s*\{Number\(form\.couverts_min\) > 1\s*\?\s*`Réglée à partir de \$\{Number\(form\.couverts_min\)\}, cette table ne sera jamais donnée à moins de/.test(CFG_MIN))
   verifier('⚠️ et sans minimum, il dit qu’un couple peut y être installé',
     /: 'Quand les plus petites sont prises, elle peut accueillir un groupe plus petit, un couple par exemple\./.test(CFG_MIN))
+  // ═══ L'AGENDA D'UNE SALLE (Alex, 10/09) ═══════════════════════════════════
+  //
+  // « L'agenda n'est pas correct / complet, et quand je clique il ne me donne
+  // pas le résumé complet. » Un bloc par FORMAT et par heure de départ, comme
+  // un cours : les blocs de 18h00 et de 18h30 se recouvraient, chacun n'ouvrait
+  // que son format. Et un rendez-vous à 18h15 ne se dessinait nulle part.
+  const { servicesDeSalle, estReservationDeTable, caseDeDepart } = await import('../lib/cours-collectifs.js')
+  const jointT2 = { nom: 'Table pour 2 personnes', par_couverts: true }
+  const jointT4 = { nom: 'Table de 4 personnes', par_couverts: true }
+  const jointT6 = { nom: 'Table de 6 personnes', par_couverts: true }
+  const soiree = [
+    { id: 'a', date_rdv: '2026-09-10', heure_debut: '18:00:00', heure_fin: '19:30:00', couverts: 2, place_no: 1, statut: 'confirme', prestation: jointT2 },
+    { id: 'b', date_rdv: '2026-09-10', heure_debut: '18:00:00', heure_fin: '19:30:00', couverts: 2, place_no: 2, statut: 'confirme', prestation: jointT2 },
+    { id: 'c', date_rdv: '2026-09-10', heure_debut: '18:00:00', heure_fin: '19:30:00', couverts: 2, place_no: 3, statut: 'confirme', prestation: jointT4 },
+    { id: 'd', date_rdv: '2026-09-10', heure_debut: '18:30:00', heure_fin: '21:00:00', couverts: 6, place_no: 1, statut: 'confirme', prestation: jointT6 },
+    { id: 'e', date_rdv: '2026-09-10', heure_debut: '21:00:00', heure_fin: '22:30:00', couverts: 2, place_no: 1, statut: 'confirme', prestation: jointT2 },
+    { id: 'coupe', date_rdv: '2026-09-10', heure_debut: '18:00:00', heure_fin: '18:45:00', statut: 'confirme', prestation: { nom: 'Coupe', par_couverts: false } },
+  ]
+  const services = servicesDeSalle(soiree)
+  verifier('🔴 les tables qui se chevauchent forment UN service, tous formats confondus',
+    services.length === 2 && services[0].tables.map(t => t.id).join(',') === 'a,b,c,d',
+    JSON.stringify(services.map(s => s.tables.map(t => t.id))))
+  egal('⚠️ de la première arrivée au dernier départ', [services[0].heure_debut, services[0].heure_fin], ['18:00', '21:00'])
+  egal('🔴 et le bloc dit qui arrive à quelle heure',
+    services[0].arrivees, [{ heure: '18:00', tables: 3, couverts: 6 }, { heure: '18:30', tables: 1, couverts: 6 }])
+  verifier('⚠️ une table qui arrive quand la dernière part ouvre un autre service',
+    services[1].tables.map(t => t.id).join(',') === 'e' && services[1].heure_debut === '21:00')
+  verifier('⚠️ ce qui n’est pas une table reste hors des services', !services.some(s => s.tables.some(t => t.id === 'coupe')))
+  // 🔴 LE TÉMOIN DE LA JOINTURE : sans `par_couverts` dans la prestation jointe,
+  // aucune réservation n'est une table, et l'agenda retombe sur celui d'un cours.
+  verifier('🔴 sans `par_couverts` dans la jointure, une table n’est pas reconnue',
+    !estReservationDeTable({ prestation: { nom: 'Table de 4 personnes' } }) && estReservationDeTable({ prestation: jointT4 }))
+  const minuit = servicesDeSalle([{ id: 'n', date_rdv: '2026-09-12', heure_debut: '23:00', heure_fin: '00:30', couverts: 4, prestation: jointT4 }])
+  egal('⚠️ une table qui finit après minuit dure une heure et demie', minuit[0].finMin - minuit[0].debutMin, 90)
+
+  // 🔴 LE RENDEZ-VOUS DE 18h15 SE DESSINE ENFIN, dans la case de 18h00.
+  egal('🔴 un rendez-vous à 18h15 se pose dans la case de 18h00, décalé de 15 minutes',
+    caseDeDepart(18 * 60 + 15, 12 * 60, 30), { caseMin: 18 * 60, decalage: 15 })
+  egal('⚠️ et un rendez-vous pile à 18h00, sans décalage', caseDeDepart(18 * 60, 12 * 60, 30), { caseMin: 18 * 60, decalage: 0 })
+  egal('⚠️ 18h45 tombe dans la case de 18h30', caseDeDepart(18 * 60 + 45, 12 * 60, 30).caseMin, 18 * 60 + 30)
+
+  // L'agenda lui-même : il ne s'exécute pas hors navigateur, on vérifie qu'il
+  // pose les blocs par la règle et qu'il range les tables dans leur service.
+  const AGENDA_S = sansProse(readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
+  verifier('🔴 l’agenda pose chaque bloc dans la case qui CONTIENT son heure',
+    /const commenceIci = \(debutMin\) => caseDeDepart\(debutMin, heureMin, PAS_MINUTES\)\.caseMin === slotMin/.test(AGENDA_S)
+    && !/timeToMinutes\(r\.heure_debut\) === slotMin/.test(AGENDA_S))
+  verifier('🔴 les tables sortent des blocs de cours et entrent dans leur service',
+    /const rdvsCommencantIci = debutsIci\.filter\(r => !estReservationDeTable\(r\)\)/.test(AGENDA_S)
+    && /const blocsIci = \[\.\.\.servicesIci, \.\.\.blocsAgenda\(rdvsCommencantIci\)\]/.test(AGENDA_S))
+  verifier('🔴 le service s’ouvre sur la liste de TOUTES ses tables',
+    /setServiceOuvert\(\{ \.\.\.service, jourDate: j\.date \}\)/.test(AGENDA_S)
+    && /const tables = serviceOuvert\.tables \|\| \[\]/.test(AGENDA_S) && /\{tables\.map\(i => \{/.test(AGENDA_S))
+  verifier('⚠️ et seules les tables déjà parties se clôturent d’un geste',
+    /const aClore = tables\.filter\(estAClore\)/.test(AGENDA_S) && /onHonorerSeance\(aClore\)/.test(AGENDA_S))
+  verifier('⚠️ une table s’ajoute depuis le service, avec l’heure d’arrivée au choix',
+    /onNouveauRdv\(jour, h\)/.test(AGENDA_S))
+
+  // Et le tableau de bord donne à l'agenda ce qu'il lui faut.
+  const BORD_S = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 la prestation jointe aux réservations porte `par_couverts`',
+    /const SELECT_RDVS = `\*, prestation:rdv_prestations\(nom, duree_minutes, prix, par_couverts\)/.test(BORD_S))
+  verifier('🔴 la clôture d’un service parle en tables',
+    (BORD_S.match(/table: seanceAHonorer\.length > 0 && seanceAHonorer\.every\(estReservationDeTable\)/g) || []).length === 2)
+  const { questionSeanceHonoree: qCloture } = await import('../lib/confirmation-rdv.js')
+  verifier('🔴 et la question dit « ces 4 tables », pas « ces 4 personnes »',
+    qCloture(4, { table: true }).titre === 'Marquer ces 4 tables comme venues ?')
+  verifier('🔴 sans promettre un email qui ne part plus',
+    !/email/i.test(qCloture(1, { table: true }).message) && !/email/i.test(qCloture(4, { table: true }).message))
+
   verifier('🔴 la carte de la table montre le minimum : « de 3 à 4 personnes »',
     /\{Number\(p\.couverts_min\) > 1\s*\?\s*<>de <strong[^>]*>\{p\.couverts_min\}<\/strong> à <\/>\s*:\s*<>jusqu&rsquo;à <\/>\}/.test(CFG_MIN))
 }

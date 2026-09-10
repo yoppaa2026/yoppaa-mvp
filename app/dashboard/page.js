@@ -48,6 +48,7 @@ import { chiffreAffaires } from '@/lib/statistiques'
 import { peutMarquerNonRetire, ancienneteCommande } from '@/lib/rappels-retrait'
 import { libellePeriodeStats } from '@/lib/agenda-bloc'
 import { compterAClore } from '@/lib/rdv-statut'
+import { estReservationDeTable } from '@/lib/cours-collectifs'
 import { accesDashboard } from '@/lib/statut-commercant'
 import EcranValidation from './EcranValidation'
 
@@ -163,7 +164,12 @@ const SELECT_COMMANDES = `*, creneau:creneaux(*), creneau_livraison:livraison_cr
 // commerçant un remboursement plus gros que le prélèvement, et personne ne
 // verrait l'erreur : `Number(undefined || 0)` vaut zéro et ne lève rien. C'est
 // le défaut le plus fréquent de ce projet, à sa septième occurrence.
-const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, bon_cadeau_montant, fidelite_remise, commande_articles(quantite, article_nom, options, article:articles(nom)))`
+//
+// 🔴 ET `par_couverts` DANS LA PRESTATION JOINTE (10/09). C'est lui qui dit à
+// l'agenda qu'une réservation est une TABLE, donc qu'elle se range dans le
+// service de la soirée et pas dans un bloc de cours. Sans lui, l'agenda d'un
+// restaurant retombait sur celui d'un studio de yoga, sans aucune erreur.
+const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix, par_couverts), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, bon_cadeau_montant, fidelite_remise, commande_articles(quantite, article_nom, options, article:articles(nom)))`
 
 // ─── Notifications système ────────────────────────────────────────────────────
 let _notifPermission = 'default'
@@ -2117,13 +2123,16 @@ export default function Dashboard() {
   }
 
   // ⚠️ UNE SEULE QUESTION POUR TOUT UN COURS, MAIS UNE ÉCRITURE PAR PERSONNE.
-  // La base garde la vérité individuelle : chacun est venu ou non, reçoit son
-  // email, et son montant entre au chiffre d'affaires pour ce qu'il vaut. C'est
-  // seulement le GESTE qui est mutualisé.
-  // Les écritures partent EN SÉRIE et non en parallèle : chacune déclenche un
-  // email et, pour un rendez-vous qui porte des produits, le passage de sa
+  // La base garde la vérité individuelle : chacun est venu ou non, son passage
+  // est compté sur sa carte de fidélité, et son montant entre au chiffre
+  // d'affaires pour ce qu'il vaut. C'est seulement le GESTE qui est mutualisé.
+  // Les écritures partent EN SÉRIE et non en parallèle : chacune crédite la
+  // fidélité et, pour un rendez-vous qui porte des produits, fait passer sa
   // commande en récupérée. Douze d'un coup, c'est la file d'attente qui décide
   // de l'ordre, et un échec au milieu qu'on ne saurait plus attribuer.
+  // ⚠️ CORRIGÉ LE 10/09 : ce commentaire disait « chacun reçoit son email ».
+  // Aucun email ne part plus à la clôture depuis le 27/08, et la question posée
+  // au commerçant le promettait encore.
   async function repondreSeance(choix) {
     if (!seanceAHonorer) return
     // ⚠️ QUATRE RÉPONSES POSSIBLES, ET UNE SEULE NE FAIT RIEN. `honore` clôture
@@ -2150,7 +2159,10 @@ export default function Dashboard() {
       else echecs++
     }
     setActionEnCours(false)
-    setConfirmationSeanceTexte(confirmationSeanceHonoree({ faits, echecs }))
+    setConfirmationSeanceTexte(confirmationSeanceHonoree({
+      faits, echecs,
+      table: seanceAHonorer.length > 0 && seanceAHonorer.every(estReservationDeTable),
+    }))
   }
 
   function fermerSeance() {
@@ -3641,6 +3653,8 @@ export default function Dashboard() {
               // pèsent zéro : si elles sont seules, la question du moyen de
               // paiement ne se pose même pas.
               montant: seanceAHonorer.reduce((somme, r) => somme + (resteAEncaisser(r) || 0), 0),
+              // Un service de restaurant clôture des TABLES, pas des personnes.
+              table: seanceAHonorer.length > 0 && seanceAHonorer.every(estReservationDeTable),
             }) || {})
           : {})}
         enCours={actionEnCours}

@@ -776,6 +776,52 @@ const MUTATIONS = [
     fichier: 'app/commander/[slug]/page.js',
     de: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire(commercant)',
     vers: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && false' },
+
+  // ═══ « LA CARTE » OU « PRODUITS » (decision d Alex, 10/09 au soir) ═══════
+  { nom: '🔴 un metier tape a la main n a plus de carte',
+    fichier: 'lib/types-commerce.js',
+    de: '    return mots.some(m => MOTS_QUI_SERVENT_A_MANGER.has(m))',
+    vers: '    return false' },
+
+  { nom: '⚠️ une brasserie artisanale recoit une carte',
+    fichier: 'lib/types-commerce.js',
+    de: "    if (mots.includes('brasserie') && mots.includes('artisanale')) return false",
+    vers: '' },
+
+  { nom: '🔴 tout le monde lit « La carte »',
+    fichier: 'lib/types-commerce.js',
+    de: "  return sertAManger(commercant?.type) ? 'La carte' : 'Produits'",
+    vers: "  return 'La carte'" },
+
+  { nom: '⚠️ le barbier devient un bar',
+    fichier: 'lib/types-commerce.js',
+    de: '    const mots = sansAccents(t).split(/[^a-z]+/).filter(Boolean)',
+    vers: '    const mots = [...MOTS_QUI_SERVENT_A_MANGER].filter(m => sansAccents(t).includes(m))' },
+
+  { nom: '⚠️ un metier de la liste s ecarte d une lettre',
+    fichier: 'lib/types-commerce.js',
+    de: "  'Sandwicherie', 'Coffee shop', 'Food truck',",
+    vers: "  'Sandwicheries', 'Coffee shop', 'Food truck'," },
+
+  { nom: '🔴 la fiche repasse l etape a « Menu »',
+    fichier: 'app/commander/[slug]/page.js',
+    de: "{ n: 1, label: estDetail ? 'Catalogue' : nomDeLaCarte(commercant) }",
+    vers: "{ n: 1, label: estDetail ? 'Catalogue' : 'Menu' }" },
+
+  { nom: '🔴 l onglet des reglages repasse a « Menu »',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "estVitrine ? 'Catalogue' : nomDeLaCarte(commercant), icon: 'menu'",
+    vers: "estVitrine ? 'Catalogue' : 'Menu', icon: 'menu'" },
+
+  { nom: '⚠️ l en-tete des reglages repasse a « Menu »',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "estVitrine ? 'Catalogue' : nomDeLaCarte(commercant)}</p>",
+    vers: "estVitrine ? 'Catalogue' : 'Menu'}</p>" },
+
+  { nom: '⚠️ le catalogue vide reparle de menu',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: 'Aucun article pour l&rsquo;instant',
+    vers: 'Aucun article dans le menu' },
 ]
 
 const lancer = () => {

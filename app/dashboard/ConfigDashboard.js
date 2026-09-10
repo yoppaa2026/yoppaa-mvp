@@ -15,6 +15,7 @@ import {
   FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
 } from '@/lib/plans'
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
+import { nomDeLaCarte } from '@/lib/types-commerce'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
@@ -962,7 +963,9 @@ function TabMenu({ commercantId, commercant, toast }) {
       {/* ─── En-tête (panel violet foncé YOPPAA) ─────────────────────────── */}
       <div className="tabmenu-header" style={{ background: T.bgPanel, borderRadius: 14, padding: '18px 20px', marginBottom: 14, color: '#fff' }}>
         <div>
-          <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>{commercant?.categorie === 'detail' ? 'Boutique' : estVitrine ? 'Catalogue' : 'Menu'}</p>
+          {/* ✅ « LA CARTE » OU « PRODUITS » CHEZ UN ALIMENTAIRE (Alex, 10/09 au
+              soir), le même mot que l'onglet et que la fiche du client. */}
+          <p style={{ fontSize: 11, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: 2 }}>{commercant?.categorie === 'detail' ? 'Boutique' : estVitrine ? 'Catalogue' : nomDeLaCarte(commercant)}</p>
           <h2 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', margin: 0 }}>
             {articles.length} {estVitrine ? 'produit' : 'article'}{articles.length > 1 ? 's' : ''}
             <span style={{ color: T.light, fontWeight: 600, fontSize: 14, marginLeft: 8 }}>· {categories.length} catégorie{categories.length > 1 ? 's' : ''}</span>
@@ -1052,7 +1055,7 @@ function TabMenu({ commercantId, commercant, toast }) {
 
           {articles.length === 0 && !showForm ? (
             <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
-              <p style={{ color: T.muted, marginBottom: 16 }}>Aucun article dans le menu</p>
+              <p style={{ color: T.muted, marginBottom: 16 }}>Aucun article pour l&rsquo;instant</p>
               <button style={{ ...s.btn, ...s.btnPrimary }} onClick={openNew}>
                 <Icon name="plus" size={14}/> Ajouter le premier article
               </button>
@@ -3129,7 +3132,7 @@ function TabActus({ commercantId, commercant, toast }) {
       </div>
 
       <div style={{ background: '#F0F9FF', borderLeft: `4px solid #0284C7`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#0C4A6E', lineHeight: 1.5 }}>
-        Une <strong>actualité</strong> informe (nouveau produit, événement…). Une <strong>alerte</strong> signale un changement important (fermeture exceptionnelle, rupture). Les alertes s&rsquo;affichent en rouge sur la fiche client, prioritaires sur le menu.
+        Une <strong>actualité</strong> informe (nouveau produit, événement…). Une <strong>alerte</strong> signale un changement important (fermeture exceptionnelle, rupture). Les alertes s&rsquo;affichent en rouge sur la fiche client, avant tout le reste.
       </div>
 
       {showForm && (
@@ -12768,7 +12771,10 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // ── RÉGLER ───────────────────────────────────────────────────────────
     // Le socle. Nom, horaires, adresse, emplacements : le reste en descend.
     { id: 'profil', label: 'Profil général', icon: 'shop', mention: 'À faire en premier' },
-    { id: 'menu',     label: commercant?.categorie === 'detail' ? 'Boutique' : estVitrine ? 'Catalogue' : 'Menu', icon: 'menu' },
+    // ✅ « LA CARTE » POUR UN MÉTIER QUI SERT À MANGER, « PRODUITS » POUR LES
+    // AUTRES ALIMENTAIRES (Alex, 10/09 au soir). « Menu », en Belgique, c'est la
+    // formule du jour, et chez un boucher il ne voulait rien dire.
+    { id: 'menu',     label: commercant?.categorie === 'detail' ? 'Boutique' : estVitrine ? 'Catalogue' : nomDeLaCarte(commercant), icon: 'menu' },
     // Créneaux de retrait C&C : alimentaire uniquement (le retrait boutique détail
     // sera cadré au Module 2 étape 5).
     // ⚠️ CET ONGLET ÉCHAPPAIT AU FORFAIT : il s'affichait pour tout commerce

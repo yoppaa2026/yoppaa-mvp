@@ -9,6 +9,7 @@ import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompen
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine, isAlimentaire, planEffectif, commandeAllumee } from '@/lib/plans'
 import { reservationActive, motReservation } from '@/lib/reservation-metier'
+import { nomDeLaCarte } from '@/lib/types-commerce'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
 import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionArticle, libelleMoment, avertissementDelai } from '@/lib/delai-commande'
@@ -3561,7 +3562,7 @@ export default function CommanderSlug() {
               )}
               {dealDetailOuvert.article_id && (
                 <p style={{ fontSize: '0.78rem', color: T.main, fontWeight: 700, margin: '0 0 6px' }}>
-                  <Check size={13} strokeWidth={2.4} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Appliqué automatiquement à l&rsquo;article concerné dans le menu
+                  <Check size={13} strokeWidth={2.4} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Appliqué automatiquement à l&rsquo;article concerné
                 </p>
               )}
 
@@ -3771,11 +3772,15 @@ export default function CommanderSlug() {
 
           {etape < 4 && peutCommander && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-              {/* Libellés par monde : « Menu » n'a de sens qu'en alimentaire.
-                  Détail et services parlent de Catalogue, et leur 2e étape est
-                  le retrait/l'expédition, pas un créneau (décision Alex 01/08). */}
+              {/* Libellés par monde : l'alimentaire parle de « La carte » ou de
+                  « Produits » selon son métier (10/09), détail et services de
+                  Catalogue, et leur 2e étape est le retrait/l'expédition, pas un
+                  créneau (décision Alex 01/08). */}
               {[
-                { n: 1, label: estDetail ? 'Catalogue' : 'Menu' },
+                // ✅ « LA CARTE » OU « PRODUITS » (Alex, 10/09 au soir) : le menu,
+                // en Belgique, c'est la formule du jour. Un restaurant a une
+                // carte, un boulanger a des produits.
+                { n: 1, label: estDetail ? 'Catalogue' : nomDeLaCarte(commercant) },
                 { n: 2, label: estDetail ? (modeBoutiqueEff === 'expedition' ? 'Expédition' : 'Retrait') : 'Créneau' },
               ].map((s, i) => {
                 const target = s.n + 1          // étape 1 -> etape 2, étape 2 -> etape 3

@@ -2109,6 +2109,64 @@ egal('la réservation d’un restaurant s’atteint quand même',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ✅ « LA CARTE » OU « PRODUITS » (décision d'Alex, 10/09 au soir)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// L'étape de commande s'appelait « Menu » chez tout alimentaire. En Belgique,
+// le menu, c'est la formule du jour ; un restaurant a une carte, un boulanger a
+// des produits. Exécuté sur des métiers de la liste ET tapés à la main.
+{
+  const { sertAManger, nomDeLaCarte, TYPES_QUI_SERVENT_A_MANGER, TYPES_ALIMENTAIRE } = await import('../lib/types-commerce.js')
+  const horsListe = TYPES_QUI_SERVENT_A_MANGER.filter(t => !TYPES_ALIMENTAIRE.includes(t))
+  verifier('🔴 chaque métier qui sert à manger existe tel quel dans la liste des alimentaires',
+    horsListe.length === 0, `hors liste : ${horsListe.join(', ')}`)
+  const cas = [
+    ['Restaurant', true], ['Restaurant & Bar - café', true], ['Snack & Food truck', true],
+    ['Boulangerie & Sandwicherie', true], ['Pizzeria', true], ['Traiteur', true], ['Coffee shop', true],
+    ['Boulangerie', false], ['Boulangerie & Pâtisserie', false], ['Boucherie', false], ['Fromagerie', false],
+    // Tapés à la main, dans « Autre… »
+    ['Brasserie', true], ['Taverne', true], ['Foodtruck', true], ['Cafe', true], ['Friture', true],
+    // Les pièges
+    ['Brasserie artisanale', false], ['Barbier', false], ['Torréfacteur', false], ['', false], [null, false],
+  ]
+  const faux = cas.filter(([t, attendu]) => sertAManger(t) !== attendu)
+  verifier('🔴 un métier qui sert à manger a une carte, les autres ont des produits',
+    faux.length === 0, faux.map(([t, a]) => `${t} → ${!a}`).join(' · '))
+  egal('🔴 le restaurant lit « La carte »', nomDeLaCarte({ categorie: 'alimentaire', type: 'Restaurant & Bar - café' }), 'La carte')
+  egal('🔴 le boulanger lit « Produits »', nomDeLaCarte({ categorie: 'alimentaire', type: 'Boulangerie' }), 'Produits')
+  egal('⚠️ et sans type, « Produits », jamais « Menu »', nomDeLaCarte(null), 'Produits')
+
+  const FICHE_C = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  const CFG_C = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 l’étape de commande de la fiche porte le nom du métier',
+    /\{ n: 1, label: estDetail \? 'Catalogue' : nomDeLaCarte\(commercant\) \}/.test(FICHE_C))
+  verifier('🔴 l’onglet et l’en-tête des réglages aussi, le même mot',
+    (CFG_C.match(/estVitrine \? 'Catalogue' : nomDeLaCarte\(commercant\)/g) || []).length === 2)
+  // ⚠️ ET PLUS AUCUN « MENU » POUR DÉSIGNER LA LISTE DES PRODUITS, dans tout
+  // `app/` : ni libellé, ni phrase. Un frère oublié dirait « menu » à côté de
+  // « la carte » sur le même écran.
+  {
+    const { readdirSync, statSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const racine = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+    const restes = []
+    const parcourir = (d) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e)
+        if (statSync(p).isDirectory()) { parcourir(p); continue }
+        if (!/\.jsx?$/.test(e)) continue
+        const src = sansProse(readFileSync(p, 'utf8'))
+        for (const m of src.matchAll(/: 'Menu'|'Menu' :|(dans|sur) le menu\b|Aucun article dans le menu/g)) {
+          restes.push(`${p.split(/[\\/]/).slice(-2).join('/')} → ${m[0]}`)
+        }
+      }
+    }
+    parcourir(join(racine, 'app'))
+    verifier('⚠️ plus aucun « Menu » ne désigne la liste des produits', restes.length === 0, restes.join(' | '))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

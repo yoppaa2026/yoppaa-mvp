@@ -1329,7 +1329,12 @@ export default function Dashboard() {
         // désormais la salle en tables, et `enModeInventaire` exige la quantité
         // de chaque format. Sans elle, la salle ne se comptait jamais ici, sans
         // un mot, et la saisie restait aveugle.
-        .select('id, nom, duree_minutes, prix, acompte_pourcent, ordre, tva_taux, capacite, par_couverts, couverts_min, couverts_max, duree_paliers, quantite')
+        //
+        // 🔴 ET `jointure_de`, `jointure_tables` (lot 3, 11/09) : sans elles, une
+        // réservation posée sur deux tables de quatre jointes ne compterait que
+        // pour une ligne, ses deux tables paraîtraient libres au téléphone, et
+        // la jointure passerait pour une table de plus.
+        .select('id, nom, duree_minutes, prix, acompte_pourcent, ordre, tva_taux, capacite, par_couverts, couverts_min, couverts_max, duree_paliers, quantite, jointure_de, jointure_tables')
         .eq('commercant_id', id)
         .eq('actif', true)
         .is('deleted_at', null)

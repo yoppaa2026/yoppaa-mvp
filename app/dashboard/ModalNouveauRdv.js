@@ -16,7 +16,7 @@ import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, born
 import { motsReservation } from '@/lib/reservation-metier'
 import { creneauAcceptable, creneauxDuJour, heuresLibresDuJour, premiereMinuteOuverte, dejaPasse } from '@/lib/deplacement-rdv'
 import {
-  enModeInventaire, formatPourAffichage, plusGrandeTable,
+  enModeInventaire, formatPourAffichage, plusGrandGroupe, estJointure,
   dureeDuGroupe, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour,
 } from '@/lib/inventaire-salle'
 // ⚠️ LES RÈGLES DE L'ABONNEMENT NE SONT PAS RÉÉCRITES ICI, elles sont APPELÉES.
@@ -95,6 +95,10 @@ export default function ModalNouveauRdv({
   // la saisie reste celle d'avant, format choisi à la main.
   const salleEnTables = enModeInventaire(prestations)
   const autresPrestations = (prestations || []).filter(p => !estParCouverts(p))
+  // 🔴 UNE JOINTURE NE SE CHOISIT PAS DANS LE MENU (lot 3) : elle n'est pas une
+  // table de plus, c'est la salle qui l'assemble pour un grand groupe. En
+  // couverts, où le menu liste tout, elle n'aurait même aucun sens.
+  const auMenu = (prestations || []).filter(p => !estJointure(p))
   // Un restaurant qui ne propose que des tables n'a rien à choisir dans un menu.
   const tableSeule = salleEnTables && autresPrestations.length === 0
   const [prestationId, setPrestationId] = useState(tableSeule ? UNE_TABLE : '')
@@ -741,7 +745,7 @@ export default function ModalNouveauRdv({
                 onChange={(e) => { setPrestationId(e.target.value); setFormatManuelId(null); setChangerTable(false) }} style={inputSt}>
                 <option value="">Choisir {mots.prestationUne}</option>
                 {salleEnTables && <option value={UNE_TABLE}>Une table</option>}
-                {(salleEnTables ? autresPrestations : (prestations || [])).map(p => {
+                {(salleEnTables ? autresPrestations : auMenu).map(p => {
                   const prix = p.prix != null ? `${Number(p.prix).toFixed(0)}€` : ''
                   return (
                     <option key={p.id} value={p.id}>
@@ -771,7 +775,7 @@ export default function ModalNouveauRdv({
             <div style={{ marginBottom: 12 }}>
               <label htmlFor="mn-rdv-couverts" style={labelSt}>Combien de personnes ? *</label>
               <input id="mn-rdv-couverts" type="number" inputMode="numeric"
-                min={1} max={plusGrandeTable(prestations) || undefined}
+                min={1} max={plusGrandGroupe(prestations) || undefined}
                 value={couverts} onChange={(e) => { setCouverts(e.target.value); setFormatManuelId(null) }}
                 placeholder="Par exemple 2" style={inputSt}/>
               {!nombreSaisi && (
@@ -886,8 +890,11 @@ export default function ModalNouveauRdv({
               {etat && etat.parFormat.length > 0 && heureFin && (
                 <div style={{ marginTop: 10 }}>
                   <span style={labelSt}>Libres de {heure} à {heureFin}</span>
+                  {/* ⚠️ UNE JOINTURE NE SE MONTRE QU'AU GROUPE QU'ELLE ACCUEILLE :
+                      « 2 tables de 4 jointes » sous un couple ne dit rien de sa
+                      salle. Ses tables, elles, sont déjà retirées de leur ligne. */}
                   <div style={{ display: 'grid', gap: 4 }}>
-                    {etat.parFormat.map(l => {
+                    {etat.parFormat.filter(l => !l.jointure || l.convient).map(l => {
                       const retenue = presta && String(presta.id) === String(l.format.id)
                       return (
                         <div key={l.format.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: '0.8rem', color: l.libres > 0 ? T.deep : T.muted, fontWeight: retenue ? 800 : 600 }}>
@@ -910,7 +917,7 @@ export default function ModalNouveauRdv({
                     <label htmlFor="mn-rdv-table" style={labelSt}>Table</label>
                     <select id="mn-rdv-table" value={formatManuelId || ''} onChange={(e) => setFormatManuelId(e.target.value || null)} style={inputSt}>
                       <option value="">La table proposée par Yoppaa</option>
-                      {etat.parFormat.map(l => (
+                      {etat.parFormat.filter(l => !l.jointure || l.convient).map(l => (
                         <option key={l.format.id} value={l.format.id} disabled={!l.convient}>
                           {l.format.nom} · {!l.convient
                             ? `pas pour ${nCouverts} personne${nCouverts > 1 ? 's' : ''}`

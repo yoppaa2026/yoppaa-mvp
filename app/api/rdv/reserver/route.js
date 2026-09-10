@@ -404,12 +404,26 @@ export async function POST(request) {
       // ⚠️ LE NOMBRE DE COUVERTS EST DIT AU CLIENT, PAS DEVINÉ. « Complet »
       // tout court le laisse choisir une autre heure au hasard ; « il reste
       // deux places » lui dit s'il peut venir à trois.
+      // ⚠️ `creneau_refuse` (11/09) : la fiche renvoie alors choisir une autre
+      // heure, sur une grille remise à jour. Sans lui, le client restait devant
+      // son formulaire rempli avec « c'est complet », sans rien pour repartir.
       if (res.code === 'salle_complete') {
         return NextResponse.json({
           ok: false,
           error: Number(res.restants) > 0
             ? `Il ne reste que ${res.restants} place${res.restants > 1 ? 's' : ''} à cette heure-là.`
             : 'C’est complet à cette heure-là. Choisis un autre horaire.',
+          creneau_refuse: true,
+        }, { status: 409 })
+      }
+      // 🔴 CE REFUS TOMBAIT DANS LE 500 « RÉESSAIE » (trouvé le 11/09, avec les
+      // tables jointes). Un groupe qu'aucune table n'accueille, même jointe, ne
+      // trouvera jamais d'heure : relancer ne servirait à rien, et « réessaie »
+      // le lui faisait croire. Il appelle, c'est ce que la fiche lui dit aussi.
+      if (res.code === 'groupe_trop_grand') {
+        return NextResponse.json({
+          ok: false,
+          error: `Aucune table n’accueille ${Number(res.couverts) || 'autant de'} personnes en ligne. Appelle directement ${commercant.nom} : les grandes tablées se préparent de vive voix.`,
         }, { status: 409 })
       }
       if (res.code === 'couverts_invalides') {

@@ -2728,8 +2728,13 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // confondre « pas encore réservable en ligne » avec « ça n'existe pas » :
   // une fiche est d'abord une vitrine, et le client qui connaît le studio
   // conclurait qu'ils ont arrêté le yoga.
+  // ⚠️ PRÉCISÉE LE 11/09 (lot 3) : la liste est celle des prestations AU CHOIX,
+  // c'est-à-dire toutes sauf les jointures de tables, qui se donnent par le
+  // nombre de personnes et jamais par une carte. La garde exige que ce soit la
+  // SEULE chose retirée : aucun cours, avec ou sans horaire, n'en sort.
   verifier('🔴 un cours sans horaire reste VISIBLE sur la fiche',
-    /\{\(prestations \|\| \[\]\)\.map\(p => \{ const sansDates = coursSansHoraire\(p, liaisonsCreneaux\); return \(/.test(FICHE))
+    /\{prestationsAuChoix\.map\(p => \{ const sansDates = coursSansHoraire\(p, liaisonsCreneaux\); return \(/.test(FICHE)
+    && /const prestationsAuChoix = \(prestations \|\| \[\]\)\.filter\(p => !estJointure\(p\)\)/.test(FICHE))
   verifier('🔴 mais il n’est pas cliquable',
     /disabled=\{sansDates\} onClick=\{\(\) => \{ if \(!sansDates\) choisirPrestation\(p\) \}\}/.test(FICHE)
     && /\{sansDates \? 'Dates à venir' : 'Réserver'\}/.test(FICHE))
@@ -2747,7 +2752,8 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('⚠️ le bouton « réserver » ne compte que ce qui est réservable',
     /const peutReserverIci = !commercant\?\._rdvDesactive && prestationsProposables\.length > 0/.test(FICHE))
   verifier('⚠️ et le vide reste le vide : zéro prestation, pas zéro réservable',
-    /\{\(prestations \|\| \[\]\)\.length === 0 \? \(/.test(FICHE))
+    /\{prestationsAuChoix\.length === 0 \? \(/.test(FICHE)
+    && !/\{prestationsProposables\.length === 0 \? \(/.test(FICHE))
   // 🔴 ET LA ROUTE DE CRÉATION DIT AU SERVEUR S'IL S'AGIT D'UN COURS.
   //
   // ⚠️ CETTE GARDE MANQUAIT, ET LA MUTATION L'A DIT : mes tests appelaient

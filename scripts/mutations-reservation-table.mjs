@@ -409,15 +409,15 @@ const MUTATIONS = [
   // `verif:ancres` qui l a vu.
   { nom: '🔴 le tableau de bord recharge ses prestations sans par_couverts',
     fichier: 'app/dashboard/page.js',
-    de: ", capacite, par_couverts, couverts_min, couverts_max, duree_paliers, quantite')",
-    vers: ", capacite, quantite')" },
+    de: ", capacite, par_couverts, couverts_min, couverts_max, duree_paliers, quantite, jointure_de, jointure_tables')",
+    vers: ", capacite, quantite, jointure_de, jointure_tables')" },
 
   // ✅ DECISION D ALEX DU 10/09 : le minimum d une table reste STRICT, et
   // l ecran le dit la ou on le regle et sur la carte.
   { nom: '🔴 le moteur ignore le minimum d une table',
     fichier: 'lib/inventaire-salle.js',
-    de: '      return taille !== null && n >= minimumDe(f) && n <= taille',
-    vers: '      return taille !== null && n <= taille' },
+    de: '    return taille !== null && n >= minimumDe(f) && n <= taille',
+    vers: '    return taille !== null && n <= taille' },
 
   { nom: '🔴 le formulaire ne dit plus ce que fait le minimum',
     fichier: 'app/dashboard/ConfigDashboard.js',

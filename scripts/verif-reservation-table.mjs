@@ -939,8 +939,14 @@ egal('la réservation d’un restaurant s’atteint quand même',
     && /Nous serons/.test(FICHE2B))
   verifier('🔴 et le choix du nombre désigne la table tout seul',
     /setCouverts\(n\); const f = formatPourAffichage\(prestations, n\); if \(f\) choisirPrestation\(f\)/.test(FICHE2B))
-  verifier('⚠️ au-delà de la plus grande table, on invite à téléphoner',
-    /Plus de \{plusGrandeTable\(prestations\)\} personnes \?/.test(FICHE2B))
+  // ⚠️ PRÉCISÉE LE 11/09 (lot 3) : la borne est désormais le plus grand GROUPE,
+  // jointures comprises, et une taille qu'aucune table n'accueille se dit
+  // aussi. La garde exige les deux phrases et la borne qui les nourrit ; le
+  // calcul est EXÉCUTÉ dans `verif-tables-jointes.mjs`.
+  verifier('⚠️ au-delà du plus grand groupe, on invite à téléphoner',
+    /const max = plusGrandGroupe\(prestations\)/.test(FICHE2B)
+    && /`Plus de \$\{max\} personnes \? Appelle`/.test(FICHE2B)
+    && /`Pour \$\{listeTrous\} \$\{mot\}, ou plus de \$\{max\}, appelle`/.test(FICHE2B))
   verifier('⚠️ et la question n’est plus reposée à l’étape suivante',
     /estParCouverts\(prestationChoisie\) && !salleParInventaire && \(\(\) => \{/.test(FICHE2B))
 
@@ -1644,8 +1650,13 @@ egal('la réservation d’un restaurant s’atteint quand même',
 
   // Et l'écran le dit, à deux endroits : là où on le règle, et sur la carte.
   const CFG_MIN = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  // ⚠️ PRÉCISÉE LE 11/09 (lot 3) : la phrase vaut pour une TABLE SEULE. Une
+  // jointure a la sienne (« deux tables jointes ne font pas toujours la
+  // somme »), et le conseil « mets 1 » n'y aurait aucun sens. La garde exige
+  // toujours la phrase de la table, mot pour mot, sous la condition qui la
+  // réserve aux tables seules.
   verifier('🔴 le formulaire dit ce que fait « À partir de », selon la valeur saisie',
-    /\{form\.par_couverts && \(\s*<p[^>]*>\s*Yoppaa installe toujours un groupe à la plus petite table libre qui lui convient\.\{' '\}\s*\{Number\(form\.couverts_min\) > 1\s*\?\s*`Réglée à partir de \$\{Number\(form\.couverts_min\)\}, cette table ne sera jamais donnée à moins de/.test(CFG_MIN))
+    /\{form\.par_couverts && !formEstJointure && \(\s*<p[^>]*>\s*Yoppaa installe toujours un groupe à la plus petite table libre qui lui convient\.\{' '\}\s*\{Number\(form\.couverts_min\) > 1\s*\?\s*`Réglée à partir de \$\{Number\(form\.couverts_min\)\}, cette table ne sera jamais donnée à moins de/.test(CFG_MIN))
   verifier('⚠️ et sans minimum, il dit qu’un couple peut y être installé',
     /: 'Quand les plus petites sont prises, elle peut accueillir un groupe plus petit, un couple par exemple\./.test(CFG_MIN))
   // ═══ L'AGENDA D'UNE SALLE (Alex, 10/09) ═══════════════════════════════════

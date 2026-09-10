@@ -38,7 +38,11 @@ import { classerProduitsParCategorie, produitParType } from '@/lib/produits-bout
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
 import { capacitePrestation, palierNettoyes, estCoursCollectif } from '@/lib/cours-collectifs'
-import { enModeInventaire, formatsSansQuantite, tablesTotales, couvertsTotaux } from '@/lib/inventaire-salle'
+import {
+  enModeInventaire, formatsSansQuantite, tablesTotales, couvertsTotaux,
+  estJointure, tablesDeLaJointure, baseDeLaJointure, basesJoignables, jointuresDe,
+  jointureParDefaut, verifierJointure, alerteJointure,
+} from '@/lib/inventaire-salle'
 import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ⚠️ Trois fonctions de moins depuis le 18/08, et le lieu avec elles : cet écran
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
@@ -8060,7 +8064,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
-  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [], quantite: '' }
+  // ⚠️ `jointure_de` et `jointure_tables` restent VIDES pour tout ce qui n'est
+  // pas une jointure : c'est ce qui dit au formulaire de quoi il parle.
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [], quantite: '', jointure_de: '', jointure_tables: '' }
   const [form, setForm] = useState(initialForm)
   // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : « la seule qu'on va
   // faire payer, c'est un montant forfaitaire par personne à partir d'un
@@ -8068,6 +8074,16 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   // disparaissent du formulaire d'une table, et s'enregistrent vides. Le
   // forfait par personne aura ses propres réglages (lot 4).
   const formEstTable = estTable && form.par_couverts === true
+  // 🔴 LES TABLES JOINTES (lot 3, 11/09) : le même formulaire qu'une table, sa
+  // composition en plus. Deux formulaires pour la même chose finiraient par
+  // enregistrer deux choses différentes.
+  const formEstJointure = formEstTable && !!form.jointure_de
+  const baseDuFormulaire = formEstJointure
+    ? prestations.find(p => String(p.id) === String(form.jointure_de)) || null
+    : null
+  // Le nom proposé tant que le restaurateur ne l'a pas changé : il suit la
+  // composition choisie, et s'arrête dès qu'on écrit le sien.
+  const [nomJointureAuto, setNomJointureAuto] = useState(null)
   // Propositions IA pour la description de la prestation (surface 'prestation')
   const [propsIa, setPropsIa] = useState([])
   const firstLoadRef = useRef(true)
@@ -8130,10 +8146,51 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   }
 
   function openNew() {
-    setForm(initialForm); setEditId(null); setSelectedPraticiens(new Set()); setPropsIa([]); setShowForm(true)
+    setForm(initialForm); setEditId(null); setSelectedPraticiens(new Set()); setPropsIa([]); setNomJointureAuto(null); setShowForm(true)
+  }
+  // Une nouvelle jointure, préremplie depuis la table qu'on joint.
+  // ⚠️ SES SALLES SONT CELLES DE SA TABLE, au départ : une jointure de tables
+  // de la terrasse se sert en terrasse. Le restaurateur peut les changer.
+  function openNouvelleJointure(base, tables = 2) {
+    const d = jointureParDefaut(base, prestations, tables)
+    setForm({
+      ...initialForm,
+      par_couverts: true,
+      jointure_de: base.id,
+      jointure_tables: String(Math.max(2, Number(tables) || 2)),
+      nom: d.nom,
+      couverts_min: String(d.couverts_min),
+      couverts_max: String(d.couverts_max),
+      quantite: String(d.quantite),
+      duree_minutes: String(d.duree_minutes),
+    })
+    setNomJointureAuto(d.nom)
+    setEditId(null)
+    setSelectedPraticiens(new Set(junctionMap[base.id] || []))
+    setPropsIa([])
+    setShowForm(true)
+  }
+  // Changer la composition d'une jointure en cours de création : le reste des
+  // propositions suit, sauf ce que le restaurateur a déjà écrit lui-même.
+  function recomposerJointure(baseId, tables) {
+    const base = prestations.find(p => String(p.id) === String(baseId))
+    if (!base) return
+    const d = jointureParDefaut(base, prestations, tables)
+    setForm(f => ({
+      ...f,
+      jointure_de: base.id,
+      jointure_tables: String(tables),
+      nom: !f.nom.trim() || f.nom === nomJointureAuto ? d.nom : f.nom,
+      couverts_min: String(d.couverts_min),
+      couverts_max: String(d.couverts_max),
+      quantite: String(d.quantite),
+    }))
+    setNomJointureAuto(d.nom)
+    if (String(baseId) !== String(form.jointure_de)) setSelectedPraticiens(new Set(junctionMap[base.id] || []))
   }
   function openEdit(p) {
     setPropsIa([])
+    setNomJointureAuto(null)
     setForm({
       nom: p.nom || '',
       description: p.description || '',
@@ -8158,6 +8215,10 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
         ? p.duree_paliers.map(x => ({ des: String(x?.des ?? ''), minutes: String(x?.minutes ?? '') }))
         : [],
       quantite: p.quantite != null ? String(p.quantite) : '',
+      // ⚠️ LUE POUR SAVOIR DE QUOI ON PARLE, JAMAIS RÉÉCRITE : la composition
+      // d'une jointure est figée, la base refuse qu'elle change.
+      jointure_de: p.jointure_de || '',
+      jointure_tables: p.jointure_tables != null ? String(p.jointure_tables) : '',
     })
     setEditId(p.id)
     // Précharge les praticiens autorisés depuis la junction existante
@@ -8178,10 +8239,34 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
     if (!form.nom.trim()) return toast('Nom obligatoire', 'error')
     const duree = parseInt(form.duree_minutes, 10)
     if (!duree || duree < 5) return toast('Durée minimum 5 min', 'error')
+    // ─── LES TABLES JOINTES (lot 3) ──────────────────────────────────────────
+    // ⚠️ LA RÈGLE DU MODULE, AVANT LA BASE : elle refuse aussi, mais en message
+    // brut. Une jointure dont la table a disparu ne se corrige pas, elle se
+    // supprime.
+    if (formEstJointure) {
+      if (editId && !baseDuFormulaire) {
+        return toast('Sa table n’existe plus : supprime cette jointure plutôt que de la modifier.', 'error')
+      }
+      const refus = verifierJointure({
+        base: baseDuFormulaire, tables: form.jointure_tables,
+        couverts_min: form.couverts_min, couverts_max: form.couverts_max, quantite: form.quantite,
+      })
+      if (refus) return toast(refus, 'error')
+    }
+    // 🔴 UNE TABLE QUI ENTRE DANS UNE JOINTURE RESTE UNE TABLE : sans elle, la
+    // jointure ne serait plus proposée, et rien ne le dirait au restaurateur.
+    if (editId && estTable && !formEstJointure && !form.par_couverts) {
+      const jointes = jointuresDe({ id: editId }, prestations)
+      if (jointes.length > 0) {
+        return toast(`Cette table entre dans ${jointes.map(j => `« ${j.nom} »`).join(', ')} : supprime d’abord ${jointes.length > 1 ? 'ces jointures' : 'cette jointure'}.`, 'error')
+      }
+    }
     const payload = {
       commercant_id: commercantId,
       nom: form.nom.trim(),
-      description: form.description.trim() || null,
+      // Une jointure ne s'affiche jamais en carte chez le client : elle n'a
+      // rien à décrire.
+      description: formEstJointure ? null : form.description.trim() || null,
       duree_minutes: duree,
       // Vide = tarif de vive voix, la fiche affiche « Prix sur demande ».
       // ✅ UNE TABLE N'A PAS DE PRIX : vide d'office, quoi que contienne le
@@ -8239,11 +8324,16 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
     // INSERT/UPDATE prestation
     let prestationId = editId
     if (editId) {
+      // ⚠️ LA COMPOSITION D'UNE JOINTURE N'EST JAMAIS RENVOYÉE : elle est
+      // figée, et `payload` ne la porte pas.
       const { error } = await supabase.from('rdv_prestations').update(payload).eq('id', editId)
-      if (error) { setSaving(false); return toast(`Erreur : ${error.message}`, 'error') }
+      if (error) { setSaving(false); return toast(messageRefusTable(error), 'error') }
     } else {
-      const { data: created, error } = await supabase.from('rdv_prestations').insert(payload).select('id').single()
-      if (error || !created) { setSaving(false); return toast(`Erreur : ${error?.message || 'échec création'}`, 'error') }
+      const aCreer = formEstJointure
+        ? { ...payload, jointure_de: form.jointure_de, jointure_tables: Number(form.jointure_tables) }
+        : payload
+      const { data: created, error } = await supabase.from('rdv_prestations').insert(aCreer).select('id').single()
+      if (error || !created) { setSaving(false); return toast(error ? messageRefusTable(error) : 'Erreur : échec création', 'error') }
       prestationId = created.id
     }
     // Sync junction prestation ↔ praticiens : delete existing puis insert selected
@@ -8254,25 +8344,104 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       const { error: errJ } = await supabase.from('rdv_prestation_praticiens').insert(rows)
       if (errJ) console.warn('[TabRdvPrestations] junction insert error', errJ)
     }
+    // 🔴 UNE NOUVELLE JOINTURE SE SERT LÀ OÙ SA TABLE SE SERT (lot 3). Un service
+    // qui ne prend que certaines tables ne la connaît pas encore : sans cette
+    // copie, le groupe de huit ne trouverait aucune heure sur le service où ses
+    // tables de quatre sont pourtant proposées. On lui donne les services de sa
+    // table, une fois ; ensuite, elle se règle comme les autres.
+    // ⚠️ ON LIT LE RÉSULTAT : une copie ratée se dit, elle ne s'espère pas.
+    let copieRatee = false
+    if (!editId && formEstJointure) {
+      const { data: liens, error: errL } = await supabase
+        .from('rdv_creneau_prestations')
+        .select('creneau_id')
+        .eq('prestation_id', form.jointure_de)
+      if (errL) copieRatee = true
+      else if ((liens || []).length > 0) {
+        const { error: errC } = await supabase
+          .from('rdv_creneau_prestations')
+          .insert(liens.map(l => ({ creneau_id: l.creneau_id, prestation_id: prestationId })))
+        if (errC) copieRatee = true
+      }
+      if (copieRatee) console.error('[TabRdvPrestations] copie des services de la jointure KO', errL)
+    }
     setSaving(false)
-    toast(editId ? 'Prestation mise à jour' : 'Prestation créée')
-    setShowForm(false); setEditId(null); setForm(initialForm); setSelectedPraticiens(new Set())
+    if (copieRatee) {
+      toast('Jointure autorisée. Je n’ai pas pu la rattacher à tes services qui ne prennent que certaines tables : ouvre-les dans « Services » et coche-la.', 'error')
+    } else {
+      toast(formEstJointure
+        ? (editId ? 'Jointure mise à jour' : 'Jointure autorisée')
+        : (editId ? 'Prestation mise à jour' : 'Prestation créée'))
+    }
+    setShowForm(false); setEditId(null); setForm(initialForm); setSelectedPraticiens(new Set()); setNomJointureAuto(null)
     fetchAll()
   }
 
+  // Les refus de la base sur une jointure, dits avec les mots du restaurateur.
+  function messageRefusTable(error) {
+    const m = String(error?.message || '')
+    if (m.includes('JOINTURE_RESERVEE')) return 'Des réservations à venir occupent cette jointure : elle reste active jusqu’à la dernière. Déplace-les ou annule-les d’abord.'
+    if (m.includes('JOINTURE_FIGEE')) return 'La composition d’une jointure ne change pas : supprime-la et crées-en une autre.'
+    if (m.includes('JOINTURE_INVALIDE')) return 'Une jointure se fait avec une table de ta salle, qui n’est pas elle-même une jointure.'
+    return `Erreur : ${m || 'inconnue'}`
+  }
+
+  // Combien de réservations à venir (aujourd'hui compris) occupent cette ligne.
+  // `null` si la lecture échoue : c'est alors la base qui tranche.
+  async function reservationsAVenir(p) {
+    const { count, error } = await supabase
+      .from('rdv_reservations')
+      .select('id', { count: 'exact', head: true })
+      .eq('commercant_id', commercantId)
+      .eq('prestation_id', p.id)
+      .in('statut', ['confirme', 'honore'])
+      .is('deleted_at', null)
+      .gte('date_rdv', jourBruxelles())
+    return error ? null : (count || 0)
+  }
+
+  // 🔴 UNE JOINTURE RÉSERVÉE NE S'ÉTEINT PAS (lot 3) : la fiche ne lit que les
+  // tables actives, ses réservations cesseraient d'y compter, et ses tables
+  // paraîtraient libres. On le dit avant d'essayer ; la base le refuse de
+  // toute façon.
+  async function refusJointureReservee(p) {
+    if (!estJointure(p)) return false
+    const n = await reservationsAVenir(p)
+    if (!n) return false
+    toast(`${n} réservation${n > 1 ? 's' : ''} à venir occupe${n > 1 ? 'nt' : ''} « ${p.nom} » : elle reste active jusqu’à la dernière. Déplace-les ou annule-les d’abord.`, 'error')
+    return true
+  }
+
   async function toggleActif(p) {
+    if (p.actif && await refusJointureReservee(p)) return
     const { error } = await supabase.from('rdv_prestations').update({ actif: !p.actif }).eq('id', p.id)
-    if (error) return toast(`Erreur : ${error.message}`, 'error')
+    if (error) return toast(messageRefusTable(error), 'error')
     fetchAll()
   }
 
   async function softDelete(p) {
-    if (!await confirme(confirmationSimple({ titre: 'Supprimer cette prestation ?', message: 'Les rendez-vous déjà pris ne bougent pas, elle disparaît seulement de ce que tes clients peuvent réserver.', details: p.nom, action: 'Oui, supprimer la prestation' }))) return
+    // ⚠️ UNE TABLE JOINTE NE SE SUPPRIME PAS SOUS SA JOINTURE : celle-ci ne
+    // serait plus proposée, et resterait dans la liste sans rien assembler.
+    const jointes = estJointure(p) ? [] : jointuresDe(p, prestations)
+    if (jointes.length > 0) {
+      return toast(`« ${p.nom} » entre dans ${jointes.map(j => `« ${j.nom} »`).join(', ')} : supprime d’abord ${jointes.length > 1 ? 'ces jointures' : 'cette jointure'}.`, 'error')
+    }
+    if (await refusJointureReservee(p)) return
+    const confirmation = estJointure(p)
+      ? confirmationSimple({ titre: 'Supprimer cette jointure ?', message: 'Les réservations déjà passées ne bougent pas. Un groupe ne pourra plus réserver ces tables ensemble en ligne.', details: p.nom, action: 'Oui, supprimer la jointure' })
+      : confirmationSimple({ titre: 'Supprimer cette prestation ?', message: 'Les rendez-vous déjà pris ne bougent pas, elle disparaît seulement de ce que tes clients peuvent réserver.', details: p.nom, action: 'Oui, supprimer la prestation' })
+    if (!await confirme(confirmation)) return
     const { error } = await supabase.from('rdv_prestations').update({ deleted_at: new Date().toISOString() }).eq('id', p.id)
-    if (error) return toast(`Erreur : ${error.message}`, 'error')
-    toast('Prestation supprimée')
+    if (error) return toast(messageRefusTable(error), 'error')
+    toast(estJointure(p) ? 'Jointure supprimée' : 'Prestation supprimée')
     fetchAll()
   }
+
+  // ⚠️ LES JOINTURES À PART (lot 3) : elles ne sont pas des tables de plus, et
+  // les compter avec les formats annoncerait au restaurateur une table qu'il
+  // n'a pas.
+  const prestationsSeules = prestations.filter(p => !estJointure(p))
+  const jointures = prestations.filter(p => estJointure(p))
 
   if (loading) return <p style={{ color: T.muted, padding: 16 }}>Chargement…</p>
 
@@ -8282,7 +8451,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
           <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>{mots.prestations}</p>
-          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{prestations.length} {mots.prestation}{prestations.length > 1 ? 's' : ''}</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{prestationsSeules.length} {mots.prestation}{prestationsSeules.length > 1 ? 's' : ''}</p>
         </div>
         <button onClick={openNew}
           style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
@@ -8354,14 +8523,14 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
         )
       })()}
 
-      {prestations.length === 0 ? (
+      {prestationsSeules.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
           <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>{mots.prestationAucune}</p>
           <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{mots.prestationAide}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {prestations.map(p => {
+          {prestationsSeules.map(p => {
             const prixLabel = p.prix != null ? euros(p.prix) : 'Prix sur demande'
             return (
               <div key={p.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, opacity: p.actif ? 1 : 0.55, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
@@ -8459,14 +8628,149 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
         </div>
       )}
 
+      {/* ─── LES TABLES JOINTES (lot 3, 11/09) ──────────────────────────────
+          🔴 La demande exacte du Bistrologue : « j'autorise le couplage de x
+          fois 2 tables de 4 ». Le restaurateur DÉCLARE ce qu'il accepte de
+          joindre ; Yoppaa ne l'invente jamais, et ne joint qu'en dernier
+          recours, quand aucune table seule n'est libre pour le groupe.
+          ⚠️ SEULEMENT CHEZ UN RESTAURANT, et seulement quand sa salle se compte
+          en tables : sans inventaire, rien ne dit quelles tables sont libres.
+          Des jointures déjà créées restent visibles, pour qu'on puisse les
+          supprimer, avec la raison pour laquelle elles ne servent plus. */}
+      {estTable && (jointures.length > 0 || enModeInventaire(prestations)) && (() => {
+        const enInventaire = enModeInventaire(prestations)
+        // La table la plus nombreuse d'abord : c'est elle qu'on joint.
+        const joignables = [...basesJoignables(prestations)]
+          .sort((a, b) => (Number(b.quantite) || 0) - (Number(a.quantite) || 0) || (Number(b.couverts_max) || 0) - (Number(a.couverts_max) || 0))
+        return (
+          <div style={{ marginTop: 20 }}>
+            <p style={{ fontSize: 14, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Tables jointes</p>
+            <p style={{ fontSize: 11.5, color: T.muted, marginTop: 2, marginBottom: 10, lineHeight: 1.5 }}>
+              Pour les groupes plus grands que tes tables : « deux tables de 4 ensemble, de 6 à 8 personnes ».
+              Yoppaa ne joint des tables qu&rsquo;en dernier recours, quand aucune table seule n&rsquo;est libre pour le groupe.
+            </p>
+            {!enInventaire && (
+              <div style={{ background: '#FFFBEB', border: '1px solid #F59E0B', borderRadius: 12, padding: '10px 14px', marginBottom: 10 }}>
+                <p style={{ fontSize: 11.5, color: '#92400E', lineHeight: 1.5, margin: 0 }}>
+                  Tant que ta salle se compte en couverts, Yoppaa ne joint aucune table : dis d&rsquo;abord combien tu as de tables de chaque format.
+                </p>
+              </div>
+            )}
+            {jointures.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                {jointures.map(j => {
+                  const base = baseDeLaJointure(j, prestations)
+                  const alerte = alerteJointure(j, prestations)
+                  return (
+                    <div key={j.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, opacity: j.actif ? 1 : 0.55, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: 800, fontSize: 14, color: T.ink, marginBottom: 2 }}>{j.nom}</p>
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: T.muted }}>
+                          <span>
+                            <strong style={{ color: T.ink }}>{tablesDeLaJointure(j) || '?'}</strong> × « {base?.nom || 'table supprimée'} »
+                          </span>
+                          <span>
+                            de <strong style={{ color: T.ink }}>{j.couverts_min || '?'}</strong> à <strong style={{ color: T.ink }}>{j.couverts_max || '?'}</strong> personnes
+                          </span>
+                          <span><strong style={{ color: T.ink }}>{j.quantite || '?'}</strong> à la fois au plus</span>
+                          <span><strong style={{ color: T.deep }}>{j.duree_minutes} min</strong></span>
+                          {!j.actif && <span style={{ color: '#DC2626', fontWeight: 700 }}>Inactive</span>}
+                        </div>
+                        {alerte && (
+                          <p style={{ fontSize: 11.5, fontWeight: 700, color: '#B45309', marginTop: 5, lineHeight: 1.45 }}>{alerte}</p>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button onClick={() => toggleActif(j)} title={j.actif ? 'Désactiver' : 'Activer'}
+                          style={{ padding: '6px 10px', border: `1px solid ${T.hairline}`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.muted, fontFamily: '"DM Sans", sans-serif' }}>
+                          {j.actif ? 'Désactiver' : 'Activer'}
+                        </button>
+                        <button onClick={() => openEdit(j)} title="Modifier"
+                          style={{ padding: '6px 10px', border: `1px solid ${T.main}44`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.main, fontFamily: '"DM Sans", sans-serif' }}>
+                          Modifier
+                        </button>
+                        <button onClick={() => softDelete(j)} title="Supprimer"
+                          style={{ padding: '6px 10px', border: '1px solid #DC262644', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: '#DC2626', fontFamily: '"DM Sans", sans-serif' }}>
+                          Suppr.
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {enInventaire && (joignables.length > 0 ? (
+              <button onClick={() => openNouvelleJointure(joignables[0])}
+                style={{ padding: '9px 14px', borderRadius: 100, border: `1.5px solid ${T.main}`, background: '#fff', color: T.main, cursor: 'pointer', fontWeight: 800, fontSize: 12.5, fontFamily: '"DM Sans", sans-serif' }}>
+                + Joindre des tables
+              </button>
+            ) : (
+              <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+                Pour joindre des tables, il t&rsquo;en faut au moins deux d&rsquo;un même format.
+              </p>
+            ))}
+          </div>
+        )
+      })()}
+
       {/* Modal formulaire création/édition */}
       {showForm && (
         <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90svh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
-            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? mots.prestationModifier : mots.prestationNouvelle}</p>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Nom *</label>
-            <Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder={estTable ? 'Table de 4' : 'Coupe femme'} style={{ marginBottom: 10 }}/>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>
+              {formEstJointure
+                ? (editId ? 'Modifier la jointure' : 'Joindre des tables')
+                : (editId ? mots.prestationModifier : mots.prestationNouvelle)}
+            </p>
+            {/* 🔴 CE QU'ON JOINT, ET COMBIEN (lot 3). Choisi à la création,
+                FIGÉ ensuite : changer la composition réinterpréterait les
+                réservations déjà prises, et la base le refuse. */}
+            {formEstJointure && (
+              <div style={{ marginBottom: 12, padding: 12, background: T.bg, borderRadius: 10 }}>
+                {editId ? (
+                  <>
+                    <p style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, margin: '0 0 3px' }}>
+                      {form.jointure_tables} × « {baseDuFormulaire?.nom || 'table supprimée'} »
+                    </p>
+                    <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+                      Ce qu&rsquo;on joint ne change plus une fois la jointure créée : les réservations déjà prises gardent leurs tables.
+                      Pour en changer, supprime-la et crées-en une autre.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, marginBottom: 8 }}>Quelles tables joins-tu ?</p>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <div style={{ flex: '0 0 84px' }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 3 }}>Combien</label>
+                        <select value={form.jointure_tables} onChange={e => recomposerJointure(form.jointure_de, Number(e.target.value))}
+                          style={{ ...s.input, cursor: 'pointer' }}>
+                          {Array.from({ length: Math.max(1, Math.min(10, Number(baseDuFormulaire?.quantite) || 2) - 1) }, (_, i) => i + 2).map(k => (
+                            <option key={k} value={k}>{k}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 3 }}>Tables</label>
+                        <select value={form.jointure_de} onChange={e => recomposerJointure(e.target.value, 2)}
+                          style={{ ...s.input, cursor: 'pointer' }}>
+                          {basesJoignables(prestations).map(b => (
+                            <option key={b.id} value={b.id}>{b.nom} ({b.quantite} dans ta salle)</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>{formEstJointure ? 'Nom dans ton agenda *' : 'Nom *'}</label>
+            <Input value={form.nom} onChange={e => setForm({ ...form, nom: e.target.value })} placeholder={formEstJointure ? '2 tables de 4 jointes' : estTable ? 'Table de 4' : 'Coupe femme'} style={{ marginBottom: 10 }}/>
+            {/* Une jointure ne s'affiche jamais en carte chez le client : elle
+                n'a rien à décrire. */}
+            {!formEstJointure && (
+            <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted }}>Description (optionnel)</label>
               <BoutonIaInline commercantId={commercantId} surface="prestation" brief={form.nom}
@@ -8484,6 +8788,8 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
               </div>
             ) : (
               <p style={{ fontSize: 10, color: T.muted, margin: '0 0 10px' }}>{mots.astuceIA}</p>
+            )}
+            </>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
@@ -8511,7 +8817,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                 personnes, pas en lignes d'agenda. La case ne s'affiche que pour
                 un alimentaire qui a droit à la réservation de table : partout
                 ailleurs, elle n'aurait aucun sens et ferait douter. */}
-            {estTable && (
+            {/* ⚠️ UNE JOINTURE EST UNE TABLE PAR CONSTRUCTION : la case ne se
+                propose pas, elle ne se décoche pas. */}
+            {estTable && !formEstJointure && (
               <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${form.par_couverts ? T.main : T.pale}`, background: form.par_couverts ? T.pale : '#fff' }}>
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
                   <input type="checkbox" checked={!!form.par_couverts}
@@ -8578,7 +8886,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                 sache avant de découvrir un couple refusé dans une salle à moitié
                 vide. La phrase change avec la valeur saisie : elle dit la
                 conséquence du réglage en cours, pas une généralité. */}
-            {form.par_couverts && (
+            {form.par_couverts && !formEstJointure && (
               <p style={{ fontSize: 11, color: T.muted, margin: '-6px 0 12px', lineHeight: 1.45 }}>
                 Yoppaa installe toujours un groupe à la plus petite table libre qui lui convient.{' '}
                 {Number(form.couverts_min) > 1
@@ -8586,19 +8894,35 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                   : 'Quand les plus petites sont prises, elle peut accueillir un groupe plus petit, un couple par exemple. Monte « À partir de » pour la garder aux groupes.'}
               </p>
             )}
+            {/* 🔴 LA CAPACITÉ D'UNE JOINTURE SE DÉCLARE, ELLE NE S'ADDITIONNE PAS
+                (lot 3) : selon la forme des tables, on perd les bouts, ou l'on
+                gagne une place au centre. La phrase dit aussi QUAND elle sert. */}
+            {formEstJointure && (
+              <p style={{ fontSize: 11, color: T.muted, margin: '-6px 0 12px', lineHeight: 1.45 }}>
+                Deux tables jointes ne font pas toujours la somme : on perd souvent les bouts. Mets ce que ta salle permet vraiment.
+                Yoppaa ne joint ces tables que pour un groupe de {Number(form.couverts_min) || '?'} à {Number(form.couverts_max) || '?'} personnes,
+                et seulement quand aucune table seule n&rsquo;est libre pour lui.
+              </p>
+            )}
             {/* 🔴 COMBIEN DE TABLES DE CE FORMAT (lot 2a). C'est ce qui fait
                 passer la salle d'une jauge en couverts à un vrai inventaire :
                 un groupe de six ne passe plus parce qu'il reste six places
-                éparpillées, mais parce qu'une table de six est libre. */}
+                éparpillées, mais parce qu'une table de six est libre.
+                ⚠️ POUR UNE JOINTURE, LE MÊME CHAMP DIT COMBIEN EN MÊME TEMPS :
+                le « x » du Bistrologue, ce que sa salle permet de rapprocher. */}
             {form.par_couverts && (
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Combien en as-tu ?</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
+                  {formEstJointure ? 'Combien à la fois, au plus ?' : 'Combien en as-tu ?'}
+                </label>
                 <Input type="number" min="1" max="500" value={form.quantite}
-                  onChange={e => setForm({ ...form, quantite: e.target.value })} placeholder="6"/>
+                  onChange={e => setForm({ ...form, quantite: e.target.value })} placeholder={formEstJointure ? '1' : '6'}/>
                 <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>
-                  Le nombre de tables de ce format dans ta salle. Tant qu&rsquo;une seule
+                  {formEstJointure
+                    ? `Si seules deux paires de tables peuvent se rapprocher dans ta salle, mets 2. Chaque jointure immobilise ${Number(form.jointure_tables) || 2} « ${baseDuFormulaire?.nom || 'tables'} » : Yoppaa n’en joint jamais plus que tes tables libres ne le permettent.`
+                    : <>Le nombre de tables de ce format dans ta salle. Tant qu&rsquo;une seule
                   de tes tables n&rsquo;a pas ce nombre, Yoppaa continue de compter ta
-                  salle en couverts.
+                  salle en couverts.</>}
                 </p>
               </div>
             )}
@@ -8737,7 +9061,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
               </button>
               <button onClick={save} disabled={saving}
                 style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
-                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer la prestation')}
+                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : formEstJointure ? 'Autoriser cette jointure' : 'Créer la prestation')}
               </button>
             </div>
           </div>

@@ -40,7 +40,7 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 // le lieu gravé et la première place libre se décident CÔTÉ SERVEUR, dans
 // `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
 import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts, dureeSelonCouverts, sansPrixSiTable } from '@/lib/cours-collectifs'
-import { enModeInventaire, plusGrandeTable, formatPourAffichage } from '@/lib/inventaire-salle'
+import { enModeInventaire, plusGrandGroupe, taillesReservables, formatPourAffichage, estJointure } from '@/lib/inventaire-salle'
 import { attenteOuverte } from '@/lib/attente-rdv'
 import BlocAttente from './BlocAttente'
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
@@ -700,7 +700,12 @@ export default function CommanderRdvSlug() {
   //
   // Il est donc affiché, NON CLIQUABLE, avec ce qu'il faut savoir.
   // ⚠️ Tant que les liaisons ne sont pas chargées, aucun cours n'est marqué.
-  const prestationsProposables = (prestations || []).filter(p => !coursSansHoraire(p, liaisonsCreneaux))
+  // 🔴 UNE JOINTURE NE SE CHOISIT PAS DANS UNE LISTE (lot 3) : « 2 tables de 4
+  // jointes » n'est pas une table qu'on réserve, c'est ce que la salle assemble
+  // pour un grand groupe. Elle se donne par le nombre de personnes, jamais par
+  // une carte.
+  const prestationsAuChoix = (prestations || []).filter(p => !estJointure(p))
+  const prestationsProposables = prestationsAuChoix.filter(p => !coursSansHoraire(p, liaisonsCreneaux))
 
   // 🔴 LE VOCABULAIRE DU MÉTIER, ET IL ÉTAIT IMPORTÉ SANS ÊTRE JAMAIS LU. Un
   // restaurateur lisait « Choisis ta prestation », « Confirmer mon RDV » et
@@ -2895,8 +2900,11 @@ export default function CommanderRdvSlug() {
                     </span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                   </div>
+                  {/* 🔴 JUSQU'AU PLUS GRAND GROUPE, JOINTURES COMPRISES (lot 3), et
+                      seulement les tailles qu'une table accueille : un bouton qui
+                      ne mène à rien ne se montre pas, il se dit en dessous. */}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                    {Array.from({ length: plusGrandeTable(prestations) }, (_, i) => i + 1).map(n => (
+                    {taillesReservables(prestations).map(n => (
                       <button key={n}
                         onClick={() => { setCouverts(n); const f = formatPourAffichage(prestations, n); if (f) choisirPrestation(f) }}
                         style={{ minWidth: 52, padding: '14px 16px', borderRadius: 14, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.deep, fontWeight: 800, fontSize: '1.05rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
@@ -2904,11 +2912,20 @@ export default function CommanderRdvSlug() {
                       </button>
                     ))}
                   </div>
-                  {/* ⚠️ ON DIT QUOI FAIRE AU-DELÀ, on ne laisse pas le client
-                      conclure que le restaurant ne veut pas de son groupe. */}
+                  {/* ⚠️ ON DIT QUOI FAIRE AU-DELÀ, et pour une taille qu'aucune
+                      table n'accueille : on ne laisse pas le client conclure que
+                      le restaurant ne veut pas de son groupe. */}
                   <p style={{ fontSize: '0.8rem', color: T.muted, lineHeight: 1.55 }}>
-                    Plus de {plusGrandeTable(prestations)} personnes ? Appelle
-                    directement <strong style={{ color: T.ink }}>{commercant.nom}</strong>
+                    {(() => {
+                      const max = plusGrandGroupe(prestations)
+                      const tailles = taillesReservables(prestations)
+                      const trous = []
+                      for (let n = 1; n <= max; n++) if (!tailles.includes(n)) trous.push(n)
+                      const listeTrous = trous.length > 1 ? `${trous.slice(0, -1).join(', ')} ou ${trous[trous.length - 1]}` : String(trous[0] || '')
+                      const mot = trous.length === 1 && trous[0] === 1 ? 'personne' : 'personnes'
+                      return trous.length > 0 ? `Pour ${listeTrous} ${mot}, ou plus de ${max}, appelle` : `Plus de ${max} personnes ? Appelle`
+                    })()}
+                    {' '}directement <strong style={{ color: T.ink }}>{commercant.nom}</strong>
                     {commercant.telephone ? <> au <strong style={{ color: T.ink }}>{commercant.telephone}</strong></> : null} :
                     les grandes tablées se préparent.
                   </p>
@@ -2931,7 +2948,7 @@ export default function CommanderRdvSlug() {
                     )}
                   </div>
 
-                  {(prestations || []).length === 0 ? (
+                  {prestationsAuChoix.length === 0 ? (
                     <div style={{ background: '#fff', border: `1px dashed ${T.pale}`, borderRadius: 14, padding: '2rem 1rem', textAlign: 'center' }}>
                       <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune prestation disponible pour le moment</p>
                       <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.5 }}>
@@ -2940,7 +2957,7 @@ export default function CommanderRdvSlug() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {(prestations || []).map(p => { const sansDates = coursSansHoraire(p, liaisonsCreneaux); return (
+                      {prestationsAuChoix.map(p => { const sansDates = coursSansHoraire(p, liaisonsCreneaux); return (
                         <button key={p.id} className={sansDates ? undefined : 'prest-card'} disabled={sansDates} onClick={() => { if (!sansDates) choisirPrestation(p) }}
                           style={{ width: '100%', textAlign: 'left', background: '#fff', borderRadius: 14, overflow: 'hidden', border: `1.5px solid ${T.pale}`, boxShadow: '0 1px 4px rgba(107,53,196,0.04)', cursor: sansDates ? 'default' : 'pointer', opacity: sansDates ? 0.92 : 1, padding: 0, fontFamily: '"DM Sans", sans-serif' }}>
                           {/* Bande 3px canonique en haut de chaque card prestation */}

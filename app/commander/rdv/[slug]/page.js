@@ -40,7 +40,7 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 // le lieu gravé et la première place libre se décident CÔTÉ SERVEUR, dans
 // `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
 import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts, dureeSelonCouverts, sansPrixSiTable } from '@/lib/cours-collectifs'
-import { enModeInventaire, plusGrandGroupe, taillesReservables, formatPourAffichage, estJointure } from '@/lib/inventaire-salle'
+import { enModeInventaire, plusGrandGroupe, taillesReservables, formatPourAffichage, estJointure, plafondCadence, phraseCuisinePleine } from '@/lib/inventaire-salle'
 import { attenteOuverte } from '@/lib/attente-rdv'
 import BlocAttente from './BlocAttente'
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
@@ -503,12 +503,21 @@ export default function CommanderRdvSlug() {
   // filtre sert un salon (« Carole est-elle libre ? ») et masquerait ici les
   // tables posées dans une autre salle : la grille verrait la salle plus vide
   // que le serveur ne la compte, et proposerait ce qu'il refuse.
+  //
+  // 🔴 ET LA CADENCE DE LA CUISINE (lot 5, 12/09), avec les MÊMES réservations
+  // brutes : la cuisine compte tout le monde qui arrive, toutes salles
+  // confondues. Seulement pour une table, et seulement si le restaurateur l'a
+  // réglée ; sinon `null`, et la grille ne change pas d'une case.
+  const plafondCuisine = plafondCadence(commercant)
   const regleOccupation = (reservationsDuJour) => ({
     capacite: capacitePrestation(prestationChoisie),
     prestationId: prestationChoisie?.id || null,
     parCouverts: estParCouverts(prestationChoisie),
     couvertsDemandes: couverts,
     salle: salleParInventaire ? { formats: prestations, reservations: reservationsDuJour || [] } : null,
+    cadence: estParCouverts(prestationChoisie) && plafondCuisine !== null
+      ? { plafond: plafondCuisine, reservations: reservationsDuJour || [] }
+      : null,
   })
   // ⚠️ LE REFUS « PLACE PRISE » N'A PAS LE MÊME SENS POUR UNE TABLE. Depuis que
   // son rang se cherche parmi toutes les réservations de l'heure, il ne dit
@@ -1693,7 +1702,12 @@ export default function CommanderRdvSlug() {
         // problème qui n'existe pas.
         // ⚠️ ET UNE TABLE N'EST PAS UN COURS : « sa dernière place » ne dit rien
         // à un client de restaurant, « plus de table » lui dit tout.
-        setSubmitError(conflit.raison === 'complet' || conflit.raison === 'trop_grand'
+        // 🔴 ET LA CUISINE N'EST PAS LA SALLE (lot 5) : des tables peuvent être
+        // libres pendant que ce quart d'heure est plein. Dire « plus de table »
+        // serait faux ; la phrase est celle du serveur, écrite une fois.
+        setSubmitError(conflit.raison === 'cadence'
+          ? phraseCuisinePleine({ heure: heureChoisie, nom: commercant?.nom })
+          : conflit.raison === 'complet' || conflit.raison === 'trop_grand'
           ? (estParCouverts(prestationChoisie)
               ? 'La dernière table libre à cette heure-là vient d’être réservée. Choisis un autre horaire.'
               : 'Ce cours vient d’afficher complet, sa dernière place a été prise. Choisis un autre horaire.')

@@ -1884,30 +1884,35 @@ egal('la réservation d’un restaurant s’atteint quand même',
     [m1, m2, m3, m4, md, mdTrop].every(m => !/—/.test(`${m?.titre} ${m?.detail}`)))
 
   // ─── La lecture de la salle, une seule pour les deux fenêtres ────────────
+  // ⚠️ PRÉCISÉE LE 12/09 (lot 5) : la lecture rend aussi la cadence de la
+  // cuisine, lue sur la fiche du commerce. La fausse base note donc chaque
+  // table à part ; ce qui est vérifié ici des réservations n'a pas bougé.
   {
-    const vu = { table: null, select: null, eq: {}, in: {}, is: {} }
+    const vu = {}
     const faux = {
       from: (t) => {
-        vu.table = t
+        const v = vu[t] = { select: null, eq: {}, in: {}, is: {} }
         const c = {
-          select: (s) => { vu.select = s; return c },
-          eq: (k, v) => { vu.eq[k] = v; return c },
-          in: (k, v) => { vu.in[k] = v; return c },
-          is: (k, v) => { vu.is[k] = v; return c },
+          select: (s) => { v.select = s; return c },
+          eq: (k, val) => { v.eq[k] = val; return c },
+          in: (k, val) => { v.in[k] = val; return c },
+          is: (k, val) => { v.is[k] = val; return c },
+          maybeSingle: async () => ({ data: null, error: null }),
           then: (r) => r({ data: [{ id: 'x' }], error: null }),
         }
         return c
       },
     }
     const lu = await lireSalleDuJour(faux, { commercantId: 'c1', dateStr: '2026-09-10' })
+    const lr = vu.rdv_reservations || { eq: {}, in: {}, is: {} }
     verifier('🔴 la salle se lit sur les réservations du commerce, ce jour-là',
-      vu.table === 'rdv_reservations' && vu.eq.commercant_id === 'c1' && vu.eq.date_rdv === '2026-09-10', JSON.stringify(vu))
-    egal('🔴 seulement ce qui occupe une table', vu.in.statut, ['confirme', 'honore'])
-    verifier('🔴 et jamais ce qui est supprimé', 'deleted_at' in vu.is && vu.is.deleted_at === null)
+      !!vu.rdv_reservations && lr.eq.commercant_id === 'c1' && lr.eq.date_rdv === '2026-09-10', JSON.stringify(vu))
+    egal('🔴 seulement ce qui occupe une table', lr.in.statut, ['confirme', 'honore'])
+    verifier('🔴 et jamais ce qui est supprimé', 'deleted_at' in lr.is && lr.is.deleted_at === null)
     verifier('⚠️ avec les colonnes que compte la salle',
-      ['id', 'prestation_id', 'heure_debut', 'heure_fin'].every(c => new RegExp(`\\b${c}\\b`).test(vu.select || '')), vu.select)
+      ['id', 'prestation_id', 'heure_debut', 'heure_fin'].every(c => new RegExp(`\\b${c}\\b`).test(lr.select || '')), lr.select)
     egal('⚠️ et elle rend ce qu’elle a lu', lu.reservations.map(r => r.id), ['x'])
-    const enPanne = { from: () => { const c = { select: () => c, eq: () => c, in: () => c, is: () => c, then: (r) => r({ data: null, error: { message: 'réseau' } }) }; return c } }
+    const enPanne = { from: () => { const c = { select: () => c, eq: () => c, in: () => c, is: () => c, maybeSingle: async () => ({ data: null, error: null }), then: (r) => r({ data: null, error: { message: 'réseau' } }) }; return c } }
     const ko2 = await lireSalleDuJour(enPanne, { commercantId: 'c1', dateStr: '2026-09-10' })
     verifier('⚠️ une lecture en échec le dit, elle ne rend pas une salle vide sans un mot',
       ko2.error?.message === 'réseau' && ko2.reservations.length === 0)
@@ -1934,12 +1939,16 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /const dureeMin = enTable\s*\?\s*\(dureeGroupe \|\| undefined\)/.test(SAISIE)
     && /dureeDuGroupe\(\{ prestation: presta, formats: prestations,/.test(SAISIE)
     && !/dureeSelonCouverts\(/.test(SAISIE))
+  // ⚠️ PRÉCISÉE LE 12/09 (lot 5) : la relecture vaut désormais pour toute table
+  // (`lectureSalle` contient `enTable`), et un changement de la cuisine arrête
+  // l'écriture comme un changement de table.
   verifier('🔴 elle relit la salle en base au moment d’écrire, et n’écrit rien si la réponse a changé',
-    /if \(enTable\) \{\s*const frais = await lireSalle\(commercant\.id, dateStr\)[\s\S]{0,700}?choixFrais\.forcer !== choixTable\.forcer\)\s*\{\s*setSalle\(/.test(SAISIE))
+    /const lectureSalle = enTable \|\| tableHorsInventaire/.test(SAISIE)
+    && /if \(lectureSalle\) \{\s*const frais = await lireSalle\(commercant\.id, dateStr\)[\s\S]{0,1400}?choixFrais\.forcer !== choixTable\.forcer\)[\s\S]{0,600}?if \(tableChangee \|\| cadenceChangee\) \{\s*setSalle\(/.test(SAISIE))
   verifier('🔴 sa lecture de la salle est celle du module, pas une copie',
     /const lireSalle = \(commercantId, dateStr\) => lireSalleDuJour\(supabase, \{ commercantId, dateStr \}\)/.test(SAISIE))
   verifier('🔴 le bouton dit « Poser quand même » quand aucune table n’est libre',
-    /choixTable\?\.forcer \? 'Poser quand même ✓'/.test(SAISIE))
+    /\(choixTable\?\.forcer \|\| cadenceDepassee\) \? 'Poser quand même ✓'/.test(SAISIE))
   verifier('⚠️ « une table » ne part pas chercher des abonnés en base',
     /if \(!prestationId \|\| prestationId === UNE_TABLE\)/.test(SAISIE))
   verifier('⚠️ elle montre ce qui reste libre sur tout le repas',
@@ -1965,13 +1974,19 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 et la nouvelle table s’écrit, avec sa capacité',
     /prestationId: tableChange \? tableFinale\.id : null,/.test(DEPLACE)
     && /capacite: tableChange \? capacitePrestation\(tableFinale\) : capacite,/.test(DEPLACE))
+  // ⚠️ PRÉCISÉE LE 12/09 (lot 5) : relue pour toute table, la cuisine en dépend ;
+  // la table, elle, ne se redemande qu'en inventaire.
   verifier('🔴 la salle se relit au moment d’écrire',
-    /if \(salleEnTables\) \{\s*const frais = await lireSalleDuJour\(supabase, \{ commercantId: commercant\.id, dateStr: date \}\)[\s\S]{0,900}?if \(!pareil\) \{\s*setSalle\(/.test(DEPLACE))
+    /if \(estTable\) \{\s*const frais = await lireSalleDuJour\(supabase, \{ commercantId: commercant\.id, dateStr: date \}\)[\s\S]{0,1400}?const choixFrais = salleEnTables \? tablePour\(heure, frais\.reservations\) : null[\s\S]{0,1200}?if \(!pareil\) \{\s*setSalle\(/.test(DEPLACE))
   // ⚠️ PRÉCISÉE LE 10/09 TARD : la boucle a déménagé dans le module
   // (`heuresLibresDuJour`), partagée avec la saisie ; la question de la salle
   // est devenue un refus de l'`accepte` au lieu d'un `continue`.
+  // ⚠️ PRÉCISÉE LE 12/09 (lot 5) : rien ne se propose avant que la salle soit
+  // lue, pour toute table ; `salleLue` est la lecture, `salleConnue` sa part en
+  // inventaire.
   verifier('🔴 « Créneaux libres » ne propose plus une heure sans table',
-    /if \(salleEnTables && !salleConnue\) return \[\]/.test(DEPLACE)
+    /if \(estTable && !salleLue\) return \[\]/.test(DEPLACE)
+    && /const salleLue = estTable && salle\.etat === 'ok' && salle\.date === date/.test(DEPLACE)
     && /return heuresLibresDuJour\(\{[\s\S]{0,700}?if \(salleEnTables\) \{\s*const t = tablePour\(h, salle\.reservations\)\s*if \(!t\?\.format \|\| t\.forcer\) return false/.test(DEPLACE))
   verifier('🔴 le bouton dit « Déplacer quand même » quand la salle n’a plus rien',
     /salleAlerte \? 'Déplacer quand même ✓'/.test(DEPLACE))

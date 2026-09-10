@@ -32,7 +32,7 @@ import {
   heureDeFin, minutesDeLHeure, jourCle, formatJour,
   heuresLibresDuJour, premiereMinuteOuverte,
 } from '@/lib/deplacement-rdv'
-import { enModeInventaire, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour } from '@/lib/inventaire-salle'
+import { enModeInventaire, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour, etatCadence, phraseCadence } from '@/lib/inventaire-salle'
 
 const T = {
   main:  '#6B35C4',
@@ -110,24 +110,28 @@ export default function ModalDeplacerRdv({
   // permet de dire « libre », et le déplacement reste celui d'avant.
   const salleEnTables = estTable && enModeInventaire(prestations)
   const couvertsRdv = couvertsDe(rdv)
-  const [salle, setSalle] = useState({ etat: 'repos', reservations: [], date: null })
+  const [salle, setSalle] = useState({ etat: 'repos', reservations: [], plafond: null, date: null })
   const [relire, setRelire] = useState(0)
+  // 🔴 LA SALLE SE LIT POUR TOUTE TABLE (lot 5, 12/09), inventaire ou non : la
+  // cadence de la cuisine compte les personnes qui arrivent au nouveau quart
+  // d'heure, quelle que soit la façon dont la salle se compte.
   useEffect(() => {
-    if (!salleEnTables || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return
+    if (!estTable || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return
     let annule = false
-    setSalle({ etat: 'lecture', reservations: [], date })
-    lireSalleDuJour(supabase, { commercantId: commercant.id, dateStr: date }).then(({ reservations, error }) => {
+    setSalle({ etat: 'lecture', reservations: [], plafond: null, date })
+    lireSalleDuJour(supabase, { commercantId: commercant.id, dateStr: date }).then(({ reservations, plafond, error }) => {
       if (annule) return
       setSalle(error
-        ? { etat: 'erreur', reservations: [], date, message: error.message }
-        : { etat: 'ok', reservations, date })
+        ? { etat: 'erreur', reservations: [], plafond: null, date, message: error.message }
+        : { etat: 'ok', reservations, plafond, date })
     }).catch(e => {
       // ⚠️ UNE LECTURE QUI LÈVE NE LAISSE PAS « JE REGARDE TA SALLE » À VIE.
-      if (!annule) setSalle({ etat: 'erreur', reservations: [], date, message: e?.message || String(e) })
+      if (!annule) setSalle({ etat: 'erreur', reservations: [], plafond: null, date, message: e?.message || String(e) })
     })
     return () => { annule = true }
-  }, [salleEnTables, commercant.id, date, relire])
-  const salleConnue = salleEnTables && salle.etat === 'ok' && salle.date === date
+  }, [estTable, commercant.id, date, relire])
+  const salleLue = estTable && salle.etat === 'ok' && salle.date === date
+  const salleConnue = salleEnTables && salleLue
 
   // La table que la salle donne à cette réservation, à cette heure-là.
   // ⚠️ `basculer` : personne n'a choisi de table en déplaçant, seulement une
@@ -187,8 +191,11 @@ export default function ModalDeplacerRdv({
   // 🔴 ET POUR UN COURS (10/09 tard) : un cours complet ne se propose plus.
   // ⚠️ La boucle vit dans le module, partagée avec la saisie au téléphone ; elle
   // part du quart d'heure en cours, jamais d'une heure déjà passée.
+  // 🔴 ET POUR TOUTE TABLE, LA CUISINE (lot 5, 12/09) : un quart d'heure où la
+  // cadence est déjà atteinte n'est pas libre pour elle. Rien ne se propose
+  // avant que la salle soit lue, puisque c'est elle qui dit qui arrive.
   const heuresLibres = useMemo(() => {
-    if (salleEnTables && !salleConnue) return []
+    if (estTable && !salleLue) return []
     return heuresLibresDuJour({
       creneauxJour,
       dureeMinutes,
@@ -196,6 +203,7 @@ export default function ModalDeplacerRdv({
       accepte: (h) => {
         if (!creneauAcceptable({ ...contexte, heureDebut: h }).ok) return false
         if (estCours && !coursAPlace({ id: rdv?.prestation_id, capacite }, rdvsExistants, { dateStr: date, heure: h, exclureId: rdv?.id })) return false
+        if (estTable && etatCadence({ plafond: salle.plafond, couverts: couvertsRdv, reservations: salle.reservations, debutMin: minutesDeLHeure(h), exclureId: rdv?.id })?.depasse) return false
         if (salleEnTables) {
           const t = tablePour(h, salle.reservations)
           if (!t?.format || t.forcer) return false
@@ -204,7 +212,7 @@ export default function ModalDeplacerRdv({
       },
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, salleEnTables, salleConnue, salle, maintenant])
+  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, estTable, salleEnTables, salleLue, salleConnue, salle, maintenant])
 
   const utile = deplacementUtile(rdv, { date, heure })
   const heureFin = heureDeFin(heure, dureeMinutes)
@@ -216,9 +224,19 @@ export default function ModalDeplacerRdv({
   const messageSalle = choixTable
     ? phraseSalle({ formats: prestations, etat: choixTable.etat, choix: choixTable, couverts: couvertsRdv, debut: heure, fin: heureFin, deplacement: true, actuel: presta })
     : null
-  const salleAttend = salleEnTables && verdict.ok && utile && !salleConnue
-  // ✅ DÉCISION D'ALEX, 10/09 : prévenir, puis laisser faire.
-  const salleAlerte = salleEnTables && verdict.ok && utile && !!choixTable && (choixTable.forcer || choixTable.raison === 'trop_grand')
+  // ─── LA CADENCE DE LA CUISINE AU NOUVEAU QUART D'HEURE (lot 5, 12/09) ────
+  // ⚠️ `exclureId` : à son propre quart d'heure, elle ne se compte pas deux fois.
+  const cadence = salleLue && verdict.ok && utile && dureeMinutes > 0
+    ? etatCadence({ plafond: salle.plafond, couverts: couvertsRdv, reservations: salle.reservations, debutMin: minutesDeLHeure(heure), exclureId: rdv?.id })
+    : null
+  const cadenceDepassee = cadence?.depasse === true
+  const messageCadence = phraseCadence(cadence, { deplacement: true })
+  // ⚠️ TANT QUE LA SALLE N'EST PAS LUE, POUR TOUTE TABLE : c'est elle qui dit
+  // combien de personnes arrivent au nouveau quart d'heure.
+  const salleAttend = estTable && verdict.ok && utile && !salleLue
+  // ✅ DÉCISION D'ALEX, 10/09 : prévenir, puis laisser faire. La cuisine aussi.
+  const salleAlerte = verdict.ok && utile
+    && ((salleEnTables && !!choixTable && (choixTable.forcer || choixTable.raison === 'trop_grand')) || cadenceDepassee)
   const peutValider = !!(date && heure && verdict.ok && utile && dureeMinutes > 0 && !submitting && !salleAttend)
   const nomClient = [rdv?.client_prenom, rdv?.client_nom].filter(Boolean).join(' ') || 'ce client'
 
@@ -240,27 +258,31 @@ export default function ModalDeplacerRdv({
       // ⚠️ CE QUE L'ÉCRAN A MONTRÉ N'EST PAS UNE PREUVE : une table a pu être
       // réservée en ligne depuis. Si la réponse de la salle change, on n'écrit
       // RIEN, on montre la salle telle qu'elle est.
+      // 🔴 ET LA CUISINE AVEC ELLE (lot 5, 12/09), pour toute table : un quart
+      // d'heure qui s'est rempli, ou vidé, pendant la saisie change le geste.
       let tableFinale = presta
-      if (salleEnTables) {
+      if (estTable) {
         const frais = await lireSalleDuJour(supabase, { commercantId: commercant.id, dateStr: date })
         if (frais.error) {
           setError(`Impossible de lire ta salle : ${frais.error.message}`)
           setSubmitting(false)
           return
         }
-        const choixFrais = tablePour(heure, frais.reservations)
-        const pareil = !!choixFrais && !!choixTable
+        const choixFrais = salleEnTables ? tablePour(heure, frais.reservations) : null
+        const cadenceFrais = etatCadence({ plafond: frais.plafond, couverts: couvertsRdv, reservations: frais.reservations, debutMin: minutesDeLHeure(heure), exclureId: rdv.id })
+        const pareil = (!salleEnTables || (!!choixFrais && !!choixTable
           && String(choixFrais.format?.id ?? '') === String(choixTable.format?.id ?? '')
           && choixFrais.forcer === choixTable.forcer
-          && choixFrais.raison === choixTable.raison
+          && choixFrais.raison === choixTable.raison))
+          && (cadenceFrais?.depasse === true) === cadenceDepassee
         if (!pareil) {
-          setSalle({ etat: 'ok', reservations: frais.reservations, date })
+          setSalle({ etat: 'ok', reservations: frais.reservations, plafond: frais.plafond, date })
           setError('Ta salle a changé pendant la saisie. Relis ce qui est proposé, puis confirme.')
           setSubmitting(false)
           return
         }
         // Aucune table n'accueille plus ce groupe : elle garde la sienne.
-        tableFinale = choixFrais.format || presta
+        if (choixFrais) tableFinale = choixFrais.format || presta
       }
 
       // ⚠️ LA PLACE SE LIT EN BASE, jamais dans l'état de l'écran, qui peut
@@ -485,8 +507,11 @@ export default function ModalDeplacerRdv({
             </div>
           )}
 
-          {/* ─── LA SALLE, QUAND C'EST UNE TABLE ───────────────────────────── */}
-          {salleEnTables && verdict.ok && utile && heure && dureeMinutes > 0 && (
+          {/* ─── LA SALLE, QUAND C'EST UNE TABLE ─────────────────────────────
+              ⚠️ Pour toute table depuis le lot 5 : hors inventaire, il n'y a pas
+              de table à proposer, mais une lecture ratée ou en cours se dit, la
+              cadence en dépend. */}
+          {estTable && verdict.ok && utile && heure && dureeMinutes > 0 && (
             salle.etat === 'erreur' ? (
               <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 10, padding: '0.625rem 0.875rem', marginBottom: 12 }}>
                 <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.45, margin: 0 }}>
@@ -513,6 +538,16 @@ export default function ModalDeplacerRdv({
                 )}
               </div>
             ) : null
+          )}
+
+          {/* ─── LA CUISINE, QUAND ELLE A QUELQUE CHOSE À DIRE (lot 5) ────────
+              Trop de personnes arrivent déjà au nouveau quart d'heure : on le
+              dit, et le bouton devient « Déplacer quand même ». Muette sinon. */}
+          {messageCadence && (
+            <div style={{ borderRadius: 10, padding: '0.625rem 0.875rem', marginBottom: 12, background: '#FFFBEB', border: '1.5px solid #FCD34D' }}>
+              <p style={{ fontSize: '0.82rem', fontWeight: 800, lineHeight: 1.45, margin: 0, color: '#92400E' }}>{messageCadence.titre}</p>
+              <p style={{ fontSize: '0.75rem', color: T.deep, margin: '4px 0 0', lineHeight: 1.5 }}>{messageCadence.detail}</p>
+            </div>
           )}
 
           {/* Prévenir le client */}

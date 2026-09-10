@@ -582,7 +582,7 @@ const MUTATIONS = [
 
   { nom: '🔴 la saisie dit « confirmer » sur une salle pleine',
     fichier: 'app/dashboard/ModalNouveauRdv.js',
-    de: "choixTable?.forcer ? 'Poser quand même ✓' : ",
+    de: "(choixTable?.forcer || cadenceDepassee) ? 'Poser quand même ✓' : ",
     vers: '' },
 
   { nom: '🔴 la saisie oublie la table designee',
@@ -627,7 +627,7 @@ const MUTATIONS = [
 
   { nom: '⚠️ « Creneaux libres » avant d avoir lu la salle',
     fichier: 'app/dashboard/ModalDeplacerRdv.js',
-    de: '    if (salleEnTables && !salleConnue) return []',
+    de: '    if (estTable && !salleLue) return []',
     vers: '' },
 
   { nom: '🔴 le deplacement dit « deplacer » sur une salle pleine',

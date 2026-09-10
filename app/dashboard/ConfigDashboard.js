@@ -42,6 +42,7 @@ import {
   enModeInventaire, formatsSansQuantite, tablesTotales, couvertsTotaux,
   estJointure, tablesDeLaJointure, baseDeLaJointure, basesJoignables, jointuresDe,
   jointureParDefaut, verifierJointure, alerteJointure,
+  plafondCadence, validerCadence, CADENCE_MIN, CADENCE_MAX,
 } from '@/lib/inventaire-salle'
 import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ⚠️ Trois fonctions de moins depuis le 18/08, et le lieu avec elles : cet écran
@@ -8046,6 +8047,97 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
   )
 }
 
+// ─── LA CADENCE DE LA CUISINE (lot 5, 12/09) ─────────────────────────────────
+//
+// 🔴 VINGT COUVERTS À 20:00 ET RIEN À 20:30, C'EST UN COUP DE FEU, PAS UNE
+// BONNE SOIRÉE. Le restaurateur dit combien de personnes sa cuisine peut
+// accueillir sur un même quart d'heure ; sa fiche propose alors un autre quart
+// d'heure au-delà, même quand des tables sont libres. La règle vit dans
+// `lib/inventaire-salle.js` : cet écran ne fait que la régler.
+//
+// ⚠️ LA VALEUR SE LIT EN BASE À L'OUVERTURE, pas dans la fiche du commerce
+// chargée au démarrage du tableau de bord : revenir sur cet onglet après un
+// enregistrement doit montrer ce qui est enregistré.
+// ⚠️ ON LIT LE RÉSULTAT DE L'ÉCRITURE. Un réglage qui n'a pas pris et un écran
+// qui l'affiche quand même, c'est un restaurateur qui croit sa cuisine protégée.
+function ReglageCadence({ commercantId, toast }) {
+  const [saisie, setSaisie] = useState('')
+  const [enregistree, setEnregistree] = useState(null)
+  const [lecture, setLecture] = useState('lecture')
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    let annule = false
+    supabase.from('commercants').select('rdv_cadence_couverts').eq('id', commercantId).maybeSingle()
+      .then(({ data, error }) => {
+        if (annule) return
+        if (error) { setLecture('erreur'); return }
+        const p = plafondCadence(data)
+        setEnregistree(p)
+        setSaisie(p === null ? '' : String(p))
+        setLecture('ok')
+      })
+    return () => { annule = true }
+  }, [commercantId])
+
+  const verdict = validerCadence(saisie)
+  const aEnregistrer = lecture === 'ok' && verdict.ok && verdict.valeur !== enregistree
+
+  async function enregistrer() {
+    if (!aEnregistrer || saving) return
+    setSaving(true)
+    const { error } = await supabase.from('commercants')
+      .update({ rdv_cadence_couverts: verdict.valeur }).eq('id', commercantId)
+    setSaving(false)
+    if (error) return toast(`Erreur : ${error.message}. Ta cadence n’a pas changé.`, 'error')
+    setEnregistree(verdict.valeur)
+    toast(verdict.valeur === null
+      ? 'Cadence retirée : ta cuisine n’a plus de limite par quart d’heure'
+      : `Cadence enregistrée : ${verdict.valeur} personne${verdict.valeur > 1 ? 's' : ''} par quart d’heure`)
+  }
+
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+      <p style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, margin: '0 0 3px' }}>La cadence de ta cuisine</p>
+      <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5, margin: '0 0 10px' }}>
+        Combien de personnes peuvent arriver sur un même quart d&rsquo;heure (19:00, 19:15, 19:30…) ?
+        Au-delà, ta fiche propose un autre quart d&rsquo;heure, même si des tables sont libres :
+        ta cuisine sert tout le monde sans coup de feu.
+      </p>
+      {lecture === 'erreur' ? (
+        <p style={{ fontSize: 11.5, fontWeight: 700, color: '#DC2626', margin: 0 }}>
+          Impossible de lire ce réglage. Recharge la page pour réessayer.
+        </p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <input type="number" inputMode="numeric" min={CADENCE_MIN} max={CADENCE_MAX}
+              aria-label="Personnes par quart d’heure"
+              value={saisie} disabled={lecture !== 'ok'} placeholder="Pas de limite"
+              onChange={(e) => setSaisie(e.target.value)}
+              style={{ width: 120, padding: '8px 10px', borderRadius: 10, border: `1.5px solid ${verdict.ok ? T.hairline : '#FCA5A5'}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff' }}/>
+            <span style={{ fontSize: 12, color: T.deep, fontWeight: 700 }}>personnes par quart d&rsquo;heure</span>
+            <button type="button" onClick={enregistrer} disabled={!aEnregistrer || saving}
+              style={{ padding: '8px 16px', borderRadius: 100, border: 'none', background: aEnregistrer ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#D1D5DB', color: '#fff', fontWeight: 800, fontSize: 12, cursor: aEnregistrer && !saving ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+          {!verdict.ok && (
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#DC2626', margin: '6px 0 0' }}>{verdict.message}</p>
+          )}
+          <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: '8px 0 0' }}>
+            {enregistree === null
+              ? 'Aujourd’hui : pas de limite. '
+              : `Aujourd’hui : ${enregistree} personne${enregistree > 1 ? 's' : ''} par quart d’heure. `}
+            Laisse vide pour ne pas limiter. Un groupe plus grand que ce nombre peut réserver
+            s&rsquo;il arrive seul sur son quart d&rsquo;heure. Au téléphone, Yoppaa te prévient
+            et te laisse poser quand même.
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
 // Sess 5a : CRUD Prestations RDV. nom, description, durée_minutes, prix
 // (fixe, ou vide = sur demande), acompte_pourcent, ordre, actif.
 // Soft delete via deleted_at (conformité 7 ans Belgique).
@@ -8522,6 +8614,13 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
           </div>
         )
       })()}
+
+      {/* 🔴 LA CADENCE DE LA CUISINE (lot 5, 12/09), juste sous la salle : ses
+          couverts disent combien elle assied, la cadence combien la cuisine
+          sert d'un coup. Seulement chez un restaurant qui a des tables. */}
+      {estTable && prestations.some(p => p.par_couverts === true && p.actif !== false) && (
+        <ReglageCadence commercantId={commercantId} toast={toast} />
+      )}
 
       {prestationsSeules.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>

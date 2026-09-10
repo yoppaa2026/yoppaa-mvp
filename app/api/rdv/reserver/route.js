@@ -50,6 +50,7 @@ import { jourSemaineDe } from '@/lib/creneaux'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { timeToMinutes, minutesToTime, finApresMinuit } from '@/lib/rdv-slots'
 import { dureeSelonCouverts } from '@/lib/cours-collectifs'
+import { phraseCuisinePleine } from '@/lib/inventaire-salle'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const HEURE = /^\d{2}:\d{2}(:\d{2})?$/
@@ -424,6 +425,18 @@ export async function POST(request) {
         return NextResponse.json({
           ok: false,
           error: `Aucune table n’accueille ${Number(res.couverts) || 'autant de'} personnes en ligne. Appelle directement ${commercant.nom} : les grandes tablées se préparent de vive voix.`,
+        }, { status: 409 })
+      }
+      // 🔴 LA CUISINE A DIT NON, PAS LA SALLE (lot 5, 12/09) : trop de personnes
+      // arrivent déjà sur ce quart d'heure. Un refus de règle, donc pas le 500
+      // « réessaie », qui ferait relancer indéfiniment la même heure. Le client
+      // n'a pas à connaître la cadence, seulement qu'un autre quart d'heure a sa
+      // chance ; `creneau_refuse` le renvoie choisir sur une grille remise à jour.
+      if (res.code === 'cadence_atteinte') {
+        return NextResponse.json({
+          ok: false,
+          error: phraseCuisinePleine({ heure, nom: commercant.nom }),
+          creneau_refuse: true,
         }, { status: 409 })
       }
       if (res.code === 'couverts_invalides') {

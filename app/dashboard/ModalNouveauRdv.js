@@ -18,6 +18,7 @@ import { creneauAcceptable, creneauxDuJour, heuresLibresDuJour, premiereMinuteOu
 import {
   enModeInventaire, formatPourAffichage, plusGrandGroupe, estJointure,
   dureeDuGroupe, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour,
+  etatCadence, phraseCadence,
 } from '@/lib/inventaire-salle'
 // ⚠️ LES RÈGLES DE L'ABONNEMENT NE SONT PAS RÉÉCRITES ICI, elles sont APPELÉES.
 // Le solde, le plafond hebdomadaire, la fenêtre de validité et l'ordre de
@@ -108,9 +109,15 @@ export default function ModalNouveauRdv({
   const [changerTable, setChangerTable] = useState(false)
   // ⚠️ LA SALLE PORTE LA DATE QU'ELLE DÉCRIT : quand le jour change, celle de
   // la veille ne doit pas répondre pour le lendemain le temps d'une lecture.
-  const [salle, setSalle] = useState({ etat: 'repos', reservations: [], date: null })
+  const [salle, setSalle] = useState({ etat: 'repos', reservations: [], plafond: null, date: null })
   const [relire, setRelire] = useState(0)
   const enTable = salleEnTables && prestationId === UNE_TABLE
+  // 🔴 LA SALLE SE LIT AUSSI POUR UNE TABLE HORS INVENTAIRE (lot 5, 12/09) : la
+  // cadence de la cuisine compte les personnes qui arrivent, quelle que soit la
+  // façon dont la salle se compte.
+  const tableHorsInventaire = !enTable && !!prestationId && prestationId !== UNE_TABLE
+    && estParCouverts((prestations || []).find(p => String(p.id) === String(prestationId)))
+  const lectureSalle = enTable || tableHorsInventaire
 
   // 🔴 LA DATE ET L'HEURE SE CHOISISSENT ICI (Alex, 10/09 tard : « quand un
   // client sonne, on choisit une heure mais dans la discussion elle peut
@@ -200,22 +207,22 @@ export default function ModalNouveauRdv({
   }, [])
 
   // La salle du jour choisi, relue à l'ouverture, à chaque changement de date
-  // et à chaque « Réessayer ».
+  // et à chaque « Réessayer ». Avec elle, la cadence de la cuisine.
   useEffect(() => {
-    if (!enTable || !DATE_ISO.test(date)) return
+    if (!lectureSalle || !DATE_ISO.test(date)) return
     let annule = false
-    setSalle({ etat: 'lecture', reservations: [], date })
-    lireSalle(commercant.id, date).then(({ reservations, error }) => {
+    setSalle({ etat: 'lecture', reservations: [], plafond: null, date })
+    lireSalle(commercant.id, date).then(({ reservations, plafond, error }) => {
       if (annule) return
       setSalle(error
-        ? { etat: 'erreur', reservations: [], date, message: error.message }
-        : { etat: 'ok', reservations, date })
+        ? { etat: 'erreur', reservations: [], plafond: null, date, message: error.message }
+        : { etat: 'ok', reservations, plafond, date })
     }).catch(e => {
       // ⚠️ UNE LECTURE QUI LÈVE NE LAISSE PAS « JE REGARDE TA SALLE » À VIE.
-      if (!annule) setSalle({ etat: 'erreur', reservations: [], date, message: e?.message || String(e) })
+      if (!annule) setSalle({ etat: 'erreur', reservations: [], plafond: null, date, message: e?.message || String(e) })
     })
     return () => { annule = true }
-  }, [enTable, commercant.id, date, relire])
+  }, [lectureSalle, commercant.id, date, relire])
   const salleConnue = salle.etat === 'ok' && salle.date === date
 
   // ESC pour fermer
@@ -286,6 +293,25 @@ export default function ModalNouveauRdv({
     ? phraseSalle({ formats: prestations, etat, choix: choixTable, couverts: nCouverts, debut: heure, fin: heureFin, manuel: !!formatManuelId })
     : null
 
+  // ─── LA CADENCE DE LA CUISINE (lot 5, 12/09) ─────────────────────────────
+  //
+  // ✅ PRÉVENIR, PUIS LAISSER POSER, comme pour la salle (décision d'Alex du
+  // 10/09) : si trop de personnes arrivent déjà sur ce quart d'heure, l'écran
+  // le dit et le bouton devient « Poser quand même ». Ce qu'il pose compte dans
+  // le quart d'heure, et le ferme en ligne.
+  // ⚠️ LE GROUPE DE LA RÉSERVATION, pas celui d'une table : en inventaire, le
+  // nombre saisi ; sinon, le nombre ou le minimum de la table, comme la jauge.
+  // ⚠️ ET RIEN SUR UNE HEURE DÉJÀ PASSÉE : on note des gens venus, la cuisine
+  // les a déjà servis.
+  const groupeCadence = enTable
+    ? (nombreSaisi ? nCouverts : null)
+    : (presta && estParCouverts(presta) ? (couverts === '' ? bornesCouverts(presta).min : Math.floor(Number(couverts)) || 1) : null)
+  const cadence = !passe && salleConnue && heureValide && groupeCadence
+    ? etatCadence({ plafond: salle.plafond, couverts: groupeCadence, reservations: salle.reservations, debutMin })
+    : null
+  const cadenceDepassee = cadence?.depasse === true
+  const messageCadence = phraseCadence(cadence)
+
   // ─── LES HEURES LIBRES CE JOUR-LÀ, PROPOSÉES D'UN TAP ─────────────────────
   //
   // 🔴 LA SAISIE N'EN MONTRAIT AUCUNE (Alex, 10/09 tard). Le restaurateur au
@@ -299,6 +325,8 @@ export default function ModalNouveauRdv({
   //     tout le repas, dans la salle relue en base ;
   //   • pour une table sans inventaire, la salle a encore ces couverts, comptés
   //     comme le serveur les compte ;
+  //   • pour une table, la cuisine accepte encore ce groupe sur ce quart
+  //     d'heure (lot 5) : une heure qu'il faudrait forcer n'est pas libre ;
   //   • pour un cours, il reste une place.
   // Et jamais avant le quart d'heure en cours : on ne propose pas hier à
   // quelqu'un qui appelle. La boucle est celle du déplacement, dans le module.
@@ -308,6 +336,9 @@ export default function ModalNouveauRdv({
       dateStr: date, heureDebut: h, dureeMinutes: duree, horaireJour, creneauxJour,
       rdvsExistants, capacite: capacitePrestation(p), prestationId: p.id, prestations,
     }).ok
+    // 🔴 LA CUISINE, AVEC LA RÈGLE DU SERVEUR (lot 5) : la cadence et les
+    // arrivées viennent de la salle relue en base.
+    const cuisinePleine = (m, groupe) => !!etatCadence({ plafond: salle.plafond, couverts: groupe, reservations: salle.reservations, debutMin: m })?.depasse
     if (enTable) {
       if (!nombreSaisi || !referenceGroupe || !dureeGroupe || !salleConnue) return []
       return heuresLibresDuJour({
@@ -315,12 +346,16 @@ export default function ModalNouveauRdv({
         accepte: (h) => {
           if (!regle(h, referenceGroupe, dureeGroupe)) return false
           const m = timeToMinutes(h)
+          if (cuisinePleine(m, nCouverts)) return false
           const t = tableAPoser(etatSalle({ formats: prestations, couverts: nCouverts, reservations: salle.reservations, debutMin: m, finMin: m + dureeGroupe }))
           return !!t.format && !t.forcer
         },
       })
     }
     if (!presta || !dureeMin) return []
+    // ⚠️ UNE TABLE NE SE PROPOSE QU'UNE FOIS LA SALLE LUE : tant qu'on ne sait
+    // pas combien de personnes arrivent, « libre » serait une supposition.
+    if (tableHorsInventaire && !salleConnue) return []
     const idsSalle = (prestations || []).filter(estParCouverts).map(p => String(p.id))
     const groupe = couverts === '' ? bornesCouverts(presta).min : Math.floor(Number(couverts)) || 1
     return heuresLibresDuJour({
@@ -328,6 +363,7 @@ export default function ModalNouveauRdv({
       accepte: (h) => {
         if (!regle(h, presta, dureeMin)) return false
         if (estParCouverts(presta)) {
+          if (cuisinePleine(timeToMinutes(h), groupe)) return false
           // ⚠️ LA MÊME JAUGE QUE LE SERVEUR SANS INVENTAIRE : les couverts de
           // TOUTE la salle qui chevauchent le repas, contre la capacité.
           const m = timeToMinutes(h)
@@ -340,7 +376,7 @@ export default function ModalNouveauRdv({
         return true
       },
     })
-  }, [dateValide, depuis, date, horaireJour, creneauxJour, rdvsExistants, prestations, enTable, nombreSaisi, referenceGroupe, dureeGroupe, salleConnue, salle, nCouverts, presta, dureeMin, couverts])
+  }, [dateValide, depuis, date, horaireJour, creneauxJour, rdvsExistants, prestations, enTable, tableHorsInventaire, nombreSaisi, referenceGroupe, dureeGroupe, salleConnue, salle, nCouverts, presta, dureeMin, couverts])
 
   // Le prix de la prestation. Plus de fourchette depuis le 27/08 : le prix est
   // le prix, et ce qu'on ajoute se règle à la caisse.
@@ -462,19 +498,30 @@ export default function ModalNouveauRdv({
       // telle qu'elle est, et le restaurateur confirme en connaissance de cause.
       // C'est aussi ce qui fait du « poser quand même » un vrai second geste
       // quand la salle se remplit pendant l'appel.
-      if (enTable) {
+      // 🔴 ET LA CUISINE AVEC ELLE (lot 5, 12/09), pour toute table : un quart
+      // d'heure qui se remplit, ou se vide, pendant l'appel change le geste. On
+      // n'écrit rien, on montre, et il confirme en connaissance de cause.
+      if (lectureSalle) {
         const frais = await lireSalle(commercant.id, dateStr)
         if (frais.error) {
           setError(`Impossible de lire ta salle : ${frais.error.message}`)
           setSubmitting(false)
           return
         }
-        const choixFrais = tableAPoser(etatSalle({
-          formats: prestations, couverts: nCouverts, reservations: frais.reservations, debutMin, finMin,
-        }), { prefere: formatManuelId })
-        if (String(choixFrais.format?.id) !== String(presta.id) || choixFrais.forcer !== choixTable.forcer) {
-          setSalle({ etat: 'ok', reservations: frais.reservations, date: dateStr })
-          setError('Ta salle a changé pendant la saisie. Relis la table proposée, puis confirme.')
+        const choixFrais = enTable
+          ? tableAPoser(etatSalle({
+              formats: prestations, couverts: nCouverts, reservations: frais.reservations, debutMin, finMin,
+            }), { prefere: formatManuelId })
+          : null
+        const tableChangee = !!choixFrais
+          && (String(choixFrais.format?.id) !== String(presta.id) || choixFrais.forcer !== choixTable.forcer)
+        const cadenceFrais = passe ? null : etatCadence({ plafond: frais.plafond, couverts: groupeCadence, reservations: frais.reservations, debutMin })
+        const cadenceChangee = (cadenceFrais?.depasse === true) !== cadenceDepassee
+        if (tableChangee || cadenceChangee) {
+          setSalle({ etat: 'ok', reservations: frais.reservations, plafond: frais.plafond, date: dateStr })
+          setError(tableChangee
+            ? 'Ta salle a changé pendant la saisie. Relis la table proposée, puis confirme.'
+            : 'Les arrivées de ce quart d’heure ont changé pendant la saisie. Relis ce que dit ta cuisine, puis confirme.')
           setSubmitting(false)
           return
         }
@@ -933,6 +980,25 @@ export default function ModalNouveauRdv({
             </div>
           )}
 
+          {/* ─── LA CUISINE, QUAND ELLE A QUELQUE CHOSE À DIRE (lot 5) ────────
+              Trop de personnes arrivent déjà sur ce quart d'heure : on le dit,
+              et le bouton devient « Poser quand même ». Muette sinon : une
+              alarme qui sonne à chaque saisie ne se lit plus.
+              ⚠️ Hors inventaire, la salle n'a pas d'encadré à elle : sa lecture
+              ratée se dit ici, sinon la cadence se tairait sans raison. */}
+          {tableHorsInventaire && salle.etat === 'erreur' && (
+            <div style={{ ...boiteSt('refus'), marginBottom: 12 }}>
+              <p style={titreBoiteSt('refus')}>Impossible de lire ta salle{salle.message ? ` : ${salle.message}` : ''}.</p>
+              <button type="button" onClick={() => setRelire(n => n + 1)} style={lienSt}>Réessayer</button>
+            </div>
+          )}
+          {messageCadence && (
+            <div style={{ ...boiteSt(messageCadence.ton), marginBottom: 12 }}>
+              <p style={titreBoiteSt(messageCadence.ton)}>{messageCadence.titre}</p>
+              <p style={{ fontSize: '0.75rem', color: T.deep, margin: '4px 0 0', lineHeight: 1.5 }}>{messageCadence.detail}</p>
+            </div>
+          )}
+
           {/* ─── L'ABONNÉE, S'IL Y EN A UNE ────────────────────────────────
               ⚠️ CE BLOC N'APPARAÎT QUE S'IL A QUELQUE CHOSE À DIRE : un cours
               sans abonné ne doit pas encombrer la saisie la plus fréquente,
@@ -1099,10 +1165,11 @@ export default function ModalNouveauRdv({
               fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif',
               boxShadow: (!formValide || submitting) ? 'none' : `0 4px 16px ${T.main}55`,
             }}>
-            {/* ⚠️ LE BOUTON DIT LE GESTE : quand aucune table n'est libre, il ne
+            {/* ⚠️ LE BOUTON DIT LE GESTE : quand aucune table n'est libre, ou que
+                la cuisine a déjà son compte sur ce quart d'heure (lot 5), il ne
                 dit plus « Confirmer » comme si de rien n'était. Et sur une heure
                 déjà passée, on ne confirme rien à personne : on note. */}
-            {submitting ? 'Enregistrement…' : passe ? 'Noter après coup ✓' : choixTable?.forcer ? 'Poser quand même ✓' : `${mots.manuelConfirmer} ✓`}
+            {submitting ? 'Enregistrement…' : passe ? 'Noter après coup ✓' : (choixTable?.forcer || cadenceDepassee) ? 'Poser quand même ✓' : `${mots.manuelConfirmer} ✓`}
           </button>
         </div>
       </div>

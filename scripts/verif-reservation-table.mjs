@@ -381,9 +381,28 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // ⚠️ ON DIT QUOI FAIRE, pas seulement la borne.
   verifier('⚠️ au-delà du maximum, on donne une sortie',
     /les grandes tablées se réservent de vive voix/.test(TUNNEL))
-  verifier('🔴 les deux grilles comptent en couverts',
-    (TUNNEL.match(/parCouverts: estParCouverts\(prestationChoisie\)/g) || []).length === 2
-    && (TUNNEL.match(/couvertsDemandes: couverts/g) || []).length === 2)
+  // 🔴 LES TROIS QUESTIONS, PAS DEUX (10/09). Cette garde comptait deux grilles ;
+  // le contrôle d'avant envoi posait la même question sans les couverts, et
+  // refusait à l'envoi ce que la grille venait de proposer. Elle compte
+  // désormais les trois, et la règle unique qu'elles partagent.
+  const defRegle = (TUNNEL.match(/const regleOccupation = \(reservationsDuJour\) => \(\{[\s\S]*?\}\)/) || [''])[0]
+  verifier('🔴 la règle d’occupation porte les couverts ET la salle',
+    /parCouverts: estParCouverts\(prestationChoisie\)/.test(defRegle)
+    && /couvertsDemandes: couverts/.test(defRegle)
+    && /salle: salleParInventaire \? \{ formats: prestations, reservations: reservationsDuJour \|\| \[\] \} : null/.test(defRegle),
+    defRegle.slice(0, 200))
+  verifier('🔴 et les trois questions la lisent : la grille, le calendrier, le contrôle d’avant envoi',
+    (TUNNEL.match(/\.\.\.regleOccupation\(/g) || []).length === 3)
+  // ⚠️ AVEC LES RÉSERVATIONS BRUTES. Le filtre de praticien sert un salon ; il
+  // masquerait ici les tables d'une autre salle, et la grille verrait une
+  // salle plus vide que celle que le serveur compte.
+  verifier('⚠️ et la salle reçoit les réservations brutes, jamais celles filtrées par praticien',
+    /\.\.\.regleOccupation\(reservations\)/.test(TUNNEL)
+    && /\.\.\.regleOccupation\(resaDuJour\)/.test(TUNNEL)
+    && /\.\.\.regleOccupation\(busy\)/.test(TUNNEL))
+  verifier('⚠️ et plus aucune question ne recopie ses arguments à la main',
+    (TUNNEL.match(/parCouverts: estParCouverts\(prestationChoisie\)/g) || []).length === 1
+    && (TUNNEL.match(/couvertsDemandes: couverts/g) || []).length === 1)
   // 🔴 LES TROIS ENVOIS, pas deux : le paiement d'acompte, le bon cadeau et la
   // réservation directe passent par des chemins différents, et un seul oublié
   // écrirait une table d'une personne pour un groupe de six.
@@ -873,12 +892,21 @@ egal('la réservation d’un restaurant s’atteint quand même',
     parcourir(join(racine, 'app'))
     parcourir(join(racine, 'lib'))
     const fautifs = []
+    const vus = []
     for (const f of fichiers) {
-      const src = readFileSync(f, 'utf8')
+      // 🔴 SANS SA PROSE (10/09). Cette garde lisait le fichier brut, et le
+      // select du tableau de bord se tenait à dix-sept lignes de commentaire de
+      // son `from` : hors de la fenêtre de 160 caractères, donc jamais vu. Il
+      // chargeait `capacite` sans `par_couverts`, et la garde restait verte —
+      // la saisie au téléphone ne savait pas qu'une table en était une. Une
+      // garde peut être verte et complice ; celle-ci l'était par sa fenêtre.
+      const src = sansProse(readFileSync(f, 'utf8'))
       for (const m of src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,160}?\.select\(\s*(['"`])([^'"`]*)\1/g)) {
         const cols = m[2]
+        const nom = f.split(/[\\/]/).slice(-2).join('/')
+        vus.push(`${nom} → ${cols}`)
         if (/\bcapacite\b/.test(cols) && !/\bpar_couverts\b/.test(cols)) {
-          fautifs.push(`${f.split(/[\\/]/).slice(-2).join('/')} → ${cols}`)
+          fautifs.push(`${nom} → ${cols}`)
         }
       }
     }
@@ -886,6 +914,10 @@ egal('la réservation d’un restaurant s’atteint quand même',
       fautifs.length === 0, fautifs.join(' | '))
     verifier('⚠️ et la garde a bien parcouru le dépôt',
       fichiers.length > 100, `${fichiers.length} fichiers`)
+    // ⚠️ ET ELLE VOIT CELUI QUI LUI AVAIT ÉCHAPPÉ. Compter les fichiers ne prouve
+    // pas qu'elle lit les selects : un témoin nommé, si.
+    verifier('⚠️ et elle voit le select du tableau de bord, celui qui lui échappait',
+      vus.some(v => /^dashboard\/page\.js → .*\bcapacite\b/.test(v)), `${vus.length} selects vus`)
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -935,15 +967,25 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 « trop grand » et « complet » sont deux refus distincts',
     /choix\.raison === 'aucune_table_a_cette_taille'\s*\n?\s*\? \{ ok: false, code: 'groupe_trop_grand'/.test(SRV)
     && /: \{ ok: false, code: 'salle_complete', restants: 0 \}/.test(SRV))
+  // ⚠️ LA DURÉE, ELLE, EST CELLE DU GROUPE DEPUIS LE 10/09 (`dureeRetenue`) :
+  // la garde qui exigeait celle de la table retenue figeait un défaut, un
+  // couple enregistré sur cent vingt minutes après un contrôle sur quatre-vingt-
+  // dix. La valeur est désormais mesurée en exécutant le module, plus bas.
   verifier('🔴 et c’est la table RETENUE qui s’écrit, pas celle qu’on a reçue',
     /prestation_id: prestationRetenue\.id,/.test(SRV)
-    && /duree_minutes: dureeSelonCouverts\(prestationRetenue, couvertsRetenus\),/.test(SRV)
+    && /duree_minutes: dureeRetenue,/.test(SRV)
     && /capacite_creneau: capacitePrestation\(prestationRetenue\),/.test(SRV))
-  // ⚠️ LE RANG N'A DE SENS QU'À L'INTÉRIEUR D'UN FORMAT. Calculé sur la table
-  // proposée puis écrit sur une autre, il désigne un rang du mauvais format et
-  // l'index unique le rejette — ou laisse passer une collision d'à côté.
-  verifier('🔴 la place se refait quand la table change',
-    /if \(String\(prestationRetenue\.id\) !== String\(prestation\.id\)\) \{[\s\S]{0,600}?premierePlaceLibre\(prestationRetenue,/.test(SRV))
+  // 🔴 LE RANG D'UNE TABLE N'A PAS DE SENS À L'INTÉRIEUR D'UN FORMAT (10/09).
+  // Cette garde exigeait l'inverse, et c'était le défaut qu'Alex a touché :
+  // l'index `rdv_no_double_book` ne connaît pas la prestation, et un rang
+  // cherché dans le seul format retenu redonnait le 1 de la table voisine. Le
+  // rang se cherche parmi TOUTES les réservations de l'heure ; la mesure qui
+  // compte est exécutée plus bas, sur une fausse base qui reproduit l'index.
+  verifier('🔴 le rang d’une table se cherche parmi toutes les réservations de l’heure',
+    /const \{ data: memeHeure \} = await db\s*\.from\('rdv_reservations'\)\s*\.select\('place_no'\)\s*\.eq\('commercant_id', commercantId\)\s*\.eq\('date_rdv', dateRdv\)\s*\.eq\('heure_debut', heure\)\s*\.in\('statut', STATUTS_OCCUPENT\)/.test(SRV)
+    && /placeNo = rangLibre\(\(memeHeure \|\| \[\]\)\.map\(r => r\.place_no\)\)/.test(SRV))
+  verifier('⚠️ et plus aucun rang ne se cherche dans le seul format retenu',
+    !/premierePlaceLibre\(prestationRetenue,/.test(SRV))
 
   // 🔴 LA CAPACITÉ DE SALLE NE SE DEMANDE PLUS DEUX FOIS (Alex, 09/09 : « à quoi
   // sert ce champ ? »). Elle était la jauge de l'ancien modèle ; elle se déduit
@@ -1054,14 +1096,22 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // sur 150 minutes puis ENREGISTRÉE sur 90 libérerait une table encore occupée.
   const CREATION = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
   verifier('🔴 le module écrit LUI-MÊME la durée et la fin',
-    // ⚠️ SUR LA TABLE RETENUE depuis 2b : le serveur choisit le format, et la
-    // durée doit être celle de la table qu'il donne, pas de celle qu'on lui a
-    // proposée. Écrire la durée d'une table pour en occuper une autre est le
-    // même défaut que vérifier une valeur puis en écrire une autre.
-    /duree_minutes: dureeSelonCouverts\(prestationRetenue, couvertsRetenus\),/.test(CREATION)
-    && /heure_fin: minutesToTime\(timeToMinutes\(heure\) \+ dureeSelonCouverts\(prestationRetenue, couvertsRetenus\)\)/.test(CREATION))
-  verifier('🔴 et ses gardes mesurent la MÊME durée',
-    (CREATION.match(/dureeSelonCouverts\(prestation, champs\?\.couverts\)/g) || []).length === 2)
+    // 🔴 `dureeRetenue` DEPUIS LE 10/09, ET PLUS LA TABLE RETENUE. Cette garde
+    // exigeait la durée de la table donnée ; or le contrôle de la salle, lui,
+    // lisait celle de la table demandée. Dès que le serveur montait d'un
+    // format, il écrivait une durée que personne n'avait contrôlée : la garde
+    // gravait l'écart qu'elle prétendait interdire.
+    /duree_minutes: dureeRetenue,/.test(CREATION)
+    && /heure_fin: minutesToTime\(timeToMinutes\(heure\) \+ dureeRetenue\)/.test(CREATION))
+  // 🔴 ET SES GARDES MESURENT LA MÊME DURÉE : le créneau, la salle en tables, la
+  // salle en couverts. Les trois lisent la variable qui s'écrit.
+  verifier('🔴 et ses trois contrôles mesurent la MÊME durée, celle qui s’écrit',
+    /finMin: timeToMinutes\(heure\) \+ dureeRetenue,/.test(CREATION)
+    && /finMin: debutMin \+ dureeRetenue,/.test(CREATION)
+    && /const finMin = debutMin \+ dureeRetenue/.test(CREATION))
+  verifier('⚠️ et aucune autre durée ne se calcule après la décision',
+    !/dureeSelonCouverts\(prestationRetenue/.test(CREATION)
+    && !/dureeSelonCouverts\(prestation, champs/.test(CREATION))
 
   // 🔴 LE DÉFAUT QUI RENDAIT TOUT LE MODULE MUET (09/09 au soir).
   //
@@ -1292,6 +1342,278 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('⚠️ et pour un rendez-vous ailleurs',
     /ton prochain rendez-vous/.test(libelleAutresRecompenses(2, 'rdv', { categorie: 'vitrine' }))
     && /ton prochain rendez-vous/.test(libelleAutresRecompenses(2, 'rdv')))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 « POURQUOI ÇA BLOQUE APRÈS DEUX RÉSAS ? » (Alex, 10/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Deux tables de deux à 19h, une troisième demande pour deux : le serveur
+// trouvait bien la table de quatre, et la base refusait l'écriture. L'index
+// `rdv_no_double_book` porte sur (commerce, praticien, date, heure, place) —
+// sans la prestation — et le rang était cherché dans le seul format retenu.
+//
+// En cherchant les frères, trois autres portes : la grille de la fiche tenait
+// une table d'un autre format pour un conflit, le contrôle d'avant envoi
+// oubliait les couverts, et le tableau de bord refusait au téléphone deux
+// tables qui se chevauchent. Tout est EXÉCUTÉ ici, sur la salle du test d'Alex.
+{
+  const { rangLibre } = await import('../lib/cours-collectifs.js')
+  const { conflitReservation, genererSlots } = await import('../lib/rdv-slots.js')
+  const { conflitSalle, occupationParFormat } = await import('../lib/inventaire-salle.js')
+  const { creneauAcceptable } = await import('../lib/deplacement-rdv.js')
+  const { creerReservationRdv } = await import('../lib/rdv-creation-server.js')
+
+  // ─── Le rang ─────────────────────────────────────────────────────────────
+  egal('🔴 le rang d’une table prend le premier libre parmi TOUS', rangLibre([1, 2]), 3)
+  egal('⚠️ et comble le trou laissé par une annulation', rangLibre([1, 3]), 2)
+  egal('⚠️ une heure vide commence au rang 1', rangLibre([]), 1)
+  // 🔴 SANS PLAFOND : pour une table, ce n'est pas le rang qui dit « complet ».
+  egal('🔴 et il n’a pas de plafond', rangLibre(Array.from({ length: 30 }, (_, i) => i + 1)), 31)
+
+  // ─── La salle du test d'Alex, avec ses durées ─────────────────────────────
+  const A2 = { id: 'a2', nom: 'Table pour 2 personnes', par_couverts: true, actif: true, couverts_min: 1, couverts_max: 2, quantite: 2, capacite: 4, duree_minutes: 90, tva_taux: 12, commercant_id: 'c1' }
+  const A4 = { id: 'a4', nom: 'Table de 4 personnes', par_couverts: true, actif: true, couverts_min: 1, couverts_max: 4, quantite: 6, capacite: 24, duree_minutes: 120, tva_taux: 12, commercant_id: 'c1' }
+  const A6 = { id: 'a6', nom: 'Table de 6 personnes', par_couverts: true, actif: true, couverts_min: 1, couverts_max: 6, quantite: 2, capacite: 12, duree_minutes: 150, tva_taux: 12, commercant_id: 'c1' }
+  const SALLE_ALEX = [A4, A2, A6]
+  const deuxCouples = [
+    { id: 'r1', prestation_id: 'a2', heure_debut: '19:00:00', heure_fin: '20:30:00', place_no: 1, praticien_id: null, statut: 'confirme', date_rdv: '2026-09-15' },
+    { id: 'r2', prestation_id: 'a2', heure_debut: '19:00:00', heure_fin: '20:30:00', place_no: 2, praticien_id: null, statut: 'confirme', date_rdv: '2026-09-15' },
+  ]
+  const H19 = 19 * 60
+
+  // ─── La question de la grille, posée comme le serveur ─────────────────────
+  const troisieme = conflitSalle({ formats: SALLE_ALEX, couverts: 2, reservations: deuxCouples, debut: H19, fin: H19 + 90 })
+  verifier('🔴 la troisième demande pour deux trouve la table de quatre',
+    troisieme.conflit === false && troisieme.format?.id === 'a4', JSON.stringify(troisieme))
+  const salleAlex = { formats: SALLE_ALEX, reservations: deuxCouples }
+  verifier('🔴 et `conflitReservation` rend la même réponse dès qu’on lui donne la salle',
+    conflitReservation({ debut: H19, fin: H19 + 90, prestationId: 'a2', capacite: 4, reservations: deuxCouples,
+      parCouverts: true, couvertsDemandes: 2, salle: salleAlex }).conflit === false)
+  const pourQuatre = conflitReservation({ debut: H19, fin: H19 + 120, prestationId: 'a4', capacite: 24,
+    reservations: deuxCouples, parCouverts: true, couvertsDemandes: 4, salle: salleAlex })
+  verifier('🔴 deux tables de deux à 19h ne ferment pas 19h au groupe de quatre',
+    pourQuatre.conflit === false, JSON.stringify(pourQuatre))
+  // ⚠️ LE TÉMOIN DU DÉFAUT : sans la salle, l'ancien calcul tourne toujours, et
+  // tient la table voisine pour un rendez-vous qui occupe la maison.
+  const sansSalle = conflitReservation({ debut: H19, fin: H19 + 120, prestationId: 'a4', capacite: 24,
+    reservations: deuxCouples, parCouverts: true, couvertsDemandes: 4 })
+  verifier('⚠️ témoin : sans la salle, la table voisine était un conflit',
+    sansSalle.conflit === true && sansSalle.raison === 'occupe', JSON.stringify(sansSalle))
+
+  // ⚠️ LA SALLE PLEINE RESTE PLEINE : la correction n'ouvre rien de plus.
+  const petite = [{ ...A2 }, { ...A4, quantite: 1 }]
+  const pleine = [...deuxCouples, { prestation_id: 'a4', heure_debut: '19:00:00', heure_fin: '21:00:00' }]
+  const refus = conflitSalle({ formats: petite, couverts: 2, reservations: pleine, debut: H19, fin: H19 + 90 })
+  verifier('🔴 quand toutes les tables sont prises, c’est complet',
+    refus.conflit === true && refus.raison === 'complet', JSON.stringify(refus))
+  const huit = conflitSalle({ formats: SALLE_ALEX, couverts: 8, reservations: [], debut: H19, fin: H19 + 150 })
+  verifier('⚠️ et un groupe de huit est « trop grand », pas « complet »',
+    huit.conflit === true && huit.raison === 'trop_grand', JSON.stringify(huit))
+
+  // 🔴 LE PIÈGE DU ZÉRO : le moteur manipule des minutes, la base rend des
+  // heures. Une lecture qui n'attend que des heures voyait la salle VIDE.
+  const enMinutes = deuxCouples.map(r => ({ prestation_id: r.prestation_id, start: H19, end: H19 + 90 }))
+  verifier('🔴 une réservation en minutes compte autant qu’une réservation en heures',
+    occupationParFormat(enMinutes, H19, H19 + 60).get('a2') === 2,
+    JSON.stringify([...occupationParFormat(enMinutes, H19, H19 + 60)]))
+  // ⚠️ ET ELLE NE DÉBORDE PAS AVANT SON HEURE. Mesuré par mutation : un début
+  // lu comme une heure absente vaut 0, et une réservation « de minuit à 20h30 »
+  // chevauche encore 19h — le test ci-dessus restait vert. Seule une fenêtre
+  // AVANT la réservation voit la différence.
+  verifier('⚠️ et une table de 19h n’occupe pas 17h',
+    occupationParFormat(enMinutes, 17 * 60, 18 * 60).size === 0,
+    JSON.stringify([...occupationParFormat(enMinutes, 17 * 60, 18 * 60)]))
+
+  // ─── La grille elle-même, un mardi soir ───────────────────────────────────
+  const mardiSoir = new Date('2026-09-15T12:00:00+02:00')
+  const service = [{ id: 's1', jour_semaine: 'mardi', heure_debut: '18:00', heure_fin: '23:00', pas_minutes: 30, actif: true }]
+  const ouvert = { mardi: { ouvert: true, debut: '09:00', fin: '00:00' } }
+  const grille = (couverts, format, avecSalle) => genererSlots({
+    dateChoisie: mardiSoir, dureeMinutes: format.duree_minutes, creneaux: service,
+    reservations: deuxCouples, horairesDetail: ouvert, capacite: format.capacite, prestationId: format.id,
+    liaisonsCreneaux: [], parCouverts: true, couvertsDemandes: couverts,
+    salle: avecSalle ? salleAlex : null,
+  })
+  const a19 = (slots) => slots.find(s => s.heure === '19:00')
+  verifier('🔴 la grille propose 19:00 à un troisième couple', a19(grille(2, A2, true))?.pris === false,
+    JSON.stringify(a19(grille(2, A2, true))))
+  verifier('🔴 et au groupe de quatre', a19(grille(4, A4, true))?.pris === false,
+    JSON.stringify(a19(grille(4, A4, true))))
+  verifier('⚠️ témoin : sans la salle, la grille fermait 19:00 au groupe de quatre',
+    a19(grille(4, A4, false))?.pris === true)
+
+  // 🔴 ET LA GRILLE EN COUVERTS REÇOIT LES COUVERTS. Une salle sans inventaire
+  // se compte encore en couverts ; la copie des réservations dans le moteur
+  // perdait leur nombre, et une table de quatre y pesait UN couvert.
+  const tableDeQuatre = [{ prestation_id: 's6', heure_debut: '19:00:00', heure_fin: '21:00:00', couverts: 4 }]
+  const enCouverts = (couverts) => genererSlots({
+    dateChoisie: mardiSoir, dureeMinutes: 120, creneaux: service, reservations: tableDeQuatre,
+    horairesDetail: ouvert, capacite: 6, prestationId: 's6', liaisonsCreneaux: [],
+    parCouverts: true, couvertsDemandes: couverts,
+  })
+  verifier('🔴 dans une salle de six où quatre sont assis, un autre groupe de quatre ne passe pas',
+    a19(enCouverts(4))?.pris === true && a19(enCouverts(4))?.motif === 'complet', JSON.stringify(a19(enCouverts(4))))
+  verifier('⚠️ mais un couple, si', a19(enCouverts(2))?.pris === false, JSON.stringify(a19(enCouverts(2))))
+
+  // ─── Le serveur, sur une fausse base qui REPRODUIT L'INDEX ────────────────
+  //
+  // ⚠️ SANS L'INDEX, CE TEST NE PROUVERAIT RIEN : une base qui accepte tout
+  // aurait laissé passer le rang 1 comme avant. Elle refuse ici exactement ce
+  // que refuse `rdv_no_double_book`, et un témoin le vérifie.
+  function salleSimulee({ demandee, formats, existantes }) {
+    const vu = { payload: null, lecturesRang: [] }
+    const table = (nom) => {
+      const filtres = {}
+      let colonnes = ''
+      const chaine = {
+        select: (c) => { colonnes = String(c || ''); return chaine },
+        eq: (col, val) => { filtres[col] = val; return chaine },
+        in: (col, val) => { filtres[col] = val; return chaine },
+        is: () => chaine,
+        neq: () => chaine,
+        order: () => chaine,
+        maybeSingle: async () => ({
+          data: nom === 'rdv_prestations' ? demandee
+            : nom === 'commercants' ? { id: 'c1', nom: 'La Table d’Essai', adresse: 'Rue du Test 1' }
+            : null,
+        }),
+        insert: (p) => { vu.payload = p; return chaine },
+        single: async () => {
+          const p = vu.payload
+          const doublon = existantes.some(r =>
+            String(r.praticien_id ?? '') === String(p?.praticien_id ?? '')
+            && r.date_rdv === p?.date_rdv
+            && String(r.heure_debut).slice(0, 5) === String(p?.heure_debut).slice(0, 5)
+            && Number(r.place_no) === Number(p?.place_no))
+          return doublon
+            ? { data: null, error: { code: '23505' } }
+            : { data: { id: 'rdv-3', numero_rdv: 3, numero_prefixe: 'RE', place_no: p?.place_no }, error: null }
+        },
+        then: (resoudre) => {
+          if (nom === 'rdv_prestations') return resoudre({ data: formats })
+          if (nom !== 'rdv_reservations') return resoudre({ data: [] })
+          let lignes = existantes.filter(r => !filtres.date_rdv || r.date_rdv === filtres.date_rdv)
+          if (filtres.prestation_id !== undefined) {
+            const ids = [].concat(filtres.prestation_id).map(String)
+            lignes = lignes.filter(r => ids.includes(String(r.prestation_id)))
+          }
+          if (filtres.heure_debut !== undefined) {
+            lignes = lignes.filter(r => String(r.heure_debut).slice(0, 5) === String(filtres.heure_debut).slice(0, 5))
+          }
+          if (colonnes.trim() === 'place_no') vu.lecturesRang.push({ ...filtres })
+          return resoudre({ data: lignes })
+        },
+      }
+      return chaine
+    }
+    return { from: table, _vu: vu }
+  }
+
+  {
+    const db = salleSimulee({ demandee: A2, formats: SALLE_ALEX, existantes: deuxCouples })
+    const r = await db.from('rdv_reservations').insert({ praticien_id: null, date_rdv: '2026-09-15', heure_debut: '19:00', place_no: 1 }).select('id').single()
+    verifier('⚠️ témoin : la fausse base refuse bien le rang 1 déjà pris à 19h', r.error?.code === '23505')
+  }
+  {
+    const db = salleSimulee({ demandee: A2, formats: SALLE_ALEX, existantes: deuxCouples })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'a2', dateRdv: '2026-09-15', heureDebut: '19:00',
+      champs: { couverts: 2, client_email: 'essai@yoppaa.app' },
+    })
+    verifier('🔴 la troisième réservation pour deux passe enfin', res.ok === true, JSON.stringify({ ok: res.ok, code: res.code }))
+    egal('🔴 sur une table de quatre', db._vu.payload?.prestation_id, 'a4')
+    egal('🔴 au premier rang libre de l’HEURE, pas du format', db._vu.payload?.place_no, 3)
+    egal('🔴 pour la durée du couple, pas celle d’une tablée de quatre', db._vu.payload?.duree_minutes, 90)
+    egal('⚠️ et l’heure de fin le répète', db._vu.payload?.heure_fin, '20:30')
+    egal('⚠️ la TVA et la capacité suivent la table retenue', [db._vu.payload?.tva_taux, db._vu.payload?.capacite_creneau], [12, 24])
+    const lecture = db._vu.lecturesRang.at(-1) || {}
+    verifier('🔴 le rang se lit sur toute l’heure, sans filtre de format',
+      lecture.heure_debut === '19:00' && lecture.date_rdv === '2026-09-15' && lecture.prestation_id === undefined,
+      JSON.stringify(lecture))
+  }
+  {
+    // ⚠️ UNE REQUÊTE QUI DÉSIGNE LA TABLE DE QUATRE POUR DEUX ne décide pas de
+    // la durée : le serveur prend sa référence dans la salle.
+    const db = salleSimulee({ demandee: A4, formats: SALLE_ALEX, existantes: [] })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'a4', dateRdv: '2026-09-15', heureDebut: '19:00', champs: { couverts: 2 },
+    })
+    verifier('⚠️ une requête qui désigne une grande table pour deux passe', res.ok === true)
+    egal('⚠️ sur la table de deux, la plus petite qui convient', db._vu.payload?.prestation_id, 'a2')
+    egal('🔴 et pour la durée du groupe, pas celle de la table désignée', db._vu.payload?.duree_minutes, 90)
+  }
+  {
+    const db = salleSimulee({ demandee: A4, formats: SALLE_ALEX, existantes: deuxCouples })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'a4', dateRdv: '2026-09-15', heureDebut: '19:00', champs: { couverts: 4 },
+    })
+    verifier('🔴 un groupe de quatre à 19h passe à côté des deux couples', res.ok === true, JSON.stringify({ code: res.code }))
+    egal('⚠️ sur une table de quatre, au rang 3, pour deux heures',
+      [db._vu.payload?.prestation_id, db._vu.payload?.place_no, db._vu.payload?.duree_minutes], ['a4', 3, 120])
+  }
+  {
+    const pleineEnBase = [...deuxCouples, { id: 'r3', prestation_id: 'a4', heure_debut: '19:00:00', heure_fin: '21:00:00', place_no: 3, praticien_id: null, statut: 'confirme', date_rdv: '2026-09-15' }]
+    const db = salleSimulee({ demandee: A2, formats: [A2, { ...A4, quantite: 1 }], existantes: pleineEnBase })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'a2', dateRdv: '2026-09-15', heureDebut: '19:00', champs: { couverts: 2 },
+    })
+    verifier('🔴 et une salle vraiment pleine reste refusée, sans rien écrire',
+      res.ok === false && res.code === 'salle_complete' && db._vu.payload === null, JSON.stringify({ code: res.code }))
+  }
+
+  // ─── Le tableau de bord : la saisie au téléphone et le déplacement ────────
+  const soir = { ouvert: true, debut: '09:00', fin: '00:00' }
+  const assis = [{ id: 'x1', prestation_id: 'a2', date_rdv: '2026-09-15', heure_debut: '19:00:00', heure_fin: '20:30:00', statut: 'confirme' }]
+  const appel = { dateStr: '2026-09-15', heureDebut: '19:30', dureeMinutes: 120, horaireJour: soir,
+    creneauxJour: service, rdvsExistants: assis, capacite: 24, prestationId: 'a4' }
+  const verdictAppel = creneauAcceptable({ ...appel, prestations: SALLE_ALEX })
+  verifier('🔴 au téléphone, une table de quatre à 19h30 passe à côté d’un couple assis à 19h',
+    verdictAppel.ok === true, JSON.stringify(verdictAppel))
+  verifier('⚠️ témoin : sans le catalogue, c’était « ce créneau chevauche un RDV »',
+    creneauAcceptable(appel).raison === 'conflit')
+  const COUPE = { id: 'coupe', par_couverts: false, capacite: 1 }
+  verifier('⚠️ un rendez-vous qui n’est pas une table reste un conflit',
+    creneauAcceptable({ ...appel, prestationId: 'coupe', capacite: 1, dureeMinutes: 45,
+      prestations: [...SALLE_ALEX, COUPE] }).raison === 'conflit')
+  verifier('⚠️ et une table ne passe pas sur ce qui n’en est pas une',
+    creneauAcceptable({ ...appel, rdvsExistants: [{ ...assis[0], prestation_id: 'coupe' }],
+      prestations: [...SALLE_ALEX, COUPE] }).raison === 'conflit')
+
+  // Les deux modales : elles ne s'exécutent pas hors navigateur, on vérifie
+  // qu'elles donnent à la règle ce dont elle a besoin, et le rang de l'heure.
+  const MODALE_N = sansProse(readFileSync(new URL('../app/dashboard/ModalNouveauRdv.js', import.meta.url), 'utf8'))
+  const MODALE_D = sansProse(readFileSync(new URL('../app/dashboard/ModalDeplacerRdv.js', import.meta.url), 'utf8'))
+  verifier('🔴 la saisie au téléphone donne le catalogue à la règle',
+    /const verdict = creneauAcceptable\(\{[\s\S]{0,600}?prestationId: presta\.id,\s*prestations,\s*\}\)/.test(MODALE_N))
+  verifier('🔴 et le déplacement aussi',
+    /exclureId: rdv\?\.id \?\? null,\s*prestations,\s*\}/.test(MODALE_D))
+  verifier('🔴 la saisie cherche le rang d’une table sur toute l’heure',
+    /if \(estParCouverts\(presta\)\) \{[\s\S]{0,300}?\.from\('rdv_reservations'\)\s*\.select\('date_rdv, place_no'\)\s*\.eq\('commercant_id', commercant\.id\)\s*\.in\('date_rdv', toutesLesDates\)\s*\.eq\('heure_debut', heureInit\)[\s\S]{0,700}?rangLibre\(/.test(MODALE_N))
+  verifier('🔴 et le déplacement aussi, en s’excluant lui-même',
+    /if \(estTable\) \{[\s\S]{0,300}?\.from\('rdv_reservations'\)\s*\.select\('id, place_no'\)\s*\.eq\('commercant_id', commercant\.id\)\s*\.eq\('date_rdv', date\)\s*\.eq\('heure_debut', heure\)[\s\S]{0,500}?rangLibre\(\(memeHeure \|\| \[\]\)\.filter\(r => String\(r\.id\) !== String\(rdv\.id\)\)/.test(MODALE_D))
+  verifier('🔴 et une table déplacée n’est plus un « cours de 24 places »',
+    /const estTable = presta \? estParCouverts\(presta\) : false/.test(MODALE_D)
+    && /const estCours = !estTable && capacite > 1/.test(MODALE_D))
+
+  // 🔴 ET LES COLONNES QUE CES RÈGLES LISENT ARRIVENT JUSQU'AUX MODALES. La
+  // dixième colonne absente d'un select était celle-ci.
+  const BORD = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+  const selBord = (BORD.match(/from\('rdv_prestations'\)[\s\S]{0,160}?\.select\('([^']*)'\)/) || [])[1] || ''
+  const manquantes = ['capacite', 'par_couverts', 'couverts_min', 'couverts_max', 'duree_minutes', 'duree_paliers']
+    .filter(c => !new RegExp(`\\b${c}\\b`).test(selBord))
+  verifier('🔴 le tableau de bord charge tout ce que lisent les modales d’une table',
+    selBord !== '' && manquantes.length === 0, `manque : ${manquantes.join(', ')} · select : ${selBord}`)
+
+  // ⚠️ LES MOTS DU REFUS. Depuis que le rang d'une table se cherche sur toute
+  // l'heure, « place prise » ne veut plus dire « complet » mais « une autre
+  // réservation est arrivée à la même seconde ». « La dernière place vient
+  // d'être prise » serait faux devant une salle qui a encore dix tables.
+  const FICHE_T = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('⚠️ une table « prise » le dit juste, sur les trois chemins d’envoi',
+    (FICHE_T.match(/setSubmitError\(estParCouverts\(prestationChoisie\) \? phraseTablePrise : j\.collectif/g) || []).length === 3)
+  verifier('⚠️ et le contrôle d’avant envoi parle de table, pas de cours',
+    /conflit\.raison === 'complet' \|\| conflit\.raison === 'trop_grand'\s*\?\s*\(estParCouverts\(prestationChoisie\)\s*\?\s*'La dernière table libre/.test(FICHE_T))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

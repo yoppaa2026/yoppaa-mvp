@@ -458,8 +458,12 @@ const MUTATIONS = [
     // sont venues s'ajouter sous `couverts` quand le module a cessé de les
     // recevoir de l'écran. Une ancre qui vise la dernière ligne d'un bloc suit
     // ce bloc à chaque fois qu'il grandit ; c'est le prix d'une ancre juste.
-    de: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeSelonCouverts(prestationRetenue, couvertsRetenus)),\n  }',
-    vers: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeSelonCouverts(prestationRetenue, couvertsRetenus)),\n    ...champs,\n  }' },
+    // ⚠️ REMISE UNE TROISIÈME FOIS LE 10/09 : la durée écrite est devenue
+    // `dureeRetenue`, celle que la salle contrôle. Et l'ancre n'a plus de saut
+    // de ligne : `...champs` s'ajoute sur la même ligne, après la dernière clé,
+    // ce qui suffit à le faire passer en dernier dans le spread.
+    de: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeRetenue),',
+    vers: '    heure_fin: minutesToTime(timeToMinutes(heure) + dureeRetenue), ...champs,' },
 
   // 🔴 CROISER DEUX IDENTIFIANTS SANS VÉRIFIER LEUR LIEN : la prestation d’un
   // salon se réserverait dans l’agenda d’un autre.

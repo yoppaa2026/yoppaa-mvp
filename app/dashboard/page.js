@@ -1309,7 +1309,16 @@ export default function Dashboard() {
         // fiche et le lien vers l'abonnement dans « Mes rendez-vous ». Le banc
         // exige désormais que TOUS les champs lus par les modales soient
         // demandés ici.
-        .select('id, nom, duree_minutes, prix, acompte_pourcent, ordre, tva_taux, capacite')
+        //
+        // 🔴 ET CETTE PHRASE ÉTAIT FAUSSE (10/09), DIXIÈME FOIS. Les quatre
+        // colonnes de la table manquaient : `par_couverts`, les bornes et les
+        // paliers. La saisie au téléphone ne savait donc pas qu'une table en
+        // était une — pas de « combien de personnes ? », un couvert écrit
+        // d'office, la durée de base au lieu de celle du groupe. Aucun banc ne
+        // l'exigeait : la garde « capacite et par_couverts voyagent ensemble »
+        // cherchait le `select` à 160 caractères du `from`, et ce commentaire-ci
+        // l'en éloignait. Elle lit maintenant le code sans sa prose.
+        .select('id, nom, duree_minutes, prix, acompte_pourcent, ordre, tva_taux, capacite, par_couverts, couverts_min, couverts_max, duree_paliers')
         .eq('commercant_id', id)
         .eq('actif', true)
         .is('deleted_at', null)

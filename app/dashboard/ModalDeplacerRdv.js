@@ -26,7 +26,7 @@ import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
-import { capacitePrestation, premierePlaceLibre } from '@/lib/cours-collectifs'
+import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts } from '@/lib/cours-collectifs'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
   heureDeFin, heureDeMinutes, minutesDeLHeure, jourCle, formatJour,
@@ -75,7 +75,14 @@ export default function ModalDeplacerRdv({
   // de 45 minutes parce que le commerçant a modifié son catalogue entre-temps.
   const dureeMinutes = Number(rdv?.duree_minutes) || Number(presta?.duree_minutes) || 0
   const capacite = presta ? capacitePrestation(presta) : Math.max(1, Number(rdv?.capacite_creneau) || 1)
-  const estCours = capacite > 1
+  // 🔴 UNE TABLE N'EST PAS UN COURS, ICI NON PLUS (10/09). `capacite > 1`
+  // classait chaque table en cours : déplacer une réservation de restaurant
+  // annonçait « cours de 24 places » et cherchait sa place dans son seul
+  // format, où l'index la rejetait dès qu'une table voisine partait à la même
+  // heure. Sans prestation (supprimée depuis), on ne peut pas savoir : on garde
+  // la lecture d'avant.
+  const estTable = presta ? estParCouverts(presta) : false
+  const estCours = !estTable && capacite > 1
 
   const jour = useMemo(() => (
     /^\d{4}-\d{2}-\d{2}$/.test(date) ? jourCle(new Date(`${date}T12:00:00`)) : null
@@ -95,13 +102,16 @@ export default function ModalDeplacerRdv({
     // décalage plus court qu'une prestation serait refusé, c'est-à-dire
     // précisément les petits décalages qu'on demande le plus souvent.
     exclureId: rdv?.id ?? null,
+    // 🔴 ET DEUX TABLES NE SE GÊNENT PAS : sans le catalogue, décaler une table
+    // de 19h à 19h30 était refusé dès qu'une autre était assise à 19h.
+    prestations,
   }
 
   // LE VERDICT S'AFFICHE AVANT DE CONFIRMER, il ne sanctionne pas après coup.
   // Même principe que l'aperçu des abonnements : l'écran est le garde-fou.
   const verdict = useMemo(() => creneauAcceptable({ ...contexte, heureDebut: heure }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [date, heure, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants])
+    [date, heure, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations])
 
   // LES HEURES QUI RESTENT LIBRES CE JOUR-LÀ, proposées d'un tap.
   // Zéro friction : le commerçant ne devine pas ses propres trous, il les voit.
@@ -120,7 +130,7 @@ export default function ModalDeplacerRdv({
     }
     return trouvees.sort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants])
+  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations])
 
   const utile = deplacementUtile(rdv, { date, heure })
   const peutValider = !!(date && heure && verdict.ok && utile && dureeMinutes > 0 && !submitting)
@@ -137,7 +147,25 @@ export default function ModalDeplacerRdv({
       // déplacement à l'intérieur du même cours, on compterait sinon sa propre
       // place comme prise par quelqu'un d'autre.
       let placeNo = 1
-      if (estCours) {
+      if (estTable) {
+        // 🔴 LE RANG D'UNE TABLE SE CHERCHE PARMI TOUTES LES RÉSERVATIONS DE
+        // L'HEURE (10/09), tous formats confondus, en s'excluant soi-même. Même
+        // règle que le serveur et que la saisie : `rangLibre`.
+        const { data: memeHeure, error: errRangs } = await supabase
+          .from('rdv_reservations')
+          .select('id, place_no')
+          .eq('commercant_id', commercant.id)
+          .eq('date_rdv', date)
+          .eq('heure_debut', heure)
+          .in('statut', ['confirme', 'honore'])
+          .is('deleted_at', null)
+        if (errRangs) {
+          setError(`Impossible de lire les tables déjà posées à cette heure : ${errRangs.message}`)
+          setSubmitting(false)
+          return
+        }
+        placeNo = rangLibre((memeHeure || []).filter(r => String(r.id) !== String(rdv.id)).map(r => r.place_no))
+      } else if (estCours) {
         const { data: dejaLa, error: errLecture } = await supabase
           .from('rdv_reservations')
           .select('id, place_no')
@@ -179,7 +207,9 @@ export default function ModalDeplacerRdv({
 
       if (errMaj) {
         if (errMaj.code === '23505') {
-          setError(estCours
+          setError(estTable
+            ? 'Une autre table vient d\'être posée à la même heure pendant ta saisie. Réessaie, le rang suivant sera calculé.'
+            : estCours
             ? 'Une place vient d\'être prise pendant ta saisie. Réessaie, la suivante sera calculée.'
             : 'Ce créneau vient d\'être pris par un autre RDV. Recharge ton agenda.')
         } else {

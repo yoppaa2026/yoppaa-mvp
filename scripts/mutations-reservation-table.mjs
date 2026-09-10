@@ -295,6 +295,118 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '  const peutRdv       = peutReserver(commercant)',
     vers: "  const peutRdv       = peut(commercant, 'rdv')" },
+
+  // ═══ 10/09 : « POURQUOI CA BLOQUE APRES DEUX RESAS ? » ══════════════════
+  //
+  // 🔴 LE DEFAUT QU ALEX A TOUCHE : le rang de la table retenue se cherchait
+  // dans son seul format, et l index sans prestation le rejetait.
+  { nom: '🔴 le rang d une table retombe a 1',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    placeNo = rangLibre((memeHeure || []).map(r => r.place_no))',
+    vers: '    placeNo = 1' },
+
+  { nom: '🔴 le rang d une table retrouve un plafond',
+    fichier: 'lib/cours-collectifs.js',
+    de: '  while (prises.has(rang)) rang++',
+    vers: '  while (prises.has(rang) && rang < 2) rang++' },
+
+  // 🔴 LA DUREE CONTROLEE ET LA DUREE ECRITE : la meme variable.
+  { nom: '🔴 la duree ecrite redevient celle de la table retenue',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '    duree_minutes: dureeRetenue,',
+    vers: '    duree_minutes: dureeSelonCouverts(prestationRetenue, couvertsRetenus),' },
+
+  { nom: '🔴 la table designee par la requete decide de la duree',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '      if (reference) dureeRetenue = dureeSelonCouverts(reference, couvertsRetenus)',
+    vers: '      void reference' },
+
+  { nom: '🔴 le controle du creneau mesure une autre duree que celle ecrite',
+    fichier: 'lib/rdv-creation-server.js',
+    de: '      finMin: timeToMinutes(heure) + dureeRetenue,',
+    vers: '      finMin: timeToMinutes(heure) + dureeSelonCouverts(prestation, champs?.couverts),' },
+
+  // 🔴 LA GRILLE : une table d un autre format n est pas un conflit.
+  { nom: '🔴 la regle ignore la salle qu on lui donne',
+    fichier: 'lib/rdv-slots.js',
+    de: '  if (salle && enModeInventaire(salle.formats)) {',
+    vers: '  if (false) {' },
+
+  { nom: '🔴 la grille ne transmet plus la salle',
+    fichier: 'lib/rdv-slots.js',
+    de: '        salle,',
+    vers: '        salle: null,' },
+
+  // 🔴 LE PIEGE DU ZERO : des minutes lues comme des heures vident la salle.
+  // ⚠️ MANQUEE AU PREMIER PASSAGE : un debut a 0 chevauche encore 19h. C est une
+  // fenetre AVANT la reservation qui la voit, ajoutee au banc.
+  { nom: '🔴 le debut d une reservation en minutes retombe a zero',
+    fichier: 'lib/inventaire-salle.js',
+    de: "    const d = typeof r.start === 'number' ? r.start : timeToMinutes(r.heure_debut)",
+    vers: '    const d = timeToMinutes(r.heure_debut)' },
+
+  { nom: '🔴 la grille perd les couverts en recopiant les reservations',
+    fichier: 'lib/rdv-slots.js',
+    de: '    couverts: r.couverts,',
+    vers: '' },
+
+  { nom: '🔴 la fin d une reservation en minutes retombe a zero',
+    fichier: 'lib/inventaire-salle.js',
+    de: "    const f = typeof r.end === 'number' ? r.end : timeToMinutes(r.heure_fin)",
+    vers: '    const f = timeToMinutes(r.heure_fin)' },
+
+  // 🔴 LA FICHE : trois questions, une regle.
+  { nom: '🔴 le controle d avant envoi recopie ses arguments et oublie la salle',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '        ...regleOccupation(busy),',
+    vers: '        capacite: capacitePrestation(prestationChoisie),' },
+
+  { nom: '⚠️ la salle recoit les reservations filtrees par praticien',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '        ...regleOccupation(reservations),',
+    vers: '        ...regleOccupation(reservationsFiltrees),' },
+
+  { nom: '⚠️ une table prise redit « la derniere place »',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '          setSubmitError(estParCouverts(prestationChoisie) ? phraseTablePrise : j.collectif',
+    vers: '          setSubmitError(j.collectif' },
+
+  // 🔴 LE TABLEAU DE BORD : la saisie au telephone et le deplacement.
+  { nom: '🔴 deux tables redeviennent un conflit au telephone',
+    fichier: 'lib/deplacement-rdv.js',
+    de: '    if (estTable && idsSalle.has(String(r.prestation_id))) return false',
+    vers: '    if (false) return false' },
+
+  { nom: '🔴 la saisie au telephone ne donne plus le catalogue',
+    fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '        prestations,',
+    vers: '' },
+
+  { nom: '🔴 le deplacement ne donne plus le catalogue',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '    prestations,',
+    vers: '' },
+
+  { nom: '🔴 la saisie cherche encore le rang dans le seul format',
+    fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '        for (const d of toutesLesDates) placeParDate[d] = rangLibre(rangsParDate[d] || [])',
+    vers: '        for (const d of toutesLesDates) placeParDate[d] = 1' },
+
+  { nom: '🔴 une table deplacee redevient un cours',
+    fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '  const estCours = !estTable && capacite > 1',
+    vers: '  const estCours = capacite > 1' },
+
+  // 🔴 LA DIXIEME COLONNE ABSENTE, et la garde qui ne la voyait pas.
+  { nom: '🔴 le tableau de bord recharge ses prestations sans par_couverts',
+    fichier: 'app/dashboard/page.js',
+    de: ", capacite, par_couverts, couverts_min, couverts_max, duree_paliers')",
+    vers: ", capacite')" },
+
+  { nom: '⚠️ la garde structurelle relit le code AVEC sa prose',
+    fichier: 'scripts/verif-reservation-table.mjs',
+    de: "      const src = sansProse(readFileSync(f, 'utf8'))",
+    vers: "      const src = readFileSync(f, 'utf8')" },
 ]
 
 const lancer = () => {

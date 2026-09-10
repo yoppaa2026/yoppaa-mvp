@@ -487,6 +487,32 @@ export default function CommanderRdvSlug() {
   // pas — c'est la même règle que le serveur, lue au même endroit, et les deux
   // doivent dire la même chose sous peine de proposer ce que l'autre refuse.
   const salleParInventaire = enModeInventaire(prestations)
+
+  // 🔴 LA RÈGLE D'OCCUPATION, ÉCRITE UNE FOIS POUR LES TROIS QUESTIONS DE CETTE
+  // PAGE (Alex, 10/09 : « pourquoi ça bloque après deux résas ? »). La grille
+  // du jour, les pastilles du calendrier et le contrôle d'avant envoi posent la
+  // même question — ce créneau est-il libre ? — et chacune recopiait ses
+  // arguments. Le contrôle d'avant envoi avait oublié les couverts : il tenait
+  // deux tables qui se chevauchent pour un conflit, et refusait la seconde
+  // réservation d'un service que la grille venait de proposer.
+  //
+  // ⚠️ `salle` REÇOIT LES RÉSERVATIONS BRUTES, sans le filtre de praticien. Ce
+  // filtre sert un salon (« Carole est-elle libre ? ») et masquerait ici les
+  // tables posées dans une autre salle : la grille verrait la salle plus vide
+  // que le serveur ne la compte, et proposerait ce qu'il refuse.
+  const regleOccupation = (reservationsDuJour) => ({
+    capacite: capacitePrestation(prestationChoisie),
+    prestationId: prestationChoisie?.id || null,
+    parCouverts: estParCouverts(prestationChoisie),
+    couvertsDemandes: couverts,
+    salle: salleParInventaire ? { formats: prestations, reservations: reservationsDuJour || [] } : null,
+  })
+  // ⚠️ LE REFUS « PLACE PRISE » N'A PAS LE MÊME SENS POUR UNE TABLE. Depuis que
+  // son rang se cherche parmi toutes les réservations de l'heure, il ne dit
+  // plus « c'est complet » — l'inventaire l'aurait dit avant — mais « une autre
+  // réservation est arrivée à la même seconde ». « La dernière place vient
+  // d'être prise » serait faux : il reste peut-être dix tables.
+  const phraseTablePrise = 'Une autre réservation vient d’arriver à la même heure. Choisis à nouveau ton horaire : la grille vient de se mettre à jour.'
   const [dateChoisie, setDateChoisie] = useState(null)        // Date object
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
@@ -1345,12 +1371,10 @@ export default function CommanderRdvSlug() {
         horairesDetail: commercant.horaires_detail,
         // ⚠️ La capacité fait la différence entre « ce créneau est pris » et
         // « il reste des places ». Sans elle, un cours de dix se fermerait dès
-        // le premier inscrit.
-        capacite: capacitePrestation(prestationChoisie),
-        prestationId: prestationChoisie?.id || null,
+        // le premier inscrit. Elle vient de `regleOccupation`, avec les
+        // couverts et la salle : une seule écriture pour les trois questions.
+        ...regleOccupation(reservations),
         liaisonsCreneaux,
-        parCouverts: estParCouverts(prestationChoisie),
-        couvertsDemandes: couverts,
       })
       setSlots(list)
       // Tri des reservations par heure_debut pour la section info 'Deja pris'
@@ -1461,14 +1485,11 @@ export default function CommanderRdvSlug() {
       reservations: resaFiltree,
       horairesDetail: commercant?.horaires_detail,
       // Le mini-calendrier doit compter pareil : sans la capacité, un jour de
-      // cours apparaîtrait complet alors qu'il reste neuf places.
-      capacite: capacitePrestation(prestationChoisie),
-      prestationId: prestationChoisie?.id || null,
+      // cours apparaîtrait complet alors qu'il reste neuf places. Et une salle
+      // se remplit en tables : ce que le client demande décide de ce qui lui
+      // reste ouvert.
+      ...regleOccupation(resaDuJour),
       liaisonsCreneaux,
-      // Une salle se remplit en couverts : ce que le client demande décide de
-      // ce qui lui reste ouvert.
-      parCouverts: estParCouverts(prestationChoisie),
-      couvertsDemandes: couverts,
     })
     return { ...j, nbLibres: list.filter(s => !s.pris).length }
   })
@@ -1626,19 +1647,29 @@ export default function CommanderRdvSlug() {
       // garde-fou refusait la troisième inscrite, parce qu'il tenait tout
       // chevauchement pour un conflit. Il appelle maintenant la MÊME fonction
       // que la grille : une règle, un seul endroit où elle est écrite.
+      //
+      // 🔴 ET IL LA TROUVAIT À MOITIÉ (10/09). Il recevait la capacité mais ni
+      // les couverts ni la salle : deux tables qui se chevauchent sans partir à
+      // la même minute passaient pour un conflit, et la table d'un autre format
+      // aussi. Il refusait donc à l'envoi ce que la grille venait de proposer.
+      // Les arguments viennent maintenant de `regleOccupation`, comme ceux de
+      // la grille : on ne peut plus en oublier un d'un côté seulement.
       const conflit = conflitReservation({
         debut: debutMin, fin: finMin,
-        prestationId: prestationChoisie?.id || null,
-        capacite: capacitePrestation(prestationChoisie),
         reservations: busyFiltres,
+        ...regleOccupation(busy),
       })
       if (conflit.conflit) {
         console.warn('[rdv] conflit', { nouveau: `${debutMin}-${finMin}`, raison: conflit.raison, inscrits: conflit.inscrits })
         // Deux refus, deux raisons, deux phrases. « Ce créneau chevauche un RDV »
         // devant un cours qui vient d'afficher complet enverrait chercher un
         // problème qui n'existe pas.
-        setSubmitError(conflit.raison === 'complet'
-          ? 'Ce cours vient d’afficher complet, sa dernière place a été prise. Choisis un autre horaire.'
+        // ⚠️ ET UNE TABLE N'EST PAS UN COURS : « sa dernière place » ne dit rien
+        // à un client de restaurant, « plus de table » lui dit tout.
+        setSubmitError(conflit.raison === 'complet' || conflit.raison === 'trop_grand'
+          ? (estParCouverts(prestationChoisie)
+              ? 'La dernière table libre à cette heure-là vient d’être réservée. Choisis un autre horaire.'
+              : 'Ce cours vient d’afficher complet, sa dernière place a été prise. Choisis un autre horaire.')
           : 'Ce créneau chevauche un RDV déjà pris. Choisis-en un autre.')
         setHeureChoisie(null)
         setSubmitting(false)
@@ -1802,7 +1833,7 @@ export default function CommanderRdvSlug() {
             if (j?.error === 'refus') {
               setSubmitError(expliquerRefusSeance(j.raison, aboDuCours, { plafond: j.plafond }))
             } else if (j?.error === 'place_prise') {
-              setSubmitError(j.collectif
+              setSubmitError(estParCouverts(prestationChoisie) ? phraseTablePrise : j.collectif
                 ? 'La dernière place vient d’être prise. Choisis un autre horaire.'
                 : 'Ce créneau vient d’être pris. Choisis-en un autre.')
               setHeureChoisie(null)
@@ -1987,7 +2018,7 @@ export default function CommanderRdvSlug() {
           // Le créneau peut avoir été pris pendant que le client remplissait ses
           // coordonnées : on le dit, et on le renvoie choisir une autre heure.
           if (!j.ok && j.error === 'place_prise') {
-            setSubmitError(j.collectif
+            setSubmitError(estParCouverts(prestationChoisie) ? phraseTablePrise : j.collectif
               ? 'La dernière place vient d’être prise. Choisis un autre horaire.'
               : 'Ce créneau vient d’être pris. Choisis-en un autre.')
             setHeureChoisie(null)
@@ -2140,7 +2171,7 @@ export default function CommanderRdvSlug() {
         // un cours de douze, « ce créneau vient d'être pris » laisserait croire
         // que le cours est annulé, alors qu'il ne reste plus de place.
         if (j?.error === 'place_prise') {
-          setSubmitError(j.collectif
+          setSubmitError(estParCouverts(prestationChoisie) ? phraseTablePrise : j.collectif
             ? 'La dernière place vient d’être prise. Choisis un autre horaire.'
             : 'Ce créneau vient d’être pris par un autre client. Choisis-en un autre.')
           setHeureChoisie(null)

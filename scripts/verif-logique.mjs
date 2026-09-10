@@ -1326,8 +1326,18 @@ verifier('et il grave la capacité',
 // écrit. Un compte se périme ; ce qui ne se périme pas, c'est que TOUT endroit
 // qui tranche la disponibilité doit connaître la capacité. Si ce nombre
 // descend, c'est qu'un de ces trois l'a reperdue.
+//
+// ⚠️ DEPUIS LE 10/09, LA CAPACITÉ N'EST PLUS RECOPIÉE TROIS FOIS : elle vit dans
+// `regleOccupation`, avec les couverts et la salle, et les trois endroits la
+// lisent. Le contrôle d'avant envoi avait justement oublié les couverts en
+// recopiant ses arguments. On compte donc les TROIS LECTEURS de la règle, et
+// on vérifie que la règle porte la capacité : si l'un des trois la perd, le
+// compte descend exactement comme avant.
+const defRegleOccupation = (srcResaRdv.match(/const regleOccupation = \(reservationsDuJour\) => \(\{[\s\S]*?\}\)/) || [''])[0]
+verifier('la règle d’occupation porte la capacité',
+  /capacite: capacitePrestation\(prestationChoisie\)/.test(defRegleOccupation), defRegleOccupation.slice(0, 160))
 egal('les trois endroits qui tranchent connaissent la capacité',
-  (srcResaRdv.match(/capacite: capacitePrestation\(prestationChoisie\)/g) || []).length, 3)
+  (srcResaRdv.match(/\.\.\.regleOccupation\(/g) || []).length, 3)
 // Un cours complet reste affiché, grisé : le filtre laisse passer ce motif.
 verifier('un cours complet reste affiché',
   /slots\.filter\(s => !s\.pris \|\| s\.motif === 'complet'\)/.test(srcResaRdv))

@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
 import { euros } from '@/lib/montants'
-import { capacitePrestation, premierePlaceLibre, estParCouverts, bornesCouverts, couvertsValides, dureeSelonCouverts } from '@/lib/cours-collectifs'
+import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, bornesCouverts, couvertsValides, dureeSelonCouverts } from '@/lib/cours-collectifs'
 import { motsReservation } from '@/lib/reservation-metier'
 import { creneauAcceptable, creneauxDuJour } from '@/lib/deplacement-rdv'
 // ⚠️ LES RÈGLES DE L'ABONNEMENT NE SONT PAS RÉÉCRITES ICI, elles sont APPELÉES.
@@ -254,6 +254,10 @@ export default function ModalNouveauRdv({
         rdvsExistants,
         capacite,
         prestationId: presta.id,
+        // 🔴 SANS LE CATALOGUE, DEUX TABLES QUI SE CHEVAUCHENT ÉTAIENT UN
+        // CONFLIT (10/09) : le restaurateur ne pouvait pas prendre au téléphone
+        // une table à 19h30 si une autre était assise depuis 19h.
+        prestations,
       })
       if (!verdict.ok) {
         console.warn('[ModalNouveauRdv] créneau refusé', verdict)
@@ -272,7 +276,32 @@ export default function ModalNouveauRdv({
       // rejeter la moitié de la série par l'index unique.
       const toutesLesDates = [dateStr, ...datesRepetees]
       const placeParDate = {}
-      if (capacite > 1) {
+      if (estParCouverts(presta)) {
+        // 🔴 UNE TABLE CHERCHE SON RANG PARMI TOUTES LES RÉSERVATIONS DE L'HEURE
+        // (10/09), tous formats confondus : l'index anti double-booking ne
+        // connaît pas la prestation, et un rang cherché dans le seul format de
+        // la table redonnait le 1 déjà pris par la table d'à côté. Même règle
+        // que le serveur, `rangLibre`, et pas de « complet » ici : le
+        // restaurateur connaît sa salle, son agenda reste le sien.
+        const { data: memeHeure, error: errRangs } = await supabase
+          .from('rdv_reservations')
+          .select('date_rdv, place_no')
+          .eq('commercant_id', commercant.id)
+          .in('date_rdv', toutesLesDates)
+          .eq('heure_debut', heureInit)
+          .in('statut', ['confirme', 'honore'])
+          .is('deleted_at', null)
+        if (errRangs) {
+          setError(`Impossible de lire les tables déjà posées à cette heure : ${errRangs.message}`)
+          setSubmitting(false)
+          return
+        }
+        const rangsParDate = {}
+        for (const r of memeHeure || []) {
+          (rangsParDate[r.date_rdv] = rangsParDate[r.date_rdv] || []).push(r.place_no)
+        }
+        for (const d of toutesLesDates) placeParDate[d] = rangLibre(rangsParDate[d] || [])
+      } else if (capacite > 1) {
         const { data: dejaLa } = await supabase
           .from('rdv_reservations')
           .select('date_rdv, place_no')
@@ -405,7 +434,9 @@ export default function ModalNouveauRdv({
           // ⚠️ SUR UN COURS, CE MESSAGE MENTAIT. La place calculée juste avant
           // vient d'être prise par quelqu'un d'autre : le cours n'est pas
           // « déjà pris », il a simplement bougé pendant la saisie.
-          setError(capacite > 1
+          setError(estParCouverts(presta)
+            ? 'Une autre table vient d\'être posée à la même heure pendant ta saisie. Réessaie, le rang suivant sera calculé.'
+            : capacite > 1
             ? 'Une place vient d\'être prise pendant ta saisie. Réessaie, la suivante sera calculée.'
             : 'Ce créneau exact vient d\'être pris (autre RDV identique). Recharge ton agenda.')
         } else {

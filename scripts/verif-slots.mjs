@@ -1118,8 +1118,12 @@ verifier('un cours reste ouvert malgré deux praticiennes occupées', !c.conflit
 // ⚠️ Ancré sur l'APPEL, pas sur le nom importé : importer sans appeler
 // laisserait le test vert avec la vieille boucle toujours en place.
 const srcTunnel = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+// ⚠️ DEPUIS LE 10/09, LA CAPACITÉ ARRIVE PAR `regleOccupation`, avec les
+// couverts et la salle que ce contrôle avait oubliés en recopiant ses
+// arguments. On exige l'appel ET que la règle étalée porte la capacité.
 verifier('le tunnel client interroge la règle commune',
-  /conflitReservation\(\{[\s\S]{0,220}?capacite: capacitePrestation\(prestationChoisie\)/.test(srcTunnel))
+  /conflitReservation\(\{[\s\S]{0,220}?\.\.\.regleOccupation\(busy\)/.test(srcTunnel)
+  && /const regleOccupation = \(reservationsDuJour\) => \(\{\s*capacite: capacitePrestation\(prestationChoisie\),/.test(srcTunnel))
 verifier('et il ne refait plus le calcul à la main',
   !/const overlap = busyFiltres\.some/.test(srcTunnel))
 verifier('un cours complet reçoit sa propre phrase',

@@ -2016,6 +2016,55 @@ for (const chemin of [
     /j\?\.error === 'creneau_passe'\) \{[\s\S]{0,200}?setHeureChoisie\(null\)[\s\S]{0,120}?allerEtape\(2\)/.test(FICHE))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 TOUT REMBOURSEMENT PASSE PAR UNE ANNULATION (11/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Trouvé en cherchant qui envoie l'email d'annulation. `/api/stripe/refund`,
+// une ébauche de juillet qu'aucun écran n'appelait, remboursait TOUT le
+// paiement (acompte ET produits) sans rien annuler. Un Yopper connecté pouvait
+// l'appeler avec son propre jeton, dans son délai d'annulation : le webhook
+// `charge.refunded` lui rendait ensuite ses bons et sa récompense, et sa
+// réservation restait confirmée, ses produits à retirer. Supprimée.
+//
+// ⚠️ LA LISTE EST FERMÉE. Un remboursement Stripe ne part que d'une route qui
+// change le statut dans le même geste. Une nouvelle route qui rembourse fait
+// rougir ce banc, et c'est voulu : elle se lit avant d'entrer dans la liste.
+{
+  const { readdirSync, statSync, existsSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const racine = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+  const rembourseurs = []
+  const parcourir = (d) => {
+    for (const e of readdirSync(d)) {
+      const p = join(d, e)
+      if (statSync(p).isDirectory()) { parcourir(p); continue }
+      if (!/\.jsx?$/.test(e)) continue
+      if (/refunds\.create\(/.test(sansProse(readFileSync(p, 'utf8')))) {
+        rembourseurs.push(p.replace(/\\/g, '/').replace(/^.*?\/(app|lib)\//, '$1/'))
+      }
+    }
+  }
+  parcourir(join(racine, 'app'))
+  parcourir(join(racine, 'lib'))
+  const ANNULENT_EN_REMBOURSANT = {
+    'app/api/commande/cancel/route.js': 'annulee_client_refund',
+    'app/api/rdv/cancel/route.js': 'annule_client',
+    'app/api/rdv/annuler-commercant/route.js': 'annule_commercant',
+    'app/api/rdv/no-show/route.js': 'no_show',
+  }
+  verifie('la sonde a trouvé des remboursements', rembourseurs.length >= 4, String(rembourseurs.length))
+  verifie('🔴 seules les routes qui changent le statut remboursent',
+    JSON.stringify([...rembourseurs].sort()) === JSON.stringify(Object.keys(ANNULENT_EN_REMBOURSANT).sort()),
+    rembourseurs.sort().join(' | '))
+  for (const [chemin, statut] of Object.entries(ANNULENT_EN_REMBOURSANT)) {
+    verifie(`🔴 ${chemin.split('/').slice(-3, -1).join('/')} écrit « ${statut} » en remboursant`,
+      new RegExp(`statut: '${statut}'`).test(lireCode(chemin)))
+  }
+  verifie('🔴 la route qui remboursait sans annuler n’existe plus',
+    !existsSync(join(racine, 'app', 'api', 'stripe', 'refund', 'route.js')))
+}
+
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════
 console.log(`\nTunnel rendez-vous : ${ok + echecs.length} vérifications`)
 if (echecs.length) {

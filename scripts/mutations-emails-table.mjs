@@ -160,6 +160,14 @@ const MUTATIONS = [
   { nom: '⚠️ le déplacement recalcule l’horloge à la main', banc: 'verif:table', fichier: 'app/api/emails/rdv-confirme/route.js',
     de: '          sequence: deplace ? sequenceIcs() : 0,',
     vers: '          sequence: deplace ? Math.floor(Date.now() / 60000) : 0,' },
+
+  // ─── TOUT REMBOURSEMENT PASSE PAR UNE ANNULATION ────────────────────────
+  { nom: '🔴 une route se remet à rembourser sans rien annuler', banc: 'verif:tunnel-rdv', fichier: 'app/api/emails/rdv-no-show/route.js',
+    de: "import { motsReservation } from '@/lib/reservation-metier'",
+    vers: "import { motsReservation } from '@/lib/reservation-metier'; export const rembourser = (s, pi) => s.refunds.create({ payment_intent: pi })" },
+  { nom: '🔴 le non-honoré rembourse sans écrire son statut', banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/no-show/route.js',
+    de: ".update({ statut: 'no_show', motif_annulation: 'commercant' })",
+    vers: ".update({ motif_annulation: 'commercant' })" },
 ]
 
 const lancer = (banc) => {

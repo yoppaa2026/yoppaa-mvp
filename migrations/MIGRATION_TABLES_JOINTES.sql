@@ -34,6 +34,12 @@
 -- ⚠️ À PASSER AVANT LE DÉPLOIEMENT DU CODE : le serveur et le tableau de bord
 -- demandent ces deux colonnes par leur nom. Sans elles, leurs requêtes
 -- échoueraient entières. Sûre à rejouer.
+--
+-- ✅ PASSÉE PAR ALEX LE 11/09/2026, avant le push de `25c8977` : colonnes
+-- `uuid` et `integer`, les trois garde-fous posés, fonction 1 (attendu 1),
+-- déclencheur posé et actif 1 (attendu 1), aucune jointure existante, droits
+-- d'`anon` et RLS inchangés, et les quinze essais conformes (1, 9, 13, 14 et 15
+-- acceptés ; 2 à 8 et 10 à 12 refusés).
 
 -- 1) Les deux colonnes.
 ALTER TABLE public.rdv_prestations

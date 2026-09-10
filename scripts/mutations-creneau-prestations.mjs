@@ -172,7 +172,9 @@ const MUTATIONS = [
 
   // 🔴 UN SEUL COURS PAR PLAGE (Alex, 07/09).
   { nom: '🔴 deux cours redeviennent possibles sur la meme plage',
-    de: '    if (p && Number(p.capacite) > 1) return p',
+    // ⚠️ ANCRE SUIVIE LE 10/09 : la condition exclut desormais les tables, qui
+    // ne sont pas des cours. La mutation neutralise toujours le meme test.
+    de: '    if (p && Number(p.capacite) > 1 && p.par_couverts !== true) return p',
     vers: '    if (false) return p' },
 
   // 🔴 LA PLAGE HORS HORAIRES, DEFAUT SILENCIEUX TROUVE PAR ALEX LE 07/09.
@@ -236,8 +238,8 @@ const MUTATIONS = [
   // 🔴 L AVERTISSEMENT QUI NOMME LE MAUVAIS COUPABLE (Alex, 07/09).
   { nom: '🔴 l avertissement renomme les cours qui ont deja leur plage',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '                    Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons, creneaux))',
-    vers: '                    Number(p.capacite) > 1)' },
+    de: '                    estCoursCollectif(p) && prestationSansCreneauDedie(p.id, liaisons, creneaux))',
+    vers: '                    estCoursCollectif(p))' },
 
   // 🔴 L ONGLET QUI SURVIT AU RECHARGEMENT (Alex, 07/09).
   { nom: '🔴 l onglet cesse d etre ecrit dans l adresse',

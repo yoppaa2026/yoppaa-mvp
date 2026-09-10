@@ -2114,8 +2114,12 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // garde restait verte : la même expression vit AUSSI dans le bandeau des
   // cours orphelins, deux cents lignes plus bas. C'est le piège du JUMEAU, déjà
   // rencontré le 06/09 sur `cible_tout`. Un nom unique le désamorce.
+  // ⚠️ `estCoursCollectif` ET PLUS `capacite > 1` (10/09) : la condition figée
+  // ici classait chaque format de table en « cours », et le bandeau demandait à
+  // un restaurant d'ouvrir « une plage à l'heure du cours ». La garde figeait le
+  // défaut ; elle vise maintenant la règle.
   verifier('⚠️ « toutes » avertit sur les cours restés sans plage',
-    /const exposes = prestationsRdv\.filter\(p =>\s*Number\(p\.capacite\) > 1 && prestationSansCreneauDedie\(p\.id, liaisons, creneaux\)\)/.test(CONFIG))
+    /const exposes = prestationsRdv\.filter\(p =>\s*estCoursCollectif\(p\) && prestationSansCreneauDedie\(p\.id, liaisons, creneaux\)\)/.test(CONFIG))
   verifier('🔴 et plus sur tout le catalogue de cours',
     !/prestationsRdv\.filter\(p => Number\(p\.capacite\) > 1\)\.map\(p => p\.nom\)/.test(CONFIG))
 
@@ -2582,7 +2586,7 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // était juste dans le moteur et morte à l'entrée.
   const CREATION_RDV = lire('lib/rdv-creation-server.js')
   verifier('🔴 la route de création dit au serveur si c’est un cours',
-    /estCours: capacitePrestation\(prestation\) > 1,/.test(CREATION_RDV))
+    /estCours: estCoursCollectif\(prestation\),/.test(CREATION_RDV))
 
   // ⚠️ ET L'AVERTISSEMENT DÉCRIT LA RÈGLE, plus le défaut qu'elle remplace.
   verifier('🔴 l’avertissement ne dit plus « proposés à toutes tes heures »',

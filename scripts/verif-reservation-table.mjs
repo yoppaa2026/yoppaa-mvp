@@ -795,6 +795,51 @@ egal('la réservation d’un restaurant s’atteint quand même',
     quantiteDe({ quantite: 0 }) === null && quantiteDe({ quantite: 3 }) === 3)
 
   // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 UNE TABLE N'EST PAS UN COURS (Alex, 10/09 : « c'est un peu confus »)
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // `capacite > 1` confondait deux notions : plusieurs places par créneau (vrai
+  // pour un cours ET une table) et cours à heure fixe (vrai pour le yoga, faux
+  // pour une table). Depuis que la capacité d'une table vaut son inventaire, six
+  // tables de quatre étaient « un cours de vingt-quatre », et le moteur ne leur
+  // offrait AUCUN horaire hors des plages qui les nomment.
+  const { estCoursCollectif } = await import('../lib/cours-collectifs.js')
+  const { coursSansHoraire, genererSlots } = await import('../lib/rdv-slots.js')
+  const TABLE24 = { id: 't4', par_couverts: true, capacite: 24, couverts_max: 4, quantite: 6 }
+  const YOGA12 = { id: 'y', par_couverts: false, capacite: 12 }
+  verifier('🔴 une table de six exemplaires n’est pas un cours',
+    estCoursCollectif(TABLE24) === false)
+  verifier('🔴 mais le yoga de douze places reste un cours, lui',
+    estCoursCollectif(YOGA12) === true)
+  verifier('⚠️ et un rendez-vous individuel n’en est pas un non plus',
+    estCoursCollectif({ par_couverts: false, capacite: 1 }) === false)
+  // Une plage « toutes mes prestations » : aucune liaison ne nomme la table.
+  verifier('🔴 une table sans plage dédiée n’est jamais « dates à venir »',
+    coursSansHoraire(TABLE24, []) === false)
+  verifier('⚠️ tandis que le yoga sans plage dédiée l’est toujours',
+    coursSansHoraire(YOGA12, []) === true)
+
+  // 🔴 LE COMPORTEMENT, PAS SEULEMENT LA FONCTION : le moteur de créneaux doit
+  // offrir des horaires à une table sur une plage qui ne la nomme pas.
+  const mardi = new Date('2026-09-15T12:00:00+02:00')
+  const plageToutes = [{ id: 'c1', jour_semaine: 'mardi', heure_debut: '18:00', heure_fin: '23:00', pas_minutes: 30, actif: true }]
+  const horairesOuverts = { mardi: { ouvert: true, debut: '09:00', fin: '00:00' } }
+  const slotsTable = genererSlots({
+    dateChoisie: mardi, dureeMinutes: 120, creneaux: plageToutes, reservations: [],
+    horairesDetail: horairesOuverts, capacite: 24, prestationId: 't4',
+    liaisonsCreneaux: [], parCouverts: true, couvertsDemandes: 4,
+  })
+  verifier('🔴 un groupe de quatre trouve des horaires sur un service ouvert à toutes les tables',
+    slotsTable.some(s => !s.pris), `${slotsTable.filter(s => !s.pris).length} horaires libres`)
+  const slotsYoga = genererSlots({
+    dateChoisie: mardi, dureeMinutes: 60, creneaux: plageToutes, reservations: [],
+    horairesDetail: horairesOuverts, capacite: 12, prestationId: 'y',
+    liaisonsCreneaux: [], parCouverts: false,
+  })
+  verifier('⚠️ et le yoga, lui, reste sans horaire sur une plage qui ne le nomme pas',
+    !slotsYoga.some(s => !s.pris), `${slotsYoga.filter(s => !s.pris).length} horaires libres`)
+
+  // ═══════════════════════════════════════════════════════════════════════
   // LOT 2b : LE CLIENT DIT COMBIEN ILS SONT, LE SERVEUR TROUVE LA TABLE
   // ═══════════════════════════════════════════════════════════════════════
   //

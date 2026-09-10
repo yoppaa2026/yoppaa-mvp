@@ -36,7 +36,7 @@ import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
-import { capacitePrestation, palierNettoyes } from '@/lib/cours-collectifs'
+import { capacitePrestation, palierNettoyes, estCoursCollectif } from '@/lib/cours-collectifs'
 import { enModeInventaire, formatsSansQuantite, tablesTotales, couvertsTotaux } from '@/lib/inventaire-salle'
 import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ⚠️ Trois fonctions de moins depuis le 18/08, et le lieu avec elles : cet écran
@@ -10529,8 +10529,10 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
           ⚠️ Ça ne touche QUE les cours : un catalogue sans capacité supérieure
           à 1 ne voit rien changer. */}
       {(() => {
+        // ⚠️ UNE TABLE N EST JAMAIS UN COURS SANS HORAIRE (10/09) : ce bandeau
+        // annoncait « 2 cours n ont pas encore d horaire » a un restaurant.
         const orphelins = prestationsRdv.filter(p =>
-          Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons, creneaux))
+          estCoursCollectif(p) && prestationSansCreneauDedie(p.id, liaisons, creneaux))
         if (orphelins.length === 0) return null
         return (
           <div style={{ margin: '0 0 12px', padding: '10px 12px', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 10 }}>
@@ -10783,7 +10785,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                 {(() => {
                   if (!form.toutesPrestations) return null
                   const exposes = prestationsRdv.filter(p =>
-                    Number(p.capacite) > 1 && prestationSansCreneauDedie(p.id, liaisons, creneaux))
+                    estCoursCollectif(p) && prestationSansCreneauDedie(p.id, liaisons, creneaux))
                   if (exposes.length === 0) return null
                   const plusieurs = exposes.length > 1
                   return (
@@ -10815,7 +10817,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {prestationsRdv.map(p => {
                     const choisie = (form.prestations || []).includes(p.id)
-                    const cours = Number(p.capacite) > 1
+                    const cours = estCoursCollectif(p)
                     // 🔴 UN SEUL COURS PAR PLAGE. À cette heure-là il n'y en a
                     // qu'un : en accepter deux ferait décider le premier client,
                     // c'est-à-dire le défaut qu'on vient de corriger.

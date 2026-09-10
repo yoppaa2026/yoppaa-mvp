@@ -32,6 +32,21 @@ CREATE OR REPLACE VIEW public.commercants_public AS
    FROM commercants
   WHERE statut_publication = 'publie'::text;
 
+-- 🔴 AJOUTÉ AU RANGEMENT, LE 10/09, ET C'EST UNE GARDE QUI L'A EXIGÉ.
+--
+-- Passée le 09/09 telle quelle, sans ce REVOKE, et c'était sans danger en
+-- production : `CREATE OR REPLACE VIEW` conserve les droits d'une vue qui
+-- existe, et ceux-ci avaient été fermés le 27/08 (MIGRATION_VUES_PUBLIQUES_
+-- LECTURE_SEULE). Le contrôle ci-dessous l'avait vérifié : « SELECT seul ».
+--
+-- ⚠️ MAIS CE FICHIER SERT À RECRÉER LA BASE. Sur une base neuve, la vue
+-- n'existe pas encore, `CREATE OR REPLACE` en crée une NEUVE, et une vue neuve
+-- naît ouverte en écriture pour `anon` — sans `security_invoker`, l'écriture
+-- IGNORE la RLS. C'est le défaut du 27/08. Une migration rangée doit être sûre
+-- à rejouer partout, pas seulement là où elle a été passée la première fois.
+-- Idempotent : sur la base de production, cette ligne ne change rien.
+REVOKE INSERT, UPDATE, DELETE ON public.commercants_public FROM anon, authenticated;
+
 COMMIT;
 
 select 'colonnes de la vue' as controle,

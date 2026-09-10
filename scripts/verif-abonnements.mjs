@@ -691,8 +691,13 @@ const srcConfigAbo = sansComm(
 // et c'est exactement ce que ce compte protège.
 egal('le contrat fige son taux à la signature',
   (srcConfigAbo.match(/tva_taux: presta\.tva_taux \?\? null/g) || []).length, 1)
+// ⚠️ ELLE FIGEAIT LE SELECT ENTIER, ET PAS SEULEMENT CE QU'ELLE PROTÈGE (10/09).
+// Son intention est la TVA ; `par_couverts` s'y est ajouté pour qu'une table ne
+// passe plus pour un cours, et elle a rougi sur une colonne qui ne la concerne
+// pas. Une garde qui fige la phrase au lieu de la colonne rougit à chaque ajout
+// légitime, et on finit par l'éteindre. On vise la colonne.
 verifier('et la colonne arrive bien jusqu’à l’écran',
-  /select\('id, nom, capacite, duree_minutes, tva_taux'\)/.test(srcConfigAbo))
+  /from\('rdv_prestations'\)\.select\('[^']*\btva_taux\b[^']*'\)/.test(srcConfigAbo))
 
 // ─── L'EXPORT COMPTABLE ───────────────────────────────────────────────────
 const { construireLignes } = await import('../lib/export-comptable.js')

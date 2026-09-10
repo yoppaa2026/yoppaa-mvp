@@ -8789,7 +8789,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
       supabase.from('abonnement_formules').select('*')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('ordre', { ascending: true }).order('created_at', { ascending: true }),
-      supabase.from('rdv_prestations').select('id, nom, capacite, duree_minutes, tva_taux')
+      supabase.from('rdv_prestations').select('id, nom, capacite, duree_minutes, tva_taux, par_couverts')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('ordre', { ascending: true }),
       supabase.from('abonnements').select('*')
@@ -9881,7 +9881,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       // ⚠️ `capacite` EST OBLIGATOIRE ICI. C'est elle qui distingue un cours
       // d'un rendez-vous individuel, et donc ce qu'on avertit plus bas.
       supabase.from('rdv_prestations')
-        .select('id, nom, capacite, duree_minutes')
+        .select('id, nom, capacite, duree_minutes, par_couverts')
         .eq('commercant_id', commercantId)
         .eq('actif', true)
         .is('deleted_at', null)

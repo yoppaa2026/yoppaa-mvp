@@ -839,6 +839,55 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('⚠️ et le yoga, lui, reste sans horaire sur une plage qui ne le nomme pas',
     !slotsYoga.some(s => !s.pris), `${slotsYoga.filter(s => !s.pris).length} horaires libres`)
 
+  // 🔴 ET LA RÈGLE ÉTAIT JUSTE, MAIS INOPÉRANTE (Alex, 10/09 : « encore un truc
+  // qui bug quand je coche toutes les prestations »).
+  //
+  // `estCoursCollectif` lit `par_couverts` pour savoir qu'une table n'est pas un
+  // cours. L'onglet Services chargeait ses prestations avec
+  // `select('id, nom, capacite, duree_minutes')` : sans `par_couverts`. La
+  // colonne valait `undefined`, `!== true` était vrai, et chaque table redevenait
+  // un cours — les deux bandeaux revenaient, identiques, après le correctif.
+  //
+  // ⚠️ MON BANC NE POUVAIT PAS LE VOIR : il testait la règle sur un objet que je
+  // construisais à la main, qui portait la colonne. Il vérifiait la FONCTION,
+  // jamais ce que l'ÉCRAN lui donne. La colonne absente d'un select, neuvième
+  // fois — le lendemain du jour où je l'avais notée comme LA leçon.
+  //
+  // 🔴 LA RÈGLE STRUCTURELLE : `capacite` ET `par_couverts` VOYAGENT ENSEMBLE.
+  // Une capacité lue sans son drapeau est exactement l'ambiguïté qui fait passer
+  // une table pour un cours. On balaie TOUT le dépôt, pas le fichier touché :
+  // chercher les frères, c'est balayer le dépôt.
+  {
+    const { readdirSync, statSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const racine = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+    const fichiers = []
+    const parcourir = (d) => {
+      for (const e of readdirSync(d)) {
+        if (e === 'node_modules' || e === '.next' || e.startsWith('.')) continue
+        const p = join(d, e)
+        if (statSync(p).isDirectory()) parcourir(p)
+        else if (/\.jsx?$/.test(e)) fichiers.push(p)
+      }
+    }
+    parcourir(join(racine, 'app'))
+    parcourir(join(racine, 'lib'))
+    const fautifs = []
+    for (const f of fichiers) {
+      const src = readFileSync(f, 'utf8')
+      for (const m of src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,160}?\.select\(\s*(['"`])([^'"`]*)\1/g)) {
+        const cols = m[2]
+        if (/\bcapacite\b/.test(cols) && !/\bpar_couverts\b/.test(cols)) {
+          fautifs.push(`${f.split(/[\\/]/).slice(-2).join('/')} → ${cols}`)
+        }
+      }
+    }
+    verifier('🔴 aucun select ne charge « capacite » sans « par_couverts », dans tout le dépôt',
+      fautifs.length === 0, fautifs.join(' | '))
+    verifier('⚠️ et la garde a bien parcouru le dépôt',
+      fichiers.length > 100, `${fichiers.length} fichiers`)
+  }
+
   // ═══════════════════════════════════════════════════════════════════════
   // LOT 2b : LE CLIENT DIT COMBIEN ILS SONT, LE SERVEUR TROUVE LA TABLE
   // ═══════════════════════════════════════════════════════════════════════

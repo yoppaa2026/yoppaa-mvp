@@ -50,8 +50,9 @@ export async function GET(request) {
         prix_estime, acompte_paye_en_ligne, acompte_montant, fidelite_remise,
         client_email, client_prenom,
         lieu_id, lieu_libelle, lieu_adresse,
+        couverts,
         commercant:commercants(nom, slug, adresse, rdv_delai_annulation_heures, categorie),
-        prestation:rdv_prestations(nom)
+        prestation:rdv_prestations(nom, par_couverts)
       `)
       .eq('date_rdv', dateRdv)
       .eq('statut', 'confirme')
@@ -91,6 +92,12 @@ export async function GET(request) {
           solde_a_prevoir:         solde,
           delai_annulation_heures: r.commercant.rdv_delai_annulation_heures || 24,
           commercant_categorie:    r.commercant.categorie || null,
+          // 🔴 UNE TABLE SE DIT EN PERSONNES (11/09) : « Table pour 4 personnes »
+          // sous l'heure, et plus le format où la salle les a assis.
+          // ⚠️ `couverts` et `par_couverts` sont demandés plus haut : sans eux,
+          // le rappel retombe sur le format, sans erreur.
+          table:                   r.prestation.par_couverts === true,
+          couverts:                r.couverts,
         })
 
         await envoyerAuCommercant({

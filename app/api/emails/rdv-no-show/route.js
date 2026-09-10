@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerAuCommercant, emailRdvNoShow } from '@/lib/resend'
+import { motsReservation } from '@/lib/reservation-metier'
 
 export async function POST(request) {
   try {
@@ -47,8 +48,9 @@ export async function POST(request) {
       .select(`
         id, date_rdv, heure_debut, acompte_paye_en_ligne, acompte_montant,
         client_email, client_prenom, bons_utilises,
+        couverts,
         commercant:commercants(nom, slug, categorie),
-        prestation:rdv_prestations(nom)
+        prestation:rdv_prestations(nom, par_couverts)
       `)
       .eq('id', rdv_id)
       .single()
@@ -62,6 +64,11 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, skipped: 'no_email' })
     }
 
+    // 🔴 UNE TABLE SE DIT EN PERSONNES, ici comme dans la confirmation (11/09).
+    // ⚠️ `couverts` ET `par_couverts` DOIVENT ÊTRE DEMANDÉS : absents du select,
+    // l'email retombe sur le format de la table, sans erreur.
+    const table = rdv.prestation?.par_couverts === true
+    const mots = motsReservation(rdv.commercant)
     try {
       const html = emailRdvNoShow({
         yopper_prenom:    rdv.client_prenom || 'Yopper',
@@ -89,10 +96,15 @@ export async function POST(request) {
         bon_garde,
         bon_restitue,
         recompense_rendue,
+        table,
+        couverts:         rdv.couverts,
       })
       await envoyerAuCommercant({
         to: rdv.client_email,
-        subject: `Ton RDV chez ${rdv.commercant?.nom || 'le commerçant'} a été marqué non honoré`,
+        // ⚠️ L'OBJET DANS LES MOTS DU MÉTIER : il disait « Ton RDV … a été
+        // marqué non honoré » au-dessus d'un email titré « Ta réservation a été
+        // marquée non honorée ». Un salon garde exactement son objet d'avant.
+        subject: `${mots.sujetChez} ${rdv.commercant?.nom || 'le commerçant'} a été ${mots.participeMarque} non ${mots.participeHonore}`,
         html,
       })
     } catch (e) {

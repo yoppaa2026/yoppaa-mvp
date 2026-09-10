@@ -54,13 +54,23 @@ export async function POST(request) {
       .from('rdv_reservations')
       .select(`
         id, date_rdv, heure_debut, heure_fin, acompte_paye_en_ligne, acompte_montant,
-        client_email, client_prenom, rappel_push_id,
+        client_email, client_prenom, client_nom, rappel_push_id,
         lieu_id, lieu_libelle, lieu_adresse,
+        couverts,
         commercant:commercants(nom, slug, adresse, telephone, email, categorie),
-        prestation:rdv_prestations(nom)
+        prestation:rdv_prestations(nom, par_couverts)
       `)
       .eq('id', rdv_id)
       .single()
+
+    // 🔴 L'ANNULATION D'UNE TABLE REDISAIT SON FORMAT (11/09) : « Table : Table
+    // de 6 personnes » pour un groupe de quatre, et « [ANNULÉ] RDV Table de 6
+    // personnes » dans le calendrier, là où la confirmation disait « 4
+    // personnes » et « Table pour 4 personnes ».
+    // ⚠️ `couverts` ET `par_couverts` DOIVENT ÊTRE DEMANDÉS : absents du select,
+    // ils valent `undefined`, et l'email retombe sur le format SANS erreur.
+    // `client_nom` aussi : le fichier calendrier le lisait sans le charger.
+    const table = rdv?.prestation?.par_couverts === true
 
     // Annule le rappel push programmé (1h avant) quel que soit le motif. Best-effort.
     if (rdv?.rappel_push_id) {
@@ -86,6 +96,8 @@ export async function POST(request) {
       client_email: rdv.client_email,
       client_nom: [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
       rappel_24h: false,
+      table,
+      couverts: rdv.couverts,
       status: 'CANCELLED',
       method: 'CANCEL',
       sequence: 1,
@@ -111,6 +123,8 @@ export async function POST(request) {
       // Frère exact du bon cadeau, corrigé la veille et jamais porté à côté.
       recompense_rendue,
       produits_montant,
+      table,
+      couverts:          rdv.couverts,
     })
 
     await envoyerAuCommercant({

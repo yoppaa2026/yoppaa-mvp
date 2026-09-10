@@ -2304,6 +2304,257 @@ egal('la réservation d’un restaurant s’atteint quand même',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 🔴 L'ANNULATION, L'ABSENCE ET LE RAPPEL D'UNE TABLE DISENT LE GROUPE (11/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// La confirmation disait « 4 personnes » depuis le 10/09. L'annulation de la
+// même table redisait « Table de 6 personnes », comme le non-honoré, le rappel
+// de la veille, le rappel push d'une heure avant et le fichier calendrier
+// d'annulation : même client, même table, deux vérités selon le message.
+// Et deux objets disaient encore « Ton RDV » à un restaurant.
+//
+// ⚠️ LES GABARITS ET LE RAPPEL PUSH SONT EXÉCUTÉS. Le rappel l'est sur une base
+// qui ne rend QUE les colonnes demandées, comme PostgREST : un select auquel
+// manque `couverts` ou `par_couverts` y rougit, là où un objet fait main
+// aurait tout fourni. Les routes, qu'aucun banc n'exécute, se lisent ensuite.
+{
+  const { emailRdvAnnule, emailRdvNoShow, emailRdvReminder } = await import('../lib/resend.js')
+  const { generateRdvIcs } = await import('../lib/ical.js')
+  const { groupeReservation, intituleReservation, objetReservation } = await import('../lib/reservation-metier.js')
+  const texte = (html) => String(html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ')
+
+  // ─── La règle, lue à un seul endroit ─────────────────────────────────────
+  egal('⚠️ le groupe se dit en personnes', groupeReservation({ table: true, couverts: 4 }), '4 personnes')
+  egal('⚠️ au singulier pour une seule', groupeReservation({ table: true, couverts: 1 }), '1 personne')
+  egal('🔴 rien quand ce n’est pas une table', groupeReservation({ table: false, couverts: 4 }), null)
+  egal('🔴 rien quand le nombre ne se lit pas : on n’invente pas « 1 personne »',
+    [null, undefined, '', 0, 'abc', -2].map(c => groupeReservation({ table: true, couverts: c })),
+    [null, null, null, null, null, null])
+  egal('⚠️ l’objet reste celui de la veille', objetReservation({ prestation_nom: 'Table de 6 personnes', table: true, couverts: 4 }), '4 personnes')
+  egal('⚠️ l’intitulé d’une table, quand rien ne l’annonce', intituleReservation({ prestation_nom: 'Table de 6 personnes', table: true, couverts: 4 }), 'Table pour 4 personnes')
+  egal('⚠️ sans nombre, la table garde son nom', intituleReservation({ prestation_nom: 'Table de 6 personnes', table: true, couverts: null }), 'Table de 6 personnes')
+  egal('⚠️ une prestation garde le sien', intituleReservation({ prestation_nom: 'Coupe femme', table: false, couverts: 4 }), 'Coupe femme')
+  // 🔴 LE CALENDRIER N'A PLUS SA COPIE : deux copies d'une règle finissent par
+  // dire deux choses. On le mesure sur la sortie ET sur le fichier.
+  const ICAL = sansProse(readFileSync(new URL('../lib/ical.js', import.meta.url), 'utf8'))
+  verifier('🔴 le calendrier lit la règle des emails, sans copie à lui',
+    /groupeReservation\(\{[^}]*\}\)/.test(ICAL) && !/personne\$\{/.test(ICAL))
+
+  // ─── Les trois gabarits, exécutés ────────────────────────────────────────
+  const TABLE_4 = {
+    yopper_prenom: 'Camille', commercant_nom: 'Le Bistrologue', commercant_slug: 'bistrologue',
+    commercant_adresse: 'Place Joseph Meunier 18, 5640 Mettet', commercant_categorie: 'alimentaire',
+    prestation_nom: 'Table de 6 personnes', date_rdv: '2026-09-12', heure_debut: '19:30:00',
+    heure_fin: '21:30:00', duree_minutes: 120, raison_annulation: 'commercant',
+    table: true, couverts: 4,
+  }
+  const annul = texte(emailRdvAnnule(TABLE_4))
+  verifier('🔴 l’annulation d’une table dit combien ils étaient', /Table : 4 personnes/.test(annul), annul.slice(0, 240))
+  verifier('🔴 et plus le format où la salle les avait assis', !/Table de 6 personnes/.test(annul))
+  const absent = texte(emailRdvNoShow(TABLE_4))
+  verifier('🔴 le non-honoré d’une table dit combien ils étaient', /Table 4 personnes/.test(absent), absent.slice(0, 240))
+  verifier('🔴 et plus le format', !/Table de 6 personnes/.test(absent))
+  const veille = texte(emailRdvReminder(TABLE_4))
+  verifier('🔴 le rappel de la veille dit « Table pour 4 personnes »', /Table pour 4 personnes/.test(veille), veille.slice(0, 240))
+  verifier('🔴 et plus le format', !/Table de 6 personnes/.test(veille))
+
+  // Les témoins : un salon ne bouge pas d'un caractère, et une table dont le
+  // nombre ne se lit pas garde son nom plutôt que d'en inventer un.
+  const SALON_R = { ...TABLE_4, commercant_nom: 'Ciseaux et Soins', commercant_categorie: 'vitrine', prestation_nom: 'Coupe femme', table: false, couverts: null }
+  for (const [nom, gabarit] of [['l’annulation', emailRdvAnnule], ['le non-honoré', emailRdvNoShow], ['le rappel de la veille', emailRdvReminder]]) {
+    const avant = String(gabarit({ ...SALON_R, table: undefined, couverts: undefined }))
+    verifier(`⚠️ témoin : ${nom} d’un salon garde sa prestation`, /Coupe femme/.test(texte(avant)))
+    verifier(`🔴 ${nom} d’un salon ne bouge pas d’un caractère, même si on lui passe un nombre`,
+      String(gabarit({ ...SALON_R, couverts: 3 })) === avant)
+    verifier(`⚠️ ${nom} d’une table sans nombre lisible garde son nom`,
+      /Table de 6 personnes/.test(texte(gabarit({ ...TABLE_4, couverts: null }))))
+  }
+
+  // Le fichier calendrier de l'annulation : le même titre qu'à la création.
+  const deplie = (s) => s.replace(/\r\n /g, '')
+  const icsAnnul = deplie(generateRdvIcs({
+    id: 'r9', date_rdv: '2026-09-12', heure_debut: '19:30', heure_fin: '21:30',
+    prestation_nom: 'Table de 6 personnes', commercant_nom: 'Le Bistrologue', commercant_adresse: 'Mettet',
+    table: true, couverts: 4, rappel_24h: false, status: 'CANCELLED', method: 'CANCEL', sequence: 1,
+  }))
+  verifier('🔴 le calendrier retire « Table pour 4 personnes », le titre de la création',
+    /SUMMARY:\[ANNULÉ\] Table pour 4 personnes chez Le Bistrologue/.test(icsAnnul))
+
+  // ─── Le rappel push d'une heure avant, EXÉCUTÉ ───────────────────────────
+  // Une base qui ne rend que ce qu'on lui demande, champ par champ, jointures
+  // comprises : c'est elle qui fait la preuve que le select est complet.
+  const projeter = (ligne, select) => {
+    const parties = []
+    let prof = 0, cour = ''
+    for (const ch of String(select)) {
+      if (ch === '(') prof++
+      if (ch === ')') prof--
+      if (ch === ',' && prof === 0) { parties.push(cour); cour = ''; continue }
+      cour += ch
+    }
+    parties.push(cour)
+    const sortie = {}
+    for (const brut of parties) {
+      const p = brut.trim()
+      if (!p) continue
+      const j = /^([a-z_0-9]+)\s*:\s*[a-z_0-9]+\s*\(([\s\S]*)\)$/i.exec(p)
+      if (j) { sortie[j[1]] = ligne[j[1]] == null ? null : projeter(ligne[j[1]], j[2]); continue }
+      if (Object.prototype.hasOwnProperty.call(ligne, p)) sortie[p] = ligne[p]
+    }
+    return sortie
+  }
+  egal('⚠️ la base simulée ne rend que les colonnes demandées',
+    projeter({ a: 1, b: 2, p: { nom: 'x', par_couverts: true } }, 'a, p:rdv_prestations(nom)'), { a: 1, p: { nom: 'x' } })
+  const baseDuRappel = (ligne) => ({
+    from(table) {
+      let colonnes = ''
+      const chaine = {
+        select(c) { colonnes = c; return chaine },
+        eq() { return chaine },
+        single: async () => table === 'rdv_reservations'
+          ? { data: projeter(ligne, colonnes), error: null }
+          : table === 'clients' ? { data: { id: 'client-1' }, error: null } : { data: null, error: { message: table } },
+        update() { return { eq: async () => ({ error: null }) } },
+      }
+      return chaine
+    },
+  })
+  const dansTroisJours = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
+  const RESA_PUSH = {
+    id: 'r-push', statut: 'confirme', date_rdv: dansTroisJours, heure_debut: '19:30:00',
+    client_email: 'camille@exemple.be', rappel_push_id: null, couverts: 4,
+    commercant: { nom: 'Le Bistrologue', slug: 'bistrologue', categorie: 'alimentaire' },
+    prestation: { nom: 'Table de 6 personnes', par_couverts: true },
+  }
+  const envAvant = { app: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID, cle: process.env.ONESIGNAL_REST_API_KEY }
+  const fetchAvant = globalThis.fetch
+  const pushs = []
+  process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID = 'app-du-banc'
+  process.env.ONESIGNAL_REST_API_KEY = 'cle-du-banc'
+  globalThis.fetch = async (_url, init) => {
+    pushs.push(JSON.parse(init?.body || '{}'))
+    return new Response(JSON.stringify({ id: 'push-1', recipients: 1 }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  try {
+    const { programmerRappelRdv } = await import('../lib/rappels.js')
+    await programmerRappelRdv('r-push', baseDuRappel(RESA_PUSH))
+    await programmerRappelRdv('r-salon', baseDuRappel({ ...RESA_PUSH, id: 'r-salon', couverts: null,
+      commercant: { nom: 'Ciseaux et Soins', slug: 'ciseaux', categorie: 'vitrine' },
+      prestation: { nom: 'Coupe femme', par_couverts: false } }))
+  } finally {
+    globalThis.fetch = fetchAvant
+    if (envAvant.app === undefined) delete process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID; else process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID = envAvant.app
+    if (envAvant.cle === undefined) delete process.env.ONESIGNAL_REST_API_KEY; else process.env.ONESIGNAL_REST_API_KEY = envAvant.cle
+  }
+  const pushTable = pushs[0]?.contents?.fr || ''
+  const pushSalon = pushs[1]?.contents?.fr || ''
+  verifier('le rappel push est parti deux fois (banc)', pushs.length === 2, String(pushs.length))
+  verifier('🔴 le rappel push d’une table dit « (4 personnes) »', /\(4 personnes\)/.test(pushTable), pushTable)
+  verifier('🔴 et plus le format', !/Table de 6 personnes/.test(pushTable), pushTable)
+  verifier('⚠️ témoin : le rappel d’un salon garde sa prestation', /\(Coupe femme\)/.test(pushSalon), pushSalon)
+
+  // ─── Les routes : charger ET passer, les deux bouts ──────────────────────
+  const lire = (chemin) => sansProse(readFileSync(new URL('../' + chemin, import.meta.url), 'utf8'))
+  // La liste de colonnes de LA lecture de la réservation, et elle seule : un
+  // `couverts` ailleurs dans le fichier rendrait la garde verte par un jumeau.
+  const colonnesRdv = (src) => {
+    const directe = /\.from\('rdv_reservations'\)\s*\.select\(`([\s\S]*?)`/.exec(src)
+    if (directe) return directe[1]
+    const nommee = /\.from\('rdv_reservations'\)\s*\.select\(([A-Za-z_]+)\)/.exec(src)
+    return nommee ? (new RegExp(`const ${nommee[1]} = \`([\\s\\S]*?)\``).exec(src)?.[1] || '') : ''
+  }
+  const argumentDe = (src, nom) => {
+    const i = src.indexOf(`${nom}({`)
+    if (i === -1) return ''
+    let p = 0
+    for (let k = i + nom.length; k < src.length; k++) {
+      if (src[k] === '(') p++
+      else if (src[k] === ')') { p--; if (p === 0) return src.slice(i, k) }
+    }
+    return ''
+  }
+  const EXPEDITEURS = [
+    ['app/api/emails/rdv-annule/route.js', ['emailRdvAnnule', 'generateRdvIcs'], 'l’annulation par le commerçant'],
+    ['app/api/rdv/cancel/route.js', ['emailRdvAnnule', 'generateRdvIcs'], 'l’annulation par le client'],
+    ['app/api/emails/rdv-no-show/route.js', ['emailRdvNoShow'], 'le non-honoré'],
+    ['app/api/cron/rdv-reminder-9h/route.js', ['emailRdvReminder'], 'le rappel de la veille'],
+  ]
+  for (const [chemin, appels, quoi] of EXPEDITEURS) {
+    const src = lire(chemin)
+    const cols = colonnesRdv(src)
+    verifier(`${quoi} : la lecture de la réservation a été trouvée`, cols.length > 40, chemin)
+    verifier(`🔴 ${quoi} CHARGE le nombre de personnes`, /(^|,)\s*couverts\s*(,|$)/m.test(cols), chemin)
+    verifier(`🔴 ${quoi} sait ce qu’est une table`, /prestation:rdv_prestations\([^)]*\bpar_couverts\b[^)]*\)/.test(cols), chemin)
+    for (const appel of appels) {
+      const lignes = argumentDe(src, appel).split('\n')
+      const ligneTable = lignes.find(l => /^\s*table\s*[:,]/.test(l)) || ''
+      const ligneCouverts = lignes.find(l => /^\s*couverts\s*:/.test(l)) || ''
+      // ⚠️ LA VALEUR, PAS LA CLÉ : `table: false` ou `couverts: null` porteraient
+      // la clé et rendraient exactement le texte d'avant.
+      const tableLue = /^\s*table\s*,\s*$/.test(ligneTable)
+        ? /const table = [^\n]*\.par_couverts === true/.test(src)
+        : /\.par_couverts === true/.test(ligneTable)
+      verifier(`🔴 ${quoi} dit à ${appel} si c’est une table`, tableLue, `${chemin} → ${ligneTable.trim() || 'absent'}`)
+      verifier(`🔴 ${quoi} passe à ${appel} le nombre de personnes`,
+        /:\s*[a-z]+\??\.couverts\s*,?\s*$/.test(ligneCouverts), `${chemin} → ${ligneCouverts.trim() || 'absent'}`)
+    }
+  }
+
+  // ─── Les deux expéditeurs de l'annulation remplissent l'email pareil ─────
+  const ANNULE = lire('app/api/emails/rdv-annule/route.js')
+  const CANCEL = lire('app/api/rdv/cancel/route.js')
+  const NOSHOW = lire('app/api/emails/rdv-no-show/route.js')
+  const clesDe = (src, nom) => [...argumentDe(src, nom).matchAll(/^\s*([a-z_0-9]+)\s*[:,]/gim)].map(m => m[1]).sort()
+  // ⚠️ SEUL LE CLIENT PEUT GARDER SES PRODUITS : c'est lui qui choisit, à
+  // l'écran d'annulation. Tout le reste doit être passé des deux côtés.
+  const PROPRES_AU_CLIENT = ['produits_gardes']
+  verifier('les deux annulations se découpent', clesDe(ANNULE, 'emailRdvAnnule').length > 15, String(clesDe(ANNULE, 'emailRdvAnnule').length))
+  egal('🔴 les deux annulations passent les mêmes champs à l’email',
+    clesDe(CANCEL, 'emailRdvAnnule').filter(k => !PROPRES_AU_CLIENT.includes(k)), clesDe(ANNULE, 'emailRdvAnnule'))
+
+  // ─── L'objet de l'email, dans les mots du métier ─────────────────────────
+  const objetsDe = (src) => [...src.matchAll(/subject:[^\n]*/g)].map(m => m[0])
+  verifier('🔴 l’annulation par le client ne dit plus « Ton RDV » dans son objet',
+    /subject: `\$\{mots\.sujetAnnule\} [^`]*a été \$\{mots\.participeAnnule\}`/.test(CANCEL)
+    && objetsDe(CANCEL).length > 0 && objetsDe(CANCEL).every(s => !/RDV/.test(s)), objetsDe(CANCEL).join(' | '))
+  verifier('🔴 le non-honoré non plus',
+    /subject: `\$\{mots\.sujetChez\} [^`]*a été \$\{mots\.participeMarque\} non \$\{mots\.participeHonore\}`/.test(NOSHOW)
+    && objetsDe(NOSHOW).length > 0 && objetsDe(NOSHOW).every(s => !/RDV/.test(s)), objetsDe(NOSHOW).join(' | '))
+  // ⚠️ ET LES MOTS RENDENT, POUR UN SALON, EXACTEMENT L'OBJET D'AVANT.
+  const MS = motsReservation({ categorie: 'vitrine' })
+  const MT = motsReservation({ categorie: 'alimentaire' })
+  egal('⚠️ témoin : un salon garde son objet d’annulation',
+    `${MS.sujetAnnule} Ciseaux a été ${MS.participeAnnule}`, 'Ton RDV chez Ciseaux a été annulé')
+  egal('🔴 un restaurant lit « Ta réservation … a été annulée »',
+    `${MT.sujetAnnule} Le Bistrologue a été ${MT.participeAnnule}`, 'Ta réservation chez Le Bistrologue a été annulée')
+  egal('⚠️ témoin : un salon garde son objet de non-honoré',
+    `${MS.sujetChez} Ciseaux a été ${MS.participeMarque} non ${MS.participeHonore}`, 'Ton RDV chez Ciseaux a été marqué non honoré')
+  egal('🔴 un restaurant lit « Ta réservation … a été marquée non honorée »',
+    `${MT.sujetChez} Le Bistrologue a été ${MT.participeMarque} non ${MT.participeHonore}`, 'Ta réservation chez Le Bistrologue a été marquée non honorée')
+
+  // 🔴 ET PLUS AUCUN OBJET N'ÉCRIT « RDV » EN DUR, dans tout le dépôt : le
+  // prochain expéditeur qui recopierait l'ancienne ligne serait vu ici.
+  {
+    const { readdirSync, statSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const racine = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+    const enDur = []
+    const parcourir = (d) => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e)
+        if (statSync(p).isDirectory()) { parcourir(p); continue }
+        if (!/\.jsx?$/.test(e)) continue
+        const src = sansProse(readFileSync(p, 'utf8'))
+        for (const m of src.matchAll(/subject:[^\n]*(\bRDV\b|rendez-vous)[^\n]*/g)) enDur.push(`${p.split(/[\\/]/).slice(-3).join('/')} → ${m[0].trim().slice(0, 90)}`)
+      }
+    }
+    parcourir(join(racine, 'app'))
+    parcourir(join(racine, 'lib'))
+    verifier('🔴 aucun objet d’email n’écrit « RDV » en dur', enDur.length === 0, enDur.join(' | '))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

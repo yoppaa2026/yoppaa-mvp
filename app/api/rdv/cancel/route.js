@@ -26,6 +26,7 @@ import { prevenirLaFile } from '@/lib/attente-rdv-server'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
+import { motsReservation } from '@/lib/reservation-metier'
 
 export async function POST(request) {
   try {
@@ -56,8 +57,9 @@ export async function POST(request) {
       commercant_id, prestation_id, rappel_push_id, commande_id, fidelite_recompense_id,
       lieu_id, lieu_libelle, lieu_adresse,
       prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
+      couverts,
       commercant:commercants(id, nom, slug, adresse, stripe_account_id, rdv_delai_annulation_heures, categorie),
-      prestation:rdv_prestations(nom)
+      prestation:rdv_prestations(nom, par_couverts)
     `
     const query = supabase.from('rdv_reservations').select(selectCols).is('deleted_at', null)
     const { data: rdv, error: errRdv } = await (rdv_id
@@ -381,6 +383,12 @@ export async function POST(request) {
     }
 
     // ─── 7) Email annulation Yopper (avec iCal CANCEL en pièce jointe) ─────
+    //
+    // 🔴 UNE TABLE SE DIT EN PERSONNES (11/09), dans l'email comme dans le
+    // calendrier : c'est le même email que `/api/emails/rdv-annule`, et il
+    // redisait le format quand la confirmation disait le groupe.
+    const table = rdv.prestation?.par_couverts === true
+    const mots = motsReservation(commercant)
     if (rdv.client_email) {
       try {
         const html = emailRdvAnnule({
@@ -408,6 +416,8 @@ export async function POST(request) {
           recompense_rendue: recompenseRendue,
           produits_gardes:   gardeSesProduits,
           produits_montant:  produitsPayesCarte,
+          table,
+          couverts:          rdv.couverts,
         })
         // iCal CANCEL (SEQUENCE+1 par rapport au confirme initial)
         // ⚠️ CORRIGÉ LE 05/08 : cet appel passait `rdv_id` alors que la
@@ -427,6 +437,8 @@ export async function POST(request) {
           client_email: rdv.client_email,
           client_nom:   [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
           rappel_24h:   false,
+          table,
+          couverts:     rdv.couverts,
           status:       'CANCELLED',
           method: 'CANCEL',
           sequence: 1,
@@ -434,7 +446,10 @@ export async function POST(request) {
         const attachments = ics ? [icsToBase64Attachment(ics, `yoppaa-rdv-annulation-${rdv.id}.ics`)] : null
         await envoyerAuCommercant({
           to: rdv.client_email,
-          subject: `Ton RDV chez ${commercant?.nom || 'le commerçant'} a été annulé`,
+          // ⚠️ L'OBJET DANS LES MOTS DU MÉTIER, comme l'autre expéditeur : il
+          // disait « Ton RDV … a été annulé » au-dessus d'un email titré « Ta
+          // réservation a été annulée ».
+          subject: `${mots.sujetAnnule} ${commercant?.nom || 'le commerçant'} a été ${mots.participeAnnule}`,
           html,
           attachments,
         })

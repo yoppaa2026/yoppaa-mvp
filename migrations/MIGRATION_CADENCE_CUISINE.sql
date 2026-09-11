@@ -42,6 +42,21 @@
 -- par son nom avec la salle du jour. Sans la colonne, cette lecture échoue, et
 -- la saisie d'une table au téléphone s'arrête sur « Impossible de lire ta
 -- salle ». Sûre à rejouer.
+--
+-- ✅ PASSÉE PAR ALEX LE 12/09/2026, avant le push de `127d7db` : les dix-huit
+-- contrôles A01 à A18 conformes (colonne `integer` vide par défaut, garde-fou
+-- posé, aucun commerce réglé, droits de lecture et de réglage, vue à 56
+-- colonnes avec la cadence en dernier, filtre des fiches publiées intact,
+-- options inchangées, lecture seule pour `anon`, 12 commerces publiés toujours
+-- visibles, les deux fonctions en une seule version chacune, qui rendent les
+-- couverts et restent appelables par `anon`), et les neuf essais conformes
+-- (cadences vide, 1, 12 et 200 acceptées ; -3, 0 et 201 refusées ; les deux
+-- fonctions répondent pour un commerce inconnu).
+-- 🔴 ET L'ANCIENNE DÉFINITION DU CALENDRIER À PASTILLES, RELUE (Z2), CONFIRME LE
+-- DÉFAUT NOMMÉ LE 10/09 : elle ne rendait que la date, les heures et le
+-- praticien, ni `prestation_id` ni `couverts`. Une salle en inventaire y
+-- paraissait donc toujours vide. Mêmes statuts et même filtre de suppression
+-- que la nouvelle, qui n'ajoute que des colonnes et la borne de 400 jours.
 
 BEGIN;
 

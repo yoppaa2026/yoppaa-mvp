@@ -1,6 +1,13 @@
 -- ============================================================================
 -- DURCISSEMENT DES ACCÈS (audit du 12/09/2026)
 --
+-- ✅ PASSÉE PAR ALEX LE 12/09/2026. Les six contrôles conformes : plus aucune
+-- fonction SECURITY DEFINER sans `search_path`, les deux épinglées sur
+-- `public, pg_temp`, plus aucun droit `anon`/`PUBLIC` sur les trois tables, la
+-- RLS toujours active sur les trois, et `service_role` garde les siens sur
+-- `article_likes` (Z05 a même rendu plus que le minimum attendu : REFERENCES,
+-- TRIGGER et TRUNCATE en plus, ce qui est le GRANT ALL habituel de Supabase).
+--
 -- CE QUE CETTE MIGRATION FAIT, ET RIEN D'AUTRE :
 --   1. fixe le `search_path` des deux fonctions SECURITY DEFINER ;
 --   2. retire les droits SQL qui traînent sur trois tables verrouillées.

@@ -13,9 +13,14 @@
 //   single-use : Supabase le consomme à la vérification). En interne on consomme
 //   le token courant puis on reset() le widget pour régénérer le suivant. Pour un
 //   double appel (signUp + auto-login), appeler getToken() deux fois suffit.
-// - Si NEXT_PUBLIC_TURNSTILE_SITE_KEY est absente (dev local), getToken() renvoie
-//   null : quand le Captcha Supabase est désactivé, un token null/absent est ignoré,
-//   donc rien ne casse en dev.
+// - Si NEXT_PUBLIC_TURNSTILE_SITE_KEY est absente, getToken() renvoie null.
+//   ⚠️ CE FICHIER A LONGTEMPS DIT QUE « RIEN NE CASSE EN DEV », PARCE QUE LE
+//   CAPTCHA SUPABASE ÉTAIT DÉSACTIVÉ. CE N'EST PLUS VRAI. Sondé le 12/09 :
+//   Supabase EXIGE le captcha et refuse une connexion en 400 avant même de
+//   comparer le mot de passe. Un jeton absent n'est donc plus ignoré, il est
+//   refusé : sans la clé de site dans `.env.local`, on ne se connecte pas en
+//   local. C'est une bonne nouvelle pour la production, et un piège pour qui
+//   lirait l'ancienne phrase.
 // - Le mode (invisible / managed) est déterminé par la config de la site key côté
 //   Cloudflare (la même que la landing = invisible). On ne force pas la taille ici.
 

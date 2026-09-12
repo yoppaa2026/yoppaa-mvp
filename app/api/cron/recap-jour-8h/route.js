@@ -15,6 +15,9 @@ import { resolvePlan } from '@/lib/plans'
 import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 import { motsReservation, reservationActive } from '@/lib/reservation-metier'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
+import { envoyerAuAdmin } from '@/lib/resend'
+import { surveillerCompteur } from '@/lib/sonde-compteur'
+import { bonsLimiter } from '@/lib/ratelimit'
 
 export async function GET(request) {
   const refuse = refusCron(gardeCron(request, 'cron/recap-jour-8h'), NextResponse)
@@ -203,7 +206,16 @@ export async function GET(request) {
     }
 
     console.info('[cron/recap-jour-8h]', { dateJour, sent, failed, details })
-    return NextResponse.json({ ok: true, date_jour: dateJour, sent, failed, details })
+
+    // Une fois par jour, on demande au compteur de requetes s'il compte encore.
+    //
+    // ⚠️ APRES les recapitulatifs, et jamais devant : une sonde ne doit pas
+    // retarder ni empecher l'envoi de sa journee a un commercant. Elle ne jette
+    // pas non plus, elle rend son verdict. Alex n'est prevenu QUE si le
+    // compteur ne compte plus, jamais quand tout va bien.
+    const compteur = await surveillerCompteur({ limiteur: bonsLimiter, envoyerAuAdmin })
+
+    return NextResponse.json({ ok: true, date_jour: dateJour, sent, failed, details, compteur })
 
   } catch (e) {
     console.error('[cron/recap-jour-8h] exception', e)

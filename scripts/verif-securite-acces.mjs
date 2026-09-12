@@ -36,6 +36,9 @@ import { join } from 'node:path'
 import { sansProse } from './lire-code.mjs'
 import { gardeCron, refusCron } from '../lib/cron-auth.js'
 import { encoderIdentite, identiteDepuisValeur } from '../lib/yopper-signature.js'
+import {
+  sonderCompteur, verdictCompteur, surveillerCompteur, SONDE_PLAFOND,
+} from '../lib/sonde-compteur.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -241,6 +244,94 @@ if (envInitial.s === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY
 const session = code('app/api/yopper/session/route.js')
 verifier('la route de session refuse de poser un cookie non signable',
   /if \(!encoded\)/.test(session) && /503/.test(session))
+
+// ─── 5 bis. La sonde du compteur de requêtes, exécutée ──────────────────────
+//
+// 🔴 LE DANGER N'EST PAS LA PANNE, C'EST LE SILENCE. Le compteur est fail-open
+// par choix : quand Upstash ne répond plus, tout continue de marcher et plus
+// personne n'est limité. Cette sonde pose la question tous les matins, et
+// n'écrit QUE si la réponse est mauvaise.
+
+// Faux compteurs : on veut éprouver la règle, pas le réseau.
+const limiteurQuiCompte = (plafond) => {
+  const vus = new Map()
+  return { limit: async (cle) => {
+    const n = (vus.get(cle) || 0) + 1
+    vus.set(cle, n)
+    return { success: n <= plafond }
+  } }
+}
+const limiteurOuvert = { limit: async () => ({ success: true }) }
+const limiteurQuiJette = { limit: async () => { throw new Error('upstash injoignable') } }
+
+const constatSain = await sonderCompteur(limiteurQuiCompte(SONDE_PLAFOND))
+verifier('compteur sain : le dernier essai est refusé', constatSain.compte === true)
+verifier('compteur sain : le filet local n\'a pas servi', constatSain.viaRepliLocal === false)
+egal('compteur sain : on tire bien un essai de plus que le plafond',
+  constatSain.tirages, SONDE_PLAFOND + 1)
+egal('compteur sain : aucune alerte', verdictCompteur(constatSain).alerte, false)
+
+// 🔴 LE CAS QUI A MOTIVÉ TOUT CECI : plus rien ne borne quoi que ce soit.
+const constatOuvert = await sonderCompteur(limiteurOuvert)
+verifier('compteur muet : le dernier essai passe encore', constatOuvert.compte === false)
+egal('compteur muet : alerte levée', verdictCompteur(constatOuvert).alerte, true)
+egal('compteur muet : la cause est nommée', verdictCompteur(constatOuvert).cause, 'aucune_limite')
+
+// Upstash tombe : le filet local prend le relais, mais il ne vaut que pour une
+// instance. C'est une panne, même si « ça bloque encore ».
+const constatRepli = await sonderCompteur(limiteurQuiJette)
+verifier('compteur partagé en panne : le filet local a servi', constatRepli.viaRepliLocal === true)
+egal('compteur partagé en panne : alerte levée', verdictCompteur(constatRepli).alerte, true)
+egal('compteur partagé en panne : cause distincte du cas precedent',
+  verdictCompteur(constatRepli).cause, 'partage_muet')
+
+// ⚠️ Une sonde qui jette ferait tomber la tâche qui l'héberge.
+verifier('la sonde ne jette jamais, même sans compteur du tout',
+  (await sonderCompteur(null)) !== null)
+egal('aucun constat du tout : on alerte plutôt que de se taire',
+  verdictCompteur(null).alerte, true)
+
+// La surveillance complète : qui reçoit un email, et quand.
+const boite = []
+const fauxEnvoi = async (message) => { boite.push(message); return { ok: true } }
+
+const r1 = await surveillerCompteur({ limiteur: limiteurQuiCompte(SONDE_PLAFOND), envoyerAuAdmin: fauxEnvoi })
+egal('tout va bien : AUCUN email', boite.length, 0)
+egal('tout va bien : pas d\'alerte', r1.alerte, false)
+
+const r2 = await surveillerCompteur({ limiteur: limiteurOuvert, envoyerAuAdmin: fauxEnvoi })
+egal('compteur muet : un email, un seul', boite.length, 1)
+egal('compteur muet : alerte rendue a l appelant', r2.alerte, true)
+verifier('l\'email dit ce qui ne va pas dans son objet', /compteur|limite/i.test(boite[0]?.subject || ''))
+verifier('l\'email explique la conséquence',
+  /force brute|brute/i.test(boite[0]?.html || ''))
+verifier('l\'email dit qu\'il ne part que quand ça va mal',
+  /ne part QUE/i.test(boite[0]?.html || ''))
+// ⚠️ Gmail Android jette les dégradés : un fond doit être une couleur pleine.
+verifier('l\'email n\'utilise aucun dégradé de fond',
+  !/linear-gradient/i.test(boite[0]?.html || ''))
+
+// ⚠️ UN ENVOI QUI ÉCHOUE NE DOIT PAS FAIRE TOMBER LE CRON QUI L'HÉBERGE.
+const envoiQuiJette = async () => { throw new Error('resend KO') }
+const r3 = await surveillerCompteur({ limiteur: limiteurOuvert, envoyerAuAdmin: envoiQuiJette })
+verifier('un envoi en échec ne remonte pas en exception', r3 && r3.alerte === null)
+
+// Parité : le plafond de la sonde doit être celui du limiteur qu'elle interroge.
+const codeRatelimit = code('lib/ratelimit.js')
+verifier('le plafond de la sonde est celui de bonsLimiter',
+  new RegExp(`bonsLimiter\\s*=\\s*makeLimiter\\(Ratelimit\\.slidingWindow\\(${SONDE_PLAFOND},`).test(codeRatelimit))
+
+// Le cron porte la sonde, APRÈS ses envois, et la route admin ne recompte plus.
+const cronRecap = code('app/api/cron/recap-jour-8h/route.js')
+verifier('le récapitulatif du matin porte la sonde', /surveillerCompteur\s*\(/.test(cronRecap))
+verifier('… et elle vient APRÈS l\'envoi aux commerçants',
+  cronRecap.indexOf('surveillerCompteur(') > cronRecap.indexOf('envoyerAuCommercant('))
+const diagAdmin = code('app/api/admin/diagnostic-ratelimit/route.js')
+verifier('le diagnostic admin partage la même sonde', /sonderCompteur\s*\(/.test(diagAdmin))
+// 🔴 LA GARDE ANTI-DIVERGENCE : deux boucles qui prétendent mesurer la même
+// chose finissent par ne plus dire la même chose.
+verifier('le diagnostic admin n\'a plus sa propre boucle de tirages',
+  !/for\s*\(\s*let\s+i\s*=\s*0;\s*i\s*<\s*11/.test(diagAdmin))
 
 // ─── 6. La clé de service ne descend jamais dans le navigateur ──────────────
 

@@ -17,7 +17,8 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { bonsLimiter, checkLimit } from '@/lib/ratelimit'
+import { bonsLimiter } from '@/lib/ratelimit'
+import { sonderCompteur, verdictCompteur, SONDE_TIRAGES } from '@/lib/sonde-compteur'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
@@ -52,19 +53,21 @@ export async function GET(request) {
       limiteur_instancie: !!bonsLimiter,
     }
 
-    // Onze tirages d'affilée sur une clé qui n'appartient à personne.
-    const cle = `diagnostic-${Date.now()}`
-    const essais = []
-    const depart = Date.now()
-    for (let i = 0; i < 11; i++) {
-      const r = await checkLimit(bonsLimiter, cle, { cle: 'diag', max: 10, fenetreMs: 60_000 })
-      essais.push({ n: i + 1, autorise: !!r.success, repli_local: !!r.local, ignore: !!r.skipped })
-    }
-    const duree = Date.now() - depart
+    // ⚠️ LA MÊME SONDE QUE LE CRON DU MATIN, et surtout pas une seconde copie.
+    // Ce fichier tirait ses onze essais lui-même ; la surveillance quotidienne
+    // ajoutée le 12/09 aurait fait une deuxième boucle disant la même chose,
+    // jusqu'au jour où l'une des deux aurait changé de plafond sans l'autre.
+    // La règle vit désormais dans lib/sonde-compteur.js, et elle s'exécute au
+    // banc.
+    const constat = await sonderCompteur(bonsLimiter)
+    const jugement = verdictCompteur(constat)
 
-    const onzieme = essais[10]
-    const compteReellement = !onzieme.autorise
-    const viaRepliLocal = essais.some(e => e.repli_local)
+    const essais = constat.essais.map(e => ({
+      n: e.n, autorise: e.autorise, repli_local: e.repliLocal, ignore: e.ignore,
+    }))
+    const duree = constat.dureeMs
+    const compteReellement = constat.compte
+    const viaRepliLocal = constat.viaRepliLocal
 
     return NextResponse.json({
       ok: true,
@@ -73,11 +76,12 @@ export async function GET(request) {
       via_repli_local: viaRepliLocal,
       duree_ms: duree,
       essais,
-      verdict: compteReellement
-        ? (viaRepliLocal
-            ? 'Le compteur partagé ne répond pas : c\'est le filet local qui bloque. Vérifie la base Upstash.'
-            : 'Tout va bien : le compteur partagé bloque au onzième essai.')
-        : 'AUCUNE limite : ni Upstash ni le filet local ne bloquent. Les codes de bons cadeaux sont exposés au brute-force.',
+      // Le même jugement que celui qui déclenche, ou non, l'email du matin :
+      // l'écran d'administration et l'alerte automatique ne peuvent pas se
+      // contredire, puisqu'ils lisent la même règle.
+      verdict: `${jugement.titre} ${jugement.detail}`,
+      cause: jugement.cause,
+      tirages: SONDE_TIRAGES,
     })
   } catch (e) {
     console.error('[admin/diagnostic-ratelimit]', e?.message)

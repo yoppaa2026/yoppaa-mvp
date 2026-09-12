@@ -1,7 +1,10 @@
 -- ============================================================================
 -- LE CLIENT N'ÉCRIT PLUS DIRECTEMENT DANS SON RENDEZ-VOUS (audit du 12/09/2026)
 --
--- ⚠️ NE PAS PASSER SANS LA RÉPONSE D'ALEX. Voir la question à la fin.
+-- ✅ PASSÉE PAR ALEX LE 12/09/2026. Y01 : la policy n'existe plus. Y02 : le
+-- commerçant garde ses quatre policies (voir, créer, modifier, supprimer).
+-- Y03 : le client garde ses deux policies de lecture. Y04 : huit policies
+-- restantes, soit les neuf listées par le contrôle n° 3 moins celle-ci.
 --
 -- LE DÉFAUT. La policy `Client peut annuler son RDV` autorise un compte
 -- connecté à faire UPDATE sur ses propres rendez-vous :
@@ -82,7 +85,11 @@ UNION ALL
 SELECT 'Y04',
        'Policies restantes sur rdv_reservations',
        count(*)::text,
-       'une de moins qu avant (dix au lieu de onze)',
+       -- ⚠️ NEUF AVANT, HUIT APRES. Ce chiffre se COMPTE, il ne se devine pas :
+       -- la premiere version de cette ligne annoncait « dix au lieu de onze »,
+       -- inventes, alors que le controle n 3 venait de lister les neuf. Un
+       -- attendu faux est pire qu absent, il apprend a ignorer la colonne.
+       'huit (les neuf listees par le controle n 3, moins celle-ci)',
        'A LIRE'
 FROM pg_policies
 WHERE schemaname = 'public' AND tablename = 'rdv_reservations'

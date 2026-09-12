@@ -20,6 +20,7 @@ import IconeRetrait from '@/app/components/IconeRetrait'
 // ⚠️ `planEffectif` ET NON `c.plan` : sans lui, un commerçant en essai de
 // Vendre restait « vitrine » dans la liste des commerces (26/08).
 import { canDo, bandeauCategorie, planEffectif } from '@/lib/plans'
+import { lieuDeCarte } from '@/lib/adresse-localite'
 // Les mots du métier : « Annuler cette réservation » chez un restaurant.
 import { motsReservation } from '@/lib/reservation-metier'
 // Une note sans son nombre d'avis ne dit rien, et cinq étoiles vides se lisent
@@ -1150,6 +1151,15 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
   }
 
   const physique = getStatutPhysique()
+  // Où se trouve ce commerce : la distance si le Yopper a partagé sa position,
+  // sa commune sinon. Sans ce repli, une liste consultée sans géolocalisation
+  // ne disait plus RIEN du lieu. La règle vit dans lib/adresse-localite.js.
+  const lieu = lieuDeCarte({
+    distance: c.distance,
+    adresse: c.adresse,
+    libelleLieu: c.lieu_proche?.libelle || null,
+    formatDistance,
+  })
   // Pas de reservation si le plan ne permet pas la commande (palier Exister)
   const peutCommander = canDo(planEffectif(c), 'commande')
   const resa = peutCommander ? getStatutResa(physique) : null
@@ -1160,16 +1170,15 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
       onMouseOver={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 32px rgba(26,8,64,0.12)`; e.currentTarget.style.borderColor = T.light }}
       onMouseOut={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(26,8,64,0.04)'; e.currentTarget.style.borderColor = T.pale }}>
 
-      {/* Bande haute 'type' : marqueur de categorie (couleur) + type de commerce (texte) en une seule
-          zone, signature visuelle compacte. Plus de pastilles couleur sous le nom = card moins chargee.
-          Dispatch centralise via bandeauCategorie() (lib/plans.js) :
-          • alimentaire (C&C) → degrade VIOLET canonique (Ink → Main → Light)
-          • vitrine (services / RDV) → degrade VERT (Forest → Emerald → Mint)
-          • detail (boutique / mise de cote) → degrade ORANGE chaud (Rust → Orange → Peach) */}
+      {/* Bande haute : le MÉTIER écrit, et à droite ce qu'on peut faire de la
+          fiche. Un seul dégradé, le violet Yoppaa, depuis le 12/09 : voir
+          bandeauCategorie() (lib/plans.js) pour la raison, qui tient en une
+          phrase d'Alex — le bandeau porte déjà le métier, la couleur ne faisait
+          que répéter le mot en le payant d'une ambiguïté avec les états. */}
       <div style={{
         height: 24,
         background: bandeauCategorie(c),
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 0.875rem',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 0.5rem 0 0.875rem',
       }}>
         <span style={{
           color: '#fff',
@@ -1199,6 +1208,56 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
             Bonne affaire
           </span>
         )}
+
+        {/* PARTAGER ET METTRE EN FAVORI, DANS LE BANDEAU (Alex, 12/09).
+            🔴 ILS VIVAIENT SUR LE LOGO, ET ILS LE MANGEAIENT. Posés en absolu
+            à `right: 2` et `right: 74`, ils mordaient la vignette de 68 pixels
+            qui commence à `right: 14`. Alex l'avait signalé deux fois le 24/08 ;
+            la réponse d'alors — les pousser vers l'extérieur pour ne lui prendre
+            « qu'une pointe » — n'a pas tenu, il l'a redit le 12/09. Le bandeau
+            fait 24 pixels de haut et son côté droit est vide : ils y tiennent
+            sans rien coûter, et l'enseigne du commerçant redevient entière.
+
+            ⚠️ LE CŒUR COCHÉ EST BLANC, PLUS ROUGE. Sur le logo blanc, le rouge
+            était le bon choix ; sur un bandeau coloré il se noie. Le blanc plein
+            dit « coché » aussi bien, et tient sur n'importe quel fond.
+
+            ⚠️ stopPropagation, sinon la carte entière s'ouvre sous le doigt. */}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          <button onClick={e => onPartager?.(c, e)}
+            aria-label={`Partager ${c.nom}`}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 20, height: 20, padding: 0, border: 'none', borderRadius: '50%',
+              background: 'rgba(255,255,255,0.22)', cursor: 'pointer', transition: 'background 0.15s',
+            }}
+            onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.38)' }}
+            onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)' }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff"
+              strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="18" cy="5" r="3"/>
+              <circle cx="6" cy="12" r="3"/>
+              <circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+          </button>
+          <button onClick={e => onToggleFavori(c.id, e)}
+            aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 20, height: 20, padding: 0, border: 'none', borderRadius: '50%',
+              background: 'rgba(255,255,255,0.22)', cursor: 'pointer', transition: 'background 0.15s',
+            }}
+            onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.38)' }}
+            onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)' }}>
+            <svg width="11" height="11" viewBox="0 0 24 24"
+              fill={estFavori ? '#fff' : 'none'} stroke="#fff"
+              strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+          </button>
+        </span>
       </div>
 
       {/* Partage du commerce. Un Yopper qui trouve son boucher n'a aucun moyen
@@ -1219,75 +1278,39 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
           voit que du noir : c'est `T.main` qui se lit comme du Yoppaa.
 
           ⚠️ stopPropagation, sinon la carte entière s'ouvre sous le doigt. */}
-      <button onClick={e => onPartager?.(c, e)}
-        aria-label={`Partager ${c.nom}`}
-        style={{
-          position: 'absolute', top: 22, right: 74, zIndex: 2,
-          background: 'rgba(255,255,255,0.95)',
-          border: 'none',
-          cursor: 'pointer', padding: 5,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'transform 0.15s, box-shadow 0.15s',
-          borderRadius: '50%',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
-        }}
-        onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,8,64,0.22)' }}
-        onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.10)' }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.main}
-          strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="18" cy="5" r="3"/>
-          <circle cx="6" cy="12" r="3"/>
-          <circle cx="18" cy="19" r="3"/>
-          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-        </svg>
-      </button>
-
-      {/* Bouton favori en absolute coin haut droit de la vignette photo.
-          Pattern UX standard TGTG/Airbnb : cœur outline → rempli rouge si favori.
-          Cohérent avec la fiche détail commerçant (memo UX 2026-06-12). */}
-      <button onClick={e => onToggleFavori(c.id, e)}
-        aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-        style={{
-          // Poussé jusqu'au bout du coin, et rétréci avec son voisin de partage
-          // (Alex, 24/08 : « le logo du commerçant ne doit pas être mangé »).
-          position: 'absolute', top: 22, right: 2, zIndex: 2,
-          background: 'rgba(255,255,255,0.95)',
-          border: 'none',
-          cursor: 'pointer', padding: 5,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'transform 0.15s, box-shadow 0.15s',
-          borderRadius: '50%',
-          boxShadow: estFavori ? '0 3px 10px rgba(220,38,38,0.25)' : '0 1px 3px rgba(0,0,0,0.10)',
-        }}
-        onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(26,8,64,0.22)' }}
-        onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = estFavori ? '0 3px 10px rgba(220,38,38,0.25)' : '0 1px 3px rgba(0,0,0,0.10)' }}>
-        {/* Le cœur vide suit le partage : violet de la charte, pas du noir. */}
-        <svg width="15" height="15" viewBox="0 0 24 24"
-          fill={estFavori ? '#DC2626' : 'none'}
-          stroke={estFavori ? '#DC2626' : T.main}
-          strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-      </button>
-
       <div style={{ padding: '0.5rem 0.875rem 0.625rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ marginBottom: 4 }}>
-              <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 32 }}>{c.nom}</p>
+              {/* ⚠️ DEUX LIGNES PLUTÔT QU'UN NOM COUPÉ (Alex, 12/09, capture à
+                  l'appui : « Centre Respire – Yoga et Pila… »). Sur 390 points,
+                  la place disponible n'autorisait qu'une trentaine de
+                  caractères, et le `paddingRight: 32` en mangeait encore
+                  davantage pour laisser passer les boutons qui vivaient là.
+                  Ils sont partis dans le bandeau : la réserve n'a plus lieu
+                  d'être, et l'enseigne s'écrit en entier.
+                  Au-delà de deux lignes on coupe encore, mais c'est devenu
+                  l'exception et non la règle. */}
+              <p style={{ fontWeight: 900, color: T.ink, margin: 0, fontSize: '0.95rem', letterSpacing: '-0.3px', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{c.nom}</p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              {resumeNote.montreMoyenne && (
-                <>
-                  <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: T.ink }}>{resumeNote.moyenne}</span>
-                </>
-              )}
-              <span style={{ fontSize: '0.68rem', color: resumeNote.aDesAvis ? T.muted : '#D1D5DB' }}>
-                {resumeNote.libelleNombre}
-              </span>
-            </div>
+            {/* 🔴 « PAS ENCORE D'AVIS » PRENAIT UNE LIGNE POUR NE RIEN DIRE, et
+                sur une application qui démarre, la plupart des fiches n'en ont
+                aucun : la liste entière se donnait un air désert. On n'affiche
+                donc cette ligne QUE s'il y a quelque chose à lire. La fiche, elle,
+                garde l'invitation à en déposer un. */}
+            {resumeNote.aDesAvis && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                {resumeNote.montreMoyenne && (
+                  <>
+                    <Etoiles note={noteInfo?.moyenne || 0} taille={11}/>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 800, color: T.ink }}>{resumeNote.moyenne}</span>
+                  </>
+                )}
+                <span style={{ fontSize: '0.68rem', color: T.muted }}>
+                  {resumeNote.libelleNombre}
+                </span>
+              </div>
+            )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6, alignItems: 'center' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: physique.bg, borderRadius: 100, padding: '3px 8px', border: `1px solid ${physique.dot}22` }}>
                 <span style={{ width: physique.pulse ? 9 : 7, height: physique.pulse ? 9 : 7, borderRadius: '50%', background: physique.dot, flexShrink: 0 }}/>
@@ -1299,17 +1322,17 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
                   <span style={{ fontSize: '0.66rem', fontWeight: 700, color: resa.color }}>{resa.label}</span>
                 </span>
               )}
-              {c.distance != null && (
+              {/* Le nom du lieu n'apparaît que s'il diffère du siège :
+                  « 1,2 km » suffit pour une boulangerie, « Salle Saint-Roch »
+                  est ce qui manque à un cours de yoga ou à un food truck. */}
+              {lieu && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.7rem', color: T.muted, fontWeight: 600, minWidth: 0 }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                     <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
                     <circle cx="12" cy="10" r="3"/>
                   </svg>
-                  {/* Le nom du lieu n'apparaît que s'il diffère du siège :
-                      « 1,2 km » suffit pour une boulangerie, « Salle Saint-Roch »
-                      est ce qui manque à un cours de yoga ou à un food truck. */}
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {c.lieu_proche?.libelle ? `${c.lieu_proche.libelle} · ` : ''}{formatDistance(c.distance)}
+                    {lieu}
                   </span>
                 </span>
               )}
@@ -1861,6 +1884,10 @@ export default function Commander() {
   const [familleActive, setFamilleActive] = useState('tous')
   const [metierActif, setMetierActif] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+  // La recherche est repliée derrière une loupe : voir le commentaire au-dessus
+  // du champ. Elle se rouvre au doigt, et ne se referme jamais toute seule sur
+  // une recherche en cours.
+  const [showRecherche, setShowRecherche] = useState(false)
   const [favoris, setFavoris] = useState([])
   const [commercantsFavoris, setCommercantsFavoris] = useState([])
   const [client, setClient] = useState({ nom: '', email: '', telephone: '', prenom: '' })
@@ -3530,12 +3557,18 @@ export default function Commander() {
           padding-right: max(env(safe-area-inset-right, 0px), 16px);
           box-sizing: border-box;
         }
-        .cats { display: flex; gap: 6px; overflow-x: auto; padding: 0 1rem 0.875rem; scrollbar-width: none; }
+        .cats { display: flex; gap: 6px; overflow-x: auto; padding: 0 1rem 0.625rem; scrollbar-width: none; }
         .cats::-webkit-scrollbar { display: none; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }
         @keyframes tribu-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.7; transform:scale(1.15); } }
-        @keyframes navPillPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.14); } }
+        /* Le point de la barre du bas. Amplitude relevée depuis qu'il a
+           remplacé deux pastilles larges : sur 10 pixels, un scale de 1,14 ne
+           se remarquait pas. */
+        @keyframes navPillPulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.35); opacity:0.72; } }
+        @media (prefers-reduced-motion: reduce) {
+          @keyframes navPillPulse { 0%,100% { transform:none; opacity:1; } }
+        }
         @keyframes tribu-pulse2 { 0%,100% { opacity:0.85; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.1); } }
         @keyframes tribu-pulse3 { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.3; transform:scale(1.05); } }
         @keyframes dot-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.4); opacity:0.7; } }
@@ -3568,7 +3601,12 @@ export default function Commander() {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)`, zIndex: 2 }}/>
           <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 10%, ${T.mid}33 0%, transparent 50%), radial-gradient(circle at 10% 90%, ${T.light}18 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${T.main}22 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.875rem 1rem 0.625rem' }}>
+          {/* ⚠️ MARGES RESSERRÉES, MAIS LES POINTS DE LA MARQUE RESTENT SOUS LE
+              MOT (Alex, 12/09 : « les dots doivent rester en dessous du
+              wordmark »). Les passer à côté aurait gagné une douzaine de pixels
+              de plus, au prix de la signature. Les pixels se trouvent ailleurs,
+              la signature ne se remplace pas. */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.625rem 1rem 0.5rem' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}>
               {/* Wordmark tricolore : yo (blanc), pp (Light), aa (Mid) - canonique Good Morning Yoppers */}
               <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-0.05em', lineHeight: 1, margin: 0 }}>
@@ -3587,6 +3625,22 @@ export default function Commander() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* La loupe qui déplie la recherche. Elle n'apparaît que sur
+                    l'accueil, seul endroit où il y a quelque chose à chercher,
+                    et elle disparaît quand le champ est déjà ouvert : deux
+                    loupes à l'écran feraient douter de celle qui compte. */}
+                {onglet === 'accueil' && !showRecherche && !searchQuery && (
+                  <button onClick={() => setShowRecherche(true)}
+                    aria-label="Rechercher un commerce"
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: `1px solid ${T.light}33`, cursor: 'pointer', flexShrink: 0, transition: 'background 0.15s' }}
+                    onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)' }}
+                    onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)' }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                      <circle cx="11" cy="11" r="7" stroke="rgba(255,255,255,0.75)" strokeWidth="2.2"/>
+                      <path d="M16.5 16.5L21 21" stroke="rgba(255,255,255,0.75)" strokeWidth="2.2" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                )}
                 <BoutonGoodMorning nonVu={gmNonVu} onClick={() => router.push('/commander/morning')}/>
                 {/* Pill d'adresse tappable : ouvre directement l'édition (le lien
                     « Saisir manuellement » séparé est supprimé, zéro friction).
@@ -3666,8 +3720,19 @@ export default function Commander() {
           )}
 
 
-          {onglet === 'accueil' && (
-            <div style={{ padding: '0.625rem 1rem 0.625rem' }}>
+          {/* 🔴 LA RECHERCHE SE REPLIE DANS UNE LOUPE (Alex, 12/09). L'en-tête
+              prenait à lui seul l'équivalent d'une carte et demie : c'est lui,
+              pas la fiche, qui faisait qu'on ne voyait que deux commerces et
+              demi par écran. Le champ ouvert en permanence coûtait une
+              cinquantaine de pixels à tout le monde, pour un geste que peu de
+              Yoppers font à chaque visite.
+
+              ⚠️ MAIS IL RESTE OUVERT DÈS QU'UNE RECHERCHE EST EN COURS. Le
+              replier avec du texte dedans cacherait la RAISON pour laquelle la
+              liste est courte : le Yopper croirait qu'il n'y a que deux
+              commerces chez lui, comme au premier jour du chargement. */}
+          {onglet === 'accueil' && (showRecherche || searchQuery) && (
+            <div style={{ padding: '0 1rem 0.5rem' }}>
               <div style={{ position: 'relative', maxWidth: 520, margin: '0 auto' }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
                   <circle cx="11" cy="11" r="7" stroke="rgba(255,255,255,0.55)" strokeWidth="2.2"/>
@@ -3678,11 +3743,15 @@ export default function Commander() {
                   placeholder="Rechercher un commerce…"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
+                  autoFocus
                   style={{ width: '100%', padding: '0.4rem 1rem 0.4rem 2.1rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: '0.82rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box' }}
                 />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', color: '#fff', fontSize: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-                )}
+                {/* La croix vide la recherche ET replie le champ : sans elle, un
+                    Yopper qui a ouvert la loupe par curiosité n'aurait aucun
+                    moyen de récupérer ses pixels. */}
+                <button onClick={() => { setSearchQuery(''); setShowRecherche(false) }}
+                  aria-label={searchQuery ? 'Effacer la recherche' : 'Fermer la recherche'}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', color: '#fff', fontSize: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
               </div>
             </div>
           )}
@@ -4208,7 +4277,15 @@ export default function Commander() {
                       const dureeT = dureeM >= 60 ? `${Math.floor(dureeM/60)}h${dureeM%60>0?(dureeM%60)+'min':''}` : `${dureeM}min`
                       return (
                         <div key={r.id} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.75rem', border: `1.5px solid #10B98133`, boxShadow: '0 2px 8px rgba(16,185,129,0.08)' }}>
-                          {/* Bande 3px verte = signature vitrine (cohérent avec les cards accueil) */}
+                          {/* Bande 3px verte = « c'est un rendez-vous », en face
+                              du violet des commandes dans ce même onglet.
+                              ⚠️ ELLE NE SUIT PLUS LES CARTES DE L'ACCUEIL, qui
+                              portaient le même vert au titre de la catégorie
+                              « vitrine » : depuis le 12/09 elles sont toutes
+                              violettes (voir bandeauCategorie, lib/plans.js).
+                              Ce vert-ci n'a donc plus rien à voir avec la
+                              catégorie du commerce, il ne code que le type de
+                              ligne à l'intérieur du suivi. */}
                           <div style={{ height: 3, background: 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)' }}/>
                           <div style={{ padding: '0.875rem 1rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
@@ -4993,6 +5070,10 @@ export default function Commander() {
             const stroke = '#ffffff'
             return (
               <button key={item.key} onClick={() => setOnglet(item.key)}
+                /* Le point est décoratif pour l'œil, mais il porte une
+                   information : sans ce libellé, un lecteur d'écran annoncerait
+                   « Suivi » sans jamais dire qu'il s'y passe quelque chose. */
+                aria-label={item.badge > 0 ? `${item.label}, ${item.badge} en cours` : undefined}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
 
                 {item.key === 'accueil' && (
@@ -5038,22 +5119,34 @@ export default function Commander() {
                   </svg>
                 )}
 
-                {/* Onglet 'commandes' : 2 pastilles distinctes.
-                    Violette en haut GAUCHE = commandes (pretes a retirer + en cours).
-                    Verte    en haut DROITE = RDVs a venir.
-                    Ordre coherent avec le toggle interne (Commandes a gauche / RDVs a droite).
-                    Si une seule est >0, l'autre n'est pas rendue (pas de "0"). */}
-                {item.key === 'commandes' && item.badgeCmd > 0 && (
-                  <span style={{ position: 'absolute', top: 2, right: 'calc(50% + 6px)', height: 20, padding: '0 7px 0 5px', borderRadius: 100, background: T.main, color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 3, border: '2px solid #fff', boxShadow: `0 2px 8px ${T.main}99, 0 0 0 1.5px ${T.main}44`, lineHeight: 1, letterSpacing: '-0.2px', animation: item.badgeCmdUrgent ? 'navPillPulse 1.4s ease-in-out infinite' : 'none' }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></svg>
-                    {item.badgeCmd > 9 ? '9+' : item.badgeCmd}
-                  </span>
-                )}
-                {item.key === 'commandes' && item.badgeRdv > 0 && (
-                  <span style={{ position: 'absolute', top: 2, left: 'calc(50% + 6px)', height: 20, padding: '0 7px 0 5px', borderRadius: 100, background: '#10B981', color: '#fff', fontSize: '0.7rem', fontWeight: 900, fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 3, border: '2px solid #fff', boxShadow: '0 2px 8px rgba(16,185,129,0.55), 0 0 0 1.5px rgba(16,185,129,0.27)', lineHeight: 1, letterSpacing: '-0.2px' }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
-                    {item.badgeRdv > 9 ? '9+' : item.badgeRdv}
-                  </span>
+                {/* UN POINT, ET IL NE CLIGNOTE QUE QUAND ÇA T'ATTEND (Alex, 12/09).
+                    🔴 IL Y AVAIT DEUX PASTILLES, ET ELLES RECOUVRAIENT L'ICÔNE
+                    QU'ELLES DÉCORAIENT. Chacune faisait 24 pixels de haut avec
+                    sa bordure, posées de part et d'autre d'un calendrier qui en
+                    fait 26 : sur la capture d'Alex, on ne voyait plus le
+                    calendrier. La verte était `#10B981`, c'est-à-dire
+                    exactement le vert qui dit « ouvert » sur les fiches, et les
+                    deux chiffres identiques se lisaient comme un doublon plutôt
+                    que comme deux comptes différents.
+
+                    Le détail commandes / rendez-vous existe déjà À L'INTÉRIEUR
+                    de l'onglet Suivi, qui a son propre sélecteur avec ses
+                    compteurs. Le répéter ici coûtait une icône illisible pour
+                    une information qui est à un doigt.
+
+                    ⚠️ LA PULSATION EST RÉSERVÉE À CE QUI ATTEND UNE ACTION :
+                    une commande prête à retirer, une livraison à réceptionner.
+                    Un point qui pulserait parce qu'un rendez-vous existe dans
+                    trois semaines clignoterait des jours entiers, et une alarme
+                    qui sonne tout le temps ne protège plus rien. */}
+                {item.key === 'commandes' && item.badge > 0 && (
+                  <span aria-hidden="true" style={{
+                    position: 'absolute', top: 6, left: 'calc(50% + 7px)',
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: T.mid, border: '2px solid #fff',
+                    boxShadow: `0 1px 5px ${T.mid}cc`,
+                    animation: item.badgeCmdUrgent ? 'navPillPulse 1.5s ease-in-out infinite' : 'none',
+                  }}/>
                 )}
 
                 {item.label && (

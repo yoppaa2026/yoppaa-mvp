@@ -372,6 +372,42 @@ verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'v
   // est justement celui qu'on veut voir sur la carte.
   verifier('et le point qui pulse n’est plus rogné',
     /overflow:\s*'visible'/.test(srcPills))
+
+  // ⚠️ DEPUIS LE 12/09 LA CARTE N'AFFICHE PLUS QUE DES ICÔNES. Une clé ajoutée
+  // à `getPillsStatut` sans dessin dans `PillsStatut` donnerait un jeton VIDE :
+  // une capacité payée, affichée, et illisible. C'est le défaut du 19/08 sous
+  // une autre forme, alors on mesure la RÈGLE — toute clé produite a son
+  // dessin — et pas la présence d'un mot dans le fichier.
+  const bloc = srcPills.slice(srcPills.indexOf('const DESSINS'), srcPills.indexOf('CLES_AVEC_DESSIN'))
+  const clesDessinees = [...bloc.matchAll(/^ {2}(\w+):/gm)].map(m => m[1])
+  verifier('les dessins des capacités sont bien tous lus', clesDessinees.length >= 8)
+
+  // Tous les profils qui existent, pour balayer toutes les clés possibles.
+  const PROFILS = [
+    { plan: 'vendre', categorie: 'alimentaire', fidelite_actif: true, bons_cadeaux_actif: true, livraison_actif: true, rdv_actif: true },
+    { plan: 'vendre', categorie: 'vitrine', rdv_actif: true, fidelite_actif: true, bons_cadeaux_actif: true },
+    { plan: 'vendre', categorie: 'detail', fidelite_actif: true, bons_cadeaux_actif: true },
+  ]
+  const clesProduites = new Set()
+  for (const c of PROFILS) {
+    for (const p of getPillsStatut(c, { dealActif: true, actuActive: true })) clesProduites.add(p.key)
+  }
+  const orphelines = [...clesProduites].filter(k => !clesDessinees.includes(k))
+  verifier(
+    `chaque capacité affichable a son dessin${orphelines.length ? ` (sans dessin : ${orphelines.join(', ')})` : ''}`,
+    orphelines.length === 0)
+
+  // Et l'inverse : un dessin sans clé est du code mort qui trompe le lecteur.
+  const inutiles = clesDessinees.filter(k => !clesProduites.has(k))
+  verifier(
+    `aucun dessin ne traîne sans capacité${inutiles.length ? ` (orphelins : ${inutiles.join(', ')})` : ''}`,
+    inutiles.length === 0)
+
+  // ⚠️ LA FICHE GARDE SES MOTS. C'est elle qui apprend les icônes au client ;
+  // si elle passait aux jetons elle aussi, plus personne ne saurait jamais ce
+  // que veut dire la rosette.
+  verifier('seule la carte du listing passe en icônes, jamais la fiche',
+    /const xs = size === 'xs'/.test(srcPills) && /if \(xs\) \{/.test(srcPills))
 }
 
 if (clesDynamiques.length > 0) {

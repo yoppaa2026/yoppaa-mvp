@@ -15,6 +15,7 @@ import {
   codesPostauxDe,
 } from '../lib/morning-eligibilite.js'
 import { estSessionPerdue, ERREUR_SESSION } from '../lib/session-perdue.js'
+import { localiteDeAdresse, lieuDeCarte } from '../lib/adresse-localite.js'
 import { sansProse } from './lire-code.mjs'
 
 let ok = 0, ko = 0
@@ -1257,6 +1258,54 @@ for (const chemin of routesAdmin) {
     /\.is\('auth_user_id', null\)/.test(auth))
   // ⚠️ Un `await` dont on ignore l'erreur est un espoir, pas une action.
   verifier('et l’échec du rattachement se lit', /if \(errLien\) console\.error/.test(auth))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OÙ SE TROUVE UN COMMERCE QUAND ON NE SAIT PAS OÙ EST LE CLIENT (12/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// La carte n'affichait QUE la distance, et seulement si elle existait. Sans
+// géolocalisation accordée, elle ne disait plus rien du lieu : ni distance, ni
+// commune. C'est le visiteur qui découvre l'application qui était le plus mal
+// servi, et c'est lui qu'il faut convaincre.
+{
+  const fd = (m) => (m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`)
+
+  verifier('la localité se lit après le code postal',
+    localiteDeAdresse('Rue du Moulin 20, 5640 Biesme') === 'Biesme')
+  verifier('sans virgule aussi',
+    localiteDeAdresse('Rue de Prée 9G 5640 Mettet') === 'Mettet')
+  verifier('une localité composée reste entière',
+    localiteDeAdresse('Chaussée 4, 5060 Sambreville-Auvelais') === 'Sambreville-Auvelais')
+  verifier('les accents passent', localiteDeAdresse('Rue X 1, 4140 Sprimont-Florzé') === 'Sprimont-Florzé')
+
+  // ⚠️ ON SE TAIT PLUTÔT QUE D'INVENTER. Le pire cas de ce module doit être
+  // l'état d'avant, une carte sans lieu, jamais une commune fabriquée.
+  verifier('une adresse sans code postal ne rend rien', localiteDeAdresse('Rue du Moulin 20') === null)
+  verifier('un code postal sans localité ne rend rien', localiteDeAdresse('Rue du Moulin 20, 5640') === null)
+  verifier('une adresse vide ne rend rien', localiteDeAdresse('') === null)
+  verifier('une adresse absente ne rend rien', localiteDeAdresse(null) === null)
+  verifier('une initiale seule n’est pas une commune', localiteDeAdresse('Rue X 1, 5640 M') === null)
+
+  // La règle d'affichage elle-même : la distance gagne toujours, la commune ne
+  // sert que de repli.
+  verifier('la distance passe avant la commune',
+    lieuDeCarte({ distance: 450, adresse: 'Rue X 1, 5640 Mettet', formatDistance: fd }) === '450 m')
+  verifier('sans position, la commune prend le relais',
+    lieuDeCarte({ distance: null, adresse: 'Rue X 1, 5640 Mettet', formatDistance: fd }) === 'Mettet')
+  verifier('sans position NI adresse lisible, on n’affiche rien',
+    lieuDeCarte({ distance: null, adresse: 'Rue X 1', formatDistance: fd }) === null)
+  // Le nom du lieu ponctuel (food truck, salle) reste devant dans les deux cas.
+  verifier('le lieu ponctuel garde sa place avec la distance',
+    lieuDeCarte({ distance: 450, adresse: 'Rue X 1, 5640 Mettet', libelleLieu: 'Salle Saint-Roch', formatDistance: fd }) === 'Salle Saint-Roch · 450 m')
+  verifier('et avec la commune de repli',
+    lieuDeCarte({ distance: null, adresse: 'Rue X 1, 5640 Mettet', libelleLieu: 'Salle Saint-Roch', formatDistance: fd }) === 'Salle Saint-Roch · Mettet')
+
+  // 🔴 LE PIÈGE DU ZÉRO, HUITIÈME FOIS. Un commerce À la position du client
+  // rend `distance === 0`, qui est falsy : un test `if (distance)` le ferait
+  // basculer sur la commune alors qu'on sait exactement où il est.
+  verifier('une distance de zéro reste une distance',
+    lieuDeCarte({ distance: 0, adresse: 'Rue X 1, 5640 Mettet', formatDistance: fd }) === '0 m')
 }
 
 // 🔴 LE TOTAL S'IMPRIMAIT AU MILIEU DU FICHIER (trouvé le 31/08).

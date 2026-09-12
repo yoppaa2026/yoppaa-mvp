@@ -1512,8 +1512,44 @@ verifier('il charge les lieux des commerces affichés',
 verifier('et remesure quand ils arrivent',
   /setCommercants\(prev => avecDistances\(prev, position, parCommercant\)\)/.test(srcEcranClient))
 // Le nom du lieu n'est montré que s'il diffère du siège.
-verifier('la carte nomme le lieu quand il diffère du siège',
-  /lieu_proche\?\.libelle \? `\$\{c\.lieu_proche\.libelle\} · ` : ''/.test(srcEcranClient))
+//
+// ⚠️ LA RÈGLE A DÉMÉNAGÉ LE 12/09 dans `lib/adresse-localite.js`, le jour où
+// on lui a ajouté un repli : sans géolocalisation, la carte n'affichait NI
+// distance NI commune, donc plus rien du lieu. Cette garde-ci vérifie que
+// l'écran confie bien la décision à la règle partagée au lieu de la rejouer ;
+// le comportement lui-même — l'ordre, le point médian, et le zéro qui reste
+// une distance — est mesuré dans `npm run verif:yopper`.
+verifier('la carte confie son lieu à la règle partagée',
+  /lieuDeCarte\(\{/.test(srcEcranClient)
+  && /libelleLieu: c\.lieu_proche\?\.libelle \|\| null/.test(srcEcranClient))
+verifier('et lui donne de quoi retrouver la commune sans position',
+  /adresse: c\.adresse/.test(srcEcranClient))
+
+// ─── LA RECHERCHE REPLIÉE NE CACHE JAMAIS UNE RECHERCHE EN COURS ──────────
+// 🔴 LE PIÈGE DE CE REPLI (12/09). Le champ vit derrière une loupe pour rendre
+// une cinquantaine de pixels à la liste. Mais replié AVEC du texte dedans, il
+// cacherait la raison pour laquelle la liste est courte : le Yopper croirait
+// qu'il n'y a que deux commerces chez lui, exactement comme au premier jour
+// quand « Aucun résultat » s'affichait pendant un chargement raté.
+verifier('la recherche reste dépliée tant qu’une recherche est en cours',
+  /\(showRecherche \|\| searchQuery\)/.test(srcEcranClient))
+// Et la croix doit REPLIER, pas seulement vider : sinon on ouvre la loupe par
+// curiosité et on ne récupère jamais ses pixels.
+verifier('la croix vide la recherche et replie le champ',
+  /setSearchQuery\(''\); setShowRecherche\(false\)/.test(srcEcranClient))
+
+// ─── LE POINT DE LA BARRE DU BAS NE CLIGNOTE PAS POUR RIEN ────────────────
+// ⚠️ UNE ALARME QUI SONNE TOUT LE TEMPS NE PROTÈGE PLUS RIEN. Le point s'allume
+// dès qu'il y a quelque chose à suivre, mais il ne PULSE que si une action
+// attend le Yopper : commande prête à retirer, livraison à réceptionner. Un
+// rendez-vous dans trois semaines ne fait pas clignoter une barre pendant
+// vingt jours.
+verifier('le point du bas ne pulse que si une action attend le Yopper',
+  /animation: item\.badgeCmdUrgent \? 'navPillPulse/.test(srcEcranClient))
+// ⚠️ ET IL RESTE ANNONCÉ AUX LECTEURS D'ÉCRAN. Un point purement visuel
+// supprimerait l'information pour ceux qui ne le voient pas.
+verifier('et il reste annoncé aux lecteurs d’écran',
+  /aria-label=\{item\.badge > 0 \?/.test(srcEcranClient))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 6 quinquies. LA BARRE DU HAUT — la cloche ne sort plus de l'écran

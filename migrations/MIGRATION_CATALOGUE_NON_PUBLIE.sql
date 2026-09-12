@@ -44,6 +44,12 @@
 -- HORS PÉRIMÈTRE : `tva_taux_reference`, table de référence globale sans
 -- commerçant, publique par nature.
 --
+-- ✅ PASSÉE PAR ALEX LE 12/09/2026. Z01 à Z05 conformes : plus aucune lecture
+-- ouverte sur le catalogue, dix lectures conditionnelles posées, 25 policies de
+-- gestion du propriétaire intactes, les quatre fonctions en place avec leur
+-- `search_path`. ⚠️ Z06 s'est révélé VERT POUR LA MAUVAISE RAISON (voir plus
+-- bas et MIGRATION_BOOLEENS_NON_NULS.sql) : la fermeture, elle, est réelle.
+--
 -- ✅ ESSAYÉE SUR UN POSTGRES EN MÉMOIRE avant d'être envoyée (PGlite, base
 -- fabriquée, aucune donnée réelle) : 33 essais conformes. Avant, `anon` voyait
 -- les deux commerces sur les dix tables ; après, il n'en voit plus qu'un. Le
@@ -299,14 +305,22 @@ SELECT 'Z05',
        CASE WHEN (SELECT public.commerce_lisible(id) FROM public.commercants
                   WHERE statut_publication = 'publie' LIMIT 1) THEN 'OK' ELSE '>>> ECHEC' END
 
+-- 🔴 CETTE LIGNE A ETE VERTE POUR LA MAUVAISE RAISON, LE 12/09. Sa premiere
+-- version enveloppait le resultat dans un COALESCE : la fonction rendait NULL
+-- (et non false), le repli a donc ete pris, la valeur affichait « aucun
+-- commerce cache » alors qu il y en avait deux, et le verdict disait OK sans
+-- rien avoir mesure. Voir MIGRATION_BOOLEENS_NON_NULS.sql.
+-- ⚠️ `IS NOT DISTINCT FROM false` distingue false de NULL ; `= false` et
+-- `COALESCE(..., false)` les confondent, et c est toute la difference entre
+-- une garde qui mesure et une garde qui se rassure.
 UNION ALL
 SELECT 'Z06',
        'La regle repond juste sur un commerce non publie',
        COALESCE((SELECT public.commerce_lisible(id)::text FROM public.commercants
-                 WHERE statut_publication IS DISTINCT FROM 'publie' LIMIT 1), 'aucun commerce cache'),
-       'false',
-       CASE WHEN NOT COALESCE((SELECT public.commerce_lisible(id) FROM public.commercants
-                               WHERE statut_publication IS DISTINCT FROM 'publie' LIMIT 1), false)
+                 WHERE statut_publication IS DISTINCT FROM 'publie' LIMIT 1), 'NULL ou aucun commerce cache'),
+       'false, et surtout pas NULL',
+       CASE WHEN (SELECT public.commerce_lisible(id) FROM public.commercants
+                  WHERE statut_publication IS DISTINCT FROM 'publie' LIMIT 1) IS NOT DISTINCT FROM false
             THEN 'OK' ELSE '>>> ECHEC' END
 
 ORDER BY 1;

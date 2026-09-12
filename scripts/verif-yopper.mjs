@@ -162,6 +162,46 @@ verifier('le badge croise « pas ouvert » ET « du contenu »',
 verifier('le contenu du Morning est bien interrogé',
   /morningADuContenu\(supabase, commune\)/.test(accueil))
 
+// ─── « Nouveau » veut dire NOUVEAU (12/09) ─────────────────────────────────
+//
+// 🔴 LE DÉFAUT TROUVÉ PAR ALEX. Une actu reste dans l'édition toute sa fenêtre,
+// et c'est voulu. Mais la pastille se rallumait CHAQUE matin pour du déjà-vu, et
+// la carte affirmait « aujourd'hui » sur une actu de quatre jours. Une page qui
+// répète produit le même effet qu'une page vide, en moins honnête.
+const { actuNouvelleCeMatin } = await import('../lib/morning-contenu.js')
+
+// ⚠️ EN JOUR BELGE. Un instant du 12 à 23h30 UTC est déjà le 13 à Bruxelles :
+// comparer sur la date universelle rangerait l'actu sous la mauvaise journée,
+// exactement le piège qui a coûté au food truck.
+verifier('une actu poussée ce matin est nouvelle',
+  actuNouvelleCeMatin('2026-09-12T05:30:00Z', '2026-09-12') === true)
+verifier('la même actu ne l\'est plus le lendemain',
+  actuNouvelleCeMatin('2026-09-12T05:30:00Z', '2026-09-13') === false)
+verifier('23h30 UTC compte pour le lendemain belge',
+  actuNouvelleCeMatin('2026-09-12T23:30:00Z', '2026-09-13') === true)
+
+// 🔴 LA COLONNE ABSENTE DU SELECT, le défaut le plus fréquent de ce projet :
+// sans `push_envoye_at` demandé, la règle reçoit `undefined` et le badge ne
+// s'allumerait PLUS JAMAIS pour une actu. Sans bruit, sans erreur.
+verifier('une date absente ne se fait pas passer pour neuve',
+  actuNouvelleCeMatin(undefined, '2026-09-12') === false)
+verifier('une date nulle non plus',
+  actuNouvelleCeMatin(null, '2026-09-12') === false)
+
+verifier('le badge demande la colonne qui date l\'entrée dans l\'édition',
+  /select\('id, push_envoye_at,/.test(morningLu))
+verifier('le badge ne compte que les actus NOUVELLES de ce matin',
+  /actuNouvelleCeMatin\(a\.push_envoye_at, today\)/.test(morningLu))
+verifier('la page Morning demande la même colonne',
+  /push_envoye_at,/.test(morning))
+verifier('la page Morning partage la règle au lieu de la recopier',
+  /from '@\/lib\/morning-contenu'/.test(morning) && !/function actuNouvelleCeMatin/.test(morning))
+// La carte ne doit plus annoncer « aujourd'hui » à tout le monde.
+verifier('une actu qui court le dit au lieu de se faire passer pour neuve',
+  /toujours d&rsquo;actualit/.test(morning))
+verifier('« aujourd\'hui » est devenu conditionnel',
+  /d\.nouvelle \? <>aujourd&rsquo;hui<\/>/.test(morning))
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 4. LES EUROS S'ÉCRIVENT AVEC UNE VIRGULE
 // ═══════════════════════════════════════════════════════════════════════════

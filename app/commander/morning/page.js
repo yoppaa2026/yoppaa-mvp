@@ -28,6 +28,9 @@ import {
   commercantEligibleActu as eligibleActu,
 } from '@/lib/morning-eligibilite'
 import { jourBruxelles } from '@/lib/timezone'
+// La MÊME règle que celle du badge : l'édition et la pastille ne peuvent pas
+// se contredire sur ce qui est nouveau ce matin.
+import { actuNouvelleCeMatin } from '@/lib/morning-contenu'
 
 // ─── Tokens design system (canoniques) ─────────────────────────────
 const T = {
@@ -119,7 +122,7 @@ async function fetchMorningData(commune) {
     supabase
       .from('actualites')
       .select(`
-        id, titre, contenu, type, date_debut, date_fin, urgence, photo_url,
+        id, titre, contenu, type, date_debut, date_fin, urgence, photo_url, push_envoye_at,
         commercant:commercants ( id, nom, type, adresse, plan, statut_publication, logo_url, slug )
       `)
       .not('commercant_id', 'is', null)
@@ -202,6 +205,9 @@ async function fetchMorningData(commune) {
       actu: a.contenu || a.titre,
       photo: a.photo_url || null,
       alerte: a.type === 'alerte' || a.urgence === true,
+      // Premier matin dans l'édition, ou actu qui court depuis plusieurs jours ?
+      // La carte le dit, au lieu d'annoncer « aujourd'hui » à tout le monde.
+      nouvelle: actuNouvelleCeMatin(a.push_envoye_at, today),
       prio: 2 + (PRIO_PLAN[a.commercant.plan] ?? 1),
     }))
 
@@ -550,7 +556,13 @@ function ActuCard({ d, shown, delay, onOpen }) {
             <div style={{ fontSize: 13, fontWeight: 800, color: isAlerte ? '#7F1D1D' : T.ink, letterSpacing: '-0.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {d.commerce}
             </div>
-            <div style={{ fontSize: 10, color: isAlerte ? '#DC2626' : T.main, fontWeight: 600 }}>{d.categorie} · aujourd&rsquo;hui</div>
+            {/* 🔴 CETTE LIGNE AFFIRMAIT « aujourd'hui » SUR UNE ACTU DE QUATRE
+                JOURS. Une actu reste dans l'édition toute sa fenêtre (décision
+                du 23/07) : elle doit alors le dire, au lieu de se faire passer
+                pour neuve. Trouvé par Alex le 12/09. */}
+            <div style={{ fontSize: 10, color: isAlerte ? '#DC2626' : T.main, fontWeight: 600 }}>
+              {d.categorie} · {d.nouvelle ? <>aujourd&rsquo;hui</> : <>toujours d&rsquo;actualit&eacute;</>}
+            </div>
           </div>
           {isAlerte ? (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px 3px 7px', background: '#DC2626', borderRadius: 100, flexShrink: 0 }}>

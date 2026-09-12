@@ -26,6 +26,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo } from '@/lib/plans'
+import { fusionnerIds } from '@/lib/morning-eligibilite'
 import { jourBruxelles } from '@/lib/timezone'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
 
@@ -180,11 +181,16 @@ async function handle(req) {
   for (const { commune, dealIds, actuIds, commercantIds } of parCommune.values()) {
     stats.communes++
 
-    const { data: clientsZone } = await supabase
-      .from('clients')
-      .select('id')
-      .in('code_postal', commune.codes_postaux)
-    const clientIds = [...new Set((clientsZone || []).map(cl => cl.id).filter(Boolean))]
+    // ⚠️ DEUX CHEMINS, PARCE QU'IL Y A DEUX SOURCES DE VÉRITÉ (12/09). Le code
+    // postal n'est posé qu'au passage par la route des tags OneSignal ; la
+    // commune, elle, est CHOISIE par le Yopper. Ne lire que la première revenait
+    // à ignorer 17 personnes sur 18 qui avaient pourtant dit où elles habitent.
+    // Voir `fusionnerIds` dans lib/morning-eligibilite.
+    const [{ data: parCodePostal }, { data: parCommuneChoisie }] = await Promise.all([
+      supabase.from('clients').select('id').in('code_postal', commune.codes_postaux),
+      supabase.from('clients').select('id').eq('commune_id', commune.id),
+    ])
+    const clientIds = fusionnerIds(parCodePostal, parCommuneChoisie)
 
     if (clientIds.length === 0) {
       stats.communes_sans_yoppers++

@@ -202,6 +202,33 @@ verifier('une actu qui court le dit au lieu de se faire passer pour neuve',
 verifier('« aujourd\'hui » est devenu conditionnel',
   /d\.nouvelle \? <>aujourd&rsquo;hui<\/>/.test(morning))
 
+// ─── QUI REÇOIT LE GOOD MORNING (12/09) ────────────────────────────────────
+//
+// 🔴 MESURÉ EN BASE : 23 Yoppers, 18 avaient CHOISI leur commune, UN SEUL
+// recevait le Good Morning. Le cron ne lisait que `code_postal`, posée au
+// passage par la route des tags OneSignal ; la commune choisie était ignorée.
+const { fusionnerIds } = await import('../lib/morning-eligibilite.js')
+
+egal('les deux sources se fusionnent',
+  fusionnerIds([{ id: 'a' }], [{ id: 'b' }]).sort(), ['a', 'b'])
+// Quelqu'un peut porter À LA FOIS un code postal de la commune et l'avoir
+// choisie : sans dédoublonnage, il recevrait le push deux fois.
+egal('personne n\'est compté deux fois',
+  fusionnerIds([{ id: 'a' }], [{ id: 'a' }]), ['a'])
+egal('une liste absente ne casse rien', fusionnerIds(null, undefined), [])
+egal('une ligne sans identifiant est ignorée',
+  fusionnerIds([{ id: null }, { id: 'a' }, {}]), ['a'])
+
+const cronGmy = lire('app/api/cron/morning-yoppers/route.js')
+verifier('le cron lit le code postal', /\.in\('code_postal', commune\.codes_postaux\)/.test(cronGmy))
+// 🎯 LA GARDE QUI PORTE LA CORRECTION : sans elle, dix-sept Yoppers sur
+// dix-huit restent invisibles alors qu'ils ont dit où ils habitent.
+verifier('le cron lit AUSSI la commune choisie', /\.eq\('commune_id', commune\.id\)/.test(cronGmy))
+verifier('le cron fusionne les deux sources', /fusionnerIds\(parCodePostal, parCommuneChoisie\)/.test(cronGmy))
+// ⚠️ Un `.or()` concaténé sur des valeurs est la forme même de l'injection.
+verifier('le ciblage ne colle pas de valeurs dans un filtre',
+  !/\.or\(`/.test(cronGmy))
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 4. LES EUROS S'ÉCRIVENT AVEC UNE VIRGULE
 // ═══════════════════════════════════════════════════════════════════════════

@@ -29,6 +29,13 @@
 -- traités de la même façon. On rend la fonction honnête, on ne modifie aucun
 -- comportement d'accès.
 --
+-- ✅ PASSÉE PAR ALEX LE 12/09/2026, les six contrôles conformes, et cette fois
+-- ils MESURENT : `is_yoppaa_admin()` et `is_admin()` rendent `false` et non
+-- NULL, `commerce_lisible()` rend `false` sur un commerce non publié et `true`
+-- sur un publié, les 2 commerces en attente restent cachés et les 12 publiés
+-- restent lisibles. Les chiffres recoupent exactement ceux relevés avant le
+-- chantier (contrôle n° 5, ligne W).
+--
 -- ✅ ESSAYÉE SUR UN POSTGRES EN MÉMOIRE (PGlite, base fabriquée) : 58 essais
 -- conformes au total. Avant, `commerce_lisible` d'un commerce non publié rendait
 -- NULL ; après, elle rend `false`. Et surtout, NON-RÉGRESSION vérifiée table par

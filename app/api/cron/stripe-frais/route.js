@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { recupererFraisStripe, ventilerFrais, sessionBonCadeau } from '@/lib/stripe-frais'
 import { regimeBonPourCommerce } from '@/lib/bons-cadeaux-server'
+import { gardeCron, refusCron } from '@/lib/cron-auth'
 
 // Chaque ligne coûte un appel API à Stripe : on borne pour ne pas dépasser la
 // durée d'exécution, le reliquat passe la nuit suivante.
@@ -32,17 +33,9 @@ function admin() {
   )
 }
 
-function autorise(req) {
-  const secret = process.env.CRON_SECRET
-  if (!secret) {
-    console.warn('[cron/stripe-frais] CRON_SECRET absente, endpoint NON protégé')
-    return true
-  }
-  return (req.headers.get('authorization') || '') === `Bearer ${secret}`
-}
-
 async function handle(req) {
-  if (!autorise(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const refuse = refusCron(gardeCron(req, 'cron/stripe-frais'), NextResponse)
+  if (refuse) return refuse
 
   const supabase = admin()
   const stats = { commandes: 0, rdvs: 0, bons: 0, indisponibles: 0, sans_compte: 0 }

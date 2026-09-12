@@ -27,6 +27,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo } from '@/lib/plans'
 import { jourBruxelles } from '@/lib/timezone'
+import { gardeCron, refusCron } from '@/lib/cron-auth'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -34,16 +35,6 @@ function getSupabaseAdmin() {
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { persistSession: false } }
   )
-}
-
-function isAuthorized(req) {
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) {
-    console.warn('[cron/morning-yoppers] CRON_SECRET non configurée, endpoint NON protégé')
-    return true
-  }
-  const authHeader = req.headers.get('authorization') || ''
-  return authHeader === `Bearer ${cronSecret}`
 }
 
 // Codes postaux belges : 4 chiffres. Extrait depuis l'adresse libre du commerçant.
@@ -54,9 +45,8 @@ function extraireCodePostal(adresse) {
 }
 
 async function handle(req) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+  const refuse = refusCron(gardeCron(req, 'cron/morning-yoppers'), NextResponse)
+  if (refuse) return refuse
 
   const supabase = getSupabaseAdmin()
   const today = jourBruxelles()

@@ -18,14 +18,12 @@ import { envoyerAuCommercant, emailRdvReminder } from '@/lib/resend'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { soldeRdv } from '@/lib/rdv-paiement'
 import { motsReservation } from '@/lib/reservation-metier'
+import { gardeCron, refusCron } from '@/lib/cron-auth'
 
 export async function GET(request) {
-  // 1) Securite : verifie Bearer token
-  const authHeader = request.headers.get('authorization') || ''
-  const expectedSecret = process.env.CRON_SECRET
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  // 1) Securite : la garde partagee refuse aussi quand CRON_SECRET est absente.
+  const refuse = refusCron(gardeCron(request, 'cron/rdv-reminder-9h'), NextResponse)
+  if (refuse) return refuse
 
   try {
     const supabase = createClient(

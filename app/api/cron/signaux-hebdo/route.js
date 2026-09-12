@@ -23,13 +23,11 @@ import { envoyerAuCommercant } from '@/lib/resend'
 import { emailSignauxHebdo } from '@/lib/signaux-email'
 import { enviesAAlerter, peutEnvoyerEmail } from '@/lib/signaux'
 import { resolvePlan } from '@/lib/plans'
+import { gardeCron, refusCron } from '@/lib/cron-auth'
 
 export async function GET(request) {
-  const authHeader = request.headers.get('authorization') || ''
-  const secret = process.env.CRON_SECRET
-  if (secret && authHeader !== `Bearer ${secret}`) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  const refuse = refusCron(gardeCron(request, 'cron/signaux-hebdo'), NextResponse)
+  if (refuse) return refuse
 
   try {
     const supabase = createClient(

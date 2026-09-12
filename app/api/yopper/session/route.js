@@ -45,6 +45,12 @@ export async function POST(request) {
     // Cookie SIGNÉ : sans signature, il suffisait de réencoder le sien avec
     // l'identifiant d'un autre pour agir en son nom. Voir lib/yopper-session.
     const encoded = encoderIdentite(identity)
+    // Aucun secret de signature disponible : on ne pose rien. Un cookie non
+    // signable serait falsifiable, et l'écrire reviendrait à rouvrir la porte
+    // que la signature ferme.
+    if (!encoded) {
+      return NextResponse.json({ ok: false, error: 'session indisponible' }, { status: 503 })
+    }
     const jar = await cookies()
     jar.set(COOKIE_NAME, encoded, {
       httpOnly: true,

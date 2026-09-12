@@ -14,13 +14,11 @@ import { envoyerAuCommercant, emailRecapRdvJour, emailRecapCommandesJour } from 
 import { resolvePlan } from '@/lib/plans'
 import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 import { motsReservation, reservationActive } from '@/lib/reservation-metier'
+import { gardeCron, refusCron } from '@/lib/cron-auth'
 
 export async function GET(request) {
-  const authHeader = request.headers.get('authorization') || ''
-  const expectedSecret = process.env.CRON_SECRET
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  const refuse = refusCron(gardeCron(request, 'cron/recap-jour-8h'), NextResponse)
+  if (refuse) return refuse
 
   try {
     const supabase = createClient(

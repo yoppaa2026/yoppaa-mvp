@@ -19,13 +19,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { crediterFideliteRdv } from '@/lib/fidelite-server'
+import { gardeCron, refusCron } from '@/lib/cron-auth'
 
 export async function GET(request) {
-  const authHeader = request.headers.get('authorization') || ''
-  const expectedSecret = process.env.CRON_SECRET
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  const refuse = refusCron(gardeCron(request, 'cron/fidelite-rdv'), NextResponse)
+  if (refuse) return refuse
 
   try {
     const supabase = createClient(

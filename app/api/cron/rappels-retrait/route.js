@@ -43,13 +43,11 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 // dans `client_nom`. La demander faisait échouer TOUTE la requête, et la
 // route annonçait « Commande introuvable » sur une commande bien présente.
 import { prenomClient } from '@/lib/nom-client'
+import { gardeCron, refusCron } from '@/lib/cron-auth'
 
 export async function GET(request) {
-  const authHeader = request.headers.get('authorization') || ''
-  const expectedSecret = process.env.CRON_SECRET
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  const refuse = refusCron(gardeCron(request, 'cron/rappels-retrait'), NextResponse)
+  if (refuse) return refuse
 
   try {
     const supabase = createClient(

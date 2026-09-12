@@ -26,6 +26,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant } from '@/lib/resend'
 import { emailRevealLaunch } from '@/lib/resend-landing'
+import { gardeCron, refusCron } from '@/lib/cron-auth'
 
 const BATCH_SIZE = 100
 const DELAY_MS_BETWEEN_SENDS = 120  // Resend rate-limit friendly
@@ -38,22 +39,11 @@ function getSupabaseAdmin() {
   )
 }
 
-function isAuthorized(req) {
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) {
-    console.warn('[cron/reveal-21juillet] CRON_SECRET non configurée, endpoint NON protégé')
-    return true
-  }
-  const authHeader = req.headers.get('authorization') || ''
-  return authHeader === `Bearer ${cronSecret}`
-}
-
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
 async function handle(req) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+  const refuse = refusCron(gardeCron(req, 'cron/reveal-21juillet'), NextResponse)
+  if (refuse) return refuse
 
   const revealDate = new Date(process.env.NEXT_PUBLIC_REVEAL_DATE || '2026-08-01T10:00:00+02:00')
   const now = new Date()

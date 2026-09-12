@@ -22,6 +22,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe } from '@/lib/stripe'
 import { sendBillingRelance } from '@/lib/billing-emails'
 import { getPrixPlan } from '@/lib/plans'
+import { gardeCron, refusCron } from '@/lib/cron-auth'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -29,18 +30,6 @@ function getSupabaseAdmin() {
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { persistSession: false } }
   )
-}
-
-// Vérifie l'authentification : on accepte le header Vercel Cron ou un Bearer
-// avec la valeur de CRON_SECRET (pour debug manuel).
-function isAuthorized(req) {
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret) {
-    console.warn('[cron/billing-relances] CRON_SECRET non configurée, endpoint NON protégé')
-    return true  // permissif en dev si pas de secret config (à reactiver en prod)
-  }
-  const authHeader = req.headers.get('authorization') || ''
-  return authHeader === `Bearer ${cronSecret}`
 }
 
 // Différence en jours entiers entre deux dates (positif si futur, négatif si passé).
@@ -195,9 +184,8 @@ async function processCommercant(commercant, supabase, stats) {
 }
 
 async function handler(req) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  }
+  const refuse = refusCron(gardeCron(req, 'cron/billing-relances'), NextResponse)
+  if (refuse) return refuse
 
   const supabase = getSupabaseAdmin()
 

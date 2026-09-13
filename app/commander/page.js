@@ -22,7 +22,7 @@ import IconeRetrait from '@/app/components/IconeRetrait'
 import { canDo, bandeauCategorie, planEffectif } from '@/lib/plans'
 import { lieuDeCarte } from '@/lib/adresse-localite'
 // Les mots du métier : « Annuler cette réservation » chez un restaurant.
-import { motsReservation } from '@/lib/reservation-metier'
+import { motsReservation, intituleReservation } from '@/lib/reservation-metier'
 // Une note sans son nombre d'avis ne dit rien, et cinq étoiles vides se lisent
 // comme un zéro. La règle vit en fonction pure et testée.
 import { resumeAvis } from '@/lib/avis-affichage'
@@ -1209,55 +1209,6 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
           </span>
         )}
 
-        {/* PARTAGER ET METTRE EN FAVORI, DANS LE BANDEAU (Alex, 12/09).
-            🔴 ILS VIVAIENT SUR LE LOGO, ET ILS LE MANGEAIENT. Posés en absolu
-            à `right: 2` et `right: 74`, ils mordaient la vignette de 68 pixels
-            qui commence à `right: 14`. Alex l'avait signalé deux fois le 24/08 ;
-            la réponse d'alors — les pousser vers l'extérieur pour ne lui prendre
-            « qu'une pointe » — n'a pas tenu, il l'a redit le 12/09. Le bandeau
-            fait 24 pixels de haut et son côté droit est vide : ils y tiennent
-            sans rien coûter, et l'enseigne du commerçant redevient entière.
-
-            ⚠️ LE CŒUR COCHÉ EST BLANC, PLUS ROUGE. Sur le logo blanc, le rouge
-            était le bon choix ; sur un bandeau coloré il se noie. Le blanc plein
-            dit « coché » aussi bien, et tient sur n'importe quel fond.
-
-            ⚠️ stopPropagation, sinon la carte entière s'ouvre sous le doigt. */}
-        <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          <button onClick={e => onPartager?.(c, e)}
-            aria-label={`Partager ${c.nom}`}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 20, height: 20, padding: 0, border: 'none', borderRadius: '50%',
-              background: 'rgba(255,255,255,0.22)', cursor: 'pointer', transition: 'background 0.15s',
-            }}
-            onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.38)' }}
-            onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)' }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff"
-              strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="18" cy="5" r="3"/>
-              <circle cx="6" cy="12" r="3"/>
-              <circle cx="18" cy="19" r="3"/>
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-            </svg>
-          </button>
-          <button onClick={e => onToggleFavori(c.id, e)}
-            aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 20, height: 20, padding: 0, border: 'none', borderRadius: '50%',
-              background: 'rgba(255,255,255,0.22)', cursor: 'pointer', transition: 'background 0.15s',
-            }}
-            onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.38)' }}
-            onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)' }}>
-            <svg width="11" height="11" viewBox="0 0 24 24"
-              fill={estFavori ? '#fff' : 'none'} stroke="#fff"
-              strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-          </button>
-        </span>
       </div>
 
       {/* Partage du commerce. Un Yopper qui trouve son boucher n'a aucun moyen
@@ -1350,9 +1301,61 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
             }
           </div>
         </div>
-        {/* Pills statut sur toute la largeur de la card : 5 pills une seule ligne, labels complets */}
-        <div style={{ marginTop: 8 }}>
-          <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} bonneAffaire={bonneAffaire} size="xs"/>
+        {/* LA RANGÉE DU BAS : ce qu'on peut faire ici à gauche, ce qu'on peut
+            faire DE la fiche à droite.
+
+            🔴 LES DEUX BOUTONS ONT DÉMÉNAGÉ DEUX FOIS EN DEUX JOURS, et la
+            deuxième raison annule la première. Le 12/09 ils ont quitté le logo
+            du commerçant, qu'ils mordaient. Dans le bandeau de 24 pixels, ils
+            ne pouvaient faire que 20 de large : Alex les a essayés le 13/09 et
+            les a trouvés « trop compliqués à cliquer ». Il avait raison, et la
+            cible qu'il proposait — la taille des jetons de capacité, 22 pixels
+            — n'aurait rien changé.
+
+            ⚠️ UNE CIBLE TACTILE SE VISE À 44 PIXELS, PAS À 22. Le dessin fait
+            28, et la zone qui répond au doigt en fait 40, débordant du dessin
+            par un pseudo-élément invisible. L'écart de 12 entre les deux
+            boutons empêche leurs zones de se recouvrir : sans lui, le partage
+            déclencherait le favori.
+
+            ⚠️ ET ILS NE RESSEMBLENT PAS AUX CAPACITÉS. Mêmes rondeurs, mais
+            fond BLANC et contour là où les capacités sont pleines : deux jetons
+            identiques côte à côte, dont l'un agit et l'autre informe, et le
+            doigt part sur le mauvais.
+
+            Le cœur redevient ROUGE : sur du blanc, c'est la couleur que tout le
+            monde lit comme « coché ». Il n'avait cessé de l'être que dans le
+            bandeau, faute de contraste sur un fond coloré. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <PillsStatut commercant={c} dealActif={dealsActifs?.has(c.id) || false} actuActive={actusActives?.has(c.id) || false} bonneAffaire={bonneAffaire} size="xs"/>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            <button onClick={e => onPartager?.(c, e)}
+              aria-label={`Partager ${c.nom}`}
+              className="action-carte"
+              style={{ borderColor: T.light }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main}
+                strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3"/>
+                <circle cx="6" cy="12" r="3"/>
+                <circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+            </button>
+            <button onClick={e => onToggleFavori(c.id, e)}
+              aria-label={estFavori ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+              className="action-carte"
+              style={{ borderColor: estFavori ? '#DC2626' : T.light }}>
+              <svg width="14" height="14" viewBox="0 0 24 24"
+                fill={estFavori ? '#DC2626' : 'none'}
+                stroke={estFavori ? '#DC2626' : T.main}
+                strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -3557,6 +3560,19 @@ export default function Commander() {
           padding-right: max(env(safe-area-inset-right, 0px), 16px);
           box-sizing: border-box;
         }
+        /* Les deux boutons d'action d'une carte. Le dessin fait 28, la zone qui
+           répond au doigt en fait 40 : voir le commentaire de la rangée du bas. */
+        .action-carte {
+          position: relative; width: 28px; height: 28px; border-radius: 50%;
+          background: #fff; border: 1.5px solid ${T.light}; padding: 0;
+          display: inline-flex; align-items: center; justify-content: center;
+          cursor: pointer; flex-shrink: 0; transition: border-color 0.15s, background 0.15s;
+        }
+        .action-carte::after {
+          content: ''; position: absolute; top: 50%; left: 50%;
+          width: 40px; height: 40px; transform: translate(-50%, -50%);
+        }
+        .action-carte:hover { background: ${T.pale}; }
         .cats { display: flex; gap: 6px; overflow-x: auto; padding: 0 1rem 0.625rem; scrollbar-width: none; }
         .cats::-webkit-scrollbar { display: none; }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -3964,8 +3980,17 @@ export default function Commander() {
                       : []),
                   ].map(tab => {
                     const actif = sousOngletCmd === tab.key
-                    // Couleur identite : violet pour Commandes (alimentaire), vert pour Rendez-vous (vitrine).
-                    const couleurId = tab.key === 'rdvs' ? '#10B981' : T.main
+                    // 🔴 LE VERT DES RENDEZ-VOUS EST PARTI (Alex, 13/09). Il
+                    // datait du temps où la couleur disait la CATÉGORIE du
+                    // commerce, vert pour les vitrines ; depuis le 12/09 les
+                    // bandeaux sont tous violets, et ce vert-ci ne renvoyait
+                    // plus à rien. Il tapait en plus sur le vert qui dit
+                    // « ouvert » et « confirmé » à trois lignes de là.
+                    //
+                    // ⚠️ LES DEUX VIOLETS SE DISTINGUENT QUAND MÊME : le Main
+                    // pour les commandes, le Deep pour les rendez-vous. Et le
+                    // mot est écrit juste à côté, comme sur les bandeaux.
+                    const couleurId = tab.key === 'rdvs' ? T.deep : T.main
                     // ⚠️ À TROIS ONGLETS, LE TEXTE DOIT TENIR. « Abonnements »
                     // est le plus long des trois, et une pastille tronquée en
                     // silence est un défaut déjà relevé ailleurs dans ce
@@ -4267,7 +4292,7 @@ export default function Commander() {
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                       <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>À venir</span>
-                      <span style={{ background: '#10B981', color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{rdvsAVenir.length}</span>
+                      <span style={{ background: T.deep, color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{rdvsAVenir.length}</span>
                     </div>
                     {rdvsAVenir.map(r => {
                       const dateObj = r.date_rdv ? new Date(r.date_rdv + 'T12:00:00') : null
@@ -4276,25 +4301,33 @@ export default function Commander() {
                       const dureeM = (heureEnMinutes(r.heure_fin) - heureEnMinutes(r.heure_debut)) || 0
                       const dureeT = dureeM >= 60 ? `${Math.floor(dureeM/60)}h${dureeM%60>0?(dureeM%60)+'min':''}` : `${dureeM}min`
                       return (
-                        <div key={r.id} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.75rem', border: `1.5px solid #10B98133`, boxShadow: '0 2px 8px rgba(16,185,129,0.08)' }}>
-                          {/* Bande 3px verte = « c'est un rendez-vous », en face
-                              du violet des commandes dans ce même onglet.
-                              ⚠️ ELLE NE SUIT PLUS LES CARTES DE L'ACCUEIL, qui
-                              portaient le même vert au titre de la catégorie
-                              « vitrine » : depuis le 12/09 elles sont toutes
-                              violettes (voir bandeauCategorie, lib/plans.js).
-                              Ce vert-ci n'a donc plus rien à voir avec la
-                              catégorie du commerce, il ne code que le type de
-                              ligne à l'intérieur du suivi. */}
-                          <div style={{ height: 3, background: 'linear-gradient(90deg, #047857 0%, #10B981 60%, #6EE7B7 100%)' }}/>
+                        <div key={r.id} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', marginBottom: '0.75rem', border: `1.5px solid ${T.deep}33`, boxShadow: `0 2px 8px ${T.deep}14` }}>
+                          {/* Bande 3px = « c'est un rendez-vous », en Deep face
+                              au Main des commandes. Elle était VERTE jusqu'au
+                              13/09, héritée du temps où la couleur disait la
+                              catégorie du commerce. */}
+                          <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.deep} 60%, ${T.mid} 100%)` }}/>
                           <div style={{ padding: '0.875rem 1rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ fontSize: '0.62rem', fontWeight: 800, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+                                <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
                                   {dateObj ? dateObj.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' }) : '-'} · {heureD}
                                 </p>
+                                {/* 🔴 UNE TABLE S'ANNONÇAIT SOUS LE NOM DE SON
+                                    FORMAT (13/09). Le Yopper qui avait réservé
+                                    pour quatre lisait « Table 6 personnes », le
+                                    nom interne de la case d'agenda que la salle
+                                    lui a attribuée. Il dit combien ils sont,
+                                    c'est le restaurant qui choisit la table :
+                                    `intituleReservation` le redit comme lui le
+                                    dit, et laisse son nom à toute prestation
+                                    qui n'est pas une table. */}
                                 <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.95rem', letterSpacing: '-0.2px', lineHeight: 1.25, marginBottom: 4 }}>
-                                  {r.prestation_nom || 'Prestation'}
+                                  {intituleReservation({
+                                    prestation_nom: r.prestation_nom,
+                                    table: r.prestation?.par_couverts === true,
+                                    couverts: r.couverts,
+                                  }) || 'Prestation'}
                                 </p>
                                 <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.4 }}>
                                   {dureeT} · chez <strong style={{ color: T.deep }}>{r.commercant?.nom}</strong>
@@ -4327,7 +4360,7 @@ export default function Commander() {
                                   `!= null` : une cliente qui avait réglé son
                                   année voyait trente-six lignes à « 0 € ». */}
                               {libellePrixSeance(r) ? (
-                                <p style={{ fontWeight: 800, color: '#10B981', fontSize: '0.7rem', flexShrink: 0, textAlign: 'right', maxWidth: 92, lineHeight: 1.3 }}>{libellePrixSeance(r)}</p>
+                                <p style={{ fontWeight: 800, color: T.deep, fontSize: '0.7rem', flexShrink: 0, textAlign: 'right', maxWidth: 92, lineHeight: 1.3 }}>{libellePrixSeance(r)}</p>
                               ) : montantNetRdv(r) != null && (
                                 /* 🔴 LE TARIF PLEIN S'AFFICHAIT SUR UN RENDEZ-VOUS
                                    DÉJÀ PAYÉ (Alex, 29/08) : sa coupe réglée par
@@ -4691,8 +4724,8 @@ export default function Commander() {
                       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>,
                     },
                     {
-                      label: 'RDV', value: rdvsActifs.length, color: '#10B981', bg: '#F0FDF4',
-                      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
+                      label: 'RDV', value: rdvsActifs.length, color: T.deep, bg: T.pale,
+                      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
                     },
                     {
                       label: 'Dépensé local', value: `${totalDepense.toFixed(0)}€`, color: T.mid, bg: `${T.mid}18`,
@@ -5150,8 +5183,15 @@ export default function Commander() {
                 )}
 
                 {item.label && (
+                  /* ⚠️ LE COMPTE SE RANGE DANS LE LIBELLÉ (Alex, 13/09). Le
+                     point seul disait qu'il se passait quelque chose, jamais
+                     COMBIEN, et toute tentative de le dire ramenait une
+                     pastille sur l'icône, c'est-à-dire le défaut qu'on venait
+                     de corriger. Le mot, lui, a déjà la place.
+                     Deux signaux, deux rôles : le libellé compte, le point
+                     appelle. */
                   <span style={{ fontSize: '0.62rem', fontWeight: 700, color: actif ? '#fff' : '#6B7280', letterSpacing: '0.2px', fontFamily: '"DM Sans", sans-serif' }}>
-                    {item.label}
+                    {item.badge > 0 ? `${item.label} · ${item.badge > 9 ? '9+' : item.badge}` : item.label}
                   </span>
                 )}
                 {actif && <div style={{ position: 'absolute', bottom: 5, left: '50%', transform: 'translateX(-50%)', width: 22, height: 3, borderRadius: 3, background: T.light, boxShadow: `0 0 6px ${T.light}66` }}/>}

@@ -1016,7 +1016,7 @@ function LaTotale() {
     {
       question: 'Vendre ?',
       reponse: `${eur(prix('vendre'))}/mois.`,
-      quoi: 'Click and Collect, livraison, rendez-vous en ligne, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique, invendus du soir à prix réduit.',
+      quoi: 'Click and Collect, livraison, rendez-vous en ligne, réservation de table, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique, invendus du soir à prix réduit.',
     },
   ]
 
@@ -1193,6 +1193,11 @@ const FORMULES = [
       'Tout Communiquer, plus :',
       'Click & Collect avec paiement en ligne',
       'Rendez-vous en ligne, réservables 24h/24',
+      // ⚠️ CE QUE LE RESTAURATEUR CHERCHE, DIT COMME IL LE PENSE. « Capacité
+      // par service » est le mot du logiciel ; lui compte des couverts et des
+      // tables. Et c'est sa salle qui attribue la table, jamais le client :
+      // c'est la décision qui fait tout le module.
+      'Réservation de table : le client dit combien ils sont, ta salle attribue la table',
       'Boutique en ligne et livraison locale',
       'Fidélité automatique : chaque commande et chaque rendez-vous remplit la carte, sans rien faire',
       'Bons cadeaux à offrir : tes clients font découvrir ton commerce à leurs proches',
@@ -1599,8 +1604,8 @@ export default function LandingReveal({ referent = null }) {
         {/* Bénéfices en pastilles */}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginTop: 40 }}>
           {[
-            'Click & Collect', 'Rendez-vous en ligne', 'Good Morning Yoppers', 'Deals du jour',
-            'Cartes de fidélité', 'Bons cadeaux', 'Livraison locale', 'Suivi de commande',
+            'Click & Collect', 'Rendez-vous en ligne', 'Réserver une table', 'Good Morning Yoppers',
+            'Deals du jour', 'Cartes de fidélité', 'Bons cadeaux', 'Livraison locale', 'Suivi de commande',
             // ⚠️ ICI C'EST LE NOM CÔTÉ YOPPER : ces pastilles s'adressent aux
             // habitants, pas aux commerçants. « Avant la fermeture » est le nom
             // de la fonction dans le tableau de bord, il n'a rien à faire ici.

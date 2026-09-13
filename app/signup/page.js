@@ -849,8 +849,14 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     },
     {
       Icon: Utensils, titre: 'Réservation de table',
-      desc: 'Pour les restaurateurs : tes capacités par service, et le Yopper réserve depuis ta fiche en choisissant son horaire et le nombre de personnes. C’est le prochain module que nous construisons, il n’est pas encore utilisable.',
-      plan: 'bientot',
+      // ⚠️ CE QUI MANQUE ENCORE EST ÉCRIT DANS LA DESCRIPTION, pas caché
+      // derrière un badge « bientôt » qui masquerait tout le module (Alex,
+      // 13/09 : « c'est dispo, on doit juste finir les acomptes et empreintes »).
+      // Un restaurateur peut ouvrir ses services et recevoir des réservations
+      // dès aujourd'hui : le lui refuser serait faux. Mais lui laisser croire
+      // qu'il peut déjà retenir une carte le serait tout autant.
+      desc: 'Pour les restaurateurs : tu déclares tes services et ta salle, et le Yopper réserve depuis ta fiche en choisissant son horaire et le nombre de personnes. Il dit combien ils sont, c’est ta salle qui attribue la table. L’acompte et l’empreinte bancaire, pour te prémunir des tables qui ne viennent pas, ne sont pas encore en place.',
+      plan: 'vendre',
     },
   ]
 

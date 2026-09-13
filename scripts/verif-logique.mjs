@@ -1550,6 +1550,31 @@ verifier('le point du bas ne pulse que si une action attend le Yopper',
 // supprimerait l'information pour ceux qui ne le voient pas.
 verifier('et il reste annoncé aux lecteurs d’écran',
   /aria-label=\{item\.badge > 0 \?/.test(srcEcranClient))
+// ⚠️ LE POINT DIT « IL SE PASSE QUELQUE CHOSE », LE LIBELLÉ DIT COMBIEN (Alex,
+// 13/09). Toute tentative de mettre le compte SUR l'icône ramène une pastille
+// par-dessus le calendrier, c'est-à-dire le défaut qu'on venait de corriger.
+// Le mot, lui, a déjà la place.
+verifier('le compte se range dans le libellé de la barre du bas',
+  /\$\{item\.label\} · \$\{item\.badge > 9 \? '9\+' : item\.badge\}/.test(srcEcranClient))
+
+// ─── UNE TABLE SE DIT EN PERSONNES, JAMAIS AU NOM DE SON FORMAT ───────────
+// 🔴 CE QUE LISAIT UN YOPPER QUI AVAIT RÉSERVÉ POUR QUATRE : « Table 6
+// personnes », le nom interne de la case d'agenda que la salle lui a
+// attribuée. Le client dit combien ils sont, c'est le restaurant qui choisit
+// la table. Même défaut qu'un email d'Alex du 10/09, corrigé là-bas par
+// `intituleReservation` : le suivi du Yopper, lui, n'avait jamais été relu.
+verifier('une réservation de table s’annonce en personnes dans le suivi',
+  /intituleReservation\(\{/.test(srcEcranClient))
+verifier('et elle lit bien ce qui en fait une table',
+  /table: r\.prestation\?\.par_couverts === true/.test(srcEcranClient)
+  && /couverts: r\.couverts/.test(srcEcranClient))
+
+// ─── LE VERT DES RENDEZ-VOUS EST PARTI AVEC LES BANDEAUX VERTS ────────────
+// Il datait du temps où la couleur disait la catégorie du commerce. Depuis le
+// 12/09 les bandeaux sont tous violets : ce vert-ci ne renvoyait plus à rien,
+// et il tapait sur le vert qui dit « ouvert » et « confirmé ».
+verifier('le sous-onglet des rendez-vous porte le violet, plus le vert des états',
+  /const couleurId = tab\.key === 'rdvs' \? T\.deep : T\.main/.test(srcEcranClient))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 6 quinquies. LA BARRE DU HAUT — la cloche ne sort plus de l'écran

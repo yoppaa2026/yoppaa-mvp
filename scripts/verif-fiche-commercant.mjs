@@ -555,12 +555,26 @@ verifier('le badge « en construction » existe',
 // commercial n'est légal aujourd'hui.
 verifier('la newsletter est annoncée comme pas encore ouverte',
   /consentement explicite de chaque Yopper/.test(signupSrcTxt))
-// ⚠️ La réservation de table arrive (module M6, décision Alex du 13/08), mais
-// un restaurateur ne doit pas croire qu'il l'aura en payant aujourd'hui.
-verifier('la réservation de table est annoncée comme à venir',
-  /prochain module que nous construisons/.test(signupSrcTxt))
-egal('et les deux portent bien le badge',
-  (signupSrcTxt.match(/plan: 'bientot',/g) || []).length, 2)
+// ─── LA RÉSERVATION DE TABLE EST OUVERTE, SAUF L'ARGENT (Alex, 13/09) ──────
+//
+// Elle portait le badge « en construction » depuis le 13/08. Le module est
+// désormais utilisable de bout en bout : un restaurateur déclare ses services,
+// un Yopper réserve. Le lui refuser serait faux.
+//
+// ⚠️ MAIS L'ACOMPTE ET L'EMPREINTE BANCAIRE NE SONT PAS FAITS, et c'est
+// justement ce qu'un restaurateur cherche en premier quand il pense « table qui
+// ne vient pas ». Le taire, c'est la promesse du 10/08 recommencée : il
+// souscrit au palier payant en comptant dessus, attend, et ne revient pas.
+// La garde vérifie donc que le manque est ÉCRIT, pas seulement que la fonction
+// est annoncée.
+verifier('la réservation de table est annoncée comme utilisable',
+  /le Yopper réserve depuis ta fiche/.test(signupSrcTxt))
+verifier('et ce qui n’est pas encore là est dit noir sur blanc',
+  /acompte et l’empreinte bancaire[^.]*ne sont pas encore en place/.test(signupSrcTxt))
+// Il ne reste que la newsletter derrière ce badge. S'il en réapparaît un autre,
+// cette garde le dira, et la question se reposera au bon moment.
+egal('un seul module reste marqué « en construction »',
+  (signupSrcTxt.match(/plan: 'bientot',/g) || []).length, 1)
 
 // ⚠️ L'IA ÉCRIT, ELLE N'ANALYSE PAS. Deux routes existent, `presentation` et
 // `generer-post`. « Segmentation automatique des Yoppers », « analyse de

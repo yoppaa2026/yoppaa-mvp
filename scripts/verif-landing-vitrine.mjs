@@ -170,7 +170,72 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 5. LA LANDING N'AFFICHE AUCUNE ENSEIGNE DE DÉMONSTRATION
+// 5. LA FICHE DE COMMANDE ET LES CARTES DE FIDÉLITÉ DISENT LE PRODUIT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Les deux maquettes les plus anciennes de la landing, refaites le 13/09 après
+// qu'Alex les a pointées comme « trop éloignées de la vraie app ».
+{
+  const fiche = LANDING.split('function MockFiche()')[1]?.split('\nfunction ')[0] || ''
+  verifier('la fiche existe encore', fiche.length > 400)
+
+  // Les quatre éléments que l'ancienne n'avait pas, et que l'écran a.
+  verifier('la fiche montre ses deux étapes',
+    /Produits/.test(fiche) && /Créneau/.test(fiche))
+  verifier('la fiche a ses onglets de catégories',
+    /Viennoiserie/.test(fiche) && /Pâtisserie/.test(fiche))
+  verifier('chaque article porte une vignette',
+    /<VignetteArticle/.test(fiche))
+  verifier('la disponibilité est dite sur l’article',
+    /Disponible/.test(fiche))
+
+  // 🔴 UNE VIGNETTE PORTE UNE ICÔNE, PAS UN APLAT NU (Alex, 13/09). Un carré de
+  // couleur seul se lit comme une photo qui n'a pas chargé ; l'icône dit que
+  // la photo du commerçant viendra là. Sans cette garde, la prochaine retouche
+  // « simplifierait » en retirant le dessin, et personne ne le verrait.
+  // 🔴 LE DÉCOUPAGE SE FAIT SUR `\nfunction `, PAS SUR UN COMMENTAIRE. La
+  // première version bornait la fonction au commentaire suivant : comme
+  // `sansProse` venait de les supprimer tous, la borne n'existait plus et la
+  // garde lisait TOUT LE RESTE DU FICHIER, où un `<rect>` se trouve forcément.
+  // Elle est restée verte pendant qu'on retirait l'icône. Trouvée par mutation,
+  // jamais par relecture.
+  const vignette = LANDING.split('function VignetteArticle(')[1]?.split('\nfunction ')[0] || ''
+  verifier('la vignette est bien isolée', vignette.length > 100 && vignette.length < 1200,
+    `${vignette.length} caractères découpés`)
+  verifier('la vignette dessine une icône de photo',
+    /<svg/.test(vignette) && /<rect/.test(vignette))
+
+  // ⚠️ ET SES COULEURS D'INVENDUS VIENNENT DU MODULE. Une recopie de la valeur
+  // crème tiendrait jusqu'à la première retouche du module, puis la landing
+  // montrerait un écran qui n'existe plus.
+  verifier('le bloc des invendus prend ses couleurs dans le module',
+    /FOND_ANTI_GASPI/.test(fiche) && /BORD_ANTI_GASPI/.test(fiche))
+  verifier('et ne recopie aucune couleur d’invendus en dur',
+    !/#FBF8F2|#E6DECF/i.test(fiche))
+
+  const fid = LANDING.split('function MockFidelite()')[1]?.split('\nfunction ')[0] || ''
+  verifier('les cartes de fidélité existent encore', fid.length > 400)
+
+  // 🔴 C'EST LA LISTE QUI DÉMONTRE LA PHRASE. Le libellé dit « sans carton à
+  // perdre » : plusieurs commerces visibles d'un coup le prouvent, une carte
+  // unique ne fait que l'illustrer. Repasser à une seule carte reviendrait à
+  // reprendre l'écran précédent.
+  // 🔴 LE MOTIF EST ANCRÉ SUR L'ACCOLADE, ET C'EST TOUTE LA DIFFÉRENCE. La
+  // première version cherchait `n: '…'` et comptait des PROPRIÉTÉS CSS :
+  // `flexDirection: 'column'`, `textAlign: 'center'`, `position: 'absolute'`
+  // se terminent tous par un `n`. La garde annonçait dix commerces là où il y
+  // en avait quatre, et restait verte quand on en retirait deux.
+  const enseignesFid = (fid.match(/\{ n: '/g) || []).length
+  verifier('plusieurs commerces sont montrés à la fois',
+    enseignesFid >= 3, `${enseignesFid} carte(s)`)
+  verifier('au moins une récompense est déjà débloquée',
+    /gagne: true/.test(fid))
+  verifier('le pointage au comptoir est expliqué',
+    /numéro de GSM suffit au comptoir/.test(fid))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. LA LANDING N'AFFICHE AUCUNE ENSEIGNE DE DÉMONSTRATION
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // 🔴 TROIS Y ÉTAIENT, EN PRODUCTION, ET C'EST ALEX QUI LES A VUES. « La mie de

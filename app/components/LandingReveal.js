@@ -265,78 +265,132 @@ function CaptureProduit({ capture, fondClair = false }) {
   )
 }
 
-// ─── Mockup 1 : fiche commerçant Click & Collect (côté Yopper) ───────────────
-function MockFiche() {
+// ─── La vignette d'un article ───────────────────────────────────────────────
+//
+// ⚠️ UN APLAT DE COULEUR SEUL PRÉTEND ÊTRE UNE PHOTO (Alex, 13/09). Sur la
+// vraie fiche, chaque article porte la photo du commerçant : une plaque colorée
+// à sa place fait croire à une image floue ou mal chargée. L'icône dit
+// clairement « ici il y aura ta photo », et le dégradé garde la maquette
+// vivante au lieu d'un carré gris.
+//
+// ⚠️ C'est la même logique que `PhotoVitrine` prise par l'autre bout : là-bas
+// un dégradé sert de REPLI derrière une vraie image, ici il n'y a pas d'image
+// du tout, et le dessin doit le dire.
+function VignetteArticle({ degrade }) {
   return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Hero fiche violet + card infos qui chevauche */}
-      <div style={{ height: 74, background: `linear-gradient(135deg, ${T.panel} 0%, ${T.deep} 40%, ${T.main} 100%)`, position: 'relative', flexShrink: 0 }}>
-        <Bande3px/>
-      </div>
-      <div style={{ background: '#fff', margin: '-30px 10px 0', borderRadius: 14, padding: '10px 12px', boxShadow: '0 8px 24px rgba(22,6,54,0.16)', position: 'relative', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, border: '2px solid #fff', marginTop: -22, boxShadow: '0 4px 12px rgba(22,6,54,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2l2 4h8l2-4"/><path d="M6 22l-2-9h16l-2 9"/><path d="M9 12v4M15 12v4M12 12v4"/></svg>
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <span style={{ fontSize: 6.5, fontWeight: 800, color: T.main, background: T.pale, padding: '2px 6px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Boulangerie</span>
-            <p style={{ margin: '3px 0 0', fontWeight: 900, fontSize: 13, color: T.ink, letterSpacing: '-0.3px' }}>Boulangerie du Centre</p>
-          </div>
-        </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#F0FDF4', borderRadius: 100, padding: '2px 7px', border: '1px solid #10B98133', marginTop: 7 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }}/>
-          <span style={{ fontSize: 8, fontWeight: 800, color: '#10B981' }}>Ouvert · 07:00–18:00</span>
-        </div>
-      </div>
-      {/* Jours de retrait */}
-      <div style={{ display: 'flex', gap: 5, padding: '10px 10px 0', flexShrink: 0 }}>
-        {['Auj.', 'Demain', 'Jeudi'].map((j, i) => (
-          <span key={j} style={{ padding: '4px 10px', borderRadius: 100, fontSize: 8.5, fontWeight: 800, background: i === 0 ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: i === 0 ? '#fff' : T.deep, border: i === 0 ? 'none' : `1px solid ${T.pale}` }}>{j}</span>
+    <span style={{
+      width: 42, height: 42, borderRadius: 8, flexShrink: 0, background: degrade,
+      border: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9"
+        strokeLinecap="round" strokeLinejoin="round" opacity="0.9" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="2.5"/>
+        <circle cx="8.8" cy="8.8" r="1.9"/>
+        <path d="m21 15.5-4.7-4.7L5.5 21"/>
+      </svg>
+    </span>
+  )
+}
+
+// ─── Mockup 1 : la fiche de commande (côté Yopper) ──────────────────────────
+//
+// ⚠️ REDESSINÉE LE 13/09 D'APRÈS LES CAPTURES, ET L'ANCIENNE NE RESSEMBLAIT
+// PLUS À RIEN. Elle montrait une carte blanche posée sur un hero, des pastilles
+// de jours et des articles sans photo : aucun de ces éléments n'existe encore
+// dans le produit. La vraie fiche a ses deux étapes en haut, ses onglets de
+// catégories, une photo par article et la pastille verte de disponibilité.
+//
+// ⚠️ LE BLOC DES INVENDUS EST DANS LE FLUX, PAS À PART, et c'est ce que montre
+// la capture : « Rien ne se perd » apparaît au milieu des articles, à sa place
+// dans la liste. Le mockup dédié montre l'écran complet ; celui-ci montre que
+// l'offre du soir se commande comme n'importe quel croissant.
+function MockFiche() {
+  const articles = [
+    {
+      nom: 'Croissant', prix: '1,80 €',
+      desc: 'Un classique fait maison, avec des ingrédients locaux.',
+      degrade: 'linear-gradient(135deg, #E8B96A, #C88B3A 60%, #F2D9A8)',
+      dispo: true, jeton: null,
+    },
+    {
+      nom: 'Pain au chocolat', prix: '1,90 €',
+      desc: 'Pâte feuilletée croustillante, chocolat au lait.',
+      degrade: 'linear-gradient(135deg, #6B4A2A, #A9724A 55%, #E2C39A)',
+      dispo: false, jeton: 'Commande 1 jour à l’avance',
+    },
+  ]
+  const plus = (
+    <span style={{ width: 26, height: 26, borderRadius: 8, background: T.main, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 15, flexShrink: 0, alignSelf: 'flex-start' }}>+</span>
+  )
+  return (
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: T.panel, padding: '24px 9px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(196,160,244,0.25)', borderRadius: 100, padding: '3px 7px', fontSize: 7.5, fontWeight: 800, color: '#fff', flexShrink: 0 }}>&lsaquo; Retour</span>
+        <span style={{ fontSize: 7.5, fontWeight: 800, color: '#fff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Boulangerie du Centre</span>
+        {[{ n: '1', l: 'Produits', on: true }, { n: '2', l: 'Créneau', on: false }].map(e => (
+          <span key={e.n} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0,
+            borderRadius: 100, padding: '2px 7px 2px 2px', fontSize: 6.5, fontWeight: 800,
+            background: e.on ? T.main : 'rgba(255,255,255,0.08)',
+            color: e.on ? '#fff' : 'rgba(255,255,255,0.55)',
+          }}>
+            <span style={{ width: 11, height: 11, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 6, fontWeight: 900, background: e.on ? '#fff' : 'rgba(255,255,255,0.16)', color: e.on ? T.main : 'rgba(255,255,255,0.7)' }}>{e.n}</span>
+            {e.l}
+          </span>
         ))}
       </div>
-      {/* Deal du jour (vraie DealOfferCard) */}
-      <div style={{ margin: '9px 10px 0', background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.main}55`, flexShrink: 0 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 6.5, fontWeight: 800, color: '#FB923C', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-          <IconFlame size={8}/> Deal du jour
-        </span>
-        <p style={{ margin: '2px 0 3px', fontWeight: 800, color: '#fff', fontSize: 10.5 }}>3 croissants + 1 offert</p>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 900, color: T.light }}>5,40€</span>
-            <span style={{ fontSize: 8.5, color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through', fontWeight: 700 }}>7,20€</span>
-          </div>
-          <span style={{ width: 22, height: 22, borderRadius: 7, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 12 }}>+</span>
-        </div>
+
+      {/* Les onglets de catégories : c'est par eux que le client circule dans
+          une carte, et l'ancienne maquette n'en avait aucun. */}
+      <div style={{ display: 'flex', gap: 12, padding: '8px 10px 0', background: '#fff', borderBottom: '1px solid #EFEAF7', flexShrink: 0 }}>
+        {[{ t: 'Viennoiserie', on: true }, { t: 'Pains' }, { t: 'Pâtisserie' }].map(o => (
+          <span key={o.t} style={{ fontSize: 8, fontWeight: 800, color: o.on ? T.ink : '#9AA0AE', paddingBottom: 6, borderBottom: o.on ? `2px solid ${T.main}` : '2px solid transparent', whiteSpace: 'nowrap' }}>{o.t}</span>
+        ))}
       </div>
-      {/* Articles */}
-      {[
-        { nom: 'Croissant au beurre', prix: '1,80€', stock: '12 dispo', qte: 2 },
-        { nom: 'Pain complet', prix: '3,20€', stock: '6 dispo', qte: 0 },
-      ].map(a => (
-        <div key={a.nom} style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1px solid ${T.pale}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }}>
-          <div style={{ minWidth: 0 }}>
-            <p style={{ margin: 0, fontWeight: 800, fontSize: 10.5, color: T.ink }}>{a.nom}</p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
-              <span style={{ fontSize: 10, fontWeight: 900, color: T.main }}>{a.prix}</span>
-              <span style={{ fontSize: 7, fontWeight: 800, color: '#10B981', background: '#F0FDF4', padding: '1px 6px', borderRadius: 100, border: '1px solid #10B98133' }}>{a.stock}</span>
+
+      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <p style={{ margin: '0 0 7px', display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>Viennoiserie</span>
+          <span style={{ fontSize: 7.5, color: T.muted, fontWeight: 600 }}>3 articles</span>
+        </p>
+
+        {articles.map(a => (
+          <div key={a.nom} style={{ background: '#fff', border: '1px solid #F0ECF8', borderRadius: 12, padding: 8, marginBottom: 7, display: 'flex', gap: 8, boxShadow: '0 2px 8px rgba(26,8,64,0.05)', flexShrink: 0 }}>
+            <VignetteArticle degrade={a.degrade}/>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 10, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>{a.nom}</p>
+              <p style={{ margin: '2px 0 0', fontSize: 7.5, color: T.muted, lineHeight: 1.4, fontWeight: 500 }}>{a.desc}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 10.5, fontWeight: 900, color: T.main }}>{a.prix}</span>
+                {a.dispo && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#F0FDF4', border: '1px solid #10B98133', borderRadius: 100, padding: '1px 6px', fontSize: 6.5, fontWeight: 800, color: '#10B981' }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#10B981' }}/>Disponible
+                  </span>
+                )}
+                {a.jeton && (
+                  <span style={{ background: T.pale, color: T.deep, borderRadius: 100, padding: '1px 6px', fontSize: 6.5, fontWeight: 800 }}>{a.jeton}</span>
+                )}
+              </div>
             </div>
+            {plus}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-            {a.qte > 0 && (
-              <>
-                <span style={{ width: 18, height: 18, borderRadius: 6, border: `1px solid ${T.pale}`, color: T.main, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 10 }}>−</span>
-                <span style={{ fontWeight: 900, fontSize: 10, color: T.ink }}>{a.qte}</span>
-              </>
-            )}
-            <span style={{ width: 20, height: 20, borderRadius: 6, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 11 }}>+</span>
+        ))}
+
+        {/* ⚠️ LES COULEURS VIENNENT DU MODULE, JAMAIS D'UNE COPIE : une recopie
+            de `#FBF8F2` tiendrait jusqu'à la première retouche, puis la landing
+            montrerait un écran qui n'existe plus. */}
+        <div style={{ background: FOND_ANTI_GASPI, border: `1.5px solid ${BORD_ANTI_GASPI}`, borderRadius: 12, padding: '8px 9px', marginTop: 'auto', marginBottom: 9, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: NUIT_ANTI_GASPI, color: '#fff', borderRadius: 100, padding: '2px 8px', fontSize: 6.5, fontWeight: 900, letterSpacing: '0.5px' }}>
+              <IconeAntiGaspi taille={8} couleur={MARQUE_SUR_NUIT} epaisseur={2.6}/> RIEN NE SE PERD
+            </span>
+            <p style={{ margin: '5px 0 1px', fontSize: 10, fontWeight: 900, color: ENCRE_ANTI_GASPI }}>Torsade au chocolat</p>
+            <p style={{ margin: 0, fontSize: 7.5, color: ENCRE_DOUCE_ANTI_GASPI, fontWeight: 600 }}>il en reste 5 &middot; jusqu&rsquo;à 18 h</p>
+            <p style={{ margin: '4px 0 0', fontSize: 11, fontWeight: 900, color: ACCENT_ANTI_GASPI }}>
+              1,10 €<s style={{ fontSize: 8, color: '#9C8D78', fontWeight: 700, marginLeft: 5 }}>2,20 €</s>
+            </p>
           </div>
-        </div>
-      ))}
-      {/* CTA panier collé en bas */}
-      <div style={{ padding: 10, marginTop: 'auto' }}>
-        <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 9.5, fontWeight: 800, color: '#fff' }}>Commander · retrait 16:30</span>
-          <span style={{ fontSize: 10.5, fontWeight: 900, color: '#fff' }}>9,00€</span>
+          {plus}
         </div>
       </div>
     </div>
@@ -855,62 +909,68 @@ function MockDashboard() {
   )
 }
 
-// ─── Mockup 5 : la carte de fidélité du Yopper (page reçue par SMS) ─────────
+// ─── Mockup 5 : les cartes de fidélité du Yopper ────────────────────────────
+//
+// ⚠️ REDESSINÉE LE 13/09, ET LE CHOIX DE L'ÉCRAN EST L'ESSENTIEL. Les captures
+// en montrent DEUX versions : le bloc à dix pastilles dans la fiche d'un
+// commerce, et la liste de toutes les cartes dans le profil. C'est la LISTE qui
+// est ici, parce que le libellé de la maquette dit « sans carton à perdre » :
+// quatre commerces visibles d'un coup le prouvent, une seule carte non. Le
+// dessin doit démontrer la phrase, pas l'illustrer.
+//
+// L'ancienne version montrait le SMS d'ouverture puis une carte plein écran
+// avec le wordmark : un parcours qui n'existe plus sous cette forme.
 function MockFidelite() {
+  const cartes = [
+    { n: 'Salon Camille', i: 'C', fond: `linear-gradient(135deg, ${T.deep}, ${T.main})`, pct: 22,
+      t: '2 récompenses débloquées : 10 € sur ton prochain achat chacune', gagne: true },
+    { n: 'Friterie du Parc', i: 'F', fond: 'linear-gradient(135deg, #7A1F1F, #C0392B)', pct: 90,
+      t: '9/10 passages → le 11e te fait gagner 5 €', gagne: false },
+    { n: 'Boulangerie du Centre', i: 'B', fond: `linear-gradient(135deg, ${T.main}, ${T.light})`, pct: 40,
+      t: '4/10 passages → le 11e te fait gagner 5 €', gagne: false },
+    { n: 'Maison Léa', i: 'M', fond: 'linear-gradient(135deg, #B45309, #F59E0B)', pct: 100,
+      t: 'Récompense débloquée : 10 € offerts', gagne: true },
+  ]
   return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', height: '100%', display: 'flex', flexDirection: 'column', background: `linear-gradient(180deg, ${T.panel} 0%, ${T.deep} 58%, ${T.main} 130%)`, padding: '26px 10px 10px' }}>
-      {/* Le SMS qui amène le client sur sa carte */}
-      <div style={{ background: 'rgba(255,255,255,0.94)', borderRadius: 11, padding: '6px 9px', flexShrink: 0, boxShadow: '0 6px 16px rgba(0,0,0,0.28)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3.5, background: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.6 9.6 0 0 1-2.9-.4L3 21l1.6-4.8A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg>
-          </span>
-          <span style={{ fontSize: 6, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Messages · Yoppaa</span>
-          <span style={{ marginLeft: 'auto', fontSize: 6, fontWeight: 700, color: T.muted }}>maintenant</span>
-        </div>
-        <p style={{ margin: 0, fontSize: 7.5, color: T.ink, fontWeight: 600, lineHeight: 1.4 }}>Ta carte de fidélité chez Boulangerie du Centre est ouverte 🟣 Suis-la ici : yoppaa.app/carte/…</p>
-      </div>
-
-      {/* Wordmark tricolore fond foncé */}
-      <div style={{ textAlign: 'center', margin: '12px 0 10px', flexShrink: 0 }}>
-        <p style={{ margin: 0, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 19, letterSpacing: '-0.05em', lineHeight: 1 }}>
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: T.panel, padding: '22px 12px 10px', flexShrink: 0 }}>
+        <p style={{ margin: 0, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 15, letterSpacing: '-0.05em', lineHeight: 1 }}>
           <span style={{ color: '#fff' }}>yo</span><span style={{ color: T.light }}>pp</span><span style={{ color: T.mid }}>aa</span>
         </p>
-        <div style={{ display: 'flex', gap: 3, justifyContent: 'center', marginTop: 4 }}>
-          {['#fff', T.light, T.mid].map((c, i) => (
-            <span key={i} style={{ width: 4.5, height: 4.5, borderRadius: '50%', background: c, opacity: i === 0 ? 0.55 : 1 }}/>
-          ))}
-        </div>
+        <p style={{ margin: '10px 0 0', fontSize: 13, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>Mes cartes de fidélité</p>
+        <p style={{ margin: '2px 0 0', fontSize: 8, color: T.light, fontWeight: 700 }}>Elles se remplissent toutes seules</p>
       </div>
 
-      {/* La carte */}
-      <div style={{ background: '#fff', borderRadius: 15, overflow: 'hidden', boxShadow: '0 12px 30px rgba(0,0,0,0.32)', flexShrink: 0 }}>
-        <Bande3px/>
-        <div style={{ padding: '12px 12px 13px', textAlign: 'center' }}>
-          <p style={{ margin: '0 0 1px', fontSize: 6.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.9px' }}>Ma carte de fidélité</p>
-          <p style={{ margin: '0 0 10px', fontWeight: 900, fontSize: 12, color: T.ink, letterSpacing: '-0.3px' }}>Boulangerie du Centre</p>
+      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 7.5, fontWeight: 900, color: T.main, textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap' }}>Mes cartes</span>
+          <span style={{ flex: 1, height: 1, background: T.pale }}/>
+          <span style={{ fontSize: 8, color: T.muted, fontWeight: 800 }}>8</span>
+        </div>
 
-          <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '11px 11px 12px' }}>
-            <p style={{ margin: '0 0 5px', fontSize: 6, fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '0.9px' }}>Mes passages</p>
-            <p style={{ margin: '0 0 8px', fontSize: 21, fontWeight: 900, color: '#fff', letterSpacing: '-1px', lineHeight: 1 }}>
-              7<span style={{ fontSize: 10, fontWeight: 700, color: T.light, marginLeft: 4 }}>/ 10</span>
-            </p>
-            <div style={{ height: 6, borderRadius: 100, background: 'rgba(255,255,255,0.15)', overflow: 'hidden' }}>
-              <div style={{ width: '70%', height: '100%', borderRadius: 100, background: `linear-gradient(90deg, ${T.light}, #fff)` }}/>
+        {cartes.map(c => (
+          <div key={c.n} style={{
+            background: c.gagne ? '#F0FDF4' : '#fff',
+            border: `1px solid ${c.gagne ? '#10B98144' : '#F0ECF8'}`,
+            borderRadius: 12, padding: 9, marginBottom: 7, display: 'flex', gap: 8, alignItems: 'center',
+            boxShadow: '0 2px 8px rgba(26,8,64,0.05)', flexShrink: 0,
+          }}>
+            <span style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: c.fond, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: '#fff' }}>{c.i}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 9.5, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>{c.n}</p>
+              <div style={{ height: 5, borderRadius: 100, background: T.pale, overflow: 'hidden', margin: '5px 0 4px' }}>
+                <span style={{ display: 'block', height: '100%', width: `${c.pct}%`, borderRadius: 100, background: c.gagne ? '#10B981' : `linear-gradient(90deg, ${T.main}, ${T.mid})` }}/>
+              </div>
+              <p style={{ margin: 0, fontSize: 7.5, color: c.gagne ? '#047857' : T.muted, fontWeight: c.gagne ? 800 : 600, lineHeight: 1.4 }}>{c.t}</p>
             </div>
-            <p style={{ margin: '8px 0 0', fontSize: 7.5, color: T.light, lineHeight: 1.45 }}>
-              Encore <strong style={{ color: '#fff' }}>3 passages</strong> et tu débloques : 1 café offert
-            </p>
+            <span style={{ color: T.muted, fontSize: 11, flexShrink: 0 }}>&rsaquo;</span>
           </div>
+        ))}
 
-          <div style={{ marginTop: 10, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '7px 12px' }}>
-            <span style={{ fontSize: 8.5, fontWeight: 800, color: '#fff' }}>Voir Boulangerie du Centre</span>
-          </div>
-          <p style={{ margin: '8px 0 0', fontSize: 6.5, color: T.muted, lineHeight: 1.45 }}>Garde ce lien : c&rsquo;est ta carte, elle se met à jour toute seule 🟣</p>
-        </div>
+        <p style={{ margin: 'auto 0 10px', fontSize: 7.5, color: T.muted, textAlign: 'center', fontWeight: 600, lineHeight: 1.5 }}>
+          Plus de carton au fond du sac : ton numéro de GSM suffit au comptoir.
+        </p>
       </div>
-
-      <p style={{ margin: 'auto 0 0', textAlign: 'center', fontSize: 6.5, color: 'rgba(255,255,255,0.55)', paddingTop: 8 }}>Ton quartier dans ta poche 🟣</p>
     </div>
   )
 }

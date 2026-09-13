@@ -1227,6 +1227,44 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
     /color: encreDouce, whiteSpace: 'nowrap' \}\}>Tout est parti/.test(FICHE))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LA LANDING LE MONTRE, ELLE NE FAIT PLUS QUE L'ÉCRIRE (13/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ IL ÉTAIT NOMMÉ À QUATRE ENDROITS DE LA LANDING SANS UNE SEULE IMAGE : le
+// bloc « Ce qui reste ne part plus à la poubelle », la pastille « Rien ne se
+// perd », la ligne de la formule Vendre et le détail des tarifs. Exactement le
+// défaut du restaurant, corrigé la veille.
+{
+  // 🔴 `sansProse`, ET CE N'EST PAS UN DÉTAIL. Sans lui, la garde du temps
+  // restant lisait « encore 3 h 09 » DANS LE COMMENTAIRE qui explique pourquoi
+  // ce libellé compte : elle restait verte alors que la maquette ne l'affichait
+  // plus. Un harnais de mutation l'a attrapée. C'est le troisième mode de faux
+  // vert du projet, après l'import et le jumeau (reference_tests_faussement_verts).
+  const LANDING = sansProse(readFileSync(new URL('../app/components/LandingReveal.js', import.meta.url), 'utf8'))
+
+  verifier('la landing montre l’offre de fin de journée',
+    /<MockAntiGaspi\/>/.test(LANDING))
+
+  // 🔴 ET ELLE PREND SES COULEURS DANS LE MODULE, PAS DANS SA PROPRE PALETTE.
+  // Une copie locale de `#FBF8F2` aurait tenu jusqu'à la première retouche du
+  // crème, puis la landing aurait montré un écran qui n'existe plus. C'est le
+  // motif le plus tenace de ce projet, et la seule réponse est de n'avoir
+  // qu'un seul endroit à corriger.
+  verifier('et ses couleurs viennent du module, pas d’une copie',
+    /from '@\/app\/components\/IconeAntiGaspi'/.test(LANDING)
+    && /background: FOND_ANTI_GASPI/.test(LANDING)
+    && /background: NUIT_ANTI_GASPI/.test(LANDING))
+  verifier('aucune couleur du module n’est recopiée en dur dans la landing',
+    !/#FBF8F2/.test(LANDING) && !/#E6DECF/.test(LANDING))
+
+  // ⚠️ CE QUI FAIT L'ARGUMENT, C'EST LE COUPLE TEMPS + QUANTITÉ. Le prix barré
+  // seul ne serait qu'une promotion de plus ; « encore 3 h 09 » et « il en
+  // reste 3 » disent ensemble qu'il faut y aller maintenant.
+  verifier('la maquette garde le temps ET la quantité restants',
+    /encore 3 h 09/.test(LANDING) && /il en reste 3/.test(LANDING))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

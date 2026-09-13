@@ -18,6 +18,13 @@ import Script from 'next/script'
 import Link from 'next/link'
 import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
+// ⚠️ LES COULEURS DU MODULE ANTI-GASPI VIENNENT DE SON PROPRE FICHIER. Les
+// recopier ici ferait diverger la landing de l'écran à la première retouche,
+// et c'est le motif le plus tenace de ce projet.
+import IconeAntiGaspi, {
+  ACCENT_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI,
+  ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT,
+} from '@/app/components/IconeAntiGaspi'
 import {
   LAUNCH_DATE_ISO, libelleLancement, libelleDernierJourGratuit,
   joursOfferts, joursOffertsAuLancement, joursAvance,
@@ -560,6 +567,80 @@ function MockTableCreneaux() {
             <span style={{ fontSize: 9, fontWeight: 800, color: '#fff' }}>Confirmer ma table</span>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Mockup 9 : ce qui reste avant la fermeture ─────────────────────────────
+//
+// ⚠️ LA LANDING EN PARLAIT À QUATRE ENDROITS SANS JAMAIS LE MONTRER (Alex,
+// 13/09). Le bloc « Ce qui reste ne part plus à la poubelle », la pastille
+// « Rien ne se perd », la ligne de la formule Vendre et le détail des tarifs :
+// quatre fois du texte, zéro image. Même défaut que le restaurant la veille.
+//
+// ⚠️ LES COULEURS VIENNENT DU MODULE, PAS D'ICI. `IconeAntiGaspi` exporte le
+// crème, son bord, la nuit et l'accent : les recopier ferait diverger la
+// landing de l'écran dès la première retouche, et c'est le motif le plus tenace
+// de ce projet.
+//
+// ⚠️ CE QUI FAIT L'ARGUMENT, C'EST LE COUPLE TEMPS + QUANTITÉ. « encore 3 h 09 »
+// et « il en reste 3 » disent ensemble qu'il faut y aller maintenant ; le prix
+// barré seul ne serait qu'une promotion de plus.
+function MockAntiGaspi() {
+  const offres = [
+    { enseigne: 'La mie de test', titre: 'Torsade au chocolat', prix: '1,10 €', avant: '2,20 €', reste: 'il en reste 5', loin: '1.3 km' },
+    { enseigne: 'Kebabistro', titre: 'Fondant au chocolat', prix: '2,50 €', avant: '5,00 €', reste: 'il en reste 3', loin: '3.7 km' },
+  ]
+  const pastille = {
+    display: 'inline-flex', alignItems: 'center', gap: 3,
+    background: '#fff', border: `1px solid ${BORD_ANTI_GASPI}`, borderRadius: 100,
+    padding: '2px 6px', fontSize: 7, fontWeight: 800, color: ENCRE_DOUCE_ANTI_GASPI,
+    whiteSpace: 'nowrap',
+  }
+  return (
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: NUIT_ANTI_GASPI, padding: '24px 12px 12px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 9, padding: '3px 7px', fontSize: 9, fontWeight: 800, color: '#fff' }}>‹</span>
+          <IconeAntiGaspi taille={13} couleur={MARQUE_SUR_NUIT} epaisseur={2.4}/>
+          <span style={{ fontSize: 12.5, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>Rien ne se perd</span>
+        </div>
+        <p style={{ margin: '4px 0 0 25px', fontSize: 8, color: MARQUE_SUR_NUIT, fontWeight: 700 }}>Les derniers du jour, avant la fermeture.</p>
+      </div>
+      <div style={{ padding: '10px 10px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <p style={{ margin: '0 0 7px', fontSize: 7, fontWeight: 800, color: ENCRE_DOUCE_ANTI_GASPI, textTransform: 'uppercase', letterSpacing: '0.7px' }}>2 offres près de toi</p>
+        {offres.map(o => (
+          <div key={o.titre} style={{ position: 'relative', background: FOND_ANTI_GASPI, border: `1.5px solid ${BORD_ANTI_GASPI}`, borderRadius: 11, padding: '8px 9px', marginBottom: 7 }}>
+            <span style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(26,8,64,0.14)' }}>
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={ACCENT_ANTI_GASPI} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
+              </svg>
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2, paddingRight: 20 }}>
+              <IconeAntiGaspi taille={9} epaisseur={2.6}/>
+              <span style={{ fontSize: 7, fontWeight: 900, color: ACCENT_ANTI_GASPI, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{o.enseigne}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 6, marginBottom: 6 }}>
+              <span style={{ fontSize: 10.5, fontWeight: 900, color: ENCRE_ANTI_GASPI, lineHeight: 1.2 }}>{o.titre}</span>
+              <span style={{ textAlign: 'right', flexShrink: 0 }}>
+                <span style={{ display: 'block', fontSize: 12, fontWeight: 900, color: ACCENT_ANTI_GASPI, lineHeight: 1 }}>{o.prix}</span>
+                <span style={{ display: 'block', fontSize: 7, fontWeight: 700, color: ENCRE_DOUCE_ANTI_GASPI, marginTop: 2 }}>
+                  <s>{o.avant}</s> · &minus;50 %
+                </span>
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <span style={pastille}>
+                <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke={ENCRE_DOUCE_ANTI_GASPI} strokeWidth="2.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                encore 3 h 09
+              </span>
+              <span style={pastille}>{o.reste}</span>
+              <span style={pastille}>{o.loin}</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -1755,6 +1836,9 @@ export default function LandingReveal({ referent = null }) {
           </PhoneFrame>
           <PhoneFrame label="Ta carte de fidélité se remplit toute seule, sans carton à perdre">
             <MockFidelite/>
+          </PhoneFrame>
+          <PhoneFrame label="Ce qui reste avant la fermeture, à prix réduit, à deux pas de chez toi">
+            <MockAntiGaspi/>
           </PhoneFrame>
         </div>
         {/* Bénéfices en pastilles */}

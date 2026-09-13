@@ -2849,6 +2849,65 @@ egal('la réservation d’un restaurant s’atteint quand même',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LE TUNNEL NE DIT PLUS « RDV » À QUELQU'UN QUI RÉSERVE UNE TABLE (13/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ALEX A VU SUR SA CAPTURE DE L'ÉTAPE 3 : « TON RDV » écrit au-dessus
+// de « Table de 4 personnes ». Personne ne dit qu'il a rendez-vous au
+// restaurant. C'est le troisième endroit du même défaut, après l'email du 10/09
+// et le suivi du Yopper corrigé la veille.
+//
+// ⚠️ ET L'ACCORD SUIT LE MOT. « Ta réservation est confirmée » chez un
+// restaurant, « Ton RDV est confirmé » chez un coiffeur : c'est pour ça que le
+// module porte `emailConfirme` en entier plutôt qu'un nom à recoller à la main.
+{
+  const TUNNEL = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+
+  verifier('🔴 le récapitulatif de l’étape 3 prend le mot du métier',
+    /\{mots\.laSienne\}/.test(TUNNEL))
+  verifier('et la confirmation de paiement aussi, accord compris',
+    /\{mots\.emailConfirme\}/.test(TUNNEL))
+  verifier('plus aucun « Ton RDV » en dur dans le tunnel',
+    !/Ton RDV/.test(TUNNEL))
+
+  // ⚠️ LES DEUX MESSAGES DU RETOUR STRIPE N'ONT PAS LE DROIT AU VOCABULAIRE.
+  // Ils partent pendant que la fiche se charge encore : `motsReservation` n'a
+  // pas la catégorie et retomberait sur « RDV », y compris chez un restaurant.
+  // Une tournure sans genre ni métier est juste dans les deux cas, et c'est
+  // exactement le genre de faux-vert qu'un banc doit figer.
+  // (Les apostrophes sont échappées dans le source : on vise le texte entre.)
+  verifier('le retour de Stripe reste neutre, faute de connaître le métier',
+    /bien confirmé, tu recevras/.test(TUNNEL)
+    && /Rien n.{0,2}a été réservé, tu peux réessayer/.test(TUNNEL))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA LANDING MONTRE LE RESTAURANT (13/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Six maquettes et aucun restaurant : le module le plus récent était le seul
+// qu'un visiteur ne voyait jamais. Elles sont deux, et elles ne disent pas la
+// même chose — l'une la double nature de la fiche, l'autre le parcours.
+{
+  const LANDING = readFileSync(new URL('../app/components/LandingReveal.js', import.meta.url), 'utf8')
+
+  verifier('la landing montre le choix entre table et emporter',
+    /<MockTableChoix\/>/.test(LANDING))
+  verifier('et le parcours de réservation',
+    /<MockTableCreneaux\/>/.test(LANDING))
+  // ⚠️ LES CHIFFRES DE LA MAQUETTE VIENNENT DES CAPTURES, PAS DE MON IMAGINATION.
+  // Trois détails avaient été inventés au premier essai. Celui-ci les fige :
+  // la borne du restaurant de démo est à SIX, et les étapes sont au nombre de
+  // trois. Une maquette qui ment sur le produit est pire qu'une absente.
+  verifier('la maquette affiche bien les trois étapes du vrai tunnel',
+    /\{ t: '✓', fait: true \}, \{ t: '2', actif: true \}, \{ t: '3' \}/.test(LANDING))
+  // Les photos sont posées EN FOND par-dessus un dégradé : un fichier manquant
+  // laisse une plaque de couleur, jamais une image cassée sur la page d'accueil.
+  verifier('une photo absente ne casse pas la page d’accueil',
+    /background: `url\(\$\{src\}\) center\/cover, \$\{degrade\}`/.test(LANDING))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

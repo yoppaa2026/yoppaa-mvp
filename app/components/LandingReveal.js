@@ -416,6 +416,155 @@ function MockRdv() {
   )
 }
 
+// ─── Mockups 7 et 8 : le restaurant ─────────────────────────────────────────
+//
+// ⚠️ AUCUNE DES SIX PREMIÈRES NE MONTRAIT UN RESTAURANT (Alex, 13/09 : « on a
+// un super module restaurant, ils doivent le voir et le comprendre »). Il en
+// faut DEUX, et elles ne disent pas la même chose :
+//   • MockTableChoix montre ce qu'AUCUNE autre ne raconte, la double nature
+//     d'un restaurant : réserver une table ET commander à emporter, sur la même
+//     fiche. C'est l'argument du module, lisible en une seconde.
+//   • MockTableCreneaux montre le parcours lui-même, et surtout qu'il tient en
+//     trois étapes affichées en haut.
+//
+// ⚠️ DESSINÉES D'APRÈS LES CAPTURES D'ALEX, pas d'après le code. Trois détails
+// avaient été inventés à la première tentative : les étapes n'apparaissaient
+// pas, la borne était à huit personnes au lieu de six, et la phrase des grandes
+// tablées ne donnait pas le numéro de téléphone. Une maquette qui ment sur le
+// produit est pire qu'une maquette absente.
+
+// Les photos du commerce de démo. Elles sont posées EN FOND, par-dessus un
+// dégradé : si un fichier manque, il reste une plaque de couleur crédible au
+// lieu d'une image cassée sur la page d'accueil.
+function PhotoVitrine({ src, degrade }) {
+  return (
+    <span style={{
+      flex: 1, height: 54, borderRadius: 9,
+      background: `url(${src}) center/cover, ${degrade}`,
+      border: '1px solid rgba(255,255,255,0.5)',
+    }}/>
+  )
+}
+
+function MockTableChoix() {
+  return (
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: T.panel, padding: '24px 9px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(196,160,244,0.25)', borderRadius: 100, padding: '3px 7px', fontSize: 7.5, fontWeight: 800, color: '#fff', flexShrink: 0 }}>‹ Retour</span>
+        <span style={{ fontSize: 8, fontWeight: 800, color: '#fff' }}>La Table d&rsquo;Essai</span>
+      </div>
+      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <p style={{ margin: '0 0 5px', fontSize: 6.5, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Mon commerce en images</p>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          <PhotoVitrine src="/captures/resto-facade.webp" degrade="linear-gradient(135deg, #3F3A36, #6B5E52 60%, #A08E7A)"/>
+          <PhotoVitrine src="/captures/resto-salle.webp" degrade="linear-gradient(135deg, #5C4A3A, #B99B76 55%, #E4CDAA)"/>
+        </div>
+
+        <div style={{ background: '#fff', borderRadius: 12, padding: 11, border: `1px solid ${T.pale}`, boxShadow: '0 2px 10px rgba(26,8,64,0.06)' }}>
+          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 900, color: T.deep, letterSpacing: '-0.2px' }}>Que veux-tu faire&nbsp;?</p>
+          <p style={{ margin: '3px 0 9px', fontSize: 8, color: T.muted, fontWeight: 600, lineHeight: 1.45 }}>La carte est juste en dessous, tu peux la lire avant de choisir.</p>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <span style={{ flex: 1, borderRadius: 10, padding: '9px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: `linear-gradient(135deg, ${T.ink}, ${T.main})` }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+              <span style={{ fontSize: 8.5, fontWeight: 800, color: '#fff', lineHeight: 1.3, textAlign: 'center' }}>Réserver<br/>une table</span>
+            </span>
+            <span style={{ flex: 1, borderRadius: 10, padding: '9px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: '#fff', border: `1.4px solid ${T.main}` }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9 4 5h16l1 4v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/><path d="M5 11v10h14V11"/></svg>
+              <span style={{ fontSize: 8.5, fontWeight: 800, color: T.main, lineHeight: 1.3, textAlign: 'center' }}>Commander<br/>à emporter</span>
+            </span>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 'auto', paddingBottom: 10 }}>
+          <div style={{ background: T.pale, border: '1px solid rgba(196,160,244,0.6)', borderRadius: 9, padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+            <p style={{ margin: 0, fontSize: 7, fontWeight: 700, color: T.deep, lineHeight: 1.4 }}>Sur une table, le restaurant peut demander un <b>acompte</b> ou une <b>empreinte bancaire</b>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MockTableCreneaux() {
+  const jours = [
+    { j: 'Dim', n: '13', ferme: false, actif: false },
+    { j: 'Lun', n: '14', ferme: true, actif: false },
+    { j: 'Mar', n: '15', ferme: false, actif: true },
+    { j: 'Mer', n: '16', ferme: false, actif: false },
+    { j: 'Jeu', n: '17', ferme: false, actif: false },
+  ]
+  const creneaux = ['12:00', '12:15', '12:30', '12:45', '13:00', '13:15', '13:30', '13:45', '18:00', '18:15', '18:30', '18:45', '19:00', '19:15', '19:30', '20:00']
+  return (
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: T.panel, padding: '24px 9px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(196,160,244,0.25)', borderRadius: 100, padding: '3px 7px', fontSize: 7.5, fontWeight: 800, color: '#fff', flexShrink: 0 }}>‹ Retour</span>
+        <span style={{ fontSize: 8, fontWeight: 800, color: '#fff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>La Table d&rsquo;Essai</span>
+        {/* Les trois étapes : c'est elles qui disent « c'est court ». */}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          {[{ t: '✓', fait: true }, { t: '2', actif: true }, { t: '3' }].map((e, i) => (
+            <span key={i} style={{
+              width: 15, height: 15, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 7, fontWeight: 900,
+              background: e.fait ? 'rgba(16,185,129,0.15)' : e.actif ? T.main : 'rgba(255,255,255,0.08)',
+              border: `1px solid ${e.fait ? '#10B981' : e.actif ? T.light : 'rgba(196,160,244,0.3)'}`,
+              color: e.fait ? '#10B981' : e.actif ? '#fff' : 'rgba(255,255,255,0.6)',
+            }}>{e.t}</span>
+          ))}
+        </span>
+      </div>
+      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ background: '#fff', borderRadius: 10, padding: '7px 9px', marginBottom: 9, border: `1px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(26,8,64,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${T.ink}, ${T.main} 60%, ${T.mid})` }}/>
+          <div>
+            <p style={{ margin: 0, fontSize: 6.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Prestation choisie</p>
+            <p style={{ margin: '2px 0 0', fontSize: 10.5, fontWeight: 900, color: T.ink }}>Table de 4 personnes</p>
+            <p style={{ margin: '1px 0 0', fontSize: 7.5, color: T.muted, fontWeight: 600 }}>2h</p>
+          </div>
+          <span style={{ flexShrink: 0, border: `1.2px solid ${T.main}`, borderRadius: 100, padding: '3px 8px', fontSize: 7.5, fontWeight: 800, color: T.main }}>Changer</span>
+        </div>
+
+        <p style={{ margin: '0 0 5px', fontSize: 7, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Je viens le</p>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 9 }}>
+          {jours.map(d => (
+            <span key={d.n} style={{ flex: 1, borderRadius: 8, border: `1px solid ${d.actif ? T.main : T.pale}`, background: d.actif ? T.main : '#fff', padding: '4px 0', textAlign: 'center', opacity: d.ferme ? 0.38 : 1 }}>
+              <span style={{ display: 'block', fontSize: 6.5, fontWeight: 700, color: d.actif ? '#fff' : T.muted }}>{d.j}</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 900, color: d.actif ? '#fff' : T.ink, lineHeight: 1.1 }}>{d.n}</span>
+              <span style={{ display: 'block', fontSize: 6.5, fontWeight: 700, color: d.actif ? '#fff' : T.muted }}>sep</span>
+            </span>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '0 0 5px' }}>
+          <span style={{ fontSize: 7, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Créneaux mardi 15 sep</span>
+          <span style={{ flex: 1, height: 1, background: T.pale }}/>
+          <span style={{ fontSize: 7, fontWeight: 700, color: T.muted }}>22 libres</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+          {creneaux.map(h => (
+            <span key={h} style={{
+              padding: '5px 0', borderRadius: 7, fontSize: 8, fontWeight: 800, textAlign: 'center',
+              background: h === '19:15' ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
+              color: h === '19:15' ? '#fff' : T.ink,
+              border: h === '19:15' ? 'none' : `1px solid ${T.pale}`,
+            }}>{h}</span>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 'auto', paddingBottom: 10 }}>
+          <div style={{ background: T.pale, border: '1px solid rgba(196,160,244,0.6)', borderRadius: 9, padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+            <p style={{ margin: 0, fontSize: 7, fontWeight: 700, color: T.deep, lineHeight: 1.4 }}>Ta carte est <b>simplement enregistrée</b>. Rien n&rsquo;est débité si tu viens.</p>
+          </div>
+          <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '7px 14px', textAlign: 'center' }}>
+            <span style={{ fontSize: 9, fontWeight: 800, color: '#fff' }}>Confirmer ma table</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Mockup 4 : dashboard commerçant ────────────────────────────────────────
 // Reproduit l'écran d'accueil réel : en-tête sombre avec le nom du commerce,
 // onglets Commandes / RDV / Paramètres, actions rapides (esprit ODOO), stats
@@ -1597,6 +1746,12 @@ export default function LandingReveal({ referent = null }) {
           </PhoneFrame>
           <PhoneFrame label="Prends rendez-vous chez ton coiffeur ou ton barbier, même à minuit">
             <MockRdv/>
+          </PhoneFrame>
+          <PhoneFrame label="Réserve ta table ou commande à emporter, depuis la même fiche">
+            <MockTableChoix/>
+          </PhoneFrame>
+          <PhoneFrame label="Dis combien vous êtes, choisis ton heure : la table est retenue en trois étapes">
+            <MockTableCreneaux/>
           </PhoneFrame>
           <PhoneFrame label="Ta carte de fidélité se remplit toute seule, sans carton à perdre">
             <MockFidelite/>

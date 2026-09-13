@@ -1097,7 +1097,12 @@ export default function CommanderRdvSlug() {
         }
       } else {
         // Pas de snapshot (cookies cleared ?) → fallback : message + retour accueil
-        setSubmitError('Paiement reçu, mais impossible d\'afficher le récap (session expirée). Ton RDV est confirmé, tu recevras l\'email de confirmation.')
+        // ⚠️ PAS DE VOCABULAIRE MÉTIER ICI, ET C'EST VOLONTAIRE. Ce message part
+        // au RETOUR DE STRIPE, pendant que la fiche du commerçant se charge
+        // encore : `motsReservation` n'a pas sa catégorie et retomberait sur
+        // « Ton RDV », y compris chez un restaurant. Une tournure sans genre ni
+        // métier est juste dans les deux cas.
+        setSubmitError('Paiement reçu, mais impossible d\'afficher le récap (session expirée). C\'est bien confirmé, tu recevras l\'email de confirmation.')
       }
       try { sessionStorage.removeItem(STORAGE_KEY) } catch (_) {}
     } else if (paiement === 'annule') {
@@ -1110,7 +1115,9 @@ export default function CommanderRdvSlug() {
         if (snapshot.client) setClient(p => ({ ...p, ...snapshot.client }))
         allerEtape(3)
       }
-      setSubmitError('Paiement annulé. Ton RDV n\'a pas été créé. Tu peux réessayer.')
+      // Même raison qu'au-dessus : au retour de Stripe on ne connaît pas encore
+      // le métier. « Rien n'a été réservé » ne porte ni genre ni vocabulaire.
+      setSubmitError('Paiement annulé. Rien n\'a été réservé, tu peux réessayer.')
       try { sessionStorage.removeItem(STORAGE_KEY) } catch (_) {}
     }
   }, [slug])
@@ -3541,7 +3548,15 @@ export default function CommanderRdvSlug() {
                     <div style={{ padding: '0.875rem 1rem' }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>Ton RDV</p>
+                          {/* 🔴 « TON RDV » AU-DESSUS DE « TABLE DE 4 PERSONNES »
+                              (capture d'Alex, 13/09). Personne ne dit qu'il a
+                              rendez-vous au restaurant : il a réservé une table.
+                              C'est le frère du défaut du 10/09 côté email, et de
+                              celui corrigé la veille dans le suivi du Yopper.
+                              `mots.laSienne` dit « ta réservation » chez un
+                              restaurant et « ton rendez-vous » chez un coiffeur,
+                              sans qu'aucun écran n'ait à le savoir. */}
+                          <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>{mots.laSienne}</p>
                           <p style={{ fontWeight: 800, color: T.ink, fontSize: '1rem', letterSpacing: '-0.2px', lineHeight: 1.25, marginBottom: 4 }}>
                             {prestationChoisie.nom}
                           </p>
@@ -4417,7 +4432,10 @@ export default function CommanderRdvSlug() {
                           Acompte payé · paiement sécurisé Stripe
                         </p>
                         <p style={{ fontSize: '0.76rem', color: '#047857', lineHeight: 1.4, margin: 0 }}>
-                          Ton RDV est confirmé. Tu vas recevoir l&apos;email de confirmation et le reçu de paiement d&apos;ici quelques secondes.
+                          {/* Ici la fiche EST chargée : le vocabulaire du métier
+                              s'applique, accord compris (`emailConfirme` porte
+                              « confirmée » chez un restaurant). */}
+                          {mots.emailConfirme}. Tu vas recevoir l&apos;email de confirmation et le reçu de paiement d&apos;ici quelques secondes.
                         </p>
                       </div>
                     </div>

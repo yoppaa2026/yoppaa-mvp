@@ -9,7 +9,7 @@
 // ⚠️ D'où la moitié des vérifications ci-dessous : elles disent ce qui ne
 // change PAS.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync, statSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   fonctionReservation, peutReserver, reservationActive,
@@ -2905,6 +2905,23 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // laisse une plaque de couleur, jamais une image cassée sur la page d'accueil.
   verifier('une photo absente ne casse pas la page d’accueil',
     /background: `url\(\$\{src\}\) center\/cover, \$\{degrade\}`/.test(LANDING))
+
+  // ⚠️ ET ELLES RESTENT LÉGÈRES. Les deux originales pesaient 976 Ko et 1638 Ko
+  // pour s'afficher sur CINQUANTE-QUATRE PIXELS de haut. La landing est la
+  // première impression de Yoppaa, souvent sur la 4G d'un village : une photo
+  // d'un mégaoctet y coûte plus cher que tout ce qu'elle raconte. Le plafond
+  // n'est pas une coquetterie, c'est ce qui empêche de redéposer un JPG brut
+  // le jour où on changera de restaurant de démo.
+  const PLAFOND_KO = 40
+  for (const f of ['resto-facade.webp', 'resto-salle.webp']) {
+    const chemin = new URL(`../public/captures/${f}`, import.meta.url)
+    const existe = existsSync(chemin)
+    verifier(`la photo ${f} est bien là`, existe)
+    if (existe) {
+      const ko = Math.round(statSync(chemin).size / 1024)
+      verifier(`et elle reste sous ${PLAFOND_KO} Ko (${ko} Ko)`, ko <= PLAFOND_KO)
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

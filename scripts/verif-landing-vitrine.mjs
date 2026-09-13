@@ -169,6 +169,32 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
     /if \(!c\) \{/.test(CADRAGES) && /continue/.test(CADRAGES))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. LA LANDING N'AFFICHE AUCUNE ENSEIGNE DE DÉMONSTRATION
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 TROIS Y ÉTAIENT, EN PRODUCTION, ET C'EST ALEX QUI LES A VUES. « La mie de
+// test » affichait le mot TEST sur la page qui recrute les commerçants. Les
+// deux autres désignent des commerces qui existent vraiment en base : leur
+// prêter une fausse offre du soir ou une fausse carte de fidélité sur une page
+// publique, c'est écrire à leur place.
+//
+// ⚠️ LA GARDE VISE LES PAGES PUBLIQUES, PAS LE CODE ENTIER. Ces mêmes noms
+// vivent dans des commentaires de `lib/` qui racontent des cas vécus, et ils y
+// sont utiles : c'est l'AFFICHAGE qui est en cause, pas la mention.
+{
+  const DEMOS = ['Kebabistro', 'La mie de test', 'La Boutique Témoin', 'Ciseaux et Soins', 'Centre Respire']
+  for (const nom of DEMOS) {
+    verifier(`la landing n’affiche pas l’enseigne « ${nom} »`, !LANDING.includes(nom))
+  }
+  // ⚠️ ET LA RÈGLE AU-DELÀ DE CES CINQ NOMS : une enseigne inventée ne dit
+  // jamais qu'elle est un essai. Sans ce filet, la prochaine maquette écrite
+  // en vitesse repasserait sous la liste ci-dessus.
+  const enseignes = [...LANDING.matchAll(/enseigne: '([^']+)'/g)].map(m => m[1])
+  verifier('aucune enseigne de maquette ne se dit de test',
+    enseignes.every(e => !/\b(test|témoin|demo|démo)\b/i.test(e)), enseignes.join(', '))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

@@ -448,7 +448,7 @@ function MockRdv() {
     <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ background: T.panel, padding: '24px 9px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(196,160,244,0.25)', borderRadius: 100, padding: '3px 7px', fontSize: 7.5, fontWeight: 800, color: '#fff', flexShrink: 0 }}>&lsaquo; Retour</span>
-        <span style={{ fontSize: 8, fontWeight: 800, color: '#fff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Ciseaux et Soins</span>
+        <span style={{ fontSize: 8, fontWeight: 800, color: '#fff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Salon Camille</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           {[{ t: '✓', fait: true }, { t: '2', actif: true }, { t: '3' }].map((e, i) => (
             <span key={i} style={{
@@ -681,8 +681,14 @@ function MockTableCreneaux() {
 // barré seul ne serait qu'une promotion de plus.
 function MockAntiGaspi() {
   const offres = [
-    { enseigne: 'La mie de test', titre: 'Torsade au chocolat', prix: '1,10 €', avant: '2,20 €', reste: 'il en reste 5', loin: '1.3 km' },
-    { enseigne: 'Kebabistro', titre: 'Fondant au chocolat', prix: '2,50 €', avant: '5,00 €', reste: 'il en reste 3', loin: '3.7 km' },
+    // 🔴 LES ENSEIGNES DE DÉMONSTRATION N'ONT RIEN À FAIRE ICI, et celles-ci y
+    // sont restées en production. « La mie de test » affichait le mot TEST sur
+    // la page qui recrute les commerçants, et les deux autres noms désignent
+    // des commerces qui existent vraiment en base : leur prêter une fausse
+    // offre du soir sur une page publique, c'est écrire à leur place.
+    // Les enseignes de cette landing sont inventées, et le restent.
+    { enseigne: 'Boulangerie du Centre', titre: 'Torsade au chocolat', prix: '1,10 €', avant: '2,20 €', reste: 'il en reste 5', loin: '1.3 km' },
+    { enseigne: 'Friterie du Parc', titre: 'Fondant au chocolat', prix: '2,50 €', avant: '5,00 €', reste: 'il en reste 3', loin: '3.7 km' },
   ]
   const pastille = {
     display: 'inline-flex', alignItems: 'center', gap: 3,

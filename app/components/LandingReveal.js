@@ -1525,6 +1525,12 @@ const FORMULES = [
       'Tout Communiquer, plus :',
       'Click & Collect avec paiement en ligne',
       'Rendez-vous en ligne, réservables 24h/24',
+      // ⚠️ LE MODULE EXISTAIT DEPUIS DES SEMAINES ET N'ÉTAIT NOMMÉ QU'UNE FOIS,
+      // au milieu d'une énumération du détail des tarifs. Un centre de yoga
+      // lisait toute la page sans savoir qu'il pouvait vendre ses abonnements.
+      // Troisième fois après le restaurant et l'anti-gaspi : un module qu'on ne
+      // montre pas n'existe pas, même s'il est fini.
+      'Abonnements et cartes de séances : ton élève achète, réserve ses cours lui-même, et son solde se décompte tout seul',
       // ⚠️ CE QUE LE RESTAURATEUR CHERCHE, DIT COMME IL LE PENSE. « Capacité
       // par service » est le mot du logiciel ; lui compte des couverts et des
       // tables. Et c'est sa salle qui attribue la table, jamais le client :
@@ -1975,6 +1981,11 @@ export default function LandingReveal({ referent = null }) {
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginTop: 40 }}>
           {[
             'Click & Collect', 'Rendez-vous en ligne', 'Réserver une table', 'Good Morning Yoppers',
+            // ⚠️ « ET SÉANCES », PAS « ABONNEMENTS » TOUT SEUL. Sur cette page,
+            // le mot abonnement désigne déjà nos formules : employé nu dans une
+            // liste destinée aux habitants, il ferait lire « je dois m'abonner
+            // à Yoppaa ». Le second mot dit de quoi il s'agit.
+            'Abonnements et séances',
             'Deals du jour', 'Cartes de fidélité', 'Bons cadeaux', 'Livraison locale', 'Suivi de commande',
             // ⚠️ ICI C'EST LE NOM CÔTÉ YOPPER : ces pastilles s'adressent aux
             // habitants, pas aux commerçants. « Avant la fermeture » est le nom

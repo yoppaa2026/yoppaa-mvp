@@ -22,7 +22,7 @@ import {
   User, Heart, Radio, Sun, Megaphone, Flame, AlertTriangle, Bell, Mail, Sparkles, BarChart3,
   ShoppingCart, Bike, Utensils, Calendar, Briefcase, Clock, Users, Package, CreditCard, Star, Download,
   Smartphone, Printer, Camera, FileText, Pencil, CheckCircle, Check, Circle, Shield, IdCard,
-  MapPin, Gift, Sunset,
+  MapPin, Gift, Sunset, Ticket,
 } from 'lucide-react'
 // Logo canonique Yoppaa : wordmark + 5 dots V2-B (spec validee 12/06).
 // Ne JAMAIS redessiner les dots ailleurs : importer YoppaaLogo ou YoppaaDots.
@@ -883,6 +883,17 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
       // tête-à-tête, et passe son chemin.
       Icon: Users, titre: 'Cours collectifs',
       desc: 'Un créneau peut accueillir plusieurs personnes : tu dis combien, et le Yopper voit les places restantes avant de s’inscrire. Le cours s’affiche « complet » quand il est plein, et ton agenda montre la liste des inscrits en un bloc plutôt qu’en dix lignes. Pour le yoga, le pilates, un coach, une auto-école.',
+      plan: 'vendre',
+    },
+    {
+      // ⚠️ LE MODULE ÉTAIT COMPLET ET NE FIGURAIT NULLE PART DANS CETTE LISTE.
+      // « Cours collectifs » parle des PLACES d'un créneau, pas de la vente d'un
+      // abonnement : un centre de yoga lisait les vingt-neuf fonctions sans
+      // apprendre qu'il pouvait vendre sa carte de séances. C'est la troisième
+      // fois qu'un module fini reste invisible, après le restaurant et les
+      // invendus du soir.
+      Icon: Ticket, titre: 'Abonnements et cartes de séances',
+      desc: 'Tu vends une carte de séances ou un abonnement sur une période : tu fixes le nombre de séances, les dates de validité et le rythme autorisé. Ton élève paie une fois, puis réserve ses cours lui-même quand il veut, et son solde se décompte tout seul. Il voit ce qu’il lui reste, tu vois qui vient.',
       plan: 'vendre',
     },
     {

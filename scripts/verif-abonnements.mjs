@@ -28,6 +28,7 @@ import {
   phraseApercuFormule, expliquerApercuFormule,
 } from '../lib/abonnements.js'
 import { jourSemaineDe, JOURS_SEMAINE_FR } from '../lib/creneaux.js'
+import { sansProse } from './lire-code.mjs'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -2075,6 +2076,51 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     /restantes === null/.test(srcConfig))
   verifier('le total reste dit, sinon le solde ne se situe pas',
     /sur \$\{a\.seances_total\}/.test(srcConfig))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UN MODULE FINI QUE PERSONNE NE VOIT N'EXISTE PAS
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 TROISIÈME FOIS EN TROIS JOURS, APRÈS LE RESTAURANT ET LES INVENDUS.
+// Le module était complet, testé, visible dans l'application, et pourtant :
+// absent des vingt-neuf fonctions listées au signup, et nommé UNE SEULE FOIS
+// sur la landing, au milieu d'une énumération du détail des tarifs. Un centre
+// de yoga pouvait lire la page entière et l'inscription entière sans jamais
+// apprendre qu'il pouvait vendre sa carte de séances.
+//
+// ⚠️ CE QUI REND CE DÉFAUT INVISIBLE, c'est qu'il ne casse rien : aucun écran
+// ne plante, aucun test ne rougit, le module marche parfaitement pour ceux qui
+// le trouvent. Seul un banc qui regarde les pages de DÉCISION peut le dire.
+{
+  // 🔴 `sansProse`, ET C'EST LA RAISON MÊME DE CE BLOC. Les commentaires qui
+  // expliquent pourquoi ces libellés comptent CITENT ces libellés : lus avec la
+  // prose, ces gardes resteraient vertes alors que l'écran aurait tout perdu.
+  // Quatrième mode de faux vert du projet, et le mieux documenté.
+  const SIGNUP = sansProse(lire('app/signup/page.js'))
+  const LANDING = sansProse(lire('app/components/LandingReveal.js'))
+
+  verifier('le signup annonce la vente d’abonnements',
+    /titre: 'Abonnements et cartes de séances'/.test(SIGNUP))
+  // ⚠️ ET IL DIT CE QUE ÇA FAIT, pas seulement son nom. Une ligne de liste sans
+  // description ne décide personne : c'est le solde qui se décompte tout seul
+  // qui distingue un abonnement d'une suite de rendez-vous payés à l'unité.
+  verifier('et explique que le solde se décompte seul',
+    /son solde se décompte tout seul/.test(SIGNUP))
+  verifier('la vente d’abonnements est rattachée à la formule Vendre',
+    /titre: 'Abonnements et cartes de séances',[\s\S]{0,600}?plan: 'vendre'/.test(SIGNUP))
+
+  verifier('la landing le liste dans la formule Vendre',
+    /'Abonnements et cartes de séances : /.test(LANDING))
+  verifier('et le nomme côté habitant',
+    /'Abonnements et séances'/.test(LANDING))
+
+  // ⚠️ « ABONNEMENTS » TOUT SEUL EST AMBIGU SUR CETTE PAGE : elle emploie déjà
+  // le mot pour NOS formules (« pas d'abonnement contraignant »). Dans une
+  // liste destinée aux habitants, le mot nu ferait lire « je dois m'abonner à
+  // Yoppaa ». Le second mot n'est pas un ornement, il lève la confusion.
+  verifier('la pastille habitant ne dit jamais « Abonnements » seul',
+    !/'Abonnements',/.test(LANDING))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

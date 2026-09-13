@@ -410,7 +410,12 @@ function CalculateurCommission() {
 
           <p style={{ margin: '18px auto 0', maxWidth: 620, fontSize: 13.5, color: 'rgba(255,255,255,0.6)', textAlign: 'center', fontWeight: 600, lineHeight: 1.65 }}>
             Et chaque matin, ton commerce part dans le <strong style={{ color: '#fff' }}>Good Morning Yoppers</strong> de
-            ta commune. <strong style={{ color: '#fff' }}>Même en Exister, qui est gratuite pour toujours.</strong> Avec
+            {/* ⚠️ « GRATUIT », AU MASCULIN, ET CE N'EST PAS UNE FAUTE. Ailleurs
+                la page écrit « LA FORMULE Exister est gratuite » : l'accord y est
+                porté par le mot formule. Ici « Exister » est seul, et se lit
+                comme le nom du forfait. Laisser le féminin obligeait le lecteur
+                à retrouver un mot absent. */}
+            ta commune. <strong style={{ color: '#fff' }}>Même en Exister, qui est gratuit pour toujours.</strong> Avec
             Communiquer, tu y ajoutes tes deals et des actus qui remontent dans la liste.
           </p>
 
@@ -470,7 +475,7 @@ function ResultatCalcul({ mode, ecart, nb, formule, nomFormule, prixFormule, tau
           {mode === 'abo' ? `À ce niveau, tu paies moins que la formule ${nomFormule}.` : 'À ce volume, tu paies moins avec la commission.'}
         </p>
         <p style={phrase}>
-          Commence par <strong style={fort}>Exister</strong>, qui est gratuite à vie : ta fiche, tes horaires,
+          Commence par <strong style={fort}>Exister</strong>, qui est gratuit à vie : ta fiche, tes horaires,
           tes infos. Tu monteras de formule le jour où ça vaudra le coup, pas avant.
         </p>
       </>
@@ -487,7 +492,7 @@ function ResultatCalcul({ mode, ecart, nb, formule, nomFormule, prixFormule, tau
       <p style={phrase}>
         {mode === 'abo' ? (
           formule === 'exister'
-            ? <>Et tout ce que tu as coché tient dans <strong style={fort}>Exister</strong>, qui est gratuite pour toujours. Tu ne nous dois rien.</>
+            ? <>Et tout ce que tu as coché tient dans <strong style={fort}>Exister</strong>, qui est gratuit pour toujours. Tu ne nous dois rien.</>
             : formule === 'communiquer'
               ? <>Et tout ce que tu as coché tient dans <strong style={fort}>Communiquer</strong>. Vendre ne te servira que le jour où tu voudras encaisser en ligne.</>
               : <>Et surtout : <strong style={fort}>{nb} abonnement{nb > 1 ? 's' : ''}, {nb} facture{nb > 1 ? 's' : ''}</strong>, et rien qui se parle. Chez nous, ta fiche, tes rendez-vous et ta fidélité se connaissent.</>
@@ -1946,7 +1951,18 @@ const FORMULES = [
       // c'est la décision qui fait tout le module.
       'Réservation de table : le client dit combien ils sont, ta salle attribue la table',
       'Acompte ou empreinte bancaire sur une réservation, contre les tables qui ne viennent pas',
-      'Boutique en ligne et livraison locale',
+      // ⚠️ DEUX MÉCANIQUES, UN SEUL BESOIN, ET C'EST LE BESOIN QU'ON ÉCRIT.
+      // La capacité `livraison` de lib/plans.js est bien réservée à
+      // l'alimentaire, mais elle ne désigne que LA TOURNÉE : un commerce de
+      // détail sert lui aussi ses clients à domicile, en EXPÉDIANT
+      // (`boutique_mode_vente`). Écrire « livraison pour l'alimentaire »
+      // revenait à faire lire le nom de notre mécanique au lieu du service
+      // rendu, et à faire croire à une boutique qu'elle n'y a pas droit.
+      // C'est la décision d'Alex du 27/08, déjà écrite dans lib/signaux.js :
+      // « un habitant veut être servi chez lui, il se moque de savoir si c'est
+      // une camionnette ou bpost ».
+      'Livraison à domicile : ta tournée en alimentaire, l\'expédition pour une boutique',
+      'Boutique en ligne : tes articles, avec leurs tailles et leurs couleurs',
       'Fidélité automatique : chaque commande et chaque rendez-vous remplit la carte, sans rien faire',
       'Bons cadeaux à offrir : tes clients font découvrir ton commerce à leurs proches',
       // ⚠️ AUCUN CHIFFRE DANS CETTE LIGNE, et c'est une règle de la landing :

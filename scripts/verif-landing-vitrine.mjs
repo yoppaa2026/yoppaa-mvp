@@ -333,7 +333,25 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
   verifier('le résultat prévoit le cas où la commission coûte moins cher',
     /ecart <= 0/.test(res))
   verifier('et renvoie alors vers la formule gratuite',
-    /gratuite à vie/.test(res))
+    /gratuit à vie/.test(res))
+
+  // ⚠️ L'ACCORD SUIT LE MOT PORTEUR (Alex, 13/09). Quand la page écrit « LA
+  // FORMULE Exister », le féminin est juste ; quand « Exister » est seul, il se
+  // lit comme le nom du forfait et prend le masculin. Laisser « gratuite » sans
+  // le mot formule obligeait le lecteur à retrouver un mot absent.
+  const zoneAccord = LANDING.split('const POSTES_CALCUL')[1]?.split('function RangeeMaquettes')[0] || ''
+  verifier('Exister employé seul ne prend pas le féminin',
+    !/Exister<\/strong>, qui est gratuite|Exister, qui est gratuite/.test(zoneAccord))
+
+  // 🔴 LA LIVRAISON N'EST PAS RÉSERVÉE À L'ALIMENTAIRE, ET LE DIRE ÉCARTAIT LES
+  // BOUTIQUES. La capacité `livraison` ne désigne que la TOURNÉE ; un commerce
+  // de détail sert ses clients à domicile en EXPÉDIANT (`boutique_mode_vente`).
+  // Décision d'Alex du 27/08, déjà écrite dans lib/signaux.js : c'est le besoin
+  // du client qu'on nomme, pas le nom de notre mécanique.
+  verifier('la livraison nomme la tournée ET l’expédition',
+    /Livraison à domicile : ta tournée en alimentaire, l\\'expédition pour une boutique/.test(LANDING))
+  verifier('et ne la réserve pas à l’alimentaire',
+    !/Livraison[^']{0,40}pour l\\'alimentaire/.test(LANDING))
 
   // ⚠️ « LA COMMISSION YOPPAA », JAMAIS LA FORMULE NUE.
   verifier('la commission est toujours nommée avec son sujet',

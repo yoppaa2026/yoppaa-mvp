@@ -67,6 +67,58 @@ const CADRAGES = {
     sortie: 'dashboard-essai',
     haut: 6.6, bas: 58.5, gauche: 0, droite: 0,
   },
+
+  // ─── 13/09 : les écrans côté Yopper ──────────────────────────────────────
+  //
+  // ⚠️ UNE CAPTURE D'ÉCRAN ENTIER NE SE LIT PAS SUR UNE LANDING. Un téléphone
+  // fait 1179 px de large pour 2556 de haut ; ramené à la largeur d'une colonne,
+  // le texte tombe sous la barre des dix pixels. CHAQUE CADRAGE ICI PREND UN
+  // BLOC, PAS UN ÉCRAN : c'est ce qui garde le texte lisible.
+  //
+  // ⚠️ ET CHACUN COUPE QUELQUE CHOSE DE PRÉCIS. L'en-tête de l'application
+  // porte la pastille de localisation, c'est-à-dire l'adresse d'Alex ; le
+  // bandeau du profil porte son nom, son email et son numéro ; le bloc des bons
+  // porte des codes utilisables. Ce ne sont pas des détails de cadrage, ce sont
+  // les trois raisons de cadrer.
+
+  // La liste d'accueil : le premier écran de tout Yopper, et le seul qui
+  // n'était NULLE PART sur la landing. On garde « Rien ne se perd », le compte
+  // de commerces et deux fiches entières. On coupe AU-DESSUS des filtres :
+  // c'est là que se trouve la pastille de localisation.
+  'IMG_4644': {
+    sortie: 'yopper-liste',
+    haut: 22, bas: 33, gauche: 0, droite: 0,
+  },
+  // Les options d'un article : « choisis-en un », le marqueur OBLIGATOIRE, et
+  // une sauce à supplément. C'est la question que pose toute friterie avant de
+  // signer, et aucune maquette ne la montrait.
+  'IMG_4656': {
+    sortie: 'yopper-options',
+    haut: 31.5, bas: 3.5, gauche: 0, droite: 0,
+  },
+  // Une fiche produit de boutique : la photo, puis taille ET couleur. Le détail
+  // non alimentaire n'existait sur la landing que sous forme de mot.
+  'IMG_4658': {
+    sortie: 'yopper-variantes',
+    haut: 39.5, bas: 0.2, gauche: 0, droite: 0,
+  },
+  // Le bon cadeau : montants, « je l'offre » ou « pour moi ». Un module entier
+  // dont la landing parlait sans jamais le montrer. Le formulaire est vide, il
+  // ne porte aucune coordonnée.
+  'IMG_4652': {
+    sortie: 'yopper-bon-cadeau',
+    haut: 14, bas: 40, gauche: 0, droite: 0,
+  },
+
+  // 🔴 CE QUI A ÉTÉ ÉCARTÉ, ET POURQUOI ON NE LE REPRENDRA PAS PLUS TARD.
+  // L'écran du profil (IMG_4665) montre le temps économisé, et c'est l'argument
+  // le plus touchant de toute l'application. Il ne partira pas en ligne :
+  // « 17 h 29 », « 195 commandes » et « 4407 € » sont les compteurs d'un compte
+  // de TEST, gonflés par des mois d'essais. Les montrer promettrait un usage
+  // que personne n'a encore. C'est le même défaut que les zéros d'un commerce
+  // fictif, pris par l'autre bout : dans les deux cas, le compteur d'un compte
+  // de démonstration ne raconte rien du produit.
+  // Il redeviendra publiable le jour où un vrai Yopper aura de vrais chiffres.
 }
 
 const pct = (v, total) => Math.max(0, Math.round((Number(v) || 0) / 100 * total))

@@ -588,7 +588,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
               <>
                 La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie.
                 {' '}<span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> te sont
-                offertes <span style={{ color: T.light }}>{joursOffertsAuLancement()} jours</span> à partir du {libelleLancement()}, et tout le temps d’ici là est en bonus.
+                offertes <span style={{ color: T.light }}>{joursOffertsAuLancement()} jours</span> à partir du {libelleLancement()}, et le temps d’ici là pour tout préparer.
               </>
             ) : (
               <>

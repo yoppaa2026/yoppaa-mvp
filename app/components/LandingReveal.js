@@ -35,7 +35,7 @@ import { FACEBOOK_URL, RESEAUX } from '@/lib/reseaux'
 import { getPrixPlan } from '@/lib/plans'
 import { TYPES_ENVIE, libelleEnvie } from '@/lib/signaux'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
-import { CAPTURES, captureSrc } from '@/lib/captures-landing'
+import { CAPTURES_COMMERCANT, CAPTURES_YOPPER, captureSrc } from '@/lib/captures-landing'
 import PartageMobilisation from './PartageMobilisation'
 
 const T = {
@@ -208,6 +208,26 @@ function PhoneFrame({ children, label }) {
   )
 }
 
+// ─── Une rangée de maquettes, sous son idée ─────────────────────────────────
+//
+// Le titre n'est pas décoratif : c'est lui qui fait qu'une rangée se lit comme
+// un groupe et pas comme une file d'attente. Sans lui, on retombe sur le mur
+// de téléphones que ces deux rangées viennent défaire.
+function RangeeMaquettes({ titre, children }) {
+  return (
+    <div style={{ marginBottom: 44 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, maxWidth: 900, margin: '0 auto 22px' }}>
+        <span style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${T.pale})` }}/>
+        <span style={{ fontSize: 12, fontWeight: 900, color: T.main, textTransform: 'uppercase', letterSpacing: '1.2px', whiteSpace: 'nowrap' }}>{titre}</span>
+        <span style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${T.pale}, transparent)` }}/>
+      </div>
+      <div style={{ display: 'flex', gap: 'clamp(16px, 2.6vw, 28px)', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'flex-start', color: T.deep, maxWidth: 1180, margin: '0 auto' }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 // ─── Une vraie capture du produit ───────────────────────────────────────────
 //
 // ⚠️ `width` ET `height` EN ATTRIBUTS, PAS SEULEMENT EN CSS. Le navigateur s'en
@@ -218,18 +238,28 @@ function PhoneFrame({ children, label }) {
 // ⚠️ `loading="lazy"` : ces captures vivent au milieu de la partie commerçant,
 // très bas dans la page. Les charger à l'ouverture ralentirait le hero pour
 // des images que la plupart des visiteurs n'atteindront jamais.
-function CaptureProduit({ capture }) {
+// ⚠️ DEUX FONDS, UN SEUL COMPOSANT. La série commerçant est posée sur le violet
+// sombre, la série Yopper sur le fond clair de la page. Un titre en blanc sur
+// l'un des deux devient invisible, et c'est le genre de défaut qu'un banc ne
+// voit jamais : rien ne casse, le texte est simplement absent à l'écran.
+function CaptureProduit({ capture, fondClair = false }) {
+  const encre = fondClair ? T.ink : '#fff'
+  const encreDouce = fondClair ? T.muted : 'rgba(255,255,255,0.86)'
   return (
-    <figure style={{ margin: 0, flex: '1 1 300px', maxWidth: 440 }}>
+    <figure style={{ margin: 0, flex: '1 1 260px', maxWidth: 400 }}>
       <img
         src={captureSrc(capture)} alt={capture.alt}
         width={capture.largeur} height={capture.hauteur}
         loading="lazy" decoding="async"
-        style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 14, background: '#fff', border: '1px solid rgba(255,255,255,0.18)', boxShadow: '0 14px 34px rgba(0,0,0,0.3)' }}
+        style={{
+          width: '100%', height: 'auto', display: 'block', borderRadius: 14, background: '#fff',
+          border: fondClair ? `1px solid ${T.pale}` : '1px solid rgba(255,255,255,0.18)',
+          boxShadow: fondClair ? '0 10px 28px rgba(22,6,54,0.14)' : '0 14px 34px rgba(0,0,0,0.3)',
+        }}
       />
       <figcaption style={{ marginTop: 12, textAlign: 'left' }}>
-        <p style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 15, color: '#fff', letterSpacing: '-0.2px' }}>{capture.titre}</p>
-        <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.86)', lineHeight: 1.55, fontWeight: 500 }}>{capture.legende}</p>
+        <p style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 15, color: encre, letterSpacing: '-0.2px' }}>{capture.titre}</p>
+        <p style={{ margin: 0, fontSize: 13, color: encreDouce, lineHeight: 1.55, fontWeight: 500 }}>{capture.legende}</p>
       </figcaption>
     </figure>
   )
@@ -374,49 +404,111 @@ function MockMorning() {
 }
 
 // ─── Mockup 3 : prise de RDV (services) ──────────────────────────────────────
+// ⚠️ REDESSINÉE LE 13/09 D'APRÈS UNE CAPTURE, ET ELLE MENTAIT SUR CINQ POINTS.
+// La version précédente datait d'avant le module d'agenda : pas d'indicateur
+// d'étapes, « Avec qui » en pastilles de texte, les créneaux pris affichés
+// barrés, le jour écrit en titre au lieu d'un carrousel, et le compte de
+// créneaux libres absent. Le produit a bougé, la landing non : c'est le défaut
+// que les maquettes dessinées d'après le CODE finissent toujours par produire.
+//
+// ⚠️ LES CRÉNEAUX SONT CEUX DE LA CAPTURE, Y COMPRIS LE TROU DE MIDI. Entre
+// 11:00 et 13:00, rien : le salon mange. Aucune maquette inventée n'aurait
+// produit ce trou, et c'est précisément lui qui fait vrai. Ne pas « compléter »
+// la grille.
+//
+// ⚠️ LES CRÉNEAUX DÉJÀ PRIS NE S'AFFICHENT PAS, et c'est un choix du produit :
+// on montre ce qui reste, pas ce qui manque. Les barrer, comme le faisait la
+// version précédente, donne l'impression d'un agenda plein.
 function MockRdv() {
+  // Les quatre tuiles de la vraie fiche. La dernière est coupée par le bord :
+  // c'est ce qui dit qu'il y en a d'autres, sans place pour les montrer.
+  const equipe = [
+    { i: '?', n: 'Sans préférence', fond: `linear-gradient(135deg, ${T.main}, ${T.mid})`, actif: false },
+    { i: 'C', n: 'Carole', fond: T.main, actif: true },
+    { i: 'E', n: 'Elisa', fond: '#C2189B', actif: false },
+    { i: 'V', n: 'Vic', fond: '#10B981', actif: false },
+  ]
+  const jours = [
+    { j: 'Dim', n: '13', auj: true, passe: true },
+    { j: 'Lun', n: '14', actif: true },
+    { j: 'Mar', n: '15' },
+    { j: 'Mer', n: '16' },
+    { j: 'Jeu', n: '17' },
+  ]
+  const creneaux = [
+    '07:00', '07:30', '08:00', '08:30',
+    '09:00', '09:30', '10:00', '10:30',
+    '11:00', '13:00', '13:30', '14:00',
+    '14:30', '15:00', '15:30', '16:00',
+    '16:30', '17:00', '17:30', '18:00',
+    '18:30',
+  ]
+  const titre = { fontSize: 7, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }
   return (
     <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '26px 12px 12px', flexShrink: 0 }}>
-        <p style={{ margin: 0, fontWeight: 900, fontSize: 13, color: '#fff', letterSpacing: '-0.3px' }}>Barbier Léon</p>
-        <p style={{ margin: '2px 0 0', fontSize: 8.5, color: T.light, fontWeight: 700 }}>Prendre rendez-vous</p>
+      <div style={{ background: T.panel, padding: '24px 9px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(196,160,244,0.25)', borderRadius: 100, padding: '3px 7px', fontSize: 7.5, fontWeight: 800, color: '#fff', flexShrink: 0 }}>&lsaquo; Retour</span>
+        <span style={{ fontSize: 8, fontWeight: 800, color: '#fff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Ciseaux et Soins</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+          {[{ t: '✓', fait: true }, { t: '2', actif: true }, { t: '3' }].map((e, i) => (
+            <span key={i} style={{
+              width: 15, height: 15, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 7, fontWeight: 900,
+              background: e.fait ? 'rgba(16,185,129,0.15)' : e.actif ? T.main : 'rgba(255,255,255,0.08)',
+              border: `1px solid ${e.fait ? '#10B981' : e.actif ? T.light : 'rgba(196,160,244,0.3)'}`,
+              color: e.fait ? '#10B981' : e.actif ? '#fff' : 'rgba(255,255,255,0.6)',
+            }}>{e.t}</span>
+          ))}
+        </span>
       </div>
-      <div style={{ padding: '10px 10px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <p style={{ margin: '0 0 6px', fontSize: 7.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Choisis ta prestation</p>
-        <div style={{ background: '#fff', borderRadius: 11, padding: '8px 10px', border: `1.5px solid ${T.main}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: `0 4px 14px ${T.main}22` }}>
+
+      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ background: '#fff', borderRadius: 10, padding: '7px 9px', marginBottom: 9, border: `1px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(26,8,64,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${T.ink}, ${T.main} 60%, ${T.mid})` }}/>
           <div>
-            <p style={{ margin: 0, fontWeight: 800, fontSize: 10.5, color: T.ink }}>Coupe + barbe</p>
-            <p style={{ margin: '2px 0 0', fontSize: 8, color: T.muted, fontWeight: 600 }}>45 min</p>
+            <p style={{ margin: 0, ...titre }}>Prestation choisie</p>
+            <p style={{ margin: '2px 0 0', fontSize: 10.5, fontWeight: 900, color: T.ink }}>Coupe femme</p>
+            <p style={{ margin: '1px 0 0', fontSize: 7.5, color: T.muted, fontWeight: 600 }}>30 min &middot; 35,00 &euro;</p>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 900, color: T.main }}>28,00€</span>
+          <span style={{ flexShrink: 0, border: `1.2px solid ${T.main}`, borderRadius: 100, padding: '3px 8px', fontSize: 7.5, fontWeight: 800, color: T.main }}>Changer</span>
         </div>
-        <p style={{ margin: '10px 0 6px', fontSize: 7.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Avec qui ?</p>
-        <div style={{ display: 'flex', gap: 5 }}>
-          {[{ n: 'Léon', actif: true }, { n: 'Sami', actif: false }, { n: 'Sans préférence', actif: false }].map(p => (
-            <span key={p.n} style={{ padding: '4px 9px', borderRadius: 100, fontSize: 8, fontWeight: 800, background: p.actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: p.actif ? '#fff' : T.deep, border: p.actif ? 'none' : `1px solid ${T.pale}` }}>{p.n}</span>
+
+        <p style={{ margin: '0 0 5px', ...titre }}>Avec qui</p>
+        <div style={{ display: 'flex', gap: 5, marginBottom: 9, overflow: 'hidden', flexShrink: 0 }}>
+          {equipe.map(p => (
+            <span key={p.n} style={{
+              width: 56, flexShrink: 0, borderRadius: 9, padding: '6px 3px',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+              background: p.actif ? '#FBF8FF' : '#fff',
+              border: `${p.actif ? 1.4 : 1}px solid ${p.actif ? T.main : T.pale}`,
+            }}>
+              <span style={{ width: 20, height: 20, borderRadius: '50%', background: p.fond, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900 }}>{p.i}</span>
+              <span style={{ fontSize: 6.5, fontWeight: 800, color: p.actif ? T.main : T.deep, whiteSpace: 'nowrap' }}>{p.n}</span>
+            </span>
           ))}
         </div>
-        <p style={{ margin: '10px 0 6px', fontSize: 7.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Jeudi 8 octobre</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-          {[
-            { h: '09:00', pris: false, actif: false },
-            { h: '09:45', pris: false, actif: true },
-            { h: '10:30', pris: true, actif: false },
-            { h: '11:15', pris: false, actif: false },
-            { h: '14:00', pris: false, actif: false },
-            { h: '14:45', pris: false, actif: false },
-          ].map(s => (
-            <span key={s.h} style={{ padding: '5px 9px', borderRadius: 8, fontSize: 8.5, fontWeight: 800, background: s.actif ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff', color: s.actif ? '#fff' : s.pris ? '#C7C9D1' : T.deep, border: s.actif ? 'none' : `1px solid ${T.pale}`, textDecoration: s.pris ? 'line-through' : 'none' }}>{s.h}</span>
+
+        <p style={{ margin: '0 0 5px', ...titre }}>Je viens le</p>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 9, flexShrink: 0 }}>
+          {jours.map(d => (
+            <span key={d.n} style={{ flex: 1, position: 'relative', borderRadius: 8, border: `1px solid ${d.actif ? T.main : T.pale}`, background: d.actif ? T.main : '#fff', padding: '4px 0', textAlign: 'center', opacity: d.passe ? 0.4 : 1 }}>
+              {d.auj && <span style={{ position: 'absolute', top: -3, right: -2, background: T.pale, color: T.deep, fontSize: 4.5, fontWeight: 900, borderRadius: 3, padding: '1px 2px', letterSpacing: '0.3px' }}>AUJ</span>}
+              <span style={{ display: 'block', fontSize: 6.5, fontWeight: 700, color: d.actif ? '#fff' : T.muted }}>{d.j}</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 900, color: d.actif ? '#fff' : T.ink, lineHeight: 1.1 }}>{d.n}</span>
+              <span style={{ display: 'block', fontSize: 6.5, fontWeight: 700, color: d.actif ? '#fff' : T.muted }}>sep</span>
+            </span>
           ))}
         </div>
-        <div style={{ marginTop: 'auto', paddingBottom: 10 }}>
-          <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '8px 14px', textAlign: 'center' }}>
-            <span style={{ fontSize: 9.5, fontWeight: 800, color: '#fff' }}>Confirmer mon RDV</span>
-          </div>
-          <div style={{ marginTop: 8, background: '#F0FDF4', border: '1px solid #10B98144', borderRadius: 10, padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <IconCheck size={11}/>
-            <span style={{ fontSize: 8.5, fontWeight: 800, color: '#10B981' }}>C&rsquo;est noté ! Rappel 1h avant 🟣</span>
-          </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '0 0 5px', flexShrink: 0 }}>
+          <span style={titre}>Créneaux lundi 14 sep</span>
+          <span style={{ flex: 1, height: 1, background: T.pale }}/>
+          <span style={{ fontSize: 7, fontWeight: 700, color: T.muted, whiteSpace: 'nowrap' }}>21 libres</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, paddingBottom: 10 }}>
+          {creneaux.map(h => (
+            <span key={h} style={{ padding: '5px 0', borderRadius: 7, fontSize: 8, fontWeight: 800, textAlign: 'center', background: '#fff', color: T.ink, border: `1px solid ${T.pale}` }}>{h}</span>
+          ))}
         </div>
       </div>
     </div>
@@ -986,17 +1078,27 @@ function EncartOffreLancement({ onRejoindre }) {
           </div>
           <div style={{ height: 1, background: 'rgba(255,255,255,0.16)', margin: '0 0 16px' }}/>
 
-          {/* ⚠️ L'AVANCE EST DITE EN TOUTES LETTRES, JAMAIS CHIFFRÉE.
-              Le bonus ne se compte pas, il se raconte : « tout ce qui précède
-              est en plus ». Un second nombre obligerait à poser une addition,
-              et une offre qu'il faut expliquer se fait relire de travers. */}
+          {/* 🔴 CE PARAGRAPHE PROMETTAIT QUELQUE CHOSE QUI N'ARRIVE PAS (Alex,
+              13/09). Il disait « ta page part en ligne dès qu'elle est validée
+              et tes premiers clients commandent avant tout le monde », puis
+              présentait l'attente comme un BONUS qui « ne compte pas dans tes
+              100 jours ». Or rien ne s'ouvre avant le lancement : ni
+              l'application, ni les commerces. Personne ne commande, et un temps
+              où l'on ne peut pas vendre n'est pas un cadeau.
+              ⚠️ LA RAISON DE S'INSCRIRE TÔT RESTE ENTIÈRE, mais ce n'est pas
+              celle qu'on annonçait : on ne gagne pas des jours, on gagne le
+              temps de PRÉPARER. Une promesse invérifiable se retourne au
+              premier commerçant qui attend ses clients de septembre ; une
+              promesse de préparation, elle, se tient le jour J.
+              ⚠️ L'avance reste dite en toutes lettres, jamais chiffrée : un
+              second nombre obligerait à poser une addition, et une offre qu'il
+              faut expliquer se fait relire de travers. */}
           <p style={{ margin: '0 0 18px', fontSize: 14, fontWeight: 600, lineHeight: 1.65, color: 'rgba(255,255,255,0.92)' }}>
-            Le {libelleLancement()} est la date du lancement <strong style={{ color: '#fff' }}>officiel</strong>,
-            pas celle du départ. Ta page part en ligne dès qu&rsquo;elle est validée et tes premiers
-            clients commandent avant tout le monde.
-            {avance > 0 && <> Et <strong style={{ color: '#fff' }}>tout le temps d&rsquo;ici
-              le {libelleLancement()} est en bonus</strong> : il ne compte pas dans tes {garantis} jours,
-              et il fond un peu chaque jour.</>}
+            Le {libelleLancement()} est le jour où tout s&rsquo;allume : l&rsquo;application,
+            les commerces, les commandes.
+            {avance > 0 && <> D&rsquo;ici là, tu prépares ta page, ton catalogue et tes
+              créneaux tranquillement. <strong style={{ color: '#fff' }}>Le jour J, tu ouvres
+              prêt, et tu ne perds aucun de tes {garantis} jours.</strong></>}
           </p>
           {/* ⚠️ Style écrit ici, PAS `btnPrimaire` : celui-ci vit DANS le
               composant principal, donc l'appeler d'ici serait une variable
@@ -1306,7 +1408,7 @@ function LaTotale() {
           {estRegimeLancement() && (
             <p style={{ margin: '0 0 6px', fontSize: 14.5, fontWeight: 800, color: '#fff', lineHeight: 1.55 }}>
               {joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},
-              et tout le temps d’ici là est en bonus.
+              et le temps d’ici là pour tout préparer.
             </p>
           )}
           <p style={{ margin: '0 0 4px', fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: 600, lineHeight: 1.6 }}>
@@ -1699,7 +1801,7 @@ export default function LandingReveal({ referent = null }) {
                     Ici « et tout le temps d'ici là » est coordonné à la même
                     phrase : c'est une virgule, comme dans « La totale » et
                     dans le signup, qui portent déjà la phrase. */}
-                {joursAvance() > 0 && ', et tout le temps d’ici là est en bonus'}
+                {joursAvance() > 0 && ', et le temps d’ici là sert à te préparer'}
               </span>
             </div>
           )}
@@ -1729,8 +1831,8 @@ export default function LandingReveal({ referent = null }) {
           </p>
           <CompteurLancement/>
           <p style={{ margin: '18px auto 0', maxWidth: 520, fontSize: 14, fontWeight: 600, lineHeight: 1.6, color: 'rgba(255,255,255,0.82)' }}>
-            Pas besoin de l&rsquo;attendre pour commencer : ta page part en ligne dès qu&rsquo;elle est
-            validée, et tes premiers clients commandent avant tout le monde.
+            Inscris-toi maintenant : tu prépares ta page, ton catalogue et tes créneaux
+            sans te presser, et le jour J tu ouvres prêt, sans perdre un seul jour.
           </p>
           {/* ⚠️ ALEX, 26/08 : « rends-les plus visibles, je recrute pour les
               réseaux ». Une ligne soulignée en petit sous un compte à rebours
@@ -1818,15 +1920,15 @@ export default function LandingReveal({ referent = null }) {
             plans du jour près de chez toi.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 'clamp(16px, 2.6vw, 28px)', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'flex-start', color: T.deep, maxWidth: 1180, margin: '0 auto' }}>
+        {/* ⚠️ DEUX RANGÉES, PARCE QU'À SEPT PLUS PERSONNE N'EN REGARDE AUCUNE.
+            Les maquettes se sont accumulées au fil des modules : six en août,
+            sept le 13/09 avec l'anti-gaspi. Alignées, elles passaient à la
+            ligne toutes seules et faisaient un mur de téléphones sans ordre.
+            Chaque rangée porte maintenant UNE idée, et il y a de la place pour
+            en ajouter sans refaire ce mur. */}
+        <RangeeMaquettes titre="Commander, réserver, retirer">
           <PhoneFrame label="Commande à l'avance et passe la prendre sans faire la file">
             <MockFiche/>
-          </PhoneFrame>
-          <PhoneFrame label="Chaque matin à 7h30, les bons plans de ta commune arrivent tout seuls">
-            <MockMorning/>
-          </PhoneFrame>
-          <PhoneFrame label="Prends rendez-vous chez ton coiffeur ou ton barbier, même à minuit">
-            <MockRdv/>
           </PhoneFrame>
           <PhoneFrame label="Réserve ta table ou commande à emporter, depuis la même fiche">
             <MockTableChoix/>
@@ -1834,13 +1936,41 @@ export default function LandingReveal({ referent = null }) {
           <PhoneFrame label="Dis combien vous êtes, choisis ton heure : la table est retenue en trois étapes">
             <MockTableCreneaux/>
           </PhoneFrame>
-          <PhoneFrame label="Ta carte de fidélité se remplit toute seule, sans carton à perdre">
-            <MockFidelite/>
+          <PhoneFrame label="Choisis la personne et ton heure, même à minuit : le rappel arrive une heure avant">
+            <MockRdv/>
+          </PhoneFrame>
+        </RangeeMaquettes>
+        <RangeeMaquettes titre="Et ce qui te fait revenir">
+          <PhoneFrame label="Chaque matin à 7h30, les bons plans de ta commune arrivent tout seuls">
+            <MockMorning/>
           </PhoneFrame>
           <PhoneFrame label="Ce qui reste avant la fermeture, à prix réduit, à deux pas de chez toi">
             <MockAntiGaspi/>
           </PhoneFrame>
-        </div>
+          <PhoneFrame label="Ta carte de fidélité se remplit toute seule, sans carton à perdre">
+            <MockFidelite/>
+          </PhoneFrame>
+        </RangeeMaquettes>
+
+        {/* ⚠️ LES MAQUETTES CI-DESSUS RESTENT, ET CELLES-CI NE LES REMPLACENT
+            PAS. Une maquette porte un geste : elle simplifie, elle enlève le
+            bruit, elle montre l'intention. Une capture porte la preuve : la
+            vraie liste de sauces, les vraies tailles, le vrai nombre de
+            créneaux. Demander à l'une de faire le travail de l'autre, c'est
+            perdre les deux. */}
+        {CAPTURES_YOPPER.length > 0 && (
+          <div style={{ marginTop: 52 }}>
+            <p style={{ textAlign: 'center', margin: '0 0 6px', fontSize: 'clamp(1.15rem, 2.6vw, 1.4rem)', fontWeight: 900, letterSpacing: '-0.5px', color: T.ink }}>
+              Et ça, ce n&rsquo;est pas dessiné.
+            </p>
+            <p style={{ textAlign: 'center', margin: '0 auto 26px', maxWidth: 560, fontSize: 14, color: T.muted, lineHeight: 1.6, fontWeight: 500 }}>
+              Ce sont des captures de l&rsquo;application, prises telles quelles.
+            </p>
+            <div style={{ display: 'flex', gap: 'clamp(20px, 4vw, 40px)', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {CAPTURES_YOPPER.map(c => <CaptureProduit key={c.cle} capture={c} fondClair/>)}
+            </div>
+          </div>
+        )}
         {/* Bénéfices en pastilles */}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginTop: 40 }}>
           {[
@@ -1976,7 +2106,7 @@ export default function LandingReveal({ referent = null }) {
               ⚠️ Le mockup au-dessus RESTE. Il porte le geste et le mouvement,
               elles portent la preuve : ce n'est pas la même chose, et l'un ne
               remplace pas l'autre. */}
-          {CAPTURES.length > 0 && (
+          {CAPTURES_COMMERCANT.length > 0 && (
             <div style={{ marginTop: 52 }}>
               <p style={{ textAlign: 'center', margin: '0 0 6px', fontSize: 'clamp(1.15rem, 2.6vw, 1.4rem)', fontWeight: 900, letterSpacing: '-0.5px', color: '#fff' }}>
                 Et ça, ce ne sont pas des maquettes.
@@ -1985,7 +2115,7 @@ export default function LandingReveal({ referent = null }) {
                 Ce sont les écrans que tu verras, tels quels.
               </p>
               <div style={{ display: 'flex', gap: 'clamp(20px, 4vw, 44px)', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                {CAPTURES.map(c => <CaptureProduit key={c.cle} capture={c}/>)}
+                {CAPTURES_COMMERCANT.map(c => <CaptureProduit key={c.cle} capture={c}/>)}
               </div>
             </div>
           )}
@@ -2212,7 +2342,7 @@ export default function LandingReveal({ referent = null }) {
             {estRegimeLancement() && (
               <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: T.light, lineHeight: 1.55 }}>
                 {joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},
-                et tout le temps d&rsquo;ici là est en bonus. Sans carte de paiement.
+                et le temps d&rsquo;ici là pour tout préparer. Sans carte de paiement.
               </p>
             )}
           </div>
@@ -2233,8 +2363,8 @@ export default function LandingReveal({ referent = null }) {
                 datées par des évènements réels : les commerces qui ouvrent, et
                 l'app qui sort. */}
             <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.9)', fontWeight: 500, lineHeight: 1.6 }}>
-              Inscris-toi : on te prévient quand les premiers commerces de ton quartier
-              sont en ligne, et le jour où l&rsquo;app est téléchargeable.
+              Inscris-toi : on te prévient dès que ça démarre, pour que tu puisses télécharger
+              l&rsquo;app et enfin voir, commander et réserver chez tes commerçants préférés.
             </p>
           </div>
 

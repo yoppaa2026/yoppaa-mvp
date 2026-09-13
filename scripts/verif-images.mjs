@@ -15,7 +15,7 @@
 //   npm run verif:images
 
 import { readFileSync, existsSync } from 'node:fs'
-import { CAPTURES } from '../lib/captures-landing.js'
+import * as CapturesLanding from '../lib/captures-landing.js'
 import {
   TAILLE_CONSEILLEE,
   avertissementTaille,
@@ -305,9 +305,30 @@ function tailleWebp(b) {
 // de l'image : une valeur recopiée de travers produit précisément le saut de
 // page qu'elles étaient censées éviter, et il se produit sous le pouce du
 // visiteur au moment où il commence à lire.
+//
+// ⚠️ ON NE PARCOURT PAS UNE LISTE NOMMÉE, ON LES PARCOURT TOUTES. Le 13/09 une
+// deuxième série est arrivée (les écrans côté Yopper) et cette garde, qui
+// visait `CAPTURES` par son nom, ne l'aurait pas vue : quatre captures auraient
+// pu partir en ligne sans fichier, sans dimensions et sans texte de
+// remplacement, et tout serait resté vert. Une garde qui vise un NOM ne protège
+// que ce nom. Celle-ci lit le module et prend toute liste de captures qu'elle
+// y trouve, y compris celles qui n'existent pas encore.
 {
   const dossier = new URL('../public/captures/', import.meta.url)
-  for (const c of CAPTURES) {
+
+  const listes = Object.entries(CapturesLanding).filter(([, v]) =>
+    Array.isArray(v) && v.length > 0 && v.every(c => c && typeof c.cle === 'string' && typeof c.fichier === 'string'))
+
+  verifie('le module des captures expose au moins deux séries',
+    listes.length >= 2, `${listes.length} série(s) : ${listes.map(([n]) => n).join(', ')}`)
+
+  // ⚠️ DEUX SÉRIES NE DOIVENT PAS SE PARTAGER UNE CLÉ : `key={c.cle}` est rendu
+  // par le même composant des deux côtés, et React ne dirait rien.
+  const cles = listes.flatMap(([, v]) => v.map(c => c.cle))
+  verifie('aucune capture ne porte la clé d’une autre',
+    new Set(cles).size === cles.length, cles.join(', '))
+
+  for (const c of listes.flatMap(([, v]) => v)) {
     const chemin = new URL(c.fichier, dossier)
     const existe = existsSync(chemin)
     verifie(`la capture « ${c.cle} » a bien son fichier`, existe, c.fichier)

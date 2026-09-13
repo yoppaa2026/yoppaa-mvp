@@ -462,8 +462,14 @@ function sansCommentaires(src) {
   //    1er octobre, alors qu'arriver tôt est tout l'intérêt de l'offre.
   verifier('le hero dit que le lancement est OFFICIEL, pas le départ',
     /Lancement officiel le \{libelleLancement\(\)\}/.test(reveal))
-  verifier("le hero dit qu'on n'a pas à attendre pour commencer",
-    /Pas besoin de l&rsquo;attendre pour commencer/.test(reveal))
+  // 🔴 CE QUE CETTE GARDE MESURE A CHANGÉ LE 13/09, ET C'EST UNE CORRECTION DE
+  // FOND. Elle exigeait « Pas besoin de l'attendre pour commencer » : la page
+  // promettait des ventes avant l'ouverture, alors que rien ne s'allume avant
+  // le lancement. La raison de s'inscrire tôt reste entière, mais ce n'est pas
+  // de gagner des jours de vente : c'est d'avoir le temps de tout préparer, et
+  // d'ouvrir prêt le jour J.
+  verifier("le hero dit à quoi sert le temps d'ici l'ouverture",
+    /tu ouvres prêt/.test(reveal))
   verifier("l'appel final n'invite plus à attendre",
     !/Rendez-vous le \{libelleLancement\(\)\}\./.test(reveal),
     '« Rendez-vous le 1er octobre » disait le contraire de tout le reste')
@@ -486,8 +492,8 @@ function sansCommentaires(src) {
     /\{joursOffertsAuLancement\(\)\} jours offerts/.test(hero))
   verifier("le hero rattache les 100 jours à la date d'ouverture",
     /à partir du \{libelleLancement\(\)\}/.test(hero))
-  verifier("le hero présente l'avance comme un bonus, en mots",
-    /est en bonus/.test(hero))
+  verifier("le hero dit que le temps d'ici là sert à préparer, en mots",
+    /sert à te préparer/.test(hero))
   verifier("le hero ne chiffre PAS le total avec l'avance",
     !/\{joursOfferts\(\)\}/.test(hero),
     'un seul chiffre sur la page : 100')
@@ -520,7 +526,30 @@ function sansCommentaires(src) {
       'un seul chiffre sur la page, et c\'est 100')
   }
   verifier("mais l'avance reste dite en toutes lettres",
-    /est en bonus/.test(reveal))
+    /le temps d’ici là/.test(reveal))
+
+  // 🔴 RIEN NE S'OUVRE AVANT LE LANCEMENT, ET AUCUNE PAGE NE DOIT LE PROMETTRE.
+  // Jusqu'au 13/09 la landing annonçait « tes premiers clients commandent avant
+  // tout le monde » et présentait l'attente comme un bonus de jours offerts qui
+  // « fond un peu chaque jour ». L'application et les commerces ne s'allument
+  // qu'au lancement : ce commerçant attendait des clients qui ne pouvaient pas
+  // venir, et il l'aurait constaté seul, en septembre, sans que rien ne rougisse
+  // de notre côté.
+  //
+  // ⚠️ LA GARDE VISE LA PROMESSE, PAS LA PHRASE. Un texte réécrit dans le même
+  // réflexe repasserait sous une garde qui ne chercherait que l'ancienne
+  // tournure : c'est le vocabulaire du « temps offert avant l'heure » qui est
+  // interdit, sur les deux pages qui le portaient.
+  for (const chemin of ['app/components/LandingReveal.js', 'app/signup/page.js']) {
+    const src = sansCommentaires(lire(chemin))
+    for (const [quoi, motif] of [
+      ['des commandes avant l’ouverture', /clients commandent avant/],
+      ['l’attente comme un bonus', /est en bonus/],
+      ['une avance qui « fond »', /fond un peu chaque jour/],
+    ]) {
+      verifier(`${chemin} ne promet plus ${quoi}`, !motif.test(src))
+    }
+  }
 
   // ⚠️ LES DEUX PUBLICS, NOMMÉS D'UNE SEULE FAÇON.
   // La même personne était appelée « Devenir Yopper », « Je suis habitant » et
@@ -573,10 +602,10 @@ function sansCommentaires(src) {
   verifier("le bloc ne chiffre PAS le total avec l'avance",
     !/joursOfferts\(\)/.test(encart),
     'le bonus se raconte, il ne se compte pas')
-  verifier("le bloc dit quand même que l'avance est un bonus",
-    /est en bonus/.test(encart))
-  verifier("et qu'elle fond",
-    /fond un peu chaque jour/.test(encart))
+  verifier("le bloc dit à quoi sert le temps d'ici l'ouverture",
+    /tu prépares ta page/.test(encart))
+  verifier("et promet d'ouvrir prêt sans perdre un jour",
+    /tu ne perds aucun de tes/.test(encart))
 
   // La comparaison, EXÉCUTÉE. C'est elle qui porte l'urgence.
   const auLancement = joursOffertsAuLancement()

@@ -235,7 +235,42 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 6. LA LANDING N'AFFICHE AUCUNE ENSEIGNE DE DÉMONSTRATION
+// 6. LE GOOD MORNING YOPPERS EST UNE ÉDITION, PAS UN FIL D'ACTUALITÉ
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// L'ancienne maquette montrait un bandeau violet et trois cartes empilées :
+// n'importe quelle application fait ça. Le vrai écran est une carte qui s'ouvre
+// par-dessus l'application, DATÉE, NUMÉROTÉE, rattachée à une commune, avec deux
+// onglets qui comptent ce qu'il y a dedans et un pied qui donne rendez-vous au
+// lendemain. C'est cette forme de journal qui explique pourquoi on l'ouvre, et
+// aucun de ces éléments n'était là.
+{
+  const gmy = LANDING.split('function MockMorning()')[1]?.split('\nfunction ')[0] || ''
+  verifier('l’édition du matin existe', gmy.length > 400)
+
+  verifier('elle est datée', /DIMANCHE/.test(gmy) && /13 septembre/.test(gmy))
+  verifier('elle porte un numéro d’édition', /N°/.test(gmy))
+  verifier('elle nomme la commune', /Mettet/.test(gmy))
+  verifier('ses deux onglets comptent ce qu’ils contiennent',
+    /t: 'Deals', n: \d/.test(gmy) && /t: 'Actus', n: \d/.test(gmy))
+
+  // ⚠️ ALEX A DEMANDÉ QU'ELLE MONTRE UN DEAL, et ses captures n'en avaient
+  // aucun ce matin-là : l'écran affichait « Pas de deals à Mettet ce matin ».
+  // Une maquette qui montrerait l'état vide raconterait l'inverse du libellé.
+  verifier('un deal y est montré, pas un état vide',
+    /Deal/.test(gmy) && !/Pas de deals/.test(gmy))
+  // Le prix barré et le stock, ensemble : c'est le couple qui fait l'offre.
+  verifier('le deal dit son prix, son prix barré et ce qu’il en reste',
+    /lineThrough|line-through/.test(gmy) && /restants/.test(gmy))
+
+  // 🔴 LE PIED EST CE QUI FAIT REVENIR. Sans le rendez-vous du lendemain, une
+  // édition quotidienne n'est plus qu'une page de plus.
+  verifier('le pied donne rendez-vous au lendemain',
+    /Rendez-vous/.test(gmy) && /07h30/.test(gmy))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. LA LANDING N'AFFICHE AUCUNE ENSEIGNE DE DÉMONSTRATION
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // 🔴 TROIS Y ÉTAIENT, EN PRODUCTION, ET C'EST ALEX QUI LES A VUES. « La mie de

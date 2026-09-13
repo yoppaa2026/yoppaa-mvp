@@ -398,60 +398,110 @@ function MockFiche() {
 }
 
 // ─── Mockup 2 : Good Morning Yoppers (l'édition de 7h30) ────────────────────
+// ⚠️ REDESSINÉE LE 13/09 D'APRÈS LES CAPTURES, ET CE N'ÉTAIT PAS LE MÊME ÉCRAN.
+// L'ancienne montrait un simple bandeau violet suivi de trois cartes empilées.
+// Le vrai Good Morning Yoppers est une ÉDITION : une carte qui s'ouvre par
+// dessus l'application, datée, numérotée, avec le nom de la commune, deux
+// onglets qui comptent ce qu'il y a dedans, et un pied qui donne rendez-vous au
+// lendemain. Ce n'est pas un fil d'actualité, c'est un journal du matin, et
+// c'est cette forme-là qui explique pourquoi on l'ouvre.
+//
+// ⚠️ LA CARTE DU DEAL SUIT LE GABARIT DE `DealCard` (app/commander/morning) :
+// en-tête façon post, visuel, titre, puis la ligne remise / prix / prix barré /
+// stock / « J'en profite ». Les captures d'Alex ne montraient aucun deal ce
+// matin-là : plutôt que d'inventer la carte, elle a été relevée dans le code
+// qui la rend.
 function MockMorning() {
   return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '26px 12px 12px', flexShrink: 0 }}>
-        <p style={{ margin: 0, fontSize: 7.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Chaque matin · 7h30</p>
-        <p style={{ margin: '3px 0 0', fontWeight: 900, fontSize: 14, color: '#fff', letterSpacing: '-0.3px' }}>Good Morning Yoppers</p>
-        <p style={{ margin: '2px 0 0', fontSize: 8.5, color: 'rgba(255,255,255,0.8)', fontWeight: 600 }}>Les deals et actus de ta commune</p>
-      </div>
-      {/* Carte deal façon post */}
-      <div style={{ margin: '10px 10px 0', background: '#fff', borderRadius: 12, padding: '9px 11px', border: `1px solid ${T.pale}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-          <span style={{ width: 24, height: 24, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 10, flexShrink: 0 }}>B</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 9.5, fontWeight: 800, color: T.ink }}>Boulangerie du Centre</p>
-            <p style={{ margin: 0, fontSize: 7, color: T.main, fontWeight: 600 }}>Boulangerie · aujourd&rsquo;hui</p>
+    <div style={{ fontFamily: '"DM Sans", sans-serif', background: '#F2EFFA', height: '100%', display: 'flex', flexDirection: 'column', padding: '26px 8px 8px' }}>
+      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 10px 26px rgba(22,6,54,0.18)', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ height: 2.5, background: `linear-gradient(90deg, ${T.panel}, ${T.main} 55%, ${T.light})`, flexShrink: 0 }}/>
+
+        <div style={{ padding: '8px 10px 0', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <p style={{ margin: 0, fontSize: 7 }}>
+              <span style={{ fontWeight: 900, color: T.ink, letterSpacing: '0.7px' }}>DIMANCHE</span>
+              <span style={{ fontWeight: 700, color: T.main, marginLeft: 4 }}>13 septembre</span>
+            </p>
+            <p style={{ margin: 0, fontSize: 7, fontWeight: 700, color: T.main }}>
+              <span style={{ opacity: 0.6 }}>N°</span> 256
+            </p>
           </div>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 100, background: T.pale, color: T.deep, fontSize: 6.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            <IconFlame size={7} color={T.main}/> Deal
+
+          {/* Le titre est ÉNORME sur l'écran, et c'est ce qui fait l'édition :
+              réduit à la taille d'une ligne de liste, ce ne serait plus un
+              journal. Le mot « Yoppers » porte le dégradé du wordmark. */}
+          <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 19, lineHeight: 1.02, letterSpacing: '-1px', color: T.ink }}>
+            Good Morning<br/>
+            <span style={{ color: T.ink }}>Yo</span><span style={{ color: T.main }}>pp</span><span style={{ color: T.mid }}>ers</span>
+          </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, margin: '5px 0 0' }}>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.6"/>
+            </svg>
+            <span style={{ fontSize: 8.5, fontWeight: 800, color: T.ink }}>Mettet</span>
+            <span style={{ fontSize: 7, color: T.ink }}>⌄</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 14, padding: '7px 10px 0', borderBottom: '1px solid #EFEAF7', flexShrink: 0 }}>
+          {[{ t: 'Deals', n: 1, on: true }, { t: 'Actus', n: 2, on: false }].map(o => (
+            <span key={o.t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, paddingBottom: 6, borderBottom: o.on ? `2px solid ${T.ink}` : '2px solid transparent' }}>
+              {o.on ? <IconFlame size={8} color={T.main}/> : <IconBell size={8}/>}
+              <span style={{ fontSize: 8.5, fontWeight: 800, color: o.on ? T.ink : T.muted }}>{o.t}</span>
+              <span style={{ fontSize: 6.5, fontWeight: 800, minWidth: 11, textAlign: 'center', borderRadius: 100, padding: '1px 4px', background: o.on ? T.pale : '#EFEFF3', color: o.on ? T.deep : T.muted }}>{o.n}</span>
+            </span>
+          ))}
+        </div>
+
+        <div style={{ padding: '8px 10px 0', flex: 1, minHeight: 0 }}>
+          <div style={{ border: `1px solid ${T.pale}`, borderRadius: 12, padding: '8px 9px', background: '#fff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
+              <span style={{ width: 21, height: 21, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 9, flexShrink: 0 }}>B</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 9, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px' }}>Boulangerie du Centre</p>
+                <p style={{ margin: 0, fontSize: 6.5, color: T.main, fontWeight: 600 }}>Boulangerie &middot; aujourd&rsquo;hui</p>
+              </div>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 100, background: T.pale, color: T.deep, fontSize: 6, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.6px', flexShrink: 0 }}>
+                <IconFlame size={7} color={T.main}/> Deal
+              </span>
+            </div>
+            <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 7, height: 52, background: 'linear-gradient(135deg, #E8B96A, #C88B3A 60%, #F2D9A8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.8" cy="8.8" r="1.9"/><path d="m21 15.5-4.7-4.7L5.5 21"/>
+              </svg>
+            </div>
+            <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 700, color: T.ink, lineHeight: 1.3 }}>3 croissants + 1 offert</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 7.5, fontWeight: 900, padding: '2px 7px', borderRadius: 100, background: T.pale, color: T.deep }}>&minus;25%</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: T.ink }}>5,40€</span>
+              <span style={{ fontSize: 8, color: T.mid, textDecoration: 'line-through' }}>7,20€</span>
+              <span style={{ fontSize: 6.5, fontWeight: 700, padding: '2px 6px', borderRadius: 20, background: '#FEF2F2', color: '#DC2626' }}>5 restants</span>
+              <span style={{ marginLeft: 'auto', fontSize: 6.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>J&rsquo;en profite ›</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Le pied donne rendez-vous au lendemain : c'est lui qui fait revenir,
+            et l'ancienne maquette n'en avait pas. */}
+        <div style={{ background: T.panel, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+          <span style={{ width: 20, height: 20, borderRadius: 6, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>
+            </svg>
+          </span>
+          <p style={{ margin: 0, flex: 1, fontSize: 7, color: 'rgba(255,255,255,0.85)', fontWeight: 600, lineHeight: 1.4 }}>
+            Rendez-vous <strong style={{ color: '#fff' }}>lundi 14 septembre</strong> à <strong style={{ color: '#fff' }}>07h30</strong> pour de nouveaux deals.
+          </p>
+          <span style={{ background: T.light, color: T.ink, borderRadius: 100, padding: '4px 9px', fontSize: 7, fontWeight: 800, flexShrink: 0 }}>Explorer</span>
+        </div>
+        <div style={{ background: T.ink, padding: '4px 0', textAlign: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 5.5, fontWeight: 800, color: 'rgba(255,255,255,0.45)', letterSpacing: '1.2px' }}>PROPULSÉ PAR </span>
+          <span style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 7.5, letterSpacing: '-0.04em' }}>
+            <span style={{ color: '#fff' }}>yo</span><span style={{ color: T.light }}>pp</span><span style={{ color: T.mid }}>aa</span>
           </span>
         </div>
-        <p style={{ margin: '0 0 5px', fontSize: 10.5, fontWeight: 700, color: T.ink }}>3 croissants + 1 offert</p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: T.ink }}>5,40€</span>
-          <span style={{ fontSize: 8.5, color: T.mid, textDecoration: 'line-through' }}>7,20€</span>
-          <span style={{ fontSize: 6.5, fontWeight: 700, padding: '2px 6px', borderRadius: 20, background: '#FEF2F2', color: '#DC2626' }}>5 restants</span>
-          <span style={{ marginLeft: 'auto', fontSize: 7, fontWeight: 700, color: T.main, textTransform: 'uppercase', letterSpacing: '0.4px' }}>J&rsquo;en profite ›</span>
-        </div>
-      </div>
-      {/* Carte actu commerçant */}
-      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 12, padding: '9px 11px', border: `1px solid ${T.pale}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
-          <span style={{ width: 24, height: 24, borderRadius: '50%', background: `linear-gradient(135deg, ${T.deep}, ${T.main})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 10, flexShrink: 0 }}>T</span>
-          <div style={{ minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 9.5, fontWeight: 800, color: T.ink }}>Torréfaction Sainte-Croix</p>
-            <p style={{ margin: 0, fontSize: 7, color: T.main, fontWeight: 600 }}>Torréfacteur · actu</p>
-          </div>
-        </div>
-        <p style={{ margin: 0, fontSize: 9.5, fontWeight: 700, color: T.ink }}>Nouvel arrivage d&rsquo;Éthiopie ce samedi</p>
-      </div>
-      {/* Carte actu boutique */}
-      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 12, padding: '9px 11px', border: `1px solid ${T.pale}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
-          <span style={{ width: 24, height: 24, borderRadius: '50%', background: `linear-gradient(135deg, ${T.mid}, ${T.light})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 10, flexShrink: 0 }}>M</span>
-          <div style={{ minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 9.5, fontWeight: 800, color: T.ink }}>Maison Léa</p>
-            <p style={{ margin: 0, fontSize: 7, color: T.main, fontWeight: 600 }}>Boutique · actu</p>
-          </div>
-        </div>
-        <p style={{ margin: 0, fontSize: 9.5, fontWeight: 700, color: T.ink }}>La nouvelle collection est arrivée</p>
-      </div>
-      {/* Push notification collée en bas */}
-      <div style={{ margin: 'auto 10px 10px', background: 'rgba(107,53,196,0.08)', borderRadius: 10, padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 6, border: `1px dashed ${T.main}44` }}>
-        <IconBell size={11}/>
-        <p style={{ margin: 0, fontSize: 8, fontWeight: 700, color: T.deep, lineHeight: 1.4 }}>Une notification chaque matin, pour ta commune uniquement</p>
       </div>
     </div>
   )

@@ -1016,7 +1016,7 @@ function LaTotale() {
     {
       question: 'Vendre ?',
       reponse: `${eur(prix('vendre'))}/mois.`,
-      quoi: 'Click and Collect, livraison, rendez-vous en ligne, réservation de table, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique, invendus du soir à prix réduit.',
+      quoi: 'Click and Collect, livraison, rendez-vous en ligne, réservation de table avec acompte ou empreinte bancaire, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique, invendus du soir à prix réduit.',
     },
   ]
 
@@ -1198,6 +1198,7 @@ const FORMULES = [
       // tables. Et c'est sa salle qui attribue la table, jamais le client :
       // c'est la décision qui fait tout le module.
       'Réservation de table : le client dit combien ils sont, ta salle attribue la table',
+      'Acompte ou empreinte bancaire sur une réservation, contre les tables qui ne viennent pas',
       'Boutique en ligne et livraison locale',
       'Fidélité automatique : chaque commande et chaque rendez-vous remplit la carte, sans rien faire',
       'Bons cadeaux à offrir : tes clients font découvrir ton commerce à leurs proches',

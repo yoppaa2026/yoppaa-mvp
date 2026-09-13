@@ -569,8 +569,23 @@ verifier('la newsletter est annoncée comme pas encore ouverte',
 // est annoncée.
 verifier('la réservation de table est annoncée comme utilisable',
   /le Yopper réserve depuis ta fiche/.test(signupSrcTxt))
-verifier('et ce qui n’est pas encore là est dit noir sur blanc',
-  /acompte et l’empreinte bancaire[^.]*ne sont pas encore en place/.test(signupSrcTxt))
+// ⚠️ CE QUI DÉCIDE L'ABONNEMENT D'UN RESTAURATEUR DOIT ÊTRE DIT AUX DEUX
+// ENDROITS. Il cherche l'acompte en premier quand il pense « table qui ne vient
+// pas » : l'annoncer au signup et l'oublier sur la landing, ou l'inverse, c'est
+// perdre celui qui n'a lu qu'une des deux pages.
+verifier('l’acompte et l’empreinte sont annoncés au signup',
+  /Acompte ou empreinte bancaire au choix/.test(signupSrcTxt))
+{
+  const landingSrc = lire('app/components/LandingReveal.js')
+  verifier('et sur la landing, dans les points de la formule Vendre',
+    /Acompte ou empreinte bancaire sur une réservation/.test(landingSrc))
+  verifier('et dans le détail des tarifs',
+    /réservation de table avec acompte ou empreinte bancaire/.test(landingSrc))
+  // ⚠️ LE NOM DU MODULE, LUI, SE DIT AVEC LE MOT DU CLIENT. Côté Yopper une
+  // « capacité par service » ne veut rien dire : il réserve une table.
+  verifier('la pastille côté Yopper dit « Réserver une table »',
+    /'Réserver une table'/.test(landingSrc))
+}
 // Il ne reste que la newsletter derrière ce badge. S'il en réapparaît un autre,
 // cette garde le dira, et la question se reposera au bon moment.
 egal('un seul module reste marqué « en construction »',

@@ -2325,7 +2325,16 @@ export default function LandingReveal({ referent = null }) {
               {LIBELLE_COMMERCANT}
             </p>
             <p style={{ margin: '0 0 16px', fontSize: 14.5, color: '#fff', fontWeight: 600, lineHeight: 1.6 }}>
-              Ta commune est déjà ouverte et ta page peut être en ligne cette semaine.
+              {/* ⚠️ LA NUANCE EXACTE, ET ELLE A DEMANDÉ DEUX ALLERS-RETOURS.
+                  Ta page part bien en ligne dès sa validation : c'est un vrai
+                  argument de rapidité, et le retirer aurait appauvri la page
+                  pour rien. Ce qui était faux, c'est ce qu'on en concluait :
+                  « tes premiers clients commandent avant tout le monde ». Le
+                  public n'arrive qu'au lancement. Une page en ligne n'est pas
+                  une page fréquentée, et c'est toute la différence. */}
+              Ta commune est déjà ouverte et ta page part en ligne dès sa validation.
+              Le public, lui, arrive le {libelleLancement()} : d&rsquo;ici là, tu prépares tout
+              tranquillement.
             </p>
             <Link href="/signup"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '15px 30px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 15.5, letterSpacing: 0.2, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif', marginBottom: 10, boxShadow: '0 8px 22px rgba(150,96,224,0.35)' }}>

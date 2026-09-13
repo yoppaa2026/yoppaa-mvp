@@ -540,16 +540,46 @@ function sansCommentaires(src) {
   // réflexe repasserait sous une garde qui ne chercherait que l'ancienne
   // tournure : c'est le vocabulaire du « temps offert avant l'heure » qui est
   // interdit, sur les deux pages qui le portaient.
-  for (const chemin of ['app/components/LandingReveal.js', 'app/signup/page.js']) {
+  // ⚠️ QUATRE FICHIERS, PAS DEUX. La landing et le signup portaient la promesse
+  // en toutes lettres, mais l'email de bienvenue et le kit papier la disaient
+  // autrement : « ce sont tes clients à toi qui arrivent en premier », « tu
+  // ouvres avec une clientèle déjà prête ». Corriger les pages en laissant les
+  // emails aurait déplacé le défaut là où personne ne relit jamais.
+  for (const chemin of [
+    'app/components/LandingReveal.js',
+    'app/signup/page.js',
+    'lib/resend.js',
+    'app/kit/[slug]/KitClient.js',
+  ]) {
     const src = sansCommentaires(lire(chemin))
     for (const [quoi, motif] of [
       ['des commandes avant l’ouverture', /clients commandent avant/],
       ['l’attente comme un bonus', /est en bonus/],
       ['une avance qui « fond »', /fond un peu chaque jour/],
+      ['des clients avant l’ouverture', /clients à toi qui arrivent/],
+      // 🔴 PAS DE MOTIF SUR « CLIENTÈLE DÉJÀ PRÊTE », ET CE N'EST PAS UN OUBLI.
+      // Il a été essayé, il a rougi, et il avait TORT : le kit et son email
+      // disent « LE 1er OCTOBRE, tu ouvres avec une clientèle déjà prête », ce
+      // qui place le résultat AU lancement et pas avant. C'est même le but du
+      // kit papier : faire parler du commerce au comptoir pendant l'attente.
+      // Ce qui est interdit, c'est de promettre du TRAFIC AVANT l'ouverture,
+      // pas d'employer le mot clientèle. Une garde qui vise un mot au lieu
+      // d'une promesse fait supprimer des phrases justes, et j'en avais déjà
+      // retiré une du kit avant qu'elle ne me le dise.
     ]) {
       verifier(`${chemin} ne promet plus ${quoi}`, !motif.test(src))
     }
   }
+
+  // ⚠️ ET LA NUANCE EXACTE EST GARDÉE, PAS SEULEMENT L'INTERDIT. Une page qui
+  // ne dit plus rien du tout aurait passé les gardes ci-dessus en perdant un
+  // argument vrai : la fiche part bien en ligne dès sa validation. Ce qui est
+  // faux, c'est d'en conclure qu'il y aura du trafic. Les deux moitiés de la
+  // phrase se tiennent, et se gardent ensemble.
+  verifier('la landing garde la mise en ligne dès la validation',
+    /part en ligne dès sa validation/.test(reveal))
+  verifier('et dit que le public arrive au lancement',
+    /Le public, lui, arrive le \{libelleLancement\(\)\}/.test(reveal))
 
   // ⚠️ LES DEUX PUBLICS, NOMMÉS D'UNE SEULE FAÇON.
   // La même personne était appelée « Devenir Yopper », « Je suis habitant » et

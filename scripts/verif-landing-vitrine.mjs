@@ -295,6 +295,73 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
     enseignes.every(e => !/\b(test|témoin|demo|démo)\b/i.test(e)), enseignes.join(', '))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. LE CALCULATEUR LIT LA MATRICE, ET DIT LA VÉRITÉ QUAND ELLE NOUS DESSERT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 LA GARDE LA PLUS IMPORTANTE DE CE BANC. La formule d'un poste est DÉDUITE
+// de `PLAN_FEATURES` et jamais recopiée : le jour où une capacité change de
+// palier, le calculateur suit tout seul. Une table de correspondance écrite en
+// dur continuerait d'annoncer l'ancien prix sans que rien ne casse, et c'est
+// exactement le défaut qu'Alex a vu à la main : la fidélité est dans
+// COMMUNIQUER à 19,90 €, et le calculateur répondait 49,90 € à un commerçant
+// qui ne paie que ça.
+{
+  const calc = LANDING.split('function CalculateurCommission()')[1]?.split('\nfunction ')[0] || ''
+  const res = LANDING.split('function ResultatCalcul(')[1]?.split('\nfunction ')[0] || ''
+  verifier('le calculateur est écrit', calc.length > 1000)
+  verifier('il est monté sur la landing', /<CalculateurCommission\/>/.test(LANDING))
+
+  verifier('la formule d’un poste est déduite de la matrice',
+    /PLANS\.find\(p => canDo\(p, capacite\)\)/.test(LANDING))
+  verifier('aucun poste ne code sa formule en dur',
+    !/formule: '(exister|communiquer|vendre)'/.test(LANDING))
+  verifier('chaque poste déclare la capacité qui le couvre',
+    (LANDING.match(/capacite: '/g) || []).length >= 10)
+  verifier('les prix viennent de getPrixPlan',
+    /getPrixPlan\(formule\)/.test(calc))
+
+  // ⚠️ LES TROIS MODES, dont celui des abonnements qu'Alex a demandé.
+  for (const m of ['pct', 'fix', 'abo']) {
+    verifier(`le mode « ${m} » existe`, new RegExp(`'${m}'`).test(calc))
+  }
+
+  // 🔴 ET LE VERDICT QUI NOUS DONNE TORT. Un calculateur qui ne peut jamais
+  // conclure contre son auteur se repère en trois secondes, et il emporte le
+  // reste de la page. À petit volume, la commission gagne : on le dit, et on
+  // renvoie vers la formule gratuite.
+  verifier('le résultat prévoit le cas où la commission coûte moins cher',
+    /ecart <= 0/.test(res))
+  verifier('et renvoie alors vers la formule gratuite',
+    /gratuite à vie/.test(res))
+
+  // ⚠️ « LA COMMISSION YOPPAA », JAMAIS LA FORMULE NUE.
+  verifier('la commission est toujours nommée avec son sujet',
+    /la commission Yoppaa sur tes ventes/.test(calc))
+  verifier('ce que Yoppaa ne fait pas est dit dans le mode abonnements',
+    /ta caisse, ton stock ou les plannings/.test(calc))
+
+  // ⚠️ ON NE NOMME AUCUNE PLATEFORME : publicité comparative, et le commerçant
+  // qu'on recrute est souvent déjà leur client.
+  //
+  // 🔴 LA ZONE TESTÉE PART DE `POSTES_CALCUL`, PAS DU CORPS DE LA FONCTION. La
+  // première version ne regardait que l'intérieur de `CalculateurCommission` :
+  // les noms de postes sont déclarés AU-DESSUS, une marque glissée dans l'un
+  // d'eux passait sans rien faire rougir. Trouvé par mutation, comme le
+  // découpage de la vignette : borner trop court est aussi faux que ne pas
+  // border du tout.
+  const zoneCalc = LANDING.split('const POSTES_CALCUL')[1]?.split('function RangeeMaquettes')[0] || ''
+  verifier('la zone du calculateur est bien cadrée',
+    zoneCalc.length > 3000 && zoneCalc.length < 40000, `${zoneCalc.length} caractères`)
+  for (const marque of ['Uber', 'Deliveroo', 'Takeaway', 'TheFork', 'Planity', 'Salonkee', 'Fidelybox']) {
+    verifier(`le calculateur ne nomme pas ${marque}`, !new RegExp(marque, 'i').test(zoneCalc))
+  }
+
+  // La newsletter n'est pas ouverte : le calculateur ne la vend pas.
+  verifier('aucun poste ne s’appuie sur la newsletter, qui n’est pas ouverte',
+    !/capacite: 'newsletter_ciblee'/.test(LANDING))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

@@ -885,6 +885,16 @@ function commissionsOrphelines(txt) {
     if (/Commission europ/i.test(fenetre)) continue          // l'institution, pas un prélèvement
     if (/Yoppaa/i.test(fenetre)) continue                    // nommée
     if (/nous ne (prenons|prélevons|percevons)/i.test(fenetre)) continue   // première personne
+    // ⚠️ 13/09 : LA RÈGLE PORTE SUR LA NÉGATION, PAS SUR LE MOT. Ce qu'on ne
+    // veut jamais lire, c'est « aucune commission » sans dire QUI n'en prend
+    // pas : le commerçant comprend qu'il n'y a aucun frais, alors que Stripe
+    // prélève les siens. Une commission AFFIRMÉE ne crée pas cette croyance :
+    // « une commission grandit avec toi », « les places de marché prennent
+    // leur commission » ne promettent rien et ne trompent personne.
+    // Le calculateur de la landing parle de la commission des AUTRES : sans
+    // cette précision, la garde interdisait d'en parler du tout, ce qui n'a
+    // jamais été la règle. La négation, elle, reste interdite sans sujet.
+    if (!/(aucune?|sans|z[ée]ro|pas de|ne prend|0\s*%)/i.test(fenetre)) continue
     orphelines.push(fenetre)
   }
   return orphelines
@@ -900,6 +910,17 @@ verifier('une commission attribuée à la première personne passe',
   commissionsOrphelines('Sur leurs ventes, nous ne prenons aucune commission.').length === 0)
 verifier('la Commission européenne n’est pas un prélèvement',
   commissionsOrphelines('encadrés par les clauses types de la Commission européenne').length === 0)
+// ⚠️ LA PRÉCISION DU 13/09, MESURÉE DANS LES DEUX SENS. Une commission
+// affirmée, attribuée à quelqu'un d'autre, ne promet rien : elle passe. Toute
+// NÉGATION sans sujet reste refusée, y compris sous ses autres formes.
+verifier('une commission affirmée chez un tiers passe',
+  commissionsOrphelines('Les places de marché prennent leur commission.').length === 0)
+verifier('une commission affirmée sur un volume passe',
+  commissionsOrphelines('Avec une commission de 14 %, tu paies 840 € par mois.').length === 0)
+verifier('« sans commission » sans sujet est refusé',
+  commissionsOrphelines('Vends en ligne sans commission sur tes ventes.').length === 1)
+verifier('« zéro commission » sans sujet est refusé',
+  commissionsOrphelines('Zéro commission, zéro surprise.').length === 1)
 
 for (const chemin of TEXTES_PUBLICS) {
   const orphelines = commissionsOrphelines(lire(chemin))

@@ -32,7 +32,7 @@ import {
   estRegimeLancement, ESSAI_JOURS_MINIMUM,
 } from '@/lib/lancement'
 import { FACEBOOK_URL, RESEAUX } from '@/lib/reseaux'
-import { getPrixPlan } from '@/lib/plans'
+import { getPrixPlan, canDo, PLANS } from '@/lib/plans'
 import { TYPES_ENVIE, libelleEnvie } from '@/lib/signaux'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import { CAPTURES_COMMERCANT, CAPTURES_YOPPER, captureSrc } from '@/lib/captures-landing'
@@ -205,6 +205,299 @@ function PhoneFrame({ children, label }) {
       </div>
       {label && <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: 'inherit', opacity: 0.85, textAlign: 'center', maxWidth: 250, lineHeight: 1.4 }}>{label}</p>}
     </div>
+  )
+}
+
+// ─── Ce que la commission coûte ─────────────────────────────────────────────
+//
+// Idée d'Alex (13/09) : le visiteur entre SON chiffre, et l'écart apparaît.
+//
+// ⚠️ ON NE NOMME AUCUNE PLATEFORME, ET C'EST PLUS FORT AINSI. La publicité
+// comparative belge exige des taux exacts, vérifiables et à jour : un taux qui
+// change et la page devient trompeuse. Surtout, le restaurateur qu'on recrute
+// est souvent DÉJÀ client de ces plateformes : lui dire qu'elles sont mauvaises
+// revient à lui dire qu'il s'est fait avoir. Un montant qu'il a saisi lui-même
+// est indiscutable, et ne juge personne.
+//
+// 🔴 ET LE CALCULATEUR DIT LA VÉRITÉ QUAND ELLE NOUS DESSERT. À petit volume,
+// une commission coûte moins cher qu'un abonnement : la page l'affiche au lieu
+// de le cacher, et renvoie vers Exister. Un calculateur qui ne peut jamais
+// donner tort à son auteur se repère en trois secondes, et il emporte le reste
+// de la page avec lui.
+
+// ⚠️ LA FORMULE D'UN POSTE EST LUE DANS LA MATRICE, JAMAIS RECOPIÉE. Le jour où
+// une capacité change de palier, le calculateur suit tout seul. Une table de
+// correspondance écrite ici continuerait d'annoncer l'ancien prix, sans que
+// rien ne casse : c'est le mensonge le plus difficile à voir.
+function formuleMinimale(capacite) {
+  return PLANS.find(p => canDo(p, capacite)) || 'vendre'
+}
+
+// Des POSTES, pas des marques : rien à sourcer, rien à maintenir quand un
+// concurrent change son offre, et le commerçant reconnaît quand même sa facture.
+// Les montants sont des exemples, que le visiteur remplace par les siens.
+const POSTES_CALCUL = [
+  { cle: 'pub',    capacite: 'morning',             nom: 'Visibilité locale, toutes-boîtes',  prix: 45 },
+  { cle: 'site',   capacite: 'vitrine',             nom: 'Site ou page vitrine',              prix: 20 },
+  { cle: 'fid',    capacite: 'fidelite',            nom: 'Carte de fidélité au comptoir',     prix: 50, defaut: true },
+  { cle: 'deals',  capacite: 'deals',               nom: 'Promos, deals et mise en avant',    prix: 19 },
+  // ⚠️ `push_cibles_favoris` ET NON `newsletter_ciblee` : la newsletter n'est
+  // pas ouverte (le consentement explicite manque), et le signup le dit. Ce
+  // calculateur ne vend que ce qui existe.
+  { cle: 'push',   capacite: 'push_cibles_favoris', nom: 'Notifications à tes clients',       prix: 25 },
+  { cle: 'rdv',    capacite: 'rdv',                 nom: 'Agenda et rendez-vous en ligne',    prix: 39 },
+  { cle: 'cmd',    capacite: 'commande',            nom: 'Commande ou click and collect',     prix: 29 },
+  { cle: 'liv',    capacite: 'livraison',           nom: 'Livraison à domicile',              prix: 29 },
+  { cle: 'table',  capacite: 'reservation_table',   nom: 'Réservation de table',              prix: 25 },
+  { cle: 'gaspi',  capacite: 'anti_gaspi',          nom: 'Invendus de fin de journée',        prix: 19 },
+  { cle: 'bons',   capacite: 'bons_cadeaux',        nom: 'Bons cadeaux',                      prix: 15 },
+  { cle: 'seance', capacite: 'rdv',                 nom: 'Abonnements et cartes de séances',  prix: 35 },
+]
+
+const euro = (n, dec) => n.toLocaleString('fr-BE', {
+  minimumFractionDigits: dec ? 2 : 0, maximumFractionDigits: dec ? 2 : 0,
+}) + ' €'
+
+function CalculateurCommission() {
+  const [mode, setMode] = useState('pct')
+  const [pctVolume, setPctVolume] = useState(6000)
+  const [pctTaux, setPctTaux] = useState(14)
+  const [fixNb, setFixNb] = useState(400)
+  const [fixMontant, setFixMontant] = useState(2)
+  const [abos, setAbos] = useState(() =>
+    Object.fromEntries(POSTES_CALCUL.map(p => [p.cle, { actif: !!p.defaut, prix: p.prix }])))
+
+  const actifs = POSTES_CALCUL.filter(p => abos[p.cle].actif)
+  const nb = actifs.length
+
+  let paye, titreEux, formule
+  if (mode === 'abo') {
+    paye = actifs.reduce((s, p) => s + (Number(abos[p.cle].prix) || 0), 0)
+    formule = actifs.reduce((max, p) => {
+      const f = formuleMinimale(p.capacite)
+      return PLANS.indexOf(f) > PLANS.indexOf(max) ? f : max
+    }, PLANS[0])
+    titreEux = nb === 0 ? 'Aucun abonnement coché'
+             : nb === 1 ? 'Avec ton abonnement'
+             : `Avec tes ${nb} abonnements`
+  } else if (mode === 'pct') {
+    paye = pctVolume * pctTaux / 100
+    formule = 'vendre'
+    titreEux = `Avec une commission de ${pctTaux.toLocaleString('fr-BE', { maximumFractionDigits: 1 })} %`
+  } else {
+    paye = fixNb * fixMontant
+    formule = 'vendre'
+    titreEux = `Avec ${euro(fixMontant, fixMontant % 1 !== 0)} par commande`
+  }
+
+  const prixFormule = getPrixPlan(formule)?.mensuel ?? 0
+  const nomFormule = formule.charAt(0).toUpperCase() + formule.slice(1)
+  const ecart = (paye - prixFormule) * 12
+
+  const carte = { background: 'rgba(255,255,255,0.07)', border: '1.5px solid rgba(255,255,255,0.16)', borderRadius: 18, padding: '22px 20px', textAlign: 'center' }
+  const titreChamp = { display: 'block', fontSize: 12, fontWeight: 900, color: T.light, textTransform: 'uppercase', letterSpacing: '0.9px', marginBottom: 10 }
+  const valeur = { margin: '0 0 8px', fontSize: 26, fontWeight: 900, color: '#fff', letterSpacing: '-0.6px', fontVariantNumeric: 'tabular-nums' }
+
+  return (
+    <section style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 0' }}>
+      <div style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 58%, ${T.panel} 100%)`, borderRadius: 26, overflow: 'hidden', color: '#fff', boxShadow: `0 18px 44px ${T.ink}3A` }}>
+        <Bande3px/>
+        <div style={{ padding: 'clamp(26px, 5vw, 46px)' }}>
+          <SectionEyebrow>Le calcul que personne ne te propose</SectionEyebrow>
+          <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.2rem)', fontWeight: 900, letterSpacing: '-1.1px', margin: '0 0 12px', color: '#fff', lineHeight: 1.15 }}>
+            Une commission grandit avec toi.<br/>Un abonnement, non.
+          </h2>
+          <p style={{ margin: '0 0 26px', maxWidth: 640, fontSize: '0.97rem', color: 'rgba(255,255,255,0.9)', fontWeight: 500, lineHeight: 1.65 }}>
+            Tu connais ton pourcentage par cœur, ou le total de tes abonnements. Mets-le ici et regarde
+            ce que ça représente sur une année. On ne te demande pas de nous croire : c&rsquo;est ton
+            chiffre, et c&rsquo;est ta calculette.
+          </p>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
+            {[['pct', 'On me prend un pourcentage'], ['fix', 'On me prend un montant par commande'], ['abo', 'Je paie déjà des abonnements']].map(([m, l]) => (
+              <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={mode === m}
+                style={{
+                  padding: '10px 18px', borderRadius: 100, fontFamily: '"DM Sans", sans-serif',
+                  fontSize: 13.5, fontWeight: 800, cursor: 'pointer',
+                  border: `1.5px solid ${mode === m ? '#fff' : 'rgba(196,160,244,0.4)'}`,
+                  background: mode === m ? '#fff' : 'rgba(255,255,255,0.06)',
+                  color: mode === m ? T.deep : 'rgba(255,255,255,0.92)',
+                }}>{l}</button>
+            ))}
+          </div>
+
+          {mode !== 'abo' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 22, marginBottom: 30 }}>
+              <div>
+                <label style={titreChamp} htmlFor="calc-a">{mode === 'pct' ? 'Ce que je vends en ligne par mois' : 'Commandes ou couverts par mois'}</label>
+                <p style={valeur}>{(mode === 'pct' ? pctVolume : fixNb).toLocaleString('fr-BE')} {mode === 'pct' && <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>€</span>}</p>
+                <input id="calc-a" type="range" style={{ width: '100%', accentColor: T.light, height: 26, cursor: 'pointer' }}
+                  min={mode === 'pct' ? 500 : 20} max={mode === 'pct' ? 30000 : 1500} step={mode === 'pct' ? 250 : 10}
+                  value={mode === 'pct' ? pctVolume : fixNb}
+                  onChange={e => (mode === 'pct' ? setPctVolume : setFixNb)(Number(e.target.value))}/>
+              </div>
+              <div>
+                <label style={titreChamp} htmlFor="calc-b">{mode === 'pct' ? 'Le pourcentage qu’on me prend' : 'Ce qu’on me prend par commande'}</label>
+                <p style={valeur}>
+                  {(mode === 'pct' ? pctTaux : fixMontant).toLocaleString('fr-BE', { maximumFractionDigits: 2 })}
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}> {mode === 'pct' ? '%' : '€'}</span>
+                </p>
+                <input id="calc-b" type="range" style={{ width: '100%', accentColor: T.light, height: 26, cursor: 'pointer' }}
+                  min={mode === 'pct' ? 1 : 0.5} max={mode === 'pct' ? 35 : 8} step={mode === 'pct' ? 0.5 : 0.25}
+                  value={mode === 'pct' ? pctTaux : fixMontant}
+                  onChange={e => (mode === 'pct' ? setPctTaux : setFixMontant)(Number(e.target.value))}/>
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 26 }}>
+              <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
+                Coche ce que tu paies aujourd&rsquo;hui, et mets tes vrais montants mensuels.
+              </p>
+              {POSTES_CALCUL.map(p => {
+                const on = abos[p.cle].actif
+                const f = formuleMinimale(p.capacite)
+                return (
+                  <div key={p.cle} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 12, marginBottom: 8,
+                    background: on ? 'rgba(196,160,244,0.14)' : 'rgba(255,255,255,0.05)',
+                    border: `1px solid ${on ? 'rgba(196,160,244,0.45)' : 'rgba(255,255,255,0.12)'}`,
+                  }}>
+                    <input type="checkbox" id={`poste-${p.cle}`} checked={on}
+                      onChange={e => setAbos(a => ({ ...a, [p.cle]: { ...a[p.cle], actif: e.target.checked } }))}
+                      style={{ width: 19, height: 19, accentColor: T.light, cursor: 'pointer', flexShrink: 0 }}/>
+                    <label htmlFor={`poste-${p.cle}`} style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.92)', cursor: 'pointer' }}>
+                      {p.nom}
+                      <span style={{
+                        display: 'inline-block', marginLeft: 8, padding: '2px 8px', borderRadius: 100,
+                        fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.6px', verticalAlign: 'middle',
+                        background: f === 'vendre' ? 'rgba(110,231,183,0.22)' : f === 'communiquer' ? 'rgba(196,160,244,0.3)' : 'rgba(255,255,255,0.16)',
+                        color: f === 'vendre' ? '#6EE7B7' : '#fff',
+                      }}>{f}</span>
+                    </label>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <input type="number" min="0" max="500" step="1" value={abos[p.cle].prix} disabled={!on}
+                        aria-label={`Prix mensuel : ${p.nom}`}
+                        onChange={e => setAbos(a => ({ ...a, [p.cle]: { ...a[p.cle], prix: Math.max(0, Number(e.target.value) || 0) } }))}
+                        style={{ width: 74, padding: '7px 9px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.25)', color: '#fff', fontFamily: '"DM Sans", sans-serif', fontSize: 14, fontWeight: 800, textAlign: 'right', opacity: on ? 1 : 0.35 }}/>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>€ / mois</span>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+            <div style={carte}>
+              <h3 style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 900, color: 'rgba(255,255,255,0.92)', lineHeight: 1.4 }}>{titreEux}</h3>
+              <p style={{ margin: 0, fontSize: 'clamp(1.9rem, 5.4vw, 2.7rem)', fontWeight: 900, letterSpacing: '-1.6px', lineHeight: 1, color: '#F87171', fontVariantNumeric: 'tabular-nums' }}>{euro(paye, paye > 0 && paye < 100)}</p>
+              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>par mois</p>
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.16)', margin: '16px 0' }}/>
+              <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#F87171', fontVariantNumeric: 'tabular-nums' }}>{euro(paye * 12, false)}</p>
+              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>par an</p>
+            </div>
+            <div style={{ ...carte, background: 'rgba(196,160,244,0.14)', border: '1.5px solid rgba(196,160,244,0.5)' }}>
+              <h3 style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 900, color: 'rgba(255,255,255,0.92)', lineHeight: 1.4 }}>Avec Yoppaa, formule {nomFormule}</h3>
+              <p style={{ margin: 0, fontSize: 'clamp(1.9rem, 5.4vw, 2.7rem)', fontWeight: 900, letterSpacing: '-1.6px', lineHeight: 1, color: '#6EE7B7', fontVariantNumeric: 'tabular-nums' }}>
+                {prixFormule === 0 ? 'Gratuit' : euro(prixFormule, true)}
+              </p>
+              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>{prixFormule === 0 ? 'pour toujours' : 'par mois, HTVA'}</p>
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.16)', margin: '16px 0' }}/>
+              <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#6EE7B7', fontVariantNumeric: 'tabular-nums' }}>{prixFormule === 0 ? '0 €' : euro(prixFormule * 12, true)}</p>
+              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>par an</p>
+            </div>
+          </div>
+
+          <p style={{ margin: '18px auto 0', maxWidth: 620, fontSize: 13.5, color: 'rgba(255,255,255,0.6)', textAlign: 'center', fontWeight: 600, lineHeight: 1.65 }}>
+            Et chaque matin, ton commerce part dans le <strong style={{ color: '#fff' }}>Good Morning Yoppers</strong> de
+            ta commune. <strong style={{ color: '#fff' }}>Même en Exister, qui est gratuite pour toujours.</strong> Avec
+            Communiquer, tu y ajoutes tes deals et des actus qui remontent dans la liste.
+          </p>
+
+          <div style={{ marginTop: 30, paddingTop: 26, borderTop: '1px solid rgba(255,255,255,0.16)', textAlign: 'center' }}>
+            <ResultatCalcul mode={mode} ecart={ecart} nb={nb} formule={formule} nomFormule={nomFormule}
+              prixFormule={prixFormule} taux={mode === 'pct' ? pctTaux : fixMontant}/>
+            <Link href="/signup" style={{ display: 'inline-block', marginTop: 24, padding: '15px 32px', borderRadius: 100, background: '#fff', color: T.deep, fontWeight: 900, fontSize: 14.5, letterSpacing: 0.4, textTransform: 'uppercase', textDecoration: 'none', boxShadow: '0 8px 22px rgba(0,0,0,0.28)' }}>
+              J&rsquo;inscris mon commerce
+            </Link>
+            {/* ⚠️ « LA COMMISSION YOPPAA », JAMAIS « AUCUNE COMMISSION » TOUT
+                SEUL : Stripe prélève ses frais, et une promesse sans sujet se
+                retourne au premier versement. */}
+            <p style={{ margin: '14px auto 0', maxWidth: 640, fontSize: 12.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
+              {mode === 'abo'
+                ? <>Yoppaa ne remplace pas tout : si ton logiciel tient aussi <strong style={{ color: 'rgba(255,255,255,0.92)' }}>ta caisse, ton stock ou les plannings de ton équipe</strong>, garde-le. Ce calcul ne compte que les postes que Yoppaa couvre vraiment.</>
+                : <>Les frais de ta banque et de ton terminal existent des deux côtés : ils ne sont comptés ni ici, ni là. Ce qui change, c&rsquo;est <strong style={{ color: 'rgba(255,255,255,0.92)' }}>la commission Yoppaa sur tes ventes : il n&rsquo;y en a pas</strong>.</>}
+            </p>
+          </div>
+
+          <div style={{ marginTop: 26, padding: 22, borderRadius: 18, textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(196,160,244,0.3)' }}>
+            <p style={{ margin: 0, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 'clamp(1.05rem, 3vw, 1.4rem)', lineHeight: 1.4, letterSpacing: '-0.5px', color: '#fff' }}>
+              Les places de marché prennent leur commission.<br/>
+              <span style={{ color: T.light }}>Les places de village, non.</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// Le verdict, séparé parce qu'il a trois formes, et que la troisième nous
+// donne tort.
+function ResultatCalcul({ mode, ecart, nb, formule, nomFormule, prixFormule, taux }) {
+  const petit = { margin: 0, fontSize: 12.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px' }
+  const phrase = { margin: '18px auto 0', maxWidth: 580, fontSize: 15, color: 'rgba(255,255,255,0.92)', fontWeight: 600 }
+  const fort = { color: '#fff' }
+
+  if (mode === 'abo' && nb === 0) {
+    return (
+      <>
+        <p style={petit}>À toi de jouer</p>
+        <p style={{ margin: 0, fontSize: 'clamp(1.15rem, 3.4vw, 1.65rem)', fontWeight: 900, letterSpacing: '-0.7px', color: T.light }}>
+          Coche ce que tu paies aujourd&rsquo;hui.
+        </p>
+        <p style={phrase}>Et si tu ne paies rien pour l&rsquo;instant, commence par <strong style={fort}>Exister</strong> : c&rsquo;est gratuit, pour toujours.</p>
+      </>
+    )
+  }
+
+  // 🔴 L'ÉCART PEUT ÊTRE NÉGATIF, ET ON NE LE CACHE PAS.
+  if (ecart <= 0) {
+    return (
+      <>
+        <p style={petit}>Et on te le dit quand même</p>
+        <p style={{ margin: 0, fontSize: 'clamp(1.15rem, 3.4vw, 1.65rem)', fontWeight: 900, letterSpacing: '-0.7px', color: T.light }}>
+          {mode === 'abo' ? `À ce niveau, tu paies moins que la formule ${nomFormule}.` : 'À ce volume, tu paies moins avec la commission.'}
+        </p>
+        <p style={phrase}>
+          Commence par <strong style={fort}>Exister</strong>, qui est gratuite à vie : ta fiche, tes horaires,
+          tes infos. Tu monteras de formule le jour où ça vaudra le coup, pas avant.
+        </p>
+      </>
+    )
+  }
+
+  const seuil = taux > 0 ? (mode === 'pct' ? prixFormule * 100 / taux : prixFormule / taux) : 0
+  return (
+    <>
+      <p style={petit}>Ce que tu gardes sur un an</p>
+      <p style={{ margin: 0, fontSize: 'clamp(2.6rem, 9vw, 4.4rem)', fontWeight: 900, letterSpacing: '-2.6px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
+        {euro(ecart, false)}
+      </p>
+      <p style={phrase}>
+        {mode === 'abo' ? (
+          formule === 'exister'
+            ? <>Et tout ce que tu as coché tient dans <strong style={fort}>Exister</strong>, qui est gratuite pour toujours. Tu ne nous dois rien.</>
+            : formule === 'communiquer'
+              ? <>Et tout ce que tu as coché tient dans <strong style={fort}>Communiquer</strong>. Vendre ne te servira que le jour où tu voudras encaisser en ligne.</>
+              : <>Et surtout : <strong style={fort}>{nb} abonnement{nb > 1 ? 's' : ''}, {nb} facture{nb > 1 ? 's' : ''}</strong>, et rien qui se parle. Chez nous, ta fiche, tes rendez-vous et ta fidélité se connaissent.</>
+        ) : mode === 'pct' ? (
+          <>Le point de bascule est à <strong style={fort}>{euro(seuil, false)} de ventes par mois</strong>. Au-dessus, tout ce que tu vends en plus ne te coûte rien de plus.</>
+        ) : (
+          <>Le point de bascule est à <strong style={fort}>{Math.ceil(seuil)} commandes par mois</strong>. Au-dessus, chaque commande supplémentaire ne te coûte rien de plus.</>
+        )}
+      </p>
+    </>
   )
 }
 
@@ -2276,6 +2569,9 @@ export default function LandingReveal({ referent = null }) {
           </div>
         </div>
       </section>
+
+      {/* ═══ 4 bis. CE QUE LA COMMISSION COÛTE ═══ */}
+      <CalculateurCommission/>
 
       {/* ═══ 5. LES FORMULES (clair, détaillé, transparence) ═══ */}
       <section style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 8px' }}>

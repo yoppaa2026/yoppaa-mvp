@@ -83,6 +83,9 @@ import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, co
   trierAbonnementsPourSeance, libelleChoixAbonnement } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
+// ⚠️ LA MÊME RÈGLE QUE LE SERVEUR, et le serveur la rejoue : cet écran décide
+// seulement d'afficher, jamais de demander.
+import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
 
@@ -2099,6 +2102,55 @@ export default function CommanderRdvSlug() {
         } catch (e) {
           console.error('[rdv] erreur Stripe Checkout tunnel unique', e)
           setSubmitError(`Erreur paiement : ${e.message}. Réessaie ou contacte ${commercant.nom}.`)
+          setSubmitting(false)
+          return
+        }
+      }
+
+      // ─── L'EMPREINTE BANCAIRE SUR UNE GRANDE TABLE (lot 4, 14/09) ─────────
+      //
+      // 🔴 RIEN N'EST DÉBITÉ ICI. Le client donne sa carte, elle est enregistrée
+      // sur le compte du restaurateur, et le no-show se facture plus tard. La
+      // table naît ensuite par le webhook, exactement comme sur le chemin de
+      // l'acompte : elle n'existe donc PAS tant que la carte n'est pas donnée.
+      //
+      // ⚠️ SI LA TABLE PART ENTRE LE CLIC ET LE RETOUR, personne n'est lésé :
+      // aucun argent n'a bougé, le SetupIntent n'a servi à rien. C'est tout
+      // l'avantage de l'empreinte sur l'acompte, qu'il aurait fallu encaisser
+      // puis rembourser.
+      //
+      // ⚠️ AVANT L'ACOMPTE DANS L'ORDRE DES BRANCHES, et ça ne se croise pas en
+      // pratique : une table n'a pas de prix, donc pas d'acompte. L'ordre est
+      // écrit pour que la règle reste vraie si un tarif apparaissait un jour.
+      if (empreinteRequise(commercant, prestationChoisie, couverts)) {
+        try {
+          const res = await fetchAvecPreuveSiConnecte('/api/stripe/checkout/create-rdv-empreinte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              commercant_id: commercant.id,
+              prestation_id: prestationChoisie.id,
+              praticien_id: praticienChoisi?.id || null,
+              couverts,
+              date_rdv: dateStr,
+              heure_debut: heureChoisie,
+              heure_fin: heureFin,
+              duree_minutes: dureeRetenue,
+              client_email: email,
+              client_prenom: prenom,
+              client_nom: nom,
+              client_telephone: telephone,
+              notes_client: client.notes.trim() || null,
+              rgpd_marketing: rgpdMarketing,
+            }),
+          })
+          const data = await res.json()
+          if (!data.ok || !data.url) throw new Error(data.error || 'empreinte impossible')
+          window.location.href = data.url
+          return
+        } catch (e) {
+          console.error('[rdv] erreur empreinte bancaire', e)
+          setSubmitError(`Impossible d’enregistrer ta carte : ${e.message}. Réessaie ou appelle ${commercant.nom}.`)
           setSubmitting(false)
           return
         }

@@ -80,6 +80,13 @@ const PUBLIQUES_ASSUMEES = {
     'achat public ; le prix vient de `abonnement_formules.prix`, et l\'éligibilité à la vente est revérifiée',
   'app/api/stripe/checkout/create-rdv-acompte/route.js':
     'acompte public ; le montant vient de la prestation en base',
+  // ⚠️ MÊME RAISON QUE SA JUMELLE, ET UN ARGUMENT DE PLUS : cette route
+  // n'encaisse RIEN. Elle ouvre un Checkout `mode: setup` qui enregistre une
+  // carte, et le montant garanti est recalculé serveur à partir du réglage du
+  // commerçant et du nombre de personnes revérifié contre la prestation. Ce qui
+  // arrive du corps de la requête ne décide d'aucun euro.
+  'app/api/stripe/checkout/create-rdv-empreinte/route.js':
+    'empreinte publique ; rien n\'est débité, et le montant garanti est recalculé en base, jamais pris dans la requête',
   'app/api/rdv/from-session/route.js':
     'écran de confirmation après Stripe, appelé par le client qui vient de payer ; clé = l\'identifiant de session Stripe',
   // ⚠️ MÊME RAISONNEMENT QUE SA JUMELLE CI-DESSUS, et volontairement : l'achat

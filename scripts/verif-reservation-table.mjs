@@ -412,8 +412,12 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // obliques et qu'un dépouilleur trop zélé mangerait le code. Un de ces trois
   // envois traîne un « // null = Sans préférence » qui a fait rougir cette
   // garde alors que le code était juste.
-  verifier('🔴 les trois envois portent le nombre de personnes',
-    (TUNNEL.match(/praticien_id: praticienChoisi\?\.id \|\| null,[^\n]*\s*couverts,/g) || []).length === 3)
+  // 🔴 QUATRE DEPUIS LE 14/09 : l'empreinte bancaire est un quatrième chemin de
+  // départ, et c'est celui où le nombre de personnes décide du MONTANT
+  // GARANTI. L'oublier là ne ferait pas seulement une table d'une personne :
+  // il demanderait au client une garantie calculée sur un seul couvert.
+  verifier('🔴 les quatre envois portent le nombre de personnes',
+    (TUNNEL.match(/praticien_id: praticienChoisi\?\.id \|\| null,[^\n]*\s*couverts,/g) || []).length === 4)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -110,7 +110,10 @@ export async function POST(request) {
       case 'checkout.session.completed':
         // Backup : stocke session_id direct depuis l'event (sans aller chercher
         // la session via Stripe API qui peut echouer en mode test).
-        await handleCheckoutSessionCompleted(event.data.object, supabase)
+        // ⚠️ `event.account` EST NÉCESSAIRE DEPUIS L'EMPREINTE : la carte
+        // enregistrée vit sur le compte du restaurateur, et il faut ce compte
+        // pour aller relire le SetupIntent chez Stripe.
+        await handleCheckoutSessionCompleted(event.data.object, supabase, event.account)
         break
 
       case 'payment_intent.payment_failed':
@@ -1096,9 +1099,122 @@ async function handleChargeRefunded(charge, supabase) {
 // Si #2 arrive en premier, #1 fait juste l'UPDATE post-creation.
 // Si #1 arrive en premier, le RDV n'existe pas encore → on retry plus tard
 // (mais ce cas est rare car les 2 events sont quasi-simultanes).
-async function handleCheckoutSessionCompleted(session, supabase) {
+// ─── L'EMPREINTE POSÉE : LA CARTE EST LÀ, LA TABLE PEUT NAÎTRE (lot 4, 14/09) ─
+//
+// Rien n'a été débité. Le client a donné sa carte, Stripe l'a rattachée au
+// compte du restaurateur avec l'authentification forte, et c'est ce mandat qui
+// permettra le débit hors session le jour d'un no-show.
+//
+// ⚠️ ON RELIT LE SetupIntent CHEZ STRIPE plutôt que de croire la session : la
+// carte (`payment_method`) n'est renseignée que là, et c'est elle qui décide si
+// la garantie existe vraiment.
+//
+// 🔴 ET LE MONTANT VIENT DES MÉTADONNÉES DU SetupIntent, PAS D'UN CALCUL REFAIT
+// ICI. C'est la trace de ce que le client a accepté au moment de donner sa
+// carte : le restaurateur peut changer son réglage entre-temps, et un montant
+// recalculé aujourd'hui ne serait plus celui qu'on lui a montré.
+async function handleEmpreinteSetup(session, supabase, compteConnecte) {
+  const setupIntentId = typeof session.setup_intent === 'string' ? session.setup_intent : session.setup_intent?.id
+  if (!setupIntentId) {
+    console.warn('[webhook/empreinte] session sans SetupIntent', { sessionId: session.id })
+    return
+  }
+
+  // ⚠️ SUR LE COMPTE DU RESTAURATEUR : en direct charge, un SetupIntent lu
+  // depuis la plateforme n'existe pas.
+  const si = await stripe.setupIntents.retrieve(setupIntentId,
+    compteConnecte ? { stripeAccount: compteConnecte } : undefined)
+  const meta = si?.metadata || {}
+  const rdvId = meta.yoppaa_rdv_id || null
+  const paymentMethodId = typeof si?.payment_method === 'string' ? si.payment_method : si?.payment_method?.id
+  const customerId = typeof si?.customer === 'string' ? si.customer : si?.customer?.id
+
+  // 🔴 SANS CARTE NI CLIENT, ON NE CRÉE RIEN. Une réservation qui se dirait
+  // garantie sans l'être, c'est un restaurateur qui l'apprend le soir du
+  // no-show, et la contrainte `rdv_empreinte_complete_check` refuserait de
+  // toute façon la ligne.
+  if (!paymentMethodId || !customerId) {
+    console.error('[webhook/empreinte] SetupIntent sans carte ou sans client', { setupIntentId, paymentMethodId, customerId })
+    throw new Error(`empreinte incomplète (${setupIntentId})`)
+  }
+
+  const montant = Number(meta.empreinte_montant)
+  if (!(montant > 0)) {
+    console.error('[webhook/empreinte] montant garanti absent ou nul', { setupIntentId, brut: meta.empreinte_montant })
+    throw new Error(`montant d empreinte illisible (${setupIntentId})`)
+  }
+
+  // Le rejeu de Stripe est absorbé : la table existe déjà, on ne la crée pas
+  // deux fois.
+  if (rdvId) {
+    const { data: deja } = await supabase
+      .from('rdv_reservations').select('id').eq('id', rdvId).maybeSingle()
+    if (deja) {
+      console.info('[webhook/empreinte] table déjà créée, rejeu absorbé', { rdvId })
+      return
+    }
+  }
+
+  const champs = {
+    praticien_id: meta.praticien_id || null,
+    client_email: normaliserEmail(meta.client_email),
+    client_prenom: meta.client_prenom,
+    client_nom: meta.client_nom,
+    client_telephone: meta.client_telephone,
+    heure_fin: meta.heure_fin,
+    duree_minutes: Number(meta.duree_minutes) || null,
+    notes_client: meta.notes_client || null,
+    rgpd_marketing: meta.rgpd_marketing === '1',
+    // ⚠️ REVÉRIFIÉ PAR LE MODULE contre les bornes de la prestation, la salle et
+    // la cadence, exactement comme sur le chemin de l'acompte.
+    ...(Number(meta.couverts) ? { couverts: Number(meta.couverts) } : {}),
+    empreinte_statut: 'posee',
+    empreinte_montant: montant,
+    empreinte_setup_intent_id: setupIntentId,
+    empreinte_payment_method_id: paymentMethodId,
+    empreinte_customer_id: customerId,
+    stripe_checkout_session_id: session.id,
+  }
+
+  const resa = await creerReservationRdv(supabase, {
+    rdvId,
+    commercantId: meta.yoppaa_commercant_id,
+    prestationId: meta.prestation_id,
+    dateRdv: meta.date_rdv,
+    heureDebut: meta.heure_debut,
+    champs,
+  })
+  // ⚠️ ON RELANCE, comme sur le chemin de l'acompte : Stripe rejouera, et le
+  // garde ci-dessus absorbe le rejeu. Une table perdue en silence, c'est un
+  // client qui se présente devant une salle qui ne l'attend pas.
+  if (!resa.ok) throw new Error(`création table impossible (${resa.code}) : ${resa.error?.message || resa.code}`)
+
+  console.info('[webhook/empreinte] table créée avec sa garantie', { rdvId, setupIntentId, montant })
+
+  // ⚠️ LES EMAILS APRÈS L'INSERTION, ET SANS BLOQUER : un envoi qui échoue ne
+  // doit pas faire rejouer Stripe sur une table déjà créée, sinon le rejeu
+  // tourne en rond sur un problème que le rejeu ne résoudra pas.
+  try {
+    await envoyerEmailsRdvConfirme(supabase, resa.rdv?.id || rdvId)
+  } catch (e) {
+    console.warn('[webhook/empreinte] emails de confirmation non envoyés (non bloquant)', e?.message)
+  }
+}
+
+async function handleCheckoutSessionCompleted(session, supabase, compteConnecte) {
   const sessionId = session.id
   const paymentIntentId = session.payment_intent
+
+  // 🔴 UNE EMPREINTE N'A PAS DE PAIEMENT, ET CE HANDLER SORTAIT DONC EN SILENCE.
+  // En `mode: 'setup'`, `session.payment_intent` est vide et c'est
+  // `session.setup_intent` qui porte tout. Le garde ci-dessous, écrit pour les
+  // paiements, aurait ignoré chaque table garantie : le client donnait sa
+  // carte, et sa réservation n'existait jamais. Traité AVANT lui.
+  if (session.mode === 'setup' && session.setup_intent) {
+    await handleEmpreinteSetup(session, supabase, compteConnecte)
+    return
+  }
+
   if (!sessionId || !paymentIntentId) {
     console.warn('[webhook/session.completed] session ou PI manquant', { sessionId, paymentIntentId })
     return

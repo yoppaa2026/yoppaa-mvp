@@ -207,6 +207,81 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(ECRAN))
 }
 
+// ─── 8) LE PARCOURS : LA CARTE, PUIS LA TABLE ───────────────────────────────
+//
+// Trois maillons, et chacun peut trahir seul : l'écran qui part vers Stripe, la
+// route qui ouvre la session, le webhook qui crée la table au retour.
+{
+  const ROUTE = sansProse(lire('app/api/stripe/checkout/create-rdv-empreinte/route.js'))
+  const WEBHOOK = sansProse(lire('app/api/stripe/webhook/route.js'))
+  const TUNNEL = sansProse(lire('app/commander/rdv/[slug]/page.js'))
+
+  // ⚠️ `mode: 'setup'` : c'est ce mot qui fait que RIEN n'est débité.
+  verifie('🔴 la route ouvre une session qui n’encaisse rien', /mode: 'setup'/.test(ROUTE))
+  // 🔴 `off_session` DEMANDE L'AUTHENTIFICATION FORTE MAINTENANT. Sans lui, le
+  // débit du no-show serait refusé par la banque avec `authentication_required`,
+  // au moment précis où plus personne n'est devant l'écran.
+  verifie('🔴 elle demande le mandat qui permettra le débit plus tard',
+    /setup_intent_data: \{\s*usage: 'off_session'/.test(ROUTE))
+  // ⚠️ CARTE UNIQUEMENT : une empreinte suppose une autorisation gardée puis
+  // capturée. Bancontact passerait par une domiciliation contestable.
+  verifie('🔴 carte uniquement, jamais Bancontact', /payment_method_types: \['card'\]/.test(ROUTE))
+  // ⚠️ SUR LE COMPTE DU RESTAURATEUR : en direct charge, une carte enregistrée
+  // sur la plateforme ne serait pas débitable par lui.
+  verifie('🔴 le client Stripe naît sur le compte du restaurateur',
+    /stripe\.customers\.create\([\s\S]{0,400}?\{ stripeAccount: commercant\.stripe_account_id \}\)/.test(ROUTE))
+  verifie('🔴 et la session aussi',
+    /stripeAccount: commercant\.stripe_account_id,\s*\}\)/.test(ROUTE))
+  // 🔴 LE SERVEUR REJOUE LA RÈGLE, il ne croit pas l'écran.
+  verifie('🔴 la route revérifie que l’empreinte est due',
+    /empreinteRequise\(commercant, prestation, couvertsRetenus\)/.test(ROUTE))
+  verifie('🔴 et revérifie le nombre de personnes contre la prestation',
+    /couvertsValides\(prestation, couverts\)/.test(ROUTE))
+  // ⚠️ LE PIÈGE DU ZÉRO : une garantie de zéro euro n'est pas une garantie.
+  verifie('🔴 une garantie nulle ne demande pas de carte', /if \(!\(montant > 0\)\)/.test(ROUTE))
+  verifie('⚠️ les gardes de forfait sont les mêmes que sur l’acompte',
+    /for \(const feature of \['rdv', 'paiement_ligne'\]\)/.test(ROUTE))
+  verifie('⚠️ un créneau déjà commencé est refusé avant d’ouvrir la session',
+    /creneauDejaCommence\(date_rdv/.test(ROUTE))
+  // ⚠️ LA PRESTATION APPARTIENT-ELLE À CE COMMERCE ? Deux identifiants venus du
+  // même écran ne prouvent pas qu'ils vont ensemble.
+  verifie('🔴 la prestation est vérifiée comme appartenant au commerce',
+    /prestation\.commercant_id !== commercant\.id/.test(ROUTE))
+
+  // 🔴 LE HANDLER SORTAIT EN SILENCE SUR UNE SESSION SANS PAIEMENT. En
+  // `mode: 'setup'`, `session.payment_intent` est vide : le garde écrit pour
+  // les paiements aurait ignoré chaque table garantie.
+  verifie('🔴 le webhook traite l’empreinte AVANT le garde qui exige un paiement',
+    WEBHOOK.indexOf("session.mode === 'setup'") !== -1
+    && WEBHOOK.indexOf("session.mode === 'setup'") < WEBHOOK.indexOf('if (!sessionId || !paymentIntentId)'))
+  // ⚠️ ON RELIT LE SetupIntent CHEZ STRIPE : la carte n'est renseignée que là.
+  verifie('🔴 il relit le SetupIntent sur le compte du restaurateur',
+    /stripe\.setupIntents\.retrieve\(setupIntentId,\s*compteConnecte \? \{ stripeAccount: compteConnecte \}/.test(WEBHOOK))
+  // 🔴 LE MONTANT VIENT DES MÉTADONNÉES STRIPE, hors de portée du commerçant,
+  // et pas d'un calcul refait aujourd'hui avec un réglage qui a pu changer.
+  verifie('🔴 le montant garanti vient des métadonnées du SetupIntent',
+    /const montant = Number\(meta\.empreinte_montant\)/.test(WEBHOOK))
+  verifie('🔴 sans carte ni client Stripe, aucune table n’est créée',
+    /if \(!paymentMethodId \|\| !customerId\)/.test(WEBHOOK))
+  verifie('🔴 un montant nul fait échouer la création plutôt que de garantir zéro',
+    /if \(!\(montant > 0\)\) \{[\s\S]{0,300}?throw new Error/.test(WEBHOOK))
+  verifie('⚠️ le rejeu de Stripe est absorbé',
+    /table déjà créée, rejeu absorbé/.test(WEBHOOK))
+  verifie('🔴 la table naît avec sa garantie posée',
+    /empreinte_statut: 'posee'/.test(WEBHOOK) && /empreinte_setup_intent_id: setupIntentId/.test(WEBHOOK))
+  verifie('⚠️ et l’échec de création relance Stripe plutôt que de perdre la table',
+    /création table impossible/.test(WEBHOOK))
+
+  // ⚠️ L'ÉCRAN PART VERS STRIPE AVANT L'ACOMPTE : une table n'a pas de prix,
+  // donc pas d'acompte, mais l'ordre est écrit pour que ça reste vrai.
+  verifie('🔴 le tunnel envoie vers l’empreinte quand elle est due',
+    /if \(empreinteRequise\(commercant, prestationChoisie, couverts\)\)/.test(TUNNEL))
+  verifie('⚠️ et il le fait avant la branche de l’acompte',
+    TUNNEL.indexOf('empreinteRequise(commercant, prestationChoisie, couverts)') < TUNNEL.indexOf('if (acompteEnLigneRequis)'))
+  verifie('⚠️ il appelle la bonne route',
+    /create-rdv-empreinte/.test(TUNNEL))
+}
+
 // ═══ RÉSULTAT ═══════════════════════════════════════════════════════════════
 console.log(`\nEmpreinte de table : ${ok + echecs.length} vérifications`)
 if (echecs.length) {

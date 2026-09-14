@@ -61,7 +61,32 @@
 -- réglages par leur nom. Sans eux, la lecture échoue et la réservation de table
 -- s'arrête. Sûre à rejouer.
 --
--- ⏳ PAS ENCORE PASSÉE.
+-- ✅ PASSÉE PAR ALEX LE 14/09/2026 : 41 lignes conformes (trois réglages,
+-- empreinte éteinte partout, les deux nombres NOT NULL à 6 et 20.00, les dix
+-- colonnes de la réservation, `annulation_tardive` NOT NULL fausse, cinq
+-- garde-fous, vue à 59 colonnes avec les trois en dernier, aucune colonne
+-- perdue, filtre et options intacts, lecture seule pour `anon`), et les vingt
+-- essais conformes (bornes acceptées et refusées dans les deux sens, une
+-- empreinte posée sans montant, sans carte ou sans client Stripe refusée, un
+-- statut inventé refusé).
+--
+-- ⚠️ DEUX CHOSES À RETENIR DU PASSAGE, ET AUCUNE N'EST UN DÉTAIL :
+--
+-- 1. 🔴 A11 N'A RIEN MESURÉ. Il devait prouver qu'aucun statut n'avait été
+--    ajouté ; il a ramené la contrainte d'exclusion anti double-réservation,
+--    qui contient les mots « statut » et « confirme ». Ce qu'il révèle par
+--    accident vaut mieux que ce qu'il prétendait : `statut` N'A AUCUNE
+--    CONTRAINTE EN BASE, les huit valeurs ne vivent que dans le code.
+-- 2. HUIT COMMERCES PUBLIÉS (A20), CONTRE DOUZE LE 12/09 au même contrôle.
+--    ✅ EXPLIQUÉ : « c'est moi qui ai suspendu 4 fiches » (Alex, 14/09). Ce
+--    n'est donc pas une régression, et le contrôle a bien fait son travail en
+--    rendant le nombre plutôt qu'un « oui ».
+--
+-- 🔴 ET LE TROU QUE CE PASSAGE A OUVERT : `authenticated` peut ÉCRIRE sur
+-- `rdv_reservations` (A21), et le tableau de bord s'en sert vraiment
+-- (app/dashboard/page.js:2036). Un commerçant pouvait donc gonfler
+-- `empreinte_montant`, ou coller l'identifiant du SetupIntent d'un autre
+-- client, avant de déclencher le débit. Fermé par MIGRATION_EMPREINTE_VERROU.
 
 BEGIN;
 

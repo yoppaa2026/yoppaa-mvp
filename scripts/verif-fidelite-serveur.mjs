@@ -18,7 +18,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { appliquerCredit, libelleRecompense, normaliserTelephone } from '../lib/fidelite.js'
 // ⚠️ IMPORTÉS POUR ÊTRE EXÉCUTÉS, pas pour verdir une garde par leur seule
 // présence : c'est l'IMPORT qui rendait des bancs verts à tort (19/08).
-import { texteSmsRecompense } from '../lib/fidelite-sms.js'
+import { texteSmsRecompense, heureDecente } from '../lib/fidelite-sms.js'
 import { emailFideliteRecompenseDebloquee } from '../lib/resend.js'
 import { sansProse } from './lire-code.mjs'
 
@@ -234,7 +234,18 @@ const egal = (nom, obtenu, attendu) =>
   // ── Les gardes communes, qui protègent l'argent du commerçant ──────────
   verifie('🔴 aucun SMS sans crédit décompté', /rpc\('consommer_sms_credit'/.test(sms))
   verifie('🔴 et le crédit est RENDU si l\'envoi échoue', /rpc\('rendre_sms_credit'/.test(sms))
-  verifie('rien ne part la nuit', /return h >= 8 && h < 21/.test(sms))
+  // ⚠️ EN L'EXÉCUTANT, PAS EN CHERCHANT LA LIGNE. Cette garde figeait
+  // `return h >= 8 && h < 21` ; le jour où la plage est devenue réglable (le
+  // 14/09, pour le lien « confirme ta table » d'un restaurant qui sert jusqu'à
+  // 23 h), elle a rougi sur un code parfaitement juste. Une garde qui décrit
+  // une LIGNE se casse au premier refactor ; celle-ci décrit la RÈGLE.
+  verifie('rien ne part la nuit', heureDecente(new Date('2026-09-19T03:00:00+02:00')) === false)
+  verifie('ni à 7 h du matin', heureDecente(new Date('2026-09-19T07:30:00+02:00')) === false)
+  verifie('mais bien à 10 h', heureDecente(new Date('2026-09-19T10:00:00+02:00')) === true)
+  // 🔴 ET LA PLAGE PAR DÉFAUT DE LA FIDÉLITÉ N'A PAS BOUGÉ : personne n'a
+  // besoin d'apprendre à 22 h qu'il a gagné 55 centimes.
+  verifie('🔴 et plus rien après 21 h, par défaut',
+    heureDecente(new Date('2026-09-19T21:30:00+02:00')) === false)
   verifie('ni si le commerçant a coupé les SMS', /commercant\?\.fidelite_sms_actif/.test(sms))
 
   // ⚠️ PAS D'EMOJI DANS UN SMS : le 🟣 arrivait en « ? » chez l'opérateur, sur

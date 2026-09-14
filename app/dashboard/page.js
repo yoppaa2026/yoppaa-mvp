@@ -53,7 +53,7 @@ import { accesDashboard } from '@/lib/statut-commercant'
 // ⚠️ LA FENÊTRE DE FACTURATION VIENT DU MODULE, pas d'un calcul de cet écran :
 // la route la rejoue à l'identique, et deux calculs qui divergent, c'est un
 // bouton qui s'affiche sur une table que le serveur refusera de facturer.
-import { raisonDebitImpossible } from '@/lib/empreinte-table'
+import { raisonDebitImpossible, peutDemander } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
 
 const T = {
@@ -303,7 +303,14 @@ function IconPhone({ size = 12, color = 'currentColor' }) {
 // expirerait de toute façon en sept jours.
 const estTableGarantie = (rdv) => Number(rdv?.couverts) > 1 || !!rdv?.empreinte_statut
 
-function EmpreinteRdv({ rdv, onFacturer }) {
+// Le bouton d'un lien d'empreinte : discret, deux fois sur la même ligne.
+const boutonLien = {
+  flex: 1, padding: '0.34rem', borderRadius: 8, border: '1.2px solid #92400E',
+  background: 'transparent', color: '#92400E', fontWeight: 800, fontSize: '0.66rem',
+  cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+}
+
+function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null }) {
   const [enCours, setEnCours] = useState(false)
   const montant = Number(rdv?.empreinte_montant) || 0
   const raison = raisonDebitImpossible(rdv, new Date())
@@ -320,10 +327,41 @@ function EmpreinteRdv({ rdv, onFacturer }) {
   if (rdv.empreinte_statut !== 'posee') {
     // ⚠️ L'INFORMATION QUI MANQUAIT, et elle vaut surtout pour les grandes
     // tables : c'est là qu'une absence coûte cher.
+    //
+    // 🔴 ET LE GESTE QUI VA AVEC (14/09) : une réservation prise au téléphone
+    // n'a pas de carte au bout du fil. Le restaurateur envoie un lien, le
+    // client pose sa carte lui-même. Sa table ne bouge pas : elle reste
+    // réservée, garantie ou non.
+    const relance = !!rdv.empreinte_demande_at
     return (
-      <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#92400E', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '5px 9px' }}>
-        Sans empreinte bancaire{rdv.empreinte_statut === 'echouee' ? ' (le débit a été refusé)' : ''}
-      </p>
+      <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 9px' }}>
+        <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#92400E' }}>
+          Sans empreinte bancaire{rdv.empreinte_statut === 'echouee' ? ' (le débit a été refusé)' : ''}
+        </p>
+        {relance && (
+          <p style={{ margin: '3px 0 0', fontSize: '0.68rem', color: '#92400E' }}>
+            Lien déjà envoyé par {rdv.empreinte_demande_canal === 'sms' ? 'SMS' : 'email'}, pas encore confirmé.
+          </p>
+        )}
+        {onDemanderEmpreinte && peutDemander(rdv, new Date()) && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            {rdv.client_telephone && (
+              <button type="button" disabled={enCours}
+                onClick={async () => { setEnCours(true); await onDemanderEmpreinte(rdv.id, 'sms'); setEnCours(false) }}
+                style={boutonLien}>
+                {relance ? 'Relancer par SMS' : 'Demander par SMS'}
+              </button>
+            )}
+            {rdv.client_email && (
+              <button type="button" disabled={enCours}
+                onClick={async () => { setEnCours(true); await onDemanderEmpreinte(rdv.id, 'email'); setEnCours(false) }}
+                style={boutonLien}>
+                {relance ? 'Relancer par email' : 'Demander par email'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -856,7 +894,7 @@ function CarteCommande({ commande, numero, categorie = null, onChangerStatut, on
 // ─── Carte RDV (vitrine) ──────────────────────────────────────────────────────
 // Affichage d'un RDV pour le commercant : heure, prestation, duree, client (nom/tel/email),
 // notes du client, prix estime. Actions : Honore / No-show / Annuler.
-function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null, onFacturerEmpreinte = null }) {
+function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null, onFacturerEmpreinte = null, onDemanderEmpreinte = null }) {
   const statut = STATUTS_RDV[rdv.statut] || STATUTS_RDV['confirme']
   const { couleur } = statut
 
@@ -1032,7 +1070,7 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
             facturer, par exemple dans une vue de consultation. */}
         {estTableGarantie(rdv) && (
           <div style={{ marginTop: 10 }}>
-            <EmpreinteRdv rdv={rdv} onFacturer={onFacturerEmpreinte} />
+            <EmpreinteRdv rdv={rdv} onFacturer={onFacturerEmpreinte} onDemanderEmpreinte={onDemanderEmpreinte} />
           </div>
         )}
 
@@ -2059,6 +2097,29 @@ export default function Dashboard() {
   // 🔴 ET ON LIT VRAIMENT LA RÉPONSE. Un débit refusé par la banque (carte
   // expirée, fonds insuffisants) rend un 402 : le taire laisserait le
   // restaurateur croire qu'il a été payé.
+  // ─── DEMANDER SA CARTE À UN CLIENT QUI A RÉSERVÉ PAR TÉLÉPHONE ────────────
+  //
+  // ⚠️ SA TABLE NE BOUGE PAS. Elle reste réservée, garantie ou non : le lien ne
+  // fait que la faire passer de l'un à l'autre. Rien ne se libère tout seul.
+  async function demanderEmpreinte(rdvId, canal) {
+    const res = await postPro('/api/rdv/empreinte-demander', { rdv_id: rdvId, canal })
+    const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+    if (!j?.ok) {
+      // 🔴 ON LIT VRAIMENT LA RÉPONSE : plus de crédits SMS, heure trop tardive,
+      // email absent. Le taire laisserait le restaurateur croire son client
+      // relancé, et découvrir le contraire le soir du no-show.
+      alert(j?.error || 'Le lien n’a pas pu partir. Réessaie dans un instant.')
+      return false
+    }
+    setRdvs(prev => prev.map(r => r.id === rdvId
+      ? { ...r, empreinte_demande_at: new Date().toISOString(), empreinte_demande_canal: canal }
+      : r))
+    alert(canal === 'sms'
+      ? 'SMS envoyé. Ta table reste réservée tant qu’il n’a pas confirmé.'
+      : 'Email envoyé. Ta table reste réservée tant qu’il n’a pas confirmé.')
+    return true
+  }
+
   async function facturerEmpreinte(rdvId) {
     const res = await postPro('/api/rdv/empreinte-debiter', { rdv_id: rdvId })
     const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
@@ -3725,6 +3786,7 @@ export default function Dashboard() {
               onChangerStatut={(id, st, raison) => { changerStatutRdv(id, st, raison); setRdvSelectionne(null) }}
               onDemanderAction={(r, action) => { setRdvSelectionne(null); setActionRdv({ rdv: r, action }) }}
               onFacturerEmpreinte={facturerEmpreinte}
+              onDemanderEmpreinte={demanderEmpreinte}
               onDeplacer={(r) => { setRdvSelectionne(null); setRdvADeplacer(r) }}/>
             <button onClick={() => setRdvSelectionne(null)}
               style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>

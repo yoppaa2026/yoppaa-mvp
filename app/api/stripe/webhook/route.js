@@ -1144,6 +1144,46 @@ async function handleEmpreinteSetup(session, supabase, compteConnecte) {
     throw new Error(`montant d empreinte illisible (${setupIntentId})`)
   }
 
+  // 🔴 DEUX CHEMINS, ET LES CONFONDRE PERD LA CARTE. Sur la fiche publique, la
+  // table N'EXISTE PAS encore : on la crée. Sur le lien « confirme ta table »,
+  // elle a été prise au téléphone et elle existe : on lui POSE la garantie. Un
+  // seul chemin, et la seconde carte serait prise pour un rejeu Stripe, donc
+  // enregistrée chez Stripe et jamais posée sur la réservation.
+  if (meta.empreinte_sur_existante === '1') {
+    if (!rdvId) {
+      console.error('[webhook/empreinte] lien sans réservation désignée', { setupIntentId })
+      throw new Error(`lien d empreinte sans rdv (${setupIntentId})`)
+    }
+    const { data: cible } = await supabase
+      .from('rdv_reservations')
+      .select('id, empreinte_statut')
+      .eq('id', rdvId).is('deleted_at', null).maybeSingle()
+    if (!cible) {
+      console.error('[webhook/empreinte] table du lien introuvable', { rdvId, setupIntentId })
+      throw new Error(`table introuvable pour le lien (${rdvId})`)
+    }
+    // ⚠️ UNE TABLE DÉJÀ FACTURÉE NE REDEVIENT PAS « GARANTIE ». Le rejeu d'un
+    // webhook ne doit pas effacer un débit qui a eu lieu.
+    if (cible.empreinte_statut === 'debitee') {
+      console.warn('[webhook/empreinte] table déjà facturée, garantie non réécrite', { rdvId })
+      return
+    }
+    const { error } = await supabase.from('rdv_reservations').update({
+      empreinte_statut: 'posee',
+      empreinte_montant: montant,
+      empreinte_setup_intent_id: setupIntentId,
+      empreinte_payment_method_id: paymentMethodId,
+      empreinte_customer_id: customerId,
+      empreinte_debit_erreur: null,
+      // ⚠️ LE LIEN EST BRÛLÉ : il a servi. Le laisser vivant permettrait de
+      // rouvrir une saisie de carte sur une table déjà garantie.
+      empreinte_demande_jeton_hash: null,
+    }).eq('id', rdvId)
+    if (error) throw new Error(`garantie non posée sur ${rdvId} : ${error.message}`)
+    console.info('[webhook/empreinte] table prise au téléphone désormais garantie', { rdvId, montant })
+    return
+  }
+
   // Le rejeu de Stripe est absorbé : la table existe déjà, on ne la crée pas
   // deux fois.
   if (rdvId) {

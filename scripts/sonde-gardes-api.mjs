@@ -87,6 +87,13 @@ const PUBLIQUES_ASSUMEES = {
   // arrive du corps de la requête ne décide d'aucun euro.
   'app/api/stripe/checkout/create-rdv-empreinte/route.js':
     'empreinte publique ; rien n\'est débité, et le montant garanti est recalculé en base, jamais pris dans la requête',
+  // ⚠️ SA CLÉ EST LE JETON, ET C'EST UNE VRAIE CLÉ : tiré au sort par le
+  // serveur, gardé HACHÉ en base, comparé par son empreinte. Une fuite de la
+  // base ne permet pas d'en fabriquer un. Le client n'est pas connecté quand il
+  // clique sur le lien reçu par SMS : exiger un compte fermerait la porte à
+  // ceux à qui elle est destinée.
+  'app/api/stripe/checkout/empreinte-lien/route.js':
+    'le jeton du lien EST la garde ; rien n\'est débité, et le montant garanti est recalculé en base',
   'app/api/rdv/from-session/route.js':
     'écran de confirmation après Stripe, appelé par le client qui vient de payer ; clé = l\'identifiant de session Stripe',
   // ⚠️ MÊME RAISONNEMENT QUE SA JUMELLE CI-DESSUS, et volontairement : l'achat

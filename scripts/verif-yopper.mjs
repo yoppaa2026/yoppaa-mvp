@@ -89,7 +89,20 @@ verifier('aucun emoji dans le contenu des SMS',
 verifier('les SMS sont signés Yoppaa', /const SIGNATURE = 'Yoppaa'/.test(smsCode))
 verifier('les deux SMS portent la signature',
   (smsCode.match(/\$\{SIGNATURE\}/g) || []).length >= 2)
-verifier('la garde horaire est branchée sur l\'envoi', /if \(!heureDecente\(\)\) return/.test(smsCode))
+// ⚠️ L'ANCRE ACCEPTE UNE PLAGE DEPUIS LE 14/09, et la garde en profite pour
+// vérifier DAVANTAGE. `envoyerAvecCredit` sert désormais aussi au lien
+// « confirme ta table », dont le service va jusqu'à 23 h ; la fidélité, elle,
+// garde 8-21 h, parce que personne n'a besoin d'apprendre à 22 h qu'il a gagné
+// 55 centimes. Les deux sont vérifiées : la garde est branchée, ET les valeurs
+// par défaut n'ont pas bougé.
+verifier('la garde horaire est branchée sur l\'envoi', /if \(!heureDecente\(.*\)\) return/.test(smsCode))
+verifier('🔴 et la plage par défaut de la fidélité reste 8 h - 21 h',
+  /\{ min = 8, max = 21 \} = \{\}/.test(smsCode) && /return h >= min && h < max/.test(smsCode))
+// ⚠️ ET L'INTERRUPTEUR DE FIDÉLITÉ RESTE EXIGÉ PAR DÉFAUT : seul un appelant
+// qui le dit explicitement s'en passe, et le lien d'empreinte est le seul.
+verifier('🔴 l’interrupteur de fidélité reste exigé par défaut',
+  /exigerFidelite = true/.test(smsCode)
+  && /if \(exigerFidelite && !commercant\?\.fidelite_sms_actif\)/.test(smsCode))
 // Quelqu'un qui a un compte a déjà sa carte dans l'application : lui envoyer un
 // SMS payé par le commerçant ne lui apprend rien.
 // ⚠️ LA SIGNATURE A CHANGÉ LE 24/08, ET CETTE GARDE L'A VU. Elle exigeait

@@ -14,6 +14,7 @@ import {
   fenetreDebit, peutDebiter, raisonDebitImpossible,
   EMPREINTE_SEUIL_DEFAUT, EMPREINTE_MONTANT_DEFAUT,
   EMPREINTE_SEUIL_MAX, EMPREINTE_MONTANT_MAX,
+  echeanceLien, lienValide, peutDemander, raisonDemandeImpossible,
 } from '../lib/empreinte-table.js'
 
 let ok = 0
@@ -357,6 +358,144 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /raisonDebitImpossible\(rdv, new Date\(\)\)/.test(DASH))
   verifie('🔴 aucune somme annoncée comme bloquée dans l’agenda',
     !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(DASH))
+}
+
+// ─── 10) LE LIEN « CONFIRME TA TABLE » (réservations par téléphone) ─────────
+//
+// ⚠️ CE N'EST PAS LA TABLE QUI ATTEND, C'EST LE LIEN QUI EXPIRE. Le restaurateur
+// au téléphone confirme la réservation ; elle ne dépend pas du clic du client.
+{
+  const DEMANDE = sansProse(lire('app/api/rdv/empreinte-demander/route.js'))
+  const LIEN = sansProse(lire('app/api/stripe/checkout/empreinte-lien/route.js'))
+  const WEBHOOK2 = sansProse(lire('app/api/stripe/webhook/route.js'))
+  const PAGE = sansProse(lire('app/empreinte/[jeton]/page.js'))
+  const DASH2 = sansProse(lire('app/dashboard/page.js'))
+  const MAIL = sansProse(lire('lib/resend.js'))
+
+  // ── Les règles, EXÉCUTÉES ──────────────────────────────────────────────
+  const demain = { statut: 'confirme', date_rdv: '2026-09-19', heure_debut: '20:00' }
+  egal('une table déjà garantie ne se redemande pas',
+    raisonDemandeImpossible({ ...demain, empreinte_statut: 'posee' }, new Date('2026-09-18T10:00:00+02:00')), 'deja_garantie')
+  egal('une table déjà facturée non plus',
+    raisonDemandeImpossible({ ...demain, empreinte_statut: 'debitee' }, new Date('2026-09-18T10:00:00+02:00')), 'deja_debitee')
+  egal('une réservation annulée non plus',
+    raisonDemandeImpossible({ ...demain, statut: 'annule_client' }, new Date('2026-09-18T10:00:00+02:00')), 'pas_confirmee')
+  // 🔴 APRÈS LE DÉBUT DU SERVICE, RÉCLAMER UNE CARTE NE PROTÈGE PLUS RIEN : le
+  // client est là, ou il ne viendra pas.
+  egal('une fois le service commencé, on ne demande plus rien',
+    raisonDemandeImpossible(demain, new Date('2026-09-19T20:30:00+02:00')), 'service_commence')
+  verifie('mais la veille, on peut demander',
+    peutDemander(demain, new Date('2026-09-18T10:00:00+02:00')) === true)
+
+  // 🔴 L'ÉCHÉANCE S'ARRÊTE AU PLUS TÔT DE SEPT JOURS ET DE LA LIMITE
+  // D'ANNULATION. Au-delà, le client donnerait sa carte alors qu'il ne peut
+  // déjà plus annuler sans être débité.
+  {
+    const resto = { categorie: 'alimentaire' }   // 3 h avant le service
+    const tot = echeanceLien(demain, resto, new Date('2026-09-18T10:00:00+02:00'))
+    egal('🔴 le lien meurt à la limite d’annulation, pas sept jours plus tard',
+      tot.toISOString(), '2026-09-19T15:00:00.000Z')
+    const loin = { ...demain, date_rdv: '2026-12-25' }
+    const sept = echeanceLien(loin, resto, new Date('2026-09-18T10:00:00+02:00'))
+    egal('et sur une table lointaine, il vaut sept jours',
+      sept.toISOString(), '2026-09-25T08:00:00.000Z')
+  }
+  verifie('un lien sans échéance est mort, jamais éternel',
+    lienValide({}, new Date()) === false)
+  verifie('un lien à échéance illisible est mort aussi',
+    lienValide({ empreinte_demande_expire_at: 'bientôt' }, new Date()) === false)
+  verifie('un lien encore valable est vivant',
+    lienValide({ empreinte_demande_expire_at: '2026-09-19T15:00:00Z' }, new Date('2026-09-18T10:00:00Z')) === true)
+
+  // ── La route qui envoie ────────────────────────────────────────────────
+  verifie('🔴 la demande prouve qui appelle, sur la ligne visée',
+    /gardeSurLigne\(request, supabase, 'rdv_reservations', rdv_id\)/.test(DEMANDE))
+  // 🔴 LE JETON EN CLAIR NE VA QU'AU CLIENT : une fuite de la base ne doit pas
+  // rendre les liens utilisables.
+  verifie('🔴 le jeton est tiré au sort et gardé HACHÉ',
+    /randomBytes\(24\)/.test(DEMANDE) && /createHash\('sha256'\)\.update\(jeton\)/.test(DEMANDE))
+  verifie('🔴 la base ne reçoit jamais le jeton en clair',
+    !/empreinte_demande_jeton_hash: jeton/.test(DEMANDE))
+  verifie('🔴 la règle de l’empreinte est rejouée avant d’envoyer',
+    /empreinteRequise\(commercant, rdv\.prestation, rdv\.couverts\)/.test(DEMANDE))
+  // ⚠️ L'APPEL, PAS L'IMPORT. `envoyerAvecCredit` apparaît d'abord en haut du
+  // fichier, dans la liste des imports : comparer les positions du seul nom
+  // rendait cette garde FAUSSEMENT ROUGE. Le piège de l'import, déjà nommé.
+  verifie('⚠️ le lien est posé AVANT d’être envoyé',
+    DEMANDE.indexOf('empreinte_demande_jeton_hash: hash') < DEMANDE.indexOf('await envoyerAvecCredit('))
+  // 🔴 UN SMS N'A NI ACCENT NI EMOJI : un caractère hors GSM-7 double le coût,
+  // et c'est le commerçant qui paie.
+  verifie('🔴 le SMS du lien n’a ni accent ni emoji',
+    !/const contenu = `Yoppaa[^`]*[àâäéèêëîïôöùûüç\u{1F300}-\u{1FAFF}]/u.test(DEMANDE))
+  verifie('🔴 et il part jusqu’à 23 h, sans exiger la fidélité',
+    /exigerFidelite: false, plageHoraire: \{ min: 8, max: 23 \}/.test(DEMANDE))
+  // ⚠️ UN ÉCHEC D'ENVOI N'EFFACE PAS LE LIEN : le restaurateur peut le renvoyer
+  // par l'autre canal.
+  verifie('⚠️ un échec d’envoi laisse le lien valable',
+    /LE LIEN RESTE VALABLE|le restaurateur peut le/.test(lire('app/api/rdv/empreinte-demander/route.js')))
+
+  // ── La route que le client ouvre ───────────────────────────────────────
+  verifie('🔴 elle retrouve la table par l’EMPREINTE du jeton',
+    /createHash\('sha256'\)\.update\(String\(jeton\)\)/.test(LIEN)
+    && /\.eq\('empreinte_demande_jeton_hash', hash\)/.test(LIEN))
+  verifie('🔴 un lien expiré est refusé', /lienValide\(rdv, new Date\(\)\)/.test(LIEN))
+  verifie('🔴 elle rejoue la règle : un réglage a pu changer depuis l’envoi',
+    /empreinteRequise\(commercant, rdv\.prestation, rdv\.couverts\)/.test(LIEN))
+  verifie('⚠️ elle n’encaisse rien non plus', /mode: 'setup'/.test(LIEN) && /usage: 'off_session'/.test(LIEN))
+  // 🔴 LE DRAPEAU QUI EMPÊCHE LE WEBHOOK DE CRÉER UNE TABLE QUI EXISTE, ET IL
+  // DOIT ÊTRE DANS `setup_intent_data`. Le webhook lit les métadonnées du
+  // SetupIntent (`si.metadata`), jamais celles de la session : un drapeau posé
+  // seulement sur la session laisserait créer une table EN DOUBLE, avec la
+  // carte du client rattachée à la mauvaise.
+  // ⚠️ La garde cherchait le mot n'importe où dans le fichier ; il y figure
+  // DEUX fois, et elle restait verte quand on retirait celui qui compte. Le
+  // jumeau, deuxième fois aujourd'hui. Trouvé par mutation.
+  {
+    const iSetup = LIEN.indexOf('setup_intent_data:')
+    const iSession = LIEN.indexOf('metadata: buildPaymentMetadata(', LIEN.indexOf('}),', iSetup))
+    const zoneSetup = iSetup === -1 ? '' : LIEN.slice(iSetup, iSession === -1 ? undefined : iSession)
+    verifie('🔴 elle dit au webhook que la table existe déjà, DANS le SetupIntent',
+      /empreinte_sur_existante: '1'/.test(zoneSetup), `zone de ${zoneSetup.length} caractères`)
+  }
+  verifie('🔴 le webhook pose alors la garantie au lieu de créer',
+    /if \(meta\.empreinte_sur_existante === '1'\)/.test(WEBHOOK2)
+    && /table prise au téléphone désormais garantie/.test(WEBHOOK2))
+  // ⚠️ UNE TABLE DÉJÀ FACTURÉE NE REDEVIENT PAS « GARANTIE » sur un rejeu.
+  verifie('🔴 un rejeu n’efface pas un débit qui a eu lieu',
+    /if \(cible\.empreinte_statut === 'debitee'\)/.test(WEBHOOK2))
+  // ⚠️ LE LIEN EST BRÛLÉ APRÈS USAGE.
+  verifie('🔴 le lien est brûlé une fois la carte posée',
+    /empreinte_demande_jeton_hash: null/.test(WEBHOOK2))
+
+  // ── Ce que le client lit ───────────────────────────────────────────────
+  // 🔴 SA TABLE EST DÉJÀ RÉSERVÉE, et le lui cacher ferait passer Yoppaa pour
+  // un service qui prend les tables en otage.
+  verifie('🔴 la page dit que la table est DÉJÀ réservée',
+    /déjà réservée/.test(PAGE))
+  verifie('🔴 et que rien n’est débité s’il vient',
+    /Rien n’est débité si tu viens/.test(PAGE))
+  verifie('🔴 aucune somme annoncée comme bloquée sur sa carte',
+    !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(PAGE))
+  verifie('⚠️ un abandon laisse la table réservée, et le dit',
+    /Ta table reste réservée, simplement sans garantie/.test(PAGE))
+  verifie('⚠️ l’email dit la même chose que la page',
+    /Rien n&rsquo;est débité si tu viens/.test(MAIL) && /Ta table reste réservée même sans ce geste/.test(MAIL))
+  verifie('🔴 et l’email n’annonce aucune somme bloquée',
+    !/(bloqu|retenu)\w*\s+(sur\s+)?(ta|ton|sa|son)\s+(carte|compte)/i.test(MAIL))
+
+  // ── Le bouton du restaurateur ──────────────────────────────────────────
+  verifie('🔴 il peut demander la carte par SMS et par email',
+    /onDemanderEmpreinte\(rdv\.id, 'sms'\)/.test(DASH2) && /onDemanderEmpreinte\(rdv\.id, 'email'\)/.test(DASH2))
+  verifie('⚠️ le bouton suit la règle du module',
+    /peutDemander\(rdv, new Date\(\)\)/.test(DASH2))
+  verifie('⚠️ un lien déjà envoyé se voit, et se relance',
+    /Lien déjà envoyé par/.test(DASH2) && /Relancer par SMS/.test(DASH2))
+  // 🔴 ON LIT VRAIMENT LA RÉPONSE : plus de crédits, heure trop tardive, email
+  // absent. Le taire laisserait le restaurateur croire son client relancé.
+  verifie('🔴 un envoi raté est DIT au restaurateur',
+    /alert\(j\?\.error \|\| 'Le lien n’a pas pu partir/.test(DASH2))
+  verifie('⚠️ et le message rappelle que la table reste réservée',
+    /Ta table reste réservée tant qu’il n’a pas confirmé/.test(DASH2))
 }
 
 // ═══ RÉSULTAT ═══════════════════════════════════════════════════════════════

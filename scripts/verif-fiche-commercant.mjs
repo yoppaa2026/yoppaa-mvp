@@ -18,6 +18,11 @@ import { TYPES_SERVICE, TYPES_ALIMENTAIRE, TYPES_DETAIL } from '../lib/types-com
 import { FRAIS_STRIPE_TEXTE } from '../lib/frais-paiement.js'
 import { emailMerciPreinscription } from '../lib/resend-landing.js'
 import { lieuAAfficher } from '../lib/lieux-activite.js'
+// ⚠️ POUR LES GARDES QUI INTERDISENT UN MOT. Elles lisent le texte PUBLIÉ, pas
+// les commentaires qui expliquent l'interdit : sans ce dépouilleur, la note
+// « on n'écrit jamais qu'une somme est bloquée » déclenche la garde qui
+// interdit d'écrire qu'une somme est bloquée.
+import { sansProse } from './lire-code.mjs'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -561,26 +566,45 @@ verifier('la newsletter est annoncée comme pas encore ouverte',
 // désormais utilisable de bout en bout : un restaurateur déclare ses services,
 // un Yopper réserve. Le lui refuser serait faux.
 //
-// ⚠️ MAIS L'ACOMPTE ET L'EMPREINTE BANCAIRE NE SONT PAS FAITS, et c'est
-// justement ce qu'un restaurateur cherche en premier quand il pense « table qui
-// ne vient pas ». Le taire, c'est la promesse du 10/08 recommencée : il
-// souscrit au palier payant en comptant dessus, attend, et ne revient pas.
-// La garde vérifie donc que le manque est ÉCRIT, pas seulement que la fonction
-// est annoncée.
+// 🔴 L'ACOMPTE EST SORTI DES TEXTES LE 14/09, ET LA GARDE A CHANGÉ DE SENS.
+// Elle exigeait « acompte OU empreinte au choix » aux deux endroits. Or
+// l'acompte ne sera PAS construit : un acompte encaissé est un produit à
+// déclarer, avec TVA et caisse certifiée belge, quand une empreinte non
+// capturée n'est rien. Décision d'Alex. Une garde qui réclame une promesse
+// qu'on ne tiendra pas GRAVE le défaut au lieu de l'attraper.
 verifier('la réservation de table est annoncée comme utilisable',
   /le Yopper réserve depuis ta fiche/.test(signupSrcTxt))
 // ⚠️ CE QUI DÉCIDE L'ABONNEMENT D'UN RESTAURATEUR DOIT ÊTRE DIT AUX DEUX
-// ENDROITS. Il cherche l'acompte en premier quand il pense « table qui ne vient
-// pas » : l'annoncer au signup et l'oublier sur la landing, ou l'inverse, c'est
-// perdre celui qui n'a lu qu'une des deux pages.
-verifier('l’acompte et l’empreinte sont annoncés au signup',
-  /Acompte ou empreinte bancaire au choix/.test(signupSrcTxt))
+// ENDROITS. Il cherche la garantie en premier quand il pense « table qui ne
+// vient pas » : l'annoncer au signup et l'oublier sur la landing, ou l'inverse,
+// c'est perdre celui qui n'a lu qu'une des deux pages.
+verifier('l’empreinte bancaire est annoncée au signup',
+  /[Ee]mpreinte bancaire/.test(signupSrcTxt))
 {
   const landingSrc = lire('app/components/LandingReveal.js')
   verifier('et sur la landing, dans les points de la formule Vendre',
-    /Acompte ou empreinte bancaire sur une réservation/.test(landingSrc))
+    /Empreinte bancaire sur les grandes tables/.test(landingSrc))
   verifier('et dans le détail des tarifs',
-    /réservation de table avec acompte ou empreinte bancaire/.test(landingSrc))
+    /réservation de table avec empreinte bancaire/.test(landingSrc))
+  // 🔴 ET PLUS AUCUNE PROMESSE D'ACOMPTE SUR UNE TABLE, DANS AUCUN DES DEUX.
+  // Le mot « acompte » reste légitime ailleurs (le rendez-vous vitrine en
+  // prend un, et il est construit) : c'est la PAIRE avec l'empreinte qui
+  // annonçait le module non construit.
+  const publies = [['signup', sansProse(signupSrcTxt)], ['landing', sansProse(landingSrc)]]
+  for (const [fichier, src] of publies) {
+    verifier(`${fichier} : plus d’acompte promis à côté de l’empreinte`,
+      !/(acompte[^.]{0,30}empreinte|empreinte[^.]{0,30}acompte)/i.test(src))
+  }
+  // 🔴 ET ON N'ÉCRIT JAMAIS QU'UNE SOMME EST BLOQUÉE. Le chemin Stripe est un
+  // `SetupIntent` : la carte est enregistrée, RIEN n'est retenu sur le compte
+  // du client, et une autorisation de fonds expirerait de toute façon en sept
+  // jours. Le client qui lirait « 120 € bloqués » chercherait la retenue sur
+  // son relevé et ne la trouverait pas.
+  for (const [fichier, src] of publies) {
+    verifier(`${fichier} : aucune somme annoncée comme bloquée sur le compte`,
+      !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(src)
+      && !/(somme|montant)\s+(est\s+)?(bloqu|retenu|g[eé]l)/i.test(src))
+  }
   // ⚠️ LE NOM DU MODULE, LUI, SE DIT AVEC LE MOT DU CLIENT. Côté Yopper une
   // « capacité par service » ne veut rien dire : il réserve une table.
   verifier('la pastille côté Yopper dit « Réserver une table »',

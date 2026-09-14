@@ -979,7 +979,16 @@ function MockTableChoix() {
         <div style={{ marginTop: 'auto', paddingBottom: 10 }}>
           <div style={{ background: T.pale, border: '1px solid rgba(196,160,244,0.6)', borderRadius: 9, padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-            <p style={{ margin: 0, fontSize: 7, fontWeight: 700, color: T.deep, lineHeight: 1.4 }}>Sur une table, le restaurant peut demander un <b>acompte</b> ou une <b>empreinte bancaire</b>.</p>
+            {/* ⚠️ L'ACOMPTE A DISPARU D'ICI LE 14/09, ET CE N'EST PAS UN
+                RACCOURCI DE RÉDACTION : il ne sera pas construit. Un acompte
+                encaissé est un produit à déclarer, avec TVA et caisse
+                certifiée ; une empreinte non capturée n'est rien. Décision
+                d'Alex du 14/09.
+                🔴 ET ON NE DIT JAMAIS QU'UNE SOMME EST BLOQUÉE. Le chemin
+                Stripe est un `SetupIntent` : la carte est enregistrée, rien
+                n'est retenu sur le compte du client. Écrire « on bloque 120 € »
+                serait faux, et c'est exactement ce qu'il vérifierait. */}
+            <p style={{ margin: 0, fontSize: 7, fontWeight: 700, color: T.deep, lineHeight: 1.4 }}>Sur une grande table, le restaurant peut demander une <b>empreinte bancaire</b> : rien n’est débité si tu viens.</p>
           </div>
         </div>
       </div>
@@ -1762,7 +1771,7 @@ function LaTotale() {
     {
       question: 'Vendre ?',
       reponse: `${eur(prix('vendre'))}/mois.`,
-      quoi: 'Click and Collect, livraison, rendez-vous en ligne, réservation de table avec acompte ou empreinte bancaire, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique, invendus du soir à prix réduit.',
+      quoi: 'Click and Collect, livraison, rendez-vous en ligne, réservation de table avec empreinte bancaire, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique, invendus du soir à prix réduit.',
     },
   ]
 
@@ -1950,7 +1959,12 @@ const FORMULES = [
       // tables. Et c'est sa salle qui attribue la table, jamais le client :
       // c'est la décision qui fait tout le module.
       'Réservation de table : le client dit combien ils sont, ta salle attribue la table',
-      'Acompte ou empreinte bancaire sur une réservation, contre les tables qui ne viennent pas',
+      // ⚠️ L'EMPREINTE SEULE, ET CE QU'ELLE FAIT VRAIMENT. « Acompte ou
+      // empreinte au choix » promettait un encaissement qui ne sera pas
+      // construit (TVA, caisse certifiée), et le mot « empreinte » tout seul
+      // laisse croire à une somme bloquée : avec un `SetupIntent`, rien n'est
+      // retenu sur le compte du client. La phrase dit donc la mécanique.
+      'Empreinte bancaire sur les grandes tables : la carte est enregistrée, rien n’est débité si le client vient',
       // ⚠️ DEUX MÉCANIQUES, UN SEUL BESOIN, ET C'EST LE BESOIN QU'ON ÉCRIT.
       // La capacité `livraison` de lib/plans.js est bien réservée à
       // l'alimentaire, mais elle ne désigne que LA TOURNÉE : un commerce de

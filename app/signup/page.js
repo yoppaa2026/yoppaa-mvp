@@ -849,14 +849,20 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     },
     {
       Icon: Utensils, titre: 'Réservation de table',
-      // ⚠️ L'ACOMPTE ET L'EMPREINTE SONT ANNONCÉS ALORS QU'ILS SE TERMINENT
-      // (décision d'Alex, 13/09 : « le module sera terminé avant l'ouverture de
-      // leurs comptes, donc pas de problème »). C'est un ENGAGEMENT DE DATE, et
-      // il est écrit ici pour que personne ne l'oublie : si le module glissait,
-      // c'est ce texte qu'il faudrait corriger, pas l'inverse. Un restaurateur
-      // qui pense « table qui ne vient pas » cherche l'acompte en premier ;
-      // c'est la ligne qui décide de son abonnement.
-      desc: 'Pour les restaurateurs : tu déclares tes services et ta salle, et le Yopper réserve depuis ta fiche en choisissant son horaire et le nombre de personnes. Il dit combien ils sont, c’est ta salle qui attribue la table. Acompte ou empreinte bancaire au choix, pour te prémunir des tables qui ne viennent pas.',
+      // ⚠️ L'EMPREINTE EST ANNONCÉE ALORS QU'ELLE SE TERMINE (décision d'Alex,
+      // 13/09 : « le module sera terminé avant l'ouverture de leurs comptes,
+      // donc pas de problème »). C'est un ENGAGEMENT DE DATE, et il est écrit
+      // ici pour que personne ne l'oublie : si le module glissait, c'est ce
+      // texte qu'il faudrait corriger, pas l'inverse. Un restaurateur qui pense
+      // « table qui ne vient pas » cherche cette ligne en premier ; c'est elle
+      // qui décide de son abonnement.
+      //
+      // 🔴 L'ACOMPTE EN EST SORTI LE 14/09, ET IL NE REVIENDRA PAS. Un acompte
+      // encaissé est un produit à déclarer, avec TVA et caisse certifiée belge.
+      // Une empreinte non capturée n'est rien : c'est ce qui met le point
+      // fiscal hors du chemin. Et on n'écrit jamais qu'une somme est bloquée,
+      // parce qu'avec un `SetupIntent` rien ne l'est.
+      desc: 'Pour les restaurateurs : tu déclares tes services et ta salle, et le Yopper réserve depuis ta fiche en choisissant son horaire et le nombre de personnes. Il dit combien ils sont, c’est ta salle qui attribue la table. Sur les grandes tables, tu peux demander une empreinte bancaire : la carte du client est enregistrée, rien n’est débité s’il vient, et l’absence se facture.',
       plan: 'vendre',
     },
   ]

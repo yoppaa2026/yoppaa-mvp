@@ -40,14 +40,26 @@
 --    CONTROLE_EMPREINTE_DROITS.sql les éprouve correctement, en recopiant les
 --    contraintes VIVANTES comme la première migration le faisait déjà.
 --
--- 2. 🔴 **A06 : `anon` A QUATRE PRIVILÈGES SUR LES COLONNES DU LIEN**, là où
---    j'en attendais zéro. Le haché ne se renverse pas, donc ce n'est pas le
---    sujet : le sujet, c'est que si `anon` lit ces colonnes, il lit la même
---    table que `client_email`, `client_nom` et `client_telephone`. La RLS
---    protège à la LIGNE, mais il faut savoir ce qui est ouvert.
---    ⚠️ RIEN N'A ÉTÉ RÉVOQUÉ : en PostgreSQL, un privilège posé sur la TABLE ne
---    se retire pas colonne par colonne, et on ne touche pas aux droits de
---    production sur une intuition. CONTROLE_EMPREINTE_DROITS.sql mesure d'abord.
+-- 2. ⚠️ **A06 A CRIÉ AU MAUVAIS ENDROIT, ET C'EST MA GARDE QUI ÉTAIT FAUSSE.**
+--    Elle comptait les privilèges d'`anon` sur ces colonnes SANS FILTRER LEUR
+--    TYPE. Les quatre trouvés n'étaient pas des `SELECT` mais des `INSERT`.
+--    ✅ VÉRIFIÉ ENSUITE (CONTROLE_EMPREINTE_DROITS, 14/09) : `anon` ne LIT rien
+--    de cette table, ni les colonnes personnelles, ni les identifiants Stripe,
+--    et AUCUNE policy ne le cite. La RLS étant active, elle refuse par défaut
+--    tout ce qu'aucune policy n'autorise : son `GRANT INSERT` résiduel
+--    n'ouvre rien. Une garde qui compte sans dire QUOI compte mal.
+--
+-- ✅ ET LE RELEVÉ DES POLICIES CONFIRME QUE LE VERROU ÉTAIT NÉCESSAIRE :
+--    `Commercant update ses RDV` autorise un commerçant à modifier ses
+--    réservations SANS EXCLURE UNE SEULE COLONNE. Sans le trigger,
+--    `empreinte_montant` et l'identifiant du SetupIntent étaient à sa main.
+--
+-- ⏳ DEUX RESTES À RANGER, NOMMÉS ET NON TRAITÉS (hors de ce chantier) :
+--    • le `GRANT INSERT` d'`anon` sur `rdv_reservations` ne sert à rien et
+--      deviendrait une porte le jour où une policy `INSERT` le citerait ;
+--    • `Commercant delete RDV non honores` permet une suppression PHYSIQUE,
+--      alors que le projet fait du soft delete (`deleted_at`, conservation
+--      sept ans en Belgique). Une table déjà facturée y passe aussi.
 
 BEGIN;
 

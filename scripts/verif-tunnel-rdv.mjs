@@ -616,6 +616,37 @@ for (const chemin of [
     verifie('l’heure est normalisée', db._vu.payload.heure_debut === '10:00')
   }
 
+  // ── 🔴 CE QUE COÛTE UN NOMBRE DE PERSONNES OUBLIÉ (14/09) ───────────────
+  //
+  // La route d'acompte ne lisait pas `couverts`, il n'entrait donc pas dans les
+  // métadonnées Stripe et le webhook ne le passait pas au module. Ce banc
+  // montre le prix exact de cet oubli, EN EXÉCUTANT : sur une prestation à
+  // couverts, le module REFUSE de créer la réservation. Le client avait payé,
+  // la table n'existait pas, et le webhook rejouait sans fin.
+  {
+    const PRESTA_TABLE = { id: 'p3', nom: 'Table', capacite: 40, tva_taux: 12,
+      duree_minutes: 90, commercant_id: 'c1', par_couverts: true, couverts_min: 1, couverts_max: 10 }
+
+    const dbSans = baseSimulee({ prestation: PRESTA_TABLE })
+    const sans = await creerReservationRdv(dbSans, {
+      commercantId: 'c1', prestationId: 'p3',
+      dateRdv: '2026-09-19', heureDebut: '20:00',
+      champs: { client_email: 'a@b.be' },
+    })
+    verifie('🔴 sans le nombre de personnes, la table ne se crée PAS',
+      sans.ok === false && sans.code === 'couverts_invalides')
+    verifie('et rien n’a été inséré', dbSans._vu.payload === null)
+
+    const dbAvec = baseSimulee({ prestation: PRESTA_TABLE })
+    const avec = await creerReservationRdv(dbAvec, {
+      commercantId: 'c1', prestationId: 'p3',
+      dateRdv: '2026-09-19', heureDebut: '20:00',
+      champs: { client_email: 'a@b.be', couverts: 6 },
+    })
+    verifie('avec le nombre de personnes, la table se crée', avec.ok === true)
+    egal('et les six couverts sont GRAVÉS', dbAvec._vu.payload?.couverts, 6)
+  }
+
   // ── LA PLACE LIBÉRÉE AU MILIEU, le cœur du sujet ────────────────────────
   {
     const db = baseSimulee({ prestation: PRESTA_COURS, placesPrises: [1, 2, 4] })

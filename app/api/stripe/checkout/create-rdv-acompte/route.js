@@ -43,6 +43,17 @@ export async function POST(request) {
       commercant_id, prestation_id, praticien_id, date_rdv, heure_debut, heure_fin, duree_minutes,
       client_email, client_prenom, client_nom, client_telephone,
       notes_client, rgpd_marketing,
+      // 🔴 LE NOMBRE DE PERSONNES SE PERDAIT ICI, ET IL COÛTAIT LA RÉSERVATION
+      // (14/09). L'écran l'envoie depuis le premier jour (commander/rdv/[slug]
+      // /page.js:2140) ; cette route ne le lisait pas, il n'entrait donc pas
+      // dans les métadonnées et le webhook ne pouvait pas le transmettre. Or
+      // `couvertsValides` rend NULL quand la valeur manque sur une prestation à
+      // couverts : le module refusait de créer la table avec
+      // `couverts_invalides`, APRÈS le paiement. Le client payait son acompte,
+      // la table n'était jamais réservée, et Stripe rejouait le webhook en
+      // boucle. Il est REVÉRIFIÉ par le module, comme tout ce qui vient d'un
+      // écran : le transmettre n'autorise rien.
+      couverts,
       // ⚠️ DÉSIGNÉ PAR LE CLIENT, DONC REVÉRIFIÉ INTÉGRALEMENT plus bas contre
       // son identité PROUVÉE. Un identifiant envoyé n'autorise rien.
       fidelite_recompense_id,
@@ -281,6 +292,12 @@ export async function POST(request) {
             heure_debut: heure_debut.slice(0,5),
             heure_fin: heure_fin.slice(0,5),
             duree_minutes: String(duree_minutes || prestation.duree_minutes),
+            // 🔴 ET LE NOMBRE DE PERSONNES VOYAGE AVEC, sans quoi le webhook
+            // créerait une table de six pour une personne, quand il y arrive :
+            // sur une prestation à couverts, il ÉCHOUE carrément. Les
+            // métadonnées sont le seul canal, la réservation n'existant pas
+            // encore.
+            ...(couverts ? { couverts: String(Math.floor(Number(couverts)) || '') } : {}),
             // ⚠️ LE TARIF DE LA PRESTATION RESTE LE BRUT. C'est ce qui a été
             // affiché, et une remise ne réécrit pas un tarif. La remise voyage
             // à côté, et tous les calculs de solde la retranchent.

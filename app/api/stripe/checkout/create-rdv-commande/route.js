@@ -67,6 +67,11 @@ export async function POST(request) {
       commercant_id, prestation_id, praticien_id, date_rdv, heure_debut, heure_fin, duree_minutes,
       client_email, client_prenom, client_nom, client_telephone,
       notes_client, rgpd_marketing,
+      // ⚠️ PAS DE `couverts` ICI, ET C'EST VOLONTAIRE (vérifié le 14/09 en
+      // cherchant le frère de l'oubli de `create-rdv-acompte`). Cette route
+      // REFUSE toute prestation à couverts bien plus bas, avant la commande, le
+      // stock et Stripe : un achat de produits ne se couple pas à une table.
+      // Transmettre le nombre de personnes y serait du code mort.
       articles = [],
       // 🔴 CE CHAMP N'EXISTAIT NI ICI NI CHEZ L'APPELANT. Les deux côtés étaient
       // muets, ce qui explique qu'aucune erreur ne soit jamais remontée : il n'y

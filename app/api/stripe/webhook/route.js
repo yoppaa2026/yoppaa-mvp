@@ -187,6 +187,15 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       client_telephone: meta.client_telephone,
       heure_fin: meta.heure_fin,
       duree_minutes: Number(meta.duree_minutes) || null,
+      // 🔴 LE NOMBRE DE PERSONNES MANQUAIT ICI, ET LE RENDEZ-VOUS NE SE CRÉAIT
+      // PAS (14/09). Sur une prestation à couverts, `couvertsValides` rend NULL
+      // quand la valeur est absente, et le module refuse avec
+      // `couverts_invalides` : le client avait payé son acompte, la table
+      // n'était jamais réservée, et le `throw` plus bas faisait rejouer Stripe
+      // indéfiniment sur un échec qui ne pouvait pas se résoudre tout seul.
+      // ⚠️ Il est REVÉRIFIÉ par le module contre les bornes de la prestation et
+      // la salle : ce qui arrive des métadonnées n'autorise rien.
+      ...(Number(meta.couverts) ? { couverts: Number(meta.couverts) } : {}),
       prix_estime: Number(meta.prix_estime) || null,
       // ⚠️ LA REMISE EST FIGÉE SUR LE RENDEZ-VOUS, comme sur une commande.
       // `prix_estime` garde le tarif de la prestation ; c'est `fidelite_remise`

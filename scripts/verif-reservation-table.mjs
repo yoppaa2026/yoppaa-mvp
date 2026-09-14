@@ -2147,6 +2147,60 @@ egal('la réservation d’un restaurant s’atteint quand même',
     iRefus !== -1 && iAvant.length === 3 && iAvant.every(i => iRefus < i)
     && /if \(estParCouverts\(prestation\)\) \{\s*return NextResponse\.json\(\{ ok: false,[^}]*\}, \{ status: 400 \}\)/.test(GROUPE),
     `refus à ${iRefus}, suivants à ${iAvant.join(', ')}`)
+  // 🔴 LE NOMBRE DE PERSONNES DOIT SURVIVRE AU DÉTOUR PAR STRIPE (14/09).
+  //
+  // Trois maillons, et il en manquait DEUX. L'écran envoyait `couverts` depuis
+  // le premier jour ; la route d'acompte ne le lisait pas, il n'entrait donc
+  // pas dans les métadonnées, et le webhook n'avait rien à transmettre. Sur une
+  // prestation à couverts, `couvertsValides` rend NULL quand la valeur manque :
+  // le module refusait la création APRÈS le paiement. Le client payait son
+  // acompte, la table n'était jamais réservée, et le `throw` du webhook faisait
+  // rejouer Stripe sur un échec qui ne pouvait pas se résoudre.
+  //
+  // ⚠️ LA CHAÎNE ENTIÈRE EST GARDÉE, PAS UN SEUL MAILLON : un banc qui ne
+  // vérifie que la route resterait vert le jour où le webhook oublie de relire
+  // la métadonnée, et c'est exactement la forme qu'avait le défaut.
+  {
+    const ACOMPTE = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-rdv-acompte/route.js', import.meta.url), 'utf8'))
+    const WEBHOOK = sansProse(readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8'))
+    const ECRAN = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+
+    verifier('🔴 l’écran envoie le nombre de personnes à la route d’acompte',
+      /create-rdv-acompte[\s\S]{0,900}?\n\s*couverts,/.test(ECRAN))
+    verifier('🔴 la route d’acompte le LIT',
+      /\n\s*couverts,\n/.test(ACOMPTE))
+    verifier('🔴 et le met dans les métadonnées Stripe',
+      /couverts: String\(/.test(ACOMPTE))
+    // ⚠️ DANS LE BLOC `champs`, pas n'importe où : le webhook nomme `couverts`
+    // à plusieurs endroits pour ses emails, et c'est la CRÉATION qui en a
+    // besoin.
+    const iChamps = WEBHOOK.indexOf('const champs = {')
+    const iFin = WEBHOOK.indexOf('creerReservationRdv(supabase, {', iChamps)
+    const zoneChamps = iChamps === -1 || iFin === -1 ? '' : WEBHOOK.slice(iChamps, iFin)
+    verifier('🔴 et le webhook le repasse au module, dans le bloc des champs',
+      /couverts: Number\(meta\.couverts\)/.test(zoneChamps),
+      `zone de ${zoneChamps.length} caractères`)
+    // ⚠️ ET IL RESTE REVÉRIFIÉ : ce qui arrive d'un écran, puis d'une
+    // métadonnée, n'autorise rien. Le module borne contre la prestation.
+    const MODULE = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+    verifier('le module revérifie ce nombre plutôt que de le croire',
+      /couvertsValides\(prestation, champs\?\.couverts\)/.test(MODULE))
+    // 🔴 ET LE MAILLON DU MILIEU, TROUVÉ PAR MUTATION LE 14/09. Remplacer ce
+    // `couvertsRetenus` par un 1 ne faisait rougir AUCUN banc : `formatLibrePour`
+    // est éprouvé en isolation, mais rien ne vérifiait le nombre qu'on lui
+    // PASSE. Un groupe de six se serait vu attribuer une table de deux, et la
+    // salle aurait dit oui. C'est exactement la forme du défaut du jour : les
+    // deux bouts gardés, le milieu libre.
+    // ⏳ Une garde de COMPORTEMENT vaudrait mieux, et elle demande une fausse
+    // base qui rende un inventaire de formats. Inscrit au todo, pas oublié.
+    verifier('🔴 la table attribuée est choisie sur le nombre RETENU, jamais sur un nombre en dur',
+      /formatLibrePour\(\{\s*formats: formatsTable,\s*couverts: couvertsRetenus,/.test(MODULE))
+    verifier('et la cadence de la cuisine compte le même nombre',
+      /etatCadence\(\{ plafond, couverts: couvertsRetenus,/.test(MODULE))
+    verifier('et c’est lui qui est GRAVÉ sur la réservation',
+      /^\s{4}couverts: couvertsRetenus,$/m.test(MODULE))
+  }
+
   // ⚠️ LA FICHE DU RESTAURANT NE CHANGE PAS : sa carte reste à emporter, et son
   // lien « Réserver une table » n'emporte pas le panier.
   const FICHE_R = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))

@@ -40,7 +40,17 @@
 -- façon désactiver le trigger, et le bloquer n'empêcherait qu'Alex de corriger
 -- une ligne à la main un soir de panne.
 --
--- ⏳ PAS ENCORE PASSÉE.
+-- ✅ PASSÉE PAR ALEX LE 14/09/2026 : 21 lignes conformes. La fonction existe en
+-- SECURITY INVOKER (A02, sans quoi `current_user` mentirait), search_path figé,
+-- trigger actif BEFORE INSERT OR UPDATE FOR EACH ROW, les dix colonnes nommées,
+-- aucune comparaison `<>` restante. Et les onze essais, pris RÉELLEMENT sous le
+-- rôle `authenticated` : les sept tentatives d'un commerçant sont refusées
+-- (gonfler le montant, coller le SetupIntent d'un autre client, remplacer la
+-- carte, effacer sa trace, déclarer un débit, se déclarer en annulation
+-- tardive, insérer une réservation déjà garantie), les trois gestes légitimes
+-- passent (modifier sa note, insérer une réservation sans empreinte, réécrire
+-- la même valeur), le serveur écrit toujours le débit, et la réservation forgée
+-- n'existe pas.
 
 BEGIN;
 

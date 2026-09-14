@@ -1526,10 +1526,21 @@ export default function Dashboard() {
       // ─── FLOW NORMAL : commercant connecte par son propre compte ───
       const { data } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).order('nom')
       if (!data || data.length === 0) {
-        // Pas de commerçant lié : si c'est l'admin Yoppaa, on l'envoie vers /admin.
-        // Sinon /login (cas où une session traîne sans onboarding finalisé).
-        if (user.email === adminEmail) router.push('/admin')
-        else router.push('/login')
+        // 🔴 L'ADMIN N'EST PLUS PROPULSÉ DANS SON ESPACE (Alex, 14/09 : « pas
+        // normal d'accéder au db admin aussi facilement »). Taper l'adresse du
+        // tableau de bord ouvrait l'administration toute seule, en une seconde,
+        // sans un mot. Ce n'était pas une faille (il faut une session valide, et
+        // la RLS vérifie `is_yoppaa_admin()`), mais un espace qui donne accès à
+        // TOUS les commerces ne s'ouvre pas par ricochet : il se demande.
+        //
+        // ⚠️ ET CE PÉRIMÈTRE A GRANDI LE 14/09 : `gardeCommercant` laisse passer
+        // l'admin partout, y compris sur le débit d'une empreinte. Cette porte
+        // commande désormais des cartes bancaires de clients.
+        //
+        // Tout le monde va donc au même endroit : l'écran de connexion, qui dit
+        // qui est connecté et laisse choisir. L'administration s'ouvre en tapant
+        // `/admin`, comme n'importe quelle autre adresse.
+        router.push('/login')
         return
       }
 
@@ -2417,8 +2428,21 @@ export default function Dashboard() {
     localStorage.removeItem('yoppaa_dashboard_commercant_id')
     // ⚠️ Le commerçant et le Yopper partagent le même stockage de session sur
     // un même navigateur : le marqueur de départ voulu se pose ici aussi.
+    // 🔴 ON LIT LE RÉSULTAT DE LA DÉCONNEXION, ET C'EST NEUF (14/09). Elle
+    // partait vers `/login` sans jamais regarder si elle avait eu lieu : un
+    // `await` non lu est un espoir, pas une action. Quand le serveur refusait
+    // (jeton déjà mort, réseau coupé), la session restait dans ce navigateur,
+    // `/login` la voyait et renvoyait au tableau de bord. La boucle était
+    // fermée, et la seule sortie était d'effacer les données du site.
     marquerDeconnexionVoulue()
-    await supabase.auth.signOut()
+    const { error: errSortie } = await supabase.auth.signOut()
+    if (errSortie) {
+      console.error('[dashboard] déconnexion refusée par le serveur', errSortie.message)
+      // ⚠️ AU MOINS CE NAVIGATEUR-CI. Le jeton peut être mort côté serveur sans
+      // que le stockage local le sache : `scope: 'local'` le vide ici, ce qui
+      // suffit à rendre l'appareil à son propriétaire.
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    }
     router.push('/login')
   }
 

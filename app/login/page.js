@@ -4,6 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import TurnstileWidget from '@/app/components/TurnstileWidget'
+// ⚠️ SANS CETTE MARQUE, `session-permanente` REPOSE LA SESSION qu'on vient
+// d'effacer : c'est son métier, et il ne s'abstient que pour un départ voulu.
+// Changer de compte depuis cet écran est un départ voulu.
+import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 
 const T = {
   bg:      '#F8F6FF',
@@ -41,12 +45,56 @@ function Login() {
   const modeAdmin = nextPath === '/admin'
   const turnstileRef = useRef(null)
 
+  // 🔴 CE BLOC A ENFERMÉ ALEX SUR SON TÉLÉPHONE LE 14/09, ET IL AURAIT ENFERMÉ
+  // N'IMPORTE QUEL COMMERÇANT.
+  //
+  // Il appelait `getSession()`, qui LIT LE STOCKAGE LOCAL et ne vérifie rien :
+  // un jeton mort, révoqué ou appartenant à un compte qu'on vient de quitter
+  // suffisait à renvoyer vers `nextPath`. Le formulaire ne s'affichait donc
+  // JAMAIS, et comme le tableau de bord renvoie lui-même ailleurs, la boucle se
+  // refermait : impossible de se déconnecter, impossible de changer de compte.
+  // La seule sortie était d'effacer les données du site dans les réglages du
+  // navigateur, ce qu'un restaurateur ne fera pas : il arrête, simplement.
+  //
+  // ⚠️ `getUser()` DEMANDE AU SERVEUR. Une session que le serveur refuse n'est
+  // pas une session, et on montre le formulaire. C'est toute la différence
+  // entre « un jeton traîne ici » et « cette personne est connectée ».
+  const [dejaConnecte, setDejaConnecte] = useState(null)
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.push(nextPath)
-      else setCheckingSession(false)
+    let annule = false
+    supabase.auth.getUser().then(({ data, error }) => {
+      if (annule) return
+      // ⚠️ LE MOINDRE DOUTE MÈNE AU FORMULAIRE, jamais à la redirection : se
+      // voir proposer de se connecter alors qu'on l'est déjà est un petit
+      // désagrément ; être renvoyé en boucle sans pouvoir rien faire est une
+      // porte fermée.
+      if (error || !data?.user) { setCheckingSession(false); return }
+      // 🔴 ET PLUS DE REDIRECTION AUTOMATIQUE : on DIT qui est connecté, et on
+      // laisse choisir. C'est exactement ce qui manquait le 14/09, quand une
+      // session admin oubliée renvoyait sans fin vers un espace qu'on ne
+      // voulait pas ouvrir, sans jamais dire à qui elle appartenait.
+      setDejaConnecte(data.user.email || 'un compte')
+      setCheckingSession(false)
     })
-  }, [router, nextPath])
+    return () => { annule = true }
+  }, [])
+
+  // La sortie qui n'existait pas. ⚠️ On marque la déconnexion comme VOULUE
+  // avant de la demander, sinon `session-permanente` repose la session qu'on
+  // vient d'effacer, et la personne se retrouve reconnectée malgré elle.
+  async function changerDeCompte() {
+    marquerDeconnexionVoulue()
+    const { error: err } = await supabase.auth.signOut()
+    if (err) {
+      // ⚠️ ON LE DIT, ET ON NETTOIE CE QU'ON PEUT. Un échec silencieux ici
+      // ramènerait exactement la boucle qu'on vient de fermer.
+      console.error('[login] déconnexion refusée par le serveur', err.message)
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    }
+    setDejaConnecte(null)
+    setCheckingSession(false)
+  }
 
   function resetForm() {
     setError('')
@@ -96,6 +144,33 @@ function Login() {
   if (checkingSession) return (
     <div style={{ minHeight: '100dvh', background: T.bgPanel, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: T.light, fontFamily: '"DM Sans", sans-serif' }}>Chargement...</p>
+    </div>
+  )
+
+  // 🔴 L'ÉCRAN QUI MANQUAIT (14/09). Une session valide ne renvoie plus
+  // ailleurs en silence : elle se NOMME, et on choisit. Sans lui, une session
+  // oubliée sur un téléphone partagé rouvrait un espace sans jamais dire à qui
+  // elle appartenait, et rien ne permettait d'en changer.
+  if (dejaConnecte) return (
+    <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, #2D0F6B 50%, ${T.ink} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: '"DM Sans", sans-serif' }}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+      <div style={{ width: '100%', maxWidth: 400, background: '#fff', borderRadius: 18, padding: '1.75rem' }}>
+        <p style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6B6485', textTransform: 'uppercase', letterSpacing: '0.6px', margin: '0 0 6px' }}>Déjà connecté</p>
+        <h1 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#1A0840', margin: '0 0 6px', letterSpacing: '-0.3px', wordBreak: 'break-word' }}>
+          {dejaConnecte}
+        </h1>
+        <p style={{ fontSize: '0.88rem', lineHeight: 1.55, color: '#6B6485', margin: '0 0 18px' }}>
+          Ce navigateur garde une connexion ouverte. Tu peux continuer, ou entrer avec un autre compte.
+        </p>
+        <button type="button" onClick={() => router.push(nextPath)}
+          style={{ width: '100%', padding: '0.8rem', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.ink}, #6B35C4)`, color: '#fff', fontWeight: 800, fontSize: '0.92rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+          Continuer avec ce compte
+        </button>
+        <button type="button" onClick={changerDeCompte}
+          style={{ width: '100%', marginTop: 9, padding: '0.8rem', borderRadius: 100, border: '1.5px solid #E9E1F8', background: '#fff', color: '#6B35C4', fontWeight: 800, fontSize: '0.92rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+          Me connecter avec un autre compte
+        </button>
+      </div>
     </div>
   )
 

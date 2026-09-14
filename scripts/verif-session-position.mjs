@@ -170,14 +170,26 @@ function egale(nom, recu, attendu) {
 // vaut pour les SIX, y compris côté commerçant et admin : le même navigateur
 // partage le même stockage de session.
 {
+  // 🔴 `app/login/page.js` EST ENTRÉ DANS LA LISTE LE 14/09 : il déconnecte
+  // désormais lui aussi, et une déconnexion non surveillée est exactement celle
+  // qui se fera ressusciter sans que personne ne le voie.
   const FICHIERS = [
     'app/commander/page.js', 'app/commander/SupprimerCompte.js',
     'app/dashboard/page.js', 'app/signup/page.js', 'app/admin/page.js',
+    'app/login/page.js',
   ]
   let total = 0, marques = 0
   for (const f of FICHIERS) {
     const lignes = readFileSync(f, 'utf8').replace(/\r\n/g, '\n').split('\n')
     lignes.forEach((ligne, i) => {
+      // ⚠️ UN COMMENTAIRE N'EST PAS UNE DÉCONNEXION (14/09). Ce banc lit le
+      // fichier BRUT, et il le faut : la marque doit précéder l'appel de six
+      // lignes RÉELLES, ce qu'un dépouillage rendrait faux. Mais compter les
+      // lignes de commentaire, c'est rougir dès que quelqu'un EXPLIQUE la
+      // règle en citant l'appel. C'est arrivé le jour même où la règle a été
+      // renforcée : la note qui disait « on lit le résultat » a été comptée
+      // comme une septième déconnexion non marquée.
+      if (/^\s*(\/\/|\*|\/\*)/.test(ligne)) return
       if (!/auth\.signOut\(\)/.test(ligne)) return
       total++
       // La marque doit précéder l'appel, dans les six lignes au-dessus.
@@ -186,7 +198,47 @@ function egale(nom, recu, attendu) {
       else echecs.push(`déconnexion NON marquée — ${f}:${i + 1}`)
     })
   }
-  verifie('six déconnexions recensées dans l\'application', total === 6, `trouvé ${total}`)
+  verifie('sept déconnexions recensées dans l\'application', total === 7, `trouvé ${total}`)
+
+  // ═══ LA BOUCLE DONT ON NE SORTAIT PAS (14/09) ═══════════════════════════
+  //
+  // 🔴 CE QU'ALEX A VÉCU SUR SON TÉLÉPHONE. `/login` appelait `getSession()`,
+  // qui LIT LE STOCKAGE LOCAL sans rien vérifier : un jeton mort ou appartenant
+  // à un compte qu'on vient de quitter suffisait à renvoyer ailleurs. Le
+  // formulaire ne s'affichait JAMAIS. Combiné au tableau de bord qui renvoie
+  // lui aussi, la boucle se refermait, et la seule sortie était d'effacer les
+  // données du site dans les réglages du navigateur. Un restaurateur ne fait
+  // pas ça : il arrête.
+  {
+    const LOGIN = readFileSync('app/login/page.js', 'utf8')
+    verifie('🔴 la connexion DEMANDE AU SERVEUR qui est connecté',
+      /supabase\.auth\.getUser\(\)/.test(LOGIN))
+    verifie('🔴 et ne croit plus le stockage local',
+      !/supabase\.auth\.getSession\(\)\.then/.test(LOGIN))
+    // ⚠️ LE MOINDRE DOUTE MÈNE AU FORMULAIRE : une session que le serveur
+    // refuse n'est pas une session.
+    verifie('🔴 une session refusée par le serveur montre le formulaire',
+      /if \(error \|\| !data\?\.user\) \{ setCheckingSession\(false\); return \}/.test(LOGIN))
+    // 🔴 ET PLUS DE REDIRECTION AUTOMATIQUE : on dit QUI est connecté.
+    verifie('🔴 une session valide se nomme au lieu de rediriger en silence',
+      /setDejaConnecte\(data\.user\.email/.test(LOGIN))
+    verifie('🔴 et la sortie existe enfin',
+      /Me connecter avec un autre compte/.test(LOGIN)
+      && /async function changerDeCompte/.test(LOGIN))
+
+    const DASH = readFileSync('app/dashboard/page.js', 'utf8')
+    // 🔴 UN `await` NON LU EST UN ESPOIR, PAS UNE ACTION. La déconnexion
+    // partait vers `/login` sans regarder si elle avait eu lieu.
+    verifie('🔴 le tableau de bord lit le résultat de sa déconnexion',
+      /const \{ error: errSortie \} = await supabase\.auth\.signOut\(\)/.test(DASH))
+    verifie('⚠️ et nettoie au moins ce navigateur si le serveur refuse',
+      /signOut\(\{ scope: 'local' \}\)/.test(DASH))
+    // 🔴 L'ADMINISTRATION NE S'OUVRE PLUS PAR RICOCHET (Alex, 14/09 : « pas
+    // normal d'accéder au db admin aussi facilement »). Elle donne accès à TOUS
+    // les commerces, et depuis le lot 4 au débit des cartes de leurs clients.
+    verifie('🔴 taper l’adresse du tableau de bord n’ouvre plus l’administration',
+      !/if \(user\.email === adminEmail\) router\.push\('\/admin'\)/.test(DASH))
+  }
   verifie('toutes portent le marqueur de départ voulu', marques === total, `${marques}/${total}`)
 }
 

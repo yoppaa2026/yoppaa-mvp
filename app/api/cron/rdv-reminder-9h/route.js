@@ -19,6 +19,7 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 import { soldeRdv } from '@/lib/rdv-paiement'
 import { motsReservation } from '@/lib/reservation-metier'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
+import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 
 export async function GET(request) {
   // 1) Securite : la garde partagee refuse aussi quand CRON_SECRET est absente.
@@ -88,7 +89,11 @@ export async function GET(request) {
           heure_fin:               r.heure_fin,
           duree_minutes:           r.duree_minutes,
           solde_a_prevoir:         solde,
-          delai_annulation_heures: r.commercant.rdv_delai_annulation_heures || 24,
+          // 🔴 C'ÉTAIT `|| 24`, ET ÇA MENTAIT AU CLIENT. Un commerçant réglé à
+          // ZÉRO voyait son zéro devenir vingt-quatre heures dans ce rappel,
+          // alors que la route d'annulation appliquait bien zéro. Le module
+          // décide, et il décide la même chose partout.
+          delai_annulation_heures: delaiAnnulationHeures(r.commercant),
           commercant_categorie:    r.commercant.categorie || null,
           // 🔴 UNE TABLE SE DIT EN PERSONNES (11/09) : « Table pour 4 personnes »
           // sous l'heure, et plus le format où la salle les a assis.

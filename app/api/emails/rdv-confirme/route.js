@@ -23,6 +23,7 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
 import { motsReservation, objetReservation } from '@/lib/reservation-metier'
 import { rappelVeillePossible } from '@/lib/timezone'
+import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 
 export async function POST(request) {
   try {
@@ -153,7 +154,11 @@ export async function POST(request) {
           fidelite_remise:         rdv.fidelite_remise || 0,
       bon_cadeau_montant:      rdv.bon_cadeau_montant || 0,
       nb_bons:                 (rdv.bons_utilises || []).length,
-          delai_annulation_heures: rdv.commercant?.rdv_delai_annulation_heures || 24,
+          // 🔴 C'ÉTAIT `|| 24` : un délai réglé à ZÉRO était annoncé au client
+          // comme vingt-quatre heures, quand la route d'annulation en
+          // appliquait zéro. Et le défaut d'un restaurant n'est pas celui d'un
+          // salon : le module tranche les deux, une seule fois.
+          delai_annulation_heures: delaiAnnulationHeures(rdv.commercant),
           annulation_token:        rdv.annulation_token,
           praticien_prenom:        rdv.praticien?.prenom || null,
           praticien_nom:           rdv.praticien?.nom || null,

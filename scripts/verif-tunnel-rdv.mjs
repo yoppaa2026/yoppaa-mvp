@@ -2096,6 +2096,69 @@ for (const chemin of [
     !existsSync(join(racine, 'app', 'api', 'stripe', 'refund', 'route.js')))
 }
 
+// ═══ LE DÉLAI D'ANNULATION : UNE RÈGLE, UN SEUL ENDROIT ══════════════════
+//
+// 🔴 IL VIVAIT EN CINQ COPIES, ET TROIS ÉTAIENT FAUSSES DE LA MÊME FAÇON
+// (14/09). `rdv_delai_annulation_heures || 24` transforme un délai réglé à ZÉRO
+// en vingt-quatre heures : l'email de confirmation, le rappel de 9 h et le
+// webhook annonçaient au client une règle que la route d'annulation
+// n'appliquait pas, elle qui gardait bien le zéro avec `??`. Le piège du zéro,
+// neuvième fois.
+{
+  const { delaiAnnulationHeures, estAnnulationTardive, DELAI_DEFAUT_VITRINE, DELAI_DEFAUT_TABLE } =
+    await import('../lib/rdv-delai-annulation.js')
+
+  egal('un salon sans réglage : le délai habituel', delaiAnnulationHeures({ categorie: 'vitrine' }), DELAI_DEFAUT_VITRINE)
+  egal('une boutique sans réglage : le même', delaiAnnulationHeures({ categorie: 'detail' }), DELAI_DEFAUT_VITRINE)
+  // ⚠️ CÔTÉ ALIMENTAIRE, LE RENDEZ-VOUS EST UNE TABLE, et personne ne sait la
+  // veille à midi qu'il ne dînera pas le soir.
+  egal('un restaurant sans réglage : trois heures', delaiAnnulationHeures({ categorie: 'alimentaire' }), DELAI_DEFAUT_TABLE)
+  egal('un commerce sans catégorie du tout ne casse pas', delaiAnnulationHeures({}), DELAI_DEFAUT_VITRINE)
+  egal('et un commerçant absent non plus', delaiAnnulationHeures(null), DELAI_DEFAUT_VITRINE)
+  // 🔴 LE CŒUR DU DÉFAUT.
+  egal('🔴 un délai réglé à ZÉRO reste zéro', delaiAnnulationHeures({ categorie: 'alimentaire', rdv_delai_annulation_heures: 0 }), 0)
+  egal('un délai réglé prime sur le défaut', delaiAnnulationHeures({ categorie: 'alimentaire', rdv_delai_annulation_heures: 48 }), 48)
+  egal('un délai en texte est compris', delaiAnnulationHeures({ rdv_delai_annulation_heures: '12' }), 12)
+  egal('un délai négatif ne remonte pas le temps', delaiAnnulationHeures({ rdv_delai_annulation_heures: -5 }), 0)
+  egal('un délai illisible retombe sur le défaut', delaiAnnulationHeures({ rdv_delai_annulation_heures: 'bientôt' }), DELAI_DEFAUT_VITRINE)
+
+  // La limite, en heure murale de Bruxelles. Un service à 20:00 avec trois
+  // heures de délai se ferme à 17:00, le même jour.
+  const table = { date_rdv: '2026-09-19', heure_debut: '20:00' }
+  const resto = { categorie: 'alimentaire' }
+  verifie('avant la limite, l’annulation n’est pas tardive',
+    estAnnulationTardive(table, resto, new Date('2026-09-19T14:59:00+02:00')) === false)
+  verifie('🔴 après la limite, elle l’est, et la porte reste OUVERTE',
+    estAnnulationTardive(table, resto, new Date('2026-09-19T17:01:00+02:00')) === true)
+  verifie('une réservation sans date ne déclare jamais de retard',
+    estAnnulationTardive({}, resto, new Date()) === false)
+
+  // ⚠️ ET PLUS AUCUNE COPIE DANS LES QUATRE FICHIERS QUI DÉCIDENT. Un `|| 24`
+  // qui revient, c'est le zéro écrasé qui revient avec lui.
+  const DECIDENT = [
+    'app/api/rdv/cancel/route.js',
+    'app/api/emails/rdv-confirme/route.js',
+    'app/api/cron/rdv-reminder-9h/route.js',
+    'app/api/stripe/webhook/route.js',
+  ]
+  for (const chemin of DECIDENT) {
+    const src = lireCode(chemin)   // `lireCode` dépouille déjà les commentaires
+    const court = chemin.split('/').slice(-3, -1).join('/')
+    verifie(`${court} : plus de délai calculé sur place`,
+      !/rdv_delai_annulation_heures\s*(\|\||\?\?)/.test(src))
+    verifie(`${court} : il appelle le module`, /delaiAnnulationHeures\(/.test(src))
+    // 🔴 ET IL CHARGE LA CATÉGORIE DANS SON SELECT, sans quoi le défaut d'un
+    // restaurant serait celui d'un salon. La colonne absente d'un select est le
+    // défaut le plus fréquent de ce dépôt, et il ne prévient jamais.
+    // ⚠️ LA GARDE VISE LA JOINTURE, PAS LE MOT. Un simple `/categorie/` sur le
+    // fichier restait vert quand on retirait la colonne du select : le mot
+    // vivait ailleurs, dans `motsReservation(commercant.categorie)`. Trouvé par
+    // mutation le 14/09. Une garde qui cherche un mot ne garde rien.
+    verifie(`${court} : la catégorie est dans le select des commerçants`,
+      /commercants\([^)]*\bcategorie\b[^)]*\)/.test(src))
+  }
+}
+
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════
 console.log(`\nTunnel rendez-vous : ${ok + echecs.length} vérifications`)
 if (echecs.length) {

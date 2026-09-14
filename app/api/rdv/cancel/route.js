@@ -27,6 +27,7 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { motsReservation } from '@/lib/reservation-metier'
+import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 
 export async function POST(request) {
   try {
@@ -106,7 +107,10 @@ export async function POST(request) {
 
     // ─── 4) Vérif cutoff (date_rdv + heure_debut - delai_annulation_heures) ─
     const commercant = rdv.commercant
-    const delaiH = commercant?.rdv_delai_annulation_heures ?? 24
+    // ⚠️ LE MODULE, PAS LE `?? 24` D'ICI. Celui-ci gardait bien le zéro, mais
+    // il ignorait que le défaut d'une table n'est pas celui d'un salon, et ses
+    // trois frères, eux, écrasaient le zéro. Une règle, un endroit.
+    const delaiH = delaiAnnulationHeures(commercant)
     // Instant du RDV en heure murale Europe/Brussels, DST-aware (été +02:00 /
     // hiver +01:00) via brusselsInstant : sinon la deadline tombait 1h trop tôt
     // en hiver et pénalisait le client.

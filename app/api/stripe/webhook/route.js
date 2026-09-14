@@ -42,6 +42,7 @@ import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { creerReservationRdv, appliquerAvantagesRdv, lignesBonsDeMeta } from '@/lib/rdv-creation-server'
 import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
+import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -1233,7 +1234,10 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       fidelite_remise:         rdv.fidelite_remise || 0,
       bon_cadeau_montant:      rdv.bon_cadeau_montant || 0,
       nb_bons:                 (rdv.bons_utilises || []).length,
-      delai_annulation_heures: rdv.commercant.rdv_delai_annulation_heures || 24,
+      // 🔴 C'ÉTAIT `|| 24`, la troisième copie du même défaut : un zéro réglé
+      // devenait vingt-quatre heures dans l'email, quand la route d'annulation
+      // appliquait zéro. Le module décide pour tout le monde.
+      delai_annulation_heures: delaiAnnulationHeures(rdv.commercant),
       annulation_token:        rdv.annulation_token,
       praticien_prenom:        rdv.praticien?.prenom || null,
       praticien_nom:           rdv.praticien?.nom || null,

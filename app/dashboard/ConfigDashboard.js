@@ -44,6 +44,18 @@ import {
   jointureParDefaut, verifierJointure, alerteJointure,
   plafondCadence, validerCadence, CADENCE_MIN, CADENCE_MAX,
 } from '@/lib/inventaire-salle'
+// ⚠️ LES RÈGLES DE L'EMPREINTE VIENNENT DU MODULE, l'écran ne fait que les
+// régler : il écrit ces colonnes directement en base, donc une validation qui
+// vivrait dans le formulaire ne vaudrait que pour celui qui passe par lui.
+import {
+  seuilEmpreinte, montantParPersonne, validerSeuil, validerMontant,
+  EMPREINTE_SEUIL_DEFAUT, EMPREINTE_MONTANT_DEFAUT,
+  EMPREINTE_SEUIL_MIN, EMPREINTE_SEUIL_MAX,
+  EMPREINTE_MONTANT_MIN, EMPREINTE_MONTANT_MAX,
+} from '@/lib/empreinte-table'
+import {
+  delaiAnnulationHeures, validerDelai, DELAI_MIN, DELAI_MAX, DELAI_DEFAUT_TABLE,
+} from '@/lib/rdv-delai-annulation'
 import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ⚠️ Trois fonctions de moins depuis le 18/08, et le lieu avec elles : cet écran
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
@@ -8138,6 +8150,173 @@ function ReglageCadence({ commercantId, toast }) {
   )
 }
 
+// ─── L'EMPREINTE BANCAIRE SUR LES GRANDES TABLES (lot 4, 14/09) ─────────────
+//
+// 🔴 CE QUE LE RESTAURATEUR DOIT COMPRENDRE EN TROIS SECONDES : rien n'est
+// débité si le client vient. On n'écrit JAMAIS qu'une somme est bloquée ou
+// retenue, parce qu'avec un `SetupIntent` rien ne l'est, et qu'une autorisation
+// de fonds expirerait de toute façon en sept jours.
+//
+// ⚠️ LE TOTAL EST AFFICHÉ, PAS SEULEMENT LE MONTANT PAR PERSONNE. « 20 € » ne
+// dit rien ; « une table de 6 garantit 120 € » dit ce que son client va lire.
+// Un montant n'est pas une information.
+//
+// ⚠️ ET LE DÉLAI D'ANNULATION EST ICI, avec l'empreinte et pas ailleurs : c'est
+// lui qui décide du moment où elle devient débitable. Jusqu'au 14/09 seul
+// l'administrateur pouvait le régler, donc un restaurateur ne pouvait ni le
+// voir ni le changer alors qu'il commande son argent.
+function ReglageEmpreinte({ commercantId, commercant, toast }) {
+  const [actif, setActif] = useState(false)
+  const [seuil, setSeuil] = useState(String(EMPREINTE_SEUIL_DEFAUT))
+  const [montant, setMontant] = useState(String(EMPREINTE_MONTANT_DEFAUT))
+  const [delai, setDelai] = useState('')
+  const [enregistre, setEnregistre] = useState(null)
+  const [lecture, setLecture] = useState('lecture')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let annule = false
+    supabase.from('commercants')
+      .select('rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne, rdv_delai_annulation_heures')
+      .eq('id', commercantId).maybeSingle()
+      .then(({ data, error }) => {
+        if (annule) return
+        if (error || !data) { setLecture('erreur'); return }
+        setActif(!!data.rdv_empreinte_actif)
+        setSeuil(String(seuilEmpreinte(data)))
+        setMontant(String(montantParPersonne(data)))
+        // ⚠️ VIDE VEUT DIRE « PAS ENCORE RÉGLÉ », et le texte dit alors ce qui
+        // s'applique par défaut. Un zéro affiché à la place laisserait croire
+        // que le client peut annuler à la dernière seconde.
+        setDelai(data.rdv_delai_annulation_heures === null || data.rdv_delai_annulation_heures === undefined
+          ? '' : String(data.rdv_delai_annulation_heures))
+        setEnregistre(data)
+        setLecture('ok')
+      })
+    return () => { annule = true }
+  }, [commercantId])
+
+  const vSeuil = validerSeuil(seuil)
+  const vMontant = validerMontant(montant)
+  const vDelai = validerDelai(delai)
+  const valide = vSeuil.ok && vMontant.ok && vDelai.ok
+  const change = lecture === 'ok' && enregistre && (
+    actif !== !!enregistre.rdv_empreinte_actif
+    || (vSeuil.ok && vSeuil.valeur !== enregistre.rdv_empreinte_seuil_couverts)
+    || (vMontant.ok && vMontant.valeur !== Number(enregistre.rdv_empreinte_par_personne))
+    || (vDelai.ok && vDelai.valeur !== (enregistre.rdv_delai_annulation_heures ?? null))
+  )
+  const aEnregistrer = valide && change
+
+  // ⚠️ SANS COMPTE STRIPE, LE RÉGLAGE NE SERVIRAIT À RIEN, et il faut le dire
+  // ICI plutôt que de laisser le restaurateur allumer une protection qui ne se
+  // déclenchera jamais.
+  const stripePret = !!commercant?.stripe_account_id && commercant?.stripe_account_charges_enabled !== false
+  const delaiApplique = vDelai.ok
+    ? delaiAnnulationHeures({ ...commercant, rdv_delai_annulation_heures: vDelai.valeur })
+    : null
+  const total = vSeuil.ok && vMontant.ok ? Math.round(vSeuil.valeur * vMontant.valeur * 100) / 100 : null
+
+  async function enregistrer() {
+    if (!aEnregistrer || saving) return
+    setSaving(true)
+    const { data, error } = await supabase.from('commercants').update({
+      rdv_empreinte_actif: actif,
+      rdv_empreinte_seuil_couverts: vSeuil.valeur,
+      rdv_empreinte_par_personne: vMontant.valeur,
+      rdv_delai_annulation_heures: vDelai.valeur,
+    }).eq('id', commercantId)
+      // ⚠️ ON LIT LE RÉSULTAT DE L'ÉCRITURE, comme pour la cadence : un réglage
+      // qui n'a pas pris et un écran qui l'affiche quand même, c'est un
+      // restaurateur qui croit ses tables garanties.
+      .select('rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne, rdv_delai_annulation_heures')
+      .maybeSingle()
+    setSaving(false)
+    if (error || !data) return toast(`Erreur : ${error?.message || 'réglage non enregistré'}. Rien n’a changé.`, 'error')
+    setEnregistre(data)
+    toast(data.rdv_empreinte_actif
+      ? `Empreinte enregistrée : dès ${data.rdv_empreinte_seuil_couverts} personnes, ${data.rdv_empreinte_par_personne} € par personne`
+      : 'Empreinte éteinte : plus aucune carte n’est demandée')
+  }
+
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+      <p style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, margin: '0 0 3px' }}>Les tables qui ne viennent pas</p>
+      <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5, margin: '0 0 10px' }}>
+        Sur tes grandes tables, tu peux demander la carte du client au moment de la réservation.
+        <strong> Rien n&rsquo;est débité s&rsquo;il vient.</strong> S&rsquo;il ne se présente pas, tu décides
+        toi-même de facturer, depuis ton agenda, jusqu&rsquo;à la fin du lendemain.
+      </p>
+      {lecture === 'erreur' ? (
+        <p style={{ fontSize: 11.5, fontWeight: 700, color: '#DC2626', margin: 0 }}>
+          Impossible de lire ce réglage. Recharge la page pour réessayer.
+        </p>
+      ) : (
+        <>
+          {!stripePret && (
+            <p style={{ fontSize: 11.5, fontWeight: 700, color: '#92400E', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '7px 10px', margin: '0 0 10px' }}>
+              Connecte d&rsquo;abord ton compte Stripe : sans lui, aucune carte ne peut être enregistrée,
+              et ce réglage resterait sans effet.
+            </p>
+          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: lecture === 'ok' ? 'pointer' : 'default', marginBottom: 10 }}>
+            <input type="checkbox" checked={actif} disabled={lecture !== 'ok'}
+              onChange={(e) => setActif(e.target.checked)}
+              style={{ width: 17, height: 17, accentColor: T.main, cursor: 'inherit' }}/>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: T.ink }}>Demander une empreinte bancaire</span>
+          </label>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', opacity: actif ? 1 : 0.55 }}>
+            <span style={{ fontSize: 12, color: T.deep, fontWeight: 700 }}>À partir de</span>
+            <input type="number" inputMode="numeric" min={EMPREINTE_SEUIL_MIN} max={EMPREINTE_SEUIL_MAX}
+              aria-label="À partir de combien de personnes" value={seuil} disabled={lecture !== 'ok' || !actif}
+              onChange={(e) => setSeuil(e.target.value)}
+              style={{ width: 78, padding: '8px 10px', borderRadius: 10, border: `1.5px solid ${vSeuil.ok ? T.hairline : '#FCA5A5'}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff' }}/>
+            <span style={{ fontSize: 12, color: T.deep, fontWeight: 700 }}>personnes,</span>
+            <input type="number" inputMode="decimal" min={EMPREINTE_MONTANT_MIN} max={EMPREINTE_MONTANT_MAX} step="0.5"
+              aria-label="Montant garanti par personne" value={montant} disabled={lecture !== 'ok' || !actif}
+              onChange={(e) => setMontant(e.target.value)}
+              style={{ width: 88, padding: '8px 10px', borderRadius: 10, border: `1.5px solid ${vMontant.ok ? T.hairline : '#FCA5A5'}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff' }}/>
+            <span style={{ fontSize: 12, color: T.deep, fontWeight: 700 }}>&euro; par personne</span>
+          </div>
+          {actif && total !== null && (
+            <p style={{ fontSize: 11.5, fontWeight: 700, color: T.deep, margin: '8px 0 0' }}>
+              Une table de {vSeuil.valeur} garantit {total.toString().replace('.', ',')}&nbsp;&euro;.
+            </p>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+            <span style={{ fontSize: 12, color: T.deep, fontWeight: 700 }}>Annulation libre jusqu&rsquo;à</span>
+            <input type="number" inputMode="numeric" min={DELAI_MIN} max={DELAI_MAX}
+              aria-label="Heures avant le service" value={delai} disabled={lecture !== 'ok'}
+              placeholder={String(DELAI_DEFAUT_TABLE)}
+              onChange={(e) => setDelai(e.target.value)}
+              style={{ width: 78, padding: '8px 10px', borderRadius: 10, border: `1.5px solid ${vDelai.ok ? T.hairline : '#FCA5A5'}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff' }}/>
+            <span style={{ fontSize: 12, color: T.deep, fontWeight: 700 }}>heures avant le service</span>
+          </div>
+          <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: '6px 0 0' }}>
+            {delai.trim() === ''
+              ? `Laissé vide : ${DELAI_DEFAUT_TABLE} heures s’appliquent. `
+              : `Aujourd’hui : ${delaiApplique} heure${delaiApplique > 1 ? 's' : ''}. `}
+            Après ce moment, ton client peut encore annuler, mais son empreinte devient facturable
+            au même titre qu&rsquo;une absence : sa table ne se reloue plus.
+          </p>
+
+          {!valide && (
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#DC2626', margin: '6px 0 0' }}>
+              {vSeuil.message || vMontant.message || vDelai.message}
+            </p>
+          )}
+          <button type="button" onClick={enregistrer} disabled={!aEnregistrer || saving}
+            style={{ marginTop: 12, padding: '8px 16px', borderRadius: 100, border: 'none', background: aEnregistrer ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#D1D5DB', color: '#fff', fontWeight: 800, fontSize: 12, cursor: aEnregistrer && !saving ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 // Sess 5a : CRUD Prestations RDV. nom, description, durée_minutes, prix
 // (fixe, ou vide = sur demande), acompte_pourcent, ordre, actif.
 // Soft delete via deleted_at (conformité 7 ans Belgique).
@@ -8619,7 +8798,13 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
           couverts disent combien elle assied, la cadence combien la cuisine
           sert d'un coup. Seulement chez un restaurant qui a des tables. */}
       {estTable && prestations.some(p => p.par_couverts === true && p.actif !== false) && (
-        <ReglageCadence commercantId={commercantId} toast={toast} />
+        <>
+          <ReglageCadence commercantId={commercantId} toast={toast} />
+          {/* 🔴 ET L'EMPREINTE JUSTE APRÈS (lot 4, 14/09) : la cadence protège
+              la cuisine, l'empreinte protège la salle. Même condition, parce
+              qu'une empreinte n'a de sens que là où il y a des tables. */}
+          <ReglageEmpreinte commercantId={commercantId} commercant={commercant} toast={toast} />
+        </>
       )}
 
       {prestationsSeules.length === 0 ? (

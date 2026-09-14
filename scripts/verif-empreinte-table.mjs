@@ -154,6 +154,59 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(src))
 }
 
+// ─── 7) L'ÉCRAN DE RÉGLAGE ──────────────────────────────────────────────────
+//
+// ⚠️ L'ÉCRAN NE DÉCIDE DE RIEN : il écrit ces colonnes directement en base, donc
+// la validation doit venir du module, sinon elle ne vaut que pour celui qui
+// passe par le formulaire.
+{
+  const CONFIG = sansProse(lire('app/dashboard/ConfigDashboard.js'))
+  const i = CONFIG.indexOf('function ReglageEmpreinte(')
+  const ECRAN = i === -1 ? '' : CONFIG.slice(i, CONFIG.indexOf('\nfunction ', i + 10))
+  verifie('le réglage de l’empreinte se découpe', ECRAN.length > 2000, String(ECRAN.length))
+  // ⚠️ LA GARDE VISE LA LECTURE, PAS LE MOT. Le même select existe DEUX fois
+  // dans ce composant, à l'ouverture et en relecture après écriture : un motif
+  // qui ne nommait que les colonnes restait vert quand on cassait la première,
+  // parce qu'il trouvait la seconde. Le jumeau, encore. Trouvé par mutation le
+  // 14/09.
+  verifie('🔴 il lit les réglages EN BASE à l’ouverture, pas dans la fiche du démarrage',
+    /supabase\.from\('commercants'\)\s*\.select\('rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne, rdv_delai_annulation_heures'\)/.test(ECRAN))
+  verifie('🔴 il valide avec les règles du module',
+    /validerSeuil\(seuil\)/.test(ECRAN) && /validerMontant\(montant\)/.test(ECRAN) && /validerDelai\(delai\)/.test(ECRAN))
+  verifie('🔴 et n’écrit que ce qu’elles rendent',
+    /rdv_empreinte_seuil_couverts: vSeuil\.valeur/.test(ECRAN)
+    && /rdv_empreinte_par_personne: vMontant\.valeur/.test(ECRAN)
+    && /rdv_delai_annulation_heures: vDelai\.valeur/.test(ECRAN))
+  // ⚠️ UN RÉGLAGE QUI N'A PAS PRIS ET UN ÉCRAN QUI L'AFFICHE QUAND MÊME, c'est
+  // un restaurateur qui croit ses tables garanties.
+  verifie('🔴 il lit le résultat de l’écriture avant de dire « enregistrée »',
+    /\.select\('rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne, rdv_delai_annulation_heures'\)\s*\.maybeSingle\(\)/.test(ECRAN)
+    && /if \(error \|\| !data\) return toast\(/.test(ECRAN))
+  // ⚠️ SANS COMPTE STRIPE, LE RÉGLAGE SERAIT SANS EFFET, et le restaurateur
+  // doit l'apprendre AVANT d'allumer une protection qui ne se déclenchera pas.
+  verifie('🔴 il prévient quand le compte Stripe n’est pas prêt',
+    /stripePret/.test(ECRAN) && /Connecte d&rsquo;abord ton compte Stripe/.test(ECRAN))
+  // ⚠️ UN MONTANT N'EST PAS UNE INFORMATION : « 20 € » ne dit rien, « une table
+  // de 6 garantit 120 € » dit ce que le client va lire.
+  verifie('🔴 il montre le TOTAL garanti, pas seulement le montant par personne',
+    /Une table de \{vSeuil\.valeur\} garantit \{total/.test(ECRAN))
+  verifie('⚠️ ses bornes sont celles du module',
+    /min=\{EMPREINTE_SEUIL_MIN\} max=\{EMPREINTE_SEUIL_MAX\}/.test(ECRAN)
+    && /min=\{EMPREINTE_MONTANT_MIN\} max=\{EMPREINTE_MONTANT_MAX\}/.test(ECRAN)
+    && /min=\{DELAI_MIN\} max=\{DELAI_MAX\}/.test(ECRAN))
+  // 🔴 ET IL DIT CE QUI SE PASSE APRÈS LE DÉLAI. Un restaurateur qui ne
+  // comprend pas quand l'empreinte devient facturable ne l'allumera pas.
+  verifie('🔴 il dit que rien n’est débité si le client vient',
+    /Rien n&rsquo;est débité s&rsquo;il vient/.test(ECRAN))
+  verifie('🔴 et que passé le délai, le client peut encore annuler',
+    /ton client peut encore annuler/.test(ECRAN))
+  verifie('⚠️ il est monté sous la même condition que la cadence',
+    /<ReglageEmpreinte commercantId=\{commercantId\} commercant=\{commercant\} toast=\{toast\} \/>/.test(CONFIG))
+  // 🔴 ET AUCUNE SOMME BLOQUÉE DANS CET ÉCRAN NON PLUS.
+  verifie('🔴 aucune somme annoncée comme bloquée sur la carte du client',
+    !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(ECRAN))
+}
+
 // ═══ RÉSULTAT ═══════════════════════════════════════════════════════════════
 console.log(`\nEmpreinte de table : ${ok + echecs.length} vérifications`)
 if (echecs.length) {

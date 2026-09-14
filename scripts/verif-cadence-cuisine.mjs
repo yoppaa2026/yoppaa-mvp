@@ -491,8 +491,12 @@ verifier('🔴 il vérifie la saisie avec la règle du module, et n’écrit que
   && /\.update\(\{ rdv_cadence_couverts: verdict\.valeur \}\)\.eq\('id', commercantId\)/.test(REGLAGE))
 verifier('🔴 il lit le résultat de l’écriture avant de dire « enregistrée »',
   /if \(error\) return toast\(`Erreur : \$\{error\.message\}\. Ta cadence n’a pas changé\.`, 'error'\)\s*setEnregistree\(verdict\.valeur\)/.test(REGLAGE))
+// ⚠️ L'ANCRE ACCEPTE LE FRAGMENT DEPUIS LE 14/09 : l'empreinte de table s'est
+// posée sous la cadence, sous la MÊME condition, ce qui a introduit un `<>`
+// entre le test et le composant. La condition, elle, n'a pas bougé d'un
+// caractère, et c'est elle que cette garde surveille.
 verifier('⚠️ il ne s’affiche que chez un restaurant qui a des tables',
-  /\{estTable && prestations\.some\(p => p\.par_couverts === true && p\.actif !== false\) && \(\s*<ReglageCadence commercantId=\{commercantId\} toast=\{toast\} \/>/.test(REGLAGES))
+  /\{estTable && prestations\.some\(p => p\.par_couverts === true && p\.actif !== false\) && \(\s*(<>\s*)?<ReglageCadence commercantId=\{commercantId\} toast=\{toast\} \/>/.test(REGLAGES))
 verifier('⚠️ ses bornes sont celles du module', /min=\{CADENCE_MIN\} max=\{CADENCE_MAX\}/.test(REGLAGE))
 verifier('⚠️ aucun tiret cadratin ni emoji dans ce qu’il dit', !/—|🟣/.test(brut('app/dashboard/ConfigDashboard.js').slice(brut('app/dashboard/ConfigDashboard.js').indexOf('function ReglageCadence('), brut('app/dashboard/ConfigDashboard.js').indexOf('function TabRdvPrestations('))))
 

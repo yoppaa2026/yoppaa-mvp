@@ -22,7 +22,32 @@
 -- recréée pour les couvrir : elles décident de qui peut poser une carte sur une
 -- table, et ça ne s'écrit pas depuis un navigateur.
 --
--- ⏳ PAS ENCORE PASSÉE.
+-- ✅ PASSÉE PAR ALEX LE 14/09/2026 : les quatre colonnes, le jeton haché, les
+-- deux garde-fous, l'index de recherche, le verrou étendu aux QUATORZE colonnes
+-- et toujours en SECURITY INVOKER, le trigger actif, aucune réservation avec un
+-- lien. Les sept essais du verrou sont conformes : le commerçant ne peut ni
+-- fabriquer un jeton, ni repousser une échéance, ni déclarer un envoi, ni
+-- choisir le canal, ni insérer une réservation avec un lien tout prêt.
+--
+-- 🔴 DEUX ÉCARTS AU PASSAGE, ET ILS NE DISENT PAS LA MÊME CHOSE :
+--
+-- 1. **B021 ET B022 ONT DIT « ACCEPTÉ » ALORS QU'ON ATTENDAIT UN REFUS, ET
+--    C'EST MA FAUTE, PAS CELLE DE LA BASE.** La table temporaire portait le
+--    TRIGGER mais PAS les contraintes CHECK : un lien sans échéance y passait
+--    forcément. Ces deux essais ne mesuraient rien, et « accepté » ne prouvait
+--    rien. Une garde qui ne se déclenche jamais est pire qu'une garde absente.
+--    Les contraintes existent bel et bien (A03 et A04 les comptent), et
+--    CONTROLE_EMPREINTE_DROITS.sql les éprouve correctement, en recopiant les
+--    contraintes VIVANTES comme la première migration le faisait déjà.
+--
+-- 2. 🔴 **A06 : `anon` A QUATRE PRIVILÈGES SUR LES COLONNES DU LIEN**, là où
+--    j'en attendais zéro. Le haché ne se renverse pas, donc ce n'est pas le
+--    sujet : le sujet, c'est que si `anon` lit ces colonnes, il lit la même
+--    table que `client_email`, `client_nom` et `client_telephone`. La RLS
+--    protège à la LIGNE, mais il faut savoir ce qui est ouvert.
+--    ⚠️ RIEN N'A ÉTÉ RÉVOQUÉ : en PostgreSQL, un privilège posé sur la TABLE ne
+--    se retire pas colonne par colonne, et on ne touche pas aux droits de
+--    production sur une intuition. CONTROLE_EMPREINTE_DROITS.sql mesure d'abord.
 
 BEGIN;
 

@@ -50,6 +50,10 @@ import { libellePeriodeStats } from '@/lib/agenda-bloc'
 import { compterAClore } from '@/lib/rdv-statut'
 import { estReservationDeTable, sansPrixSiTable } from '@/lib/cours-collectifs'
 import { accesDashboard } from '@/lib/statut-commercant'
+// ⚠️ LA FENÊTRE DE FACTURATION VIENT DU MODULE, pas d'un calcul de cet écran :
+// la route la rejoue à l'identique, et deux calculs qui divergent, c'est un
+// bouton qui s'affiche sur une table que le serveur refusera de facturer.
+import { raisonDebitImpossible } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
 
 const T = {
@@ -288,9 +292,91 @@ function IconPhone({ size = 12, color = 'currentColor' }) {
   )
 }
 
+// ─── L'EMPREINTE D'UNE TABLE, VUE DU COMPTOIR (lot 4, 14/09) ────────────────
+//
+// 🔴 CE QUE LE RESTAURATEUR NE POUVAIT PAS SAVOIR. Une table de huit prise au
+// téléphone n'a pas de carte au bout du fil, et elle ressemblait en tout point
+// à une table garantie. Il découvrait la différence le soir du no-show.
+//
+// ⚠️ ON NE DIT JAMAIS QU'UNE SOMME EST BLOQUÉE OU RETENUE : elle ne l'est pas.
+// La carte est enregistrée, rien de plus, et une autorisation de fonds
+// expirerait de toute façon en sept jours.
+const estTableGarantie = (rdv) => Number(rdv?.couverts) > 1 || !!rdv?.empreinte_statut
+
+function EmpreinteRdv({ rdv, onFacturer }) {
+  const [enCours, setEnCours] = useState(false)
+  const montant = Number(rdv?.empreinte_montant) || 0
+  const raison = raisonDebitImpossible(rdv, new Date())
+  const facturable = raison === null
+
+  if (rdv.empreinte_statut === 'debitee') {
+    return (
+      <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#6B7280' }}>
+        Table non honorée facturée&nbsp;: {euros(Number(rdv.empreinte_debit_montant) || montant)}
+      </p>
+    )
+  }
+
+  if (rdv.empreinte_statut !== 'posee') {
+    // ⚠️ L'INFORMATION QUI MANQUAIT, et elle vaut surtout pour les grandes
+    // tables : c'est là qu'une absence coûte cher.
+    return (
+      <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#92400E', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '5px 9px' }}>
+        Sans empreinte bancaire{rdv.empreinte_statut === 'echouee' ? ' (le débit a été refusé)' : ''}
+      </p>
+    )
+  }
+
+  return (
+    <div style={{ background: '#F5F3FF', border: '1px solid #DDD6FE', borderRadius: 8, padding: '6px 9px' }}>
+      <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: T.deep }}>
+        Garantie&nbsp;: {euros(montant)}. Rien n&rsquo;est débité si la table vient.
+      </p>
+      {facturable && onFacturer && (
+        <button type="button" disabled={enCours}
+          onClick={async () => {
+            // ⚠️ UNE VRAIE QUESTION AVANT DE PRENDRE DE L'ARGENT, et elle porte
+            // le montant : un bouton qui débite au premier clic devient un
+            // réflexe, et un réflexe ne décide rien.
+            //
+            // 🔴 ET PAS UN `window.confirm`, une garde du dépôt l'interdit ici
+            // depuis le 15/08 : « OK » et « Annuler » ne disent pas ce qu'ils
+            // déclenchent. Chaque bouton porte donc la phrase de ce qu'il fait.
+            const ok = await confirme(confirmationSimple({
+              titre: `Facturer ${euros(montant)} à ${rdv.client_prenom || 'ce client'} ?`,
+              message: 'Sa carte enregistrée sera débitée maintenant. Cette table n’est plus facturable après la fin du lendemain.',
+              action: 'Oui, facturer cette table',
+              retour: 'Ne rien facturer',
+            }))
+            if (!ok) return
+            setEnCours(true)
+            await onFacturer(rdv.id)
+            setEnCours(false)
+          }}
+          style={{
+            marginTop: 6, width: '100%', padding: '0.42rem', borderRadius: 9,
+            border: '1.5px solid #6B35C4', background: '#fff', color: '#6B35C4',
+            fontWeight: 800, fontSize: '0.72rem', cursor: enCours ? 'default' : 'pointer',
+            fontFamily: '"DM Sans", sans-serif',
+          }}>
+          {enCours ? 'Facturation…' : 'Facturer cette table non honorée'}
+        </button>
+      )}
+      {!facturable && raison === 'fenetre_fermee' && (
+        <p style={{ margin: '5px 0 0', fontSize: '0.68rem', color: '#6B7280' }}>
+          Le délai de facturation est passé.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // Statuts RDV (parallele de STATUTS pour les commandes).
 // Vert pour 'honore', rouge pour annule_*, gris pour 'no_show', violet pour 'confirme'.
-// NB : le CHECK DB sur rdv_reservations.statut n'accepte que les valeurs ci-dessous
+// ⚠️ CE COMMENTAIRE AFFIRMAIT QU'UN CHECK EN BASE PROTÉGEAIT CES VALEURS. C'EST
+// FAUX, vérifié le 14/09 en passant une migration : `rdv_reservations.statut`
+// n'a AUCUNE contrainte, les huit valeurs ne vivent que dans le code. Rien
+// n'empêche donc une écriture d'y mettre autre chose, et personne ne le dirait.
 // (jamais 'annule' tout court). annule_client vs annule_commercant = qui a annule.
 const STATUTS_RDV = {
   'confirme':          { label: 'Confirmé',           couleur: { border: '#6B35C4', badge: '#6B35C4', cardBg: '#EDE0FF' }, icon: '●', actions: ['honore', 'no_show', 'annule_commercant'] },
@@ -770,7 +856,7 @@ function CarteCommande({ commande, numero, categorie = null, onChangerStatut, on
 // ─── Carte RDV (vitrine) ──────────────────────────────────────────────────────
 // Affichage d'un RDV pour le commercant : heure, prestation, duree, client (nom/tel/email),
 // notes du client, prix estime. Actions : Honore / No-show / Annuler.
-function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null }) {
+function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null, onFacturerEmpreinte = null }) {
   const statut = STATUTS_RDV[rdv.statut] || STATUTS_RDV['confirme']
   const { couleur } = statut
 
@@ -932,6 +1018,22 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
             </svg>
             Déplacer ce RDV
           </button>
+        )}
+
+        {/* ─── L'EMPREINTE BANCAIRE (lot 4, 14/09) ─────────────────────────
+            🔴 CE QUE LE RESTAURATEUR NE POUVAIT PAS SAVOIR : quelles tables
+            sont couvertes et lesquelles ne le sont pas. Une réservation prise
+            au téléphone n'a pas de carte au bout du fil, et elle ressemblait
+            en tout point à une réservation garantie. Le jeton le dit.
+            ⚠️ ET ON N'ÉCRIT JAMAIS QU'UNE SOMME EST BLOQUÉE : elle ne l'est
+            pas. La carte est enregistrée, rien de plus. */}
+        {/* ⚠️ SANS LE GESTE DE FACTURATION, LE JETON RESTE : savoir qu'une
+            table n'est pas garantie vaut d'être dit même là où l'on ne peut pas
+            facturer, par exemple dans une vue de consultation. */}
+        {estTableGarantie(rdv) && (
+          <div style={{ marginTop: 10 }}>
+            <EmpreinteRdv rdv={rdv} onFacturer={onFacturerEmpreinte} />
+          </div>
         )}
 
         {/* Actions selon statut */}
@@ -1948,6 +2050,29 @@ export default function Dashboard() {
   // fonction rend `true`/`false` à TROIS appelants : changer son type
   // obligerait à relire les trois, et c'est le piège nommé le 24/08. On ajoute
   // une sortie, on ne déplace pas la porte.
+  // ─── FACTURER UNE TABLE NON HONORÉE (lot 4, 14/09) ────────────────────────
+  //
+  // ⚠️ RIEN NE S'ÉCRIT DEPUIS CE NAVIGATEUR. La route relit le SetupIntent chez
+  // Stripe, compare le montant à celui que le client a accepté, débite hors
+  // session et enregistre le résultat. Ici on ne fait que demander et raconter.
+  //
+  // 🔴 ET ON LIT VRAIMENT LA RÉPONSE. Un débit refusé par la banque (carte
+  // expirée, fonds insuffisants) rend un 402 : le taire laisserait le
+  // restaurateur croire qu'il a été payé.
+  async function facturerEmpreinte(rdvId) {
+    const res = await postPro('/api/rdv/empreinte-debiter', { rdv_id: rdvId })
+    const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+    if (!j?.ok) {
+      alert(j?.error || 'La facturation n’a pas pu aboutir. Réessaie dans un instant.')
+      return false
+    }
+    setRdvs(prev => prev.map(r => r.id === rdvId
+      ? { ...r, empreinte_statut: 'debitee', empreinte_debit_montant: j.montant, empreinte_debit_pi_id: j.payment_intent_id }
+      : r))
+    alert(`Table facturée : ${euros(j.montant)}.`)
+    return true
+  }
+
   async function changerStatutRdv(rdvId, statut, raison = 'commercant', { silencieux = false, champs = null, surRetours = null } = {}) {
     // 🔴 L'ANNULATION PAR LE COMMERÇANT PASSE PAR LE SERVEUR, ET C'EST NEUF.
     //
@@ -1999,6 +2124,10 @@ export default function Dashboard() {
       return true
     }
 
+    // ⚠️ MARQUER UN NO-SHOW NE FACTURE RIEN (lot 4, 14/09). Débiter l'empreinte
+    // est un geste SÉPARÉ, avec son bouton et sa question : les confondre, ce
+    // serait prélever chez un client en rangeant son agenda le lendemain matin.
+    //
     // 🔴 LE NO-SHOW PASSE PAR LE SERVEUR, ET C'EST NEUF (30/08 au soir).
     //
     // Il s'écrivait ici, depuis ce navigateur, et c'était tenable tant que le
@@ -2033,6 +2162,9 @@ export default function Dashboard() {
     }
 
     const payload = { statut, ...(champs || {}) }
+    // ⚠️ CET `update` NE TOUCHE PLUS À L'ARGENT DE L'EMPREINTE, et la base le
+    // refuserait : un trigger verrouille ces dix colonnes depuis
+    // MIGRATION_EMPREINTE_VERROU. Seule la clé de service les écrit.
     const { error } = await supabase.from('rdv_reservations').update(payload).eq('id', rdvId)
     if (error) {
       console.error('[dashboard] changerStatutRdv', error)
@@ -3592,6 +3724,7 @@ export default function Dashboard() {
             <CarteRdv rdv={rdvSelectionne}
               onChangerStatut={(id, st, raison) => { changerStatutRdv(id, st, raison); setRdvSelectionne(null) }}
               onDemanderAction={(r, action) => { setRdvSelectionne(null); setActionRdv({ rdv: r, action }) }}
+              onFacturerEmpreinte={facturerEmpreinte}
               onDeplacer={(r) => { setRdvSelectionne(null); setRdvADeplacer(r) }}/>
             <button onClick={() => setRdvSelectionne(null)}
               style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>

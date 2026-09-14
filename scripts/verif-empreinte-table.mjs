@@ -282,6 +282,83 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /create-rdv-empreinte/.test(TUNNEL))
 }
 
+// ─── 9) LE DÉBIT, LE SEUL MOMENT OÙ DE L'ARGENT SORT ────────────────────────
+{
+  const DEBIT = sansProse(lire('app/api/rdv/empreinte-debiter/route.js'))
+  const DASH = sansProse(lire('app/dashboard/page.js'))
+
+  // ⚠️ LA MÊME GARDE QUE LE NO-SHOW : elle prouve que celui qui appelle est le
+  // commerçant de CETTE ligne. Sans elle, un identifiant suffirait à débiter la
+  // table d'un autre.
+  verifie('🔴 la route prouve qui appelle, sur la ligne visée',
+    /gardeSurLigne\(request, supabase, 'rdv_reservations', rdv_id\)/.test(DEBIT))
+  // 🔴 LA FENÊTRE VIENT DU MODULE, pas d'un test réécrit ici.
+  verifie('🔴 elle rejoue la fenêtre du module plutôt que d’en réécrire une',
+    /raisonDebitImpossible\(rdv, new Date\(\)\)/.test(DEBIT))
+  // 🔴 DEUX SOURCES POUR UN MONTANT. La base est verrouillée par un trigger,
+  // mais on ne prélève pas sur la foi d'une seule source : le montant doit être
+  // celui que Stripe garde, c'est-à-dire celui que le client a lu.
+  verifie('🔴 le montant est comparé à celui que Stripe a gardé',
+    /stripe\.setupIntents\.retrieve\(rdv\.empreinte_setup_intent_id, \{ stripeAccount: compte \}\)/.test(DEBIT)
+    && /Math\.abs\(montantStripe - montant\) > 0\.009/.test(DEBIT))
+  verifie('🔴 et une divergence ne débite RIEN',
+    /montant divergent[\s\S]{0,400}?Rien n’a été facturé/.test(DEBIT))
+  // ⚠️ LE CLIENT N'EST PAS LÀ : c'est le mandat obtenu à l'enregistrement qui
+  // rend ce débit possible.
+  verifie('🔴 le débit se fait hors session, confirmé, sur le compte du commerçant',
+    /off_session: true/.test(DEBIT) && /confirm: true/.test(DEBIT)
+    && /stripeAccount: compte,/.test(DEBIT))
+  // 🔴 DEUX CLICS NE DÉBITENT QU'UNE FOIS.
+  verifie('🔴 une clé d’idempotence empêche le double débit',
+    /idempotencyKey: `empreinte-\$\{rdv\.id\}`/.test(DEBIT))
+  // 🔴 UN DÉBIT HORS SESSION PEUT ÊTRE REFUSÉ, et le taire laisserait le
+  // restaurateur croire qu'il a été payé.
+  verifie('🔴 un refus de la banque est écrit et dit',
+    /empreinte_statut: 'echouee'/.test(DEBIT) && /La banque a refusé/.test(DEBIT))
+  verifie('⚠️ la base n’est écrite qu’APRÈS Stripe',
+    DEBIT.indexOf('stripe.paymentIntents.create') < DEBIT.indexOf("empreinte_statut: 'debitee'"))
+  // 🔴 L'ARGENT PARTI SANS TRACE NE SE TAIT PAS.
+  verifie('🔴 un débit réussi mais non enregistré est crié dans les journaux',
+    /DÉBIT RÉUSSI MAIS NON ENREGISTRÉ/.test(DEBIT))
+  verifie('⚠️ sans compte Stripe prêt, la route refuse',
+    /stripe_account_charges_enabled === false/.test(DEBIT))
+
+  // ─── CÔTÉ TABLEAU DE BORD ─────────────────────────────────────────────────
+  verifie('🔴 marquer un no-show ne facture rien',
+    !/empreinte-debiter/.test(DASH.slice(DASH.indexOf("if (statut === 'no_show')"), DASH.indexOf("if (statut === 'no_show')") + 1200)))
+  // ⚠️ LA GARDE VISE LE MESSAGE D'ÉCHEC, PAS « UNE ALERTE QUELQUE PART ». Un
+  // motif large attrapait l'alerte de SUCCÈS qui suit, et laissait passer un
+  // échec avalé en silence : le restaurateur aurait cru avoir été payé. Trouvé
+  // par mutation le 14/09.
+  verifie('🔴 le geste de facturation est séparé, et il DIT l’échec',
+    /postPro\('\/api\/rdv\/empreinte-debiter', \{ rdv_id: rdvId \}\)/.test(DASH)
+    && /alert\(j\?\.error \|\|/.test(DASH))
+  // ⚠️ UN BOUTON QUI DÉBITE AU PREMIER CLIC DEVIENT UN RÉFLEXE, et un réflexe
+  // ne décide rien. La question porte le montant.
+  // 🔴 ET PAS UN `window.confirm` : une garde du dépôt l'interdit dans cet
+  // écran depuis le 15/08, parce que « OK » et « Annuler » ne disent pas ce
+  // qu'ils déclenchent. Chaque bouton porte la phrase de ce qu'il fait.
+  verifie('🔴 une question porte le montant avant de prendre l’argent',
+    /confirme\(confirmationSimple\(\{\s*titre: `Facturer \$\{euros\(montant\)\}/.test(DASH))
+  // ⚠️ ET LE MONTANT S'ÉCRIT AVEC LA FONCTION DU DÉPÔT, jamais à la main : une
+  // garde du tableau de bord l'exige depuis le 28/08, parce que l'écran
+  // affichait « 52.00€ » quand l'email du client disait « 52,00 € ».
+  verifie('⚠️ les montants de l’empreinte passent par euros()',
+    /Garantie&nbsp;: \{euros\(montant\)\}/.test(DASH))
+  verifie('⚠️ et son bouton de sortie ne fait rien',
+    /retour: 'Ne rien facturer'/.test(DASH))
+  // 🔴 L'INFORMATION QUI MANQUAIT AU RESTAURATEUR : quelles tables sont
+  // couvertes, lesquelles ne le sont pas.
+  verifie('🔴 une table sans empreinte le dit',
+    /Sans empreinte bancaire/.test(DASH))
+  verifie('⚠️ et une table garantie dit que rien n’est débité si elle vient',
+    /Rien n&rsquo;est débité si la table vient/.test(DASH))
+  verifie('⚠️ le bouton suit la fenêtre du module',
+    /raisonDebitImpossible\(rdv, new Date\(\)\)/.test(DASH))
+  verifie('🔴 aucune somme annoncée comme bloquée dans l’agenda',
+    !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(DASH))
+}
+
 // ═══ RÉSULTAT ═══════════════════════════════════════════════════════════════
 console.log(`\nEmpreinte de table : ${ok + echecs.length} vérifications`)
 if (echecs.length) {

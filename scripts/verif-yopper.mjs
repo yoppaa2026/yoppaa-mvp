@@ -16,6 +16,7 @@ import {
 } from '../lib/morning-eligibilite.js'
 import { estSessionPerdue, ERREUR_SESSION } from '../lib/session-perdue.js'
 import { localiteDeAdresse, lieuDeCarte } from '../lib/adresse-localite.js'
+import { ficheUtilisablePar } from '../lib/fiche-client.js'
 import { sansProse } from './lire-code.mjs'
 
 let ok = 0, ko = 0
@@ -1271,6 +1272,22 @@ for (const chemin of routesAdmin) {
     /\.is\('auth_user_id', null\)/.test(auth))
   // ⚠️ Un `await` dont on ignore l'erreur est un espoir, pas une action.
   verifier('et l’échec du rattachement se lit', /if \(errLien\) console\.error/.test(auth))
+
+  // 🔴 ET UNE FICHE RELIÉE À UN AUTRE COMPTE NE SE REND PAS (15/09). Le code
+  // refusait de la rattacher, et la rendait quand même : identifiant, nom et
+  // téléphone de l'autre. L'email est unique dans `clients`, et un compte qui
+  // change d'adresse laisse sa fiche à l'ancienne.
+  verifier('une fiche d’invité, reliée à personne, sert au compte qui arrive',
+    ficheUtilisablePar({ auth_user_id: null }, 'compte-a') === true)
+  verifier('sa propre fiche lui sert évidemment',
+    ficheUtilisablePar({ auth_user_id: 'compte-a' }, 'compte-a') === true)
+  verifier('🔴 la fiche d’un AUTRE compte ne lui sert jamais',
+    ficheUtilisablePar({ auth_user_id: 'compte-b' }, 'compte-a') === false)
+  verifier('pas de fiche, pas de fiche', ficheUtilisablePar(null, 'compte-a') === false)
+  verifier('⚠️ et sans compte identifié, rien ne se rend',
+    ficheUtilisablePar({ auth_user_id: null }, null) === false)
+  verifier('🔴 l’identité passe par cette règle avant de rendre la fiche',
+    /fiche = ficheUtilisablePar\(parEmail, user\.id\) \? parEmail : null/.test(auth))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

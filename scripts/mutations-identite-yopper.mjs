@@ -113,6 +113,25 @@ const MUTATIONS = [
     fichier: AUTH,
     de: '        if (errLien) console.error',
     vers: '        if (false) console.error' },
+
+  // ─── LA FICHE D'UN AUTRE COMPTE (15/09) ─────────────────────────────────
+  //
+  // 🔴 Refuser de la rattacher ne suffisait pas : elle était RENDUE quand
+  // même, avec le nom et le téléphone de l'autre.
+  { nom: '🔴 la fiche reliee a un AUTRE compte est de nouveau rendue',
+    fichier: AUTH,
+    de: '      fiche = ficheUtilisablePar(parEmail, user.id) ? parEmail : null',
+    vers: '      fiche = parEmail || null' },
+
+  { nom: '🔴 la regle accepte une fiche reliee a n importe quel compte',
+    fichier: 'lib/fiche-client.js',
+    de: '  return !fiche.auth_user_id || fiche.auth_user_id === userId',
+    vers: '  return true' },
+
+  { nom: '🔴 la fiche d invite n est plus rattachable',
+    fichier: 'lib/fiche-client.js',
+    de: '  return !fiche.auth_user_id || fiche.auth_user_id === userId',
+    vers: '  return fiche.auth_user_id === userId' },
 ]
 
 const lancer = () => {

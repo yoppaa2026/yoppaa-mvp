@@ -78,12 +78,15 @@ FROM t JOIN perso p ON p.nom = t.nom WHERE NOT t.rls
 
 UNION ALL
 SELECT 'A03',
-       'Tables avec RLS mais AUCUNE policy (tout est refuse, ou rien ne filtre)',
+       'Tables avec RLS mais AUCUNE policy PERMISSIVE (tout est refuse hors cle de service)',
        COALESCE(string_agg(t.nom, ', ' ORDER BY t.nom), 'aucune'),
        'aucune',
        CASE WHEN count(*) = 0 THEN 'OK' ELSE '>>> A REGARDER' END
 FROM t
-WHERE t.rls AND NOT EXISTS (SELECT 1 FROM pg_policy pol WHERE pol.polrelid = t.oid)
+-- ⚠️ `polpermissive` (corrigé le 15/09) : une policy RESTRICTIVE n'accorde rien
+-- à elle seule. Une table qui n'en porte que de ce type refuse tout, comme une
+-- table sans policy, et c'est celle-là qu'on cherche.
+WHERE t.rls AND NOT EXISTS (SELECT 1 FROM pg_policy pol WHERE pol.polrelid = t.oid AND pol.polpermissive)
 
 -- ─── B. Ce que l'anonyme peut faire ─────────────────────────────────────────
 UNION ALL
@@ -153,7 +156,10 @@ SELECT 'E01', 'Nombre de tables dans public', count(*)::text, 'pour memoire', 'I
 UNION ALL
 SELECT 'E02', 'Nombre de vues dans public', count(*)::text, 'pour memoire', 'INFO' FROM v
 UNION ALL
-SELECT 'E03', 'Nombre de policies au total', count(*)::text, 'pour memoire', 'INFO'
+SELECT 'E03', 'Nombre de policies au total, par type',
+       ('permissives = ' || count(*) FILTER (WHERE pol.polpermissive)
+        || ', restrictives = ' || count(*) FILTER (WHERE NOT pol.polpermissive))::text,
+       'pour memoire', 'INFO'
 FROM pg_policy pol JOIN pg_class c ON c.oid = pol.polrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public'
 

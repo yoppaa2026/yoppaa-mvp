@@ -111,8 +111,8 @@ SELECT 'A04', 'anon lit-il les identifiants Stripe de l empreinte ?',
            AND (column_name LIKE 'empreinte%' OR column_name LIKE 'stripe%')),
        'a lire'
 UNION ALL
-SELECT 'A05', 'combien de policies de LECTURE existent pour anon',
-       (SELECT COALESCE(string_agg(policyname::text, ', ' ORDER BY policyname::text), 'AUCUNE')
+SELECT 'A05', 'les policies de LECTURE qui visent anon, avec leur type',
+       (SELECT COALESCE(string_agg(policyname::text || ' (' || permissive::text || ')', ', ' ORDER BY policyname::text), 'AUCUNE')
           FROM pg_policies
          WHERE schemaname = 'public' AND tablename = 'rdv_reservations'
            AND cmd IN ('SELECT', 'ALL') AND 'anon' = ANY(roles)),

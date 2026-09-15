@@ -50,7 +50,10 @@ SELECT c.relname AS table_sans_rls
 -- ATTENDU : que des lignes dont la condition NOMME un propriétaire
 -- (`auth.uid()`, `is_admin()`, un `commercant_id IN (...)`). Toute ligne dont
 -- la condition est `true` ou `—` est une porte ouverte.
-SELECT tablename, policyname, cmd, roles::text,
+--
+-- ⚠️ LA COLONNE `permissive` (ajoutée le 15/09) : une RESTRICTIVE `true` ne
+-- donne rien à elle seule, seule une PERMISSIVE `true` ouvre.
+SELECT tablename, policyname, permissive, cmd, roles::text,
        coalesce(qual, '—')       AS using_clause,
        coalesce(with_check, '—') AS with_check_clause
   FROM pg_policies
@@ -69,7 +72,7 @@ SELECT tablename, policyname, cmd, roles::text,
 -- ⚠️ Et guetter les DOUBLONS : une policy stricte et une policy large sur la
 -- même table se combinent en OU, donc la large gagne toujours. C'est comme ça
 -- que le catalogue d'un commerçant non validé reste lisible.
-SELECT tablename, policyname, roles::text, coalesce(qual, '—') AS using_clause
+SELECT tablename, policyname, permissive, roles::text, coalesce(qual, '—') AS using_clause
   FROM pg_policies
  WHERE schemaname = 'public'
    AND cmd = 'SELECT'
@@ -86,9 +89,12 @@ SELECT tablename, policyname, roles::text, coalesce(qual, '—') AS using_clause
 SELECT c.relname AS table_sans_policy
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
  WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity = true
+   -- ⚠️ PERMISSIVE seulement (15/09) : une table qui ne porte que des
+   -- RESTRICTIVE refuse tout, exactement comme une table sans policy.
    AND NOT EXISTS (
      SELECT 1 FROM pg_policies p
-      WHERE p.schemaname = 'public' AND p.tablename = c.relname)
+      WHERE p.schemaname = 'public' AND p.tablename = c.relname
+        AND p.permissive = 'PERMISSIVE')
  ORDER BY 1;
 
 

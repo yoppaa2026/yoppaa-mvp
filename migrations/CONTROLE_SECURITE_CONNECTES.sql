@@ -27,7 +27,10 @@ WITH perso(nom) AS (
          ('demandes_commande'), ('yoppers')
 ),
 pol AS (
-  SELECT tablename::text AS tbl, policyname::text AS nom, cmd::text AS commande,
+  -- ⚠️ `permissive` (ajouté le 15/09) : c'est le contrôle qui l'avait oublié, et
+  -- le n° 4 (CONTROLE_POLICIES_PERMISSIVE) est né de cet oubli.
+  SELECT tablename::text AS tbl, policyname::text AS nom, permissive::text AS type,
+         cmd::text AS commande,
          roles::text[] AS roles, qual::text AS lecture, with_check::text AS ecriture,
          (COALESCE(qual, '') || ' ' || COALESCE(with_check, ''))::text AS expr
   FROM pg_policies
@@ -39,11 +42,12 @@ pol AS (
 -- toutes les commandes de tous les commerçants. Une seule ligne ici vaut audit.
 SELECT 'O'::text AS ordre,
        (tbl || ' · ' || nom || ' [' || commande || ']')::text AS objet,
-       ('roles=' || array_to_string(roles, ',')
+       (type || ' | roles=' || array_to_string(roles, ',')
         || ' | USING ' || COALESCE(left(lecture, 100), '-')
         || ' | CHECK ' || COALESCE(left(ecriture, 100), '-'))::text AS detail,
-       'aucune policy ne doit valoir true'::text AS attendu,
-       '>>> OUVERTE A TOUT COMPTE'::text AS verdict
+       'aucune policy PERMISSIVE ne doit valoir true'::text AS attendu,
+       CASE WHEN type = 'PERMISSIVE' THEN '>>> OUVERTE A TOUT COMPTE'
+            ELSE 'RESTRICTIVE : n ouvre rien seule' END::text AS verdict
 FROM pol
 WHERE COALESCE(lecture, '') = 'true' OR COALESCE(ecriture, '') = 'true'
 
@@ -54,11 +58,12 @@ WHERE COALESCE(lecture, '') = 'true' OR COALESCE(ecriture, '') = 'true'
 UNION ALL
 SELECT 'L',
        (p.tbl || ' · ' || p.nom || ' [' || p.commande || ']'),
-       ('roles=' || array_to_string(p.roles, ',')
+       (p.type || ' | roles=' || array_to_string(p.roles, ',')
         || ' | USING ' || COALESCE(left(p.lecture, 120), '-')
         || ' | CHECK ' || COALESCE(left(p.ecriture, 120), '-')),
        'doit citer auth.uid() ou une fonction d identite',
-       '>>> A JUSTIFIER'
+       CASE WHEN p.type = 'PERMISSIVE' THEN '>>> A JUSTIFIER'
+            ELSE 'RESTRICTIVE : restreint, n ouvre rien' END
 FROM pol p
 JOIN perso pe ON pe.nom = p.tbl
 WHERE p.expr !~ '(auth\.uid|auth\.jwt|is_admin|is_yoppaa_admin)'
@@ -67,7 +72,7 @@ WHERE p.expr !~ '(auth\.uid|auth\.jwt|is_admin|is_yoppaa_admin)'
 UNION ALL
 SELECT 'M',
        (tbl || ' · ' || nom || ' [' || commande || ']'),
-       ('roles=' || array_to_string(roles, ',')
+       (type || ' | roles=' || array_to_string(roles, ',')
         || ' | USING ' || COALESCE(left(lecture, 150), '-')
         || ' | CHECK ' || COALESCE(left(ecriture, 150), '-')),
        'chaque ligne limitee a son proprietaire, ou a l admin',
@@ -97,8 +102,10 @@ SELECT 'P',
        'etat le plus ferme',
        'INFO'
 FROM perso pe
+-- ⚠️ Une RESTRICTIVE n'accorde aucune lecture à elle seule : seules les
+-- PERMISSIVE comptent ici (15/09).
 WHERE NOT EXISTS (
-  SELECT 1 FROM pol p WHERE p.tbl = pe.nom AND p.commande IN ('SELECT', 'ALL')
+  SELECT 1 FROM pol p WHERE p.tbl = pe.nom AND p.commande IN ('SELECT', 'ALL') AND p.type = 'PERMISSIVE'
 )
 
 -- ─── Q. Reperes ────────────────────────────────────────────────────────────

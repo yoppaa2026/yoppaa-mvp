@@ -25,8 +25,11 @@ WITH perso(nom) AS (
          ('demandes_commande'), ('yoppers'), ('commande_articles')
 ),
 pol AS (
+  -- ⚠️ `permissive` (ajouté le 15/09) : une RESTRICTIVE `true` ne donne rien à
+  -- elle seule. Sans le type, F et G criaient « ouvert » sur un verrou.
   SELECT tablename::text AS tbl,
          policyname::text AS nom,
+         permissive::text AS type,
          cmd::text AS commande,
          roles::text[] AS roles,
          qual::text AS lecture,
@@ -45,11 +48,12 @@ ouvertes AS (
 -- l'agenda. Une condition `true` sur une écriture est un robinet ouvert.
 SELECT 'F'::text AS ordre,
        (tbl || ' · ' || nom || ' [' || commande || ']')::text AS objet,
-       ('roles=' || array_to_string(roles, ',')
+       (type || ' | roles=' || array_to_string(roles, ',')
         || ' | USING ' || COALESCE(left(lecture, 180), '-')
         || ' | CHECK ' || COALESCE(left(ecriture, 180), '-'))::text AS detail,
        'une condition qui identifie l auteur, jamais true'::text AS attendu,
        CASE
+         WHEN type = 'RESTRICTIVE' THEN 'RESTRICTIVE : n ouvre rien seule'
          WHEN COALESCE(ecriture, lecture, 'true') = 'true' THEN '>>> OUVERT A TOUS'
          ELSE 'A LIRE'
        END::text AS verdict
@@ -60,10 +64,11 @@ WHERE commande IN ('INSERT', 'UPDATE', 'DELETE', 'ALL')
 UNION ALL
 SELECT 'G',
        (o.tbl || ' · ' || o.nom || ' [' || o.commande || ']'),
-       ('roles=' || array_to_string(o.roles, ',')
+       (o.type || ' | roles=' || array_to_string(o.roles, ',')
         || ' | USING ' || COALESCE(left(o.lecture, 240), '-')),
        'une condition qui limite a ses propres lignes',
-       CASE WHEN COALESCE(o.lecture, 'true') = 'true' THEN '>>> FUITE : TOUT EST LISIBLE'
+       CASE WHEN o.type = 'RESTRICTIVE' THEN 'RESTRICTIVE : n ouvre rien seule'
+            WHEN COALESCE(o.lecture, 'true') = 'true' THEN '>>> FUITE : TOUT EST LISIBLE'
             ELSE 'A LIRE' END
 FROM ouvertes o
 JOIN perso p ON p.nom = o.tbl

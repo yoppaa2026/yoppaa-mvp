@@ -29,18 +29,21 @@ SELECT 'C02', 'les policies du journal (nom : type commande, rôles)',
           FROM pg_policies WHERE schemaname = 'public' AND tablename = 'admin_impersonations')::text,
        'a lire : de quoi LIRE, INSERER et FERMER pour l admin'::text
 UNION ALL
-SELECT 'C03', 'au moins une policy permet de LIRE (SELECT ou ALL)',
+-- 🔴 C03 ET C04 NE COMPTENT QUE LES PERMISSIVE (corrigé le 15/09, dans la nuit).
+-- Une RESTRICTIVE n'accorde RIEN à elle seule : `zz_commerce_ouvert`, en ALL,
+-- faisait dire « 1 » à ces deux lignes même sans aucune policy de l'admin.
+SELECT 'C03', 'au moins une policy PERMISSIVE permet de LIRE (SELECT ou ALL)',
        (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'admin_impersonations'
-          AND cmd IN ('SELECT', 'ALL'))::text,
+          AND permissive = 'PERMISSIVE' AND cmd IN ('SELECT', 'ALL'))::text,
        'au moins 1'::text
 UNION ALL
-SELECT 'C04', 'au moins une policy permet de FERMER une ligne (UPDATE ou ALL)',
+SELECT 'C04', 'au moins une policy PERMISSIVE permet de FERMER une ligne (UPDATE ou ALL)',
        (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'admin_impersonations'
-          AND cmd IN ('UPDATE', 'ALL'))::text,
+          AND permissive = 'PERMISSIVE' AND cmd IN ('UPDATE', 'ALL'))::text,
        'au moins 1, sinon les lignes restent ouvertes'::text
 UNION ALL
-SELECT 'C05', 'les conditions des policies (USING / WITH CHECK)',
-       (SELECT COALESCE(string_agg(policyname || ' : USING ' || COALESCE(qual, '-') || ' / CHECK ' || COALESCE(with_check, '-'), ' | ' ORDER BY policyname), 'AUCUNE')
+SELECT 'C05', 'les conditions des policies, avec leur type (USING / WITH CHECK)',
+       (SELECT COALESCE(string_agg(policyname || ' (' || permissive || ') : USING ' || COALESCE(qual, '-') || ' / CHECK ' || COALESCE(with_check, '-'), ' | ' ORDER BY policyname), 'AUCUNE')
           FROM pg_policies WHERE schemaname = 'public' AND tablename = 'admin_impersonations')::text,
        'a lire : chaque condition limitee a l admin'::text
 UNION ALL

@@ -27,7 +27,10 @@ export default function robots() {
       rules: {
         userAgent: '*',
         allow: [
-          '/$', '/legal', '/sitemap.xml',
+          // `/concours` : le règlement du concours de lancement, lié depuis
+          // Facebook. Un règlement fermé aux robots n'aurait pas d'aperçu de
+          // lien, et un document contractuel doit rester trouvable.
+          '/$', '/legal', '/concours', '/sitemap.xml',
           // Le favicon des résultats de recherche est récupéré par un crawl
           // SÉPARÉ, qui respecte lui aussi le robots.txt : sans ces trois
           // lignes, Google affiche son globe générique à la place du logo.

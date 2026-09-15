@@ -20,6 +20,7 @@ export default async function sitemap() {
     return [
       { url: BASE_URL, lastModified: now, changeFrequency: 'daily', priority: 1 },
       { url: `${BASE_URL}/legal`, lastModified: now, changeFrequency: 'monthly', priority: 0.3 },
+      { url: `${BASE_URL}/concours`, lastModified: now, changeFrequency: 'weekly', priority: 0.5 },
     ]
   }
 
@@ -28,6 +29,7 @@ export default async function sitemap() {
     { url: `${BASE_URL}/commander`, lastModified: now, changeFrequency: 'daily', priority: 0.9 },
     { url: `${BASE_URL}/classement`, lastModified: now, changeFrequency: 'daily', priority: 0.7 },
     { url: `${BASE_URL}/legal`, lastModified: now, changeFrequency: 'monthly', priority: 0.3 },
+    { url: `${BASE_URL}/concours`, lastModified: now, changeFrequency: 'weekly', priority: 0.5 },
   ]
 
   let fiches = []

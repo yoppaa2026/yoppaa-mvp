@@ -31,12 +31,18 @@ const DATES = {
 // ici après le 16 septembre retirerait des fiches du décompte : l'organisateur
 // pourrait déplacer le nombre final vers l'estimation de son choix.
 // Relevée le 15/09 dans la vue publique (clé anon), noms EXACTS tels
-// qu'affichés, et cochée par Alex : tout ce qui est publié sauf Centre Respire
-// et L'Arrosoir, qui sont de vrais commerces.
+// qu'affichés, et cochée par Alex : tout ce qui est publié sauf L'Arrosoir,
+// seul vrai commerce publié à cette date.
 // ⚠️ LES TESTS SUSPENDUS NE SONT PAS LISTÉS, ET C'EST L'ANNEXE QUI LES COUVRE :
 // l'organisateur s'engage à n'en republier aucun. Une liste de noms tirés de
 // mémoire aurait pu en oublier un, qui serait alors compté.
+// 🔴 DEUX NOMS SONT AUSSI CEUX DE VRAIS COMMERCES (Alex, 15/09) : le vrai
+// Kebabistro et le vrai Centre Respire rejoignent l'application. Un test ne se
+// désigne donc ni par son nom, ni par son adresse (le vrai commerce pourra la
+// reprendre une fois le test retiré), mais par ce qui les distingue pour de
+// bon : créé par l'organisateur, et existant au début du concours.
 const COMMERCES_DEMONSTRATION = [
+  'Centre Respire - Yoga et Pilates',
   'Ciseaux et Soins',
   'Kebabistro',
   'La Boutique Témoin',
@@ -287,9 +293,10 @@ export default function ReglementConcours() {
             <h2 style={{ fontWeight: 800, fontSize: '1.08rem', color: T.deep, marginBottom: '0.75rem', paddingBottom: '0.5rem', borderBottom: `2px solid ${T.pale}` }}>
               Annexe. Commerces de démonstration de l'organisateur
             </h2>
-            <P>Ces commerces servent à présenter et à tester l'application. Leurs fiches ne sont comptées ni dans le nombre de l'article 6, ni dans le nombre de commerces de l'article 7. Cette liste est arrêtée au {DATES.debut}.</P>
+            <P>Les fiches ci-dessous ont été créées par l'organisateur pour présenter et tester l'application. Elles ne sont comptées ni dans le nombre de l'article 6, ni dans le nombre de commerces de l'article 7. Cette liste vise les fiches de test existant au {DATES.debut}, et elle est arrêtée à cette date.</P>
             <Liste items={COMMERCES_DEMONSTRATION} />
-            <P>Les commerces de test de l'organisateur qui ne sont pas publiés au début du concours ne sont pas publiés pendant sa durée.</P>
+            <P>Certaines de ces fiches portent le nom d'un commerce réel. Lorsque ce commerce rejoint Yoppaa, sa fiche est une fiche distincte, créée par le commerçant lui-même : elle est comptée normalement, dans les deux nombres.</P>
+            <P>Les fiches de test sont retirées de l'application au plus tard le 1er octobre 2026, et restent exclues des décomptes en toute hypothèse. Les commerces de test de l'organisateur qui ne sont pas publiés au début du concours ne sont pas publiés pendant sa durée.</P>
           </section>
         </div>
       </main>

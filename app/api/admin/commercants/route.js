@@ -6,7 +6,8 @@
 //
 // 🔴 UN VRAI COMMERÇANT S'ARCHIVE, IL NE S'EFFACE JAMAIS (décision d'Alex,
 // 15/09). La suppression est refusée dès qu'il existe UNE commande, UNE
-// réservation, UN bon cadeau, UN abonnement ou UN achat de SMS, payé ou non :
+// réservation, UN bon cadeau, UN abonnement, UN achat de SMS ou UN pack
+// d'accompagnement commandé (un pack seulement coché ne compte pas), payé ou non :
 // l'écran propose alors de passer son statut à « suspendu ». Il n'existe plus
 // aucun moyen de passer outre.
 //
@@ -162,13 +163,22 @@ export async function DELETE(request) {
       { table: 'bons_cadeaux', singulier: 'bon cadeau', pluriel: 'bons cadeaux' },
       { table: 'abonnements', singulier: 'abonnement', pluriel: 'abonnements' },
       { table: 'fidelite_sms_achats', singulier: 'achat de SMS', pluriel: 'achats de SMS' },
+      // ⚠️ UNE VENTE D'AVCOTECH, PAS UN SOUHAIT (Alex, 15/09). Cette table porte
+      // aussi les packs simplement COCHÉS à l'inscription (`souhaite`), que le
+      // commerçant efface lui-même : les compter bloquerait à vie un commerce
+      // qui n'a rien acheté. Tout le reste, en cours de paiement ou payé,
+      // raconte de l'argent. Les lignes sans statut comptent, par prudence.
+      { table: 'success_packs', exclureStatut: 'souhaite', singulier: "pack d'accompagnement", pluriel: "packs d'accompagnement" },
     ]
     const historique = []
     for (const h of HISTORIQUE) {
-      const { count, error: errCompte } = await admin
+      let requete = admin
         .from(h.table)
         .select('id', { count: 'exact', head: true })
         .eq('commercant_id', c.id)
+      // La valeur exclue vient de la liste ci-dessus, jamais de la requête.
+      if (h.exclureStatut) requete = requete.or(`statut.is.null,statut.neq.${h.exclureStatut}`)
+      const { count, error: errCompte } = await requete
       // ⚠️ UN COMPTAGE IMPOSSIBLE REFUSE, IL NE LAISSE PAS PASSER. « Je n'ai pas
       // pu regarder » ne veut pas dire « il n'y a rien » : c'est l'erreur qui
       // effacerait un historique sans que personne l'ait décidé.

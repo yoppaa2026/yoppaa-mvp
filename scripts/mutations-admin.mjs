@@ -111,6 +111,24 @@ const MUTATIONS = [
     de: "        .update({ statut_publication: 'suspendu' })",
     vers: "        .update({ statut_publication: 'rejete' })" },
 
+  // ─── LES VENTES D'AVCOTECH (Alex, 15/09) ────────────────────────────────
+  { nom: '🔴 les packs d’accompagnement payes sortent de l’historique',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: "      { table: 'success_packs', exclureStatut: 'souhaite', singulier: \"pack d'accompagnement\", pluriel: \"packs d'accompagnement\" },",
+    vers: '' },
+
+  // ⚠️ L'erreur inverse : compter les souhaits bloquerait à vie un commerce
+  // qui n'a rien acheté.
+  { nom: '🔴 un pack seulement coche devient de l’historique',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: "      { table: 'success_packs', exclureStatut: 'souhaite',",
+    vers: "      { table: 'success_packs'," },
+
+  { nom: '🔴 l’exclusion des souhaits ne s’applique plus au comptage',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: '      if (h.exclureStatut) requete = requete.or(`statut.is.null,statut.neq.${h.exclureStatut}`)',
+    vers: '' },
+
   // ─── LE PIÈGE QUI N'EXISTE PAS ENCORE ──────────────────────────────────
   //
   // 🔴 CANONISER LES ADRESSES GMAIL est une idée qui revient dès qu'on veut

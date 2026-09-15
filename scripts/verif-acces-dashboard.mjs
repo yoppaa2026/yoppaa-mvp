@@ -274,10 +274,17 @@ function sansCommentaires(src) {
   // précisément ce qu'on vient d'en retirer.
   const codeSuppression = src.slice(src.indexOf('export async function DELETE'))
     .replace(/^[ \t]*\/\/.*$/gm, '')
-  for (const table of ['commandes', 'rdv_reservations', 'bons_cadeaux', 'abonnements', 'fidelite_sms_achats']) {
+  for (const table of ['commandes', 'rdv_reservations', 'bons_cadeaux', 'abonnements', 'fidelite_sms_achats', 'success_packs']) {
     verifier(`🔴 l’historique compte « ${table} »`,
       new RegExp(`\\{ table: '${table}',`).test(codeSuppression))
   }
+  // ⚠️ LES PACKS SIMPLEMENT COCHÉS NE SONT PAS UNE VENTE (Alex, 15/09) : les
+  // compter bloquerait à vie un commerce qui n'a rien acheté. Et l'exclusion
+  // doit réellement s'appliquer à la requête, pas seulement figurer dans la liste.
+  verifier('⚠️ un pack seulement souhaité n’est pas de l’historique',
+    /\{ table: 'success_packs', exclureStatut: 'souhaite',/.test(codeSuppression))
+  verifier('⚠️ et l’exclusion s’applique vraiment au comptage, lignes sans statut comprises',
+    /if \(h\.exclureStatut\) requete = requete\.or\(`statut\.is\.null,statut\.neq\.\$\{h\.exclureStatut\}`\)/.test(codeSuppression))
   verifier('🔴 l’historique compte TOUT, pas seulement ce qui est payé',
     !/paye_en_ligne|acompte_paye/.test(codeSuppression))
   verifier('🔴 un historique refuse la suppression',

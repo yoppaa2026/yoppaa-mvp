@@ -336,7 +336,7 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
           <div style={{ padding: '0.875rem 1.125rem 1.125rem', borderTop: '1px solid #FCA5A5', background: '#FEF2F2' }}>
             <p style={{ fontSize: 13, fontWeight: 800, color: '#991B1B', margin: '0 0 6px' }}>Suppression définitive</p>
             <p style={{ fontSize: 12, color: '#B91C1C', lineHeight: 1.5, margin: '0 0 10px' }}>
-              «&nbsp;{commercant.nom}&nbsp;» et tout son contenu (articles, deals, actus, créneaux…) seront supprimés, ainsi que le compte de connexion lié. <strong>Irréversible.</strong> Réservé à un commerce sans historique : dès qu&rsquo;il a une commande, une réservation, un bon, un abonnement ou un achat de SMS, il s&rsquo;archive.
+              «&nbsp;{commercant.nom}&nbsp;» et tout son contenu (articles, deals, actus, créneaux…) seront supprimés, ainsi que le compte de connexion lié. <strong>Irréversible.</strong> Réservé à un commerce sans historique : dès qu&rsquo;il a une commande, une réservation, un bon, un abonnement, un achat de SMS ou un pack d&rsquo;accompagnement commandé, il s&rsquo;archive.
             </p>
             {blockInfo && (
               <div style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74', borderRadius: 10, padding: '0.5rem 0.75rem', marginBottom: 10 }}>

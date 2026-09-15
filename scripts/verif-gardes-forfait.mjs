@@ -19,7 +19,7 @@
 
 import { readFileSync } from 'node:fs'
 import { verdictForfait, forfaitOuvre, premierPlanQuiOuvre, COLONNES_GARDE } from '../lib/garde-forfait.js'
-import { PLAN_FEATURES, commandeAllumee, getPillsStatut } from '../lib/plans.js'
+import { PLAN_FEATURES, commandeAllumee, getPillsStatut, planIa } from '../lib/plans.js'
 import { actionCommerce } from '../lib/action-google.js'
 import { commercantEligibleDeal } from '../lib/morning-eligibilite.js'
 
@@ -484,6 +484,56 @@ for (const r of ROUTES) {
   for (const chemin of ['lib/action-google.js', 'lib/plans.js']) {
     verifier(`${chemin} lit le forfait effectif`,
       /const plan = planEffectif\(commercant, maintenant\)/.test(codeSeul(lire(chemin))))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠️ LE VOLUME D'IA PENDANT L'ESSAI (Alex, 15/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// « On garde le volume de Communiquer pour l'IA. » L'essai ouvre les fonctions
+// de Vendre, jamais Sonnet ni ses 200 textes par mois. Les deux erreurs sont
+// possibles et aucune ne se voit : lire `plan` laisse un Exister en essai à un
+// texte par mois, lire `planEffectif` offre Sonnet à tout essai.
+{
+  const essaiVendre = commerce('exister', { essai_plan: 'vendre' })
+  verifier('🔴 un Exister en essai de Vendre écrit au volume de Communiquer',
+    planIa(essaiVendre, PENDANT_ESSAI) === 'communiquer')
+  verifier('et retombe sur Exister une fois l’essai terminé',
+    planIa(essaiVendre, APRES_ESSAI) === 'exister')
+  verifier('un Exister en essai de Communiquer aussi',
+    planIa(commerce('exister', { essai_plan: 'communiquer' }), PENDANT_ESSAI) === 'communiquer')
+  verifier('⚠️ un Communiquer en essai de Vendre ne monte pas à Vendre',
+    planIa(commerce('communiquer', { essai_plan: 'vendre' }), PENDANT_ESSAI) === 'communiquer')
+  verifier('⚠️ celui qui PAIE Vendre garde son volume',
+    planIa(commerce('vendre'), PENDANT_ESSAI) === 'vendre')
+  verifier('sans essai demandé, rien ne monte',
+    planIa(commerce('exister'), PENDANT_ESSAI) === 'exister')
+  verifier('et l’ancien nom `full` reste Vendre',
+    planIa(commerce('full'), APRES_ESSAI) === 'vendre')
+
+  const IA = [
+    { nom: 'le générateur de textes', chemin: 'app/api/ia/generer-post/route.js', regles: [
+      ['charge l’essai', /'id, nom, type, plan, essai_plan, created_at, categorie,/],
+      ['règle son volume par planIa', /const cfg = getIaConfig\(planIa\(com\)\)/],
+    ] },
+    { nom: 'la rédaction de la fiche', chemin: 'app/api/ia/presentation/route.js', regles: [
+      ['charge l’essai', /auth_user_id, plan, essai_plan, created_at'/],
+      ['règle son quota par planIa', /getIaFicheConfig\(planIa\(com\)\)\.quota_mois/],
+    ] },
+    { nom: 'l’onglet générateur', chemin: 'app/dashboard/TabGenerateur.js', regles: [
+      ['affiche le volume du serveur', /const cfg = getIaConfig\(planIa\(commercant\)\)/],
+      ['ne promet « 1 essai » qu’à un vrai Exister', /const estExister = planIa\(commercant\) === 'exister'/],
+    ] },
+    { nom: 'le tableau de bord', chemin: 'app/dashboard/ConfigDashboard.js', regles: [
+      ['ouvre l’onglet par planIa', /const iaActif = getIaConfig\(planIa\(commercant\)\)\.actif/],
+    ] },
+  ]
+  for (const l of IA) {
+    const src = codeSeul(lire(l.chemin))
+    for (const [quoi, re] of l.regles) verifier(`${l.nom} ${quoi}`, re.test(src))
+    verifier(`🔴 ${l.nom} ne règle jamais l’IA sur le forfait effectif`,
+      !/getIa(?:Fiche)?Config\(planEffectif/.test(src))
   }
 }
 

@@ -23,7 +23,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { IA_MODELES, getIaFicheConfig } from '@/lib/plans'
+import { IA_MODELES, getIaFicheConfig, planIa } from '@/lib/plans'
 import { genererTexte, iaDisponible } from '@/lib/anthropic'
 import { aiLimiter, checkLimit } from '@/lib/ratelimit'
 import { lireSiteWeb } from '@/lib/site-web'
@@ -160,8 +160,10 @@ export async function POST(request) {
       // ⚠️ `plan` EST INDISPENSABLE : c'est lui qui fixe le quota mensuel. Sans
       // cette colonne, `getIaFicheConfig` retomberait sur le palier le plus
       // bas pour tout le monde, et un commerçant qui paie se verrait refuser
-      // sa quatrième demande sans comprendre pourquoi.
-      .select('id, nom, type, categorie, adresse, site_web, auth_user_id, plan')
+      // sa quatrième demande sans comprendre pourquoi. `essai_plan` et
+      // `created_at` aussi : pendant l'essai, le quota monte à celui de
+      // Communiquer (Alex, 15/09), et sans eux il resterait à Exister.
+      .select('id, nom, type, categorie, adresse, site_web, auth_user_id, plan, essai_plan, created_at')
       .eq('id', commercantId)
       .maybeSingle()
     if (!com || com.auth_user_id !== user.id) {
@@ -179,7 +181,7 @@ export async function POST(request) {
     const debutMois = new Date()
     debutMois.setUTCDate(1); debutMois.setUTCHours(0, 0, 0, 0)
 
-    const quotaMois = getIaFicheConfig(com.plan).quota_mois
+    const quotaMois = getIaFicheConfig(planIa(com)).quota_mois
     const { count } = await admin
       .from('ia_generations')
       .select('id', { count: 'exact', head: true })

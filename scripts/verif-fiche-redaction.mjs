@@ -121,10 +121,13 @@ function verifie(nom, condition, detail) {
   const route = lireCode('app/api/ia/presentation/route.js')
   verifie('la route compte sur le MOIS en cours, plus à vie',
     /\.gte\('created_at', debutMois\.toISOString\(\)\)/.test(route))
+  // ⚠️ PRÉCISÉES LE 15/09, PAS DÉSARMÉES : le palier se lit par `planIa`
+  // (pendant l'essai, le volume de Communiquer, décision d'Alex), et il lui
+  // faut `essai_plan` et `created_at` en plus de `plan`.
   verifie('et lit le quota du palier du commerçant',
-    /getIaFicheConfig\(com\.plan\)\.quota_mois/.test(route))
-  // ⚠️ LA COLONNE DOIT ÊTRE CHARGÉE, sinon tout le monde retombe sur Exister.
-  verifie('le plan est bien demandé à la base', /auth_user_id, plan'/.test(route))
+    /getIaFicheConfig\(planIa\(com\)\)\.quota_mois/.test(route))
+  // ⚠️ LES COLONNES DOIVENT ÊTRE CHARGÉES, sinon tout le monde retombe sur Exister.
+  verifie('le plan et l’essai sont bien demandés à la base', /auth_user_id, plan, essai_plan, created_at'/.test(route))
   // ⚠️ CHAQUE CHAMP SON COMPTEUR : épuiser la présentation ne doit pas fermer
   // les infos pratiques.
   verifie('chaque champ a son propre compteur', /\.eq\('type', CHAMPS\[champ\]\.log\)/.test(route))

@@ -11,7 +11,7 @@ import {
   // `peut` aurait coupé la boutique de tout commerce de détail en Vendre.
   // Là où l'historique appelait `canDo(plan, …)` sans catégorie, on garde
   // exactement cette portée et on n'ajoute QUE l'essai.
-  peut, planEffectif, statutFonction, planPourGarder, planEnEssai, essaiProposable,
+  peut, planEffectif, planIa, statutFonction, planPourGarder, planEnEssai, essaiProposable,
   FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
 } from '@/lib/plans'
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
@@ -13295,7 +13295,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
   // pas une question d'argent et que la lui montrer serait lui promettre ce qui
   // n'arrivera jamais.
   const etatDe = (feature) => statutFonction(commercant, feature)
-  const iaActif = getIaConfig(commercant?.plan).actif   // Générateur IA (exister 1 test / communiquer / vendre)
+  const iaActif = getIaConfig(planIa(commercant)).actif   // Générateur IA : même palier que le serveur (Alex, 15/09)
   const estVitrine = commercant?.categorie === 'vitrine'
 
   // Compteur des signalements en attente → badge rouge sur l'onglet Signaux

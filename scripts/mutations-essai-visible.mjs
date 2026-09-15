@@ -39,6 +39,9 @@ const PAGE_GMY = 'app/commander/morning/page.js'
 const BALISAGE = 'app/commander/[slug]/layout.js'
 const KIT = 'app/kit/[slug]/page.js'
 const BORD = 'app/dashboard/ConfigDashboard.js'
+const IA_POSTS = 'app/api/ia/generer-post/route.js'
+const IA_FICHE = 'app/api/ia/presentation/route.js'
+const GENERATEUR = 'app/dashboard/TabGenerateur.js'
 
 const MUTATIONS = [
   // ─── CE QUI S'EXÉCUTE ───────────────────────────────────────────────────
@@ -192,6 +195,58 @@ const MUTATIONS = [
     fichier: BORD,
     de: '  const planResolu = planEffectif(commercant)',
     vers: '  const planResolu = commercant?.plan' },
+
+  // ─── LE VOLUME D'IA PENDANT L'ESSAI (Alex, 15/09) ───────────────────────
+  //
+  // ⚠️ LES DEUX ERREURS : relire `plan` laisse un Exister en essai à un texte
+  // par mois ; lire `planEffectif` lui offre Sonnet et deux cents textes.
+  { nom: '🔴 l’essai ouvre le volume de Vendre',
+    de: "export const PLAN_IA_ESSAI_MAX = 'communiquer'",
+    vers: "export const PLAN_IA_ESSAI_MAX = 'vendre'" },
+
+  { nom: '🔴 l’essai ne compte plus pour le volume d’IA',
+    de: '  if (!essai) return choisi',
+    vers: '  if (true) return choisi' },
+
+  { nom: '🔴 le generateur relit le forfait choisi',
+    fichier: IA_POSTS,
+    de: 'const cfg = getIaConfig(planIa(com))',
+    vers: 'const cfg = getIaConfig(com.plan)' },
+
+  { nom: '🔴 le generateur offre Sonnet a tout essai',
+    fichier: IA_POSTS,
+    de: 'const cfg = getIaConfig(planIa(com))',
+    vers: 'const cfg = getIaConfig(planEffectif(com))' },
+
+  { nom: '🔴 le generateur ne charge plus l’essai',
+    fichier: IA_POSTS,
+    de: "'id, nom, type, plan, essai_plan, created_at, categorie",
+    vers: "'id, nom, type, plan, categorie" },
+
+  { nom: '🔴 la redaction de la fiche relit le forfait choisi',
+    fichier: IA_FICHE,
+    de: 'getIaFicheConfig(planIa(com)).quota_mois',
+    vers: 'getIaFicheConfig(com.plan).quota_mois' },
+
+  { nom: '🔴 la redaction de la fiche ne charge plus l’essai',
+    fichier: IA_FICHE,
+    de: "auth_user_id, plan, essai_plan, created_at'",
+    vers: "auth_user_id, plan'" },
+
+  { nom: '🔴 l’onglet affiche un autre volume que le serveur',
+    fichier: GENERATEUR,
+    de: '  const cfg = getIaConfig(planIa(commercant))',
+    vers: '  const cfg = getIaConfig(commercant?.plan)' },
+
+  { nom: '🔴 le bandeau « 1 essai » revient pendant l’essai',
+    fichier: GENERATEUR,
+    de: "  const estExister = planIa(commercant) === 'exister'",
+    vers: "  const estExister = commercant?.plan === 'exister'" },
+
+  { nom: '🔴 le tableau de bord ouvre l’onglet sur le forfait choisi',
+    fichier: BORD,
+    de: 'const iaActif = getIaConfig(planIa(commercant)).actif',
+    vers: 'const iaActif = getIaConfig(commercant?.plan).actif' },
 ]
 
 // ⚠️ L ÉCRITURE ET LA RESTAURATION PASSENT PAR `scripts/harnais-mutation.mjs`,

@@ -75,10 +75,12 @@ const MUTATIONS = [
     de: '7. N\'écris JAMAIS d\'adresse web, de lien, de "yoppaa.app" ni de "www".',
     vers: '7. Tu peux citer l\'adresse du commerce.' },
 
+  // ⚠️ ANCRE REFAITE LE 15/09 : la requête charge aussi `essai_plan` et
+  // `created_at`, pour le volume d'IA pendant l'essai. `verif:ancres` l'a dit.
   { nom: '🔴 la route ne charge plus le slug',
     fichier: ROUTE,
-    de: "      .select('id, nom, type, plan, categorie, adresse, auth_user_id, slug')",
-    vers: "      .select('id, nom, type, plan, categorie, adresse, auth_user_id')" },
+    de: "      .select('id, nom, type, plan, essai_plan, created_at, categorie, adresse, auth_user_id, slug')",
+    vers: "      .select('id, nom, type, plan, essai_plan, created_at, categorie, adresse, auth_user_id')" },
 
   // ─── L'ÉCRAN ────────────────────────────────────────────────────────────
   { nom: '🔴 le bouton copie le post SANS le lien',

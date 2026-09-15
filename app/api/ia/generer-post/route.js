@@ -16,7 +16,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getIaConfig, IA_MODELES } from '@/lib/plans'
+import { getIaConfig, IA_MODELES, planIa } from '@/lib/plans'
 import { genererTexte, iaDisponible } from '@/lib/anthropic'
 import { aiLimiter, checkLimit } from '@/lib/ratelimit'
 import { lienFiche } from '@/lib/lien-fiche'
@@ -158,7 +158,7 @@ export async function POST(request) {
     )
     const { data: com } = await admin
       .from('commercants')
-      .select('id, nom, type, plan, categorie, adresse, auth_user_id, slug')
+      .select('id, nom, type, plan, essai_plan, created_at, categorie, adresse, auth_user_id, slug')
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com || com.auth_user_id !== user.id) {
@@ -166,7 +166,9 @@ export async function POST(request) {
     }
 
     // 3) Palier -> config IA (lue côté serveur, jamais depuis le client).
-    const cfg = getIaConfig(com.plan)
+    // ⚠️ `planIa`, ni `plan` ni `planEffectif` (Alex, 15/09) : un commerçant en
+    // essai écrit au volume de Communiquer, jamais à celui de Vendre.
+    const cfg = getIaConfig(planIa(com))
     if (!cfg.actif) {
       return NextResponse.json({ ok: false, error: 'plan_sans_ia', message: 'Le générateur est réservé aux paliers Communiquer et Vendre.' }, { status: 403 })
     }

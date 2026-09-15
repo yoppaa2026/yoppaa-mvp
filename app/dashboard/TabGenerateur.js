@@ -32,7 +32,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { getIaConfig } from '@/lib/plans'
+import { getIaConfig, planIa } from '@/lib/plans'
 import { signatureYoppaa, postAvecSignature } from '@/lib/lien-fiche'
 import PartageVisuel from '@/app/components/PartageVisuel'
 import { TYPE_ACTU } from '@/lib/visuel-partage'
@@ -57,8 +57,11 @@ const TONS = ['Chaleureux', 'Dynamique', 'Élégant', 'Décontracté', 'Gourmand
 export const OCCASION_AVEC_PRIX = 'Bon plan'
 
 export default function TabGenerateur({ commercantId, commercant, toast, onAllerA = null }) {
-  const cfg = getIaConfig(commercant?.plan)
-  const estExister = (commercant?.plan === 'exister' || commercant?.plan === 'on')
+  // ⚠️ LE MÊME PALIER QUE LE SERVEUR (Alex, 15/09) : pendant l'essai, le
+  // volume de Communiquer. Lu ailleurs, le compteur afficherait 1 quand le
+  // serveur en accorde 60, et le bandeau promettrait « 1 essai » à tort.
+  const cfg = getIaConfig(planIa(commercant))
+  const estExister = planIa(commercant) === 'exister'
 
   const [occasion, setOccasion] = useState('Nouveauté')
   const [brief, setBrief] = useState('')
@@ -148,7 +151,7 @@ export default function TabGenerateur({ commercantId, commercant, toast, onAller
       {estExister && (
         <div style={{ background: 'rgba(150,96,224,0.10)', border: `1px solid ${T.light}`, borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.ink, lineHeight: 1.5 }}>
-            Tu as <strong>1 essai gratuit ce mois-ci</strong> pour découvrir. Passe à <strong>Communiquer</strong> pour 60 générations/mois. 🟣
+            Tu as <strong>1 essai gratuit ce mois-ci</strong> pour découvrir. Passe à <strong>Communiquer</strong> pour {getIaConfig('communiquer').quota_mois} générations par mois.
           </p>
         </div>
       )}

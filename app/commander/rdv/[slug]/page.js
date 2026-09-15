@@ -86,6 +86,7 @@ import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 // ⚠️ LA MÊME RÈGLE QUE LE SERVEUR, et le serveur la rejoue : cet écran décide
 // seulement d'afficher, jamais de demander.
 import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
+import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
 
@@ -1040,7 +1041,15 @@ export default function CommanderRdvSlug() {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const paiement = params.get('paiement')
-    if (!paiement) return
+    // 🔴 LE RETOUR DE L'EMPREINTE N'ÉTAIT LU PAR PERSONNE (15/09, essai E2).
+    // Stripe renvoie `?empreinte=ok|annule`, et la fiche ne connaissait que
+    // `?paiement=` : le client qui venait de donner sa carte retombait sur une
+    // fiche vierge, sans un mot sur sa table. Même retour, mêmes étapes, et ce
+    // qui diffère est nommé : rien n'a été payé.
+    const empreinte = params.get('empreinte')
+    if (!paiement && !empreinte) return
+    const viaEmpreinte = !paiement
+    const retour = paiement || empreinte
 
     const STORAGE_KEY = `yoppaa.rdv.stripe.${slug}`
     let snapshot = null
@@ -1049,7 +1058,7 @@ export default function CommanderRdvSlug() {
       if (raw) snapshot = JSON.parse(raw)
     } catch (_) {}
 
-    if (paiement === 'ok') {
+    if (retour === 'ok') {
       const sessionId = params.get('session_id')
       window.history.replaceState({}, '', window.location.pathname)
 
@@ -1057,12 +1066,18 @@ export default function CommanderRdvSlug() {
         if (snapshot.prestationChoisie) setPrestationChoisie(snapshot.prestationChoisie)
         if (snapshot.dateChoisie) setDateChoisie(new Date(snapshot.dateChoisie))
         if (snapshot.heureChoisie) setHeureChoisie(snapshot.heureChoisie)
+        // ⚠️ LE NOMBRE DE PERSONNES AUSSI : la durée affichée en dépend.
+        if (snapshot.couverts) setCouverts(snapshot.couverts)
         if (snapshot.client) setClient(p => ({ ...p, ...snapshot.client }))
         setRdvCree({
           _viaStripe: true,
           stripe_checkout_session_id: sessionId,
           statut: 'confirme',
-          acompte_montant: snapshot.acompteMontant ?? null,
+          // ⚠️ UNE EMPREINTE N'EST PAS UN ACOMPTE : rien n'a été payé, et le
+          // bandeau « Acompte payé » mentirait.
+          _empreinte: viaEmpreinte,
+          empreinte_montant: viaEmpreinte ? (snapshot.empreinteMontant ?? null) : null,
+          acompte_montant: viaEmpreinte ? null : (snapshot.acompteMontant ?? null),
           // Ce que le client vient RÉELLEMENT de payer, et par quoi.
           _ventilation: snapshot.ventilation || null,
         })
@@ -1105,22 +1120,27 @@ export default function CommanderRdvSlug() {
         // encore : `motsReservation` n'a pas sa catégorie et retomberait sur
         // « Ton RDV », y compris chez un restaurant. Une tournure sans genre ni
         // métier est juste dans les deux cas.
-        setSubmitError('Paiement reçu, mais impossible d\'afficher le récap (session expirée). C\'est bien confirmé, tu recevras l\'email de confirmation.')
+        setSubmitError(viaEmpreinte
+          ? 'Carte enregistrée, mais impossible d\'afficher le récap (session expirée). Rien n\'a été débité, et tu recevras l\'email de confirmation.'
+          : 'Paiement reçu, mais impossible d\'afficher le récap (session expirée). C\'est bien confirmé, tu recevras l\'email de confirmation.')
       }
       try { sessionStorage.removeItem(STORAGE_KEY) } catch (_) {}
-    } else if (paiement === 'annule') {
+    } else if (retour === 'annule') {
       window.history.replaceState({}, '', window.location.pathname)
       // Restaure l'etat pour ne pas faire perdre la saisie au user
       if (snapshot) {
         if (snapshot.prestationChoisie) setPrestationChoisie(snapshot.prestationChoisie)
         if (snapshot.dateChoisie) setDateChoisie(new Date(snapshot.dateChoisie))
         if (snapshot.heureChoisie) setHeureChoisie(snapshot.heureChoisie)
+        if (snapshot.couverts) setCouverts(snapshot.couverts)
         if (snapshot.client) setClient(p => ({ ...p, ...snapshot.client }))
         allerEtape(3)
       }
       // Même raison qu'au-dessus : au retour de Stripe on ne connaît pas encore
       // le métier. « Rien n'a été réservé » ne porte ni genre ni vocabulaire.
-      setSubmitError('Paiement annulé. Rien n\'a été réservé, tu peux réessayer.')
+      setSubmitError(viaEmpreinte
+        ? 'Carte non enregistrée. Rien n\'a été réservé ni débité, tu peux réessayer.'
+        : 'Paiement annulé. Rien n\'a été réservé, tu peux réessayer.')
       try { sessionStorage.removeItem(STORAGE_KEY) } catch (_) {}
     }
   }, [slug])
@@ -2146,6 +2166,22 @@ export default function CommanderRdvSlug() {
           })
           const data = await res.json()
           if (!data.ok || !data.url) throw new Error(data.error || 'empreinte impossible')
+          // 🔴 LE CLICHÉ AVANT DE PARTIR CHEZ STRIPE (15/09, essai E2). Le retour
+          // `?empreinte=ok` n'était lu par personne : le client revenait sur une
+          // fiche vierge, sans rien qui lui dise que sa table était prise. Même
+          // clé que l'acompte, relue par le même retour.
+          // ⚠️ LE MONTANT EST CELUI DU SERVEUR, celui qui voyage dans le
+          // SetupIntent, pas un calcul refait par l'écran.
+          try {
+            sessionStorage.setItem(`yoppaa.rdv.stripe.${slug}`, JSON.stringify({
+              prestationChoisie,
+              dateChoisie: dateChoisie?.toISOString(),
+              heureChoisie,
+              couverts,
+              client: { email, prenom, nom, telephone, notes: client.notes },
+              empreinteMontant: data.montant ?? null,
+            }))
+          } catch (err) { console.warn('[rdv] sessionStorage save fail', err) }
           window.location.href = data.url
           return
         } catch (e) {
@@ -4382,12 +4418,32 @@ export default function CommanderRdvSlug() {
                             </div>
                           )}
                         </div>
+                        {/* 🔴 LA CARTE EST ANNONCÉE AVANT LE CLIC (15/09, essai E2).
+                            Le montant garanti était importé et jamais affiché :
+                            le client serait parti chez Stripe sans savoir
+                            pourquoi on lui demandait sa carte, ni pour combien.
+                            C'est ce qu'il accepte, et ça se lit AVANT.
+                            ⚠️ JAMAIS « bloqué » ni « retenu » : rien ne l'est. */}
+                        {montantEmpreinte(commercant, prestationChoisie, couverts) > 0 && (
+                          <div style={{ background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 14, padding: '10px 12px', margin: '12px 0' }}>
+                            <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 800, color: T.ink, lineHeight: 1.45 }}>
+                              {`Pour une table de ${couverts} personnes, ${commercant.nom} demande d’enregistrer ta carte. Rien n’est débité si tu viens.`}
+                            </p>
+                            <p style={{ margin: '4px 0 0', fontSize: '0.74rem', color: T.muted, fontWeight: 600, lineHeight: 1.45 }}>
+                              {`Le restaurant ne peut facturer ${euros(montantEmpreinte(commercant, prestationChoisie, couverts))} que si personne ne se présente${delaiAnnulationHeures(commercant) > 0 ? `, ou si tu annules moins de ${delaiAnnulationHeures(commercant)} h avant` : ''}.`}
+                            </p>
+                          </div>
+                        )}
                         <button disabled={!formValide || submitting}
                           onClick={passerRdv}
                           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: (!formValide || submitting) ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (!formValide || submitting) ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: (!formValide || submitting) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: (!formValide || submitting) ? 'none' : `0 6px 24px ${T.main}55`, opacity: (!formValide || submitting) ? 0.6 : 1, transition: 'all 0.2s' }}>
                           {submitting ? 'Réservation en cours…' : (
                             <>
-                              {aPayerMaintenant > 0 ? `Payer ${euros(aPayerMaintenant)} et confirmer` : mots.confirmer}
+                              {aPayerMaintenant > 0
+                                ? `Payer ${euros(aPayerMaintenant)} et confirmer`
+                                : montantEmpreinte(commercant, prestationChoisie, couverts) > 0
+                                  ? 'Enregistrer ma carte et réserver'
+                                  : mots.confirmer}
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
                               </svg>
@@ -4414,7 +4470,7 @@ export default function CommanderRdvSlug() {
                     </p>
                   )}
                   <p style={{ fontSize: '0.7rem', color: T.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
-                    Tu pourras annuler ou reporter jusqu&apos;à {commercant.rdv_delai_annulation_heures || 24}h {mots.avant}.
+                    Tu pourras annuler ou reporter jusqu&apos;à {delaiAnnulationHeures(commercant)}h {mots.avant}.
                   </p>
                 </div>
               )}
@@ -4472,8 +4528,25 @@ export default function CommanderRdvSlug() {
                     </p>
                   </div>
 
+                  {/* 🔴 LA TABLE GARANTIE PAR UNE CARTE (15/09, essai E2). Rien
+                      n'a été payé : le bandeau « Acompte payé » ne s'applique
+                      pas, et ce qui compte est dit ici, montant compris. */}
+                  {rdvCree._empreinte && (
+                    <div style={{ background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', border: '1.5px solid #10B981', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <Lock size={20} strokeWidth={2.2} color="#059669" style={{ flexShrink: 0, marginTop: 1 }}/>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontWeight: 800, fontSize: '0.88rem', color: '#065F46', margin: 0, marginBottom: 2 }}>
+                          Carte enregistrée · rien n’a été débité
+                        </p>
+                        <p style={{ fontSize: '0.76rem', color: '#047857', lineHeight: 1.4, margin: 0 }}>
+                          {`Ta table est garantie. ${commercant.nom} ne peut facturer${rdvCree.empreinte_montant > 0 ? ` ${euros(rdvCree.empreinte_montant)}` : ''} que si personne ne se présente${delaiAnnulationHeures(commercant) > 0 ? `, ou si tu annules moins de ${delaiAnnulationHeures(commercant)} h avant` : ''}. Tu vas recevoir l’email de confirmation d’ici quelques secondes.`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Bandeau paiement Stripe reçu - cas _viaStripe (retour Checkout) */}
-                  {rdvCree._viaStripe && (
+                  {rdvCree._viaStripe && !rdvCree._empreinte && (
                     <div style={{ background: 'linear-gradient(135deg, #ECFDF5, #D1FAE5)', border: '1.5px solid #10B981', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
                         <path d="M2 7h20M6 11h12M9 15h6M11 19h2"/>
@@ -4515,7 +4588,7 @@ export default function CommanderRdvSlug() {
                             avecProduits: lignesPanier.length > 0,
                             commercant,
                           }).etapes,
-                          `Tu peux annuler ou reporter depuis ton espace Yoppaa jusqu'à **${commercant.rdv_delai_annulation_heures || 24}h avant**.`,
+                          `Tu peux annuler ou reporter depuis ton espace Yoppaa jusqu'à **${delaiAnnulationHeures(commercant)}h avant**.`,
                         ].map((texte, i) => (
                           <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
                             <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: `0 2px 6px ${T.main}33` }}>{i + 1}</span>

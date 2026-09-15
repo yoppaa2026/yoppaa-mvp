@@ -57,6 +57,7 @@
     "mutations:bons": "node scripts/mutations-bons-cadeaux.mjs",
     "mutations:comptable": "node scripts/mutations-comptable.mjs",
     "mutations:session": "node scripts/mutations-session.mjs",
+    "mutations:empreinte": "node scripts/mutations-empreinte-table.mjs",
     "verif:lien": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-lien-fiche.mjs",
     "verif:visuel": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-visuel-partage.mjs",
     "verif:attente": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-attente-rdv.mjs",

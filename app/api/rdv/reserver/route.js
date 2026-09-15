@@ -49,7 +49,8 @@ import { creneauxDuJour } from '@/lib/ouverture'
 import { jourSemaineDe } from '@/lib/creneaux'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { timeToMinutes, minutesToTime, finApresMinuit } from '@/lib/rdv-slots'
-import { dureeSelonCouverts } from '@/lib/cours-collectifs'
+import { dureeSelonCouverts, couvertsValides } from '@/lib/cours-collectifs'
+import { empreinteRequise } from '@/lib/empreinte-table'
 import { phraseCuisinePleine } from '@/lib/inventaire-salle'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -109,9 +110,12 @@ export async function POST(request) {
 
     // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait en dépend, et
     // une colonne absente d'un select la rendrait muette sans lever d'erreur.
+    // 🔴 LES TROIS COLONNES D'EMPREINTE ET `stripe_account_charges_enabled` : la
+    // règle de la carte en dépend, et sans elles elle rendrait « pas de carte
+    // demandée », c'est-à-dire qu'elle laisserait passer la table.
     const [{ data: commercant }, { data: prestation }] = await Promise.all([
       db.from('commercants')
-        .select('id, nom, slug, categorie, rdv_actif, rdv_acompte_en_ligne_actif, rdv_acompte_global, stripe_account_id, stripe_account_charges_enabled, horaires_detail, plan, essai_plan, created_at')
+        .select('id, nom, slug, categorie, rdv_actif, rdv_acompte_en_ligne_actif, rdv_acompte_global, stripe_account_id, stripe_account_charges_enabled, horaires_detail, plan, essai_plan, created_at, rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne')
         .eq('id', commercant_id).maybeSingle(),
       db.from('rdv_prestations')
         // ⚠️ `par_couverts` ET `duree_paliers` : sans elles, la durée retombe sur
@@ -145,6 +149,25 @@ export async function POST(request) {
     }
     if (!prestation || String(prestation.commercant_id) !== String(commercant.id)) {
       return NextResponse.json({ ok: false, error: 'Prestation introuvable.' }, { status: 404 })
+    }
+
+    // 🔴 UNE TABLE QUI DEMANDE UNE CARTE NE PASSE PAS PAR ICI (15/09, essai E2
+    // d'Alex). Cette route ne rejouait pas la règle de l'empreinte : une table
+    // de six se posait sans carte dès que la fiche se trompait de chemin, et une
+    // requête écrite à la main faisait de même. L'écran choisit le chemin, le
+    // serveur le fait respecter.
+    //
+    // ⚠️ LE NOMBRE EST LU PAR LA MÊME FONCTION QUE LE MODULE DE CRÉATION : deux
+    // lectures du même champ laisseraient une table passer sous le seuil ici et
+    // naître au-dessus plus loin. Un nombre hors bornes rend `null`, et c'est le
+    // module qui le refuse, avec son propre message.
+    const couvertsTable = couvertsValides(prestation, couverts)
+    if (couvertsTable !== null && empreinteRequise(commercant, prestation, couvertsTable)) {
+      return NextResponse.json({
+        ok: false,
+        error: `Pour une table de ${couvertsTable} personnes, ${commercant.nom} demande d’enregistrer ta carte. Rien n’est débité si tu viens. Recharge la page pour la donner.`,
+        empreinte_requise: true,
+      }, { status: 409 })
     }
 
     // ─── LE CRÉNEAU EXISTE-T-IL VRAIMENT ? ─────────────────────────────────

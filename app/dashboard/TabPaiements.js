@@ -12,6 +12,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { supabase } from '@/lib/supabase'
+import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 
 const T = {
   bg:      '#F8F6FF',
@@ -241,7 +242,7 @@ export default function TabPaiements({ commercantId, toast }) {
               <h3 style={{ fontSize: '1.05rem', fontWeight: 900, color: T.ink, margin: 0, letterSpacing: '-0.3px' }}>Exiger un acompte en ligne</h3>
               <p style={{ fontSize: '0.82rem', color: T.muted, lineHeight: 1.5, marginTop: 6 }}>
                 Quand activé, tes clients devront payer l'acompte de la prestation par carte AU MOMENT de réserver.
-                Réduit les no-shows. Refund automatique si le client annule dans les délais ({commercant.rdv_delai_annulation_heures || 24}h avant le RDV).
+                Réduit les no-shows. Remboursement automatique si le client annule dans les délais ({delaiAnnulationHeures(commercant)}h avant le RDV).
                 {!onboardingComplet && <><br/><strong style={{ color: '#92400E' }}>⚠ Connecte d'abord ton compte Stripe pour activer cette option.</strong></>}
               </p>
             </div>

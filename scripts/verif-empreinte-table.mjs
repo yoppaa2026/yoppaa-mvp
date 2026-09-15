@@ -53,10 +53,22 @@ verifie('l’empreinte éteinte ne demande jamais rien',
 // table, et une friterie qui prend des commandes n'a pas à réclamer de carte.
 verifie('🔴 une prestation qui n’est pas une table : jamais d’empreinte',
   empreinteRequise(RESTO, COUPE, 10) === false)
-// ⚠️ SANS COMPTE STRIPE, LA DEMANDE ÉCHOUERAIT AU PIRE MOMENT : quand le client
-// a déjà sorti sa carte.
-verifie('🔴 sans compte Stripe, on ne demande pas de carte',
-  empreinteRequise({ ...RESTO, stripe_account_id: null }, TABLE, 8) === false)
+// ⚠️ SANS COMPTE STRIPE QUI ENCAISSE, LA DEMANDE ÉCHOUERAIT AU PIRE MOMENT :
+// quand le client a déjà sorti sa carte.
+verifie('🔴 sans compte Stripe qui encaisse, on ne demande pas de carte',
+  empreinteRequise({ ...RESTO, stripe_account_id: null, stripe_account_charges_enabled: null }, TABLE, 8) === false)
+// 🔴 LA FICHE PUBLIQUE NE CONNAÎT PAS `stripe_account_id` (15/09, essai E2
+// d'Alex). La règle le testait : sur la fiche, elle rendait toujours faux, et
+// ce banc restait vert parce que RESTO portait la colonne. Ici, le restaurant
+// tel que `commercants_public` le rend, et rien de plus.
+const RESTO_VUE = { ...RESTO }
+delete RESTO_VUE.stripe_account_id
+verifie('🔴 sur la fiche publique, une table de 6 demande bien la carte',
+  empreinteRequise(RESTO_VUE, TABLE, 6) === true)
+egal('🔴 et la fiche annonce le bon montant', montantEmpreinte(RESTO_VUE, TABLE, 6), 120)
+// ⚠️ UNE COLONNE ABSENTE D'UN SELECT NE VAUT PAS UN COMPTE EN ORDRE.
+verifie('⚠️ un encaissement inconnu ne déclenche rien',
+  empreinteRequise({ ...RESTO_VUE, stripe_account_charges_enabled: undefined }, TABLE, 8) === false)
 verifie('🔴 avec un compte Stripe qui n’encaisse pas encore, non plus',
   empreinteRequise({ ...RESTO, stripe_account_charges_enabled: false }, TABLE, 8) === false)
 verifie('un nombre de personnes absurde ne déclenche rien',
@@ -600,6 +612,63 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /alert\(j\?\.error \|\| 'Le lien n’a pas pu partir/.test(DASH2))
   verifie('⚠️ et le message rappelle que la table reste réservée',
     /Ta table reste réservée tant qu’il n’a pas confirmé/.test(DASH2))
+}
+
+// ─── LA FICHE, LA PORTE GRATUITE ET LE RETOUR (15/09, essai E2 d'Alex) ──────
+//
+// 🔴 UNE TABLE DE SIX SE RÉSERVAIT SANS QU'AUCUNE CARTE SOIT DEMANDÉE. Quatre
+// maillons manquaient : la règle lisait une colonne que la fiche n'a pas, la
+// route gratuite ne rejouait pas la règle, et ni l'annonce avant le clic ni le
+// retour de Stripe n'existaient. Aucun banc ne regardait la route gratuite.
+{
+  const RESERVER = sansProse(lire('app/api/rdv/reserver/route.js'))
+  const TUNNEL = sansProse(lire('app/commander/rdv/[slug]/page.js'))
+  const PAIEMENTS = sansProse(lire('app/dashboard/TabPaiements.js'))
+
+  // ── La porte gratuite ──────────────────────────────────────────────────
+  // ⚠️ LA RÈGLE REND « PAS DE CARTE » SUR UNE COLONNE ABSENTE : sur cette route,
+  // ça veut dire laisser passer la table. Chaque colonne est donc exigée.
+  const mSelect = RESERVER.match(/db\.from\('commercants'\)\s*\.select\('([^']*)'\)/)
+  const colonnes = mSelect ? mSelect[1].split(',').map(s => s.trim()) : []
+  for (const col of ['rdv_empreinte_actif', 'rdv_empreinte_seuil_couverts', 'rdv_empreinte_par_personne', 'stripe_account_charges_enabled']) {
+    verifie(`🔴 la route gratuite charge ${col}`, colonnes.includes(col), `${colonnes.length} colonnes lues`)
+  }
+  verifie('🔴 la route gratuite rejoue la règle de la carte',
+    /if \(couvertsTable !== null && empreinteRequise\(commercant, prestation, couvertsTable\)\) \{/.test(RESERVER))
+  const iGarde = RESERVER.indexOf('empreinteRequise(commercant, prestation, couvertsTable)')
+  verifie('🔴 et le fait AVANT de créer la table',
+    iGarde !== -1 && iGarde < RESERVER.indexOf('creerReservationRdv(db,'))
+  verifie('⚠️ avec la même lecture du nombre que le module de création',
+    /const couvertsTable = couvertsValides\(prestation, couverts\)/.test(RESERVER))
+  verifie('🔴 elle refuse, et le dit', /empreinte_requise: true,\s*\}, \{ status: 409 \}\)/.test(RESERVER))
+
+  // ── L'annonce avant le clic ────────────────────────────────────────────
+  verifie('🔴 la fiche annonce la carte et le montant AVANT le clic',
+    /\{montantEmpreinte\(commercant, prestationChoisie, couverts\) > 0 && \(/.test(TUNNEL))
+  verifie('🔴 elle dit que rien n’est débité si le client vient',
+    /demande d’enregistrer ta carte\. Rien n’est débité si tu viens\./.test(TUNNEL))
+  verifie('⚠️ le bouton dit le geste', /'Enregistrer ma carte et réserver'/.test(TUNNEL))
+  verifie('🔴 aucune somme annoncée comme bloquée sur la fiche',
+    !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(TUNNEL))
+
+  // ── Le retour de Stripe ────────────────────────────────────────────────
+  const iBranche = TUNNEL.indexOf("'/api/stripe/checkout/create-rdv-empreinte'")
+  const iDepart = TUNNEL.indexOf('window.location.href = data.url', iBranche)
+  const iCliche = TUNNEL.indexOf('empreinteMontant: data.montant', iBranche)
+  verifie('🔴 le cliché est posé AVANT de partir chez Stripe',
+    iBranche !== -1 && iCliche !== -1 && iCliche < iDepart)
+  verifie('🔴 le retour `?empreinte=` est lu',
+    /const empreinte = params\.get\('empreinte'\)/.test(TUNNEL) && /if \(!paiement && !empreinte\) return/.test(TUNNEL))
+  verifie('🔴 une empreinte ne s’affiche pas comme un acompte payé',
+    /\{rdvCree\._viaStripe && !rdvCree\._empreinte && \(/.test(TUNNEL) && /acompte_montant: viaEmpreinte \? null :/.test(TUNNEL))
+  verifie('⚠️ l’abandon chez Stripe dit que rien n’a été réservé ni débité',
+    /Carte non enregistrée\. Rien n\\'a été réservé ni débité/.test(TUNNEL))
+
+  // ── Le délai annoncé ───────────────────────────────────────────────────
+  // 🔴 LE PIÈGE DU ZÉRO, ET UN RESTAURANT À 24 H AU LIEU DE 3 : la fiche et le
+  // réglage de l'acompte gardaient les deux dernières copies de `|| 24`.
+  verifie('🔴 plus aucun délai en `|| 24` sur la fiche', !/rdv_delai_annulation_heures \|\| 24/.test(TUNNEL))
+  verifie('🔴 ni dans le réglage de l’acompte', !/rdv_delai_annulation_heures \|\| 24/.test(PAIEMENTS))
 }
 
 // ═══ RÉSULTAT ═══════════════════════════════════════════════════════════════

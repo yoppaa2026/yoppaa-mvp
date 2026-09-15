@@ -410,6 +410,14 @@ verifier('et lit les places en base, pas dans l’état de l’écran',
 // inventés de mémoire ont déjà faussé des statistiques entières. Ce test
 // existe parce que je l'ai écrit de mémoire avant de le vérifier.
 const srcConfig = sansCommentaires(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+
+// 🔴 LE REMÈDE DU MERCREDI FUTUR S'APPLIQUE PARTOUT (15/09 au soir). Deux blocs
+// l'avaient oublié : l'un a rougi le soir même de sa date écrite en dur, l'autre
+// aurait suivi dans un an. Plus aucun appel du moteur ne reçoit une date fixe.
+// ⚠️ ICI ET PAS EN TÊTE : `sansCommentaires` est une constante, et l'appeler
+// avant sa déclaration planterait le banc au lieu de le faire rougir.
+verifier('🔴 aucun appel du moteur de créneaux sur une date écrite en dur',
+  !/dateChoisie:\s*new Date\(\s*['"`]/.test(sansCommentaires(readFileSync(new URL(import.meta.url), 'utf8'))))
 verifier('résilier un abonnement écrit un statut qui existe',
   /statut: 'annule_commercant'/.test(srcConfig))
 verifier('et jamais « annule » tout court',
@@ -1919,13 +1927,13 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     // l'a démasqué. Un test qui vérifie une ABSENCE doit toujours voyager avec
     // celui qui vérifie la PRÉSENCE.
     const slotsCours = genererSlots({
-      creneaux: [LARGE], dateChoisie: new Date('2026-09-15T12:00:00'), dureeMinutes: 60,
+      creneaux: [LARGE], dateChoisie: MARDI, dureeMinutes: 60,
       reservations: [], horairesDetail: { mardi: { ouvert: true, debut: '08:00', fin: '18:00' } },
       prestationId: 'yoga', liaisonsCreneaux: AILLEURS, capacite: 12,
     })
     egal('🔴 aucun créneau pour un cours sans plage', slotsCours.length, 0)
     const slotsSolo = genererSlots({
-      creneaux: [LARGE], dateChoisie: new Date('2026-09-15T12:00:00'), dureeMinutes: 60,
+      creneaux: [LARGE], dateChoisie: MARDI, dureeMinutes: 60,
       reservations: [], horairesDetail: { mardi: { ouvert: true, debut: '08:00', fin: '18:00' } },
       prestationId: 'reiki', liaisonsCreneaux: AILLEURS, capacite: 1,
     })
@@ -2211,15 +2219,24 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('des heures illisibles sont refusées', !garde('yoga', null, undefined))
 
   // ── Et le moteur lui-même ───────────────────────────────────────────────
+  //
+  // 🔴 LE BANC A POURRI UNE DEUXIÈME FOIS (15/09 au soir). Deux appels plus haut
+  // travaillaient sur le 15/09/2026 en dur, un mardi : le soir venu, le moteur
+  // a masqué les créneaux déjà passés et « la journée entière pour un solo » est
+  // tombée en rouge, pendant que son jumeau « aucun créneau pour un cours »
+  // restait vert sans rien mesurer. Ceux-ci visaient le 13/09/2027 et
+  // auraient suivi dans un an. Le piège était nommé en tête de fichier, avec
+  // son remède : je ne l'avais pas appliqué partout.
+  const LUNDI_FUTUR = new Date(mercredi); LUNDI_FUTUR.setDate(mercredi.getDate() - 2)
   const slotsYoga = genererSlots({
-    dateChoisie: new Date('2027-09-13T12:00:00'), dureeMinutes: 60,
+    dateChoisie: LUNDI_FUTUR, dureeMinutes: 60,
     creneaux: CRENEAUX, reservations: [], horairesDetail: null,
     capacite: 12, prestationId: 'yoga', liaisonsCreneaux: LIAISONS,
   })
   egal('🔴 le cours n’est plus proposé qu’à son heure',
     slotsYoga.map(s => s.heure), ['10:00'])
   const slotsReiki = genererSlots({
-    dateChoisie: new Date('2027-09-13T12:00:00'), dureeMinutes: 60,
+    dateChoisie: LUNDI_FUTUR, dureeMinutes: 60,
     creneaux: CRENEAUX, reservations: [], horairesDetail: null,
     capacite: 1, prestationId: 'reiki', liaisonsCreneaux: LIAISONS,
   })
@@ -2239,7 +2256,7 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('et celle d’après aussi', slotsReiki.some(s => s.heure === '11:00'))
   // ⚠️ SANS LIAISONS, LE MOTEUR REND EXACTEMENT CE QU'IL RENDAIT AVANT.
   const slotsAvant = genererSlots({
-    dateChoisie: new Date('2027-09-13T12:00:00'), dureeMinutes: 60,
+    dateChoisie: LUNDI_FUTUR, dureeMinutes: 60,
     creneaux: CRENEAUX, reservations: [], horairesDetail: null,
     capacite: 12, prestationId: 'yoga',
   })

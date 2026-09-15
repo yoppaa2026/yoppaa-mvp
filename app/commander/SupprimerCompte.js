@@ -44,7 +44,9 @@ export default function SupprimerCompte({ email, onSupprime }) {
         // restauration de session tenterait de reposer les jetons d'un compte
         // qui vient d'être supprimé.
         marquerDeconnexionVoulue()
-        await supabase.auth.signOut().catch(() => {})
+        const { error: errSortie } = await supabase.auth.signOut().catch((e) => ({ error: e }))
+        // ⚠️ LU, PAS ESPÉRÉ (14/09, porté ici le 15/09) : au moins ce navigateur-ci.
+        if (errSortie) await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
         fetch('/api/yopper/session', { method: 'DELETE' }).catch(() => {})
         onSupprime?.()
         return

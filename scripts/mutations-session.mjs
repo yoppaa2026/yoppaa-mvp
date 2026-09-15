@@ -97,6 +97,50 @@ const MUTATIONS = [
     fichier: ACCUEIL,
     de: '    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {',
     vers: '    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {' },
+
+  // ─── CE QUE LE NAVIGATEUR GARDE DE LA PERSONNE (15/09, trouvé par Alex) ───
+  //
+  // 🔴 Déconnecté depuis l'onglet du tableau de bord, son profil Yopper
+  // affichait encore son nom, son email et son GSM.
+  { nom: '🔴 une deconnexion voulue n oublie plus l identite gardee par le navigateur',
+    fichier: SESSION,
+    de: '  oublierIdentiteDuNavigateur()',
+    vers: '  void 0' },
+
+  { nom: '🔴 l identite locale survit a la sortie',
+    fichier: SESSION,
+    de: '  effacerIdentiteLocale()',
+    vers: '  void 0' },
+
+  { nom: '🔴 le cookie de l identite survit a la sortie',
+    fichier: SESSION,
+    de: "    fetch('/api/yopper/session', { method: 'DELETE', keepalive: true }).catch(() => {})",
+    vers: '    void 0' },
+
+  { nom: '🔴 l appli relit le cookie d une personne partie',
+    fichier: ACCUEIL,
+    de: '      if ((!email || !id) && !deconnexionEtaitVoulue()) {',
+    vers: '      if (!email || !id) {' },
+
+  { nom: '🔴 un onglet Yopper ouvert garde les coordonnees apres une sortie ailleurs',
+    fichier: ACCUEIL,
+    de: "      if (event === 'SIGNED_OUT' && deconnexionEtaitVoulue()) viderEtatPersonnel()",
+    vers: '      void 0' },
+
+  { nom: '🔴 le bandeau dit « pas encore connecte ici » a qui l a ete',
+    fichier: ACCUEIL,
+    de: '    if (sessionPerdue) setDejaVenuIci(dejaConnecteIci())',
+    vers: '    void 0' },
+
+  { nom: '🔴 la deconnexion Yopper redevient un espoir',
+    fichier: ACCUEIL,
+    de: "                    if (errSortie) await supabase.auth.signOut({ scope: 'local' }).catch(() => {})",
+    vers: '                    void errSortie' },
+
+  { nom: '⚠️ la suppression de compte ne lit plus sa deconnexion',
+    fichier: 'app/commander/SupprimerCompte.js',
+    de: "        if (errSortie) await supabase.auth.signOut({ scope: 'local' }).catch(() => {})",
+    vers: '        void errSortie' },
 ]
 
 const lancer = () => {

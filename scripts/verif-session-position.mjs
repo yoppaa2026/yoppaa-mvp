@@ -623,6 +623,65 @@ function egale(nom, recu, attendu) {
     /marquerDeconnexionVoulue\(\)[\s\S]{0,900}viderEtatPersonnel\(\)/.test(src))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CE QUE LE NAVIGATEUR GARDE DE LA PERSONNE, APRÈS UNE SORTIE FAITE AILLEURS (15/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 TROUVÉ PAR ALEX : déconnecté depuis l'onglet du tableau de bord, son profil
+// Yopper affichait encore son nom, son email et son GSM, sous « Pas encore
+// connecté ici ». Le serveur, lui, ne rendait plus rien : 0 commande, 0 rendez-
+// vous. Seules les pages Yopper effaçaient l'identité gardée par le navigateur.
+{
+  // ── Exécutée pour de vrai, sur de faux stockages ──────────────────────────
+  const { marquerDeconnexionVoulue } = await import('../lib/session-permanente.js')
+  const faux = new Map()
+  const appels = []
+  const fetchAvant = globalThis.fetch
+  globalThis.window = {}
+  globalThis.localStorage = {
+    getItem: (k) => (faux.has(k) ? faux.get(k) : null),
+    setItem: (k, v) => { faux.set(k, String(v)) },
+    removeItem: (k) => { faux.delete(k) },
+  }
+  globalThis.fetch = (url, opts) => { appels.push(`${opts?.method || 'GET'} ${url}`); return Promise.resolve({ ok: true }) }
+  const CLES = ['yoppaa_client_id', 'yoppaa_email', 'yoppaa_prenom', 'yoppaa_nom', 'yoppaa_telephone']
+  try {
+    CLES.forEach((k) => faux.set(k, 'valeur'))
+    marquerDeconnexionVoulue()
+    verifie('🔴 exécuté : plus aucune coordonnée dans le navigateur après une sortie voulue',
+      CLES.every((k) => !faux.has(k)), JSON.stringify([...faux.keys()]))
+    verifie('🔴 exécuté : et le cookie de l’identité est effacé côté serveur',
+      appels.includes('DELETE /api/yopper/session'), appels.join(' | ') || 'aucun appel')
+    verifie('⚠️ exécuté : la marque de départ voulu est bien posée', faux.get('yoppaa_deconnexion_voulue') === '1')
+  } finally {
+    delete globalThis.window
+    delete globalThis.localStorage
+    globalThis.fetch = fetchAvant
+  }
+
+  // ── Le code, là où la règle doit être appelée ─────────────────────────────
+  const srcPerm = readFileSync('lib/session-permanente.js', 'utf8').replace(/\r\n/g, '\n')
+  const iMarque = srcPerm.indexOf('export function marquerDeconnexionVoulue()')
+  const corpsMarque = iMarque === -1 ? '' : srcPerm.slice(iMarque, srcPerm.indexOf('\n}', iMarque))
+  verifie('⚠️ la marque de départ se pose AVANT l’oubli',
+    corpsMarque.indexOf("ecrire(CLE_VOLONTAIRE, '1')") > -1
+    && corpsMarque.indexOf("ecrire(CLE_VOLONTAIRE, '1')") < corpsMarque.indexOf('oublierIdentiteDuNavigateur()'))
+
+  const ecran = readFileSync('app/commander/page.js', 'utf8').replace(/\r\n/g, '\n')
+  verifie('🔴 après une sortie voulue, l’appli ne relit plus l’identité du cookie',
+    /if \(\(!email \|\| !id\) && !deconnexionEtaitVoulue\(\)\) \{/.test(ecran))
+  verifie('🔴 un onglet Yopper ouvert se vide quand la sortie a lieu ailleurs',
+    /if \(event === 'SIGNED_OUT' && deconnexionEtaitVoulue\(\)\) viderEtatPersonnel\(\)/.test(ecran))
+  verifie('🔴 « déjà connecté ici » se relit à chaque perte, d’où qu’elle vienne',
+    /useEffect\(\(\) => \{\s*if \(sessionPerdue\) setDejaVenuIci\(dejaConnecteIci\(\)\)\s*\}, \[sessionPerdue\]\)/.test(ecran))
+  verifie('🔴 la déconnexion Yopper lit son résultat, comme le tableau de bord et l’admin',
+    /const \{ error: errSortie \} = await supabase\.auth\.signOut\(\)[\s\S]{0,160}?if \(errSortie\) await supabase\.auth\.signOut\(\{ scope: 'local' \}\)/.test(ecran))
+
+  const suppr = readFileSync('app/commander/SupprimerCompte.js', 'utf8').replace(/\r\n/g, '\n')
+  verifie('⚠️ la suppression de compte aussi',
+    /if \(errSortie\) await supabase\.auth\.signOut\(\{ scope: 'local' \}\)/.test(suppr))
+}
+
 console.log(`\nSession + position : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

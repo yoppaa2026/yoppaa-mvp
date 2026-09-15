@@ -43,7 +43,7 @@ import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
-import { brancherSessionPermanente, marquerDeconnexionVoulue, dejaConnecteIci } from '@/lib/session-permanente'
+import { brancherSessionPermanente, marquerDeconnexionVoulue, dejaConnecteIci, deconnexionEtaitVoulue } from '@/lib/session-permanente'
 // ⚠️ « SESSION EXPIRÉE » ne se dit que si une session a existé ICI : le lien
 // d'email s'ouvre dans le navigateur, où le Yopper n'a jamais été connecté.
 import { libelleAccesPerdu } from '@/lib/retour-app'
@@ -2072,7 +2072,10 @@ export default function Commander() {
       let telephone = localStorage.getItem('yoppaa_telephone')
       let id = localStorage.getItem('yoppaa_client_id')
       // Fallback cookie si localStorage vide (Safari iOS ITP purge probable)
-      if (!email || !id) {
+      // 🔴 SAUF APRÈS UNE DÉCONNEXION VOULUE (15/09, trouvé par Alex) : le cookie
+      // d'une personne partie la ramènerait à l'écran. Il est effacé à la sortie,
+      // mais une panne réseau peut l'avoir laissé en place : on ne le relit pas.
+      if ((!email || !id) && !deconnexionEtaitVoulue()) {
         try {
           const res = await fetch('/api/yopper/session')
           const data = await res.json()
@@ -2199,6 +2202,13 @@ export default function Commander() {
     // c'est là qu'il faut l'attraper, pas cinq secondes plus tard sur un 401.
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       check(session?.user)
+      // 🔴 UNE DÉCONNEXION VOULUE, FAITE DANS UN AUTRE ONGLET (15/09, trouvé par
+      // Alex) : la session est commune à tout le navigateur, et cet onglet gardait
+      // à l'écran le nom, l'email et le GSM de la personne partie. On vide son état
+      // comme si la sortie avait eu lieu ici.
+      // ⚠️ AUCUN APPEL À L'AUTHENTIFICATION ICI : ce rappel est attendu verrou tenu
+      // (31/08). Vider l'état ne touche qu'à React.
+      if (event === 'SIGNED_OUT' && deconnexionEtaitVoulue()) viderEtatPersonnel()
     })
 
     // ⚠️ LE BANDEAU « SESSION EXPIRÉE » NE S'ALLUME PLUS QU'EN DERNIER RECOURS.
@@ -2221,6 +2231,14 @@ export default function Commander() {
       debrancher()
     }
   }, [])
+
+  // 🔴 LA MARQUE SE RELIT À CHAQUE PERTE, D'OÙ QU'ELLE VIENNE (15/09, vu par
+  // Alex). Seul le branchement de la session la relisait : un refus du serveur
+  // sur les commandes ou les rendez-vous allumait le bandeau sans elle, et
+  // disait « Pas encore connecté ici » à quelqu'un qui l'avait été.
+  useEffect(() => {
+    if (sessionPerdue) setDejaVenuIci(dejaConnecteIci())
+  }, [sessionPerdue])
 
   // ─── Polling client 5s ─────────────────────────────────────────────────────
   // IMPORTANT : on relit localStorage à CHAQUE tick (pas seulement au mount).
@@ -4994,7 +5012,9 @@ export default function Commander() {
                     // distingue « il s'en va » de « la session est tombée ».
                     // Sans lui, la restauration le reconnecterait aussitôt.
                     marquerDeconnexionVoulue()
-                    await supabase.auth.signOut()
+                    const { error: errSortie } = await supabase.auth.signOut()
+                    // ⚠️ LU, PAS ESPÉRÉ (14/09, porté ici le 15/09) : au moins ce navigateur-ci.
+                    if (errSortie) await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
                     ;effacerIdentiteLocale(); localStorage.removeItem('yoppaa_onglet')
                     // Efface aussi le cookie serveur (vrai logout : get-own ne doit plus rien renvoyer).
                     fetch('/api/yopper/session', { method: 'DELETE' }).catch(() => {})

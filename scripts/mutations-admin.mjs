@@ -70,6 +70,47 @@ const MUTATIONS = [
     de: '    let compteSupprime = null',
     vers: '    let compteSupprime = false' },
 
+  // ─── UN VRAI COMMERÇANT S'ARCHIVE (Alex, 15/09) ─────────────────────────
+  //
+  // 🔴 Chaque table oubliée, c'est un pan d'historique qui repart avec le
+  // commerçant. Le bon cadeau est celui qu'on oublierait : il n'a rien d'une
+  // commande, et c'est pourtant de l'argent encaissé.
+  { nom: '🔴 les bons cadeaux sortent de l’historique',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: "      { table: 'bons_cadeaux', singulier: 'bon cadeau', pluriel: 'bons cadeaux' },",
+    vers: '' },
+
+  { nom: '🔴 les SMS achetes a Yoppaa sortent de l’historique',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: "      { table: 'fidelite_sms_achats', singulier: 'achat de SMS', pluriel: 'achats de SMS' },",
+    vers: '' },
+
+  { nom: '🔴 un historique ne refuse plus la suppression',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: '    if (historique.length > 0) {',
+    vers: '    if (false) {' },
+
+  // ⚠️ « Je n'ai pas pu regarder » ne veut pas dire « il n'y a rien ».
+  { nom: '🔴 un comptage impossible laisse passer',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: '      if (errCompte) {',
+    vers: '      if (false) {' },
+
+  { nom: '🔴 le passage en force revient',
+    fichier: 'app/api/admin/commercants/route.js',
+    de: '    const { commercant_id } = body || {}',
+    vers: '    const { commercant_id, force } = body || {}' },
+
+  { nom: '🔴 l’ecran ne reconnait plus le refus d’historique',
+    fichier: 'app/admin/ModalEditCommercant.js',
+    de: "      if (res.status === 409 && j.error === 'historique_a_conserver') {",
+    vers: "      if (res.status === 409 && j.error === 'transactions_payees') {" },
+
+  { nom: '🔴 l’archivage ne suspend plus la fiche',
+    fichier: 'app/admin/ModalEditCommercant.js',
+    de: "        .update({ statut_publication: 'suspendu' })",
+    vers: "        .update({ statut_publication: 'rejete' })" },
+
   // ─── LE PIÈGE QUI N'EXISTE PAS ENCORE ──────────────────────────────────
   //
   // 🔴 CANONISER LES ADRESSES GMAIL est une idée qui revient dès qu'on veut

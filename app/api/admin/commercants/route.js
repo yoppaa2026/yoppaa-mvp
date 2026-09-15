@@ -1,13 +1,14 @@
 // /api/admin/commercants
-//   DELETE -> supprime DEFINITIVEMENT un commerçant de test + tout son contenu.
+//   DELETE -> supprime DEFINITIVEMENT un commerçant SANS HISTORIQUE + son contenu.
 //
-// Les FK historiques (articles, commandes, RDV…) ne sont PAS en ON DELETE CASCADE,
-// donc on supprime tous les enfants explicitement dans l'ordre avant le commerçant.
-// On supprime aussi le compte auth lié (pour libérer l'email) au best effort.
+// On supprime les enfants explicitement dans l'ordre avant le commerçant, et le
+// compte auth lié (pour libérer l'email), en lisant le résultat.
 //
-// GARDE-FOU LÉGAL : refuse par défaut si le commerçant a des transactions PAYÉES
-// (commandes payées en ligne ou RDV avec acompte payé) — rétention comptable. Un
-// admin peut forcer (force:true) pour du pur nettoyage de données de test.
+// 🔴 UN VRAI COMMERÇANT S'ARCHIVE, IL NE S'EFFACE JAMAIS (décision d'Alex,
+// 15/09). La suppression est refusée dès qu'il existe UNE commande, UNE
+// réservation, UN bon cadeau, UN abonnement ou UN achat de SMS, payé ou non :
+// l'écran propose alors de passer son statut à « suspendu ». Il n'existe plus
+// aucun moyen de passer outre.
 //
 // Auth : JWT admin dans le header Authorization (même schéma que les autres routes
 // admin), opérations en service_role.
@@ -90,7 +91,7 @@ export async function DELETE(request) {
     if (error) return NextResponse.json({ ok: false, error }, { status })
 
     const body = await request.json().catch(() => ({}))
-    const { commercant_id, force } = body || {}
+    const { commercant_id } = body || {}
     if (!commercant_id) return NextResponse.json({ ok: false, error: 'commercant_id requis' }, { status: 400 })
 
     const { data: c } = await admin
@@ -143,26 +144,53 @@ export async function DELETE(request) {
       }
     }
 
-    // Garde-fou : transactions payées (rétention légale)
-    const { count: nbCmd } = await admin
-      .from('commandes')
-      .select('id', { count: 'exact', head: true })
-      .eq('commercant_id', commercant_id)
-      .eq('paye_en_ligne', true)
-    const { count: nbRdv } = await admin
-      .from('rdv_reservations')
-      .select('id', { count: 'exact', head: true })
-      .eq('commercant_id', commercant_id)
-      .eq('acompte_paye', true)
-    const nbPaye = (nbCmd || 0) + (nbRdv || 0)
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔴 L'HISTORIQUE SE CONSERVE, PAYÉ OU NON (décision d'Alex, 15/09).
+    //
+    // Le garde-fou d'avant ne comptait que les paiements EN LIGNE. Une commande
+    // payée au comptoir, une réservation sans acompte, un bon vendu, un
+    // abonnement, un pack de SMS acheté à Yoppaa : tout partait avec le
+    // commerçant, et le reste se contournait d'un clic « Supprimer quand même ».
+    //
+    // ⚠️ ON COMPTE TOUT, SANS FILTRE DE STATUT. Une commande annulée ou un bon
+    // jamais payé restent une trace de ce qui s'est passé chez lui ; un commerce
+    // de test qui en porte s'archive comme les autres.
+    // ═══════════════════════════════════════════════════════════════════════
+    const HISTORIQUE = [
+      { table: 'commandes', singulier: 'commande', pluriel: 'commandes' },
+      { table: 'rdv_reservations', singulier: 'réservation', pluriel: 'réservations' },
+      { table: 'bons_cadeaux', singulier: 'bon cadeau', pluriel: 'bons cadeaux' },
+      { table: 'abonnements', singulier: 'abonnement', pluriel: 'abonnements' },
+      { table: 'fidelite_sms_achats', singulier: 'achat de SMS', pluriel: 'achats de SMS' },
+    ]
+    const historique = []
+    for (const h of HISTORIQUE) {
+      const { count, error: errCompte } = await admin
+        .from(h.table)
+        .select('id', { count: 'exact', head: true })
+        .eq('commercant_id', c.id)
+      // ⚠️ UN COMPTAGE IMPOSSIBLE REFUSE, IL NE LAISSE PAS PASSER. « Je n'ai pas
+      // pu regarder » ne veut pas dire « il n'y a rien » : c'est l'erreur qui
+      // effacerait un historique sans que personne l'ait décidé.
+      if (errCompte) {
+        return NextResponse.json({
+          ok: false,
+          error: 'historique_illisible',
+          message: `Impossible de vérifier la table ${h.table} pour « ${c.nom} » (${errCompte.message}). Rien n'a été supprimé.`,
+        }, { status: 500 })
+      }
+      if ((count || 0) > 0) {
+        historique.push({ table: h.table, nombre: count, libelle: count > 1 ? h.pluriel : h.singulier })
+      }
+    }
 
-    if (nbPaye > 0 && !force) {
+    if (historique.length > 0) {
+      const detail = historique.map(h => `${h.nombre} ${h.libelle}`).join(', ')
       return NextResponse.json({
         ok: false,
-        error: 'transactions_payees',
-        nbCmd: nbCmd || 0,
-        nbRdv: nbRdv || 0,
-        message: `Ce commerçant a ${nbPaye} transaction(s) payée(s). Pour un vrai commerçant, archive-le (statut « suspendu ») plutôt que de le supprimer (rétention comptable).`,
+        error: 'historique_a_conserver',
+        historique,
+        message: `« ${c.nom} » a un historique (${detail}). Un commerçant qui a déjà vendu ou reçu une réservation ne se supprime pas : archive-le en passant son statut à « suspendu ». Sa fiche disparaît de l'application, son historique reste.`,
       }, { status: 409 })
     }
 
@@ -260,7 +288,6 @@ export async function DELETE(request) {
     return NextResponse.json({
       ok: true,
       deleted: c.nom,
-      forced: !!force,
       // `null` = il n'y avait aucun compte à supprimer, et ce n'est pas `false`.
       compte_supprime: compteSupprime,
       ...(compteSupprime === false ? {

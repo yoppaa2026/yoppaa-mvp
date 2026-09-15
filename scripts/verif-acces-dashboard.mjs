@@ -236,11 +236,13 @@ function sansCommentaires(src) {
   // 🔴 LE GARDE-FOU DES TRANSACTIONS PAYÉES NE COUVRE PAS CE CAS : un commerce
   // de test n'a aucun paiement, il passe donc sans qu'on lui demande rien. Les
   // deux gardes sont indépendantes, et celle de l'admin vient AVANT.
+  // ⚠️ PRÉCISÉE LE 15/09, PAS DÉSARMÉE : le garde-fou des paiements est devenu
+  // celui de l'HISTORIQUE (décision d'Alex). L'ordre, lui, ne change pas.
   const posAdmin = src.indexOf("error: 'compte_admin'")
-  const posPaye = src.indexOf("error: 'transactions_payees'")
-  verifier('le refus admin passe avant le garde-fou des paiements',
-    posAdmin > 0 && posPaye > 0 && posAdmin < posPaye,
-    `admin ${posAdmin}, paiements ${posPaye}`)
+  const posHistorique = src.indexOf("error: 'historique_a_conserver'")
+  verifier('le refus admin passe avant le garde-fou de l’historique',
+    posAdmin > 0 && posHistorique > 0 && posAdmin < posHistorique,
+    `admin ${posAdmin}, historique ${posHistorique}`)
 
   // 🔴 ET L'EFFACEMENT DU COMPTE LIÉ SE LIT, il ne s'espère pas. Son échec
   // partait dans un `console.warn` que personne ne lit, et l'écran répondait
@@ -261,6 +263,39 @@ function sansCommentaires(src) {
   // de la même façon.
   verifier('« aucun compte » ne se confond pas avec « échec »',
     /let compteSupprime = null/.test(src))
+
+  // ═══ 🔴 UN VRAI COMMERÇANT S'ARCHIVE, IL NE S'EFFACE JAMAIS (Alex, 15/09) ═══
+  //
+  // Le garde-fou ne comptait que les paiements EN LIGNE : les commandes payées
+  // au comptoir, les réservations sans acompte, les bons, les abonnements et
+  // les SMS achetés à Yoppaa partaient avec le commerçant. Et il se contournait
+  // d'un clic « Supprimer quand même (test) ».
+  // ⚠️ ON LIT LE CODE, PAS LA PROSE : les commentaires de la route racontent
+  // précisément ce qu'on vient d'en retirer.
+  const codeSuppression = src.slice(src.indexOf('export async function DELETE'))
+    .replace(/^[ \t]*\/\/.*$/gm, '')
+  for (const table of ['commandes', 'rdv_reservations', 'bons_cadeaux', 'abonnements', 'fidelite_sms_achats']) {
+    verifier(`🔴 l’historique compte « ${table} »`,
+      new RegExp(`\\{ table: '${table}',`).test(codeSuppression))
+  }
+  verifier('🔴 l’historique compte TOUT, pas seulement ce qui est payé',
+    !/paye_en_ligne|acompte_paye/.test(codeSuppression))
+  verifier('🔴 un historique refuse la suppression',
+    /if \(historique\.length > 0\) \{/.test(codeSuppression))
+  verifier('⚠️ un comptage impossible refuse aussi, il ne laisse pas passer',
+    /if \(errCompte\) \{/.test(codeSuppression) && /error: 'historique_illisible'/.test(codeSuppression))
+  verifier('🔴 plus aucun moyen de passer outre',
+    !/\bforce\b/.test(codeSuppression))
+  verifier('le refus dit le geste : archiver en suspendant',
+    /suspendu/.test((codeSuppression.match(/error: 'historique_a_conserver',[\s\S]*?\}, \{ status: 409 \}/) || [''])[0]))
+
+  const modale = lire('app/admin/ModalEditCommercant.js').replace(/^[ \t]*\/\/.*$/gm, '')
+  verifier('🔴 l’écran ne propose plus de supprimer « quand même »',
+    !/quand même/.test(modale) && !/\bforce\b/.test(modale))
+  verifier('il reconnaît le refus d’historique',
+    /j\.error === 'historique_a_conserver'/.test(modale))
+  verifier('et il propose d’archiver, c’est-à-dire de suspendre',
+    /update\(\{ statut_publication: 'suspendu' \}\)/.test(modale) && /Archiver ce commerçant/.test(modale))
 }
 
 // ═══ LE PIÈGE QUI N'EXISTE PAS ENCORE, ET QU'ON EMPÊCHE D'ARRIVER ═════════

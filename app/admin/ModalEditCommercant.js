@@ -146,9 +146,33 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
     }
   }
 
-  // Suppression définitive (cascade côté serveur). Gardée : le serveur refuse (409)
-  // si le commerçant a des transactions payées, sauf force=true (données de test).
-  async function supprimer(force = false) {
+  // 🔴 UN VRAI COMMERÇANT S'ARCHIVE, IL NE S'EFFACE JAMAIS (Alex, 15/09). Le
+  // serveur refuse (409 `historique_a_conserver`) dès qu'il existe une commande,
+  // une réservation, un bon, un abonnement ou un achat de SMS. Il n'y a plus de
+  // bouton pour passer outre : l'écran propose alors d'archiver.
+  //
+  // L'archivage : la fiche disparaît de l'application, l'historique reste. La
+  // même écriture que `sauvegarder`, autorisée à l'admin par la RLS.
+  async function archiver() {
+    if (deleting) return
+    setDeleting(true); setError(null)
+    try {
+      const { error: errArchive } = await supabase
+        .from('commercants')
+        .update({ statut_publication: 'suspendu' })
+        .eq('id', commercant.id)
+      if (errArchive) throw errArchive
+      if (toast) toast(`${commercant.nom} archivé : sa fiche est suspendue, son historique est conservé`, 'success')
+      if (onSaved) onSaved({ ...commercant, statut_publication: 'suspendu' })
+      onClose()
+    } catch (e) {
+      console.error('[ModalEditCommercant] archive error', e)
+      setError(`Erreur : ${e.message || 'inconnue'}`)
+      setDeleting(false)
+    }
+  }
+
+  async function supprimer() {
     if (deleting) return
     setDeleting(true); setError(null)
     try {
@@ -156,10 +180,10 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
       const res = await fetch('/api/admin/commercants', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
-        body: JSON.stringify({ commercant_id: commercant.id, force }),
+        body: JSON.stringify({ commercant_id: commercant.id }),
       })
       const j = await res.json()
-      if (res.status === 409 && j.error === 'transactions_payees') {
+      if (res.status === 409 && j.error === 'historique_a_conserver') {
         setBlockInfo(j); setDeleting(false); return
       }
       if (!res.ok || !j.ok) throw new Error(j.message || j.error || 'Erreur suppression')
@@ -312,7 +336,7 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
           <div style={{ padding: '0.875rem 1.125rem 1.125rem', borderTop: '1px solid #FCA5A5', background: '#FEF2F2' }}>
             <p style={{ fontSize: 13, fontWeight: 800, color: '#991B1B', margin: '0 0 6px' }}>Suppression définitive</p>
             <p style={{ fontSize: 12, color: '#B91C1C', lineHeight: 1.5, margin: '0 0 10px' }}>
-              «&nbsp;{commercant.nom}&nbsp;» et TOUT son contenu (articles, variantes, commandes, RDV, deals, actus, créneaux…) seront supprimés, ainsi que le compte de connexion lié. <strong>Irréversible.</strong>
+              «&nbsp;{commercant.nom}&nbsp;» et tout son contenu (articles, deals, actus, créneaux…) seront supprimés, ainsi que le compte de connexion lié. <strong>Irréversible.</strong> Réservé à un commerce sans historique : dès qu&rsquo;il a une commande, une réservation, un bon, un abonnement ou un achat de SMS, il s&rsquo;archive.
             </p>
             {blockInfo && (
               <div style={{ background: '#FFF7ED', border: '1.5px solid #FDBA74', borderRadius: 10, padding: '0.5rem 0.75rem', marginBottom: 10 }}>
@@ -328,10 +352,17 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
                 style={{ flex: 1, padding: '0.7rem', background: '#fff', border: `1.5px solid ${T.hairline}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: deleting ? 'default' : 'pointer', fontSize: 13, fontFamily: '"DM Sans", sans-serif' }}>
                 Annuler
               </button>
-              <button onClick={() => supprimer(!!blockInfo)} disabled={deleting || !nomOk}
-                style={{ flex: 2, padding: '0.7rem', border: 'none', borderRadius: 100, background: (deleting || !nomOk) ? '#FCA5A5' : '#DC2626', color: '#fff', fontWeight: 800, cursor: (deleting || !nomOk) ? 'default' : 'pointer', fontSize: 13, fontFamily: '"DM Sans", sans-serif' }}>
-                {deleting ? 'Suppression…' : (blockInfo ? 'Supprimer quand même (test)' : 'Supprimer définitivement')}
-              </button>
+              {blockInfo ? (
+                <button onClick={archiver} disabled={deleting}
+                  style={{ flex: 2, padding: '0.7rem', border: 'none', borderRadius: 100, background: deleting ? '#D1D5DB' : T.deep, color: '#fff', fontWeight: 800, cursor: deleting ? 'default' : 'pointer', fontSize: 13, fontFamily: '"DM Sans", sans-serif' }}>
+                  {deleting ? 'Archivage…' : 'Archiver ce commerçant'}
+                </button>
+              ) : (
+                <button onClick={() => supprimer()} disabled={deleting || !nomOk}
+                  style={{ flex: 2, padding: '0.7rem', border: 'none', borderRadius: 100, background: (deleting || !nomOk) ? '#FCA5A5' : '#DC2626', color: '#fff', fontWeight: 800, cursor: (deleting || !nomOk) ? 'default' : 'pointer', fontSize: 13, fontFamily: '"DM Sans", sans-serif' }}>
+                  {deleting ? 'Suppression…' : 'Supprimer définitivement'}
+                </button>
+              )}
             </div>
           </div>
         ) : (

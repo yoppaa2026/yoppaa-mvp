@@ -28,6 +28,9 @@ import { calculerStatutOuverture, limiteRetraitCeJour } from '../lib/ouverture.j
 // ⚠️ ET DEPUIS LE MODULE BAS pour la règle de minuit : `rdv-slots` la republie,
 // mais c'est `deplacement-rdv` qui l'écrit, et c'est là qu'il faut la mesurer.
 import { plagesOuverture } from '../lib/deplacement-rdv.js'
+// ⚠️ UN JOUR TOUJOURS FUTUR pour chaque appel du moteur de créneaux (15/09 au
+// soir) : ce banc a rougi à 19 h sur le 15/09 écrit en dur.
+import { jourFutur } from './jour-futur.mjs'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -453,7 +456,7 @@ egal('la réservation d’un restaurant s’atteint quand même',
   const PLAGE_SOIR = [{ id: 'k-soir', jour_semaine: 'mardi', date_specifique: null, heure_debut: '18:00', heure_fin: '23:00', actif: true, pas_minutes: 30 }]
 
   const slotsMardi = genererSlots({
-    dateChoisie: new Date('2026-09-15T12:00:00'), // un mardi
+    dateChoisie: jourFutur('mardi'),
     dureeMinutes: 120, creneaux: PLAGE_SOIR, reservations: [],
     horairesDetail: BAR, capacite: 40, prestationId: 'p-soir',
     parCouverts: true, couvertsDemandes: 2,
@@ -464,7 +467,7 @@ egal('la réservation d’un restaurant s’atteint quand même',
 
   const PLAGE_SAM = [{ ...PLAGE_SOIR[0], id: 'k-sam', jour_semaine: 'samedi', heure_fin: '23:30' }]
   const slotsSamedi = genererSlots({
-    dateChoisie: new Date('2026-09-19T12:00:00'), // un samedi
+    dateChoisie: jourFutur('samedi'),
     dureeMinutes: 120, creneaux: PLAGE_SAM, reservations: [],
     horairesDetail: BAR, capacite: 40, prestationId: 'p-soir',
     parCouverts: true, couvertsDemandes: 2,
@@ -476,7 +479,7 @@ egal('la réservation d’un restaurant s’atteint quand même',
   const PLAGE_LUN = [{ ...PLAGE_SOIR[0], id: 'k-lun', jour_semaine: 'lundi' }]
   egal('⚠️ le lundi fermé n’a toujours aucun créneau',
     genererSlots({
-      dateChoisie: new Date('2026-09-14T12:00:00'), // un lundi
+      dateChoisie: jourFutur('lundi'),
       dureeMinutes: 120, creneaux: PLAGE_LUN, reservations: [],
       horairesDetail: BAR, capacite: 40, prestationId: 'p-soir',
     }).length, 0)
@@ -844,7 +847,7 @@ egal('la réservation d’un restaurant s’atteint quand même',
 
   // 🔴 LE COMPORTEMENT, PAS SEULEMENT LA FONCTION : le moteur de créneaux doit
   // offrir des horaires à une table sur une plage qui ne la nomme pas.
-  const mardi = new Date('2026-09-15T12:00:00+02:00')
+  const mardi = jourFutur('mardi')
   const plageToutes = [{ id: 'c1', jour_semaine: 'mardi', heure_debut: '18:00', heure_fin: '23:00', pas_minutes: 30, actif: true }]
   const horairesOuverts = { mardi: { ouvert: true, debut: '09:00', fin: '00:00' } }
   const slotsTable = genererSlots({
@@ -1444,7 +1447,7 @@ egal('la réservation d’un restaurant s’atteint quand même',
     JSON.stringify([...occupationParFormat(enMinutes, 17 * 60, 18 * 60)]))
 
   // ─── La grille elle-même, un mardi soir ───────────────────────────────────
-  const mardiSoir = new Date('2026-09-15T12:00:00+02:00')
+  const mardiSoir = jourFutur('mardi')
   const service = [{ id: 's1', jour_semaine: 'mardi', heure_debut: '18:00', heure_fin: '23:00', pas_minutes: 30, actif: true }]
   const ouvert = { mardi: { ouvert: true, debut: '09:00', fin: '00:00' } }
   const grille = (couverts, format, avecSalle) => genererSlots({

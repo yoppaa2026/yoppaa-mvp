@@ -30,6 +30,9 @@ import {
   STATUTS_QUI_OCCUPENT,
 } from '../lib/inventaire-salle.js'
 import { conflitReservation, genererSlots, jourSemaineDate } from '../lib/rdv-slots.js'
+// ⚠️ UN SAMEDI TOUJOURS FUTUR (15/09 au soir) : le 16/03/2030 écrit en dur
+// aurait fait rougir la grille ce jour-là, comme `verif:table` le 15/09 à 19 h.
+import { jourFutur, isoLocal } from './jour-futur.mjs'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -42,7 +45,7 @@ const lire = (chemin) => sansProse(readFileSync(new URL('../' + chemin, import.m
 const brut = (chemin) => readFileSync(new URL('../' + chemin, import.meta.url), 'utf8')
 
 const H = (h) => { const [a, b] = String(h).split(':').map(Number); return a * 60 + b }
-const DATE = '2030-03-16'
+const DATE = isoLocal(jourFutur('samedi'))
 const resa = (id, debut, couverts, extra = {}) => ({
   id, commercant_id: 'c1', prestation_id: 't4', heure_debut: `${debut}:00`, heure_fin: '21:30:00',
   couverts, statut: 'confirme', date_rdv: DATE, place_no: 1, praticien_id: null, deleted_at: null, ...extra,

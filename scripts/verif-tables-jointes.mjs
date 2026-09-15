@@ -31,6 +31,9 @@ import {
   conflitSalle,
 } from '../lib/inventaire-salle.js'
 import { genererSlots } from '../lib/rdv-slots.js'
+// ⚠️ UN JOUR TOUJOURS FUTUR pour la grille (15/09 au soir) : le 19/09 écrit en
+// dur aurait fait rougir ce banc le samedi soir venu.
+import { jourFutur } from './jour-futur.mjs'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -219,7 +222,7 @@ egal('⚠️ une jointure aux paliers suit ses paliers',
 
 // ─── La grille de la fiche, qui décide de ce que le client voit ─────────────
 {
-  const samedi = new Date('2026-09-19T12:00:00+02:00')
+  const samedi = jourFutur('samedi')
   const service = [{ id: 'soir', jour_semaine: 'samedi', heure_debut: '18:00', heure_fin: '23:30', pas_minutes: 30, actif: true }]
   const ouvert = { samedi: { ouvert: true, debut: '09:00', fin: '02:00' } }
   const grille = (reservations) => genererSlots({

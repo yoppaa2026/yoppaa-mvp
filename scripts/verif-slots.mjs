@@ -411,13 +411,33 @@ verifier('et lit les places en base, pas dans l’état de l’écran',
 // existe parce que je l'ai écrit de mémoire avant de le vérifier.
 const srcConfig = sansCommentaires(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
 
-// 🔴 LE REMÈDE DU MERCREDI FUTUR S'APPLIQUE PARTOUT (15/09 au soir). Deux blocs
-// l'avaient oublié : l'un a rougi le soir même de sa date écrite en dur, l'autre
-// aurait suivi dans un an. Plus aucun appel du moteur ne reçoit une date fixe.
+// 🔴 LE REMÈDE DU MERCREDI FUTUR S'APPLIQUE À TOUS LES BANCS (15/09 au soir).
+// Le moteur masque les heures passées quand la date demandée est aujourd'hui :
+// une date écrite en dur rougit donc le jour venu, à l'heure dite. Le 15/09,
+// `verif:slots` puis `verif:table` à 19 h ; `verif:jointes` aurait suivi le
+// samedi 19/09. La première version de cette garde ne regardait que ce fichier,
+// et ne voyait pas la date passée par une VARIABLE, qui était justement la
+// forme de `verif:table`. Elle balaie désormais tous les bancs, et suit les
+// variables. Aide partagée : `scripts/jour-futur.mjs`.
 // ⚠️ ICI ET PAS EN TÊTE : `sansCommentaires` est une constante, et l'appeler
 // avant sa déclaration planterait le banc au lieu de le faire rougir.
-verifier('🔴 aucun appel du moteur de créneaux sur une date écrite en dur',
-  !/dateChoisie:\s*new Date\(\s*['"`]/.test(sansCommentaires(readFileSync(new URL(import.meta.url), 'utf8'))))
+{
+  const DATE_FIXE = /new Date\(\s*['"`]\d{4}-\d{2}-\d{2}/
+  const fautifs = []
+  const bancs = readdirSync(new URL('.', import.meta.url)).filter(f => /^verif-.*\.mjs$/.test(f))
+  for (const nom of bancs) {
+    const src = sansCommentaires(readFileSync(new URL(nom, import.meta.url), 'utf8'))
+    // Les variables qui portent une date écrite en dur…
+    const variables = [...src.matchAll(/(?:const|let)\s+(\w+)\s*=\s*new Date\(\s*['"`]\d{4}-\d{2}-\d{2}/g)].map(m => m[1])
+    // … et chaque date passée au moteur, directement ou par l'une d'elles.
+    for (const m of src.matchAll(/dateChoisie:\s*([^,}\n]+)/g)) {
+      const valeur = m[1].trim()
+      if (DATE_FIXE.test(valeur) || variables.includes(valeur)) fautifs.push(`${nom} : dateChoisie: ${valeur}`)
+    }
+  }
+  verifier('les bancs se balaient', bancs.length > 40, `${bancs.length} bancs`)
+  verifier('🔴 aucun banc ne passe au moteur de créneaux une date écrite en dur', fautifs.length === 0, fautifs.join(' | '))
+}
 verifier('résilier un abonnement écrit un statut qui existe',
   /statut: 'annule_commercant'/.test(srcConfig))
 verifier('et jamais « annule » tout court',

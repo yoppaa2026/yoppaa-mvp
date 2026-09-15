@@ -245,6 +245,124 @@ const session = code('app/api/yopper/session/route.js')
 verifier('la route de session refuse de poser un cookie non signable',
   /if \(!encoded\)/.test(session) && /503/.test(session))
 
+// ─── 5 ter. Personne ne se fie à l'identité déclarée (15/09) ────────────────
+//
+// 🔴 `POST /api/yopper/session` SIGNE CE QU'ON LUI DÉCLARE. La signature prouve
+// que le cookie vient de nous, jamais que celui qui le présente est la bonne
+// personne. Deux routes s'en contentaient encore :
+//   • `commande/ignore-avis`, sur la foi d'un UUID « que seul son auteur
+//     possède » : le commerçant le possède aussi, avec l'email du client ;
+//   • `signaux`, qui attribuait signalements, suggestions et envies au nom
+//     déclaré.
+// Le cookie ne sert plus qu'à préremplir. On EXÉCUTE le module d'identité, puis
+// on relit tout le code de l'application et ses appelants.
+{
+  // ⚠️ IMPORT DYNAMIQUE, et c'est voulu : si le module se remettait à lire le
+  // cookie, il chargerait `next/headers`, qui peut refuser de se charger hors de
+  // Next. Le banc doit alors ROUGIR en le disant, pas exploser.
+  let modIdentite = null
+  try {
+    modIdentite = await import('../lib/yopper-auth.js')
+  } catch (e) {
+    verifier('le module d’identité se charge hors de Next', false, e?.message)
+  }
+  if (modIdentite) {
+    egal('🔴 sans jeton, identiteYopper ne rend personne', await modIdentite.identiteYopper(requete()), null)
+    egal('🔴 sans jeton, identiteProuvee non plus', await modIdentite.identiteProuvee(requete()), null)
+    egal('un en-tête « Bearer » vide ne vaut pas un jeton',
+      await modIdentite.identiteYopper(requete({ Authorization: 'Bearer ' })), null)
+  }
+
+  const auth = code('lib/yopper-auth.js')
+  verifier('🔴 le module d’identité ne relit plus le cookie déclaré',
+    !/from '\.\/yopper-session'/.test(auth) && !/lireIdentiteYopper/.test(auth))
+
+  const fichiers = []
+  const visiter = (rel) => {
+    for (const e of readdirSync(new URL('../' + rel, import.meta.url), { withFileTypes: true })) {
+      const chemin = `${rel}/${e.name}`
+      if (e.isDirectory()) visiter(chemin)
+      else if (/\.js$/.test(e.name)) fichiers.push(chemin)
+    }
+  }
+  visiter('app')
+  visiter('lib')
+
+  const lecteursCookie = []
+  const appelsLarges = []
+  for (const f of fichiers) {
+    const src = code(f)
+    if (f !== 'lib/yopper-session.js' && /\blireIdentiteYopper\s*\(/.test(src)) lecteursCookie.push(f)
+    if (f !== 'lib/yopper-auth.js' && /(?<![\w.])identiteYopper\s*\(/.test(src)) appelsLarges.push(f)
+  }
+  // ⚠️ UNE SONDE QUI N'A RIEN LU EST VERTE POUR RIEN.
+  verifier('la sonde a bien parcouru le code de l’application', fichiers.length > 150, `${fichiers.length} fichiers`)
+  egal('🔴 seule la route de préremplissage relit le cookie déclaré',
+    lecteursCookie.sort(), ['app/api/yopper/session/route.js'])
+  egal('🔴 aucune route n’appelle identiteYopper en direct, toutes passent par identiteProuvee',
+    appelsLarges.sort(), [])
+
+  const signaux = code('app/api/signaux/route.js')
+  verifier('🔴 un signal ne s’attribue qu’à une identité prouvée',
+    /const identite = await identiteProuvee\(request\)/.test(signaux))
+  const ignoreAvis = code('app/api/commande/ignore-avis/route.js')
+  verifier('🔴 masquer une demande d’avis exige l’identité prouvée',
+    /await identiteProuvee\(request\)/.test(ignoreAvis))
+  verifier('et le filtre borne toujours le jeton à SES commandes',
+    /\.eq\('client_email', email\)/.test(ignoreAvis))
+
+  // ⚠️ ET LES APPELANTS ENVOIENT LA PREUVE QUAND ELLE EXISTE. Sans elle, la
+  // route la mieux gardée ne reconnaîtrait plus personne : le signal partirait
+  // anonyme, et la demande d'avis ne se masquerait plus que sur un appareil.
+  const accueil = code('app/commander/page.js')
+  verifier('masquer une demande d’avis part avec le jeton',
+    accueil.includes("fetchYopper('/api/commande/ignore-avis'") && !accueil.includes("fetch('/api/commande/ignore-avis'"))
+  const envies = code('app/commander/SignauxYopper.js')
+  verifier('une envie part avec la preuve si elle existe',
+    envies.includes("fetchAvecPreuveSiConnecte('/api/signaux'") && !envies.includes("fetch('/api/signaux'"))
+  for (const [nom, src] of [['la suggestion de commerce', accueil], ['le signalement', code('app/commander/ModalSignalement.js')]]) {
+    const envois = (src.match(/envoyerSignal\(/g) || []).length
+    const avecPreuve = (src.match(/fetchImpl: fetchAvecPreuveSiConnecte \}\)/g) || []).length
+    verifier(`${nom} part avec la preuve si elle existe`, envois > 0 && envois === avecPreuve, `${avecPreuve} sur ${envois}`)
+  }
+
+  // 🔴 ET TOUTE LA FAMILLE, PAS SEULEMENT LES ROUTES DU JOUR. Une route qui
+  // exige la preuve ne voit personne si son appelant part en `fetch` nu : c'est
+  // exactement ce qui a éteint les étiquettes de ciblage (`sync-tags`) du 21/08
+  // au 15/09, en silence, un 401 n'étant jamais retenté. On relève les routes
+  // qui appellent `identiteProuvee`, puis tout appel nu vers l'une d'elles.
+  const routesProuvees = fichiers
+    .filter(f => /^app\/api\/.+\/route\.js$/.test(f) && /identiteProuvee\s*\(/.test(code(f)))
+    .map(f => f.replace(/^app/, '').replace(/\/route\.js$/, ''))
+  verifier('la sonde a bien trouvé les routes qui exigent la preuve',
+    routesProuvees.length >= 15, `${routesProuvees.length} routes`)
+  // ⚠️ UNE SEULE EXCEPTION, ET ELLE EST ÉCRITE : `get-or-create` de
+  // `/api/yopper/client` sert l'invité au moment de commander, sans compte.
+  const appelLibre = (route, appel) => route === '/api/yopper/client' && /action: 'get-or-create'/.test(appel)
+  const appelsNus = []
+  for (const f of fichiers.filter(x => !/\/route\.js$/.test(x))) {
+    const src = code(f)
+    const re = /(?<![\w.])fetch\(\s*['"`](\/api\/[^'"`?$]+)/g
+    let m
+    while ((m = re.exec(src)) !== null) {
+      const route = m[1].replace(/\/$/, '')
+      if (!routesProuvees.includes(route)) continue
+      // Le texte de l'appel, jusqu'à sa parenthèse fermante.
+      let prof = 0
+      let fin = m.index + 'fetch'.length
+      for (; fin < src.length; fin++) {
+        if (src[fin] === '(') prof++
+        else if (src[fin] === ')' && --prof === 0) break
+      }
+      if (!appelLibre(route, src.slice(m.index, fin))) appelsNus.push(`${f} → ${route}`)
+    }
+  }
+  egal('🔴 aucun appel nu vers une route qui exige la preuve d’identité', appelsNus, [])
+
+  verifier('🔴 la sonde des routes ne compte plus l’identité déclarée comme une garde',
+    !code('scripts/sonde-gardes-api.mjs').includes('identiteYopper|lireIdentiteYopper'))
+}
+
 // ─── 5 bis. La sonde du compteur de requêtes, exécutée ──────────────────────
 //
 // 🔴 LE DANGER N'EST PAS LA PANNE, C'EST LE SILENCE. Le compteur est fail-open

@@ -22,6 +22,7 @@
 
 import Script from 'next/script'
 import { useEffect } from 'react'
+import { fetchYopper } from '@/lib/fetch-yopper'
 
 const APP_ID = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
 
@@ -35,8 +36,16 @@ function pushOneSignal(cb) {
 }
 
 // Pose des tags OneSignal côté serveur (via l'API REST), en s'authentifiant par
-// le cookie Yopper. Best-effort : les échecs sont silencieux (le ciblage push
+// le jeton du Yopper. Best-effort : les échecs sont silencieux (le ciblage push
 // n'est pas critique au point de bloquer l'UI).
+//
+// 🔴 CET APPEL PARTAIT EN `fetch` NU, ET PLUS AUCUNE ÉTIQUETTE NE PASSAIT
+// (trouvé le 15/09). Le 21/08, `sync-tags` a exigé l'identité PROUVÉE, et son
+// appelant n'a pas suivi : sans jeton, la route répondait 401 à tous les coups,
+// et un 401 n'est pas retenté. Les favoris et le code postal ne se posaient plus
+// chez OneSignal, le code postal ne se recopiait plus sur la fiche, et aucune
+// ligne d'erreur ne le disait. `fetchYopper` porte le jeton, et sans session il
+// ne sonne même pas le serveur.
 //
 // Retry sur 404/5xx : au tout premier chargement, la synchro initiale part juste
 // après login(), mais le user OneSignal n'est pas encore créé côté serveur -> le
@@ -47,9 +56,8 @@ function pushOneSignal(cb) {
 export function syncYopperTags(tags, attempt = 0) {
   if (typeof window === 'undefined') return
   if (!tags || Object.keys(tags).length === 0) return
-  fetch('/api/yopper/sync-tags', {
+  fetchYopper('/api/yopper/sync-tags', {
     method: 'POST',
-    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tags }),
   })

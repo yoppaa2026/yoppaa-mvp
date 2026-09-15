@@ -9,6 +9,7 @@
 
 import { useState } from 'react'
 import { envoyerSignal } from '@/lib/signaux'
+import { fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 
 const T = {
   ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -40,7 +41,8 @@ export default function ModalSignalement({ target, onClose, onSent }) {
     setSubmitting(true)
     setError(null)
     // Route serveur : la table était insérable par n'importe qui, donc par
-    // n'importe quel robot. L'auteur est repris du cookie côté serveur.
+    // n'importe quel robot. L'auteur n'est repris que d'une identité PROUVÉE :
+    // la preuve part si elle existe, sinon le signalement reste anonyme (15/09).
     // ⚠️ MÊME LECTURE QUE LES DEUX AUTRES FORMULAIRES, et surtout le même
     // message : celui du serveur n'est jamais recopié tel quel à l'écran.
     const r = await envoyerSignal({
@@ -49,7 +51,7 @@ export default function ModalSignalement({ target, onClose, onSent }) {
       description: description.trim() || null,
       commercant_id: target.kind === 'commerce' ? target.id : null,
       service_id:    target.kind === 'service'  ? target.id : null,
-    })
+    }, { fetchImpl: fetchAvecPreuveSiConnecte })
     setSubmitting(false)
     if (!r.ok) {
       setError(r.message)

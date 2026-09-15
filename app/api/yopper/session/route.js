@@ -13,6 +13,11 @@
 // GET  : retourne { ok, identity: { client_id, email, prenom, nom, telephone } | null }
 // POST : sauvegarde l'identité passée en body dans le cookie
 // DELETE : efface le cookie (déconnexion Yopper)
+//
+// 🔴 CE COOKIE N'EST QU'UNE MÉMOIRE DE PRÉREMPLISSAGE (15/09). POST signe ce
+// qu'on lui envoie, sans rien vérifier : il ne peut donc RIEN prouver. Aucune
+// route ne s'y fie, et ce GET le rend seulement au navigateur qui l'a posé.
+// Tout ce qui touche à une personne passe par `identiteProuvee`.
 
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'

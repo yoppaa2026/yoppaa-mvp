@@ -368,6 +368,31 @@ function egale(nom, recu, attendu) {
   verifie('la marque est relue au moment de la perte',
     /if \(perdue\) setDejaVenuIci\(dejaConnecteIci\(\)\)/.test(srcEcran))
 
+  // 🔴 LE BOUTON DU MOT DE PASSE (15/09). Une session tombée remettait
+  // `has_password` à faux : le profil proposait « Créer un mot de passe » à
+  // quelqu'un qui en avait un. On EXÉCUTE la règle, puis on vérifie que l'écran
+  // la lit.
+  const { libelleMotDePasse } = await import('../lib/retour-app.js')
+  verifie('session ouverte avec mot de passe : « Modifier »',
+    libelleMotDePasse({ connecte: true, aMotDePasse: true }) === 'Modifier mon mot de passe')
+  verifie('session ouverte sans mot de passe : « Créer »',
+    libelleMotDePasse({ connecte: true, aMotDePasse: false }) === 'Créer un mot de passe')
+  verifie('🔴 session perdue : le bouton se tait, même avec un reste de session',
+    libelleMotDePasse({ connecte: true, aMotDePasse: false, sessionPerdue: true }) === null)
+  verifie('🔴 déjà connecté ici et plus de session : le bouton se tait',
+    libelleMotDePasse({ connecte: false, dejaConnecte: true }) === null)
+  verifie('un invité jamais connecté ici peut toujours créer son mot de passe',
+    libelleMotDePasse({ connecte: false, dejaConnecte: false }) === 'Créer un mot de passe')
+  verifie('sans argument : c’est un invité, pas un compte',
+    libelleMotDePasse() === 'Créer un mot de passe')
+  verifie('🔴 le profil n’affiche le bouton que si la règle a un libellé',
+    /\{client\.email && libelleMotDePasse\(\{ \.\.\.compteMdp, sessionPerdue \}\) && \(/.test(srcEcran))
+  verifie('et son texte vient de la règle, plus d’un ternaire écrit en dur',
+    /\{libelleMotDePasse\(\{ \.\.\.compteMdp, sessionPerdue \}\)\}/.test(srcEcran)
+    && !/aMotDePasse \? 'Modifier mon mot de passe' : 'Créer un mot de passe'/.test(srcEcran))
+  verifie('🔴 le profil retient s’il est connecté et s’il est déjà passé par ici',
+    /connecte: !!user,/.test(srcEcran) && /dejaConnecte: dejaConnecteIci\(\),/.test(srcEcran))
+
   // ⚠️ ON DIT OÙ ON EST, ON NE PROMET PAS D'OUVRIR L'APPLICATION. Une page web
   // n'a aucun moyen de lancer une application installée sur iOS : un bouton qui
   // ne ferait rien serait pire que pas de bouton.

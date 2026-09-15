@@ -49,7 +49,9 @@ const MARQUEURS = [
   ['jeton Supabase',      (s) => /getUser\s*\(/.test(s)],
   ['signature Stripe',    (s) => /stripe-signature/.test(s)],
   ['secret de cron',      (s) => /CRON_SECRET/.test(s)],
-  ['identité déclarée',   (s) => /identiteYopper|lireIdentiteYopper/.test(s)],
+  // ⚠️ L'IDENTITÉ DÉCLARÉE N'EST PLUS UNE GARDE (15/09). `POST /api/yopper/session`
+  // signe ce qu'on lui déclare : une route qui s'en contenterait doit apparaître
+  // ici À TRIER, pas passer pour protégée.
   ['anti-robot',          (s) => /turnstile/i.test(s)],
   ['jeton d\'annulation', (s) => /annulation_token/.test(s)],
 ]

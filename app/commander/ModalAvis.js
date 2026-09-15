@@ -40,7 +40,7 @@ export default function ModalAvis({ commercant, clientId, commandeId = null, onC
     setSubmitting(true)
     setError(null)
     // L'avis part par une route serveur : la table n'accepte plus d'écriture
-    // directe. Le serveur reprend l'auteur du cookie et vérifie qu'il a bien
+    // directe. Le serveur reprend l'auteur de l'identité prouvée et vérifie qu'il a bien
     // une commande récupérée chez ce commerce, ce qu'une policy SQL ne pouvait
     // pas faire faute d'identité Supabase Auth pour un Yopper.
     let err = null

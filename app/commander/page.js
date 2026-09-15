@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { fetchYopper, estSessionPerdue } from '@/lib/fetch-yopper'
+import { fetchYopper, fetchAvecPreuveSiConnecte, estSessionPerdue } from '@/lib/fetch-yopper'
 import CarteAbonnement from './CarteAbonnement'
 import HistoriqueRepli from './HistoriqueRepli'
 import { libelleRetrait } from '@/lib/libelle-retrait'
@@ -46,7 +46,7 @@ import ModalAvis from './ModalAvis'
 import { brancherSessionPermanente, marquerDeconnexionVoulue, dejaConnecteIci, deconnexionEtaitVoulue } from '@/lib/session-permanente'
 // ⚠️ « SESSION EXPIRÉE » ne se dit que si une session a existé ICI : le lien
 // d'email s'ouvre dans le navigateur, où le Yopper n'a jamais été connecté.
-import { libelleAccesPerdu } from '@/lib/retour-app'
+import { libelleAccesPerdu, libelleMotDePasse } from '@/lib/retour-app'
 import { sansAccents } from '@/lib/texte-normalise'
 import { poserIdentiteLocale, effacerIdentiteLocale, cacheEtranger } from '@/lib/identite-locale'
 import OneSignalInit, { taggerFavoriOneSignal, syncYopperTags } from '@/app/components/OneSignalInit'
@@ -389,13 +389,15 @@ function SuggestionForm() {
     // ⚠️ ON LIT LA RÉPONSE, et le formulaire reste rempli si elle est mauvaise.
     // Cet envoi affichait « Merci pour ta suggestion ! » quoi qu'il arrive :
     // quatre champs écrits à la main disparaissaient en silence.
+    // ⚠️ AVEC LA PREUVE SI ELLE EXISTE (15/09) : le serveur n'attribue plus une
+    // suggestion qu'à une identité prouvée. Sans session, elle part anonyme.
     const r = await envoyerSignal({
       type: 'suggestion',
       nom_commerce: form.nom.trim(),
       adresse: form.adresse.trim() || null,
       type_commerce: form.type.trim() || null,
       commentaire: form.commentaire.trim() || null,
-    })
+    }, { fetchImpl: fetchAvecPreuveSiConnecte })
     setSending(false)
     if (!r.ok) { setErreur(r.message); return }
     setSent(true)
@@ -1895,7 +1897,9 @@ export default function Commander() {
   const [commercantsFavoris, setCommercantsFavoris] = useState([])
   const [client, setClient] = useState({ nom: '', email: '', telephone: '', prenom: '' })
   const [clientId, setClientId] = useState(null)
-  const [aMotDePasse, setAMotDePasse] = useState(false)  // le compte Supabase a-t-il déjà un mot de passe ?
+  // Ce que le profil sait du compte : session ouverte, mot de passe posé, passage
+  // antérieur sur ce navigateur. `libelleMotDePasse` en tire le bouton.
+  const [compteMdp, setCompteMdp] = useState({ connecte: false, aMotDePasse: false, dejaConnecte: false })
   const [clientCommandes, setClientCommandes] = useState([])
   // B.6 fidélité : mes cartes (rattachées par les téléphones de mes commandes)
   const [mesCartesFid, setMesCartesFid] = useState([])
@@ -2140,7 +2144,7 @@ export default function Commander() {
       // recharger depuis la DB pour synchroniser le state + localStorage. Sinon le bandeau "Profil incomplet"
       // reapparait apres chaque reload alors que la valeur est bien en DB.
       // Profil (prefill si manquant) + commune du Yopper, côté serveur (RLS clients
-      // verrouillé, autorisé par le cookie Yopper). Un seul appel pour les deux.
+      // verrouillé, autorisé par le jeton du Yopper). Un seul appel pour les deux.
       // ⚠️ C'ÉTAIT UN `fetch` NU sur une route qui exige une identité prouvée :
       // elle répondait 401 à TOUS LES COUPS, et la commune du Yopper n'était
       // jamais chargée par cette voie. Le `catch` muet et le `if (!data) return`
@@ -2192,8 +2196,20 @@ export default function Commander() {
   // pour afficher "Modifier" plutôt que "Créer" dans le Profil. On écoute
   // onAuthStateChange (fiable dès que la session est prête : SIGNED_IN au load,
   // USER_UPDATED après définition du mdp) + un getUser initial de secours.
+  //
+  // 🔴 SANS SESSION, ON NE SAIT PLUS, ET LE BOUTON DISAIT « CRÉER » (15/09).
+  // Une session tombée remettait `has_password` à faux : le profil proposait
+  // « Créer un mot de passe » à quelqu'un qui en avait un, vers une page qui ne
+  // peut rien sans session. On retient donc aussi « connecté ou pas » et « déjà
+  // passé par ici », et la règle vit dans `libelleMotDePasse`.
+  // ⚠️ `dejaConnecteIci` ne lit que le stockage du navigateur : aucun appel à
+  // l'authentification dans ce rappel, attendu verrou tenu (31/08).
   useEffect(() => {
-    const check = (user) => setAMotDePasse(!!user?.user_metadata?.has_password)
+    const check = (user) => setCompteMdp({
+      connecte: !!user,
+      aMotDePasse: !!user?.user_metadata?.has_password,
+      dejaConnecte: dejaConnecteIci(),
+    })
     supabase.auth.getUser().then(({ data }) => check(data?.user)).catch(() => {})
     // ⚠️ CETTE ÉCOUTE IGNORAIT LA DÉCONNEXION. Elle ne regardait que le mot de
     // passe, alors qu'elle est le seul endroit de l'application prévenu quand
@@ -2287,8 +2303,8 @@ export default function Commander() {
     const DELAI_MIN_MS = 60 * 60 * 1000              // 60 minutes après le retrait
     const FENETRE_MAX_MS = 7 * 24 * 60 * 60 * 1000   // pertinence : 7 jours max
 
-    // Dismiss LOCAL en secours : si l'API ignore-avis a échoué (cookie yopper
-    // absent sur ce device, réseau), la commande ne re-sollicite plus ici.
+    // Dismiss LOCAL en secours : si l'API ignore-avis a échoué (pas de session
+    // sur ce device, réseau), la commande ne re-sollicite plus ici.
     let ignoresLocaux = new Set()
     try { ignoresLocaux = new Set(JSON.parse(localStorage.getItem('yoppaa_avis_ignores') || '[]')) } catch { /* ignore */ }
 
@@ -2808,7 +2824,7 @@ export default function Commander() {
   async function chargerRdvsClient(email) {
     // Le SELECT direct Supabase echoue silencieusement sur les Yoppers non-auth
     // (RLS "Client voit ses RDV" exige auth.uid()). On passe par une route
-    // serveur qui bypass RLS via service_role + auth cookie yopper HTTP-only.
+    // serveur qui bypass RLS via service_role + identité prouvée par le jeton.
     // Le param email est conserve pour compat (deja passe partout), la route
     // ignore et utilise le cookie serveur pour identifier le Yopper.
     try {
@@ -2994,8 +3010,8 @@ export default function Commander() {
 
   async function chargerCommandesClient(_email) {
     // « Mes commandes » = PII (email/nom/téléphone/adresse/total) → lecture via
-    // l'API serveur (service_role + cookie yoppaa_yopper). L'email vient du cookie
-    // côté serveur, pas de ce paramètre. L'enrichissement numéro (numero_commande
+    // l'API serveur (service_role + identité prouvée par le jeton). L'email vient
+    // du jeton côté serveur, pas de ce paramètre. L'enrichissement numéro (numero_commande
     // ou position du jour) est fait côté serveur pour garder la parité d'affichage.
     // ⚠️ `setClientCommandes(res?.commandes || [])` EFFAÇAIT TOUT sur un 401.
     // Le relevé tournant en boucle, les commandes disparaissaient et ne
@@ -3469,7 +3485,7 @@ export default function Commander() {
           commandeId={avisCommande.id}
           onClose={async () => {
             // Dismiss LOCAL d'abord (ceinture + bretelles) : même si l'API
-            // échoue (401 cookie absent, réseau), ce device ne re-sollicite
+            // échoue (401 sans session, réseau), ce device ne re-sollicite
             // plus cette commande. Le serveur reste la source cross-devices.
             try {
               const key = 'yoppaa_avis_ignores'
@@ -3478,10 +3494,11 @@ export default function Commander() {
               localStorage.setItem(key, JSON.stringify([...ids].slice(-100)))
             } catch { /* ignore */ }
             try {
-              await fetch('/api/commande/ignore-avis', {
+              // ⚠️ AVEC LE JETON (15/09) : la route n'accepte plus l'identité
+              // déclarée, un `fetch` nu y recevrait toujours 401.
+              await fetchYopper('/api/commande/ignore-avis', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ commande_id: avisCommande.id }),
               })
             } catch (e) {
@@ -4995,14 +5012,17 @@ export default function Commander() {
                   </div>
                 )}
 
-                {client.email && (
+                {/* 🔴 LE BOUTON NE PARLE DU MOT DE PASSE QUE S'IL SAIT (15/09) :
+                    rien pendant une session perdue, se reconnecter lui rend le
+                    bon libellé. Voir `libelleMotDePasse`. */}
+                {client.email && libelleMotDePasse({ ...compteMdp, sessionPerdue }) && (
                   <button onClick={() => router.push('/commander/auth/definir-mdp')}
                     style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.pale}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', marginBottom: 10, fontFamily: '"DM Sans", sans-serif' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="11" width="18" height="11" rx="2"/>
                       <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                     </svg>
-                    {aMotDePasse ? 'Modifier mon mot de passe' : 'Créer un mot de passe'}
+                    {libelleMotDePasse({ ...compteMdp, sessionPerdue })}
                   </button>
                 )}
 

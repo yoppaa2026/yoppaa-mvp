@@ -9,17 +9,17 @@
 //  la vue `commandes_stats`, pas par cette route.)
 //
 // Sécurité :
-//   • list / confirmer-reception : autorisés UNIQUEMENT via le cookie Yopper
-//     (yoppaa_yopper, HTTP-only) → l'email vient du cookie, jamais du body, donc
+//   • list / confirmer-reception : autorisés UNIQUEMENT avec une identité
+//     PROUVÉE (jeton Supabase) → l'email vient du jeton, jamais du body, donc
 //     pas d'énumération. La réception vérifie que la commande appartient bien à
-//     l'email du cookie avant l'UPDATE.
+//     cet email avant l'UPDATE.
 //   • get-one : par id de commande (UUID). Renvoie seulement les champs d'affichage
 //     de la confirmation. L'UUID est fourni par le retour Stripe du Yopper lui-même
 //     (= capacité) ; résidu accepté (qui connaît l'UUID exact voit ces champs).
 //
 // Body : { action, ...params }
-//   - 'list'                : {} (cookie) → { commandes: [...] } (enrichi numéro)
-//   - 'confirmer-reception' : { commande_id } (cookie) → { ok }
+//   - 'list'                : {} (jeton) → { commandes: [...] } (enrichi numéro)
+//   - 'confirmer-reception' : { commande_id } (jeton) → { ok }
 //   - 'get-one'             : { commande_id } → { commande }
 
 import { NextResponse } from 'next/server'
@@ -143,7 +143,7 @@ export async function POST(request) {
     if (action === 'confirmer-reception') {
       const id = body.commande_id
       if (!id) return NextResponse.json({ ok: false, error: 'commande_id requis' }, { status: 400 })
-      // Vérifie l'appartenance : la commande doit être à l'email du cookie.
+      // Vérifie l'appartenance : la commande doit être à l'email du jeton.
       const { data: cmd } = await supabase
         .from('commandes')
         // ⚠️ `total`, `paye_en_ligne`, `bon_cadeau_montant` ET `fidelite_remise`

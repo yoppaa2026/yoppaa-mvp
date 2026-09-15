@@ -6,8 +6,8 @@
 // entrant en course avec login() sur un user fraîchement créé (constaté 03/07,
 // tags favori:* jamais synchronisés, ciblage push par favori cassé).
 //
-// Auth : cookie HTTP-only yoppaa_yopper. Le Yopper ne tague que son propre user
-// (l'external_id est dérivé du cookie, jamais du body).
+// Auth : identité PROUVÉE (jeton Supabase). Le Yopper ne tague que son propre
+// user (l'external_id est dérivé du jeton, jamais du body).
 //
 // Body : { tags: { "favori:UUID": "1" | "", "code_postal": "5640", ... } }
 //   - valeur "1" pour poser un tag, "" (chaîne vide) pour le retirer.

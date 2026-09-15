@@ -117,6 +117,40 @@ const MUTATIONS = [
     fichier: 'app/commander/rdv/cancel/page.js',
     de: '            <NoteHorsApp/>',
     vers: '' },
+
+  // ─── 6) LE BOUTON DU MOT DE PASSE (15/09) ───────────────────────────────
+  //
+  // 🔴 Une session tombée faisait proposer « Créer un mot de passe » à
+  // quelqu'un qui en avait un.
+  { nom: '🔴 une session perdue propose de nouveau « Créer un mot de passe »',
+    fichier: 'lib/retour-app.js',
+    de: '  if (sessionPerdue) return null',
+    vers: '  if (false) return null' },
+
+  { nom: '🔴 déjà connecté ici sans session : le bouton reparle',
+    fichier: 'lib/retour-app.js',
+    de: "  return dejaConnecte ? null : 'Créer un mot de passe'",
+    vers: "  return 'Créer un mot de passe'" },
+
+  { nom: '🔴 l’invité perd le chemin vers son mot de passe',
+    fichier: 'lib/retour-app.js',
+    de: "  return dejaConnecte ? null : 'Créer un mot de passe'",
+    vers: '  return null' },
+
+  { nom: '🔴 le profil réécrit le ternaire au lieu de lire la règle',
+    fichier: 'app/commander/page.js',
+    de: '                    {libelleMotDePasse({ ...compteMdp, sessionPerdue })}',
+    vers: "                    {compteMdp.aMotDePasse ? 'Modifier mon mot de passe' : 'Créer un mot de passe'}" },
+
+  { nom: '🔴 le profil affiche le bouton sans consulter la règle',
+    fichier: 'app/commander/page.js',
+    de: '                {client.email && libelleMotDePasse({ ...compteMdp, sessionPerdue }) && (',
+    vers: '                {client.email && (' },
+
+  { nom: '🔴 le profil oublie qu’il est déjà passé par ici',
+    fichier: 'app/commander/page.js',
+    de: '      dejaConnecte: dejaConnecteIci(),',
+    vers: '      dejaConnecte: false,' },
 ]
 
 function lancer() {

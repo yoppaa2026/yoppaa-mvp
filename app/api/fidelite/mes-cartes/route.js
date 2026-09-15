@@ -5,8 +5,8 @@
 // commandes (et celui de sa fiche client), jamais par saisie libre d'un
 // numéro (sinon n'importe qui pourrait espionner les cartes d'autrui).
 //
-// Sécurité : identité depuis le cookie HTTP-only yoppaa_yopper (même pattern
-// que /api/yopper/commandes), service_role côté serveur, la table
+// Sécurité : identité PROUVÉE par le jeton Supabase (même pattern que
+// /api/yopper/commandes), service_role côté serveur, la table
 // fidelite_cartes n'étant pas lisible par anon.
 //
 // Body : { action, ...params }
@@ -38,7 +38,7 @@ function admin() {
 // cookie de l'ANCIEN format, non signé, resté en place après le durcissement du
 // 03/08 : le décodage échouait, l'identité valait null, et la fiche affichait
 // éternellement le teaser du programme au lieu de la jauge du Yopper. Le même
-// oubli avait touché /api/rdv/mes-rdvs. Toute lecture de cookie Yopper passe
+// oubli avait touché /api/rdv/mes-rdvs. Toute lecture d'identité Yopper passe
 // désormais par lib/yopper-auth, sans exception.
 //
 // Preuve EXIGÉE : la carte se rattache aux téléphones tirés des commandes de

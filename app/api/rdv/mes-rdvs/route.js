@@ -1,7 +1,7 @@
 // GET /api/rdv/mes-rdvs
 //
-// Retourne les RDV du Yopper identifié par le cookie yopper (HTTP-only,
-// posé par POST /api/yopper/session lors de la connexion Yopper).
+// Retourne les RDV du Yopper identifié par son jeton Supabase (identité
+// PROUVÉE, voir plus bas : le cookie déclaré ne donne plus accès à rien).
 //
 // Contexte : la policy RLS "Client voit ses RDV" (MIGRATION_RDV.sql:359)
 // exige TO authenticated + auth.uid() défini. Or 99% des Yoppers Yoppaa
@@ -10,8 +10,8 @@
 // silencieusement (0 lignes retournées) → bug "RDV qui disparaissent"
 // signalé Alex 30/06 et 01/07.
 //
-// Solution : route serveur qui bypass RLS via service_role. Auth Yopper
-// via cookie HTTP-only Same-Site déjà en place.
+// Solution : route serveur qui bypass RLS via service_role. L'auth Yopper
+// passait d'abord par le cookie ; elle exige aujourd'hui l'identité prouvée.
 
 // ⚠️ RÉGRESSION CORRIGÉE LE 05/08. Cette route décodait encore le cookie à
 // l'ancien format, un simple base64 de JSON. Le durcissement du 03/08 a rendu

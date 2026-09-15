@@ -8,16 +8,17 @@
 //
 // Sécurité :
 //   • get-or-create : par email (le Yopper le saisit au checkout = il le revendique).
-//     Décision Alex 06/07 : on renvoie le pré-remplissage nom/tél pour cet email.
-//     Résidu accepté (qui connaît un email exact voit nom/tél ; plus de dump bulk).
-//   • get-own / update-own / set-commune : autorisés UNIQUEMENT via le cookie
-//     Yopper (yoppaa_yopper, HTTP-only) → pas d'énumération par id.
+//     ⚠️ Sur une fiche EXISTANTE, plus rien n'est écrit ni rendu que son
+//     identifiant (voir plus bas) : le pré-remplissage nom/tél accordé le 06/07
+//     a été retiré. Résidu : l'identifiant de la fiche, et le fait qu'elle existe.
+//   • get-own / update-own / set-commune : autorisés UNIQUEMENT avec une
+//     identité PROUVÉE (jeton Supabase) → pas d'énumération par id.
 //
 // Body : { action, ...params }
-//   - 'get-or-create' : { email, prenom?, nom?, telephone? } → { id, prenom, nom, telephone }
-//   - 'get-own'       : {} (cookie) → { id, prenom, nom, telephone, commune_id, commune }
-//   - 'update-own'    : { prenom?, nom?, telephone? } (cookie) → { ok }
-//   - 'set-commune'   : { commune_id } (cookie) → { ok }
+//   - 'get-or-create' : { email, prenom?, nom?, telephone? } → créée : { id, prenom, nom, telephone } ; existante : { id }
+//   - 'get-own'       : {} (jeton) → { id, prenom, nom, telephone, commune_id, commune }
+//   - 'update-own'    : { prenom?, nom?, telephone? } (jeton) → { ok }
+//   - 'set-commune'   : { commune_id } (jeton) → { ok }
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -32,14 +33,16 @@ function admin() {
   )
 }
 
-// client_id du Yopper depuis le cookie HTTP-only (jamais depuis le body pour les
-// opérations "own", afin d'éviter l'énumération par id).
+// client_id du Yopper depuis son identité PROUVÉE (jamais depuis le body pour
+// les opérations "own", afin d'éviter l'énumération par id).
 // ⚠️ Lisait encore l'ANCIEN cookie non signé, resté en place après le
 // durcissement du 03/08 : le profil du Yopper revenait donc toujours vide.
 // Toute lecture d'identité passe par lib/yopper-auth.
 //
 // Preuve exigée : c'est la fiche d'identité (nom, téléphone, adresse).
-async function cookieClientId(request) {
+// ⚠️ Elle s'appelait `cookieClientId`, du temps du cookie : le nom mentait
+// depuis le 03/08 (renommée le 15/09).
+async function clientIdProuve(request) {
   const id = await identiteProuvee(request)
   return id?.client_id || null
 }
@@ -97,7 +100,7 @@ export async function POST(request) {
     }
 
     // ─── opérations "own" : identité prouvée uniquement ────────────────────
-    const clientId = await cookieClientId(request)
+    const clientId = await clientIdProuve(request)
     if (!clientId) return NextResponse.json({ ok: false, error: 'session_yopper_manquante' }, { status: 401 })
 
     if (action === 'get-own') {

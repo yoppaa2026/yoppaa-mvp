@@ -10,7 +10,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { lireIdentiteYopper } from '@/lib/yopper-session'
+import { identiteProuvee } from '@/lib/yopper-auth'
 import { globalLimiter, formulairesLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envieConnue } from '@/lib/signaux'
 import { envoyerAuAdmin, emailSuggestionCommerce, emailSignalementFiche } from '@/lib/resend'
@@ -55,7 +55,13 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'type invalide' }, { status: 400 })
     }
 
-    const identite = await lireIdentiteYopper()
+    // 🔴 UN SIGNAL NE S'ATTRIBUE QU'À UNE IDENTITÉ PROUVÉE (15/09). Cette route
+    // lisait le cookie déclaré, que `POST /api/yopper/session` signe pour
+    // quiconque le demande : n'importe qui déposait un signalement, une
+    // suggestion ou une envie AU NOM d'un autre Yopper, et contournait l'anti-spam
+    // d'une envie par semaine en changeant de nom. Sans jeton vérifié, le signal
+    // part quand même, ANONYME : ces formulaires restent ouverts aux visiteurs.
+    const identite = await identiteProuvee(request)
     const clientId = identite?.client_id || null
 
     const supabase = createClient(

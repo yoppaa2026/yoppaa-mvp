@@ -6,7 +6,7 @@
 // SQL ne pouvait l'empêcher, faute d'identité Supabase Auth pour un Yopper.
 //
 // Ce que le serveur vérifie, et que la base ne savait pas faire :
-//   • l'auteur est celui du cookie, jamais celui annoncé par le navigateur ;
+//   • l'auteur est celui de l'identité prouvée, jamais celui annoncé par le navigateur ;
 //   • il a une commande RÉCUPÉRÉE ou un rendez-vous HONORÉ chez ce commerce
 //     (règle anti-troll : pas d'avis sans relation commerciale prouvée) ;
 //   • il n'a pas déjà noté cette commande ;
@@ -108,7 +108,7 @@ export async function POST(request) {
 
     const { error } = await supabase.from('avis').insert({
       commercant_id,
-      client_id: identite.client_id,   // l'auteur vient du cookie, pas du navigateur
+      client_id: identite.client_id,   // l'auteur vient du jeton, pas du navigateur
       note: noteNum,
       commentaire: (commentaire || '').trim().slice(0, 1000) || null,
       commande_id: commande_id || null,

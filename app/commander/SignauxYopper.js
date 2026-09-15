@@ -19,6 +19,7 @@
 // ce composant ne rend rien : pas de cadre vide, pas de titre orphelin.
 
 import { useState } from 'react'
+import { fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 
 const T = {
   bgPanel: '#160636',
@@ -69,7 +70,9 @@ export default function SignauxYopper({ types = [], commercant }) {
     try {
       // L'anti-spam d'une envie par semaine vit côté serveur : il était dans le
       // navigateur, donc contournable, et la table n'y est plus insérable.
-      await fetch('/api/signaux', {
+      // ⚠️ AVEC LA PREUVE SI ELLE EXISTE (15/09) : le serveur n'attribue plus une
+      // envie qu'à une identité prouvée. Sans session, elle part anonyme.
+      await fetchAvecPreuveSiConnecte('/api/signaux', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'envie', feature: type, commercant_id: commercant.id }),

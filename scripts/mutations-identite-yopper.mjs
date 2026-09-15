@@ -132,6 +132,15 @@ const MUTATIONS = [
     fichier: 'lib/fiche-client.js',
     de: '  return !fiche.auth_user_id || fiche.auth_user_id === userId',
     vers: '  return fiche.auth_user_id === userId' },
+
+  // ─── LA GARDE RESSERRÉE (15/09) ─────────────────────────────────────────
+  //
+  // 🔴 Elle acceptait l'identité large : `ignore-avis` s'en contentait, et un
+  // commerçant pouvait faire taire les demandes d'avis sur ses commandes.
+  { nom: '🔴 ignore-avis revient a l identite large',
+    fichier: 'app/api/commande/ignore-avis/route.js',
+    de: '  const id = await identiteProuvee(request)',
+    vers: '  const id = await identiteYopper(request)' },
 ]
 
 const lancer = () => {

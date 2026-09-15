@@ -8,13 +8,12 @@
 //
 // Body attendu : { commande_id: UUID }
 //
-// Auth : cookie HTTP-only yopper session. Le client_email du cookie doit
-// matcher le client_email de la commande (sécurité minimale, un autre
-// Yopper ne peut pas dismiss les avis d'un tiers).
+// Auth : identité PROUVÉE (jeton Supabase). L'email du jeton doit être celui de
+// la commande : un Yopper ne masque que les demandes d'avis de SES commandes.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { identiteYopper } from '@/lib/yopper-auth'
+import { identiteProuvee } from '@/lib/yopper-auth'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -24,26 +23,27 @@ function getSupabaseAdmin() {
   )
 }
 
-// ⚠️ Lisait encore l'ANCIEN cookie non signé (durcissement du 03/08) : masquer
-// une demande d'avis échouait donc toujours en silence.
+// 🔴 L'IDENTITÉ DÉCLARÉE NE SUFFIT PLUS, ICI NON PLUS (15/09).
 //
-// ⚠️ ICI L'IDENTITÉ DÉCLARÉE SUFFIT, ET CETTE ROUTE EST LA SEULE DANS CE CAS.
-// Elle a été réexaminée le 21/08, en même temps que `sync-tags`, qui utilisait
-// le même helper faible et a dû passer à `identiteProuvee`.
+// Cette route était la dernière à l'accepter, sur un raisonnement écrit le
+// 21/08 : « un cookie forgé au nom d'une adresse ne sert à rien sans l'UUID de
+// la commande, que seul son auteur possède ». C'était FAUX. Le tableau de bord
+// du COMMERÇANT affiche l'email du client et reçoit l'UUID de chaque commande.
+// Il lui suffisait de se faire signer un cookie à cette adresse
+// (`POST /api/yopper/session` signe ce qu'on lui déclare) pour faire taire la
+// demande d'avis sur ses propres commandes, à commencer par celles qui se sont
+// mal passées. Un avis vérifié qu'on peut empêcher de naître ne vérifie plus
+// rien.
 //
-// La différence tient au FILTRE de la mise à jour, plus bas : elle exige
-// `id = commande_id` ET `client_email = email`. Un cookie forgé au nom d'une
-// adresse ne sert donc à rien sans l'identifiant de la commande, qui est un
-// UUID que seul son auteur possède. C'est l'UUID qui garde, pas le cookie.
+// ⚠️ ET EXIGER LA PREUVE NE RETIRE RIEN À PERSONNE : la demande d'avis naît des
+// commandes du Yopper, et ces commandes ne se chargent QU'AVEC une identité
+// prouvée (`/api/yopper/commandes`). Qui voit la demande a donc un jeton.
 //
-// Et le geste consiste à masquer une invitation sur SA propre commande, souvent
-// passée en invité juste avant : exiger la connexion le casserait pour protéger
-// une donnée qui n'en est pas une.
-//
-// ⚠️ SI CE FILTRE PERD SON `.eq('client_email', …)`, cette route devient le
-// défaut de `sync-tags`. Les deux lignes se lisent ensemble.
+// ⚠️ LE FILTRE `.eq('client_email', …)` RESTE INDISPENSABLE : c'est lui qui
+// borne le jeton à SES commandes. Sans lui, n'importe quel compte masquerait
+// les demandes d'avis de tout le monde.
 async function getYopperEmail(request) {
-  const id = await identiteYopper(request)
+  const id = await identiteProuvee(request)
   return id?.email || null
 }
 

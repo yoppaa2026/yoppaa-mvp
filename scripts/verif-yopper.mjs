@@ -52,8 +52,12 @@ for (const chemin of ROUTES_IDENTITE) {
   const ligneCode = src.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
   verifier(`${chemin.split('/').slice(-2)[0]} ne décode plus le cookie à la main`,
     !/Buffer\.from\([^)]*'base64'\)/.test(ligneCode))
-  verifier(`${chemin.split('/').slice(-2)[0]} passe par lib/yopper-auth ou yopper-session`,
-    /identiteProuvee|identiteYopper|lireIdentiteYopper/.test(ligneCode))
+  // 🔴 L'IDENTITÉ PROUVÉE, ET ELLE SEULE (resserré le 15/09). La garde acceptait
+  // aussi `identiteYopper` et `lireIdentiteYopper`, qui laissaient passer le
+  // cookie déclaré : `ignore-avis` s'en contentait, et un commerçant pouvait
+  // faire taire les demandes d'avis sur ses propres commandes.
+  verifier(`${chemin.split('/').slice(-2)[0]} passe par l'identité prouvée`,
+    /identiteProuvee\s*\(/.test(ligneCode))
 }
 
 // L'appelant doit envoyer le jeton, sinon la route la mieux écrite du monde ne

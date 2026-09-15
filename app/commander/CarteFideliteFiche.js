@@ -3,7 +3,7 @@
 //   • le Yopper a une carte → jauge (tampons ou cagnotte) + récompense débloquée
 //   • pas de carte / pas connecté → teaser du programme (libellé de la récompense)
 // Les infos du PROGRAMME viennent de la vue commercants_public (fidelite_*),
-// MA carte vient de /api/fidelite/mes-cartes (cookie Yopper), fetchée par la fiche.
+// MA carte vient de /api/fidelite/mes-cartes (identité prouvée), fetchée par la fiche.
 
 import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
 

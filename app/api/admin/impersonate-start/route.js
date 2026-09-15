@@ -4,12 +4,20 @@
 // Trace requise pour conformité RGPD : tout accès admin à un compte commerçant
 // est consigné (qui, quel commerçant, quand, raison optionnelle).
 //
-// Le FE appelle cette route AVANT de naviguer vers /dashboard?as=<commercant_id>.
-// Retourne un impersonation_id que le FE stocke en localStorage, et qu'il
-// renvoie au impersonate-end pour fermer la session proprement.
+// Le FE appelle cette route AVANT de naviguer vers /dashboard. Elle retourne un
+// impersonation_id que l'écran range DANS L'ONGLET (sessionStorage, 15/09), et
+// que le tableau de bord fait confirmer par /api/admin/impersonate-verifier à
+// chaque chargement.
+//
+// 🔴 ET ELLE FERME LES LIGNES RESTÉES OUVERTES AU-DELÀ DE LEUR DURÉE (15/09).
+// Avant, une ligne dont personne n'avait cliqué « Quitter » restait ouverte à
+// vie : le journal disait qu'un accès durait depuis des jours. ⚠️ Seulement
+// celles qui ont DÉPASSÉ deux heures : un autre onglet peut légitimement
+// travailler sur un autre commerce en même temps.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { finAInscrire, ligneExpiree } from '@/lib/impersonation'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
@@ -49,6 +57,26 @@ export async function POST(request) {
       .maybeSingle()
     if (!c) {
       return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
+    }
+
+    // Les lignes restées ouvertes au-delà de leur durée se ferment, à la fin de
+    // cette durée et pas à « maintenant ».
+    const maintenant = new Date()
+    const { data: ouvertes, error: errOuvertes } = await supabase
+      .from('admin_impersonations')
+      .select('id, started_at')
+      .eq('admin_email', user.email)
+      .is('ended_at', null)
+    // ⚠️ NON BLOQUANT, MAIS DIT : ouvrir la nouvelle ligne compte plus que ranger
+    // les anciennes, et l'échec se lit dans les journaux du serveur.
+    if (errOuvertes) console.error('[admin/impersonate-start] lignes ouvertes illisibles', errOuvertes.message)
+    for (const l of (ouvertes || []).filter(l => ligneExpiree(l, maintenant))) {
+      const { error: errFin } = await supabase
+        .from('admin_impersonations')
+        .update({ ended_at: finAInscrire(l, maintenant).toISOString() })
+        .eq('id', l.id)
+        .is('ended_at', null)
+      if (errFin) console.error('[admin/impersonate-start] ligne expirée non fermée', { id: l.id, erreur: errFin.message })
     }
 
     // Log : insert dans admin_impersonations

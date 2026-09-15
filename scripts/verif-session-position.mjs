@@ -198,7 +198,12 @@ function egale(nom, recu, attendu) {
       else echecs.push(`déconnexion NON marquée — ${f}:${i + 1}`)
     })
   }
-  verifie('sept déconnexions recensées dans l\'application', total === 7, `trouvé ${total}`)
+  // ⚠️ SIX DEPUIS LE 15/09, ET CE N'EST PAS UNE DÉCONNEXION PERDUE. Les deux
+  // boutons de l'admin appelaient chacun `signOut` en ligne, sans lire le
+  // résultat ni fermer « Voir Dashboard ». Ils passent maintenant par une seule
+  // sortie, `seDeconnecter`, qui fait les deux. Un appel de moins, pas une porte
+  // de moins : la marque reste exigée sur chacun des six.
+  verifie('six déconnexions recensées dans l\'application', total === 6, `trouvé ${total}`)
 
   // ═══ LA BOUCLE DONT ON NE SORTAIT PAS (14/09) ═══════════════════════════
   //

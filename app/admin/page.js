@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
+import { effacerImpersonation, fermerImpersonationServeur, messageImpersonation } from '@/lib/impersonation'
 import SectionTousCommercants from './SectionTousCommercants'
 import SectionKYBAValider from './SectionKYBAValider'
 import SectionPreinscriptions from './SectionPreinscriptions'
@@ -119,6 +120,39 @@ export default function AdminPage() {
     setTimeout(() => setToast(null), 4000)
   }
 
+  // 🔴 LA RAISON D'UN RETOUR FORCÉ DEPUIS LE TABLEAU DE BORD (15/09). Une
+  // connexion en tant que commerçant expirée ou refusée ramène ici : sans un
+  // mot, on croirait à un bug.
+  useEffect(() => {
+    if (checking || typeof window === 'undefined') return
+    const raison = new URLSearchParams(window.location.search).get('voir')
+    if (!raison) return
+    window.history.replaceState({}, '', window.location.pathname)
+    showToast(messageImpersonation(raison), 'error')
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule lecture, une fois la session vérifiée
+  }, [checking])
+
+  // 🔴 LA DÉCONNEXION DE L'ADMIN (15/09). Elle n'effaçait pas « Voir Dashboard »,
+  // qui reprenait donc à la connexion suivante, et elle ne lisait pas son
+  // résultat : le défaut n°2 du 14/09, corrigé au tableau de bord mais pas ici.
+  async function seDeconnecter() {
+    if (session?.user?.email === ADMIN_EMAIL) {
+      // La connexion en tant que commerçant vit dans un onglet, et on ne sait
+      // pas lequel : on les ferme toutes au journal, tant que le jeton vit.
+      const fermees = await fermerImpersonationServeur(supabase, { toutes: true })
+      if (!fermees) console.warn('[admin] les connexions en tant que commerçant n’ont pas pu être fermées au journal')
+    }
+    effacerImpersonation()
+    marquerDeconnexionVoulue()
+    const { error: errSortie } = await supabase.auth.signOut()
+    if (errSortie) {
+      console.error('[admin] déconnexion refusée par le serveur', errSortie.message)
+      // ⚠️ AU MOINS CE NAVIGATEUR-CI, comme au tableau de bord.
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    }
+    router.push('/login')
+  }
+
   // ─── Actions ───────────────────────────────────────────────────────────
   async function valider(commercant_id) {
     if (!confirm('Confirmer la validation de ce commerçant ? Sa page sera publiée et un email lui sera envoyé.')) return
@@ -182,7 +216,7 @@ export default function AdminPage() {
     return <CenteredMsg variant="error">
       <strong>Accès refusé.</strong><br/>
       Cette page est réservée à l&apos;équipe Yoppaa.<br/>
-      <button onClick={async () => { marquerDeconnexionVoulue(); await supabase.auth.signOut(); router.push('/login') }}
+      <button onClick={seDeconnecter}
         style={{ marginTop: 16, padding: '10px 22px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
         Se déconnecter
       </button>
@@ -206,7 +240,7 @@ export default function AdminPage() {
             <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 24, letterSpacing: '-0.05em', color: '#fff', margin: 0, lineHeight: 1 }}>yoppaa</p>
             <span style={{ fontSize: 11, fontWeight: 800, color: T.light, background: `${T.main}55`, padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '1px', border: `1px solid ${T.light}44` }}>Admin</span>
           </div>
-          <button onClick={async () => { marquerDeconnexionVoulue(); await supabase.auth.signOut(); router.push('/login') }}
+          <button onClick={seDeconnecter}
             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer', borderRadius: 10, padding: '0.5rem 1rem', fontWeight: 700, fontSize: 13, fontFamily: '"DM Sans", sans-serif' }}>
             Déconnexion
           </button>

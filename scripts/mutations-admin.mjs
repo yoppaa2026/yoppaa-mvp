@@ -155,6 +155,141 @@ const MUTATIONS = [
     fichier: 'lib/email-normalise.js',
     de: "  const s = String(valeur ?? '').trim().toLowerCase()",
     vers: "  const s = String(valeur ?? '')" },
+
+  // ─── « VOIR DASHBOARD » VIT DANS L'ONGLET, ET IL MEURT (15/09, trouvé par Alex) ──
+  //
+  // 🔴 Un vieux « Voir Dashboard » dormait dans le localStorage, commun à tous
+  // les onglets et jamais effacé : Alex est tombé sur Ciseaux et Soins en MODE
+  // ADMIN. L'admin passe toutes les gardes, débit d'une empreinte compris.
+  { nom: '🔴 la duree passe a huit heures',
+    fichier: 'lib/impersonation.js',
+    de: 'export const DUREE_IMPERSONATION_MS = 2 * 60 * 60 * 1000',
+    vers: 'export const DUREE_IMPERSONATION_MS = 8 * 60 * 60 * 1000' },
+
+  { nom: '🔴 a deux heures pile, elle autorise encore',
+    fichier: 'lib/impersonation.js',
+    de: "  if (ecoule >= DUREE_IMPERSONATION_MS) return 'expiree'",
+    vers: "  if (ecoule > DUREE_IMPERSONATION_MS) return 'expiree'" },
+
+  { nom: '🔴 une ligne fermee autorise encore',
+    fichier: 'lib/impersonation.js',
+    de: "  if (ligne.ended_at) return 'terminee'",
+    vers: "  if (false) return 'terminee'" },
+
+  { nom: '🔴 la ligne d un autre commerce ouvre celui-ci',
+    fichier: 'lib/impersonation.js',
+    de: "  if (!commercantId || String(ligne.commercant_id) !== String(commercantId)) return 'autre_commerce'",
+    vers: "  if (!commercantId) return 'autre_commerce'" },
+
+  { nom: '🔴 la ligne d un autre compte autorise',
+    fichier: 'lib/impersonation.js',
+    de: "  if (!admin || String(ligne.admin_email || '').trim().toLowerCase() !== admin) return 'autre_admin'",
+    vers: "  if (!admin) return 'autre_admin'" },
+
+  { nom: '🔴 une ligne oubliee se ferme a maintenant (trois jours d acces au journal)',
+    fichier: 'lib/impersonation.js',
+    de: '  return fin < maintenant ? fin : maintenant',
+    vers: '  return maintenant' },
+
+  { nom: '🔴 une ligne de plus de deux heures ne passe plus pour expiree',
+    fichier: 'lib/impersonation.js',
+    de: '  return !fin || fin <= maintenant',
+    vers: '  return !fin' },
+
+  { nom: '🔴 une deconnexion dans un autre onglet n arrete plus rien',
+    fichier: 'lib/impersonation.js',
+    de: "  return String(idAuChargement) !== String(idActuel || '')",
+    vers: '  return !!idActuel && String(idAuChargement) !== String(idActuel)' },
+
+  { nom: '🔴 « Voir Dashboard » retourne dans le navigateur (tous les onglets)',
+    fichier: 'lib/impersonation.js',
+    de: "  try { onglet = typeof sessionStorage !== 'undefined' ? sessionStorage : null } catch { onglet = null }",
+    vers: "  try { onglet = typeof localStorage !== 'undefined' ? localStorage : null } catch { onglet = null }" },
+
+  { nom: '🔴 les vieilles cles du navigateur ne se purgent plus',
+    fichier: 'lib/impersonation.js',
+    de: '    navigateur.removeItem(CLE_COMMERCE)',
+    vers: '    void 0' },
+
+  { nom: '🔴 le tableau de bord ne demande plus rien au serveur',
+    fichier: 'app/dashboard/page.js',
+    de: '        const verdict = await verifierImpersonation(supabase, imp)',
+    vers: '        const verdict = { ok: true, expireAt: null }' },
+
+  { nom: '🔴 un refus du serveur n efface plus rien',
+    fichier: 'app/dashboard/page.js',
+    de: '        effacerImpersonation()',
+    vers: '        void 0' },
+
+  { nom: '🔴 deux heures passees, l onglet reste ouvert',
+    fichier: 'app/dashboard/page.js',
+    de: "    const minuterie = setTimeout(() => quitterImpersonation('expiree'), Math.max(0, reste))",
+    vers: '    const minuterie = setTimeout(() => {}, Math.max(0, reste))' },
+
+  { nom: '🔴 un autre compte connecte ailleurs ne l arrete plus',
+    fichier: 'app/dashboard/page.js',
+    de: '      if (compteAChange(compteAuChargementRef.current, session?.user?.id)) {',
+    vers: '      if (false) {' },
+
+  { nom: '🔴 l ecran d arret n est plus rendu',
+    fichier: 'app/dashboard/page.js',
+    de: '  if (compteChange) return (',
+    vers: '  if (false && compteChange) return (' },
+
+  { nom: '🔴 la deconnexion du tableau de bord laisse « Voir Dashboard » ouvert',
+    fichier: 'app/dashboard/page.js',
+    de: '    if (impersonating) await fermerImpersonationServeur(supabase, { toutes: true })',
+    vers: '    void 0' },
+
+  { nom: '⚠️ la deconnexion voulue passe pour un changement de compte',
+    fichier: 'app/dashboard/page.js',
+    de: '    sortieVoulueRef.current = true',
+    vers: '    void 0' },
+
+  { nom: '🔴 « Voir Dashboard » s ecrit de nouveau dans le navigateur',
+    fichier: 'app/admin/SectionTousCommercants.js',
+    de: '      if (!poserImpersonation(c.id, j.impersonation_id)) {',
+    vers: "      if (localStorage.setItem('yoppaa_admin_impersonating', c.id)) {" },
+
+  { nom: '🔴 un bouton de l admin retrouve une deconnexion qui n efface rien',
+    fichier: 'app/admin/page.js',
+    de: 'onClick={seDeconnecter}',
+    vers: "onClick={async () => { marquerDeconnexionVoulue(); await supabase.auth.signOut(); router.push('/login') }}" },
+
+  { nom: '🔴 la sortie de l admin ne ferme plus le journal',
+    fichier: 'app/admin/page.js',
+    de: '      const fermees = await fermerImpersonationServeur(supabase, { toutes: true })',
+    vers: '      const fermees = true' },
+
+  { nom: '🔴 la page Abonnement rouvre un commerce qui n est pas le sien',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: ".eq('id', savedId).eq('auth_user_id', user.id)",
+    vers: ".eq('id', savedId)" },
+
+  { nom: '🔴 la page Abonnement ne demande plus au serveur',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '        const verdict = await verifierImpersonation(supabase, imp)',
+    vers: '        const verdict = { ok: true }' },
+
+  { nom: '🔴 la route accepte sans appliquer la regle',
+    fichier: 'app/api/admin/impersonate-verifier/route.js',
+    de: '    const raison = raisonImpersonationRefusee(ligne, { adminEmail: user.email, commercantId: commercant_id, maintenant })',
+    vers: '    const raison = null' },
+
+  { nom: '🔴 un journal illisible vaut un accord',
+    fichier: 'app/api/admin/impersonate-verifier/route.js',
+    de: '    if (error) {',
+    vers: '    if (false) {' },
+
+  { nom: '🔴 la fermeture redevient un espoir',
+    fichier: 'app/api/admin/impersonate-end/route.js',
+    de: '      if (errFin || !faite?.length) {',
+    vers: '      if (false) {' },
+
+  { nom: '⚠️ une nouvelle connexion ne range plus les lignes oubliees',
+    fichier: 'app/api/admin/impersonate-start/route.js',
+    de: '    for (const l of (ouvertes || []).filter(l => ligneExpiree(l, maintenant))) {',
+    vers: '    for (const l of []) {' },
 ]
 
 const lancer = () => {

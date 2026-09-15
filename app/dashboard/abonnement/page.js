@@ -15,6 +15,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { lireImpersonation, verifierImpersonation, effacerImpersonation, messageImpersonation } from '@/lib/impersonation'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PLAN_LABEL } from '@/lib/plans'
 import { euros } from '@/lib/montants'
@@ -81,17 +82,28 @@ export default function AbonnementPage() {
       const adminEmail = 'verstappenalexandre@gmail.com'
       const isAdmin = user.email === adminEmail
 
-      // 1. Mode impersonation admin (depuis /admin → "Voir Dashboard")
-      const impersonatingId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_admin_impersonating') : null
-      if (isAdmin && impersonatingId) {
-        const { data: c } = await supabase.from('commercants').select('*').eq('id', impersonatingId).maybeSingle()
+      // 1. « Voir Dashboard » depuis /admin, DANS CET ONGLET et confirmé par le
+      // serveur (15/09) : la même règle que le tableau de bord, par les mêmes
+      // fonctions.
+      const imp = lireImpersonation()
+      if (isAdmin && imp) {
+        const verdict = await verifierImpersonation(supabase, imp)
+        if (!verdict.ok) {
+          effacerImpersonation()
+          if (mounted) { setError(messageImpersonation(verdict.raison)); setLoading(false) }
+          return
+        }
+        const { data: c } = await supabase.from('commercants').select('*').eq('id', imp.commercantId).maybeSingle()
         if (mounted && c) { setCommercant(c); setLoading(false); return }
       }
 
-      // 2. Commerçant déjà sélectionné via le dashboard
+      // 2. Commerçant déjà sélectionné via le dashboard.
+      // 🔴 PARMI LES SIENS SEULEMENT (15/09). « Voir Dashboard » écrivait aussi
+      // cet identifiant, et « Quitter » ne l'effaçait pas : l'admin, que la base
+      // laisse tout lire, rouvrait ici le dernier commerce visité, SANS BANDEAU.
       const savedId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_dashboard_commercant_id') : null
       if (savedId) {
-        const { data: c } = await supabase.from('commercants').select('*').eq('id', savedId).maybeSingle()
+        const { data: c } = await supabase.from('commercants').select('*').eq('id', savedId).eq('auth_user_id', user.id).maybeSingle()
         if (mounted && c) { setCommercant(c); setLoading(false); return }
       }
 

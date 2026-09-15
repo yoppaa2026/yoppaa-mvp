@@ -24,6 +24,12 @@ import {
 // distinct de l'adresse administrateur, donc si douze comptes de test restent
 // douze commerçants ordinaires.
 import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
+// ⚠️ IMPORTÉES POUR ÊTRE EXÉCUTÉES : « Voir Dashboard », sa durée et son
+// stockage (15/09, trouvé par Alex).
+import {
+  DUREE_IMPERSONATION_MS, raisonImpersonationRefusee, finImpersonation, ligneExpiree, finAInscrire,
+  compteAChange, poserImpersonation, lireImpersonation, effacerImpersonation,
+} from '../lib/impersonation.js'
 
 // ⚠️ On NORMALISE LES FINS DE LIGNE. Git rend ces fichiers en CRLF sous
 // Windows, et une expression qui cherche `return\n` ne trouve alors rien : la
@@ -158,8 +164,12 @@ function sansCommentaires(src) {
     'la personne doit lire POURQUOI, pas croire à un mot de passe refusé')
 
   // L'admin regarde les dossiers en attente : c'est tout l'intérêt.
+  // ⚠️ PRÉCISÉE LE 15/09, PAS DÉSARMÉE. Elle cherchait la clé du localStorage,
+  // qui a quitté le tableau de bord : `indexOf` aurait rendu -1, donc « avant »
+  // pour toujours, et la garde serait restée verte sans plus rien regarder.
+  const posImpersonation = visible.indexOf('const imp = lireImpersonation()')
   verifier("l'impersonation admin sort AVANT la porte",
-    visible.indexOf('yoppaa_admin_impersonating') < visible.indexOf('accesDashboard(data[0])'),
+    posImpersonation > -1 && posImpersonation < visible.indexOf('accesDashboard(data[0])'),
     'Alex doit pouvoir ouvrir un dossier qu\'il n\'a pas encore validé')
 }
 
@@ -338,6 +348,156 @@ function sansCommentaires(src) {
     memeEmail('A@B.be', ' a@b.be ') === true)
   verifier('quand deux adresses différentes ne se confondent pas',
     memeEmail('verstappenalexandre+x@gmail.com', ADMIN) === false)
+}
+
+// ═══ « VOIR DASHBOARD » VIT DANS L'ONGLET, ET IL MEURT (15/09, trouvé par Alex) ═══
+//
+// 🔴 Revenu sur l'onglet où il testait La Table d'Essai avec le compte du
+// restaurant, Alex est tombé sur Ciseaux et Soins en MODE ADMIN. Il s'était
+// connecté côté Yopper dans un autre onglet, avec son adresse, qui est aussi
+// celle de l'admin : la session est commune à tout le navigateur. Et un vieux
+// « Voir Dashboard » dormait dans le localStorage, commun à tous les onglets et
+// jamais effacé par une déconnexion. L'admin passe toutes les gardes, débit
+// d'une empreinte compris.
+//
+// ⚠️ LES DATES FIXES SONT SANS DANGER ICI : la règle reçoit son « maintenant »,
+// elle ne lit jamais l'horloge.
+{
+  const ADMIN = 'verstappenalexandre@gmail.com'
+  const H = 3600 * 1000
+  const T0 = new Date('2026-09-15T20:00:00Z')
+  const LIGNE = { id: 'i1', admin_email: ADMIN, commercant_id: 'c1', started_at: T0.toISOString(), ended_at: null }
+  const a = (ms, autres = {}) => ({ adminEmail: ADMIN, commercantId: 'c1', maintenant: new Date(T0.getTime() + ms), ...autres })
+
+  // ── La règle, exécutée ─────────────────────────────────────────────────
+  verifier('✅ la durée est de deux heures (décision d’Alex)', DUREE_IMPERSONATION_MS === 2 * H)
+  verifier('une ligne ouverte, au nom de l’admin, pour ce commerce, autorise',
+    raisonImpersonationRefusee(LIGNE, a(60 * 1000)) === null)
+  verifier('🔴 à 1 h 59 elle autorise encore', raisonImpersonationRefusee(LIGNE, a(2 * H - 60 * 1000)) === null)
+  verifier('🔴 à deux heures pile, c’est fini', raisonImpersonationRefusee(LIGNE, a(2 * H)) === 'expiree')
+  verifier('🔴 trois jours plus tard aussi', raisonImpersonationRefusee(LIGNE, a(72 * H)) === 'expiree')
+  verifier('🔴 une ligne fermée n’autorise plus rien',
+    raisonImpersonationRefusee({ ...LIGNE, ended_at: T0.toISOString() }, a(60 * 1000)) === 'terminee')
+  verifier('🔴 la ligne d’un autre commerce n’ouvre pas celui-ci',
+    raisonImpersonationRefusee(LIGNE, a(60 * 1000, { commercantId: 'c2' })) === 'autre_commerce')
+  verifier('🔴 ni celle d’un autre compte',
+    raisonImpersonationRefusee({ ...LIGNE, admin_email: 'quelquun@exemple.be' }, a(60 * 1000)) === 'autre_admin')
+  verifier('🔴 un +alias n’est pas l’admin',
+    raisonImpersonationRefusee({ ...LIGNE, admin_email: 'verstappenalexandre+test@gmail.com' }, a(60 * 1000)) === 'autre_admin')
+  verifier('🔴 sans ligne, aucun accès', raisonImpersonationRefusee(null, a(0)) === 'introuvable')
+  verifier('⚠️ une date illisible n’autorise pas',
+    raisonImpersonationRefusee({ ...LIGNE, started_at: 'demain' }, a(0)) === 'date_illisible'
+    && raisonImpersonationRefusee({ ...LIGNE, started_at: null }, a(0)) === 'date_illisible')
+  verifier('⚠️ une ligne commencée demain n’autorise pas', raisonImpersonationRefusee(LIGNE, a(-24 * H)) === 'date_illisible')
+  verifier('la fin tombe deux heures après le début', finImpersonation(LIGNE)?.getTime() === T0.getTime() + 2 * H)
+  verifier('🔴 une ligne oubliée trois jours se ferme à la fin de sa durée, pas « maintenant »',
+    finAInscrire(LIGNE, new Date(T0.getTime() + 72 * H)).getTime() === T0.getTime() + 2 * H)
+  verifier('et une ligne encore dans sa durée, au moment réel',
+    finAInscrire(LIGNE, new Date(T0.getTime() + H)).getTime() === T0.getTime() + H)
+  verifier('🔴 au-delà de deux heures, une ligne ouverte est expirée', ligneExpiree(LIGNE, new Date(T0.getTime() + 3 * H)) === true)
+  verifier('mais pas avant', ligneExpiree(LIGNE, new Date(T0.getTime() + H)) === false)
+  verifier('⚠️ et une date illisible l’est d’office', ligneExpiree({ ...LIGNE, started_at: 'x' }, T0) === true)
+
+  // ── Le compte de l'onglet ──────────────────────────────────────────────
+  verifier('le même compte n’arrête rien', compteAChange('u1', 'u1') === false)
+  verifier('🔴 un autre compte, connecté dans un autre onglet, arrête le tableau de bord', compteAChange('u1', 'u2') === true)
+  verifier('🔴 une déconnexion ailleurs aussi', compteAChange('u1', undefined) === true)
+  verifier('avant le chargement, il n’y a rien à comparer', compteAChange(null, 'u2') === false)
+
+  // ── Le stockage : l'onglet, jamais le navigateur ───────────────────────
+  const fauxStockage = () => {
+    const m = new Map()
+    return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)) }, removeItem: (k) => { m.delete(k) } }
+  }
+  const S = { onglet: fauxStockage(), navigateur: fauxStockage() }
+  S.navigateur.setItem('yoppaa_admin_impersonating', 'ciseaux')
+  S.navigateur.setItem('yoppaa_admin_impersonation_session_id', 'vieille-ligne')
+  verifier('🔴 un vieux « Voir Dashboard » du navigateur ne rouvre RIEN', lireImpersonation(S) === null)
+  verifier('🔴 et il est purgé dès la lecture',
+    S.navigateur.getItem('yoppaa_admin_impersonating') === null && S.navigateur.getItem('yoppaa_admin_impersonation_session_id') === null)
+  verifier('« Voir Dashboard » se range', poserImpersonation('c1', 'i1', S) === true)
+  verifier('🔴 dans l’onglet', S.onglet.getItem('yoppaa_admin_impersonating') === 'c1')
+  verifier('🔴 et jamais dans le navigateur', S.navigateur.getItem('yoppaa_admin_impersonating') === null)
+  const relu = lireImpersonation(S)
+  verifier('il se relit dans le même onglet', relu?.commercantId === 'c1' && relu?.impersonationId === 'i1')
+  effacerImpersonation(S)
+  verifier('🔴 et il s’efface', lireImpersonation(S) === null)
+  verifier('⚠️ sans ligne du journal, rien ne se range', poserImpersonation('c1', null, S) === false && lireImpersonation(S) === null)
+  verifier('⚠️ sans stockage d’onglet, rien ne se range', poserImpersonation('c1', 'i1', { onglet: null, navigateur: null }) === false)
+  const libSrc = sansCommentaires(lire('lib/impersonation.js'))
+  verifier('🔴 par défaut, l’onglet est le sessionStorage, et le navigateur une source à purger',
+    /onglet = typeof sessionStorage !== 'undefined' \? sessionStorage : null/.test(libSrc)
+    && /navigateur = typeof localStorage !== 'undefined' \? localStorage : null/.test(libSrc)
+    && !/navigateur\.setItem/.test(libSrc))
+
+  // ── Le code, là où la règle doit être appelée ──────────────────────────
+  const dash = sansCommentaires(lire('app/dashboard/page.js'))
+  const liste = sansCommentaires(lire('app/admin/SectionTousCommercants.js'))
+  const abo = sansCommentaires(lire('app/dashboard/abonnement/page.js'))
+  const pageAdmin = sansCommentaires(lire('app/admin/page.js'))
+  const routeVerif = sansCommentaires(lire('app/api/admin/impersonate-verifier/route.js'))
+  const routeFin = sansCommentaires(lire('app/api/admin/impersonate-end/route.js'))
+  const routeDebut = sansCommentaires(lire('app/api/admin/impersonate-start/route.js'))
+
+  verifier('🔴 plus aucun « Voir Dashboard » dans le localStorage',
+    !/localStorage\.(getItem|setItem)\('yoppaa_admin_impersonat/.test([dash, liste, abo, pageAdmin].join('\n')))
+  verifier('🔴 « Voir Dashboard » se range dans l’onglet, et le dit s’il n’y arrive pas',
+    /if \(!poserImpersonation\(c\.id, j\.impersonation_id\)\) \{/.test(liste))
+  verifier('🔴 et ne pose plus le commerce du tableau de bord', !/yoppaa_dashboard_commercant_id/.test(liste))
+
+  const iLire = dash.indexOf('const imp = lireImpersonation()')
+  const iVerdict = dash.indexOf('const verdict = await verifierImpersonation(supabase, imp)')
+  const iCharge = dash.indexOf("? await supabase.from('commercants').select('*').eq('id', imp.commercantId).maybeSingle()")
+  verifier('🔴 le tableau de bord demande au serveur AVANT de charger le commerce',
+    iLire > -1 && iVerdict > iLire && iCharge > iVerdict, `${iLire} / ${iVerdict} / ${iCharge}`)
+  verifier('🔴 un refus efface et renvoie à /admin avec la raison',
+    /effacerImpersonation\(\)\s*router\.push\(`\/admin\?voir=\$\{encodeURIComponent\(verdict\.ok \? 'introuvable' : verdict\.raison\)\}`\)/.test(dash))
+  verifier('⚠️ le bandeau dit jusqu’à quand', /jusqu’à \{new Date\(impersonationFin\)\.toLocaleTimeString\('fr-BE'/.test(dash))
+  verifier('🔴 à deux heures, l’onglet quitte tout seul', /setTimeout\(\(\) => quitterImpersonation\('expiree'\)/.test(dash))
+  verifier('⚠️ « Quitter » ne prend pas le clic pour une raison', /typeof raison === 'string'/.test(dash))
+
+  verifier('🔴 le tableau de bord retient le compte du chargement', /compteAuChargementRef\.current = user\.id/.test(dash))
+  verifier('🔴 il écoute un changement de compte', /supabase\.auth\.onAuthStateChange\(\(event, session\) => \{/.test(dash))
+  verifier('⚠️ sans rappel async : la bibliothèque l’attend en tenant son verrou (31/08)', !/onAuthStateChange\(async/.test(dash))
+  verifier('🔴 il compare au compte du chargement', /compteAChange\(compteAuChargementRef\.current, session\?\.user\?\.id\)/.test(dash))
+  const iArret = dash.indexOf('if (compteChange) return')
+  verifier('🔴 un compte changé arrête l’écran AVANT tout le reste',
+    iArret > -1 && iArret < dash.indexOf('if (listeCommercants.length > 0 && !commercant) return'))
+
+  const iSortie = dash.indexOf('async function seDeconnecter()')
+  const sortie = iSortie === -1 ? '' : dash.slice(iSortie, dash.indexOf("router.push('/login')", iSortie))
+  verifier('🔴 la déconnexion se déclare voulue AVANT de sortir',
+    sortie.indexOf('sortieVoulueRef.current = true') > -1
+    && sortie.indexOf('sortieVoulueRef.current = true') < sortie.indexOf('supabase.auth.signOut()'))
+  verifier('🔴 la déconnexion du tableau de bord ferme « Voir Dashboard », jeton encore vivant',
+    /fermerImpersonationServeur\(supabase, \{ toutes: true \}\)/.test(sortie)
+    && sortie.indexOf('effacerImpersonation()') > -1
+    && sortie.indexOf('effacerImpersonation()') < sortie.indexOf('supabase.auth.signOut()'))
+
+  verifier('🔴 l’admin n’a plus de déconnexion qui n’efface rien',
+    !/marquerDeconnexionVoulue\(\); await supabase\.auth\.signOut\(\)/.test(pageAdmin))
+  verifier('🔴 ses deux boutons passent par la même sortie', (pageAdmin.match(/onClick=\{seDeconnecter\}/g) || []).length === 2)
+  verifier('🔴 qui ferme « Voir Dashboard » et lit son résultat',
+    /fermerImpersonationServeur\(supabase, \{ toutes: true \}\)/.test(pageAdmin)
+    && /effacerImpersonation\(\)/.test(pageAdmin)
+    && /const \{ error: errSortie \} = await supabase\.auth\.signOut\(\)/.test(pageAdmin)
+    && /signOut\(\{ scope: 'local' \}\)/.test(pageAdmin))
+  verifier('⚠️ un retour forcé depuis le tableau de bord est expliqué', /showToast\(messageImpersonation\(raison\), 'error'\)/.test(pageAdmin))
+
+  verifier('🔴 la page Abonnement suit la même règle', /const verdict = await verifierImpersonation\(supabase, imp\)/.test(abo))
+  verifier('🔴 et ne rouvre plus un commerce qui n’est pas le sien',
+    /\.eq\('id', savedId\)\.eq\('auth_user_id', user\.id\)/.test(abo))
+
+  verifier('🔴 le serveur lit le journal avec le jeton de l’admin, jamais la clé de service',
+    /\.from\('admin_impersonations'\)\s*\.select\('id, admin_email, commercant_id, started_at, ended_at'\)/.test(routeVerif)
+    && /NEXT_PUBLIC_SUPABASE_ANON_KEY/.test(routeVerif) && !/SERVICE_ROLE/.test(routeVerif))
+  verifier('🔴 il applique la règle',
+    /raisonImpersonationRefusee\(ligne, \{ adminEmail: user\.email, commercantId: commercant_id, maintenant \}\)/.test(routeVerif))
+  verifier('🔴 un journal illisible ne vaut pas un accord', /if \(error\) \{[\s\S]{0,200}journal_illisible/.test(routeVerif))
+  verifier('⚠️ une ligne expirée se ferme, et le résultat est lu', /if \(errFin \|\| !fermees\?\.length\)/.test(routeVerif))
+  verifier('🔴 la fermeture n’est plus un espoir', /if \(errFin \|\| !faite\?\.length\)/.test(routeFin) && !/no_auth/.test(routeFin))
+  verifier('🔴 la déconnexion ferme toutes les lignes de l’admin', /if \(!toutes\) requete = requete\.eq\('id', impersonation_id\)/.test(routeFin))
+  verifier('⚠️ une nouvelle connexion range les lignes oubliées', /\.filter\(l => ligneExpiree\(l, maintenant\)\)/.test(routeDebut))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

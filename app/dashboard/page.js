@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
+import { lireImpersonation, verifierImpersonation, effacerImpersonation, fermerImpersonationServeur, compteAChange } from '@/lib/impersonation'
 import { retourArriereAutorise, alerteAutreOnglet, indexBlocages, appliquerBlocage, etatCreneau, ongletDouverture } from '@/lib/tableau-de-bord'
 import { peutReserver, motReservation, motsReservation } from '@/lib/reservation-metier'
 import { useRouter } from 'next/navigation'
@@ -1170,11 +1171,16 @@ export default function Dashboard() {
   // le commerçant vient-il d'être payé ?
   const [commandeAEncaisser, setCommandeAEncaisser] = useState(null)
   const [confirmationCommandeTexte, setConfirmationCommandeTexte] = useState(null)
-  // Mode impersonation : admin Yoppaa connecte en tant qu'un commercant pour le support.
-  // Detecte via localStorage yoppaa_admin_impersonating (set depuis /admin "Voir Dashboard").
-  // Affiche un banner sticky en haut + bouton Quitter qui revient sur /admin.
+  // « Voir Dashboard » : l'admin Yoppaa dans le tableau de bord d'un commerçant,
+  // pour le support. Lu dans l'ONGLET et confirmé par le serveur (lib/impersonation).
+  // Affiche un bandeau en haut, avec l'heure de fin, et « Quitter » qui revient sur /admin.
   const [impersonating, setImpersonating] = useState(false)
   const [_impersonationId, setImpersonationId] = useState(null)
+  const [impersonationFin, setImpersonationFin] = useState(null)
+  // Le compte de cet onglet au chargement, et ce qui arrive s'il change ailleurs.
+  const compteAuChargementRef = useRef(null)
+  const sortieVoulueRef = useRef(false)
+  const [compteChange, setCompteChange] = useState(null)
   const [activationRdv, setActivationRdv] = useState(false)
   // Onglet de configuration ouvert par les raccourcis « Actions rapides ».
   //
@@ -1510,26 +1516,37 @@ export default function Dashboard() {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
+      // Le compte de CET onglet au chargement : s'il change ailleurs, on s'arrête.
+      compteAuChargementRef.current = user.id
 
-      // ─── MODE IMPERSONATION ADMIN ───
-      // Si l'admin Yoppaa a cliqué "Voir Dashboard" depuis /admin, on a un flag
-      // dans localStorage. On fetch ce commerçant directement (sans filtrer par auth_user_id)
-      // grâce a la policy RLS "Admin Yoppaa FULL" qui autorise l'admin a tout voir.
+      // ─── « VOIR DASHBOARD » DEPUIS /admin ───
+      // 🔴 DANS L'ONGLET ET CONFIRMÉ PAR LE SERVEUR (15/09, trouvé par Alex).
+      // Le commerce choisi vivait dans le localStorage, commun à tous les onglets
+      // et jamais effacé par une déconnexion : revenu sur l'onglet où il testait
+      // La Table d'Essai, Alex s'est retrouvé en MODE ADMIN sur Ciseaux et Soins.
+      // Le serveur dit maintenant, à chaque chargement, si la ligne du journal
+      // est ouverte, à son nom, pour ce commerce, depuis moins de deux heures.
+      // Au moindre doute : pas de mode admin, retour à /admin avec la raison.
+      // ⚠️ La base laisse l'admin tout lire (policy « Admin Yoppaa FULL ») :
+      // c'est pour ça que la question se pose ici, et pas seulement en base.
       const adminEmail = 'verstappenalexandre@gmail.com'
-      const impersonatingId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_admin_impersonating') : null
-      if (user.email === adminEmail && impersonatingId) {
-        const { data: c } = await supabase.from('commercants').select('*').eq('id', impersonatingId).maybeSingle()
+      const imp = lireImpersonation()
+      if (user.email === adminEmail && imp) {
+        const verdict = await verifierImpersonation(supabase, imp)
+        const { data: c } = verdict.ok
+          ? await supabase.from('commercants').select('*').eq('id', imp.commercantId).maybeSingle()
+          : { data: null }
         if (c) {
           setCommercant(c)
           setImpersonating(true)
-          setImpersonationId(localStorage.getItem('yoppaa_admin_impersonation_session_id'))
+          setImpersonationId(imp.impersonationId)
+          setImpersonationFin(verdict.expireAt)
           chargerCommandes(c.id); chargerRdvs(c.id); chargerBlocages(c.id)
           return
-        } else {
-          // Le commercant impersonne n'existe plus. On nettoie et retombe sur le flow normal.
-          localStorage.removeItem('yoppaa_admin_impersonating')
-          localStorage.removeItem('yoppaa_admin_impersonation_session_id')
         }
+        effacerImpersonation()
+        router.push(`/admin?voir=${encodeURIComponent(verdict.ok ? 'introuvable' : verdict.raison)}`)
+        return
       }
       // ─── FLOW NORMAL : commercant connecte par son propre compte ───
       const { data } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).order('nom')
@@ -1648,27 +1665,48 @@ export default function Dashboard() {
     return () => { annule = true }
   }, [commercant?.id])
 
-  // Fonction pour quitter le mode impersonation (logue end + nettoie flags + retour /admin)
-  const quitterImpersonation = useCallback(async () => {
-    const impId = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_admin_impersonation_session_id') : null
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (impId) {
-        await fetch('/api/admin/impersonate-end', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
-          body: JSON.stringify({ impersonation_id: impId }),
-        })
-      }
-    } catch (e) {
-      console.warn('[dashboard] impersonate-end failed', e)
+  // Quitter « Voir Dashboard » : fermer la ligne du journal, oublier le commerce
+  // dans CET onglet, revenir à /admin. Avec une raison quand ce n'est pas un
+  // clic (l'expiration) : /admin la dira.
+  // ⚠️ `onClick={quitterImpersonation}` passe l'ÉVÉNEMENT en premier argument :
+  // seule une chaîne est une raison.
+  const quitterImpersonation = useCallback(async (raison) => {
+    const imp = lireImpersonation()
+    if (imp) {
+      const fermee = await fermerImpersonationServeur(supabase, { impersonationId: imp.impersonationId })
+      if (!fermee) console.warn('[dashboard] la ligne du journal n’a pas pu être fermée', imp.impersonationId)
     }
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('yoppaa_admin_impersonating')
-      localStorage.removeItem('yoppaa_admin_impersonation_session_id')
-    }
-    router.push('/admin')
+    effacerImpersonation()
+    router.push(typeof raison === 'string' ? `/admin?voir=${encodeURIComponent(raison)}` : '/admin')
   }, [router])
+
+  // 🔴 DEUX HEURES, PAS UNE DE PLUS (décision d'Alex, 15/09) : un onglet resté
+  // ouvert ne garde pas l'accès parce que personne ne l'a rechargé.
+  useEffect(() => {
+    if (!impersonating || !impersonationFin) return
+    const reste = new Date(impersonationFin).getTime() - Date.now()
+    const minuterie = setTimeout(() => quitterImpersonation('expiree'), Math.max(0, reste))
+    return () => clearTimeout(minuterie)
+  }, [impersonating, impersonationFin, quitterImpersonation])
+
+  // 🔴 UN AUTRE COMPTE DANS UN AUTRE ONGLET (15/09, trouvé par Alex). La session
+  // est commune à tous les onglets de yoppaa.app : se connecter ailleurs, même
+  // côté Yopper, change le compte ICI aussi, sans que l'écran le sache. On
+  // s'arrête et on le dit, plutôt que de continuer sous une identité qui n'est
+  // plus la bonne.
+  // ⚠️ PAS `async`, ET AUCUN APPEL À L'AUTHENTIFICATION DANS CE RAPPEL : la
+  // bibliothèque l'attend en tenant son verrou (31/08, l'application ne
+  // s'ouvrait plus).
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT') return
+      if (sortieVoulueRef.current) return
+      if (compteAChange(compteAuChargementRef.current, session?.user?.id)) {
+        setCompteChange(event === 'SIGNED_OUT' ? 'sortie' : 'autre')
+      }
+    })
+    return () => { try { sub?.subscription?.unsubscribe() } catch { /* déjà parti */ } }
+  }, [])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -2433,6 +2471,13 @@ export default function Dashboard() {
   }
 
   async function seDeconnecter() {
+    // ⚠️ AVANT la déconnexion : sinon cet onglet se croirait déconnecté par un autre.
+    sortieVoulueRef.current = true
+    // 🔴 « VOIR DASHBOARD » MEURT AVEC LA SESSION (15/09). Il survivait à la
+    // déconnexion et reprenait à la connexion suivante. On ferme au journal TANT
+    // QUE le jeton vit encore, puis on oublie.
+    if (impersonating) await fermerImpersonationServeur(supabase, { toutes: true })
+    effacerImpersonation()
     localStorage.removeItem('yoppaa_dashboard_commercant_id')
     // ⚠️ Le commerçant et le Yopper partagent le même stockage de session sur
     // un même navigateur : le marqueur de départ voulu se pose ici aussi.
@@ -2734,6 +2779,28 @@ export default function Dashboard() {
   const periodeStats = ongletPrincipal === 'rdv'
     ? libellePeriodeStats({ jour: fenetreRdv.debut, fin: fenetreRdv.fin, aujourdhui: todayKey, historique: modeHistorique })
     : libellePeriodeStats({ jour: jourActif, aujourdhui: todayKey, historique: modeHistorique })
+
+  // ─── Le compte a changé dans un autre onglet ─────────────────────────────
+  // 🔴 ON NE MONTRE PLUS RIEN ET ON N'AGIT PLUS (15/09, trouvé par Alex) : la
+  // session est commune à tout le navigateur, et ce tableau de bord tournerait
+  // sinon sous un compte qui n'est plus celui qu'il affiche.
+  if (compteChange) return (
+    <div style={{ minHeight: '100vh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, ${T.deep} 60%, #3D1580 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: '"DM Sans", sans-serif' }}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+      <div style={{ width: '100%', maxWidth: 420, background: '#fff', borderRadius: 18, padding: '1.75rem', textAlign: 'center' }}>
+        <h1 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#1A0840', margin: '0 0 10px', letterSpacing: '-0.4px' }}>
+          {compteChange === 'sortie' ? 'La session a été fermée dans un autre onglet' : 'Un autre compte s’est connecté dans un autre onglet'}
+        </h1>
+        <p style={{ fontSize: '0.9rem', lineHeight: 1.6, color: '#6B7280', margin: '0 0 18px' }}>
+          Ce navigateur ne garde qu’une connexion à la fois. Ce tableau de bord s’est arrêté pour ne rien faire au nom du mauvais compte.
+        </p>
+        <button onClick={() => window.location.reload()}
+          style={{ width: '100%', padding: '0.85rem', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+          Recharger la page
+        </button>
+      </div>
+    </div>
+  )
 
   // ─── Sélecteur commerce ───────────────────────────────────────────────────
   if (listeCommercants.length > 0 && !commercant) return (
@@ -3115,6 +3182,7 @@ export default function Dashboard() {
           </span>
           <span style={{ opacity: 0.92 }}>
             Tu es connecté en tant que <strong>{commercant.nom}</strong>
+            {impersonationFin && <> · jusqu’à {new Date(impersonationFin).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Brussels' })}</>}
           </span>
           <button onClick={quitterImpersonation}
             style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', borderRadius: 100, padding: '4px 12px', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>

@@ -7,6 +7,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { poserImpersonation } from '@/lib/impersonation'
 import ModalEditCommercant from './ModalEditCommercant'
 
 const T = {
@@ -89,8 +90,8 @@ export default function SectionTousCommercants({ toast }) {
 
   async function voirDashboard(c) {
     // Demarre une session d'impersonation : POST /api/admin/impersonate-start qui logue
-    // dans admin_impersonations (conformite RGPD). Retourne l'impersonation_id qu'on garde
-    // en localStorage pour le fermer proprement via impersonate-end au "Quitter".
+    // dans admin_impersonations (conformite RGPD). Retourne l'impersonation_id que
+    // le tableau de bord fait confirmer par le serveur à chaque chargement.
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/admin/impersonate-start', {
@@ -101,10 +102,13 @@ export default function SectionTousCommercants({ toast }) {
       const j = await res.json()
       if (!j.ok) throw new Error(j.error || 'Erreur impersonation')
 
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('yoppaa_dashboard_commercant_id', c.id)
-        localStorage.setItem('yoppaa_admin_impersonating', c.id)
-        localStorage.setItem('yoppaa_admin_impersonation_session_id', j.impersonation_id)
+      // 🔴 DANS L'ONGLET, PLUS DANS LE NAVIGATEUR (15/09, trouvé par Alex). Le
+      // localStorage est commun à tous les onglets et ne s'efface jamais seul :
+      // le dernier « Voir Dashboard » gagnait partout, pour toujours. Et
+      // `yoppaa_dashboard_commercant_id`, écrit ici aussi, rouvrait ce commerce
+      // SANS BANDEAU dans la page Abonnement. On n'écrit plus que dans l'onglet.
+      if (!poserImpersonation(c.id, j.impersonation_id)) {
+        throw new Error('ce navigateur refuse le stockage de l’onglet')
       }
       router.push('/dashboard')
     } catch (e) {

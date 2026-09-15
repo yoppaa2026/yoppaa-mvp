@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { canDo } from '@/lib/plans'
+import { canDo, planEffectif } from '@/lib/plans'
 import { construireLignes, csvJournal, csvDetail, journalParJour } from '@/lib/export-comptable'
 import { normaliser } from '@/lib/tva'
 import { jourBruxelles } from '@/lib/timezone'
@@ -51,14 +51,16 @@ export async function GET(request) {
 
     const { data: commercant } = await admin
       .from('commercants')
-      .select('id, nom, plan, auth_user_id, tva_taux_defaut, tva_assujetti, bce')
+      .select('id, nom, plan, essai_plan, created_at, auth_user_id, tva_taux_defaut, tva_assujetti, bce')
       .eq('id', commercantId)
       .maybeSingle()
 
     if (!commercant || commercant.auth_user_id !== user.id) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
-    if (!canDo(commercant.plan, 'export_comptable')) {
+    // 🔴 FORFAIT EFFECTIF (15/09) : un commerçant en essai de Vendre vend en
+    // ligne, il doit pouvoir sortir ce qu'il a vendu.
+    if (!canDo(planEffectif(commercant), 'export_comptable')) {
       return NextResponse.json({ ok: false, error: 'export réservé à la formule Vendre' }, { status: 402 })
     }
 

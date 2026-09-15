@@ -20,6 +20,8 @@
 import { readFileSync } from 'node:fs'
 import { verdictForfait, forfaitOuvre, premierPlanQuiOuvre, COLONNES_GARDE } from '../lib/garde-forfait.js'
 import { PLAN_FEATURES, commandeAllumee, getPillsStatut } from '../lib/plans.js'
+import { actionCommerce } from '../lib/action-google.js'
+import { commercantEligibleDeal } from '../lib/morning-eligibilite.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 // ⚠️ ON CHERCHE DANS LE CODE, PAS DANS LA PROSE. Les commentaires de ces
@@ -356,6 +358,133 @@ for (const r of ROUTES) {
   verifier('et il se relit comme il s’écrit',
     /commande_actif: data\.commande_actif !== false,/.test(CONFIG)
     && /commande_actif: form\.commande_actif !== false,/.test(CONFIG))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 L'ESSAI SE VOYAIT AU TABLEAU DE BORD, ET NULLE PART AILLEURS (15/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Trouvé en relisant le règlement du concours de lancement : un commerçant en
+// essai de Vendre allumait ses bons cadeaux, et PERSONNE ne pouvait en acheter.
+// La route d'achat et celle qui affiche le bouton lisaient `commercant.plan`.
+// Le même défaut vivait dans les pastilles, le lien Google, le Good Morning,
+// les notifications aux favoris, l'export comptable, les statistiques, les
+// packs SMS, la fidélité d'un bon, le récap du matin et la limite d'actus.
+//
+// ⚠️ LES DEUX SENS, comme partout dans ce banc : ouvert PENDANT l'essai,
+// refermé APRÈS. Une correction qui ouvrirait pour toujours offrirait Vendre.
+{
+  const enEssai = commerce('exister', {
+    essai_plan: 'vendre', slug: 'essai', bons_cadeaux_actif: true, fidelite_actif: false,
+    statut_publication: 'publie', adresse: 'Rue de Prée 9, 5640 Mettet',
+  })
+
+  // ─── Ce qui s'exécute ─────────────────────────────────────────────────────
+  const pastilles = (c, m) => getPillsStatut(c, { maintenant: m }).map(p => p.key)
+  verifier('🔴 la fiche d’un commerçant en essai montre ses bons cadeaux',
+    pastilles(enEssai, PENDANT_ESSAI).includes('bons'))
+  verifier('et ne les montre plus une fois l’essai terminé',
+    !pastilles(enEssai, APRES_ESSAI).includes('bons'))
+  verifier('sans essai demandé, la pastille reste absente',
+    !pastilles({ ...enEssai, essai_plan: null }, PENDANT_ESSAI).includes('bons'))
+
+  verifier('🔴 Google apprend qu’un commerçant en essai prend des commandes',
+    actionCommerce(enEssai, PENDANT_ESSAI)?.type === 'commander')
+  verifier('et ne le déclare plus après l’essai',
+    actionCommerce(enEssai, APRES_ESSAI) === null)
+
+  const mettet = new Set(['5640'])
+  verifier('🔴 le deal d’un commerçant en essai entre dans le Good Morning',
+    commercantEligibleDeal(enEssai, mettet, PENDANT_ESSAI))
+  verifier('et en sort après l’essai',
+    !commercantEligibleDeal(enEssai, mettet, APRES_ESSAI))
+
+  // ─── Ce qui se lit ────────────────────────────────────────────────────────
+  //
+  // ⚠️ CES ROUTES NE S'EXÉCUTENT PAS AU BANC : elles appellent Supabase et
+  // Stripe. On lit donc la RÈGLE (le forfait effectif) ET la REQUÊTE (les deux
+  // colonnes), parce qu'une seule des deux ne protège rien : `planEffectif`
+  // sans `essai_plan` retombe sur le forfait choisi, en silence.
+  // ⚠️ L'actu du Good Morning n'a pas d'essai d'exécution : `actu_gmy` est
+  // ouverte à Exister, le résultat serait le même avant et après. Sa garde est
+  // donc de lecture.
+  const LECTURES = [
+    { nom: 'l’achat d’un bon', chemin: 'app/api/bons-cadeaux/checkout/route.js', regles: [
+      ['charge l’essai', /'id, nom, slug, plan, essai_plan, created_at, categorie,/],
+      ['vend selon le forfait effectif', /!canDo\(planEffectif\(commercant\), 'bons_cadeaux'\)/],
+    ] },
+    { nom: 'le bouton « offrir un bon »', chemin: 'app/api/bons-cadeaux/config/route.js', regles: [
+      ['charge l’essai', /'plan, essai_plan, created_at, statut_publication,/],
+      ['s’affiche selon le forfait effectif', /canDo\(planEffectif\(c\), 'bons_cadeaux'\)/],
+    ] },
+    { nom: 'la notification d’une actu', chemin: 'app/api/actus/notify-favoris/route.js', regles: [
+      ['charge l’essai', /slug, plan, essai_plan, created_at, statut_publication\)/],
+      ['lit le forfait effectif', /const planVivant = planEffectif\(c\)/],
+    ] },
+    { nom: 'la notification d’un deal', chemin: 'app/api/deals/notify-favoris/route.js', regles: [
+      ['charge l’essai', /slug, plan, essai_plan, created_at, statut_publication\)/],
+      ['lit le forfait effectif', /!canDo\(planEffectif\(c\), 'deals'\)/],
+    ] },
+    { nom: 'l’export comptable', chemin: 'app/api/dashboard/export-comptable/route.js', regles: [
+      ['charge l’essai', /'id, nom, plan, essai_plan, created_at, auth_user_id,/],
+      ['lit le forfait effectif', /canDo\(planEffectif\(commercant\), 'export_comptable'\)/],
+    ] },
+    { nom: 'les statistiques', chemin: 'app/api/dashboard/statistiques/route.js', regles: [
+      ['chargent l’essai', /'id, auth_user_id, plan, essai_plan, created_at, categorie'/],
+      ['lisent le forfait effectif', /peutVendre: canDo\(planEffectif\(commercant\), 'deals'\)/],
+    ] },
+    { nom: 'les packs SMS', chemin: 'app/api/fidelite/sms-packs/checkout/route.js', regles: [
+      ['chargent l’essai', /plan, essai_plan, created_at, auth_user_id, stripe_customer_id/],
+      ['lisent le forfait effectif', /canDo\(planEffectif\(com\), 'fidelite'\)/],
+    ] },
+    { nom: 'la fidélité d’un bon acheté', chemin: 'app/api/stripe/webhook/route.js', regles: [
+      ['charge la ligne entière', /\.from\('commercants'\)\.select\('\*'\)\.eq\('id', com\.id\)/],
+      ['lit le forfait effectif', /canDo\(planEffectif\(complet\), 'fidelite_auto'\)/],
+    ] },
+    { nom: 'le cron du Good Morning', chemin: 'app/api/cron/morning-yoppers/route.js', regles: [
+      ['lit le forfait effectif pour les deals', /const planDeal = planEffectif\(c\)/],
+      ['et pour les actus', /canDo\(planEffectif\(c\), 'actu_gmy'\)/],
+    ], selects: [/adresse, plan, essai_plan, created_at, statut_publication\)/g, 2] },
+    { nom: 'le récap du matin', chemin: 'app/api/cron/recap-jour-8h/route.js', regles: [
+      ['charge l’essai', /categorie, plan, essai_plan, created_at, rdv_actif'/],
+      ['lit le forfait effectif', /planEffectif\(c\) === 'vendre'/],
+    ] },
+    { nom: 'l’éligibilité au Good Morning', chemin: 'lib/morning-eligibilite.js', regles: [
+      ['l’actu lit le forfait effectif', /canDo\(planEffectif\(c, maintenant\), 'actu_gmy'\)/],
+    ] },
+    { nom: 'la page Good Morning', chemin: 'app/commander/morning/page.js', regles: [],
+      selects: [/adresse, plan, essai_plan, created_at, statut_publication,/g, 2] },
+    { nom: 'le balisage Google de la fiche', chemin: 'app/commander/[slug]/layout.js', regles: [
+      ['charge l’essai', /longitude, plan, essai_plan, created_at'/],
+    ] },
+    { nom: 'la consigne Google du kit', chemin: 'app/kit/[slug]/page.js', regles: [
+      ['charge l’essai', /'nom, slug, plan, essai_plan, created_at, categorie'/],
+    ] },
+    { nom: 'le tableau de bord', chemin: 'app/dashboard/ConfigDashboard.js', regles: [
+      ['la consigne Google charge l’essai', /'slug, nom, plan, essai_plan, created_at, categorie'/],
+      ['la limite d’actus lit le forfait effectif', /const planResolu = planEffectif\(commercant\)/],
+    ] },
+  ]
+  // ⚠️ La forme brute interdite, sur les fichiers où plus aucun droit ne doit
+  // se lire dans la colonne. Pas sur le tableau de bord : il lit `plan` pour
+  // AFFICHER le forfait choisi, et c'est juste.
+  const BRUT = /canDo\((?:c|com|commercant|complet)\??\.plan\b|resolvePlan\(c\.plan\) === 'vendre'/
+  for (const l of LECTURES) {
+    const src = codeSeul(lire(l.chemin))
+    for (const [quoi, re] of l.regles) verifier(`${l.nom} ${quoi}`, re.test(src))
+    if (l.selects) {
+      const [re, attendu] = l.selects
+      const n = (src.match(re) || []).length
+      verifier(`${l.nom} charge l’essai dans ses ${attendu} requêtes`, n === attendu, `${n} trouvée(s)`)
+    }
+    if (l.chemin !== 'app/dashboard/ConfigDashboard.js') {
+      verifier(`${l.nom} ne lit plus la colonne brute`, !BRUT.test(src))
+    }
+  }
+  for (const chemin of ['lib/action-google.js', 'lib/plans.js']) {
+    verifier(`${chemin} lit le forfait effectif`,
+      /const plan = planEffectif\(commercant, maintenant\)/.test(codeSeul(lire(chemin))))
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

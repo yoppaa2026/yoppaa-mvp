@@ -33,7 +33,7 @@ import { referenceRdv } from '@/lib/numero-commande'
 import { programmerRappelRdv } from '@/lib/rappels'
 import { recupererFraisStripe, ventilerFrais, instantPaiement } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
-import { canDo } from '@/lib/plans'
+import { canDo, planEffectif } from '@/lib/plans'
 import { jourBruxelles, rappelVeillePossible } from '@/lib/timezone'
 import { motsReservation, objetReservation } from '@/lib/reservation-metier'
 import { contratDepuisFormule, resumeContratAchete } from '@/lib/abonnements'
@@ -671,7 +671,9 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
       const { data: complet } = await supabase
         .from('commercants').select('*').eq('id', com.id).maybeSingle()
       if (complet?.fidelite_actif
-          && canDo(complet.plan, 'fidelite_auto')
+          // 🔴 FORFAIT EFFECTIF (15/09), comme `crediterFidelite` elle-même :
+          // la ligne est lue en entier, `essai_plan` et `created_at` compris.
+          && canDo(planEffectif(complet), 'fidelite_auto')
           && complet.fidelite_mecanique === 'cagnotte') {
         const { data: client } = await supabase
           .from('clients').select('telephone')

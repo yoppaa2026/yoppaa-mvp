@@ -306,8 +306,11 @@ const egal = (nom, obtenu, attendu) =>
   // ⚠️ ET C'EST BRANCHÉ ? (le défaut du 23/08, encore et toujours)
   const layout = lireCode('app/commander/[slug]/layout.js')
   verifie('🔴 le layout appelle le balisage', /\.\.\.potentialActionJsonLd\(c\)/.test(layout))
-  verifie('🔴 et il rapatrie `plan`, sans quoi tout serait muet',
-    /\.select\('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan'\)/.test(layout))
+  // ⚠️ PRÉCISÉE LE 15/09, PAS DÉSARMÉE : le balisage suit désormais le forfait
+  // EFFECTIF, il lui faut aussi `essai_plan` et `created_at`. La garde exige
+  // les quatre, `plan` compris.
+  verifie('🔴 et il rapatrie `plan` et l’essai, sans quoi tout serait muet',
+    /\.select\('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan, essai_plan, created_at'\)/.test(layout))
 
   // La consigne du kit
   const consigne = consigneGoogle({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux' })
@@ -328,9 +331,11 @@ const egal = (nom, obtenu, attendu) =>
   const kitPage = lireCode('app/kit/[slug]/page.js')
   verifie('🔴 le TABLEAU DE BORD monte la consigne', /<ConsigneGoogle consigne=\{consigneG\}\/>/.test(bord))
   verifie('🔴 la PAGE DE KIT aussi', /<ConsigneGoogle consigne=\{consigne\} sombre\/>/.test(kitClient))
-  verifie('le tableau de bord rapatrie plan et catégorie',
-    /\.select\('slug, nom, plan, categorie'\)/.test(bord))
-  verifie('la page de kit aussi', /\.select\('nom, slug, plan, categorie'\)/.test(kitPage))
+  // ⚠️ PRÉCISÉES LE 15/09 : la consigne suit le forfait EFFECTIF, les deux
+  // requêtes chargent aussi `essai_plan` et `created_at`.
+  verifie('le tableau de bord rapatrie plan, essai et catégorie',
+    /\.select\('slug, nom, plan, essai_plan, created_at, categorie'\)/.test(bord))
+  verifie('la page de kit aussi', /\.select\('nom, slug, plan, essai_plan, created_at, categorie'\)/.test(kitPage))
 
   // ⚠️ LE LIEN DONNÉ AU COMMERÇANT EST CELUI QUE LE QR IMPRIME. Trois formes
   // du même lien (QR, partage, Google), c'est trois règles à corriger le jour

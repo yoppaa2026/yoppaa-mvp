@@ -7,7 +7,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { canDo } from '@/lib/plans'
+import { canDo, planEffectif } from '@/lib/plans'
 
 export async function GET(request) {
   try {
@@ -21,12 +21,16 @@ export async function GET(request) {
     )
     const { data: c } = await supabase
       .from('commercants')
-      .select('plan, statut_publication, bons_cadeaux_actif, bons_cadeaux_validite_mois, stripe_account_charges_enabled')
+      .select('plan, essai_plan, created_at, statut_publication, bons_cadeaux_actif, bons_cadeaux_validite_mois, stripe_account_charges_enabled')
       .eq('id', commercant_id)
       .maybeSingle()
 
+    // 🔴 LE FORFAIT EFFECTIF (15/09). Un commerçant en essai de Vendre voyait
+    // l'onglet des bons, les allumait, et sa fiche n'affichait jamais le
+    // bouton : cette route lisait le forfait CHOISI. Trouvé en relisant le
+    // règlement du concours, qui promet des bons chez les partenaires.
     const actif = !!c && c.statut_publication === 'publie' && !!c.bons_cadeaux_actif
-      && canDo(c.plan, 'bons_cadeaux') && !!c.stripe_account_charges_enabled
+      && canDo(planEffectif(c), 'bons_cadeaux') && !!c.stripe_account_charges_enabled
 
     return NextResponse.json({
       ok: true,

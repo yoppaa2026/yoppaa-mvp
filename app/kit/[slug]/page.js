@@ -36,7 +36,7 @@ async function getKit(slug) {
   let consigne = null
 
   // 1) Commerçant onboardé (commercants.slug) — cas au lancement + tests (ex. kebabistro).
-  const { data: com } = await supabase.from('commercants').select('nom, slug, plan, categorie').eq('slug', slug).maybeSingle()
+  const { data: com } = await supabase.from('commercants').select('nom, slug, plan, essai_plan, created_at, categorie').eq('slug', slug).maybeSingle()
   if (com) {
     nom = com.nom
     consigne = consigneGoogle(com)

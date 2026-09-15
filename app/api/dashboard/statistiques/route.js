@@ -20,7 +20,7 @@ import {
   commandeEncaissee, messageVide, topPrestations, serieJournaliere, seancesNonDeclarees,
   momentsDePointe, rdvHonore,
 } from '@/lib/statistiques'
-import { canDo } from '@/lib/plans'
+import { canDo, planEffectif } from '@/lib/plans'
 import { jourBruxelles } from '@/lib/timezone'
 
 function admin() {
@@ -45,7 +45,7 @@ async function commercantDuProprietaire(supabase, request, commercantId) {
   if (!user) return null
   const { data: c } = await supabase
     .from('commercants')
-    .select('id, auth_user_id, plan, categorie')
+    .select('id, auth_user_id, plan, essai_plan, created_at, categorie')
     .eq('id', commercantId)
     .maybeSingle()
   if (!c || c.auth_user_id !== user.id) return null
@@ -300,7 +300,9 @@ export async function GET(request) {
         ? messageVide({
             aDesArticles: (nbArticles || 0) > 0,
             aDesDeals: (deals || []).length > 0,
-            peutVendre: canDo(commercant.plan, 'deals'),
+            // 🔴 FORFAIT EFFECTIF (15/09) : un commerçant en essai peut publier
+            // des deals, le message vide ne doit pas lui dire le contraire.
+            peutVendre: canDo(planEffectif(commercant), 'deals'),
           })
         : null,
     })

@@ -11,7 +11,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRecapRdvJour, emailRecapCommandesJour } from '@/lib/resend'
-import { resolvePlan } from '@/lib/plans'
+import { planEffectif } from '@/lib/plans'
 import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 import { motsReservation, reservationActive } from '@/lib/reservation-metier'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
@@ -40,7 +40,10 @@ export async function GET(request) {
     // Fetch les commercants en notif_mode='recap_jour'
     const { data: commercants } = await supabase
       .from('commercants')
-      .select('id, nom, email, categorie, plan, rdv_actif')
+      // 🔴 `essai_plan` ET `created_at` MANQUAIENT (15/09). `reservationActive`
+      // lit déjà le forfait effectif : sans eux, un restaurant en essai ne
+      // voyait jamais ses tables dans ce récap, sans aucune erreur.
+      .select('id, nom, email, categorie, plan, essai_plan, created_at, rdv_actif')
       .eq('notif_mode', 'recap_jour')
       .not('email', 'is', null)
 
@@ -51,7 +54,7 @@ export async function GET(request) {
     for (const c of (commercants || [])) {
       const estVitrine = c.categorie === 'vitrine'
       // Alimentaire ET détail (boutique, Module 2) reçoivent le récap commandes
-      const estAlim    = (c.categorie === 'alimentaire' || c.categorie === 'detail') && resolvePlan(c.plan) === 'vendre'
+      const estAlim    = (c.categorie === 'alimentaire' || c.categorie === 'detail') && planEffectif(c) === 'vendre'
 
       // 🔴 UN RESTAURANT A UNE SALLE ET UN COMPTOIR, ET CE CRON N'EN VOYAIT
       // QU'UN (trouvé le 09/09 en traitant le vocabulaire, arbitré par Alex).

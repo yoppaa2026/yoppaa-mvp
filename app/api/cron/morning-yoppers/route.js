@@ -25,7 +25,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
-import { canDo } from '@/lib/plans'
+import { canDo, planEffectif } from '@/lib/plans'
 import { fusionnerIds } from '@/lib/morning-eligibilite'
 import { jourBruxelles } from '@/lib/timezone'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
@@ -57,7 +57,7 @@ async function handle(req) {
     .from('yoppaa_deals')
     .select(`
       id, titre, commercant_id,
-      commercant:commercants (id, nom, adresse, plan, statut_publication)
+      commercant:commercants (id, nom, adresse, plan, essai_plan, created_at, statut_publication)
     `)
     .eq('actif', true)
     .eq('inclus_morning', true)
@@ -74,7 +74,7 @@ async function handle(req) {
     .from('actualites')
     .select(`
       id, titre, commercant_id,
-      commercant:commercants (id, nom, adresse, plan, statut_publication)
+      commercant:commercants (id, nom, adresse, plan, essai_plan, created_at, statut_publication)
     `)
     .not('commercant_id', 'is', null)
     .eq('actif', true)
@@ -116,9 +116,12 @@ async function handle(req) {
   for (const d of dealsPending || []) {
     const c = d.commercant
     if (!c || c.statut_publication !== 'publie') continue
-    // Deals réservés à Communiquer + Vendre (gating canDo)
-    if (!canDo(c.plan, 'deals')) continue
-    if (!canDo(c.plan, 'morning')) continue
+    // Deals réservés à Communiquer + Vendre (gating canDo).
+    // 🔴 FORFAIT EFFECTIF (15/09) : l'essai compte, `essai_plan` et
+    // `created_at` sont dans les deux selects ci-dessus.
+    const planDeal = planEffectif(c)
+    if (!canDo(planDeal, 'deals')) continue
+    if (!canDo(planDeal, 'morning')) continue
     const commune = communeDuCp(extraireCodePostal(c.adresse))
     if (!commune) continue
     ajouter(commune, 'dealIds', d.id, c.id)
@@ -130,7 +133,7 @@ async function handle(req) {
     if (!c || c.statut_publication !== 'publie') continue
     // Actus GMY autorisées à tous les plans commerçant (Exister limité à
     // 1/semaine mais c'est déjà validé côté saveActu, pas ici)
-    if (!canDo(c.plan, 'actu_gmy')) continue
+    if (!canDo(planEffectif(c), 'actu_gmy')) continue
     const commune = communeDuCp(extraireCodePostal(c.adresse))
     if (!commune) continue
     ajouter(commune, 'actuIds', a.id, c.id)

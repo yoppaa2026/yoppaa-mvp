@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
-import { canDo } from '@/lib/plans'
+import { canDo, planEffectif } from '@/lib/plans'
 import { genererCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 
@@ -69,13 +69,17 @@ export async function POST(request) {
 
     const { data: commercant } = await supabase
       .from('commercants')
-      .select('id, nom, slug, plan, categorie, statut_publication, stripe_account_id, stripe_account_charges_enabled, bons_cadeaux_actif, bons_cadeaux_validite_mois')
+      .select('id, nom, slug, plan, essai_plan, created_at, categorie, statut_publication, stripe_account_id, stripe_account_charges_enabled, bons_cadeaux_actif, bons_cadeaux_validite_mois')
       .eq('id', commercant_id)
       .single()
     if (!commercant || commercant.statut_publication !== 'publie') {
       return NextResponse.json({ ok: false, error: 'Commerçant introuvable.' }, { status: 404 })
     }
-    if (!commercant.bons_cadeaux_actif || !canDo(commercant.plan, 'bons_cadeaux')) {
+    // 🔴 LE FORFAIT EFFECTIF (15/09), frère exact de /api/bons-cadeaux/config :
+    // la vente d'un bon chez un commerçant en essai de Vendre était refusée.
+    // ⚠️ La garde porte sur la CRÉATION : un bon déjà vendu reste utilisable
+    // après l'essai, `verifier` ne regarde aucun forfait.
+    if (!commercant.bons_cadeaux_actif || !canDo(planEffectif(commercant), 'bons_cadeaux')) {
       return NextResponse.json({ ok: false, error: `Les ${libelleBon(commercant?.categorie, { pluriel: true })} ne sont pas proposés chez ce commerçant.` }, { status: 400 })
     }
     if (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled) {

@@ -30,8 +30,9 @@ const getCommercant = cache(async (slug) => {
       // ⚠️ `plan` EST INDISPENSABLE au balisage : sans lui, on déclarerait
       // « on commande ici » pour un commerce du palier Exister, qui n'a pas de
       // panier. Une colonne absente d'un select ne lève aucune erreur, elle
-      // fait juste mentir la page.
-      .select('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan')
+      // fait juste mentir la page. `essai_plan` et `created_at` aussi : sans
+      // eux, un commerçant en essai de Vendre ne déclarerait rien (15/09).
+      .select('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan, essai_plan, created_at')
       .eq('slug', slug)
       .maybeSingle()
     return data

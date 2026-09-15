@@ -2977,7 +2977,10 @@ function TabActus({ commercantId, commercant, toast }) {
   // Palier Exister limite a 1 apparition GMY par semaine calendaire lundi-dim
   // (decision Alex 01/07 anti-cannibalisation Communiquer). Communiquer + Vendre
   // sont illimites cote UI (rate limit push cote OneSignal si abus futur).
-  const planResolu = commercant?.plan === 'on' ? 'exister' : commercant?.plan === 'full' ? 'vendre' : commercant?.plan
+  // 🔴 FORFAIT EFFECTIF (15/09) : un commerçant en essai de Communiquer ou de
+  // Vendre restait limité à une actu par semaine, alors que le serveur la lui
+  // accorde. `planEffectif` résout aussi les anciens noms `on` et `full`.
+  const planResolu = planEffectif(commercant)
   const estExister = planResolu === 'exister'
 
   // Retourne le lundi 00:00 de la semaine calendaire d'une date (locale Brussels).
@@ -7451,8 +7454,9 @@ function QRCodeSection({ commercantId, toast }) {
       // ⚠️ `plan` ET `categorie` SONT INDISPENSABLES : la consigne Google dépend
       // des deux (commander ou prendre rendez-vous, et seulement si la formule
       // l'autorise). Une colonne absente d'un select ne lève aucune erreur : la
-      // consigne aurait simplement disparu sans un mot.
-      const { data } = await supabase.from('commercants').select('slug, nom, plan, categorie').eq('id', commercantId).single()
+      // consigne aurait simplement disparu sans un mot. `essai_plan` et
+      // `created_at` pour la même raison : la consigne suit le forfait EFFECTIF.
+      const { data } = await supabase.from('commercants').select('slug, nom, plan, essai_plan, created_at, categorie').eq('id', commercantId).single()
       if (data) { setSlug(data.slug); setNomCommerce(data.nom || ''); setConsigneG(consigneGoogle(data)) }
       setLoading(false)
     }

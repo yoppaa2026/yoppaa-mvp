@@ -26,7 +26,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
-import { canDo } from '@/lib/plans'
+import { canDo, planEffectif } from '@/lib/plans'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -59,7 +59,7 @@ export async function POST(req) {
     .from('actualites')
     .select(`
       id, titre, contenu, type, actif, inclus_gmy,
-      commercant:commercants(id, nom, slug, plan, statut_publication)
+      commercant:commercants(id, nom, slug, plan, essai_plan, created_at, statut_publication)
     `)
     .eq('id', actu_id)
     .single()
@@ -79,8 +79,11 @@ export async function POST(req) {
 
   // Gating par plan : Communiquer/Vendre peuvent envoyer librement.
   // Exister peut envoyer UNIQUEMENT si inclus_gmy=true (portail GMY 1/semaine).
-  const peutActusIllimitees = canDo(c.plan, 'actus_illimitees')
-  const peutActuGmy = canDo(c.plan, 'actu_gmy') && actu.inclus_gmy
+  // 🔴 FORFAIT EFFECTIF (15/09) : un commerçant en essai publiait son actu et
+  // ses abonnés n'en étaient jamais prévenus.
+  const planVivant = planEffectif(c)
+  const peutActusIllimitees = canDo(planVivant, 'actus_illimitees')
+  const peutActuGmy = canDo(planVivant, 'actu_gmy') && actu.inclus_gmy
   if (!peutActusIllimitees && !peutActuGmy) {
     return NextResponse.json({ status: 'skipped', reason: 'plan_sans_push' })
   }

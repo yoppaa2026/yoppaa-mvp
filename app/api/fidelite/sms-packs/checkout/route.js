@@ -15,7 +15,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { getStripePriceIdSmsPack, getOrCreateStripeCustomer } from '@/lib/stripe-billing'
 import { PACKS_SMS } from '@/lib/packs-sms'
-import { canDo } from '@/lib/plans'
+import { canDo, planEffectif } from '@/lib/plans'
 
 export async function POST(request) {
   try {
@@ -46,7 +46,7 @@ export async function POST(request) {
 
     const { data: com } = await admin
       .from('commercants')
-      .select('id, nom, email, plan, auth_user_id, stripe_customer_id')
+      .select('id, nom, email, plan, essai_plan, created_at, auth_user_id, stripe_customer_id')
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
@@ -54,7 +54,9 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
     // Les SMS ne servent qu'au programme de fidélité (Communiquer et Vendre)
-    if (!canDo(com.plan, 'fidelite')) {
+    // 🔴 FORFAIT EFFECTIF (15/09) : la fidélité d'un commerçant en essai
+    // fonctionne, ses SMS doivent pouvoir s'acheter.
+    if (!canDo(planEffectif(com), 'fidelite')) {
       return NextResponse.json({ ok: false, error: 'Les SMS de fidélité sont inclus à partir de la formule Communiquer.' }, { status: 400 })
     }
 

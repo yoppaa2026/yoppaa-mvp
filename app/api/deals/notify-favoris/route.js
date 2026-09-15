@@ -19,7 +19,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
-import { canDo } from '@/lib/plans'
+import { canDo, planEffectif } from '@/lib/plans'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -52,7 +52,7 @@ export async function POST(req) {
     .from('yoppaa_deals')
     .select(`
       id, titre, prix_deal, prix_original, actif, est_bonne_affaire,
-      commercant:commercants(id, nom, slug, plan, statut_publication)
+      commercant:commercants(id, nom, slug, plan, essai_plan, created_at, statut_publication)
     `)
     .eq('id', deal_id)
     .single()
@@ -69,7 +69,9 @@ export async function POST(req) {
   if (!c || c.statut_publication !== 'publie') {
     return NextResponse.json({ status: 'skipped', reason: 'commercant_non_publie' })
   }
-  if (!canDo(c.plan, 'deals')) {
+  // 🔴 FORFAIT EFFECTIF (15/09) : l'essai compte, sinon le deal d'un
+  // commerçant en essai ne prévenait personne.
+  if (!canDo(planEffectif(c), 'deals')) {
     return NextResponse.json({ status: 'skipped', reason: 'plan_sans_deals' })
   }
 

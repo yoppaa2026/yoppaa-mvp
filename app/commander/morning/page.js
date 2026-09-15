@@ -110,7 +110,7 @@ async function fetchMorningData(commune) {
       .select(`
         id, titre, description, prix_deal, prix_original, date_deal, article_id, cta_appeler_reserver, photo_url,
         deal_type, remise_pct,
-        commercant:commercants ( id, nom, type, adresse, plan, statut_publication, logo_url, slug, telephone )
+        commercant:commercants ( id, nom, type, adresse, plan, essai_plan, created_at, statut_publication, logo_url, slug, telephone )
       `)
       .eq('actif', true)
       .eq('inclus_morning', true)
@@ -123,7 +123,7 @@ async function fetchMorningData(commune) {
       .from('actualites')
       .select(`
         id, titre, contenu, type, date_debut, date_fin, urgence, photo_url, push_envoye_at,
-        commercant:commercants ( id, nom, type, adresse, plan, statut_publication, logo_url, slug )
+        commercant:commercants ( id, nom, type, adresse, plan, essai_plan, created_at, statut_publication, logo_url, slug )
       `)
       .not('commercant_id', 'is', null)
       .eq('actif', true)

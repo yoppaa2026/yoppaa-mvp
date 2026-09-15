@@ -21,8 +21,11 @@ SELECT 'C01' AS ordre,
          WHERE n.nspname = 'public' AND c.relname = 'admin_impersonations')::text AS valeur,
        'oui'::text AS attendu
 UNION ALL
-SELECT 'C02', 'les policies du journal (nom : commande, rôles)',
-       (SELECT COALESCE(string_agg(policyname || ' : ' || cmd || ' ' || array_to_string(roles, ','), ' | ' ORDER BY policyname), 'AUCUNE')
+-- 🔴 SANS LA COLONNE `permissive`, CE CONTRÔLE NE PROUVAIT RIEN (corrigé le 15/09
+-- après le premier passage). Une policy de restriction posée en PERMISSIVE
+-- ouvre au lieu de fermer, et `qual` ne le montre pas.
+SELECT 'C02', 'les policies du journal (nom : type commande, rôles)',
+       (SELECT COALESCE(string_agg(policyname || ' : ' || permissive || ' ' || cmd || ' ' || array_to_string(roles, ','), ' | ' ORDER BY policyname), 'AUCUNE')
           FROM pg_policies WHERE schemaname = 'public' AND tablename = 'admin_impersonations')::text,
        'a lire : de quoi LIRE, INSERER et FERMER pour l admin'::text
 UNION ALL

@@ -27,7 +27,8 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { motsReservation } from '@/lib/reservation-metier'
-import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
+import { decisionAnnulation } from '@/lib/rdv-delai-annulation'
+import { montantAnnulationFacturable } from '@/lib/empreinte-table'
 
 export async function POST(request) {
   try {
@@ -38,7 +39,9 @@ export async function POST(request) {
     // rendez-vous porte des produits payés dans le même paiement. Ce n'est pas
     // un détail de confort : c'est lui qui décide du montant remboursé, et la
     // trace de sa décision si la banque conteste plus tard.
-    const { rdv_id, token, client_email, produits_choix } = body
+    // `apercu` : calculer ce que deviendrait l'annulation SANS RIEN ÉCRIRE, pour
+    // que l'écran prévienne le client avant le clic (15/09).
+    const { rdv_id, token, client_email, produits_choix, apercu } = body
 
     if (!rdv_id && !token) {
       return NextResponse.json({ ok: false, error: 'rdv_id (+ client_email) ou token requis.' }, { status: 400 })
@@ -59,6 +62,7 @@ export async function POST(request) {
       lieu_id, lieu_libelle, lieu_adresse,
       prix_estime, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
       couverts,
+      abonnement_id, empreinte_statut, empreinte_montant, empreinte_payment_method_id,
       commercant:commercants(id, nom, slug, adresse, telephone, email, stripe_account_id, rdv_delai_annulation_heures, categorie),
       prestation:rdv_prestations(nom, par_couverts)
     `
@@ -105,26 +109,42 @@ export async function POST(request) {
       }, { status: 400 })
     }
 
-    // ─── 4) Vérif cutoff (date_rdv + heure_debut - delai_annulation_heures) ─
+    // ─── 4) Le délai, et ce que devient une annulation qui le dépasse ───────
     const commercant = rdv.commercant
-    // ⚠️ LE MODULE, PAS LE `?? 24` D'ICI. Celui-ci gardait bien le zéro, mais
-    // il ignorait que le défaut d'une table n'est pas celui d'un salon, et ses
-    // trois frères, eux, écrasaient le zéro. Une règle, un endroit.
-    const delaiH = delaiAnnulationHeures(commercant)
-    // Instant du RDV en heure murale Europe/Brussels, DST-aware (été +02:00 /
-    // hiver +01:00) via brusselsInstant : sinon la deadline tombait 1h trop tôt
-    // en hiver et pénalisait le client.
-    const rdvDate = brusselsInstant(rdv.date_rdv, rdv.heure_debut)
-    const cutoffDate = new Date(rdvDate.getTime() - delaiH * 60 * 60 * 1000)
-    const now = new Date()
-    if (now > cutoffDate) {
+    // ⚠️ LE MODULE DÉCIDE, cette route applique (15/09). Le délai (défaut par
+    // métier, zéro respecté), la limite en heure de Bruxelles, et surtout la
+    // règle nouvelle : hors délai, une TABLE s'annule et devient tardive, un
+    // salon ou une séance d'abonnement reste refusé. La décision a ses essais
+    // exécutés dans deux bancs ; la réécrire ici, c'était la dupliquer.
+    const table = rdv.prestation?.par_couverts === true
+    const decision = decisionAnnulation(rdv, commercant, new Date())
+    const delaiH = decision.delaiH
+    if (decision.refus) {
       const heureFR = rdv.heure_debut?.slice(0, 5) || ''
       return NextResponse.json({
         ok: false,
         cutoff_expired: true,
-        cutoff_date: cutoffDate.toISOString(),
+        cutoff_date: decision.limite ? decision.limite.toISOString() : null,
         error: `Délai d'annulation dépassé. Tu pouvais annuler jusqu'à ${delaiH}h ${mots.ecranAvant} (${heureFR}). Contacte directement ${commercant?.nom || 'le commerçant'}.`,
       }, { status: 403 })
+    }
+    const tardive = decision.tardive
+    // 🔴 CE QUE LE CLIENT PEUT ENCORE PAYER : seulement une table annulée trop
+    // tard ET garantie par une carte. Une table tardive sans empreinte ne coûte
+    // rien, et le dire lui ferait peur pour rien.
+    const montantFacturable = montantAnnulationFacturable(rdv, tardive)
+
+    // ─── 4.1) L'APERÇU : ON DIT, ON N'ÉCRIT RIEN ───────────────────────────
+    // ⚠️ AVANT les avantages, le remboursement et la mise à jour : un aperçu
+    // qui toucherait à la base serait une annulation déguisée.
+    if (apercu === true) {
+      return NextResponse.json({
+        ok: true,
+        apercu: true,
+        tardive,
+        delai_heures: delaiH,
+        montant_facturable: montantFacturable,
+      })
     }
 
     // ─── 4.5) Le rendez-vous porte-t-il des produits déjà payés ? ───────────
@@ -353,6 +373,10 @@ export async function POST(request) {
     const updateData = {
       statut: 'annule_client',
       motif_annulation: 'yopper',
+      // 🔴 SANS CE DRAPEAU, RIEN NE SERAIT JAMAIS FACTURABLE : la règle du
+      // débit ne connaît que `no_show` et `annule_client` + tardive. Écrit par
+      // la clé de service, seule autorisée par le verrou de l'empreinte.
+      annulation_tardive: tardive,
     }
     if (refundId) {
       updateData.stripe_refund_id = refundId
@@ -369,6 +393,27 @@ export async function POST(request) {
     if (errUpd) {
       console.error('[rdv/cancel] UPDATE statut KO', errUpd)
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour RDV.' }, { status: 500 })
+    }
+
+    // ─── 6 ter) UNE CARTE QUI NE SERT PLUS À RIEN SE DÉTACHE (15/09) ───────
+    //
+    // Annulée À TEMPS, une table garantie n'est plus facturable, jamais. Garder
+    // la carte du client attachée au compte du restaurant, c'est garder une
+    // donnée de paiement sans raison. On la détache, et la ligne le dit.
+    // ⚠️ APRÈS l'écriture du statut, jamais avant : si le détachement échoue,
+    // l'annulation a bien eu lieu et la table reste non facturable par sa
+    // règle. L'échec se journalise, il ne bloque pas le client.
+    // ⚠️ ET JAMAIS SUR UNE ANNULATION TARDIVE : cette carte-là doit rester
+    // attachée pour que le restaurant puisse facturer.
+    if (!tardive && rdv.empreinte_statut === 'posee' && rdv.empreinte_payment_method_id && commercant?.stripe_account_id) {
+      try {
+        await stripe.paymentMethods.detach(rdv.empreinte_payment_method_id, { stripeAccount: commercant.stripe_account_id })
+        const { error: errLib } = await supabase
+          .from('rdv_reservations').update({ empreinte_statut: 'liberee' }).eq('id', rdv.id)
+        if (errLib) console.error('[rdv/cancel] carte détachée mais statut non écrit', { rdvId: rdv.id, message: errLib.message })
+      } catch (e) {
+        console.error('[rdv/cancel] carte non détachée (table annulée à temps, donc non facturable)', { rdvId: rdv.id, message: e?.message })
+      }
     }
 
     // Annule le rappel push programmé (1h avant) s'il existe. Best-effort.
@@ -401,7 +446,8 @@ export async function POST(request) {
     // 🔴 UNE TABLE SE DIT EN PERSONNES (11/09), dans l'email comme dans le
     // calendrier : c'est le même email que `/api/emails/rdv-annule`, et il
     // redisait le format quand la confirmation disait le groupe.
-    const table = rdv.prestation?.par_couverts === true
+    // (`table` est établie à l'étape 4 depuis le 15/09 : la décision
+    // d'annulation en a besoin avant tout le reste.)
     // Combien de bons ont payé ce qui revient. L'email ET l'écran le disent, au
     // pluriel dès deux (01/09) : compté une fois, pour les deux.
     const nbBonsRendus = lignesBonsDe(rdv).length + (gardeSesProduits ? 0 : lignesBonsDe(commandeLiee || {}).length)
@@ -434,6 +480,9 @@ export async function POST(request) {
           produits_montant:  produitsPayesCarte,
           table,
           couverts:          rdv.couverts,
+          // 🔴 ET CE QU'IL PEUT ENCORE PAYER, dans l'email aussi (15/09).
+          tardive_facturable: montantFacturable,
+          delai_heures:      delaiH,
         })
         // iCal CANCEL (SEQUENCE+1 par rapport au confirme initial)
         // ⚠️ CORRIGÉ LE 05/08 : cet appel passait `rdv_id` alors que la
@@ -501,7 +550,16 @@ export async function POST(request) {
     const phraseRecompense = recompenseRendue > 0
       ? ` Ta récompense fidélité de ${euros(recompenseRendue)} retourne sur ta carte, utilisable à ton prochain passage.`
       : ''
-    const retours = `${phraseBon}${phraseRecompense}`
+    // 🔴 L'ANNULATION TARDIVE SE DIT SUR L'ÉCRAN QUI LA CONFIRME (15/09). Le
+    // client a été prévenu avant de cliquer ; on le redit, parce que c'est
+    // cet écran-là qu'il relira s'il découvre le débit.
+    // ⚠️ DANS `retours`, COMME LE BON ET LA RÉCOMPENSE, et pas en fin de message :
+    // un `message +=` à part devenait une sixième phrase qui ne commençait plus
+    // par « Ta réservation est annulée. », et la garde des phrases de fin l'a vu.
+    const phraseTardive = montantFacturable > 0
+      ? ` Tu as annulé moins de ${delaiH} h avant : ${commercant?.nom || 'le restaurant'} peut facturer ${euros(montantFacturable)}.`
+      : ''
+    const retours = `${phraseBon}${phraseRecompense}${phraseTardive}`
 
     let message
     if (refundError) {
@@ -515,7 +573,6 @@ export async function POST(request) {
     } else {
       message = `${mots.ecranAnnule}${retours}`
     }
-
     return NextResponse.json({
       ok: true,
       rdv_id: rdv.id,
@@ -524,6 +581,8 @@ export async function POST(request) {
       refund_error: refundError,
       refund_montant: refundMontant,
       produits_choix: commandeLiee ? produits_choix : null,
+      annulation_tardive: tardive,
+      montant_facturable: montantFacturable,
       message,
     })
   } catch (e) {

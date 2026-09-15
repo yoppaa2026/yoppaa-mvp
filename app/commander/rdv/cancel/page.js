@@ -50,6 +50,32 @@ export default function RdvCancelPage() {
     setToken(t)
   }, [])
 
+  // 🔴 CE QUE COÛTE L'ANNULATION, AVANT DE CONFIRMER (15/09). Une table garantie
+  // peut s'annuler hors délai, mais le restaurant peut alors la facturer. La
+  // route le calcule sans rien écrire ; cet écran le montre avant le clic.
+  const [apercu, setApercu] = useState(null)
+  useEffect(() => {
+    if (!token) return
+    let annule = false
+    fetch('/api/rdv/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, apercu: true }),
+    })
+      .then(r => r.json())
+      .then(a => {
+        if (annule) return
+        // ⚠️ UN REFUS SE DIT TOUT DE SUITE, au lieu de faire confirmer une
+        // annulation que le serveur refusera au clic.
+        if (a?.ok === false && a?.cutoff_expired) { setErreur(a.error); setStep('erreur'); return }
+        setApercu(a)
+      })
+      // ⚠️ L'APERÇU NE BLOQUE JAMAIS : sans lui l'écran reste celui d'avant, et
+      // la route redécide au vrai clic.
+      .catch(() => {})
+    return () => { annule = true }
+  }, [token])
+
   // Le rendez-vous porte des produits déjà payés : le serveur refuse d'annuler
   // tant que le client n'a pas dit ce qu'il en fait. On ne décide pas à sa
   // place, et ce choix commande le montant remboursé.
@@ -144,6 +170,13 @@ export default function RdvCancelPage() {
                     changent ENSEMBLE, sinon elles se remettent à diverger. */}
                 Ton acompte, ton bon et ta récompense fidélité te reviennent automatiquement.
               </p>
+              {/* 🔴 AVANT LE CLIC, PAS APRÈS (15/09) : une table garantie annulée
+                  trop tard reste facturable, et le client doit le lire ici. */}
+              {Number(apercu?.montant_facturable) > 0 && (
+                <p style={{ marginTop: 14, background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 12, padding: '10px 12px', color: '#9A3412', fontSize: '0.9rem', lineHeight: 1.5, fontWeight: 700 }}>
+                  Tu annules moins de {apercu.delai_heures} h avant : le restaurant peut facturer {euros(Number(apercu.montant_facturable))}.
+                </p>
+              )}
             </div>
 
             <button onClick={() => confirmer()} disabled={loading || !token} style={{ ...btnPrimary, opacity: !token ? 0.45 : 1 }}>

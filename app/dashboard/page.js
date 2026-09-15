@@ -400,6 +400,14 @@ function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null }) {
           {enCours ? 'Facturation…' : 'Facturer cette table non honorée'}
         </button>
       )}
+      {/* ⚠️ LE BOUTON NE S'AFFICHE PLUS SUR UNE TABLE NON POINTÉE (15/09) :
+          on ne facture qu'une absence déclarée. Sans cette phrase, le
+          restaurateur chercherait un bouton disparu sans savoir pourquoi. */}
+      {!facturable && raison === 'pas_absente' && rdv.statut === 'confirme' && (
+        <p style={{ margin: '5px 0 0', fontSize: '0.68rem', color: '#6B7280' }}>
+          Si cette table n&rsquo;est pas venue, passe-la en « No-show » : tu pourras ensuite la facturer.
+        </p>
+      )}
       {!facturable && raison === 'fenetre_fermee' && (
         <p style={{ margin: '5px 0 0', fontSize: '0.68rem', color: '#6B7280' }}>
           Le délai de facturation est passé.

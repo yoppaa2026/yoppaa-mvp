@@ -15,6 +15,7 @@ import {
   EMPREINTE_SEUIL_DEFAUT, EMPREINTE_MONTANT_DEFAUT,
   EMPREINTE_SEUIL_MAX, EMPREINTE_MONTANT_MAX,
   echeanceLien, lienValide, peutDemander, raisonDemandeImpossible,
+  estAbsenceFacturable, montantAnnulationFacturable,
 } from '../lib/empreinte-table.js'
 
 let ok = 0
@@ -105,7 +106,11 @@ egal('et un seuil à zéro vaut une personne', seuilEmpreinte({ rdv_empreinte_se
 //
 // Elle s'ouvre à l'heure du service et se ferme à la fin du LENDEMAIN. Un
 // client ne doit pas découvrir un prélèvement trois semaines après son dîner.
+// ⚠️ `statut: 'no_show'` DEPUIS LE 15/09 : on ne facture qu'une absence
+// déclarée. Sans lui, tous les essais de fenêtre ci-dessous rendraient
+// « pas absente » et ne mesureraient plus la fenêtre.
 const POSEE = {
+  statut: 'no_show',
   date_rdv: '2026-09-19', heure_debut: '20:00',
   empreinte_statut: 'posee', empreinte_montant: 120,
   empreinte_payment_method_id: 'pm_1', empreinte_customer_id: 'cus_1',
@@ -129,6 +134,105 @@ egal('🔴 une empreinte déjà débitée ne se débite pas deux fois',
   raisonDebitImpossible({ ...POSEE, empreinte_debit_pi_id: 'pi_1' }, new Date('2026-09-19T21:30:00+02:00')), 'deja_debitee')
 egal('une réservation sans date ne se débite pas',
   raisonDebitImpossible({ empreinte_statut: 'posee' }, new Date()), 'date_illisible')
+
+// ─── 4 bis) ON NE FACTURE QU'UNE ABSENCE (G7, 15/09) ────────────────────────
+//
+// 🔴 LA RÈGLE NE REGARDAIT PAS LE STATUT : une table honorée ou annulée à temps
+// restait facturable jusqu'au lendemain soir. Trouvé en écrivant la liste des
+// essais, avant qu'un seul client ne soit débité.
+{
+  const pendant = new Date('2026-09-19T21:30:00+02:00')
+  egal('🔴 une table HONORÉE ne se facture pas',
+    raisonDebitImpossible({ ...POSEE, statut: 'honore' }, pendant), 'pas_absente')
+  egal('🔴 une table pas encore pointée non plus',
+    raisonDebitImpossible({ ...POSEE, statut: 'confirme' }, pendant), 'pas_absente')
+  egal('🔴 ni une table annulée À TEMPS par le client',
+    raisonDebitImpossible({ ...POSEE, statut: 'annule_client', annulation_tardive: false }, pendant), 'pas_absente')
+  egal('ni une table annulée par le restaurateur',
+    raisonDebitImpossible({ ...POSEE, statut: 'annule_commercant' }, pendant), 'pas_absente')
+  verifie('un no-show déclaré se facture', peutDebiter({ ...POSEE, statut: 'no_show' }, pendant) === true)
+  verifie('🔴 une annulation TARDIVE se facture',
+    peutDebiter({ ...POSEE, statut: 'annule_client', annulation_tardive: true }, pendant) === true)
+  verifie('⚠️ un drapeau tardif absent vaut « à temps », jamais « tardif »',
+    estAbsenceFacturable({ statut: 'annule_client' }) === false)
+  egal('⚠️ avant le service, on dit « pas commencé », pas « pas absente »',
+    raisonDebitImpossible({ ...POSEE, statut: 'confirme' }, new Date('2026-09-19T19:00:00+02:00')), 'service_pas_commence')
+}
+
+// ─── 4 ter) L'ANNULATION TARDIVE D'UNE TABLE (H2, 15/09) ────────────────────
+//
+// 🔴 ELLE ÉTAIT ANNONCÉE ET PAS CONSTRUITE : le réglage, l'email et la page du
+// lien disaient « passé ce délai, ton client peut encore annuler », et la route
+// refusait. Promettre ce qui n'existe pas, deuxième fois en deux jours.
+{
+  const { decisionAnnulation } = await import('../lib/rdv-delai-annulation.js')
+  const resto = { categorie: 'alimentaire' }
+  const table = { date_rdv: '2026-09-19', heure_debut: '20:00', prestation: { par_couverts: true } }
+  const aTemps = decisionAnnulation(table, resto, new Date('2026-09-19T15:00:00+02:00'))
+  verifie('une table annulée à temps : ni refus, ni retard', !aTemps.refus && !aTemps.tardive)
+  const tard = decisionAnnulation(table, resto, new Date('2026-09-19T18:30:00+02:00'))
+  verifie('🔴 une table annulée hors délai PASSE, et devient tardive', tard.refus === false && tard.tardive === true)
+  egal('et le délai annoncé est celui du restaurant', tard.delaiH, 3)
+  verifie('🔴 un salon hors délai reste REFUSÉ',
+    decisionAnnulation({ ...table, prestation: { par_couverts: false } }, { categorie: 'vitrine' }, new Date('2026-09-19T18:30:00+02:00')).refus === true)
+  verifie('⚠️ une prestation inconnue n’ouvre pas la porte',
+    decisionAnnulation({ date_rdv: table.date_rdv, heure_debut: table.heure_debut }, resto, new Date('2026-09-19T18:30:00+02:00')).refus === true)
+
+  const ANNUL = sansProse(lire('app/api/rdv/cancel/route.js'))
+  verifie('🔴 la route applique la décision du module',
+    /const decision = decisionAnnulation\(rdv, commercant, new Date\(\)\)/.test(ANNUL))
+  // ⚠️ DANS L'ÉCRITURE, PAS DANS LA RÉPONSE : `annulation_tardive: tardive`
+  // figure deux fois dans la route. Un motif libre resterait vert si l'écriture
+  // disparaissait, parce qu'il trouverait la réponse. Le jumeau, vu avant la
+  // mutation cette fois.
+  {
+    const iMaj = ANNUL.indexOf('const updateData = {')
+    const zoneMaj = iMaj === -1 ? '' : ANNUL.slice(iMaj, ANNUL.indexOf('}', iMaj))
+    verifie('🔴 elle ÉCRIT le retard, sans quoi rien ne serait jamais facturable',
+      /annulation_tardive: tardive,/.test(zoneMaj), `zone de ${zoneMaj.length} caractères`)
+  }
+  verifie('🔴 elle charge ce qu’elle lit (abonnement et empreinte)',
+    /abonnement_id, empreinte_statut, empreinte_montant, empreinte_payment_method_id/.test(ANNUL))
+  verifie('🔴 l’aperçu répond AVANT toute écriture',
+    ANNUL.indexOf('apercu === true') !== -1
+    && ANNUL.indexOf('apercu === true') < ANNUL.indexOf('rendreAvantagesRdv(supabase')
+    && ANNUL.indexOf('apercu === true') < ANNUL.indexOf('.update(updateData)'))
+  // ⚠️ EXÉCUTÉ, PLUS CHERCHÉ (15/09). Le motif `tardive && rdv.empreinte_statut
+  // === 'posee'` était aussi CONTENU dans la condition de détachement voisine
+  // (`!tardive && …`) : casser le calcul du montant laissait la garde verte.
+  // Trouvé par mutation. Le calcul vit maintenant dans le module.
+  const garantie = { empreinte_statut: 'posee', empreinte_montant: 120 }
+  egal('🔴 une table TARDIVE et garantie annonce son montant',
+    montantAnnulationFacturable(garantie, true), 120)
+  egal('🔴 une table annulée À TEMPS n’annonce rien', montantAnnulationFacturable(garantie, false), 0)
+  egal('🔴 une table tardive SANS carte n’annonce rien',
+    montantAnnulationFacturable({ empreinte_statut: null, empreinte_montant: 120 }, true), 0)
+  egal('une carte déjà libérée n’annonce rien',
+    montantAnnulationFacturable({ empreinte_statut: 'liberee', empreinte_montant: 120 }, true), 0)
+  egal('les centimes ne dérivent pas',
+    montantAnnulationFacturable({ empreinte_statut: 'posee', empreinte_montant: 86.449999 }, true), 86.45)
+  verifie('🔴 et la route appelle CE calcul, sans le refaire',
+    /const montantFacturable = montantAnnulationFacturable\(rdv, tardive\)/.test(ANNUL))
+  verifie('⚠️ une carte annulée à temps se détache, jamais une carte tardive',
+    /if \(!tardive && rdv\.empreinte_statut === 'posee'/.test(ANNUL) && /paymentMethods\.detach\(/.test(ANNUL))
+  verifie('🔴 le client lit ce qu’il peut encore payer, sur l’écran de fin',
+    /peut facturer \$\{euros\(montantFacturable\)\}/.test(ANNUL))
+  verifie('🔴 et dans l’email',
+    /tardive_facturable: montantFacturable/.test(ANNUL) && /Annulation tardive/.test(sansProse(lire('lib/resend.js'))))
+  const LIENANNUL = sansProse(lire('app/commander/rdv/cancel/page.js'))
+  verifie('🔴 l’écran du lien d’email prévient AVANT de confirmer',
+    /apercu: true/.test(LIENANNUL) && /apercu\.montant_facturable/.test(LIENANNUL))
+  const ESPACE = sansProse(lire('app/commander/page.js'))
+  verifie('🔴 l’espace client prévient AVANT de confirmer',
+    /client_email: rdv\.client_email, apercu: true/.test(ESPACE)
+    && /peut facturer \$\{euros\(Number\(a\.montant_facturable\)\)\}/.test(ESPACE))
+  const DEB = sansProse(lire('app/api/rdv/empreinte-debiter/route.js'))
+  verifie('🔴 la route de débit CHARGE le retard qu’elle doit lire',
+    /id, statut, annulation_tardive,/.test(DEB))
+  const DASH3 = sansProse(lire('app/dashboard/page.js'))
+  verifie('⚠️ l’agenda dit pourquoi le bouton manque',
+    /raison === 'pas_absente' && rdv\.statut === 'confirme'/.test(DASH3))
+}
 
 // ─── 5) LE CHANGEMENT D'HEURE ───────────────────────────────────────────────
 //

@@ -36,6 +36,9 @@ const MESSAGES = {
   date_illisible: 'La date de cette réservation est illisible, impossible de facturer.',
   service_pas_commence: 'Le service n’a pas encore commencé : tu ne peux pas facturer une table qui peut encore arriver.',
   fenetre_fermee: 'Le délai est passé : une empreinte ne se facture plus au-delà de la fin du lendemain.',
+  // 🔴 G7, 15/09 : une table honorée, annulée à temps ou pas encore pointée
+  // n'est jamais facturable.
+  pas_absente: 'Cette table n’est pas déclarée absente : passe-la d’abord en « No-show ». On ne facture jamais une table venue ou annulée à temps.',
 }
 
 export async function POST(request) {
@@ -63,7 +66,7 @@ export async function POST(request) {
     const { data: rdv } = await supabase
       .from('rdv_reservations')
       .select(`
-        id, statut, date_rdv, heure_debut, couverts, client_prenom, client_nom,
+        id, statut, annulation_tardive, date_rdv, heure_debut, couverts, client_prenom, client_nom,
         empreinte_statut, empreinte_montant, empreinte_setup_intent_id,
         empreinte_payment_method_id, empreinte_customer_id, empreinte_debit_pi_id,
         commercant_id,

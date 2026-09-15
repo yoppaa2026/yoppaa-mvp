@@ -442,9 +442,31 @@ for (const s of STATUTS_CONSOMMENT_SEANCE) {
 // ⚠️ LE GARDE-FOU DONT DÉPEND TOUTE LA RÈGLE. Si la route d'annulation cesse
 // de refuser les annulations tardives, « annulé = annulé à temps » devient
 // faux, et une cliente qui prévient une heure avant récupérerait sa séance.
+//
+// ⚠️ ELLE EST PASSÉE DU MOT À LA RÈGLE LE 15/09, ET ELLE EST PLUS STRICTE. Les
+// TABLES peuvent désormais s'annuler hors délai (elles n'ont ni prix ni
+// séance, et le refus ne faisait que laisser une table vide). La garde
+// exigeait deux bouts de texte dans la route : elle aurait laissé passer une
+// séance d'abonnement ouverte par erreur, pourvu que les deux mots restent.
+// Elle EXÉCUTE maintenant la décision, sur les cas qui comptent ici.
 const srcCancel = readFileSync(new URL('../app/api/rdv/cancel/route.js', import.meta.url), 'utf8')
-verifier('la route d’annulation refuse encore les annulations hors délai',
-  /cutoff_expired: true/.test(srcCancel) && /now > cutoffDate/.test(srcCancel))
+{
+  const { decisionAnnulation } = await import('../lib/rdv-delai-annulation.js')
+  const salon = { categorie: 'vitrine', rdv_delai_annulation_heures: 24 }
+  const seanceDu5 = { date_rdv: '2026-10-05', heure_debut: '10:00' }
+  const uneHeureAvant = new Date('2026-10-05T09:00:00+02:00')
+  const seance = decisionAnnulation({ ...seanceDu5, abonnement_id: 'ab1', prestation: { par_couverts: false } }, salon, uneHeureAvant)
+  verifier('🔴 une séance d’abonnement annulée une heure avant est REFUSÉE',
+    seance.refus === true && seance.tardive === false)
+  verifier('un rendez-vous de salon hors délai l’est aussi',
+    decisionAnnulation({ ...seanceDu5, prestation: { par_couverts: false } }, salon, uneHeureAvant).refus === true)
+  verifier('🔴 même une table, dès qu’elle est posée sur un abonnement',
+    decisionAnnulation({ ...seanceDu5, abonnement_id: 'ab1', prestation: { par_couverts: true } }, salon, uneHeureAvant).refus === true)
+  verifier('une séance annulée à temps passe, et n’est pas tardive',
+    (() => { const d = decisionAnnulation({ ...seanceDu5, abonnement_id: 'ab1', prestation: {} }, salon, new Date('2026-10-03T09:00:00+02:00')); return !d.refus && !d.tardive })())
+  verifier('et la route applique CETTE décision, avec son refus',
+    /decisionAnnulation\(rdv, commercant/.test(srcCancel) && /cutoff_expired: true/.test(srcCancel))
+}
 
 // ─── LE SOLDE, TEL QU'IL S'AFFICHE ─────────────────────────────────────────
 const HISTORIQUE = [

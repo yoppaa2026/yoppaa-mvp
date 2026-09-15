@@ -2146,7 +2146,11 @@ for (const chemin of [
     const court = chemin.split('/').slice(-3, -1).join('/')
     verifie(`${court} : plus de délai calculé sur place`,
       !/rdv_delai_annulation_heures\s*(\|\||\?\?)/.test(src))
-    verifie(`${court} : il appelle le module`, /delaiAnnulationHeures\(/.test(src))
+    // ⚠️ La route d'annulation passe depuis le 15/09 par `decisionAnnulation`,
+    // qui appelle elle-même `delaiAnnulationHeures` : la même règle, un étage
+    // plus haut, et ses propres essais dans ce banc et dans celui des
+    // abonnements.
+    verifie(`${court} : il appelle le module`, /delaiAnnulationHeures\(|decisionAnnulation\(/.test(src))
     // 🔴 ET IL CHARGE LA CATÉGORIE DANS SON SELECT, sans quoi le défaut d'un
     // restaurant serait celui d'un salon. La colonne absente d'un select est le
     // défaut le plus fréquent de ce dépôt, et il ne prévient jamais.

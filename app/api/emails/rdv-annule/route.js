@@ -127,6 +127,14 @@ export async function POST(request) {
       produits_montant,
       table,
       couverts:          rdv.couverts,
+      // ⚠️ ZÉRO EXPLICITE, ET C'EST LA VÉRITÉ (15/09). Cette route sert
+      // l'annulation par le commerçant ou automatique : elle n'est jamais une
+      // annulation tardive du client, donc jamais facturable. Les deux champs
+      // sont passés quand même, pour que les deux expéditeurs du même email
+      // restent identiques : c'est leur divergence qui avait fait dire « RDV »
+      // et « bon cadeau » à un restaurant.
+      tardive_facturable: 0,
+      delai_heures:      null,
     })
 
     await envoyerAuCommercant({

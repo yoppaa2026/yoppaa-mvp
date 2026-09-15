@@ -2893,6 +2893,30 @@ export default function Commander() {
       }
     }
 
+    // 🔴 CE QUE COÛTE L'ANNULATION SE DIT AVANT DE CONFIRMER (15/09). Une table
+    // garantie par une empreinte peut s'annuler hors délai, mais le restaurant
+    // peut alors la facturer : l'apprendre APRÈS avoir cliqué serait un piège.
+    // La route calcule sans rien écrire (`apercu`), elle seule connaît le délai
+    // et le montant, et elle redécide de toute façon au vrai clic.
+    let avertissement = ''
+    try {
+      const r = await fetch('/api/rdv/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rdv_id: rdv.id, client_email: rdv.client_email, apercu: true }),
+      })
+      const a = await r.json()
+      // ⚠️ UN REFUS SE DIT TOUT DE SUITE, au lieu de faire confirmer une
+      // annulation que le serveur refusera à la ligne suivante.
+      if (a?.ok === false && a?.cutoff_expired) {
+        alert(`Annulation impossible : ${a.error}`)
+        return
+      }
+      if (a?.apercu && Number(a.montant_facturable) > 0) {
+        avertissement = `Tu annules moins de ${a.delai_heures} h avant : ${rdv.commercant?.nom || 'le restaurant'} peut facturer ${euros(Number(a.montant_facturable))}.\n\n`
+      }
+    } catch { /* l'aperçu ne bloque jamais : la route redécide au vrai clic */ }
+
     askConfirm({
       title: mots.annulerTitre,
       // ⚠️ CE QUI REVIENT VRAIMENT, ET RIEN D'AUTRE (11/09). Cette phrase ne

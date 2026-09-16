@@ -23,6 +23,9 @@ import { NextResponse } from 'next/server'
 import { eurosNus } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
+// 🔴 CE QU'ON FAIT D'UN ÉVÉNEMENT DÉJÀ VU : le rejeu de Stripe était avalé, et
+// aucun handler qui lève pour obtenir un rejeu ne pouvait aboutir.
+import { decisionRejeu } from '@/lib/stripe-rejeu'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBons, recrediterBons, regimeBonPourCommerce } from '@/lib/bons-cadeaux-server'
@@ -78,26 +81,62 @@ export async function POST(request) {
 
   const supabase = getSupabaseAdmin()
 
-  // 2. Idempotency : skip si event_id déjà traité
+  // 2. Idempotency : on ne saute QUE ce qui a RÉUSSI.
+  //
+  // 🔴 LE REJEU DE STRIPE ÉTAIT AVALÉ (16/09, essai E4 d'Alex : table garantie
+  // jamais créée, aucun email). Le verrou était posé AVANT le traitement, et la
+  // condition ne regardait pas le `status` — il était pourtant SÉLECTIONNÉ
+  // juste au-dessus, lu et jamais utilisé. Donc : premier essai en échec,
+  // `status = 'error'`, 500 rendu pour que Stripe rejoue… et le rejeu tombait
+  // sur « event déjà traité, skip » et repartait avec un 200.
+  //
+  // 🔴 CE N'EST PAS UN DÉFAUT DE L'EMPREINTE, C'EST UN DÉFAUT DE TOUS LES FLUX.
+  // Plusieurs handlers lèvent EXPRÈS pour obtenir un rejeu (« on relance, Stripe
+  // rejouera, et le garde absorbe le rejeu ») : acompte, commande, bon cadeau,
+  // abonnement. Aucun de ces rejeux n'a jamais pu aboutir. Une seule défaillance
+  // passagère — un démarrage à froid, une base indisponible une seconde —
+  // perdait la réservation DÉFINITIVEMENT, et personne n'était prévenu.
   const { data: existing } = await supabase
     .from('stripe_webhook_events')
     .select('event_id, status')
     .eq('event_id', event.id)
     .maybeSingle()
 
-  if (existing) {
+  // ⚠️ LA RÈGLE VIT DANS `lib/stripe-rejeu`, ET ELLE Y EST EXÉCUTÉE AU BANC :
+  // seul l'échec EXPLICITE se rejoue, un statut inconnu vaut un succès.
+  const decision = decisionRejeu(existing)
+  if (decision === 'sauter') {
     console.info('[stripe/webhook] event déjà traité, skip', { id: event.id, type: event.type })
     return NextResponse.json({ ok: true, skipped: true })
   }
 
-  // 3. Insert l'event AVANT le traitement (lock idempotency). En cas d'échec on
-  //    met à jour status='error', sinon on laisse 'ok'.
-  await supabase.from('stripe_webhook_events').insert({
-    event_id: event.id,
-    event_type: event.type,
-    account_id: event.account || null,
-    payload: event,                         // full event pour debug
-  })
+  // 3. Le verrou est posé AVANT le traitement. En cas d'échec on met à jour
+  //    status='error', sinon on laisse 'ok'.
+  if (decision === 'reprendre') {
+    // ⚠️ REPRISE D'UN ÉCHEC : la ligne existe déjà, on la remet en chantier au
+    // lieu d'insérer un doublon que la contrainte d'unicité refuserait.
+    console.warn('[stripe/webhook] rejeu d’un event en échec', { id: event.id, type: event.type })
+    await supabase
+      .from('stripe_webhook_events')
+      .update({ status: 'ok', error_msg: null, processed_at: new Date().toISOString() })
+      .eq('event_id', event.id)
+  } else {
+    const { error: erreurVerrou } = await supabase.from('stripe_webhook_events').insert({
+      event_id: event.id,
+      event_type: event.type,
+      account_id: event.account || null,
+      payload: event,                         // full event pour debug
+    })
+    // ⚠️ ON LIT CE RÉSULTAT (il était jeté). Un verrou non posé ne bloque pas le
+    // traitement — les handlers absorbent leur propre rejeu — mais il faut le
+    // SAVOIR : sans cette ligne, l'événement ne serait plus jamais retrouvable
+    // dans le journal, et le contrôle ci-dessous dirait « jamais reçu ».
+    if (erreurVerrou) {
+      console.error('[stripe/webhook] verrou non posé, traitement quand même', {
+        id: event.id, type: event.type, message: erreurVerrou.message,
+      })
+    }
+  }
 
   // 4. Dispatch selon event.type
   try {

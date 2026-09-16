@@ -2177,6 +2177,47 @@ verifier('une commande remise sans moyen garde son rattrapage',
   }
 }
 
+// ── 🔴 LE REJEU DE STRIPE ÉTAIT AVALÉ (16/09, essai E4 d'Alex) ──────────────
+//
+// La table garantie n'est jamais née, aucun email n'est parti. Le verrou
+// d'idempotence du webhook est posé AVANT le traitement, et sa condition de
+// sortie ne regardait pas le statut : il était pourtant SÉLECTIONNÉ juste
+// au-dessus, lu et jamais utilisé. Premier essai en échec → 500 pour que Stripe
+// rejoue → et le rejeu repartait avec « event déjà traité, skip ».
+//
+// 🔴 TOUS LES FLUX D'ARGENT ÉTAIENT CONCERNÉS, pas seulement l'empreinte :
+// acompte, commande, bon cadeau et abonnement lèvent EXPRÈS pour obtenir un
+// rejeu. Aucun de ces rejeux ne pouvait aboutir. Une défaillance passagère
+// perdait la vente DÉFINITIVEMENT, sans prévenir personne.
+{
+  const { decisionRejeu } = await import('../lib/stripe-rejeu.js')
+
+  // La règle, EXÉCUTÉE. Une garde qui chercherait cette condition dans la route
+  // trouverait son jumeau dans la condition voisine.
+  verifier('🔴 un event jamais vu se traite', decisionRejeu(null) === 'traiter')
+  verifier('🔴 un event EN ÉCHEC se REJOUE', decisionRejeu({ status: 'error' }) === 'reprendre')
+  verifier('un event réussi ne se rejoue pas', decisionRejeu({ status: 'ok' }) === 'sauter')
+  verifier('un event sauté non plus', decisionRejeu({ status: 'skipped' }) === 'sauter')
+  // ⚠️ REJOUER CE QU'ON NE COMPREND PAS EST PLUS DANGEREUX QUE DE NE PAS LE
+  // REJOUER : au bout d'un rejeu, il y a de l'argent.
+  verifier('⚠️ un statut absent vaut un succès, pas un échec',
+    decisionRejeu({}) === 'sauter' && decisionRejeu({ status: null }) === 'sauter')
+  verifier('⚠️ et un statut inconnu aussi', decisionRejeu({ status: 'zarbi' }) === 'sauter')
+
+  const srcVerrou = readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8')
+  verifier('🔴 le webhook décide par cette règle, pas par une condition recopiée',
+    /const decision = decisionRejeu\(existing\)/.test(srcVerrou)
+    && /if \(decision === 'sauter'\)/.test(srcVerrou))
+  verifier('🔴 et il reprend la ligne en échec au lieu d’insérer un doublon',
+    /if \(decision === 'reprendre'\)/.test(srcVerrou)
+    && /status: 'ok', error_msg: null/.test(srcVerrou))
+  // ⚠️ UN VERROU NON POSÉ NE DOIT PAS PARTIR EN SILENCE : sans son message,
+  // l'événement devient introuvable dans le journal et le contrôle dirait
+  // « jamais reçu » sur un événement pourtant traité.
+  verifier('⚠️ un verrou qui ne se pose pas est DIT',
+    /const \{ error: erreurVerrou \}/.test(srcVerrou) && /verrou non posé/.test(srcVerrou))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

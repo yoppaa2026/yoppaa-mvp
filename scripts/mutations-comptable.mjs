@@ -549,6 +549,31 @@ const MUTATIONS = [
     banc: 'audit:colonnes', fichier: 'lib/bons-cadeaux-server.js',
     de: "      supabase.from('rdv_prestations').select('tva_taux').eq('commercant_id', id),",
     vers: "      supabase.from('prestations').select('tva_taux').eq('commercant_id', id)," },
+
+  // ─── LE REJEU DE STRIPE (16/09) ─────────────────────────────────────────
+  // 🔴 LE DEFAUT D ORIGINE : la condition de sortie ignorait le statut, donc
+  // un event en echec repartait avec « deja traite » et n etait jamais rejoue.
+  { nom: '🔴 un event en echec redevient « deja traite » (le defaut d origine)',
+    banc: 'verif:comptable', fichier: 'lib/stripe-rejeu.js',
+    de: "  return existant.status === 'error' ? 'reprendre' : 'sauter'",
+    vers: "  return 'sauter'" },
+
+  // ⚠️ ET L INVERSE EST DANGEREUX AUSSI : rejouer ce qu on ne comprend pas,
+  // c est rejouer de l argent sur un statut qu on n a pas prevu.
+  { nom: '⚠️ un statut inconnu declenche un rejeu',
+    banc: 'verif:comptable', fichier: 'lib/stripe-rejeu.js',
+    de: "  return existant.status === 'error' ? 'reprendre' : 'sauter'",
+    vers: "  return existant.status === 'ok' ? 'sauter' : 'reprendre'" },
+
+  { nom: '🔴 le webhook recopie sa condition au lieu de lire la regle',
+    banc: 'verif:comptable', fichier: 'app/api/stripe/webhook/route.js',
+    de: '  const decision = decisionRejeu(existing)',
+    vers: "  const decision = existing ? 'sauter' : 'traiter'" },
+
+  { nom: '⚠️ un verrou qui ne se pose pas repart en silence',
+    banc: 'verif:comptable', fichier: 'app/api/stripe/webhook/route.js',
+    de: '    const { error: erreurVerrou } = await supabase.from(\'stripe_webhook_events\').insert({',
+    vers: '    await supabase.from(\'stripe_webhook_events\').insert({' },
 ]
 
 function lancer(banc) {
@@ -564,16 +589,35 @@ function lancer(banc) {
   }
 }
 
+// 🔴 ON NE MESURE RIEN SUR UN BANC ROUGE — MAIS ON MESURE LES AUTRES (16/09).
+// Jusqu'ici ce harnais SORTAIT au premier banc rouge. `audit:colonnes` l'est
+// depuis un moment (44 colonnes, dette connue et sans rapport), donc PLUS AUCUNE
+// mutation de ce fichier n'était mesurée, y compris celles des bancs verts, et
+// ça se disait sur une seule ligne qu'on pouvait prendre pour un détail.
+// Un harnais qui ne démarre pas ne mesure rien : c'est une garde éteinte.
+//
+// ⚠️ LE PRINCIPE EST RESPECTÉ, PAS CONTOURNÉ : les mutations du banc rouge ne
+// sont pas mesurées, elles sont COMPTÉES COMME NON MESURÉES et nommées à la fin.
+const bancsRouges = new Set()
 for (const banc of [...new Set(MUTATIONS.map(m => m.banc))]) {
   const avant = lancer(banc)
-  if (avant.rouge) { console.log(`✕ ${banc} DÉJÀ rouge.`); console.log(avant.extrait); process.exit(1) }
+  if (avant.rouge) {
+    bancsRouges.add(banc)
+    console.log(`✕ ${banc} DÉJÀ rouge : ses mutations ne seront PAS mesurées.`)
+    console.log(avant.extrait)
+  }
 }
-console.log('Bancs verts au départ.\n')
+console.log(bancsRouges.size ? '' : 'Bancs verts au départ.\n')
 
 let attrapees = 0
 const manquees = []
+const nonMesurees = []
 
 for (const m of MUTATIONS) {
+  if (bancsRouges.has(m.banc)) {
+    nonMesurees.push(`${m.nom} — banc ${m.banc} DÉJÀ ROUGE`)
+    continue
+  }
   const f = chemin(m.fichier)
   const original = readFileSync(f, 'utf8')
   // ⚠️ UN TEXTE INTROUVABLE EST UNE NON-MESURE QUI PASSE POUR UNE MESURE.
@@ -603,11 +647,18 @@ for (const m of MUTATIONS) {
   else { manquees.push(`${m.nom} — RESTÉ VERT`); console.log(`  ✕ MANQUÉE : ${m.nom}`) }
 }
 
-console.log(`\n${attrapees}/${MUTATIONS.length} mutations attrapées.`)
+const mesurees = MUTATIONS.length - nonMesurees.length
+console.log(`\n${attrapees}/${mesurees} mutations attrapées, sur ${MUTATIONS.length} écrites.`)
 if (manquees.length) { console.log('\nNON ATTRAPÉES :'); manquees.forEach(x => console.log('   • ' + x)) }
+// ⚠️ NOMMÉES UNE PAR UNE : un compte global laisserait croire que tout a été
+// mesuré. Ce qui n'a pas été mesuré doit se lire, pas se déduire.
+if (nonMesurees.length) {
+  console.log(`\n🔴 ${nonMesurees.length} NON MESURÉES (banc déjà rouge, la garde n’est pas surveillée) :`)
+  nonMesurees.forEach(x => console.log('   • ' + x))
+}
 
 let finalRouge = false
-for (const banc of [...new Set(MUTATIONS.map(m => m.banc))]) {
+for (const banc of [...new Set(MUTATIONS.map(m => m.banc))].filter(b => !bancsRouges.has(b))) {
   const res = lancer(banc)
   if (res.rouge) {
     finalRouge = true
@@ -616,4 +667,4 @@ for (const banc of [...new Set(MUTATIONS.map(m => m.banc))]) {
   }
 }
 console.log(finalRouge ? '' : '\nBancs verts après restauration. Dépôt intact.')
-process.exit(manquees.length || finalRouge ? 1 : 0)
+process.exit(manquees.length || nonMesurees.length || finalRouge ? 1 : 0)

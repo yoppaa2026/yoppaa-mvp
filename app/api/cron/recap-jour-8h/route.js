@@ -15,7 +15,10 @@ import { planEffectif } from '@/lib/plans'
 import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 import { motsReservation, reservationActive } from '@/lib/reservation-metier'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
-import { envoyerAuAdmin } from '@/lib/resend'
+import { envoyerAuAdmin, emailDossiersEnAttente } from '@/lib/resend'
+// ⚠️ LE FILET : il relit les dossiers en attente côté SERVEUR, là où l'alerte
+// de soumission dépend d'un navigateur resté ouvert.
+import { dossiersEnRetard } from '@/lib/statut-commercant'
 import { surveillerCompteur } from '@/lib/sonde-compteur'
 import { bonsLimiter } from '@/lib/ratelimit'
 
@@ -218,7 +221,44 @@ export async function GET(request) {
     // compteur ne compte plus, jamais quand tout va bien.
     const compteur = await surveillerCompteur({ limiteur: bonsLimiter, envoyerAuAdmin })
 
-    return NextResponse.json({ ok: true, date_jour: dateJour, sent, failed, details, compteur })
+    // ═══ LE FILET DES DOSSIERS OUBLIÉS (16/09) ════════════════════════════
+    //
+    // 🔴 L'alerte « un commerçant attend » part d'un `fetch` DEPUIS LE
+    // NAVIGATEUR, à la dernière étape de l'inscription. Elle se perd sur un 403,
+    // sur un 500, ou simplement si l'onglet se ferme entre l'enregistrement et
+    // l'appel : la fiche passe en attente et aucun email n'est même tenté.
+    //
+    // ⚠️ CE RAPPEL-CI PART DU SERVEUR et ne dépend d'aucun navigateur. Il
+    // rattrape aussi le cas le plus banal : l'email bien parti, jamais lu.
+    //
+    // ⚠️ APRÈS les récapitulatifs, comme la sonde, et pour la même raison : un
+    // filet ne retarde jamais l'envoi de sa journée à un commerçant.
+    let enRetard = 0
+    try {
+      const { data: attente, error: errAttente } = await supabase
+        .from('commercants')
+        .select('id, nom, type, created_at, statut_publication')
+        .eq('statut_publication', 'en_attente')
+      // 🔴 UNE LECTURE EN ÉCHEC N'EST PAS « AUCUN DOSSIER N'ATTEND ». Les deux
+      // rendent zéro rappel, et la première doit se voir.
+      if (errAttente) throw new Error(errAttente.message)
+      const oublies = dossiersEnRetard(attente || [])
+      enRetard = oublies.length
+      // ⚠️ RIEN À SIGNALER, RIEN À ENVOYER : une alarme qui sonne tous les
+      // matins ne protège plus rien.
+      if (oublies.length) {
+        await envoyerAuAdmin({
+          subject: oublies.length > 1
+            ? `${oublies.length} dossiers attendent ta validation`
+            : 'Un dossier attend ta validation',
+          html: emailDossiersEnAttente({ dossiers: oublies }),
+        })
+      }
+    } catch (e) {
+      console.error('[cron/recap-jour-8h] filet des dossiers en attente KO', e?.message || e)
+    }
+
+    return NextResponse.json({ ok: true, date_jour: dateJour, sent, failed, details, compteur, enRetard })
 
   } catch (e) {
     console.error('[cron/recap-jour-8h] exception', e)

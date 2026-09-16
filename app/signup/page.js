@@ -2671,9 +2671,23 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
     // était un relais de courrier ouvert : n'importe qui choisissait le
     // destinataire ET le texte d'un email signé par notre domaine. Le nom, le
     // plan et l'adresse ne sont plus envoyés du tout, la route les relit en base.
-    try {
+    // 🔴 ON LIT LA RÉPONSE, ET ON RÉESSAIE UNE FOIS (16/09). Cet appel partait
+    // dans un `try` vide : `fetch` ne lève pas sur un 403 ni sur un 500, donc
+    // un échec ne déclenchait même pas le `catch`. Le commerçant voyait
+    // « Demande envoyée ! », personne n'était prévenu, et il n'existait AUCUNE
+    // trace de l'échec nulle part.
+    //
+    // ⚠️ ET CETTE ROUTE ENVOIE DEUX EMAILS : l'alerte à Yoppaa ET l'accusé de
+    // réception au commerçant. Perdre l'appel, c'est aussi le laisser sans
+    // trace écrite de sa demande.
+    //
+    // ⚠️ UN SEUL NOUVEL ESSAI, PAS UNE BOUCLE : on rattrape l'incident
+    // passager, on n'insiste pas sur un refus qui se répétera à l'identique.
+    // Le vrai filet est ailleurs, côté serveur : le rappel quotidien des
+    // dossiers en attente, qui ne dépend d'aucun navigateur resté ouvert.
+    const prevenirYoppaa = async () => {
       const { data: { session: s } } = await supabase.auth.getSession()
-      await fetch('/api/notify-yoppaa', {
+      const res = await fetch('/api/notify-yoppaa', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2689,7 +2703,23 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
           shop_total_ht: totalChoisis,
         }),
       })
-    } catch { /* email non bloquant pour la soumission */ }
+      // 🔴 `fetch` NE LÈVE PAS SUR UN CODE HTTP. Sans cette lecture, un 403 ou
+      // un 500 passait pour un succès.
+      if (!res.ok) throw new Error(`notify-yoppaa ${res.status}`)
+      return res
+    }
+    try {
+      await prevenirYoppaa()
+    } catch (e1) {
+      try {
+        await prevenirYoppaa()
+      } catch (e2) {
+        // ⚠️ ON NE BLOQUE PAS SA SOUMISSION : sa fiche est bien enregistrée et
+        // attend la validation, l'email n'y change rien. Mais l'échec cesse
+        // d'être invisible, et le rappel quotidien le rattrapera côté serveur.
+        console.error('[signup] Yoppaa n a pas pu etre prevenu', e2?.message || e1?.message)
+      }
+    }
 
     setSubmitted(true)
     setSubmitting(false)

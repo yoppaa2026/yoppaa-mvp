@@ -182,6 +182,30 @@ const MUTATIONS = [
     de: '        id, created_at, statut_publication, ${COLONNES_INSCRIPTION}',
     vers: '        id, created_at, statut_publication, nom, type, categorie, adresse, telephone, email' },
 
+  // ─── LE FILET DES DOSSIERS OUBLIES (16/09) ──────────────────────────────
+  { nom: '🔴 le filet rappelle TOUS les dossiers, tous les matins : l alarme sonne en continu',
+    de: '    .filter((d) => d.attente.enRetard)',
+    vers: '    .filter((d) => true)' },
+
+  { nom: '🔴 le plus ancien n est plus en tete : on traite au hasard',
+    de: '    .sort((a, b) => (b.attente.ouvres || 0) - (a.attente.ouvres || 0))',
+    vers: '    .sort((a, b) => (a.attente.ouvres || 0) - (b.attente.ouvres || 0))' },
+
+  { nom: '🔴 le cron reveille Alex meme quand la file est vide',
+    fichier: 'app/api/cron/recap-jour-8h/route.js',
+    de: '      if (oublies.length) {',
+    vers: '      if (true) {' },
+
+  { nom: '🔴 une lecture en echec se lit « aucun dossier n attend »',
+    fichier: 'app/api/cron/recap-jour-8h/route.js',
+    de: '      if (errAttente) throw new Error(errAttente.message)',
+    vers: '      if (false) throw new Error(errAttente.message)' },
+
+  { nom: '🔴 la soumission ne lit plus la reponse : un 403 passe pour un succes',
+    fichier: 'app/signup/page.js',
+    de: '      if (!res.ok) throw new Error(`notify-yoppaa ${res.status}`)',
+    vers: '      if (false) throw new Error(`notify-yoppaa ${res.status}`)' },
+
   // ─── LA RELANCE, ET SURTOUT CE QU'ELLE N'ENVOIE PAS ─────────────────────
   // 🔴 CES MUTATIONS-LA font envoyer des emails a de vraies personnes. Chacune
   // doit rougir, sinon la regle ne protege rien.

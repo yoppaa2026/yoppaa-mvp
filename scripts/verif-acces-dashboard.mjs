@@ -23,7 +23,7 @@ import {
   // ⚠️ IMPORTÉES POUR ÊTRE EXÉCUTÉES : l'autre porte, celle de la fiche.
   fichePubliee, COLONNE_PUBLICATION, PUBLICATION_OUVERTE,
   attenteDepuis, joursOuvresEntre,
-  remplissageInscription, CHAMPS_INSCRIPTION,
+  remplissageInscription, CHAMPS_INSCRIPTION, dossiersEnRetard,
 } from '../lib/statut-commercant.js'
 // ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE, avec un faux client Supabase : c'est la
 // seule façon de savoir ce que la file RÉPOND, et non ce qu'elle a l'air de
@@ -801,6 +801,54 @@ function sansCommentaires(src) {
 
     verifier('⚠️ et l’écran de validation MONTRE l’attente, pas seulement la date',
       /\{attente\.texte\}/.test(codeDe('app/admin/page.js')))
+
+    // ─── LE FILET DES DOSSIERS OUBLIÉS ───────────────────────────────────
+    // 🔴 L'alerte de soumission part d'un `fetch` DEPUIS LE NAVIGATEUR : elle
+    // se perd sur un 403, sur un 500, ou si l'onglet se ferme entre
+    // l'enregistrement et l'appel. Le filet, lui, part du serveur.
+    const FICHES = [
+      { nom: 'À l’heure', created_at: MAR },        // hier
+      { nom: 'Oublié', created_at: VEN },           // vendredi → mercredi
+      { nom: 'Très oublié', created_at: '2026-09-07T09:00:00' },
+    ]
+    const oublies = dossiersEnRetard(FICHES, MER)
+    egalNombre('🔴 EXÉCUTÉE : seuls les dossiers EN RETARD sont rappelés', oublies.length, 2)
+    verifier('⚠️ celui d’hier ne déclenche rien',
+      !oublies.some(d => d.fiche.nom === 'À l’heure'))
+    // ⚠️ LE PLUS ANCIEN EN TÊTE : c'est lui qui décide s'il reste ou s'il part.
+    verifier('🔴 le plus ancien passe en premier', oublies[0].fiche.nom === 'Très oublié')
+    egalNombre('une file vide ne réveille personne', dossiersEnRetard([], MER).length, 0)
+    egalNombre('une lecture nulle non plus', dossiersEnRetard(null, MER).length, 0)
+    // ⚠️ UNE DATE ABSENTE N'INVENTE PAS UN RETARD.
+    egalNombre('un dossier sans date ne sonne pas',
+      dossiersEnRetard([{ nom: 'Sans date', created_at: null }], MER).length, 0)
+
+    {
+      const cron = codeDe('app/api/cron/recap-jour-8h/route.js')
+      verifier('🔴 le filet tourne côté serveur, dans le cron du matin',
+        /dossiersEnRetard\(attente \|\| \[\]\)/.test(cron))
+      verifier('⚠️ il ne réveille personne quand la file est vide',
+        /if \(oublies\.length\) \{/.test(cron))
+      // 🔴 UNE LECTURE EN ÉCHEC N'EST PAS « AUCUN DOSSIER N'ATTEND ».
+      verifier('🔴 une lecture en échec se voit', /if \(errAttente\) throw/.test(cron))
+      // ⚠️ ET IL NE RETARDE PAS LES RÉCAPS DES COMMERÇANTS.
+      // ⚠️ ON VISE L'APPEL, PAS LE NOM : cherché tout court, le nom se trouve
+      // d'abord dans la ligne d'import, tout en haut, et la comparaison ne
+      // mesure alors que l'ordre des imports. Le piège de l'import, quatrième
+      // fois du jour.
+      verifier('⚠️ il passe APRÈS les récapitulatifs',
+        cron.indexOf('dossiersEnRetard(attente') > cron.indexOf('surveillerCompteur({'))
+    }
+    {
+      const signup = codeDe('app/signup/page.js')
+      // 🔴 `fetch` NE LÈVE PAS SUR UN CODE HTTP : sans cette lecture, un 403
+      // passait pour un succès et le commerçant voyait « Demande envoyée ! ».
+      verifier('🔴 la soumission lit la réponse de la notification',
+        /if \(!res\.ok\) throw new Error\(`notify-yoppaa \$\{res\.status\}`\)/.test(signup))
+      verifier('⚠️ et réessaie une fois, sans boucler', /await prevenirYoppaa\(\)/.test(signup))
+      verifier('⚠️ l’échec est tracé au lieu d’être avalé',
+        /Yoppaa n a pas pu etre prevenu/.test(signup))
+    }
   }
 
   // ─── CEUX QUI SE SONT ARRÊTÉS EN ROUTE ─────────────────────────────────

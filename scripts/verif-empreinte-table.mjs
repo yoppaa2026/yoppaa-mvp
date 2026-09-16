@@ -505,6 +505,46 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   verifie('🔴 le montant est comparé à celui que Stripe a gardé',
     /stripe\.setupIntents\.retrieve\(rdv\.empreinte_setup_intent_id, undefined,\s*\{ stripeAccount: compte \}\)/.test(DEBIT)
     && /Math\.abs\(montantStripe - montant\) > 0\.009/.test(DEBIT))
+  // ── 🔴 LE REFUS DE LA BANQUE SE DIT EN FRANÇAIS (16/09, essai G5 bis) ────
+  //
+  // « Your card was declined.. » partait tel quel dans la fenêtre : en anglais,
+  // avec deux points de suite. Le restaurateur lit ça au moment précis où il
+  // vient de perdre 120 €, et il ne sait pas s'il doit réessayer, rappeler son
+  // client, ou renoncer.
+  {
+    const { messageRefus, raisonRefusFr } = await import('../lib/stripe-refus.js')
+    // ⚠️ ON TRADUIT LE CODE, PAS LA PHRASE : la phrase anglaise de Stripe change
+    // avec les versions, le `decline_code` non.
+    verifie('🔴 un refus connu est traduit et dit la suite à donner',
+      /pas assez approvisionné/.test(messageRefus({ decline_code: 'insufficient_funds', message: 'Your card has insufficient funds.' }))
+      && /réessayer plus tard/.test(messageRefus({ decline_code: 'insufficient_funds' })))
+    verifie('⚠️ une carte expirée renvoie vers le client, pas vers un nouvel essai',
+      /contacter directement|contacte le client/i.test(messageRefus({ decline_code: 'expired_card' }))
+      && !/réessay/i.test(messageRefus({ decline_code: 'expired_card' })))
+    // 🔴 CELUI-CI EST À PART : personne ne peut authentifier, le client n'est pas là.
+    verifie('🔴 une authentification réclamée hors session est expliquée',
+      /pas devant son écran/.test(messageRefus({ code: 'authentication_required' })))
+    // ⚠️ UN CODE INCONNU GARDE LE MESSAGE DE STRIPE plutôt que d'inventer une
+    // raison, mais SANS son point final : « declined.. » se lit comme une faute.
+    egal('🔴 un code inconnu garde le message de Stripe, sans double point',
+      messageRefus({ code: 'zarbi', message: 'Your card was declined.' }),
+      'Rien n’a été facturé : la banque a répondu « Your card was declined »')
+    egal('⚠️ et sans message du tout, on ne prétend pas savoir',
+      messageRefus({}), 'Rien n’a été facturé : la banque a refusé sans en dire la raison')
+    verifie('⚠️ un code inconnu ne se traduit pas', raisonRefusFr({ code: 'zarbi' }) === null)
+    // 🔴 CE QUI COMPTE EN PREMIER : rien n'a été facturé. C'est la crainte du
+    // restaurateur avant même la raison.
+    verifie('🔴 chaque refus commence par « rien n’a été facturé »',
+      ['insufficient_funds', 'expired_card', 'zarbi'].every(c => /^Rien n’a été facturé/.test(messageRefus({ decline_code: c }))))
+    verifie('🔴 et la route emploie cette phrase, pas celle de Stripe',
+      /\$\{messageRefus\(e\)\}, et la table reste marquée comme non honorée/.test(DEBIT)
+      && !/La banque a refusé : \$\{message\}/.test(DEBIT))
+  }
+  // ⚠️ ET L'ÉCRAN DE L'ARGENT NE PASSE PLUS PAR UNE FENÊTRE DU NAVIGATEUR.
+  verifie('🔴 la facturation ne passe plus par un alert()',
+    !/alert\(/.test(DASH.slice(DASH.indexOf('async function facturerEmpreinte'),
+      DASH.indexOf('async function changerStatutRdv')))
+    && /titre: 'La table n’a pas été facturée'/.test(DASH))
   verifie('🔴 et une divergence ne débite RIEN',
     /montant divergent[\s\S]{0,400}?Rien n’a été facturé/.test(DEBIT))
   // ⚠️ LE CLIENT N'EST PAS LÀ : c'est le mandat obtenu à l'enregistrement qui
@@ -517,8 +557,10 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /idempotencyKey: `empreinte-\$\{rdv\.id\}`/.test(DEBIT))
   // 🔴 UN DÉBIT HORS SESSION PEUT ÊTRE REFUSÉ, et le taire laisserait le
   // restaurateur croire qu'il a été payé.
+  // ⚠️ GARDE SUIVIE (16/09) : la phrase anglaise de Stripe a laissé place au
+  // message français du module, qui dit d'abord que rien n'a été facturé.
   verifie('🔴 un refus de la banque est écrit et dit',
-    /empreinte_statut: 'echouee'/.test(DEBIT) && /La banque a refusé/.test(DEBIT))
+    /empreinte_statut: 'echouee'/.test(DEBIT) && /messageRefus\(e\)/.test(DEBIT))
   verifie('⚠️ la base n’est écrite qu’APRÈS Stripe',
     DEBIT.indexOf('stripe.paymentIntents.create') < DEBIT.indexOf("empreinte_statut: 'debitee'"))
   // 🔴 L'ARGENT PARTI SANS TRACE NE SE TAIT PAS.
@@ -540,9 +582,12 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // motif large attrapait l'alerte de SUCCÈS qui suit, et laissait passer un
   // échec avalé en silence : le restaurateur aurait cru avoir été payé. Trouvé
   // par mutation le 14/09.
+  // ⚠️ GARDE SUIVIE (16/09) : l'échec se dit toujours, mais dans la fenêtre du
+  // dépôt. Un `alert()` du navigateur sur l'écran de l'argent, c'est le dernier
+  // endroit où on veut de l'adresse du site et d'un bouton « OK ».
   verifie('🔴 le geste de facturation est séparé, et il DIT l’échec',
     /postPro\('\/api\/rdv\/empreinte-debiter', \{ rdv_id: rdvId \}\)/.test(DASH)
-    && /alert\(j\?\.error \|\|/.test(DASH))
+    && /message: j\?\.error \|\| 'La facturation n’a pas pu aboutir/.test(DASH))
   // ⚠️ UN BOUTON QUI DÉBITE AU PREMIER CLIC DEVIENT UN RÉFLEXE, et un réflexe
   // ne décide rien. La question porte le montant.
   // 🔴 ET PAS UN `window.confirm` : une garde du dépôt l'interdit dans cet

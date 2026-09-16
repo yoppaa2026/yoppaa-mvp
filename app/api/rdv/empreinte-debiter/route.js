@@ -27,6 +27,9 @@ import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { stripe, requireStripe, calculApplicationFee } from '@/lib/stripe'
 import { raisonDebitImpossible } from '@/lib/empreinte-table'
+// ⚠️ LE REFUS SE DIT EN FRANÇAIS, et il dit la suite à donner : réessayer,
+// contacter le client, ou renoncer.
+import { messageRefus } from '@/lib/stripe-refus'
 
 // Ce qu'on répond au commerçant selon ce qui bloque. Le message dit ce qu'il
 // peut faire, pas ce que le code a constaté.
@@ -159,11 +162,18 @@ export async function POST(request) {
       await supabase.from('rdv_reservations')
         .update({ empreinte_statut: 'echouee', empreinte_debit_erreur: message.slice(0, 480) })
         .eq('id', rdv.id)
-      console.error('[empreinte-debiter] débit refusé', { rdvId: rdv.id, message })
+      console.error('[empreinte-debiter] débit refusé', {
+        rdvId: rdv.id, message, code: e?.code || null, decline: e?.decline_code || null,
+      })
+      // 🔴 EN FRANÇAIS, ET AVEC LA SUITE À DONNER (Alex, 16/09, essai G5 bis).
+      // Le message de Stripe partait tel quel : « Your card was declined.. »,
+      // en anglais et avec deux points de suite. Un restaurateur lit ça au
+      // moment précis où il vient de perdre 120 €, et il ne sait pas s'il doit
+      // réessayer, rappeler son client, ou laisser tomber.
       return NextResponse.json({
         ok: false,
         code: 'debit_refuse',
-        error: `La banque a refusé : ${message}. Rien n’a été facturé, et la table reste marquée comme non honorée.`,
+        error: `${messageRefus(e)}, et la table reste marquée comme non honorée.`,
       }, { status: 402 })
     }
 

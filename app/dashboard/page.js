@@ -2250,14 +2250,29 @@ export default function Dashboard() {
   async function facturerEmpreinte(rdvId) {
     const res = await postPro('/api/rdv/empreinte-debiter', { rdv_id: rdvId })
     const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+    // ⚠️ LA FENÊTRE DU DÉPÔT ICI AUSSI (16/09). C'est l'écran de l'ARGENT : un
+    // `alert()` du navigateur, avec l'adresse du site et un bouton « OK » qui ne
+    // dit rien, est le dernier endroit où on veut l'afficher.
     if (!j?.ok) {
-      alert(j?.error || 'La facturation n’a pas pu aboutir. Réessaie dans un instant.')
+      await confirme(confirmationInfo({
+        titre: 'La table n’a pas été facturée',
+        message: j?.error || 'La facturation n’a pas pu aboutir. Réessaie dans un instant.',
+        // ⚠️ CE QU'IL PEUT ENCORE FAIRE : sans cette ligne, un refus de banque
+        // se lit comme une perte sèche et définitive.
+        details: 'La table reste marquée non honorée. Tu peux réessayer tant que la fenêtre de facturation est ouverte, jusqu’à la fin du lendemain.',
+        action: 'J’ai compris',
+      }))
       return false
     }
     setRdvs(prev => prev.map(r => r.id === rdvId
       ? { ...r, empreinte_statut: 'debitee', empreinte_debit_montant: j.montant, empreinte_debit_pi_id: j.payment_intent_id }
       : r))
-    alert(`Table facturée : ${euros(j.montant)}.`)
+    await confirme(confirmationInfo({
+      titre: `Table facturée : ${euros(j.montant)}`,
+      message: 'Le montant part sur ton compte Stripe, comme un paiement ordinaire.',
+      details: 'Ton client en est informé. Cette table ne peut plus être facturée une seconde fois.',
+      action: 'Parfait',
+    }))
     return true
   }
 

@@ -248,6 +248,27 @@ const MUTATIONS = [
     de: "      titre: canal === 'sms' ? 'SMS envoyé' : 'Email envoyé',",
     vers: "      titre: alert('parti') || (canal === 'sms' ? 'SMS envoyé' : 'Email envoyé')," },
 
+  // ─── LE REFUS DE LA BANQUE, EN FRANCAIS (16/09, essai G5 bis) ───────────
+  { nom: '🔴 le refus repart en anglais, avec la phrase de Stripe',
+    fichier: 'app/api/rdv/empreinte-debiter/route.js',
+    de: '        error: `${messageRefus(e)}, et la table reste marquée comme non honorée.`,',
+    vers: '        error: `La banque a refusé : ${message}. Rien n’a été facturé, et la table reste marquée comme non honorée.`,' },
+
+  { nom: '🔴 le double point de Stripe revient (« declined.. »)',
+    fichier: 'lib/stripe-refus.js',
+    de: "  const brut = String(erreur?.message || '').trim().replace(/\\.+$/, '')",
+    vers: "  const brut = String(erreur?.message || '').trim()" },
+
+  { nom: '🔴 un code de refus connu n est plus traduit',
+    fichier: 'lib/stripe-refus.js',
+    de: '  return (code && PAR_CODE[code]) || null',
+    vers: '  return null' },
+
+  { nom: '🔴 la facturation repasse par une fenetre du navigateur',
+    fichier: DASH,
+    de: "        titre: 'La table n’a pas été facturée',",
+    vers: "        titre: alert('rate') || 'La table n’a pas été facturée'," },
+
   { nom: '🔴 une table facturee redit « pas d empreinte bancaire »',
     fichier: REGLE,
     de: "  if (rdv?.empreinte_statut === 'debitee' || rdv?.empreinte_debit_pi_id) return 'deja_debitee'",

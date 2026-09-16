@@ -2359,15 +2359,41 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     const j = CONFIG.indexOf('</BlocAide>', i)
     return j < 0 ? '' : CONFIG.slice(i, j)
   }
+  // ⚠️ GARDES SUIVIES LE 16/09, ET ÉLARGIES. Le texte a quitté le JSX pour le
+  // module du métier, parce qu'un restaurateur lisait « le lundi 10 h à 11 h,
+  // rien que le yoga » et « ajoute ton équipe » sous des onglets « Tables ·
+  // Salles · Services ». Elles vérifient désormais LES DEUX métiers, ce que le
+  // JSX ne permettait pas.
+  const { motsReservation } = await import('../lib/reservation-metier.js')
+  const aideTable = motsReservation({ categorie: 'alimentaire' }).aide
+  const aideRdv = motsReservation({ categorie: 'vitrine' }).aide
   verifier('et il décrit les quatre étapes dans l’ordre',
-    (blocAide('rdv').match(/<EtapeAide n=\{[1-4]\}/g) || []).length === 4)
+    aideTable.etapes.length === 4 && aideRdv.etapes.length === 4)
+  verifier('⚠️ chaque étape porte un titre ET son explication',
+    [...aideTable.etapes, ...aideRdv.etapes].every(e => e.titre?.length > 5 && e.texte?.length > 40))
   // ⚠️ LES DEUX PIÈGES SONT NOMMÉS, parce que ce sont eux qui coûtent une
   // journée de compréhension : une plage hors horaires ne propose rien, et un
   // cours resté sur une plage ouverte se donne à n'importe quelle heure.
   verifier('⚠️ le mode d’emploi nomme le piège des horaires',
-    /déborder de tes horaires/.test(CONFIG))
+    /déborder de tes horaires/.test(aideTable.pieges) && /déborder de tes horaires/.test(aideRdv.pieges))
   verifier('⚠️ et celui du cours laissé sur une plage ouverte',
-    /réservable à n’importe quelle heure/.test(CONFIG))
+    /réservable à n’importe quelle heure/.test(aideRdv.pieges))
+  // 🔴 LE PIÈGE DU RESTAURANT EST LE SIEN : tant que Stripe n'encaisse pas, la
+  // carte n'est jamais demandée, et ses grandes tables se réservent sans
+  // garantie sans que rien ne le lui dise (défaut du 16/09).
+  verifier('🔴 et celui du compte Stripe qui n’encaisse pas encore',
+    /Stripe encaisse|sans garantie/.test(aideTable.pieges))
+  // 🔴 AUCUN DES DEUX NE PARLE LE MÉTIER DE L'AUTRE. C'est tout l'objet de la
+  // correction : celui qui est seul devant son écran doit se reconnaître.
+  const texteAide = (a) => [a.resume, a.pieges, ...a.etapes.map(e => `${e.titre} ${e.texte}`)].join(' ')
+  verifier('🔴 l’aide du restaurant ne parle ni de yoga, ni de praticien, ni de cours',
+    !/yoga|praticien|cours collectif|tête à tête|séance/i.test(texteAide(aideTable)))
+  verifier('🔴 et l’aide du salon ne parle ni de table, ni de couverts',
+    !/\btabl|couvert|terrasse/i.test(texteAide(aideRdv)))
+  // ⚠️ ET L'ÉCRAN LIT CE TEXTE, il ne le contient plus : sinon les deux
+  // versions divergeraient au premier changement.
+  verifier('⚠️ l’écran lit l’aide du métier au lieu de l’écrire',
+    /resume=\{mots\.aide\.resume\}/.test(CONFIG) && /mots\.aide\.etapes\.map/.test(CONFIG))
 
   // 🔴 UN BLOC DÉPLIABLE, PAS UNE MODALE. Une fenêtre qui s'ouvre seule à
   // chaque visite est la friction que ce produit combat partout ailleurs.

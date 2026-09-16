@@ -113,6 +113,21 @@ export default function BlocAide({ id, titre, resume = null, T, children }) {
   )
 }
 
+// Rend en gras ce que les textes encadrent de `**`.
+//
+// ⚠️ LA FORMULATION VIT DANS UN MODULE, PAS DANS L'ÉCRAN. Depuis le 16/09,
+// l'aide des réservations suit le métier : un restaurateur lit « tes formats de
+// table », un salon lit « tes prestations ». Un texte rangé avec le reste du
+// vocabulaire se relit, se traduit et se teste ; le même texte écrit en JSX ne
+// se fait remarquer que le jour où quelqu'un le lit à l'écran.
+export function enGras(texte) {
+  return String(texte).split(/(\*\*[^*]+\*\*)/g).map((bout, i) =>
+    bout.startsWith('**') && bout.endsWith('**')
+      ? <strong key={i}>{bout.slice(2, -2)}</strong>
+      : <span key={i}>{bout}</span>
+  )
+}
+
 // Une étape de la démarche. Numérotée, parce qu'ICI l'ordre porte une
 // information vraie : on ne peut pas rattacher une prestation à une plage
 // avant d'avoir créé la prestation.

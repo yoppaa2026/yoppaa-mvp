@@ -32,7 +32,7 @@ import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJou
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
-import BlocAide, { EtapeAide } from './BlocAide'
+import BlocAide, { EtapeAide, enGras } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
@@ -7984,32 +7984,22 @@ function TabRdv({ commercantId, commercant, toast, onSaved }) {
       {/* 🔴 « COMMENT ÇA MARCHE » (Alex, 07/09). L'objectif est l'autonomie :
           un commerçant qui s'en sort seul en parle autour de lui. L'aide n'est
           pas du confort, c'est le canal d'acquisition. */}
-      <BlocAide id="rdv" titre={mots.reglages}
-        resume={`${mots.prestations}, ton équipe, tes plages et jusqu’à quand on réserve : l’ordre à suivre en 4 étapes`}
-        T={T}>
-        <EtapeAide n={1} titre="Tes prestations, d’abord" T={T}>
-          Ce que tu proposes, sa durée et son prix. <strong>La capacité change tout</strong> :
-          laisse-la à 1 pour un rendez-vous en tête à tête, monte-la pour un cours collectif.
-          C’est elle qui décide de la suite, ici et sur ta fiche.
-        </EtapeAide>
-        <EtapeAide n={2} titre="Ton équipe, ensuite" T={T}>
-          Une personne seule ? Passe cette étape. Sinon, ajoute chacun, puis dis
-          sur la prestation qui sait la faire. Sans rien préciser, tout le monde peut tout.
-        </EtapeAide>
-        <EtapeAide n={3} titre="Tes plages : quand, pour qui, pour quoi" T={T}>
-          Une plage dit à quelles heures on peut réserver, <strong>avec qui</strong>, et
-          <strong> ce qui s’y donne</strong>. Un cours à heure fixe mérite sa propre plage :
-          le lundi 10h à 11h, rien que le yoga. Le reste de la journée peut rester ouvert à tout.
-        </EtapeAide>
-        <EtapeAide n={4} titre="Jusqu’à quand on peut réserver" T={T}>
-          Deux mois par défaut. Si tu vends des carnets ou des abonnements, monte à
-          trois ou six mois : dix séances par semaine couvrent déjà plus de deux mois.
-        </EtapeAide>
+      {/* 🔴 L'AIDE SUIT LE MÉTIER, COMME LES ONGLETS (Alex, 16/09). Sous des
+          onglets « Tables · Salles · Services », un restaurateur lisait ici
+          « laisse la capacité à 1 pour un rendez-vous en tête à tête », « ajoute
+          ton équipe » et « le lundi 10h à 11h, rien que le yoga ». Le
+          vocabulaire du salon, mot pour mot, sur l'écran d'un restaurant : celui
+          qui est seul devant son écran referme et téléphone. Le texte vit
+          maintenant dans `lib/reservation-metier`, avec le reste du vocabulaire. */}
+      <BlocAide id="rdv" titre={mots.reglages} resume={mots.aide.resume} T={T}>
+        {mots.aide.etapes.map((etape, i) => (
+          <EtapeAide key={etape.titre} n={i + 1} titre={etape.titre} T={T}>
+            {enGras(etape.texte)}
+          </EtapeAide>
+        ))}
         <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.6, margin: '2px 0 0', paddingTop: 10, borderTop: `1px solid ${T.hairline}` }}>
           <strong style={{ color: T.deep }}>Deux pièges, et l’écran te prévient pour les deux.</strong>{' '}
-          Tes plages ne peuvent pas déborder de tes horaires d’ouverture (Paramètres → Profil) :
-          ce qui dépasse ne sera jamais proposé. Et un cours laissé sur une plage ouverte à tout
-          devient réservable à n’importe quelle heure, pour une personne seule.
+          {enGras(mots.aide.pieges)}
         </p>
       </BlocAide>
 

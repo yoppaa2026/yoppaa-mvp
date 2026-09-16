@@ -16,7 +16,11 @@ const chemin = (f) => `${RACINE}/${f}`
 // Avec le seul `verif:table`, ces mutations auraient ete declarees NON
 // ATTRAPEES alors que la garde existait : un harnais qui mesure avec le mauvais
 // instrument fait douter d un code juste.
-const BANC = 'verif:table && npm run verif:gardes'
+// ⚠️ TROIS BANCS DEPUIS LE 16/09. Le vocabulaire du métier est mesuré par
+// `verif:table` et `verif:gardes`, mais l'AIDE de l'écran de réglage l'est par
+// `verif:slots`. Une mutation dont le banc n'est pas lancé reste verte : elle
+// ne mesurerait rien, et le dirait comme un succès.
+const BANC = 'verif:table && npm run verif:gardes && npm run verif:slots'
 const MODULE = 'lib/reservation-metier.js'
 
 const MUTATIONS = [
@@ -822,6 +826,29 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: 'Aucun article pour l&rsquo;instant',
     vers: 'Aucun article dans le menu' },
+
+  // ─── L AIDE DE L ECRAN SUIT LE METIER (16/09, demande d Alex) ───────────
+  // 🔴 Un restaurateur lisait « le lundi 10 h a 11 h, rien que le yoga » sous
+  // des onglets « Tables · Salles · Services ».
+  { nom: '🔴 l aide du restaurant reparle de yoga',
+    fichier: 'lib/reservation-metier.js',
+    de: "        texte: 'Un service dit à quelles heures on prend des réservations, **et dans quelle salle**. Midi de 12 h à 14 h, soir de 18 h 30 à 22 h : deux services, et le reste de la journée reste fermé.',",
+    vers: "        texte: 'Une plage dit à quelles heures on peut réserver : le lundi de 10 h à 11 h, rien que le yoga.'," },
+
+  { nom: '⚠️ une etape perd son explication et ne dit plus quoi faire',
+    fichier: 'lib/reservation-metier.js',
+    de: "        texte: 'Deux mois par défaut, et c’est ce qu’il faut pour un restaurant. Monte plus haut si tu prends des groupes longtemps à l’avance, comme les fêtes de fin d’année.',",
+    vers: "        texte: 'Deux mois.'," },
+
+  { nom: '🔴 le piege du compte Stripe disparait de l aide du restaurant',
+    fichier: 'lib/reservation-metier.js',
+    de: 'Et la carte bancaire ne se demande que si ton compte Stripe encaisse : tant qu’il n’est pas actif, tes grandes tables se réservent sans garantie.',
+    vers: 'Et pense a verifier tes reglages de temps en temps.' },
+
+  { nom: '🔴 l ecran reecrit l aide au lieu de lire celle du metier',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      <BlocAide id="rdv" titre={mots.reglages} resume={mots.aide.resume} T={T}>',
+    vers: '      <BlocAide id="rdv" titre={mots.reglages} resume="L ordre a suivre en 4 etapes" T={T}>' },
 
   // 🔴 LA GARDE LIT LA LISTE RESOLUE, PAS UNE FENETRE DE TEXTE (16/09). Depuis
   // que la constante du serveur compose sa fin avec les colonnes declarees par

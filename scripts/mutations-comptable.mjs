@@ -570,6 +570,22 @@ const MUTATIONS = [
     de: '  const decision = decisionRejeu(existing)',
     vers: "  const decision = existing ? 'sauter' : 'traiter'" },
 
+  // ─── LE COMPTE CONNECTE EN DEUXIEME ARGUMENT (16/09) ────────────────────
+  // 🔴 LE DEFAUT QUI A MANGE LA TABLE GARANTIE : `retrieve(id, params, options)`
+  // est positionnel ; en deuxieme, `{ stripeAccount }` part comme parametre de
+  // requete et Stripe refuse l appel entier.
+  { nom: '🔴 le webhook repasse le compte en deuxieme argument',
+    banc: 'verif:comptable', fichier: 'app/api/stripe/webhook/route.js',
+    de: '  const si = await stripe.setupIntents.retrieve(setupIntentId, undefined,',
+    vers: '  const si = await stripe.setupIntents.retrieve(setupIntentId,' },
+
+  // ⚠️ LE FRERE, sur la route qui facture un no-show : elle aurait repondu
+  // « garantie introuvable chez Stripe » alors que la garantie existait.
+  { nom: '🔴 le debit du no-show repasse le compte en deuxieme argument',
+    banc: 'verif:comptable', fichier: 'app/api/rdv/empreinte-debiter/route.js',
+    de: '      const si = await stripe.setupIntents.retrieve(rdv.empreinte_setup_intent_id, undefined,',
+    vers: '      const si = await stripe.setupIntents.retrieve(rdv.empreinte_setup_intent_id,' },
+
   { nom: '⚠️ un verrou qui ne se pose pas repart en silence',
     banc: 'verif:comptable', fichier: 'app/api/stripe/webhook/route.js',
     de: '    const { error: erreurVerrou } = await supabase.from(\'stripe_webhook_events\').insert({',

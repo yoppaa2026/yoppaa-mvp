@@ -13,6 +13,9 @@
 // en forme.
 
 import { readFileSync, readdirSync } from 'node:fs'
+// ⚠️ LE DÉPOUILLEUR DU DÉPÔT : un `/*` dans un `//` avalait deux mille
+// caractères en silence, et les gardes lisaient un fichier tronqué.
+import { sansProse } from './lire-code.mjs'
 import { ventiler, tauxFraisLivraison, cleTaux, libelleTaux, tauxPourArticle, imputerRemise, TAUX_NON_RENSEIGNE, REGIME_EMPORTER } from '../lib/tva.js'
 import { construireLignes, journalParJour, tauxRencontres, estComptabilisable, csvJournal, csvDetail, montantStripe, sommeStripe, arrondi, referencesNonQualifiees, partDejaTaxee, regimesParBon, libelleRegimeBon } from '../lib/export-comptable.js'
 import { regimeBon, regimeDuBon, USAGE_UNIQUE, USAGE_MULTIPLE } from '../lib/bons-tva.js'
@@ -2216,6 +2219,72 @@ verifier('une commande remise sans moyen garde son rattrapage',
   // « jamais reçu » sur un événement pourtant traité.
   verifier('⚠️ un verrou qui ne se pose pas est DIT',
     /const \{ error: erreurVerrou \}/.test(srcVerrou) && /verrou non posé/.test(srcVerrou))
+}
+
+// ── 🔴 LE COMPTE CONNECTÉ VA EN TROISIÈME ARGUMENT (16/09, essai E4) ────────
+//
+// `Received unknown parameter: stripeAccount`. Dans stripe 22, les méthodes qui
+// commencent par un identifiant sont POSITIONNELLES : `retrieve(id, params,
+// options)`. Passé en deuxième, `{ stripeAccount }` part comme paramètre de
+// requête, Stripe refuse l'appel, et deux flux tombaient :
+//   • le webhook, qui relit le SetupIntent → la table garantie ne naissait
+//     JAMAIS et aucun email ne partait ;
+//   • `empreinte-debiter`, qui aurait répondu « garantie introuvable chez
+//     Stripe » sur CHAQUE no-show, alors que la garantie existait.
+//
+// ⚠️ DEUXIÈME PARAMÈTRE MAL PLACÉ DANS LA MÊME JOURNÉE, après
+// `setup_intent_data[usage]`. La garde ne vise donc pas un appel : elle vise LA
+// POSITION, sur tous les appels du dépôt.
+{
+  const METHODES = 'retrieve|update|cancel|capture|del|confirm|reject|expire'
+  const fichiers = []
+  const parcourir = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) parcourir(`${d}/${e.name}`)
+      else if (e.name.endsWith('.js')) fichiers.push(`${d}/${e.name}`)
+    }
+  }
+  parcourir(new URL('../app', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+  parcourir(new URL('../lib', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+
+  // Découpe les arguments de premier niveau d'un appel, parenthèses, crochets
+  // et accolades comptés. Une virgule dans un objet n'est pas un séparateur.
+  const argumentsDe = (src, ouvrante) => {
+    const args = ['']
+    let p = 0
+    for (let i = ouvrante + 1; i < src.length; i++) {
+      const c = src[i]
+      if ('([{'.includes(c)) p++
+      else if (')]}'.includes(c)) { if (p === 0) return args.map(a => a.trim()); p-- }
+      if (p === 0 && c === ',') { args.push(''); continue }
+      args[args.length - 1] += c
+    }
+    return args.map(a => a.trim())
+  }
+
+  const fautifs = []
+  let appelsVus = 0
+  for (const f of fichiers) {
+    const src = sansProse(readFileSync(f, 'utf8'))
+    const rx = new RegExp(`stripe\\.[A-Za-z.]+\\.(${METHODES})\\s*\\(`, 'g')
+    let m
+    while ((m = rx.exec(src)) !== null) {
+      const args = argumentsDe(src, m.index + m[0].length - 1)
+      const iCompte = args.findIndex(a => /stripeAccount/.test(a))
+      if (iCompte === -1) continue
+      appelsVus++
+      // Le premier argument est l'identifiant, le deuxième les paramètres, le
+      // troisième les options. Le compte connecté est une OPTION.
+      if (iCompte !== 2) {
+        fautifs.push(`${f.split(/[\\/]/).slice(-2).join('/')} · ${m[0]} → compte en argument ${iCompte + 1}`)
+      }
+    }
+  }
+  // ⚠️ UNE LISTE VIDE DIRAIT « TOUT VA BIEN » SANS AVOIR RIEN LU.
+  verifier('🔴 les appels Stripe avec compte connecté sont bien lus',
+    appelsVus >= 3, `${appelsVus} appels vus`)
+  verifier('🔴 le compte connecté est toujours en TROISIÈME argument',
+    fautifs.length === 0, fautifs.join(' | '))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

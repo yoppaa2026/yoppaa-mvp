@@ -440,8 +440,13 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     WEBHOOK.indexOf("session.mode === 'setup'") !== -1
     && WEBHOOK.indexOf("session.mode === 'setup'") < WEBHOOK.indexOf('if (!sessionId || !paymentIntentId)'))
   // ⚠️ ON RELIT LE SetupIntent CHEZ STRIPE : la carte n'est renseignée que là.
+  // 🔴 ET LE COMPTE EN TROISIÈME ARGUMENT (16/09). Cette garde figeait la
+  // FORME FAUSSE : `retrieve(id, params, options)` est positionnel, et le
+  // compte passé en deuxième partait comme paramètre de requête. Stripe
+  // refusait, le webhook levait, la table garantie ne naissait jamais. La garde
+  // exigeait exactement l'appel qui ne pouvait pas marcher.
   verifie('🔴 il relit le SetupIntent sur le compte du restaurateur',
-    /stripe\.setupIntents\.retrieve\(setupIntentId,\s*compteConnecte \? \{ stripeAccount: compteConnecte \}/.test(WEBHOOK))
+    /stripe\.setupIntents\.retrieve\(setupIntentId, undefined,\s*compteConnecte \? \{ stripeAccount: compteConnecte \}/.test(WEBHOOK))
   // 🔴 LE MONTANT VIENT DES MÉTADONNÉES STRIPE, hors de portée du commerçant,
   // et pas d'un calcul refait aujourd'hui avec un réglage qui a pu changer.
   verifie('🔴 le montant garanti vient des métadonnées du SetupIntent',
@@ -483,8 +488,11 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // 🔴 DEUX SOURCES POUR UN MONTANT. La base est verrouillée par un trigger,
   // mais on ne prélève pas sur la foi d'une seule source : le montant doit être
   // celui que Stripe garde, c'est-à-dire celui que le client a lu.
+  // ⚠️ MÊME CORRECTION QUE SUR LE WEBHOOK : le compte en troisième argument.
+  // Cette garde-ci figeait aussi la forme fausse, donc cette route aurait
+  // répondu « garantie introuvable chez Stripe » sur CHAQUE no-show.
   verifie('🔴 le montant est comparé à celui que Stripe a gardé',
-    /stripe\.setupIntents\.retrieve\(rdv\.empreinte_setup_intent_id, \{ stripeAccount: compte \}\)/.test(DEBIT)
+    /stripe\.setupIntents\.retrieve\(rdv\.empreinte_setup_intent_id, undefined,\s*\{ stripeAccount: compte \}\)/.test(DEBIT)
     && /Math\.abs\(montantStripe - montant\) > 0\.009/.test(DEBIT))
   verifie('🔴 et une divergence ne débite RIEN',
     /montant divergent[\s\S]{0,400}?Rien n’a été facturé/.test(DEBIT))

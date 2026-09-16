@@ -1163,7 +1163,13 @@ async function handleEmpreinteSetup(session, supabase, compteConnecte) {
 
   // ⚠️ SUR LE COMPTE DU RESTAURATEUR : en direct charge, un SetupIntent lu
   // depuis la plateforme n'existe pas.
-  const si = await stripe.setupIntents.retrieve(setupIntentId,
+  // 🔴 LE COMPTE VA EN TROISIÈME ARGUMENT, PAS EN DEUXIÈME (16/09, essai E4).
+  // `retrieve(id, params, options)` est POSITIONNEL dans stripe 22 : passé en
+  // deuxième, `{ stripeAccount }` part comme paramètre de requête et Stripe
+  // répond « Received unknown parameter: stripeAccount ». Le webhook levait
+  // donc à chaque fois, la table garantie ne naissait jamais, et aucun email ne
+  // partait. Deuxième paramètre au mauvais endroit dans la même journée.
+  const si = await stripe.setupIntents.retrieve(setupIntentId, undefined,
     compteConnecte ? { stripeAccount: compteConnecte } : undefined)
   const meta = si?.metadata || {}
   const rdvId = meta.yoppaa_rdv_id || null

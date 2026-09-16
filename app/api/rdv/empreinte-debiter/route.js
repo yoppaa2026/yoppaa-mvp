@@ -94,7 +94,14 @@ export async function POST(request) {
     // la trace du montant que le client a accepté.
     let montantStripe = null
     try {
-      const si = await stripe.setupIntents.retrieve(rdv.empreinte_setup_intent_id, { stripeAccount: compte })
+      // 🔴 LE COMPTE EN TROISIÈME ARGUMENT (16/09) : `retrieve(id, params,
+      // options)` est positionnel. En deuxième, `{ stripeAccount }` part comme
+      // paramètre de requête et Stripe refuse. Cette route aurait donc répondu
+      // « la garantie est introuvable chez Stripe » sur CHAQUE no-show, alors
+      // que la garantie existait. Frère exact du défaut du webhook, trouvé en
+      // cherchant les autres appels du même genre.
+      const si = await stripe.setupIntents.retrieve(rdv.empreinte_setup_intent_id, undefined,
+        { stripeAccount: compte })
       montantStripe = Number(si?.metadata?.empreinte_montant)
     } catch (e) {
       console.error('[empreinte-debiter] SetupIntent illisible', { rdvId: rdv.id, message: e?.message })

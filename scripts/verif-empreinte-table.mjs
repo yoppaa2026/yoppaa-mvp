@@ -16,6 +16,7 @@ import {
   EMPREINTE_SEUIL_MAX, EMPREINTE_MONTANT_MAX,
   echeanceLien, lienValide, peutDemander, raisonDemandeImpossible,
   estAbsenceFacturable, montantAnnulationFacturable, compteEncaisse, libelleRelance,
+  raisonLienImpossible, messageLienImpossible,
 } from '../lib/empreinte-table.js'
 // 🔴 LA RÈGLE DES COUVERTS, ET LES COLONNES QU'ELLE DÉCLARE LIRE : `capacite`
 // manquait dans deux selects, et toute table devenait invalide.
@@ -952,8 +953,13 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // ── Le bouton du restaurateur ──────────────────────────────────────────
   verifie('🔴 il peut demander la carte par SMS et par email',
     /onDemanderEmpreinte\(rdv\.id, 'sms'\)/.test(DASH2) && /onDemanderEmpreinte\(rdv\.id, 'email'\)/.test(DASH2))
+  // ⚠️ GARDE SUIVIE, PAS DÉSARMÉE (16/09) : elle visait `peutDemander`, qui ne
+  // connaît que l'heure du SERVICE. Le lien, lui, meurt à la limite
+  // d'annulation, plus tôt. Entre les deux, l'écran offrait un bouton que le
+  // serveur refusait à tous les coups. La règle complète est
+  // `raisonLienImpossible`, et l'écran pose désormais la MÊME question.
   verifie('⚠️ le bouton suit la règle du module',
-    /peutDemander\(rdv, new Date\(\)\)/.test(DASH2))
+    /const raisonLien = raisonLienImpossible\(rdv, commercant, new Date\(\)\)/.test(DASH2))
   // ── 🔴 COMBIEN DE FOIS LE LIEN EST PARTI (demande d'Alex, 16/09) ────────
   //
   // « Lien déjà envoyé » ne disait pas COMBIEN DE FOIS : le restaurateur ne
@@ -1067,7 +1073,31 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // ⚠️ L'AGENDA EXPLIQUE AU LIEU D'OFFRIR UN BOUTON QUI SERA REFUSÉ. La route
   // refuse de toute façon : cette ligne informe, elle ne protège pas.
   verifie('⚠️ l’agenda ne propose plus un lien qui ne partirait pas',
-    /\{onDemanderEmpreinte && stripePret && peutDemander\(rdv, new Date\(\)\) && \(/.test(DASH2))
+    /\{onDemanderEmpreinte && stripePret && !raisonLien && \(/.test(DASH2))
+  // 🔴 ET IL DIT POURQUOI À LA PLACE DU BOUTON : un bouton qui disparaît sans
+  // raison laisse croire à une panne, et le restaurateur recharge pour rien.
+  verifie('🔴 et la raison remplace le bouton',
+    /\{onDemanderEmpreinte && messageLienImpossible\(raisonLien\) && \(/.test(DASH2))
+  // ⚠️ LE COMMERÇANT DOIT ARRIVER JUSQUE-LÀ : sans lui, le délai d'annulation
+  // retombe sur son défaut de 24 h, et les boutons disparaîtraient un jour trop
+  // tôt sur toutes les tables.
+  verifie('🔴 et le commerçant est passé jusqu’à la carte',
+    /<EmpreinteRdv rdv=\{rdv\}[^>]*commercant=\{commercant\}/.test(DASH2)
+    && /stripePret=\{compteEncaisse\(commercant\)\} commercant=\{commercant\}/.test(DASH2))
+  // La règle, EXÉCUTÉE : c'est le cas exact qu'Alex a rencontré.
+  {
+    const resto3h = { categorie: 'alimentaire' }   // 3 h de délai
+    const tableCeSoir = { statut: 'confirme', date_rdv: '2026-09-16', heure_debut: '19:00' }
+    egal('🔴 à 16 h 01 pour une table de 19 h, le lien piégerait le client',
+      raisonLienImpossible(tableCeSoir, resto3h, new Date('2026-09-16T16:01:00+02:00')), 'delai_passe')
+    egal('⚠️ mais à 15 h 59, il part encore',
+      raisonLienImpossible(tableCeSoir, resto3h, new Date('2026-09-16T15:59:00+02:00')), null)
+    egal('🔴 et une fois le service commencé, c’est l’autre raison',
+      raisonLienImpossible(tableCeSoir, resto3h, new Date('2026-09-16T19:30:00+02:00')), 'service_commence')
+    verifie('⚠️ chaque raison a sa phrase, et « delai_passe » dit le piège',
+      /piégerait ton client/.test(messageLienImpossible('delai_passe'))
+      && messageLienImpossible(null) === null)
+  }
   verifie('⚠️ et il dit pourquoi, à la place du bouton',
     /stripePret={compteEncaisse\(commercant\)}/.test(DASH2)
     && /pour pouvoir demander une carte/.test(DASH2))

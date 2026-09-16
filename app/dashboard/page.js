@@ -56,7 +56,7 @@ import { accesDashboard } from '@/lib/statut-commercant'
 // ⚠️ LA FENÊTRE DE FACTURATION VIENT DU MODULE, pas d'un calcul de cet écran :
 // la route la rejoue à l'identique, et deux calculs qui divergent, c'est un
 // bouton qui s'affiche sur une table que le serveur refusera de facturer.
-import { raisonDebitImpossible, peutDemander, compteEncaisse, libelleRelance } from '@/lib/empreinte-table'
+import { raisonDebitImpossible, compteEncaisse, libelleRelance, raisonLienImpossible, messageLienImpossible } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
 
 const T = {
@@ -318,7 +318,7 @@ const boutonLien = {
 // cacherait le bouton empêcherait un restaurateur en ordre de demander sa
 // carte ; un oubli qui le montre laisse un refus serveur qui, lui, nomme
 // maintenant la bonne cause. Entre les deux, le silence est du mauvais côté.
-function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null, stripePret = true }) {
+function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null, stripePret = true, commercant = null }) {
   const [enCours, setEnCours] = useState(false)
   const montant = Number(rdv?.empreinte_montant) || 0
   const raison = raisonDebitImpossible(rdv, new Date())
@@ -341,6 +341,10 @@ function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null, stripePret 
     // client pose sa carte lui-même. Sa table ne bouge pas : elle reste
     // réservée, garantie ou non.
     const relance = !!rdv.empreinte_demande_at
+    // ⚠️ LA MÊME QUESTION QUE LA ROUTE, POSÉE PAR LA MÊME FONCTION. Le
+    // commerçant porte le délai d'annulation, sans lequel l'échéance du lien ne
+    // peut pas se calculer : un défaut de 3 h n'est pas celui de 24 h.
+    const raisonLien = raisonLienImpossible(rdv, commercant, new Date())
     return (
       <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 9px' }}>
         <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#92400E' }}>
@@ -357,13 +361,24 @@ function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null, stripePret 
             ICI plutôt que d'offrir un bouton dont le refus arrive après le
             clic. La route refuse de toute façon : cette ligne explique, elle ne
             protège pas. */}
-        {onDemanderEmpreinte && peutDemander(rdv, new Date()) && !stripePret && (
+        {onDemanderEmpreinte && !raisonLien && !stripePret && (
           <p style={{ margin: '5px 0 0', fontSize: '0.68rem', color: '#92400E', fontWeight: 700 }}>
             Ton compte Stripe n&rsquo;encaisse pas encore : termine son inscription dans Paiements
             pour pouvoir demander une carte.
           </p>
         )}
-        {onDemanderEmpreinte && stripePret && peutDemander(rdv, new Date()) && (
+        {/* 🔴 ET ON DIT POURQUOI LE LIEN NE PEUT PLUS SERVIR (16/09, Alex sur
+            une table de 19 h avec un délai de 3 h). L'écran ne regardait que
+            l'heure du SERVICE ; le lien, lui, meurt à la limite d'annulation.
+            Entre les deux, il offrait un bouton que le serveur refusait à tous
+            les coups. Un bouton qui disparaît sans raison laisse croire à une
+            panne : on remplace le bouton par sa raison. */}
+        {onDemanderEmpreinte && messageLienImpossible(raisonLien) && (
+          <p style={{ margin: '5px 0 0', fontSize: '0.68rem', color: '#92400E', fontWeight: 700 }}>
+            {messageLienImpossible(raisonLien)}
+          </p>
+        )}
+        {onDemanderEmpreinte && stripePret && !raisonLien && (
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             {rdv.client_telephone && (
               <button type="button" disabled={enCours}
@@ -922,7 +937,7 @@ function CarteCommande({ commande, numero, categorie = null, onChangerStatut, on
 // ─── Carte RDV (vitrine) ──────────────────────────────────────────────────────
 // Affichage d'un RDV pour le commercant : heure, prestation, duree, client (nom/tel/email),
 // notes du client, prix estime. Actions : Honore / No-show / Annuler.
-function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null, onFacturerEmpreinte = null, onDemanderEmpreinte = null, stripePret = true }) {
+function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null, onFacturerEmpreinte = null, onDemanderEmpreinte = null, stripePret = true, commercant = null }) {
   const statut = STATUTS_RDV[rdv.statut] || STATUTS_RDV['confirme']
   const { couleur } = statut
 
@@ -1098,7 +1113,7 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
             facturer, par exemple dans une vue de consultation. */}
         {estTableGarantie(rdv) && (
           <div style={{ marginTop: 10 }}>
-            <EmpreinteRdv rdv={rdv} onFacturer={onFacturerEmpreinte} onDemanderEmpreinte={onDemanderEmpreinte} stripePret={stripePret} />
+            <EmpreinteRdv rdv={rdv} onFacturer={onFacturerEmpreinte} onDemanderEmpreinte={onDemanderEmpreinte} stripePret={stripePret} commercant={commercant} />
           </div>
         )}
 
@@ -3934,7 +3949,7 @@ export default function Dashboard() {
               onDemanderAction={(r, action) => { setRdvSelectionne(null); setActionRdv({ rdv: r, action }) }}
               onFacturerEmpreinte={facturerEmpreinte}
               onDemanderEmpreinte={demanderEmpreinte}
-              stripePret={compteEncaisse(commercant)}
+              stripePret={compteEncaisse(commercant)} commercant={commercant}
               onDeplacer={(r) => { setRdvSelectionne(null); setRdvADeplacer(r) }}/>
             <button onClick={() => setRdvSelectionne(null)}
               style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>

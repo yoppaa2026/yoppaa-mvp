@@ -200,10 +200,13 @@ const MUTATIONS = [
     de: '    if (!compteEncaisse(commercant)) {',
     vers: '    if (false) {' },
 
+  // ⚠️ ANCRE SUIVIE : la condition visait `peutDemander`, elle vise maintenant
+  // la regle complete `raisonLienImpossible`. La mutation reste la meme : on
+  // retire la garde du compte Stripe.
   { nom: '⚠️ l agenda propose de nouveau un lien qui ne partirait pas',
     fichier: DASH,
-    de: '{onDemanderEmpreinte && stripePret && peutDemander(rdv, new Date()) && (',
-    vers: '{onDemanderEmpreinte && peutDemander(rdv, new Date()) && (' },
+    de: '        {onDemanderEmpreinte && stripePret && !raisonLien && (',
+    vers: '        {onDemanderEmpreinte && !raisonLien && (' },
 
   // ─── LA COLONNE ABSENTE QUI BLOQUAIT TOUTE TABLE (16/09, essai E2) ──────
   { nom: '🔴 la regle ne declare plus `capacite` parmi ses colonnes',
@@ -239,6 +242,27 @@ const MUTATIONS = [
     fichier: DASH,
     de: "      titre: canal === 'sms' ? 'SMS envoyé' : 'Email envoyé',",
     vers: "      titre: alert('parti') || (canal === 'sms' ? 'SMS envoyé' : 'Email envoyé')," },
+
+  // ─── L ECRAN OFFRAIT UN LIEN QUE LE SERVEUR REFUSAIT (16/09) ────────────
+  { nom: '🔴 l ecran ne regarde de nouveau que l heure du service',
+    fichier: REGLE,
+    de: "  return echeanceLien(rdv, commercant, maintenant) <= maintenant ? 'delai_passe' : null",
+    vers: '  return null' },
+
+  { nom: '🔴 le bouton ne suit plus la regle complete',
+    fichier: DASH,
+    de: '        {onDemanderEmpreinte && stripePret && !raisonLien && (',
+    vers: '        {onDemanderEmpreinte && stripePret && (' },
+
+  { nom: '🔴 le bouton disparait sans dire pourquoi',
+    fichier: DASH,
+    de: '        {onDemanderEmpreinte && messageLienImpossible(raisonLien) && (',
+    vers: '        {false && messageLienImpossible(raisonLien) && (' },
+
+  { nom: '🔴 le commercant n arrive plus jusqu a la carte (le delai retombe a 24 h)',
+    fichier: DASH,
+    de: '              stripePret={compteEncaisse(commercant)} commercant={commercant}',
+    vers: '              stripePret={compteEncaisse(commercant)}' },
 
   // ─── UNE ERREUR DE LECTURE N EST PAS UNE TABLE INTROUVABLE (16/09) ──────
   { nom: '🔴 la demande rejette de nouveau son erreur de lecture',

@@ -864,6 +864,21 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /\{montantEmpreinte\(commercant, prestationChoisie, couverts\) > 0 && \(/.test(TUNNEL))
   verifie('🔴 elle dit que rien n’est débité si le client vient',
     /demande d’enregistrer ta carte\. Rien n’est débité si tu viens\./.test(TUNNEL))
+  // 🔴 UNE TABLE GARANTIE N'A QU'UN SEUL MESSAGE (Alex, 16/09). « Rien à payer
+  // maintenant, tu règles sur place », juste au-dessus de « enregistre ta
+  // carte », laissait croire à un débit ; et le délai d'annulation était donné
+  // deux fois sur le même écran, à quatre lignes d'intervalle.
+  verifie('🔴 le récapitulatif se tait quand une carte est demandée',
+    /\) : montantEmpreinte\(commercant, prestationChoisie, couverts\) > 0 \? \(/.test(TUNNEL))
+  verifie('🔴 et le rappel sous le bouton aussi',
+    /\{montantEmpreinte\(commercant, prestationChoisie, couverts\) === 0 && \(/.test(TUNNEL))
+  // ⚠️ DONC LE SEUL MESSAGE RESTANT PORTE TOUT : le montant, le délai sans
+  // frais, et le fait qu'on peut aussi REPORTER. Le délai suit le réglage du
+  // commerçant, et zéro heure est une valeur qu'on écrit au lieu de se taire.
+  verifie('🔴 le message de l’empreinte porte le délai d’annulation sans frais',
+    /Tu peux annuler ou reporter sans frais jusqu’à \$\{delaiAnnulationHeures\(commercant\)\} h avant\./.test(TUNNEL))
+  verifie('⚠️ et il le dit encore quand ce délai vaut zéro',
+    /Tu peux annuler ou reporter sans frais jusqu’au dernier moment\./.test(TUNNEL))
   verifie('⚠️ le bouton dit le geste', /'Enregistrer ma carte et réserver'/.test(TUNNEL))
   verifie('🔴 aucune somme annoncée comme bloquée sur la fiche',
     !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(TUNNEL))

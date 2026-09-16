@@ -214,6 +214,22 @@ const MUTATIONS = [
     de: '        `id, nom, duree_minutes, commercant_id, ${COLONNES_COUVERTS}`',
     vers: "        'id, nom, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max'" },
 
+  // ─── UNE TABLE GARANTIE N A QU UN SEUL MESSAGE (16/09) ─────────────────
+  { nom: '🔴 le recapitulatif reparle de payer sur place sous une empreinte',
+    fichier: FICHE,
+    de: '                          ) : montantEmpreinte(commercant, prestationChoisie, couverts) > 0 ? (',
+    vers: '                          ) : false ? (' },
+
+  { nom: '🔴 le rappel sous le bouton redonne le delai une seconde fois',
+    fichier: FICHE,
+    de: '                  {montantEmpreinte(commercant, prestationChoisie, couverts) === 0 && (',
+    vers: '                  {true && (' },
+
+  { nom: '🔴 le seul message restant fige le delai au lieu de lire le reglage',
+    fichier: FICHE,
+    de: '                                  ? `Tu peux annuler ou reporter sans frais jusqu’à ${delaiAnnulationHeures(commercant)} h avant.`',
+    vers: '                                  ? `Tu peux annuler ou reporter sans frais jusqu’à 24 h avant.`' },
+
   { nom: '🔴 la route gratuite recopie sa liste de colonnes a la main',
     fichier: RESERVER,
     de: '        .select(`id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, duree_paliers, ${COLONNES_COUVERTS}`)',

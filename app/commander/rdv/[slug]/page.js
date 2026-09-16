@@ -4373,6 +4373,15 @@ export default function CommanderRdvSlug() {
                               <span style={{ fontSize: '0.85rem', color: T.deep, fontWeight: 800 }}>Tu paies maintenant</span>
                               <span style={{ fontSize: '1rem', fontWeight: 900, color: T.main }}>{euros(aPayerMaintenant)}</span>
                             </div>
+                          ) : montantEmpreinte(commercant, prestationChoisie, couverts) > 0 ? (
+                            // 🔴 UNE TABLE GARANTIE N'A QU'UN SEUL MESSAGE (Alex,
+                            // 16/09). « Rien à payer maintenant, tu règles sur
+                            // place » juste au-dessus de « enregistre ta carte »
+                            // sème le doute : le client lit qu'il paiera sur
+                            // place, puis qu'on lui demande sa carte, et croit
+                            // qu'il va être débité. Le bloc de l'empreinte dit
+                            // tout, y compris le délai d'annulation sans frais.
+                            null
                           ) : (
                             <div style={{ padding: '11px 14px', background: T.pale }}>
                               {/* 🔴 CETTE PHRASE NE DISAIT AUCUN MONTANT (Alex,
@@ -4430,7 +4439,16 @@ export default function CommanderRdvSlug() {
                               {`Pour une table de ${couverts} personnes, ${commercant.nom} demande d’enregistrer ta carte. Rien n’est débité si tu viens.`}
                             </p>
                             <p style={{ margin: '4px 0 0', fontSize: '0.74rem', color: T.muted, fontWeight: 600, lineHeight: 1.45 }}>
-                              {`Le restaurant ne peut facturer ${euros(montantEmpreinte(commercant, prestationChoisie, couverts))} que si personne ne se présente${delaiAnnulationHeures(commercant) > 0 ? `, ou si tu annules moins de ${delaiAnnulationHeures(commercant)} h avant` : ''}.`}
+                              {/* ⚠️ ET LE DÉLAI SANS FRAIS EST DIT ICI, TOUJOURS,
+                                  parce que c'est le seul message qui reste sur
+                                  une table garantie. Il suit le réglage du
+                                  commerçant, et zéro heure est une valeur : ce
+                                  restaurant-là accepte une annulation jusqu'au
+                                  dernier moment, et c'est ce qu'on écrit. */}
+                              {`Le restaurant ne peut facturer ${euros(montantEmpreinte(commercant, prestationChoisie, couverts))} que si personne ne se présente. `
+                                + (delaiAnnulationHeures(commercant) > 0
+                                  ? `Tu peux annuler ou reporter sans frais jusqu’à ${delaiAnnulationHeures(commercant)} h avant.`
+                                  : 'Tu peux annuler ou reporter sans frais jusqu’au dernier moment.')}
                             </p>
                           </div>
                         )}
@@ -4469,9 +4487,16 @@ export default function CommanderRdvSlug() {
                       Accepte le traitement de ta réservation pour continuer
                     </p>
                   )}
-                  <p style={{ fontSize: '0.7rem', color: T.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
-                    Tu pourras annuler ou reporter jusqu&apos;à {delaiAnnulationHeures(commercant)}h {mots.avant}.
-                  </p>
+                  {/* ⚠️ PAS SUR UNE TABLE GARANTIE : le bloc de l'empreinte
+                      porte déjà ce délai, et le répéter quatre lignes plus bas
+                      donnait deux fois le même chiffre sur le même écran. Le
+                      « reporter » n'est pas perdu pour autant, il est passé
+                      dans la phrase de l'empreinte. */}
+                  {montantEmpreinte(commercant, prestationChoisie, couverts) === 0 && (
+                    <p style={{ fontSize: '0.7rem', color: T.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
+                      Tu pourras annuler ou reporter jusqu&apos;à {delaiAnnulationHeures(commercant)}h {mots.avant}.
+                    </p>
+                  )}
                 </div>
               )}
 

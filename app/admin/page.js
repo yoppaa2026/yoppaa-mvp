@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { effacerImpersonation, fermerImpersonationServeur, messageImpersonation } from '@/lib/impersonation'
-import { attenteDepuis } from '@/lib/statut-commercant'
+import { attenteDepuis, attendUneValidation, COLONNES_PUBLICATION_DIFFEREE } from '@/lib/statut-commercant'
 import SectionTousCommercants from './SectionTousCommercants'
 import SectionInscriptionsEnCours from './SectionInscriptionsEnCours'
 import SectionKYBAValider from './SectionKYBAValider'
@@ -74,12 +74,18 @@ export default function AdminPage() {
       .from('commercants')
       .select(`
         id, nom, slug, type, categorie, plan, description, telephone, email, adresse,
-        logo_url, latitude, longitude, created_at, statut_publication, motif_rejet,
+        logo_url, latitude, longitude, created_at, motif_rejet, ${COLONNES_PUBLICATION_DIFFEREE},
         onboarding_commercants ( id, statut, validation_auto_score, success_pack_choisi, completed_at )
       `)
       .eq('statut_publication', 'en_attente')
       .order('created_at', { ascending: false })
-    setAValider(cs || [])
+    // 🔴 UNE FICHE DÉJÀ VALIDÉE N'ATTEND PLUS DE VALIDATION (16/09, vu par
+    // Alex). Ouvrir l'espace d'un commerçant sans publier sa page, c'est
+    // valider puis remettre `statut_publication` sur `en_attente` : sa fiche
+    // porte alors `statut = valide`, et elle retombait ici comme un dossier à
+    // traiter. `statut_publication` seule ne distingue pas une décision prise
+    // d'une décision attendue ; les deux colonnes ensemble, oui.
+    setAValider((cs || []).filter(attendUneValidation))
 
     // ⚠️ LES PHOTOS PASSENT PAR L'API, PAS PAR SUPABASE DIRECTEMENT. Depuis le
     // 21/08, `commercant_photos` ne se lit qu'à deux conditions : commerce

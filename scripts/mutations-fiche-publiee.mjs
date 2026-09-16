@@ -103,8 +103,8 @@ const MUTATIONS = [
 
   { nom: '🔴 un etat inconnu se deguise a nouveau en « Suspendu »',
     fichier: 'app/admin/SectionTousCommercants.js',
-    de: '            const badgeS = BADGE_STATUT[c.statut_publication] || BADGE_INCONNU',
-    vers: '            const badgeS = BADGE_STATUT[c.statut_publication] || BADGE_STATUT.suspendu' },
+    de: '              : (BADGE_STATUT[c.statut_publication] || BADGE_INCONNU)',
+    vers: '              : (BADGE_STATUT[c.statut_publication] || BADGE_STATUT.suspendu)' },
 
   { nom: '🔴 « brouillon » disparait des badges : l inscription abandonnee redevient invisible',
     fichier: 'app/admin/SectionTousCommercants.js',
@@ -181,6 +181,34 @@ const MUTATIONS = [
     fichier: 'app/admin/SectionInscriptionsEnCours.js',
     de: '        id, created_at, statut_publication, ${COLONNES_INSCRIPTION}',
     vers: '        id, created_at, statut_publication, nom, type, categorie, adresse, telephone, email' },
+
+  // ─── VALIDE, MAIS PAS ENCORE PUBLIE (16/09, vu par Alex en pratiquant) ──
+  { nom: '🔴 une fiche deja validee retombe dans « A valider »',
+    de: "  return STATUTS_ACCES_AUTORISE.includes(commercant?.statut)",
+    vers: '  return false && [].includes(commercant?.statut)' },
+
+  { nom: '🔴 la publication differee redevient une attente de decision',
+    de: "  return commercant?.[COLONNE_PUBLICATION] === 'en_attente' && !publicationDifferee(commercant)",
+    vers: "  return commercant?.[COLONNE_PUBLICATION] === 'en_attente'" },
+
+  { nom: '🔴 le filet du matin rappelle une decision DEJA PRISE, tous les jours',
+    de: '    .filter((f) => attendUneValidation(f))',
+    vers: '    .filter(() => true)' },
+
+  { nom: '🔴 l ecran « A valider » remet le Bistrologue dans la file',
+    fichier: 'app/admin/page.js',
+    de: '    setAValider((cs || []).filter(attendUneValidation))',
+    vers: '    setAValider(cs || [])' },
+
+  { nom: '🔴 la colonne `statut` quitte le select : tout redevient « a valider »',
+    fichier: 'app/admin/page.js',
+    de: '        logo_url, latitude, longitude, created_at, motif_rejet, ${COLONNES_PUBLICATION_DIFFEREE},',
+    vers: '        logo_url, latitude, longitude, created_at, motif_rejet, statut_publication,' },
+
+  { nom: '🔴 la liste dit « En attente » sur une fiche qu Alex vient de valider',
+    fichier: 'app/admin/SectionTousCommercants.js',
+    de: '            const badgeS = publicationDifferee(c)',
+    vers: '            const badgeS = !publicationDifferee(c)' },
 
   // ─── LE FILET DES DOSSIERS OUBLIES (16/09) ──────────────────────────────
   { nom: '🔴 le filet rappelle TOUS les dossiers, tous les matins : l alarme sonne en continu',

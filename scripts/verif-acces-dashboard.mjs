@@ -24,6 +24,7 @@ import {
   fichePubliee, COLONNE_PUBLICATION, PUBLICATION_OUVERTE,
   attenteDepuis, joursOuvresEntre,
   remplissageInscription, CHAMPS_INSCRIPTION, dossiersEnRetard,
+  publicationDifferee, attendUneValidation, COLONNES_PUBLICATION_DIFFEREE,
 } from '../lib/statut-commercant.js'
 // ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE, avec un faux client Supabase : c'est la
 // seule façon de savoir ce que la file RÉPOND, et non ce qu'elle a l'air de
@@ -811,7 +812,7 @@ function sansCommentaires(src) {
       { nom: 'Oublié', created_at: VEN },           // vendredi → mercredi
       { nom: 'Très oublié', created_at: '2026-09-07T09:00:00' },
     ]
-    const oublies = dossiersEnRetard(FICHES, MER)
+    const oublies = dossiersEnRetard(FICHES.map(f => ({ ...f, statut_publication: 'en_attente' })), MER)
     egalNombre('🔴 EXÉCUTÉE : seuls les dossiers EN RETARD sont rappelés', oublies.length, 2)
     verifier('⚠️ celui d’hier ne déclenche rien',
       !oublies.some(d => d.fiche.nom === 'À l’heure'))
@@ -821,7 +822,56 @@ function sansCommentaires(src) {
     egalNombre('une lecture nulle non plus', dossiersEnRetard(null, MER).length, 0)
     // ⚠️ UNE DATE ABSENTE N'INVENTE PAS UN RETARD.
     egalNombre('un dossier sans date ne sonne pas',
-      dossiersEnRetard([{ nom: 'Sans date', created_at: null }], MER).length, 0)
+      dossiersEnRetard([{ nom: 'Sans date', statut_publication: 'en_attente', created_at: null }], MER).length, 0)
+
+    // ─── VALIDÉ, MAIS PAS ENCORE PUBLIÉ ──────────────────────────────────
+    // 🔴 LE DÉFAUT VU PAR ALEX EN PRATIQUANT LA MANŒUVRE (16/09). Valider puis
+    // remettre `statut_publication` sur `en_attente` ouvre l'espace sans
+    // montrer la page. Sa fiche porte alors `statut = valide`, et deux écrans
+    // qui ne lisaient que la seconde colonne la reprenaient pour un dossier à
+    // traiter : « À valider » la remettait dans la file, et le filet du matin
+    // s'apprêtait à la rappeler tous les jours.
+    const DIFFERE = { nom: 'Le Bistrologue', statut: 'valide', statut_publication: 'en_attente', created_at: '2026-09-07T09:00:00' }
+    const SOUMIS = { nom: 'Vrai dossier', statut: 'en_attente_validation', statut_publication: 'en_attente', created_at: '2026-09-07T09:00:00' }
+    verifier('🔴 validé puis dépublié = publication DIFFÉRÉE', publicationDifferee(DIFFERE) === true)
+    verifier('🔴 et ce n’est PAS un dossier qui attend une décision',
+      attendUneValidation(DIFFERE) === false)
+    verifier('⚠️ un dossier jamais validé, lui, en attend une',
+      attendUneValidation(SOUMIS) === true)
+    verifier('⚠️ un compte `actif` posé à la main compte aussi comme validé',
+      publicationDifferee({ ...DIFFERE, statut: 'actif' }) === true)
+    verifier('une fiche publiée n’est pas une publication différée',
+      publicationDifferee({ statut: 'valide', statut_publication: 'publie' }) === false)
+    // 🔴 LE PIÈGE DE LA COLONNE ABSENTE : sans `statut`, tout redevient « à
+    // valider » et les deux écrans se retrompent, en silence.
+    verifier('🔴 sans la colonne `statut`, la règle ne prétend rien',
+      publicationDifferee({ statut_publication: 'en_attente' }) === false)
+    verifier('la règle déclare les deux colonnes qu’elle lit',
+      COLONNES_PUBLICATION_DIFFEREE === 'statut, statut_publication')
+    // 🔴 ET LE FILET NE LE RAPPELLE PLUS : c'est une décision prise, pas un oubli.
+    egalNombre('🔴 EXÉCUTÉE : une publication différée ne réveille personne',
+      dossiersEnRetard([DIFFERE], MER).length, 0)
+    egalNombre('⚠️ mais le vrai dossier oublié, si',
+      dossiersEnRetard([SOUMIS], MER).length, 1)
+
+    {
+      const page = codeDe('app/admin/page.js')
+      const liste = codeDe('app/admin/SectionTousCommercants.js')
+      verifier('🔴 « À valider » écarte les fiches déjà validées',
+        /setAValider\(\(cs \|\| \[\]\)\.filter\(attendUneValidation\)\)/.test(page))
+      verifier('🔴 et charge les deux colonnes de la règle',
+        /\$\{COLONNES_PUBLICATION_DIFFEREE\}/.test(page))
+      // ⚠️ ON VISE L'AFFECTATION, PAS L'APPEL. Chercher `publicationDifferee(c)`
+      // tout court, c'est le trouver même précédé d'un `false &&` qui l'éteint.
+      // Cinquième fois du jour qu'une garde cherche un mot au lieu de viser
+      // l'endroit exact où la chose se décide.
+      verifier('⚠️ la liste nomme cet état au lieu de dire « En attente »',
+        /const badgeS = publicationDifferee\(c\)/.test(liste) && /label: 'Validé · à publier'/.test(liste))
+      verifier('⚠️ et elle charge `statut` par la règle',
+        /\$\{COLONNES_PUBLICATION_DIFFEREE\}/.test(liste))
+      verifier('⚠️ le filet du matin aussi',
+        /\$\{COLONNES_PUBLICATION_DIFFEREE\}/.test(codeDe('app/api/cron/recap-jour-8h/route.js')))
+    }
 
     {
       const cron = codeDe('app/api/cron/recap-jour-8h/route.js')

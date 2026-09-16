@@ -18,7 +18,7 @@ import { gardeCron, refusCron } from '@/lib/cron-auth'
 import { envoyerAuAdmin, emailDossiersEnAttente } from '@/lib/resend'
 // ⚠️ LE FILET : il relit les dossiers en attente côté SERVEUR, là où l'alerte
 // de soumission dépend d'un navigateur resté ouvert.
-import { dossiersEnRetard } from '@/lib/statut-commercant'
+import { dossiersEnRetard, COLONNES_PUBLICATION_DIFFEREE } from '@/lib/statut-commercant'
 import { surveillerCompteur } from '@/lib/sonde-compteur'
 import { bonsLimiter } from '@/lib/ratelimit'
 
@@ -237,7 +237,10 @@ export async function GET(request) {
     try {
       const { data: attente, error: errAttente } = await supabase
         .from('commercants')
-        .select('id, nom, type, created_at, statut_publication')
+        // ⚠️ `statut` VIENT DE LA RÈGLE : sans lui, une fiche validée dont la
+        // publication est volontairement différée serait rappelée chaque matin
+        // comme un dossier oublié.
+        .select(`id, nom, type, created_at, ${COLONNES_PUBLICATION_DIFFEREE}`)
         .eq('statut_publication', 'en_attente')
       // 🔴 UNE LECTURE EN ÉCHEC N'EST PAS « AUCUN DOSSIER N'ATTEND ». Les deux
       // rendent zéro rappel, et la première doit se voir.

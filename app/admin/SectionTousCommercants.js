@@ -8,6 +8,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { poserImpersonation } from '@/lib/impersonation'
+import { publicationDifferee, COLONNES_PUBLICATION_DIFFEREE } from '@/lib/statut-commercant'
 import ModalEditCommercant from './ModalEditCommercant'
 
 const T = {
@@ -37,6 +38,11 @@ const BADGE_STATUT = {
 // quel qu'il soit, c'est affirmer quelque chose de faux avec l'aplomb d'une
 // certitude. Mieux vaut un écran qui avoue.
 const BADGE_INCONNU = { bg: '#FEF2F2', color: '#B91C1C', label: 'Statut inconnu' }
+// ⚠️ VALIDÉ, PAS ENCORE PUBLIÉ. L'espace du commerçant est ouvert, sa page ne
+// l'est pas : c'est la manœuvre pour le laisser préparer sa fiche avant une
+// date d'ouverture. Sans ce badge, elle se lisait « En attente », comme un
+// dossier à traiter.
+const BADGE_DIFFERE = { bg: '#F5F3FF', color: '#6B35C4', label: 'Validé · à publier' }
 
 const BADGE_PLAN = {
   on:     { bg: '#F3F4F6', color: '#6B7280' },
@@ -58,7 +64,10 @@ export default function SectionTousCommercants({ toast }) {
     setLoading(true)
     const { data, error } = await supabase
       .from('commercants')
-      .select('id, nom, slug, type, categorie, plan, statut_publication, email, telephone, adresse, description, rdv_actif, rdv_delai_annulation_heures, auth_user_id, created_at, logo_url')
+      // ⚠️ `statut` ARRIVE PAR LA RÈGLE : sans lui, une fiche validée dont la
+      // publication est différée s'afficherait « En attente », comme si elle
+      // attendait encore une décision d'Alex.
+      .select(`id, nom, slug, type, categorie, plan, ${COLONNES_PUBLICATION_DIFFEREE}, email, telephone, adresse, description, rdv_actif, rdv_delai_annulation_heures, auth_user_id, created_at, logo_url`)
       .order('nom')
     if (error) {
       console.error('[SectionTousCommercants]', error)
@@ -183,7 +192,12 @@ export default function SectionTousCommercants({ toast }) {
       {!loading && filtres.length > 0 && (
         <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.hairline}`, overflow: 'hidden' }}>
           {filtres.map((c, i) => {
-            const badgeS = BADGE_STATUT[c.statut_publication] || BADGE_INCONNU
+            // ⚠️ VALIDÉ ET PAS ENCORE MONTRÉ : ce n'est ni une attente ni un
+            // oubli, c'est une décision. Le badge le dit, sinon Alex relit
+            // « En attente » sur une fiche qu'il vient de valider lui-même.
+            const badgeS = publicationDifferee(c)
+              ? BADGE_DIFFERE
+              : (BADGE_STATUT[c.statut_publication] || BADGE_INCONNU)
             const badgeP = BADGE_PLAN[c.plan] || BADGE_PLAN.on
             return (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i === 0 ? 'none' : `1px solid ${T.hairline}`, flexWrap: 'wrap' }}>

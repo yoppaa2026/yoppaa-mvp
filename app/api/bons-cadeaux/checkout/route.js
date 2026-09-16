@@ -18,6 +18,7 @@ import { libelleBon } from '@/lib/bons-cadeaux'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { canDo, planEffectif } from '@/lib/plans'
+import { fichePubliee } from '@/lib/statut-commercant'
 import { genererCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 
@@ -72,7 +73,7 @@ export async function POST(request) {
       .select('id, nom, slug, plan, essai_plan, created_at, categorie, statut_publication, stripe_account_id, stripe_account_charges_enabled, bons_cadeaux_actif, bons_cadeaux_validite_mois')
       .eq('id', commercant_id)
       .single()
-    if (!commercant || commercant.statut_publication !== 'publie') {
+    if (!fichePubliee(commercant)) {
       return NextResponse.json({ ok: false, error: 'Commerçant introuvable.' }, { status: 404 })
     }
     // 🔴 LE FORFAIT EFFECTIF (15/09), frère exact de /api/bons-cadeaux/config :

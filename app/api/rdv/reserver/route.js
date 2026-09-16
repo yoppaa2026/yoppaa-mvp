@@ -38,6 +38,7 @@ import { createClient } from '@supabase/supabase-js'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { verdictForfait } from '@/lib/garde-forfait'
+import { fichePubliee } from '@/lib/statut-commercant'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
 import { chargerBonsValides } from '@/lib/bons-cadeaux-server'
@@ -115,7 +116,7 @@ export async function POST(request) {
     // demandée », c'est-à-dire qu'elle laisserait passer la table.
     const [{ data: commercant }, { data: prestation }] = await Promise.all([
       db.from('commercants')
-        .select('id, nom, slug, categorie, rdv_actif, rdv_acompte_en_ligne_actif, rdv_acompte_global, stripe_account_id, stripe_account_charges_enabled, horaires_detail, plan, essai_plan, created_at, rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne')
+        .select('id, nom, slug, categorie, statut_publication, rdv_actif, rdv_acompte_en_ligne_actif, rdv_acompte_global, stripe_account_id, stripe_account_charges_enabled, horaires_detail, plan, essai_plan, created_at, rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne')
         .eq('id', commercant_id).maybeSingle(),
       db.from('rdv_prestations')
         // ⚠️ `par_couverts` ET `duree_paliers` : sans elles, la durée retombe sur
@@ -131,6 +132,26 @@ export async function POST(request) {
     ])
 
     if (!commercant) return NextResponse.json({ ok: false, error: 'Commerçant introuvable.' }, { status: 404 })
+
+    // 🔴 ET LA FICHE NON PUBLIÉE, QUI N'ÉTAIT REGARDÉE NULLE PART ICI (16/09).
+    // `rdv_actif` était donc le seul verrou du serveur : chez un commerce en
+    // préparation, invisible pour tout le monde, une requête bien formée posait
+    // un rendez-vous, bloquait le créneau et pouvait exiger une empreinte
+    // bancaire. Les deux routes sœurs du cœur transactionnel, `create-commande`
+    // et `bons-cadeaux/checkout`, faisaient ce contrôle depuis toujours.
+    //
+    // ⚠️ AVANT LE FORFAIT, et ce n'est pas indifférent : une fiche en
+    // préparation n'a rien à dire de son abonnement.
+    //
+    // ⚠️ LE CLIENT REÇOIT LE MÊME MESSAGE QUE POUR L'AGENDA ÉTEINT : nos états
+    // internes ne le regardent pas, et ce refus-ci lui apprendrait l'existence
+    // d'un commerce qui a justement choisi de ne pas encore exister.
+    if (!fichePubliee(commercant)) {
+      return NextResponse.json(
+        { ok: false, error: 'Ce commerçant ne prend pas encore de rendez-vous en ligne.', code: 'fiche_non_publiee' },
+        { status: 400 }
+      )
+    }
 
     // 🔴 LE FORFAIT, QUI N'ÉTAIT VÉRIFIÉ NULLE PART SUR CE CHEMIN. L'insertion
     // depuis le navigateur ne demandait rien du tout : un rendez-vous se posait

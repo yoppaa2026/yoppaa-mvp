@@ -27,6 +27,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo, planEffectif } from '@/lib/plans'
 import { fusionnerIds } from '@/lib/morning-eligibilite'
+import { fichePubliee } from '@/lib/statut-commercant'
 import { jourBruxelles } from '@/lib/timezone'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
 
@@ -115,7 +116,7 @@ async function handle(req) {
 
   for (const d of dealsPending || []) {
     const c = d.commercant
-    if (!c || c.statut_publication !== 'publie') continue
+    if (!fichePubliee(c)) continue
     // Deals réservés à Communiquer + Vendre (gating canDo).
     // 🔴 FORFAIT EFFECTIF (15/09) : l'essai compte, `essai_plan` et
     // `created_at` sont dans les deux selects ci-dessus.
@@ -130,7 +131,7 @@ async function handle(req) {
 
   for (const a of actusGmy || []) {
     const c = a.commercant
-    if (!c || c.statut_publication !== 'publie') continue
+    if (!fichePubliee(c)) continue
     // Actus GMY autorisées à tous les plans commerçant (Exister limité à
     // 1/semaine mais c'est déjà validé côté saveActu, pas ici)
     if (!canDo(planEffectif(c), 'actu_gmy')) continue

@@ -38,6 +38,10 @@ const MESSAGES = {
   demande_invalide: 'Cette demande n’est pas valable.',
   prestation_introuvable: 'Cette prestation n’existe plus.',
   prestation_inactive: 'Cette prestation n’est plus proposée.',
+  // ⚠️ MÊME PHRASE QUE POUR UNE FILE ÉTEINTE. Que la page soit en préparation
+  // ne regarde pas le Yopper, et le lui dire reviendrait à lui annoncer un
+  // commerce qui a choisi de ne pas encore se montrer.
+  commerce_ferme: 'Ce commerçant ne propose pas de liste d’attente sur cette prestation.',
   identite_requise: 'Connecte-toi pour rejoindre la liste d’attente.',
   introuvable: 'Cette attente n’existe plus.',
 }

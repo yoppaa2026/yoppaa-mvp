@@ -55,6 +55,7 @@
     "verif:harnais": "node scripts/verif-harnais-mutation.mjs",
     "verif:ancres": "node scripts/verif-ancres-mutation.mjs",
     "mutations:admin": "node scripts/mutations-admin.mjs",
+    "mutations:fiche-publiee": "node scripts/mutations-fiche-publiee.mjs",
     "mutations:bons": "node scripts/mutations-bons-cadeaux.mjs",
     "mutations:comptable": "node scripts/mutations-comptable.mjs",
     "mutations:session": "node scripts/mutations-session.mjs",

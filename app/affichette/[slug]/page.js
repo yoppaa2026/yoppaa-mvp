@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import { libelleRecompense } from '@/lib/fidelite'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
+import { fichePubliee } from '@/lib/statut-commercant'
 import { lienFiche, LIEN_ACCUEIL } from '@/lib/lien-fiche'
 
 export const dynamic = 'force-dynamic'
@@ -35,7 +36,7 @@ async function getCommerce(slug) {
     .select('nom, slug, categorie, logo_url, statut_publication, fidelite_actif, fidelite_mecanique, fidelite_seuil_passages, fidelite_taux_cagnotte, fidelite_seuil_cagnotte, fidelite_recompense_type, fidelite_recompense_valeur, fidelite_recompense_libelle')
     .eq('slug', slug)
     .maybeSingle()
-  if (!data || data.statut_publication !== 'publie') return null
+  if (!fichePubliee(data)) return null
   return data
 }
 

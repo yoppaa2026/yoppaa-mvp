@@ -27,6 +27,7 @@ import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo, planEffectif } from '@/lib/plans'
+import { fichePubliee } from '@/lib/statut-commercant'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -73,7 +74,7 @@ export async function POST(req) {
   }
 
   const c = actu.commercant
-  if (!c || c.statut_publication !== 'publie') {
+  if (!fichePubliee(c)) {
     return NextResponse.json({ status: 'skipped', reason: 'commercant_non_publie' })
   }
 

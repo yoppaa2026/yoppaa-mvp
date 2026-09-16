@@ -15,11 +15,18 @@
 //      est la pire des réponses ;
 //   3. l'écran est bien MONTÉ, et l'admin n'est jamais bloqué.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
+import { sansProse } from './lire-code.mjs'
 import {
   accesDashboard, STATUTS_ACCES_AUTORISE,
   RAISON_OK, RAISON_AUCUN_COMPTE, RAISON_ONBOARDING, RAISON_REJETE, RAISON_ATTENTE,
+  // ⚠️ IMPORTÉES POUR ÊTRE EXÉCUTÉES : l'autre porte, celle de la fiche.
+  fichePubliee, COLONNE_PUBLICATION, PUBLICATION_OUVERTE,
 } from '../lib/statut-commercant.js'
+// ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE, avec un faux client Supabase : c'est la
+// seule façon de savoir ce que la file RÉPOND, et non ce qu'elle a l'air de
+// répondre. Le résolveur d'alias de `verif:acces` rend ce module atteignable.
+import { inscrire } from '../lib/attente-rdv-server.js'
 // ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE : c'est elle qui décide si un `+alias` reste
 // distinct de l'adresse administrateur, donc si douze comptes de test restent
 // douze commerçants ordinaires.
@@ -514,6 +521,206 @@ function sansCommentaires(src) {
   verifier('🔴 la fermeture n’est plus un espoir', /if \(errFin \|\| !faite\?\.length\)/.test(routeFin) && !/no_auth/.test(routeFin))
   verifier('🔴 la déconnexion ferme toutes les lignes de l’admin', /if \(!toutes\) requete = requete\.eq\('id', impersonation_id\)/.test(routeFin))
   verifier('⚠️ une nouvelle connexion range les lignes oubliées', /\.filter\(l => ligneExpiree\(l, maintenant\)\)/.test(routeDebut))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. L'AUTRE PORTE : LA FICHE ACCUEILLE-T-ELLE DES CLIENTS ?
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 `/api/rdv/reserver` NE LA REGARDAIT PAS (16/09). Chez un commerce en
+// préparation, invisible pour tout le monde, `rdv_actif` était le seul verrou du
+// serveur : une requête bien formée posait un rendez-vous, bloquait un créneau
+// et pouvait exiger une empreinte bancaire. Deux routes sœurs du même cœur
+// transactionnel faisaient ce contrôle depuis toujours, chacune avec sa propre
+// comparaison recopiée à la main : la règle n'existait nulle part, seulement
+// ses copies.
+{
+  // ─── LA RÈGLE, EXÉCUTÉE ────────────────────────────────────────────────
+  verifier('une fiche publiée accueille', fichePubliee({ statut_publication: 'publie' }) === true)
+  for (const etat of ['brouillon', 'en_attente', 'rejete', 'suspendu', 'Publie', 'publié', '']) {
+    verifier(`⚠️ « ${etat || '(vide)'} » n’accueille personne`,
+      fichePubliee({ statut_publication: etat }) === false)
+  }
+  // ⚠️ LISTE BLANCHE, ET C'EST TOUT L'ENJEU : refuser quatre états nommément
+  // laisserait passer le cinquième le jour où quelqu'un l'ajoute en base.
+  verifier('⚠️ un état inventé demain reste dehors tout seul',
+    fichePubliee({ statut_publication: 'archive_2027' }) === false)
+  // 🔴 LE PIÈGE DE LA COLONNE ABSENTE, ET IL SE RETOURNE ICI CONTRE LES
+  // COMMERÇANTS PUBLIÉS : oubliée dans un select, elle vaut `undefined` et la
+  // route refuse alors TOUT LE MONDE, sans un mot. D'où la garde générale plus
+  // bas, qui vérifie que chaque appelant la charge.
+  verifier('🔴 une colonne absente ferme la porte, elle ne l’ouvre pas', fichePubliee({}) === false)
+  verifier('une fiche introuvable ferme aussi',
+    fichePubliee(null) === false && fichePubliee(undefined) === false)
+  verifier('la règle nomme elle-même la colonne qu’elle lit',
+    COLONNE_PUBLICATION === 'statut_publication' && PUBLICATION_OUVERTE === 'publie')
+
+  // ─── QUI APPLIQUE LA RÈGLE CHARGE SA COLONNE ───────────────────────────
+  // ⚠️ AUCUNE LISTE RECOPIÉE À LA MAIN : on balaie, sinon il manquera un
+  // fichier et il manquera en silence.
+  const sources = []
+  const parcourir = (dossier) => {
+    for (const e of readdirSync(new URL(`../${dossier}`, import.meta.url), { withFileTypes: true })) {
+      if (e.isDirectory()) parcourir(`${dossier}/${e.name}`)
+      else if (e.name.endsWith('.js')) sources.push(`${dossier}/${e.name}`)
+    }
+  }
+  parcourir('app')
+  parcourir('lib')
+  const codeDe = (f) => sansProse(lire(f))
+  // La règle se définit ici, elle ne s'y applique pas.
+  const appliquent = sources.filter(f => /fichePubliee\s*\(/.test(codeDe(f)) && f !== 'lib/statut-commercant.js')
+  verifier('la règle est appliquée par au moins neuf fichiers',
+    appliquent.length >= 9, `${appliquent.length} trouvés`)
+  // 🔴 ON COMPTE, ON NE CHERCHE PAS. Chercher le mot une fois, c'est rester
+  // vert quand un fichier lit les commerçants à DEUX endroits et qu'un seul
+  // porte la colonne : le Good Morning en a deux, et la mutation qui vidait le
+  // premier n'a rien déclenché. Chaque lecture de commerçant est donc examinée
+  // séparément.
+  const lecturesCommercants = (src) => {
+    const out = []
+    // Jointure : `commercant:commercants (id, nom, …)`
+    for (const m of src.matchAll(/commercants\s*\(([^)]*)\)/g)) out.push(m[1])
+    // Lecture directe : `.from('commercants')` … `.select('…')`
+    for (const m of src.matchAll(/from\('commercants'\)[\s\S]{0,400}?\.select\(([^)]*)\)/g)) out.push(m[1])
+    return out
+  }
+  // ⚠️ SEULS LES FICHIERS QUI INTERROGENT LA BASE. Un module pur reçoit la
+  // fiche toute faite et n'a aucune colonne à demander : le lui exiger serait
+  // une garde impossible à satisfaire, donc une garde qu'on finit par éteindre.
+  // Ses appelants, eux, sont vérifiés juste en dessous.
+  //
+  // 🔴 ET D'UN CRAN PLUS LOIN : qui délègue la règle à un module pur doit lui
+  // servir une fiche qui porte la colonne. Sans ça `commercantEligibleDeal`
+  // écarterait en silence TOUS les commerçants du Good Morning.
+  const delegues = sources.filter(f => /commercantEligible(Deal|Actu)\s*\(/.test(codeDe(f)))
+    .filter(f => f !== 'lib/morning-eligibilite.js')
+  verifier('au moins un appelant délègue l’éligibilité', delegues.length >= 1, `${delegues.length} trouvés`)
+  // ⚠️ ET ON NE L'EXIGE PAS DE TOUTE LECTURE : ce module lit deux fois les
+  // commerçants rien que pour écrire « une place s'est libérée chez X ». Ces
+  // lectures-là ne jugent rien. La règle juste est un COMPTE : autant de
+  // lectures portant la colonne que d'endroits où ce fichier juge.
+  const porteLaColonne = new RegExp(`\\b${COLONNE_PUBLICATION}\\b`)
+  for (const f of [...new Set([...appliquent, ...delegues])]) {
+    // Les écrans lisent `commercants_public` avec `select('*')` : la colonne
+    // arrive sans être nommée.
+    if (f.startsWith('app/commander/')) continue
+    const src = codeDe(f)
+    const juges = (src.match(/fichePubliee\s*\(|commercantEligible(Deal|Actu)\s*\(/g) || []).length
+    const servies = lecturesCommercants(src).filter(cols => porteLaColonne.test(cols)).length
+    if (!lecturesCommercants(src).length) continue
+    verifier(`🔴 ${f} sert la colonne à CHAQUE endroit où il juge`,
+      servies >= juges, `${servies} lecture(s) avec la colonne pour ${juges} jugement(s)`)
+  }
+  // 🔴 ET LA GARDE QUI VISE LA RÈGLE, PAS UNE LIGNE : personne ne recopie la
+  // comparaison à la main. C'est ainsi que les deux routes sœurs se sont
+  // trouvées gardées pendant que la troisième ne l'était pas.
+  const recopient = sources.filter(f => /statut_publication\s*[!=]==\s*'publie'/.test(codeDe(f)))
+  verifier('🔴 plus aucune comparaison recopiée à la main',
+    recopient.length === 0, recopient.join(', '))
+
+  // ─── LES TROIS ROUTES DU CŒUR TRANSACTIONNEL ───────────────────────────
+  // ⚠️ CES ROUTES NE S'EXÉCUTENT PAS AU BANC : elles appellent Supabase. On
+  // vérifie donc qu'elles appellent la règle ET à quelle place, l'ordre étant
+  // ici la moitié du sujet.
+  for (const f of [
+    'app/api/rdv/reserver/route.js',
+    'app/api/stripe/checkout/create-commande/route.js',
+    'app/api/bons-cadeaux/checkout/route.js',
+  ]) {
+    verifier(`🔴 ${f} refuse une fiche non publiée`, /if \(!fichePubliee\(/.test(codeDe(f)))
+  }
+  {
+    const src = codeDe('app/api/rdv/reserver/route.js')
+    const iRegle = src.indexOf('!fichePubliee(commercant)')
+    const iForfait = src.indexOf('verdictForfait(')
+    const iCreation = src.indexOf('creerReservationRdv(')
+    // ⚠️ AVANT LE FORFAIT : une fiche en préparation n'a rien à dire de son
+    // abonnement. Et avant la création, évidemment.
+    verifier('🔴 la règle passe avant le forfait', iRegle > 0 && iForfait > iRegle)
+    verifier('🔴 et bien avant que le rendez-vous naisse', iCreation > iRegle)
+    // ⚠️ LE MÊME REFUS QUE POUR UN AGENDA ÉTEINT : nos états internes ne
+    // regardent pas le client.
+    verifier('⚠️ et le client n’apprend pas l’existence du commerce',
+      /error: 'Ce commerçant ne prend pas encore de rendez-vous en ligne.', code: 'fiche_non_publiee'/.test(src))
+  }
+  {
+    // ─── ET CELLE-CI S'EXÉCUTE POUR DE BON ───────────────────────────────
+    // 🔴 LA LEÇON DU 16/09 : une garde qui lit du code ne vérifie que ma
+    // lecture du code. `inscrire` reçoit son client en paramètre, on lui en
+    // donne un faux et on regarde ce qu'elle RÉPOND.
+    //
+    // ⚠️ LE CONSTRUCTEUR DE REQUÊTE SUPABASE EST UN THENABLE : `then` oui,
+    // `catch` non. Le faux client doit l'être aussi, sinon il ne mesure pas le
+    // vrai chemin.
+    const fauxDb = (reponses, vues = []) => ({
+      from(table) {
+        vues.push(table)
+        const rep = reponses[table] || { data: null, error: null }
+        const base = {
+          single: async () => rep,
+          maybeSingle: async () => rep,
+          then: (res, rej) => Promise.resolve(rep).then(res, rej),
+        }
+        // ⚠️ TOUT AUTRE VERBE REND LA REQUÊTE : select, eq, neq, in, order…
+        // Un faux client qui ne connaît qu'une liste de verbes fait échouer le
+        // banc sur SA propre lacune, et on croit alors avoir trouvé un défaut.
+        // ⚠️ Les symboles restent absents, sinon `await` s'y perd.
+        const q = new Proxy(base, {
+          get: (cible, prop) =>
+            (prop in cible ? cible[prop] : (typeof prop === 'symbol' ? undefined : () => q)),
+        })
+        return q
+      },
+    })
+    const PRESTATION = {
+      id: 'p1', nom: 'Table de 4', commercant_id: 'c1',
+      capacite: 4, attente_max: 10, actif: true, deleted_at: null, par_couverts: true,
+    }
+    const demande = { prestationId: 'p1', clientId: 'y1', dateRdv: '2026-10-02', heureDebut: '19:00', duree: null }
+    const inscrireAvec = (commerce, errCommerce = null, vues = []) => inscrire(fauxDb({
+      rdv_prestations: { data: PRESTATION, error: null },
+      commercants: { data: commerce, error: errCommerce },
+      rdv_attente: { data: [], error: null },
+    }, vues), demande)
+
+    const vuesFerme = []
+    const ferme = await inscrireAvec({ id: 'c1', statut_publication: 'en_attente' }, null, vuesFerme)
+    verifier('🔴 EXÉCUTÉE : une fiche en préparation ne prend personne dans sa file',
+      ferme?.ok === false && ferme?.error === 'commerce_ferme', JSON.stringify(ferme))
+    // 🔴 ET L'ORDRE, PROUVÉ PAR L'EXÉCUTION plutôt que par deux `indexOf` : si
+    // la file avait seulement été LUE, c'est que le refus arrivait trop tard.
+    verifier('🔴 EXÉCUTÉE : la file n’est même pas ouverte quand la fiche est fermée',
+      !vuesFerme.includes('rdv_attente'), vuesFerme.join(' → '))
+
+    const publie = await inscrireAvec({ id: 'c1', statut_publication: 'publie' })
+    verifier('✅ EXÉCUTÉE : une fiche publiée passe ce contrôle',
+      publie?.error !== 'commerce_ferme', JSON.stringify(publie))
+
+    // ⚠️ ET LA DIFFÉRENCE QUI COMPTE : un incident de lecture n'est pas un
+    // commerce fermé. Sans ce test, une panne réseau annoncerait à toute la
+    // file que le commerçant ne veut plus d'elle.
+    const panne = await inscrireAvec(null, { message: 'reseau' })
+    verifier('🔴 EXÉCUTÉE : une lecture en échec se dit lecture en échec',
+      panne?.error === 'lecture_ko', JSON.stringify(panne))
+
+    // La liste d'attente : rien à facturer, mais une place libérée enverrait un
+    // push vers une page qui n'existe pour personne.
+    const src = codeDe('lib/attente-rdv-server.js')
+    verifier('🔴 la file refuse un commerce non publié', src.includes("error: 'commerce_ferme'"))
+    // ⚠️ UNE LECTURE QUI ÉCHOUE N'EST PAS UNE FICHE FERMÉE, sinon un incident
+    // réseau annonce un commerce fermé à toute la file.
+    verifier('⚠️ une lecture en échec se dit lecture en échec',
+      /if \(errC\) return \{ ok: false, error: 'lecture_ko' \}/.test(src))
+    verifier('⚠️ et le refus a sa phrase côté route',
+      /commerce_ferme: '[^']+'/.test(codeDe('app/api/rdv/attente/route.js')))
+  }
+  // ✅ ET CELLE QUI NE DOIT PAS LA PORTER, décision du 16/09 : des séances déjà
+  // payées se posent même si la fiche est dépubliée, exactement comme un bon
+  // cadeau déjà vendu reste utilisable. Garde figée pour qu'on ne « corrige »
+  // pas un jour ce qui est un choix.
+  verifier('✅ un abonnement déjà signé garde le droit de poser ses séances',
+    !/fichePubliee/.test(codeDe('app/api/rdv/reserver-abonnement/route.js')))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

@@ -9,6 +9,7 @@ import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompen
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine, isAlimentaire, planEffectif, commandeAllumee } from '@/lib/plans'
 import { reservationActive, motReservation } from '@/lib/reservation-metier'
+import { fichePubliee } from '@/lib/statut-commercant'
 import { nomDeLaCarte } from '@/lib/types-commerce'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
@@ -1825,7 +1826,7 @@ export default function CommanderSlug() {
     if (!c) { router.push('/commander'); return }
     // Bloque l'accès aux fiches non publiées (brouillon, en_attente, refusée).
     // L'admin a une route d'aperçu dédiée - à coder plus tard.
-    if (c.statut_publication !== 'publie') {
+    if (!fichePubliee(c)) {
       setLoading(false)
       setCommercant({ ...c, _nonPublie: true })
       return

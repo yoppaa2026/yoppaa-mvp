@@ -53,6 +53,7 @@ import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { verdictForfait } from '@/lib/garde-forfait'
+import { fichePubliee } from '@/lib/statut-commercant'
 import { commandeAllumee } from '@/lib/plans'
 
 export async function POST(request) {
@@ -137,7 +138,7 @@ export async function POST(request) {
     if (errC || !commercant) {
       return NextResponse.json({ ok: false, error: 'Commerçant introuvable.' }, { status: 404 })
     }
-    if (commercant.statut_publication !== 'publie') {
+    if (!fichePubliee(commercant)) {
       return NextResponse.json({ ok: false, error: 'Ce commerçant n\'accepte pas encore de commandes.' }, { status: 400 })
     }
 

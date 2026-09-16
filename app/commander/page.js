@@ -37,6 +37,7 @@ import { lieuxDuJour } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
 import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
+import { libelleRecompense } from '@/lib/fidelite'
 import { libelleExpedition, suiviUrl } from '@/lib/transporteurs'
 import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation,
   lectureReussieDansCetteSession, marquerLectureDeCetteSession, demandeFaiteDansCetteSession, marquerDemandeDeCetteSession } from '@/lib/geoloc'
@@ -4912,8 +4913,11 @@ export default function Commander() {
                         const nbRecompenses = Number(carte.recompenses_disponibles || 0)
                         const recompense = nbRecompenses > 0
                         const lien = com.categorie === 'vitrine' ? `/commander/rdv/${com.slug}` : `/commander/${com.slug}`
-                        const libelle = com.fidelite_recompense_libelle
-                          || (com.fidelite_recompense_type === 'remise_pct' && com.fidelite_recompense_valeur ? `-${Number(com.fidelite_recompense_valeur)}%` : com.fidelite_recompense_valeur ? `${Number(com.fidelite_recompense_valeur).toFixed(2)}€ offerts` : 'Récompense fidélité')
+                        // 🔴 TROISIÈME COPIE DU MÊME LIBELLÉ, corrigée le 16/09.
+                        // Elle relisait les deux réglages libres et annonçait
+                        // donc au Yopper ce que la refonte supprime : une
+                        // cagnotte de 10 € présentée comme « 5 € offerts ».
+                        const libelle = libelleRecompense(com)
                         return (
                           <button key={carte.id} onClick={() => com.slug && router.push(lien)}
                             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${recompense ? '#10B98155' : T.pale}`, background: recompense ? '#F0FDF4' : '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left', width: '100%' }}>

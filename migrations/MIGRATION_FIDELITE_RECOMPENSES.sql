@@ -2,6 +2,17 @@
 -- MIGRATION : LA RÉCOMPENSE DEVIENT UN OBJET, FIGÉ ET DÉPENSABLE EN LIGNE
 -- ═══════════════════════════════════════════════════════════════════════════
 --
+-- 🔴 DÉJÀ PASSÉE, ET À NE PAS REJOUER TELLE QUELLE (note du 16/09).
+-- Son bloc de rattrapage recopie l'ANCIENNE règle de récompense :
+-- `COALESCE(NULLIF(c.fidelite_recompense_type, ''), 'remise_montant')` et la
+-- valeur libre du commerçant. Depuis la refonte demandée par Alex, le type et
+-- la valeur se DÉDUISENT de la mécanique (`recompenseDue` dans `lib/fidelite`) :
+-- la cagnotte rend la cagnotte, les passages rendent un pourcentage, et le
+-- montant fixe en euros n'existe plus.
+--
+-- La rejouer recréerait donc des récompenses selon une règle qui n'a plus
+-- cours. La création à chaud, elle, est déjà à jour.
+--
 -- ⚠️ À PASSER DANS L'ÉDITEUR SQL SUPABASE, PUIS ME DIRE QUE C'EST FAIT.
 -- Aucun repli n'est écrit dans le code.
 --

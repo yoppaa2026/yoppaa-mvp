@@ -110,7 +110,12 @@ import { TAILLE_CONSEILLEE, avertissementTaille } from '@/lib/image-qualite'
 // correctif : le calcul d'une carte de fidélité n'a plus rien à faire dans un
 // navigateur. Il vit dans /api/fidelite/mouvement, qui relit la configuration
 // du commerçant en base au lieu de faire confiance à ce que l'écran a chargé.
-import { normaliserTelephone, afficherTelephone, libelleRecompense, presetFidelite } from '@/lib/fidelite'
+import {
+  normaliserTelephone, afficherTelephone, libelleRecompense, presetFidelite,
+  // ⚠️ LA RÈGLE, PAS UNE COPIE : ce que la récompense vaut et ce qu'elle coûte
+  // se décident dans `lib/fidelite`, et l'écran ne fait que les montrer.
+  phraseCout, seuilCagnotte, seuilPassages, recompenseDue,
+} from '@/lib/fidelite'
 import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
 import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '@/lib/guide-photos'
 import { LARGEUR_CHAMP, LARGEUR_TEXTE_LONG } from '@/lib/responsive'
@@ -4758,7 +4763,9 @@ function configFidelite(commercant) {
     fidelite_seuil_passages: commercant?.fidelite_seuil_passages || 10,
     fidelite_taux_cagnotte: commercant?.fidelite_taux_cagnotte || 5,
     fidelite_seuil_cagnotte: commercant?.fidelite_seuil_cagnotte || 10,
-    fidelite_recompense_type: commercant?.fidelite_recompense_type || preset.fidelite_recompense_type,
+    // ⚠️ PLUS DE `fidelite_recompense_type` ICI : il se déduit de la mécanique
+    // au moment d'enregistrer. Le garder dans le formulaire, c'était laisser
+    // une valeur survivre à un changement de mécanique.
     fidelite_recompense_valeur: commercant?.fidelite_recompense_valeur ?? preset.fidelite_recompense_valeur,
     fidelite_recompense_libelle: commercant?.fidelite_recompense_libelle || preset.fidelite_recompense_libelle,
     fidelite_sms_actif: commercant?.fidelite_sms_actif !== false,
@@ -4834,12 +4841,19 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
     // enregistrement : y laisser `fidelite_sms_credits: 25` ferait REPARTIR ce
     // cadeau de 25 SMS à chaque enregistrement suivant, puisque `cfg` est
     // recopié dans le patch. Un solde de SMS payés serait écrasé par 25.
+    // 🔴 LE TYPE ET LA VALEUR NE SE SAISISSENT PLUS, ILS SE DÉDUISENT. C'est le
+    // cœur de la refonte du 16/09 : deux réglages libres à côté de la mécanique,
+    // c'était une cagnotte de 10 € qui rendait 5 €, et un café qui donnait 25 %
+    // de son chiffre sans le savoir. On écrit quand même les deux colonnes pour
+    // que la base reste lisible telle quelle, mais elles viennent de la règle.
+    const due = recompenseDue(cfg)
     const reglages = {
       ...cfg,
-      fidelite_seuil_passages: Math.min(50, Math.max(2, parseInt(cfg.fidelite_seuil_passages) || 10)),
+      fidelite_seuil_passages: seuilPassages(cfg),
       fidelite_taux_cagnotte: Math.min(30, Math.max(1, parseFloat(cfg.fidelite_taux_cagnotte) || 5)),
-      fidelite_seuil_cagnotte: Math.max(1, parseFloat(cfg.fidelite_seuil_cagnotte) || 10),
-      fidelite_recompense_valeur: parseFloat(cfg.fidelite_recompense_valeur) || null,
+      fidelite_seuil_cagnotte: seuilCagnotte(cfg),
+      fidelite_recompense_type: due.type,
+      fidelite_recompense_valeur: due.valeur,
     }
     const patch = { ...reglages }
     if (activer) {
@@ -5124,18 +5138,40 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
                 </div>
               </div>
             )}
+            {/* 🔴 LE CHOIX « MONTANT (€) » A DISPARU, ET C'ÉTAIT LE DÉFAUT.
+                Un montant fixe sur une carte à passages coûtait 25 % à un café
+                à 2 € le panier et 1,4 % à un traiteur à 35 € : le même réglage,
+                le même écran, et personne ne savait ce qu'il donnait. Chaque
+                mécanique garde maintenant SON unité, et la récompense en
+                découle au lieu de se régler à côté. */}
             <div>
               <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 800, color: T.deep }}>Récompense</p>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <button style={chip(cfg.fidelite_recompense_type === 'remise_montant')} onClick={() => setCfg(p => ({ ...p, fidelite_recompense_type: 'remise_montant' }))}>Montant (€)</button>
-                <button style={chip(cfg.fidelite_recompense_type === 'remise_pct')} onClick={() => setCfg(p => ({ ...p, fidelite_recompense_type: 'remise_pct' }))}>Pourcentage (%)</button>
-                <input type="number" min={1} step="0.5" style={{ ...field, width: 100 }} value={cfg.fidelite_recompense_valeur}
-                  onChange={e => setCfg(p => ({ ...p, fidelite_recompense_valeur: e.target.value }))}
-                  placeholder={cfg.fidelite_recompense_type === 'remise_pct' ? '%' : '€'}/>
-              </div>
+              {estCagnotte ? (
+                <p style={{ margin: '0 0 8px', fontSize: 13, color: T.deep, lineHeight: 1.55 }}>
+                  C&apos;est <strong>ta cagnotte elle-même</strong> : dès que ton client atteint{' '}
+                  <strong>{euros(seuilCagnotte(cfg))}</strong>, il obtient <strong>{euros(seuilCagnotte(cfg))}</strong> de remise.
+                  Rien d&apos;autre à régler.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, color: T.deep }}>Au {seuilPassages(cfg) + 1}<sup>e</sup> passage, remise de</span>
+                  <input type="number" min={1} max={100} step="1" style={{ ...field, width: 90 }} value={cfg.fidelite_recompense_valeur}
+                    onChange={e => setCfg(p => ({ ...p, fidelite_recompense_valeur: e.target.value }))}
+                    placeholder="%"/>
+                  <span style={{ fontSize: 13, color: T.deep }}>%</span>
+                </div>
+              )}
+              {/* ⚠️ CE QUE ÇA COÛTE, SOUS LE RÉGLAGE ET PAS AILLEURS. « 10 % »
+                  ne veut pas dire la même chose dans les deux mécaniques :
+                  10 % en cagnotte, c'est 10 % de tout le chiffre ; 10 % au
+                  11e passage, c'est 0,9 %. Onze fois d'écart pour le même
+                  chiffre saisi. */}
+              <p style={{ margin: '0 0 8px', fontSize: 12.5, color: T.muted, lineHeight: 1.55, background: T.bgSoft || '#F8F6FF', padding: '8px 10px', borderRadius: 8 }}>
+                {phraseCout(cfg)}
+              </p>
               <input style={{ ...field, width: '100%' }} maxLength={90} value={cfg.fidelite_recompense_libelle}
                 onChange={e => setCfg(p => ({ ...p, fidelite_recompense_libelle: e.target.value }))}
-                placeholder="Libellé montré au client (ex : Le 11e pain est offert)"/>
+                placeholder={`Texte montré au client (par défaut : ${libelleRecompense(cfg)})`}/>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
               <input type="checkbox" checked={cfg.fidelite_sms_actif}

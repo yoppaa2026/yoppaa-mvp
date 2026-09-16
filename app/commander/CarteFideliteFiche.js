@@ -6,6 +6,7 @@
 // MA carte vient de /api/fidelite/mes-cartes (identité prouvée), fetchée par la fiche.
 
 import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
+import { libelleRecompense } from '@/lib/fidelite'
 
 const T = {
   main:  '#6B35C4',
@@ -16,13 +17,11 @@ const T = {
   muted: '#6B7280',
 }
 
-function libelleRecompense(com) {
-  if (com?.fidelite_recompense_libelle?.trim()) return com.fidelite_recompense_libelle.trim()
-  if (com?.fidelite_recompense_type === 'remise_pct' && com?.fidelite_recompense_valeur) return `-${Number(com.fidelite_recompense_valeur)}% offerts`
-  if (com?.fidelite_recompense_valeur) return `${Number(com.fidelite_recompense_valeur).toFixed(2).replace('.', ',')}€ offerts`
-  return 'Récompense fidélité'
-}
-
+// 🔴 CE LIBELLÉ ÉTAIT UNE COPIE DE `lib/fidelite` (16/09). Il relisait les deux
+// réglages libres, donc il annonçait au client exactement ce que la refonte
+// vient de supprimer : une cagnotte de 10 € présentée comme « 5 € offerts ».
+// C'est le texte que LE CLIENT lit sur la fiche : la copie la plus dangereuse
+// des trois.
 export default function CarteFideliteFiche({ commercant, carte, connecte = true, nbCartes = 0 }) {
   if (!commercant?.fidelite_actif) return null
   const estCagnotte = commercant.fidelite_mecanique === 'cagnotte'

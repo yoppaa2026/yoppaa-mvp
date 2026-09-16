@@ -16,6 +16,13 @@
 
 import { readFileSync, existsSync } from 'node:fs'
 import { appliquerCredit, libelleRecompense, normaliserTelephone } from '../lib/fidelite.js'
+// ⚠️ IMPORTÉES POUR ÊTRE EXÉCUTÉES : ce que la récompense VAUT et ce qu'elle
+// COÛTE. Deux réglages libres à côté de la mécanique, et c'est le commerçant
+// qui paie la différence sans jamais la voir.
+import {
+  recompenseDue, coutEnPourcent, phraseCout, presetFidelite,
+  seuilCagnotte, seuilPassages, pourcentPassages, tauxCagnotte, estCagnotte,
+} from '../lib/fidelite.js'
 // ⚠️ IMPORTÉS POUR ÊTRE EXÉCUTÉS, pas pour verdir une garde par leur seule
 // présence : c'est l'IMPORT qui rendait des bancs verts à tort (19/08).
 import { texteSmsRecompense, heureDecente } from '../lib/fidelite-sms.js'
@@ -425,6 +432,142 @@ const egal = (nom, obtenu, attendu) =>
     /signalerEnvoi\([\s\S]{0,80}\/api\/fidelite\/rdv-honore/.test(dash))
   verifie('et il dit ce qui marche encore',
     /rattrapé automatiquement demain matin/.test(dash))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CE QUE LA RÉCOMPENSE VAUT, ET CE QU'ELLE COÛTE (16/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 L'INCOHÉRENCE VUE PAR ALEX. Le type et la valeur de la récompense se
+// réglaient SÉPARÉMENT de la mécanique, et rien ne les reliait :
+//   • « 10 passages → 5 € » coûtait 25 % à un café à 2 € le panier et 1,4 % à
+//     un traiteur à 35 € ; le même écran, et personne ne savait ce qu'il donnait.
+//   • une cagnotte affichée « 10,00 € » au client pouvait rendre 5 €.
+//
+// Décision : chaque mécanique garde SON unité. La cagnotte rend la cagnotte,
+// les passages rendent un pourcentage, le montant fixe n'existe plus.
+{
+  const CAGNOTTE = { fidelite_mecanique: 'cagnotte', fidelite_taux_cagnotte: 5, fidelite_seuil_cagnotte: 10 }
+  const PASSAGES = { fidelite_mecanique: 'passages', fidelite_seuil_passages: 10, fidelite_recompense_valeur: 10 }
+
+  // ─── LA RÈGLE, EXÉCUTÉE ────────────────────────────────────────────────
+  egal('🔴 la cagnotte rend LA CAGNOTTE', recompenseDue(CAGNOTTE).valeur, 10)
+  egal('et sous forme de montant', recompenseDue(CAGNOTTE).type, 'remise_montant')
+  egal('🔴 les passages rendent un POURCENTAGE', recompenseDue(PASSAGES).type, 'remise_pct')
+  egal('celui que le commerçant a réglé', recompenseDue(PASSAGES).valeur, 10)
+
+  // 🔴 CE QUE LE CLIENT VOIT EST CE QU'IL REÇOIT. C'est toute la refonte : la
+  // jauge affiche des euros, ces euros doivent être les siens.
+  for (const seuil of [5, 10, 12.5, 40]) {
+    egal(`🔴 cagnotte de ${seuil} € → ${seuil} € de remise`,
+      recompenseDue({ ...CAGNOTTE, fidelite_seuil_cagnotte: seuil }).valeur, seuil)
+  }
+
+  // 🔴 LE MONTANT FIXE N'EXISTE PLUS, MÊME SI LA BASE EN PORTE ENCORE UN.
+  // Une vieille ligne `remise_montant` + 5 € sur une carte à passages ne doit
+  // plus JAMAIS ressortir : c'était exactement le réglage qui coûtait 25 %.
+  egal('🔴 un vieux montant en euros sur des passages devient un pourcentage',
+    recompenseDue({ ...PASSAGES, fidelite_recompense_type: 'remise_montant' }).type, 'remise_pct')
+  egal('🔴 et un vieux pourcentage sur une cagnotte redevient un montant',
+    recompenseDue({ ...CAGNOTTE, fidelite_recompense_type: 'remise_pct' }).type, 'remise_montant')
+  // ⚠️ La valeur libre d'une cagnotte est IGNORÉE : c'est elle qui permettait
+  // d'afficher 10 € et d'en rendre 5.
+  egal('🔴 une cagnotte ne rend jamais autre chose que son seuil',
+    recompenseDue({ ...CAGNOTTE, fidelite_recompense_valeur: 5 }).valeur, 10)
+
+  // ─── CE QUE ÇA COÛTE, ET LES DEUX NE SE COMPARENT PAS ──────────────────
+  // 🔴 « 10 % » NE VEUT PAS DIRE LA MÊME CHOSE DANS LES DEUX MÉCANIQUES.
+  egal('🔴 cagnotte à 10 % : il rend 10 % de tout son chiffre',
+    coutEnPourcent({ ...CAGNOTTE, fidelite_taux_cagnotte: 10 }), 10)
+  egal('🔴 passages 10 → 10 % : il rend 0,9 % de son chiffre',
+    coutEnPourcent(PASSAGES), 0.9)
+  verifie('⚠️ onze fois d’écart pour le même chiffre saisi',
+    coutEnPourcent({ ...CAGNOTTE, fidelite_taux_cagnotte: 10 }) > coutEnPourcent(PASSAGES) * 10)
+  egal('un préréglage RDV à -50 % coûte 4,5 %',
+    coutEnPourcent({ ...PASSAGES, fidelite_recompense_valeur: 50 }), 4.5)
+
+  // ⚠️ ZÉRO EST UN RÉGLAGE, PAS UNE ABSENCE DE RÉGLAGE (le piège du zéro).
+  egal('🔴 une cagnotte coupée à 0 % coûte zéro, pas cinq',
+    coutEnPourcent({ ...CAGNOTTE, fidelite_taux_cagnotte: 0 }), 0)
+  verifie('⚠️ et l’écran dit que personne ne débloquera rien',
+    /ne monte jamais/.test(phraseCout({ ...CAGNOTTE, fidelite_taux_cagnotte: 0 })))
+  egal('un taux jamais renseigné retombe sur 5 %',
+    tauxCagnotte({ fidelite_mecanique: 'cagnotte' }), 5)
+  egal('une chaîne vide aussi', tauxCagnotte({ fidelite_taux_cagnotte: '' }), 5)
+
+  // ⚠️ LA PHRASE NOMME LE CHIFFRE ET CE QU'IL SIGNIFIE : un pourcentage seul ne
+  // dit pas de quoi il est le pourcentage.
+  verifie('🔴 la cagnotte annonce ce qu’elle rend du chiffre',
+    /tout ton chiffre/.test(phraseCout(CAGNOTTE)))
+  verifie('⚠️ les passages annoncent une ESTIMATION, sans mentir sur sa nature',
+    /Environ/.test(phraseCout(PASSAGES)) && /gros achat/.test(phraseCout(PASSAGES)))
+
+  // ─── LES BORNES ────────────────────────────────────────────────────────
+  egal('un seuil de cagnotte ne descend pas sous 1 €', seuilCagnotte({ fidelite_seuil_cagnotte: 0 }), 1)
+  egal('deux passages au minimum', seuilPassages({ fidelite_seuil_passages: 1 }), 2)
+  egal('cinquante au maximum', seuilPassages({ fidelite_seuil_passages: 999 }), 50)
+  egal('une remise ne dépasse pas 100 %', pourcentPassages({ fidelite_recompense_valeur: 300 }), 100)
+  egal('ni ne descend sous 1 %', pourcentPassages({ fidelite_recompense_valeur: 0 }), 1)
+
+  // ─── LES PRÉRÉGLAGES SUIVENT LA MÊME RÈGLE ─────────────────────────────
+  for (const cat of ['detail', 'vitrine', 'alimentaire']) {
+    const p = presetFidelite(cat)
+    const due = recompenseDue(p)
+    verifie(`⚠️ le préréglage « ${cat} » n’impose plus de montant en euros`,
+      !(due.type === 'remise_pct' && estCagnotte(p)) && !(p.fidelite_recompense_type === 'remise_montant' && !estCagnotte(p)))
+    // 🔴 ET AUCUN LIBELLÉ CHIFFRÉ EN DUR : « 10€ offerts » devenait faux dès
+    // que le commerçant changeait son seuil, et personne ne le voyait.
+    verifie(`🔴 « ${cat} » ne fige plus un libellé chiffré`,
+      !/[0-9]/.test(String(p.fidelite_recompense_libelle || '')), String(p.fidelite_recompense_libelle))
+    verifie(`le libellé se déduit pour « ${cat} »`, libelleRecompense(p).length > 0)
+  }
+  // Le libellé suit le réglage, il ne le contredit pas.
+  verifie('🔴 le libellé d’une cagnotte de 40 € annonce 40 €',
+    libelleRecompense({ ...CAGNOTTE, fidelite_seuil_cagnotte: 40 }).includes('40,00'))
+  verifie('⚠️ et celui des passages annonce le pourcentage',
+    libelleRecompense(PASSAGES).includes('-10%'))
+  verifie('⚠️ un libellé écrit par le commerçant reste le sien',
+    libelleRecompense({ ...CAGNOTTE, fidelite_recompense_libelle: 'Le 11e pain offert' }) === 'Le 11e pain offert')
+
+  // ─── ET PERSONNE NE RECOPIE LA RÈGLE ───────────────────────────────────
+  // 🔴 LE SERVEUR FIGE CE QUE LE CLIENT A MÉRITÉ : s'il relisait les deux
+  // colonnes brutes, une cagnotte de 10 € créerait encore une récompense de 5 €.
+  {
+    const srv = lireCode('lib/fidelite-recompense-server.js')
+    verifie('🔴 la création de récompense passe par la règle',
+      /const \{ type, valeur \} = recompenseDue\(commercant\)/.test(srv))
+    verifie('🔴 et ne relit plus les deux réglages libres',
+      !/commercant\.fidelite_recompense_type/.test(srv) && !/Number\(commercant\.fidelite_recompense_valeur\)/.test(srv))
+  }
+  // 🔴 L'ÉCRAN NE PROPOSE PLUS LE MONTANT EN EUROS : c'était LE réglage fautif.
+  {
+    const ecran = lireCode('app/dashboard/ConfigDashboard.js')
+    // ⚠️ ON VISE LE BOUTON, PAS LE MOT. « Montant (€) » est aussi le
+    // placeholder d'un champ de débit et d'un champ de prix, à mille lignes de
+    // là : chercher le texte, c'est rougir sur des écrans sans rapport.
+    // Troisième fois du jour qu'une garde cherche un mot au lieu de viser
+    // l'endroit exact où la chose se joue.
+    verifie('🔴 le choix du type de récompense a disparu de l’écran',
+      !/fidelite_recompense_type: 'remise_/.test(ecran))
+    verifie('🔴 et le sélecteur montant/pourcentage avec lui',
+      !/chip\(cfg\.fidelite_recompense_type/.test(ecran))
+    // ⚠️ CE QUE ÇA COÛTE EST ÉCRIT SOUS LE RÉGLAGE, pas ailleurs, pas nulle part.
+    verifie('🔴 l’écran annonce ce que le programme coûte', /\{phraseCout\(cfg\)\}/.test(ecran))
+    verifie('⚠️ et la sauvegarde déduit type et valeur de la règle',
+      /const due = recompenseDue\(cfg\)/.test(ecran)
+      && /fidelite_recompense_type: due\.type/.test(ecran)
+      && /fidelite_recompense_valeur: due\.valeur/.test(ecran))
+  }
+  // 🔴 ET LES TROIS COPIES DU LIBELLÉ, CÔTÉ CLIENT. C'est le texte que le
+  // YOPPER lit : une copie qui relit les réglages libres lui annonce
+  // exactement ce que la refonte supprime. Les frères se cherchent et se
+  // nomment, sinon la règle vit à un endroit et ment aux deux autres.
+  for (const f of ['app/commander/CarteFideliteFiche.js', 'app/commander/page.js']) {
+    const src = lireCode(f)
+    verifie(`🔴 ${f} prend le libellé à la règle`, /libelleRecompense\(/.test(src))
+    verifie(`🔴 ${f} ne recopie plus la règle`,
+      !/fidelite_recompense_type === 'remise_pct'/.test(src))
+  }
 }
 
 console.log(`\nFidélité serveur : ${ok} vérifications`)

@@ -693,11 +693,22 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   // l'a gagnée. Un commerçant qui baisse sa récompense ne reprend pas ce qu'il
   // a déjà promis. Mêmes replis que la migration, pour que les lignes créées à
   // chaud soient indiscernables de celles du rattrapage.
-  verifie('elle fige le type, la valeur et le libellé du commerçant',
-    /fidelite_recompense_type/.test(rs) && /fidelite_recompense_valeur/.test(rs)
-    && /fidelite_recompense_libelle/.test(rs))
-  verifie('avec les mêmes replis que la migration',
-    /'remise_montant'/.test(rs) && /\|\| 5\b/.test(rs) && /'Récompense fidélité'/.test(rs))
+  // 🔴 CES DEUX GARDES FIGEAIENT LA FORME ANCIENNE (réécrites le 16/09). Elles
+  // exigeaient mot pour mot la lecture des deux réglages libres du commerçant
+  // et leurs replis `'remise_montant'` / `|| 5`. C'est précisément ce que la
+  // refonte supprime : le type et la valeur se DÉDUISENT désormais de la
+  // mécanique, la cagnotte rendant la cagnotte et les passages un pourcentage.
+  //
+  // ⚠️ LE PRINCIPE, LUI, N'A PAS BOUGÉ D'UN POUCE, et c'est lui qu'on garde :
+  // ce qui est écrit dans la ligne est FIGÉ. Un commerçant qui baisse sa
+  // récompense demain ne reprend pas ce qu'il a déjà promis.
+  verifie('elle fige type, valeur et libellé DANS la ligne créée',
+    /^\s*type,$/m.test(rs) && /^\s*valeur,$/m.test(rs) && /^\s*libelle,$/m.test(rs))
+  verifie('🔴 et la valeur vient de la RÈGLE, plus de deux réglages libres',
+    /const \{ type, valeur \} = recompenseDue\(commercant\)/.test(rs)
+    && !/commercant\.fidelite_recompense_type/.test(rs))
+  verifie('⚠️ le libellé garde un repli, il ne sort jamais vide',
+    /libelleRecompense\(commercant\)/.test(rs))
 
   // 🔴 LES DEUX CHEMINS DE CRÉDIT, pas un seul. Le chemin automatique (commande
   // récupérée, rendez-vous honoré) ET le comptoir avaient le même trou.

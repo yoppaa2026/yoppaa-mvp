@@ -240,6 +240,11 @@ const MUTATIONS = [
     de: "      titre: canal === 'sms' ? 'SMS envoyé' : 'Email envoyé',",
     vers: "      titre: alert('parti') || (canal === 'sms' ? 'SMS envoyé' : 'Email envoyé')," },
 
+  { nom: '🔴 le message reparle de « TA table » au restaurateur',
+    fichier: DASH,
+    de: '      details: \'Sa table est déjà réservée. S’il ne clique pas, elle le reste, simplement sans garantie.\',',
+    vers: '      details: \'Ta table reste réservée tant qu’il n’a pas confirmé.\',' },
+
   { nom: '🔴 un envoi rate ne dit plus pourquoi',
     fichier: DASH,
     de: "        message: j?.error || 'Le lien n’a pas pu partir. Réessaie dans un instant.',",

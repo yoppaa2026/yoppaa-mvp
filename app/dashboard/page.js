@@ -2192,8 +2192,8 @@ export default function Dashboard() {
         titre: canal === 'sms' ? 'Le SMS n’est pas parti' : 'L’email n’est pas parti',
         message: j?.error || 'Le lien n’a pas pu partir. Réessaie dans un instant.',
         // ⚠️ CE QUI RESTE VRAI MALGRÉ L'ÉCHEC : sans cette ligne, le
-        // restaurateur peut croire que sa table vient de se libérer.
-        details: 'Ta table reste réservée. Tu peux corriger et réessayer, ou passer par l’autre canal.',
+        // restaurateur peut croire que la table vient de se libérer.
+        details: 'La table reste réservée. Tu peux corriger le numéro et réessayer, ou passer par l’autre canal.',
         action: 'J’ai compris',
       }))
       return false
@@ -2213,7 +2213,12 @@ export default function Dashboard() {
       message: canal === 'sms'
         ? 'Ton client reçoit le lien et le montant garanti sur son GSM.'
         : 'Ton client reçoit le lien et le montant garanti par email.',
-      details: 'Ta table reste réservée tant qu’il n’a pas confirmé : le lien la garantit, il ne la crée pas.',
+      // 🔴 CETTE PHRASE PARLAIT AU CLIENT, DEVANT LE RESTAURATEUR (Alex, 16/09 :
+      // « le message n'est pas clair pour moi »). Elle disait « TA table » à
+      // celui qui tient le restaurant : ce n'est pas la sienne, c'est celle de
+      // son client. Et « le lien la garantit, il ne la crée pas » explique un
+      // mécanisme au lieu de dire ce qui va se passer.
+      details: 'Sa table est déjà réservée. S’il ne clique pas, elle le reste, simplement sans garantie.',
       action: 'Parfait',
     }))
     return true

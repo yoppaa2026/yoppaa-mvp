@@ -988,9 +988,15 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   verifie('🔴 un envoi raté est DIT au restaurateur',
     /message: j\?\.error \|\| 'Le lien n’a pas pu partir/.test(DASH2)
     && /titre: canal === 'sms' \? 'Le SMS n’est pas parti'/.test(DASH2))
+  // ⚠️ ET IL PARLE AU RESTAURATEUR, DE LA TABLE DE SON CLIENT (Alex, 16/09 :
+  // « le message n'est pas clair pour moi »). Il disait « TA table » à celui
+  // qui tient le restaurant, et expliquait un mécanisme — « le lien la garantit,
+  // il ne la crée pas » — au lieu de dire ce qui va se passer.
   verifie('⚠️ et le message rappelle que la table reste réservée',
-    /Ta table reste réservée tant qu’il n’a pas confirmé/.test(DASH2)
-    && /Ta table reste réservée\. Tu peux corriger et réessayer/.test(DASH2))
+    /S’il ne clique pas, elle le reste, simplement sans garantie/.test(DASH2)
+    && /La table reste réservée\. Tu peux corriger le numéro/.test(DASH2))
+  verifie('🔴 et il ne tutoie plus le restaurateur sur la table de son client',
+    !/Ta table reste réservée/.test(DASH2))
   // 🔴 PLUS AUCUN `alert()` SUR CE GESTE : c'est celui que le restaurateur voit
   // le plus souvent, et c'était le plus laid.
   verifie('🔴 la demande d’empreinte ne passe plus par une fenêtre du navigateur',

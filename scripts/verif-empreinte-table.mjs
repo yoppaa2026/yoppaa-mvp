@@ -151,6 +151,16 @@ egal('sans empreinte posée, il n’y a rien à débiter',
   raisonDebitImpossible({ ...POSEE, empreinte_statut: null }, new Date('2026-09-19T21:30:00+02:00')), 'aucune_empreinte')
 egal('🔴 une empreinte déjà débitée ne se débite pas deux fois',
   raisonDebitImpossible({ ...POSEE, empreinte_debit_pi_id: 'pi_1' }, new Date('2026-09-19T21:30:00+02:00')), 'deja_debitee')
+// 🔴 ET ELLE LE DIT AVEC LE BON MOT (Alex, 16/09, essai G6). Une table facturée
+// passe en `debitee`, donc son statut n'est plus `posee` : le test de l'absence
+// d'empreinte l'attrapait d'abord et répondait « cette réservation n'a pas
+// d'empreinte bancaire », juste sous une carte affichant « Garantie :
+// 120,00 € ». Deux phrases contraires sur le même écran, et un restaurateur qui
+// pouvait croire sa garantie perdue.
+egal('🔴 une table facturée dit « déjà facturée », pas « pas d’empreinte »',
+  raisonDebitImpossible({ ...POSEE, empreinte_statut: 'debitee' }, new Date('2026-09-19T21:30:00+02:00')), 'deja_debitee')
+egal('⚠️ et un débit refusé reste débitable : la carte peut être remplacée',
+  raisonDebitImpossible({ ...POSEE, empreinte_statut: 'echouee' }, new Date('2026-09-19T21:30:00+02:00')), 'aucune_empreinte')
 egal('une réservation sans date ne se débite pas',
   raisonDebitImpossible({ empreinte_statut: 'posee' }, new Date()), 'date_illisible')
 

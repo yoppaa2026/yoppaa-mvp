@@ -248,6 +248,11 @@ const MUTATIONS = [
     de: "      titre: canal === 'sms' ? 'SMS envoyé' : 'Email envoyé',",
     vers: "      titre: alert('parti') || (canal === 'sms' ? 'SMS envoyé' : 'Email envoyé')," },
 
+  { nom: '🔴 une table facturee redit « pas d empreinte bancaire »',
+    fichier: REGLE,
+    de: "  if (rdv?.empreinte_statut === 'debitee' || rdv?.empreinte_debit_pi_id) return 'deja_debitee'",
+    vers: "  if (rdv?.empreinte_debit_pi_id) return 'deja_debitee'" },
+
   // ─── DEUX ISSUES QUI N ONT PAS DE SENS (16/09, captures d Alex) ─────────
   { nom: '🔴 le no-show redevient possible avant l heure du service',
     fichier: DASH,

@@ -602,6 +602,25 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // ── La route qui envoie ────────────────────────────────────────────────
   verifie('🔴 la demande prouve qui appelle, sur la ligne visée',
     /gardeSurLigne\(request, supabase, 'rdv_reservations', rdv_id\)/.test(DEMANDE))
+  // 🔴 UNE ERREUR DE LECTURE N'EST PAS UNE RÉSERVATION INTROUVABLE (16/09 :
+  // « SMS et email ne partent plus »). Une seule colonne invisible pour
+  // PostgREST fait échouer TOUTE la requête : `rdv` vaut `null`, et la route
+  // annonçait une table disparue alors qu'elle est là. C'est le cas juste après
+  // une migration, tant que le cache de schéma n'est pas rechargé.
+  for (const [quoi, src] of [
+    ['la demande', DEMANDE],
+    ['le débit', sansProse(lire('app/api/rdv/empreinte-debiter/route.js'))],
+  ]) {
+    verifie(`🔴 ${quoi} LIT l’erreur de lecture au lieu de la jeter`,
+      /const \{ data: rdv, error: erreurLecture \} = await supabase/.test(src)
+      && /if \(erreurLecture\) \{/.test(src))
+    verifie(`⚠️ et ${quoi} distingue « illisible » de « introuvable »`,
+      src.indexOf('if (erreurLecture) {') < src.indexOf("if (!rdv) return NextResponse.json({ ok: false, error: 'Réservation introuvable.' }"))
+  }
+  // ⚠️ ET LE DÉBIT DIT QUE RIEN N'A ÉTÉ PRIS : sur une route qui touche à
+  // l'argent, le silence sur ce point est une inquiétude de plus.
+  verifie('🔴 un débit illisible dit que RIEN n’a été facturé',
+    /n’a pas pu être lue[^`]*Rien n’a été facturé/.test(sansProse(lire('app/api/rdv/empreinte-debiter/route.js'))))
   // 🔴 LE JETON EN CLAIR NE VA QU'AU CLIENT : une fuite de la base ne doit pas
   // rendre les liens utilisables.
   verifie('🔴 le jeton est tiré au sort et gardé HACHÉ',

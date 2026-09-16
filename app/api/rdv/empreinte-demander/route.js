@@ -69,7 +69,15 @@ export async function POST(request) {
     const nonAutorise = refus(verdict, NextResponse)
     if (nonAutorise) return nonAutorise
 
-    const { data: rdv } = await supabase
+    // 🔴 L'ERREUR DE LECTURE ÉTAIT JETÉE (16/09, SMS et email qui « ne partent
+    // plus »). Une seule colonne invisible pour PostgREST fait échouer TOUTE la
+    // requête, pas seulement la colonne : `rdv` vaut alors `null` et la route
+    // répondait « réservation introuvable » sur une réservation qui existe. Le
+    // restaurateur cherchait une table disparue, la cause était ailleurs.
+    //
+    // ⚠️ ET C'EST LE CAS JUSTE APRÈS UNE MIGRATION : PostgREST garde son schéma
+    // en cache, et une colonne ajoutée n'est lisible qu'après son rechargement.
+    const { data: rdv, error: erreurLecture } = await supabase
       .from('rdv_reservations')
       .select(`
         id, statut, date_rdv, heure_debut, couverts, numero_rdv, numero_prefixe,
@@ -84,6 +92,15 @@ export async function POST(request) {
       .is('deleted_at', null)
       .maybeSingle()
 
+    // ⚠️ « ILLISIBLE » ET « INTROUVABLE » SONT DEUX RÉPONSES DIFFÉRENTES : la
+    // première se réessaie, la seconde jamais.
+    if (erreurLecture) {
+      console.error('[empreinte-demander] lecture KO', { rdvId: rdv_id, message: erreurLecture.message })
+      return NextResponse.json({
+        ok: false, code: 'lecture',
+        error: `Cette réservation n’a pas pu être lue (${erreurLecture.message}). Réessaie dans un instant.`,
+      }, { status: 503 })
+    }
     if (!rdv) return NextResponse.json({ ok: false, error: 'Réservation introuvable.' }, { status: 404 })
 
     const raison = raisonDemandeImpossible(rdv, new Date())

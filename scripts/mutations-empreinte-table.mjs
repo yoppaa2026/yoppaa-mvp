@@ -240,6 +240,17 @@ const MUTATIONS = [
     de: "      titre: canal === 'sms' ? 'SMS envoyé' : 'Email envoyé',",
     vers: "      titre: alert('parti') || (canal === 'sms' ? 'SMS envoyé' : 'Email envoyé')," },
 
+  // ─── UNE ERREUR DE LECTURE N EST PAS UNE TABLE INTROUVABLE (16/09) ──────
+  { nom: '🔴 la demande rejette de nouveau son erreur de lecture',
+    fichier: DEMANDE,
+    de: '    const { data: rdv, error: erreurLecture } = await supabase',
+    vers: '    const { data: rdv } = await supabase; const erreurLecture = null; void supabase' },
+
+  { nom: '🔴 le debit du no-show rejette de nouveau la sienne',
+    fichier: 'app/api/rdv/empreinte-debiter/route.js',
+    de: '    const { data: rdv, error: erreurLecture } = await supabase',
+    vers: '    const { data: rdv } = await supabase; const erreurLecture = null; void supabase' },
+
   { nom: '🔴 le message reparle de « TA table » au restaurateur',
     fichier: DASH,
     de: '      details: \'Sa table est déjà réservée. S’il ne clique pas, elle le reste, simplement sans garantie.\',',

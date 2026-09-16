@@ -63,7 +63,11 @@ export async function POST(request) {
     // ⚠️ CHACUNE DE CES COLONNES EST OBLIGATOIRE : absente du select, elle vaut
     // `undefined`, et le débit partirait au mauvais montant sans qu'aucune
     // erreur ne se lève. Le défaut le plus fréquent de ce projet.
-    const { data: rdv } = await supabase
+    // ⚠️ MÊME LEÇON QUE SUR LA DEMANDE (16/09) : une erreur de lecture jetée
+    // devient « réservation introuvable », et le restaurateur cherche une table
+    // qui est là. Sur CETTE route, c'est un no-show qu'il n'arrive pas à
+    // facturer sans comprendre pourquoi.
+    const { data: rdv, error: erreurLecture } = await supabase
       .from('rdv_reservations')
       .select(`
         id, statut, annulation_tardive, date_rdv, heure_debut, couverts, client_prenom, client_nom,
@@ -76,6 +80,13 @@ export async function POST(request) {
       .is('deleted_at', null)
       .maybeSingle()
 
+    if (erreurLecture) {
+      console.error('[empreinte-debiter] lecture KO', { rdvId: rdv_id, message: erreurLecture.message })
+      return NextResponse.json({
+        ok: false, code: 'lecture',
+        error: `Cette table n’a pas pu être lue (${erreurLecture.message}). Rien n’a été facturé, réessaie dans un instant.`,
+      }, { status: 503 })
+    }
     if (!rdv) return NextResponse.json({ ok: false, error: 'Réservation introuvable.' }, { status: 404 })
 
     const raison = raisonDebitImpossible(rdv, new Date())

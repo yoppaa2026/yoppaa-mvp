@@ -40,6 +40,8 @@ const EMPREINTE = 'app/api/stripe/checkout/create-rdv-empreinte/route.js'
 // Le gabarit de l'email de confirmation : il ne disait pas le montant garanti,
 // et promettait le remboursement d'un acompte qui n'existe pas.
 const MAIL = 'lib/resend.js'
+// La porte unique des SMS : elle normalise le numero et rend le credit.
+const SMS = 'lib/fidelite-sms.js'
 
 const MUTATIONS = [
   // ─── LA RÈGLE ───────────────────────────────────────────────────────────
@@ -216,6 +218,24 @@ const MUTATIONS = [
     fichier: EMPREINTE,
     de: '        `id, nom, duree_minutes, commercant_id, ${COLONNES_COUVERTS}`',
     vers: "        'id, nom, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max'" },
+
+  // ─── LE SMS NE PARTAIT NULLE PART (16/09, essai F2) ─────────────────────
+  // 🔴 Brevo n accepte que le format international : le numero tape par le
+  // restaurateur etait refuse a chaque envoi.
+  { nom: '🔴 le numero repart au format national chez Brevo',
+    fichier: SMS,
+    de: '    await envoyerSms({ to: destinataire, contenu })',
+    vers: '    await envoyerSms({ to: telephone, contenu })' },
+
+  { nom: '🔴 un numero invalide coute de nouveau un credit',
+    fichier: SMS,
+    de: "  if (!destinataire) return { ok: false, raison: 'telephone_invalide' }",
+    vers: '  if (!destinataire) { /* on continue */ }' },
+
+  { nom: '⚠️ le restaurateur ne sait plus quoi corriger',
+    fichier: DEMANDE,
+    de: "          telephone_invalide: 'Ce numéro n’est pas un numéro belge valable. Corrige-le, ou envoie le lien par email.',",
+    vers: '' },
 
   // ─── L EMAIL DE CONFIRMATION (16/09, essai E6) ──────────────────────────
   { nom: '🔴 l email de confirmation ne dit plus le montant garanti',

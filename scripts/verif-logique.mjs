@@ -4368,6 +4368,43 @@ verifier('les échecs sont comptés, pas alertés douze fois',
     /\.eq\('commercant_id', prestation\.commercant_id\)/.test(PPS))
 }
 
+// ── 🔴 `.catch()` N'EXISTE PAS SUR UNE REQUÊTE SUPABASE (16/09, essai F2) ───
+//
+// Le constructeur de requête est un THENABLE : il porte `then()`, pas
+// `catch()` (vérifié dans @supabase/postgrest-js installé : zéro occurrence de
+// `catch(onrejected)`). Un `.catch()` chaîné lève donc
+// `e.rpc(...).catch is not a function` — et il lève DANS LE RATTRAPAGE, là où
+// personne ne regarde : le crédit SMS n'était pas rendu, et surtout la vraie
+// cause de l'échec était remplacée par cette erreur-là. C'est elle qu'Alex a
+// lue à l'écran, à la place du problème.
+//
+// ⚠️ LA GARDE VISE LE CHAÎNAGE DIRECT, la forme qui s'écrit naturellement.
+// `auth.signOut()`, `storage.remove()` et `request.json()` rendent de VRAIES
+// promesses : elles gardent leur `.catch()`, et c'est correct.
+{
+  const TERMINAISONS = 'rpc|select|insert|update|upsert|delete|eq|neq|is|in|single|maybeSingle|limit|order|match|range|filter|not|or|gte|lte|gt|lt|like|ilike|contains'
+  const fautifs = []
+  let fichiersLus = 0
+  const parcourirJs = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) { parcourirJs(`${d}/${e.name}`); continue }
+      if (!e.name.endsWith('.js')) continue
+      fichiersLus++
+      const src = readFileSync(`${d}/${e.name}`, 'utf8')
+      const rx = new RegExp(`\\.(${TERMINAISONS})\\s*\\([^()]*\\)\\s*\\.catch\\s*\\(`, 'g')
+      for (const m of src.matchAll(rx)) {
+        fautifs.push(`${d.split(/[\\/]/).slice(-1)[0]}/${e.name} · ${m[0].trim()}`)
+      }
+    }
+  }
+  parcourirJs(new URL('../app', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+  parcourirJs(new URL('../lib', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+  // ⚠️ UNE LISTE VIDE DIRAIT « TOUT VA BIEN » SANS AVOIR RIEN LU.
+  verifier('🔴 les fichiers sont bien parcourus', fichiersLus > 100, `${fichiersLus} fichiers`)
+  verifier('🔴 aucun `.catch()` chaîné sur une requête Supabase',
+    fautifs.length === 0, fautifs.join(' | '))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

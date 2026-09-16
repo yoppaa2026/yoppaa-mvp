@@ -170,6 +170,11 @@ export async function POST(request) {
           plus_de_credits: 'Tu n’as plus de crédits SMS. Recharge, ou envoie le lien par email.',
           heure_indue: 'Il est trop tard pour un SMS. Envoie le lien par email.',
           sans_telephone: 'Ce client n’a pas de numéro.',
+          // 🔴 LA CAUSE LA PLUS FRÉQUENTE, ET ELLE N'AVAIT PAS DE MESSAGE
+          // (16/09) : un numéro qui n'est pas un numéro belge valable. Sans
+          // cette ligne, le restaurateur lisait « le SMS n'a pas pu partir »
+          // et n'avait aucune idée de ce qu'il devait corriger.
+          telephone_invalide: 'Ce numéro n’est pas un numéro belge valable. Corrige-le, ou envoie le lien par email.',
           brevo_ko: 'L’envoi du SMS a échoué. Réessaie, ou envoie le lien par email.',
         }[res.raison] || 'Le SMS n’a pas pu partir.'
         // ⚠️ LE LIEN RESTE VALABLE : il est posé, le restaurateur peut le

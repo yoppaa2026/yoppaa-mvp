@@ -615,6 +615,38 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // rendait cette garde FAUSSEMENT ROUGE. Le piège de l'import, déjà nommé.
   verifie('⚠️ le lien est posé AVANT d’être envoyé',
     DEMANDE.indexOf('empreinte_demande_jeton_hash: hash') < DEMANDE.indexOf('await envoyerAvecCredit('))
+  // ── 🔴 LE NUMÉRO PART AU FORMAT INTERNATIONAL (16/09, essai F2 d'Alex) ──
+  //
+  // Brevo n'accepte que `+32470123456`. Le lien « confirme ta table » envoyait
+  // le numéro TEL QUE LE RESTAURATEUR L'AVAIT TAPÉ (`0472634325`), donc chaque
+  // SMS partait vers un destinataire rejeté. La fidélité ne s'en apercevait pas :
+  // ses numéros sont déjà normalisés en base au moment du pointage.
+  {
+    const { envoyerAvecCredit } = await import('../lib/fidelite-sms.js')
+    const SMS = sansProse(lire('lib/fidelite-sms.js'))
+
+    // La normalisation vit dans la PORTE UNIQUE des SMS, avant tout le reste :
+    // corriger l'appelant du jour aurait laissé le piège armé pour le suivant.
+    const iNormalise = SMS.indexOf('const destinataire = normaliserTelephone(telephone)')
+    verifie('🔴 la porte unique des SMS normalise le numéro',
+      iNormalise !== -1 && iNormalise < SMS.indexOf("rpc('consommer_sms_credit'"))
+    verifie('🔴 et c’est CE numéro qui part chez Brevo',
+      /envoyerSms\(\{ to: destinataire, contenu \}\)/.test(SMS))
+
+    // 🔴 UN NUMÉRO INVALIDE NE COÛTE PAS UN CRÉDIT : le refus vient avant la
+    // consommation. Exécuté, avec une base simulée qui compte les appels.
+    let appelsRpc = 0
+    const baseSms = { rpc: (nom) => { appelsRpc++; return Promise.resolve({ data: 1, error: null, nom }) } }
+    const refus = await envoyerAvecCredit(baseSms, { id: 'c1', fidelite_sms_actif: true }, '12345', 'coucou',
+      { exigerFidelite: false, plageHoraire: { min: 0, max: 24 } })
+    egal('🔴 un numéro invalide est refusé', refus.raison, 'telephone_invalide')
+    egal('🔴 et il n’a coûté AUCUN crédit', appelsRpc, 0)
+    // ⚠️ ET LE RESTAURATEUR APPREND QUOI CORRIGER : sans ce message, il lisait
+    // « le SMS n'a pas pu partir » sans savoir quoi faire.
+    verifie('🔴 la route nomme cette cause',
+      /telephone_invalide: 'Ce numéro n’est pas un numéro belge valable/.test(DEMANDE))
+  }
+
   // 🔴 UN SMS N'A NI ACCENT NI EMOJI : un caractère hors GSM-7 double le coût,
   // et c'est le commerçant qui paie.
   verifie('🔴 le SMS du lien n’a ni accent ni emoji',

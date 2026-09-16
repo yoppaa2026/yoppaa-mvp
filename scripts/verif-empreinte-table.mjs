@@ -781,6 +781,67 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /Ta table reste réservée, simplement sans garantie/.test(PAGE))
   verifie('⚠️ l’email dit la même chose que la page',
     /Rien n&rsquo;est débité si tu viens/.test(MAIL) && /Ta table reste réservée même sans ce geste/.test(MAIL))
+
+  // ── 🔴 L'EMAIL DE CONFIRMATION, EXÉCUTÉ (16/09, essai E6 d'Alex) ────────
+  //
+  // Le client venait d'enregistrer sa carte, la fiche lui avait annoncé 120 €,
+  // et sa confirmation n'en disait pas un mot. C'est pourtant l'écrit qu'il
+  // garde, et celui qu'il ressortira le jour d'un débit.
+  //
+  // 🔴 ET ELLE LUI PROMETTAIT « REMBOURSEMENT AUTOMATIQUE DE L'ACOMPTE EN 5 À
+  // 10 JOURS » sur une table qui n'a jamais rien payé. Un client qui attend un
+  // virement qui ne viendra pas rappelle son restaurant, puis conteste.
+  {
+    const { emailRdvConfirme } = await import('../lib/resend.js')
+    const base = {
+      yopper_prenom: 'Alexandre', commercant_nom: 'La Table d’Essai',
+      commercant_adresse: 'Place Joseph Meunier 18, 5640 Mettet',
+      prestation_nom: 'Table de 6 personnes', date_rdv: '2026-09-19',
+      heure_debut: '20:00', heure_fin: '22:30', duree_minutes: 150,
+      delai_annulation_heures: 3, annulation_token: 'jeton-essai',
+      commercant_categorie: 'alimentaire', table: true, couverts: 6,
+    }
+    // ⚠️ LE MONTANT ATTENDU VIENT DE `euros()`, jamais écrit à la main : son
+    // espace est INSÉCABLE (U+00A0), et une garde qui tape une espace normale
+    // rougit sur un email parfaitement correct. Elle m'a eu tout de suite.
+    const { euros } = await import('../lib/montants.js')
+    const garantie = emailRdvConfirme({ ...base, empreinte_montant: 120 })
+    verifie('🔴 l’email de confirmation DIT le montant garanti',
+      /Garantie/.test(garantie) && garantie.includes(euros(120)))
+    verifie('🔴 et qu’il n’est pas débité si le client vient',
+      /Rien n&rsquo;est débité si tu viens/.test(garantie))
+    verifie('🔴 le bloc d’annulation redit ce que le restaurant peut facturer',
+      /ne peut facturer [^<]*120,00/.test(garantie))
+    // 🔴 LE DÉFAUT EXACT VU PAR ALEX.
+    verifie('🔴 et il ne promet AUCUN remboursement d’acompte',
+      !/Remboursement automatique de l'acompte/.test(garantie))
+
+    // Une table sans garantie et sans acompte ne promet rien non plus.
+    const nue = emailRdvConfirme({ ...base })
+    verifie('🔴 une table sans acompte ne promet pas de remboursement',
+      !/Remboursement automatique de l'acompte/.test(nue) && !/acompte revient/.test(nue))
+    verifie('⚠️ et elle n’affiche aucune garantie', !/Garantie/.test(nue))
+    // ⚠️ MAIS UN VRAI ACOMPTE SE DIT TOUJOURS : la phrase n'a pas disparu, elle
+    // ne s'écrit plus que quand elle est vraie.
+    const avecAcompte = emailRdvConfirme({ ...base, acompte_paye: true, acompte_montant: 15, prix_estime: 60 })
+    verifie('⚠️ un acompte réellement payé annonce son remboursement',
+      /acompte revient sur ton moyen de paiement/.test(avecAcompte))
+  }
+
+  // ── Les DEUX expéditeurs du même email chargent et passent la garantie ──
+  //
+  // ⚠️ CES DEUX-LÀ ONT DÉJÀ DIVERGÉ : le webhook s'est tu sur les produits, puis
+  // sur la catégorie. Même email, deux chemins : ce qui n'est pas comparé dérive.
+  for (const [quoi, chemin] of [
+    ['le webhook', 'app/api/stripe/webhook/route.js'],
+    ['la route d’emails', 'app/api/emails/rdv-confirme/route.js'],
+  ]) {
+    const src = sansProse(lire(chemin))
+    verifie(`🔴 ${quoi} CHARGE l’empreinte de la réservation`,
+      /empreinte_statut, empreinte_montant/.test(src), chemin)
+    verifie(`🔴 ${quoi} PASSE le montant garanti au gabarit`,
+      /empreinte_montant:\s*rdv\.empreinte_statut === 'posee' \? Number\(rdv\.empreinte_montant\) \|\| 0 : 0/.test(src), chemin)
+  }
   verifie('🔴 et l’email n’annonce aucune somme bloquée',
     !/(bloqu|retenu)\w*\s+(sur\s+)?(ta|ton|sa|son)\s+(carte|compte)/i.test(MAIL))
 

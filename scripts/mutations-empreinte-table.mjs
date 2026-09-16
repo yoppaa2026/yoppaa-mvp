@@ -37,6 +37,9 @@ const DASH = 'app/dashboard/page.js'
 // La règle des couverts et les colonnes qu'elle déclare lire.
 const COUVERTS = 'lib/cours-collectifs.js'
 const EMPREINTE = 'app/api/stripe/checkout/create-rdv-empreinte/route.js'
+// Le gabarit de l'email de confirmation : il ne disait pas le montant garanti,
+// et promettait le remboursement d'un acompte qui n'existe pas.
+const MAIL = 'lib/resend.js'
 
 const MUTATIONS = [
   // ─── LA RÈGLE ───────────────────────────────────────────────────────────
@@ -213,6 +216,38 @@ const MUTATIONS = [
     fichier: EMPREINTE,
     de: '        `id, nom, duree_minutes, commercant_id, ${COLONNES_COUVERTS}`',
     vers: "        'id, nom, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max'" },
+
+  // ─── L EMAIL DE CONFIRMATION (16/09, essai E6) ──────────────────────────
+  { nom: '🔴 l email de confirmation ne dit plus le montant garanti',
+    fichier: MAIL,
+    de: '${garantie > 0 ? `<tr><td style="padding:10px 14px;color:${C.muted};border-bottom:1px solid ${C.pale};">Garantie</td>',
+    vers: '${false ? `<tr><td style="padding:10px 14px;color:${C.muted};border-bottom:1px solid ${C.pale};">Garantie</td>' },
+
+  { nom: '🔴 il repromet le remboursement d un acompte qui n existe pas',
+    fichier: MAIL,
+    de: "              aAcompte ? 'Ton acompte revient sur ton moyen de paiement en 5 à 10 jours.' : null,",
+    vers: "              'Remboursement automatique de l\\'acompte en 5 à 10 jours.'," },
+
+  { nom: '🔴 le bloc d annulation ne redit plus ce qui peut etre facture',
+    fichier: MAIL,
+    de: '              garantie > 0',
+    vers: '              false' },
+
+  { nom: '🔴 le webhook ne charge plus l empreinte pour l email',
+    fichier: 'app/api/stripe/webhook/route.js',
+    de: '      empreinte_statut, empreinte_montant,',
+    vers: '      empreinte_statut,' },
+
+  { nom: '🔴 la route d emails ne passe plus le montant garanti',
+    fichier: 'app/api/emails/rdv-confirme/route.js',
+    de: "          empreinte_montant:       rdv.empreinte_statut === 'posee' ? Number(rdv.empreinte_montant) || 0 : 0,",
+    vers: '          empreinte_montant:       0,' },
+
+  // ⚠️ UNE DEMANDE NON CONFIRMEE NE GARANTIT RIEN : l annoncer serait faux.
+  { nom: '⚠️ une empreinte seulement DEMANDEE s annonce comme garantie',
+    fichier: 'app/api/stripe/webhook/route.js',
+    de: "      empreinte_montant:       rdv.empreinte_statut === 'posee' ? Number(rdv.empreinte_montant) || 0 : 0,",
+    vers: '      empreinte_montant:       Number(rdv.empreinte_montant) || 0,' },
 
   // ─── CE QUE STRIPE ACCEPTE, LU DANS LA BIBLIOTHEQUE INSTALLEE (16/09) ───
   // 🔴 LE PARAMETRE QUI BLOQUAIT TOUT : Stripe refusait l appel entier avec

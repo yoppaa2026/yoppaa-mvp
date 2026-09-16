@@ -63,6 +63,7 @@ export async function POST(request) {
       .select(`
         id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, duree_minutes,
         prix_estime, acompte_paye, acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant, bons_utilises,
+        empreinte_statut, empreinte_montant,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
         annulation_token, lieu_id, lieu_libelle, lieu_adresse, commande_id,
         couverts,
@@ -159,6 +160,10 @@ export async function POST(request) {
           // appliquait zéro. Et le défaut d'un restaurant n'est pas celui d'un
           // salon : le module tranche les deux, une seule fois.
           delai_annulation_heures: delaiAnnulationHeures(rdv.commercant),
+          // 🔴 CE QUE LA TABLE GARANTIT (16/09, essai E6). Le MÊME paramètre que
+          // l'autre expéditeur du même email : ces deux-là ont déjà divergé deux
+          // fois, un banc les compare désormais. Seule une carte POSÉE garantit.
+          empreinte_montant:       rdv.empreinte_statut === 'posee' ? Number(rdv.empreinte_montant) || 0 : 0,
           annulation_token:        rdv.annulation_token,
           praticien_prenom:        rdv.praticien?.prenom || null,
           praticien_nom:           rdv.praticien?.nom || null,

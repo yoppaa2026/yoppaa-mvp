@@ -1345,12 +1345,20 @@ async function handleCheckoutSessionCompleted(session, supabase, compteConnecte)
 // insert RDV. Non-bloquant : erreurs loguees mais ne font pas planter le webhook.
 async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
   // Fetch les jointures fraiches pour avoir nom commercant + presta + email
+  //
+  // 🔴 `empreinte_statut` ET `empreinte_montant` (16/09, essai E6 d'Alex).
+  // Sans elles, l'email de confirmation d'une table garantie ne disait pas un
+  // mot de ce que le client venait d'accepter, et lui promettait en prime le
+  // « remboursement automatique de l'acompte » d'un acompte qui n'existe pas.
+  // ⚠️ Les mêmes colonnes sont exigées de l'AUTRE expéditeur du même email : un
+  // banc les compare, parce que ces deux-là ont déjà divergé deux fois.
   const { data: rdv } = await supabase
     .from('rdv_reservations')
     .select(`
       id, date_rdv, heure_debut, heure_fin, duree_minutes, prix_estime,
       numero_rdv, numero_prefixe,
       acompte_paye_en_ligne, acompte_montant, fidelite_remise, bon_cadeau_montant, bons_utilises,
+      empreinte_statut, empreinte_montant,
       client_email, client_prenom, client_nom, client_telephone, notes_client,
       annulation_token, commande_id,
       lieu_id, lieu_libelle, lieu_adresse,
@@ -1441,6 +1449,9 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       // devenait vingt-quatre heures dans l'email, quand la route d'annulation
       // appliquait zéro. Le module décide pour tout le monde.
       delai_annulation_heures: delaiAnnulationHeures(rdv.commercant),
+      // 🔴 CE QUE LA TABLE GARANTIT, et seulement si la carte est POSÉE : une
+      // demande non confirmée ne garantit rien, l'annoncer serait faux.
+      empreinte_montant:       rdv.empreinte_statut === 'posee' ? Number(rdv.empreinte_montant) || 0 : 0,
       annulation_token:        rdv.annulation_token,
       praticien_prenom:        rdv.praticien?.prenom || null,
       praticien_nom:           rdv.praticien?.nom || null,

@@ -1222,9 +1222,17 @@ async function handleEmpreinteSetup(session, supabase, compteConnecte) {
       empreinte_payment_method_id: paymentMethodId,
       empreinte_customer_id: customerId,
       empreinte_debit_erreur: null,
-      // ⚠️ LE LIEN EST BRÛLÉ : il a servi. Le laisser vivant permettrait de
-      // rouvrir une saisie de carte sur une table déjà garantie.
-      empreinte_demande_jeton_hash: null,
+      // 🔴 LE JETON N'EST PLUS EFFACÉ (16/09, essai F5 d'Alex). Il l'était pour
+      // que le lien ne serve pas deux fois — mais ce n'est PAS lui qui protège :
+      // `chargerLienEmpreinte` refuse « déjà garantie » AVANT d'ouvrir la
+      // moindre session Stripe, donc aucune seconde carte ne peut être
+      // attachée, jeton ou pas.
+      //
+      // Ce que l'effacement coûtait, en revanche : le client qui rouvrait son
+      // lien ne tombait sur AUCUNE ligne, donc sur « ce lien n'est pas
+      // valable ». Il pouvait croire sa table non garantie et rappeler le
+      // restaurant. En gardant le jeton, il lit « ta table est garantie »,
+      // c'est-à-dire la vérité, et c'est la seule chose qu'il veut savoir.
     }).eq('id', rdvId)
     if (error) throw new Error(`garantie non posée sur ${rdvId} : ${error.message}`)
     console.info('[webhook/empreinte] table prise au téléphone désormais garantie', { rdvId, montant })

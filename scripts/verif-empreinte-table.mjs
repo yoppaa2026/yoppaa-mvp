@@ -631,7 +631,7 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     verifie('🔴 la porte unique des SMS normalise le numéro',
       iNormalise !== -1 && iNormalise < SMS.indexOf("rpc('consommer_sms_credit'"))
     verifie('🔴 et c’est CE numéro qui part chez Brevo',
-      /envoyerSms\(\{ to: destinataire, contenu \}\)/.test(SMS))
+      /envoyerSms\(\{ to: destinataire, contenu: versGsm7\(contenu\) \}\)/.test(SMS))
 
     // 🔴 UN NUMÉRO INVALIDE NE COÛTE PAS UN CRÉDIT : le refus vient avant la
     // consommation. Exécuté, avec une base simulée qui compte les appels.
@@ -647,10 +647,30 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
       /telephone_invalide: 'Ce numéro n’est pas un numéro belge valable/.test(DEMANDE))
   }
 
-  // 🔴 UN SMS N'A NI ACCENT NI EMOJI : un caractère hors GSM-7 double le coût,
-  // et c'est le commerçant qui paie.
-  verifie('🔴 le SMS du lien n’a ni accent ni emoji',
-    !/const contenu = `Yoppaa[^`]*[àâäéèêëîïôöùûüç\u{1F300}-\u{1FAFF}]/u.test(DEMANDE))
+  // ── 🔴 LE SMS TIENT EN GSM-7, QUOI QU'ON Y METTE (16/09) ────────────────
+  //
+  // ⚠️ GARDE REMPLACÉE, PAS RETIRÉE. Elle interdisait TOUT accent dans le
+  // gabarit : prudent, mais faux (l'alphabet accepte `à é è ù`) et surtout
+  // AVEUGLE à ce qui coûte vraiment — le nom du commerce, qui est interpolé.
+  // Une « Crêperie » doublait le coût de chacun de ses SMS sans que rien ne le
+  // voie. La porte unique traduit désormais le message COMPLET, et le banc
+  // EXÉCUTE cette traduction.
+  {
+    const { versGsm7, estGsm7, segments } = await import('../lib/gsm7.js')
+    egal('🔴 l’apostrophe typographique devient la droite', versGsm7('n’est'), "n'est")
+    egal('🔴 un accent hors alphabet perd sa marque, pas sa lettre', versGsm7('Crêperie du Goût'), 'Creperie du Gout')
+    egal('⚠️ mais les accents ADMIS sont gardés', versGsm7('débité à 20:00 où ça'), 'débité à 20:00 où ca')
+    egal('⚠️ un emoji disparaît au lieu de doubler le coût', versGsm7('Bravo 🎉'), 'Bravo ')
+    egal('⚠️ l’espace insécable devient une espace ordinaire', versGsm7('120,00 EUR'), '120,00 EUR')
+    verifie('🔴 tout ce qui sort est représentable en GSM-7',
+      [...versGsm7('Crêperie « Le Goût » – 5 € 🎉 n’est')].every(estGsm7))
+    // ⚠️ ET LE MESSAGE DU LIEN TIENT EN DEUX SEGMENTS, comme avant : écrire en
+    // français correct ne coûte pas un segment de plus.
+    const exemple = `Yoppaa - La Table d'Essai : confirme ta table du 19/09 à 20:00 en enregistrant ta carte. Rien n'est débité si tu viens, 120,00 EUR seulement en cas d'absence ou d'annulation tardive. https://www.yoppaa.app/empreinte/${'a'.repeat(32)}`
+    verifie('🔴 le SMS du lien tient en deux segments', segments(exemple) <= 2, `${segments(exemple)} segments`)
+  }
+  verifie('🔴 la porte unique met le message en GSM-7 avant l’envoi',
+    /await envoyerSms\(\{ to: destinataire, contenu: versGsm7\(contenu\) \}\)/.test(sansProse(lire('lib/fidelite-sms.js'))))
   verifie('🔴 et il part jusqu’à 23 h, sans exiger la fidélité',
     /exigerFidelite: false, plageHoraire: \{ min: 8, max: 23 \}/.test(DEMANDE))
   // 🔴 LE SMS NE DISAIT PAS LE MONTANT (16/09) : prévenu par SMS, le client
@@ -670,6 +690,20 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // par l'autre canal.
   verifie('⚠️ un échec d’envoi laisse le lien valable',
     /LE LIEN RESTE VALABLE|le restaurateur peut le/.test(lire('app/api/rdv/empreinte-demander/route.js')))
+  // 🔴 MAIS IL N'ANNONCE PLUS QU'IL EST PARTI (16/09, essai F2 bis d'Alex :
+  // numéro erroné, le SMS ne part pas, et l'agenda affiche « Relancer par
+  // SMS »). L'agenda lit `empreinte_demande_at` pour dire « lien déjà envoyé,
+  // pas encore confirmé » : posé AVANT l'envoi, ce champ ment dès que l'envoi
+  // échoue, et le restaurateur croit son client prévenu.
+  {
+    const effacements = [...DEMANDE.matchAll(/empreinte_demande_at: null, empreinte_demande_canal: null/g)].length
+    egal('🔴 un envoi raté efface la trace de l’ENVOI, dans les DEUX canaux', effacements, 2)
+    // ⚠️ LE JETON ET L'ÉCHÉANCE SURVIVENT : le lien reste utilisable s'il a
+    // malgré tout atteint le client, et le restaurateur peut le renvoyer.
+    verifie('⚠️ mais ni le jeton ni l’échéance ne sont effacés',
+      !/empreinte_demande_at: null[^}]*empreinte_demande_jeton_hash: null/.test(DEMANDE)
+      && !/empreinte_demande_expire_at: null/.test(DEMANDE))
+  }
 
   // ── CE QUE LE JETON OUVRE, EXÉCUTÉ ─────────────────────────────────────
   //
@@ -722,6 +756,12 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
       await code({ ...RDV_LIEN, empreinte_demande_expire_at: '2026-09-17T10:00:00Z' }), 'expire')
     egal('une table déjà garantie ne redemande pas de carte',
       await code({ ...RDV_LIEN, empreinte_statut: 'posee' }), 'deja_garantie')
+    // 🔴 MÊME QUAND LE LIEN A EXPIRÉ DEPUIS (16/09, essai F5). Le client qui
+    // rouvre son lien veut savoir que sa carte est posée, pas que son lien est
+    // périmé : l'échéance ne l'intéresse plus une fois qu'elle a servi.
+    egal('🔴 et elle le dit même si le lien a expiré entre-temps',
+      await code({ ...RDV_LIEN, empreinte_statut: 'posee', empreinte_demande_expire_at: '2026-09-17T10:00:00Z' }),
+      'deja_garantie')
     egal('un restaurant qui n’encaisse pas ne demande pas de carte',
       await code({ ...RDV_LIEN, commercant: { ...RESTO, stripe_account_charges_enabled: false } }), 'stripe_absent')
     // 🔴 LE RÉGLAGE A PU CHANGER DEPUIS L'ENVOI : la règle est rejouée à chaque
@@ -778,9 +818,22 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // ⚠️ UNE TABLE DÉJÀ FACTURÉE NE REDEVIENT PAS « GARANTIE » sur un rejeu.
   verifie('🔴 un rejeu n’efface pas un débit qui a eu lieu',
     /if \(cible\.empreinte_statut === 'debitee'\)/.test(WEBHOOK2))
-  // ⚠️ LE LIEN EST BRÛLÉ APRÈS USAGE.
-  verifie('🔴 le lien est brûlé une fois la carte posée',
-    /empreinte_demande_jeton_hash: null/.test(WEBHOOK2))
+  // ⚠️ GARDE RÉORIENTÉE LE 16/09, PAS DÉSARMÉE. Elle exigeait l'effacement du
+  // jeton après usage, « pour que le lien ne serve pas deux fois ». Mais ce
+  // n'était PAS lui qui protégeait : la règle refuse « déjà garantie » avant
+  // d'ouvrir la moindre session Stripe, jeton ou pas. L'effacement, lui,
+  // coûtait la vérité au client : rouvrant son lien, il ne tombait sur aucune
+  // ligne, donc sur « ce lien n'est pas valable », et pouvait croire sa table
+  // non garantie. La garde vise maintenant ce qui protège VRAIMENT.
+  verifie('🔴 une table déjà garantie ne rouvre AUCUNE saisie de carte',
+    /if \(raison === 'deja_garantie'\)/.test(MODULE)
+    && MODULE.indexOf("raison === 'deja_garantie'") < MODULE.indexOf('return { ok: true, rdv, commercant, montant }'))
+  // 🔴 ET ELLE LE DIT AVANT DE PARLER D'ÉCHÉANCE : une carte posée rend
+  // l'expiration du lien sans intérêt pour le client.
+  verifie('🔴 « déjà garantie » se dit AVANT « expiré »',
+    MODULE.indexOf("raison === 'deja_garantie'") < MODULE.indexOf('!lienValide(rdv, maintenant)'))
+  verifie('⚠️ et le jeton n’est plus effacé, sinon la ligne serait introuvable',
+    !/empreinte_demande_jeton_hash: null/.test(WEBHOOK2))
 
   // ── Ce que le client lit ───────────────────────────────────────────────
   // 🔴 SA TABLE EST DÉJÀ RÉSERVÉE, et le lui cacher ferait passer Yoppaa pour
@@ -886,10 +939,21 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /Lien déjà envoyé par/.test(DASH2) && /Relancer par SMS/.test(DASH2))
   // 🔴 ON LIT VRAIMENT LA RÉPONSE : plus de crédits, heure trop tardive, email
   // absent. Le taire laisserait le restaurateur croire son client relancé.
+  // ⚠️ GARDE SUIVIE, PAS DÉSARMÉE (16/09) : le message n'a pas disparu, il a
+  // changé de fenêtre. Un `alert()` du navigateur porte l'adresse du site et un
+  // bouton « OK » qui ne dit rien ; `confirmationInfo` annonce dans les couleurs
+  // du produit, avec un seul bouton qui EST la sortie.
   verifie('🔴 un envoi raté est DIT au restaurateur',
-    /alert\(j\?\.error \|\| 'Le lien n’a pas pu partir/.test(DASH2))
+    /message: j\?\.error \|\| 'Le lien n’a pas pu partir/.test(DASH2)
+    && /titre: canal === 'sms' \? 'Le SMS n’est pas parti'/.test(DASH2))
   verifie('⚠️ et le message rappelle que la table reste réservée',
-    /Ta table reste réservée tant qu’il n’a pas confirmé/.test(DASH2))
+    /Ta table reste réservée tant qu’il n’a pas confirmé/.test(DASH2)
+    && /Ta table reste réservée\. Tu peux corriger et réessayer/.test(DASH2))
+  // 🔴 PLUS AUCUN `alert()` SUR CE GESTE : c'est celui que le restaurateur voit
+  // le plus souvent, et c'était le plus laid.
+  verifie('🔴 la demande d’empreinte ne passe plus par une fenêtre du navigateur',
+    !/alert\(/.test(DASH2.slice(DASH2.indexOf('async function demanderEmpreinte'),
+      DASH2.indexOf('async function facturerEmpreinte'))))
 
   // ── « CE COMPTE ENCAISSE-T-IL ? », UNE SEULE DÉFINITION ────────────────
   //

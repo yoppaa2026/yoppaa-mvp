@@ -169,8 +169,8 @@ const MUTATIONS = [
   // ─── LE SMS ─────────────────────────────────────────────────────────────
   { nom: '🔴 le SMS ne dit plus le montant garanti',
     fichier: DEMANDE,
-    de: 'Rien n est debite si tu viens, ${eurosNus(montant)} EUR seulement en cas d absence ou d annulation tardive.',
-    vers: 'Rien n est debite si tu viens.' },
+    de: "Rien n'est débité si tu viens, ${eurosNus(montant)} EUR seulement en cas d'absence ou d'annulation tardive.",
+    vers: "Rien n'est débité si tu viens." },
 
   { nom: '🔴 le SMS ressert la date brute de la base',
     fichier: DEMANDE,
@@ -219,13 +219,60 @@ const MUTATIONS = [
     de: '        `id, nom, duree_minutes, commercant_id, ${COLONNES_COUVERTS}`',
     vers: "        'id, nom, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max'" },
 
+  // ─── LE LIEN ROUVERT ET L ENVOI RATE (16/09, essais F5 et F2 bis) ───────
+  { nom: '🔴 « expire » repasse devant « deja garantie »',
+    fichier: MODULE,
+    de: "  if (raison === 'deja_garantie') {",
+    vers: '  if (false) {' },
+
+  { nom: '🔴 le jeton est de nouveau efface, la ligne devient introuvable',
+    fichier: 'app/api/stripe/webhook/route.js',
+    de: '      empreinte_debit_erreur: null,',
+    vers: '      empreinte_debit_erreur: null, empreinte_demande_jeton_hash: null,' },
+
+  { nom: '🔴 un SMS rate s annonce toujours comme envoye',
+    fichier: DEMANDE,
+    de: "        await supabase.from('rdv_reservations').update({ empreinte_demande_at: null, empreinte_demande_canal: null }).eq('id', rdv.id)",
+    vers: '        // envoi rate, on ne touche a rien' },
+
+  { nom: '⚠️ la demande d empreinte repasse par une fenetre du navigateur',
+    fichier: DASH,
+    de: "      titre: canal === 'sms' ? 'SMS envoyé' : 'Email envoyé',",
+    vers: "      titre: alert('parti') || (canal === 'sms' ? 'SMS envoyé' : 'Email envoyé')," },
+
+  { nom: '🔴 un envoi rate ne dit plus pourquoi',
+    fichier: DASH,
+    de: "        message: j?.error || 'Le lien n’a pas pu partir. Réessaie dans un instant.',",
+    vers: "        message: 'Le lien n’a pas pu partir. Réessaie dans un instant.'," },
+
   // ─── LE SMS NE PARTAIT NULLE PART (16/09, essai F2) ─────────────────────
   // 🔴 Brevo n accepte que le format international : le numero tape par le
   // restaurateur etait refuse a chaque envoi.
+  // ─── LE SMS TIENT EN GSM-7, QUOI QU ON Y METTE (16/09) ──────────────────
+  { nom: '🔴 le message n est plus mis en GSM-7 avant l envoi',
+    fichier: SMS,
+    de: '    await envoyerSms({ to: destinataire, contenu: versGsm7(contenu) })',
+    vers: '    await envoyerSms({ to: destinataire, contenu })' },
+
+  { nom: '🔴 l apostrophe typographique n est plus traduite (elle double le cout)',
+    fichier: 'lib/gsm7.js',
+    de: "  '’': \"'\", '‘': \"'\", '‚': ',', '‛': \"'\",",
+    vers: "  '‘': \"'\", '‚': ',', '‛': \"'\"," },
+
+  { nom: '🔴 un accent hors alphabet est garde tel quel',
+    fichier: 'lib/gsm7.js',
+    de: "    const sansAccent = caractere.normalize('NFD').replace(MARQUES, '')",
+    vers: '    const sansAccent = caractere' },
+
+  { nom: '⚠️ un caractere admis est retire alors qu il passait',
+    fichier: 'lib/gsm7.js',
+    de: '  return BASE.includes(caractere) || EXTENSION.includes(caractere)',
+    vers: '  return /[A-Za-z0-9 ]/.test(caractere)' },
+
   { nom: '🔴 le numero repart au format national chez Brevo',
     fichier: SMS,
-    de: '    await envoyerSms({ to: destinataire, contenu })',
-    vers: '    await envoyerSms({ to: telephone, contenu })' },
+    de: '    await envoyerSms({ to: destinataire, contenu: versGsm7(contenu) })',
+    vers: '    await envoyerSms({ to: telephone, contenu: versGsm7(contenu) })' },
 
   { nom: '🔴 un numero invalide coute de nouveau un credit',
     fichier: SMS,

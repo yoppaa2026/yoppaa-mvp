@@ -146,20 +146,20 @@ export async function POST(request) {
       if (!rdv.client_telephone) {
         return NextResponse.json({ ok: false, error: 'Ce client n’a pas de numéro : envoie le lien par email.' }, { status: 400 })
       }
-      // ⚠️ PAS D'ACCENT NI D'EMOJI DANS UN SMS : un caractère hors GSM-7 le fait
-      // basculer en UCS-2, donc 70 caractères au lieu de 160, donc le double de
-      // segments sur des SMS que Yoppaa paie à Brevo.
-      //
-      // 🔴 D'OÙ UNE DATE EN CHIFFRES ET PAS LE `quand` DE L'EMAIL : « août »
-      // suffirait à faire basculer le message entier (`û` est hors GSM-7), et
-      // `euros()` pose une espace insécable, hors GSM-7 elle aussi.
+      // ⚠️ UNE DATE EN CHIFFRES, ET C'EST LE SEUL SACRIFICE QUI RESTE : « août »
+      // ferait sortir le message de l'alphabet GSM-7 (`û` n'y est pas), et une
+      // date longue le rallongerait d'un segment pour rien.
       const [, mois, jourDuMois] = String(rdv.date_rdv || '').split('-')
-      const quandSms = jourDuMois && mois ? `${jourDuMois}/${mois} a ${heure}` : `${rdv.date_rdv} a ${heure}`
-      // 🔴 ET IL DIT LE MONTANT (16/09). L'email l'annonçait, le SMS non : un
-      // client prévenu par SMS arrivait sur la page sans avoir jamais lu ce
-      // qu'il garantissait. Le message reste en deux segments, comme avant, et
-      // un envoi coûte un crédit au commerçant quelle que soit sa longueur.
-      const contenu = `Yoppaa - ${commercant.nom} : confirme ta table du ${quandSms} en enregistrant ta carte. Rien n est debite si tu viens, ${eurosNus(montant)} EUR seulement en cas d absence ou d annulation tardive. ${lien}`
+      const quandSms = jourDuMois && mois ? `${jourDuMois}/${mois} à ${heure}` : `${rdv.date_rdv} à ${heure}`
+      // 🔴 LE MESSAGE S'ÉCRIT EN FRANÇAIS CORRECT (16/09, demande d'Alex :
+      // « il manque les apostrophes »). Il le peut désormais parce que
+      // `envoyerAvecCredit` met le message COMPLET en GSM-7 avant de l'envoyer :
+      // l'apostrophe droite et `à é è ù` y sont admis, la typographique `’` et
+      // `ê ç û` sont traduits. Écrire proprement ne coûte plus un segment.
+      //
+      // ⚠️ `eurosNus` ET JAMAIS `euros()` : celui-ci pose une espace insécable,
+      // que la traduction rendrait en espace ordinaire — autant ne pas la poser.
+      const contenu = `Yoppaa - ${commercant.nom} : confirme ta table du ${quandSms} en enregistrant ta carte. Rien n'est débité si tu viens, ${eurosNus(montant)} EUR seulement en cas d'absence ou d'annulation tardive. ${lien}`
       // ⚠️ SANS L'INTERRUPTEUR DE FIDÉLITÉ (ce n'est pas de la fidélité) ET
       // JUSQU'À 23 H : une réservation prise en plein service du soir doit
       // pouvoir partir.
@@ -179,6 +179,15 @@ export async function POST(request) {
         }[res.raison] || 'Le SMS n’a pas pu partir.'
         // ⚠️ LE LIEN RESTE VALABLE : il est posé, le restaurateur peut le
         // renvoyer autrement. On ne l'efface pas pour un échec d'envoi.
+        //
+        // 🔴 MAIS ON N'ANNONCE PLUS QU'IL EST PARTI (16/09, essai F2 bis
+        // d'Alex : numéro erroné, le SMS ne part pas, et l'agenda affiche
+        // pourtant « Relancer par SMS »). L'agenda lit `empreinte_demande_at`
+        // pour dire « lien déjà envoyé, pas encore confirmé » : posé avant
+        // l'envoi, ce champ devient un MENSONGE dès que l'envoi échoue, et le
+        // restaurateur croit son client prévenu. On efface la trace de l'ENVOI,
+        // jamais le jeton ni l'échéance.
+        await supabase.from('rdv_reservations').update({ empreinte_demande_at: null, empreinte_demande_canal: null }).eq('id', rdv.id)
         return NextResponse.json({ ok: false, code: res.raison, error: pourquoi }, { status: 502 })
       }
       return NextResponse.json({ ok: true, canal, expire_le: echeance.toISOString(), montant })
@@ -204,6 +213,9 @@ export async function POST(request) {
       })
     } catch (e) {
       console.error('[empreinte-demander] email KO', { rdvId: rdv.id, message: e?.message })
+      // ⚠️ LE MÊME FRÈRE QUE CÔTÉ SMS : un email qui n'est pas parti ne doit pas
+      // s'afficher comme « lien déjà envoyé par email, pas encore confirmé ».
+      await supabase.from('rdv_reservations').update({ empreinte_demande_at: null, empreinte_demande_canal: null }).eq('id', rdv.id)
       return NextResponse.json({ ok: false, error: 'L’email n’a pas pu partir. Réessaie, ou envoie le lien par SMS.' }, { status: 502 })
     }
 

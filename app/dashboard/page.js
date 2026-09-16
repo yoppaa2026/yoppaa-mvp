@@ -17,7 +17,9 @@ import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme } from './PosteConfirmation'
 import { jourBruxelles } from '@/lib/timezone'
 import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, confirmationEncaissement, questionEncaissement, nomClient } from '@/lib/confirmation-rdv'
-import { confirmationSimple } from '@/lib/confirmations'
+// ⚠️ `confirmationInfo` : un seul bouton, qui EST la sortie. On annonce, on ne
+// demande rien — et surtout plus par un `alert()` du navigateur.
+import { confirmationSimple, confirmationInfo } from '@/lib/confirmations'
 import { etatPaiementRdv, etatPaiementCommande, couleurPaiement, caDesRdvs, resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import ModalDeplacerRdv from './ModalDeplacerRdv'
 import ModaleExpedition from './ModaleExpedition'
@@ -2176,19 +2178,35 @@ export default function Dashboard() {
   async function demanderEmpreinte(rdvId, canal) {
     const res = await postPro('/api/rdv/empreinte-demander', { rdv_id: rdvId, canal })
     const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+    // ⚠️ LA FENÊTRE DU DÉPÔT, PLUS CELLE DU NAVIGATEUR (Alex, 16/09). Un
+    // `alert()` porte l'adresse du site, un bouton « OK » qui ne dit rien, et
+    // aucune des couleurs du produit. `confirmationInfo` annonce, avec un seul
+    // bouton qui EST la sortie : il n'y a rien à décider ici.
     if (!j?.ok) {
       // 🔴 ON LIT VRAIMENT LA RÉPONSE : plus de crédits SMS, heure trop tardive,
-      // email absent. Le taire laisserait le restaurateur croire son client
-      // relancé, et découvrir le contraire le soir du no-show.
-      alert(j?.error || 'Le lien n’a pas pu partir. Réessaie dans un instant.')
+      // email absent, numéro invalide. Le taire laisserait le restaurateur
+      // croire son client relancé, et découvrir le contraire le soir du no-show.
+      await confirme(confirmationInfo({
+        titre: canal === 'sms' ? 'Le SMS n’est pas parti' : 'L’email n’est pas parti',
+        message: j?.error || 'Le lien n’a pas pu partir. Réessaie dans un instant.',
+        // ⚠️ CE QUI RESTE VRAI MALGRÉ L'ÉCHEC : sans cette ligne, le
+        // restaurateur peut croire que sa table vient de se libérer.
+        details: 'Ta table reste réservée. Tu peux corriger et réessayer, ou passer par l’autre canal.',
+        action: 'J’ai compris',
+      }))
       return false
     }
     setRdvs(prev => prev.map(r => r.id === rdvId
       ? { ...r, empreinte_demande_at: new Date().toISOString(), empreinte_demande_canal: canal }
       : r))
-    alert(canal === 'sms'
-      ? 'SMS envoyé. Ta table reste réservée tant qu’il n’a pas confirmé.'
-      : 'Email envoyé. Ta table reste réservée tant qu’il n’a pas confirmé.')
+    await confirme(confirmationInfo({
+      titre: canal === 'sms' ? 'SMS envoyé' : 'Email envoyé',
+      message: canal === 'sms'
+        ? 'Ton client reçoit le lien et le montant garanti sur son GSM.'
+        : 'Ton client reçoit le lien et le montant garanti par email.',
+      details: 'Ta table reste réservée tant qu’il n’a pas confirmé : le lien la garantit, il ne la crée pas.',
+      action: 'Parfait',
+    }))
     return true
   }
 

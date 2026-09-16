@@ -16,7 +16,7 @@ import ModalNouveauRdv from './ModalNouveauRdv'
 import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme } from './PosteConfirmation'
 import { jourBruxelles } from '@/lib/timezone'
-import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, confirmationEncaissement, questionEncaissement, nomClient } from '@/lib/confirmation-rdv'
+import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, confirmationEncaissement, questionEncaissement, nomClient, noShowPossible } from '@/lib/confirmation-rdv'
 // ⚠️ `confirmationInfo` : un seul bouton, qui EST la sortie. On annonce, on ne
 // demande rien — et surtout plus par un `alert()` du navigateur.
 import { confirmationSimple, confirmationInfo } from '@/lib/confirmations'
@@ -939,6 +939,9 @@ function CarteCommande({ commande, numero, categorie = null, onChangerStatut, on
 // notes du client, prix estime. Actions : Honore / No-show / Annuler.
 function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null, onFacturerEmpreinte = null, onDemanderEmpreinte = null, stripePret = true, commercant = null }) {
   const statut = STATUTS_RDV[rdv.statut] || STATUTS_RDV['confirme']
+  // ⚠️ LA MÊME RÈGLE QUE LA FENÊTRE, POSÉE PAR LA MÊME FONCTION : une absence
+  // ne se déclare pas avant l'heure du service.
+  const actionsVisibles = statut.actions.filter(a => a !== 'no_show' || noShowPossible(rdv, new Date()))
   const { couleur } = statut
 
   const heureD = rdv.heure_debut?.slice(0,5)
@@ -1118,9 +1121,14 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
         )}
 
         {/* Actions selon statut */}
-        {statut.actions.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: statut.actions.length === 3 ? '2fr 1fr 1fr' : '1fr', gap: 6, marginTop: 10 }}>
-            {statut.actions.map(action => {
+        {/* 🔴 PAS DE « NO-SHOW » AVANT L'HEURE (Alex, 16/09 : « la capture
+            permet un no-show pour un rendez-vous dans 30 min »). Le client n'a
+            pas encore eu l'occasion de venir : le marquer absent l'accuse à
+            tort et lui envoie un email qui le dit. La règle vit dans le module,
+            avec l'heure murale belge. */}
+        {actionsVisibles.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: actionsVisibles.length === 3 ? '2fr 1fr 1fr' : '1fr', gap: 6, marginTop: 10 }}>
+            {actionsVisibles.map(action => {
               const cfg = ACTIONS_RDV_LABEL[action]
               if (!cfg) return null
               const isPrincipal = action === 'honore' || action === 'confirme'

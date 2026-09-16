@@ -18,7 +18,12 @@ import { execSync } from 'node:child_process'
 
 const RACINE = 'c:/Users/HP/yoppaa-mvp'
 const chemin = (f) => `${RACINE}/${f}`
-const BANC = 'verif:empreinte'
+// ⚠️ DEUX BANCS DEPUIS LE 16/09. Les règles du lien et de l'empreinte vivent
+// dans `verif:empreinte`, mais celles qui décident des ISSUES d'un rendez-vous
+// (déclarer une absence, proposer un changement d'adresse) sont mesurées par
+// `verif:logique`. Une mutation dont le banc n'est pas lancé reste verte : elle
+// ne mesurerait rien, et le dirait comme un succès.
+const BANC = 'verif:empreinte && npm run verif:logique'
 
 const REGLE = 'lib/empreinte-table.js'
 const RESERVER = 'app/api/rdv/reserver/route.js'
@@ -242,6 +247,22 @@ const MUTATIONS = [
     fichier: DASH,
     de: "      titre: canal === 'sms' ? 'SMS envoyé' : 'Email envoyé',",
     vers: "      titre: alert('parti') || (canal === 'sms' ? 'SMS envoyé' : 'Email envoyé')," },
+
+  // ─── DEUX ISSUES QUI N ONT PAS DE SENS (16/09, captures d Alex) ─────────
+  { nom: '🔴 le no-show redevient possible avant l heure du service',
+    fichier: DASH,
+    de: "  const actionsVisibles = statut.actions.filter(a => a !== 'no_show' || noShowPossible(rdv, new Date()))",
+    vers: '  const actionsVisibles = statut.actions' },
+
+  { nom: '🔴 une absence se declare la veille',
+    fichier: 'lib/confirmation-rdv.js',
+    de: '  return maintenant >= debut',
+    vers: '  return true' },
+
+  { nom: '🔴 annuler une table repropose « je change d adresse »',
+    fichier: 'lib/confirmation-rdv.js',
+    de: '  const estTable = rdv?.prestation?.par_couverts === true',
+    vers: '  const estTable = false' },
 
   // ─── L ECRAN OFFRAIT UN LIEN QUE LE SERVEUR REFUSAIT (16/09) ────────────
   { nom: '🔴 l ecran ne regarde de nouveau que l heure du service',

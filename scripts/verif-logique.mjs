@@ -3988,6 +3988,43 @@ verifier('honorer un rendez-vous payant demande comment',
 verifier('honorer une séance d’abonnement ne demande rien',
   questionRdvEnc('honore', { abonnement_id: 'a', prix_estime: 0 }) === null)
 
+// ── 🔴 DEUX ISSUES QUI N'ONT PAS DE SENS SUR UNE TABLE (Alex, 16/09) ────────
+{
+  const { noShowPossible } = await import('../lib/confirmation-rdv.js')
+  const table = { client_prenom: 'Alexandre', date_rdv: '2026-09-16', heure_debut: '19:15', prestation: { par_couverts: true } }
+  const salon = { ...table, prestation: { par_couverts: false } }
+
+  // 🔴 « JE CHANGE D'ADRESSE » EXISTE POUR UN SALON QUI DÉMÉNAGE. Un restaurant
+  // qui annule une table ne change pas d'adresse : le bouton offrait un geste
+  // absurde en plein service, et le mot « adresse » inquiète le client qui
+  // reçoit l'email pour rien.
+  const boutons = (rdv) => (questionRdvEnc('annule_commercant', rdv)?.actions || []).map(a => a.valeur)
+  verifier('🔴 annuler une TABLE ne propose pas de changer d’adresse',
+    !boutons(table).includes('lieu'), boutons(table).join(', '))
+  verifier('⚠️ mais un salon garde cette issue : lui peut déménager',
+    boutons(salon).includes('lieu'), boutons(salon).join(', '))
+  // ⚠️ ET LES AUTRES ISSUES RESTENT, dont la sortie sans effet : une fenêtre
+  // sans issue force la main.
+  verifier('⚠️ la table garde le déplacement, l’annulation et la sortie',
+    ['deplacer', 'annuler', 'rien'].every(v => boutons(table).includes(v)), boutons(table).join(', '))
+
+  // 🔴 ON NE DÉCLARE PAS UNE ABSENCE AVANT L'HEURE : le client n'a pas encore eu
+  // l'occasion de venir, et le marquer absent lui envoie un email qui l'accuse.
+  verifier('🔴 une table de 19 h 15 ne se déclare pas absente à 18 h 45',
+    noShowPossible(table, new Date('2026-09-16T18:45:00+02:00')) === false)
+  verifier('⚠️ à l’heure pile, c’est possible : le client est en retard',
+    noShowPossible(table, new Date('2026-09-16T19:15:00+02:00')) === true)
+  verifier('et une demi-heure plus tard aussi',
+    noShowPossible(table, new Date('2026-09-16T19:45:00+02:00')) === true)
+  // ⚠️ L'HEURE MURALE BELGE, PAS CELLE DU SERVEUR : Vercel tourne en UTC, et
+  // 17 h 20 UTC, c'est 19 h 20 à Bruxelles.
+  verifier('🔴 l’heure lue est celle de Bruxelles, pas celle du serveur',
+    noShowPossible(table, new Date('2026-09-16T17:20:00Z')) === true
+    && noShowPossible(table, new Date('2026-09-16T16:50:00Z')) === false)
+  verifier('⚠️ une date illisible ne permet aucune absence',
+    noShowPossible({ date_rdv: null, heure_debut: null }) === false)
+}
+
 // La confirmation dit ce qui vient d'être noté, jamais « c'est fait ».
 verifier('la confirmation nomme le terminal',
   /terminal/.test(confirmationEncaissement('terminal', { montant: 15, nom: 'Alexandre' })))

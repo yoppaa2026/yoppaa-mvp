@@ -518,6 +518,12 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /stripe_account_charges_enabled === false/.test(DEBIT))
 
   // ─── CÔTÉ TABLEAU DE BORD ─────────────────────────────────────────────────
+  // 🔴 ET LE BOUTON NO-SHOW N'EXISTE PAS AVANT L'HEURE (Alex, 16/09). Le débit
+  // était déjà tenu par sa propre fenêtre, mais un restaurateur qui voit
+  // « Facturer » apparaître croit légitimement pouvoir le faire.
+  verifie('🔴 l’agenda ne propose pas d’absence avant l’heure du service',
+    /const actionsVisibles = statut\.actions\.filter\(a => a !== 'no_show' \|\| noShowPossible\(rdv, new Date\(\)\)\)/.test(DASH)
+    && !/\{statut\.actions\.map\(/.test(DASH))
   verifie('🔴 marquer un no-show ne facture rien',
     !/empreinte-debiter/.test(DASH.slice(DASH.indexOf("if (statut === 'no_show')"), DASH.indexOf("if (statut === 'no_show')") + 1200)))
   // ⚠️ LA GARDE VISE LE MESSAGE D'ÉCHEC, PAS « UNE ALERTE QUELQUE PART ». Un

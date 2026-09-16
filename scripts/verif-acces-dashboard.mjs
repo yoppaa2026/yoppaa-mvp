@@ -28,7 +28,7 @@ import { normaliserEmail, memeEmail } from '../lib/email-normalise.js'
 // stockage (15/09, trouvé par Alex).
 import {
   DUREE_IMPERSONATION_MS, raisonImpersonationRefusee, finImpersonation, ligneExpiree, finAInscrire,
-  compteAChange, poserImpersonation, lireImpersonation, effacerImpersonation,
+  compteAChange, poserImpersonation, lireImpersonation, effacerImpersonation, messageImpersonation,
 } from '../lib/impersonation.js'
 
 // ⚠️ On NORMALISE LES FINS DE LIGNE. Git rend ces fichiers en CRLF sous
@@ -444,6 +444,22 @@ function sansCommentaires(src) {
   verifier('🔴 « Voir Dashboard » se range dans l’onglet, et le dit s’il n’y arrive pas',
     /if \(!poserImpersonation\(c\.id, j\.impersonation_id\)\) \{/.test(liste))
   verifier('🔴 et ne pose plus le commerce du tableau de bord', !/yoppaa_dashboard_commercant_id/.test(liste))
+
+  // 🔴 UN MESSAGE NOMME UN BOUTON QUI DOIT EXISTER SOUS CE NOM (16/09, relevé en
+  // écrivant la procédure d'essai d'Alex). Les messages de /admin disaient
+  // « Clique « Voir Dashboard » » pendant que le bouton s'appelait
+  // « Dashboard → » : on envoyait quelqu'un chercher un bouton introuvable.
+  // On EXÉCUTE les messages, on en tire le nom cité, et on le relit dans l'écran.
+  const nomsCites = [...new Set(
+    ['expiree', 'terminee', 'introuvable', 'reseau', 'raison-inconnue']
+      .map(r => (messageImpersonation(r).match(/«\s*([^»]+?)\s*»/) || [])[1])
+      .filter(Boolean),
+  )]
+  verifier('tous les messages de retour citent le MÊME bouton',
+    nomsCites.length === 1, nomsCites.join(' / ') || 'aucun nom cité')
+  verifier('🔴 et ce bouton porte ce nom dans l’écran admin',
+    nomsCites.length > 0 && nomsCites.every(n => liste.includes(n)),
+    `${nomsCites.join(' / ')} : introuvable dans SectionTousCommercants`)
 
   const iLire = dash.indexOf('const imp = lireImpersonation()')
   const iVerdict = dash.indexOf('const verdict = await verifierImpersonation(supabase, imp)')

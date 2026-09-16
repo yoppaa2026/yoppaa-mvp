@@ -251,6 +251,17 @@ const MUTATIONS = [
     de: '      if (!poserImpersonation(c.id, j.impersonation_id)) {',
     vers: "      if (localStorage.setItem('yoppaa_admin_impersonating', c.id)) {" },
 
+  // ─── LE MESSAGE ET LE BOUTON (16/09) ────────────────────────────────────
+  { nom: '🔴 le bouton reprend un nom que les messages ne citent pas',
+    fichier: 'app/admin/SectionTousCommercants.js',
+    de: '                    Voir Dashboard →',
+    vers: '                    Dashboard →' },
+
+  { nom: '🔴 un message envoie cliquer sur un bouton qui n existe pas',
+    fichier: 'lib/impersonation.js',
+    de: "  expiree: 'Ta connexion en tant que commerçant a pris fin après deux heures. Clique « Voir Dashboard » pour la rouvrir.',",
+    vers: "  expiree: 'Ta connexion en tant que commerçant a pris fin après deux heures. Clique « Ouvrir le dashboard » pour la rouvrir.'," },
+
   { nom: '🔴 un bouton de l admin retrouve une deconnexion qui n efface rien',
     fichier: 'app/admin/page.js',
     de: 'onClick={seDeconnecter}',

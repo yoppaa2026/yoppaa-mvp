@@ -209,9 +209,13 @@ export default function SectionTousCommercants({ toast }) {
                     style={{ padding: '5px 10px', borderRadius: 100, border: `1.5px solid ${T.main}33`, background: T.pale, color: T.main, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                     ✏ Modifier
                   </button>
+                  {/* ⚠️ CE LIBELLÉ EST CITÉ MOT POUR MOT par les messages de
+                      `messageImpersonation`, qui disent quoi cliquer quand la
+                      connexion en tant que commerçant est refusée. Les deux se
+                      relisent ensemble (`npm run verif:acces`). */}
                   <button onClick={() => voirDashboard(c)}
                     style={{ padding: '5px 10px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 2px 8px ${T.main}44` }}>
-                    Dashboard →
+                    Voir Dashboard →
                   </button>
                 </div>
               </div>

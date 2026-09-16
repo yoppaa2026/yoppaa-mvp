@@ -151,13 +151,36 @@ const MUTATIONS = [
 
   { nom: '🔴 la colonne quitte le select : la section reste vide pour toujours',
     fichier: 'app/admin/SectionInscriptionsEnCours.js',
-    de: '        id, nom, type, categorie, telephone, email, adresse, created_at, statut_publication,',
-    vers: '        id, nom, type, categorie, telephone, email, adresse, created_at,' },
+    de: '        id, created_at, statut_publication, ${COLONNES_INSCRIPTION}',
+    vers: '        id, created_at, ${COLONNES_INSCRIPTION}' },
 
   { nom: '🔴 la section redonne une date brute au lieu de l attente',
     fichier: 'app/admin/SectionInscriptionsEnCours.js',
     de: '        const depuis = attenteDepuis(c.created_at)',
     vers: '        const depuis = { texte: c.created_at }' },
+
+  // ─── « DOSSIER REMPLI A 0 % », LE MENSONGE D'ECRAN (16/09) ──────────────
+  { nom: '🔴 le score de soumission revient : « 0 % » sur un dossier complet',
+    fichier: 'app/admin/SectionInscriptionsEnCours.js',
+    de: '        const rempli = remplissageInscription(c)',
+    vers: '        const rempli = remplissageInscription(c); const avance = c.validation_auto_score' },
+
+  { nom: '🔴 un champ vide compte comme rempli : le dossier parait complet',
+    de: "    (champ) => String(commercant[champ] ?? '').trim() !== ''",
+    vers: "    (champ) => String(commercant[champ] ?? '').trim() !== 'zzz'" },
+
+  { nom: '🔴 l avancement redevient un pourcentage, dont on ignore ce qu il compte',
+    de: "    texte: remplis === 0 ? 'dossier vide' : `${remplis} champs sur ${total} renseignés`,",
+    vers: "    texte: remplis === 0 ? 'dossier vide' : `dossier rempli à ${Math.round(remplis * 100 / total)} %`," },
+
+  { nom: '🔴 un champ quitte la regle : le dossier parait moins rempli qu il est',
+    de: "export const CHAMPS_INSCRIPTION = ['nom', 'type', 'categorie', 'adresse', 'telephone', 'email', 'description']",
+    vers: "export const CHAMPS_INSCRIPTION = ['nom', 'type', 'categorie', 'adresse', 'telephone', 'email']" },
+
+  { nom: '🔴 l ecran recopie les colonnes comptees et en oublie une',
+    fichier: 'app/admin/SectionInscriptionsEnCours.js',
+    de: '        id, created_at, statut_publication, ${COLONNES_INSCRIPTION}',
+    vers: '        id, created_at, statut_publication, nom, type, categorie, adresse, telephone, email' },
 
   // ─── LA RELANCE, ET SURTOUT CE QU'ELLE N'ENVOIE PAS ─────────────────────
   // 🔴 CES MUTATIONS-LA font envoyer des emails a de vraies personnes. Chacune

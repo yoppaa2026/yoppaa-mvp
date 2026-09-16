@@ -23,6 +23,7 @@ import {
   // ⚠️ IMPORTÉES POUR ÊTRE EXÉCUTÉES : l'autre porte, celle de la fiche.
   fichePubliee, COLONNE_PUBLICATION, PUBLICATION_OUVERTE,
   attenteDepuis, joursOuvresEntre,
+  remplissageInscription, CHAMPS_INSCRIPTION,
 } from '../lib/statut-commercant.js'
 // ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE, avec un faux client Supabase : c'est la
 // seule façon de savoir ce que la file RÉPOND, et non ce qu'elle a l'air de
@@ -845,6 +846,50 @@ function sansCommentaires(src) {
     // l'état et Alex verrait une liste pendant que le cron en relance une autre.
     verifier('🔴 l’écran prend l’état à la règle, il ne le recopie pas',
       /ETAT_NON_TERMINEE = PUBLICATION_BROUILLON/.test(section))
+
+    // ⚠️ SA PLACE EST UN CHOIX (Alex, 16/09) : juste sous les deux validations,
+    // avec la liste des commerçants dans la foulée. Ce sont les écrans sur
+    // lesquels on AGIT ; les diagnostics se consultent, eux, et passent après.
+    verifier('⚠️ elle est placée juste sous les validations',
+      page.indexOf('<SectionKYBAValider') > 0
+      && page.indexOf('<SectionKYBAValider') < page.indexOf('<SectionInscriptionsEnCours />'))
+    verifier('⚠️ et la liste des commerçants la suit, avant les diagnostics',
+      page.indexOf('<SectionTousCommercants') < page.indexOf('<SectionDiagnosticBrevo'))
+
+    // ─── « DOSSIER REMPLI À 0 % », LE MENSONGE D'ÉCRAN ───────────────────
+    // 🔴 `validation_auto_score` n'est écrit qu'à la SOUMISSION : sur un
+    // brouillon il vaut toujours zéro. L'écran annonçait « 0 % » à quelqu'un
+    // qui avait tout saisi sauf le dernier clic, et un chiffre faux décide à la
+    // place de celui qui le lit.
+    verifier('🔴 la section ne lit plus le score de soumission',
+      !/validation_auto_score/.test(section))
+    verifier('🔴 elle compte ce qui est vraiment rempli',
+      /remplissageInscription\(c\)/.test(section))
+    verifier('🔴 et charge les champs DÉCLARÉS par la règle',
+      /\$\{COLONNES_INSCRIPTION\}/.test(section), 'liste recopiée à la main')
+
+    // ⚠️ EXÉCUTÉE.
+    const pleine = Object.fromEntries(CHAMPS_INSCRIPTION.map(c => [c, 'x']))
+    egalNombre('un dossier complet est compté entier',
+      remplissageInscription(pleine).remplis, CHAMPS_INSCRIPTION.length)
+    verifier('⚠️ et il se dit « 7 champs sur 7 », jamais en pourcentage',
+      remplissageInscription(pleine).texte === `${CHAMPS_INSCRIPTION.length} champs sur ${CHAMPS_INSCRIPTION.length} renseignés`)
+    egalNombre('un champ manquant se voit',
+      remplissageInscription({ ...pleine, description: null }).remplis, CHAMPS_INSCRIPTION.length - 1)
+    // ⚠️ UN CHAMP D'ESPACES N'EST PAS UN CHAMP REMPLI.
+    egalNombre('un champ d’espaces ne compte pas',
+      remplissageInscription({ ...pleine, adresse: '   ' }).remplis, CHAMPS_INSCRIPTION.length - 1)
+    verifier('un dossier vide le dit', remplissageInscription({}).texte === 'dossier vide')
+    verifier('une fiche absente ne plante pas', remplissageInscription(null).remplis === 0)
+    // 🔴 LE CAS RÉEL DU 13/09 : six champs sur sept, et l'écran disait 0 %.
+    const laTableDuStock = {
+      nom: 'La Table du Stock', type: 'Restaurant & Bar - café', categorie: 'alimentaire',
+      adresse: 'Rue d’Orbey 15, 5070 Fosses-la-Ville', telephone: '0471074349',
+      email: 'un@exemple.be', description: 'Parking gratuit, salle de réception à l’étage',
+    }
+    verifier('🔴 le dossier réel se lit enfin pour ce qu’il est',
+      remplissageInscription(laTableDuStock).texte === '7 champs sur 7 renseignés',
+      remplissageInscription(laTableDuStock).texte)
   }
 
   // ─── LA RELANCE, ET SURTOUT CE QU'ELLE N'ENVOIE PAS ────────────────────

@@ -298,7 +298,18 @@ export default function AdminPage() {
         {/* KYB en attente (S5.3 - 19/06) : valider/rejeter les verifications entreprise */}
         <SectionKYBAValider toast={(msg, type) => setToast({ msg, type })} />
 
+        {/* 🔴 CEUX QUI SE SONT ARRÊTÉS EN ROUTE (16/09). Ils n'ont déclenché
+            aucune notification, puisqu'elle ne part qu'au dernier clic : sans
+            ce bloc, ils se rangent au milieu des vrais commerçants et personne
+            ne sait qu'ils existent.
+            ⚠️ JUSTE SOUS LES DEUX VALIDATIONS (Alex, 16/09), avec la liste des
+            commerçants dans la foulée : ce sont les trois écrans sur lesquels
+            on agit. Les diagnostics et les suivis ne se consultent pas tous les
+            jours, eux, et ils passent derrière. */}
+        <SectionInscriptionsEnCours />
 
+        {/* Tous les commerçants (édition + impersonation) */}
+        <SectionTousCommercants toast={(msg, type) => setToast({ msg, type })} />
 
         {/* Diagnostic Brevo : la connexion email/SMS répond-elle ? */}
         <SectionDiagnosticBrevo />
@@ -315,16 +326,6 @@ export default function AdminPage() {
         {/* Commerces réclamés par les habitants et encore absents : la liste de
             prospection, classée par nombre de demandes. */}
         <SectionSuggestions />
-
-        {/* 🔴 CEUX QUI SE SONT ARRÊTÉS EN ROUTE (16/09). Ils n'ont déclenché
-            aucune notification, puisqu'elle ne part qu'au dernier clic : sans
-            ce bloc, ils se rangent au milieu des vrais commerçants et personne
-            ne sait qu'ils existent. Placé AVANT la liste générale, sinon il
-            faut faire défiler pour découvrir qu'un prospect attend. */}
-        <SectionInscriptionsEnCours />
-
-        {/* Tous les commerçants (édition + impersonation) */}
-        <SectionTousCommercants toast={(msg, type) => setToast({ msg, type })} />
 
         {/* Historique */}
         <section>

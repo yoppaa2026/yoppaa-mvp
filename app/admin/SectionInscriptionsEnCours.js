@@ -19,7 +19,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ClipboardList, Phone, Mail, RefreshCw } from 'lucide-react'
-import { attenteDepuis, PUBLICATION_BROUILLON } from '@/lib/statut-commercant'
+import {
+  attenteDepuis, PUBLICATION_BROUILLON, remplissageInscription, COLONNES_INSCRIPTION,
+} from '@/lib/statut-commercant'
 
 const T = {
   main: '#6B35C4', pale: '#EDE0FF', ink: '#1A0840', deep: '#2D0F6B',
@@ -43,9 +45,11 @@ export default function SectionInscriptionsEnCours() {
     // TOUTE la requête, pas seulement sa propre valeur.
     const { data, error } = await supabase
       .from('commercants')
+      // ⚠️ LES CHAMPS COMPTÉS VIENNENT DE LA RÈGLE (`COLONNES_INSCRIPTION`) :
+      // une seule absente du select et le dossier paraîtrait moins rempli qu'il
+      // ne l'est, ce qui ferait renoncer à un rappel qui valait la peine.
       .select(`
-        id, nom, type, categorie, telephone, email, adresse, created_at, statut_publication,
-        onboarding_commercants ( id, statut, validation_auto_score, completed_at )
+        id, created_at, statut_publication, ${COLONNES_INSCRIPTION}
       `)
       .eq('statut_publication', ETAT_NON_TERMINEE)
       .order('created_at', { ascending: false })
@@ -97,8 +101,11 @@ export default function SectionInscriptionsEnCours() {
       )}
 
       {lignes.map((c) => {
-        const ob = Array.isArray(c.onboarding_commercants) ? c.onboarding_commercants[0] : c.onboarding_commercants
-        const avance = ob?.validation_auto_score
+        // 🔴 ON COMPTE CE QUI EST LÀ, on ne lit plus `validation_auto_score` :
+        // ce score n'est écrit qu'à la soumission, donc sur un brouillon il
+        // vaut TOUJOURS zéro, et l'écran annonçait « dossier rempli à 0 % » à
+        // quelqu'un qui avait tout saisi sauf le dernier clic.
+        const rempli = remplissageInscription(c)
         const depuis = attenteDepuis(c.created_at)
         return (
           <div key={c.id} style={{ borderTop: `1px solid ${T.hairline}`, padding: '12px 0', display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -112,8 +119,7 @@ export default function SectionInscriptionsEnCours() {
                   calcul, « le 13 septembre » demande un effort à chaque coup
                   d'œil. */}
               <p style={{ margin: 0, fontSize: 12.5, color: T.deep, fontWeight: 700 }}>
-                Commencée {depuis.texte}
-                {Number.isFinite(avance) ? ` · dossier rempli à ${avance} %` : ' · avancement inconnu'}
+                Commencée {depuis.texte} · {rempli.texte}
               </p>
             </div>
             {/* Le geste attendu : le rappeler. Les coordonnées sont donc des

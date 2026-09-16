@@ -57,8 +57,11 @@ export async function POST(request) {
       mode: 'setup',
       customer: client.id,
       payment_method_types: ['card'],
+      // 🔴 PAS DE `usage` ICI : Stripe n'accepte que `description`, `metadata`
+      // et `on_behalf_of` sur `setup_intent_data`, et refusait l'appel entier.
+      // Un SetupIntent sans `usage` vaut `off_session` par défaut, ce qui donne
+      // le mandat hors session. Même défaut que sur la route de la fiche.
       setup_intent_data: {
-        usage: 'off_session',
         metadata: buildPaymentMetadata({
           kind: PAYMENT_KIND.RDV_EMPREINTE,
           commercantId: commercant.id,

@@ -214,6 +214,27 @@ const MUTATIONS = [
     de: '        `id, nom, duree_minutes, commercant_id, ${COLONNES_COUVERTS}`',
     vers: "        'id, nom, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max'" },
 
+  // ─── CE QUE STRIPE ACCEPTE, LU DANS LA BIBLIOTHEQUE INSTALLEE (16/09) ───
+  // 🔴 LE PARAMETRE QUI BLOQUAIT TOUT : Stripe refusait l appel entier avec
+  // « Received unknown parameter: setup_intent_data[usage] », et deux gardes
+  // EXIGEAIENT ce parametre. Elles verifiaient ma memoire, pas l API.
+  { nom: '🔴 la fiche reinvente le parametre `usage` que Stripe refuse',
+    fichier: EMPREINTE,
+    de: '      setup_intent_data: {',
+    vers: "      setup_intent_data: { usage: 'off_session'," },
+
+  { nom: '🔴 le lien « confirme ta table » le reinvente aussi',
+    fichier: 'app/api/stripe/checkout/empreinte-lien/route.js',
+    de: '      setup_intent_data: {',
+    vers: "      setup_intent_data: { usage: 'off_session'," },
+
+  // ⚠️ ET LA GARDE NE DOIT PAS SE CROIRE SATISFAITE SANS AVOIR RIEN LU : le
+  // piege du tableau vide, ou `every()` rend vrai sur zero element.
+  { nom: '⚠️ plus aucune cle a lire dans setup_intent_data',
+    fichier: EMPREINTE,
+    de: '      setup_intent_data: {',
+    vers: '      setup_intent_donnees: {' },
+
   // ─── UNE TABLE GARANTIE N A QU UN SEUL MESSAGE (16/09) ─────────────────
   { nom: '🔴 le recapitulatif reparle de payer sur place sous une empreinte',
     fichier: FICHE,

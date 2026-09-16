@@ -347,11 +347,67 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
 
   // ⚠️ `mode: 'setup'` : c'est ce mot qui fait que RIEN n'est débité.
   verifie('🔴 la route ouvre une session qui n’encaisse rien', /mode: 'setup'/.test(ROUTE))
-  // 🔴 `off_session` DEMANDE L'AUTHENTIFICATION FORTE MAINTENANT. Sans lui, le
-  // débit du no-show serait refusé par la banque avec `authentication_required`,
-  // au moment précis où plus personne n'est devant l'écran.
-  verifie('🔴 elle demande le mandat qui permettra le débit plus tard',
-    /setup_intent_data: \{\s*usage: 'off_session'/.test(ROUTE))
+
+  // ─── 🔴 CE QUE STRIPE ACCEPTE SE LIT DANS LA BIBLIOTHÈQUE INSTALLÉE ───────
+  //
+  // Essai E2 d'Alex, 16/09 : « Received unknown parameter:
+  // setup_intent_data[usage] ». Stripe refusait l'appel ENTIER, donc aucune
+  // carte n'a jamais pu être enregistrée depuis la fiche.
+  //
+  // 🔴 ET DEUX GARDES EXIGEAIENT CE PARAMÈTRE. Elles décrivaient ce que je
+  // croyais de l'API, pas ce que l'API accepte : une garde écrite de mémoire
+  // ne vérifie que ma mémoire. Elles lisent maintenant les types de la version
+  // installée, comme on lit la doc de Next dans `node_modules`.
+  //
+  // ⚠️ RIEN N'EST PERDU : un SetupIntent sans `usage` vaut `off_session` par
+  // défaut, et c'est lui qui donne le mandat hors session.
+  {
+    const TYPES = readFileSync(
+      new URL('../node_modules/stripe/cjs/resources/Checkout/Sessions.d.ts', import.meta.url), 'utf8')
+    const i = TYPES.indexOf('        interface SetupIntentData {')
+    const bloc = i === -1 ? '' : TYPES.slice(i, TYPES.indexOf('\n        }', i))
+    const permis = [...bloc.matchAll(/^ {12}(\w+)\??:/gm)].map(m => m[1])
+    verifie('🔴 les paramètres acceptés sont lus dans stripe installé',
+      permis.length >= 3 && permis.includes('metadata'), `lus : ${permis.join(', ') || 'AUCUN'}`)
+    verifie('🔴 et `usage` n’en fait PAS partie, contrairement à ce que je croyais',
+      !permis.includes('usage'), permis.join(', '))
+
+    // Les clés de premier niveau réellement écrites dans chaque route.
+    const clesDe = (src) => {
+      const debut = src.indexOf('setup_intent_data: {')
+      if (debut === -1) return null
+      const cles = []
+      let profondeur = 0
+      for (let j = debut + 'setup_intent_data:'.length; j < src.length; j++) {
+        const c = src[j]
+        if (c === '{') { profondeur++; continue }
+        if (c === '}') { profondeur--; if (profondeur === 0) break; continue }
+        if (profondeur !== 1) continue
+        if (!/[\s{,]/.test(src[j - 1] || '')) continue
+        // ⚠️ UNE CLÉ COMMENCE PAR UNE LETTRE. Sans cette précision, un ternaire
+        // `? 0 : x` était lu comme une clé nommée « 0 » et la garde criait sur
+        // du code parfaitement valable. Une alarme qui sonne pour rien ne
+        // protège plus rien.
+        const m = src.slice(j).match(/^([A-Za-z_]\w*)\s*:/)
+        if (m) cles.push(m[1])
+      }
+      return cles
+    }
+    for (const [nom, src] of [
+      ['la fiche', ROUTE],
+      ['le lien « confirme ta table »', sansProse(lire('app/api/stripe/checkout/empreinte-lien/route.js'))],
+    ]) {
+      const cles = clesDe(src)
+      // ⚠️ UNE LISTE VIDE DIRAIT « TOUT VA BIEN » SANS AVOIR RIEN LU : le piège
+      // du `every()` sur un tableau vide, déjà nommé dans ce dépôt.
+      verifie(`🔴 ${nom} : les clés de setup_intent_data sont lues`,
+        Array.isArray(cles) && cles.length > 0, `clés : ${(cles || []).join(', ') || 'AUCUNE'}`)
+      for (const cle of cles || []) {
+        verifie(`🔴 ${nom} : « ${cle} » est un paramètre que Stripe accepte`,
+          permis.includes(cle), `acceptés : ${permis.join(', ')}`)
+      }
+    }
+  }
   // ⚠️ CARTE UNIQUEMENT : une empreinte suppose une autorisation gardée puis
   // capturée. Bancontact passerait par une domiciliation contestable.
   verifie('🔴 carte uniquement, jamais Bancontact', /payment_method_types: \['card'\]/.test(ROUTE))
@@ -655,7 +711,12 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   verifie('⚠️ et elle ne les demande pas non plus à la base',
     /avecClient: false/.test(DETAILS))
   verifie('⚠️ elle n’ouvre rien chez Stripe', !/stripe\./.test(DETAILS))
-  verifie('⚠️ elle n’encaisse rien non plus', /mode: 'setup'/.test(LIEN) && /usage: 'off_session'/.test(LIEN))
+  // ⚠️ `mode: 'setup'` EST CE QUI GARANTIT QU'ON N'ENCAISSE RIEN, et c'est la
+  // seule chose à exiger ici. Cette garde réclamait aussi `usage: 'off_session'`,
+  // un paramètre que Stripe REFUSE : elle a tenu deux jours un appel qui ne
+  // pouvait pas aboutir. Les clés sont désormais confrontées aux types installés,
+  // plus haut dans ce banc.
+  verifie('⚠️ elle n’encaisse rien non plus', /mode: 'setup'/.test(LIEN))
   // 🔴 LE DRAPEAU QUI EMPÊCHE LE WEBHOOK DE CRÉER UNE TABLE QUI EXISTE, ET IL
   // DOIT ÊTRE DANS `setup_intent_data`. Le webhook lit les métadonnées du
   // SetupIntent (`si.metadata`), jamais celles de la session : un drapeau posé

@@ -147,12 +147,22 @@ export async function POST(request) {
       // Une empreinte suppose une autorisation gardée puis capturée : Bancontact
       // passerait par une domiciliation contestable huit semaines.
       payment_method_types: ['card'],
-      // 🔴 `off_session` : c'est CE mot qui demande l'authentification forte
-      // MAINTENANT et qui donne le mandat. Sans lui, le débit du no-show serait
-      // refusé par la banque avec `authentication_required`, au moment précis où
-      // plus personne n'est devant l'écran pour authentifier quoi que ce soit.
+      // 🔴 `usage: 'off_session'` A ÉTÉ RETIRÉ D'ICI (16/09, essai E2 d'Alex).
+      // Stripe refusait l'appel ENTIER : « Received unknown parameter:
+      // setup_intent_data[usage] ». Ce paramètre n'existe pas sur
+      // `setup_intent_data` d'une session Checkout, qui n'accepte que
+      // `description`, `metadata` et `on_behalf_of` (types de la bibliothèque
+      // installée, stripe 22.0.2). Aucune carte n'a donc jamais pu être
+      // enregistrée depuis la fiche, et DEUX GARDES EXIGEAIENT ce paramètre :
+      // elles décrivaient ce que je croyais, pas ce que Stripe accepte.
+      //
+      // ⚠️ ET RIEN N'EST PERDU : un SetupIntent sans `usage` vaut `off_session`
+      // par défaut (« If not provided, this value defaults to off_session »,
+      // node_modules/stripe/cjs/resources/SetupIntents.d.ts). C'est ce qui
+      // demande l'authentification forte maintenant et donne le mandat, sans
+      // quoi le débit du no-show serait refusé avec `authentication_required`,
+      // au moment précis où plus personne n'est devant l'écran.
       setup_intent_data: {
-        usage: 'off_session',
         metadata: buildPaymentMetadata({
           kind: PAYMENT_KIND.RDV_EMPREINTE,
           commercantId: commercant.id,

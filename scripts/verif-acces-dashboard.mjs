@@ -28,6 +28,9 @@ import {
 // seule façon de savoir ce que la file RÉPOND, et non ce qu'elle a l'air de
 // répondre. Le résolveur d'alias de `verif:acces` rend ce module atteignable.
 import { inscrire } from '../lib/attente-rdv-server.js'
+// ⚠️ IMPORTÉES POUR ÊTRE EXÉCUTÉES : cette règle décide d'écrire à de vraies
+// personnes, et une relance en double ne se rattrape pas.
+import { raisonPasDeRelance, trierPourRelance, COLONNES_RELANCE } from '../lib/relance-inscription.js'
 // ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE : c'est elle qui décide si un `+alias` reste
 // distinct de l'adresse administrateur, donc si douze comptes de test restent
 // douze commerçants ordinaires.
@@ -811,9 +814,12 @@ function sansCommentaires(src) {
     verifier('⚠️ et AVANT la liste générale, sinon il faut la chercher',
       page.indexOf('<SectionInscriptionsEnCours />') > 0
       && page.indexOf('<SectionInscriptionsEnCours />') < page.indexOf('<SectionTousCommercants'))
+    // ⚠️ LA GARDE VISE LE FILTRE, PAS LA VALEUR ÉCRITE À LA MAIN : l'état
+    // vient maintenant de la règle partagée, et cette garde a rougi le jour où
+    // il a cessé d'être recopié. Elle vérifie donc le geste, et la provenance
+    // de l'état se vérifie séparément.
     verifier('🔴 elle ne montre QUE les inscriptions non terminées',
-      /\.eq\('statut_publication', ETAT_NON_TERMINEE\)/.test(section)
-      && /ETAT_NON_TERMINEE = 'brouillon'/.test(section))
+      /\.eq\('statut_publication', ETAT_NON_TERMINEE\)/.test(section))
     // 🔴 LE PIÈGE DE LA COLONNE, ENCORE : sans elle dans le select, le filtre
     // porte sur une valeur absente et la section reste vide pour toujours.
     //
@@ -835,6 +841,87 @@ function sansCommentaires(src) {
     // ⚠️ LE GESTE ATTENDU EST UN APPEL : les coordonnées sont des liens.
     verifier('⚠️ le téléphone et l’email se cliquent',
       /href=\{`tel:\$\{c\.telephone\}`\}/.test(section) && /href=\{`mailto:\$\{c\.email\}`\}/.test(section))
+    // ⚠️ L'ÉCRAN ET LA TÂCHE DOIVENT PARLER DES MÊMES FICHES : deux copies de
+    // l'état et Alex verrait une liste pendant que le cron en relance une autre.
+    verifier('🔴 l’écran prend l’état à la règle, il ne le recopie pas',
+      /ETAT_NON_TERMINEE = PUBLICATION_BROUILLON/.test(section))
+  }
+
+  // ─── LA RELANCE, ET SURTOUT CE QU'ELLE N'ENVOIE PAS ────────────────────
+  //
+  // 🔴 CETTE RÈGLE DÉCIDE D'ÉCRIRE À DE VRAIES PERSONNES. Elle s'exécute donc
+  // ici, sur chaque cas, plutôt que de se relire : une relance en double se
+  // voit et agace, et on ne la découvre jamais au banc si le banc ne fait que
+  // chercher des mots.
+  {
+    const MAINTENANT = new Date('2026-09-16T10:00:00')
+    const fiche = (extra = {}) => ({
+      id: 'c1', nom: 'La Table du Stock', email: 'commercant@exemple.be',
+      statut_publication: 'brouillon', created_at: '2026-09-13T10:00:00',
+      relance_inscription_envoyee_at: null, ...extra,
+    })
+    const raison = (extra, quand = MAINTENANT) => raisonPasDeRelance(fiche(extra), quand)
+
+    verifier('✅ commencée il y a trois jours, jamais relancée : on relance',
+      raison({}) === null, String(raison({})))
+    // 🔴 LE GARDE-FOU QUI JUSTIFIE LA MIGRATION.
+    verifier('🔴 déjà relancée : JAMAIS une seconde fois',
+      raison({ relance_inscription_envoyee_at: '2026-09-15T08:00:00' }) === 'deja_relance')
+    verifier('🔴 une inscription menée au bout ne se relance pas',
+      raison({ statut_publication: 'en_attente' }) === 'inscription_pas_en_brouillon')
+    verifier('⚠️ une fiche publiée encore moins',
+      raison({ statut_publication: 'publie' }) === 'inscription_pas_en_brouillon')
+    verifier('sans adresse, rien à envoyer', raison({ email: null }) === 'pas_d_email')
+    verifier('une fiche absente ne déclenche rien', raisonPasDeRelance(null, MAINTENANT) === 'fiche_absente')
+
+    // ⚠️ LES DEUX BORNES, ET LEURS VOISINES IMMÉDIATES : c'est là que les
+    // règles de délai se trompent, jamais au milieu.
+    verifier('⚠️ 47 h : trop tôt, on laisse finir tranquillement',
+      raison({ created_at: '2026-09-14T11:00:00' }) === 'trop_tot')
+    verifier('⚠️ 48 h pile : la relance part', raison({ created_at: '2026-09-14T10:00:00' }) === null)
+    verifier('⚠️ 30 jours pile : encore dans les temps',
+      raison({ created_at: '2026-08-17T10:00:00' }) === null)
+    verifier('🔴 31 jours : on ne réveille plus personne',
+      raison({ created_at: '2026-08-16T09:00:00' }) === 'trop_vieux')
+    // ⚠️ DANS LE DOUTE ON N'ENVOIE PAS : une date illisible ne vaut pas un feu vert.
+    verifier('🔴 une date illisible n’autorise pas un envoi',
+      raison({ created_at: 'pas une date' }) === 'date_inconnue')
+    verifier('une date absente non plus', raison({ created_at: null }) === 'date_inconnue')
+
+    // Le tri d'une fournée rend AUSSI ce qu'il a écarté, et pourquoi.
+    const tri = trierPourRelance([
+      fiche(), fiche({ id: 'c2', relance_inscription_envoyee_at: '2026-09-15T08:00:00' }),
+      fiche({ id: 'c3', email: null }), fiche({ id: 'c4', created_at: '2026-09-16T09:00:00' }),
+    ], MAINTENANT)
+    egalNombre('un seul retenu sur quatre', tri.retenus.length, 1)
+    egalNombre('et les écartés sont comptés par raison', Object.keys(tri.ecartes).length, 3)
+    verifier('⚠️ chaque écarté porte un nom, sinon « 0 envoi » est indébogable',
+      tri.ecartes.deja_relance === 1 && tri.ecartes.pas_d_email === 1 && tri.ecartes.trop_tot === 1,
+      JSON.stringify(tri.ecartes))
+
+    // ─── LA TÂCHE ELLE-MÊME ──────────────────────────────────────────────
+    const cron = codeDe('app/api/cron/relance-inscriptions/route.js')
+    // 🔴 SANS SECRET, ON REFUSE. Dix crons ont déjà été trouvés ouverts.
+    verifier('🔴 la tâche refuse sans CRON_SECRET', /gardeCron\(request, 'relance-inscriptions'\)/.test(cron))
+    verifier('🔴 elle prend ses colonnes à la règle', /\.select\(COLONNES_RELANCE\)/.test(cron))
+    verifier('⚠️ dont celle du garde-fou',
+      /relance_inscription_envoyee_at/.test(codeDe('lib/relance-inscription.js'))
+      && COLONNES_RELANCE.includes('relance_inscription_envoyee_at'))
+    verifier('🔴 une lecture en échec ne se lit pas « personne à relancer »',
+      /if \(error\) \{[\s\S]{0,220}status: 500/.test(cron))
+    // 🔴 L'ORDRE : marquer AVANT d'envoyer. Marquer après, c'est offrir un
+    // second email à la moindre coupure entre les deux.
+    const iMarque = cron.indexOf('relance_inscription_envoyee_at: maintenant.toISOString()')
+    const iEnvoi = cron.indexOf('envoyerAuCommercant(')
+    verifier('🔴 elle marque la fiche AVANT d’envoyer', iMarque > 0 && iEnvoi > iMarque)
+    // ⚠️ ET ELLE REND LA FICHE RELANÇABLE SI L'ENVOI ÉCHOUE, sinon elle est
+    // comptée comme relancée sans que personne n'ait rien reçu.
+    verifier('⚠️ un envoi raté ne consomme pas la relance',
+      /update\(\{ relance_inscription_envoyee_at: null \}\)/.test(cron))
+    verifier('⚠️ le marquage ne repose pas sur un await non lu', /if \(errMarque\)/.test(cron))
+    // La tâche doit être PLANIFIÉE, sinon elle ne tournera jamais.
+    verifier('🔴 elle est déclarée dans vercel.json',
+      /"\/api\/cron\/relance-inscriptions"/.test(lire('vercel.json')))
   }
 }
 

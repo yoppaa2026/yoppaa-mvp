@@ -135,10 +135,14 @@ const MUTATIONS = [
     de: '        <SectionInscriptionsEnCours />',
     vers: '        {null}' },
 
-  { nom: '🔴 elle montre les fiches soumises au lieu des abandons',
+  { nom: '🔴 l ecran recopie l etat a la main et derive de la tache de relance',
     fichier: 'app/admin/SectionInscriptionsEnCours.js',
-    de: "const ETAT_NON_TERMINEE = 'brouillon'",
+    de: 'const ETAT_NON_TERMINEE = PUBLICATION_BROUILLON',
     vers: "const ETAT_NON_TERMINEE = 'en_attente'" },
+
+  { nom: '🔴 l etat des abandons change : l ecran ET la relance visent les fiches soumises',
+    de: "export const PUBLICATION_BROUILLON = 'brouillon'",
+    vers: "export const PUBLICATION_BROUILLON = 'en_attente'" },
 
   { nom: '🔴 une lecture en echec se lit « personne n attend »',
     fichier: 'app/admin/SectionInscriptionsEnCours.js',
@@ -154,6 +158,69 @@ const MUTATIONS = [
     fichier: 'app/admin/SectionInscriptionsEnCours.js',
     de: '        const depuis = attenteDepuis(c.created_at)',
     vers: '        const depuis = { texte: c.created_at }' },
+
+  // ─── LA RELANCE, ET SURTOUT CE QU'ELLE N'ENVOIE PAS ─────────────────────
+  // 🔴 CES MUTATIONS-LA font envoyer des emails a de vraies personnes. Chacune
+  // doit rougir, sinon la regle ne protege rien.
+  { nom: '🔴 le garde-fou anti-doublon saute : le meme email repart tous les jours',
+    fichier: 'lib/relance-inscription.js',
+    de: "  if (commercant.relance_inscription_envoyee_at) return 'deja_relance'",
+    vers: "  if (false) return 'deja_relance'" },
+
+  { nom: '🔴 le delai de 48 h disparait : relance dans l heure qui suit',
+    fichier: 'lib/relance-inscription.js',
+    de: "  if (heures < DELAI_RELANCE_HEURES) return 'trop_tot'",
+    vers: "  if (heures < 0) return 'trop_tot'" },
+
+  { nom: '🔴 le delai passe a une heure',
+    fichier: 'lib/relance-inscription.js',
+    de: 'export const DELAI_RELANCE_HEURES = 48',
+    vers: 'export const DELAI_RELANCE_HEURES = 1' },
+
+  { nom: '🔴 les vieux dossiers se font reveiller un mois plus tard',
+    fichier: 'lib/relance-inscription.js',
+    de: "  if (heures > LIMITE_RELANCE_JOURS * 24) return 'trop_vieux'",
+    vers: "  if (false) return 'trop_vieux'" },
+
+  { nom: '🔴 une date illisible ne bloque plus rien',
+    fichier: 'lib/relance-inscription.js',
+    de: "  if (heures === null) return 'date_inconnue'",
+    vers: "  if (false) return 'date_inconnue'" },
+
+  { nom: '🔴 un commercant DEJA PUBLIE recoit une relance d inscription',
+    fichier: 'lib/relance-inscription.js',
+    de: "  if (!inscriptionNonTerminee(commercant)) return 'inscription_pas_en_brouillon'",
+    vers: "  if (false) return 'inscription_pas_en_brouillon'" },
+
+  { nom: '🔴 la tache ne marque plus la fiche : second email demain',
+    fichier: 'app/api/cron/relance-inscriptions/route.js',
+    de: '      .update({ relance_inscription_envoyee_at: maintenant.toISOString() })',
+    vers: '      .update({ nom: c.nom })' },
+
+  { nom: '🔴 un envoi rate consomme quand meme la relance',
+    fichier: 'app/api/cron/relance-inscriptions/route.js',
+    de: '      .update({ relance_inscription_envoyee_at: null })',
+    vers: '      .update({ nom: c.nom })' },
+
+  { nom: '🔴 la tache s ouvre sans son secret',
+    fichier: 'app/api/cron/relance-inscriptions/route.js',
+    de: "  const refus = refusCron(gardeCron(request, 'relance-inscriptions'), NextResponse)",
+    vers: '  const refus = null' },
+
+  { nom: '🔴 elle recopie ses colonnes et oublie le garde-fou',
+    fichier: 'app/api/cron/relance-inscriptions/route.js',
+    de: '    .select(COLONNES_RELANCE)',
+    vers: "    .select('id, nom, email, statut_publication, created_at')" },
+
+  { nom: '🔴 une lecture en echec se lit « personne a relancer »',
+    fichier: 'app/api/cron/relance-inscriptions/route.js',
+    de: '  if (error) {',
+    vers: '  if (false) {' },
+
+  { nom: '🔴 la tache n est plus planifiee : elle ne tournera jamais',
+    fichier: 'vercel.json',
+    de: '      "path": "/api/cron/relance-inscriptions",',
+    vers: '      "path": "/api/cron/relance-inscriptions-jamais",' },
 
   // ─── ET LA DECISION QU'ON NE DOIT PAS « CORRIGER » ──────────────────────
   { nom: '✅ des seances deja payees se font refuser parce que la fiche est depubliee',

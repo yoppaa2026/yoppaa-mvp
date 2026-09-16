@@ -151,14 +151,20 @@ verifier('refusCron rend le statut du verdict',
 process.env.CRON_SECRET = secretInitial
 if (secretInitial === undefined) delete process.env.CRON_SECRET
 
-// ─── 2. Les dix routes portent la garde partagée ────────────────────────────
+// ─── 2. Les onze routes portent la garde partagée ───────────────────────────
+//
+// ⚠️ LE COMPTE EST VOLONTAIREMENT FIGÉ, et il a rougi le 16/09 à l'ajout de
+// `relance-inscriptions`. C'est son rôle : une tâche planifiée s'ajoute en
+// trois lignes de `vercel.json`, elle tourne toute seule tous les jours, et
+// celle-ci envoie des emails à de vraies personnes. Le compteur force à le
+// déclarer ici plutôt qu'à le découvrir dans les journaux.
 
 const DOSSIER_CRON = 'app/api/cron'
 const routesCron = readdirSync(new URL('../' + DOSSIER_CRON, import.meta.url), { withFileTypes: true })
   .filter(e => e.isDirectory())
   .map(e => `${DOSSIER_CRON}/${e.name}/route.js`)
 
-verifier('les tâches planifiées sont bien au nombre de dix', routesCron.length === 10,
+verifier('les tâches planifiées sont bien au nombre de onze', routesCron.length === 11,
   `trouvé ${routesCron.length}`)
 
 for (const chemin of routesCron) {

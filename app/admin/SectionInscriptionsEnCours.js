@@ -19,16 +19,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ClipboardList, Phone, Mail, RefreshCw } from 'lucide-react'
-import { attenteDepuis } from '@/lib/statut-commercant'
+import { attenteDepuis, PUBLICATION_BROUILLON } from '@/lib/statut-commercant'
 
 const T = {
   main: '#6B35C4', pale: '#EDE0FF', ink: '#1A0840', deep: '#2D0F6B',
   muted: '#6B7280', hairline: '#EEE9F5', bleu: '#1D4ED8', bleuPale: '#EFF6FF',
 }
 
-// ⚠️ LA COLONNE EST DÉCLARÉE PAR LA RÈGLE, pas recopiée : `statut_publication`
-// absente du select et le filtre ne trouverait plus personne, en silence.
-const ETAT_NON_TERMINEE = 'brouillon'
+// ⚠️ L'ÉTAT VIENT DE LA RÈGLE PARTAGÉE, jamais d'une copie : cet écran et la
+// tâche de relance doivent parler des MÊMES fiches, sinon Alex voit une liste
+// et le cron en relance une autre.
+const ETAT_NON_TERMINEE = PUBLICATION_BROUILLON
 
 export default function SectionInscriptionsEnCours() {
   const [lignes, setLignes] = useState([])

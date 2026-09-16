@@ -13,6 +13,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/relance-inscriptions",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/cron/expire-reservations",
       "schedule": "*/5 * * * *"
     },

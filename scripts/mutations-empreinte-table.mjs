@@ -30,18 +30,26 @@ const MODULE = 'lib/empreinte-lien-serveur.js'
 const DETAILS = 'app/api/rdv/empreinte-details/route.js'
 const PAGE = 'app/empreinte/[jeton]/page.js'
 const DEMANDE = 'app/api/rdv/empreinte-demander/route.js'
+// « Ce compte encaisse-t-il ? » : l'écran de réglage le demandait plus
+// largement que la règle, et l'inscription Stripe en cours passait entre les deux.
+const CONFIG = 'app/dashboard/ConfigDashboard.js'
+const DASH = 'app/dashboard/page.js'
 
 const MUTATIONS = [
   // ─── LA RÈGLE ───────────────────────────────────────────────────────────
+  // ⚠️ CES DEUX ANCRES ONT SUIVI LA REGLE LE 16/09. Elle vivait dans
+  // `empreinteRequise` ; elle a une fonction a elle, `compteEncaisse`, partagee
+  // avec l ecran de reglage. Le harnais a dit « TEXTE INTROUVABLE », il n a pas
+  // fait semblant de mesurer.
   { nom: '🔴 la regle relit stripe_account_id, que la fiche publique n a pas (le defaut d origine)',
     fichier: REGLE,
-    de: '  if (commercant?.stripe_account_charges_enabled !== true) return false',
-    vers: '  if (!commercant?.stripe_account_id || commercant?.stripe_account_charges_enabled !== true) return false' },
+    de: '  return commercant?.stripe_account_charges_enabled === true',
+    vers: '  return !!commercant?.stripe_account_id && commercant?.stripe_account_charges_enabled === true' },
 
   { nom: '🔴 une colonne d encaissement absente passe pour un compte en ordre',
     fichier: REGLE,
-    de: '  if (commercant?.stripe_account_charges_enabled !== true) return false',
-    vers: '  if (commercant?.stripe_account_charges_enabled === false) return false' },
+    de: '  return commercant?.stripe_account_charges_enabled === true',
+    vers: '  return commercant?.stripe_account_charges_enabled !== false' },
 
   // ─── LA PORTE GRATUITE ──────────────────────────────────────────────────
   { nom: '🔴 la route gratuite ne rejoue plus la regle de la carte',
@@ -160,6 +168,34 @@ const MUTATIONS = [
     fichier: DEMANDE,
     de: 'confirme ta table du ${quandSms} en enregistrant',
     vers: 'confirme ta table du ${rdv.date_rdv} en enregistrant' },
+
+  // ─── « CE COMPTE ENCAISSE-T-IL ? » (16/09) ──────────────────────────────
+  // Les deux formes de l absence se mesurent SEPAREMENT : la colonne manquante
+  // ci-dessus (`undefined`), l inscription commencee ici (`null`).
+  { nom: '🔴 une inscription Stripe commencee (null) repasse pour un compte en ordre',
+    fichier: REGLE,
+    de: '  return commercant?.stripe_account_charges_enabled === true',
+    vers: '  return commercant?.stripe_account_charges_enabled !== undefined' },
+
+  { nom: '🔴 l ecran de reglage repose la question plus largement que la regle',
+    fichier: CONFIG,
+    de: '  const stripePret = compteEncaisse(commercant)',
+    vers: '  const stripePret = !!commercant?.stripe_account_id && commercant?.stripe_account_charges_enabled !== false' },
+
+  { nom: '🔴 la confirmation promet de nouveau une protection qui n existe pas',
+    fichier: CONFIG,
+    de: 'Réglage enregistré, mais aucune carte ne sera demandée tant que ton compte Stripe n’encaisse pas.',
+    vers: 'Empreinte enregistrée.' },
+
+  { nom: '🔴 la demande ne nomme plus la vraie cause du refus',
+    fichier: DEMANDE,
+    de: '    if (!compteEncaisse(commercant)) {',
+    vers: '    if (false) {' },
+
+  { nom: '⚠️ l agenda propose de nouveau un lien qui ne partirait pas',
+    fichier: DASH,
+    de: '{onDemanderEmpreinte && stripePret && peutDemander(rdv, new Date()) && (',
+    vers: '{onDemanderEmpreinte && peutDemander(rdv, new Date()) && (' },
 ]
 
 const lancer = () => {

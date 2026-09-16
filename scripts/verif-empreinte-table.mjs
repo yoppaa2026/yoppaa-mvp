@@ -15,7 +15,7 @@ import {
   EMPREINTE_SEUIL_DEFAUT, EMPREINTE_MONTANT_DEFAUT,
   EMPREINTE_SEUIL_MAX, EMPREINTE_MONTANT_MAX,
   echeanceLien, lienValide, peutDemander, raisonDemandeImpossible,
-  estAbsenceFacturable, montantAnnulationFacturable,
+  estAbsenceFacturable, montantAnnulationFacturable, compteEncaisse,
 } from '../lib/empreinte-table.js'
 // 🔴 CE QUE LE JETON OUVRE, EXÉCUTÉ CONTRE UNE BASE SIMULÉE : c'est de là que
 // sortent le montant affiché au client ET le montant signé chez Stripe.
@@ -304,8 +304,14 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     && /if \(error \|\| !data\) return toast\(/.test(ECRAN))
   // ⚠️ SANS COMPTE STRIPE, LE RÉGLAGE SERAIT SANS EFFET, et le restaurateur
   // doit l'apprendre AVANT d'allumer une protection qui ne se déclenchera pas.
+  // ⚠️ GARDE RÉORIENTÉE LE 16/09, PAS DÉSARMÉE : elle visait « Connecte
+  // d'abord ton compte Stripe », une phrase qui ne parlait pas à celui qui a
+  // commencé son inscription sans la finir, et c'était justement lui qui se
+  // faisait avoir. Elle exige maintenant la phrase qui couvre les deux cas ET
+  // sa conséquence, « aucune carte n'est demandée ».
   verifie('🔴 il prévient quand le compte Stripe n’est pas prêt',
-    /stripePret/.test(ECRAN) && /Connecte d&rsquo;abord ton compte Stripe/.test(ECRAN))
+    /stripePret/.test(ECRAN) && /Ton compte Stripe n&rsquo;encaisse pas encore/.test(ECRAN)
+    && /aucune carte n&rsquo;est demandée/.test(ECRAN))
   // ⚠️ UN MONTANT N'EST PAS UNE INFORMATION : « 20 € » ne dit rien, « une table
   // de 6 garantit 120 € » dit ce que le client va lire.
   verifie('🔴 il montre le TOTAL garanti, pas seulement le montant par personne',
@@ -719,6 +725,56 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /alert\(j\?\.error \|\| 'Le lien n’a pas pu partir/.test(DASH2))
   verifie('⚠️ et le message rappelle que la table reste réservée',
     /Ta table reste réservée tant qu’il n’a pas confirmé/.test(DASH2))
+
+  // ── « CE COMPTE ENCAISSE-T-IL ? », UNE SEULE DÉFINITION ────────────────
+  //
+  // 🔴 L'ÉCRAN DE RÉGLAGE LE DEMANDAIT PLUS LARGEMENT QUE LA RÈGLE (16/09) :
+  // « un identifiant posé et l'encaissement pas FAUX » contre « l'encaissement
+  // VRAI ». Entre les deux vit l'inscription Stripe commencée et non terminée.
+  // Le restaurateur cochait « demander une empreinte », lisait une confirmation
+  // chiffrée, et aucune carte n'était jamais demandée.
+  const CONFIG = sansProse(lire('app/dashboard/ConfigDashboard.js'))
+
+  verifie('un compte qui encaisse est prêt', compteEncaisse({ stripe_account_charges_enabled: true }) === true)
+  verifie('un compte refusé ne l’est pas', compteEncaisse({ stripe_account_charges_enabled: false }) === false)
+  // 🔴 LES DEUX FORMES DE L'ABSENCE, ENCORE : `null` est une inscription
+  // commencée, une colonne manquante est un select incomplet. Ni l'une ni
+  // l'autre n'est un compte en ordre.
+  verifie('🔴 une inscription commencée n’est PAS un compte en ordre',
+    compteEncaisse({ stripe_account_id: 'acct_1', stripe_account_charges_enabled: null }) === false)
+  verifie('🔴 une colonne absente non plus', compteEncaisse({ stripe_account_id: 'acct_1' }) === false)
+  verifie('et pas de commerçant du tout non plus', compteEncaisse(undefined) === false)
+  // La règle de la fiche publique pose la même question, par la même fonction.
+  verifie('🔴 la règle pose la question par cette fonction',
+    empreinteRequise({ ...RESTO, stripe_account_charges_enabled: null }, TABLE, 8) === false
+    && /if \(!compteEncaisse\(commercant\)\) return false/.test(sansProse(lire('lib/empreinte-table.js'))))
+
+  verifie('🔴 l’écran de réglage pose la MÊME question que la règle',
+    /const stripePret = compteEncaisse\(commercant\)/.test(CONFIG))
+  verifie('🔴 et plus jamais la version large qui laissait passer l’inscription en cours',
+    !/stripe_account_charges_enabled !== false/.test(CONFIG))
+  // 🔴 LA PHRASE QU'IL LIT ET QU'IL CROIT : elle annonçait « dès 6 personnes,
+  // 20 € par personne » là où aucune carte ne serait demandée.
+  verifie('🔴 la confirmation ne promet pas une protection qui n’existe pas',
+    /Réglage enregistré, mais aucune carte ne sera demandée/.test(CONFIG))
+  verifie('⚠️ et l’avertissement parle aussi à qui a commencé son inscription',
+    /Ton compte Stripe n&rsquo;encaisse pas encore/.test(CONFIG))
+
+  // 🔴 LE REFUS NOMME LA BONNE CAUSE. Le message envoyait le restaurateur
+  // vérifier son réglage et ses couverts, tous deux parfaits.
+  {
+    const iStripe = DEMANDE.indexOf('if (!compteEncaisse(commercant)) {')
+    verifie('🔴 la demande refuse d’abord sur le compte, et le DIT',
+      iStripe !== -1 && iStripe < DEMANDE.indexOf('if (!empreinteRequise(commercant')
+      && /Ton compte Stripe n’encaisse pas encore/.test(DEMANDE))
+  }
+  // ⚠️ L'AGENDA EXPLIQUE AU LIEU D'OFFRIR UN BOUTON QUI SERA REFUSÉ. La route
+  // refuse de toute façon : cette ligne informe, elle ne protège pas.
+  verifie('⚠️ l’agenda ne propose plus un lien qui ne partirait pas',
+    /\{onDemanderEmpreinte && stripePret && peutDemander\(rdv, new Date\(\)\) && \(/.test(DASH2))
+  verifie('⚠️ et il dit pourquoi, à la place du bouton',
+    /stripePret={compteEncaisse\(commercant\)}/.test(DASH2)
+    && /pour pouvoir demander une carte/.test(DASH2))
 }
 
 // ─── LA FICHE, LA PORTE GRATUITE ET LE RETOUR (15/09, essai E2 d'Alex) ──────

@@ -18,7 +18,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes, createHash } from 'node:crypto'
 import { gardeSurLigne, refus } from '@/lib/api-auth'
-import { empreinteRequise, montantEmpreinte, echeanceLien, raisonDemandeImpossible } from '@/lib/empreinte-table'
+import { empreinteRequise, montantEmpreinte, echeanceLien, raisonDemandeImpossible, compteEncaisse } from '@/lib/empreinte-table'
 import { envoyerAvecCredit } from '@/lib/fidelite-sms'
 import { emailDemandeEmpreinte, envoyerAuYopper } from '@/lib/resend'
 import { euros, eurosNus } from '@/lib/montants'
@@ -74,6 +74,16 @@ export async function POST(request) {
     }
 
     const commercant = rdv.commercant
+    // 🔴 LA VRAIE CAUSE, NOMMÉE (16/09). Le message ci-dessous envoyait le
+    // restaurateur vérifier son réglage et son nombre de couverts, tous deux
+    // parfaits, quand c'est son compte Stripe qui n'encaisse pas encore. Il
+    // cherchait là où il n'y avait rien à trouver.
+    if (!compteEncaisse(commercant)) {
+      return NextResponse.json({
+        ok: false, code: 'stripe_absent',
+        error: 'Ton compte Stripe n’encaisse pas encore : termine son inscription dans Paiements, sinon aucune carte ne peut être enregistrée.',
+      }, { status: 400 })
+    }
     // 🔴 LA MÊME RÈGLE QUE SUR LA FICHE PUBLIQUE, rejouée ici : sans elle, un
     // restaurateur réclamerait une carte pour un couple, ou pour une table
     // alors qu'il a éteint l'empreinte.

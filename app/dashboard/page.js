@@ -54,7 +54,7 @@ import { accesDashboard } from '@/lib/statut-commercant'
 // ⚠️ LA FENÊTRE DE FACTURATION VIENT DU MODULE, pas d'un calcul de cet écran :
 // la route la rejoue à l'identique, et deux calculs qui divergent, c'est un
 // bouton qui s'affiche sur une table que le serveur refusera de facturer.
-import { raisonDebitImpossible, peutDemander } from '@/lib/empreinte-table'
+import { raisonDebitImpossible, peutDemander, compteEncaisse } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
 
 const T = {
@@ -311,7 +311,12 @@ const boutonLien = {
   cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
 }
 
-function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null }) {
+// ⚠️ `stripePret` VAUT `true` PAR DÉFAUT, ET C'EST VOULU. Ce drapeau EXPLIQUE,
+// il ne protège pas : la route refuse toute seule. Un oubli de passage qui
+// cacherait le bouton empêcherait un restaurateur en ordre de demander sa
+// carte ; un oubli qui le montre laisse un refus serveur qui, lui, nomme
+// maintenant la bonne cause. Entre les deux, le silence est du mauvais côté.
+function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null, stripePret = true }) {
   const [enCours, setEnCours] = useState(false)
   const montant = Number(rdv?.empreinte_montant) || 0
   const raison = raisonDebitImpossible(rdv, new Date())
@@ -344,7 +349,17 @@ function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null }) {
             Lien déjà envoyé par {rdv.empreinte_demande_canal === 'sms' ? 'SMS' : 'email'}, pas encore confirmé.
           </p>
         )}
-        {onDemanderEmpreinte && peutDemander(rdv, new Date()) && (
+        {/* 🔴 SANS COMPTE QUI ENCAISSE, LE LIEN NE PARTIRAIT PAS, et on le dit
+            ICI plutôt que d'offrir un bouton dont le refus arrive après le
+            clic. La route refuse de toute façon : cette ligne explique, elle ne
+            protège pas. */}
+        {onDemanderEmpreinte && peutDemander(rdv, new Date()) && !stripePret && (
+          <p style={{ margin: '5px 0 0', fontSize: '0.68rem', color: '#92400E', fontWeight: 700 }}>
+            Ton compte Stripe n&rsquo;encaisse pas encore : termine son inscription dans Paiements
+            pour pouvoir demander une carte.
+          </p>
+        )}
+        {onDemanderEmpreinte && stripePret && peutDemander(rdv, new Date()) && (
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             {rdv.client_telephone && (
               <button type="button" disabled={enCours}
@@ -903,7 +918,7 @@ function CarteCommande({ commande, numero, categorie = null, onChangerStatut, on
 // ─── Carte RDV (vitrine) ──────────────────────────────────────────────────────
 // Affichage d'un RDV pour le commercant : heure, prestation, duree, client (nom/tel/email),
 // notes du client, prix estime. Actions : Honore / No-show / Annuler.
-function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null, onFacturerEmpreinte = null, onDemanderEmpreinte = null }) {
+function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = null, onFacturerEmpreinte = null, onDemanderEmpreinte = null, stripePret = true }) {
   const statut = STATUTS_RDV[rdv.statut] || STATUTS_RDV['confirme']
   const { couleur } = statut
 
@@ -1079,7 +1094,7 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
             facturer, par exemple dans une vue de consultation. */}
         {estTableGarantie(rdv) && (
           <div style={{ marginTop: 10 }}>
-            <EmpreinteRdv rdv={rdv} onFacturer={onFacturerEmpreinte} onDemanderEmpreinte={onDemanderEmpreinte} />
+            <EmpreinteRdv rdv={rdv} onFacturer={onFacturerEmpreinte} onDemanderEmpreinte={onDemanderEmpreinte} stripePret={stripePret} />
           </div>
         )}
 
@@ -3887,6 +3902,7 @@ export default function Dashboard() {
               onDemanderAction={(r, action) => { setRdvSelectionne(null); setActionRdv({ rdv: r, action }) }}
               onFacturerEmpreinte={facturerEmpreinte}
               onDemanderEmpreinte={demanderEmpreinte}
+              stripePret={compteEncaisse(commercant)}
               onDeplacer={(r) => { setRdvSelectionne(null); setRdvADeplacer(r) }}/>
             <button onClick={() => setRdvSelectionne(null)}
               style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>

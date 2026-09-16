@@ -48,7 +48,7 @@ import {
 // régler : il écrit ces colonnes directement en base, donc une validation qui
 // vivrait dans le formulaire ne vaudrait que pour celui qui passe par lui.
 import {
-  seuilEmpreinte, montantParPersonne, validerSeuil, validerMontant,
+  seuilEmpreinte, montantParPersonne, validerSeuil, validerMontant, compteEncaisse,
   EMPREINTE_SEUIL_DEFAUT, EMPREINTE_MONTANT_DEFAUT,
   EMPREINTE_SEUIL_MIN, EMPREINTE_SEUIL_MAX,
   EMPREINTE_MONTANT_MIN, EMPREINTE_MONTANT_MAX,
@@ -8215,7 +8215,14 @@ function ReglageEmpreinte({ commercantId, commercant, toast }) {
   // ⚠️ SANS COMPTE STRIPE, LE RÉGLAGE NE SERVIRAIT À RIEN, et il faut le dire
   // ICI plutôt que de laisser le restaurateur allumer une protection qui ne se
   // déclenchera jamais.
-  const stripePret = !!commercant?.stripe_account_id && commercant?.stripe_account_charges_enabled !== false
+  //
+  // 🔴 ET CET AVERTISSEMENT NE SE DÉCLENCHAIT PAS AU BON MOMENT (16/09). Il
+  // exigeait un identifiant Stripe et un encaissement qui ne soit pas FAUX,
+  // là où la règle exige un encaissement VRAI. Entre les deux vit exactement
+  // l'inscription commencée et non terminée : l'écran se taisait, le
+  // restaurateur cochait, et aucune carte n'était jamais demandée. La question
+  // n'a plus qu'une définition, et c'est celle de la règle.
+  const stripePret = compteEncaisse(commercant)
   const delaiApplique = vDelai.ok
     ? delaiAnnulationHeures({ ...commercant, rdv_delai_annulation_heures: vDelai.valeur })
     : null
@@ -8238,8 +8245,14 @@ function ReglageEmpreinte({ commercantId, commercant, toast }) {
     setSaving(false)
     if (error || !data) return toast(`Erreur : ${error?.message || 'réglage non enregistré'}. Rien n’a changé.`, 'error')
     setEnregistre(data)
+    // 🔴 LE MESSAGE DE CONFIRMATION NE PROMET PAS CE QUI N'AURA PAS LIEU
+    // (16/09). Il annonçait « dès 6 personnes, 20 € par personne » à un
+    // restaurateur dont le compte n'encaisse pas encore, donc à qui aucune carte
+    // ne serait demandée. C'est la phrase qu'il lit et qu'il croit.
     toast(data.rdv_empreinte_actif
-      ? `Empreinte enregistrée : dès ${data.rdv_empreinte_seuil_couverts} personnes, ${data.rdv_empreinte_par_personne} € par personne`
+      ? (stripePret
+        ? `Empreinte enregistrée : dès ${data.rdv_empreinte_seuil_couverts} personnes, ${data.rdv_empreinte_par_personne} € par personne`
+        : 'Réglage enregistré, mais aucune carte ne sera demandée tant que ton compte Stripe n’encaisse pas.')
       : 'Empreinte éteinte : plus aucune carte n’est demandée')
   }
 
@@ -8259,8 +8272,12 @@ function ReglageEmpreinte({ commercantId, commercant, toast }) {
         <>
           {!stripePret && (
             <p style={{ fontSize: 11.5, fontWeight: 700, color: '#92400E', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '7px 10px', margin: '0 0 10px' }}>
-              Connecte d&rsquo;abord ton compte Stripe : sans lui, aucune carte ne peut être enregistrée,
-              et ce réglage resterait sans effet.
+              {/* ⚠️ LES DEUX CAS DANS UNE SEULE PHRASE : pas encore connecté, et
+                  connecté mais inscription non terminée. « Connecte d&rsquo;abord »
+                  ne parlait pas au second, qui croyait avoir tout fait. */}
+              Ton compte Stripe n&rsquo;encaisse pas encore : termine son inscription dans
+              Paiements. Tant qu&rsquo;il n&rsquo;est pas actif, <strong>aucune carte n&rsquo;est demandée</strong> et
+              ce réglage reste sans effet.
             </p>
           )}
           <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: lecture === 'ok' ? 'pointer' : 'default', marginBottom: 10 }}>

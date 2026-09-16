@@ -9,6 +9,7 @@ import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { effacerImpersonation, fermerImpersonationServeur, messageImpersonation } from '@/lib/impersonation'
 import { attenteDepuis } from '@/lib/statut-commercant'
 import SectionTousCommercants from './SectionTousCommercants'
+import SectionInscriptionsEnCours from './SectionInscriptionsEnCours'
 import SectionKYBAValider from './SectionKYBAValider'
 import SectionPreinscriptions from './SectionPreinscriptions'
 import SectionDiagnosticBrevo from './SectionDiagnosticBrevo'
@@ -314,6 +315,13 @@ export default function AdminPage() {
         {/* Commerces réclamés par les habitants et encore absents : la liste de
             prospection, classée par nombre de demandes. */}
         <SectionSuggestions />
+
+        {/* 🔴 CEUX QUI SE SONT ARRÊTÉS EN ROUTE (16/09). Ils n'ont déclenché
+            aucune notification, puisqu'elle ne part qu'au dernier clic : sans
+            ce bloc, ils se rangent au milieu des vrais commerçants et personne
+            ne sait qu'ils existent. Placé AVANT la liste générale, sinon il
+            faut faire défiler pour découvrir qu'un prospect attend. */}
+        <SectionInscriptionsEnCours />
 
         {/* Tous les commerçants (édition + impersonation) */}
         <SectionTousCommercants toast={(msg, type) => setToast({ msg, type })} />

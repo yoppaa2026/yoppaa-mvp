@@ -129,6 +129,32 @@ const MUTATIONS = [
     de: '              {attente.texte}',
     vers: '              {null}' },
 
+  // ─── CEUX QUI SE SONT ARRETES EN ROUTE ──────────────────────────────────
+  { nom: '🔴 la section des inscriptions non terminees n est plus montee',
+    fichier: 'app/admin/page.js',
+    de: '        <SectionInscriptionsEnCours />',
+    vers: '        {null}' },
+
+  { nom: '🔴 elle montre les fiches soumises au lieu des abandons',
+    fichier: 'app/admin/SectionInscriptionsEnCours.js',
+    de: "const ETAT_NON_TERMINEE = 'brouillon'",
+    vers: "const ETAT_NON_TERMINEE = 'en_attente'" },
+
+  { nom: '🔴 une lecture en echec se lit « personne n attend »',
+    fichier: 'app/admin/SectionInscriptionsEnCours.js',
+    de: '    if (error) { setErr(error.message); setLoading(false); return }',
+    vers: '    if (false) { setErr(error.message); setLoading(false); return }' },
+
+  { nom: '🔴 la colonne quitte le select : la section reste vide pour toujours',
+    fichier: 'app/admin/SectionInscriptionsEnCours.js',
+    de: '        id, nom, type, categorie, telephone, email, adresse, created_at, statut_publication,',
+    vers: '        id, nom, type, categorie, telephone, email, adresse, created_at,' },
+
+  { nom: '🔴 la section redonne une date brute au lieu de l attente',
+    fichier: 'app/admin/SectionInscriptionsEnCours.js',
+    de: '        const depuis = attenteDepuis(c.created_at)',
+    vers: '        const depuis = { texte: c.created_at }' },
+
   // ─── ET LA DECISION QU'ON NE DOIT PAS « CORRIGER » ──────────────────────
   { nom: '✅ des seances deja payees se font refuser parce que la fiche est depubliee',
     fichier: 'app/api/rdv/reserver-abonnement/route.js',

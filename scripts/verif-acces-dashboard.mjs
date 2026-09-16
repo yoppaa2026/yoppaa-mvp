@@ -798,6 +798,44 @@ function sansCommentaires(src) {
     verifier('⚠️ et l’écran de validation MONTRE l’attente, pas seulement la date',
       /\{attente\.texte\}/.test(codeDe('app/admin/page.js')))
   }
+
+  // ─── CEUX QUI SE SONT ARRÊTÉS EN ROUTE ─────────────────────────────────
+  // Demande d'Alex, 16/09 : « mon problème est la table du stock qui arrive
+  // dans mon DB admin sans prévenir et sans infos ».
+  {
+    const section = codeDe('app/admin/SectionInscriptionsEnCours.js')
+    const page = codeDe('app/admin/page.js')
+    verifier('🔴 la section est MONTÉE dans l’admin', /<SectionInscriptionsEnCours \/>/.test(page))
+    // ⚠️ `> 0` D'ABORD : absente, `indexOf` rend -1, et « -1 est plus petit »
+    // aurait suffi à garder cette garde verte sur une section disparue.
+    verifier('⚠️ et AVANT la liste générale, sinon il faut la chercher',
+      page.indexOf('<SectionInscriptionsEnCours />') > 0
+      && page.indexOf('<SectionInscriptionsEnCours />') < page.indexOf('<SectionTousCommercants'))
+    verifier('🔴 elle ne montre QUE les inscriptions non terminées',
+      /\.eq\('statut_publication', ETAT_NON_TERMINEE\)/.test(section)
+      && /ETAT_NON_TERMINEE = 'brouillon'/.test(section))
+    // 🔴 LE PIÈGE DE LA COLONNE, ENCORE : sans elle dans le select, le filtre
+    // porte sur une valeur absente et la section reste vide pour toujours.
+    //
+    // ⚠️ ON VISE LE SELECT, PAS LE FICHIER. Chercher le nom partout, c'est le
+    // trouver dans le `.eq(...)` juste en dessous et rester vert alors que la
+    // colonne a quitté le select : la mutation l'a prouvé, deuxième fois du
+    // jour. Une garde doit regarder l'endroit exact où la chose se joue.
+    const selectPrincipal = section.match(/from\('commercants'\)[\s\S]{0,200}?\.select\(`([\s\S]*?)`\)/)
+    verifier('la lecture des commerçants est repérable', !!selectPrincipal)
+    verifier(`🔴 elle charge « ${COLONNE_PUBLICATION} » DANS son select`,
+      !!selectPrincipal && porteLaColonne.test(selectPrincipal[1]))
+    // 🔴 UNE REQUÊTE EN ÉCHEC ET UNE LISTE VIDE SE RESSEMBLENT À L'ÉCRAN, et
+    // la seconde se lirait « personne n'attend ».
+    verifier('🔴 elle lit l’erreur de lecture au lieu de l’avaler',
+      /if \(error\) \{ setErr\(error\.message\)/.test(section))
+    verifier('⚠️ et le dit sans faire croire qu’il n’y a personne',
+      /Rien ne dit qu&apos;il n&apos;y a personne/.test(section))
+    verifier('⚠️ elle dit l’attente, pas la date brute', /attenteDepuis\(c\.created_at\)/.test(section))
+    // ⚠️ LE GESTE ATTENDU EST UN APPEL : les coordonnées sont des liens.
+    verifier('⚠️ le téléphone et l’email se cliquent',
+      /href=\{`tel:\$\{c\.telephone\}`\}/.test(section) && /href=\{`mailto:\$\{c\.email\}`\}/.test(section))
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

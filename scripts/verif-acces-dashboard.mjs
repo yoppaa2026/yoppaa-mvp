@@ -22,6 +22,7 @@ import {
   RAISON_OK, RAISON_AUCUN_COMPTE, RAISON_ONBOARDING, RAISON_REJETE, RAISON_ATTENTE,
   // ⚠️ IMPORTÉES POUR ÊTRE EXÉCUTÉES : l'autre porte, celle de la fiche.
   fichePubliee, COLONNE_PUBLICATION, PUBLICATION_OUVERTE,
+  attenteDepuis, joursOuvresEntre,
 } from '../lib/statut-commercant.js'
 // ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE, avec un faux client Supabase : c'est la
 // seule façon de savoir ce que la file RÉPOND, et non ce qu'elle a l'air de
@@ -721,6 +722,82 @@ function sansCommentaires(src) {
   // pas un jour ce qui est un choix.
   verifier('✅ un abonnement déjà signé garde le droit de poser ses séances',
     !/fichePubliee/.test(codeDe('app/api/rdv/reserver-abonnement/route.js')))
+
+  // ─── ET CE QUE L'ADMIN MONTRE DE CES ÉTATS ─────────────────────────────
+  //
+  // 🔴 16/09, TROUVÉ PAR ALEX. « La Table du Stock », inscription commencée le
+  // 13/09 et jamais soumise, s'affichait « Suspendu » dans la liste et
+  // « publie » dans la fenêtre d'édition. Les deux mentaient sur la même
+  // valeur, `brouillon`, qu'aucun des deux ne connaissait : la liste retombait
+  // sur son défaut, le menu sur sa première option. Un « Enregistrer » pour
+  // corriger un téléphone aurait PUBLIÉ un commerce jamais validé.
+  {
+    const modale = codeDe('app/admin/ModalEditCommercant.js')
+    const liste = codeDe('app/admin/SectionTousCommercants.js')
+    verifier('🔴 la modale n’invente plus « publie » sur un état qu’elle ignore',
+      !/statut_publication: commercant\.statut_publication \|\| 'publie'/.test(modale))
+    verifier('🔴 et elle n’écrit le statut QUE s’il est connu',
+      /if \(STATUTS_PUB\.some\(s => s\.valeur === form\.statut_publication\)\)/.test(modale))
+    verifier('🔴 un état inconnu ne se déguise plus en « Suspendu »',
+      /BADGE_STATUT\[c\.statut_publication\] \|\| BADGE_INCONNU/.test(liste))
+    verifier('⚠️ et le défaut de la liste n’est plus un état réel',
+      /BADGE_INCONNU = \{[^}]*label: 'Statut inconnu'/.test(liste))
+
+    // 🔴 LA RÈGLE, PAS LA LIGNE : tout état que le code ÉCRIT, l'admin doit
+    // savoir l'afficher ET le choisir. C'est cette garde-ci qui aurait attrapé
+    // `brouillon` le 13/09, au lieu de laisser Alex le découvrir trois jours
+    // plus tard en croyant avoir suspendu quelqu'un.
+    const ecrits = new Set()
+    for (const f of sources) {
+      for (const m of codeDe(f).matchAll(/statut_publication:\s*'([a-z_]+)'/g)) ecrits.add(m[1])
+    }
+    verifier('le code écrit au moins quatre états de publication',
+      ecrits.size >= 4, [...ecrits].join(', '))
+    for (const etat of ecrits) {
+      verifier(`🔴 l’admin sait AFFICHER « ${etat} »`,
+        new RegExp(`\\b${etat}:\\s*\\{`).test(liste), 'absent de BADGE_STATUT')
+      verifier(`🔴 l’admin sait CHOISIR « ${etat} »`,
+        new RegExp(`valeur: '${etat}'`).test(modale), 'absent du menu d’édition')
+      verifier(`⚠️ et l’admin sait FILTRER « ${etat} »`,
+        new RegExp(`<option value="${etat}">`).test(liste), 'absent du filtre de la liste')
+    }
+  }
+
+  // ─── DEPUIS COMBIEN DE TEMPS CELUI-LÀ ATTEND-IL ? ──────────────────────
+  // ⚠️ EXÉCUTÉE. Une date brute laissait le calcul à faire pendant que la page
+  // d'inscription promet une réponse sous 24 h ouvrées.
+  {
+    const LUN = new Date('2026-09-14T09:00:00')   // lundi
+    const MAR = new Date('2026-09-15T09:00:00')   // mardi
+    const MER = new Date('2026-09-16T09:00:00')   // mercredi
+    const VEN = new Date('2026-09-11T20:00:00')   // vendredi soir
+
+    verifier('aujourd’hui se dit « aujourd’hui »', attenteDepuis(MER, MER).texte === 'aujourd’hui')
+    verifier('la veille se dit « hier »', attenteDepuis(MAR, MER).texte === 'hier')
+    verifier('au-delà, on compte les jours', attenteDepuis(LUN, MER).texte === 'il y a 2 jours')
+
+    // 🔴 LE WEEK-END NE COMPTE PAS, sinon tout dossier déposé le vendredi soir
+    // paraîtrait en retard dès le lundi matin et l'alerte perdrait son sens.
+    // ⚠️ UNE ALARME QUI SONNE TOUT LE TEMPS NE PROTÈGE PLUS RIEN.
+    egalNombre('samedi et dimanche ne sont pas des jours ouvrés',
+      joursOuvresEntre(VEN, LUN), 1)
+    verifier('🔴 déposé vendredi soir, traité lundi : DANS les temps',
+      attenteDepuis(VEN, LUN).enRetard === false)
+    verifier('🔴 déposé vendredi soir, toujours rien mardi : EN RETARD',
+      attenteDepuis(VEN, MAR).enRetard === true, JSON.stringify(attenteDepuis(VEN, MAR)))
+
+    // ⚠️ UNE DATE ABSENTE NE DÉCLENCHE PAS UNE FAUSSE ALERTE : on ne sait pas,
+    // on le dit, et on n'accuse personne.
+    const sansDate = attenteDepuis(null, MER)
+    verifier('une date absente se dit inconnue, sans alarme',
+      sansDate.texte === 'date inconnue' && sansDate.enRetard === false)
+    verifier('une date illisible non plus', attenteDepuis('pas une date', MER).enRetard === false)
+    // Une date dans le futur ne rend jamais un compte négatif.
+    egalNombre('une date future ne remonte pas le temps', attenteDepuis(MER, LUN).jours, 0)
+
+    verifier('⚠️ et l’écran de validation MONTRE l’attente, pas seulement la date',
+      /\{attente\.texte\}/.test(codeDe('app/admin/page.js')))
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

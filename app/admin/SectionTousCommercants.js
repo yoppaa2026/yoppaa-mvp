@@ -22,12 +22,21 @@ const T = {
 }
 
 // Badges visuels par statut publication
+// 🔴 `brouillon` MANQUAIT, et le défaut de cette table était « Suspendu »
+// (16/09, trouvé par Alex). « La Table du Stock », inscription commencée le
+// 13/09 et jamais soumise, s'affichait donc comme une fiche qu'il aurait
+// suspendue lui-même : un défaut d'affichage déguisé en décision d'admin.
 const BADGE_STATUT = {
   publie:     { bg: '#F0FDF4', color: '#10B981', label: 'Publié' },
   en_attente: { bg: '#FEF3C7', color: '#92400E', label: 'En attente' },
+  brouillon:  { bg: '#EFF6FF', color: '#1D4ED8', label: 'Inscription non terminée' },
   rejete:     { bg: '#FEE2E2', color: '#DC2626', label: 'Rejeté' },
   suspendu:   { bg: '#E5E7EB', color: '#6B7280', label: 'Suspendu' },
 }
+// ⚠️ ET CE QU'ON NE CONNAÎT PAS SE DIT INCONNU. Retomber sur un état réel,
+// quel qu'il soit, c'est affirmer quelque chose de faux avec l'aplomb d'une
+// certitude. Mieux vaut un écran qui avoue.
+const BADGE_INCONNU = { bg: '#FEF2F2', color: '#B91C1C', label: 'Statut inconnu' }
 
 const BADGE_PLAN = {
   on:     { bg: '#F3F4F6', color: '#6B7280' },
@@ -137,9 +146,13 @@ export default function SectionTousCommercants({ toast }) {
           style={{ padding: '0.55rem 0.75rem', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', color: T.ink, outline: 'none', cursor: 'pointer', background: '#fff' }}>
           <option value="tous">Tous les statuts</option>
           <option value="publie">Publiés</option>
-          <option value="en_attente">En attente</option>
+          <option value="en_attente">En attente de validation</option>
+          {/* ⚠️ CEUX QUI SE SONT ARRÊTÉS EN ROUTE. Ils ne déclenchent aucune
+              notification, puisque la soumission n'a jamais eu lieu : sans ce
+              filtre, personne ne sait qu'ils existent. */}
+          <option value="brouillon">Inscriptions non terminées</option>
           <option value="rejete">Rejetés</option>
-          <option value="suspendu">Suspendus</option>
+          <option value="suspendu">Suspendus (archivés)</option>
         </select>
         <select value={filtrePlan} onChange={e => setFiltrePlan(e.target.value)}
           style={{ padding: '0.55rem 0.75rem', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', color: T.ink, outline: 'none', cursor: 'pointer', background: '#fff' }}>
@@ -170,7 +183,7 @@ export default function SectionTousCommercants({ toast }) {
       {!loading && filtres.length > 0 && (
         <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.hairline}`, overflow: 'hidden' }}>
           {filtres.map((c, i) => {
-            const badgeS = BADGE_STATUT[c.statut_publication] || BADGE_STATUT.suspendu
+            const badgeS = BADGE_STATUT[c.statut_publication] || BADGE_INCONNU
             const badgeP = BADGE_PLAN[c.plan] || BADGE_PLAN.on
             return (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i === 0 ? 'none' : `1px solid ${T.hairline}`, flexWrap: 'wrap' }}>

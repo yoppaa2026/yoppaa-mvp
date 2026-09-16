@@ -90,6 +90,45 @@ const MUTATIONS = [
     de: 'commercant:commercants (id, nom, adresse, plan, essai_plan, created_at, statut_publication)',
     vers: 'commercant:commercants (id, nom, adresse, plan, essai_plan, created_at)' },
 
+  // ─── CE QUE L'ADMIN MONTRE DE CES ETATS (16/09, trouve par Alex) ────────
+  { nom: '🔴 la modale reinvente « publie » sur un etat qu elle ignore',
+    fichier: 'app/admin/ModalEditCommercant.js',
+    de: "      statut_publication: commercant.statut_publication || '',",
+    vers: "      statut_publication: commercant.statut_publication || 'publie'," },
+
+  { nom: '🔴 « Enregistrer » reecrit un statut que la modale n a jamais compris',
+    fichier: 'app/admin/ModalEditCommercant.js',
+    de: '      if (STATUTS_PUB.some(s => s.valeur === form.statut_publication)) {',
+    vers: '      if (true) {' },
+
+  { nom: '🔴 un etat inconnu se deguise a nouveau en « Suspendu »',
+    fichier: 'app/admin/SectionTousCommercants.js',
+    de: '            const badgeS = BADGE_STATUT[c.statut_publication] || BADGE_INCONNU',
+    vers: '            const badgeS = BADGE_STATUT[c.statut_publication] || BADGE_STATUT.suspendu' },
+
+  { nom: '🔴 « brouillon » disparait des badges : l inscription abandonnee redevient invisible',
+    fichier: 'app/admin/SectionTousCommercants.js',
+    de: "  brouillon:  { bg: '#EFF6FF', color: '#1D4ED8', label: 'Inscription non terminée' },",
+    vers: "  brouillon_inconnu: { bg: '#EFF6FF', color: '#1D4ED8', label: 'Inscription non terminée' }," },
+
+  // ─── DEPUIS COMBIEN DE TEMPS CELUI-LA ATTEND-IL ? ───────────────────────
+  { nom: '🔴 le week-end compte : depose vendredi soir, « en retard » lundi matin',
+    de: '    if (jour !== 0 && jour !== 6) n++',
+    vers: '    n++' },
+
+  { nom: '🔴 l alerte se declenche un jour trop tot, et sonne donc tout le temps',
+    de: '  return { jours, ouvres, texte, enRetard: ouvres > JOURS_OUVRES_PROMIS }',
+    vers: '  return { jours, ouvres, texte, enRetard: ouvres >= JOURS_OUVRES_PROMIS }' },
+
+  { nom: '🔴 une date absente accuse un retard qu on ne peut pas connaitre',
+    de: "    return { jours: null, ouvres: null, texte: 'date inconnue', enRetard: false }",
+    vers: "    return { jours: null, ouvres: null, texte: 'date inconnue', enRetard: true }" },
+
+  { nom: '🔴 l ecran de validation redonne une date sans dire l attente',
+    fichier: 'app/admin/page.js',
+    de: '              {attente.texte}',
+    vers: '              {null}' },
+
   // ─── ET LA DECISION QU'ON NE DOIT PAS « CORRIGER » ──────────────────────
   { nom: '✅ des seances deja payees se font refuser parce que la fiche est depubliee',
     fichier: 'app/api/rdv/reserver-abonnement/route.js',

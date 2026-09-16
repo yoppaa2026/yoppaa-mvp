@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { effacerImpersonation, fermerImpersonationServeur, messageImpersonation } from '@/lib/impersonation'
+import { attenteDepuis } from '@/lib/statut-commercant'
 import SectionTousCommercants from './SectionTousCommercants'
 import SectionKYBAValider from './SectionKYBAValider'
 import SectionPreinscriptions from './SectionPreinscriptions'
@@ -401,6 +402,9 @@ function CarteAValider({ commercant: c, photos = [], onValider, onRejeter, disab
   const score = ob?.validation_auto_score ?? null
   const successPack = ob?.success_pack_choisi
   const dateSoumission = ob?.completed_at || c.created_at
+  // ⚠️ UNE DATE N'EST PAS UNE ATTENTE. « Soumis le 13 septembre » laisse le
+  // calcul à faire, et un dossier oublié ne fait aucun bruit.
+  const attente = attenteDepuis(dateSoumission)
   const couleurScore = score == null ? T.muted : score >= 80 ? '#10B981' : score >= 60 ? '#EA580C' : '#DC2626'
 
   // ⚠️ ARBITRAGE D'ALEX, 21/08 : une image trop petite ne bloque plus le
@@ -465,6 +469,11 @@ function CarteAValider({ commercant: c, photos = [], onValider, onRejeter, disab
           </div>
           <p style={{ fontSize: 13, color: T.muted, fontWeight: 600, margin: '0 0 8px' }}>
             {c.type || '—'} · soumis le {new Date(dateSoumission).toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+            {' · '}
+            <span style={{ fontWeight: 800, color: attente.enRetard ? '#DC2626' : T.deep }}>
+              {attente.texte}
+              {attente.enRetard ? ` (${attente.ouvres} jours ouvrés, promesse : 24 h)` : ''}
+            </span>
           </p>
           {c.description && (
             <p style={{ fontSize: 13, color: T.deep, margin: '0 0 8px', lineHeight: 1.5 }}>

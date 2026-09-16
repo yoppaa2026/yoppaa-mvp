@@ -25,7 +25,17 @@ const T = {
   hairline: '#EEE9F5',
 }
 
-const STATUTS_PUB = ['publie', 'en_attente', 'rejete', 'suspendu']
+// ⚠️ LES CINQ ÉTATS RÉELS, ET LEUR SENS EN CLAIR. `brouillon` manquait : une
+// inscription commencée et jamais soumise tombait donc dans aucune option, et
+// le menu affichait « publie » à sa place. Le libellé dit ce que l'état FAIT,
+// parce que « en_attente » ne dit pas qui attend quoi.
+const STATUTS_PUB = [
+  { valeur: 'publie', label: 'publie — visible par les Yoppers' },
+  { valeur: 'en_attente', label: 'en_attente — soumise, attend TA validation' },
+  { valeur: 'brouillon', label: 'brouillon — inscription jamais terminée' },
+  { valeur: 'rejete', label: 'rejete — refusée, motif envoyé' },
+  { valeur: 'suspendu', label: 'suspendu — archivée, historique gardé' },
+]
 const CATEGORIES = ['alimentaire', 'vitrine', 'detail']
 // Suggestions du champ Type : liste officielle complète (lib/types-commerce).
 // Le champ reste en TEXTE LIBRE : contrôle total admin pour normaliser un type
@@ -40,7 +50,7 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
     type: '',
     categorie: 'alimentaire',
     plan: 'exister',
-    statut_publication: 'publie',
+    statut_publication: '',
     email: '',
     telephone: '',
     adresse: '',
@@ -68,7 +78,16 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
       type: commercant.type || '',
       categorie: commercant.categorie || 'alimentaire',
       plan: commercant.plan || 'exister',
-      statut_publication: commercant.statut_publication || 'publie',
+      // 🔴 `|| 'publie'` ÉTAIT UN PIÈGE (16/09, trouvé par Alex sur « La Table
+      // du Stock »). Cette fiche est en `brouillon` : une inscription commencée
+      // le 13/09 et jamais soumise. `brouillon` ne figurait pas dans les
+      // options du menu, le navigateur affichait donc la PREMIÈRE, « publie »,
+      // et un simple « Enregistrer » pour corriger un numéro de téléphone
+      // aurait PUBLIÉ un commerce que personne n'a jamais validé, sans slug.
+      // ⚠️ UN FORMULAIRE MONTRE CE QUI EST, il n'invente pas une valeur, et
+      // surtout pas celle qui ouvre une porte. Une valeur inconnue est
+      // conservée telle quelle et le menu la montre, marquée comme telle.
+      statut_publication: commercant.statut_publication || '',
       email: commercant.email || '',
       telephone: commercant.telephone || '',
       adresse: commercant.adresse || '',
@@ -121,13 +140,20 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
         type: form.type.trim() || null,
         categorie: form.categorie,
         plan: form.plan,
-        statut_publication: form.statut_publication,
         email: form.email.trim() || null,
         telephone: form.telephone.trim() || null,
         adresse: form.adresse.trim() || null,
         description: form.description.trim() || null,
         rdv_actif: !!form.rdv_actif,
         rdv_delai_annulation_heures: Number(form.rdv_delai_annulation_heures) || 24,
+      }
+      // 🔴 ON N'ÉCRIT LE STATUT QUE SI C'EST UN ÉTAT CONNU, et jamais en
+      // recopiant bêtement le formulaire. Une fiche `brouillon` ouverte pour
+      // corriger un téléphone repartait sinon avec l'état affiché par défaut.
+      // ⚠️ La colonne est LAISSÉE INTACTE dans le doute : on ne remplace pas un
+      // état qu'on ne comprend pas, on le montre et on attend une décision.
+      if (STATUTS_PUB.some(s => s.valeur === form.statut_publication)) {
+        updates.statut_publication = form.statut_publication
       }
       const { error: errUp } = await supabase
         .from('commercants')
@@ -281,7 +307,18 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
             <div>
               <label style={labelSt}>Statut publication</label>
               <select value={form.statut_publication} onChange={e => setField('statut_publication', e.target.value)} style={selectSt}>
-                {STATUTS_PUB.map(s => <option key={s} value={s}>{s}</option>)}
+                {/* 🔴 ET L'ÉTAT QU'ON NE CONNAÎT PAS SE MONTRE QUAND MÊME.
+                    Sans cette option, une valeur absente de la liste laisse le
+                    navigateur choisir la première, et le formulaire annonce
+                    alors un état que la base n'a jamais eu. */}
+                {!STATUTS_PUB.some(s => s.valeur === form.statut_publication) && (
+                  <option value={form.statut_publication}>
+                    {form.statut_publication
+                      ? `${form.statut_publication} — état inconnu, à ne pas enregistrer tel quel`
+                      : '(aucun état en base, à ne pas enregistrer tel quel)'}
+                  </option>
+                )}
+                {STATUTS_PUB.map(s => <option key={s.valeur} value={s.valeur}>{s.label}</option>)}
               </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>

@@ -15,7 +15,7 @@ import {
   EMPREINTE_SEUIL_DEFAUT, EMPREINTE_MONTANT_DEFAUT,
   EMPREINTE_SEUIL_MAX, EMPREINTE_MONTANT_MAX,
   echeanceLien, lienValide, peutDemander, raisonDemandeImpossible,
-  estAbsenceFacturable, montantAnnulationFacturable, compteEncaisse,
+  estAbsenceFacturable, montantAnnulationFacturable, compteEncaisse, libelleRelance,
 } from '../lib/empreinte-table.js'
 // 🔴 LA RÈGLE DES COUVERTS, ET LES COLONNES QU'ELLE DÉCLARE LIRE : `capacite`
 // manquait dans deux selects, et toute table devenait invalide.
@@ -935,8 +935,50 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /onDemanderEmpreinte\(rdv\.id, 'sms'\)/.test(DASH2) && /onDemanderEmpreinte\(rdv\.id, 'email'\)/.test(DASH2))
   verifie('⚠️ le bouton suit la règle du module',
     /peutDemander\(rdv, new Date\(\)\)/.test(DASH2))
+  // ── 🔴 COMBIEN DE FOIS LE LIEN EST PARTI (demande d'Alex, 16/09) ────────
+  //
+  // « Lien déjà envoyé » ne disait pas COMBIEN DE FOIS : le restaurateur ne
+  // savait pas s'il relançait pour la première ou la quatrième, et au bout d'un
+  // moment on décroche son téléphone au lieu de renvoyer un lien.
   verifie('⚠️ un lien déjà envoyé se voit, et se relance',
-    /Lien déjà envoyé par/.test(DASH2) && /Relancer par SMS/.test(DASH2))
+    /libelleRelance\(\{ envois: rdv\.empreinte_demande_envois, canal: rdv\.empreinte_demande_canal \}\)/.test(DASH2)
+    && /Relancer par SMS/.test(DASH2))
+  egal('la première fois se dit sans chiffre',
+    libelleRelance({ envois: 1, canal: 'sms' }), 'Lien envoyé par SMS, pas encore confirmé.')
+  egal('🔴 les suivantes portent le compte',
+    libelleRelance({ envois: 3, canal: 'sms' }), 'Lien envoyé 3 fois, le dernier par SMS, pas encore confirmé.')
+  egal('et le canal suit le dernier envoi',
+    libelleRelance({ envois: 2, canal: 'email' }), 'Lien envoyé 2 fois, le dernier par email, pas encore confirmé.')
+  // ⚠️ UN COMPTEUR ABSENT OU NUL NE DOIT PAS ÉCRIRE « 0 fois » : les deux formes
+  // de l'absence, comme partout.
+  egal('⚠️ un compteur absent se lit comme un premier envoi',
+    libelleRelance({ canal: 'sms' }), 'Lien envoyé par SMS, pas encore confirmé.')
+  egal('⚠️ et un compteur illisible aussi',
+    libelleRelance({ envois: 'trois', canal: 'sms' }), 'Lien envoyé par SMS, pas encore confirmé.')
+  // 🔴 MAIS UN NOMBRE RENDU EN TEXTE COMPTE QUAND MÊME. Une colonne `integer`
+  // peut revenir en chaîne selon le chemin de lecture, et « 3 » n'est pas une
+  // absence : le lire comme tel afficherait « envoyé par SMS » sur une table
+  // relancée trois fois. Trouvé par mutation, mon jeu d'essais ne le couvrait pas.
+  egal('🔴 un compte rendu en texte compte quand même',
+    libelleRelance({ envois: '3', canal: 'sms' }), 'Lien envoyé 3 fois, le dernier par SMS, pas encore confirmé.')
+  // 🔴 ON NE COMPTE QUE CE QUI EST PARTI : l'incrément vient APRÈS l'envoi, dans
+  // les deux canaux, et jamais sur un échec.
+  {
+    const iEchecSms = DEMANDE.indexOf('code: res.raison, error: pourquoi')
+    const iCompteSms = DEMANDE.indexOf('const envois = await compterEnvoi(supabase, rdv)')
+    verifie('🔴 un envoi raté ne compte pas comme une relance',
+      iCompteSms !== -1 && iEchecSms !== -1 && iEchecSms < iCompteSms)
+    egal('🔴 les DEUX canaux comptent leur envoi',
+      [...DEMANDE.matchAll(/await compterEnvoi\(supabase, rdv\)/g)].length, 2)
+    // ⚠️ ET L'ÉCRAN SUIT SANS RECHARGEMENT : sans l'incrément local, le
+    // restaurateur relance et relit « envoyé par SMS » comme si rien n'avait
+    // changé. Il relancerait une troisième fois.
+    verifie('⚠️ le compte suit l’écran dès la relance',
+      /empreinte_demande_envois: \(Number\(r\.empreinte_demande_envois\) \|\| 0\) \+ 1,/.test(DASH2))
+    verifie('⚠️ et un compteur non écrit ne fait pas échouer l’envoi',
+      /compteur non incrémenté/.test(DEMANDE) && !/throw/.test(
+        DEMANDE.slice(DEMANDE.indexOf('async function compterEnvoi'), DEMANDE.indexOf('export async function POST'))))
+  }
   // 🔴 ON LIT VRAIMENT LA RÉPONSE : plus de crédits, heure trop tardive, email
   // absent. Le taire laisserait le restaurateur croire son client relancé.
   // ⚠️ GARDE SUIVIE, PAS DÉSARMÉE (16/09) : le message n'a pas disparu, il a

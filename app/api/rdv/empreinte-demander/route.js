@@ -31,6 +31,24 @@ const MESSAGES = {
   service_commence: 'Le service a commencé : demander une carte maintenant ne protège plus rien.',
 }
 
+// 🔴 ON NE COMPTE QUE CE QUI EST PARTI (demande d'Alex, 16/09 : « un numéro dans
+// le DB avec le nombre de relances, pour qu'ils aient un repère »). Appelée
+// APRÈS l'envoi, jamais avant : compter une tentative ferait croire le client
+// prévenu, exactement le défaut corrigé le même jour sur la trace d'envoi.
+//
+// ⚠️ ET UN COMPTEUR QUI N'A PAS PU S'ÉCRIRE NE FAIT PAS ÉCHOUER L'ENVOI : le
+// SMS est parti, le client a son lien. On le dit dans le journal, et la réponse
+// rend le compte qu'on croit juste.
+async function compterEnvoi(supabase, rdv) {
+  const envois = (Number(rdv?.empreinte_demande_envois) || 0) + 1
+  const { error } = await supabase
+    .from('rdv_reservations')
+    .update({ empreinte_demande_envois: envois })
+    .eq('id', rdv.id)
+  if (error) console.error('[empreinte-demander] compteur non incrémenté', { rdvId: rdv.id, message: error.message })
+  return envois
+}
+
 export async function POST(request) {
   try {
     const { rdv_id, canal } = await request.json()
@@ -56,7 +74,7 @@ export async function POST(request) {
       .select(`
         id, statut, date_rdv, heure_debut, couverts, numero_rdv, numero_prefixe,
         client_prenom, client_nom, client_email, client_telephone,
-        empreinte_statut, commercant_id, prestation_id,
+        empreinte_statut, empreinte_demande_envois, commercant_id, prestation_id,
         prestation:rdv_prestations(id, nom, par_couverts, couverts_min, couverts_max),
         commercant:commercants(id, nom, slug, categorie, stripe_account_id, stripe_account_charges_enabled,
           rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne,
@@ -190,7 +208,8 @@ export async function POST(request) {
         await supabase.from('rdv_reservations').update({ empreinte_demande_at: null, empreinte_demande_canal: null }).eq('id', rdv.id)
         return NextResponse.json({ ok: false, code: res.raison, error: pourquoi }, { status: 502 })
       }
-      return NextResponse.json({ ok: true, canal, expire_le: echeance.toISOString(), montant })
+      const envois = await compterEnvoi(supabase, rdv)
+      return NextResponse.json({ ok: true, canal, expire_le: echeance.toISOString(), montant, envois })
     }
 
     if (!rdv.client_email) {
@@ -219,7 +238,8 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'L’email n’a pas pu partir. Réessaie, ou envoie le lien par SMS.' }, { status: 502 })
     }
 
-    return NextResponse.json({ ok: true, canal, expire_le: echeance.toISOString(), montant })
+    const envois = await compterEnvoi(supabase, rdv)
+    return NextResponse.json({ ok: true, canal, expire_le: echeance.toISOString(), montant, envois })
   } catch (e) {
     console.error('[empreinte-demander] erreur', e)
     return NextResponse.json({ ok: false, error: e?.message || 'erreur serveur' }, { status: 500 })

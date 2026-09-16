@@ -56,7 +56,7 @@ import { accesDashboard } from '@/lib/statut-commercant'
 // ⚠️ LA FENÊTRE DE FACTURATION VIENT DU MODULE, pas d'un calcul de cet écran :
 // la route la rejoue à l'identique, et deux calculs qui divergent, c'est un
 // bouton qui s'affiche sur une table que le serveur refusera de facturer.
-import { raisonDebitImpossible, peutDemander, compteEncaisse } from '@/lib/empreinte-table'
+import { raisonDebitImpossible, peutDemander, compteEncaisse, libelleRelance } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
 
 const T = {
@@ -348,7 +348,9 @@ function EmpreinteRdv({ rdv, onFacturer, onDemanderEmpreinte = null, stripePret 
         </p>
         {relance && (
           <p style={{ margin: '3px 0 0', fontSize: '0.68rem', color: '#92400E' }}>
-            Lien déjà envoyé par {rdv.empreinte_demande_canal === 'sms' ? 'SMS' : 'email'}, pas encore confirmé.
+            {/* ⚠️ LE COMPTE VIENT DU MODULE, pas d'une phrase écrite ici : la
+                première fois se dit sans chiffre, les suivantes avec. */}
+            {libelleRelance({ envois: rdv.empreinte_demande_envois, canal: rdv.empreinte_demande_canal })}
           </p>
         )}
         {/* 🔴 SANS COMPTE QUI ENCAISSE, LE LIEN NE PARTIRAIT PAS, et on le dit
@@ -2197,7 +2199,14 @@ export default function Dashboard() {
       return false
     }
     setRdvs(prev => prev.map(r => r.id === rdvId
-      ? { ...r, empreinte_demande_at: new Date().toISOString(), empreinte_demande_canal: canal }
+      ? {
+        ...r,
+        empreinte_demande_at: new Date().toISOString(),
+        empreinte_demande_canal: canal,
+        // ⚠️ LE COMPTEUR SUIT L'ÉCRAN AUSSI : sans ça, le restaurateur relance
+        // et lit toujours « envoyé par SMS » jusqu'au prochain rechargement.
+        empreinte_demande_envois: (Number(r.empreinte_demande_envois) || 0) + 1,
+      }
       : r))
     await confirme(confirmationInfo({
       titre: canal === 'sms' ? 'SMS envoyé' : 'Email envoyé',

@@ -248,6 +248,27 @@ const MUTATIONS = [
   // ─── LE SMS NE PARTAIT NULLE PART (16/09, essai F2) ─────────────────────
   // 🔴 Brevo n accepte que le format international : le numero tape par le
   // restaurateur etait refuse a chaque envoi.
+  // ─── COMBIEN DE FOIS LE LIEN EST PARTI (16/09, demande d Alex) ──────────
+  { nom: '🔴 la premiere fois ecrit « 1 fois »',
+    fichier: REGLE,
+    de: '  if (!Number.isFinite(n) || n <= 1) return `Lien envoyé par ${parQuoi}, pas encore confirmé.`',
+    vers: '  if (!Number.isFinite(n) || n < 1) return `Lien envoyé par ${parQuoi}, pas encore confirmé.`' },
+
+  { nom: '🔴 un compteur illisible ecrit « NaN fois »',
+    fichier: REGLE,
+    de: '  const n = Math.floor(Number(envois))',
+    vers: '  const n = envois' },
+
+  { nom: '🔴 un envoi rate compte comme une relance',
+    fichier: DEMANDE,
+    de: '      const envois = await compterEnvoi(supabase, rdv)',
+    vers: '      const envois = 1' },
+
+  { nom: '🔴 le compteur ne suit plus l ecran apres une relance',
+    fichier: DASH,
+    de: '        empreinte_demande_envois: (Number(r.empreinte_demande_envois) || 0) + 1,',
+    vers: '        empreinte_demande_envois: r.empreinte_demande_envois,' },
+
   // ─── LE SMS TIENT EN GSM-7, QUOI QU ON Y METTE (16/09) ──────────────────
   { nom: '🔴 le message n est plus mis en GSM-7 avant l envoi',
     fichier: SMS,

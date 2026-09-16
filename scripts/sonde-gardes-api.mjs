@@ -96,6 +96,12 @@ const PUBLIQUES_ASSUMEES = {
   // ceux à qui elle est destinée.
   'app/api/stripe/checkout/empreinte-lien/route.js':
     'le jeton du lien EST la garde ; rien n\'est débité, et le montant garanti est recalculé en base',
+  // ⚠️ MÊME CLÉ QUE LA ROUTE CI-DESSUS, ET ELLE EN REND MOINS : ni nom, ni
+  // email, ni téléphone, ni identifiant de réservation. Elle ne charge même pas
+  // ces colonnes. Ce qu'elle rend, le porteur du lien le sait déjà, et il doit
+  // le lire AVANT de donner sa carte.
+  'app/api/rdv/empreinte-details/route.js':
+    'ce que le client lit avant de sortir sa carte ; clé = le jeton haché du lien, aucune donnée personnelle rendue',
   'app/api/rdv/from-session/route.js':
     'écran de confirmation après Stripe, appelé par le client qui vient de payer ; clé = l\'identifiant de session Stripe',
   // ⚠️ MÊME RAISONNEMENT QUE SA JUMELLE CI-DESSUS, et volontairement : l'achat

@@ -24,6 +24,12 @@ const REGLE = 'lib/empreinte-table.js'
 const RESERVER = 'app/api/rdv/reserver/route.js'
 const FICHE = 'app/commander/rdv/[slug]/page.js'
 const PAIEMENTS = 'app/dashboard/TabPaiements.js'
+// Le lien « confirme ta table » : ce que le jeton ouvre, et ce que le client
+// lit avant de sortir sa carte (16/09).
+const MODULE = 'lib/empreinte-lien-serveur.js'
+const DETAILS = 'app/api/rdv/empreinte-details/route.js'
+const PAGE = 'app/empreinte/[jeton]/page.js'
+const DEMANDE = 'app/api/rdv/empreinte-demander/route.js'
 
 const MUTATIONS = [
   // ─── LA RÈGLE ───────────────────────────────────────────────────────────
@@ -95,6 +101,65 @@ const MUTATIONS = [
     fichier: PAIEMENTS,
     de: '({delaiAnnulationHeures(commercant)}h avant le RDV)',
     vers: '({commercant.rdv_delai_annulation_heures || 24}h avant le RDV)' },
+
+  // ─── CE QUE LE JETON OUVRE (module partagé, executé au banc) ────────────
+  { nom: '🔴 le montant du lien ne vient plus du calcul du module',
+    fichier: MODULE,
+    de: '  const montant = montantEmpreinte(commercant, rdv.prestation, rdv.couverts)',
+    vers: '  const montant = Number(rdv.couverts)' },
+
+  { nom: '🔴 un lien perime redevient valable',
+    fichier: MODULE,
+    de: '  if (!lienValide(rdv, maintenant)) {',
+    vers: '  if (false) {' },
+
+  { nom: '🔴 une lecture en erreur repasse pour un jeton inconnu',
+    fichier: MODULE,
+    de: '  if (error) {',
+    vers: '  if (false) {' },
+
+  { nom: '🔴 l affichage charge de nouveau les coordonnees du client',
+    fichier: MODULE,
+    de: '    .select(avecClient ? `${COLONNES_TABLE}, ${COLONNES_CLIENT}` : COLONNES_TABLE)',
+    vers: '    .select(`${COLONNES_TABLE}, ${COLONNES_CLIENT}`)' },
+
+  // ─── LA ROUTE QUI AFFICHE ───────────────────────────────────────────────
+  { nom: '🔴 la route qui affiche rend l email du client',
+    fichier: DETAILS,
+    de: '      commerce: commercant.nom,',
+    vers: '      commerce: commercant.nom, client_email: rdv.client_email,' },
+
+  { nom: '🔴 elle recalcule son montant dans son coin (la divergence)',
+    fichier: DETAILS,
+    de: '      montant,',
+    vers: '      montant: montantEmpreinte(commercant, rdv.prestation, rdv.couverts),' },
+
+  // ─── CE QUE LE CLIENT LIT ───────────────────────────────────────────────
+  { nom: '🔴 la page n annonce plus le montant garanti',
+    fichier: PAGE,
+    de: 'Le restaurant ne peut facturer ${euros(details.montant)} que si personne',
+    vers: 'Le restaurant ne peut facturer que si personne' },
+
+  { nom: '🔴 le bouton s affiche avant que le montant soit connu',
+    fichier: PAGE,
+    de: '  if (!details) {',
+    vers: '  if (false) {' },
+
+  { nom: '🔴 la page ne demande plus la somme au serveur',
+    fichier: PAGE,
+    de: "fetch('/api/rdv/empreinte-details', {",
+    vers: "fetch('/api/stripe/checkout/empreinte-lien', {" },
+
+  // ─── LE SMS ─────────────────────────────────────────────────────────────
+  { nom: '🔴 le SMS ne dit plus le montant garanti',
+    fichier: DEMANDE,
+    de: 'Rien n est debite si tu viens, ${eurosNus(montant)} EUR seulement en cas d absence ou d annulation tardive.',
+    vers: 'Rien n est debite si tu viens.' },
+
+  { nom: '🔴 le SMS ressert la date brute de la base',
+    fichier: DEMANDE,
+    de: 'confirme ta table du ${quandSms} en enregistrant',
+    vers: 'confirme ta table du ${rdv.date_rdv} en enregistrant' },
 ]
 
 const lancer = () => {

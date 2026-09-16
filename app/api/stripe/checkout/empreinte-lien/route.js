@@ -8,8 +8,9 @@
 // toute seule.
 //
 // 🔴 ROUTE PUBLIQUE, ET SA SEULE CLÉ EST LE JETON. Il est tiré au sort par le
-// serveur, gardé HACHÉ en base, et comparé ici par son empreinte : la base ne
-// contient donc rien qui permette de fabriquer un lien.
+// serveur, gardé HACHÉ en base, et comparé par son empreinte dans
+// `lib/empreinte-lien-serveur` : la base ne contient donc rien qui permette de
+// fabriquer un lien.
 //
 // ⚠️ ET RIEN N'EST DÉBITÉ. Comme sur la fiche publique : Checkout `mode: setup`,
 // la carte est enregistrée avec l'authentification forte, le débit éventuel
@@ -17,18 +18,14 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createHash } from 'node:crypto'
 import { stripe, requireStripe, PAYMENT_KIND, buildPaymentMetadata } from '@/lib/stripe'
-import { empreinteRequise, montantEmpreinte, lienValide, raisonDemandeImpossible } from '@/lib/empreinte-table'
+import { chargerLienEmpreinte } from '@/lib/empreinte-lien-serveur'
 import { normaliserEmail } from '@/lib/email-normalise'
 
 export async function POST(request) {
   try {
     requireStripe()
     const { jeton } = await request.json()
-    if (!jeton || String(jeton).length < 16) {
-      return NextResponse.json({ ok: false, error: 'Lien invalide.' }, { status: 400 })
-    }
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -36,54 +33,16 @@ export async function POST(request) {
       { auth: { persistSession: false } }
     )
 
-    const hash = createHash('sha256').update(String(jeton)).digest('hex')
-    const { data: rdv } = await supabase
-      .from('rdv_reservations')
-      .select(`
-        id, statut, date_rdv, heure_debut, couverts,
-        client_prenom, client_nom, client_email, client_telephone,
-        empreinte_statut, empreinte_demande_expire_at, prestation_id, commercant_id,
-        prestation:rdv_prestations(id, nom, par_couverts, couverts_min, couverts_max),
-        commercant:commercants(id, nom, slug, stripe_account_id, stripe_account_charges_enabled,
-          rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne)
-      `)
-      .eq('empreinte_demande_jeton_hash', hash)
-      .is('deleted_at', null)
-      .maybeSingle()
-
-    // ⚠️ UN SEUL MESSAGE POUR « JETON INCONNU » ET « JETON PÉRIMÉ » NE VAUT
-    // RIEN POUR LE CLIENT : il ne sait pas s'il doit rappeler ou attendre. Mais
-    // on ne dit jamais qu'une table existe à qui n'a pas le bon jeton.
-    if (!rdv) return NextResponse.json({ ok: false, code: 'inconnu', error: 'Ce lien n’est pas valable.' }, { status: 404 })
-    if (!lienValide(rdv, new Date())) {
-      return NextResponse.json({
-        ok: false, code: 'expire',
-        error: 'Ce lien a expiré. Ta table reste réservée : appelle le restaurant si tu veux la garantir.',
-      }, { status: 410 })
+    // 🔴 LA LECTURE, LA RÈGLE ET LE MONTANT VIENNENT DU MODULE PARTAGÉ (16/09),
+    // le même qui a servi à AFFICHER la somme au client une seconde plus tôt.
+    // Deux copies de ce calcul, c'est le jour où l'écran annonce 120 € et où le
+    // mandat part sur 160. `avecClient` charge en plus les coordonnées, dont
+    // cette route a besoin pour créer le client Stripe et elle seule.
+    const lien = await chargerLienEmpreinte(supabase, jeton, { avecClient: true })
+    if (!lien.ok) {
+      return NextResponse.json({ ok: false, code: lien.code, error: lien.error }, { status: lien.status })
     }
-
-    const raison = raisonDemandeImpossible(rdv, new Date())
-    if (raison === 'deja_garantie') {
-      return NextResponse.json({ ok: false, code: 'deja_garantie', error: 'Ta carte est déjà enregistrée pour cette table.' }, { status: 409 })
-    }
-    if (raison) {
-      return NextResponse.json({ ok: false, code: raison, error: 'Cette table ne peut plus être garantie.' }, { status: 409 })
-    }
-
-    const commercant = rdv.commercant
-    if (!commercant?.stripe_account_id || !commercant.stripe_account_charges_enabled) {
-      return NextResponse.json({ ok: false, error: 'Le restaurant ne peut pas enregistrer de carte pour le moment.' }, { status: 400 })
-    }
-    // 🔴 LA RÈGLE EST REJOUÉE ICI AUSSI. Le réglage du restaurateur a pu changer
-    // entre l'envoi du lien et le clic : demander une carte sur une table qui
-    // n'en demande plus serait une prise de garantie sans base.
-    if (!empreinteRequise(commercant, rdv.prestation, rdv.couverts)) {
-      return NextResponse.json({ ok: false, error: 'Cette table ne demande plus d’empreinte.' }, { status: 409 })
-    }
-    const montant = montantEmpreinte(commercant, rdv.prestation, rdv.couverts)
-    if (!(montant > 0)) {
-      return NextResponse.json({ ok: false, error: 'Cette table ne demande plus d’empreinte.' }, { status: 409 })
-    }
+    const { rdv, commercant, montant } = lien
 
     const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yoppaa.app'
 

@@ -17,6 +17,9 @@ import {
   echeanceLien, lienValide, peutDemander, raisonDemandeImpossible,
   estAbsenceFacturable, montantAnnulationFacturable,
 } from '../lib/empreinte-table.js'
+// 🔴 CE QUE LE JETON OUVRE, EXÉCUTÉ CONTRE UNE BASE SIMULÉE : c'est de là que
+// sortent le montant affiché au client ET le montant signé chez Stripe.
+import { chargerLienEmpreinte } from '../lib/empreinte-lien-serveur.js'
 
 let ok = 0
 const echecs = []
@@ -545,18 +548,104 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     !/const contenu = `Yoppaa[^`]*[àâäéèêëîïôöùûüç\u{1F300}-\u{1FAFF}]/u.test(DEMANDE))
   verifie('🔴 et il part jusqu’à 23 h, sans exiger la fidélité',
     /exigerFidelite: false, plageHoraire: \{ min: 8, max: 23 \}/.test(DEMANDE))
+  // 🔴 LE SMS NE DISAIT PAS LE MONTANT (16/09) : prévenu par SMS, le client
+  // arrivait sur la page sans avoir jamais lu ce qu'il garantissait.
+  verifie('🔴 le SMS dit le montant garanti', /\$\{eurosNus\(montant\)\} EUR/.test(DEMANDE))
+  // ⚠️ AVEC `eurosNus` ET JAMAIS `euros` : celui-ci pose une espace insécable,
+  // hors GSM-7, qui ferait basculer le message entier en UCS-2.
+  verifie('⚠️ et il ne passe pas par euros(), dont l’espace est insécable',
+    !/euros\(montant\)\} EUR/.test(DEMANDE))
+  // 🔴 « TA TABLE DU 2026-09-19 » : la date brute de la base partait au client,
+  // par SMS ET par email. Le SMS a la sienne, en chiffres, sans accent.
+  verifie('🔴 le SMS a sa propre date, en chiffres',
+    /confirme ta table du \$\{quandSms\}/.test(DEMANDE))
+  verifie('🔴 et l’email lit une date en toutes lettres',
+    /toLocaleDateString\('fr-BE', \{ weekday: 'long'/.test(DEMANDE))
   // ⚠️ UN ÉCHEC D'ENVOI N'EFFACE PAS LE LIEN : le restaurateur peut le renvoyer
   // par l'autre canal.
   verifie('⚠️ un échec d’envoi laisse le lien valable',
     /LE LIEN RESTE VALABLE|le restaurateur peut le/.test(lire('app/api/rdv/empreinte-demander/route.js')))
 
-  // ── La route que le client ouvre ───────────────────────────────────────
-  verifie('🔴 elle retrouve la table par l’EMPREINTE du jeton',
-    /createHash\('sha256'\)\.update\(String\(jeton\)\)/.test(LIEN)
-    && /\.eq\('empreinte_demande_jeton_hash', hash\)/.test(LIEN))
-  verifie('🔴 un lien expiré est refusé', /lienValide\(rdv, new Date\(\)\)/.test(LIEN))
-  verifie('🔴 elle rejoue la règle : un réglage a pu changer depuis l’envoi',
-    /empreinteRequise\(commercant, rdv\.prestation, rdv\.couverts\)/.test(LIEN))
+  // ── CE QUE LE JETON OUVRE, EXÉCUTÉ ─────────────────────────────────────
+  //
+  // 🔴 LE MONTANT LU ET LE MONTANT SIGNÉ SORTENT DU MÊME MODULE (16/09). Deux
+  // copies de ce calcul, c'est le jour où la page annonce 120 € et où le mandat
+  // part sur 160 : le client conteste, et il gagne.
+  {
+    const QUAND = new Date('2026-09-18T10:00:00+02:00')
+    const JETON = 'a'.repeat(32)
+    const RDV_LIEN = {
+      id: 'r1', statut: 'confirme', date_rdv: '2026-09-19', heure_debut: '20:00:00', couverts: 8,
+      empreinte_statut: null, empreinte_demande_expire_at: '2026-09-19T15:00:00Z',
+      prestation: TABLE, commercant: { ...RESTO, id: 'c1', nom: 'Kebabistro' },
+    }
+    // ⚠️ LA BASE EST SIMULÉE, MAIS LA RÈGLE EST LA VRAIE : on retient le SELECT
+    // pour vérifier ce que la lecture demande vraiment.
+    let selectVu = ''
+    const base = (data, error = null) => ({
+      from: () => ({
+        select: (s) => {
+          selectVu = s
+          return { eq: () => ({ is: () => ({ maybeSingle: async () => ({ data, error }) }) }) }
+        },
+      }),
+    })
+
+    const ouvert = await chargerLienEmpreinte(base(RDV_LIEN), JETON, {}, QUAND)
+    egal('🔴 le lien ouvert rend le montant garanti', ouvert.montant, 160)
+    egal('et le nom du restaurant qui l’a demandé', ouvert.commercant?.nom, 'Kebabistro')
+    // 🔴 LE JETON EST UNE CLÉ, PAS UNE PREUVE D'IDENTITÉ : il se transfère, se
+    // lit par-dessus une épaule et reste dans un historique. Les coordonnées du
+    // client ne sont donc même pas DEMANDÉES à la base pour l'affichage.
+    verifie('🔴 pour afficher, les coordonnées ne sont même pas lues',
+      !/client_email|client_telephone|client_nom|client_prenom/.test(selectVu), `select de ${selectVu.length} caractères`)
+    await chargerLienEmpreinte(base(RDV_LIEN), JETON, { avecClient: true }, QUAND)
+    verifie('⚠️ et seule la création du client Stripe les demande',
+      /client_email/.test(selectVu))
+
+    const code = async (data, erreur = null, quand = QUAND) =>
+      (await chargerLienEmpreinte(base(data, erreur), JETON, {}, quand)).code
+    egal('un jeton trop court n’atteint même pas la base',
+      (await chargerLienEmpreinte(base(RDV_LIEN), 'court', {}, QUAND)).code, 'invalide')
+    egal('un jeton inconnu est refusé', await code(null), 'inconnu')
+    // 🔴 UNE LECTURE EN ERREUR N'EST PAS UN JETON INCONNU : l'ancienne route
+    // jetait l'erreur, et une base indisponible envoyait le client rappeler son
+    // restaurant pour un lien parfaitement bon.
+    egal('🔴 une lecture en erreur ne se lit pas « lien invalide »',
+      await code(null, { message: 'boum' }), 'lecture')
+    egal('un lien périmé est refusé',
+      await code({ ...RDV_LIEN, empreinte_demande_expire_at: '2026-09-17T10:00:00Z' }), 'expire')
+    egal('une table déjà garantie ne redemande pas de carte',
+      await code({ ...RDV_LIEN, empreinte_statut: 'posee' }), 'deja_garantie')
+    egal('un restaurant qui n’encaisse pas ne demande pas de carte',
+      await code({ ...RDV_LIEN, commercant: { ...RESTO, stripe_account_charges_enabled: false } }), 'stripe_absent')
+    // 🔴 LE RÉGLAGE A PU CHANGER DEPUIS L'ENVOI : la règle est rejouée à chaque
+    // ouverture, sinon on prendrait une garantie qui n'a plus de base.
+    egal('🔴 une table repassée sous le seuil ne demande plus rien',
+      await code({ ...RDV_LIEN, couverts: 4 }), 'plus_demandee')
+  }
+
+  // ── Les deux routes partent du même module ─────────────────────────────
+  const MODULE = sansProse(lire('lib/empreinte-lien-serveur.js'))
+  const DETAILS = sansProse(lire('app/api/rdv/empreinte-details/route.js'))
+
+  verifie('🔴 il retrouve la table par l’EMPREINTE du jeton',
+    /createHash\('sha256'\)\.update\(String\(jeton\)\)/.test(MODULE)
+    && /\.eq\('empreinte_demande_jeton_hash', hash\)/.test(MODULE))
+  verifie('🔴 un lien expiré est refusé', /lienValide\(rdv, maintenant\)/.test(MODULE))
+  verifie('🔴 il rejoue la règle : un réglage a pu changer depuis l’envoi',
+    /empreinteRequise\(commercant, rdv\.prestation, rdv\.couverts\)/.test(MODULE))
+  // 🔴 C'EST LA DIVERGENCE ELLE-MÊME QU'ON INTERDIT, PAS SON SYMPTÔME : aucune
+  // des deux routes ne recalcule le montant dans son coin.
+  for (const [quoi, src] of [['la saisie de carte', LIEN], ['l’affichage', DETAILS]]) {
+    verifie(`🔴 ${quoi} prend son montant dans le module partagé`,
+      /chargerLienEmpreinte\(supabase, jeton/.test(src) && !/montantEmpreinte\(/.test(src))
+  }
+  verifie('🔴 la route qui affiche ne rend aucune donnée personnelle',
+    !/client_email|client_nom|client_prenom|client_telephone/.test(DETAILS))
+  verifie('⚠️ et elle ne les demande pas non plus à la base',
+    /avecClient: false/.test(DETAILS))
+  verifie('⚠️ elle n’ouvre rien chez Stripe', !/stripe\./.test(DETAILS))
   verifie('⚠️ elle n’encaisse rien non plus', /mode: 'setup'/.test(LIEN) && /usage: 'off_session'/.test(LIEN))
   // 🔴 LE DRAPEAU QUI EMPÊCHE LE WEBHOOK DE CRÉER UNE TABLE QUI EXISTE, ET IL
   // DOIT ÊTRE DANS `setup_intent_data`. Le webhook lit les métadonnées du
@@ -590,6 +679,24 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     /déjà réservée/.test(PAGE))
   verifie('🔴 et que rien n’est débité s’il vient',
     /Rien n’est débité si tu viens/.test(PAGE))
+  // 🔴 ELLE NE DISAIT PAS LE MONTANT (16/09) : le client donnait sa carte sans
+  // savoir ce qu'il engageait. L'email le disait, le SMS non, la page jamais.
+  verifie('🔴 la page dit le montant garanti',
+    /Le restaurant ne peut facturer \$\{euros\(details\.montant\)\}/.test(PAGE))
+  verifie('🔴 et elle le demande au serveur, jamais au client',
+    /fetch\('\/api\/rdv\/empreinte-details'/.test(PAGE))
+  // 🔴 UN BOUTON AFFICHÉ AVANT LA SOMME, C'EST UNE SIGNATURE AVANT LECTURE.
+  // Tout le reste de la page peut attendre ; le geste, non.
+  {
+    const iAttente = PAGE.indexOf('if (!details) {')
+    verifie('🔴 aucun bouton tant que le montant n’est pas connu',
+      iAttente !== -1 && iAttente < PAGE.indexOf('Enregistrer ma carte'),
+      `attente en ${iAttente}, bouton en ${PAGE.indexOf('Enregistrer ma carte')}`)
+  }
+  // ⚠️ ET UN LIEN MORT SE DIT AVANT LE CLIC, pas après : le client cliquait,
+  // puis apprenait que son lien avait expiré.
+  verifie('⚠️ un lien qui ne peut plus servir le dit avant le clic',
+    /if \(refus\) \{/.test(PAGE) && /TITRES\[refus\.code\]/.test(PAGE))
   verifie('🔴 aucune somme annoncée comme bloquée sur sa carte',
     !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(PAGE))
   verifie('⚠️ un abandon laisse la table réservée, et le dit',

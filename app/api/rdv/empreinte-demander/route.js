@@ -21,7 +21,7 @@ import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { empreinteRequise, montantEmpreinte, echeanceLien, raisonDemandeImpossible } from '@/lib/empreinte-table'
 import { envoyerAvecCredit } from '@/lib/fidelite-sms'
 import { emailDemandeEmpreinte, envoyerAuYopper } from '@/lib/resend'
-import { euros } from '@/lib/montants'
+import { euros, eurosNus } from '@/lib/montants'
 
 const MESSAGES = {
   deja_garantie: 'Cette table est déjà garantie : sa carte est enregistrée.',
@@ -123,7 +123,14 @@ export async function POST(request) {
     }
 
     const prenom = rdv.client_prenom || ''
-    const quand = `${rdv.date_rdv} à ${String(rdv.heure_debut).slice(0, 5)}`
+    const heure = String(rdv.heure_debut || '').slice(0, 5)
+    // 🔴 « TA TABLE DU 2026-09-19 » (16/09). L'email et le SMS servaient la date
+    // brute de la base à un client. Midi et jamais minuit : le motif du dépôt,
+    // pour qu'un fuseau en retard ne recule pas la table d'un jour.
+    const jour = new Date(`${rdv.date_rdv}T12:00:00`)
+    const quand = isNaN(jour.getTime())
+      ? String(rdv.date_rdv || '')
+      : `${jour.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })} à ${heure}`
 
     if (canal === 'sms') {
       if (!rdv.client_telephone) {
@@ -131,8 +138,18 @@ export async function POST(request) {
       }
       // ⚠️ PAS D'ACCENT NI D'EMOJI DANS UN SMS : un caractère hors GSM-7 le fait
       // basculer en UCS-2, donc 70 caractères au lieu de 160, donc le double de
-      // crédits sur des SMS que le commerçant paie.
-      const contenu = `Yoppaa - ${commercant.nom} : confirme ta table du ${quand} en enregistrant ta carte. Rien n est debite si tu viens. ${lien}`
+      // segments sur des SMS que Yoppaa paie à Brevo.
+      //
+      // 🔴 D'OÙ UNE DATE EN CHIFFRES ET PAS LE `quand` DE L'EMAIL : « août »
+      // suffirait à faire basculer le message entier (`û` est hors GSM-7), et
+      // `euros()` pose une espace insécable, hors GSM-7 elle aussi.
+      const [, mois, jourDuMois] = String(rdv.date_rdv || '').split('-')
+      const quandSms = jourDuMois && mois ? `${jourDuMois}/${mois} a ${heure}` : `${rdv.date_rdv} a ${heure}`
+      // 🔴 ET IL DIT LE MONTANT (16/09). L'email l'annonçait, le SMS non : un
+      // client prévenu par SMS arrivait sur la page sans avoir jamais lu ce
+      // qu'il garantissait. Le message reste en deux segments, comme avant, et
+      // un envoi coûte un crédit au commerçant quelle que soit sa longueur.
+      const contenu = `Yoppaa - ${commercant.nom} : confirme ta table du ${quandSms} en enregistrant ta carte. Rien n est debite si tu viens, ${eurosNus(montant)} EUR seulement en cas d absence ou d annulation tardive. ${lien}`
       // ⚠️ SANS L'INTERRUPTEUR DE FIDÉLITÉ (ce n'est pas de la fidélité) ET
       // JUSQU'À 23 H : une réservation prise en plein service du soir doit
       // pouvoir partir.

@@ -16,7 +16,16 @@ import {
   motsReservation, motReservation, ficheDuCommerce, pageReservation,
 } from '../lib/reservation-metier.js'
 import { getPillsStatut, peut } from '../lib/plans.js'
-import { couvertsDe, occupationDe, bornesCouverts, couvertsValides } from '../lib/cours-collectifs.js'
+import { couvertsDe, occupationDe, bornesCouverts, couvertsValides, COLONNES_COUVERTS } from '../lib/cours-collectifs.js'
+
+// ⚠️ UN SELECT SE RÉSOUT AVANT D'ÊTRE MESURÉ, exactement comme le ferait un
+// lecteur humain. La garde résolvait déjà la constante nommée ; depuis le
+// 16/09 elle doit résoudre aussi l'interpolation `${COLONNES_COUVERTS}`, par
+// laquelle la règle des couverts DÉCLARE elle-même les colonnes qu'elle lit.
+// Sans ça la garde lirait un nom de variable et se croirait satisfaite, ou
+// rougirait sur du code parfaitement correct. On précise la garde, on ne rogne
+// jamais son périmètre.
+const resoudreSelect = (s) => String(s || '').replace('${COLONNES_COUVERTS}', COLONNES_COUVERTS)
 import {
   conflitReservation, genererSlots, finApresMinuit, franchitMinuit,
   creneauHorsOuverture, ajusterPlagePourJour,
@@ -1042,9 +1051,14 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 les deux requêtes de prestation lisent la MÊME liste de colonnes',
     (CREA.match(/\.select\(COLONNES_PRESTATION_DECIDE\)/g) || []).length === 2
     && !/\.select\('id, nom, actif, par_couverts/.test(CREA))
+  // ⚠️ ON LIT LA LISTE RÉSOLUE, pas une fenêtre de 300 caractères après son nom :
+  // depuis le 16/09 elle compose sa fin avec `${COLONNES_COUVERTS}`, et
+  // `capacite` n'y figure plus en toutes lettres. Résoudre d'abord, mesurer
+  // ensuite, comme le ferait un lecteur.
+  const listeCrea = resoudreSelect((CREA.match(/COLONNES_PRESTATION_DECIDE\s*=\s*\n?\s*[`']([^`']+)[`']/) || [])[1] || '')
   for (const colonne of ['duree_minutes', 'duree_paliers', 'tva_taux', 'capacite', 'par_couverts', 'quantite']) {
     verifier(`⚠️ la liste porte « ${colonne} », dont dépend la table retenue`,
-      new RegExp(`COLONNES_PRESTATION_DECIDE =[\\s\\S]{0,300}?\\b${colonne}\\b`).test(CREA))
+      new RegExp(`\\b${colonne}\\b`).test(listeCrea), `liste de ${listeCrea.length} caractères`)
   }
   verifier('⚠️ le calcul en couverts survit dans la branche « sinon »',
     /\} else \{[\s\S]{0,400}?occupes \+ couvertsRetenus > capacite/.test(CREA))
@@ -1156,11 +1170,11 @@ egal('la réservation d’un restaurant s’atteint quand même',
     // ⚠️ ET LA GARDE SUIT LA CONSTANTE, sinon elle ne lit plus qu'un nom de
     // variable et se croit satisfaite. Un select nommé se résout avant d'être
     // mesuré : c'est ce que fait un lecteur humain, la garde doit faire pareil.
-    const constante = (src.match(/COLONNES_PRESTATION_DECIDE\s*=\s*\n?\s*'([^']+)'/) || [])[1] || ''
+    const constante = (src.match(/COLONNES_PRESTATION_DECIDE\s*=\s*\n?\s*[`']([^`']+)[`']/) || [])[1] || ''
     const selects = [
       ...[...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,200}?\.select\(\s*(['"`])([\s\S]*?)\1/g)].map(m => m[2]),
       ...[...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,300}?\.select\(COLONNES_PRESTATION_DECIDE\)/g)].map(() => constante),
-    ]
+    ].map(resoudreSelect)
     verifier(`🔴 ${nom} charge « par_couverts »`,
       selects.length > 0 && selects.every(s => /\bpar_couverts\b/.test(s)), selects.join(' | '))
     verifier(`🔴 et ${nom} charge « duree_paliers »`,
@@ -2066,7 +2080,7 @@ egal('la réservation d’un restaurant s’atteint quand même',
         const src = sansProse(readFileSync(p, 'utf8'))
         if (!/prixPrestationServeur\(/.test(src)) continue
         routes++
-        const selects = [...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,300}?\.select\(\s*(['"`])([\s\S]*?)\1/g)].map(m => m[2])
+        const selects = [...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,300}?\.select\(\s*(['"`])([\s\S]*?)\1/g)].map(m => resoudreSelect(m[2]))
         if (selects.length === 0 || !selects.every(s => /\bpar_couverts\b/.test(s))) {
           sansColonne.push(`${p.split(/[\\/]/).slice(-3).join('/')} → ${selects.join(' | ') || 'aucun select'}`)
         }

@@ -31,6 +31,9 @@ import {
   conflitSalle,
 } from '../lib/inventaire-salle.js'
 import { genererSlots } from '../lib/rdv-slots.js'
+// Les colonnes que la règle des couverts déclare lire : la constante du serveur
+// les compose désormais, la garde doit donc savoir les remplacer.
+import { COLONNES_COUVERTS } from '../lib/cours-collectifs.js'
 // ⚠️ UN JOUR TOUJOURS FUTUR pour la grille (15/09 au soir) : le 19/09 écrit en
 // dur aurait fait rougir ce banc le samedi soir venu.
 import { jourFutur } from './jour-futur.mjs'
@@ -446,7 +449,13 @@ const SALLE_SRV = SALLE.map(C1)
   for (const f of fichiers) {
     const src = sansProse(readFileSync(f, 'utf8'))
     const nom = f.split(/[\\/]/).slice(-2).join('/')
-    const constante = (src.match(/COLONNES_PRESTATION_DECIDE\s*=\s*\n?\s*'([^']+)'/) || [])[1] || null
+    // ⚠️ LA CONSTANTE EST DEVENUE UN GABARIT LE 16/09 : elle compose sa fin avec
+    // les colonnes que la règle des couverts déclare lire (`capacite` manquait
+    // dans deux selects voisins, et toute table devenait invalide). La garde
+    // accepte donc les deux écritures ET remplace l'interpolation par sa valeur,
+    // sinon elle croirait le serveur devenu aveugle aux jointures.
+    const constante = ((src.match(/COLONNES_PRESTATION_DECIDE\s*=\s*\n?\s*[`']([^`']+)[`']/) || [])[1] || null)
+      ?.replace('${COLONNES_COUVERTS}', COLONNES_COUVERTS) || null
     const selects = [
       ...[...src.matchAll(/from\(\s*['"]rdv_prestations['"]\s*\)[\s\S]{0,300}?\.select\(\s*(['"`])([^'"`]*)\1/g)].map(m => m[2]),
       ...(constante ? [...src.matchAll(/\.select\(COLONNES_PRESTATION_DECIDE\)/g)].map(() => constante) : []),

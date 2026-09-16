@@ -822,6 +822,16 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: 'Aucun article pour l&rsquo;instant',
     vers: 'Aucun article dans le menu' },
+
+  // 🔴 LA GARDE LIT LA LISTE RESOLUE, PAS UNE FENETRE DE TEXTE (16/09). Depuis
+  // que la constante du serveur compose sa fin avec les colonnes declarees par
+  // la regle des couverts, `capacite` n y figure plus en toutes lettres : si la
+  // garde ne resolvait pas l interpolation, cette mutation passerait inapercue,
+  // et c est exactement elle qui bloquait toute table.
+  { nom: '🔴 `capacite` disparait de la liste que le serveur charge',
+    fichier: 'lib/cours-collectifs.js',
+    de: "export const COLONNES_COUVERTS = 'capacite, par_couverts, couverts_min, couverts_max'",
+    vers: "export const COLONNES_COUVERTS = 'par_couverts, couverts_min, couverts_max'" },
 ]
 
 const lancer = () => {

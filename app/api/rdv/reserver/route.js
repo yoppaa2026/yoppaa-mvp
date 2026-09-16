@@ -49,7 +49,7 @@ import { creneauxDuJour } from '@/lib/ouverture'
 import { jourSemaineDe } from '@/lib/creneaux'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { timeToMinutes, minutesToTime, finApresMinuit } from '@/lib/rdv-slots'
-import { dureeSelonCouverts, couvertsValides } from '@/lib/cours-collectifs'
+import { dureeSelonCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-collectifs'
 import { empreinteRequise } from '@/lib/empreinte-table'
 import { phraseCuisinePleine } from '@/lib/inventaire-salle'
 
@@ -122,7 +122,11 @@ export async function POST(request) {
         // la base en silence et ce contrôle-ci accepterait un créneau que le
         // module de création refusera trois lignes plus loin. Deux calculs de la
         // même chose doivent lire les mêmes colonnes.
-        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max, duree_paliers')
+        // 🔴 ET `capacite` MANQUAIT (16/09). `couvertsValides` rendait donc
+        // `null` sur toute table, et la garde de l'empreinte juste en dessous
+        // était DÉSARMÉE : une table de six se réservait sans qu'aucune carte
+        // soit demandée. La règle déclare maintenant ses colonnes elle-même.
+        .select(`id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, duree_paliers, ${COLONNES_COUVERTS}`)
         .eq('id', prestation_id).maybeSingle(),
     ])
 

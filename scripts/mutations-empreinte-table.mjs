@@ -34,6 +34,9 @@ const DEMANDE = 'app/api/rdv/empreinte-demander/route.js'
 // largement que la règle, et l'inscription Stripe en cours passait entre les deux.
 const CONFIG = 'app/dashboard/ConfigDashboard.js'
 const DASH = 'app/dashboard/page.js'
+// La règle des couverts et les colonnes qu'elle déclare lire.
+const COUVERTS = 'lib/cours-collectifs.js'
+const EMPREINTE = 'app/api/stripe/checkout/create-rdv-empreinte/route.js'
 
 const MUTATIONS = [
   // ─── LA RÈGLE ───────────────────────────────────────────────────────────
@@ -196,6 +199,25 @@ const MUTATIONS = [
     fichier: DASH,
     de: '{onDemanderEmpreinte && stripePret && peutDemander(rdv, new Date()) && (',
     vers: '{onDemanderEmpreinte && peutDemander(rdv, new Date()) && (' },
+
+  // ─── LA COLONNE ABSENTE QUI BLOQUAIT TOUTE TABLE (16/09, essai E2) ──────
+  { nom: '🔴 la regle ne declare plus `capacite` parmi ses colonnes',
+    fichier: COUVERTS,
+    de: "export const COLONNES_COUVERTS = 'capacite, par_couverts, couverts_min, couverts_max'",
+    vers: "export const COLONNES_COUVERTS = 'par_couverts, couverts_min, couverts_max'" },
+
+  // ⚠️ CES DEUX-CI RECOPIENT LA LISTE A LA MAIN, exactement comme avant : la
+  // ligne d import garde le nom, donc une garde qui cherchait le nom seul
+  // serait restee VERTE.
+  { nom: '🔴 la route de l empreinte recopie sa liste de colonnes a la main',
+    fichier: EMPREINTE,
+    de: '        `id, nom, duree_minutes, commercant_id, ${COLONNES_COUVERTS}`',
+    vers: "        'id, nom, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max'" },
+
+  { nom: '🔴 la route gratuite recopie sa liste de colonnes a la main',
+    fichier: RESERVER,
+    de: '        .select(`id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, duree_paliers, ${COLONNES_COUVERTS}`)',
+    vers: "        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max, duree_paliers')" },
 ]
 
 const lancer = () => {

@@ -28,7 +28,7 @@ import { verdictForfait } from '@/lib/garde-forfait'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
-import { estParCouverts, couvertsValides } from '@/lib/cours-collectifs'
+import { estParCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-collectifs'
 
 export async function POST(request) {
   try {
@@ -67,8 +67,12 @@ export async function POST(request) {
       supabase.from('commercants').select(
         'id, nom, slug, categorie, stripe_account_id, stripe_account_charges_enabled, rdv_actif, plan, essai_plan, created_at, rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne'
       ).eq('id', commercant_id).single(),
+      // 🔴 `COLONNES_COUVERTS` ET PAS UNE LISTE RECOPIÉE (16/09) : `capacite`
+      // manquait, donc la capacité valait 1, donc les bornes valaient { 1, 1 },
+      // donc TOUTE table se voyait répondre « ce nombre de personnes n'est pas
+      // accepté ». Aucune empreinte n'a jamais pu être posée depuis la fiche.
       supabase.from('rdv_prestations').select(
-        'id, nom, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max'
+        `id, nom, duree_minutes, commercant_id, ${COLONNES_COUVERTS}`
       ).eq('id', prestation_id).single(),
     ])
 

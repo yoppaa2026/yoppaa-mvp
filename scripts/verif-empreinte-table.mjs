@@ -7,7 +7,7 @@
 // Une empreinte mal bornée débite un client qui était là, et un débit de bonne
 // foi revient en contestation de carte que Stripe tranche contre nous.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   seuilEmpreinte, montantParPersonne, empreinteRequise, montantEmpreinte,
@@ -17,6 +17,9 @@ import {
   echeanceLien, lienValide, peutDemander, raisonDemandeImpossible,
   estAbsenceFacturable, montantAnnulationFacturable, compteEncaisse,
 } from '../lib/empreinte-table.js'
+// 🔴 LA RÈGLE DES COUVERTS, ET LES COLONNES QU'ELLE DÉCLARE LIRE : `capacite`
+// manquait dans deux selects, et toute table devenait invalide.
+import { couvertsValides, COLONNES_COUVERTS } from '../lib/cours-collectifs.js'
 // 🔴 CE QUE LE JETON OUVRE, EXÉCUTÉ CONTRE UNE BASE SIMULÉE : c'est de là que
 // sortent le montant affiché au client ET le montant signé chez Stripe.
 import { chargerLienEmpreinte } from '../lib/empreinte-lien-serveur.js'
@@ -798,6 +801,57 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   }
   verifie('🔴 la route gratuite rejoue la règle de la carte',
     /if \(couvertsTable !== null && empreinteRequise\(commercant, prestation, couvertsTable\)\) \{/.test(RESERVER))
+
+  // ── 🔴 LA GARDE CI-DESSUS ÉTAIT DÉSARMÉE PAR UNE COLONNE ABSENTE (16/09) ──
+  //
+  // Essai E2 d'Alex, deuxième fois : « Ce nombre de personnes n'est pas
+  // accepté ». `capacite` manquait dans le select de la prestation, ici et sur
+  // la route de l'empreinte. Sans elle la capacité vaut 1, les bornes valent
+  // { 1, 1 }, et `couvertsValides` rend `null` sur TOUTE table :
+  //   • la route de l'empreinte bloquait le client devant sa carte ;
+  //   • et la garde juste au-dessus ne se déclenchait JAMAIS, puisqu'elle
+  //     commence par `couvertsTable !== null`. Une table de six se réservait
+  //     donc sans carte, exactement comme avant le correctif du 15/09.
+  //
+  // ⚠️ LE BANC REGARDAIT LES COLONNES DU COMMERÇANT, PAS CELLES DE LA
+  // PRESTATION. C'est pour ça qu'il est resté vert sur les deux.
+  {
+    // La règle EXÉCUTÉE, avec et sans la colonne : c'est le piège lui-même.
+    const table12 = { par_couverts: true, couverts_min: 1, couverts_max: 12 }
+    egal('🔴 sans `capacite`, une table de six est refusée',
+      couvertsValides(table12, 6), null)
+    egal('⚠️ et même une table de deux', couvertsValides(table12, 2), null)
+    egal('avec la capacité, six passe', couvertsValides({ ...table12, capacite: 24 }, 6), 6)
+
+    // Et la liste vient de la règle, pas d'une recopie par appelant.
+    const colonnes = COLONNES_COUVERTS.split(',').map(s => s.trim())
+    egal('🔴 la règle déclare les quatre colonnes qu’elle lit', colonnes.length, 4)
+    verifie('dont `capacite`, celle qui manquait', colonnes.includes('capacite'))
+    // 🔴 ET LA GARDE GÉNÉRALE, celle qui empêchera la huitième fois : QUI
+    // APPLIQUE LA RÈGLE CHARGE SES COLONNES. Aucune liste recopiée à la main,
+    // sinon il en manquera une, et elle manquera en silence.
+    const sources = []
+    const parcourir = (dossier) => {
+      for (const e of readdirSync(new URL(`../${dossier}`, import.meta.url), { withFileTypes: true })) {
+        if (e.isDirectory()) parcourir(`${dossier}/${e.name}`)
+        else if (e.name.endsWith('.js')) sources.push(`${dossier}/${e.name}`)
+      }
+    }
+    parcourir('app/api')
+    parcourir('lib')
+    const appliquent = sources.filter(f => /couvertsValides\s*\(|bornesCouverts\s*\(/.test(sansProse(lire(f))))
+      // La règle elle-même se définit, elle ne se charge pas.
+      .filter(f => f !== 'lib/cours-collectifs.js')
+    verifie('la règle des couverts est appliquée par au moins trois fichiers',
+      appliquent.length >= 3, `${appliquent.length} trouvés`)
+    // ⚠️ ON VISE L'INTERPOLATION, PAS LE NOM. Chercher `COLONNES_COUVERTS` tout
+    // court, c'est trouver la ligne d'import et rester vert alors que le select
+    // a été recopié à la main juste en dessous. Le piège de l'import, encore.
+    for (const f of appliquent) {
+      verifie(`🔴 ${f} charge les colonnes DÉCLARÉES par la règle`,
+        /\$\{COLONNES_COUVERTS\}/.test(sansProse(lire(f))), 'liste recopiée à la main')
+    }
+  }
   const iGarde = RESERVER.indexOf('empreinteRequise(commercant, prestation, couvertsTable)')
   verifie('🔴 et le fait AVANT de créer la table',
     iGarde !== -1 && iGarde < RESERVER.indexOf('creerReservationRdv(db,'))

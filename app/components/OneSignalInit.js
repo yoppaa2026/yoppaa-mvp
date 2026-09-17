@@ -22,6 +22,12 @@
 
 import Script from 'next/script'
 import { useEffect } from 'react'
+// ⚠️ LE PLUGIN NATIF ET LE SDK WEB PORTENT LE MÊME NOM (`window.OneSignal`) et
+// n'ont pas les mêmes méthodes : tout ce fichier est écrit pour le navigateur,
+// et il faut donc SORTIR avant, dans l'application. Voir `lib/push-natif`.
+import {
+  estAppNative, initialiserPushNatif, demanderPushNatif, etatPushNatif, taguerNatif,
+} from '@/lib/push-natif'
 import { fetchYopper } from '@/lib/fetch-yopper'
 
 const APP_ID = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
@@ -82,6 +88,10 @@ export function syncYopperTags(tags, attempt = 0) {
 // pas ici, pour éviter le 409 Conflict.
 export function taggerFavoriOneSignal(commercantId, ajoute) {
   if (!commercantId || !ajoute) return
+  // 🔴 `pushOneSignal` EMPILE DANS `OneSignalDeferred`, QUI N'EXISTE PAS DANS
+  // L'APP. La file serait créée, la fonction rangée dedans, et personne ne la
+  // dépilerait jamais : aucune erreur, aucun prompt, aucun abonnement.
+  if (estAppNative(window)) { demanderPushNatif(window); return }
   pushOneSignal(async (OneSignal) => {
     try {
       const optedIn = OneSignal.User?.PushSubscription?.optedIn
@@ -106,6 +116,8 @@ export function taggerFavoriOneSignal(commercantId, ajoute) {
 // « Autoriser » dessus sert de gesture pour le prompt natif du navigateur.
 // No-op si déjà abonné ou permission déjà accordée/refusée définitivement.
 export function promptPushOneSignal() {
+  // Même raison qu'au-dessus : la file différée n'existe pas dans l'app.
+  if (typeof window !== 'undefined' && estAppNative(window)) { demanderPushNatif(window); return }
   pushOneSignal(async (OneSignal) => {
     try {
       const optedIn = OneSignal.User?.PushSubscription?.optedIn
@@ -126,7 +138,22 @@ export function promptPushOneSignal() {
 // Lit l'état courant de l'abonnement push (diagnostic + affichage du bouton).
 // Accède à window.OneSignal directement (chargé par le <Script> ci-dessous).
 export function lireEtatPush() {
-  if (typeof window === 'undefined' || !window.OneSignal) return { pret: false }
+  if (typeof window === 'undefined') return { pret: false }
+  // 🔴 DANS L'APP, L'ÉTAT NE SE LIT PAS AU MÊME ENDROIT. `Notification.permission`
+  // et le service worker n'existent pas côté natif : lire le web ici, c'est
+  // annoncer « notifications désactivées » à quelqu'un qui les reçoit.
+  const natif = etatPushNatif(window)
+  if (natif) {
+    return {
+      pret: true,
+      supporte: true,
+      permission: natif.autorise ? 'granted' : 'default',
+      optedIn: natif.autorise,
+      id: null,
+      natif: true,
+    }
+  }
+  if (!window.OneSignal) return { pret: false }
   const OS = window.OneSignal
   const NotifAPI = typeof Notification !== 'undefined' ? Notification : null
   try {
@@ -168,7 +195,13 @@ export async function diagnostiquerPush() {
 // On accède à window.OneSignal directement pour ne pas casser la chaîne de geste
 // (la file OneSignalDeferred différée perdrait l'activation utilisateur sur Safari).
 export async function activerNotifications() {
-  if (typeof window === 'undefined' || !window.OneSignal) return { ok: false, raison: 'sdk_absent' }
+  if (typeof window === 'undefined') return { ok: false, raison: 'sdk_absent' }
+  // 🔴 L'APPLICATION NATIVE D'ABORD, ET AVANT TOUTE AUTRE VÉRIFICATION. Tout ce
+  // qui suit est écrit pour le navigateur : la permission `Notification`, le
+  // service worker, le geste utilisateur de Safari. Rien de cela n'existe dans
+  // l'app, où c'est le système qui demande et le plugin qui répond.
+  if (estAppNative(window)) return demanderPushNatif(window)
+  if (!window.OneSignal) return { ok: false, raison: 'sdk_absent' }
   const OS = window.OneSignal
   try {
     const supporte = OS.Notifications?.isPushSupported ? OS.Notifications.isPushSupported() : true
@@ -239,6 +272,26 @@ export async function activerNotifications() {
 export default function OneSignalInit({ yopperId, codePostal, favoris = [] }) {
   useEffect(() => {
     if (!APP_ID) return
+
+    // 🔴 DANS L'APPLICATION NATIVE, ON NE CHARGE PAS LE SDK WEB (16/09).
+    // Le plugin OneSignal natif s'expose sous `window.OneSignal`, exactement
+    // le même nom que le SDK web : les deux se disputeraient le même global et
+    // le même abonnement. Pire, leurs méthodes ne se recouvrent pas
+    // (`init` contre `initialize`), donc le code ci-dessous croirait parler au
+    // web, n'échouerait nulle part visiblement, et personne ne recevrait
+    // jamais de notification dans l'app publiée.
+    if (estAppNative(window)) {
+      const tagsNatifs = {}
+      if (codePostal) tagsNatifs.code_postal = String(codePostal)
+      favoris.forEach((f) => { tagsNatifs[`favori:${f}`] = '1' })
+      const res = initialiserPushNatif(window, APP_ID, yopperId)
+      // ⚠️ ON LIT LE RÉSULTAT. Un `init` qu'on n'écoute pas est un espoir, et
+      // ici l'espoir vaut toutes les notifications de l'application.
+      if (!res.ok) console.error('[push natif] initialisation KO :', res.raison)
+      else if (Object.keys(tagsNatifs).length) taguerNatif(window, tagsNatifs)
+      return
+    }
+
     pushOneSignal(async (OneSignal) => {
       try {
         if (!OneSignal.__yoppaaInitDone) {

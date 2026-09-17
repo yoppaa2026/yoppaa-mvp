@@ -1,0 +1,116 @@
+# LE PAQUET iOS, FABRIQUÉ PAR GITHUB SUR UN MAC.
+#
+# 🔴 IL N'Y A PAS D'AUTRE VOIE. Xcode n'existe pas sous Windows, et Apple
+# n'accepte aucun fichier produit autrement. La machine d'Alex ne peut donc pas
+# fabriquer ce paquet, quoi qu'on installe dessus : il faut un Mac, et celui de
+# GitHub fait l'affaire.
+#
+# ⚠️ LES MINUTES macOS COMPTENT DIX FOIS PLUS que les minutes Linux dans le
+# quota GitHub. Un build prend une dizaine de minutes, donc une centaine de
+# minutes facturées : c'est tenable quand on dépose, pas quand on pousse.
+# D'où le déclenchement à la main, comme pour Android.
+#
+# ⚠️ CE PAQUET NE CONTIENT PAS L'APPLICATION, IL LA POINTE
+# (`https://www.yoppaa.app`). Aucun secret Supabase ni Stripe ne transite ici.
+name: Paquet iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_nom:
+        description: 'Version affichée sur l''App Store (ex. 1.0.0)'
+        required: true
+        default: '1.0.0'
+      version_build:
+        description: 'Numéro de build, STRICTEMENT croissant à chaque dépôt'
+        required: true
+        default: '1'
+
+jobs:
+  construire:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      # ⚠️ LE BANC AVANT LE PAQUET. Une revue Apple prend des jours ; un aller
+      # -retour pour un défaut qu'on connaissait déjà en coûte autant.
+      - name: Vérifier l'enveloppe et les notifications
+        run: npm run verif:push-natif
+
+      - name: Synchroniser Capacitor
+        run: npx cap sync ios
+
+      - name: Installer les pods
+        working-directory: ios/App
+        run: pod install --repo-update
+
+      # 🔴 LE NUMÉRO DE BUILD DOIT CROÎTRE À CHAQUE DÉPÔT. Apple refuse un
+      # numéro déjà vu, même si la version affichée change.
+      - name: Poser la version
+        working-directory: ios/App
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ inputs.version_nom }}" App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ inputs.version_build }}" App/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" App/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" App/Info.plist
+
+      # 🔴 LES CERTIFICATS APPLE. Sans eux, on obtient au mieux une archive non
+      # signée, inutilisable pour un dépôt.
+      # ⚠️ ILS ARRIVENT EN SECRETS, JAMAIS DANS LE DÉPÔT : un certificat de
+      # distribution volé permet de signer n'importe quoi au nom d'Avcotech.
+      # ⚠️ ET LE TROUSSEAU EST TEMPORAIRE : il vit le temps du build et repart
+      # avec la machine.
+      - name: Préparer la signature
+        if: ${{ env.CERTIFICAT_P12_B64 != '' }}
+        env:
+          CERTIFICAT_P12_B64: ${{ secrets.CERTIFICAT_P12_B64 }}
+          CERTIFICAT_MDP: ${{ secrets.CERTIFICAT_MDP }}
+          PROFIL_MOBILEPROVISION_B64: ${{ secrets.PROFIL_MOBILEPROVISION_B64 }}
+        run: |
+          echo "$CERTIFICAT_P12_B64" | base64 -d > certificat.p12
+          echo "$PROFIL_MOBILEPROVISION_B64" | base64 -d > profil.mobileprovision
+          security create-keychain -p "build" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "build" build.keychain
+          security import certificat.p12 -k build.keychain -P "$CERTIFICAT_MDP" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "build" build.keychain
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp profil.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+          rm -f certificat.p12 profil.mobileprovision
+
+      - name: Archiver
+        working-directory: ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App \
+            -configuration Release -archivePath build/App.xcarchive \
+            -destination "generic/platform=iOS" archive
+
+      - name: Exporter l'IPA
+        working-directory: ios/App
+        run: |
+          cat > export.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath build/App.xcarchive \
+            -exportOptionsPlist export.plist -exportPath build/ipa
+
+      - name: Récupérer le paquet
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoppaa-ios-${{ inputs.version_nom }}
+          path: ios/App/build/ipa/*.ipa
+          if-no-files-found: error
+          retention-days: 30

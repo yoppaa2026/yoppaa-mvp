@@ -1,0 +1,98 @@
+# LE PAQUET ANDROID, FABRIQUÉ PAR GITHUB.
+#
+# POURQUOI ICI ET PAS SUR LA MACHINE D'ALEX. Elle tourne sous Windows et n'a ni
+# Java ni le SDK Android : il faudrait installer plusieurs gigaoctets d'outils
+# pour produire un fichier qu'on dépose quatre fois par an. Le runner de GitHub
+# les a déjà.
+#
+# ⚠️ CE PAQUET NE CONTIENT PAS L'APPLICATION, IL LA POINTE. `capacitor.config.ts`
+# vise `https://www.yoppaa.app` : le build n'a donc besoin d'AUCUNE variable
+# Supabase ou Stripe, et aucun secret d'exécution ne transite ici. C'est aussi
+# pour cela qu'il n'y a rien à reconstruire quand le site change.
+#
+# ⚠️ DÉCLENCHEMENT À LA MAIN UNIQUEMENT. Un paquet signé produit à chaque
+# poussée, c'est un numéro de version qui s'envole et des artefacts qu'on ne
+# regarde jamais. On le lance quand on dépose.
+name: Paquet Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_nom:
+        description: 'Nom de version affiché dans le store (ex. 1.0.0)'
+        required: true
+        default: '1.0.0'
+      version_code:
+        description: 'Numéro de build, STRICTEMENT croissant à chaque dépôt'
+        required: true
+        default: '1'
+
+jobs:
+  construire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      # ⚠️ LE BANC AVANT LE PAQUET. Déposer sur un store prend des jours à
+      # corriger : autant ne pas y envoyer une version dont on sait déjà
+      # qu'elle est cassée.
+      - name: Vérifier l'enveloppe et les notifications
+        run: npm run verif:push-natif
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      # Le dossier `android/` est versionné : il n'y a rien à générer, seulement
+      # à resynchroniser la configuration et les plugins.
+      - name: Synchroniser Capacitor
+        run: npx cap sync android
+
+      # 🔴 LE NUMÉRO DE BUILD DOIT CROÎTRE À CHAQUE DÉPÔT, sinon Google refuse le
+      # fichier sans expliquer autre chose que « version code déjà utilisé ».
+      - name: Poser la version
+        run: |
+          sed -i "s/versionCode .*/versionCode ${{ inputs.version_code }}/" android/app/build.gradle
+          sed -i "s/versionName .*/versionName \"${{ inputs.version_nom }}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+
+      # ⚠️ UN BUNDLE (.aab), PAS UN APK : Google Play n'accepte plus que ce
+      # format pour les nouvelles applications.
+      - name: Construire le bundle
+        working-directory: android
+        run: ./gradlew bundleRelease
+
+      # 🔴 LA SIGNATURE. Sans elle, le fichier est refusé au dépôt.
+      # ⚠️ LA CLÉ NE VIT PAS DANS LE DÉPÔT : elle arrive en secret GitHub,
+      # encodée en base64. Une clé de signature perdue, c'est une application
+      # qu'on ne peut PLUS JAMAIS mettre à jour, jamais.
+      - name: Signer le bundle
+        if: ${{ env.CLE_ANDROID_B64 != '' }}
+        env:
+          CLE_ANDROID_B64: ${{ secrets.CLE_ANDROID_B64 }}
+          CLE_ANDROID_MDP: ${{ secrets.CLE_ANDROID_MDP }}
+          CLE_ANDROID_ALIAS: ${{ secrets.CLE_ANDROID_ALIAS }}
+        run: |
+          echo "$CLE_ANDROID_B64" | base64 -d > cle.jks
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+            --ks cle.jks --ks-pass "pass:$CLE_ANDROID_MDP" --ks-key-alias "$CLE_ANDROID_ALIAS" \
+            --min-sdk-version 23 \
+            android/app/build/outputs/bundle/release/app-release.aab
+          rm -f cle.jks
+
+      - name: Récupérer le paquet
+        uses: actions/upload-artifact@v4
+        with:
+          name: yoppaa-android-${{ inputs.version_nom }}
+          path: android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Yoppaa</title>
+<!--
+  CETTE PAGE N'EST PRESQUE JAMAIS AFFICHÉE, ET C'EST VOULU.
+
+  ⚠️ Capacitor EXIGE un `webDir`, même quand l'application est servie depuis
+  `https://www.yoppaa.app` (voir `capacitor.config.ts`). Sans ce dossier,
+  `cap sync` s'arrête.
+
+  🔴 IL POINTAIT D'ABORD VERS `public/`, ce qui recopiait 1,2 Mo d'icônes et de
+  splash dans chaque paquet natif, à chaque synchronisation, pour du contenu
+  que la WebView ne sert jamais. Un dossier dédié d'un seul fichier fait le
+  même travail sans alourdir l'app que les gens téléchargent.
+
+  Elle s'affiche dans un seul cas : la WebView n'a pas encore joint le site.
+  Autant qu'elle dise quelque chose d'utile plutôt que d'être blanche.
+-->
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; min-height: 100dvh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 24px; text-align: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #1A0840; color: #fff;
+  }
+  h1 { margin: 0; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.4px; }
+  p { margin: 0; font-size: 0.95rem; line-height: 1.6; color: #C4A0F4; max-width: 30ch; }
+  .point { width: 12px; height: 12px; border-radius: 50%; background: #9660E0; }
+</style>
+</head>
+<body>
+  <div class="point"></div>
+  <h1>Yoppaa</h1>
+  <p>Connexion en cours. Si rien ne s&rsquo;affiche, vérifie ta connexion internet et rouvre l&rsquo;application.</p>
+</body>
+</html>

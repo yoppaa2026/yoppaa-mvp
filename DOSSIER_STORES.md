@@ -122,21 +122,22 @@ regarde un brouillon.
 - **Sign in with Apple non requis** : aucune connexion tierce n'est proposée.
 - **Aucun paiement de service numérique** dans l'app publiée.
 
-### 🔴 À trancher avant de déposer
+### ✅ La suppression de compte bloquée par un solde — traité
 
-**La suppression de compte est bloquée quand un bon a encore du solde.**
-`app/api/yopper/supprimer-compte/route.js` rend un 409 avec « Un bon a encore du
-solde à utiliser. »
+**Le constat de départ était faux, et c'est une erreur de lecture de ma part.**
+J'avais jugé l'écran en lisant le serveur : `app/api/yopper/supprimer-compte`
+rend bien un 409 sans proposer de voie, mais l'écran, lui, affichait déjà
+« Reviens quand ce sera terminé, ou écris-nous à dpo@yoppaa.app ».
 
-C'est **juste commercialement** — le bon vaut de l'argent — mais Apple peut le
-lire comme un refus de supprimer, et le message **ne propose aucune sortie**.
-Trois options :
+Le risque de rejet était donc **bien plus faible** qu'annoncé. Ce qui restait
+perfectible était modeste et a été corrigé : l'adresse **se clique** désormais,
+avec un sujet pré-rempli. Un relecteur Apple qui doit recopier une adresse à la
+main, c'est une friction inutile au moment précis où il vérifie la règle
+5.1.1(v).
 
-| Option | Ce que ça implique |
-|---|---|
-| **Expliquer et proposer une voie** (recommandé) | le message dit « utilise-le, offre-le, ou écris à dpo@yoppaa.app et nous fermons le compte ». Aucune règle métier ne change. |
-| **Supprimer quand même, en prévenant** | le solde est perdu, le Yopper l'accepte explicitement. Simple pour Apple, coûteux pour lui. |
-| **Laisser tel quel** | pari sur le relecteur. Un aller-retour de revue coûte plusieurs jours. |
+⚠️ Reste un choix, si l'on veut aller plus loin : **supprimer quand même en
+prévenant que le solde est perdu**. Plus simple pour le relecteur, plus coûteux
+pour le Yopper. À trancher seulement si Apple objecte.
 
 ### ⏳ À préparer
 

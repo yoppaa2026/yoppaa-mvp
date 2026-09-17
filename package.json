@@ -68,7 +68,8 @@
     "verif:attente": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-attente-rdv.mjs",
     "verif:empreinte": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-empreinte-table.mjs",
     "verif:push-natif": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-push-natif.mjs",
-    "cap:sync": "npx cap sync"
+    "cap:sync": "npx cap sync",
+    "icones:natives": "node scripts/generer-icones-natives.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",

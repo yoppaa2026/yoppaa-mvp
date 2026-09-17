@@ -104,8 +104,21 @@ export default function SupprimerCompte({ email, onSupprime }) {
           {raisons.map((r, i) => (
             <p key={i} style={{ margin: '0 0 3px', fontSize: '0.78rem', color: '#92400E', lineHeight: 1.5 }}>• {r}</p>
           ))}
+          {/* ⚠️ L'ADRESSE SE CLIQUE, ELLE NE SE RECOPIE PAS (16/09, préparation
+              des stores). Apple vérifie qu'un compte peut être supprimé DEPUIS
+              l'app (règle 5.1.1(v)) : quand un solde bloque la suppression, la
+              sortie doit être immédiate, pas un texte à retaper.
+              ⚠️ Le sujet est pré-rempli pour que la demande arrive
+              identifiable, plutôt que dans un message sans objet. */}
           <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: '#92400E', lineHeight: 1.5 }}>
-            Reviens quand ce sera terminé, ou écris-nous à dpo@yoppaa.app.
+            Reviens quand ce sera terminé, ou écris-nous à{' '}
+            <a
+              href="mailto:dpo@yoppaa.app?subject=Suppression%20de%20mon%20compte%20Yoppaa"
+              style={{ color: '#92400E', fontWeight: 800 }}
+            >
+              dpo@yoppaa.app
+            </a>{' '}
+            et nous la ferons avec toi.
           </p>
         </div>
       )}

@@ -28,6 +28,7 @@ import {
 import { texteSmsRecompense, heureDecente } from '../lib/fidelite-sms.js'
 import { emailFideliteRecompenseDebloquee } from '../lib/resend.js'
 import { sansProse } from './lire-code.mjs'
+import { pourcent } from '../lib/montants.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -524,8 +525,12 @@ const egal = (nom, obtenu, attendu) =>
   // Le libellé suit le réglage, il ne le contredit pas.
   verifie('🔴 le libellé d’une cagnotte de 40 € annonce 40 €',
     libelleRecompense({ ...CAGNOTTE, fidelite_seuil_cagnotte: 40 }).includes('40,00'))
+  // ⚠️ « -10% » EST DEVENU « -10 % » LE 17/09, avec son espace insécable. Cette
+  // garde attendait la forme anglaise sans espace : elle gravait la typographie
+  // fautive au lieu de vérifier que le libellé annonce bien le taux réglé.
+  // On compare donc avec `pourcent()`, comme partout ailleurs.
   verifie('⚠️ et celui des passages annonce le pourcentage',
-    libelleRecompense(PASSAGES).includes('-10%'))
+    libelleRecompense(PASSAGES).includes(`-${pourcent(10)}`))
   verifie('⚠️ un libellé écrit par le commerçant reste le sien',
     libelleRecompense({ ...CAGNOTTE, fidelite_recompense_libelle: 'Le 11e pain offert' }) === 'Le 11e pain offert')
 

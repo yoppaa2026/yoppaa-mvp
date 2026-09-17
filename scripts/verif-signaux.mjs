@@ -134,9 +134,18 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
     && /livraison: 'Livraison'/.test(bloc)
     && /rdv: {7}'Prendre rendez-vous'/.test(bloc)
     && /deals: {5}'Bonnes affaires, deals et actus'/.test(bloc))
+  // ⚠️ CETTE GARDE EXIGEAIT « ...en plus chez », LE « chez » COMPRIS. Elle a
+  // rougi le 17/09 quand ce mot est devenu conditionnel, alors que la phrase
+  // disait toujours la même chose : « Chez Momo » portait déjà sa préposition,
+  // et l'écran annonçait « un service en plus chez Chez Momo ». La garde visait
+  // la forme exacte d'une phrase, pas ce qu'elle doit dire.
   verifier('la phrase part de son envie à lui',
-    /Tu aimerais un service en plus chez/.test(bloc)
+    /Tu aimerais un service en plus /.test(bloc)
     && /Demande-le-lui en cliquant ci-dessous/.test(bloc))
+  // 🔴 ET ELLE NE DOUBLE PAS LA PRÉPOSITION. Deux des sept fiches publiées
+  // s'appellent « Chez Momo » et « Chez Mathilde ».
+  verifier('et elle ne dit jamais « chez Chez Momo »',
+    /nomPorteChez\(commercant\.nom\) \? '' : 'chez '/.test(bloc))
   // ⚠️ « VOIR LES PRIX » N'A PLUS DE BOUTON, ET IL ÉTAIT MORT DEPUIS TOUJOURS :
   // `prix_affiches` vaut `true` dans les TROIS forfaits, donc sa condition
   // n'a JAMAIS été vraie. Le vérifier ici plutôt que de le croire.

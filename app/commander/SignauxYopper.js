@@ -20,6 +20,7 @@
 
 import { useState } from 'react'
 import { fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
+import { nomPorteChez } from '@/lib/nom-commerce'
 
 const T = {
   bgPanel: '#160636',
@@ -100,10 +101,18 @@ export default function SignauxYopper({ types = [], commercant }) {
               Pas « demande à ce commerçant d'activer », qui place l'habitant en
               pétitionnaire et parle le vocabulaire interne du produit : on
               nomme un SERVICE EN PLUS, et on dit que ça tient en un clic. */}
+          {/* ⚠️ « chez Chez Momo », ENCORE (17/09, vu par Alex sur une capture).
+              Ce cas-ci avait échappé au premier passage : le nom est enveloppé
+              dans un `<strong>`, et le motif cherché était « chez » suivi
+              directement de la variable, sans balise au milieu. On ne pose donc
+              pas la locution toute faite de `chezLeCommerce`, qui rendrait du
+              texte brut : on décide juste du PRÉFIXE, et le nom reste en gras.
+              ⚠️ Et un commentaire JSX ne se glisse pas entre le `?` et le `:`
+              d'un ternaire : c'est une erreur de syntaxe, elle vient d'arriver. */}
           <p style={{ fontSize: 14.5, fontWeight: 700, color: '#fff', lineHeight: 1.45, margin: '0 0 4px', letterSpacing: '-0.2px' }}>
             {tousEnvoyes
               ? <>C&rsquo;est transmis à <strong>{commercant.nom}</strong> 🟣</>
-              : <>Tu aimerais un service en plus chez <strong>{commercant.nom}</strong> ?</>}
+              : <>Tu aimerais un service en plus {nomPorteChez(commercant.nom) ? '' : 'chez '}<strong>{commercant.nom}</strong> ?</>}
           </p>
           <p style={{ fontSize: 12.5, fontWeight: 600, color: T.light, lineHeight: 1.5, margin: '0 0 12px', opacity: 0.9 }}>
             {tousEnvoyes

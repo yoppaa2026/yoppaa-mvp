@@ -826,6 +826,50 @@ egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
   egal('aucune catégorie, aucune réponse', categorieAtteinte({ scrollTop: 0, ancres: [] }), null)
   egal('sans argument, aucune réponse', categorieAtteinte(), null)
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 « TOUT EST DÉCALÉ » (Alex, 17/09). L'onglet « Frites » s'allumait
+  // au-dessus des desserts, et toute la barre était décalée.
+  //
+  // La règle prenait « la dernière ancre franchie », c'est-à-dire la dernière
+  // DU TABLEAU. Or il vient d'un `Object.entries(catRefs.current)`, et un objet
+  // garde l'ordre de la PREMIÈRE insertion de chaque clé : les refs se posent
+  // au premier rendu, quand les articles arrivent encore, et cet ordre-là se
+  // fige pendant que les sections, elles, se réordonnent.
+  //
+  // ⚠️ LES ANCRES SONT DONC DÉLIBÉRÉMENT DÉSORDONNÉES DANS CES CAS. Les donner
+  // déjà triées, c'est tester la situation qui marchait déjà.
+  // ═══════════════════════════════════════════════════════════════════════
+  const melangees = [
+    { cat: 'Desserts', offsetTop: 2000 },
+    { cat: 'Entrées', offsetTop: 400 },
+    { cat: 'Plats', offsetTop: 1200 },
+  ]
+  egal('en haut de page, la catégorie la plus HAUTE, pas la première du tableau',
+    categorieAtteinte({ scrollTop: 0, hauteurEntete: entete, ancres: melangees }), 'Entrées')
+  egal('au milieu, la section qu’on lit vraiment',
+    categorieAtteinte({ scrollTop: 1200 - entete - MARGE_LECTURE, hauteurEntete: entete, ancres: melangees }), 'Plats')
+  egal('tout en bas, la plus BASSE, pas la dernière du tableau',
+    categorieAtteinte({ scrollTop: 99999, hauteurEntete: entete, ancres: melangees }), 'Desserts')
+
+  // Le cas exact de la capture : l'ordre d'insertion place « Frites » après
+  // « Desserts » alors que sa section est PLUS BAS dans la page.
+  const commeChezMomo = [
+    { cat: 'Assiettes', offsetTop: 0 },
+    { cat: 'Frites', offsetTop: 3000 },
+    { cat: 'Desserts', offsetTop: 1500 },
+    { cat: 'Kebabs', offsetTop: 4200 },
+  ]
+  egal('devant les desserts, c’est « Desserts » qui s’allume',
+    categorieAtteinte({ scrollTop: 1500 - entete - MARGE_LECTURE, hauteurEntete: entete, ancres: commeChezMomo }), 'Desserts')
+  egal('et « Frites » n’arrive qu’à sa propre section',
+    categorieAtteinte({ scrollTop: 3000 - entete - MARGE_LECTURE, hauteurEntete: entete, ancres: commeChezMomo }), 'Frites')
+
+  // ⚠️ ET UNE ANCRE SANS POSITION NE CASSE PAS LE TRI. `sort` sur `null`
+  // renverrait n'importe quoi : on les écarte AVANT de trier.
+  egal('un fantôme au milieu ne dérègle pas l’ordre',
+    categorieAtteinte({ scrollTop: 99999, hauteurEntete: entete,
+      ancres: [{ cat: 'Desserts', offsetTop: 2000 }, { cat: 'Fantôme', offsetTop: null }, { cat: 'Entrées', offsetTop: 400 }] }), 'Desserts')
+
   // L'ombre de la barre
   verifier('en haut, la barre ne porte pas d’ombre', barreDetachee({ scrollTop: 0, hauteurEntete: entete }) === false)
   verifier('une fois l’en-tête dépassé, l’ombre apparaît', barreDetachee({ scrollTop: entete, hauteurEntete: entete }) === true)

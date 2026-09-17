@@ -6,6 +6,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { libelleRecompense } from '@/lib/fidelite'
+import { euros } from '@/lib/montants'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,9 +36,10 @@ async function getCarte(token) {
 
 // Les euros s'écrivent avec une virgule en français : « 0.55 € » sur la carte
 // d'Alex faisait tache sur l'écran le plus regardé du programme (05/08).
-function euros(n) {
-  return `${Number(n || 0).toFixed(2).replace('.', ',')} €`
-}
+// ⚠️ LA COPIE LOCALE EST PARTIE (17/09). Elle posait une espace ORDINAIRE là où
+// `lib/montants.js` pose une insécable : le « € » pouvait tomber seul en fin de
+// ligne, sur l'écran le plus regardé du programme. Une règle qui vit à deux
+// endroits finit par dire deux choses.
 
 export default async function CartePage({ params }) {
   const { token } = await params

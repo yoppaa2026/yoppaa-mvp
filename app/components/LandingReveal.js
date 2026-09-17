@@ -37,6 +37,7 @@ import { TYPES_ENVIE, libelleEnvie } from '@/lib/signaux'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import { CAPTURES_COMMERCANT, CAPTURES_YOPPER, captureSrc } from '@/lib/captures-landing'
 import PartageMobilisation from './PartageMobilisation'
+import { euros } from '@/lib/montants'
 
 const T = {
   ink:     '#1A0840',
@@ -1745,7 +1746,9 @@ const inputStyle = {
 // restaurateur qui signe.
 function LaTotale() {
   const prix = p => getPrixPlan(p)?.mensuel
-  const eur = n => `${Number(n).toFixed(2).replace('.', ',')} €`
+  // ⚠️ `euros()` PLUTÔT QU'UNE COPIE : celle-ci posait une espace ordinaire, et
+  // le « € » pouvait tomber seul en fin de ligne sur la landing.
+  const eur = euros
 
   // ⚠️ ALEX, 26/08 : « il ne faut plus broder, il faut être percutant et oser
   // s'affirmer ». Les descriptions sont donc des ÉNUMÉRATIONS, pas des

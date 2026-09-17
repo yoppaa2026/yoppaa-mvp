@@ -570,8 +570,13 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   // couvertes, donc les deux motifs sont exigés séparément.
   verifie('🔴 la nouvelle carte est nommée (passages)',
     /Ta nouvelle carte a déjà/.test(fiche))
+  // ⚠️ « a déjà repris à » EST DEVENU « est déjà à » LE 17/09, Alex trouvant ces
+  // textes bavards. La garde citait la phrase MOT POUR MOT : elle a rougi sur
+  // une reformulation qui dit exactement la même chose. Elle vise maintenant ce
+  // qui compte — que la nouvelle cagnotte soit NOMMÉE, pour qu'on ne confonde
+  // pas le cycle qui repart avec la récompense qu'on vient de gagner.
   verifie('🔴 et la nouvelle cagnotte aussi',
-    /Ta nouvelle cagnotte a déjà repris/.test(fiche))
+    /Ta nouvelle cagnotte est déjà/.test(fiche))
   verifie('le geste est rappelé sur la fiche aussi',
     /donne ton numéro de GSM/i.test(fiche))
   verifie('et les cartes multiples sont NOMMÉES',

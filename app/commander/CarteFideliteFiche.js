@@ -63,8 +63,8 @@ export default function CarteFideliteFiche({ commercant, carte, connecte = true,
             {recompense
               ? libelleCarteRecompenses(nbRecompenses, libelle)
               : estCagnotte
-                ? `Ta cagnotte : ${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€. Encore ${Math.max(0, seuilC - Number(carte.cagnotte)).toFixed(2).replace('.', ',')}€ de cagnotte et tu débloques : ${libelle}`
-                : `${carte.passages} passage${carte.passages > 1 ? 's' : ''} sur ${seuilP}. Encore ${Math.max(0, seuilP - carte.passages)} et tu débloques : ${libelle}`}
+                ? `Ta cagnotte : ${euros(carte.cagnotte)}. Encore ${euros(Math.max(0, seuilC - Number(carte.cagnotte)))} et tu reçois : ${libelle}.`
+                : `${carte.passages} passage${carte.passages > 1 ? 's' : ''} sur ${seuilP}. Encore ${Math.max(0, seuilP - carte.passages)} et tu reçois : ${libelle}.`}
           </p>
 
           {/* ⚠️ 🔴 LA JAUGE CONTREDISAIT LA RÉCOMPENSE, et Alex l'a vu sur sa
@@ -78,7 +78,7 @@ export default function CarteFideliteFiche({ commercant, carte, connecte = true,
           {recompense && (
             <p style={{ margin: '4px 0 0', fontSize: '0.72rem', fontWeight: 600, color: T.deep, lineHeight: 1.5 }}>
               {estCagnotte
-                ? `Ta nouvelle cagnotte a déjà repris à ${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€.`
+                ? `Ta nouvelle cagnotte est déjà à ${euros(carte.cagnotte)}.`
                 : `Ta nouvelle carte a déjà ${carte.passages} passage${carte.passages > 1 ? 's' : ''} sur ${seuilP}.`}
             </p>
           )}
@@ -112,16 +112,32 @@ export default function CarteFideliteFiche({ commercant, carte, connecte = true,
         </>
       ) : (
         <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: T.deep, lineHeight: 1.5 }}>
+          {/* ⚠️ PLUS COURT, ET IL DIT LA MÊME CHOSE (Alex, 17/09). L'ancien
+              texte disait le montant DEUX FOIS (« atteint 10,00 €, tu reçois
+              10,00 € offerts ») et répétait « cagnotte » à trois lignes
+              d'intervalle. On garde ce qui répond aux deux seules questions du
+              client : combien je gagne, et à partir de quand.
+
+              ⚠️ ET CE COMMENTAIRE VIT À L'INTÉRIEUR DU paragraphe, dont il est
+              un enfant. Un commentaire JSX ne peut ni se glisser entre le
+              point d'interrogation et le deux-points d'un ternaire, ni se
+              poser à côté de l'élément d'une branche : une branche ne porte
+              QU'UNE expression. Les deux formes sont des erreurs de syntaxe, et
+              je les ai faites toutes les deux le même jour. Un commentaire se
+              place dans un parent, jamais dans un aiguillage. */}
           {estCagnotte
-            ? `Gagne ${pourcent(commercant.fidelite_taux_cagnotte || 5)} de chaque achat dans ta cagnotte. Dès qu'elle atteint ${euros(seuilC)}, tu reçois : ${libelle}.`
-            : `Après ${seuilP} passages, tu reçois : ${libelle}.`}
+            ? `${pourcent(commercant.fidelite_taux_cagnotte || 5)} de chaque achat va dans ta cagnotte. À ${euros(seuilC)}, tu reçois : ${libelle}.`
+            : `${seuilP} passages, et tu reçois : ${libelle}.`}
           {' '}
           {/* Sans cette phrase, un Yopper qui a déjà des passages voit le même
               texte que quelqu'un qui n'a jamais rien acheté, et en conclut que
               rien n'est compté. Le programme se raconte quand même : c'est ce
               qui donne envie de se connecter. */}
+          {/* ⚠️ « à chaque commande » DISAIT CE QUE LA PHRASE D'AVANT DIT DÉJÀ
+              (« de chaque achat »). Une redite dans un encart de quatre lignes
+              se remarque, et fait douter du reste. */}
           {connecte
-            ? 'Ta carte se remplit toute seule à chaque commande 🟣'
+            ? 'Ta carte se remplit toute seule 🟣'
             : 'Connecte-toi pour voir où en est ta carte 🟣'}
         </p>
       )}

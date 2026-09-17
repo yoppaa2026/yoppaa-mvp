@@ -4947,7 +4947,7 @@ export default function Commander() {
                                 {recompense
                                   ? libelleCarteRecompenses(nbRecompenses, libelle, { court: true })
                                   : estCagnotte
-                                    ? `${Number(carte.cagnotte).toFixed(2).replace('.', ',')}€ / ${seuilC.toFixed(2).replace('.', ',')}€ → ${libelle}`
+                                    ? `${euros(carte.cagnotte)} / ${euros(seuilC)} → ${libelle}`
                                     : `${carte.passages}/${seuilP} passages → ${libelle}`}
                               </p>
                             </div>

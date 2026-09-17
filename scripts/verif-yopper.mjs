@@ -256,7 +256,13 @@ verifier('le ciblage ne colle pas de valeurs dans un filtre',
 // « 0.55 € » s'affichait sur la carte de fidélité, l'écran le plus regardé du
 // programme.
 const carte = lire('app/carte/[token]/page.js')
-verifier('la carte formate les euros à la française', /replace\('\.', ','\)/.test(carte))
+// ⚠️ CETTE GARDE CHERCHAIT `replace('.', ',')`, UNE FORME. Elle a rougi le 17/09
+// quand la copie locale de `euros()` a été retirée de cet écran, alors que le
+// formatage devenait MEILLEUR : la copie posait une espace ordinaire là où
+// `lib/montants.js` pose une insécable. Elle vise désormais la règle partagée,
+// dont le comportement est mesuré plus bas dans ce même banc.
+verifier('la carte formate les euros par la règle partagée',
+  /import \{[^}]*\beuros\b[^}]*\} from '@\/lib\/montants'/.test(carte) && /euros\(/.test(carte))
 verifier('plus de toFixed nu suivi d\'un euro', !/toFixed\(2\)\} €/.test(carte))
 
 // ═══════════════════════════════════════════════════════════════════════════

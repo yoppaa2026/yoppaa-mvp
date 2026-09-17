@@ -21,6 +21,7 @@ import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo, planEffectif } from '@/lib/plans'
 import { fichePubliee } from '@/lib/statut-commercant'
+import { euros } from '@/lib/montants'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -77,7 +78,7 @@ export async function POST(req) {
   }
 
   // Message push : distingue bonne affaire (accroche forte) vs deal classique
-  const prixStr = deal.prix_deal ? ` · ${Number(deal.prix_deal).toFixed(2).replace('.', ',')}€` : ''
+  const prixStr = deal.prix_deal ? ` · ${euros(deal.prix_deal)}` : ''
   const headings = deal.est_bonne_affaire ? 'Bonne affaire' : 'Nouveau deal'
   const contents = `${c.nom} : ${deal.titre}${prixStr}`
 

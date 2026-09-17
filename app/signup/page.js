@@ -35,6 +35,7 @@ import TurnstileWidget from '@/app/components/TurnstileWidget'
 // double métier max 2, champ libre « Autre… »). Sélection via SelecteurTypes.
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import { estFoodTruck } from '@/lib/types-commerce'
+import { euros } from '@/lib/montants'
 import {
   avantLancement, estRegimeLancement, joursOffertsAuLancement,
   libelleLancement, libelleFinEssaiLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM,
@@ -2745,9 +2746,9 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
             {[...shopChoices].map(type => {
               const p = SHOP_PRODUCTS.find(p => p.type === type)
               if (!p) return null
-              return <li key={type}><strong>{p.label} :</strong> {p.prix.toFixed(2).replace('.', ',')}€ HTVA</li>
+              return <li key={type}><strong>{p.label} :</strong> {euros(p.prix)} HTVA</li>
             })}
-            {shopChoices.size > 0 && <li style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.hairline}` }}><strong>Total boutique :</strong> {totalChoisis.toFixed(2).replace('.', ',')}€ HTVA</li>}
+            {shopChoices.size > 0 && <li style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.hairline}` }}><strong>Total boutique :</strong> {euros(totalChoisis)} HTVA</li>}
           </ul>
         </Card>
         <div style={{ background: T.pale, borderRadius: 14, padding: '14px 16px', marginTop: 16, textAlign: 'left' }}>
@@ -2914,7 +2915,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
                 {shopChoices.size} produit{shopChoices.size > 1 ? 's' : ''} sélectionné{shopChoices.size > 1 ? 's' : ''}
               </span>
               <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: '-0.3px' }}>
-                Total : {totalChoisis.toFixed(2).replace('.', ',')}€ HTVA
+                Total : {euros(totalChoisis)} HTVA
               </span>
             </div>
             {/* ⚠️ CE TOTAL S'AFFICHAIT SANS DIRE CE QU'IL DEVENAIT, juste
@@ -3017,7 +3018,7 @@ function ProduitCard({ produit, actif, onToggle, secondaire = false }) {
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <span style={{ fontSize: 15, fontWeight: 900, color: actif ? T.light : T.main, whiteSpace: 'nowrap' }}>
-            {produit.prix.toFixed(2).replace('.', ',')}€
+            {euros(produit.prix)}
           </span>
           <p style={{ fontSize: 10, color: actif ? 'rgba(255,255,255,0.55)' : T.muted, margin: '1px 0 0', fontWeight: 700 }}>HTVA</p>
         </div>
@@ -3282,7 +3283,7 @@ function CardPlan({ plan, categorie, actif, onClick }) {
           <span style={{ fontSize: 13, fontWeight: 800, color: actif ? T.light : T.main }}>Gratuit à vie</span>
         ) : (
           <span style={{ fontSize: 16, fontWeight: 900, color: actif ? '#fff' : T.ink }}>
-            {p.mensuel.toFixed(2).replace('.', ',')}€<span style={{ fontSize: 11, fontWeight: 600, color: actif ? T.light : T.muted, marginLeft: 2 }}>HTVA/mois</span>
+            {euros(p.mensuel)}<span style={{ fontSize: 11, fontWeight: 600, color: actif ? T.light : T.muted, marginLeft: 2 }}>HTVA/mois</span>
           </span>
         )}
       </div>

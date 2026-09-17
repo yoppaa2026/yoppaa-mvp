@@ -48,9 +48,24 @@ jobs:
       - name: Synchroniser Capacitor
         run: npx cap sync ios
 
-      - name: Installer les pods
+      # 🔴 CAPACITOR 8 N UTILISE PLUS COCOAPODS, MAIS SWIFT PACKAGE MANAGER.
+      # Cette etape lancait `pod install` : le premier vrai lancement du
+      # workflow, le 17/09 au soir, a repondu « No Podfile found in the project
+      # directory », et pour cause — il n y en a AUCUN dans le depot. Les
+      # dependances vivent dans `ios/App/CapApp-SPM/Package.swift`.
+      #
+      # ⚠️ ON RESOUT LES PAQUETS EXPLICITEMENT plutot que de laisser l archive
+      # le faire. Xcode les telechargerait tout seul au milieu du build : une
+      # coupure reseau echouerait alors dans une etape qui parle de signature,
+      # et la cause serait a chercher tres loin de la.
+      - name: Resoudre les dependances Swift
         working-directory: ios/App
-        run: pod install --repo-update
+        run: |
+          if [ -f Podfile ]; then
+            echo "::error::Un Podfile est apparu : ce projet est en SPM, il faut trancher avant de continuer."
+            exit 1
+          fi
+          xcodebuild -resolvePackageDependencies -project App.xcodeproj -scheme App
 
       # 🔴 LE NUMÉRO DE BUILD DOIT CROÎTRE À CHAQUE DÉPÔT. Apple refuse un
       # numéro déjà vu, même si la version affichée change.
@@ -125,7 +140,11 @@ jobs:
             echo "::error::APPLE_TEAM_ID ou PROFIL_NOM manque dans les secrets du depot."
             exit 1
           fi
-          xcodebuild -workspace App.xcworkspace -scheme App \
+          # 🔴 `-project`, PAS `-workspace`. Le workspace `App.xcworkspace` est
+          # celui que CocoaPods fabrique, et il n existe pas ici : Capacitor 8
+          # est en SPM. Ce defaut-la se serait revele APRES la correction du
+          # `pod install`, un aller-retour de dix minutes de Mac plus tard.
+          xcodebuild -project App.xcodeproj -scheme App \
             -configuration Release -archivePath build/App.xcarchive \
             -destination "generic/platform=iOS" \
             CODE_SIGN_STYLE=Manual \

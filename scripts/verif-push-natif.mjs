@@ -23,6 +23,13 @@ import {
 const lire = (chemin) =>
   readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const codeDe = (chemin) => sansProse(lire(chemin))
+// ⚠️ ON INTERROGE LE DÉPÔT, PAS SEULEMENT LES TEXTES. Un workflow peut être
+// parfaitement écrit et demander un fichier qui n'existe pas : c'est ce qui
+// s'est produit le 17/09 avec `pod install` sur un projet passé à SPM.
+const existe = (chemin) => {
+  try { readFileSync(new URL(`../${chemin}`, import.meta.url)); return true }
+  catch { return false }
+}
 
 let ok = 0
 const echecs = []
@@ -326,6 +333,39 @@ const fenetreNative = (options = {}) => {
     // sortirait inutilisable, et le dépôt le refuserait des heures plus tard.
     verifie('🔴 les secrets d’équipe manquants font échouer le travail',
       /::error::APPLE_TEAM_ID ou PROFIL_NOM manque/.test(ios))
+
+    // ═══ COCOAPODS OU SWIFT PACKAGE MANAGER, IL FAUT CHOISIR ═══════════════
+    //
+    // 🔴 LES DEUX DÉFAUTS TROUVÉS AU PREMIER VRAI LANCEMENT (17/09 au soir).
+    // Le workflow lançait `pod install` et archivait un `App.xcworkspace` :
+    // Capacitor 8 est passé à Swift Package Manager, et NI L'UN NI L'AUTRE
+    // n'existe dans ce dépôt. GitHub a répondu « No Podfile found », et le
+    // second défaut ne se serait révélé qu'après la correction du premier,
+    // dix minutes de Mac plus tard.
+    //
+    // ⚠️ C'EST LA CONFIRMATION DE LA RÈGLE DU MATIN : un workflow qui n'a
+    // jamais tourné ne prouve rien, quelle que soit la qualité de sa relecture.
+    // J'avais corrigé trois défauts par la lecture ; il en restait deux que
+    // seul le lancement pouvait montrer.
+    //
+    // ⚠️ ON VÉRIFIE AUSSI L'ÉTAT DU DÉPÔT, pas seulement le texte du workflow :
+    // le jour où un Podfile réapparaîtrait, c'est le workflow qu'il faudrait
+    // changer, et cette garde le dira avant le build.
+    const aUnPodfile = existe('ios/App/Podfile')
+    const aUnPackageSwift = existe('ios/App/CapApp-SPM/Package.swift')
+    verifie('le projet iOS est en Swift Package Manager, pas en CocoaPods',
+      aUnPackageSwift && !aUnPodfile,
+      `Package.swift=${aUnPackageSwift}, Podfile=${aUnPodfile}`)
+    verifie('🔴 le workflow ne lance donc jamais « pod install »',
+      !lignesIos.some((l) => /\bpod install\b/.test(l)))
+    verifie('🔴 et il archive le PROJET, pas un workspace CocoaPods',
+      lignesIos.some((l) => /-project App\.xcodeproj/.test(l))
+      && !lignesIos.some((l) => /-workspace App\.xcworkspace/.test(l)))
+    // ⚠️ LES PAQUETS SE RÉSOLVENT AVANT L'ARCHIVE, explicitement : sinon Xcode
+    // les télécharge au milieu du build, et une coupure réseau échoue dans une
+    // étape qui parle de signature.
+    verifie('⚠️ les dépendances Swift sont résolues avant l’archive',
+      /-resolvePackageDependencies/.test(ios))
   }
 }
 

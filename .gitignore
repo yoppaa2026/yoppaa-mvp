@@ -74,3 +74,11 @@ COMMERCES.csv
 *.certSigningRequest
 cle.b64
 certificat.b64
+# 🔴 LA CLE PRIVEE DU CERTIFICAT APPLE (17/09). Elle manquait a cette liste, et
+# c est la plus dangereuse : le certificat telecharge chez Apple ne vaut RIEN
+# sans elle, et elle seule permet de fabriquer le .p12 qui signe l application.
+# Perdue, tout est a refaire ; publiee, n importe qui signe au nom d Avcotech.
+*.key
+# Le dossier de travail des pieces Apple : tout ce qui y tombe est ignore, y
+# compris ce qu on n aurait pas pense a nommer ici.
+cles-apple/

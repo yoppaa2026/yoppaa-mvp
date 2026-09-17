@@ -30,6 +30,7 @@ import { nomTransporteur, suiviUrl, libelleExpedition } from '../lib/transporteu
 // On compare avec `euros()`, jamais avec une copie du format écrite à la main.
 import { euros } from '../lib/montants.js'
 import { prenomClient, nomCompletClient } from '../lib/nom-client.js'
+import { reponseRefuse, motifDuRefus } from '../lib/verdict-reponse.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -973,7 +974,67 @@ verifier('et range la commande du bon côté',
   // ⚠️ ET IL LIT LE CORPS : une raison vaut dix codes. « forfait insuffisant »
   // et « commande introuvable » sont tous deux des 4xx et n'appellent pas le
   // même geste.
-  verifier('il rapporte la raison, pas juste le code', /j\?\.error \|\| j\?\.message/.test(fetchPro))
+  // ⚠️ CETTE GARDE VISAIT `j?.error || j?.message`, c'est-à-dire une FORME et
+  // même un nom de variable. Elle a rougi le 17/09 quand la règle a déménagé
+  // dans `lib/verdict-reponse.js`, alors que `prevenirClient` rapportait
+  // toujours la raison. Elle vise désormais la règle elle-même, dont le
+  // comportement est mesuré quelques lignes plus bas.
+  verifier('il rapporte la raison, pas juste le code', /motifDuRefus\(corpsRecu\)/.test(fetchPro))
+
+  // 🔴 LE 200 QUI DIT NON (17/09). `if (res.ok)` suffisait, et laissait passer le
+  // cas le plus courant de nos routes : `NextResponse.json({ ok: false, … })`
+  // part avec un code 200. `/api/fidelite/crediter` répond ainsi, et cette
+  // fonction — écrite EXPRÈS pour ne plus rien laisser passer — annonçait un
+  // succès sur un refus.
+  //
+  // ⚠️ ON MESURE LE COMPORTEMENT, PAS LE TEXTE. Six réponses, jouées pour de
+  // vrai contre la logique de la fonction : c'est la seule façon de prouver
+  // qu'une route sans champ `ok` reste un succès, ce qu'une garde de texte ne
+  // peut pas dire.
+  // 🔴 CES CAS ONT D'ABORD MESURÉ UNE COPIE, ET UNE MUTATION L'A DÉMASQUÉ. Je
+  // les avais écrits en REJOUANT la logique dans le banc, parce que
+  // `lib/fetch-pro.js` porte `'use client'` et importe Supabase. Ils restaient
+  // donc verts pendant qu'on cassait le vrai code. La règle a été extraite dans
+  // `lib/verdict-reponse.js`, qui est pur : on exécute désormais CE QUI TOURNE.
+  {
+    const cas = [
+      ['un 200 qui dit ok:false est un ÉCHEC', [true, { ok: false, error: 'pas de GSM' }], true],
+      ['un 200 qui dit ok:true est un succès', [true, { ok: true }], false],
+      // ⚠️ `corps?.ok === false`, JAMAIS `!corps?.ok` : une route qui rend
+      // `{ sent: true }` serait déclarée en échec par la seconde forme, et
+      // l'alerte s'afficherait chez le commerçant sans qu'il se soit rien passé.
+      ['une route sans champ ok reste un succès', [true, { sent: true }], false],
+      ['un corps illisible reste un succès', [true, null], false],
+      ['un 403 est un échec', [false, { error: 'interdit' }], true],
+      ['un 500 est un échec', [false, { error: 'boum' }], true],
+      ['un 500 sans corps est un échec', [false, null], true],
+    ]
+    for (const [nom, [estOk, corps], attendu] of cas) {
+      verifier(nom, reponseRefuse(estOk, corps) === attendu)
+    }
+    // Le motif : une phrase d'abord, le mot technique en dernier recours.
+    verifier('le motif préfère la phrase au mot technique',
+      motifDuRefus({ error: 'pas de GSM', reason: 'telephone_invalide' }) === 'pas de GSM')
+    verifier('et se rabat sur le mot technique quand il n’y a rien d’autre',
+      motifDuRefus({ reason: 'telephone_invalide' }) === 'telephone_invalide')
+    verifier('sans corps, il ne rend pas « undefined »', motifDuRefus(null) === '')
+
+    // Et la garde de texte qui empêche le retour en arrière dans la vraie source.
+    verifier('`prevenirClient` confie son verdict à la règle partagée',
+      /reponseRefuse\(res\.ok, corpsRecu\)/.test(fetchPro))
+    // 🔴 `indexOf` REND -1, ET -1 EST PLUS PETIT QUE TOUT. Écrite
+    // `indexOf(lecture) < indexOf(verdict)`, cette garde restait VERTE quand on
+    // supprimait la lecture du corps : une mutation l'a montré. On exige donc
+    // que les deux EXISTENT avant de comparer leur ordre.
+    {
+      const iLecture = fetchPro.indexOf('corpsRecu = await res.json()')
+      const iVerdict = fetchPro.indexOf('reponseRefuse(res.ok, corpsRecu)')
+      verifier('il lit vraiment le corps de la réponse', iLecture >= 0, `index ${iLecture}`)
+      verifier('et il le lit AVANT de juger', iLecture >= 0 && iVerdict > iLecture,
+        `lecture ${iLecture}, verdict ${iVerdict}`)
+    }
+  }
+
 
   const dash = lire('app/dashboard/page.js')
   const dashCode = dash.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
@@ -992,6 +1053,26 @@ verifier('et range la commande du bon côté',
   verifier('et il l\'affiche au commerçant', /envoiRate && \(/.test(dashCode))
   verifier('en lui disant ce qui marche encore',
     /ton client la voit dans son application/.test(dash))
+
+  // ⚠️ LA FIDÉLITÉ PASSE PAR LE CHEMIN BAVARD ELLE AUSSI (17/09). Elle s'écrivait
+  // `postPro(...).catch(...)` : aucun des cinq motifs de refus n'atteignait le
+  // commerçant. Et pour une COMMANDE il n'existe aucun filet — le cron
+  // `fidelite-rdv` ne repasse que sur `rdv_reservations` — donc un crédit manqué
+  // est de la cagnotte perdue pour de bon.
+  //
+  // ⚠️ CES DEUX GARDES VIVENT ICI, APRÈS `dashCode`, ET PAS PLUS HAUT. Écrites
+  // au-dessus de sa déclaration, elles ont fait PLANTER le banc sur une zone
+  // morte temporelle : un `const` n'est pas remonté comme une `function`. Le
+  // banc a dit « Cannot access before initialization » au lieu de rougir, et un
+  // banc qui explose n'est pas une mesure, c'est un accident.
+  verifier('le crédit de fidélité d\'une commande signale son échec',
+    /signalerEnvoi\('\/api\/fidelite\/crediter'/.test(dashCode))
+  // ⚠️ ET IL NE PROMET PAS UN FILET QUI N'EXISTE PAS. Le commentaire voisin du
+  // tableau de bord annonce que « le cron du lendemain rattrape » : c'est vrai
+  // pour un rendez-vous, faux pour une commande. Servir cette phrase-là ici
+  // ferait attendre un rattrapage qui ne viendra jamais.
+  verifier('et il ne promet PAS un rattrapage qui n\'existe pas',
+    !/crediterFideliteCommande\(commandeId\)[\s\S]{0,400}?sera rattrapé/.test(dashCode))
 }
 
 // ═══ DEUX ROUTES D'ANNULATION, UN SEUL DISCOURS ═════════════════════════════

@@ -1876,10 +1876,25 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   }, [commercant?.id, notificationsActives])
 
-  // Crédit fidélité automatique (Vendre) au statut final. Fire-and-forget,
-  // idempotent côté serveur (index unique par commande).
+  // Crédit fidélité automatique (Vendre) au statut final. Idempotent côté
+  // serveur (index unique par commande).
+  //
+  // 🔴 IL ÉTAIT « FIRE-AND-FORGET », ET C'ÉTAIT UN OUBLI, PAS UN CHOIX (17/09).
+  // Il s'écrivait `postPro(...).catch(...)`, qui ne se déclenche jamais sur un
+  // code HTTP, et la route répond 200 même quand elle refuse. Aucun des cinq
+  // motifs de refus n'atteignait donc le commerçant : sa commande passait au
+  // vert, et la carte du client restait vide.
+  //
+  // 🔴 ET POUR UNE COMMANDE, IL N'Y A AUCUN FILET. Le cron `fidelite-rdv` ne
+  // repasse que sur les RENDEZ-VOUS : vérifié, il ne lit que
+  // `rdv_reservations`. Un crédit de commande manqué est perdu pour de bon,
+  // c'est-à-dire de la cagnotte que le client ne reverra jamais. C'est
+  // exactement pour ça qu'il faut le DIRE tout de suite, tant que le commerçant
+  // a le client devant lui.
   function crediterFideliteCommande(commandeId) {
-    postPro('/api/fidelite/crediter', { commande_id: commandeId }).catch(e => console.warn('[dashboard] credit fidelite KO', e))
+    signalerEnvoi('/api/fidelite/crediter', { commande_id: commandeId },
+      'la carte de fidélité de ton client',
+      'Sa commande est bien enregistrée. Le crédit ne se rattrape pas tout seul : préviens-nous pour qu\'on le pose à la main.')
   }
 
   // ─── Les produits d'un rendez-vous viennent d'être remis ─────────────────

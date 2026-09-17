@@ -16,6 +16,17 @@ import { crediterFideliteCommande } from '@/lib/fidelite-server'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Ce que `crediterFideliteCommande` peut refuser, dit au commerçant. Chaque
+// motif nomme LE GESTE qui débloque : un message qui décrit sans dire quoi
+// faire laisse le commerçant devant le même écran.
+const MOTIFS = {
+  fidelite_inactive: 'la carte de fidélité n\'est pas ouverte sur cette fiche, ou le forfait ne donne pas le crédit automatique',
+  telephone_invalide: 'cette commande n\'a pas de numéro de GSM, et le GSM est la clé de la carte',
+  commande_introuvable: 'commande introuvable',
+  carte_introuvable: 'la carte n\'a pas pu être créée',
+  exception: 'une erreur interne a interrompu le crédit',
+}
+
 export async function POST(request) {
   try {
     const body = await request.json().catch(() => null)
@@ -51,8 +62,16 @@ export async function POST(request) {
     // AILLEURS. Elle était recopiée dans trois routes, et il suffisait d'en
     // oublier une pour que le double comptage revienne par celle-là : s'offrir
     // un bon à soi-même remplissait alors la cagnotte deux fois.
+    // ⚠️ UN REFUS DOIT SE DIRE EN FRANÇAIS. Cette route rendait `res` tel quel,
+    // c'est-à-dire `{ ok: false, reason: 'telephone_invalide' }` avec un code
+    // 200 : le tableau de bord n'y lisait rien, et le commerçant voyait sa
+    // commande passer au vert sur un crédit qui n'avait pas eu lieu.
+    //
+    // ⚠️ ET LE CODE RESTE 200, VOLONTAIREMENT. « Fidélité inactive » n'est pas
+    // une erreur du serveur ni une faute de l'appelant : c'est une réponse. Le
+    // corps porte le verdict, et `prevenirClient` sait désormais le lire.
     const res = await crediterFideliteCommande(supabase, commandeId, '[fidelite/crediter]')
-    return NextResponse.json(res)
+    return NextResponse.json(res.ok ? res : { ...res, error: MOTIFS[res.reason] || res.reason || 'refus sans motif' })
   } catch (e) {
     console.error('[fidelite/crediter] KO', e?.message)
     return NextResponse.json({ ok: false, error: 'Erreur serveur' }, { status: 500 })

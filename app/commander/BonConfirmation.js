@@ -29,6 +29,7 @@
 import Link from 'next/link'
 import { euros } from '@/lib/montants'
 import { libelleBon } from '@/lib/bons-cadeaux'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 const T = {
   vert:   '#059669',
@@ -190,7 +191,7 @@ export default function BonConfirmation({ etat = null, bon = null, categorie = n
           <p style={{ margin: '0 0 4px', fontSize: '0.84rem', color: T.deep, lineHeight: 1.55 }}>
             {bon.pour_moi
               ? <>Tu le retrouves dans <strong>ton profil</strong>, et il t&rsquo;attend aussi par email.</>
-              : <><strong>{bon.beneficiaire_prenom || 'La personne à qui tu l\'offres'}</strong> reçoit tout par email : ton message, le montant et le code. Au comptoir, il suffit de montrer ce code{chezQui ? ` chez ${chezQui}` : ''} ; en ligne, il s&rsquo;applique au moment de payer, en une ou plusieurs fois.</>}
+              : <><strong>{bon.beneficiaire_prenom || 'La personne à qui tu l\'offres'}</strong> reçoit tout par email : ton message, le montant et le code. Au comptoir, il suffit de montrer ce code{chezQui ? ` ${chezLeCommerce(chezQui)}` : ''} ; en ligne, il s&rsquo;applique au moment de payer, en une ou plusieurs fois.</>}
           </p>
           {!bon.pour_moi && (
             <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: T.muted, lineHeight: 1.55 }}>
@@ -213,7 +214,7 @@ export default function BonConfirmation({ etat = null, bon = null, categorie = n
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {onContinuer && (
               <button type="button" onClick={onContinuer} style={btnPlein}>
-                {chezQui ? `Continuer chez ${chezQui}` : 'Continuer'}
+                {chezQui ? `Continuer ${chezLeCommerce(chezQui)}` : 'Continuer'}
               </button>
             )}
             <Link href="/commander" style={btnBord}>Retour à l&rsquo;accueil</Link>

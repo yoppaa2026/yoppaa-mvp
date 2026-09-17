@@ -13,6 +13,8 @@
 
 import { useState, useEffect } from 'react'
 import { resumeFormulePublique, cleAchatAbonnement } from '@/lib/abonnements'
+import { euros } from '@/lib/montants'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 const T = {
   main:  '#6B35C4',
@@ -181,13 +183,13 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
 
             <div style={{ background: `linear-gradient(135deg, #160636 0%, ${T.deep} 100%)`, color: '#fff', padding: '1rem 1.125rem' }}>
               <p style={{ fontSize: '0.6rem', fontWeight: 800, color: T.pale, textTransform: 'uppercase', letterSpacing: '1.5px', margin: 0, marginBottom: 4, opacity: 0.85 }}>
-                Ton abonnement chez {commercant?.nom}
+                Ton abonnement {chezLeCommerce(commercant?.nom)}
               </p>
               <p style={{ fontSize: '1.05rem', fontWeight: 900, margin: 0, lineHeight: 1.25 }}>
                 {choisie.libelle}
                 <br/>
                 <span style={{ color: T.pale, fontSize: '0.85rem', fontWeight: 700 }}>
-                  {resumeFormulePublique(choisie)?.seancesLibelle} · {Number(choisie.prix).toFixed(2)} €
+                  {resumeFormulePublique(choisie)?.seancesLibelle} · {euros(choisie.prix)}
                 </span>
               </p>
             </div>
@@ -263,7 +265,7 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                   color: '#fff', fontWeight: 800, cursor: (!valide || envoi) ? 'default' : 'pointer',
                   fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif',
                 }}>
-                {envoi ? 'Redirection…' : `Payer ${Number(choisie.prix).toFixed(2)} €`}
+                {envoi ? 'Redirection…' : `Payer ${euros(choisie.prix)}`}
               </button>
             </div>
           </div>

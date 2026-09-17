@@ -22,6 +22,7 @@ import { empreinteRequise, montantEmpreinte, echeanceLien, raisonDemandeImpossib
 import { envoyerAvecCredit } from '@/lib/fidelite-sms'
 import { emailDemandeEmpreinte, envoyerAuYopper } from '@/lib/resend'
 import { euros, eurosNus } from '@/lib/montants'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 const MESSAGES = {
   deja_garantie: 'Cette table est déjà garantie : sa carte est enregistrée.',
@@ -244,7 +245,7 @@ export async function POST(request) {
       })
       await envoyerAuYopper({
         to: rdv.client_email,
-        subject: `Confirme ta table chez ${commercant.nom}`,
+        subject: `Confirme ta table ${chezLeCommerce(commercant.nom)}`,
         html,
       })
     } catch (e) {

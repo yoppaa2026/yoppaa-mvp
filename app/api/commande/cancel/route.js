@@ -24,6 +24,7 @@ import { rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { referenceCommande } from '@/lib/numero-commande'
 import { libelleOptions } from '@/lib/options-ligne'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 export async function POST(request) {
   try {
@@ -282,7 +283,7 @@ export async function POST(request) {
         })
         await envoyerAuCommercant({
           to: cmd.client_email,
-          subject: `Ta commande chez ${commercant?.nom || 'le commerçant'} a été annulée`,
+          subject: `Ta commande ${chezLeCommerce(commercant?.nom || 'le commerçant')} a été annulée`,
           html,
         })
       } catch (e) {

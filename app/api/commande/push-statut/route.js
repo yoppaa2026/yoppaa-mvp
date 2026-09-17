@@ -18,6 +18,7 @@ import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { referenceCommande } from '@/lib/numero-commande'
 import { nomTransporteur } from '@/lib/transporteurs'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 const URL_COMMANDES = '/commander?onglet=commandes'
 
@@ -127,7 +128,7 @@ export async function POST(request) {
           }
         : {
             headings: '🎉 Ta commande est prête à retirer',
-            contents: `Va récupérer ta commande #${num} chez ${nom}${creneauTxt ? ` (créneau ${creneauTxt})` : ''}.`,
+            contents: `Va récupérer ta commande #${num} ${chezLeCommerce(nom)}${creneauTxt ? ` (créneau ${creneauTxt})` : ''}.`,
             data: { kind: 'commande_prete_retrait', commande_id: cmd.id },
           }
     }

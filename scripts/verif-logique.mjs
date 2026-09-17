@@ -1549,6 +1549,23 @@ verifier('et la lib des lieux ne la repose pas',
   !/source\s*===\s*['"]siege['"]/.test(sansCommentaires(
     readFileSync(new URL('../lib/lieux-activite.js', import.meta.url), 'utf8'))))
 
+// 🔴 « 3.2 km » AVEC UN POINT (17/09). `formatDistance` vit DANS l'écran et
+// n'est pas exportée : un banc ne peut pas l'exécuter, on mesure donc son texte.
+// `toFixed` rend toujours un point décimal, quelle que soit la langue de la
+// page, et il s'affichait sur chaque commerce à plus d'un kilomètre.
+//
+// ⚠️ ON VISE LA LIGNE, PAS LE FICHIER : chercher `replace('.', ',')` n'importe
+// où dans quarante mille lignes trouverait n'importe quel autre remplacement et
+// resterait vert le jour où celui-ci disparaît.
+{
+  const corps = (srcEcranClient.match(/function formatDistance\([\s\S]{0,300}?\n\}/) || [''])[0]
+  verifier('la distance en km prend la virgule française',
+    /toFixed\(1\)\.replace\('\.', ','\)/.test(corps), corps.slice(0, 160))
+  // Le cadrage : si le découpage rate, on mesure le vide et tout passe.
+  verifier('et ce morceau est bien la fonction, pas un vide',
+    corps.length > 80 && corps.length < 300, `longueur ${corps.length}`)
+}
+
 // ─── LA RECHERCHE REPLIÉE NE CACHE JAMAIS UNE RECHERCHE EN COURS ──────────
 // 🔴 LE PIÈGE DE CE REPLI (12/09). Le champ vit derrière une loupe pour rendre
 // une cinquantaine de pixels à la liste. Mais replié AVEC du texte dedans, il

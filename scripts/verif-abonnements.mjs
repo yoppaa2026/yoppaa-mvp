@@ -29,6 +29,7 @@ import {
 } from '../lib/abonnements.js'
 import { jourSemaineDe, JOURS_SEMAINE_FR } from '../lib/creneaux.js'
 import { sansProse } from './lire-code.mjs'
+import { euros } from '../lib/montants.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -1293,7 +1294,16 @@ const resumeAchat = resumeContratAchete(
 )
 egal('le résumé compte les séances', resumeAchat.seances, '45 séances')
 egal('il borne la validité', resumeAchat.validite, 'Du 15 août au 1er juillet')
-egal('il porte le montant payé', resumeAchat.prix, '400.00 €')
+// 🔴 CETTE GARDE ATTENDAIT « 400.00 € », AVEC LE POINT ANGLAIS (corrigé le
+// 17/09). Elle avait recopié ce que le code produisait au lieu de dire ce qu'il
+// devait produire : verte, et complice d'un montant illisible en français sur
+// un récapitulatif d'abonnement à 400 €.
+//
+// ⚠️ ON COMPARE AVEC `euros()`, JAMAIS AVEC UNE CHAÎNE ÉCRITE À LA MAIN. Une
+// garde qui recopie le format teste sa propre copie, et rougit le jour où le
+// format s'améliore : c'est la règle déjà posée en tête de `verif:logique`,
+// après qu'un passage à l'espace insécable en eut fait tomber cinq d'un coup.
+egal('il porte le montant payé, à la française', resumeAchat.prix, euros(400))
 // ⚠️ CE QUE LE CLIENT A À FAIRE dépend du MODE, et c'est l'information la plus
 // utile des cinq : en crédit il doit réserver, personne ne le lui dira sinon.
 verifier('en crédit, il dit qu’il faut réserver soi-même',

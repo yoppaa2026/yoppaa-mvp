@@ -17,6 +17,7 @@ import { referenceCommande } from '@/lib/numero-commande'
 // dans `client_nom`. La demander faisait échouer TOUTE la requête, et la
 // route annonçait « Commande introuvable » sur une commande bien présente.
 import { prenomClient } from '@/lib/nom-client'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 export async function POST(request) {
   try {
@@ -92,7 +93,7 @@ export async function POST(request) {
         })
         await envoyerAuCommercant({
           to: cmd.client_email,
-          subject: `Ta commande chez ${cmd.commercant?.nom || 'le commerçant'} a été annulée`,
+          subject: `Ta commande ${chezLeCommerce(cmd.commercant?.nom || 'le commerçant')} a été annulée`,
           html,
         })
       } catch (e) {

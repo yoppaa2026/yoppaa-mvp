@@ -16,6 +16,8 @@ import {
 } from '../lib/morning-eligibilite.js'
 import { estSessionPerdue, ERREUR_SESSION } from '../lib/session-perdue.js'
 import { localiteDeAdresse, lieuDeCarte, libelleApporteUnLieu } from '../lib/adresse-localite.js'
+import { chezLeCommerce } from '../lib/nom-commerce.js'
+import { euros, eurosNus, pourcent } from '../lib/montants.js'
 import { ficheUtilisablePar } from '../lib/fiche-client.js'
 import { sansProse } from './lire-code.mjs'
 
@@ -1385,6 +1387,61 @@ for (const chemin of routesAdmin) {
 
   verifier('un libellé vide n’apporte aucun lieu', libelleApporteUnLieu('', 'Chez Momo') === false)
   verifier('un libellé absent non plus', libelleApporteUnLieu(null, 'Chez Momo') === false)
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 « CHEZ CHEZ MOMO », TROIS FOIS SUR LE MÊME ÉCRAN (17/09)
+  //
+  // Le frère du défaut du dessus, et je l'avais manqué : j'avais cherché les
+  // frères du LIEU, pas ceux du MOTIF. Un préfixe collé à un texte qui le
+  // contient déjà. Deux des sept fiches publiées sont concernées.
+  // ═══════════════════════════════════════════════════════════════════════
+  verifier('une enseigne qui porte « Chez » ne le reçoit pas deux fois',
+    chezLeCommerce('Chez Momo') === 'Chez Momo')
+  verifier('et sa majuscule est la sienne, pas la nôtre',
+    chezLeCommerce('Chez Mathilde', { majuscule: true }) === 'Chez Mathilde')
+  verifier('les accents ne trompent pas la comparaison',
+    chezLeCommerce('Chèz Momo') === 'Chèz Momo')
+  verifier('une enseigne ordinaire reçoit bien sa préposition',
+    chezLeCommerce('Boulangerie Dupuis') === 'chez Boulangerie Dupuis')
+  verifier('et sa majuscule en début de phrase',
+    chezLeCommerce('Boulangerie Dupuis', { majuscule: true }) === 'Chez Boulangerie Dupuis')
+
+  // 🔴 ON NE TRONQUE JAMAIS LE NOM. « chez Momo » serait plus joli et faux :
+  // l'enseigne s'appelle « Chez Momo », c'est ce nom-là qui est sur la vitrine.
+  verifier('le nom de l’enseigne n’est jamais amputé',
+    chezLeCommerce('Chez Momo').includes('Chez Momo'))
+
+  // ⚠️ « Chezal » N'EST PAS UN « CHEZ ». Sans la borne de mot, une enseigne dont
+  // le nom commence par ces quatre lettres perdrait sa préposition.
+  verifier('un nom qui commence par ces lettres sans être « chez » garde la préposition',
+    chezLeCommerce('Chezal Traiteur') === 'chez Chezal Traiteur')
+
+  // ⚠️ SANS NOM, ON RESTE UNE PHRASE. Une chaîne vide laisserait « Ta commande
+  // a été annulée » avec deux espaces et un trou au milieu.
+  verifier('sans nom, la phrase tient debout',
+    chezLeCommerce('') === 'chez le commerçant')
+  verifier('et en début de phrase aussi',
+    chezLeCommerce(null, { majuscule: true }) === 'Chez le commerçant')
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 « 1.5% » : LE POINT DÉCIMAL ANGLAIS (17/09)
+  //
+  // La carte de fidélité annonçait « Gagne 1.5% de chaque achat ». JavaScript
+  // écrit ses nombres à l'anglaise quelle que soit la langue de la page, et le
+  // point s'affichait sur chaque fiche dont le taux n'est pas rond.
+  // ═══════════════════════════════════════════════════════════════════════
+  verifier('un taux décimal prend la virgule', pourcent(1.5) === '1,5 %')
+  verifier('un taux rond ne prend pas de décimales inventées', pourcent(10) === '10 %')
+  // ⚠️ L'ESPACE EST INSÉCABLE, sinon le « % » tombe seul en début de ligne.
+  verifier('l’espace avant le symbole est insécable', pourcent(5).includes(' '))
+  verifier('et ce n’est pas une espace ordinaire', !pourcent(5).includes(' %'))
+  // 🔴 LE PIÈGE DU ZÉRO, ENCORE : un taux de 0 % est une valeur, pas une absence.
+  verifier('un taux de zéro reste un taux', pourcent(0) === '0 %')
+  verifier('un taux absent ne rend pas NaN', pourcent(undefined) === '0 %')
+
+  // Les montants : la règle existait déjà, on mesure qu'elle tient.
+  verifier('un montant prend la virgule et son espace', euros(35) === '35,00 €')
+  verifier('et la version nue reste sans symbole', eurosNus(35) === '35,00')
 }
 
 // 🔴 LE TOTAL S'IMPRIMAIT AU MILIEU DU FICHIER (trouvé le 31/08).

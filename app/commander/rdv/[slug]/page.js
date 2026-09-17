@@ -64,7 +64,7 @@ function enGras(texte) {
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { poserIdentiteLocale } from '@/lib/identite-locale'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
-import { euros } from '@/lib/montants'
+import { euros, pourcent } from '@/lib/montants'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import BonCadeauFiche from '../../BonCadeauFiche'
 import BonConfirmation from '../../BonConfirmation'
@@ -83,6 +83,7 @@ import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, co
   abonnementsPourPrestation, expliquerRefusSeance, libellePrixSeance,
   trierAbonnementsPourSeance, libelleChoixAbonnement } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
+import { libelleApporteUnLieu } from '@/lib/adresse-localite'
 import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 // ⚠️ LA MÊME RÈGLE QUE LE SERVEUR, et le serveur la rejoue : cet écran décide
 // seulement d'afficher, jamais de demander.
@@ -128,11 +129,12 @@ function formatPrix(prestation, deals = []) {
   // demande », qui laisserait croire qu'un tarif se discute. Rien ne s'affiche.
   if (estParCouverts(prestation)) return null
   const prix = prixEffectifPrestation(prestation, deals)
-  if (prix != null) return `${Number(prix).toFixed(2)} €`
+  if (prix != null) return `${euros(prix)}`
   return 'Sur demande'
 }
 
 import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit } from '@/lib/rdv-slots'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 // ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
 // Affiche les jours de l'horizon, regroupes par mois. ⚠️ L'HORIZON N'EST PLUS
@@ -2487,8 +2489,8 @@ export default function CommanderRdvSlug() {
                 {Number(p.prix) > 0 ? (
                   <p style={{ margin: '3px 0 0', fontSize: '0.8rem', fontWeight: 900, color: remise ? '#DC2626' : T.main, display: 'flex', alignItems: 'baseline', gap: 4 }}>
                     {p.est_vitrine && <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, marginRight: 3 }}>dès</span>}
-                    {remise ? remise.prix.toFixed(2) : Number(p.prix).toFixed(2)}€
-                    {remise && <span style={{ fontSize: '0.66rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{remise.prixBarre.toFixed(2)}€</span>}
+                    {euros(remise ? remise.prix : p.prix)}
+                    {remise && <span style={{ fontSize: '0.66rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{euros(remise.prixBarre)}</span>}
                   </p>
                 ) : (
                   <p style={{ margin: '3px 0 0', fontSize: '0.66rem', fontWeight: 700, color: T.muted }}>Prix sur demande</p>
@@ -2653,7 +2655,7 @@ export default function CommanderRdvSlug() {
               <span style={{ flex: 1, minWidth: 0, fontSize: '0.82rem', fontWeight: 700, color: T.ink }}>
                 {nbProduitsPanier} article{nbProduitsPanier > 1 ? 's' : ''} à emporter
               </span>
-              <span style={{ fontSize: '1rem', fontWeight: 900, color: T.ink, whiteSpace: 'nowrap' }}>{totalProduits.toFixed(2)} €</span>
+              <span style={{ fontSize: '1rem', fontWeight: 900, color: T.ink, whiteSpace: 'nowrap' }}>{euros(totalProduits)}</span>
             </div>
             {peutReserverIci && (
               <button onClick={allerAuxPrestations}
@@ -2811,8 +2813,15 @@ export default function CommanderRdvSlug() {
                       </svg>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
                         {/* Le NOM de l'endroit d'abord quand il y en a un : « Salle
-                            Saint-Roch » dit plus à une cliente qu'un numéro de rue. */}
-                        {lieuAffiche?.libelle
+                            Saint-Roch » dit plus à une cliente qu'un numéro de rue.
+                            🔴 MAIS PAS QUAND IL REPETE L'ENSEIGNE. Le lieu principal
+                            porte presque toujours le nom du commerce, et la fiche
+                            annonçait « Salon Nathalie · Rue Albert Premier » sous le
+                            titre « Salon Nathalie ». Même règle que la carte
+                            d'accueil, écrite le matin même : c'était le frère, et
+                            je l'avais manqué en vérifiant d'où venait `lieuAffiche`
+                            au lieu de regarder ce qu'on en FAISAIT. */}
+                        {libelleApporteUnLieu(lieuAffiche?.libelle, commercant?.nom)
                           ? `${lieuAffiche.libelle} · ${adresseAffichee}`
                           : adresseAffichee}
                       </span>
@@ -2937,11 +2946,11 @@ export default function CommanderRdvSlug() {
                           <p style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginTop: 2, lineHeight: 1.3 }}>{d.titre}</p>
                         </div>
                         {d.remise_pct ? (
-                          <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px', flexShrink: 0 }}>-{d.remise_pct}%</span>
+                          <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px', flexShrink: 0 }}>-{pourcent(d.remise_pct)}</span>
                         ) : d.prix_deal ? (
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            {d.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{Number(d.prix_original).toFixed(2)}€</p>}
-                            <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{Number(d.prix_deal).toFixed(2)}€</p>
+                            {d.prix_original && <p style={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.55)', textDecoration: 'line-through' }}>{euros(d.prix_original)}</p>}
+                            <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.light, letterSpacing: '-0.3px' }}>{euros(d.prix_deal)}</p>
                           </div>
                         ) : null}
                         <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0, marginLeft: 4 }}>›</span>
@@ -3106,7 +3115,7 @@ export default function CommanderRdvSlug() {
                                     pourquoi, et le client ne voit pas qu'il fait une affaire. */}
                                 {remiseSurPrestation(p, deals) && (
                                   <span style={{ fontSize: '0.82rem', fontWeight: 700, color: T.muted, textDecoration: 'line-through', marginLeft: 6 }}>
-                                    {Number(p.prix).toFixed(2)} €
+                                    {euros(p.prix)}
                                   </span>
                                 )}
                                 {/* La pastille doit dire ce qui se passe VRAIMENT.
@@ -3118,7 +3127,7 @@ export default function CommanderRdvSlug() {
                                     Stripe. On distingue les deux cas. */}
                                 {p.acompte_pourcent > 0 && (
                                   <span style={{ fontSize: '0.62rem', fontWeight: 800, color: T.deep, background: T.pale, padding: '2px 7px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                                    Acompte {p.acompte_pourcent}% {acompteEnLigneDispo ? 'en ligne' : 'sur place'}
+                                    Acompte {pourcent(p.acompte_pourcent)} {acompteEnLigneDispo ? 'en ligne' : 'sur place'}
                                   </span>
                                 )}
                                 {/* ⚠️ ICI ON INFORME, ON NE DÉCIDE PAS. Le choix
@@ -3686,12 +3695,12 @@ export default function CommanderRdvSlug() {
                           jamais lieu. */}
                       {prestationChoisie.acompte_pourcent > 0 && !seanceSurAbo && (
                         <p style={{ margin: 0, fontSize: '0.74rem', color: T.deep, fontWeight: 700, background: T.pale, borderRadius: 8, padding: '6px 10px' }}>
-                          Acompte {prestationChoisie.acompte_pourcent}% {acompteEnLigneDispo ? 'à payer en ligne maintenant' : 'à régler sur place'}
+                          Acompte {pourcent(prestationChoisie.acompte_pourcent)} {acompteEnLigneDispo ? 'à payer en ligne maintenant' : 'à régler sur place'}
                           {(() => {
                             // ⚠️ L'ACOMPTE SUIT LE PRIX REMISÉ : sur un soin à 50 €
                             // remisé à 40 € avec 50 % d'acompte, c'est 20 € et non 25.
                             const base = prixEffectifPrestation(prestationChoisie, deals)
-                            return base != null ? ` · ${(Math.round(base * prestationChoisie.acompte_pourcent) / 100).toFixed(2)}€` : ''
+                            return base != null ? ` · ${euros(Math.round(base * prestationChoisie.acompte_pourcent) / 100)}` : ''
                           })()}
                         </p>
                       )}
@@ -4548,7 +4557,7 @@ export default function CommanderRdvSlug() {
                     <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>
                       {textesConfirmation(RETRAIT_RDV, { avecProduits: lignesPanier.length > 0, commercant }).titre}
                     </h2>
-                    <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
+                    <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>{chezLeCommerce(commercant.nom, { majuscule: true })}</p>
                     <p style={{ color: T.muted, fontSize: '0.875rem' }}>
                       {JOURS_LONGS[dateChoisie.getDay()]} {dateChoisie.getDate()} {MOIS_COURTS[dateChoisie.getMonth()]} à {heureChoisie}
                     </p>
@@ -4745,7 +4754,7 @@ export default function CommanderRdvSlug() {
                     allerEtape(1)
                   }}
                     style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif' }}>
-                    Prendre un autre RDV chez {commercant.nom}
+                    Prendre un autre RDV {chezLeCommerce(commercant.nom)}
                   </button>
                 </div>
               )}
@@ -4807,12 +4816,12 @@ export default function CommanderRdvSlug() {
                     {dealDetailOuvert.titre}
                   </h2>
                   {dealDetailOuvert.remise_pct ? (
-                    <span style={{ display: 'inline-block', fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)', marginTop: 8 }}>-{dealDetailOuvert.remise_pct}%</span>
+                    <span style={{ display: 'inline-block', fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)', marginTop: 8 }}>-{pourcent(dealDetailOuvert.remise_pct)}</span>
                   ) : dealDetailOuvert.prix_deal ? (
                     <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 8 }}>
-                      <span style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
+                      <span style={{ fontWeight: 900, fontSize: '1.6rem', color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{euros(dealDetailOuvert.prix_deal)}</span>
                       {dealDetailOuvert.prix_original && (
-                        <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'line-through', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+                        <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.75)', textDecoration: 'line-through', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{euros(dealDetailOuvert.prix_original)}</span>
                       )}
                     </div>
                   ) : null}
@@ -4834,12 +4843,12 @@ export default function CommanderRdvSlug() {
                   {dealDetailOuvert.titre}
                 </h2>
                 {dealDetailOuvert.remise_pct ? (
-                  <span style={{ display: 'inline-block', fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px', marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>-{dealDetailOuvert.remise_pct}%</span>
+                  <span style={{ display: 'inline-block', fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px', marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>-{pourcent(dealDetailOuvert.remise_pct)}</span>
                 ) : dealDetailOuvert.prix_deal ? (
                   <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10, marginTop: 12, background: 'rgba(255,255,255,0.1)', padding: '8px 14px', borderRadius: 12 }}>
-                    <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{Number(dealDetailOuvert.prix_deal).toFixed(2)}€</span>
+                    <span style={{ fontWeight: 900, fontSize: '1.6rem', color: T.light, letterSpacing: '-0.5px' }}>{euros(dealDetailOuvert.prix_deal)}</span>
                     {dealDetailOuvert.prix_original && (
-                      <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{Number(dealDetailOuvert.prix_original).toFixed(2)}€</span>
+                      <span style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.5)', textDecoration: 'line-through' }}>{euros(dealDetailOuvert.prix_original)}</span>
                     )}
                   </div>
                 ) : null}

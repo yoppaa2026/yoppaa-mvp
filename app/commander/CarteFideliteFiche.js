@@ -7,6 +7,7 @@
 
 import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
 import { libelleRecompense } from '@/lib/fidelite'
+import { euros, pourcent } from '@/lib/montants'
 
 const T = {
   main:  '#6B35C4',
@@ -112,7 +113,7 @@ export default function CarteFideliteFiche({ commercant, carte, connecte = true,
       ) : (
         <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 700, color: T.deep, lineHeight: 1.5 }}>
           {estCagnotte
-            ? `Gagne ${Number(commercant.fidelite_taux_cagnotte || 5)}% de chaque achat dans ta cagnotte. Dès qu'elle atteint ${seuilC.toFixed(2).replace('.', ',')}€, tu reçois : ${libelle}.`
+            ? `Gagne ${pourcent(commercant.fidelite_taux_cagnotte || 5)} de chaque achat dans ta cagnotte. Dès qu'elle atteint ${euros(seuilC)}, tu reçois : ${libelle}.`
             : `Après ${seuilP} passages, tu reçois : ${libelle}.`}
           {' '}
           {/* Sans cette phrase, un Yopper qui a déjà des passages voit le même

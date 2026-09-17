@@ -116,6 +116,7 @@ import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
 import { resumeAvis, libelleBascule } from '@/lib/avis-affichage'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Star, Flame, Calendar, Store, Check, Phone, Heart, Share2 } from 'lucide-react'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1454,7 +1455,7 @@ export default function CommanderSlug() {
     const a = articleDetail
     if (!a || typeof window === 'undefined') return
     const url = `${window.location.origin}/commander/${commercant?.slug || slug}?article=${a.id}`
-    const texte = `${a.nom} chez ${commercant?.nom || 'un commerçant Yoppaa'} 🟣`
+    const texte = `${a.nom} ${chezLeCommerce(commercant?.nom || 'un commerçant Yoppaa')} 🟣`
     if (navigator.share) {
       try { await navigator.share({ title: a.nom, text: texte, url }) } catch (e) { /* partage annulé */ }
       return
@@ -5463,7 +5464,7 @@ export default function CommanderSlug() {
                   </div>
                 )}
                 <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>{confirmation.titre}</h2>
-                <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant.nom}</p>
+                <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>{chezLeCommerce(commercant.nom, { majuscule: true })}</p>
                 <p style={{ color: T.muted, fontSize: '0.875rem' }}>{confirmation.sousTitre}</p>
               </div>
 
@@ -5605,7 +5606,7 @@ export default function CommanderSlug() {
               {!cancelResult && (
                 <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(true); setErreurCommande(null); setAjustementStock(null); allerEtape(2) }}
                   style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', marginBottom: 10 }}>
-                  Continuer chez {commercant.nom}
+                  Continuer {chezLeCommerce(commercant.nom)}
                 </button>
               )}
               {/* Lien d'annulation discret : visible avant le cutoff configuré par le commerçant

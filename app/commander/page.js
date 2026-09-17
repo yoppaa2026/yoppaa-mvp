@@ -113,9 +113,14 @@ function distanceVolOiseau(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2
   return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
 }
+// 🔴 « 3.2 km » AVEC UN POINT (trouvé par Alex le 17/09, sur une capture destinée
+// aux stores). `toFixed` est une fonction anglaise : elle rend toujours un point
+// décimal, quelle que soit la langue de la page. En français le séparateur est
+// la virgule, et un point à cet endroit est la marque d'une application traduite
+// à la va-vite. Il s'affichait sur chaque commerce à plus d'un kilomètre.
 function formatDistance(m) {
   if (!m && m !== 0) return null
-  return m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`
+  return m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1).replace('.', ',')} km`
 }
 function Etoiles({ note, taille = 13 }) {
   const n = note ? Math.round(note) : 0
@@ -4450,7 +4455,7 @@ export default function Commander() {
                                     <rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 11h20"/>
                                   </svg>
                                   <span style={{ fontSize: '0.7rem', fontWeight: 800, color: T.main }}>
-                                    Acompte {Number(r.acompte_montant).toFixed(2)}€ payé
+                                    Acompte {euros(r.acompte_montant)} payé
                                   </span>
                                 </span>
                               )}

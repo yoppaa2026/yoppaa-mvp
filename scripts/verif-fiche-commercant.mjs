@@ -1252,7 +1252,15 @@ verifier('la barre est déclarée APRÈS ce qu\'elle lit',
   `barre=${fRdv.indexOf('const barrePanierVisible')}, produitsAchetables=${fRdv.indexOf('const produitsAchetables')}`)
 verifier('peutReserverIci aussi',
   fRdv.indexOf('const peutReserverIci') > fRdv.indexOf('const [prestations'))
-verifier('la barre affiche le total du panier', /totalProduits\.toFixed\(2\)/.test(fRdv))
+// ⚠️ CETTE GARDE VISAIT `totalProduits.toFixed(2)`, C'EST-À-DIRE UNE FORME.
+// Elle a rougi le 17/09 au passage des montants par `euros()`, alors que la
+// barre affichait toujours son total : elle surveillait la façon d'écrire le
+// nombre, pas le fait qu'il soit là. Elle vise désormais la RÈGLE, et vérifie
+// en prime que le montant est formaté à la française, ce que `toFixed` seul
+// n'a jamais garanti : c'est ce point décimal anglais qu'Alex a trouvé sur une
+// capture destinée aux stores.
+verifier('la barre affiche le total du panier, formaté en euros',
+  /euros\(totalProduits\)/.test(fRdv))
 verifier('la barre propose de prendre rendez-vous', /Je prends rendez-vous/.test(fRdv))
 // LA SORTIE QUI MANQUAIT : celui qui veut juste un shampoing n'a aucune raison
 // de réserver un créneau.

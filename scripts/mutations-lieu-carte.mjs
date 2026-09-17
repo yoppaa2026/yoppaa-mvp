@@ -29,6 +29,8 @@ const chemin = (f) => `${RACINE}/${f}`
 
 const LIB = 'lib/adresse-localite.js'
 const ECRAN = 'app/commander/page.js'
+const NOM = 'lib/nom-commerce.js'
+const MONTANTS = 'lib/montants.js'
 
 const MUTATIONS = [
   // ─── LE MASQUAGE NE MASQUE PLUS RIEN ────────────────────────────────────
@@ -82,6 +84,57 @@ const MUTATIONS = [
     banc: 'verif:logique', fichier: ECRAN,
     de: '      return { ...c, distance, lieu_proche: lieuProche }',
     vers: "      return { ...c, distance, lieu_proche: lieuProche?.source === 'siege' ? null : lieuProche }" },
+
+  // ═══ « CHEZ CHEZ MOMO » ═══════════════════════════════════════════════════
+  // Le frere du defaut ci-dessus, trouve le meme jour sur une capture : un
+  // prefixe colle a un texte qui le porte deja.
+  { nom: '🔴 la preposition revient toujours : « chez Chez Momo »',
+    banc: 'verif:yopper', fichier: NOM,
+    de: '  if (nomPorteChez(propre)) return propre',
+    vers: '  if (false) return propre' },
+
+  { nom: '🔴 la borne de mot saute : « Chezal Traiteur » perd sa preposition',
+    banc: 'verif:yopper', fichier: NOM,
+    de: 'const PORTE_LA_PREPOSITION = /^chez\\b/',
+    vers: 'const PORTE_LA_PREPOSITION = /^chez/' },
+
+  { nom: '⚠️ la casse et les accents ne sont plus neutralises sur le nom',
+    banc: 'verif:yopper', fichier: NOM,
+    de: '  return PORTE_LA_PREPOSITION.test(sansAccents(String(nom || \'\').trim()))',
+    vers: '  return PORTE_LA_PREPOSITION.test(String(nom || \'\').trim())' },
+
+  // ⚠️ LE SYMETRIQUE : sans nom, la phrase doit tenir debout.
+  { nom: '⚠️ sans nom, la phrase se troue : « Ta commande  a ete annulee »',
+    banc: 'verif:yopper', fichier: NOM,
+    de: "  if (!propre) return majuscule ? 'Chez le commerçant' : 'chez le commerçant'",
+    vers: "  if (!propre) return ''" },
+
+  // ═══ LE POINT DECIMAL ANGLAIS ════════════════════════════════════════════
+  { nom: '🔴 le taux repasse au point : « 1.5 % »',
+    banc: 'verif:yopper', fichier: MONTANTS,
+    de: "  return `${String(arrondi).replace('.', ',')}${INSECABLE}%`",
+    vers: '  return `${String(arrondi)}${INSECABLE}%`' },
+
+  // ⚠️ CETTE MUTATION-CI A FAILLI NE RIEN MESURER. Sa premiere version ancrait
+  // sur `\\u00A0` ecrit en clair ; l editeur avait converti la sequence en VRAI
+  // caractere insecable, invisible, et l ancre ne trouvait plus rien. Le harnais
+  // l a dit (« TEXTE INTROUVABLE »), et c est la raison pour laquelle cette
+  // espace porte desormais un NOM dans le code.
+  { nom: '🔴 l espace avant le symbole redevient secable : le « % » tombe seul',
+    banc: 'verif:yopper', fichier: MONTANTS,
+    de: 'const INSECABLE = String.fromCharCode(160)',
+    vers: 'const INSECABLE = String.fromCharCode(32)' },
+
+  { nom: '⚠️ le taux force deux decimales : « 10,00 % » sur un chiffre a la louche',
+    banc: 'verif:yopper', fichier: MONTANTS,
+    de: '  const arrondi = Math.round((Number.isFinite(n) ? n : 0) * 100) / 100',
+    vers: '  const arrondi = (Number.isFinite(n) ? n : 0).toFixed(2)' },
+
+  // ═══ LA DISTANCE ══════════════════════════════════════════════════════════
+  { nom: '🔴 la distance repasse au point : « 3.2 km »',
+    banc: 'verif:logique', fichier: ECRAN,
+    de: "${(m/1000).toFixed(1).replace('.', ',')} km",
+    vers: '${(m/1000).toFixed(1)} km' },
 ]
 
 const lancer = (banc) => {

@@ -22,6 +22,7 @@ import { referenceCommande } from '@/lib/numero-commande'
 // dans `client_nom`. La demander faisait échouer TOUTE la requête, et la
 // route annonçait « Commande introuvable » sur une commande bien présente.
 import { prenomClient } from '@/lib/nom-client'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 export async function POST(request) {
   try {
@@ -119,7 +120,7 @@ export async function POST(request) {
         }
       : {
           headings: '✅ Commande livrée',
-          contents: `Ta commande #${ref} de chez ${nomCommerce} a été livrée. Bon appétit !`,
+          contents: `Ta commande #${ref} de ${chezLeCommerce(nomCommerce)} a été livrée. Bon appétit !`,
           data: { kind: 'livraison_livree', commande_id: cmd.id },
         }
 

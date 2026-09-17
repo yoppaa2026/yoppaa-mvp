@@ -46,6 +46,7 @@ import { normaliserEmail } from '@/lib/email-normalise'
 import { creerReservationRdv, appliquerAvantagesRdv, lignesBonsDeMeta } from '@/lib/rdv-creation-server'
 import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
 import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -582,7 +583,7 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
     if (contrat.client_email) {
       await envoyerAuCommercant({
         to: contrat.client_email,
-        subject: `Ton abonnement chez ${com?.nom || 'ton commerçant'} est actif`,
+        subject: `Ton abonnement ${chezLeCommerce(com?.nom || 'ton commerçant')} est actif`,
         html: emailAbonnementConfirme({
           yopper_prenom: contrat.client_prenom || '',
           commercant_nom: com?.nom || '',
@@ -738,7 +739,7 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
     if (!pourMoi) {
       await envoyerAuCommercant({
         to: bon.beneficiaire_email,
-        subject: `${bon.acheteur_prenom ? bon.acheteur_prenom + ' t\'offre' : 'On t\'offre'} un ${nomBon} chez ${bon.commercant?.nom || 'un commerçant'}`,
+        subject: `${bon.acheteur_prenom ? bon.acheteur_prenom + ' t\'offre' : 'On t\'offre'} un ${nomBon} ${chezLeCommerce(bon.commercant?.nom || 'un commerçant')}`,
         html: emailBonCadeauBeneficiaire({
           beneficiaire_prenom: bon.beneficiaire_prenom,
           acheteur_prenom: bon.acheteur_prenom,
@@ -755,8 +756,8 @@ async function handleBonCadeauSucceeded(paymentIntent, supabase) {
     await envoyerAuCommercant({
       to: bon.acheteur_email,
       subject: pourMoi
-        ? `Ton ${nomBon} chez ${bon.commercant?.nom || 'le commerçant'} est prêt`
-        : `Ton cadeau chez ${bon.commercant?.nom || 'le commerçant'} est envoyé`,
+        ? `Ton ${nomBon} ${chezLeCommerce(bon.commercant?.nom || 'le commerçant')} est prêt`
+        : `Ton cadeau ${chezLeCommerce(bon.commercant?.nom || 'le commerçant')} est envoyé`,
       html: emailBonCadeauAcheteur({
         acheteur_prenom: bon.acheteur_prenom,
         commercant_nom: bon.commercant?.nom || '',

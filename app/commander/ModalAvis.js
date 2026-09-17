@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import { fetchYopper } from '@/lib/fetch-yopper'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 const T = {
   ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -114,7 +115,7 @@ export default function ModalAvis({ commercant, clientId, commandeId = null, onC
                 {commandeId ? '✓ Commande récupérée' : 'Laisser un avis'}
               </p>
               <h2 style={{ fontSize: 18, fontWeight: 800, color: T.ink, letterSpacing: '-0.3px', margin: '0 0 4px', lineHeight: 1.25 }}>
-                Comment c&rsquo;était chez {commercant.nom}&nbsp;?
+                Comment c&rsquo;était {chezLeCommerce(commercant.nom)}&nbsp;?
               </h2>
               <p style={{ fontSize: 12, color: T.muted, margin: '0 0 18px', lineHeight: 1.5 }}>
                 {commandeId

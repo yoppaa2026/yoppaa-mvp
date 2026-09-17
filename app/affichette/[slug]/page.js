@@ -9,6 +9,7 @@
 import QRCode from 'qrcode'
 import { createClient } from '@supabase/supabase-js'
 import { libelleRecompense } from '@/lib/fidelite'
+import { euros, pourcent } from '@/lib/montants'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import { avantLancement, libelleLancement } from '@/lib/lancement'
 import { fichePubliee } from '@/lib/statut-commercant'
@@ -76,7 +77,7 @@ export default async function AffichettePage({ params }) {
   const cagnotte = com.fidelite_mecanique === 'cagnotte'
   // Règle affichée au client, dans SES mots à lui (pas de jargon interne)
   const regle = cagnotte
-    ? `${Number(com.fidelite_taux_cagnotte || 0)}% de chaque achat va dans ta cagnotte. Dès ${Number(com.fidelite_seuil_cagnotte || 0).toFixed(2)} €, tu reçois ta récompense.`
+    ? `${pourcent(com.fidelite_taux_cagnotte || 0)} de chaque achat va dans ta cagnotte. Dès ${euros(com.fidelite_seuil_cagnotte || 0)}, tu reçois ta récompense.`
     : `${com.fidelite_seuil_passages || 10} passages, et ta récompense est à toi.`
 
   return (

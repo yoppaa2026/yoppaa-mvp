@@ -27,6 +27,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { messageRetourAbonnement, resumeContratAchete, etapesApresAbonnement } from '@/lib/abonnements'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 const T = {
   main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF',
@@ -108,7 +109,7 @@ export default function ConfirmationAbonnement({
         <h2 style={{ fontWeight: 900, fontSize: '1.7rem', color: T.ink, marginBottom: '0.5rem', letterSpacing: '-0.75px' }}>
           {m.titre}
         </h2>
-        <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>Chez {commercant?.nom}</p>
+        <p style={{ color: T.deep, fontWeight: 700, marginBottom: '0.25rem' }}>{chezLeCommerce(commercant?.nom, { majuscule: true })}</p>
         {resume?.formule && (
           <p style={{ color: T.muted, fontSize: '0.875rem' }}>{resume.formule}</p>
         )}

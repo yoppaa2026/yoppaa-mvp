@@ -15,6 +15,7 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 // dans `client_nom`. La demander faisait échouer TOUTE la requête, et la
 // route annonçait « Commande introuvable » sur une commande bien présente.
 import { prenomClient } from '@/lib/nom-client'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 export async function POST(request) {
   try {
@@ -144,10 +145,10 @@ export async function POST(request) {
         // Dire « prête » à quelqu'un qui ne se déplace pas ne veut rien dire :
         // ce qu'il attend, c'est de savoir que ça part.
         subject: estExpedition
-          ? `📦 Ton colis #${referenceCommande(cmd) || ''} est emballé chez ${cmd.commercant?.nom || ''}`
+          ? `📦 Ton colis #${referenceCommande(cmd) || ''} est emballé ${chezLeCommerce(cmd.commercant?.nom || '')}`
           : estLivraison
           ? `🛵 Ta commande #${referenceCommande(cmd) || ''} est prête, livraison en préparation`
-          : `🎉 Ta commande #${referenceCommande(cmd) || ''} est prête chez ${cmd.commercant?.nom || ''}`,
+          : `🎉 Ta commande #${referenceCommande(cmd) || ''} est prête ${chezLeCommerce(cmd.commercant?.nom || '')}`,
         html,
       })
       if (!envoi?.ok) {

@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { pourcent } from '@/lib/montants'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper } from '@/lib/fetch-yopper'
 // Icônes Lucide React (charte Yoppaa, charte durcie 17/06 : pas d'emoji
@@ -509,7 +510,7 @@ function DealCard({ d, shown, delay, onOpen }) {
         {/* Prix + remise % + stock + CTA */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {d.remisePct && (
-            <div style={{ fontSize: 12, fontWeight: 900, padding: '3px 9px', borderRadius: 100, background: T.pale, color: T.deep }}>-{d.remisePct}%</div>
+            <div style={{ fontSize: 12, fontWeight: 900, padding: '3px 9px', borderRadius: 100, background: T.pale, color: T.deep }}>-{pourcent(d.remisePct)}</div>
           )}
           {d.prix && <div style={{ fontSize: 20, fontWeight: 800, color: T.ink }}>{d.prix}</div>}
           {d.prixNormal && <div style={{ fontSize: 12, color: T.mid, textDecoration: 'line-through' }}>{d.prixNormal}</div>}

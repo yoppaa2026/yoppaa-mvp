@@ -6,6 +6,7 @@
 
 import { useState } from 'react'
 import { redirectTop } from '@/lib/redirect-top'
+import { euros } from '@/lib/montants'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { BON_MONTANT_MIN, BON_MONTANT_MAX, libelleBon } from '@/lib/bons-cadeaux'
 
@@ -159,7 +160,7 @@ export default function BonCadeauModal({ commercant, validiteMois = 12, onClose 
 
           <button onClick={payer} disabled={!formOk || loading}
             style={{ width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', cursor: formOk && !loading ? 'pointer' : 'default', background: formOk ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E5E7EB', color: formOk ? '#fff' : '#9CA3AF', boxShadow: formOk ? `0 6px 24px ${T.main}55` : 'none' }}>
-            {loading ? 'Redirection…' : montantOk ? `Payer ${montantNum.toFixed(2)} €` : 'Payer'}
+            {loading ? 'Redirection…' : montantOk ? `Payer ${euros(montantNum)}` : 'Payer'}
           </button>
           <p style={{ margin: '10px 0 0', fontSize: '0.68rem', color: T.muted, textAlign: 'center', lineHeight: 1.5 }}>
             Paiement sécurisé Stripe (carte ou Bancontact). Bon valable {validiteMois} mois, utilisable en une ou plusieurs fois, en ligne ou sur place 🟣

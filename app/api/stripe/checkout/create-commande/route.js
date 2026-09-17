@@ -55,6 +55,7 @@ import { normaliserEmail } from '@/lib/email-normalise'
 import { verdictForfait } from '@/lib/garde-forfait'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { commandeAllumee } from '@/lib/plans'
+import { chezLeCommerce } from '@/lib/nom-commerce'
 
 export async function POST(request) {
   try {
@@ -413,7 +414,7 @@ export async function POST(request) {
       if (!seuilMini.ok) {
         return NextResponse.json({
           ok: false,
-          error: `La livraison démarre à ${eurosNus(seuilMini.seuil)} € chez ${commercant.nom}. Il te manque ${eurosNus(seuilMini.manque)} €, ou choisis le retrait en magasin.`,
+          error: `La livraison démarre à ${eurosNus(seuilMini.seuil)} € ${chezLeCommerce(commercant.nom)}. Il te manque ${eurosNus(seuilMini.manque)} €, ou choisis le retrait en magasin.`,
           minimum_livraison: seuilMini.seuil,
           manque: seuilMini.manque,
         }, { status: 400 })

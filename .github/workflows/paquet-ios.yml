@@ -102,26 +102,90 @@ jobs:
           cp profil.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
           rm -f certificat.p12 profil.mobileprovision
 
+      # 🔴 SIGNATURE MANUELLE, ET C EST TOUT L ENJEU (17/09). Le projet Xcode
+      # porte `CODE_SIGN_STYLE = Automatic` : Xcode voudrait alors se connecter
+      # a un compte Apple pour gerer les certificats lui-meme. Sur un runner
+      # GitHub il n y a aucune session, et l archive echoue.
+      #
+      # ⚠️ ON NE TOUCHE PAS AU PROJET, ON SURCHARGE A LA LIGNE DE COMMANDE : le
+      # `.xcodeproj` reste ouvrable tel quel sur un Mac de developpement, ou la
+      # signature automatique est au contraire commode.
+      #
+      # ⚠️ `PROVISIONING_PROFILE_SPECIFIER` PREND LE NOM DU PROFIL, pas son
+      # fichier. Il est fixe par un secret parce qu il change a chaque
+      # regeneration du profil chez Apple, et qu un nom fige ici serait faux au
+      # premier renouvellement, sans que rien ne le dise.
       - name: Archiver
         working-directory: ios/App
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PROFIL_NOM: ${{ secrets.PROFIL_NOM }}
         run: |
+          if [ -z "$TEAM_ID" ] || [ -z "$PROFIL_NOM" ]; then
+            echo "::error::APPLE_TEAM_ID ou PROFIL_NOM manque dans les secrets du depot."
+            exit 1
+          fi
           xcodebuild -workspace App.xcworkspace -scheme App \
             -configuration Release -archivePath build/App.xcarchive \
-            -destination "generic/platform=iOS" archive
+            -destination "generic/platform=iOS" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFIL_NOM" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            archive
 
+      # 🔴 L EXPORT NE DEVINE NI L EQUIPE NI LE PROFIL. Cette liste ne portait
+      # que la methode : sur un compte a plusieurs equipes l export echoue, et
+      # meme sur une seule il repasse en signature automatique, donc il redemande
+      # une session Apple qui n existe pas ici.
+      #
+      # ⚠️ `provisioningProfiles` ASSOCIE LE BUNDLE AU NOM DU PROFIL. Sans cette
+      # correspondance, le profil importe trois etapes plus haut est copie dans
+      # le dossier du runner et n est jamais utilise.
       - name: Exporter l'IPA
         working-directory: ios/App
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PROFIL_NOM: ${{ secrets.PROFIL_NOM }}
         run: |
-          cat > export.plist <<'PLIST'
+          cat > export.plist <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>export</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>app.yoppaa.client</key><string>${PROFIL_NOM}</string>
+            </dict>
           </dict></plist>
           PLIST
           xcodebuild -exportArchive -archivePath build/App.xcarchive \
             -exportOptionsPlist export.plist -exportPath build/ipa
+
+      # ⚠️ ON RELIT CE QU ON A PRODUIT. Un `.ipa` peut sortir non signe sans que
+      # `xcodebuild` ne rende une erreur : c est exactement ce qui est arrive
+      # cote Android, ou `jarsigner -verify` rendait 0 sur un paquet NON signe.
+      - name: Verifier la signature du paquet
+        working-directory: ios/App
+        run: |
+          IPA=$(ls build/ipa/*.ipa 2>/dev/null | head -1)
+          if [ -z "$IPA" ]; then echo "::error::Aucun .ipa produit."; exit 1; fi
+          rm -rf verif && mkdir verif && unzip -q "$IPA" -d verif
+          APP=$(ls -d verif/Payload/*.app | head -1)
+          if [ -z "$APP" ]; then echo "::error::Le .ipa ne contient pas de Payload/*.app"; exit 1; fi
+          codesign -dv --verbose=4 "$APP" 2>&1 | tee signature.txt
+          # ⚠️ ON LIT LA PHRASE, PAS LE CODE DE SORTIE. C est la lecon du paquet
+          # Android : une commande de verification peut rendre 0 sans rien avoir
+          # verifie.
+          grep -q "Authority=Apple Distribution" signature.txt \
+            || { echo "::error::Le paquet n est PAS signe par un certificat de distribution."; exit 1; }
+          grep -q "app.yoppaa.client" signature.txt \
+            || { echo "::error::Le paquet ne porte pas le bundle app.yoppaa.client."; exit 1; }
+          echo "Signature verifiee : distribution, bundle app.yoppaa.client."
 
       - name: Récupérer le paquet
         uses: actions/upload-artifact@v4

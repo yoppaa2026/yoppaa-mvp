@@ -263,6 +263,70 @@ const fenetreNative = (options = {}) => {
   // le second serait refusé pour une cause à chercher très loin de là.
   verifie('🔴 le numéro de build posé est relu',
     /grep -q "versionCode/.test(android) && /Le numero de build n a pas ete pose/.test(android))
+
+  // ═══ LE WORKFLOW iOS, QUI N'A JAMAIS TOURNÉ (17/09) ═════════════════════
+  //
+  // 🔴 C'EST EXACTEMENT LA SITUATION DU MATIN. Le workflow Android portait CINQ
+  // défauts silencieux, tous découverts en le lançant pour de vrai. Celui d'iOS
+  // n'a pas encore été exécuté : ses gardes sont donc la seule chose qui le
+  // sépare d'une soirée perdue sur une erreur de signature illisible.
+  {
+    const ios = lire('.github/workflows/paquet-ios.yml')
+    const lignesIos = ios.split('\n').filter((l) => !/^\s*#/.test(l))
+
+    // 🔴 SIGNATURE MANUELLE, OBLIGATOIRE EN CI. Le projet Xcode porte
+    // `CODE_SIGN_STYLE = Automatic` : Xcode voudrait alors ouvrir une session
+    // Apple pour gérer les certificats, et un runner GitHub n'en a aucune.
+    verifie('🔴 iOS archive en signature MANUELLE',
+      lignesIos.some((l) => /CODE_SIGN_STYLE=Manual/.test(l)))
+    verifie('🔴 et il nomme l’équipe, que xcodebuild ne devine pas',
+      /DEVELOPMENT_TEAM="\$TEAM_ID"/.test(ios))
+
+    // ⚠️ L'ÉQUIPE VIENT D'UN SECRET, JAMAIS DU FICHIER. Un Team ID écrit en dur
+    // dans un dépôt public dit à qui appartient le compte, et fige une valeur
+    // qui change si la société change d'équipe.
+    // ⚠️ PREMIÈRE VERSION FAUSSE, corrigée dans la minute : elle interdisait
+    // `DEVELOPMENT_TEAM=` suivi d'autre chose qu'un `$`, et rougissait donc sur
+    // `DEVELOPMENT_TEAM="$TEAM_ID"`, à cause du guillemet. Une garde qui rougit
+    // sur du code juste ne protège de rien : elle vise maintenant le DÉFAUT,
+    // un Team ID de dix caractères écrit en clair dans le dépôt.
+    verifie('⚠️ le Team ID vient d’un secret, pas du fichier',
+      /secrets\.APPLE_TEAM_ID/.test(ios)
+      && !lignesIos.some((l) => /DEVELOPMENT_TEAM="?[A-Z0-9]{10}"?/.test(l)))
+
+    // 🔴 L'EXPORT NE DEVINE NI L'ÉQUIPE NI LE PROFIL. Sans `teamID`, un compte à
+    // plusieurs équipes échoue ; sans `provisioningProfiles`, le profil importé
+    // trois étapes plus haut est copié sur le runner et jamais utilisé.
+    verifie('🔴 l’export nomme l’équipe',
+      /<key>teamID<\/key>/.test(ios))
+    verifie('🔴 l’export reste en signature manuelle',
+      /<key>signingStyle<\/key><string>manual<\/string>/.test(ios))
+    verifie('🔴 et il associe le bundle à son profil',
+      /<key>provisioningProfiles<\/key>/.test(ios)
+      && /<key>app\.yoppaa\.client<\/key>/.test(ios))
+
+    // ⚠️ LE `heredoc` DOIT INTERPOLER. Écrit `<<'PLIST'` avec des apostrophes,
+    // le shell recopie `${TEAM_ID}` littéralement dans le fichier, et l'export
+    // part avec le texte au lieu de la valeur. Le défaut serait invisible à la
+    // lecture du workflow.
+    verifie('🔴 le gabarit d’export interpole ses variables',
+      /cat > export\.plist <<PLIST/.test(ios) && !/cat > export\.plist <<'PLIST'/.test(ios))
+
+    // 🔴 ON RELIT CE QU'ON A PRODUIT, ET ON LIT LA PHRASE. La leçon du paquet
+    // Android : une commande de vérification peut rendre 0 sans rien vérifier.
+    verifie('🔴 la signature du .ipa est vérifiée après coup',
+      lignesIos.some((l) => /codesign -dv/.test(l)))
+    verifie('🔴 et la vérification lit l’autorité, pas le code de sortie',
+      /grep -q "Authority=Apple Distribution"/.test(ios))
+    verifie('🔴 elle vérifie aussi que c’est le bon bundle',
+      /grep -q "app\.yoppaa\.client"/.test(ios))
+
+    // ⚠️ ET LES DEUX NOUVEAUX SECRETS FONT ÉCHOUER LE TRAVAIL S'ILS MANQUENT,
+    // comme les trois autres. Un paquet signé par défaut n'existe pas : il
+    // sortirait inutilisable, et le dépôt le refuserait des heures plus tard.
+    verifie('🔴 les secrets d’équipe manquants font échouer le travail',
+      /::error::APPLE_TEAM_ID ou PROFIL_NOM manque/.test(ios))
+  }
 }
 
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)

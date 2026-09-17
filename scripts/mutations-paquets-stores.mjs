@@ -34,6 +34,44 @@ const IOS = '.github/workflows/paquet-ios.yml'
 const CONF = 'capacitor.config.ts'
 
 const MUTATIONS = [
+  // ─── LE WORKFLOW iOS, QUI N A JAMAIS TOURNE (17/09) ─────────────────────
+  // 🔴 C est la situation exacte du workflow Android ce matin : cinq defauts
+  // silencieux, tous trouves en le LANCANT. Celui-ci n a pas encore tourne, et
+  // ses gardes sont la seule chose qui le separe d une soiree perdue sur une
+  // erreur de signature illisible.
+  { nom: '🔴 iOS repasse en signature automatique : xcodebuild reclame une session Apple',
+    fichier: IOS,
+    de: 'CODE_SIGN_STYLE=Manual',
+    vers: 'CODE_SIGN_STYLE=Automatic' },
+
+  { nom: '🔴 l export oublie l equipe : un compte a plusieurs equipes echoue',
+    fichier: IOS,
+    de: '<key>teamID</key>',
+    vers: '<key>teamIgnore</key>' },
+
+  { nom: '🔴 l export n associe plus le bundle a son profil : le profil importe est ignore',
+    fichier: IOS,
+    de: '            <key>provisioningProfiles</key>',
+    vers: '            <key>profilsIgnores</key>' },
+
+  // ⚠️ LE PIEGE DU HEREDOC : avec des apostrophes autour du marqueur, le shell
+  // recopie la variable LITTERALEMENT dans le fichier produit, et l export part
+  // avec le texte au lieu de la valeur. Invisible a la lecture du workflow.
+  { nom: '🔴 le gabarit d export cesse d interpoler : le Team ID part en texte',
+    fichier: IOS,
+    de: 'cat > export.plist <<PLIST',
+    vers: "cat > export.plist <<'PLIST'" },
+
+  { nom: '🔴 la signature du .ipa n est plus verifiee sur son autorite',
+    fichier: IOS,
+    de: 'grep -q "Authority=Apple Distribution" signature.txt',
+    vers: 'grep -q "" signature.txt' },
+
+  { nom: '⚠️ le Team ID passe en dur dans le depot',
+    fichier: IOS,
+    de: 'DEVELOPMENT_TEAM="$TEAM_ID"',
+    vers: 'DEVELOPMENT_TEAM="4PS788HD98"' },
+
   // ─── LE DEFAUT REEL DU 17/09, DANS LES DEUX WORKFLOWS ───────────────────
   { nom: '🔴 LE DEFAUT D ORIGINE : la signature Android redevient toujours sautee',
     fichier: ANDROID,

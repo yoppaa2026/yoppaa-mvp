@@ -25,6 +25,11 @@ on:
         description: 'Numéro de build, STRICTEMENT croissant à chaque dépôt'
         required: true
         default: '1'
+      televerser:
+        description: 'Envoyer le paquet à App Store Connect (décocher pour un essai)'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   construire:
@@ -206,6 +211,10 @@ jobs:
             || { echo "::error::Le paquet ne porte pas le bundle app.yoppaa.client."; exit 1; }
           echo "Signature verifiee : distribution, bundle app.yoppaa.client."
 
+      # ⚠️ L'ARTEFACT AVANT LE TÉLÉVERSEMENT, ET DANS CET ORDRE EXPRÈS. Un dépôt
+      # peut échouer pour une raison qui n'a rien à voir avec le paquet (numéro
+      # de build déjà vu, coupure réseau, clé API révoquée). Le fichier, lui, est
+      # bon : le perdre obligerait à racheter dix minutes de Mac pour le refaire.
       - name: Récupérer le paquet
         uses: actions/upload-artifact@v4
         with:
@@ -213,3 +222,72 @@ jobs:
           path: ios/App/build/ipa/*.ipa
           if-no-files-found: error
           retention-days: 30
+
+      # 🔴 LE DÉPÔT LUI-MÊME, ET IL N'A PAS D'AUTRE VOIE. `altool` fait partie de
+      # Xcode : il n'existe ni sous Windows ni sous Linux. La machine d'Alex ne
+      # peut donc PAS envoyer ce fichier à Apple, quoi qu'on y installe. C'est
+      # aussi pour cela que l'étape vit ici plutôt que dans un geste manuel.
+      #
+      # ⚠️ ON S'AUTHENTIFIE PAR CLÉ API, PAS PAR MOT DE PASSE D'APPLICATION. Une
+      # clé API porte un rôle précis et se révoque seule, sans toucher au compte
+      # Apple d'Alex ; un mot de passe d'application ouvre tout le compte.
+      #
+      # ⚠️ LA CLÉ PRIVÉE ARRIVE EN SECRET, ENCODÉE. Elle ne transite jamais par
+      # le dépôt : qui la détient peut déposer une application au nom d'Avcotech.
+      - name: Televerser vers App Store Connect
+        if: ${{ inputs.televerser }}
+        working-directory: ios/App
+        env:
+          CLE_API_ID: ${{ secrets.APPSTORE_CLE_ID }}
+          CLE_API_EMETTEUR: ${{ secrets.APPSTORE_EMETTEUR_ID }}
+          CLE_API_P8_B64: ${{ secrets.APPSTORE_CLE_P8_B64 }}
+        run: |
+          set -euo pipefail
+          for v in CLE_API_ID CLE_API_EMETTEUR CLE_API_P8_B64; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::Le secret $v manque. Sans les trois, rien ne peut etre televerse."
+              exit 1
+            fi
+          done
+          # 🔴 LE NOM DU FICHIER N'EST PAS LIBRE. `altool` ne prend pas de chemin
+          # vers la clé : il la CHERCHE, dans ce dossier, sous ce nom exact,
+          # construit depuis l'identifiant. Nommé autrement, il répond « No such
+          # private key can be found », et l'erreur ne dit pas où il regardait.
+          mkdir -p ~/.appstoreconnect/private_keys
+          CLE=~/.appstoreconnect/private_keys/AuthKey_$CLE_API_ID.p8
+          echo "$CLE_API_P8_B64" | base64 -d > "$CLE"
+          IPA=$(ls build/ipa/*.ipa 2>/dev/null | head -1)
+          if [ -z "$IPA" ]; then echo "::error::Aucun .ipa a televerser."; exit 1; fi
+
+          # ⚠️ ON VALIDE AVANT DE DÉPOSER. La validation lit les mêmes règles que
+          # le dépôt mais ne consomme pas le numéro de build : une icône absente
+          # ou une clé manquante dans l'Info.plist se voit ici, en une minute,
+          # au lieu de brûler un numéro qu'on ne peut plus réutiliser.
+          xcrun altool --validate-app -f "$IPA" -t ios \
+            --apiKey "$CLE_API_ID" --apiIssuer "$CLE_API_EMETTEUR" \
+            --output-format json | tee validation.json
+
+          # 🔴 ET ON LIT CE QU'IL A ÉCRIT, PAS SON CODE DE SORTIE. C'est la leçon
+          # des deux paquets : `jarsigner -verify` rendait 0 sur un bundle NON
+          # signé. `altool` range ses refus dans « product-errors » et peut
+          # rendre 0 en les ayant écrits.
+          if grep -q "product-errors" validation.json; then
+            echo "::error::Apple refuse ce paquet. La raison est dans validation.json ci-dessus."
+            exit 1
+          fi
+
+          xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$CLE_API_ID" --apiIssuer "$CLE_API_EMETTEUR" \
+            --output-format json | tee depot.json
+          if grep -q "product-errors" depot.json; then
+            # 🔴 LA CAUSE LA PLUS FRÉQUENTE EST UN NUMÉRO DE BUILD DÉJÀ VU. Apple
+            # refuse alors avec « ITMS-4238 », et le remède est de relancer ce
+            # travail avec un numero_build plus grand, pas de chercher ailleurs.
+            echo "::error::Le depot a echoue. Si le message parle de ITMS-4238, le numero de build a deja ete depose : relancer avec le suivant."
+            exit 1
+          fi
+          # ⚠️ ON EFFACE LA CLÉ, même si la machine part avec. La même hygiène que
+          # le certificat : rien ne traîne dans un espace de travail qu'une étape
+          # suivante pourrait recopier dans un artefact.
+          rm -f "$CLE" validation.json depot.json
+          echo "Paquet depose. Il apparait dans App Store Connect apres traitement, de dix minutes a une heure."

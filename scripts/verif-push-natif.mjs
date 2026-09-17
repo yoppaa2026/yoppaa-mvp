@@ -224,8 +224,28 @@ const fenetreNative = (options = {}) => {
       fautifs.join(' | '))
     // 🔴 ET LA SIGNATURE REFUSE DE SE TAIRE. Un paquet non signé n'a aucun
     // usage : mieux vaut échouer bruyamment que livrer un fichier mort.
-    verifie(`🔴 ${w} : les secrets manquants font échouer le travail`,
-      /::error::Le secret/.test(src) && /exit 1/.test(src))
+    //
+    // 🔴 CETTE GARDE A ÉTÉ VERTE ET COMPLICE, le 17/09 au soir, ET C'EST MOI
+    // QUI L'AI DÉSARMÉE. Elle cherchait `::error::Le secret` dans le fichier.
+    // En ajoutant l'étape de téléversement, j'ai mis un SECOND message de la
+    // même forme dans le workflow iOS : retirer celui de la signature ne la
+    // faisait alors plus rougir, puisqu'elle trouvait celui du dépôt. La
+    // mutation l'a démasquée. C'est le motif du jour, quatrième fois : un mot
+    // cherché se trouve ailleurs, et une garde meurt quand on touche à un
+    // AUTRE endroit, sans un mot.
+    //
+    // ⚠️ ON COMPTE DONC, ON NE CHERCHE PLUS : chaque bloc de secrets
+    // obligatoires doit porter SON cri. Un bloc ajouté demain sans message
+    // fera rougir celle-ci, au lieu de se glisser derrière les autres.
+    // ⚠️ LES CHIFFRES COMPTENT DANS LES NOMS : `CLE_ANDROID_B64`,
+    // `CERTIFICAT_P12_B64`. Première écriture sans `0-9`, elle trouvait zéro
+    // bloc et rougissait sur du code juste. Deuxième fois aujourd'hui qu'une
+    // garde neuve accuse le bon code ; c'est le détail affiché qui l'a dit.
+    const blocs = (src.match(/for v in [A-Z0-9_ ]+; do/g) || []).length
+    const cris = (src.match(/::error::Le secret \$v manque/g) || []).length
+    verifie(`🔴 ${w} : CHAQUE bloc de secrets fait échouer le travail`,
+      blocs > 0 && cris === blocs && /exit 1/.test(src),
+      `blocs=${blocs}, messages=${cris}`)
   }
 
   const android = lire('.github/workflows/paquet-android.yml')
@@ -366,6 +386,75 @@ const fenetreNative = (options = {}) => {
     // étape qui parle de signature.
     verifie('⚠️ les dépendances Swift sont résolues avant l’archive',
       /-resolvePackageDependencies/.test(ios))
+
+    // ═══ LE DÉPÔT CHEZ APPLE, QUI N'A PAS D'AUTRE VOIE ═════════════════════
+    //
+    // 🔴 ET C'EST LA DISSYMÉTRIE AVEC ANDROID, pas un oubli. Le `.aab` se
+    // dépose à la main dans la console Play, depuis n'importe quel navigateur,
+    // Windows compris. Un `.ipa`, non : App Store Connect ne prend le fichier
+    // que par `altool` ou Transporter, qui font partie de Xcode et n'existent
+    // donc que sur macOS. Le paquet Android n'a PAS besoin de cette étape ;
+    // celui d'iOS ne peut pas s'en passer.
+    const sansComm = lignesIos.join('\n')
+    verifie('🔴 le paquet iOS est téléversé depuis le Mac de GitHub',
+      /xcrun altool --upload-app/.test(sansComm))
+
+    // ⚠️ L'ARTEFACT EST RÉCUPÉRÉ AVANT LE DÉPÔT, et l'ordre est le fond de
+    // l'affaire : un dépôt refusé (numéro de build déjà vu, réseau) ferait
+    // sinon perdre un fichier parfaitement bon, et dix minutes de Mac avec.
+    {
+      const iArtefact = sansComm.indexOf('upload-artifact')
+      const iDepot = sansComm.indexOf('altool --upload-app')
+      verifie('🔴 le fichier est mis de côté AVANT d’être déposé',
+        iArtefact > -1 && iDepot > -1 && iArtefact < iDepot)
+    }
+
+    // ⚠️ ON VALIDE AVANT DE DÉPOSER. Un numéro de build brûlé ne se réutilise
+    // jamais : autant apprendre d'une validation qu'il manque une icône.
+    {
+      const iValide = sansComm.indexOf('altool --validate-app')
+      const iDepot = sansComm.indexOf('altool --upload-app')
+      verifie('🔴 la validation passe AVANT le dépôt',
+        iValide > -1 && iDepot > -1 && iValide < iDepot)
+    }
+
+    // 🔴 ET ON LIT CE QU'ALTOOL A ÉCRIT, PAS SON CODE DE SORTIE. Troisième fois
+    // que ce motif se présente : `jarsigner -verify` rendait 0 sur un bundle
+    // non signé, `codesign` peut se taire, et `altool` range ses refus dans
+    // « product-errors ». Les DEUX appels doivent être relus, pas seulement le
+    // dernier : une validation refusée qu'on n'écoute pas mène droit au dépôt.
+    verifie('🔴 la validation et le dépôt sont relus, tous les deux',
+      (sansComm.match(/grep -q "product-errors"/g) || []).length === 2)
+
+    // 🔴 `altool` NE PREND PAS DE CHEMIN VERS LA CLÉ, IL LA CHERCHE. Sous ce
+    // dossier, et sous ce nom exact. Nommée autrement, elle est introuvable et
+    // le message ne dit pas où il regardait.
+    verifie('🔴 la clé API porte le nom qu’Apple ira chercher',
+      /AuthKey_\$CLE_API_ID\.p8/.test(sansComm)
+      && /\.appstoreconnect\/private_keys/.test(sansComm))
+
+    // ⚠️ LES TROIS SECRETS DU DÉPÔT MANQUANTS FONT ÉCHOUER LE TRAVAIL, comme
+    // les cinq autres. Sans eux le paquet sortirait, mais ne partirait nulle
+    // part, et le travail serait vert.
+    verifie('🔴 les secrets du dépôt manquants font échouer le travail',
+      /::error::Le secret \$v manque\. Sans les trois, rien ne peut etre televerse/.test(ios))
+
+    // 🔴 ET LA CLÉ PRIVÉE NE VIT QUE DANS UN SECRET. Qui la détient peut
+    // déposer une application au nom d'Avcotech.
+    verifie('🔴 la clé privée vient d’un secret, jamais du dépôt',
+      /secrets\.APPSTORE_CLE_P8_B64/.test(ios)
+      && !/BEGIN PRIVATE KEY/.test(ios))
+
+    // 🔴 LA DÉCLARATION D'EXPORT, SANS LAQUELLE CHAQUE DÉPÔT RESTE EN ATTENTE.
+    // Absente de l'Info.plist, App Store Connect marque le build « Conformité
+    // aux règles d'exportation manquante » et REFUSE de le laisser soumettre
+    // tant qu'on n'a pas répondu à la question, à la main, à chaque version.
+    // Yoppaa ne fait que du HTTPS, qui est exempté : la réponse est « false ».
+    {
+      const plist = lire('ios/App/App/Info.plist')
+      verifie('🔴 la conformité export est déclarée, sinon chaque dépôt attend',
+        /<key>ITSAppUsesNonExemptEncryption<\/key>\s*<false\/>/.test(plist))
+    }
   }
 }
 

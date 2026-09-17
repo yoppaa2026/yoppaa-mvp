@@ -32,6 +32,7 @@ const MODULE = 'lib/push-natif.js'
 const ANDROID = '.github/workflows/paquet-android.yml'
 const IOS = '.github/workflows/paquet-ios.yml'
 const CONF = 'capacitor.config.ts'
+const PLIST = 'ios/App/App/Info.plist'
 
 const MUTATIONS = [
   // ─── LE WORKFLOW iOS, QUI N A JAMAIS TOURNE (17/09) ─────────────────────
@@ -71,6 +72,55 @@ const MUTATIONS = [
     fichier: IOS,
     de: 'DEVELOPMENT_TEAM="$TEAM_ID"',
     vers: 'DEVELOPMENT_TEAM="4PS788HD98"' },
+
+  // ─── LE DEPOT CHEZ APPLE, AJOUTE LE 17/09 AU SOIR ───────────────────────
+  // 🔴 Sans cette etape, le travail est VERT et le paquet ne part nulle part.
+  // C est la forme la plus traitre : rien n echoue, il ne se passe rien.
+  { nom: '🔴 le paquet iOS n est plus depose : travail vert, App Store vide',
+    fichier: IOS,
+    de: '          xcrun altool --upload-app -f "$IPA" -t ios \\',
+    vers: '          echo "on ne depose pas" \\' },
+
+  // ⚠️ L ORDRE (artefact AVANT depot, validation AVANT depot) est verifie par
+  // les gardes mais N EST PAS MESURE ICI : l inverser demande de deplacer des
+  // blocs entiers, et une ancre multi-ligne se casse au premier changement
+  // d indentation. Les deux moities « presence » sont eprouvees, les deux
+  // moities « ordre » ne le sont pas. Note plutot que tue, comme pour `chmod`.
+
+  { nom: '🔴 on ne valide plus avant de deposer : un numero de build brule pour une icone',
+    fichier: IOS,
+    de: '          xcrun altool --validate-app -f "$IPA" -t ios \\',
+    vers: '          echo "on valide pas" \\' },
+
+  // 🔴 TROISIEME FOIS CE MOTIF : lire le code de sortie au lieu de la phrase.
+  // `altool` range ses refus dans « product-errors » et peut rendre 0.
+  { nom: '🔴 la validation n est plus relue : Apple refuse, on depose quand meme',
+    fichier: IOS,
+    de: '          if grep -q "product-errors" validation.json; then',
+    vers: '          if false; then' },
+
+  { nom: '🔴 la cle API perd le nom qu Apple ira chercher : « No such private key »',
+    fichier: IOS,
+    de: '          CLE=~/.appstoreconnect/private_keys/AuthKey_$CLE_API_ID.p8',
+    vers: '          CLE=~/.appstoreconnect/private_keys/cle.p8' },
+
+  { nom: '🔴 un secret de depot manquant ne fait plus echouer : le paquet ne part pas, en silence',
+    fichier: IOS,
+    de: '              echo "::error::Le secret $v manque. Sans les trois, rien ne peut etre televerse."',
+    vers: '              echo "secret absent, on continue"' },
+
+  { nom: '🔴 la cle privee cesse de venir d un secret : elle passe par une saisie',
+    fichier: IOS,
+    de: '          CLE_API_P8_B64: ${{ secrets.APPSTORE_CLE_P8_B64 }}',
+    vers: '          CLE_API_P8_B64: ${{ inputs.cle_p8 }}' },
+
+  // 🔴 LA DECLARATION D EXPORT ABSENTE N EMPECHE PAS LE DEPOT : elle bloque la
+  // SOUMISSION, apres coup, avec « Conformite aux regles d exportation
+  // manquante », et il faut repondre a la main a chaque version.
+  { nom: '🔴 la conformite export disparait de l Info.plist : chaque depot reste en attente',
+    fichier: PLIST,
+    de: '<key>ITSAppUsesNonExemptEncryption</key>',
+    vers: '<key>ITSAppUsesNonExemptEncryptionAbsente</key>' },
 
   // ─── LE DEFAUT REEL DU 17/09, DANS LES DEUX WORKFLOWS ───────────────────
   { nom: '🔴 LE DEFAUT D ORIGINE : la signature Android redevient toujours sautee',

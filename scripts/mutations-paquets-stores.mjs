@@ -50,6 +50,16 @@ const MUTATIONS = [
     de: "          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \\",
     vers: "          apksigner sign --min-sdk-version 23 \\" },
 
+  { nom: '🔴 LE DEFAUT REEL DU 17/09 : gradlew lance sans etre executable, « Permission denied »',
+    fichier: ANDROID,
+    de: "          chmod +x ./gradlew",
+    vers: "          echo on y va" },
+
+  // ⚠️ L'ORDRE (chmod AVANT l appel) est verifie par la garde mais N EST PAS
+  // MESURE ICI : l inverser demande une ancre sur deux lignes, et une ancre
+  // multi-ligne se casse au premier changement d indentation. La garde reste
+  // utile, sa moitie « ordre » est simplement non eprouvee. Note plutot que tue.
+
   { nom: '🔴 le numero de build pose en silence : le 2e depot refuse, cause introuvable',
     fichier: ANDROID,
     de: "          grep -q \"versionCode ${{ inputs.version_code }}\" \"$G\" || {",

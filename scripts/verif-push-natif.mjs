@@ -237,6 +237,18 @@ const fenetreNative = (options = {}) => {
   // ⚠️ ON VÉRIFIE LA SIGNATURE APRÈS L'AVOIR POSÉE : `jarsigner` peut rendre 0
   // sans avoir rien signé, et l'artefact muet ne se découvre qu'au dépôt.
   verifie('⚠️ la signature est vérifiée après coup', /jarsigner -verify -strict/.test(android))
+  // 🔴 `gradlew` DOIT ÊTRE RENDU EXÉCUTABLE AVANT D'ÊTRE LANCÉ. Le dépôt vit
+  // sous Windows, où Git ne conserve pas le bit : le runner Linux répond
+  // « Permission denied », code 126, et ne nomme rien. Défaut réel du 17/09.
+  //
+  // ⚠️ ON VÉRIFIE L'ORDRE, pas la présence : un `chmod` après l'appel ne sert
+  // à rien, et une garde qui cherche les deux mots serait verte à l'envers.
+  {
+    const iChmod = android.indexOf('chmod +x ./gradlew')
+    const iLance = android.indexOf('./gradlew bundleRelease')
+    verifie('🔴 gradlew est rendu exécutable AVANT d’être lancé',
+      iChmod > -1 && iLance > -1 && iChmod < iLance)
+  }
   // 🔴 ET LE NUMÉRO DE BUILD AUSSI. Un `sed` qui ne trouve rien ne dit rien :
   // le paquet repartirait avec l'ancien numéro, le premier dépôt passerait, et
   // le second serait refusé pour une cause à chercher très loin de là.

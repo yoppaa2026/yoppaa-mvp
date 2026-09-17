@@ -83,9 +83,19 @@ jobs:
 
       # ⚠️ UN BUNDLE (.aab), PAS UN APK : Google Play n'accepte plus que ce
       # format pour les nouvelles applications.
+      # 🔴 `chmod +x` AVANT DE LANCER, ET CE N'EST PAS UNE PRÉCAUTION OISIVE.
+      # Le dépôt vit sous Windows, où Git ne conserve pas le bit exécutable :
+      # `gradlew` est arrivé ici en 100644, et le runner Linux a répondu
+      # « Permission denied » avec un code 126 qui ne nomme rien.
+      #
+      # ⚠️ LE BIT EST AUSSI POSÉ DANS L'INDEX GIT (100755), mais cette ligne
+      # reste : `npx cap sync` ou une régénération du projet natif le
+      # réécrirait sans, et on repartirait pour le même diagnostic.
       - name: Construire le bundle
         working-directory: android
-        run: ./gradlew bundleRelease
+        run: |
+          chmod +x ./gradlew
+          ./gradlew bundleRelease
 
       # 🔴 LA SIGNATURE. Sans elle, le fichier est refusé au dépôt.
       # ⚠️ LA CLÉ NE VIT PAS DANS LE DÉPÔT : elle arrive en secret GitHub,

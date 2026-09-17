@@ -117,9 +117,24 @@ Le bouton doit dire **« Connecter Stripe »**, pas « Continuer l'onboarding »
 
 ## 6. Le feu vert aux commerçants
 
-C'est **la seule étape qu'Alex ne contrôle pas**, et elle commande le
-calendrier : vérification d'identité, IBAN, validation par Stripe. Compte
-plusieurs jours, davantage si un document manque.
+C'est **la seule étape qu'Alex ne contrôle pas**, mais elle est plus rapide que
+ce que ce document affirmait avant le 17/09.
+
+🔴 **CORRECTION D'UNE AFFIRMATION DE L'ASSISTANT.** J'avais écrit « compte
+plusieurs jours » sans l'avoir vérifié, et tout un arbitrage de calendrier en
+dépendait. Alex a corrigé : **`charges_enabled` passe à vrai en quelques
+minutes.** Stripe vérifie le BCE et l'identité automatiquement, et quand il veut
+une pièce en plus, il laisse encaisser d'abord, avec une échéance.
+
+⚠️ **Ce qui peut traîner, ce sont les VERSEMENTS vers l'IBAN, pas la capacité à
+encaisser.** `charges_enabled` et `payouts_enabled` sont deux choses
+différentes : un commerçant peut vendre bien avant d'être payé. Les confondre
+fait croire à un délai qui n'existe pas.
+
+**Le vrai délai est humain** : que les cinq lisent le message, retrouvent leur
+IBAN et leur carte d'identité, et s'y mettent. Celui-là peut courir **avant** la
+bascule : leur demander de préparer leurs documents ne coûte rien et fait gagner
+les jours qui comptent.
 
 Ce qu'il faut leur dire :
 

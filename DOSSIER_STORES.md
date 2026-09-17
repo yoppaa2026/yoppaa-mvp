@@ -296,8 +296,15 @@ expédition, son tunnel meurt. À basculer en retrait avant les captures.
 > services used outside the app. Gift vouchers sold in the app are credit
 > redeemable only in a physical shop, not digital content.
 >
-> The demonstration merchants used for review accept **payment on collection**,
-> so the full ordering flow can be completed without entering card details.
+> **Test card**
+>
+> The demonstration merchants run in Stripe test mode. To complete a full
+> payment, use card number **4242 4242 4242 4242**, any future expiry date, any
+> 3-digit CVC, any postcode. No real money is charged. The Stripe payment page
+> displays a "TEST MODE" banner, which is expected.
+>
+> Ordering without payment is also possible: several merchants accept payment on
+> collection, and the order is confirmed immediately.
 >
 > **Account deletion**
 >
@@ -312,6 +319,16 @@ expédition, son tunnel meurt. À basculer en retrait avant les captures.
 
 ⏳ **À compléter avant de coller** : l'identifiant et le mot de passe du compte
 de démonstration.
+
+🔴 **CE TEXTE N'EST VRAI QUE TANT QUE LA PLATEFORME EST EN MODE TEST.** Le jour
+de la bascule, la carte `4242` sera refusée, et une note qui l'annonce enverrait
+le relecteur droit dans le mur. **Ne bascule pas pendant qu'un dossier est
+ouvert chez Apple ou Google** : il reprend son test le lendemain, tombe sur des
+comptes morts, et le rejet est de ta main.
+
+⚠️ **L'ordre est donc : soumettre, attendre la validation, puis basculer.** Et
+prévenir les commerçants de préparer leur IBAN et leur carte d'identité dès
+maintenant : ce délai-là est humain, il peut courir pendant la revue.
 
 ### 7.5 L'essai qui valide la note, à faire par Alex
 

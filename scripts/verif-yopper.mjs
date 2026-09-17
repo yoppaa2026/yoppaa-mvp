@@ -15,7 +15,7 @@ import {
   codesPostauxDe,
 } from '../lib/morning-eligibilite.js'
 import { estSessionPerdue, ERREUR_SESSION } from '../lib/session-perdue.js'
-import { localiteDeAdresse, lieuDeCarte } from '../lib/adresse-localite.js'
+import { localiteDeAdresse, lieuDeCarte, libelleApporteUnLieu } from '../lib/adresse-localite.js'
 import { ficheUtilisablePar } from '../lib/fiche-client.js'
 import { sansProse } from './lire-code.mjs'
 
@@ -1340,6 +1340,51 @@ for (const chemin of routesAdmin) {
   // basculer sur la commune alors qu'on sait exactement où il est.
   verifier('une distance de zéro reste une distance',
     lieuDeCarte({ distance: 0, adresse: 'Rue X 1, 5640 Mettet', formatDistance: fd }) === '0 m')
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 LE NOM DU COMMERCE NE S'AFFICHE PAS DEUX FOIS (17/09)
+  //
+  // Trouvé par Alex sur une capture destinée aux stores : sous le titre « Le
+  // Dressing de Sophie », la ligne de lieu répétait « Le Dressing de Sophie ·
+  // 43 m ». Trois commerces sur trois. La garde qui aurait dû l'empêcher
+  // comparait `source === 'siege'`, une valeur que `normaliser()` ne pose plus
+  // depuis le 15/08 : elle était verte et n'a jamais rien masqué.
+  // ═══════════════════════════════════════════════════════════════════════
+  const fiche = { distance: 43, adresse: 'Rue X 1, 5640 Mettet', formatDistance: fd }
+
+  verifier('le libellé qui répète le nom du commerce s’efface',
+    lieuDeCarte({ ...fiche, libelleLieu: 'Le Dressing de Sophie', nomCommerce: 'Le Dressing de Sophie' }) === '43 m')
+  verifier('la casse et les accents ne le sauvent pas',
+    lieuDeCarte({ ...fiche, libelleLieu: 'CHEZ MATHILDE', nomCommerce: 'Chez Mathildé' }) === '43 m')
+  verifier('un libellé déjà tout entier dans le nom ne dit rien de plus',
+    lieuDeCarte({ ...fiche, libelleLieu: 'Chez Momo', nomCommerce: 'Chez Momo - Friterie' }) === '43 m')
+  verifier('la ponctuation ne fabrique pas une différence',
+    lieuDeCarte({ ...fiche, libelleLieu: 'Chez Momo !', nomCommerce: 'Chez Momo' }) === '43 m')
+
+  // ⚠️ ET SURTOUT, CE QUE LA LIGNE EXISTE POUR DIRE RESTE DIT. Une professeure
+  // de yoga qui donne cours en salle serait introuvable sans son libellé.
+  verifier('la salle d’un cours reste annoncée',
+    lieuDeCarte({ ...fiche, libelleLieu: 'Salle Saint-Roch', nomCommerce: 'Yoga Zen' }) === 'Salle Saint-Roch · 43 m')
+  verifier('un libellé qui ajoute un lieu au nom reste entier',
+    lieuDeCarte({ ...fiche, libelleLieu: 'Chez Momo Place du Marché', nomCommerce: 'Chez Momo' })
+      === 'Chez Momo Place du Marché · 43 m')
+  // Un morceau de mot n'est pas un mot : « Sse » n'est pas dans « Chaussée ».
+  verifier('un fragment de mot ne compte pas comme répétition',
+    lieuDeCarte({ ...fiche, libelleLieu: 'Sse', nomCommerce: 'Chaussée du Roi' }) === 'Sse · 43 m')
+
+  // ⚠️ SANS NOM À COMPARER, ON AFFICHE. C'est aussi ce qui garde les appelants
+  // qui ne passent pas encore de nom au comportement qu'ils avaient.
+  verifier('sans nom de commerce, le libellé passe',
+    lieuDeCarte({ ...fiche, libelleLieu: 'Salle Saint-Roch' }) === 'Salle Saint-Roch · 43 m')
+
+  // La même règle vaut sur le repli par commune, sinon le doublon revient dès
+  // qu'un Yopper refuse la géolocalisation.
+  verifier('le repli par commune applique la même règle',
+    lieuDeCarte({ distance: null, adresse: 'Rue X 1, 5640 Mettet', libelleLieu: 'Chez Momo', nomCommerce: 'Chez Momo', formatDistance: fd })
+      === 'Mettet')
+
+  verifier('un libellé vide n’apporte aucun lieu', libelleApporteUnLieu('', 'Chez Momo') === false)
+  verifier('un libellé absent non plus', libelleApporteUnLieu(null, 'Chez Momo') === false)
 }
 
 // 🔴 LE TOTAL S'IMPRIMAIT AU MILIEU DU FICHIER (trouvé le 31/08).

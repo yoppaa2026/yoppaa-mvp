@@ -1524,6 +1524,30 @@ verifier('la carte confie son lieu à la règle partagée',
   && /libelleLieu: c\.lieu_proche\?\.libelle \|\| null/.test(srcEcranClient))
 verifier('et lui donne de quoi retrouver la commune sans position',
   /adresse: c\.adresse/.test(srcEcranClient))
+// 🔴 ET LE NOM DU COMMERCE, SANS QUOI LA RÈGLE NE PEUT PAS SE TAIRE (17/09).
+// Sans lui, `lieuDeCarte` n'a rien à quoi comparer le libellé et l'affiche
+// toujours : c'est exactement l'état qui répétait « Le Dressing de Sophie » sur
+// la ligne censée dire OÙ se trouve Le Dressing de Sophie.
+verifier('et le nom du commerce, pour qu’elle sache quoi retrancher',
+  /nomCommerce: c\.nom/.test(srcEcranClient))
+
+// 🔴 LA GARDE MORTE NE DOIT PAS REVENIR (17/09).
+//
+// L'accueil masquait le libellé du lieu quand `source === 'siege'`. Le siège a
+// cessé d'être un lieu le 15/08 : `normaliser()` pose `source: lieu.type`, qui
+// vaut permanent, hebdo ou ponctuel. La comparaison était donc morte depuis un
+// mois, verte, commentée d'une règle juste, et ne masquait plus rien.
+//
+// ⚠️ ON LIT DU CODE DÉPOUILLÉ DE SA PROSE (`srcEcranClient` passe déjà par
+// `sansCommentaires`) : le commentaire qui raconte cette histoire contient
+// lui-même la comparaison, et une garde qui rougit sur son propre récit
+// apprend surtout à ne plus rien écrire.
+verifier('l’accueil ne compare plus un lieu au siège, valeur qui n’existe plus',
+  !/source\s*===\s*['"]siege['"]/.test(srcEcranClient))
+// Le frère : la lib des lieux ne doit pas la reposer non plus.
+verifier('et la lib des lieux ne la repose pas',
+  !/source\s*===\s*['"]siege['"]/.test(sansCommentaires(
+    readFileSync(new URL('../lib/lieux-activite.js', import.meta.url), 'utf8'))))
 
 // ─── LA RECHERCHE REPLIÉE NE CACHE JAMAIS UNE RECHERCHE EN COURS ──────────
 // 🔴 LE PIÈGE DE CE REPLI (12/09). Le champ vit derrière une loupe pour rendre

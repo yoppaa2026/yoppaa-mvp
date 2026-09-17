@@ -63,6 +63,7 @@
     "mutations:empreinte": "node scripts/mutations-empreinte-table.mjs",
     "mutations:policies": "node scripts/mutations-lecture-policies.mjs",
     "mutations:identite-declaree": "node scripts/mutations-identite-declaree.mjs",
+    "mutations:lieu-carte": "node scripts/mutations-lieu-carte.mjs",
     "verif:lien": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-lien-fiche.mjs",
     "verif:visuel": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-visuel-partage.mjs",
     "verif:attente": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-attente-rdv.mjs",

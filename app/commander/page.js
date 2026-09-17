@@ -1161,6 +1161,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
     distance: c.distance,
     adresse: c.adresse,
     libelleLieu: c.lieu_proche?.libelle || null,
+    nomCommerce: c.nom,
     formatDistance,
   })
   // Pas de reservation si le plan ne permet pas la commande (palier Exister)
@@ -3103,10 +3104,16 @@ export default function Commander() {
         const d = distanceVolOiseau(pos.lat, pos.lng, parseFloat(l.latitude), parseFloat(l.longitude))
         if (distance === null || d < distance) { distance = d; lieuProche = l }
       }
-      // Le nom du lieu n'est affiché que s'il diffère du siège : « 1,2 km »
-      // suffit pour une boulangerie, « Salle Saint-Roch · 1,2 km » est ce qui
-      // manque à un cours de yoga.
-      return { ...c, distance, lieu_proche: lieuProche?.source === 'siege' ? null : lieuProche }
+      // 🔴 ICI VIVAIT UNE GARDE MORTE : `lieuProche?.source === 'siege' ? null
+      // : lieuProche`. Le siège a cessé d'être un lieu le 15/08, `normaliser()`
+      // pose `source: lieu.type` (permanent, hebdo ou ponctuel), et cette
+      // comparaison ne pouvait donc plus jamais être vraie. Tous les libellés
+      // passaient, y compris ceux qui répètent le nom du commerce.
+      //
+      // La décision d'afficher ou non le libellé appartient maintenant à
+      // `lieuDeCarte`, qui la prend sur ce qu'elle voulait dire : le libellé
+      // s'affiche s'il apporte un lieu que le nom ne donne pas déjà.
+      return { ...c, distance, lieu_proche: lieuProche }
     })
     avecDistance.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
     return avecDistance

@@ -236,7 +236,16 @@ const fenetreNative = (options = {}) => {
     !lignesYml.some((l) => /\bapksigner\b/.test(l)))
   // ⚠️ ON VÉRIFIE LA SIGNATURE APRÈS L'AVOIR POSÉE : `jarsigner` peut rendre 0
   // sans avoir rien signé, et l'artefact muet ne se découvre qu'au dépôt.
-  verifie('⚠️ la signature est vérifiée après coup', /jarsigner -verify -strict/.test(android))
+  //
+  // 🔴 ET ON LIT SA PHRASE, PAS SON CODE DE SORTIE. Les deux autres façons ont
+  // été essayées sur un vrai paquet le 17/09 et sont fausses : `-strict` échoue
+  // sur un certificat auto-signé, ce qu'est TOUJOURS une clé Android ; et sans
+  // `-strict`, jarsigner rend 0 même sur un jar non signé.
+  verifie('⚠️ la signature est vérifiée après coup', /jarsigner -verify /.test(android))
+  verifie('🔴 et la vérification lit « jar verified », pas le code de sortie',
+    /grep -q "jar verified"/.test(android))
+  verifie('🔴 « -strict » ne revient pas : il rejette le cas normal',
+    !lignesYml.some((l) => /jarsigner -verify -strict/.test(l)))
   // 🔴 `gradlew` DOIT ÊTRE RENDU EXÉCUTABLE AVANT D'ÊTRE LANCÉ. Le dépôt vit
   // sous Windows, où Git ne conserve pas le bit : le runner Linux répond
   // « Permission denied », code 126, et ne nomme rien. Défaut réel du 17/09.

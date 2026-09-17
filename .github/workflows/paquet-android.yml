@@ -135,8 +135,23 @@ jobs:
             "$AAB" "$CLE_ANDROID_ALIAS"
           # ⚠️ ON VÉRIFIE QUE LA SIGNATURE EST RÉELLEMENT POSÉE. `jarsigner` peut
           # rendre 0 en n'ayant rien signé ; un artefact muet coûterait un dépôt.
-          jarsigner -verify -strict "$AAB"
-          rm -f cle.jks
+          #
+          # 🔴 ET NI LE CODE DE SORTIE NI `-strict` NE CONVIENNENT, les deux ont
+          # été essayés sur un vrai paquet le 17/09 :
+          #   • `-strict` ECHOUE sur un certificat auto-signé (code 4). Or une
+          #     clé de signature Android est TOUJOURS auto-signée : aucune
+          #     autorité ne délivre ce genre de certificat. La garde rejetait
+          #     donc exactement le cas normal, et le bundle etait pourtant signé.
+          #   • sans `-strict`, `jarsigner -verify` rend 0 MEME SUR UN JAR NON
+          #     SIGNE, en affichant « jar is unsigned ». Elle ne protégeait plus
+          #     de rien.
+          # On lit donc la phrase que jarsigner écrit, qui est sans ambiguïté.
+          jarsigner -verify "$AAB" | tee verif.txt
+          if ! grep -q "jar verified" verif.txt; then
+            echo "::error::Le bundle n est PAS signe. jarsigner n a pas ecrit « jar verified »."
+            exit 1
+          fi
+          rm -f cle.jks verif.txt
           echo "Bundle signe et verifie."
 
       - name: Récupérer le paquet

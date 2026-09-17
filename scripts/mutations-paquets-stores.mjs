@@ -67,8 +67,21 @@ const MUTATIONS = [
 
   { nom: '🔴 la signature n est plus verifiee : un artefact muet part au depot',
     fichier: ANDROID,
-    de: "          jarsigner -verify -strict \"$AAB\"",
-    vers: "          echo \"on fait confiance\"" },
+    de: "          jarsigner -verify \"$AAB\" | tee verif.txt",
+    vers: "          echo \"on fait confiance\" > verif.txt" },
+
+  // 🔴 LE DEFAUT REEL DU 17/09, dans les deux sens : `-strict` rejette le cas
+  // normal (certificat auto-signe), et lire le code de sortie au lieu de la
+  // phrase ne protege de rien puisque jarsigner rend 0 sur un jar non signe.
+  { nom: '🔴 « -strict » revient : il fait echouer un bundle pourtant signe',
+    fichier: ANDROID,
+    de: "          jarsigner -verify \"$AAB\" | tee verif.txt",
+    vers: "          jarsigner -verify -strict \"$AAB\" | tee verif.txt" },
+
+  { nom: '🔴 on relit le code de sortie au lieu de la phrase : 0 sur un jar non signe',
+    fichier: ANDROID,
+    de: "          if ! grep -q \"jar verified\" verif.txt; then",
+    vers: "          if false; then" },
 
   { nom: '🔴 un secret Android manquant ne fait plus echouer : bundle non signe, en silence',
     fichier: ANDROID,

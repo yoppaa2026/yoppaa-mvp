@@ -32,6 +32,7 @@ import { categorieAtteinte, barreDetachee } from '@/lib/responsive'
 import { jourLocalISO, jourBruxelles, brusselsInstant } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
 import { lieuxDuJour, estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
+import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import IconeRetrait from '@/app/components/IconeRetrait'
@@ -3232,8 +3233,21 @@ export default function CommanderSlug() {
   const inputSt = { width: '100%', padding: '0.875rem 1rem', border: `1.5px solid ${T.pale}`, borderRadius: 12, marginBottom: 10, fontSize: '1rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none', color: T.ink, background: '#fff', display: 'block' }
   const btnPrimary = { width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }
 
-  const categories = [...new Set(articles.map(a => a.categorie).filter(Boolean))]
+  // ⚠️ UNE SEULE SOURCE POUR LA BARRE ET POUR LES SECTIONS. `toutesLesCats`
+  // dérive de `categories` : les deux ne peuvent pas diverger, ce qui est
+  // exactement le défaut qu'on vient de corriger sur l'onglet actif.
+  //
+  // L'ordre voulu par le commerçant passe devant ; le reste suit dans l'ordre
+  // d'apparition des articles, comme avant lui. Un commerçant qui n'a rien
+  // rangé voit donc sa fiche inchangée (`lib/categories-catalogue.js`).
+  const categories = categoriesOrdonnees(
+    [...new Set(articles.map(a => a.categorie).filter(Boolean))],
+    commercant?.ordre_categories,
+  )
   const sansCat = articles.filter(a => !a.categorie)
+  // « Autres » reste EN DERNIER, et ne se range pas : ce n'est pas une
+  // catégorie que le commerçant a nommée, c'est le tas de ce qu'il n'a pas
+  // classé. Le mettre devant ses plats n'aurait aucun sens.
   const toutesLesCats = [...categories, ...(sansCat.length > 0 ? ['__autres__'] : [])]
 
   // M5 food truck : l'emplacement du JOUR remplace l'adresse du dépôt sur la

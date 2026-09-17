@@ -75,7 +75,8 @@
     "icones:natives": "node scripts/generer-icones-natives.mjs",
     "captures:stores": "node scripts/preparer-captures-stores.mjs",
     "mutations:silence-fidelite": "node scripts/mutations-silence-fidelite.mjs",
-    "mutations:barre-categories": "node scripts/mutations-barre-categories.mjs"
+    "mutations:barre-categories": "node scripts/mutations-barre-categories.mjs",
+    "mutations:ordre-categories": "node scripts/mutations-ordre-categories.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",

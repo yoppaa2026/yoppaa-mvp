@@ -119,6 +119,7 @@ import {
 import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
 import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '@/lib/guide-photos'
 import { LARGEUR_CHAMP, LARGEUR_TEXTE_LONG } from '@/lib/responsive'
+import OrdreCategories from '@/app/dashboard/OrdreCategories'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -1126,6 +1127,12 @@ function TabMenu({ commercantId, commercant, toast }) {
       {/* ───────────── SUB-TAB : CATÉGORIES ───────────── */}
       {subTab === 'categories' && (
         <>
+          {/* ⚠️ LE RANGEMENT EST AU-DESSUS DE LA LISTE, et c'est voulu : le
+              commerçant qui ouvre cet onglet vient d'abord voir ce que ses
+              clients voient. Le bloc se tait tout seul en dessous de deux
+              catégories, où il n'y a rien à ranger. */}
+          <OrdreCategories commercantId={commercantId} commercant={commercant}
+            categories={categories} toast={toast}/>
           {showCatForm && (
             <div style={{ ...s.cardActive, padding: 16, marginBottom: 12 }}>
               {/* Sous-catégories (demande Alex 24/07) : convention « Parent · Enfant »

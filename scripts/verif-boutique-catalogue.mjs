@@ -20,6 +20,7 @@ import {
 
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
+import { categoriesOrdonnees, ordrePourEnregistrer } from '../lib/categories-catalogue.js'
 
 let ok = 0
 const echecs = []
@@ -436,6 +437,108 @@ v('le tableau de bord nomme le statut souhaite sans parler de dette',
     !/STARTER 49€ ou PREMIUM 249€/.test(signupBrut))
   v('et plus de promesse de persistance « en S2b »',
     !/seront persistés en S2b/.test(signupBrut))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'ORDRE DES CATÉGORIES, CHOISI PAR LE COMMERÇANT (17/09)
+//
+// 🔴 POURQUOI. L'ordre était celui d'apparition des articles : un restaurateur
+// ne pouvait pas mettre ses plats avant ses boissons. Demandé par Alex le
+// 17/09, après le défaut de la barre d'onglets décalée.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const CATS = ['Assiettes', 'Boissons', 'Desserts', 'Frites', 'Kebabs']
+  const joint = (x) => x.join('|')
+
+  // ⚠️ NE RIEN RANGER EST LE CAS NORMAL. Un commerçant qui n'a jamais ouvert cet
+  // écran doit voir EXACTEMENT ce qu'il voyait avant.
+  v('sans ordre voulu, la liste ne bouge pas',
+    joint(categoriesOrdonnees(CATS, null)) === joint(CATS))
+  v('une liste vide ne bouge rien non plus',
+    joint(categoriesOrdonnees(CATS, [])) === joint(CATS))
+
+  v('les catégories rangées passent devant, dans leur ordre',
+    joint(categoriesOrdonnees(CATS, ['Kebabs', 'Frites']))
+      === joint(['Kebabs', 'Frites', 'Assiettes', 'Boissons', 'Desserts']))
+  v('et le reste garde son ordre d’origine derrière',
+    joint(categoriesOrdonnees(CATS, ['Desserts']))
+      === joint(['Desserts', 'Assiettes', 'Boissons', 'Frites', 'Kebabs']))
+
+  // 🔴 UNE CATÉGORIE RANGÉE MAIS VIDE NE FABRIQUE PAS D'ONGLET. Le commerçant a
+  // pu supprimer ses derniers articles de « Glaces » : un onglet sans section en
+  // face, c'est le décalage de barre qu'on vient de corriger.
+  v('une catégorie rangée qui n’existe plus est ignorée',
+    joint(categoriesOrdonnees(CATS, ['Glaces', 'Kebabs']))
+      === joint(['Kebabs', 'Assiettes', 'Boissons', 'Desserts', 'Frites']))
+
+  // ⚠️ DEUX FOIS LE MÊME NOM produirait deux sections au même endroit, donc deux
+  // ancres, et la barre choisirait au hasard.
+  v('un doublon dans l’ordre voulu ne duplique pas la catégorie',
+    categoriesOrdonnees(CATS, ['Kebabs', 'Kebabs']).filter(c => c === 'Kebabs').length === 1)
+
+  // ⚠️ AUCUNE CATÉGORIE NE SE PERD, quoi qu'on range. C'est le contrôle qui
+  // compte : une catégorie qui disparaît, ce sont des articles invisibles.
+  for (const voulu of [null, [], ['Kebabs'], ['Glaces'], ['Kebabs', 'Frites', 'Assiettes', 'Desserts', 'Boissons']]) {
+    v(`aucune catégorie perdue avec ${JSON.stringify(voulu)}`,
+      categoriesOrdonnees(CATS, voulu).length === CATS.length
+      && CATS.every(c => categoriesOrdonnees(CATS, voulu).includes(c)))
+  }
+
+  // Ce qu'on enregistre : jamais de nom qui n'existe plus.
+  v('on n’enregistre pas une catégorie supprimée',
+    JSON.stringify(ordrePourEnregistrer(['Kebabs', 'Glaces'], CATS)) === JSON.stringify(['Kebabs']))
+  // ⚠️ `null` VEUT DIRE « RIEN RANGÉ », un tableau vide voudrait dire « zéro
+  // catégorie devant ». Les deux doivent rester distincts en base.
+  v('plus rien à ranger rend null, pas un tableau vide',
+    ordrePourEnregistrer([], CATS) === null)
+
+  // La fiche publique s'en sert vraiment, et la barre comme les sections en
+  // dérivent : deux calculs séparés finiraient par diverger.
+  const fiche = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  v('la fiche ordonne ses catégories avec la règle partagée',
+    /categoriesOrdonnees\(/.test(fiche))
+  v('et elle lui passe l’ordre voulu par le commerçant',
+    /commercant\?\.ordre_categories/.test(fiche))
+  v('la barre d’onglets dérive de la même liste que les sections',
+    /const toutesLesCats = \[\.\.\.categories,/.test(fiche))
+
+  // ─── L'ÉCRAN DE RANGEMENT, CÔTÉ COMMERÇANT ──────────────────────────────
+  const ecran = sansProse(readFileSync(new URL('../app/dashboard/OrdreCategories.js', import.meta.url), 'utf8'))
+  const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+
+  v('l’écran de rangement est branché dans l’onglet Catégories',
+    /<OrdreCategories/.test(config))
+  v('et il reçoit les catégories réelles du commerçant',
+    /categories=\{categories\}/.test(config))
+
+  // ⚠️ IL SE TAIT SOUS DEUX CATÉGORIES : il n'y a rien à ranger, et un bloc
+  // vide dans un réglage fait douter de tout l'écran.
+  v('il ne s’affiche pas quand il n’y a rien à ranger',
+    /categories\.length < 2\) return null/.test(ecran))
+
+  // 🔴 UN `update` NON LU EST UN ESPOIR, PAS UNE ACTION. Sans cette lecture, le
+  // commerçant croirait son classement enregistré et retrouverait l'ancien au
+  // rechargement, sans rien comprendre. C'est le défaut du crédit de fidélité,
+  // corrigé le matin même.
+  v('il lit l’erreur de l’enregistrement',
+    /const \{ error \} = await supabase/.test(ecran) && /if \(error\)/.test(ecran))
+  v('et il la DIT au commerçant, avec son motif',
+    /toast\?\.\(\{ type: 'error'[\s\S]{0,120}error\.message/.test(ecran))
+
+  // ⚠️ IL N'ENREGISTRE PAS À CHAQUE FLÈCHE : dix requêtes pour un seul geste
+  // mental, et une liste à moitié rangée si l'une d'elles échoue.
+  v('une flèche ne déclenche aucune écriture',
+    !/deplacer\([\s\S]{0,400}?supabase/.test(ecran))
+
+  // ⚠️ IL PASSE PAR LA RÈGLE PARTAGÉE, dans les deux sens : ce qu'il affiche et
+  // ce qu'il enregistre. Une copie de la règle ici et la fiche montrerait un
+  // autre ordre que le réglage.
+  v('il affiche via la règle partagée', /listeAOrdonner\(/.test(ecran))
+  v('et il enregistre via la règle partagée', /ordrePourEnregistrer\(/.test(ecran))
+
+  // ⚠️ DES FLÈCHES, PAS D'EMOJI : la règle d'Alex, icônes SVG dans l'interface.
+  v('les boutons portent des icônes SVG', /<svg /.test(ecran))
+  v('et ils nomment le geste pour qui n’y voit pas', /aria-label=\{`Monter /.test(ecran))
 }
 
 // ─────────────────────────────────────────────────────────────────────────

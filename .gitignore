@@ -57,3 +57,20 @@ captures-stores/
 
 # Table de correspondance des commerces : contient des emails de tiers
 COMMERCES.csv
+
+# 🔴 LES CLES DE SIGNATURE, ET TOUT CE QUI EN DECOULE. Une cle de signature
+# poussee sur GitHub est compromise DEFINITIVEMENT : n importe qui pourrait
+# signer une application au nom d Avcotech, et un depot public garde une trace
+# de tout ce qui y est passe, meme efface au commit suivant.
+#
+# ⚠️ CES LIGNES NE REMPLACENT PAS LA BONNE HABITUDE, qui est de garder la cle
+# HORS du dossier de travail. Elles rattrapent le geste distrait, celui d un
+# fichier depose ici « juste le temps de l encoder ».
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
+cle.b64
+certificat.b64

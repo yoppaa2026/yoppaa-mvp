@@ -68,13 +68,29 @@ jobs:
       # distribution volé permet de signer n'importe quoi au nom d'Avcotech.
       # ⚠️ ET LE TROUSSEAU EST TEMPORAIRE : il vit le temps du build et repart
       # avec la machine.
+      #
+      # 🔴 CETTE ÉTAPE ÉTAIT TOUJOURS SAUTÉE (corrigé le 17/09, frère du même
+      # défaut dans `paquet-android.yml`). Elle portait
+      # `if: env.CERTIFICAT_P12_B64 != ''`, or un `if` est évalué AVANT l'étape
+      # et la variable n'existait que dans son `env:`. La condition était donc
+      # toujours fausse : le trousseau n'était jamais monté, et l'archivage
+      # échouait plus loin sur une erreur de signature incompréhensible.
+      #
+      # ⚠️ ET ELLE N'EST PLUS FACULTATIVE : sans certificat, il n'y a rien à
+      # déposer. Mieux vaut échouer ici, avec la raison, qu'au milieu de Xcode.
       - name: Préparer la signature
-        if: ${{ env.CERTIFICAT_P12_B64 != '' }}
         env:
           CERTIFICAT_P12_B64: ${{ secrets.CERTIFICAT_P12_B64 }}
           CERTIFICAT_MDP: ${{ secrets.CERTIFICAT_MDP }}
           PROFIL_MOBILEPROVISION_B64: ${{ secrets.PROFIL_MOBILEPROVISION_B64 }}
         run: |
+          set -euo pipefail
+          for v in CERTIFICAT_P12_B64 CERTIFICAT_MDP PROFIL_MOBILEPROVISION_B64; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::Le secret $v manque. Sans les trois, rien ne peut etre signe."
+              exit 1
+            fi
+          done
           echo "$CERTIFICAT_P12_B64" | base64 -d > certificat.p12
           echo "$PROFIL_MOBILEPROVISION_B64" | base64 -d > profil.mobileprovision
           security create-keychain -p "build" build.keychain

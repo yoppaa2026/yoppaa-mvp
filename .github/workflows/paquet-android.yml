@@ -75,19 +75,43 @@ jobs:
       # ⚠️ LA CLÉ NE VIT PAS DANS LE DÉPÔT : elle arrive en secret GitHub,
       # encodée en base64. Une clé de signature perdue, c'est une application
       # qu'on ne peut PLUS JAMAIS mettre à jour, jamais.
+      #
+      # 🔴 CETTE ÉTAPE ÉTAIT TOUJOURS SAUTÉE (corrigé le 17/09). Elle portait
+      # `if: env.CLE_ANDROID_B64 != ''`, or un `if` est évalué AVANT l'étape, et
+      # la variable n'existait que DANS son `env:`. La condition était donc
+      # toujours fausse : le bundle sortait NON SIGNÉ, l'étape n'apparaissait
+      # même pas en échec, et Google refusait le dépôt sans que rien n'explique
+      # pourquoi. C'est le motif « une garde qui ne se déclenche jamais ».
+      #
+      # ⚠️ ET ELLE N'EST PLUS FACULTATIVE. Un paquet non signé n'a aucun usage :
+      # mieux vaut que le travail échoue bruyamment que de produire un fichier
+      # qu'on découvrira inutilisable au moment du dépôt.
       - name: Signer le bundle
-        if: ${{ env.CLE_ANDROID_B64 != '' }}
         env:
           CLE_ANDROID_B64: ${{ secrets.CLE_ANDROID_B64 }}
           CLE_ANDROID_MDP: ${{ secrets.CLE_ANDROID_MDP }}
           CLE_ANDROID_ALIAS: ${{ secrets.CLE_ANDROID_ALIAS }}
         run: |
+          set -euo pipefail
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          for v in CLE_ANDROID_B64 CLE_ANDROID_MDP CLE_ANDROID_ALIAS; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::Le secret $v manque. Sans les trois, le bundle ne peut pas etre signe."
+              exit 1
+            fi
+          done
           echo "$CLE_ANDROID_B64" | base64 -d > cle.jks
-          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
-            --ks cle.jks --ks-pass "pass:$CLE_ANDROID_MDP" --ks-key-alias "$CLE_ANDROID_ALIAS" \
-            --min-sdk-version 23 \
-            android/app/build/outputs/bundle/release/app-release.aab
+          # 🔴 `jarsigner`, PAS `apksigner` : ce dernier ne traite que les APK et
+          # refuse un Android App Bundle. Play App Signing resigne de toute
+          # facon avec sa propre cle ; celle-ci n'est que la cle d'envoi.
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore cle.jks -storepass "$CLE_ANDROID_MDP" \
+            "$AAB" "$CLE_ANDROID_ALIAS"
+          # ⚠️ ON VÉRIFIE QUE LA SIGNATURE EST RÉELLEMENT POSÉE. `jarsigner` peut
+          # rendre 0 en n'ayant rien signé ; un artefact muet coûterait un dépôt.
+          jarsigner -verify -strict "$AAB"
           rm -f cle.jks
+          echo "Bundle signe et verifie."
 
       - name: Récupérer le paquet
         uses: actions/upload-artifact@v4

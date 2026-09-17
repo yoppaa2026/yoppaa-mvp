@@ -199,6 +199,46 @@ const fenetreNative = (options = {}) => {
   verifie('⚠️ le dossier embarqué reste minimal', /webDir: 'capacitor-web'/.test(conf))
 }
 
+// ═══ 7) LES WORKFLOWS QUI FABRIQUENT LES PAQUETS ═══════════════════════════
+{
+  // 🔴 LE DÉFAUT QUI NE SE VOIT NULLE PART (17/09, dans LES DEUX workflows).
+  // `if: ${{ env.X != '' }}` sur une étape dont le `env:` définit X : la
+  // condition est évaluée AVANT l'étape, donc X est vide, donc l'étape est
+  // TOUJOURS sautée. Android sortait un bundle non signé et Google le refusait
+  // sans un mot ; iOS échouait plus loin sur une erreur de signature obscure.
+  // Aucun des deux n'apparaissait en échec à l'endroit du problème.
+  for (const w of ['paquet-android', 'paquet-ios']) {
+    const src = lire(`.github/workflows/${w}.yml`)
+    // ⚠️ ON VISE LA FORME EXACTE, pas le mot « env » : `env:` est légitime
+    // partout ailleurs, c'est sa lecture dans un `if:` d'étape qui piège.
+    const ifs = src.match(/^\s*if:.*$/gm) || []
+    const fautifs = ifs.filter((l) => /env\./.test(l))
+    verifie(`🔴 ${w} : aucun « if » ne lit un env d’étape`, fautifs.length === 0,
+      fautifs.join(' | '))
+    // 🔴 ET LA SIGNATURE REFUSE DE SE TAIRE. Un paquet non signé n'a aucun
+    // usage : mieux vaut échouer bruyamment que livrer un fichier mort.
+    verifie(`🔴 ${w} : les secrets manquants font échouer le travail`,
+      /::error::Le secret/.test(src) && /exit 1/.test(src))
+  }
+
+  const android = lire('.github/workflows/paquet-android.yml')
+  // 🔴 `apksigner` NE SIGNE PAS UN BUNDLE : c'est l'outil des APK, et il refuse
+  // un .aab. Un bundle se signe avec `jarsigner`.
+  //
+  // ⚠️ ON VISE LES LIGNES EXÉCUTÉES, PAS LE FICHIER. La première version de
+  // cette garde rougissait sur le COMMENTAIRE ci-dessus, qui explique
+  // précisément pourquoi cet outil est écarté. Deuxième fois de la semaine :
+  // un mot cherché se trouve dans ce qui le proscrit.
+  const lignesYml = android.split('\n').filter((l) => !/^\s*#/.test(l))
+  verifie('🔴 le bundle est signé avec jarsigner',
+    lignesYml.some((l) => /\bjarsigner\b/.test(l)))
+  verifie('🔴 et jamais avec apksigner, qui refuse un .aab',
+    !lignesYml.some((l) => /\bapksigner\b/.test(l)))
+  // ⚠️ ON VÉRIFIE LA SIGNATURE APRÈS L'AVOIR POSÉE : `jarsigner` peut rendre 0
+  // sans avoir rien signé, et l'artefact muet ne se découvre qu'au dépôt.
+  verifie('⚠️ la signature est vérifiée après coup', /jarsigner -verify -strict/.test(android))
+}
+
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)
 if (echecs.length) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

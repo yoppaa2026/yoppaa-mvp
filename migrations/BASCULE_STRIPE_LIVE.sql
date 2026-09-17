@@ -57,12 +57,12 @@ UPDATE commercants
  WHERE statut_publication = 'publie'
    AND accepte_paiement_cash IS DISTINCT FROM true;
 
--- Le rendez-vous a son propre couple de reglages.
-UPDATE commercants
-   SET rdv_paiement_cash = true
- WHERE statut_publication = 'publie'
-   AND rdv_actif IS TRUE
-   AND rdv_paiement_cash IS DISTINCT FROM true;
+-- ⚠️ ET RIEN POUR LE RENDEZ-VOUS, VERIFIE LE 17/09. Les colonnes
+-- `rdv_paiement_cash` et `rdv_paiement_ligne` existent, sont exposees par
+-- `commercants_public`, et ne sont lues NULLE PART dans le code : ni dans
+-- `app/`, ni dans `lib/`. Les ecrire ici ferait croire qu on a agi. Le
+-- rendez-vous se ferme par `stripe_account_charges_enabled`, deja remis a faux
+-- au bloc 1, et il reste reservable sans paiement d avance.
 
 -- ⚠️ LE DETAIL EN RETRAIT TRANCHE, ET C EST EXCLUSIF : tant que le choix est
 -- « en_ligne », `cashOK` reste faux meme avec `accepte_paiement_cash`. Le

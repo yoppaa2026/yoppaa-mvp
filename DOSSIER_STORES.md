@@ -221,3 +221,114 @@ pour le Yopper. À trancher seulement si Apple objecte.
 ⚠️ **Le lancement officiel est le 14 novembre**, l'ouverture aux Yoppers le
 1er octobre. Un aller-retour de revue Apple prend plusieurs jours : déposer tôt
 laisse le temps d'encaisser un refus sans que la date bouge.
+
+---
+
+## 7. Les notes de revue
+
+C'est le premier texte que le relecteur ouvre, et souvent le seul qu'il lit en
+entier. Il se colle dans **App Review Information → Notes** chez Apple, et dans
+**Instructions de test** chez Google.
+
+🔴 **Trois choses le décident, et deux sont invisibles depuis un bureau
+californien** : il ne verra aucun commerce, il ne pourra pas payer, et il
+cherchera les achats intégrés. Chacune est un rejet si la note ne l'a pas dit
+d'avance.
+
+### 7.1 Ce que le relecteur doit savoir, dans l'ordre
+
+| Point | Pourquoi il décide |
+|---|---|
+| **La géolocalisation** | il teste depuis la Californie : sans commune choisie à la main, sa liste est **vide**, et une app vide se rejette pour contenu incomplet |
+| **Le paiement** | il cherchera pourquoi ce n'est pas un achat intégré ; la réponse tient en une phrase, mais elle doit y être |
+| **Le compte de démonstration** | Apple l'exige dès qu'il y a une connexion, et il doit fonctionner le jour de la revue |
+
+### 7.2 Le paiement, et pourquoi ce n'est pas un achat intégré
+
+Yoppaa vend des **biens et services du monde réel** : un repas retiré au
+comptoir, une table au restaurant, une coupe chez le coiffeur, un colis expédié
+par la poste. Apple autorise explicitement un moyen de paiement externe pour
+ça, et l'achat intégré n'est exigé que pour du contenu numérique consommé dans
+l'application.
+
+⚠️ **Le seul point discutable est le bon cadeau.** Il s'achète dans
+l'application, mais il ne se consomme que chez un commerçant physique : c'est un
+avoir sur un bien réel, pas un contenu. La note le dit d'avance plutôt que
+d'attendre la question.
+
+### 7.3 Ce que le relecteur peut réellement faire
+
+🔴 **Le parcours doit aller jusqu'au bout sans carte bancaire.** Les fiches de
+démonstration encaissent **au comptoir** : la commande se confirme sans
+paiement, et l'écran le dit. Voir `PROCEDURE_BASCULE_STRIPE.md` §2, et le
+contrôle D du SQL de bascule, qui compte les fiches dont le tunnel s'arrêterait
+sans issue.
+
+⚠️ **Une fiche de détail en expédition ne peut pas encaisser au comptoir** : un
+colis part avant toute rencontre. Si une fiche de démonstration est en
+expédition, son tunnel meurt. À basculer en retrait avant les captures.
+
+### 7.4 Le texte à coller (anglais)
+
+> **About Yoppaa**
+>
+> Yoppaa connects people with independent shops in their own town in Belgium:
+> bakeries, restaurants, hair salons, grocers. Users browse what is open nearby,
+> order ahead, book a table or an appointment, and collect in store.
+>
+> **Reviewing from outside Belgium**
+>
+> The app lists shops around the user. The test account below is already
+> registered in **Mettet, Belgium**, so shops, menus and booking appear as soon
+> as you sign in, with or without location permission. You may decline the
+> location prompt.
+>
+> **Test account**
+>
+> Email: `<a completer>` — Password: `<a completer>`
+>
+> **Payments**
+>
+> Yoppaa is used to buy physical goods and real-world services consumed outside
+> the app (food collected in store, restaurant tables, salon appointments,
+> parcels shipped by post). Payment for these is handled by the merchant through
+> Stripe, in line with App Store Review Guideline 3.1.3(e) for goods and
+> services used outside the app. Gift vouchers sold in the app are credit
+> redeemable only in a physical shop, not digital content.
+>
+> The demonstration merchants used for review accept **payment on collection**,
+> so the full ordering flow can be completed without entering card details.
+>
+> **Account deletion**
+>
+> Account deletion is available in the app under the **Profile** tab, button
+> **Supprimer mon compte**, and also at https://www.yoppaa.app/legal. Deletion is refused only
+> while an order or a paid voucher is still outstanding, and the screen then
+> explains what remains and gives a contact address.
+>
+> **Company**
+>
+> Avcotech SRL, Mettet, Belgium. Contact: support@yoppaa.app
+
+⏳ **À compléter avant de coller** : l'identifiant et le mot de passe du compte
+de démonstration.
+
+### 7.5 L'essai qui valide la note, à faire par Alex
+
+🔴 **Une note de revue qui décrit un chemin faux coûte un cycle entier.** Deux
+affirmations de cette note n'ont pas pu être prouvées depuis le code et doivent
+donc être vues à l'écran, **en navigation privée**, avec le compte de
+démonstration et **rien d'autre** :
+
+1. Refuser la demande de géolocalisation, puis regarder la liste d'accueil.
+   **Si elle est vide, la note est fausse** et il faut décrire le geste réel qui
+   fait apparaître les commerces. La commune vient du profil du client
+   (`clients.commune_id`), pas d'un sélecteur d'écran : je n'ai pas pu établir
+   avec certitude que la liste s'en sert quand la position est refusée.
+2. Aller jusqu'au bout d'une commande sur une fiche de démonstration, sans
+   carte. **Si un écran réclame une carte, le relecteur sera bloqué au même
+   endroit.**
+
+⚠️ **Le compte doit fonctionner le jour de la revue, pas le jour du dépôt.**
+Apple ouvre parfois le dossier trois jours plus tard ; un compte expiré, un mot
+de passe changé ou une fiche dépubliée entre-temps est un rejet sec.

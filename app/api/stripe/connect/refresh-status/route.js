@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
+import { verdictCompte, messageCompte, VERDICT } from '@/lib/stripe-mode'
 
 export async function POST(request) {
   try {
@@ -39,7 +40,13 @@ export async function POST(request) {
 
     const { data: commercant } = await supabase
       .from('commercants')
-      .select('id, stripe_account_id, auth_user_id')
+      // ⚠️ `stripe_account_mode` : sans elle, le verdict ci-dessous rend
+      // « inconnu » pour tout le monde, et cette route repart interroger Stripe
+      // sur un compte inatteignable.
+      // ⚠️ `stripe_onboarding_done_at` était LU plus bas sans être sélectionné :
+      // il valait donc toujours `undefined`, et la date d'ouverture était
+      // réécrite à chaque passage.
+      .select('id, stripe_account_id, stripe_account_mode, stripe_onboarding_done_at, auth_user_id')
       .eq('id', commercant_id)
       .single()
 
@@ -47,6 +54,30 @@ export async function POST(request) {
     if (commercant.auth_user_id !== user.id) return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     if (!commercant.stripe_account_id) {
       return NextResponse.json({ ok: false, error: 'aucun compte Stripe lié' }, { status: 400 })
+    }
+
+    // 🔴 NE PAS INTERROGER STRIPE SUR UN COMPTE D'UN AUTRE MONDE. Cette route
+    // tourne à chaque retour sur le tableau de bord. Après la bascule, elle
+    // partirait chercher un compte de test avec une clé live : Stripe refuse,
+    // et le commerçant reçoit un message anglais qu'il ne comprend pas, sur un
+    // écran où il n'a rien demandé.
+    //
+    // ⚠️ ON NE DÉTACHE RIEN ICI, ET C'EST VOLONTAIRE. Le détachement appartient
+    // au parcours de reconnexion, qui le fait sur un geste du commerçant. Une
+    // écriture déclenchée par un simple affichage se répéterait à chaque
+    // ouverture de page, sans que personne ne l'ait demandée.
+    const verdict = verdictCompte(commercant)
+    if (verdict === VERDICT.PERDU) {
+      console.warn('[stripe/connect/refresh-status] compte d un autre mode', {
+        commercant_id, ne_en: commercant.stripe_account_mode,
+      })
+      return NextResponse.json({
+        ok: false,
+        code: 'compte_autre_mode',
+        a_reconnecter: true,
+        error: messageCompte(verdict),
+        charges_enabled: false,
+      }, { status: 409 })
     }
 
     // Fetch le compte Stripe + extraire les flags

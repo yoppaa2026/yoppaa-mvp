@@ -20,6 +20,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG } from '@/lib/stripe'
 import { verdictForfait } from '@/lib/garde-forfait'
+import { comptePerdu, detachementCompte, naissanceCompte } from '@/lib/stripe-mode'
 
 export async function POST(request) {
   try {
@@ -53,7 +54,9 @@ export async function POST(request) {
       .from('commercants')
       // ⚠️ `plan`, `essai_plan` ET `created_at` : sans ces trois colonnes la
       // garde de forfait ci-dessous se trompe EN SILENCE (voir COLONNES_GARDE).
-      .select('id, nom, email, stripe_account_id, auth_user_id, plan, essai_plan, created_at')
+      // ⚠️ `stripe_account_mode` : sans elle, `comptePerdu` ne peut rien juger
+      // et rend « inconnu » pour tout le monde, donc ne detache jamais rien.
+      .select('id, nom, email, slug, stripe_account_id, stripe_account_mode, auth_user_id, plan, essai_plan, created_at')
       .eq('id', commercant_id)
       .single()
 
@@ -64,8 +67,44 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
 
-    // 1. Crée le compte Connect Express si pas encore lié
+    // 0. LE COMPTE EST-IL ENCORE ATTEIGNABLE ?
+    //
+    // 🔴 SANS CE BLOC, UN COMMERÇANT EST COINCÉ POUR TOUJOURS APRÈS LA BASCULE.
+    // Son `stripe_account_id` de test est renseigné, donc la création plus bas
+    // est sautée, et `accountLinks.create` part sur un compte qui n'existe pas
+    // dans le monde live. Stripe refuse, et son message anglais remonte tel quel
+    // au commerçant. Il clique, ça échoue, il reclique, ça échoue encore.
+    //
+    // ⚠️ LE VERDICT EST CERTAIN, IL NE S'INTERPRÈTE PAS : on compare le monde
+    // noté à la naissance du compte et celui de la clé actuelle. Deux mots. Un
+    // compte dont le monde n'a jamais été noté rend « inconnu », et « inconnu »
+    // ne détache rien.
     let accountId = commercant.stripe_account_id
+    const perdu = comptePerdu(commercant)
+    if (perdu) {
+      console.warn('[stripe/connect] compte d un autre mode, on repart a zero', {
+        commercant_id: commercant.id,
+        ne_en: commercant.stripe_account_mode,
+      })
+      // ⚠️ SI LE DÉTACHEMENT ÉCHOUE, ON S'ARRÊTE. Continuer créerait un second
+      // compte Stripe pendant que la fiche pointe toujours vers le premier :
+      // deux comptes, un seul lien, et l'argent du bon sur le mauvais.
+      const { error: errDetach } = await supabase
+        .from('commercants')
+        .update(detachementCompte(commercant))
+        .eq('id', commercant_id)
+      if (errDetach) {
+        console.error('[stripe/connect] detachement impossible', { commercant_id, msg: errDetach.message })
+        return NextResponse.json({
+          ok: false,
+          error: 'Ton compte de paiement doit etre reconnecte, et Yoppaa n a pas pu '
+            + 'preparer l operation. Previens-nous, on s en occupe.',
+        }, { status: 500 })
+      }
+      accountId = null
+    }
+
+    // 1. Crée le compte Connect Express si pas encore lié
     if (!accountId) {
       // 🔴 LA GARDE DE FORFAIT EST ICI, ET NULLE PART AILLEURS DANS CETTE
       // ROUTE. C'est le point le plus délicat des cinq gardes serveur.
@@ -81,7 +120,14 @@ export async function POST(request) {
       // Encaisser en ligne demande Vendre. Ouvrir un compte pour la première
       // fois, c'est donc créer une capacité qu'il n'a pas encore : là, on
       // ferme. Après, jamais.
-      const verdict = verdictForfait(commercant, 'paiement_ligne')
+      //
+      // ⚠️ ET UN COMPTE PERDU À LA BASCULE N'EST PAS UNE PREMIÈRE FOIS. Le
+      // commerçant avait déjà son compte ; c'est NOUS qui l'avons rendu
+      // inatteignable en changeant le mode de la plateforme. Lui opposer son
+      // forfait à cet instant reviendrait à lui faire payer notre bascule. Il
+      // retrouve ce qu'il avait, rien de plus : les gardes de paiement, elles,
+      // continuent de vérifier le forfait à chaque encaissement.
+      const verdict = perdu ? { ok: true } : verdictForfait(commercant, 'paiement_ligne')
       if (!verdict.ok) {
         return NextResponse.json(
           { ok: false, error: verdict.message, code: verdict.code, plan_requis: verdict.plan_requis },
@@ -107,10 +153,27 @@ export async function POST(request) {
         },
       })
       accountId = account.id
-      await supabase
+      // 🔴 C'EST ICI, ET NULLE PART AILLEURS, QUE LE MONDE DU COMPTE EST NOTÉ.
+      // Sans cette écriture, `comptePerdu` rend « inconnu » à vie et la
+      // détection ci-dessus ne se déclenche jamais : muette, donc inutile.
+      //
+      // ⚠️ ON LIT LE RÉSULTAT. Un `await` dont on ignore l'erreur est un espoir,
+      // pas une action : ici, le compte existerait chez Stripe sans être relié
+      // au commerçant, et personne ne le saurait.
+      const { error: errLien } = await supabase
         .from('commercants')
-        .update({ stripe_account_id: accountId })
+        .update(naissanceCompte(accountId))
         .eq('id', commercant_id)
+      if (errLien) {
+        console.error('[stripe/connect] compte cree chez Stripe mais NON RELIE', {
+          commercant_id, account_id: accountId, msg: errLien.message,
+        })
+        return NextResponse.json({
+          ok: false,
+          error: 'Ton compte de paiement a ete cree, mais Yoppaa n a pas pu l enregistrer. '
+            + 'Ne recommence pas : previens-nous, on le rattache.',
+        }, { status: 500 })
+      }
     }
 
     // 2. Génère l'Account Link (URL one-shot Stripe-hosted)

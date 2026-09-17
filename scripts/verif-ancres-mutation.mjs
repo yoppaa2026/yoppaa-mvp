@@ -47,7 +47,11 @@ for (const nom of HARNAIS) {
 
   // Les constantes de chemin déclarées en tête du harnais (MODULE, FICHE…).
   const constantes = {}
-  for (const m of src.matchAll(/const ([A-Z_][A-Z_0-9]*) = '([^']+)'/g)) constantes[m[1]] = m[2]
+  // ⚠️ `\s*` AUTOUR DU `=`, ET C'EST TOUT L'INTÉRÊT. Avec un espace exigé, un
+  // simple alignement cosmétique (`const SQL  = '…'`) faisait manquer la
+  // constante : le harnais retombait sur MODULE, et quatre ancres parfaitement
+  // valides étaient déclarées périmées. Une alarme fausse ne protège plus rien.
+  for (const m of src.matchAll(/const ([A-Z_][A-Z_0-9]*)\s*=\s*'([^']+)'/g)) constantes[m[1]] = m[2]
 
   // ⚠️ ON DÉCOUPE SUR LA FORME EXACTE DES ENTRÉES, `\n  { nom: `. Un découpage
   // plus large avalerait les commentaires et rendrait des ancres fantômes.

@@ -51,3 +51,9 @@ next-env.d.ts
 # portent de vraies coordonnees du commerce de test : adresse, telephone,
 # email. Seul le resultat recadre, dans public/captures/, part en ligne.
 captures-brutes/
+
+# Captures d ecran pour les stores : images lourdes, refaites a chaque refonte
+captures-stores/
+
+# Table de correspondance des commerces : contient des emails de tiers
+COMMERCES.csv

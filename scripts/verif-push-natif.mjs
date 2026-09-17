@@ -237,6 +237,11 @@ const fenetreNative = (options = {}) => {
   // ⚠️ ON VÉRIFIE LA SIGNATURE APRÈS L'AVOIR POSÉE : `jarsigner` peut rendre 0
   // sans avoir rien signé, et l'artefact muet ne se découvre qu'au dépôt.
   verifie('⚠️ la signature est vérifiée après coup', /jarsigner -verify -strict/.test(android))
+  // 🔴 ET LE NUMÉRO DE BUILD AUSSI. Un `sed` qui ne trouve rien ne dit rien :
+  // le paquet repartirait avec l'ancien numéro, le premier dépôt passerait, et
+  // le second serait refusé pour une cause à chercher très loin de là.
+  verifie('🔴 le numéro de build posé est relu',
+    /grep -q "versionCode/.test(android) && /Le numero de build n a pas ete pose/.test(android))
 }
 
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)

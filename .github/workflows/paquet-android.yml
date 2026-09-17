@@ -59,11 +59,27 @@ jobs:
 
       # 🔴 LE NUMÉRO DE BUILD DOIT CROÎTRE À CHAQUE DÉPÔT, sinon Google refuse le
       # fichier sans expliquer autre chose que « version code déjà utilisé ».
+      #
+      # ⚠️ ET UN `sed` QUI NE TROUVE RIEN NE DIT RIEN. Si `build.gradle` change
+      # de forme un jour, le remplacement devient muet et le paquet repart avec
+      # l'ancien numéro. Le premier dépôt passerait ; le deuxième serait refusé,
+      # et la cause serait à chercher très loin de là. On vérifie donc que la
+      # valeur écrite est bien celle demandée.
       - name: Poser la version
         run: |
-          sed -i "s/versionCode .*/versionCode ${{ inputs.version_code }}/" android/app/build.gradle
-          sed -i "s/versionName .*/versionName \"${{ inputs.version_nom }}\"/" android/app/build.gradle
-          grep -E "versionCode|versionName" android/app/build.gradle
+          set -euo pipefail
+          G=android/app/build.gradle
+          sed -i "s/versionCode .*/versionCode ${{ inputs.version_code }}/" "$G"
+          sed -i "s/versionName .*/versionName \"${{ inputs.version_nom }}\"/" "$G"
+          grep -E "versionCode|versionName" "$G"
+          grep -q "versionCode ${{ inputs.version_code }}" "$G" || {
+            echo "::error::Le numero de build n a pas ete pose. Le paquet garderait l ancien, et le depot serait refuse."
+            exit 1
+          }
+          grep -q "versionName \"${{ inputs.version_nom }}\"" "$G" || {
+            echo "::error::Le nom de version n a pas ete pose."
+            exit 1
+          }
 
       # ⚠️ UN BUNDLE (.aab), PAS UN APK : Google Play n'accepte plus que ce
       # format pour les nouvelles applications.

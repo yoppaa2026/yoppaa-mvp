@@ -50,6 +50,11 @@ const MUTATIONS = [
     de: "          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \\",
     vers: "          apksigner sign --min-sdk-version 23 \\" },
 
+  { nom: '🔴 le numero de build pose en silence : le 2e depot refuse, cause introuvable',
+    fichier: ANDROID,
+    de: "          grep -q \"versionCode ${{ inputs.version_code }}\" \"$G\" || {",
+    vers: "          if false; then" },
+
   { nom: '🔴 la signature n est plus verifiee : un artefact muet part au depot',
     fichier: ANDROID,
     de: "          jarsigner -verify -strict \"$AAB\"",

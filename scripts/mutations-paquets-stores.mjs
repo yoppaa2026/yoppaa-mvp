@@ -33,6 +33,7 @@ const ANDROID = '.github/workflows/paquet-android.yml'
 const IOS = '.github/workflows/paquet-ios.yml'
 const CONF = 'capacitor.config.ts'
 const PLIST = 'ios/App/App/Info.plist'
+const ANDROID_MANIFESTE = 'android/app/src/main/AndroidManifest.xml'
 
 const MUTATIONS = [
   // ─── LE WORKFLOW iOS, QUI N A JAMAIS TOURNE (17/09) ─────────────────────
@@ -121,6 +122,55 @@ const MUTATIONS = [
     fichier: PLIST,
     de: '<key>ITSAppUsesNonExemptEncryption</key>',
     vers: '<key>ITSAppUsesNonExemptEncryptionAbsente</key>' },
+
+  // ─── CE QUE LE CODE DEMANDE ET QUE LES MANIFESTES DOIVENT DECLARER ──────
+  //
+  // 🔴 LE DEFAUT DU 17/09 A MINUIT, TROUVE PAR UN MAIL D APPLE (ITMS-90683).
+  // Le code appelle `navigator.geolocation` dans quatre fichiers et ouvre
+  // quatorze choix d image, et AUCUN des deux manifestes ne le declarait. Le
+  // manifeste Android ne portait QUE `INTERNET`. Les deux paquets seraient
+  // partis avec leur ecran principal vide.
+  { nom: '🔴 iOS cesse d expliquer la position : ITMS-90683, et la geoloc ne s accorde jamais',
+    fichier: PLIST,
+    de: '\t<key>NSLocationWhenInUseUsageDescription</key>',
+    vers: '\t<key>NSLocationWhenInUseUsageDescriptionAbsente</key>' },
+
+  { nom: '🔴 iOS cesse d expliquer l appareil photo : l app est TUEE au premier appui',
+    fichier: PLIST,
+    de: '\t<key>NSCameraUsageDescription</key>',
+    vers: '\t<key>NSCameraUsageDescriptionAbsente</key>' },
+
+  { nom: '🔴 iOS cesse d expliquer la phototheque',
+    fichier: PLIST,
+    de: '\t<key>NSPhotoLibraryUsageDescription</key>',
+    vers: '\t<key>NSPhotoLibraryUsageDescriptionAbsente</key>' },
+
+  // 🔴 APPLE REFUSE UNE CHAINE CREUSE. « Cette app a besoin de votre
+  // position » ne dit pas a quoi ca sert : le texte doit nommer l usage.
+  { nom: '🔴 la chaine d explication devient creuse : Apple rejette a la revue',
+    fichier: PLIST,
+    de: '\t<string>Yoppaa utilise ta position pour te montrer les commerces ouverts autour de toi et la distance qui t\'en sépare.</string>',
+    vers: '\t<string>Cette app utilise votre position.</string>' },
+
+  { nom: '🔴 Android cesse de declarer la position : le WebView ne l obtient JAMAIS',
+    fichier: ANDROID_MANIFESTE,
+    de: '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
+    vers: '    <uses-permission android:name="android.permission.NOTHING" />' },
+
+  // 🔴 CELLE-CI MESURE LE FILTRE DES COMMENTAIRES. Commenter la permission la
+  // laisse LISIBLE dans le fichier : une garde qui cherche le mot resterait
+  // verte sur un manifeste qui ne demande plus rien.
+  { nom: '🔴 la permission est COMMENTEE : le mot reste, la demande disparait',
+    fichier: ANDROID_MANIFESTE,
+    de: '    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />',
+    vers: '    <!-- <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /> -->' },
+
+  // ⚠️ SANS `required="false"`, Google Play deduit de la permission que
+  // l appareil DOIT avoir un GPS et masque l app a ceux qui n en ont pas.
+  { nom: '⚠️ le GPS redevient obligatoire : Play masque l app aux appareils sans GPS',
+    fichier: ANDROID_MANIFESTE,
+    de: '<uses-feature android:name="android.hardware.location.gps" android:required="false" />',
+    vers: '<uses-feature android:name="android.hardware.location.gps" android:required="true" />' },
 
   // ─── LE DEFAUT REEL DU 17/09, DANS LES DEUX WORKFLOWS ───────────────────
   { nom: '🔴 LE DEFAUT D ORIGINE : la signature Android redevient toujours sautee',

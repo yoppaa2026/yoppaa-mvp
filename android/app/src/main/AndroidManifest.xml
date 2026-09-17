@@ -38,4 +38,36 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      🔴 LA POSITION, ET CE MANQUE A FAILLI PARTIR EN PRODUCTION (17/09 minuit).
+      Le manifeste ne declarait QUE l acces reseau. Or `navigator.geolocation`
+      est appele dans quatre fichiers, et un WebView Android ne peut PAS
+      accorder ce que le manifeste ne demande pas : la position aurait ete
+      refusee a l ouverture, en silence, et l ecran principal se serait vide.
+
+      ⚠️ AUCUN PLUGIN NE L AJOUTE A NOTRE PLACE : on utilise l API du
+      navigateur, pas `@capacitor/geolocation`. Rien ne fusionne donc de
+      permission dans ce fichier, contrairement a ce qu on lit partout.
+
+      ⚠️ ET C EST APPLE QUI L A TROUVE, pas nous. Le mail ITMS-90683 parlait de
+      l `Info.plist` ; le defaut vivait aussi ici, sans que rien ne le dise.
+
+      ⚠️ LES DEUX NIVEAUX, ET C EST VOULU. `COARSE` seule donne 1 a 3 km : assez
+      pour deviner la commune, pas pour ecrire « a 400 m de toi ». Un chiffre
+      faux est pire qu un chiffre absent. `FINE` au premier plan ne demande
+      aucun formulaire supplementaire chez Google ; c est `BACKGROUND_LOCATION`
+      qui en exige un, et nous ne la demandons pas.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!--
+      ⚠️ LE GPS N EST PAS OBLIGATOIRE POUR INSTALLER. Sans cette ligne, Google
+      Play deduit de la permission ci-dessus que l appareil DOIT avoir un GPS,
+      et masque l application a ceux qui n en ont pas. Yoppaa sait vivre sans :
+      on choisit sa commune a la main.
+    -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
 </manifest>

@@ -13,7 +13,7 @@
 // Le module est PUR — on lui passe la fenêtre — donc il s'exécute ici, sans
 // navigateur et sans téléphone.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   estAppNative, pluginNatif, initialiserPushNatif, demanderPushNatif,
@@ -455,6 +455,90 @@ const fenetreNative = (options = {}) => {
       verifie('🔴 la conformité export est déclarée, sinon chaque dépôt attend',
         /<key>ITSAppUsesNonExemptEncryption<\/key>\s*<false\/>/.test(plist))
     }
+  }
+}
+
+// ═══ 8) CE QUE LE CODE DEMANDE, LES MANIFESTES DOIVENT LE DÉCLARER ════════
+//
+// 🔴 LE DÉFAUT DU 17/09 À MINUIT, ET C'EST APPLE QUI L'A TROUVÉ, PAS NOUS.
+// Le premier dépôt a répondu ITMS-90683 : pas de chaîne d'explication pour la
+// position dans l'`Info.plist`. En cherchant les frères, il y en avait DEUX
+// autres, dont un côté Android que rien n'aurait jamais signalé : le manifeste
+// ne déclarait QUE `INTERNET`, alors que `navigator.geolocation` est appelé
+// dans quatre fichiers.
+//
+// ⚠️ AUCUN PLUGIN NE LES AJOUTE À NOTRE PLACE. On utilise les API du
+// navigateur, pas `@capacitor/geolocation` ni `@capacitor/camera` : rien ne
+// fusionne de permission dans ces fichiers, contrairement à ce qu'on lit
+// partout. Les deux paquets seraient partis avec leur écran principal vide.
+//
+// ⚠️ LA GARDE PART DU CODE, PAS DES MANIFESTES. Vérifier qu'une clé est
+// présente ne dit rien : c'est l'APPEL qui crée l'obligation. Le jour où un
+// écran appellera la caméra ou le micro, c'est ici que ça rougira.
+{
+  // 🔴 ET ON RETIRE LES COMMENTAIRES DES DEUX MANIFESTES AVANT DE LIRE. Ceux
+  // que je viens d'y écrire NOMMENT les permissions qu'ils expliquent : une
+  // garde qui cherche le mot le trouverait dans sa propre justification, et
+  // resterait verte sur un manifeste vidé. C'est le motif déjà vu deux fois
+  // cette semaine, un mot cherché se trouve dans ce qui le proscrit.
+  const sansXml = (t) => t.replace(/<!--[\s\S]*?-->/g, '')
+  const plist = sansXml(lire('ios/App/App/Info.plist'))
+  const manif = sansXml(lire('android/app/src/main/AndroidManifest.xml'))
+
+  const fichiersJs = ['app', 'lib'].flatMap((dossier) =>
+    readdirSync(new URL(`../${dossier}/`, import.meta.url), { recursive: true })
+      .filter((f) => typeof f === 'string' && f.endsWith('.js'))
+      .map((f) => `${dossier}/${f.split('\\').join('/')}`))
+  const toutLeCode = fichiersJs.map((f) => codeDe(f)).join('\n')
+
+  // ⚠️ LA POSITION. Quatre fichiers l'appellent, et sans géolocalisation il
+  // n'y a plus AUCUN lieu à montrer : l'écran principal se vide.
+  const veutPosition = /navigator\.geolocation/.test(toutLeCode)
+  verifie('⚠️ le code appelle bien la position (sinon cette section ment)',
+    veutPosition)
+  if (veutPosition) {
+    verifie('🔴 iOS explique POURQUOI il demande la position',
+      /<key>NSLocationWhenInUseUsageDescription<\/key>/.test(plist))
+    verifie('🔴 Android déclare la position, sans quoi le WebView ne l’obtient jamais',
+      /android\.permission\.ACCESS_FINE_LOCATION/.test(manif)
+      && /android\.permission\.ACCESS_COARSE_LOCATION/.test(manif))
+    // ⚠️ ET LE GPS RESTE FACULTATIF. Sans ces deux lignes, Google Play déduit
+    // de la permission que l'appareil DOIT avoir un GPS, et masque
+    // l'application à ceux qui n'en ont pas. Yoppaa sait vivre sans : on
+    // choisit sa commune à la main.
+    verifie('🔴 le GPS n’est pas rendu obligatoire à l’installation',
+      /location\.gps"\s+android:required="false"/.test(manif)
+      && /location\.network"\s+android:required="false"/.test(manif))
+  }
+
+  // ⚠️ L'IMAGE. Un `<input type="file" accept="image/*">` propose « Prendre une
+  // photo » sur iPhone : sans `NSCameraUsageDescription`, iOS TUE l'app à
+  // l'instant où l'utilisateur y touche. Ce n'est pas un avertissement.
+  //
+  // ⚠️ ANDROID N'A RIEN À DÉCLARER ICI, et c'est la dissymétrie : le WebView
+  // passe par l'intent système, qui s'exécute dans l'application Appareil
+  // photo. Demander `CAMERA` nous obligerait au contraire à la réclamer à
+  // l'utilisateur pour rien.
+  const veutImage = /type="file"[^>]*accept="image/.test(toutLeCode)
+  verifie('⚠️ le code ouvre bien un choix d’image (sinon cette section ment)',
+    veutImage)
+  if (veutImage) {
+    verifie('🔴 iOS explique POURQUOI il ouvre l’appareil photo',
+      /<key>NSCameraUsageDescription<\/key>/.test(plist))
+    verifie('🔴 iOS explique POURQUOI il ouvre la photothèque',
+      /<key>NSPhotoLibraryUsageDescription<\/key>/.test(plist))
+  }
+
+  // 🔴 ET UNE CHAÎNE VIDE OU CREUSE SE FAIT REJETER. Apple refuse « cette app
+  // a besoin de votre position » : le texte doit dire à quoi ça sert, dans la
+  // langue de l'utilisateur. On exige donc qu'il nomme l'app et qu'il ait la
+  // longueur d'une vraie phrase.
+  for (const cle of ['NSCameraUsageDescription', 'NSLocationWhenInUseUsageDescription',
+    'NSPhotoLibraryUsageDescription']) {
+    const m = plist.match(new RegExp(`<key>${cle}</key>\\s*<string>([^<]*)</string>`))
+    const texte = m ? m[1] : ''
+    verifie(`🔴 ${cle} dit à quoi ça sert`,
+      texte.length >= 40 && /Yoppaa/.test(texte), `« ${texte} »`)
   }
 }
 

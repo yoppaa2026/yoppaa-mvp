@@ -26,6 +26,12 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Yoppaa utilise l'appareil photo quand tu ajoutes une image à ta fiche, à tes articles ou à tes annonces.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Yoppaa utilise ta position pour te montrer les commerces ouverts autour de toi et la distance qui t'en sépare.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Yoppaa accède à tes photos quand tu choisis une image pour ta fiche, tes articles ou tes annonces.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

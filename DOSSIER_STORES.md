@@ -315,10 +315,29 @@ expédition, son tunnel meurt. À basculer en retrait avant les captures.
 >
 > **Company**
 >
-> Avcotech SRL, Mettet, Belgium. Contact: support@yoppaa.app
+> Avcotech, Rue de Prée 9 G, 5640 Mettet, Belgium. Contact: hello@yoppaa.app
 
 ⏳ **À compléter avant de coller** : l'identifiant et le mot de passe du compte
 de démonstration.
+
+🔴 **LE COMPTE DE DÉMONSTRATION DOIT AVOIR UN VRAI MOT DE PASSE**, décidé le
+11/08 et toujours vrai : le lien magique seul est inutilisable, le relecteur n'a
+aucun accès à la boîte mail. Un compte qui n'ouvre qu'avec un lien reçu par
+courriel est un rejet immédiat.
+
+⚠️ **Deux autres décisions arrêtées le 11/08, à ne pas rouvrir** :
+« Autoriser Google à tester avec ces identifiants » reste **désactivé** (le robot
+tapote au hasard, atteindrait le bouton de confirmation et créerait de vraies
+commandes chez de vrais commerçants) ; et **on n'écrit jamais à un store que
+l'application contient des données de test**, ce qui reviendrait à déclarer
+qu'elle n'est pas finie.
+
+⚠️ **Une piste notée le 11/08, à vérifier avant de s'en servir** : « refuser la
+géolocalisation et saisir le code postal 5640 ». Cette instruction a trois
+semaines et l'écran d'accueil a changé depuis. La commune vient aujourd'hui du
+profil du client (`clients.commune_id`), pas d'un champ de saisie : c'est
+exactement ce que l'essai §7.5 doit trancher. **Ne pas recopier cette phrase
+dans les notes sans l'avoir vue fonctionner.**
 
 🔴 **CE TEXTE N'EST VRAI QUE TANT QUE LA PLATEFORME EST EN MODE TEST.** Le jour
 de la bascule, la carte `4242` sera refusée, et une note qui l'annonce enverrait

@@ -274,7 +274,40 @@ const egal = (nom, obtenu, attendu) =>
   verifie('🔴 le message rendu vient du module', /messageCompte\(/.test(src))
 }
 
-// ═══ 7) LA MIGRATION ═══════════════════════════════════════════════════════
+// ═══ 7) L'ÉCRAN QUI DOIT LE DIRE ═══════════════════════════════════════════
+{
+  // 🔴 LE SERVEUR PEUT AVOIR RAISON SANS QUE PERSONNE NE L'ENTENDE. La route
+  // répond 409 avec la marche à suivre en français, mais le tableau de bord
+  // faisait `await fetch(...)` SANS LIRE LA RÉPONSE : `fetch` ne lève pas sur
+  // un code HTTP, donc le 409 passait pour un succès et l'écran réaffichait le
+  // même état. Le commerçant cliquait, rien ne changeait, il recliquait.
+  const src = codeDe('app/dashboard/TabPaiements.js')
+
+  // ⚠️ VISER L'ENDROIT : on découpe la fonction, pas le fichier. Un `res.ok`
+  // trouvé dans une autre fonction du même écran ne prouverait rien.
+  const i = src.indexOf('async function rafraichirStatus')
+  verifie('🔴 la fonction de rafraîchissement est lisible', i > -1)
+  const fin = src.indexOf('async function', i + 20)
+  const bloc = src.slice(i, fin > i ? fin : i + 1500)
+
+  verifie('🔴 la réponse du serveur est recueillie', /const res = await fetch\(/.test(bloc))
+  verifie('🔴 et son code HTTP est lu', /res\.ok/.test(bloc))
+  verifie('🔴 le message du serveur atteint l’écran', /toast\?\.\(/.test(bloc))
+  // ⚠️ ET IL DIT LE MESSAGE DU SERVEUR, pas un texte générique qui l'écraserait.
+  verifie('🔴 c’est le texte du serveur qui s’affiche', /j\.error/.test(bloc))
+  // ⚠️ L'ÉCRAN SE RECHARGE QUAND MÊME : l'état a pu changer malgré l'erreur.
+  //
+  // 🔴 ET CHERCHER `await charger()` NE SUFFIT PAS. Un `return` glissé avant lui
+  // laisse le texte en place et coupe pourtant le flux : la garde restait verte
+  // sur une mutation qui figeait l'écran. On vise donc le CHEMIN, pas le mot.
+  const iJson = bloc.indexOf('res.json()')
+  const iCharger = bloc.indexOf('await charger()')
+  verifie('⚠️ l’écran se recharge dans tous les cas', iCharger > -1)
+  verifie('🔴 et rien ne coupe le chemin avant ce rechargement',
+    iJson > -1 && iCharger > iJson && !/\breturn\b/.test(bloc.slice(iJson, iCharger)))
+}
+
+// ═══ 8) LA MIGRATION ═══════════════════════════════════════════════════════
 {
   const sql = lire('migrations/MIGRATION_MODE_COMPTE_STRIPE.sql')
 

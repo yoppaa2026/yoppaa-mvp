@@ -95,7 +95,7 @@ export default function TabPaiements({ commercantId, toast }) {
     setRefreshing(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      await fetch('/api/stripe/connect/refresh-status', {
+      const res = await fetch('/api/stripe/connect/refresh-status', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -103,6 +103,17 @@ export default function TabPaiements({ commercantId, toast }) {
         },
         body: JSON.stringify({ commercant_id: commercantId }),
       })
+      // 🔴 ON LIT LA RÉPONSE. `fetch` ne lève pas sur un code HTTP : un 409 ou
+      // un 500 passait ici pour un succès, et `charger()` réaffichait le même
+      // état. Le commerçant cliquait, rien ne changeait, il recliquait.
+      //
+      // ⚠️ LE CAS QUI COMPTE EST LE COMPTE D'UN AUTRE MONDE. Après la bascule,
+      // le serveur répond 409 avec la marche à suivre en français. Sans cette
+      // lecture, ce message n'atteignait personne.
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast?.(j.error || 'L’état de ton compte de paiement n’a pas pu être vérifié.', 'error')
+      }
       await charger()
     } catch (e) {
       console.error('[TabPaiements] rafraichirStatus', e)

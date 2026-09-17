@@ -26,6 +26,7 @@ const MODULE = 'lib/stripe-mode.js'
 const LIEN = 'app/api/stripe/connect/create-account-link/route.js'
 const ETAT = 'app/api/stripe/connect/refresh-status/route.js'
 const SQL  = 'migrations/MIGRATION_MODE_COMPTE_STRIPE.sql'
+const BORD = 'app/dashboard/TabPaiements.js'
 
 const MUTATIONS = [
   // ─── LE MONDE D UNE CLE ─────────────────────────────────────────────────
@@ -158,6 +159,27 @@ const MUTATIONS = [
     fichier: ETAT,
     de: "        error: messageCompte(verdict),",
     vers: "        error: 'compte_autre_mode'," },
+
+  // ─── L ECRAN QUI DOIT LE DIRE ───────────────────────────────────────────
+  { nom: '🔴 LE DEFAUT D ORIGINE : l ecran n attrape plus la reponse, le 409 part dans le vide',
+    fichier: BORD,
+    de: "      const res = await fetch('/api/stripe/connect/refresh-status', {",
+    vers: "      const res = { ok: true, json: async () => ({}) }; await fetch('/api/stripe/connect/refresh-status', {" },
+
+  { nom: '🔴 le code HTTP n est plus lu : un 409 passe pour un succes',
+    fichier: BORD,
+    de: "      if (!res.ok) {",
+    vers: "      if (false) {" },
+
+  { nom: '🔴 le message du serveur est remplace par un texte generique',
+    fichier: BORD,
+    de: "        toast?.(j.error || 'L’état de ton compte de paiement n’a pas pu être vérifié.', 'error')",
+    vers: "        toast?.('Erreur', 'error')" },
+
+  { nom: '⚠️ l ecran ne se recharge plus : l etat reste fige apres l erreur',
+    fichier: BORD,
+    de: "      const j = await res.json().catch(() => ({}))",
+    vers: "      const j = await res.json().catch(() => ({})); return" },
 
   // ─── LA MIGRATION ───────────────────────────────────────────────────────
   { nom: '🔴 les droits ne sont plus repliques : le parcours casse sous l identite du commercant',

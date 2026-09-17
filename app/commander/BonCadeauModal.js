@@ -6,7 +6,7 @@
 
 import { useState } from 'react'
 import { redirectTop } from '@/lib/redirect-top'
-import { euros } from '@/lib/montants'
+import { euros, INSECABLE } from '@/lib/montants'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { BON_MONTANT_MIN, BON_MONTANT_MAX, libelleBon } from '@/lib/bons-cadeaux'
 
@@ -98,7 +98,11 @@ export default function BonCadeauModal({ commercant, validiteMois = 12, onClose 
             {MONTANTS_RAPIDES.map(m => (
               <button key={m} type="button" onClick={() => setMontant(String(m))}
                 style={{ flex: 1, padding: '9px 0', borderRadius: 12, border: `1.5px solid ${montantNum === m ? T.main : T.pale}`, background: montantNum === m ? T.pale : '#fff', color: montantNum === m ? T.main : T.ink, fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                {m}€
+                {/* ⚠️ « 20 € » ET NON « 20€ » : l'espace avant le symbole est la
+                    règle française, et elle est INSÉCABLE pour que le « € » ne
+                    tombe pas seul. Pas `euros()` ici : « 20,00 € » met deux
+                    décimales inutiles sur une pastille de trois centimètres. */}
+                {`${m}${INSECABLE}€`}
               </button>
             ))}
           </div>

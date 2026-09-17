@@ -314,14 +314,18 @@ function SwipeRetrait({ onConfirm, clientPrenom, libelle = 'Glisse pour récupé
           </div>
         )}
 
-        {/* FIX : thumb - "YOP" → "SWIPE" */}
+        {/* 🔴 « SWIPE » ÉTAIT DE L'ANGLAIS, JUSTE SOUS « FAIS GLISSER POUR
+            RÉCUPÉRER » (Alex, 17/09, sur une capture destinée aux stores). Deux
+            langues à trois centimètres l'une de l'autre, sur l'écran que le
+            client montre au comptoir. « GLISSE » fait la même longueur, dit le
+            même geste, et reprend le verbe de la consigne juste au-dessus. */}
         <div style={{ position: 'absolute', left: 4 + swipeX, top: 4, width: THUMB, height: THUMB, borderRadius: '50%', background: `linear-gradient(135deg, ${C.main}, ${C.mid})`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 20px ${C.main}66, 0 0 0 ${p > 0.5 ? '3px' : '0px'} ${C.light}`, transition: swiping ? 'none' : 'left 0.3s, box-shadow 0.2s', userSelect: 'none', gap: 2 }}>
           <div style={{ display: 'flex', gap: 3 }}>
             {[{c:'rgba(255,255,255,0.5)',s:4},{c:'rgba(196,160,244,0.9)',s:5},{c:'rgba(150,96,224,0.9)',s:4}].map((d,i) => (
               <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c }}/>
             ))}
           </div>
-          <span style={{ fontWeight: 900, fontSize: '0.52rem', color: '#fff', letterSpacing: '0.8px', textTransform: 'uppercase', lineHeight: 1 }}>SWIPE</span>
+          <span style={{ fontWeight: 900, fontSize: '0.52rem', color: '#fff', letterSpacing: '0.8px', textTransform: 'uppercase', lineHeight: 1 }}>GLISSE</span>
         </div>
       </div>
     </div>

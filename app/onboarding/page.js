@@ -356,7 +356,14 @@ export default function OnboardingPage() {
     <>
       <style>{`
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; overflow: hidden; }
+        /* ⚠️ LA RACINE EST PEINTE, PAS SEULEMENT LE CORPS. Sans cela, un
+           dépassement laisse voir le fond de globals.css, blanc en clair :
+           c'est la bande blanche du 01/09, et elle revenait par là.
+           ⚠️ AUCUN ACCENT GRAVE DANS CE BLOC. Tout ce style vit dans un
+           gabarit JavaScript : un seul accent grave le referme, et le fichier
+           ne compile plus. Les bancs de texte restent VERTS dessus, seul
+           eslint le voit. C'est arrivé en écrivant ce commentaire-ci. */
+        html, body { height: 100%; overflow: hidden; background: ${T.bgPanel}; }
         body { font-family: "DM Sans", sans-serif; background: ${T.bgPanel}; }
 
         @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
@@ -368,8 +375,26 @@ export default function OnboardingPage() {
         @keyframes popIn { from { opacity:0; transform:translate(-50%,-50%) scale(0.5); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
         @keyframes progressFill { from { width:0; } to { width:100%; } }
 
+        /* ⚠️ LE GABARIT « BOÎTE DE LA TAILLE DE L'ÉCRAN », celui des trois
+           autres pages. La boîte a une hauteur FIXE et ne déborde JAMAIS ;
+           c'est la zone intérieure qui défile.
+           🔴 SURTOUT PAS de hauteur MINIMALE ici. Une boîte libre de GRANDIR, c'est
+           exactement le défaut du 01/09 : une bande blanche en bas de l'écran
+           et un défilement sans fin dans le vide. */
         .wrap { height: 100dvh; display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; position: relative; overflow: hidden; }
-        .ecran { flex: 1; display: flex; flex-direction: column; animation: ${sortie ? 'slideOut 0.3s ease forwards' : 'fadeIn 0.4s ease'}; }
+
+        /* 🔴 LA CORRECTION DU 18/09, TROUVÉE PAR ALEX SUR SON IPHONE : les
+           quatre écrans d'accueil débordaient, le bas était coupé, et on ne
+           pouvait plus ni valider ni passer à la suite. L'onboarding était
+           donc INFRANCHISSABLE, dans l'app même qu'on dépose sur les stores.
+           Il manquait les deux moitiés du gabarit sur cette zone :
+             • la hauteur minimale à zéro, sans quoi un enfant flex REFUSE de
+               descendre sous la hauteur de son contenu. Il POUSSE au lieu de
+               se comprimer, et son débordement ne peut jamais défiler.
+             • le débordement vertical en auto, pour que le trop-plein défile
+               au lieu d'être coupé.
+           Troisième fois que ce piège se présente dans ce dépôt. */
+        .ecran { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; animation: ${sortie ? 'slideOut 0.3s ease forwards' : 'fadeIn 0.4s ease'}; }
 
         .btn-primary {
           width: 100%;
@@ -445,7 +470,11 @@ export default function OnboardingPage() {
         <div className="ecran">
 
           {/* Zone visuelle */}
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1.5rem 1rem' }}>
+          {/* ⚠️ C'EST ELLE QUI ABSORBE LA COMPRESSION, et c'est voulu : un
+              décor animé peut rétrécir, un bouton qu'on doit atteindre, non.
+              Sans `minHeight: 0` elle imposait sa taille (l'un des visuels
+              porte un `aspectRatio: 4/3`) et repoussait le texte vers le bas. */}
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1.5rem 1rem' }}>
             {ecran.visuel === 'yoppaa' && <VisuelYoppaa/>}
             {ecran.visuel === 'notifs' && <VisuelNotifs/>}
             {ecran.visuel === 'maps' && <VisuelMaps/>}

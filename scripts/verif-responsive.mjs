@@ -924,12 +924,22 @@ egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
 // peignaient `body` ; la racine gardait le fond de `globals.css`, blanc en
 // clair et presque noir en sombre.
 {
+  // 🔴 LES ÉCRANS D'ACCUEIL N'ÉTAIENT PAS DANS CETTE LISTE, ET LE MÊME DÉFAUT
+  // Y VIVAIT (18/09, trouvé par Alex sur son iPhone). Ils portent le gabarit
+  // sans le dire : une boîte à la taille de l'écran, une zone qui défile. Mais
+  // cette zone n'avait NI `min-height: 0` NI `overflow-y: auto` : le bas était
+  // coupé, le bouton inatteignable, et l'onboarding INFRANCHISSABLE dans l'app
+  // même qu'on dépose sur les stores.
+  //
+  // ⚠️ LES NOMS DE CLASSES DIFFÈRENT, la règle non. On les porte donc dans la
+  // liste plutôt que de renommer du CSS qui a un sens là où il est.
   const GABARIT = [
-    ['l’accueil Yopper', 'app/commander/page.js'],
-    ['la fiche boutique', 'app/commander/[slug]/page.js'],
-    ['la fiche des services', 'app/commander/rdv/[slug]/page.js'],
+    ['l’accueil Yopper', 'app/commander/page.js', 'page-wrap', 'scroll-body'],
+    ['la fiche boutique', 'app/commander/[slug]/page.js', 'page-wrap', 'scroll-body'],
+    ['la fiche des services', 'app/commander/rdv/[slug]/page.js', 'page-wrap', 'scroll-body'],
+    ['les écrans d’accueil', 'app/onboarding/page.js', 'wrap', 'ecran'],
   ]
-  for (const [nom, chemin] of GABARIT) {
+  for (const [nom, chemin, clBoite, clZone] of GABARIT) {
     let src = null
     // ⚠️ Un fichier disparu rougit, il ne fait pas exploser le banc.
     // ⚠️ ET LES INTERPOLATIONS SONT NEUTRALISÉES D'ABORD. Ces blocs CSS vivent
@@ -942,8 +952,12 @@ egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
     verifier(`${nom} : son fichier existe encore`, src !== null, chemin)
     if (src === null) continue
 
-    const wrap = (src.match(/\.page-wrap\s*\{[^}]*\}/) || [''])[0]
-    const corps = (src.match(/\.scroll-body\s*\{[^}]*\}/) || [''])[0]
+    // ⚠️ LE POINT EST DANS LA REGEX, ET IL COMPTE : sans lui, `wrap` se
+    // trouverait à l'intérieur de `.page-wrap`, et la garde mesurerait le
+    // mauvais bloc sur trois pages sur quatre.
+    const bloc = (cl) => (src.match(new RegExp(`\\.${cl}\\s*\\{[^}]*\\}`)) || [''])[0]
+    const wrap = bloc(clBoite)
+    const corps = bloc(clZone)
 
     // 🔴 LA HAUTEUR EST FIXE, PAS MINIMALE.
     verifier(`${nom} : la boîte fait la taille de l’écran`,
@@ -956,8 +970,11 @@ egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
     verifier(`${nom} : et elle défile bien elle-même`,
       /overflow-y:\s*auto/.test(corps), corps.slice(0, 120))
     // ⚠️ LA RACINE PORTE LE FOND DE L'APP, sinon un dépassement montre du blanc.
+    // ⚠️ ET ELLE PEUT ÊTRE PEINTE AVEC LE CORPS : `html, body { … }` est une
+    // règle valable, que la première écriture de cette garde ne voyait pas.
+    // Ce qui compte est que le sélecteur COMMENCE par `html`.
     verifier(`${nom} : la racine est peinte, pas seulement le corps`,
-      /html\s*\{[^}]*background:/.test(src))
+      /html\s*(,[^{]*)?\{[^}]*background:/.test(src))
   }
 }
 

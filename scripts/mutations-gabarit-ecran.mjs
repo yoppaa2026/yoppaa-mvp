@@ -31,8 +31,44 @@ const BANC = 'verif:responsive'
 const ACCUEIL = 'app/commander/page.js'
 const BOUTIQUE = 'app/commander/[slug]/page.js'
 const SERVICES = 'app/commander/rdv/[slug]/page.js'
+const ONBOARDING = 'app/onboarding/page.js'
 
 const MUTATIONS = [
+  // ─── LES ÉCRANS D'ACCUEIL, QUI N'ÉTAIENT PAS DANS LE GABARIT (18/09) ─────
+  //
+  // 🔴 LE MÊME DÉFAUT Y VIVAIT, ET ALEX L'A TROUVÉ SUR SON IPHONE. La zone de
+  // contenu n'avait NI `min-height: 0` NI `overflow-y: auto` : sur un petit
+  // écran le bas était COUPÉ, le bouton devenait inatteignable, et les quatre
+  // écrans d'accueil étaient INFRANCHISSABLES — dans l'app même qu'on dépose.
+  //
+  // ⚠️ ET LA CORRECTION A FAILLI ÊTRE L'INVERSE : passer la boîte en
+  // `min-height`. C'est exactement le défaut du 01/09, la bande blanche et le
+  // vide sous la page. La première mutation ci-dessous mesure ce garde-fou.
+  { nom: '🔴 les ecrans d accueil repassent en hauteur MINIMALE (le vide du 01/09)',
+    fichier: ONBOARDING,
+    de: '.wrap { height: 100dvh;',
+    vers: '.wrap { min-height: 100dvh;' },
+
+  { nom: '🔴 la boite des ecrans d accueil peut a nouveau deborder',
+    fichier: ONBOARDING,
+    de: 'position: relative; overflow: hidden; }',
+    vers: 'position: relative; overflow-x: hidden; }' },
+
+  { nom: '🔴 LE DEFAUT REEL DU 18/09 : la zone de contenu ne peut plus retrecir',
+    fichier: ONBOARDING,
+    de: '.ecran { flex: 1; min-height: 0;',
+    vers: '.ecran { flex: 1; min-height: auto;' },
+
+  { nom: '🔴 ET SON FRERE : le trop-plein est coupe au lieu de defiler',
+    fichier: ONBOARDING,
+    de: 'min-height: 0; overflow-y: auto; display: flex;',
+    vers: 'min-height: 0; overflow-y: visible; display: flex;' },
+
+  { nom: '🔴 les ecrans d accueil cessent de peindre la racine',
+    fichier: ONBOARDING,
+    de: 'html, body { height: 100%; overflow: hidden; background: ${T.bgPanel}; }',
+    vers: 'html, body { height: 100%; overflow: hidden; color: inherit; }' },
+
   // ─── LA HAUTEUR REDEVIENT MINIMALE : LA BOÎTE PEUT GRANDIR ──────────────
   { nom: '🔴 l’accueil repasse en hauteur MINIMALE (le defaut d’origine)',
     fichier: ACCUEIL,

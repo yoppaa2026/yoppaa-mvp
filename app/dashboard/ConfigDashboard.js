@@ -11409,16 +11409,39 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
               </div>
             </div>
 
-            {/* Pas de réservation */}
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Granularité réservation</label>
-            <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
-              {PAS_OPTIONS.map(p => (
-                <button key={p} onClick={() => setForm({ ...form, pas_minutes: p })} type="button"
-                  style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: `1.5px solid ${form.pas_minutes === p ? T.main : T.hairline}`, background: form.pas_minutes === p ? T.pale : '#fff', color: form.pas_minutes === p ? T.main : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                  {p} min
-                </button>
-              ))}
-            </div>
+            {/* Pas de réservation — SEULEMENT LÀ OÙ ON SERT DES TABLES */}
+            {/* 🔴 CE RÉGLAGE N'A DE SENS QUE POUR UN RESTAURANT (18/09, demandé
+                par Alex après l'avoir vu chez Studio Amandine). Un service
+                s'enchaîne sur sa propre durée : une coiffeuse n'a aucune raison
+                d'avoir à choisir entre 15, 30 et 60 minutes de granularité, et
+                le mot lui-même ne lui dit rien. Un restaurateur, si : un
+                service de 18h à 23h avec un pas de 30, c'est lui qui décide que
+                les gens arrivent à et demie, et la durée du couvert n'y change
+                rien.
+
+                ⚠️ ON MASQUE L'ÉCRAN, ON NE TOUCHE PAS AU MOTEUR. La valeur en
+                base continue de décider, et c'est délibéré : Salon Nathalie
+                règle un pas de 30 pour des prestations de 30 à 90 minutes.
+                Faire suivre la durée lui aurait retiré les deux tiers de ses
+                départs sur les longues, et cassé son premier créneau d'après
+                la pause. Mesuré sur les vrais commerces avant de trancher.
+
+                ⚠️ UNE TABLE SE RECONNAÎT À `par_couverts`, pas à la catégorie
+                du commerce : c'est la prestation qui porte le mode, et un
+                restaurant peut très bien vendre aussi un atelier cuisine. */}
+            {prestationsRdv.some(p => p.par_couverts === true) && (
+              <>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Granularité réservation</label>
+                <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
+                  {PAS_OPTIONS.map(p => (
+                    <button key={p} onClick={() => setForm({ ...form, pas_minutes: p })} type="button"
+                      style={{ flex: 1, padding: '8px 4px', borderRadius: 8, border: `1.5px solid ${form.pas_minutes === p ? T.main : T.hairline}`, background: form.pas_minutes === p ? T.pale : '#fff', color: form.pas_minutes === p ? T.main : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      {p} min
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             {/* Pause optionnelle */}
             <div style={{ marginBottom: 10, padding: 10, background: T.bg, borderRadius: 10 }}>

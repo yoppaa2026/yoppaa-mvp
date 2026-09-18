@@ -130,6 +130,33 @@ const MUTATIONS = [
     de: '  const plafondCuisine = plafondCadence(commercant)',
     vers: '  const plafondCuisine = commercant?.rdv_cadence_couverts ?? null' },
 
+  // ─── LA GRANULARITÉ, RÉSERVÉE AUX TABLES (18/09) ────────────────────────
+  //
+  // 🔴 Vue par Alex chez Studio Amandine : un institut n a aucune raison de
+  // choisir entre 15, 30 et 60 minutes de granularite. Un restaurateur, si.
+  { nom: '🔴 la granularite revient chez tout le monde, instituts compris',
+    banc: 'verif:table', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '            {prestationsRdv.some(p => p.par_couverts === true) && (',
+    vers: '            {true && (' },
+
+  // 🔴 LA COLONNE ABSENTE DU SELECT, le defaut le plus frequent du depot : sans
+  // elle `par_couverts` vaut undefined partout, la condition est TOUJOURS
+  // fausse, et le reglage disparait AUSSI chez les restaurateurs, sans erreur.
+  { nom: '🔴 par_couverts sort du select : le reglage disparait meme au resto',
+    banc: 'verif:table', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: ".select('id, nom, capacite, duree_minutes, par_couverts')",
+    vers: ".select('id, nom, capacite, duree_minutes')" },
+
+  // 🔴 ET LE MOTEUR NE SUIT PAS LA DUREE. Mesure sur les vrais commerces :
+  // Salon Nathalie regle 30 min pour des prestations de 30 a 90, et y perdrait
+  // les deux tiers de ses departs sur les longues, plus son premier creneau
+  // d apres la pause. Cette mutation empeche de refaire le chemin sans
+  // remesurer.
+  { nom: '🔴 le pas se met a suivre la duree : Salon Nathalie perd ses departs',
+    banc: 'verif:table', fichier: 'lib/rdv-slots.js',
+    de: '    const pas        = cr.pas_minutes || 15',
+    vers: '    const pas        = parCouverts ? (cr.pas_minutes || 15) : dureeMinutes' },
+
   // ─── LA SAISIE AU TÉLÉPHONE ─────────────────────────────────────────────
   { nom: '🔴 hors inventaire, la salle ne se lit pas', banc: 'verif:table', fichier: 'app/dashboard/ModalNouveauRdv.js',
     de: '  const lectureSalle = enTable || tableHorsInventaire',

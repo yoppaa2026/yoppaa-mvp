@@ -147,6 +147,36 @@ egal('la réservation d’un restaurant s’atteint quand même',
   const BORD      = lire('app/dashboard/page.js')
   const CONFIG    = lire('app/dashboard/ConfigDashboard.js')
 
+  // ── LA GRANULARITÉ N'EST PAS UNE AFFAIRE DE SERVICE (18/09) ─────────────
+  //
+  // 🔴 CE QU'ALEX A VU chez Studio Amandine : « Granularité réservation » dans
+  // la configuration d'un institut. Le mot ne lui dit rien, le réglage non
+  // plus : un service s'enchaîne sur sa propre durée. Chez un restaurateur au
+  // contraire, c'est lui qui décide que les gens arrivent à et demie, et la
+  // durée du couvert n'y change rien. L'écran ne le propose donc plus qu'à qui
+  // sert des tables.
+  //
+  // ⚠️ `par_couverts` EST LE DISCRIMINANT, pas la catégorie du commerce : le
+  // mode est porté par la PRESTATION, et un restaurant peut très bien vendre
+  // aussi un atelier cuisine.
+  verifier('🔴 la granularité ne s’affiche que là où on sert des tables',
+    /prestationsRdv\.some\(p => p\.par_couverts === true\) && \(/.test(CONFIG))
+  // ⚠️ ET LE SELECT QUI ALIMENTE CE TEST DOIT RAMENER LA COLONNE. Sans elle,
+  // `par_couverts` vaut `undefined` partout, la condition est toujours fausse,
+  // et le réglage disparaît AUSSI chez les restaurateurs — sans une erreur.
+  // C'est le défaut le plus fréquent du dépôt : une colonne absente du select.
+  verifier('🔴 et la colonne qui en décide est bien demandée',
+    /rdv_prestations'\)[\s\S]{0,120}par_couverts/.test(CONFIG))
+
+  // 🔴 LE MOTEUR, LUI, NE BOUGE PAS, ET C'EST UNE DÉCISION MESURÉE. Le pas a
+  // bien failli suivre la DURÉE de la prestation. Sur les vrais commerces,
+  // c'était une perte : Salon Nathalie règle 30 minutes pour des prestations
+  // de 30 à 90, et y aurait laissé LES DEUX TIERS de ses départs sur les
+  // longues, plus son premier créneau d'après la pause. Cette garde empêche
+  // de refaire le chemin sans remesurer.
+  verifier('🔴 le pas des créneaux reste celui de la plage, jamais la durée',
+    /const pas\s+= cr\.pas_minutes \|\| 15/.test(lire('lib/rdv-slots.js')))
+
   verifier('🔴 la page de réservation accepte un restaurant',
     /if \(!isVitrine\(c\) && !reservationActive\(c\)\) \{/.test(FICHE_RDV))
   verifier('⚠️ et renvoie les autres vers leur fiche, pas vers une erreur',

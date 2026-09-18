@@ -69,6 +69,30 @@ const MUTATIONS = [
     de: 'html, body { height: 100%; overflow: hidden; background: ${T.bgPanel}; }',
     vers: 'html, body { height: 100%; overflow: hidden; color: inherit; }' },
 
+  // ─── UN VISUEL QUI S ECRIT PAR DESSUS LE TEXTE (18/09) ──────────────────
+  //
+  // 🔴 CE QU ALEX A VU sur le quatrieme ecran, capture a l appui : « Rejoins
+  // les Yoppers » ecrit PAR DESSUS deux lignes de la liste des avantages.
+  // ⚠️ ET C EST LA CORRECTION DE LA VEILLE QUI L A REVELE : depuis que la zone
+  // visuelle peut se comprimer, son contenu la depasse. Sans overflow: hidden,
+  // un depassement ne disparait pas, il SE DESSINE AILLEURS.
+  { nom: '🔴 la zone du visuel laisse a nouveau deborder sur le texte',
+    fichier: ONBOARDING,
+    de: "flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex'",
+    vers: "flex: 1, minHeight: 0, display: 'flex'" },
+
+  // 🔴 LA CAUSE DE FOND : une fraction de l ECRAN ne dit rien de la place qui
+  // RESTE une fois le titre et les deux boutons poses.
+  { nom: '🔴 le visuel se remesure en fraction d ecran',
+    fichier: ONBOARDING,
+    de: "<div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>",
+    vers: "<div style={{ maxHeight: '46dvh', overflowY: 'auto' }}>" },
+
+  { nom: '🔴 le visuel de connexion cesse de se borner a la place recue',
+    fichier: ONBOARDING,
+    de: "maxHeight: '100%', display: 'flex', flexDirection: 'column', minHeight: 0",
+    vers: "display: 'flex', flexDirection: 'column'" },
+
   // ─── LA HAUTEUR REDEVIENT MINIMALE : LA BOÎTE PEUT GRANDIR ──────────────
   { nom: '🔴 l’accueil repasse en hauteur MINIMALE (le defaut d’origine)',
     fichier: ACCUEIL,

@@ -234,9 +234,19 @@ function VisuelMaps() {
 // ── Visuel écran 4 — Connexion ────────────────────────────────────────────────
 function VisuelConnexion() {
   return (
-    <div style={{ width: '100%', maxWidth: 280 }}>
+    // 🔴 LE VISUEL SE BORNE À LA PLACE QU'IL REÇOIT, PAS À L'ÉCRAN (18/09,
+    // capture d'Alex). Avant, il valait sa hauteur naturelle — avatar plus neuf
+    // avantages, environ 490 pixels — pendant que la zone qui l'accueille n'en
+    // offrait que 350. Le trop-plein ne disparaissait pas : il DÉBORDAIT PAR
+    // DESSUS le titre, et « Rejoins les Yoppers » s'écrivait sur deux lignes de
+    // la liste. Illisible, et dans l'app qu'on dépose.
+    //
+    // ⚠️ `maxHeight: 100%` ET PAS `height`, parce que la zone d'accueil centre
+    // ses enfants : un enfant étiré à 100 % y perdrait son centrage sur les
+    // grands écrans, où il reste de la place.
+    <div style={{ width: '100%', maxWidth: 280, maxHeight: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Avatar Yopper */}
-      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+      <div style={{ textAlign: 'center', marginBottom: 20, flexShrink: 0 }}>
         {/* ⚠️ UN SEUL POINT MAUVE, comme dans la communication habituelle.
             Il y en avait DEUX, l'un dans l'autre : un emoji 🟣 posé au centre
             d'un disque violet en dégradé. Deux ronds concentriques de la même
@@ -249,7 +259,12 @@ function VisuelConnexion() {
       </div>
 
       {/* Avantages compte — la liste défile si l'écran est court, elle ne se fait PAS couper */}
-      <div style={{ maxHeight: '46dvh', overflowY: 'auto' }}>
+      {/* 🔴 `46dvh` MESURAIT L'ÉCRAN, PAS LA PLACE DISPONIBLE. Quarante-six
+          pour cent d'un iPhone font près de quatre cents pixels, quelle que
+          soit la hauteur qu'il reste une fois le titre et les deux boutons
+          posés. La liste prend maintenant ce qu'on lui donne, et défile
+          dedans : c'est le même gabarit que la page, un cran plus bas. */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
       {[
         // On annonce ce que Yoppaa sait faire, ce qui est la vraie raison de
         // créer un compte. ⚠️ Rien qui n'existe pas : fidélité, bons cadeaux
@@ -474,7 +489,13 @@ export default function OnboardingPage() {
               décor animé peut rétrécir, un bouton qu'on doit atteindre, non.
               Sans `minHeight: 0` elle imposait sa taille (l'un des visuels
               porte un `aspectRatio: 4/3`) et repoussait le texte vers le bas. */}
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1.5rem 1rem' }}>
+          {/* 🔴 ET `overflow: hidden` EST LE FILET, pas une précaution oisive.
+              Sans lui, un visuel plus haut que sa zone ne disparaît pas : il
+              s'affiche PAR DESSUS le titre et les boutons, et deux textes se
+              superposent. C'est ce qu'Alex a vu le 18/09 sur le quatrième
+              écran. Un visuel coupé se regarde encore ; deux textes l'un sur
+              l'autre, non. */}
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1.5rem 1rem' }}>
             {ecran.visuel === 'yoppaa' && <VisuelYoppaa/>}
             {ecran.visuel === 'notifs' && <VisuelNotifs/>}
             {ecran.visuel === 'maps' && <VisuelMaps/>}

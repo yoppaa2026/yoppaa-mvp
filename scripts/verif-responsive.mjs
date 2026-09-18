@@ -976,6 +976,52 @@ egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
     verifier(`${nom} : la racine est peinte, pas seulement le corps`,
       /html\s*(,[^{]*)?\{[^}]*background:/.test(src))
   }
+
+  // ═══ UN VISUEL NE S'ÉCRIT PAS PAR DESSUS LE TEXTE (18/09) ═══════════════
+  //
+  // 🔴 CE QU'ALEX A VU sur le quatrième écran d'accueil, capture à l'appui :
+  // « Rejoins les Yoppers » s'écrivait PAR DESSUS deux lignes de la liste des
+  // avantages. Deux textes superposés, illisibles, dans l'app qu'on dépose.
+  //
+  // 🔴 ET C'EST LA CORRECTION DE LA VEILLE QUI L'A RÉVÉLÉ. Avant, la zone
+  // visuelle gardait sa taille naturelle et poussait : le bas était coupé.
+  // Depuis qu'elle peut se comprimer, son contenu la dépasse — et sans
+  // `overflow: hidden`, un dépassement ne disparaît pas, il se DESSINE AILLEURS.
+  //
+  // ⚠️ LA CAUSE DE FOND : `maxHeight: '46dvh'` sur la liste. Une fraction de
+  // l'ÉCRAN ne dit rien de la place qui RESTE une fois le titre et les deux
+  // boutons posés. Quarante-six pour cent d'un iPhone font près de quatre cents
+  // pixels pour une zone qui n'en offrait que trois cent cinquante.
+  {
+    // 🔴 ON RETIRE LES COMMENTAIRES AVANT DE LIRE, et la première écriture de
+    // cette garde l'a appris à ses dépens : le commentaire qui explique
+    // pourquoi une hauteur en fraction d'écran est interdite CITE la valeur
+    // fautive. La garde se trouvait elle-même et rougissait sur du code juste.
+    // Troisième fois ce motif cette semaine.
+    let src = null
+    try {
+      src = lire('app/onboarding/page.js')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/^\s*\/\/.*$/gm, ' ')
+    } catch { src = null }
+    verifier('les écrans d’accueil : leur fichier existe encore', src !== null)
+    if (src !== null) {
+      verifier('🔴 la zone du visuel ne laisse rien déborder sur le texte',
+        /flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex'/.test(src))
+      // ⚠️ ET LE VISUEL SE BORNE À CE QU'ON LUI DONNE. `maxHeight` et pas
+      // `height` : la zone centre ses enfants, un enfant étiré perdrait son
+      // centrage là où il reste de la place.
+      verifier('🔴 le visuel de connexion se borne à la place reçue',
+        /maxHeight: '100%', display: 'flex', flexDirection: 'column', minHeight: 0/.test(src))
+      verifier('🔴 et sa liste défile dans ce qu’il lui reste',
+        /\{ flex: 1, minHeight: 0, overflowY: 'auto' \}/.test(src))
+      // 🔴 AUCUNE HAUTEUR EN FRACTION D'ÉCRAN DANS UN VISUEL. C'est la faute
+      // exacte, et elle se réécrit toute seule dès qu'on veut « que ça tienne ».
+      // Seule la boîte de la page a le droit de mesurer l'écran.
+      const dvhHorsWrap = (src.match(/\d+dvh/g) || []).filter((m) => m !== '100dvh')
+      egal('🔴 aucun visuel ne se mesure en fraction d’écran', dvhHorsWrap, [])
+    }
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

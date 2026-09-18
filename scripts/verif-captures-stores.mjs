@@ -14,6 +14,7 @@
 //   - la palette qui DIVERGE de celle du brand-kit.
 
 import { readFileSync } from 'node:fs'
+import { sansProse } from './lire-code.mjs'
 import {
   T, FORMATS, VISUELS, P, RATIO_MINIMUM_GOOGLE, RECADRAGE_DEFAUT,
   enLignes, dessiner,
@@ -241,6 +242,59 @@ const avantF = passees
   }
 }
 console.log('   ' + (passees - avantF) + ' verifications')
+
+console.log('\n── G. La police passe bien par la CSP ──')
+const avantG = passees
+{
+  // 🔴 LE DEFAUT DU 18/09, TROUVE PAR ALEX A L ECRAN. `font-src` vaut
+  // « 'self' data: https://fonts.gstatic.com » : une police tiree directement
+  // de jsdelivr par `new FontFace(url)` est BLOQUEE par la CSP, et la page ne
+  // montrait plus que son bandeau rouge. Le brand-kit fait un `fetch` (que
+  // `connect-src` autorise) puis passe par une data URL (que `font-src`
+  // autorise) : j en avais recopie la moitie.
+  //
+  // ⚠️ RIEN NE MESURAIT CA, et rien ne le mesurera le jour ou la CSP bougera.
+  // 🔴 ET ON DEPOUILLE LA CONFIG AUSSI, pas seulement la page. Ma premiere
+  // version lisait le fichier brut : `next.config.ts:26` porte un COMMENTAIRE
+  // qui dit « (connect-src 'self') », `exec` prenait cette occurrence-la, et la
+  // garde rougissait sur une CSP parfaitement juste. Le piege que son propre
+  // commentaire decrit, deux lignes plus bas.
+  const csp = sansProse(readFileSync(new URL('../next.config.ts', import.meta.url), 'utf8'))
+  const fontSrc = /"font-src ([^"]*)"/.exec(csp)
+  const connectSrc = /connect-src ([^`"]*)/.exec(csp)
+
+  verifier('G1 la CSP declare bien un font-src', Boolean(fontSrc))
+  verifier(
+    'G2 font-src autorise les data URL',
+    fontSrc && /(^|\s)data:/.test(fontSrc[1]),
+    'font-src = ' + (fontSrc ? fontSrc[1] : 'absent'),
+  )
+  verifier(
+    'G3 connect-src autorise le CDN de la police',
+    connectSrc && connectSrc[1].includes('cdn.jsdelivr.net'),
+  )
+
+  // ⚠️ ON DEPOUILLE LES COMMENTAIRES AVANT DE CHERCHER. Le commentaire de la
+  // page explique justement ce qu il ne faut PAS faire, avec les mots exacts :
+  // une garde qui lirait le fichier brut se trouverait elle-meme, et resterait
+  // verte sur le defaut qu elle est censee attraper.
+  const page = sansProse(readFileSync(new URL('../app/brand-kit/captures/page.js', import.meta.url), 'utf8'))
+  const appels = page.match(/new FontFace\([^)]*\)/g) || []
+  verifier('G4 la page cree bien des FontFace', appels.length > 0, appels.length + ' appel(s)')
+  for (const [i, appel] of appels.entries()) {
+    // 🔴 LE CONTROLE QUI COMPTE : aucune URL http(s) ne doit arriver dans un
+    // FontFace. Seule une data URL passe la CSP.
+    verifier(
+      'G5 l appel FontFace n° ' + (i + 1) + ' ne pointe pas une URL externe',
+      !/https?:\/\//.test(appel),
+      appel.slice(0, 80),
+    )
+  }
+  // Et la data URL doit venir d un FileReader, sinon le fetch ne sert a rien.
+  verifier('G6 la page lit la police en data URL', /readAsDataURL/.test(page))
+  verifier('G7 la page va chercher la police par fetch', /fetch\(/.test(page))
+}
+console.log('   ' + (passees - avantG) + ' verifications')
 
 console.log('')
 if (echecs.length) {

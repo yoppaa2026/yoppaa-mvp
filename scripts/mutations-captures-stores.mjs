@@ -22,6 +22,8 @@ const chemin = (f) => `${RACINE}/${f}`
 const BANC = 'verif:captures'
 const MODULE = 'lib/captures-stores.js'
 const BRAND = 'app/brand-kit/page.js'
+const PAGE = 'app/brand-kit/captures/page.js'
+const CONFIG = 'next.config.ts'
 
 const MUTATIONS = [
   // ─── LES FORMATS QUE LES STORES EXIGENT ────────────────────────────────
@@ -109,6 +111,30 @@ const MUTATIONS = [
     fichier: BRAND,
     de: "  ink:    '#1A0840',",
     vers: "  ink:    '#1A0841'," },
+
+  // ─── LA POLICE ET LA CSP ───────────────────────────────────────────────
+  //
+  // 🔴 LE DEFAUT DU 18/09, TROUVE PAR ALEX A L ECRAN et par personne d autre.
+  // `font-src` vaut « 'self' data: https://fonts.gstatic.com » : une police
+  // tiree directement de jsdelivr est BLOQUEE, et la page n affichait plus que
+  // son bandeau rouge. Le brand-kit fait un `fetch` puis passe par une data
+  // URL, et j en avais recopie la moitie.
+  { nom: '🔴 la police repart en URL directe, que la CSP bloque',
+    fichier: PAGE,
+    de: '      return new FontFace(\'Plus Jakarta Sans\', "url(\'" + dataUrl + "\')", { weight: poids }).load()',
+    vers: '      return new FontFace(\'Plus Jakarta Sans\', "url(\'https://cdn.jsdelivr.net/p.woff2\')", { weight: poids }).load()' },
+
+  // ⚠️ ET LES DEUX MOITIES DE LA CSP QUI RENDENT LE DETOUR POSSIBLE. Si l une
+  // saute, la police cesse de charger et seul l ecran le dira.
+  { nom: '🔴 font-src n autorise plus les data URL',
+    fichier: CONFIG,
+    de: '  "font-src \'self\' data: https://fonts.gstatic.com",',
+    vers: '  "font-src \'self\' https://fonts.gstatic.com",' },
+
+  { nom: '🔴 connect-src n autorise plus le CDN de la police',
+    fichier: CONFIG,
+    de: 'https://nominatim.openstreetmap.org https://cdn.jsdelivr.net',
+    vers: 'https://nominatim.openstreetmap.org' },
 ]
 
 const lancer = () => {

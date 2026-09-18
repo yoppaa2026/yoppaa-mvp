@@ -628,8 +628,42 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   // ⚠️ ELLE SE JUGE SUR CE QUI EST DANS LE PÉRIMÈTRE, PAS SUR CE QUI EST OUVERT.
   // Rester sur `invendusOuverts` aurait affiché le titre « Rien ne se perd »
   // au-dessus d'une liste vide le jour où la seule offre du pays est à 60 km.
-  verifier('🔴 la section n’existe que s’il y a quelque chose',
-    /\{invendusProches\.length > 0 && \(/.test(ACCUEIL))
+  //
+  // ⚠️ CETTE GARDE A CHANGÉ LE 18/09, PARCE QUE LA DÉCISION A CHANGÉ — pas
+  // parce qu'elle gênait. Elle avait EXACTEMENT prévu le cas : « le jour où la
+  // seule offre du pays est à 60 km ». C'est arrivé, Alex l'a vécu depuis
+  // Achêne alors que ses commerces sont à Mettet, et ce qu'il a vu n'était pas
+  // une liste vide : c'était le bandeau qui s'affichait UNE SECONDE puis
+  // disparaissait, dès que la position rendait la distance mesurable.
+  //
+  // Ce que la garde interdisait reste interdit : le titre « Rien ne se perd »
+  // ne s'affiche toujours QUE sur ce qui est dans le périmètre. Ce qui s'y
+  // ajoute est un message DIFFÉRENT, qui dit l'absence et propose d'aller voir
+  // plus loin — et qui ne paraît jamais sur du vide.
+  verifier('🔴 le bandeau ne s’affiche que sur ce qui est dans le périmètre',
+    /invendusProches\.length > 0 && \(/.test(ACCUEIL))
+  // 🔴 ET IL SE TAIT PENDANT QU'ON CHERCHE LA POSITION. La règle laisse passer
+  // une distance INCONNUE, ce qui est juste pour un affichage stable : sans ce
+  // garde, la bande paraît pendant la recherche puis s'évanouit. Montrer ce
+  // qu'on va retirer est pire que de faire attendre une seconde.
+  verifier('🔴 et il se tait tant que la position n’est pas connue',
+    /\{!invendusEnAttente && invendusProches\.length > 0 && \(/.test(ACCUEIL)
+    && /const invendusEnAttente = geoLoading && invendusOuverts\.length > 0/.test(ACCUEIL))
+  // 🔴 LE MESSAGE « PLUS LOIN » NE PARAÎT JAMAIS SUR DU VIDE. C'est ce qui
+  // sépare une information d'une section décorative : tant qu'aucun commerçant
+  // n'a publié, il n'y a rien à dire, donc on se tait. La troisième situation
+  // est le SILENCE, et c'est la plus fréquente.
+  verifier('🔴 « il y en a, mais loin » ne se dit que s’il y en a vraiment',
+    /const invendusPlusLoin = invendusOuverts\.length > 0 && invendusProches\.length === 0/.test(ACCUEIL)
+    && /\{invendusPlusLoin && !invendusEnAttente && \(/.test(ACCUEIL))
+  // ⚠️ ET LE BOUTON LÈVE LE PLAFOND, il ne le double pas : un second chiffre
+  // arbitraire serait à rediscuter dans six mois. Sans plafond, chaque offre
+  // s'affiche avec SA distance, et le Yopper décide du déplacement.
+  verifier('🔴 « voir plus loin » retire le plafond au lieu d’en inventer un autre',
+    /rayon: sansPlafondInvendus \? Infinity : RAYON_INVENDU_M/.test(ACCUEIL))
+  // ⚠️ ET IL RETOMBE : demander « plus loin » est un geste pour CETTE fois.
+  verifier('⚠️ et il ne se garde pas d’une visite à l’autre',
+    /useState\(false\)/.test((ACCUEIL.match(/const \[sansPlafondInvendus[^\n]*/) || [''])[0]))
   // ⚠️ ON ANNONCE L'ÉTAT, PAS UNE ALARME.
   verifier('le temps restant se dit avec les mots du module',
     /libelleTempsRestant\(restant\)/.test(ACCUEIL))
@@ -913,6 +947,29 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
     offresProches(avecReservable, { distanceDe: o => (avecReservable.find(l => l.offre.id === o.id) || {}).__distance })
       .map(o => o.offre.id),
     ['loin_reservable', 'proche'])
+
+  // ═══ « VOIR PLUS LOIN » LÈVE LE PLAFOND (Alex, 18/09) ═══════════════════
+  //
+  // 🔴 CE QU'IL A VÉCU : depuis Achêne, aucun invendu ne s'affichait, ses
+  // commerces étant à Mettet. Il l'a prouvé en se plaçant sur Mettet, où le
+  // bandeau revient. Le filtre faisait son travail ; ce qui manquait, c'était
+  // de pouvoir dire « montre-moi quand même ».
+  //
+  // 🔴 ET `Infinity` DEVAIT ÊTRE ÉCRIT EXPLICITEMENT dans le module :
+  // `Number.isFinite(Infinity)` vaut FAUX, donc sans sa propre branche il
+  // retombait sur les 25 kilomètres. Le bouton n'aurait rien fait, en silence.
+  {
+    const auLoin = [ligne('mettet', 30000, 45), ligne('ici', 2000, 90)]
+    const dist = o => (auLoin.find(l => l.offre.id === o.id) || {}).__distance
+    egal('⚠️ au plafond normal, l’offre à 30 km est écartée',
+      offresProches(auLoin, { distanceDe: dist }).map(o => o.offre.id), ['ici'])
+    egal('🔴 sans plafond, elle revient, et derrière la plus proche',
+      offresProches(auLoin, { distanceDe: dist, rayon: Infinity }).map(o => o.offre.id),
+      ['ici', 'mettet'])
+    // ⚠️ ET LE PLAFOND PAR DÉFAUT N'A PAS BOUGÉ : c'est une décision produit,
+    // pas un effet de bord de cette correction.
+    egal('⚠️ le plafond par défaut reste vingt-cinq kilomètres', RAYON_INVENDU_M, 25000)
+  }
 
   // ⚠️ ROBUSTESSE : une entrée qui n'est pas une liste ne doit pas faire tomber
   // l'accueil entier.

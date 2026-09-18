@@ -28,6 +28,35 @@ const MODULE = 'lib/anti-gaspi.js'
 const HEURE = 'lib/heure-belge.js'
 
 const MUTATIONS = [
+  // ─── LE BANDEAU QUI APPARAISSAIT PUIS DISPARAISSAIT (Alex, 18/09) ──────
+  //
+  // 🔴 SES MOTS : « il apparait 2 sec et disparait ». Teste sur ses DEUX
+  // telephones : le meme defaut des deux cotes, seul le delai de geolocalisation
+  // differe. La regle laisse passer une distance INCONNUE — ce qui est juste
+  // pour un affichage stable — donc la bande paraissait pendant la recherche,
+  // puis s evanouissait des que la distance devenait mesurable. Il etait a
+  // Achene, ses commerces sont a Mettet.
+  { nom: '🔴 LE CLIGNOTEMENT REVIENT : la bande parait avant de savoir',
+    fichier: 'app/commander/page.js',
+    de: '{!invendusEnAttente && invendusProches.length > 0 && (',
+    vers: '{invendusProches.length > 0 && (' },
+
+  // 🔴 ET `Infinity` DOIT ETRE ECRIT EXPLICITEMENT : `Number.isFinite(Infinity)`
+  // vaut FAUX, donc sans sa branche le bouton « voir plus loin » retombait sur
+  // les 25 kilometres et ne faisait RIEN, en silence.
+  // ⚠️ ANCRE SUR UNE SEULE LIGNE. Une ancre a cheval sur deux lignes se casse au
+  // premier changement d indentation, et ne vaut que sur une machine.
+  { nom: '🔴 « voir plus loin » retombe sur le plafond, en silence',
+    de: '  const plafond = rayon === Infinity',
+    vers: '  const plafond = rayon === null' },
+
+  // ⚠️ ET LE MESSAGE « PLUS LOIN » NE DOIT JAMAIS PARAITRE SUR DU VIDE : une
+  // section vide en permanence devient du decor qu on n apprend plus a regarder.
+  { nom: '🔴 « il y en a mais loin » se dit meme quand il n y a rien',
+    fichier: 'app/commander/page.js',
+    de: '  const invendusPlusLoin = invendusOuverts.length > 0 && invendusProches.length === 0',
+    vers: '  const invendusPlusLoin = invendusProches.length === 0' },
+
   // ─── LE FUSEAU, LE PIÈGE PRINCIPAL ──────────────────────────────────────
   //
   // ⚠️ QUATRE MUTATIONS VISENT `lib/heure-belge.js` DEPUIS LE 04/09 : les
@@ -327,7 +356,7 @@ const MUTATIONS = [
   // pas sur ce qui est ouvert dans tout le pays.
   { nom: '🔴 la section « Rien ne se perd » s affiche vide',
     fichier: 'app/commander/page.js',
-    de: '              {invendusProches.length > 0 && (',
+    de: '              {!invendusEnAttente && invendusProches.length > 0 && (',
     vers: '              {true && (' },
 
   // ─── LE PLAFOND DE L'OFFRE (04/09 au soir) ──────────────────────────────
@@ -482,7 +511,7 @@ const MUTATIONS = [
   // ─── L'ÉCRAN D'ACCUEIL ──────────────────────────────────────────────────
   { nom: '🔴 la section se juge sur ce qui est ouvert, pas sur le perimetre',
     fichier: 'app/commander/page.js',
-    de: '              {invendusProches.length > 0 && (',
+    de: '              {!invendusEnAttente && invendusProches.length > 0 && (',
     vers: '              {invendusOuverts.length > 0 && (' },
 
   { nom: '🔴 l’accueil ne relaie plus la distance du commercant',

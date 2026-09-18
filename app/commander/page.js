@@ -57,7 +57,7 @@ import SupprimerCompte from './SupprimerCompte'
 // ⚠️ LE TITRE, LE SOUS-TITRE ET LE TRI VIENNENT DU MODULE, JAMAIS D'ICI.
 // Recopiés dans l'écran, ils auraient divergé au premier changement de
 // formulation, comme le libellé du bon cadeau avant le 31/08.
-import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, offresProches, libelleTempsRestant, libelleReste, resteSurOffre, texteDePartage, lienVersOffre } from '@/lib/anti-gaspi'
+import { TITRE_YOPPER, SOUS_TITRE_YOPPER, offresOuvertes, offresProches, libelleTempsRestant, libelleReste, resteSurOffre, texteDePartage, lienVersOffre, RAYON_INVENDU_M } from '@/lib/anti-gaspi'
 import { libelleDecompte, PARAM_LISTE } from '@/lib/anti-gaspi'
 // ⚠️ L'ADRESSE PUBLIQUE D'UNE FICHE A UNE SEULE FABRIQUE. Celle du partage et
 // celle qu'imprime le QR du kit doivent être la même : elles l'étaient par
@@ -1867,6 +1867,10 @@ export default function Commander() {
   // l'état « distance inconnue », et l'écran serait resté trié par urgence même
   // une fois la position acquise.
   const [invendusOuverts, setInvendusOuverts] = useState([])
+  // ⚠️ IL RETOMBE À CHAQUE FOIS QU'ON REVIENT. Demander « plus loin » est un
+  // geste pour CETTE fois : le garder ferait réapparaître des offres à trente
+  // kilomètres des semaines plus tard, sans que personne ne s'en souvienne.
+  const [sansPlafondInvendus, setSansPlafondInvendus] = useState(false)
   // ═══ LA LISTE COMPLÈTE EST UN PANNEAU, ET ELLE EST ADRESSÉE ═══════════════
   //
   // 🔴 ALEX, 05/09 : « un habitant qui ouvre Yoppaa pour la première fois voit
@@ -3287,7 +3291,25 @@ export default function Commander() {
   // boulangerie : il n'a jamais demandé à filtrer ça.
   const invendusProches = offresProches(invendusOuverts, {
     distanceDe: offre => commercants.find(c => c.id === offre?.commercant_id)?.distance ?? null,
+    // 🔴 « VOIR PLUS LOIN » LÈVE LE PLAFOND, il ne le double pas (Alex, 18/09).
+    // Un second chiffre arbitraire serait à rediscuter dans six mois ; sans
+    // plafond, chaque offre s'affiche avec SA distance sur la carte, et le
+    // Yopper décide lui-même si ça vaut le déplacement.
+    rayon: sansPlafondInvendus ? Infinity : RAYON_INVENDU_M,
   })
+  // ⚠️ « IL Y EN A, MAIS LOIN » EST UNE INFORMATION, et on la jetait. Le code
+  // charge d'abord TOUTES les offres ouvertes, puis les filtre par distance :
+  // au moment où la section se vide, on sait donc déjà qu'il en existe. Aucune
+  // requête à changer, on cesse seulement de perdre ce qu'on avait.
+  const invendusPlusLoin = invendusOuverts.length > 0 && invendusProches.length === 0
+  // 🔴 ET ON N'AFFICHE RIEN TANT QU'ON CHERCHE LA POSITION (Alex, 18/09, testé
+  // sur ses deux téléphones). La règle laisse passer une distance INCONNUE,
+  // ce qui est juste pour un affichage stable : le bandeau apparaissait donc
+  // pendant la recherche, puis disparaissait dès que la distance devenait
+  // connue. Montrer ce qu'on va retirer est pire que de faire attendre une
+  // seconde. Le délai plus long sur iPhone n'était que sa géolocalisation plus
+  // lente ; le défaut était le même des deux côtés.
+  const invendusEnAttente = geoLoading && invendusOuverts.length > 0
   // ⚠️ PLUS DE PLAFOND D'AFFICHAGE DEPUIS LE 05/09, et plus de « Voir les 9 ».
   // La bande n'affiche AUCUNE carte : le plafond n'avait de sens que tant que
   // les cartes occupaient le haut de l'accueil. Le panneau, lui, les montre
@@ -3932,7 +3954,32 @@ export default function Commander() {
                   ⚠️ SUR 360 POINTS, C'EST LE TITRE QUI CÈDE, JAMAIS LE
                   DÉCOMPTE. Un titre écourté reste compréhensible ; un décompte
                   tronqué à « 4 offres près de… » ne veut plus rien dire. */}
-              {invendusProches.length > 0 && (
+              {/* ⚠️ TROIS ÉTATS, ET LE TROISIÈME EST LE SILENCE (Alex, 18/09).
+                  Tant qu'aucun commerçant n'a publié, il n'y a rien à dire :
+                  une section vide en permanence deviendrait du décor qu'on
+                  n'apprend plus à regarder. On ne parle que quand on a quelque
+                  chose à dire. */}
+              {invendusPlusLoin && !invendusEnAttente && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.bgCard, border: `1px solid ${T.pale}`, borderRadius: 12, padding: '0.6rem 0.75rem', marginBottom: 16 }}>
+                  <IconeAntiGaspi taille={16} epaisseur={2.3} couleur={T.muted}/>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: T.muted, minWidth: 0, lineHeight: 1.35 }}>
+                    Aucun invendu à moins de {Math.round(RAYON_INVENDU_M / 1000)}&nbsp;km de toi.
+                  </span>
+                  {/* 🔴 LE BOUTON LÈVE LE PLAFOND, il ne le double pas : chaque
+                      offre s'affiche alors avec SA distance, et le Yopper
+                      décide lui-même si ça vaut le déplacement. */}
+                  <button onClick={() => setSansPlafondInvendus(true)}
+                    style={{ marginLeft: 'auto', flexShrink: 0, background: 'none', border: 'none', padding: '2px 4px', color: T.main, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textDecoration: 'underline' }}>
+                    Voir plus loin
+                  </button>
+                </div>
+              )}
+
+              {/* 🔴 `!invendusEnAttente` EST LA CORRECTION DU CLIGNOTEMENT, et
+                  c'est elle qu'Alex a vue : sans ce garde, la bande s'affiche
+                  pendant la recherche de position — la distance inconnue passe
+                  le filtre — puis disparaît dès que la distance est connue. */}
+              {!invendusEnAttente && invendusProches.length > 0 && (
                 <button onClick={ouvrirListeInvendus}
                   aria-label={`${TITRE_YOPPER} : ${libelleDecompte(invendusProches)}`}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: NUIT_ANTI_GASPI, border: 'none', borderRadius: 12, padding: '0.6rem 0.75rem', marginBottom: 16, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>

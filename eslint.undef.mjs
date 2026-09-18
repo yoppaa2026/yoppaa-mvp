@@ -46,6 +46,10 @@ const NAVIGATEUR = {
   alert: 'readonly', confirm: 'readonly', prompt: 'readonly',
   URL: 'readonly', URLSearchParams: 'readonly', Blob: 'readonly', File: 'readonly',
   FileReader: 'readonly', FormData: 'readonly', Image: 'readonly', Audio: 'readonly',
+  // ⚠️ AJOUTÉ, PAS EXEMPTÉ. `FontFace` est une API du navigateur au même titre
+  // que `Image` juste au-dessus, et l'ajouter vaut pour TOUT le dépôt. Éteindre
+  // la règle sur un fichier, ça, aurait été la désarmer.
+  FontFace: 'readonly',
   Headers: 'readonly', Request: 'readonly', Response: 'readonly', AbortController: 'readonly',
   Notification: 'readonly', ResizeObserver: 'readonly', IntersectionObserver: 'readonly',
   MutationObserver: 'readonly', Event: 'readonly', CustomEvent: 'readonly',

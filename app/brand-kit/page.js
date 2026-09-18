@@ -684,6 +684,33 @@ export default function BrandKit() {
             quartier dans ta poche » est écrit du point de vue du Yopper ;
             un commerçant demande d'abord ce que c'est, pas ce que ça lui
             apporte. Le slogan reste sur tout ce qui s'adresse au public. */}
+        {/* ⚠️ LES VISUELS DES STORES VIVENT SUR LEUR PROPRE ROUTE, comme le kit
+            commerçant ci-dessous : ils chargent des captures dans un canvas, et
+            cette page-ci en fait déjà assez.
+            🔴 ET LA MISE EN PAGE N EST PAS UN CONFORT. Sans elle, une capture
+            1080 × 2400 devait être ÉTIRÉE de 2,5 % pour atteindre le format
+            d&rsquo;Apple, sous le seuil qui déclenchait l&rsquo;alerte de l&rsquo;ancien
+            script, et le format Android produit violait le ratio de Google. */}
+        <a href="/brand-kit/captures"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap',
+            background: `linear-gradient(135deg, ${T.main}, ${T.deep})`, color: '#fff', textDecoration: 'none',
+            borderRadius: 14, padding: '18px 22px', marginBottom: 14 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: '1.6px', textTransform: 'uppercase', color: T.light }}>
+              À déposer chez Apple et Google
+            </p>
+            <p style={{ margin: '5px 0 0', fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px' }}>
+              Les visuels des stores · huit captures, trois formats
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: 12.5, color: T.light, lineHeight: 1.5 }}>
+              Tes captures posées sur un fond aux dimensions exactes de chaque store,
+              jamais étirées. Les mêmes servent aux deux : Apple regarde les
+              dimensions, pas d&rsquo;où vient l&rsquo;image.
+            </p>
+          </div>
+          <span style={{ fontSize: 22, fontWeight: 800 }}>→</span>
+        </a>
+
         <a href="/brand-kit/commercant"
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap',
             background: `linear-gradient(135deg, ${T.deep}, ${T.ink})`, color: '#fff', textDecoration: 'none',

@@ -72,7 +72,43 @@ async function convertir(source, cible, format) {
   return { mode: 'bandes', ecart }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 CE SCRIPT EST NEUTRALISÉ DEPUIS LE 18/09. IL PRODUISAIT DU HORS-RÈGLES.
+//
+// Deux défauts, tous deux SILENCIEUX, trouvés en préparant les vrais visuels :
+//
+//   1. L'ÉTIREMENT SOUS LE SEUIL. `ECART_TOLERE` vaut 3 % ; l'écart entre les
+//      captures d'Alex (1080 × 2400, ratio 0,45) et le format d'Apple
+//      (1290 × 2796, ratio 0,4613) vaut 2,5 %. JUSTE EN DESSOUS. Il aurait
+//      étiré les prix et les visages de 2,5 %, sans un mot, et c'est
+//      exactement ce que le relecteur regarde.
+//
+//   2. LE FORMAT ANDROID VIOLAIT LA RÈGLE DE GOOGLE. Google demande un ratio
+//      entre 16:9 et 9:16, donc AU MOINS 0,5625 en portrait. Ce script
+//      produisait du 1080 × 2340, soit 0,4615. Le bon format est 1080 × 1920.
+//
+// ✅ LE REMPLAÇANT : yoppaa.app/brand-kit/captures. Il POSE la capture à sa
+// taille sur un fond au format du store, au lieu de la déformer pour qu'elle
+// y entre. Le ratio du fond est alors celui qu'on veut, quelle que soit la
+// source, et plus rien n'est étiré.
+//
+// ⚠️ ON NE LE SUPPRIME PAS, ON L'ARRÊTE. Le code reste lisible pour que la
+// prochaine personne comprenne POURQUOI, plutôt que de le réécrire à
+// l'identique. Mais il ne doit plus rien produire : un outil qui fabrique du
+// hors-règles et qui reste lançable finit par être lancé.
+// ═══════════════════════════════════════════════════════════════════════════
+const NEUTRALISE = true
+
 async function main() {
+  if (NEUTRALISE) {
+    console.log('\n🔴 Ce script ne sert plus : il produisait des captures ETIREES de 2,5 %')
+    console.log('   vers le format d Apple, et un format Android au ratio 0,4615 que')
+    console.log('   Google refuse (il en veut 0,5625 au minimum).')
+    console.log('\n✅ Utilise plutot  yoppaa.app/brand-kit/captures')
+    console.log('   Il pose ta capture a sa taille sur un fond au format du store,')
+    console.log('   sans jamais la deformer, et les memes captures servent aux deux.\n')
+    process.exit(1)
+  }
   for (const p of [ENTREE, join(ENTREE, 'android'), join(ENTREE, 'ios'), SORTIE]) mkdirSync(p, { recursive: true })
 
   let total = 0

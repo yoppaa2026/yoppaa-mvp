@@ -34,6 +34,51 @@ const CONNEXION = 'app/commander/auth/page.js'
 const AUTH = 'lib/yopper-auth.js'
 
 const MUTATIONS = [
+  // ─── CE QUI DIT AU YOPPER QUE CA TRAVAILLE (18/09, demande par Alex) ────
+  //
+  // 🔴 SON MOT EXACT : « sinon le Yopper pense que la commande n est pas
+  // passee ». Un bouton qui ne reagit pas se fait recliquer, et sur un tunnel
+  // de commande recliquer peut couter deux envois.
+  //
+  // ⚠️ L ANIMATION EXPLIQUE, `disabled` PROTEGE. Les deux mutations ci-dessous
+  // retirent chacune une moitie, parce qu aucune ne remplace l autre.
+  { nom: '🔴 le bouton de l onboarding redevient cliquable pendant l attente',
+    fichier: 'app/onboarding/page.js',
+    de: 'onClick={gererCta} disabled={enAttente}',
+    vers: 'onClick={gererCta}' },
+
+  // 🔴 LE PIEGE DU BOUTON MORT, deja vecu au retour de Stripe : un etat
+  // d attente qui ne retombe pas laisse le bouton eteint pour toujours.
+  //
+  // ⚠️ L ANCRE TIENT SUR UNE SEULE LIGNE, ET SON INDENTATION LA VISE. Six
+  // espaces, c est la repose du chemin des NOTIFICATIONS ; celles de la
+  // position en ont douze. `replace` prend la premiere occurrence du fichier,
+  // et le bloc des notifications vient avant.
+  { nom: '🔴 l attente des notifications ne retombe plus : bouton mort a vie',
+    fichier: 'app/onboarding/page.js',
+    de: '      setEnAttente(false)',
+    vers: '      void 0' },
+
+  // 🔴 ET LE DELAI, sans lequel les points tournent a vie : `getCurrentPosition`
+  // n appelle AUCUNE de ses deux fonctions tant que la fenetre du systeme reste
+  // ouverte. Quelqu un qui la laisse de cote bloquait le bouton pour de bon.
+  { nom: '🔴 la position attend a vie si personne ne repond a la fenetre',
+    fichier: 'app/onboarding/page.js',
+    de: '          { timeout: 15000 },',
+    vers: '' },
+
+  // ⚠️ L ACCESSIBILITE N EST PAS UN SUPPLEMENT : une animation muette ne dit
+  // rien a qui n a pas l ecran sous les yeux.
+  { nom: '⚠️ l attente cesse de s annoncer aux lecteurs d ecran',
+    fichier: 'app/components/DotsAttente.js',
+    de: '      role="status"',
+    vers: '      data-role="status"' },
+
+  { nom: '⚠️ l animation ignore qui demande moins de mouvement',
+    fichier: 'app/components/DotsAttente.js',
+    de: '        @media (prefers-reduced-motion: reduce) {',
+    vers: '        @media (min-width: 0px) and (max-width: 0px) {' },
+
   // ─── LE CŒUR : ÉCRIRE, C'EST AUSSI EFFACER ──────────────────────────────
   { nom: '🔴 un champ vide n’efface plus rien (le defaut d’origine)',
     fichier: MODULE,

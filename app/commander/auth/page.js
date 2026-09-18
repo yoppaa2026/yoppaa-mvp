@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
 import TurnstileWidget from '@/app/components/TurnstileWidget'
 import { poserIdentiteLocale, effacerIdentiteLocale } from '@/lib/identite-locale'
@@ -288,7 +289,7 @@ function AuthForm() {
           <input placeholder="ton@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && envoyerMagicLink()} style={inputSt} autoFocus/>
           <button onClick={envoyerMagicLink} disabled={!email.trim() || loading}
             style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: !email.trim() || loading ? 0.5 : 1 }}>
-            {loading ? 'Envoi…' : (<>Envoyer le lien magique
+            {loading ? (<>Envoi <DotsAttente couleur="#fff" taille={5} label="Envoi en cours"/></>) : (<>Envoyer le lien magique
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 3l1.9 5.8H20l-5 3.6L17 18l-5-3.6L7 18l2-5.6-5-3.6h6.1L12 3z"/>
               </svg></>)}

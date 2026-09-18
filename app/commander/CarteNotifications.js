@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { activerNotifications, diagnostiquerPush } from '@/app/components/OneSignalInit'
+import DotsAttente from '@/app/components/DotsAttente'
 
 const T = {
   main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4', pale: '#EDE0FF',
@@ -86,7 +87,10 @@ export default function CarteNotifications() {
         {!actif && (
           <button onClick={onActiver} disabled={enCours}
             style={{ flexShrink: 0, padding: '9px 16px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 13, cursor: enCours ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-            {enCours ? '…' : 'Activer'}
+            {/* ⚠️ LES POINTS SEULS ICI : le bouton fait seize pixels de marge,
+                « Activer » plus des points le ferait changer de largeur à
+                chaque clic. */}
+            {enCours ? <DotsAttente couleur="#fff" taille={4} label="Activation en cours"/> : 'Activer'}
           </button>
         )}
       </div>

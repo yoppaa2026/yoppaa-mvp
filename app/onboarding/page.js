@@ -6,6 +6,7 @@ import {
   Scissors, Truck, CalendarCheck, Repeat, Sunrise, Ticket,
 } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
+import DotsAttente from '@/app/components/DotsAttente'
 import OneSignalInit, { activerNotifications } from '@/app/components/OneSignalInit'
 import { memoriserPosition, marquerDemandee } from '@/lib/geoloc'
 
@@ -300,6 +301,14 @@ export default function OnboardingPage() {
   const [ecranIdx, setEcranIdx] = useState(0)
   const [sortie, setSortie] = useState(false)
   const [note, setNote] = useState(null)
+  // 🔴 CE QUI SE PASSE PENDANT QU'ON ATTEND (18/09, demandé par Alex). Ces deux
+  // boutons ouvrent une fenêtre du système : sans rien à l'écran, le Yopper
+  // croit que son geste n'est pas parti et reclique.
+  //
+  // ⚠️ IL RETOMBE SUR TOUS LES CHEMINS, y compris les refus. Un état d'attente
+  // qui ne revient jamais, c'est un bouton mort — et ça nous est déjà arrivé au
+  // retour de Stripe, où le navigateur restaure la page telle qu'il l'a quittée.
+  const [enAttente, setEnAttente] = useState(false)
 
   const ecran = ECRANS[ecranIdx]
 
@@ -330,7 +339,13 @@ export default function OnboardingPage() {
       // natif doit partir DANS le geste de clic, sinon iOS perd le geste et le
       // bouton reste figé. D'où l'appel direct ici, sans await préalable.
       setNote(null)
+      // ⚠️ `setEnAttente` AVANT L'APPEL, ET DANS LE MÊME TICK. Le commentaire
+      // ci-dessus vaut toujours : rien d'attendu ne doit s'intercaler entre le
+      // clic et la demande, sinon iOS perd le geste. Poser un état de rendu
+      // n'attend rien, il programme.
+      setEnAttente(true)
       const r = await activerNotifications()
+      setEnAttente(false)
       if (r?.ok) { allerEcranSuivant(); return }
       // ⚠️ Un refus se NOMME. Passer à l'écran suivant en silence laisserait
       // croire que c'est activé, et le client attendrait des notifications qui
@@ -339,6 +354,7 @@ export default function OnboardingPage() {
     } else if (ecran.id === 'localisation') {
       if ('geolocation' in navigator) {
         setNote(null)
+        setEnAttente(true)
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             // ⚠️ ON ÉCRIT DANS LA MÉMOIRE DE L'APPLICATION, PAS À CÔTÉ.
@@ -353,14 +369,32 @@ export default function OnboardingPage() {
               // rouvrirait la fenêtre du navigateur juste après.
               marquerDemandee()
             } catch { /* stockage refusé : on n'empêche pas d'avancer pour autant */ }
+            setEnAttente(false)
             allerEcranSuivant()
           },
-          () => setNote('La position n’a pas été autorisée. Tu peux continuer, et indiquer ta commune toi-même.'),
+          () => {
+            setEnAttente(false)
+            setNote('La position n’a pas été autorisée. Tu peux continuer, et indiquer ta commune toi-même.')
+          },
+          // 🔴 UN DÉLAI, SANS QUOI LES POINTS TOURNERAIENT À VIE. `getCurrentPosition`
+          // n'appelle NI l'une NI l'autre de ses fonctions tant que la fenêtre du
+          // système reste ouverte : quelqu'un qui la laisse de côté sans répondre
+          // bloquait le bouton pour de bon. Au bout du délai, le second appel part
+          // avec une erreur de dépassement, et l'écran reprend la main.
+          //
+          // ⚠️ QUINZE SECONDES PARCE QU'UN GPS EST LENT à froid, surtout en
+          // intérieur. Trop court, on renoncerait pour quelqu'un qui allait
+          // accepter.
+          { timeout: 15000 },
         )
       } else {
         allerEcranSuivant()
       }
     } else if (ecran.id === 'connexion') {
+      // ⚠️ ON NE REMET RIEN À `false` ICI, ET C'EST VOULU : la navigation démonte
+      // l'écran. Les points restent le temps que la page d'à côté arrive, ce qui
+      // est exactement ce qu'on veut montrer.
+      setEnAttente(true)
       router.push('/commander/auth?redirect=/commander')
     } else {
       allerEcranSuivant()
@@ -536,8 +570,21 @@ export default function OnboardingPage() {
                   {note}
                 </p>
               )}
-              <button className="btn-primary" onClick={gererCta}>
-                {ecran.cta}
+              {/* ⚠️ LE LIBELLÉ RESTE, LES POINTS S'AJOUTENT. Un bouton qui perd
+                  son texte pendant l'attente change de largeur et se relit :
+                  on dit toujours ce qu'on fait, on ajoute seulement que c'est
+                  en cours.
+                  ⚠️ ET `disabled` VA AVEC. L'animation explique, elle ne
+                  protège pas : c'est la désactivation qui empêche de rouvrir
+                  la fenêtre du système par un second clic. Tous les chemins
+                  reposent l'état, y compris les refus et le dépassement de
+                  délai, sinon le bouton resterait mort. */}
+              <button className="btn-primary" onClick={gererCta} disabled={enAttente}
+                style={enAttente ? { opacity: 0.75, cursor: 'wait' } : undefined}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                  {ecran.cta}
+                  {enAttente && <DotsAttente couleur="#fff" taille={5} label="En cours"/>}
+                </span>
               </button>
 
               {/* CTA secondaire */}

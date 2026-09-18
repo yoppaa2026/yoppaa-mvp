@@ -9,6 +9,7 @@
 
 import { useState } from 'react'
 import { envoyerSignal } from '@/lib/signaux'
+import DotsAttente from '@/app/components/DotsAttente'
 import { fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 
 const T = {
@@ -161,7 +162,9 @@ export default function ModalSignalement({ target, onClose, onSent }) {
                 </button>
                 <button onClick={envoyer} disabled={!type || submitting}
                   style={{ flex: 2, padding: '12px 18px', border: 'none', borderRadius: 100, background: (!type || submitting) ? '#D1D5DB' : `linear-gradient(135deg, ${T.ink}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: (!type || submitting) ? 'not-allowed' : 'pointer', fontFamily: 'inherit', boxShadow: (!type || submitting) ? 'none' : `0 6px 20px ${T.main}40` }}>
-                  {submitting ? 'Envoi…' : 'Envoyer'}
+                  {submitting
+                    ? (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>Envoi <DotsAttente couleur="#fff" taille={5} label="Envoi en cours"/></span>)
+                    : 'Envoyer'}
                 </button>
               </div>
             </>

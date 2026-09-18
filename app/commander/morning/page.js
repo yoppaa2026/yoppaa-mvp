@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import DotsAttente from '@/app/components/DotsAttente'
 import { pourcent } from '@/lib/montants'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper } from '@/lib/fetch-yopper'
@@ -809,8 +810,8 @@ export default function GoodMorningYoppersPage() {
 
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 120 }}>
           {loadingData && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 0', color: T.muted, fontSize: 13, fontWeight: 600 }}>
-              Chargement…
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '24px 0', color: T.muted, fontSize: 13, fontWeight: 600 }}>
+              Chargement <DotsAttente couleur={T.muted} taille={5} label="Chargement en cours"/>
             </div>
           )}
 

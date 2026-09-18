@@ -1460,6 +1460,83 @@ for (const chemin of routesAdmin) {
 // le monde. Rien n'est jamais passé au travers. Mais un banc qui sous-déclare
 // son propre travail est un banc dont on ne peut pas suivre la progression, et
 // c'est précisément le chiffre que je recopie dans chaque message de commit.
+// ═══════════════════════════════════════════════════════════════════════════
+// CE QUI DIT AU YOPPER QUE ÇA TRAVAILLE (18/09, demandé par Alex)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'IL A VU, ET C'EST LE VRAI SUJET : un bouton qui ne réagit pas fait
+// croire que le geste n'est pas parti. Le Yopper reclique. Sur un tunnel de
+// commande, recliquer peut coûter deux envois.
+//
+// ⚠️ L'ANIMATION EXPLIQUE, ELLE NE PROTÈGE PAS. Ce qui empêche le double clic,
+// c'est `disabled`. Les deux vont ensemble et l'un ne remplace jamais l'autre :
+// ces gardes vérifient donc les deux moitiés.
+{
+  const dots = sansProse(lire('app/components/DotsAttente.js'))
+
+  // ⚠️ UNE ANIMATION MUETTE NE DIT RIEN À QUI N'A PAS L'ÉCRAN SOUS LES YEUX.
+  // ⚠️ L'ESPACE DEVANT `role` EST LA BORNE, et il a fallu une mutation restée
+  // verte pour s'en apercevoir : `data-role="status"` CONTIENT `role="status"`,
+  // donc la première écriture de cette garde trouvait encore son mot dans un
+  // attribut qui ne veut plus rien dire pour un lecteur d'écran.
+  verifier('🔴 l’attente s’annonce aussi aux lecteurs d’écran',
+    /\srole="status"/.test(dots) && /aria-label=\{label\}/.test(dots))
+  // ⚠️ QUI DEMANDE MOINS D'ANIMATION EN REÇOIT MOINS, mais garde l'information.
+  verifier('⚠️ et elle se calme pour qui demande moins de mouvement',
+    /prefers-reduced-motion: reduce/.test(dots))
+  // 🔴 LE DÉPLACEMENT EST EN POURCENTAGE, PAS EN PIXELS : une seule définition
+  // sert toutes les tailles. Avec des pixels, deux tailles dans la même page
+  // s'écraseraient, la dernière montée gagnant pour tout le monde.
+  verifier('🔴 l’animation ne dépend pas de la taille demandée',
+    /translateY\(-60%\)/.test(dots) && !/translateY\(-\$\{/.test(dots))
+
+  // 🔴 ET PLUS AUCUN BOUTON NE S'EN TIENT À TROIS POINTS DE SUSPENSION. C'est
+  // ce qui existait, et c'était presque invisible sur un bouton plein.
+  for (const chemin of [
+    'app/commander/page.js',
+    'app/commander/[slug]/page.js',
+    'app/commander/rdv/[slug]/page.js',
+    'app/commander/auth/page.js',
+    'app/commander/auth/definir-mdp/page.js',
+    'app/commander/CarteNotifications.js',
+    'app/commander/ModalAvis.js',
+    'app/commander/ModalSignalement.js',
+    'app/commander/morning/page.js',
+    'app/onboarding/page.js',
+  ]) {
+    const src = sansProse(lire(chemin))
+    verifier(`⚠️ ${chemin} : il connaît les points d’attente`,
+      /DotsAttente/.test(src))
+  }
+
+  // ═══ LES DEUX BOUTONS DE L'ONBOARDING, QUI N'AVAIENT RIEN DU TOUT ═══════
+  //
+  // 🔴 ET C'EST LÀ QUE LE RISQUE EST LE PLUS GRAND, parce qu'ils ouvrent une
+  // fenêtre du SYSTÈME : notifications et position. Sans rien à l'écran, le
+  // Yopper croit que son geste n'est pas parti.
+  {
+    const onb = sansProse(lire('app/onboarding/page.js'))
+    verifier('🔴 l’onboarding sait qu’il attend', /const \[enAttente, setEnAttente\]/.test(onb))
+    verifier('🔴 et son bouton se désactive pendant ce temps', /disabled=\{enAttente\}/.test(onb))
+
+    // 🔴 L'ÉTAT RETOMBE SUR TOUS LES CHEMINS, ET C'EST LE VRAI DANGER. Un état
+    // d'attente qui ne revient jamais, c'est un bouton MORT. Ça nous est déjà
+    // arrivé au retour de Stripe, où le navigateur restaure la page telle
+    // qu'il l'a quittée. On compte donc les reposes, on ne les cherche pas :
+    // succès des notifications, succès de la position, refus de la position.
+    const reposes = (onb.match(/setEnAttente\(false\)/g) || []).length
+    verifier('🔴 l’attente retombe sur CHAQUE chemin, sinon le bouton reste mort',
+      reposes >= 3, `${reposes} reposes, au moins 3 attendues`)
+
+    // 🔴 ET LE DÉLAI DE LA GÉOLOCALISATION, sans quoi les points tourneraient à
+    // vie. `getCurrentPosition` n'appelle NI l'une NI l'autre de ses fonctions
+    // tant que la fenêtre du système reste ouverte : quelqu'un qui la laisse de
+    // côté bloquait le bouton pour de bon.
+    verifier('🔴 la position abandonne au bout d’un délai, elle n’attend pas à vie',
+      /\{ timeout: 15000 \}/.test(onb))
+  }
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 
 if (ko > 0) {

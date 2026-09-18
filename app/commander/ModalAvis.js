@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import { fetchYopper } from '@/lib/fetch-yopper'
+import DotsAttente from '@/app/components/DotsAttente'
 import { chezLeCommerce } from '@/lib/nom-commerce'
 
 const T = {
@@ -165,7 +166,9 @@ export default function ModalAvis({ commercant, clientId, commandeId = null, onC
                 </button>
                 <button onClick={envoyer} disabled={note < 1 || submitting}
                   style={{ flex: 2, padding: '12px 18px', border: 'none', borderRadius: 100, background: (note < 1 || submitting) ? '#D1D5DB' : `linear-gradient(135deg, ${T.ink}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: (note < 1 || submitting) ? 'not-allowed' : 'pointer', fontFamily: 'inherit', boxShadow: (note < 1 || submitting) ? 'none' : `0 6px 20px ${T.main}40` }}>
-                  {submitting ? 'Envoi…' : 'Envoyer mon avis'}
+                  {submitting
+                    ? (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>Envoi <DotsAttente couleur="#fff" taille={5} label="Envoi en cours"/></span>)
+                    : 'Envoyer mon avis'}
                 </button>
               </div>
             </>

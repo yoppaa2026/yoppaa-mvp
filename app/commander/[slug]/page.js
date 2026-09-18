@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import DotsAttente from '@/app/components/DotsAttente'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
@@ -5317,7 +5318,11 @@ export default function CommanderSlug() {
                                   }}
                                   disabled={bonLoading}
                                   style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 100, border: retenu ? '1.5px solid #059669' : 'none', background: retenu ? '#fff' : 'linear-gradient(135deg, #059669, #10B981)', color: retenu ? '#059669' : '#fff', fontWeight: 800, fontSize: '0.8rem', cursor: bonLoading ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', opacity: bonLoading ? 0.6 : 1 }}>
-                                  {bonLoading ? '…' : retenu ? 'Retirer' : 'Utiliser'}
+                                  {/* ⚠️ LA COULEUR SUIT CELLE DU TEXTE DU BOUTON, qui change
+                                      avec l'état : vert sur fond blanc quand le bon est retenu,
+                                      blanc sur fond vert sinon. Une couleur figée serait
+                                      invisible une fois sur deux. */}
+                                  {bonLoading ? <DotsAttente couleur={retenu ? '#059669' : '#fff'} taille={4} label="En cours"/> : retenu ? 'Retirer' : 'Utiliser'}
                                 </button>
                               </div>
                             )
@@ -5340,7 +5345,7 @@ export default function CommanderSlug() {
                               style={{ ...inputSt, marginBottom: 0, flex: 1, fontFamily: 'monospace', letterSpacing: '1px' }}/>
                             <button type="button" onClick={appliquerBon} disabled={bonLoading || !bonInput.trim()}
                               style={{ flexShrink: 0, padding: '0 16px', borderRadius: 12, border: 'none', background: bonInput.trim() ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E5E7EB', color: bonInput.trim() ? '#fff' : '#9CA3AF', fontWeight: 800, fontSize: '0.82rem', cursor: bonInput.trim() ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
-                              {bonLoading ? '…' : 'Appliquer'}
+                              {bonLoading ? <DotsAttente couleur="#fff" taille={4} label="Vérification en cours"/> : 'Appliquer'}
                             </button>
                           </div>
                           {bonErreur && <p style={{ fontSize: '0.74rem', color: '#DC2626', fontWeight: 700, margin: '6px 0 0' }}>{bonErreur}</p>}

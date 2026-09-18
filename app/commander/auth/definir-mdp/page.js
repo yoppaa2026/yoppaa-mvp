@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
 import TurnstileWidget from '@/app/components/TurnstileWidget'
 import { oublierDemande } from '@/lib/geoloc'
@@ -137,7 +138,9 @@ export default function DefinirMdpPage() {
         <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 20, padding: '2rem', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
 
           {phase === 'loading' && (
-            <p style={{ color: T.light, textAlign: 'center', fontWeight: 600 }}>Chargement…</p>
+            <p style={{ color: T.light, textAlign: 'center', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              Chargement <DotsAttente couleur={T.light} taille={6} label="Chargement en cours"/>
+            </p>
           )}
 
           {/* Pas de session : on envoie le lien de vérification */}
@@ -151,7 +154,9 @@ export default function DefinirMdpPage() {
                 onKeyDown={e => e.key === 'Enter' && envoyerLien()} placeholder="ton@email.com" style={inputSt} autoFocus/>
               {message && <p style={{ fontSize: '0.78rem', color: '#FCA5A5', marginBottom: 12 }}>{message.text}</p>}
               <button onClick={envoyerLien} disabled={loading} style={{ ...btnPrimary, background: loading ? `${T.main}88` : T.main, cursor: loading ? 'wait' : 'pointer' }}>
-                {loading ? 'Envoi…' : 'Recevoir mon lien de vérification →'}
+                {loading
+                  ? (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>Envoi <DotsAttente couleur="#fff" taille={5} label="Envoi en cours"/></span>)
+                  : 'Recevoir mon lien de vérification →'}
               </button>
               <TurnstileWidget ref={turnstileRef} />
               <p style={{ fontSize: '0.72rem', color: `${T.light}88`, textAlign: 'center', marginTop: '1rem', lineHeight: 1.5 }}>

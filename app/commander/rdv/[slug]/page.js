@@ -23,6 +23,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
 // ⚠️ `planEffectif` ET NON `commercant.plan` : un commerçant en essai de Vendre
 // voyait son tableau de bord s'ouvrir et sa fiche publique continuer de refuser
@@ -2680,7 +2681,9 @@ export default function CommanderRdvSlug() {
         <div className="scroll-body" ref={scrollRef} style={barrePanierVisible ? { paddingBottom: 170 } : undefined}>
 
           {loading && (
-            <div style={{ padding: '3rem 1rem', textAlign: 'center', color: T.muted }}>Chargement…</div>
+            <div style={{ padding: '3rem 1rem', textAlign: 'center', color: T.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              Chargement <DotsAttente couleur={T.muted} taille={6} label="Chargement en cours"/>
+            </div>
           )}
 
           {!loading && erreur && (
@@ -4235,7 +4238,10 @@ export default function CommanderRdvSlug() {
                               />
                               <button type="button" onClick={() => appliquerBon()} disabled={bonLoading || !bonInput.trim()}
                                 style={{ flexShrink: 0, padding: '10px 16px', borderRadius: 12, border: 'none', background: (bonLoading || !bonInput.trim()) ? T.pale : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (bonLoading || !bonInput.trim()) ? T.muted : '#fff', fontWeight: 800, fontSize: '0.82rem', cursor: (bonLoading || !bonInput.trim()) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                                {bonLoading ? '…' : 'Appliquer'}
+                                {/* ⚠️ `T.muted` ET PAS BLANC : pendant la vérification, ce
+                                    bouton passe en fond pâle et son texte devient sourd.
+                                    Des points blancs disparaîtraient dedans. */}
+                                {bonLoading ? <DotsAttente couleur={T.muted} taille={4} label="Vérification en cours"/> : 'Appliquer'}
                               </button>
                             </div>
                             {/* ⚠️ L'ERREUR VIENT DU SERVEUR ET SE LIT TELLE

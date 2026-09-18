@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, fetchAvecPreuveSiConnecte, estSessionPerdue } from '@/lib/fetch-yopper'
 import CarteAbonnement from './CarteAbonnement'
@@ -497,7 +498,9 @@ function EditablePrenom({ client, setClient, clientId, openSignal }) {
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={sauvegarder} disabled={!vPrenom.trim() || saving}
           style={{ flex: 1, padding: '0.5rem', background: 'rgba(255,255,255,0.9)', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', color: '#6B35C4', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          {saving ? '…' : (<><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6B35C4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Sauvegarder</>)}
+          {/* ⚠️ DES POINTS VIOLETS ICI : le bouton est blanc, des points blancs
+              y seraient invisibles. La couleur suit le texte, pas l'habitude. */}
+          {saving ? <DotsAttente couleur="#6B35C4" taille={4} label="Enregistrement en cours"/> : (<><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6B35C4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg> Sauvegarder</>)}
         </button>
         <button onClick={() => setEditing(false)}
           style={{ padding: '0.5rem 0.875rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 100, color: 'rgba(255,255,255,0.6)', fontSize: '0.8rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>

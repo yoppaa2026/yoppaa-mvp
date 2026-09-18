@@ -3387,6 +3387,82 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
       vuServeur(yoga, 'lundi', '17:00') === true)
   }
 
+  // ═══ LE COMPTEUR DE PLACES EN « SANS PRÉFÉRENCE » (Alex, 18/09) ═════════
+  //
+  // 🔴 SES MOTS : « le nombre de places restantes ne se met à jour que sur le
+  // praticien, sans préférence n'actualise pas ». Vérifié en exécutant avant de
+  // toucher à quoi que ce soit : sur Emily, une place prise sur trois ; sans
+  // préférence, ZÉRO.
+  //
+  // LA CAUSE : `filtrerReservationsPourSlots` répondait à deux questions que
+  // rien ne distinguait. « Ce créneau est-il bloqué ? » — non, Carole est libre.
+  // « Combien reste-t-il de places à ce cours ? » — là, toute inscription
+  // compte. Écartée pour la première, elle disparaissait de la seconde.
+  //
+  // ✅ ET LE SERVEUR, LUI, COMPTAIT JUSTE : sa requête ne filtre pas par
+  // praticien, et l'index unique refuse une place déjà prise. Il n'y a donc
+  // jamais eu de surréservation possible — seulement un chiffre faux à l'écran,
+  // et un client refusé au dernier moment.
+  {
+    const CAROLE2 = 'p-carole', EMILY2 = 'p-emily'
+    const ELIGIBLES = [{ id: CAROLE2 }, { id: EMILY2 }]
+    const resa = (prat, presta, place) => ({
+      heure_debut: '10:00:00', heure_fin: '11:00:00',
+      praticien_id: prat, prestation_id: presta, place_no: place,
+    })
+    const placesVues = (resas, choisi, cours) => {
+      const filtrees = filtrerReservationsPourSlots(resas, choisi, ELIGIBLES, { prestationCours: cours })
+      const s = genererSlots({
+        dateChoisie: jourFutur('lundi'), dureeMinutes: 60,
+        creneaux: choisi
+          ? PLAGES.filter(c => c.praticien_id === choisi.id || c.praticien_id === null)
+          : PLAGES,
+        reservations: filtrees, horairesDetail: HORAIRES,
+        capacite: 3, prestationId: 'yoga', liaisonsCreneaux: LIAISONS,
+      }).find(x => x.heure === '10:00')
+      return s?.placesPrises ?? null
+    }
+
+    const uneChezEmily = [resa(EMILY2, 'yoga', 1)]
+    egal('⚠️ sur Emily, la place prise se compte', placesVues(uneChezEmily, { id: EMILY2 }, 'yoga'), 1)
+    // 🔴 LA LIGNE QUI RENDAIT ZÉRO AVANT LA CORRECTION.
+    egal('🔴 et sans préférence AUSSI (le défaut du 18/09)',
+      placesVues(uneChezEmily, null, 'yoga'), 1)
+
+    // 🔴 PAS DE DOUBLE COMPTAGE. Une inscription peut être bloquante ET porter
+    // ce cours : comptée deux fois, elle prendrait deux places à elle seule et
+    // fermerait le cours trop tôt. Le défaut serait alors l'inverse.
+    const deuxPraticiennes = [resa(CAROLE2, 'yoga', 1), resa(EMILY2, 'yoga', 2)]
+    egal('🔴 deux inscrites font DEUX places, jamais quatre',
+      placesVues(deuxPraticiennes, null, 'yoga'), 2)
+
+    // 🔴 ET UN RENDEZ-VOUS INDIVIDUEL NE SE FERME PAS À TORT. C'est la garantie
+    // qui protège l'immense majorité du parc : un Reiki chez Carole à 10h
+    // n'empêche pas d'en prendre un chez Emily à la même heure. L'appelant ne
+    // passe donc l'identifiant QUE pour un cours.
+    {
+      const soloChezCarole = [resa(CAROLE2, 'reiki', 1)]
+      const filtrees = filtrerReservationsPourSlots(soloChezCarole, null, ELIGIBLES, { prestationCours: null })
+      egal('🔴 un solo chez une collègue ne bloque pas l’autre', filtrees, [])
+      // ⚠️ ET LA MÊME CHOSE PASSÉE EN COURS LE COMPTERAIT : la preuve que c'est
+      // bien l'appelant qui décide, et que le défaut serait de lui passer
+      // l'identifiant tout le temps.
+      const commeSiCours = filtrerReservationsPourSlots(soloChezCarole, null, ELIGIBLES, { prestationCours: 'reiki' })
+      egal('⚠️ passé comme un cours, il compterait — d’où la condition', commeSiCours.length, 1)
+    }
+
+    // ⚠️ ET LA FICHE NE PASSE L'IDENTIFIANT QUE POUR UN COURS.
+    const fiche = sansCommentaires(
+      readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+    verifier('🔴 la fiche ne compte comme un cours que ce qui EST un cours',
+      /capacitePrestation\(prestationChoisie\) > 1 && !estParCouverts\(prestationChoisie\)/.test(fiche))
+    // 🔴 ET LES TROIS APPELS LE PASSENT. Un seul oublié, et le compteur ment
+    // encore à cet endroit-là — le mini-calendrier, la grille, ou le contrôle
+    // d'avant envoi.
+    const appelsAvecCours = (fiche.match(/filtrerReservationsPourSlots\([^)]*prestationCours: coursPourComptage\(\)/g) || []).length
+    egal('🔴 les TROIS appels de la fiche le passent', appelsAvecCours, 3)
+  }
+
   // ═══ LE COMMERÇANT VOIT SUR QUELLE BASE IL CONFIGURE (18/09) ════════════
   //
   // 🔴 DEMANDÉ PAR ALEX : « cela permet au commerçant de savoir sur quelle base

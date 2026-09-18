@@ -517,6 +517,25 @@ export default function CommanderRdvSlug() {
   // confondues. Seulement pour une table, et seulement si le restaurateur l'a
   // réglée ; sinon `null`, et la grille ne change pas d'une case.
   const plafondCuisine = plafondCadence(commercant)
+  // 🔴 L'IDENTIFIANT DU COURS, QUAND C'EN EST UN (Alex, 18/09). Le compteur de
+  // places ne bougeait qu'en choisissant une praticienne : en « sans
+  // préférence », `filtrerReservationsPourSlots` n'écarte que les réservations
+  // qui BLOQUENT le créneau, et une inscription chez Emily ne bloque pas
+  // Carole. Elle disparaissait donc aussi du COMPTAGE, et le cours s'affichait
+  // vide alors qu'il ne l'était pas.
+  //
+  // ⚠️ `null` DÈS QUE CE N'EST PAS UN COURS, et c'est la garantie qui protège
+  // tout le reste : compter les réservations non bloquantes sur un rendez-vous
+  // INDIVIDUEL fermerait des créneaux à tort. Un Reiki chez Carole à 10h
+  // n'empêche pas d'en prendre un chez Emily à la même heure.
+  //
+  // ⚠️ UNE TABLE N'EST PAS UN COURS : sa capacité est celle d'une salle, elle
+  // se compte en couverts ailleurs.
+  const coursPourComptage = () => (
+    capacitePrestation(prestationChoisie) > 1 && !estParCouverts(prestationChoisie)
+      ? (prestationChoisie?.id || null)
+      : null
+  )
   const regleOccupation = (reservationsDuJour) => ({
     capacite: capacitePrestation(prestationChoisie),
     prestationId: prestationChoisie?.id || null,
@@ -1432,7 +1451,7 @@ export default function CommanderRdvSlug() {
         .rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
       if (annule) return
       if (errRpc) console.warn('[rdv-slots] rpc error', errRpc)
-      const reservationsFiltrees = filtrerReservationsPourSlots(reservations, praticienChoisi, praticiensEligibles)
+      const reservationsFiltrees = filtrerReservationsPourSlots(reservations, praticienChoisi, praticiensEligibles, { prestationCours: coursPourComptage() })
       const list = genererSlots({
         dateChoisie,
         dureeMinutes: dureeRetenue,
@@ -1547,7 +1566,7 @@ export default function CommanderRdvSlug() {
   const joursAvecDispo = joursDispos.map(j => {
     if (!j.ouvert || !prestationChoisie) return { ...j, nbLibres: 0 }
     const resaDuJour = reservations60j.filter(r => r.date_rdv === j.iso)
-    const resaFiltree = filtrerReservationsPourSlots(resaDuJour, praticienChoisi, praticiensEligibles)
+    const resaFiltree = filtrerReservationsPourSlots(resaDuJour, praticienChoisi, praticiensEligibles, { prestationCours: coursPourComptage() })
     const list = genererSlots({
       dateChoisie: j.date,
       dureeMinutes: dureeRetenue,
@@ -1710,7 +1729,7 @@ export default function CommanderRdvSlug() {
         setSubmitError('Impossible de vérifier la disponibilité (RPC). Reessaie dans quelques secondes.')
         setSubmitting(false); return
       }
-      const busyFiltres = filtrerReservationsPourSlots(busy, praticienChoisi, praticiensEligibles)
+      const busyFiltres = filtrerReservationsPourSlots(busy, praticienChoisi, praticiensEligibles, { prestationCours: coursPourComptage() })
       console.info('[rdv] reservations bloquantes apres filtre praticien', busyFiltres)
       // ⚠️ CE CONTRÔLE REFAISAIT LE CALCUL SANS LA CAPACITÉ (défaut trouvé par
       // Alex le 16/08). La grille annonçait « 10 places restantes » et ce

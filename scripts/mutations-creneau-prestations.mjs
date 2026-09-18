@@ -26,6 +26,30 @@ const BANC = 'verif:slots && npm run verif:bord'
 const MODULE = 'lib/rdv-slots.js'
 
 const MUTATIONS = [
+  // ─── LE COMPTEUR DE PLACES EN « SANS PREFERENCE » (Alex, 18/09) ────────
+  //
+  // 🔴 SES MOTS : « le nombre de places restantes ne se met a jour que sur le
+  // praticien, sans preference n actualise pas ». Une inscription chez Emily ne
+  // BLOQUE pas Carole : elle etait donc ecartee du filtre, et disparaissait
+  // aussi du COMPTAGE. Le cours s affichait vide alors qu il ne l etait pas.
+  { nom: '🔴 LE DEFAUT DU 18/09 : les inscriptions au cours cessent d etre comptees',
+    de: '  if (prestationCours) {',
+    vers: '  if (false) {' },
+
+  // 🔴 ET LE DOUBLE COMPTAGE EST L AUTRE DEFAUT POSSIBLE : une inscription
+  // bloquante ET du meme cours, comptee deux fois, prendrait deux places a elle
+  // seule et fermerait le cours trop tot.
+  { nom: '🔴 une inscription bloquante est comptee DEUX fois',
+    de: '      if (String(r.prestation_id) === String(prestationCours) && !dejaLa.has(r)) {',
+    vers: '      if (String(r.prestation_id) === String(prestationCours)) {' },
+
+  // 🔴 ET LA FICHE NE DOIT COMPTER COMME UN COURS QUE CE QUI EN EST UN : passer
+  // l identifiant sur un rendez-vous INDIVIDUEL fermerait des creneaux a tort.
+  { nom: '🔴 la fiche compte un rendez-vous individuel comme un cours',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '    capacitePrestation(prestationChoisie) > 1 && !estParCouverts(prestationChoisie)',
+    vers: '    true' },
+
   // ─── SUR QUELLE BASE IL CONFIGURE (Alex, 18/09) ────────────────────────
   //
   // 🔴 « Cela permet au commercant de savoir sur quelle base il configure ses

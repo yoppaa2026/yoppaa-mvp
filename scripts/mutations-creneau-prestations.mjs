@@ -26,6 +26,40 @@ const BANC = 'verif:slots && npm run verif:bord'
 const MODULE = 'lib/rdv-slots.js'
 
 const MUTATIONS = [
+  // ─── SUR QUELLE BASE IL CONFIGURE (Alex, 18/09) ────────────────────────
+  //
+  // 🔴 « Cela permet au commercant de savoir sur quelle base il configure ses
+  // creneaux plutot que de decouvrir le message quand il valide. » Le trou etait
+  // complet cote rendez-vous : l avertissement des horaires n existait que pour
+  // le click & collect.
+  { nom: '🔴 la config RDV cesse de dire les heures d ouverture',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '{nomJour}, tu es ouvert de <strong style={{ color: T.ink }}>',
+    vers: '{nomJour}, tu es la <strong style={{ color: T.ink }}>' },
+
+  // ⚠️ LE CAS QUE PERSONNE NE DISAIT : une plage a cheval s enregistre et le
+  // moteur l ecrete EN SILENCE. Le commercant croit ouvrir sa fin de journee.
+  { nom: '🔴 une plage a cheval cesse d annoncer ce qui sera vraiment propose',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: 'Cette plage déborde : elle sera proposée de <strong>',
+    vers: 'Cette plage est enregistree. <strong>' },
+
+  // 🔴 ET L ECRAN NE REECRIT AUCUNE DES DEUX REGLES. Un troisieme calcul du
+  // meme fait, c est la prochaine divergence entre ce que l ecran annonce et ce
+  // que le moteur fait.
+  { nom: '🔴 l ecran cesse de demander au moteur ce qui restera de la plage',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '              const ajuste = ajusterPlagePourJour(',
+    vers: '              const ajuste = (() => ({ morceaux: [] }))(' },
+
+  // 🔴 ET LA SOURCE FAIT FOI. Chez un commerce qui change d endroit, les
+  // horaires viennent des EMPLACEMENTS : afficher ceux du profil donnerait de
+  // faux horaires a un food truck, pire que de ne rien afficher.
+  { nom: '🔴 l affichage lit le profil au lieu des horaires qui font foi',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '              const h = horairesReference?.[jour]',
+    vers: '              const h = commercant?.horaires_detail?.[jour]' },
+
   // ─── LE SERVEUR REFUSAIT CE QUE L ECRAN PROPOSAIT (Alex, 18/09) ────────
   //
   // 🔴 SA PHRASE : « Pourquoi il refuse alors qu il la propose dans les dates

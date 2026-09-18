@@ -3387,6 +3387,58 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
       vuServeur(yoga, 'lundi', '17:00') === true)
   }
 
+  // ═══ LE COMMERÇANT VOIT SUR QUELLE BASE IL CONFIGURE (18/09) ════════════
+  //
+  // 🔴 DEMANDÉ PAR ALEX : « cela permet au commerçant de savoir sur quelle base
+  // il configure ses créneaux plutôt que de découvrir le message quand il
+  // valide ». Et le trou était complet côté rendez-vous : l'avertissement des
+  // horaires n'existait que pour le click & collect.
+  //
+  // ⚠️ LE CAS QUE PERSONNE NE DISAIT : une plage À CHEVAL. Elle s'enregistre,
+  // elle s'affiche dans la liste, et le moteur l'écrête en silence. Le
+  // commerçant croit ouvrir sa fin de journée ; aucun client ne voit un créneau
+  // après la fermeture, et rien ne permet de le deviner.
+  {
+    const cfg = sansCommentaires(
+      readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+
+    // ⚠️ ON COMPTE, ON NE CHERCHE PAS, et une mutation restée verte l'a appris :
+    // « tu es ouvert de » s'écrit dans LES TROIS cas, donc en retirer un seul
+    // laissait la garde tranquille. Troisième fois ce motif aujourd'hui.
+    const foisOuvert = (cfg.match(/tu es ouvert de/g) || []).length
+    egal('🔴 la config des créneaux RDV dit les heures d’ouverture dans les 3 cas',
+      foisOuvert, 3)
+    verifier('🔴 et elle nomme le jour fermé sans le confondre avec une fermeture d’heure',
+      /tu es fermé<\/strong> selon tes horaires/.test(cfg))
+    // ⚠️ LES TROIS CAS SE DISENT DIFFÉREMMENT. « Tu es fermé » sur une plage qui
+    // déborde serait faux, et Alex l'avait déjà relevé le 08/09 : « je ne
+    // comprends pas, je ne suis pas fermé le mercredi ».
+    verifier('🔴 une plage entièrement dehors le dit',
+      /entièrement en dehors/.test(cfg))
+    verifier('🔴 et une plage à cheval annonce ce qui sera VRAIMENT proposé',
+      /Cette plage déborde : elle sera proposée de/.test(cfg))
+
+    // 🔴 ON N'ÉCRIT PAS UN TROISIÈME CALCUL DU MÊME FAIT. `creneauHorsOuverture`
+    // dit s'il y a un écart, `ajusterPlagePourJour` dit ce qui reste. Recopier
+    // l'un des deux à la main, c'est fabriquer la prochaine divergence entre
+    // ce que l'écran annonce et ce que le moteur fait.
+    // 🔴 ON VISE LE BLOC, PAS LE FICHIER, et une seconde mutation restée verte
+    // l'a appris aussi : `ajusterPlagePourJour` s'écrit dans l'IMPORT et dans la
+    // fonction de copie. Chercher son nom dans tout le fichier, c'est le
+    // trouver là où il ne sert pas à ce qu'on mesure.
+    const blocAffichage = (cfg.match(/const jour = form\.jour_semaine[\s\S]{0,2200}/) || [''])[0]
+    verifier('🔴 l’écran réutilise les deux règles du moteur, il n’en réécrit aucune',
+      /creneauHorsOuverture\(\{/.test(blocAffichage) && /ajusterPlagePourJour\(\s*$/m.test(blocAffichage))
+
+    // 🔴 ET LA SOURCE EST `horairesReference`. Chez un commerce qui change
+    // d'endroit, les horaires viennent des EMPLACEMENTS : lire
+    // `commercant.horaires_detail` afficherait de faux horaires à un food
+    // truck, ce qui est pire que de ne rien afficher.
+    verifier('🔴 les horaires affichés sont ceux qui font foi pour ce commerce',
+      /horairesReference\?\.\[jour\]/.test(blocAffichage)
+      && !/commercant\?\.horaires_detail/.test(blocAffichage))
+  }
+
   // ═══ CE QUE LA CONFIGURATION DIT, ET QU'ON NE DOIT PAS CASSER ═══════════
   {
     const reiki = PRESTATIONS.find(p => p.id === 'reiki')

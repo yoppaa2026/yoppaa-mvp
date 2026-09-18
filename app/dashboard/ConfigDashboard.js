@@ -11409,6 +11409,92 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
               </div>
             </div>
 
+            {/* ── SUR QUELLE BASE IL CONFIGURE (18/09, demandé par Alex) ──────
+                🔴 LE DÉFAUT LE PLUS SILENCIEUX DE CET ÉCRAN, et il n'était
+                traité que du côté click & collect : rien ici ne disait les
+                heures d'ouverture. Une plage 09:00-18:00 posée un jeudi où la
+                maison ferme à 17:00 s'enregistre telle quelle, et le moteur
+                l'écrête sans un mot. Le commerçant croit ouvrir sa fin de
+                journée, aucun client ne voit un seul créneau après 16:00, et
+                rien ne permet de le deviner.
+
+                ⚠️ IL LE VOIT PENDANT QU'IL SAISIT, pas après avoir validé.
+                C'est la demande d'Alex, et c'est la différence entre une
+                information et un reproche.
+
+                ⚠️ ON N'INVENTE AUCUNE RÈGLE : `creneauHorsOuverture` dit s'il
+                y a un écart, `ajusterPlagePourJour` dit ce qui sera réellement
+                proposé. Les deux existent, sont éprouvées, et servent déjà
+                ailleurs. Écrire un troisième calcul du même fait, c'est
+                fabriquer la prochaine divergence.
+
+                ⚠️ ET LA SOURCE EST `horairesReference`, JAMAIS
+                `commercant.horaires_detail` : chez un commerce qui change
+                d'endroit, les horaires viennent des EMPLACEMENTS. Afficher les
+                mauvais serait pire que de ne rien afficher. */}
+            {(() => {
+              const jour = form.jour_semaine
+              const h = horairesReference?.[jour]
+              const nomJour = jour ? jour.charAt(0).toUpperCase() + jour.slice(1) : ''
+              const cadre = { fontSize: 12, lineHeight: 1.45, borderRadius: 10, padding: '8px 10px', marginBottom: 10 }
+
+              // ⚠️ HORAIRES INCONNUS : ON NE DIT RIEN. Afficher « on ne sait
+              // pas » à chaque saisie apprendrait à ne plus lire ce cadre.
+              if (!h) return null
+
+              if (h.ouvert === false) {
+                return (
+                  <div style={{ ...cadre, background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', fontWeight: 600 }}>
+                    <strong>{nomJour} : tu es fermé</strong> selon tes horaires. Cette plage ne proposera rien tant que tu ne les auras pas ouverts.
+                  </div>
+                )
+              }
+
+              const services = []
+              if (h.debut && h.fin) services.push(`${h.debut} à ${h.fin}`)
+              if (h.debut2 && h.fin2) services.push(`${h.debut2} à ${h.fin2}`)
+              if (services.length === 0) return null
+
+              const ecart = creneauHorsOuverture({
+                jour, heureDebut: form.heure_debut, heureFin: form.heure_fin, horairesDetail: horairesReference,
+              })
+              const ajuste = ajusterPlagePourJour(
+                { heure_debut: form.heure_debut, heure_fin: form.heure_fin },
+                h,
+              )
+              const reel = (ajuste?.morceaux || [])
+                .map(m => `${m.debut} à ${m.fin}`)
+                .join(' et ')
+
+              // ⚠️ RIEN À SIGNALER : on rappelle seulement la base, en sourdine.
+              if (!ecart) {
+                return (
+                  <div style={{ ...cadre, background: T.bg, color: T.muted, fontWeight: 600 }}>
+                    {nomJour}, tu es ouvert de <strong style={{ color: T.ink }}>{services.join(' et de ')}</strong>.
+                  </div>
+                )
+              }
+
+              // 🔴 ENTIÈREMENT DEHORS : pas une minute ne servira.
+              if (ecart.raison === 'hors_ouverture') {
+                return (
+                  <div style={{ ...cadre, background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', fontWeight: 600 }}>
+                    {nomJour}, tu es ouvert de <strong>{services.join(' et de ')}</strong>.<br/>
+                    Cette plage est <strong>entièrement en dehors</strong> : elle ne proposera aucun créneau.
+                  </div>
+                )
+              }
+
+              // ⚠️ À CHEVAL : une partie servira, l'autre est écrêtée en
+              // silence. C'est le cas qu'aucun écran ne disait.
+              return (
+                <div style={{ ...cadre, background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', fontWeight: 600 }}>
+                  {nomJour}, tu es ouvert de <strong>{services.join(' et de ')}</strong>.<br/>
+                  Cette plage déborde : elle sera proposée de <strong>{reel || services.join(' et de ')}</strong>.
+                </div>
+              )
+            })()}
+
             {/* Pas de réservation — SEULEMENT LÀ OÙ ON SERT DES TABLES */}
             {/* 🔴 CE RÉGLAGE N'A DE SENS QUE POUR UN RESTAURANT (18/09, demandé
                 par Alex après l'avoir vu chez Studio Amandine). Un service

@@ -3180,6 +3180,251 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// L'ÉCRAN ET LE SERVEUR JUGENT LES MÊMES CRÉNEAUX (18/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ALEX A VU, ET SA PHRASE EXACTE : « Pourquoi il refuse alors qu'il la
+// propose dans les dates et les heures ? » La grille offrait un cours de yoga
+// le lundi à 17h, et le serveur répondait « cet horaire n'est pas ouvert à
+// cette prestation ».
+//
+// LA CAUSE, confirmée sur le relevé complet de sa configuration :
+// `rdv-creation-server.js` chargeait ses plages SANS `praticien_id`. Depuis que
+// `tranchesReservees` distingue une plage NOMMÉE d'une plage COMMUNE, cette
+// colonne décide si une plage dédiée réserve l'heure de sa seule praticienne ou
+// celle de toute la maison. Absente, elle vaut `undefined` : le serveur
+// retombait sur l'ancienne règle et refusait ce que l'écran venait d'ouvrir.
+//
+// ⚠️ UNE COLONNE ABSENTE NE LÈVE JAMAIS. C'est le défaut le plus fréquent de ce
+// dépôt, et le seul qui s'applique À L'ENVERS en silence.
+//
+// 🔴 ET AUCUNE DES 658 VÉRIFICATIONS NE LE VOYAIT, parce qu'aucune ne faisait
+// PARLER L'ÉCRAN ET LE SERVEUR SUR LES MÊMES DONNÉES. Chacun était éprouvé
+// seul, chacun était juste seul, et le désaccord vivait entre les deux. C'est
+// exactement ce que cette section mesure : tout créneau que la grille propose
+// doit être accepté par le serveur, sans exception.
+//
+// ⚠️ LA CONFIGURATION EST CELLE DE STUDIO AMANDINE, relevée en base le 18/09,
+// pas inventée. Deux praticiennes, trois prestations dont deux cours, neuf
+// plages toutes restreintes, et un Reiki qui ne vit que le mercredi.
+{
+  // ⚠️ CETTE LISTE EST LOCALE, et ce n'est pas une duplication paresseuse :
+  // `JOURS` n'est pas exporté par le module, il lui est privé. L'importer
+  // demanderait de l'exposer, c'est-à-dire d'élargir une surface publique pour
+  // le confort d'un banc.
+  const JOURS_SEMAINE = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+  const jourFutur = (nom) => {
+    const cible = JOURS_SEMAINE.indexOf(nom)
+    const d = new Date()
+    d.setHours(12, 0, 0, 0)
+    d.setDate(d.getDate() + 7)
+    while (d.getDay() !== cible) d.setDate(d.getDate() + 1)
+    return d
+  }
+
+  const CAROLE = 'p-carole'
+  const EMILY  = 'p-emily'
+  const PRESTATIONS = [
+    { id: 'pilates', nom: 'Cours de pilates', duree: 60, capacite: 3 },
+    { id: 'yoga',    nom: 'Cours de Yoga',    duree: 60, capacite: 3 },
+    { id: 'reiki',   nom: 'Séance de Reiki',  duree: 60, capacite: 1 },
+  ]
+  const plage = (id, jour, debut, fin, prat) => ({
+    id, jour_semaine: jour, date_specifique: null,
+    heure_debut: `${debut}:00`, heure_fin: `${fin}:00`,
+    pas_minutes: 60, praticien_id: prat, actif: true,
+  })
+  const PLAGES = [
+    plage('k-lun-c', 'lundi',    '09:00', '18:00', CAROLE),
+    plage('k-lun-e', 'lundi',    '09:00', '18:00', EMILY),
+    plage('k-mar-c', 'mardi',    '09:00', '18:00', CAROLE),
+    plage('k-mar-e', 'mardi',    '09:00', '18:00', EMILY),
+    plage('k-mer-c', 'mercredi', '09:00', '18:00', CAROLE),
+    plage('k-jeu-c', 'jeudi',    '09:00', '17:00', CAROLE),
+    plage('k-jeu-e', 'jeudi',    '09:00', '17:00', EMILY),
+    plage('k-ven-c', 'vendredi', '09:00', '15:00', CAROLE),
+    plage('k-ven-e', 'vendredi', '09:00', '15:00', EMILY),
+  ]
+  const LIAISONS = [
+    { creneau_id: 'k-lun-c', prestation_id: 'pilates' },
+    { creneau_id: 'k-lun-e', prestation_id: 'yoga' },
+    { creneau_id: 'k-mar-c', prestation_id: 'pilates' },
+    { creneau_id: 'k-mar-e', prestation_id: 'yoga' },
+    { creneau_id: 'k-mer-c', prestation_id: 'reiki' },
+    { creneau_id: 'k-jeu-c', prestation_id: 'pilates' },
+    { creneau_id: 'k-jeu-e', prestation_id: 'yoga' },
+    { creneau_id: 'k-ven-c', prestation_id: 'pilates' },
+    { creneau_id: 'k-ven-e', prestation_id: 'yoga' },
+  ]
+  const HORAIRES = {
+    lundi:    { ouvert: true, debut: '08:00', fin: '20:00' },
+    mardi:    { ouvert: true, debut: '08:00', fin: '20:00' },
+    mercredi: { ouvert: true, debut: '08:00', fin: '20:00' },
+    jeudi:    { ouvert: true, debut: '08:00', fin: '17:00' },
+    vendredi: { ouvert: true, debut: '08:00', fin: '15:00' },
+    samedi:   { ouvert: true, debut: '08:00', fin: '12:00' },
+    dimanche: { ouvert: false },
+  }
+
+  // ⚠️ ON REPRODUIT CE QUE FAIT LA FICHE, à la ligne près : elle filtre les
+  // plages par praticienne AVANT d'appeler le moteur, et garde tout quand
+  // personne n'est choisi. Le serveur, lui, reçoit TOUTES les plages. C'est
+  // précisément dans cet écart que le désaccord est né.
+  const vuEcran = (presta, prat, jour) => genererSlots({
+    dateChoisie: jourFutur(jour),
+    dureeMinutes: presta.duree,
+    creneaux: prat ? PLAGES.filter(c => c.praticien_id === prat || c.praticien_id === null) : PLAGES,
+    reservations: [],
+    horairesDetail: HORAIRES,
+    capacite: presta.capacite,
+    prestationId: presta.id,
+    liaisonsCreneaux: LIAISONS,
+  }).filter(s => !s.pris).map(s => s.heure)
+
+  const vuServeur = (presta, jour, heure) => prestationAutoriseeSurCreneaux({
+    creneaux: PLAGES,
+    liaisons: LIAISONS,
+    prestationId: presta.id,
+    dateStr: isoDate(jourFutur(jour)),
+    jour,
+    debutMin: timeToMinutes(heure),
+    finMin: timeToMinutes(heure) + presta.duree,
+    estCours: presta.capacite > 1,
+  })
+
+  const JOURS_OUVRES = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi']
+  const CHOIX = [['Carole', CAROLE], ['Emily', EMILY], ['sans préférence', null]]
+
+  // 🔴 LA GARDE QUI MANQUAIT : tout ce que la grille propose, le serveur
+  // l'accepte. Quarante-cinq combinaisons, toutes les heures de chacune.
+  let desaccords = []
+  let proposesEnTout = 0
+  for (const presta of PRESTATIONS) {
+    for (const [nomChoix, prat] of CHOIX) {
+      for (const jour of JOURS_OUVRES) {
+        for (const heure of vuEcran(presta, prat, jour)) {
+          proposesEnTout++
+          if (!vuServeur(presta, jour, heure)) {
+            desaccords.push(`${presta.nom} / ${nomChoix} / ${jour} ${heure}`)
+          }
+        }
+      }
+    }
+  }
+  egal('🔴 le serveur accepte TOUT ce que la grille propose', desaccords, [])
+  // ⚠️ ET LA MESURE SE MESURE ELLE-MÊME : zéro créneau proposé rendrait la
+  // ligne ci-dessus verte sans rien avoir éprouvé. C'est le piège du banc qui
+  // se félicite du vide.
+  verifier('⚠️ et la grille a bien proposé quelque chose à éprouver',
+    proposesEnTout > 100, `${proposesEnTout} créneaux éprouvés`)
+
+  // ═══ LE CAS EXACT D'ALEX, NOMMÉ ═════════════════════════════════════════
+  //
+  // Cours de Yoga, lundi, 17:00. La grille le proposait, le serveur le
+  // refusait. Les deux lignes ci-dessous sont celles qui rougissaient.
+  {
+    const yoga = PRESTATIONS.find(p => p.id === 'yoga')
+    verifier('🔴 le yoga du lundi 17h est proposé sans préférence',
+      vuEcran(yoga, null, 'lundi').includes('17:00'), vuEcran(yoga, null, 'lundi').join(' '))
+    verifier('🔴 ET le serveur l’accepte (le défaut du 18/09)',
+      vuServeur(yoga, 'lundi', '17:00') === true)
+  }
+
+  // ═══ LE SERVEUR DOIT CHARGER CE QUE LA RÈGLE LIT ════════════════════════
+  //
+  // 🔴 ET C'EST ICI QUE LE DÉFAUT DU 18/09 VIVAIT, PAS DANS LA RÈGLE. Les
+  // vérifications ci-dessus passent les plages COMPLÈTES au serveur : elles
+  // n'auraient donc rien vu, puisque le défaut était que le serveur ne les
+  // charge pas complètes. Un banc qui fabrique ses propres données ne mesure
+  // jamais ce qu'un appelant oublie de demander.
+  //
+  // ⚠️ ON VISE DONC LE `select` LUI-MÊME, dans le fichier du serveur, et on
+  // exige chaque colonne que le moteur lit. Une colonne absente ne lève pas :
+  // elle vaut `undefined`, et la règle s'applique à l'envers en silence.
+  {
+    const srcServeur = sansCommentaires(
+      readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+    const bloc = (srcServeur.match(/from\('rdv_creneaux'\)[\s\S]{0,400}?\.select\('([^']+)'\)/) || [])[1] || ''
+    const demandees = bloc.split(',').map(s => s.trim()).filter(Boolean)
+    // Les colonnes que `creneauxDuJour`, `creneauAccepte` et `tranchesReservees`
+    // lisent réellement. Toute nouvelle lecture doit venir s'ajouter ici.
+    const LUES = ['id', 'jour_semaine', 'date_specifique', 'heure_debut', 'heure_fin',
+      'pause_debut', 'pause_fin', 'actif', 'praticien_id']
+    const manquantes = LUES.filter(col => !demandees.includes(col))
+    egal('🔴 le serveur charge CHAQUE colonne que la règle des créneaux lit', manquantes, [])
+
+    // ⚠️ ET LA RÈGLE S'APPELLE PAREIL DES DEUX CÔTÉS. `tranchesReservees` prend
+    // `estCours` depuis le 18/09 : la garde du serveur l'oubliait, et jugeait
+    // donc qu'une grande plage ouverte peut accueillir un COURS, ce qu'elle ne
+    // peut pas. Une règle écrite une fois mais appelée avec des arguments
+    // différents, ce sont deux règles.
+    //
+    // ⚠️ CELLE-CI VISE LE TEXTE, ET JE LE DIS : la configuration de Studio
+    // Amandine n'a aucune plage sans liaison, donc aucun cas de comportement
+    // ne distingue les deux appels chez elle. La cohérence est vérifiable,
+    // l'effet ne l'est pas ici. Noté plutôt que tu.
+    const srcMoteur = sansCommentaires(
+      readFileSync(new URL('../lib/rdv-slots.js', import.meta.url), 'utf8'))
+    verifier('🔴 la garde du serveur passe estCours à tranchesReservees',
+      /tranchesReservees\(duJour, prestationId, liaisons, \{ estCours \}\)/.test(srcMoteur))
+
+    // 🔴 ET ON MONTRE CE QUE COÛTE L'OUBLI, sur le cas exact d'Alex. Sans
+    // `praticien_id`, la plage de Carole dédiée au pilates réserve la journée
+    // entière contre le yoga, et le serveur refuse ce que la grille propose.
+    const yoga = PRESTATIONS.find(p => p.id === 'yoga')
+    const aveugles = PLAGES.map(({ praticien_id, ...reste }) => reste)  // eslint-disable-line no-unused-vars
+    const verdictAveugle = prestationAutoriseeSurCreneaux({
+      creneaux: aveugles, liaisons: LIAISONS, prestationId: 'yoga',
+      dateStr: isoDate(jourFutur('lundi')), jour: 'lundi',
+      debutMin: timeToMinutes('17:00'), finMin: timeToMinutes('17:00') + yoga.duree,
+      estCours: true,
+    })
+    verifier('🔴 sans praticien_id, le serveur refuse — c’est LE défaut du 18/09',
+      verdictAveugle === false)
+    // ⚠️ ET AVEC LA COLONNE, IL ACCEPTE. Les deux lignes ensemble prouvent que
+    // c'est bien elle qui décide, et pas autre chose.
+    verifier('✅ et avec la colonne, il accepte',
+      vuServeur(yoga, 'lundi', '17:00') === true)
+  }
+
+  // ═══ CE QUE LA CONFIGURATION DIT, ET QU'ON NE DOIT PAS CASSER ═══════════
+  {
+    const reiki = PRESTATIONS.find(p => p.id === 'reiki')
+    const pilates = PRESTATIONS.find(p => p.id === 'pilates')
+    const yoga = PRESTATIONS.find(p => p.id === 'yoga')
+
+    // ⚠️ LE REIKI NE VIT QUE LE MERCREDI, chez Carole : c'est la seule plage qui
+    // le nomme. Ce n'est pas un défaut, c'est la configuration d'Alex, et une
+    // correction qui l'ouvrirait ailleurs serait une régression.
+    egal('⚠️ le Reiki reste introuvable le lundi', vuEcran(reiki, null, 'lundi'), [])
+    verifier('✅ mais il est bien là le mercredi',
+      vuEcran(reiki, null, 'mercredi').length > 0, vuEcran(reiki, null, 'mercredi').join(' '))
+
+    // 🔴 SANS PRÉFÉRENCE NE RETIRE RIEN : c'est le défaut corrigé la veille, et
+    // il doit le rester. Ce qu'on voit sur une praticienne, on le voit sans en
+    // choisir aucune.
+    egal('🔴 sans préférence rend les créneaux de Carole pour le pilates',
+      vuEcran(pilates, null, 'lundi'), vuEcran(pilates, CAROLE, 'lundi'))
+    egal('🔴 et ceux d’Emily pour le yoga',
+      vuEcran(yoga, null, 'lundi'), vuEcran(yoga, EMILY, 'lundi'))
+    // ⚠️ ET CHACUNE NE VOIT QUE CE QU'ELLE DONNE.
+    egal('⚠️ Emily ne propose pas le pilates', vuEcran(pilates, EMILY, 'lundi'), [])
+    egal('⚠️ Carole ne propose pas le yoga', vuEcran(yoga, CAROLE, 'lundi'), [])
+
+    // ⚠️ LES HORAIRES DU COMMERCE CLIPPENT LES PLAGES, et le jeudi le prouve :
+    // la plage va jusqu'à 17h, la boutique ferme à 17h, donc le dernier départ
+    // possible pour une heure de cours est 16h.
+    const jeudi = vuEcran(pilates, CAROLE, 'jeudi')
+    verifier('⚠️ le jeudi s’arrête à 16h, la maison fermant à 17h',
+      jeudi.includes('16:00') && !jeudi.includes('17:00'), jeudi.join(' '))
+    // ⚠️ ET LE VENDREDI FERME À 15H.
+    const vendredi = vuEcran(pilates, CAROLE, 'vendredi')
+    verifier('⚠️ le vendredi s’arrête à 14h',
+      vendredi.includes('14:00') && !vendredi.includes('15:00'), vendredi.join(' '))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

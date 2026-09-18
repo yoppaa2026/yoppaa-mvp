@@ -26,6 +26,27 @@ const BANC = 'verif:slots && npm run verif:bord'
 const MODULE = 'lib/rdv-slots.js'
 
 const MUTATIONS = [
+  // ─── LE SERVEUR REFUSAIT CE QUE L ECRAN PROPOSAIT (Alex, 18/09) ────────
+  //
+  // 🔴 SA PHRASE : « Pourquoi il refuse alors qu il la propose dans les dates
+  // et les heures ? » Cours de yoga, lundi 17h. La cause n etait pas dans la
+  // regle mais dans le SELECT : `rdv-creation-server.js` chargeait ses plages
+  // sans `praticien_id`. Absente, la colonne vaut `undefined`, la plage dediee
+  // au pilates reservait la journee entiere contre le yoga, et le serveur
+  // refusait exactement ce que la grille venait d ouvrir.
+  //
+  // ⚠️ UNE COLONNE ABSENTE NE LEVE JAMAIS. Defaut le plus frequent du depot, et
+  // le seul qui applique la regle A L ENVERS en silence.
+  { nom: '🔴 LE DEFAUT DU 18/09 : le serveur recharge ses plages sans praticien_id',
+    fichier: 'lib/rdv-creation-server.js',
+    de: ", actif, praticien_id')",
+    vers: ", actif')" },
+
+  // ⚠️ ET LA REGLE DOIT S APPELER PAREIL DES DEUX COTES.
+  { nom: '🔴 la garde du serveur cesse de passer estCours',
+    de: 'tranchesReservees(duJour, prestationId, liaisons, { estCours })',
+    vers: 'tranchesReservees(duJour, prestationId, liaisons)' },
+
   // ─── « SANS PREFERENCE » NE PROPOSAIT PLUS RIEN (Alex, 18/09) ───────────
   //
   // 🔴 LE DEFAUT REEL, capture a l appui chez Studio Amandine. Deux plages

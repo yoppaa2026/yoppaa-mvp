@@ -52,6 +52,35 @@ const MUTATIONS = [
     de: '**position approximative ET PRÉCISE**',
     vers: '**position approximative**' },
 
+  // ─── LES TEXTES DE FICHE ───────────────────────────────────────────────
+  //
+  // 🔴 AUCUN STORE N INTERPRETE LE MARKDOWN. Deux intertitres de la
+  // description longue etaient en gras markdown : les asterisques seraient
+  // parties telles quelles dans la fiche publique. Signale, puis porte de todo
+  // en todo pendant des semaines parce que rien ne le mesurait.
+  { nom: '🔴 un intertitre repasse en gras markdown, que la fiche affichera tel quel',
+    fichier: DOSSIER,
+    de: '> Ce que tu peux faire',
+    vers: '> **Ce que tu peux faire**' },
+
+  // 🔴 ET UN TEXTE TROP LONG EST REFUSE AU COLLAGE, pas a la revue : on
+  // l abrege alors dans l urgence, mal.
+  { nom: '🔴 le sous-titre Apple depasse ses 30 caracteres',
+    fichier: DOSSIER,
+    de: '> `Tes commerces, à portée`',
+    vers: '> `Tes commerces, à portée de main et de clic`' },
+
+  // 🔴 ET UN TEXTE VIDE NE DOIT PAS PASSER EN SILENCE. Ma garde est nee
+  // complice : l entete « Description » d Apple renvoie au texte de Play
+  // plutot que de le dupliquer, donc sans bloc « > ». Le parseur en faisait un
+  // texte de zero caractere, qui tient dans n importe quelle limite et ne
+  // contient aucun markdown : DEUX verifications vertes en n ayant rien
+  // regarde. Le compte des champs pleins est ce qui l attrape.
+  { nom: '🔴 un texte de fiche est vide, et personne ne le compte plus',
+    fichier: DOSSIER,
+    de: '> `Yoppaa - Commerces locaux`',
+    vers: '> ``' },
+
   // ─── LE WORKFLOW iOS, QUI N A JAMAIS TOURNE (17/09) ─────────────────────
   // 🔴 C est la situation exacte du workflow Android ce matin : cinq defauts
   // silencieux, tous trouves en le LANCANT. Celui-ci n a pas encore tourne, et

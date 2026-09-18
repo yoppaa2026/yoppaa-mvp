@@ -539,6 +539,57 @@ const fenetreNative = (options = {}) => {
     }
   }
 
+  // ─── LES TEXTES DE FICHE ────────────────────────────────────────────────
+  //
+  // 🔴 UN TEXTE TROP LONG EST REFUSÉ AU COLLAGE, pas à la revue : la console
+  // le tronque ou le rejette, et on l'abrège dans l'urgence, mal. Les limites
+  // comptent des CARACTÈRES, accents compris.
+  //
+  // 🔴 ET AUCUN STORE N'INTERPRÈTE LE MARKDOWN. Deux intertitres de la
+  // description longue étaient en `**gras**` : les astérisques seraient
+  // parties telles quelles dans la fiche publique. Le défaut avait été
+  // SIGNALÉ, puis porté de todo en todo pendant des semaines, parce que rien
+  // ne le mesurait.
+  {
+    const dossierFiches = lire('DOSSIER_STORES.md')
+    const lignesFiches = dossierFiches.split('\n')
+    let champs = 0
+    for (let i = 0; i < lignesFiches.length; i++) {
+      const entete = /^\*\*(.+?)\*\*\s*\((\d+)\s*caractères max/.exec(lignesFiches[i])
+      if (!entete) continue
+      const corps = []
+      for (let j = i + 1; j < lignesFiches.length; j++) {
+        const l = lignesFiches[j]
+        if (l.trim() === '') { if (corps.length) break; continue }
+        if (!l.startsWith('>')) break
+        corps.push(l.replace(/^>\s?/, ''))
+      }
+      const texte = corps.join('\n').replace(/^`|`$/gm, '').trim()
+      // 🔴 UN CHAMP VIDE PASSAIT TOUT SEUL, et ma propre garde est née comme
+      // ça : l'entête « Description » d'Apple renvoie au texte de Google Play
+      // plutôt que de le dupliquer, donc il n'a pas de bloc `>`. Le parseur en
+      // faisait un texte de zéro caractère, qui tient dans n'importe quelle
+      // limite et ne contient aucun markdown. DEUX vérifications vertes en
+      // n'ayant rien regardé.
+      // On ne compte donc que les champs qui portent vraiment un texte, et le
+      // total attendu plus bas fait le reste : vider un vrai texte le fait
+      // sortir du compte, et la section rougit.
+      if (!texte) continue
+      champs++
+      verifie(`🔴 « ${entete[1]} » tient dans ses ${entete[2]} caractères (${texte.length})`,
+        texte.length <= Number(entete[2]))
+      // ⚠️ ON NE CHERCHE LE MARKDOWN QUE DANS LE TEXTE FINAL, jamais dans tout
+      // le document : les notes qui expliquent de NE PAS en mettre en
+      // contiennent, et une garde qui lirait le fichier entier se trouverait
+      // dans sa propre consigne. Quatrième fois cette semaine.
+      verifie(`🔴 « ${entete[1]} » sans markdown, qu'aucun store n'interprète`,
+        !/\*\*/.test(texte))
+    }
+    // ⚠️ SANS CE COMPTE, un parseur cassé rendrait zéro champ et la section
+    // entière serait verte en n'ayant rien regardé.
+    verifie('⚠️ les sept textes de fiche sont bien trouvés', champs >= 7, champs + ' trouvés')
+  }
+
   // ⚠️ L'IMAGE. Un `<input type="file" accept="image/*">` propose « Prendre une
   // photo » sur iPhone : sans `NSCameraUsageDescription`, iOS TUE l'app à
   // l'instant où l'utilisateur y touche. Ce n'est pas un avertissement.

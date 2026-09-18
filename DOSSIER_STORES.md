@@ -189,6 +189,12 @@ pour le Yopper. À trancher seulement si Apple objecte.
 **Description courte** (80 caractères max)
 > `Commande chez tes commerçants du coin, et récupère sans faire la file.`
 
+⚠️ **CE BLOC SE COLLE TEL QUEL, SANS RIEN Y AJOUTER.** Les intertitres sont en
+texte simple, et c'est voulu : **aucun store n'interprète le markdown**, les
+astérisques d'un `**gras**` partiraient telles quelles dans la fiche publique.
+Google Play accepte quelques balises HTML, l'App Store non, et ce texte sert
+aux deux.
+
 **Description longue** (4000 caractères max)
 
 > Yoppaa rassemble les commerçants de ta commune en un seul endroit.
@@ -196,7 +202,7 @@ pour le Yopper. À trancher seulement si Apple objecte.
 > Tu vois qui est ouvert autour de toi, ce qu'ils proposent aujourd'hui, et tu
 > commandes avant d'arriver. Ta commande t'attend, tu ne fais pas la file.
 >
-> **Ce que tu peux faire**
+> Ce que tu peux faire
 >
 > • Trouver les commerces ouverts près de chez toi
 > • Commander et payer à l'avance, ou payer sur place
@@ -206,7 +212,7 @@ pour le Yopper. À trancher seulement si Apple objecte.
 > • Offrir un bon cadeau valable chez ton commerçant préféré
 > • Repérer les invendus à prix réduit, avant la fermeture
 >
-> **Pourquoi c'est différent**
+> Pourquoi c'est différent
 >
 > Yoppaa ne remplace pas ton commerçant, il lui donne les mêmes outils que les
 > grandes enseignes. Tu commandes chez lui, tu payes chez lui, et c'est lui que
@@ -222,8 +228,28 @@ pour le Yopper. À trancher seulement si Apple objecte.
 **Sous-titre** (30 caractères max)
 > `Tes commerces, à portée`
 
+**Description** (4000 caractères max)
+
+🔴 **ON RECOPIE LA DESCRIPTION LONGUE DE GOOGLE PLAY, TELLE QUELLE.** App Store
+Connect exige ce champ et il manquait ici : sans lui, la fiche ne peut pas être
+soumise.
+
+⚠️ **ET ON NE LA DUPLIQUE PAS DANS CE DOSSIER.** Deux copies du même texte
+divergent à la première retouche, et c'est l'une des deux qui part chez un
+store sans qu'on sache laquelle. Une seule source : §5, Google Play.
+
+⚠️ Rien à retirer pour Apple : ce texte ne nomme aucune autre plateforme, ce
+qu'Apple refuse, et ne promet aucun achat intégré.
+
 **Mots-clés** (100 caractères max, séparés par des virgules, sans espaces)
-> `commerce,local,commande,click,collect,boulangerie,restaurant,fidélité,belgique,livraison`
+> `local,commande,click,collect,boulangerie,restaurant,fidélité,belgique,livraison,rdv,traiteur,snack`
+
+⚠️ **`commerce` A ÉTÉ RETIRÉ, ET CE N'EST PAS UNE PERTE.** Apple indexe le nom,
+le sous-titre ET les mots-clés ensemble : « Tes commerces, à portée » le porte
+déjà. Les 9 caractères récupérés ont servi à `rdv`, `traiteur` et `snack`, qui
+n'apparaissaient nulle part. 98 caractères sur 100.
+
+⚠️ **Pas d'espace après les virgules** : Apple les compte comme des caractères.
 
 **Texte promotionnel** (170 caractères max, modifiable sans revue)
 > `Commande chez tes commerçants du coin et récupère sans attendre. Fidélité, bons cadeaux et réservations, tout au même endroit.`

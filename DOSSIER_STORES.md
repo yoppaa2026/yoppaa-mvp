@@ -144,8 +144,31 @@ pour le Yopper. À trancher seulement si Apple objecte.
 - **Déclarations de données** : formulaire « Sécurité des données » de Google et
   étiquettes de confidentialité d'Apple. ⚠️ Elles doivent correspondre à ce que
   `/legal` déclare, sinon la divergence se paie au dépôt. Données collectées :
-  adresse email, nom, téléphone, **position approximative**, historique d'achat,
-  identifiants d'appareil (notifications).
+  adresse email, nom, téléphone, **position approximative ET PRÉCISE**,
+  historique d'achat, identifiants d'appareil (notifications).
+
+  🔴 **LA POSITION PRÉCISE A ÉTÉ AJOUTÉE LE 18/09 ET DOIT ÊTRE DÉCLARÉE.**
+  `21c558a` a mis `ACCESS_FINE_LOCATION` dans le manifeste Android, en même
+  temps que `ACCESS_COARSE_LOCATION`. **Google recoupe automatiquement le
+  manifeste avec le formulaire**, et une divergence se paie au dépôt. Il faut
+  donc cocher, chez Google, « position approximative » **et** « position
+  précise » ; chez Apple, `Precise Location` en plus de `Coarse Location`.
+
+  ⚠️ **ET ELLE EST JUSTIFIÉE, ce n'est pas du zèle.** La documentation Android
+  chiffre les deux : `ACCESS_COARSE_LOCATION` donne **environ 3 km²**, soit à
+  peu près un kilomètre de rayon ; `ACCESS_FINE_LOCATION` donne **environ
+  50 m**. Or la liste d'accueil affiche « 38 m », « 43 m », « 67 m », « 132 m »
+  et **classe les commerces par proximité** : avec la seule position
+  approximative, ces quatre-là deviennent indiscernables et le tri ne veut plus
+  rien dire. `app/commander/page.js:2462` demande d'ailleurs déjà
+  `enableHighAccuracy: true`.
+
+  ⚠️ Seul `ConfirmCommune.js:111` se contente de l'approximative
+  (`enableHighAccuracy: false`), et c'est juste : il ne cherche qu'une commune.
+
+  ⚠️ **AUCUNE PHOTO À DÉCLARER.** L'application empaquetée est l'app CLIENT
+  (`appId: app.yoppaa.client`) et le parcours Yopper ne contient aucun
+  `<input type="file">` : rien n'y téléverse d'image.
 - **Compte de démonstration pour le relecteur** : Apple exige un identifiant qui
   fonctionne. Prévoir un compte Yopper avec un commerce ouvert à proximité,
   sinon le relecteur voit une liste vide et rejette pour « contenu incomplet ».

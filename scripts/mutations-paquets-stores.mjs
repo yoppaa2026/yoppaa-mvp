@@ -34,8 +34,24 @@ const IOS = '.github/workflows/paquet-ios.yml'
 const CONF = 'capacitor.config.ts'
 const PLIST = 'ios/App/App/Info.plist'
 const ANDROID_MANIFESTE = 'android/app/src/main/AndroidManifest.xml'
+const DOSSIER = 'DOSSIER_STORES.md'
 
 const MUTATIONS = [
+  // ─── CE QUE LE MANIFESTE DEMANDE DOIT ETRE DECLARE AUX STORES (18/09) ───
+  //
+  // 🔴 LE TROU TROUVE PAR ALEX : « on devait changer quelque chose dans les
+  // declarations Play, tu te souviens ? ». `ACCESS_FINE_LOCATION` est entree au
+  // manifeste le 17/09 au soir, et le dossier ne prevoyait de declarer que la
+  // position « approximative ». Google RECOUPE le manifeste avec le formulaire
+  // Securite des donnees, et la divergence se paie APRES la revue.
+  //
+  // ⚠️ RIEN NE REGARDAIT DANS CE SENS : les gardes partaient du CODE et s
+  // arretaient au MANIFESTE. Vingt-quatre heures sans que personne le voie.
+  { nom: '🔴 le dossier ne declare plus que la position approximative',
+    fichier: DOSSIER,
+    de: '**position approximative ET PRÉCISE**',
+    vers: '**position approximative**' },
+
   // ─── LE WORKFLOW iOS, QUI N A JAMAIS TOURNE (17/09) ─────────────────────
   // 🔴 C est la situation exacte du workflow Android ce matin : cinq defauts
   // silencieux, tous trouves en le LANCANT. Celui-ci n a pas encore tourne, et

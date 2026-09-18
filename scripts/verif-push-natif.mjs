@@ -509,6 +509,34 @@ const fenetreNative = (options = {}) => {
     verifie('🔴 le GPS n’est pas rendu obligatoire à l’installation',
       /location\.gps"\s+android:required="false"/.test(manif)
       && /location\.network"\s+android:required="false"/.test(manif))
+
+    // 🔴 ET CE QUE LE MANIFESTE DEMANDE DOIT ÊTRE DÉCLARÉ AUX STORES.
+    //
+    // LE TROU DU 18/09, TROUVÉ PAR ALEX EN DEMANDANT « on devait changer
+    // quelque chose dans les déclarations Play ? ». `ACCESS_FINE_LOCATION` est
+    // entrée au manifeste le 17/09 au soir ; `DOSSIER_STORES.md` ne prévoyait
+    // de déclarer que la position « approximative ». **Google RECOUPE
+    // automatiquement le manifeste avec le formulaire Sécurité des données**,
+    // et la divergence se paie au dépôt, donc APRÈS la revue.
+    //
+    // ⚠️ RIEN NE REGARDAIT DANS CE SENS-LÀ. La garde ci-dessus part du CODE et
+    // s'arrête au MANIFESTE ; il manquait le maillon suivant, du manifeste vers
+    // ce qu'on déclare. Vingt-quatre heures sans que personne le voie.
+    //
+    // ⚠️ ET LA POSITION PRÉCISE EST JUSTIFIÉE, ce n'est pas du zèle : la
+    // documentation Android chiffre `ACCESS_COARSE_LOCATION` à environ 3 km²,
+    // soit un kilomètre de rayon. La liste d'accueil affiche « 38 m », « 43 m »,
+    // « 67 m » et CLASSE par proximité : avec l'approximative seule, ces
+    // distances deviennent indiscernables.
+    const dossier = lire('DOSSIER_STORES.md')
+    if (/ACCESS_FINE_LOCATION/.test(manif)) {
+      // ⚠️ ON VISE LA LIGNE DES DONNÉES COLLECTÉES, pas le mot « précise » :
+      // le dossier l'emploie plusieurs fois dans l'explication juste en
+      // dessous, et une garde qui chercherait le mot se trouverait dans la
+      // justification en laissant la déclaration fausse.
+      verifie('🔴 le dossier déclare la position PRÉCISE, que le manifeste demande',
+        /position approximative ET PRÉCISE/.test(dossier))
+    }
   }
 
   // ⚠️ L'IMAGE. Un `<input type="file" accept="image/*">` propose « Prendre une

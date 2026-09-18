@@ -53,6 +53,7 @@
     "verif:anti-gaspi": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-anti-gaspi.mjs",
     "verif:captures": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-captures-stores.mjs",
     "mutations:captures": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/mutations-captures-stores.mjs",
+    "mutations:paquets": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/mutations-paquets-stores.mjs",
     "verif:delai": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-delai-commande.mjs",
     "verif:harnais": "node scripts/verif-harnais-mutation.mjs",
     "verif:ancres": "node scripts/verif-ancres-mutation.mjs",

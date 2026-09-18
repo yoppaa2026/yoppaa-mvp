@@ -332,6 +332,12 @@ expédition, son tunnel meurt. À basculer en retrait avant les captures.
 > as you sign in, with or without location permission. You may decline the
 > location prompt.
 >
+> **Setting the location (important)**
+>
+> On the home screen, tap the location field at the top right and enter
+> **"Mettet"** or **"5640"**. Without this, distances are computed from your own
+> position and the "Rien ne se perd" section appears empty.
+>
 > **Test account**
 >
 > Email: `<a completer>` — Password: `<a completer>`
@@ -398,21 +404,34 @@ comptes morts, et le rejet est de ta main.
 prévenir les commerçants de préparer leur IBAN et leur carte d'identité dès
 maintenant : ce délai-là est humain, il peut courir pendant la revue.
 
-### 7.5 L'essai qui valide la note, à faire par Alex
+### 7.5 ✅ L'ESSAI EST FAIT — ALEX, 18/09
 
 🔴 **Une note de revue qui décrit un chemin faux coûte un cycle entier.** Deux
-affirmations de cette note n'ont pas pu être prouvées depuis le code et doivent
-donc être vues à l'écran, **en navigation privée**, avec le compte de
-démonstration et **rien d'autre** :
+affirmations n'avaient pas pu être prouvées depuis le code. **Alex les a
+vérifiées à l'écran le 18/09, avec le compte de démonstration**, et le second
+essai a révélé un troisième point que personne n'avait vu.
 
-1. Refuser la demande de géolocalisation, puis regarder la liste d'accueil.
-   **Si elle est vide, la note est fausse** et il faut décrire le geste réel qui
-   fait apparaître les commerces. La commune vient du profil du client
-   (`clients.commune_id`), pas d'un sélecteur d'écran : je n'ai pas pu établir
-   avec certitude que la liste s'en sert quand la position est refusée.
-2. Aller jusqu'au bout d'une commande sur une fiche de démonstration, sans
-   carte. **Si un écran réclame une carte, le relecteur sera bloqué au même
-   endroit.**
+1. ✅ **La liste n'est PAS vide sans géolocalisation.** La commune vient bien du
+   profil (`clients.commune_id`), et les commerces apparaissent dès la
+   connexion. Le doute est levé.
+
+   ⚠️ **ET SI `commune_id` EST NULL, LE RELECTEUR EST BLOQUÉ** :
+   `app/commander/page.js:3504` ouvre une fenêtre `mode='first'`, **pas
+   fermable**. D'où l'obligation que le compte de démonstration porte sa commune
+   AVANT le dépôt.
+
+2. ✅ **Le tunnel va au bout des DEUX façons** chez Chez Momo : « paiement sur
+   place », et carte de test `4242 4242 4242 4242`.
+
+3. 🔴 **LE POINT QUE SEUL UN VRAI TEST POUVAIT DONNER, trouvé par Alex.** La
+   commune du profil décide **quels commerces s'affichent** ; le champ de
+   localisation en haut de l'accueil décide **des distances**. Ce sont deux
+   choses différentes. Sans régler le second, le relecteur voit les commerces à
+   des milliers de kilomètres, **et « Rien ne se perd » est VIDE** puisque cette
+   section filtre à 25 km. Or c'est l'un des huit visuels de la fiche : il
+   aurait vu une capture qui promet des invendus, et un écran vide dans l'app.
+
+⚠️ **Le compte doit fonctionner le jour de la revue, pas le jour du dépôt.**
 
 ⚠️ **Le compte doit fonctionner le jour de la revue, pas le jour du dépôt.**
 Apple ouvre parfois le dossier trois jours plus tard ; un compte expiré, un mot

@@ -151,6 +151,32 @@ place uniquement.
 
 ## 7. Ce qui reste après
 
+🔴 **RETIRER LA CARTE DE TEST DES INSTRUCTIONS DE REVUE, SUR LES DEUX STORES.**
+
+Le 18/09, la soumission à Google est partie avec ce paragraphe dans
+**Contenu de l'application → Informations de connexion** :
+
+> With a payment: Stripe runs in test mode for this review. Use card
+> 4242 4242 4242 4242, any future expiry date, any 3-digit CVC, any postal
+> code. No real money is charged.
+
+⚠️ **CE TEXTE DEVIENT FAUX À LA SECONDE OÙ ON BASCULE**, et le piège n'est pas
+qu'il soit inexact : c'est que **les stores relisent ces instructions bien après
+la première revue**. Google comme Apple re-testent une application déjà publiée,
+à l'occasion d'une mise à jour ou d'un contrôle. Le relecteur suit la consigne,
+la carte `4242` est refusée par le Stripe réel, il voit un **paiement qui
+échoue** et il rejette, sans que rien n'ait changé dans le code.
+
+**Le geste** : ne garder que le chemin sans paiement.
+
+> Without paying: open "Chez Momo", add an item, and choose "paiement sur
+> place" (pay on site) at checkout.
+
+⚠️ **Et ne pas basculer PENDANT une revue en cours**, pour la même raison. L'ordre
+est : soumettre → laisser la revue se faire → basculer → publier. La
+**publication gérée** de Play, activée le 18/09, donne exactement ce contrôle :
+Google approuve, et c'est Alex qui décide du jour de la mise en ligne.
+
 - **Dépublier les fiches de test** avant le 1er octobre.
 - **Monter le bac à sable** : une fois la production en live, il n'y a plus
   d'endroit où essayer sans conséquence. Ce n'est plus un confort.

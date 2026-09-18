@@ -26,6 +26,33 @@ const BANC = 'verif:slots && npm run verif:bord'
 const MODULE = 'lib/rdv-slots.js'
 
 const MUTATIONS = [
+  // ─── « SANS PREFERENCE » NE PROPOSAIT PLUS RIEN (Alex, 18/09) ───────────
+  //
+  // 🔴 LE DEFAUT REEL, capture a l appui chez Studio Amandine. Deux plages
+  // 09:00-18:00 superposees, Carole donne le pilates, Emily donne le yoga. Sur
+  // Carole : neuf creneaux. Sur « sans preference » : AUCUN. La plage d Emily,
+  // dediee au yoga, reservait la journee entiere contre le pilates.
+  //
+  // ⚠️ CETTE MUTATION REMET EXACTEMENT LE CODE D AVANT : une plage nommee qui
+  // ne m accepte pas reserve son heure contre tout le monde, sans regarder s il
+  // reste une collegue pour m accueillir.
+  { nom: '🔴 LE DEFAUT DU 18/09 : la plage d une collegue reserve contre tous',
+    de: '    if (c.praticien_id) {',
+    vers: '    if (false) {' },
+
+  // ⚠️ ET DANS L AUTRE SENS : sans le test du praticien, DEUX plages d une
+  // MEME personne se libereraient l une l autre. Carole ne peut pas donner
+  // deux cours a la fois, quel que soit le nombre de plages qu elle ouvre.
+  { nom: '🔴 deux plages d une MEME praticienne se liberent l une l autre',
+    de: '        if (!autre.praticien_id || String(autre.praticien_id) === String(c.praticien_id)) return false',
+    vers: '        if (!autre.praticien_id) return false' },
+
+  // ⚠️ ET LE CHEVAUCHEMENT COMPTE : sans lui, une plage de 19h libererait une
+  // heure de 10h, a l autre bout de la journee.
+  { nom: '🔴 le chevauchement horaire cesse d etre verifie',
+    de: '        if (timeToMinutes(autre.heure_debut) >= fin) return false',
+    vers: '        if (false) return false' },
+
   // 🔴 UN COURS N A PAS D HORAIRE HORS DE SA PLAGE (Alex, 08/09).
   //
   // ⚠️ CETTE MUTATION VISAIT AVANT `return !liaisons.some(...)`, la ligne qui
@@ -212,8 +239,13 @@ const MUTATIONS = [
     de: '      if (tombeDansUneTrancheReservee(t, slotEnd, reservees)) continue',
     vers: '      if (false) continue' },
 
+  // ⚠️ ANCRE REPOSEE LE 18/09. La correction de « sans preference » a sorti le
+  // calcul des bornes de cette ligne : l ancienne ancre visait
+  // `out.push([timeToMinutes(...), timeToMinutes(...)])`, qui n existe plus.
+  // Le harnais a dit « TEXTE INTROUVABLE » — c est exactement ce qu il doit
+  // faire, une ancre perimee ne mesure rien.
   { nom: '🔴 une plage dediee cesse de reserver son heure',
-    de: '    out.push([timeToMinutes(c.heure_debut), timeToMinutes(c.heure_fin)])',
+    de: '    out.push([debut, fin])',
     vers: '    void 0' },
 
   { nom: '🔴 une plage qui m accepte se met a se reserver contre moi',

@@ -3079,6 +3079,107 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// « SANS PRÉFÉRENCE » NE PROPOSAIT PLUS RIEN (Alex, 18/09, Studio Amandine)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ALEX A VU, CAPTURES À L'APPUI. Un cours de pilates, deux
+// praticiennes, deux plages 09:00-18:00 superposées : Carole donne le pilates,
+// Emily donne le yoga.
+//   • sur Carole            → neuf créneaux          ✅
+//   • sur Emily             → aucun, et c'est normal ✅
+//   • sur « sans préférence » → AUCUN                🔴
+//
+// En « sans préférence », `tranchesReservees` reçoit TOUTES les plages du jour.
+// Celle d'Emily, dédiée au yoga, réservait la journée entière contre le
+// pilates : le moteur croyait la salle prise par un cours, alors que c'est une
+// collègue qui en donne un autre à côté. Le choix par défaut du tunnel ne
+// proposait donc rien, chez un commerce qui a des places libres.
+//
+// ⚠️ ET CES 650 VÉRIFICATIONS ÉTAIENT VERTES PENDANT CE TEMPS. Aucune ne
+// superposait deux plages nommées de deux praticiennes différentes : le cas le
+// plus banal d'un studio à deux professeurs n'était mesuré nulle part.
+{
+  const PLAGE = (id, praticien) => ({
+    id, jour_semaine: 'mercredi', date_specifique: null,
+    heure_debut: '09:00:00', heure_fin: '18:00:00', actif: true,
+    pas_minutes: 60, praticien_id: praticien,
+  })
+  const CAROLE = PLAGE('k-carole', 'carole')
+  const EMILY  = PLAGE('k-emily', 'emily')
+  const LIAISONS = [
+    { creneau_id: 'k-carole', prestation_id: 'pilates' },
+    { creneau_id: 'k-emily',  prestation_id: 'yoga' },
+  ]
+  const libres = (creneaux, prestationId = 'pilates', liaisons = LIAISONS) => genererSlots({
+    dateChoisie: mercredi, dureeMinutes: 60, creneaux, reservations: [],
+    horairesDetail: { mercredi: { ouvert: true, debut: '08:00', fin: '20:00' } },
+    capacite: 3, prestationId, liaisonsCreneaux: liaisons,
+  }).filter(s => !s.pris).map(s => s.heure)
+
+  const surCarole = libres([CAROLE])
+  verifier('⚠️ sur Carole seule, le pilates a bien ses créneaux',
+    surCarole.length > 0, surCarole.join(' '))
+  egal('⚠️ sur Emily seule, rien, et c’est normal', libres([EMILY]), [])
+
+  // 🔴 LE DÉFAUT LUI-MÊME. Sans la correction, cette ligne rend un tableau vide.
+  const sansPreference = libres([CAROLE, EMILY])
+  verifier('🔴 SANS PRÉFÉRENCE, les créneaux de Carole restent proposés',
+    sansPreference.length > 0, `obtenu « ${sansPreference.join(' ')} », attendu non vide`)
+  // ⚠️ ET CE SONT EXACTEMENT LES MÊMES : ne pas choisir ne doit rien retirer.
+  egal('🔴 et ce sont exactement ceux de Carole', sansPreference, surCarole)
+
+  // ═══ CE QU'ON NE DOIT SURTOUT PAS DÉFAIRE ════════════════════════════════
+  //
+  // 🔴 LA CORRECTION DU 07/09 TIENT TOUJOURS : une plage dédiée empêche qu'une
+  // autre prestation vienne squatter l'heure du cours. Sans elle, un Reiki pris
+  // à 10h fermait le yoga pour tout le monde.
+  {
+    // ⚠️ DEUX PLAGES D'UNE MÊME PERSONNE SONT LA MÊME RESSOURCE : elles ne se
+    // libèrent pas l'une l'autre. Carole ne peut pas donner deux cours à la
+    // fois, quel que soit le nombre de plages qu'elle ouvre.
+    const CAROLE_YOGA = { ...PLAGE('k-carole-yoga', 'carole'), heure_debut: '10:00:00', heure_fin: '11:00:00' }
+    const avecSonYoga = libres([CAROLE, CAROLE_YOGA], 'pilates',
+      [...LIAISONS, { creneau_id: 'k-carole-yoga', prestation_id: 'yoga' }])
+    verifier('🔴 deux plages d’une MÊME praticienne ne se libèrent pas l’une l’autre',
+      !avecSonYoga.includes('10:00'), avecSonYoga.join(' '))
+
+    // ⚠️ ET UNE PLAGE COMMUNE PREND LA MAISON ENTIÈRE. Personne n'étant nommé,
+    // elle n'appartient à aucune praticienne : elle réserve contre tous.
+    const COMMUNE_YOGA = { ...PLAGE('k-commune-yoga', null), heure_debut: '10:00:00', heure_fin: '11:00:00' }
+    const avecCommune = libres([CAROLE, COMMUNE_YOGA], 'pilates',
+      [...LIAISONS, { creneau_id: 'k-commune-yoga', prestation_id: 'yoga' }])
+    verifier('🔴 une plage COMMUNE dédiée réserve encore contre tout le monde',
+      !avecCommune.includes('10:00'), avecCommune.join(' '))
+
+    // 🔴 ET LA COLLÈGUE DOIT ÊTRE LÀ À CETTE HEURE-LÀ, pas ailleurs dans la
+    // journée. Ce cas-ci est le seul qui le montre, et il a fallu une mutation
+    // restée verte pour s'en apercevoir : les trois cas précédents superposent
+    // des plages, donc ils ne mesuraient jamais le chevauchement lui-même.
+    //
+    // Emily donne le pilates toute la journée, sauf de 10h à 11h où elle donne
+    // son yoga. Carole ne fait du pilates que l'après-midi. À 10h, personne ne
+    // peut donc accueillir le pilates : le créneau doit rester fermé. Sans la
+    // vérification des heures, la plage de Carole de l'après-midi « libérerait »
+    // dix heures du matin, et le client réserverait un cours que personne ne
+    // donne.
+    const EMILY_PILATES = { ...PLAGE('k-emily-pilates', 'emily') }
+    const EMILY_YOGA    = { ...PLAGE('k-emily-yoga', 'emily'), heure_debut: '10:00:00', heure_fin: '11:00:00' }
+    const CAROLE_APREM  = { ...PLAGE('k-carole-aprem', 'carole'), heure_debut: '14:00:00', heure_fin: '18:00:00' }
+    const horsHeure = libres([EMILY_PILATES, EMILY_YOGA, CAROLE_APREM], 'pilates', [
+      { creneau_id: 'k-emily-pilates', prestation_id: 'pilates' },
+      { creneau_id: 'k-emily-yoga',    prestation_id: 'yoga' },
+      { creneau_id: 'k-carole-aprem',  prestation_id: 'pilates' },
+    ])
+    verifier('🔴 une collègue libre l’APRÈS-MIDI ne libère pas dix heures du matin',
+      !horsHeure.includes('10:00'), horsHeure.join(' '))
+    // ⚠️ ET LE RESTE DE LA JOURNÉE N'EST PAS EMPORTÉ AVEC : on ferme une heure,
+    // pas un agenda. Une correction qui viderait tout serait pire que le défaut.
+    verifier('⚠️ mais le reste de la journée reste ouvert',
+      horsHeure.includes('09:00') && horsHeure.includes('11:00'), horsHeure.join(' '))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

@@ -139,6 +139,59 @@ main, c'est une friction inutile au moment précis où il vérifie la règle
 prévenant que le solde est perdu**. Plus simple pour le relecteur, plus coûteux
 pour le Yopper. À trancher seulement si Apple objecte.
 
+### ✅ Le statut de commerçant (DSA), fourni et vérifié le 19/09
+
+🔴 **CE POINT MANQUAIT ENTIÈREMENT À CE DOSSIER, ET IL BLOQUAIT LA SOUMISSION.**
+Les articles 30 et 31 du règlement sur les services numériques obligent Apple à
+vérifier et à publier les coordonnées de tout commerçant qui distribue une app
+dans l'Union. **Sans statut déclaré, une nouvelle app ne se soumet pas dans
+l'UE**, et depuis le 18 février 2025 les apps sans statut vérifié en sont
+retirées.
+
+⚠️ **CE N'EST PAS LA VALIDATION DU COMPTE DÉVELOPPEUR.** Le dossier d'août
+prouvait qu'Avcotech existe et qu'Alex la représente ; celui-ci sert à
+**afficher publiquement** les coordonnées sous l'app. Le second ne découle pas
+du premier. Alex a demandé « tu es certain, en plus de mon accès déjà accordé
+par Apple ? », j'ai répondu que le bandeau devait être générique : **c'était
+faux**, il était rouge, ciblé, et portait un lien d'action.
+
+**Le chemin** : `Business` → bandeau rouge → « Compléter les exigences de
+conformité ». Réponse : « J'ai le statut de commerçant », puisque Avcotech
+distribue Yoppaa dans le cadre de son activité professionnelle.
+
+**Ce qui est désormais publié sur la fiche App Store des 27 pays de l'UE** :
+
+| Champ | Valeur | Origine |
+|---|---|---|
+| Nom | `Avcotech` | D&B, sans « SRL » |
+| Adresse | `Rue de Pree 9 G, Mettet, 5640, Belgique` | **reprise de D&B, non modifiable ici** |
+| Téléphone | `+32 492 73 08 69` | |
+| Email | `hello@yoppaa.app` | celle de `/legal` et de la fiche Play |
+| D-U-N-S | `371859889` | affiché publiquement lui aussi |
+
+✅ **Vérifié par Apple en quelques minutes**, sans document ni code à fournir :
+le compte avait déjà passé la vérification d'entreprise en août, Apple ne
+redemande pas ce qu'il sait.
+
+✅ **C'est la correction d'adresse obtenue d'Altares le 03/08 qui a servi ici.**
+L'adresse vient de D&B et ne se modifie pas depuis cet écran. Sans elle, la
+fiche publique porterait « Biesme » collé dans le nom de rue et l'ancien numéro.
+
+⚠️ **Le champ « État ou province » se laisse vide** : une adresse belge n'en
+porte pas, il n'est pas obligatoire, et le remplir créerait un écart avec
+l'extrait BCE.
+
+🔴 **NE PAS SIGNER LE CONTRAT RELATIF AUX APPLICATIONS PAYANTES.** Un bandeau
+bleu le propose et il ne nous concerne pas : Yoppaa est gratuite et sans achat
+intégré. Le seul contrat utile, celui des applications gratuites, est **actif du
+31 août 2026 au 31 août 2027**. Signer l'autre ouvrirait des obligations
+bancaires et fiscales sans aucune contrepartie, et le bandeau ne disparaîtrait
+pas pour autant.
+
+⏳ **Reste le réglage par app** : `Apps` → Yoppaa → `Informations sur l'app` →
+`Réglementations et autorisations de l'App Store`, où le statut se confirme pour
+cette app précise.
+
 ### ⏳ À préparer
 
 - **Déclarations de données** : formulaire « Sécurité des données » de Google et
@@ -176,6 +229,46 @@ pour le Yopper. À trancher seulement si Apple objecte.
   commerce belge. Prévoir la phrase qui explique comment choisir une commune à
   la main, dans les notes de revue.
 - **Classification du contenu** (questionnaire Google) et **âge minimum**.
+
+### ⏳ L'âge chez Apple : deux questions à ne pas confondre
+
+Apple a ajouté le 9 juillet 2026 des questions sur les **capacités de réseaux
+sociaux**, et les réponses sont **obligatoires depuis septembre 2026** pour
+soumettre une nouvelle app. Elles s'ajoutent à la question, plus ancienne, du
+contenu généré par les utilisateurs. Ce ne sont pas les mêmes.
+
+**1. Capacité de réseau social : NON.** Apple la définit comme la faculté de
+« redistribuer, amplifier ou interagir avec du contenu d'utilisateurs, via un
+fil social ou une méthode de découverte similaire ». Les deux moitiés comptent,
+et aucune ne tient chez nous :
+
+| Le test | Chez Yoppaa | Preuve |
+|---|---|---|
+| Un fil social ? | non, les avis ne vivent que sur la fiche du commerce | `app/commander/[slug]/page.js`, `limit(10)` |
+| Redistribuer ? | non, aucun partage d'un avis | |
+| Amplifier ? | non, ordre chronologique, ni like ni vote « utile » | `order('created_at')` |
+| Interagir ? | seul le commerçant répond, et depuis Yoppaa Pro, qui n'est pas sur l'App Store | `reponse_commercant` |
+| Auteur identifiable ? | non, `avis_public` n'expose pas `client_id` | |
+
+🔴 **NE PAS RÉPONDRE OUI PAR PRUDENCE.** Apple collerait un **descripteur
+« Réseaux sociaux » sur la fiche publique** et ferait entrer Yoppaa dans la
+catégorie de temps d'écran correspondante : un parent qui limite les réseaux
+sociaux bloquerait l'app qui sert à aller chercher son pain.
+
+**2. Contenu généré par les utilisateurs : OUI.** Un Yopper écrit un commentaire
+libre, affiché publiquement. Répondre non serait une fausse déclaration,
+vérifiable en trente secondes par un relecteur qui ouvre une fiche. Le niveau à
+déclarer est le plus bas : pas d'avis spontané, une commande récupérée exigée,
+un avis par commande, auteur anonyme, badge « Vérifié ».
+
+⏳ **CE QUE CETTE RÉPONSE NOUS OBLIGE À REGARDER** : la règle 1.2 d'Apple attend
+qu'on puisse **signaler un contenu déplacé**. Le lien de signalement existe en
+bas de fiche, mais ses 8 motifs visent la fiche du commerce (fermé, horaires,
+doublon) et **aucun ne parle d'un avis**. Il reste « Autre » avec un texte
+libre, donc le chemin existe sans être nommé. À renforcer d'un motif et d'un
+lien sous chaque avis, **sans nouveau paquet** puisque l'app pointe le site.
+⚠️ Mais pas pendant qu'un relecteur teste : un déploiement raté casse l'app sur
+son téléphone.
 
 ---
 
@@ -375,6 +468,10 @@ expédition, son tunnel meurt. À basculer en retrait avant les captures.
 ⏳ **À compléter avant de coller** : l'identifiant et le mot de passe du compte
 de démonstration.
 
+🔴 **ET ILS NE S'ÉCRIVENT PAS ICI.** Ce fichier est suivi par git et part sur
+GitHub : les identifiants se collent directement dans le formulaire du store,
+jamais dans le dépôt. Le `<a completer>` ci-dessus reste tel quel.
+
 🔴 **LE COMPTE DE DÉMONSTRATION DOIT AVOIR UN VRAI MOT DE PASSE**, décidé le
 11/08 et toujours vrai : le lien magique seul est inutilisable, le relecteur n'a
 aucun accès à la boîte mail. Un compte qui n'ouvre qu'avec un lien reçu par
@@ -430,8 +527,6 @@ essai a révélé un troisième point que personne n'avait vu.
    des milliers de kilomètres, **et « Rien ne se perd » est VIDE** puisque cette
    section filtre à 25 km. Or c'est l'un des huit visuels de la fiche : il
    aurait vu une capture qui promet des invendus, et un écran vide dans l'app.
-
-⚠️ **Le compte doit fonctionner le jour de la revue, pas le jour du dépôt.**
 
 ⚠️ **Le compte doit fonctionner le jour de la revue, pas le jour du dépôt.**
 Apple ouvre parfois le dossier trois jours plus tard ; un compte expiré, un mot

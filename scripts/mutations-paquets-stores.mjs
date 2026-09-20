@@ -65,10 +65,18 @@ const MUTATIONS = [
 
   // 🔴 ET UN TEXTE TROP LONG EST REFUSE AU COLLAGE, pas a la revue : on
   // l abrege alors dans l urgence, mal.
+  //
+  // ⚠️ CETTE ANCRE SUIT LA VALEUR DU SOUS-TITRE, ET C EST INEVITABLE : la
+  // mutation doit rendre CE texte trop long, donc elle doit le connaitre. Elle
+  // a donc perime le 20/09, quand Alex a remplace « Tes commerces, à portée »
+  // par le sien. ✅ `verif:ancres` l a attrapee le jour meme, et c est
+  // exactement son travail : une ancre perimee ne mesure rien ET ne dit rien.
+  // Ne pas chercher a la rendre « robuste » en visant un fragment : une ancre
+  // partielle risque de ne plus etre unique, et un saut de ligne y est proscrit.
   { nom: '🔴 le sous-titre Apple depasse ses 30 caracteres',
     fichier: DOSSIER,
-    de: '> `Tes commerces, à portée`',
-    vers: '> `Tes commerces, à portée de main et de clic`' },
+    de: '> `Les commerces de ton quartier`',
+    vers: '> `Les commerces de ton quartier et de la rue d a cote`' },
 
   // 🔴 ET UN TEXTE VIDE NE DOIT PAS PASSER EN SILENCE. Ma garde est nee
   // complice : l entete « Description » d Apple renvoie au texte de Play

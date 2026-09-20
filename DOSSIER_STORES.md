@@ -230,7 +230,7 @@ cette app précise.
   la main, dans les notes de revue.
 - **Classification du contenu** (questionnaire Google) et **âge minimum**.
 
-### ⏳ L'âge chez Apple : deux questions à ne pas confondre
+### ✅ L'âge chez Apple : **4+**, obtenu le 19/09
 
 Apple a ajouté le 9 juillet 2026 des questions sur les **capacités de réseaux
 sociaux**, et les réponses sont **obligatoires depuis septembre 2026** pour
@@ -269,6 +269,150 @@ libre, donc le chemin existe sans être nommé. À renforcer d'un motif et d'un
 lien sous chaque avis, **sans nouveau paquet** puisque l'app pointe le site.
 ⚠️ Mais pas pendant qu'un relecteur teste : un déploiement raté casse l'app sur
 son téléphone.
+
+#### 🔴 LA MÉTHODE, APPRISE TROIS FOIS EN UNE HEURE : OUVRIR LE « ? »
+
+Le libellé d'Apple est toujours plus large que sa définition, et c'est la
+définition qui décide. Trois fois le même piège, dans le même questionnaire :
+
+| Ligne | Le libellé dit | La définition dit | Réponse |
+|---|---|---|---|
+| Contenu des utilisateurs | « contenu créé par les utilisateurs » | « **largement distribués** » | non |
+| Réseaux sociaux | « interaction avec du contenu » | « **flux social**, grand nombre d'utilisateurs, de manière visible » | non |
+| Alcool | « références à l'alcool » | « références à la **consommation** » | aucun |
+
+🔴 **SUR L'ALCOOL, J'AI FAILLI COÛTER UN 13+ À LA FICHE.** J'avais recommandé
+« peu fréquent » en lisant le libellé large, au motif que `lib/tva-aide.js`
+prévoit les boissons alcoolisées. **Alex a demandé « sûr ? » et a ouvert
+l'infobulle** : « peut inclure des comportements en état d'ivresse, le
+tabagisme ou la prise de drogues illicites ». Un article de catalogue n'est pas
+une représentation de consommation. Et le barème officiel chiffre l'erreur :
+**peu fréquent = 13+, fréquent = 18+**.
+
+#### Les réponses données, à reprendre telles quelles en cas de nouvelle version
+
+**Étape 1, fonctionnalités** : contrôle parental **non** · validation de l'âge
+**non** · **accès au Web sans restrictions : NON**, alors que l'app EST une
+WebView, parce que `capacitor.config.ts` n'autorise que quatre domaines
+(Stripe, Supabase) et que tout le reste part dans le navigateur du système ·
+contenu des utilisateurs **non** · réseaux sociaux **non** · réseaux sociaux
+désactivés &lt;13 ans **non** · messagerie et chat **non** · publicité **non**,
+comme sur Play.
+
+**Étapes 2 à 6** : tout à **aucun**. Y compris **Concours**, dont l'infobulle
+vise les compétitions DANS l'app (quiz, défis) : le concours Yoppaa se joue par
+commentaire Facebook, `/concours` n'héberge qu'un règlement, et
+`app/concours/page.js:210` dit que **les gagnants ne sont pas désignés par
+tirage au sort** mais par question subsidiaire.
+
+**Étape 7** : **4+** sur 172 pays, `AL` au Brésil, `TOUS` en Corée du Sud,
+`00+` au Vietnam. Remplacement : **non applicable**, URL d'adéquation vide.
+
+🔴 **JAMAIS « CONÇUE POUR LES ENFANTS »** : la catégorie Kids interdit la
+collecte de données, les liens externes sans barrière parentale et les
+paiements libres. Ce serait un rejet immédiat.
+
+⚠️ **4+ NE CONTREDIT PAS LE « 18 ANS ET PLUS » DE PLAY** : Google demande le
+public VISÉ (ce qui évite les règles « Familles »), Apple calcule l'âge du
+CONTENU. La déclaration de contenu chez Google était « Tous les autres types
+d'applications », donc les deux disent la même chose.
+
+⏳ **ET UNE LACUNE TROUVÉE EN VÉRIFIANT CECI** : `/legal` ne contient **aucune
+clause d'âge**, ni « majeur », ni « mineur », ni âge minimum. En Belgique un
+mineur ne peut pas contracter seul. Ça arrange le 4+ aujourd'hui, mais c'est un
+trou juridique. 🔴 **Le jour où cette clause est ajoutée, il faut revenir dans
+ce questionnaire** : l'écran dit qu'une restriction d'âge au contrat doit se
+refléter dans la classification.
+
+### ✅ Le reste de « Informations sur l'app », rempli le 19/09
+
+| Champ | Valeur | Note |
+|---|---|---|
+| Nom | `Yoppaa` | |
+| Sous-titre | `Les commerces de ton quartier` | voir §5 |
+| Catégorie principale | **Shopping** | même choix que Play |
+| Catégorie secondaire | **Cuisine et boissons** | là où sont Uber Eats et Takeaway |
+| Droits relatifs au contenu | **Oui**, avec les droits nécessaires | photos et menus des commerçants, avis, OpenStreetMap |
+| Contrat de licence | **type Apple (CLUF)** | un CLUF personnalisé se fait relire et ne sert à rien ici |
+| Chiffrement | rien à fournir | `ITSAppUsesNonExemptEncryption` est à `false` dans `ios/App/App/Info.plist` |
+
+🔴 **ET IL MANQUE UNE CLAUSE DE LICENCE DANS LES CGU.** Cocher « je possède les
+droits nécessaires » engage. Or `/legal` dit seulement que les contenus « sont
+la propriété d'Avcotech **ou font l'objet d'une autorisation d'utilisation** »
+(`page.js:145`) et que « le Commerçant reste responsable du contenu publié sur
+sa fiche » (`page.js:306`). **Nulle part le commerçant n'autorise Yoppaa à
+afficher ET à republier ses contenus**, alors que le partage vers les réseaux
+et le Good Morning Yoppers le font. La responsabilité n'est pas une licence.
+
+### ✅ App Privacy, publiée le 19/09
+
+**Les deux URL**, les mêmes que sur Play, ancres vérifiées dans le code :
+
+| Champ | Valeur |
+|---|---|
+| Politique de confidentialité | `https://www.yoppaa.app/legal#confidentialite` |
+| Choix de confidentialité (facultatif) | `https://www.yoppaa.app/legal#droits-donnees` |
+
+**Les 10 types déclarés, et pour chacun l'usage, le lien à l'identité, le suivi :**
+
+| Donnée | Usage | Liée | Suivi |
+|---|---|---|---|
+| Nom · E-mail · Téléphone · Adresse physique | Fonctionnalité | oui | non |
+| **Emplacement précis** | Fonctionnalité | 🔴 **non** | non |
+| **Emplacement approximatif** | Fonctionnalité | **oui** | non |
+| Autre contenu utilisateur (les avis) | Fonctionnalité | oui | non |
+| Identifiant de l'utilisateur | Fonctionnalité | oui | non |
+| **Identifiant de l'appareil** | Fonctionnalité **+ marketing du développeur** | oui | non |
+| Historique d'achats | Fonctionnalité | oui | non |
+
+🔴 **LES DEUX EMPLACEMENTS NE SE RÉPONDENT PAS PAREIL, ET C'EST LE SCHÉMA QUI LE
+DIT.** `clients` porte `code_postal` et `commune_id` mais **aucune latitude ni
+longitude** : la position précise sert au tri par distance, part chez Nominatim
+sans identité et disparaît, donc **non liée** ; la commune est dans le profil,
+donc **liée**.
+
+🔴 **L'IDENTIFIANT DE L'APPAREIL PORTE DU MARKETING**, et c'est le Good Morning
+Yoppers : `app/api/cron/morning-yoppers/route.js:10` envoie « un push OneSignal
+par commune ayant du contenu », avec les deals et les actus. La finalité d'Apple
+dit « l'envoi de communications marketing directement à vos utilisateurs ».
+
+✅ **AUCUN SUIVI**, donc pas de section « Données utilisées pour vous suivre »
+sur la fiche publique.
+
+**Ce qu'on NE déclare PAS, et pourquoi** :
+
+- **Informations de paiement** : Apple l'écrit lui-même sous la case, « si votre
+  app utilise un service de paiement, les informations sont saisies en dehors de
+  votre app et vous n'y avez jamais accès, elles ne sont donc pas collectées ».
+  C'est Stripe Checkout. **Pas de divergence avec Play, qui ne les déclare pas.**
+- **Photos ou vidéos** : les trois seuls `type="file"` du dépôt sont
+  `brand-kit/captures` (rien ne quitte le navigateur), `ConfigDashboard.js` et
+  `signup/page.js`, **tous deux dans Yoppaa Pro, qui n'est pas publié**.
+- **Historique de recherche** : les recherches de commune partent chez Nominatim,
+  mais la définition d'Apple exige un accès « pendant un temps plus long que
+  nécessaire pour traiter la demande en temps réel ». Rien n'est conservé.
+- **Données d'utilisation, diagnostic, analyses** : aucune mesure d'audience
+  dans le dépôt, vérifié (ni Google Analytics, ni Vercel Analytics, ni Plausible,
+  ni Sentry).
+
+⏳ **DEUX POINTS À CONTRÔLER PLUS TARD** :
+
+1. **Ce que le SDK OneSignal remonte vraiment** (sessions, modèle d'appareil).
+   Ça pourrait toucher « Interaction avec le produit ». Non coché, parce que
+   Play ne le déclare pas non plus et que la configuration n'a pas été vérifiée.
+2. 🔴 **La cohérence avec la Sécurité des données de Play**, APRÈS la revue :
+   ce dossier ne listait ni l'**adresse de livraison** ni les **avis**, qui sont
+   déclarés ici. Les catégories des deux stores ne se correspondent pas
+   exactement, mais deux déclarations divergentes sur le même produit se paient.
+
+🔴 **AVANT LE PREMIER E-MAIL PROMOTIONNEL AUX YOPPERS**, il faudra revenir ici.
+Aujourd'hui l'e-mail est **transactionnel seulement** (confirmations, lien de
+connexion) et les SMS Brevo sont **fonctionnels** (`lib/fidelite-sms.js` annonce
+une récompense gagnée, il ne fait pas de promo). Une newsletter demanderait,
+dans l'ordre : un **consentement e-mail** qui n'existe pas en base (`clients`
+n'a que `notifs_actives` pour les push), un lien de désinscription, la mise à
+jour de `/legal`, **et cette déclaration, chez Apple comme chez Google**. La
+page a son propre bouton « Publier », indépendant des versions de l'app.
 
 ---
 
@@ -319,7 +463,19 @@ aux deux.
 > `Yoppaa`
 
 **Sous-titre** (30 caractères max)
-> `Tes commerces, à portée`
+> `Les commerces de ton quartier`
+
+⚠️ **ÉCRIT ET GARDÉ PAR ALEX LE 19/09**, en remplacement de
+`Tes commerces, à portée`. **29 caractères sur 30**, validé par le compteur
+d'Apple. La décision a été discutée : j'ai proposé
+`Les commerces de ta commune`, au motif que « quartier » est un mot de ville
+alors que la cible est rurale. **Alex a tranché pour « quartier », et son choix
+est cohérent avec les CGU**, qui écrivent déjà « les commerces de leur
+quartier » (`app/legal/page.js:152`). Mon argument du « vocabulaire employé
+partout ailleurs » était donc trop large.
+
+⚠️ Il porte **« commerces »**, ce qui valide le calcul des mots-clés ci-dessous :
+`commerce` y a été retiré parce que le sous-titre le contient.
 
 **Description** (4000 caractères max)
 

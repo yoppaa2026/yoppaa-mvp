@@ -29,7 +29,11 @@
 
 import { requireStripe } from '@/lib/stripe'
 import { modePlateforme, MODE_TEST } from '@/lib/stripe-mode'
-import { getPrixPlan, TVA_ABONNEMENT_POURCENT } from '@/lib/plans'
+import { getPrixPlan, prixTTC, TVA_ABONNEMENT_POURCENT } from '@/lib/plans'
+// ⚠️ `euros()` ET NON UN `toFixed(2)`, qui écrit « 24.08 € » à l'anglaise. La
+// règle vit dans lib/montants.js depuis le 28/08, et elle vaut aussi pour un
+// script : c'est un montant qu'on recopiera dans une note ou un message.
+import { euros } from '@/lib/montants'
 
 const mode = modePlateforme()
 if (!mode) {
@@ -144,4 +148,7 @@ if (rouges > 0) {
   process.exit(1)
 }
 console.log(`La TVA de ${TVA_ABONNEMENT_POURCENT} % s'ajoutera bien aux prix HTVA. ${lignes.length} contrôles conformes.`)
-console.log(`Communiquer sera facturé ${(getPrixPlan('communiquer').mensuel * (100 + TVA_ABONNEMENT_POURCENT) / 100).toFixed(2)} € TVA comprise.`)
+for (const plan of ['communiquer', 'vendre']) {
+  const htva = getPrixPlan(plan).mensuel
+  console.log(`${plan} : ${euros(htva)} HTVA sera facturé ${euros(prixTTC(htva))} TVA comprise.`)
+}

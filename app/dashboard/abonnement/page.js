@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { lireImpersonation, verifierImpersonation, effacerImpersonation, messageImpersonation } from '@/lib/impersonation'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { PLAN_LABEL } from '@/lib/plans'
+import { PLAN_LABEL, prixTTC, TVA_ABONNEMENT_POURCENT } from '@/lib/plans'
 import { euros } from '@/lib/montants'
 import { estRegimeLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
 
@@ -363,8 +363,14 @@ export default function AbonnementPage() {
               </p>
             )}
 
+            {/* 🔴 CETTE PHRASE PROMETTAIT UNE TVA QUE PERSONNE N'AJOUTAIT. Elle
+                annonçait « la TVA applicable sera ajoutée selon votre pays et
+                votre statut TVA », ce qui décrit Stripe Tax : or rien ne la
+                calculait, et Stripe prélevait le montant nu. Elle dit
+                maintenant le taux réellement appliqué, et ce taux vient de la
+                même constante que les montants affichés au-dessus. */}
             <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, margin: '24px 0 0' }}>
-              Sans engagement, résiliable à tout moment. Tous les prix sont HTVA. La TVA applicable sera ajoutée au moment du paiement selon votre pays et votre statut TVA.
+              Sans engagement, tu résilies quand tu veux. Les prix sont HTVA : la TVA belge de {TVA_ABONNEMENT_POURCENT} % s&rsquo;ajoute au moment du paiement. Ton numéro de TVA se saisit à la commande et figure sur chaque facture.
             </p>
           </>
         )}
@@ -376,6 +382,7 @@ export default function AbonnementPage() {
 
 // ────────── Composant carte de plan ──────────
 function PlanCard({ title, price, features, cta, trial, loading, onClick, accent }) {
+  const ttc = prixTTC(price)
   return (
     <div style={{
       background: accent ? `linear-gradient(160deg, ${T.deep} 0%, ${T.main} 100%)` : '#fff',
@@ -394,6 +401,16 @@ function PlanCard({ title, price, features, cta, trial, loading, onClick, accent
         </p>
         <p style={{ fontSize: 13, color: accent ? T.light : T.muted, margin: 0 }}>HTVA / mois</p>
       </div>
+      {/* ⚠️ LE MONTANT QUI SERA RÉELLEMENT DÉBITÉ, sous celui qui est annoncé.
+          « HTVA » est du vocabulaire de comptable ; le chiffre est du
+          vocabulaire de tout le monde. Un commerçant qui lit 19,90 € et qui
+          voit 24,08 € sur son relevé se sent forcé, même quand la mention
+          était écrite juste à côté. */}
+      {ttc != null && (
+        <p style={{ fontSize: 12.5, fontWeight: 600, color: accent ? T.light : T.muted, margin: '0 0 6px' }}>
+          soit {euros(ttc)} TVA comprise
+        </p>
+      )}
       <p style={{ fontSize: 12, color: accent ? T.light : T.muted, margin: '0 0 18px' }}>{trial}</p>
 
       <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 22px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>

@@ -28,9 +28,10 @@ import {
   progressionVersLancement,
   LAUNCH_DATE_ISO, FIN_ESSAI_LANCEMENT_ISO, ESSAI_JOURS_MINIMUM,
 } from '../lib/lancement.js'
-import { calculerTrialEnd, isTrialDiffereActif } from '../lib/stripe-billing.js'
+import { calculerTrialEnd, isTrialDiffereActif, getStripeTaxRateId } from '../lib/stripe-billing.js'
+import { sansProse } from './lire-code.mjs'
 import { jsonLdLanding, jsonLdLandingString, echapperJsonLd, SITE_URL } from '../lib/seo-landing.js'
-import { getPrixPlan } from '../lib/plans.js'
+import { getPrixPlan, prixTTC, TVA_ABONNEMENT_POURCENT } from '../lib/plans.js'
 import robots from '../app/robots.js'
 import { FACEBOOK_URL, INSTAGRAM_URL, RESEAUX_URLS } from '../lib/reseaux.js'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '../lib/libelles-audience.js'
@@ -192,6 +193,144 @@ function sansCommentaires(src) {
     isTrialDiffereActif(aout) === true)
   verifier('et comme terminé en mars 2027',
     isTrialDiffereActif(mars) === false)
+}
+
+// ═══ 2 bis. LA TVA DE L'ABONNEMENT ═══════════════════════════════════════
+// 🔴 LE MÊME PIÈGE QUE LA DATE, PORTÉ SUR LE MONTANT. La page d'abonnement
+// promettait « la TVA applicable sera ajoutée au moment du paiement » alors que
+// NI `automatic_tax` NI `default_tax_rates` n'existaient dans tout le dépôt :
+// Stripe prélevait le montant nu. Une facture sans TVA est réputée TVA
+// comprise, donc il serait resté 16,45 € sur 19,90 €. Personne ne l'aurait vu
+// avant la première déclaration trimestrielle, et pour tout le monde à la fois.
+{
+  const egal = (nom, obtenu, attendu) =>
+    verifier(nom, obtenu === attendu, `« ${obtenu} » au lieu de « ${attendu} »`)
+
+  // ── Le calcul, EXÉCUTÉ ──────────────────────────────────────────────────
+  egal('19,90 € HTVA font 24,08 € TVA comprise', prixTTC(19.90), 24.08)
+  egal('49,90 € HTVA font 60,38 € TVA comprise', prixTTC(49.90), 60.38)
+
+  // ⚠️ LE FLOTTANT MENT : 19.9 × 121 vaut 2407.8999999999996 en JavaScript.
+  // Sans arrondi au cent, l'écran afficherait 24,078999999999997 €.
+  egal('l’arrondi tombe au cent, pas au millième', prixTTC(1.005), 1.22)
+
+  // 🔴 LE PIÈGE DU ZÉRO, HUITIÈME FOIS. Exister est gratuit, et 0 € HTVA font
+  // bien 0 € TTC : le refuser mettrait un trou à la place d'une gratuité.
+  egal('zéro euro reste zéro euro', prixTTC(0), 0)
+
+  // ⚠️ MAIS UNE ABSENCE N'EST PAS UN ZÉRO. `Number(null)` vaut 0 : rendre
+  // « 0,00 € » pour un prix qu'on n'a pas afficherait « gratuit » sur un
+  // forfait payant, et c'est exactement la capture qu'un commerçant garderait.
+  egal('un prix absent ne vaut pas gratuit', prixTTC(null), null)
+  egal('un prix indéfini non plus', prixTTC(undefined), null)
+  egal('NaN non plus', prixTTC(NaN), null)
+  // ⚠️ `Number.isFinite(Infinity)` vaut FAUX, et c'est ce qu'on veut ici.
+  egal('l’infini n’est pas un prix', prixTTC(Infinity), null)
+  egal('une chaîne n’est pas un nombre', prixTTC('19.90'), null)
+
+  // 🔴 LA GARDE ANTI-DIVERGENCE : le montant affiché DESCEND du taux, il n'est
+  // pas recopié à côté. Le jour où le taux belge bouge, cette ligne suit toute
+  // seule ; un 24,08 écrit en dur quelque part, lui, ne suivrait pas.
+  egal('le montant TTC descend du taux, il ne le double pas',
+    prixTTC(100), 100 + TVA_ABONNEMENT_POURCENT)
+
+  // Et ce qu'on taxe est bien le tarif réel du forfait, pas un nombre voisin.
+  egal('le TTC de Communiquer part du tarif réel du forfait',
+    prixTTC(getPrixPlan('communiquer').mensuel), 24.08)
+  egal('le TTC de Vendre aussi',
+    prixTTC(getPrixPlan('vendre').mensuel), 60.38)
+  egal('Exister reste gratuit, TVA comprise',
+    prixTTC(getPrixPlan('exister').mensuel), 0)
+
+  // ── Le TaxRate : le bon monde, ou rien ──────────────────────────────────
+  const envAvant = {
+    STRIPE_SECRET_KEY:       process.env.STRIPE_SECRET_KEY,
+    STRIPE_TAX_RATE_BE_TEST: process.env.STRIPE_TAX_RATE_BE_TEST,
+    STRIPE_TAX_RATE_BE_LIVE: process.env.STRIPE_TAX_RATE_BE_LIVE,
+  }
+  const poser = (valeurs) => {
+    for (const [cle, val] of Object.entries(valeurs)) {
+      if (val === undefined) delete process.env[cle]
+      else process.env[cle] = val
+    }
+  }
+  const leve = (fn) => { try { fn(); return false } catch { return true } }
+
+  poser({
+    STRIPE_SECRET_KEY: 'sk_test_de_banc',
+    STRIPE_TAX_RATE_BE_TEST: 'txr_du_monde_de_test',
+    STRIPE_TAX_RATE_BE_LIVE: 'txr_du_monde_reel',
+  })
+  egal('une clé de test prend le taux de test', getStripeTaxRateId(), 'txr_du_monde_de_test')
+
+  poser({ STRIPE_SECRET_KEY: 'sk_live_de_banc' })
+  egal('une clé réelle prend le taux réel', getStripeTaxRateId(), 'txr_du_monde_reel')
+
+  // 🔴 CELUI-CI EST LE DÉFAUT QUI COÛTE. Quand le taux du monde courant manque,
+  // il ne faut SURTOUT PAS retomber sur celui de l'autre monde, qui existe
+  // pourtant juste à côté dans l'environnement : un TaxRate de test posé sur un
+  // abonnement réel ne taxe rien, et Stripe l'accepte sans broncher.
+  poser({ STRIPE_SECRET_KEY: 'sk_test_de_banc', STRIPE_TAX_RATE_BE_TEST: undefined })
+  verifier('sans taux de test, on refuse au lieu de prendre celui de production',
+    leve(() => getStripeTaxRateId()),
+    'un taux a été rendu alors que STRIPE_TAX_RATE_BE_TEST manque')
+
+  // ⚠️ PAS DE CLÉ, PAS DE VERDICT. `isStripeTestMode()` répond « live » sans
+  // clé : s'appuyer sur lui aurait choisi le taux de production sur une
+  // installation qui n'a pas de Stripe du tout. C'est la leçon du 17/09.
+  poser({ STRIPE_SECRET_KEY: undefined })
+  verifier('sans clé Stripe, aucun taux n’est choisi',
+    leve(() => getStripeTaxRateId()),
+    'un taux a été choisi alors que la clé est absente')
+
+  poser(envAvant)
+
+  // ── Les DEUX voies posent le taux ───────────────────────────────────────
+  // ⚠️ ON COMPTE, ON NE CHERCHE PAS. Le mot apparaît aussi dans le commentaire
+  // qui explique la règle et dans la citation de la doc Stripe : `sansProse`
+  // les retire, et le compte exact attrape la voie qu'on aurait oubliée. Il y
+  // en a deux, et c'est la seconde, celle du KYB, qui sert les cinq premiers
+  // commerçants sans jamais passer par un formulaire Checkout.
+  const codeBilling = sansProse(lire('lib/stripe-billing.js').replace(/\r\n/g, '\n'))
+  const poses = (codeBilling.match(/default_tax_rates:/g) || []).length
+  verifier('la TVA est posée deux fois, pas une de plus ni de moins', poses === 2,
+    `${poses} appel(s) portent default_tax_rates, attendu 2 (Checkout et la voie KYB)`)
+
+  // 🔴 ET ON VISE CHAQUE ENDROIT, parce que compter ne suffit pas : deux poses
+  // dans la même voie feraient un compte juste et laisseraient l'autre nue.
+  // C'est la règle du dépôt, et elle vaut ici plus qu'ailleurs, puisque la voie
+  // oubliée serait justement celle qui ne passe par aucun formulaire.
+  const iCheckout = codeBilling.indexOf('export async function createCheckoutSession')
+  const iKyb = codeBilling.indexOf('export async function creerSubscriptionAutomatique')
+  verifier('les deux voies de souscription sont bien là où on les cherche',
+    iCheckout >= 0 && iKyb > iCheckout,
+    'createCheckoutSession ou creerSubscriptionAutomatique a été renommée ou déplacée : les deux gardes suivantes ne mesurent plus rien')
+  verifier('la voie Checkout pose la TVA',
+    /default_tax_rates:/.test(codeBilling.slice(iCheckout, iKyb)),
+    'un commerçant qui souscrit lui-même depuis son tableau de bord ne serait pas taxé')
+  verifier('la voie du KYB pose la TVA',
+    /default_tax_rates:/.test(codeBilling.slice(iKyb)),
+    'les abonnements créés à la validation du dossier ne seraient pas taxés, et c’est la voie des cinq premiers commerçants')
+
+  // ── L'écran ne promet plus ce que Stripe ne fait pas ────────────────────
+  // 🔴 CES TROIS GARDES LISENT LE CODE DÉPOUILLÉ, ET C'EST LE BANC QUI ME L'A
+  // APPRIS : écrite sur le fichier brut, la première rougissait sur le
+  // COMMENTAIRE qui raconte la phrase d'avant. Une garde qui cherche un mot le
+  // trouve dans sa propre explication, et la prose n'est pas ce que le
+  // commerçant lit. On vise ce qui s'affiche.
+  const codePage = sansProse(lire('app/dashboard/abonnement/page.js').replace(/\r\n/g, '\n'))
+  verifier('la page ne promet plus une TVA « selon votre pays »',
+    !/selon votre pays/.test(codePage),
+    'la phrase de Stripe Tax est revenue, alors que le taux appliqué est un taux belge fixe')
+  verifier('la page affiche le montant réellement débité',
+    /TVA comprise/.test(codePage),
+    'le montant TTC a disparu : le commerçant ne voit plus ce qui sera prélevé')
+
+  // 🔴 ET LE TAUX N'Y EST PAS ÉCRIT EN DUR, exactement comme les dates d'essai.
+  // Un chiffre recopié dans une page finit toujours par contredire la facture.
+  verifier('le taux affiché vient de la constante, pas d’un nombre recopié',
+    /TVA_ABONNEMENT_POURCENT/.test(codePage) && !/\b21\s*%/.test(codePage),
+    'un taux est écrit en dur dans la page au lieu de descendre de lib/plans.js')
 }
 
 // ═══ 3. LES TEXTES : AUCUNE DATE ÉCRITE EN DUR ═══════════════════════════

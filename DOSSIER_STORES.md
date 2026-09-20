@@ -1,8 +1,35 @@
 # Dossier de préparation aux stores
 
-État au **16 septembre 2026**. Ce document est le point d'entrée du dépôt de
+État au **20 septembre 2026**. Ce document est le point d'entrée du dépôt de
 Yoppaa sur Google Play et l'App Store. Il dit ce qui est fait, ce qui manque, et
 ce qui dépend d'Alex.
+
+## 🎉 LES DEUX STORES SONT EN REVUE
+
+| Store | Envoyé | État |
+|---|---|---|
+| **Google Play** | 18/09 au soir | modifications en cours d'examen, **publication gérée** |
+| **App Store** | **20/09 à 16 h 28**, build `1.0.0 (2)` | en attente de vérification, **publication manuelle** |
+
+✅ **RIEN NE SE PUBLIERA SANS LE FEU VERT D'ALEX**, des deux côtés. C'est ce qui
+rend l'ordre tenable : **revue → bascule Stripe → publication**.
+
+🔴 **LES TROIS INTERDITS DE CETTE PÉRIODE**
+
+1. **NE PAS TOUCHER À STRIPE.** Les notes de revue des deux stores donnent la
+   carte de test `4242 4242 4242 4242` ; un Stripe réel la refuserait sous les
+   yeux d'un relecteur, qui verrait un paiement échouer.
+2. **NE PAS DÉPUBLIER LES FICHES DE DÉMONSTRATION**, même après le 1er octobre,
+   date que la procédure de bascule retient pour le ménage. Un relecteur qui
+   rouvre le dossier le 2 octobre tomberait sur une app vide. Elles sont
+   refaites « comme de vraies » depuis le 17/09, elles ne trahissent rien.
+3. ⏳ **SAUF UNE** : « La Boutique Témoin » reste à réécrire chez Le Dressing de
+   Sophie. Tant qu'elle porte ce nom, elle est la preuve affichée d'une app non
+   finalisée. « Ciseaux Provisoires » est déjà réglé.
+
+⏳ **Et le build expire** : « 88 jours » affichés le 20/09, donc mi-décembre. Le
+lancement du 14 novembre passe largement, mais une publication qui glisserait
+au-delà imposerait un nouveau paquet.
 
 > 🔴 **On publie Yoppaa, jamais Yoppaa Pro.** L'app des habitants ne vend que des
 > biens physiques et des services réels, que les deux stores excluent
@@ -115,9 +142,18 @@ L'app a une barre de navigation d'app et une mise en page qui s'adapte.
 ✅ **ET GARDER L'IPAD GARDE LE BUILD 2** : retirer l'iPad imposait un build 3 et
 une nouvelle attente de traitement.
 
-⚠️ **Format des captures : 2048 x 2752 a été refusé ou accepté ?** L'iPad Pro
-12,9" capture en **2048 x 2732**, le slot Apple s'appelle « 13 pouces » et
-affiche 2064 x 2752 comme référence. À confirmer au dépôt.
+✅ **FORMAT CONFIRMÉ AU DÉPÔT : 2048 x 2732 EST ACCEPTÉ** dans le slot
+« iPad, écran de 13 pouces », alors qu'Apple affiche 2064 x 2752 comme
+référence. C'est la définition native de l'iPad Pro 12,9", donc **les captures
+sortent de l'appareil sans aucun traitement**.
+
+⚠️ **ET ELLES SONT DÉPOSÉES BRUTES, sans l'habillage des captures iPhone**, et
+c'est délibéré. Personne ne voit les deux jeux côte à côte : l'App Store montre
+les captures iPhone aux iPhone et les iPad aux iPad. Sur un écran de 13 pouces
+on lit les prix, les créneaux, les avis et le panier : l'écran se raconte seul,
+et lui voler un bandeau de titre le dessert. Ajouter le format à
+`lib/captures-stores.js` demanderait de reprendre une composition pensée pour
+des ratios de téléphone (0,45) vers un format presque carré (0,75).
 
 🔴 **ET DEUX CAPTURES D'IPAD NE DOIVENT PAS PARTIR TELLES QUELLES** : l'écran de
 choix de créneau affiche **l'adresse email et le numéro de GSM personnels**

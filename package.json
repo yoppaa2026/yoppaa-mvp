@@ -82,7 +82,8 @@
     "mutations:ordre-categories": "node scripts/mutations-ordre-categories.mjs",
     "mutations:tva": "node scripts/mutations-tva-abonnement.mjs",
     "mutations:compte": "node scripts/mutations-mon-compte.mjs",
-    "controle:tva": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-tva-stripe.mjs"
+    "controle:tva": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-tva-stripe.mjs",
+    "produits:stripe": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/creer-produits-stripe.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",

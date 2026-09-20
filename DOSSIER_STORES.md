@@ -86,9 +86,48 @@ signature par Google Play si elle ne l'est pas déjà.
 | Captures iPhone 6.5" | **1242 × 2688** ou 1284 × 2778 | 3 minimum |
 | Captures iPad 13" | **2064 × 2752** | requis seulement si l'app est proposée sur iPad |
 
-⚠️ **Décider si on propose l'app sur iPad.** Dire non supprime tout un jeu de
-captures et une surface de test ; dire oui demande que l'affichage tienne sur
-grand écran. L'app est déclarée `portrait` dans son manifeste.
+### ✅ L'IPAD EST ASSUMÉ, tranché le 20/09 par Alex, sur pièces
+
+🔴 **CE CHOIX N'EST PAS RESTÉ THÉORIQUE : APPLE L'A IMPOSÉ.** « Ajouter pour
+vérification » a été refusé d'un seul motif, « veuillez charger une capture
+d'écran adaptée aux iPad munis d'un écran de 13 pouces ». Capacitor génère
+`TARGETED_DEVICE_FAMILY = "1,2"` par défaut, soit iPhone **et** iPad, et la
+question posée ici depuis des semaines n'avait jamais été tranchée.
+
+**J'avais recommandé de RETIRER l'iPad**, au motif qu'Apple testerait alors sur
+un appareil que personne n'avait essayé, et que des captures 2064 x 2752
+fabriquées depuis des écrans d'iPhone en 1080 x 2400 seraient étirées ou barrées
+de bandes. **Alex a répondu qu'il l'avait essayée sur son iPad Pro, et que ça
+marchait.** Les captures l'ont confirmé, et mon argument principal tombait :
+
+| | sur iPad 12,9" |
+|---|---|
+| Accueil | grille de **3 colonnes** de cartes commerces |
+| Galerie d'une fiche | **4 colonnes** |
+| Créneaux de retrait | **4 colonnes** |
+| Modale du bon cadeau | centrée, proportionnée |
+
+🔴 **CE N'EST DONC PAS UN EMBALLAGE DE SITE**, et c'est le seul risque qui
+comptait : la guideline 4.2 rejette les apps qui ne sont qu'une page web dans
+une fenêtre, et ce risque est bien plus grand sur grand écran que sur téléphone.
+L'app a une barre de navigation d'app et une mise en page qui s'adapte.
+
+✅ **ET GARDER L'IPAD GARDE LE BUILD 2** : retirer l'iPad imposait un build 3 et
+une nouvelle attente de traitement.
+
+⚠️ **Format des captures : 2048 x 2752 a été refusé ou accepté ?** L'iPad Pro
+12,9" capture en **2048 x 2732**, le slot Apple s'appelle « 13 pouces » et
+affiche 2064 x 2752 comme référence. À confirmer au dépôt.
+
+🔴 **ET DEUX CAPTURES D'IPAD NE DOIVENT PAS PARTIR TELLES QUELLES** : l'écran de
+choix de créneau affiche **l'adresse email et le numéro de GSM personnels**
+d'Alex en clair, et le **code d'un bon cadeau** (`BC-…`) apparaît sur deux
+écrans. Une capture d'App Store est publique et le reste des années.
+
+⚠️ **Il n'y a pas de garde de banc sur ce réglage**, et c'était tentant d'en
+écrire une : elle aurait figé `"1"` alors que la décision est `"1,2"`. Ce qui se
+reperd ici, ce n'est pas une valeur, c'est la RAISON, et elle est écrite
+ci-dessus.
 
 ### 3.3 Les écrans à capturer
 
@@ -581,17 +620,18 @@ expédition, son tunnel meurt. À basculer en retrait avant les captures.
 > as you sign in, with or without location permission. You may decline the
 > location prompt.
 >
-> **Setting the location (important)**
+> Setting the location (important)
 >
 > On the home screen, tap the location field at the top right and enter
-> **"Mettet"** or **"5640"**. Without this, distances are computed from your own
-> position and the "Rien ne se perd" section appears empty.
+> "Mettet" or "5640". Without this, distances are computed from your own
+> position and the shops appear thousands of kilometres away.
 >
-> **Test account**
+> Note: the "Rien ne se perd" section lists end-of-day surplus items and follows
+> real shop hours in Belgium. Like the shops it mirrors, it may be empty
+> depending on the time of day and on what merchants published. This is expected
+> and does not affect any other feature.
 >
-> Email: `<a completer>` — Password: `<a completer>`
->
-> **Payments**
+> Payments
 >
 > Yoppaa is used to buy physical goods and real-world services consumed outside
 > the app (food collected in store, restaurant tables, salon appointments,
@@ -621,12 +661,28 @@ expédition, son tunnel meurt. À basculer en retrait avant les captures.
 >
 > Avcotech, Rue de Prée 9 G, 5640 Mettet, Belgium. Contact: hello@yoppaa.app
 
-⏳ **À compléter avant de coller** : l'identifiant et le mot de passe du compte
-de démonstration.
+⚠️ **LA SECTION « TEST ACCOUNT » A ÉTÉ RETIRÉE DE CE TEXTE le 19/09.** App Store
+Connect a **deux champs dédiés** pour l'identifiant et le mot de passe, juste
+au-dessus des Remarques : les y mettre évite de recopier un mot de passe dans un
+bloc de prose que personne ne pense à mettre à jour. Le texte dit désormais
+« the test account provided above ».
 
-🔴 **ET ILS NE S'ÉCRIVENT PAS ICI.** Ce fichier est suivi par git et part sur
-GitHub : les identifiants se collent directement dans le formulaire du store,
-jamais dans le dépôt. Le `<a completer>` ci-dessus reste tel quel.
+🔴 **ET LES IDENTIFIANTS NE S'ÉCRIVENT PAS ICI.** Ce fichier est suivi par git et
+part sur GitHub : ils se tapent directement dans le formulaire du store, jamais
+dans le dépôt.
+
+🔴 **CE QUE CE TEXTE NE DOIT PLUS FAIRE : PROMETTRE DES INVENDUS.** La version
+précédente disait « sans ce réglage, la section Rien ne se perd apparaît vide »,
+ce qui laissait entendre qu'AVEC le réglage elle serait pleine. **Alex l'a
+relevé** : « pas d'obligation qu'il y ait une offre, ça dépend du moment ». Une
+section d'invendus vide est le fonctionnement NORMAL d'une place de marché, pas
+un défaut. J'allais faire fabriquer une offre artificielle de longue durée pour
+couvrir une phrase que j'avais moi-même mal écrite. **La correction était dans
+le texte**, pas dans la base : la note annonce maintenant qu'un vide est
+attendu, et un relecteur prévenu ne rejette pas pour ça.
+
+⚠️ **Longueur mesurée : 2268 caractères sur 4000.** Comptée, pas estimée, après
+la leçon des 500 caractères de Google.
 
 🔴 **LE COMPTE DE DÉMONSTRATION DOIT AVOIR UN VRAI MOT DE PASSE**, décidé le
 11/08 et toujours vrai : le lien magique seul est inutilisable, le relecteur n'a

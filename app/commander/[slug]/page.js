@@ -223,6 +223,17 @@ function SkeletonArticle() {
 // côté Yopper, vit dans app/commander/page.js) ────────────────────────────────
 function CarteAvis({ a }) {
   const [ouvert, setOuvert] = useState(false)
+  // 🔴 SIGNALER UN AVIS (20/09, demandé par Apple). Les avis sont du contenu
+  // écrit par des habitants et publié sur une fiche : il faut pouvoir en
+  // signaler un. Les huit motifs du signalement de fiche ne servaient à rien
+  // ici, ils visent des données (horaires, adresse) ; la modale en propose
+  // d'autres dès qu'on lui passe `kind: 'avis'`.
+  //
+  // ⚠️ LE BOUTON N'APPARAÎT QUE SUR UNE CARTE OUVERTE, et c'est le bon moment :
+  // on signale ce qu'on vient de lire. Sur une carte repliée, le commentaire
+  // est tronqué à une ligne, et proposer de signaler un texte qu'on n'a pas lu
+  // n'appelle que des signalements à l'aveugle.
+  const [signaler, setSignaler] = useState(false)
   const verifie = !!a.commande_id
   return (
     <div onClick={() => setOuvert(o => !o)}
@@ -258,6 +269,39 @@ function CarteAvis({ a }) {
               <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 500 }}>{a.reponse_commercant}</p>
             </div>
           )}
+
+          {/* ⚠️ `stopPropagation` OU LA CARTE SE REFERME SOUS LE DOIGT. Tout le
+              bloc porte un `onClick` qui bascule l'ouverture : sans ça, ouvrir
+              la modale replierait l'avis en même temps, et le clic aurait l'air
+              d'avoir raté. */}
+          <button type="button"
+            onClick={(e) => { e.stopPropagation(); setSignaler(true) }}
+            style={{
+              marginTop: 10, background: 'none', border: 'none', padding: 0,
+              color: T.muted, fontSize: '0.72rem', fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline',
+              textUnderlineOffset: 2,
+            }}>
+            Signaler cet avis
+          </button>
+        </div>
+      )}
+
+      {signaler && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ModalSignalement
+            target={{
+              kind: 'avis',
+              id: a.id,
+              // Ce qu'on signale, montré tel qu'on vient de le lire. On ne
+              // reprend PAS le nom de l'auteur : on signale un contenu, pas
+              // quelqu'un, et la décision se prend sur le texte.
+              nom: a.commentaire
+                ? `« ${a.commentaire.slice(0, 70)}${a.commentaire.length > 70 ? '…' : ''} »`
+                : 'Une note sans commentaire',
+            }}
+            onClose={() => setSignaler(false)}
+          />
         </div>
       )}
     </div>

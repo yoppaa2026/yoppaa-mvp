@@ -8,7 +8,7 @@
 //  - onSent  : callback succès
 
 import { useState } from 'react'
-import { envoyerSignal } from '@/lib/signaux'
+import { envoyerSignal, TYPES_MOTIF_AVIS, MOTIFS_AVIS } from '@/lib/signaux'
 import DotsAttente from '@/app/components/DotsAttente'
 import { fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 
@@ -30,7 +30,19 @@ const TYPES = [
   { key: 'autre',     label: 'Autre',               icon: '💬' },
 ]
 
+// ─── SIGNALER UN AVIS, ET CE N'EST PAS SIGNALER UNE FICHE ───────────────────
+// 🔴 LES HUIT MOTIFS CI-DESSUS VISENT TOUS UNE DONNÉE de la fiche : horaires,
+// adresse, téléphone. Aucun ne dit quoi que ce soit d'un contenu écrit par un
+// habitant, et les montrer sur un avis ferait choisir au hasard.
+//
+// ⚠️ PAS D'ICÔNE SUR CES MOTIFS-CI, et c'est volontaire : la règle du projet
+// veut des SVG, pas des emoji. Les huit d'au-dessus sont une dette qu'on ne
+// double pas. Le rendu s'en passe proprement.
+const MOTIFS_POUR_AVIS = TYPES_MOTIF_AVIS.map(key => ({ key, label: MOTIFS_AVIS[key] }))
+
 export default function ModalSignalement({ target, onClose, onSent }) {
+  const surUnAvis = target?.kind === 'avis'
+  const motifs = surUnAvis ? MOTIFS_POUR_AVIS : TYPES
   const [type, setType] = useState(null)
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -52,6 +64,7 @@ export default function ModalSignalement({ target, onClose, onSent }) {
       description: description.trim() || null,
       commercant_id: target.kind === 'commerce' ? target.id : null,
       service_id:    target.kind === 'service'  ? target.id : null,
+      avis_id:       target.kind === 'avis'     ? target.id : null,
     }, { fetchImpl: fetchAvecPreuveSiConnecte })
     setSubmitting(false)
     if (!r.ok) {
@@ -93,8 +106,15 @@ export default function ModalSignalement({ target, onClose, onSent }) {
               <h2 style={{ fontSize: 18, fontWeight: 800, color: T.ink, margin: '0 0 6px', letterSpacing: '-0.3px' }}>
                 Merci, signalement envoyé !
               </h2>
+              {/* ⚠️ DEUX CIBLES, DEUX SUITES, ET LE TEXTE DOIT DIRE LA VRAIE.
+                  Sur une fiche, le commerçant corrige sa donnée. Sur un avis,
+                  c'est Yoppaa qui arbitre et le commerçant n'est PAS prévenu :
+                  lui promettre le contraire serait faux, et lui laisser croire
+                  que son signalement retire l'avis tout seul le serait aussi. */}
               <p style={{ fontSize: 13, color: T.muted, margin: 0, lineHeight: 1.5 }}>
-                Le commerçant va recevoir ton retour et corriger ce qui doit l&rsquo;être.
+                {surUnAvis
+                  ? 'Notre équipe va relire cet avis et décider s’il doit être retiré. Le commerçant n’est pas prévenu.'
+                  : 'Le commerçant va recevoir ton retour et corriger ce qui doit l’être.'}
               </p>
             </div>
           )}
@@ -103,7 +123,7 @@ export default function ModalSignalement({ target, onClose, onSent }) {
           {!done && (
             <>
               <p style={{ fontSize: 10, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 6px' }}>
-                Signaler un problème
+                {surUnAvis ? 'Signaler cet avis' : 'Signaler un problème'}
               </p>
               <h2 style={{ fontSize: 17, fontWeight: 800, color: T.ink, letterSpacing: '-0.3px', margin: '0 0 4px', lineHeight: 1.25 }}>
                 {target.nom}
@@ -117,7 +137,7 @@ export default function ModalSignalement({ target, onClose, onSent }) {
                 Que se passe-t-il&nbsp;?
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 16 }}>
-                {TYPES.map(t => {
+                {motifs.map(t => {
                   const actif = type === t.key
                   return (
                     <button key={t.key} type="button" onClick={() => setType(t.key)}
@@ -132,7 +152,7 @@ export default function ModalSignalement({ target, onClose, onSent }) {
                         fontSize: 12, textAlign: 'left',
                         transition: 'all 0.15s',
                       }}>
-                      <span style={{ fontSize: 14, flexShrink: 0 }}>{t.icon}</span>
+                      {t.icon && <span style={{ fontSize: 14, flexShrink: 0 }}>{t.icon}</span>}
                       <span style={{ flex: 1, lineHeight: 1.2 }}>{t.label}</span>
                     </button>
                   )

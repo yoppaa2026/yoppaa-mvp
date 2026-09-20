@@ -12,8 +12,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { globalLimiter, formulairesLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
-import { envieConnue } from '@/lib/signaux'
-import { envoyerAuAdmin, emailSuggestionCommerce, emailSignalementFiche } from '@/lib/resend'
+import { envieConnue, motifAvisConnu, libelleMotifAvis } from '@/lib/signaux'
+import { envoyerAuAdmin, emailSuggestionCommerce, emailSignalementFiche, emailSignalementAvis } from '@/lib/resend'
 
 // Prévenir l'administration, SANS jamais faire échouer le geste de l'habitant.
 //
@@ -83,10 +83,23 @@ export async function POST(request) {
     }
 
     if (type === 'signalement') {
-      if (!body.commercant_id && !body.service_id) {
+      if (!body.commercant_id && !body.service_id && !body.avis_id) {
         return NextResponse.json({ ok: false, error: 'cible manquante' }, { status: 400 })
       }
-      const motif = texte(body.motif, 60) || 'autre'
+
+      // 🔴 SUR UN AVIS, LA LISTE DES MOTIFS EST FERMÉE. Pour une fiche, le
+      // motif est du texte libre borné à soixante caractères, et c'est sans
+      // conséquence : la modale n'en propose que huit. Sur un contenu écrit par
+      // quelqu'un, le motif décide du traitement, et une file de modération qui
+      // reçoit des motifs inventés ne se trie plus. L'écran propose, le serveur
+      // vérifie : c'est la règle du dépôt, et une garde d'écran n'est jamais une
+      // réponse à elle seule.
+      const surUnAvis = !!body.avis_id
+      if (surUnAvis && !motifAvisConnu(body.motif)) {
+        return NextResponse.json({ ok: false, error: 'motif de signalement inconnu' }, { status: 400 })
+      }
+
+      const motif = surUnAvis ? body.motif : (texte(body.motif, 60) || 'autre')
       const description = texte(body.description, 1000)
       const { error } = await supabase.from('signalements').insert({
         type: motif,
@@ -94,8 +107,41 @@ export async function POST(request) {
         yopper_id: clientId,
         commercant_id: body.commercant_id || null,
         service_id: body.service_id || null,
+        avis_id: body.avis_id || null,
       })
       if (error) throw error
+
+      // ⚠️ DEUX CIBLES, DEUX EMAILS, ET CE N'EST PAS DE LA COQUETTERIE. Sur une
+      // fiche on corrige une donnée ; sur un avis on arbitre un CONTENU, et la
+      // décision est de le retirer ou de le laisser. Envoyer « Signalement sur
+      // une fiche » pour un avis ferait juger la mauvaise chose, et le gabarit
+      // des fiches ne porte pas le texte incriminé.
+      if (surUnAvis) {
+        // Le contenu à juger. Son absence n'empêche rien : le gabarit dit alors
+        // qu'il s'agit d'une note seule, ce qui est une information en soi.
+        const { data: avis } = await supabase
+          .from('avis')
+          .select('id, note, commentaire, commercant:commercants(nom)')
+          .eq('id', body.avis_id)
+          .maybeSingle()
+
+        // 🔴 UN AVIS INTROUVABLE N'EST PAS UNE ERREUR À TAIRE. Il a pu être
+        // supprimé entre l'affichage et le signalement : la ligne est déjà
+        // partie en base (la clé étrangère l'aurait refusée sinon), donc on
+        // prévient quand même, en le disant.
+        await prevenirLAdmin(
+          `Signalement d’un avis · ${avis?.commercant?.nom || 'commerce inconnu'}`,
+          emailSignalementAvis({
+            motif_libelle: libelleMotifAvis(motif),
+            description,
+            commerce_nom: avis?.commercant?.nom || null,
+            avis_texte: avis?.commentaire || null,
+            avis_note: avis?.note ?? null,
+            avis_id: body.avis_id,
+          }),
+        )
+        return NextResponse.json({ ok: true })
+      }
 
       // Le nom de la fiche visée, pour que l'email dise de qui on parle. Son
       // absence ne doit rien empêcher : le gabarit s'en passe.

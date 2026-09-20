@@ -10,6 +10,7 @@ import { sansProse } from './lire-code.mjs'
 import {
   libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail,
   LIBELLE_ENVIE, TYPES_ENVIE, envieConnue,
+  MOTIFS_AVIS, TYPES_MOTIF_AVIS, motifAvisConnu, libelleMotifAvis,
   envoyerSignal, messageEchecSignal, MESSAGE_SIGNAL_RESEAU,
   ENVIE_VERS_FONCTION, fonctionDeLEnvie, envieDeLaFonction, phraseEnvieFonction,
   enviesProposables,
@@ -617,6 +618,91 @@ egal('un commerce sans code postal ne crée pas de fausse commune',
     !htmlSignalement.includes('<img src=x') && !htmlSignalement.includes('href="http://faux.example"'))
   verifier('l’email rappelle que le commerçant n’est pas prévenu',
     /pas prévenu/.test(htmlSignalement))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ═══ SIGNALER UN AVIS (20/09, demandé par Apple) ═══════════════════════════
+// 🔴 CE QUI MANQUAIT. Les huit motifs de la modale visent tous la FICHE d'un
+// commerce : fermé, horaires, adresse, téléphone. Les avis, eux, sont du
+// contenu écrit par des habitants et publié sur ces fiches, et rien ne
+// permettait d'en signaler un. Apple l'a demandé lors de la revue du 20/09.
+{
+  // ── Les motifs, EXÉCUTÉS ────────────────────────────────────────────────
+  verifier('les motifs d’avis existent en nombre suffisant', TYPES_MOTIF_AVIS.length >= 5,
+    `${TYPES_MOTIF_AVIS.length} motif(s), trop peu pour couvrir le contenu abusif`)
+  verifier('« autre » survit, sinon un cas non prévu n’a nulle part où aller',
+    motifAvisConnu('autre'))
+  verifier('un motif connu est reconnu', motifAvisConnu('haineux'))
+  verifier('un motif inventé est refusé', !motifAvisConnu('nimportequoi'))
+
+  // 🔴 LE PIÈGE DE `in`. `'constructor' in MOTIFS_AVIS` rend VRAI : écrire la
+  // vérification avec `in` laisserait entrer `constructor` et `toString` comme
+  // motifs, et la file de modération recevrait des lignes incompréhensibles.
+  verifier('🔴 « constructor » n’est pas un motif', !motifAvisConnu('constructor'))
+  verifier('🔴 « toString » non plus', !motifAvisConnu('toString'))
+  verifier('une absence n’est pas un motif',
+    !motifAvisConnu(null) && !motifAvisConnu(undefined))
+  verifier('un objet n’est pas un motif', !motifAvisConnu({}))
+
+  // ⚠️ LE SEUIL A ÉTÉ POSÉ TROP HAUT, ET LE BANC L'A DIT TOUT DE SUITE :
+  // « Autre » fait exactement cinq caractères. Ce qu'on veut interdire, c'est
+  // qu'un motif s'affiche sous sa CLÉ (« hors_sujet ») faute de libellé.
+  verifier('chaque motif porte un libellé lisible, jamais sa clé brute',
+    TYPES_MOTIF_AVIS.every(k =>
+      typeof MOTIFS_AVIS[k] === 'string'
+      && MOTIFS_AVIS[k].trim().length >= 4
+      && MOTIFS_AVIS[k] !== k))
+  verifier('un motif inconnu retombe sur « autre » au lieu de rendre vide',
+    libelleMotifAvis('nimportequoi') === MOTIFS_AVIS.autre)
+
+  // ⚠️ LES DEUX LISTES NE SE RECOUPENT PAS. Le jour où quelqu'un les fusionne
+  // pour « simplifier », la modale proposerait « horaires incorrects » sur un
+  // avis, et le modérateur recevrait des signalements inexploitables.
+  const MODAL_AVIS = sansProse(readFileSync(new URL('../app/commander/ModalSignalement.js', import.meta.url), 'utf8'))
+  verifier('la modale choisit ses motifs selon la cible',
+    /surUnAvis \? MOTIFS_POUR_AVIS : TYPES/.test(MODAL_AVIS),
+    'les deux listes ont été fusionnées : des motifs de fiche s’afficheraient sur un avis')
+  verifier('la modale envoie l’identifiant de l’avis',
+    /avis_id:\s*target\.kind === 'avis'/.test(MODAL_AVIS),
+    'le signalement partirait sans dire quel avis il vise')
+
+  // 🔴 ET LE SERVEUR VÉRIFIE, PAS SEULEMENT L'ÉCRAN. Une garde d'écran n'est
+  // jamais une réponse à elle seule : la route est appelable directement.
+  const ROUTE_AVIS = sansProse(readFileSync(new URL('../app/api/signaux/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur refuse un motif inconnu sur un avis',
+    /motifAvisConnu\(body\.motif\)/.test(ROUTE_AVIS),
+    'n’importe quel mot de soixante caractères entrerait en base comme motif')
+  // ⚠️ ON VISE L'INSERT, PAS LA ROUTE ENTIÈRE. Cherché partout, `avis_id:
+  // body.avis_id` se trouve aussi dans l'appel à l'email : la mutation qui
+  // rangeait `null` en base passait au travers, et la garde restait verte en
+  // mesurant un autre endroit. Mesuré, pas relu.
+  const iInsertSignal = ROUTE_AVIS.indexOf("from('signalements').insert(")
+  const blocInsert = iInsertSignal >= 0 ? ROUTE_AVIS.slice(iInsertSignal, iInsertSignal + 400) : ''
+  verifier('l’insertion des signalements est là où on la cherche', iInsertSignal >= 0,
+    'la garde suivante ne mesure plus rien')
+  verifier('le serveur range l’identifiant dans sa colonne',
+    /avis_id:\s*body\.avis_id/.test(blocInsert),
+    'l’avis visé ne serait plus retrouvable dans la file de modération')
+
+  // 🔴 ET UN AVIS EST UNE CIBLE VALABLE. Sans cette condition, la route refuse
+  // le signalement avant même de regarder le motif : le bouton existerait, la
+  // modale s'ouvrirait, et l'envoi rendrait « cible manquante ».
+  verifier('🔴 un avis est une cible acceptée par la route',
+    /!body\.commercant_id && !body\.service_id && !body\.avis_id/.test(ROUTE_AVIS),
+    'tout signalement d’avis serait refusé avec « cible manquante »')
+  verifier('un avis signalé déclenche SON email, pas celui des fiches',
+    /emailSignalementAvis\(/.test(ROUTE_AVIS),
+    'le modérateur lirait « signalement sur une fiche » et jugerait la mauvaise chose')
+
+  // ⚠️ L'ÉCRAN OÙ ÇA SE PASSE. Sans ce bouton, tout le reste est du code mort,
+  // et c'est exactement ce qu'Apple vérifiera dans la vidéo.
+  const FICHE_AVIS = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 la carte d’avis porte le bouton de signalement',
+    /Signaler cet avis/.test(FICHE_AVIS),
+    'plus aucun moyen de signaler un avis depuis la fiche')
+  verifier('et le bouton ne referme pas la carte sous le doigt',
+    /stopPropagation\(\); setSignaler\(true\)/.test(FICHE_AVIS),
+    'le clic replierait l’avis au lieu d’ouvrir la modale')
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

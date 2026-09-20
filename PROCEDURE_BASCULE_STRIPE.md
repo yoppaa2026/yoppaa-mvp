@@ -43,12 +43,21 @@ deviendront impossibles.
 Passer l'interrupteur « Mode test » sur **off**, puis :
 
 1. **Créer les deux tarifs d'abonnement** (Communiquer 19,90 · Vendre 49,90) et
-   relever leurs identifiants `price_…`.
-2. **Créer les deux webhooks** vers la production :
+   relever leurs identifiants `price_…`. 🔴 **Les montants sont HTVA** : 19,90 et
+   49,90, jamais 24,08 ni 60,38. Un Price qui porterait déjà la TVA la ferait
+   compter deux fois (24,08 + 21 % = 29,14 €).
+2. 🔴 **Créer le taux de taxe** (Produits → Taux de taxe → Créer), et relever son
+   identifiant `txr_…` : nom affiché `TVA`, **21 %**, pays **Belgique**, et
+   **« inclus dans le prix » = NON**.
+   ⚠️ **Ce « non » décide de la marge.** Un taux inclusif déclarerait que les
+   19,90 € contenaient déjà la TVA : Avcotech en reverserait 3,45 € et il
+   resterait 16,45 €, soit 17,4 % de la recette d'abonnement.
+   🔴 **Un TaxRate de test ne vaut rien en production**, il faut le recréer ici.
+3. **Créer les deux webhooks** vers la production :
    - `https://www.yoppaa.app/api/stripe/webhook` — les paiements et les comptes
      connectés. ⚠️ Cocher aussi les événements **Connect**.
    - `https://www.yoppaa.app/api/stripe/billing/webhook` — les abonnements.
-3. Relever les **deux secrets** `whsec_…`, un par webhook.
+4. Relever les **deux secrets** `whsec_…`, un par webhook.
 
 ---
 
@@ -65,6 +74,16 @@ Passer l'interrupteur « Mode test » sur **off**, puis :
 | `STRIPE_CONNECT_CLIENT_ID` | `ca_test_…` | `ca_live_…` |
 | `STRIPE_WEBHOOK_SECRET` | secret test | **secret du webhook live** |
 
+⚠️ **DEUX DE CES QUATRE NE SONT LUES PAR PERSONNE** (vérifié le 20/09).
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` et `STRIPE_CONNECT_CLIENT_ID` alimentent
+`STRIPE_CONFIG.publishableKey` et `.connectClientId` (`lib/stripe.js:30-31`), et
+**aucun fichier du dépôt ne lit ces deux propriétés**. Tout passe par Checkout
+hébergé, il n'y a pas de `loadStripe` côté navigateur, et le commentaire du
+fichier dit lui-même du second qu'il n'est « pas utilisé en Express ».
+Les remplacer ne coûte rien et garde la porte ouverte ; **ne pas les confondre
+avec les deux qui comptent vraiment**, `STRIPE_SECRET_KEY` et
+`STRIPE_WEBHOOK_SECRET`, dont l'absence arrête tout.
+
 **À renseigner s'ils sont vides** — le code les choisit tout seul dès que la clé
 est en `sk_live_`, mais il ne peut pas les inventer :
 
@@ -72,11 +91,47 @@ est en `sk_live_`, mais il ne peut pas les inventer :
 |---|---|
 | `STRIPE_PRICE_COMMUNIQUER_LIVE` | le `price_…` créé à l'étape 2 |
 | `STRIPE_PRICE_VENDRE_LIVE` | idem |
+| `STRIPE_TAX_RATE_BE_LIVE` | le `txr_…` du taux de taxe créé à l'étape 2 |
 | `STRIPE_BILLING_WEBHOOK_SECRET_LIVE` | le `whsec_…` du webhook de facturation |
 
-🔴 **C'est l'oubli le plus coûteux de toute la procédure.** Si
-`STRIPE_BILLING_WEBHOOK_SECRET_LIVE` reste vide, les abonnements ne se
-confirment plus et personne ne le voit avant le premier paiement raté.
+🔴 **ET HUIT AUTRES QUE CE DOCUMENT OUBLIAIT** (trouvées le 20/09 par un audit
+des variables). Ce sont les ventes d'Avcotech : elles passent par le compte
+PLATEFORME, donc par des Price que Stripe doit connaître.
+
+| Variable | Produit |
+|---|---|
+| `STRIPE_PRICE_SMS100_LIVE` | pack 100 SMS de fidélité |
+| `STRIPE_PRICE_SMS500_LIVE` | pack 500 SMS |
+| `STRIPE_PRICE_SUCCESS_PACK_LIVE` | accompagnement sur place, 199 € |
+| `STRIPE_PRICE_SUCCESS_PACK_KIT_LIVE` | accompagnement + installation, 259 € |
+| `STRIPE_PRICE_MISE_EN_ROUTE_LIVE` | mise en route à distance, 59 € |
+| `STRIPE_PRICE_KIT_PRO_LIVE` | Kit Yoppaa Pro, 469 € |
+| `STRIPE_PRICE_KIT_LIGHT_LIVE` | Kit Yoppaa Light, 259 € |
+| `STRIPE_PRICE_ROULEAU_LIVE` | pack de 8 rouleaux, 47,90 € |
+
+🔴 **ET LEURS JUMELLES `_TEST` N'EXISTENT PAS NON PLUS** (constaté sur la liste
+Vercel du 20/09). Autrement dit, **acheter un pack SMS ou un article de la
+boutique rend déjà 500 aujourd'hui**, et pas seulement après la bascule.
+
+⚠️ **UN SEUL PRICE MANQUANT FAIT TOMBER TOUT LE PANIER.**
+`app/api/accompagnement/checkout/route.js:71` résout les Price dans un `.map()`
+synchrone : le premier produit sans variable fait lever la route entière, et
+aucun autre article du panier ne part au paiement. Le commerçant voit un message
+technique, jamais lequel des articles pose problème.
+
+🔴 **DEUX OUBLIS COÛTENT CHER ICI, ET ILS NE SE VOIENT PAS DE LA MÊME FAÇON.**
+
+- `STRIPE_BILLING_WEBHOOK_SECRET_LIVE` vide : les abonnements **ne se confirment
+  plus**, et personne ne le voit avant le premier paiement raté. Silencieux.
+- `STRIPE_TAX_RATE_BE_LIVE` vide : **toute souscription lève immédiatement**
+  (« Configuration Stripe incomplète »), côté Checkout comme à la validation
+  d'un KYB. Bruyant, donc moins dangereux, mais bloquant tout de suite.
+  ⚠️ C'est délibéré : encaisser un abonnement **sans TVA** coûte plus cher que
+  de refuser une souscription. Le code refuse plutôt que de deviner.
+
+✅ **`npm run controle:tva` vérifie les trois d'un coup** (le taux, son
+`inclusive`, et le montant des deux Price), en **lecture seule**. À lancer juste
+après avoir renseigné les variables, avant d'annoncer quoi que ce soit.
 
 ⚠️ **Ne pas toucher** aux variables `_TEST` : elles ne servent plus en
 production, mais elles resteront utiles le jour où on montera un bac à sable.

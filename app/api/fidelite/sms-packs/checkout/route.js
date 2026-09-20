@@ -13,7 +13,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
-import { getStripePriceIdSmsPack, getOrCreateStripeCustomer } from '@/lib/stripe-billing'
+import { getStripePriceIdSmsPack, getOrCreateStripeCustomer, getStripeTaxRateId } from '@/lib/stripe-billing'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { canDo, planEffectif } from '@/lib/plans'
 
@@ -61,6 +61,14 @@ export async function POST(request) {
     }
 
     const priceId = getStripePriceIdSmsPack(String(pack))
+    // 🔴 LE PACK EST ANNONCÉ HTVA (`montant_htva` juste en dessous), ET PERSONNE
+    // N'AJOUTAIT LA TVA. C'est le frère du défaut des abonnements, trouvé le
+    // 20/09 : ici aussi c'est Avcotech qui vend, sur le compte PLATEFORME, donc
+    // c'est à nous de la facturer. Sans ce taux, une facture sans TVA est
+    // réputée TVA comprise et on en reverse 21/121.
+    // ⚠️ RÉSOLU ICI, AVANT L'ÉCRITURE EN BASE, pour la même raison que le Price
+    // juste au-dessus : s'il manque, on échoue sans laisser de commande fantôme.
+    const tvaBelge = getStripeTaxRateId()
     const customer = await getOrCreateStripeCustomer(com, admin)
 
     // Trace de l'achat AVANT le paiement : le webhook s'en sert pour créditer
@@ -83,7 +91,7 @@ export async function POST(request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       customer: customer.id,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1, tax_rates: [tvaBelge] }],
       success_url: `${STRIPE_CONFIG.appUrl}/dashboard?sms=ok`,
       cancel_url:  `${STRIPE_CONFIG.appUrl}/dashboard?sms=annule`,
       metadata: {

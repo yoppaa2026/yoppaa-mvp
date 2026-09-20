@@ -27,6 +27,8 @@ const MODULE = 'lib/plans.js'
 
 const BILLING = 'lib/stripe-billing.js'
 const PAGE    = 'app/dashboard/abonnement/page.js'
+const SMS     = 'app/api/fidelite/sms-packs/checkout/route.js'
+const SHOP    = 'app/api/accompagnement/checkout/route.js'
 
 const MUTATIONS = [
   // ─── LE CALCUL ──────────────────────────────────────────────────────────
@@ -103,6 +105,39 @@ const MUTATIONS = [
     fichier: BILLING,
     de: '    default_tax_rates: [tvaBelge],',
     vers: '    metadata_tva_posee: true,' },
+
+  // ─── LES FRERES : LES AUTRES VENTES D AVCOTECH ──────────────────────────
+  // 🔴 LE DEFAUT D ORIGINE DES DEUX COTES : le prix est annonce HTVA et
+  // personne n ajoute la TVA, parce que trois commentaires affirmaient qu elle
+  // etait « portee par le Price Stripe ».
+  { nom: '🔴 les packs SMS repassent au prix nu, sans TVA',
+    fichier: SMS,
+    de: '      line_items: [{ price: priceId, quantity: 1, tax_rates: [tvaBelge] }],',
+    vers: '      line_items: [{ price: priceId, quantity: 1 }],' },
+
+  { nom: '🔴 la boutique repasse au prix nu, sans TVA',
+    fichier: SHOP,
+    de: '    const lineItems = choisis.map(p => ({ price: getStripePriceIdProduitBoutique(p.envKey), quantity: 1, tax_rates: [tvaBelge] }))',
+    vers: '    const lineItems = choisis.map(p => ({ price: getStripePriceIdProduitBoutique(p.envKey), quantity: 1 }))' },
+
+  // 🔴 LE TAUX QUI N EST PLUS RESOLU AVANT L ECRITURE ROUVRE LE TROU DE LA
+  // COMMANDE FANTOME : une ligne « paiement en attente » ecrite en base, puis
+  // une exception, et un paiement qui n arrive jamais. Les deux routes
+  // resolvent deja leurs Price AVANT d ecrire, exactement pour ca.
+  //
+  // ⚠️ LA MUTATION SUPPRIME L APPEL PLUTOT QUE DE LE DEPLACER, parce qu une
+  // ancre ne peut pas contenir de saut de ligne (les fichiers sont en CRLF).
+  // Elle mesure donc la meme garde par son autre bout : sans appel, l ordre
+  // n est plus verifiable, et `tvaBelge` partirait a `undefined` chez Stripe.
+  { nom: '🔴 le taux des SMS n est plus resolu : Stripe recoit un taux indefini',
+    fichier: SMS,
+    de: '    const tvaBelge = getStripeTaxRateId()',
+    vers: '    const tvaBelge = undefined' },
+
+  { nom: '🔴 le taux de la boutique n est plus resolu : Stripe recoit un taux indefini',
+    fichier: SHOP,
+    de: '    const tvaBelge = getStripeTaxRateId()',
+    vers: '    const tvaBelge = undefined' },
 
   // ─── L ECRAN ────────────────────────────────────────────────────────────
   { nom: '🔴 LA PROMESSE D ORIGINE REVIENT : une TVA « selon votre pays » que rien ne calcule',

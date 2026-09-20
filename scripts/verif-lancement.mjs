@@ -312,6 +312,35 @@ function sansCommentaires(src) {
     /default_tax_rates:/.test(codeBilling.slice(iKyb)),
     'les abonnements créés à la validation du dossier ne seraient pas taxés, et c’est la voie des cinq premiers commerçants')
 
+  // ── LES AUTRES VENTES D'AVCOTECH, qui avaient le même trou ──────────────
+  // 🔴 LES FRÈRES, TROUVÉS LE 20/09 PAR UN AUDIT DES VARIABLES. Trois modules
+  // affirmaient noir sur blanc que « la TVA est portée par le Price Stripe ».
+  // C'est faux : un Price ne porte aucune taxe tout seul, exactement comme
+  // `tax_id_collection` n'en facturait pas. Les packs SMS et la boutique sont
+  // vendus par Avcotech sur le compte PLATEFORME, à des prix HTVA, et personne
+  // ne les taxait. Le commentaire faux est ce qui a fait passer le défaut
+  // inaperçu : il donnait le sujet pour traité.
+  for (const [quoi, chemin] of [
+    ['les packs SMS', 'app/api/fidelite/sms-packs/checkout/route.js'],
+    ['la boutique',   'app/api/accompagnement/checkout/route.js'],
+  ]) {
+    const codeRoute = sansProse(lire(chemin).replace(/\r\n/g, '\n'))
+    verifier(`${quoi} : la TVA est posée sur la ligne de commande`,
+      /tax_rates:\s*\[tvaBelge\]/.test(codeRoute),
+      `${chemin} vend au prix nu : Avcotech devrait alors reverser 21/121 de sa propre recette`)
+
+    // 🔴 ET ELLE EST RÉSOLUE AVANT L'ÉCRITURE EN BASE. Les deux routes prennent
+    // déjà soin de résoudre leurs Price avant d'insérer, pour ne pas laisser de
+    // commande fantôme quand une variable manque. Un taux résolu APRÈS l'insert
+    // rouvrirait exactement ce trou : une ligne « paiement en attente » créée,
+    // puis une exception, et un paiement qui n'arrive jamais.
+    const iTaux = codeRoute.indexOf('getStripeTaxRateId()')
+    const iInsert = codeRoute.indexOf('.insert(')
+    verifier(`${quoi} : le taux est résolu avant toute écriture en base`,
+      iTaux >= 0 && iInsert >= 0 && iTaux < iInsert,
+      `${chemin} écrirait une commande en base avant de savoir s’il peut la taxer`)
+  }
+
   // ── L'écran ne promet plus ce que Stripe ne fait pas ────────────────────
   // 🔴 CES TROIS GARDES LISENT LE CODE DÉPOUILLÉ, ET C'EST LE BANC QUI ME L'A
   // APPRIS : écrite sur le fichier brut, la première rougissait sur le

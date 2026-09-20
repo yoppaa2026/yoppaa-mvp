@@ -19,7 +19,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
-import { getStripePriceIdProduitBoutique, getOrCreateStripeCustomer } from '@/lib/stripe-billing'
+import { getStripePriceIdProduitBoutique, getOrCreateStripeCustomer, getStripeTaxRateId } from '@/lib/stripe-billing'
 import { produitParType } from '@/lib/produits-boutique'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
@@ -68,7 +68,16 @@ export async function POST(request) {
 
     // Les Price sont résolus AVANT toute écriture : si l'un manque, on échoue
     // proprement sans laisser de commande fantôme en base.
-    const lineItems = choisis.map(p => ({ price: getStripePriceIdProduitBoutique(p.envKey), quantity: 1 }))
+    //
+    // 🔴 LA TVA AUSSI, ET ELLE MANQUAIT. `lib/produits-boutique.js` affirmait
+    // que « la TVA est portée par le Price Stripe » : c'est faux, un Price ne la
+    // porte pas tout seul, exactement comme `tax_id_collection` ne la facturait
+    // pas sur les abonnements. Les prix du catalogue sont HTVA (`montant_ht` en
+    // base), c'est Avcotech qui vend sur le compte PLATEFORME, donc c'est à nous
+    // de la facturer. Trouvé le 20/09 en traitant les frères de l'abonnement.
+    // ⚠️ RÉSOLU AVANT L'ÉCRITURE, pour la même raison que les Price.
+    const tvaBelge = getStripeTaxRateId()
+    const lineItems = choisis.map(p => ({ price: getStripePriceIdProduitBoutique(p.envKey), quantity: 1, tax_rates: [tvaBelge] }))
 
     const note = String(message || '').trim().slice(0, 400)
 

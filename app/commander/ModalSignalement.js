@@ -129,7 +129,16 @@ export default function ModalSignalement({ target, onClose, onSent }) {
                 {target.nom}
               </h2>
               <p style={{ fontSize: 12, color: T.muted, margin: '0 0 16px', lineHeight: 1.5 }}>
-                Tes signalements aident la tribu à garder Yoppaa à jour. Merci de prendre 30 secondes&nbsp;!
+                {/* ⚠️ DEUX CIBLES, DEUX RAISONS D'ÊTRE LÀ. « Garder Yoppaa à
+                    jour » décrit la correction d'une donnée : des horaires, une
+                    adresse. On ne met rien à jour en signalant des propos
+                    haineux, et promettre ça banaliserait le geste au moment
+                    précis où il compte le plus. Repéré sur une capture d'Alex,
+                    après la mise en ligne : le texte était juste pour les
+                    fiches et faux pour les avis. */}
+                {surUnAvis
+                  ? 'Cet avis ne respecte pas les règles ? Dis-nous pourquoi, on le relit.'
+                  : 'Tes signalements aident la tribu à garder Yoppaa à jour. Merci de prendre 30 secondes !'}
               </p>
 
               {/* Sélection du type */}
@@ -165,7 +174,9 @@ export default function ModalSignalement({ target, onClose, onSent }) {
               </label>
               <textarea value={description} onChange={e => setDescription(e.target.value)}
                 rows={3}
-                placeholder="Ex: ils sont en réalité fermés le lundi…"
+                placeholder={surUnAvis
+                  ? 'Ex : cet avis cite le numéro de téléphone de quelqu’un…'
+                  : 'Ex: ils sont en réalité fermés le lundi…'}
                 style={{ width: '100%', padding: 12, borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontFamily: 'inherit', color: T.ink, outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: 14 }}/>
 
               {error && (

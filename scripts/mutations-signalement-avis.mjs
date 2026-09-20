@@ -86,6 +86,26 @@ const MUTATIONS = [
     de: "      avis_id:       target.kind === 'avis'     ? target.id : null,",
     vers: '      avis_id:       null,' },
 
+  // ─── LES TEXTES DE LA MODALE ────────────────────────────────────────────
+  // 🔴 TROUVES SUR UNE CAPTURE D ALEX, APRES LA MISE EN LIGNE. La modale avait
+  // gardé le sous-titre et l exemple des FICHES : on ne « met pas Yoppaa a
+  // jour » en signalant des propos haineux, et l exemple parlait d horaires de
+  // fermeture au moment ou l on decrit un contenu abusif.
+  { nom: '🔴 le sous-titre des FICHES revient sur un signalement de contenu',
+    fichier: MODAL,
+    de: "                  ? 'Cet avis ne respecte pas les règles ? Dis-nous pourquoi, on le relit.'",
+    vers: "                  ? 'Tes signalements aident la tribu à garder Yoppaa à jour.'" },
+
+  { nom: '⚠️ l exemple de precision parle encore d horaires de fermeture',
+    fichier: MODAL,
+    de: '                placeholder={surUnAvis',
+    vers: '                placeholder={false' },
+
+  { nom: '🔴 le message de succes promet que le commercant est prevenu',
+    fichier: MODAL,
+    de: "                  ? 'Notre équipe va relire cet avis et décider s’il doit être retiré. Le commerçant n’est pas prévenu.'",
+    vers: "                  ? 'Le commerçant va recevoir ton retour.'" },
+
   // ─── L ECRAN ────────────────────────────────────────────────────────────
   // ⚠️ SANS CE BOUTON, TOUT LE RESTE EST DU CODE MORT, et c est exactement ce
   // qu un relecteur Apple cherchera dans la video.

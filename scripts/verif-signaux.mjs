@@ -666,6 +666,22 @@ egal('un commerce sans code postal ne crée pas de fausse commune',
     /avis_id:\s*target\.kind === 'avis'/.test(MODAL_AVIS),
     'le signalement partirait sans dire quel avis il vise')
 
+  // 🔴 ET SES TEXTES DISENT LA VRAIE RAISON D'ÊTRE LÀ. Trouvés sur une capture
+  // d'Alex, APRÈS la mise en ligne : la modale gardait le sous-titre des fiches
+  // (« aident la tribu à garder Yoppaa à jour ») et leur exemple (« ils sont en
+  // réalité fermés le lundi »). On ne met rien à jour en signalant des propos
+  // haineux, et l'exemple orientait vers la mauvaise chose au moment de saisir.
+  // Un écran qui promet autre chose que ce qu'il fait banalise le geste.
+  verifier('le sous-titre change selon la cible',
+    /surUnAvis\s*\n?\s*\?\s*'Cet avis ne respecte pas les règles/.test(MODAL_AVIS),
+    'la modale promet de « garder Yoppaa à jour » à qui signale des propos haineux')
+  verifier('l’exemple de précision change selon la cible',
+    /placeholder=\{surUnAvis/.test(MODAL_AVIS),
+    'l’exemple parle d’horaires de fermeture sur un signalement de contenu')
+  verifier('et le message de succès ne promet pas que le commerçant est prévenu',
+    /Le commerçant n’est pas prévenu/.test(MODAL_AVIS),
+    'on laisserait croire que le commerçant reçoit le signalement d’un avis')
+
   // 🔴 ET LE SERVEUR VÉRIFIE, PAS SEULEMENT L'ÉCRAN. Une garde d'écran n'est
   // jamais une réponse à elle seule : la route est appelable directement.
   const ROUTE_AVIS = sansProse(readFileSync(new URL('../app/api/signaux/route.js', import.meta.url), 'utf8'))

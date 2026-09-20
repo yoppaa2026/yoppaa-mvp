@@ -719,6 +719,19 @@ egal('un commerce sans code postal ne crée pas de fausse commune',
   verifier('et le bouton ne referme pas la carte sous le doigt',
     /stopPropagation\(\); setSignaler\(true\)/.test(FICHE_AVIS),
     'le clic replierait l’avis au lieu d’ouvrir la modale')
+
+  // 🔴 LA PASTILLE « VÉRIFIÉ » LISAIT UNE COLONNE ABSENTE DE LA VUE, septième
+  // fois pour cette famille. `avis_public` fait le calcul et n'expose QUE son
+  // résultat (`commande_id IS NOT NULL AS verifie`) : recalculer à partir de
+  // `commande_id` rendait toujours faux, sans erreur ni avertissement. Et une
+  // pastille manquante ne se voit pas, elle s'oublie.
+  const ligneVerifie = FICHE_AVIS.split('\n').find(l => /const verifie\s*=/.test(l)) || ''
+  verifier('🔴 la pastille « Vérifié » lit la colonne que la vue expose vraiment',
+    /a\.verifie/.test(ligneVerifie),
+    'elle recalcule depuis une colonne absente d’avis_public : aucun avis ne sera jamais marqué vérifié')
+  verifier('et elle ne recalcule pas depuis commande_id',
+    !/a\.commande_id/.test(ligneVerifie),
+    'avis_public n’expose pas commande_id : le calcul rendrait toujours faux')
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

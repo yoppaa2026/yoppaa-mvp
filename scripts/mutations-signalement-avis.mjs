@@ -118,6 +118,14 @@ const MUTATIONS = [
     fichier: FICHE,
     de: '            onClick={(e) => { e.stopPropagation(); setSignaler(true) }}',
     vers: '            onClick={() => setSignaler(true)}' },
+
+  // 🔴 LE DEFAUT D ORIGINE DE LA PASTILLE : elle recalculait depuis une colonne
+  // que la vue n expose pas. `avis_public` fait le calcul et ne rend que son
+  // resultat. Aucune erreur, aucun avertissement, juste une pastille absente.
+  { nom: '🔴 la pastille « Verifie » recalcule depuis une colonne absente de la vue',
+    fichier: FICHE,
+    de: '  const verifie = a.verifie === true',
+    vers: '  const verifie = !!a.commande_id' },
 ]
 
 const lancer = () => {

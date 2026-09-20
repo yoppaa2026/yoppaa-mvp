@@ -234,7 +234,24 @@ function CarteAvis({ a }) {
   // est tronqué à une ligne, et proposer de signaler un texte qu'on n'a pas lu
   // n'appelle que des signalements à l'aveugle.
   const [signaler, setSignaler] = useState(false)
-  const verifie = !!a.commande_id
+
+  // 🔴 LA PASTILLE « VÉRIFIÉ » NE S'EST JAMAIS AFFICHÉE, et c'est la colonne
+  // absente d'une vue pour la septième fois. Cet écran lit `avis_public`, qui
+  // fait le calcul à notre place et n'expose QUE son résultat :
+  //
+  //     commande_id IS NOT NULL AS verifie
+  //
+  // `a.commande_id` valait donc toujours `undefined`, et `!!undefined` est
+  // faux. Aucune erreur, aucun avertissement : la pastille manquait, voilà
+  // tout. Trouvé le 20/09 en regardant une capture d'Alex, où cinq avis à cinq
+  // étoiles s'affichaient sans la moindre marque de vérification — exactement
+  // ce qui fait suspecter des avis fabriqués.
+  //
+  // ⚠️ ET LA VUE NE VÉRIFIE QUE LES COMMANDES. Un avis laissé après un
+  // rendez-vous honoré est tout aussi prouvé (`/api/yopper/avis` exige l'un ou
+  // l'autre), et il restera pourtant non vérifié tant que la vue ne regarde pas
+  // `rdv_reservation_id`. Ça se corrige dans la vue, pas ici.
+  const verifie = a.verifie === true
   return (
     <div onClick={() => setOuvert(o => !o)}
       style={{ background: T.bgCard, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.5rem', border: `1.5px solid ${T.pale}`, cursor: 'pointer', transition: 'all 0.15s' }}

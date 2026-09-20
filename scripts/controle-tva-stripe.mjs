@@ -70,7 +70,16 @@ if (!idTaxRate) {
   process.exit(1)
 }
 
-const taxRate = await stripe.taxRates.retrieve(idTaxRate)
+let taxRate
+try {
+  taxRate = await stripe.taxRates.retrieve(idTaxRate)
+} catch (e) {
+  console.error(`\n🔴 STRIPE_TAX_RATE_BE_${suffixe} : Stripe ne reconnaît pas cet identifiant.`)
+  console.error(`   ${e?.message || 'erreur inconnue'}`)
+  console.error('   Un taux de taxe commence par txr_, et il appartient à un monde :')
+  console.error(`   celui-ci doit venir du mode ${suffixe === 'TEST' ? 'test' : 'réel'}.`)
+  process.exit(1)
+}
 controle('le taux appliqué', taxRate.percentage, TVA_ABONNEMENT_POURCENT)
 // 🔴 LE CONTRÔLE QUI DÉCIDE DE LA MARGE.
 controle('le taux s’AJOUTE au prix (inclusive = false)', taxRate.inclusive, false)
@@ -89,7 +98,25 @@ for (const [plan, envKey] of [
     controle(`${plan} : ${envKey}`, 'absente', 'un identifiant price_…')
     continue
   }
-  const price = await stripe.prices.retrieve(idPrice)
+  // ⚠️ LA CONFUSION QUI SE PRODUIT VRAIMENT : `prod_…` EST LE PRODUIT, `price_…`
+  // EST SON TARIF. L'écran de Stripe montre l'identifiant du produit en premier,
+  // et il faut ouvrir la ligne de tarification pour trouver celui du tarif. Le
+  // message brut de Stripe (« No such price ») ne dit pas lequel des deux on a
+  // collé, ni où aller chercher l'autre.
+  let price
+  try {
+    price = await stripe.prices.retrieve(idPrice)
+  } catch (e) {
+    if (String(idPrice).startsWith('prod_')) {
+      console.error(`\n🔴 ${envKey} contient un identifiant de PRODUIT (prod_…), pas de TARIF (price_…).`)
+      console.error('   Chez Stripe : Catalogue de produits → ouvre le produit → section Tarification →')
+      console.error('   clique la ligne du tarif, et copie l’ID qui commence par price_.')
+    } else {
+      console.error(`\n🔴 ${envKey} : Stripe ne reconnaît pas cet identifiant (${e?.message || 'erreur inconnue'}).`)
+      console.error(`   Vérifie qu’il vient bien du monde ${suffixe} : un tarif de test n’existe pas en réel, et l’inverse non plus.`)
+    }
+    process.exit(1)
+  }
   const attenduCents = Math.round(getPrixPlan(plan).mensuel * 100)
   controle(`${plan} : le montant du Price, en cents HTVA`, price.unit_amount, attenduCents)
   controle(`${plan} : la devise`, price.currency, 'eur')

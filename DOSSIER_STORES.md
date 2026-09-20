@@ -779,3 +779,110 @@ essai a révélé un troisième point que personne n'avait vu.
 ⚠️ **Le compte doit fonctionner le jour de la revue, pas le jour du dépôt.**
 Apple ouvre parfois le dossier trois jours plus tard ; un compte expiré, un mot
 de passe changé ou une fiche dépubliée entre-temps est un rejet sec.
+
+---
+
+## 📨 RÉPONSE À APPLE — GUIDELINE 2.1, INFORMATION NEEDED (20/09)
+
+Soumission `fa162ca4-9f81-42aa-801d-bda200cf35c9`. **Pas un rejet** : compte
+développeur sans historique de revue. **Pas de resoumission nécessaire** :
+répondre depuis la page App Review, et recopier dans le champ **Notes** de App
+Review Information, qu'Apple relira aux prochaines soumissions.
+
+🔴 **LES IDENTIFIANTS DU COMPTE DE DÉMONSTRATION NE SONT PAS ICI.** Ce fichier
+part sur GitHub. Ils se tapent directement dans le formulaire.
+
+### 2. Purpose and target audience
+
+> Yoppaa is a local commerce app for Belgium. It connects residents of small
+> towns and villages with the independent shops around them: bakeries,
+> butchers, hairdressers, restaurants, florists.
+>
+> The problem it solves: most independent local shops have no online presence
+> at all. Residents don't know what exists nearby, what the opening hours are,
+> what is available today, or whether they can order ahead. At the same time,
+> these shops cannot afford a website, an ordering system and a loyalty program
+> as three separate products.
+>
+> Yoppaa gives residents one app to find those shops, see what they sell, order
+> and pay ahead, book appointments, and collect loyalty rewards. Shops get a
+> public page and the tools behind it for a flat monthly fee.
+>
+> Target audience: adults living in Belgian municipalities, mainly in Wallonia.
+> The app is rated 4+ and contains no age-restricted content.
+>
+> Yoppaa is operated by Avcotech SRL, a Belgian company (company number
+> 0731.637.148).
+
+### 3. Setting up and accessing the main features
+
+> No account is needed to browse. The app opens directly on the list of shops.
+>
+> A demo account is provided in the App Review Information section. There is
+> only one account type for app users. Merchants use a separate web dashboard
+> that is not part of this app and is not publicly available.
+>
+> 1. Browse — the app opens on the shop list for a municipality. Tap any shop
+>    to open its page: products, opening hours, customer reviews.
+> 2. Order and pay — open "Chez Momo", add an item, pick a collection slot and
+>    check out. Stripe runs in TEST mode for this review, so no real money is
+>    charged: use card 4242 4242 4242 4242, any future expiry date, any 3-digit
+>    CVC, any postal code. To go through without paying, choose "paiement sur
+>    place" (pay on site) at checkout.
+> 3. Report a review — on any shop page, scroll to "Avis clients", tap a review
+>    to expand it, then tap "Signaler cet avis". Six reasons are offered: hate
+>    speech, fake review, personal data, illegal content, off-topic or spam,
+>    other. Reports reach our moderation queue by email and are reviewed by us;
+>    the merchant is not notified and cannot remove a review.
+>    Reviews can only be written by someone who actually collected an order or
+>    attended an appointment at that shop, and only once per order. Verified
+>    reviews carry a green "Vérifié" badge.
+> 4. Delete the account — Profile tab, "Supprimer mon compte". The user types
+>    SUPPRIMER to confirm. Deletion is refused only while an order, appointment
+>    or gift card is still pending with a third-party merchant, so that the
+>    merchant is not left with an unresolved transaction.
+
+### 4. External services
+
+> Used by the backend that serves the app:
+>
+> - Supabase — authentication and PostgreSQL database
+> - Stripe — payment processing, and Stripe Connect to pay merchants directly.
+>   Currently in TEST mode.
+> - OneSignal — push notifications
+> - Resend — transactional email (order confirmations, receipts)
+> - Brevo — mailing lists and SMS
+> - Cloudflare Turnstile — bot protection on public forms
+> - Upstash Redis — rate limiting
+> - Vercel — hosting
+>
+> Two further services are used only in the merchant dashboard, which is not
+> part of this app: OpenRouteService (delivery route optimisation) and
+> Anthropic Claude (assisted copywriting for merchants' own product texts).
+>
+> The app contains no third-party advertising, no analytics SDK and no user
+> tracking, which matches our App Privacy declaration.
+
+### 5. Regional differences
+
+> There are none. The app is distributed in Belgium only, in French only, and
+> every feature behaves identically for every user. Availability is set to
+> Belgium alone in App Store Connect.
+
+### 6. Regulated industry or protected material
+
+> Yoppaa does not operate in a regulated industry and uses no protected
+> third-party material.
+>
+> - Payments: Yoppaa never holds customer funds. All payments are processed by
+>   Stripe, the licensed payment institution, and merchants are paid directly
+>   through Stripe Connect.
+> - Alcohol: a grocery merchant may list alcoholic drinks among ordinary
+>   products, but the app contains no alcohol-related content, no depiction or
+>   promotion of consumption, and no age-restricted section. This is why the
+>   rating is 4+.
+> - All shop names, photos and product descriptions are supplied by the
+>   merchants themselves, who accept our terms of service before publishing.
+> - Avcotech SRL is registered in Belgium under company number 0731.637.148.
+>   Our trader status was verified by Apple on 19 September 2026 under the
+>   Digital Services Act.

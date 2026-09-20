@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { postPro } from '@/lib/fetch-pro'
 import { supabase } from '@/lib/supabase'
 import {
-  canDo, getIaConfig, getPlanLabel, getPrixPlan, isAlimentaire,
+  canDo, getIaConfig, getPlanLabel, getPrixPlan, prixTTC, isAlimentaire,
   // ⚠️ `peut` APPLIQUE LA CATÉGORIE, `planEffectif` NON, ET LA NUANCE COÛTE
   // CHER. La matrice réserve `commande` à l'alimentaire, alors que toute
   // l'application l'accorde aussi au détail et au salon qui vendent leurs
@@ -13297,6 +13297,203 @@ function OngletAEteFerme({ titre, message, action, onAction, T }) {
   )
 }
 
+// ⚠️ LA FIN D'ESSAI EST UN HORODATAGE ISO COMPLET (« …T…Z »), pas une date
+// seule. Y concaténer 'T12:00:00', comme le faisait le formateur des emails,
+// donnait une « Invalid Date » : le défaut est déjà corrigé dans `formatDateFr`
+// et il n'a pas à être refait ici.
+const DATE_LONGUE_COMPTE = new Intl.DateTimeFormat('fr-FR', {
+  day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Brussels',
+})
+function dateLongue(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return DATE_LONGUE_COMPTE.format(d).replace(/^1 /, '1er ')
+}
+
+// Le nombre de jours entiers d'ici là. `null` quand on ne sait pas, et on ne
+// prétend pas savoir : un rappel accroché à une date illisible inquiéterait
+// sans rien apprendre, et il s'afficherait pour toujours.
+function joursJusqua(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return Math.ceil((d.getTime() - Date.now()) / 86400000)
+}
+
+// ─── MON COMPTE : CE QU'IL PAIE, ET JUSQU'À QUAND ───────────────────────────
+// 🔴 « NULLE PART LE COMMERÇANT NE VOIT SON FORFAIT, SA PÉRIODE DE GRATUITÉ,
+// SON PROFIL DE CONNEXION. IL NE SAIT PAS GÉRER SON FORFAIT NI LE BASCULEMENT.
+// UN JOYEUX BORDEL » (Alex, 10/09).
+//
+// ⚠️ ET LA PAGE EXISTAIT DÉJÀ, COMPLÈTE. `/dashboard/abonnement` porte les
+// formules, la date de fin d'essai et le portail Stripe depuis des semaines :
+// elle n'était RELIÉE À RIEN. On n'y arrivait que par le bandeau d'essai, par
+// une fonction verrouillée, ou par un email de relance qu'il faut avoir reçu.
+// Celui qui se demandait « où je vois mon abonnement » n'avait aucune réponse,
+// et c'est la question que tous posent dans les premiers jours.
+//
+// ⚠️ CET ONGLET N'A PAS DE `feature`, ET C'EST VOLONTAIRE. Savoir ce qu'on paie
+// ne se mérite pas : celui qui est en Exister y lit qu'il ne paie rien, celui
+// dont l'essai se termine y lit la date. Un cadenas ici serait absurde.
+function TabMonCompte({ commercant, toast }) {
+  const [portail, setPortail] = useState(false)
+
+  const plan = commercant?.plan || 'exister'
+  const exempt = commercant?.billing_exempt === true
+  const statut = commercant?.subscription_status || null
+  const enEssai = statut === 'trialing'
+  const enRetard = statut === 'past_due'
+  const abonne = ['active', 'trialing', 'past_due'].includes(statut || '')
+  const prix = getPrixPlan(plan)
+  const ttc = prixTTC(prix?.mensuel)
+
+  // ⚠️ LA DATE VIENT DE STRIPE, JAMAIS D'UN CALCUL LOCAL. `subscription_trial_end`
+  // est le miroir de ce que Stripe prélèvera : un texte qui devine sa date finit
+  // toujours par contredire la facture. C'est la leçon de l'offre de lancement.
+  const finEssai = dateLongue(commercant?.subscription_trial_end)
+  const prochain = dateLongue(commercant?.subscription_current_period_end)
+
+  // 🔴 LE RAPPEL DE LA CARTE, UN MOIS AVANT (todo du 10/09). Sans carte à la fin
+  // de l'essai, Stripe échoue, le cron relance, et à J+7 le commerçant bascule
+  // en Exister « sans comprendre ». Les emails existent, mais un email peut
+  // rebondir, partir en indésirable, ou être lu par quelqu'un d'autre. Le
+  // tableau de bord, lui, il l'ouvre tous les jours.
+  const joursAvantFin = joursJusqua(commercant?.subscription_trial_end)
+  const rappelCarte = enEssai && joursAvantFin !== null && joursAvantFin <= 30
+
+  async function ouvrirPortail() {
+    setPortail(true)
+    // ⚠️ `postPro` REND LA `Response`, IL NE LÈVE PAS SUR UN CODE HTTP. Un 409
+    // « aucun abonnement lié » ne déclencherait aucun `catch` : on lit le corps.
+    const res = await postPro('/api/stripe/billing/portal', { commercantId: commercant.id })
+    if (typeof res?.json !== 'function') {
+      toast(res?.sansSession ? 'Ta session a expiré, reconnecte-toi.' : 'Connexion perdue, réessaie.', 'error')
+      setPortail(false); return
+    }
+    let corps = null
+    try { corps = await res.json() } catch (e) { /* le code suffira */ }
+    if (!res.ok || !corps?.url) {
+      toast(corps?.error || `Le portail n'a pas pu s'ouvrir (erreur ${res.status}).`, 'error')
+      setPortail(false); return
+    }
+    window.location.href = corps.url
+  }
+
+  const Ligne = ({ quoi, valeur, fort = false }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '10px 0', borderBottom: `1px solid ${T.hairline}`, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 13, color: T.muted, fontWeight: 600 }}>{quoi}</span>
+      <span style={{ fontSize: 13.5, color: T.ink, fontWeight: fort ? 800 : 600, textAlign: 'right' }}>{valeur}</span>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={s.card}>
+        <h2 style={s.h2}>Ta formule</h2>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <span style={{ fontSize: 26, fontWeight: 900, color: T.ink, letterSpacing: '-0.5px' }}>{getPlanLabel(plan)}</span>
+          {exempt && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Partenariat</span>}
+          {!exempt && enEssai && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Essai en cours</span>}
+          {!exempt && statut === 'active' && <span style={{ ...s.tag, background: '#ECFDF5', color: '#065F46' }}>Actif</span>}
+          {!exempt && enRetard && <span style={{ ...s.tag, background: '#FEF2F2', color: '#B91C1C' }}>Paiement en attente</span>}
+        </div>
+
+        {exempt ? (
+          <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: 0 }}>
+            Tu as un accès gratuit au titre du partenariat de lancement. Rien ne t&rsquo;est facturé.
+            Quand tu voudras passer à une formule payante, écris-nous à{' '}
+            <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
+          </p>
+        ) : (
+          <>
+            {/* ⚠️ LE MONTANT TTC EST CELUI QU'IL VERRA SUR SON RELEVÉ. « HTVA »
+                est du vocabulaire de comptable ; le chiffre est celui de tout
+                le monde, et c'est lui qu'on compare à une ligne de banque. */}
+            <Ligne quoi="Ce que ça coûte" fort valeur={
+              prix?.mensuel ? `${euros(prix.mensuel)} HTVA par mois, soit ${euros(ttc)} TVA comprise` : 'Gratuit à vie'
+            } />
+            {finEssai && <Ligne quoi="Offert jusqu’au" valeur={`${finEssai} inclus`} fort />}
+            {!enEssai && prochain && <Ligne quoi="Prochain prélèvement" valeur={prochain} />}
+            <Ligne quoi="Engagement" valeur="Aucun, tu résilies quand tu veux" />
+          </>
+        )}
+      </div>
+
+      {/* 🔴 LE RAPPEL QUI ÉVITE LA BASCULE SUBIE. Il dit la date, le montant, et
+          le geste, parce qu'un rappel sans geste ne fait qu'inquiéter. */}
+      {rappelCarte && (
+        <div style={{ ...s.card, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+          <h2 style={{ ...s.h2, color: '#92400E', marginBottom: 8 }}>Pense à ton moyen de paiement</h2>
+          <p style={{ fontSize: 13, color: '#78350F', lineHeight: 1.6, margin: '0 0 14px' }}>
+            Ton essai se termine le <strong>{finEssai}</strong>. Sans moyen de paiement enregistré d&rsquo;ici là,
+            le premier prélèvement de {euros(ttc)} échouera et tu repasseras en Exister : tu garderais ta fiche,
+            mais tu perdrais les fonctions de {getPlanLabel(plan)}.
+          </p>
+          <button onClick={ouvrirPortail} disabled={portail} style={{ ...s.btn, ...s.btnPrimary, opacity: portail ? 0.6 : 1 }}>
+            {portail ? 'Ouverture…' : 'Enregistrer ma carte'}
+          </button>
+        </div>
+      )}
+
+      {enRetard && (
+        <div style={{ ...s.card, background: '#FEF2F2', border: '1px solid #FCA5A5' }}>
+          <h2 style={{ ...s.h2, color: '#B91C1C', marginBottom: 8 }}>Un paiement n’est pas passé</h2>
+          <p style={{ fontSize: 13, color: '#7F1D1D', lineHeight: 1.6, margin: '0 0 14px' }}>
+            Ta fiche et tes clients ne bougent pas. Mets ton moyen de paiement à jour pour garder
+            les fonctions de {getPlanLabel(plan)}.
+          </p>
+          <button onClick={ouvrirPortail} disabled={portail} style={{ ...s.btn, ...s.btnPrimary, opacity: portail ? 0.6 : 1 }}>
+            {portail ? 'Ouverture…' : 'Mettre à jour mon paiement'}
+          </button>
+        </div>
+      )}
+
+      <div style={s.card}>
+        <h2 style={s.h2}>Tes paiements et tes factures</h2>
+        {abonne && !exempt ? (
+          <>
+            <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: '0 0 14px' }}>
+              Ta carte, tes factures, ton changement de formule et ta résiliation se gèrent dans
+              l&rsquo;espace sécurisé de Stripe, notre prestataire de paiement.
+            </p>
+            <button onClick={ouvrirPortail} disabled={portail} style={{ ...s.btn, ...s.btnPrimary, opacity: portail ? 0.6 : 1 }}>
+              {portail ? 'Ouverture…' : 'Gérer mon abonnement'}
+            </button>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: '0 0 14px' }}>
+              {exempt
+                ? 'Aucune facture tant que ton partenariat court.'
+                : 'Tu n’as pas encore d’abonnement payant, donc aucune facture ni moyen de paiement à gérer.'}
+            </p>
+            {!exempt && (
+              <a href="/dashboard/abonnement" style={{ ...s.btn, ...s.btnPrimary, textDecoration: 'none' }}>
+                Voir les formules
+              </a>
+            )}
+          </>
+        )}
+      </div>
+
+      <div style={s.card}>
+        <h2 style={s.h2}>Ton accès</h2>
+        <Ligne quoi="Email de connexion" valeur={commercant?.email || '—'} />
+        {/* ⚠️ ON DIT CE QU'ON NE SAIT PAS ENCORE FAIRE, ET PAR OÙ PASSER. Un
+            écran qui affiche une information sans dire comment la changer
+            laisse chercher un bouton qui n'existe pas. */}
+        <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6, margin: '14px 0 0' }}>
+          Pour changer ton email de connexion ou ton mot de passe, écris-nous à{' '}
+          <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>,
+          on s&rsquo;en occupe.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onOngletChange = null }) {
   const [tab, setTab] = useState(tabInitial)
   // L'endroit précis où déposer le commerçant dans le Profil, quand un autre
@@ -13596,6 +13793,16 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // Accompagnement sur place et matériel : accessible à tout moment, plus
     // seulement à l'inscription (l'étape 5 le promettait déjà).
     { id: 'accompagnement', label: 'Accompagnement', icon: 'box' },
+
+    // ── CE QU'IL PAIE ───────────────────────────────────────────────────
+    // 🔴 IL N'Y AVAIT AUCUNE PORTE. La page d'abonnement existait, complète, et
+    // on n'y arrivait que par le bandeau d'essai, une fonction verrouillée ou
+    // un email de relance. « Où je vois mon abonnement » est la question des
+    // premiers jours, et elle n'avait pas de réponse.
+    // ⚠️ EN DERNIER, ET SANS `feature`. En dernier parce qu'on ne vient pas
+    // régler son commerce ici ; sans forfait parce que savoir ce qu'on paie ne
+    // se mérite pas, et qu'un cadenas sur son propre compte serait absurde.
+    { id: 'compte', label: 'Mon compte', icon: 'user' },
   ].filter(Boolean)
     // ⚠️ L'ÉTAT SE CALCULE ICI, UNE FOIS, ET LE FILTRE NE PORTE QUE SUR `null`.
     // Un onglet sans `feature` est toujours à lui (Chiffres, Profil, Avis…).
@@ -13700,6 +13907,10 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
       {tab === 'comptabilite' && peut(commercant, 'export_comptable') && <TabComptabilite commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} ancre={ancreProfil} surAncreLue={oublierAncre} onAllerA={changerOnglet} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {/* ⚠️ AUCUNE CONDITION DE FORFAIT ICI, contrairement aux onglets
+          au-dessus. Celui qui est en Exister doit pouvoir lire qu'il ne paie
+          rien, et celui dont l'essai se termine doit pouvoir lire la date. */}
+      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signaux' && <TabSignaux commercantId={commercantId} toast={showToast} signalementsEnAttente={signalementsEnAttente} />}
 

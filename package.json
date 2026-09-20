@@ -81,6 +81,7 @@
     "mutations:barre-categories": "node scripts/mutations-barre-categories.mjs",
     "mutations:ordre-categories": "node scripts/mutations-ordre-categories.mjs",
     "mutations:tva": "node scripts/mutations-tva-abonnement.mjs",
+    "mutations:compte": "node scripts/mutations-mon-compte.mjs",
     "controle:tva": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-tva-stripe.mjs"
   },
   "dependencies": {

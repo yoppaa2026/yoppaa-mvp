@@ -731,6 +731,98 @@ const verifie = (nom, cond, detail = '') => {
     /\{!notificationsActives && \(\s*\n?\s*<span style=\{\{ position: 'absolute', top: -3, right: -3/.test(PAGE))
 }
 
+// ═══ « MON COMPTE » : LA PORTE QUI N'EXISTAIT PAS ═════════════════════════
+// 🔴 LA PAGE D'ABONNEMENT ÉTAIT COMPLÈTE ET RELIÉE À RIEN. Ni onglet, ni menu :
+// on n'y arrivait que par le bandeau d'essai, par une fonction verrouillée, ou
+// par un email de relance qu'il faut avoir reçu. « Où je vois mon abonnement »
+// est la question des premiers jours, et elle n'avait aucune réponse.
+{
+  const brut = readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8')
+  const code = sansProse(brut.replace(/\r\n/g, '\n'))
+
+  // ⚠️ ON DÉCOUPE LA LISTE DES ONGLETS, on ne cherche pas le mot dans tout le
+  // fichier : « compte » s'y trouve partout, dans `commercant`, dans
+  // `comptabilite`, dans les phrases des écrans.
+  const iTabs = code.indexOf('const tabs = [')
+  const iFinTabs = code.indexOf('].filter(Boolean)', iTabs)
+  verifie('la barre d’onglets est là où on la cherche', iTabs >= 0 && iFinTabs > iTabs,
+    'la liste des onglets a changé de forme : les gardes suivantes ne mesurent plus rien')
+  const listeTabs = code.slice(iTabs, iFinTabs)
+
+  verifie('🔴 l’onglet « Mon compte » existe dans la barre',
+    /id: 'compte'/.test(listeTabs),
+    'la page d’abonnement redevient inatteignable depuis le tableau de bord')
+  verifie('et il porte le libellé que le commerçant cherche',
+    /label: 'Mon compte'/.test(listeTabs),
+    'le libellé a changé : il ne reconnaîtra pas l’onglet')
+
+  // 🔴 SANS `feature`, ET C'EST TOUT LE POINT. Lui en donner une le fermerait à
+  // qui n'a pas le forfait : celui qui est en Exister ne pourrait plus lire
+  // qu'il ne paie rien, et celui dont l'essai se termine ne verrait pas sa date.
+  const ligneCompte = listeTabs.split('\n').find(l => /id: 'compte'/.test(l)) || ''
+  verifie('🔴 l’onglet « Mon compte » n’est derrière aucun forfait',
+    ligneCompte.length > 0 && !/feature:/.test(ligneCompte),
+    'un cadenas est apparu sur le compte du commerçant : il ne voit plus ce qu’il paie')
+
+  // ⚠️ ET LE CONTENU NON PLUS. La barre grise un onglet, mais c'est la seconde
+  // condition qui empêche vraiment l'écran de s'afficher, le fichier le dit
+  // lui-même à propos des autres onglets.
+  const rendu = code.split('\n').find(l => /tab === 'compte'/.test(l)) || ''
+  verifie('l’écran du compte est branché', rendu.length > 0,
+    'l’onglet existe mais n’affiche rien')
+  verifie('🔴 et son contenu n’est pas conditionné par le forfait',
+    rendu.length > 0 && !/peut\(|canDo\(/.test(rendu),
+    'une garde de forfait s’est posée sur le compte du commerçant')
+
+  // ── Ce que l'écran dit, et d'où il le tient ─────────────────────────────
+  const iCompte = code.indexOf('function TabMonCompte')
+  const iFinCompte = code.indexOf('export default function ConfigDashboard')
+  verifie('l’écran du compte est là où on le cherche', iCompte >= 0 && iFinCompte > iCompte,
+    'TabMonCompte a été renommé ou déplacé : les gardes suivantes ne mesurent plus rien')
+  const corpsCompte = code.slice(iCompte, iFinCompte)
+
+  // 🔴 LA DATE VIENT DE STRIPE, JAMAIS D'UN CALCUL LOCAL. C'est la leçon de
+  // l'offre de lancement : un texte qui devine sa date contredit la facture.
+  //
+  // ⚠️ ON VISE LA LIGNE, PAS LE COMPOSANT. Cherché dans tout le corps, le nom
+  // de la colonne se trouvait aussi dans le calcul du rappel : la mutation qui
+  // faisait afficher `essai_demande_le` passait au travers, et la garde restait
+  // verte en mesurant un autre endroit. Mesuré, pas relu.
+  const ligneFinEssai = corpsCompte.split('\n').find(l => /const finEssai\s*=/.test(l)) || ''
+  verifie('la fin d’essai affichée est le miroir de Stripe',
+    /subscription_trial_end/.test(ligneFinEssai),
+    'la date affichée ne descend plus de ce que Stripe prélèvera')
+
+  // ⚠️ LE MONTANT TVA COMPRISE, parce que « HTVA » est du vocabulaire de
+  // comptable et que le commerçant compare à une ligne de son relevé.
+  verifie('le montant réellement débité est affiché',
+    /prixTTC\(/.test(corpsCompte) && /TVA comprise/.test(corpsCompte),
+    'le commerçant ne voit plus ce qui sera prélevé, seulement le montant HTVA')
+
+  // 🔴 LE RAPPEL QUI ÉVITE LA BASCULE SUBIE. Sans carte à la fin de l'essai,
+  // Stripe échoue et le cron bascule en Exister à J+7. Les emails existent,
+  // mais un email rebondit, part en indésirable, ou est lu par quelqu'un
+  // d'autre ; le tableau de bord, lui, il l'ouvre tous les jours.
+  //
+  // ⚠️ ET ON VISE SA LIGNE, pour la même raison que la date : le nom
+  // `rappelCarte` survit à un `= false`, puisqu'il reste sa propre définition
+  // et son usage dans l'écran. Un nom présent ne prouve pas une règle vivante.
+  const ligneRappel = corpsCompte.split('\n').find(l => /const rappelCarte\s*=/.test(l)) || ''
+  verifie('le rappel du moyen de paiement dépend vraiment de l’essai et de sa date',
+    /enEssai/.test(ligneRappel) && /joursAvantFin/.test(ligneRappel),
+    'plus rien ne prévient dans le tableau de bord : il ne resterait que les emails')
+  verifie('et il prévient un mois avant, pas la veille',
+    /joursAvantFin\s*<=\s*30/.test(ligneRappel),
+    'la fenêtre du rappel a changé : trop tard, il n’a plus le temps de réagir')
+
+  // 🔴 LE 200 QUI DIT NON. `postPro` rend la `Response` et ne lève pas sur un
+  // code HTTP : lire `res.ok` sans lire le corps annoncerait une réussite sur
+  // un refus, et le commerçant attendrait un portail qui ne s'ouvre jamais.
+  verifie('l’ouverture du portail lit le corps, pas seulement le code',
+    /res\.json\(\)/.test(corpsCompte) && /corps\?\.url/.test(corpsCompte),
+    'le portail annoncerait une réussite sur un refus')
+}
+
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du
 // fichier et n'annonçait donc qu'un tiers du travail.
 console.log(`\nTableau de bord : ${ok} vérifications`)

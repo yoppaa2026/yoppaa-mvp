@@ -12,7 +12,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { globalLimiter, formulairesLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
-import { envieConnue, motifAvisConnu, libelleMotifAvis } from '@/lib/signaux'
+import { envieConnue, motifAvisConnu, motifFicheConnu, libelleMotifAvis } from '@/lib/signaux'
 import { envoyerAuAdmin, emailSuggestionCommerce, emailSignalementFiche, emailSignalementAvis } from '@/lib/resend'
 
 // Prévenir l'administration, SANS jamais faire échouer le geste de l'habitant.
@@ -87,19 +87,29 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: 'cible manquante' }, { status: 400 })
       }
 
-      // 🔴 SUR UN AVIS, LA LISTE DES MOTIFS EST FERMÉE. Pour une fiche, le
-      // motif est du texte libre borné à soixante caractères, et c'est sans
-      // conséquence : la modale n'en propose que huit. Sur un contenu écrit par
-      // quelqu'un, le motif décide du traitement, et une file de modération qui
-      // reçoit des motifs inventés ne se trie plus. L'écran propose, le serveur
-      // vérifie : c'est la règle du dépôt, et une garde d'écran n'est jamais une
-      // réponse à elle seule.
+      // 🔴 LES DEUX LISTES SONT FERMÉES, ET LA BASE EN EST LA RAISON. Le motif
+      // d'une fiche était du texte libre borné à soixante caractères, alors que
+      // `signalements_type_check` n'autorise que huit valeurs : un appel direct
+      // à l'API avec un motif inventé rendait 500. Ce n'était pas exploité,
+      // puisque la modale ne propose que ces huit, mais « pas exploité » n'est
+      // pas « fermé », et c'était une garde d'écran qui tenait toute seule.
+      // Trouvé le 20/09 en cherchant pourquoi un signalement d'avis échouait.
+      //
+      // ⚠️ L'ABSENCE DE MOTIF RESTE TOLÉRÉE SUR UNE FICHE et retombe sur
+      // « autre » : c'est le comportement d'avant, et le refuser casserait un
+      // appel qui marche aujourd'hui sans rien protéger de plus. Sur un avis,
+      // le motif décide du traitement en modération : il est exigé.
       const surUnAvis = !!body.avis_id
-      if (surUnAvis && !motifAvisConnu(body.motif)) {
+      const motifDemande = texte(body.motif, 60)
+      const connu = surUnAvis ? motifAvisConnu(motifDemande) : motifFicheConnu(motifDemande)
+      if (motifDemande && !connu) {
         return NextResponse.json({ ok: false, error: 'motif de signalement inconnu' }, { status: 400 })
       }
+      if (surUnAvis && !motifDemande) {
+        return NextResponse.json({ ok: false, error: 'motif de signalement requis' }, { status: 400 })
+      }
 
-      const motif = surUnAvis ? body.motif : (texte(body.motif, 60) || 'autre')
+      const motif = motifDemande || 'autre'
       const description = texte(body.description, 1000)
       const { error } = await supabase.from('signalements').insert({
         type: motif,

@@ -8,7 +8,7 @@
 //  - onSent  : callback succès
 
 import { useState } from 'react'
-import { envoyerSignal, TYPES_MOTIF_AVIS, MOTIFS_AVIS } from '@/lib/signaux'
+import { envoyerSignal, TYPES_MOTIF_AVIS, MOTIFS_AVIS, TYPES_MOTIF_FICHE, MOTIFS_FICHE } from '@/lib/signaux'
 import DotsAttente from '@/app/components/DotsAttente'
 import { fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 
@@ -18,17 +18,24 @@ const T = {
   hairline: '#F0EBF8', muted: '#6B7280',
 }
 
-// 8 types de signalement avec label + icône SVG.
-const TYPES = [
-  { key: 'ferme',     label: 'Fermé / disparu',    icon: '🔒' },
-  { key: 'horaires',  label: 'Horaires incorrects', icon: '🕐' },
-  { key: 'adresse',   label: 'Adresse erronée',     icon: '📍' },
-  { key: 'telephone', label: 'Téléphone faux',      icon: '📞' },
-  { key: 'articles',  label: 'Menu / articles KO',  icon: '🍞' },
-  { key: 'site_web',  label: 'Site web cassé',      icon: '🌐' },
-  { key: 'doublon',   label: 'Fiche en doublon',    icon: '👯' },
-  { key: 'autre',     label: 'Autre',               icon: '💬' },
-]
+// 🔴 LES CLÉS ET LES LIBELLÉS VIENNENT DU MODULE, PLUS DE CET ÉCRAN. Ils y
+// vivaient seuls, et le serveur acceptait à côté n'importe quel motif de
+// soixante caractères alors que la base n'en autorise que huit : trois endroits,
+// trois vérités possibles. Une liste qui ne vit que dans un composant ne peut
+// être ni vérifiée par le serveur, ni exécutée par un banc.
+//
+// ⚠️ SEULES LES ICÔNES RESTENT ICI, parce qu'elles sont de la présentation pure
+// et qu'elles n'ont rien à faire dans une règle métier. Un motif sans icône
+// s'affiche très bien : le rendu la saute.
+const ICONES_FICHE = {
+  ferme: '🔒', horaires: '🕐', adresse: '📍', telephone: '📞',
+  articles: '🍞', site_web: '🌐', doublon: '👯', autre: '💬',
+}
+const TYPES = TYPES_MOTIF_FICHE.map(key => ({
+  key,
+  label: MOTIFS_FICHE[key],
+  icon: ICONES_FICHE[key],
+}))
 
 // ─── SIGNALER UN AVIS, ET CE N'EST PAS SIGNALER UNE FICHE ───────────────────
 // 🔴 LES HUIT MOTIFS CI-DESSUS VISENT TOUS UNE DONNÉE de la fiche : horaires,

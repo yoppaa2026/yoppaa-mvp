@@ -57,8 +57,21 @@ const MUTATIONS = [
   // directement, sans passer par la modale.
   { nom: '🔴 le serveur ne verifie plus le motif : n importe quel mot entre en base',
     fichier: ROUTE,
-    de: '      if (surUnAvis && !motifAvisConnu(body.motif)) {',
+    de: '      if (motifDemande && !connu) {',
     vers: '      if (false) {' },
+
+  // 🔴 LE DECALAGE QUI A COUTE UN 500 : la base contraint `type` a une liste
+  // fermee, et le code acceptait soixante caracteres libres sur une fiche.
+  { nom: '🔴 les motifs de fiche redeviennent du texte libre, que la base refusera',
+    fichier: ROUTE,
+    de: '      const connu = surUnAvis ? motifAvisConnu(motifDemande) : motifFicheConnu(motifDemande)',
+    vers: '      const connu = surUnAvis ? motifAvisConnu(motifDemande) : true' },
+
+  // ⚠️ TROIS ENDROITS, TROIS VERITES POSSIBLES : l ecran, le serveur, la base.
+  { nom: '⚠️ la liste des motifs de fiche retourne vivre dans l ecran',
+    fichier: MODAL,
+    de: 'const TYPES = TYPES_MOTIF_FICHE.map(key => ({',
+    vers: "const TYPES = [{ key: 'autre', label: 'Autre', icon: '💬' }].map(key => ({" },
 
   { nom: '🔴 l identifiant de l avis n est plus range : la cible devient introuvable',
     fichier: ROUTE,

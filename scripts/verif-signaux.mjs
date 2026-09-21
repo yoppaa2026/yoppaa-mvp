@@ -11,6 +11,7 @@ import {
   libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail,
   LIBELLE_ENVIE, TYPES_ENVIE, envieConnue,
   MOTIFS_AVIS, TYPES_MOTIF_AVIS, motifAvisConnu, libelleMotifAvis,
+  MOTIFS_FICHE, TYPES_MOTIF_FICHE, motifFicheConnu,
   envoyerSignal, messageEchecSignal, MESSAGE_SIGNAL_RESEAU,
   ENVIE_VERS_FONCTION, fonctionDeLEnvie, envieDeLaFonction, phraseEnvieFonction,
   enviesProposables,
@@ -685,9 +686,19 @@ egal('un commerce sans code postal ne crée pas de fausse commune',
   // 🔴 ET LE SERVEUR VÉRIFIE, PAS SEULEMENT L'ÉCRAN. Une garde d'écran n'est
   // jamais une réponse à elle seule : la route est appelable directement.
   const ROUTE_AVIS = sansProse(readFileSync(new URL('../app/api/signaux/route.js', import.meta.url), 'utf8'))
-  verifier('🔴 le serveur refuse un motif inconnu sur un avis',
-    /motifAvisConnu\(body\.motif\)/.test(ROUTE_AVIS),
+  // ⚠️ CETTE GARDE VISAIT `motifAvisConnu(body.motif)`, LA FORME EXACTE, et ma
+  // refonte du 20/09 l'a périmée en passant par une variable intermédiaire. Le
+  // banc l'a dit tout de suite, mais la leçon reste : on vise la RÈGLE, pas la
+  // façon de l'écrire. Ici, que le choix de la liste dépende de la cible.
+  const ligneChoixMotif = ROUTE_AVIS.split('\n').find(l => /const connu\s*=/.test(l)) || ''
+  verifier('🔴 le serveur choisit sa liste de motifs selon la cible',
+    /surUnAvis/.test(ligneChoixMotif)
+    && /motifAvisConnu\(/.test(ligneChoixMotif)
+    && /motifFicheConnu\(/.test(ligneChoixMotif),
     'n’importe quel mot de soixante caractères entrerait en base comme motif')
+  verifier('et il refuse ce qui n’appartient pas à la liste',
+    /if \(motifDemande && !connu\)/.test(ROUTE_AVIS),
+    'le motif inconnu passerait jusqu’à la base, qui rendrait 500')
   // ⚠️ ON VISE L'INSERT, PAS LA ROUTE ENTIÈRE. Cherché partout, `avis_id:
   // body.avis_id` se trouve aussi dans l'appel à l'email : la mutation qui
   // rangeait `null` en base passait au travers, et la garde restait verte en
@@ -706,6 +717,33 @@ egal('un commerce sans code postal ne crée pas de fausse commune',
   verifier('🔴 un avis est une cible acceptée par la route',
     /!body\.commercant_id && !body\.service_id && !body\.avis_id/.test(ROUTE_AVIS),
     'tout signalement d’avis serait refusé avec « cible manquante »')
+
+  // ── LE CODE ET LA BASE DISENT LA MÊME CHOSE ─────────────────────────────
+  // 🔴 CE QUI A COÛTÉ UNE ERREUR 500 EN PRODUCTION, le 20/09 : la base contraint
+  // `signalements.type` à une liste fermée, et le code l'ignorait. Un banc qui
+  // lit du JavaScript ne voit pas une contrainte SQL ; ce qu'il PEUT voir, c'est
+  // que les listes du module sont bien celles que le serveur vérifie et que
+  // l'écran affiche. Le reste tient à la migration, et elle est passée.
+  verifier('les huit motifs de fiche sont exactement ceux que la base autorise',
+    TYPES_MOTIF_FICHE.length === 8 && TYPES_MOTIF_FICHE.every(k => typeof MOTIFS_FICHE[k] === 'string'),
+    `${TYPES_MOTIF_FICHE.length} motifs de fiche : la contrainte SQL en autorise huit, tout écart rendra 500`)
+  verifier('« autre » appartient aux deux familles',
+    motifFicheConnu('autre') && motifAvisConnu('autre'))
+  verifier('🔴 un motif de fiche inventé est refusé, comme pour les avis',
+    !motifFicheConnu('nimportequoi') && !motifFicheConnu('constructor'))
+  verifier('un motif d’avis n’est pas un motif de fiche',
+    !motifFicheConnu('haineux'),
+    'les deux familles se recouvrent : un motif de contenu passerait pour un motif de fiche')
+
+  verifier('🔴 le serveur vérifie AUSSI le motif d’une fiche',
+    /motifFicheConnu\(/.test(ROUTE_AVIS),
+    'un appel direct à l’API avec un motif inventé rendrait 500, refusé par la base')
+
+  // ⚠️ ET L'ÉCRAN LIT LA MÊME SOURCE. Tant que sa liste vivait dans le
+  // composant, trois endroits pouvaient diverger : l'écran, le serveur, la base.
+  verifier('la modale prend ses motifs de fiche dans le module',
+    /TYPES_MOTIF_FICHE\.map/.test(MODAL_AVIS),
+    'la liste est revenue vivre dans l’écran : elle peut à nouveau diverger de la base')
   verifier('un avis signalé déclenche SON email, pas celui des fiches',
     /emailSignalementAvis\(/.test(ROUTE_AVIS),
     'le modérateur lirait « signalement sur une fiche » et jugerait la mauvaise chose')

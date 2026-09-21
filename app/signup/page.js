@@ -5,7 +5,7 @@ import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import { useRouter } from 'next/navigation'
-import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan } from '@/lib/plans'
+import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan, TVA_ABONNEMENT_POURCENT } from '@/lib/plans'
 import { compresserImage } from '@/lib/compress-image'
 import { TAILLE_CONSEILLEE, avertissementTaille, refusFichierImage, mesurerFichierImage } from '@/lib/image-qualite'
 import { logoProvisoireSvg, propositionsLogo } from '@/lib/logo-provisoire'
@@ -657,8 +657,17 @@ function Etape1Compte({ session, commercant, onCompte }) {
             <CardPlan key={p} plan={p} categorie={categorie} actif={plan === p} onClick={() => setPlan(p)}/>
           ))}
         </div>
+        {/* 🔴 ELLE PARLAIT DE PAIEMENT PILE AU MOMENT DE L'HÉSITATION (21/09).
+            « La TVA sera ajoutée au moment du paiement » se lisait juste sous
+            les trois cartes, à l'instant précis où le commerçant se demande si
+            ça va lui coûter quelque chose. Le fait est vrai et doit rester,
+            mais il se DATE : la TVA arrive sur la première facture, donc après
+            l'essai. Et « selon ton statut et ton pays » était du bruit, Yoppaa
+            n'ouvre qu'en Belgique. Le taux vient de `lib/plans.js`, source
+            unique, jamais d'un 21 écrit à la main. */}
         <p style={{ fontSize: 11, color: T.muted, marginTop: 14, lineHeight: 1.5, textAlign: 'center' }}>
-          Tous les tarifs sont HTVA. La TVA applicable sera ajoutée au moment du paiement selon ton statut et ton pays.
+          Tous les tarifs sont HTVA. La TVA belge de {TVA_ABONNEMENT_POURCENT} % s’ajoutera sur la première facture,
+          après l’essai.
         </p>
       </Card>
 
@@ -3201,6 +3210,22 @@ function CategorieCard({ actif, onClick, titre, sous, exemples, Icon }) {
   )
 }
 
+// 🔴 CE QUI TUE LA PEUR, ET C'EST LA PHRASE LA PLUS IMPORTANTE DE L'ÉCRAN.
+// Constat d'Alex le 21/09 : « ils veulent du Vendre offert jusqu'au 8 janvier
+// mais ils choisissent Exister de peur que ça ne soit pas gratuit ». Leur peur
+// était infondée et c'est CET écran qui la fabriquait : seule la carte Exister
+// portait « Aucune information de paiement demandée », donc par contraste les
+// deux autres avaient l'air d'en demander une. Aucune carte n'est demandée sur
+// aucun des trois, ni ici ni au tableau de bord (`payment_method_collection:
+// 'if_required'`).
+//
+// ⚠️ ELLE NOMME LA SORTIE, ET C'EST TOUT LE SUJET. « Sans engagement,
+// résiliable en 1 clic » est du vocabulaire d'abonnement : il suppose justement
+// l'abonnement qui fait peur. Ce qui rassure, c'est de savoir ce qui arrive si
+// on ne veut plus : on repasse en Exister, et la fiche reste. C'est exactement
+// ce que fait `cron/billing-relances` après ses trois relances.
+const NOTE_SANS_CARTE = 'Aucune carte demandée. À la fin de l\'essai, tu décides : tu continues, ou tu repasses en Exister et tu gardes ta fiche.'
+
 // Cards plan refondues 16/06 (S1) : 3 paliers Yoppaa avec features cohérentes
 // avec lib/plans.js (source unique). Features varient légèrement selon la
 // catégorie pour les plans "Vendre" (RDV vs Click&Collect).
@@ -3239,7 +3264,7 @@ function CardPlan({ plan, categorie, actif, onClick }) {
         'Push ciblés aux Yoppers favoris',
         'Un assistant qui rédige tes textes à ta place',
       ],
-      note: 'Sans engagement, résiliable en 1 clic',
+      note: NOTE_SANS_CARTE,
     },
     vendre: {
       tagline: 'Pour transactionner et fidéliser',
@@ -3251,7 +3276,7 @@ function CardPlan({ plan, categorie, actif, onClick }) {
         'Paiement en ligne, sans commission Yoppaa',
         `Carte de fidélité, ${libelleBon(categorie, { pluriel: true })}, export comptable`,
       ],
-      note: 'Sans engagement, résiliable en 1 clic',
+      note: NOTE_SANS_CARTE,
     },
   }
   const cfg = PLAN_CONFIG[plan]
@@ -3279,8 +3304,18 @@ function CardPlan({ plan, categorie, actif, onClick }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 900, fontSize: 20, letterSpacing: '-0.4px' }}>{label}</span>
+        {/* 🔴 LE PRIX S'EFFACE TANT QUE L'ESSAI COURT (21/09). Il s'affichait en
+            16 px poids 900, et « Offert jusqu'au 8 janvier » en 11 px sous la
+            tagline : l'œil tombait sur 49,90 € et jamais sur l'offre. Le mot
+            « puis » fait tout le travail, parce qu'il dit à lui seul que ce
+            n'est pas maintenant. Le montant reste lisible, il n'est pas caché :
+            une offre qui masque son prix se paie en méfiance. */}
         {p.mensuel === 0 ? (
           <span style={{ fontSize: 13, fontWeight: 800, color: actif ? T.light : T.main }}>Gratuit à vie</span>
+        ) : cfg.essai ? (
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: actif ? T.light : T.muted }}>
+            puis {euros(p.mensuel)} HTVA/mois
+          </span>
         ) : (
           <span style={{ fontSize: 16, fontWeight: 900, color: actif ? '#fff' : T.ink }}>
             {euros(p.mensuel)}<span style={{ fontSize: 11, fontWeight: 600, color: actif ? T.light : T.muted, marginLeft: 2 }}>HTVA/mois</span>
@@ -3292,12 +3327,14 @@ function CardPlan({ plan, categorie, actif, onClick }) {
         {cfg.tagline}
       </p>
 
+      {/* La pastille prend la place que le prix occupait : c'est elle que le
+          commerçant doit lire en premier sur un forfait payant. */}
       {cfg.essai && (
         <p style={{
-          fontSize: 11, fontWeight: 800,
+          fontSize: 12.5, fontWeight: 800,
           color: actif ? '#fff' : '#065F46',
           background: actif ? 'rgba(255,255,255,0.12)' : '#ECFDF5',
-          padding: '4px 9px', borderRadius: 100, display: 'inline-block',
+          padding: '5px 11px', borderRadius: 100, display: 'inline-block',
           margin: '0 0 10px', letterSpacing: '0.3px',
         }}>{estRegimeLancement()
           ? `Offert jusqu'au ${libelleDernierJourGratuit()}`
@@ -3319,7 +3356,18 @@ function CardPlan({ plan, categorie, actif, onClick }) {
         ))}
       </ul>
 
-      <p style={{ fontSize: 10.5, color: actif ? 'rgba(255,255,255,0.65)' : T.muted, margin: 0, fontStyle: 'italic' }}>
+      {/* ⚠️ LA NOTE DU FORFAIT PAYANT N'EST PAS UNE NOTE DE BAS DE PAGE. En
+          10,5 px gris italique, la seule phrase qui lève l'hésitation se lisait
+          comme une mention légale, donc ne se lisait pas. Elle garde sa place,
+          elle change de poids. Celle d'Exister reste discrète : elle confirme
+          une gratuité que personne ne met en doute. */}
+      <p style={{
+        fontSize: cfg.essai ? 11.5 : 10.5,
+        color: actif ? (cfg.essai ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.65)') : (cfg.essai ? T.deep : T.muted),
+        fontWeight: cfg.essai ? 600 : 400,
+        fontStyle: cfg.essai ? 'normal' : 'italic',
+        lineHeight: 1.45, margin: 0,
+      }}>
         {cfg.note}
       </p>
     </button>

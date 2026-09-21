@@ -360,6 +360,61 @@ function sansCommentaires(src) {
   verifier('le taux affiché vient de la constante, pas d’un nombre recopié',
     /TVA_ABONNEMENT_POURCENT/.test(codePage) && !/\b21\s*%/.test(codePage),
     'un taux est écrit en dur dans la page au lieu de descendre de lib/plans.js')
+
+  // ── AUCUNE CARTE DEMANDÉE, NULLE PART (décision d'Alex, 21/09) ──────────
+  // 🔴 C'EST UNE GARDE CONTRE UNE ABSENCE, et c'est le pire genre de défaut.
+  // Sans `payment_method_collection`, Stripe collecte la carte PAR DÉFAUT en
+  // mode abonnement. Retirer cette ligne ne casse rien, ne lève rien, ne
+  // s'aperçoit nulle part dans le code : le formulaire redemande simplement
+  // une carte, et les commerçants recommencent à reculer devant Vendre.
+  //
+  // ⚠️ ET ON VISE LA TRANCHE CHECKOUT, PAS LE FICHIER. Posée dans la voie KYB,
+  // qui n'affiche aucun formulaire, l'option ne voudrait rien dire et une garde
+  // qui balaie tout le fichier la trouverait quand même. Une seule garde, à
+  // l'endroit exact, plutôt que deux dont une se contente de la présence.
+  verifier('le Checkout ne réclame pas de carte tant que l’essai couvre la période',
+    /payment_method_collection:\s*'if_required'/.test(codeBilling.slice(iCheckout, iKyb)),
+    'Stripe redemandera un moyen de paiement à la montée de forfait, alors que la même montée à l’inscription n’en demande aucun')
+
+  // ⚠️ L'ADRESSE, ELLE, RESTE EXIGÉE. La décision retire la CARTE, elle ne
+  // vide pas le formulaire : une facture belge doit porter l'adresse du client.
+  verifier('l’adresse de facturation reste demandée',
+    /billing_address_collection:\s*'required'/.test(codeBilling),
+    'les factures partiraient sans l’adresse du client, que la loi belge exige')
+
+  // ── L'ÉCRAN D'INSCRIPTION NE FABRIQUE PLUS LA PEUR ──────────────────────
+  // 🔴 CONSTAT D'ALEX, 21/09 : ils veulent Vendre et choisissent Exister « de
+  // peur que ça ne soit pas gratuit ». Seule la carte Exister portait « Aucune
+  // information de paiement demandée » ; par contraste, les deux autres
+  // avaient l'air d'en réclamer une. La note des forfaits payants doit dire
+  // les DEUX choses : pas de carte, et ce qui arrive s'il ne continue pas.
+  const codeSignup = sansProse(lire('app/signup/page.js').replace(/\r\n/g, '\n'))
+  const notesSansCarte = (codeSignup.match(/note:\s*NOTE_SANS_CARTE/g) || []).length
+  verifier('les DEUX forfaits payants portent la note qui lève la peur', notesSansCarte === 2,
+    `${notesSansCarte} forfait(s) sur 2 la portent : celui qui ne l’a pas continuera de faire reculer`)
+  verifier('la note dit qu’aucune carte n’est demandée',
+    /Aucune carte demandée/.test(codeSignup),
+    'retour au vocabulaire d’abonnement, qui suppose justement l’abonnement qui fait peur')
+  verifier('la note nomme la SORTIE, pas seulement l’absence de carte',
+    /repasses en Exister/.test(codeSignup) && /gardes ta fiche/.test(codeSignup),
+    'sans la sortie nommée, « aucune carte » se lit comme un piège à retardement')
+
+  // 🔴 ET LE PRIX NE REPREND PAS LE DESSUS. Il s'affichait en 16 px poids 900
+  // pendant que l'offre tenait en 11 px sous la tagline : l'œil tombait sur
+  // 49,90 € et jamais sur ce qui le rend gratuit. Le mot « puis » porte toute
+  // la nuance, donc c'est lui qu'on mesure.
+  verifier('le prix d’un forfait en essai est annoncé par « puis »',
+    /puis \{euros\(p\.mensuel\)\}/.test(codeSignup),
+    'le montant est redevenu l’élément fort de la carte, devant l’offre qui l’annule')
+
+  // ⚠️ ET LA PHRASE SUR LA TVA NE BRANDIT PLUS UN PAIEMENT SOUS LES CARTES :
+  // elle le DATE. Même règle que la page d'abonnement pour le taux.
+  verifier('la TVA est datée, pas brandie au moment de l’hésitation',
+    !/au moment du paiement/.test(codeSignup) && /première facture/.test(codeSignup),
+    'la phrase annonce un paiement à l’instant précis où le commerçant se demande si ça va lui coûter quelque chose')
+  verifier('le taux de l’inscription descend de lib/plans.js',
+    /TVA_ABONNEMENT_POURCENT/.test(codeSignup) && !/\b21\s*%/.test(codeSignup),
+    'un taux écrit en dur dans l’inscription finira par contredire la facture')
 }
 
 // ═══ 3. LES TEXTES : AUCUNE DATE ÉCRITE EN DUR ═══════════════════════════

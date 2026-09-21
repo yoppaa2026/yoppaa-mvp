@@ -29,6 +29,7 @@ const BILLING = 'lib/stripe-billing.js'
 const PAGE    = 'app/dashboard/abonnement/page.js'
 const SMS     = 'app/api/fidelite/sms-packs/checkout/route.js'
 const SHOP    = 'app/api/accompagnement/checkout/route.js'
+const SIGNUP  = 'app/signup/page.js'
 
 const MUTATIONS = [
   // ─── LE CALCUL ──────────────────────────────────────────────────────────
@@ -156,6 +157,69 @@ const MUTATIONS = [
     fichier: PAGE,
     de: '          soit {euros(ttc)} TVA comprise',
     vers: '          soit {euros(ttc)} hors taxes' },
+
+  // ─── AUCUNE CARTE NULLE PART (decision d Alex, 21/09) ───────────────────
+  //
+  // 🔴 CE LOT MESURE UNE ABSENCE, ET C EST LE PIRE GENRE DE DEFAUT. Stripe
+  // collecte un moyen de paiement PAR DEFAUT en mode abonnement, essai ou pas.
+  // Retirer la ligne ne casse rien, ne leve rien, ne s apercoit nulle part :
+  // le formulaire redemande simplement une carte, et les commercants
+  // recommencent a choisir Exister par peur. D ou la mutation qui remet la
+  // valeur par defaut REELLE de Stripe plutot qu une valeur inventee.
+  { nom: '🔴 LE DEFAUT D ORIGINE : le Checkout redemande une carte, et rien ne le dit',
+    fichier: BILLING,
+    de: "payment_method_collection: 'if_required',",
+    vers: "payment_method_collection: 'always'," },
+
+  // ⚠️ LA DECISION RETIRE LA CARTE, ELLE NE VIDE PAS LE FORMULAIRE : une
+  // facture belge doit porter l adresse du client.
+  { nom: '🔴 l adresse de facturation cesse d etre exigee : les factures partent incompletes',
+    fichier: BILLING,
+    de: "billing_address_collection: 'required',",
+    vers: "billing_address_collection: 'auto'," },
+
+  // ─── L ECRAN QUI FABRIQUAIT LA PEUR ─────────────────────────────────────
+  //
+  // 🔴 CONSTAT D ALEX : « ils veulent du vendre offert jusqu au 8 janvier mais
+  // ils choisissent Exister de peur que ca ne soit pas gratuit ». Trois
+  // commercants reels (Le Bistrologue, Iconic, Mozz Art) l ont fait.
+  //
+  // ⚠️ ON MUTE UNE SEULE DES DEUX NOTES, et c est tout l interet : une garde
+  // qui CHERCHE la phrase la trouverait sur l autre forfait et resterait verte.
+  // C est le piege du mot trouve ailleurs, attrape en COMPTANT.
+  { nom: '🔴 un seul des deux forfaits payants porte la note : l autre continue de faire reculer',
+    fichier: SIGNUP,
+    de: 'note: NOTE_SANS_CARTE,',
+    vers: "note: 'Sans engagement, résiliable en 1 clic'," },
+
+  { nom: '🔴 la note repasse au vocabulaire d abonnement, qui suppose l abonnement qui fait peur',
+    fichier: SIGNUP,
+    de: 'Aucune carte demandée.',
+    vers: 'Sans engagement.' },
+
+  // 🔴 SANS LA SORTIE NOMMEE, « aucune carte » se lit comme un piege : il
+  // manque ce qui arrive s il ne veut pas continuer.
+  { nom: '🔴 la sortie n est plus nommee : il ne sait plus qu il garderait sa fiche',
+    fichier: SIGNUP,
+    de: 'tu repasses en Exister et tu gardes ta fiche',
+    vers: 'tu peux résilier en un clic' },
+
+  { nom: '🔴 le prix reprend le dessus : l oeil retombe sur le montant au lieu de l offre',
+    fichier: SIGNUP,
+    de: 'puis {euros(p.mensuel)} HTVA/mois',
+    vers: '{euros(p.mensuel)} HTVA/mois' },
+
+  { nom: '🔴 LA PHRASE D ORIGINE REVIENT : un paiement brandi au moment de l hesitation',
+    fichier: SIGNUP,
+    de: 's’ajoutera sur la première facture',
+    vers: 's’ajoutera au moment du paiement' },
+
+  // ⚠️ MEME PIEGE QUE SUR LA PAGE D ABONNEMENT : le nom de la constante reste
+  // dans l import, donc une garde qui se contente de le chercher reste verte.
+  { nom: '🔴 le taux de l inscription est recopie en dur, il cessera de suivre la facture',
+    fichier: SIGNUP,
+    de: 'de {TVA_ABONNEMENT_POURCENT} %',
+    vers: 'de 21 %' },
 ]
 
 const lancer = () => {

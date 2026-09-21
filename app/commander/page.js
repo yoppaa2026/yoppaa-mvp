@@ -3143,7 +3143,23 @@ export default function Commander() {
     if (!adresse.trim()) return
     setGeoLoading(true)
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(adresse)}&format=json&limit=1&accept-language=fr`, { headers: { 'Accept': 'application/json' } })
+      // 🔴 `countrycodes=be` MANQUAIT ICI, ET NULLE PART AILLEURS (21/09). C'était
+      // le SEUL appel à Nominatim du dépôt sans filtre pays : `ChampAdresse.js`
+      // et `lib/geocode.js` le posent tous les deux, et `geocode.js:9` explique
+      // même pourquoi.
+      //
+      // ⚠️ ET C'EST NOTRE PROPRE NOTE DE REVUE QUI TOMBAIT DEDANS. Elle dit au
+      // relecteur « tap the location field and enter Mettet or 5640 ». Sans
+      // filtre, « 5640 » rend « 5640, Campoona, Australie méridionale » :
+      // 16 000 km, toutes les distances fausses, et « Rien ne se perd » vide
+      // puisqu'il filtre à 25 km. Soit exactement l'écran « app incomplète »
+      // dont cette note devait le protéger, provoqué par la note elle-même.
+      // Mesuré le 21/09 en rejouant la requête : avec le filtre, « 5640 » rend
+      // bien « 5640, Mettet, Namur, Wallonie ».
+      //
+      // ⚠️ Un nom de ville en toutes lettres marchait, un code postal non : le
+      // défaut ne se voyait donc qu'en tapant ce que la note conseille.
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(adresse)}&format=json&limit=1&accept-language=fr&countrycodes=be`, { headers: { 'Accept': 'application/json' } })
       if (res.ok) {
         const data = await res.json()
         if (data && data.length > 0) {

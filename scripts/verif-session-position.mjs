@@ -707,6 +707,74 @@ function egale(nom, recu, attendu) {
     /if \(errSortie\) await supabase\.auth\.signOut\(\{ scope: 'local' \}\)/.test(suppr))
 }
 
+// ═══ CHERCHER UNE ADRESSE NE SORT PAS DE BELGIQUE ══════════════════════════
+//
+// 🔴 LE DÉFAUT DU 21/09, ET C'EST NOTRE PROPRE NOTE DE REVUE QUI TOMBAIT DEDANS.
+// `geocoderAdresseManuelle` interrogeait Nominatim SANS `countrycodes=be` :
+// c'était le seul appel du dépôt dans ce cas. Or la note envoyée à Apple et à
+// Google dit « tap the location field and enter Mettet or 5640 ». Sans filtre,
+// « 5640 » rend « 5640, Campoona, Australie méridionale » : 16 000 km, toutes
+// les distances fausses, et « Rien ne se perd » vide puisqu'il filtre à 25 km.
+// Soit l'écran « app incomplète » exact dont la note devait protéger, provoqué
+// par la note elle-même, pendant un dossier 2.1 encore ouvert.
+//
+// ⚠️ ET ÇA NE SE VOYAIT QU'EN TAPANT UN CODE POSTAL : « Mettet » en toutes
+// lettres trouvait la bonne commune. Le seul essai qui échouait était celui que
+// notre note conseille.
+//
+// 🔴 LA GARDE VISE LA FAMILLE, PAS LA LIGNE. Elle cherche TOUS les appels de
+// recherche Nominatim du dépôt et exige le filtre sur chacun : un quatrième
+// géocodeur ajouté demain sans filtre rougira, au lieu de rouvrir ce trou.
+// ⚠️ Les appels `/reverse` sont exclus À DESSEIN : on leur donne des
+// coordonnées et ils rendent une adresse, un filtre pays n'y veut rien dire.
+{
+  const FICHIERS = [
+    'app/commander/page.js',
+    'app/components/ChampAdresse.js',
+    'lib/geocode.js',
+    'app/commander/ConfirmCommune.js',
+  ]
+  let recherches = 0
+  for (const chemin of FICHIERS) {
+    const src = readFileSync(chemin, 'utf8').replace(/\r\n/g, '\n')
+    // ⚠️ DEUX FORMES D'APPEL, ET MA PREMIÈRE VERSION N'EN VOYAIT QU'UNE. L'URL
+    // est écrite en dur dans `page.js`, mais `ChampAdresse.js` et `geocode.js`
+    // la rangent dans une constante et l'interpolent : la ligne d'appel ne
+    // contient alors pas un mot de « nominatim ». La garde ne mesurait qu'un
+    // appel sur trois, et c'est le COMPTEUR qui l'a dit, pas moi.
+    const constantes = [...src.matchAll(
+      /const\s+(\w+)\s*=\s*'https:\/\/nominatim\.openstreetmap\.org\/search'/g,
+    )].map(m => m[1])
+
+    // On isole chaque URL de RECHERCHE, et on la juge entière : une garde qui
+    // cherche `countrycodes` dans tout le fichier le trouverait sur l'appel
+    // voisin et laisserait celui-ci nu.
+    for (const ligne of src.split('\n')) {
+      const enDur = /nominatim\.openstreetmap\.org\/search\?/.test(ligne)
+      const parConstante = constantes.some(c => ligne.includes('${' + c + '}?'))
+      if (!enDur && !parConstante) continue
+      recherches++
+      verifie(`🔴 la recherche d’adresse reste en Belgique (${chemin})`,
+        /countrycodes=be/.test(ligne),
+        'un code postal belge peut renvoyer une ville à l’autre bout du monde, et toutes les distances avec')
+    }
+  }
+  // ⚠️ ON COMPTE EXACTEMENT, ET LE SEUIL EST CE QUI M'A EU. Ma première version
+  // disait `>= 2` pour trois appels réels : renommer une constante en faisait
+  // disparaître un, le compte tombait à deux, et la garde restait verte. Le
+  // piège du seuil confortable, déjà vécu le 20/09 avec un `> 5` qu'un mot de
+  // cinq lettres traversait.
+  //
+  // ⚠️ ET LE COMPTE EXACT EST VOULU : la liste de fichiers ci-dessus est écrite
+  // à la main, donc un quatrième géocodeur, même correctement filtré, doit
+  // faire rougir pour qu'on pense à l'ajouter ici. Une garde qui s'adapte
+  // toute seule à ce qu'elle trouve ne garde plus rien.
+  const ATTENDUS = 3
+  verifie('⚠️ les trois appels de recherche sont bien là où on les cherche',
+    recherches === ATTENDUS,
+    `${recherches} appel(s) trouvé(s), attendu ${ATTENDUS} : un géocodeur a été ajouté, déplacé ou renommé, relis la liste FICHIERS`)
+}
+
 console.log(`\nSession + position : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

@@ -141,6 +141,43 @@ const MUTATIONS = [
     fichier: 'app/commander/SupprimerCompte.js',
     de: "        if (errSortie) await supabase.auth.signOut({ scope: 'local' }).catch(() => {})",
     vers: '        void errSortie' },
+
+  // ─── CHERCHER UNE ADRESSE NE SORT PAS DE BELGIQUE (21/09) ───────────────
+  //
+  // 🔴 LE DEFAUT D ORIGINE, TROUVE PAR UN AUDIT ET CAUSE PAR NOTRE PROPRE NOTE
+  // DE REVUE. Elle dit au relecteur « tap the location field and enter Mettet
+  // or 5640 ». Sans `countrycodes=be`, « 5640 » rend « 5640, Campoona,
+  // Australie meridionale » : 16 000 km, toutes les distances fausses, et
+  // « Rien ne se perd » vide puisqu il filtre a 25 km. L ecran « app
+  // incomplete » exact dont la note devait proteger.
+  //
+  // ⚠️ « Mettet » en toutes lettres marchait : seul le code postal echouait,
+  // c est-a-dire l essai que la note conseille.
+  { nom: '🔴 LE DEFAUT D ORIGINE : un code postal belge peut renvoyer en Australie',
+    fichier: ACCUEIL,
+    de: "&accept-language=fr&countrycodes=be`, { headers: { 'Accept': 'application/json' } })",
+    vers: "&accept-language=fr`, { headers: { 'Accept': 'application/json' } })" },
+
+  // ⚠️ LES DEUX FRERES, qui filtrent depuis toujours. La garde vise la
+  // FAMILLE : un geocodeur ajoute demain sans filtre doit rougir aussi.
+  { nom: '🔴 le champ d adresse partage sort de Belgique',
+    fichier: 'app/components/ChampAdresse.js',
+    de: '&accept-language=fr&countrycodes=be&addressdetails=1',
+    vers: '&accept-language=fr&addressdetails=1' },
+
+  { nom: '🔴 le geocodeur serveur sort de Belgique',
+    fichier: 'lib/geocode.js',
+    de: '&format=json&limit=1&countrycodes=be',
+    vers: '&format=json&limit=1' },
+
+  // 🔴 ET LE COMPTEUR, QUI A DEJA SERVI. Ma premiere version de la garde ne
+  // voyait qu UN appel sur trois : deux passent par une constante interpolee,
+  // et leur ligne d appel ne contient pas un mot de « nominatim ». Sans le
+  // compte, une boucle vide se serait lue « tout va bien ».
+  { nom: '🔴 la constante est renommee : la boucle se vide et la garde devient muette',
+    fichier: 'lib/geocode.js',
+    de: "const NOMINATIM = 'https://nominatim.openstreetmap.org/search'",
+    vers: "const NOMINATIM_RECHERCHE = 'https://nominatim.openstreetmap.org/search'" },
 ]
 
 const lancer = () => {

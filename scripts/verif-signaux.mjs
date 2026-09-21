@@ -744,6 +744,27 @@ egal('un commerce sans code postal ne crée pas de fausse commune',
   verifier('la modale prend ses motifs de fiche dans le module',
     /TYPES_MOTIF_FICHE\.map/.test(MODAL_AVIS),
     'la liste est revenue vivre dans l’écran : elle peut à nouveau diverger de la base')
+
+  // 🔴 LE TEMPS DE LIRE, trouvé par Alex le 21/09 en testant sur son téléphone.
+  // La confirmation se refermait au bout de 1800 ms : à cette vitesse on voit
+  // qu'un texte apparaît, on ne le lit pas. Or celui des avis annonce les deux
+  // choses qui comptent — que l'équipe relit, et que le commerçant n'est pas
+  // prévenu — et il répond à la seule question de celui qui vient de signaler :
+  // « et maintenant ? » Un message qu'on n'a pas le temps de lire vaut un
+  // message absent.
+  const ligneDelai = MODAL_AVIS.split('\n').find(l => /DELAI_FERMETURE_MS\s*=/.test(l)) || ''
+  const delai = Number((ligneDelai.match(/=\s*(\d+)/) || [])[1] || 0)
+  verifier('la confirmation laisse le temps de la lire',
+    delai >= 4000,
+    `${delai} ms : le message des avis fait une centaine de caractères, il en faut au moins 4000`)
+  // ⚠️ ON COMPTE, parce qu'on ne peut pas s'accrocher au commentaire qui
+  // désigne le bouton : `sansProse` le retire, et la garde serait verte en ne
+  // mesurant rien. Le fichier n'a plus qu'UN seul `{!done && (`, celui du
+  // formulaire. Le bouton de fermeture en portait un second, et c'est lui qui
+  // faisait disparaître la croix au moment précis où l'on veut refermer.
+  const condDone = (MODAL_AVIS.match(/\{!done && \(/g) || []).length
+  verifier('et la croix reste visible pendant la confirmation', condDone === 1,
+    `${condDone} bloc(s) conditionnés par !done, attendu 1 : le bouton de fermeture disparaît pendant la confirmation`)
   verifier('un avis signalé déclenche SON email, pas celui des fiches',
     /emailSignalementAvis\(/.test(ROUTE_AVIS),
     'le modérateur lirait « signalement sur une fiche » et jugerait la mauvaise chose')

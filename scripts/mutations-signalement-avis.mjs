@@ -119,6 +119,21 @@ const MUTATIONS = [
     de: "                  ? 'Notre équipe va relire cet avis et décider s’il doit être retiré. Le commerçant n’est pas prévenu.'",
     vers: "                  ? 'Le commerçant va recevoir ton retour.'" },
 
+  // ─── LE TEMPS DE LIRE ───────────────────────────────────────────────────
+  // 🔴 TROUVE PAR ALEX EN TESTANT SUR SON TELEPHONE le 21/09. A 1800 ms, on
+  // voit qu un texte apparait, on ne le lit pas. Le message des avis annonce
+  // les deux choses qui comptent : que l equipe relit, et que le commercant n
+  // est pas prevenu.
+  { nom: '🔴 la confirmation se referme avant qu on ait pu la lire',
+    fichier: MODAL,
+    de: 'const DELAI_FERMETURE_MS = 4500',
+    vers: 'const DELAI_FERMETURE_MS = 1800' },
+
+  { nom: '⚠️ la croix disparait pendant la confirmation : plus aucun moyen visible de refermer',
+    fichier: MODAL,
+    de: '        <button onClick={onClose} aria-label="Fermer"',
+    vers: '        {!done && (<button onClick={onClose} aria-label="Fermer"' },
+
   // ─── L ECRAN ────────────────────────────────────────────────────────────
   // ⚠️ SANS CE BOUTON, TOUT LE RESTE EST DU CODE MORT, et c est exactement ce
   // qu un relecteur Apple cherchera dans la video.

@@ -47,6 +47,17 @@ const TYPES = TYPES_MOTIF_FICHE.map(key => ({
 // double pas. Le rendu s'en passe proprement.
 const MOTIFS_POUR_AVIS = TYPES_MOTIF_AVIS.map(key => ({ key, label: MOTIFS_AVIS[key] }))
 
+// Le temps que la confirmation reste à l'écran avant de se fermer seule.
+//
+// ⚠️ CALÉ SUR LE MESSAGE LE PLUS LONG, pas sur le plus court. Celui des avis
+// annonce deux choses : que l'équipe va relire, et que le commerçant n'est pas
+// prévenu. Une centaine de caractères se lisent en quatre à cinq secondes, le
+// temps de remarquer le texte compris.
+// ⚠️ ET LA CROIX RESTE VISIBLE PENDANT CE TEMPS : qui a lu referme tout de
+// suite plutôt que d'attendre, et personne n'est prisonnier d'un compte à
+// rebours qu'il ne voit pas.
+const DELAI_FERMETURE_MS = 4500
+
 export default function ModalSignalement({ target, onClose, onSent }) {
   const surUnAvis = target?.kind === 'avis'
   const motifs = surUnAvis ? MOTIFS_POUR_AVIS : TYPES
@@ -80,7 +91,14 @@ export default function ModalSignalement({ target, onClose, onSent }) {
     }
     setDone(true)
     onSent?.()
-    setTimeout(() => { onClose?.() }, 1800)
+    // 🔴 1800 ms NE LAISSAIT PAS LE TEMPS DE LIRE (Alex, 21/09, en testant sur
+    // son téléphone). Le message des avis fait une centaine de caractères et
+    // annonce deux choses qui comptent : que l'équipe va relire, et que le
+    // commerçant n'est pas prévenu. À cette vitesse, on voit qu'un texte
+    // apparaît, on ne le lit pas. Un message qu'on n'a pas le temps de lire
+    // vaut un message absent, et celui-ci répond justement à la question que
+    // se pose quelqu'un qui vient de signaler : « et maintenant ? »
+    setTimeout(() => { onClose?.() }, DELAI_FERMETURE_MS)
   }
 
   return (
@@ -92,13 +110,15 @@ export default function ModalSignalement({ target, onClose, onSent }) {
         {/* Barre dégradée fine (design system) */}
         <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
 
-        {/* Bouton fermer */}
-        {!done && (
-          <button onClick={onClose} aria-label="Fermer"
-            style={{ position: 'absolute', top: 14, right: 14, width: 28, height: 28, border: 'none', background: T.bgPage, borderRadius: '50%', color: T.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            ×
-          </button>
-        )}
+        {/* Bouton fermer.
+            ⚠️ IL DISPARAISSAIT PENDANT LA CONFIRMATION, et il n'y avait alors
+            plus aucun moyen visible de refermer : il fallait deviner qu'un clic
+            à côté marchait, ou attendre. Il reste maintenant, pour que celui
+            qui a fini de lire n'attende pas la fin du compte à rebours. */}
+        <button onClick={onClose} aria-label="Fermer"
+          style={{ position: 'absolute', top: 14, right: 14, width: 28, height: 28, border: 'none', background: T.bgPage, borderRadius: '50%', color: T.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          ×
+        </button>
 
         <div style={{ padding: '22px 22px 20px' }}>
 

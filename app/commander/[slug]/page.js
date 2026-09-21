@@ -115,7 +115,8 @@ import HorairesSection from '../HorairesSection'
 import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
 // ⚠️ DEMANDE D'ALEX : les avis se consultent, ils ne s'imposent pas. Une note
 // globale, et le Yopper choisit s'il veut lire. La règle vit en fonction pure.
-import { resumeAvis, libelleBascule } from '@/lib/avis-affichage'
+import { resumeAvis } from '@/lib/avis-affichage'
+import BlocAvis, { Etoiles } from '../BlocAvis'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Star, Flame, Calendar, Store, Check, Phone, Heart, Share2 } from 'lucide-react'
 import { chezLeCommerce } from '@/lib/nom-commerce'
@@ -178,11 +179,6 @@ function maintenant() {
   const d = new Date()
   return d.getHours() * 60 + d.getMinutes()
 }
-function Etoiles({ note, taille = 14 }) {
-  const n = note ? Math.round(note) : 0
-  return <span style={{ display: 'inline-flex', gap: 1 }}>{[1,2,3,4,5].map(i => <Star key={i} size={taille} strokeWidth={1.6} color={i<=n ? '#F59E0B' : '#D1D5DB'} fill={i<=n ? '#F59E0B' : 'none'}/>)}</span>
-}
-
 // ─── Skeleton loader ──────────────────────────────────────────────────────────
 function Skeleton({ w = '100%', h = 16, r = 8, mb = 0 }) {
   return (
@@ -221,110 +217,6 @@ function SkeletonArticle() {
 
 // ─── Swipe retrait : version morte supprimée le 31/07 (la version vivante,
 // côté Yopper, vit dans app/commander/page.js) ────────────────────────────────
-function CarteAvis({ a }) {
-  const [ouvert, setOuvert] = useState(false)
-  // 🔴 SIGNALER UN AVIS (20/09, demandé par Apple). Les avis sont du contenu
-  // écrit par des habitants et publié sur une fiche : il faut pouvoir en
-  // signaler un. Les huit motifs du signalement de fiche ne servaient à rien
-  // ici, ils visent des données (horaires, adresse) ; la modale en propose
-  // d'autres dès qu'on lui passe `kind: 'avis'`.
-  //
-  // ⚠️ LE BOUTON N'APPARAÎT QUE SUR UNE CARTE OUVERTE, et c'est le bon moment :
-  // on signale ce qu'on vient de lire. Sur une carte repliée, le commentaire
-  // est tronqué à une ligne, et proposer de signaler un texte qu'on n'a pas lu
-  // n'appelle que des signalements à l'aveugle.
-  const [signaler, setSignaler] = useState(false)
-
-  // 🔴 LA PASTILLE « VÉRIFIÉ » NE S'EST JAMAIS AFFICHÉE, et c'est la colonne
-  // absente d'une vue pour la septième fois. Cet écran lit `avis_public`, qui
-  // fait le calcul à notre place et n'expose QUE son résultat :
-  //
-  //     commande_id IS NOT NULL AS verifie
-  //
-  // `a.commande_id` valait donc toujours `undefined`, et `!!undefined` est
-  // faux. Aucune erreur, aucun avertissement : la pastille manquait, voilà
-  // tout. Trouvé le 20/09 en regardant une capture d'Alex, où cinq avis à cinq
-  // étoiles s'affichaient sans la moindre marque de vérification — exactement
-  // ce qui fait suspecter des avis fabriqués.
-  //
-  // ⚠️ ET LA VUE NE VÉRIFIE QUE LES COMMANDES. Un avis laissé après un
-  // rendez-vous honoré est tout aussi prouvé (`/api/yopper/avis` exige l'un ou
-  // l'autre), et il restera pourtant non vérifié tant que la vue ne regarde pas
-  // `rdv_reservation_id`. Ça se corrige dans la vue, pas ici.
-  const verifie = a.verifie === true
-  return (
-    <div onClick={() => setOuvert(o => !o)}
-      style={{ background: T.bgCard, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.5rem', border: `1.5px solid ${T.pale}`, cursor: 'pointer', transition: 'all 0.15s' }}
-      onMouseOver={e => e.currentTarget.style.borderColor = T.main}
-      onMouseOut={e => e.currentTarget.style.borderColor = T.pale}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Etoiles note={a.note} taille={14}/>
-          {verifie && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 800, color: '#10B981', background: '#F0FDF4', padding: '2.5px 8px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase', border: '1px solid #BBF7D0' }}>
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-              Vérifié
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: '0.75rem', color: T.deep, fontWeight: 600 }}>{a.client?.nom || 'Client'}</span>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'transform 0.2s', transform: ouvert ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-            <path d="M6 9l6 6 6-6"/>
-          </svg>
-        </div>
-      </div>
-      {a.commentaire && !ouvert && (
-        <p style={{ fontSize: '0.8rem', color: T.muted, marginTop: 6, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>{a.commentaire}</p>
-      )}
-      {ouvert && (
-        <div style={{ marginTop: 8 }}>
-          {a.commentaire && <p style={{ fontSize: '0.875rem', color: T.ink, fontWeight: 500, lineHeight: 1.5, marginBottom: a.reponse_commercant ? 10 : 0 }}>{a.commentaire}</p>}
-          {a.reponse_commercant && (
-            <div style={{ background: T.pale, borderRadius: 10, padding: '0.5rem 0.75rem' }}>
-              <p style={{ fontSize: '0.72rem', fontWeight: 700, color: T.main, marginBottom: 2 }}>Réponse du commerçant :</p>
-              <p style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 500 }}>{a.reponse_commercant}</p>
-            </div>
-          )}
-
-          {/* ⚠️ `stopPropagation` OU LA CARTE SE REFERME SOUS LE DOIGT. Tout le
-              bloc porte un `onClick` qui bascule l'ouverture : sans ça, ouvrir
-              la modale replierait l'avis en même temps, et le clic aurait l'air
-              d'avoir raté. */}
-          <button type="button"
-            onClick={(e) => { e.stopPropagation(); setSignaler(true) }}
-            style={{
-              marginTop: 10, background: 'none', border: 'none', padding: 0,
-              color: T.muted, fontSize: '0.72rem', fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline',
-              textUnderlineOffset: 2,
-            }}>
-            Signaler cet avis
-          </button>
-        </div>
-      )}
-
-      {signaler && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <ModalSignalement
-            target={{
-              kind: 'avis',
-              id: a.id,
-              // Ce qu'on signale, montré tel qu'on vient de le lire. On ne
-              // reprend PAS le nom de l'auteur : on signale un contenu, pas
-              // quelqu'un, et la décision se prend sur le texte.
-              nom: a.commentaire
-                ? `« ${a.commentaire.slice(0, 70)}${a.commentaire.length > 70 ? '…' : ''} »`
-                : 'Une note sans commentaire',
-            }}
-            onClose={() => setSignaler(false)}
-          />
-        </div>
-      )}
-    </div>
-  )
-}
-
 function OptionsSelector({ article, groupes, onAjouter }) {
   const [selections, setSelections] = useState({})
   const [erreurs, setErreurs] = useState({})
@@ -1209,7 +1101,8 @@ export default function CommanderSlug() {
   // Les avis restent REPLIÉS par défaut : seize avis dépliés poussaient le
   // panier et les créneaux hors de l'écran, et un commerce qui a bien travaillé
   // se retrouvait puni par son propre succès.
-  const [avisDeplies, setAvisDeplies] = useState(false)
+  // ⚠️ L etat du repli est parti AVEC le bloc, dans BlocAvis : il ne servait
+  // qu a lui, et le laisser ici aurait ete un vestige que personne n ose retirer.
   const [panier, setPanier] = useState({})
   const [creneauChoisi, setCreneauChoisi] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -4551,51 +4444,12 @@ export default function CommanderSlug() {
                   </div>
                 )}
 
-                {avisCommerce.length > 0 && (
-                  <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${T.pale}` }}>
-                    {/* ⚠️ REPLIÉ PAR DÉFAUT (demande d'Alex) : la note globale
-                        tient sur une ligne, et le Yopper décide s'il veut lire.
-                        Le bouton dit le GESTE (« Lire les 12 avis », « Masquer »),
-                        jamais l'état. */}
-                    <button onClick={() => setAvisDeplies(d => !d)}
-                      aria-expanded={avisDeplies}
-                      style={{
-                        width: '100%', background: 'none', border: 'none', padding: 0,
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        gap: 10, cursor: 'pointer', textAlign: 'left',
-                      }}>
-                      <span style={{ fontWeight: 800, fontSize: '1rem', color: T.deep, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26"/>
-                        </svg>
-                        Avis clients
-                        {resumeNotes.montreMoyenne && (
-                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: T.main }}>{resumeNotes.moyenne}</span>
-                        )}
-                      </span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.78rem', fontWeight: 700, color: T.main, flexShrink: 0 }}>
-                        {libelleBascule(resumeNotes, avisDeplies)}
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"
-                          style={{ transition: 'transform 0.2s', transform: avisDeplies ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                          <path d="M6 9l6 6 6-6"/>
-                        </svg>
-                      </span>
-                    </button>
-                    {avisDeplies && (
-                      <div style={{ marginTop: '0.75rem' }}>
-                        {avisCommerce.map(a => <CarteAvis key={a.id} a={a}/>)}
-                        {/* Un élément écarté se montre AVEC SA RAISON : la fiche
-                            ne charge que les 10 derniers avis, il faut le dire
-                            plutôt que de laisser croire qu'il n'y a que ça. */}
-                        {notesInfo.count > avisCommerce.length && (
-                          <p style={{ fontSize: '0.72rem', color: T.muted, margin: '4px 2px 0' }}>
-                            Les {avisCommerce.length} avis les plus récents, sur {notesInfo.count} au total.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* ⚠️ LE BLOC VIT DANS SON PROPRE FICHIER DEPUIS LE 21/09, et
+                    la fiche RDV l affiche desormais elle aussi : elle n avait
+                    AUCUN avis, alors que ses clients peuvent en ecrire apres
+                    un rendez-vous honore. Deux copies auraient diverge a la
+                    premiere correction faite d un seul cote. */}
+                <BlocAvis avis={avisCommerce} notesInfo={notesInfo} resumeNotes={resumeNotes} />
 
                 {/* RecapPanier : uniquement si la formule ouvre la commande */}
                 {peutCommander && (

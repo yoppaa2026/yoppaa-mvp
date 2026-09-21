@@ -27,7 +27,8 @@ const MODULE = 'lib/signaux.js'
 
 const ROUTE = 'app/api/signaux/route.js'
 const MODAL = 'app/commander/ModalSignalement.js'
-const FICHE = 'app/commander/[slug]/page.js'
+const FICHE = 'app/commander/BlocAvis.js'
+const RDV   = 'app/commander/rdv/[slug]/page.js'
 
 const MUTATIONS = [
   // ─── LES MOTIFS ─────────────────────────────────────────────────────────
@@ -146,6 +147,26 @@ const MUTATIONS = [
     fichier: FICHE,
     de: '            onClick={(e) => { e.stopPropagation(); setSignaler(true) }}',
     vers: '            onClick={() => setSignaler(true)}' },
+
+  // ─── LES DEUX FICHES ────────────────────────────────────────────────────
+  // 🔴 LE DEFAUT D ORIGINE, TROUVE PAR ALEX LE 21/09 CHEZ SALON NATHALIE : la
+  // fiche RDV n affichait AUCUN avis, donc aucun bouton pour en signaler un,
+  // alors que ses clients peuvent en ecrire apres un rendez-vous honore.
+  { nom: '🔴 la fiche RDV reperd ses avis : plus de signalement chez les salons',
+    fichier: RDV,
+    de: '                  <BlocAvis avis={avisCommerce} notesInfo={notesInfo} resumeNotes={resumeAvis(notesInfo)} />',
+    vers: '' },
+
+  { nom: '🔴 la fiche commerce reperd ses avis',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '                <BlocAvis avis={avisCommerce} notesInfo={notesInfo} resumeNotes={resumeNotes} />',
+    vers: '' },
+
+  // ⚠️ DEUX COPIES = DEUX ENDROITS A CORRIGER, ET UN SEUL QUI LE SERA.
+  { nom: '⚠️ une seconde carte d avis reapparait dans la fiche commerce',
+    fichier: 'app/commander/[slug]/page.js',
+    de: 'function OptionsSelector({ article, groupes, onAjouter }) {',
+    vers: 'function CarteAvis({ a }) { return null }\nfunction OptionsSelector({ article, groupes, onAjouter }) {' },
 
   // 🔴 LE DEFAUT D ORIGINE DE LA PASTILLE : elle recalculait depuis une colonne
   // que la vue n expose pas. `avis_public` fait le calcul et ne rend que son

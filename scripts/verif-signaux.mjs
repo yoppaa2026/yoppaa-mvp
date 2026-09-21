@@ -771,7 +771,30 @@ egal('un commerce sans code postal ne crée pas de fausse commune',
 
   // ⚠️ L'ÉCRAN OÙ ÇA SE PASSE. Sans ce bouton, tout le reste est du code mort,
   // et c'est exactement ce qu'Apple vérifiera dans la vidéo.
-  const FICHE_AVIS = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  //
+  // 🔴 ET IL Y EN A DEUX. La fiche RDV, celle des salons et des services,
+  // n'affichait AUCUN avis jusqu'au 21/09 — trouvé par Alex chez Salon
+  // Nathalie. Ses clients pouvaient pourtant en écrire, puisque la route
+  // accepte « commande récupérée OU rendez-vous honoré » : le salon recevait
+  // des avis que personne ne voyait, et aucun moyen d'en signaler un.
+  const FICHE_AVIS = sansProse(readFileSync(new URL('../app/commander/BlocAvis.js', import.meta.url), 'utf8'))
+  for (const [quoi, chemin] of [
+    ['la fiche commerce', '../app/commander/[slug]/page.js'],
+    ['la fiche RDV',      '../app/commander/rdv/[slug]/page.js'],
+  ]) {
+    const page = sansProse(readFileSync(new URL(chemin, import.meta.url), 'utf8'))
+    verifier(`${quoi} affiche le bloc d’avis`,
+      /<BlocAvis\b/.test(page),
+      'les avis y sont invisibles, donc le signalement aussi')
+    verifier(`${quoi} lui passe ses avis et sa note`,
+      /avis=\{/.test(page) && /notesInfo=\{/.test(page),
+      'le bloc s’afficherait vide, ou la moyenne serait fausse')
+    // ⚠️ ET ELLE NE REDÉFINIT PAS SA PROPRE CARTE. Deux copies du même bloc,
+    // ce sont deux endroits à corriger, et un seul qui le sera.
+    verifier(`${quoi} ne garde pas une copie de la carte d’avis`,
+      !/function CarteAvis\b/.test(page),
+      'une seconde définition est réapparue : les deux vont diverger')
+  }
   verifier('🔴 la carte d’avis porte le bouton de signalement',
     /Signaler cet avis/.test(FICHE_AVIS),
     'plus aucun moyen de signaler un avis depuis la fiche')

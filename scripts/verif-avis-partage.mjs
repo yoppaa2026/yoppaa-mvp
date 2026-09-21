@@ -100,12 +100,26 @@ const egal = (nom, obtenu, attendu) =>
   verifie('la fiche rend la moyenne par la règle', /resumeNotes\.moyenne/.test(fiche))
   verifie('🔴 la fiche ne rend PLUS la moyenne brute',
     !/notesInfo\.moyenne\.toFixed/.test(fiche))
-  verifie('🔴 les avis sont derrière une bascule', /setAvisDeplies/.test(fiche))
+  // ⚠️ CES QUATRE GARDES VISAIENT LA FICHE, ET LE BLOC A DÉMÉNAGÉ le 21/09.
+  // Il vit maintenant dans `app/commander/BlocAvis.js`, parce que la fiche RDV
+  // — les salons, les services — n'affichait AUCUN avis : ses clients en
+  // écrivaient après un rendez-vous honoré, et personne ne les voyait.
+  // La chaîne a attrapé le déplacement le jour même, et c'est exactement ce
+  // qu'on lui demande : une garde qui ne trouve plus sa cible ne mesure rien.
+  const bloc = lireCode('app/commander/BlocAvis.js')
+
+  verifie('🔴 les avis sont derrière une bascule', /setDeplies/.test(bloc))
   verifie('et la liste ne s\'affiche QUE dépliée',
-    /avisDeplies &&[\s\S]{0,400}avisCommerce\.map/.test(fiche))
-  verifie('le bouton porte son libellé calculé', /libelleBascule\(resumeNotes, avisDeplies\)/.test(fiche))
+    /deplies &&[\s\S]{0,400}avis\.map/.test(bloc))
+  verifie('le bouton porte son libellé calculé', /libelleBascule\(resumeNotes, deplies\)/.test(bloc))
   verifie('les avis manquants sont annoncés AVEC leur nombre',
-    /notesInfo\.count > avisCommerce\.length/.test(fiche))
+    /notesInfo\.count > avis\.length/.test(bloc))
+
+  // 🔴 ET LES DEUX FICHES L'AFFICHENT. C'est le défaut d'origine : la règle
+  // était juste, le composant correct, et une des deux pages ne l'appelait pas.
+  verifie('🔴 la fiche commerce affiche le bloc', /<BlocAvis\b/.test(fiche))
+  verifie('🔴 la fiche RDV aussi, depuis le 21/09',
+    /<BlocAvis\b/.test(lireCode('app/commander/rdv/[slug]/page.js')))
 
   verifie('🔴 l\'ACCUEIL importe la règle', /import \{[^}]*resumeAvis[^}]*\} from '@\/lib\/avis-affichage'/.test(accueil))
   verifie('🔴 la carte d\'accueil l\'APPELLE', /resumeAvis\(noteInfo \|\| \{\}\)/.test(accueil))

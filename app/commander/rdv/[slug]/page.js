@@ -136,6 +136,11 @@ function formatPrix(prestation, deals = []) {
 
 import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit } from '@/lib/rdv-slots'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+// 🔴 LE MÊME BLOC QUE LA FICHE COMMERCE, et c'est tout l'intérêt : le bouton de
+// signalement et la pastille « Vérifié » ne peuvent plus exister d'un côté et
+// pas de l'autre. Cette page n'affichait aucun avis jusqu'au 21/09.
+import BlocAvis from '../../BlocAvis'
+import { resumeAvis } from '@/lib/avis-affichage'
 
 // ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
 // Affiche les jours de l'horizon, regroupes par mois. ⚠️ L'HORIZON N'EST PLUS
@@ -255,6 +260,12 @@ export default function CommanderRdvSlug() {
   const router = useRouter()
 
   const [commercant, setCommercant] = useState(null)
+  // 🔴 CETTE PAGE N'AFFICHAIT AUCUN AVIS (Alex, 21/09, chez Salon Nathalie).
+  // Et ce n'était pas qu'un manque d'affichage : `/api/yopper/avis` accepte un
+  // avis après une commande récupérée OU un rendez-vous honoré, donc les
+  // clients d'un salon en écrivaient, et personne ne les voyait jamais.
+  const [avisCommerce, setAvisCommerce] = useState([])
+  const [notesInfo, setNotesInfo] = useState({ moyenne: 0, count: 0 })
   const [prestations, setPrestations] = useState([])
   // Les formules d'abonnement mises en vente par le commerçant. La politique
   // RLS ne rend visibles que celles qu'il a explicitement publiées.
@@ -1205,6 +1216,29 @@ export default function CommanderRdvSlug() {
         setCommercant({ ...c, _nonPublie: true })
         setLoading(false)
         return
+      }
+
+      // Les avis, et la note qui les résume.
+      //
+      // ⚠️ DEUX REQUÊTES, ET C'EST VOULU : la première rend les dix plus
+      // récents, qu'on affiche ; la seconde compte TOUTES les notes, parce
+      // qu'une moyenne calculée sur dix avis alors qu'il y en a quarante serait
+      // fausse. C'est le même motif que la fiche commerce.
+      //
+      // ⚠️ AUCUN DES DEUX NE DOIT FAIRE ÉCHOUER LA PAGE : un salon sans avis est
+      // le cas le plus fréquent au démarrage, et une fiche qui refuserait de
+      // s'afficher faute d'avis serait absurde.
+      {
+        const [{ data: avisRecents }, { data: avisNotes }] = await Promise.all([
+          supabase.from('avis_public').select('*').eq('commercant_id', c.id).order('created_at', { ascending: false }).limit(10),
+          supabase.from('avis_public').select('note').eq('commercant_id', c.id),
+        ])
+        if (!annule) {
+          setAvisCommerce(avisRecents || [])
+          setNotesInfo(avisNotes?.length > 0
+            ? { moyenne: avisNotes.reduce((a, x) => a + x.note, 0) / avisNotes.length, count: avisNotes.length }
+            : { moyenne: 0, count: 0 })
+        }
       }
 
       // Deals actifs du jour : chargés AVANT le early-return module RDV désactivé,
@@ -3212,6 +3246,21 @@ export default function CommanderRdvSlug() {
               {/* ✅ PAS DE PRODUITS SUR UNE RÉSERVATION DE TABLE (Alex, 10/09) :
                   la carte se lit sur la fiche du restaurant. */}
               {etape === 1 && produits.length > 0 && !resaDeTable && renderProduits()}
+
+              {/* ─── Les avis ────────────────────────────────────────────────
+                  🔴 ILS MANQUAIENT ICI (Alex, 21/09, chez Salon Nathalie) : la
+                  fiche commerce les affichait, celle des salons et des services
+                  non. C'est le MÊME composant des deux côtés depuis, donc le
+                  bouton « Signaler cet avis » et la pastille « Vérifié » y sont
+                  aussi, et ne peuvent plus diverger.
+                  ⚠️ APRÈS les prestations et AVANT le bon cadeau, comme sur la
+                  fiche commerce : on lit ce que les autres en disent une fois
+                  qu'on a vu ce que le commerce propose. */}
+              {etape === 1 && (
+                <div style={{ padding: '0 1rem' }}>
+                  <BlocAvis avis={avisCommerce} notesInfo={notesInfo} resumeNotes={resumeAvis(notesInfo)} />
+                </div>
+              )}
 
               {/* ─── Offrir un bon cadeau ─────────────────────────────────────
                   APRÈS les prestations et les produits (Alex, 05/08), à la même

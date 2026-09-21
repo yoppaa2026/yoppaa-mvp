@@ -36,6 +36,33 @@ table **garantie** : poser une empreinte demande un Stripe qui fonctionne. Une
 fois en live, La Table d'Essai n'aura plus de compte valide et ces essais
 deviendront impossibles.
 
+### 🔴 Et relever les forfaits payants que personne ne facture
+
+```
+npm run controle:abonnements
+```
+
+Il liste les commerçants en Communiquer ou Vendre **sans abonnement Stripe et
+sans exemption de partenariat**. En lecture seule, aucun appel à Stripe.
+
+**Pourquoi ils existent** : monter un commerçant depuis l'écran
+d'administration écrit la colonne `plan` et **rien d'autre**. Les fonctions
+s'ouvrent, aucun abonnement n'est créé, la route `admin/kyb/valider` ne repasse
+jamais, et `cron/billing-relances` ne les voit pas non plus (il filtre sur
+`subscription_status in ('trialing','past_due')`, le leur vaut `null`). Alex a
+fait ce geste le 21/09 pour **Le Bistrologue, Iconic et Mozz'Art**, qui
+s'étaient inscrits en Exister par peur de payer alors qu'ils voulaient du
+transactionnel.
+
+⚠️ **Ne rien créer avant la bascule** : un abonnement posé en mode test
+disparaît en passant en réel. Et ils ne perdent aucun jour à attendre,
+`finEssai()` rendant le 9 janvier 2027 pour toute création antérieure au
+10 décembre.
+
+➜ **Garder cette liste sous la main** : c'est elle qu'on traite à l'étape 2,
+une fois les tarifs live créés. Relancer le contrôle jusqu'à ce qu'il rende
+zéro.
+
 ---
 
 ## 2. Dans Stripe, en mode live

@@ -302,6 +302,30 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
             </div>
           </div>
 
+          {/* 🔴 CET ÉCRAN NE CRÉE AUCUN ABONNEMENT, ET IL NE LE DISAIT PAS.
+              Alex a monté trois commerçants réels en Vendre depuis ici (Le
+              Bistrologue, Iconic, Mozz'Art) en croyant faire le geste complet.
+              Ce `select` écrit UNE colonne : les fonctions s'ouvrent, mais rien
+              n'est créé chez Stripe, la route KYB ne repasse pas, et
+              `cron/billing-relances` ne les verra jamais puisqu'il filtre sur
+              `subscription_status in ('trialing','past_due')` et que le leur
+              vaut `null`. Résultat silencieux : un forfait payant gratuit à
+              vie.
+              ⚠️ ON AVERTIT, ON NE BLOQUE PAS. Monter quelqu'un à la main est
+              exactement ce qu'il faut faire quand il s'est trompé à
+              l'inscription ; ce qui manquait, c'est de savoir ce qu'il reste à
+              faire ensuite. Une garde d'écran n'est jamais la protection : le
+              filet, c'est `npm run controle:abonnements`, qui les compte. */}
+          {form.plan !== commercant.plan && form.plan !== 'exister' && !commercant.billing_exempt && (
+            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '9px 11px', marginBottom: 12 }}>
+              <p style={{ margin: 0, fontSize: 12, color: '#78350F', lineHeight: 1.5 }}>
+                <strong>Ce changement n’ouvre que les fonctions.</strong> Aucun abonnement n’est créé chez
+                Stripe, donc aucune facture ne partira. Note-le, et lance <code>npm run controle:abonnements</code>{' '}
+                avant la bascule en mode réel pour retrouver tous les comptes dans ce cas.
+              </p>
+            </div>
+          )}
+
           {/* Statut publication + RDV actif */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
             <div>

@@ -84,7 +84,8 @@
     "mutations:compte": "node scripts/mutations-mon-compte.mjs",
     "mutations:avis-signal": "node scripts/mutations-signalement-avis.mjs",
     "controle:tva": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-tva-stripe.mjs",
-    "produits:stripe": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/creer-produits-stripe.mjs"
+    "produits:stripe": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/creer-produits-stripe.mjs",
+    "controle:abonnements": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-abonnements-manquants.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",

@@ -619,14 +619,35 @@ function Etape1Compte({ session, commercant, onCompte }) {
         </Card>
       )}
 
-      <Card titre="Ton activité" sous="Yoppaa s'adapte à ton type de commerce.">
+      <Card titre="Ton activité">
+        {/* 🔴 L'EXEMPLE EST CELUI D'ICONIC, PRESQUE MOT POUR MOT. Une boutique
+            de vêtements inscrite en Alimentaire, parce qu'elle a lu « commande »
+            et « livraison » sous ce titre et y a reconnu ce qu'elle voulait
+            faire. Un commerçant qui se reconnaît dans cette phrase n'a plus
+            besoin de lire la suite.
+            ⚠️ ET ON NE PROMET PAS QU'IL POURRA CHANGER : vérifié le 21/09, la
+            colonne `categorie` n'est écrite NULLE PART dans le tableau de bord.
+            Seule l'équipe peut la corriger. */}
+        <EncartChoix titre="Choisis d’après ce que tu vends">
+          Une boutique de vêtements qui veut prendre des commandes et livrer choisit <strong>Détail</strong>,
+          pas Alimentaire.
+          <span style={{ display: 'block', marginTop: 6 }}>
+            Ta catégorie décide des fonctions qui existeront chez toi, quelle que soit ta formule.
+            Tu ne pourras pas la changer toi-même ensuite : en cas de doute, écris-nous à{' '}
+            <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
+          </span>
+        </EncartChoix>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+          {/* ⚠️ LES SOUS-TITRES NOMMENT UN MÉTIER, PLUS UNE CAPACITÉ. C'est là
+              qu'ICONIC s'est perdue : « Commande à l'avance et livraison »
+              décrivait ce qu'elle cherchait à faire, pas ce qu'elle vend. Les
+              capacités restent dans les cartes de forfait, à leur place. */}
           <CategorieCard
             value="alimentaire"
             actif={categorie === 'alimentaire'}
             onClick={() => setCategorie('alimentaire')}
             titre="Alimentaire"
-            sous="Commande à l’avance et livraison"
+            sous="Tu vends à manger ou à boire"
             exemples="Boulangerie, friterie, traiteur, food truck, épicerie…"
             Icon={Croissant}
           />
@@ -635,7 +656,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
             actif={categorie === 'vitrine'}
             onClick={() => setCategorie('vitrine')}
             titre="Service"
-            sous="Ta vitrine et tes rendez-vous"
+            sous="Tu reçois sur rendez-vous"
             exemples="Coiffeur, esthéticienne, garagiste, yoga, coach, auto-école…"
             Icon={Scissors}
           />
@@ -644,14 +665,33 @@ function Etape1Compte({ session, commercant, onCompte }) {
             actif={categorie === 'detail'}
             onClick={() => setCategorie('detail')}
             titre="Détail"
-            sous="Vente en ligne, retrait ou envoi"
+            sous="Tu vends des articles non alimentaires"
             exemples="Vêtements, chaussures, fleuriste, librairie, déco…"
             Icon={ShoppingBag}
           />
         </div>
       </Card>
 
-      <Card titre="Choisis ta formule" sous="Tu pourras changer plus tard depuis ton tableau de bord.">
+      <Card titre="Choisis ta formule">
+        {/* 🔴 IL RÉPOND À UNE PEUR, PAS À UNE QUESTION. Trois commerçants réels
+            ont pris Exister en croyant se protéger d'un prélèvement, alors
+            qu'ils voulaient vendre. On ne répond pas à une peur par un
+            argumentaire : on donne le fait, AVANT les prix, et on nomme la
+            sortie.
+            ⚠️ ET LA DATE NE S'ÉCRIT PAS À LA MAIN. `libelleDernierJourGratuit`
+            et `estRegimeLancement` descendent de `lib/lancement.js` : un
+            8 janvier recopié ici finirait par contredire la facture, et le banc
+            du lancement refuse les dates en dur depuis le 20/08. */}
+        <EncartChoix titre="Prends la formule dont tu as besoin, pas la plus prudente">
+          {estRegimeLancement()
+            ? <>Jusqu’au {libelleDernierJourGratuit()} inclus, les trois formules sont gratuites et aucune carte ne t’est demandée.</>
+            : <>Pendant tes {ESSAI_JOURS_MINIMUM} premiers jours, les trois formules sont gratuites et aucune carte ne t’est demandée.</>}
+          <span style={{ display: 'block', marginTop: 6 }}>
+            À la fin de l’essai, tu décides : tu continues, ou tu repasses en Exister, qui reste gratuite,
+            et tu gardes ta fiche. Tu changes de formule quand tu veux depuis ton tableau de bord,
+            dans un sens comme dans l’autre.
+          </span>
+        </EncartChoix>
         <div style={{ display: 'grid', gap: 12, marginTop: 4 }}>
           {plansDispos.map(p => (
             <CardPlan key={p} plan={p} categorie={categorie} actif={plan === p} onClick={() => setPlan(p)}/>
@@ -3117,6 +3157,34 @@ function Card({ titre, sous, children }) {
         {sous && <p style={{ fontSize: 12, color: T.muted, margin: '4px 0 0' }}>{sous}</p>}
       </div>
       {children}
+    </div>
+  )
+}
+
+// 🔴 CE QUE LE CHOIX ENGAGE, LÀ OÙ IL SE FAIT (21/09, demandé par Alex).
+//
+// Deux erreurs réelles ont motivé cet encart, et les deux venaient du même
+// endroit : l'information existait, dans le sous-titre de la carte, en 12 px
+// gris, c'est-à-dire à l'endroit où personne ne lit.
+//
+//   - Trois commerçants ont choisi Exister alors qu'ils voulaient vendre,
+//     « de peur que ça ne soit pas gratuit ».
+//   - ICONIC, boutique de vêtements, a choisi la catégorie Alimentaire : elle a
+//     lu « Commande à l'avance et livraison » sous ce titre, y a reconnu ce
+//     qu'elle voulait FAIRE, et a cliqué. Le sous-titre promettait une capacité
+//     là où il devait nommer un métier.
+//
+// ⚠️ IL REMPLACE LE SOUS-TITRE, IL NE S'AJOUTE PAS. Deux blocs de plus sur un
+// écran d'inscription déjà long feraient un mur, et un mur ne se lit pas mieux
+// qu'une ligne grise. Les deux `Card` concernées perdent donc leur `sous`.
+function EncartChoix({ titre, children }) {
+  return (
+    <div style={{
+      background: '#F8F6FF', border: `1px solid ${T.pale}`, borderRadius: 12,
+      padding: '11px 13px', marginBottom: 14,
+    }}>
+      <p style={{ fontSize: 13, fontWeight: 800, color: T.deep, margin: '0 0 5px', lineHeight: 1.35 }}>{titre}</p>
+      <div style={{ fontSize: 12.5, color: T.ink, lineHeight: 1.55 }}>{children}</div>
     </div>
   )
 }

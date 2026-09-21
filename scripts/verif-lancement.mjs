@@ -395,9 +395,18 @@ function sansCommentaires(src) {
   verifier('la note dit qu’aucune carte n’est demandée',
     /Aucune carte demandée/.test(codeSignup),
     'retour au vocabulaire d’abonnement, qui suppose justement l’abonnement qui fait peur')
-  verifier('la note nomme la SORTIE, pas seulement l’absence de carte',
-    /repasses en Exister/.test(codeSignup) && /gardes ta fiche/.test(codeSignup),
-    'sans la sortie nommée, « aucune carte » se lit comme un piège à retardement')
+  // 🔴 ON COMPTE, ET C'EST MON PROPRE AJOUT QUI L'A IMPOSÉ. Cette garde
+  // cherchait « repasses en Exister » dans tout le fichier et marchait. Puis
+  // l'encart de formule, ajouté le 21/09, a écrit les mêmes mots ailleurs :
+  // retirer la phrase de la NOTE ne la faisait plus rougir. Le piège du mot
+  // trouvé ailleurs, créé par sa propre correction. Deux endroits doivent la
+  // porter, et on le dit.
+  const sorties = (codeSignup.match(/repasses en Exister/g) || []).length
+  verifier('la sortie est nommée aux DEUX endroits : la note et l’encart', sorties === 2,
+    `${sorties} mention(s) de la sortie, attendu 2 : sans elle, « aucune carte » se lit comme un piège à retardement`)
+  verifier('et la fiche conservée est dite, elle aussi',
+    (codeSignup.match(/gardes ta fiche/g) || []).length === 2,
+    'ce qu’il garde en repassant en Exister n’est plus dit des deux côtés')
 
   // 🔴 ET LE PRIX NE REPREND PAS LE DESSUS. Il s'affichait en 16 px poids 900
   // pendant que l'offre tenait en 11 px sous la tagline : l'œil tombait sur
@@ -415,6 +424,66 @@ function sansCommentaires(src) {
   verifier('le taux de l’inscription descend de lib/plans.js',
     /TVA_ABONNEMENT_POURCENT/.test(codeSignup) && !/\b21\s*%/.test(codeSignup),
     'un taux écrit en dur dans l’inscription finira par contredire la facture')
+
+  // ── CE QUE LE CHOIX ENGAGE, DIT LÀ OÙ IL SE FAIT (21/09) ────────────────
+  //
+  // 🔴 DEUX ERREURS RÉELLES, UNE SEULE CAUSE. L'information existait déjà, dans
+  // le sous-titre de la carte, en 12 px gris. Trois commerçants ont pris
+  // Exister « de peur que ça ne soit pas gratuit », et ICONIC, boutique de
+  // vêtements, s'est inscrite en Alimentaire parce qu'elle y a lu « commande »
+  // et « livraison », c'est-à-dire ce qu'elle voulait FAIRE.
+  const encarts = (codeSignup.match(/<EncartChoix /g) || []).length
+  verifier('les DEUX choix engageants portent leur encart', encarts === 2,
+    `${encarts} encart(s), attendu 2 : celui de la catégorie et celui de la formule`)
+
+  // ⚠️ ET LES SOUS-TITRES GRIS NE REVIENNENT PAS PAR-DESSUS. Deux blocs qui
+  // disent la même chose, dont un que personne ne lit, c'est la situation
+  // d'avant avec un encart en plus.
+  verifier('les deux cartes ont bien cédé la place à leur encart',
+    /<Card titre="Ton activité">/.test(codeSignup) && /<Card titre="Choisis ta formule">/.test(codeSignup),
+    'un sous-titre est revenu sur une Card qui porte déjà un encart')
+
+  // 🔴 ON NE PROMET PAS CE QU'ON NE SAIT PAS FAIRE. Vérifié le 21/09 : la
+  // colonne `categorie` n'est écrite NULLE PART dans le tableau de bord, seule
+  // l'équipe peut la corriger. Un « tu pourras changer » serait un mensonge.
+  const iCat = codeSignup.indexOf('Choisis d’après ce que tu vends')
+  const iForm = codeSignup.indexOf('Prends la formule dont tu as besoin')
+  verifier('les deux encarts sont là où on les cherche',
+    iCat >= 0 && iForm > iCat,
+    'un encart a été renommé ou déplacé : les gardes suivantes ne mesurent plus rien')
+  const encartCat = codeSignup.slice(iCat, iForm)
+  verifier('🔴 l’encart de catégorie dit qu’elle ne se change pas soi-même',
+    /ne pourras pas la changer toi-même/.test(encartCat),
+    'l’écran laisserait croire qu’une catégorie se corrige depuis le tableau de bord, ce qui est faux')
+  verifier('⚠️ et il donne la sortie : par où passer en cas d’erreur',
+    /hello@yoppaa\.app/.test(encartCat),
+    'on annonce un choix définitif sans dire à qui s’adresser : c’est une impasse')
+
+  // ⚠️ LA DATE NE S'ÉCRIT PAS À LA MAIN, MÊME DANS UN ENCART. Le banc refuse
+  // les dates en dur depuis le 20/08, et `libelleDernierJourGratuit` est déjà
+  // employé ailleurs dans le fichier : on VISE la tranche de l'encart, sinon on
+  // le trouverait sur les pastilles des cartes et la garde serait complice.
+  //
+  // 🔴 ET LA TRANCHE SE FERME. Ma première version faisait `slice(iForm)` tout
+  // court, donc jusqu'à la FIN du fichier : elle englobait `CardPlan`, qui
+  // appelle la même fonction. La garde restait verte quand on recopiait la date
+  // dans l'encart. Une tranche ouverte d'un seul côté ne vise rien.
+  const finEncart = codeSignup.indexOf('</EncartChoix>', iForm)
+  verifier('l’encart de formule est bien refermé',
+    finEncart > iForm,
+    'la tranche de l’encart n’a pas de fin : la garde suivante lirait tout le fichier')
+  const encartForm = codeSignup.slice(iForm, finEncart)
+  verifier('🔴 la date de l’encart descend de lib/lancement.js',
+    /libelleDernierJourGratuit\(\)/.test(encartForm),
+    'une date recopiée dans l’encart finira par contredire la facture')
+
+  // 🔴 LES SOUS-TITRES DE CATÉGORIE NOMMENT UN MÉTIER, PLUS UNE CAPACITÉ.
+  // « Commande à l'avance et livraison » décrivait ce qu'ICONIC cherchait à
+  // faire, pas ce qu'elle vend. On compte les trois, parce qu'en corriger deux
+  // laisserait justement la porte par laquelle elle est passée.
+  const metiers = (codeSignup.match(/sous="Tu (vends|reçois)/g) || []).length
+  verifier('les TROIS catégories se présentent par ce qu’on y vend', metiers === 3,
+    `${metiers} sous-titre(s) sur 3 nomment un métier : les autres promettent encore une capacité`)
 }
 
 // ═══ 3. LES TEXTES : AUCUNE DATE ÉCRITE EN DUR ═══════════════════════════

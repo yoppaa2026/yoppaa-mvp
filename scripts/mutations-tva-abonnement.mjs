@@ -220,6 +220,57 @@ const MUTATIONS = [
     fichier: SIGNUP,
     de: 'de {TVA_ABONNEMENT_POURCENT} %',
     vers: 'de 21 %' },
+
+  // ─── CE QUE LE CHOIX ENGAGE (21/09) ─────────────────────────────────────
+  //
+  // 🔴 DEUX ERREURS REELLES, UNE SEULE CAUSE : l information existait deja,
+  // dans le sous-titre de la carte, en 12 px gris. Trois commercants ont pris
+  // Exister « de peur que ca ne soit pas gratuit », et ICONIC, boutique de
+  // vetements, s est inscrite en Alimentaire parce qu elle y a lu « commande »
+  // et « livraison », c est-a-dire ce qu elle voulait FAIRE.
+  { nom: '🔴 un seul encart subsiste : l autre choix redevient muet',
+    fichier: SIGNUP,
+    de: '<EncartChoix titre="Choisis d’après ce que tu vends">',
+    vers: '<div>' },
+
+  // ⚠️ LE SOUS-TITRE GRIS QUI REVIENT PAR-DESSUS : deux blocs qui disent la
+  // meme chose, dont un que personne ne lit. La situation d avant, en pire.
+  { nom: '🔴 le sous-titre gris revient sur une carte qui porte deja son encart',
+    fichier: SIGNUP,
+    de: '<Card titre="Choisis ta formule">',
+    vers: '<Card titre="Choisis ta formule" sous="Tu pourras changer plus tard depuis ton tableau de bord.">' },
+
+  // 🔴 LA PROMESSE FAUSSE. Verifie le 21/09 : la colonne `categorie` n est
+  // ecrite NULLE PART dans le tableau de bord, seule l equipe peut la corriger.
+  { nom: '🔴 l ecran laisse croire qu une categorie se corrige toute seule',
+    fichier: SIGNUP,
+    de: 'Tu ne pourras pas la changer toi-même ensuite : en cas de doute',
+    vers: 'Tu pourras la changer plus tard : en cas de doute' },
+
+  // ⚠️ ON MUTE LE LIEN, PAS LA PHRASE D A COTE. Ma premiere version remplacait
+  // « ecris-nous a » et laissait la balise juste apres : l adresse restait dans
+  // la tranche, et la garde restait verte. Une mutation doit retirer CE QUE LA
+  // GARDE REGARDE.
+  { nom: '🔴 le choix definitif est annonce sans dire a qui s adresser',
+    fichier: SIGNUP,
+    de: '<a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: \'none\' }}>hello@yoppaa.app</a>',
+    vers: 'notre équipe' },
+
+  // ⚠️ LA DATE RECOPIEE DANS L ENCART. `libelleDernierJourGratuit` sert deja
+  // sur les pastilles des cartes : une garde qui se contenterait de chercher le
+  // nom resterait verte. Elle vise la tranche de l encart.
+  { nom: '🔴 la date de l encart est recopiee a la main',
+    fichier: SIGNUP,
+    de: 'Jusqu’au {libelleDernierJourGratuit()} inclus, les trois formules',
+    vers: 'Jusqu’au 8 janvier 2027 inclus, les trois formules' },
+
+  // 🔴 LE SOUS-TITRE QUI A PERDU ICONIC : il promettait une capacite la ou il
+  // devait nommer un metier. En corriger deux sur trois laisserait justement la
+  // porte par laquelle elle est passee.
+  { nom: '🔴 une categorie sur trois promet de nouveau une capacite, et c est la sienne',
+    fichier: SIGNUP,
+    de: 'sous="Tu vends à manger ou à boire"',
+    vers: 'sous="Commande à l’avance et livraison"' },
 ]
 
 const lancer = () => {

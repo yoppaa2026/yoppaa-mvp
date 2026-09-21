@@ -1534,6 +1534,26 @@ for (const chemin of routesAdmin) {
     // côté bloquait le bouton pour de bon.
     verifier('🔴 la position abandonne au bout d’un délai, elle n’attend pas à vie',
       /\{ timeout: 15000 \}/.test(onb))
+
+    // 🔴 LE MESSAGE APPARTIENT À L'ÉCRAN QUI L'A PRODUIT (21/09, vu par Alex
+    // sur une capture de l'app native). `gererCta` vidait la note au clic, mais
+    // RIEN ne la vidait en changeant d'écran : « Les notifications n'ont pas
+    // été activées. Tu pourras le faire depuis ton profil. » restait affiché
+    // sous le titre « Les commerçants près de chez toi ». Un message d'échec
+    // qui suit le client d'écran en écran, en lui parlant d'autre chose que ce
+    // qu'il a sous les yeux.
+    //
+    // ⚠️ ON VISE LE CHANGEMENT D'ÉCRAN, pas le fichier : `setNote(null)` existe
+    // déjà deux fois dans `gererCta`, donc une garde qui se contenterait de le
+    // chercher serait verte depuis toujours et n'aurait rien attrapé.
+    const iSuivant = onb.indexOf('function allerEcranSuivant')
+    const iSuite = onb.indexOf('function terminer')
+    verifier('⚠️ le changement d’écran est bien là où on le cherche',
+      iSuivant >= 0 && iSuite > iSuivant,
+      'allerEcranSuivant a été renommée ou déplacée : la garde suivante ne mesure plus rien')
+    verifier('🔴 la note d’échec ne suit pas le Yopper sur l’écran suivant',
+      /setNote\(null\)/.test(onb.slice(iSuivant, iSuite)),
+      'un refus de notification resterait affiché sous l’écran de la position, qui n’en parle pas')
   }
 }
 

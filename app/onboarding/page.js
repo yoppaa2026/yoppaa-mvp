@@ -315,7 +315,23 @@ export default function OnboardingPage() {
   function allerEcranSuivant() {
     if (ecranIdx < ECRANS.length - 1) {
       setSortie(true)
-      setTimeout(() => { setEcranIdx(i => i + 1); setSortie(false) }, 300)
+      // 🔴 LA NOTE APPARTIENT À L'ÉCRAN QU'ON QUITTE (21/09, vu par Alex sur
+      // une capture de l'app native). `gererCta` la vidait au clic, mais RIEN
+      // ne la vidait en changeant d'écran : « Les notifications n'ont pas été
+      // activées. Tu pourras le faire depuis ton profil. » restait affiché sous
+      // le titre « Les commerçants près de chez toi », donc sous un écran qui
+      // ne parle pas du tout de notifications.
+      //
+      // ⚠️ ET CE N'EST PAS QU'INESTHÉTIQUE : c'est un message d'échec qui suit
+      // le client d'écran en écran, en lui parlant d'autre chose que ce qu'il a
+      // sous les yeux. Un relecteur y lit une app qui ne sait pas où elle en
+      // est, et il a raison.
+      //
+      // ⚠️ VIDÉE AU CHANGEMENT D'INDEX, PAS AVANT : pendant les 300 ms de
+      // sortie, l'écran courant est encore à l'écran, et son message avec lui.
+      // La vider tout de suite ferait disparaître le texte sous un écran qui
+      // n'a pas fini de partir.
+      setTimeout(() => { setEcranIdx(i => i + 1); setNote(null); setSortie(false) }, 300)
     } else {
       terminer()
     }

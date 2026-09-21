@@ -186,6 +186,23 @@ const MUTATIONS = [
     fichier: 'app/api/commande/ignore-avis/route.js',
     de: '  const id = await identiteProuvee(request)',
     vers: '  const id = await identiteYopper(request)' },
+
+  // ─── LA NOTE D ECHEC QUI SUIT LE YOPPER (21/09) ─────────────────────────
+  //
+  // 🔴 VU PAR ALEX SUR UNE CAPTURE DE L APP NATIVE, le jour ou il a pu l
+  // ouvrir pour la premiere fois. « Les notifications n ont pas ete activees.
+  // Tu pourras le faire depuis ton profil. » restait affiche sous le titre
+  // « Les commercants pres de chez toi », un ecran qui ne parle pas du tout de
+  // notifications. `gererCta` vidait la note au clic, mais rien ne la vidait
+  // en changeant d ecran.
+  //
+  // ⚠️ ET LA MUTATION VISE LE BON ENDROIT : `setNote(null)` existe deja deux
+  // fois ailleurs dans le fichier, donc une garde qui se contenterait de le
+  // chercher serait verte depuis toujours.
+  { nom: '🔴 LE DEFAUT D ORIGINE : la note d echec suit le Yopper sur l ecran suivant',
+    fichier: 'app/onboarding/page.js',
+    de: 'setEcranIdx(i => i + 1); setNote(null); setSortie(false)',
+    vers: 'setEcranIdx(i => i + 1); setSortie(false)' },
 ]
 
 const lancer = () => {

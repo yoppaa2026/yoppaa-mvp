@@ -4,6 +4,7 @@ import { libelleLancement } from '@/lib/lancement'
 import { jsonLdLandingString } from '@/lib/seo-landing'
 import LandingTeasing from './components/LandingTeasing'
 import LandingReveal from './components/LandingReveal'
+import RedirectionAppNative from './components/RedirectionAppNative'
 
 // Page d'accueil / : bascule automatique Teasing → Reveal selon NEXT_PUBLIC_REVEAL_DATE.
 // Mode Teasing (avant le 1er août 10h) → page minimaliste mysterieuse.
@@ -71,10 +72,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ [
   // parce que le balisage doit décrire ce que la page montre. Le mode teasing
   // n'affiche ni formules ni tarifs : les baliser serait faux, et Google
   // sanctionne un balisage qui promet ce que l'écran ne contient pas.
-  if (mode !== 'reveal') return <LandingTeasing referent={referent} />
+  // 🔴 L'APP DES STORES N'OUVRE PAS SUR LA VITRINE COMMERÇANTE, et il en faut
+  // un exemplaire dans CHAQUE branche : le mode teasing n'est pas une exception
+  // le jour où on y revient. Voir le composant pour ce que ça coûtait en revue.
+  // ⚠️ Sans effet dans un navigateur et dans la PWA, qui gardent la landing.
+  if (mode !== 'reveal') {
+    return (
+      <>
+        <RedirectionAppNative />
+        <LandingTeasing referent={referent} />
+      </>
+    )
+  }
 
   return (
     <>
+      <RedirectionAppNative />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdLandingString() }}

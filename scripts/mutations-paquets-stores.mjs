@@ -35,6 +35,8 @@ const CONF = 'capacitor.config.ts'
 const PLIST = 'ios/App/App/Info.plist'
 const ANDROID_MANIFESTE = 'android/app/src/main/AndroidManifest.xml'
 const DOSSIER = 'DOSSIER_STORES.md'
+const RACINE_PAGE = 'app/page.tsx'
+const COMPOSANT = 'app/components/RedirectionAppNative.js'
 
 const MUTATIONS = [
   // ─── CE QUE LE MANIFESTE DEMANDE DOIT ETRE DECLARE AUX STORES (18/09) ───
@@ -325,6 +327,41 @@ const MUTATIONS = [
   { nom: '🔴 une autorisation refusee par le systeme passe pour accordee',
     de: "    return accorde === true ? { ok: true, raison: null } : { ok: false, raison: 'refuse_os' }",
     vers: "    return { ok: true, raison: null }" },
+
+  // ─── LE PREMIER ECRAN DE L APP (21/09) ──────────────────────────────────
+  //
+  // 🔴 CE QUE CES MUTATIONS PROTEGENT. Le manifeste ouvre la PWA sur
+  // `/commander` ; `server.url` ouvre l app des stores sur la RACINE, donc sur
+  // la landing commercante et ses tarifs mensuels. Personne ne l avait jamais
+  // vu : TestFlight portait « aucun testeur », et Alex testait la PWA en
+  // croyant tester l app deposee. Notre note de revue decrit pourtant un champ
+  // de localisation qui n existe pas sur la landing : le relecteur cherche un
+  // ecran absent et conclut que l app est incomplete.
+  { nom: '🔴 une seule branche redirige : la moitie des chemins reste sur la landing',
+    fichier: RACINE_PAGE,
+    de: '        <RedirectionAppNative />',
+    vers: '        {null}' },
+
+  // ⚠️ `push` AU LIEU DE `replace` : le geste « revenir en arriere » ramene le
+  // relecteur sur la landing, l ecran exact qu on vient de lui eviter.
+  { nom: '🔴 le retour arriere ramene sur la landing',
+    fichier: COMPOSANT,
+    de: "router.replace('/commander')",
+    vers: "router.push('/commander')" },
+
+  // ⚠️ LA DETECTION RECOPIEE. Deux copies finissent par diverger, et celle de
+  // `push-natif` rattrape deja l acces qui jette.
+  { nom: '🔴 la detection ne descend plus du module partage',
+    fichier: COMPOSANT,
+    de: "from '@/lib/push-natif'",
+    vers: "from '@/lib/detection-locale'" },
+
+  // 🔴 LA FENETRE LUE PENDANT LE RENDU, qui rouvre la zone morte du 03/09 :
+  // ecran blanc que ni le lint ni le build ne voient.
+  { nom: '🔴 la fenetre est lue pendant le rendu, pas dans l effet',
+    fichier: COMPOSANT,
+    de: '  const router = useRouter()',
+    vers: '  const router = useRouter(); const natif = estAppNative(window)' },
 ]
 
 const lancer = () => {

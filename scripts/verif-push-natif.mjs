@@ -204,6 +204,62 @@ const fenetreNative = (options = {}) => {
   verifie('⚠️ le site de production est la source', /url: 'https:\/\/www\.yoppaa\.app'/.test(conf))
   // ⚠️ LE `webDir` NE RECOPIE PLUS 1,2 Mo D'ICÔNES dans chaque paquet.
   verifie('⚠️ le dossier embarqué reste minimal', /webDir: 'capacitor-web'/.test(conf))
+
+  // ─── LE PREMIER ÉCRAN DE L'APP (21/09) ──────────────────────────────────
+  //
+  // 🔴 DEUX FICHIERS DÉCIDENT DU PREMIER ÉCRAN, ET ILS DIVERGEAIENT. Le
+  // manifeste ouvre la PWA sur `/commander` ; `server.url` ouvre l'app des
+  // stores sur la RACINE, c'est-à-dire la landing commerçante et ses tarifs
+  // mensuels. Personne ne l'avait vu : TestFlight portait « aucun testeur »,
+  // et Alex testait la PWA en croyant tester l'app déposée.
+  //
+  // ⚠️ CE QUE ÇA COÛTAIT : notre note de revue décrit un champ de localisation
+  // « en haut à droite de l'écran d'accueil » qui n'existe pas sur la landing.
+  // Le relecteur cherche un écran absent et conclut que l'app est incomplète,
+  // soit le rejet 2.1 dont on venait de sortir.
+  //
+  // 🔴 LA GARDE VISE LA RÈGLE, PAS LA LIGNE. Si un jour `server.url` pointe
+  // directement sur `/commander`, la redirection devient inutile et cette
+  // garde doit cesser d'exiger : ce qui compte est qu'UNE des deux voies mène
+  // l'app à l'application. Sinon, elle exigerait pour toujours un correctif
+  // devenu du code mort.
+  const ouvreLaRacine = !/url: 'https:\/\/www\.yoppaa\.app\/[a-z]/.test(conf)
+  const racine = codeDe('app/page.tsx')
+  const poses = (racine.match(/<RedirectionAppNative \/>/g) || []).length
+  if (ouvreLaRacine) {
+    // ⚠️ ON COMPTE LES DEUX BRANCHES. La page rend le teasing OU le reveal :
+    // un seul exemplaire laisserait un chemin entier sur la landing, et c'est
+    // exactement la moitié qu'on oublierait en relisant vite.
+    verifie('🔴 l’app native ne reste pas sur la landing, dans les DEUX branches',
+      poses === 2, `${poses} pose(s) de RedirectionAppNative, attendu 2`)
+
+    const comp = codeDe('app/components/RedirectionAppNative.js')
+    // ⚠️ LA DÉTECTION DESCEND DU MODULE PARTAGÉ, jamais recopiée : `push-natif`
+    // rattrape déjà l'accès qui jette, et deux copies finissent par diverger.
+    verifie('⚠️ la détection vient de estAppNative, pas d’une copie',
+      /estAppNative/.test(comp) && /from '@\/lib\/push-natif'/.test(comp))
+    verifie('🔴 elle envoie sur l’application, pas ailleurs',
+      /replace\('\/commander'\)/.test(comp),
+      'la cible a changé, ou `push` a remplacé `replace` et le retour arrière ramène sur la landing')
+    // 🔴 DANS L'EFFET, JAMAIS PENDANT LE RENDU : lire `window` au rendu rouvre
+    // la zone morte du 03/09, que ni le lint ni le build ne voient.
+    //
+    // 🔴 ET CETTE GARDE EST NÉE COMPLICE, attrapée par son propre harnais le
+    // 21/09. Sa première version visait `useEffect` : le mot se trouve d'abord
+    // dans l'IMPORT, tout en haut, donc l'index était toujours le plus petit et
+    // la garde toujours verte. On vise l'APPEL, `useEffect(`, que l'import ne
+    // contient pas. Le piège du mot trouvé ailleurs, une fois de plus.
+    //
+    // ⚠️ ET ON COMPTE EN PLUS DE VISER : une seconde lecture de la fenêtre,
+    // posée ailleurs dans le composant, laisserait l'ordre juste et le défaut
+    // entier.
+    const lectures = (comp.match(/estAppNative\(window\)/g) || []).length
+    verifie('⚠️ la fenêtre n’est lue qu’une fois', lectures === 1,
+      `${lectures} lecture(s) de estAppNative(window), attendu 1`)
+    verifie('⚠️ la fenêtre est lue dans un effet, pas pendant le rendu',
+      comp.indexOf('useEffect(') >= 0
+      && comp.indexOf('useEffect(') < comp.indexOf('estAppNative(window)'))
+  }
 }
 
 // ═══ 7) LES WORKFLOWS QUI FABRIQUENT LES PAQUETS ═══════════════════════════

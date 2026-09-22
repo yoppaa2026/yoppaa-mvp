@@ -148,6 +148,55 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
   verifier('les deux séries sont non vides',
     CAPTURES_YOPPER.length > 0 && CAPTURES_COMMERCANT.length > 0)
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LE TEXTE D'ANNONCE S'ACCORDE AU NOMBRE DE CAPTURES (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 TROUVÉ PAR ALEX, EN PRODUCTION, À L'ŒIL NU : « et ça, ce ne sont pas des
+  // maquettes... il y a UNE image en dessous. » Le retrait des deux captures de
+  // l'inscription, la veille, avait laissé leur chapeau en place : un titre et
+  // un sous-titre au PLURIEL au-dessus d'une seule figure. Le banc était vert à
+  // 93 vérifications pendant ce temps, parce qu'il ne mesurait que la PRÉSENCE
+  // d'un `.map` et jamais l'accord entre ce qui est dit et ce qui est montré.
+  //
+  // ⚠️ LA GARDE EST BORNÉE DES DEUX CÔTÉS, ET ÇA COMPTE DOUBLE ICI. Une tranche
+  // ouverte (`split(...)[1]`) court jusqu'à la fin du fichier : elle trouverait
+  // le chapeau de l'AUTRE série, qui est au pluriel à bon droit avec ses neuf
+  // captures, et resterait verte quoi qu'il arrive au bloc commerçant. On prend
+  // donc exactement ce qui vit ENTRE la condition et le rendu, là où le chapeau
+  // d'une série se trouve, et on vérifie que le cadrage n'a pas glissé.
+  {
+    const SERIES = [
+      { nom: 'commerçant', cle: 'CAPTURES_COMMERCANT', liste: CAPTURES_COMMERCANT },
+      { nom: 'Yopper', cle: 'CAPTURES_YOPPER', liste: CAPTURES_YOPPER },
+    ]
+    // ⚠️ LES APOSTROPHES SONT DES ENTITÉS DANS CE JSX (`n&rsquo;est`). Une regex
+    // écrite avec une apostrophe ordinaire ne trouverait jamais rien et la garde
+    // naîtrait verte.
+    const APO = '(?:&rsquo;|’|\')'
+    const PLURIEL = new RegExp(`ce ne sont pas|ce sont des|ce sont les|les écrans que tu verras`, 'i')
+    const SINGULIER = new RegExp(`ce n${APO}est pas une|c${APO}est l${APO}écran que tu verras|une seule capture`, 'i')
+
+    for (const s of SERIES) {
+      const debut = LANDING.indexOf(`${s.cle}.length > 0`)
+      const rendu = LANDING.indexOf(`${s.cle}.map(`, debut)
+      const chapeau = debut >= 0 && rendu > debut ? LANDING.slice(debut, rendu) : ''
+
+      // Le cadrage lui-même : si ces deux repères s'éloignent, on ne mesure plus
+      // le chapeau mais la moitié de la page.
+      verifier(`le chapeau de la série ${s.nom} est cadré`,
+        chapeau.length > 0 && chapeau.length < 1500, `${chapeau.length} caractères`)
+
+      if (s.liste.length === 1) {
+        verifier(`la série ${s.nom} n’annonce pas plusieurs images pour une seule`,
+          !PLURIEL.test(chapeau), chapeau.match(PLURIEL)?.[0] || '')
+      } else {
+        verifier(`la série ${s.nom} n’annonce pas une seule image pour ${s.liste.length}`,
+          !SINGULIER.test(chapeau), chapeau.match(SINGULIER)?.[0] || '')
+      }
+    }
+  }
+
   // Chaque capture doit dire ce qu'elle montre, sinon la légende ne sert à
   // rien : un titre sans phrase laisse le lecteur deviner ce qu'il regarde.
   for (const c of [...CAPTURES_YOPPER, ...CAPTURES_COMMERCANT]) {

@@ -148,6 +148,42 @@ const MUTATIONS = [
     garde: 'rien de ce que la page affiche ne se dit de test',
   },
 
+  // ─── 5. L ACCORD ENTRE CE QUI EST DIT ET CE QUI EST MONTRE ───────────────
+  //
+  // 🔴 TROUVE PAR ALEX EN PRODUCTION, A L OEIL NU, le 22/09 : « et ca, ce ne
+  // sont pas des maquettes... il y a UNE image en dessous. » Le retrait des deux
+  // captures de l inscription avait laisse leur chapeau au PLURIEL au-dessus
+  // d une seule figure, et le banc etait vert a 93 verifications dessus.
+  {
+    nom: '🔴 LE DEFAUT D ALEX : le bloc commercant reannonce plusieurs images pour une seule',
+    fichier: LANDING,
+    de: "            <div style={{ marginTop: 44, display: 'flex', flexDirection: 'column', gap: 'clamp(24px, 5vw, 48px)' }}>",
+    vers: "            <div style={{ marginTop: 44, display: 'flex', flexDirection: 'column', gap: 'clamp(24px, 5vw, 48px)' }}>\n              <p>Ce sont les écrans que tu verras, tels quels.</p>",
+    garde: 'la série commerçant n’annonce pas plusieurs images pour une seule',
+  },
+
+  // ⚠️ ET LE SYMETRIQUE, parce qu une garde qui ne surveille qu un sens laisse
+  // passer l autre : neuf captures annoncees au singulier.
+  {
+    nom: '🔴 le bloc Yopper annonce une seule image pour ses neuf captures',
+    fichier: LANDING,
+    de: 'Ce sont des captures de l&rsquo;application, prises telles quelles.',
+    vers: 'C&rsquo;est l&rsquo;écran que tu verras, tel quel.',
+    garde: 'la série Yopper n’annonce pas une seule image pour',
+  },
+
+  // 🔴 ET LE CADRAGE DE LA GARDE ELLE-MEME. Si les deux reperes qui bornent le
+  // chapeau s ecartent, la garde ne mesure plus le chapeau mais la moitie de la
+  // page, et elle le fait EN SILENCE. C est le defaut de la tranche ouverte,
+  // deja rencontre dans ce depot.
+  {
+    nom: '🔴 le repere de fin disparait : la garde d accord ne mesure plus rien',
+    fichier: LANDING,
+    de: '{CAPTURES_COMMERCANT.map(c =>',
+    vers: '{CAPTURES_COMMERCANT .map(c =>',
+    garde: 'le chapeau de la série commerçant est cadré',
+  },
+
   // ─── 4. LE DOUBLON LUI-MEME ──────────────────────────────────────────────
   {
     nom: '🔴 un dessin revient doubler la capture du rendez-vous',

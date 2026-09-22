@@ -541,11 +541,19 @@ function RangeeMaquettes({ titre, children }) {
 // sombre, la série Yopper sur le fond clair de la page. Un titre en blanc sur
 // l'un des deux devient invisible, et c'est le genre de défaut qu'un banc ne
 // voit jamais : rien ne casse, le texte est simplement absent à l'écran.
-function CaptureProduit({ capture, fondClair = false }) {
+// ⚠️ ET UN MODE « EN LIGNE », AJOUTÉ LE 22/09 POUR UNE RAISON DE FOND. Une
+// capture porte DÉJÀ son titre et sa légende ici même : la coiffer d'un titre
+// de section, c'est écrire deux titres pour une image. C'est ce qui rendait la
+// partie commerçant lourde, et ça se voyait d'autant plus qu'il ne restait
+// qu'UNE capture de ce côté. En ligne, l'image et son texte forment une rangée
+// comme les autres, et le titre de section disparaît sans rien emporter.
+function CaptureProduit({ capture, fondClair = false, enLigne = false }) {
   const encre = fondClair ? T.ink : '#fff'
   const encreDouce = fondClair ? T.muted : 'rgba(255,255,255,0.86)'
   return (
-    <figure style={{ margin: 0, flex: '1 1 260px', maxWidth: 400 }}>
+    <figure style={enLigne
+      ? { margin: 0, display: 'flex', gap: 'clamp(24px, 5vw, 56px)', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', width: '100%' }
+      : { margin: 0, flex: '1 1 260px', maxWidth: 400 }}>
       <img
         src={captureSrc(capture)} alt={capture.alt}
         width={capture.largeur} height={capture.hauteur}
@@ -554,11 +562,14 @@ function CaptureProduit({ capture, fondClair = false }) {
           width: '100%', height: 'auto', display: 'block', borderRadius: 14, background: '#fff',
           border: fondClair ? `1px solid ${T.pale}` : '1px solid rgba(255,255,255,0.18)',
           boxShadow: fondClair ? '0 10px 28px rgba(22,6,54,0.14)' : '0 14px 34px rgba(0,0,0,0.3)',
+          ...(enLigne ? { flex: '0 1 360px', maxWidth: 360 } : null),
         }}
       />
-      <figcaption style={{ marginTop: 12, textAlign: 'left' }}>
-        <p style={{ margin: '0 0 4px', fontWeight: 900, fontSize: 15, color: encre, letterSpacing: '-0.2px' }}>{capture.titre}</p>
-        <p style={{ margin: 0, fontSize: 13, color: encreDouce, lineHeight: 1.55, fontWeight: 500 }}>{capture.legende}</p>
+      <figcaption style={enLigne
+        ? { margin: 0, textAlign: 'left', flex: '1 1 300px', maxWidth: 420 }
+        : { marginTop: 12, textAlign: 'left' }}>
+        <p style={{ margin: '0 0 6px', fontWeight: 900, fontSize: enLigne ? 'clamp(1.25rem, 3vw, 1.6rem)' : 15, letterSpacing: enLigne ? '-0.8px' : '-0.2px', lineHeight: enLigne ? 1.15 : 1.3, color: encre }}>{capture.titre}</p>
+        <p style={{ margin: 0, fontSize: enLigne ? '0.95rem' : 13, color: encreDouce, lineHeight: enLigne ? 1.65 : 1.55, fontWeight: 500 }}>{capture.legende}</p>
       </figcaption>
     </figure>
   )
@@ -2388,10 +2399,8 @@ export default function LandingReveal({ referent = null }) {
             </h2>
             <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.88)', maxWidth: 620, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
               La première place de marché du commerce local qui va de la visibilité au marketing,
-              et du marketing à la vente. Une page professionnelle, des commandes, des rendez-vous,
-              une carte de fidélité, des bons cadeaux, des promotions qui arrivent directement sur le
-              téléphone de tes clients, et même un assistant IA pour rédiger tes textes.
-              Tout est pensé pour te faire gagner du temps, et Yoppaa ne prélève jamais rien sur tes ventes.
+              et du marketing à la vente. Tout est pensé pour te faire gagner du temps, et Yoppaa
+              ne prélève jamais rien sur tes ventes.
             </p>
           </div>
 
@@ -2469,33 +2478,40 @@ export default function LandingReveal({ referent = null }) {
                 arrive dans ta boîte mail.
               </p>
             </div>
-            <PhoneFrame label="Un score de complétude en direct : tu sais toujours ce qu'il te reste à faire">
+            <PhoneFrame label="La dernière étape : tu relis ton dossier, puis tu l'envoies">
               <MockOnboarding/>
             </PhoneFrame>
           </div>
 
-          {/* ⚠️ CE NE SONT PAS DES MAQUETTES, ET C'EST TOUT L'INTÉRÊT.
-              Idée d'Alex, 26/08 : « on montre la réalité ». Tout ce qui précède
-              est dessiné à la main en JSX — léger, net, toujours à jour. Ces
-              deux images-ci sont de vraies captures de l'inscription, prises le
-              jour où elle a été testée de bout en bout. Un dessin dit « voilà à
-              quoi ça pourrait ressembler » ; une capture dit « voilà ce que tu
-              auras », et c'est ce qui décide un commerçant qui hésite.
+          {/* ⚠️ CE N'EST PAS UNE MAQUETTE, ET C'EST TOUT L'INTÉRÊT.
+              Idée d'Alex, 26/08 : « on montre la réalité ». Ce qui précède est
+              dessiné à la main en JSX, léger, net, toujours à jour. Ceci est une
+              vraie capture. Un dessin dit « voilà à quoi ça pourrait
+              ressembler » ; une capture dit « voilà ce que tu auras », et c'est
+              ce qui décide un commerçant qui hésite.
 
-              ⚠️ Le mockup au-dessus RESTE. Il porte le geste et le mouvement,
-              elles portent la preuve : ce n'est pas la même chose, et l'un ne
-              remplace pas l'autre. */}
+              🔴 CE COMMENTAIRE A ÉTÉ FAUX PENDANT UNE JOURNÉE, ET C'EST ALEX QUI
+              L'A VU À L'ÉCRAN. Il annonçait « ces DEUX images-ci sont de vraies
+              captures de L'INSCRIPTION » alors que le retrait du 22/09 n'en avait
+              laissé qu'UNE, et qu'elle montre le TABLEAU DE BORD. Le texte visible
+              avait vieilli de la même façon : un titre et un sous-titre au pluriel
+              au-dessus d'une seule image. **Quand on retire un élément d'une liste,
+              ce qui le DÉCRIVAIT reste en place et devient faux sans rien casser.**
+
+              ⚠️ LES DEUX TITRES CENTRÉS SONT PARTIS, ET PAS SEULEMENT PARCE QU'ILS
+              ÉTAIENT AU PLURIEL. Le composant CaptureProduit porte DÉJÀ le titre et la légende
+              de la capture : les coiffer d'un titre de section faisait deux titres
+              pour une image. La capture se pose maintenant en rangée, image à
+              gauche et texte à droite, en miroir du bloc de l'inscription juste
+              au-dessus. Rien n'est perdu : le titre qu'on lit est celui que porte
+              la capture dans lib/captures-landing.js.
+
+              ⚠️ Le mockup au-dessus RESTE. Il porte le geste et le mouvement, elle
+              porte la preuve : ce n'est pas la même chose, et l'un ne remplace pas
+              l'autre. */}
           {CAPTURES_COMMERCANT.length > 0 && (
-            <div style={{ marginTop: 52 }}>
-              <p style={{ textAlign: 'center', margin: '0 0 6px', fontSize: 'clamp(1.15rem, 2.6vw, 1.4rem)', fontWeight: 900, letterSpacing: '-0.5px', color: '#fff' }}>
-                Et ça, ce ne sont pas des maquettes.
-              </p>
-              <p style={{ textAlign: 'center', margin: '0 0 26px', fontSize: 13.5, color: 'rgba(255,255,255,0.82)', fontWeight: 600 }}>
-                Ce sont les écrans que tu verras, tels quels.
-              </p>
-              <div style={{ display: 'flex', gap: 'clamp(20px, 4vw, 44px)', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                {CAPTURES_COMMERCANT.map(c => <CaptureProduit key={c.cle} capture={c}/>)}
-              </div>
+            <div style={{ marginTop: 44, display: 'flex', flexDirection: 'column', gap: 'clamp(24px, 5vw, 48px)' }}>
+              {CAPTURES_COMMERCANT.map(c => <CaptureProduit key={c.cle} capture={c} enLigne/>)}
             </div>
           )}
 
@@ -2510,8 +2526,8 @@ export default function LandingReveal({ referent = null }) {
               },
               {
                 icone: <IconLifebuoy/>,
-                titre: 'En ligne en dix minutes',
-                texte: 'L’inscription se fait seul, tranquillement, en quelques étapes guidées. Tu préfères qu’on passe ? L’accompagnement sur place se choisit au moment de ton inscription, ou plus tard depuis ton tableau de bord : on vient chez toi installer ton catalogue et te former.',
+                titre: 'Et si tu préfères, on passe',
+                texte: 'L’accompagnement sur place se choisit au moment de ton inscription, ou plus tard depuis ton tableau de bord : on vient chez toi, on installe ton catalogue et on te forme. Jamais une obligation, jamais un abonnement de plus.',
               },
               {
                 icone: <IconHeadset/>,

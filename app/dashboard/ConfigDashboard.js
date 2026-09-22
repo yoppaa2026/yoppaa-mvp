@@ -28,7 +28,7 @@ import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from 
 import { euros } from '@/lib/montants'
 import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
-import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, finDegustation } from '@/lib/lancement'
+import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
@@ -13392,7 +13392,14 @@ function TabMonCompte({ commercant, toast, illisible = false }) {
   // qui s'inscrit en décembre a donc plus que les autres. Le bandeau annonce
   // une constante à tout le monde ; ici, on dit sa date à lui.
   const degustation = planEnEssai(commercant)
-  const finDeg = dateLongue(finDegustation(commercant?.created_at))
+  // 🔴 LE DERNIER JOUR OFFERT, PAS L'INSTANT DE FACTURATION. Première
+  // version : `finDegustation(created_at)`, affiché suivi de « inclus ». Or
+  // cette date EST celle de la première facture : l'écrire « offert jusqu'au
+  // 9 janvier inclus » promettait une journée de plus que la règle. Alex l'a
+  // vu en une phrase, le jour même (« l'essai jusqu'au 8 janvier inclus »),
+  // et `lib/lancement.js` l'écrivait déjà pour la date commune : « une
+  // journée fausse sur une promesse de gratuité, c'est une réclamation ».
+  const finDeg = dateLongue(dernierJourGratuit(commercant?.created_at))
 
   // 🔴 ET LE CAS QU'ALEX A VU CHEZ UN COMMERÇANT RÉEL : une formule payante
   // OUVERTE DEPUIS L'ADMINISTRATION. La modale d'admin le dit elle-même,

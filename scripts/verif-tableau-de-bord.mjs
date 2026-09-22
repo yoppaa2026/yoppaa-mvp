@@ -840,8 +840,18 @@ const verifie = (nom, cond, detail = '') => {
   // plus que les autres. `libelleDernierJourGratuit()` ne prend aucun
   // commerçant en argument, c'est donc une constante ; ici on veut la sienne.
   verifie('et la date affichée est celle de CE commerçant',
-    /finDegustation\(commercant\?\.created_at\)/.test(corpsCompte),
+    /dernierJourGratuit\(commercant\?\.created_at\)/.test(corpsCompte),
     'la date serait la même pour tout le monde, alors que la règle dépend de la date d’inscription')
+
+  // 🔴 ET C'EST LE DERNIER JOUR OFFERT, PAS L'INSTANT DE FACTURATION. Les
+  // deux dates sont voisines d'une journée, et `lib/lancement.js` prévient
+  // en toutes lettres : « une journée fausse sur une promesse de gratuité,
+  // c'est une réclamation ». La première version de cet écran affichait
+  // `finDegustation` suivi du mot « inclus », donc promettait un jour de
+  // trop. Trouvé par Alex le jour même, en lisant la règle et pas le code.
+  verifie('l’écran ne confond pas le dernier jour offert et la facturation',
+    !/finDegustation\(/.test(corpsCompte),
+    'la date de première facture serait affichée comme dernier jour gratuit')
 
   // 🔴 ET CE QUI SE PASSE APRÈS, qui est la seule chose qu'un commerçant
   // veuille savoir en lisant son compte : ce qu'il perd, ce qu'il garde.

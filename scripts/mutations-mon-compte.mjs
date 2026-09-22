@@ -42,9 +42,18 @@ const MUTATIONS = [
   // que les autres. `libelleDernierJourGratuit()` ne prend aucun commercant en
   // argument, c est donc une constante.
   { nom: '🔴 la date de degustation redevient la meme pour tout le monde',
-    de: '  const finDeg = dateLongue(finDegustation(commercant?.created_at))',
+    de: '  const finDeg = dateLongue(dernierJourGratuit(commercant?.created_at))',
     vers: '  const finDeg = libelleDernierJourGratuit()',
     garde: 'et la date affichée est celle de CE commerçant' },
+
+  // 🔴 UN JOUR DE TROP SUR UNE PROMESSE DE GRATUITE. `finDegustation` rend
+  // l INSTANT DE FACTURATION : l afficher suivi de « inclus » promet une
+  // journee de plus que la regle. C est la premiere version de cet ecran, et
+  // c est Alex qui l a vue, en lisant la regle plutot que le code.
+  { nom: '🔴 la date affichee redevient celle de la premiere facture',
+    de: '  const finDeg = dateLongue(dernierJourGratuit(commercant?.created_at))',
+    vers: '  const finDeg = dateLongue(finDegustation(commercant?.created_at))',
+    garde: 'l’écran ne confond pas le dernier jour offert et la facturation' },
 
   { nom: '🔴 la degustation annonce une date sans dire ce qu elle change',
     de: 'tu perds les fonctions de {getPlanLabel(degustation)}',

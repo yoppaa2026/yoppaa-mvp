@@ -806,117 +806,26 @@ function MockMorning() {
   )
 }
 
-// ─── Mockup 3 : prise de RDV (services) ──────────────────────────────────────
-// ⚠️ REDESSINÉE LE 13/09 D'APRÈS UNE CAPTURE, ET ELLE MENTAIT SUR CINQ POINTS.
-// La version précédente datait d'avant le module d'agenda : pas d'indicateur
-// d'étapes, « Avec qui » en pastilles de texte, les créneaux pris affichés
-// barrés, le jour écrit en titre au lieu d'un carrousel, et le compte de
-// créneaux libres absent. Le produit a bougé, la landing non : c'est le défaut
-// que les maquettes dessinées d'après le CODE finissent toujours par produire.
+// ─── LA MAQUETTE DU RENDEZ-VOUS EST PARTIE LE 22/09, ET C'EST LA RÈGLE DE CE
+// FICHIER QUI L'A DÉCIDÉ ────────────────────────────────────────────────────
 //
-// ⚠️ LES CRÉNEAUX SONT CEUX DE LA CAPTURE, Y COMPRIS LE TROU DE MIDI. Entre
-// 11:00 et 13:00, rien : le salon mange. Aucune maquette inventée n'aurait
-// produit ce trou, et c'est précisément lui qui fait vrai. Ne pas « compléter »
-// la grille.
+// « Une maquette porte un geste, une capture porte la preuve. » Tant qu'aucune
+// capture ne montrait la prise de rendez-vous, le dessin faisait le travail des
+// deux. Depuis le 22/09, la capture `yopper_creneaux` montre EXACTEMENT le même
+// écran, en vrai : la prestation choisie, « Avec qui », le carrousel des jours,
+// puis la grille des créneaux. Garder les deux, c'est montrer deux fois le même
+// geste dans la même page, et affaiblir la capture en la doublant d'un dessin.
 //
-// ⚠️ LES CRÉNEAUX DÉJÀ PRIS NE S'AFFICHENT PAS, et c'est un choix du produit :
-// on montre ce qui reste, pas ce qui manque. Les barrer, comme le faisait la
-// version précédente, donne l'impression d'un agenda plein.
-function MockRdv() {
-  // Les quatre tuiles de la vraie fiche. La dernière est coupée par le bord :
-  // c'est ce qui dit qu'il y en a d'autres, sans place pour les montrer.
-  const equipe = [
-    { i: '?', n: 'Sans préférence', fond: `linear-gradient(135deg, ${T.main}, ${T.mid})`, actif: false },
-    { i: 'C', n: 'Carole', fond: T.main, actif: true },
-    { i: 'E', n: 'Elisa', fond: '#C2189B', actif: false },
-    { i: 'V', n: 'Vic', fond: '#10B981', actif: false },
-  ]
-  const jours = [
-    { j: 'Dim', n: '13', auj: true, passe: true },
-    { j: 'Lun', n: '14', actif: true },
-    { j: 'Mar', n: '15' },
-    { j: 'Mer', n: '16' },
-    { j: 'Jeu', n: '17' },
-  ]
-  const creneaux = [
-    '07:00', '07:30', '08:00', '08:30',
-    '09:00', '09:30', '10:00', '10:30',
-    '11:00', '13:00', '13:30', '14:00',
-    '14:30', '15:00', '15:30', '16:00',
-    '16:30', '17:00', '17:30', '18:00',
-    '18:30',
-  ]
-  const titre = { fontSize: 7, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }
-  return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: T.panel, padding: '24px 9px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(196,160,244,0.25)', borderRadius: 100, padding: '3px 7px', fontSize: 7.5, fontWeight: 800, color: '#fff', flexShrink: 0 }}>&lsaquo; Retour</span>
-        <span style={{ fontSize: 8, fontWeight: 800, color: '#fff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Salon Camille</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          {[{ t: '✓', fait: true }, { t: '2', actif: true }, { t: '3' }].map((e, i) => (
-            <span key={i} style={{
-              width: 15, height: 15, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 7, fontWeight: 900,
-              background: e.fait ? 'rgba(16,185,129,0.15)' : e.actif ? T.main : 'rgba(255,255,255,0.08)',
-              border: `1px solid ${e.fait ? '#10B981' : e.actif ? T.light : 'rgba(196,160,244,0.3)'}`,
-              color: e.fait ? '#10B981' : e.actif ? '#fff' : 'rgba(255,255,255,0.6)',
-            }}>{e.t}</span>
-          ))}
-        </span>
-      </div>
-
-      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ background: '#fff', borderRadius: 10, padding: '7px 9px', marginBottom: 9, border: `1px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(26,8,64,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${T.ink}, ${T.main} 60%, ${T.mid})` }}/>
-          <div>
-            <p style={{ margin: 0, ...titre }}>Prestation choisie</p>
-            <p style={{ margin: '2px 0 0', fontSize: 10.5, fontWeight: 900, color: T.ink }}>Coupe femme</p>
-            <p style={{ margin: '1px 0 0', fontSize: 7.5, color: T.muted, fontWeight: 600 }}>30 min &middot; 35,00 &euro;</p>
-          </div>
-          <span style={{ flexShrink: 0, border: `1.2px solid ${T.main}`, borderRadius: 100, padding: '3px 8px', fontSize: 7.5, fontWeight: 800, color: T.main }}>Changer</span>
-        </div>
-
-        <p style={{ margin: '0 0 5px', ...titre }}>Avec qui</p>
-        <div style={{ display: 'flex', gap: 5, marginBottom: 9, overflow: 'hidden', flexShrink: 0 }}>
-          {equipe.map(p => (
-            <span key={p.n} style={{
-              width: 56, flexShrink: 0, borderRadius: 9, padding: '6px 3px',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-              background: p.actif ? '#FBF8FF' : '#fff',
-              border: `${p.actif ? 1.4 : 1}px solid ${p.actif ? T.main : T.pale}`,
-            }}>
-              <span style={{ width: 20, height: 20, borderRadius: '50%', background: p.fond, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900 }}>{p.i}</span>
-              <span style={{ fontSize: 6.5, fontWeight: 800, color: p.actif ? T.main : T.deep, whiteSpace: 'nowrap' }}>{p.n}</span>
-            </span>
-          ))}
-        </div>
-
-        <p style={{ margin: '0 0 5px', ...titre }}>Je viens le</p>
-        <div style={{ display: 'flex', gap: 4, marginBottom: 9, flexShrink: 0 }}>
-          {jours.map(d => (
-            <span key={d.n} style={{ flex: 1, position: 'relative', borderRadius: 8, border: `1px solid ${d.actif ? T.main : T.pale}`, background: d.actif ? T.main : '#fff', padding: '4px 0', textAlign: 'center', opacity: d.passe ? 0.4 : 1 }}>
-              {d.auj && <span style={{ position: 'absolute', top: -3, right: -2, background: T.pale, color: T.deep, fontSize: 4.5, fontWeight: 900, borderRadius: 3, padding: '1px 2px', letterSpacing: '0.3px' }}>AUJ</span>}
-              <span style={{ display: 'block', fontSize: 6.5, fontWeight: 700, color: d.actif ? '#fff' : T.muted }}>{d.j}</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 900, color: d.actif ? '#fff' : T.ink, lineHeight: 1.1 }}>{d.n}</span>
-              <span style={{ display: 'block', fontSize: 6.5, fontWeight: 700, color: d.actif ? '#fff' : T.muted }}>sep</span>
-            </span>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '0 0 5px', flexShrink: 0 }}>
-          <span style={titre}>Créneaux lundi 14 sep</span>
-          <span style={{ flex: 1, height: 1, background: T.pale }}/>
-          <span style={{ fontSize: 7, fontWeight: 700, color: T.muted, whiteSpace: 'nowrap' }}>21 libres</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, paddingBottom: 10 }}>
-          {creneaux.map(h => (
-            <span key={h} style={{ padding: '5px 0', borderRadius: 7, fontSize: 8, fontWeight: 800, textAlign: 'center', background: '#fff', color: T.ink, border: `1px solid ${T.pale}` }}>{h}</span>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
+// ⚠️ CE QUE LE DESSIN DISAIT DE PLUS N'A PAS ÉTÉ PERDU. Son étiquette était la
+// SEULE ligne de toute la landing à annoncer le rappel ; elle est passée dans
+// la légende de la capture. Le délai a été revérifié dans le code avant le
+// déplacement : `RAPPEL_RDV_MIN = 60` (`lib/rappels.js`), donc « une heure
+// avant » est juste. L'email de confirmation, lui, porte un rappel à 24 h.
+//
+// ⚠️ ET ELLE PORTAIT UNE DATE QUI VIEILLISSAIT TOUTE SEULE : « AUJ » sur le
+// dimanche 13, « Créneaux lundi 14 sep ». Neuf jours plus tard, la page
+// d'accueil proposait des créneaux passés. Une capture ne promet pas un jour
+// précis ; un dessin daté, si.
 
 // ─── Mockups 7 et 8 : le restaurant ─────────────────────────────────────────
 //
@@ -1279,15 +1188,35 @@ function MockDashboard() {
 // L'ancienne version montrait le SMS d'ouverture puis une carte plein écran
 // avec le wordmark : un parcours qui n'existe plus sous cette forme.
 function MockFidelite() {
+  // 🔴 CETTE MAQUETTE VENDAIT UNE MÉCANIQUE SUPPRIMÉE LE 16/09 (corrigé le
+  // 22/09). Elle annonçait « 9/10 passages → le 11e te fait gagner 5 € », or
+  // `lib/fidelite.js` l'écrit noir sur blanc : « Le montant fixe en euros
+  // n'existe plus. C'était lui, le défaut. » Un commerçant ne PEUT plus régler
+  // ça, et le client ne le verra jamais : la page d'accueil promettait donc
+  // quelque chose que le produit refuse de faire.
+  //
+  // ⚠️ DEUX MÉCANIQUES, ET CHACUNE GARDE SON UNITÉ (`recompenseDue`) :
+  //   • PASSAGES → un POURCENTAGE de remise, parce qu'il suit le prix pratiqué.
+  //   • CAGNOTTE → la récompense EST la cagnotte : seuil à 10 €, 10 € rendus.
+  // Les deux sont montrées, sinon la landing n'en raconte qu'une moitié.
+  //
+  // ⚠️ ET C'EST LE 10e PASSAGE, PAS LE 11e. `appliquerCredit` déclenche sur
+  // `passages >= seuil` : la carte se remplit au 10e, et la remise se dépense
+  // sur la commande suivante. « Le 11e » décalait la promesse d'un passage.
+  //
+  // ⚠️ LES DEUX CARTES GAGNÉES NE SONT PAS PLEINES, et c'est le détail qui
+  // prouve que la maquette a été relevée sur le produit : au débloquage, le
+  // seuil est RETIRÉ et la carte repart. L'écran réel le dit lui-même (« Ta
+  // nouvelle carte a déjà 2 passages sur 10 »), une barre figée à 100 % non.
   const cartes = [
-    { n: 'Salon Camille', i: 'C', fond: `linear-gradient(135deg, ${T.deep}, ${T.main})`, pct: 22,
-      t: '2 récompenses débloquées : 10 € sur ton prochain achat chacune', gagne: true },
+    { n: 'Salon Camille', i: 'C', fond: `linear-gradient(135deg, ${T.deep}, ${T.main})`, pct: 20,
+      t: '-50 % débloqués · ta nouvelle carte : 2 passages sur 10', gagne: true },
     { n: 'Friterie du Parc', i: 'F', fond: 'linear-gradient(135deg, #7A1F1F, #C0392B)', pct: 90,
-      t: '9/10 passages → le 11e te fait gagner 5 €', gagne: false },
+      t: '9 passages sur 10 · encore 1 et tu reçois -10 %', gagne: false },
     { n: 'Boulangerie du Centre', i: 'B', fond: `linear-gradient(135deg, ${T.main}, ${T.light})`, pct: 40,
-      t: '4/10 passages → le 11e te fait gagner 5 €', gagne: false },
-    { n: 'Maison Léa', i: 'M', fond: 'linear-gradient(135deg, #B45309, #F59E0B)', pct: 100,
-      t: 'Récompense débloquée : 10 € offerts', gagne: true },
+      t: 'Ta cagnotte : 4,00 € · encore 6,00 € et tu reçois 10,00 € offerts', gagne: false },
+    { n: 'Maison Léa', i: 'M', fond: 'linear-gradient(135deg, #B45309, #F59E0B)', pct: 15,
+      t: '10,00 € offerts débloqués · ta cagnotte repart à 1,50 €', gagne: true },
   ]
   return (
     <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -2383,9 +2312,6 @@ export default function LandingReveal({ referent = null }) {
           </PhoneFrame>
           <PhoneFrame label="Dis combien vous êtes, choisis ton heure : la table est retenue en trois étapes">
             <MockTableCreneaux/>
-          </PhoneFrame>
-          <PhoneFrame label="Choisis la personne et ton heure, même à minuit : le rappel arrive une heure avant">
-            <MockRdv/>
           </PhoneFrame>
         </RangeeMaquettes>
         <RangeeMaquettes titre="Et ce qui te fait revenir">

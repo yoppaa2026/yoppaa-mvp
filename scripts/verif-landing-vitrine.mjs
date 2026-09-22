@@ -24,6 +24,7 @@
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import { CAPTURES_YOPPER, CAPTURES_COMMERCANT } from '../lib/captures-landing.js'
+import { recompenseDue, presetFidelite } from '../lib/fidelite.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -73,44 +74,58 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 2. LA PRISE DE RENDEZ-VOUS DIT CE QUE LE PRODUIT FAIT
+// 2. LA PRISE DE RENDEZ-VOUS EST MONTRÉE, ET C'EST LA VRAIE
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Les quatre gardes qui suivent figent les quatre écarts mesurés le 13/09 en
-// comparant la maquette à une capture de l'écran réel.
+// 🔴 CETTE SECTION MESURAIT UN DESSIN QUI N'EXISTE PLUS (22/09). Ses six
+// gardes figeaient les écarts relevés le 13/09 entre `MockRdv` et l'écran réel
+// (indicateur d'étapes, tuiles à initiale, trou de midi, créneaux non barrés).
+// Le dessin est parti parce que la capture `yopper_creneaux` montre le MÊME
+// écran en vrai : aucun de ces écarts n'est plus possible, une capture ne peut
+// pas oublier le trou de midi.
+//
+// 🔴 MAIS UNE SECTION QUI PERD SA CIBLE NE DEVIENT PAS VIDE, ELLE CHANGE DE
+// CIBLE. Supprimer ces gardes avec leur sujet laisserait un trou silencieux :
+// la landing pourrait cesser d'afficher la prise de rendez-vous sans que rien
+// ne rougisse, et c'est exactement le genre de vert complice que ce banc
+// existe pour empêcher. On ne mesure donc plus le dessin : on mesure que la
+// PREUVE est là, qu'elle est décrite, et qu'elle n'a rien perdu de ce que le
+// dessin était seul à dire.
 {
-  const mock = LANDING.split('function MockRdv()')[1]?.split('\nfunction ')[0] || ''
-  verifier('la maquette du rendez-vous existe', mock.length > 200)
+  const rdv = CAPTURES_YOPPER.find(c => c.cle === 'yopper_creneaux')
+  verifier('la prise de rendez-vous est montrée par une capture', !!rdv)
+  verifier('elle est décrite pour qui ne voit pas l’image',
+    (rdv?.alt?.length || 0) > 60 && (rdv?.legende?.length || 0) > 60)
 
-  // L'indicateur d'étapes : c'est lui qui dit « c'est court », et c'est la
-  // première chose qu'un client cherche avant de s'engager dans un tunnel.
-  verifier('le rendez-vous affiche son indicateur d’étapes',
-    /fait: true/.test(mock) && /actif: true/.test(mock))
+  // ⚠️ ELLE NOMME LES TROIS CHOIX DU TUNNEL. C'est ce que la maquette montrait
+  // et ce qu'un lecteur pressé doit lire sans ouvrir l'image : la prestation,
+  // la personne, l'heure.
+  const dit = `${rdv?.alt || ''} ${rdv?.legende || ''}`.toLowerCase()
+  for (const mot of ['prestation', 'personne', 'heure']) {
+    verifier(`la capture du rendez-vous nomme « ${mot} »`, dit.includes(mot))
+  }
 
-  // ⚠️ « AVEC QUI » EST UNE LISTE DE PERSONNES, PAS UNE LISTE DE MOTS. L'écran
-  // réel montre une pastille d'initiale par personne ; la version précédente
-  // n'affichait que des noms dans des pilules, ce qui ne ressemblait à rien de
-  // ce que le client voit.
-  verifier('on choisit la personne sur une tuile à initiale',
-    /borderRadius: '50%'/.test(mock) && /Sans préférence/.test(mock))
+  // 🔴 ET LE RAPPEL, QUE LE DESSIN ÉTAIT SEUL À ANNONCER. Son étiquette est la
+  // seule ligne de la landing à l'avoir jamais dit ; en la retirant sans la
+  // déplacer, on aurait perdu un argument sans que personne ne s'en aperçoive.
+  verifier('la capture annonce toujours le rappel', /rappel/i.test(dit))
 
-  // 🔴 LES CRÉNEAUX PRIS NE S'AFFICHENT PAS. Le produit montre ce qui reste ;
-  // les barrer donnerait l'impression d'un agenda plein, c'est-à-dire l'inverse
-  // exact de ce que la landing doit faire comprendre.
-  verifier('aucun créneau n’est montré barré',
-    !/lineThrough|line-through/.test(mock))
+  // 🔴 LA GARDE QUI VAUT LES SIX AUTRES : LE DÉLAI ANNONCÉ EST CELUI DU CODE.
+  // La landing écrit « une heure avant » ; `lib/rappels.js` décide vraiment.
+  // Le jour où ce réglage bouge, la page d'accueil promettra autre chose que
+  // ce que le produit envoie, et rien d'autre ne le dirait.
+  const RAPPELS = readFileSync(new URL('../lib/rappels.js', import.meta.url), 'utf8')
+  const minutes = Number(RAPPELS.match(/RAPPEL_RDV_MIN\s*=\s*(\d+)/)?.[1] || 0)
+  verifier('le délai du rappel RDV se lit dans le code', minutes > 0, `${minutes} min`)
+  verifier('et la landing annonce ce délai-là',
+    minutes === 60 ? /une heure avant/i.test(dit) : new RegExp(`${minutes}`).test(dit),
+    `code : ${minutes} min · page : ${dit.slice(-40)}`)
 
-  // ⚠️ LE TROU DE MIDI. Entre 11:00 et 13:00 le salon mange, et cette absence
-  // vient de la capture. Une grille « complétée » à la main redeviendrait un
-  // dessin : c'est le détail qui prouve que la maquette a été relevée sur un
-  // écran, pas imaginée.
-  verifier('la grille garde le trou de midi de la capture',
-    /'11:00', '13:00'/.test(mock))
-
-  // Le compte de créneaux libres : l'écran le donne, et c'est lui qui dit
-  // « il reste de la place » sans faire compter le lecteur.
-  verifier('le nombre de créneaux libres est annoncé',
-    /\d+ libres/.test(mock))
+  // ⚠️ ET PERSONNE NE REDESSINE CE QUE LA CAPTURE PROUVE. Une maquette du même
+  // écran remise à côté d'elle ferait deux fois le même geste dans la page, et
+  // rouvrirait le défaut du 13/09 : un dessin qui vieillit sans le dire.
+  verifier('aucune maquette ne redouble la capture du rendez-vous',
+    !/function MockRdv\(/.test(LANDING))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -232,6 +247,59 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
     /gagne: true/.test(fid))
   verifier('le pointage au comptoir est expliqué',
     /numéro de GSM suffit au comptoir/.test(fid))
+
+  // 🔴 ET CE QUE CES GARDES NE REGARDAIENT PAS : CE QUE LA CARTE PROMET.
+  // Elles comptaient les cartes, cherchaient un `gagne: true` et la phrase du
+  // GSM. Pendant ce temps la maquette annonçait « 9/10 passages → le 11e te
+  // fait gagner 5 € », six jours après que la refonte du 16/09 ait supprimé le
+  // montant fixe en euros. Un banc vert, une page d'accueil qui vendait une
+  // mécanique que plus aucun commerçant ne peut régler.
+  //
+  // ⚠️ LA GARDE NE RECOPIE PAS LA RÈGLE, ELLE L'EXÉCUTE. `recompenseDue` décide
+  // seule de l'unité de chaque mécanique ; on lui demande, et on compare à ce
+  // que l'écran affiche. Le jour où l'unité change, la maquette rougit.
+  const duePassages = recompenseDue(presetFidelite('alimentaire'))
+  const dueCagnotte = recompenseDue(presetFidelite('detail'))
+  verifier('le code rend un POURCENTAGE sur la mécanique à passages',
+    duePassages.type === 'remise_pct', duePassages.type)
+  verifier('et un MONTANT sur la mécanique à cagnotte',
+    dueCagnotte.type === 'remise_montant', dueCagnotte.type)
+
+  const promesses = [...fid.matchAll(/t: '([^']+)'/g)].map(m => m[1])
+  verifier('chaque carte dit ce qu’elle promet', promesses.length >= 3, `${promesses.length} promesse(s)`)
+
+  const enPassages = promesses.filter(t => /passages?/i.test(t))
+  const enCagnotte = promesses.filter(t => /cagnotte/i.test(t))
+
+  // 🔴 LES DEUX MÉCANIQUES SE JUGENT SUR LES CARTES EN COURS, PAS SUR LE LOT.
+  // Mesurée au harnais, la première version restait verte quand la seule
+  // cagnotte de la page passait en passages : une carte DÉJÀ GAGNÉE disait
+  // encore le mot « cagnotte » en annonçant son gain, et ça suffisait. Or ce
+  // qui explique une mécanique, c'est la jauge qui MONTE, pas le gain.
+  const enCours = [...fid.matchAll(/t: '([^']+)', gagne: false }/g)].map(m => m[1])
+  verifier('des cartes en cours de remplissage sont montrées', enCours.length >= 2, `${enCours.length}`)
+  verifier('la mécanique à passages est montrée en cours',
+    enCours.some(t => /passages?/i.test(t)), enCours.join(' | '))
+  verifier('la mécanique à cagnotte est montrée en cours aussi',
+    enCours.some(t => /cagnotte/i.test(t)), enCours.join(' | '))
+
+  // 🔴 LE DÉFAUT LUI-MÊME : un montant en euros sur une carte à passages.
+  verifier('aucune carte à passages ne promet un montant en euros',
+    enPassages.every(t => !/€/.test(t)), enPassages.filter(t => /€/.test(t)).join(' | '))
+  // ⚠️ « every », PAS « some ». Avec « some », une seule carte portante
+  // suffisait : on pouvait vider le pourcentage de toutes les autres sans que
+  // rien ne rougisse. Une carte à passages qui ne dit pas sa remise ne dit
+  // rien du tout.
+  verifier('CHAQUE carte à passages annonce son pourcentage',
+    enPassages.every(t => /%/.test(t)), enPassages.filter(t => !/%/.test(t)).join(' | '))
+  verifier('la carte à cagnotte compte bien en euros',
+    enCagnotte.every(t => /€/.test(t)), enCagnotte.join(' | '))
+
+  // ⚠️ ET LE PASSAGE QUI DÉCLENCHE. `appliquerCredit` débloque sur
+  // `passages >= seuil` : c'est le 10e qui remplit la carte. La version
+  // précédente annonçait « le 11e », soit un passage de plus que la règle.
+  verifier('aucune carte ne décale le passage qui déclenche',
+    !/le 11e|11e passage/i.test(fid))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -282,17 +350,49 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
 // ⚠️ LA GARDE VISE LES PAGES PUBLIQUES, PAS LE CODE ENTIER. Ces mêmes noms
 // vivent dans des commentaires de `lib/` qui racontent des cas vécus, et ils y
 // sont utiles : c'est l'AFFICHAGE qui est en cause, pas la mention.
+//
+// 🔴 ET CETTE GARDE ÉTAIT VERTE EN NE REGARDANT PRESQUE RIEN (constaté le
+// 22/09). Son filet général cherchait `enseigne: '...'` : DEUX noms sur la
+// vingtaine que les maquettes affichent, parce que les autres s'écrivent
+// `n:`, `nom:`, ou directement dans le JSX. Elle couvrait 10 % de la page et
+// répondait « tout va bien » pour les 90 % restants. Le piège n'est pas la
+// regex, c'est d'avoir visé une CLÉ là où il fallait viser le TEXTE AFFICHÉ.
+//
+// 🔴 ELLE NE REGARDAIT QUE LA LANDING, ALORS QUE LA PAGE MONTRE DES IMAGES.
+// Depuis le 22/09 elle affiche dix captures, et leurs `alt` et légendes sont
+// du texte public comme le reste : une légende qui nommerait une enseigne
+// passait sous la garde. Elles sont balayées ici aussi.
+//
+// ⚠️ CE QUE CETTE GARDE NE PEUT PAS FAIRE, ET IL FAUT L'ÉCRIRE : elle lit du
+// texte, pas des pixels. Ce qu'une capture montre À L'ÉCRAN (le nom d'un
+// commerce sur sa fiche, un prix, une adresse) ne se vérifie qu'en ouvrant
+// l'image. C'est le prix des captures, et ce contrôle-là reste humain.
 {
   const DEMOS = ['Kebabistro', 'La mie de test', 'La Boutique Témoin', 'Ciseaux et Soins', 'Centre Respire']
+  // Le texte public de la page : les maquettes ET ce que les captures disent.
+  const TEXTES_CAPTURES = [...CAPTURES_YOPPER, ...CAPTURES_COMMERCANT]
+    .flatMap(c => [c.alt, c.legende, c.titre]).filter(Boolean)
+  const PUBLIC = `${LANDING}\n${TEXTES_CAPTURES.join('\n')}`
+
   for (const nom of DEMOS) {
-    verifier(`la landing n’affiche pas l’enseigne « ${nom} »`, !LANDING.includes(nom))
+    verifier(`la page n’affiche pas l’enseigne « ${nom} »`, !PUBLIC.includes(nom))
   }
-  // ⚠️ ET LA RÈGLE AU-DELÀ DE CES CINQ NOMS : une enseigne inventée ne dit
-  // jamais qu'elle est un essai. Sans ce filet, la prochaine maquette écrite
-  // en vitesse repasserait sous la liste ci-dessus.
-  const enseignes = [...LANDING.matchAll(/enseigne: '([^']+)'/g)].map(m => m[1])
-  verifier('aucune enseigne de maquette ne se dit de test',
-    enseignes.every(e => !/\b(test|témoin|demo|démo)\b/i.test(e)), enseignes.join(', '))
+
+  // ⚠️ ET LA RÈGLE AU-DELÀ DE CES CINQ NOMS : rien de ce que la page affiche ne
+  // se dit un essai. On balaie TOUTES les chaînes littérales du fichier
+  // dépouillé, plus les textes des captures, au lieu d'une seule clé.
+  const ESSAI = /\b(tests?|t[ée]moins?|d[ée]mos?)\b/i
+  const affichees = [...LANDING.matchAll(/'([^'\\\n]{3,80})'/g)].map(m => m[1])
+  const fautives = [...affichees, ...TEXTES_CAPTURES].filter(t => ESSAI.test(t))
+  verifier('rien de ce que la page affiche ne se dit de test',
+    fautives.length === 0, fautives.join(' | '))
+
+  // 🔴 ET LE COMPTEUR, PARCE QU'UNE LISTE VIDE PASSE TOUJOURS. C'est ce défaut
+  // exact qui rendait la version précédente complice : deux chaînes examinées,
+  // vert franc. Si la page cesse d'être lisible ici, la garde doit le dire.
+  verifier('la garde regarde vraiment le texte de la page',
+    affichees.length > 300 && TEXTES_CAPTURES.length >= 12,
+    `${affichees.length} chaînes · ${TEXTES_CAPTURES.length} textes de captures`)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

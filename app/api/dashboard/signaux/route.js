@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { estAdminYoppaa } from '@/lib/api-auth'
 
 function admin() {
   return createClient(
@@ -42,7 +43,11 @@ async function commercantDuProprietaire(supabase, request, commercantId) {
     .select('id, auth_user_id, plan, categorie, signaux_seuil_alerte, signaux_vus_le, signaux_email_actif, signaux_email_pause_jusqu')
     .eq('id', commercantId)
     .maybeSingle()
-  if (!c || c.auth_user_id !== user.id) return null
+  // ⚠️ L'ADMIN PASSE, ET C'EST UN POINT CENTRAL QUI LE DIT. Cette route le
+  // refusait : le mode admin était donc à moitié fonctionnel, on pouvait
+  // regarder un dossier sans jamais s'en servir. Trouvé le 22/09 sur la
+  // facturation, corrigé ici et chez ses deux frères.
+  if (!c || (c.auth_user_id !== user.id && !estAdminYoppaa(user))) return null
   return c
 }
 

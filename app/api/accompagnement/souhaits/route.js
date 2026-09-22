@@ -27,8 +27,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { produitParType } from '@/lib/produits-boutique'
+import { estAdminYoppaa } from '@/lib/api-auth'
 
-const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
 // Statut d'un choix fait à l'inscription : rien n'est engagé, rien n'est dû.
 // Il se distingue de 'paiement_en_attente' (un Checkout a été ouvert) et de
@@ -62,7 +62,7 @@ async function autoriser(request, commercantId) {
     .eq('id', commercantId)
     .maybeSingle()
   if (!com) return { ok: false, statut: 404, error: 'commerçant introuvable' }
-  if (com.auth_user_id !== user.id && user.email !== ADMIN_EMAIL) {
+  if (com.auth_user_id !== user.id && !estAdminYoppaa(user)) {
     return { ok: false, statut: 403, error: 'accès refusé' }
   }
   return { ok: true, admin, com }

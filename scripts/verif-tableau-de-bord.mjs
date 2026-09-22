@@ -1128,31 +1128,51 @@ const verifie = (nom, cond, detail = '') => {
   const listeTabs = iTabsF >= 0 && iFinTabsF > iTabsF ? code.slice(iTabsF, iFinTabsF) : ''
   verifie('la barre d’onglets reste lisible depuis ce bloc', listeTabs.length > 200, String(listeTabs.length))
   // ─── L'écran ─────────────────────────────────────────────────────────────
-  verifie('🔴 l’onglet « Facturation » existe dans la barre',
-    /label: 'Facturation'/.test(listeTabs),
-    'les coordonnées qui partent sur la facture redeviennent invisibles')
+  // 🔴 LA FACTURATION A ÉTÉ UN ONGLET PENDANT UNE HEURE (22/09). Alex l'a
+  // demandée séparée, l'a vue à l'écran, et a tranché : « facturation doit
+  // aller dans Mon compte ». La garde suit : ce qu'on veut, ce n'est pas un
+  // onglet, c'est que les coordonnées soient LISIBLES quelque part.
+  //
+  // ⚠️ ET ON VÉRIFIE L'INVERSE AUSSI : pas de second onglet qui referait la
+  // même chose ailleurs. Deux endroits pour un même sujet, c'est le défaut
+  // qu'on vient de corriger sur la page d'abonnement.
+  verifie('la facturation n’a pas repris un onglet à elle',
+    !/label: 'Facturation'/.test(listeTabs),
+    'les coordonnées vivraient à deux endroits, comme l’abonnement avant le 22/09')
 
   // ⚠️ SANS `feature`, comme « Mon compte » : savoir sous quel nom on est
   // facturé ne se mérite pas, et un cadenas sur ses propres coordonnées serait
   // absurde.
+  // ⚠️ ET « MON COMPTE » RESTE SANS FORFAIT, puisqu'il porte maintenant la
+  // facturation : savoir sous quel nom on est facturé ne se mérite pas.
   {
-    const ligne = listeTabs.split('\n').find(l => /id: 'facturation'/.test(l)) || ''
-    verifie('et il n’est derrière aucun forfait',
+    const ligne = listeTabs.split('\n').find(l => /id: 'compte'/.test(l)) || ''
+    verifie('« Mon compte » n’est derrière aucun forfait',
       ligne.length > 0 && !/feature:/.test(ligne), ligne.trim().slice(0, 80))
   }
 
-  const iFact = code.indexOf('function TabFacturation')
+  const iFact = code.indexOf('function BlocFacturation')
   const iFinFact = code.indexOf('function TabMonCompte')
-  verifie('l’écran de facturation est là où on le cherche',
+  verifie('le bloc de facturation est là où on le cherche',
     iFact >= 0 && iFinFact > iFact,
-    'TabFacturation a été renommé : les gardes suivantes ne mesurent plus rien')
+    'BlocFacturation a été renommé : les gardes suivantes ne mesurent plus rien')
+
+  // 🔴 ET IL EST BIEN RENDU DEPUIS « MON COMPTE ». Un composant qui existe et
+  // que personne ne pose est un écran que personne ne verra : c'est exactement
+  // ce que la garde des maquettes de la landing attrape, et ça vaut ici aussi.
+  verifie('et il est rendu depuis « Mon compte »',
+    /<BlocFacturation commercant=\{commercant\} toast=\{toast\} onSaved=\{onSaved\} \/>/.test(code),
+    'le bloc existerait sans que personne ne l’affiche')
   const corpsFact = iFact >= 0 && iFinFact > iFact ? code.slice(iFact, iFinFact) : ''
 
   // 🔴 LA MÊME GARDE QUE « MON COMPTE », POUR UNE RAISON PIRE : ici c'est un
   // FORMULAIRE. Sans dossier, des champs vides ressemblent à des valeurs, et un
   // enregistrement les écrirait pour de bon.
-  verifie('il refuse d’afficher un formulaire sans dossier',
-    /if \(!commercant\)/.test(corpsFact),
+  // ⚠️ LE FILET MINIMAL RESTE, MÊME SI LE PARENT GARDE DÉJÀ. Un composant ne
+  // doit jamais supposer son parent : le jour où on le rend ailleurs, la garde
+  // de « Mon compte » ne le protégera plus.
+  verifie('le bloc ne s’affiche pas sans dossier',
+    /if \(!commercant\) return null/.test(corpsFact),
     'des champs vides seraient pris pour des valeurs, et enregistrés comme telles')
 
   // ⚠️ ET IL NE RECOPIE LE DOSSIER QU'UNE FOIS. Remplir à chaque rendu
@@ -1229,13 +1249,49 @@ const verifie = (nom, cond, detail = '') => {
     /if \(net === ''\) return \{ ok: true, valeur: null \}/.test(fact),
     'un commerce en franchise ne pourrait plus enregistrer ses coordonnées')
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LE MODE ADMIN ÉTAIT À MOITIÉ FONCTIONNEL (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Alex a essayé d'enregistrer des coordonnées depuis son accès admin, sur la
+  // fiche d'un commerçant, et a lu « accès refusé ». Trois autres routes du
+  // tableau de bord faisaient pareil : on pouvait REGARDER un dossier sans
+  // jamais s'en servir. Un mode admin qui ne peut que regarder ne sert qu'à
+  // moitié, et il existe pour dépanner un commerçant au téléphone.
+  //
+  // ⚠️ ET LA RÉPONSE VIENT D'UN POINT CENTRAL, PAS D'UNE COPIE. Chaque route
+  // qui voulait laisser passer l'admin recopiait son adresse : le dépôt en
+  // comptait vingt-huit dans le code. La fonction estAdminYoppaa en a retiré
+  // deux, et evite trois de plus.
+  {
+    verifie('le point central sait reconnaître l’administrateur',
+      /export function estAdminYoppaa\(user\)/.test(readFileSync(new URL('../lib/api-auth.js', import.meta.url), 'utf8')),
+      'chaque route recopierait l’adresse admin, et celles qu’on oublie s’éteindraient sans rien dire')
+
+    for (const r of ['dashboard/signaux', 'dashboard/statistiques', 'dashboard/export-comptable',
+                     'accompagnement/checkout', 'accompagnement/souhaits']) {
+      const src = readFileSync(new URL(`../app/api/${r}/route.js`, import.meta.url), 'utf8')
+      verifie(`${r} laisse passer l’administrateur`,
+        /estAdminYoppaa\(user\)/.test(src),
+        'le mode admin y resterait aveugle')
+      // 🔴 ET AUCUNE N'A GARDÉ SA COPIE DE L'ADRESSE.
+      verifie(`${r} ne recopie pas l’adresse admin`,
+        !/verstappenalexandre@/.test(src),
+        'une copie de plus à retrouver le jour où l’adresse change')
+    }
+  }
+
   // ─── L'adresse ───────────────────────────────────────────────────────────
+  // ⚠️ ET L'ADRESSE DE L'ONGLET DISPARU EST RETIRÉE. Une valeur qui ne
+  // correspond plus à rien serait acceptée par l'URL et déposerait le
+  // commerçant sur un onglet vide, sans rien dire.
   {
     const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
     const liste = dash.split('const CONFIG_VALIDES')[1]?.split(']')[0] || ''
-    verifie('l’adresse ?config=facturation est acceptée',
-      /'facturation'/.test(liste),
-      'l’onglet ne serait atteignable par aucun lien, et le bouton Précédent redeviendrait muet')
+    verifie('l’adresse ?config=compte reste acceptée', /'compte'/.test(liste),
+      'le bouton des deux barres ne mènerait nulle part')
+    verifie('et ?config=facturation ne l’est plus', !/'facturation'/.test(liste),
+      'une adresse mènerait à un onglet qui n’existe plus')
   }
 }
 

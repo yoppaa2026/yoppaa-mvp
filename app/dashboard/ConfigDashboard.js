@@ -13394,7 +13394,7 @@ function DossierAbsent({ illisible = false, quoi }) {
 // comptable : celui qui la porte doit l'avoir écrite. Le numéro d'entreprise
 // est rappelé sous le champ, pour qu'il l'ait sous les yeux sans qu'on le
 // saisisse à sa place.
-function TabFacturation({ commercant, toast, onSaved, illisible = false }) {
+function BlocFacturation({ commercant, toast, onSaved }) {
   const [nom, setNom] = useState('')
   const [adresse, setAdresse] = useState('')
   const [tva, setTva] = useState('')
@@ -13417,7 +13417,12 @@ function TabFacturation({ commercant, toast, onSaved, illisible = false }) {
   // 🔴 LA MÊME GARDE QUE « MON COMPTE », POUR LA MÊME RAISON. Sans dossier, un
   // écran de formulaire afficherait des champs vides qui ressemblent à des
   // valeurs, et un enregistrement les écrirait pour de bon.
-  if (!commercant) return <DossierAbsent illisible={illisible} quoi="tes coordonnées de facturation" />
+  // ⚠️ PLUS DE GARDE DE CHARGEMENT ICI, ET C'EST VOLONTAIRE : ce bloc n'est
+  // rendu que depuis « Mon compte », qui a déjà refusé d'afficher quoi que ce
+  // soit sans dossier. Une seconde garde en cascade donnerait l'illusion d'une
+  // double protection là où la première a déjà tout arrêté. On garde quand même
+  // le filet minimal, parce qu'un composant ne doit jamais supposer son parent.
+  if (!commercant) return null  // le filet, le parent garde déjà
 
   const bceLisible = commercant.bce ? formaterBCECompact(String(commercant.bce).replace(/\D/g, '')) : null
   const manqueTva = assujetti && !String(tva).trim()
@@ -13531,7 +13536,7 @@ function TabFacturation({ commercant, toast, onSaved, illisible = false }) {
   )
 }
 
-function TabMonCompte({ commercant, toast, illisible = false }) {
+function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) {
   const [portail, setPortail] = useState(false)
 
   // 🔴 SANS DOSSIER, CET ÉCRAN AFFIRMAIT « EXISTER, GRATUIT À VIE » (22/09).
@@ -13765,6 +13770,13 @@ function TabMonCompte({ commercant, toast, illisible = false }) {
           </>
         )}
       </div>
+
+      {/* 🔴 LA FACTURATION VIT ICI DEPUIS LE 22/09, et l'ordre se lit : ce que
+          tu as, ce que tu paies, sous quel nom tu es facturé, comment tu te
+          connectes. Elle vient APRÈS les paiements parce qu'on ouvre cet écran
+          pour son abonnement, et AVANT l'accès parce qu'elle parle encore
+          d'argent. */}
+      <BlocFacturation commercant={commercant} toast={toast} onSaved={onSaved} />
 
       <div style={s.card}>
         <h2 style={s.h2}>Ton accès</h2>
@@ -14117,10 +14129,12 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // ⚠️ EN DERNIER, ET SANS `feature`. En dernier parce qu'on ne vient pas
     // régler son commerce ici ; sans forfait parce que savoir ce qu'on paie ne
     // se mérite pas, et qu'un cadenas sur son propre compte serait absurde.
-    // ⚠️ LA FACTURATION AVANT LE COMPTE, ET C'EST L'ORDRE DE LECTURE : on
-    // vérifie sous quel nom on est facturé, puis ce qu'on paie. L'inverse
-    // ferait découvrir le montant avant de savoir à qui il est adressé.
-    { id: 'facturation', label: 'Facturation', icon: 'user' },
+    // 🔴 LA FACTURATION A ÉTÉ UN ONGLET PENDANT UNE HEURE (22/09). Alex l'a
+    // demandée séparée, l'a vue à l'écran, et a tranché : « facturation doit
+    // aller dans Mon compte ». Il a raison, et c'est ce que le relevé disait
+    // avant que la question se pose : tout ce qui touche à l'argent au même
+    // endroit, c'est déjà là que mènent cinq emails de facturation, et la barre
+    // n'a pas besoin d'un dix-septième onglet pour ça.
     { id: 'compte', label: 'Mon compte', icon: 'user' },
   ].filter(Boolean)
     // ⚠️ L'ÉTAT SE CALCULE ICI, UNE FOIS, ET LE FILTRE NE PORTE QUE SUR `null`.
@@ -14229,8 +14243,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
       {/* ⚠️ AUCUNE CONDITION DE FORFAIT ICI, contrairement aux onglets
           au-dessus. Celui qui est en Exister doit pouvoir lire qu'il ne paie
           rien, et celui dont l'essai se termine doit pouvoir lire la date. */}
-      {tab === 'facturation' && <TabFacturation commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} />}
-      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} illisible={commercantIllisible} />}
+      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signaux' && <TabSignaux commercantId={commercantId} toast={showToast} signalementsEnAttente={signalementsEnAttente} />}
 

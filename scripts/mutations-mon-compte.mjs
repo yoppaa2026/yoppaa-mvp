@@ -25,6 +25,45 @@ const BANC = 'verif:bord'
 const MODULE = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── 22/09 : LE MODE ADMIN ETAIT A MOITIE FONCTIONNEL ───────────────────
+  //
+  // 🔴 Alex a essaye d enregistrer des coordonnees depuis son acces admin, sur
+  // la fiche d un commercant, et a lu « acces refuse ». Trois autres routes du
+  // tableau de bord faisaient pareil : on pouvait REGARDER un dossier sans
+  // jamais s en servir.
+  { nom: '🔴 le point central cesse de reconnaitre l administrateur',
+    fichier: 'lib/api-auth.js',
+    de: 'export function estAdminYoppaa(user) {',
+    vers: 'function estAdminYoppaaInterne(user) {',
+    garde: 'le point central sait reconnaître l’administrateur' },
+
+  { nom: '🔴 les signaux redeviennent aveugles au mode admin',
+    fichier: 'app/api/dashboard/signaux/route.js',
+    de: '&& !estAdminYoppaa(user)',
+    vers: '&& true',
+    garde: 'dashboard/signaux laisse passer l’administrateur' },
+
+  { nom: '🔴 les statistiques redeviennent aveugles au mode admin',
+    fichier: 'app/api/dashboard/statistiques/route.js',
+    de: '&& !estAdminYoppaa(user)',
+    vers: '&& true',
+    garde: 'dashboard/statistiques laisse passer l’administrateur' },
+
+  { nom: '🔴 l export comptable redevient aveugle au mode admin',
+    fichier: 'app/api/dashboard/export-comptable/route.js',
+    de: '&& !estAdminYoppaa(user)',
+    vers: '&& true',
+    garde: 'dashboard/export-comptable laisse passer l’administrateur' },
+
+  // ⚠️ ET LA COPIE DE L ADRESSE, qui revient par la petite porte a chaque fois
+  // qu une route veut laisser passer l admin sans appeler le point central.
+  { nom: '⚠️ une route recopie l adresse admin au lieu d appeler le point central',
+    fichier: 'app/api/accompagnement/souhaits/route.js',
+    de: 'estAdminYoppaa(user)',
+    vers: "(user.email === 'verstappenalexandre@gmail.com')",
+    garde: 'accompagnement/souhaits ne recopie pas l’adresse admin' },
+
+
   // ─── 22/09 : « MON COMPTE » ATTEIGNABLE SANS FAIRE DEFILER ──────────────
   //
   // 🔴 IL N ETAIT DANS AUCUNE DES DEUX BARRES. Il vivait au BOUT d une bande a
@@ -74,24 +113,16 @@ const MUTATIONS = [
   // formule, le prix et le portail, et pas une seule des donnees qui
   // apparaissent sur la facture. Le commercant payait sans jamais voir sous
   // quel nom il etait facture.
-  { nom: '🔴 l onglet Facturation disparait de la barre',
-    de: "    { id: 'facturation', label: 'Facturation', icon: 'user' },",
-    vers: '',
-    garde: 'l’onglet « Facturation » existe dans la barre' },
-
-  { nom: '🔴 un cadenas de forfait se pose sur ses propres coordonnees',
-    de: "    { id: 'facturation', label: 'Facturation', icon: 'user' },",
-    vers: "    { id: 'facturation', label: 'Facturation', icon: 'user', feature: 'export_comptable' },",
-    garde: 'et il n’est derrière aucun forfait' },
-
   // ⚠️ ANCRE SUR UNE SEULE LIGNE, comme la règle du dépôt l'exige. La version
   // d'avant portait un bloc entier avec ses sauts de ligne, parce que la ligne
   // de garde n'était pas unique dans le fichier. Elle l'est devenue en
   // supprimant la duplication : c'est le code qu'on a réparé, pas l'ancre.
   { nom: '🔴 le formulaire s affiche sans dossier : des champs vides passent pour des valeurs',
-    de: '  if (!commercant) return <DossierAbsent illisible={illisible} quoi="tes coordonnées de facturation" />',
-    vers: '  if (false) return <DossierAbsent illisible={illisible} quoi="tes coordonnées de facturation" />',
-    garde: 'il refuse d’afficher un formulaire sans dossier' },
+    // ⚠️ L ANCRE PORTE SON COMMENTAIRE, et c est ce qui la rend unique :
+    // `BandeauEssai` ecrit exactement la meme ligne, cent lignes plus haut.
+    de: '  if (!commercant) return null  // le filet, le parent garde déjà',
+    vers: '  if (commercant === undefined) return null  // le filet, le parent garde déjà',
+    garde: 'le bloc ne s’affiche pas sans dossier' },
 
   { nom: '🔴 les champs se reecrivent pendant que le commercant tape',
     de: '    if (charge || !commercant) return',
@@ -168,9 +199,9 @@ const MUTATIONS = [
   // ⚠️ ET L ADRESSE, sans quoi l onglet n est atteignable par aucun lien.
   { nom: '🔴 l adresse ?config=facturation redevient invalide',
     fichier: 'app/dashboard/page.js',
-    de: "    'avis', 'signaux', 'compte', 'facturation']",
-    vers: "    'avis', 'signaux', 'compte']",
-    garde: 'l’adresse ?config=facturation est acceptée' },
+    de: "    'avis', 'signaux', 'compte']",
+    vers: "    'avis', 'signaux', 'compte', 'facturation']",
+    garde: 'et ?config=facturation ne l’est plus' },
 
 
   // ─── 22/09 : CE QUE CONTIENT CHAQUE FORMULE RESTE LISIBLE ───────────────
@@ -217,8 +248,8 @@ const MUTATIONS = [
   { nom: '🔴 l adresse ?config=compte redevient invalide',
     fichier: 'app/dashboard/page.js',
     // ⚠️ ANCRE RECALEE LE 22/09 : la liste a gagne 'facturation' depuis.
-    de: "'compte', 'facturation']",
-    vers: "'facturation']",
+    de: "'signaux', 'compte']",
+    vers: "'signaux']",
     garde: 'l’adresse ?config=compte est acceptée par le tableau de bord' },
 
   // ⚠️ ET LA LANGUE DU PRODUIT. Tout Yoppaa tutoie.
@@ -297,8 +328,8 @@ const MUTATIONS = [
     garde: 'l’écran du compte refuse de deviner une formule sans dossier' },
 
   { nom: '🔴 le chargement et la panne redonnent le meme ecran',
-    de: 'function TabMonCompte({ commercant, toast, illisible = false }) {',
-    vers: 'function TabMonCompte({ commercant, toast }) {\n  const illisible = false',
+    de: 'function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) {',
+    vers: 'function TabMonCompte({ commercant, toast, onSaved = null }) {\n  const illisible = false',
     garde: 'et il distingue le chargement de la panne' },
 
   // ─── 22/09 : UN RECHARGEMENT RATE N EFFACE PAS LE COMMERCANT ────────────
@@ -384,11 +415,11 @@ const MUTATIONS = [
     vers: "    { id: 'compte', label: 'Mon compte', icon: 'user', feature: 'export_comptable' }," },
 
   { nom: '🔴 l onglet existe mais n affiche plus rien',
-    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} illisible={commercantIllisible} />}",
+    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} />}",
     vers: '' },
 
   { nom: '🔴 le contenu se cache derriere le forfait, en plus de la barre',
-    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} illisible={commercantIllisible} />}",
+    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} />}",
     vers: "      {tab === 'compte' && peut(commercant, 'export_comptable') && <TabMonCompte commercant={commercant} toast={showToast} />}" },
 
   // ─── CE QUE L ECRAN DIT ─────────────────────────────────────────────────

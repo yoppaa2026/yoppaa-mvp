@@ -114,7 +114,7 @@ export default function AbonnementPage() {
         if (isAdmin) {
           setError('Aucun commerçant sélectionné. Allez sur /admin et cliquez "Voir Dashboard" depuis un commerçant.')
         } else {
-          setError('Impossible de charger votre fiche commerçant.')
+          setError('On n’a pas pu charger ta fiche commerçant.')
         }
         setLoading(false)
         return
@@ -136,7 +136,7 @@ export default function AbonnementPage() {
     if (status === 'success') {
       setCheckoutResult({ ok: true, message: 'Merci ! Votre abonnement est en cours d\'activation. Vous recevrez un email de confirmation dans quelques instants.' })
     } else if (status === 'canceled') {
-      setCheckoutResult({ ok: false, message: 'Souscription annulée. Vous pouvez relancer le processus à tout moment.' })
+      setCheckoutResult({ ok: false, message: 'Souscription annulée. Tu peux la reprendre quand tu veux.' })
     }
   }, [searchParams])
 
@@ -146,7 +146,7 @@ export default function AbonnementPage() {
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) throw new Error('Session expirée, reconnectez-vous')
+      if (!session?.access_token) throw new Error('Session expirée, reconnecte-toi')
 
       const res = await fetch('/api/stripe/billing/checkout', {
         method: 'POST',
@@ -197,7 +197,7 @@ export default function AbonnementPage() {
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: T.bg, padding: '60px 20px', fontFamily: '"DM Sans", system-ui, sans-serif', textAlign: 'center' }}>
-        <p style={{ color: T.muted }}>Chargement de votre abonnement…</p>
+        <p style={{ color: T.muted }}>On charge ton abonnement…</p>
       </div>
     )
   }
@@ -225,8 +225,12 @@ export default function AbonnementPage() {
     <div style={{ minHeight: '100vh', background: T.bg, padding: '32px 20px 80px', fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif' }}>
       <div style={{ maxWidth: 880, margin: '0 auto' }}>
 
+        {/* 🔴 LE RETOUR REPOSAIT LE COMMERÇANT À L'ENTRÉE DU TABLEAU DE BORD,
+            pas sur l'onglet d'où il venait. On arrive ici par « Mon compte »,
+            par un email de facturation ou par un retour de Stripe : dans les
+            trois cas, c'est « Mon compte » qu'on veut retrouver. */}
         {/* Lien retour dashboard */}
-        <a href="/dashboard" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: T.main, textDecoration: 'none', fontWeight: 700, marginBottom: 18 }}>
+        <a href="/dashboard?onglet=config&config=compte" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: T.main, textDecoration: 'none', fontWeight: 700, marginBottom: 18 }}>
           ← Retour au dashboard
         </a>
 
@@ -235,7 +239,7 @@ export default function AbonnementPage() {
           Abonnement Yoppaa
         </h1>
         <p style={{ fontSize: 15, color: T.muted, margin: '0 0 28px' }}>
-          Gérez votre formule, vos paiements et vos factures.
+          Ta formule, tes paiements et tes factures.
         </p>
 
         {/* Bandeau résultat checkout (success ou canceled) */}
@@ -284,7 +288,7 @@ export default function AbonnementPage() {
           </div>
           {isExempt && (
             <p style={{ fontSize: 13, color: T.muted, margin: '12px 0 0', lineHeight: 1.55 }}>
-              Vous bénéficiez d'un accès gratuit à Yoppaa au titre de notre partenariat de lancement. Aucune facturation en cours. Quand vous serez prêt à activer votre formule payante, contactez-nous à <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
+              Tu as un accès gratuit à Yoppaa au titre du partenariat de lancement. Aucune facturation en cours. Quand vous serez prêt à activer votre formule payante, contactez-nous à <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
             </p>
           )}
           {hasActiveSub && (
@@ -338,17 +342,30 @@ export default function AbonnementPage() {
           )}
         </div>
 
-        {/* Boutons d'upgrade (visibles si pas de sub active et pas exempt) */}
-        {!hasActiveSub && !isExempt && (
+        {/* 🔴 CES CARTES DISPARAISSAIENT DÈS QU'ON ÉTAIT ABONNÉ (corrigé le
+            22/09), et c'était le seul endroit du produit qui dit ce que
+            CONTIENT chaque formule. Un commerçant en Communiquer ne pouvait
+            donc plus lire ce que Vendre lui apporterait : pour monter en
+            gamme, il fallait déjà savoir ce qu'on montait chercher.
+
+            ⚠️ MAIS LE GESTE N'EST PAS LE MÊME DES DEUX CÔTÉS. Sans abonnement,
+            on souscrit, donc Checkout. Avec un abonnement en cours, souscrire
+            une seconde fois en créerait un DEUXIÈME : un changement de formule
+            passe par le portail, qui sait faire le prorata. La carte de sa
+            propre formule, elle, ne propose rien du tout. */}
+        {!isExempt && (
           <>
             <h3 style={{ fontSize: 18, fontWeight: 900, color: T.deep, letterSpacing: '-0.3px', margin: '8px 0 14px' }}>
-              {plan === 'exister' ? 'Passez au niveau supérieur' : 'Choisissez votre formule'}
+              {hasActiveSub ? 'Ce que contient chaque formule' : plan === 'exister' ? 'Passe au niveau supérieur' : 'Choisis ta formule'}
             </h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
 
               {/* Carte Communiquer */}
               <PlanCard
+                actuelle={plan === 'communiquer'}
+                abonne={hasActiveSub}
+                onPortail={handleOpenPortal}
                 title="Communiquer"
                 price={TARIF_COMMUNIQUER}
                 // 🔴 CETTE LISTE VENDAIT TROIS CHOSES QUI N'EXISTENT PAS (22/09,
@@ -382,6 +399,9 @@ export default function AbonnementPage() {
 
               {/* Carte Vendre */}
               <PlanCard
+                actuelle={plan === 'vendre'}
+                abonne={hasActiveSub}
+                onPortail={handleOpenPortal}
                 title="Vendre"
                 price={TARIF_VENDRE}
                 // ⚠️ ICI LA CATÉGORIE N'EST PAS DEVINÉE, ELLE EST CONNUE : ce
@@ -440,13 +460,18 @@ export default function AbonnementPage() {
 }
 
 // ────────── Composant carte de plan ──────────
-function PlanCard({ title, price, features, cta, trial, loading, onClick, accent }) {
+function PlanCard({ title, price, features, cta, trial, loading, onClick, accent, actuelle = false, abonne = false, onPortail = null }) {
   const ttc = prixTTC(price)
   return (
     <div style={{
       background: accent ? `linear-gradient(160deg, ${T.deep} 0%, ${T.main} 100%)` : '#fff',
       color: accent ? '#fff' : T.ink,
       borderRadius: 16, padding: '24px 26px',
+      // ⚠️ La carte de sa propre formule se distingue sans changer de taille :
+      // un liseré, pas une mise en avant, sinon elle volerait l'attention de
+      // celle qu'il est venu comparer.
+      outline: actuelle ? `2px solid ${accent ? '#fff' : T.main}` : 'none',
+      outlineOffset: actuelle ? 2 : 0,
       border: accent ? 'none' : `1px solid ${T.pale}`,
       boxShadow: accent ? '0 12px 32px rgba(107,53,196,0.25)' : '0 2px 8px rgba(26,8,64,0.05)',
       display: 'flex', flexDirection: 'column', minHeight: 380,
@@ -481,20 +506,35 @@ function PlanCard({ title, price, features, cta, trial, loading, onClick, accent
         ))}
       </ul>
 
-      <button
-        onClick={onClick}
-        disabled={loading}
-        style={{
-          padding: '12px 22px',
-          background: accent ? '#fff' : T.main,
-          color: accent ? T.main : '#fff',
-          border: 'none', borderRadius: 100, cursor: loading ? 'wait' : 'pointer',
-          fontWeight: 800, fontSize: 14, letterSpacing: '-0.2px',
-          opacity: loading ? 0.6 : 1,
-        }}
-      >
-        {loading ? 'Redirection…' : cta}
-      </button>
+      {/* ⚠️ TROIS ÉTATS, TROIS GESTES, ET AUCUN NE SE DEVINE DEPUIS LES DEUX
+          AUTRES : c'est déjà ta formule (rien à proposer), tu es abonné à une
+          autre (le portail, qui sait faire le prorata), tu n'as pas
+          d'abonnement (Checkout). Proposer « souscrire » à un abonné lui
+          créerait un SECOND abonnement. */}
+      {actuelle ? (
+        <div style={{
+          padding: '12px 22px', textAlign: 'center', borderRadius: 100,
+          border: `1px solid ${accent ? 'rgba(255,255,255,0.4)' : T.pale}`,
+          color: accent ? '#fff' : T.muted, fontWeight: 800, fontSize: 14,
+        }}>
+          C&rsquo;est ta formule
+        </div>
+      ) : (
+        <button
+          onClick={abonne ? onPortail : onClick}
+          disabled={loading}
+          style={{
+            padding: '12px 22px',
+            background: accent ? '#fff' : T.main,
+            color: accent ? T.main : '#fff',
+            border: 'none', borderRadius: 100, cursor: loading ? 'wait' : 'pointer',
+            fontWeight: 800, fontSize: 14, letterSpacing: '-0.2px',
+            opacity: loading ? 0.6 : 1,
+          }}
+        >
+          {loading ? 'Redirection…' : abonne ? 'Changer pour cette formule' : cta}
+        </button>
+      )}
     </div>
   )
 }

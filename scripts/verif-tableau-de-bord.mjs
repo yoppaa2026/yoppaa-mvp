@@ -1038,6 +1038,68 @@ const verifie = (nom, cond, detail = '') => {
     verifie(`${nom} nomme le retard « Paiement en attente »`,
       /Paiement en attente/.test(src),
       'les deux écrans emploieraient deux mots pour le même état')
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 CE QUE CONTIENT CHAQUE FORMULE RESTE LISIBLE, MÊME ABONNÉ (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 LES CARTES DE FORMULES DISPARAISSAIENT DÈS QU'ON ÉTAIT ABONNÉ, et
+  // c'était le SEUL endroit du produit qui dit ce que chaque formule contient.
+  // Un commerçant en Communiquer ne pouvait donc plus lire ce que Vendre lui
+  // apporterait : pour monter en gamme, il fallait déjà savoir ce qu'on montait
+  // chercher. C'est un manque à gagner, pas un détail d'affichage.
+  verifie('les formules restent lisibles quand on est abonné',
+    /\{!isExempt && \(/.test(abo),
+    'le seul endroit qui dit ce que contient chaque formule se ferme dès la première souscription')
+
+  // 🔴 MAIS LE GESTE N'EST PAS LE MÊME DES DEUX CÔTÉS, et c'est une question
+  // d'argent : proposer « souscrire » à quelqu'un qui a déjà un abonnement lui
+  // en créerait un SECOND. Un changement de formule passe par le portail, qui
+  // sait faire le prorata.
+  verifie('un abonné est envoyé au portail, pas vers une seconde souscription',
+    /onClick=\{abonne \? onPortail : onClick\}/.test(abo),
+    'un abonné qui clique sur une autre formule souscrirait une deuxième fois')
+
+  verifie('et la carte de sa propre formule ne lui propose rien',
+    /\{actuelle \? \(/.test(abo),
+    'il pourrait « changer » pour la formule qu’il a déjà')
+
+  // ⚠️ ET LES DEUX CARTES SAVENT LAQUELLE EST LA SIENNE. Sans ça, la garde
+  // ci-dessus est vraie et n'a jamais de cas à traiter.
+  verifie('les deux formules savent si elles sont la sienne',
+    (abo.match(/actuelle=\{plan === '/g) || []).length >= 2,
+    'une seule carte se reconnaîtrait, l’autre proposerait de souscrire à ce qu’il a')
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LE RETOUR RAMÈNE LÀ D'OÙ L'ON VIENT (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // On arrive sur cette page par l'onglet « Mon compte », par un email de
+  // facturation ou par un retour de Stripe. Dans les trois cas, c'est « Mon
+  // compte » qu'on veut retrouver ; le lien reposait à l'entrée du tableau de
+  // bord, c'est-à-dire sur les commandes du jour.
+  verifie('le retour ramène à l’onglet « Mon compte »',
+    /href="\/dashboard\?onglet=config&config=compte"/.test(abo),
+    'le commerçant est reposé à l’entrée du tableau de bord, pas là où il était')
+
+  // 🔴 ET L'ADRESSE DOIT ÊTRE ACCEPTÉE, SINON ELLE REPLIE SUR LE DÉFAUT EN
+  // SILENCE. `CONFIG_VALIDES` refuse toute valeur qu'elle ne connaît pas :
+  // « compte » y manquait depuis la création de l'onglet, le 20/09.
+  {
+    const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+    const liste = dash.split('const CONFIG_VALIDES')[1]?.split(']')[0] || ''
+    verifie('l’adresse ?config=compte est acceptée par le tableau de bord',
+      /'compte'/.test(liste),
+      'l’adresse est refusée et repliée sur l’accueil, sans rien dire')
+  }
+
+  // ⚠️ ET LA PAGE PARLE LA LANGUE DU PRODUIT. Tout Yoppaa tutoie ; cette page
+  // vouvoyait, ce qui fait douter d'être encore chez soi.
+  for (const mot of ['Gérez votre', 'Vous bénéficiez', 'Chargement de votre']) {
+    verifie(`la page d’abonnement ne vouvoie plus (« ${mot} »)`,
+      !abo.includes(mot),
+      'le reste du produit tutoie : le commerçant croit changer de site')
+  }
   }
 }
 

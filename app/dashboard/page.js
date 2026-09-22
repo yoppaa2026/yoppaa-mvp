@@ -1281,9 +1281,14 @@ export default function Dashboard() {
   // ⚠️ ET LES VALEURS SONT VALIDÉES. Une adresse se bricole à la main : un
   // onglet inconnu afficherait un écran vide sans rien dire.
   const ONGLETS_VALIDES = ['commandes', 'rdv', 'config']
+  // 🔴 « compte » MANQUAIT, ET L'ONGLET EXISTE DEPUIS LE 20/09. Une valeur
+  // absente de cette liste est refusée et repliée sur le défaut : l'adresse
+  // `?config=compte` ramenait donc à l'accueil. Conséquence invisible mais
+  // quotidienne : le bouton « Précédent » du navigateur, après un aller vers
+  // la page d'abonnement, ne rendait plus l'onglet d'où l'on venait.
   const CONFIG_VALIDES = ['stats', 'menu', 'deals', 'actus', 'ia', 'creneaux', 'livraison',
     'rdv', 'fidelite', 'bons', 'paiements', 'comptabilite', 'profil', 'accompagnement',
-    'avis', 'signaux']
+    'avis', 'signaux', 'compte']
 
   // 🔴 LA LECTURE SE FAIT DANS UN EFFET, PAS DANS L'ÉTAT INITIAL. Lire
   // `window` au premier rendu ferait diverger le rendu serveur du rendu client,

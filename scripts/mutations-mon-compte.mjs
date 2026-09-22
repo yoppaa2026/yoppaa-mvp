@@ -25,6 +25,61 @@ const BANC = 'verif:bord'
 const MODULE = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── 22/09 : CE QUE CONTIENT CHAQUE FORMULE RESTE LISIBLE ───────────────
+  //
+  // 🔴 LES CARTES DISPARAISSAIENT DES QU ON ETAIT ABONNE, et c etait le SEUL
+  // endroit du produit qui dit ce que chaque formule contient. Pour monter en
+  // gamme, il fallait deja savoir ce qu on montait chercher.
+  { nom: '🔴 les formules se referment des la premiere souscription',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '        {!isExempt && (',
+    vers: '        {!hasActiveSub && !isExempt && (',
+    garde: 'les formules restent lisibles quand on est abonné' },
+
+  // 🔴 ET C EST UNE QUESTION D ARGENT : proposer « souscrire » a un abonne lui
+  // creerait un SECOND abonnement. Un changement de formule passe par le
+  // portail, qui sait faire le prorata.
+  { nom: '🔴 un abonne peut souscrire une deuxieme fois',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '          onClick={abonne ? onPortail : onClick}',
+    vers: '          onClick={onClick}',
+    garde: 'un abonné est envoyé au portail, pas vers une seconde souscription' },
+
+  { nom: '🔴 la carte de sa propre formule lui propose d y souscrire',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '      {actuelle ? (',
+    vers: '      {false ? (',
+    garde: 'et la carte de sa propre formule ne lui propose rien' },
+
+  { nom: '🔴 une seule des deux cartes se reconnait',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: "                actuelle={plan === 'vendre'}",
+    vers: '                actuelle={false}',
+    garde: 'les deux formules savent si elles sont la sienne' },
+
+  // ─── 22/09 : LE RETOUR RAMENE LA D OU L ON VIENT ────────────────────────
+  { nom: '🔴 le retour repose le commercant a l entree du tableau de bord',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '        <a href="/dashboard?onglet=config&config=compte"',
+    vers: '        <a href="/dashboard"',
+    garde: 'le retour ramène à l’onglet « Mon compte »' },
+
+  // 🔴 ET L ADRESSE DOIT ETRE ACCEPTEE, SINON ELLE REPLIE SUR LE DEFAUT EN
+  // SILENCE. « compte » manquait a la liste depuis la creation de l onglet.
+  { nom: '🔴 l adresse ?config=compte redevient invalide',
+    fichier: 'app/dashboard/page.js',
+    de: "    'avis', 'signaux', 'compte']",
+    vers: "    'avis', 'signaux']",
+    garde: 'l’adresse ?config=compte est acceptée par le tableau de bord' },
+
+  // ⚠️ ET LA LANGUE DU PRODUIT. Tout Yoppaa tutoie.
+  { nom: '⚠️ la page d abonnement se remet a vouvoyer',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: 'Ta formule, tes paiements et tes factures.',
+    vers: 'Gérez votre formule, vos paiements et vos factures.',
+    garde: 'la page d’abonnement ne vouvoie plus' },
+
+
   // ─── 22/09 : LA DEGUSTATION EXISTE DANS CET ECRAN ───────────────────────
   //
   // 🔴 QUESTION D ALEX : « normal qu il n y ait pas de mention de periode

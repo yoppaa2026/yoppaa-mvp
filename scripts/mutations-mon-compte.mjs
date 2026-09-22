@@ -25,6 +25,48 @@ const BANC = 'verif:bord'
 const MODULE = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── 22/09 : « MON COMPTE » ATTEIGNABLE SANS FAIRE DEFILER ──────────────
+  //
+  // 🔴 IL N ETAIT DANS AUCUNE DES DEUX BARRES. Il vivait au BOUT d une bande a
+  // defilement de dix-sept onglets, donc hors de l ecran, et c est la que
+  // menent cinq emails de facturation.
+  { nom: '🔴 le bouton disparait de la barre laterale (PC)',
+    fichier: 'app/dashboard/page.js',
+    de: "            <button onClick={() => ouvrirConfig('compte')}",
+    vers: "            <button onClick={() => {}}",
+    garde: 'le bouton « Mon compte » est dans les DEUX barres' },
+
+  // 🔴 ET SUR TELEPHONE. La barre laterale n existe pas sous 1100 px : poser le
+  // bouton d un seul cote laisserait sans reponse ceux qui travaillent sur leur
+  // telephone, c est-a-dire la plupart des commercants.
+  { nom: '🔴 le bouton disparait de la barre du haut (moins de 1100 px)',
+    fichier: 'app/dashboard/page.js',
+    de: "                <button onClick={() => ouvrirConfig('compte')}",
+    vers: "                <button onClick={() => {}}",
+    garde: 'le bouton « Mon compte » est dans les DEUX barres' },
+
+  { nom: '⚠️ l icone de compte disparait',
+    fichier: 'app/dashboard/page.js',
+    de: 'function IconCompte({ size = 18, color = ',
+    vers: 'function IconCompteInutilisee({ size = 18, color = ',
+    garde: 'une icône de compte existe, en SVG' },
+
+  // 🔴 ET IL NE DEVIENT PAS UN QUATRIEME ONGLET. Un compte se regarde une fois
+  // par mois ; lui donner le poids d une commande qui arrive deplacerait l oeil
+  // chaque jour pour rien.
+  { nom: '🔴 le compte est pose au meme niveau que les commandes du jour',
+    fichier: 'app/dashboard/page.js',
+    de: "              { key: 'config',    label: 'Paramètres',  Icon: IconConfig,    visible: true },",
+    vers: "              { key: 'compte', label: 'Mon compte', Icon: IconCompte, visible: true },\n              { key: 'config',    label: 'Paramètres',  Icon: IconConfig,    visible: true },",
+    garde: 'la navigation latérale garde ses trois entrées' },
+
+  { nom: '🔴 le bouton depose le commercant sur le dernier onglet consulte',
+    fichier: 'app/dashboard/page.js',
+    de: "  function ouvrirConfig(tab) { setConfigTab(tab); setOngletPrincipal('config') }",
+    vers: "  function ouvrirConfig(tab) { setOngletPrincipal('config') }",
+    garde: 'le bouton ouvre l’onglet du compte, pas les paramètres' },
+
+
   // ─── 22/09 : L ONGLET « FACTURATION » ────────────────────────────────────
   //
   // 🔴 POURQUOI IL EXISTE. Alex : « est-ce que toutes les coordonnees utiles a
@@ -96,9 +138,18 @@ const MUTATIONS = [
   // 🔴 LA PROPRIETE SE VERIFIE PAR LE JETON, JAMAIS PAR LE CORPS DE LA REQUETE.
   { nom: '🔴 n importe qui ecrit les coordonnees de n importe quel commerce',
     fichier: 'app/api/dashboard/facturation/route.js',
-    de: '  if (!c || c.auth_user_id !== user.id) return null',
-    vers: '  if (!c) return null',
-    garde: 'la route vérifie la propriété de la fiche' },
+    // ⚠️ ANCRE RECALEE LE 22/09 : la route ne recopie plus la verification,
+    // elle appelle la garde centrale. Alex l avait trouvee en essayant l ecran
+    // depuis son mode admin : la copie ignorait que l administrateur existe.
+    de: '  if (!garde.ok) return null',
+    vers: '  if (false) return null',
+    garde: 'et elle refuse quand la garde refuse' },
+
+  { nom: '🔴 la route recopie la verification au lieu d appeler la garde centrale',
+    fichier: 'app/api/dashboard/facturation/route.js',
+    de: '  const garde = await gardeCommercant(request, supabase, commercantId)',
+    vers: '  const garde = { ok: true }',
+    garde: 'la route passe par la garde centrale, elle ne la recopie pas' },
 
   { nom: '🔴 le numero de TVA n est plus verifie, seulement compte',
     fichier: 'app/api/dashboard/facturation/route.js',

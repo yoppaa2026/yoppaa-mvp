@@ -26,6 +26,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireStripe } from '@/lib/stripe'
 import { validerBCE } from '@/lib/kyb'
+import { gardeCommercant } from '@/lib/api-auth'
 
 function admin() {
   return createClient(
@@ -35,26 +36,34 @@ function admin() {
   )
 }
 
-// Le commerçant est-il bien propriétaire de cette fiche ? Même schéma que
-// `/api/dashboard/signaux`, dont on ne s'écarte pas : la colonne s'appelle
-// `auth_user_id`, et c'est le JETON qui décide, jamais le corps de la requête.
-async function commercantDuProprietaire(supabase, request, commercantId) {
-  const jeton = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!jeton || !commercantId) return null
-  const authClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${jeton}` } } }
-  )
-  const { data: { user } = {} } = await authClient.auth.getUser()
-  if (!user) return null
+// 🔴 LA GARDE VIENT DU POINT CENTRAL, ELLE N'EST PLUS RECOPIÉE (22/09).
+// Première version : une vérification écrite ici, `auth_user_id !== user.id`,
+// sur le modèle de `/api/dashboard/signaux`. Alex l'a essayée depuis son MODE
+// ADMIN, sur la fiche d'un commerçant, et a lu « Fiche introuvable ou accès
+// refusé ». Ce n'était pas un défaut : la garde faisait exactement ce qu'on lui
+// avait écrit. Elle ignorait simplement que l'administrateur existe.
+//
+// ⚠️ ET `lib/api-auth.js` PORTAIT DÉJÀ LA RÉPONSE, avec son intention écrite :
+// « l'administrateur Yoppaa passe : il ouvre des dossiers qui ne sont pas les
+// siens, c'est son métier ». Recopier une vérification au lieu d'appeler celle
+// qui existe, c'est se priver de ce qu'elle a appris.
+//
+// ⚠️ ET ÇA ÉVITE UNE VINGT-NEUVIÈME COPIE DE L'ADRESSE ADMIN. Le dépôt en
+// compte vingt-huit dans le code et trois en base : la constante vit dans
+// `api-auth`, et c'est le seul endroit où elle doit vivre.
+//
+// 🔴 TROIS AUTRES ROUTES DU TABLEAU DE BORD ONT LE MÊME DÉFAUT : `signaux`,
+// `statistiques` et `export-comptable` refusent aussi l'admin. C'est noté ;
+// ici on répare celle qu'Alex a vue.
+async function chargerFiche(supabase, request, commercantId) {
+  const garde = await gardeCommercant(request, supabase, commercantId)
+  if (!garde.ok) return null
   const { data: c } = await supabase
     .from('commercants')
     .select('id, auth_user_id, nom, adresse, telephone, email, bce, tva_numero, tva_assujetti, stripe_customer_id')
     .eq('id', commercantId)
     .maybeSingle()
-  if (!c || c.auth_user_id !== user.id) return null
-  return c
+  return c || null
 }
 
 // 🔴 LE NUMÉRO DE TVA SE NORMALISE AVANT D'ÊTRE JUGÉ. Un commerçant tape
@@ -90,7 +99,7 @@ export async function POST(request) {
     const { commercantId, nom, adresse, tvaNumero, tvaAssujetti } = corps || {}
 
     const supabase = admin()
-    const commercant = await commercantDuProprietaire(supabase, request, commercantId)
+    const commercant = await chargerFiche(supabase, request, commercantId)
     if (!commercant) {
       return NextResponse.json({ error: 'Fiche introuvable ou accès refusé.' }, { status: 403 })
     }

@@ -1197,8 +1197,22 @@ const verifie = (nom, cond, detail = '') => {
 
   // 🔴 LA PROPRIÉTÉ SE VÉRIFIE PAR LE JETON, JAMAIS PAR LE CORPS DE LA REQUÊTE.
   // Sans ça, il suffirait de changer un identifiant pour écrire chez un autre.
-  verifie('la route vérifie la propriété de la fiche',
-    /auth_user_id !== user\.id/.test(fact),
+  // 🔴 LA GARDE VIENT DU POINT CENTRAL, ELLE N’EST PLUS RECOPIÉE (22/09).
+  // Première version : une vérification écrite dans la route. Alex l’a essayée
+  // depuis son MODE ADMIN, sur la fiche d’un commerçant, et a lu « Fiche
+  // introuvable ou accès refusé ». Ce n’était pas un défaut : la garde faisait
+  // exactement ce qu’on lui avait écrit, elle ignorait que l’administrateur
+  // existe. Et `lib/api-auth.js` portait déjà la réponse, avec son intention :
+  // « l’administrateur Yoppaa passe, il ouvre des dossiers qui ne sont pas les
+  // siens, c’est son métier ».
+  //
+  // ⚠️ ET ÇA ÉVITE UNE VINGT-NEUVIÈME COPIE DE L’ADRESSE ADMIN : la constante
+  // vit dans `api-auth`, et c’est le seul endroit où elle doit vivre.
+  verifie('la route passe par la garde centrale, elle ne la recopie pas',
+    /gardeCommercant\(request, supabase, commercantId\)/.test(fact),
+    'une copie de la vérification ignorerait le mode admin, et recopierait l’adresse admin une 29e fois')
+  verifie('et elle refuse quand la garde refuse',
+    /if \(!garde\.ok\) return null/.test(fact),
     'n’importe qui écrirait les coordonnées de n’importe quel commerce')
 
   // ⚠️ LE NUMÉRO DE TVA PASSE LE CONTRÔLE OFFICIEL. En Belgique ce sont les
@@ -1223,6 +1237,55 @@ const verifie = (nom, cond, detail = '') => {
       /'facturation'/.test(liste),
       'l’onglet ne serait atteignable par aucun lien, et le bouton Précédent redeviendrait muet')
   }
+}
+
+
+// ═══ 8quater) « MON COMPTE » EST ATTEIGNABLE SANS FAIRE DÉFILER (22/09) ═════
+//
+// 🔴 IL N'ÉTAIT DANS AUCUNE DES DEUX BARRES. Alex : « est-ce qu'on peut mettre
+// le bouton mon compte dans la barre latérale ? » Il vivait au BOUT d'une bande
+// à défilement de dix-sept onglets, donc hors de l'écran tant qu'on ne faisait
+// pas défiler, et c'est l'endroit où mènent cinq emails de facturation.
+//
+// ⚠️ ET IL EST DANS LE PIED, PAS DANS LA NAVIGATION. « Commandes » et
+// « Rendez-vous » sont des activités quotidiennes ; son compte se regarde une
+// fois par mois. Le poser à côté d'elles lui donnerait le poids d'une commande
+// qui arrive, et déplacerait l'œil chaque jour pour rien.
+{
+  const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+
+  verifie('une icône de compte existe, en SVG',
+    /function IconCompte\(/.test(dash),
+    'le bouton n’aurait pas d’icône, ou porterait un emoji')
+
+  // 🔴 LES DEUX BARRES, ET C'EST LA GARDE QUI COMPTE. La barre latérale
+  // n'existe pas sous 1100 px : la poser d'un seul côté laisserait sans réponse
+  // ceux qui travaillent sur leur téléphone, c'est-à-dire la plupart.
+  const boutons = (dash.match(/ouvrirConfig\('compte'\)/g) || []).length
+  verifie('le bouton « Mon compte » est dans les DEUX barres',
+    boutons >= 2, `${boutons} bouton(s) trouvé(s)`)
+
+  // ⚠️ ET LA BARRE LATÉRALE EST BIEN CELLE QUI DISPARAÎT SOUS 1100 px : si ce
+  // point de rupture changeait, la garde ci-dessus resterait vraie et la
+  // raison d'avoir deux boutons deviendrait fausse.
+  verifie('la barre latérale n’apparaît qu’au-dessus de 1100 px',
+    /@media \(min-width: 1100px\)[\s\S]{0,120}\.sidebar \{ display: flex/.test(dash),
+    'le point de rupture a changé : le second bouton n’a peut-être plus lieu d’être')
+
+  // 🔴 ET IL N'EST PAS DEVENU UN QUATRIÈME ONGLET. La navigation principale
+  // compte trois entrées de chaque côté : Commandes, Rendez-vous, Paramètres.
+  // Un compte n'est pas une activité quotidienne.
+  for (const [nom, motif] of [['latérale', /\{ key: 'config',\s+label: 'Paramètres'/], ['du haut', /\{ key: 'config',\s+label: 'Config'/]]) {
+    const i = dash.search(motif)
+    verifie(`la navigation ${nom} garde ses trois entrées`,
+      i >= 0 && !/key: 'compte'/.test(dash.slice(Math.max(0, i - 900), i + 300)),
+      'le compte a été posé au même niveau que les commandes du jour')
+  }
+
+  // ⚠️ ET IL MÈNE VRAIMENT À L'ONGLET, pas à la page des paramètres au hasard.
+  verifie('le bouton ouvre l’onglet du compte, pas les paramètres',
+    /ouvrirConfig\('compte'\)/.test(dash) && /function ouvrirConfig\(tab\) \{ setConfigTab\(tab\); setOngletPrincipal\('config'\) \}/.test(dash),
+    'il déposerait le commerçant sur le dernier onglet consulté')
 }
 
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du

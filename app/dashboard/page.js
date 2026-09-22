@@ -270,6 +270,17 @@ function IconLogout({ size = 18, color = '#FCA5A5' }) {
     </svg>
   )
 }
+// ⚠️ SVG, COMME TOUTES LES AUTRES DE CE FICHIER. Le dépôt n'utilise pas
+// d'emoji dans l'interface, et une icône de compte dessinée à la main reste
+// nette à toutes les tailles et prend la couleur qu'on lui donne.
+function IconCompte({ size = 18, color = '#fff' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="12" cy="7" r="4" stroke={color} strokeWidth="2"/>
+    </svg>
+  )
+}
 function IconClock({ size = 12, color = 'currentColor' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
@@ -3390,6 +3401,12 @@ export default function Dashboard() {
                 </span>
               )}
             </button>
+            <button onClick={() => ouvrirConfig('compte')}
+              title="Ta formule, tes paiements et tes factures"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.875rem', borderRadius: 10, border: `1px solid ${T.main}44`, background: 'transparent', color: T.colTexte, fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>
+              <IconCompte size={15} color={T.colTexte}/>
+              Mon compte
+            </button>
             <button onClick={seDeconnecter}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.875rem', borderRadius: 10, border: '1px solid #DC262633', background: '#DC262611', color: '#FCA5A5', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.78rem' }}>
               <IconLogout size={15}/>
@@ -3474,6 +3491,12 @@ export default function Dashboard() {
                   {!notificationsActives && (
                     <span style={{ position: 'absolute', top: -3, right: -3, width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', border: '1.5px solid #160636' }}/>
                   )}
+                </button>
+                <button onClick={() => ouvrirConfig('compte')}
+                  title="Mon compte"
+                  aria-label="Mon compte"
+                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${T.main}44`, background: 'transparent', cursor: 'pointer' }}>
+                  <IconCompte size={15} color={T.colTexte}/>
                 </button>
                 <button onClick={seDeconnecter}
                   style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: '1px solid #DC262333', background: '#DC262311', cursor: 'pointer', flexShrink: 0 }}>

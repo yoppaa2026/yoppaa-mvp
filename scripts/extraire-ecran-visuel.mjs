@@ -99,19 +99,31 @@ for (const [source, sortie] of Object.entries(SORTIES)) {
     if (g < W && d > g) { if (g < gauche) gauche = g; if (d > droite) droite = d }
   }
 
-  // Le haut du téléphone : on descend, en partant SOUS les dots de la marque.
-  // Au-dessus, le titre et le sous-titre sont eux aussi du contenu clair sur le
-  // fond : partir de zéro donnerait le titre.
+  // Le haut du téléphone : on descend en cherchant la première ligne qui est
+  // PLEINE, c'est-à-dire occupée sur presque toute la largeur du cadre.
   //
-  // ⚠️ MÊME PRUDENCE QUE POUR LES BORDS : plusieurs colonnes, et on garde la
-  // plus haute. Le liseré arrondi du cadre ne couvre pas toute la largeur, donc
-  // une colonne unique peut le manquer de quelques pixels.
-  let haut = H
-  for (let n = 0; n < 15; n++) {
-    const x = Math.round(gauche + (droite - gauche) * (n / 14))
-    let y = 360
-    while (y < H && proche(px(x, y), fond)) y++
-    if (y < haut) haut = y
+  // 🔴 ET C'EST LA DEUXIÈME FOIS QUE CETTE MESURE ME PREND. Ma version
+  // précédente gardait la première ligne non vide trouvée sur quinze colonnes.
+  // Sur le visuel dont le titre tient sur DEUX lignes, les cinq points de la
+  // marque descendent plus bas que le seuil de départ : ils étaient pris pour
+  // le haut du téléphone, et la capture sortait avec 55 px de fond sombre et
+  // des points TRONQUÉS par le bord. Trouvé en ouvrant l'image, pas en lisant
+  // le code : une mesure ne se vérifie qu'en regardant ce qu'elle a produit.
+  //
+  // Les points sont un petit groupe centré ; le cadre du téléphone, lui, court
+  // d'un bord à l'autre. C'est cette différence qu'on mesure, et elle ne dépend
+  // d'aucune hauteur écrite en dur.
+  const COLONNES = 24
+  const PLEINE = 0.8
+  let haut = 360
+  while (haut < H) {
+    let occupees = 0
+    for (let n = 0; n < COLONNES; n++) {
+      const x = Math.round(gauche + (droite - gauche) * (n / (COLONNES - 1)))
+      if (!proche(px(x, haut), fond)) occupees++
+    }
+    if (occupees >= COLONNES * PLEINE) break
+    haut++
   }
 
   const larg = droite - gauche + 1

@@ -94,6 +94,34 @@ const MUTATIONS = [
     de: "'Une actu par semaine, publiée dans le Good Morning de ta commune',",
     vers: "'Tu apparais chaque jour dans Good Morning Yoppers'," },
 
+  // 🔴 ET LE GLOSSAIRE DE LA MEME PAGE, qui le promettait encore le 22/09 a
+  // quelques centimetres de la carte corrigee.
+  { nom: '🔴 le glossaire du signup repromet une actu par jour en Exister',
+    fichier: SIGNUP,
+    de: 'Exister : 1 actu basique par semaine',
+    vers: 'Exister : 1 actu basique par jour',
+    garde: 'et le glossaire de la même page non plus' },
+
+  // ─── 22/09 : LES DEUX ECRANS PROMETTENT LA MEME FORMULE GRATUITE ────────
+  //
+  // 🔴 C EST LA LECON DES QUATRE LISTES DIVERGENTES : ce n est pas la premiere
+  // redaction qui ment, c est la SECONDE, ecrite ailleurs et corrigee seule.
+  // La carte Exister est arrivee dans le tableau de bord le 22/09 (« la
+  // formule exister est absente des formules », Alex) : elle doit vivre
+  // attachee a celle du signup, sinon un commercant lit deux promesses selon
+  // qu il s inscrit ou qu il est deja la.
+  { nom: '🔴 la carte Exister du tableau de bord derive de celle du signup',
+    fichier: ABO,
+    de: "                  'Tes statistiques : vues, favoris, signaux',",
+    vers: "                  'Tes statistiques détaillées : audience et engagement',",
+    garde: 'les deux écrans promettent exactement la même formule Exister' },
+
+  { nom: '⚠️ la carte Exister du tableau de bord n est plus reperable',
+    fichier: ABO,
+    de: '                title="Exister"',
+    vers: '                title="Exister "',
+    garde: 'la carte Exister du tableau de bord est là où on la cherche' },
+
   // ─── LES CLES MORTES ────────────────────────────────────────────────────
   //
   // ⚠️ ON LES REMET DANS UNE LISTE DE FORFAIT, pas n importe ou : le glossaire

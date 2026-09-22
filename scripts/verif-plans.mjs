@@ -466,6 +466,15 @@ verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'v
     !/chaque jour dans Good Morning/i.test(ecrans['app/signup/page.js']),
     'le plafond d’une actu par semaine en Exister est contredit par la carte')
 
+  // 🔴 ET LE GLOSSAIRE DE LA MÊME PAGE LE DISAIT ENCORE (22/09). La carte avait
+  // été corrigée, l'entrée « Actu » du glossaire non : « Exister : 1 actu
+  // basique par jour », à quelques centimètres de la carte qui dit « par
+  // semaine ». La garde du dessus ne l'attrapait pas parce qu'elle cherchait
+  // une formulation, pas la règle. On vise donc la promesse elle-même.
+  verifier('et le glossaire de la même page non plus',
+    !/Exister ?: ?\d+ actu[^.]*par jour/i.test(ecrans['app/signup/page.js']),
+    'le glossaire promet une actu quotidienne que le code refuse dès la deuxième de la semaine')
+
   // ⚠️ ET ON NE VEND AUCUNE CLÉ MORTE. Ces quatre-là valent `true` dans la
   // matrice et ne sont lues par AUCUNE ligne de code : les écrire dans une
   // liste de forfait, c'est promettre du vide. Décision d'Alex du 22/09 : on
@@ -497,8 +506,11 @@ verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'v
   {
     const src = ecrans['app/dashboard/abonnement/page.js']
     const blocs = src.match(/features=\{\[[\s\S]*?\]\}/g) || []
+    // 🔴 TROIS, DEPUIS QUE LA GRATUITE EST REVENUE (22/09). Alex : « la formule
+    // exister est absente des formules ». La page n'en montrait que deux,
+    // toutes les deux payantes, quand le signup en montre trois.
     verifier('les listes de forfaits du tableau de bord sont là où on les cherche',
-      blocs.length >= 2, `${blocs.length} liste(s) trouvée(s), au moins 2 attendues`)
+      blocs.length >= 3, `${blocs.length} liste(s) trouvée(s), au moins 3 attendues`)
     blocs.forEach((b, n) => listes.push([`app/dashboard/abonnement/page.js (liste ${n + 1})`, b]))
   }
   for (const [ou, bloc] of listes) {
@@ -506,6 +518,52 @@ verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'v
       verifier(`${ou} ne vend pas « ${quoi} », que rien n’implémente`,
         !motif.test(bloc),
         'cette clé vaut true dans la matrice et n’est lue par aucune ligne de code')
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🔴 LES DEUX ÉCRANS DISENT LA MÊME CHOSE DE LA FORMULE GRATUITE (22/09)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // C'est la leçon des quatre listes divergentes : ce n'est pas la première
+  // rédaction qui ment, c'est la SECONDE, écrite ailleurs, corrigée seule. Le
+  // signup a vu sa liste Exister corrigée le 22/09 (« une actu par semaine »,
+  // pas « chaque jour ») ; la carte du tableau de bord naît le même jour de la
+  // même matrice. La garde les attache l'une à l'autre : le jour où l'une
+  // bouge, l'autre doit bouger, sinon un commerçant lit deux promesses selon
+  // qu'il s'inscrit ou qu'il est déjà là.
+  //
+  // ⚠️ ELLE COMPARE LES PHRASES, PAS LEUR NOMBRE. Deux listes de cinq lignes
+  // peuvent se contredire ligne à ligne.
+  {
+    const phrases = (bloc) => (bloc.match(/'[^']{20,}'/g) || []).map(s => s.slice(1, -1)).sort()
+
+    // ⚠️ ON PART DE `features:`, PAS DE `exister: {`. La tranche large
+    // ramassait le `tagline`, que la carte du tableau de bord n'affiche pas :
+    // la garde rougissait sur une accroche, pas sur une promesse. Comparer
+    // deux choses, c'est d'abord découper la même.
+    const sig = ecrans['app/signup/page.js']
+    const iSig = sig.indexOf('features: [', sig.indexOf('exister: {'))
+    const finSig = sig.indexOf(']', iSig)
+    verifier('la liste Exister du signup est là où on la cherche',
+      iSig >= 0 && finSig > iSig,
+      'PLAN_CONFIG.exister a changé de forme : la comparaison ne mesure plus rien')
+
+    const abo = ecrans['app/dashboard/abonnement/page.js']
+    const iAbo = abo.indexOf('title="Exister"')
+    const finAbo = abo.indexOf(']}', iAbo)
+    verifier('la carte Exister du tableau de bord est là où on la cherche',
+      iAbo >= 0 && finAbo > iAbo,
+      'la carte a changé de forme : la comparaison ne mesure plus rien')
+
+    if (iSig >= 0 && iAbo >= 0) {
+      const a = phrases(sig.slice(iSig, finSig))
+      const b = phrases(abo.slice(iAbo, finAbo))
+      const manquantes = a.filter(p => !b.includes(p))
+      const enTrop = b.filter(p => !a.includes(p))
+      verifier('les deux écrans promettent exactement la même formule Exister',
+        manquantes.length === 0 && enTrop.length === 0,
+        `signup seul : ${manquantes.length} · tableau de bord seul : ${enTrop.length} · ${[...manquantes, ...enTrop][0] || ''}`)
     }
   }
 }

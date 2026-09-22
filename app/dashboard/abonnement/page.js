@@ -361,11 +361,50 @@ export default function AbonnementPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
 
+              {/* 🔴 EXISTER MANQUAIT, ET C'EST LA FORMULE DE DÉPART DE TOUT LE
+                  MONDE (Alex, 22/09 : « la formule exister est absente des
+                  formules »). L'écran s'intitulait « Choisis ta formule » et
+                  n'en montrait que deux, toutes les deux payantes. Celui qui
+                  hésite ne lisait donc nulle part ce qu'il GARDE s'il ne prend
+                  rien, et celui qui paie ne voyait pas ce qui lui reste s'il
+                  arrête : deux peurs, le même trou.
+
+                  ⚠️ LA LISTE EST CELLE DU SIGNUP, AU MOT PRÈS. Quatre listes de
+                  forfaits divergeaient dans le dépôt le 22/09 ; celle-ci
+                  descend de la matrice (`lib/plans.js`) par le même chemin que
+                  celle de l'inscription, et `verif:plans` tient les deux
+                  ensemble. Un commerçant ne doit pas lire deux promesses
+                  différentes selon qu'il s'inscrit ou qu'il est déjà là. */}
+              <PlanCard
+                actuelle={plan === 'exister'}
+                abonne={hasActiveSub}
+                onPortail={handleOpenPortal}
+                portailEnCours={portalLoading}
+                gratuite={true}
+                title="Exister"
+                price={0}
+                features={[
+                  'Ta fiche : photos illimitées, horaires détaillés, tes prix',
+                  'Référencée sur Google et retrouvée dans l’app',
+                  // 🔴 UNE PAR SEMAINE, PAS UNE PAR JOUR. Le plafond vit dans le
+                  // code depuis le 01/07 (décision d'Alex contre la
+                  // cannibalisation de Communiquer) et deux écrans du produit
+                  // l'annonçaient encore faux. Communiquer, lui, dit « chaque
+                  // matin, en priorité » : c'est là qu'est la différence.
+                  'Une actu par semaine, publiée dans le Good Morning de ta commune',
+                  'Favoris et signaux : le quartier te dit ce qu’il cherche',
+                  'Tes statistiques : vues, favoris, signaux',
+                ]}
+                trial="Aucune information de paiement demandée"
+                accent={false}
+              />
+
               {/* Carte Communiquer */}
               <PlanCard
                 actuelle={plan === 'communiquer'}
                 abonne={hasActiveSub}
                 onPortail={handleOpenPortal}
+                portailEnCours={portalLoading}
                 title="Communiquer"
                 price={TARIF_COMMUNIQUER}
                 // 🔴 CETTE LISTE VENDAIT TROIS CHOSES QUI N'EXISTENT PAS (22/09,
@@ -402,6 +441,7 @@ export default function AbonnementPage() {
                 actuelle={plan === 'vendre'}
                 abonne={hasActiveSub}
                 onPortail={handleOpenPortal}
+                portailEnCours={portalLoading}
                 title="Vendre"
                 price={TARIF_VENDRE}
                 // ⚠️ ICI LA CATÉGORIE N'EST PAS DEVINÉE, ELLE EST CONNUE : ce
@@ -460,8 +500,13 @@ export default function AbonnementPage() {
 }
 
 // ────────── Composant carte de plan ──────────
-function PlanCard({ title, price, features, cta, trial, loading, onClick, accent, actuelle = false, abonne = false, onPortail = null }) {
-  const ttc = prixTTC(price)
+function PlanCard({ title, price, features, cta, trial, loading, onClick, accent, actuelle = false, abonne = false, onPortail = null, portailEnCours = false, gratuite = false }) {
+  // 🔴 LE PIÈGE DU ZÉRO, NEUVIÈME FOIS, ET IL SE SERAIT VU À L'ÉCRAN.
+  // `prixTTC` accepte le vrai 0 d'Exister, comme il le doit : la carte gratuite
+  // aurait donc affiché « 0,00 € HTVA / mois » puis « soit 0,00 € TVA
+  // comprise ». Ce n'est pas faux, c'est illisible : personne n'annonce une
+  // TVA sur rien. Une formule gratuite ne se dit pas avec un montant.
+  const ttc = gratuite ? null : prixTTC(price)
   return (
     <div style={{
       background: accent ? `linear-gradient(160deg, ${T.deep} 0%, ${T.main} 100%)` : '#fff',
@@ -481,9 +526,9 @@ function PlanCard({ title, price, features, cta, trial, loading, onClick, accent
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '14px 0 4px' }}>
         <p style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-1px', margin: 0 }}>
-          {euros(price)}
+          {gratuite ? 'Gratuit' : euros(price)}
         </p>
-        <p style={{ fontSize: 13, color: accent ? T.light : T.muted, margin: 0 }}>HTVA / mois</p>
+        <p style={{ fontSize: 13, color: accent ? T.light : T.muted, margin: 0 }}>{gratuite ? 'pour toujours' : 'HTVA / mois'}</p>
       </div>
       {/* ⚠️ LE MONTANT QUI SERA RÉELLEMENT DÉBITÉ, sous celui qui est annoncé.
           « HTVA » est du vocabulaire de comptable ; le chiffre est du
@@ -519,6 +564,44 @@ function PlanCard({ title, price, features, cta, trial, loading, onClick, accent
         }}>
           C&rsquo;est ta formule
         </div>
+      ) : gratuite ? (
+        // 🔴 SUR LA FORMULE GRATUITE, « CHANGER POUR CETTE FORMULE » AURAIT ÉTÉ
+        // UN MENSONGE POLI : descendre à Exister, ce n'est pas changer de
+        // formule, c'est RÉSILIER. Le bouton dit donc le geste, et rien
+        // d'autre. Il ne crée aucun chemin nouveau : le portail est déjà
+        // atteignable par « Gérer mon abonnement », et c'est lui qui annule.
+        //
+        // ⚠️ ET IL EST EN CONTOUR, PAS EN PLEIN. Dire la sortie est honnête,
+        // la mettre en avant serait de l'inviter.
+        abonne ? (
+          <button
+            onClick={onPortail}
+            disabled={portailEnCours}
+            style={{
+              padding: '12px 22px',
+              background: 'transparent',
+              color: accent ? '#fff' : T.muted,
+              border: `1px solid ${accent ? 'rgba(255,255,255,0.4)' : T.pale}`,
+              borderRadius: 100, cursor: portailEnCours ? 'wait' : 'pointer',
+              fontWeight: 800, fontSize: 14, letterSpacing: '-0.2px',
+              opacity: portailEnCours ? 0.6 : 1,
+            }}
+          >
+            {portailEnCours ? 'Redirection…' : 'Résilier mon abonnement'}
+          </button>
+        ) : (
+          // ⚠️ SANS ABONNEMENT EN COURS, IL N'Y A AUCUN GESTE À PROPOSER : ni
+          // souscrire à du gratuit, ni résilier ce qui n'existe pas. Ce qu'il
+          // faut dire, c'est ce qu'il advient de sa fiche, et c'est aussi la
+          // réponse à la peur qui fait choisir Exister par défaut.
+          <div style={{
+            padding: '12px 22px', textAlign: 'center', borderRadius: 100,
+            border: `1px solid ${accent ? 'rgba(255,255,255,0.4)' : T.pale}`,
+            color: accent ? '#fff' : T.muted, fontWeight: 700, fontSize: 13, lineHeight: 1.4,
+          }}>
+            Ta fiche reste en ligne, sans rien payer
+          </div>
+        )
       ) : (
         <button
           onClick={abonne ? onPortail : onClick}

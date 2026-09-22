@@ -1339,6 +1339,17 @@ export default function Dashboard() {
   const [configTabUrl, setConfigTabUrl] = useState('profil')
   useEffect(() => { setConfigTabUrl(configTab) }, [configTab])
 
+  // 🔴 LE BOUTON DIT AUSSI QU'ON Y EST (22/09). Depuis qu'Alex a retiré « Mon
+  // compte » de la barre d'onglets, plus aucun onglet ne s'allume quand on
+  // regarde son compte : la barre du haut reste au repos, et l'écran flotte
+  // sans repère. C'est le bouton qui a ouvert la porte qui doit le montrer.
+  //
+  // ⚠️ ON LIT `configTabUrl`, PAS `configTab`. Le second est la clé de montage
+  // du composant : il ne bouge plus quand le commerçant change d'onglet à
+  // l'intérieur, alors que le premier suit (`onOngletChange`). Lire la clé
+  // laisserait le bouton allumé sur les seize autres onglets.
+  const surCompte = ongletPrincipal === 'config' && configTabUrl === 'compte'
+
   // 🔴 ON OUVRE SUR CE QUE LE COMMERCE REÇOIT (Alex, 08/09). Tout le monde
   // tombait sur « Commandes », y compris un centre de yoga dont la journée
   // entière est dans son agenda.
@@ -3401,9 +3412,12 @@ export default function Dashboard() {
                 </span>
               )}
             </button>
+            {/* ⚠️ ALLUMÉ QUAND ON Y EST : c'est le seul repère qui reste depuis
+                que « Mon compte » n'est plus un onglet de la barre du haut. */}
             <button onClick={() => ouvrirConfig('compte')}
               title="Ta formule, tes paiements et tes factures"
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.875rem', borderRadius: 10, border: `1px solid ${T.main}44`, background: 'transparent', color: T.colTexte, fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>
+              aria-current={surCompte ? 'page' : undefined}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.875rem', borderRadius: 10, border: `1px solid ${T.main}${surCompte ? 'CC' : '44'}`, background: surCompte ? `${T.main}33` : 'transparent', color: T.colTexte, fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>
               <IconCompte size={15} color={T.colTexte}/>
               Mon compte
             </button>
@@ -3495,7 +3509,8 @@ export default function Dashboard() {
                 <button onClick={() => ouvrirConfig('compte')}
                   title="Mon compte"
                   aria-label="Mon compte"
-                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${T.main}44`, background: 'transparent', cursor: 'pointer' }}>
+                  aria-current={surCompte ? 'page' : undefined}
+                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${T.main}${surCompte ? 'CC' : '44'}`, background: surCompte ? `${T.main}33` : 'transparent', cursor: 'pointer' }}>
                   <IconCompte size={15} color={T.colTexte}/>
                 </button>
                 <button onClick={seDeconnecter}

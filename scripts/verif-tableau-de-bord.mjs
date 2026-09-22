@@ -749,20 +749,19 @@ const verifie = (nom, cond, detail = '') => {
     'la liste des onglets a changé de forme : les gardes suivantes ne mesurent plus rien')
   const listeTabs = code.slice(iTabs, iFinTabs)
 
-  verifie('🔴 l’onglet « Mon compte » existe dans la barre',
-    /id: 'compte'/.test(listeTabs),
-    'la page d’abonnement redevient inatteignable depuis le tableau de bord')
-  verifie('et il porte le libellé que le commerçant cherche',
-    /label: 'Mon compte'/.test(listeTabs),
-    'le libellé a changé : il ne reconnaîtra pas l’onglet')
-
-  // 🔴 SANS `feature`, ET C'EST TOUT LE POINT. Lui en donner une le fermerait à
-  // qui n'a pas le forfait : celui qui est en Exister ne pourrait plus lire
-  // qu'il ne paie rien, et celui dont l'essai se termine ne verrait pas sa date.
-  const ligneCompte = listeTabs.split('\n').find(l => /id: 'compte'/.test(l)) || ''
-  verifie('🔴 l’onglet « Mon compte » n’est derrière aucun forfait',
-    ligneCompte.length > 0 && !/feature:/.test(ligneCompte),
-    'un cadenas est apparu sur le compte du commerçant : il ne voit plus ce qu’il paie')
+  // 🔴 ET « MON COMPTE » N'EST PLUS UN ONGLET DE CETTE BARRE (22/09). Il l'a
+  // été deux jours, en même temps qu'il vivait dans le pied des deux barres :
+  // Alex l'a vu à l'écran et a tranché, « il doit être uniquement proche des
+  // alertes ». La garde mesure donc aujourd'hui l'inverse d'hier, et c'est
+  // assumé : c'est exactement le défaut de la facturation à deux endroits,
+  // corrigé le même jour sur la page d'abonnement.
+  //
+  // ⚠️ ELLE N'EST PAS UNE GARDE DE GOÛT. Deux portes pour une pièce, c'est
+  // deux endroits à tenir à jour et un commerçant qui se demande s'il a bien
+  // vu la même chose des deux côtés.
+  verifie('🔴 « Mon compte » n’est pas un onglet de cette barre',
+    !/id: 'compte'/.test(listeTabs),
+    'le doublon est revenu : un bouton dans le pied ET un onglet au bout de seize autres')
 
   // ⚠️ ET LE CONTENU NON PLUS. La barre grise un onglet, mais c'est la seconde
   // condition qui empêche vraiment l'écran de s'afficher, le fichier le dit
@@ -1066,9 +1065,81 @@ const verifie = (nom, cond, detail = '') => {
 
   // ⚠️ ET LES DEUX CARTES SAVENT LAQUELLE EST LA SIENNE. Sans ça, la garde
   // ci-dessus est vraie et n'a jamais de cas à traiter.
-  verifie('les deux formules savent si elles sont la sienne',
-    (abo.match(/actuelle=\{plan === '/g) || []).length >= 2,
-    'une seule carte se reconnaîtrait, l’autre proposerait de souscrire à ce qu’il a')
+  verifie('les trois formules savent si elles sont la sienne',
+    (abo.match(/actuelle=\{plan === '/g) || []).length >= 3,
+    'une carte ne se reconnaîtrait pas et proposerait de souscrire à ce qu’il a déjà')
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 EXISTER ÉTAIT ABSENTE DE LA PAGE DES FORMULES (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Alex : « la formule exister est absente des formules ». L'écran s'appelait
+  // « Choisis ta formule » et n'en montrait que deux, toutes les deux
+  // payantes. Celui qui hésite ne lisait nulle part ce qu'il GARDE s'il ne
+  // prend rien ; celui qui paie ne voyait pas ce qui lui reste s'il arrête.
+  // Le signup, lui, l'affiche depuis toujours : deux écrans du même parcours
+  // ne proposaient pas le même produit.
+  verifie('🔴 la formule gratuite est sur la page des formules',
+    /title="Exister"/.test(abo),
+    'la formule de départ de tout le monde n’est proposée nulle part dans le tableau de bord')
+
+  verifie('et elle vient en premier, comme partout ailleurs',
+    abo.indexOf('title="Exister"') >= 0 &&
+    abo.indexOf('title="Exister"') < abo.indexOf('title="Communiquer"'),
+    'les formules ne se lisent plus du moins cher au plus cher, contrairement à la landing et au signup')
+
+  // 🔴 LE PIÈGE DU ZÉRO, ET IL SE SERAIT VU À L'ÉCRAN. `prixTTC` accepte le
+  // vrai 0 d'Exister, comme il le doit : sans ce garde-fou, la carte annonçait
+  // « 0,00 € HTVA / mois » puis « soit 0,00 € TVA comprise ».
+  verifie('la formule gratuite n’annonce pas une TVA sur zéro',
+    /const ttc = gratuite \? null : prixTTC\(price\)/.test(abo),
+    'la carte afficherait « soit 0,00 € TVA comprise » sous un prix de zéro')
+  verifie('et son prix se dit en mots, pas en euros',
+    /\{gratuite \? 'Gratuit' : euros\(price\)\}/.test(abo),
+    '« 0,00 € » à la place de « Gratuit » : le chiffre fait douter là où le mot rassure')
+
+  // 🔴 ET LE BOUTON DIT LE GESTE VRAI. Descendre à Exister, ce n'est pas
+  // changer de formule, c'est RÉSILIER. « Changer pour cette formule » aurait
+  // envoyé un abonné au portail sans lui dire ce qu'il allait y faire.
+  //
+  // ⚠️ SUR LE CODE DÉPOUILLÉ, parce que le commentaire qui explique pourquoi ce
+  // bouton dit « Résilier » contient le mot « Résilier ». Six gardes ont déjà
+  // verdi sur ma propre prose, d'où `sansProse`.
+  const aboNu = sansProse(abo.replace(/\r\n/g, '\n'))
+  verifie('descendre en Exister s’appelle par son nom',
+    /Résilier mon abonnement/.test(aboNu),
+    'un abonné lirait « changer pour cette formule » sur ce qui est une résiliation')
+
+  // ⚠️ ET LA LISTE DE LA GRATUITE NE VEND RIEN QU'ELLE N'A PAS. C'est la
+  // matrice qui tranche (lib/plans.js) : en Exister, `deals`, `commande`,
+  // `rdv`, `paiement_ligne`, `fidelite` et `push_cibles_favoris` valent tous
+  // false. Promettre l'un d'eux ici, c'est vider Communiquer de son sens et
+  // décevoir le jour où il cherche le bouton.
+  {
+    // ⚠️ DÉPOUILLÉE, ELLE AUSSI : le commentaire qui rappelle le plafond du
+    // Good Morning cite « chaque matin » pour dire que c'est Communiquer, et
+    // la garde du dessous cherche exactement ces mots-là.
+    const i = aboNu.indexOf('title="Exister"')
+    const liste = i < 0 ? '' : aboNu.slice(i, aboNu.indexOf(']}', i))
+    verifie('la liste de la formule gratuite est là où on la cherche',
+      i >= 0 && liste.includes('features={['),
+      'la carte a changé de forme : les gardes suivantes ne mesurent plus rien')
+    for (const [quoi, motif] of [
+      ['les deals', /deals?/i], ['la commande en ligne', /commande/i],
+      ['les rendez-vous', /rendez-vous/i], ['le paiement en ligne', /paiement/i],
+      ['la carte de fidélité', /fidélité/i], ['les push', /push/i],
+    ]) {
+      verifie(`la formule gratuite ne promet pas ${quoi}`,
+        !motif.test(liste),
+        'la matrice le réserve à Communiquer ou à Vendre : c’est une promesse que l’écran ne tiendra pas')
+    }
+    // 🔴 ET LE GOOD MORNING Y EST PLAFONNÉ À UNE ACTU PAR SEMAINE, décision
+    // d'Alex du 01/07 contre la cannibalisation. Deux écrans du produit
+    // annonçaient encore « chaque jour ».
+    verifie('et elle dit le plafond du Good Morning',
+      /par semaine/.test(liste) && !/chaque jour|chaque matin/.test(liste),
+      'elle annoncerait une place quotidienne que le code refuse après la première actu de la semaine')
+  }
 
   // ═════════════════════════════════════════════════════════════════════════
   // 🔴 LE RETOUR RAMÈNE LÀ D'OÙ L'ON VIENT (22/09)
@@ -1140,15 +1211,13 @@ const verifie = (nom, cond, detail = '') => {
     !/label: 'Facturation'/.test(listeTabs),
     'les coordonnées vivraient à deux endroits, comme l’abonnement avant le 22/09')
 
-  // ⚠️ SANS `feature`, comme « Mon compte » : savoir sous quel nom on est
-  // facturé ne se mérite pas, et un cadenas sur ses propres coordonnées serait
-  // absurde.
-  // ⚠️ ET « MON COMPTE » RESTE SANS FORFAIT, puisqu'il porte maintenant la
-  // facturation : savoir sous quel nom on est facturé ne se mérite pas.
+  // ⚠️ ET AUCUN DES DEUX N'EST REVENU DANS LA BARRE. La facturation vit dans
+  // « Mon compte », et « Mon compte » vit dans le pied des deux barres : cette
+  // liste-ci ne doit porter ni l'un ni l'autre, sinon le sujet se dédouble.
   {
-    const ligne = listeTabs.split('\n').find(l => /id: 'compte'/.test(l)) || ''
-    verifie('« Mon compte » n’est derrière aucun forfait',
-      ligne.length > 0 && !/feature:/.test(ligne), ligne.trim().slice(0, 80))
+    verifie('ni « Mon compte » ni la facturation ne reprennent un onglet',
+      !/id: 'compte'/.test(listeTabs) && !/id: 'facturation'/.test(listeTabs),
+      'le même sujet vivrait à deux endroits, et chacun dirait sa version')
   }
 
   const iFact = code.indexOf('function BlocFacturation')
@@ -1317,9 +1386,50 @@ const verifie = (nom, cond, detail = '') => {
   // 🔴 LES DEUX BARRES, ET C'EST LA GARDE QUI COMPTE. La barre latérale
   // n'existe pas sous 1100 px : la poser d'un seul côté laisserait sans réponse
   // ceux qui travaillent sur leur téléphone, c'est-à-dire la plupart.
+  // 🔴 ET EXACTEMENT DEUX, PAS TROIS (22/09). Le compte a vécu deux jours dans
+  // le pied des deux barres ET dans la barre d'onglets : « l'onglet mon compte
+  // est à deux endroits » (Alex). Compter au moins deux laissait le doublon
+  // passer ; on compte les portes, et il y en a une par barre.
   const boutons = (dash.match(/ouvrirConfig\('compte'\)/g) || []).length
-  verifie('le bouton « Mon compte » est dans les DEUX barres',
-    boutons >= 2, `${boutons} bouton(s) trouvé(s)`)
+  verifie('le bouton « Mon compte » est dans les DEUX barres, et nulle part ailleurs',
+    boutons === 2, `${boutons} bouton(s) trouvé(s), 2 attendus`)
+
+  // 🔴 ET IL DIT QU'ON Y EST. Depuis qu'il n'est plus un onglet, aucun onglet
+  // ne s'allume quand on regarde son compte : sans ce repère, l'écran flotte
+  // au-dessus d'une barre au repos et on ne sait plus d'où il sort.
+  verifie('le bouton s’allume quand on est sur son compte',
+    /const surCompte = ongletPrincipal === 'config' && configTabUrl === 'compte'/.test(dash),
+    'rien ne montre où l’on est : la barre du haut reste au repos sur cet écran')
+
+  // ⚠️ ET LES DEUX BOUTONS LE LISENT, pas seulement celui du grand écran.
+  verifie('et les deux boutons le lisent',
+    (dash.match(/surCompte \? 'CC' : '44'/g) || []).length === 2,
+    'un seul des deux s’allumerait, et l’autre laisserait le doute')
+
+  // ⚠️ ON LIT L'ONGLET COURANT, PAS LA CLÉ DE MONTAGE. `configTab` sert de
+  // `key` à ConfigDashboard et ne bouge plus quand le commerçant change
+  // d'onglet à l'intérieur : le bouton resterait allumé sur les seize autres.
+  verifie('et il lit l’onglet courant, pas la clé de montage',
+    !/const surCompte = ongletPrincipal === 'config' && configTab === 'compte'/.test(dash),
+    'le bouton resterait allumé sur tous les autres onglets de configuration')
+
+  // 🔴 ET AUCUN FORFAIT NE LE FERME. C'était tout le point quand il était un
+  // onglet, et ça ne change pas en changeant de barre : celui qui est en
+  // Exister doit pouvoir lire qu'il ne paie rien, et celui dont l'essai se
+  // termine doit pouvoir lire sa date.
+  //
+  // ⚠️ ET LA FENÊTRE VA JUSQU'AU BOUT DU BOUTON. Mesurée au harnais, une
+  // première version s'arrêtait 200 caractères après le `onClick` : le style
+  // en fait trois cents à lui seul, donc le cadenas posé sur l'icône passait
+  // sans rougir. Une garde qui regarde à côté est une garde muette.
+  {
+    const i = dash.indexOf("ouvrirConfig('compte')")
+    const fin = i < 0 ? 0 : dash.indexOf('</button>', i)
+    const autour = i < 0 ? '' : dash.slice(Math.max(0, i - 400), fin)
+    verifie('« Mon compte » n’est derrière aucun forfait',
+      i >= 0 && fin > i && !/peut\(|canDo\(/.test(autour),
+      'un cadenas est apparu sur le compte du commerçant : il ne voit plus ce qu’il paie')
+  }
 
   // ⚠️ ET LA BARRE LATÉRALE EST BIEN CELLE QUI DISPARAÎT SOUS 1100 px : si ce
   // point de rupture changeait, la garde ci-dessus resterait vraie et la

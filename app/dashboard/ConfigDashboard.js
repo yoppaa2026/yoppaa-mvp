@@ -14121,21 +14121,25 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // seulement à l'inscription (l'étape 5 le promettait déjà).
     { id: 'accompagnement', label: 'Accompagnement', icon: 'box' },
 
-    // ── CE QU'IL PAIE ───────────────────────────────────────────────────
-    // 🔴 IL N'Y AVAIT AUCUNE PORTE. La page d'abonnement existait, complète, et
-    // on n'y arrivait que par le bandeau d'essai, une fonction verrouillée ou
-    // un email de relance. « Où je vois mon abonnement » est la question des
-    // premiers jours, et elle n'avait pas de réponse.
-    // ⚠️ EN DERNIER, ET SANS `feature`. En dernier parce qu'on ne vient pas
-    // régler son commerce ici ; sans forfait parce que savoir ce qu'on paie ne
-    // se mérite pas, et qu'un cadenas sur son propre compte serait absurde.
-    // 🔴 LA FACTURATION A ÉTÉ UN ONGLET PENDANT UNE HEURE (22/09). Alex l'a
-    // demandée séparée, l'a vue à l'écran, et a tranché : « facturation doit
-    // aller dans Mon compte ». Il a raison, et c'est ce que le relevé disait
-    // avant que la question se pose : tout ce qui touche à l'argent au même
-    // endroit, c'est déjà là que mènent cinq emails de facturation, et la barre
-    // n'a pas besoin d'un dix-septième onglet pour ça.
-    { id: 'compte', label: 'Mon compte', icon: 'user' },
+    // ── CE QU'IL PAIE : PAS ICI ─────────────────────────────────────────
+    // 🔴 « MON COMPTE » N'EST PAS UN ONGLET, ET C'EST UNE DÉCISION (22/09).
+    // Il l'a été le temps qu'Alex le voie à l'écran : « l'onglet mon compte
+    // est à deux endroits, il doit être uniquement proche des alertes ». Il
+    // avait raison, et le défaut était de mon fait : je l'ai posé dans cette
+    // barre pour qu'il existe, puis dans le pied des deux barres pour qu'il
+    // se voie sans faire défiler, sans retirer le premier. Deux portes pour
+    // une pièce, c'est le doublon qu'on venait de corriger sur la page
+    // d'abonnement.
+    //
+    // ⚠️ ET LA PORTE QUI RESTE EST LA BONNE : son compte n'est pas un réglage
+    // de son commerce, il se regarde une fois par mois, et cette barre en
+    // comptait déjà seize.
+    //
+    // ⚠️ L'ÉCRAN, LUI, VIT TOUJOURS ICI. `tab === 'compte'` le rend plus bas,
+    // `ouvrirConfig('compte')` y mène depuis le pied de chaque barre et
+    // `?config=compte` reste une adresse valable. Un onglet retiré de la
+    // barre n'est pas un écran retiré : les cinq emails de facturation
+    // pointent toujours dessus.
   ].filter(Boolean)
     // ⚠️ L'ÉTAT SE CALCULE ICI, UNE FOIS, ET LE FILTRE NE PORTE QUE SUR `null`.
     // Un onglet sans `feature` est toujours à lui (Chiffres, Profil, Avis…).

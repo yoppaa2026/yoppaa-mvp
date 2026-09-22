@@ -230,11 +230,12 @@ const MUTATIONS = [
     vers: '      {false ? (',
     garde: 'et la carte de sa propre formule ne lui propose rien' },
 
-  { nom: '🔴 une seule des deux cartes se reconnait',
+  // ⚠️ TROIS DEPUIS LE 22/09, la gratuite ayant rejoint les deux payantes.
+  { nom: '🔴 une seule des trois cartes se reconnait',
     fichier: 'app/dashboard/abonnement/page.js',
     de: "                actuelle={plan === 'vendre'}",
     vers: '                actuelle={false}',
-    garde: 'les deux formules savent si elles sont la sienne' },
+    garde: 'les trois formules savent si elles sont la sienne' },
 
   // ─── 22/09 : LE RETOUR RAMENE LA D OU L ON VIENT ────────────────────────
   { nom: '🔴 le retour repose le commercant a l entree du tableau de bord',
@@ -398,21 +399,54 @@ const MUTATIONS = [
     garde: 'et il dit quoi faire' },
 
 
-  // ─── LA PORTE ───────────────────────────────────────────────────────────
-  { nom: '🔴 LE DEFAUT D ORIGINE : l onglet disparait, la page redevient inatteignable',
-    de: "    { id: 'compte', label: 'Mon compte', icon: 'user' },",
-    vers: '' },
+  // ─── LA PORTE, ET UNE SEULE ─────────────────────────────────────────────
+  //
+  // 🔴 LES TROIS MUTATIONS QUI VIVAIENT ICI GARDAIENT L ONGLET DE LA BARRE, et
+  // cet onglet n existe plus : Alex l a vu a l ecran le 22/09, en meme temps
+  // que le bouton du pied. « L onglet mon compte est a deux endroits, il doit
+  // etre uniquement proche des alertes. » Ce qu on mesure s est donc INVERSE,
+  // et les ancres qui visaient l onglet ne pointaient plus sur rien.
+  { nom: '🔴 LE DEFAUT DU 22/09 : l onglet revient dans la barre, en double du bouton du pied',
+    de: '  ].filter(Boolean)',
+    vers: "    { id: 'compte', label: 'Mon compte', icon: 'user' } ].filter(Boolean)",
+    garde: '« Mon compte » n’est pas un onglet de cette barre' },
 
-  { nom: '⚠️ le libelle change : il ne reconnait plus l onglet qu il cherche',
-    de: "    { id: 'compte', label: 'Mon compte', icon: 'user' },",
-    vers: "    { id: 'compte', label: 'Facturation', icon: 'user' }," },
+  // 🔴 ET LE BOUTON DU PIED DISPARAIT D UNE DES DEUX BARRES. La barre laterale
+  // n existe pas sous 1100 px : n en garder qu un laisse sans reponse ceux qui
+  // travaillent sur leur telephone, c est-a-dire la plupart.
+  { nom: '🔴 le bouton ne reste que dans une seule des deux barres',
+    fichier: 'app/dashboard/page.js',
+    de: "            <button onClick={() => ouvrirConfig('compte')}",
+    vers: '            <button onClick={() => {}}',
+    garde: 'le bouton « Mon compte » est dans les DEUX barres, et nulle part ailleurs' },
 
   // 🔴 LUI POSER UN FORFAIT LE FERMERAIT A CEUX QUI EN ONT LE PLUS BESOIN :
   // celui qui est en Exister ne pourrait plus lire qu il ne paie rien, et celui
   // dont l essai se termine ne verrait pas sa date.
   { nom: '🔴 un cadenas de forfait se pose sur le compte du commercant',
-    de: "    { id: 'compte', label: 'Mon compte', icon: 'user' },",
-    vers: "    { id: 'compte', label: 'Mon compte', icon: 'user', feature: 'export_comptable' }," },
+    fichier: 'app/dashboard/page.js',
+    de: "              <IconCompte size={15} color={T.colTexte}/>",
+    vers: "              {peut(commercant, 'export_comptable') && <IconCompte size={15} color={T.colTexte}/>}",
+    garde: '« Mon compte » n’est derrière aucun forfait' },
+
+  // 🔴 ET RIEN NE DIT PLUS OU L ON EST. Depuis que le compte n est plus un
+  // onglet, aucun onglet ne s allume quand on le regarde : sans ce repere,
+  // l ecran flotte au-dessus d une barre au repos.
+  { nom: '🔴 le bouton ne montre plus qu on est sur son compte',
+    fichier: 'app/dashboard/page.js',
+    de: "  const surCompte = ongletPrincipal === 'config' && configTabUrl === 'compte'",
+    vers: '  const surCompte = false',
+    garde: 'le bouton s’allume quand on est sur son compte' },
+
+  // ⚠️ ET IL LIT L ONGLET COURANT, PAS LA CLE DE MONTAGE. `configTab` sert de
+  // `key` a ConfigDashboard : il ne bouge plus quand le commercant change
+  // d onglet a l interieur, donc le bouton resterait allume sur les seize
+  // autres. La mutation remet exactement cette version-la.
+  { nom: '⚠️ le bouton lit la cle de montage au lieu de l onglet courant',
+    fichier: 'app/dashboard/page.js',
+    de: "  const surCompte = ongletPrincipal === 'config' && configTabUrl === 'compte'",
+    vers: "  const surCompte = ongletPrincipal === 'config' && configTab === 'compte'",
+    garde: 'et il lit l’onglet courant, pas la clé de montage' },
 
   { nom: '🔴 l onglet existe mais n affiche plus rien',
     de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} />}",
@@ -449,6 +483,68 @@ const MUTATIONS = [
   { nom: '🔴 le portail ne lit plus le corps de la reponse, seulement le code',
     de: "    if (!res.ok || !corps?.url) {",
     vers: "    if (!res.ok) {" },
+
+
+  // ─── 22/09 : LA FORMULE GRATUITE ETAIT ABSENTE DES FORMULES ─────────────
+  //
+  // 🔴 Alex : « la formule exister est absente des formules ». L ecran
+  // s appelait « Choisis ta formule » et n en montrait que deux, toutes les
+  // deux payantes. Celui qui hesite ne lisait nulle part ce qu il GARDE s il
+  // ne prend rien ; celui qui paie ne voyait pas ce qui lui reste s il arrete.
+  { nom: '🔴 LE DEFAUT D ORIGINE : la formule gratuite disparait de la page',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '                title="Exister"',
+    vers: '                title="Formule de base"',
+    garde: '🔴 la formule gratuite est sur la page des formules' },
+
+  // ⚠️ ET LA CARTE GRATUITE SE RECONNAIT. Sans ca, un commercant deja en
+  // Exister se verrait proposer de resilier un abonnement qu il n a pas.
+  { nom: '🔴 la carte gratuite ne sait plus si c est sa formule',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: "                actuelle={plan === 'exister'}",
+    vers: '                actuelle={false}',
+    garde: 'les trois formules savent si elles sont la sienne' },
+
+  // 🔴 LE PIEGE DU ZERO, ET IL SE VOIT A L ECRAN : `prixTTC` accepte le vrai 0
+  // d Exister, comme il le doit. Sans le garde-fou, la carte annonce
+  // « 0,00 € HTVA / mois » puis « soit 0,00 € TVA comprise ».
+  { nom: '🔴 la carte gratuite annonce une TVA sur zero',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '  const ttc = gratuite ? null : prixTTC(price)',
+    vers: '  const ttc = prixTTC(price)',
+    garde: 'la formule gratuite n’annonce pas une TVA sur zéro' },
+
+  { nom: '⚠️ le prix de la gratuite se dit en euros au lieu de mots',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: "          {gratuite ? 'Gratuit' : euros(price)}",
+    vers: '          {euros(price)}',
+    garde: 'et son prix se dit en mots, pas en euros' },
+
+  // 🔴 DESCENDRE EN EXISTER, C EST RESILIER. « Changer pour cette formule »
+  // envoie un abonne au portail sans lui dire ce qu il va y faire.
+  { nom: '🔴 la resiliation reprend le libelle d un changement de formule',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: "'Résilier mon abonnement'",
+    vers: "'Changer pour cette formule'",
+    garde: 'descendre en Exister s’appelle par son nom' },
+
+  // ⚠️ ET LA LISTE NE VEND RIEN QU ELLE N A PAS : la matrice ferme `deals`,
+  // `push_cibles_favoris`, `commande`, `rdv`, `paiement_ligne` et `fidelite`
+  // en Exister. Promettre l un d eux vide Communiquer de son sens.
+  { nom: '🔴 la gratuite se met a promettre les deals et les push',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: "                  'Favoris et signaux : le quartier te dit ce qu’il cherche',",
+    vers: "                  'Deals du jour et push à tes favoris',",
+    garde: 'la formule gratuite ne promet pas les deals' },
+
+  // 🔴 UNE ACTU PAR SEMAINE, PAS UNE PAR JOUR. Le plafond vit dans le code
+  // depuis le 01/07, decision d Alex contre la cannibalisation de Communiquer,
+  // et deux ecrans du produit l annoncaient encore faux.
+  { nom: '🔴 la gratuite annonce une place quotidienne dans le Good Morning',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: "                  'Une actu par semaine, publiée dans le Good Morning de ta commune',",
+    vers: "                  'Ta place chaque matin dans le Good Morning de ta commune',",
+    garde: 'et elle dit le plafond du Good Morning' },
 ]
 
 const lancer = () => {

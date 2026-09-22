@@ -837,7 +837,14 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
     },
     {
       Icon: Megaphone, titre: 'Actualité',
-      desc: 'Une nouvelle que tu publies : nouveau produit, événement, créneau libre. Exister : 1 actu basique par jour, visible uniquement dans Good Morning Yoppers (pas de bandeau sur ta fiche). Communiquer / Vendre : actus enrichies illimitées (titre + photo + description longue), visibles sur ta fiche + push aux favoris.',
+      // 🔴 « PAR JOUR » ÉTAIT FAUX, ET C'EST LE FRÈRE DU DÉFAUT DU 22/09. La
+      // carte Exister de cette même page l'annonçait aussi et a été corrigée ;
+      // le glossaire, à quelques centimètres, continuait de promettre une actu
+      // quotidienne. Le code plafonne à UNE par semaine calendaire depuis le
+      // 01/07 (décision d'Alex contre la cannibalisation de Communiquer) :
+      // le commerçant publiait sa deuxième actu et se heurtait au plafond sans
+      // comprendre pourquoi.
+      desc: 'Une nouvelle que tu publies : nouveau produit, événement, créneau libre. Exister : 1 actu basique par semaine, visible uniquement dans Good Morning Yoppers (pas de bandeau sur ta fiche). Communiquer / Vendre : actus enrichies illimitées (titre + photo + description longue), visibles sur ta fiche + push aux favoris.',
       plan: 'communiquer',
     },
     {

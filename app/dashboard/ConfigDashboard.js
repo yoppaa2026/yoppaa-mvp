@@ -13609,7 +13609,10 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
     setPortail(true)
     // ⚠️ `postPro` REND LA `Response`, IL NE LÈVE PAS SUR UN CODE HTTP. Un 409
     // « aucun abonnement lié » ne déclencherait aucun `catch` : on lit le corps.
-    const res = await postPro('/api/stripe/billing/portal', { commercantId: commercant.id })
+    // ⚠️ ON DIT D'OÙ L'ON PART, PAS OÙ REVENIR. La route tient la liste des
+    // écrans et construit l'adresse elle-même : lui envoyer une URL ouvrirait
+    // une redirection vers n'importe quel site, au retour de Stripe.
+    const res = await postPro('/api/stripe/billing/portal', { commercantId: commercant.id, retour: 'compte' })
     if (typeof res?.json !== 'function') {
       toast(res?.sansSession ? 'Ta session a expiré, reconnecte-toi.' : 'Connexion perdue, réessaie.', 'error')
       setPortail(false); return

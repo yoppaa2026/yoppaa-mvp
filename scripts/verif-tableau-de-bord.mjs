@@ -838,6 +838,13 @@ const verifie = (nom, cond, detail = '') => {
     /'Gérer ma carte et mes factures'/.test(corpsCompte),
     'celui qui cherche où mettre sa carte ne reconnaît pas le bouton qui l’y mène')
 
+  // ⚠️ ET « MON COMPTE » DIT D'OÙ IL PART, pour que Stripe l'y ramène. Sans
+  // ce mot, le retour retombe sur la page d'abonnement et il doit refaire le
+  // chemin, avec sa carte enregistrée mais l'impression de s'être perdu.
+  verifie('et le départ depuis « Mon compte » est annoncé à la route',
+    /retour: 'compte'/.test(corpsCompte),
+    'le commerçant serait déposé sur un autre écran au retour de Stripe')
+
   // ⚠️ ET CELUI QUI N'A PAS ENCORE D'ABONNEMENT APPREND CE QUI L'ATTEND. Sans
   // cette phrase, l'écran constate qu'il n'a rien à gérer et s'arrête là :
   // c'est exactement la question restée sans réponse.
@@ -1190,11 +1197,25 @@ const verifie = (nom, cond, detail = '') => {
 
   // ⚠️ ET LA PAGE PARLE LA LANGUE DU PRODUIT. Tout Yoppaa tutoie ; cette page
   // vouvoyait, ce qui fait douter d'être encore chez soi.
-  for (const mot of ['Gérez votre', 'Vous bénéficiez', 'Chargement de votre']) {
-    verifie(`la page d’abonnement ne vouvoie plus (« ${mot} »)`,
-      !abo.includes(mot),
+  //
+  // 🔴 QUATRE VOUVOIEMENTS AVAIENT SURVÉCU À LA PREMIÈRE PASSE (22/09), dont
+  // « VOTRE FORMULE ACTUELLE » en capitales sur la capture qu'Alex a envoyée,
+  // et une phrase qui mélangeait « Tu as » et « quand vous serez prêt ». La
+  // liste ne cherchait que trois formulations : viser des phrases, c'est
+  // n'attraper que celles qu'on a déjà vues. On vise les mots du vouvoiement.
+  //
+  // ⚠️ SUR LE CODE DÉPOUILLÉ, sinon les commentaires qui citent les anciennes
+  // phrases pour expliquer la correction font rougir la garde.
+  for (const motif of [/\b[Vv]otre\b/, /\b[Vv]os\b/, /\bVous \w+ez\b/, /\bvous serez\b/,
+                       /reconnectez-vous/, /contactez-nous/]) {
+    verifie(`la page d’abonnement ne vouvoie plus (${motif.source})`,
+      !motif.test(aboNu),
       'le reste du produit tutoie : le commerçant croit changer de site')
   }
+  // ⚠️ ET ELLE ANNONCE SON ÉCRAN DE DÉPART, comme « Mon compte » le fait.
+  verifie('la page d’abonnement annonce son propre retour',
+    /retour: 'abonnement'/.test(abo),
+    'les deux écrans retomberaient sur le même retour, dont un faux')
   }
 }
 
@@ -1400,6 +1421,34 @@ const verifie = (nom, cond, detail = '') => {
       verifie(`${r} ne garde pas sa vérification de propriété en double`,
         !/auth_user_id !== user\.id/.test(src),
         'la règle vivrait à deux endroits, et la copie ne saurait rien des corrections de l’autre')
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // 🔴 LE RETOUR DE STRIPE RAMÈNE LÀ D'OÙ L'ON VIENT, SANS OUVRIR DE PORTE
+    // ═════════════════════════════════════════════════════════════════════════
+    //
+    // Le portail s'ouvre depuis deux écrans ; le retour était écrit en dur pour
+    // l'un des deux. Celui qui partait de « Mon compte » revenait ailleurs.
+    //
+    // 🔴 ET C'EST LA GARDE QUI COMPTE ICI : le client envoie un NOM, jamais une
+    // adresse. Accepter une URL dans le corps de la requête offrirait une
+    // redirection vers n'importe quel site à qui sait fabriquer un appel, et
+    // Stripe y renverrait le commerçant lui-même, au retour de sa facturation.
+    // Une fausse page Yoppaa à ce moment-là récolte ce qu'elle veut.
+    {
+      const src = readFileSync(new URL('../app/api/stripe/billing/portal/route.js', import.meta.url), 'utf8')
+      verifie('le retour du portail se choisit dans une liste tenue par le serveur',
+        /const RETOURS = \{/.test(src) && /Object\.hasOwn\(RETOURS, demande\)/.test(src),
+        'l’adresse de retour viendrait d’ailleurs que de cette liste')
+      verifie('🔴 et jamais d’une adresse envoyée par le client',
+        /const returnUrl = `\$\{appUrl\}\$\{chemin\}`/.test(src) && !/returnUrl = (body|corps)\./.test(src),
+        'redirection ouverte : Stripe renverrait le commerçant vers le site de son choix')
+      // ⚠️ ET LES DEUX ÉCRANS SONT DANS LA LISTE, sinon l'un des deux retombe
+      // en silence sur le défaut, ce qui est exactement le défaut d'origine.
+      for (const cle of ["compte: '/dashboard?onglet=config&config=compte'", "abonnement: '/dashboard/abonnement'"]) {
+        verifie(`la liste connaît ${cle.split(':')[0]}`, src.includes(cle),
+          'cet écran retomberait sur le retour par défaut, sans rien dire')
+      }
     }
   }
 

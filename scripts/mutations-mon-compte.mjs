@@ -593,6 +593,49 @@ const MUTATIONS = [
     de: '    if (!commercant.stripe_customer_id) {',
     vers: "    if (commercant.auth_user_id !== user.id) { return NextResponse.json({ error: 'accès refusé' }, { status: 403 }) } if (!commercant.stripe_customer_id) {",
     garde: 'stripe/billing/portal ne garde pas sa vérification de propriété en double' },
+
+
+  // ─── 22/09 : LE RETOUR DE STRIPE ────────────────────────────────────────
+  //
+  // 🔴 LA MUTATION QUI COMPTE EST LA PREMIERE : elle remet la forme naturelle,
+  // celle qu on ecrit sans y penser, et qui ouvre une redirection vers
+  // n importe quel site au retour de la facturation.
+  { nom: '🔴 la route accepte une adresse de retour envoyee par le client',
+    fichier: 'app/api/stripe/billing/portal/route.js',
+    de: '    const returnUrl = `${appUrl}${chemin}`',
+    vers: '    const returnUrl = body.retour || `${appUrl}${chemin}`',
+    garde: '🔴 et jamais d’une adresse envoyée par le client' },
+
+  { nom: '⚠️ la liste des retours oublie « Mon compte »',
+    fichier: 'app/api/stripe/billing/portal/route.js',
+    de: "      compte: '/dashboard?onglet=config&config=compte',",
+    vers: "      compte: '/dashboard/abonnement',",
+    garde: 'la liste connaît compte' },
+
+  { nom: '⚠️ la cle inconnue n est plus filtree par la liste',
+    fichier: 'app/api/stripe/billing/portal/route.js',
+    de: '    const chemin = Object.hasOwn(RETOURS, demande) ? RETOURS[demande] : RETOURS.abonnement',
+    vers: '    const chemin = RETOURS[demande] || RETOURS.abonnement',
+    garde: 'le retour du portail se choisit dans une liste tenue par le serveur' },
+
+  { nom: '🔴 « Mon compte » n annonce plus son ecran de depart',
+    de: "    const res = await postPro('/api/stripe/billing/portal', { commercantId: commercant.id, retour: 'compte' })",
+    vers: "    const res = await postPro('/api/stripe/billing/portal', { commercantId: commercant.id })",
+    garde: 'et le départ depuis « Mon compte » est annoncé à la route' },
+
+  { nom: '⚠️ la page d abonnement n annonce plus le sien',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: "        body: JSON.stringify({ commercantId: commercant.id, retour: 'abonnement' }),",
+    vers: '        body: JSON.stringify({ commercantId: commercant.id }),',
+    garde: 'la page d’abonnement annonce son propre retour' },
+
+  // ⚠️ ET LE VOUVOIEMENT REVIENT PAR OU IL ETAIT RESTE : le titre en capitales
+  // de la carte, que quatre passes de relecture n avaient pas vu.
+  { nom: '⚠️ le titre de la carte revouvoie le commercant',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '>Ta formule actuelle</p>',
+    vers: '>Votre formule actuelle</p>',
+    garde: 'la page d’abonnement ne vouvoie plus (\\b[Vv]otre\\b)' },
 ]
 
 const lancer = () => {

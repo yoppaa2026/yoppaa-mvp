@@ -69,8 +69,30 @@ export async function POST(req) {
       }, { status: 409 })
     }
 
+    // ═══ LE RETOUR RAMÈNE LÀ D'OÙ L'ON VIENT (22/09) ═══════════════════════
+    //
+    // Le portail s'ouvre depuis DEUX écrans : « Mon compte », qui est la porte
+    // principale depuis qu'il porte la facturation, et la page d'abonnement.
+    // Le retour était écrit en dur pour la seconde : celui qui partait de
+    // « Mon compte » revenait ailleurs, et devait refaire le chemin.
+    //
+    // 🔴 ET LE CLIENT N'ENVOIE PAS UNE URL, IL ENVOIE UN NOM. Accepter une
+    // adresse dans le corps de la requête, c'est offrir une redirection vers
+    // n'importe quel site à qui sait fabriquer un appel : Stripe renverrait
+    // le commerçant, jeton en poche, vers une fausse page Yoppaa. Le nom sert
+    // de clé, le chemin vit ici, et un nom inconnu retombe sur le défaut.
+    //
+    // ⚠️ `Object.hasOwn`, PAS UN SIMPLE ACCÈS : `RETOURS['constructor']`
+    // rendrait une fonction héritée, et l'URL construite serait absurde.
+    const RETOURS = {
+      compte: '/dashboard?onglet=config&config=compte',
+      abonnement: '/dashboard/abonnement',
+    }
+    const demande = typeof body?.retour === 'string' ? body.retour : ''
+    const chemin = Object.hasOwn(RETOURS, demande) ? RETOURS[demande] : RETOURS.abonnement
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.yoppaa.app'
-    const returnUrl = `${appUrl}/dashboard/abonnement`
+    const returnUrl = `${appUrl}${chemin}`
 
     const session = await createCustomerPortalSession({ commercant, returnUrl })
 

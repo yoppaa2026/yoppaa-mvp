@@ -134,7 +134,7 @@ export default function AbonnementPage() {
   useEffect(() => {
     const status = searchParams.get('stripe_checkout')
     if (status === 'success') {
-      setCheckoutResult({ ok: true, message: 'Merci ! Votre abonnement est en cours d\'activation. Vous recevrez un email de confirmation dans quelques instants.' })
+      setCheckoutResult({ ok: true, message: 'Merci ! Ton abonnement est en cours d\'activation. Tu recevras un email de confirmation dans quelques instants.' })
     } else if (status === 'canceled') {
       setCheckoutResult({ ok: false, message: 'Souscription annulée. Tu peux la reprendre quand tu veux.' })
     }
@@ -173,7 +173,7 @@ export default function AbonnementPage() {
     setError(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) throw new Error('Session expirée, reconnectez-vous')
+      if (!session?.access_token) throw new Error('Session expirée, reconnecte-toi')
 
       const res = await fetch('/api/stripe/billing/portal', {
         method: 'POST',
@@ -181,7 +181,7 @@ export default function AbonnementPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ commercantId: commercant.id }),
+        body: JSON.stringify({ commercantId: commercant.id, retour: 'abonnement' }),
       })
       const json = await res.json()
       if (!res.ok || !json?.url) {
@@ -256,7 +256,7 @@ export default function AbonnementPage() {
 
         {/* Carte plan actuel */}
         <div style={{ background: '#fff', borderRadius: 16, padding: '24px 28px', border: `1px solid ${T.pale}`, marginBottom: 24 }}>
-          <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase', margin: '0 0 6px' }}>Votre formule actuelle</p>
+          <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, letterSpacing: '1.5px', textTransform: 'uppercase', margin: '0 0 6px' }}>Ta formule actuelle</p>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: 28, fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: 0 }}>{planLabel}</h2>
             {isExempt && (
@@ -288,7 +288,7 @@ export default function AbonnementPage() {
           </div>
           {isExempt && (
             <p style={{ fontSize: 13, color: T.muted, margin: '12px 0 0', lineHeight: 1.55 }}>
-              Tu as un accès gratuit à Yoppaa au titre du partenariat de lancement. Aucune facturation en cours. Quand vous serez prêt à activer votre formule payante, contactez-nous à <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
+              Tu as un accès gratuit à Yoppaa au titre du partenariat de lancement. Aucune facturation en cours. Quand tu seras prêt à activer ta formule payante, écris-nous à <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
             </p>
           )}
           {hasActiveSub && (

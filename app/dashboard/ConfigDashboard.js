@@ -13336,8 +13336,33 @@ function joursJusqua(iso) {
 // ⚠️ CET ONGLET N'A PAS DE `feature`, ET C'EST VOLONTAIRE. Savoir ce qu'on paie
 // ne se mérite pas : celui qui est en Exister y lit qu'il ne paie rien, celui
 // dont l'essai se termine y lit la date. Un cadenas ici serait absurde.
-function TabMonCompte({ commercant, toast }) {
+function TabMonCompte({ commercant, toast, illisible = false }) {
   const [portail, setPortail] = useState(false)
+
+  // 🔴 SANS DOSSIER, CET ÉCRAN AFFIRMAIT « EXISTER, GRATUIT À VIE » (22/09).
+  // Toutes ses valeurs sont des replis : `commercant?.plan || 'exister'`,
+  // `commercant?.subscription_status || null`. Avec un commerçant absent, ils
+  // s'alignent tous sur le cas gratuit, et l'écran ANNONCE une formule au lieu
+  // d'avouer qu'il ne sait pas. C'est le pire des deux : un écran vide se
+  // remarque, un écran faux se croit.
+  //
+  // ⚠️ DEUX CAS, DEUX MESSAGES. « Pas encore chargé » se répare tout seul ;
+  // « illisible » demande un geste. Les confondre ferait attendre pour rien
+  // devant une panne, ou crier à la panne devant un chargement.
+  if (!commercant) {
+    return (
+      <div style={{ ...s.card, textAlign: 'center' }}>
+        <h2 style={{ ...s.h2, marginBottom: 8 }}>
+          {illisible ? 'Ton dossier n’a pas pu être lu' : 'Un instant…'}
+        </h2>
+        <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: 0 }}>
+          {illisible
+            ? <>La connexion a été perdue le temps de charger ta formule. Recharge la page. Si ça se reproduit, écris-nous à <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.</>
+            : 'On récupère ta formule et tes paiements.'}
+        </p>
+      </div>
+    )
+  }
 
   const plan = commercant?.plan || 'exister'
   const exempt = commercant?.billing_exempt === true
@@ -13496,6 +13521,10 @@ function TabMonCompte({ commercant, toast }) {
 
 export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onOngletChange = null }) {
   const [tab, setTab] = useState(tabInitial)
+  // ⚠️ « ILLISIBLE » N'EST PAS « VIDE ». Un dossier qu'on n'a pas pu lire et un
+  // dossier sans abonnement méritent deux écrans différents : le premier est
+  // une panne, le second un état normal du commerce.
+  const [commercantIllisible, setCommercantIllisible] = useState(false)
   // L'endroit précis où déposer le commerçant dans le Profil, quand un autre
   // onglet l'y envoie. Oublié dès qu'il y est arrivé : revenir au Profil de
   // lui-même ne doit pas refaire défiler l'écran sous ses yeux.
@@ -13630,9 +13659,32 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
   // Charge le commerçant pour connaître le plan (conditionne les onglets).
   // Exposé comme fonction pour rafraîchir après sauvegarde du Profil : activer la
   // livraison fait apparaître l'onglet Livraison sans reload manuel.
+  // 🔴 ON N'ÉCRASE PAS CE QU'ON A PAR RIEN (22/09). Cette fonction faisait
+  // `setCommercant(data)` SANS CONDITION, et son `error` n'était pas même
+  // destructurée. Une lecture qui échoue rendait donc `data = null`, et le
+  // tableau de bord REMPLAÇAIT un commerçant correct par rien du tout.
+  //
+  // 🔴 ET ELLE N'EST PAS APPELÉE QU'AU MONTAGE. Elle repasse après chaque
+  // enregistrement du Profil, de la Fidélité, des Bons, et après le démarrage
+  // d'un essai. Un commerçant en Vendre qui sauvegarde pendant une coupure
+  // voyait donc son écran retomber sur les valeurs par défaut : « Exister,
+  // gratuit à vie », alors qu'il paie. Sans un mot, puisque l'erreur n'était
+  // lue nulle part.
+  //
+  // ⚠️ GARDER L'ANCIEN VAUT MIEUX QUE MONTRER DU FAUX. Une donnée d'il y a
+  // trente secondes est presque toujours juste ; une donnée absente qu'on
+  // présente comme une réponse ne l'est jamais.
   async function rechargerCommercant() {
     if (!commercantId) return
-    const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).maybeSingle()
+    const { data, error } = await supabase.from('commercants').select('*').eq('id', commercantId).maybeSingle()
+    if (error || !data) {
+      // ⚠️ ON LE DIT, MÊME SI ON GARDE L'ANCIEN : un écran qui se fige sans
+      // rien dire fait cliquer deux fois sur le même bouton.
+      console.error('[dashboard] dossier commerçant illisible', error?.message || 'aucune ligne')
+      setCommercantIllisible(true)
+      return
+    }
+    setCommercantIllisible(false)
     setCommercant(data)
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
@@ -13910,7 +13962,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
       {/* ⚠️ AUCUNE CONDITION DE FORFAIT ICI, contrairement aux onglets
           au-dessus. Celui qui est en Exister doit pouvoir lire qu'il ne paie
           rien, et celui dont l'essai se termine doit pouvoir lire la date. */}
-      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} />}
+      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} illisible={commercantIllisible} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signaux' && <TabSignaux commercantId={commercantId} toast={showToast} signalementsEnAttente={signalementsEnAttente} />}
 

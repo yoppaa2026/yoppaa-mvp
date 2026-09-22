@@ -213,6 +213,12 @@ export default function AbonnementPage() {
   const plan = commercant.plan || 'exister'
   const isExempt = commercant.billing_exempt === true
   const hasActiveSub = commercant.subscription_status && ['active', 'trialing', 'past_due'].includes(commercant.subscription_status)
+  // ⚠️ « A ENCORE SES FONCTIONS » ET « EST À JOUR » SONT DEUX QUESTIONS. Un
+  // commerçant en `past_due` garde son accès le temps des relances, et c'est
+  // voulu : on ne coupe pas un commerce pour une carte expirée. Mais il n'est
+  // pas à jour, et c'est ça qu'il vient lire ici.
+  const enRetard = commercant.subscription_status === 'past_due'
+  const resilie = commercant.subscription_status === 'canceled'
   const planLabel = PLAN_LABEL[plan] || plan
 
   return (
@@ -254,7 +260,23 @@ export default function AbonnementPage() {
                 Partenariat test
               </span>
             )}
-            {hasActiveSub && (
+            {/* 🔴 CE BADGE DISAIT « ABONNEMENT ACTIF », EN VERT, À UN COMMERÇANT
+                EN RETARD DE PAIEMENT (corrigé le 22/09). `hasActiveSub` range
+                `past_due` parmi les statuts actifs, ce qui est juste pour
+                décider de l'accès, et faux pour décider d'un message. Son
+                ternaire ne distinguait que `trialing`.
+
+                🔴 ET C'EST L'ÉCRAN OÙ NOS PROPRES EMAILS L'ENVOIENT. Les deux
+                relances d'échec de paiement pointent vers cette page : le
+                commerçant lisait « ton paiement a échoué », cliquait, et
+                trouvait un badge vert. Pendant ce temps l'onglet « Mon compte »
+                affichait un bandeau rouge sur le même statut. */}
+            {enRetard && (
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#B91C1C', background: '#FEF2F2', padding: '4px 10px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                Paiement en attente
+              </span>
+            )}
+            {hasActiveSub && !enRetard && (
               <span style={{ fontSize: 11, fontWeight: 800, color: '#065F46', background: '#ECFDF5', padding: '4px 10px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                 {commercant.subscription_status === 'trialing' ? 'Essai en cours' : 'Abonnement actif'}
               </span>
@@ -281,8 +303,21 @@ export default function AbonnementPage() {
                   </p>
                 </div>
               )}
+              {/* 🔴 LE GESTE, PAS SEULEMENT LE CONSTAT. Un badge rouge qui ne dit
+                  pas quoi faire laisse le commerçant chercher. Le bouton qui
+                  suit ouvre exactement l'endroit où sa carte se met à jour. */}
+              {enRetard && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '14px 16px', margin: '14px 0' }}>
+                  <p style={{ fontSize: 13.5, fontWeight: 800, color: '#B91C1C', margin: '0 0 6px' }}>Ton dernier paiement n’est pas passé</p>
+                  <p style={{ fontSize: 13, color: '#7F1D1D', margin: 0, lineHeight: 1.55 }}>
+                    Ta fiche et tes clients ne bougent pas. Mets ton moyen de paiement à jour
+                    ci-dessous pour garder les fonctions de ta formule.
+                  </p>
+                </div>
+              )}
               <p style={{ fontSize: 13, color: T.muted, margin: '12px 0 16px', lineHeight: 1.55 }}>
-                Gérez votre carte de paiement, changez de formule, téléchargez vos factures ou résiliez votre abonnement depuis le portail sécurisé Stripe.
+                Ta carte, tes factures, ton changement de formule et ta résiliation se gèrent
+                dans l&rsquo;espace sécurisé de Stripe, notre prestataire de paiement.
               </p>
               <button
                 onClick={handleOpenPortal}

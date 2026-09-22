@@ -25,6 +25,88 @@ const BANC = 'verif:bord'
 const MODULE = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── 22/09 : L ECRAN NE REPOND PAS A LA PLACE DU DOSSIER QU IL N A PAS ───
+  //
+  // 🔴 SANS COMMERCANT, CET ECRAN AFFIRMAIT « EXISTER, GRATUIT A VIE ». Toutes
+  // ses valeurs sont des replis : avec un dossier absent elles s alignent sur
+  // le cas gratuit, et l ecran ANNONCE une formule au lieu d avouer qu il ne
+  // sait pas. Un ecran vide se remarque ; un ecran faux se croit.
+  { nom: '🔴 la garde de chargement saute : l ecran redevine « Exister, gratuit a vie »',
+    de: '  if (!commercant) {',
+    vers: '  if (false) {',
+    garde: 'l’écran du compte refuse de deviner une formule sans dossier' },
+
+  { nom: '🔴 le chargement et la panne redonnent le meme ecran',
+    de: 'function TabMonCompte({ commercant, toast, illisible = false }) {',
+    vers: 'function TabMonCompte({ commercant, toast }) {\n  const illisible = false',
+    garde: 'et il distingue le chargement de la panne' },
+
+  // ─── 22/09 : UN RECHARGEMENT RATE N EFFACE PAS LE COMMERCANT ────────────
+  //
+  // 🔴 `setCommercant(data)` ETAIT APPELE SANS CONDITION, et l `error` n etait
+  // meme pas destructuree. Cette fonction repasse apres CHAQUE enregistrement
+  // du Profil, de la Fidelite, des Bons : un commercant en Vendre qui
+  // sauvegarde pendant une coupure voyait son ecran retomber sur « Exister ».
+  { nom: '🔴 le rechargement cesse de lire son erreur',
+    // ⚠️ L ANCRE PORTE LA REQUETE ENTIERE, et c est mesure : « const { data,
+    // error } » vit SEIZE fois dans ce fichier, et `replace` ne touche que la
+    // premiere. La mutation mutait une autre fonction, la garde restait verte,
+    // et on aurait conclu qu elle ne protege pas.
+    de: "    const { data, error } = await supabase.from('commercants').select('*').eq('id', commercantId).maybeSingle()",
+    vers: "    const { data } = await supabase.from('commercants').select('*').eq('id', commercantId).maybeSingle()",
+    garde: 'le rechargement lit son erreur' },
+
+  { nom: '🔴 une lecture ratee ecrase le commercant payant par une absence',
+    // ⚠️ L ANCRE EST UNIQUE, ET C EST MESURE. « if (error || !data) { » avec
+    // quatre espaces se trouve AUSSI dans une ligne indentee de HUIT espaces
+    // huit mille lignes plus haut, parce qu une sous-chaine ignore les lignes :
+    // la mutation mutait cette ligne-la et laissait la vraie intacte.
+    //
+    // 🔴 ET ELLE REINTRODUIT LE DEFAUT EXACT : ecrire dans l etat AVANT de
+    // sortir de la branche d echec, donc remplacer un commercant payant par
+    // `null`. C est ce que faisait le code avant le 22/09.
+    de: '      setCommercantIllisible(true)',
+    vers: '      setCommercant(data)',
+    garde: 'et il n’écrase pas le dossier par une absence' },
+
+  // ─── 22/09 : LES DEUX ECRANS DISENT LA MEME CHOSE DU MEME STATUT ────────
+  //
+  // 🔴 LA PAGE D ABONNEMENT AFFICHAIT « ABONNEMENT ACTIF », EN VERT, A UN
+  // COMMERCANT EN RETARD DE PAIEMENT. Et c est l ecran ou nos propres emails
+  // de relance l envoient : il lisait « ton paiement a echoue », cliquait, et
+  // trouvait un badge vert.
+  { nom: '🔴 LE DEFAUT D ORIGINE : le badge vert reprend le retard de paiement',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '            {hasActiveSub && !enRetard && (',
+    vers: '            {hasActiveSub && (',
+    garde: 'le badge vert exclut le retard de paiement' },
+
+  { nom: '🔴 le badge rouge disparait : le statut est connu, rien ne le montre',
+    fichier: 'app/dashboard/abonnement/page.js',
+    // ⚠️ « {enRetard && ( » VIT DEUX FOIS : le badge en tete de carte, puis le
+    // bandeau qui porte le geste. `replace` ne touche que la PREMIERE, donc
+    // cette mutation retire le BADGE et laisse le bandeau. C est exactement ce
+    // qu il faut mesurer, et c est ce qui a montre que la garde d origine
+    // etait trop faible : elle cherchait le motif, qui survivait dans l autre.
+    de: '            {enRetard && (',
+    vers: '            {false && (',
+    garde: 'et son bandeau rouge, distinct du badge' },
+
+  { nom: '🔴 la page ne sait plus ce qu est un retard de paiement',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: "  const enRetard = commercant.subscription_status === 'past_due'",
+    vers: '  const enRetard = false',
+    garde: 'la page d’abonnement connaît le retard de paiement' },
+
+  // 🔴 LE GESTE, PAS SEULEMENT LE CONSTAT. Le mail promet « Mettre a jour mes
+  // informations de paiement » : la page doit tenir cette promesse.
+  { nom: '🔴 le bandeau rouge constate sans dire quoi faire',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: 'Mets ton moyen de paiement à jour',
+    vers: 'Ton abonnement est suspendu',
+    garde: 'et il dit quoi faire' },
+
+
   // ─── LA PORTE ───────────────────────────────────────────────────────────
   { nom: '🔴 LE DEFAUT D ORIGINE : l onglet disparait, la page redevient inatteignable',
     de: "    { id: 'compte', label: 'Mon compte', icon: 'user' },",
@@ -42,11 +124,11 @@ const MUTATIONS = [
     vers: "    { id: 'compte', label: 'Mon compte', icon: 'user', feature: 'export_comptable' }," },
 
   { nom: '🔴 l onglet existe mais n affiche plus rien',
-    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} />}",
+    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} illisible={commercantIllisible} />}",
     vers: '' },
 
   { nom: '🔴 le contenu se cache derriere le forfait, en plus de la barre',
-    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} />}",
+    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} illisible={commercantIllisible} />}",
     vers: "      {tab === 'compte' && peut(commercant, 'export_comptable') && <TabMonCompte commercant={commercant} toast={showToast} />}" },
 
   // ─── CE QUE L ECRAN DIT ─────────────────────────────────────────────────
@@ -84,10 +166,11 @@ const lancer = () => {
     return { rouge: false, plante: false, extrait: sortie.slice(-300) }
   } catch (e) {
     const sortie = `${e.stdout || ''}${e.stderr || ''}`
+    const echecs = [...sortie.matchAll(/• ([^\n—]+)/g)].map(m => m[1].trim())
     // ⚠️ ON DISTINGUE « ROUGE » DE « PLANTE ». Un banc qui explose au lieu de
     // rougir n est pas une mesure, c est un accident.
     const plante = !/vérifications/.test(sortie)
-    return { rouge: true, plante, extrait: sortie.slice(-400) }
+    return { rouge: true, echecs, plante, extrait: sortie.slice(-400) }
   }
 }
 
@@ -119,9 +202,18 @@ for (const m of MUTATIONS) {
     process.exit(2)
   }
 
-  if (res.rouge && !res.plante) { attrapees++; console.log(`  ✓ attrapée : ${m.nom}`) }
-  else if (res.plante) { manquees.push(`${m.nom} — le banc a PLANTÉ`); console.log(`  ⚠ plantage : ${m.nom}`) }
-  else { manquees.push(`${m.nom} — RESTÉ VERT`); console.log(`  ✕ MANQUÉE : ${m.nom}`) }
+  // 🔴 ROUGE NE SUFFIT PAS : ROUGE SUR LA BONNE GARDE (ajoute le 22/09). Une
+  // mutation peut casser une garde VOISINE et passer pour une mesure de celle
+  // qu on visait ; la vraie garde reste alors non eprouvee tout en paraissant
+  // tenue. Les mutations qui declarent une `garde` sont donc verifiees par son
+  // nom ; celles d avant, qui n en declarent pas, gardent l ancien contrat.
+  if (res.plante) { manquees.push(`${m.nom} — le banc a PLANTÉ`); console.log(`  ⚠ plantage : ${m.nom}`) }
+  else if (!res.rouge) { manquees.push(`${m.nom} — RESTÉ VERT`); console.log(`  ✕ MANQUÉE : ${m.nom}`) }
+  else if (m.garde && !(res.echecs || []).some(e => e.includes(m.garde))) {
+    manquees.push(`${m.nom} — rouge sur une AUTRE garde : ${(res.echecs || []).slice(0, 2).join(' / ') || '(aucune nommée)'}`)
+    console.log(`  ⚠ mauvaise garde : ${m.nom}`)
+  }
+  else { attrapees++; console.log(`  ✓ attrapée : ${m.nom}`) }
 }
 
 console.log(`\n${attrapees}/${MUTATIONS.length} mutations attrapées.`)

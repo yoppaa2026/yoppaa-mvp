@@ -821,6 +821,154 @@ const verifie = (nom, cond, detail = '') => {
   verifie('l’ouverture du portail lit le corps, pas seulement le code',
     /res\.json\(\)/.test(corpsCompte) && /corps\?\.url/.test(corpsCompte),
     'le portail annoncerait une réussite sur un refus')
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 L'ÉCRAN NE RÉPOND JAMAIS À LA PLACE DU DOSSIER QU'IL N'A PAS (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 SANS COMMERÇANT, CET ÉCRAN AFFIRMAIT « EXISTER, GRATUIT À VIE ». Toutes
+  // ses valeurs sont des replis (`commercant?.plan || 'exister'`,
+  // `commercant?.subscription_status || null`) : ils s'alignent tous sur le cas
+  // gratuit, et l'écran ANNONCE une formule au lieu d'avouer qu'il ne sait pas.
+  // Un écran vide se remarque ; un écran faux se croit.
+  //
+  // ⚠️ LA GARDE DOIT VENIR AVANT LES REPLIS, sinon elle ne protège rien : on
+  // vérifie donc qu'elle est dans le PREMIER tiers du composant.
+  {
+    const tete = corpsCompte.slice(0, Math.floor(corpsCompte.length / 3))
+    verifie('l’écran du compte refuse de deviner une formule sans dossier',
+      /if\s*\(!commercant\)/.test(tete),
+      'sans dossier, l’écran retombe sur ses valeurs par défaut et annonce « Exister, gratuit à vie »')
+
+    // ⚠️ DEUX CAS, DEUX MESSAGES. « Pas encore chargé » se répare tout seul,
+    // « illisible » demande un geste. Les confondre fait attendre devant une
+    // panne, ou crier à la panne devant un chargement.
+    // ⚠️ ON VISE LA PROP, PAS LE MOT. Mesurée au harnais, une garde qui
+    // cherchait « illisible » restait verte quand on retirait le paramètre
+    // pour le remplacer par une constante locale à false : le mot survivait,
+    // la distinction non. Ce qu'on veut savoir, c'est que l'information
+    // ARRIVE de l'extérieur, donc qu'elle est dans la signature.
+    verifie('et il distingue le chargement de la panne',
+      /function TabMonCompte\(\{[^)]*illisible/.test(corpsCompte),
+      'un dossier illisible et un dossier qui arrive donneraient le même écran')
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 UN RECHARGEMENT RATÉ N'EFFACE PAS LE COMMERÇANT (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 `setCommercant(data)` ÉTAIT APPELÉ SANS CONDITION, et l'`error` n'était
+  // même pas destructurée. Une lecture qui échoue rend `data = null` : le
+  // tableau de bord remplaçait donc un commerçant correct par rien.
+  //
+  // 🔴 ET CETTE FONCTION N'EST PAS APPELÉE QU'AU MONTAGE. Elle repasse après
+  // chaque enregistrement du Profil, de la Fidélité, des Bons, et après le
+  // démarrage d'un essai. Un commerçant en Vendre qui sauvegarde pendant une
+  // coupure voyait son écran retomber sur « Exister, gratuit à vie », sans un
+  // mot, puisque l'erreur n'était lue nulle part.
+  {
+    const iRecharge = code.indexOf('async function rechargerCommercant')
+    verifie('le rechargeur du commerçant est là où on le cherche', iRecharge >= 0,
+      'rechargerCommercant a été renommé : les deux gardes suivantes ne mesurent plus rien')
+    // ⚠️ BORNÉ DES DEUX CÔTÉS. Une tranche ouverte trouverait un `error` lu
+    // ailleurs dans le fichier et resterait verte quoi qu'il arrive ici.
+    const corpsRecharge = iRecharge >= 0 ? code.slice(iRecharge, iRecharge + 900) : ''
+
+    verifie('le rechargement lit son erreur',
+      /const \{ data, error \}/.test(corpsRecharge),
+      'une lecture qui échoue passerait inaperçue')
+    // ⚠️ ON MESURE CE QUE LA BRANCHE FAIT, PAS QU'ELLE EXISTE. Mesurée au
+    // harnais, la première version se contentait de « il y a un `if` et un
+    // `return` » : on pouvait écrire `setCommercant(data)` À L'INTÉRIEUR de la
+    // branche d'échec, donc réintroduire exactement le défaut, et elle restait
+    // verte. Ce qui compte n'est pas la forme du garde-fou, c'est que RIEN ne
+    // soit écrit avant d'en sortir.
+    const iSi = corpsRecharge.indexOf('if (error || !data)')
+    const iRet = iSi >= 0 ? corpsRecharge.indexOf('return', iSi) : -1
+    const brancheEchec = iSi >= 0 && iRet > iSi ? corpsRecharge.slice(iSi, iRet) : ''
+    verifie('le rechargement prévoit le cas où la lecture échoue',
+      brancheEchec.length > 0,
+      'plus aucune branche d’échec : une lecture ratée irait droit dans l’état')
+    verifie('et il n’écrase pas le dossier par une absence',
+      brancheEchec.length > 0 && !/setCommercant\(/.test(brancheEchec),
+      'un rechargement raté remplacerait un commerçant payant par les valeurs par défaut')
+  }
+}
+
+
+// ═══ 8bis) LES DEUX ÉCRANS DE L'ABONNEMENT DISENT LA MÊME CHOSE DU MÊME ═════
+//      STATUT (22/09)
+//
+// 🔴 LE DÉFAUT : la page d'abonnement affichait « Abonnement actif », EN VERT,
+// à un commerçant en retard de paiement. `hasActiveSub` range `past_due` parmi
+// les statuts actifs, ce qui est juste pour décider de l'ACCÈS et faux pour
+// décider d'un MESSAGE. Son badge ne distinguait que `trialing`.
+//
+// 🔴 ET C'EST L'ÉCRAN OÙ NOS PROPRES EMAILS L'ENVOIENT. Les deux relances
+// d'échec de paiement (`lib/billing-emails.js`) pointent leur bouton vers
+// `/dashboard/abonnement` : le commerçant lisait « ton paiement a échoué »,
+// cliquait, et trouvait un badge vert. Pendant ce temps l'onglet « Mon compte »
+// affichait un bandeau rouge sur le même statut, dans le même produit.
+//
+// ⚠️ CE N'EST PAS UN DÉFAUT D'AFFICHAGE, C'EST UNE CONTRADICTION. Deux écrans
+// qui lisent la même colonne doivent en dire la même chose, sinon celui des
+// deux qui rassure gagne, et c'est le mauvais.
+{
+  const abo = readFileSync(new URL('../app/dashboard/abonnement/page.js', import.meta.url), 'utf8')
+  const bord = readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8')
+
+  // ⚠️ ON MESURE LA RÈGLE, PAS LE NOM. Mesurée au harnais, la première
+  // version restait verte quand `enRetard` devenait `false` : le nom vivait,
+  // `past_due` vivait ailleurs dans la liste des statuts actifs, et plus rien
+  // ne reliait les deux. Un nom présent ne prouve pas une règle vivante.
+  verifie('la page d’abonnement connaît le retard de paiement',
+    /const enRetard\s*=\s*commercant\.subscription_status === 'past_due'/.test(abo),
+    'elle rangeait past_due parmi les actifs sans jamais le nommer à l’écran')
+
+  // ⚠️ ON VISE LA LIGNE DU BADGE VERT, PAS LE FICHIER. Le mot « past_due »
+  // existait déjà dans le fichier, dans la liste des statuts actifs et dans un
+  // commentaire d'en-tête qui promettait un message jamais écrit. Chercher le
+  // mot aurait donc été vert AVANT la correction.
+  // ⚠️ ET ON REMONTE DEPUIS LE LIBELLÉ, pas depuis la condition. Première
+  // version : « aucune ligne ne porte `hasActiveSub &&` sans `enRetard` ».
+  // Elle rougissait sur le bloc qui ouvre la section du portail, lequel a
+  // parfaitement le droit de s'afficher pendant un retard de paiement puisque
+  // c'est LÀ qu'on met sa carte à jour. Viser un mot attrape ses homonymes :
+  // on part du texte affiché, et on remonte à la condition qui le gouverne.
+  const iActif = abo.indexOf("'Abonnement actif'")
+  const ouvertureBadge = iActif < 0 ? '' : (abo.slice(Math.max(0, iActif - 500), iActif)
+    .split('\n').reverse().find(l => /hasActiveSub/.test(l)) || '')
+  verifie('le libellé « Abonnement actif » existe encore', iActif >= 0,
+    'le badge a été renommé : la garde suivante ne mesure plus rien')
+  verifie('le badge vert exclut le retard de paiement',
+    /!enRetard/.test(ouvertureBadge),
+    `un commerçant en retard lirait « Abonnement actif » en vert · condition : ${ouvertureBadge.trim().slice(0, 60)}`)
+
+  // ⚠️ DEUX ENDROITS, DEUX GARDES. `{enRetard && (` apparaît deux fois : le
+  // badge en tête de carte et le bandeau qui porte le geste. Une seule garde
+  // sur le motif laissait retirer l'un des deux en silence, et c'est ce que le
+  // harnais a montré.
+  verifie('le retard a son propre badge',
+    /\{enRetard && \(/.test(abo),
+    'le statut est connu mais rien ne le montre')
+  verifie('et son bandeau rouge, distinct du badge',
+    (abo.match(/\{enRetard && \(/g) || []).length >= 2,
+    'il ne resterait que la pastille, sans le bloc qui explique et qui agit')
+
+  // 🔴 LE GESTE, PAS SEULEMENT LE CONSTAT. Un badge rouge qui ne dit pas quoi
+  // faire laisse chercher. Le mail promet « Mettre à jour mes informations de
+  // paiement » : la page doit tenir cette promesse.
+  verifie('et il dit quoi faire',
+    /Mets ton moyen de paiement à jour/.test(abo),
+    'le commerçant voit qu’il y a un problème sans savoir par où le régler')
+
+  // ⚠️ ET LES DEUX ÉCRANS EMPLOIENT LE MÊME MOT. « Paiement en attente » d'un
+  // côté et autre chose de l'autre ferait douter d'être au bon endroit.
+  for (const [nom, src] of [['la page d’abonnement', abo], ['l’onglet « Mon compte »', bord]]) {
+    verifie(`${nom} nomme le retard « Paiement en attente »`,
+      /Paiement en attente/.test(src),
+      'les deux écrans emploieraient deux mots pour le même état')
+  }
 }
 
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du

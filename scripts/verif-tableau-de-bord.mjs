@@ -823,6 +823,66 @@ const verifie = (nom, cond, detail = '') => {
     'le portail annoncerait une réussite sur un refus')
 
   // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LA DÉGUSTATION EXISTE DANS CET ÉCRAN, ET AVEC LA DATE DE CELUI QUI LIT
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 QUESTION D'ALEX, 22/09 : « normal qu'il n'y ait pas de mention de
+  // période d'essai ? » Non. Cet écran ne lisait que le MIROIR STRIPE
+  // (`subscription_status`), et la dégustation de lancement ne passe pas par
+  // Stripe : elle vit dans `essai_plan` et dans la date d'inscription. Le
+  // bandeau violet du haut l'annonçait, l'onglet juste en dessous l'ignorait.
+  verifie('l’écran du compte connaît la dégustation, pas seulement Stripe',
+    /planEnEssai\(commercant\)/.test(corpsCompte),
+    'seul l’essai Stripe serait montré, et la dégustation de lancement resterait invisible')
+
+  // ⚠️ SA DATE, PAS LA DATE DE TOUT LE MONDE. `finEssai` rend le MAX entre
+  // l'inscription + 30 jours et le 9 janvier : qui s'inscrit en décembre a
+  // plus que les autres. `libelleDernierJourGratuit()` ne prend aucun
+  // commerçant en argument, c'est donc une constante ; ici on veut la sienne.
+  verifie('et la date affichée est celle de CE commerçant',
+    /finDegustation\(commercant\?\.created_at\)/.test(corpsCompte),
+    'la date serait la même pour tout le monde, alors que la règle dépend de la date d’inscription')
+
+  // 🔴 ET CE QUI SE PASSE APRÈS, qui est la seule chose qu'un commerçant
+  // veuille savoir en lisant son compte : ce qu'il perd, ce qu'il garde.
+  verifie('la dégustation dit ce qu’il advient ensuite',
+    /tu perds les fonctions de/.test(corpsCompte),
+    'elle annoncerait une date sans dire ce qu’elle change')
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LA FORMULE OUVERTE DEPUIS L'ADMINISTRATION SE DIT (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // 🔴 LE CAS QU'ALEX A VU CHEZ UN COMMERÇANT RÉEL. La modale d'admin le
+  // reconnaît elle-même : « ce changement n'ouvre que les fonctions, aucun
+  // abonnement n'est créé chez Stripe ». Côté commerçant, l'écran annonçait
+  // « 49,90 € HTVA par mois » ET « tu n'as pas encore d'abonnement payant »,
+  // dans la même carte. Les deux phrases sont vraies séparément et se
+  // contredisent ensemble.
+  verifie('l’écran reconnaît une formule ouverte sans abonnement',
+    /const ouvertSansFacture\s*=/.test(corpsCompte),
+    'le commerçant lirait un tarif mensuel et « pas d’abonnement » sans savoir lequel le concerne')
+
+  // ⚠️ ON MESURE LA RÈGLE, PAS LE NOM. Un `ouvertSansFacture = false` garderait
+  // le nom et éteindrait le cas.
+  {
+    const ligne = corpsCompte.split('\n').find(l => /const ouvertSansFacture\s*=/.test(l)) || ''
+    verifie('et il le déduit de l’absence d’abonnement, pas d’un drapeau',
+      /!abonne/.test(ligne) && /!exempt/.test(ligne) && /plan !== 'exister'/.test(ligne),
+      `la règle ne tient plus : ${ligne.trim().slice(0, 80)}`)
+  }
+
+  // 🔴 UN TARIF N'EST PAS UNE ÉCHÉANCE. « Ce que ça coûte » au présent faisait
+  // croire à un prélèvement en cours à quelqu'un qui n'a jamais donné de carte.
+  verifie('le tarif ne se présente pas comme un prélèvement en cours',
+    /ouvertSansFacture \? 'Le tarif de cette formule'/.test(corpsCompte),
+    'l’écran annoncerait un montant mensuel à un commerçant que personne ne débite')
+
+  verifie('et l’écran dit clairement que rien n’est facturé',
+    /rien ne t’est facturé aujourd’hui/.test(corpsCompte),
+    'le commerçant resterait avec un tarif affiché et aucune réponse')
+
+  // ═════════════════════════════════════════════════════════════════════════
   // 🔴 L'ÉCRAN NE RÉPOND JAMAIS À LA PLACE DU DOSSIER QU'IL N'A PAS (22/09)
   // ═════════════════════════════════════════════════════════════════════════
   //

@@ -25,6 +25,53 @@ const BANC = 'verif:bord'
 const MODULE = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── 22/09 : LA DEGUSTATION EXISTE DANS CET ECRAN ───────────────────────
+  //
+  // 🔴 QUESTION D ALEX : « normal qu il n y ait pas de mention de periode
+  // d essai ? » Non. L ecran ne lisait que le MIROIR STRIPE, et la degustation
+  // de lancement ne passe pas par Stripe : elle vit dans `essai_plan` et dans
+  // la date d inscription. Le bandeau du haut l annoncait, l onglet juste en
+  // dessous l ignorait.
+  { nom: '🔴 LE DEFAUT D ALEX : l ecran redevient aveugle a la degustation',
+    de: '  const degustation = planEnEssai(commercant)',
+    vers: '  const degustation = null',
+    garde: 'l’écran du compte connaît la dégustation, pas seulement Stripe' },
+
+  // ⚠️ SA DATE, PAS CELLE DE TOUT LE MONDE. `finEssai` rend le MAX entre
+  // l inscription + 30 jours et le 9 janvier : qui s inscrit en decembre a plus
+  // que les autres. `libelleDernierJourGratuit()` ne prend aucun commercant en
+  // argument, c est donc une constante.
+  { nom: '🔴 la date de degustation redevient la meme pour tout le monde',
+    de: '  const finDeg = dateLongue(finDegustation(commercant?.created_at))',
+    vers: '  const finDeg = libelleDernierJourGratuit()',
+    garde: 'et la date affichée est celle de CE commerçant' },
+
+  { nom: '🔴 la degustation annonce une date sans dire ce qu elle change',
+    de: 'tu perds les fonctions de {getPlanLabel(degustation)}',
+    vers: 'tu continues comme avant',
+    garde: 'la dégustation dit ce qu’il advient ensuite' },
+
+  // ─── 22/09 : LA FORMULE OUVERTE DEPUIS L ADMINISTRATION ─────────────────
+  //
+  // 🔴 LE CAS VU CHEZ UN COMMERCANT REEL. L ecran annoncait « 49,90 € HTVA par
+  // mois » ET « tu n as pas encore d abonnement payant », dans la meme carte.
+  // Les deux phrases sont vraies separement et se contredisent ensemble.
+  { nom: '🔴 l ecran ne reconnait plus la formule ouverte sans abonnement',
+    de: "  const ouvertSansFacture = !exempt && !abonne && plan !== 'exister' && !degustation",
+    vers: '  const ouvertSansFacture = false',
+    garde: 'et il le déduit de l’absence d’abonnement, pas d’un drapeau' },
+
+  { nom: '🔴 le tarif se represente comme un prelevement en cours',
+    de: "            <Ligne quoi={ouvertSansFacture ? 'Le tarif de cette formule' : 'Ce que ça coûte'} fort valeur={",
+    vers: "            <Ligne quoi=\"Ce que ça coûte\" fort valeur={",
+    garde: 'le tarif ne se présente pas comme un prélèvement en cours' },
+
+  { nom: '🔴 l ecran cesse de dire que rien n est facture',
+    de: 'rien ne t’est facturé aujourd’hui',
+    vers: 'ta formule est active',
+    garde: 'et l’écran dit clairement que rien n’est facturé' },
+
+
   // ─── 22/09 : L ECRAN NE REPOND PAS A LA PLACE DU DOSSIER QU IL N A PAS ───
   //
   // 🔴 SANS COMMERCANT, CET ECRAN AFFIRMAIT « EXISTER, GRATUIT A VIE ». Toutes

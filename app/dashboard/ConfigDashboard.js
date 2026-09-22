@@ -28,7 +28,7 @@ import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from 
 import { euros } from '@/lib/montants'
 import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
-import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit } from '@/lib/lancement'
+import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, finDegustation } from '@/lib/lancement'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
@@ -13379,6 +13379,30 @@ function TabMonCompte({ commercant, toast, illisible = false }) {
   const finEssai = dateLongue(commercant?.subscription_trial_end)
   const prochain = dateLongue(commercant?.subscription_current_period_end)
 
+  // 🔴 LA DÉGUSTATION N'EXISTAIT PAS DANS CET ÉCRAN (Alex, 22/09 : « normal
+  // qu'il n'y ait pas de mention de période d'essai ? »). Il ne lisait que le
+  // MIROIR STRIPE (`subscription_status`), et la dégustation de lancement ne
+  // passe pas par Stripe du tout : elle vit dans `essai_plan` et dans la date
+  // d'inscription. Le bandeau violet en haut de l'écran l'annonçait, l'onglet
+  // juste en dessous n'en savait rien, et les deux moitiés du produit ne
+  // parlaient pas de la même chose.
+  //
+  // ⚠️ LA DATE EST CELLE DE CE COMMERÇANT, pas la date affichée partout.
+  // `finEssai` rend le MAX entre son inscription + 30 jours et le 9 janvier :
+  // qui s'inscrit en décembre a donc plus que les autres. Le bandeau annonce
+  // une constante à tout le monde ; ici, on dit sa date à lui.
+  const degustation = planEnEssai(commercant)
+  const finDeg = dateLongue(finDegustation(commercant?.created_at))
+
+  // 🔴 ET LE CAS QU'ALEX A VU CHEZ UN COMMERÇANT RÉEL : une formule payante
+  // OUVERTE DEPUIS L'ADMINISTRATION. La modale d'admin le dit elle-même,
+  // « ce changement n'ouvre que les fonctions, aucun abonnement n'est créé
+  // chez Stripe ». Côté commerçant, l'écran annonçait donc « 49,90 € HTVA par
+  // mois » ET « tu n'as pas encore d'abonnement payant », dans la même carte.
+  // Les deux phrases sont vraies séparément et se contredisent ensemble : on
+  // lui annonce un prélèvement mensuel et on lui dit qu'il n'en a pas.
+  const ouvertSansFacture = !exempt && !abonne && plan !== 'exister' && !degustation
+
   // 🔴 LE RAPPEL DE LA CARTE, UN MOIS AVANT (todo du 10/09). Sans carte à la fin
   // de l'essai, Stripe échoue, le cron relance, et à J+7 le commerçant bascule
   // en Exister « sans comprendre ». Les emails existent, mais un email peut
@@ -13421,6 +13445,8 @@ function TabMonCompte({ commercant, toast, illisible = false }) {
           <span style={{ fontSize: 26, fontWeight: 900, color: T.ink, letterSpacing: '-0.5px' }}>{getPlanLabel(plan)}</span>
           {exempt && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Partenariat</span>}
           {!exempt && enEssai && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Essai en cours</span>}
+          {!exempt && degustation && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Dégustation en cours</span>}
+          {ouvertSansFacture && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Ouvert par Yoppaa</span>}
           {!exempt && statut === 'active' && <span style={{ ...s.tag, background: '#ECFDF5', color: '#065F46' }}>Actif</span>}
           {!exempt && enRetard && <span style={{ ...s.tag, background: '#FEF2F2', color: '#B91C1C' }}>Paiement en attente</span>}
         </div>
@@ -13436,9 +13462,18 @@ function TabMonCompte({ commercant, toast, illisible = false }) {
             {/* ⚠️ LE MONTANT TTC EST CELUI QU'IL VERRA SUR SON RELEVÉ. « HTVA »
                 est du vocabulaire de comptable ; le chiffre est celui de tout
                 le monde, et c'est lui qu'on compare à une ligne de banque. */}
-            <Ligne quoi="Ce que ça coûte" fort valeur={
+            {/* ⚠️ « CE QUE ÇA COÛTE » N'EST PAS « CE QUI EST PRÉLEVÉ ». Sans
+                abonnement chez Stripe, ce montant est un tarif, pas une
+                échéance : l'écrire au présent faisait croire à un prélèvement
+                en cours à quelqu'un qui n'a jamais donné de carte. */}
+            <Ligne quoi={ouvertSansFacture ? 'Le tarif de cette formule' : 'Ce que ça coûte'} fort valeur={
               prix?.mensuel ? `${euros(prix.mensuel)} HTVA par mois, soit ${euros(ttc)} TVA comprise` : 'Gratuit à vie'
             } />
+            {degustation && (
+              <Ligne quoi="Tu essaies" fort valeur={
+                finDeg ? `${getPlanLabel(degustation)}, offert jusqu’au ${finDeg} inclus` : `${getPlanLabel(degustation)}, offert`
+              } />
+            )}
             {finEssai && <Ligne quoi="Offert jusqu’au" valeur={`${finEssai} inclus`} fort />}
             {!enEssai && prochain && <Ligne quoi="Prochain prélèvement" valeur={prochain} />}
             <Ligne quoi="Engagement" valeur="Aucun, tu résilies quand tu veux" />
@@ -13448,6 +13483,43 @@ function TabMonCompte({ commercant, toast, illisible = false }) {
 
       {/* 🔴 LE RAPPEL QUI ÉVITE LA BASCULE SUBIE. Il dit la date, le montant, et
           le geste, parce qu'un rappel sans geste ne fait qu'inquiéter. */}
+      {/* 🔴 CE BLOC RÉPOND À LA QUESTION D'ALEX. Le bandeau du haut annonce la
+          dégustation ; ici on dit ce qu'elle engage, c'est-à-dire ce qui se
+          passe APRÈS, qui est la seule chose qu'un commerçant veuille savoir
+          quand il lit son compte. */}
+      {degustation && (
+        <div style={{ ...s.card, background: '#F8F6FF', border: `1px solid ${T.pale}` }}>
+          <h2 style={{ ...s.h2, marginBottom: 8 }}>Ta dégustation de {getPlanLabel(degustation)}</h2>
+          <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: '0 0 14px' }}>
+            Tu as toutes les fonctions de {getPlanLabel(degustation)}
+            {finDeg ? <> jusqu’au <strong style={{ color: T.ink }}>{finDeg}</strong> inclus</> : null}, sans rien payer
+            et sans carte. Ensuite, ta formule reste <strong style={{ color: T.ink }}>{getPlanLabel(plan)}</strong> :
+            tu gardes ta fiche et tes clients, tu perds les fonctions de {getPlanLabel(degustation)}.
+            Rien ne se déclenche dans ton dos.
+          </p>
+          <a href="/dashboard/abonnement" style={{ ...s.btn, ...s.btnPrimary, textDecoration: 'none' }}>
+            Garder {getPlanLabel(degustation)}
+          </a>
+        </div>
+      )}
+
+      {/* 🔴 ET LE CAS DU COMMERÇANT OUVERT DEPUIS L'ADMINISTRATION. Il lisait
+          un tarif mensuel et « tu n'as pas d'abonnement » sans savoir lequel
+          des deux le concernait. On lui dit les deux faits dans le bon ordre :
+          ce qu'il a, et ce qu'on ne lui prend pas. */}
+      {ouvertSansFacture && (
+        <div style={{ ...s.card, background: '#F8F6FF', border: `1px solid ${T.pale}` }}>
+          <h2 style={{ ...s.h2, marginBottom: 8 }}>Ta formule t’a été ouverte par Yoppaa</h2>
+          <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: 0 }}>
+            Tu as toutes les fonctions de <strong style={{ color: T.ink }}>{getPlanLabel(plan)}</strong>, et
+            <strong style={{ color: T.ink }}> rien ne t’est facturé aujourd’hui</strong> : aucun abonnement n’est
+            en cours et aucune carte ne t’est demandée. Le jour où ça changera, on te préviendra avant,
+            et c’est toi qui décideras. Une question ? Écris-nous à{' '}
+            <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
+          </p>
+        </div>
+      )}
+
       {rappelCarte && (
         <div style={{ ...s.card, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
           <h2 style={{ ...s.h2, color: '#92400E', marginBottom: 8 }}>Pense à ton moyen de paiement</h2>
@@ -13492,7 +13564,9 @@ function TabMonCompte({ commercant, toast, illisible = false }) {
             <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: '0 0 14px' }}>
               {exempt
                 ? 'Aucune facture tant que ton partenariat court.'
-                : 'Tu n’as pas encore d’abonnement payant, donc aucune facture ni moyen de paiement à gérer.'}
+                : ouvertSansFacture
+                  ? 'Aucune facture ni moyen de paiement à gérer : ta formule t’a été ouverte par Yoppaa, elle ne passe pas par un abonnement.'
+                  : 'Tu n’as pas encore d’abonnement payant, donc aucune facture ni moyen de paiement à gérer.'}
             </p>
             {!exempt && (
               <a href="/dashboard/abonnement" style={{ ...s.btn, ...s.btnPrimary, textDecoration: 'none' }}>

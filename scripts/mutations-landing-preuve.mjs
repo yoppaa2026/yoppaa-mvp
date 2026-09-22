@@ -148,6 +148,34 @@ const MUTATIONS = [
     garde: 'rien de ce que la page affiche ne se dit de test',
   },
 
+  // ─── 6. LA CAPTURE QUI A PRIS LA PLACE D UNE MAQUETTE (22/09) ────────────
+  //
+  // Alex : « remplace ce visuel par la capture jointe ». La serie commercant
+  // vit desormais a DEUX endroits, separes par un `find` sur une cle. Les trois
+  // mutations qui suivent mesurent la panne MUETTE de ce montage : un `find`
+  // qui ne trouve rien ne casse rien, il EFFACE.
+  {
+    nom: '🔴 la cle du tableau de bord est mal orthographiee : le visuel disparait en silence',
+    fichier: LANDING,
+    de: "const CLE_DASHBOARD = 'dashboard_commandes'",
+    vers: "const CLE_DASHBOARD = 'dashboard_commande'",
+    garde: 'et cette clé existe vraiment dans la liste',
+  },
+  {
+    nom: '🔴 la capture du tableau de bord n est plus rendue du tout',
+    fichier: LANDING,
+    de: '{CAPTURE_DASHBOARD && <CaptureProduit capture={CAPTURE_DASHBOARD}/>}',
+    vers: '{null}',
+    garde: 'la capture du tableau de bord est affichée',
+  },
+  {
+    nom: '🔴 le bloc de preuve n est plus rendu',
+    fichier: LANDING,
+    de: '{CAPTURES_PREUVE.map(c =>',
+    vers: '{[].map(c =>',
+    garde: 'le bloc de preuve est affiché',
+  },
+
   // ─── 5. L ACCORD ENTRE CE QUI EST DIT ET CE QUI EST MONTRE ───────────────
   //
   // 🔴 TROUVE PAR ALEX EN PRODUCTION, A L OEIL NU, le 22/09 : « et ca, ce ne
@@ -179,8 +207,11 @@ const MUTATIONS = [
   {
     nom: '🔴 le repere de fin disparait : la garde d accord ne mesure plus rien',
     fichier: LANDING,
-    de: '{CAPTURES_COMMERCANT.map(c =>',
-    vers: '{CAPTURES_COMMERCANT .map(c =>',
+    // ⚠️ ANCRE RECALEE LE 22/09 : la liste rendue ici s appelle CAPTURES_PREUVE
+    // depuis que la capture du tableau de bord part ailleurs. L ancienne ancre
+    // pointait dans le vide, et le harnais l a dit (« TEXTE INTROUVABLE »).
+    de: '{CAPTURES_PREUVE.map(c =>',
+    vers: '{CAPTURES_PREUVE .map(c =>',
     garde: 'le chapeau de la série commerçant est cadré',
   },
 

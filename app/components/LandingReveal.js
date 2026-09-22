@@ -36,6 +36,18 @@ import { getPrixPlan, canDo, PLANS } from '@/lib/plans'
 import { TYPES_ENVIE, libelleEnvie } from '@/lib/signaux'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import { CAPTURES_COMMERCANT, CAPTURES_YOPPER, captureSrc } from '@/lib/captures-landing'
+
+// ⚠️ LES CAPTURES COMMERÇANT NE VONT PAS TOUTES AU MÊME ENDROIT, et c'est pour
+// ça qu'elles sont triées ici plutôt qu'au fil du JSX. Celle du tableau de bord
+// a remplacé une maquette, à la place de cette maquette, à côté des arguments
+// qu'elle illustre. Les autres restent le bloc de preuve, plus bas.
+//
+// 🔴 UN `find` QUI NE TROUVE RIEN NE CASSE RIEN, IL EFFACE. Si la clé change,
+// le visuel disparaît de la page sans qu'une ligne ne bronche : c'est le banc
+// qui doit le dire, et il le dit (`verif:vitrine`, section 3).
+const CLE_DASHBOARD = 'dashboard_commandes'
+const CAPTURE_DASHBOARD = CAPTURES_COMMERCANT.find(c => c.cle === CLE_DASHBOARD)
+const CAPTURES_PREUVE = CAPTURES_COMMERCANT.filter(c => c.cle !== CLE_DASHBOARD)
 import PartageMobilisation from './PartageMobilisation'
 import { euros } from '@/lib/montants'
 
@@ -1076,128 +1088,30 @@ function MockAntiGaspi() {
   )
 }
 
-// ─── Mockup 4 : dashboard commerçant ────────────────────────────────────────
-// Reproduit l'écran d'accueil réel : en-tête sombre avec le nom du commerce,
-// onglets Commandes / RDV / Paramètres, actions rapides (esprit ODOO), stats
-// du jour, sélecteur de jours, puis les commandes à préparer.
-function MockDashboard() {
-  return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* En-tête */}
-      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '25px 11px 10px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2l2 4h8l2-4"/><path d="M6 22l-2-9h16l-2 9"/></svg>
-          </span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ margin: 0, fontWeight: 900, fontSize: 11, color: '#fff', letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Boulangerie du Centre</p>
-            <p style={{ margin: '1px 0 0', fontSize: 6.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.7px' }}>Formule Vendre</p>
-          </div>
-          <span style={{ width: 20, height: 20, borderRadius: 6, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <IconBell size={10} color={T.light}/>
-          </span>
-        </div>
-        {/* Onglets principaux */}
-        <div style={{ display: 'flex', gap: 5, marginTop: 9 }}>
-          {[{ l: 'Commandes', a: true }, { l: 'RDV', a: false }, { l: 'Paramètres', a: false }].map(o => (
-            <span key={o.l} style={{ padding: '4px 10px', borderRadius: 100, fontSize: 8, fontWeight: 800, background: o.a ? '#fff' : 'rgba(255,255,255,0.10)', color: o.a ? T.deep : 'rgba(255,255,255,0.75)' }}>{o.l}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* Actions rapides (les gestes de comptoir, sans fouiller les réglages) */}
-      <div style={{ display: 'flex', gap: 5, padding: '9px 10px 0', flexShrink: 0 }}>
-        {[
-          { l: 'Carte de fidélité', a: 'Pointer un client', i: <IconHeart size={9} color={T.main}/> },
-          { l: 'Bon cadeau', a: 'Encaisser un code', i: <IconGift size={9} color={T.main}/> },
-        ].map(x => (
-          <div key={x.l} style={{ flex: 1, minWidth: 0, background: '#fff', borderRadius: 9, border: `1px solid ${T.pale}`, padding: '5px 7px', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 17, height: 17, borderRadius: 5, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{x.i}</span>
-            <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 7.5, fontWeight: 800, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.l}</span>
-              <span style={{ display: 'block', fontSize: 6, fontWeight: 700, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.a}</span>
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Stats du jour */}
-      <div style={{ display: 'flex', gap: 5, padding: '7px 10px 0', flexShrink: 0 }}>
-        {[
-          { val: '4', label: 'à préparer', color: '#DC2626', bg: '#FEF2F2', bd: '#FECACA', pulse: true },
-          { val: '2', label: 'prêtes', color: '#059669', bg: '#F0FDF4', bd: '#A7F3D0', pulse: false },
-          { val: '184,60€', label: 'CA du jour', color: T.main, bg: '#fff', bd: T.pale, pulse: false },
-        ].map(s => (
-          <div key={s.label} style={{ flex: 1, background: s.bg, borderRadius: 9, padding: '5px 6px', border: `1px solid ${s.bd}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              {s.pulse && <span style={{ width: 4, height: 4, borderRadius: '50%', background: s.color, flexShrink: 0 }}/>}
-              <p style={{ margin: 0, fontSize: 5.8, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{s.label}</p>
-            </div>
-            <p style={{ margin: '1px 0 0', fontWeight: 900, fontSize: 13, color: s.color, letterSpacing: '-0.6px', lineHeight: 1.1 }}>{s.val}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Sélecteur de jours */}
-      <div style={{ display: 'flex', gap: 4, padding: '7px 10px 0', flexShrink: 0 }}>
-        {[{ l: 'Aujourd’hui', n: 4, a: true }, { l: 'Demain', n: 3, a: false }, { l: 'Historique', n: 0, a: false }].map(j => (
-          <span key={j.l} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 8px', borderRadius: 100, fontSize: 7.5, fontWeight: 800, background: j.a ? T.main : '#fff', color: j.a ? '#fff' : T.ink, border: j.a ? 'none' : `1px solid ${T.main}28` }}>
-            {j.l}
-            {j.n > 0 && <span style={{ background: j.a ? 'rgba(255,255,255,0.3)' : '#DC2626', color: '#fff', fontSize: 5.8, fontWeight: 800, padding: '0.5px 4px', borderRadius: 100 }}>{j.n}</span>}
-          </span>
-        ))}
-      </div>
-
-      {/* Commande à préparer */}
-      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, overflow: 'hidden', flexShrink: 0 }}>
-        <Bande3px/>
-        <div style={{ padding: '8px 10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
-            <p style={{ margin: 0, fontWeight: 800, fontSize: 9.5, color: T.ink }}>#1042 · Marie D.</p>
-            <span style={{ fontSize: 6.5, fontWeight: 800, color: '#B45309', background: '#FEF3C7', padding: '2px 7px', borderRadius: 100 }}>En préparation</span>
-          </div>
-          <p style={{ margin: '0 0 3px', fontSize: 8, color: T.muted, fontWeight: 600 }}>4 croissants · 1 pain complet</p>
-          <p style={{ margin: '0 0 6px', fontSize: 7.5, color: T.main, fontWeight: 800 }}>Retrait 16:30 · payé en ligne · 9,00€</p>
-          <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '5px 10px', textAlign: 'center' }}>
-            <span style={{ fontSize: 8, fontWeight: 800, color: '#fff' }}>Marquer prête · le client est prévenu</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Commande déjà prête */}
-      <div style={{ margin: '7px 10px 0', background: '#fff', borderRadius: 11, border: '1px solid #A7F3D0', padding: '7px 10px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-          <p style={{ margin: 0, fontWeight: 800, fontSize: 9.5, color: T.ink }}>#1041 · Yasmine B.</p>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 6.5, fontWeight: 800, color: '#059669', background: '#F0FDF4', padding: '2px 7px', borderRadius: 100 }}>
-            <IconCheck size={7}/> Prête
-          </span>
-        </div>
-        <p style={{ margin: 0, fontSize: 7.5, color: T.muted, fontWeight: 600 }}>Notification envoyée à 15:52 · retrait 16:00</p>
-      </div>
-
-      {/* Assistant IA, collé en bas */}
-      <div style={{ margin: 'auto 10px 10px', background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, borderRadius: 11, padding: '8px 10px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-          <IconSparkles size={9}/>
-          <span style={{ fontSize: 6.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Rédiger avec l&rsquo;IA</span>
-        </div>
-        <p style={{ margin: 0, fontSize: 8, color: '#fff', fontWeight: 600, lineHeight: 1.4 }}>Trois propositions de texte pour ton deal, prêtes en cinq secondes.</p>
-      </div>
-    </div>
-  )
-}
-
-// ─── Mockup 5 : les cartes de fidélité du Yopper ────────────────────────────
+// ─── LA MAQUETTE DU TABLEAU DE BORD EST PARTIE LE 22/09 ─────────────────────
 //
-// ⚠️ REDESSINÉE LE 13/09, ET LE CHOIX DE L'ÉCRAN EST L'ESSENTIEL. Les captures
-// en montrent DEUX versions : le bloc à dix pastilles dans la fiche d'un
-// commerce, et la liste de toutes les cartes dans le profil. C'est la LISTE qui
-// est ici, parce que le libellé de la maquette dit « sans carton à perdre » :
-// quatre commerces visibles d'un coup le prouvent, une seule carte non. Le
-// dessin doit démontrer la phrase, pas l'illustrer.
+// Alex : « remplace ce visuel par la capture jointe ». C'est le PREMIER endroit
+// de cette landing où une capture prend la PLACE d'un dessin au lieu de
+// s'ajouter à côté, et ça vaut d'être expliqué, parce que la règle du fichier
+// des captures dit l'inverse par défaut : une maquette porte un geste, une
+// capture porte la preuve, l'une ne remplace pas l'autre.
 //
-// L'ancienne version montrait le SMS d'ouverture puis une carte plein écran
-// avec le wordmark : un parcours qui n'existe plus sous cette forme.
+// Ici le geste était devenu une évidence. « Voilà ton écran d'accueil, avec tes
+// commandes » ne demande plus à être simplifié pour être compris : ce qui
+// convainc, c'est de voir la VRAIE liste, avec ses vrais compteurs et une vraie
+// commande dedans. Le dessin ne pouvait pas montrer qu'une commande peut être
+// LIÉE À UN RENDEZ-VOUS et se remettre pendant la prestation : il aurait fallu
+// l'inventer, et une maquette qui invente finit toujours par mentir.
+//
+// ⚠️ LA FONCTION EST SUPPRIMÉE, PAS LAISSÉE DE CÔTÉ. Une maquette définie et
+// jamais posée est un écran que personne ne verra, et le banc le dit (« aucune
+// maquette définie ne reste hors de la page »). La laisser « au cas où » aurait
+// fait rougir la vitrine sans qu'aucun défaut n'existe.
+//
+// ⚠️ ET LA CAPTURE PORTAIT DES DONNÉES PERSONNELLES. Voir le masquage dans
+// scripts/extraire-ecran-visuel.mjs : un numéro de GSM et une adresse email,
+// en route pour la page d'accueil publique.
+
 function MockFidelite() {
   // 🔴 CETTE MAQUETTE VENDAIT UNE MÉCANIQUE SUPPRIMÉE LE 16/09 (corrigé le
   // 22/09). Elle annonçait « 9/10 passages → le 11e te fait gagner 5 € », or
@@ -2425,9 +2339,16 @@ export default function LandingReveal({ referent = null }) {
 
           {/* Dashboard mockup + arguments */}
           <div style={{ display: 'flex', gap: 'clamp(24px, 5vw, 56px)', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
-            <PhoneFrame label="Ton espace commerçant : simple, rapide, pensé pour le comptoir">
-              <MockDashboard/>
-            </PhoneFrame>
+            {/* 🔴 ICI VIVAIT `MockDashboard`, UNE MAQUETTE DESSINÉE, JUSQU'AU 22/09.
+                Alex : « remplace ce visuel par la capture jointe ». C'est le
+                premier endroit de la landing où une capture prend la place d'un
+                dessin plutôt que de s'ajouter à côté, et la règle du fichier des
+                captures le justifie : le dessin portait le geste, mais ce geste
+                est devenu une évidence, et la vraie liste de commandes prouve
+                davantage qu'une liste inventée. La maquette a été SUPPRIMÉE,
+                pas laissée de côté : une maquette définie et non posée est un
+                écran que personne ne verra jamais. */}
+            {CAPTURE_DASHBOARD && <CaptureProduit capture={CAPTURE_DASHBOARD}/>}
             <div style={{ flex: '1 1 340px', maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 14 }}>
               {[
                 { titre: 'Ton quartier te parle', texte: 'Les habitants te disent ce qu’ils attendent de toi : du Click & Collect, de la livraison, des bonnes affaires, un produit que tu ne proposes pas encore. Et ton tableau de bord traduit tout ça en chiffres : ce qui part, à quelle heure, ce qui revient le plus souvent dans les demandes.' },
@@ -2509,9 +2430,9 @@ export default function LandingReveal({ referent = null }) {
               ⚠️ Le mockup au-dessus RESTE. Il porte le geste et le mouvement, elle
               porte la preuve : ce n'est pas la même chose, et l'un ne remplace pas
               l'autre. */}
-          {CAPTURES_COMMERCANT.length > 0 && (
+          {CAPTURES_PREUVE.length > 0 && (
             <div style={{ marginTop: 44, display: 'flex', flexDirection: 'column', gap: 'clamp(24px, 5vw, 48px)' }}>
-              {CAPTURES_COMMERCANT.map(c => <CaptureProduit key={c.cle} capture={c} enLigne/>)}
+              {CAPTURES_PREUVE.map(c => <CaptureProduit key={c.cle} capture={c} enLigne/>)}
             </div>
           )}
 

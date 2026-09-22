@@ -132,8 +132,27 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
 // 3. LES CAPTURES SONT AFFICHÉES, DES DEUX CÔTÉS, SUR LE BON FOND
 // ═══════════════════════════════════════════════════════════════════════════
 {
-  verifier('la série commerçant est affichée',
-    /CAPTURES_COMMERCANT\.map/.test(LANDING))
+  // 🔴 LA SÉRIE COMMERÇANT VIT À DEUX ENDROITS DEPUIS LE 22/09, et c'est ce qui
+  // rend cette garde délicate. La capture du tableau de bord a remplacé une
+  // maquette, à la place de cette maquette ; les autres forment le bloc de
+  // preuve plus bas. La page les sépare avec un `find` sur une clé.
+  //
+  // 🔴 UN `find` QUI NE TROUVE RIEN NE CASSE RIEN, IL EFFACE. Une clé mal
+  // orthographiée fait disparaître le visuel de la page d'accueil sans qu'une
+  // ligne ne bronche, sans erreur, sans écran blanc. C'est exactement le genre
+  // de panne muette que ce banc existe pour attraper.
+  verifier('le bloc de preuve est affiché',
+    /CAPTURES_PREUVE\.map/.test(LANDING))
+  verifier('la capture du tableau de bord est affichée',
+    /CAPTURE_DASHBOARD &&/.test(LANDING) || /capture=\{CAPTURE_DASHBOARD\}/.test(LANDING))
+
+  {
+    const cleLue = LANDING.match(/const CLE_DASHBOARD = '([^']+)'/)?.[1] || ''
+    verifier('la page nomme la clé qu’elle cherche', cleLue.length > 0, cleLue)
+    verifier('et cette clé existe vraiment dans la liste',
+      CAPTURES_COMMERCANT.some(c => c.cle === cleLue),
+      `cherchée : « ${cleLue} » · présentes : ${CAPTURES_COMMERCANT.map(c => c.cle).join(', ')}`)
+  }
   verifier('la série Yopper est affichée',
     /CAPTURES_YOPPER\.map/.test(LANDING))
 
@@ -166,8 +185,14 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
   // donc exactement ce qui vit ENTRE la condition et le rendu, là où le chapeau
   // d'une série se trouve, et on vérifie que le cadrage n'a pas glissé.
   {
+    // ⚠️ LE BLOC DE PREUVE NE REND PLUS TOUTE LA SÉRIE COMMERÇANT : la capture du
+    // tableau de bord est rendue ailleurs. C'est donc le nombre d'images DE CE
+    // BLOC qu'il faut accorder à son chapeau, pas le nombre d'entrées de la
+    // liste. Compter la liste entière ici rendrait la garde fausse le jour où
+    // une troisième capture part à un troisième endroit.
+    const CLE_DASHBOARD = LANDING.match(/const CLE_DASHBOARD = '([^']+)'/)?.[1] || ''
     const SERIES = [
-      { nom: 'commerçant', cle: 'CAPTURES_COMMERCANT', liste: CAPTURES_COMMERCANT },
+      { nom: 'commerçant', cle: 'CAPTURES_PREUVE', liste: CAPTURES_COMMERCANT.filter(c => c.cle !== CLE_DASHBOARD) },
       { nom: 'Yopper', cle: 'CAPTURES_YOPPER', liste: CAPTURES_YOPPER },
     ]
     // ⚠️ LES APOSTROPHES SONT DES ENTITÉS DANS CE JSX (`n&rsquo;est`). Une regex

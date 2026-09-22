@@ -90,5 +90,18 @@ cles-apple/
 # ni dans le depot ni sur le deploiement : seuls les .webp produits sont
 # servis. Sans cette regle, chaque deploiement Vercel emporterait 6,4 Mo
 # d images que personne ne demande, publiquement accessibles.
+#
+# 🔴 ET LE 22/09, CETTE REGLE A FAILLI LAISSER PASSER UN NUMERO DE GSM. Elle
+# nommait .jpeg et pas .jpg : la capture deposee par Alex etait un .jpg, donc
+# SUIVIE par git, donc promise a etre servie sur www.yoppaa.app avec le numero
+# de telephone et l adresse email d un client lisibles dessus. Une extension
+# d ecart entre deux facons d ecrire le meme format.
+#
+# ⚠️ ON NOMME DONC LE FORMAT, PAS UNE DE SES ORTHOGRAPHES. Et on couvre aussi
+# .png et .webp DE SOURCE : seuls les fichiers produits par le script sont
+# suivis, et ils le sont un par un, jamais par un motif large.
 public/captures/yoppaa-android-*.png
 public/captures/*.jpeg
+public/captures/*.jpg
+public/captures/*.JPG
+public/captures/*.JPEG

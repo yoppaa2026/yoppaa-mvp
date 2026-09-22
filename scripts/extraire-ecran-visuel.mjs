@@ -174,6 +174,59 @@ const BRUTES = {
   // écran prise en août, restée au format cadrage quand les huit autres sont
   // passées en écran entier.
   'ad1e51da-073b-47de-8263-6f01945c2879.jpeg': 'yopper-options',
+
+  // Le tableau de bord d'un commerce de services, avec une commande liée à un
+  // rendez-vous. Elle remplace la maquette dessinée du tableau de bord (Alex,
+  // 22/09 : « remplace ce visuel par la capture jointe »).
+  'dashboard-commandes.jpg': 'dashboard-commandes',
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CE QU'UNE CAPTURE DE PRODUCTION EMPORTE SANS QU'ON Y PENSE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 LA CAPTURE DU 22/09 PORTAIT UN NUMÉRO DE GSM ET UNE ADRESSE EMAIL EN
+// CLAIR, sur la fiche d'une vraie commande. Destination : la page d'accueil
+// publique. Ce n'est pas un détail de mise en page, c'est une donnée
+// personnelle qu'on s'apprêtait à publier et à faire indexer.
+//
+// ⚠️ ON PIXELLISE AVANT DE FLOUTER, ET L'ORDRE EST LA SÉCURITÉ ELLE-MÊME. Un
+// flou gaussien est un filtre passe-bas : appliqué seul sur un texte dont on
+// connaît la police et le gabarit, il se remonte. Réduire la zone à dix pixels
+// DÉTRUIT l'information ; le flou qui suit ne fait plus qu'adoucir les blocs
+// pour que le résultat reste présentable.
+//
+// ⚠️ LES ZONES SONT EN PIXELS DE LA SOURCE, et elles ne se devinent pas : on
+// les mesure sur l'image, puis on REGARDE ce qu'on a produit. Une zone décalée
+// de trente pixels laisse les trois derniers chiffres lisibles, et rien dans
+// la sortie du script ne le dirait.
+const MASQUES = {
+  'dashboard-commandes.jpg': [
+    { left: 336, top: 1602, width: 250, height: 54 },  // le numéro de GSM
+    { left: 292, top: 1656, width: 478, height: 58 },  // l'adresse email
+  ],
+}
+
+const BLOCS_MASQUE = 10  // largeur en pixels de la zone réduite, avant réagrandissement
+
+// Rend le chemin à traiter : l'original si rien à masquer, un buffer masqué
+// sinon. ⚠️ Les mesures de barres se font sur l'ORIGINAL : le masque ne touche
+// que le contenu, jamais les bords.
+async function sourceMasquee(chemin, source) {
+  const zones = MASQUES[source] || []
+  if (!zones.length) return chemin
+  const pieces = []
+  for (const z of zones) {
+    const petit = await sharp(chemin).extract(z).resize({ width: BLOCS_MASQUE, kernel: 'nearest' }).toBuffer()
+    const gros = await sharp(petit)
+      .resize({ width: z.width, height: z.height, kernel: 'nearest' })
+      .blur(6)
+      .png()
+      .toBuffer()
+    pieces.push({ input: gros, left: z.left, top: z.top })
+  }
+  console.log(`   ${source} : ${zones.length} zone(s) masquée(s) avant découpe`)
+  return await sharp(chemin).composite(pieces).toBuffer()
 }
 
 const presentes = readdirSync(DOSSIER)
@@ -187,6 +240,11 @@ for (const [source, sortie] of Object.entries(BRUTES)) {
   const { data, info } = await sharp(chemin).raw().toBuffer({ resolveWithObject: true })
   const { width: W, height: H, channels: C } = info
   const px = (x, y) => [data[(y * W + x) * C], data[(y * W + x) * C + 1], data[(y * W + x) * C + 2]]
+
+  // ⚠️ LE MASQUE D'ABORD, LA DÉCOUPE ENSUITE. Masquer après le redimensionnement
+  // reviendrait à poser des zones calculées sur la source par-dessus une image
+  // qui n'a plus la même échelle.
+  const base = await sourceMasquee(chemin, source)
 
   // La barre de statut : sa couleur est celle du tout premier pixel.
   const barre = px(4, 2)
@@ -204,7 +262,7 @@ for (const [source, sortie] of Object.entries(BRUTES)) {
     continue
   }
 
-  await sharp(chemin)
+  await sharp(base)
     .extract({ left: 0, top: haut, width: W, height: hauteur })
     .resize({ width: LARGEUR, withoutEnlargement: true })
     .webp({ quality: QUALITE })

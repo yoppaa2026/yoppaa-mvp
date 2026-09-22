@@ -410,6 +410,106 @@ verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'v
     /const xs = size === 'xs'/.test(srcPills) && /if \(xs\) \{/.test(srcPills))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CE QU'ON VEND DOIT ÊTRE CE QUE LE CODE DONNE (22/09)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 QUATRE LISTES DÉCRIVENT LES MÊMES FORFAITS, ET ELLES DIVERGEAIENT. Alex a
+// trouvé le premier fil : « la fidélité comptoir n'est pas affichée dans
+// Communiquer alors qu'elle en fait partie ». Un audit des trois sources a
+// montré que le défaut était plus large.
+//
+// ⚠️ CE BANC NE COMPARE PAS LES ÉCRANS ENTRE EUX, il les compare À LA MATRICE.
+// La landing s'est révélée fausse sur deux points et le signup sur un autre :
+// aucun écran ne peut servir de référence à un autre.
+{
+  const lireSrc = (c) => readFileSync(new URL(`../${c}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  // ⚠️ LE CODE DÉPOUILLÉ, SANS QUOI CES GARDES SE LISENT ELLES-MÊMES : les
+  // commentaires que je viens d'écrire contiennent tous les mots cherchés.
+  const nu = (src) => src.split('\n').map(l => l.replace(/(^|\s)\/\/.*/, '$1')).join('\n')
+  const ecrans = {
+    'app/signup/page.js': nu(lireSrc('app/signup/page.js')),
+    'app/dashboard/abonnement/page.js': nu(lireSrc('app/dashboard/abonnement/page.js')),
+  }
+
+  // 🔴 LA FIDÉLITÉ AU COMPTOIR EST ACQUISE DÈS COMMUNIQUER (lib/plans.js:179),
+  // et la taire coûtait 30 € par mois au commerçant qui ne voulait que ça.
+  for (const [chemin, src] of Object.entries(ecrans)) {
+    verifier(`${chemin} : la carte au comptoir est annoncée dès Communiquer`,
+      /fidélité au comptoir/i.test(src),
+      'un commerçant qui ne veut qu’une carte de fidélité croira devoir payer Vendre')
+    // ⚠️ ET CE QUE VENDRE AJOUTE EST DIT, sinon la ligne de Communiquer vide
+    // Vendre de son argument au lieu de corriger le mensonge.
+    verifier(`${chemin} : ce que Vendre ajoute à la fidélité est dit`,
+      /crédite toute seule/i.test(src),
+      '`fidelite_auto` est la vraie différence entre les deux forfaits, et elle n’est écrite nulle part')
+  }
+
+  // 🔴 LE GLOSSAIRE DU SIGNUP EST SUR LA MÊME PAGE QUE LES CARTES. Son badge
+  // disait « Inclus avec Vendre » à dix centimètres d'une carte qui dit
+  // l'inverse. On vise l'entrée, pas le fichier.
+  {
+    const src = ecrans['app/signup/page.js']
+    const i = src.indexOf("titre: 'Carte de fidélité'")
+    verifier('l’entrée « Carte de fidélité » du glossaire est là où on la cherche', i >= 0,
+      'l’entrée a été renommée : la garde suivante ne mesure plus rien')
+    const entree = src.slice(i, i + 900)
+    verifier('le glossaire badge la fidélité sur Communiquer, pas sur Vendre',
+      /plan: 'communiquer'/.test(entree),
+      'la même page affiche « Inclus avec Vendre » sous une carte qui annonce la fidélité en Communiquer')
+  }
+
+  // 🔴 LE GOOD MORNING EN EXISTER EST PLAFONNÉ À UNE ACTU PAR SEMAINE
+  // (ConfigDashboard.js:2989, décision d'Alex du 01/07 contre la
+  // cannibalisation). Le signup annonçait « chaque jour ».
+  verifier('le gratuit n’annonce plus une place quotidienne dans le Good Morning',
+    !/chaque jour dans Good Morning/i.test(ecrans['app/signup/page.js']),
+    'le plafond d’une actu par semaine en Exister est contredit par la carte')
+
+  // ⚠️ ET ON NE VEND AUCUNE CLÉ MORTE. Ces quatre-là valent `true` dans la
+  // matrice et ne sont lues par AUCUNE ligne de code : les écrire dans une
+  // liste de forfait, c'est promettre du vide. Décision d'Alex du 22/09 : on
+  // les tait, sans toucher à `lib/plans.js`.
+  //
+  // 🔴 ET LA GARDE VISE LES LISTES, PAS LE FICHIER, parce que sa première
+  // version rougissait sur le GLOSSAIRE du signup, qui annonce la newsletter
+  // « En construction, pas encore disponible ». C'est précisément le bon
+  // comportement : dire qu'une fonction arrive n'est pas la vendre. Une garde
+  // qui interdit un mot partout punit l'honnêteté en même temps que le
+  // mensonge.
+  const MORTES = [
+    ['newsletter ciblée', /newsletter cibl/i],
+    ['segmentation des favoris', /segmentation/i],
+    ['IA bridée', /IA bridée/i],
+    ['IA avancée', /IA avancée/i],
+  ]
+  // Les listes de fonctions, et rien d'autre : `PLAN_CONFIG` côté inscription,
+  // les tableaux `features={[...]}` côté tableau de bord.
+  const listes = []
+  {
+    const src = ecrans['app/signup/page.js']
+    const i = src.indexOf('const PLAN_CONFIG = {')
+    const f = src.indexOf('const cfg = PLAN_CONFIG[plan]', i)
+    verifier('les listes de forfaits du signup sont là où on les cherche',
+      i >= 0 && f > i, 'PLAN_CONFIG a été renommé : les gardes de clés mortes ne mesurent plus rien')
+    if (i >= 0 && f > i) listes.push(['app/signup/page.js', src.slice(i, f)])
+  }
+  {
+    const src = ecrans['app/dashboard/abonnement/page.js']
+    const blocs = src.match(/features=\{\[[\s\S]*?\]\}/g) || []
+    verifier('les listes de forfaits du tableau de bord sont là où on les cherche',
+      blocs.length >= 2, `${blocs.length} liste(s) trouvée(s), au moins 2 attendues`)
+    blocs.forEach((b, n) => listes.push([`app/dashboard/abonnement/page.js (liste ${n + 1})`, b]))
+  }
+  for (const [ou, bloc] of listes) {
+    for (const [quoi, motif] of MORTES) {
+      verifier(`${ou} ne vend pas « ${quoi} », que rien n’implémente`,
+        !motif.test(bloc),
+        'cette clé vaut true dans la matrice et n’est lue par aucune ligne de code')
+    }
+  }
+}
+
 if (clesDynamiques.length > 0) {
   console.log(`\n⚠️  ${clesDynamiques.length} appel(s) à clé calculée, non vérifiables ici :`)
   clesDynamiques.forEach(d => console.log('     ' + d))

@@ -709,6 +709,21 @@ function Etape1Compte({ session, commercant, onCompte }) {
           Tous les tarifs sont HTVA. La TVA belge de {TVA_ABONNEMENT_POURCENT} % s’ajoutera sur la première facture,
           après l’essai.
         </p>
+        {/* 🔴 LE KIT EST UNE OPTION, PAS UN PALIER (Alex, 22/09). Il ne monte
+            sur aucune des trois cartes, et ce n'est pas un oubli : l'y écrire
+            dirait « inclus avec Vendre », ce qui serait faux dans les deux sens
+            puisqu'il n'est ni compris dans le forfait, ni réservé à celui-ci.
+            La clé `hardware` de la matrice (lib/plans.js:243) n'est d'ailleurs
+            lue par AUCUNE ligne de code : c'est la boutique qui le vend, à tous
+            les paliers.
+            ⚠️ ET LA PREMIÈRE PHRASE COMPTE AUTANT QUE LA SECONDE : un
+            commerçant qui croit devoir acheter du matériel pour commencer ne
+            s'inscrit pas. Le détail des kits et leurs prix restent dans le
+            glossaire, juste en dessous. */}
+        <p style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.5, textAlign: 'center' }}>
+          Yoppaa fonctionne sur PC, Android et iPhone : <strong style={{ color: T.deep }}>aucun matériel n’est obligatoire</strong>.
+          Le kit Yoppaa reste disponible en option, selon tes besoins.
+        </p>
       </Card>
 
       {/* Mini-glossaire des fonctionnalités — contextuel selon la catégorie choisie */}
@@ -988,9 +1003,22 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
       plan: 'vendre',
     },
     {
-      Icon: Star, titre: 'Carte de fidélité',
-      desc: 'Tu fixes la règle, par exemple 10 € dépensés donnent 1 point, et ce que le client gagne au bout : une remise, un produit offert. Plus de carton perdu au fond d’un sac, tout se compte tout seul.',
-      plan: 'vendre',
+      // 🔴 CE BADGE DISAIT « VENDRE » ET IL COÛTAIT 30 € PAR MOIS (22/09).
+      // `PLAN_FEATURES.communiquer.fidelite` vaut `true` (lib/plans.js:179) et
+      // la route du comptoir ne vérifie que le forfait
+      // (app/api/fidelite/comptoir/route.js:98) : la carte au comptoir est
+      // acquise dès Communiquer. Un commerçant qui ne voulait que ça lisait
+      // « Inclus avec Vendre » et montait à 49,90 pour rien.
+      //
+      // ⚠️ LA DESCRIPTION DIT MAINTENANT LES DEUX NIVEAUX, parce que la
+      // différence est réelle et qu'elle justifie Vendre : `fidelite_auto`
+      // (lib/plans.js:239) est ce qui crédite sans qu'on tape quoi que ce soit.
+      // ⚠️ LE BADGE EST SUR LA MÊME LIGNE QUE LE TITRE, et c'est pour qu'on
+      // puisse le mesurer : `plan: 'communiquer'` apparaît sept fois dans ce
+      // glossaire, donc une ancre de mutation posée dessus seule viserait une
+      // autre entrée et ne prouverait rien.
+      Icon: Star, titre: 'Carte de fidélité', plan: 'communiquer',
+      desc: 'Tu fixes la règle, par exemple 10 € dépensés donnent 1 point, et ce que le client gagne au bout : une remise, un produit offert. Plus de carton perdu au fond d’un sac, tout se compte tout seul. Dès Communiquer, tu crédites au comptoir avec le numéro de GSM de ton client ; avec Vendre, chaque commande et chaque rendez-vous créditent tout seuls.',
     },
     {
       // ⚠️ Le module est complet depuis le 31/07 et n'apparaissait nulle part
@@ -3302,35 +3330,84 @@ function CardPlan({ plan, categorie, actif, onClick }) {
   const label = PLAN_LABEL[plan]
   if (!p) return null
 
-  // Tagline + 4 features clés par plan. Pour Vendre, on adapte selon la
-  // catégorie (alimentaire = Click & Collect, vitrine = RDV).
-  const VENDRE_FEATURE_TRANSACTIONNEL = categorie === 'vitrine'
-    ? 'Module RDV complet : prestations, créneaux, multi-praticiens'
-    // ⚠️ Le détail promettait une « réservation produit » qui n'existe pas.
+  // ─── CE QUE CHAQUE FORFAIT DONNE VRAIMENT (22/09, audit demandé par Alex) ──
+  //
+  // 🔴 LA MATRICE TRANCHE, PAS LA LANDING. Alex a demandé d'aligner ces cartes
+  // sur celles de la page d'accueil, et un audit des trois sources a montré que
+  // ni l'une ni l'autre ne pouvait servir de référence :
+  //
+  //   - le signup CACHAIT `fidelite` à Communiquer, qui la paie, et la carte
+  //     Vendre se l'attribuait. Un commerçant qui voulait juste une carte au
+  //     comptoir croyait devoir payer 49,90 au lieu de 19,90 ;
+  //   - le signup annonçait le Good Morning « chaque jour » en Exister, alors
+  //     que `ConfigDashboard.js:2989` plafonne à UNE actu par semaine
+  //     calendaire, décision d'Alex du 01/07 contre la cannibalisation ;
+  //   - la landing, elle, promet des push « aux habitants de ta commune » quand
+  //     le code ne connaît que `push_cibles_favoris`, et se contredit 130
+  //     lignes plus loin. On ne l'a donc PAS recopiée.
+  //
+  // ⚠️ ET ON NE VEND AUCUNE CLÉ MORTE. `newsletter_ciblee`,
+  // `segmentation_favoris`, `ia_bridee`, `ia_avancee` et `hardware` valent
+  // `true` dans la matrice et ne sont lues par AUCUNE ligne de code. Décision
+  // d'Alex du 22/09 : on les tait ici, sans toucher à `lib/plans.js`.
+
+  // 🔴 DEUX LIGNES VARIENT, PAS UNE, et c'est ce qui évite de promettre une
+  // réservation de table à un coiffeur. Les six fonctions de métier sont
+  // verrouillées par `canDoAvecCategorie` (lib/plans.js:410-411) : aucune ne
+  // doit jamais passer en ligne fixe.
+  //
+  // ⚠️ LA VENTE EN LIGNE, ELLE, N'EST PAS VERROUILLÉE PAR LE MÉTIER. La fiche
+  // publique décide avec `canDo(forfait, 'commande')`, sans la catégorie
+  // (app/commander/[slug]/page.js:3305) : Le Dressing de Sophie vend déjà en
+  // ligne aujourd'hui. Décision d'Alex du 22/09 : c'est le code qui tourne qui
+  // fait foi, et les trois métiers l'annoncent avec leur propre mot.
+  const VENDRE_VENTE = categorie === 'vitrine'
+    ? 'Rendez-vous en ligne, réservables 24 h sur 24'
     : categorie === 'detail'
+      // ⚠️ « EXPÉDITION », PAS « ENVOI », ET UNE GARDE ME L'A APPRIS. C'est le
+      // mot de la colonne `boutique_mode_vente`, qui vaut `retrait`,
+      // `expedition` ou `les_deux`, et c'est aussi celui de la landing.
+      // `verif:plans` exige la formule exacte depuis le jour où le signup
+      // promettait une « réservation produit » qui n'a jamais existé.
       ? 'Vente en ligne : retrait en magasin ou expédition'
-      : 'Commande à l’avance et livraison'
+      : 'Commande à l’avance : retrait ou livraison'
+
+  const VENDRE_MODULE = categorie === 'vitrine'
+    ? 'Abonnements et cartes de séances, plusieurs praticiens'
+    : categorie === 'detail'
+      ? 'Tes articles avec leurs tailles et leurs couleurs'
+      : 'Réservation de table, et tes invendus du soir'
 
   const PLAN_CONFIG = {
     exister: {
-      tagline: 'Ton commerce visible sur Yoppaa, sans coût',
+      tagline: 'Ton commerce existe en ligne, sans rien débourser',
       essai: false,
       features: [
-        'Fiche commerce, photos, horaires',
-        'Tu apparais chaque jour dans Good Morning Yoppers',
-        'Tes Yoppers peuvent te mettre en favori et t\'envoyer des signaux',
-        'Statistiques de base sur ta fiche',
+        'Ta fiche : photos illimitées, horaires détaillés, tes prix',
+        'Référencée sur Google et retrouvée dans l’app',
+        // 🔴 « CHAQUE JOUR » ÉTAIT FAUX. Une actu par semaine calendaire en
+        // Exister, et c'est voulu : voir le commentaire en tête.
+        'Une actu par semaine, publiée dans le Good Morning de ta commune',
+        'Favoris et signaux : le quartier te dit ce qu’il cherche',
+        'Tes statistiques : vues, favoris, signaux',
       ],
       note: 'Aucune information de paiement demandée',
     },
     communiquer: {
-      tagline: 'Pour grandir ton audience',
+      tagline: 'Ta commune entend parler de toi chaque matin',
       essai: true,
       features: [
         'Tout Exister, plus :',
         'Actus illimitées, deals, Bonnes affaires',
-        'Push ciblés aux Yoppers favoris',
-        'Un assistant qui rédige tes textes à ta place',
+        'Alertes urgentes sur ta fiche : fermeture, rupture',
+        'Ta place chaque matin dans le Good Morning, en priorité',
+        // ⚠️ « à tes favoris », jamais « à ta commune » : le code ne sait
+        // toucher que ceux qui t'ont mis en favori.
+        'Push à tes favoris, autant que tu veux',
+        // 🔴 LA LIGNE QUI MANQUAIT, ET QUI COÛTAIT 30 € PAR MOIS AU COMMERÇANT.
+        'Carte de fidélité au comptoir : le GSM de ton client suffit',
+        'Tes statistiques détaillées : audience et engagement',
+        'Un assistant qui rédige tes textes',
       ],
       note: NOTE_SANS_CARTE,
     },
@@ -3340,9 +3417,17 @@ function CardPlan({ plan, categorie, actif, onClick }) {
       recommande: true,
       features: [
         'Tout Communiquer, plus :',
-        VENDRE_FEATURE_TRANSACTIONNEL,
-        'Paiement en ligne, sans commission Yoppaa',
-        `Carte de fidélité, ${libelleBon(categorie, { pluriel: true })}, export comptable`,
+        VENDRE_VENTE,
+        VENDRE_MODULE,
+        // ⚠️ LE COMPTOIR AUSSI, et il n'était écrit nulle part : `paiement_cash`
+        // (lib/plans.js:236) existe pour de vrai. Un commerçant qui n'encaisse
+        // qu'à la remise croyait que Vendre ne servait qu'au paiement en ligne.
+        'Paiement en ligne ou au comptoir, sans commission Yoppaa',
+        // 🔴 CE QUE VENDRE AJOUTE VRAIMENT À LA FIDÉLITÉ. Communiquer a déjà la
+        // carte au comptoir ; ici c'est `fidelite_auto` (lib/plans.js:239) :
+        // chaque vente et chaque rendez-vous créditent sans geste.
+        'La fidélité se crédite toute seule à chaque vente',
+        `${libelleBon(categorie, { pluriel: true, majuscule: true })} à offrir, et export comptable`,
       ],
       note: NOTE_SANS_CARTE,
     },

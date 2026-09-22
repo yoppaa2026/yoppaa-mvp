@@ -679,10 +679,15 @@ const MUTATIONS = [
     de: "letterSpacing: '1.5px', marginBottom: 2 }}>{nomBonsMaj}</p>",
     vers: "letterSpacing: '1.5px', marginBottom: 2 }}>Bons cadeaux</p>" },
 
+  // ⚠️ ANCRE REFAITE LE 22/09. La ligne a été réécrite en corrigeant les
+  // fonctions annoncées par forfait : « Carte de fidélité » y mentait, puisque
+  // la carte au comptoir arrive dès Communiquer. `verif:ancres` a signalé la
+  // péremption le jour même, ce qui est exactement son travail : une ancre qui
+  // ne trouve plus sa cible ne mesure rien, et ne le dit pas toute seule.
   { nom: '🔴 le signup regèle le mot dans la liste des fonctions',
     banc: 'verif:bons', fichier: 'app/signup/page.js',
-    de: '`Carte de fidélité, ${libelleBon(categorie, { pluriel: true })}, export comptable`,',
-    vers: "'Carte de fidélité, bons cadeaux, export comptable'," },
+    de: '`${libelleBon(categorie, { pluriel: true, majuscule: true })} à offrir, et export comptable`,',
+    vers: "'Bons cadeaux à offrir, et export comptable'," },
 
   // ⚠️ ET LA FRONTIÈRE DANS L'AUTRE SENS : l'export part chez un comptable,
   // il ne doit PAS suivre le métier. Une garde qui ne tient qu'un bord laisse

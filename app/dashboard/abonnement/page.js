@@ -316,13 +316,27 @@ export default function AbonnementPage() {
               <PlanCard
                 title="Communiquer"
                 price={TARIF_COMMUNIQUER}
+                // 🔴 CETTE LISTE VENDAIT TROIS CHOSES QUI N'EXISTENT PAS (22/09,
+                // audit des quatre listes de forfaits du dépôt).
+                // `segmentation_favoris`, `newsletter_ciblee` et `ia_bridee`
+                // valent `true` dans la matrice et ne sont lues par AUCUNE ligne
+                // de code. Le glossaire du signup marque d'ailleurs la
+                // newsletter « En construction » : deux écrans du même produit
+                // se contredisaient.
+                //
+                // ⚠️ ET « AUX YOPPERS » ÉTAIT TROP LARGE : le code ne connaît que
+                // `push_cibles_favoris` (lib/plans.js:170), donc ceux qui ont
+                // mis le commerce en favori, pas toute la commune.
                 features={[
-                  'Push ciblés illimités aux Yoppers',
-                  'Segmentation des favoris',
-                  'Newsletter ciblée',
-                  'Statistiques d\'engagement',
-                  'IA bridée (reformulation + suggestions)',
-                  'Mise en avant Bonnes affaires',
+                  'Actus illimitées, deals, Bonnes affaires',
+                  'Alertes urgentes sur ta fiche : fermeture, rupture',
+                  'Ta place chaque matin dans le Good Morning, en priorité',
+                  'Push à tes favoris, autant que tu veux',
+                  // 🔴 LA LIGNE QUI MANQUAIT ICI AUSSI : la carte au comptoir
+                  // est acquise dès Communiquer (lib/plans.js:179).
+                  'Carte de fidélité au comptoir : le GSM de ton client suffit',
+                  'Tes statistiques détaillées : audience et engagement',
+                  'Un assistant qui rédige tes textes',
                 ]}
                 cta="Démarrer mon essai gratuit"
                 trial={phraseEssaiTarif(TARIF_COMMUNIQUER)}
@@ -335,17 +349,27 @@ export default function AbonnementPage() {
               <PlanCard
                 title="Vendre"
                 price={TARIF_VENDRE}
+                // ⚠️ ICI LA CATÉGORIE N'EST PAS DEVINÉE, ELLE EST CONNUE : ce
+                // commerçant est déjà inscrit. Les fonctions verrouillées par le
+                // métier portent donc leur condition entre parenthèses, comme
+                // « Avant la fermeture » le faisait déjà.
                 features={[
                   'Tout Communiquer +',
-                  'Transactionnel (commandes, RDV, réservations)',
-                  'Paiement en ligne (Stripe Connect)',
+                  'Commande à l’avance et livraison (alimentaire)',
+                  'Rendez-vous en ligne et cartes de séances (services)',
+                  'Vente en ligne : retrait en magasin ou envoi',
+                  'Réservation de table (alimentaire)',
+                  'Paiement en ligne ou au comptoir, sans commission Yoppaa',
                   // ⚠️ LE MOT DU COMMERÇANT, pas celui du Yopper. Il lira
                   // « Avant la fermeture » sur son onglet Deals ; « Rien ne se
                   // perd » est ce que ses clients verront. Les deux noms vivent
                   // dans `lib/anti-gaspi.js`.
                   'Avant la fermeture : tes invendus du soir à prix réduit (alimentaire)',
-                  'Fidélité configurable',
-                  'IA avancée (rédaction, segmentation, benchmarking)',
+                  // 🔴 « Fidélité configurable » laissait croire que la carte
+                  // arrivait avec Vendre. Elle arrive avec Communiquer ; ce que
+                  // Vendre ajoute, c'est `fidelite_auto` (lib/plans.js:239).
+                  'La fidélité se crédite toute seule à chaque vente',
+                  'Bons cadeaux à offrir',
                   'Export comptable',
                 ]}
                 cta="Démarrer mon essai gratuit"

@@ -82,3 +82,13 @@ certificat.b64
 # Le dossier de travail des pieces Apple : tout ce qui y tombe est ignore, y
 # compris ce qu on n aurait pas pense a nommer ici.
 cles-apple/
+
+# Les SOURCES des captures de la landing : les huit visuels composes pour les
+# stores (`yoppaa-android-*.png`, 6,4 Mo a eux seuls) et les captures brutes de
+# telephone deposees en .jpeg. Elles vivent dans `public/captures/` pour que
+# `scripts/extraire-ecran-visuel.mjs` les lise, mais elles n ont rien a faire
+# ni dans le depot ni sur le deploiement : seuls les .webp produits sont
+# servis. Sans cette regle, chaque deploiement Vercel emporterait 6,4 Mo
+# d images que personne ne demande, publiquement accessibles.
+public/captures/yoppaa-android-*.png
+public/captures/*.jpeg

@@ -25,6 +25,103 @@ const BANC = 'verif:bord'
 const MODULE = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── 22/09 : L ONGLET « FACTURATION » ────────────────────────────────────
+  //
+  // 🔴 POURQUOI IL EXISTE. Alex : « est-ce que toutes les coordonnees utiles a
+  // la facturation sont visibles dans Mon compte ? » Non. L ecran montrait la
+  // formule, le prix et le portail, et pas une seule des donnees qui
+  // apparaissent sur la facture. Le commercant payait sans jamais voir sous
+  // quel nom il etait facture.
+  { nom: '🔴 l onglet Facturation disparait de la barre',
+    de: "    { id: 'facturation', label: 'Facturation', icon: 'user' },",
+    vers: '',
+    garde: 'l’onglet « Facturation » existe dans la barre' },
+
+  { nom: '🔴 un cadenas de forfait se pose sur ses propres coordonnees',
+    de: "    { id: 'facturation', label: 'Facturation', icon: 'user' },",
+    vers: "    { id: 'facturation', label: 'Facturation', icon: 'user', feature: 'export_comptable' },",
+    garde: 'et il n’est derrière aucun forfait' },
+
+  // ⚠️ ANCRE SUR UNE SEULE LIGNE, comme la règle du dépôt l'exige. La version
+  // d'avant portait un bloc entier avec ses sauts de ligne, parce que la ligne
+  // de garde n'était pas unique dans le fichier. Elle l'est devenue en
+  // supprimant la duplication : c'est le code qu'on a réparé, pas l'ancre.
+  { nom: '🔴 le formulaire s affiche sans dossier : des champs vides passent pour des valeurs',
+    de: '  if (!commercant) return <DossierAbsent illisible={illisible} quoi="tes coordonnées de facturation" />',
+    vers: '  if (false) return <DossierAbsent illisible={illisible} quoi="tes coordonnées de facturation" />',
+    garde: 'il refuse d’afficher un formulaire sans dossier' },
+
+  { nom: '🔴 les champs se reecrivent pendant que le commercant tape',
+    de: '    if (charge || !commercant) return',
+    vers: '    if (!commercant) return',
+    garde: 'et il ne réécrit pas les champs pendant la saisie' },
+
+  // 🔴 LE NUMERO D ENTREPRISE EST VERIFIE PAR ALEX AU KYB. Le laisser changer
+  // apres coup voudrait dire qu un dossier valide peut designer une autre
+  // entreprise.
+  { nom: '🔴 le numero d entreprise redevient modifiable apres validation',
+    de: '        <input style={{ ...s.input, background: T.bg, color: T.muted }} value={bceLisible || \'—\'} disabled readOnly />',
+    vers: '        <input style={{ ...s.input, background: T.bg, color: T.muted }} value={bceLisible || \'—\'} />',
+    garde: 'le numéro d’entreprise n’est pas modifiable depuis l’écran' },
+
+  { nom: '⚠️ l ecran ne dit plus que ces donnees sont aussi celles de la fiche',
+    de: 'change aussi ce que tes clients voient',
+    vers: 'sert a te facturer',
+    garde: 'il prévient que ces données sont aussi celles de la fiche' },
+
+  // ─── LA ROUTE, ET LA MOITIE QUI MANQUAIT ────────────────────────────────
+  //
+  // 🔴 `stripe.customers.update` N EXISTAIT NULLE PART dans le depot : une
+  // correction d adresse restait en base et la facture gardait l ancienne.
+  { nom: '🔴 LE DEFAUT D ORIGINE : plus rien ne remonte chez Stripe',
+    fichier: 'app/api/dashboard/facturation/route.js',
+    de: '        await stripe.customers.update(commercant.stripe_customer_id, {',
+    vers: '        await Promise.resolve({ id: commercant.stripe_customer_id, ignore: {',
+    garde: 'la route pousse vraiment vers Stripe' },
+
+  // 🔴 LA BASE EST MAITRESSE : perdre la saisie du commercant parce qu un
+  // service tiers ne repond pas, ce serait lui faire payer un probleme qui n
+  // est pas le sien.
+  { nom: '🔴 un echec Stripe fait perdre la saisie du commercant',
+    fichier: 'app/api/dashboard/facturation/route.js',
+    de: "        stripeSynchro = 'en retard'",
+    vers: "        stripeSynchro = 'à jour'",
+    garde: 'un échec Stripe ne fait pas perdre la saisie' },
+
+  { nom: '🔴 l ecran cesse de dire que Stripe n a pas suivi',
+    de: 'Stripe n’a pas pu être mis à jour',
+    vers: 'tout est enregistré',
+    garde: 'et l’écran le répète au commerçant' },
+
+  // 🔴 LA PROPRIETE SE VERIFIE PAR LE JETON, JAMAIS PAR LE CORPS DE LA REQUETE.
+  { nom: '🔴 n importe qui ecrit les coordonnees de n importe quel commerce',
+    fichier: 'app/api/dashboard/facturation/route.js',
+    de: '  if (!c || c.auth_user_id !== user.id) return null',
+    vers: '  if (!c) return null',
+    garde: 'la route vérifie la propriété de la fiche' },
+
+  { nom: '🔴 le numero de TVA n est plus verifie, seulement compte',
+    fichier: 'app/api/dashboard/facturation/route.js',
+    de: '  const { valide } = validerBCE(chiffres)',
+    vers: '  const valide = true',
+    garde: 'le numéro de TVA est vérifié, pas seulement compté' },
+
+  // ⚠️ LA FRANCHISE EST UN ETAT NORMAL. Refuser le vide empecherait un commerce
+  // en franchise d enregistrer le reste de ses coordonnees.
+  { nom: '⚠️ un commerce en franchise ne peut plus enregistrer',
+    fichier: 'app/api/dashboard/facturation/route.js',
+    de: "  if (net === '') return { ok: true, valeur: null }",
+    vers: "  if (net === '') return { ok: false, erreur: 'Numéro obligatoire.' }",
+    garde: 'un champ vide reste accepté (franchise de TVA)' },
+
+  // ⚠️ ET L ADRESSE, sans quoi l onglet n est atteignable par aucun lien.
+  { nom: '🔴 l adresse ?config=facturation redevient invalide',
+    fichier: 'app/dashboard/page.js',
+    de: "    'avis', 'signaux', 'compte', 'facturation']",
+    vers: "    'avis', 'signaux', 'compte']",
+    garde: 'l’adresse ?config=facturation est acceptée' },
+
+
   // ─── 22/09 : CE QUE CONTIENT CHAQUE FORMULE RESTE LISIBLE ───────────────
   //
   // 🔴 LES CARTES DISPARAISSAIENT DES QU ON ETAIT ABONNE, et c etait le SEUL
@@ -68,8 +165,9 @@ const MUTATIONS = [
   // SILENCE. « compte » manquait a la liste depuis la creation de l onglet.
   { nom: '🔴 l adresse ?config=compte redevient invalide',
     fichier: 'app/dashboard/page.js',
-    de: "    'avis', 'signaux', 'compte']",
-    vers: "    'avis', 'signaux']",
+    // ⚠️ ANCRE RECALEE LE 22/09 : la liste a gagne 'facturation' depuis.
+    de: "'compte', 'facturation']",
+    vers: "'facturation']",
     garde: 'l’adresse ?config=compte est acceptée par le tableau de bord' },
 
   // ⚠️ ET LA LANGUE DU PRODUIT. Tout Yoppaa tutoie.
@@ -143,8 +241,8 @@ const MUTATIONS = [
   // le cas gratuit, et l ecran ANNONCE une formule au lieu d avouer qu il ne
   // sait pas. Un ecran vide se remarque ; un ecran faux se croit.
   { nom: '🔴 la garde de chargement saute : l ecran redevine « Exister, gratuit a vie »',
-    de: '  if (!commercant) {',
-    vers: '  if (false) {',
+    de: '  if (!commercant) return <DossierAbsent illisible={illisible} quoi="ta formule et tes paiements" />',
+    vers: '  if (false) return <DossierAbsent illisible={illisible} quoi="ta formule et tes paiements" />',
     garde: 'l’écran du compte refuse de deviner une formule sans dossier' },
 
   { nom: '🔴 le chargement et la panne redonnent le meme ecran',

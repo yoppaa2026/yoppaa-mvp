@@ -29,6 +29,7 @@ import { euros } from '@/lib/montants'
 import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit } from '@/lib/lancement'
+import { formaterBCECompact } from '@/lib/kyb'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
@@ -13336,6 +13337,200 @@ function joursJusqua(iso) {
 // ⚠️ CET ONGLET N'A PAS DE `feature`, ET C'EST VOLONTAIRE. Savoir ce qu'on paie
 // ne se mérite pas : celui qui est en Exister y lit qu'il ne paie rien, celui
 // dont l'essai se termine y lit la date. Un cadenas ici serait absurde.
+// ─── LE DOSSIER QU'ON N'A PAS ──────────────────────────────────────────────
+//
+// 🔴 DEUX ÉCRANS DISAIENT LA MÊME CHOSE, EN DEUX ENDROITS. « Mon compte » et
+// « Facturation » se rabattent tous deux sur des valeurs par défaut quand le
+// commerçant manque : le premier annonçait « Exister, gratuit à vie » à
+// quelqu'un qui paie, le second afficherait des champs vides qui ressemblent à
+// des valeurs et qu'un enregistrement écrirait pour de bon.
+//
+// ⚠️ ET LES DEUX BLOCS ÉTAIENT COPIÉS, AU MOT PRÈS. Deux copies d'un même
+// message, c'est deux endroits où le corriger et un seul qu'on pense à faire.
+// C'est aussi ce qui a fait rater une mesure au harnais : la même ligne de
+// garde existait deux fois, et une mutation ne touchait jamais celle qu'elle
+// visait.
+//
+// ⚠️ DEUX CAS, DEUX MESSAGES. « Pas encore chargé » se répare tout seul ;
+// « illisible » demande un geste. Les confondre ferait attendre pour rien
+// devant une panne, ou crier à la panne devant un chargement.
+function DossierAbsent({ illisible = false, quoi }) {
+  return (
+    <div style={{ ...s.card, textAlign: 'center' }}>
+      <h2 style={{ ...s.h2, marginBottom: 8 }}>
+        {illisible ? 'Ton dossier n’a pas pu être lu' : 'Un instant…'}
+      </h2>
+      <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: 0 }}>
+        {illisible
+          ? <>La connexion a été perdue le temps de charger {quoi}. Recharge la page. Si ça se reproduit, écris-nous à <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.</>
+          : <>On récupère {quoi}.</>}
+      </p>
+    </div>
+  )
+}
+
+// ─── L'ONGLET « FACTURATION » (22/09) ───────────────────────────────────────
+//
+// 🔴 POURQUOI IL EXISTE. Alex, en relisant « Mon compte » : « toutes les
+// coordonnées utiles à la facturation sont-elles visibles ? » Non. L'écran
+// montrait la formule, le prix et le portail, et pas une seule des données qui
+// apparaissent sur la facture : raison sociale, siège social, numéro
+// d'entreprise, numéro de TVA. Le commerçant payait sans jamais voir sous quel
+// nom il était facturé.
+//
+// 🔴 ET RIEN NE REMONTAIT CHEZ STRIPE. `stripe.customers.update` n'existait
+// nulle part : une correction d'adresse restait en base et la facture gardait
+// l'ancienne, pour toujours. C'est `/api/dashboard/facturation` qui pousse
+// désormais, parce que la base est maîtresse (décision d'Alex, 22/09).
+//
+// ⚠️ CE SONT LES MÊMES COLONNES QUE LA FICHE PUBLIQUE, et l'écran le dit. Le
+// nom et l'adresse servent aux deux : les modifier ici change aussi ce que les
+// clients voient. Le taire aurait fait une surprise le jour où un commerçant
+// aurait « corrigé sa raison sociale » et vu sa fiche changer de nom.
+//
+// ⚠️ LE NUMÉRO DE TVA SE SAISIT, IL NE SE DÉDUIT PAS (décision d'Alex, 22/09).
+// En Belgique ce sont les mêmes chiffres que le numéro d'entreprise, et on
+// aurait pu le pré-remplir. Mais c'est une mention légale sur un document
+// comptable : celui qui la porte doit l'avoir écrite. Le numéro d'entreprise
+// est rappelé sous le champ, pour qu'il l'ait sous les yeux sans qu'on le
+// saisisse à sa place.
+function TabFacturation({ commercant, toast, onSaved, illisible = false }) {
+  const [nom, setNom] = useState('')
+  const [adresse, setAdresse] = useState('')
+  const [tva, setTva] = useState('')
+  const [assujetti, setAssujetti] = useState(true)
+  const [envoi, setEnvoi] = useState(false)
+  const [charge, setCharge] = useState(false)
+
+  // ⚠️ ON REMPLIT UNE FOIS, QUAND LE DOSSIER ARRIVE, ET PLUS APRÈS. Recopier le
+  // commerçant à chaque rendu écraserait ce que le commerçant est en train de
+  // taper, à la première mise à jour venue du parent.
+  useEffect(() => {
+    if (charge || !commercant) return
+    setNom(commercant.nom || '')
+    setAdresse(commercant.adresse || '')
+    setTva(commercant.tva_numero || '')
+    setAssujetti(commercant.tva_assujetti !== false)
+    setCharge(true)
+  }, [commercant, charge])
+
+  // 🔴 LA MÊME GARDE QUE « MON COMPTE », POUR LA MÊME RAISON. Sans dossier, un
+  // écran de formulaire afficherait des champs vides qui ressemblent à des
+  // valeurs, et un enregistrement les écrirait pour de bon.
+  if (!commercant) return <DossierAbsent illisible={illisible} quoi="tes coordonnées de facturation" />
+
+  const bceLisible = commercant.bce ? formaterBCECompact(String(commercant.bce).replace(/\D/g, '')) : null
+  const manqueTva = assujetti && !String(tva).trim()
+
+  async function enregistrer() {
+    setEnvoi(true)
+    const res = await postPro('/api/dashboard/facturation', {
+      commercantId: commercant.id,
+      nom, adresse, tvaNumero: tva, tvaAssujetti: assujetti,
+    })
+    // ⚠️ `postPro` REND LA `Response`, IL NE LÈVE PAS SUR UN CODE HTTP. Lire
+    // `res.ok` sans lire le corps annoncerait une réussite sur un refus.
+    if (typeof res?.json !== 'function') {
+      toast(res?.sansSession ? 'Ta session a expiré, reconnecte-toi.' : 'Connexion perdue, réessaie.', 'error')
+      setEnvoi(false); return
+    }
+    let corps = null
+    try { corps = await res.json() } catch (e) { /* le code suffira */ }
+    if (!res.ok || !corps?.ok) {
+      toast(corps?.error || `Enregistrement impossible (erreur ${res.status}).`, 'error')
+      setEnvoi(false); return
+    }
+    // 🔴 ON DIT CE QUI S'EST VRAIMENT PASSÉ, Y COMPRIS QUAND C'EST À MOITIÉ.
+    // La base est maîtresse : sa correction est enregistrée et vaut. Si Stripe
+    // n'a pas suivi, le taire recréerait le défaut qu'on vient de corriger.
+    if (corps.stripeSynchro === 'en retard') {
+      toast('Enregistré. Stripe n’a pas pu être mis à jour : on réessaiera, écris-nous si ça dure.', 'error')
+    } else if (corps.incomplet) {
+      toast('Enregistré. Il manque encore ton numéro de TVA pour que tes factures soient complètes.', 'success')
+    } else {
+      toast('Tes coordonnées de facturation sont à jour.', 'success')
+    }
+    setEnvoi(false)
+    if (typeof onSaved === 'function') onSaved()
+  }
+
+  return (
+    <div>
+      <div style={s.card}>
+        <h2 style={s.h2}>Ce qui figure sur tes factures</h2>
+        <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: '0 0 18px' }}>
+          Ces informations partent sur les factures que Yoppaa t&rsquo;envoie, et sur celles que
+          ton comptable recevra. Elles sont aussi celles de ta fiche : les changer ici
+          change aussi ce que tes clients voient.
+        </p>
+
+        <label style={s.label}>Raison sociale</label>
+        <input style={s.input} value={nom} onChange={e => setNom(e.target.value)}
+          placeholder="Le nom de ton entreprise" />
+
+        <label style={{ ...s.label, marginTop: 14 }}>Adresse du siège social</label>
+        <input style={s.input} value={adresse} onChange={e => setAdresse(e.target.value)}
+          placeholder="Rue, numéro, code postal, commune" />
+
+        {/* 🔴 LE NUMÉRO D'ENTREPRISE EST EN LECTURE, ET C'EST UNE DÉCISION.
+            Alex le vérifie lui-même au moment de valider le dossier : le
+            laisser changer après coup voudrait dire qu'un dossier validé peut
+            désigner une autre entreprise. */}
+        <label style={{ ...s.label, marginTop: 14 }}>Numéro d&rsquo;entreprise</label>
+        <input style={{ ...s.input, background: T.bg, color: T.muted }} value={bceLisible || '—'} disabled readOnly />
+        <p style={{ fontSize: 12, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+          Il a été vérifié à la validation de ton dossier. Pour le corriger, écris-nous à{' '}
+          <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
+        </p>
+      </div>
+
+      <div style={s.card}>
+        <h2 style={s.h2}>Ta TVA</h2>
+
+        {/* ⚠️ LA FRANCHISE EST UN ÉTAT NORMAL, PAS UN DOSSIER INCOMPLET. Une
+            petite entreprise en franchise n'a pas de numéro de TVA à faire
+            figurer, et lui réclamer indéfiniment serait lui reprocher sa
+            situation. La case commande le reste de la carte. */}
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 14 }}>
+          <input type="checkbox" checked={assujetti} onChange={e => setAssujetti(e.target.checked)}
+            style={{ marginTop: 3, width: 16, height: 16, accentColor: T.main, cursor: 'pointer' }} />
+          <span style={{ fontSize: 13.5, color: T.ink, fontWeight: 600, lineHeight: 1.5 }}>
+            Mon entreprise est assujettie à la TVA
+            <span style={{ display: 'block', fontSize: 12.5, color: T.muted, fontWeight: 500, marginTop: 2 }}>
+              Décoche si tu es en franchise de TVA. Tes factures n&rsquo;en porteront alors aucune mention.
+            </span>
+          </span>
+        </label>
+
+        {assujetti && (
+          <>
+            <label style={s.label}>Numéro de TVA</label>
+            <input style={s.input} value={tva} onChange={e => setTva(e.target.value)}
+              placeholder="BE 0123.456.789" />
+            <p style={{ fontSize: 12, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+              {bceLisible
+                ? <>En Belgique, c&rsquo;est le plus souvent ton numéro d&rsquo;entreprise précédé de « BE » : <strong style={{ color: T.ink }}>{bceLisible}</strong>. Recopie-le seulement si c&rsquo;est bien celui de ta TVA.</>
+                : 'Format attendu : BE suivi de dix chiffres.'}
+            </p>
+            {manqueTva && (
+              <p style={{ fontSize: 12.5, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '9px 11px', margin: '12px 0 0', lineHeight: 1.5 }}>
+                Tant qu&rsquo;il manque, tes factures partiront sans numéro de TVA.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      <div style={s.card}>
+        <button onClick={enregistrer} disabled={envoi}
+          style={{ ...s.btn, ...s.btnPrimary, opacity: envoi ? 0.6 : 1, width: '100%' }}>
+          {envoi ? 'Enregistrement…' : 'Enregistrer mes coordonnées'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function TabMonCompte({ commercant, toast, illisible = false }) {
   const [portail, setPortail] = useState(false)
 
@@ -13349,20 +13544,7 @@ function TabMonCompte({ commercant, toast, illisible = false }) {
   // ⚠️ DEUX CAS, DEUX MESSAGES. « Pas encore chargé » se répare tout seul ;
   // « illisible » demande un geste. Les confondre ferait attendre pour rien
   // devant une panne, ou crier à la panne devant un chargement.
-  if (!commercant) {
-    return (
-      <div style={{ ...s.card, textAlign: 'center' }}>
-        <h2 style={{ ...s.h2, marginBottom: 8 }}>
-          {illisible ? 'Ton dossier n’a pas pu être lu' : 'Un instant…'}
-        </h2>
-        <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: 0 }}>
-          {illisible
-            ? <>La connexion a été perdue le temps de charger ta formule. Recharge la page. Si ça se reproduit, écris-nous à <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.</>
-            : 'On récupère ta formule et tes paiements.'}
-        </p>
-      </div>
-    )
-  }
+  if (!commercant) return <DossierAbsent illisible={illisible} quoi="ta formule et tes paiements" />
 
   const plan = commercant?.plan || 'exister'
   const exempt = commercant?.billing_exempt === true
@@ -13935,6 +14117,10 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // ⚠️ EN DERNIER, ET SANS `feature`. En dernier parce qu'on ne vient pas
     // régler son commerce ici ; sans forfait parce que savoir ce qu'on paie ne
     // se mérite pas, et qu'un cadenas sur son propre compte serait absurde.
+    // ⚠️ LA FACTURATION AVANT LE COMPTE, ET C'EST L'ORDRE DE LECTURE : on
+    // vérifie sous quel nom on est facturé, puis ce qu'on paie. L'inverse
+    // ferait découvrir le montant avant de savoir à qui il est adressé.
+    { id: 'facturation', label: 'Facturation', icon: 'user' },
     { id: 'compte', label: 'Mon compte', icon: 'user' },
   ].filter(Boolean)
     // ⚠️ L'ÉTAT SE CALCULE ICI, UNE FOIS, ET LE FILTRE NE PORTE QUE SUR `null`.
@@ -14043,6 +14229,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
       {/* ⚠️ AUCUNE CONDITION DE FORFAIT ICI, contrairement aux onglets
           au-dessus. Celui qui est en Exister doit pouvoir lire qu'il ne paie
           rien, et celui dont l'essai se termine doit pouvoir lire la date. */}
+      {tab === 'facturation' && <TabFacturation commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} />}
       {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} illisible={commercantIllisible} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signaux' && <TabSignaux commercantId={commercantId} toast={showToast} signalementsEnAttente={signalementsEnAttente} />}

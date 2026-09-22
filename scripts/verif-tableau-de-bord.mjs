@@ -1103,6 +1103,128 @@ const verifie = (nom, cond, detail = '') => {
   }
 }
 
+
+// ═══ 8ter) LES COORDONNÉES DE FACTURATION, ET LEUR ALLER-RETOUR STRIPE ══════
+//
+// 🔴 POURQUOI CET ÉCRAN EXISTE. Alex, 22/09 : « est-ce que toutes les
+// coordonnées utiles à la facturation sont visibles dans Mon compte ? » Non.
+// L'écran montrait la formule, le prix et le portail, et pas une seule des
+// données qui apparaissent sur la facture. Le commerçant payait sans jamais
+// voir sous quel nom il était facturé.
+//
+// 🔴 ET RIEN NE REMONTAIT CHEZ STRIPE. `stripe.customers.update` n'existait
+// NULLE PART dans le dépôt : le Customer était créé une fois, et une
+// correction d'adresse restait en base pendant que la facture gardait
+// l'ancienne, pour toujours. Sur une facture belge, c'est de la conformité,
+// pas du confort.
+{
+  // ⚠️ CE BLOC LIT SES PROPRES SOURCES, et ce n'est pas de la redondance : le
+  // bloc voisin a les siennes dans sa portée. Les emprunter de loin marcherait
+  // tant que les deux se suivent, et casserait le jour où l'un des deux bouge.
+  const code = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'))
+  const fact = readFileSync(new URL('../app/api/dashboard/facturation/route.js', import.meta.url), 'utf8')
+  const iTabsF = code.indexOf('const tabs = [')
+  const iFinTabsF = code.indexOf('].filter(Boolean)', iTabsF)
+  const listeTabs = iTabsF >= 0 && iFinTabsF > iTabsF ? code.slice(iTabsF, iFinTabsF) : ''
+  verifie('la barre d’onglets reste lisible depuis ce bloc', listeTabs.length > 200, String(listeTabs.length))
+  // ─── L'écran ─────────────────────────────────────────────────────────────
+  verifie('🔴 l’onglet « Facturation » existe dans la barre',
+    /label: 'Facturation'/.test(listeTabs),
+    'les coordonnées qui partent sur la facture redeviennent invisibles')
+
+  // ⚠️ SANS `feature`, comme « Mon compte » : savoir sous quel nom on est
+  // facturé ne se mérite pas, et un cadenas sur ses propres coordonnées serait
+  // absurde.
+  {
+    const ligne = listeTabs.split('\n').find(l => /id: 'facturation'/.test(l)) || ''
+    verifie('et il n’est derrière aucun forfait',
+      ligne.length > 0 && !/feature:/.test(ligne), ligne.trim().slice(0, 80))
+  }
+
+  const iFact = code.indexOf('function TabFacturation')
+  const iFinFact = code.indexOf('function TabMonCompte')
+  verifie('l’écran de facturation est là où on le cherche',
+    iFact >= 0 && iFinFact > iFact,
+    'TabFacturation a été renommé : les gardes suivantes ne mesurent plus rien')
+  const corpsFact = iFact >= 0 && iFinFact > iFact ? code.slice(iFact, iFinFact) : ''
+
+  // 🔴 LA MÊME GARDE QUE « MON COMPTE », POUR UNE RAISON PIRE : ici c'est un
+  // FORMULAIRE. Sans dossier, des champs vides ressemblent à des valeurs, et un
+  // enregistrement les écrirait pour de bon.
+  verifie('il refuse d’afficher un formulaire sans dossier',
+    /if \(!commercant\)/.test(corpsFact),
+    'des champs vides seraient pris pour des valeurs, et enregistrés comme telles')
+
+  // ⚠️ ET IL NE RECOPIE LE DOSSIER QU'UNE FOIS. Remplir à chaque rendu
+  // écraserait ce que le commerçant est en train de taper.
+  verifie('et il ne réécrit pas les champs pendant la saisie',
+    /if \(charge \|\| !commercant\) return/.test(corpsFact),
+    'une mise à jour venue du parent effacerait la saisie en cours')
+
+  // 🔴 LE NUMÉRO D'ENTREPRISE RESTE EN LECTURE. Alex le vérifie au KYB : le
+  // laisser changer après coup voudrait dire qu'un dossier validé peut désigner
+  // une autre entreprise.
+  verifie('le numéro d’entreprise n’est pas modifiable depuis l’écran',
+    /disabled readOnly/.test(corpsFact),
+    'un dossier validé pourrait désigner une autre entreprise')
+
+  // ⚠️ ET L'ÉCRAN DIT QUE CE SONT LES MÊMES DONNÉES QUE LA FICHE PUBLIQUE.
+  // Sans ça, « corriger sa raison sociale » changerait le nom vu par les
+  // clients, par surprise.
+  verifie('il prévient que ces données sont aussi celles de la fiche',
+    /change aussi ce que tes clients voient/.test(corpsFact),
+    'le commerçant changerait sa fiche publique sans le savoir')
+
+  // ─── La route ────────────────────────────────────────────────────────────
+  verifie('🔴 la route pousse vraiment vers Stripe',
+    /stripe\.customers\.update\(/.test(fact),
+    'la correction resterait en base et la facture garderait l’ancienne adresse')
+
+  // 🔴 ET ELLE N'ANNULE PAS L'ÉCRITURE SI STRIPE REFUSE. La base est maîtresse
+  // (décision d'Alex, 22/09) : perdre la saisie du commerçant parce qu'un
+  // service tiers ne répond pas, ce serait lui faire payer un problème qui
+  // n'est pas le sien.
+  verifie('un échec Stripe ne fait pas perdre la saisie',
+    /stripeSynchro = 'en retard'/.test(fact),
+    'une panne Stripe annulerait la correction du commerçant')
+
+  // ⚠️ MAIS ELLE LE DIT. Un silence ici recréerait exactement le défaut qu'on
+  // vient de corriger : une base à jour, une facture fausse, et personne
+  // prévenu.
+  verifie('et l’écran le répète au commerçant',
+    /Stripe n’a pas pu être mis à jour/.test(corpsFact),
+    'la base et la facture divergeraient en silence')
+
+  // 🔴 LA PROPRIÉTÉ SE VÉRIFIE PAR LE JETON, JAMAIS PAR LE CORPS DE LA REQUÊTE.
+  // Sans ça, il suffirait de changer un identifiant pour écrire chez un autre.
+  verifie('la route vérifie la propriété de la fiche',
+    /auth_user_id !== user\.id/.test(fact),
+    'n’importe qui écrirait les coordonnées de n’importe quel commerce')
+
+  // ⚠️ LE NUMÉRO DE TVA PASSE LE CONTRÔLE OFFICIEL. En Belgique ce sont les
+  // mêmes chiffres que le numéro d'entreprise, avec la même clé modulo 97. Un
+  // numéro qui ne la passe pas n'existe pas, et Billit l'enverrait quand même :
+  // la facture reviendrait rejetée, longtemps après.
+  verifie('le numéro de TVA est vérifié, pas seulement compté',
+    /validerBCE\(chiffres\)/.test(fact),
+    'un numéro inexistant partirait chez Billit et reviendrait rejeté')
+
+  // ⚠️ ET LA FRANCHISE RESTE POSSIBLE. Un commerce en franchise n'a pas de
+  // numéro à donner : le refuser l'empêcherait d'enregistrer le reste.
+  verifie('un champ vide reste accepté (franchise de TVA)',
+    /if \(net === ''\) return \{ ok: true, valeur: null \}/.test(fact),
+    'un commerce en franchise ne pourrait plus enregistrer ses coordonnées')
+
+  // ─── L'adresse ───────────────────────────────────────────────────────────
+  {
+    const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+    const liste = dash.split('const CONFIG_VALIDES')[1]?.split(']')[0] || ''
+    verifie('l’adresse ?config=facturation est acceptée',
+      /'facturation'/.test(liste),
+      'l’onglet ne serait atteignable par aucun lien, et le bouton Précédent redeviendrait muet')
+  }
+}
+
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du
 // fichier et n'annonçait donc qu'un tiers du travail.
 console.log(`\nTableau de bord : ${ok} vérifications`)

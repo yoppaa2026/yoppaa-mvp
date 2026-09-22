@@ -27,6 +27,26 @@
 // fond, et on IMPRIME ce qu'on a trouvé : si une mesure s'écarte des autres,
 // elle se voit dans la sortie.
 
+// ═══════════════════════════════════════════════════════════════════════════
+// OÙ SONT LES SOURCES, ET POURQUOI ELLES N'ONT RIEN À FAIRE ICI
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Ce script LIT ses sources dans `public/captures/`, mais elles n'y vivent que
+// le temps de l'extraction. Elles sont ensuite déplacées dans :
+//
+//     C:UsersHPyoppaa-sources-captures//
+// 🔴 PARCE QUE `public/` EST SERVI TEL QUEL. Tout fichier qui y traîne est
+// accessible en ligne à son adresse exacte, sans lien nulle part, et se fait
+// indexer. Le 22/09, la source du tableau de bord portait un numéro de GSM et
+// une adresse email en clair : elle était à une commande `git add` de la
+// production, parce que le `.gitignore` nommait `.jpeg` et pas `.jpg`.
+//
+// ⚠️ DONC CE SCRIPT AFFICHE « ABSENT » POUR PRESQUE TOUTES SES SOURCES, ET
+// C'EST NORMAL. Pour réextraire, on redépose la source dans
+// `public/captures/`, on relance, et on la ressort. Le `.gitignore` la retient
+// pendant ce temps, mais il ne la fait pas disparaître : c'est le déplacement
+// qui protège, pas la règle git.
+
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import sharp from 'sharp'

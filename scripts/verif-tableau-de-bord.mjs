@@ -822,6 +822,30 @@ const verifie = (nom, cond, detail = '') => {
     'le portail annoncerait une réussite sur un refus')
 
   // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 LE MOT « CARTE » SE TROUVE SANS LE CHERCHER (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Question d'Alex : « où est-ce qu'il met ses données bancaires pour le
+  // paiement de son abonnement ? » La réponse était bonne, l'écran ne la
+  // donnait pas : le paragraphe parlait de sa carte, le bouton s'appelait
+  // « Gérer mon abonnement », et le mot « carte » n'apparaissait sur aucun
+  // bouton tant qu'il n'était pas à trente jours de sa première facture.
+  //
+  // ⚠️ ET C'EST L'UNIQUE ENDROIT OÙ IL PEUT LA SAISIR APRÈS COUP. Le Checkout
+  // ne la demande pas (`payment_method_collection: 'if_required'`, décision
+  // assumée de `lib/stripe-billing.js`) : tout passe donc par ce bouton.
+  verifie('le bouton du portail nomme la carte',
+    /'Gérer ma carte et mes factures'/.test(corpsCompte),
+    'celui qui cherche où mettre sa carte ne reconnaît pas le bouton qui l’y mène')
+
+  // ⚠️ ET CELUI QUI N'A PAS ENCORE D'ABONNEMENT APPREND CE QUI L'ATTEND. Sans
+  // cette phrase, l'écran constate qu'il n'a rien à gérer et s'arrête là :
+  // c'est exactement la question restée sans réponse.
+  verifie('et l’écran dit quand la carte sera demandée',
+    /aucune carte ne te sera demandée tant que ton essai court/.test(corpsCompte),
+    'il ne saurait ni quand ni où sa carte lui sera demandée')
+
+  // ═════════════════════════════════════════════════════════════════════════
   // 🔴 LA DÉGUSTATION EXISTE DANS CET ÉCRAN, ET AVEC LA DATE DE CELUI QUI LIT
   // ═════════════════════════════════════════════════════════════════════════
   //
@@ -1347,6 +1371,35 @@ const verifie = (nom, cond, detail = '') => {
       verifie(`${r} ne recopie pas l’adresse admin`,
         !/verstappenalexandre@/.test(src),
         'une copie de plus à retrouver le jour où l’adresse change')
+    }
+
+    // 🔴 ET LES DEUX ROUTES DE L'ABONNEMENT, TROUVÉES LE 22/09 EN CHERCHANT
+    // AUTRE CHOSE. Alex : « où est-ce qu'il met ses données bancaires pour le
+    // paiement de son abonnement ? » En suivant le chemin, les deux routes qui
+    // ouvrent Stripe portaient chacune sa copie de l'adresse admin et sa
+    // propre vérification de propriété, écrites avant `api-auth.js`.
+    //
+    // ⚠️ ELLES N'ÉTAIENT PAS DANS LE RELEVÉ DE LA VEILLE, et ce sont LES
+    // routes de l'argent. Un relevé qui s'arrête aux routes qu'on a sous les
+    // yeux laisse toujours la suivante : celle-là s'est rappelée à nous par
+    // une question qui n'avait rien à voir.
+    //
+    // ⚠️ ELLES PASSENT PAR `gardeCommercant`, PAS PAR `estAdminYoppaa` seul :
+    // c'est la garde complète qu'il leur faut, propriété comprise, et
+    // l'administrateur y est déjà prévu.
+    for (const r of ['stripe/billing/portal', 'stripe/billing/checkout']) {
+      const src = readFileSync(new URL(`../app/api/${r}/route.js`, import.meta.url), 'utf8')
+      verifie(`${r} passe par la garde partagée`,
+        /gardeCommercant\(req, supabase, commercantId\)/.test(src),
+        'elle réapprendrait seule ce que la garde partagée sait déjà, l’administrateur compris')
+      verifie(`${r} ne recopie pas l’adresse admin`,
+        !/verstappenalexandre@/.test(src),
+        'une copie de plus à retrouver le jour où l’adresse change')
+      // ⚠️ ET ELLE NE GARDE PAS SA PROPRE VÉRIFICATION DE PROPRIÉTÉ À CÔTÉ :
+      // deux gardes pour une porte, c'est celle qu'on oublie qui décide.
+      verifie(`${r} ne garde pas sa vérification de propriété en double`,
+        !/auth_user_id !== user\.id/.test(src),
+        'la règle vivrait à deux endroits, et la copie ne saurait rien des corrections de l’autre')
     }
   }
 

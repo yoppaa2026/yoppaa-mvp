@@ -13749,8 +13749,17 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
               Ta carte, tes factures, ton changement de formule et ta résiliation se gèrent dans
               l&rsquo;espace sécurisé de Stripe, notre prestataire de paiement.
             </p>
+            {/* 🔴 LE BOUTON NE DISAIT PAS LE MOT QU'ON CHERCHE (Alex, 22/09 :
+                « où est-ce qu'il met ses données bancaires pour le paiement de
+                son abonnement ? »). Le paragraphe juste au-dessus parle de sa
+                carte, le bouton s'appelait « Gérer mon abonnement », et le mot
+                « carte » n'apparaissait nulle part tant qu'il n'était pas à
+                trente jours de sa première facture.
+                ⚠️ ET LA PAGE /dashboard/abonnement GARDE LE SIEN : là-bas le
+                bloc parle de la formule, et le portail sert aussi à en
+                changer. Chaque bouton dit le geste de SON bloc. */}
             <button onClick={ouvrirPortail} disabled={portail} style={{ ...s.btn, ...s.btnPrimary, opacity: portail ? 0.6 : 1 }}>
-              {portail ? 'Ouverture…' : 'Gérer mon abonnement'}
+              {portail ? 'Ouverture…' : 'Gérer ma carte et mes factures'}
             </button>
           </>
         ) : (
@@ -13760,7 +13769,7 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
                 ? 'Aucune facture tant que ton partenariat court.'
                 : ouvertSansFacture
                   ? 'Aucune facture ni moyen de paiement à gérer : ta formule t’a été ouverte par Yoppaa, elle ne passe pas par un abonnement.'
-                  : 'Tu n’as pas encore d’abonnement payant, donc aucune facture ni moyen de paiement à gérer.'}
+                  : 'Tu n’as pas encore d’abonnement payant, donc aucune facture ni moyen de paiement à gérer. Quand tu prendras une formule, aucune carte ne te sera demandée tant que ton essai court : on te préviendra un mois avant la première facture, et tu l’enregistreras depuis cet écran.'}
             </p>
             {!exempt && (
               <a href="/dashboard/abonnement" style={{ ...s.btn, ...s.btnPrimary, textDecoration: 'none' }}>

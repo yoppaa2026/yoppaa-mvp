@@ -10,9 +10,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCheckoutSession } from '@/lib/stripe-billing'
+import { gardeCommercant } from '@/lib/api-auth'
 
-const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
-
+// 🔴 LA GARDE VIENT DU POINT CENTRAL (22/09), comme sa jumelle du portail.
+// Les deux routes de l'abonnement portaient chacune sa copie de l'adresse
+// admin et sa propre vérification de propriété, écrites avant `api-auth.js`.
+// Elles sont l'aller et le retour du même geste : on les ramène ensemble,
+// sinon la seconde reste seule et devient celle qu'on oublie.
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -22,19 +26,7 @@ function getSupabaseAdmin() {
 
 export async function POST(req) {
   try {
-    // Auth obligatoire : JWT Supabase via header Authorization
-    const authHeader = req.headers.get('authorization') || ''
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
-    if (!token) {
-      return NextResponse.json({ error: 'Authentification requise' }, { status: 401 })
-    }
-
     const supabase = getSupabaseAdmin()
-    const { data: { user }, error: errAuth } = await supabase.auth.getUser(token)
-    if (errAuth || !user) {
-      return NextResponse.json({ error: 'Token invalide' }, { status: 401 })
-    }
-
     const body = await req.json()
     const { commercantId, targetPlan } = body || {}
 
@@ -46,6 +38,13 @@ export async function POST(req) {
       return NextResponse.json({
         error: 'targetPlan invalide (attendu communiquer ou vendre)',
       }, { status: 400 })
+    }
+
+    // ⚠️ LA GARDE D'ABORD, LA FICHE ENSUITE. L'administrateur y passe : il
+    // ouvre la souscription d'un commerçant pour le dépanner au téléphone.
+    const garde = await gardeCommercant(req, supabase, commercantId)
+    if (!garde.ok) {
+      return NextResponse.json({ error: garde.error }, { status: garde.status })
     }
 
     // Charger le commerçant
@@ -63,16 +62,15 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Commerçant introuvable' }, { status: 404 })
     }
 
-    // Auth check ownership : l'user doit être owner du commerçant, ou admin Yoppaa
-    const isAdmin = user.email === ADMIN_EMAIL
-    if (!isAdmin && commercant.auth_user_id !== user.id) {
-      return NextResponse.json({ error: 'Accès non autorisé à ce commerçant' }, { status: 403 })
-    }
-
     // Bloquer si subscription active existante : il doit passer par le portail
+    //
+    // ⚠️ CE MESSAGE EST LU PAR LE COMMERÇANT : il vouvoyait, parlait de « plan »
+    // là où les écrans disent « formule », et nommait « portail client » un
+    // bouton qui s'appelle « Gérer ma carte et mes factures ». Trois mots que
+    // personne ne reconnaît sur son propre écran.
     if (commercant.subscription_status && ['active', 'trialing', 'past_due'].includes(commercant.subscription_status)) {
       return NextResponse.json({
-        error: 'Vous avez déjà un abonnement actif. Utilisez le portail client pour changer de plan ou résilier.',
+        error: 'Tu as déjà un abonnement en cours : change de formule ou résilie depuis « Mon compte ».',
         code: 'already_subscribed',
       }, { status: 409 })
     }

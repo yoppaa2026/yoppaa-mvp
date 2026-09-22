@@ -545,6 +545,54 @@ const MUTATIONS = [
     de: "                  'Une actu par semaine, publiée dans le Good Morning de ta commune',",
     vers: "                  'Ta place chaque matin dans le Good Morning de ta commune',",
     garde: 'et elle dit le plafond du Good Morning' },
+
+
+  // ─── 22/09 : OU MET-IL SA CARTE ? ───────────────────────────────────────
+  //
+  // 🔴 Question d Alex. La reponse etait bonne, l ecran ne la donnait pas : le
+  // paragraphe parlait de sa carte, le bouton s appelait « Gerer mon
+  // abonnement », et le mot « carte » n apparaissait sur aucun bouton tant
+  // qu il n etait pas a trente jours de sa premiere facture.
+  { nom: '🔴 le bouton du portail ne nomme plus la carte',
+    de: "              {portail ? 'Ouverture…' : 'Gérer ma carte et mes factures'}",
+    vers: "              {portail ? 'Ouverture…' : 'Gérer mon abonnement'}",
+    garde: 'le bouton du portail nomme la carte' },
+
+  // ⚠️ ET CELUI QUI N A PAS ENCORE D ABONNEMENT APPREND CE QUI L ATTEND. Sans
+  // cette phrase, l ecran constate qu il n a rien a gerer et s arrete la.
+  { nom: '⚠️ l ecran ne dit plus quand la carte sera demandee',
+    de: 'Quand tu prendras une formule, aucune carte ne te sera demandée tant que ton essai court : on te préviendra un mois avant la première facture, et tu l’enregistreras depuis cet écran.',
+    vers: '',
+    garde: 'et l’écran dit quand la carte sera demandée' },
+
+  // 🔴 LES DEUX ROUTES DE L ABONNEMENT, ramenees au point central le 22/09.
+  // Elles portaient chacune sa copie de l adresse admin et sa propre
+  // verification de propriete, et ce sont LES routes de l argent.
+  { nom: '🔴 le portail de facturation reecrit sa propre garde',
+    fichier: 'app/api/stripe/billing/portal/route.js',
+    de: '    const garde = await gardeCommercant(req, supabase, commercantId)',
+    vers: '    const garde = { ok: true }',
+    garde: 'stripe/billing/portal passe par la garde partagée' },
+
+  { nom: '🔴 la souscription reecrit sa propre garde',
+    fichier: 'app/api/stripe/billing/checkout/route.js',
+    de: '    const garde = await gardeCommercant(req, supabase, commercantId)',
+    vers: '    const garde = { ok: true }',
+    garde: 'stripe/billing/checkout passe par la garde partagée' },
+
+  { nom: '🔴 la souscription recopie l adresse admin',
+    fichier: 'app/api/stripe/billing/checkout/route.js',
+    de: "import { gardeCommercant } from '@/lib/api-auth'",
+    vers: "import { gardeCommercant } from '@/lib/api-auth'; const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'",
+    garde: 'stripe/billing/checkout ne recopie pas l’adresse admin' },
+
+  // ⚠️ ET LA VERIFICATION DE PROPRIETE NE REVIENT PAS A COTE DE LA GARDE :
+  // deux gardes pour une porte, c est celle qu on oublie qui decide.
+  { nom: '⚠️ le portail garde sa verification de propriete en double',
+    fichier: 'app/api/stripe/billing/portal/route.js',
+    de: '    if (!commercant.stripe_customer_id) {',
+    vers: "    if (commercant.auth_user_id !== user.id) { return NextResponse.json({ error: 'accès refusé' }, { status: 403 }) } if (!commercant.stripe_customer_id) {",
+    garde: 'stripe/billing/portal ne garde pas sa vérification de propriété en double' },
 ]
 
 const lancer = () => {

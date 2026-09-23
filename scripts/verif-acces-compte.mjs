@@ -270,6 +270,26 @@ function sansCommentaires(src) {
     !/UPDATE public\.commercants[\s\S]{0,200}FROM auth\.users/i.test(sql),
     'elle écraserait une adresse choisie par une adresse devinée')
 
+  // 🔴 LE DÉFAUT QUE LE CONTRÔLE D01 A MONTRÉ EN VRAI, LE SOIR MÊME. « Chez
+  // Momo » se connecte avec le compte d'Alex et reçoit sur une boîte interne :
+  // la première version du trigger aurait écrasé ce choix au premier changement
+  // d'email, sur toutes les fiches rattachées au compte, en silence.
+  const suivi = lire('migrations/MIGRATION_SYNC_EMAIL_COMMERCANT_SUIVI_SEUL.sql')
+  verifier('le trigger ne touche que les dossiers qui SUIVAIENT l\'ancienne adresse',
+    /AND lower\(email\) = lower\(OLD\.email\)/.test(suivi),
+    'un dossier avec une adresse choisie se ferait écraser au premier changement')
+  verifier('et il ne remplit pas un dossier sans adresse',
+    !/OR email IS NULL/.test(suivi),
+    'écrire dans un dossier vide à l’occasion d’un changement, c’est inventer une décision')
+  verifier('le correctif garde la fonction hors d\'état de casser une connexion',
+    /EXCEPTION WHEN OTHERS THEN/.test(suivi) && /RAISE WARNING/.test(suivi))
+  // ⚠️ LA MIGRATION D'ORIGINE EST DÉJÀ PASSÉE : la recoller remettrait
+  // l'ancienne fonction. Son en-tête doit le dire, sinon quelqu'un la rejouera
+  // un jour en croyant réparer.
+  verifier('et l\'ancienne migration prévient qu\'elle ne doit plus être collée seule',
+    /NE PAS RECOLLER CE\s*\n?--\s*FICHIER SEUL/.test(sql),
+    'la rejouer réintroduirait l’écrasement, sans que rien ne le dise')
+
   const rev = lire('migrations/MIGRATION_REVOQUER_ANON_COMMERCANTS_SIGNALEMENTS.sql')
   verifier('la migration des REVOKE refuse d\'agir si une vue en security_invoker en dépend',
     /security_invoker/.test(rev) && /RAISE EXCEPTION/.test(rev))

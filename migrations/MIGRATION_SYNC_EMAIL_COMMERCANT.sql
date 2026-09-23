@@ -1,6 +1,13 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- L'EMAIL DU DOSSIER SUIT L'EMAIL DE CONNEXION
 -- Écrite le 23/09/2026 — pour l'écran « changer mon email » de « Mon compte »
+--
+-- 🔴 PASSÉE LE 23/09, PUIS CORRIGÉE LE MÊME SOIR PAR
+-- `MIGRATION_SYNC_EMAIL_COMMERCANT_SUIVI_SEUL.sql`. NE PAS RECOLLER CE
+-- FICHIER SEUL : sa fonction écrase l'adresse de TOUT dossier rattaché au
+-- compte, y compris celui qui en porte une autre délibérément. Le contrôle D01
+-- a montré le cas réel le soir même. Si ce fichier est rejoué, rejouer le
+-- correctif juste après.
 -- ═══════════════════════════════════════════════════════════════════════════
 --
 -- POURQUOI. Un commerçant va enfin pouvoir changer son email de connexion

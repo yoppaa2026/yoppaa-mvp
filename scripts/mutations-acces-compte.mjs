@@ -36,6 +36,7 @@ const SQL_REVOKE = 'migrations/MIGRATION_REVOQUER_ANON_COMMERCANTS_SIGNALEMENTS.
 const BILLING = 'lib/stripe-billing.js'
 const FACTURATION = 'app/api/dashboard/facturation/route.js'
 const PORTAIL = 'app/api/stripe/billing/portal/route.js'
+const SQL_SUIVI = 'migrations/MIGRATION_SYNC_EMAIL_COMMERCANT_SUIVI_SEUL.sql'
 
 const MUTATIONS = [
   // ═══ LE COMPORTEMENT : LA TRADUCTION DES REFUS ═════════════════════════
@@ -321,6 +322,32 @@ const MUTATIONS = [
     de: 'commercant?.stripe_account_id && (',
     vers: 'true && (',
     garde: 'et cette phrase ne s’affiche qu’à qui a un compte Stripe' },
+
+  // ═══ 23/09 : LE TRIGGER PROPAGE, IL N IMPOSE PAS ═══════════════════════
+  //
+  // 🔴 MONTRE EN VRAI PAR LE CONTROLE D01, le soir meme de la migration.
+  // « Chez Momo » se connecte avec le compte d Alex et recoit sur une boite
+  // interne : la premiere version ecrasait ce choix au premier changement
+  // d email, sur toutes les fiches du compte, en silence.
+  { nom: '🔴 le trigger reecrit l adresse de TOUS les dossiers du compte',
+    fichier: SQL_SUIVI,
+    de: 'AND lower(email) = lower(OLD.email)',
+    vers: 'AND true',
+    garde: 'le trigger ne touche que les dossiers qui SUIVAIENT l’ancienne adresse' },
+
+  { nom: '⚠️ le trigger se met a remplir les dossiers sans adresse',
+    fichier: SQL_SUIVI,
+    de: 'AND lower(email) = lower(OLD.email)',
+    vers: 'AND (lower(email) = lower(OLD.email) OR email IS NULL)',
+    garde: 'et il ne remplit pas un dossier sans adresse' },
+
+  // ⚠️ RECOLLER L ANCIENNE MIGRATION REMETTRAIT L ANCIENNE FONCTION. Son
+  // en-tete est la seule chose qui le dise.
+  { nom: '⚠️ l ancienne migration ne previent plus qu elle ne doit pas etre recollee',
+    fichier: SQL_EMAIL,
+    de: 'NE PAS RECOLLER CE',
+    vers: 'ON PEUT RECOLLER CE',
+    garde: 'et l’ancienne migration prévient qu’elle ne doit plus être collée seule' },
 ]
 
 // 🔴 LE HARNAIS A FAILLI MENTIR SUR SES PROPRES MESURES. Au premier passage,

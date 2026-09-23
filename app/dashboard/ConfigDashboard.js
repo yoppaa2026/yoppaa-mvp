@@ -13731,7 +13731,18 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
         </div>
       )}
 
-      {enRetard && (
+      {/* 🔴 JAMAIS CHEZ UN EXEMPTÉ (22/09). Le BADGE se taisait déjà pour eux
+          (`!exempt && enRetard`), pas ce bandeau : une fiche en partenariat
+          dont Stripe passe en `past_due` affichait donc « Un paiement n'est
+          pas passé », en rouge, à quelqu'un à qui on ne demande rien. Deux
+          conditions pour un même état, dont une oubliée : c'est le défaut de
+          la règle qui vit à deux endroits.
+
+          ⚠️ ET LE CAS N'EST PAS THÉORIQUE : `cron/billing-relances` ignore les
+          exemptés, mais STRIPE ne sait rien de `billing_exempt`. Un abonnement
+          d'essai laissé ouvert sur une fiche exemptée bascule en `past_due`
+          tout seul, et le bandeau apparaît sans que personne ne l'ait voulu. */}
+      {!exempt && enRetard && (
         <div style={{ ...s.card, background: '#FEF2F2', border: '1px solid #FCA5A5' }}>
           <h2 style={{ ...s.h2, color: '#B91C1C', marginBottom: 8 }}>Un paiement n’est pas passé</h2>
           <p style={{ fontSize: 13, color: '#7F1D1D', lineHeight: 1.6, margin: '0 0 14px' }}>

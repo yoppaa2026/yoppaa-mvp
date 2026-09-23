@@ -86,6 +86,7 @@
     "mutations:avis-signal": "node scripts/mutations-signalement-avis.mjs",
     "controle:tva": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-tva-stripe.mjs",
     "produits:stripe": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/creer-produits-stripe.mjs",
+    "demo:gratuites": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/fiches-demo-gratuites.mjs",
     "controle:prices": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-prices-stripe.mjs",
     "controle:abonnements": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-abonnements-manquants.mjs",
     "mutations:forfaits": "node scripts/mutations-forfaits-annonces.mjs",

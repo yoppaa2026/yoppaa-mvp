@@ -380,9 +380,9 @@ const MUTATIONS = [
     // cette mutation retire le BADGE et laisse le bandeau. C est exactement ce
     // qu il faut mesurer, et c est ce qui a montre que la garde d origine
     // etait trop faible : elle cherchait le motif, qui survivait dans l autre.
-    de: '            {enRetard && (',
+    de: '            {!isExempt && enRetard && (',
     vers: '            {false && (',
-    garde: 'et son bandeau rouge, distinct du badge' },
+    garde: 'le retard a son propre badge' },
 
   { nom: '🔴 la page ne sait plus ce qu est un retard de paiement',
     fichier: 'app/dashboard/abonnement/page.js',
@@ -636,6 +636,57 @@ const MUTATIONS = [
     de: '>Ta formule actuelle</p>',
     vers: '>Votre formule actuelle</p>',
     garde: 'la page d’abonnement ne vouvoie plus (\\b[Vv]otre\\b)' },
+
+
+  // ─── 22/09 : LE ROUGE CHEZ QUELQU UN A QUI ON NE DEMANDE RIEN ───────────
+  //
+  // 🔴 `cron/billing-relances` ignore les fiches en partenariat, mais STRIPE ne
+  // sait rien de `billing_exempt` : un abonnement d essai laisse ouvert sur une
+  // de ces fiches bascule en `past_due` tout seul. La regle vivait a TROIS
+  // endroits et deux l ignoraient.
+  { nom: '🔴 le bandeau de retard revient chez un exempte (Mon compte)',
+    de: '      {!exempt && enRetard && (',
+    vers: '      {enRetard && (',
+    garde: 'le bandeau de retard ne s’affiche pas chez un exempté' },
+
+  { nom: '🔴 le badge de retard revient chez un exempte (page abonnement)',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '            {!isExempt && enRetard && (',
+    vers: '            {enRetard && (',
+    garde: 'et aucun des deux ne s’affiche chez un exempté' },
+
+  { nom: '🔴 le bandeau de retard revient chez un exempte (page abonnement)',
+    fichier: 'app/dashboard/abonnement/page.js',
+    de: '              {!isExempt && enRetard && (',
+    vers: '              {enRetard && (',
+    garde: 'et son bandeau rouge, distinct du badge' },
+
+
+  // ─── 22/09 : LE WEBHOOK RETROGRADAIT UN EXEMPTE ─────────────────────────
+  //
+  // 🔴 TROUVE EN PREPARANT LE SCRIPT QUI ANNULE LES ESSAIS DES SIX FICHES DE
+  // DEMONSTRATION : l annulation declenche `customer.subscription.deleted`, et
+  // ce webhook ecrivait `plan = 'exister'` sans regarder l exemption. Le geste
+  // prevu aurait vide les fiches de leurs fonctions en pleine revue Google.
+  { nom: '🔴 une mise a jour d abonnement retrograde de nouveau un exempte',
+    fichier: 'app/api/stripe/billing/webhook/route.js',
+    de: '  if (!commercant.billing_exempt) {',
+    vers: '  if (true) {',
+    garde: '🔴 une mise à jour d’abonnement ne rétrograde pas un exempté' },
+
+  { nom: '🔴 l annulation retrograde de nouveau un exempte',
+    fichier: 'app/api/stripe/billing/webhook/route.js',
+    de: "  if (!commercant.billing_exempt) updates.plan = 'exister'",
+    vers: "  updates.plan = 'exister'",
+    garde: '🔴 et une annulation non plus' },
+
+  // ⚠️ ET LA COLONNE DISPARAIT DU SELECT : la garde lirait `undefined` et
+  // s ouvrirait au lieu de se fermer. Defaut le plus frequent du depot.
+  { nom: '🔴 l exemption disparait du select du webhook',
+    fichier: 'app/api/stripe/billing/webhook/route.js',
+    de: "    .select('id, plan, stripe_subscription_id, billing_exempt')",
+    vers: "    .select('id, plan, stripe_subscription_id')",
+    garde: 'le select de la mise à jour porte l’exemption' },
 ]
 
 const lancer = () => {

@@ -275,7 +275,12 @@ export default function AbonnementPage() {
                 commerçant lisait « ton paiement a échoué », cliquait, et
                 trouvait un badge vert. Pendant ce temps l'onglet « Mon compte »
                 affichait un bandeau rouge sur le même statut. */}
-            {enRetard && (
+            {/* 🔴 JAMAIS CHEZ UN EXEMPTÉ (22/09). `cron/billing-relances`
+                ignore les fiches en partenariat, mais STRIPE ne sait rien de
+                `billing_exempt` : un abonnement d'essai laissé ouvert sur une
+                de ces fiches bascule en `past_due` tout seul, et ce badge
+                rouge apparaît chez quelqu'un à qui on ne demande rien. */}
+            {!isExempt && enRetard && (
               <span style={{ fontSize: 11, fontWeight: 800, color: '#B91C1C', background: '#FEF2F2', padding: '4px 10px', borderRadius: 100, letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                 Paiement en attente
               </span>
@@ -310,7 +315,10 @@ export default function AbonnementPage() {
               {/* 🔴 LE GESTE, PAS SEULEMENT LE CONSTAT. Un badge rouge qui ne dit
                   pas quoi faire laisse le commerçant chercher. Le bouton qui
                   suit ouvre exactement l'endroit où sa carte se met à jour. */}
-              {enRetard && (
+              {/* ⚠️ ET LUI AUSSI SE TAIT CHEZ UN EXEMPTÉ. Il vivait sous
+                  `hasActiveSub`, qui range `past_due` parmi les actifs : une
+                  fiche en partenariat le voyait donc apparaître. */}
+              {!isExempt && enRetard && (
                 <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '14px 16px', margin: '14px 0' }}>
                   <p style={{ fontSize: 13.5, fontWeight: 800, color: '#B91C1C', margin: '0 0 6px' }}>Ton dernier paiement n’est pas passé</p>
                   <p style={{ fontSize: 13, color: '#7F1D1D', margin: 0, lineHeight: 1.55 }}>

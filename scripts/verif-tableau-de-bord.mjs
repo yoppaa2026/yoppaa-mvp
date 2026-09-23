@@ -852,6 +852,62 @@ const verifie = (nom, cond, detail = '') => {
     /aucune carte ne te sera demandée tant que ton essai court/.test(corpsCompte),
     'il ne saurait ni quand ni où sa carte lui sera demandée')
 
+  // 🔴 ET LE BANDEAU ROUGE SE TAIT CHEZ UN EXEMPTÉ (22/09). Le badge, trois
+  // lignes plus haut, portait déjà `!exempt` ; ce bandeau non. La même règle
+  // vivait à deux endroits dans le même écran, et c'est celui qu'on oublie qui
+  // parle. Stripe ne sait rien de `billing_exempt` : un essai laissé ouvert sur
+  // une fiche en partenariat bascule seul en `past_due`.
+  verifie('le bandeau de retard ne s’affiche pas chez un exempté',
+    /\{!exempt && enRetard && \(/.test(corpsCompte),
+    'une fiche en partenariat lirait « un paiement n’est pas passé » sans qu’on lui demande rien')
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 UN EXEMPTÉ NE CHANGE PAS DE FORFAIT SUR UN ÉVÉNEMENT STRIPE (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // `billing_exempt` veut dire « Yoppaa lui a ouvert cette formule, il ne paie
+  // rien » : son forfait ne dépend d'aucun abonnement. Le webhook, lui,
+  // rétrogradait en `exister` sur le seul statut Stripe. Un vieil essai qui
+  // s'éteint suffisait donc à retirer Vendre à un partenaire, sans que
+  // personne ne l'ait décidé et sans un mot à l'écran.
+  //
+  // 🔴 TROUVÉ EN PRÉPARANT LE SCRIPT QUI ANNULE CES ESSAIS : il aurait
+  // déclenché ce webhook sur les six fiches de démonstration, en pleine revue
+  // Google. C'est le geste prévu qui a révélé le piège, pas une relecture.
+  {
+    const hook = readFileSync(new URL('../app/api/stripe/billing/webhook/route.js', import.meta.url), 'utf8')
+
+    // ⚠️ LA COLONNE D'ABORD : sans elle au `select`, la garde lit `undefined`
+    // et laisse tout passer. C'est le défaut le plus fréquent du dépôt.
+    //
+    // 🔴 ET ON VISE LES DEUX SELECTS, PAS LE FICHIER. Première version : elle
+    // comptait les occurrences de `billing_exempt` et en exigeait quatre. Le
+    // harnais l'a laissée VERTE en retirant la colonne d'un select, parce que
+    // les commentaires qui expliquent la règle contiennent le mot. Compter un
+    // mot dans un fichier, c'est se compter soi-même.
+    for (const [quoi, motif] of [
+      ['la mise à jour', /\.select\('id, plan, stripe_subscription_id, billing_exempt'\)/],
+      ['l’annulation', /\.select\('id, billing_exempt'\)/],
+    ]) {
+      verifie(`le select de ${quoi} porte l’exemption`, motif.test(hook),
+        'la garde lirait `undefined` et s’ouvrirait au lieu de se fermer')
+    }
+
+    verifie('🔴 une mise à jour d’abonnement ne rétrograde pas un exempté',
+      /if \(!commercant\.billing_exempt\) \{/.test(hook),
+      'un partenaire perdrait sa formule quand son abonnement Stripe change de statut')
+
+    verifie('🔴 et une annulation non plus',
+      /if \(!commercant\.billing_exempt\) updates\.plan = 'exister'/.test(hook),
+      'annuler un vieil essai retirerait Vendre à une fiche ouverte par Yoppaa, dans la seconde')
+
+    // ⚠️ ET LE MIROIR CONTINUE DE SUIVRE STRIPE. On refuse de changer le
+    // DROIT, pas de savoir : statut et dates restent à jour dans les deux cas.
+    verifie('mais le statut reste le miroir de Stripe',
+      /subscription_status: 'canceled',/.test(hook),
+      'on ne saurait plus ce que Stripe pense de cet abonnement')
+  }
+
   // ═════════════════════════════════════════════════════════════════════════
   // 🔴 LA DÉGUSTATION EXISTE DANS CET ÉCRAN, ET AVEC LA DATE DE CELUI QUI LIT
   // ═════════════════════════════════════════════════════════════════════════
@@ -1048,12 +1104,27 @@ const verifie = (nom, cond, detail = '') => {
   // badge en tête de carte et le bandeau qui porte le geste. Une seule garde
   // sur le motif laissait retirer l'un des deux en silence, et c'est ce que le
   // harnais a montré.
+  // 🔴 ET LES DEUX SE TAISENT CHEZ UN EXEMPTÉ (22/09). `cron/billing-relances`
+  // ignore les fiches en partenariat, mais STRIPE ne sait rien de
+  // `billing_exempt` : un abonnement d'essai laissé ouvert sur l'une d'elles
+  // bascule en `past_due` tout seul, et le rouge apparaît chez quelqu'un à qui
+  // on ne demande rien. Le badge de tête le savait déjà, pas les deux autres :
+  // la même règle vivait à trois endroits, et deux l'ignoraient.
+  // ⚠️ ON REMONTE DEPUIS LE LIBELLÉ, comme pour le badge vert. Chercher le
+  // motif dans tout le fichier le trouvait dans le BANDEAU : la garde restait
+  // verte alors que le badge avait disparu, et le harnais l'a montré.
+  const iAttente = abo.indexOf('Paiement en attente')
+  const ouvertureRetard = iAttente < 0 ? '' : (abo.slice(Math.max(0, iAttente - 500), iAttente)
+    .split('\n').reverse().find(l => /&& \(/.test(l)) || '')
   verifie('le retard a son propre badge',
-    /\{enRetard && \(/.test(abo),
-    'le statut est connu mais rien ne le montre')
+    /\{!isExempt && enRetard && \(/.test(ouvertureRetard),
+    `le statut est connu mais rien ne le montre, ou il crie chez un exempté · ${ouvertureRetard.trim().slice(0, 60)}`)
   verifie('et son bandeau rouge, distinct du badge',
-    (abo.match(/\{enRetard && \(/g) || []).length >= 2,
+    (abo.match(/\{!isExempt && enRetard && \(/g) || []).length >= 2,
     'il ne resterait que la pastille, sans le bloc qui explique et qui agit')
+  verifie('et aucun des deux ne s’affiche chez un exempté',
+    !/\{enRetard && \(/.test(abo),
+    'une fiche en partenariat verrait « paiement en attente » sans qu’on lui demande rien')
 
   // 🔴 LE GESTE, PAS SEULEMENT LE CONSTAT. Un badge rouge qui ne dit pas quoi
   // faire laisse chercher. Le mail promet « Mettre à jour mes informations de

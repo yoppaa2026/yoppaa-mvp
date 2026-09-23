@@ -264,9 +264,12 @@ async function handleSubscriptionUpsert(subscription, supabase) {
     return
   }
 
+  // ⚠️ `billing_exempt` EST LU ICI PARCE QU'IL DÉCIDE PLUS BAS. Le défaut
+  // « colonne absente du select » est le plus fréquent du dépôt : sans elle,
+  // la garde du forfait lirait `undefined` et laisserait passer.
   const { data: commercant, error: errFetch } = await supabase
     .from('commercants')
-    .select('id, plan, stripe_subscription_id')
+    .select('id, plan, stripe_subscription_id, billing_exempt')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
 
@@ -290,14 +293,25 @@ async function handleSubscriptionUpsert(subscription, supabase) {
     subscription_canceled_at:         tsToIso(subscription.canceled_at),
   }
 
-  // Bascule plan si subscription active ou en trial
-  if (['active', 'trialing'].includes(subscription.status) && targetPlan) {
-    updates.plan = targetPlan
-  }
+  // 🔴 UN COMMERÇANT EXEMPTÉ NE CHANGE PAS DE FORFAIT SUR UN ÉVÉNEMENT STRIPE
+  // (22/09). `billing_exempt` veut dire « Yoppaa lui a ouvert cette formule, il
+  // ne paie rien » : son forfait ne dépend d'aucun abonnement. Or ces deux
+  // lignes rétrogradaient sur le seul statut Stripe, donc un vieil essai qui
+  // s'éteint chez Stripe suffisait à retirer Vendre à un partenaire, sans que
+  // personne ne l'ait décidé et sans un mot.
+  //
+  // ⚠️ LE MIROIR, LUI, RESTE À JOUR : statut, dates, identifiant d'abonnement
+  // continuent de suivre Stripe. On refuse de changer le DROIT, pas de savoir.
+  if (!commercant.billing_exempt) {
+    // Bascule plan si subscription active ou en trial
+    if (['active', 'trialing'].includes(subscription.status) && targetPlan) {
+      updates.plan = targetPlan
+    }
 
-  // Sub annulée/expirée → rebascule vers exister
-  if (['canceled', 'incomplete_expired'].includes(subscription.status)) {
-    updates.plan = 'exister'
+    // Sub annulée/expirée → rebascule vers exister
+    if (['canceled', 'incomplete_expired'].includes(subscription.status)) {
+      updates.plan = 'exister'
+    }
   }
 
   const { error } = await supabase
@@ -319,7 +333,7 @@ async function handleSubscriptionDeleted(subscription, supabase) {
   const customerId = subscription.customer
   const { data: commercant } = await supabase
     .from('commercants')
-    .select('id')
+    .select('id, billing_exempt')
     .eq('stripe_customer_id', customerId)
     .maybeSingle()
   if (!commercant) {
@@ -327,13 +341,19 @@ async function handleSubscriptionDeleted(subscription, supabase) {
     return
   }
 
+  // 🔴 ET ICI AUSSI, POUR LA MÊME RAISON (22/09). C'est LA porte par laquelle
+  // le défaut serait passé : annuler l'abonnement d'essai d'une fiche ouverte
+  // par Yoppaa lui aurait retiré Vendre dans la seconde, par ce webhook, sans
+  // que rien à l'écran ne l'explique.
+  const updates = {
+    subscription_status: 'canceled',
+    subscription_canceled_at: tsToIso(subscription.canceled_at) || new Date().toISOString(),
+  }
+  if (!commercant.billing_exempt) updates.plan = 'exister'
+
   const { error } = await supabase
     .from('commercants')
-    .update({
-      plan: 'exister',
-      subscription_status: 'canceled',
-      subscription_canceled_at: tsToIso(subscription.canceled_at) || new Date().toISOString(),
-    })
+    .update(updates)
     .eq('id', commercant.id)
 
   if (error) throw error

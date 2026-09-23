@@ -687,6 +687,28 @@ const MUTATIONS = [
     de: "    .select('id, plan, stripe_subscription_id, billing_exempt')",
     vers: "    .select('id, plan, stripe_subscription_id')",
     garde: 'le select de la mise à jour porte l’exemption' },
+
+
+  // ─── 22/09 : UNE FORMULE OUVERTE PAR YOPPAA DIT JUSQU A QUAND ───────────
+  //
+  // Alex : « Bistrologue et Arrosoir, l essai doit porter jusqu au 8 janvier ».
+  // « Rien ne t est facture aujourd hui » est vrai et se lit « pas encore ».
+  { nom: '🔴 la formule ouverte par Yoppaa ne dit plus jusqu a quand',
+    de: 'au moins jusqu’au {libelleDernierJourGratuit()} inclus',
+    vers: 'sans date de fin connue',
+    garde: 'la formule ouverte par Yoppaa dit jusqu’à quand elle est offerte' },
+
+  // 🔴 ET LA DATE RECOPIEE A LA MAIN, qui deviendrait fausse en silence le jour
+  // ou la regle bouge. Quatre listes de forfaits ont deja diverge ici.
+  { nom: '🔴 la date d essai est recopiee a la main au lieu de venir du module',
+    de: 'au moins jusqu’au {libelleDernierJourGratuit()} inclus',
+    vers: 'au moins jusqu’au 8 janvier 2027 inclus',
+    garde: 'et cette date n’est pas écrite à la main' },
+
+  { nom: '⚠️ la promesse survit au regime de lancement qui la justifie',
+    de: '            {estRegimeLancement() && (',
+    vers: '            {true && (',
+    garde: 'et elle ne s’affiche que pendant le régime de lancement' },
 ]
 
 const lancer = () => {

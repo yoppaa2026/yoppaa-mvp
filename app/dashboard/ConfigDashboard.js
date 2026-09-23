@@ -28,7 +28,7 @@ import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from 
 import { euros } from '@/lib/montants'
 import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
-import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit } from '@/lib/lancement'
+import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
@@ -13710,7 +13710,27 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
           <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: 0 }}>
             Tu as toutes les fonctions de <strong style={{ color: T.ink }}>{getPlanLabel(plan)}</strong>, et
             <strong style={{ color: T.ink }}> rien ne t’est facturé aujourd’hui</strong> : aucun abonnement n’est
-            en cours et aucune carte ne t’est demandée. Le jour où ça changera, on te préviendra avant,
+            en cours et aucune carte ne t’est demandée.{' '}
+            {/* 🔴 LA DATE, DEMANDÉE PAR ALEX LE 22/09 : « Bistrologue et Arrosoir,
+                l'essai doit porter jusqu'au 8 janvier ». Sans elle, la phrase
+                était vraie et rassurait sur AUJOURD'HUI seulement : « rien ne
+                t'est facturé » se lit comme « pas encore », et c'est la
+                question qu'un commerçant se pose le soir.
+
+                ⚠️ « AU MOINS », ET CE MOT EST PESÉ. Ces fiches n'ont AUCUN
+                abonnement chez Stripe : rien n'est programmé le 9 janvier non
+                plus. Écrire « offert jusqu'au 8 janvier » tout court
+                annoncerait une facture le lendemain, qui n'existe pas.
+
+                ⚠️ ET LA DATE VIENT DU MODULE, jamais d'un texte. Quatre listes
+                de forfaits ont déjà divergé dans ce dépôt ; une date d'essai
+                recopiée à la main serait la même erreur. Hors régime de
+                lancement, la phrase disparaît d'elle-même. */}
+            {estRegimeLancement() && (
+              <>C’est offert <strong style={{ color: T.ink }}>au moins jusqu’au {libelleDernierJourGratuit()} inclus</strong>,
+              comme pour tous ceux qui nous rejoignent au lancement.{' '}</>
+            )}
+            Le jour où ça changera, on te préviendra avant,
             et c’est toi qui décideras. Une question ? Écris-nous à{' '}
             <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
           </p>

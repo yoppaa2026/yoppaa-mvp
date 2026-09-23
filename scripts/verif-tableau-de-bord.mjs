@@ -862,6 +862,35 @@ const verifie = (nom, cond, detail = '') => {
     'une fiche en partenariat lirait « un paiement n’est pas passé » sans qu’on lui demande rien')
 
   // ═════════════════════════════════════════════════════════════════════════
+  // 🔴 UNE FORMULE OUVERTE PAR YOPPAA DIT JUSQU'À QUAND (22/09)
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Alex : « Bistrologue et Arrosoir, l'essai doit porter jusqu'au 8 janvier ».
+  // Le bloc disait « rien ne t'est facturé aujourd'hui », ce qui est vrai et
+  // rassure sur le jour même : « pas encore » est exactement ce qu'un
+  // commerçant y lit le soir.
+  //
+  // ⚠️ « AU MOINS », ET CE MOT EST PESÉ : ces fiches n'ont aucun abonnement
+  // chez Stripe, donc rien n'est programmé le 9 janvier non plus. Une date
+  // sèche annoncerait une facture qui n'existe pas.
+  verifie('la formule ouverte par Yoppaa dit jusqu’à quand elle est offerte',
+    /au moins jusqu’au \{libelleDernierJourGratuit\(\)\} inclus/.test(corpsCompte),
+    '« rien ne t’est facturé aujourd’hui » se lit « pas encore », et la date manque')
+
+  // 🔴 ET LA DATE VIENT DU MODULE, JAMAIS D'UN TEXTE. Quatre listes de
+  // forfaits ont déjà divergé dans ce dépôt : une date recopiée à la main
+  // deviendrait fausse le jour où la règle bouge, en silence.
+  verifie('et cette date n’est pas écrite à la main',
+    !/jusqu’au 8 janvier 2027/.test(corpsCompte),
+    'la date vivrait à deux endroits, et celle du texte ne suivrait pas la règle')
+
+  // ⚠️ ET ELLE DISPARAÎT HORS RÉGIME DE LANCEMENT, sinon l'écran promettrait en
+  // février une date de janvier.
+  verifie('et elle ne s’affiche que pendant le régime de lancement',
+    /\{estRegimeLancement\(\) && \(/.test(corpsCompte),
+    'la promesse survivrait à la période qui la justifie')
+
+  // ═════════════════════════════════════════════════════════════════════════
   // 🔴 UN EXEMPTÉ NE CHANGE PAS DE FORFAIT SUR UN ÉVÉNEMENT STRIPE (22/09)
   // ═════════════════════════════════════════════════════════════════════════
   //

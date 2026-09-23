@@ -9,7 +9,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createCustomerPortalSession } from '@/lib/stripe-billing'
+import { createCustomerPortalSession, synchroniserEmailCustomer } from '@/lib/stripe-billing'
 import { gardeCommercant } from '@/lib/api-auth'
 
 // 🔴 LA GARDE VIENT DU POINT CENTRAL (22/09). Cette route portait sa PROPRE
@@ -51,7 +51,12 @@ export async function POST(req) {
     // besoin. La garde a déjà refusé si elle n'existe pas.
     const { data: commercant, error: errFetch } = await supabase
       .from('commercants')
-      .select('id, stripe_customer_id, nom')
+      // ⚠️ `email` EST DANS CE SELECT POUR LA SYNCHRO PLUS BAS. La colonne
+      // absente d'un select est le défaut le plus fréquent de ce dépôt, et il
+      // serait MUET ici : `commercant.email` vaudrait `undefined`, la synchro
+      // rendrait « sans objet », et le portail afficherait l'ancienne adresse
+      // sans que rien ne rougisse.
+      .select('id, stripe_customer_id, nom, email')
       .eq('id', commercantId)
       .maybeSingle()
     if (errFetch || !commercant) {
@@ -93,6 +98,14 @@ export async function POST(req) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.yoppaa.app'
     const returnUrl = `${appUrl}${chemin}`
+
+    // 🔴 LE DERNIER MOMENT OÙ L'ON PEUT RATTRAPER L'EMAIL AVANT QU'IL LE VOIE.
+    // Le portail affiche ses factures et son adresse de facturation : s'il a
+    // changé son email de connexion, c'est ici qu'il découvrirait l'ancienne.
+    // ⚠️ ELLE NE PEUT PAS FAIRE ÉCHOUER L'OUVERTURE : la fonction capture tout
+    // et rend un état. Un portail qui refuse de s'ouvrir pour une question
+    // d'adresse email serait pire que l'adresse périmée.
+    await synchroniserEmailCustomer(commercant)
 
     const session = await createCustomerPortalSession({ commercant, returnUrl })
 

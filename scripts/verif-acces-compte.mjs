@@ -27,6 +27,9 @@ import { readFileSync } from 'node:fs'
 import {
   messageAuth, emailPlausible, memeEmail, mdpAssezLong, longueurMdp, MDP_MIN,
 } from '../lib/messages-auth.js'
+// ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE, pas pour être lue. Les cas mesurés plus bas
+// sortent tous avant le moindre appel réseau.
+import { synchroniserEmailCustomer } from '../lib/stripe-billing.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -279,6 +282,91 @@ function sansCommentaires(src) {
   verifier('et elle s\'annule si la vue publique ne répond plus',
     /IF vue LIKE 'ECHEC%' THEN/.test(rev),
     'sans ce test, une migration qui vient d\'éteindre les fiches publiques le confirme')
+}
+
+// ═══ 5. STRIPE GARDE SA PROPRE COPIE DE L'EMAIL ══════════════════════════
+//
+// 🔴 LE DÉFAUT TROUVÉ LE 23/09, SUR UNE QUESTION D'ALEX : « ça bascule bien
+// l'identifiant ET l'adresse des communications ? ». Oui pour Yoppaa, NON pour
+// Stripe. Le Customer était créé avec l'email et plus rien ne remontait, et
+// `customers.update` poussait le nom et l'adresse en laissant l'email derrière.
+// C'est le frère exact du défaut du 22/09, sur le même document : la facture.
+{
+  const bs = lire('lib/stripe-billing.js')
+
+  // ⚠️ ON EXÉCUTE CE QUI PEUT L'ÊTRE SANS TOUCHER AU RÉSEAU. Les cas ci-dessous
+  // sortent tous AVANT le moindre appel à Stripe : ce sont de vraies mesures,
+  // pas une lecture de code.
+  verifier('sans dossier, la synchro ne fait rien', await synchroniserEmailCustomer(null) === 'sans objet')
+  verifier('sans Customer Stripe, la synchro ne fait rien',
+    await synchroniserEmailCustomer({ id: 'x', email: 'a@b.be' }) === 'sans objet')
+  verifier('sans email au dossier, la synchro ne fait rien',
+    await synchroniserEmailCustomer({ id: 'x', stripe_customer_id: 'cus_1' }) === 'sans objet')
+
+  // 🔴 LA MÊME ADRESSE NE DÉCLENCHE AUCUN APPEL. Sans cette comparaison, chaque
+  // ouverture de portail et chaque achat écriraient chez Stripe pour rien.
+  verifier('un email identique est reconnu, et rien n’est poussé',
+    await synchroniserEmailCustomer(
+      { id: 'x', stripe_customer_id: 'cus_1', email: 'alex@yoppaa.app' },
+      { id: 'cus_1', email: 'ALEX@Yoppaa.app' },
+    ) === 'à jour',
+    'la casse suffisait à déclencher une écriture inutile')
+
+  verifier('un Customer supprimé chez Stripe ne fait rien',
+    await synchroniserEmailCustomer(
+      { id: 'x', stripe_customer_id: 'cus_1', email: 'alex@yoppaa.app' },
+      { id: 'cus_1', deleted: true, email: 'autre@yoppaa.app' },
+    ) === 'sans objet')
+
+  // 🔴 ELLE NE LÈVE JAMAIS : elle est branchée sur le chemin d'un paiement.
+  // ⚠️ CE CAS N'EST MESURABLE QUE SANS CLÉ STRIPE, sinon il partirait pour de
+  // vrai sur le réseau depuis un banc. On le dit plutôt que de le simuler.
+  if (!process.env.STRIPE_SECRET_KEY) {
+    const etat = await synchroniserEmailCustomer(
+      { id: 'x', stripe_customer_id: 'cus_1', email: 'neuf@yoppaa.app' },
+      { id: 'cus_1', email: 'ancien@yoppaa.app' },
+    )
+    verifier('Stripe injoignable ne fait pas échouer l’appelant, il rend « en retard »',
+      etat === 'en retard', `rendu : ${etat}`)
+  } else {
+    console.log('  ⓘ cas « Stripe injoignable » non mesuré : une clé Stripe est présente, et ce banc ne part pas sur le réseau.')
+  }
+
+  // Le branchement, visé à l'endroit.
+  const fonction = bs.slice(bs.indexOf('export async function getOrCreateStripeCustomer'),
+                            bs.indexOf('export async function createCheckoutSession'))
+  verifier('le passage obligé des achats rattrape l’email au retour du Customer',
+    /await synchroniserEmailCustomer\(commercant, customer\)/.test(fonction),
+    'un commerçant qui change son email puis achète garderait l’ancienne chez Stripe')
+
+  const fact = sansCommentaires(lire('app/api/dashboard/facturation/route.js'))
+  verifier('la route de facturation pousse enfin l’email chez Stripe',
+    /email: commercant\.email \|\| undefined/.test(fact),
+    'le nom et l’adresse remontent, l’email reste en arrière : c’est le défaut du 22/09')
+  // ⚠️ `null` EFFACERAIT l'email du Customer ; Stripe ignore `undefined`.
+  verifier('et elle ne risque pas d’effacer l’email chez Stripe',
+    !/email: commercant\.email \|\| null/.test(fact))
+
+  const portail = lire('app/api/stripe/billing/portal/route.js')
+  verifier('le portail pousse l’email avant de s’ouvrir',
+    /await synchroniserEmailCustomer\(commercant\)/.test(sansCommentaires(portail)))
+  // 🔴 LE DÉFAUT LE PLUS FRÉQUENT DE CE DÉPÔT, ET IL SERAIT MUET ICI :
+  // `commercant.email` vaudrait `undefined` et la synchro rendrait « sans
+  // objet » sans que rien ne rougisse.
+  verifier('et la colonne email est bien dans son select',
+    /\.select\('id, stripe_customer_id, nom, email'\)/.test(portail),
+    'sans la colonne, la synchro du portail ne fait rien, en silence')
+
+  // La phrase sur le compte Connect, qui lui n'est PAS synchronisé.
+  const brutBloc = lire('app/dashboard/ConfigDashboard.js')
+  const blocAcces = sansCommentaires(brutBloc.slice(brutBloc.indexOf('function BlocAcces('),
+                                                   brutBloc.indexOf('function TabMonCompte(')))
+  verifier('l’écran dit que le compte Stripe garde sa propre adresse',
+    /Ton compte Stripe garde sa propre adresse/.test(blocAcces),
+    'sans cette phrase, il croit que son compte Stripe a suivi')
+  verifier('et cette phrase ne s’affiche qu’à qui a un compte Stripe',
+    /commercant\?\.stripe_account_id &&/.test(blocAcces),
+    'du bruit sur l’écran de celui qui n’encaisse pas encore')
 }
 
 console.log(`\nAccès au compte : ${ok} vérifications`)

@@ -33,6 +33,9 @@ const MODULE = 'app/dashboard/ConfigDashboard.js'
 const TRAD = 'lib/messages-auth.js'
 const SQL_EMAIL = 'migrations/MIGRATION_SYNC_EMAIL_COMMERCANT.sql'
 const SQL_REVOKE = 'migrations/MIGRATION_REVOQUER_ANON_COMMERCANTS_SIGNALEMENTS.sql'
+const BILLING = 'lib/stripe-billing.js'
+const FACTURATION = 'app/api/dashboard/facturation/route.js'
+const PORTAIL = 'app/api/stripe/billing/portal/route.js'
 
 const MUTATIONS = [
   // ═══ LE COMPORTEMENT : LA TRADUCTION DES REFUS ═════════════════════════
@@ -243,6 +246,81 @@ const MUTATIONS = [
     de: 'SET LOCAL ROLE anon;',
     vers: 'SET LOCAL ROLE postgres;',
     garde: 'elle essaie pour de vrai, dans la peau d’anon' },
+
+  // ═══ 23/09 : STRIPE GARDE SA PROPRE COPIE DE L EMAIL ═══════════════════
+  //
+  // 🔴 TROUVE SUR UNE QUESTION D ALEX. Le Customer etait cree avec l email et
+  // plus rien ne remontait ; `customers.update` poussait le nom et l adresse en
+  // laissant l email derriere. Frere exact du defaut du 22/09, meme document.
+  { nom: '⚠️ la synchro redemande le Customer alors qu elle l a deja en main',
+    fichier: BILLING,
+    de: 'let customer = customerConnu',
+    vers: 'let customer = null',
+    garde: 'un email identique est reconnu, et rien n’est poussé' },
+
+  { nom: '🔴 la comparaison des emails redevient sensible a la casse',
+    fichier: BILLING,
+    de: "if (memeEmail(customer.email, commercant.email)) return 'à jour'",
+    vers: "if (customer.email === commercant.email) return 'à jour'",
+    garde: 'un email identique est reconnu, et rien n’est poussé' },
+
+  { nom: '⚠️ un Customer supprime chez Stripe est traite comme vivant',
+    fichier: BILLING,
+    de: "if (!customer || customer.deleted) return 'sans objet'",
+    vers: "if (!customer) return 'sans objet'",
+    garde: 'un Customer supprimé chez Stripe ne fait rien' },
+
+  // 🔴 ELLE EST BRANCHEE SUR LE CHEMIN D UN PAIEMENT : annoncer « a jour »
+  // quand Stripe n a pas repondu recreerait le silence qu on vient de fermer.
+  { nom: '🔴 un echec Stripe passe pour une reussite',
+    fichier: BILLING,
+    de: "    return 'en retard'",
+    vers: "    return 'à jour'",
+    garde: 'Stripe injoignable ne fait pas échouer l’appelant, il rend « en retard »' },
+
+  { nom: '🔴 le passage oblige des achats cesse de rattraper l email',
+    fichier: BILLING,
+    de: 'await synchroniserEmailCustomer(commercant, customer)',
+    vers: 'await Promise.resolve()',
+    garde: 'le passage obligé des achats rattrape l’email au retour du Customer' },
+
+  { nom: '🔴 la route de facturation reoublie l email, comme le 22/09',
+    fichier: FACTURATION,
+    de: 'email: commercant.email || undefined,',
+    vers: 'phone: commercant.telephone || undefined,',
+    garde: 'la route de facturation pousse enfin l’email chez Stripe' },
+
+  // 🔴 `null` N EST PAS `undefined` CHEZ STRIPE : le premier EFFACE le champ.
+  { nom: '🔴 la route de facturation efface l email du Customer',
+    fichier: FACTURATION,
+    de: 'email: commercant.email || undefined,',
+    vers: 'email: commercant.email || null,',
+    garde: 'et elle ne risque pas d’effacer l’email chez Stripe' },
+
+  { nom: '🔴 le portail s ouvre sans pousser l email',
+    fichier: PORTAIL,
+    de: 'await synchroniserEmailCustomer(commercant)',
+    vers: 'await Promise.resolve()',
+    garde: 'le portail pousse l’email avant de s’ouvrir' },
+
+  // 🔴 LE DEFAUT LE PLUS FREQUENT DE CE DEPOT, ET LE PLUS MUET : sans la
+  // colonne, `commercant.email` vaut `undefined`, la synchro rend « sans
+  // objet », et personne ne le saurait jamais.
+  { nom: '🔴 la colonne email disparait du select du portail',
+    fichier: PORTAIL,
+    de: ".select('id, stripe_customer_id, nom, email')",
+    vers: ".select('id, stripe_customer_id, nom')",
+    garde: 'et la colonne email est bien dans son select' },
+
+  { nom: '⚠️ l ecran ne previent plus que le compte Stripe ne suit pas',
+    de: 'Ton compte Stripe garde sa propre adresse.',
+    vers: 'Tout est synchronise.',
+    garde: 'l’écran dit que le compte Stripe garde sa propre adresse' },
+
+  { nom: '⚠️ l avertissement Stripe s affiche meme a qui n encaisse pas',
+    de: 'commercant?.stripe_account_id && (',
+    vers: 'true && (',
+    garde: 'et cette phrase ne s’affiche qu’à qui a un compte Stripe' },
 ]
 
 // 🔴 LE HARNAIS A FAILLI MENTIR SUR SES PROPRES MESURES. Au premier passage,

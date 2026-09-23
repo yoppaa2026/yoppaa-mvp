@@ -13681,6 +13681,26 @@ function BlocAcces({ commercant, toast }) {
           style={{ ...s.btn, ...s.btnPrimary, marginTop: 14, width: '100%', opacity: (envoiEmail || !nouvelEmail.trim()) ? 0.6 : 1 }}>
           {envoiEmail ? 'Envoi…' : 'Envoyer les deux liens de confirmation'}
         </button>
+
+        {/* 🔴 LE SEUL CANAL QUI NE SUIT PAS, ET IL FAUT LE DIRE. Son compte
+            Stripe a sa propre adresse : c'est SON compte chez Stripe, pas une
+            copie que Yoppaa tient à jour, et Stripe s'en sert pour le prévenir
+            de ses virements. L'écraser depuis ici serait décider à sa place sur
+            un compte qui ne nous appartient pas. Se taire, en revanche, lui
+            ferait croire que tout a basculé.
+            ⚠️ AFFICHÉE SEULEMENT S'IL A UN COMPTE : pour celui qui n'encaisse
+            pas encore, cette phrase ne serait que du bruit sur un écran qui
+            parle déjà d'argent. La colonne arrive par le `select('*')` du
+            chargement ; la restreindre un jour ferait disparaître cet
+            avertissement sans bruit. */}
+        {commercant?.stripe_account_id && (
+          <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6, margin: '14px 0 0' }}>
+            <strong style={{ color: T.ink }}>Ton compte Stripe garde sa propre adresse.</strong> C&rsquo;est
+            celle qui te prévient de tes virements, et elle ne change pas d&rsquo;ici : tu la
+            modifies depuis ton tableau de bord Stripe, auquel tu accèdes par l&rsquo;onglet
+            Paiements.
+          </p>
+        )}
       </div>
 
       <div style={s.card}>

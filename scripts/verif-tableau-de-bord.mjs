@@ -1366,7 +1366,17 @@ const verifie = (nom, cond, detail = '') => {
   }
 
   const iFact = code.indexOf('function BlocFacturation')
-  const iFinFact = code.indexOf('function TabMonCompte')
+  // 🔴 LA TRANCHE S'ARRÊTE À LA FONCTION SUIVANTE, QUELLE QU'ELLE SOIT.
+  // Elle allait jusqu'à `TabMonCompte`, donc elle a grossi de deux fonctions le
+  // jour où `Ligne` et `BlocAcces` se sont posées entre les deux. La garde
+  // « le bloc ne s'affiche pas sans dossier » a alors trouvé la ligne du filet
+  // chez le VOISIN et est restée verte pendant que la mutation la retirait de
+  // `BlocFacturation` : 84/84 est passé à 83/84, et c'est la seule chose qui
+  // l'a dit. Une borne nommée en dur vieillit à chaque insertion ; celle-ci se
+  // recale toute seule.
+  const apresFact = code.slice(iFact + 1)
+  const suivante = apresFact.match(/\nfunction \w+\s*\(/)
+  const iFinFact = suivante ? iFact + 1 + suivante.index : code.indexOf('function TabMonCompte')
   verifie('le bloc de facturation est là où on le cherche',
     iFact >= 0 && iFinFact > iFact,
     'BlocFacturation a été renommé : les gardes suivantes ne mesurent plus rien')

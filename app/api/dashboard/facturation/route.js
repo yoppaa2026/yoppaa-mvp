@@ -152,6 +152,15 @@ export async function POST(request) {
         await stripe.customers.update(commercant.stripe_customer_id, {
           name: nomNet,
           address: { line1: adresseNette, country: 'BE' },
+          // 🔴 L'EMAIL AVAIT ÉTÉ OUBLIÉ ICI (trouvé le 23/09, sur une question
+          // d'Alex). Cette route a été écrite le 22/09 pour réparer une adresse
+          // postale qui restait fausse sur les factures ; elle a poussé le nom
+          // et l'adresse, et laissé l'email derrière. Tant que personne ne
+          // pouvait changer son email, ça ne se voyait pas. Depuis qu'il le
+          // peut, c'est le même défaut, sur le même document.
+          // ⚠️ `undefined` ET PAS `null` : Stripe ignore un champ absent, mais
+          // `null` EFFACERAIT l'email du Customer.
+          email: commercant.email || undefined,
           metadata: {
             yoppaa_commercant_id: String(commercantId),
             ...(commercant.bce ? { yoppaa_bce: commercant.bce } : {}),

@@ -13614,7 +13614,22 @@ function BlocAcces({ commercant, toast }) {
       toast('C’est déjà ton adresse de connexion.', 'error'); return
     }
     setEnvoiEmail(true)
-    const { error } = await supabase.auth.updateUser({ email: cible })
+    // 🔴 `emailRedirectTo` N'EST PAS UNE OPTION, C'EST LA CONVENTION DU DÉPÔT.
+    // Le gabarit Supabase compose son lien ainsi : `{{ .RedirectTo }}&token_hash=…`.
+    // Les cinq autres appels du projet (inscription, connexion, lien magique,
+    // parcours Yopper) passent tous une adresse qui contient DÉJÀ un `?`, donc
+    // le `&` du gabarit tombe juste. Celui-ci n'en passait aucune : `.RedirectTo`
+    // retombait sur le Site URL, `https://yoppaa.app/`, et le lien devenait
+    // `https://yoppaa.app/&token_hash=…`. Next cherchait une page nommée
+    // `&token_hash=…` et rendait un 404. Alex l'a vu en essayant, le 23/09.
+    // ⚠️ LE GABARIT N'A JAMAIS ÉTÉ EN CAUSE, et il ne faut pas y toucher : le
+    // corriger pour ce cas casserait les cinq autres.
+    // ⚠️ LE `?next=` NE SERT PAS À NAVIGUER, il sert à ce qu'il y ait un `?`
+    // avant le `&` du gabarit. Le retirer suffirait à tout recasser.
+    const { error } = await supabase.auth.updateUser(
+      { email: cible },
+      { emailRedirectTo: `${window.location.origin}/auth/email-change?next=/dashboard` },
+    )
     setEnvoiEmail(false)
     if (error) { toast(messageAuth(error), 'error'); return }
     setEnAttente(cible)

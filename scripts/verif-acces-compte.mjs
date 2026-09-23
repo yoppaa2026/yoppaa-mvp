@@ -173,7 +173,13 @@ function sansCommentaires(src) {
     'aucun appel à reauthenticate : le code envoyé par email ne peut pas exister')
 
   // 🔴 L'ÉCRAN NE DIT JAMAIS QUE L'EMAIL EST CHANGÉ.
-  const succesEmail = bloc.slice(bloc.indexOf('updateUser({ email'), bloc.indexOf('async function demanderCode'))
+  // ⚠️ LA TRANCHE SE DÉCOUPE SUR LA FONCTION, PAS SUR L'APPEL. Elle partait de
+  // `updateUser({ email`, et le jour où cet appel est passé sur trois lignes
+  // pour recevoir `emailRedirectTo`, `indexOf` a rendu -1 : la tranche est
+  // devenue absurde et la garde a rougi sans qu'aucune régression n'existe.
+  // Une ancre posée sur une ligne qu'on va modifier ne mesure rien longtemps.
+  const succesEmail = bloc.slice(bloc.indexOf('async function demanderChangementEmail'),
+                                 bloc.indexOf('async function demanderCode'))
   verifier('la réussite de la demande d\'email n\'annonce pas un changement',
     !/(email|adresse)[^\n]{0,40}(est|a été)\s+(bien\s+)?(changé|modifié|mis à jour)/i.test(succesEmail),
     'l\'écran annonce un changement que les deux confirmations n\'ont pas encore fait')
@@ -193,6 +199,23 @@ function sansCommentaires(src) {
     /setMdp\(''\)/.test(succesMdp.slice(0, 700)) && /setMdpBis\(''\)/.test(succesMdp.slice(0, 700)))
 
   // Les deux refus qui se voient sans aller-retour.
+  // 🔴 LA GARDE QUI MANQUAIT, ET QUI A COÛTÉ UN 404 EN PRODUCTION. Le gabarit
+  // Supabase compose `{{ .RedirectTo }}&token_hash=…` : sans `emailRedirectTo`,
+  // `.RedirectTo` retombe sur le Site URL, sans `?`, et le lien devient
+  // `https://yoppaa.app/&token_hash=…`. Les CINQ autres appels du dépôt en
+  // passent un ; celui-ci était le seul à ne pas suivre la convention, et rien
+  // ne le vérifiait.
+  verifier('la demande de changement d\'email passe une adresse de retour',
+    /emailRedirectTo:/.test(bloc),
+    'sans elle, le gabarit fabrique un lien vers la racine et les deux liens font 404')
+  verifier('et cette adresse mène à la page du changement d\'email',
+    /emailRedirectTo:[^\n]*\/auth\/email-change/.test(bloc),
+    'le retour tomberait sur l’écran de CONNEXION, qui dit « lien invalide »')
+  // ⚠️ LE `?` N'EST PAS DÉCORATIF : le gabarit colle un `&` juste derrière.
+  verifier('et elle porte un « ? », sans quoi le « & » du gabarit tombe à faux',
+    /\/auth\/email-change\?[a-z]/.test(bloc),
+    'c’est exactement ce qui a produit le 404 du 23/09')
+
   verifier('l\'écran refuse une adresse qui n\'en est pas une avant d\'appeler Supabase',
     /emailPlausible\(/.test(bloc))
   verifier('l\'écran refuse de demander un changement vers la même adresse',

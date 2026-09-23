@@ -149,6 +149,25 @@ const MUTATIONS = [
     vers: 'if (mdp.trim() !== mdpBis.trim())',
     garde: 'et elles sont comparées brutes, sans trim' },
 
+  // 🔴 LE DEFAUT QU ALEX A VU EN PRODUCTION LE 23/09 : sans adresse de retour,
+  // le gabarit compose `{{ .RedirectTo }}&token_hash=` avec un Site URL sans
+  // `?`, et les deux liens menent a un 404.
+  { nom: '🔴 la demande d email ne passe plus d adresse de retour',
+    de: "      { emailRedirectTo: `${window.location.origin}/auth/email-change?next=/dashboard` },",
+    vers: '      undefined,',
+    garde: 'la demande de changement d’email passe une adresse de retour' },
+
+  { nom: '🔴 le retour tombe sur l ecran de connexion au lieu du changement',
+    de: '/auth/email-change?next=/dashboard`',
+    vers: '/auth/confirm?next=/dashboard`',
+    garde: 'et cette adresse mène à la page du changement d’email' },
+
+  // ⚠️ LE `?` FAIT TOUT : le gabarit colle un `&` juste derriere.
+  { nom: '🔴 l adresse de retour perd son « ? », et le « & » du gabarit tombe a faux',
+    de: '/auth/email-change?next=/dashboard`',
+    vers: '/auth/email-change`',
+    garde: 'et elle porte un « ? », sans quoi le « & » du gabarit tombe à faux' },
+
   { nom: '⚠️ l ecran cesse de verifier la forme de l adresse',
     de: 'if (!emailPlausible(cible)) {',
     vers: 'if (false) {',

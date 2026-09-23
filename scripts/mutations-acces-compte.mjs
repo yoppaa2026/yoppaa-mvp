@@ -37,6 +37,7 @@ const BILLING = 'lib/stripe-billing.js'
 const FACTURATION = 'app/api/dashboard/facturation/route.js'
 const PORTAIL = 'app/api/stripe/billing/portal/route.js'
 const SQL_SUIVI = 'migrations/MIGRATION_SYNC_EMAIL_COMMERCANT_SUIVI_SEUL.sql'
+const RETOUR_EMAIL = 'app/auth/email-change/page.js'
 
 const MUTATIONS = [
   // ═══ LE COMPORTEMENT : LA TRADUCTION DES REFUS ═════════════════════════
@@ -322,6 +323,43 @@ const MUTATIONS = [
     de: 'commercant?.stripe_account_id && (',
     vers: 'true && (',
     garde: 'et cette phrase ne s’affiche qu’à qui a un compte Stripe' },
+
+  // ═══ 23/09 : OU ATTERRISSENT LES DEUX LIENS ════════════════════════════
+  //
+  // 🔴 LES DEUX LIENS MENAIENT A UN 404, vu par Alex en essayant. Le gabarit
+  // Supabase etait casse, ET la page d arrivee etait celle de la CONNEXION :
+  // elle aurait dit « lien invalide » au premier des deux clics, alors que tout
+  // s etait bien passe.
+  { nom: '🔴 la page accepte n importe quel lien d authentification',
+    fichier: RETOUR_EMAIL,
+    de: "if (!token_hash || type !== 'email_change') {",
+    vers: 'if (!token_hash) {',
+    garde: 'elle refuse un lien qui n’est pas un changement d’adresse' },
+
+  { nom: '🔴 le premier des deux clics annonce un changement deja fait',
+    fichier: RETOUR_EMAIL,
+    de: 'const reste = !!data?.user?.new_email',
+    vers: 'const reste = false',
+    garde: 'elle distingue le premier lien du second par `new_email`' },
+
+  { nom: '⚠️ l ecran ne dit plus avec quelle adresse se connecter en attendant',
+    fichier: RETOUR_EMAIL,
+    de: 'continue à te connecter avec l’ancienne',
+    vers: 'tu peux utiliser la nouvelle',
+    garde: 'et au premier lien, elle dit de continuer avec l’ancienne adresse' },
+
+  { nom: '⚠️ un lien deja clique passe pour une panne',
+    fichier: RETOUR_EMAIL,
+    de: 'déjà servi',
+    vers: 'peut-etre casse',
+    garde: 'un lien déjà servi est expliqué, pas présenté comme une panne' },
+
+  // 🔴 CE QUE FAIT `/auth/session`, ET QUI EST FAUX ICI.
+  { nom: '🔴 la page renvoie vers « lien invalide » comme l ecran de connexion',
+    fichier: RETOUR_EMAIL,
+    de: "        setDetail(messageAuth(error))",
+    vers: "        window.location.href = '/login?error=lien-invalide'",
+    garde: 'et elle ne renvoie jamais vers « lien invalide »' },
 
   // ═══ 23/09 : LE TRIGGER PROPAGE, IL N IMPOSE PAS ═══════════════════════
   //

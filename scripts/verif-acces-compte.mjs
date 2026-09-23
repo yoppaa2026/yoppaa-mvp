@@ -304,6 +304,48 @@ function sansCommentaires(src) {
     'sans ce test, une migration qui vient d\'éteindre les fiches publiques le confirme')
 }
 
+// ═══ 4 bis. OÙ ATTERRISSENT LES DEUX LIENS ═══════════════════════════════
+//
+// 🔴 LE DÉFAUT QU'ALEX A VU EN ESSAYANT, LE 23/09 : les deux liens menaient à
+// un 404. J'avais construit le geste sans jamais regarder où le commerçant
+// retombe. Deux choses manquaient, et la seconde ne se serait vue qu'après
+// avoir réparé la première : `/auth/session` est faite pour une CONNEXION, elle
+// exige une session et renvoie vers `/login?error=lien-invalide`. Le commerçant
+// qui clique le PREMIER des deux liens y aurait lu « lien invalide » alors que
+// tout s'était bien passé.
+{
+  const page = lire('app/auth/email-change/page.js')
+  const sansCom = sansCommentaires(page)
+
+  verifier('la page de retour du changement d\'email existe',
+    page.length > 500, 'les liens du mail retombent dans le vide')
+  verifier('elle vérifie le jeton auprès de Supabase',
+    /verifyOtp\(\{ token_hash, type: 'email_change' \}\)/.test(sansCom))
+
+  // 🔴 ELLE N'ACCEPTE QUE SON PROPRE TYPE. Laisser passer `recovery` ou
+  // `magiclink` ouvrirait une session de connexion sur un écran qui n'est pas
+  // fait pour ça et qui ne le dirait pas.
+  verifier('elle refuse un lien qui n\'est pas un changement d\'adresse',
+    /type !== 'email_change'/.test(sansCom),
+    'un lien de connexion ouvrirait une session sur cet écran, en silence')
+
+  // 🔴 CE QUI DISTINGUE LE PREMIER CLIC DU SECOND, et rien d'autre ne le dit.
+  verifier('elle distingue le premier lien du second par `new_email`',
+    /data\?\.user\?\.new_email/.test(sansCom),
+    'sans ça, le premier clic annoncerait un changement qui n’a pas eu lieu')
+  verifier('et au premier lien, elle dit de continuer avec l’ancienne adresse',
+    /continue à te connecter avec l’ancienne/.test(page),
+    'il essaierait la nouvelle et croirait son compte cassé')
+
+  // ⚠️ UN LIEN DÉJÀ CLIQUÉ N'EST PAS UNE PANNE. Le dire autrement inquiète pour
+  // rien et fait écrire au support.
+  verifier('un lien déjà servi est expliqué, pas présenté comme une panne',
+    /déjà servi/.test(page))
+  verifier('et elle ne renvoie jamais vers « lien invalide »',
+    !/login\?error=lien-invalide/.test(sansCom),
+    'c’est ce que fait /auth/session, et c’est faux pour un changement d’email')
+}
+
 // ═══ 5. STRIPE GARDE SA PROPRE COPIE DE L'EMAIL ══════════════════════════
 //
 // 🔴 LE DÉFAUT TROUVÉ LE 23/09, SUR UNE QUESTION D'ALEX : « ça bascule bien

@@ -30,6 +30,7 @@ import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
+import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
 import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
@@ -13536,6 +13537,210 @@ function BlocFacturation({ commercant, toast, onSaved }) {
   )
 }
 
+// Une ligne « libellé à gauche, valeur à droite » des cartes de « Mon compte ».
+//
+// 🔴 ELLE VIVAIT DANS `TabMonCompte`, ET ÇA A FAILLI COÛTER UN ÉCRAN BLANC.
+// En sortant « Ton accès » dans son propre composant, elle n'était plus
+// atteignable : `ReferenceError` au premier rendu, écran blanc sur l'onglet.
+// ⚠️ ET `npm run verif:undef` EST RESTÉ VERT, parce que `no-undef` est éteint
+// sur ce dépôt. C'est le piège déjà payé une fois : un lint qui passe ne prouve
+// pas qu'un nom existe. Au passage, une fonction déclarée dans le corps d'un
+// composant est reconstruite à chaque rendu ; elle est mieux ici.
+function Ligne({ quoi, valeur, fort = false }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '10px 0', borderBottom: `1px solid ${T.hairline}`, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 13, color: T.muted, fontWeight: 600 }}>{quoi}</span>
+      <span style={{ fontSize: 13.5, color: T.ink, fontWeight: fort ? 800 : 600, textAlign: 'right' }}>{valeur}</span>
+    </div>
+  )
+}
+
+// ─── TON ACCÈS : L'EMAIL DE CONNEXION ET LE MOT DE PASSE ────────────────────
+//
+// Jusqu'au 23/09, cet écran affichait l'email de connexion et renvoyait vers
+// hello@yoppaa.app pour le changer. C'était honnête, mais c'était du travail
+// manuel pour Alex et une attente pour le commerçant.
+//
+// 🔴 LES DEUX PARCOURS NE SE RESSEMBLENT PAS, ET C'EST SUPABASE QUI DÉCIDE.
+//
+// L'EMAIL passe par `Secure email change`, activé sur ce projet : Supabase
+// envoie un lien à l'ANCIENNE adresse ET à la NOUVELLE, et ne bascule qu'une
+// fois les deux cliquées. L'écran ne peut donc jamais annoncer « c'est fait » :
+// il annonce que les messages sont partis, et c'est le trigger
+// `trg_sync_email_commercant` qui recopiera l'adresse dans le dossier le jour
+// où la bascule aura lieu, même si Yoppaa est fermé à ce moment-là.
+// ⚠️ ET C'EST CE RÉGLAGE QUI PROTÈGE LA CONSOLE D'ADMINISTRATION : être admin,
+// ici, c'est détenir une adresse. Sans la double confirmation, n'importe qui
+// demanderait à basculer vers celle d'Alex.
+//
+// LE MOT DE PASSE passe par un code à huit chiffres envoyé par email
+// (`reauthenticate()`), puis `updateUser({ password, nonce })`.
+//
+// 🔴 ET ON DEMANDE CE CODE À CHAQUE FOIS, MÊME QUAND SUPABASE NE L'EXIGE PAS.
+// La documentation de `supabase-js` est explicite : avec `Secure password
+// change`, la réauthentification n'est imposée que si la session a PLUS DE
+// 24 HEURES. Un écran qui suivrait cette règle marcherait parfaitement en
+// essai, où l'on vient de se connecter, et refuserait chez un commerçant
+// connecté depuis une semaine. Deux chemins dont un seul est jamais éprouvé,
+// c'est la définition d'un défaut qui attend. Et le cas qu'on veut fermer est
+// justement celui de la tablette restée ouverte au comptoir, où la session est
+// toute fraîche.
+function BlocAcces({ commercant, toast }) {
+  const [nouvelEmail, setNouvelEmail] = useState('')
+  const [envoiEmail, setEnvoiEmail] = useState(false)
+  // L'adresse pour laquelle les liens sont partis. ⚠️ Elle ne dit PAS que le
+  // changement a eu lieu : elle dit qu'il est demandé, et l'écran le formule
+  // comme tel tant que les deux liens n'ont pas été cliqués.
+  const [enAttente, setEnAttente] = useState(null)
+
+  const [etapeMdp, setEtapeMdp] = useState('repos')
+  const [code, setCode] = useState('')
+  const [mdp, setMdp] = useState('')
+  const [mdpBis, setMdpBis] = useState('')
+  const [envoiMdp, setEnvoiMdp] = useState(false)
+
+  if (!commercant) return null  // le filet, le parent garde déjà
+
+  const emailActuel = commercant?.email || ''
+
+  async function demanderChangementEmail() {
+    const cible = nouvelEmail.trim()
+    // ⚠️ LES DEUX REFUS QUI SE VOIENT D'ICI, dits avant l'aller-retour. Supabase
+    // répondrait, mais en anglais et plus tard.
+    if (!emailPlausible(cible)) {
+      toast('Cette adresse ne ressemble pas à une adresse email.', 'error'); return
+    }
+    if (memeEmail(cible, emailActuel)) {
+      toast('C’est déjà ton adresse de connexion.', 'error'); return
+    }
+    setEnvoiEmail(true)
+    const { error } = await supabase.auth.updateUser({ email: cible })
+    setEnvoiEmail(false)
+    if (error) { toast(messageAuth(error), 'error'); return }
+    setEnAttente(cible)
+    setNouvelEmail('')
+    toast('Deux emails de confirmation sont partis.', 'success')
+  }
+
+  async function demanderCode() {
+    setEnvoiMdp(true)
+    const { error } = await supabase.auth.reauthenticate()
+    setEnvoiMdp(false)
+    if (error) { toast(messageAuth(error), 'error'); return }
+    setEtapeMdp('code')
+    toast('Un code vient de partir vers ton adresse de connexion.', 'success')
+  }
+
+  async function changerMotDePasse() {
+    const nonce = code.trim()
+    if (!nonce) { toast('Recopie le code reçu par email.', 'error'); return }
+    if (!mdpAssezLong(mdp)) {
+      toast(`Ton mot de passe doit faire au moins ${MDP_MIN} caractères.`, 'error'); return
+    }
+    // ⚠️ LA COMPARAISON PORTE SUR LA SAISIE BRUTE, sans `trim`. Un espace final
+    // fait partie du mot de passe : le retirer ici enregistrerait autre chose
+    // que ce qui a été tapé, et la connexion suivante échouerait.
+    if (mdp !== mdpBis) { toast('Les deux mots de passe ne sont pas identiques.', 'error'); return }
+    setEnvoiMdp(true)
+    const { error } = await supabase.auth.updateUser({ password: mdp, nonce })
+    setEnvoiMdp(false)
+    if (error) { toast(messageAuth(error), 'error'); return }
+    // 🔴 ON VIDE TOUT, Y COMPRIS LE CODE. Un nonce ne sert qu'une fois : le
+    // laisser à l'écran invite à recommencer avec un code déjà consommé, et le
+    // refus qui suit passerait pour un mot de passe refusé.
+    setEtapeMdp('repos'); setCode(''); setMdp(''); setMdpBis('')
+    toast('Ton mot de passe est changé.', 'success')
+  }
+
+  return (
+    <>
+      <div style={s.card}>
+        <h2 style={s.h2}>Ton accès</h2>
+        <Ligne quoi="Email de connexion" valeur={emailActuel || '—'} />
+
+        <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: '16px 0 12px' }}>
+          C&rsquo;est l&rsquo;adresse avec laquelle tu te connectes, et celle qui reçoit tes
+          factures. Pour en changer, indique la nouvelle : on enverra un lien de
+          confirmation <strong style={{ color: T.ink }}>aux deux adresses</strong>, l&rsquo;ancienne
+          et la nouvelle. Tant que les deux ne sont pas confirmées, rien ne change.
+        </p>
+
+        {enAttente && (
+          <p style={{ fontSize: 12.5, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '9px 11px', margin: '0 0 12px', lineHeight: 1.55 }}>
+            Un changement vers <strong>{enAttente}</strong> attend d&rsquo;être confirmé.
+            Ouvre les deux messages et clique sur les deux liens. Tant que ce n&rsquo;est
+            pas fait, continue à te connecter avec {emailActuel}.
+          </p>
+        )}
+
+        <label style={s.label}>Nouvelle adresse email</label>
+        <input style={s.input} value={nouvelEmail} onChange={e => setNouvelEmail(e.target.value)}
+          type="email" autoComplete="email" placeholder="ton.adresse@exemple.be" />
+
+        <button onClick={demanderChangementEmail} disabled={envoiEmail || !nouvelEmail.trim()}
+          style={{ ...s.btn, ...s.btnPrimary, marginTop: 14, width: '100%', opacity: (envoiEmail || !nouvelEmail.trim()) ? 0.6 : 1 }}>
+          {envoiEmail ? 'Envoi…' : 'Envoyer les deux liens de confirmation'}
+        </button>
+      </div>
+
+      <div style={s.card}>
+        <h2 style={s.h2}>Ton mot de passe</h2>
+
+        {etapeMdp === 'repos' ? (
+          <>
+            <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: '0 0 14px' }}>
+              Pour le changer, on t&rsquo;envoie d&rsquo;abord un code par email. C&rsquo;est ce qui
+              empêche quelqu&rsquo;un de prendre ton compte depuis un écran resté ouvert.
+            </p>
+            <button onClick={demanderCode} disabled={envoiMdp}
+              style={{ ...s.btn, ...s.btnPrimary, width: '100%', opacity: envoiMdp ? 0.6 : 1 }}>
+              {envoiMdp ? 'Envoi…' : 'Recevoir mon code par email'}
+            </button>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: '0 0 14px' }}>
+              Un code vient de partir vers <strong style={{ color: T.ink }}>{emailActuel}</strong>.
+              Recopie-le ci-dessous avec ton nouveau mot de passe. Il reste valable une
+              demi-heure.
+            </p>
+
+            <label style={s.label}>Le code reçu par email</label>
+            <input style={s.input} value={code} onChange={e => setCode(e.target.value)}
+              inputMode="numeric" autoComplete="one-time-code" placeholder="8 chiffres" />
+
+            <label style={{ ...s.label, marginTop: 14 }}>Nouveau mot de passe</label>
+            <input style={s.input} value={mdp} onChange={e => setMdp(e.target.value)}
+              type="password" autoComplete="new-password" placeholder={`${MDP_MIN} caractères au moins`} />
+            {/* ⚠️ LA RÈGLE SE DIT AVANT, PAS APRÈS LE REFUS. Le minimum est
+                passé de 6 à 10 le 12/09 : le laisser découvrir par un message
+                d'erreur, c'est faire taper deux fois pour rien. */}
+            <p style={{ fontSize: 12, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+              Au moins {MDP_MIN} caractères. Une phrase dont tu te souviens protège mieux
+              qu&rsquo;un mot court avec des symboles.
+            </p>
+
+            <label style={{ ...s.label, marginTop: 14 }}>Le même, pour être sûr</label>
+            <input style={s.input} value={mdpBis} onChange={e => setMdpBis(e.target.value)}
+              type="password" autoComplete="new-password" placeholder="Retape-le" />
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+              <button onClick={changerMotDePasse} disabled={envoiMdp}
+                style={{ ...s.btn, ...s.btnPrimary, flex: '1 1 200px', opacity: envoiMdp ? 0.6 : 1 }}>
+                {envoiMdp ? 'Changement…' : 'Changer mon mot de passe'}
+              </button>
+              <button onClick={() => { setEtapeMdp('repos'); setCode(''); setMdp(''); setMdpBis('') }}
+                disabled={envoiMdp} style={{ ...s.btn, flex: '0 1 auto' }}>
+                Annuler
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
 function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) {
   const [portail, setPortail] = useState(false)
 
@@ -13625,13 +13830,6 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
     }
     window.location.href = corps.url
   }
-
-  const Ligne = ({ quoi, valeur, fort = false }) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '10px 0', borderBottom: `1px solid ${T.hairline}`, flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 13, color: T.muted, fontWeight: 600 }}>{quoi}</span>
-      <span style={{ fontSize: 13.5, color: T.ink, fontWeight: fort ? 800 : 600, textAlign: 'right' }}>{valeur}</span>
-    </div>
-  )
 
   return (
     <div>
@@ -13821,18 +14019,11 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
           d'argent. */}
       <BlocFacturation commercant={commercant} toast={toast} onSaved={onSaved} />
 
-      <div style={s.card}>
-        <h2 style={s.h2}>Ton accès</h2>
-        <Ligne quoi="Email de connexion" valeur={commercant?.email || '—'} />
-        {/* ⚠️ ON DIT CE QU'ON NE SAIT PAS ENCORE FAIRE, ET PAR OÙ PASSER. Un
-            écran qui affiche une information sans dire comment la changer
-            laisse chercher un bouton qui n'existe pas. */}
-        <p style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.6, margin: '14px 0 0' }}>
-          Pour changer ton email de connexion ou ton mot de passe, écris-nous à{' '}
-          <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>,
-          on s&rsquo;en occupe.
-        </p>
-      </div>
+      {/* 🔴 L'ACCÈS VIENT EN DERNIER, ET C'EST L'ORDRE DE LA LECTURE : ce que tu
+          as, ce que tu paies, sous quel nom tu es facturé, comment tu te
+          connectes. Depuis le 23/09 il ne renvoie plus vers hello@yoppaa.app :
+          le commerçant change lui-même son email et son mot de passe. */}
+      <BlocAcces commercant={commercant} toast={toast} />
     </div>
   )
 }

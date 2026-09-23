@@ -28,16 +28,23 @@
 // commerçant le jour où il en existe un dans le même cas. On nomme, on compte,
 // et on refuse le reste.
 //
+// 🔴 ET IL NE SORT PAS PAR `process.exit()`. Sur Windows, quitter pendant que
+// libuv referme les connexions du client HTTP fait planter le processus sur
+// « Assertion failed: !(handle->flags & UV_HANDLE_CLOSING) » — vu par Alex au
+// premier relevé du 22/09. Le travail était fait, mais un script qui se termine
+// sur une assertion donne un code de sortie faux, et un code de sortie faux est
+// exactement ce qu'on ne peut pas se permettre sur un script qui écrit. On pose
+// donc `process.exitCode` et on laisse Node finir proprement.
+//
 // AUCUNE DONNÉE PERSONNELLE N'EST LUE : un identifiant, un nom de commerce,
 // des dates.
 //
 // UTILISATION (à lancer par Alex, jamais par l'assistant) :
 //
-//   node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs \
-//        scripts/fiches-demo-gratuites.mjs
+//   npm run demo:gratuites
 //
-// Ajouter `--ecrire` pour appliquer. Sans ce drapeau, le script se contente de
-// DIRE ce qu'il ferait : on regarde d'abord, on écrit ensuite.
+// Ajouter `-- --ecrire` pour appliquer. Sans ce drapeau, le script se contente
+// de DIRE ce qu'il ferait : on regarde d'abord, on écrit ensuite.
 
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
@@ -55,123 +62,129 @@ const FICHES_DEMO = [
   'Studio Amandine',
 ]
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-const cleService = process.env.SUPABASE_SERVICE_ROLE_KEY
-const cleStripe = process.env.STRIPE_SECRET_KEY
-if (!url || !cleService) {
-  console.log('🔴 NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquante.')
-  process.exit(1)
-}
-if (!cleStripe) {
-  console.log('🔴 STRIPE_SECRET_KEY manquante : sans clé, on ne devine pas le monde.')
-  process.exit(1)
-}
-
-// 🔴 LE MONDE SE DIT EN TÊTE, ET IL SE LIT DANS LA CLÉ. Annuler des abonnements
-// en croyant toucher le monde de test alors qu'on est en production est
-// exactement le genre d'erreur qu'on ne voit qu'après.
-const MONDE = cleStripe.startsWith('sk_live_') ? 'RÉEL (live)'
-  : cleStripe.startsWith('sk_test_') ? 'TEST' : 'INCONNU'
-if (MONDE === 'INCONNU') {
-  console.log('🔴 La clé Stripe ne commence ni par sk_test_ ni par sk_live_.')
-  process.exit(1)
-}
-
-const stripe = new Stripe(cleStripe)
-const db = createClient(url, cleService, { auth: { persistSession: false } })
-
-console.log('')
-console.log(`Monde Stripe : ${MONDE}`)
-console.log(ECRIRE ? 'Mode : ÉCRITURE' : 'Mode : relevé seul (ajouter --ecrire pour appliquer)')
-console.log('')
-
-// ─── 1. LES FICHES, PAR LEUR NOM ────────────────────────────────────────────
-const { data: fiches, error } = await db
-  .from('commercants')
-  .select('id, nom, plan, billing_exempt, subscription_status, stripe_subscription_id')
-  .in('nom', FICHES_DEMO)
-
-if (error) {
-  console.log(`🔴 Lecture impossible : ${error.message}`)
-  process.exit(1)
-}
-
-// ⚠️ ON COMPTE AVANT D'AGIR. Une fiche renommée depuis le relevé ne serait pas
-// trouvée, et le script terminerait en silence sur un travail à moitié fait.
-const manquantes = FICHES_DEMO.filter(n => !(fiches || []).some(f => f.nom === n))
-if (manquantes.length > 0) {
-  console.log(`🔴 ${manquantes.length} fiche(s) introuvable(s) par leur nom :`)
-  manquantes.forEach(n => console.log('   • ' + n))
-  console.log('   Renommées depuis le relevé du 22/09 ? On s’arrête plutôt que d’en faire la moitié.')
-  process.exit(1)
-}
-
-console.log(`${fiches.length} fiche(s) trouvée(s) :`)
-for (const f of fiches) {
-  const deja = f.billing_exempt === true ? ' — déjà exemptée' : ''
-  console.log(`  • ${f.nom} : ${f.plan}, ${f.subscription_status || 'aucun abonnement'}${deja}`)
-}
-console.log('')
-
-const aFaire = fiches.filter(f => f.billing_exempt !== true || f.stripe_subscription_id)
-if (aFaire.length === 0) {
-  console.log('Rien à faire : toutes sont déjà gratuites à vie, sans abonnement ouvert.')
-  process.exit(0)
-}
-
-console.log(`${aFaire.length} à traiter : exemption de facturation, puis annulation de l’essai Stripe.`)
-console.log('')
-
-if (!ECRIRE) {
-  console.log('Relevé seul : rien n’a été modifié.')
-  console.log('Pour appliquer, relancer la même commande avec --ecrire.')
-  process.exit(0)
-}
-
-// ─── 2. L'EXEMPTION D'ABORD, L'ANNULATION ENSUITE ───────────────────────────
-const rates = []
-let faits = 0
-for (const f of aFaire) {
-  // a) Le droit : gratuit à vie, quoi qu'il arrive ensuite chez Stripe.
-  const { error: errExempt } = await db
-    .from('commercants')
-    .update({ billing_exempt: true })
-    .eq('id', f.id)
-  if (errExempt) {
-    // 🔴 ON N'ANNULE PAS SI L'EXEMPTION A ÉCHOUÉ. Sans elle, le webhook de
-    // l'annulation retirerait Vendre à la fiche : le demi-geste serait pire
-    // que pas de geste du tout.
-    rates.push(`${f.nom} : exemption refusée (${errExempt.message}), abonnement laissé intact`)
-    continue
+async function principal() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const cleService = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const cleStripe = process.env.STRIPE_SECRET_KEY
+  if (!url || !cleService) {
+    console.log('🔴 NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquante.')
+    return 1
+  }
+  if (!cleStripe) {
+    console.log('🔴 STRIPE_SECRET_KEY manquante : sans clé, on ne devine pas le monde.')
+    return 1
   }
 
-  // b) L'essai qui se terminait le 1er octobre n'a plus lieu d'être.
-  if (f.stripe_subscription_id) {
-    try {
-      await stripe.subscriptions.cancel(f.stripe_subscription_id)
-    } catch (e) {
-      // Déjà annulé chez Stripe : l'exemption, elle, est posée. On le dit sans
-      // en faire un échec.
-      const message = e?.message || String(e)
-      if (/No such subscription|canceled/i.test(message)) {
-        console.log(`  ✓ ${f.nom} (abonnement déjà clos chez Stripe)`)
-        faits++
-        continue
-      }
-      rates.push(`${f.nom} : exemptée, mais l’annulation Stripe a échoué (${message})`)
+  // 🔴 LE MONDE SE DIT EN TÊTE, ET IL SE LIT DANS LA CLÉ. Annuler des
+  // abonnements en croyant toucher le monde de test alors qu'on est en
+  // production est exactement le genre d'erreur qu'on ne voit qu'après.
+  const MONDE = cleStripe.startsWith('sk_live_') ? 'RÉEL (live)'
+    : cleStripe.startsWith('sk_test_') ? 'TEST' : 'INCONNU'
+  if (MONDE === 'INCONNU') {
+    console.log('🔴 La clé Stripe ne commence ni par sk_test_ ni par sk_live_.')
+    return 1
+  }
+
+  const stripe = new Stripe(cleStripe)
+  const db = createClient(url, cleService, { auth: { persistSession: false } })
+
+  console.log('')
+  console.log(`Monde Stripe : ${MONDE}`)
+  console.log(ECRIRE ? 'Mode : ÉCRITURE' : 'Mode : relevé seul (ajouter --ecrire pour appliquer)')
+  console.log('')
+
+  // ─── 1. LES FICHES, PAR LEUR NOM ──────────────────────────────────────────
+  const { data: fiches, error } = await db
+    .from('commercants')
+    .select('id, nom, plan, billing_exempt, subscription_status, stripe_subscription_id')
+    .in('nom', FICHES_DEMO)
+
+  if (error) {
+    console.log(`🔴 Lecture impossible : ${error.message}`)
+    return 1
+  }
+
+  // ⚠️ ON COMPTE AVANT D'AGIR. Une fiche renommée depuis le relevé ne serait
+  // pas trouvée, et le script terminerait en silence sur un travail à moitié
+  // fait.
+  const manquantes = FICHES_DEMO.filter(n => !(fiches || []).some(f => f.nom === n))
+  if (manquantes.length > 0) {
+    console.log(`🔴 ${manquantes.length} fiche(s) introuvable(s) par leur nom :`)
+    manquantes.forEach(n => console.log('   • ' + n))
+    console.log('   Renommées depuis le relevé du 22/09 ? On s’arrête plutôt que d’en faire la moitié.')
+    return 1
+  }
+
+  console.log(`${fiches.length} fiche(s) trouvée(s) :`)
+  for (const f of fiches) {
+    const deja = f.billing_exempt === true ? ' — déjà exemptée' : ''
+    console.log(`  • ${f.nom} : ${f.plan}, ${f.subscription_status || 'aucun abonnement'}${deja}`)
+  }
+  console.log('')
+
+  const aFaire = fiches.filter(f => f.billing_exempt !== true || f.stripe_subscription_id)
+  if (aFaire.length === 0) {
+    console.log('Rien à faire : toutes sont déjà gratuites à vie, sans abonnement ouvert.')
+    return 0
+  }
+
+  console.log(`${aFaire.length} à traiter : exemption de facturation, puis annulation de l’essai Stripe.`)
+  console.log('')
+
+  if (!ECRIRE) {
+    console.log('Relevé seul : rien n’a été modifié.')
+    console.log('Pour appliquer, relancer la même commande avec -- --ecrire.')
+    return 0
+  }
+
+  // ─── 2. L'EXEMPTION D'ABORD, L'ANNULATION ENSUITE ─────────────────────────
+  const rates = []
+  let faits = 0
+  for (const f of aFaire) {
+    // a) Le droit : gratuit à vie, quoi qu'il arrive ensuite chez Stripe.
+    const { error: errExempt } = await db
+      .from('commercants')
+      .update({ billing_exempt: true })
+      .eq('id', f.id)
+    if (errExempt) {
+      // 🔴 ON N'ANNULE PAS SI L'EXEMPTION A ÉCHOUÉ. Sans elle, le webhook de
+      // l'annulation retirerait Vendre à la fiche : le demi-geste serait pire
+      // que pas de geste du tout.
+      rates.push(`${f.nom} : exemption refusée (${errExempt.message}), abonnement laissé intact`)
       continue
     }
+
+    // b) L'essai qui se terminait le 1er octobre n'a plus lieu d'être.
+    if (f.stripe_subscription_id) {
+      try {
+        await stripe.subscriptions.cancel(f.stripe_subscription_id)
+      } catch (e) {
+        // Déjà annulé chez Stripe : l'exemption, elle, est posée. On le dit
+        // sans en faire un échec.
+        const message = e?.message || String(e)
+        if (/No such subscription|canceled/i.test(message)) {
+          console.log(`  ✓ ${f.nom} (abonnement déjà clos chez Stripe)`)
+          faits++
+          continue
+        }
+        rates.push(`${f.nom} : exemptée, mais l’annulation Stripe a échoué (${message})`)
+        continue
+      }
+    }
+    faits++
+    console.log(`  ✓ ${f.nom}`)
   }
-  faits++
-  console.log(`  ✓ ${f.nom}`)
+
+  console.log('')
+  console.log(`${faits} fiche(s) en Vendre, gratuit à vie.`)
+  console.log('Le miroir (`subscription_status`) se remplira seul au passage du webhook.')
+  if (rates.length > 0) {
+    console.log('')
+    console.log(`🔴 ${rates.length} problème(s) :`)
+    rates.forEach(r => console.log('   • ' + r))
+    return 1
+  }
+  return 0
 }
 
-console.log('')
-console.log(`${faits} fiche(s) en Vendre, gratuit à vie.`)
-console.log('Le miroir (`subscription_status`) se remplira seul au passage du webhook.')
-if (rates.length > 0) {
-  console.log('')
-  console.log(`🔴 ${rates.length} problème(s) :`)
-  rates.forEach(r => console.log('   • ' + r))
-  process.exit(1)
-}
+process.exitCode = await principal()

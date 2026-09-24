@@ -38,6 +38,7 @@ const FACTURATION = 'app/api/dashboard/facturation/route.js'
 const PORTAIL = 'app/api/stripe/billing/portal/route.js'
 const SQL_SUIVI = 'migrations/MIGRATION_SYNC_EMAIL_COMMERCANT_SUIVI_SEUL.sql'
 const RETOUR_EMAIL = 'app/auth/email-change/page.js'
+const LOGIN = 'app/login/page.js'
 
 const MUTATIONS = [
   // ═══ LE COMPORTEMENT : LA TRADUCTION DES REFUS ═════════════════════════
@@ -366,6 +367,45 @@ const MUTATIONS = [
     de: 'commercant?.stripe_account_id && (',
     vers: 'true && (',
     garde: 'et cette phrase ne s’affiche qu’à qui a un compte Stripe' },
+
+  // ═══ 24/09 : L ECRAN DE CONNEXION ACCUSAIT LE MOT DE PASSE ═════════════
+  //
+  // 🔴 `if (err) setError('Email ou mot de passe incorrect')` ecrasait TOUTES
+  // les causes. Alex a cherche une heure du mauvais cote : son adresse
+  // n existait plus, et l ecran parlait de son mot de passe.
+  { nom: '🔴 l ecran de connexion accuse de nouveau le mot de passe, quelle que soit la cause',
+    fichier: LOGIN,
+    de: "setError(messageAuth(err) || 'Email ou mot de passe incorrect.')",
+    vers: "setError('Email ou mot de passe incorrect')",
+    garde: 'l’écran de connexion traduit le vrai refus' },
+
+  { nom: '⚠️ un refus sans message traduisible laisse l ecran muet',
+    fichier: LOGIN,
+    de: "messageAuth(err) || 'Email ou mot de passe incorrect.'",
+    vers: 'messageAuth(err)',
+    garde: 'et il garde un message même si la traduction rend null' },
+
+  // 🔴 LE FLOU EST LA PROTECTION : dire qu une adresse est inconnue laisse
+  // dresser la liste des comptes, une adresse apres l autre.
+  { nom: '🔴 le refus revele que l adresse existe',
+    fichier: TRAD,
+    de: "invalid_credentials:         'Email ou mot de passe incorrect.',",
+    vers: "invalid_credentials:         'Cette adresse est inconnue.',",
+    garde: 'un refus d’identifiants ne dit pas lequel des deux est faux' },
+
+  { nom: '⚠️ l ecran ne nomme plus la porte de secours',
+    fichier: LOGIN,
+    de: 'Passe par <strong style={{ color: \'#fff\' }}>Lien magique</strong>',
+    vers: 'Essaie encore',
+    garde: 'l’écran nomme le lien magique comme porte de secours' },
+
+  // ⚠️ AFFICHEE D EMBLEE, elle invite a contourner le mot de passe ; sous le
+  // lien magique, elle n a aucun sens.
+  { nom: '⚠️ la sortie s affiche avant meme un refus',
+    fichier: LOGIN,
+    de: "{error && mode === 'password' && (",
+    vers: '{true && (',
+    garde: 'la sortie ne s’affiche qu’après un refus, en mode mot de passe' },
 
   // ═══ 23/09 : OU ATTERRISSENT LES DEUX LIENS ════════════════════════════
   //

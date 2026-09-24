@@ -8,6 +8,9 @@ import TurnstileWidget from '@/app/components/TurnstileWidget'
 // d'effacer : c'est son métier, et il ne s'abstient que pour un départ voulu.
 // Changer de compte depuis cet écran est un départ voulu.
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
+// ⚠️ LA MÊME TRADUCTION QUE « MON COMPTE », et c'est le but : deux écrans qui
+// traduisent chacun les refus de Supabase finissent par en dire deux versions.
+import { messageAuth } from '@/lib/messages-auth'
 
 const T = {
   bg:      '#F8F6FF',
@@ -130,7 +133,15 @@ function Login() {
       options: { captchaToken },
     })
     if (err) {
-      setError('Email ou mot de passe incorrect')
+      // 🔴 CE MESSAGE ÉCRASAIT TOUTES LES CAUSES, et Alex l'a payé le 24/09 :
+      // son adresse n'existait plus, l'écran accusait son mot de passe, et il a
+      // cherché une heure du mauvais côté. Un captcha qui n'a pas pu se
+      // charger, une limite de tentatives atteinte ou une panne disaient tous
+      // « mot de passe incorrect ».
+      // ⚠️ POUR UN VRAI REFUS D'IDENTIFIANTS, LE FLOU RESTE : `messageAuth`
+      // rend « Email ou mot de passe incorrect » sans dire lequel, sinon on
+      // offrirait de quoi énumérer les comptes.
+      setError(messageAuth(err) || 'Email ou mot de passe incorrect.')
       setLoading(false); return
     }
     // Auto-repair du flag has_password : la connexion par mot de passe prouve qu'il existe.
@@ -286,6 +297,22 @@ function Login() {
               )}
 
               {error && <p style={{ fontSize: '0.78rem', color: '#FCA5A5', marginBottom: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}><AlertTriangle size={13} strokeWidth={1.8}/> {error}</p>}
+
+              {/* 🔴 LA SORTIE, QUI N'ÉTAIT ÉCRITE NULLE PART. Le chemin existe
+                  et fonctionne : lien magique, puis « Mon compte ». Mais rien
+                  ne le disait, alors celui qui a oublié son mot de passe
+                  réessaie, échoue, et appelle. L'onglet est juste au-dessus de
+                  ses yeux et il ne sait pas qu'il sert à ça.
+                  ⚠️ EN MODE MOT DE PASSE SEULEMENT, et seulement après un
+                  refus : affichée d'emblée, elle inviterait à contourner le mot
+                  de passe, et affichée sous le lien magique elle n'aurait aucun
+                  sens. */}
+              {error && mode === 'password' && (
+                <p style={{ fontSize: '0.74rem', color: T.light, opacity: 0.85, marginBottom: 12, lineHeight: 1.55 }}>
+                  Tu ne te souviens plus de ton mot de passe ? Passe par <strong style={{ color: '#fff' }}>Lien magique</strong>, juste au-dessus :
+                  tu recevras un lien qui te connecte sans mot de passe, et tu pourras en choisir un nouveau depuis <strong style={{ color: '#fff' }}>Mon compte</strong>.
+                </p>
+              )}
 
               <button
                 onClick={mode === 'magic' ? envoyerMagicLink : connexionMotDePasse}

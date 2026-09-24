@@ -416,6 +416,43 @@ function sansCommentaires(src) {
     'c’est ce que fait /auth/session, et c’est faux pour un changement d’email')
 }
 
+// ═══ 4 ter. L'ÉCRAN DE CONNEXION DIT LA VRAIE CAUSE, ET LA SORTIE ════════
+//
+// 🔴 `if (err) setError('Email ou mot de passe incorrect')` ÉCRASAIT TOUTES
+// LES CAUSES. Alex l'a payé le 24/09 : son adresse n'existait plus, l'écran
+// accusait son mot de passe, et il a cherché une heure du mauvais côté. Un
+// captcha qui n'a pas pu se charger ou une limite de tentatives atteinte
+// disaient exactement la même chose.
+{
+  const login = sansCommentaires(lire('app/login/page.js'))
+
+  verifier('l’écran de connexion traduit le vrai refus',
+    /setError\(messageAuth\(err\)/.test(login),
+    'toutes les causes redeviendraient « mot de passe incorrect »')
+  // ⚠️ ET IL GARDE UN REPLI : `messageAuth` rend `null` sur une erreur vide,
+  // et un écran sans message laisserait cliquer sans rien comprendre.
+  verifier('et il garde un message même si la traduction rend null',
+    /messageAuth\(err\) \|\| 'Email ou mot de passe incorrect\.'/.test(login))
+
+  // 🔴 LE FLOU EST LA PROTECTION SUR CE CAS-LÀ : dire « cette adresse est
+  // inconnue » laisserait énumérer les comptes.
+  verifier('un refus d’identifiants ne dit pas lequel des deux est faux',
+    /invalid_credentials:\s*'Email ou mot de passe incorrect\.'/.test(sansCommentaires(lire('lib/messages-auth.js'))),
+    'révéler qu’une adresse existe permet de dresser la liste des comptes')
+
+  // La sortie, qui n'était écrite nulle part alors que le chemin existe.
+  verifier('l’écran nomme le lien magique comme porte de secours',
+    /Passe par <strong[^>]*>Lien magique<\/strong>/.test(login),
+    'l’onglet est sous ses yeux et rien ne dit qu’il sert à ça')
+  verifier('et il dit où changer son mot de passe ensuite',
+    /choisir un nouveau depuis <strong[^>]*>Mon compte<\/strong>/.test(login))
+  // ⚠️ SEULEMENT APRÈS UN REFUS, ET SEULEMENT EN MODE MOT DE PASSE : affichée
+  // d'emblée elle inviterait à contourner le mot de passe, et sous le lien
+  // magique elle n'aurait aucun sens.
+  verifier('la sortie ne s’affiche qu’après un refus, en mode mot de passe',
+    /\{error && mode === 'password' && \(/.test(login))
+}
+
 // ═══ 5. STRIPE GARDE SA PROPRE COPIE DE L'EMAIL ══════════════════════════
 //
 // 🔴 LE DÉFAUT TROUVÉ LE 23/09, SUR UNE QUESTION D'ALEX : « ça bascule bien

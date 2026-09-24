@@ -62,12 +62,40 @@ function Verificateur({ setEtat, setDetail }) {
         return
       }
 
-      // 🔴 `new_email` ENCORE REMPLI = IL RESTE UN LIEN. C'est la seule chose
-      // qui distingue le premier clic du second, et elle décide de ce qu'on
-      // affiche.
-      const reste = !!data?.user?.new_email
-      setEtat(reste ? 'partiel' : 'fait')
-      setDetail(reste ? (data.user.new_email || '') : (data?.user?.email || ''))
+      // 🔴 TROIS ÉTATS, PAS DEUX, ET C'EST UN DÉFAUT PAYÉ EN PRODUCTION.
+      // Première version : `const reste = !!data?.user?.new_email`. Ce booléen
+      // vaut `false` dans DEUX cas qui n'ont rien à voir : quand la bascule est
+      // terminée, et quand Supabase ne renvoie AUCUN utilisateur. Or au premier
+      // des deux clics il n'y a pas de session, donc pas d'utilisateur, donc
+      // l'écran annonçait « ton adresse est changée » alors qu'il restait un
+      // lien à cliquer. Alex l'a vu le 23/09 : les deux liens disaient la même
+      // chose.
+      //
+      // ⚠️ UNE ABSENCE D'INFORMATION N'EST PAS UNE PREUVE. C'est la même
+      // famille que `Number(null)` qui vaut 0 : le langage rend une valeur
+      // plausible là où il n'y a rien, et on la lit comme un fait.
+      let user = data?.user || null
+      if (!user) {
+        // Secours : au SECOND clic une session s'ouvre, et on peut alors lire
+        // l'état réel. Au premier, ceci rend `null` et on l'assume.
+        const { data: apres } = await supabase.auth.getUser()
+        user = apres?.user || null
+      }
+
+      if (!user) {
+        // 🔴 ON NE SAIT PAS LEQUEL DES DEUX, ET ON LE DIT SANS MENTIR. La
+        // phrase est vraie dans les deux cas : s'il en reste un, elle donne la
+        // consigne ; s'il n'en reste pas, elle ne gêne pas.
+        setEtat('confirme')
+        return
+      }
+      if (user.new_email) {
+        setEtat('partiel')
+        setDetail(user.new_email)
+        return
+      }
+      setEtat('fait')
+      setDetail(user.email || '')
     }
 
     verifier()
@@ -124,6 +152,27 @@ export default function PageChangementEmail() {
               Il reste <strong style={{ color: '#fff' }}>le second lien</strong> à cliquer, dans
               l’autre message. Tant que les deux ne sont pas confirmés, ton adresse ne change
               pas : continue à te connecter avec l’ancienne.
+            </p>
+          </div>
+        )}
+
+        {/* 🔴 L'ÉTAT « JE NE SAIS PAS », et il est le plus fréquent des trois.
+            Supabase ne renvoie pas d'utilisateur au premier des deux clics :
+            plutôt que de deviner, on écrit une phrase qui reste vraie dans les
+            deux cas. Annoncer « c'est changé » sans preuve, c'est envoyer se
+            connecter avec une adresse qui n'est pas encore la sienne. */}
+        {etat === 'confirme' && (
+          <div style={carte}>
+            <p style={titre}>C’est confirmé de ce côté</p>
+            <p style={corps}>
+              S’il te reste <strong style={{ color: '#fff' }}>un second lien</strong> dans l’autre
+              boîte, clique-le aussi : le changement n’a lieu qu’une fois les deux confirmés.
+              Tant que ce n’est pas fait, continue à te connecter avec ton ancienne adresse.
+            </p>
+            <p style={{ ...corps, marginTop: 10 }}>
+              Pour savoir où tu en es, ouvre « Mon compte » : la ligne
+              <strong style={{ color: '#fff' }}> Email de connexion</strong> affiche toujours
+              l’adresse en cours.
             </p>
           </div>
         )}

@@ -355,17 +355,33 @@ const MUTATIONS = [
     vers: 'if (!token_hash) {',
     garde: 'elle refuse un lien qui n’est pas un changement d’adresse' },
 
-  { nom: '🔴 le premier des deux clics annonce un changement deja fait',
+  // 🔴 LE DEFAUT VU EN PRODUCTION : une absence d information lue comme une
+  // preuve. Les DEUX liens annoncaient « ton adresse est changee ».
+  // ⚠️ ANCRE SUR UNE SEULE LIGNE : `setEtat('confirme')` n apparait qu une fois
+  // dans la fonction, et `replace` ne touche que la premiere occurrence.
+  { nom: '🔴 l absence d utilisateur repasse pour « c est termine »',
     fichier: RETOUR_EMAIL,
-    de: 'const reste = !!data?.user?.new_email',
-    vers: 'const reste = false',
-    garde: 'elle distingue le premier lien du second par `new_email`' },
+    de: "        setEtat('confirme')",
+    vers: "        setEtat('fait')",
+    garde: 'elle traite l’absence d’utilisateur comme un état à part' },
+
+  { nom: '🔴 « changee » s annonce sans preuve positive',
+    fichier: RETOUR_EMAIL,
+    de: '      if (user.new_email) {',
+    vers: '      if (false) {',
+    garde: 'elle n’annonce « changée » que sur une preuve positive' },
+
+  { nom: '⚠️ l etat reel n est plus relu quand le jeton ne dit rien',
+    fichier: RETOUR_EMAIL,
+    de: 'const { data: apres } = await supabase.auth.getUser()',
+    vers: 'const apres = null',
+    garde: 'elle relit l’état auprès de Supabase quand le jeton ne dit rien' },
 
   { nom: '⚠️ l ecran ne dit plus avec quelle adresse se connecter en attendant',
     fichier: RETOUR_EMAIL,
     de: 'continue à te connecter avec l’ancienne',
     vers: 'tu peux utiliser la nouvelle',
-    garde: 'et au premier lien, elle dit de continuer avec l’ancienne adresse' },
+    garde: 'et dans tous les cas elle dit de continuer avec l’ancienne adresse' },
 
   { nom: '⚠️ un lien deja clique passe pour une panne',
     fichier: RETOUR_EMAIL,

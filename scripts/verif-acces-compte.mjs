@@ -352,12 +352,23 @@ function sansCommentaires(src) {
     /type !== 'email_change'/.test(sansCom),
     'un lien de connexion ouvrirait une session sur cet écran, en silence')
 
-  // 🔴 CE QUI DISTINGUE LE PREMIER CLIC DU SECOND, et rien d'autre ne le dit.
-  verifier('elle distingue le premier lien du second par `new_email`',
-    /data\?\.user\?\.new_email/.test(sansCom),
-    'sans ça, le premier clic annoncerait un changement qui n’a pas eu lieu')
-  verifier('et au premier lien, elle dit de continuer avec l’ancienne adresse',
-    /continue à te connecter avec l’ancienne/.test(page),
+  // 🔴 LE DÉFAUT VU EN PRODUCTION LE 23/09 : les DEUX liens annonçaient « ton
+  // adresse est changée ». `!!data?.user?.new_email` vaut `false` quand la
+  // bascule est finie ET quand Supabase ne renvoie aucun utilisateur, ce qui
+  // est le cas au premier clic. Une absence d'information avait été lue comme
+  // une preuve.
+  verifier('elle traite l’absence d’utilisateur comme un état à part',
+    /if \(!user\) \{[\s\S]{0,120}setEtat\('confirme'\)/.test(sansCom),
+    'sans ça, le premier des deux clics annonce un changement qui n’a pas eu lieu')
+  verifier('elle n’annonce « changée » que sur une preuve positive',
+    /if \(user\.new_email\)[\s\S]{0,140}setEtat\('fait'\)/.test(sansCom),
+    'l’état « fait » doit venir d’un utilisateur lu, jamais d’un booléen vide')
+  // ⚠️ LE SECOURS : au second clic une session s'ouvre, et l'état réel devient
+  // lisible. Sans lui, les deux clics retomberaient sur « je ne sais pas ».
+  verifier('elle relit l’état auprès de Supabase quand le jeton ne dit rien',
+    /await supabase\.auth\.getUser\(\)/.test(sansCom))
+  verifier('et dans tous les cas elle dit de continuer avec l’ancienne adresse',
+    (page.match(/continue à te connecter avec (l’|ton )ancienne/g) || []).length >= 2,
     'il essaierait la nouvelle et croirait son compte cassé')
 
   // ⚠️ UN LIEN DÉJÀ CLIQUÉ N'EST PAS UNE PANNE. Le dire autrement inquiète pour

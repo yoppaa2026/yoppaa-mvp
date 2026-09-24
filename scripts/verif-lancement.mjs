@@ -1152,6 +1152,74 @@ function sansCommentaires(src) {
     'l\'ancre existe mais ne coiffe plus la section commerçant')
 }
 
+// ═══ LE RÈGLEMENT DU CONCOURS ════════════════════════════════════════════
+//
+// 🔴 C'EST UN DOCUMENT CONTRACTUEL. Il fait foi face aux participants, et
+// l'article 13 interdit d'en retirer quoi que ce soit après le début. Ses
+// dates et ses montants se cassent donc en silence : rien, dans le produit, ne
+// dépend d'eux, et aucun écran ne rougit si une date se contredit.
+//
+// ⚠️ CE QUI A ÉTÉ PAYÉ LE 24/09 : l'annexe listait sept commerces de
+// démonstration relevés le 15/09. En neuf jours, ils avaient TOUS été
+// renommés. La liste aurait été publiée fausse, et le règlement interdit de la
+// compléter après le début. Une liste de noms vaut à une date ; une définition
+// vaut toujours.
+{
+  const reg = sansCommentaires(lire('app/concours/page.js'))
+
+  // Les trois dates vivent dans un seul objet : on vérifie qu'elles y sont
+  // encore, et qu'elles disent la même chose que ce qu'Alex a décidé.
+  verifier('le règlement ouvre au 24 septembre 2026 à 20 h',
+    /debut: 'jeudi 24 septembre 2026 à 20 h'/.test(reg))
+  verifier('les participations se ferment le 31 octobre',
+    /finParticipations: 'samedi 31 octobre 2026 à 23 h 59'/.test(reg))
+  verifier('et le constat tombe le 7 novembre',
+    /constat: 'samedi 7 novembre 2026 à 23 h 59'/.test(reg))
+  // 🔴 LES SEPT JOURS D'ÉCART SONT UNE DÉCISION D'ALEX (15/09) : sans eux,
+  // celui qui commente le dernier soir compte les fiches et connaît presque la
+  // réponse. C'est la règle, pas la date, qu'on mesure ici.
+  {
+    const lire1 = (cle) => (reg.match(new RegExp(`${cle}: '[^']*?(\\d{1,2}) (\\w+) 2026`)) || []).slice(1)
+    const MOIS = { janvier: 0, février: 1, mars: 2, avril: 3, mai: 4, juin: 5, juillet: 6, août: 7, septembre: 8, octobre: 9, novembre: 10, décembre: 11 }
+    const jour = (cle) => { const [j, m] = lire1(cle); return (j && m in MOIS) ? new Date(2026, MOIS[m], Number(j)) : null }
+    const fin = jour('finParticipations'), cons = jour('constat'), deb = jour('debut')
+    const ecart = (fin && cons) ? Math.round((cons - fin) / 86400000) : null
+    verifier('sept jours séparent la dernière participation du constat', ecart === 7,
+      `écart lu : ${ecart} jour(s)`)
+    verifier('et le concours ouvre avant de se fermer', deb && fin && deb < fin)
+  }
+
+  // 🔴 L'ANNEXE NE LISTE PLUS DE NOMS. Une liste de commerces se périme en
+  // quelques jours, et publiée fausse elle ne peut plus être corrigée.
+  verifier('l’annexe ne publie plus de liste de commerces',
+    !/COMMERCES_DEMONSTRATION/.test(reg),
+    'une liste de noms vaut à une date, et celle du 15/09 était déjà fausse le 24')
+  verifier('elle définit ce qu’est une fiche de démonstration',
+    /créée par l'organisateur, et non par un commerçant/.test(reg))
+  // ⚠️ LA PROTECTION DU PARTICIPANT : l'exclusion vaut que les fiches soient
+  // encore en ligne ou non, puisque la revue d'un store peut retarder leur
+  // retrait.
+  verifier('et l’exclusion vaut même si les fiches sont encore publiées',
+    /qu'elles soient encore publiées ou non au moment du constat/.test(reg))
+  // 🔴 AUCUNE DATE DE RETRAIT PROMISE : le règlement s'y engageait au 1er
+  // octobre, alors que la décision du 23/09 est de ne pas y toucher pendant
+  // une revue. Un contrat ne promet pas une date qu'on ne maîtrise pas.
+  verifier('le règlement ne promet plus de retirer les fiches à une date',
+    !/retirées de l'application au plus tard/.test(reg))
+
+  // Les paliers, et le plafond qui doit rester cohérent avec eux.
+  verifier('les seuils de commerces sont 50, 75 et 100',
+    /à partir de 50 commerces/.test(reg) && /à partir de 75 commerces/.test(reg) && /à partir de 100 commerces/.test(reg))
+  verifier('et les montants n’ont pas bougé',
+    /un bon de cent euros/.test(reg) && /un bon de deux cents euros/.test(reg) && /un bon de trois cents euros/.test(reg))
+  // 🔴 4 bons de 50 € (grille abonnés) + 300 € (palier haut) = 500 €, soit
+  // exactement le plafond annoncé. Monter un montant sans monter le plafond
+  // ferait promettre plus que ce qu'on s'autorise à donner.
+  verifier('le plafond annoncé couvre encore le cumul maximal des deux grilles',
+    /ne peut en aucun cas excéder cinq cents euros/.test(reg)
+      && /4 bons de cinquante euros/.test(reg))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

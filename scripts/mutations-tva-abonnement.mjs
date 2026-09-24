@@ -30,6 +30,7 @@ const PAGE    = 'app/dashboard/abonnement/page.js'
 const SMS     = 'app/api/fidelite/sms-packs/checkout/route.js'
 const SHOP    = 'app/api/accompagnement/checkout/route.js'
 const SIGNUP  = 'app/signup/page.js'
+const CONCOURS = 'app/concours/page.js'
 
 const MUTATIONS = [
   // ─── LE CALCUL ──────────────────────────────────────────────────────────
@@ -271,6 +272,63 @@ const MUTATIONS = [
     fichier: SIGNUP,
     de: 'sous="Tu vends à manger ou à boire"',
     vers: 'sous="Commande à l’avance et livraison"' },
+
+  // ═══ 24/09 : LE REGLEMENT DU CONCOURS ══════════════════════════════════
+  //
+  // 🔴 DOCUMENT CONTRACTUEL. Rien dans le produit ne depend de ses dates ni de
+  // ses montants : ils se contredisent en silence, et l article 13 interdit
+  // d en retirer quoi que ce soit apres le debut.
+  //
+  // 🔴 LES SEPT JOURS SONT UNE DECISION D ALEX (15/09) : sans eux, celui qui
+  // commente le dernier soir compte les fiches et connait presque la reponse.
+  { nom: '🔴 le constat se rapproche de la derniere participation',
+    fichier: CONCOURS,
+    de: "constat: 'samedi 7 novembre 2026 à 23 h 59'",
+    vers: "constat: 'dimanche 1 novembre 2026 à 23 h 59'",
+    garde: 'sept jours séparent la dernière participation du constat' },
+
+  { nom: '🔴 le concours se ferme avant de s ouvrir',
+    fichier: CONCOURS,
+    de: "debut: 'jeudi 24 septembre 2026 à 20 h'",
+    vers: "debut: 'jeudi 24 décembre 2026 à 20 h'",
+    garde: 'et le concours ouvre avant de se fermer' },
+
+  // 🔴 LE DEFAUT DU 24/09 : une liste de sept noms relevee le 15/09, dont
+  // AUCUN n existait plus neuf jours plus tard.
+  { nom: '🔴 l annexe republie une liste de noms, qui se perimera',
+    fichier: CONCOURS,
+    de: "            <P>Une fiche de démonstration se reconnaît",
+    vers: "            <P>COMMERCES_DEMONSTRATION. Une fiche de démonstration se reconnaît",
+    garde: 'l’annexe ne publie plus de liste de commerces' },
+
+  { nom: '⚠️ l exclusion ne vaut plus si les fiches sont encore en ligne',
+    fichier: CONCOURS,
+    de: "qu'elles soient encore publiées ou non au moment du constat",
+    vers: 'une fois retirées',
+    garde: 'et l’exclusion vaut même si les fiches sont encore publiées' },
+
+  // 🔴 UN CONTRAT NE PROMET PAS UNE DATE QU ON NE MAITRISE PAS : la revue d un
+  // store peut retarder le retrait des fiches de demonstration.
+  { nom: '🔴 le reglement repromet de retirer les fiches a une date',
+    fichier: CONCOURS,
+    de: "            <P>Au moment du constat, l'organisateur publie",
+    vers: "            <P>Les fiches de test sont retirées de l'application au plus tard le 1er octobre 2026. Au moment du constat, l'organisateur publie",
+    garde: 'le règlement ne promet plus de retirer les fiches à une date' },
+
+  { nom: '⚠️ un seuil de commerces remonte a son ancienne valeur',
+    fichier: CONCOURS,
+    de: 'à partir de 75 commerces',
+    vers: 'à partir de 125 commerces',
+    garde: 'les seuils de commerces sont 50, 75 et 100' },
+
+  // 🔴 4 bons de 50 € + 300 € = 500 €, soit EXACTEMENT le plafond annonce.
+  // Monter un montant sans monter le plafond ferait promettre plus que ce
+  // qu on s autorise a donner.
+  { nom: '🔴 un montant depasse le plafond annonce',
+    fichier: CONCOURS,
+    de: 'un bon de trois cents euros',
+    vers: 'un bon de quatre cents euros',
+    garde: 'et les montants n’ont pas bougé' },
 ]
 
 const lancer = () => {

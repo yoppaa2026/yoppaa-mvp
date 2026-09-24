@@ -20,36 +20,34 @@
 // tous, y compris par l'aperçu de lien de Facebook.
 
 const DATES = {
-  version: '16 septembre 2026',
-  debut: 'mercredi 16 septembre 2026 à 20 h',
-  finParticipations: 'samedi 24 octobre 2026 à 23 h 59',
-  constat: 'samedi 31 octobre 2026 à 23 h 59',
-  constatCourt: '31 octobre 2026 à 23 h 59',
+  version: '24 septembre 2026',
+  debut: 'jeudi 24 septembre 2026 à 20 h',
+  finParticipations: 'samedi 31 octobre 2026 à 23 h 59',
+  constat: 'samedi 7 novembre 2026 à 23 h 59',
+  constatCourt: '7 novembre 2026 à 23 h 59',
 }
 
-// ⚠️ LA LISTE EST FIGÉE AU DÉBUT DU CONCOURS (article 6). Ajouter un commerce
-// ici après le 16 septembre retirerait des fiches du décompte : l'organisateur
-// pourrait déplacer le nombre final vers l'estimation de son choix.
-// Relevée le 15/09 dans la vue publique (clé anon), noms EXACTS tels
-// qu'affichés, et cochée par Alex : tout ce qui est publié sauf L'Arrosoir,
-// seul vrai commerce publié à cette date.
-// ⚠️ LES TESTS SUSPENDUS NE SONT PAS LISTÉS, ET C'EST L'ANNEXE QUI LES COUVRE :
-// l'organisateur s'engage à n'en republier aucun. Une liste de noms tirés de
-// mémoire aurait pu en oublier un, qui serait alors compté.
-// 🔴 DEUX NOMS SONT AUSSI CEUX DE VRAIS COMMERCES (Alex, 15/09) : le vrai
-// Kebabistro et le vrai Centre Respire rejoignent l'application. Un test ne se
-// désigne donc ni par son nom, ni par son adresse (le vrai commerce pourra la
-// reprendre une fois le test retiré), mais par ce qui les distingue pour de
-// bon : créé par l'organisateur, et existant au début du concours.
-const COMMERCES_DEMONSTRATION = [
-  'Centre Respire - Yoga et Pilates',
-  'Ciseaux et Soins',
-  'Kebabistro',
-  'La Boutique Témoin',
-  'La mie de test',
-  "La Table d'Essai",
-  'Sushi Sushi',
-]
+// 🔴 L'ANNEXE NE LISTE PLUS DE NOMS, ET C'EST UNE CORRECTION DU 24/09.
+//
+// La version d'origine nommait sept fiches, relevées le 15/09. En neuf jours,
+// elles avaient TOUTES été renommées : la liste publiée aurait exclu des
+// commerces qui n'existaient plus, et laissé compter ceux qui étaient en ligne.
+// Or le règlement interdit de compléter cette liste après le début (article 6) :
+// publiée fausse, elle ne pouvait plus être rectifiée, et l'écart se serait
+// retourné contre l'organisateur au moment du constat.
+//
+// ⚠️ UNE LISTE DE NOMS VAUT À UNE DATE, UNE DÉFINITION VAUT TOUJOURS. Ce qui
+// distingue une fiche de démonstration n'est ni son nom ni son adresse (un vrai
+// commerce peut reprendre les deux), mais QUI l'a créée : l'organisateur, et non
+// un commerçant. C'était déjà écrit dans ce commentaire le 15/09 ; c'est
+// désormais le texte lui-même qui le dit.
+//
+// 🔴 ET L'ENGAGEMENT DE RETRAIT AU 1er OCTOBRE A ÉTÉ RETIRÉ. Le règlement
+// promettait que les fiches de test seraient dépubliées à cette date, alors que
+// la décision du 23/09 est de NE PAS y toucher tant qu'un store est en revue.
+// Un document contractuel ne promet pas une date qu'on ne maîtrise pas : ce qui
+// protège le participant est l'exclusion du décompte, et elle vaut que les
+// fiches soient encore en ligne ou non.
 
 export const metadata = {
   title: 'Règlement du concours de lancement · Yoppaa',
@@ -212,7 +210,7 @@ export default function ReglementConcours() {
             <P>Le nombre retenu est celui des fiches visibles par le public sur les pages des commerces présents sur Yoppaa : les produits et plats de leur catalogue, et les prestations proposées à la réservation. Une fiche marquée comme épuisée ou temporairement indisponible, mais toujours affichée, est comptée.</P>
             <P>Ne sont pas comptés :</P>
             <Liste items={[
-              "les fiches des commerces de démonstration de l'organisateur, dont la liste figure en annexe et ne peut plus être complétée après le début du concours ;",
+              "les fiches des commerces de démonstration de l'organisateur, définis en annexe ;",
               "les variantes d'une même fiche, notamment de taille ou de couleur : la fiche compte pour une seule unité ;",
               'les offres de fin de journée et les deals, qui renvoient à une fiche existante ;',
               "les bons cadeaux, les formules d'abonnement et les formats de table proposés par un restaurant.",
@@ -230,10 +228,19 @@ export default function ReglementConcours() {
               'à partir de 2 000 abonnés : 4 bons de cinquante euros.',
             ]} />
             <P>Un bon supplémentaire est ajouté selon le nombre de commerces visibles sur Yoppaa au {DATES.constatCourt}, hors commerces de démonstration :</P>
+            {/* ⚠️ SEUILS ABAISSÉS LE 24/09, AVANT LE DÉBUT (décision d'Alex) :
+                50 / 100 / 150 devient 50 / 75 / 100. Les MONTANTS ne bougent
+                pas, seuls les seuils. Après le début, l'article 13 interdirait
+                d'y toucher au détriment des participants ; ici le changement
+                leur est favorable et intervient avant l'ouverture.
+                ⚠️ LE PLAFOND TIENT TOUJOURS : 4 bons de 50 € (grille abonnés)
+                plus 300 € (palier haut) font exactement les 500 € annoncés plus
+                bas. Abaisser un seuil ne déplace pas ce total, il le rend plus
+                probable. */}
             <Liste items={[
               'à partir de 50 commerces : un bon de cent euros ;',
-              'à partir de 100 commerces : un bon de deux cents euros ;',
-              'à partir de 150 commerces : un bon de trois cents euros.',
+              'à partir de 75 commerces : un bon de deux cents euros ;',
+              'à partir de 100 commerces : un bon de trois cents euros.',
             ]} />
             <P>Dans chacune de ces deux grilles, seul le palier le plus élevé atteint est retenu : les paliers ne se cumulent pas. Ils déterminent uniquement le nombre et la valeur des lots, n'ont aucune incidence sur les chances individuelles de gagner et ne sont liés à aucune action de partage.</P>
             <P>La dotation offerte par l'organisateur, tous bons confondus, ne peut en aucun cas excéder cinq cents euros.</P>
@@ -293,10 +300,9 @@ export default function ReglementConcours() {
             <h2 style={{ fontWeight: 800, fontSize: '1.08rem', color: T.deep, marginBottom: '0.75rem', paddingBottom: '0.5rem', borderBottom: `2px solid ${T.pale}` }}>
               Annexe. Commerces de démonstration de l'organisateur
             </h2>
-            <P>Les fiches ci-dessous ont été créées par l'organisateur pour présenter et tester l'application. Elles ne sont comptées ni dans le nombre de l'article 6, ni dans le nombre de commerces de l'article 7. Cette liste vise les fiches de test existant au {DATES.debut}, et elle est arrêtée à cette date.</P>
-            <Liste items={COMMERCES_DEMONSTRATION} />
-            <P>Certaines de ces fiches portent le nom d'un commerce réel. Lorsque ce commerce rejoint Yoppaa, sa fiche est une fiche distincte, créée par le commerçant lui-même : elle est comptée normalement, dans les deux nombres.</P>
-            <P>Les fiches de test sont retirées de l'application au plus tard le 1er octobre 2026, et restent exclues des décomptes en toute hypothèse. Les commerces de test de l'organisateur qui ne sont pas publiés au début du concours ne sont pas publiés pendant sa durée.</P>
+            <P>Les fiches créées par l'organisateur pour présenter et tester l'application ne sont comptées ni dans le nombre de l'article 6, ni dans le nombre de commerces de l'article 7, <strong>qu'elles soient encore publiées ou non au moment du constat</strong>.</P>
+            <P>Une fiche de démonstration se reconnaît à ce qu'elle a été créée par l'organisateur, et non par un commerçant. Lorsqu'un commerce réel portant le même nom rejoint Yoppaa, sa fiche est une fiche distincte, créée par le commerçant lui-même : elle est comptée normalement, dans les deux nombres.</P>
+            <P>Au moment du constat, l'organisateur publie le nombre de fiches retenues pour chaque commerce, afin que chacun puisse vérifier le sien.</P>
           </section>
         </div>
       </main>

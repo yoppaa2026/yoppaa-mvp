@@ -149,6 +149,30 @@ const MUTATIONS = [
     vers: 'if (mdp.trim() !== mdpBis.trim())',
     garde: 'et elles sont comparées brutes, sans trim' },
 
+  // 🔴 LE DEFAUT QUI A COUTE SON ACCES ADMIN A ALEX, LE 24/09. L ecran affichait
+  // un dossier et la demande portait sur LA SESSION.
+  { nom: '🔴 le bloc cesse de verifier que la session est celle du dossier',
+    de: 'idSession === commercant.auth_user_id',
+    vers: 'true',
+    garde: 'le bloc vérifie que la session est bien celle du dossier affiché' },
+
+  { nom: '🔴 deux absences font une egalite, et le bloc s affiche sans rien savoir',
+    de: '!!idSession && !!commercant?.auth_user_id && idSession === commercant.auth_user_id',
+    vers: 'idSession === commercant?.auth_user_id',
+    garde: 'et il exige les deux identités, pas seulement leur égalité' },
+
+  { nom: '🔴 les gestes restent affiches sur le dossier d un autre',
+    de: 'if (memeCompte === false) {',
+    vers: 'if (false) {',
+    garde: 'quand ce n’est pas le même compte, les deux gestes disparaissent' },
+
+  // ⚠️ AU PREMIER RENDU L ETAT VAUT `null` : un test negatif afficherait
+  // l avertissement a tout le monde, une seconde, a chaque ouverture.
+  { nom: '⚠️ « pas encore su » est confondu avec « pas le meme compte »',
+    de: 'if (memeCompte === false) {',
+    vers: 'if (!memeCompte) {',
+    garde: 'et l’état « pas encore su » n’est pas confondu avec « pas le même »' },
+
   // 🔴 LE DEFAUT QU ALEX A VU EN PRODUCTION LE 23/09 : sans adresse de retour,
   // le gabarit compose `{{ .RedirectTo }}&token_hash=` avec un Site URL sans
   // `?`, et les deux liens menent a un 404.

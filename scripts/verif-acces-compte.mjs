@@ -199,6 +199,27 @@ function sansCommentaires(src) {
     /setMdp\(''\)/.test(succesMdp.slice(0, 700)) && /setMdpBis\(''\)/.test(succesMdp.slice(0, 700)))
 
   // Les deux refus qui se voient sans aller-retour.
+  // 🔴 LA GARDE QUI A COÛTÉ SON ACCÈS ADMIN À ALEX, LE 24/09.
+  // `supabase.auth.updateUser()` agit sur LA SESSION, pas sur le dossier
+  // affiché. En mode administrateur, l'écran montrait « Salon Nathalie » et la
+  // demande portait sur le compte d'Alex : il a confirmé les deux liens, son
+  // adresse est devenue celle qu'il croyait poser sur la fiche, et la console
+  // admin lui a fermé la porte. Un commerçant ordinaire n'a qu'un dossier,
+  // c'est pourquoi rien ne l'avait signalé.
+  verifier('le bloc vérifie que la session est bien celle du dossier affiché',
+    /idSession === commercant\.auth_user_id/.test(bloc),
+    'depuis un autre compte, le geste changerait l’email de CELUI QUI REGARDE')
+  verifier('et il exige les deux identités, pas seulement leur égalité',
+    /!!idSession && !!commercant\?\.auth_user_id &&/.test(bloc),
+    'deux absences feraient une égalité, et le bloc s’afficherait justement quand on ne sait rien')
+  verifier('quand ce n’est pas le même compte, les deux gestes disparaissent',
+    /if \(memeCompte === false\)/.test(bloc),
+    'les masquer à moitié laisserait le plus dangereux des deux')
+  // ⚠️ `=== false` ET PAS `!memeCompte` : au premier rendu l'état vaut `null`,
+  // et un test négatif afficherait l'avertissement à tout le monde une seconde.
+  verifier('et l’état « pas encore su » n’est pas confondu avec « pas le même »',
+    !/if \(!memeCompte\)/.test(bloc))
+
   // 🔴 LA GARDE QUI MANQUAIT, ET QUI A COÛTÉ UN 404 EN PRODUCTION. Le gabarit
   // Supabase compose `{{ .RedirectTo }}&token_hash=…` : sans `emailRedirectTo`,
   // `.RedirectTo` retombe sur le Site URL, sans `?`, et le lien devient

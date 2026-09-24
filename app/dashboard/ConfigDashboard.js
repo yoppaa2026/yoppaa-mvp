@@ -13599,6 +13599,35 @@ function BlocAcces({ commercant, toast }) {
   const [mdpBis, setMdpBis] = useState('')
   const [envoiMdp, setEnvoiMdp] = useState(false)
 
+  // 🔴 CE BLOC AGIT SUR LA SESSION, PAS SUR LE DOSSIER AFFICHÉ, ET ÇA A COÛTÉ
+  // SON ACCÈS À ALEX LE 24/09. `supabase.auth.updateUser()` modifie le compte
+  // AVEC LEQUEL ON EST CONNECTÉ. En mode administrateur, on ouvre le dossier
+  // d'un autre commerçant sans changer de session : l'écran affichait donc
+  // « Salon Nathalie » et la demande portait sur le compte d'Alex. Il a
+  // confirmé les deux liens, son adresse est devenue celle qu'il croyait poser
+  // sur la fiche, et la console admin lui a fermé la porte.
+  //
+  // ⚠️ LE COMMERÇANT ORDINAIRE N'EST PAS CONCERNÉ : il n'a qu'un dossier, et
+  // c'est le sien. C'est précisément pour ça que rien ne l'avait signalé.
+  //
+  // ⚠️ ON RETIRE LE GESTE, ON NE LE CORRIGE PAS. Faire porter le changement sur
+  // le dossier affiché demanderait l'API d'administration côté serveur, et ce
+  // n'est pas ce que cet écran promet. Tant qu'il dit « ton accès », il ne doit
+  // parler que du compte de celui qui le regarde.
+  const [memeCompte, setMemeCompte] = useState(null)  // null = pas encore su
+  useEffect(() => {
+    let annule = false
+    supabase.auth.getUser().then(({ data }) => {
+      if (annule) return
+      const idSession = data?.user?.id || null
+      // ⚠️ DEUX ABSENCES NE FONT PAS UNE ÉGALITÉ. Sans ces deux présences
+      // exigées, `null === null` rendrait `true` et le bloc s'afficherait
+      // justement dans le cas où l'on ne sait rien. C'est le défaut du jour.
+      setMemeCompte(!!idSession && !!commercant?.auth_user_id && idSession === commercant.auth_user_id)
+    }).catch(() => { if (!annule) setMemeCompte(false) })
+    return () => { annule = true }
+  }, [commercant?.auth_user_id])
+
   if (!commercant) return null  // le filet, le parent garde déjà
 
   const emailActuel = commercant?.email || ''
@@ -13665,6 +13694,23 @@ function BlocAcces({ commercant, toast }) {
     // refus qui suit passerait pour un mot de passe refusé.
     setEtapeMdp('repos'); setCode(''); setMdp(''); setMdpBis('')
     toast('Ton mot de passe est changé.', 'success')
+  }
+
+  // 🔴 LE DOSSIER REGARDÉ N'EST PAS CELUI DE LA SESSION : on n'affiche AUCUN
+  // des deux gestes, et on dit pourquoi. C'est le cas du mode administrateur.
+  if (memeCompte === false) {
+    return (
+      <div style={s.card}>
+        <h2 style={s.h2}>Ton accès</h2>
+        <Ligne quoi="Email de connexion du dossier" valeur={emailActuel || '—'} />
+        <p style={{ fontSize: 12.5, color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 12px', margin: '16px 0 0', lineHeight: 1.6 }}>
+          Tu regardes ce dossier depuis un autre compte que le sien. Changer un email
+          ou un mot de passe depuis cet écran agirait sur <strong>ton</strong> compte,
+          pas sur celui-ci : les deux gestes sont donc masqués ici. Pour les faire,
+          il faut être connecté avec le compte du commerce.
+        </p>
+      </div>
+    )
   }
 
   return (

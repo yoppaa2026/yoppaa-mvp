@@ -373,24 +373,39 @@ function sansCommentaires(src) {
     /type !== 'email_change'/.test(sansCom),
     'un lien de connexion ouvrirait une session sur cet écran, en silence')
 
-  // 🔴 LE DÉFAUT VU EN PRODUCTION LE 23/09 : les DEUX liens annonçaient « ton
-  // adresse est changée ». `!!data?.user?.new_email` vaut `false` quand la
-  // bascule est finie ET quand Supabase ne renvoie aucun utilisateur, ce qui
-  // est le cas au premier clic. Une absence d'information avait été lue comme
-  // une preuve.
-  verifier('elle traite l’absence d’utilisateur comme un état à part',
-    /if \(!user\) \{[\s\S]{0,120}setEtat\('confirme'\)/.test(sansCom),
-    'sans ça, le premier des deux clics annonce un changement qui n’a pas eu lieu')
-  verifier('elle n’annonce « changée » que sur une preuve positive',
-    /if \(user\.new_email\)[\s\S]{0,140}setEtat\('fait'\)/.test(sansCom),
-    'l’état « fait » doit venir d’un utilisateur lu, jamais d’un booléen vide')
-  // ⚠️ LE SECOURS : au second clic une session s'ouvre, et l'état réel devient
-  // lisible. Sans lui, les deux clics retomberaient sur « je ne sais pas ».
-  verifier('elle relit l’état auprès de Supabase quand le jeton ne dit rien',
-    /await supabase\.auth\.getUser\(\)/.test(sansCom))
-  verifier('et dans tous les cas elle dit de continuer avec l’ancienne adresse',
-    (page.match(/continue à te connecter avec (l’|ton )ancienne/g) || []).length >= 2,
-    'il essaierait la nouvelle et croirait son compte cassé')
+  // 🔴 DEUX TENTATIVES DE DEVINER, DEUX MESSAGES FAUX, VUS EN PRODUCTION LES
+  // 23 ET 24/09. `verifyOtp` rend bien un utilisateur au PREMIER des deux
+  // clics, mais sans remplir `new_email` : l'information n'existe pas de ce
+  // côté, et aucune déduction ne peut la fabriquer.
+  // ⚠️ SUR `sansCom`, PAS SUR `page` : cette garde est née ROUGE parce qu'elle
+  // trouvait la phrase dans le commentaire qui raconte justement le défaut.
+  // C'est le piège le plus fréquent de ce dépôt, et il vient de se reproduire
+  // sur la garde écrite pour l'empêcher.
+  verifier('l’écran n’annonce JAMAIS que l’adresse est changée',
+    !/adresse est changée/i.test(sansCom),
+    'celui qui lit ça au premier clic n’ouvre jamais le second message')
+  // 🔴 ON VÉRIFIE LA RÈGLE, PAS UNE FORME. Première version de cette garde :
+  // `!/setEtat\('fait'\)/`. Une mutation écrivant
+  // `setEtat(data?.user ? 'fait' : 'confirme')` est passée sans la faire
+  // rougir, parce que la chaîne cherchée n'y figurait pas littéralement. On
+  // relève donc TOUS les états posés et on exige qu'ils appartiennent à
+  // l'ensemble prévu : une réintroduction, quelle que soit son écriture, sort
+  // de l'ensemble.
+  {
+    const poses = [...sansCom.matchAll(/setEtat\(([^)]*)\)/g)].map(m => m[1].trim())
+    const autorises = new Set(["'invalide'", "'confirme'"])
+    const hors = poses.filter(e => !autorises.has(e))
+    verifier('et il ne reste aucun état déduit d’une absence',
+      poses.length > 0 && hors.length === 0,
+      `états posés hors des deux prévus : ${hors.join(' / ') || '(aucun état posé du tout)'}`)
+  }
+  // ⚠️ CE QU'ON DIT À LA PLACE : la règle, qui est vraie dans les deux cas, et
+  // l'endroit qui connaît la réponse.
+  verifier('il rappelle que les DEUX liens sont nécessaires',
+    /deux\s*\n?\s*liens<\/strong> cliqués/.test(sansCom))
+  verifier('et il renvoie vers la ligne qui fait foi',
+    /affiche\s*\n?\s*l’adresse réellement en cours/.test(sansCom),
+    'sans elle, personne ne sait où il en est')
 
   // ⚠️ UN LIEN DÉJÀ CLIQUÉ N'EST PAS UNE PANNE. Le dire autrement inquiète pour
   // rien et fait écrire au support.

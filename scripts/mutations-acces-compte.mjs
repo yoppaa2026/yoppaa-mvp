@@ -379,33 +379,33 @@ const MUTATIONS = [
     vers: 'if (!token_hash) {',
     garde: 'elle refuse un lien qui n’est pas un changement d’adresse' },
 
-  // 🔴 LE DEFAUT VU EN PRODUCTION : une absence d information lue comme une
-  // preuve. Les DEUX liens annoncaient « ton adresse est changee ».
-  // ⚠️ ANCRE SUR UNE SEULE LIGNE : `setEtat('confirme')` n apparait qu une fois
-  // dans la fonction, et `replace` ne touche que la premiere occurrence.
-  { nom: '🔴 l absence d utilisateur repasse pour « c est termine »',
+  // 🔴 DEUX TENTATIVES DE DEVINER, DEUX MESSAGES FAUX EN PRODUCTION (23 et
+  // 24/09). `verifyOtp` rend un utilisateur au PREMIER des deux clics mais ne
+  // remplit pas `new_email` : aucune deduction ne peut fabriquer cette
+  // information. L ecran ne l affirme donc plus.
+  { nom: '🔴 l ecran recommence a annoncer que l adresse est changee',
     fichier: RETOUR_EMAIL,
-    de: "        setEtat('confirme')",
-    vers: "        setEtat('fait')",
-    garde: 'elle traite l’absence d’utilisateur comme un état à part' },
+    de: '            <p style={{ ...titre, color: T.vert }}>C’est confirmé de ce côté</p>',
+    vers: '            <p style={{ ...titre, color: T.vert }}>Ton adresse est changée</p>',
+    garde: 'l’écran n’annonce JAMAIS que l’adresse est changée' },
 
-  { nom: '🔴 « changee » s annonce sans preuve positive',
+  { nom: '🔴 un etat deduit d une absence revient dans le code',
     fichier: RETOUR_EMAIL,
-    de: '      if (user.new_email) {',
-    vers: '      if (false) {',
-    garde: 'elle n’annonce « changée » que sur une preuve positive' },
+    de: "      setEtat('confirme')",
+    vers: "      setEtat(data?.user ? 'fait' : 'confirme')",
+    garde: 'et il ne reste aucun état déduit d’une absence' },
 
-  { nom: '⚠️ l etat reel n est plus relu quand le jeton ne dit rien',
+  { nom: '⚠️ l ecran ne rappelle plus qu il faut les DEUX liens',
     fichier: RETOUR_EMAIL,
-    de: 'const { data: apres } = await supabase.auth.getUser()',
-    vers: 'const apres = null',
-    garde: 'elle relit l’état auprès de Supabase quand le jeton ne dit rien' },
+    de: 'liens</strong> cliqués',
+    vers: 'liens</strong> envoyés',
+    garde: 'il rappelle que les DEUX liens sont nécessaires' },
 
-  { nom: '⚠️ l ecran ne dit plus avec quelle adresse se connecter en attendant',
+  { nom: '⚠️ l ecran ne dit plus ou lire l adresse qui fait foi',
     fichier: RETOUR_EMAIL,
-    de: 'continue à te connecter avec l’ancienne',
-    vers: 'tu peux utiliser la nouvelle',
-    garde: 'et dans tous les cas elle dit de continuer avec l’ancienne adresse' },
+    de: 'l’adresse réellement en cours',
+    vers: 'ton ancienne adresse',
+    garde: 'et il renvoie vers la ligne qui fait foi' },
 
   { nom: '⚠️ un lien deja clique passe pour une panne',
     fichier: RETOUR_EMAIL,

@@ -62,40 +62,31 @@ function Verificateur({ setEtat, setDetail }) {
         return
       }
 
-      // 🔴 TROIS ÉTATS, PAS DEUX, ET C'EST UN DÉFAUT PAYÉ EN PRODUCTION.
-      // Première version : `const reste = !!data?.user?.new_email`. Ce booléen
-      // vaut `false` dans DEUX cas qui n'ont rien à voir : quand la bascule est
-      // terminée, et quand Supabase ne renvoie AUCUN utilisateur. Or au premier
-      // des deux clics il n'y a pas de session, donc pas d'utilisateur, donc
-      // l'écran annonçait « ton adresse est changée » alors qu'il restait un
-      // lien à cliquer. Alex l'a vu le 23/09 : les deux liens disaient la même
-      // chose.
+      // 🔴 ON N'AFFICHE PLUS UN ÉTAT QU'ON NE PEUT PAS CONNAÎTRE, ET C'EST LA
+      // TROISIÈME VERSION DE CE BLOC.
       //
-      // ⚠️ UNE ABSENCE D'INFORMATION N'EST PAS UNE PREUVE. C'est la même
-      // famille que `Number(null)` qui vaut 0 : le langage rend une valeur
-      // plausible là où il n'y a rien, et on la lit comme un fait.
-      let user = data?.user || null
-      if (!user) {
-        // Secours : au SECOND clic une session s'ouvre, et on peut alors lire
-        // l'état réel. Au premier, ceci rend `null` et on l'assume.
-        const { data: apres } = await supabase.auth.getUser()
-        user = apres?.user || null
+      // Première : `!!data?.user?.new_email`. Ce booléen vaut `false` quand la
+      // bascule est finie ET quand Supabase ne renvoie rien. Les deux liens
+      // annonçaient « ton adresse est changée ».
+      // Deuxième : trois états, avec un secours par `getUser()`. Alex a
+      // réessayé le 24/09 : LES DEUX LIENS DISAIENT ENCORE LA MÊME CHOSE.
+      // `verifyOtp` rend bien un utilisateur au PREMIER clic, mais sans
+      // remplir `new_email`. L'information n'existe pas de ce côté.
+      //
+      // ⚠️ DEUX TENTATIVES DE DEVINER, DEUX MESSAGES FAUX. On arrête. Un écran
+      // qui affirme ce qu'il ignore se trompe tôt ou tard, et ici l'erreur
+      // coûte cher : celui qui lit « c'est changé » au premier clic n'ouvre
+      // jamais le second message, et son adresse ne bascule pas.
+      //
+      // Le message est désormais LE MÊME dans les deux cas, et il est VRAI
+      // dans les deux : ce qui est confirmé l'est, ce qui reste à faire est
+      // rappelé, et l'endroit qui dit la vérité est nommé. « Mon compte »
+      // affiche `commercants.email`, donc l'adresse réellement en cours.
+      if (data?.user?.new_email) {
+        // Le seul cas où l'on SAIT : Supabase nomme l'adresse en attente.
+        setDetail(data.user.new_email)
       }
-
-      if (!user) {
-        // 🔴 ON NE SAIT PAS LEQUEL DES DEUX, ET ON LE DIT SANS MENTIR. La
-        // phrase est vraie dans les deux cas : s'il en reste un, elle donne la
-        // consigne ; s'il n'en reste pas, elle ne gêne pas.
-        setEtat('confirme')
-        return
-      }
-      if (user.new_email) {
-        setEtat('partiel')
-        setDetail(user.new_email)
-        return
-      }
-      setEtat('fait')
-      setDetail(user.email || '')
+      setEtat('confirme')
     }
 
     verifier()
@@ -161,29 +152,25 @@ export default function PageChangementEmail() {
             plutôt que de deviner, on écrit une phrase qui reste vraie dans les
             deux cas. Annoncer « c'est changé » sans preuve, c'est envoyer se
             connecter avec une adresse qui n'est pas encore la sienne. */}
+        {/* 🔴 UN SEUL MESSAGE DE SUCCÈS, VRAI DANS LES DEUX CAS. Il y en avait
+            deux, et l'écran devait deviner lequel afficher : il s'est trompé
+            deux fois de suite, en annonçant « c'est changé » au premier des
+            deux clics. Celui qui lit ça n'ouvre jamais le second message.
+            Ici rien n'est affirmé sur ce qui reste à faire : on dit ce qui est
+            acquis, on rappelle la règle, et on nomme l'endroit qui, lui,
+            connaît la réponse. */}
         {etat === 'confirme' && (
           <div style={carte}>
-            <p style={titre}>C’est confirmé de ce côté</p>
+            <p style={{ ...titre, color: T.vert }}>C’est confirmé de ce côté</p>
             <p style={corps}>
-              S’il te reste <strong style={{ color: '#fff' }}>un second lien</strong> dans l’autre
-              boîte, clique-le aussi : le changement n’a lieu qu’une fois les deux confirmés.
-              Tant que ce n’est pas fait, continue à te connecter avec ton ancienne adresse.
+              Le changement n’a lieu qu’une fois les <strong style={{ color: '#fff' }}>deux
+              liens</strong> cliqués{detail ? <>, vers <strong style={{ color: '#fff' }}>{detail}</strong></> : null}.
+              Si le second message t’attend encore dans l’autre boîte, ouvre-le aussi.
             </p>
             <p style={{ ...corps, marginTop: 10 }}>
               Pour savoir où tu en es, ouvre « Mon compte » : la ligne
-              <strong style={{ color: '#fff' }}> Email de connexion</strong> affiche toujours
-              l’adresse en cours.
-            </p>
-          </div>
-        )}
-
-        {etat === 'fait' && (
-          <div style={carte}>
-            <p style={{ ...titre, color: T.vert }}>Ton adresse est changée</p>
-            <p style={corps}>
-              C’est désormais celle-ci qu’il faut utiliser pour te connecter
-              {detail ? <> : <strong style={{ color: '#fff' }}>{detail}</strong></> : null}.
-              Tes factures et tes notifications y arriveront aussi.
+              <strong style={{ color: '#fff' }}> Email de connexion</strong> affiche
+              l’adresse réellement en cours, et c’est elle qui fait foi.
             </p>
           </div>
         )}

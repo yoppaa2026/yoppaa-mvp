@@ -438,6 +438,46 @@ verifier('les CGU citent le lien de connexion de l\'email de confirmation',
 verifier('les CGU ne présentent plus le compte comme facultatif pour le suivi',
   !/compte \(facultative\) permet de suivre/.test(cguClient))
 
+// ─── LES DEUX TROUS JURIDIQUES DU 20/09, COMBLÉS LE 24/09 ──────────────────
+//
+// 🔴 TROUVÉS EN REMPLISSANT LE DOSSIER APPLE, pas en relisant les CGU. Ce sont
+// des clauses ABSENTES : rien ne peut les signaler, puisqu'il n'y a rien à
+// lire. Une garde est donc le seul moyen qu'elles ne disparaissent pas
+// silencieusement à la prochaine réécriture.
+verifier('les CGU client posent une clause d’âge',
+  /1 bis\. Âge requis/.test(cguClient),
+  'un mineur belge ne peut pas contracter seul, et rien ne le disait')
+verifier('et elles nomment les produits à limite d’âge',
+  /boissons alcoolisées et de tabac/.test(cguClient),
+  'c’est le point qu’Apple regarde, et celui qui expose un commerçant')
+// ⚠️ QUI VÉRIFIE, ET QUAND : sans ça, la clause dit un interdit sans dire qui
+// l'applique, donc personne ne l'applique.
+verifier('et elles disent que le commerçant vérifie à la remise',
+  /vérifie l&rsquo;âge au moment de la remise/.test(cguClient))
+
+// La licence de republication vit dans les CGU COMMERÇANT : c'est son contenu
+// qu'on republie.
+const cguCommercant = legal.slice(legal.indexOf('id="cgu-commercant"'), legal.indexOf('id="confidentialite"'))
+verifier('les CGU commerçant existent', cguCommercant.length > 2000)
+const licence = cguCommercant.slice(cguCommercant.indexOf('11. Contenus publiés par le Commerçant'))
+// ⚠️ ON VISE LA SECTION, PAS LA PAGE. « Good Morning Yoppers » figure déjà
+// dans la description des formules, cent lignes plus haut : une garde posée
+// sur toute la page serait verte sans que la licence existe.
+verifier('les CGU commerçant concèdent une licence de republication',
+  licence.length > 500 && /licence non exclusive/.test(licence),
+  'Yoppaa republie tous les jours sans que rien ne l’y autorise')
+verifier('et la licence nomme le Good Morning, qui republie chaque jour',
+  /Good Morning Yoppers/.test(licence))
+verifier('et les visuels de partage vers les réseaux',
+  /visuels de partage vers les réseaux/.test(licence))
+// 🔴 LA GARANTIE COMPTE AUTANT QUE LA LICENCE : sans elle, une photo prise
+// ailleurs part vers des milliers de boîtes, signée Yoppaa.
+verifier('et le commerçant garantit détenir les droits sur ses photos',
+  /garantit détenir les droits/.test(licence),
+  'sans cette garantie, Yoppaa diffuse à ses risques ce qu’un autre a photographié')
+verifier('et la licence s’éteint avec le contrat',
+  /licence prend fin avec le contrat/.test(licence))
+
 // ─── CE QUE LES STORES EXIGENT ─────────────────────────────────────────────
 // ⚠️ Motif de rejet classique : la politique de confidentialité DOIT être
 // atteignable depuis l'APPLICATION, pas seulement depuis le site vitrine. Le

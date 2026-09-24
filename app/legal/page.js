@@ -155,6 +155,17 @@ export default function LegalPage() {
             <P>L'accès à la plateforme Yoppaa est gratuit pour les clients. <strong>La commande et la prise de rendez-vous restent possibles sans créer de compte</strong> : il suffit de renseigner ses coordonnées au moment de valider.</P>
             <P>En revanche, <strong>l'accès aux données personnelles rattachées à une adresse email suppose d'avoir prouvé qu'on en est bien le titulaire</strong>. L'historique des commandes et des rendez-vous, les favoris, les cartes de fidélité et le dépôt d'un avis ne sont donc accessibles qu'après vérification de l'adresse email, par mot de passe ou par le lien de connexion contenu dans l'email de confirmation. Renseigner l'adresse d'un tiers ne donne accès à rien.</P>
             <P>Le Client qui vient de commander sans compte peut suivre <strong>cette commande</strong> depuis l'appareil utilisé pour la passer, sans vérification supplémentaire.</P>
+            {/* 🔴 LA CLAUSE D'ÂGE MANQUAIT ENTIÈREMENT, trouvé le 20/09 en
+                remplissant le dossier Apple. Deux trous distincts : un mineur
+                belge ne peut pas contracter seul, et la plateforme propose de
+                l'alcool chez certains commerçants. Le second est le plus
+                exposé : c'est celui qu'Apple regarde, et c'est celui qui peut
+                se retourner contre un commerçant. */}
+            <H3>1 bis. Âge requis</H3>
+            <P>La plateforme s&rsquo;adresse aux <strong>personnes majeures</strong>. Un mineur ne peut passer commande, réserver un rendez-vous ni acheter un bon cadeau qu&rsquo;avec l&rsquo;accord préalable de son représentant légal, qui en assume la responsabilité et le paiement. Yoppaa peut refuser ou annuler toute commande pour laquelle cet accord n&rsquo;est manifestement pas réuni.</P>
+            <P><strong>Produits soumis à une limite d&rsquo;âge.</strong> La vente de boissons alcoolisées et de tabac est interdite aux mineurs selon les seuils fixés par la loi belge. Lorsque de tels produits sont proposés, ils ne peuvent être commandés que par une personne ayant l&rsquo;âge requis. <strong>Le commerçant vérifie l&rsquo;âge au moment de la remise</strong> et refuse celle-ci à défaut : la commande n&rsquo;ouvre alors aucun droit à réclamation contre Yoppaa, qui n&rsquo;est pas le vendeur.</P>
+            <P>Le dépôt d&rsquo;un avis et l&rsquo;usage des fonctions de la plateforme supposent également d&rsquo;avoir l&rsquo;âge à partir duquel le droit belge permet de consentir seul au traitement de ses données personnelles.</P>
+
             <P>Yoppaa se réserve le droit de suspendre ou supprimer tout compte en cas d'utilisation frauduleuse ou contraire aux présentes CGU.</P>
             <P>Le Client peut <strong>supprimer son compte à tout moment et par lui-même</strong>, depuis l'onglet Profil de l'application. Les modalités et les conséquences de cette suppression sont détaillées à l'article 4, Confidentialité. La suppression est refusée tant qu'une commande, un rendez-vous ou un bon cadeau en cours implique un commerçant tiers.</P>
 
@@ -312,6 +323,20 @@ export default function LegalPage() {
               Exemple : préavis notifié le 10 mars → effet le 1er avril ✓{'\n'}
               Préavis notifié le 20 mars → effet le 1er mai (hors délai)
             </InfoBox>
+
+            {/* 🔴 LA LICENCE DE REPUBLICATION MANQUAIT, trouvé le 20/09.
+                La « Propriété intellectuelle » des mentions légales protège
+                les contenus DE YOPPAA ; rien ne disait ce que Yoppaa a le
+                droit de faire des contenus DU COMMERÇANT. Or on les republie
+                déjà tous les jours : Good Morning Yoppers, notifications,
+                visuels de partage vers les réseaux, référencement.
+                ⚠️ ET LA GARANTIE COMPTE AUTANT QUE LA LICENCE : sans elle,
+                une photo prise ailleurs par un commerçant est republiée par
+                Yoppaa, sous le nom de Yoppaa, vers des milliers de boîtes. */}
+            <H3>11. Contenus publiés par le Commerçant</H3>
+            <P>Le Commerçant reste <strong>propriétaire</strong> des textes, photographies, logos et autres contenus qu&rsquo;il publie sur sa page Yoppaa. Il <strong>garantit détenir les droits nécessaires</strong> sur chacun d&rsquo;eux, en particulier sur les photographies, et qu&rsquo;ils ne portent atteinte à aucun droit de tiers. Il répond seul des conséquences d&rsquo;une publication faite en méconnaissance de cette garantie.</P>
+            <P>Pour que la plateforme puisse faire ce pour quoi le Commerçant s&rsquo;y inscrit, celui-ci concède à Avcotech SRL une <strong>licence non exclusive et gratuite</strong>, valable pour la durée du contrat, l&rsquo;autorisant à reproduire ces contenus, à en adapter le format et à les diffuser <strong>aux seules fins de promouvoir son commerce et la plateforme</strong> : sur sa page publique et dans l&rsquo;application, dans les emails adressés aux habitants dont le Good Morning Yoppers, dans les notifications, sur les visuels de partage vers les réseaux sociaux mis à sa disposition, et par le référencement de sa page dans les moteurs de recherche.</P>
+            <P>Le Commerçant peut retirer un contenu de sa page à tout moment : il cesse alors d&rsquo;être diffusé pour l&rsquo;avenir. La licence prend fin avec le contrat, <strong>sous réserve des diffusions déjà effectuées</strong> et des copies conservées par des tiers (moteurs de recherche, réseaux sociaux, boîtes de réception), sur lesquelles ni le Commerçant ni Yoppaa n&rsquo;ont de reprise.</P>
           </Section>
 
           {/* 4. CONFIDENTIALITÉ */}

@@ -203,6 +203,51 @@ const MUTATIONS = [
     fichier: 'app/onboarding/page.js',
     de: 'setEcranIdx(i => i + 1); setNote(null); setSortie(false)',
     vers: 'setEcranIdx(i => i + 1); setSortie(false)' },
+
+  // ═══ 24/09 : LES DEUX TROUS JURIDIQUES DU DOSSIER APPLE ════════════════
+  //
+  // 🔴 CE SONT DES CLAUSES ABSENTES. Rien ne peut signaler ce qui n existe
+  // pas : sans ces mutations, les gardes qui les protegent ne seraient jamais
+  // eprouvees, et la prochaine reecriture des CGU pourrait les emporter en
+  // silence.
+  { nom: '🔴 la clause d age disparait des CGU client',
+    fichier: 'app/legal/page.js',
+    de: '<H3>1 bis. Âge requis</H3>',
+    vers: '<H3>1 bis. Accès</H3>',
+    garde: 'les CGU client posent une clause d’âge' },
+
+  { nom: '🔴 les CGU ne nomment plus l alcool ni le tabac',
+    fichier: 'app/legal/page.js',
+    de: 'boissons alcoolisées et de tabac',
+    vers: 'certains produits',
+    garde: 'et elles nomment les produits à limite d’âge' },
+
+  // ⚠️ UN INTERDIT SANS RESPONSABLE N EST APPLIQUE PAR PERSONNE.
+  { nom: '⚠️ la clause d age ne dit plus QUI verifie',
+    fichier: 'app/legal/page.js',
+    de: 'vérifie l&rsquo;âge au moment de la remise',
+    vers: 'peut demander une preuve',
+    garde: 'et elles disent que le commerçant vérifie à la remise' },
+
+  { nom: '🔴 la licence de republication disparait des CGU commercant',
+    fichier: 'app/legal/page.js',
+    de: 'licence non exclusive',
+    vers: 'autorisation de principe',
+    garde: 'les CGU commerçant concèdent une licence de republication' },
+
+  // 🔴 SANS LA GARANTIE, une photo prise ailleurs part vers des milliers de
+  // boites, signee Yoppaa.
+  { nom: '🔴 le commercant ne garantit plus detenir les droits sur ses photos',
+    fichier: 'app/legal/page.js',
+    de: 'garantit détenir les droits',
+    vers: 'publie sous sa responsabilité',
+    garde: 'et le commerçant garantit détenir les droits sur ses photos' },
+
+  { nom: '⚠️ la licence ne s eteint plus avec le contrat',
+    fichier: 'app/legal/page.js',
+    de: 'licence prend fin avec le contrat',
+    vers: 'licence reste acquise',
+    garde: 'et la licence s’éteint avec le contrat' },
 ]
 
 const lancer = () => {

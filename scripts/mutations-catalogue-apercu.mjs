@@ -38,8 +38,29 @@ const MUTATIONS = [
 
   { nom: '⚠️ un groupe vide s annonce comme un groupe rempli',
     fichier: APERCU,
-    de: '  if (options === 0) return `${partGroupes}, aucune option`',
-    vers: '  if (false) return partGroupes' },
+    de: '  if (options === 0) return `${partNoms} · aucune option`',
+    vers: '  if (false) return partNoms' },
+
+  // 🔴 LE DEFAUT DU 25/09, RELEVE PAR ALEX SUR CAPTURE : « il faut que le nom
+  // du groupe soit affiche, pas le nombre de groupes, il faut toujours cliquer
+  // pour savoir lequel ». Une vignette qui dit « 1 groupe » oblige a ouvrir
+  // l article — exactement ce qu elle devait eviter.
+  { nom: '🔴 la vignette redit le nombre de groupes au lieu de leur nom',
+    fichier: APERCU,
+    de: '  const partNoms = reste > 0 ? `${montres} +${reste}` : montres',
+    vers: '  const partNoms = noms.length === 1 ? `1 groupe` : `${noms.length} groupes`' },
+
+  // ⚠️ AU-DELA DE DEUX NOMS, ca deborde de la vignette sur un telephone.
+  { nom: '⚠️ tous les noms sont ecrits, la vignette deborde',
+    fichier: APERCU,
+    de: '  const montres = noms.slice(0, NOMS_MONTRES).join(\', \')',
+    vers: "  const montres = noms.join(', ')" },
+
+  // ⚠️ UN GROUPE SANS NOM NE LAISSE PAS UN BLANC en tete de phrase.
+  { nom: '⚠️ un groupe sans nom laisse un blanc',
+    fichier: APERCU,
+    de: "  const noms = liste.map(g => String(g?.nom || '').trim() || 'Sans nom')",
+    vers: "  const noms = liste.map(g => String(g?.nom || '').trim())" },
 
   // 🔴 UN ARTICLE SANS GROUPE NE DOIT RIEN ANNONCER : une vignette qui promet
   // un contenu inexistant est pire qu une vignette muette.

@@ -26,24 +26,43 @@ const v = (nom, cond, detail = '') => {
 
 // ═══ 1) CE QUE LES OPTIONS DONNENT À LIRE ═════════════════════════════════
 {
-  const G = (n) => ({ valeurs: Array.from({ length: n }, (_, i) => ({ nom: `v${i}` })) })
+  const G = (nom, n) => ({ nom, valeurs: Array.from({ length: n }, (_, i) => ({ nom: `v${i}` })) })
 
   v('sans groupe, il n’y a rien à dire', apercuOptions([]) === null)
   v('une liste absente ne casse rien', apercuOptions(null) === null)
 
-  // ⚠️ ON COMPTE LES DEUX NIVEAUX : « 2 groupes » ne dit pas si le client aura
-  // deux choix ou vingt.
-  v('un groupe et ses options se comptent',
-    apercuOptions([G(3)]) === '1 groupe · 3 options', apercuOptions([G(3)]))
-  v('plusieurs groupes s’additionnent',
-    apercuOptions([G(3), G(6)]) === '2 groupes · 9 options', apercuOptions([G(3), G(6)]))
-  v('le singulier est respecté',
-    apercuOptions([G(1)]) === '1 groupe · 1 option', apercuOptions([G(1)]))
+  // 🔴 LE NOM, PAS LE NOMBRE (Alex, 25/09) : « 1 groupe · 13 options »
+  // obligeait à ouvrir l'article pour savoir s'il s'agissait des sauces ou de
+  // la cuisson — exactement ce que la vignette devait éviter.
+  v('le nom du groupe est dit, pas son nombre',
+    apercuOptions([G('Choix de sauce', 13)]) === 'Choix de sauce · 13 options',
+    apercuOptions([G('Choix de sauce', 13)]))
+  v('et aucun décompte de groupes ne subsiste',
+    !/\d+ groupes?/.test(apercuOptions([G('Choix de sauce', 13), G('Suppléments', 3)]) || ''),
+    apercuOptions([G('Choix de sauce', 13), G('Suppléments', 3)]))
 
-  // ⚠️ UN GROUPE VIDE EXISTE : créé puis jamais rempli. « 1 groupe · 0 option »
-  // serait exact mais illisible ; on dit ce qui manque.
-  v('un groupe sans option dit ce qui manque',
-    apercuOptions([G(0)]) === '1 groupe, aucune option', apercuOptions([G(0)]))
+  // ⚠️ LE TOTAL D'OPTIONS RESTE, parce qu'il dit autre chose : le nom dit DE
+  // QUOI il s'agit, le compte dit COMBIEN de choix le client aura.
+  v('deux groupes se nomment tous les deux, options additionnées',
+    apercuOptions([G('Choix de sauce', 13), G('Suppléments', 3)]) === 'Choix de sauce, Suppléments · 16 options',
+    apercuOptions([G('Choix de sauce', 13), G('Suppléments', 3)]))
+  v('le singulier est respecté',
+    apercuOptions([G('Taille', 1)]) === 'Taille · 1 option', apercuOptions([G('Taille', 1)]))
+
+  // ⚠️ AU-DELÀ DE DEUX NOMS, ça déborde de la vignette sur un téléphone : on
+  // compte le reste plutôt que de tout écrire.
+  const quatre = [G('Sauce', 5), G('Suppléments', 3), G('Cuisson', 2), G('Taille', 4)]
+  v('au-delà de deux groupes, le reste est compté',
+    apercuOptions(quatre) === 'Sauce, Suppléments +2 · 14 options', apercuOptions(quatre))
+
+  // ⚠️ UN GROUPE VIDE EXISTE : créé puis jamais rempli. « 0 option » serait
+  // exact mais illisible ; on dit ce qui manque, et on le NOMME quand même.
+  v('un groupe sans option dit ce qui manque, en le nommant',
+    apercuOptions([G('Cuisson', 0)]) === 'Cuisson · aucune option',
+    apercuOptions([G('Cuisson', 0)]))
+  // ⚠️ UN GROUPE SANS NOM NE LAISSE PAS UN BLANC en tête de phrase.
+  v('un groupe sans nom reste lisible',
+    apercuOptions([G('   ', 2)]) === 'Sans nom · 2 options', apercuOptions([G('   ', 2)]))
 }
 
 // ═══ 2) CE QUE LES VARIANTES DONNENT À LIRE ═══════════════════════════════
@@ -79,10 +98,11 @@ const v = (nom, cond, detail = '') => {
 
 // ═══ 3) LA LIGNE DE LA VIGNETTE ═══════════════════════════════════════════
 {
-  const G = (n) => ({ valeurs: Array.from({ length: n }, () => ({})) })
+  const G = (nom, n) => ({ nom, valeurs: Array.from({ length: n }, () => ({})) })
 
-  const avec = apercuContenu({ groupes: [G(4)] })
-  v('ce qui existe se lit en clair', avec.texte === '1 groupe · 4 options' && avec.vide === false,
+  const avec = apercuContenu({ groupes: [G('Choix de sauce', 4)] })
+  v('ce qui existe se lit en clair, et se nomme',
+    avec.texte === 'Choix de sauce · 4 options' && avec.vide === false,
     JSON.stringify(avec))
 
   // ⚠️ « RIEN » EST UNE INFORMATION SUR CET ÉCRAN-LÀ : c'est même celle qu'on

@@ -94,6 +94,80 @@ const MUTATIONS = [
     de: '  const aCopier = Math.max(0, cibles - conflits)',
     vers: '  const aCopier = cibles' },
 
+  // ─── LES VARIANTES, CHEZ QUI N A PAS DE GROUPES (25/09) ──────────────────
+  //
+  // 🔴 LE TROU TROUVE PAR ALEX : dupliquer un t-shirt rendait une fiche NUE,
+  // sans meme la definition de ses axes.
+  { nom: '🔴 la copie d un article perd ses axes de variantes',
+    fichier: COPIE,
+    de: '    if (article[champ] !== undefined) sortie[champ] = article[champ]',
+    vers: '    if (false) sortie[champ] = article[champ]' },
+
+  // 🔴 « 12 EN TAILLE M » DECRIT UN CARTON, pas un modele : recopier le stock
+  // vendrait douze t-shirts qui n existent pas.
+  { nom: '🔴 le stock des variantes est recopie au lieu de repartir a zero',
+    fichier: COPIE,
+    de: '    stock: 0,',
+    vers: '    stock: Number(v?.stock) || 0,' },
+
+  { nom: '⚠️ la copie de variantes n allume pas le drapeau de gestion',
+    fichier: COPIE,
+    de: '  sortie.gere_variantes = true',
+    vers: '  sortie.gere_variantes = false' },
+
+  // 🔴 UNE MATRICE REMPLACE CELLE QUI EST LA : copier vers un article equipe
+  // detruirait ses tailles, ses prix et ses stocks.
+  { nom: '🔴 les articles deja equipes ne sont plus ecartes',
+    fichier: COPIE,
+    de: '    return a.gere_variantes === true && axes.length > 0',
+    vers: '    return false' },
+
+  { nom: '⚠️ le resume des variantes ne dit plus le stock a zero',
+    fichier: COPIE,
+    de: '  const base = `Les mêmes variantes seront créées sur ${quoi}, à stock zéro.`',
+    vers: '  const base = `Les mêmes variantes seront créées sur ${quoi}.`' },
+
+  // ─── LA BIBLIOTHEQUE (25/09) ─────────────────────────────────────────────
+  //
+  // 🔴 LA PLUS COMPLETE SERT DE MODELE : ajouter une valeur oubliee ne coute
+  // rien, retrouver une valeur silencieusement retiree coute quarante
+  // relectures.
+  { nom: '🔴 le modele de la bibliotheque n est plus le plus complet',
+    fichier: COPIE,
+    de: '      if ((g?.valeurs?.length || 0) > (modele?.valeurs?.length || 0)) modele = g',
+    vers: '      if (false) modele = g' },
+
+  // 🔴 SANS CE COMPTE, on applique une version que le commercant n a pas
+  // choisie, sans qu il le sache.
+  { nom: '🔴 les versions differentes ne sont plus comptees',
+    fichier: COPIE,
+    de: '    const versions = new Set(mêmes.map(signature)).size',
+    vers: '    const versions = 1' },
+
+  { nom: '⚠️ l ordre des valeurs fabrique de fausses versions differentes',
+    fichier: COPIE,
+    de: '      .sort()',
+    vers: '      ' },
+
+  { nom: '⚠️ la bibliotheque ne met plus le plus utilise en tete',
+    fichier: COPIE,
+    de: '  return sortie.sort((a, b) => (b.articles.length - a.articles.length) || a.nom.localeCompare(b.nom))',
+    vers: '  return sortie' },
+
+  // ─── LES PRESTATIONS (25/09) ─────────────────────────────────────────────
+  //
+  // 🔴 DEUX JOINTURES SUR LES MEMES TABLES feraient compter deux fois le meme
+  // inventaire, et le service afficherait des places qui n existent pas.
+  { nom: '🔴 une jointure de tables se duplique',
+    fichier: COPIE,
+    de: '  if (prestation.jointure_de) return null',
+    vers: '  if (false) return null' },
+
+  { nom: '🔴 la prestation copiee arrive en ligne toute seule',
+    fichier: COPIE,
+    de: '  sortie.nom = nomDeLaCopie(prestation.nom, nomsExistants)',
+    vers: '  sortie.nom = prestation.nom' },
+
   // ─── AGIR EN LOT ─────────────────────────────────────────────────────────
   //
   // 🔴 LA DERIVE BINAIRE SUR DE L ARGENT : `9.5 * 0.99` vaut 9,404999… donc
@@ -185,10 +259,16 @@ const MUTATIONS = [
     vers: '    const aCopier = cibles.filter(id => !conflits.includes(id))' },
 
   // 🔴 LES VALEURS SE RATTACHENT PAR ARTICLE, jamais par l ordre de retour.
+  //
+  // ⚠️ L INDENTATION FAIT PARTIE DE L ANCRE. Cette ligne vivait dans un
+  // composant (6 espaces) ; depuis que l ecriture est partagee entre deux
+  // ecrans, elle vit au niveau du module (4 espaces). Le harnais a dit
+  // « TEXTE INTROUVABLE » — c est exactement ce qu on lui demande, et c est
+  // pour ca qu une ancre introuvable ne compte jamais comme une reussite.
   { nom: '🔴 les options copiees se rattachent par l ordre d insertion',
     fichier: ECRAN,
-    de: '      const groupeId = idParArticle.get(String(g.article_id))',
-    vers: '      const groupeId = (crees || [])[i]?.id' },
+    de: '    const groupeId = idParArticle.get(String(g.article_id))',
+    vers: '    const groupeId = (crees || [])[i]?.id' },
 ]
 
 const lancer = (banc = BANC) => {

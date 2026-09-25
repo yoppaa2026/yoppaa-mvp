@@ -126,7 +126,10 @@ import { LARGEUR_CHAMP, LARGEUR_TEXTE_LONG } from '@/lib/responsive'
 // applique, il ne les réinvente pas. C'est ce qui permet de les mesurer.
 import {
   copieDArticle, ciblesDeCopie, conflitsDeGroupe, copiesDuGroupe,
-  resumeDeCopie, repartirCibles,
+  copiesDeVariantes, resumeDeCopie, repartirCibles,
+  bibliothequeDeGroupes, phraseDeBibliotheque,
+  axesDeLArticle, conflitsDeVariantes, resumeDeVariantes,
+  copieDePrestation,
 } from '@/lib/catalogue-copie'
 // ⚠️ ET CE QUI S'APPLIQUE À PLUSIEURS ARTICLES SE DÉCIDE AUSSI DANS UN MODULE :
 // ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
@@ -787,6 +790,22 @@ function TabMenu({ commercantId, commercant, toast }) {
       .eq('article_id', a.id)
 
     let optionsRatees = false
+
+    // 🔴 ET LES COMBINAISONS DE VARIANTES AUSSI (trou trouvé par Alex le
+    // 25/09 : « cette modif s'applique à tous les catalogues ? »). En détail
+    // et en vitrine, il n'y a pas de groupes d'options : il y a une matrice
+    // taille/couleur. Sans elle, une boutique dupliquait un t-shirt et
+    // récupérait une fiche nue — le geste qui lui sert le plus était
+    // justement celui-là.
+    if (a.gere_variantes) {
+      const { data: variantesSource } = await supabase
+        .from('article_variantes').select('*').eq('article_id', a.id).order('ordre')
+      const lignes = copiesDeVariantes(variantesSource || [], cree.id)
+      if (lignes.length > 0) {
+        const { error: errVar } = await supabase.from('article_variantes').insert(lignes)
+        if (errVar) optionsRatees = true
+      }
+    }
     for (const g of groupesSource || []) {
       const { groupes: [copie], valeurs: [valeursCopie] } = copiesDuGroupe(g, [cree.id])
       const { data: gCree, error: errG } = await supabase
@@ -806,7 +825,13 @@ function TabMenu({ commercantId, commercant, toast }) {
       toast(`« ${payload.nom} » est créé, mais une partie de ses options n'a pas pu être copiée. Vérifie-les.`, 'error')
       return
     }
-    toast(`« ${payload.nom} » créé, en indisponible. Relis-le puis rends-le disponible.`)
+    // ⚠️ ON DIT CE QUI NE SUIT PAS : le stock repart de zéro sur chaque
+    // combinaison, parce qu'une quantité décrit un carton dans l'arrière-
+    // boutique, pas un article. Le taire ferait vendre des tailles qui
+    // n'existent pas.
+    toast(a.gere_variantes
+      ? `« ${payload.nom} » créé, en indisponible, avec ses variantes à zéro stock.`
+      : `« ${payload.nom} » créé, en indisponible. Relis-le puis rends-le disponible.`)
   }
 
   async function updateStock(id, val) {
@@ -1488,6 +1513,13 @@ function TabMenu({ commercantId, commercant, toast }) {
                 : 'Configure les groupes d’options de chaque article (sauces obligatoires, suppléments payants…). Clique pour gérer.'}
             </p>
           </div>
+          {/* ⚠️ LA BIBLIOTHÈQUE PASSE DEVANT LA LISTE (Alex, 25/09) : le
+              commerçant pense « mes garnitures », pas « les garnitures de la
+              margherita ». Elle ne s'affiche que là où les groupes existent :
+              le détail et la vitrine ont des variantes, un autre modèle. */}
+          {!variantesCategorie && articles.length > 0 && (
+            <BibliothequeGroupes articles={articles} toast={toast} onApplique={fetchArticles}/>
+          )}
           {articles.length === 0 ? (
             <div style={{ ...s.card, textAlign: 'center', padding: 40, color: T.muted }}>
               Crée d&rsquo;abord des articles dans l&rsquo;onglet <strong>Articles</strong>.
@@ -1507,7 +1539,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                 </summary>
                 <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${T.hairline}` }}>
                   {variantesCategorie
-                    ? <VariantesArticle article={a} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
+                    ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
                     : <OptionsArticle articleId={a.id} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
                 </div>
               </details>
@@ -1520,6 +1552,238 @@ function TabMenu({ commercantId, commercant, toast }) {
 }
 
 // ─── Gestionnaire d'options pour un article ──────────────────────────────────
+// ─── ÉCRIRE LES COPIES D'UN GROUPE ──────────────────────────────────────────
+//
+// ⚠️ ELLE VIT AU NIVEAU DU MODULE parce que DEUX écrans l'appellent : le
+// panneau d'un article, et la bibliothèque en tête de « Personnalisation ».
+// Recopiée deux fois, elle aurait fini par écrire deux choses différentes, et
+// c'est justement ce qu'on essaie d'éviter dans tout ce chantier.
+//
+// 🔴 LES VALEURS SE RATTACHENT PAR `article_id`, JAMAIS PAR L'ORDRE DE RETOUR.
+// `insert([...]).select()` rend les lignes créées, mais compter sur leur ordre
+// serait un pari : un jour où il change, les sauces de la margherita
+// atterriraient sur la quatre-fromages. Chaque cible n'apparaît qu'une fois
+// dans le lot, son identifiant d'article est donc une clé sûre.
+//
+// ⚠️ ET SI LES VALEURS ÉCHOUENT, ON LE DIT SANS TOUT DÉFAIRE. Des groupes
+// vides restent visibles et corrigeables ; un effacement silencieux, lui,
+// laisserait le commerçant croire que rien n'a bougé.
+async function ecrireCopiesDeGroupe(groupe, cibleIds) {
+  const { groupes: aEcrire, valeurs } = copiesDuGroupe(groupe, cibleIds)
+  if (aEcrire.length === 0) return { ok: false, erreur: 'Rien à copier.' }
+
+  const { data: crees, error } = await supabase
+    .from('article_options_groupes').insert(aEcrire).select('id, article_id')
+  if (error) return { ok: false, erreur: error.message }
+
+  const idParArticle = new Map((crees || []).map(g => [String(g.article_id), g.id]))
+  const lignes = []
+  aEcrire.forEach((g, i) => {
+    const groupeId = idParArticle.get(String(g.article_id))
+    if (!groupeId) return
+    for (const val of valeurs[i]) lignes.push({ groupe_id: groupeId, ...val })
+  })
+  if (lignes.length > 0) {
+    const { error: errVal } = await supabase.from('article_options_valeurs').insert(lignes)
+    if (errVal) {
+      return {
+        ok: false, partiel: true, combien: crees?.length || 0,
+        erreur: `Les groupes sont créés mais leurs options n'ont pas pu être écrites : ${errVal.message}`,
+      }
+    }
+  }
+  return { ok: true, combien: crees?.length || aEcrire.length }
+}
+
+// ─── LA BIBLIOTHÈQUE DE GROUPES, EN TÊTE DE « PERSONNALISATION » ────────────
+//
+// 🔴 POURQUOI (Alex, 25/09). « Avoir les groupes existants au-dessus, pouvoir
+// les sélectionner et les appliquer à d'autres articles. Toujours plus de
+// facilité. » Ouvrir une pizza pour trouver un groupe et le copier ailleurs,
+// c'est le raisonnement à l'envers : le commerçant pense « mes garnitures »,
+// pas « les garnitures de la margherita ».
+//
+// ⚠️ ELLE NE REMPLACE PAS LE PANNEAU DE CHAQUE ARTICLE, elle lui donne son
+// entrée naturelle. L'un sert à régler un article, l'autre à étendre une règle.
+function BibliothequeGroupes({ articles = [], toast, onApplique }) {
+  const [tousLesGroupes, setTousLesGroupes] = useState([])
+  const [chargement, setChargement] = useState(true)
+  const [choisi, setChoisi] = useState(null)   // le nom du groupe déplié
+  const [cibles, setCibles] = useState([])
+  const [envoi, setEnvoi] = useState(false)
+
+  const idsArticles = articles.map(a => a.id)
+  const cleArticles = idsArticles.join('|')
+
+  useEffect(() => {
+    let vivant = true
+    async function charger() {
+      if (idsArticles.length === 0) { setTousLesGroupes([]); setChargement(false); return }
+      setChargement(true)
+      const { data, error } = await supabase
+        .from('article_options_groupes')
+        .select('*, valeurs:article_options_valeurs(*)')
+        .in('article_id', idsArticles)
+      if (!vivant) return
+      if (error) toast(`Erreur : ${error.message}`, 'error')
+      setTousLesGroupes(data || [])
+      setChargement(false)
+    }
+    charger()
+    return () => { vivant = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- la liste d'articles est résumée par sa clé
+  }, [cleArticles])
+
+  const biblio = bibliothequeDeGroupes(tousLesGroupes)
+  // Les groupes rangés par article, pour repérer les conflits sans recharger.
+  const groupesParArticle = (() => {
+    const map = {}
+    for (const g of tousLesGroupes) {
+      const cle = String(g.article_id)
+      if (!map[cle]) map[cle] = []
+      map[cle].push({ nom: g.nom })
+    }
+    return map
+  })()
+
+  async function appliquer(entree) {
+    if (envoi) return
+    const conflits = conflitsDeGroupe(entree.nom, cibles, groupesParArticle)
+    const { aCopier } = repartirCibles(cibles, conflits)
+    if (aCopier.length === 0) { toast('Rien à appliquer : ces articles ont déjà ce groupe.', 'error'); return }
+
+    setEnvoi(true)
+    const r = await ecrireCopiesDeGroupe(entree.modele, aCopier)
+    setEnvoi(false)
+    if (!r.ok) { toast(r.erreur, 'error'); return }
+
+    // ⚠️ ON RECHARGE : sans ça, réappliquer le même groupe ne verrait pas les
+    // conflits qu'on vient de créer, et le commerçant doublerait ses groupes.
+    const { data } = await supabase
+      .from('article_options_groupes')
+      .select('*, valeurs:article_options_valeurs(*)')
+      .in('article_id', idsArticles)
+    setTousLesGroupes(data || [])
+    setChoisi(null)
+    setCibles([])
+    onApplique?.()
+    toast(r.combien === 1
+      ? `« ${entree.nom} » appliqué à 1 article.`
+      : `« ${entree.nom} » appliqué à ${r.combien} articles.`)
+  }
+
+  if (chargement) return <p style={{ fontSize: 12, color: T.muted, padding: '8px 0' }}>Chargement de tes groupes…</p>
+  // ⚠️ RIEN À MONTRER, RIEN À DIRE : un bloc vide en tête de page ferait douter
+  // du reste de l'écran. Le commerçant crée son premier groupe sur un article.
+  if (biblio.length === 0) return null
+
+  return (
+    <div style={{ ...s.card, padding: 14, marginBottom: 16 }}>
+      <p style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '1.2px', margin: '0 0 4px' }}>
+        Tes groupes d&rsquo;options
+      </p>
+      <p style={{ fontSize: 12, color: T.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
+        Choisis-en un pour le poser sur d&rsquo;autres articles, sans le réécrire.
+      </p>
+
+      <div style={{ display: 'grid', gap: 8 }}>
+        {biblio.map(entree => {
+          const ouvert = choisi === entree.nom
+          const listeCibles = articles.filter(a => a.est_vitrine !== true)
+          const conflits = conflitsDeGroupe(entree.nom, cibles, groupesParArticle)
+          const bloques = new Set(conflits.map(String))
+          const dejaPosesIds = new Set(entree.articles.map(String))
+          const tousCoches = listeCibles.length > 0 && listeCibles.every(a => cibles.some(id => String(id) === String(a.id)))
+
+          return (
+            <div key={entree.nom} style={{ border: `1px solid ${ouvert ? T.bgPanel : T.hairline}`, borderRadius: 10, padding: 10, background: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 800, fontSize: 13, color: T.ink }}>{entree.nom}</span>
+                    <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 100, background: T.pale, color: T.deep }}>
+                      {entree.type === 'unique' ? '1 choix' : 'Plusieurs choix'}
+                    </span>
+                    {entree.obligatoire && (
+                      <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 100, background: '#FEE2E2', color: '#DC2626' }}>Obligatoire</span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 11.5, color: T.muted, margin: '3px 0 0' }}>
+                    {phraseDeBibliotheque(entree)}
+                  </p>
+                </div>
+                <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11, flexShrink: 0 }}
+                  onClick={() => { setChoisi(ouvert ? null : entree.nom); setCibles([]) }}>
+                  <Copy size={13} strokeWidth={1.8}/> {ouvert ? 'Fermer' : 'Appliquer à…'}
+                </button>
+              </div>
+
+              {/* Les options du modèle, pour qu'il sache ce qu'il pose. */}
+              {ouvert && (
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, margin: '10px 0' }}>
+                    {entree.valeurs.map(val => (
+                      <span key={val.id} style={{ background: '#FAFAFA', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 10px', fontSize: 11.5, color: T.ink, fontWeight: 600 }}>
+                        {val.nom}{Number(val.prix_supplement) > 0 ? ` +${euros(val.prix_supplement)}` : ''}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: T.ink }}>Poser sur :</span>
+                    <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11 }}
+                      onClick={() => setCibles(tousCoches ? [] : listeCibles.map(a => a.id))}>
+                      {tousCoches ? 'Tout décocher' : 'Tout cocher'}
+                    </button>
+                  </div>
+
+                  <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 2, marginBottom: 8 }}>
+                    {listeCibles.map(a => {
+                      const coche = cibles.some(id => String(id) === String(a.id))
+                      // ⚠️ DEUX RAISONS DE NE RIEN ÉCRIRE, DEUX MOTS DIFFÉRENTS :
+                      // « c'est déjà posé ici » n'est pas « tu viens de le cocher
+                      // alors qu'il y est déjà ». Le second n'apparaît qu'une fois
+                      // coché, le premier se lit tout de suite.
+                      const dejaPose = dejaPosesIds.has(String(a.id))
+                      const ignore = bloques.has(String(a.id))
+                      return (
+                        <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: coche ? T.pale : 'transparent' }}>
+                          <input type="checkbox" checked={coche} style={{ cursor: 'pointer', width: 15, height: 15 }}
+                            onChange={() => setCibles(prev => (
+                              prev.some(id => String(id) === String(a.id))
+                                ? prev.filter(id => String(id) !== String(a.id))
+                                : [...prev, a.id]
+                            ))}/>
+                          <span style={{ fontSize: 12, color: T.ink, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
+                          {(dejaPose || ignore) && (
+                            <span style={{ fontSize: 10, fontWeight: 800, color: T.muted, background: '#F3F4F6', borderRadius: 100, padding: '2px 7px', flexShrink: 0 }}>
+                              {ignore ? 'a déjà ce groupe' : 'déjà posé'}
+                            </span>
+                          )}
+                        </label>
+                      )
+                    })}
+                  </div>
+
+                  <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+                    {resumeDeCopie({ nomGroupe: entree.nom, cibles: cibles.length, conflits: conflits.length })}
+                  </p>
+
+                  <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12 }}
+                    onClick={() => appliquer(entree)}
+                    disabled={envoi || cibles.length - conflits.length <= 0}>
+                    <Copy size={13} strokeWidth={1.8}/> {envoi ? 'Application…' : 'Appliquer'}
+                  </button>
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function OptionsArticle({ articleId, toast, articles = [] }) {
   const [groupes, setGroupes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1616,17 +1880,8 @@ function OptionsArticle({ articleId, toast, articles = [] }) {
     setGroupesCibles(parArticle)
   }
 
-  // ─── ÉCRIRE LES COPIES ───────────────────────────────────────────────────
-  //
-  // 🔴 LES VALEURS SE RATTACHENT PAR `article_id`, JAMAIS PAR L'ORDRE DE
-  // RETOUR. `insert([...]).select()` rend les lignes créées, mais compter sur
-  // leur ordre serait un pari : un jour où il change, les sauces de la
-  // margherita atterriraient sur la quatre-fromages. Chaque cible n'apparaît
-  // qu'une fois dans le lot, son identifiant d'article est donc une clé sûre.
-  //
-  // ⚠️ ET SI LES VALEURS ÉCHOUENT, ON LE DIT SANS TOUT DÉFAIRE. Des groupes
-  // vides restent visibles et corrigeables ; un effacement silencieux, lui,
-  // laisserait le commerçant croire que rien n'a bougé.
+  // ⚠️ L'ÉCRITURE EST PARTAGÉE avec la bibliothèque (`ecrireCopiesDeGroupe`) :
+  // deux copies du même geste finiraient par écrire deux choses différentes.
   async function copierGroupe() {
     if (!copieDe || copieEnCours) return
     const conflits = conflitsDeGroupe(copieDe.nom, cibles, groupesCibles)
@@ -1634,33 +1889,15 @@ function OptionsArticle({ articleId, toast, articles = [] }) {
     if (aCopier.length === 0) { toast('Rien à copier : ces articles ont déjà ce groupe.', 'error'); return }
 
     setCopieEnCours(true)
-    const { groupes: aEcrire, valeurs } = copiesDuGroupe(copieDe, aCopier)
-    const { data: crees, error } = await supabase
-      .from('article_options_groupes').insert(aEcrire).select('id, article_id')
-    if (error) { setCopieEnCours(false); toast(`Erreur : ${error.message}`, 'error'); return }
-
-    const idParArticle = new Map((crees || []).map(g => [String(g.article_id), g.id]))
-    const lignes = []
-    aEcrire.forEach((g, i) => {
-      const groupeId = idParArticle.get(String(g.article_id))
-      if (!groupeId) return
-      for (const val of valeurs[i]) lignes.push({ groupe_id: groupeId, ...val })
-    })
-    if (lignes.length > 0) {
-      const { error: errVal } = await supabase.from('article_options_valeurs').insert(lignes)
-      if (errVal) {
-        setCopieEnCours(false)
-        toast(`Les groupes sont créés mais leurs options n'ont pas pu être écrites : ${errVal.message}`, 'error')
-        return
-      }
-    }
+    const r = await ecrireCopiesDeGroupe(copieDe, aCopier)
     setCopieEnCours(false)
+    if (!r.ok) { toast(r.erreur, 'error'); return }
+
     setCopieDe(null)
     setCibles([])
-    const combien = crees?.length || aCopier.length
-    toast(combien === 1
+    toast(r.combien === 1
       ? `« ${copieDe.nom} » copié sur 1 article.`
-      : `« ${copieDe.nom} » copié sur ${combien} articles.`)
+      : `« ${copieDe.nom} » copié sur ${r.combien} articles.`)
   }
 
   if (loading) return <p style={{ fontSize: 12, color: T.muted, padding: '8px 0' }}>Chargement des options...</p>
@@ -1847,8 +2084,17 @@ function OptionsArticle({ articleId, toast, articles = [] }) {
 // ─── Gestionnaire de variantes pour un article (détail / service) ────────────
 // Axes (Taille, Couleur…) stockés sur l'article + une ligne article_variantes
 // par combinaison (stock/prix/photo). Sauvegarde directe, comme OptionsArticle.
-function VariantesArticle({ article, toast }) {
+function VariantesArticle({ article, toast, articles = [] }) {
   const [gere, setGere] = useState(!!article.gere_variantes)
+  // ─── COPIER SA MATRICE SUR D'AUTRES ARTICLES (Alex, 25/09) ───────────────
+  //
+  // 🔴 « Faciliter la création des catalogues s'adresse à TOUS les
+  // commerçants. » Une boutique qui vend quarante modèles en S, M, L, XL
+  // réécrivait ses quatre tailles quarante fois, comme la pizzeria réécrivait
+  // ses garnitures.
+  const [copieOuverte, setCopieOuverte] = useState(false)
+  const [ciblesVar, setCiblesVar] = useState([])
+  const [envoiVar, setEnvoiVar] = useState(false)
   const [axe1Nom, setAxe1Nom] = useState(article.axe1_nom || 'Taille')
   const [axe2Nom, setAxe2Nom] = useState(article.axe2_nom || '')
   const [axe1Valeurs, setAxe1Valeurs] = useState(Array.isArray(article.axe1_valeurs) ? article.axe1_valeurs : [])
@@ -1980,6 +2226,42 @@ function VariantesArticle({ article, toast }) {
     )
   }
 
+  // ─── ÉCRIRE LA MATRICE SUR LES ARTICLES VISÉS ────────────────────────────
+  //
+  // 🔴 LES AXES REMPLACENT, LES COMBINAISONS S'AJOUTENT. C'est pour ça que les
+  // articles déjà équipés sont écartés en amont : chez eux, écrire les axes
+  // détruirait leurs tailles, leurs prix et leurs stocks.
+  //
+  // ⚠️ ET LE STOCK REPART DE ZÉRO sur chaque combinaison créée : « 12 en M »
+  // décrit un carton dans l'arrière-boutique, pas un modèle.
+  async function copierVariantes() {
+    if (envoiVar) return
+    const conflits = conflitsDeVariantes(ciblesVar, articles)
+    const { aCopier } = repartirCibles(ciblesVar, conflits)
+    if (aCopier.length === 0) { toast('Rien à copier : ces articles ont déjà leurs variantes.', 'error'); return }
+
+    setEnvoiVar(true)
+    const axes = axesDeLArticle({ gere_variantes: true, axe1_nom: axe1Nom, axe1_valeurs: axe1Valeurs, axe2_nom: axe2Nom, axe2_valeurs: axe2Valeurs })
+    const { error } = await supabase.from('articles').update(axes).in('id', aCopier)
+    if (error) { setEnvoiVar(false); toast(`Erreur : ${error.message}`, 'error'); return }
+
+    const lignes = aCopier.flatMap(id => copiesDeVariantes(variantes, id))
+    if (lignes.length > 0) {
+      const { error: errVar } = await supabase.from('article_variantes').insert(lignes)
+      if (errVar) {
+        setEnvoiVar(false)
+        toast(`Les axes sont posés mais les combinaisons n'ont pas pu être créées : ${errVar.message}`, 'error')
+        return
+      }
+    }
+    setEnvoiVar(false)
+    setCopieOuverte(false)
+    setCiblesVar([])
+    toast(aCopier.length === 1
+      ? 'Variantes copiées sur 1 article, à stock zéro.'
+      : `Variantes copiées sur ${aCopier.length} articles, à stock zéro.`)
+  }
+
   if (loading) return <p style={{ fontSize: 12, color: T.muted, padding: '8px 0' }}>Chargement des variantes...</p>
 
   return (
@@ -1988,6 +2270,66 @@ function VariantesArticle({ article, toast }) {
         <input type="checkbox" checked={gere} onChange={e => toggleGere(e.target.checked)} style={{ width: 16, height: 16, accentColor: T.main, cursor: 'pointer' }}/>
         <span style={{ fontSize: 12.5, fontWeight: 800, color: T.ink }}>Cet article se décline en variantes (taille, couleur…)</span>
       </label>
+
+      {/* ⚠️ LE BOUTON N'APPARAÎT QUE S'IL Y A UNE MATRICE À DONNER et quelqu'un
+          à qui la donner : sinon il ouvrirait une liste vide. */}
+      {gere && axe1Valeurs.length > 0 && ciblesDeCopie(articles, article.id).length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+            onClick={() => { setCopieOuverte(v => !v); setCiblesVar([]) }}>
+            <Copy size={13} strokeWidth={1.8}/> {copieOuverte ? 'Fermer' : 'Copier ces variantes vers…'}
+          </button>
+
+          {copieOuverte && (() => {
+            const listeCibles = ciblesDeCopie(articles, article.id)
+            const conflits = conflitsDeVariantes(ciblesVar, articles)
+            const bloques = new Set(conflits.map(String))
+            const dejaEquipes = new Set(conflitsDeVariantes(listeCibles.map(a => a.id), articles).map(String))
+            const tousCoches = listeCibles.length > 0 && listeCibles.every(a => ciblesVar.some(id => String(id) === String(a.id)))
+            return (
+              <div style={{ background: '#FAFAFA', borderRadius: 10, padding: 12, marginTop: 8, border: `1.5px solid ${T.bgPanel}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <p style={{ fontWeight: 700, fontSize: 12, color: T.ink, margin: 0 }}>
+                    Poser {axe1Nom || 'ces valeurs'}{axe2Nom ? ` et ${axe2Nom}` : ''} sur :
+                  </p>
+                  <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 8px', fontSize: 11 }}
+                    onClick={() => setCiblesVar(tousCoches ? [] : listeCibles.map(a => a.id))}>
+                    {tousCoches ? 'Tout décocher' : 'Tout cocher'}
+                  </button>
+                </div>
+                <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 2, marginBottom: 8 }}>
+                  {listeCibles.map(a => {
+                    const coche = ciblesVar.some(id => String(id) === String(a.id))
+                    const equipe = dejaEquipes.has(String(a.id)) || bloques.has(String(a.id))
+                    return (
+                      <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: coche ? T.pale : 'transparent' }}>
+                        <input type="checkbox" checked={coche} style={{ cursor: 'pointer', width: 15, height: 15 }}
+                          onChange={() => setCiblesVar(prev => (
+                            prev.some(id => String(id) === String(a.id))
+                              ? prev.filter(id => String(id) !== String(a.id))
+                              : [...prev, a.id]
+                          ))}/>
+                        <span style={{ fontSize: 12, color: T.ink, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
+                        {equipe && (
+                          <span style={{ fontSize: 10, fontWeight: 800, color: T.muted, background: '#F3F4F6', borderRadius: 100, padding: '2px 7px', flexShrink: 0 }}>a déjà ses variantes</span>
+                        )}
+                      </label>
+                    )
+                  })}
+                </div>
+                <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+                  {resumeDeVariantes({ cibles: ciblesVar.length, conflits: conflits.length })}
+                </p>
+                <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12 }}
+                  onClick={copierVariantes}
+                  disabled={envoiVar || ciblesVar.length - conflits.length <= 0}>
+                  <Copy size={13} strokeWidth={1.8}/> {envoiVar ? 'Copie en cours…' : 'Copier'}
+                </button>
+              </div>
+            )
+          })()}
+        </div>
+      )}
 
       {gere && (
         <>
@@ -2296,7 +2638,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
         </div>
       </div>
       {showOptions && ((estDetail || estVitrine)
-        ? <VariantesArticle article={a} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
+        ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
         : <OptionsArticle articleId={a.id} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
     </div>
   )
@@ -9168,6 +9510,45 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
     fetchAll()
   }
 
+  // ─── DUPLIQUER UNE PRESTATION (Alex, 25/09) ──────────────────────────────
+  //
+  // 🔴 UN SALON A TRENTE PRESTATIONS QUI SE RESSEMBLENT à deux mots près :
+  // coupe femme, coupe femme longue, coupe femme + brushing. Elles se
+  // saisissaient entièrement, une par une, durée, prix, acompte et praticiens
+  // compris. « Faciliter la création des catalogues s'adresse à tous les
+  // commerçants », et les métiers à rendez-vous en font partie.
+  //
+  // ⚠️ LES PRATICIENS SUIVENT. Sans eux, la copie serait proposée par TOUT LE
+  // MONDE dans le salon : aucun praticien coché veut dire « tous », et la
+  // cliente se retrouverait chez quelqu'un qui ne fait pas cette coupe.
+  async function dupliquerPrestation(p) {
+    const payload = copieDePrestation(p, {
+      commercantId,
+      nomsExistants: prestations.map(x => x.nom),
+    })
+    // Le refus vient du module : une jointure de tables ne se duplique pas.
+    if (!payload) { toast('Une jointure de tables ne se duplique pas.', 'error'); return }
+
+    const { data: cree, error } = await supabase
+      .from('rdv_prestations').insert(payload).select('id').single()
+    if (error || !cree) { toast(error ? messageRefusTable(error) : 'Erreur : échec de la copie', 'error'); return }
+
+    const lies = junctionMap[p.id]
+    if (lies && lies.size > 0) {
+      const rows = Array.from(lies).map(pid => ({ prestation_id: cree.id, praticien_id: pid }))
+      const { error: errJ } = await supabase.from('rdv_prestation_praticiens').insert(rows)
+      // ⚠️ UN ÉCHEC ICI SE DIT : la prestation existe, mais tout le monde la
+      // propose, et c'est exactement ce que le commerçant n'avait pas voulu.
+      if (errJ) {
+        fetchAll()
+        toast(`« ${payload.nom} » est créée, mais ses praticiens n'ont pas suivi : vérifie qui la propose.`, 'error')
+        return
+      }
+    }
+    fetchAll()
+    toast(`« ${payload.nom} » créée, en indisponible. Relis-la puis rends-la disponible.`)
+  }
+
   async function softDelete(p) {
     // ⚠️ UNE TABLE JOINTE NE SE SUPPRIME PAS SOUS SA JOINTURE : celle-ci ne
     // serait plus proposée, et resterait dans la liste sans rien assembler.
@@ -9379,6 +9760,16 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                     style={{ padding: '6px 10px', border: `1px solid ${T.main}44`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.main, fontFamily: '"DM Sans", sans-serif' }}>
                     Modifier
                   </button>
+                  {/* ⚠️ PAS SUR UNE JOINTURE DE TABLES : deux jointures sur
+                      les mêmes tables feraient compter deux fois le même
+                      inventaire. Le module refuse déjà, le bouton n'a donc
+                      aucune raison de se montrer. */}
+                  {!estJointure(p) && (
+                    <button onClick={() => dupliquerPrestation(p)} title="Dupliquer cette prestation"
+                      style={{ padding: '6px 10px', border: `1px solid ${T.main}44`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.main, fontFamily: '"DM Sans", sans-serif' }}>
+                      Dupliquer
+                    </button>
+                  )}
                   <button onClick={() => softDelete(p)} title="Supprimer"
                     style={{ padding: '6px 10px', border: '1px solid #DC262644', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: '#DC2626', fontFamily: '"DM Sans", sans-serif' }}>
                     Suppr.

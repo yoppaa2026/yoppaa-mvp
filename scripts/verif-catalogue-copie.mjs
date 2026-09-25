@@ -13,8 +13,11 @@
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
-  CHAMPS_COPIES, nomDeLaCopie, copieDArticle, ciblesDeCopie,
-  conflitsDeGroupe, copiesDuGroupe, resumeDeCopie, repartirCibles,
+  CHAMPS_COPIES, CHAMPS_VARIANTES, nomDeLaCopie, copieDArticle, ciblesDeCopie,
+  conflitsDeGroupe, copiesDuGroupe, copiesDeVariantes, resumeDeCopie, repartirCibles,
+  bibliothequeDeGroupes, phraseDeBibliotheque,
+  axesDeLArticle, conflitsDeVariantes, resumeDeVariantes,
+  CHAMPS_PRESTATION, copieDePrestation,
 } from '../lib/catalogue-copie.js'
 
 let ok = 0
@@ -97,6 +100,71 @@ const v = (nom, cond, detail = '') => {
   const enTrop = CHAMPS_COPIES.filter(c => !champsPayload.includes(c))
   v('et la copie n’invente aucun champ que le formulaire ignore',
     enTrop.length === 0, enTrop.join(', '))
+
+  // 🔴 ET LES AXES DE VARIANTES ONT UNE AUTRE SOURCE, C'EST TOUT LE DÉFAUT DU
+  // 25/09. Ces colonnes vivent sur `articles` mais ne passent pas par le
+  // formulaire : l'écran des variantes les écrit à part. La garde ci-dessus
+  // était donc verte sur un article à moitié copié. On mesure la parité contre
+  // le `select` de cet écran-là, sa vraie source.
+  const iVar = config.indexOf("supabase.from('articles').select('gere_variantes")
+  const ligneVar = iVar >= 0 ? config.slice(iVar, config.indexOf(')', config.indexOf('select(', iVar) + 8)) : ''
+  v('le select des axes a bien été retrouvé', ligneVar.length > 40, String(ligneVar.length))
+  const champsAxes = (ligneVar.match(/[a-z0-9_]+/g) || [])
+    .filter(x => x.startsWith('axe') || x === 'gere_variantes')
+  const axesOublies = champsAxes.filter(c => !CHAMPS_VARIANTES.includes(c))
+  v('aucun axe de variante n’est oublié par la copie',
+    axesOublies.length === 0 && champsAxes.length === 5,
+    `oubliés: ${axesOublies.join(', ') || 'aucun'} · trouvés: ${champsAxes.length}`)
+
+  // ⚠️ ET ILS SONT VRAIMENT DANS LA COPIE, pas seulement dans une constante.
+  const tshirt = {
+    id: 'a2', nom: 'T-shirt', prix: 19.9, actif: true,
+    gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['S', 'M'],
+    axe2_nom: 'Couleur', axe2_valeurs: ['Noir'],
+  }
+  const copieVar = copieDArticle(tshirt, { commercantId: 'c1' })
+  v('la copie d’un article à variantes garde ses axes',
+    copieVar?.gere_variantes === true && copieVar?.axe1_nom === 'Taille'
+      && Array.isArray(copieVar?.axe1_valeurs) && copieVar.axe1_valeurs.join(',') === 'S,M',
+    JSON.stringify(copieVar))
+  // ⚠️ UN ARTICLE SANS VARIANTES NE GAGNE PAS DES COLONNES VIDES : écrire
+  // `gere_variantes: null` sur une pizza ferait porter à l'alimentaire un
+  // réglage qui n'est pas le sien.
+  const copiePizza = copieDArticle({ id: 'a3', nom: 'Margherita', prix: 9 }, {})
+  v('un article sans variantes n’hérite pas de colonnes d’axes',
+    !('gere_variantes' in copiePizza) && !('axe1_nom' in copiePizza),
+    Object.keys(copiePizza).join(','))
+}
+
+// ═══ 2 bis) LES COMBINAISONS DE VARIANTES ═════════════════════════════════
+{
+  const variantes = [
+    { id: 'v1', article_id: 'a2', axe1_valeur: 'S', axe2_valeur: 'Noir', stock: 12, prix: 21.9, photo_url: 'https://x/s.jpg', actif: true, ordre: 0 },
+    { id: 'v2', article_id: 'a2', axe1_valeur: 'M', axe2_valeur: 'Noir', stock: 4, prix: null, photo_url: null, actif: false, ordre: 1 },
+  ]
+  const copies = copiesDeVariantes(variantes, 'a9')
+
+  v('chaque combinaison est recréée', copies.length === 2, String(copies.length))
+  v('elles visent le nouvel article', copies.every(c => c.article_id === 'a9'))
+  v('les valeurs d’axes suivent',
+    copies[0].axe1_valeur === 'S' && copies[0].axe2_valeur === 'Noir')
+  v('le prix de la variante suit', copies[0].prix === 21.9, String(copies[0].prix))
+  v('la photo de la variante suit', copies[0].photo_url === 'https://x/s.jpg')
+  // ⚠️ LE COMMERÇANT A DÉCIDÉ QUE LE 3XL NE SE VEND PLUS : il n'a pas envie de
+  // le redécider.
+  v('une combinaison désactivée le reste', copies[1].actif === false)
+  v('l’ordre d’affichage suit', copies[1].ordre === 1, String(copies[1].ordre))
+  v('aucune copie n’emporte l’identifiant de la variante source',
+    copies.every(c => c.id === undefined))
+
+  // 🔴 LE STOCK EST LE SEUL CHAMP QUI NE SE COPIE PAS : « 12 en taille M » est
+  // une quantité, pas un réglage. La recopier vendrait douze t-shirts qui
+  // n'existent pas.
+  v('le stock repart de zéro',
+    copies.every(c => c.stock === 0), copies.map(c => c.stock).join(','))
+
+  v('sans article cible, rien n’est produit', copiesDeVariantes(variantes, null).length === 0)
+  v('sans variante, rien n’est produit', copiesDeVariantes([], 'a9').length === 0)
 }
 
 // ═══ 3) VERS QUELS ARTICLES PEUT-ON COPIER ? ══════════════════════════════
@@ -191,6 +259,178 @@ const v = (nom, cond, detail = '') => {
     copiesDuGroupe(groupe, []).groupes.length === 0)
 }
 
+// ═══ 5 quater) LES PRESTATIONS, POUR LES MÉTIERS À RENDEZ-VOUS ════════════
+{
+  const coupe = {
+    id: 'p1', commercant_id: 'c1', created_at: 'x', nom: 'Coupe femme',
+    description: 'Shampoing compris', duree_minutes: 45, prix: 38,
+    acompte_pourcent: 20, actif: true, tva_taux: 21, capacite: 1,
+    par_couverts: false, couverts_min: null, couverts_max: null,
+    duree_paliers: null, quantite: null,
+  }
+  const copie = copieDePrestation(coupe, { commercantId: 'c1', nomsExistants: ['Coupe femme'] })
+
+  v('la prestation se copie', !!copie)
+  v('elle prend un nom libre', copie?.nom === 'Coupe femme (copie)', copie?.nom)
+  v('elle naît indisponible', copie?.actif === false, String(copie?.actif))
+  // 🔴 DEUX CHAMPS QUI N'EXISTENT NULLE PART AILLEURS : la durée, et l'acompte
+  // qui touche à l'argent pris d'avance.
+  v('la durée suit', copie?.duree_minutes === 45, String(copie?.duree_minutes))
+  v('l’acompte suit', copie?.acompte_pourcent === 20, String(copie?.acompte_pourcent))
+  v('le prix et la TVA suivent', copie?.prix === 38 && copie?.tva_taux === 21)
+  v('elle n’emporte ni identifiant ni date de création',
+    copie?.id === undefined && copie?.created_at === undefined,
+    Object.keys(copie || {}).join(','))
+
+  // 🔴 UNE JOINTURE DE TABLES NE SE DUPLIQUE PAS : deux jointures sur les mêmes
+  // tables feraient compter deux fois le même inventaire.
+  v('une jointure de tables est refusée',
+    copieDePrestation({ ...coupe, jointure_de: 'p9' }, {}) === null)
+  v('une prestation illisible ne fabrique pas de ligne',
+    copieDePrestation(null) === null && copieDePrestation(42) === null)
+
+  // ⚠️ LA LISTE DES CHAMPS DOIT SUIVRE LE FORMULAIRE, comme pour les articles.
+  // ⚠️ ON DÉCOUPE L'ONGLET AVANT DE CHERCHER LE FORMULAIRE. Les articles et
+  // les prestations ont deux `payload` qui commencent par les mêmes lignes :
+  // une recherche sur tout le fichier trouve le premier des deux, et la garde
+  // mesure alors un écran qu'elle ne surveille pas. Défaut vu ici même le
+  // 25/09, la garde annonçant « stock_jour » manquant à une prestation.
+  const config2 = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  const iTab = config2.indexOf('function TabRdvPrestations(')
+  const tab = iTab >= 0 ? config2.slice(iTab) : ''
+  v('l’onglet des prestations a bien été retrouvé', tab.length > 1000, String(tab.length))
+  const iP = tab.indexOf('const payload = {')
+  const blocP = iP >= 0 ? tab.slice(iP, tab.indexOf('setSaving(true)', iP)) : ''
+  v('le formulaire de prestation a bien été retrouvé', blocP.length > 300, String(blocP.length))
+  const champsP = [...blocP.matchAll(/^\s{6}([a-z_]+):/gm)].map(m => m[1])
+    .filter(c => c !== 'commercant_id')
+  const oublies = champsP.filter(c => !CHAMPS_PRESTATION.includes(c))
+  v('aucun champ de prestation n’est oublié par la copie',
+    oublies.length === 0, oublies.join(', '))
+}
+
+// ═══ 5 ter) LE MÊME GESTE POUR LES VARIANTES ══════════════════════════════
+{
+  const tshirt = {
+    id: 1, nom: 'T-shirt', gere_variantes: true,
+    axe1_nom: 'Taille', axe1_valeurs: ['S', 'M', 'L'],
+    axe2_nom: 'Couleur', axe2_valeurs: ['Noir'],
+  }
+  const axes = axesDeLArticle(tshirt)
+  v('les axes se recopient', axes?.axe1_nom === 'Taille' && axes?.axe1_valeurs.join(',') === 'S,M,L',
+    JSON.stringify(axes))
+  // ⚠️ SANS LE DRAPEAU, l'écran de l'article cible n'afficherait même pas les
+  // tailles qu'on vient de lui poser.
+  v('le drapeau de gestion est allumé', axes?.gere_variantes === true)
+  v('un article illisible ne fabrique pas de patch', axesDeLArticle(null) === null)
+
+  // 🔴 UNE MATRICE REMPLACE CELLE QUI EST LÀ : copier vers un article déjà
+  // équipé détruirait ses tailles, ses prix et ses stocks.
+  const catalogue = [
+    { id: 1, nom: 'T-shirt', gere_variantes: true, axe1_valeurs: ['S'] },
+    { id: 2, nom: 'Pull', gere_variantes: true, axe1_valeurs: ['M', 'L'] },
+    { id: 3, nom: 'Casquette' },
+    { id: 4, nom: 'Écharpe', gere_variantes: true, axe1_valeurs: [] },
+  ]
+  const conflits = conflitsDeVariantes([2, 3, 4], catalogue)
+  v('un article déjà équipé est écarté', conflits.includes(2), conflits.join(','))
+  v('un article sans variantes est une cible valable', !conflits.includes(3), conflits.join(','))
+  // ⚠️ UN DRAPEAU RESTÉ VRAI SUR UNE MATRICE VIDE n'a rien à perdre : le
+  // priver de la copie serait un refus incompréhensible.
+  v('un drapeau vrai sur une matrice vide ne bloque pas',
+    !conflits.includes(4), conflits.join(','))
+  v('un identifiant inconnu ne bloque pas', conflitsDeVariantes([99], catalogue).length === 0)
+
+  const phrase = resumeDeVariantes({ cibles: 5, conflits: 2 })
+  v('le résumé dit ce qui sera créé', /sur 3 articles/.test(phrase), phrase)
+  // ⚠️ LE STOCK REPART DE ZÉRO, et il faut le lire avant de cliquer.
+  v('et qu’on repart à stock zéro', /à stock zéro/.test(phrase), phrase)
+  v('il promet de ne rien écraser', /rien n’y sera écrasé/.test(phrase), phrase)
+  v('tout en conflit se lit comme un refus',
+    /Rien à copier/.test(resumeDeVariantes({ cibles: 2, conflits: 2 })),
+    resumeDeVariantes({ cibles: 2, conflits: 2 }))
+  v('aucune cible : il demande d’en choisir une',
+    /Choisis au moins un article/.test(resumeDeVariantes({ cibles: 0 })))
+}
+
+// ═══ 5 bis) LA BIBLIOTHÈQUE : PARTIR DU GROUPE, PAS DE L'ARTICLE ══════════
+{
+  const G = (id, article_id, nom, valeurs, extra = {}) => ({
+    id, article_id, nom, type: 'multiple', obligatoire: false,
+    valeurs: valeurs.map((n, i) => ({ id: `${id}v${i}`, nom: n, prix_supplement: 0 })),
+    ...extra,
+  })
+  // ⚠️ « CUISSON » EST VOLONTAIREMENT EN PREMIER dans les données, et posé sur
+  // un seul article : sans tri, c'est lui qui sortirait en tête. Une garde de
+  // tri mesurée sur des données déjà triées ne mesure rien, et le harnais l'a
+  // dit le 25/09 en laissant passer la suppression du `sort`.
+  const tous = [
+    G('g4', 1, 'Cuisson', ['Bien cuite'], { type: 'unique', obligatoire: true }),
+    G('g1', 1, 'Sauces', ['Ketchup', 'Mayo']),
+    G('g2', 2, 'Sauces', ['Ketchup', 'Mayo']),
+    G('g3', 3, 'Sauces', ['Ketchup', 'Mayo', 'Truffe']),   // une version plus complète
+  ]
+  const biblio = bibliothequeDeGroupes(tous)
+
+  v('les groupes se regroupent par nom', biblio.length === 2, String(biblio.length))
+  // ⚠️ LE PLUS UTILISÉ EN PREMIER : c'est celui qu'il cherche.
+  v('le plus utilisé arrive en tête, quel que soit l’ordre reçu',
+    biblio[0].nom === 'Sauces', biblio.map(b => b.nom).join(','))
+  v('il compte ses articles', biblio[0].articles.length === 3, String(biblio[0].articles.length))
+
+  // 🔴 LA PLUS COMPLÈTE SERT DE MODÈLE : ajouter une valeur oubliée ne coûte
+  // rien, retrouver une valeur silencieusement retirée coûte quarante
+  // relectures.
+  v('le modèle est la version la plus complète',
+    biblio[0].valeurs.length === 3, String(biblio[0].valeurs.length))
+  v('et les versions différentes sont comptées',
+    biblio[0].versions === 2, String(biblio[0].versions))
+
+  // ⚠️ L'ORDRE DES VALEURS NE FAIT PAS UNE VERSION DIFFÉRENTE.
+  const memeContenu = bibliothequeDeGroupes([
+    G('h1', 1, 'Sauces', ['Mayo', 'Ketchup']),
+    G('h2', 2, 'Sauces', ['Ketchup', 'Mayo']),
+  ])
+  v('deux mêmes listes dans un autre ordre sont une seule version',
+    memeContenu[0].versions === 1, String(memeContenu[0].versions))
+
+  // ⚠️ LA CASSE NON PLUS : le commerçant lit un seul groupe.
+  v('la casse ne fabrique pas deux groupes',
+    bibliothequeDeGroupes([G('i1', 1, 'Sauces', ['x']), G('i2', 2, 'sauces', ['x'])]).length === 1)
+
+  // ⚠️ ON RETROUVE « Cuisson » PAR SON NOM, pas par son rang : le rang dépend
+  // du tri qu'on vient justement de mesurer, et une garde qui s'appuie sur ce
+  // qu'elle mesure ne mesure plus rien.
+  const cuisson = biblio.find(b => b.nom === 'Cuisson')
+  v('le type et l’obligation viennent du modèle',
+    cuisson?.type === 'unique' && cuisson?.obligatoire === true,
+    `${cuisson?.type}/${cuisson?.obligatoire}`)
+  v('un groupe sans nom est ignoré',
+    bibliothequeDeGroupes([G('j1', 1, '   ', ['x'])]).length === 0)
+  v('une liste vide ne casse rien', bibliothequeDeGroupes(null).length === 0)
+
+  // ⚠️ ET LE MODÈLE EST UN VRAI GROUPE, réutilisable tel quel par la copie.
+  const { groupes: copiees } = copiesDuGroupe(biblio[0].modele, [9])
+  v('le modèle se copie comme n’importe quel groupe',
+    copiees.length === 1 && copiees[0].nom === 'Sauces', JSON.stringify(copiees))
+
+  // ─── LA PHRASE LUE SOUS CHAQUE GROUPE ───────────────────────────────────
+  const ligne = phraseDeBibliotheque(biblio[0])
+  v('la phrase dit sur combien d’articles il est posé', /sur 3 articles/.test(ligne), ligne)
+  v('et combien d’options il porte', /3 options/.test(ligne), ligne)
+  // 🔴 SANS CETTE MENTION, on applique une version que le commerçant n'a pas
+  // choisie, sans qu'il le sache.
+  v('elle prévient quand plusieurs versions existent',
+    /2 versions différentes/.test(ligne), ligne)
+  v('et elle se tait quand il n’y en a qu’une',
+    !/versions différentes/.test(phraseDeBibliotheque(memeContenu[0])),
+    phraseDeBibliotheque(memeContenu[0]))
+  v('le singulier est respecté',
+    /sur 1 article ·  ?1 option/.test(phraseDeBibliotheque({ articles: [1], valeurs: [{}] }))
+      || /sur 1 article · 1 option/.test(phraseDeBibliotheque({ articles: [1], valeurs: [{}] })),
+    phraseDeBibliotheque({ articles: [1], valeurs: [{}] }))
+}
+
 // ═══ 6) CE QUE LE COMMERÇANT LIT AVANT DE CLIQUER ═════════════════════════
 {
   // ⚠️ IL DOIT LIRE COMBIEN D'ARTICLES IL TOUCHE. « Copier ? » ne dit rien.
@@ -236,21 +476,66 @@ const v = (nom, cond, detail = '') => {
   // 🔴 LES RÈGLES VIENNENT DU MODULE, ELLES NE SONT PAS RÉÉCRITES ICI. Une
   // copie de la règle dans l'écran, et le résumé lu par le commerçant finirait
   // par ne plus décrire ce qui s'écrit vraiment.
-  for (const fn of ['ciblesDeCopie', 'conflitsDeGroupe', 'copiesDuGroupe', 'repartirCibles', 'resumeDeCopie']) {
+  for (const fn of ['ciblesDeCopie', 'conflitsDeGroupe', 'repartirCibles', 'resumeDeCopie']) {
     v(`l’écran appelle ${fn} au lieu de refaire la règle`,
       new RegExp(`${fn}\\(`).test(optionsArticle), fn)
   }
+
+  // ─── L'ÉCRITURE EST PARTAGÉE, ET C'EST LA GARDE QUI COMPTE ───────────────
+  //
+  // 🔴 DEUX ÉCRANS ÉCRIVENT LA MÊME CHOSE : le panneau d'un article et la
+  // bibliothèque. Recopiée, cette écriture finirait par écrire deux choses
+  // différentes — exactement le défaut que tout ce chantier essaie d'éviter.
+  const iEcr = config.indexOf('async function ecrireCopiesDeGroupe(')
+  const ecriture = iEcr >= 0 ? config.slice(iEcr, config.indexOf('function BibliothequeGroupes(', iEcr)) : ''
+  v('l’écriture des copies a bien été retrouvée', ecriture.length > 400, String(ecriture.length))
+  v('elle vient du module', /copiesDuGroupe\(/.test(ecriture))
 
   // 🔴 LES VALEURS SE RATTACHENT PAR `article_id`, jamais par l'ordre de retour
   // de l'insertion : un jour où cet ordre change, les sauces de la margherita
   // atterrissent sur la quatre-fromages.
   v('les options copiées se rattachent par l’article, pas par l’ordre',
-    /idParArticle\.get\(String\(g\.article_id\)\)/.test(optionsArticle))
+    /idParArticle\.get\(String\(g\.article_id\)\)/.test(ecriture))
 
   // ⚠️ UN ÉCHEC SUR LES VALEURS SE DIT : des groupes vides sont corrigeables,
   // un silence ne l'est pas.
   v('un échec sur les options copiées est annoncé',
-    /n'ont pas pu être écrites/.test(optionsArticle))
+    /n'ont pas pu être écrites/.test(ecriture))
+
+  // ⚠️ ET LES DEUX ÉCRANS PASSENT VRAIMENT PAR ELLE. Compter les appels : si
+  // l'un des deux se remettait à écrire pour son compte, cette garde le dirait.
+  v('les deux écrans passent par l’écriture partagée',
+    (config.match(/await ecrireCopiesDeGroupe\(/g) || []).length === 2,
+    String((config.match(/await ecrireCopiesDeGroupe\(/g) || []).length))
+
+  // ─── LA BIBLIOTHÈQUE ─────────────────────────────────────────────────────
+  const iBib = config.indexOf('function BibliothequeGroupes(')
+  const biblioEcran = iBib >= 0 ? config.slice(iBib, config.indexOf('function OptionsArticle(', iBib)) : ''
+  v('la bibliothèque a bien été retrouvée', biblioEcran.length > 1000, String(biblioEcran.length))
+  v('elle regroupe par nom avec le module', /bibliothequeDeGroupes\(/.test(biblioEcran))
+  v('et elle dit ce que chaque groupe couvre', /phraseDeBibliotheque\(/.test(biblioEcran))
+  // ⚠️ ELLE AUSSI ÉCARTE LES CONFLITS PAR LA RÈGLE, et pas à sa façon. Manque
+  // vu par le harnais le 25/09 : la garde ne surveillait que le panneau d'un
+  // article, donc muter le tri de la bibliothèque ne faisait rougir personne.
+  for (const fn of ['conflitsDeGroupe', 'repartirCibles', 'resumeDeCopie']) {
+    v(`la bibliothèque appelle ${fn} au lieu de refaire la règle`,
+      new RegExp(`${fn}\\(`).test(biblioEcran), fn)
+  }
+  // 🔴 ELLE APPLIQUE LE MODÈLE, pas le premier groupe venu : sur douze
+  // « Sauces » dont une plus complète, c'est la plus complète qui se pose.
+  v('elle applique le modèle retenu par la règle',
+    /ecrireCopiesDeGroupe\(entree\.modele,/.test(biblioEcran))
+  // ⚠️ ELLE RECHARGE APRÈS AVOIR ÉCRIT : sinon réappliquer le même groupe ne
+  // verrait pas les conflits qu'on vient de créer, et doublerait les groupes.
+  v('elle relit ses groupes après avoir écrit',
+    /setTousLesGroupes\(data \|\| \[\]\)[\s\S]{0,200}setChoisi\(null\)/.test(biblioEcran))
+  // ⚠️ ELLE NE S'AFFICHE QUE LÀ OÙ LES GROUPES EXISTENT : le détail et la
+  // vitrine ont des variantes, un autre modèle entièrement.
+  v('elle ne s’affiche pas chez qui n’a pas de groupes',
+    /!variantesCategorie && articles\.length > 0 && \([\s\S]{0,120}<BibliothequeGroupes/.test(config))
+  // ⚠️ RIEN À MONTRER, RIEN À DIRE : un bloc vide ferait douter de l'écran.
+  v('elle se tait quand aucun groupe n’existe encore',
+    /if \(biblio\.length === 0\) return null/.test(biblioEcran))
 
   // ⚠️ LE BOUTON NE S'AFFICHE PAS QUAND IL N'Y A NULLE PART OÙ COPIER.
   v('le bouton se tait quand le catalogue n’a pas d’autre article',
@@ -276,8 +561,60 @@ const v = (nom, cond, detail = '') => {
   v('le message dit que la copie est indisponible',
     /en indisponible/.test(dup), dup.slice(-160))
 
+  // 🔴 ET LES VARIANTES SUIVENT, SINON UNE BOUTIQUE DUPLIQUE UNE FICHE NUE.
+  // C'est le trou du 25/09 : le détail et la vitrine n'ont pas de groupes
+  // d'options, ils ont une matrice taille/couleur.
+  const dupLong = iDup >= 0 ? config.slice(iDup, iDup + 4000) : ''
+  v('la duplication emporte les combinaisons de variantes',
+    /gere_variantes[\s\S]{0,300}from\('article_variantes'\)[\s\S]{0,200}copiesDeVariantes\(/.test(dupLong),
+    'un article a variantes serait duplique sans ses tailles')
+  // ⚠️ ET LE STOCK REMIS À ZÉRO SE DIT : sinon le commerçant vend des tailles
+  // qui n'existent pas.
+  v('et le message annonce le stock remis à zéro',
+    /variantes à zéro stock/.test(dupLong))
+
   v('le bouton de duplication est sur la carte d’article',
     /onDupliquer\(a\)/.test(config) && /onDupliquer=\{dupliquerArticle\}/.test(config))
+
+  // ─── LES VARIANTES, CHEZ QUI N'A PAS DE GROUPES ──────────────────────────
+  //
+  // 🔴 « Faciliter la création des catalogues s'adresse à TOUS les
+  // commerçants » (Alex, 25/09). Le détail et la vitrine n'ont pas de groupes
+  // d'options : sans ce geste-là, la moitié des métiers restait à la main.
+  const iVarC = config.indexOf('async function copierVariantes(')
+  const copVar = iVarC >= 0 ? config.slice(iVarC, iVarC + 2000) : ''
+  v('la copie de variantes a bien été retrouvée', copVar.length > 500, String(copVar.length))
+  v('elle écarte les articles déjà équipés', /conflitsDeVariantes\(ciblesVar, articles\)/.test(copVar))
+  v('elle compose ses axes avec le module', /axesDeLArticle\(/.test(copVar))
+  v('et ses combinaisons aussi', /copiesDeVariantes\(variantes, id\)/.test(copVar))
+  // ⚠️ UN ÉCHEC PARTIEL SE DIT : des axes posés sans combinaisons laissent un
+  // article à moitié équipé, et le commerçant doit le savoir.
+  v('un échec partiel est annoncé', /n'ont pas pu être créées/.test(copVar))
+  // ⚠️ LE STOCK À ZÉRO SE DIT AUSSI, sinon il vend des tailles qui n'existent pas.
+  v('le message annonce le stock à zéro', /à stock zéro/.test(copVar))
+  v('l’écran des variantes reçoit le catalogue',
+    /function VariantesArticle\(\{ article, toast, articles = \[\] \}\)/.test(config))
+
+  // ─── LA DUPLICATION D'UNE PRESTATION ─────────────────────────────────────
+  const iDupP = config.indexOf('async function dupliquerPrestation(')
+  const dupP = iDupP >= 0 ? config.slice(iDupP, iDupP + 2000) : ''
+  v('la duplication de prestation a bien été retrouvée', dupP.length > 400, String(dupP.length))
+  v('elle compose sa copie avec le module', /copieDePrestation\(p, \{/.test(dupP))
+  // 🔴 SANS LES PRATICIENS, LA COPIE EST PROPOSÉE PAR TOUT LE MONDE : aucun
+  // praticien coché veut dire « tous », et la cliente atterrit chez quelqu'un
+  // qui ne fait pas cette coupe.
+  v('les praticiens suivent la copie',
+    /junctionMap\[p\.id\][\s\S]{0,400}rdv_prestation_praticiens[\s\S]{0,60}insert\(/.test(dupP))
+  v('un échec sur les praticiens est annoncé',
+    /n'ont pas suivi/.test(dupP))
+  // ⚠️ ELLE NAÎT INDISPONIBLE, et le message le dit.
+  v('le message dit qu’elle est indisponible', /en indisponible/.test(dupP))
+  // ⚠️ ET LE BOUTON NE S'AFFICHE PAS SUR UNE JOINTURE DE TABLES.
+  v('le bouton se tait sur une jointure de tables',
+    /!estJointure\(p\) && \([\s\S]{0,200}dupliquerPrestation\(p\)/.test(config))
+  v('et les deux endroits qui l’affichent le lui passent',
+    (config.match(/<VariantesArticle article=\{a\} articles=\{articles\}/g) || []).length === 2,
+    String((config.match(/<VariantesArticle article=\{a\} articles=\{articles\}/g) || []).length))
 }
 
 console.log(`\nCopier dans le catalogue : ${ok} vérifications`)

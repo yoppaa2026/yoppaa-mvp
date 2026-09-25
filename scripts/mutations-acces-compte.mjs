@@ -39,8 +39,55 @@ const PORTAIL = 'app/api/stripe/billing/portal/route.js'
 const SQL_SUIVI = 'migrations/MIGRATION_SYNC_EMAIL_COMMERCANT_SUIVI_SEUL.sql'
 const RETOUR_EMAIL = 'app/auth/email-change/page.js'
 const LOGIN = 'app/login/page.js'
+const TURNSTILE = 'app/components/TurnstileWidget.js'
 
 const MUTATIONS = [
+  // ═══ LE WIDGET ANTI-ROBOT NE SE MURE PLUS (25/09) ══════════════════════
+  //
+  // 🔴 ALEX : « j ai occasionnellement des problemes de login avec le message
+  // anti-bot, c est aleatoire ». `error-callback` effacait le jeton sans rien
+  // relancer : apres la moindre erreur Turnstile, le formulaire restait mure
+  // jusqu au rechargement de la page.
+  { nom: '🔴 une erreur du challenge mure le formulaire',
+    fichier: TURNSTILE,
+    de: '        relancerChallenge()',
+    vers: '        void relancerChallenge' },
+
+  { nom: '🔴 un jeton manquant n a plus de seconde chance',
+    fichier: TURNSTILE,
+    de: '      if (!relancerChallenge()) return null',
+    vers: '      if (true) return null' },
+
+  { nom: '⚠️ le code d erreur de Cloudflare n est plus trace',
+    fichier: TURNSTILE,
+    de: "        console.error('[Turnstile] challenge en échec', code)",
+    vers: '        void code' },
+
+  // 🔴 SANS BORNE, un widget qui echoue en boucle appellerait Cloudflare sans
+  // fin — et ce genre de boucle se remarque de leur cote.
+  { nom: '🔴 les relances ne sont plus bornees',
+    fichier: TURNSTILE,
+    de: '    if (relancesRef.current >= RELANCES_MAX) return false',
+    vers: '    if (false) return false' },
+
+  // ⚠️ LE COMPTEUR MESURE DES ECHECS CONSECUTIFS : trois erreurs eparpillees
+  // sur une longue session ne doivent pas condamner la visite.
+  { nom: '⚠️ le compteur d echecs ne repart plus a zero',
+    fichier: TURNSTILE,
+    de: '        relancesRef.current = 0',
+    vers: '        void 0' },
+
+  // 🔴 LA CONDITION POSEE PAR ALEX PENDANT LA REVUE PLAY : le chemin qui
+  // fonctionne ne bouge pas. Cette mutation le change, et la garde doit le dire.
+  //
+  // ⚠️ ANCRE D UNE SEULE LIGNE, comme partout : un saut de ligne dans une
+  // ancre la rend fragile au moindre reformatage, et une ancre qui ne trouve
+  // plus sa cible ne mesure rien.
+  { nom: '🔴 le chemin nominal du jeton a change pendant une revue de store',
+    fichier: TURNSTILE,
+    de: '        const token = tokenRef.current',
+    vers: '        const token = null' },
+
   // ═══ LE COMPORTEMENT : LA TRADUCTION DES REFUS ═════════════════════════
   //
   // 🔴 LE PIEGE DEJA PAYE SUR LA TABLE DES RETOURS STRIPE. `'constructor' in

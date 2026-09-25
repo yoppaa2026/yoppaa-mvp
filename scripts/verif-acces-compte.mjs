@@ -429,6 +429,58 @@ function sansCommentaires(src) {
   verifier('l’écran de connexion traduit le vrai refus',
     /setError\(messageAuth\(err\)/.test(login),
     'toutes les causes redeviendraient « mot de passe incorrect »')
+
+  // ═══ LE WIDGET ANTI-ROBOT NE SE MURE PLUS (Alex, 25/09) ═════════════════
+  //
+  // 🔴 « J'ai occasionnellement des problèmes de login avec le message
+  // anti-bot. Aujourd'hui jamais, hier en démo plusieurs fois, c'est
+  // aléatoire. » `error-callback` effaçait le jeton et ne relançait RIEN :
+  // après la moindre erreur Turnstile, le formulaire restait muré jusqu'au
+  // rechargement de la page, et tous les essais suivants échouaient pareil.
+  // Cloudflare est explicite : c'est à l'intégrateur d'appeler `reset()`.
+  //
+  // ⚠️ CE BANC LIT DU CODE, IL NE JOUE PAS LE CHALLENGE. Turnstile ne
+  // s'exécute pas hors navigateur : ce qui se mesure ici, c'est le câblage —
+  // qu'une erreur relance, qu'un échec ait une seconde chance, et surtout que
+  // le chemin nominal n'ait pas bougé.
+  {
+    const widget = sansCommentaires(lire('app/components/TurnstileWidget.js'))
+
+    verifier('une erreur du challenge relance un nouvel essai',
+      /'error-callback': \([\s\S]{0,400}relancerChallenge\(\)/.test(widget),
+      'le formulaire resterait muré jusqu’au rechargement de la page')
+    // ⚠️ SANS TRACE, ON EN EST RÉDUIT À DÉDUIRE : Cloudflare passe un code à
+    // l'error-callback, et on l'ignorait.
+    verifier('et le code d’erreur de Cloudflare est enregistré',
+      /console\.error\('\[Turnstile\] challenge en échec', code\)/.test(widget))
+
+    // 🔴 LA SECONDE CHANCE EST TOUT LE CORRECTIF : sans elle, on rendait
+    // `null` sans avoir relancé, donc l'essai suivant échouait à l'identique.
+    verifier('un jeton manquant donne droit à une seconde chance',
+      /if \(!relancerChallenge\(\)\) return null[\s\S]{0,200}attendre\(8000\)/.test(widget),
+      'un échec condamnerait tous les essais suivants')
+
+    // 🔴 ET LE CHEMIN NOMINAL N'A PAS BOUGÉ. C'est la condition posée par Alex
+    // pendant la revue Play : quand un jeton existe, on passe exactement par
+    // où on passait, et aucune connexion qui marche ne peut cesser de marcher.
+    verifier('le cas nominal reste celui d’avant',
+      /if \(tokenRef\.current\) \{\s*const token = tokenRef\.current\s*tokenRef\.current = null/.test(widget),
+      'le chemin qui fonctionne aurait changé pendant une revue de store')
+
+    // ⚠️ ON NE RELANCE PAS À L'INFINI : un widget qui échoue en boucle
+    // appellerait Cloudflare sans fin.
+    verifier('les relances sont bornées',
+      /relancesRef\.current >= RELANCES_MAX/.test(widget))
+    // ⚠️ MAIS LE COMPTEUR MESURE DES ÉCHECS CONSÉCUTIFS : trois erreurs
+    // éparpillées sur une longue session ne doivent pas condamner la visite.
+    verifier('et le compteur repart à zéro dès qu’un challenge réussit',
+      /callback: \(token\) => \{[\s\S]{0,200}relancesRef\.current = 0/.test(widget))
+
+    // ⚠️ L'EXPIRATION EST DÉJÀ COUVERTE PAR CLOUDFLARE (`refresh-expired`
+    // vaut `auto`) : relancer par-dessus lui ferait deux challenges pour un.
+    verifier('l’expiration ne déclenche pas de relance en double',
+      /'expired-callback': \(\) => \{ tokenRef\.current = null \}/.test(widget))
+  }
   // ⚠️ ET IL GARDE UN REPLI : `messageAuth` rend `null` sur une erreur vide,
   // et un écran sans message laisserait cliquer sans rien comprendre.
   verifier('et il garde un message même si la traduction rend null',

@@ -584,10 +584,12 @@ const v = (nom, cond, detail = '') => {
   // « Sauces » dont une plus complète, c'est la plus complète qui se pose.
   v('elle applique le modèle retenu par la règle',
     /ecrireCopiesDeGroupe\(entree\.modele,/.test(biblioEcran))
-  // ⚠️ ELLE RECHARGE APRÈS AVOIR ÉCRIT : sinon réappliquer le même groupe ne
+  // ⚠️ ELLE FAIT RELIRE APRÈS AVOIR ÉCRIT : sinon réappliquer le même groupe ne
   // verrait pas les conflits qu'on vient de créer, et doublerait les groupes.
-  v('elle relit ses groupes après avoir écrit',
-    /setTousLesGroupes\(data \|\| \[\]\)[\s\S]{0,200}setChoisi\(null\)/.test(biblioEcran))
+  // Depuis le 25/09 c'est le PARENT qui relit — ses groupes servent aussi aux
+  // vignettes — et elle se contente de lui nommer les articles touchés.
+  v('elle fait relire le catalogue après avoir écrit',
+    /onApplique\?\.\(aCopier\)/.test(biblioEcran))
   // ⚠️ ELLE NE S'AFFICHE QUE LÀ OÙ LES GROUPES EXISTENT : le détail et la
   // vitrine ont des variantes, un autre modèle entièrement.
   v('elle ne s’affiche pas chez qui n’a pas de groupes',
@@ -621,8 +623,13 @@ const v = (nom, cond, detail = '') => {
     String((config.match(/version=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}|versionOptions=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}/g) || []).length))
   // 🔴 ET LE FRÈRE, DANS L'AUTRE SENS : copier depuis une pizza laissait la
   // bibliothèque annoncer « sur 3 articles » alors qu'il y en avait quinze.
-  v('la bibliothèque relit quand un panneau a écrit',
-    /\}, \[cleArticles, version\]\)/.test(config))
+  //
+  // ⚠️ LA LECTURE A DÉMÉNAGÉ CHEZ LE PARENT (25/09) : elle sert maintenant aux
+  // vignettes ET à la bibliothèque, et c'est le total des écritures qui la
+  // relance. La garde suit la règle là où elle vit, elle ne reste pas sur son
+  // ancienne adresse.
+  v('les groupes du catalogue sont relus après chaque écriture',
+    /\}, \[cleArticles, totalTouches\]\)/.test(config))
 
   // ─── LA DUPLICATION D'ARTICLE ────────────────────────────────────────────
   const iDup = config.indexOf('async function dupliquerArticle(')

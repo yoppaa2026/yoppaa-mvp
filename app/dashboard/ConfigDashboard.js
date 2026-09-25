@@ -121,6 +121,13 @@ import {
 import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
 import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '@/lib/guide-photos'
 import { LARGEUR_CHAMP, LARGEUR_TEXTE_LONG } from '@/lib/responsive'
+// ⚠️ RESTER OÙ L'ON ÉTAIT QUAND ON RECHARGE (Alex, 25/09). Le sous-onglet vit
+// dans l'adresse, par un seul mécanisme pour les quatre écrans qui en ont un.
+import { useSousOnglet, CLE_SOUS_ONGLET_2 } from '@/lib/onglet-url'
+// ⚠️ CE QU'UN ARTICLE CONTIENT SE LIT SANS L'OUVRIR (Alex, 25/09) : la règle
+// compose la phrase, l'écran la peint. Les comptes sont chargés UNE fois pour
+// tout le catalogue, jamais par vignette.
+import { apercuContenu } from '@/lib/catalogue-apercu'
 // ⚠️ COPIER SE DÉCIDE DANS LE MODULE, PAS ICI. Qui peut recevoir une copie, ce
 // qu'elle emporte et ce qu'on refuse d'écraser sont des règles : l'écran les
 // applique, il ne les réinvente pas. C'est ce qui permet de les mesurer.
@@ -411,7 +418,17 @@ function TabMenu({ commercantId, commercant, toast }) {
     return map
   })()
   // ─── Sous-onglet actif : Articles | Catégories | Personnalisation ────────
-  const [subTab, setSubTab] = useState('articles')
+  //
+  // ⚠️ IL VIT DANS L'ADRESSE (Alex, 25/09) : recharger depuis
+  // « Personnalisation » ramenait sur « Articles », et il fallait quatre clics
+  // pour revenir là où on travaillait.
+  //
+  // 🔴 ET C'EST LE SECOND NIVEAU : cet écran vit DANS « Carte », qui choisit
+  // déjà entre Produits et Abonnements. Une seule clé d'adresse pour les deux,
+  // et celui-ci écraserait celui-là à chaque rendu.
+  const [subTab, setSubTab] = useSousOnglet(
+    ['articles', 'categories', 'personnalisation'], 'articles', CLE_SOUS_ONGLET_2,
+  )
   const [searchQuery, setSearchQuery] = useState('')
 
   const [articles, setArticles] = useState([])
@@ -447,6 +464,46 @@ function TabMenu({ commercantId, commercant, toast }) {
   // ⚠️ UN COMPTEUR PAR ARTICLE, PAS UN COMPTEUR GLOBAL : faire relire quarante
   // panneaux pour trois articles touchés, c'est trente-sept requêtes pour rien.
   const [optionsTouchees, setOptionsTouchees] = useState({})
+  // ─── CE QUE CHAQUE ARTICLE CONTIENT, CHARGÉ UNE SEULE FOIS ───────────────
+  //
+  // 🔴 POURQUOI ICI ET PAS DANS CHAQUE VIGNETTE (Alex, 25/09) : « quand un
+  // article contient un groupe, une variante, cela doit se voir depuis sa
+  // vignette ». Quarante vignettes qui iraient chercher leurs groupes, ce
+  // seraient quarante requêtes pour afficher une ligne de texte.
+  //
+  // ⚠️ ET C'EST LA MÊME LECTURE QUE CELLE DE LA BIBLIOTHÈQUE, qui la faisait
+  // pour son compte : deux chargements de la même chose finissent toujours par
+  // ne plus dire la même chose. Le parent lit, les deux consomment.
+  const [tousLesGroupes, setTousLesGroupes] = useState([])
+  const cleArticles = articles.map(a => a.id).join('|')
+  const totalTouches = Object.values(optionsTouchees).reduce((t, n) => t + n, 0)
+  useEffect(() => {
+    let vivant = true
+    async function charger() {
+      const ids = articles.map(a => a.id)
+      if (ids.length === 0) { setTousLesGroupes([]); return }
+      const { data } = await supabase
+        .from('article_options_groupes')
+        .select('id, article_id, nom, type, obligatoire, valeurs:article_options_valeurs(*)')
+        .in('article_id', ids)
+      if (vivant) setTousLesGroupes(data || [])
+    }
+    charger()
+    return () => { vivant = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- la liste est résumée par sa clé, et `totalTouches` relit après chaque écriture
+  }, [cleArticles, totalTouches])
+
+  // Les groupes rangés par article, pour les vignettes et les conflits.
+  const groupesParArticle = (() => {
+    const map = {}
+    for (const g of tousLesGroupes) {
+      const cle = String(g.article_id)
+      if (!map[cle]) map[cle] = []
+      map[cle].push(g)
+    }
+    return map
+  })()
+
   function noterOptionsTouchees(ids = []) {
     setOptionsTouchees(prev => {
       const suite = { ...prev }
@@ -1202,7 +1259,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // Vitrine : la card dépend du produit (indicatif = pastille « à partir
     // de », vendable = stock permanent façon détail)
     const indicatif = estVitrine && a.est_vitrine
-    return <ArticleCard key={a.id} a={a} estVitrine={indicatif} estDetail={estDetail || (estVitrine && !indicatif)} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={indicatif} estDetail={estDetail || (estVitrine && !indicatif)} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
   return (
@@ -1568,7 +1625,7 @@ function TabMenu({ commercantId, commercant, toast }) {
               le détail et la vitrine ont des variantes, un autre modèle. */}
           {!variantesCategorie && articles.length > 0 && (
             <BibliothequeGroupes articles={articles} toast={toast} onApplique={noterOptionsTouchees}
-              version={Object.values(optionsTouchees).reduce((t, n) => t + n, 0)}/>
+              tousLesGroupes={tousLesGroupes} groupesParArticle={groupesParArticle}/>
           )}
           {articles.length === 0 ? (
             <div style={{ ...s.card, textAlign: 'center', padding: 40, color: T.muted }}>
@@ -1584,13 +1641,32 @@ function TabMenu({ commercantId, commercant, toast }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontWeight: 700, color: T.ink, fontSize: 14, margin: 0 }}>{a.nom}</p>
                     <p style={{ fontSize: 11, color: T.muted, margin: '2px 0 0' }}>{euros(a.prix)} {a.categorie ? `· ${a.categorie}` : ''}</p>
+                    {/* 🔴 CE QUE L'ARTICLE CONTIENT, SANS L'OUVRIR (Alex,
+                        25/09). La question qu'on se pose sur cet écran est
+                        « lesquels n'ont pas encore leurs options ? » : sans
+                        réponse ici, il faut ouvrir les quarante articles un
+                        par un. ⚠️ « Pas d'options » s'affiche AUSSI, en gris :
+                        sur cet écran-là, l'absence est justement ce qu'on vient
+                        chercher. */}
+                    {(() => {
+                      const ap = apercuContenu({
+                        groupes: groupesParArticle[String(a.id)] || [],
+                        article: a,
+                        variantes: variantesCategorie,
+                      })
+                      return (
+                        <p style={{ fontSize: 11, fontWeight: ap.vide ? 500 : 700, color: ap.vide ? '#9CA3AF' : T.main, margin: '3px 0 0', fontStyle: ap.vide ? 'italic' : 'normal' }}>
+                          {ap.texte}
+                        </p>
+                      )
+                    })()}
                   </div>
                   <Icon name="chevR" size={16} color={T.muted}/>
                 </summary>
                 <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${T.hairline}` }}>
                   {variantesCategorie
                     ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-                    : <OptionsArticle articleId={a.id} articles={articles} version={optionsTouchees[String(a.id)] || 0} onCopie={noterOptionsTouchees} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+                    : <OptionsArticle articleId={a.id} articles={articles} version={optionsTouchees[String(a.id)] || 0} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
                 </div>
               </details>
             ))
@@ -1655,50 +1731,16 @@ async function ecrireCopiesDeGroupe(groupe, cibleIds) {
 //
 // ⚠️ ELLE NE REMPLACE PAS LE PANNEAU DE CHAQUE ARTICLE, elle lui donne son
 // entrée naturelle. L'un sert à régler un article, l'autre à étendre une règle.
-function BibliothequeGroupes({ articles = [], toast, onApplique, version = 0 }) {
-  const [tousLesGroupes, setTousLesGroupes] = useState([])
-  const [chargement, setChargement] = useState(true)
+// ⚠️ ELLE NE CHARGE PLUS RIEN (25/09). Le parent lit les groupes une seule
+// fois, pour les vignettes ET pour elle : deux lectures de la même chose
+// finissaient par ne plus dire la même chose, et la bibliothèque annonçait
+// « sur 3 articles » quand une copie venait d'en faire quinze.
+function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes = [], groupesParArticle = {} }) {
   const [choisi, setChoisi] = useState(null)   // le nom du groupe déplié
   const [cibles, setCibles] = useState([])
   const [envoi, setEnvoi] = useState(false)
 
-  const idsArticles = articles.map(a => a.id)
-  const cleArticles = idsArticles.join('|')
-
-  useEffect(() => {
-    let vivant = true
-    async function charger() {
-      if (idsArticles.length === 0) { setTousLesGroupes([]); setChargement(false); return }
-      setChargement(true)
-      const { data, error } = await supabase
-        .from('article_options_groupes')
-        .select('*, valeurs:article_options_valeurs(*)')
-        .in('article_id', idsArticles)
-      if (!vivant) return
-      if (error) toast(`Erreur : ${error.message}`, 'error')
-      setTousLesGroupes(data || [])
-      setChargement(false)
-    }
-    charger()
-    return () => { vivant = false }
-  // ⚠️ ET ELLE RELIT QUAND UN PANNEAU D'ARTICLE A ÉCRIT (25/09). Le frère du
-  // défaut d'Alex, vu dans l'autre sens : copier « Sauces » depuis une pizza
-  // laissait la bibliothèque annoncer « sur 3 articles » alors qu'il y en avait
-  // quinze. Un compte faux en tête de page est pire qu'aucun compte.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- la liste d'articles est résumée par sa clé
-  }, [cleArticles, version])
-
   const biblio = bibliothequeDeGroupes(tousLesGroupes)
-  // Les groupes rangés par article, pour repérer les conflits sans recharger.
-  const groupesParArticle = (() => {
-    const map = {}
-    for (const g of tousLesGroupes) {
-      const cle = String(g.article_id)
-      if (!map[cle]) map[cle] = []
-      map[cle].push({ nom: g.nom })
-    }
-    return map
-  })()
 
   async function appliquer(entree) {
     if (envoi) return
@@ -1711,24 +1753,19 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, version = 0 }) 
     setEnvoi(false)
     if (!r.ok) { toast(r.erreur, 'error'); return }
 
-    // ⚠️ ON RECHARGE : sans ça, réappliquer le même groupe ne verrait pas les
-    // conflits qu'on vient de créer, et le commerçant doublerait ses groupes.
-    const { data } = await supabase
-      .from('article_options_groupes')
-      .select('*, valeurs:article_options_valeurs(*)')
-      .in('article_id', idsArticles)
-    setTousLesGroupes(data || [])
     setChoisi(null)
     setCibles([])
-    // ⚠️ ON NOMME LES ARTICLES TOUCHÉS, on ne dit pas seulement « c'est fait » :
-    // c'est ce qui permet au parent de ne faire relire que ceux-là.
+    // ⚠️ ON NOMME LES ARTICLES TOUCHÉS, et c'est le parent qui relit : ses
+    // groupes servent aussi aux vignettes, et lui seul peut les remettre à
+    // jour partout d'un coup. Sans ce rechargement, réappliquer le même groupe
+    // ne verrait pas les conflits qu'on vient de créer, et le commerçant
+    // doublerait ses groupes.
     onApplique?.(aCopier)
     toast(r.combien === 1
       ? `« ${entree.nom} » appliqué à 1 article.`
       : `« ${entree.nom} » appliqué à ${r.combien} articles.`)
   }
 
-  if (chargement) return <p style={{ fontSize: 12, color: T.muted, padding: '8px 0' }}>Chargement de tes groupes…</p>
   // ⚠️ RIEN À MONTRER, RIEN À DIRE : un bloc vide en tête de page ferait douter
   // du reste de l'écran. Le commerçant crée son premier groupe sur un article.
   if (biblio.length === 0) return null
@@ -1840,7 +1877,7 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, version = 0 }) 
   )
 }
 
-function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie = null }) {
+function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie = null, groupesParArticle = {} }) {
   const [groupes, setGroupes] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -1855,7 +1892,8 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
   // donner à ses voisins.
   const [copieDe, setCopieDe] = useState(null)      // le groupe qu'on copie
   const [cibles, setCibles] = useState([])          // ids cochés
-  const [groupesCibles, setGroupesCibles] = useState({}) // { articleId: [{ nom }] }
+  // ⚠️ LES GROUPES DES AUTRES ARTICLES VIENNENT DU PARENT, qui les lit une
+  // seule fois : ce panneau ne fait plus sa propre requête.
   const [copieEnCours, setCopieEnCours] = useState(false)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
@@ -1924,37 +1962,21 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
 
   // ─── OUVRIR LE PANNEAU DE COPIE ──────────────────────────────────────────
   //
-  // ⚠️ ON VA CHERCHER CE QUE LES AUTRES ONT DÉJÀ, et seulement à l'ouverture.
-  // Sans ça, impossible de dire au commerçant lesquels seront ignorés, et la
-  // copie écraserait ou dédoublerait un réglage qu'il avait fait exprès.
-  //
-  // ⚠️ ON NE LIT QUE LE NOM ET L'ARTICLE : ni les valeurs, ni les prix. C'est
-  // tout ce que la règle du conflit demande, et une requête qui charge plus
-  // que nécessaire finit toujours par charger trop.
-  async function ouvrirCopie(groupe) {
+  // ⚠️ IL NE CHARGE PLUS RIEN (25/09). Il allait chercher les groupes de tous
+  // les autres articles pour savoir lesquels seraient ignorés ; le parent les
+  // lit désormais UNE fois, pour les vignettes et pour la bibliothèque. Trois
+  // lectures de la même chose finissent par ne plus dire la même chose, et
+  // c'est un panneau de copie qui se serait trompé de conflits.
+  function ouvrirCopie(groupe) {
     setCopieDe(groupe)
     setCibles([])
-    const ids = ciblesDeCopie(articles, articleId).map(a => a.id)
-    if (ids.length === 0) { setGroupesCibles({}); return }
-    const { data, error } = await supabase
-      .from('article_options_groupes')
-      .select('article_id, nom')
-      .in('article_id', ids)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    const parArticle = {}
-    for (const g of data || []) {
-      const cle = String(g.article_id)
-      if (!parArticle[cle]) parArticle[cle] = []
-      parArticle[cle].push({ nom: g.nom })
-    }
-    setGroupesCibles(parArticle)
   }
 
   // ⚠️ L'ÉCRITURE EST PARTAGÉE avec la bibliothèque (`ecrireCopiesDeGroupe`) :
   // deux copies du même geste finiraient par écrire deux choses différentes.
   async function copierGroupe() {
     if (!copieDe || copieEnCours) return
-    const conflits = conflitsDeGroupe(copieDe.nom, cibles, groupesCibles)
+    const conflits = conflitsDeGroupe(copieDe.nom, cibles, groupesParArticle)
     const { aCopier } = repartirCibles(cibles, conflits)
     if (aCopier.length === 0) { toast('Rien à copier : ces articles ont déjà ce groupe.', 'error'); return }
 
@@ -2075,7 +2097,7 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
               geste qu'il connaît déjà ne se réapprend pas. */}
           {copieDe?.id === g.id && (() => {
             const listeCibles = ciblesDeCopie(articles, articleId)
-            const conflits = conflitsDeGroupe(g.nom, cibles, groupesCibles)
+            const conflits = conflitsDeGroupe(g.nom, cibles, groupesParArticle)
             const bloques = new Set(conflits.map(String))
             const tousCoches = cibles.length === listeCibles.length && listeCibles.length > 0
             return (
@@ -2456,7 +2478,7 @@ function VariantesArticle({ article, toast, articles = [] }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -2544,6 +2566,23 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ fontWeight: 800, color: T.ink, fontSize: 15 }}>{a.nom}</span>
             <span style={{ ...s.tag, background: a.actif ? T.bgPanel : '#F3F4F6', color: a.actif ? '#fff' : T.muted }}>{a.actif ? 'Actif' : 'Inactif'}</span>
+            {/* ⚠️ ICI ON NE MONTRE QUE CE QUI EXISTE, contrairement à l'écran
+                de personnalisation. Sur la liste de tous les jours, une
+                pastille « pas d'options » sur chaque article serait du bruit :
+                ce n'est pas la question qu'on vient y poser. */}
+            {(() => {
+              const ap = apercuContenu({
+                groupes: groupesParArticle[String(a.id)] || [],
+                article: a,
+                variantes: estDetail || estVitrine,
+              })
+              if (ap.vide) return null
+              return (
+                <span style={{ ...s.tag, background: T.pale, color: T.deep, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icon name="sliders" size={11} color={T.deep}/> {ap.texte}
+                </span>
+              )
+            })()}
           </div>
           {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -2713,7 +2752,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
       </div>
       {showOptions && ((estDetail || estVitrine)
         ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-        : <OptionsArticle articleId={a.id} articles={articles} version={versionOptions} onCopie={onCopieOptions} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
+        : <OptionsArticle articleId={a.id} articles={articles} version={versionOptions} onCopie={onCopieOptions} groupesParArticle={groupesParArticle} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
     </div>
   )
 }
@@ -7014,7 +7053,9 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
   // choisir une présentation remplirait aussi les infos pratiques.
   const [propsIaDescription, setPropsIaDescription] = useState([])
   const [propsIaInfos, setPropsIaInfos] = useState([])
-  const [sousOnglet, setSousOnglet] = useState('fiche')
+  // ⚠️ MÊME RÈGLE : recharger depuis « Lieux » ne doit pas ramener sur
+  // « Fiche ». L'ancre d'arrivée, elle, garde la priorité juste en dessous.
+  const [sousOnglet, setSousOnglet] = useSousOnglet(['fiche', 'contact', 'lieux', 'reglages'], 'fiche')
   // 🔴 ARRIVER AU BON ENDROIT, PAS SEULEMENT AU BON ONGLET (Alex, 08/09 :
   // « il faut diriger vers l'onglet profil À L'ENDROIT où il faut activer la
   // livraison »). Le Profil est long : y déposer quelqu'un tout en haut sans
@@ -8793,7 +8834,9 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
 // ═════════════════════════════════════════════════════════════════════════
 
 function TabRdv({ commercantId, commercant, toast, onSaved }) {
-  const [subTab, setSubTab] = useState('prestations')
+  // ⚠️ MÊME RÈGLE QUE PARTOUT : le sous-onglet vit dans l'adresse, sinon
+  // recharger depuis « Créneaux » ramène sur « Prestations ».
+  const [subTab, setSubTab] = useSousOnglet(['prestations', 'praticiens', 'creneaux', 'fermetures'], 'prestations')
   // ⚠️ L'INTERRUPTEUR QUI N'EXISTAIT NULLE PART. Voir lib/activation-rdv.js :
   // `rdv_actif` ne s'écrivait que depuis /admin, et le commerçant configurait
   // tout sans jamais pouvoir ouvrir sa fiche. La bannière vit ICI, là où il
@@ -14042,7 +14085,9 @@ function TabComptabilite({ commercantId, categorie, toast }) {
 // laisserait le commerçant chercher ses prestations : il vient de lire qu'elles
 // ne sont pas là, il ne sait toujours pas où elles sont.
 function TabCatalogue({ commercantId, commercant, toast, onAllerA = null }) {
-  const [sousOnglet, setSousOnglet] = useState('produits')
+  // ⚠️ PREMIER NIVEAU de l'onglet « Carte » : `TabMenu`, à l'intérieur, tient
+  // le second avec sa propre clé d'adresse.
+  const [sousOnglet, setSousOnglet] = useSousOnglet(['produits', 'abonnements'], 'produits')
   const estVitrine = commercant?.categorie === 'vitrine'
   const peutAbonnements = peut(commercant, 'rdv')
 

@@ -218,9 +218,15 @@ const MUTATIONS = [
 
   // 🔴 LE FRERE, DANS L AUTRE SENS : la bibliotheque annoncait « sur 3
   // articles » alors qu il y en avait quinze.
+  //
+  // ⚠️ L ANCRE A SUIVI LE DEMENAGEMENT (25/09). La lecture vivait dans la
+  // bibliotheque ; elle est passee chez le parent, ou elle sert aussi aux
+  // vignettes. `verif:ancres` a dit « ancre perimee » des le premier passage —
+  // c est exactement son travail : une ancre qui ne trouve plus sa cible ne
+  // mesure rien, et sans lui elle serait restee muette.
   { nom: '🔴 la bibliotheque garde un compte perime',
     fichier: ECRAN,
-    de: '  }, [cleArticles, version])',
+    de: '  }, [cleArticles, totalTouches])',
     vers: '  }, [cleArticles])' },
 
   // ─── AGIR EN LOT ─────────────────────────────────────────────────────────

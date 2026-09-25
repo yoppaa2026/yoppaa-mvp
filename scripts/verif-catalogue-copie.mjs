@@ -527,7 +527,7 @@ const v = (nom, cond, detail = '') => {
 
   // ⚠️ SANS LA LISTE DES ARTICLES, il n'a nulle part où copier.
   v('le panneau d’options reçoit le catalogue',
-    /function OptionsArticle\(\{ articleId, toast, articles = \[\] \}\)/.test(optionsArticle))
+    /function OptionsArticle\(\{ articleId, toast, articles = \[\]/.test(optionsArticle))
   v('et les deux endroits qui l’affichent la lui passent',
     (config.match(/<OptionsArticle articleId=\{a\.id\} articles=\{articles\}/g) || []).length === 2,
     String((config.match(/<OptionsArticle articleId=\{a\.id\} articles=\{articles\}/g) || []).length))
@@ -599,6 +599,30 @@ const v = (nom, cond, detail = '') => {
   // ⚠️ LE BOUTON NE S'AFFICHE PAS QUAND IL N'Y A NULLE PART OÙ COPIER.
   v('le bouton se tait quand le catalogue n’a pas d’autre article',
     /ciblesDeCopie\(articles, articleId\)\.length > 0 && \(/.test(optionsArticle))
+
+  // ─── CE QUI EST ÉCRIT DOIT SE VOIR, SANS RECHARGER LA PAGE ───────────────
+  //
+  // 🔴 DÉFAUT TROUVÉ PAR ALEX (25/09) : « il faut rafraîchir la page pour voir
+  // les groupes ajoutés, le message dit que c'est fait mais on ne le voit pas,
+  // on pense que ça n'a pas fonctionné ». Les panneaux sont tous montés dès
+  // l'affichage — le contenu d'un `<details>` vit même fermé — et chacun avait
+  // chargé ses groupes une fois pour toutes. Un succès invisible fait recopier,
+  // et le groupe se retrouve en double.
+  v('un panneau relit ses groupes quand on a écrit chez lui',
+    /useEffect\(\(\) => \{ fetchGroupes\(\) \}, \[articleId, version\]\)/.test(optionsArticle))
+  v('et la copie nomme les articles touchés',
+    /onCopie\?\.\(aCopier\)/.test(optionsArticle))
+  // ⚠️ UN COMPTEUR PAR ARTICLE, PAS UN COMPTEUR GLOBAL : quarante panneaux qui
+  // relisent pour trois articles touchés, ce sont trente-sept requêtes de trop.
+  v('le compteur est tenu par article',
+    /suite\[cle\] = \(suite\[cle\] \|\| 0\) \+ 1/.test(config))
+  v('les deux endroits qui affichent un panneau lui passent son compteur',
+    (config.match(/version=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}|versionOptions=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}/g) || []).length === 2,
+    String((config.match(/version=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}|versionOptions=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}/g) || []).length))
+  // 🔴 ET LE FRÈRE, DANS L'AUTRE SENS : copier depuis une pizza laissait la
+  // bibliothèque annoncer « sur 3 articles » alors qu'il y en avait quinze.
+  v('la bibliothèque relit quand un panneau a écrit',
+    /\}, \[cleArticles, version\]\)/.test(config))
 
   // ─── LA DUPLICATION D'ARTICLE ────────────────────────────────────────────
   const iDup = config.indexOf('async function dupliquerArticle(')

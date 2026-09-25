@@ -437,6 +437,26 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [lotValeur, setLotValeur] = useState('')       // le pourcentage
   const [lotCategorie, setLotCategorie] = useState('') // la catégorie visée
   const [lotEnCours, setLotEnCours] = useState(false)
+  // ─── QUI DOIT RELIRE SES GROUPES (Alex, 25/09) ───────────────────────────
+  //
+  // 🔴 « Il faut rafraîchir la page pour voir les groupes ajoutés, le message
+  // dit que c'est fait mais on ne le voit pas. » Les panneaux d'options sont
+  // tous montés dès l'affichage de la page — le contenu d'un `<details>` vit
+  // même fermé — et chacun avait chargé ses groupes une fois pour toutes.
+  //
+  // ⚠️ UN COMPTEUR PAR ARTICLE, PAS UN COMPTEUR GLOBAL : faire relire quarante
+  // panneaux pour trois articles touchés, c'est trente-sept requêtes pour rien.
+  const [optionsTouchees, setOptionsTouchees] = useState({})
+  function noterOptionsTouchees(ids = []) {
+    setOptionsTouchees(prev => {
+      const suite = { ...prev }
+      for (const id of ids) {
+        const cle = String(id)
+        suite[cle] = (suite[cle] || 0) + 1
+      }
+      return suite
+    })
+  }
   // Renommage catégorie
   const [renamingCat, setRenamingCat] = useState(null) // nom de la cat en cours de renommage
   const [renameValue, setRenameValue] = useState('')
@@ -1182,7 +1202,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // Vitrine : la card dépend du produit (indicatif = pastille « à partir
     // de », vendable = stock permanent façon détail)
     const indicatif = estVitrine && a.est_vitrine
-    return <ArticleCard key={a.id} a={a} estVitrine={indicatif} estDetail={estDetail || (estVitrine && !indicatif)} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={indicatif} estDetail={estDetail || (estVitrine && !indicatif)} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
   return (
@@ -1547,7 +1567,8 @@ function TabMenu({ commercantId, commercant, toast }) {
               margherita ». Elle ne s'affiche que là où les groupes existent :
               le détail et la vitrine ont des variantes, un autre modèle. */}
           {!variantesCategorie && articles.length > 0 && (
-            <BibliothequeGroupes articles={articles} toast={toast} onApplique={fetchArticles}/>
+            <BibliothequeGroupes articles={articles} toast={toast} onApplique={noterOptionsTouchees}
+              version={Object.values(optionsTouchees).reduce((t, n) => t + n, 0)}/>
           )}
           {articles.length === 0 ? (
             <div style={{ ...s.card, textAlign: 'center', padding: 40, color: T.muted }}>
@@ -1569,7 +1590,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                 <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${T.hairline}` }}>
                   {variantesCategorie
                     ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-                    : <OptionsArticle articleId={a.id} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+                    : <OptionsArticle articleId={a.id} articles={articles} version={optionsTouchees[String(a.id)] || 0} onCopie={noterOptionsTouchees} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
                 </div>
               </details>
             ))
@@ -1634,7 +1655,7 @@ async function ecrireCopiesDeGroupe(groupe, cibleIds) {
 //
 // ⚠️ ELLE NE REMPLACE PAS LE PANNEAU DE CHAQUE ARTICLE, elle lui donne son
 // entrée naturelle. L'un sert à régler un article, l'autre à étendre une règle.
-function BibliothequeGroupes({ articles = [], toast, onApplique }) {
+function BibliothequeGroupes({ articles = [], toast, onApplique, version = 0 }) {
   const [tousLesGroupes, setTousLesGroupes] = useState([])
   const [chargement, setChargement] = useState(true)
   const [choisi, setChoisi] = useState(null)   // le nom du groupe déplié
@@ -1660,8 +1681,12 @@ function BibliothequeGroupes({ articles = [], toast, onApplique }) {
     }
     charger()
     return () => { vivant = false }
+  // ⚠️ ET ELLE RELIT QUAND UN PANNEAU D'ARTICLE A ÉCRIT (25/09). Le frère du
+  // défaut d'Alex, vu dans l'autre sens : copier « Sauces » depuis une pizza
+  // laissait la bibliothèque annoncer « sur 3 articles » alors qu'il y en avait
+  // quinze. Un compte faux en tête de page est pire qu'aucun compte.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- la liste d'articles est résumée par sa clé
-  }, [cleArticles])
+  }, [cleArticles, version])
 
   const biblio = bibliothequeDeGroupes(tousLesGroupes)
   // Les groupes rangés par article, pour repérer les conflits sans recharger.
@@ -1695,7 +1720,9 @@ function BibliothequeGroupes({ articles = [], toast, onApplique }) {
     setTousLesGroupes(data || [])
     setChoisi(null)
     setCibles([])
-    onApplique?.()
+    // ⚠️ ON NOMME LES ARTICLES TOUCHÉS, on ne dit pas seulement « c'est fait » :
+    // c'est ce qui permet au parent de ne faire relire que ceux-là.
+    onApplique?.(aCopier)
     toast(r.combien === 1
       ? `« ${entree.nom} » appliqué à 1 article.`
       : `« ${entree.nom} » appliqué à ${r.combien} articles.`)
@@ -1813,7 +1840,7 @@ function BibliothequeGroupes({ articles = [], toast, onApplique }) {
   )
 }
 
-function OptionsArticle({ articleId, toast, articles = [] }) {
+function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie = null }) {
   const [groupes, setGroupes] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -1832,7 +1859,21 @@ function OptionsArticle({ articleId, toast, articles = [] }) {
   const [copieEnCours, setCopieEnCours] = useState(false)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
-  useEffect(() => { fetchGroupes() }, [articleId])
+  // 🔴 ET IL RELIT QUAND ON A ÉCRIT CHEZ LUI (Alex, 25/09 : « il faut
+  // rafraîchir la page pour voir les groupes ajoutés, le message dit que c'est
+  // fait mais on ne le voit pas, on pense que ça n'a pas fonctionné »).
+  //
+  // ⚠️ LE CONTENU D'UN `<details>` EST MONTÉ MÊME FERMÉ : les quarante
+  // panneaux ont donc chargé leurs groupes au premier affichage, et aucun
+  // n'avait de raison de recommencer. Un message de succès qui ne change rien à
+  // l'écran est pire qu'un échec : le commerçant recopie, et se retrouve avec
+  // le groupe en double.
+  //
+  // ⚠️ `version` NE BOUGE QUE POUR LES ARTICLES VRAIMENT TOUCHÉS. Un compteur
+  // global ferait relire quarante panneaux à chaque copie, donc quarante
+  // requêtes pour trois articles concernés.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch piloté par l'id et par le compteur d'écritures
+  useEffect(() => { fetchGroupes() }, [articleId, version])
 
   async function fetchGroupes() {
     setLoading(true)
@@ -1924,6 +1965,10 @@ function OptionsArticle({ articleId, toast, articles = [] }) {
 
     setCopieDe(null)
     setCibles([])
+    // ⚠️ ON PRÉVIENT LES PANNEAUX DES ARTICLES TOUCHÉS. Sans ça, le commerçant
+    // lit « copié sur 12 articles », ouvre l'un d'eux, ne voit rien, et
+    // recopie : le groupe se retrouve en double.
+    onCopie?.(aCopier)
     toast(r.combien === 1
       ? `« ${copieDe.nom} » copié sur 1 article.`
       : `« ${copieDe.nom} » copié sur ${r.combien} articles.`)
@@ -2411,7 +2456,7 @@ function VariantesArticle({ article, toast, articles = [] }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -2668,7 +2713,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
       </div>
       {showOptions && ((estDetail || estVitrine)
         ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-        : <OptionsArticle articleId={a.id} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
+        : <OptionsArticle articleId={a.id} articles={articles} version={versionOptions} onCopie={onCopieOptions} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
     </div>
   )
 }

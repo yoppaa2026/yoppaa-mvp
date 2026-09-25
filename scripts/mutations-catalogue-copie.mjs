@@ -200,6 +200,29 @@ const MUTATIONS = [
     de: '  if (stocksJour > 0) {',
     vers: '  if (false) {' },
 
+  // ─── CE QUI EST ECRIT DOIT SE VOIR (25/09, trouve par Alex) ──────────────
+  //
+  // 🔴 « Il faut rafraichir la page pour voir les groupes ajoutes, le message
+  // dit que c est fait mais on ne le voit pas, on pense que ca n a pas
+  // fonctionne. » Un succes invisible fait recopier, et le groupe se retrouve
+  // en double.
+  { nom: '🔴 le panneau ne relit plus ses groupes apres une copie',
+    fichier: ECRAN,
+    de: '  useEffect(() => { fetchGroupes() }, [articleId, version])',
+    vers: '  useEffect(() => { fetchGroupes() }, [articleId])' },
+
+  { nom: '🔴 la copie ne nomme plus les articles touches',
+    fichier: ECRAN,
+    de: '    onCopie?.(aCopier)',
+    vers: '    onCopie?.([])' },
+
+  // 🔴 LE FRERE, DANS L AUTRE SENS : la bibliotheque annoncait « sur 3
+  // articles » alors qu il y en avait quinze.
+  { nom: '🔴 la bibliotheque garde un compte perime',
+    fichier: ECRAN,
+    de: '  }, [cleArticles, version])',
+    vers: '  }, [cleArticles])' },
+
   // ─── AGIR EN LOT ─────────────────────────────────────────────────────────
   //
   // 🔴 LA DERIVE BINAIRE SUR DE L ARGENT : `9.5 * 0.99` vaut 9,404999… donc

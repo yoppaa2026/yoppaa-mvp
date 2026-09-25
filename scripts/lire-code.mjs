@@ -35,8 +35,33 @@
 // rien coûter, et l'ordre éprouvé sur les 300 autres fichiers ne bouge pas.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 LE DÉFAUT DU 25/09 : `accept="image/*"` AVALAIT 8 000 CARACTÈRES
+//
+// Même mécanique que le 29/08, une famille plus loin. Ce n'est plus un « /* »
+// écrit dans un commentaire, c'est un « /* » écrit dans une CHAÎNE :
+//
+//     <input accept="image/*" …/>          ← ce « /* » n'en est pas un
+//     … 8 000 caractères de VRAI CODE …
+//     {/* un commentaire JSX quelconque */} ← ce « */ » ferme le faux bloc
+//
+// Mesuré sur le dépôt ce jour-là : 4 fichiers sur 501, dont
+// `ConfigDashboard.js` (8 017 caractères) et `signup/page.js` (1 983). Les
+// gardes qui visaient ces zones étaient aveugles, dans les deux sens : celles
+// qui cherchent un motif ne le trouvaient plus, celles qui vérifient qu'un
+// motif est ABSENT verdissaient sans rien prouver. C'est exactement comme ça
+// que le défaut a été trouvé : une garde toute neuve, juste, restait rouge.
+//
+// ✅ LE REMÈDE SUIT CELUI DU 29/08 : désarmer le marqueur plutôt qu'espérer un
+// ordre. Un vrai commentaire s'ouvre après un espace, un début de ligne, une
+// accolade ou une parenthèse ; un `/*` COLLÉ à une lettre, un chiffre ou une
+// étoile vient d'un type MIME ou d'un glob, jamais d'un commentaire lisible.
+// ═══════════════════════════════════════════════════════════════════════════
+
 export function sansProse(texte) {
   return texte
+    // 0) Les faux marqueurs venus des chaînes : `image/*`, `text/*`, `*/*`.
+    .replace(/(?<=[A-Za-z0-9_*])\/\*/g, '  ')
     // 1) Sur les seules lignes de commentaire, les « /* » et « */ » deviennent
     //    inoffensifs. Ces lignes disparaissent à l'étape 3 de toute façon.
     .replace(/^[ \t]*\/\/.*$/gm, (ligne) => ligne.replace(/\/\*|\*\//g, '  '))

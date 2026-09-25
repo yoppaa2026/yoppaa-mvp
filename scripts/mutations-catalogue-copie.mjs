@@ -200,6 +200,41 @@ const MUTATIONS = [
     de: '  if (stocksJour > 0) {',
     vers: '  if (false) {' },
 
+  // 🔴 QUINZE FOIS LA MEME FENETRE N EST PAS UNE INFORMATION (Alex, 25/09) :
+  // « pas 15 fois la meme chose s il fait la manip sur 15 articles ». Douze
+  // fenetres par jour deviennent un reflexe, et le jour ou elle compte
+  // vraiment, plus personne ne la lit.
+  { nom: '🔴 la fenetre se leve pour une copie ordinaire',
+    fichier: COPIE,
+    de: "  return (Array.isArray(points) ? points : []).some(p => p?.grave === true)",
+    vers: '  return true' },
+
+  { nom: '🔴 la fenetre se releve a chaque duplication',
+    fichier: COPIE,
+    de: '  if (dejaVue) return false',
+    vers: '  if (false) return false' },
+
+  // 🔴 LE SEUL POINT QUI NE SE VOIT NULLE PART : l article a l air pret, il s
+  // active, et rien ne se vend.
+  { nom: '🔴 le stock zero des variantes cesse d etre un point grave',
+    fichier: COPIE,
+    de: '      grave: true,',
+    vers: '      grave: false,' },
+
+  // ⚠️ LA MODALE REND UNE LIGNE PAR ENTREE : lui passer un texte colle donnait
+  // le pave illisible de la capture du 25/09.
+  { nom: '⚠️ la fenetre recoit un pave au lieu d une ligne par point',
+    fichier: COPIE,
+    de: "  return (Array.isArray(points) ? points : []).map(p => `• ${p.quoi}. ${p.faire}`)",
+    vers: "  return [(Array.isArray(points) ? points : []).map(p => `${p.quoi}. ${p.faire}`).join(' ')]" },
+
+  // ⚠️ LE MESSAGE COURT NE REPREND QUE CE QUI SE RETIENT : recopier les six
+  // lignes de la fenetre dans un message de trois secondes ne sert personne.
+  { nom: '⚠️ le message court deverse tous les points',
+    fichier: COPIE,
+    de: '    .map(p => p?.court)',
+    vers: '    .map(p => p?.court || p?.quoi)' },
+
   // ─── CE QUI EST ECRIT DOIT SE VOIR (25/09, trouve par Alex) ──────────────
   //
   // 🔴 « Il faut rafraichir la page pour voir les groupes ajoutes, le message

@@ -136,7 +136,8 @@ import {
   copiesDeVariantes, resumeDeCopie, repartirCibles,
   bibliothequeDeGroupes, phraseDeBibliotheque,
   axesDeLArticle, conflitsDeVariantes, resumeDeVariantes,
-  copieDePrestation, aVerifierApresCopie, texteAVerifier,
+  copieDePrestation, aVerifierApresCopie, lignesDeFenetre,
+  doitOuvrirFenetre, resumeCourt,
 } from '@/lib/catalogue-copie'
 // ⚠️ ET CE QUI S'APPLIQUE À PLUSIEURS ARTICLES SE DÉCIDE AUSSI DANS UN MODULE :
 // ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
@@ -933,10 +934,21 @@ function TabMenu({ commercantId, commercant, toast }) {
       variantes: nbVariantes || 0,
       options: optionsRatees ? 0 : (groupesSource?.length || 0),
     })
+    // 🔴 PAS QUINZE FOIS LA MÊME FENÊTRE (Alex, 25/09). Elle ne se lève que
+    // pour ce qui ne se voit nulle part — des variantes à stock zéro — et une
+    // seule fois par session. Le reste passe dans un message qui ne bloque
+    // personne.
+    if (!doitOuvrirFenetre(points, rappelCopieVu())) {
+      toast(resumeCourt(payload.nom, points))
+      return
+    }
+    marquerRappelCopieVu()
     await confirme(confirmationInfo({
       titre: 'Copie créée. À vérifier avant de la publier',
       message: `« ${payload.nom} » est créé, en indisponible.`,
-      details: texteAVerifier(points),
+      // ⚠️ UN TABLEAU, PAS UNE CHAÎNE : la modale rend une ligne par entrée.
+      // Lui passer un texte collé donnait le pavé illisible de la capture.
+      details: lignesDeFenetre(points),
     }))
   }
 
@@ -1678,6 +1690,27 @@ function TabMenu({ commercantId, commercant, toast }) {
 }
 
 // ─── Gestionnaire d'options pour un article ──────────────────────────────────
+// ─── « JE L'AI DÉJÀ LU » ────────────────────────────────────────────────────
+//
+// 🔴 ALEX, 25/09 : « pas 15 fois la même chose s'il fait la manip sur 15
+// articles ». La deuxième duplication n'apprend rien de plus que la première :
+// la fenêtre se lève une fois par session, puis se tait.
+//
+// ⚠️ PAR SESSION, PAS POUR TOUJOURS. `localStorage` la ferait disparaître
+// définitivement, et le commerçant qui duplique un article six mois plus tard
+// aurait oublié la règle des stocks à zéro. Un onglet fermé la ramène.
+//
+// ⚠️ ET TOUT EST DANS UN `try` : en navigation privée, ou quand les données de
+// site sont bloquées, le simple fait de LIRE lève. Un rappel qu'on ne peut pas
+// mémoriser doit s'afficher, jamais casser l'écran.
+const CLE_RAPPEL_COPIE = 'yoppaa-rappel-copie-vu'
+function rappelCopieVu() {
+  try { return sessionStorage.getItem(CLE_RAPPEL_COPIE) === '1' } catch { return false }
+}
+function marquerRappelCopieVu() {
+  try { sessionStorage.setItem(CLE_RAPPEL_COPIE, '1') } catch { /* rien à mémoriser, tant pis */ }
+}
+
 // ─── ÉCRIRE LES COPIES D'UN GROUPE ──────────────────────────────────────────
 //
 // ⚠️ ELLE VIT AU NIVEAU DU MODULE parce que DEUX écrans l'appellent : le
@@ -9667,11 +9700,19 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
     // savoir ce qu'il lui reste à relire, et un toast de trois secondes ne le
     // lui dit pas au moment où il en a besoin. La liste est plus courte ici :
     // une prestation n'a ni photo secondaire ni stock.
+    // ⚠️ UNE PRESTATION N'A NI VARIANTE NI STOCK : aucun de ses points n'est
+    // invisible à l'écran, donc aucune fenêtre ne se lève jamais ici. Le
+    // message court suffit, et c'est la même règle que pour les articles.
     const points = aVerifierApresCopie({ nom: payload.nom, prestation: true })
+    if (!doitOuvrirFenetre(points, rappelCopieVu())) {
+      toast(resumeCourt(payload.nom, points))
+      return
+    }
+    marquerRappelCopieVu()
     await confirme(confirmationInfo({
       titre: 'Copie créée. À vérifier avant de la publier',
       message: `« ${payload.nom} » est créée, en indisponible.`,
-      details: texteAVerifier(points),
+      details: lignesDeFenetre(points),
     }))
   }
 

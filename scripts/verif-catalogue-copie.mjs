@@ -18,7 +18,7 @@ import {
   bibliothequeDeGroupes, phraseDeBibliotheque,
   axesDeLArticle, conflitsDeVariantes, resumeDeVariantes,
   CHAMPS_PRESTATION, copieDePrestation,
-  aVerifierApresCopie, texteAVerifier,
+  aVerifierApresCopie, lignesDeFenetre, doitOuvrirFenetre, resumeCourt,
 } from '../lib/catalogue-copie.js'
 
 let ok = 0
@@ -311,11 +311,53 @@ const v = (nom, cond, detail = '') => {
     /réserver/.test(presta[1].faire), presta[1].faire)
   v('et elle s’accorde au féminin', /Elle est/.test(presta[1].quoi), presta[1].quoi)
 
-  const texte = texteAVerifier(complet)
-  v('le texte liste chaque point', (texte.match(/•/g) || []).length === complet.length,
-    String((texte.match(/•/g) || []).length))
-  v('et il dit l’état ET le geste', /Renomme-la/.test(texte), texte.slice(0, 120))
-  v('une liste vide ne casse rien', texteAVerifier(null) === '')
+  // 🔴 UN TABLEAU, PAS UNE CHAÎNE. La modale rend déjà une ligne par entrée ;
+  // lui passer un texte collé donnait le pavé illisible qu'Alex a montré en
+  // capture le 25/09. La puce est là pour l'œil qui balaie.
+  const lignes = lignesDeFenetre(complet)
+  v('la fenêtre reçoit une ligne par point',
+    Array.isArray(lignes) && lignes.length === complet.length, String(lignes.length))
+  v('chaque ligne porte sa puce', lignes.every(l => l.startsWith('• ')), lignes[0])
+  v('et elle dit l’état ET le geste', /Renomme-la/.test(lignes[0]), lignes[0])
+  v('une liste vide ne casse rien', lignesDeFenetre(null).length === 0)
+
+  // ═══ QUINZE FOIS LA MÊME FENÊTRE N'EST PAS UNE INFORMATION ═══════════════
+  //
+  // 🔴 ALEX, 25/09 : « pas 15 fois la même chose s'il fait la manip sur 15
+  // articles ». C'est la règle des confirmations du 08/09 vue d'un autre
+  // côté : douze fenêtres par jour deviennent un réflexe, et le jour où elle
+  // compte vraiment, plus personne ne la lit.
+  //
+  // ⚠️ ELLE NE SE LÈVE QUE POUR CE QUI NE SE VOIT NULLE PART. Le nom
+  // « (copie) » se lit dans la liste, la pastille « Inactif » aussi, une photo
+  // manquante se voit en ouvrant. Des variantes à stock zéro, non : l'article
+  // a l'air prêt, il s'active, et rien ne se vend.
+  const ordinaire = aVerifierApresCopie({ nom: 'Margherita (copie)', galerie: 2, options: 3 })
+  v('une copie ordinaire n’arrête pas le commerçant',
+    doitOuvrirFenetre(ordinaire, false) === false,
+    JSON.stringify(ordinaire.map(p => p.grave)))
+  v('des variantes à stock zéro, si',
+    doitOuvrirFenetre(complet, false) === true)
+  // ⚠️ ET UNE SEULE FOIS PAR SESSION : la deuxième duplication n'apprend rien
+  // de plus que la première.
+  v('et une seule fois par session',
+    doitOuvrirFenetre(complet, true) === false)
+  v('une liste vide n’ouvre rien', doitOuvrirFenetre(null, false) === false)
+
+  // ─── LE MESSAGE QUI NE BLOQUE PAS ───────────────────────────────────────
+  //
+  // ⚠️ IL NE REPREND QUE CE QUI SE RETIENT. Recopier les six lignes de la
+  // fenêtre dans un message qui dure trois secondes ne servirait personne.
+  const court = resumeCourt('T-shirt (copie)', complet)
+  v('le message court nomme la copie', /T-shirt \(copie\)/.test(court), court)
+  v('il dit qu’elle est indisponible', /en indisponible/.test(court), court)
+  v('il dit le piège invisible', /variantes à stock zéro/.test(court), court)
+  v('il dit les photos non reprises', /3 photos non reprises/.test(court), court)
+  // ⚠️ UN MESSAGE COURT N'EST PAS L'ENDROIT POUR RASSURER : ce qui a bien
+  // suivi n'a pas de version brève, et n'encombre pas la ligne.
+  v('il ne répète pas ce qui a bien suivi', !/ont bien suivi/.test(court), court)
+  v('sans rien à signaler, il reste une phrase',
+    resumeCourt('X', []) === '« X » créé.', resumeCourt('X', []))
 }
 
 // ═══ 5 quater) LES PRESTATIONS, POUR LES MÉTIERS À RENDEZ-VOUS ════════════
@@ -664,7 +706,25 @@ const v = (nom, cond, detail = '') => {
   v('le compte des variantes alimente la liste',
     /variantes: nbVariantes \|\| 0,/.test(dupInfo))
   v('et sa liste vient de la règle',
-    /aVerifierApresCopie\(\{/.test(dupInfo) && /texteAVerifier\(points\)/.test(dupInfo))
+    /aVerifierApresCopie\(\{/.test(dupInfo) && /lignesDeFenetre\(points\)/.test(dupInfo))
+  // 🔴 ET ELLE NE SE LÈVE PAS QUINZE FOIS (Alex, 25/09). Sans ce garde, un
+  // commerçant qui duplique quinze articles ferme quinze fenêtres identiques,
+  // et la seizième — celle qui compte — se ferme au réflexe.
+  v('la fenêtre ne s’ouvre que si elle a quelque chose d’invisible à dire',
+    /if \(!doitOuvrirFenetre\(points, rappelCopieVu\(\)\)\) \{/.test(dupInfo))
+  v('sinon un message court suffit',
+    /toast\(resumeCourt\(payload\.nom, points\)\)/.test(dupInfo))
+  v('et la fenêtre vue se retient',
+    /marquerRappelCopieVu\(\)/.test(dupInfo))
+  // ⚠️ PAR SESSION, PAS POUR TOUJOURS : six mois plus tard, la règle des
+  // stocks à zéro aura été oubliée.
+  v('elle se retient pour la session, pas pour toujours',
+    /sessionStorage\.setItem\(CLE_RAPPEL_COPIE/.test(config)
+      && !/localStorage\.setItem\(CLE_RAPPEL_COPIE/.test(config))
+  // ⚠️ LIRE LE STOCKAGE PEUT LEVER en navigation privée : un rappel qu'on ne
+  // peut pas mémoriser doit s'afficher, jamais casser l'écran.
+  v('et son stockage ne peut pas casser l’écran',
+    /try \{ return sessionStorage\.getItem\(CLE_RAPPEL_COPIE\) === '1' \} catch \{ return false \}/.test(config))
   // 🔴 ON COMPTE AVANT D'ANNONCER : une ligne sur les photos chez quelqu'un
   // qui n'en a pas est une alarme qui sonne pour rien.
   v('les photos sont comptées avant d’être annoncées',

@@ -4,8 +4,9 @@
 // Aucune activation automatique. Lecture/écriture via /api/admin/communes (service_role
 // + check admin). Remplace les UPDATE SQL manuels.
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { dureeLecture } from '@/lib/confirmations'
 import { Search, Check, RefreshCw } from 'lucide-react'
 // Le repli vit à part : d'autres blocs de l'admin sont aussi longs, et un bloc
 // plié doit continuer de dire ce qu'il contient.
@@ -51,9 +52,13 @@ export default function SectionCommunes() {
 
   useEffect(() => { charger() }, [charger])
 
+  // ⚠️ MÊME DÉFAUT, MÊME REMÈDE (25/09) : un minuteur non annulé efface le
+  // message suivant. Sur cet écran, on enchaîne les communes une par une.
+  const toastTimerRef = useRef(null)
   function showToast(msg, type = 'success') {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+    toastTimerRef.current = setTimeout(() => setToast(null), dureeLecture(msg))
   }
 
   // Valeur affichée pour une commune (édition en cours sinon valeur serveur).

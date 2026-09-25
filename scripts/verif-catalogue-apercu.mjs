@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import { apercuOptions, apercuVariantes, apercuContenu } from '../lib/catalogue-apercu.js'
 import { lireSousOnglet, sousOngletValide, CLE_SOUS_ONGLET, CLE_SOUS_ONGLET_2 } from '../lib/onglet-url.js'
+import { dureeLecture, TOAST_MINIMUM, TOAST_MAXIMUM } from '../lib/confirmations.js'
 
 let ok = 0
 const echecs = []
@@ -228,6 +229,56 @@ const v = (nom, cond, detail = '') => {
   // variantes, l'alimentaire des options.
   v('la vignette choisit la bonne famille selon le métier',
     /variantes: variantesCategorie,/.test(config) && /variantes: estDetail \|\| estVitrine,/.test(config))
+}
+
+// ═══ 6) UN MESSAGE QU'ON N'A PAS LE TEMPS DE LIRE NE SERT À RIEN ══════════
+//
+// 🔴 ALEX, 25/09 : « le message court de la copie d'article s'affiche une
+// demi-seconde, impossible à lire ». Chaque appel posait un `setTimeout` sans
+// annuler celui d'avant : un message affiché 2,5 s après un autre se faisait
+// balayer 500 ms plus tard par la minuterie du premier. Ça frappait surtout en
+// dupliquant plusieurs articles d'affilée — l'usage qu'on venait de rendre
+// agréable.
+{
+  // ⚠️ LA DURÉE SUIT LA LONGUEUR : trois secondes vont à « Article ajouté »,
+  // pas à une phrase qui nomme une copie et ce qui ne l'a pas suivie.
+  v('un message vide ne descend pas sous le plancher',
+    dureeLecture('') === TOAST_MINIMUM, String(dureeLecture('')))
+  // ⚠️ ET UN MESSAGE PLUS LONG DURE PLUS LONGTEMPS : c'est toute la règle.
+  v('un message long dure plus longtemps qu’un court',
+    dureeLecture('a'.repeat(60)) > dureeLecture('Article ajouté'),
+    `${dureeLecture('a'.repeat(60))} vs ${dureeLecture('Article ajouté')}`)
+  // ⚠️ ET LE PLAFOND EXISTE : au-delà, un message devient un meuble. S'il faut
+  // plus que ça, ce n'est plus un message éphémère, c'est une fenêtre.
+  v('mais jamais au-delà du plafond',
+    dureeLecture('a'.repeat(500)) === TOAST_MAXIMUM, String(dureeLecture('a'.repeat(500))))
+  v('un message vide ou absent ne casse rien',
+    dureeLecture('') === TOAST_MINIMUM && dureeLecture(null) === TOAST_MINIMUM
+      && dureeLecture(undefined) === TOAST_MINIMUM)
+
+  // ─── ET LE MINUTEUR S'ANNULE, PARTOUT OÙ ON PEUT LE CORRIGER ────────────
+  //
+  // ⚠️ LES ÉCRANS DU TUNNEL CLIENT (`app/commander/…`) SONT GELÉS pendant la
+  // revue Play : trois d'entre eux ont le même défaut et sont NOMMÉS dans la
+  // todo, à corriger après. Cette garde surveille ce qui a été corrigé.
+  const surveilles = [
+    ['app/dashboard/ConfigDashboard.js', 'le tableau de bord'],
+    ['app/admin/page.js', 'l’administration'],
+    ['app/admin/SectionCommunes.js', 'les communes'],
+  ]
+  for (const [chemin, nom] of surveilles) {
+    const src = sansProse(readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8'))
+    v(`${nom} annule le minuteur précédent`,
+      /if \(toastTimerRef\.current\) clearTimeout\(toastTimerRef\.current\)/.test(src),
+      'un ancien minuteur effacerait le message suivant')
+    v(`${nom} garde la main sur son minuteur`,
+      /toastTimerRef\.current = setTimeout\(/.test(src))
+    // ⚠️ ET LA DURÉE VIENT DE LA RÈGLE, pas d'un nombre écrit à la main : trois
+    // écrans avec trois durées finiraient par se contredire.
+    v(`${nom} prend sa durée dans la règle`,
+      /setTimeout\([\s\S]{0,90}dureeLecture\(/.test(src),
+      'une durée écrite à la main finirait par contredire les autres écrans')
+  }
 }
 
 console.log(`\nLire un article sans l’ouvrir : ${ok} vérifications`)

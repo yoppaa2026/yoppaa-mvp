@@ -2,9 +2,10 @@
 // Console admin Yoppaa — valider/rejeter les commerçants en attente.
 // Accès restreint à ADMIN_EMAIL (vérification côté client + côté API + RLS DB).
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { dureeLecture } from '@/lib/confirmations'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { effacerImpersonation, fermerImpersonationServeur, messageImpersonation } from '@/lib/impersonation'
 import { attenteDepuis, attendUneValidation, COLONNES_PUBLICATION_DIFFEREE } from '@/lib/statut-commercant'
@@ -123,9 +124,15 @@ export default function AdminPage() {
 
   useEffect(() => { charger() }, [charger])
 
+  // ⚠️ MÊME DÉFAUT QUE LE TABLEAU DE BORD, corrigé le 25/09 : sans annuler le
+  // minuteur précédent, un message affiché peu après un autre se faisait
+  // effacer par la minuterie du premier, parfois après une demi-seconde. Ici
+  // ça frappe les actions en rafale, qui sont le quotidien de cet écran.
+  const toastTimerRef = useRef(null)
   function showToast(msg, type = 'success') {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 4000)
+    toastTimerRef.current = setTimeout(() => setToast(null), dureeLecture(msg))
   }
 
   // 🔴 LA RAISON D'UN RETOUR FORCÉ DEPUIS LE TABLEAU DE BORD (15/09). Une

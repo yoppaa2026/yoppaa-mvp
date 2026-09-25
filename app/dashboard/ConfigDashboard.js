@@ -93,7 +93,7 @@ import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './Bar
 // `app/dashboard/page.js`, qui rend cet écran. On n'importe ici que la
 // fonction qui pose la question.
 import { confirme, confirmer } from './PosteConfirmation'
-import { confirmationSimple, confirmationDeuxGestes, confirmationInfo } from '@/lib/confirmations'
+import { confirmationSimple, confirmationDeuxGestes, confirmationInfo, dureeLecture } from '@/lib/confirmations'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BoutonIaFiche from './BoutonIaFiche'
 import { MIN_DESCRIPTION, descriptionRefusee, jaugeDescription, motsInspirationDescription, MOTS_INSPIRATION_INFOS, astuceRedaction } from '@/lib/fiche-redaction'
@@ -15217,9 +15217,21 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     setOngletVise(null)
   }
 
+  // 🔴 LE MINUTEUR PRÉCÉDENT EFFAÇAIT LE MESSAGE SUIVANT (Alex, 25/09 : « le
+  // message court de la copie d'article s'affiche une demi-seconde, impossible
+  // à lire »). Chaque appel posait un `setTimeout` sans jamais annuler celui
+  // d'avant : un message affiché 2,5 s après un autre était balayé 500 ms plus
+  // tard par la minuterie du premier. Ça se voyait surtout en dupliquant
+  // plusieurs articles d'affilée, c'est-à-dire exactement l'usage qu'on venait
+  // de rendre agréable.
+  //
+  // ⚠️ ET LA DURÉE SUIT LA LONGUEUR : trois secondes vont à « Article
+  // ajouté », pas à une phrase qui nomme une copie et ce qui ne l'a pas suivie.
+  const toastTimerRef = useRef(null)
   function showToast(msg, type = 'success') {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToastMsg(msg); setToastType(type)
-    setTimeout(() => setToastMsg(''), 3000)
+    toastTimerRef.current = setTimeout(() => setToastMsg(''), dureeLecture(msg))
   }
 
   useEffect(() => {

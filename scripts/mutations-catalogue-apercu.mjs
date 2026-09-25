@@ -26,6 +26,7 @@ const BANC = 'verif:apercu'
 const APERCU = 'lib/catalogue-apercu.js'
 const URL_ONGLET = 'lib/onglet-url.js'
 const ECRAN = 'app/dashboard/ConfigDashboard.js'
+const CONFIRM = 'lib/confirmations.js'
 
 const MUTATIONS = [
   // ─── CE QU UNE VIGNETTE DONNE A LIRE ─────────────────────────────────────
@@ -133,6 +134,39 @@ const MUTATIONS = [
     fichier: URL_ONGLET,
     de: '  if (url.toString() === window.location.href) return',
     vers: '  if (false) return' },
+
+  // ─── UN MESSAGE QU ON N A PAS LE TEMPS DE LIRE (25/09) ───────────────────
+  //
+  // 🔴 ALEX : « le message court de la copie d article s affiche une demi-
+  // seconde, impossible a lire ». Chaque appel posait un `setTimeout` sans
+  // annuler celui d avant : un message affiche 2,5 s apres un autre se faisait
+  // balayer 500 ms plus tard par la minuterie du premier.
+  { nom: '🔴 le minuteur precedent efface le message suivant',
+    fichier: ECRAN,
+    de: '    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)',
+    vers: '    void toastTimerRef' },
+
+  { nom: '⚠️ la duree du message cesse de suivre sa longueur',
+    fichier: ECRAN,
+    de: "    toastTimerRef.current = setTimeout(() => setToastMsg(''), dureeLecture(msg))",
+    vers: "    toastTimerRef.current = setTimeout(() => setToastMsg(''), 3000)" },
+
+  // ⚠️ LE PLAFOND EXISTE : au-dela, un message devient un meuble. S il faut
+  // plus que ca, ce n est plus un message ephemere, c est une fenetre.
+  { nom: '⚠️ un message tres long reste a l ecran sans fin',
+    fichier: CONFIRM,
+    de: '  return Math.min(TOAST_MAXIMUM, Math.max(TOAST_MINIMUM, calcule))',
+    vers: '  return Math.max(TOAST_MINIMUM, calcule)' },
+
+  // ⚠️ PAS DE MUTATION SUR LE PLANCHER, ET C EST UN CONSTAT, PAS UN OUBLI.
+  // Une premiere version retirait `TOAST_MINIMUM` de l addition : le
+  // `Math.max` en aval rendait exactement la meme valeur, donc la mutation ne
+  // changeait RIEN et restait verte a juste titre. Le plancher est garanti
+  // deux fois — par l addition et par la borne — et aucune mutation d une
+  // seule ligne ne peut le faire tomber. On garde la borne comme defense
+  // contre une future formule, et on s abstient de mesurer ce qui n a pas de
+  // defaut mesurable : une mutation qui ne change pas le resultat n apprend
+  // rien, elle gonfle le compteur.
 
   // ─── L ECRAN ─────────────────────────────────────────────────────────────
   //

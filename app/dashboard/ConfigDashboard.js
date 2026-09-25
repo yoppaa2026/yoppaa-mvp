@@ -129,7 +129,7 @@ import {
   copiesDeVariantes, resumeDeCopie, repartirCibles,
   bibliothequeDeGroupes, phraseDeBibliotheque,
   axesDeLArticle, conflitsDeVariantes, resumeDeVariantes,
-  copieDePrestation,
+  copieDePrestation, aVerifierApresCopie, texteAVerifier,
 } from '@/lib/catalogue-copie'
 // ⚠️ ET CE QUI S'APPLIQUE À PLUSIEURS ARTICLES SE DÉCIDE AUSSI DANS UN MODULE :
 // ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
@@ -825,13 +825,42 @@ function TabMenu({ commercantId, commercant, toast }) {
       toast(`« ${payload.nom} » est créé, mais une partie de ses options n'a pas pu être copiée. Vérifie-les.`, 'error')
       return
     }
-    // ⚠️ ON DIT CE QUI NE SUIT PAS : le stock repart de zéro sur chaque
-    // combinaison, parce qu'une quantité décrit un carton dans l'arrière-
-    // boutique, pas un article. Le taire ferait vendre des tailles qui
-    // n'existent pas.
-    toast(a.gere_variantes
-      ? `« ${payload.nom} » créé, en indisponible, avec ses variantes à zéro stock.`
-      : `« ${payload.nom} » créé, en indisponible. Relis-le puis rends-le disponible.`)
+    // ─── ON DIT CE QUI N'A PAS SUIVI, ET CE QU'IL RESTE À FAIRE ────────────
+    //
+    // 🔴 DÉCISION D'ALEX (25/09) : « il faut juste une fenêtre qui explique ce
+    // qui n'est pas copié et la vérification nécessaire. S'il est informé,
+    // c'est très bien. » Tout copier n'est pas souhaitable — des photos
+    // secondaires qui montrent un autre produit, ou un stock hérité, seraient
+    // des erreurs plus dures à repérer qu'une case vide. Ce qui manquait,
+    // c'était de SAVOIR.
+    //
+    // ⚠️ UN TOAST NE SUFFIT PAS ICI : il dure trois secondes et disparaît
+    // pendant que le commerçant regarde sa liste. Cette information-là, il en
+    // a besoin APRÈS, quand il ouvre la copie.
+    //
+    // ⚠️ ET ON COMPTE AVANT D'ANNONCER : la liste ne dit que ce qui est vrai
+    // pour CET article. Une ligne sur les photos chez quelqu'un qui n'en a pas
+    // est une alarme qui sonne pour rien, et on cesse de les lire.
+    const [{ count: nbPhotos }, { count: nbStocks }, { count: nbVariantes }] = await Promise.all([
+      supabase.from('article_photos').select('id', { count: 'exact', head: true }).eq('article_id', a.id),
+      supabase.from('article_stock_jour').select('id', { count: 'exact', head: true }).eq('article_id', a.id),
+      a.gere_variantes
+        ? supabase.from('article_variantes').select('id', { count: 'exact', head: true }).eq('article_id', cree.id)
+        : Promise.resolve({ count: 0 }),
+    ])
+
+    const points = aVerifierApresCopie({
+      nom: payload.nom,
+      galerie: nbPhotos || 0,
+      stocksJour: nbStocks || 0,
+      variantes: nbVariantes || 0,
+      options: optionsRatees ? 0 : (groupesSource?.length || 0),
+    })
+    await confirme(confirmationInfo({
+      titre: 'Copie créée. À vérifier avant de la publier',
+      message: `« ${payload.nom} » est créé, en indisponible.`,
+      details: texteAVerifier(points),
+    }))
   }
 
   async function updateStock(id, val) {
@@ -9546,7 +9575,16 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       }
     }
     fetchAll()
-    toast(`« ${payload.nom} » créée, en indisponible. Relis-la puis rends-la disponible.`)
+    // ⚠️ MÊME FENÊTRE QUE POUR UN ARTICLE (Alex, 25/09) : le commerçant doit
+    // savoir ce qu'il lui reste à relire, et un toast de trois secondes ne le
+    // lui dit pas au moment où il en a besoin. La liste est plus courte ici :
+    // une prestation n'a ni photo secondaire ni stock.
+    const points = aVerifierApresCopie({ nom: payload.nom, prestation: true })
+    await confirme(confirmationInfo({
+      titre: 'Copie créée. À vérifier avant de la publier',
+      message: `« ${payload.nom} » est créée, en indisponible.`,
+      details: texteAVerifier(points),
+    }))
   }
 
   async function softDelete(p) {

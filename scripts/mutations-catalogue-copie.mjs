@@ -168,6 +168,38 @@ const MUTATIONS = [
     de: '  sortie.nom = nomDeLaCopie(prestation.nom, nomsExistants)',
     vers: '  sortie.nom = prestation.nom' },
 
+  // ─── LA FENETRE DE VERIFICATION (25/09) ──────────────────────────────────
+  //
+  // 🔴 ALEX : « il faut juste une fenetre qui explique ce qui n est pas copie
+  // et la verification necessaire. S il est informe, c est tres bien. »
+  //
+  // ⚠️ LE PIRE CAS N EST PAS UNE LIGNE OUBLIEE, c est une liste GENERIQUE dont
+  // la moitie ne s applique pas : on cesse de la lire.
+  { nom: '🔴 la liste parle de photos a qui n en a pas',
+    fichier: COPIE,
+    de: '  if (galerie > 0) {',
+    vers: '  if (galerie >= 0) {' },
+
+  { nom: '🔴 la liste ne dit plus que les variantes sont a zero',
+    fichier: COPIE,
+    de: '  if (variantes > 0) {',
+    vers: '  if (false) {' },
+
+  { nom: '⚠️ elle ne dit plus la consequence : rien ne se vend',
+    fichier: COPIE,
+    de: "      faire: 'Remets les quantités : tant qu’elles sont à zéro, rien ne se vend.',",
+    vers: "      faire: 'Remets les quantités.'," },
+
+  { nom: '⚠️ elle ne dit plus que la copie est invisible du client',
+    fichier: COPIE,
+    de: "      ? 'Personne ne peut la réserver tant que tu ne l’as pas activée.'",
+    vers: "      ? 'Elle est inactive.'" },
+
+  { nom: '⚠️ elle n annonce plus que les stocks par jour n ont pas suivi',
+    fichier: COPIE,
+    de: '  if (stocksJour > 0) {',
+    vers: '  if (false) {' },
+
   // ─── AGIR EN LOT ─────────────────────────────────────────────────────────
   //
   // 🔴 LA DERIVE BINAIRE SUR DE L ARGENT : `9.5 * 0.99` vaut 9,404999… donc

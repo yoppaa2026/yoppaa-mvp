@@ -18,6 +18,7 @@ import {
   bibliothequeDeGroupes, phraseDeBibliotheque,
   axesDeLArticle, conflitsDeVariantes, resumeDeVariantes,
   CHAMPS_PRESTATION, copieDePrestation,
+  aVerifierApresCopie, texteAVerifier,
 } from '../lib/catalogue-copie.js'
 
 let ok = 0
@@ -257,6 +258,64 @@ const v = (nom, cond, detail = '') => {
     vide.groupes.length === 1 && vide.valeurs[0].length === 0)
   v('aucune cible ne produit aucune écriture',
     copiesDuGroupe(groupe, []).groupes.length === 0)
+}
+
+// ═══ 5 quinquies) CE QU'IL RESTE À VÉRIFIER SUR UNE COPIE ═════════════════
+//
+// 🔴 DÉCISION D'ALEX (25/09) : « il faut juste une fenêtre qui explique ce qui
+// n'est pas copié et la vérification nécessaire. S'il est informé, c'est très
+// bien. » Le pire cas ici n'est pas une ligne oubliée : c'est une liste
+// GÉNÉRIQUE dont la moitié ne s'applique pas, qu'on cesse de lire.
+{
+  const nu = aVerifierApresCopie({ nom: 'Margherita (copie)' })
+  // ⚠️ LES DEUX SEULS POINTS TOUJOURS VRAIS.
+  v('une copie sans rien d’autre ne dit que deux choses', nu.length === 2, String(nu.length))
+  v('le nom est dit en premier', /\(copie\)/.test(nu[0].quoi), nu[0].quoi)
+  v('et le geste est nommé', /Renomme/.test(nu[0].faire), nu[0].faire)
+  v('l’indisponibilité est dite', /indisponible/.test(nu[1].quoi), nu[1].quoi)
+  // ⚠️ ELLE DIT CE QUE ÇA IMPLIQUE, pas seulement l'état : « personne ne le
+  // voit » est ce qui fait agir, « inactif » ne fait rien.
+  v('avec ce que ça implique', /Personne ne le voit/.test(nu[1].faire), nu[1].faire)
+
+  // 🔴 RIEN SUR LES PHOTOS CHEZ QUI N'EN A PAS : une alarme qui sonne pour
+  // rien cesse d'être lue, et le jour où elle compte elle ne sert plus.
+  v('aucune ligne sur les photos quand il n’y en a pas',
+    !nu.some(p => /photo/i.test(p.quoi)))
+  v('aucune ligne sur le stock quand il n’y en a pas',
+    !nu.some(p => /stock/i.test(p.quoi)))
+
+  const complet = aVerifierApresCopie({
+    nom: 'T-shirt (copie)', galerie: 3, stocksJour: 7, variantes: 6, options: 2,
+  })
+  v('les photos supplémentaires sont annoncées',
+    complet.some(p => /3 photos supplémentaires/.test(p.quoi)),
+    complet.map(p => p.quoi).join(' | '))
+  // 🔴 LE PIÈGE LE PLUS CHER : un article activé avec des tailles à zéro ne se
+  // vend pas, et le commerçant cherche pourquoi.
+  const varLigne = complet.find(p => /variantes/.test(p.quoi))
+  v('les variantes à zéro sont annoncées', /à stock zéro/.test(varLigne?.quoi || ''), varLigne?.quoi)
+  v('avec la conséquence : rien ne se vend',
+    /rien ne se vend/.test(varLigne?.faire || ''), varLigne?.faire)
+  v('les stocks par jour sont annoncés',
+    complet.some(p => /stocks par jour/.test(p.quoi)))
+  // ⚠️ CE QUI A BIEN SUIVI SE DIT AUSSI : sinon le commerçant recrée ses
+  // groupes à la main sans avoir vérifié qu'ils y sont déjà.
+  v('ce qui a bien suivi est dit aussi',
+    complet.some(p => /groupes d’options ont bien suivi/.test(p.quoi)),
+    complet.map(p => p.quoi).join(' | '))
+
+  // ⚠️ UNE PRESTATION N'A NI PHOTO SECONDAIRE NI STOCK : sa liste est plus
+  // courte, et elle parle d'elle au féminin.
+  const presta = aVerifierApresCopie({ nom: 'Coupe (copie)', prestation: true })
+  v('une prestation parle de réservation, pas de fiche',
+    /réserver/.test(presta[1].faire), presta[1].faire)
+  v('et elle s’accorde au féminin', /Elle est/.test(presta[1].quoi), presta[1].quoi)
+
+  const texte = texteAVerifier(complet)
+  v('le texte liste chaque point', (texte.match(/•/g) || []).length === complet.length,
+    String((texte.match(/•/g) || []).length))
+  v('et il dit l’état ET le geste', /Renomme-la/.test(texte), texte.slice(0, 120))
+  v('une liste vide ne casse rien', texteAVerifier(null) === '')
 }
 
 // ═══ 5 quater) LES PRESTATIONS, POUR LES MÉTIERS À RENDEZ-VOUS ════════════
@@ -556,10 +615,35 @@ const v = (nom, cond, detail = '') => {
   // ⚠️ UN ÉCHEC PARTIEL SE DIT : une pizza sans garnitures se vendrait nue.
   v('un échec partiel sur les options est annoncé',
     /optionsRatees/.test(dup) && /n'a pas pu être copiée/.test(dup))
-  // ⚠️ LE MESSAGE DIT QU'ELLE EST INDISPONIBLE, sinon le commerçant la cherche
-  // sur sa fiche publique et ne la trouve pas.
-  v('le message dit que la copie est indisponible',
-    /en indisponible/.test(dup), dup.slice(-160))
+  // ─── LA FENÊTRE DE VÉRIFICATION (Alex, 25/09) ────────────────────────────
+  //
+  // 🔴 « S'il est informé, c'est très bien. » Un toast de trois secondes ne
+  // l'informe pas : il disparaît pendant qu'il regarde sa liste.
+  const dupInfo = iDup >= 0 ? config.slice(iDup, iDup + 5000) : ''
+  v('une fenêtre annonce ce qu’il reste à vérifier',
+    /confirme\(confirmationInfo\(\{/.test(dupInfo))
+  // ⚠️ ELLE DIT QUE LA COPIE EST INDISPONIBLE, sinon le commerçant la cherche
+  // sur sa fiche publique et ne la trouve pas. C'était dans un toast avant la
+  // fenêtre du 25/09 : la garde visait le toast, elle vise maintenant l'écran
+  // qui porte vraiment l'information.
+  v('la fenêtre dit que la copie est indisponible',
+    /est créé, en indisponible/.test(dupInfo), dupInfo.slice(-200))
+  // ⚠️ ET LE NOMBRE DE VARIANTES CRÉÉES ALIMENTE LA LISTE : c'est lui qui
+  // déclenche la ligne « à stock zéro », le piège le plus cher de la copie.
+  v('le compte des variantes alimente la liste',
+    /variantes: nbVariantes \|\| 0,/.test(dupInfo))
+  v('et sa liste vient de la règle',
+    /aVerifierApresCopie\(\{/.test(dupInfo) && /texteAVerifier\(points\)/.test(dupInfo))
+  // 🔴 ON COMPTE AVANT D'ANNONCER : une ligne sur les photos chez quelqu'un
+  // qui n'en a pas est une alarme qui sonne pour rien.
+  v('les photos sont comptées avant d’être annoncées',
+    /from\('article_photos'\)[\s\S]{0,140}count: 'exact'/.test(dupInfo))
+  v('les stocks par jour aussi',
+    /from\('article_stock_jour'\)[\s\S]{0,140}count: 'exact'/.test(dupInfo))
+  // ⚠️ LES VARIANTES SE COMPTENT SUR LA COPIE, pas sur l'original : c'est ce
+  // qui a vraiment été créé qu'on annonce.
+  v('et les variantes se comptent sur la copie',
+    /article_variantes'\)[\s\S]{0,160}eq\('article_id', cree\.id\)/.test(dupInfo))
 
   // 🔴 ET LES VARIANTES SUIVENT, SINON UNE BOUTIQUE DUPLIQUE UNE FICHE NUE.
   // C'est le trou du 25/09 : le détail et la vitrine n'ont pas de groupes
@@ -568,10 +652,6 @@ const v = (nom, cond, detail = '') => {
   v('la duplication emporte les combinaisons de variantes',
     /gere_variantes[\s\S]{0,300}from\('article_variantes'\)[\s\S]{0,200}copiesDeVariantes\(/.test(dupLong),
     'un article a variantes serait duplique sans ses tailles')
-  // ⚠️ ET LE STOCK REMIS À ZÉRO SE DIT : sinon le commerçant vend des tailles
-  // qui n'existent pas.
-  v('et le message annonce le stock remis à zéro',
-    /variantes à zéro stock/.test(dupLong))
 
   v('le bouton de duplication est sur la carte d’article',
     /onDupliquer\(a\)/.test(config) && /onDupliquer=\{dupliquerArticle\}/.test(config))

@@ -101,21 +101,21 @@
     "mutations:catalogue-prices": "node scripts/mutations-catalogue-prices.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.112.3",
+    "@anthropic-ai/sdk": "^0.127.0",
     "@capacitor/core": "8.5.2",
-    "@stripe/stripe-js": "^9.2.0",
-    "@supabase/supabase-js": "^2.103.3",
-    "@upstash/ratelimit": "^2.0.8",
+    "@stripe/stripe-js": "^9.17.0",
+    "@supabase/supabase-js": "^2.116.0",
+    "@upstash/ratelimit": "^2.1.0",
     "@upstash/redis": "^1.38.0",
     "jspdf": "^4.2.1",
-    "lucide-react": "^1.20.0",
-    "next": "16.3.4",
-    "onesignal-cordova-plugin": "5.5.7",
+    "lucide-react": "^1.47.0",
+    "next": "16.3.5",
+    "onesignal-cordova-plugin": "5.5.8",
     "qrcode": "^1.5.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "resend": "^6.12.4",
-    "stripe": "^22.0.2"
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "resend": "^6.28.1",
+    "stripe": "^22.6.2"
   },
   "devDependencies": {
     "@capacitor/android": "8.5.2",
@@ -126,7 +126,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "16.3.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

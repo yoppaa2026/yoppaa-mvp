@@ -522,8 +522,15 @@ v('le tableau de bord nomme le statut souhaite sans parler de dette',
   // corrigé le matin même.
   v('il lit l’erreur de l’enregistrement',
     /const \{ error \} = await supabase/.test(ecran) && /if \(error\)/.test(ecran))
+  // 🔴 ET CETTE GARDE VISAIT UNE FORME, PAS UNE RÈGLE (corrigé le 25/09).
+  // Elle exigeait littéralement `toast?.({ type: 'error'…`, c'est-à-dire la
+  // signature exacte que le tableau de bord n'accepte PAS : elle a donc gravé
+  // dans le banc l'appel qui faisait page blanche, et l'a protégé huit jours.
+  // Une garde recopiée sur le code qu'elle surveille ne surveille rien.
+  // La règle, elle, est « le motif de l'erreur remonte au commerçant » ; la
+  // forme de l'appel est mesurée par `verif:bord`, à un seul endroit.
   v('et il la DIT au commerçant, avec son motif',
-    /toast\?\.\(\{ type: 'error'[\s\S]{0,120}error\.message/.test(ecran))
+    /if \(error\) \{ toast\?\.\([\s\S]{0,160}error\.message/.test(ecran))
 
   // ⚠️ IL N'ENREGISTRE PAS À CHAQUE FLÈCHE : dix requêtes pour un seul geste
   // mental, et une liste à moitié rangée si l'une d'elles échoue.

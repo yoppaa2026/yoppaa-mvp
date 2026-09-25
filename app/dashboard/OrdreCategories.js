@@ -66,9 +66,26 @@ export default function OrdreCategories({ commercantId, commercant, categories =
     // ⚠️ ON LIT L'ERREUR, ET ON LA DIT. Un `update` non lu est un espoir, pas
     // une action : le commerçant croirait son classement enregistré et
     // retrouverait l'ancien au rechargement, sans comprendre.
-    if (error) { toast?.({ type: 'error', msg: `Le classement n'a pas pu être enregistré : ${error.message}` }); return }
+    //
+    // 🔴 ET C'EST ICI QUE L'ÉCRAN MOURAIT (Alex, 25/09 : « page blanche, back
+    // et reload »). Ces deux lignes appelaient `toast` avec un OBJET
+    // `{ type, msg }`, alors que tout le tableau de bord l'appelle avec DEUX
+    // ARGUMENTS, le message d'abord : `showToast(msg, type)`. L'objet partait
+    // donc dans `toastMsg`, et `<Toast>` le rend tel quel dans le JSX. React
+    // refuse un objet comme enfant, l'arbre se démonte, la page devient
+    // blanche. Les deux sorties étaient touchées, le succès comme l'erreur.
+    //
+    // ⚠️ L'ENREGISTREMENT, LUI, AVAIT BIEN EU LIEU : l'écriture se fait avant
+    // ces lignes. Le commerçant perdait son écran, jamais son classement, et
+    // c'est ce qui rendait le défaut si déroutant à raconter.
+    //
+    // ⚠️ AUCUN OUTIL NE POUVAIT LE VOIR. Ni le lint ni le build ne comparent
+    // la signature d'une fonction passée en prop : c'est un contrat entre deux
+    // composants, et il n'était écrit nulle part. La garde qui le mesure vit
+    // dans `verif-tableau-de-bord.mjs`.
+    if (error) { toast?.(`Le classement n'a pas pu être enregistré : ${error.message}`, 'error'); return }
     setModifie(false)
-    toast?.({ type: 'success', msg: 'Ordre des catégories enregistré. Tes clients le voient tout de suite.' })
+    toast?.('Ordre des catégories enregistré. Tes clients le voient tout de suite.')
   }
 
   function reinitialiser() {

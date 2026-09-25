@@ -74,11 +74,22 @@ const MUTATIONS = [
     fichier: ECRAN,
     de: '    const { error } = await supabase',
     vers: '    const { error: _ignore } = await supabase; const error = null; void _ignore; await (async () => supabase' },
+
+  // 🔴 LE DEFAUT DU 25/09, REJOUE TEL QUEL. Alex : « page blanche, back et
+  // reload ». Un objet passe a `toast` arrive dans `toastMsg`, `<Toast>` le
+  // rend tel quel, React refuse un objet comme enfant et l arbre se demonte.
+  // ⚠️ SA GARDE VIT DANS UN AUTRE BANC que les six ci-dessus, d ou le champ
+  // `banc` : une mutation NOMME la garde qui doit la faire rougir.
+  { nom: '🔴 toast recoit un objet : page blanche a l enregistrement',
+    fichier: ECRAN,
+    banc: 'verif:bord',
+    de: "    toast?.('Ordre des catégories enregistré. Tes clients le voient tout de suite.')",
+    vers: "    toast?.({ type: 'success', msg: 'Ordre des catégories enregistré. Tes clients le voient tout de suite.' })" },
 ]
 
-const lancer = () => {
+const lancer = (banc = BANC) => {
   try {
-    const sortie = execSync(`npm run ${BANC}`, { cwd: RACINE, encoding: 'utf8', stdio: 'pipe' })
+    const sortie = execSync(`npm run ${banc}`, { cwd: RACINE, encoding: 'utf8', stdio: 'pipe' })
     return { rouge: false, plante: false, extrait: sortie.slice(-300) }
   } catch (e) {
     const sortie = `${e.stdout || ''}${e.stderr || ''}`
@@ -87,13 +98,19 @@ const lancer = () => {
   }
 }
 
-const depart = lancer()
-if (depart.rouge) {
-  console.log(`🔴 ${BANC} EST DÉJÀ ROUGE. On ne mesure rien sur un banc rouge.`)
-  console.log(depart.extrait)
-  process.exit(1)
+// ⚠️ CHAQUE BANC UTILISE DOIT ETRE VERT AVANT DE COMMENCER. Mesurer une
+// mutation sur un banc deja rouge ne prouve rien : il serait rouge de toute
+// facon, et on compterait une garde qui n a rien vu.
+const BANCS = [...new Set(MUTATIONS.map((m) => m.banc || BANC))]
+for (const banc of BANCS) {
+  const depart = lancer(banc)
+  if (depart.rouge) {
+    console.log(`🔴 ${banc} EST DÉJÀ ROUGE. On ne mesure rien sur un banc rouge.`)
+    console.log(depart.extrait)
+    process.exit(1)
+  }
 }
-console.log('Banc vert au départ.\n')
+console.log(`Bancs verts au départ : ${BANCS.join(', ')}.\n`)
 
 let attrapees = 0
 const manquees = []
@@ -107,7 +124,7 @@ for (const m of MUTATIONS) {
     continue
   }
   ecrireSur(f, original.replace(m.de, m.vers))
-  const res = lancer()
+  const res = lancer(m.banc)
   ecrireSur(f, original)
 
   if (readFileSync(f, 'utf8') !== original) {
@@ -123,7 +140,7 @@ for (const m of MUTATIONS) {
 console.log(`\n${attrapees}/${MUTATIONS.length} mutations attrapées.`)
 if (manquees.length) { console.log('\nNON ATTRAPÉES :'); manquees.forEach((x) => console.log('   • ' + x)) }
 
-const finalRouge = lancer().rouge
-if (finalRouge) console.log(`🔴 ${BANC} ROUGE APRÈS RESTAURATION.`)
+const finalRouge = BANCS.some((banc) => lancer(banc).rouge)
+if (finalRouge) console.log(`🔴 UN BANC EST ROUGE APRÈS RESTAURATION (${BANCS.join(', ')}).`)
 else console.log('\nBanc vert après restauration. Dépôt intact.')
 process.exit(manquees.length || finalRouge ? 1 : 0)

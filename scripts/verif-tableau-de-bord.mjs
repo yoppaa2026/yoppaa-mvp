@@ -1666,6 +1666,56 @@ const verifie = (nom, cond, detail = '') => {
     'il déposerait le commerçant sur le dernier onglet consulté')
 }
 
+// ═══ LE CONTRAT DU TOAST, ET IL N'ÉTAIT ÉCRIT NULLE PART ══════════════════
+//
+// 🔴 CE QUI EST ARRIVÉ (Alex, 25/09) : « je change l'ordre d'une catégorie,
+// j'enregistre, page blanche, back et reload ». `OrdreCategories` appelait
+// `toast({ type, msg })` alors que le tableau de bord entier appelle
+// `toast(message, type)`. L'objet arrivait dans `toastMsg`, `<Toast>` le rend
+// tel quel dans le JSX, React refuse un objet comme enfant, l'arbre se
+// démonte. Les deux sorties étaient touchées, le succès comme l'erreur.
+//
+// ⚠️ NI LE LINT NI LE BUILD NE VOIENT ÇA : la signature d'une fonction passée
+// en prop n'est vérifiée par personne. C'est un contrat entre composants, et
+// un contrat qu'on n'écrit pas finit toujours par être rompu.
+//
+// ⚠️ ON COMPTE LES APPELS EXAMINÉS. Une garde qui ne trouve aucun appel
+// resterait verte pour toujours le jour où le nom de la fonction change : ce
+// serait une alarme débranchée, pas une protection.
+{
+  const FICHIERS = [
+    'app/dashboard/ConfigDashboard.js',
+    'app/dashboard/OrdreCategories.js',
+    'app/dashboard/page.js',
+    'app/dashboard/TabGenerateur.js',
+    'app/dashboard/TabPaiements.js',
+    'app/dashboard/BoutonIaFiche.js',
+    'app/dashboard/BoutonIaInline.js',
+    // ⚠️ IL VIT AILLEURS MAIS IL REÇOIT LE MÊME `toast`, passé en prop par le
+    // tableau de bord : le contrat le concerne autant que les autres.
+    'app/components/PartageVisuel.js',
+  ]
+  // `toast(` ou `toast?.(`, suivi de ce qui vient juste après la parenthèse.
+  // ⚠️ `setToast`, `showToast` et `toastMsg` ne doivent pas être ramassés : le
+  // caractère qui précède doit être un séparateur, pas une lettre.
+  const APPEL = /(^|[^A-Za-z0-9_$.])toast\s*(\?\.)?\(\s*(.)/g
+  let appels = 0
+  const fautifs = []
+  for (const chemin of FICHIERS) {
+    const code = sansProse(readFileSync(chemin, 'utf8'))
+    for (const m of code.matchAll(APPEL)) {
+      appels++
+      // Le premier argument doit être une chaîne ou une expression, jamais un
+      // objet littéral : c'est le message, et il s'affiche tel quel.
+      if (m[3] === '{') fautifs.push(`${chemin} : toast({…}) au lieu de toast(message, type)`)
+    }
+  }
+  verifie('des appels à toast existent encore, la garde mesure quelque chose',
+    appels >= 30, `${appels} appel(s) trouvé(s)`)
+  verifie('aucun appel à toast ne passe un objet en premier argument',
+    fautifs.length === 0, fautifs.join(' · '))
+}
+
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du
 // fichier et n'annonçait donc qu'un tiers du travail.
 console.log(`\nTableau de bord : ${ok} vérifications`)

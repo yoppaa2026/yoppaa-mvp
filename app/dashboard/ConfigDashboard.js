@@ -121,6 +121,19 @@ import {
 import { libelleEnvie, phraseHorsOuverture } from '@/lib/signaux'
 import { MAX_PHOTOS, conseilPhoto, etatGalerie, deplacerPhoto, metierPhotos } from '@/lib/guide-photos'
 import { LARGEUR_CHAMP, LARGEUR_TEXTE_LONG } from '@/lib/responsive'
+// ⚠️ COPIER SE DÉCIDE DANS LE MODULE, PAS ICI. Qui peut recevoir une copie, ce
+// qu'elle emporte et ce qu'on refuse d'écraser sont des règles : l'écran les
+// applique, il ne les réinvente pas. C'est ce qui permet de les mesurer.
+import {
+  copieDArticle, ciblesDeCopie, conflitsDeGroupe, copiesDuGroupe,
+  resumeDeCopie, repartirCibles,
+} from '@/lib/catalogue-copie'
+// ⚠️ ET CE QUI S'APPLIQUE À PLUSIEURS ARTICLES SE DÉCIDE AUSSI DANS UN MODULE :
+// ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
+// commerçant lit avant de valider. Le prix ne se défait pas, la règle non plus.
+import {
+  articlesDuLot, patchsDuLot, refusDAjustement, resumeDuLot,
+} from '@/lib/catalogue-lot'
 import OrdreCategories from '@/app/dashboard/OrdreCategories'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
@@ -409,6 +422,18 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [nouvelleCatParent, setNouvelleCatParent] = useState('')
   const [saving, setSaving] = useState(false)
   const [catActive, setCatActive] = useState('Tous')
+  // ─── AGIR SUR PLUSIEURS ARTICLES (25/09) ─────────────────────────────────
+  //
+  // ⚠️ LE MODE SE DEMANDE, IL NE S'IMPOSE PAS. Des cases à cocher affichées en
+  // permanence encombrent la liste de tous les jours, celle qu'on ouvre pour
+  // corriger un prix ou lire un stock. Le commerçant entre en sélection quand
+  // il en a besoin, et en sort dès qu'il a fini.
+  const [lotIds, setLotIds] = useState([])
+  const [enLot, setEnLot] = useState(false)
+  const [lotAction, setLotAction] = useState(null)
+  const [lotValeur, setLotValeur] = useState('')       // le pourcentage
+  const [lotCategorie, setLotCategorie] = useState('') // la catégorie visée
+  const [lotEnCours, setLotEnCours] = useState(false)
   // Renommage catégorie
   const [renamingCat, setRenamingCat] = useState(null) // nom de la cat en cours de renommage
   const [renameValue, setRenameValue] = useState('')
@@ -653,6 +678,137 @@ function TabMenu({ commercantId, commercant, toast }) {
 
   async function toggleActif(a) { await supabase.from('articles').update({ actif: !a.actif }).eq('id', a.id); fetchArticles() }
 
+  // ─── AGIR SUR PLUSIEURS ARTICLES D'UN COUP (Alex, 25/09) ──────────────────
+  //
+  // 🔴 TOUT SE FAISAIT UN PAR UN : un soir de rupture, c'est un clic par pizza.
+  //
+  // ⚠️ L'ÉCRITURE SE REGROUPE PAR PATCH IDENTIQUE. Rendre douze articles
+  // indisponibles, c'est UNE requête, pas douze : douze écritures réveilleraient
+  // douze fois le temps réel de la fiche publique. L'ajustement de prix, lui,
+  // donne un prix par article : il n'y a rien à regrouper.
+  function basculerLot(id) {
+    setLotIds(prev => (prev.some(x => String(x) === String(id))
+      ? prev.filter(x => String(x) !== String(id))
+      : [...prev, id]))
+  }
+
+  // ⚠️ « TOUT COCHER » NE COCHE QUE CE QUI EST À L'ÉCRAN. Avec un filtre de
+  // catégorie ou une recherche en cours, cocher le catalogue entier toucherait
+  // des articles que le commerçant ne voit pas : il validerait sur douze lignes
+  // lues et en modifierait quatre-vingts.
+  function toutCocher(visibles) {
+    const ids = visibles.map(a => a.id)
+    const tous = ids.length > 0 && ids.every(id => lotIds.some(x => String(x) === String(id)))
+    setLotIds(tous ? [] : ids)
+  }
+
+  async function appliquerLot() {
+    if (!lotAction || lotEnCours) return
+    const vises = articlesDuLot(articles, lotIds)
+
+    // 🔴 LE PRIX NE SE DÉFAIT PAS : aucune colonne ne garde l'ancien. On refuse
+    // avant d'écrire, et on fait confirmer ce qui ne se rattrape pas.
+    if (lotAction === 'prix') {
+      const refus = refusDAjustement(vises, lotValeur)
+      if (refus) { toast(refus, 'error'); return }
+    }
+
+    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur: lotAction === 'prix' ? lotValeur : lotCategorie })
+    if (patchs.length === 0) { toast(resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur: lotValeur }), 'error'); return }
+
+    if (lotAction === 'prix') {
+      // ⚠️ LE VERDICT PORTE UN NOM À LUI, et ce n'est pas un détail de style :
+      // `ok` apparaît trois fois dans ce fichier, et une mutation qui vise
+      // « if (!ok) return » mesurerait la confirmation d'un autre écran.
+      const okPrix = await confirme(confirmationSimple({
+        titre: `Changer le prix de ${patchs.length === 1 ? '1 article' : `${patchs.length} articles`} ?`,
+        message: resumeDuLot({ action: 'prix', patchs, coches: lotIds.length, valeur: lotValeur }),
+        action: 'Oui, changer les prix',
+      }))
+      if (!okPrix) return
+    }
+
+    setLotEnCours(true)
+    // Les patchs identiques partent ensemble : un seul update pour tous.
+    const parPatch = new Map()
+    for (const p of patchs) {
+      const cle = JSON.stringify(p.patch)
+      if (!parPatch.has(cle)) parPatch.set(cle, { patch: p.patch, ids: [] })
+      parPatch.get(cle).ids.push(p.id)
+    }
+    let rates = 0
+    for (const { patch, ids } of parPatch.values()) {
+      const { error } = await supabase.from('articles').update(patch).in('id', ids)
+      if (error) rates += ids.length
+    }
+    setLotEnCours(false)
+    fetchArticles()
+    // ⚠️ ON DIT COMBIEN ONT VRAIMENT BOUGÉ. « C'est fait » sur un échec partiel
+    // laisserait le commerçant vendre ce qu'il croyait avoir retiré.
+    if (rates > 0) {
+      toast(`${patchs.length - rates} article(s) modifié(s), ${rates} en échec. Réessaie sur ceux qui restent.`, 'error')
+      return
+    }
+    setLotIds([])
+    setLotAction(null)
+    toast(patchs.length === 1 ? '1 article modifié.' : `${patchs.length} articles modifiés.`)
+  }
+
+  // ─── DUPLIQUER UN ARTICLE (Alex, 25/09) ───────────────────────────────────
+  //
+  // 🔴 QUARANTE PIZZAS SE RESSEMBLENT À DEUX MOTS PRÈS, et il fallait les
+  // saisir entièrement quarante fois : nom, prix, catégorie, photo, délai,
+  // puis toute la liste des garnitures, une valeur après l'autre.
+  //
+  // ⚠️ LA COPIE NAÎT INDISPONIBLE. Elle porte le nom et le prix de sa voisine :
+  // la publier d'office serait une promesse faite au client avant que le
+  // commerçant ait relu quoi que ce soit. Le message le dit, sinon il la
+  // chercherait sur sa fiche sans la trouver.
+  //
+  // ⚠️ CE QU'ELLE N'EMPORTE PAS EST DIT AUSSI : les photos de la galerie, les
+  // variantes et les stocks par jour restent à l'original. Un stock recopié
+  // promettrait des parts qui n'existent pas.
+  async function dupliquerArticle(a) {
+    const payload = copieDArticle(a, {
+      commercantId,
+      nomsExistants: articles.map(x => x.nom),
+    })
+    if (!payload) { toast('Cet article ne peut pas être dupliqué.', 'error'); return }
+
+    const { data: cree, error } = await supabase
+      .from('articles').insert(payload).select('id').single()
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+
+    // ⚠️ LES OPTIONS SUIVENT, SINON LA DUPLICATION NE SERT À RIEN : c'est
+    // justement la liste des garnitures qu'on ne veut plus réécrire.
+    const { data: groupesSource } = await supabase
+      .from('article_options_groupes')
+      .select('*, valeurs:article_options_valeurs(*)')
+      .eq('article_id', a.id)
+
+    let optionsRatees = false
+    for (const g of groupesSource || []) {
+      const { groupes: [copie], valeurs: [valeursCopie] } = copiesDuGroupe(g, [cree.id])
+      const { data: gCree, error: errG } = await supabase
+        .from('article_options_groupes').insert(copie).select('id').single()
+      if (errG || !gCree) { optionsRatees = true; continue }
+      if (valeursCopie.length > 0) {
+        const { error: errV } = await supabase.from('article_options_valeurs')
+          .insert(valeursCopie.map(v => ({ groupe_id: gCree.id, ...v })))
+        if (errV) optionsRatees = true
+      }
+    }
+
+    fetchArticles()
+    // ⚠️ UN ÉCHEC PARTIEL SE DIT. L'article existe, ses options peut-être pas :
+    // le taire laisserait le commerçant vendre une pizza sans garnitures.
+    if (optionsRatees) {
+      toast(`« ${payload.nom} » est créé, mais une partie de ses options n'a pas pu être copiée. Vérifie-les.`, 'error')
+      return
+    }
+    toast(`« ${payload.nom} » créé, en indisponible. Relis-le puis rends-le disponible.`)
+  }
+
   async function updateStock(id, val) {
     const n = parseInt(val)
     if (isNaN(n) || n < 0) return
@@ -719,6 +875,12 @@ function TabMenu({ commercantId, commercant, toast }) {
   const articlesRecherche = searchQuery.trim()
     ? articlesFiltres.filter(a => a.nom.toLowerCase().includes(searchQuery.toLowerCase()) || (a.description || '').toLowerCase().includes(searchQuery.toLowerCase()))
     : articlesFiltres
+
+  // ⚠️ CE QUE « TOUT COCHER » DOIT COCHER : ce qui est SOUS LES YEUX du
+  // commerçant, filtre et recherche compris. Cocher le catalogue entier
+  // pendant qu'il lit douze lignes lui ferait modifier quatre-vingts articles
+  // sans les avoir vus.
+  const articlesVisibles = searchQuery.trim() ? articlesRecherche : articlesFiltres
 
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
 
@@ -966,7 +1128,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // Vitrine : la card dépend du produit (indicatif = pastille « à partir
     // de », vendable = stock permanent façon détail)
     const indicatif = estVitrine && a.est_vitrine
-    return <ArticleCard key={a.id} a={a} estVitrine={indicatif} estDetail={estDetail || (estVitrine && !indicatif)} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={indicatif} estDetail={estDetail || (estVitrine && !indicatif)} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
   return (
@@ -1073,6 +1235,85 @@ function TabMenu({ commercantId, commercant, toast }) {
                       {cat}
                     </button>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ─── AGIR SUR PLUSIEURS ARTICLES (25/09) ──────────────────────
+              ⚠️ LE MODE SE DEMANDE. Des cases à cocher permanentes
+              encombreraient la liste de tous les jours pour un geste qui sert
+              une fois par saison. */}
+          {articles.length > 1 && (
+            <div style={{ marginBottom: 12 }}>
+              {!enLot ? (
+                <button style={{ ...s.btn, ...s.btnGhost, padding: '7px 12px', fontSize: 12 }}
+                  onClick={() => { setEnLot(true); setLotIds([]); setLotAction(null) }}>
+                  <Check size={13} strokeWidth={2}/> Sélectionner plusieurs articles
+                </button>
+              ) : (
+                <div style={{ background: '#FAFAFA', borderRadius: 12, padding: 12, border: `1.5px solid ${T.bgPanel}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                    <span style={{ fontWeight: 700, fontSize: 12.5, color: T.ink }}>
+                      {lotIds.length === 0 ? 'Aucun article coché' : lotIds.length === 1 ? '1 article coché' : `${lotIds.length} articles cochés`}
+                    </span>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11 }}
+                        onClick={() => toutCocher(articlesVisibles)}>
+                        {articlesVisibles.length > 0 && articlesVisibles.every(a => lotIds.some(id => String(id) === String(a.id))) ? 'Tout décocher' : 'Tout cocher'}
+                      </button>
+                      <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11 }}
+                        onClick={() => { setEnLot(false); setLotIds([]); setLotAction(null) }}>Terminer</button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: lotAction ? 10 : 0 }}>
+                    {[
+                      { val: 'disponible', label: 'Rendre disponibles' },
+                      { val: 'indisponible', label: 'Rendre indisponibles' },
+                      { val: 'categorie', label: 'Changer de catégorie' },
+                      { val: 'prix', label: 'Ajuster les prix' },
+                    ].map(act => (
+                      <button key={act.val} onClick={() => setLotAction(lotAction === act.val ? null : act.val)}
+                        disabled={lotIds.length === 0}
+                        style={{ ...s.btn, padding: '6px 12px', fontSize: 11.5, opacity: lotIds.length === 0 ? 0.5 : 1, background: lotAction === act.val ? T.bgPanel : '#fff', color: lotAction === act.val ? '#fff' : T.ink, border: `1.5px solid ${lotAction === act.val ? T.bgPanel : T.hairline}` }}>
+                        {act.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {lotAction === 'categorie' && (
+                    <select value={lotCategorie} onChange={e => setLotCategorie(e.target.value)}
+                      style={{ ...s.input, cursor: 'pointer', marginBottom: 10, fontSize: 13 }}>
+                      <option value="">— Sans catégorie —</option>
+                      {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  )}
+
+                  {lotAction === 'prix' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <input type="number" step="1" value={lotValeur} onChange={e => setLotValeur(e.target.value)}
+                        placeholder="-10" style={{ ...s.input, width: 90, fontSize: 13, textAlign: 'center' }}/>
+                      <span style={{ fontSize: 12.5, color: T.muted }}>% (un moins pour baisser)</span>
+                    </div>
+                  )}
+
+                  {lotAction && (() => {
+                    const vises = articlesDuLot(articles, lotIds)
+                    const valeur = lotAction === 'prix' ? lotValeur : lotCategorie
+                    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur })
+                    return (
+                      <>
+                        <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+                          {resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur })}
+                        </p>
+                        <button style={{ ...s.btn, ...s.btnPrimary, padding: '7px 14px', fontSize: 12 }}
+                          onClick={appliquerLot} disabled={lotEnCours || patchs.length === 0}>
+                          {lotEnCours ? 'En cours…' : 'Appliquer'}
+                        </button>
+                      </>
+                    )
+                  })()}
                 </div>
               )}
             </div>
@@ -1267,7 +1508,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                 <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${T.hairline}` }}>
                   {variantesCategorie
                     ? <VariantesArticle article={a} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-                    : <OptionsArticle articleId={a.id} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+                    : <OptionsArticle articleId={a.id} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
                 </div>
               </details>
             ))
@@ -1279,13 +1520,23 @@ function TabMenu({ commercantId, commercant, toast }) {
 }
 
 // ─── Gestionnaire d'options pour un article ──────────────────────────────────
-function OptionsArticle({ articleId, toast }) {
+function OptionsArticle({ articleId, toast, articles = [] }) {
   const [groupes, setGroupes] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [formGroupe, setFormGroupe] = useState({ nom: '', type: 'unique', obligatoire: false })
   const [valeursForms, setValeursForms] = useState({})
   const [saving, setSaving] = useState(false)
+  // ─── COPIER UN GROUPE VERS D'AUTRES ARTICLES (Alex, 25/09) ───────────────
+  //
+  // 🔴 « Une liste complète de sauces, des garnitures de pizza ne peuvent pas
+  // être réécrites sur 40 pizzas différentes. » Un groupe porte un
+  // `article_id` : il appartient à un article, et rien ne permettait de le
+  // donner à ses voisins.
+  const [copieDe, setCopieDe] = useState(null)      // le groupe qu'on copie
+  const [cibles, setCibles] = useState([])          // ids cochés
+  const [groupesCibles, setGroupesCibles] = useState({}) // { articleId: [{ nom }] }
+  const [copieEnCours, setCopieEnCours] = useState(false)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchGroupes() }, [articleId])
@@ -1335,6 +1586,81 @@ function OptionsArticle({ articleId, toast }) {
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
     fetchGroupes()
+  }
+
+  // ─── OUVRIR LE PANNEAU DE COPIE ──────────────────────────────────────────
+  //
+  // ⚠️ ON VA CHERCHER CE QUE LES AUTRES ONT DÉJÀ, et seulement à l'ouverture.
+  // Sans ça, impossible de dire au commerçant lesquels seront ignorés, et la
+  // copie écraserait ou dédoublerait un réglage qu'il avait fait exprès.
+  //
+  // ⚠️ ON NE LIT QUE LE NOM ET L'ARTICLE : ni les valeurs, ni les prix. C'est
+  // tout ce que la règle du conflit demande, et une requête qui charge plus
+  // que nécessaire finit toujours par charger trop.
+  async function ouvrirCopie(groupe) {
+    setCopieDe(groupe)
+    setCibles([])
+    const ids = ciblesDeCopie(articles, articleId).map(a => a.id)
+    if (ids.length === 0) { setGroupesCibles({}); return }
+    const { data, error } = await supabase
+      .from('article_options_groupes')
+      .select('article_id, nom')
+      .in('article_id', ids)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    const parArticle = {}
+    for (const g of data || []) {
+      const cle = String(g.article_id)
+      if (!parArticle[cle]) parArticle[cle] = []
+      parArticle[cle].push({ nom: g.nom })
+    }
+    setGroupesCibles(parArticle)
+  }
+
+  // ─── ÉCRIRE LES COPIES ───────────────────────────────────────────────────
+  //
+  // 🔴 LES VALEURS SE RATTACHENT PAR `article_id`, JAMAIS PAR L'ORDRE DE
+  // RETOUR. `insert([...]).select()` rend les lignes créées, mais compter sur
+  // leur ordre serait un pari : un jour où il change, les sauces de la
+  // margherita atterriraient sur la quatre-fromages. Chaque cible n'apparaît
+  // qu'une fois dans le lot, son identifiant d'article est donc une clé sûre.
+  //
+  // ⚠️ ET SI LES VALEURS ÉCHOUENT, ON LE DIT SANS TOUT DÉFAIRE. Des groupes
+  // vides restent visibles et corrigeables ; un effacement silencieux, lui,
+  // laisserait le commerçant croire que rien n'a bougé.
+  async function copierGroupe() {
+    if (!copieDe || copieEnCours) return
+    const conflits = conflitsDeGroupe(copieDe.nom, cibles, groupesCibles)
+    const { aCopier } = repartirCibles(cibles, conflits)
+    if (aCopier.length === 0) { toast('Rien à copier : ces articles ont déjà ce groupe.', 'error'); return }
+
+    setCopieEnCours(true)
+    const { groupes: aEcrire, valeurs } = copiesDuGroupe(copieDe, aCopier)
+    const { data: crees, error } = await supabase
+      .from('article_options_groupes').insert(aEcrire).select('id, article_id')
+    if (error) { setCopieEnCours(false); toast(`Erreur : ${error.message}`, 'error'); return }
+
+    const idParArticle = new Map((crees || []).map(g => [String(g.article_id), g.id]))
+    const lignes = []
+    aEcrire.forEach((g, i) => {
+      const groupeId = idParArticle.get(String(g.article_id))
+      if (!groupeId) return
+      for (const val of valeurs[i]) lignes.push({ groupe_id: groupeId, ...val })
+    })
+    if (lignes.length > 0) {
+      const { error: errVal } = await supabase.from('article_options_valeurs').insert(lignes)
+      if (errVal) {
+        setCopieEnCours(false)
+        toast(`Les groupes sont créés mais leurs options n'ont pas pu être écrites : ${errVal.message}`, 'error')
+        return
+      }
+    }
+    setCopieEnCours(false)
+    setCopieDe(null)
+    setCibles([])
+    const combien = crees?.length || aCopier.length
+    toast(combien === 1
+      ? `« ${copieDe.nom} » copié sur 1 article.`
+      : `« ${copieDe.nom} » copié sur ${combien} articles.`)
   }
 
   if (loading) return <p style={{ fontSize: 12, color: T.muted, padding: '8px 0' }}>Chargement des options...</p>
@@ -1414,10 +1740,87 @@ function OptionsArticle({ articleId, toast }) {
                 {g.obligatoire ? 'Obligatoire' : 'Optionnel'}
               </button>
             </div>
-            <button style={{ ...s.btn, ...s.btnDanger, padding: '5px 8px', fontSize: 11 }} onClick={() => deleteGroupe(g.id)} title="Supprimer le groupe">
-              <Icon name="trash" size={13} color="#DC2626"/>
-            </button>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {/* ⚠️ LE BOUTON DIT LE GESTE, et il ne s'affiche que s'il y a
+                  quelque part où copier : seul dans son catalogue, le
+                  commerçant n'a pas besoin d'un bouton qui ouvre une liste
+                  vide. */}
+              {ciblesDeCopie(articles, articleId).length > 0 && (
+                <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                  onClick={() => (copieDe?.id === g.id ? setCopieDe(null) : ouvrirCopie(g))}
+                  title="Copier ce groupe sur d'autres articles">
+                  <Copy size={13} strokeWidth={1.8}/> Copier vers…
+                </button>
+              )}
+              <button style={{ ...s.btn, ...s.btnDanger, padding: '5px 8px', fontSize: 11 }} onClick={() => deleteGroupe(g.id)} title="Supprimer le groupe">
+                <Icon name="trash" size={13} color="#DC2626"/>
+              </button>
+            </div>
           </div>
+
+          {/* ─── PANNEAU DE COPIE ──────────────────────────────────────────
+              ⚠️ MÊME GESTE QUE « Copier vers… » DES CRÉNEAUX : le commerçant
+              coche des destinations, lit ce qui va se passer, puis valide. Un
+              geste qu'il connaît déjà ne se réapprend pas. */}
+          {copieDe?.id === g.id && (() => {
+            const listeCibles = ciblesDeCopie(articles, articleId)
+            const conflits = conflitsDeGroupe(g.nom, cibles, groupesCibles)
+            const bloques = new Set(conflits.map(String))
+            const tousCoches = cibles.length === listeCibles.length && listeCibles.length > 0
+            return (
+              <div style={{ background: '#FAFAFA', borderRadius: 10, padding: 12, marginBottom: 10, border: `1.5px solid ${T.bgPanel}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <p style={{ fontWeight: 700, fontSize: 12, color: T.ink, margin: 0 }}>
+                    Copier « {g.nom} » vers :
+                  </p>
+                  <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 8px', fontSize: 11 }}
+                    onClick={() => setCibles(tousCoches ? [] : listeCibles.map(a => a.id))}>
+                    {tousCoches ? 'Tout décocher' : 'Tout cocher'}
+                  </button>
+                </div>
+
+                {/* ⚠️ LA LISTE DÉFILE : quarante pizzas ne tiennent pas à
+                    l'écran, et une liste qui pousse le bouton hors de la vue
+                    donne un panneau qu'on ne peut pas valider. */}
+                <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 2, marginBottom: 8 }}>
+                  {listeCibles.map(a => {
+                    const coche = cibles.some(id => String(id) === String(a.id))
+                    const dejaLa = bloques.has(String(a.id))
+                    return (
+                      <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: coche ? T.pale || '#EDE0FF' : 'transparent' }}>
+                        <input type="checkbox" checked={coche} style={{ cursor: 'pointer', width: 15, height: 15 }}
+                          onChange={() => setCibles(prev => (
+                            prev.some(id => String(id) === String(a.id))
+                              ? prev.filter(id => String(id) !== String(a.id))
+                              : [...prev, a.id]
+                          ))}/>
+                        <span style={{ fontSize: 12, color: T.ink, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
+                        {/* ⚠️ ON LE DIT AVANT LE CLIC, pas après : celui-là
+                            sera ignoré, et il doit savoir pourquoi. */}
+                        {dejaLa && (
+                          <span style={{ fontSize: 10, fontWeight: 800, color: T.muted, background: '#F3F4F6', borderRadius: 100, padding: '2px 7px', flexShrink: 0 }}>a déjà ce groupe</span>
+                        )}
+                      </label>
+                    )
+                  })}
+                </div>
+
+                <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+                  {resumeDeCopie({ nomGroupe: g.nom, cibles: cibles.length, conflits: conflits.length })}
+                </p>
+
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12 }}
+                    onClick={copierGroupe}
+                    disabled={copieEnCours || cibles.length - conflits.length <= 0}>
+                    <Copy size={13} strokeWidth={1.8}/> {copieEnCours ? 'Copie en cours…' : 'Copier'}
+                  </button>
+                  <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 12px', fontSize: 12 }}
+                    onClick={() => { setCopieDe(null); setCibles([]) }}>Annuler</button>
+                </div>
+              </div>
+            )
+          })()}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
             {(g.valeurs || []).map(v => (
               <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 8px 3px 10px', fontSize: 12 }}>
@@ -1637,7 +2040,7 @@ function VariantesArticle({ article, toast }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -1706,6 +2109,16 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
   return (
     <div style={{ ...s.card, opacity: a.actif ? 1 : 0.6, borderLeft: `4px solid ${a.actif ? T.main : '#E5E7EB'}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        {/* ⚠️ LA CASE N'APPARAÎT QU'EN MODE SÉLECTION : la liste de tous les
+            jours, celle qu'on ouvre pour lire un stock, ne doit pas s'encombrer
+            d'un contrôle qui ne sert qu'une fois par saison. */}
+        {enLot && (
+          <label style={{ display: 'flex', alignItems: 'center', paddingTop: 4, cursor: 'pointer', flexShrink: 0 }}>
+            <input type="checkbox" checked={!!coche} onChange={() => onCocher?.(a.id)}
+              aria-label={`Sélectionner ${a.nom}`}
+              style={{ cursor: 'pointer', width: 18, height: 18 }}/>
+          </label>
+        )}
         {a.photo_url && (
           <div style={{ width: 48, height: 48, borderRadius: 10, overflow: 'hidden', flexShrink: 0, border: `1px solid ${T.hairline}` }}>
             <img decoding="async" loading="lazy" src={a.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
@@ -1868,6 +2281,15 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
           <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12, background: showOptions ? T.bgPanel : '#fff', color: showOptions ? '#fff' : T.bgPanel, borderColor: showOptions ? T.bgPanel : T.hairline }} onClick={() => setShowOptions(v => !v)} title="Options & personnalisation">
             <Icon name="sliders" size={14} color={showOptions ? '#fff' : T.bgPanel}/>
           </button>
+          {/* ⚠️ DUPLIQUER EST UN GESTE DE PRÉPARATION, pas une action
+              destructrice : il se range avec « modifier », loin du bouton
+              rouge, et il ne demande aucune confirmation puisque rien n'est
+              perdu si le commerçant s'est trompé. */}
+          {onDupliquer && (
+            <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12 }} onClick={() => onDupliquer(a)} title="Dupliquer cet article">
+              <Copy size={14} strokeWidth={1.8} color={T.bgPanel}/>
+            </button>
+          )}
           <button style={{ ...s.btn, ...s.btnDanger, padding: '6px 10px', fontSize: 12 }} onClick={() => onDelete(a.id)} title="Supprimer">
             <Icon name="trash" size={14} color="#DC2626"/>
           </button>
@@ -1875,7 +2297,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
       </div>
       {showOptions && ((estDetail || estVitrine)
         ? <VariantesArticle article={a} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-        : <OptionsArticle articleId={a.id} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
+        : <OptionsArticle articleId={a.id} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
     </div>
   )
 }

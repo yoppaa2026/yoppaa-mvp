@@ -868,8 +868,16 @@ function sansCommentaires(src) {
   // argument vrai : la fiche part bien en ligne dès sa validation. Ce qui est
   // faux, c'est d'en conclure qu'il y aura du trafic. Les deux moitiés de la
   // phrase se tiennent, et se gardent ensemble.
-  verifier('la landing garde la mise en ligne dès la validation',
-    /part en ligne dès sa validation/.test(reveal))
+  //
+  // 🔴 28/09 : LA PREMIÈRE MOITIÉ A CHANGÉ DE VÉRITÉ, PAS DE GARDE. Décision
+  // d'Alex : valider ouvre l'espace, et la fiche part en ligne quand elle est
+  // COMPLÈTE (lib/fiche-complete.js). La garde vise donc la phrase nouvelle,
+  // et l'ancienne devient interdite : elle promettrait une mise en ligne que
+  // la validation ne fait plus.
+  verifier('la landing garde la mise en ligne dès que la fiche est complète',
+    /part en ligne dès qu&rsquo;elle est complète/.test(reveal))
+  verifier('la landing ne promet plus la mise en ligne dès la validation',
+    !/part en ligne dès (sa|la) validation/.test(reveal))
   verifier('et dit que le public arrive au lancement',
     /Le public, lui, arrive le \{libelleLancement\(\)\}/.test(reveal))
 

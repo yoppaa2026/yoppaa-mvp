@@ -11,6 +11,7 @@ import { effacerImpersonation, fermerImpersonationServeur, messageImpersonation 
 import { attenteDepuis, attendUneValidation, COLONNES_PUBLICATION_DIFFEREE } from '@/lib/statut-commercant'
 import SectionTousCommercants from './SectionTousCommercants'
 import SectionInscriptionsEnCours from './SectionInscriptionsEnCours'
+import SectionFichesAPublier from './SectionFichesAPublier'
 import SectionKYBAValider from './SectionKYBAValider'
 import SectionPreinscriptions from './SectionPreinscriptions'
 import SectionDiagnosticBrevo from './SectionDiagnosticBrevo'
@@ -170,7 +171,9 @@ export default function AdminPage() {
 
   // ─── Actions ───────────────────────────────────────────────────────────
   async function valider(commercant_id) {
-    if (!confirm('Confirmer la validation de ce commerçant ? Sa page sera publiée et un email lui sera envoyé.')) return
+    // ⚠️ VALIDER N'EST PLUS PUBLIER (28/09) : l'espace s'ouvre, la fiche reste
+    // invisible jusqu'au clic « Publier » (bloc « Fiches à mettre en ligne »).
+    if (!confirm('Valider ce commerçant ? Son tableau de bord s’ouvre et il reçoit un email avec ce qu’il doit compléter. Sa fiche reste invisible jusqu’à ce que tu la publies.')) return
     setActionEnCours(commercant_id)
     try {
       const res = await fetch('/api/admin/valider', {
@@ -183,7 +186,7 @@ export default function AdminPage() {
       })
       const json = await res.json()
       if (!res.ok || !json.ok) throw new Error(json.error || 'Erreur inconnue')
-      showToast(`Validé ✓ · email : ${json.email}`, 'success')
+      showToast(`Validé : son espace est ouvert, sa fiche attend d’être complétée · email : ${json.email}`, 'success')
       await charger()
     } catch (e) {
       showToast(`Erreur : ${e.message}`, 'error')
@@ -320,6 +323,11 @@ export default function AdminPage() {
             on agit. Les diagnostics et les suivis ne se consultent pas tous les
             jours, eux, et ils passent derrière. */}
         <SectionInscriptionsEnCours />
+
+        {/* 🔴 VALIDÉS, PAS ENCORE EN LIGNE (28/09). Valider n'ouvre plus que
+            l'espace : c'est ici qu'Alex relance ceux qui n'avancent pas et
+            publie ceux qui sont prêts. */}
+        <SectionFichesAPublier toast={(msg, type) => setToast({ msg, type })} />
 
         {/* Tous les commerçants (édition + impersonation) */}
         <SectionTousCommercants toast={(msg, type) => setToast({ msg, type })} />
@@ -571,7 +579,7 @@ function CarteAValider({ commercant: c, photos = [], onValider, onRejeter, disab
         </button>
         <button onClick={onValider} disabled={disabled}
           style={{ padding: '9px 18px', borderRadius: 100, border: 'none', background: '#10B981', color: '#fff', fontWeight: 800, fontSize: 13, cursor: disabled ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px rgba(22,163,74,0.3)' }}>
-          {disabled ? 'En cours…' : '✓ Valider'}
+          {disabled ? 'En cours…' : '✓ Valider et ouvrir son espace'}
         </button>
       </div>
     </div>

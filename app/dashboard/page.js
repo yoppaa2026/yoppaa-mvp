@@ -58,6 +58,7 @@ import { accesDashboard } from '@/lib/statut-commercant'
 // bouton qui s'affiche sur une table que le serveur refusera de facturer.
 import { raisonDebitImpossible, compteEncaisse, libelleRelance, raisonLienImpossible, messageLienImpossible } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
+import BandeauFicheAPublier from './BandeauFicheAPublier'
 
 const T = {
   bg:      '#F8F6FF',
@@ -3737,6 +3738,15 @@ export default function Dashboard() {
 
           {/* Zone scrollable */}
           <div className="scroll-zone">
+            {/* 🔴 LA FICHE QUI N'EST PAS ENCORE EN LIGNE (28/09). Valider
+                n'ouvre plus que l'espace : tant que la fiche n'est pas
+                complète et publiée par Alex, le commerçant voit ici ce qui lui
+                manque. DANS la zone qui défile, jamais au-dessus : sur un
+                téléphone, un encart fixe mangerait l'écran de travail. */}
+            {commercant && (
+              <BandeauFicheAPublier commercant={commercant} onAllerA={ouvrirConfig}
+                cleRafraichir={`${ongletPrincipal}:${configTabUrl}`}/>
+            )}
             {ongletPrincipal === 'commandes' && (
               <>
                 {/* ⚠️ LES BONS CADEAUX VENDUS, que le commerçant ne voyait NULLE

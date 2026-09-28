@@ -144,7 +144,7 @@ export default function EcranValidation({ raison, motif, nomCommerce, onDeconnex
             <p style={{ fontSize: 15, lineHeight: 1.65, color: T.muted, margin: '0 0 20px', fontWeight: 500 }}>
               Ton inscription est bien arrivée chez nous 🟣 L&rsquo;équipe Yoppaa la vérifie,
               en général <strong style={{ color: T.ink }}>sous 24 heures</strong>. Tu recevras
-              un email dès que ton espace s&rsquo;ouvre, et tu pourras alors publier ta page.
+              un email dès que ton espace s&rsquo;ouvre : tu y prépareras ta fiche, puis tu demanderas sa mise en ligne.
             </p>
             <p style={{ fontSize: 14, lineHeight: 1.6, color: T.muted, margin: '0 0 24px', fontWeight: 500 }}>
               Tu n&rsquo;as rien à faire d&rsquo;ici là, et rien n&rsquo;est perdu : tout ce que tu as

@@ -3,15 +3,25 @@
 // Auth : JWT user dans header Authorization (vérification email admin côté serveur)
 //
 // Effets en chaîne :
-// 1) UPDATE commercants : statut='valide', statut_publication='publie', motif_rejet=null
+// 1) UPDATE commercants : statut='valide', motif_rejet=null
 // 2) UPDATE onboarding_commercants : statut='valide'
 // 3) INSERT admin_validations (log)
-// 4) Email Resend au commerçant : "Ta page est en ligne"
+// 4) Email Resend au commerçant : "Ton espace est ouvert", avec ce qui manque
+//
+// 🔴 VALIDER N'EST PLUS PUBLIER (28/09, décision d'Alex). Cette route
+// publiait la fiche d'un même geste, alors que le catalogue, les photos et
+// l'encaissement ne se remplissent QUE depuis le tableau de bord qu'elle
+// ouvrait : toute fiche partait donc en ligne à moitié vide. Elle ouvre
+// désormais l'espace et rien d'autre ; la publication est le clic « Publier »
+// (/api/admin/publier), sur une fiche complète (lib/fiche-complete.js).
+// Les emails « ta page est en ligne » et « ton kit » sont partis avec elle.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { envoyerAuCommercant, emailValidationCommercant, emailKitBienvenue } from '@/lib/resend'
-import { avantLancement } from '@/lib/lancement'
+import { envoyerAuCommercant, emailEspaceOuvert } from '@/lib/resend'
+import { clientAdmin } from '@/lib/api-auth'
+import { bilanDeLaFiche } from '@/lib/fiche-complete-server'
+import { fichePubliee } from '@/lib/statut-commercant'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
@@ -70,17 +80,21 @@ export async function POST(request) {
     // Fetch préalable : on a besoin du nom pour générer un slug si manquant
     const { data: existant } = await supabase
       .from('commercants')
-      .select('id, nom, slug')
+      .select('id, nom, slug, statut_publication')
       .eq('id', commercant_id)
       .single()
     if (!existant) {
       return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
     }
 
+    // ⚠️ UNE FICHE DÉJÀ EN LIGNE LE RESTE. Cette route sert aussi à revalider
+    // un compte (après un rejet levé, par exemple) : la remettre en attente
+    // retirerait sans prévenir une fiche que ses clients voient.
+    const dejaEnLigne = fichePubliee(existant)
     // Si pas de slug, on en génère un automatique unique (basé sur le nom)
     const updates = {
       statut: 'valide',
-      statut_publication: 'publie',
+      statut_publication: dejaEnLigne ? 'publie' : 'en_attente',
       motif_rejet: null,
     }
     if (!existant.slug) {
@@ -113,42 +127,28 @@ export async function POST(request) {
       validated_by_email: user.email,
     })
 
-    // 4) Email au commerçant (non bloquant)
+    // 4) Email au commerçant (non bloquant) : l'espace est ouvert, et voici ce
+    // qu'il faut pour que la fiche soit visible. La liste est CALCULÉE sur sa
+    // fiche réelle : ce qu'il a déjà fait à l'inscription s'y lit coché.
     //
-    // ⚠️ CES DEUX ENVOIS ARRIVENT À LA SECONDE PRÈS dans la même boîte. Ils
-    // doivent donc porter des objets DIFFÉRENTS et raconter la même histoire :
-    // le premier ouvre la porte, le second donne les outils. La phase de
-    // lancement leur est passée à TOUS LES DEUX, sinon l'un annonce une
-    // ouverture à venir pendant que l'autre la déclare déjà faite.
-    const phaseAvantLancement = avantLancement()
+    // ⚠️ PAS POUR UNE FICHE DÉJÀ EN LIGNE : lui annoncer qu'elle n'est pas
+    // visible serait faux.
     let emailResult = { ok: false, error: 'pas d\'email destinataire' }
-    if (commercant.email) {
+    if (commercant.email && !dejaEnLigne) {
+      let criteres = []
+      try {
+        const { bilan } = await bilanDeLaFiche(clientAdmin(), commercant_id)
+        criteres = bilan?.criteres || []
+      } catch (e) {
+        // Sans la liste, l'email reste juste : il dit que l'espace est ouvert
+        // et que la fiche est à préparer. On ne le bloque pas pour ça.
+        console.error('[admin/valider] bilan de la fiche impossible', e?.message)
+      }
       emailResult = await envoyerAuCommercant({
         to: commercant.email,
-        subject: `Ta page Yoppaa est en ligne, ${commercant.nom} 🎉`,
-        html: emailValidationCommercant({
-          nom: commercant.nom,
-          slug: commercant.slug,
-          avant_lancement: phaseAvantLancement,
-        }),
+        subject: `Ton espace Yoppaa est ouvert, ${commercant.nom}`,
+        html: emailEspaceOuvert({ nom: commercant.nom, criteres }),
       })
-
-      // 5) Kit de bienvenue dans la foulée : c'est le moment où le commerçant
-      // est le plus motivé. Contenu adapté à la phase (recrutement de
-      // préinscrits avant l'ouverture publique, commande après). Non bloquant.
-      try {
-        await envoyerAuCommercant({
-          to: commercant.email,
-          subject: 'Ton kit Yoppaa 🟣',
-          html: emailKitBienvenue({
-            nom_commercant: commercant.nom,
-            slug: commercant.slug,
-            avant_lancement: phaseAvantLancement,
-          }),
-        })
-      } catch (e) {
-        console.error('[admin/valider] envoi kit KO (non bloquant)', e?.message)
-      }
     }
 
     return NextResponse.json({

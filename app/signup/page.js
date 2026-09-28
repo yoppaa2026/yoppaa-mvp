@@ -2820,7 +2820,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
           Demande envoyée&nbsp;!
         </h1>
         <p style={{ fontSize: '1rem', color: T.muted, margin: '0 0 24px', lineHeight: 1.6, maxWidth: 480, marginInline: 'auto' }}>
-          On valide ton profil <strong style={{ color: T.bgPanel }}>sous 24 h ouvrées</strong>. Tu recevras un email dès que ta page sera en ligne.
+          On valide ton profil <strong style={{ color: T.bgPanel }}>sous 24 h ouvrées</strong>. Tu recevras un email dès que ton tableau de bord sera ouvert.
         </p>
         <Card titre="Récapitulatif">
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: T.deep, lineHeight: 1.9 }}>
@@ -2840,12 +2840,13 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
             Et après, qu'est-ce qui t'attend ?
           </p>
           <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.6 }}>
-            Dès que ta page est en ligne, ton tableau de bord t'ouvre le reste : ton
-            catalogue, tes créneaux, tes actus, tes deals. Rien d'obligatoire, rien à
-            faire dans l'urgence, et tout se remplit au fil de l'eau.
+            Dès que ton profil est validé, ton tableau de bord s'ouvre. Tu y complètes
+            ta fiche : au moins 3 articles ou prestations, 2 photos, ton logo, ta
+            présentation, tes horaires et un moyen d'encaisser. Quand tout est prêt,
+            tu demandes sa mise en ligne et on la publie.
             <span style={{ display: 'block', marginTop: 6, color: T.deep, fontWeight: 600 }}>
-              Le plus utile pour commencer : ajouter tes premiers articles ou tes
-              premières prestations. C'est ce que tes clients viendront chercher.
+              Le plus utile pour commencer : ajouter tes articles ou tes
+              prestations. C'est ce que tes clients viendront chercher.
             </span>
           </p>
         </div>

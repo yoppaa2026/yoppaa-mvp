@@ -1253,7 +1253,7 @@ function MockOnboarding() {
         <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '8px 12px', textAlign: 'center' }}>
           <span style={{ fontSize: 9, fontWeight: 800, color: '#fff' }}>Envoyer mon dossier</span>
         </div>
-        <p style={{ margin: '6px 0 0', textAlign: 'center', fontSize: 6.5, color: T.muted, fontWeight: 600, lineHeight: 1.4 }}>Réponse sous 48 h ouvrables. Ta page part en ligne dès la validation.</p>
+        <p style={{ margin: '6px 0 0', textAlign: 'center', fontSize: 6.5, color: T.muted, fontWeight: 600, lineHeight: 1.4 }}>Réponse sous 48 h ouvrables. Ta page part en ligne dès qu’elle est complète.</p>
       </div>
     </div>
   )
@@ -2650,8 +2650,12 @@ export default function LandingReveal({ referent = null }) {
                   pour rien. Ce qui était faux, c'est ce qu'on en concluait :
                   « tes premiers clients commandent avant tout le monde ». Le
                   public n'arrive qu'au lancement. Une page en ligne n'est pas
-                  une page fréquentée, et c'est toute la différence. */}
-              Ta commune est déjà ouverte et ta page part en ligne dès sa validation.
+                  une page fréquentée, et c'est toute la différence.
+                  🔴 28/09 : « DÈS SA VALIDATION » EST DEVENU FAUX. Valider
+                  ouvre désormais l'espace, et la page part en ligne quand
+                  elle est complète (lib/fiche-complete.js). L'argument de
+                  rapidité reste : c'est le commerçant qui décide du rythme. */}
+              Ta commune est déjà ouverte et ta page part en ligne dès qu&rsquo;elle est complète.
               Le public, lui, arrive le {libelleLancement()} : d&rsquo;ici là, tu prépares tout
               tranquillement.
             </p>

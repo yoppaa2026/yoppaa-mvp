@@ -274,8 +274,12 @@ const PHASE = avantLancement()
 // ═══ 6. LA CHAÎNE DE VALIDATION PASSE BIEN LA PHASE AUX DEUX EMAILS ══════
 // ⚠️ Sinon l'un annonce une ouverture à venir pendant que l'autre la déclare
 // déjà faite, dans la même boîte, à la même seconde.
+//
+// 🔴 28/09 : LES DEUX EMAILS ONT DÉMÉNAGÉ, LA GARDE LES SUIT. Valider n'ouvre
+// plus que l'espace ; « ta page est en ligne » et le kit partent au clic
+// « Publier », c'est donc cette route-là qui doit les accorder.
 {
-  const route = sansCommentaires(lire('app/api/admin/valider/route.js'))
+  const route = sansCommentaires(lire('app/api/admin/publier/route.js'))
   verifier('la route calcule la phase une seule fois',
     /const phaseAvantLancement = avantLancement\(\)/.test(route))
   const passages = compter(route, /avant_lancement: phaseAvantLancement/g)

@@ -124,6 +124,18 @@ const MUTATIONS = [
   { nom: '⚠️ l avertissement des papiers disparait de l inscription',
     fichier: 'app/signup/page.js', de: '          Avant de commencer, garde ceci sous la main', vers: '          Bon à savoir' },
 
+  // ─── CHAQUE IMAGE DANS LE DOSSIER DE SON COMMERCE (29/09) ────────────────
+  { nom: '🔴 les images retombent a la racine du bucket',
+    fichier: 'lib/stockage-images.js', de: '  return `${cid}/${n}`', vers: '  return n' },
+  { nom: '⚠️ une image sans commerce se range quand meme',
+    fichier: 'lib/stockage-images.js', de: "  if (!cid) throw new Error('image sans commerce : impossible de la ranger')", vers: '  if (false) throw new Error()' },
+  { nom: '🔴 un envoi du tableau de bord echappe a la regle',
+    fichier: 'app/dashboard/ConfigDashboard.js', de: 'const fileName = cheminImage(commercantId, `cover-${commercantId}-${Date.now()}.jpg`)', vers: 'const fileName = `cover-${commercantId}-${Date.now()}.jpg`' },
+  { nom: '⚠️ une suppression vise de nouveau le dernier segment',
+    fichier: 'app/dashboard/ConfigDashboard.js', de: '      const objectName = objetDepuisUrl(photo.url)', vers: "      const objectName = (photo.url || '').split('/').pop()" },
+  { nom: '⚠️ le chemin relu garde le parametre de l adresse',
+    fichier: 'lib/stockage-images.js', de: "  const brut = s.slice(i + marque.length).split('?')[0].split('#')[0]", vers: '  const brut = s.slice(i + marque.length)' },
+
   // 🔴 LA LANDING PROMETTRAIT DE NOUVEAU UNE MISE EN LIGNE A LA VALIDATION.
   { nom: '🔴 la landing promet encore la mise en ligne des la validation', banc: 'verif:lancement',
     fichier: LANDING, de: 'Ta commune est déjà ouverte et ta page part en ligne dès qu&rsquo;elle est complète.', vers: 'Ta commune est déjà ouverte et ta page part en ligne dès sa validation.' },

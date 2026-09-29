@@ -146,6 +146,7 @@ import {
   articlesDuLot, patchsDuLot, refusDAjustement, resumeDuLot,
 } from '@/lib/catalogue-lot'
 import OrdreCategories from '@/app/dashboard/OrdreCategories'
+import { cheminImage, objetDepuisUrl } from '@/lib/stockage-images'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -977,7 +978,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     setUploadingPhoto(true)
     // Fiche « façon post » : recadrage 4:5 + filigrane yoppaa (décision 30/07)
     const compressed = await preparerPhotoArticle(file)
-    const fileName = `article-${commercantId}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercantId, `article-${commercantId}-${Date.now()}.jpg`)
     const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (error) { toast('Erreur upload photo', 'error'); setUploadingPhoto(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -997,7 +998,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     setUploadingGalerie(true)
     // Même pipeline 4:5 + filigrane que la photo de couverture
     const compressed = await preparerPhotoArticle(file)
-    const fileName = `article-gal-${articleId}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercantId, `article-gal-${articleId}-${Date.now()}.jpg`)
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { toast('Erreur upload photo', 'error'); setUploadingGalerie(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -2321,7 +2322,7 @@ function VariantesArticle({ article, toast, articles = [] }) {
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo)', 'error'); return }
     setUploadId(id)
     const compressed = await compresserImage(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.85 })
-    const fileName = `variante-${id}-${Date.now()}.jpg`
+    const fileName = cheminImage(article.commercant_id, `variante-${id}-${Date.now()}.jpg`)
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { toast('Erreur upload photo', 'error'); setUploadId(null); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -3244,7 +3245,7 @@ function TabDeals({ commercantId, commercant, toast }) {
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploadingPhoto(true)
     const compressed = await compresserImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85 })
-    const fileName = `deal-${commercantId}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercantId, `deal-${commercantId}-${Date.now()}.jpg`)
     const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (error) { toast('Erreur upload photo', 'error'); setUploadingPhoto(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -3978,7 +3979,7 @@ function TabActus({ commercantId, commercant, toast }) {
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploadingPhoto(true)
     const compressed = await compresserImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.85 })
-    const fileName = `actu-${commercantId}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercantId, `actu-${commercantId}-${Date.now()}.jpg`)
     const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (error) { toast('Erreur upload photo', 'error'); setUploadingPhoto(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -7184,7 +7185,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploadingCouv(true)
     const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
-    const fileName = `cover-${commercantId}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercantId, `cover-${commercantId}-${Date.now()}.jpg`)
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { toast('Erreur upload photo', 'error'); setUploadingCouv(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -7202,7 +7203,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploadingGal(true)
     const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
-    const fileName = `gal-${commercantId}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercantId, `gal-${commercantId}-${Date.now()}.jpg`)
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { toast('Erreur upload photo', 'error'); setUploadingGal(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -7230,7 +7231,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploadingGal(true)
     const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
-    const fileName = `gal-${commercantId}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercantId, `gal-${commercantId}-${Date.now()}.jpg`)
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { toast('Erreur upload photo', 'error'); setUploadingGal(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -7239,7 +7240,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
     if (error) { toast(`Erreur : ${error.message}`, 'error'); setUploadingGal(false); return }
     setGalerie(prev => prev.map(p => (p.id === photo.id ? { ...p, url: urlData.publicUrl } : p)))
     try {
-      const ancien = (photo.url || '').split('/').pop()
+      const ancien = objetDepuisUrl(photo.url)
       if (ancien) await supabase.storage.from('logos').remove([ancien])
     } catch { /* nettoyage best effort */ }
     toast('Photo remplacée'); setUploadingGal(false)
@@ -7263,7 +7264,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
     const { error } = await supabase.from('commercant_photos').delete().eq('id', photo.id)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     try {
-      const objectName = (photo.url || '').split('/').pop()
+      const objectName = objetDepuisUrl(photo.url)
       if (objectName) await supabase.storage.from('logos').remove([objectName])
     } catch { /* nettoyage best effort */ }
     setGalerie(prev => prev.filter(p => p.id !== photo.id))
@@ -7309,7 +7310,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
     if (file.size > 15 * 1024 * 1024) { toast('Logo trop lourd (max 15 Mo brut)', 'error'); return }
     setUploadingLogo(true)
     const compressed = await compresserImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 })
-    const fileName = `${commercantId}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercantId, `${commercantId}-${Date.now()}.jpg`)
     const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (error) { toast('Erreur upload logo', 'error'); setUploadingLogo(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -11294,7 +11295,7 @@ function TabRdvPraticiens({ commercantId, commercant, toast }) {
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploading(true)
     const compressed = await compresserImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 })
-    const fileName = `praticien-${commercantId}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercantId, `praticien-${commercantId}-${Date.now()}.jpg`)
     const { error } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (error) { toast('Erreur upload photo', 'error'); setUploading(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)

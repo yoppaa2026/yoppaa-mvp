@@ -323,6 +323,38 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
     /trim\(\)\.length >= MIN_PRESENTATION/.test(code('lib/score-onboarding.js')))
 }
 
+// ═══ 12) CHAQUE IMAGE DANS LE DOSSIER DE SON COMMERCE (29/09) ═══════════════
+//
+// 🔴 Tout compte connecté pouvait remplacer ou supprimer les images de
+// n'importe quel commerce : rien dans leur chemin ne disait à qui elles
+// étaient. La policy lit désormais le premier dossier.
+{
+  const { cheminImage, objetDepuisUrl, BUCKET_IMAGES } = await import('../lib/stockage-images.js')
+  v('le bucket est celui des policies', BUCKET_IMAGES === 'logos')
+  v('une image se range dans le dossier de son commerce', cheminImage('c1', 'gal-1.jpg') === 'c1/gal-1.jpg')
+  let leve = false
+  try { cheminImage('', 'gal.jpg') } catch { leve = true }
+  v('une image sans commerce est refusée, jamais rangée à la racine', leve)
+  let leve2 = false
+  try { cheminImage('c1', 'a/b.jpg') } catch { leve2 = true }
+  v('un nom ne peut pas s inventer un autre dossier', leve2)
+  const base = 'https://x.supabase.co/storage/v1/object/public/logos/'
+  v('le chemin complet se relit depuis l adresse', objetDepuisUrl(`${base}c1/gal-1.jpg?t=2`) === 'c1/gal-1.jpg')
+  v('une ancienne image à plat se relit aussi', objetDepuisUrl(`${base}gal-c1-1.jpg`) === 'gal-c1-1.jpg')
+  v('une adresse étrangère ne donne rien', objetDepuisUrl('https://exemple.be/photo.jpg') === null)
+
+  const dash = code('app/dashboard/ConfigDashboard.js')
+  const signup = code('app/signup/page.js')
+  const envois = (src) => (src.match(/\.from\('logos'\)\.upload\(/g) || []).length
+  const ranges = (src) => (src.match(/const fileName = cheminImage\(/g) || []).length
+  v('chaque envoi du tableau de bord passe par la règle', envois(dash) >= 10 && ranges(dash) === envois(dash), `${ranges(dash)} / ${envois(dash)}`)
+  v('chaque envoi de l inscription passe par la règle', envois(signup) >= 4 && ranges(signup) === envois(signup), `${ranges(signup)} / ${envois(signup)}`)
+  v('aucune suppression ne coupe l adresse au dernier « / »',
+    !/split\('\/'\)\.pop\(\)/.test(dash + signup) && !/segments\[segments\.length - 1\]/.test(signup))
+  v('les pièces d identité gardent leur propre rangement',
+    /const fileName = `\$\{user\.id\}\/\$\{commercant\.id\}_\$\{kind\}_/.test(signup))
+}
+
 console.log(`\nUne fiche n'est montrée que complète : ${ok} vérifications`)
 
 if (echecs.length > 0) {

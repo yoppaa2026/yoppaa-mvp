@@ -11,6 +11,7 @@ import { TAILLE_CONSEILLEE, avertissementTaille, refusFichierImage, mesurerFichi
 import { logoProvisoireSvg, propositionsLogo } from '@/lib/logo-provisoire'
 import { scoreOnboarding, SEUIL_SOUMISSION } from '@/lib/score-onboarding'
 import { MIN_PRESENTATION } from '@/lib/fiche-complete'
+import { cheminImage, objetDepuisUrl } from '@/lib/stockage-images'
 import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
 import { SHOP_PRODUCTS, classerProduitsParCategorie, prixProduitTexte } from '@/lib/produits-boutique'
 import { FRAIS_STRIPE_TEXTE } from '@/lib/frais-paiement'
@@ -1529,7 +1530,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     setUploadingLogo(true)
     // Compression client automatique (feedback_zero_friction)
     const compressed = await compresserImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 })
-    const fileName = `logo-${commercant.id}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercant.id, `logo-${commercant.id}-${Date.now()}.jpg`)
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { setMsgLogo({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); setUploadingLogo(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -1557,7 +1558,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
       const canvas = await logoProvisoireCanvas(nom, commercant.type, choix)
       const blob = await canvasVersBlob(canvas)
       if (!blob) { setMsgLogo({ ton: 'erreur', titre: 'Génération du logo impossible.' }); return }
-      const fileName = `logo-${commercant.id}-${Date.now()}.png`
+      const fileName = cheminImage(commercant.id, `logo-${commercant.id}-${Date.now()}.png`)
       const { error: upErr } = await supabase.storage.from('logos').upload(fileName, blob, { upsert: true, contentType: 'image/png' })
       if (upErr) { setMsgLogo({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); return }
       const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -1589,7 +1590,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     onSaving?.('saving')
     // Compression client automatique (feedback_zero_friction) — galerie carousel
     const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
-    const fileName = `gal-${commercant.id}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercant.id, `gal-${commercant.id}-${Date.now()}.jpg`)
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { setMsgGalerie({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); setUploadingGalerie(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -1627,7 +1628,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     setUploadingGalerie(true)
     onSaving?.('saving')
     const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
-    const fileName = `gal-${commercant.id}-${Date.now()}.jpg`
+    const fileName = cheminImage(commercant.id, `gal-${commercant.id}-${Date.now()}.jpg`)
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { setMsgGalerie({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); setUploadingGalerie(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
@@ -1637,7 +1638,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     setGalerie(prev => prev.map(p => (p.id === photo.id ? { ...p, url: urlData.publicUrl } : p)))
     setDimsImages(prev => ({ ...prev, [photo.id]: dims }))
     try {
-      const ancien = (photo.url || '').split('/').pop()
+      const ancien = objetDepuisUrl(photo.url)
       if (ancien) await supabase.storage.from('logos').remove([ancien])
     } catch { /* nettoyage best-effort, l'image orpheline ne casse rien */ }
     const av = avertissementTaille(dims, TAILLE_CONSEILLEE.photo, 'photo')
@@ -1651,8 +1652,7 @@ function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving,
     await supabase.from('commercant_photos').delete().eq('id', photo.id)
     // Supprime aussi le fichier dans storage (nom = derniere segment de l'url)
     try {
-      const segments = (photo.url || '').split('/')
-      const objectName = segments[segments.length - 1]
+      const objectName = objetDepuisUrl(photo.url)
       if (objectName) await supabase.storage.from('logos').remove([objectName])
     } catch { /* nettoyage best-effort, l'image orpheline ne casse rien */ }
     setGalerie(prev => prev.filter(p => p.id !== photo.id))

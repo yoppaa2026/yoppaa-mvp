@@ -22,6 +22,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { normaliserTelephone } from '@/lib/fidelite'
 import { jourBruxelles } from '@/lib/timezone'
+import { casquettesDuCompte } from '@/lib/casquettes-server'
+import { connexionEffacable, raisonDeGarder, preinscriptionsAEffacer } from '@/lib/casquettes'
 
 // Statuts qui signifient « le commerçant attend encore quelque chose de moi ».
 const COMMANDES_EN_COURS = ['paiement_en_attente', 'en_attente', 'en_preparation', 'pret']
@@ -49,6 +51,13 @@ export async function POST(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { persistSession: false } }
     )
+
+    // 🔴 UNE CONNEXION, PLUSIEURS CASQUETTES (29/09, proposition A d'Alex).
+    // Lues AVANT tout effacement : un patron, un membre d'équipe ou l'admin
+    // qui supprime son profil Yopper garde sa connexion, qui sert ailleurs.
+    // Sans ça, la base refusait l'effacement de la connexion d'un patron APRÈS
+    // que ses données Yopper eurent été effacées : suppression à moitié faite.
+    const casquettes = await casquettesDuCompte(admin, user)
 
     const email = String(user.email || '').trim().toLowerCase()
 
@@ -142,7 +151,11 @@ export async function POST(request) {
     }
     if (email) {
       await admin.from('demandes_commande').delete().eq('client_email', email)
-      await admin.from('pre_inscriptions').delete().eq('email', email)
+      // ⚠️ Un patron garde sa préinscription de commerçant (sa page de kit, ses
+      // parrainages vivent d'elle) : on n'efface que celle de Yopper.
+      const types = preinscriptionsAEffacer(casquettes)
+      if (types) await admin.from('pre_inscriptions').delete().eq('email', email).in('type_utilisateur', types)
+      else await admin.from('pre_inscriptions').delete().eq('email', email)
     }
 
     // ── 3. Anonymisation de ce que la comptabilité impose de garder ─────────
@@ -183,6 +196,18 @@ export async function POST(request) {
     }
 
     // ── 4. Le compte de connexion lui-même ──────────────────────────────────
+    //
+    // 🔴 SEULEMENT S'IL NE SERT PLUS À RIEN D'AUTRE, et jamais celui de l'admin.
+    // Le profil Yopper est effacé dans tous les cas (étapes 2 et 3) : c'est ce
+    // que la personne a demandé, et ce que le RGPD et les stores exigent.
+    if (!connexionEffacable(casquettes, 'yopper')) {
+      console.info('[yopper/supprimer-compte] profil Yopper supprimé, connexion conservée', { lignes: ids.length, casquettes })
+      return NextResponse.json({
+        ok: true,
+        connexion_conservee: true,
+        message: `Ton profil Yopper est supprimé. ${raisonDeGarder(casquettes, 'yopper')}`,
+      })
+    }
     const { error: errAuth } = await admin.auth.admin.deleteUser(user.id)
     if (errAuth) {
       console.error('[yopper/supprimer-compte] suppression auth échouée', errAuth)

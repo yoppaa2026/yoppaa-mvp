@@ -55,8 +55,11 @@ const MUTATIONS = [
   // rien ne l'a signalé. La chance a fait le travail d'une garde.
   { nom: '🔴 l’effacement du compte lié redevient un espoir',
     fichier: 'app/api/admin/commercants/route.js',
-    de: '      const { error: errAuth } = await admin.auth.admin.deleteUser(c.auth_user_id)\n        .catch((e) => ({ error: e }))',
-    vers: '      const errAuth = null\n      await admin.auth.admin.deleteUser(c.auth_user_id).catch((e) => console.warn(e?.message))' },
+    // ⚠️ ANCRE REPOINTÉE LE 29/09 : l'effacement est désormais imbriqué dans la
+    // règle des casquettes. Cible sur UNE ligne : l'erreur est jetée, le geste
+    // reste, et le `.catch` de la ligne suivante s'accroche toujours.
+    de: 'const { error: errAuth } = await admin.auth.admin.deleteUser(c.auth_user_id)',
+    vers: 'const errAuth = null; await admin.auth.admin.deleteUser(c.auth_user_id)' },
 
   { nom: '🔴 l’échec ne remonte plus jusqu’à l’écran',
     fichier: 'app/api/admin/commercants/route.js',

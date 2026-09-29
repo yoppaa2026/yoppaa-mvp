@@ -18,6 +18,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { adminVerifie } from '@/lib/api-auth'
 import { estAdresseAdmin } from '@/lib/admin-identite'
+import { casquettesDuCompte } from '@/lib/casquettes-server'
+import { connexionEffacable, raisonDeGarder } from '@/lib/casquettes'
 
 
 async function requireAdmin(request) {
@@ -280,15 +282,36 @@ export async function DELETE(request) {
     // ⚠️ ET C'EST PRÉCISÉMENT CE SILENCE QUI A SAUVÉ L'ACCÈS D'ALEX : le
     // commerce « Dermaé » était rattaché à son compte, l'effacement a échoué, et
     // rien ne l'a signalé. La chance a fait le travail d'une garde.
+    //
+    // 🔴 UNE CONNEXION, PLUSIEURS CASQUETTES (29/09, proposition A d'Alex). Le
+    // patron peut être aussi Yopper, patron d'un autre commerce, membre d'une
+    // équipe, ou l'admin. Effacer sa connexion lui retirait TOUT le reste, sans
+    // le savoir : son profil Yopper restait en base, orphelin. On n'efface la
+    // connexion que si le commerce était sa DERNIÈRE casquette.
     let compteSupprime = null
+    let compteConserve = null
     if (c.auth_user_id) {
-      const { error: errAuth } = await admin.auth.admin.deleteUser(c.auth_user_id)
-        .catch((e) => ({ error: e }))
-      if (errAuth) {
-        console.error('[admin/commercants DELETE] compte auth NON supprimé', errAuth?.message, { cid })
+      const { data: lu, error: errLu } = await admin.auth.admin.getUserById(c.auth_user_id)
+      if (errLu && !/not found/i.test(errLu.message || '')) {
+        console.error('[admin/commercants DELETE] compte illisible, NON supprimé', errLu?.message, { cid })
         compteSupprime = false
-      } else {
-        compteSupprime = true
+      } else if (lu?.user) {
+        // ⚠️ LE COMMERCE EST DÉJÀ EFFACÉ, DONC RIEN NE SE RETIRE DU CALCUL
+        // (`null`) : une casquette « commerce » qui reste, c'est un AUTRE de ses
+        // commerces, et elle doit garder la connexion.
+        const casquettes = await casquettesDuCompte(admin, lu.user)
+        if (!connexionEffacable(casquettes, null)) {
+          compteConserve = raisonDeGarder(casquettes, null, 'admin')
+        } else {
+          const { error: errAuth } = await admin.auth.admin.deleteUser(c.auth_user_id)
+            .catch((e) => ({ error: e }))
+          if (errAuth) {
+            console.error('[admin/commercants DELETE] compte auth NON supprimé', errAuth?.message, { cid })
+            compteSupprime = false
+          } else {
+            compteSupprime = true
+          }
+        }
       }
     }
     if (c.logo_url && c.logo_url.includes('/logos/')) {
@@ -301,6 +324,10 @@ export async function DELETE(request) {
       deleted: c.nom,
       // `null` = il n'y avait aucun compte à supprimer, et ce n'est pas `false`.
       compte_supprime: compteSupprime,
+      ...(compteConserve ? {
+        compte_conserve: true,
+        information: `Le commerce est supprimé. ${compteConserve}`,
+      } : {}),
       ...(compteSupprime === false ? {
         avertissement: `Le commerce est supprimé, mais son compte de connexion existe toujours : ${c.nom} peut encore se connecter. À supprimer à la main dans Supabase Auth.`,
       } : {}),

@@ -213,7 +213,13 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
         setBlockInfo(j); setDeleting(false); return
       }
       if (!res.ok || !j.ok) throw new Error(j.message || j.error || 'Erreur suppression')
-      if (toast) toast(`${commercant.nom} supprimé définitivement`, 'success')
+      // ⚠️ LA ROUTE DIT CE QU'ELLE A GARDÉ, OU RATÉ, ET L'ÉCRAN LE LIT (29/09).
+      // L'avertissement « compte de connexion toujours là » existait depuis le
+      // 30/08, et n'était affiché nulle part.
+      if (toast) {
+        if (j.avertissement) toast(j.avertissement, 'error')
+        else toast(j.information || `${commercant.nom} supprimé définitivement`, 'success')
+      }
       if (onDeleted) onDeleted(commercant.id)
       onClose()
     } catch (e) {

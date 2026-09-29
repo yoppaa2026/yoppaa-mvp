@@ -240,7 +240,11 @@ function sansCommentaires(src) {
   verifier('elle refuse d’effacer le compte du demandeur',
     /c\.auth_user_id === user\.id/.test(src))
   verifier('et elle refuse aussi par l’adresse du compte visé',
-    /getUserById\(c\.auth_user_id\)/.test(src)
+    // 🔴 VISÉE AU NOM DE LA VARIABLE (29/09) : la règle des casquettes a ajouté
+    // un SECOND `getUserById(c.auth_user_id)` plus bas. Écrite sur le seul
+    // appel, la garde trouvait l'autre et restait verte quand celui-ci
+    // disparaissait (mesuré par `mutations-admin`).
+    /const \{ data: vise \} = await admin\.auth\.admin\.getUserById\(c\.auth_user_id\)/.test(src)
     // ⚠️ 29/09 : l'adresse ne vit plus qu'en un endroit (lib/admin-identite.js),
     // la comparaison passe par `estAdresseAdmin`. La garde suit, elle ne
     // s'éteint pas.

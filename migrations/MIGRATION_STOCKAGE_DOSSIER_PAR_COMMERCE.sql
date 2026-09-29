@@ -115,7 +115,9 @@ SELECT 'A3', 'remplacement : ' || coalesce((SELECT permissive || ' / ' || cmd FR
 UNION ALL
 SELECT 'A4', 'suppression : ' || coalesce((SELECT permissive || ' / ' || cmd FROM pg_policies
                   WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'logos_suppression_mon_dossier'), 'ABSENTE'),
-       (SELECT CASE WHEN qual LIKE '%foldername%' AND qual LIKE '%position%' THEN 'oui' ELSE 'NON' END
+       -- ⚠️ ILIKE, PAS LIKE (relevé le 29/09) : PostgreSQL réécrit la règle avec
+       -- POSITION en MAJUSCULES, et un LIKE sur « position » rendait un faux NON.
+       (SELECT CASE WHEN qual ILIKE '%foldername%' AND qual ILIKE '%position%' THEN 'oui' ELSE 'NON' END
           FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects'
            AND policyname = 'logos_suppression_mon_dossier' AND permissive = 'PERMISSIVE'),
        'oui'

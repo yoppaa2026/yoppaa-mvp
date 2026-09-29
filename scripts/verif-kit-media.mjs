@@ -165,17 +165,31 @@ const egal = (nom, obtenu, attendu) =>
   // aurait été tronquée sur l'affiche collée en vitrine.
   for (const [quoi, motif] of [
     ['le nom du commerce', /taillePourTenir\(nomCommerce, 42, 700\)/],
-    ['la première ligne de l\'accroche', /taillePourTenir\(TEXTES_AFFICHE\.accroche, 54, 900\)/],
-    ['la seconde ligne', /taillePourTenir\(TEXTES_AFFICHE\.accrocheSuite, 54, 900\)/],
+    // ⚠️ ANCRES REPOINTÉES LE 29/09 : les textes sont devenus un PARAMÈTRE
+    // (`textes`), pour que le carton de table réutilise le même dessin. La
+    // garde mesure toujours la même chose : chaque texte tient dans la page.
+    ['la première ligne de l\'accroche', /taillePourTenir\(textes\.accroche, 54, 900\)/],
+    ['la seconde ligne', /taillePourTenir\(textes\.accrocheSuite, 54, 900\)/],
     ['le slogan', /taillePourTenir\(LOGO\.slogan/],
-    ['le pied', /taillePourTenir\(TEXTES_AFFICHE\.pied, 28, 600\)/],
+    ['le pied', /taillePourTenir\(textes\.pied, 28, 600\)/],
   ]) {
     verifie(`${quoi} est contraint à la largeur`, motif.test(bloc), 'il déborderait en silence')
   }
   // ⚠️ LES DEUX LIGNES DE L'ACCROCHE PARTAGENT UNE SEULE TAILLE : réglées
   // séparément, une même phrase sortirait en deux corps différents.
   verifie('les deux lignes de l\'accroche gardent le même corps',
-    /Math\.min\(\s*taillePourTenir\(TEXTES_AFFICHE\.accroche/.test(bloc))
+    /Math\.min\(\s*taillePourTenir\(textes\.accroche/.test(bloc))
+  // 🔴 ET L'AFFICHE DE VITRINE GARDE SON ACCROCHE (29/09). Les textes sont un
+  // paramètre : sans cette valeur par défaut, l'affiche sortirait sans phrase,
+  // puisque ses deux appelants ne passent rien.
+  verifie('🔴 l\'affiche de vitrine dit, par défaut, l\'accroche d\'Alex',
+    /construireAffiche\(\{ qrDataUrl, nomCommerce = '', clair = true, textes = TEXTES_AFFICHE \}/.test(bloc))
+  verifie('et ce sont bien ces textes-là qui sont dessinés',
+    /ctx\.fillText\(textes\.accroche, W \/ 2, yAccroche1\)/.test(bloc)
+    && /ctx\.fillText\(textes\.accrocheSuite, W \/ 2, yAccroche2\)/.test(bloc)
+    && /ctx\.fillText\(textes\.pied, W \/ 2, yPied\)/.test(bloc))
+  verifie('aucun texte d\'affiche n\'est plus lu en dur dans le dessin',
+    !/fillText\(TEXTES_AFFICHE\./.test(bloc) && !/taillePourTenir\(TEXTES_AFFICHE\./.test(bloc))
   // ⚠️ ET LA TAILLE CALCULÉE EST RÉELLEMENT UTILISÉE. Mesuré : en remettant un
   // corps fixe sur l'accroche, les gardes ci-dessus restaient vertes — le
   // calcul était toujours écrit, son résultat n'allait simplement plus nulle
@@ -755,6 +769,22 @@ const egal = (nom, obtenu, attendu) =>
   verifie('🔴 et ce qui suit aussi', depouille.includes('GARDE_APRES'))
   verifie('la prose, elle, a bien disparu', !depouille.includes('sert /_next'))
   verifie('le vrai commentaire de bloc aussi', !depouille.includes('rien à faire'))
+
+  // 🔴 LE PIÈGE CI-DESSUS NE MESURAIT PLUS L'ÉTAPE 1 DEPUIS LE 25/09. Son
+  // « /* » est COLLÉ à une lettre (`media/*`) : l'étape 0, ajoutée ce jour-là
+  // pour `accept="image/*"`, le désarme AVANT l'étape 1. Casser l'étape 1
+  // laissait donc ce banc vert (trouvé le 29/09 par `mutations-jauge-kit`).
+  // Ce second piège a son « /* » après une ESPACE : seule l'étape 1 le désarme.
+  const PIEGE_ESPACE = [
+    '// ce commentaire cite /* sans jamais le fermer',
+    'const GARDE_ESPACE = 1',
+    "} catch { /* rien à faire */ }",
+    'const GARDE_ESPACE_APRES = 2',
+  ].join('\n')
+  const depouilleEspace = sansProse(PIEGE_ESPACE)
+  verifie('🔴 un « /* » précédé d’une espace dans un commentaire n’avale rien',
+    depouilleEspace.includes('GARDE_ESPACE = 1') && depouilleEspace.includes('GARDE_ESPACE_APRES'),
+    JSON.stringify(depouilleEspace).slice(0, 120))
 
   // Le cas normal ne doit pas régresser : un vrai bloc part en entier.
   const normal = sansProse('const a = 1\n/* un vrai bloc\n   sur deux lignes */\nconst b = 2')

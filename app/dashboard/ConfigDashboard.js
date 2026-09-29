@@ -15,7 +15,7 @@ import {
   FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
 } from '@/lib/plans'
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
-import { nomDeLaCarte } from '@/lib/types-commerce'
+import { nomDeLaCarte, sertAManger } from '@/lib/types-commerce'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
@@ -31,7 +31,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
-import { TEXTES_AFFICHE, telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
+import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import BlocAide, { EtapeAide, enGras } from './BlocAide'
@@ -87,7 +87,7 @@ import {
 } from '@/lib/visuel-partage'
 // ⚠️ L'ADRESSE PUBLIQUE VIENT DE SA SOURCE UNIQUE. La recomposer ici aurait
 // remis une septième fabrique de la même chaîne dans le projet.
-import { lienFiche, postAvecSignature } from '@/lib/lien-fiche'
+import { lienFiche, lienCarte, postAvecSignature } from '@/lib/lien-fiche'
 import { BarreEnregistrer, ModaleQuitter, useAvertirAvantDeQuitter } from './BarreEnregistrer'
 // ⚠️ Le POSTE qui affiche ces fenêtres est monté une seule fois, dans
 // `app/dashboard/page.js`, qui rend cet écran. On n'importe ici que la
@@ -8343,10 +8343,77 @@ function TabAccompagnement({ commercantId, commercant, toast }) {
   )
 }
 
+// ─── Les cartons de table : un QR qui ouvre la carte (29/09) ─────────────────
+//
+// ⚠️ DEMANDE D'UN RESTAURATEUR : il réimprimait ses menus chaque semaine pour
+// ses suggestions et son lunch du jour. Le QR ne change jamais ; c'est la carte
+// derrière lui qui suit son catalogue.
+function CarteTableBloc({ slug, nomCommerce, clair, toast }) {
+  const url = lienCarte(slug)
+  const [qr, setQr] = useState(null)
+  const [enCours, setEnCours] = useState(null)
+
+  useEffect(() => {
+    if (!url) return
+    let actif = true
+    import('qrcode').then(m => m.default.toDataURL(url, {
+      width: 900, margin: 1,
+      color: { dark: '#1A0840', light: '#FFFFFF' },
+      errorCorrectionLevel: 'H',
+    })).then(d => { if (actif) setQr(d) })
+      .catch(() => toast('Erreur génération du QR de table', 'error'))
+    return () => { actif = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- le QR ne dépend que de l'adresse
+  }, [url])
+
+  async function telecharger(format) {
+    if (enCours) return
+    setEnCours(format)
+    try {
+      const fait = await telechargerCarteTablePdf({ qrDataUrl: qr, nomCommerce, clair, slug, format })
+      toast(fait ? 'Cartons de table téléchargés' : 'QR pas encore prêt', fait ? 'success' : 'error')
+    } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
+    setEnCours(null)
+  }
+
+  if (!url) return null
+  return (
+    <div style={{ borderTop: `1px solid ${T.hairline}`, paddingTop: 16, marginBottom: 16 }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Le QR de tes tables</p>
+      <p style={{ fontSize: 12, color: T.ink, lineHeight: 1.55, marginBottom: 10 }}>
+        Posé sur tes tables, ce QR ouvre <strong>ta carte</strong>, sans réservation ni commande : tes clients la lisent, c&rsquo;est tout.
+        Quand tu changes un plat dans ton catalogue, la carte suit. Tu n&rsquo;as plus rien à réimprimer.
+      </p>
+      <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, marginBottom: 10 }}>
+        Tes suggestions et ton lunch du jour : range-les dans une catégorie que tu places en tête. Un plat que tu désactives certains jours disparaît de la carte ces jours-là.
+      </p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          onClick={() => telecharger('A4-4')} disabled={!qr || !!enCours}>
+          <FileText size={13} strokeWidth={1.8}/> {enCours === 'A4-4' ? 'Préparation…' : 'A4, 4 cartons'}
+        </button>
+        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          onClick={() => telecharger('A5')} disabled={!qr || !!enCours}>
+          <FileText size={13} strokeWidth={1.8}/> {enCours === 'A5' ? 'Préparation…' : 'A5, 1 carton'}
+        </button>
+      </div>
+      <p style={{ fontSize: 10.5, color: T.muted, marginBottom: 10, lineHeight: 1.5 }}>
+        L&rsquo;A4 se coupe en quatre le long des pointillés, chaque carton se glisse dans un chevalet. Le carton dit « {TEXTES_CARTE_TABLE.accroche.toLowerCase()} {TEXTES_CARTE_TABLE.accrocheSuite.toLowerCase()} ».
+      </p>
+      <a href={url} target="_blank" rel="noopener noreferrer"
+        style={{ ...s.btn, ...s.btnGhost, width: '100%', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', boxSizing: 'border-box' }}>
+        <Eye size={14} strokeWidth={1.8}/> Voir ta carte comme tes clients
+      </a>
+    </div>
+  )
+}
+
 // ─── Composant QR Code imprimable ─────────────────────────────────────────────
 function QRCodeSection({ commercantId, toast }) {
   const [slug, setSlug]           = useState(null)
   const [nomCommerce, setNomCommerce] = useState('')
+  // Le type dit si le commerce sert à manger : seul lui a des tables.
+  const [typeCommerce, setTypeCommerce] = useState(null)
   const [loading, setLoading]     = useState(true)
   const [qrDataUrl, setQrDataUrl] = useState(null)
   // Ce que le commerçant doit coller dans sa fiche Google, ou null s’il n’a
@@ -8414,8 +8481,11 @@ function QRCodeSection({ commercantId, toast }) {
       // l'autorise). Une colonne absente d'un select ne lève aucune erreur : la
       // consigne aurait simplement disparu sans un mot. `essai_plan` et
       // `created_at` pour la même raison : la consigne suit le forfait EFFECTIF.
-      const { data } = await supabase.from('commercants').select('slug, nom, plan, essai_plan, created_at, categorie').eq('id', commercantId).single()
-      if (data) { setSlug(data.slug); setNomCommerce(data.nom || ''); setConsigneG(consigneGoogle(data)) }
+      //
+      // ⚠️ `type` AUSSI, depuis le 29/09 : sans lui, le bloc des cartons de table
+      // disparaîtrait chez tous les restaurants, sans un mot.
+      const { data } = await supabase.from('commercants').select('slug, nom, plan, essai_plan, created_at, categorie, type').eq('id', commercantId).single()
+      if (data) { setSlug(data.slug); setNomCommerce(data.nom || ''); setConsigneG(consigneGoogle(data)); setTypeCommerce(data.type || null) }
       setLoading(false)
     }
     fetchSlug()
@@ -8556,6 +8626,13 @@ function QRCodeSection({ commercantId, toast }) {
       <p style={{ fontSize: 10.5, color: T.muted, marginBottom: 16, lineHeight: 1.5 }}>
         Le PDF garde ses dimensions à l&rsquo;impression. Ouvre-le, puis imprime depuis ton lecteur habituel.
       </p>
+
+      {/* ⚠️ LE QR DES TABLES N'EST PAS CELUI DE LA VITRINE (29/09). Il mène à
+          la carte, pas à la fiche : le client est déjà assis. Seulement pour un
+          commerce qui sert à manger, les autres n'ont pas de tables. */}
+      {sertAManger(typeCommerce) && (
+        <CarteTableBloc slug={slug} nomCommerce={nomCommerce} clair={fondClair} toast={toast}/>
+      )}
 
       {/* ─── LA FICHE GOOGLE ──────────────────────────────────────
           ⚠️ DEMANDE D'ALEX (24/08). L'affiche touche ceux qui passent devant la

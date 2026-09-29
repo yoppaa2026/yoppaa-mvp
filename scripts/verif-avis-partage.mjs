@@ -347,8 +347,10 @@ const egal = (nom, obtenu, attendu) =>
   verifie('🔴 la PAGE DE KIT aussi', /<ConsigneGoogle consigne=\{consigne\} sombre\/>/.test(kitClient))
   // ⚠️ PRÉCISÉES LE 15/09 : la consigne suit le forfait EFFECTIF, les deux
   // requêtes chargent aussi `essai_plan` et `created_at`.
+  // ⚠️ ANCRE REPOINTÉE LE 29/09 : la même requête lit aussi `type`, pour le
+  // bloc des cartons de table (`verif:carte-table` le surveille de son côté).
   verifie('le tableau de bord rapatrie plan, essai et catégorie',
-    /\.select\('slug, nom, plan, essai_plan, created_at, categorie'\)/.test(bord))
+    /\.select\('slug, nom, plan, essai_plan, created_at, categorie, type'\)/.test(bord))
   verifie('la page de kit aussi', /\.select\('nom, slug, plan, essai_plan, created_at, categorie'\)/.test(kitPage))
 
   // ⚠️ LE LIEN DONNÉ AU COMMERÇANT EST CELUI QUE LE QR IMPRIME. Trois formes

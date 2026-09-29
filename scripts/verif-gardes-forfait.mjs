@@ -461,7 +461,8 @@ for (const r of ROUTES) {
       ['charge l’essai', /'nom, slug, plan, essai_plan, created_at, categorie'/],
     ] },
     { nom: 'le tableau de bord', chemin: 'app/dashboard/ConfigDashboard.js', regles: [
-      ['la consigne Google charge l’essai', /'slug, nom, plan, essai_plan, created_at, categorie'/],
+      // ⚠️ Ancre repointée le 29/09 : la requête lit aussi `type` (cartons de table).
+      ['la consigne Google charge l’essai', /'slug, nom, plan, essai_plan, created_at, categorie, type'/],
       ['la limite d’actus lit le forfait effectif', /const planResolu = planEffectif\(commercant\)/],
     ] },
   ]

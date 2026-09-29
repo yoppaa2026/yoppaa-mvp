@@ -188,8 +188,8 @@ const MUTATIONS = [
 
   { nom: '🔴 la consigne Google du tableau de bord ne charge plus l’essai',
     fichier: BORD,
-    de: "'slug, nom, plan, essai_plan, created_at, categorie'",
-    vers: "'slug, nom, plan, categorie'" },
+    de: "'slug, nom, plan, essai_plan, created_at, categorie, type'",
+    vers: "'slug, nom, plan, categorie, type'" },
 
   { nom: '🔴 la limite d’actus relit le forfait choisi',
     fichier: BORD,

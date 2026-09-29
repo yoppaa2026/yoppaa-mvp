@@ -122,6 +122,18 @@ function fichiers(dossier, acc = []) {
   v('le retour en arrière est écrit', /POUR REVENIR EN ARRIÈRE/.test(sql))
 }
 
+// ═══ 7) LE MOT DE PASSE DE L'ADMIN SE CHANGE DEPUIS L'ADMIN (29/09) ════════
+//
+// Alex n'a pas de commerce : « Mon compte » lui était inaccessible.
+{
+  const porte = code('app/admin/DoubleAuth.js')
+  v('un code par email est demandé avant tout changement', /await supabase\.auth\.reauthenticate\(\)/.test(porte))
+  v('le changement porte ce code', /supabase\.auth\.updateUser\(\{ password: mdp, nonce \}\)/.test(porte))
+  v('les deux saisies se comparent brutes, espaces compris', /if \(mdp !== mdpBis\)/.test(porte) && !/mdp\.trim\(\)/.test(porte))
+  v('la longueur minimale est celle de « Mon compte »', /if \(!mdpAssezLong\(mdp\)\)/.test(porte))
+  v('la section le propose', /<ChangerMotDePasseAdmin toast=\{toast\}\/>/.test(porte))
+}
+
 console.log(`\nDouble authentification de l'admin : ${ok} vérifications`)
 
 if (echecs.length > 0) {

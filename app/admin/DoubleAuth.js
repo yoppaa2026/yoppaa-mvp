@@ -20,6 +20,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { messageAuth, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
 
 const T = {
   main: '#6B35C4', pale: '#EDE0FF', ink: '#1A0840', deep: '#2D0F6B', muted: '#6B7280',
@@ -218,6 +219,89 @@ export function SectionSecuriteAdmin({ toast, etat, onChange }) {
         </div>
       )}
       {erreur && <p role="alert" style={{ margin: '10px 0 0', fontSize: 12.5, fontWeight: 700, color: T.rouge }}>{erreur}</p>}
+
+      <ChangerMotDePasseAdmin toast={toast}/>
+    </div>
+  )
+}
+
+// ─── CHANGER LE MOT DE PASSE DE L'ADMIN (29/09) ─────────────────────────────
+//
+// 🔴 POURQUOI ICI (Alex, 29/09 : « je n'ai pas de commerçant sur mon compte
+// admin »). Le seul écran qui change un mot de passe est « Mon compte », dans
+// le tableau de bord d'un commerce : sans commerce, l'admin n'y a pas accès,
+// et en mode admin ce réglage est masqué exprès (il changerait le sien en
+// croyant changer celui du commerçant).
+//
+// ⚠️ LE MÊME CHEMIN QUE « MON COMPTE », pas un second : un code à huit
+// chiffres par email (`reauthenticate()`), puis `updateUser({ password,
+// nonce })`, avec les mêmes messages et la même longueur minimale
+// (lib/messages-auth.js). Voir `demanderCode` et `changerMotDePasse` dans
+// ConfigDashboard.js.
+function ChangerMotDePasseAdmin({ toast }) {
+  const [etape, setEtape] = useState('repos') // repos | code
+  const [code, setCode] = useState('')
+  const [mdp, setMdp] = useState('')
+  const [mdpBis, setMdpBis] = useState('')
+  const [envoi, setEnvoi] = useState(false)
+
+  async function demanderCode() {
+    setEnvoi(true)
+    const { error } = await supabase.auth.reauthenticate()
+    setEnvoi(false)
+    if (error) { toast?.(messageAuth(error), 'error'); return }
+    setEtape('code')
+    toast?.('Un code vient de partir vers ton adresse de connexion.', 'success')
+  }
+
+  async function changer() {
+    const nonce = code.trim()
+    if (!nonce) { toast?.('Recopie le code reçu par email.', 'error'); return }
+    if (!mdpAssezLong(mdp)) { toast?.(`Ton mot de passe doit faire au moins ${MDP_MIN} caractères.`, 'error'); return }
+    // Comparaison sur la saisie BRUTE : un espace final fait partie du mot de passe.
+    if (mdp !== mdpBis) { toast?.('Les deux mots de passe ne sont pas identiques.', 'error'); return }
+    setEnvoi(true)
+    const { error } = await supabase.auth.updateUser({ password: mdp, nonce })
+    setEnvoi(false)
+    if (error) { toast?.(messageAuth(error), 'error'); return }
+    // Un code ne sert qu'une fois : on vide tout.
+    setEtape('repos'); setCode(''); setMdp(''); setMdpBis('')
+    toast?.('Ton mot de passe est changé.', 'success')
+  }
+
+  const champ = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 14, borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontFamily: 'inherit', color: T.ink }
+
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${T.hairline}` }}>
+      <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 900, color: T.ink }}>Ton mot de passe</p>
+      <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>
+        Long et unique : seize caractères ou plus, générés par ton gestionnaire de mots de passe (Proton Pass, par exemple). Tu n&apos;as pas à le retenir.
+      </p>
+      {etape === 'repos' ? (
+        <button onClick={demanderCode} disabled={envoi}
+          style={{ background: 'none', border: `1.5px solid ${T.main}`, color: T.main, borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 800, cursor: envoi ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+          {envoi ? 'Envoi du code…' : 'Changer mon mot de passe'}
+        </button>
+      ) : (
+        <div style={{ display: 'grid', gap: 8, maxWidth: 360 }}>
+          <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+            inputMode="numeric" autoComplete="one-time-code" placeholder="Code reçu par email" aria-label="Code reçu par email" style={champ}/>
+          <input value={mdp} onChange={e => setMdp(e.target.value)} type="password" autoComplete="new-password"
+            placeholder="Nouveau mot de passe" aria-label="Nouveau mot de passe" style={champ}/>
+          <input value={mdpBis} onChange={e => setMdpBis(e.target.value)} type="password" autoComplete="new-password"
+            placeholder="Le même, une seconde fois" aria-label="Confirmer le nouveau mot de passe" style={champ}/>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={changer} disabled={envoi}
+              style={{ background: T.main, color: '#fff', border: 'none', borderRadius: 10, padding: '9px 16px', fontSize: 13, fontWeight: 800, cursor: envoi ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+              {envoi ? 'Enregistrement…' : 'Enregistrer le nouveau mot de passe'}
+            </button>
+            <button onClick={() => { setEtape('repos'); setCode(''); setMdp(''); setMdpBis('') }}
+              style={{ background: 'none', border: `1.5px solid ${T.hairline}`, color: T.muted, borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

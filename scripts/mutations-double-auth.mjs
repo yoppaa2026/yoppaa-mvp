@@ -38,6 +38,12 @@ const MUTATIONS = [
     fichier: 'app/admin/DoubleAuth.js', de: "  if (data?.currentLevel === 'aal2') return 'ok'", vers: "  if (data?.nextLevel === 'aal2') return 'ok'" },
   { nom: '⚠️ une policy des pieces d identite recompare l adresse',
     fichier: 'migrations/MIGRATION_ADMIN_CENTRALISE.sql', de: "    AND ((storage.foldername(name))[1] = (auth.uid())::text OR public.is_yoppaa_admin())", vers: "    AND ((storage.foldername(name))[1] = (auth.uid())::text OR (auth.jwt() ->> 'email') = 'verstappenalexandre@gmail.com')" },
+  // ─── LE MOT DE PASSE DE L ADMIN ─────────────────────────────────────────
+  { nom: '🔴 le mot de passe change sans le code envoye par email',
+    fichier: 'app/admin/DoubleAuth.js', de: '    const { error } = await supabase.auth.updateUser({ password: mdp, nonce })', vers: '    const { error } = await supabase.auth.updateUser({ password: mdp })' },
+  { nom: '⚠️ un espace final disparait du mot de passe',
+    fichier: 'app/admin/DoubleAuth.js', de: '    if (mdp !== mdpBis) {', vers: '    if (mdp.trim() !== mdpBis.trim()) {' },
+
   // ─── ETAPE 4 ─────────────────────────────────────────────────────────────
   { nom: '🔴 le serveur cesse d exiger le code',
     fichier: 'lib/api-auth.js', de: 'export const EXIGER_DOUBLE_AUTH_ADMIN = true', vers: 'export const EXIGER_DOUBLE_AUTH_ADMIN = false' },

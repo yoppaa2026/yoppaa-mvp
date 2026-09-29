@@ -220,7 +220,9 @@ const membre = (o = {}) => ({
   const serveur = code('lib/equipe-server.js')
   v('🔴 la garde du membre le cherche dans CE commerce, pour CE compte, actif',
     /\.eq\('commercant_id', commercantId\)\.eq\('auth_user_id', user\.id\)\.eq\('statut', 'actif'\)/.test(serveur))
-  v('🔴 puis applique peutAgir', /if \(!peutAgir\(\{ membre, commercant, droit \}\)\) return \{ ok: false, status: 403/.test(serveur))
+  // ⚠️ ANCRE REPOINTÉE À L'ÉTAPE 2 (29/09) : la garde accepte une LISTE de cases.
+  v('🔴 puis applique peutAgir à chaque case, et refuse si aucune n’est ouverte',
+    /permis\[d\] = peutAgir\(\{ membre, commercant, droit: d \}\)/.test(serveur) && /if \(!Object\.values\(permis\)\.some\(Boolean\)\) return \{ ok: false, status: 403/.test(serveur))
   v('🔴 un membre ne gère pas l’équipe (garde du patron : propriétaire ou admin vérifié)',
     /const patron = commercant\.auth_user_id === user\.id/.test(serveur) && /if \(!patron && !\(await adminVerifie\(request, user\)\)\) return \{ ok: false, status: 403/.test(serveur))
   v('🔴 une lecture ratée lève, elle ne répond pas « personne »', (serveur.match(/if \(error\) throw new Error/g) || []).length >= 3)
@@ -272,6 +274,105 @@ const membre = (o = {}) => ({
   }
   v('🔴 la page de connexion trie son retour', /const nextPath = cheminInterne\(searchParams\?\.get\('next'\), '\/dashboard'\)/.test(code('app/login/page.js')))
   v('🔴 la page de session aussi', /const next = cheminInterne\(searchParams\.get\('next'\), '\/dashboard'\)/.test(code('app/auth/session/page.js')))
+}
+
+// ═══ 11) ÉTAPE 2 : CE QUE LE POSTE LIT ═══════════════════════════════════════
+{
+  const P = await import('../lib/equipe-poste.js')
+  const S = await import('../lib/statuts-commande.js')
+  // ⚠️ LES JOINTURES SE RETIRENT D'ABORD : `commande_articles(quantite, …)`
+  // découpée à la virgule faisait passer `article_nom` pour une colonne de
+  // `commandes` (le banc s'est trompé le 29/09, pas le code).
+  const colonnes = (liste) => liste.replace(/[\w:]+\([^)]*\)/g, '').split(',').map(x => x.trim()).filter(Boolean)
+  const schema = lire('scripts/schema-supabase.txt')
+  const tableDuSchema = (t) => ((schema.match(new RegExp(`^${t}: (.+)$`, 'm')) || [])[1] || '').split(',')
+
+  // 🔴 UNE COLONNE ABSENTE FAIT ÉCHOUER TOUTE LA LECTURE : chaque nom existe.
+  const cmd = tableDuSchema('commandes')
+  const absentesCmd = colonnes(P.COLONNES_COMMANDE_EQUIPE).filter(c => !cmd.includes(c))
+  v('🔴 chaque colonne lue sur `commandes` existe', cmd.length > 30 && absentesCmd.length === 0, absentesCmd.join(', '))
+  // Les colonnes arrivées APRÈS le relevé du 28/08 se prouvent par leur migration.
+  const APRES_RELEVE = { couverts: 'MIGRATION_COUVERTS_TABLE.sql' }
+  const rdv = tableDuSchema('rdv_reservations')
+  const absentesRdv = colonnes(P.COLONNES_RDV_EQUIPE).filter(c => !rdv.includes(c) && !(APRES_RELEVE[c] && /ADD COLUMN IF NOT EXISTS couverts/.test(lire(`migrations/${APRES_RELEVE[c]}`))))
+  v('🔴 chaque colonne lue sur `rdv_reservations` existe', rdv.length > 30 && absentesRdv.length === 0, absentesRdv.join(', '))
+  for (const c of ['client_prenom', 'updated_at', 'note', 'date_retrait']) {
+    v(`🔴 « ${c} » n'est pas demandée sur commandes (elle n'y existe pas)`, !colonnes(P.COLONNES_COMMANDE_EQUIPE).includes(c))
+  }
+
+  // 🔴 CE QUI NE SORT JAMAIS.
+  const toutes = `${P.COLONNES_RDV_EQUIPE}, ${P.COLONNES_COMMANDE_EQUIPE}, ${P.COLONNES_COMMERCE_POSTE}`
+  for (const interdit of ['annulation_token', 'stripe_', 'client_email', 'notes_commercant', 'bons_utilises', 'empreinte_', 'rgpd_', 'email', 'auth_user_id', '*']) {
+    v(`🔴 le Poste ne lit jamais « ${interdit} »`, !toutes.includes(interdit))
+  }
+  // Ce que lit le calcul du paiement : sans ces colonnes, « reste à payer » mentirait.
+  for (const c of ['prix_estime', 'acompte_montant', 'acompte_paye', 'acompte_paye_en_ligne', 'fidelite_remise', 'bon_cadeau_montant', 'encaisse_mode', 'encaisse_montant', 'abonnement_id', 'statut']) {
+    v(`le paiement d'un rendez-vous se calcule (« ${c} » lue)`, colonnes(P.COLONNES_RDV_EQUIPE).includes(c))
+  }
+  for (const c of ['total', 'paye_en_ligne', 'encaisse_mode', 'encaisse_montant', 'bon_cadeau_montant', 'fidelite_remise', 'mode_retrait']) {
+    v(`le paiement d'une commande se calcule (« ${c} » lue)`, colonnes(P.COLONNES_COMMANDE_EQUIPE).includes(c))
+  }
+  v('l’agenda reçoit ce qu’il groupe (capacité, couverts, table)', /capacite_creneau/.test(P.COLONNES_RDV_EQUIPE) && /couverts/.test(P.COLONNES_RDV_EQUIPE) && /par_couverts/.test(P.COLONNES_RDV_EQUIPE))
+
+  // Les fenêtres.
+  const f = P.fenetres('2026-10-01', { horizonCommande: 1 })
+  v('l’agenda : une semaine derrière, deux mois devant', f.agenda.debut === '2026-09-24' && f.agenda.fin === '2026-11-30', JSON.stringify(f.agenda))
+  v('les commandes : deux jours derrière, une semaine devant au moins', f.commandes.debut === '2026-09-29' && f.commandes.fin === '2026-10-08', JSON.stringify(f.commandes))
+  v('un horizon plus long est suivi', P.fenetres('2026-10-01', { horizonCommande: 14 }).commandes.fin === '2026-10-15')
+
+  // 🔴 LE LIVREUR.
+  const payeeEnLigne = { id: 'c1', numero_commande: 12, numero_prefixe: 'LI', mode_retrait: 'livraison', date_commande: '2026-10-01', statut: 'pret', client_nom: 'Marc Dupont', client_telephone: '0470', client_email: 'marc@x.be', adresse_livraison: 'Rue 1, Mettet', note_livraison: 'Sonner 2 fois', total: 30, paye_en_ligne: true, commande_articles: [{ quantite: 2, article_nom: 'Pizza' }], creneau_livraison: { heure_debut: '18:00:00', heure_fin: '18:30:00' } }
+  const vue = P.livraisonPourLeLivreur(payeeEnLigne)
+  const permises = ['id', 'reference', 'client_nom', 'client_telephone', 'adresse', 'note', 'date', 'creneau', 'creneau_livraison_id', 'statut', 'statut_livraison', 'a_encaisser']
+  v('🔴 le livreur ne reçoit que sa vue', Object.keys(vue).every(k => permises.includes(k)), Object.keys(vue).join(','))
+  v('🔴 ni le contenu, ni le total, ni l’email', !JSON.stringify(vue).includes('Pizza') && !('total' in vue) && !JSON.stringify(vue).includes('marc@x.be'))
+  v('🔴 une commande payée en ligne : rien à encaisser', vue.a_encaisser === null)
+  v('🔴 payée à la porte : le montant à encaisser', P.livraisonPourLeLivreur({ ...payeeEnLigne, paye_en_ligne: false }).a_encaisser === 30)
+  v('le nom et la sonnette sont là', vue.client_nom === 'Marc Dupont' && vue.note === 'Sonner 2 fois' && vue.reference === 'LI12')
+  v('une livraison du jour compte', P.livraisonDuJour(payeeEnLigne, '2026-10-01') === true)
+  v('🔴 un retrait n’est pas une livraison', P.livraisonDuJour({ ...payeeEnLigne, mode_retrait: 'retrait' }, '2026-10-01') === false)
+  v('🔴 une livraison d’un autre jour non plus', P.livraisonDuJour(payeeEnLigne, '2026-10-02') === false)
+  v('une commande annulée ne se livre pas', P.livraisonDuJour({ ...payeeEnLigne, statut: 'annulee_client_refund' }, '2026-10-01') === false)
+  const triees = P.trierLivraisons([{ reference: 'LI3', creneau: { heure_debut: '19:00' } }, { reference: 'LI10', creneau: { heure_debut: '18:00' } }, { reference: 'LI2', creneau: { heure_debut: '18:00' } }])
+  v('la tournée suit le créneau, puis le numéro', triees.map(t => t.reference).join(',') === 'LI2,LI10,LI3')
+
+  // Les jours et les statuts.
+  v('« Aujourd’hui », « Demain », « Hier »', P.libelleJourPoste('2026-10-01', '2026-10-01') === 'Aujourd’hui' && P.libelleJourPoste('2026-10-02', '2026-10-01') === 'Demain' && P.libelleJourPoste('2026-09-30', '2026-10-01') === 'Hier')
+  v('🔴 un jour ne glisse pas au fuseau', P.libelleJourPoste('2026-10-05') === 'lundi 5 octobre', P.libelleJourPoste('2026-10-05'))
+  v('une livraison livrée se dit « Livrée »', S.libelleStatutCommande({ statut: 'recupere', mode_retrait: 'livraison' }) === 'Livrée')
+  v('une expédition prête se dit « À expédier »', S.libelleStatutCommande({ statut: 'pret', mode_retrait: 'expedition' }) === 'À expédier')
+  v('un retrait prêt se dit « Prête »', S.libelleStatutCommande({ statut: 'pret', mode_retrait: 'retrait' }) === 'Prête')
+
+  // 🔴 LA ROUTE.
+  const route = code('app/api/equipe/poste/route.js')
+  v('🔴 le poste passe par la garde de l’équipe', /const garde = await gardeEquipe\(request, admin, commercant_id, \[/.test(route) && /if \(!garde\.ok\) return NextResponse\.json/.test(route))
+  v('🔴 l’agenda n’est lu qu’avec sa case', /if \(permis\.agenda\) \{/.test(route))
+  v('🔴 les commandes complètes n’arrivent qu’avec « Commandes »', /if \(permis\.commandes\) reponse\.commandes = lues/.test(route))
+  v('🔴 le livreur ne reçoit que sa vue réduite', /if \(permis\.livraisons\) reponse\.livraisons = trierLivraisons\(lues\.filter\(c => livraisonDuJour\(c, aujourdhui\)\)\.map\(livraisonPourLeLivreur\)\)/.test(route))
+  v('🔴 une commande pas encore payée n’existe pas pour le comptoir', /\.neq\('statut', 'paiement_en_attente'\)/.test(route))
+  v('🔴 chaque lecture est bornée à CE commerce', (route.match(/\.eq\('commercant_id', commercant_id\)/g) || []).length === 4)
+  v('🔴 chaque lecture nomme ses colonnes', !/\.select\('\*'\)/.test(route) && /select\(COLONNES_RDV_EQUIPE\)/.test(route) && /select\(COLONNES_COMMANDE_EQUIPE\)/.test(route))
+  v('🔴 une lecture ratée lève (pas d’agenda vide sur une panne)', /if \(error\) throw new Error\(`\$\{quoi\} : \$\{error\.message\}`\)/.test(route))
+  v('le jour est le jour belge', /const aujourdhui = jourBruxelles\(\)/.test(route))
+
+  // 🔴 LA GARDE REND LES CASES OUVERTES, ET SEULEMENT ELLES.
+  const serveur = code('lib/equipe-server.js')
+  v('🔴 chaque case demandée est jugée par peutAgir', /for \(const d of demandes\) permis\[d\] = peutAgir\(\{ membre, commercant, droit: d \}\)/.test(serveur))
+  v('🔴 aucune case ouverte : refusé', /if \(!Object\.values\(permis\)\.some\(Boolean\)\) return \{ ok: false, status: 403/.test(serveur))
+
+  // L'écran.
+  const poste = code('app/equipe/PosteEquipe.js')
+  v('🔴 le Poste ne touche jamais la base', !/supabase\.from\(/.test(poste) && !/supabase\.from\(/.test(code('app/equipe/page.js')))
+  v('🔴 l’agenda s’affiche sans ses boutons de création ni de clôture', /<AgendaRdv /.test(poste) && !/onNouveauRdv=/.test(poste) && !/onHonorerSeance=/.test(poste))
+  v('le poste se rafraîchit seul, et au retour sur l’écran', /setInterval\(charger, RAFRAICHIR_MS\)/.test(poste) && /addEventListener\('pageshow', auRetour\)/.test(poste))
+  v('un accès coupé se dit', /Ton accès à ce commerce est fermé/.test(lire('app/equipe/PosteEquipe.js')))
+  v('🔴 se déconnecter est une déconnexion voulue', /marquerDeconnexionVoulue\(\)\s*const \{ error \} = await supabase\.auth\.signOut\(\)/.test(code('app/equipe/page.js')))
+
+  // Une seule source pour les libellés.
+  const bord = code('app/dashboard/page.js')
+  v('🔴 le tableau de bord lit ses libellés de statut dans le module partagé',
+    Object.keys(S.LIBELLES_STATUT_COMMANDE).every(k => new RegExp(`'${k}':\\s+\\{ label: LIBELLES_STATUT_COMMANDE\\.${k},`).test(bord)))
+  v('et sa carte dit « Livrée » par la même fonction', (bord.match(/label: libelleStatutCommande\(commande\)/g) || []).length === 4)
 }
 
 console.log(`\nÉquipe : ${ok} vérifications`)

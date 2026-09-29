@@ -880,8 +880,10 @@ verifier('et la ligne dit que le paquet est déjà parti',
   /sans être payée/.test(etatPaiementCommande(CMD_IMPAYEE).detail || ''))
 
 // ─── LE GESTE QUI MANQUAIT ────────────────────────────────────────────────
+// ⚠️ ANCRE REPOINTÉE LE 29/09 : le libellé vit dans `lib/statuts-commande.js`
+// (partagé avec le Poste équipe). La garde vérifie toujours le geste suivant.
 verifier('« Prête » mène enfin quelque part',
-  /'pret':\s+\{ label: 'Prête',\s+couleur: T\.vert,\s+icon: '●', next: 'recupere',\s+nextLabel: 'Remettre au client' \}/.test(srcDashCmd))
+  /'pret':\s+\{ label: LIBELLES_STATUT_COMMANDE\.pret,\s+couleur: T\.vert,\s+icon: '●', next: 'recupere',\s+nextLabel: 'Remettre au client' \}/.test(srcDashCmd))
 // ⚠️ ET PAS DEUX BOUTONS POUR UN SEUL GESTE : la livraison et l'expédition ont
 // leur propre sortie depuis « Prête », juste en dessous.
 verifier('la livraison et l’expédition gardent la leur',

@@ -44,6 +44,8 @@ import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
 import { libelleOptions } from '@/lib/options-ligne'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
 import { euros } from '@/lib/montants'
+// Les mots des statuts de commande, partagés avec le Poste équipe (29/09).
+import { LIBELLES_STATUT_COMMANDE, libelleStatutCommande } from '@/lib/statuts-commande'
 // ⚠️ LE CHIFFRE D'AFFAIRES A UNE SEULE DÉFINITION, ET ELLE VIT ICI. Le pavé
 // « CA du jour » avait la sienne, écrite à la main, et elle se trompait de
 // quatre façons à la fois (voir le calcul de `stats.ca`).
@@ -87,19 +89,19 @@ const T = {
 }
 
 const STATUTS = {
-  'en_attente':              { label: 'Nouvelle',           couleur: T.rouge,  icon: '●', next: 'en_preparation', nextLabel: 'Démarrer la prépa' },
-  'en_preparation':          { label: 'En prépa',           couleur: T.orange, icon: '●', next: 'pret',            nextLabel: 'Marquer prête' },
+  'en_attente':              { label: LIBELLES_STATUT_COMMANDE.en_attente, couleur: T.rouge,  icon: '●', next: 'en_preparation', nextLabel: 'Démarrer la prépa' },
+  'en_preparation':          { label: LIBELLES_STATUT_COMMANDE.en_preparation, couleur: T.orange, icon: '●', next: 'pret',            nextLabel: 'Marquer prête' },
   // ⚠️ LE CLICK AND COLLECT S'ARRÊTAIT ICI, EN CUL-DE-SAC (Alex, 17/08 : « je
   // ne sais pas la mettre en récupérée »). La livraison enchaînait « Partir en
   // livraison → Livrée », l'expédition « Marquer expédiée », et le retrait en
   // boutique n'avait RIEN : une commande prête le restait indéfiniment, avec
   // pour seule sortie « Non retiré ». Le geste le plus banal du comptoir,
   // remettre le paquet, n'existait pas.
-  'pret':                    { label: 'Prête',              couleur: T.vert,   icon: '●', next: 'recupere',        nextLabel: 'Remettre au client' },
-  'recupere':                { label: 'Récupérée',          couleur: T.bleu,   icon: '🔵', next: null,              nextLabel: null },
-  'non_retire':              { label: 'Non retiré',         couleur: T.gris,   icon: '⚫', next: null, nextLabel: null },
-  'annulee_client_refund':   { label: 'Annulée par client', couleur: T.rouge,  icon: '✕', next: null, nextLabel: null },
-  'annulee_paiement_ko':     { label: 'Paiement échoué',    couleur: T.gris,   icon: '⊘', next: null, nextLabel: null },
+  'pret':                    { label: LIBELLES_STATUT_COMMANDE.pret, couleur: T.vert,   icon: '●', next: 'recupere',        nextLabel: 'Remettre au client' },
+  'recupere':                { label: LIBELLES_STATUT_COMMANDE.recupere, couleur: T.bleu,   icon: '🔵', next: null,              nextLabel: null },
+  'non_retire':              { label: LIBELLES_STATUT_COMMANDE.non_retire, couleur: T.gris,   icon: '⚫', next: null, nextLabel: null },
+  'annulee_client_refund':   { label: LIBELLES_STATUT_COMMANDE.annulee_client_refund, couleur: T.rouge,  icon: '✕', next: null, nextLabel: null },
+  'annulee_paiement_ko':     { label: LIBELLES_STATUT_COMMANDE.annulee_paiement_ko, couleur: T.gris,   icon: '⊘', next: null, nextLabel: null },
 }
 
 // ─── Helpers dates ────────────────────────────────────────────────────────────
@@ -504,14 +506,17 @@ function CarteCommande({ commande, numero, categorie = null, onChangerStatut, on
   // Prête → En livraison → Livrée. On surcharge label + couleur uniquement dans ce cas.
   const badge = (() => {
     // Expédition boutique : « Prête » devient « À expédier », état final « Expédiée »
+    // ⚠️ LES MOTS VIENNENT DE `libelleStatutCommande` (29/09), le même que le
+    // Poste équipe : une commande « Livrée » ici ne peut pas être « Récupérée »
+    // là-bas. Cette carte ne décide que des couleurs.
     if (estExpedition) {
-      if (commande.statut === 'recupere') return { label: 'Expédiée', icon: '●', couleur: T.bleu }
-      if (commande.statut === 'pret') return { label: 'À expédier', icon: statut.icon, couleur }
+      if (commande.statut === 'recupere') return { label: libelleStatutCommande(commande), icon: '●', couleur: T.bleu }
+      if (commande.statut === 'pret') return { label: libelleStatutCommande(commande), icon: statut.icon, couleur }
       return { label: statut.label, icon: statut.icon, couleur }
     }
     if (!estLivraison) return { label: statut.label, icon: statut.icon, couleur }
-    if (statutLiv === 'en_livraison') return { label: 'En livraison', icon: '●', couleur: T.bleu }
-    if (statutLiv === 'livree' || commande.statut === 'recupere') return { label: 'Livrée', icon: '🔵', couleur: T.bleu }
+    if (statutLiv === 'en_livraison') return { label: libelleStatutCommande(commande), icon: '●', couleur: T.bleu }
+    if (statutLiv === 'livree' || commande.statut === 'recupere') return { label: libelleStatutCommande(commande), icon: '🔵', couleur: T.bleu }
     return { label: statut.label, icon: statut.icon, couleur }
   })()
   const cren = commande.creneau || commande.creneau_livraison

@@ -306,6 +306,19 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   // manque », qui restait écrit même quand plus rien ne l'affichait.
   v('l aide du bas nomme la présentation quand c est elle qui bloque',
     /: presentationManque > 0\s*\? `Ta présentation doit faire au moins \$\{MIN_PRESENTATION\} caractères : il en manque \$\{presentationManque\}\.`/.test(signup))
+  // 🔴 CE QU'IL FAUT AVOIR SOUS LA MAIN, DIT EN PREMIER (Alex, 29/09) : le
+  // contrôle d'identité arrive à la dernière étape, c'est là qu'on abandonne.
+  const iAvant = signup.indexOf('Avant de commencer, garde ceci sous la main')
+  const iOffre = signup.indexOf('La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie.')
+  const iCompte = signup.indexOf('<Card titre="Ton compte">')
+  v('l inscription annonce les papiers AVANT tout le reste de la première page',
+    iAvant > 0 && iAvant < iOffre && iAvant < iCompte)
+  v('elle nomme la carte d identité et le numéro d entreprise',
+    /Ta carte d&rsquo;identité<\/strong>/.test(signup) && /Ton numéro d&rsquo;entreprise \(BCE\)<\/strong>/.test(signup))
+  const landing = code('app/components/LandingReveal.js')
+  v('la landing ne promet plus la page en ligne au bout des cinq étapes',
+    !/Cinq étapes, et ta page part en ligne/.test(landing) && /Cinq étapes, et ton espace s&rsquo;ouvre\./.test(landing))
+  v('la landing prévient aussi des papiers', /garde sous la main ta carte d&rsquo;identité/.test(landing))
   v('le score d inscription exige la même longueur',
     /trim\(\)\.length >= MIN_PRESENTATION/.test(code('lib/score-onboarding.js')))
 }

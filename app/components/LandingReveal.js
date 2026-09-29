@@ -2390,13 +2390,26 @@ export default function LandingReveal({ referent = null }) {
             <div style={{ flex: '1 1 320px', maxWidth: 440, textAlign: 'left' }}>
               <SectionEyebrow dark>Ton inscription</SectionEyebrow>
               <h3 style={{ fontSize: 'clamp(1.25rem, 3vw, 1.6rem)', fontWeight: 900, letterSpacing: '-0.8px', lineHeight: 1.15, margin: '0 0 12px', color: '#fff' }}>
-                Cinq étapes, et ta page part en ligne.
+                {/* 🔴 29/09 : « ET TA PAGE PART EN LIGNE » ÉTAIT DEVENU FAUX.
+                    Valider ouvre l'espace ; la page part quand elle est
+                    complète (lib/fiche-complete.js). Titre changé à la
+                    demande d'Alex. */}
+                Cinq étapes, et ton espace s&rsquo;ouvre.
               </h3>
               <p style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.88)', lineHeight: 1.65, fontWeight: 500, margin: 0 }}>
                 Ton compte, tes infos, tes visuels, tes horaires, et c&rsquo;est envoyé. Un score de
                 complétude te dit en direct où tu en es, donc tu ne devines jamais ce qu&rsquo;il te
-                manque. Nous validons ton dossier, puis ta page est publiée et ton kit de bienvenue
+                manque. Nous validons ton dossier et ton tableau de bord s&rsquo;ouvre : tu y ajoutes
+                ton catalogue et tes photos, puis ta page part en ligne et ton kit de bienvenue
                 arrive dans ta boîte mail.
+              </p>
+              {/* Même avertissement qu'en tête de l'inscription : le contrôle
+                  d'identité arrive à la dernière étape, et c'est là qu'on
+                  abandonne quand on n'a pas ses papiers. */}
+              <p style={{ fontSize: '0.88rem', color: '#fff', lineHeight: 1.6, fontWeight: 600, margin: '14px 0 0', padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.22)' }}>
+                Avant de commencer, garde sous la main ta carte d&rsquo;identité et ton numéro
+                d&rsquo;entreprise (BCE, qui est aussi ton numéro de TVA). Ils sont demandés
+                pour envoyer ton dossier.
               </p>
             </div>
             <PhoneFrame label="La dernière étape : tu relis ton dossier, puis tu l'envoies">

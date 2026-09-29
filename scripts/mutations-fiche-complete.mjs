@@ -119,6 +119,11 @@ const MUTATIONS = [
   { nom: '🔴 le bloc renvoie de nouveau vers une fiche publique inexistante',
     fichier: SECTION, de: '              <button onClick={() => voir(f)} disabled={occupe}', vers: '              <a href={`/commander/${f.slug}`} onClick={() => voir(f)} disabled={occupe}' },
 
+  { nom: '🔴 le titre de la landing promet de nouveau la page en ligne',
+    fichier: LANDING, de: '                Cinq étapes, et ton espace s&rsquo;ouvre.', vers: '                Cinq étapes, et ta page part en ligne.' },
+  { nom: '⚠️ l avertissement des papiers disparait de l inscription',
+    fichier: 'app/signup/page.js', de: '          Avant de commencer, garde ceci sous la main', vers: '          Bon à savoir' },
+
   // 🔴 LA LANDING PROMETTRAIT DE NOUVEAU UNE MISE EN LIGNE A LA VALIDATION.
   { nom: '🔴 la landing promet encore la mise en ligne des la validation', banc: 'verif:lancement',
     fichier: LANDING, de: 'Ta commune est déjà ouverte et ta page part en ligne dès qu&rsquo;elle est complète.', vers: 'Ta commune est déjà ouverte et ta page part en ligne dès sa validation.' },

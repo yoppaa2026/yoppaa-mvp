@@ -578,6 +578,30 @@ function Etape1Compte({ session, commercant, onCompte }) {
         Crée ton compte et choisis ta formule. Le reste se remplit en quelques minutes, et tout se modifie ensuite depuis ton tableau de bord.
       </p>
 
+      {/* 🔴 CE QU'IL FAUT AVOIR SOUS LA MAIN, DIT AVANT DE COMMENCER (Alex,
+          29/09). Le contrôle d'identité arrive à la DERNIÈRE étape et bloque
+          l'envoi du dossier : un commerçant qui découvre là qu'il lui faut sa
+          carte d'identité et son numéro d'entreprise s'arrête, et beaucoup ne
+          reviennent pas. Le dire ici lui laisse le choix d'aller les chercher
+          avant, plutôt que d'abandonner au bout de vingt minutes.
+          ⚠️ LA LISTE EST CELLE QUE LE DOSSIER EXIGE (`kybManques`), rien de
+          plus : pas de numéro de TVA à part, c'est le même que le numéro
+          d'entreprise pour un commerce assujetti. */}
+      <div role="note" style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 14, padding: '14px 16px', marginBottom: 22 }}>
+        <p style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px', fontSize: 14, fontWeight: 900, color: '#78350F' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg>
+          Avant de commencer, garde ceci sous la main
+        </p>
+        <ul style={{ margin: '0 0 8px', paddingLeft: 20, fontSize: 13, color: '#78350F', lineHeight: 1.6 }}>
+          <li><strong>Ta carte d&rsquo;identité</strong> : on te demandera une photo du recto et du verso.</li>
+          <li><strong>Ton numéro d&rsquo;entreprise (BCE)</strong>. C&rsquo;est aussi ton numéro de TVA si ton commerce y est assujetti.</li>
+          <li><strong>Le nom et le prénom</strong> de la personne qui représente légalement le commerce.</li>
+        </ul>
+        <p style={{ margin: 0, fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+          Sans eux, tu ne pourras pas envoyer ton dossier. Tout ce que tu remplis est enregistré au fur et à mesure : tu peux t&rsquo;arrêter et reprendre plus tard.
+        </p>
+      </div>
+
       {/* Bandeau d'accroche : l'offre de lancement, en clair. On annonce la DATE
           de fin de gratuité plutôt qu'une durée, parce qu'elle se vérifie sur un
           calendrier et qu'elle ne vieillit pas. Le nombre de jours, lui, est

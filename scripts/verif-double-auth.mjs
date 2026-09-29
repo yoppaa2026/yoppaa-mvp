@@ -109,6 +109,19 @@ function fichiers(dossier, acc = []) {
   v('la migration n écrit plus l adresse nulle part', !ddl.includes(ADMIN_EMAIL))
 }
 
+// ═══ 6) ÉTAPE 4 : LE CODE EST EXIGÉ (29/09, après le « TEST OK » d'Alex) ════
+{
+  v('le serveur exige le code', EXIGER_DOUBLE_AUTH_ADMIN === true)
+  const sql = lire('migrations/MIGRATION_ADMIN_DOUBLE_AUTH.sql')
+  const ddl = sql.split('-- ─── CONTRÔLE')[0].replace(/^--.*$/gm, '')
+  v('la base exige le code', /auth\.email\(\) = '[^']+'\s*AND coalesce\(auth\.jwt\(\) ->> 'aal', ''\) = 'aal2'/.test(ddl))
+  v('le contrôle essaie l admin sans code, et attend false',
+    /'admin, mot de passe seul',\s*pg_temp\.essai_admin\('\{"email":"[^"]+","aal":"aal1"\}'\), 'false'/.test(sql))
+  v('le contrôle essaie l admin avec code, et attend true',
+    /'admin, avec le code',\s*pg_temp\.essai_admin\('\{"email":"[^"]+","aal":"aal2"\}'\), 'true'/.test(sql))
+  v('le retour en arrière est écrit', /POUR REVENIR EN ARRIÈRE/.test(sql))
+}
+
 console.log(`\nDouble authentification de l'admin : ${ok} vérifications`)
 
 if (echecs.length > 0) {

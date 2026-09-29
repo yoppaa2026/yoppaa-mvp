@@ -38,6 +38,11 @@ const MUTATIONS = [
     fichier: 'app/admin/DoubleAuth.js', de: "  if (data?.currentLevel === 'aal2') return 'ok'", vers: "  if (data?.nextLevel === 'aal2') return 'ok'" },
   { nom: '⚠️ une policy des pieces d identite recompare l adresse',
     fichier: 'migrations/MIGRATION_ADMIN_CENTRALISE.sql', de: "    AND ((storage.foldername(name))[1] = (auth.uid())::text OR public.is_yoppaa_admin())", vers: "    AND ((storage.foldername(name))[1] = (auth.uid())::text OR (auth.jwt() ->> 'email') = 'verstappenalexandre@gmail.com')" },
+  // ─── ETAPE 4 ─────────────────────────────────────────────────────────────
+  { nom: '🔴 le serveur cesse d exiger le code',
+    fichier: 'lib/api-auth.js', de: 'export const EXIGER_DOUBLE_AUTH_ADMIN = true', vers: 'export const EXIGER_DOUBLE_AUTH_ADMIN = false' },
+  { nom: '🔴 la base oublie le code',
+    fichier: 'migrations/MIGRATION_ADMIN_DOUBLE_AUTH.sql', de: "    AND coalesce(auth.jwt() ->> 'aal', '') = 'aal2',", vers: '    AND true,' },
 ]
 
 const lancer = () => {

@@ -576,7 +576,9 @@ const MUTATIONS = [
 
   { nom: '🔴 la saisie ne relit plus la salle avant d ecrire',
     fichier: 'app/dashboard/ModalNouveauRdv.js',
-    de: '        const frais = await lireSalle(commercant.id, dateStr)',
+    // ⚠️ ANCRE REPOINTÉE LE 29/09 (Poste équipe) : la relecture passe par
+    // `lireLaSalle`, qui choisit la base ou le serveur. Même geste mesuré.
+    de: '        const frais = await lireLaSalle(dateStr)',
     vers: '        const frais = { reservations: salle.reservations, error: null }' },
 
   { nom: '🔴 la saisie reprend la duree de la table',
@@ -596,8 +598,10 @@ const MUTATIONS = [
 
   { nom: '⚠️ « une table » part chercher des abonnes en base',
     fichier: 'app/dashboard/ModalNouveauRdv.js',
-    de: 'if (!prestationId || prestationId === UNE_TABLE)',
-    vers: 'if (!prestationId)' },
+    // ⚠️ ANCRE REPOINTÉE LE 29/09 : la condition commence par « serveur » (le
+    // Poste équipe n'a pas d'abonnements). Même mesure sur « une table ».
+    de: 'if (serveur || !prestationId || prestationId === UNE_TABLE)',
+    vers: 'if (serveur || !prestationId)' },
 
   { nom: '🔴 le deplacement ne compte plus la salle',
     fichier: 'app/dashboard/ModalDeplacerRdv.js',

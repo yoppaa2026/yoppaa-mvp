@@ -12,6 +12,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import DotsAttente from '@/app/components/DotsAttente'
 import AgendaRdv from '@/app/dashboard/AgendaRdv'
+// La fenêtre de saisie DU PATRON, avec l'accès serveur (étape 3b) : les heures
+// libres se calculent par le même code pour les deux écrans.
+import ModalNouveauRdv from '@/app/dashboard/ModalNouveauRdv'
 import { statutRdv } from '@/lib/rdv-statut'
 import { etatPaiementRdv, etatPaiementCommande } from '@/lib/rdv-paiement'
 import { referenceRdv, referenceCommande } from '@/lib/numero-commande'
@@ -38,6 +41,14 @@ const puce = (actif) => ({ padding: '8px 14px', borderRadius: 100, border: `1px 
 // Un rechargement toutes les 30 secondes, et au retour sur l'écran : une
 // réservation prise en ligne doit apparaître sans que personne n'y pense.
 const RAFRAICHIR_MS = 30000
+
+// Lit la réponse d'une route de l'équipe, et dit toujours quelque chose.
+async function lireReponse(res) {
+  if (!res || res.sansSession) return { ok: false, error: 'Ta session a expiré, reconnecte-toi.' }
+  if (res.erreurReseau) return { ok: false, error: 'Pas de connexion, réessaie.' }
+  const j = await res.json().catch(() => null)
+  return j || { ok: false, error: `Réponse illisible (${res.status}).` }
+}
 
 function lienTel(tel) {
   const t = String(tel || '').replace(/[^\d+]/g, '')
@@ -242,6 +253,18 @@ export default function PosteEquipe({ equipe, onChanger }) {
   // Ce qui travaille (l'identifiant de la ligne), et ce qu'on dit après.
   const [enCours, setEnCours] = useState(null)
   const [avis, setAvis] = useState(null)   // { texte, ton: 'ok' | 'erreur' }
+  // La fenêtre de saisie ouverte : { date: Date, heure: 'HH:MM' | '' }.
+  const [saisie, setSaisie] = useState(null)
+  // ⚠️ STABLE pour la vie du poste : la fenêtre s'en sert dans ses effets.
+  const serveurSaisie = useMemo(() => ({
+    lireSalle: async (date) => {
+      const j = await lireReponse(await postPro('/api/equipe/rdv/salle', { commercant_id: equipe.commercant_id, date }))
+      return j.ok
+        ? { reservations: j.reservations || [], plafond: j.plafond ?? null, error: null }
+        : { reservations: [], plafond: null, error: { message: j.error || 'salle illisible' } }
+    },
+    creer: async (corps) => lireReponse(await postPro('/api/equipe/rdv/creer', { commercant_id: equipe.commercant_id, ...corps })),
+  }), [equipe.commercant_id])
 
   const charger = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -280,12 +303,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
   // puis celle qui prévient le client avec ce que la première a rendu. Le
   // serveur revérifie tout : la case, le commerce, le statut, le montant.
   const dire = (texte, ton = 'ok') => setAvis({ texte, ton })
-  async function lire(res) {
-    if (!res || res.sansSession) return { ok: false, error: 'Ta session a expiré, reconnecte-toi.' }
-    if (res.erreurReseau) return { ok: false, error: 'Pas de connexion, réessaie.' }
-    const j = await res.json().catch(() => null)
-    return j || { ok: false, error: `Réponse illisible (${res.status}).` }
-  }
+  const lire = lireReponse
   // Un client pas prévenu se DIT : l'écran ne fait pas comme si l'email était parti.
   async function prevenir(url, corps, quoi) {
     const r = await prevenirClient(url, corps, quoi)
@@ -417,11 +435,32 @@ export default function PosteEquipe({ equipe, onChanger }) {
         </div>
       )}
 
+      {actif === 'agenda' && etat.agenda && etat.droits?.agenda && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <button type="button" onClick={() => setSaisie({ date: new Date(), heure: '' })} style={{ ...puce(true), padding: '10px 16px' }}>
+            + Nouvelle réservation
+          </button>
+        </div>
+      )}
       {actif === 'agenda' && etat.agenda && (
         <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.filet}`, overflow: 'hidden' }}>
           <AgendaRdv rdvs={etat.agenda.rdvs} creneaux={etat.agenda.creneaux} praticiens={etat.agenda.praticiens}
-            horairesDetail={etat.commerce?.horaires_detail} commercant={etat.commerce} onSelectRdv={setRdvOuvert}/>
+            horairesDetail={etat.commerce?.horaires_detail} commercant={etat.commerce} onSelectRdv={setRdvOuvert}
+            onNouveauRdv={etat.droits?.agenda ? (date, heure) => setSaisie({ date, heure }) : undefined}/>
         </div>
+      )}
+      {saisie && etat.agenda && etat.droits?.agenda && (
+        <ModalNouveauRdv
+          commercant={etat.commerce}
+          prestations={etat.agenda.prestations || []}
+          creneaux={etat.agenda.creneaux}
+          rdvsExistants={etat.agenda.rdvs}
+          dateInit={saisie.date}
+          heureInit={saisie.heure}
+          serveur={serveurSaisie}
+          onClose={() => setSaisie(null)}
+          onCreated={() => { dire('Réservation posée'); charger() }}
+        />
       )}
       {actif === 'commandes' && etat.commandes && <Commandes commandes={etat.commandes} commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null} enCours={enCours}/>}
       {actif === 'livraisons' && etat.livraisons && <Livraisons livraisons={etat.livraisons}/>}

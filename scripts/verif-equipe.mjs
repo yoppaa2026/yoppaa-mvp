@@ -371,7 +371,8 @@ const membre = (o = {}) => ({
   v('🔴 les commandes complètes n’arrivent qu’avec « Commandes »', /if \(permis\.commandes\) reponse\.commandes = lues/.test(route))
   v('🔴 le livreur ne reçoit que sa vue réduite', /if \(permis\.livraisons\) reponse\.livraisons = trierLivraisons\(lues\.filter\(c => livraisonDuJour\(c, aujourdhui\)\)\.map\(livraisonPourLeLivreur\)\)/.test(route))
   v('🔴 une commande pas encore payée n’existe pas pour le comptoir', /\.neq\('statut', 'paiement_en_attente'\)/.test(route))
-  v('🔴 chaque lecture est bornée à CE commerce', (route.match(/\.eq\('commercant_id', commercant_id\)/g) || []).length === 4)
+  // ⚠️ CINQ depuis l'étape 3b (les prestations, pour la fenêtre de saisie).
+  v('🔴 chaque lecture est bornée à CE commerce', (route.match(/\.eq\('commercant_id', commercant_id\)/g) || []).length === 5)
   v('🔴 chaque lecture nomme ses colonnes', !/\.select\('\*'\)/.test(route) && /select\(COLONNES_RDV_EQUIPE\)/.test(route) && /select\(COLONNES_COMMANDE_EQUIPE\)/.test(route))
   v('🔴 une lecture ratée lève (pas d’agenda vide sur une panne)', /if \(error\) throw new Error\(`\$\{quoi\} : \$\{error\.message\}`\)/.test(route))
   v('le jour est le jour belge', /const aujourdhui = jourBruxelles\(\)/.test(route))
@@ -384,7 +385,10 @@ const membre = (o = {}) => ({
   // L'écran.
   const poste = code('app/equipe/PosteEquipe.js')
   v('🔴 le Poste ne touche jamais la base', !/supabase\.from\(/.test(poste) && !/supabase\.from\(/.test(code('app/equipe/page.js')))
-  v('🔴 l’agenda s’affiche sans ses boutons de création ni de clôture', /<AgendaRdv /.test(poste) && !/onNouveauRdv=/.test(poste) && !/onHonorerSeance=/.test(poste))
+  // ⚠️ RÉORIENTÉE À L'ÉTAPE 3b (29/09) : créer une réservation est permis, avec la
+  // case « Agenda » seulement. Clôturer une séance entière reste au patron.
+  v('🔴 l’agenda ne propose de créer qu’avec la case Agenda, et jamais de clôturer',
+    /<AgendaRdv /.test(poste) && /onNouveauRdv=\{etat\.droits\?\.agenda \? \(date, heure\) => setSaisie\(\{ date, heure \}\) : undefined\}/.test(poste) && !/onHonorerSeance=/.test(poste))
   v('le poste se rafraîchit seul, et au retour sur l’écran', /setInterval\(charger, RAFRAICHIR_MS\)/.test(poste) && /addEventListener\('pageshow', auRetour\)/.test(poste))
   v('un accès coupé se dit', /Ton accès à ce commerce est fermé/.test(lire('app/equipe/PosteEquipe.js')))
   v('🔴 se déconnecter est une déconnexion voulue', /marquerDeconnexionVoulue\(\)\s*const \{ error \} = await supabase\.auth\.signOut\(\)/.test(code('app/equipe/page.js')))
@@ -487,6 +491,52 @@ const membre = (o = {}) => ({
   v('🔴 ceux des commandes aussi', /gestes=\{etat\.droits\?\.commandes \? gestesCommande : null\}/.test(poste))
   v('un envoi raté au client se dit', /if \(!r\.ok\) dire\(/.test(poste))
   v('un geste ne se lance pas deux fois', /if \(enCours\) return\s*setEnCours\(id\)/.test(poste))
+}
+
+// ═══ 13) ÉTAPE 3b : CRÉER UNE RÉSERVATION ═══════════════════════════════════
+{
+  const P = await import('../lib/equipe-poste.js')
+  const bord = code('app/dashboard/page.js')
+  // 🔴 LA PARITÉ : les prestations de la fenêtre, lues comme chez le patron.
+  v('🔴 les prestations sont lues avec les colonnes du tableau de bord', bord.includes(`.select('${P.COLONNES_PRESTATION_SAISIE}')`))
+  const poste = code('app/api/equipe/poste/route.js')
+  v('et avec le même filtre et le même ordre', /\.select\(COLONNES_PRESTATION_SAISIE\)\s*\.eq\('commercant_id', commercant_id\)\.eq\('actif', true\)\.is\('deleted_at', null\)\s*\.order\('ordre', \{ ascending: true \}\)\.order\('created_at', \{ ascending: true \}\)/.test(poste))
+
+  const creer = code('app/api/equipe/rdv/creer/route.js')
+  v('🔴 créer passe par la garde, case Agenda', /const garde = await gardeEquipe\(request, admin, commercant_id, 'agenda'\)\s*if \(!garde\.ok\) return NextResponse\.json/.test(creer))
+  v('🔴 le créneau est revérifié au serveur, sur les réservations relues', /const verdict = creneauAcceptable\(\{/.test(creer) && /if \(!verdict\.ok\) return NextResponse\.json/.test(creer)
+    && /\.from\('rdv_reservations'\)\.select\('id, date_rdv, statut, prestation_id, heure_debut, heure_fin'\)\s*\.eq\('commercant_id', commercant_id\)\.eq\('date_rdv', date\)/.test(creer))
+  v('🔴 la prestation doit appartenir au commerce', /\.from\('rdv_prestations'\)\.select\(`\$\{COLONNES_PRESTATION_SANS_COUVERTS\}, \$\{COLONNES_COUVERTS\}`\)\s*\.eq\('commercant_id', commercant_id\)/.test(creer) && /const presta = formats\.find\(/.test(creer))
+  // Les deux listes du module disent la même chose, l'une avec la règle au milieu.
+  v('la liste de la route et celle du Poste portent les mêmes colonnes',
+    [...P.COLONNES_PRESTATION_SANS_COUVERTS.split(', '), ...(await import('../lib/cours-collectifs.js')).COLONNES_COUVERTS.split(', ')].sort().join() === P.COLONNES_PRESTATION_SAISIE.split(', ').sort().join())
+  v('🔴 le prix vient de la prestation, jamais de l’écran', /const prix = presta\.prix != null \? Number\(presta\.prix\) : null/.test(creer) && /prix_estime: prix,/.test(creer) && !/corps\.prix/.test(creer))
+  v('🔴 les couverts sont bornés par la règle', /couvertsValides\(presta,/.test(creer) && /if \(couverts === null\)/.test(creer))
+  v('🔴 la création passe par la fonction de TOUTES les créations', /const res = await creerReservationRdv\(admin, \{/.test(creer))
+  v('elle se déclare « commerçant », comme la saisie du patron', /source: 'commercant',/.test(creer))
+  v('🔴 ni abonnement ni série pour l’équipe', !/abonnement_id/.test(creer))
+  v('le geste va au journal', /journaliserGeste\(admin, garde, \{\s*action: 'rdv_cree'/.test(creer))
+  v('les refus se disent en clair', /REFUS\[res\.code\]/.test(creer))
+
+  const salle = code('app/api/equipe/rdv/salle/route.js')
+  v('🔴 la salle ne se lit qu’avec la case Agenda', /const garde = await gardeEquipe\(request, admin, commercant_id, 'agenda'\)/.test(salle))
+  v('et par la fonction du patron', /lireSalleDuJour\(admin, \{ commercantId: commercant_id, dateStr: date \}\)/.test(salle))
+
+  // 🔴 LA FENÊTRE DU PATRON : inchangée sans le réglage.
+  const modal = code('app/dashboard/ModalNouveauRdv.js')
+  v('🔴 sans « serveur », la fenêtre lit sa salle comme avant', /\(serveur \? serveur\.lireSalle\(date\) : lireSalle\(commercant\.id, date\)\)/.test(modal))
+  v('🔴 sans « serveur », elle écrit comme avant', /const \{ error: errInsert \} = await supabase\.from\('rdv_reservations'\)\.insert\(lignes\)/.test(modal))
+  v('🔴 avec « serveur », elle s’arrête AVANT d’écrire elle-même', (() => {
+    const i = modal.indexOf('if (serveur) {\n        const r = await serveur.creer({')
+    const j = modal.indexOf(".from('rdv_reservations').insert(lignes)")
+    return i > 0 && j > i && /if \(onCreated\) onCreated\(\)\s*onClose\(\)\s*return\s*\}/.test(modal.slice(i, j))
+  })())
+  v('🔴 pas d’abonnement dans le Poste', /if \(serveur \|\| !prestationId \|\| prestationId === UNE_TABLE\) \{ setAbonnes\(\[\]\); return \}/.test(modal))
+
+  // L'écran du Poste.
+  const ecran = code('app/equipe/PosteEquipe.js')
+  v('🔴 la fenêtre ne s’ouvre qu’avec la case Agenda', /\{saisie && etat\.agenda && etat\.droits\?\.agenda && \(/.test(ecran))
+  v('elle reçoit l’accès serveur, stable', /serveur=\{serveurSaisie\}/.test(ecran) && /const serveurSaisie = useMemo\(/.test(ecran))
 }
 
 console.log(`\nÉquipe : ${ok} vérifications`)

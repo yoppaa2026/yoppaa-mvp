@@ -17,7 +17,7 @@ import { gardeEquipe } from '@/lib/equipe-server'
 import { CLES_DROITS } from '@/lib/equipe'
 import { jourBruxelles } from '@/lib/timezone'
 import {
-  COLONNES_RDV_EQUIPE, COLONNES_CRENEAU_RDV_EQUIPE, COLONNES_PRATICIEN_EQUIPE, COLONNES_COMMANDE_EQUIPE,
+  COLONNES_RDV_EQUIPE, COLONNES_CRENEAU_RDV_EQUIPE, COLONNES_PRATICIEN_EQUIPE, COLONNES_COMMANDE_EQUIPE, COLONNES_PRESTATION_SAISIE,
   COLONNES_COMMERCE_POSTE, fenetres, livraisonPourLeLivreur, livraisonDuJour, trierLivraisons,
 } from '@/lib/equipe-poste'
 import { STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
@@ -49,7 +49,7 @@ export async function POST(request) {
     for (const cle of CLES_DROITS) reponse.droits[cle] = permis[cle] === true
 
     if (permis.agenda) {
-      const [rdvs, creneaux, praticiens] = await Promise.all([
+      const [rdvs, creneaux, praticiens, prestations] = await Promise.all([
         admin.from('rdv_reservations').select(COLONNES_RDV_EQUIPE)
           .eq('commercant_id', commercant_id).is('deleted_at', null).gte('date_rdv', f.agenda.debut).lte('date_rdv', f.agenda.fin)
           .order('date_rdv').order('heure_debut').limit(3000),
@@ -57,11 +57,17 @@ export async function POST(request) {
           .eq('commercant_id', commercant_id).eq('actif', true).is('deleted_at', null),
         admin.from('rdv_praticiens').select(COLONNES_PRATICIEN_EQUIPE)
           .eq('commercant_id', commercant_id).is('deleted_at', null).order('ordre'),
+        // La fenêtre de saisie (étape 3b) : même liste, même filtre, même ordre
+        // que le tableau de bord.
+        admin.from('rdv_prestations').select(COLONNES_PRESTATION_SAISIE)
+          .eq('commercant_id', commercant_id).eq('actif', true).is('deleted_at', null)
+          .order('ordre', { ascending: true }).order('created_at', { ascending: true }),
       ])
       reponse.agenda = {
         rdvs: verifier('lecture de l’agenda', rdvs),
         creneaux: verifier('lecture des créneaux', creneaux),
         praticiens: verifier('lecture de l’équipe de l’agenda', praticiens),
+        prestations: verifier('lecture des prestations', prestations),
       }
     }
 

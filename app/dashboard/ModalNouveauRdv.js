@@ -76,6 +76,13 @@ export default function ModalNouveauRdv({
   commercant, prestations, creneaux, rdvsExistants,
   dateInit, heureInit,
   onClose, onCreated,
+  // 🔴 LE POSTE ÉQUIPE (29/09, étape 3b). ABSENT pour le patron : la fenêtre
+  // fait exactement ce qu'elle faisait. FOURNI par le Poste équipe : un membre
+  // n'a pas accès à la base, la fenêtre lit sa salle et pose la réservation
+  // par des routes serveur (`serveur.lireSalle`, `serveur.creer`), qui
+  // revérifient tout. Les heures libres, elles, restent calculées ICI, par le
+  // même code pour les deux : aucune copie qui pourrait diverger.
+  serveur = null,
 }) {
   // 🔴 LE TÉLÉPHONE EST LE PREMIER CANAL D'UN RESTAURANT, ET CETTE MODALE
   // COMPTAIT CHAQUE APPEL POUR UNE PERSONNE. Une table de six prise de vive
@@ -118,6 +125,7 @@ export default function ModalNouveauRdv({
   const tableHorsInventaire = !enTable && !!prestationId && prestationId !== UNE_TABLE
     && estParCouverts((prestations || []).find(p => String(p.id) === String(prestationId)))
   const lectureSalle = enTable || tableHorsInventaire
+  const lireLaSalle = (d) => (serveur ? serveur.lireSalle(d) : lireSalle(commercant.id, d))
 
   // 🔴 LA DATE ET L'HEURE SE CHOISISSENT ICI (Alex, 10/09 tard : « quand un
   // client sonne, on choisit une heure mais dans la discussion elle peut
@@ -162,7 +170,8 @@ export default function ModalNouveauRdv({
     setAboChoisiId(null); setRepeter(0)
     // ⚠️ « Une table » n'est pas une prestation : la chercher en base ferait
     // échouer la requête sur un identifiant qui n'existe pas.
-    if (!prestationId || prestationId === UNE_TABLE) { setAbonnes([]); return }
+    // ⚠️ PAS D'ABONNEMENT DANS LE POSTE ÉQUIPE : c'est un contrat, il reste au patron.
+    if (serveur || !prestationId || prestationId === UNE_TABLE) { setAbonnes([]); return }
     ;(async () => {
       const { data: contrats } = await supabase
         .from('abonnements')
@@ -197,7 +206,7 @@ export default function ModalNouveauRdv({
       }))
     })().catch(e => console.warn('[ModalNouveauRdv] abonnés KO', e?.message))
     return () => { annule = true }
-  }, [prestationId, commercant.id])
+  }, [prestationId, commercant.id, serveur])
 
   // Focus auto à l'ouverture : sur le menu, ou sur le nombre de personnes quand
   // il n'y a pas de menu, chez un restaurant qui ne propose que des tables.
@@ -212,7 +221,7 @@ export default function ModalNouveauRdv({
     if (!lectureSalle || !DATE_ISO.test(date)) return
     let annule = false
     setSalle({ etat: 'lecture', reservations: [], plafond: null, date })
-    lireSalle(commercant.id, date).then(({ reservations, plafond, error }) => {
+    ;(serveur ? serveur.lireSalle(date) : lireSalle(commercant.id, date)).then(({ reservations, plafond, error }) => {
       if (annule) return
       setSalle(error
         ? { etat: 'erreur', reservations: [], plafond: null, date, message: error.message }
@@ -222,7 +231,7 @@ export default function ModalNouveauRdv({
       if (!annule) setSalle({ etat: 'erreur', reservations: [], plafond: null, date, message: e?.message || String(e) })
     })
     return () => { annule = true }
-  }, [lectureSalle, commercant.id, date, relire])
+  }, [lectureSalle, commercant.id, date, relire, serveur])
   const salleConnue = salle.etat === 'ok' && salle.date === date
 
   // ESC pour fermer
@@ -502,7 +511,7 @@ export default function ModalNouveauRdv({
       // d'heure qui se remplit, ou se vide, pendant l'appel change le geste. On
       // n'écrit rien, on montre, et il confirme en connaissance de cause.
       if (lectureSalle) {
-        const frais = await lireSalle(commercant.id, dateStr)
+        const frais = await lireLaSalle(dateStr)
         if (frais.error) {
           setError(`Impossible de lire ta salle : ${frais.error.message}`)
           setSubmitting(false)
@@ -535,6 +544,28 @@ export default function ModalNouveauRdv({
       // Répéter une séance sur huit semaines, c'est huit cours différents, avec
       // huit remplissages différents : recopier la place du premier ferait
       // rejeter la moitié de la série par l'index unique.
+      // ⚠️ LE POSTE ÉQUIPE S'ARRÊTE ICI : le serveur calcule la place, la table,
+      // le lieu et le prix (`/api/equipe/rdv/creer` → `creerReservationRdv`),
+      // après avoir revérifié le créneau. Une seule date : pas de série.
+      if (serveur) {
+        const r = await serveur.creer({
+          prestation_id: presta.id, date: dateStr, heure, couverts: couvertsRetenus,
+          client_prenom: prenom.trim(), client_nom: nom.trim(), client_telephone: tel.trim(),
+          client_email: email.trim() || null, notes_client: notes.trim() || null,
+        })
+        if (!r?.ok) {
+          setError(r?.error || 'La réservation n’a pas pu être posée. Réessaie.')
+          setSubmitting(false)
+          return
+        }
+        if (r.rdv_id && (email.trim() || null) && !dejaPasse({ dateStr, heure, maintenant: new Date() })) {
+          postPro('/api/emails/rdv-confirme', { rdv_id: r.rdv_id }).catch(e => console.warn('[ModalNouveauRdv] email équipe KO', e))
+        }
+        if (onCreated) onCreated()
+        onClose()
+        return
+      }
+
       const toutesLesDates = [dateStr, ...datesRepetees]
       const placeParDate = {}
       if (estParCouverts(presta)) {

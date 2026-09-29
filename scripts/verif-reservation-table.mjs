@@ -1995,13 +1995,19 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // l'écriture comme un changement de table.
   verifier('🔴 elle relit la salle en base au moment d’écrire, et n’écrit rien si la réponse a changé',
     /const lectureSalle = enTable \|\| tableHorsInventaire/.test(SAISIE)
-    && /if \(lectureSalle\) \{\s*const frais = await lireSalle\(commercant\.id, dateStr\)[\s\S]{0,1400}?choixFrais\.forcer !== choixTable\.forcer\)[\s\S]{0,600}?if \(tableChangee \|\| cadenceChangee\) \{\s*setSalle\(/.test(SAISIE))
+    // ⚠️ 29/09 (Poste équipe) : la relecture passe par `lireLaSalle`.
+    && /if \(lectureSalle\) \{\s*const frais = await lireLaSalle\(dateStr\)[\s\S]{0,1400}?choixFrais\.forcer !== choixTable\.forcer\)[\s\S]{0,600}?if \(tableChangee \|\| cadenceChangee\) \{\s*setSalle\(/.test(SAISIE))
+  // ⚠️ 29/09 : `lireLaSalle` prend la base du patron, ou le serveur quand la
+  // fenêtre est ouverte par l'équipe. Rien d'autre.
+  verifier('🔴 la relecture choisit la base du patron ou le serveur de l’équipe',
+    /const lireLaSalle = \(d\) => \(serveur \? serveur\.lireSalle\(d\) : lireSalle\(commercant\.id, d\)\)/.test(SAISIE))
   verifier('🔴 sa lecture de la salle est celle du module, pas une copie',
     /const lireSalle = \(commercantId, dateStr\) => lireSalleDuJour\(supabase, \{ commercantId, dateStr \}\)/.test(SAISIE))
   verifier('🔴 le bouton dit « Poser quand même » quand aucune table n’est libre',
     /\(choixTable\?\.forcer \|\| cadenceDepassee\) \? 'Poser quand même ✓'/.test(SAISIE))
   verifier('⚠️ « une table » ne part pas chercher des abonnés en base',
-    /if \(!prestationId \|\| prestationId === UNE_TABLE\)/.test(SAISIE))
+    // ⚠️ 29/09 : la condition commence par « serveur » (le Poste n'a pas d'abonnements).
+    /if \(serveur \|\| !prestationId \|\| prestationId === UNE_TABLE\)/.test(SAISIE))
   verifier('⚠️ elle montre ce qui reste libre sur tout le repas',
     /Libres de \{heure\} à \{heureFin\}/.test(SAISIE) && /\{l\.libres\} sur \{l\.total\}/.test(SAISIE))
   // 🔴 LES HEURES LIBRES DE LA SAISIE (Alex, 10/09 tard : « il ne doit pas

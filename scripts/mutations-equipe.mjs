@@ -33,6 +33,8 @@ const MUTATIONS = [
     fichier: 'lib/equipe.js', de: "  if (emailPatron && adresse === adresseNormalisee(emailPatron)) return", vers: "  if (false) return" },
   { nom: '🔴 le plafond ne compte plus les invitations en attente',
     fichier: 'lib/equipe.js', de: "  const enPlace = (membres || []).filter(m => m.statut !== 'retire')", vers: "  const enPlace = (membres || []).filter(m => m.statut === 'actif')" },
+  { nom: '⚠️ le plafond change sans décision d Alex',
+    fichier: 'lib/equipe.js', de: 'export const EQUIPE_MAX = 10', vers: 'export const EQUIPE_MAX = 5' },
   { nom: '🔴 le plafond saute',
     fichier: 'lib/equipe.js', de: '  if (enPlace.length >= EQUIPE_MAX) return', vers: '  if (enPlace.length > EQUIPE_MAX) return' },
   { nom: '🔴 la date de fin ne coupe plus l accès',

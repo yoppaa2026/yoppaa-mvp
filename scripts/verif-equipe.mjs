@@ -79,11 +79,15 @@ const membre = (o = {}) => ({
   v('🔴 les cases sont revérifiées', refusInvitation({ ...base, droits: cases({ argent: true }) }) !== null)
   v('🔴 une adresse déjà là (casse ignorée) : refusée', refusInvitation({ ...base, membres: [membre({ email: 'julie@exemple.be' })] }) !== null)
   v('une adresse retirée peut être réinvitée', refusInvitation({ ...base, membres: [membre({ statut: 'retire' })] }) === null)
-  const quatre = [1, 2, 3, 4].map(i => membre({ id: `m${i}`, email: `p${i}@exemple.be` }))
-  const cinq = [...quatre, membre({ id: 'm5', email: 'p5@exemple.be', statut: 'invite' })]
-  v('à quatre, on invite encore', refusInvitation({ ...base, membres: quatre }) === null)
-  v(`🔴 à ${EQUIPE_MAX}, invitations en attente comprises, on n’invite plus`, refusInvitation({ ...base, membres: cinq }) !== null)
-  v('les retirés ne comptent pas dans le plafond', refusInvitation({ ...base, membres: [...quatre, membre({ id: 'm9', email: 'x@exemple.be', statut: 'retire' })] }) === null)
+  // ⚠️ LE PLAFOND EST CELUI D'ALEX (29/09 : « 10 actifs »), et les listes
+  // se construisent DEPUIS lui : écrites « 4 » et « 5 » en dur, elles auraient
+  // mesuré l'ancien plafond après chaque changement.
+  v('le plafond est celui d’Alex : 10', EQUIPE_MAX === 10, String(EQUIPE_MAX))
+  const presque = Array.from({ length: EQUIPE_MAX - 1 }, (_, i) => membre({ id: `m${i}`, email: `p${i}@exemple.be` }))
+  const plein = [...presque, membre({ id: 'mz', email: 'pz@exemple.be', statut: 'invite' })]
+  v(`à ${EQUIPE_MAX - 1}, on invite encore`, refusInvitation({ ...base, membres: presque }) === null)
+  v(`🔴 à ${EQUIPE_MAX}, invitations en attente comprises, on n’invite plus`, refusInvitation({ ...base, membres: plein }) !== null)
+  v('les retirés ne comptent pas dans le plafond', refusInvitation({ ...base, membres: [...presque, membre({ id: 'm99', email: 'x@exemple.be', statut: 'retire' })] }) === null)
   v('🔴 une date de fin passée : refusée', refusInvitation({ ...base, expireLe: HIER }) !== null)
   v('une date de fin à venir : acceptée', refusInvitation({ ...base, expireLe: DEMAIN }) === null)
   v('une date illisible : refusée', refusExpiration('demain soir', MAINTENANT) !== null)

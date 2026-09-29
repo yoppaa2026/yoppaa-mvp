@@ -19,8 +19,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { bonsLimiter } from '@/lib/ratelimit'
 import { sonderCompteur, verdictCompteur, SONDE_TIRAGES } from '@/lib/sonde-compteur'
+import { adminVerifie } from '@/lib/api-auth'
 
-const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
 async function requireAdmin(request) {
   const accessToken = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
@@ -32,7 +32,7 @@ async function requireAdmin(request) {
   )
   const { data: { user } } = await authClient.auth.getUser()
   if (!user) return { error: 'session expirée, reconnecte-toi', status: 401 }
-  if (user.email !== ADMIN_EMAIL) return { error: 'accès refusé', status: 403 }
+  if (!(await adminVerifie(request, user))) return { error: 'accès refusé', status: 403 }
   return { ok: true }
 }
 

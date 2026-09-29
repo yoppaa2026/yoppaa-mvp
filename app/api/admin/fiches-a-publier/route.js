@@ -10,7 +10,7 @@
 // vide le dernier commerce de la liste.
 
 import { NextResponse } from 'next/server'
-import { utilisateurAppelant, estAdminYoppaa, clientAdmin } from '@/lib/api-auth'
+import { utilisateurAppelant, adminVerifie, clientAdmin } from '@/lib/api-auth'
 import { comptesDeLaFiche } from '@/lib/fiche-complete-server'
 import { ficheComplete, COLONNES_FICHE_COMPLETE, PUBLICATIONS_EN_ATTENTE } from '@/lib/fiche-complete'
 import { STATUTS_ACCES_AUTORISE } from '@/lib/statut-commercant'
@@ -21,7 +21,7 @@ export async function GET(request) {
   try {
     const user = await utilisateurAppelant(request)
     if (!user) return NextResponse.json({ ok: false, error: 'session expirée, reconnecte-toi' }, { status: 401 })
-    if (!estAdminYoppaa(user)) return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
+    if (!(await adminVerifie(request, user))) return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
 
     const admin = clientAdmin()
     const { data, error } = await admin

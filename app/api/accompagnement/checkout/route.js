@@ -21,7 +21,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 import { getStripePriceIdProduitBoutique, getOrCreateStripeCustomer, getStripeTaxRateId } from '@/lib/stripe-billing'
 import { produitParType } from '@/lib/produits-boutique'
-import { estAdminYoppaa } from '@/lib/api-auth'
+import { adminVerifie } from '@/lib/api-auth'
 
 
 export async function POST(request) {
@@ -62,7 +62,7 @@ export async function POST(request) {
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
-    if (com.auth_user_id !== user.id && !estAdminYoppaa(user)) {
+    if (com.auth_user_id !== user.id && !(await adminVerifie(request, user))) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
 

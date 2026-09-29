@@ -15,7 +15,7 @@ import { canDo, planEffectif } from '@/lib/plans'
 import { construireLignes, csvJournal, csvDetail, journalParJour } from '@/lib/export-comptable'
 import { normaliser } from '@/lib/tva'
 import { jourBruxelles } from '@/lib/timezone'
-import { estAdminYoppaa } from '@/lib/api-auth'
+import { adminVerifie } from '@/lib/api-auth'
 
 export async function GET(request) {
   try {
@@ -60,7 +60,7 @@ export async function GET(request) {
     // refusait : le mode admin était donc à moitié fonctionnel, on pouvait
     // regarder un dossier sans jamais s'en servir. Trouvé le 22/09 sur la
     // facturation, corrigé ici et chez ses deux frères.
-    if (!commercant || (commercant.auth_user_id !== user.id && !estAdminYoppaa(user))) {
+    if (!commercant || (commercant.auth_user_id !== user.id && !(await adminVerifie(request, user)))) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
     // 🔴 FORFAIT EFFECTIF (15/09) : un commerçant en essai de Vendre vend en

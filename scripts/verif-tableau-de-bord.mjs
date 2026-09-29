@@ -1495,8 +1495,10 @@ const verifie = (nom, cond, detail = '') => {
     for (const r of ['dashboard/signaux', 'dashboard/statistiques', 'dashboard/export-comptable',
                      'accompagnement/checkout', 'accompagnement/souhaits']) {
       const src = readFileSync(new URL(`../app/api/${r}/route.js`, import.meta.url), 'utf8')
+      // ⚠️ 29/09 : laisser passer l'admin passe par `adminVerifie`, qui saura
+      // exiger le code à six chiffres. La garde suit le nouveau point central.
       verifie(`${r} laisse passer l’administrateur`,
-        /estAdminYoppaa\(user\)/.test(src),
+        /await adminVerifie\(request, user\)/.test(src),
         'le mode admin y resterait aveugle')
       // 🔴 ET AUCUNE N'A GARDÉ SA COPIE DE L'ADRESSE.
       verifie(`${r} ne recopie pas l’adresse admin`,

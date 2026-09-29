@@ -241,7 +241,10 @@ function sansCommentaires(src) {
     /c\.auth_user_id === user\.id/.test(src))
   verifier('et elle refuse aussi par l’adresse du compte visé',
     /getUserById\(c\.auth_user_id\)/.test(src)
-    && /vise\.user\.email === ADMIN_EMAIL/.test(src))
+    // ⚠️ 29/09 : l'adresse ne vit plus qu'en un endroit (lib/admin-identite.js),
+    // la comparaison passe par `estAdresseAdmin`. La garde suit, elle ne
+    // s'éteint pas.
+    && /estAdresseAdmin\(vise\.user\.email\)/.test(src))
 
   // ⚠️ ET LES DEUX REFUS DISENT CE QU'ILS ÉVITENT. « Suppression impossible »
   // ferait cliquer une seconde fois ; ici il faut comprendre qu'on vient

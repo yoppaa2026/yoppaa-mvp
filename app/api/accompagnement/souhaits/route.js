@@ -27,7 +27,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { produitParType } from '@/lib/produits-boutique'
-import { estAdminYoppaa } from '@/lib/api-auth'
+import { adminVerifie } from '@/lib/api-auth'
 
 
 // Statut d'un choix fait à l'inscription : rien n'est engagé, rien n'est dû.
@@ -62,7 +62,7 @@ async function autoriser(request, commercantId) {
     .eq('id', commercantId)
     .maybeSingle()
   if (!com) return { ok: false, statut: 404, error: 'commerçant introuvable' }
-  if (com.auth_user_id !== user.id && !estAdminYoppaa(user)) {
+  if (com.auth_user_id !== user.id && !(await adminVerifie(request, user))) {
     return { ok: false, statut: 403, error: 'accès refusé' }
   }
   return { ok: true, admin, com }

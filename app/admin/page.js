@@ -20,8 +20,9 @@ import SectionSuggestions from './SectionSuggestions'
 import SectionDiagnosticRatelimit from './SectionDiagnosticRatelimit'
 import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Lock, AlertTriangle } from 'lucide-react'
 import { TAILLE_CONSEILLEE, avertissementTaille, bilanTaillesImages } from '@/lib/image-qualite'
+import { ADMIN_EMAIL } from '@/lib/admin-identite'
+import { EcranCodeAdmin, SectionSecuriteAdmin, etatDoubleAuth } from './DoubleAuth'
 
-const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
 const T = {
   bg:       '#F8F6FF',
@@ -50,6 +51,10 @@ export default function AdminPage() {
   const [rejetEnCours, setRejetEnCours] = useState(null)   // commercant en cours de rejet (modal)
   const [motifRejet, setMotifRejet] = useState('')
   const [toast, setToast] = useState(null) // { msg, type }
+  // 🔐 Le niveau de la session : 'ok', 'code' (le code reste à donner), 'aucun'
+  // (aucun appareil enrôlé), 'erreur'. Voir ./DoubleAuth.js.
+  const [niveau, setNiveau] = useState(null)
+  const relireNiveau = useCallback(async () => { setNiveau(await etatDoubleAuth()) }, [])
 
   // ─── Auth check ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -62,7 +67,13 @@ export default function AdminPage() {
         setChecking(false)
         return // affichera l'écran "accès refusé"
       }
-      setChecking(false)
+      // 🔐 LE NIVEAU AVANT LA PORTE : sans lui, la page s'afficherait une
+      // fraction de seconde avant de demander le code.
+      etatDoubleAuth().then(n => {
+        if (annule) return
+        setNiveau(n)
+        setChecking(false)
+      })
     })
     return () => { annule = true }
   }, [router])
@@ -70,6 +81,8 @@ export default function AdminPage() {
   // ─── Chargement données ────────────────────────────────────────────────
   const charger = useCallback(async () => {
     if (!session || session.user.email !== ADMIN_EMAIL) return
+    // Rien ne se charge derrière la porte : le code n'a pas encore été donné.
+    if (niveau === 'code' || niveau === null) return
     setLoading(true)
     // Commerçants en attente — join onboarding + success_packs
     const { data: cs } = await supabase
@@ -121,7 +134,7 @@ export default function AdminPage() {
       .limit(50)
     setHistorique(hs || [])
     setLoading(false)
-  }, [session])
+  }, [session, niveau])
 
   useEffect(() => { charger() }, [charger])
 
@@ -230,6 +243,9 @@ export default function AdminPage() {
   // ─── Écrans de garde ───────────────────────────────────────────────────
   if (checking) return <CenteredMsg>Vérification…</CenteredMsg>
   if (!session) return null // redirect en cours
+  if (session.user.email === ADMIN_EMAIL && niveau === 'code') {
+    return <EcranCodeAdmin onValide={relireNiveau} onDeconnexion={seDeconnecter}/>
+  }
   if (session.user.email !== ADMIN_EMAIL) {
     return <CenteredMsg variant="error">
       <strong>Accès refusé.</strong><br/>
@@ -267,6 +283,13 @@ export default function AdminPage() {
 
       <main style={{ maxWidth: 1080, margin: '0 auto', padding: '24px 16px 80px' }}>
         {loading && <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement…</p>}
+
+        {/* 🔐 EN TÊTE TANT QU'AUCUN APPAREIL N'EST ENRÔLÉ (29/09) : c'est la
+            seule chose urgente. Ensuite, la section descend avec les
+            diagnostics, et les validations reprennent la première place. */}
+        {niveau !== 'ok' && niveau !== 'code' && (
+          <SectionSecuriteAdmin toast={(msg, type) => setToast({ msg, type })} etat={niveau} onChange={relireNiveau}/>
+        )}
 
         {/* 🔴 LES DEUX VALIDATIONS D'ABORD (Alex, 30/08) : « ce sont les
             premiers éléments que je dois retrouver dans mon DB ». Elles étaient
@@ -331,6 +354,10 @@ export default function AdminPage() {
 
         {/* Tous les commerçants (édition + impersonation) */}
         <SectionTousCommercants toast={(msg, type) => setToast({ msg, type })} />
+
+        {niveau === 'ok' && (
+          <SectionSecuriteAdmin toast={(msg, type) => setToast({ msg, type })} etat={niveau} onChange={relireNiveau}/>
+        )}
 
         {/* Diagnostic Brevo : la connexion email/SMS répond-elle ? */}
         <SectionDiagnosticBrevo />

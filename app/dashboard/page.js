@@ -59,6 +59,7 @@ import { accesDashboard } from '@/lib/statut-commercant'
 import { raisonDebitImpossible, compteEncaisse, libelleRelance, raisonLienImpossible, messageLienImpossible } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
+import { ADMIN_EMAIL } from '@/lib/admin-identite'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1599,7 +1600,7 @@ export default function Dashboard() {
       // Au moindre doute : pas de mode admin, retour à /admin avec la raison.
       // ⚠️ La base laisse l'admin tout lire (policy « Admin Yoppaa FULL ») :
       // c'est pour ça que la question se pose ici, et pas seulement en base.
-      const adminEmail = 'verstappenalexandre@gmail.com'
+      const adminEmail = ADMIN_EMAIL
       const imp = lireImpersonation()
       if (user.email === adminEmail && imp) {
         const verdict = await verifierImpersonation(supabase, imp)

@@ -16,8 +16,9 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { adminVerifie } from '@/lib/api-auth'
+import { estAdresseAdmin } from '@/lib/admin-identite'
 
-const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
 async function requireAdmin(request) {
   const accessToken = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
@@ -30,7 +31,7 @@ async function requireAdmin(request) {
   )
   const { data: { user } } = await authClient.auth.getUser()
   if (!user) return { error: 'session expirée, reconnecte-toi', status: 401 }
-  if (user.email !== ADMIN_EMAIL) return { error: 'accès refusé', status: 403 }
+  if (!(await adminVerifie(request, user))) return { error: 'accès refusé', status: 403 }
 
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -136,7 +137,7 @@ export async function DELETE(request) {
     }
     if (c.auth_user_id) {
       const { data: vise } = await admin.auth.admin.getUserById(c.auth_user_id)
-      if (vise?.user?.email && vise.user.email === ADMIN_EMAIL) {
+      if (vise?.user?.email && estAdresseAdmin(vise.user.email)) {
         return NextResponse.json({
           ok: false,
           error: 'compte_admin',

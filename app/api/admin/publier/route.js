@@ -17,7 +17,7 @@
 // partent, puisque c'est enfin vrai.
 
 import { NextResponse } from 'next/server'
-import { utilisateurAppelant, estAdminYoppaa, clientAdmin } from '@/lib/api-auth'
+import { utilisateurAppelant, adminVerifie, clientAdmin } from '@/lib/api-auth'
 import { bilanDeLaFiche } from '@/lib/fiche-complete-server'
 import { phraseManquants } from '@/lib/fiche-complete'
 import { STATUTS_ACCES_AUTORISE, fichePubliee } from '@/lib/statut-commercant'
@@ -30,7 +30,7 @@ export async function POST(request) {
   try {
     const user = await utilisateurAppelant(request)
     if (!user) return NextResponse.json({ ok: false, error: 'session expirée, reconnecte-toi' }, { status: 401 })
-    if (!estAdminYoppaa(user)) return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
+    if (!(await adminVerifie(request, user))) return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
 
     const { commercant_id } = await request.json().catch(() => ({}))
     if (!commercant_id) return NextResponse.json({ ok: false, error: 'commercant_id requis' }, { status: 400 })

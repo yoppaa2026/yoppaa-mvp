@@ -15,8 +15,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerSms } from '@/lib/brevo'
 import { normaliserTelephone } from '@/lib/fidelite'
+import { adminVerifie } from '@/lib/api-auth'
 
-const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 const BREVO_API_URL = 'https://api.brevo.com/v3'
 
 export async function GET(request) {
@@ -33,7 +33,7 @@ export async function GET(request) {
     if (!user) {
       return NextResponse.json({ ok: false, error: 'session expirée, reconnecte-toi' }, { status: 401 })
     }
-    if (user.email !== ADMIN_EMAIL) {
+    if (!(await adminVerifie(request, user))) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
 

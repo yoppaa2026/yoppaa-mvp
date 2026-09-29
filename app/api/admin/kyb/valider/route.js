@@ -11,8 +11,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailKYBValide } from '@/lib/resend'
 import { creerSubscriptionAutomatique } from '@/lib/stripe-billing'
+import { adminVerifie } from '@/lib/api-auth'
 
-const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
 export async function POST(request) {
   try {
@@ -34,7 +34,7 @@ export async function POST(request) {
     )
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user || user.email !== ADMIN_EMAIL) {
+    if (!user || !(await adminVerifie(request, user))) {
       return NextResponse.json({ ok: false, error: 'acces refuse' }, { status: 403 })
     }
 

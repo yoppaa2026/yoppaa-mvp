@@ -29,6 +29,7 @@ import { createClient } from '@supabase/supabase-js'
 import { appliquerCredit } from '@/lib/fidelite'
 import { smsRecompenseDebloquee } from '@/lib/fidelite-sms'
 import { creerRecompensesDebloquees } from '@/lib/fidelite-recompense-server'
+import { adminVerifie } from '@/lib/api-auth'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -75,7 +76,7 @@ export async function POST(request) {
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
-    if (com.auth_user_id !== user.id && user.email !== 'verstappenalexandre@gmail.com') {
+    if (com.auth_user_id !== user.id && !(await adminVerifie(request, user))) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
 

@@ -20,6 +20,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { PLAN_LABEL, prixTTC, TVA_ABONNEMENT_POURCENT } from '@/lib/plans'
 import { euros } from '@/lib/montants'
 import { estRegimeLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
+import { ADMIN_EMAIL } from '@/lib/admin-identite'
 
 const T = {
   ink:    '#1A0840',
@@ -79,7 +80,7 @@ export default function AbonnementPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
 
-      const adminEmail = 'verstappenalexandre@gmail.com'
+      const adminEmail = ADMIN_EMAIL
       const isAdmin = user.email === adminEmail
 
       // 1. « Voir Dashboard » depuis /admin, DANS CET ONGLET et confirmé par le

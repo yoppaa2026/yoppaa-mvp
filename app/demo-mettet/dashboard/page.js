@@ -45,7 +45,7 @@ const SIGNALEMENTS = [
     id: 's1', type: 'nid_poule', statut: 'nouveau',
     adresse: 'Rue de l\'Église 12, 5640 Mettet',
     description: 'Trou profond environ 15 cm, dangereux pour les vélos',
-    yopper: 'Alexandre V.', yopper_email: 'verstappenalexandre@gmail.com',
+    yopper: 'Alexandre V.', yopper_email: 'alexandre.v@exemple.be',
     created_at: '2026-06-13T08:32:00',
     photo_emoji: '🕳️',
   },

@@ -19,11 +19,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailEspaceOuvert } from '@/lib/resend'
-import { clientAdmin } from '@/lib/api-auth'
+import { clientAdmin, adminVerifie } from '@/lib/api-auth'
 import { bilanDeLaFiche } from '@/lib/fiche-complete-server'
 import { fichePubliee } from '@/lib/statut-commercant'
 
-const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
 
 // Slugify : normalise un nom en slug URL-safe (sans accents, lowercase, tirets).
 function slugify(str) {
@@ -73,7 +72,7 @@ export async function POST(request) {
     if (!user) {
       return NextResponse.json({ ok: false, error: 'session expirée, reconnecte-toi' }, { status: 401 })
     }
-    if (user.email !== ADMIN_EMAIL) {
+    if (!(await adminVerifie(request, user))) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
 

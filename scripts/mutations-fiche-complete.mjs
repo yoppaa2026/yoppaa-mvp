@@ -73,7 +73,7 @@ const MUTATIONS = [
   { nom: '🔴 Publier ne verifie plus la fiche',
     fichier: PUBLIER, de: '    if (!bilan.complet) {', vers: '    if (false) {' },
   { nom: '🔴 Publier est ouvert a tout compte connecte',
-    fichier: PUBLIER, de: "    if (!estAdminYoppaa(user)) return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })", vers: '' },
+    fichier: PUBLIER, de: "    if (!(await adminVerifie(request, user))) return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })", vers: '' },
   { nom: '🔴 Valider publie de nouveau la fiche',
     fichier: VALIDER, de: "      statut_publication: dejaEnLigne ? 'publie' : 'en_attente',", vers: "      statut_publication: 'publie'," },
   { nom: '⚠️ une demande de mise en ligne sur une fiche incomplete est acceptee',

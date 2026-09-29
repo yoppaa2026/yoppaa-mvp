@@ -16,6 +16,7 @@ import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe
 import { getStripePriceIdSmsPack, getOrCreateStripeCustomer, getStripeTaxRateId } from '@/lib/stripe-billing'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { canDo, planEffectif } from '@/lib/plans'
+import { adminVerifie } from '@/lib/api-auth'
 
 export async function POST(request) {
   try {
@@ -50,7 +51,7 @@ export async function POST(request) {
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
-    if (com.auth_user_id !== user.id && user.email !== 'verstappenalexandre@gmail.com') {
+    if (com.auth_user_id !== user.id && !(await adminVerifie(request, user))) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
     // Les SMS ne servent qu'au programme de fidélité (Communiquer et Vendre)

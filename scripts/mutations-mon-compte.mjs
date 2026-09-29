@@ -39,19 +39,19 @@ const MUTATIONS = [
 
   { nom: '🔴 les signaux redeviennent aveugles au mode admin',
     fichier: 'app/api/dashboard/signaux/route.js',
-    de: '&& !estAdminYoppaa(user)',
+    de: '&& !(await adminVerifie(request, user))',
     vers: '&& true',
     garde: 'dashboard/signaux laisse passer l’administrateur' },
 
   { nom: '🔴 les statistiques redeviennent aveugles au mode admin',
     fichier: 'app/api/dashboard/statistiques/route.js',
-    de: '&& !estAdminYoppaa(user)',
+    de: '&& !(await adminVerifie(request, user))',
     vers: '&& true',
     garde: 'dashboard/statistiques laisse passer l’administrateur' },
 
   { nom: '🔴 l export comptable redevient aveugle au mode admin',
     fichier: 'app/api/dashboard/export-comptable/route.js',
-    de: '&& !estAdminYoppaa(user)',
+    de: '&& !(await adminVerifie(request, user))',
     vers: '&& true',
     garde: 'dashboard/export-comptable laisse passer l’administrateur' },
 
@@ -59,7 +59,7 @@ const MUTATIONS = [
   // qu une route veut laisser passer l admin sans appeler le point central.
   { nom: '⚠️ une route recopie l adresse admin au lieu d appeler le point central',
     fichier: 'app/api/accompagnement/souhaits/route.js',
-    de: 'estAdminYoppaa(user)',
+    de: 'await adminVerifie(request, user)',
     vers: "(user.email === 'verstappenalexandre@gmail.com')",
     garde: 'accompagnement/souhaits ne recopie pas l’adresse admin' },
 

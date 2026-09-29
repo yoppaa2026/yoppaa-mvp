@@ -19,6 +19,7 @@ import { createClient } from '@supabase/supabase-js'
 import { normaliserTelephone } from '@/lib/fidelite'
 import { smsCarteCreee } from '@/lib/fidelite-sms'
 import { verdictForfait } from '@/lib/garde-forfait'
+import { adminVerifie } from '@/lib/api-auth'
 
 export async function POST(request) {
   try {
@@ -54,7 +55,7 @@ export async function POST(request) {
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
-    if (com.auth_user_id !== user.id && user.email !== 'verstappenalexandre@gmail.com') {
+    if (com.auth_user_id !== user.id && !(await adminVerifie(request, user))) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
 

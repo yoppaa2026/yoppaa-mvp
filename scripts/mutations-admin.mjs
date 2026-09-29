@@ -247,9 +247,9 @@ const MUTATIONS = [
     vers: '    void 0' },
 
   { nom: '🔴 « Voir Dashboard » s ecrit de nouveau dans le navigateur',
-    fichier: 'app/admin/SectionTousCommercants.js',
-    de: '      if (!poserImpersonation(c.id, j.impersonation_id)) {',
-    vers: "      if (localStorage.setItem('yoppaa_admin_impersonating', c.id)) {" },
+    fichier: 'app/admin/ouvrirTableauDeBord.js',
+    de: '  if (!poserImpersonation(commercantId, j.impersonation_id)) {',
+    vers: "  if (localStorage.setItem('yoppaa_admin_impersonating', commercantId)) {" },
 
   // ─── LE MESSAGE ET LE BOUTON (16/09) ────────────────────────────────────
   { nom: '🔴 le bouton reprend un nom que les messages ne citent pas',

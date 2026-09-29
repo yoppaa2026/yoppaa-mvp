@@ -107,6 +107,18 @@ const MUTATIONS = [
   { nom: '⚠️ la relance ne montre plus ce qui est deja fait',
     fichier: EMAILS, de: "        ${k.atteint ? 'Fait' : echapperHtml(k.avancement || 'À faire')}", vers: "        ${echapperHtml(k.avancement || 'À faire')}" },
 
+  // ─── LA PRESENTATION A L INSCRIPTION (Alex, 29/09) ───────────────────────
+  { nom: '🔴 le compteur compte de nouveau les espaces',
+    fichier: 'app/signup/page.js', de: '  const presentationLongueur = form.description.trim().length', vers: '  const presentationLongueur = form.description.length' },
+  { nom: '⚠️ le compteur ne passe plus au rouge',
+    fichier: 'app/signup/page.js', de: "color: presentationManque > 0 ? '#B91C1C' : '#047857'", vers: "color: '#6B7280'" },
+  { nom: '⚠️ l aide du bas redevient generique',
+    fichier: 'app/signup/page.js', de: '            : presentationManque > 0', vers: '            : false' },
+  { nom: '⚠️ le score d inscription reprend son propre seuil',
+    fichier: 'lib/score-onboarding.js', de: "      atteint: (commercant.description || '').trim().length >= MIN_PRESENTATION,", vers: "      atteint: (commercant.description || '').trim().length >= 20," },
+  { nom: '🔴 le bloc renvoie de nouveau vers une fiche publique inexistante',
+    fichier: SECTION, de: '              <button onClick={() => voir(f)} disabled={occupe}', vers: '              <a href={`/commander/${f.slug}`} onClick={() => voir(f)} disabled={occupe}' },
+
   // 🔴 LA LANDING PROMETTRAIT DE NOUVEAU UNE MISE EN LIGNE A LA VALIDATION.
   { nom: '🔴 la landing promet encore la mise en ligne des la validation', banc: 'verif:lancement',
     fichier: LANDING, de: 'Ta commune est déjà ouverte et ta page part en ligne dès qu&rsquo;elle est complète.', vers: 'Ta commune est déjà ouverte et ta page part en ligne dès sa validation.' },

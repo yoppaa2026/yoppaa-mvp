@@ -277,6 +277,37 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('Publier n apparaît que sur une fiche complète', /\{f\.complet && \(/.test(section))
   v('Relancer n apparaît que sur une fiche incomplète', /\{!f\.complet && f\.email && \(/.test(section))
   v('chaque envoi se confirme', /geste: 'relancer'/.test(section) && /geste: 'publier'/.test(section))
+
+  // 🔴 ALEX, 29/09 : « Aperçu » menait à la liste des commerces, la fiche
+  // n'existant pas avant sa publication. Même lien mort dans « À valider ».
+  v('le bloc ne renvoie plus vers une fiche publique qui n existe pas', !/\/commander\//.test(section))
+  v('il ouvre le tableau de bord en mode admin', /onClick=\{\(\) => voir\(f\)\}/.test(section) && /await demarrerModeAdmin\(f\.id,/.test(section))
+  v('« À valider » ne renvoie plus vers une fiche publique', !/href=\{`\/commander\/\$\{c\.slug\}`\}/.test(admin))
+}
+
+// ═══ 11) LA PRÉSENTATION À L'INSCRIPTION (Alex, 29/09) ══════════════════════
+//
+// 🔴 « des commerçants se sont déjà retrouvés bloqués à cet endroit ». Le
+// compteur comptait les espaces que la règle retire : « 20 / 20 » affiché,
+// bouton toujours gris.
+{
+  const signup = code('app/signup/page.js')
+  v('le compteur retire les espaces, comme la règle',
+    /const presentationLongueur = form\.description\.trim\(\)\.length/.test(signup))
+  v('le bouton se débloque sur le même compte',
+    /const presentationManque = Math\.max\(0, MIN_PRESENTATION - presentationLongueur\)/.test(signup)
+    && /presentationManque === 0 &&/.test(signup))
+  v('le seuil vient de la règle de la fiche complète, pas d un 20 recopié',
+    /import \{ MIN_PRESENTATION \} from '@\/lib\/fiche-complete'/.test(signup) && !/description\.trim\(\)\.length >= 20/.test(signup))
+  v('rouge tant qu il manque, vert quand c est bon',
+    /color: presentationManque > 0 \? '#B91C1C' : '#047857'/.test(signup))
+  v('il dit combien il en manque', /`Encore \$\{presentationManque\} caractère/.test(signup))
+  // ⚠️ LA CONDITION, PAS LA PHRASE : la première version cherchait « il en
+  // manque », qui restait écrit même quand plus rien ne l'affichait.
+  v('l aide du bas nomme la présentation quand c est elle qui bloque',
+    /: presentationManque > 0\s*\? `Ta présentation doit faire au moins \$\{MIN_PRESENTATION\} caractères : il en manque \$\{presentationManque\}\.`/.test(signup))
+  v('le score d inscription exige la même longueur',
+    /trim\(\)\.length >= MIN_PRESENTATION/.test(code('lib/score-onboarding.js')))
 }
 
 console.log(`\nUne fiche n'est montrée que complète : ${ok} vérifications`)

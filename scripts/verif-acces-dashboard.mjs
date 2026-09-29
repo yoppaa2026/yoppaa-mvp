@@ -446,6 +446,10 @@ function sansCommentaires(src) {
   // ── Le code, là où la règle doit être appelée ──────────────────────────
   const dash = sansCommentaires(lire('app/dashboard/page.js'))
   const liste = sansCommentaires(lire('app/admin/SectionTousCommercants.js'))
+  // ⚠️ LE GESTE A DÉMÉNAGÉ LE 29/09 dans un fichier appelé de deux endroits
+  // (la liste et le bloc « Fiches à mettre en ligne ») : les gardes le suivent.
+  const geste = sansCommentaires(lire('app/admin/ouvrirTableauDeBord.js'))
+  const blocFiches = sansCommentaires(lire('app/admin/SectionFichesAPublier.js'))
   const abo = sansCommentaires(lire('app/dashboard/abonnement/page.js'))
   const pageAdmin = sansCommentaires(lire('app/admin/page.js'))
   const routeVerif = sansCommentaires(lire('app/api/admin/impersonate-verifier/route.js'))
@@ -453,10 +457,14 @@ function sansCommentaires(src) {
   const routeDebut = sansCommentaires(lire('app/api/admin/impersonate-start/route.js'))
 
   verifier('🔴 plus aucun « Voir Dashboard » dans le localStorage',
-    !/localStorage\.(getItem|setItem)\('yoppaa_admin_impersonat/.test([dash, liste, abo, pageAdmin].join('\n')))
+    !/localStorage\.(getItem|setItem)\('yoppaa_admin_impersonat/.test([dash, liste, geste, blocFiches, abo, pageAdmin].join('\n')))
   verifier('🔴 « Voir Dashboard » se range dans l’onglet, et le dit s’il n’y arrive pas',
-    /if \(!poserImpersonation\(c\.id, j\.impersonation_id\)\) \{/.test(liste))
-  verifier('🔴 et ne pose plus le commerce du tableau de bord', !/yoppaa_dashboard_commercant_id/.test(liste))
+    /if \(!poserImpersonation\(commercantId, j\.impersonation_id\)\) \{/.test(geste))
+  verifier('🔴 et ne pose plus le commerce du tableau de bord', !/yoppaa_dashboard_commercant_id/.test([liste, geste, blocFiches].join('\n')))
+  verifier('les deux boutons passent par le même geste, journalisé',
+    /await demarrerModeAdmin\(c\.id,/.test(liste) && /await demarrerModeAdmin\(f\.id,/.test(blocFiches)
+    && /fetch\('\/api\/admin\/impersonate-start'/.test(geste))
+  verifier('personne ne recopie l appel au journal', !/impersonate-start/.test(liste) && !/impersonate-start/.test(blocFiches))
 
   // 🔴 UN MESSAGE NOMME UN BOUTON QUI DOIT EXISTER SOUS CE NOM (16/09, relevé en
   // écrivant la procédure d'essai d'Alex). Les messages de /admin disaient

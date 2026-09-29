@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { poserImpersonation } from '@/lib/impersonation'
+import { demarrerModeAdmin } from './ouvrirTableauDeBord'
 import { publicationDifferee, COLONNES_PUBLICATION_DIFFEREE } from '@/lib/statut-commercant'
 import ModalEditCommercant from './ModalEditCommercant'
 
@@ -107,27 +107,11 @@ export default function SectionTousCommercants({ toast }) {
   }
 
   async function voirDashboard(c) {
-    // Demarre une session d'impersonation : POST /api/admin/impersonate-start qui logue
-    // dans admin_impersonations (conformite RGPD). Retourne l'impersonation_id que
-    // le tableau de bord fait confirmer par le serveur à chaque chargement.
+    // ⚠️ LE GESTE VIT DANS `ouvrirTableauDeBord.js` depuis le 29/09 : le bloc
+    // « Fiches à mettre en ligne » l'appelle aussi, et une copie finirait par
+    // ne plus journaliser la même chose.
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/api/admin/impersonate-start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
-        body: JSON.stringify({ commercant_id: c.id, raison: 'Acces depuis liste admin' }),
-      })
-      const j = await res.json()
-      if (!j.ok) throw new Error(j.error || 'Erreur impersonation')
-
-      // 🔴 DANS L'ONGLET, PLUS DANS LE NAVIGATEUR (15/09, trouvé par Alex). Le
-      // localStorage est commun à tous les onglets et ne s'efface jamais seul :
-      // le dernier « Voir Dashboard » gagnait partout, pour toujours. Et
-      // `yoppaa_dashboard_commercant_id`, écrit ici aussi, rouvrait ce commerce
-      // SANS BANDEAU dans la page Abonnement. On n'écrit plus que dans l'onglet.
-      if (!poserImpersonation(c.id, j.impersonation_id)) {
-        throw new Error('ce navigateur refuse le stockage de l’onglet')
-      }
+      await demarrerModeAdmin(c.id, 'Acces depuis liste admin')
       router.push('/dashboard')
     } catch (e) {
       console.error('[voirDashboard]', e)

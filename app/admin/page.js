@@ -18,7 +18,7 @@ import SectionDiagnosticBrevo from './SectionDiagnosticBrevo'
 import SectionCommunes from './SectionCommunes'
 import SectionSuggestions from './SectionSuggestions'
 import SectionDiagnosticRatelimit from './SectionDiagnosticRatelimit'
-import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Eye, Lock, AlertTriangle } from 'lucide-react'
+import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Lock, AlertTriangle } from 'lucide-react'
 import { TAILLE_CONSEILLEE, avertissementTaille, bilanTaillesImages } from '@/lib/image-qualite'
 
 const ADMIN_EMAIL = 'verstappenalexandre@gmail.com'
@@ -567,12 +567,10 @@ function CarteAValider({ commercant: c, photos = [], onValider, onRejeter, disab
 
       {/* Actions */}
       <div style={{ borderTop: `1px solid ${T.hairline}`, padding: 14, background: T.bg, display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-        {c.slug && (
-          <a href={`/commander/${c.slug}`} target="_blank" rel="noopener noreferrer"
-            style={{ padding: '9px 16px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textDecoration: 'none' }}>
-            <Eye size={13} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aperçu fiche
-          </a>
-        )}
+        {/* 🔴 PLUS DE LIEN « APERÇU FICHE » ICI (29/09, vu par Alex dans le
+            bloc voisin). Un dossier à valider n'est jamais publié : le lien
+            menait à la liste des commerces, jamais à sa fiche. Ses photos et
+            ses informations sont déjà sur cette carte. */}
         <button onClick={onRejeter} disabled={disabled}
           style={{ padding: '9px 16px', borderRadius: 100, border: `1.5px solid #FCA5A5`, background: '#fff', color: '#DC2626', fontWeight: 700, fontSize: 13, cursor: disabled ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
           ✕ Rejeter

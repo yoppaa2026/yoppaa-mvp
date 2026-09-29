@@ -16,7 +16,9 @@
 // article a pu être retiré.
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { demarrerModeAdmin } from './ouvrirTableauDeBord'
 import { Globe, Send, RefreshCw, Phone, Mail, Check, Circle, Eye } from 'lucide-react'
 import { attenteDepuis } from '@/lib/statut-commercant'
 
@@ -53,6 +55,7 @@ function trier(fiches) {
 }
 
 export default function SectionFichesAPublier({ toast }) {
+  const router = useRouter()
   const [fiches, setFiches] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
@@ -99,7 +102,16 @@ export default function SectionFichesAPublier({ toast }) {
     setEnCours(null)
   }
 
-  const nbDemandes = fiches.filter(f => f.publication_demandee_at).length
+  async function voir(f) {
+    try {
+      await demarrerModeAdmin(f.id, 'Relecture avant mise en ligne')
+      router.push('/dashboard')
+    } catch (e) {
+      toast?.(`Erreur impersonation : ${e.message}`, 'error')
+    }
+  }
+
+  const nbDemandes =fiches.filter(f => f.publication_demandee_at).length
 
   return (
     <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${T.hairline}`, padding: '18px 20px', marginBottom: 20 }}>
@@ -191,11 +203,13 @@ export default function SectionFichesAPublier({ toast }) {
                   <Mail size={13} strokeWidth={2.4}/> {f.email}
                 </a>
               )}
-              {f.slug && (
-                <a href={`/commander/${f.slug}`} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 6, border: `1.5px solid ${T.hairline}`, color: T.muted, textDecoration: 'none', fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 10 }}>
-                  <Eye size={13} strokeWidth={2.2}/> Aperçu
-                </a>
-              )}
+              {/* 🔴 PAS DE LIEN VERS LA FICHE PUBLIQUE (Alex, 29/09) : elle
+                  n'existe pas avant la publication, on atterrissait sur la
+                  liste des commerces. Le tableau de bord, lui, montre comment
+                  la fiche a été remplie, photos comprises. */}
+              <button onClick={() => voir(f)} disabled={occupe} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1.5px solid ${T.hairline}`, color: T.deep, fontSize: 12.5, fontWeight: 700, padding: '7px 12px', borderRadius: 10, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                <Eye size={13} strokeWidth={2.2}/> Voir Dashboard →
+              </button>
 
               <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 {/* ⚠️ UNE CONFIRMATION QUI DIT À QUI ET QUOI. Un email parti ne

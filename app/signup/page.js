@@ -10,6 +10,7 @@ import { compresserImage } from '@/lib/compress-image'
 import { TAILLE_CONSEILLEE, avertissementTaille, refusFichierImage, mesurerFichierImage } from '@/lib/image-qualite'
 import { logoProvisoireSvg, propositionsLogo } from '@/lib/logo-provisoire'
 import { scoreOnboarding, SEUIL_SOUMISSION } from '@/lib/score-onboarding'
+import { MIN_PRESENTATION } from '@/lib/fiche-complete'
 import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
 import { SHOP_PRODUCTS, classerProduitsParCategorie, prixProduitTexte } from '@/lib/produits-boutique'
 import { FRAIS_STRIPE_TEXTE } from '@/lib/frais-paiement'
@@ -1186,12 +1187,21 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
   // fiche n'annonce plus rien, et « Mes lieux » réclame le complément dès la
   // première connexion au tableau de bord. Le client n'est jamais envoyé chez
   // un commerçant qui n'a pas dit où il accueille.
+  // 🔴 LA PRÉSENTATION BLOQUAIT SANS LE DIRE (Alex, 29/09 : « des commerçants
+  // se sont déjà retrouvés bloqués à cet endroit »). Trois défauts cumulés :
+  // le compteur comptait les espaces alors que la règle les retire (« 20 / 20 »
+  // affiché, bouton toujours gris) ; il était écrit en petit gris dans le
+  // sous-titre, loin du champ ; et l'aide du bas disait seulement « complète
+  // tous les champs ». Le seuil vient désormais de la règle de la fiche
+  // complète : l'inscription et le tableau de bord ne peuvent plus diverger.
+  const presentationLongueur = form.description.trim().length
+  const presentationManque = Math.max(0, MIN_PRESENTATION - presentationLongueur)
   const valide =
     form.nom.trim().length >= 2 &&
     form.type.trim().length > 0 &&
     form.adresse.trim().length > 0 &&
     form.telephone.trim().length >= 8 &&
-    form.description.trim().length >= 20 &&
+    presentationManque === 0 &&
     form.latitude && form.longitude
 
   // Sauvegarde auto (debounced)
@@ -1356,7 +1366,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
         </p>
       </Card>
 
-      <Card titre="Ta présentation" sous={`Minimum 20 caractères. ${form.description.length} / 20.`}>
+      <Card titre="Ta présentation" sous={`Au moins ${MIN_PRESENTATION} caractères, quelques mots suffisent.`}>
         {/* Écrire sur soi est l'étape où l'on abandonne une inscription. Trois
             textes à choisir et à retoucher lèvent ce blocage, et le commerçant
             découvre au passage l'assistant de rédaction. */}
@@ -1396,14 +1406,36 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
         <textarea value={form.description} onChange={e => updateField('description', e.target.value)}
           placeholder="Quelques mots qui décrivent ton commerce, ce qui te rend unique…"
           rows={4}
-          style={{ ...inputStyle(), minHeight: 90, resize: 'vertical' }}/>
+          aria-describedby="presentation-etat"
+          style={{ ...inputStyle(), minHeight: 90, resize: 'vertical', borderColor: presentationManque > 0 ? '#FCA5A5' : '#6EE7B7' }}/>
+        {/* ⚠️ SOUS LE CHAMP, EN COULEUR, ET CE QU'IL RESTE À ÉCRIRE : rouge tant
+            qu'il manque des caractères, vert quand c'est bon. Les espaces ne
+            comptent pas, exactement comme la règle qui débloque le bouton. */}
+        <p id="presentation-etat" aria-live="polite"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 0', fontSize: 12.5, fontWeight: 800, color: presentationManque > 0 ? '#B91C1C' : '#047857' }}>
+          {presentationManque > 0 ? (
+            <>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+              {presentationLongueur === 0
+                ? `Écris au moins ${MIN_PRESENTATION} caractères pour continuer.`
+                : `Encore ${presentationManque} caractère${presentationManque > 1 ? 's' : ''} pour continuer (${presentationLongueur} / ${MIN_PRESENTATION}).`}
+            </>
+          ) : (
+            <>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>
+              C&rsquo;est bon, ta présentation est suffisante.
+            </>
+          )}
+        </p>
       </Card>
 
       <NavEtape retour={retourAvecSauvegarde} continuer={continuer} valide={valide} saving={saving}
         hint={valide ? null
           : (form.adresse.trim().length > 0 && (!form.latitude || !form.longitude))
             ? 'Sélectionne ton adresse dans la liste de suggestions pour la localiser sur la carte.'
-            : 'Complète tous les champs pour continuer.'}/>
+            : presentationManque > 0
+              ? `Ta présentation doit faire au moins ${MIN_PRESENTATION} caractères : il en manque ${presentationManque}.`
+              : 'Complète tous les champs pour continuer.'}/>
     </div>
   )
 }

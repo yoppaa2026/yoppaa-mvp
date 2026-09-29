@@ -22,6 +22,14 @@ import { libelleRetrait } from '@/lib/libelle-retrait'
 import { libelleStatutCommande, STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
 import { euros } from '@/lib/montants'
 import { libelleJourPoste } from '@/lib/equipe-poste'
+// ── Étape 3 : les gestes, avec les MÊMES questions et les MÊMES routes que le
+// tableau de bord du patron (29/09).
+import { postPro, prevenirClient } from '@/lib/fetch-pro'
+import PosteConfirmation, { confirmer } from '@/app/dashboard/PosteConfirmation'
+import { questionRdv, statutDepuisChoix, noShowPossible, questionEncaissement } from '@/lib/confirmation-rdv'
+import { resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
+import { STATUT_SUIVANT, LIBELLE_GESTE_SUIVANT, transitionPermise } from '@/lib/statuts-commande'
+import { peutMarquerNonRetire } from '@/lib/rappels-retrait'
 
 const T = { fond: '#F8F6FF', ink: '#1A0840', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', panel: '#160636', rouge: '#B91C1C', vert: '#047857', filet: '#E7DEF6' }
 const carte = { background: '#fff', borderRadius: 14, border: `1px solid ${T.filet}`, padding: 14, boxSizing: 'border-box' }
@@ -46,7 +54,9 @@ function Telephone({ numero }) {
 }
 
 // ─── Le détail d'un rendez-vous, en lecture ─────────────────────────────────
-function DetailRdv({ rdv, commerce, onFermer }) {
+function DetailRdv({ rdv, commerce, droits = {}, gestes = null, enCours = false, onFermer }) {
+  const enAttente = rdv.statut === 'confirme'
+  const absentPossible = enAttente && droits.argent && noShowPossible(rdv, new Date())
   const table = estReservationDeTable(rdv)
   const intitule = intituleReservation({ prestation_nom: rdv.prestation?.nom, table, couverts: couvertsDe(rdv) })
   const statut = statutRdv(rdv)
@@ -71,7 +81,18 @@ function DetailRdv({ rdv, commerce, onFermer }) {
         {rdv.notes_client && <p style={{ margin: '10px 0 0', fontSize: 13.5, color: T.ink, background: T.fond, borderRadius: 10, padding: '8px 10px' }}>« {rdv.notes_client} »</p>}
         {paiement && <p style={{ margin: '10px 0 0', fontSize: 13, color: T.muted }}><strong style={{ color: T.ink }}>{paiement.libelle}</strong>{paiement.detail ? ` · ${paiement.detail}` : ''}</p>}
         {rdv.lieu_libelle && <p style={{ margin: '6px 0 0', fontSize: 12.5, color: T.muted }}>{rdv.lieu_libelle}</p>}
-        <button type="button" onClick={onFermer} style={{ ...puce(true), width: '100%', marginTop: 16, padding: '12px 14px' }}>Fermer</button>
+        {enAttente && gestes && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+            <button type="button" disabled={enCours} onClick={() => gestes.venu(rdv)} style={{ ...puce(true), padding: '12px 14px', background: T.vert, borderColor: T.vert }}>
+              {enCours ? <DotsAttente label="Enregistrement"/> : 'Client venu'}
+            </button>
+            {absentPossible && (
+              <button type="button" disabled={enCours} onClick={() => gestes.absent(rdv)} style={{ ...puce(false), padding: '12px 14px' }}>Client absent</button>
+            )}
+            <button type="button" disabled={enCours} onClick={() => gestes.annuler(rdv)} style={{ ...puce(false), padding: '12px 14px', color: T.rouge, borderColor: '#FCA5A5' }}>Annuler la réservation</button>
+          </div>
+        )}
+        <button type="button" onClick={onFermer} style={{ ...puce(!enAttente || !gestes), width: '100%', marginTop: enAttente && gestes ? 8 : 16, padding: '12px 14px' }}>Fermer</button>
       </div>
     </div>
   )
@@ -85,7 +106,10 @@ const FILTRES = [
   { cle: 'tout', label: 'Tout', garde: () => true },
 ]
 
-function CarteCommande({ c, commerce }) {
+function CarteCommande({ c, commerce, gestes = null, enCours = false }) {
+  const vers = STATUT_SUIVANT[c.statut]
+  const avancer = gestes && vers && transitionPermise(c, vers)
+  const nonRetire = gestes && peutMarquerNonRetire(c, new Date())
   const creneau = c.creneau || c.creneau_livraison || null
   const paiement = etatPaiementCommande(c, { categorie: commerce.categorie })
   const retrait = libelleRetrait({ ...c, commercant: commerce }, creneau, { court: true })
@@ -116,11 +140,23 @@ function CarteCommande({ c, commerce }) {
         {c.client_telephone ? <Telephone numero={c.client_telephone}/> : <span/>}
         {paiement && <span style={{ color: T.muted }}><strong style={{ color: T.ink }}>{paiement.libelle}</strong>{Number(c.total) > 0 ? ` · ${euros(c.total)}` : ''}</span>}
       </div>
+      {(avancer || nonRetire) && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          {avancer && (
+            <button type="button" disabled={enCours} onClick={() => gestes.avancer(c)} style={{ ...puce(true), flex: 1, padding: '11px 14px' }}>
+              {enCours ? <DotsAttente label="Enregistrement"/> : LIBELLE_GESTE_SUIVANT[c.statut]}
+            </button>
+          )}
+          {nonRetire && (
+            <button type="button" disabled={enCours} onClick={() => gestes.nonRetire(c)} style={{ ...puce(false), padding: '11px 14px' }}>Non retirée</button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-function Commandes({ commandes, commerce, aujourdhui }) {
+function Commandes({ commandes, commerce, aujourdhui, gestes = null, enCours = null }) {
   const [filtre, setFiltre] = useState('en_cours')
   const garde = FILTRES.find(f => f.cle === filtre)?.garde || (() => true)
   const visibles = commandes.filter(garde)
@@ -147,7 +183,7 @@ function Commandes({ commandes, commerce, aujourdhui }) {
         <div key={jour} style={{ marginBottom: 16 }}>
           <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1px' }}>{libelleJourPoste(jour, aujourdhui)}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce}/>)}
+            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce} gestes={gestes} enCours={enCours === c.id}/>)}
           </div>
         </div>
       ))}
@@ -203,6 +239,9 @@ export default function PosteEquipe({ equipe, onChanger }) {
   const [etat, setEtat] = useState({ charge: false })
   const [onglet, setOnglet] = useState(null)
   const [rdvOuvert, setRdvOuvert] = useState(null)
+  // Ce qui travaille (l'identifiant de la ligne), et ce qu'on dit après.
+  const [enCours, setEnCours] = useState(null)
+  const [avis, setAvis] = useState(null)   // { texte, ton: 'ok' | 'erreur' }
 
   const charger = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -234,6 +273,118 @@ export default function PosteEquipe({ equipe, onChanger }) {
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', auRetour); window.removeEventListener('pageshow', auRetour) }
   }, [charger])
 
+  // ─── LES GESTES (étape 3) ──────────────────────────────────────────────────
+  //
+  // ⚠️ CHAQUE GESTE SUIT LA SÉQUENCE DU TABLEAU DE BORD, route pour route :
+  // la question (`questionRdv`, `questionEncaissement`), la route qui écrit,
+  // puis celle qui prévient le client avec ce que la première a rendu. Le
+  // serveur revérifie tout : la case, le commerce, le statut, le montant.
+  const dire = (texte, ton = 'ok') => setAvis({ texte, ton })
+  async function lire(res) {
+    if (!res || res.sansSession) return { ok: false, error: 'Ta session a expiré, reconnecte-toi.' }
+    if (res.erreurReseau) return { ok: false, error: 'Pas de connexion, réessaie.' }
+    const j = await res.json().catch(() => null)
+    return j || { ok: false, error: `Réponse illisible (${res.status}).` }
+  }
+  // Un client pas prévenu se DIT : l'écran ne fait pas comme si l'email était parti.
+  async function prevenir(url, corps, quoi) {
+    const r = await prevenirClient(url, corps, quoi)
+    if (!r.ok) dire(`C’est enregistré, mais ${quoi} n’a pas pu partir (${r.erreur}). Préviens ton responsable.`, 'erreur')
+    return r
+  }
+  async function geste(id, travail) {
+    if (enCours) return
+    setEnCours(id); setAvis(null)
+    try { await travail() } finally { setEnCours(null); await charger() }
+  }
+  const categorie = etat.commerce?.categorie || null
+  const gestesRdv = {
+    venu: (rdv) => geste(rdv.id, async () => {
+      let encaissement = null
+      if (resteAEncaisser(rdv) > 0) {
+        const choix = await confirmer(questionRdv('honore', rdv, categorie))
+        if (!choix || choix === 'rien') return
+        encaissement = choix
+      }
+      const j = await lire(await postPro('/api/equipe/rdv/venu', { rdv_id: rdv.id, encaissement }))
+      if (!j.ok) { dire(j.error || 'Impossible de noter ce client venu.', 'erreur'); return }
+      setRdvOuvert(null)
+      dire('Client noté venu')
+      await prevenir('/api/fidelite/rdv-honore', { rdv_id: rdv.id }, 'le crédit de fidélité du client')
+      if (j.commande_id) await prevenir('/api/commande/produits-remis', { commande_id: j.commande_id }, 'la remise de ses produits')
+    }),
+    annuler: (rdv) => geste(rdv.id, async () => {
+      // La question du patron, sans « déplacer » : ce geste arrive plus tard.
+      const q = questionRdv('annule_commercant', rdv, categorie)
+      const choix = await confirmer({ ...q, actions: (q.actions || []).filter(a => a.valeur !== 'deplacer') })
+      const d = statutDepuisChoix('annule_commercant', choix)
+      if (!d) return
+      const j = await lire(await postPro('/api/rdv/annuler-commercant', { rdv_id: rdv.id, raison: d.raison }))
+      if (!j.ok) { dire(j.error || 'La réservation n’a pas pu être annulée.', 'erreur'); return }
+      setRdvOuvert(null)
+      dire('Réservation annulée')
+      await prevenir('/api/emails/rdv-annule', {
+        rdv_id: rdv.id,
+        raison_annulation: d.raison,
+        refund_montant: j.refund_montant,
+        refund_en_cours: !!j.refund_id && !j.refund_error,
+        bon_rendu: j.bon_rendu,
+        nb_bons: j.nb_bons,
+        recompense_rendue: j.recompense_rendue,
+        produits_montant: j.produits_montant,
+      }, 'l’email d’annulation au client')
+    }),
+    absent: (rdv) => geste(rdv.id, async () => {
+      const choix = await confirmer(questionRdv('no_show', rdv, categorie))
+      const d = statutDepuisChoix('no_show', choix)
+      if (!d) return
+      const j = await lire(await postPro('/api/rdv/no-show', { rdv_id: rdv.id }))
+      if (!j.ok) { dire(j.error || 'Ce client n’a pas pu être noté absent.', 'erreur'); return }
+      setRdvOuvert(null)
+      dire('Client noté absent')
+      await prevenir('/api/emails/rdv-no-show', {
+        rdv_id: rdv.id,
+        bon_garde: j.garde_sur_bon,
+        bon_restitue: j.bon_restitue,
+        recompense_rendue: j.recompense_rendue,
+      }, 'l’email « tu n’es pas venu »')
+    }),
+  }
+  const gestesCommande = {
+    avancer: (c) => geste(c.id, async () => {
+      const vers = STATUT_SUIVANT[c.statut]
+      let encaissement = null
+      if (vers === 'recupere' && !c.encaisse_mode) {
+        const reste = resteAEncaisserCommande(c)
+        if (reste > 0) {
+          const choix = await confirmer(questionEncaissement({ montant: reste, nom: c.client_nom }))
+          if (!choix || choix === 'rien') return
+          encaissement = choix
+        }
+      }
+      const j = await lire(await postPro('/api/equipe/commande/statut', { commande_id: c.id, statut: vers, encaissement }))
+      if (!j.ok) { dire(j.error || 'La commande n’a pas pu avancer.', 'erreur'); return }
+      dire(vers === 'recupere' ? 'Commande remise' : vers === 'pret' ? 'Commande prête' : 'Préparation démarrée')
+      if (vers === 'recupere') await prevenir('/api/fidelite/crediter', { commande_id: c.id }, 'le crédit de fidélité du client')
+      if (vers === 'en_preparation' || vers === 'pret') await prevenir('/api/commande/push-statut', { commande_id: c.id, statut: vers }, 'la notification au client')
+      if (vers === 'pret') await prevenir('/api/emails/commande-prete', { commande_id: c.id }, 'l’email « c’est prêt »')
+    }),
+    nonRetire: (c) => geste(c.id, async () => {
+      const choix = await confirmer({
+        titre: 'Commande non retirée ?',
+        message: 'Le client n’est pas venu la chercher. Ses articles repartent en stock.',
+        actions: [
+          { valeur: 'oui', ton: 'danger', label: 'Oui, non retirée' },
+          { valeur: 'rien', ton: 'neutre', label: 'Ne rien faire' },
+        ],
+      })
+      if (choix !== 'oui') return
+      const j = await lire(await postPro('/api/commande/non-retire', { commande_id: c.id }))
+      if (!j.ok) { dire(j.error || 'La commande n’a pas pu être notée non retirée.', 'erreur'); return }
+      dire('Commande notée non retirée')
+    }),
+  }
+
   const onglets = [
     etat.agenda && { cle: 'agenda', label: 'Agenda' },
     etat.commandes && { cle: 'commandes', label: 'Commandes' },
@@ -251,6 +402,10 @@ export default function PosteEquipe({ equipe, onChanger }) {
       {!etat.charge && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><DotsAttente couleur={T.main} label="Chargement du poste"/></div>}
       {etat.erreur && <p style={{ color: T.rouge, fontWeight: 700 }}>{etat.erreur}</p>}
       {etat.horsLigne && <p style={{ color: T.rouge, fontWeight: 700, fontSize: 13 }}>Pas de connexion : ce qui s&rsquo;affiche n&rsquo;est peut-être plus à jour.</p>}
+      {avis && (
+        <p role="status" style={{ margin: '0 0 12px', padding: '10px 12px', borderRadius: 12, fontSize: 13.5, fontWeight: 700, background: avis.ton === 'erreur' ? '#FEE2E2' : '#DCFCE7', color: avis.ton === 'erreur' ? T.rouge : T.vert }}>{avis.texte}</p>
+      )}
+      <PosteConfirmation/>
 
       {etat.charge && !etat.erreur && onglets.length === 0 && (
         <p style={{ color: T.muted }}>Tes cases ne donnent encore rien à afficher ici. Le comptoir arrive bientôt.</p>
@@ -268,10 +423,10 @@ export default function PosteEquipe({ equipe, onChanger }) {
             horairesDetail={etat.commerce?.horaires_detail} commercant={etat.commerce} onSelectRdv={setRdvOuvert}/>
         </div>
       )}
-      {actif === 'commandes' && etat.commandes && <Commandes commandes={etat.commandes} commerce={etat.commerce} aujourdhui={etat.aujourdhui}/>}
+      {actif === 'commandes' && etat.commandes && <Commandes commandes={etat.commandes} commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null} enCours={enCours}/>}
       {actif === 'livraisons' && etat.livraisons && <Livraisons livraisons={etat.livraisons}/>}
 
-      {rdvOuvert && <DetailRdv rdv={rdvOuvert} commerce={etat.commerce} onFermer={() => setRdvOuvert(null)}/>}
+      {rdvOuvert && <DetailRdv rdv={rdvOuvert} commerce={etat.commerce} droits={etat.droits || {}} gestes={etat.droits?.agenda ? gestesRdv : null} enCours={enCours === rdvOuvert.id} onFermer={() => setRdvOuvert(null)}/>}
     </div>
   )
 }

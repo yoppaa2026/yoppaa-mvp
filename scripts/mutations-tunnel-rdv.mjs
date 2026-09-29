@@ -55,7 +55,8 @@ const MUTATIONS = [
 
   { nom: '🔴 la route d’annulation commerçant perd sa garde d’autorisation',
     fichier: 'app/api/rdv/annuler-commercant/route.js',
-    de: "    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)",
+    // ⚠️ ANCRE REPOINTÉE LE 29/09 : garde commune du patron et de l'équipe.
+    de: "    const verdict = await gardeLigneEquipe(request, supabase, 'rdv_reservations', rdv_id, 'agenda')",
     vers: '    const verdict = { ok: true }' },
 
   // ─── 4) LE WEBHOOK QUI COUPAIT LA BRANCHE COMMANDE ────────────────────
@@ -277,7 +278,8 @@ const MUTATIONS = [
 
   { nom: '🔴 la route du no-show perd sa garde d’autorisation',
     fichier: 'app/api/rdv/no-show/route.js',
-    de: "    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)",
+    // ⚠️ ANCRE REPOINTÉE LE 29/09 : garde commune, case « Argent ».
+    de: "    const verdict = await gardeLigneEquipe(request, supabase, 'rdv_reservations', rdv_id, 'argent')",
     vers: '    const verdict = { ok: true }' },
 
   // 🔴 RESTITUER LE BON ENTIER, C'EST RENDRE AU CLIENT UNE GARANTIE QUE LE

@@ -419,8 +419,10 @@ const egal = (nom, obtenu, attendu) =>
     /\.in\('statut', \['confirme', 'honore'\]\)/.test(cron))
 
   // La route, et sa garde : elle tourne en clé de service.
+  // ⚠️ RÉORIENTÉE LE 29/09 (équipe, étape 3) : la garde commune laisse passer
+  // le patron, l'admin, et un membre qui a la case « Agenda ».
   verifie('🔴 la route de clôture porte une garde d\'autorisation',
-    /gardeSurLigne\(request, supabase, 'rdv_reservations', rdvId\)/.test(route))
+    /gardeLigneEquipe\(request, supabase, 'rdv_reservations', rdvId, 'agenda'\)/.test(route))
   verifie('et elle refuse un identifiant qui n\'en est pas un', /RE_UUID\.test/.test(route))
   // ⚠️ UN REFUS MÉTIER N'EST PAS UNE PANNE. Sans ça, le commerçant verrait un
   // avertissement à CHAQUE clôture chez qui n'a pas la fidélité, et cesserait

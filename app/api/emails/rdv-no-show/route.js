@@ -9,7 +9,10 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { gardeSurLigne, refus } from '@/lib/api-auth'
+import { refus } from '@/lib/api-auth'
+// 🔴 LE PATRON, L'ADMIN ET L'ÉQUIPE PAR LA MÊME GARDE (29/09, étape 3) : le
+// patron et l'admin passent comme avant, un membre avec la case argent.
+import { gardeLigneEquipe } from '@/lib/equipe-server'
 import { envoyerAuCommercant, emailRdvNoShow } from '@/lib/resend'
 import { motsReservation } from '@/lib/reservation-metier'
 
@@ -39,7 +42,7 @@ export async function POST(request) {
     // propre commande pouvait donc déclencher n'importe lequel de ces envois,
     // vers le commerçant comme vers lui-même, autant de fois qu'il voulait.
     // La règle vit dans lib/api-auth.js, pour les dix routes à la fois.
-    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)
+    const verdict = await gardeLigneEquipe(request, supabase, 'rdv_reservations', rdv_id, 'argent')
     const nonAutorise = refus(verdict, NextResponse)
     if (nonAutorise) return nonAutorise
 

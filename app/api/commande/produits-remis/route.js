@@ -26,6 +26,8 @@
 // et ne le saurait jamais.
 
 import { NextResponse } from 'next/server'
+import { refus } from '@/lib/api-auth'
+import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { createClient } from '@supabase/supabase-js'
 import { crediterFideliteCommande } from '@/lib/fidelite-server'
 
@@ -41,28 +43,10 @@ function admin() {
   )
 }
 
-// Le commerçant est-il bien propriétaire de cette commande ? Sans cette
-// vérification, changer un identifiant suffirait à clôturer la commande de
-// n'importe quel commerce. La colonne s'appelle `auth_user_id`, comme partout.
-async function commandeDuProprietaire(supabase, request, commandeId) {
-  const jeton = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!jeton || !commandeId) return null
-  const authClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${jeton}` } } }
-  )
-  const { data: { user } = {} } = await authClient.auth.getUser()
-  if (!user) return null
-
-  const { data: cmd } = await supabase
-    .from('commandes')
-    .select('id, statut, commercant_id, commercant:commercants(auth_user_id)')
-    .eq('id', commandeId)
-    .maybeSingle()
-  if (!cmd || cmd.commercant?.auth_user_id !== user.id) return null
-  return cmd
-}
+// Qui peut remettre les produits ? Le patron, l'admin vérifié, ou un membre de
+// l'équipe qui a « Agenda » (le client venu à son rendez-vous) ou « Commandes »
+// (`gardeLigneEquipe`, 29/09). Sans cette vérification, changer un identifiant
+// suffirait à clôturer la commande de n'importe quel commerce.
 
 export async function POST(request) {
   try {
@@ -72,8 +56,11 @@ export async function POST(request) {
     if (!commandeId) return NextResponse.json({ ok: false, error: 'commande_id requis' }, { status: 400 })
 
     const supabase = admin()
-    const cmd = await commandeDuProprietaire(supabase, request, commandeId)
-    if (!cmd) return NextResponse.json({ ok: false, error: 'non autorisé' }, { status: 403 })
+    // 🔴 LE PATRON, L'ADMIN ET L'ÉQUIPE PAR LA MÊME GARDE (29/09, étape 3).
+    // Le commerce se déduit de la commande, jamais du corps de la requête.
+    const verdict = await gardeLigneEquipe(request, supabase, 'commandes', commandeId, ['agenda', 'commandes'])
+    const nonAutorise = refus(verdict, NextResponse)
+    if (nonAutorise) return nonAutorise
 
     const { data: basculee } = await supabase
       .from('commandes')
@@ -90,6 +77,7 @@ export async function POST(request) {
     }
 
     await crediterFideliteCommande(supabase, commandeId, '[commande/produits-remis]')
+    await journaliserGeste(supabase, verdict, { action: 'produits_remis', cible_type: 'commande', cible_id: commandeId })
     console.info('[commande/produits-remis]', { commandeId })
 
     return NextResponse.json({ ok: true, remise: true })

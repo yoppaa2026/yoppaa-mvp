@@ -17,7 +17,10 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { gardeSurLigne, refus } from '@/lib/api-auth'
+import { refus } from '@/lib/api-auth'
+// 🔴 LE PATRON, L'ADMIN ET L'ÉQUIPE PAR LA MÊME GARDE (29/09, étape 3) : le
+// patron et l'admin passent comme avant, un membre avec la case agenda.
+import { gardeLigneEquipe } from '@/lib/equipe-server'
 import { crediterFideliteRdv } from '@/lib/fidelite-server'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -40,7 +43,7 @@ export async function POST(request) {
     // la RLS : sans elle, connaître l'identifiant d'un rendez-vous suffirait à
     // déclencher un crédit chez n'importe quel commerçant. `gardeSurLigne`
     // vérifie que le jeton présenté est bien celui du propriétaire de la ligne.
-    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdvId)
+    const verdict = await gardeLigneEquipe(request, supabase, 'rdv_reservations', rdvId, 'agenda')
     const nonAutorise = refus(verdict, NextResponse)
     if (nonAutorise) return nonAutorise
 

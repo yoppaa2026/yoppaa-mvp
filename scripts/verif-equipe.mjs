@@ -164,8 +164,12 @@ const membre = (o = {}) => ({
 // ═══ 8) LES ROUTES ══════════════════════════════════════════════════════════
 {
   const dossier = 'app/api/equipe'
-  const routes = readdirSync(new URL(`../${dossier}`, import.meta.url), { withFileTypes: true })
-    .filter(e => e.isDirectory()).map(e => join(dossier, e.name, 'route.js').replace(/\\/g, '/'))
+  // ⚠️ TOUS LES NIVEAUX : les gestes vivent un cran plus bas (`rdv/venu`,
+  // `commande/statut`, étape 3). Lister le seul premier niveau supposait une
+  // route dans chaque dossier, et ratait celles des sous-dossiers.
+  const routes = readdirSync(new URL(`../${dossier}`, import.meta.url), { withFileTypes: true, recursive: true })
+    .filter(e => e.isFile() && e.name === 'route.js')
+    .map(e => join(e.parentPath ?? e.path, e.name).replace(/\\/g, '/').replace(/^.*?(app\/api\/equipe\/)/, '$1'))
   v('les routes de l’équipe sont trouvées', routes.length >= 8, String(routes.length))
 
   const PATRON = ['membres', 'inviter', 'modifier', 'retirer', 'renvoyer']
@@ -225,7 +229,12 @@ const membre = (o = {}) => ({
     /permis\[d\] = peutAgir\(\{ membre, commercant, droit: d \}\)/.test(serveur) && /if \(!Object\.values\(permis\)\.some\(Boolean\)\) return \{ ok: false, status: 403/.test(serveur))
   v('🔴 un membre ne gère pas l’équipe (garde du patron : propriétaire ou admin vérifié)',
     /const patron = commercant\.auth_user_id === user\.id/.test(serveur) && /if \(!patron && !\(await adminVerifie\(request, user\)\)\) return \{ ok: false, status: 403/.test(serveur))
-  v('🔴 une lecture ratée lève, elle ne répond pas « personne »', (serveur.match(/if \(error\) throw new Error/g) || []).length >= 3)
+  // ⚠️ NOMMÉES, PLUS COMPTÉES (29/09) : la garde comptait « au moins trois »,
+  // et la garde par ligne en a ajouté une quatrième. On pouvait alors en
+  // retirer une sans qu'elle rougisse (mesuré par mutation).
+  for (const quoi of ['lecture du commerce', 'lecture de l\'équipe', 'lecture du membre', 'lecture de la ligne']) {
+    v(`🔴 « ${quoi} » ratée lève, elle ne répond pas « personne »`, serveur.includes(`if (error) throw new Error(\`${quoi} : `))
+  }
   v('l’empreinte est un sha256', /createHash\('sha256'\)/.test(serveur))
 }
 
@@ -283,7 +292,14 @@ const membre = (o = {}) => ({
   // ⚠️ LES JOINTURES SE RETIRENT D'ABORD : `commande_articles(quantite, …)`
   // découpée à la virgule faisait passer `article_nom` pour une colonne de
   // `commandes` (le banc s'est trompé le 29/09, pas le code).
-  const colonnes = (liste) => liste.replace(/[\w:]+\([^)]*\)/g, '').split(',').map(x => x.trim()).filter(Boolean)
+  // ⚠️ ET LES JOINTURES IMBRIQUÉES (étape 3 : la commande liée porte ses
+  // lignes, `commandes!clé(…, commande_articles(…))`) : on retire de
+  // l'intérieur vers l'extérieur, jusqu'à ce qu'il n'en reste plus.
+  const colonnes = (liste) => {
+    let s = liste
+    while (/[\w:!]+\([^()]*\)/.test(s)) s = s.replace(/[\w:!]+\([^()]*\)/g, '')
+    return s.split(',').map(x => x.trim()).filter(Boolean)
+  }
   const schema = lire('scripts/schema-supabase.txt')
   const tableDuSchema = (t) => ((schema.match(new RegExp(`^${t}: (.+)$`, 'm')) || [])[1] || '').split(',')
 
@@ -378,6 +394,99 @@ const membre = (o = {}) => ({
   v('🔴 le tableau de bord lit ses libellés de statut dans le module partagé',
     Object.keys(S.LIBELLES_STATUT_COMMANDE).every(k => new RegExp(`'${k}':\\s+\\{ label: LIBELLES_STATUT_COMMANDE\\.${k},`).test(bord)))
   v('et sa carte dit « Livrée » par la même fonction', (bord.match(/label: libelleStatutCommande\(commande\)/g) || []).length === 4)
+}
+
+// ═══ 12) ÉTAPE 3 : LES GESTES ═══════════════════════════════════════════════
+{
+  const E = await import('../lib/encaissement.js')
+  const S = await import('../lib/statuts-commande.js')
+  const T0 = new Date('2026-10-01T10:00:00Z')
+
+  // L'encaissement, exécuté.
+  v('rien à encaisser : aucune colonne écrite', JSON.stringify(E.champsEncaissement({ choix: 'terminal', reste: 0 })) === '{"champs":null,"refus":null}')
+  v('🔴 un reste à payer exige de dire comment', E.champsEncaissement({ choix: null, reste: 12 }).refus !== null)
+  v('🔴 « virement » n’est pas un choix du comptoir', E.champsEncaissement({ choix: 'virement', reste: 12 }).refus !== null)
+  const term = E.champsEncaissement({ choix: 'terminal', reste: 12.345, maintenant: T0 }).champs
+  v('terminal : le mode, le montant arrondi, l’heure', term?.encaisse_mode === 'terminal' && term.encaisse_montant === 12.35 && term.encaisse_le === T0.toISOString())
+  const rien = E.champsEncaissement({ choix: 'sans_paiement', reste: 12, maintenant: T0 }).champs
+  v('sans paiement : « rien », zéro euro', rien?.encaisse_mode === 'rien' && rien.encaisse_montant === 0)
+
+  // Les transitions, exécutées.
+  v('un pas en avant', S.transitionPermise({ statut: 'en_attente' }, 'en_preparation') && S.transitionPermise({ statut: 'en_preparation' }, 'pret'))
+  v('🔴 jamais deux pas d’un coup', !S.transitionPermise({ statut: 'en_attente' }, 'pret'))
+  v('🔴 jamais en arrière', !S.transitionPermise({ statut: 'pret' }, 'en_preparation'))
+  v('un retrait prêt se remet', S.transitionPermise({ statut: 'pret', mode_retrait: 'retrait' }, 'recupere'))
+  v('🔴 une livraison prête ne se « remet » pas au comptoir', !S.transitionPermise({ statut: 'pret', mode_retrait: 'livraison' }, 'recupere'))
+  v('🔴 une expédition non plus', !S.transitionPermise({ statut: 'pret', mode_retrait: 'expedition' }, 'recupere'))
+  v('une commande remise n’avance plus', !S.transitionPermise({ statut: 'recupere' }, 'recupere'))
+
+  // 🔴 LA PARITÉ AVEC LE TABLEAU DE BORD : mêmes pas, mêmes mots.
+  const bord = code('app/dashboard/page.js')
+  for (const [de, vers] of Object.entries(S.STATUT_SUIVANT)) {
+    const ligne = (bord.match(new RegExp(`'${de}':\\s+\\{[^}]*\\}`)) || [''])[0]
+    v(`🔴 le pas après « ${de} » est le même que le tableau de bord`, ligne.includes(`next: '${vers}'`), ligne.slice(0, 120))
+    v(`🔴 son bouton dit la même chose`, ligne.includes(`nextLabel: '${S.LIBELLE_GESTE_SUIVANT[de]}'`))
+  }
+  // L'email d'annulation reçoit les mêmes informations des deux écrans.
+  const poste = code('app/equipe/PosteEquipe.js')
+  const cles = (src, url) => {
+    const i = src.indexOf(`'${url}', {`)
+    if (i < 0) return ''
+    const bloc = src.slice(i, src.indexOf('}', i))
+    return [...bloc.matchAll(/(\w+):/g)].map(m => m[1]).sort().join(',')
+  }
+  for (const url of ['/api/emails/rdv-annule', '/api/emails/rdv-no-show']) {
+    v(`🔴 ${url} : mêmes informations que le tableau de bord`, cles(poste, url) !== '' && cles(poste, url) === cles(bord, url), `${cles(poste, url)} / ${cles(bord, url)}`)
+  }
+
+  // 🔴 LES ROUTES DES GESTES.
+  const venu = code('app/api/equipe/rdv/venu/route.js')
+  v('🔴 « venu » passe par la garde, case Agenda', /const verdict = await gardeLigneEquipe\(request, admin, 'rdv_reservations', rdv_id, 'agenda'\)\s*const nonAutorise = refus\(verdict, NextResponse\)\s*if \(nonAutorise\) return nonAutorise/.test(venu))
+  v('🔴 le montant vient de la base, jamais de l’écran', /champsEncaissement\(\{ choix: encaissement, reste: resteAEncaisser\(rdv\) \}\)/.test(venu) && !/montant[,\s}]*=\s*await request/.test(venu) && /const \{ rdv_id, encaissement = null \} = await request\.json\(\)/.test(venu))
+  v('🔴 une réservation ne s’honore qu’une fois', /\.eq\('id', rdv_id\)\.eq\('statut', 'confirme'\)/.test(venu) && /if \(rdv\.statut !== 'confirme'\)/.test(venu))
+  v('le geste va au journal', /journaliserGeste\(admin, verdict, \{\s*action: 'rdv_venu'/.test(venu))
+
+  const statut = code('app/api/equipe/commande/statut/route.js')
+  v('🔴 une commande avance par la garde, case Commandes', /const verdict = await gardeLigneEquipe\(request, admin, 'commandes', commande_id, 'commandes'\)\s*const nonAutorise = refus\(verdict, NextResponse\)\s*if \(nonAutorise\) return nonAutorise/.test(statut))
+  v('🔴 un seul pas en avant, revérifié au serveur', /if \(!transitionPermise\(c, statut\)\)/.test(statut))
+  v('🔴 et seulement depuis le statut lu', /\.eq\('id', commande_id\)\.eq\('statut', c\.statut\)/.test(statut))
+  v('🔴 la remise d’une commande impayée demande comment', /if \(statut === 'recupere' && !c\.encaisse_mode\) \{\s*const r = champsEncaissement\(\{ choix: encaissement, reste: resteAEncaisserCommande\(c\) \}\)/.test(statut))
+  v('le geste va au journal', /journaliserGeste\(admin, verdict, \{\s*action: 'commande_statut'/.test(statut))
+
+  // 🔴 LES ROUTES ÉLARGIES : la même garde, la bonne case, plus d'ancienne garde.
+  for (const [f, table, id, droit] of [
+    ['app/api/rdv/annuler-commercant/route.js', 'rdv_reservations', 'rdv_id', "'agenda'"],
+    ['app/api/emails/rdv-annule/route.js', 'rdv_reservations', 'rdv_id', "'agenda'"],
+    ['app/api/rdv/no-show/route.js', 'rdv_reservations', 'rdv_id', "'argent'"],
+    ['app/api/emails/rdv-no-show/route.js', 'rdv_reservations', 'rdv_id', "'argent'"],
+    ['app/api/fidelite/rdv-honore/route.js', 'rdv_reservations', 'rdvId', "'agenda'"],
+    ['app/api/commande/push-statut/route.js', 'commandes', 'commande_id', "['commandes', 'livraisons']"],
+    ['app/api/emails/commande-prete/route.js', 'commandes', 'commande_id', "'commandes'"],
+    ['app/api/fidelite/crediter/route.js', 'commandes', 'commandeId', "['commandes', 'livraisons']"],
+    ['app/api/commande/produits-remis/route.js', 'commandes', 'commandeId', "['agenda', 'commandes']"],
+    ['app/api/commande/non-retire/route.js', 'commandes', 'commandeId', "'commandes'"],
+  ]) {
+    const s = code(f)
+    const attendu = `gardeLigneEquipe(request, supabase, '${table}', ${id}, ${droit})`
+    v(`🔴 ${f.replace('app/api/', '')} : garde commune, case ${droit}`, s.includes(attendu) && /refus\(verdict, NextResponse\)/.test(s) && !/gardeSurLigne\(/.test(s) && !/auth_user_id !== user\.id/.test(s))
+  }
+  for (const [f, action] of [['app/api/rdv/annuler-commercant/route.js', 'rdv_annule'], ['app/api/rdv/no-show/route.js', 'rdv_absent'], ['app/api/commande/produits-remis/route.js', 'produits_remis'], ['app/api/commande/non-retire/route.js', 'commande_non_retiree']]) {
+    v(`le geste « ${action} » va au journal`, new RegExp(`journaliserGeste\\(supabase, verdict, \\{ action: '${action}'`).test(code(f)))
+  }
+
+  // 🔴 LA GARDE PAR LIGNE ET LE JOURNAL.
+  const serveur = code('lib/equipe-server.js')
+  v('🔴 le commerce se déduit de la ligne', /\.from\(table\)\.select\('commercant_id'\)\.eq\('id', id\)\.maybeSingle\(\)[\s\S]{0,260}return gardeEquipe\(request, admin, data\.commercant_id, droit\)/.test(serveur))
+  v('🔴 une lecture ratée de la ligne lève', /if \(error\) throw new Error\(`lecture de la ligne/.test(serveur))
+  v('le journal ne note que les gestes d’un membre', /if \(!garde\?\.ok \|\| garde\.role !== 'membre'\) return true/.test(serveur))
+
+  // L'écran.
+  v('🔴 l’annulation du Poste ne propose pas « déplacer » (pas encore)', /actions: \(q\.actions \|\| \[\]\)\.filter\(a => a\.valeur !== 'deplacer'\)/.test(poste))
+  v('🔴 « absent » seulement avec la case Argent, et après l’heure', /const absentPossible = enAttente && droits\.argent && noShowPossible\(rdv, new Date\(\)\)/.test(poste))
+  v('🔴 les gestes de l’agenda seulement avec sa case', /gestes=\{etat\.droits\?\.agenda \? gestesRdv : null\}/.test(poste))
+  v('🔴 ceux des commandes aussi', /gestes=\{etat\.droits\?\.commandes \? gestesCommande : null\}/.test(poste))
+  v('un envoi raté au client se dit', /if \(!r\.ok\) dire\(/.test(poste))
+  v('un geste ne se lance pas deux fois', /if \(enCours\) return\s*setEnCours\(id\)/.test(poste))
 }
 
 console.log(`\nÉquipe : ${ok} vérifications`)

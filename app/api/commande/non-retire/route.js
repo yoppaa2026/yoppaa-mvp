@@ -21,6 +21,8 @@
 // 10/08, et le seul rempart contre un stock qui gonfle tout seul.
 
 import { NextResponse } from 'next/server'
+import { refus } from '@/lib/api-auth'
+import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { createClient } from '@supabase/supabase-js'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 
@@ -32,31 +34,10 @@ function admin() {
   )
 }
 
-// Le commerçant est-il bien propriétaire de cette commande ? Sans cette
-// vérification, n'importe qui déclarerait non retirée la commande de n'importe
-// quel commerce en changeant un identifiant.
-//
-// ⚠️ La colonne s'appelle `auth_user_id`, pas `user_id` : même schéma que
-// l'export comptable et les signaux, dont on ne s'écarte pas.
-async function commandeDuProprietaire(supabase, request, commandeId) {
-  const jeton = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!jeton || !commandeId) return null
-  const authClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${jeton}` } } }
-  )
-  const { data: { user } = {} } = await authClient.auth.getUser()
-  if (!user) return null
-
-  const { data: cmd } = await supabase
-    .from('commandes')
-    .select('id, statut, commercant_id, commercant:commercants(auth_user_id)')
-    .eq('id', commandeId)
-    .maybeSingle()
-  if (!cmd || cmd.commercant?.auth_user_id !== user.id) return null
-  return cmd
-}
+// Qui peut déclarer une commande non retirée ? Le patron, l'admin vérifié, ou
+// un membre de l'équipe qui a la case « Commandes » (`gardeLigneEquipe`, 29/09).
+// Sans cette vérification, n'importe qui déclarerait non retirée la commande de
+// n'importe quel commerce en changeant un identifiant.
 
 export async function POST(request) {
   try {
@@ -66,8 +47,11 @@ export async function POST(request) {
     if (!commandeId) return NextResponse.json({ ok: false, error: 'commande_id requis' }, { status: 400 })
 
     const supabase = admin()
-    const cmd = await commandeDuProprietaire(supabase, request, commandeId)
-    if (!cmd) return NextResponse.json({ ok: false, error: 'non autorisé' }, { status: 403 })
+    // 🔴 LE PATRON, L'ADMIN ET L'ÉQUIPE PAR LA MÊME GARDE (29/09, étape 3).
+    // Le commerce se déduit de la commande, jamais du corps de la requête.
+    const verdict = await gardeLigneEquipe(request, supabase, 'commandes', commandeId, 'commandes')
+    const nonAutorise = refus(verdict, NextResponse)
+    if (nonAutorise) return nonAutorise
 
     // ⚠️ FILTRÉ SUR L'ANCIEN STATUT. C'est cette clause qui rend l'opération
     // idempotente : si la commande n'est plus « prête », aucune ligne ne
@@ -86,6 +70,7 @@ export async function POST(request) {
     }
 
     const restitution = await restaurerStockVariantes(supabase, [commandeId])
+    await journaliserGeste(supabase, verdict, { action: 'commande_non_retiree', cible_type: 'commande', cible_id: commandeId })
     console.info('[commande/non-retire]', { commandeId, restitution })
 
     // Le champ s'appelle `rendues`. Se tromper de nom aurait rendu zéro en

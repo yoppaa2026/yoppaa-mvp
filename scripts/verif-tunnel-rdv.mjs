@@ -365,7 +365,8 @@ for (const [nom, chemin] of [
   const src = lireCode('app/api/rdv/annuler-commercant/route.js')
   // ⚠️ SÉCURITÉ : cette route rembourse et recrédite. Sans garde, n'importe
   // qui annulerait les rendez-vous de n'importe quel commerçant.
-  verifie('la route d’annulation commerçant est gardée', /gardeSurLigne\(request/.test(src))
+  // ⚠️ RÉORIENTÉE LE 29/09 (équipe) : le patron, l'admin, et un membre avec « Agenda ».
+  verifie('la route d’annulation commerçant est gardée', /gardeLigneEquipe\(request, supabase, 'rdv_reservations', rdv_id, 'agenda'\)/.test(src))
   verifie('et le refus est rendu, pas ignoré', /refus\(verdict, NextResponse\)/.test(src))
   // ⚠️ IDEMPOTENCE : un rejeu ne rembourse pas deux fois.
   verifie('un rendez-vous déjà annulé ne rembourse pas une seconde fois',
@@ -1686,8 +1687,9 @@ for (const chemin of [
   verifie('le tableau de bord ne marque plus l’absence lui-même',
     /postPro\('\/api\/rdv\/no-show'/.test(dash))
   const src = lireCode('app/api/rdv/no-show/route.js')
+  // ⚠️ RÉORIENTÉE LE 29/09 (équipe) : « absent » débite une garantie, c'est la case « Argent ».
   verifie('la route du no-show a sa garde d’autorisation',
-    /gardeSurLigne\(request, supabase, 'rdv_reservations', rdv_id\)/.test(src))
+    /gardeLigneEquipe\(request, supabase, 'rdv_reservations', rdv_id, 'argent'\)/.test(src))
   // 🔴 LES COLONNES DU PARTAGE DOIVENT ARRIVER JUSQU'À LA ROUTE.
   const selectRdv = (src.match(/\.select\(`([^`]*)`\)/) || ['', ''])[1]
   for (const col of ['acompte_du', 'acompte_montant', 'bon_cadeau_id', 'bon_cadeau_montant', 'bons_utilises', 'fidelite_recompense_id', 'fidelite_remise']) {

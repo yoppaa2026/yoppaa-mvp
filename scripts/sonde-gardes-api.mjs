@@ -45,6 +45,10 @@ const APPEL_GARDE = /(gardeSurLigne|gardeCommercant|utilisateurAppelant)\s*\(/
 
 const MARQUEURS = [
   ['garde partagée',      (s) => IMPORT_GARDE.test(s) && APPEL_GARDE.test(s)],
+  // L'admin vérifié (double authentification), et l'équipe d'un commerce
+  // (29/09) : des gardes à part entière, qui passaient hors du compte.
+  ['garde admin',         (s) => IMPORT_GARDE.test(s) && /adminVerifie\s*\(/.test(s)],
+  ['garde de l’équipe',   (s) => /from '@\/lib\/equipe-server'/.test(s) && /(gardeEquipe|gardePatronEquipe|gardeLigneEquipe)\s*\(/.test(s)],
   ['identité prouvée',    (s) => /identiteProuvee/.test(s)],
   ['jeton Supabase',      (s) => /getUser\s*\(/.test(s)],
   ['signature Stripe',    (s) => /stripe-signature/.test(s)],
@@ -112,12 +116,19 @@ const PUBLIQUES_ASSUMEES = {
   // porteur : sur un cadeau, il ne quitte jamais le serveur.
   'app/api/bons-cadeaux/confirmation/route.js':
     'écran de confirmation après Stripe, appelé par l\'acheteur qui vient de payer ; clé = l\'identifiant de session Stripe, aucun email rendu',
+  // L'invité n'a peut-être pas encore de compte quand il ouvre l'email : la
+  // route ne rend que le prénom, le nom du commerce et une adresse MASQUÉE.
+  'app/api/equipe/invitation/route.js':
+    'lecture d’une invitation par l’empreinte de son jeton ; rend un prénom, le nom du commerce et une adresse masquée, jamais les cases',
   'app/api/rdv/schedule-rappel/route.js':
     'programmation du rappel juste après la réservation ; clé = l\'UUID du rendez-vous, que seul son auteur possède',
 }
 
 const routes = parcourir('app/api')
-const service = routes.filter(r => /SUPABASE_SERVICE_ROLE_KEY/.test(readFileSync(r, 'utf8')))
+// 🔴 LA CLÉ PEUT ÊTRE CACHÉE DERRIÈRE `clientAdmin()` (lib/api-auth.js), et la
+// sonde ne cherchait que son nom écrit en toutes lettres : QUATORZE routes lui
+// échappaient le 29/09, dont les neuf de l'équipe. Les deux formes comptent.
+const service = routes.filter(r => /SUPABASE_SERVICE_ROLE_KEY|clientAdmin\s*\(/.test(readFileSync(r, 'utf8')))
 
 const aTrier = []
 for (const r of service) {

@@ -630,8 +630,11 @@ const srcProduitsRemis = sansCommentaires(
   readFileSync(new URL('../app/api/commande/produits-remis/route.js', import.meta.url), 'utf8'))
 verifier('la remise des produits est idempotente',
   /\.in\('statut', STATUTS_REMISABLES\)/.test(srcProduitsRemis))
+// ⚠️ RÉORIENTÉE LE 29/09 (équipe, étape 3) : la vérification passe par la garde
+// commune du patron, de l'admin et de l'équipe. Le commerce se déduit de la
+// commande, et un refus arrête la route.
 verifier('et elle vérifie que le commerçant possède bien la commande',
-  /auth_user_id !== user\.id/.test(srcProduitsRemis))
+  /const verdict = await gardeLigneEquipe\(request, supabase, 'commandes', commandeId, \['agenda', 'commandes'\]\)\s*const nonAutorise = refus\(verdict, NextResponse\)\s*if \(nonAutorise\) return nonAutorise/.test(srcProduitsRemis))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 6 quater ter. L'AGENDA REMONTE DANS LE PASSÉ
@@ -2420,8 +2423,9 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   // commande déclarée non retirée retirait une pièce des rayons pour toujours.
   const routeNonRetire = sansCommentaires(readFileSync(new URL('../app/api/commande/non-retire/route.js', import.meta.url), 'utf8'))
   verifier('la route rend le stock des versions', /restaurerStockVariantes\(supabase, \[commandeId\]\)/.test(routeNonRetire))
+  // ⚠️ RÉORIENTÉE LE 29/09 (équipe, étape 3) : même garde commune.
   verifier('elle vérifie que le commerçant est propriétaire',
-    /auth_user_id !== user\.id/.test(routeNonRetire))
+    /const verdict = await gardeLigneEquipe\(request, supabase, 'commandes', commandeId, 'commandes'\)\s*const nonAutorise = refus\(verdict, NextResponse\)\s*if \(nonAutorise\) return nonAutorise/.test(routeNonRetire))
   // ⚠️ L'IDEMPOTENCE VIENT DE L'APPELANT : l'UPDATE filtré sur l'ancien statut.
   // Sans lui, deux clics rendraient le stock deux fois et le feraient gonfler.
   verifier('l\'update est filtré sur l\'ancien statut',

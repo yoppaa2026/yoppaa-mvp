@@ -11,7 +11,10 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { gardeSurLigne, refus } from '@/lib/api-auth'
+import { refus } from '@/lib/api-auth'
+// 🔴 LE PATRON, L'ADMIN ET L'ÉQUIPE PAR LA MÊME GARDE (29/09, étape 3) : le
+// patron et l'admin passent comme avant, un membre avec la case [commandes, livraisons].
+import { gardeLigneEquipe } from '@/lib/equipe-server'
 import { crediterFideliteCommande } from '@/lib/fidelite-server'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -45,7 +48,7 @@ export async function POST(request) {
     // n est appelee que par le tableau de bord : les trois mentions trouvees
     // ailleurs dans le code sont des COMMENTAIRES, pas des appels. Elle peut
     // donc exiger le jeton du commercant sans rien casser.
-    const verdict = await gardeSurLigne(request, supabase, 'commandes', commandeId)
+    const verdict = await gardeLigneEquipe(request, supabase, 'commandes', commandeId, ['commandes', 'livraisons'])
     const nonAutorise = refus(verdict, NextResponse)
     if (nonAutorise) return nonAutorise
 

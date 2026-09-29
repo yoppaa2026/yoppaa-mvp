@@ -33,7 +33,10 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { gardeSurLigne, refus } from '@/lib/api-auth'
+import { refus } from '@/lib/api-auth'
+// 🔴 LE PATRON, L'ADMIN ET L'ÉQUIPE PAR LA MÊME GARDE (29/09, étape 3) : le
+// patron et l'admin passent comme avant, un membre avec la case argent.
+import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { restitutionNoShow } from '@/lib/rdv-paiement'
 import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
 import { repartirRestitution } from '@/lib/bons-cadeaux'
@@ -53,7 +56,7 @@ export async function POST(request) {
       { auth: { persistSession: false } }
     )
 
-    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)
+    const verdict = await gardeLigneEquipe(request, supabase, 'rdv_reservations', rdv_id, 'argent')
     const nonAutorise = refus(verdict, NextResponse)
     if (nonAutorise) return nonAutorise
 
@@ -185,6 +188,9 @@ export async function POST(request) {
 
     // Le rappel de la veille n'a plus lieu d'être.
     if (rdv.rappel_push_id) annulerPush(rdv.rappel_push_id).catch(() => {})
+
+    // Le geste d'un membre de l'équipe, au journal (rien pour le patron).
+    await journaliserGeste(supabase, verdict, { action: 'rdv_absent', cible_type: 'rdv', cible_id: rdv.id, details: { garantie: part.garantie || 0 } })
 
     return NextResponse.json({
       ok: true,

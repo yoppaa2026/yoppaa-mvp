@@ -146,6 +146,8 @@ import {
   articlesDuLot, patchsDuLot, refusDAjustement, resumeDuLot,
 } from '@/lib/catalogue-lot'
 import OrdreCategories from '@/app/dashboard/OrdreCategories'
+import TabEquipe from '@/app/dashboard/TabEquipe'
+import { EQUIPE_DANS_LA_BARRE } from '@/lib/equipe'
 import { cheminImage, objetDepuisUrl } from '@/lib/stockage-images'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
@@ -15503,6 +15505,12 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // l'argument. Renommé « Signaux » (05/08).
     { id: 'signaux', label: 'Signaux', icon: 'signal', badge: signalementsEnAttente, dot: enviesNouvelles > 0 },
 
+    // ── L'ÉQUIPE (29/09) ─────────────────────────────────────────────────
+    // Le personnel et les livreurs, chacun avec son compte et ses cases.
+    // Vendre seulement : la matrice le dit (`equipe`), et chaque route de
+    // l'équipe le revérifie à chaque appel.
+    EQUIPE_DANS_LA_BARRE && { id: 'equipe', label: 'Mon équipe', icon: 'user', feature: 'equipe' },
+
     // ── L'AIDE, EN DERNIER ───────────────────────────────────────────────
     // Accompagnement sur place et matériel : accessible à tout moment, plus
     // seulement à l'inscription (l'étape 5 le promettait déjà).
@@ -15630,6 +15638,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
       {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
       {tab === 'comptabilite' && peut(commercant, 'export_comptable') && <TabComptabilite commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} ancre={ancreProfil} surAncreLue={oublierAncre} onAllerA={changerOnglet} />}
+      {tab === 'equipe' && <TabEquipe commercantId={commercantId} toast={showToast} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {/* ⚠️ AUCUNE CONDITION DE FORFAIT ICI, contrairement aux onglets
           au-dessus. Celui qui est en Exister doit pouvoir lire qu'il ne paie

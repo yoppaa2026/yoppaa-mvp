@@ -1301,7 +1301,9 @@ export default function Dashboard() {
   // la page d'abonnement, ne rendait plus l'onglet d'où l'on venait.
   const CONFIG_VALIDES = ['stats', 'menu', 'deals', 'actus', 'ia', 'creneaux', 'livraison',
     'rdv', 'fidelite', 'bons', 'paiements', 'comptabilite', 'profil', 'accompagnement',
-    'avis', 'signaux', 'compte']
+    'avis', 'signaux', 'compte',
+    // L'équipe (29/09) : même piège que « compte », évité dès le départ.
+    'equipe']
 
   // 🔴 LA LECTURE SE FAIT DANS UN EFFET, PAS DANS L'ÉTAT INITIAL. Lire
   // `window` au premier rendu ferait diverger le rendu serveur du rendu client,

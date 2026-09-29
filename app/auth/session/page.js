@@ -3,6 +3,8 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { CheckCircle, Lightbulb } from 'lucide-react'
+// 🔴 `?next=` n'accepte qu'une adresse de Yoppaa (29/09) : voir le module.
+import { cheminInterne } from '@/lib/chemin-interne'
 
 function SessionHandler({ setPhase, setNextUrl }) {
   const router = useRouter()
@@ -11,7 +13,7 @@ function SessionHandler({ setPhase, setNextUrl }) {
   useEffect(() => {
     const token_hash = searchParams.get('token_hash')
     const type = searchParams.get('type')
-    const next = searchParams.get('next') || '/dashboard'
+    const next = cheminInterne(searchParams.get('next'), '/dashboard')
 
     async function handleAuth() {
       let session = null

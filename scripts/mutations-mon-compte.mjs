@@ -199,8 +199,8 @@ const MUTATIONS = [
   // ⚠️ ET L ADRESSE, sans quoi l onglet n est atteignable par aucun lien.
   { nom: '🔴 l adresse ?config=facturation redevient invalide',
     fichier: 'app/dashboard/page.js',
-    de: "    'avis', 'signaux', 'compte']",
-    vers: "    'avis', 'signaux', 'compte', 'facturation']",
+    de: "    'avis', 'signaux', 'compte',",
+    vers: "    'avis', 'signaux', 'compte', 'facturation',",
     garde: 'et ?config=facturation ne l’est plus' },
 
 
@@ -248,9 +248,10 @@ const MUTATIONS = [
   // SILENCE. « compte » manquait a la liste depuis la creation de l onglet.
   { nom: '🔴 l adresse ?config=compte redevient invalide',
     fichier: 'app/dashboard/page.js',
-    // ⚠️ ANCRE RECALEE LE 22/09 : la liste a gagne 'facturation' depuis.
-    de: "'signaux', 'compte']",
-    vers: "'signaux']",
+    // ⚠️ ANCRE RECALEE LE 22/09 : la liste a gagne 'facturation' depuis. Et le
+    // 29/09 : 'equipe' s'ajoute apres 'compte', la ligne finit par une virgule.
+    de: "'signaux', 'compte',",
+    vers: "'signaux',",
     garde: 'l’adresse ?config=compte est acceptée par le tableau de bord' },
 
   // ⚠️ ET LA LANGUE DU PRODUIT. Tout Yoppaa tutoie.

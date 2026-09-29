@@ -11,6 +11,8 @@ import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 // ⚠️ LA MÊME TRADUCTION QUE « MON COMPTE », et c'est le but : deux écrans qui
 // traduisent chacun les refus de Supabase finissent par en dire deux versions.
 import { messageAuth } from '@/lib/messages-auth'
+// 🔴 `?next=` n'accepte qu'une adresse de Yoppaa (29/09) : voir le module.
+import { cheminInterne } from '@/lib/chemin-interne'
 
 const T = {
   bg:      '#F8F6FF',
@@ -44,7 +46,7 @@ function Login() {
   const [checkingSession, setCheckingSession] = useState(true)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const nextPath = searchParams?.get('next') || '/dashboard'
+  const nextPath = cheminInterne(searchParams?.get('next'), '/dashboard')
   const modeAdmin = nextPath === '/admin'
   const turnstileRef = useRef(null)
 

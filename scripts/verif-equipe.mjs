@@ -321,11 +321,16 @@ const membre = (o = {}) => ({
   v('un horizon plus long est suivi', P.fenetres('2026-10-01', { horizonCommande: 14 }).commandes.fin === '2026-10-15')
 
   // 🔴 LE LIVREUR.
-  const payeeEnLigne = { id: 'c1', numero_commande: 12, numero_prefixe: 'LI', mode_retrait: 'livraison', date_commande: '2026-10-01', statut: 'pret', client_nom: 'Marc Dupont', client_telephone: '0470', client_email: 'marc@x.be', adresse_livraison: 'Rue 1, Mettet', note_livraison: 'Sonner 2 fois', total: 30, paye_en_ligne: true, commande_articles: [{ quantite: 2, article_nom: 'Pizza' }], creneau_livraison: { heure_debut: '18:00:00', heure_fin: '18:30:00' } }
+  const payeeEnLigne = { id: 'c1', numero_commande: 12, numero_prefixe: 'LI', mode_retrait: 'livraison', date_commande: '2026-10-01', statut: 'pret', client_nom: 'Marc Dupont', client_telephone: '0470', client_email: 'marc@x.be', adresse_livraison: 'Rue 1, Mettet', note_livraison: 'Sonner 2 fois', total: 30, paye_en_ligne: true, commande_articles: [{ quantite: 2, article_nom: 'Pizza', prix_unitaire: 12.5, options: [{ groupe_nom: 'Taille', valeur_nom: 'Grande' }] }], creneau_livraison: { heure_debut: '18:00:00', heure_fin: '18:30:00' } }
   const vue = P.livraisonPourLeLivreur(payeeEnLigne)
-  const permises = ['id', 'reference', 'client_nom', 'client_telephone', 'adresse', 'note', 'date', 'creneau', 'creneau_livraison_id', 'statut', 'statut_livraison', 'a_encaisser']
+  const permises = ['id', 'reference', 'client_nom', 'client_telephone', 'adresse', 'note', 'date', 'creneau', 'creneau_livraison_id', 'statut', 'statut_livraison', 'a_encaisser', 'lignes']
   v('🔴 le livreur ne reçoit que sa vue', Object.keys(vue).every(k => permises.includes(k)), Object.keys(vue).join(','))
-  v('🔴 ni le contenu, ni le total, ni l’email', !JSON.stringify(vue).includes('Pizza') && !('total' in vue) && !JSON.stringify(vue).includes('marc@x.be'))
+  // ⚠️ RÉORIENTÉE LE 29/09 (Alex : « il doit pouvoir voir le contenu de la
+  // commande, pour savoir ce qu'il doit donner »). Le contenu, oui ; les prix,
+  // le total et l'email, jamais.
+  v('✅ le livreur voit ce qu’il doit donner, options comprises', vue.lignes?.[0]?.article_nom === 'Pizza' && vue.lignes[0].quantite === 2 && /Grande/.test(vue.lignes[0].options || ''))
+  v('🔴 mais aucun prix, ni total, ni email', !('total' in vue) && !JSON.stringify(vue).includes('12.5') && !JSON.stringify(vue).includes('prix') && !JSON.stringify(vue).includes('marc@x.be'))
+  v('🔴 une ligne ne porte que quantité, article, options', vue.lignes.every(l => Object.keys(l).join(',') === 'quantite,article_nom,options'))
   v('🔴 une commande payée en ligne : rien à encaisser', vue.a_encaisser === null)
   v('🔴 payée à la porte : le montant à encaisser', P.livraisonPourLeLivreur({ ...payeeEnLigne, paye_en_ligne: false }).a_encaisser === 30)
   v('le nom et la sonnette sont là', vue.client_nom === 'Marc Dupont' && vue.note === 'Sonner 2 fois' && vue.reference === 'LI12')

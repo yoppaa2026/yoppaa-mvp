@@ -173,6 +173,17 @@ function Livraisons({ livraisons }) {
               {l.creneau && <span style={{ fontSize: 12.5, color: T.muted, whiteSpace: 'nowrap' }}>{String(l.creneau.heure_debut).slice(0, 5)} – {String(l.creneau.heure_fin).slice(0, 5)}</span>}
             </div>
             {l.adresse && <p style={{ margin: '6px 0 0', fontSize: 14.5 }}><a href={lienCarte(l.adresse)} target="_blank" rel="noopener noreferrer" style={{ color: T.main, fontWeight: 700 }}>{l.adresse}</a></p>}
+            {/* Ce qu'il doit donner à la porte (Alex, 29/09), sans aucun prix. */}
+            {l.lignes?.length > 0 && (
+              <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {l.lignes.map((ligne, j) => (
+                  <li key={j} style={{ fontSize: 13.5, color: T.ink }}>
+                    <strong>{ligne.quantite} ×</strong> {ligne.article_nom}
+                    {ligne.options && <span style={{ display: 'block', fontSize: 12.5, color: T.muted, marginLeft: 22 }}>{ligne.options}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
             {l.note && <p style={{ margin: '6px 0 0', fontSize: 13.5, color: T.ink, background: T.fond, borderRadius: 10, padding: '8px 10px' }}>{l.note}</p>}
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8, fontSize: 13.5, flexWrap: 'wrap' }}>
               {l.client_telephone ? <Telephone numero={l.client_telephone}/> : <span/>}

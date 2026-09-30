@@ -525,6 +525,38 @@ const PHASE = avantLancement()
     /Yoppaa Pro/.test(espace) && manifeste.short_name === 'Yoppaa Pro' && /title: "Yoppaa Pro"/.test(lire('app/dashboard/layout.tsx')))
 }
 
+// ═══ LA MÊME AIDE DANS LE TABLEAU DE BORD (Alex, 30/09 : « vas-y ») ═══════════
+{
+  const A = await import('../lib/aide-installation.js')
+  verifier('🔴 un iPhone est un iPhone', A.appareilDe({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' }) === 'ios')
+  verifier('🔴 un iPad qui se dit « Macintosh » reste une tablette (écran tactile)',
+    A.appareilDe({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', pointsTactiles: 5 }) === 'ios')
+  verifier('un vrai Mac reste un ordinateur', A.appareilDe({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', pointsTactiles: 0 }) === 'ordinateur')
+  verifier('un Android est un Android', A.appareilDe({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8)' }) === 'android')
+  verifier('Windows est un ordinateur', A.appareilDe({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }) === 'ordinateur')
+  verifier('🔴 rien depuis l’icône déjà installée', A.aideAMontrer({ installee: true }) === false)
+  verifier('🔴 rien dans l’app des stores', A.aideAMontrer({ native: true }) === false)
+  verifier('🔴 « Plus tard » la range', A.aideAMontrer({ rangee: true }) === false)
+  verifier('dans un navigateur, elle se montre', A.aideAMontrer({}) === true)
+  const ios = A.gesteInstallation('ios'), android = A.gesteInstallation('android'), pc = A.gesteInstallation('ordinateur')
+  // Les MÊMES gestes que l'email de validation : deux textes, une seule vérité.
+  const email = emailEspaceOuvert({ nom: 'Test' }).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  verifier('🔴 iPhone : le geste de Safari, comme l’email', /Partager/.test(ios.texte) && /Sur l’écran d’accueil/.test(ios.texte) && /Sur l’écran d’accueil/.test(email))
+  verifier('🔴 Android : le geste de Chrome, comme l’email', /trois points/.test(android.texte) && /Ajouter à l’écran d’accueil/.test(android.texte) && /Ajouter à l’écran d’accueil/.test(email))
+  verifier('🔴 ordinateur : le favori et l’adresse', /Ctrl \+ D/.test(pc.texte) && pc.texte.includes(A.ADRESSE_TABLEAU_DE_BORD))
+  verifier('un seul geste montré, sans bouton quand Chrome ne propose rien', ios.bouton === null && android.bouton === null && pc.bouton === null)
+  verifier('🔴 quand Chrome propose l’installation, un vrai bouton', A.gesteInstallation('android', { installable: true }).bouton === 'Installer Yoppaa Pro')
+  verifier('🔴 une seule adresse : l’email lit celle de l’aide', /import \{ ADRESSE_TABLEAU_DE_BORD \} from '\.\/aide-installation'/.test(lire('lib/resend.js')) && !/export const ADRESSE_TABLEAU_DE_BORD/.test(lire('lib/resend.js')))
+
+  const comp = lire('app/dashboard/AideInstallation.js')
+  verifier('🔴 le composant lit l’icône installée et l’app des stores', /installee: estDansLApp\(\) === true,/.test(comp) && /native: estAppNative\(window\),/.test(comp))
+  verifier('le rangement survit à un stockage illisible', /try \{ return window\.localStorage\.getItem\(CLE_AIDE_RANGEE\) === '1' \} catch \{ return false \}/.test(comp))
+  verifier('🔴 rien au rendu serveur (pas de clignotement)', /if \(!etat\?\.visible\) return null/.test(comp) && /useState\(null\)/.test(comp))
+  verifier('le bouton d’installation garde l’invitation de Chrome', /const surInvite = \(e\) => \{ e\.preventDefault\(\); setInvite\(e\) \}/.test(comp))
+  verifier('l’icône montrée est celle de Yoppaa Pro', /src="\/icon-pro-192\.png"/.test(comp))
+  verifier('🔴 le tableau de bord la montre, dans la zone qui défile', /\{commercant && <AideInstallation\/>\}/.test(lire('app/dashboard/page.js')))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 console.log(DATEE
   ? `Phase lue : ${PHASE ? 'avant' : 'après'} l'ouverture du ${OUVERTURE}.`

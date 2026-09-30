@@ -68,6 +68,24 @@ const MUTATIONS = [
   { nom: '🔴 l icône promise ne porte plus son nom', banc: 'verif:emails',
     fichier: 'public/manifest-dashboard.json', de: '"short_name": "Yoppaa Pro"', vers: '"short_name": "Yoppaa"' },
 
+  // ─── L AIDE DANS LE TABLEAU DE BORD (banc des emails) ───────────────────
+  { nom: '🔴 l iPad qui se dit Mac reçoit le conseil du clavier', banc: 'verif:emails',
+    fichier: 'lib/aide-installation.js', de: "  if (/Macintosh/i.test(ua) && Number(pointsTactiles) > 1) return 'ios'", vers: '' },
+  { nom: '🔴 l aide s affiche depuis l icône installée', banc: 'verif:emails',
+    fichier: 'lib/aide-installation.js', de: '  return !installee && !native && !rangee', vers: '  return !native && !rangee' },
+  { nom: '🔴 l aide s affiche dans l app des stores', banc: 'verif:emails',
+    fichier: 'lib/aide-installation.js', de: '  return !installee && !native && !rangee', vers: '  return !installee && !rangee' },
+  { nom: '🔴 « Plus tard » ne range plus rien', banc: 'verif:emails',
+    fichier: 'lib/aide-installation.js', de: '  return !installee && !native && !rangee', vers: '  return !installee && !native' },
+  { nom: '🔴 Chrome propose l installation, pas de bouton', banc: 'verif:emails',
+    fichier: 'lib/aide-installation.js', de: '  if (installable) {', vers: '  if (false) {' },
+  { nom: '⚠️ le geste iPhone diverge de l email', banc: 'verif:emails',
+    fichier: 'lib/aide-installation.js', de: "puis « Sur l’écran d’accueil ». L’icône", vers: "puis « Ajouter ». L’icône" },
+  { nom: '🔴 le composant ignore l icône installée', banc: 'verif:emails',
+    fichier: 'app/dashboard/AideInstallation.js', de: '      installee: estDansLApp() === true,', vers: '      installee: false,' },
+  { nom: '🔴 le tableau de bord ne montre plus l aide', banc: 'verif:emails',
+    fichier: 'app/dashboard/page.js', de: '            {commercant && <AideInstallation/>}', vers: '' },
+
   { nom: '🔴 l affichette relit la date brute',
     fichier: 'app/affichette/[slug]/page.js', de: '? `Ouverture ${quandOuverture()} : ton compteur', vers: '? `Ouverture le ${libelleLancement()} : ton compteur' },
 ]

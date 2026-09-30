@@ -61,6 +61,8 @@ import { accesDashboard } from '@/lib/statut-commercant'
 import { raisonDebitImpossible, compteEncaisse, libelleRelance, raisonLienImpossible, messageLienImpossible } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
+// Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
+import AideInstallation from './AideInstallation'
 import { ADMIN_EMAIL } from '@/lib/admin-identite'
 
 const T = {
@@ -3755,6 +3757,10 @@ export default function Dashboard() {
               <BandeauFicheAPublier commercant={commercant} onAllerA={ouvrirConfig}
                 cleRafraichir={`${ongletPrincipal}:${configTabUrl}`}/>
             )}
+            {/* ⚠️ DANS LA ZONE QUI DÉFILE, comme le bandeau de la fiche : jamais
+                un encart fixe sur un téléphone. Rien depuis l'icône installée
+                ni dans l'app des stores, et « Plus tard » le range. */}
+            {commercant && <AideInstallation/>}
             {ongletPrincipal === 'commandes' && (
               <>
                 {/* ⚠️ LES BONS CADEAUX VENDUS, que le commerçant ne voyait NULLE

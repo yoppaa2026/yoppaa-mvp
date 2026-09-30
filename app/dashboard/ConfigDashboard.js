@@ -17,7 +17,7 @@ import {
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { nomDeLaCarte, sertAManger } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09, décisions d'Alex).
-import { MODES_STOCK, LIBELLES_MODE_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine } from '@/lib/stock-article'
+import { MODES_STOCK, LIBELLES_MODE_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE } from '@/lib/stock-article'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
@@ -373,6 +373,36 @@ function PropositionsIa({ propositions, onChoisir, onFermer, avecLong = false })
         style={{ justifySelf: 'start', padding: 0, border: 'none', background: 'none', fontSize: 11, fontWeight: 700, color: T.muted, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>
         Aucune ne me convient
       </button>
+    </div>
+  )
+}
+
+// ─── DEUX CHOIX VISIBLES, CHACUN AVEC SA PHRASE (Alex, 30/09) ────────────────
+// « Le commerçant doit comprendre sans chercher ce que fait l'une ou l'autre
+// option » : un interrupteur éteint obligeait à deviner. Sert à « vendu en
+// ligne / en vitrine » et à « sur ta fiche / masqué ».
+function ChoixCartes({ label, choix, estChoisi, onChoisir }) {
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 5 }}>{label}</label>
+      <div role="radiogroup" aria-label={label} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+        {choix.map(c => {
+          const choisi = estChoisi(c)
+          return (
+            <button key={c.titre} type="button" role="radio" aria-checked={choisi}
+              onClick={() => onChoisir(c)}
+              style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${choisi ? T.main : T.hairline}`, background: choisi ? T.pale : '#fff', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${choisi ? T.main : '#C9C3D6'}`, flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {choisi && <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.main }}/>}
+              </span>
+              <span>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: T.ink }}>{c.titre}</span>
+                <span style={{ display: 'block', fontSize: 11, color: T.muted, marginTop: 2, lineHeight: 1.45 }}>{c.phrase}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1138,12 +1168,12 @@ function TabMenu({ commercantId, commercant, toast }) {
               ou seulement montré (« en vitrine »), et son stock se compte sans
               limite, par jour ou en magasin. */}
           <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder={estAlimentaire ? '1.20' : '49.90'}/></div>
-          <Toggle value={!!form.vendable} onChange={v => setForm(p => ({ ...p, vendable: v }))} label="Vendu en ligne"/>
-          {!form.vendable && (
-            <p style={{ fontSize: 11, color: T.muted, marginTop: -4, lineHeight: 1.5 }}>
-              <strong style={{ color: T.deep }}>{mentionVitrine(commercant)}</strong> : l&rsquo;article s&rsquo;affiche sur ta fiche avec son prix et sa description, sans achat en ligne.
-            </p>
-          )}
+          {/* ✅ DEUX CHOIX VISIBLES, CHACUN AVEC SA PHRASE (Alex, 30/09 : « le
+              commerçant doit comprendre sans chercher ce que fait l'une ou
+              l'autre option »). Un interrupteur éteint obligeait à deviner. */}
+          <ChoixCartes label="Comment le client l’achète ?" choix={choixDeVente(commercant)}
+            estChoisi={c => !!form.vendable === c.vendable}
+            onChoisir={c => setForm(p => ({ ...p, vendable: c.vendable }))}/>
           {form.vendable && !canDo(planEffectif(commercant), 'commande') && (
             <p style={{ fontSize: 10, color: T.muted, marginTop: -4 }}>La commande en ligne s&rsquo;active avec la formule Vendre. En attendant, l&rsquo;article s&rsquo;affiche avec son prix.</p>
           )}
@@ -1251,7 +1281,9 @@ function TabMenu({ commercantId, commercant, toast }) {
             </p>
           </div>
 
-          <Toggle value={form.actif} onChange={v => setForm(p => ({ ...p, actif: v }))} label={estVitrine ? 'Produit visible' : 'Article disponible'}/>
+          <ChoixCartes label="Sur ta fiche ?" choix={CHOIX_VISIBILITE}
+            estChoisi={c => !!form.actif === c.actif}
+            onChoisir={c => setForm(p => ({ ...p, actif: c.actif }))}/>
 
           {/* Photo de couverture */}
           <div>

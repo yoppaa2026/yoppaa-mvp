@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, etatStock,
-  revientUnAutreJour, mentionVitrine,
+  revientUnAutreJour, mentionVitrine, choixDeVente, CHOIX_VISIBILITE,
 } from '../lib/stock-article.js'
 import { CHAMPS_COPIES } from '../lib/catalogue-copie.js'
 
@@ -98,6 +98,28 @@ const code = (f) => sansProse(lire(f))
   v('un restaurant : « Sur place uniquement »', mentionVitrine({ categorie: 'alimentaire', type: 'Restaurant' }) === 'Sur place uniquement')
   v('un boucher ou un salon : « Disponible sur place »', mentionVitrine({ categorie: 'alimentaire', type: 'Boucherie' }) === 'Disponible sur place'
     && mentionVitrine({ categorie: 'vitrine', type: 'Coiffeur' }) === 'Disponible sur place')
+}
+
+// ═══ 5b) LE CHOIX DU COMMERÇANT, LES DEUX POSSIBILITÉS DITES (Alex, 30/09) ══
+{
+  const boutique = choixDeVente({ categorie: 'detail', type: 'Vêtements' })
+  v('deux choix, en ligne puis vitrine', boutique.length === 2 && boutique[0].vendable === true && boutique[1].vendable === false)
+  v('🔴 chaque choix dit ce qu’il fait', boutique.every(c => c.titre && c.phrase && c.phrase.length > 20))
+  v('la boutique : « vient l’acheter en boutique »', /vient l’acheter en boutique/.test(boutique[1].phrase))
+  v('le restaurant : « le commande sur place »', /le commande sur place/.test(choixDeVente({ categorie: 'alimentaire', type: 'Restaurant' })[1].phrase))
+  const bord = code('app/dashboard/ConfigDashboard.js')
+  v('🔴 le formulaire montre LES DEUX choix, plus un interrupteur muet',
+    /<ChoixCartes label="Comment le client l’achète \?" choix=\{choixDeVente\(commercant\)\}/.test(bord) && !/label="Vendu en ligne"/.test(bord))
+  v('choisir règle « vendu en ligne »', /onChoisir=\{c => setForm\(p => \(\{ \.\.\.p, vendable: c\.vendable \}\)\)\}/.test(bord))
+  v('et le choix affiché est celui de l’article', /estChoisi=\{c => !!form\.vendable === c\.vendable\}/.test(bord))
+  // Même logique pour la visibilité (Alex, 30/09).
+  v('🔴 visibilité : deux choix qui disent ce qu’ils font',
+    CHOIX_VISIBILITE.length === 2 && CHOIX_VISIBILITE[0].actif === true && CHOIX_VISIBILITE[1].actif === false
+    && CHOIX_VISIBILITE.every(c => c.titre && c.phrase))
+  v('🔴 le formulaire les montre, plus l’interrupteur « Article disponible »',
+    /<ChoixCartes label="Sur ta fiche \?" choix=\{CHOIX_VISIBILITE\}/.test(bord) && !/label=\{estVitrine \? 'Produit visible' : 'Article disponible'\}/.test(bord))
+  v('choisir règle la visibilité', /onChoisir=\{c => setForm\(p => \(\{ \.\.\.p, actif: c\.actif \}\)\)\}/.test(bord) && /estChoisi=\{c => !!form\.actif === c\.actif\}/.test(bord))
+  v('🔴 la carte de choix dit bien son choix (radio)', /role="radio" aria-checked=\{choisi\}\s*onClick=\{\(\) => onChoisir\(c\)\}/.test(bord))
 }
 
 // ═══ 6) LA FICHE : UNE SEULE RÈGLE, ET PLUS DE « DÈS » ══════════════════════

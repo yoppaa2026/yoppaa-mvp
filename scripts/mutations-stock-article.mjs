@@ -50,6 +50,19 @@ const MUTATIONS = [
   { nom: '⚠️ la boutique dit « sur place »',
     fichier: LIB, de: "  if (commercant?.categorie === 'detail') return 'Disponible en boutique'", vers: '' },
 
+  { nom: '🔴 la vitrine ne dit plus ce qu elle fait',
+    fichier: LIB, de: "    { vendable: false, titre: 'En vitrine seulement', phrase: surPlace },", vers: "    { vendable: false, titre: 'En vitrine seulement', phrase: '' }," },
+  { nom: '⚠️ la boutique lit « sur place »',
+    fichier: LIB, de: "  const surPlace = commercant?.categorie === 'detail'", vers: '  const surPlace = false' },
+  { nom: '🔴 le choix « vendu en ligne » ne règle plus rien',
+    fichier: BORD, de: '            onChoisir={c => setForm(p => ({ ...p, vendable: c.vendable }))}/>', vers: '            onChoisir={() => {}}/>' },
+  { nom: '🔴 le choix « sur ta fiche » ne règle plus rien',
+    fichier: BORD, de: '            onChoisir={c => setForm(p => ({ ...p, actif: c.actif }))}/>', vers: '            onChoisir={() => {}}/>' },
+  { nom: '🔴 la carte de choix n appelle plus rien',
+    fichier: BORD, de: '              onClick={() => onChoisir(c)}', vers: '              onClick={() => {}}' },
+  { nom: '⚠️ « masqué » ne dit plus ce qu il fait',
+    fichier: LIB, de: "  { actif: false, titre: 'Masqué', phrase: 'Tes clients ne le voient plus. Il reste ici, prêt à revenir.' },", vers: "  { actif: false, titre: 'Masqué', phrase: '' }," },
+
   // ─── LA FICHE ────────────────────────────────────────────────────────────
   { nom: '🔴 la limite du panier recalcule à sa façon',
     fichier: FICHE, de: '    return etatStock({ article, entreeJour: entryDay, dejaCommande }).dispo', vers: '    return (article.stock_jour > 0) ? Math.max(0, article.stock_jour - dejaCommande) : Infinity' },

@@ -20,6 +20,11 @@
 //
 // La règle qui dit si un créneau accepte vit dans `lib/deplacement-rdv.js`,
 // pure et partagée avec la création manuelle : deux copies auraient divergé.
+//
+// ⚠️ LE POSTE ÉQUIPE OUVRE CETTE MÊME FENÊTRE (30/09), avec le réglage
+// `serveur` : la salle se lit par `serveur.lireSalle`, et le déplacement part à
+// `serveur.deplacer` (`/api/equipe/rdv/deplacer`), qui refait tout
+// (`deplacerReservationRdv`). Sans `serveur`, rien ne change pour le patron.
 
 import { useState, useEffect, useMemo } from 'react'
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
@@ -55,6 +60,8 @@ function aujourdhuiIso() {
 export default function ModalDeplacerRdv({
   commercant, rdv, prestations = [], creneaux = [], rdvsExistants = [],
   onClose, onDeplace,
+  // Le Poste équipe : { lireSalle(date), deplacer(corps) }. Absent chez le patron.
+  serveur = null,
 }) {
   // ⚠️ UN RENDEZ-VOUS D'HIER QU'ON REPORTE part d'aujourd'hui, pas de sa propre
   // date : on ne peut plus le poser là, et le champ la marquerait invalide.
@@ -119,7 +126,7 @@ export default function ModalDeplacerRdv({
     if (!estTable || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return
     let annule = false
     setSalle({ etat: 'lecture', reservations: [], plafond: null, date })
-    lireSalleDuJour(supabase, { commercantId: commercant.id, dateStr: date }).then(({ reservations, plafond, error }) => {
+    ;(serveur ? serveur.lireSalle(date) : lireSalleDuJour(supabase, { commercantId: commercant.id, dateStr: date })).then(({ reservations, plafond, error }) => {
       if (annule) return
       setSalle(error
         ? { etat: 'erreur', reservations: [], plafond: null, date, message: error.message }
@@ -129,7 +136,7 @@ export default function ModalDeplacerRdv({
       if (!annule) setSalle({ etat: 'erreur', reservations: [], plafond: null, date, message: e?.message || String(e) })
     })
     return () => { annule = true }
-  }, [estTable, commercant.id, date, relire])
+  }, [estTable, commercant.id, date, relire, serveur])
   const salleLue = estTable && salle.etat === 'ok' && salle.date === date
   const salleConnue = salleEnTables && salleLue
 
@@ -239,6 +246,7 @@ export default function ModalDeplacerRdv({
     && ((salleEnTables && !!choixTable && (choixTable.forcer || choixTable.raison === 'trop_grand')) || cadenceDepassee)
   const peutValider = !!(date && heure && verdict.ok && utile && dureeMinutes > 0 && !submitting && !salleAttend)
   const nomClient = [rdv?.client_prenom, rdv?.client_nom].filter(Boolean).join(' ') || 'ce client'
+  const emailPossible = serveur ? true : !!rdv?.client_email
 
   async function valider() {
     if (!peutValider) return
@@ -253,6 +261,9 @@ export default function ModalDeplacerRdv({
     setSubmitting(true)
     setError(null)
     try {
+      // ⚠️ LE POSTE ÉQUIPE S'ARRÊTE ICI : voir `deplacerParLeServeur`, après.
+      if (serveur) return await deplacerParLeServeur()
+
       // ─── LA SALLE, RELUE AU MOMENT D'ÉCRIRE ─────────────────────────────────
       //
       // ⚠️ CE QUE L'ÉCRAN A MONTRÉ N'EST PAS UNE PREUVE : une table a pu être
@@ -409,6 +420,48 @@ export default function ModalDeplacerRdv({
     }
   }
 
+  // ─── LE DÉPLACEMENT DU POSTE ÉQUIPE (30/09) ────────────────────────────────
+  //
+  // Le serveur (`/api/equipe/rdv/deplacer` → `deplacerReservationRdv`) relit
+  // la salle, la compare avec ce que cette fenêtre a montré (`vu`), calcule la
+  // place et le lieu, puis écrit. La suite est celle du patron : le rappel
+  // replanifié que le client soit prévenu ou non, puis l'email de déplacement.
+  //
+  // ⚠️ L'ADRESSE DU CLIENT NE VIENT PAS JUSQU'ICI : le serveur dit seulement si
+  // elle existe (`client_a_email`), et le Poste le dit ensuite à l'écran.
+  // ⚠️ APPELÉE DEPUIS `valider`, dans son `try` : une exception y est rattrapée.
+  async function deplacerParLeServeur() {
+    const r = await serveur.deplacer({
+      rdv_id: rdv.id, date, heure,
+      vu: {
+        table: choixTable ? { format_id: choixTable.format?.id ?? null, forcer: !!choixTable.forcer, raison: choixTable.raison ?? null } : null,
+        cadence_depassee: cadenceDepassee,
+      },
+    })
+    if (!r?.ok) {
+      // La salle a bougé : on la relit, et la fenêtre montre ce qu'elle est.
+      if (r?.code === 'salle_changee') setRelire(n => n + 1)
+      setError(r?.error || 'Le rendez-vous n’a pas pu être déplacé. Réessaie.')
+      setSubmitting(false)
+      return
+    }
+    const rappel = prevenirClient('/api/rdv/replanifier-rappel', { rdv_id: rdv.id }, 'le rappel du client')
+    rappel
+      .then(x => { if (!x.ok) console.warn('[ModalDeplacerRdv] rappel push non replanifié', x.statut, x.erreur) })
+      .catch(e => console.warn('[ModalDeplacerRdv] rappel push non replanifié', e?.message))
+    const emailParti = prevenir && r.client_a_email === true
+    if (emailParti) {
+      postPro('/api/emails/rdv-confirme', {
+        rdv_id: rdv.id,
+        deplace: true,
+        ancienne_date: r.ancienne_date,
+        ancienne_heure: r.ancienne_heure,
+      }).catch(e => console.warn('[ModalDeplacerRdv] email de déplacement KO', e))
+    }
+    if (onDeplace) onDeplace({ ...rdv, date_rdv: date, heure_debut: heure }, { clientAEmail: r.client_a_email === true, emailParti })
+    onClose()
+  }
+
   const inputSt = {
     width: '100%', padding: '0.625rem 0.875rem', borderRadius: 10,
     border: `1.5px solid ${T.pale}`, fontSize: '0.9rem',
@@ -551,12 +604,16 @@ export default function ModalDeplacerRdv({
           )}
 
           {/* Prévenir le client */}
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 14, cursor: rdv.client_email ? 'pointer' : 'default' }}>
-            <input type="checkbox" checked={prevenir && !!rdv.client_email} disabled={!rdv.client_email}
+          {/* ⚠️ AU POSTE ÉQUIPE, L'ADRESSE N'EST PAS CONNUE DE L'ÉCRAN : la case
+              reste ouverte, et le serveur dit après coup si l'email est parti. */}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 14, cursor: emailPossible ? 'pointer' : 'default' }}>
+            <input type="checkbox" checked={prevenir && emailPossible} disabled={!emailPossible}
               onChange={(e) => setPrevenir(e.target.checked)}
               style={{ width: 17, height: 17, accentColor: T.main, marginTop: 1, flexShrink: 0 }}/>
-            <span style={{ fontSize: '0.78rem', color: rdv.client_email ? T.deep : T.muted, fontWeight: 600, lineHeight: 1.45 }}>
-              {rdv.client_email
+            <span style={{ fontSize: '0.78rem', color: emailPossible ? T.deep : T.muted, fontWeight: 600, lineHeight: 1.45 }}>
+              {serveur
+                ? <>Prévenir {nomClient} par email si son adresse est connue, avec la mise à jour de son calendrier.</>
+                : rdv.client_email
                 ? <>Prévenir {nomClient} par email, avec la mise à jour de son calendrier.</>
                 : <>Pas d&apos;email pour ce client : préviens-le toi-même{rdv.client_telephone ? ` au ${rdv.client_telephone}` : ''}.</>}
             </span>

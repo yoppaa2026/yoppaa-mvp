@@ -485,7 +485,11 @@ const membre = (o = {}) => ({
   v('le journal ne note que les gestes d’un membre', /if \(!garde\?\.ok \|\| garde\.role !== 'membre'\) return true/.test(serveur))
 
   // L'écran.
-  v('🔴 l’annulation du Poste ne propose pas « déplacer » (pas encore)', /actions: \(q\.actions \|\| \[\]\)\.filter\(a => a\.valeur !== 'deplacer'\)/.test(poste))
+  // ⚠️ RÉORIENTÉE LE 30/09 : le déplacement existe au Poste. L'annulation pose
+  // la question du patron ENTIÈRE, et « plutôt le déplacer » ouvre la fenêtre
+  // au lieu de tomber dans le vide.
+  v('🔴 l’annulation du Poste pose la question du patron, « déplacer » compris, et le déplacement s’ouvre',
+    /const q = questionRdv\('annule_commercant', rdv, categorie\)\s*const choix = await confirmer\(q\)\s*if \(choix === 'deplacer'\) \{ setRdvOuvert\(null\); setADeplacer\(rdv\); return \}/.test(poste))
   v('🔴 « absent » seulement avec la case Argent, et après l’heure', /const absentPossible = enAttente && droits\.argent && noShowPossible\(rdv, new Date\(\)\)/.test(poste))
   v('🔴 les gestes de l’agenda seulement avec sa case', /gestes=\{etat\.droits\?\.agenda \? gestesRdv : null\}/.test(poste))
   v('🔴 ceux des commandes aussi', /gestes=\{etat\.droits\?\.commandes \? gestesCommande : null\}/.test(poste))
@@ -537,6 +541,249 @@ const membre = (o = {}) => ({
   const ecran = code('app/equipe/PosteEquipe.js')
   v('🔴 la fenêtre ne s’ouvre qu’avec la case Agenda', /\{saisie && etat\.agenda && etat\.droits\?\.agenda && \(/.test(ecran))
   v('elle reçoit l’accès serveur, stable', /serveur=\{serveurSaisie\}/.test(ecran) && /const serveurSaisie = useMemo\(/.test(ecran))
+}
+
+// ═══ 14) ÉTAPE 3b : DÉPLACER UNE RÉSERVATION (30/09) ═════════════════════════
+//
+// ⚠️ ON EXÉCUTE LA FONCTION DU SERVEUR sur une base en mémoire : un banc qui
+// chercherait « creneauAcceptable » dans le fichier resterait vert sur une
+// fonction qui écrit n'importe où.
+{
+  const D = await import('../lib/rdv-deplacement-server.js')
+  const { penduleBelge } = await import('../lib/heure-belge.js')
+
+  // Une base en mémoire : les filtres s'appliquent à la lecture et à l'écriture.
+  // ⚠️ Une heure se compare à la minute, comme Postgres compare « 19:00 » et
+  // « 19:00:00 » sur une colonne `time`.
+  const norme = (x) => (/^\d{2}:\d{2}(:\d{2})?$/.test(String(x)) ? String(x).slice(0, 5) : String(x))
+  const fauxDb = (tables, options = {}) => {
+    const trace = { ecritures: 0 }
+    const db = {
+      trace,
+      from(table) {
+        const filtres = []
+        let maj = null
+        let unique = false
+        const b = {
+          select() { return b },
+          order() { return b },
+          eq(c, x) { filtres.push(l => norme(l[c]) === norme(x)); return b },
+          in(c, xs) { filtres.push(l => xs.includes(l[c])); return b },
+          is(c, x) { filtres.push(l => (l[c] ?? null) === x); return b },
+          update(m) { maj = m; return b },
+          maybeSingle() { unique = true; return b },
+          then(ok, ko) {
+            const lignes = () => (tables[table] || []).filter(l => filtres.every(f => f(l)))
+            let rep
+            if (maj) {
+              if (options.avantEcriture) options.avantEcriture(tables)
+              if (options.refusEcriture) rep = { data: null, error: options.refusEcriture }
+              else {
+                const l = lignes()
+                l.forEach(x => Object.assign(x, maj))
+                trace.ecritures += l.length
+                rep = { data: l.map(x => ({ id: x.id })), error: null }
+              }
+            } else {
+              // ⚠️ DES COPIES, comme Supabase : sinon l'écriture modifierait aussi
+              // ce qui a été lu, et « l'ancienne heure » serait la nouvelle.
+              const l = lignes().map(x => ({ ...x }))
+              rep = { data: unique ? (l[0] || null) : l, error: null }
+            }
+            return Promise.resolve(rep).then(ok, ko)
+          },
+        }
+        return b
+      },
+    }
+    return db
+  }
+  const OUVERT = { ouvert: true, debut: '09:00', fin: '22:00' }
+  const HORAIRES = Object.fromEntries(['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'].map(j => [j, OUVERT]))
+  // Jeudi 1er octobre 2026, 10 h à Bruxelles (8 h à Greenwich, heure d'été).
+  const INSTANT = new Date('2026-10-01T08:00:00Z')
+  const base = () => ({
+    commercants: [{ id: 'c1', nom: 'Salon', horaires_detail: HORAIRES, rdv_cadence_couverts: null }],
+    rdv_prestations: [
+      { id: 'coupe', commercant_id: 'c1', nom: 'Coupe', duree_minutes: 60, capacite: 1, par_couverts: false, actif: true, deleted_at: null },
+      { id: 'yoga', commercant_id: 'c1', nom: 'Yoga', duree_minutes: 60, capacite: 3, par_couverts: false, actif: true, deleted_at: null },
+    ],
+    rdv_creneaux: [],
+    commercant_lieux: [],
+    rdv_reservations: [
+      { id: 'r1', commercant_id: 'c1', prestation_id: 'coupe', date_rdv: '2026-10-05', heure_debut: '10:00:00', heure_fin: '11:00:00', duree_minutes: 60, capacite_creneau: 1, couverts: 1, place_no: 1, statut: 'confirme', deleted_at: null, client_email: 'client@exemple.be' },
+      { id: 'r2', commercant_id: 'c1', prestation_id: 'coupe', date_rdv: '2026-10-05', heure_debut: '14:00:00', heure_fin: '15:00:00', duree_minutes: 60, capacite_creneau: 1, couverts: 1, place_no: 1, statut: 'confirme', deleted_at: null, client_email: null },
+      { id: 'y1', commercant_id: 'c1', prestation_id: 'yoga', date_rdv: '2026-10-05', heure_debut: '18:00:00', heure_fin: '19:00:00', duree_minutes: 60, capacite_creneau: 3, couverts: 1, place_no: 1, statut: 'confirme', deleted_at: null, client_email: null },
+      { id: 'y3', commercant_id: 'c1', prestation_id: 'yoga', date_rdv: '2026-10-05', heure_debut: '18:00:00', heure_fin: '19:00:00', duree_minutes: 60, capacite_creneau: 3, couverts: 1, place_no: 3, statut: 'confirme', deleted_at: null, client_email: null },
+      { id: 'y9', commercant_id: 'c1', prestation_id: 'yoga', date_rdv: '2026-10-06', heure_debut: '18:00:00', heure_fin: '19:00:00', duree_minutes: 60, capacite_creneau: 3, couverts: 1, place_no: 1, statut: 'confirme', deleted_at: null, client_email: null },
+    ],
+  })
+  const deplacer = async (tables, args, options) => {
+    const db = fauxDb(tables, options)
+    try {
+      const res = await D.deplacerReservationRdv(db, { commercantId: 'c1', instant: INSTANT, ...args })
+      return { res, db, tables }
+    } catch (e) {
+      return { res: { ok: false, code: 'exception', message: e.message }, db, tables }
+    }
+  }
+  const ligne = (tables, id) => tables.rdv_reservations.find(r => r.id === id)
+
+  {
+    const { res, db, tables } = await deplacer(base(), { rdvId: 'r1', date: '2026-10-05', heure: '12:00' })
+    const r1 = ligne(tables, 'r1')
+    v('🔴 un créneau libre : la réservation est déplacée', res.ok === true && r1.date_rdv === '2026-10-05' && norme(r1.heure_debut) === '12:00', JSON.stringify(res))
+    v('🔴 la fin suit la durée FIGÉE de la réservation', norme(r1.heure_fin) === '13:00', r1.heure_fin)
+    v('une seule ligne écrite', db.trace.ecritures === 1, String(db.trace.ecritures))
+    v('🔴 l’ancienne heure revient, pour l’email « déplacé »', res.ancienne_date === '2026-10-05' && norme(res.ancienne_heure) === '10:00')
+    v('🔴 l’adresse du client ne sort pas : seulement « elle existe »', res.client_a_email === true && !JSON.stringify(res).includes('client@exemple.be'))
+  }
+  {
+    const { res, db } = await deplacer(base(), { rdvId: 'r2', date: '2026-10-05', heure: '16:00' })
+    v('sans adresse, le serveur le dit', res.ok === true && res.client_a_email === false && db.trace.ecritures === 1)
+  }
+  {
+    const { res, db } = await deplacer(base(), { rdvId: 'r1', date: '2026-10-05', heure: '14:30' })
+    v('🔴 un créneau pris est refusé, rien n’est écrit', res.ok === false && res.code === 'conflit' && db.trace.ecritures === 0, JSON.stringify(res))
+  }
+  {
+    const { res, db } = await deplacer(base(), { rdvId: 'r1', date: '2026-10-05', heure: '10:00' })
+    v('déplacer vers le même créneau ne réécrit rien', res.ok === false && res.code === 'inutile' && db.trace.ecritures === 0)
+  }
+  {
+    // ⚠️ L'AUTRE COMMERCE EXISTE : sans lui, le refus viendrait de la lecture
+    // du commerce, et la garde de la ligne ne serait pas mesurée.
+    const t = base()
+    t.commercants.push({ id: 'c2', nom: 'Autre', horaires_detail: HORAIRES, rdv_cadence_couverts: null })
+    const { res, db } = await deplacer(t, { rdvId: 'r1', date: '2026-10-05', heure: '12:00', commercantId: 'c2' })
+    v('🔴 la réservation d’un autre commerce est introuvable', res.ok === false && res.code === 'introuvable' && db.trace.ecritures === 0, JSON.stringify(res))
+  }
+  {
+    // 🔴 LA CUISINE DEVENUE PLEINE PENDANT LA SAISIE. Une table de deux passe à
+    // 19 h, où quatre personnes arrivent déjà, dans une cuisine réglée à quatre.
+    const t = base()
+    t.commercants[0].rdv_cadence_couverts = 4
+    t.rdv_prestations.push({ id: 'table', commercant_id: 'c1', nom: 'Table', duree_minutes: 90, capacite: 20, par_couverts: true, couverts_min: 1, couverts_max: 6, quantite: null, actif: true, deleted_at: null })
+    t.rdv_reservations.push(
+      { id: 't1', commercant_id: 'c1', prestation_id: 'table', date_rdv: '2026-10-05', heure_debut: '12:00:00', heure_fin: '13:30:00', duree_minutes: 90, capacite_creneau: 20, couverts: 2, place_no: 1, statut: 'confirme', deleted_at: null, client_email: null },
+      { id: 't2', commercant_id: 'c1', prestation_id: 'table', date_rdv: '2026-10-05', heure_debut: '19:00:00', heure_fin: '20:30:00', duree_minutes: 90, capacite_creneau: 20, couverts: 4, place_no: 1, statut: 'confirme', deleted_at: null, client_email: null },
+    )
+    const copie = () => JSON.parse(JSON.stringify(t))
+    const pasVu = await deplacer(copie(), { rdvId: 't1', date: '2026-10-05', heure: '19:00', vu: { table: null, cadence_depassee: false } })
+    v('🔴 une cuisine pleine que la fenêtre n’a pas montrée : rien n’est écrit',
+      pasVu.res.ok === false && pasVu.res.code === 'salle_changee' && pasVu.db.trace.ecritures === 0, JSON.stringify(pasVu.res))
+    const vu = await deplacer(copie(), { rdvId: 't1', date: '2026-10-05', heure: '19:00', vu: { table: null, cadence_depassee: true } })
+    v('montrée et confirmée (« Déplacer quand même ») : elle passe, et prend le rang 2',
+      vu.res.ok === true && ligne(vu.tables, 't1').place_no === 2, JSON.stringify(vu.res))
+  }
+  {
+    const t = base()
+    ligne(t, 'r1').statut = 'honore'
+    const { res, db } = await deplacer(t, { rdvId: 'r1', date: '2026-10-05', heure: '12:00' })
+    v('🔴 une réservation honorée ne se rouvre pas', res.ok === false && res.code === 'pas_a_venir' && db.trace.ecritures === 0)
+  }
+  {
+    const { res, db } = await deplacer(base(), { rdvId: 'r1', date: '2026-10-01', heure: '09:30' })
+    v('🔴 le passé est refusé', res.ok === false && res.code === 'passe' && db.trace.ecritures === 0, JSON.stringify(res))
+  }
+  {
+    // 🔴 LE FUSEAU DU SERVEUR. On se met à Greenwich, comme Vercel : à 10 h
+    // chez nous, la machine dit 8 h. Si le changement de fuseau n'a pas pris,
+    // on le DIT, au lieu d'être vert sans avoir rien prouvé.
+    const avant = process.env.TZ
+    process.env.TZ = 'UTC'
+    const machineAGreenwich = INSTANT.getHours() === 8
+    v('le banc a pu se mettre à l’heure de Greenwich (sinon la garde du fuseau ne prouve rien)', machineAGreenwich, String(INSTANT.getHours()))
+    const p = penduleBelge(INSTANT)
+    v('🔴 la pendule belge dit 10 h, même sur une machine à Greenwich', !!p && p.getHours() === 10 && p.getMinutes() === 0, p ? `${p.getHours()}:${p.getMinutes()}` : 'null')
+    const { res } = await deplacer(base(), { rdvId: 'r1', date: '2026-10-01', heure: '09:30' })
+    v('🔴 et 9 h 30 est déjà passé, même là', res.ok === false && res.code === 'passe', JSON.stringify(res))
+    const { res: r2 } = await deplacer(base(), { rdvId: 'r1', date: '2026-10-01', heure: '10:00' })
+    v('le quart d’heure en cours reste ouvert', r2.ok === true, JSON.stringify(r2))
+    if (avant === undefined) delete process.env.TZ
+    else process.env.TZ = avant
+  }
+  {
+    // Deux personnes déplacent la même réservation : la seconde n'écrase rien.
+    const { res } = await deplacer(base(), { rdvId: 'r1', date: '2026-10-05', heure: '12:00' }, {
+      avantEcriture: (t) => { ligne(t, 'r1').heure_debut = '16:00:00' },
+    })
+    v('🔴 une réservation modifiée entre-temps n’est pas écrasée', res.ok === false && res.code === 'deja_modifiee', JSON.stringify(res))
+  }
+  {
+    const { res } = await deplacer(base(), { rdvId: 'r1', date: '2026-10-05', heure: '12:00' }, { refusEcriture: { message: 'RDV_DEPLACE_DANS_LE_PASSE' } })
+    v('la base qui refuse le passé se dit en clair', res.ok === false && res.code === 'passe')
+    const { res: r2 } = await deplacer(base(), { rdvId: 'r1', date: '2026-10-05', heure: '12:00' }, { refusEcriture: { code: '23505', message: 'duplicate' } })
+    v('la place prise pendant la saisie se dit en clair', r2.ok === false && r2.code === 'place_prise')
+  }
+  {
+    // 🔴 LA PLACE D'UN COURS : la première libre, pas « inscrits + 1 ».
+    const { res, tables } = await deplacer(base(), { rdvId: 'y9', date: '2026-10-05', heure: '18:00' })
+    v('🔴 un cours où 1 et 3 sont prises donne la 2', res.ok === true && ligne(tables, 'y9').place_no === 2, JSON.stringify(res))
+    const t = base()
+    t.rdv_reservations.push({ ...ligne(t, 'y1'), id: 'y2', place_no: 2 })
+    const { res: plein, db } = await deplacer(t, { rdvId: 'y9', date: '2026-10-05', heure: '18:00' })
+    v('🔴 un cours complet refuse, rien n’est écrit', plein.ok === false && plein.code === 'cours_complet' && db.trace.ecritures === 0, JSON.stringify(plein))
+  }
+
+  // 🔴 LA SALLE DOIT RÉPONDRE CE QUE LA FENÊTRE A MONTRÉ.
+  const choix = { format: { id: 't4' }, forcer: false, raison: null }
+  v('même table, même cuisine : on écrit', D.salleCommeVue({ salleEnTables: true, choix, cadenceDepassee: false, vu: { table: { format_id: 't4', forcer: false, raison: null }, cadence_depassee: false } }))
+  v('🔴 une autre table que celle montrée : on n’écrit pas', !D.salleCommeVue({ salleEnTables: true, choix, cadenceDepassee: false, vu: { table: { format_id: 't2', forcer: false, raison: null }, cadence_depassee: false } }))
+  v('🔴 une salle devenue pleine (« forcer ») : on n’écrit pas', !D.salleCommeVue({ salleEnTables: true, choix: { ...choix, forcer: true }, cadenceDepassee: false, vu: { table: { format_id: 't4', forcer: false, raison: null }, cadence_depassee: false } }))
+  v('🔴 une cuisine devenue pleine : on n’écrit pas', !D.salleCommeVue({ salleEnTables: false, choix: null, cadenceDepassee: true, vu: { table: null, cadence_depassee: false } }))
+  v('🔴 aucune table vue par la fenêtre, en inventaire : on n’écrit pas', !D.salleCommeVue({ salleEnTables: true, choix, cadenceDepassee: false, vu: null }))
+  v('une valeur absente en JSON vaut « non »', D.salleCommeVue({ salleEnTables: true, choix: { format: { id: 't4' } }, cadenceDepassee: false, vu: { table: { format_id: 't4' } } }))
+
+  // Le serveur, lu : l'écriture filtrée, le fuseau, l'adresse gardée.
+  const lib = code('lib/rdv-deplacement-server.js')
+  v('🔴 l’écriture est filtrée sur le commerce, le statut et l’ANCIEN créneau',
+    /\.update\(maj\)\s*\.eq\('id', rdv\.id\)\.eq\('commercant_id', commercantId\)\s*\.eq\('statut', 'confirme'\)\.is\('deleted_at', null\)\s*\.eq\('date_rdv', rdv\.date_rdv\)\.eq\('heure_debut', rdv\.heure_debut\)/.test(lib))
+  v('🔴 aucune adresse du client dans ce que rend la fonction', /client_a_email: !!rdv\.client_email,/.test(lib) && !/client_email: rdv/.test(lib))
+  // ⚠️ UNE PARITÉ, PAS UN COMPORTEMENT : deux cours différents ne peuvent pas
+  // se chevaucher (la règle du créneau le refuse avant), donc le filtre par
+  // prestation ne change aucun résultat observable. Il reste celui de la
+  // fenêtre du patron, et c'est ce qu'on vérifie : les deux cherchent la place
+  // d'un cours parmi SES inscrits, et celle d'une table parmi toutes.
+  v('la place d’un cours se cherche comme chez le patron, parmi SES inscrits',
+    /if \(estCours\) requete = requete\.eq\('prestation_id', rdv\.prestation_id\)/.test(lib)
+    && /\.eq\('prestation_id', rdv\.prestation_id\)\s*\.eq\('date_rdv', date\)\s*\.eq\('heure_debut', heure\)/.test(code('app/dashboard/ModalDeplacerRdv.js')))
+
+  // La route.
+  const route = code('app/api/equipe/rdv/deplacer/route.js')
+  v('🔴 déplacer passe par la garde, case Agenda, le commerce déduit de la LIGNE',
+    /const garde = await gardeLigneEquipe\(request, admin, 'rdv_reservations', rdv_id, 'agenda'\)\s*if \(!garde\.ok\) return NextResponse\.json/.test(route)
+    && /commercantId: garde\.commercant\.id/.test(route) && !/commercant_id/.test(route))
+  v('le geste va au journal', /journaliserGeste\(admin, garde, \{\s*action: 'rdv_deplace'/.test(route))
+  v('🔴 la route ne rend pas l’adresse du client', !/client_email/.test(route) && /client_a_email: res\.client_a_email/.test(route))
+
+  // Les deux routes de la suite, élargies à l'équipe.
+  const rappel = code('app/api/rdv/replanifier-rappel/route.js')
+  v('🔴 le rappel se replanifie pour le membre avec la case Agenda', /gardeLigneEquipe\(request, supabase, 'rdv_reservations', rdv_id, 'agenda'\)/.test(rappel))
+  const confirme = code('app/api/emails/rdv-confirme/route.js')
+  v('🔴 l’email « déplacé » accepte la preuve de l’équipe, case Agenda',
+    /const verdictEquipe = deplaceDemande === true && !verdictPro\.ok\s*\? await gardeLigneEquipe\(request, supabase, 'rdv_reservations', rdv_id, 'agenda'\)\.catch\(\(\) => \(\{ ok: false \}\)\)\s*: \{ ok: false \}/.test(confirme)
+    && /const deplace = deplaceDemande === true && \(verdictPro\.ok \|\| verdictEquipe\.ok\)/.test(confirme))
+
+  // 🔴 LA FENÊTRE DU PATRON : inchangée sans le réglage.
+  const modal = code('app/dashboard/ModalDeplacerRdv.js')
+  v('🔴 sans « serveur », la fenêtre lit sa salle comme avant', /\(serveur \? serveur\.lireSalle\(date\) : lireSalleDuJour\(supabase, \{ commercantId: commercant\.id, dateStr: date \}\)\)/.test(modal))
+  v('🔴 avec « serveur », elle s’arrête AVANT d’écrire elle-même', (() => {
+    const i = modal.indexOf('if (serveur) return await deplacerParLeServeur()')
+    const j = modal.indexOf('.update(maj)')
+    return i > 0 && j > i
+  })())
+  v('🔴 la fenêtre envoie ce qu’elle a MONTRÉ de la salle', /table: choixTable \? \{ format_id: choixTable\.format\?\.id \?\? null, forcer: !!choixTable\.forcer, raison: choixTable\.raison \?\? null \} : null,\s*cadence_depassee: cadenceDepassee,/.test(modal))
+  v('🔴 au Poste aussi, le rappel suit le rendez-vous, email ou pas', /const rappel = prevenirClient\('\/api\/rdv\/replanifier-rappel', \{ rdv_id: rdv\.id \}, 'le rappel du client'\)/.test(modal))
+  v('🔴 l’email ne part que si l’adresse existe ET que la case est cochée', /const emailParti = prevenir && r\.client_a_email === true\s*if \(emailParti\) \{\s*postPro\('\/api\/emails\/rdv-confirme', \{\s*rdv_id: rdv\.id,\s*deplace: true,/.test(modal))
+  v('une salle qui a changé se relit', /if \(r\?\.code === 'salle_changee'\) setRelire\(n => n \+ 1\)/.test(modal))
+
+  // L'écran du Poste.
+  const ecran = code('app/equipe/PosteEquipe.js')
+  v('🔴 la fenêtre de déplacement ne s’ouvre qu’avec la case Agenda', /\{aDeplacer && etat\.agenda && etat\.droits\?\.agenda && \(\s*<ModalDeplacerRdv/.test(ecran))
+  v('elle reçoit l’accès serveur', /<ModalDeplacerRdv[\s\S]*?serveur=\{serveurSaisie\}[\s\S]*?\/>/.test(ecran))
+  v('🔴 « plutôt le déplacer » ouvre la fenêtre au lieu d’annuler', /if \(choix === 'deplacer'\) \{ setRdvOuvert\(null\); setADeplacer\(rdv\); return \}\s*const d = statutDepuisChoix\('annule_commercant', choix\)/.test(ecran))
+  v('🔴 un client sans adresse se dit, avec son téléphone', /Pas d’email pour ce client : préviens-le/.test(lire('app/equipe/PosteEquipe.js')))
 }
 
 console.log(`\nÉquipe : ${ok} vérifications`)

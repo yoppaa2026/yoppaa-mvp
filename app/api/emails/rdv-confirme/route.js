@@ -16,6 +16,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { gardeSurLigne } from '@/lib/api-auth'
+import { gardeLigneEquipe } from '@/lib/equipe-server'
 import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment, sequenceIcs } from '@/lib/ical'
 import { referenceRdv } from '@/lib/numero-commande'
@@ -53,7 +54,15 @@ export async function POST(request) {
     // jamais eu lieu, dans un email signé par notre domaine. Sans preuve, ils
     // sont désormais ignorés, et le message redevient une simple confirmation.
     const verdictPro = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)
-    const deplace = deplaceDemande === true && verdictPro.ok
+    // 🔴 L'ÉQUIPE DÉPLACE AUSSI (30/09, Poste équipe) : un membre avec la case
+    // agenda apporte la même preuve que le patron. ⚠️ CONSULTÉE SEULEMENT QUAND
+    // UN DÉPLACEMENT EST ANNONCÉ : la confirmation du client, qui n'en annonce
+    // jamais, ne fait pas une lecture de plus, et une lecture ratée ne lui coûte
+    // rien (le message redevient une simple confirmation, comme sans preuve).
+    const verdictEquipe = deplaceDemande === true && !verdictPro.ok
+      ? await gardeLigneEquipe(request, supabase, 'rdv_reservations', rdv_id, 'agenda').catch(() => ({ ok: false }))
+      : { ok: false }
+    const deplace = deplaceDemande === true && (verdictPro.ok || verdictEquipe.ok)
     const ancienne_date = deplace ? ancienneDateDemandee : null
     const ancienne_heure = deplace ? ancienneHeureDemandee : null
 

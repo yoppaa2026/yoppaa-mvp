@@ -1,9 +1,9 @@
 // POST /api/rdv/replanifier-rappel
 //
 // Le rappel push d'une heure avant suit le rendez-vous que le commerçant vient
-// de déplacer. Appelé par le tableau de bord (ModalDeplacerRdv) après chaque
-// déplacement, que le client ait été prévenu par email ou non : l'ancien
-// rappel est faux dans les deux cas.
+// de déplacer. Appelé par la fenêtre de déplacement (ModalDeplacerRdv), chez
+// le patron comme au Poste équipe, après chaque déplacement, que le client ait
+// été prévenu par email ou non : l'ancien rappel est faux dans les deux cas.
 //
 // 🔴 POURQUOI (trouvé le 11/09). Le rappel est programmé chez OneSignal au
 // moment de la réservation, avec l'heure dans son texte. Déplacer le
@@ -14,7 +14,11 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { gardeSurLigne, refus } from '@/lib/api-auth'
+import { refus } from '@/lib/api-auth'
+// 🔴 LE PATRON, L'ADMIN ET L'ÉQUIPE PAR LA MÊME GARDE (30/09, étape 3b) : le
+// patron et l'admin passent comme avant, un membre avec la case agenda, qui
+// déplace depuis le Poste équipe.
+import { gardeLigneEquipe } from '@/lib/equipe-server'
 import { replanifierRappelRdv } from '@/lib/rappels'
 
 export async function POST(request) {
@@ -31,7 +35,7 @@ export async function POST(request) {
     // ⚠️ SEUL LE COMMERÇANT DE CE RENDEZ-VOUS : c'est lui qui déplace. Sans
     // garde, quiconque connaît l'identifiant pourrait annuler le rappel d'un
     // client, ou le faire programmer à nouveau.
-    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)
+    const verdict = await gardeLigneEquipe(request, supabase, 'rdv_reservations', rdv_id, 'agenda')
     const nonAutorise = refus(verdict, NextResponse)
     if (nonAutorise) return nonAutorise
 

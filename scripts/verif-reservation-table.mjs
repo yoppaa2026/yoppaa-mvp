@@ -2854,10 +2854,13 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // Le câblage : la route garde, le tableau de bord appelle APRÈS le
   // déplacement et HORS du bloc « prévenir par email ».
   const ROUTE_RAPPEL = lire('app/api/rdv/replanifier-rappel/route.js')
-  const iGarde = ROUTE_RAPPEL.indexOf('gardeSurLigne(request')
+  // ⚠️ RÉORIENTÉE LE 30/09 : la garde est `gardeLigneEquipe` (le patron et
+  // l'admin comme avant, un membre avec la case AGENDA, qui déplace depuis le
+  // Poste équipe). La case est lue : une autre case ne déplace rien.
+  const iGarde = ROUTE_RAPPEL.indexOf("gardeLigneEquipe(request, supabase, 'rdv_reservations', rdv_id, 'agenda')")
   const iAppel = ROUTE_RAPPEL.indexOf('replanifierRappelRdv(rdv_id')
-  verifier('🔴 la route vérifie que c’est le commerçant du rendez-vous, AVANT de toucher au rappel',
-    /from '@\/lib\/api-auth'/.test(ROUTE_RAPPEL) && iGarde !== -1 && iAppel > iGarde && /if \(nonAutorise\) return nonAutorise/.test(ROUTE_RAPPEL))
+  verifier('🔴 la route vérifie que c’est le commerçant du rendez-vous (ou son équipe, case agenda), AVANT de toucher au rappel',
+    /from '@\/lib\/equipe-server'/.test(ROUTE_RAPPEL) && iGarde !== -1 && iAppel > iGarde && /if \(nonAutorise\) return nonAutorise/.test(ROUTE_RAPPEL))
   const MODALE_DEPLACER = lire('app/dashboard/ModalDeplacerRdv.js')
   const iMaj = MODALE_DEPLACER.indexOf('.update(maj)')
   const iReplanif = MODALE_DEPLACER.indexOf("prevenirClient('/api/rdv/replanifier-rappel'")

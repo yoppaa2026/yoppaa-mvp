@@ -15,6 +15,8 @@ import AgendaRdv from '@/app/dashboard/AgendaRdv'
 // La fenêtre de saisie DU PATRON, avec l'accès serveur (étape 3b) : les heures
 // libres se calculent par le même code pour les deux écrans.
 import ModalNouveauRdv from '@/app/dashboard/ModalNouveauRdv'
+// Et SA fenêtre de déplacement (30/09), même réglage `serveur`.
+import ModalDeplacerRdv from '@/app/dashboard/ModalDeplacerRdv'
 import { statutRdv } from '@/lib/rdv-statut'
 import { etatPaiementRdv, etatPaiementCommande } from '@/lib/rdv-paiement'
 import { referenceRdv, referenceCommande } from '@/lib/numero-commande'
@@ -100,6 +102,7 @@ function DetailRdv({ rdv, commerce, droits = {}, gestes = null, enCours = false,
             {absentPossible && (
               <button type="button" disabled={enCours} onClick={() => gestes.absent(rdv)} style={{ ...puce(false), padding: '12px 14px' }}>Client absent</button>
             )}
+            <button type="button" disabled={enCours} onClick={() => gestes.deplacer(rdv)} style={{ ...puce(false), padding: '12px 14px' }}>Déplacer</button>
             <button type="button" disabled={enCours} onClick={() => gestes.annuler(rdv)} style={{ ...puce(false), padding: '12px 14px', color: T.rouge, borderColor: '#FCA5A5' }}>Annuler la réservation</button>
           </div>
         )}
@@ -264,7 +267,11 @@ export default function PosteEquipe({ equipe, onChanger }) {
         : { reservations: [], plafond: null, error: { message: j.error || 'salle illisible' } }
     },
     creer: async (corps) => lireReponse(await postPro('/api/equipe/rdv/creer', { commercant_id: equipe.commercant_id, ...corps })),
+    // ⚠️ PAS DE `commercant_id` ICI : le serveur le déduit de la réservation.
+    deplacer: async (corps) => lireReponse(await postPro('/api/equipe/rdv/deplacer', corps)),
   }), [equipe.commercant_id])
+  // La réservation ouverte dans la fenêtre de déplacement.
+  const [aDeplacer, setADeplacer] = useState(null)
 
   const charger = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -332,9 +339,11 @@ export default function PosteEquipe({ equipe, onChanger }) {
       if (j.commande_id) await prevenir('/api/commande/produits-remis', { commande_id: j.commande_id }, 'la remise de ses produits')
     }),
     annuler: (rdv) => geste(rdv.id, async () => {
-      // La question du patron, sans « déplacer » : ce geste arrive plus tard.
+      // La question du patron, « plutôt le déplacer » compris (30/09) : comme
+      // chez lui, ce choix ouvre la fenêtre de déplacement au lieu d'annuler.
       const q = questionRdv('annule_commercant', rdv, categorie)
-      const choix = await confirmer({ ...q, actions: (q.actions || []).filter(a => a.valeur !== 'deplacer') })
+      const choix = await confirmer(q)
+      if (choix === 'deplacer') { setRdvOuvert(null); setADeplacer(rdv); return }
       const d = statutDepuisChoix('annule_commercant', choix)
       if (!d) return
       const j = await lire(await postPro('/api/rdv/annuler-commercant', { rdv_id: rdv.id, raison: d.raison }))
@@ -367,6 +376,18 @@ export default function PosteEquipe({ equipe, onChanger }) {
         recompense_rendue: j.recompense_rendue,
       }, 'l’email « tu n’es pas venu »')
     }),
+    // La fenêtre du patron fait le reste : verdict, salle, serveur, rappel, email.
+    deplacer: (rdv) => { setAvis(null); setRdvOuvert(null); setADeplacer(rdv) },
+  }
+  // Ce que la fenêtre de déplacement rend, dit comme un geste du Poste.
+  // ⚠️ UN CLIENT SANS ADRESSE SE DIT, avec son téléphone : sinon il vient à
+  // l'ancienne heure et personne ne l'a appelé.
+  function apresDeplacement(rdv, { clientAEmail, emailParti } = {}) {
+    const quand = `${libelleJourPoste(rdv.date_rdv)} à ${String(rdv.heure_debut || '').slice(0, 5)}`
+    if (emailParti) dire(`Réservation déplacée au ${quand}. Le client reçoit un email.`)
+    else if (!clientAEmail) dire(`Réservation déplacée au ${quand}. Pas d’email pour ce client : préviens-le${rdv.client_telephone ? ` au ${rdv.client_telephone}` : ''}.`, 'erreur')
+    else dire(`Réservation déplacée au ${quand}. Le client n’a pas été prévenu.`, 'erreur')
+    charger()
   }
   const gestesCommande = {
     avancer: (c) => geste(c.id, async () => {
@@ -460,6 +481,18 @@ export default function PosteEquipe({ equipe, onChanger }) {
           serveur={serveurSaisie}
           onClose={() => setSaisie(null)}
           onCreated={() => { dire('Réservation posée'); charger() }}
+        />
+      )}
+      {aDeplacer && etat.agenda && etat.droits?.agenda && (
+        <ModalDeplacerRdv
+          commercant={etat.commerce}
+          rdv={aDeplacer}
+          prestations={etat.agenda.prestations || []}
+          creneaux={etat.agenda.creneaux}
+          rdvsExistants={etat.agenda.rdvs}
+          serveur={serveurSaisie}
+          onClose={() => setADeplacer(null)}
+          onDeplace={apresDeplacement}
         />
       )}
       {actif === 'commandes' && etat.commandes && <Commandes commandes={etat.commandes} commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null} enCours={enCours}/>}

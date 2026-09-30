@@ -186,7 +186,9 @@ const MUTATIONS = [
     de: "      .eq('rappel_push_id', rdv.rappel_push_id)",
     vers: '' },
   { nom: '🔴 la route replanifie sans vérifier qui demande', banc: 'verif:table', fichier: 'app/api/rdv/replanifier-rappel/route.js',
-    de: "    const verdict = await gardeSurLigne(request, supabase, 'rdv_reservations', rdv_id)",
+    // ⚠️ RÉORIENTÉE LE 30/09 : la route garde par `gardeLigneEquipe` (patron,
+    // admin, ou membre avec la case agenda qui déplace depuis le Poste).
+    de: "    const verdict = await gardeLigneEquipe(request, supabase, 'rdv_reservations', rdv_id, 'agenda')",
     vers: '    const verdict = { ok: true }' },
   { nom: '🔴 le déplacement ne replanifie plus le rappel', banc: 'verif:table', fichier: 'app/dashboard/ModalDeplacerRdv.js',
     de: "      prevenirClient('/api/rdv/replanifier-rappel', { rdv_id: rdv.id }, 'le rappel du client')",

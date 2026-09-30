@@ -122,8 +122,13 @@ function sansCommentaires(src) {
   verifier("le libellé de facturation dit « 9 janvier 2027 »",
     libelleFinEssaiLancement() === '9 janvier 2027',
     libelleFinEssaiLancement())
-  verifier('la phrase de vente annonce les 100 jours et leur point de départ',
-    phraseEssai(jour('2026-08-20T10:00:00+02:00')) === '100 jours offerts à partir du 1er octobre',
+  // ⚠️ RÉORIENTÉE LE 30/09 : l'ouverture est À CONFIRMER (Alex). La phrase
+  // datée se vérifie avec `datee: true` ; la phrase d'aujourd'hui, sans date.
+  verifier('la phrase de vente annonce les 100 jours et leur point de départ (date décidée)',
+    phraseEssai(jour('2026-08-20T10:00:00+02:00'), { datee: true }) === '100 jours offerts à partir du 1er octobre',
+    phraseEssai(jour('2026-08-20T10:00:00+02:00'), { datee: true }))
+  verifier('🔴 ouverture à confirmer : les 100 jours comptent dès l’ouverture, SANS date',
+    phraseEssai(jour('2026-08-20T10:00:00+02:00')) === '100 jours offerts dès l’ouverture',
     phraseEssai(jour('2026-08-20T10:00:00+02:00')))
   verifier('et ne chiffre jamais le total avec l\'avance',
     !/14[0-9] jours/.test(phraseEssai(jour('2026-08-20T10:00:00+02:00'))))
@@ -1226,6 +1231,65 @@ function sansCommentaires(src) {
   verifier('le plafond annoncé couvre encore le cumul maximal des deux grilles',
     /ne peut en aucun cas excéder cinq cents euros/.test(reg)
       && /4 bons de cinquante euros/.test(reg))
+}
+
+// ═══ L'OUVERTURE À CONFIRMER (Alex, 30/09 au soir) ═══════════════════════════
+//
+// « Aucun commerçant n'est online » : la date du 1er octobre aurait basculé
+// toute seule le discours (landing, kit, affichette, emails) le 01/10 à 10 h.
+// L'ouverture se fera à la main. Ces gardes EXÉCUTENT les phrases et les
+// emails, puis visent les écrans : aucune date, aucun compte à rebours tant
+// que le drapeau est levé.
+{
+  const L = await import('../lib/lancement.js')
+  verifier('🔴 l’ouverture est À CONFIRMER (décision d’Alex du 30/09)', L.OUVERTURE_A_CONFIRMER === true && L.ouvertureDatee() === false)
+  verifier('🔴 sans date décidée, on reste AVANT l’ouverture, même en 2027',
+    L.avantLancement(new Date('2027-03-01T12:00:00Z')) === true)
+  verifier('avec une date décidée, la date reprend la main',
+    L.avantLancement(new Date('2026-10-02T12:00:00Z'), { datee: true }) === false
+      && L.avantLancement(new Date('2026-09-30T12:00:00Z'), { datee: true }) === true)
+  const paires = [
+    ['quandOuverture', 'le 1er octobre', 'très bientôt'],
+    ['depuisLOuverture', 'à partir du 1er octobre', 'dès l’ouverture'],
+    ['desLOuverture', 'dès le 1er octobre', 'dès l’ouverture'],
+    ['jusquALOuverture', 'jusqu’au 1er octobre', 'jusqu’à l’ouverture'],
+    ['aLOuverture', 'le 1er octobre', 'à l’ouverture'],
+    ['lOuverture', 'le 1er octobre', 'l’ouverture'],
+    ['leJourJ', 'le 1er octobre', 'le jour de l’ouverture'],
+  ]
+  for (const [f, datee, sansDate] of paires) {
+    verifier(`${f} : datée « ${datee} », sinon « ${sansDate} »`,
+      L[f]({ datee: true }) === datee && L[f]({ datee: false }) === sansDate && L[f]() === sansDate,
+      `${L[f]({ datee: true })} / ${L[f]({ datee: false })} / ${L[f]()}`)
+  }
+  verifier('la date d’avec l’année, quand elle est décidée', L.quandOuverture({ avecAnnee: true, datee: true }) === 'le 1er octobre 2026')
+  verifier('une capitale en début de phrase', L.majuscule('le jour de l’ouverture') === 'Le jour de l’ouverture' && L.majuscule('') === '')
+
+  // Les emails, RENDUS : aucune date d'ouverture n'y survit.
+  const R = await import('../lib/resend.js')
+  const validation = R.emailValidationCommercant({ nom: 'Test', slug: 'test', avant_lancement: true })
+  verifier('🔴 l’email de publication ne promet aucune date', !/1er octobre/.test(validation) && /jusqu’à l’ouverture/.test(validation))
+  const kit = R.emailKitBienvenue({ nom_commercant: 'Test', slug: 'test', avant_lancement: true })
+  verifier('🔴 l’email du kit ne promet aucune date', !/1er octobre/.test(kit) && /(dès|à) l’ouverture|très bientôt/.test(kit))
+  const RL = await import('../lib/resend-landing.js')
+  const merci = RL.emailMerciPreinscription({ mode_landing: 'reveal', type_utilisateur: 'commercant' })
+  verifier('🔴 le merci de préinscription dit « très bientôt »', !/1er octobre/.test(merci) && /très bientôt/.test(merci))
+  verifier('🔴 le balisage Google ne publie aucune date', !/datePublished/.test(jsonLdLandingString()))
+
+  // Les écrans : chaque date a sa branche « à confirmer ».
+  const rv = sansProse(lire('app/components/LandingReveal.js'))
+  verifier('🔴 pas de compte à rebours sans date décidée', /\{ouvertureDatee\(\) && <CompteurLancement\/>\}/.test(rv))
+  verifier('🔴 ni de barre « J-N »', /const barreLancement = restant > 0 && ouvertureDatee\(\) \? \(/.test(rv))
+  verifier('« Lancement officiel très bientôt »', /: <>Lancement officiel très bientôt<\/>\}/.test(rv))
+  verifier('le merci du formulaire ne donne pas rendez-vous à une date', /'Bien reçu 🟣 On te prévient dès l’ouverture\. À très vite !'/.test(lire('app/components/LandingReveal.js')))
+  const nbDates = (rv.match(/\{libelleLancement\(\)\}|\$\{libelleLancement\(\)\}/g) || []).length
+  const nbBranches = (rv.match(/ouvertureDatee\(\)/g) || []).length
+  verifier('🔴 chaque date de la landing a sa branche « à confirmer »', nbBranches >= nbDates, `${nbDates} dates, ${nbBranches} branches`)
+  verifier('🔴 les DEUX meta descriptions ne donnent aucune date brute',
+    (lire('app/page.tsx').match(/Lancement \$\{quandOuverture\(\{ avecAnnee: true \}\)\}\./g) || []).length === 2 && !/libelleLancement|1er octobre/.test(sansProse(lire('app/page.tsx'))))
+  for (const [nom, f] of [['l’affichette', 'app/affichette/[slug]/page.js'], ['l’inscription', 'app/signup/page.js'], ['le kit', 'app/kit/[slug]/KitClient.js'], ['le brand-kit', 'app/brand-kit/commercant/page.js'], ['les emails', 'lib/resend.js'], ['l’email de merci', 'lib/resend-landing.js']]) {
+    verifier(`🔴 ${nom} ne lit plus la date brute`, !/libelleLancement\(/.test(sansProse(lire(f))))
+  }
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

@@ -40,7 +40,9 @@ import { estFoodTruck } from '@/lib/types-commerce'
 import { euros } from '@/lib/montants'
 import {
   avantLancement, estRegimeLancement, joursOffertsAuLancement,
-  libelleLancement, libelleFinEssaiLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM,
+  libelleFinEssaiLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM,
+  // L'ouverture à confirmer (30/09) : datée ou « très bientôt ».
+  quandOuverture, depuisLOuverture,
 } from '@/lib/lancement'
 
 // ─── SKIP-LOGIC (esprit ODOO : adaptive selon plan + categorie) ────────────────
@@ -615,7 +617,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
               <>
                 La formule <span style={{ color: T.light }}>Exister</span> est gratuite à vie.
                 {' '}<span style={{ color: T.light }}>Communiquer</span> et <span style={{ color: T.light }}>Vendre</span> te sont
-                offertes <span style={{ color: T.light }}>{joursOffertsAuLancement()} jours</span> à partir du {libelleLancement()}, et le temps d’ici là pour tout préparer.
+                offertes <span style={{ color: T.light }}>{joursOffertsAuLancement()} jours</span> {depuisLOuverture()}, et le temps d’ici là pour tout préparer.
               </>
             ) : (
               <>
@@ -627,7 +629,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
           </p>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', margin: '3px 0 0', lineHeight: 1.4 }}>
             Sans carte de paiement, sans engagement, résiliable à tout moment.
-            {avantLancement() && ` L'app s'ouvre officiellement au public le ${libelleLancement()} : ta page sera prête ce jour-là.`}
+            {avantLancement() && ` L'app s'ouvre officiellement au public ${quandOuverture()} : ta page sera prête ce jour-là.`}
           </p>
         </div>
       </div>

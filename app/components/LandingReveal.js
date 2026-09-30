@@ -30,6 +30,9 @@ import {
   joursOfferts, joursOffertsAuLancement, joursAvance,
   progressionVersLancement, joursAvantLancement,
   estRegimeLancement, ESSAI_JOURS_MINIMUM,
+  // L'ouverture à confirmer (Alex, 30/09 au soir) : sans date décidée, ni
+  // date ni compte à rebours, « très bientôt » et « dès l'ouverture ».
+  ouvertureDatee, depuisLOuverture,
 } from '@/lib/lancement'
 import { FACEBOOK_URL, RESEAUX } from '@/lib/reseaux'
 import { getPrixPlan, canDo, PLANS } from '@/lib/plans'
@@ -1336,7 +1339,7 @@ function EncartOffreLancement({ onRejoindre }) {
             offerts.
           </p>
           <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 700, lineHeight: 1.5, color: 'rgba(255,255,255,0.86)' }}>
-            À partir du {libelleLancement()}.
+            {ouvertureDatee() ? <>À partir du {libelleLancement()}.</> : <>Dès l&rsquo;ouverture.</>}
           </p>
         </div>
 
@@ -1372,9 +1375,9 @@ function EncartOffreLancement({ onRejoindre }) {
               second nombre obligerait à poser une addition, et une offre qu'il
               faut expliquer se fait relire de travers. */}
           <p style={{ margin: '0 0 18px', fontSize: 14, fontWeight: 600, lineHeight: 1.65, color: 'rgba(255,255,255,0.92)' }}>
-            Le {libelleLancement()} est le jour où tout s&rsquo;allume : l&rsquo;application,
+            {ouvertureDatee() ? <>Le {libelleLancement()} est</> : <>L&rsquo;ouverture est</>} le jour où tout s&rsquo;allume : l&rsquo;application,
             les commerces, les commandes.
-            {avance > 0 && <> D&rsquo;ici là, tu prépares ta page, ton catalogue et tes
+            {(avance > 0 || !ouvertureDatee()) && <> D&rsquo;ici là, tu prépares ta page, ton catalogue et tes
               créneaux tranquillement. <strong style={{ color: '#fff' }}>Le jour J, tu ouvres
               prêt, et tu ne perds aucun de tes {garantis} jours.</strong></>}
           </p>
@@ -1525,7 +1528,9 @@ function IncitantMobilisation({ communeStats, globalStats }) {
   // « préparation » inventée aurait été un mensonge déguisé en pourcentage.
   const pct = progressionVersLancement()
   const restant = joursAvantLancement()
-  const barreLancement = restant > 0 ? (
+  // ⚠️ SANS DATE DÉCIDÉE, NI BARRE NI « J-N » (30/09) : un compte à rebours
+  // vers une date que personne n'a fixée serait une promesse inventée.
+  const barreLancement = restant > 0 && ouvertureDatee() ? (
     <>
       <div style={{ height: 7, borderRadius: 100, background: 'rgba(255,255,255,0.12)', overflow: 'hidden', margin: '8px 0 6px' }}>
         <div style={{ height: '100%', width: `${pct}%`, borderRadius: 100, background: 'linear-gradient(90deg, #9660E0, #C4A0F4)', transition: 'width 0.4s' }}/>
@@ -1687,7 +1692,9 @@ function LaTotale() {
         <div style={{ marginTop: 22, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.12)', textAlign: 'center' }}>
           {estRegimeLancement() && (
             <p style={{ margin: '0 0 6px', fontSize: 14.5, fontWeight: 800, color: '#fff', lineHeight: 1.55 }}>
-              {joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},
+              {ouvertureDatee()
+                ? <>{joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},</>
+                : <>{joursOffertsAuLancement()} jours offerts dès l&rsquo;ouverture,</>}
               et le temps d’ici là pour tout préparer.
             </p>
           )}
@@ -1929,7 +1936,7 @@ export default function LandingReveal({ referent = null }) {
         setStatut({ envoi: 'ko', message: j.error || 'Une erreur est survenue, réessaie' })
         return
       }
-      setStatut({ envoi: 'ok', message: `Bien reçu 🟣 Rendez-vous le ${libelleLancement()}. À très vite !` })
+      setStatut({ envoi: 'ok', message: ouvertureDatee() ? `Bien reçu 🟣 Rendez-vous le ${libelleLancement()}. À très vite !` : 'Bien reçu 🟣 On te prévient dès l’ouverture. À très vite !' })
       if (j.slug_kit) setKitSlug(j.slug_kit)
       if (typeof window !== 'undefined' && window.turnstile && turnstileRef.current) {
         try { window.turnstile.reset(turnstileRef.current) } catch (_) {}
@@ -2097,13 +2104,13 @@ export default function LandingReveal({ referent = null }) {
                 {joursOffertsAuLancement()} jours offerts
               </span>
               <span style={{ fontSize: 13.5, fontWeight: 700, color: T.light }}>
-                à partir du {libelleLancement()}, quel que soit le forfait
+                {ouvertureDatee() ? <>à partir du {libelleLancement()}</> : <>dès l&rsquo;ouverture</>}, quel que soit le forfait
                 {/* ⚠️ VIRGULE, PAS POINT MÉDIAN. Le point médian sépare des
                     éléments distincts (les réseaux, les arguments d'une liste).
                     Ici « et tout le temps d'ici là » est coordonné à la même
                     phrase : c'est une virgule, comme dans « La totale » et
                     dans le signup, qui portent déjà la phrase. */}
-                {joursAvance() > 0 && ', et le temps d’ici là sert à te préparer'}
+                {(joursAvance() > 0 || !ouvertureDatee()) && ', et le temps d’ici là sert à te préparer'}
               </span>
             </div>
           )}
@@ -2129,9 +2136,10 @@ export default function LandingReveal({ referent = null }) {
               qu'il ne se passe rien avant, alors qu'arriver tôt est justement
               tout l'intérêt. */}
           <p style={{ margin: '0 0 14px', fontSize: 12, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.6px' }}>
-            Lancement officiel le {libelleLancement()}
+            {ouvertureDatee() ? <>Lancement officiel le {libelleLancement()}</> : <>Lancement officiel très bientôt</>}
           </p>
-          <CompteurLancement/>
+          {/* ⚠️ PAS DE COMPTE À REBOURS SANS DATE DÉCIDÉE (30/09). */}
+          {ouvertureDatee() && <CompteurLancement/>}
           <p style={{ margin: '18px auto 0', maxWidth: 520, fontSize: 14, fontWeight: 600, lineHeight: 1.6, color: 'rgba(255,255,255,0.82)' }}>
             Inscris-toi maintenant : tu prépares ta page, ton catalogue et tes créneaux
             sans te presser, et le jour J tu ouvres prêt, sans perdre un seul jour.
@@ -2325,7 +2333,7 @@ export default function LandingReveal({ referent = null }) {
             {[
               { chiffre: '0%', label: 'de commission Yoppaa sur tes ventes' },
               estRegimeLancement()
-                ? { chiffre: `${joursOffertsAuLancement()} jours`, label: `offerts à partir du ${libelleLancement()}, sans carte de paiement` }
+                ? { chiffre: `${joursOffertsAuLancement()} jours`, label: `offerts ${depuisLOuverture()}, sans carte de paiement` }
                 : { chiffre: `${ESSAI_JOURS_MINIMUM} jours`, label: "d'essai gratuit, sans carte de paiement" },
               { chiffre: '10 min', label: 'pour mettre ta page en ligne' },
               { chiffre: '0€', label: 'la formule Exister, pour toujours' },
@@ -2623,7 +2631,7 @@ export default function LandingReveal({ referent = null }) {
             {/* ⚠️ « Rendez-vous le 1er octobre » disait exactement le contraire
                 du reste de la page : c'était une invitation à attendre. */}
             {estRegimeLancement()
-              ? <>N&rsquo;attends pas le {libelleLancement()}.</>
+              ? (ouvertureDatee() ? <>N&rsquo;attends pas le {libelleLancement()}.</> : <>N&rsquo;attends pas l&rsquo;ouverture.</>)
               : <>Rejoins ton quartier.</>}
           </h2>
           <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', margin: '0 0 32px', lineHeight: 1.65, fontWeight: 500, maxWidth: 460 }}>
@@ -2669,7 +2677,7 @@ export default function LandingReveal({ referent = null }) {
                   elle est complète (lib/fiche-complete.js). L'argument de
                   rapidité reste : c'est le commerçant qui décide du rythme. */}
               Ta commune est déjà ouverte et ta page part en ligne dès qu&rsquo;elle est complète.
-              Le public, lui, arrive le {libelleLancement()} : d&rsquo;ici là, tu prépares tout
+              {ouvertureDatee() ? <>Le public, lui, arrive le {libelleLancement()}</> : <>Le public, lui, arrive très bientôt</>} : d&rsquo;ici là, tu prépares tout
               tranquillement.
             </p>
             <Link href="/signup"
@@ -2686,7 +2694,9 @@ export default function LandingReveal({ referent = null }) {
               gardé, et il m'a arrêté ici. */}
             {estRegimeLancement() && (
               <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: T.light, lineHeight: 1.55 }}>
-                {joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},
+                {ouvertureDatee()
+                  ? <>{joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},</>
+                  : <>{joursOffertsAuLancement()} jours offerts dès l&rsquo;ouverture,</>}
                 et le temps d&rsquo;ici là pour tout préparer. Sans carte de paiement.
               </p>
             )}

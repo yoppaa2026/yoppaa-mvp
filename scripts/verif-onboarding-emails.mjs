@@ -17,7 +17,7 @@
 // rendre ici ; là, il découpe la section avant d'y chercher, et il compte.
 
 import { readFileSync } from 'node:fs'
-import { libelleLancement, avantLancement } from '../lib/lancement.js'
+import { libelleLancement, avantLancement, ouvertureDatee } from '../lib/lancement.js'
 import {
   C, echapperHtml, emailKitBienvenue, emailValidationCommercant, emailRejetCommercant,
   emailDemandeRecue, emailNouveauCommercantAValider,
@@ -60,7 +60,11 @@ const compter = (texte, motif) => (texte.match(motif) || []).length
 const MOIS = 'janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre'
 const DATE_EN_DUR = new RegExp(`\\b\\d{1,2}(er)?\\s+(${MOIS})\\b`, 'g')
 
-const OUVERTURE = libelleLancement()          // « 1er octobre » aujourd'hui
+// ⚠️ RÉORIENTÉE LE 30/09 : l'ouverture est À CONFIRMER (Alex). Tant que le
+// drapeau est levé, les emails nomment « l'ouverture », jamais une date ; le
+// jour où elle est décidée, ils reprennent la date, et ce banc avec eux.
+const DATEE = ouvertureDatee()
+const OUVERTURE = DATEE ? libelleLancement() : 'l’ouverture'   // « 1er octobre » ou « l’ouverture »
 const PHASE = avantLancement()
 
 // ═══ 1. LE KIT : AUCUNE DATE ÉCRITE À LA MAIN ════════════════════════════
@@ -82,8 +86,14 @@ const PHASE = avantLancement()
   const enDur = (corps.match(DATE_EN_DUR) || []).filter(d => d !== OUVERTURE)
   verifier('aucune date française écrite à la main dans le kit',
     enDur.length === 0, enDur.join(' · '))
-  verifier('le kit dérive la date de lib/lancement',
-    /libelleLancement\(\)/.test(corps))
+  // ⚠️ RÉORIENTÉE LE 30/09 : le kit dit l'ouverture par les PHRASES de
+  // lib/lancement.js (datées ou non), plus par la date brute.
+  verifier('le kit dérive l’ouverture de lib/lancement',
+    /(desLOuverture|depuisLOuverture|quandOuverture|leJourJ|aLOuverture)\(\)/.test(corps) && !/libelleLancement\(\)/.test(corps))
+  if (!DATEE) {
+    verifier('🔴 ouverture à confirmer : le kit ne promet AUCUNE date',
+      !(html.match(DATE_EN_DUR) || []).length, (html.match(DATE_EN_DUR) || []).join(' · '))
+  }
 
   // ⚠️ LE SEUIL COMMUNAL N'EXISTE PLUS depuis le 16/08 : les 260 communes
   // wallonnes sont ouvertes, aucune n'a de palier à franchir.
@@ -484,7 +494,9 @@ const PHASE = avantLancement()
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
-console.log(`Phase lue : ${PHASE ? 'avant' : 'après'} l'ouverture du ${OUVERTURE}.`)
+console.log(DATEE
+  ? `Phase lue : ${PHASE ? 'avant' : 'après'} l'ouverture du ${OUVERTURE}.`
+  : 'Phase lue : avant l’ouverture, date à confirmer.')
 if (ko > 0) {
   console.log('\nÉCHECS :')
   echecs.forEach(e => console.log('  ✕ ' + e))

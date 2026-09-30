@@ -1,6 +1,7 @@
 import { getLandingMode } from '@/lib/landing-mode'
 import { resolveReferentNom } from '@/lib/kit-resolve'
-import { libelleLancement } from '@/lib/lancement'
+// « le 1er octobre 2026 » ou « très bientôt » tant que l'ouverture est à confirmer.
+import { quandOuverture } from '@/lib/lancement'
 import { jsonLdLandingString } from '@/lib/seo-landing'
 import LandingTeasing from './components/LandingTeasing'
 import LandingReveal from './components/LandingReveal'
@@ -20,7 +21,7 @@ export async function generateMetadata() {
   if (mode === 'reveal') {
     return {
       title: 'Yoppaa — Ton quartier dans ta poche',
-      description: `L'app belge des commerces de quartier : Click & Collect, rendez-vous en ligne, deals du jour. 0% de commission Yoppaa pour les commerçants. Lancement le ${libelleLancement({ avecAnnee: true })}.`,
+      description: `L'app belge des commerces de quartier : Click & Collect, rendez-vous en ligne, deals du jour. 0% de commission Yoppaa pour les commerçants. Lancement ${quandOuverture({ avecAnnee: true })}.`,
       // Le layout racine met tout le site en noindex tant que
       // NEXT_PUBLIC_SEO_INDEX n'est pas 'true', parce que les fiches
       // contiennent encore des commerçants de test. La landing dévoilée, elle,
@@ -30,7 +31,7 @@ export async function generateMetadata() {
       alternates: { canonical: 'https://www.yoppaa.app' },
       openGraph: {
         title: 'Yoppaa — Ton quartier dans ta poche',
-        description: `L'app belge des commerces de quartier. 0% de commission Yoppaa pour les commerçants. Lancement le ${libelleLancement({ avecAnnee: true })}.`,
+        description: `L'app belge des commerces de quartier. 0% de commission Yoppaa pour les commerçants. Lancement ${quandOuverture({ avecAnnee: true })}.`,
         type: 'website',
         locale: 'fr_BE',
         images: [{ url: '/og-share.png', width: 640, height: 640, alt: 'Yoppaa' }],

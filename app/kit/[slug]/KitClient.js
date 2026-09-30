@@ -4,7 +4,7 @@
 // inscription au commerçant (widget d'impact).
 
 import { useState } from 'react'
-import { avantLancement, libelleLancement } from '@/lib/lancement'
+import { avantLancement, leJourJ, majuscule } from '@/lib/lancement'
 import { telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
@@ -165,7 +165,8 @@ export default function KitClient({ slug, kit, lien, qr, consigne = null }) {
   // La phase ne pilote plus les TEXTES, seulement ce que la page dit au
   // commerçant sur sa destination : les messages, eux, valent en tout temps.
   const preLancement = avantLancement()
-  const ouverture = libelleLancement()
+  // « Le 1er octobre » ou « Le jour de l’ouverture » tant qu’elle est à confirmer (30/09).
+  const leJour = majuscule(leJourJ())
 
   return (
     <div style={wrap}>
@@ -330,7 +331,7 @@ export default function KitClient({ slug, kit, lien, qr, consigne = null }) {
             project_wallonie_ouverte. */}
         <p style={{ margin: '1.6rem 0 0', textAlign: 'center', fontSize: '0.76rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
           {preLancement
-            ? `Le ${ouverture}, tu ouvres avec une clientèle déjà prête. Tout ce que tu partages d’ici là compte. 🟣`
+            ? `${leJour}, tu ouvres avec une clientèle déjà prête. Tout ce que tu partages d’ici là compte. 🟣`
             : 'Une phrase au comptoir vaut dix publications. 🟣'}
         </p>
       </div>

@@ -27,6 +27,8 @@ import { feuilleEnSvg, svgEnPng, feuillesEnPdf, telecharger, DPI_IMPRESSION } fr
 // prix écrit en dur sur un papier plastifié ne se corrige plus.
 import { getPrixPlan } from '@/lib/plans'
 import { euros } from '@/lib/montants'
+// « le 1er octobre » ou « très bientôt » tant que l'ouverture est à confirmer (30/09).
+import { quandOuverture } from '@/lib/lancement'
 
 // ⚠️ LA DESTINATION DU QR EST UNE DÉCISION, PAS UN DÉTAIL.
 //
@@ -444,7 +446,7 @@ export default function KitCommercant() {
                   {/* ⚠️ LA DATE D'OUVERTURE EST PASSÉE DANS LE SUR-TITRE. Elle ne
                       coûte pas une ligne de plus sur une page qui n'en a plus, et
                       elle est à sa place : c'est le premier mot du bloc de l'offre. */}
-                  <p style={{ margin: 0, fontSize: '8.4pt', fontWeight: 800, letterSpacing: '.2em', textTransform: 'uppercase', color: T.light }}>Ouverture le 1er octobre</p>
+                  <p style={{ margin: 0, fontSize: '8.4pt', fontWeight: 800, letterSpacing: '.2em', textTransform: 'uppercase', color: T.light }}>Ouverture {quandOuverture()}</p>
                   <p style={{ margin: '2.5mm 0 0', fontSize: '20pt', fontWeight: 800, letterSpacing: '-.025em', lineHeight: 1.12 }}>
                     Gratuit jusqu&rsquo;au<br/>8 janvier 2027.
                   </p>

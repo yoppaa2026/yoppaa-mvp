@@ -106,6 +106,7 @@
     "verif:carte-table": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-carte-table.mjs",
     "verif:stock-article": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-stock-article.mjs",
     "mutations:stock-article": "node scripts/mutations-stock-article.mjs",
+    "mutations:ouverture": "node scripts/mutations-ouverture.mjs",
     "mutations:carte-table": "node scripts/mutations-carte-table.mjs",
     "verif:equipe": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-equipe.mjs",
     "mutations:equipe": "node scripts/mutations-equipe.mjs",

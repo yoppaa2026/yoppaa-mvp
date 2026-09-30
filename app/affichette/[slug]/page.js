@@ -11,7 +11,8 @@ import { createClient } from '@supabase/supabase-js'
 import { libelleRecompense } from '@/lib/fidelite'
 import { euros, pourcent } from '@/lib/montants'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
-import { avantLancement, libelleLancement } from '@/lib/lancement'
+// L'ouverture à confirmer (30/09) : « le 1er octobre » ou « très bientôt ».
+import { avantLancement, quandOuverture } from '@/lib/lancement'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { lienFiche, LIEN_ACCUEIL } from '@/lib/lien-fiche'
 
@@ -143,7 +144,7 @@ export default async function AffichettePage({ params }) {
             L&rsquo;app belge qui réunit les commerces de ta commune. Tu commandes, tu réserves et tu
             cumules tes points de fidélité, gratuitement.{' '}
             {avantLancement()
-              ? `Ouverture le ${libelleLancement()} : ton compteur, lui, démarre dès aujourd’hui.`
+              ? `Ouverture ${quandOuverture()} : ton compteur, lui, démarre dès aujourd’hui.`
               : 'Tes points sont conservés et te suivent d’un passage à l’autre.'}
           </p>
         </div>

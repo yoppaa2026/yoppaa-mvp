@@ -48,6 +48,26 @@ const MUTATIONS = [
     fichier: REVEAL, de: "'Bien reçu 🟣 On te prévient dès l’ouverture. À très vite !'", vers: '`Bien reçu 🟣 Rendez-vous le ${libelleLancement()}. À très vite !`' },
   { nom: '🔴 la meta description donne une date',
     fichier: 'app/page.tsx', de: "0% de commission Yoppaa pour les commerçants. Lancement ${quandOuverture({ avecAnnee: true })}.`,", vers: '0% de commission Yoppaa pour les commerçants. Lancement le 1er octobre 2026.`,' },
+  // ─── LES DEUX TEMPS ET L ADRESSE DU TABLEAU DE BORD (banc des emails) ───
+  { nom: '🔴 l espace ouvert ne montre plus les deux temps', banc: 'verif:emails',
+    // ⚠️ La première occurrence est celle de l'espace ouvert (avant la relance).
+    fichier: 'lib/resend.js', de: "      ${deuxTemps('fiche')}", vers: '' },
+  { nom: '🔴 le schéma se trompe d étape', banc: 'verif:emails',
+    fichier: 'lib/resend.js', de: "    fiche:   ['fait', 'atoi'],", vers: "    fiche:   ['encours', 'avenir']," },
+  { nom: '🔴 la validation ne dit plus où est le tableau de bord', banc: 'verif:emails',
+    fichier: 'lib/resend.js', de: '      ${blocAccesTableauDeBord()}', vers: '' },
+  { nom: '🔴 l adresse n est plus écrite en clair', banc: 'verif:emails',
+    fichier: 'lib/resend.js', de: '          <a href="https://${ADRESSE_TABLEAU_DE_BORD}" style="color:${C.main};text-decoration:none;">${ADRESSE_TABLEAU_DE_BORD}</a>', vers: '          <a href="https://${ADRESSE_TABLEAU_DE_BORD}" style="color:${C.main};text-decoration:none;">Ouvrir</a>' },
+  { nom: '🔴 le geste Android disparaît', banc: 'verif:emails',
+    fichier: 'lib/resend.js', de: "          ${ligne('Android',", vers: "          ${false && ligne('Android'," },
+  { nom: '⚠️ un dégradé entre dans le bloc d aide', banc: 'verif:emails',
+    fichier: 'lib/resend.js', de: '      <div style="background-color:${C.bg};border:1px solid ${C.pale};border-radius:12px;padding:16px;margin:0 0 14px;">', vers: '      <div style="background-image:linear-gradient(135deg,#fff,#eee);border:1px solid ${C.pale};border-radius:12px;padding:16px;margin:0 0 14px;">' },
+  // ⚠️ La première occurrence est celle de la publication (avant la relance).
+  { nom: '⚠️ la publication oublie l adresse', banc: 'verif:emails',
+    fichier: 'lib/resend.js', de: '      ${ligneAdresseTableauDeBord()}', vers: '' },
+  { nom: '🔴 l icône promise ne porte plus son nom', banc: 'verif:emails',
+    fichier: 'public/manifest-dashboard.json', de: '"short_name": "Yoppaa Pro"', vers: '"short_name": "Yoppaa"' },
+
   { nom: '🔴 l affichette relit la date brute',
     fichier: 'app/affichette/[slug]/page.js', de: '? `Ouverture ${quandOuverture()} : ton compteur', vers: '? `Ouverture le ${libelleLancement()} : ton compteur' },
 ]

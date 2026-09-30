@@ -21,6 +21,7 @@ import { libelleLancement, avantLancement, ouvertureDatee } from '../lib/lanceme
 import {
   C, echapperHtml, emailKitBienvenue, emailValidationCommercant, emailRejetCommercant,
   emailDemandeRecue, emailNouveauCommercantAValider,
+  emailEspaceOuvert, emailRelanceFiche, blocAccesTableauDeBord, deuxTemps,
 } from '../lib/resend.js'
 
 // ⚠️ Fins de ligne normalisées : ces fichiers sont en CRLF, et une expression
@@ -491,6 +492,37 @@ const PHASE = avantLancement()
   // ⚠️ Rend '' et non 'null' : c'est ce qui permet `${echapperHtml(x) || '—'}`
   // de garder son repli.
   verifier('une absence rend une chaîne vide', echapperHtml(null) === '' && echapperHtml(undefined) === '')
+}
+
+// ═══ LES DEUX TEMPS, ET OÙ RETROUVER SON TABLEAU DE BORD (Alex, 30/09) ═════
+//
+// Un commerçant cherchait son tableau de bord dans l'app des stores. Et depuis
+// le 28/09, l'inscription se fait en deux temps : l'espace s'ouvre, puis la
+// fiche complète est publiée. Les emails sont RENDUS, puis lus.
+{
+  const texte = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  const crit = [{ label: 'Ton logo', atteint: true }, { label: 'Trois articles', atteint: false, avancement: '1 sur 3' }]
+  const demande = texte(emailDemandeRecue({ nom: 'Test', plan: 'vendre' }))
+  const espace = texte(emailEspaceOuvert({ nom: 'Test', criteres: crit }))
+  const relance = texte(emailRelanceFiche({ nom: 'Test', criteres: crit }))
+  const publiee = texte(emailValidationCommercant({ nom: 'Test', slug: 'test', avant_lancement: true }))
+
+  verifier('🔴 la demande reçue montre les deux temps, le premier chez nous', /1\. Ton espace s’ouvre En cours, chez nous/.test(demande) && /2\. Ta fiche est publiée Ensuite/.test(demande))
+  verifier('🔴 l’espace ouvert : le premier temps fait, le second au commerçant', /1\. Ton espace s’ouvre Fait/.test(espace) && /2\. Ta fiche est publiée À toi de jouer/.test(espace))
+  verifier('la relance aussi', /2\. Ta fiche est publiée À toi de jouer/.test(relance))
+  verifier('la publication : les deux temps faits', /1\. Ton espace s’ouvre Fait/.test(publiee) && /2\. Ta fiche est publiée Fait/.test(publiee))
+  verifier('une étape inconnue retombe sur le début, sans planter', /En cours, chez nous/.test(texte(deuxTemps('n’importe'))))
+
+  verifier('🔴 à la validation, l’adresse du tableau de bord est ÉCRITE en clair', /www\.yoppaa\.app\/dashboard/.test(espace))
+  verifier('🔴 et il est dit que ce n’est pas une app à télécharger', /pas une app à télécharger/.test(espace) && /celle de tes clients/.test(espace))
+  verifier('🔴 les gestes : favori sur ordinateur, écran d’accueil sur iPhone et Android',
+    /Ctrl \+ D/.test(espace) && /Sur l’écran d’accueil/.test(espace) && /Ajouter à l’écran d’accueil/.test(espace))
+  verifier('la relance et la publication rappellent l’adresse', /www\.yoppaa\.app\/dashboard/.test(relance) && /www\.yoppaa\.app\/dashboard/.test(publiee))
+  verifier('⚠️ le bloc d’aide n’a aucun dégradé (Gmail Android les jette)', !/gradient/.test(blocAccesTableauDeBord()))
+  // L'email promet une icône « Yoppaa Pro » : c'est ce que les deux téléphones installent.
+  const manifeste = JSON.parse(lire('public/manifest-dashboard.json'))
+  verifier('🔴 l’icône promise s’appelle bien « Yoppaa Pro » (Android et iPhone)',
+    /Yoppaa Pro/.test(espace) && manifeste.short_name === 'Yoppaa Pro' && /title: "Yoppaa Pro"/.test(lire('app/dashboard/layout.tsx')))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

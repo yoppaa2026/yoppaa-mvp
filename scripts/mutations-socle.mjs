@@ -27,8 +27,11 @@ const DEP = '.github/dependabot.yml'
 const MUTATIONS = [
   // ─── LA PLAGE DE VERSIONS, LE VRAI DANGER ───────────────────────────────
   { nom: '🔴 next passe en plage ^ : npm choisit tout seul, le depot ne dit plus la verite',
-    de: '"next": "16.3.4"',
-    vers: '"next": "^16.3.4"' },
+    // ⚠️ ANCRE SUIVIE LE 30/09 : Next monté délibérément en 16.3.6 (faille
+    // critique de `next/og`, GHSA-vcvr-r3jv-pc5j). La garde vise la PLAGE, pas
+    // le numéro.
+    de: '"next": "16.3.6"',
+    vers: '"next": "^16.3.6"' },
 
   { nom: '🔴 react passe en plage ~ : deux machines, deux versions',
     de: '"react": "19.2.4"',
@@ -50,8 +53,8 @@ const MUTATIONS = [
   // restait vert a juste titre. Une mutation doit changer le RESULTAT.
   { nom: '🔴 le verrou porte une autre version que package.json',
     fichier: 'package-lock.json',
-    de: '"resolved": "https://registry.npmjs.org/next/-/next-16.3.4.tgz",',
-    vers: '"resolved": "https://registry.npmjs.org/next/-/next-16.3.4.tgz", "version": "16.9.9",' },
+    de: '"resolved": "https://registry.npmjs.org/next/-/next-16.3.6.tgz",',
+    vers: '"resolved": "https://registry.npmjs.org/next/-/next-16.3.6.tgz", "version": "16.9.9",' },
 
   // ─── LA POLITIQUE DE PROPOSITION ────────────────────────────────────────
   { nom: '🔴 les montees MAJEURES redeviennent automatiques : Next 17 se clique',

@@ -131,11 +131,17 @@ function formatPrix(prestation, deals = []) {
   if (estParCouverts(prestation)) return null
   const prix = prixEffectifPrestation(prestation, deals)
   if (prix != null) return `${euros(prix)}`
-  return 'Sur demande'
+  // ✅ PLUS DE « SUR DEMANDE » (Alex, 30/09 : « le prix est toujours un prix
+  // ferme ») : le tableau de bord exige désormais un prix, et aucune
+  // prestation n'en était privée au relevé du 30/09. Sans prix, rien ne
+  // s'affiche, comme pour une table.
+  return null
 }
 
 import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit } from '@/lib/rdv-slots'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+// La mention d'un produit en vitrine, au mot du métier (30/09).
+import { mentionVitrine } from '@/lib/stock-article'
 // 🔴 LE MÊME BLOC QUE LA FICHE COMMERCE, et c'est tout l'intérêt : le bouton de
 // signalement et la pastille « Vérifié » ne peuvent plus exister d'un côté et
 // pas de l'autre. Cette page n'affichait aucun avis jusqu'au 21/09.
@@ -2519,8 +2525,8 @@ export default function CommanderRdvSlug() {
             // prix différents pour le même article.
             const remise = remiseSurArticle(p, deals)
             const qte = panierProduits[p.id]?.quantite || 0
-            // Un produit en mode vitrine affiche un prix indicatif :
-            // il ne s'achète pas en ligne, son prix n'est pas ferme.
+            // Un produit en vitrine s'affiche à son prix FERME, sans achat en
+            // ligne (Alex, 30/09) : la mention du métier le dit.
             const achetable = produitsAchetables && !p.est_vitrine && Number(p.prix) > 0
             return (
             <div key={p.id}
@@ -2540,14 +2546,14 @@ export default function CommanderRdvSlug() {
               </a>
               <div style={{ padding: '8px 10px 10px' }}>
                 <p style={{ margin: 0, fontSize: '0.74rem', fontWeight: 700, color: T.ink, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.nom}</p>
-                {Number(p.prix) > 0 ? (
+                {Number(p.prix) > 0 && (
                   <p style={{ margin: '3px 0 0', fontSize: '0.8rem', fontWeight: 900, color: remise ? '#DC2626' : T.main, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                    {p.est_vitrine && <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.muted, marginRight: 3 }}>dès</span>}
                     {euros(remise ? remise.prix : p.prix)}
                     {remise && <span style={{ fontSize: '0.66rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{euros(remise.prixBarre)}</span>}
                   </p>
-                ) : (
-                  <p style={{ margin: '3px 0 0', fontSize: '0.66rem', fontWeight: 700, color: T.muted }}>Prix sur demande</p>
+                )}
+                {p.est_vitrine && (
+                  <p style={{ margin: '3px 0 0', fontSize: '0.62rem', fontWeight: 700, color: T.muted }}>{mentionVitrine(commercant)}</p>
                 )}
                 {achetable && (qte > 0 ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 7 }}>

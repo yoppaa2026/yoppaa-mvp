@@ -15,7 +15,7 @@ article_options_valeurs: created_at,groupe_id,id,nom,prix_supplement
 article_photos: article_id,created_at,id,ordre,url
 article_stock_jour: actif,article_id,commercant_id,created_at,id,jour_semaine,stock
 article_variantes: actif,article_id,axe1_valeur,axe2_valeur,created_at,id,ordre,photo_url,prix,sku,stock,updated_at
-articles: actif,axe1_nom,axe1_valeurs,axe2_nom,axe2_valeurs,categorie,commercant_id,created_at,description,est_vitrine,gere_variantes,id,jours_disponibles,nom,photo_url,prix,prix_promo,promo_debut,promo_fin,stock_base,stock_jour,stock_mode,temps_prepa,tva_taux,tva_taux_sur_place
+articles: actif,axe1_nom,axe1_valeurs,axe2_nom,axe2_valeurs,categorie,commercant_id,created_at,description,est_vitrine,gere_variantes,id,jours_disponibles,nom,photo_url,prix,prix_promo,promo_debut,promo_fin,stock_base,stock_jour,stock_maj_le,stock_mode,temps_prepa,tva_taux,tva_taux_sur_place
 avis: client_id,commande_id,commentaire,commercant_id,created_at,id,note,rdv_reservation_id,reponse_commercant
 avis_public: commentaire,commercant_id,created_at,id,note,reponse_commercant,verifie
 billing_relances_log: commercant_id,id,metadata,sent_at,type

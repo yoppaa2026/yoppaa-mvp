@@ -93,7 +93,17 @@ const v = (nom, cond, detail = '') => {
   const i = config.indexOf('async function saveArticle()')
   const bloc = i >= 0 ? config.slice(i, config.indexOf('const { error } = editId', i)) : ''
   v('le formulaire d’enregistrement a bien été retrouvé', bloc.length > 200, String(bloc.length))
-  const champsPayload = [...bloc.matchAll(/^\s{6}([a-z_]+):/gm)].map(m => m[1])
+  // ⚠️ RÉORIENTÉE LE 30/09 : le stock arrive dans le formulaire par `...stock`,
+  // construit par `champsStock` (lib/stock-article.js). On EXÉCUTE la fonction
+  // pour connaître ses colonnes, au lieu de les recopier ici. `stock_maj_le`
+  // n'est écrit que quand un stock en magasin change : une copie naît
+  // maintenant, par le défaut de la base, et ne le recopie donc pas.
+  const { champsStock } = await import('../lib/stock-article.js')
+  const colonnesStock = /^\s{6}\.\.\.stock,$/m.test(bloc)
+    ? Object.keys(champsStock({ mode: 'magasin', saisie: '3' })).filter(c => c !== 'stock_maj_le')
+    : []
+  v('le stock du formulaire vient bien de champsStock', colonnesStock.length > 0)
+  const champsPayload = [...[...bloc.matchAll(/^\s{6}([a-z_]+):/gm)].map(m => m[1]), ...colonnesStock]
     .filter(c => c !== 'commercant_id')
   const manquants = champsPayload.filter(c => !CHAMPS_COPIES.includes(c))
   v('aucun champ du formulaire n’est oublié par la copie',

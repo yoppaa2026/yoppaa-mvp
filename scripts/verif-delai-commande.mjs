@@ -456,8 +456,10 @@ egal('sans nom d’article, la phrase tient debout',
   // 🔴 LE COMMERÇANT PEUT RÉGLER LE DÉLAI, ET IL EST ENREGISTRÉ.
   verifier('🔴 le formulaire article propose le délai',
     /choixDeDelai\(form\.delai_minutes\)/.test(BORD))
+  // ⚠️ RÉORIENTÉE LE 30/09 : un article montré sans être vendu en ligne
+  // (« en vitrine », tous métiers) n'a pas de délai non plus.
   verifier('🔴 et il l’enregistre en nombre',
-    /delai_minutes: estVitrine \? 0 : \(parseInt\(form\.delai_minutes, 10\) \|\| 0\)/.test(BORD))
+    /delai_minutes: \(estVitrine \|\| !form\.vendable\) \? 0 : \(parseInt\(form\.delai_minutes, 10\) \|\| 0\)/.test(BORD))
   verifier('🔴 la valeur enregistrée est relue à l’ouverture',
     /delai_minutes: a\.delai_minutes \?\? 0/.test(BORD))
 

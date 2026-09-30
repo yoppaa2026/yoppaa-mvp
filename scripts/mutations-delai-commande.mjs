@@ -263,7 +263,8 @@ const MUTATIONS = [
 
   { nom: '🔴 le delai s’enregistre en CHAINE au lieu d’un nombre',
     fichier: BORD,
-    de: '      delai_minutes: estVitrine ? 0 : (parseInt(form.delai_minutes, 10) || 0),',
+    // ⚠️ ANCRE RÉORIENTÉE LE 30/09 (l'article pas vendu en ligne n'a pas de délai).
+    de: '      delai_minutes: (estVitrine || !form.vendable) ? 0 : (parseInt(form.delai_minutes, 10) || 0),',
     vers: '      delai_minutes: form.delai_minutes,' },
 
   { nom: '🔴 le delai enregistre n’est plus relu a l’ouverture de l’article',

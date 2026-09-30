@@ -33,8 +33,9 @@ const EURO = String.fromCharCode(160) + '€'
   // 🔴 LE PIÈGE DU ZÉRO : Number(null) vaut 0.
   v('🔴 sans prix saisi, rien ne s\'écrit (pas « 0,00 € »)',
     prixALaCarte({ prix: null }) === null && prixALaCarte({ prix: undefined }) === null && prixALaCarte({ prix: '' }) === null)
-  v('un article de vitrine dit « dès »', prixALaCarte({ prix: 8, est_vitrine: true }) === 'dès 8,00' + EURO)
-  v('et « Prix sur demande » sans prix', prixALaCarte({ prix: 0, est_vitrine: true }) === 'Prix sur demande')
+  // ⚠️ RÉORIENTÉES LE 30/09 : « le prix est toujours un prix ferme » (Alex).
+  v('🔴 un article de vitrine a son prix FERME, sans « dès »', prixALaCarte({ prix: 8, est_vitrine: true }) === '8,00' + EURO, prixALaCarte({ prix: 8, est_vitrine: true }))
+  v('🔴 et plus de « Prix sur demande » : sans prix, rien', prixALaCarte({ prix: 0, est_vitrine: true }) === null)
   v('une formule qui masque les prix n\'en montre aucun', prixALaCarte({ prix: 12 }, { prixAffiches: false }) === null)
 }
 

@@ -12,6 +12,9 @@ import { canDo, isVitrine, isAlimentaire, planEffectif, commandeAllumee } from '
 import { reservationActive, motReservation } from '@/lib/reservation-metier'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { nomDeLaCarte } from '@/lib/types-commerce'
+// Le stock en trois choix et la vitrine au prix ferme (30/09) : une seule règle
+// pour la carte, la limite du panier et le tableau de bord.
+import { etatStock, revientUnAutreJour, mentionVitrine } from '@/lib/stock-article'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
 import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionArticle, libelleMoment, avertissementDelai } from '@/lib/delai-commande'
@@ -457,7 +460,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 // `jourRetrait` ('YYYY-MM-DD' ou null) : le jour SOUHAITÉ en boutique. Quand il
 // est fourni, il prime sur `joursDispos[jourSelectionne]`, qui est le sélecteur
 // de l'alimentaire et ne concerne pas une boutique.
-function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null }) {
+function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -474,22 +477,15 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
     : (joursDispos[jourSelectionne]?.date || new Date())
   const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
 
-  // Logique unifiée avec getStockMax :
-  // - entrée article_stock_jour pour ce jour → source de vérité
-  // - sinon → fallback sur article.stock_jour global
-  // - stock géré ssi (entrée existe pour ce jour) OU (stock_jour global > 0)
+  // ⚠️ LA RÈGLE DE `getStockMax`, ET LA MÊME FONCTION (30/09) : `etatStock`
+  // lit le mode de l'article (sans limite, par jour, en magasin) et son
+  // réglage du jour. Les deux calculs recopiés ici ont vécu jusqu'au 30/09.
   const entryDay = stocksArticle[jourNomSelectionne]
-  let stockBrutSelectionne, actifCeJour
-  if (entryDay) {
-    actifCeJour = entryDay.actif !== false
-    stockBrutSelectionne = entryDay.actif === false ? 0 : (entryDay.stock || 0)
-  } else {
-    actifCeJour = true
-    stockBrutSelectionne = article.stock_jour || 0
-  }
-  const stockGere = !!entryDay || (article.stock_jour || 0) > 0
   const dejaCommande = (commandesParArticleJour && commandesParArticleJour[article.id]) || 0
-  const stockAujourdhui = Math.max(0, stockBrutSelectionne - dejaCommande)
+  const etat = etatStock({ article, entreeJour: entryDay, dejaCommande })
+  const actifCeJour = etat.actif
+  const stockGere = etat.gere
+  const stockAujourdhui = stockGere ? etat.dispo : 0
   const epuiseAujourdhui = stockGere && stockAujourdhui === 0
 
   function prochainJourDispo() {
@@ -504,7 +500,9 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
     return null
   }
 
-  const prochain = epuiseAujourdhui ? prochainJourDispo() : null
+  // ⚠️ UN STOCK EN MAGASIN NE REVIENT PAS DEMAIN : épuisé, il n'a pas de
+  // « prochain jour ». « Disponible jeudi » y serait une promesse fausse.
+  const prochain = epuiseAujourdhui && revientUnAutreJour(article) ? prochainJourDispo() : null
   const epuiseComplet = epuiseAujourdhui && !prochain
   const inactifCeJour = !actifCeJour
   // Stock limit : bloquer le + quand panier atteint le stock dispo
@@ -529,17 +527,17 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
                 Prix non affichés
               </span>
             ) : article.est_vitrine ? (
-              // Article en mode vitrine : "à partir de X €" ou "Prix sur demande"
-              Number(article.prix) > 0 ? (
-                <p style={{ fontSize: '0.95rem', color: T.main, fontWeight: 800, letterSpacing: '-0.2px' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 700, color: T.muted, marginRight: 4 }}>dès</span>
-                  {euros(Number(article.prix))}
-                </p>
-              ) : (
-                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '4px 10px', borderRadius: 100 }}>
-                  Prix sur demande
+              // ✅ EN VITRINE, LE PRIX EST FERME (Alex, 30/09) : ni « dès », ni
+              // « Prix sur demande ». L'article s'affiche, il ne se commande pas
+              // en ligne, et la mention du métier le dit.
+              <>
+                {Number(article.prix) > 0 && (
+                  <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{euros(Number(article.prix))}</p>
+                )}
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, color: T.deep, background: T.pale, padding: '3px 9px', borderRadius: 100 }}>
+                  {mentionVitrineTexte}
                 </span>
-              )
+              </>
             ) : remise ? (
               // Article remisé : le prix promo REMPLACE le prix normal, l'ancien
               // reste barré à côté. Un seul article, un seul prix affiché.
@@ -599,8 +597,10 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
           </div>
 
           {/* Article à VARIANTES : le stock vit PAR variante (taille/couleur),
-              la card n'affiche que dispo/épuisé, le détail vit dans la fiche */}
-          {hasVariantes ? (() => {
+              la card n'affiche que dispo/épuisé, le détail vit dans la fiche.
+              ⚠️ PAS EN VITRINE (30/09) : la commerçante n'y suit aucun stock
+              (Alex : les vêtements, trop de retours de tailles). */}
+          {hasVariantes && !article.est_vitrine ? (() => {
             const dispoVar = (variantes || []).some(v => v.actif !== false && (v.stock ?? 0) > 0)
             return dispoVar ? (
               <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F0FDF4', color: '#10B981', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
@@ -616,7 +616,7 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
           })() : null}
 
           {/* Indicateur stock 3 niveaux - clair et pro (articles SANS variantes) */}
-          {!hasVariantes && stockGere && (() => {
+          {!hasVariantes && stockGere && !article.est_vitrine && (() => {
             // Pastilles status : dot taille 9 statique pour harmonisation YOPPAA (status indicator, pas live event)
             if (inactifCeJour) {
               return prochain ? (
@@ -715,10 +715,42 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
       {showOptions && hasOptions && (
         <OptionsSelector article={article} groupes={groupes} onAjouter={(a, opts) => { ajouterAuPanier(a, opts); setShowOptions(false) }}/>
       )}
-      {showOptions && hasVariantes && (
+      {/* ⚠️ EN VITRINE, LES VERSIONS SE LISENT, ELLES NE S'ACHÈTENT PAS : le
+          sélecteur d'achat y proposait « Ajouter » sur un article que le
+          serveur refuse (30/09). */}
+      {showOptions && hasVariantes && !article.est_vitrine && (
         <VariantesSelector article={article} variantes={variantes}
           onAjouter={(a, variante) => { ajouterAuPanier(a, null, variante); setShowOptions(false) }}/>
       )}
+      {showOptions && hasVariantes && article.est_vitrine && (
+        <VariantesVitrine article={article} variantes={variantes}/>
+      )}
+    </div>
+  )
+}
+
+// ─── LES VERSIONS D'UN ARTICLE EN VITRINE, À LIRE (30/09) ────────────────────
+// Les tailles et couleurs proposées en boutique, sans stock ni bouton : la
+// commerçante ne suit pas ce stock-là dans l'application.
+function VariantesVitrine({ article, variantes }) {
+  const actives = (variantes || []).filter(v => v.actif !== false)
+  const axes = [
+    { nom: article.axe1_nom || 'Version', valeurs: [...new Set(actives.map(v => v.axe1_valeur).filter(Boolean))] },
+    ...(article.axe2_nom ? [{ nom: article.axe2_nom, valeurs: [...new Set(actives.map(v => v.axe2_valeur).filter(Boolean))] }] : []),
+  ].filter(a => a.valeurs.length > 0)
+  if (axes.length === 0) return null
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
+      {axes.map(a => (
+        <div key={a.nom} style={{ marginBottom: 8 }}>
+          <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem', margin: '0 0 6px' }}>{a.nom}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {a.valeurs.map(v => (
+              <span key={v} style={{ padding: '5px 11px', borderRadius: 100, border: `1.5px solid ${T.pale}`, color: T.ink, fontSize: '0.8rem', fontWeight: 700 }}>{v}</span>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -939,7 +971,6 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
             <h3 style={{ fontWeight: 900, fontSize: '1.15rem', color: T.ink, letterSpacing: '-0.4px', margin: 0, lineHeight: 1.25 }}>{article.nom}</h3>
             {!hasVar && Number(article.prix) > 0 && (
               <p style={{ fontSize: '1.15rem', fontWeight: 900, color: remise ? '#DC2626' : T.main, letterSpacing: '-0.4px', margin: 0, flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                {article.est_vitrine ? <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, marginRight: 5 }}>dès</span> : null}
                 {remise ? euros(remise.prix) : euros(Number(article.prix))}
                 {remise && (
                   <span style={{ fontSize: '0.85rem', color: T.muted, fontWeight: 700, textDecoration: 'line-through' }}>{euros(remise.prixBarre)}</span>
@@ -964,8 +995,18 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
             </button>
           </div>
 
+          {/* ✅ EN VITRINE (30/09) : prix ferme plus haut, la mention du métier,
+              et les versions à lire. Rien ne s'y achète en ligne. */}
+          {article.est_vitrine && (
+            <>
+              <span style={{ display: 'inline-block', fontSize: '0.75rem', fontWeight: 800, color: T.deep, background: T.pale, padding: '5px 12px', borderRadius: 100, marginBottom: 10 }}>
+                {mentionVitrine(commercant)}
+              </span>
+              {hasVar && <VariantesVitrine article={article} variantes={variantes}/>}
+            </>
+          )}
           {/* Achat gaté par le plan (onAjouter/onAjouterVariante null si lecture
-              seule) ET par article (est_vitrine = prix indicatif, non commandable) */}
+              seule) ET par article (est_vitrine = pas vendu en ligne) */}
           {hasVar && onAjouterVariante && !article.est_vitrine ? (
             <VariantesSelector article={article} variantes={variantes}
               onAjouter={(a, v) => { onAjouterVariante(a, v); onClose() }}/>
@@ -2564,15 +2605,9 @@ export default function CommanderSlug() {
     const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
     const entryDay = stocksArticle[jourNomSelectionne]
     const dejaCommande = commandesParArticleJour[articleId] || 0
-
-    if (entryDay) {
-      if (entryDay.actif === false) return 0
-      const stockBrut = entryDay.stock || 0
-      if (stockBrut <= 0) return 0
-      return Math.max(0, stockBrut - dejaCommande)
-    }
-    if (!article.stock_jour || article.stock_jour <= 0) return Infinity
-    return Math.max(0, article.stock_jour - dejaCommande)
+    // ⚠️ LA RÈGLE DE LA CARTE DE L'ARTICLE, par la même fonction (30/09) :
+    // sans limite, par jour, en magasin (à 0, épuisé et non plus illimité).
+    return etatStock({ article, entreeJour: entryDay, dejaCommande }).dispo
   }
 
   function totalPanier() {
@@ -4396,7 +4431,8 @@ export default function CommanderSlug() {
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                               variantes={variantesParArticle[a.id] || []}
                               remise={remiseSurArticle(a, dealsActifs)}
-                              onOpenDetail={() => setArticleDetail(a)}/>
+                              onOpenDetail={() => setArticleDetail(a)}
+                              mentionVitrineTexte={mentionVitrine(commercant)}/>
                             {/* Lots et duos seulement : une remise vit sur la carte de l'article */}
                             {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
                               <DealOfferCard key={dl.id} deal={dl}
@@ -4429,7 +4465,8 @@ export default function CommanderSlug() {
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}
                             remise={remiseSurArticle(a, dealsActifs)}
-                            onOpenDetail={() => setArticleDetail(a)}/>
+                            onOpenDetail={() => setArticleDetail(a)}
+                              mentionVitrineTexte={mentionVitrine(commercant)}/>
                           {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
                             <DealOfferCard key={dl.id} deal={dl}
                               reste={resteDeLOffre(dl)}

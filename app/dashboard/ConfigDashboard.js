@@ -16,6 +16,8 @@ import {
 } from '@/lib/plans'
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { nomDeLaCarte, sertAManger } from '@/lib/types-commerce'
+// Le stock en trois choix et la vitrine au prix ferme (30/09, décisions d'Alex).
+import { MODES_STOCK, LIBELLES_MODE_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine } from '@/lib/stock-article'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
@@ -667,39 +669,53 @@ function TabMenu({ commercantId, commercant, toast }) {
   }, [])
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: 0, photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: 0, photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '' })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: String(a.stock_jour ?? ''), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '' })
+    // ⚠️ « Sans limite » n'a pas de quantité : le champ repart vide si l'on
+    // change d'avis, au lieu d'afficher le 0 technique qui la représente.
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '' })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
   }
 
   async function saveArticle() {
-    if (!form.nom.trim() || !form.prix) return toast('Nom et prix obligatoires', 'error')
+    // ✅ LE PRIX EST TOUJOURS FERME, EN VITRINE AUSSI (Alex, 30/09) : plus de
+    // « prix indicatif », donc plus d'article sans prix.
+    if (!form.nom.trim() || !(parseFloat(form.prix) > 0)) return toast('Nom et prix obligatoires', 'error')
+    // Un article vendu en ligne dit comment se compte son stock.
+    const refusStock = form.vendable ? refusQuantite(form.stock_mode, form.stock_jour) : null
+    if (refusStock) return toast(refusStock, 'error')
     setSaving(true)
+    const avant = editId ? articles.find(x => String(x.id) === String(editId)) : null
+    // ⚠️ EN VITRINE, AUCUNE QUANTITÉ : rien ne s'y vend en ligne. Le mode choisi
+    // reste, pour le jour où l'article repasse en vente.
+    const stock = form.vendable
+      ? champsStock({ mode: form.stock_mode, saisie: form.stock_jour, avant })
+      : { stock_mode: MODES_STOCK.includes(form.stock_mode) ? form.stock_mode : modeStockParDefaut(commercant), stock_jour: 0 }
     const payload = {
       commercant_id: commercantId,
       nom: form.nom.trim(),
       description: form.description.trim() || null,
       prix: parseFloat(form.prix),
-      stock_jour: (estVitrine && !form.vendable) ? 0 : (parseInt(form.stock_jour) || 0),
+      ...stock,
       actif: form.actif,
       categorie: form.categorie.trim() || null,
-      temps_prepa: (estVitrine || estDetail) ? 0 : (parseFloat(form.temps_prepa) || 0),
+      temps_prepa: (estVitrine || estDetail || !form.vendable) ? 0 : (parseFloat(form.temps_prepa) || 0),
       // ⚠️ RIEN NE SE COMMANDE EN VITRINE, donc aucun délai n'y a de sens.
       // ⚠️ ET ON ÉCRIT UN NOMBRE, PAS LA CHAÎNE DU <select>. « 2880 » écrit en
       // texte passerait la contrainte de bornes de la base par conversion
       // implicite, mais le module, lui, lit `Number()` : autant n'avoir qu'une
       // seule forme dans la colonne.
-      delai_minutes: estVitrine ? 0 : (parseInt(form.delai_minutes, 10) || 0),
+      delai_minutes: (estVitrine || !form.vendable) ? 0 : (parseInt(form.delai_minutes, 10) || 0),
       photo_url: form.photo_url || null,
-      // Vitrine : est_vitrine = prix indicatif non commandable (par produit).
-      // Détail/alimentaire : toujours false (prix ferme).
-      est_vitrine: estVitrine ? !form.vendable : false,
+      // ✅ EN VITRINE = PAS VENDU EN LIGNE, pour tous les métiers (30/09) : la
+      // boutique qui montre ses vêtements et vend ses accessoires, le plat
+      // servi sur place seulement. Le prix, lui, reste ferme.
+      est_vitrine: !form.vendable,
       // Chaîne vide = « pas renseigné » : on écrit null plutôt que 0, sans quoi
       // l'article passerait pour exonéré alors qu'il n'a simplement pas été réglé.
       tva_taux: form.tva_taux === '' || form.tva_taux == null ? null : Number(form.tva_taux),
@@ -708,8 +724,17 @@ function TabMenu({ commercantId, commercant, toast }) {
     const { error } = editId
       ? await supabase.from('articles').update(payload).eq('id', editId)
       : await supabase.from('articles').insert(payload)
+    if (error) { setSaving(false); toast(`Erreur : ${error.message}`, 'error'); return }
+    // 🔴 « SANS LIMITE » RETIRE LES QUANTITÉS PAR JOUR. Le serveur les lit encore
+    // avant tout le reste : une quantité de lundi restée là plafonnerait un
+    // article déclaré sans limite. Les jours rendus INDISPONIBLES restent : ce
+    // sont eux qui font le lunch du jour.
+    if (editId && stock.stock_mode === 'illimite') {
+      const { error: errJours } = await supabase.from('article_stock_jour')
+        .delete().eq('article_id', editId).eq('actif', true)
+      if (errJours) { setSaving(false); toast(`Article enregistré, mais ses quantités par jour n’ont pas pu être retirées : ${errJours.message}`, 'error'); fetchArticles(); return }
+    }
     setSaving(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast(editId ? 'Article mis à jour' : 'Article ajouté')
     setShowForm(false); fetchArticles()
   }
@@ -958,8 +983,25 @@ function TabMenu({ commercantId, commercant, toast }) {
   async function updateStock(id, val) {
     const n = parseInt(val)
     if (isNaN(n) || n < 0) return
-    await supabase.from('articles').update({ stock_jour: n }).eq('id', id)
-    setArticles(prev => prev.map(a => a.id === id ? { ...a, stock_jour: n } : a))
+    // ⚠️ UN NOUVEAU STOCK EN MAGASIN REPART DE MAINTENANT (30/09) : les ventes
+    // se compteront à partir de cette date, pas depuis la précédente.
+    const maj = { stock_jour: n, stock_maj_le: new Date().toISOString() }
+    const { error } = await supabase.from('articles').update(maj).eq('id', id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setArticles(prev => prev.map(a => a.id === id ? { ...a, ...maj } : a))
+  }
+
+  // Un jour rendu à nouveau disponible, pour un article SANS LIMITE : le
+  // réglage du jour disparaît, il n'y a aucune quantité à y mettre.
+  async function rouvrirJour(articleId, jourSemaine) {
+    const { error } = await supabase.from('article_stock_jour')
+      .delete().eq('article_id', articleId).eq('jour_semaine', jourSemaine)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setStockParJourMap(prev => {
+      const jours = { ...(prev[articleId] || {}) }
+      delete jours[jourSemaine]
+      return { ...prev, [articleId]: jours }
+    })
   }
 
   async function deleteArticle(id) {
@@ -1091,52 +1133,53 @@ function TabMenu({ commercantId, commercant, toast }) {
               <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>{estDetail || estVitrine ? 'Astuce : note tes matières ou atouts en vrac (coton bio, fabrication européenne…) puis clique sur Rédiger avec l’IA.' : 'Astuce : note tes ingrédients ou atouts en vrac (pur beurre, producteur local…) puis clique sur Rédiger avec l’IA.'}</p>
             )}
           </div>
-          {estVitrine ? (
-            <>
-              <Toggle value={!!form.vendable} onChange={v => setForm(p => ({ ...p, vendable: v }))} label="Vendable à la commande"/>
-              {form.vendable ? (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="18.90"/></div>
-                    <div>
-                      <label style={s.label}>Stock disponible</label>
-                      <Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="12"/>
-                      <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Stock permanent. Si le produit a des variantes, le stock se gère par variante.</p>
-                    </div>
-                  </div>
-                  {!canDo(planEffectif(commercant), 'commande') && (
-                    <p style={{ fontSize: 10, color: T.muted, marginTop: -4 }}>La commande en ligne s&rsquo;active avec la formule Vendre. En attendant, le produit s&rsquo;affiche avec son prix.</p>
+          {/* ✅ UN SEUL FORMULAIRE POUR TOUS LES MÉTIERS (30/09, décisions
+              d'Alex) : le prix est toujours ferme, l'article est vendu en ligne
+              ou seulement montré (« en vitrine »), et son stock se compte sans
+              limite, par jour ou en magasin. */}
+          <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder={estAlimentaire ? '1.20' : '49.90'}/></div>
+          <Toggle value={!!form.vendable} onChange={v => setForm(p => ({ ...p, vendable: v }))} label="Vendu en ligne"/>
+          {!form.vendable && (
+            <p style={{ fontSize: 11, color: T.muted, marginTop: -4, lineHeight: 1.5 }}>
+              <strong style={{ color: T.deep }}>{mentionVitrine(commercant)}</strong> : l&rsquo;article s&rsquo;affiche sur ta fiche avec son prix et sa description, sans achat en ligne.
+            </p>
+          )}
+          {form.vendable && !canDo(planEffectif(commercant), 'commande') && (
+            <p style={{ fontSize: 10, color: T.muted, marginTop: -4 }}>La commande en ligne s&rsquo;active avec la formule Vendre. En attendant, l&rsquo;article s&rsquo;affiche avec son prix.</p>
+          )}
+          {form.vendable && (
+            <div>
+              <label style={s.label}>Stock</label>
+              <div role="radiogroup" aria-label="Comment se compte le stock" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {MODES_STOCK.map(m => {
+                  const choisi = form.stock_mode === m
+                  return (
+                    <button key={m} type="button" role="radio" aria-checked={choisi}
+                      onClick={() => setForm(p => ({ ...p, stock_mode: m }))}
+                      style={{ padding: '7px 12px', borderRadius: 100, border: `1.5px solid ${choisi ? T.bgPanel : T.hairline}`, background: choisi ? T.bgPanel : '#fff', color: choisi ? '#fff' : T.ink, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {LIBELLES_MODE_STOCK[m].titre}
+                    </button>
+                  )
+                })}
+              </div>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>{LIBELLES_MODE_STOCK[form.stock_mode]?.aide}</p>
+              {form.stock_mode !== 'illimite' && (
+                <div style={{ marginTop: 8 }}>
+                  <label style={s.label}>{form.stock_mode === 'jour' ? 'Quantité par jour *' : 'Quantité en magasin *'}</label>
+                  <Input type="number" min={form.stock_mode === 'jour' ? 1 : 0} value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder={form.stock_mode === 'jour' ? '30' : '12'}/>
+                  {form.stock_mode === 'magasin' && variantesCategorie && (
+                    <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Si l&rsquo;article a des variantes, le stock se gère par variante.</p>
                   )}
-                </>
-              ) : (
-                <div>
-                  <label style={s.label}>Prix indicatif (€)</label>
-                  <Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="À partir de 290"/>
-                  <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Affiché en mode "à partir de" sur ta fiche client, sans achat en ligne.</p>
                 </div>
               )}
-            </>
-          ) : estDetail ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="49.90"/></div>
-              <div>
-                <label style={s.label}>Stock disponible</label>
-                <Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="12"/>
-                <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Stock permanent. Si l&rsquo;article a des variantes, le stock se gère par variante.</p>
-              </div>
             </div>
-          ) : (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder="1.20"/></div>
-                <div><label style={s.label}>Stock du jour (défaut)</label><Input type="number" min="0" value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder="30"/></div>
-              </div>
-              <div>
-                <label style={s.label}>Temps de préparation (min)</label>
-                <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 1 = 1 min · 5 = 5 min"/>
-                <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé en mode Temps de préparation</p>
-              </div>
-            </>
+          )}
+          {estAlimentaire && form.vendable && (
+            <div>
+              <label style={s.label}>Temps de préparation (min)</label>
+              <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 1 = 1 min · 5 = 5 min"/>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé en mode Temps de préparation</p>
+            </div>
           )}
           {/* ⚠️ LE DÉLAI N'EST PAS LE TEMPS DE PRÉPARATION, et les deux champs
               se suivent exprès pour qu'on ne les confonde pas.
@@ -1148,8 +1191,8 @@ function TabMenu({ commercantId, commercant, toast }) {
               tarte demande 48 h, le sandwich une heure, la baguette rien.
 
               ⚠️ ET IL NE S'AFFICHE PAS EN VITRINE : rien ne s'y commande, donc
-              rien n'y a de délai. */}
-          {!estVitrine && (
+              rien n'y a de délai. Ni pour un article montré sans être vendu. */}
+          {!estVitrine && form.vendable && (
             <div>
               <label style={s.label}>Délai de commande</label>
               {/* ⚠️ UNE LISTE, PAS UN CHAMP LIBRE. Un boulanger pense « 48 h »,
@@ -1271,10 +1314,10 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (showForm && editId === a.id) {
       return <div key={a.id}>{renderArticleForm()}</div>
     }
-    // Vitrine : la card dépend du produit (indicatif = pastille « à partir
-    // de », vendable = stock permanent façon détail)
-    const indicatif = estVitrine && a.est_vitrine
-    return <ArticleCard key={a.id} a={a} estVitrine={indicatif} estDetail={estDetail || (estVitrine && !indicatif)} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    // ⚠️ DEPUIS LE 30/09, `estVitrine` / `estDetail` DISENT LA CATÉGORIE DU
+    // COMMERCE (variantes ou options, temps de préparation). Le stock et la
+    // vitrine se lisent sur l'ARTICLE : son mode, et « vendu en ligne ».
+    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
   }
 
   return (
@@ -2514,10 +2557,17 @@ function VariantesArticle({ article, toast, articles = [] }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
+  // ✅ LE STOCK ET LA VITRINE SE LISENT SUR L'ARTICLE (30/09) : vendu en ligne
+  // ou non, et comment se compte son stock. Un article sans limite garde ses
+  // jours (indisponible le lundi, le lunch du jour) sans aucune quantité.
+  const vendable = a.est_vitrine !== true
+  const mode = modeStockDe(a)
+  const sansLimite = mode === 'illimite'
+  const parJours = vendable && mode !== 'magasin'
 
   // Sémantique commerçant : "stock dispo" = ce qu'il reste à vendre maintenant.
   // En interne on stocke le brut total préparé pour la journée ; le dispo se
@@ -2536,9 +2586,11 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
     const conso = consoParJour[jour] || 0
     if (entry) {
       if (entry.actif === false) return { dispo: 0, ferme: true, override: true, brut: entry.stock }
+      if (sansLimite) return { dispo: Infinity, ferme: false, override: false, brut: 0 }
       const dispo = Math.max(0, (entry.stock || 0) - conso)
       return { dispo, ferme: false, override: true, brut: entry.stock || 0 }
     }
+    if (sansLimite) return { dispo: Infinity, ferme: false, override: false, brut: 0 }
     const brut = a.stock_jour || 0
     return { dispo: Math.max(0, brut - conso), ferme: false, override: false, brut }
   }
@@ -2622,16 +2674,15 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
           </div>
           {a.description && <p style={{ fontSize: 12, color: T.muted, margin: '0 0 8px' }}>{a.description}</p>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
-            {Number(a.prix) > 0 ? (
+            {/* ✅ LE PRIX EST TOUJOURS FERME (Alex, 30/09) : ni « à partir de »,
+                ni « Prix sur demande ». */}
+            {Number(a.prix) > 0 && (
               <span style={{ fontWeight: 900, fontSize: 18, color: T.bgPanel, letterSpacing: '-0.3px' }}>
-                {estVitrine && <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginRight: 4 }}>à partir de</span>}
                 {euros(a.prix)}
               </span>
-            ) : estVitrine ? (
-              <span style={{ fontSize: 12, fontWeight: 700, color: T.muted }}>Prix sur demande</span>
-            ) : null}
-            {/* Détail : stock permanent simple, cliquable pour l'ajuster */}
-            {estDetail && (() => {
+            )}
+            {/* Stock en magasin : un chiffre, cliquable pour l'ajuster */}
+            {vendable && mode === 'magasin' && (() => {
               const st = a.stock_jour || 0
               return (
                 <button type="button" title="Modifier le stock"
@@ -2641,13 +2692,15 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
                 </button>
               )
             })()}
-            {!estVitrine && !estDetail && (a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel, background: '#F8F6FF', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="clock" size={11} color={T.bgPanel}/>{a.temps_prepa} min</span>}
-            {!estVitrine && !estDetail && (congeAuj ? (
+            {!estVitrine && !estDetail && vendable && (a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel, background: '#F8F6FF', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="clock" size={11} color={T.bgPanel}/>{a.temps_prepa} min</span>}
+            {parJours && (congeAuj ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.main, background: T.pale, padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui (congés)</span>
             ) : fermeCommerceAuj ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui (horaires)</span>
             ) : effAuj.ferme ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui</span>
+            ) : sansLimite ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#10B981', background: '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>Sans limite</span>
             ) : stockBrutAuj > 0 ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#10B981', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
                 Aujourd&rsquo;hui&nbsp;: {stockRestant} dispo {dejaCommande > 0 && <span style={{ opacity: 0.65 }}>({dejaCommande} commandé{dejaCommande > 1 ? 's' : ''})</span>}
@@ -2655,19 +2708,20 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
             ) : (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Non géré</span>
             ))}
-            {estVitrine && (
+            {!vendable && (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.main, background: T.pale, padding: '3px 8px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                Prix indicatif · non commandable
+                {mentionVitrineTexte} · pas vendu en ligne
               </span>
             )}
           </div>
 
-          {/* 7 chips stock par jour — modèle C&C alimentaire uniquement
-              (vitrine : pas de stock ; détail : stock permanent simple) */}
-          {!estVitrine && !estDetail && <div>
+          {/* 7 chips par jour : quantité par jour, ou seulement « vendu ce
+              jour ou non » pour un article sans limite. Rien en vitrine, rien
+              pour un stock en magasin (un seul chiffre, plus haut). */}
+          {parJours && <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stock par jour</span>
-              <button onClick={() => {
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{sansLimite ? 'Jours de vente' : 'Stock par jour'}</span>
+              {!sansLimite && <button onClick={() => {
                 const v = window.prompt('Stock disponible à appliquer aux 7 jours :', String(stockRestant))
                 if (v !== null) {
                   const dispo = Math.max(0, parseInt(v) || 0)
@@ -2675,7 +2729,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
                 }
               }} style={{ ...s.btn, ...s.btnGhost, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
                 Appliquer à tous
-              </button>
+              </button>}
             </div>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {JOURS_KEYS.map((jour, idx) => {
@@ -2709,14 +2763,34 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, joursFermes = [
                     style={{ padding: '4px 8px', borderRadius: 8, border: `1.5px solid ${enEdition ? T.bgPanel : aujourdhui ? T.main : couleurs.border}`, background: couleurs.bg, color: couleurs.color, fontSize: 11, fontWeight: 700, cursor: 'pointer', minWidth: 52, fontFamily: 'inherit', transition: 'all 0.15s', position: 'relative' }}>
                     {aujourdhui && <span title="Aujourd'hui" style={{ position: 'absolute', top: 3, right: 4, width: 5, height: 5, borderRadius: '50%', background: enEdition ? '#fff' : T.main }}/>}
                     <span style={{ display: 'block', fontSize: 9, opacity: 0.7 }}>{JOURS_LABELS_COURT[idx]}</span>
-                    <span style={{ display: 'block', fontWeight: 900 }}>{afficheFerme ? '✕' : eff.dispo}</span>
+                    <span style={{ display: 'block', fontWeight: 900 }}>{afficheFerme ? '✕' : sansLimite ? '∞' : eff.dispo}</span>
                   </button>
                 )
               })}
             </div>
 
             {/* Éditeur inline — saisie en "stock dispo" (intuitif) */}
-            {jourEdite && (() => {
+            {/* SANS LIMITE : aucune quantité, seulement « vendu ce jour ou non ». */}
+            {jourEdite && sansLimite && (
+              <div style={{ marginTop: 8, padding: 12, background: '#FAFAFA', borderRadius: 10, border: `1px solid ${T.hairline}` }}>
+                <p style={{ fontSize: 12, fontWeight: 800, color: T.deep, margin: '0 0 8px' }}>Le {jourEdite}</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button onClick={() => { if (onRouvrirJour) onRouvrirJour(a.id, jourEdite); fermerEdition() }}
+                    style={{ ...s.btn, ...s.btnPrimary, padding: '5px 12px', fontSize: 12 }}>
+                    Disponible ce jour
+                  </button>
+                  <button onClick={() => sauvegarder(jourEdite, false)}
+                    style={{ ...s.btn, padding: '5px 12px', fontSize: 12, background: '#FEE2E2', color: '#DC2626', border: '1px solid #FCA5A5' }}>
+                    Article indisponible ce jour
+                  </button>
+                  <button onClick={fermerEdition}
+                    style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12 }}>
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
+            {jourEdite && !sansLimite && (() => {
               const consoEdit = consoParJour[jourEdite] || 0
               return (
                 <div style={{ marginTop: 8, padding: 12, background: '#FAFAFA', borderRadius: 10, border: `1px solid ${T.hairline}` }}>
@@ -9560,6 +9634,12 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
     if (!form.nom.trim()) return toast('Nom obligatoire', 'error')
     const duree = parseInt(form.duree_minutes, 10)
     if (!duree || duree < 5) return toast('Durée minimum 5 min', 'error')
+    // ✅ PLUS DE « PRIX SUR DEMANDE » (Alex, 30/09 : « le prix est toujours un
+    // prix ferme ») : une prestation a son prix, 0 si elle est gratuite. Une
+    // table n'en a jamais (décision du 10/09), elle n'est pas concernée.
+    if (!formEstTable && String(form.prix ?? '').trim() === '') {
+      return toast('Indique le prix de la prestation (0 si elle est gratuite) : il s’affiche tel quel sur ta fiche.', 'error')
+    }
     // ─── LES TABLES JOINTES (lot 3) ──────────────────────────────────────────
     // ⚠️ LA RÈGLE DU MODULE, AVANT LA BASE : elle refuse aussi, mais en message
     // brut. Une jointure dont la table a disparu ne se corrige pas, elle se
@@ -9589,7 +9669,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       // rien à décrire.
       description: formEstJointure ? null : form.description.trim() || null,
       duree_minutes: duree,
-      // Vide = tarif de vive voix, la fiche affiche « Prix sur demande ».
+      // Toujours un prix ferme depuis le 30/09 (vérifié plus haut).
       // ✅ UNE TABLE N'A PAS DE PRIX : vide d'office, quoi que contienne le
       // formulaire, y compris la valeur d'avant la décision du 10/09.
       prix: formEstTable ? null : form.prix ? Number(form.prix) : null,
@@ -9921,7 +10001,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {prestationsSeules.map(p => {
-            const prixLabel = p.prix != null ? euros(p.prix) : 'Prix sur demande'
+            // ✅ Plus de « Prix sur demande » (Alex, 30/09) : une prestation
+            // sans prix (d'avant la règle) le DIT à son commerçant, qui le corrige.
+            const prixLabel = p.prix != null ? euros(p.prix) : 'Prix à indiquer'
             return (
               <div key={p.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, opacity: p.actif ? 1 : 0.55, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -10407,10 +10489,10 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                 `prix_min` et `prix_max` ont été supprimées de la base, après
                 conversion des fourchettes existantes au minimum annoncé. */}
             <div style={{ marginBottom: 10 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prix (€)</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Prix (€) *</label>
               <Input type="number" min="0" step="0.50" value={form.prix} onChange={e => setForm({ ...form, prix: e.target.value })} placeholder="35.00"/>
               <p style={{ fontSize: 11, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>
-                {mots.prixSurDemande}
+                {mots.aidePrix}
               </p>
             </div>
             </>

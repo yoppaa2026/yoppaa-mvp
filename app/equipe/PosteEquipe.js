@@ -38,6 +38,7 @@ import { peutMarquerNonRetire } from '@/lib/rappels-retrait'
 import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from '@/app/dashboard/ReglageEtiquettes'
 import { imprimerSiActive } from '@/lib/impression-etiquette'
 import { etiquetteConcernee } from '@/lib/etiquette-commande'
+import { gesteLivraisonPermis } from '@/lib/livraison-geste'
 
 const T = { fond: '#F8F6FF', ink: '#1A0840', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', panel: '#160636', rouge: '#B91C1C', vert: '#047857', filet: '#E7DEF6' }
 const carte = { background: '#fff', borderRadius: 14, border: `1px solid ${T.filet}`, padding: 14, boxSizing: 'border-box' }
@@ -215,7 +216,7 @@ function Commandes({ commandes, commerce, aujourdhui, gestes = null, enCours = n
 }
 
 // ─── Les livraisons du jour ──────────────────────────────────────────────────
-function Livraisons({ livraisons }) {
+function Livraisons({ livraisons, gestes = null, enCours = null }) {
   const aFaire = livraisons.filter(l => l.statut_livraison !== 'livree' && l.statut !== 'recupere')
   const faites = livraisons.length - aFaire.length
   return (
@@ -250,6 +251,24 @@ function Livraisons({ livraisons }) {
                 ? <strong style={{ color: T.rouge }}>À encaisser : {euros(l.a_encaisser)}</strong>
                 : <span style={{ color: T.vert, fontWeight: 700 }}>Déjà payée</span>}
             </div>
+            {/* Les gestes du livreur (étape 4). Une commande pas encore prête
+                ne part pas : on le dit au lieu de cacher les boutons. */}
+            {gestes && (l.statut !== 'pret'
+              ? <p style={{ margin: '10px 0 0', fontSize: 12.5, color: T.muted, fontWeight: 700 }}>En préparation : pas encore prête à partir.</p>
+              : (
+                <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  {gesteLivraisonPermis(l, 'en_livraison') && (
+                    <button type="button" disabled={!!enCours} onClick={() => gestes.partir(l)} style={{ ...puce(false), flex: 1, padding: '11px 14px' }}>
+                      {enCours === `${l.id}:partir` ? <DotsAttente label="Enregistrement"/> : 'Partir en livraison'}
+                    </button>
+                  )}
+                  {gesteLivraisonPermis(l, 'livree') && (
+                    <button type="button" disabled={!!enCours} onClick={() => gestes.livree(l)} style={{ ...puce(true), flex: 1, padding: '11px 14px', background: T.vert, borderColor: T.vert }}>
+                      {enCours === `${l.id}:livree` ? <DotsAttente label="Enregistrement"/> : 'Livrée'}
+                    </button>
+                  )}
+                </div>
+              ))}
           </div>
         ))}
       </div>
@@ -398,6 +417,46 @@ export default function PosteEquipe({ equipe, onChanger }) {
     else dire(`Réservation déplacée au ${quand}. Le client n’a pas été prévenu.`, 'erreur')
     charger()
   }
+  // ─── LIVRER (étape 4, 01/10) ─────────────────────────────────────────────
+  // La même route que le patron (`/api/livraison/livrer`), la même question
+  // d'argent que le comptoir. ⚠️ L'IDENTIFIANT DU GESTE PORTE LE BOUTON
+  // (`id:partir`, `id:livree`) : sur une carte à deux boutons, seul celui qui
+  // travaille montre qu'il travaille.
+  const gestesLivraison = {
+    partir: (l) => geste(`${l.id}:partir`, async () => {
+      const j = await lire(await postPro('/api/livraison/livrer', { commande_id: l.id, statut_livraison: 'en_livraison' }))
+      if (!j.ok) { dire(j.error || 'La livraison n’a pas pu partir.', 'erreur'); return }
+      dire('En route')
+      await prevenir('/api/livraison/statut', { commande_id: l.id, statut_livraison: 'en_livraison' }, 'le message « ta commande arrive »')
+    }),
+    livree: (l) => geste(`${l.id}:livree`, async () => {
+      let encaissement = null
+      if (Number(l.a_encaisser) > 0) {
+        const choix = await confirmer(questionEncaissement({ montant: l.a_encaisser, nom: l.client_nom }))
+        if (!choix || choix === 'rien') return
+        encaissement = choix
+      } else {
+        // ⚠️ RIEN À ENCAISSER, MAIS ON DEMANDE QUAND MÊME : « Livrée » prévient
+        // le client et ferme la commande. Un pouce qui glisse dans la voiture
+        // ne doit pas annoncer une livraison qui n'a pas eu lieu.
+        const choix = await confirmer({
+          titre: 'Commande livrée ?',
+          message: 'Le client est prévenu que sa commande est arrivée.',
+          details: [l.reference, l.client_nom].filter(Boolean).join(' · ') || null,
+          actions: [
+            { valeur: 'oui', ton: 'principal', label: 'Oui, c’est livré' },
+            { valeur: 'rien', ton: 'neutre', label: 'Pas encore' },
+          ],
+        })
+        if (choix !== 'oui') return
+      }
+      const j = await lire(await postPro('/api/livraison/livrer', { commande_id: l.id, statut_livraison: 'livree', encaissement }))
+      if (!j.ok) { dire(j.error || 'La livraison n’a pas pu être enregistrée.', 'erreur'); return }
+      dire('Commande livrée')
+      await prevenir('/api/fidelite/crediter', { commande_id: l.id }, 'le crédit de fidélité du client')
+      await prevenir('/api/livraison/statut', { commande_id: l.id, statut_livraison: 'livree' }, 'la notification au client')
+    }),
+  }
   const gestesCommande = {
     avancer: (c) => geste(c.id, async () => {
       const vers = STATUT_SUIVANT[c.statut]
@@ -510,7 +569,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
         />
       )}
       {actif === 'commandes' && etat.commandes && <Commandes commandes={etat.commandes} commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null} enCours={enCours}/>}
-      {actif === 'livraisons' && etat.livraisons && <Livraisons livraisons={etat.livraisons}/>}
+      {actif === 'livraisons' && etat.livraisons && <Livraisons livraisons={etat.livraisons} gestes={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>}
 
       {rdvOuvert && <DetailRdv rdv={rdvOuvert} commerce={etat.commerce} droits={etat.droits || {}} gestes={etat.droits?.agenda ? gestesRdv : null} enCours={enCours === rdvOuvert.id} onFermer={() => setRdvOuvert(null)}/>}
     </div>

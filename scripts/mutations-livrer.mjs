@@ -1,0 +1,136 @@
+// HARNAIS DE MUTATION — LIVRER UNE COMMANDE (équipe, étape 4)
+//
+// Chaque mutation casse une chose précise, et le banc qu'elle nomme doit
+// rougir.
+//
+// ⚠️ INSTANTANÉ DE CONTENU, RESTAURATION CONTRÔLÉE, jamais `git checkout`.
+// ⚠️ UNE MUTATION CHANGE LE RÉSULTAT, JAMAIS LA TERMINAISON.
+// ⚠️ AUCUN SAUT DE LIGNE DANS LES CIBLES.
+//
+//   npm run mutations:livrer
+
+import { readFileSync } from 'node:fs'
+import { ecrireSur } from './harnais-mutation.mjs'
+import { execSync } from 'node:child_process'
+
+const RACINE = 'c:/Users/HP/yoppaa-mvp'
+const chemin = (f) => `${RACINE}/${f}`
+const BANC = 'verif:livrer'
+const REGLE = 'lib/livraison-geste.js'
+const SERVEUR = 'lib/livraison-serveur.js'
+const ROUTE = 'app/api/livraison/livrer/route.js'
+const STATUT = 'app/api/livraison/statut/route.js'
+const BORD = 'app/dashboard/page.js'
+const POSTE = 'app/equipe/PosteEquipe.js'
+const VUE = 'lib/equipe-poste.js'
+
+const MUTATIONS = [
+  // ─── LA RÈGLE ────────────────────────────────────────────────────────────
+  { nom: '🔴 une livraison en route repart',
+    fichier: REGLE, de: "  if (vers === 'en_livraison') return actuel === null", vers: "  if (vers === 'en_livraison') return actuel !== 'livree'" },
+  { nom: '🔴 « Livrée » exige d être parti (livreur bloqué devant la porte)',
+    fichier: REGLE, de: "  if (vers === 'livree') return actuel === null || actuel === 'en_livraison'", vers: "  if (vers === 'livree') return actuel === 'en_livraison'" },
+  { nom: '🔴 une livraison livrée se relivre',
+    fichier: REGLE, de: "  if (vers === 'livree') return actuel === null || actuel === 'en_livraison'", vers: "  if (vers === 'livree') return true" },
+  { nom: '🔴 une commande pas prête, ou un retrait, se livre',
+    fichier: REGLE, de: "  if (!commande || commande.mode_retrait !== 'livraison' || commande.statut !== 'pret') return false", vers: '  if (!commande) return false' },
+  { nom: '🔴 « Livrée » ne termine plus la commande',
+    fichier: REGLE, de: "  return { champs: { statut_livraison: 'livree', statut: 'recupere', ...(argent || {}) }, refus: null }", vers: "  return { champs: { statut_livraison: 'livree', ...(argent || {}) }, refus: null }" },
+  { nom: '🔴 « En route » termine la commande',
+    fichier: REGLE, de: "  if (vers === 'en_livraison') return { champs: { statut_livraison: 'en_livraison' }, refus: null }", vers: "  if (vers === 'en_livraison') return { champs: { statut_livraison: 'en_livraison', statut: 'recupere' }, refus: null }" },
+  { nom: '🔴 l argent déjà encaissé se réécrit',
+    fichier: REGLE, de: '  if (!commande.encaisse_mode) {', vers: '  if (true) {' },
+  { nom: '🔴 payée à la porte sans le moyen, ça passe',
+    fichier: REGLE, de: '    if (r.refus) return { champs: null, refus: r.refus }', vers: '' },
+
+  // ─── LE SERVEUR ──────────────────────────────────────────────────────────
+  { nom: '🔴 la lecture oublie le commerce',
+    fichier: SERVEUR, de: "    .eq('id', commandeId).eq('commercant_id', commercantId).maybeSingle()", vers: "    .eq('id', commandeId).maybeSingle()" },
+  { nom: '🔴 l écriture oublie le statut lu (annulée pendant le geste)',
+    fichier: SERVEUR, de: "    .eq('id', commandeId).eq('commercant_id', commercantId).eq('statut', c.statut)", vers: "    .eq('id', commandeId).eq('commercant_id', commercantId)" },
+  { nom: '🔴 l écriture oublie l étape lue (deux « Partir »)',
+    fichier: SERVEUR, de: "    : ecriture.is('statut_livraison', null)", vers: '    : ecriture' },
+  { nom: '🔴 une écriture sans ligne passe pour une réussite',
+    fichier: SERVEUR, de: "  if (!ecrit) return { ok: false, code: 'deja_fait', message: 'Cette livraison vient d’être traitée par quelqu’un d’autre.' }", vers: '' },
+
+  // ─── LES ROUTES ──────────────────────────────────────────────────────────
+  { nom: '🔴 la route s ouvre sans la case « livraisons »',
+    fichier: ROUTE, de: "gardeLigneEquipe(request, admin, 'commandes', commande_id, 'livraisons')", vers: "gardeLigneEquipe(request, admin, 'commandes', commande_id, ['livraisons', 'agenda'])" },
+  { nom: '🔴 le commerce ne vient plus de la garde',
+    fichier: ROUTE, de: '      commercantId: verdict.commercant.id,', vers: '      commercantId: verdict.commercant?.id || null,' },
+  { nom: '🔴 le message au client part sans que rien soit écrit',
+    fichier: STATUT, de: '    if (cmd.statut_livraison !== statut_livraison) {', vers: '    if (false) {' },
+  { nom: '🔴 le livreur ne peut plus prévenir le client',
+    fichier: STATUT, de: "gardeLigneEquipe(request, supabase, 'commandes', commande_id, ['commandes', 'livraisons'])", vers: "gardeLigneEquipe(request, supabase, 'commandes', commande_id, 'commandes')" },
+
+  // ─── LE TABLEAU DE BORD ──────────────────────────────────────────────────
+  { nom: '🔴 le tableau de bord réécrit depuis le navigateur',
+    fichier: BORD, de: "    const res = await postPro('/api/livraison/livrer', { commande_id: commandeId, statut_livraison: statutLivraison, encaissement })", vers: "    const res = await supabase.from('commandes').update({ statut_livraison: statutLivraison }).eq('id', commandeId)" },
+  { nom: '🔴 « rien encaissé » part sous un nom que le serveur refuse',
+    fichier: BORD, de: "      ? (champs.encaisse_mode === 'rien' ? 'sans_paiement' : champs.encaisse_mode)", vers: '      ? champs.encaisse_mode' },
+
+  // ─── LE POSTE ────────────────────────────────────────────────────────────
+  { nom: '🔴 payée à la porte, le livreur ne dit pas comment',
+    fichier: POSTE, de: '      if (Number(l.a_encaisser) > 0) {', vers: '      if (false) {' },
+  { nom: '🔴 « Livrée » part sans confirmation',
+    fichier: POSTE, de: "        if (choix !== 'oui') return", vers: '' },
+  { nom: '🔴 la livraison ne crédite plus la fidélité',
+    fichier: POSTE, de: "      await prevenir('/api/fidelite/crediter', { commande_id: l.id }, 'le crédit de fidélité du client')", vers: '' },
+  { nom: '🔴 sans la case, les boutons apparaissent',
+    fichier: POSTE, de: 'gestes={etat.droits?.livraisons ? gestesLivraison : null}', vers: 'gestes={gestesLivraison}' },
+  { nom: '🔴 « Partir » s affiche sans la règle',
+    fichier: POSTE, de: "                  {gesteLivraisonPermis(l, 'en_livraison') && (", vers: '                  {true && (' },
+  { nom: '🔴 la vue du livreur perd le mode (aucun bouton)',
+    fichier: VUE, de: '    mode_retrait: c.mode_retrait || null,', vers: '' },
+]
+
+const lancer = (banc) => {
+  try {
+    const sortie = execSync(`npm run ${banc}`, { cwd: RACINE, encoding: 'utf8', stdio: 'pipe' })
+    return { rouge: false, plante: false, extrait: sortie.slice(-300) }
+  } catch (e) {
+    const sortie = `${e.stdout || ''}${e.stderr || ''}`
+    return { rouge: true, plante: !/vérifications/.test(sortie), extrait: sortie.slice(-400) }
+  }
+}
+
+const depart = lancer(BANC)
+if (depart.rouge) {
+  console.log(`🔴 ${BANC} EST DÉJÀ ROUGE. On ne mesure rien sur un banc rouge.`)
+  console.log(depart.extrait)
+  process.exit(1)
+}
+console.log(`Banc vert au départ : ${BANC}.\n`)
+
+let attrapees = 0
+const manquees = []
+for (const m of MUTATIONS) {
+  const f = chemin(m.fichier)
+  const original = readFileSync(f, 'utf8')
+  // ⚠️ Les fichiers peuvent être en CRLF : la cible suit la fin de ligne du fichier.
+  const eol = original.includes('\r\n') ? '\r\n' : '\n'
+  const de = m.de.split('\n').join(eol)
+  const vers = m.vers.split('\n').join(eol)
+  if (!original.includes(de)) {
+    manquees.push(`${m.nom} — TEXTE INTROUVABLE`)
+    console.log(`  ? introuvable : ${m.nom}`)
+    continue
+  }
+  ecrireSur(f, original.replace(de, vers))
+  const res = lancer(m.banc || BANC)
+  ecrireSur(f, original)
+  if (readFileSync(f, 'utf8') !== original) {
+    console.log(`\n🔴 RESTAURATION RATÉE sur ${m.fichier}. On s'arrête.`)
+    process.exit(2)
+  }
+  if (res.rouge && !res.plante) { attrapees++; console.log(`  ✓ attrapée : ${m.nom}`) }
+  else if (res.plante) { manquees.push(`${m.nom} — le banc a PLANTÉ`); console.log(`  ⚠ plantage : ${m.nom}`) }
+  else { manquees.push(`${m.nom} — RESTÉE VERTE`); console.log(`  ✕ MANQUÉE : ${m.nom}`) }
+}
+
+console.log(`\n${attrapees}/${MUTATIONS.length} mutations attrapées.`)
+if (manquees.length) { console.log('\nNON ATTRAPÉES :'); manquees.forEach((x) => console.log('   • ' + x)) }
+const finalRouge = lancer(BANC).rouge
+if (finalRouge) console.log(`🔴 ${BANC} EST ROUGE APRÈS RESTAURATION.`)
+else console.log('\nBanc vert après restauration. Dépôt intact.')
+process.exit(manquees.length || finalRouge ? 1 : 0)

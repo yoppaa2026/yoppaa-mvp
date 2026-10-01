@@ -2187,14 +2187,21 @@ export default function Dashboard() {
         return
       }
     }
-    const patch = { statut_livraison: statutLivraison, ...(champs || {}) }
-    if (statutLivraison === 'livree') patch.statut = 'recupere'
-    const { error } = await supabase.from('commandes').update(patch).eq('id', commandeId)
-    if (error) {
-      console.error('[dashboard] changerStatutLivraison', error)
-      alert(`Erreur : ${error.message}`)
+    // ⚠️ L'ÉCRITURE PASSE PAR LE SERVEUR DEPUIS LE 01/10 (équipe, étape 4) : la
+    // même route que le livreur, la même règle (`lib/livraison-geste.js`). Le
+    // navigateur n'envoie plus que le CHOIX ; le montant est recalculé sur la
+    // commande relue en base.
+    const encaissement = champs?.encaisse_mode
+      ? (champs.encaisse_mode === 'rien' ? 'sans_paiement' : champs.encaisse_mode)
+      : null
+    const res = await postPro('/api/livraison/livrer', { commande_id: commandeId, statut_livraison: statutLivraison, encaissement })
+    const j = await (res?.json ? res.json().catch(() => null) : Promise.resolve(null))
+    if (!j?.ok) {
+      console.error('[dashboard] changerStatutLivraison', j)
+      alert(`Erreur : ${j?.error || (res?.sansSession ? 'session expirée, reconnecte-toi' : res?.erreurReseau ? 'pas de connexion, réessaie' : 'la livraison n’a pas pu être enregistrée')}`)
       return
     }
+    const patch = j.champs || { statut_livraison: statutLivraison }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
     if (statutLivraison === 'livree') crediterFideliteCommande(commandeId)
 

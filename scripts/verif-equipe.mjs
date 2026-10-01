@@ -339,7 +339,9 @@ const membre = (o = {}) => ({
   // 🔴 LE LIVREUR.
   const payeeEnLigne = { id: 'c1', numero_commande: 12, numero_prefixe: 'LI', mode_retrait: 'livraison', date_commande: '2026-10-01', statut: 'pret', client_nom: 'Marc Dupont', client_telephone: '0470', client_email: 'marc@x.be', adresse_livraison: 'Rue 1, Mettet', note_livraison: 'Sonner 2 fois', total: 30, paye_en_ligne: true, commande_articles: [{ quantite: 2, article_nom: 'Pizza', prix_unitaire: 12.5, options: [{ groupe_nom: 'Taille', valeur_nom: 'Grande' }] }], creneau_livraison: { heure_debut: '18:00:00', heure_fin: '18:30:00' } }
   const vue = P.livraisonPourLeLivreur(payeeEnLigne)
-  const permises = ['id', 'reference', 'client_nom', 'client_telephone', 'adresse', 'note', 'date', 'creneau', 'creneau_livraison_id', 'statut', 'statut_livraison', 'a_encaisser', 'lignes']
+  // `mode_retrait` ajouté le 01/10 (étape 4) : la règle des gestes du livreur
+  // le lit. Il ne dit rien du client, toutes ces commandes sont des livraisons.
+  const permises = ['id', 'reference', 'client_nom', 'client_telephone', 'adresse', 'note', 'date', 'creneau', 'creneau_livraison_id', 'statut', 'statut_livraison', 'mode_retrait', 'a_encaisser', 'lignes']
   v('🔴 le livreur ne reçoit que sa vue', Object.keys(vue).every(k => permises.includes(k)), Object.keys(vue).join(','))
   // ⚠️ RÉORIENTÉE LE 29/09 (Alex : « il doit pouvoir voir le contenu de la
   // commande, pour savoir ce qu'il doit donner »). Le contenu, oui ; les prix,

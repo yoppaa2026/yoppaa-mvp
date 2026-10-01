@@ -14,7 +14,8 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { gardeSurLigne, refus } from '@/lib/api-auth'
+import { refus } from '@/lib/api-auth'
+import { gardeLigneEquipe } from '@/lib/equipe-server'
 import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { envoyerAuCommercant, emailCommandeEnLivraison } from '@/lib/resend'
 import { referenceCommande } from '@/lib/numero-commande'
@@ -37,11 +38,12 @@ export async function POST(request) {
       { auth: { persistSession: false } }
     )
 
-    // ⚠️ GARDE D AUTORISATION, POSEE LE 21/08 avec les dix autres. Cette route
-    // n est appelee que par le tableau de bord : les trois mentions trouvees
-    // ailleurs dans le code sont des COMMENTAIRES, pas des appels. Elle peut
-    // donc exiger le jeton du commercant sans rien casser.
-    const verdict = await gardeSurLigne(request, supabase, 'commandes', commande_id)
+    // ⚠️ GARDE D AUTORISATION, POSEE LE 21/08 avec les dix autres, OUVERTE AU
+    // LIVREUR le 01/10 (équipe, étape 4) : le patron et l'admin passent comme
+    // avant, un membre avec la case « Livraisons » aussi. Le commerce se déduit
+    // de la commande. Même route pour tous : le message au client ne se
+    // recopie pas.
+    const verdict = await gardeLigneEquipe(request, supabase, 'commandes', commande_id, ['commandes', 'livraisons'])
     const nonAutorise = refus(verdict, NextResponse)
     if (nonAutorise) return nonAutorise
 
@@ -49,7 +51,7 @@ export async function POST(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, client_email, client_nom,
-        adresse_livraison,
+        adresse_livraison, statut_livraison,
         commercant:commercants(nom, slug),
         creneau_livraison:livraison_creneaux(heure_debut, heure_fin)
       `)
@@ -59,6 +61,15 @@ export async function POST(request) {
     if (error || !cmd) {
       console.error('[livraison/statut] commande introuvable', { commande_id, error })
       return NextResponse.json({ ok: false, error: 'Commande introuvable' }, { status: 404 })
+    }
+
+    // 🔴 ON NE PRÉVIENT QUE DE CE QUI EST ÉCRIT. Cette route ne fait que
+    // raconter : sans cette garde, n'importe quel membre pouvait envoyer « ta
+    // commande arrive » au client d'une commande encore en préparation, autant
+    // de fois qu'il le voulait. Le statut se pose AVANT, par
+    // `/api/livraison/livrer` ; ici on vérifie qu'il est bien en base.
+    if (cmd.statut_livraison !== statut_livraison) {
+      return NextResponse.json({ ok: false, error: 'Le statut de livraison n’est pas celui-là : rien n’a été envoyé.' }, { status: 409 })
     }
 
     // ⚠️ L'EMAIL PART AVANT LE PUSH, ET INDÉPENDAMMENT DE LUI.

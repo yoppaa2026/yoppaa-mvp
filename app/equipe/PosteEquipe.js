@@ -35,9 +35,9 @@ import { questionRdv, statutDepuisChoix, noShowPossible, questionEncaissement } 
 import { resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import { STATUT_SUIVANT, LIBELLE_GESTE_SUIVANT, transitionPermise } from '@/lib/statuts-commande'
 import { peutMarquerNonRetire } from '@/lib/rappels-retrait'
-import ReglageEtiquettes, { useEtiquettesAppareil } from '@/app/dashboard/ReglageEtiquettes'
-import { imprimerSiActive, imprimerEtiquette } from '@/lib/impression-etiquette'
-import { contenuEtiquette, etiquetteConcernee } from '@/lib/etiquette-commande'
+import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from '@/app/dashboard/ReglageEtiquettes'
+import { imprimerSiActive } from '@/lib/impression-etiquette'
+import { etiquetteConcernee } from '@/lib/etiquette-commande'
 
 const T = { fond: '#F8F6FF', ink: '#1A0840', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', panel: '#160636', rouge: '#B91C1C', vert: '#047857', filet: '#E7DEF6' }
 const carte = { background: '#fff', borderRadius: 14, border: `1px solid ${T.filet}`, padding: 14, boxSizing: 'border-box' }
@@ -169,12 +169,9 @@ function CarteCommande({ c, commerce, gestes = null, enCours = false, etiquettes
           )}
         </div>
       )}
-      {/* Le rattrapage de l'étiquette, sur l'appareil qui imprime seulement. */}
+      {/* Le rattrapage et les sacs en plus, sur l'appareil qui imprime seulement. */}
       {etiquettes && c.statut === 'pret' && etiquetteConcernee(c) && (
-        <button type="button" onClick={() => imprimerEtiquette(contenuEtiquette(c, { categorie: commerce.categorie }))}
-          style={{ ...puce(false), width: '100%', marginTop: 8, padding: '10px 14px' }}>
-          Imprimer l&rsquo;étiquette
-        </button>
+        <BoutonEtiquettes commande={c} categorie={commerce.categorie}/>
       )}
     </div>
   )

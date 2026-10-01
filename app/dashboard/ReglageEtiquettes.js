@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react'
 import { lireImpressionActive, ecrireImpressionActive, imprimerEtiquette } from '@/lib/impression-etiquette'
-import { ETIQUETTE_ESSAI } from '@/lib/etiquette-commande'
+import { ETIQUETTE_ESSAI, SACS_MAX, contenuEtiquette, etiquettesPourSacs } from '@/lib/etiquette-commande'
 
 const T = { ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', vert: '#047857' }
 
@@ -30,6 +30,35 @@ function IconeImprimante({ couleur }) {
   )
 }
 
+// ⚠️ LE RATTRAPAGE, ET LES SACS EN PLUS (Alex, 01/10 : « coller plusieurs
+// étiquettes s'il y a plusieurs articles »). L'impression ne bloque jamais le
+// passage en « prête » : plus de papier, imprimante éteinte, et la commande
+// avance quand même. Ce bouton refait les étiquettes sans rien défaire, une
+// par sac, numérotées. Le clic sur « Imprimer » est lui-même le geste que
+// Safari exige : rien n'est attendu avant.
+export function BoutonEtiquettes({ commande, categorie = null }) {
+  const [sacs, setSacs] = useState(1)
+  const rond = { width: 30, height: 30, borderRadius: '50%', border: `1px solid ${T.pale}`, background: '#fff', color: T.ink, fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1, padding: 0 }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} aria-label="Nombre de sacs">
+        <button type="button" onClick={() => setSacs(s => Math.max(1, s - 1))} disabled={sacs <= 1}
+          aria-label="Un sac de moins" style={{ ...rond, opacity: sacs <= 1 ? 0.4 : 1, cursor: sacs <= 1 ? 'default' : 'pointer' }}>−</button>
+        <span style={{ minWidth: 48, textAlign: 'center', fontSize: 13, fontWeight: 800, color: T.ink, fontVariantNumeric: 'tabular-nums' }}>
+          {sacs} sac{sacs > 1 ? 's' : ''}
+        </span>
+        <button type="button" onClick={() => setSacs(s => Math.min(SACS_MAX, s + 1))} disabled={sacs >= SACS_MAX}
+          aria-label="Un sac de plus" style={rond}>+</button>
+      </div>
+      <button type="button" onClick={() => imprimerEtiquette(etiquettesPourSacs(contenuEtiquette(commande, { categorie }), sacs))}
+        style={{ flex: 1, minWidth: 150, padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.ink, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <IconeImprimante couleur={T.ink}/>
+        {sacs > 1 ? `Imprimer ${sacs} étiquettes` : 'Imprimer l’étiquette'}
+      </button>
+    </div>
+  )
+}
+
 export default function ReglageEtiquettes({ actif, onChanger }) {
   const [ouvert, setOuvert] = useState(false)
   return (
@@ -45,7 +74,7 @@ export default function ReglageEtiquettes({ actif, onChanger }) {
       {ouvert && (
         <div style={{ marginTop: 10 }}>
           <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: T.deep }}>
-            Quand une commande passe en « prête », son étiquette s&rsquo;imprime depuis cet appareil. La fenêtre d&rsquo;impression s&rsquo;ouvre : la première fois, choisis ta Brother, puis touche « Imprimer ».
+            Quand une commande passe en « prête », son étiquette s&rsquo;imprime depuis cet appareil. La fenêtre d&rsquo;impression s&rsquo;ouvre : la première fois, choisis ta Brother, puis touche « Imprimer ». Plusieurs sacs ? Sur la commande prête, choisis leur nombre : chaque étiquette porte « Sac 1/3 », « Sac 2/3 »…
           </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
             <button type="button" onClick={() => onChanger(!actif)}

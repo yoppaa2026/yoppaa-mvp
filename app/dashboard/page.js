@@ -63,9 +63,9 @@ import EcranValidation from './EcranValidation'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
 import AideInstallation from './AideInstallation'
-import ReglageEtiquettes, { useEtiquettesAppareil } from './ReglageEtiquettes'
-import { imprimerSiActive, imprimerEtiquette } from '@/lib/impression-etiquette'
-import { contenuEtiquette, etiquetteConcernee } from '@/lib/etiquette-commande'
+import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from './ReglageEtiquettes'
+import { imprimerSiActive } from '@/lib/impression-etiquette'
+import { etiquetteConcernee } from '@/lib/etiquette-commande'
 import { ADMIN_EMAIL } from '@/lib/admin-identite'
 
 const T = {
@@ -847,15 +847,10 @@ function CarteCommande({ commande, numero, categorie = null, etiquettes = false,
             {statut.nextLabel} →
           </button>
         )}
-        {/* ⚠️ LE RATTRAPAGE DE L'ÉTIQUETTE. L'impression ne bloque jamais le
-            passage en « prête » : plus de papier, imprimante éteinte, et la
-            commande avance quand même. Ce bouton refait l'étiquette sans rien
-            défaire. Seulement sur l'appareil qui imprime. */}
+        {/* Le rattrapage et les sacs en plus (ReglageEtiquettes.js), sur
+            l'appareil qui imprime seulement. */}
         {etiquettes && !modeHistorique && commande.statut === 'pret' && etiquetteConcernee(commande) && (
-          <button type="button" onClick={() => imprimerEtiquette(contenuEtiquette(commande, { categorie }))}
-            style={{ width: '100%', padding: '0.5rem', background: '#fff', color: T.ink, border: `1.5px solid ${T.pale}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: '0.76rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
-            Imprimer l&rsquo;étiquette
-          </button>
+          <BoutonEtiquettes commande={commande} categorie={categorie}/>
         )}
         {/* ⚠️ LA PORTE DE SECOURS, quand la commande est déjà remise sans que
             l'encaissement ait été noté : les 66 commandes antérieures à ce
@@ -3953,9 +3948,9 @@ export default function Dashboard() {
                     elle{livraisonsSansCreneau.length > 1 ? 's n\'entrent' : ' n\'entre'} dans aucune tournée, à organiser à la main.
                   </p>
                 )}
-                {/* Les étiquettes ne concernent que les retraits : rien à régler
-                    dans la vue des tournées, ni dans l'historique. */}
-                {vueMode !== 'livraison' && !modeHistorique && (
+                {/* Retraits ET livraisons (Alex, 01/10) : rien à régler dans
+                    l'historique seulement. */}
+                {!modeHistorique && (
                   <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes}/>
                 )}
                 {loading && (

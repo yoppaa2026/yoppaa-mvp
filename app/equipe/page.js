@@ -15,12 +15,23 @@ import DotsAttente from '@/app/components/DotsAttente'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import { DROITS, libelleFinAcces } from '@/lib/equipe'
 import PosteEquipe from './PosteEquipe'
+import { lirePoste, commerceARouvrir, ecrirePoste, lireDernierCommerce, retenirDernierCommerce } from '@/lib/poste-adresse'
 
 const T = { fond: '#F8F6FF', ink: '#1A0840', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', panel: '#160636', rouge: '#B91C1C', filet: '#E7DEF6' }
 
 export default function PageEquipe() {
   const [etat, setEtat] = useState({ charge: false })
   const [choisie, setChoisie] = useState(null)
+  function choisir(e) {
+    setChoisie(e)
+    retenirDernierCommerce(e.commercant_id)
+    ecrirePoste({ commerce: e.commercant_id })
+  }
+  function changer() {
+    setChoisie(null)
+    retenirDernierCommerce(null)
+    ecrirePoste({ commerce: null, onglet: null, filtre: null })
+  }
 
   useEffect(() => {
     let annule = false
@@ -38,7 +49,10 @@ export default function PageEquipe() {
         if (!j?.ok) { setEtat({ charge: true, erreur: j?.error || 'Équipes illisibles.' }); return }
         const equipes = j.equipes || []
         setEtat({ charge: true, equipes })
-        if (equipes.length === 1) setChoisie(equipes[0])
+        // ⚠️ ON REPREND OÙ ON ÉTAIT (Alex, 01/10) : l'adresse, sinon le dernier
+        // commerce de cet appareil (lib/poste-adresse.js).
+        const rouvrir = commerceARouvrir(equipes, { adresse: lirePoste(window.location.search).commerce, appareil: lireDernierCommerce() })
+        if (rouvrir) choisir(rouvrir)
       } catch {
         if (!annule) setEtat({ charge: true, erreur: 'Pas de connexion, réessaie dans un instant.' })
       }
@@ -62,7 +76,7 @@ export default function PageEquipe() {
   } else if (etat.erreur) {
     contenu = <p style={{ margin: 0, color: T.rouge, fontWeight: 700 }}>{etat.erreur}</p>
   } else if (choisie) {
-    contenu = <PosteEquipe equipe={choisie} onChanger={etat.equipes.length > 1 ? () => setChoisie(null) : null}/>
+    contenu = <PosteEquipe equipe={choisie} onChanger={etat.equipes.length > 1 ? changer : null}/>
   } else if (etat.equipes.length === 0) {
     contenu = (
       <p style={{ margin: 0, fontSize: 14.5, color: T.ink, lineHeight: 1.55 }}>
@@ -74,7 +88,7 @@ export default function PageEquipe() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ margin: 0, fontSize: 14.5, color: T.ink }}>Choisis le commerce où tu travailles :</p>
         {etat.equipes.map(e => (
-          <button key={e.commercant_id} type="button" onClick={() => setChoisie(e)}
+          <button key={e.commercant_id} type="button" onClick={() => choisir(e)}
             style={{ textAlign: 'left', border: `1px solid ${T.filet}`, borderRadius: 14, padding: 16, background: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
             <span style={{ display: 'block', fontSize: 16, fontWeight: 800, color: T.ink }}>{e.nom}</span>
             <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>

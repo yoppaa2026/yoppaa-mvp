@@ -66,6 +66,7 @@ import AideInstallation from './AideInstallation'
 import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from './ReglageEtiquettes'
 import { imprimerSiActive } from '@/lib/impression-etiquette'
 import { etiquetteConcernee } from '@/lib/etiquette-commande'
+import { PALETTE_STATUT } from '@/lib/couleurs-statut-commande'
 import { ADMIN_EMAIL } from '@/lib/admin-identite'
 
 const T = {
@@ -79,11 +80,13 @@ const T = {
   ink:     '#1A0840',
   deep:    '#2D0F6B',
   muted:   '#6B7280',
-  gris:    { border: '#9CA3AF', badge: '#6B7280', cardBg: '#F9FAFB' },
-  rouge:   { border: '#DC2626', badge: '#DC2626', cardBg: '#FFF0F0' },
-  orange:  { border: '#EA580C', badge: '#EA580C', cardBg: '#FFF7ED' },
-  vert:    { border: '#10B981', badge: '#10B981', cardBg: '#F0FDF4' },
-  bleu:    { border: '#2563EB', badge: '#2563EB', cardBg: '#EFF6FF' },
+  // Les couleurs des statuts : la palette partagée avec le Poste équipe
+  // (lib/couleurs-statut-commande.js), jamais recopiée.
+  gris:    PALETTE_STATUT.gris,
+  rouge:   PALETTE_STATUT.rouge,
+  orange:  PALETTE_STATUT.orange,
+  vert:    PALETTE_STATUT.vert,
+  bleu:    PALETTE_STATUT.bleu,
   // 🔴 LE TEXTE DE LA COLONNE ÉTAIT DÉLAVÉ (Alex, 08/09 : « revois un peu les
   // contrastes du texte et des onglets, plus de blanc »). Tout y était écrit
   // en violet clair SOUS 60 à 75 % D'OPACITÉ, sur un fond presque noir : à

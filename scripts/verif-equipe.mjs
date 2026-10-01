@@ -788,6 +788,74 @@ const membre = (o = {}) => ({
   v('🔴 un client sans adresse se dit, avec son téléphone', /Pas d’email pour ce client : préviens-le/.test(lire('app/equipe/PosteEquipe.js')))
 }
 
+// ═══ LE POSTE AU QUOTIDIEN (Alex, 01/10, en testant chez MOMO) ═════════════
+// « il faut mettre les couleurs comme dans le DB », « le poste se met à jour
+// uniquement lors d'un refresh manuel », « je dois choisir à nouveau le
+// commerçant […] Très énervant ».
+{
+  const C = await import('../lib/couleurs-statut-commande.js')
+  const P = C.PALETTE_STATUT
+  const c = (x) => C.couleurStatutCommande(x)
+  v('🔴 en attente rouge, en préparation orange, prête verte, remise bleue',
+    c({ statut: 'en_attente' }) === P.rouge && c({ statut: 'en_preparation' }) === P.orange && c({ statut: 'pret' }) === P.vert && c({ statut: 'recupere' }) === P.bleu)
+  v('non retirée grise, annulée rouge, paiement refusé gris',
+    c({ statut: 'non_retire' }) === P.gris && c({ statut: 'annulee_client_refund' }) === P.rouge && c({ statut: 'annulee_paiement_ko' }) === P.gris)
+  v('🔴 une livraison en route est bleue, comme au tableau de bord',
+    c({ statut: 'pret', mode_retrait: 'livraison', statut_livraison: 'en_livraison' }) === P.bleu && c({ statut: 'pret', mode_retrait: 'livraison' }) === P.vert)
+  v('un statut inconnu prend la couleur d’« en attente »', c({ statut: 'bizarre' }) === P.rouge && c(null) === P.rouge)
+
+  const bord = code('app/dashboard/page.js')
+  v('🔴 le tableau de bord lit la MÊME palette (une seule source)',
+    ['gris', 'rouge', 'orange', 'vert', 'bleu'].every(k => new RegExp(`\\b${k}: +PALETTE_STATUT\\.${k},`).test(bord)))
+  const attendu = { en_attente: 'rouge', en_preparation: 'orange', pret: 'vert', recupere: 'bleu', non_retire: 'gris', annulee_client_refund: 'rouge', annulee_paiement_ko: 'gris' }
+  const ecarts = Object.entries(attendu).filter(([s, k]) => C.COULEUR_PAR_STATUT[s] !== P[k]
+    || !new RegExp(`'${s}':\\s+\\{[^}]*couleur: T\\.${k},`).test(bord))
+  v('🔴 chaque statut a la même couleur au tableau de bord et au Poste', ecarts.length === 0, ecarts.map(e => e[0]).join(','))
+
+  const poste = code('app/equipe/PosteEquipe.js')
+  v('🔴 la carte commande du Poste prend la couleur de son statut',
+    /const couleur = couleurStatutCommande\(c\)\s*return \(\s*<div style=\{\{ \.\.\.carte, borderTop: `4px solid \$\{couleur\.border\}` \}\}>/.test(poste)
+    && /background: couleur\.badge, padding: '4px 10px'/.test(poste))
+  v('🔴 la carte livraison aussi, avec son statut écrit', /borderTop: `4px solid \$\{couleurStatutCommande\(l\)\.border\}`/.test(poste) && /background: couleurStatutCommande\(l\)\.badge[\s\S]{0,120}\{libelleStatutCommande\(l\)\}/.test(poste))
+
+  v('🔴 le Poste se rafraîchit toutes les 10 secondes (30, c’était figé)', /const RAFRAICHIR_MS = 10000/.test(poste) && /setInterval\(charger, RAFRAICHIR_MS\)/.test(poste))
+  v('🔴 il dit de quand il date, et se rafraîchit à la demande',
+    /setEtat\(\{ charge: true, \.\.\.j, majA: new Date\(\) \}\)/.test(poste) && /À jour à \{etat\.majA\.toLocaleTimeString\(/.test(poste) && /<button type="button" onClick=\{charger\}/.test(poste))
+
+  // Le commerce, l'onglet et le filtre survivent au rafraîchissement.
+  const A = await import('../lib/poste-adresse.js')
+  const deux = [{ commercant_id: 'momo' }, { commercant_id: 'mathilde' }]
+  v('lire l’adresse', JSON.stringify(A.lirePoste('?commerce=momo&onglet=livraisons&filtre=pret')) === JSON.stringify({ commerce: 'momo', onglet: 'livraisons', filtre: 'pret' }))
+  v('🔴 une seule équipe : elle s’ouvre directement', A.commerceARouvrir([deux[0]])?.commercant_id === 'momo')
+  v('🔴 deux équipes : l’adresse rouvre la bonne', A.commerceARouvrir(deux, { adresse: 'mathilde', appareil: 'momo' })?.commercant_id === 'mathilde')
+  v('🔴 sans adresse : le dernier commerce de l’appareil', A.commerceARouvrir(deux, { appareil: 'momo' })?.commercant_id === 'momo')
+  v('🔴 un commerce dont on n’est pas membre ne s’ouvre pas', A.commerceARouvrir(deux, { adresse: 'autre', appareil: 'inconnu' }) === null && A.commerceARouvrir([], { adresse: 'momo' }) === null)
+  {
+    const avant = globalThis.window
+    const appels = []
+    globalThis.window = {
+      location: { href: 'https://www.yoppaa.app/equipe?commerce=momo&x=1' },
+      history: { state: { s: 1 }, replaceState: (st, t, url) => appels.push(['replace', String(url)]), pushState: (st, t, url) => appels.push(['push', String(url)]) },
+    }
+    try { A.ecrirePoste({ onglet: 'commandes', commerce: null, pirate: 'oui' }) } finally { globalThis.window = avant }
+    const url = appels[0]?.[1] || ''
+    v('🔴 l’adresse se réécrit SANS empiler l’historique (« Précédent » reste utile)', appels.length === 1 && appels[0][0] === 'replace', JSON.stringify(appels))
+    v('elle pose, retire, et ignore ce qui n’est pas à elle', /onglet=commandes/.test(url) && !/commerce=/.test(url) && !/pirate/.test(url) && /x=1/.test(url), url)
+  }
+  const page = code('app/equipe/page.js')
+  v('🔴 l’écran rouvre le commerce de l’adresse, sinon celui de l’appareil',
+    /const rouvrir = commerceARouvrir\(equipes, \{ adresse: lirePoste\(window\.location\.search\)\.commerce, appareil: lireDernierCommerce\(\) \}\)\s*if \(rouvrir\) choisir\(rouvrir\)/.test(page))
+  v('🔴 choisir retient les deux, changer oublie les deux',
+    /function choisir\(e\) \{\s*setChoisie\(e\)\s*retenirDernierCommerce\(e\.commercant_id\)\s*ecrirePoste\(\{ commerce: e\.commercant_id \}\)/.test(page)
+    && /function changer\(\) \{\s*setChoisie\(null\)\s*retenirDernierCommerce\(null\)\s*ecrirePoste\(\{ commerce: null, onglet: null, filtre: null \}\)/.test(page)
+    && /onClick=\{\(\) => choisir\(e\)\}/.test(page) && /onChanger=\{etat\.equipes\.length > 1 \? changer : null\}/.test(page))
+  v('🔴 l’onglet reprend celui de l’adresse, et s’y écrit',
+    /useState\(\(\) => \(typeof window === 'undefined' \? null : lirePoste\(window\.location\.search\)\.onglet\)\)/.test(poste)
+    && /const choisirOnglet = \(cle\) => \{ setOnglet\(cle\); ecrirePoste\(\{ onglet: cle \}\) \}/.test(poste) && /onClick=\{\(\) => choisirOnglet\(o\.cle\)\}/.test(poste))
+  v('🔴 le filtre aussi, et un filtre inconnu retombe sur « À traiter »',
+    /return FILTRES\.some\(f => f\.cle === voulu\) \? voulu : 'en_cours'/.test(poste) && /const setFiltre = \(cle\) => \{ setFiltreEtat\(cle\); ecrirePoste\(\{ filtre: cle \}\) \}/.test(poste))
+}
+
 console.log(`\nÉquipe : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

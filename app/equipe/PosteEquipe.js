@@ -39,14 +39,20 @@ import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from '@/ap
 import { imprimerSiActive } from '@/lib/impression-etiquette'
 import { etiquetteConcernee } from '@/lib/etiquette-commande'
 import { gesteLivraisonPermis } from '@/lib/livraison-geste'
+import { couleurStatutCommande } from '@/lib/couleurs-statut-commande'
+import { lirePoste, ecrirePoste } from '@/lib/poste-adresse'
 
 const T = { fond: '#F8F6FF', ink: '#1A0840', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', panel: '#160636', rouge: '#B91C1C', vert: '#047857', filet: '#E7DEF6' }
 const carte = { background: '#fff', borderRadius: 14, border: `1px solid ${T.filet}`, padding: 14, boxSizing: 'border-box' }
 const puce = (actif) => ({ padding: '8px 14px', borderRadius: 100, border: `1px solid ${actif ? T.panel : T.filet}`, background: actif ? T.panel : '#fff', color: actif ? '#fff' : T.ink, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' })
 
-// Un rechargement toutes les 30 secondes, et au retour sur l'écran : une
+// Un rechargement toutes les 10 secondes, et au retour sur l'écran : une
 // réservation prise en ligne doit apparaître sans que personne n'y pense.
-const RAFRAICHIR_MS = 30000
+// ⚠️ 30 SECONDES, C'ÉTAIT TROP (Alex, 01/10 : « le poste se met à jour
+// uniquement lors d'un refresh manuel »). À côté du tableau de bord, qui suit
+// toutes les 5 secondes, le Poste paraissait figé. L'heure de la dernière mise
+// à jour s'affiche, et un bouton permet de ne pas attendre.
+const RAFRAICHIR_MS = 10000
 
 // Lit la réponse d'une route de l'équipe, et dit toujours quelque chose.
 async function lireReponse(res) {
@@ -131,14 +137,16 @@ function CarteCommande({ c, commerce, gestes = null, enCours = false, etiquettes
   const creneau = c.creneau || c.creneau_livraison || null
   const paiement = etatPaiementCommande(c, { categorie: commerce.categorie })
   const retrait = libelleRetrait({ ...c, commercant: commerce }, creneau, { court: true })
+  // Les couleurs du tableau de bord (Alex, 01/10), depuis la palette partagée.
+  const couleur = couleurStatutCommande(c)
   return (
-    <div style={carte}>
+    <div style={{ ...carte, borderTop: `4px solid ${couleur.border}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 15.5, fontWeight: 800, color: T.ink }}>{referenceCommande(c) || 'Commande'} · {c.client_nom || 'Client'}</p>
           {retrait && <p style={{ margin: '2px 0 0', fontSize: 12.5, color: T.muted }}>{retrait}</p>}
         </div>
-        <span style={{ fontSize: 11.5, fontWeight: 800, color: T.panel, background: T.pale, padding: '4px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>{libelleStatutCommande(c)}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 800, color: '#fff', background: couleur.badge, padding: '4px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>{libelleStatutCommande(c)}</span>
       </div>
       <ul style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
         {(c.commande_articles || []).map((l, i) => {
@@ -179,7 +187,11 @@ function CarteCommande({ c, commerce, gestes = null, enCours = false, etiquettes
 }
 
 function Commandes({ commandes, commerce, aujourdhui, gestes = null, enCours = null }) {
-  const [filtre, setFiltre] = useState('en_cours')
+  const [filtre, setFiltreEtat] = useState(() => {
+    const voulu = typeof window === 'undefined' ? null : lirePoste(window.location.search).filtre
+    return FILTRES.some(f => f.cle === voulu) ? voulu : 'en_cours'
+  })
+  const setFiltre = (cle) => { setFiltreEtat(cle); ecrirePoste({ filtre: cle }) }
   const [etiquettesIci, reglerEtiquettes] = useEtiquettesAppareil()
   const garde = FILTRES.find(f => f.cle === filtre)?.garde || (() => true)
   const visibles = commandes.filter(garde)
@@ -227,10 +239,13 @@ function Livraisons({ livraisons, gestes = null, enCours = null }) {
       {aFaire.length === 0 && <p style={{ margin: '16px 0', color: T.muted, fontSize: 14 }}>Aucune livraison à faire pour le moment.</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {aFaire.map((l, i) => (
-          <div key={l.id} style={carte}>
+          <div key={l.id} style={{ ...carte, borderTop: `4px solid ${couleurStatutCommande(l).border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <p style={{ margin: 0, fontSize: 15.5, fontWeight: 800, color: T.ink }}>{i + 1}. {l.client_nom || 'Client'}</p>
-              {l.creneau && <span style={{ fontSize: 12.5, color: T.muted, whiteSpace: 'nowrap' }}>{String(l.creneau.heure_debut).slice(0, 5)} – {String(l.creneau.heure_fin).slice(0, 5)}</span>}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                {l.creneau && <span style={{ fontSize: 12.5, color: T.muted, whiteSpace: 'nowrap' }}>{String(l.creneau.heure_debut).slice(0, 5)} – {String(l.creneau.heure_fin).slice(0, 5)}</span>}
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#fff', background: couleurStatutCommande(l).badge, padding: '4px 10px', borderRadius: 100, whiteSpace: 'nowrap' }}>{libelleStatutCommande(l)}</span>
+              </span>
             </div>
             {l.adresse && <p style={{ margin: '6px 0 0', fontSize: 14.5 }}><a href={lienCarte(l.adresse)} target="_blank" rel="noopener noreferrer" style={{ color: T.main, fontWeight: 700 }}>{l.adresse}</a></p>}
             {/* Ce qu'il doit donner à la porte (Alex, 29/09), sans aucun prix. */}
@@ -284,7 +299,11 @@ function Livraisons({ livraisons, gestes = null, enCours = null }) {
 // ─── Le poste ────────────────────────────────────────────────────────────────
 export default function PosteEquipe({ equipe, onChanger }) {
   const [etat, setEtat] = useState({ charge: false })
-  const [onglet, setOnglet] = useState(null)
+  // L'onglet reprend celui de l'adresse : un rafraîchissement ne ramène plus
+  // au premier (lib/poste-adresse.js). Ce composant ne naît que dans le
+  // navigateur, après le choix du commerce : `window` existe ici.
+  const [onglet, setOnglet] = useState(() => (typeof window === 'undefined' ? null : lirePoste(window.location.search).onglet))
+  const choisirOnglet = (cle) => { setOnglet(cle); ecrirePoste({ onglet: cle }) }
   const [rdvOuvert, setRdvOuvert] = useState(null)
   // Ce qui travaille (l'identifiant de la ligne), et ce qu'on dit après.
   const [enCours, setEnCours] = useState(null)
@@ -321,7 +340,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
         setEtat({ charge: true, erreur: r.status === 403 ? 'Ton accès à ce commerce est fermé. Vois avec ton responsable.' : (j?.error || 'Poste illisible.') })
         return
       }
-      setEtat({ charge: true, ...j })
+      setEtat({ charge: true, ...j, majA: new Date() })
     } catch {
       setEtat(e => ({ ...e, charge: true, horsLigne: true }))
     }
@@ -533,6 +552,14 @@ export default function PosteEquipe({ equipe, onChanger }) {
         <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: T.ink, letterSpacing: '-0.4px' }}>{equipe.nom}</h1>
         {onChanger && <button type="button" onClick={onChanger} style={{ background: 'none', border: 'none', color: T.main, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Changer de commerce</button>}
       </div>
+      {/* ⚠️ L'ÉCRAN DIT DE QUAND IL DATE : sans ça, personne ne sait s'il voit
+          la dernière commande ou celle d'il y a une minute. */}
+      {etat.majA && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '-8px 0 12px', fontSize: 12, color: T.muted }}>
+          <span>À jour à {etat.majA.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+          <button type="button" onClick={charger} style={{ background: 'none', border: 'none', padding: 0, color: T.main, fontWeight: 700, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>Actualiser</button>
+        </div>
+      )}
 
       {!etat.charge && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><DotsAttente couleur={T.main} label="Chargement du poste"/></div>}
       {etat.erreur && <p style={{ color: T.rouge, fontWeight: 700 }}>{etat.erreur}</p>}
@@ -548,7 +575,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
 
       {onglets.length > 1 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          {onglets.map(o => <button key={o.cle} type="button" onClick={() => setOnglet(o.cle)} style={puce(actif === o.cle)}>{o.label}</button>)}
+          {onglets.map(o => <button key={o.cle} type="button" onClick={() => choisirOnglet(o.cle)} style={puce(actif === o.cle)}>{o.label}</button>)}
         </div>
       )}
 

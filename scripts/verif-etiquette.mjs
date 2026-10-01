@@ -91,9 +91,15 @@ const code = (f) => sansProse(lire(f))
   v('🔴 un sac de LIVRAISON porte sa rue', livre.adresse === 'Rue de Prée 9G, 5640 Mettet', String(livre.adresse))
   const toutLivre = JSON.stringify(livre)
   v('🔴 et toujours ni téléphone, ni email, ni nom complet', !toutLivre.includes('0470') && !toutLivre.includes('@') && !toutLivre.includes('Dupont'), toutLivre)
+  // ⚠️ REDIRIGÉES LE 01/10 (premier essai sur la machine) : l'étiquette a
+  // désormais un MINIMUM, un millimètre de plus que sa largeur, pour partir en
+  // portrait. Les comparaisons se font donc sur une commande assez longue pour
+  // le dépasser ; en dessous, toutes les étiquettes font le minimum.
+  const longue = Array.from({ length: 8 }, (_, i) => ({ article: `1 × Article ${i + 1}`, options: null }))
   v('🔴 la rue a sa place (étiquette plus haute)',
-    hauteurEtiquetteMm({ ...livre, lignes: [] }) === FORMAT_ETIQUETTE.hauteurMm + SUPPLEMENT_ADRESSE_MM
-    && hauteurEtiquetteMm({ ...paye, lignes: [] }) === FORMAT_ETIQUETTE.hauteurMm)
+    hauteurEtiquetteMm({ ...livre, lignes: longue }) === hauteurEtiquetteMm({ ...paye, lignes: longue }) + SUPPLEMENT_ADRESSE_MM)
+  v('🔴 TOUJOURS plus haute que large (sinon Chrome l’imprime en paysage, en travers du ruban)',
+    [{}, { ...paye, lignes: [] }, ETIQUETTE_ESSAI, { ...livre, lignes: [] }].every(e => hauteurEtiquetteMm(e) > FORMAT_ETIQUETTE.largeurMm))
 
   // Le bon de préparation (Alex, 01/10 : l'étiquette sort au démarrage de la prépa).
   const prepa = contenuEtiquette({
@@ -113,10 +119,12 @@ const code = (f) => sansProse(lire(f))
   v('sans nom figé, le catalogue ; sans rien, « retiré du catalogue »',
     lp[1]?.article === '1 × Tiramisu' && lp[2]?.article === '1 × Article retiré du catalogue' && lp[1]?.options === null)
   v('une ligne à zéro ne s’imprime pas', !JSON.stringify(prepa.lignes).includes('Ligne vide'))
+  const huit = Array.from({ length: 8 }, (_, i) => ({ article: `1 × Article ${i + 1}`, options: null }))
   v('🔴 l’étiquette s’allonge avec la commande',
-    hauteurEtiquetteMm(prepa) > hauteurEtiquetteMm({ ...prepa, lignes: [] }) && hauteurEtiquetteMm({ ...prepa, lignes: [] }) === FORMAT_ETIQUETTE.hauteurMm)
-  const court = hauteurEtiquetteMm({ lignes: [{ article: '1 × Pain', options: null }] })
-  const long = hauteurEtiquetteMm({ lignes: [{ article: `1 × ${'Pain aux céréales et graines '.repeat(3)}`, options: null }] })
+    hauteurEtiquetteMm({ ...prepa, lignes: [...huit, ...huit] }) > hauteurEtiquetteMm({ ...prepa, lignes: huit })
+    && hauteurEtiquetteMm({ ...prepa, lignes: huit }) > FORMAT_ETIQUETTE.largeurMm + 1)
+  const court = hauteurEtiquetteMm({ lignes: [...huit, { article: '1 × Pain', options: null }] })
+  const long = hauteurEtiquetteMm({ lignes: [...huit, { article: `1 × ${'Pain aux céréales et graines '.repeat(3)}`, options: null }] })
   v('🔴 un nom trop long pour la ligne compte pour deux (sinon il serait coupé)', long > court, `${court} / ${long}`)
   v('l’étiquette d’essai a sa liste', Array.isArray(ETIQUETTE_ESSAI.lignes) && ETIQUETTE_ESSAI.lignes.length === 2)
 

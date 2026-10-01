@@ -53,6 +53,8 @@ const MUTATIONS = [
   { nom: '🔴 « à payer » ne se détache plus',
     fichier: REGLE, de: "    aEncaisser: paiement?.cle === 'du',", vers: '    aEncaisser: false,' },
 
+  { nom: '🔴 une étiquette courte repart en paysage (plus de minimum)',
+    fichier: REGLE, de: '  return Math.max(format.largeurMm + 1, Math.ceil(h))', vers: '  return Math.ceil(h)' },
   { nom: '🔴 la liste perd ses options',
     fichier: REGLE, de: '      options: libelleOptions(l.options),', vers: '      options: null,' },
   { nom: '🔴 le nom du catalogue passe avant le nom figé',

@@ -141,7 +141,7 @@ const code = (f) => sansProse(lire(f))
 
 // ═══ 2) L'IMPRESSION, SUR UN FAUX NAVIGATEUR ════════════════════════════════
 function fauxNavigateur({ stockage = {}, stockageCasse = false, printCasse = false, sansPrint = false } = {}) {
-  const etat = { impressions: 0, innerHTML: false, ecouteurs: {}, minuteries: [] }
+  const etat = { impressions: 0, innerHTML: false, ecouteurs: {}, ecouteursPage: {}, minuteries: [] }
   const creer = (tag) => ({
     tagName: tag.toUpperCase(), id: '', className: '', textContent: '', enfants: [], parent: null, attributs: {},
     setAttribute(k, val) { this.attributs[k] = val },
@@ -156,7 +156,11 @@ function fauxNavigateur({ stockage = {}, stockageCasse = false, printCasse = fal
     for (const e of el.enfants) { const r = chercher(e, id); if (r) return r }
     return null
   }
-  const document = { head, body, createElement: creer, getElementById: (id) => chercher(head, id) || chercher(body, id) }
+  const document = {
+    head, body, createElement: creer, getElementById: (id) => chercher(head, id) || chercher(body, id),
+    addEventListener: (t, fn) => { (etat.ecouteursPage[t] ||= []).push(fn) },
+    removeEventListener: (t, fn) => { etat.ecouteursPage[t] = (etat.ecouteursPage[t] || []).filter(f => f !== fn) },
+  }
   const memoire = { ...stockage }
   const localStorage = stockageCasse
     ? { getItem() { throw new Error('bloqué') }, setItem() { throw new Error('bloqué') }, removeItem() { throw new Error('bloqué') } }
@@ -168,7 +172,11 @@ function fauxNavigateur({ stockage = {}, stockageCasse = false, printCasse = fal
   }
   if (!sansPrint) window.print = () => { etat.impressions++; if (printCasse) throw new Error('pas d’imprimante') }
   const declencher = (t) => [...(etat.ecouteurs[t] || [])].forEach(fn => fn())
-  return { window, document, etat, memoire, declencher }
+  const toucher = (t = 'pointerdown') => [...(etat.ecouteursPage[t] || [])].forEach(fn => fn())
+  // La fin d'une impression telle qu'un commerçant la vit : la fenêtre se
+  // ferme, puis il touche la page.
+  const finImpression = () => { declencher('afterprint'); toucher() }
+  return { window, document, etat, memoire, declencher, toucher, finImpression }
 }
 const texte = (el) => [el.textContent, ...el.enfants.map(texte)].filter(Boolean).join(' ')
 const vraiTimeout = globalThis.setTimeout
@@ -205,10 +213,23 @@ function dans(nav, travail) {
   v('🔴 le reste de l’écran ne s’imprime pas, et SEULEMENT à l’impression',
     /@media print \{[\s\S]*body > \*:not\(#yoppaa-etiquette\) \{ display: none !important; \}/.test(style?.textContent || '')
     && /^#yoppaa-etiquette \{ display: none; \}/.test(style?.textContent || ''))
+  dans(nav, () => nav.toucher())
+  v('un toucher AVANT la fin de l’impression ne retire rien',
+    !!nav.document.getElementById('yoppaa-etiquette') && !!nav.document.getElementById('yoppaa-etiquette-style'))
   dans(nav, () => nav.declencher('afterprint'))
-  v('🔴 après l’impression, plus rien ne reste (une affichette s’imprimerait en étiquette)',
+  v('🔴 « afterprint » seul ne retire RIEN (sur iPhone il arrive avant l’aperçu : l’écran sortait sur le rouleau)',
+    !!nav.document.getElementById('yoppaa-etiquette') && !!nav.document.getElementById('yoppaa-etiquette-style'))
+  dans(nav, () => nav.toucher())
+  v('🔴 après l’impression, au premier toucher, plus rien ne reste (une affichette s’imprimerait en étiquette)',
     !nav.document.getElementById('yoppaa-etiquette') && !nav.document.getElementById('yoppaa-etiquette-style'))
-  v('et l’écouteur est retiré', (nav.etat.ecouteurs.afterprint || []).length === 0)
+  v('et les écouteurs sont retirés', (nav.etat.ecouteurs.afterprint || []).length === 0
+    && Object.values(nav.etat.ecouteursPage).every(l => l.length === 0))
+}
+{
+  const nav = fauxNavigateur()
+  dans(nav, () => imprimerEtiquette(ETIQUETTE_ESSAI))
+  dans(nav, () => { nav.declencher('afterprint'); nav.toucher('keydown') })
+  v('une touche du clavier (Ctrl+P d’une affichette) nettoie aussi', !nav.document.getElementById('yoppaa-etiquette-style'))
 }
 {
   const nav = fauxNavigateur()
@@ -224,7 +245,7 @@ function dans(nav, travail) {
     style.includes(`size: ${FORMAT_ETIQUETTE.largeurMm}mm ${hauteurEtiquetteMm(sacs[0])}mm`)
     && hauteurEtiquetteMm(sacs[0]) > FORMAT_ETIQUETTE.hauteurMm + SUPPLEMENT_ADRESSE_MM, String(hauteurEtiquetteMm(sacs[0])))
   v('🔴 la Brother coupe entre chaque sac (une page par étiquette)', /\.etiquette \{[^}]*break-after: page;/.test(style) && /\.etiquette:last-child \{ break-after: auto;/.test(style))
-  dans(nav, () => nav.declencher('afterprint'))
+  dans(nav, () => nav.finImpression())
   v('une liste vide n’imprime rien', dans(fauxNavigateur(), () => imprimerEtiquette([])) === false)
 }
 {
@@ -240,7 +261,7 @@ function dans(nav, travail) {
   const zones = nav.document.body.enfants.filter(e => e.id === 'yoppaa-etiquette').length
   const styles = nav.document.head.enfants.filter(e => e.id === 'yoppaa-etiquette-style').length
   v('🔴 deux impressions de suite : une seule étiquette dans la page', zones === 1 && styles === 1, `${zones} zones, ${styles} styles`)
-  dans(nav, () => nav.declencher('afterprint'))
+  dans(nav, () => nav.finImpression())
 }
 {
   const nav = fauxNavigateur({ printCasse: true })
@@ -261,10 +282,10 @@ function dans(nav, travail) {
   const allume = fauxNavigateur({ stockage: { [CLE_ETIQUETTES_APPAREIL]: '1' } })
   v('🔴 activé : la commande prête imprime', dans(allume, () => imprimerSiActive(cc)) === true && allume.etat.impressions === 1)
   v('l’étiquette est celle de la commande', texte(allume.document.getElementById('yoppaa-etiquette')).includes('CC3'))
-  dans(allume, () => allume.declencher('afterprint'))
+  dans(allume, () => allume.finImpression())
   v('🔴 activé, une expédition n’imprime pas', dans(allume, () => imprimerSiActive({ ...cc, mode_retrait: 'expedition' })) === false && allume.etat.impressions === 1)
   v('🔴 activé, une livraison imprime', dans(allume, () => imprimerSiActive({ ...cc, mode_retrait: 'livraison' })) === true && allume.etat.impressions === 2)
-  dans(allume, () => allume.declencher('afterprint'))
+  dans(allume, () => allume.finImpression())
   const casse = fauxNavigateur({ stockageCasse: true })
   let leve = false
   try { dans(casse, () => { ecrireImpressionActive(true); imprimerSiActive(cc) }) } catch { leve = true }

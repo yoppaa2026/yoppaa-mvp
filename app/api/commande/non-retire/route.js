@@ -25,6 +25,7 @@ import { refus } from '@/lib/api-auth'
 import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { createClient } from '@supabase/supabase-js'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
+import { peutMarquerNonRetire } from '@/lib/rappels-retrait'
 
 function admin() {
   return createClient(
@@ -56,6 +57,23 @@ export async function POST(request) {
     // ⚠️ FILTRÉ SUR L'ANCIEN STATUT. C'est cette clause qui rend l'opération
     // idempotente : si la commande n'est plus « prête », aucune ligne ne
     // bascule, et le stock n'est pas rendu une seconde fois.
+    // 🔴 LA RÈGLE D'HEURE, VÉRIFIÉE ICI DEPUIS LE 01/10. Seul l'écran cachait le
+    // bouton avant la fin du créneau : n'importe quel appel la marquait non
+    // retirée à tout moment, rendait son stock et la sortait de la liste, alors
+    // que le client était peut-être en route. La règle est celle de l'écran
+    // (`peutMarquerNonRetire`), à l'heure de Bruxelles, jamais du serveur.
+    const { data: lue, error: errLue } = await supabase.from('commandes')
+      .select('id, statut, date_commande, creneau:creneaux(heure_fin)').eq('id', commandeId).maybeSingle()
+    if (errLue) throw new Error(`lecture de la commande : ${errLue.message}`)
+    if (lue?.statut === 'pret' && !peutMarquerNonRetire(lue, new Date())) {
+      return NextResponse.json({
+        ok: false, code: 'trop_tot',
+        error: lue.creneau?.heure_fin
+          ? 'Trop tôt : le créneau du client n’est pas encore fini.'
+          : 'Trop tôt : le client a encore toute la journée pour venir.',
+      }, { status: 409 })
+    }
+
     const { data: basculee } = await supabase
       .from('commandes')
       .update({ statut: 'non_retire' })

@@ -2162,31 +2162,35 @@ export default function Dashboard() {
     chargerBlocages(commercant.id)
   }
 
+  // ⚠️ PAR LE SERVEUR DEPUIS LE 01/10 (`/api/commande/retour-arriere`), la
+  // même route que le Poste de l'équipe. Il RELIT `retourArriereAutorise` et
+  // n'écrit que si la commande est encore remise : un double clic ne défait
+  // pas deux fois. Les trois colonnes du relevé partent ensemble, et
+  // `paye_en_ligne` n'en fait jamais partie (lib/commande-gestes-serveur.js).
   async function annulerRemise(commande) {
-    const regle = retourArriereAutorise(commande)
-    if (!regle) return
-    const patch = { statut: regle.versStatut }
-    if (regle.effaceStatutLivraison) patch.statut_livraison = null
-    // ⚠️ LES TROIS COLONNES DU RELEVÉ PARTENT ENSEMBLE. En laisser une seule
-    // suffirait à mentir : un montant sans moyen, ou une date sans montant, et
-    // le journal comptable garde une vente qui n'a pas eu lieu.
-    // ⚠️ `paye_en_ligne` N'EST PAS DANS LA LISTE, et ne doit jamais y entrer.
-    if (regle.effaceEncaissement) {
-      patch.encaisse_mode = null
-      patch.encaisse_montant = null
-      patch.encaisse_le = null
+    if (!retourArriereAutorise(commande)) return
+    const res = await postPro('/api/commande/retour-arriere', { commande_id: commande.id })
+    const j = await (res?.json ? res.json().catch(() => null) : Promise.resolve(null))
+    if (!j?.ok) {
+      if (j?.code === 'deja_fait') return  // déjà annulée entre-temps
+      alert(`Erreur : ${j?.error || (res?.sansSession ? 'session expirée, reconnecte-toi' : 'le retour arrière n’a pas pu être enregistré')}`)
+      return
     }
+    setCommandes(prev => prev.map(c => c.id === commande.id ? { ...c, ...j.champs } : c))
+  }
 
-    const { data, error } = await supabase
-      .from('commandes')
-      .update(patch)
-      .eq('id', commande.id)
-      .eq('statut', 'recupere')
-      .select('id')
-    if (error) { alert(`Erreur : ${error.message}`); return }
-    if (!data || data.length === 0) return  // déjà annulée entre-temps
-
-    setCommandes(prev => prev.map(c => c.id === commande.id ? { ...c, ...patch } : c))
+  // ⚠️ L'ENCAISSEMENT NOTÉ APRÈS COUP, PAR LE SERVEUR (01/10) : la même route
+  // que le Poste. Le navigateur n'envoie que le CHOIX ; le montant est
+  // recalculé sur la commande relue en base. Rend `true` si c'est écrit.
+  async function encaisserApresCoup(commandeId, choix) {
+    const res = await postPro('/api/commande/encaisser', { commande_id: commandeId, encaissement: choix })
+    const j = await (res?.json ? res.json().catch(() => null) : Promise.resolve(null))
+    if (!j?.ok) {
+      alert(`Erreur : ${j?.error || (res?.sansSession ? 'session expirée, reconnecte-toi' : 'l’encaissement n’a pas pu être enregistré')}`)
+      return false
+    }
+    setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...j.champs } : c))
+    return true
   }
 
   async function changerStatutLivraison(commandeId, statutLivraison, { champs = null } = {}) {
@@ -2659,6 +2663,12 @@ export default function Dashboard() {
     // Yopper ne recevrait jamais sa notification d'arrivée.
     if (commandeAEncaisser._viaLivraison) {
       await changerStatutLivraison(commandeAEncaisser.id, 'livree', { champs })
+    } else if (commandeAEncaisser.statut === 'recupere') {
+      // ⚠️ DÉJÀ REMISE (« Noter l'encaissement ») : par le serveur, et sans
+      // rejouer la remise. Repasser par `changerStatut` réécrivait le statut et
+      // recréditait la fidélité d'une commande déjà comptée.
+      const ok = await encaisserApresCoup(commandeAEncaisser.id, choix)
+      if (!ok) { setActionEnCours(false); setCommandeAEncaisser(null); return }
     } else {
       await changerStatut(commandeAEncaisser.id, 'recupere', { champs })
     }

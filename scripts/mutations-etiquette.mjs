@@ -126,7 +126,7 @@ const MUTATIONS = [
   { nom: '🔴 Poste : `geste` attend avant de lancer le travail',
     fichier: POSTE, de: '    setEnCours(id); setAvis(null)', vers: '    setEnCours(id); setAvis(null); await Promise.resolve()' },
   { nom: '⚠️ Poste : le rattrapage s affiche sans le droit « commandes »',
-    fichier: POSTE, de: ' etiquettes={etiquettesIci && !!gestes}/>', vers: ' etiquettes={etiquettesIci}/>' },
+    fichier: POSTE, de: ' etiquettes={etiquettesIci && !!gestes} retourPossible=', vers: ' etiquettes={etiquettesIci} retourPossible=' },
   { nom: '🔴 le réglage part allumé',
     fichier: REGLAGE, de: '  const [actif, setActif] = useState(false)', vers: '  const [actif, setActif] = useState(true)' },
   { nom: '🔴 « Imprimer » ignore le nombre de sacs',

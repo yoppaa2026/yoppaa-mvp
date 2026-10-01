@@ -33,6 +33,7 @@ import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import PosteConfirmation, { confirmer } from '@/app/dashboard/PosteConfirmation'
 import { questionRdv, statutDepuisChoix, noShowPossible, questionEncaissement } from '@/lib/confirmation-rdv'
 import { resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
+import { retourArriereAutorise } from '@/lib/tableau-de-bord'
 import { STATUT_SUIVANT, LIBELLE_GESTE_SUIVANT, transitionPermise } from '@/lib/statuts-commande'
 import { peutMarquerNonRetire } from '@/lib/rappels-retrait'
 import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from '@/app/dashboard/ReglageEtiquettes'
@@ -199,7 +200,7 @@ function useFiltre(filtres) {
   return [filtre, setFiltre]
 }
 
-function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enCours = null, etiquettes = false }) {
+function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enCours = null, etiquettes = false, retourPossible = false }) {
   const vers = STATUT_SUIVANT[c.statut]
   const occupe = enCours === c.id
   const avancer = gestes && vers && transitionPermise(c, vers)
@@ -248,6 +249,22 @@ function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enC
           )}
         </div>
       )}
+      {/* ⚠️ APRÈS LA REMISE (01/10), comme au tableau de bord : noter un
+          encaissement oublié ; défaire une remise cliquée par erreur, et
+          seulement dans le filtre « Récupérées » (au comptoir, un bouton
+          « Annuler » à côté du travail courant deviendrait un clic raté). */}
+      {gestes && c.statut === 'recupere' && !c.encaisse_mode && resteAEncaisserCommande(c) > 0 && (
+        <button type="button" disabled={occupe} onClick={() => gestes.encaisser(c)}
+          style={{ ...puce(false), width: '100%', marginTop: 10, padding: '10px 14px', color: '#9A3412', borderColor: '#EA580C55' }}>
+          {occupe ? <DotsAttente label="Enregistrement"/> : 'Noter l’encaissement'}
+        </button>
+      )}
+      {gestes && retourPossible && retourArriereAutorise(c) && (
+        <button type="button" disabled={occupe} onClick={() => gestes.retourArriere(c)}
+          style={{ ...puce(false), width: '100%', marginTop: 8, padding: '10px 14px', color: T.muted }}>
+          ↩ {retourArriereAutorise(c).libelle}
+        </button>
+      )}
       {/* Une livraison prête : les gestes du livreur, sur la même carte, si la
           personne a la case « Livraisons ». */}
       {gestesLivraison && estLivraison(c) && c.statut === 'pret' && (
@@ -287,7 +304,7 @@ function Commandes({ commandes, commerce, aujourdhui, filtres, gestes = null, ge
         <div key={jour} style={{ marginBottom: 16 }}>
           <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1px' }}>{libelleJourPoste(jour, aujourdhui)}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce} gestes={gestes} gestesLivraison={gestesLivraison} enCours={enCours} etiquettes={etiquettesIci && !!gestes}/>)}
+            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce} gestes={gestes} gestesLivraison={gestesLivraison} enCours={enCours} etiquettes={etiquettesIci && !!gestes} retourPossible={filtre === 'recupere'}/>)}
           </div>
         </div>
       ))}
@@ -549,7 +566,37 @@ export default function PosteEquipe({ equipe, onChanger }) {
       else dire(`Noté, mais le client n’a pas pu être prévenu${l.client_telephone ? ` : appelle-le au ${l.client_telephone}` : ''}.`, 'erreur')
     }),
   }
+  // ─── APRÈS LA REMISE (01/10) ─────────────────────────────────────────────
+  // Les mêmes routes que le patron : `/api/commande/encaisser` et
+  // `/api/commande/retour-arriere`, qui relisent la commande et la règle.
+  const gestesApresRemise = {
+    encaisser: (c) => geste(c.id, async () => {
+      const choix = await confirmer(questionEncaissement({ montant: resteAEncaisserCommande(c), nom: c.client_nom }))
+      if (!choix || choix === 'rien') return
+      const j = await lire(await postPro('/api/commande/encaisser', { commande_id: c.id, encaissement: choix }))
+      if (!j.ok) { dire(j.error || 'L’encaissement n’a pas pu être noté.', 'erreur'); return }
+      dire('Encaissement noté')
+    }),
+    retourArriere: (c) => geste(c.id, async () => {
+      const regle = retourArriereAutorise(c)
+      if (!regle) return
+      const choix = await confirmer({
+        titre: `${regle.libelle} ?`,
+        message: regle.aide,
+        details: [referenceCommande(c), c.client_nom].filter(Boolean).join(' · ') || null,
+        actions: [
+          { valeur: 'oui', ton: 'danger', label: `Oui, ${regle.libelle.charAt(0).toLowerCase()}${regle.libelle.slice(1)}` },
+          { valeur: 'rien', ton: 'neutre', label: 'Ne rien faire' },
+        ],
+      })
+      if (choix !== 'oui') return
+      const j = await lire(await postPro('/api/commande/retour-arriere', { commande_id: c.id }))
+      if (!j.ok) { dire(j.error || 'Le retour arrière n’a pas pu être enregistré.', 'erreur'); return }
+      dire('C’est défait : la commande est de nouveau prête.')
+    }),
+  }
   const gestesCommande = {
+    ...gestesApresRemise,
     avancer: (c) => geste(c.id, async () => {
       const vers = STATUT_SUIVANT[c.statut]
       // ⚠️ L'ÉTIQUETTE PART ICI, AVANT LE PREMIER `await` : `geste` appelle ce

@@ -2343,21 +2343,45 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   // si la commande a un CRÉNEAU, pour vérifier que l'heure est passée. Une
   // commande de boutique n'en a pas : le statut restait « Prête » à vie et le
   // stock ne revenait jamais en rayon.
+  // ⚠️ LES INSTANTS PORTENT LEUR FUSEAU DEPUIS LE 01/10 (« +02:00 » = l'heure
+  // d'été de Bruxelles). La règle se lit désormais à l'heure belge, sur le
+  // serveur comme dans le navigateur ; écrits sans fuseau, ces instants
+  // changeaient de sens d'une machine à l'autre (la CI tourne à Greenwich).
   const boutique = { statut: 'pret', date_commande: '2026-08-11' }
   egal('le jour même, le commerçant ne peut pas encore trancher',
-    peutMarquerNonRetire(boutique, new Date('2026-08-11T18:00:00')), false)
+    peutMarquerNonRetire(boutique, new Date('2026-08-11T18:00:00+02:00')), false)
   egal('le lendemain, il le peut',
-    peutMarquerNonRetire(boutique, new Date('2026-08-12T09:00:00')), true)
+    peutMarquerNonRetire(boutique, new Date('2026-08-12T09:00:00+02:00')), true)
   // Le comportement à créneau ne bouge pas.
   const avecCreneau = { statut: 'pret', date_commande: '2026-08-11', creneau: { heure_fin: '11:30:00' } }
   egal('à créneau, avant la fin, non',
-    peutMarquerNonRetire(avecCreneau, new Date('2026-08-11T11:00:00')), false)
+    peutMarquerNonRetire(avecCreneau, new Date('2026-08-11T11:00:00+02:00')), false)
   egal('à créneau, après la fin, oui',
-    peutMarquerNonRetire(avecCreneau, new Date('2026-08-11T12:00:00')), true)
+    peutMarquerNonRetire(avecCreneau, new Date('2026-08-11T12:00:00+02:00')), true)
+  // 🔴 LE PIÈGE DES DEUX HEURES : 20 h 20 à Bruxelles, c'est 18 h 20 à
+  // Greenwich. Un créneau fini à 20 h 15 est passé, quel que soit le fuseau
+  // de la machine qui juge (Vercel tourne en temps universel).
+  // ⚠️ ON SE MET À GREENWICH, COMME VERCEL : sur une machine belge, l'ancienne
+  // règle (heure de la machine) passait ces deux cas par hasard. Si le
+  // changement de fuseau n'a pas pris, on le DIT au lieu d'être vert pour rien.
+  const soir = { statut: 'pret', date_commande: '2026-10-01', creneau: { heure_fin: '20:15' } }
+  const tzAvant = process.env.TZ
+  process.env.TZ = 'UTC'
+  try {
+    egal('le banc a pu se mettre à l’heure de Greenwich (sinon le piège ne prouve rien)',
+      new Date('2026-10-01T18:20:00Z').getHours(), 18)
+    egal('🔴 créneau de 20 h 15, il est 20 h 20 à Bruxelles : oui, même jugé à Greenwich',
+      peutMarquerNonRetire(soir, new Date('2026-10-01T18:20:00Z')), true)
+    egal('🔴 il est 20 h 10 à Bruxelles : non',
+      peutMarquerNonRetire(soir, new Date('2026-10-01T18:10:00Z')), false)
+  } finally {
+    if (tzAvant === undefined) delete process.env.TZ
+    else process.env.TZ = tzAvant
+  }
   egal('une commande pas prête ne se déclare pas non retirée',
-    peutMarquerNonRetire({ ...boutique, statut: 'en_preparation' }, new Date('2026-08-13T09:00:00')), false)
+    peutMarquerNonRetire({ ...boutique, statut: 'en_preparation' }, new Date('2026-08-13T09:00:00+02:00')), false)
   egal('sans date de retrait, on ne devine pas',
-    peutMarquerNonRetire({ statut: 'pret' }, new Date('2026-08-13T09:00:00')), false)
+    peutMarquerNonRetire({ statut: 'pret' }, new Date('2026-08-13T09:00:00+02:00')), false)
 
   // Les textes ne laissent jamais de trou ni de dièse orphelin.
   const t24 = texteRappelRetrait({ commercantNom: 'La Boutique', reference: 'RE1', palier: 24 })

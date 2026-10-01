@@ -170,25 +170,42 @@ const verifie = (nom, cond, detail = '') => {
   const corps = debut === -1 ? '' : src.slice(debut, src.indexOf('\n  }', debut))
   verifie('le corps de l\'annulation se découpe', corps.length > 200)
 
+  // ⚠️ REDIRIGÉES LE 01/10 : l'écriture est passée au SERVEUR
+  // (`/api/commande/retour-arriere` → `lib/commande-gestes-serveur.js`), pour
+  // le patron et l'équipe. Les précautions sont les mêmes ; elles se vérifient
+  // là où elles vivent désormais. L'écran, lui, consulte la règle avant
+  // d'appeler et ne touche à rien si le serveur refuse.
+  const serveurSrc = readFileSync(new URL('../lib/commande-gestes-serveur.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const dRet = serveurSrc.indexOf('export async function retourArriere(')
+  const serveur = dRet === -1 ? '' : serveurSrc.slice(dRet)
+  verifie('le retour arrière du serveur se découpe', serveur.length > 300)
+
   // ⚠️ IL RELIT LA RÈGLE, IL NE LA REFAIT PAS. Une seconde copie finirait par
   // autoriser le retour depuis « non retirée », qui rendrait le stock deux fois.
-  verifie('l\'annulation consulte la règle partagée', /retourArriereAutorise\(commande\)/.test(corps))
-  verifie('et renonce quand elle refuse', /if \(!regle\) return/.test(corps))
+  verifie('l\'annulation consulte la règle partagée',
+    /retourArriereAutorise\(commande\)/.test(corps) && /const regle = retourArriereAutorise\(c\)/.test(serveur))
+  verifie('et renonce quand elle refuse',
+    /if \(!retourArriereAutorise\(commande\)\) return/.test(corps) && /if \(!regle\) return \{ ok: false, code: 'refuse'/.test(serveur))
+  verifie('l\'écran passe par le serveur, plus par une écriture directe',
+    /postPro\('\/api\/commande\/retour-arriere'/.test(corps) && !/\.from\('commandes'\)/.test(corps))
 
   // 🔴 LA PRÉCAUTION QUI COMPTE : l'écriture est filtrée sur l'ancien statut,
   // donc deux taps rapides ou deux onglets ouverts ne peuvent pas la rejouer.
   verifie('🔴 l\'écriture est filtrée sur l\'ancien statut',
-    /\.eq\('statut', 'recupere'\)/.test(corps), 'un double tap pourrait rejouer l\'annulation')
+    /\.update\(patch\)[\s\S]{0,120}\.eq\('statut', 'recupere'\)/.test(serveur), 'un double tap pourrait rejouer l\'annulation')
   verifie('et une écriture sans effet ne touche pas l\'écran',
-    /if \(!data \|\| data\.length === 0\) return/.test(corps))
+    /if \(!ecrit\) return \{ ok: false, code: 'deja_fait'/.test(serveur) && /if \(!j\?\.ok\) \{[\s\S]{0,300}return\s*\}\s*setCommandes/.test(corps))
   // ⚠️ LES TROIS COLONNES DU RELEVÉ PARTENT ENSEMBLE. En laisser une seule
   // suffirait à mentir : un montant sans moyen, ou une date sans montant, et
   // le journal comptable garde une vente qui n'a pas eu lieu.
-  verifie('🔴 le moyen relevé au comptoir est effacé', /patch\.encaisse_mode = null/.test(corps))
-  verifie('🔴 le montant aussi', /patch\.encaisse_montant = null/.test(corps))
-  verifie('🔴 et la date aussi', /patch\.encaisse_le = null/.test(corps))
-  verifie('mais seulement quand la règle le dit', /if \(regle\.effaceEncaissement\) \{/.test(corps),
+  const effacement = (serveur.match(/if \(regle\.effaceEncaissement\) Object\.assign\(patch, \{([^}]*)\}\)/) || [])[1] || ''
+  verifie('🔴 le moyen relevé au comptoir est effacé', /encaisse_mode: null/.test(effacement))
+  verifie('🔴 le montant aussi', /encaisse_montant: null/.test(effacement))
+  verifie('🔴 et la date aussi', /encaisse_le: null/.test(effacement))
+  verifie('mais seulement quand la règle le dit', effacement.length > 0,
     'l\'effacement s\'appliquerait même sans relevé')
+  verifie('🔴 le paiement en ligne n\'est JAMAIS écrit par le serveur non plus',
+    !/paye_en_ligne\s*[:=]/.test(serveur.slice(0, serveur.indexOf('return { ok: true, champs: patch }'))))
   // ⚠️ 🔴 ET JAMAIS LE PAIEMENT EN LIGNE : l'argent est chez Stripe, il ne doit
   // rien à ce clic. Ce champ ne doit pas être ÉCRIT ici.
   //

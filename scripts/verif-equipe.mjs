@@ -1039,6 +1039,111 @@ const membre = (o = {}) => ({
   v('🔴 chaque tampon porte sa clé d’anti-doublon', (comptoir.match(/cle: cleRequete\(\)/g) || []).length === 2)
 }
 
+// ═══ APRÈS LA REMISE, ET « NON RETIRÉE » AU SERVEUR (01/10) ════════════════
+{
+  const fauxBase = (tables, { avantEcriture = null } = {}) => {
+    const trace = { ecritures: 0 }
+    return {
+      trace,
+      from(table) {
+        const filtres = []
+        let maj = null
+        let unique = false
+        const b = {
+          select() { return b },
+          eq(c, x) { filtres.push(l => l[c] === x); return b },
+          is(c, x) { filtres.push(l => (l[c] ?? null) === x); return b },
+          update(m) { maj = m; return b },
+          maybeSingle() { unique = true; return b },
+          then(res, rej) {
+            if (maj && avantEcriture) avantEcriture(tables)
+            const lignes = (tables[table] || []).filter(l => filtres.every(f => f(l)))
+            let data
+            if (maj) { lignes.forEach(l => Object.assign(l, maj)); trace.ecritures += lignes.length; data = lignes.map(l => ({ id: l.id })) }
+            else data = lignes.map(l => ({ ...l }))
+            return Promise.resolve({ data: unique ? (data[0] || null) : data, error: null }).then(res, rej)
+          },
+        }
+        return b
+      },
+    }
+  }
+  const G = await import('../lib/commande-gestes-serveur.js')
+  const QUAND = new Date('2026-10-01T12:00:00Z')
+  const cmd = (x = {}) => ({ id: 'k1', commercant_id: 'c1', statut: 'recupere', statut_livraison: null, mode_retrait: 'retrait', total: 36, paye_en_ligne: false, bon_cadeau_montant: null, fidelite_remise: 10, encaisse_mode: null, ...x })
+  const tables = (x) => ({ commandes: [cmd(x), cmd({ id: 'k2', commercant_id: 'c2' })] })
+  const enc = async (t, choix, opts, commandeId = 'k1') => {
+    const db = fauxBase(t, opts)
+    return { r: await G.encaisserApresCoup(db, { commandeId, commercantId: 'c1', choix, maintenant: QUAND }), db, k1: t.commandes[0] }
+  }
+  {
+    const { r, db, k1 } = await enc(tables(), 'especes')
+    v('🔴 encaissement après coup : le montant RÉEL (récompense déduite), une écriture',
+      r.ok && db.trace.ecritures === 1 && k1.encaisse_mode === 'especes' && k1.encaisse_montant === 26 && k1.statut === 'recupere', JSON.stringify(k1))
+  }
+  v('sans dire comment : refusé', (await enc(tables(), null)).r.code === 'encaissement')
+  v('🔴 déjà noté : refusé, on ne réécrit jamais l’argent', (await enc(tables({ encaisse_mode: 'terminal' }), 'especes')).r.code === 'refuse')
+  v('🔴 une commande pas encore remise passe par la remise, pas ici', (await enc(tables({ statut: 'pret' }), 'especes')).r.code === 'refuse')
+  v('payée en ligne : rien à encaisser', (await enc(tables({ paye_en_ligne: true }), 'especes')).r.code === 'refuse')
+  v('🔴 la commande d’un autre commerce est introuvable', (await enc(tables(), 'especes', {}, 'k2')).r.code === 'introuvable')
+  {
+    const { r, db } = await enc(tables(), 'especes', { avantEcriture: (t) => { t.commandes[0].encaisse_mode = 'terminal' } })
+    v('🔴 noté ailleurs entre-temps : refusé, l’argent n’est pas écrit deux fois', !r.ok && r.code === 'deja_fait' && db.trace.ecritures === 0)
+  }
+
+  const ret = async (t, opts) => {
+    const db = fauxBase(t, opts)
+    return { r: await G.retourArriere(db, { commandeId: 'k1', commercantId: 'c1' }), db, k1: t.commandes[0] }
+  }
+  {
+    const { r, k1 } = await ret(tables({ encaisse_mode: 'especes', encaisse_montant: 26, encaisse_le: 'x' }))
+    v('🔴 retour arrière : la commande redevient prête, le relevé s’efface en entier',
+      r.ok && k1.statut === 'pret' && k1.encaisse_mode === null && k1.encaisse_montant === null && k1.encaisse_le === null, JSON.stringify(k1))
+    v('🔴 et `paye_en_ligne` n’est jamais touché', !('paye_en_ligne' in r.champs))
+  }
+  {
+    const { r, k1 } = await ret(tables({ mode_retrait: 'livraison', statut_livraison: 'livree' }))
+    v('une livraison redevient « pas encore partie »', r.ok && k1.statut === 'pret' && k1.statut_livraison === null)
+  }
+  v('🔴 une expédition ne revient pas en arrière (la règle du tableau de bord)', (await ret(tables({ mode_retrait: 'expedition' }))).r.code === 'refuse')
+  v('une commande pas remise ne revient pas en arrière', (await ret(tables({ statut: 'pret' }))).r.code === 'refuse')
+  {
+    const { r, db } = await ret(tables(), { avantEcriture: (t) => { t.commandes[0].statut = 'pret' } })
+    v('🔴 défaite ailleurs entre-temps : refusée, rien n’est réécrit', !r.ok && r.code === 'deja_fait' && db.trace.ecritures === 0)
+  }
+
+  for (const f of ['app/api/commande/encaisser/route.js', 'app/api/commande/retour-arriere/route.js']) {
+    const r = code(f)
+    v(`🔴 ${f.split('/')[3]} : la case « Commandes », le commerce déduit de la commande`,
+      /gardeLigneEquipe\(request, admin, 'commandes', commande_id, 'commandes'\)/.test(r) && /commercantId: verdict\.commercant\.id/.test(r))
+  }
+  const nonRetire = code('app/api/commande/non-retire/route.js')
+  v('🔴 « non retirée » : le serveur applique la règle d’heure AVANT d’écrire',
+    /if \(lue\?\.statut === 'pret' && !peutMarquerNonRetire\(lue, new Date\(\)\)\) \{/.test(nonRetire)
+    && nonRetire.indexOf('peutMarquerNonRetire(lue') < nonRetire.indexOf(".update({ statut: 'non_retire' })")
+    && /\.select\('id, statut, date_commande, creneau:creneaux\(heure_fin\)'\)/.test(nonRetire))
+  const regle = code('lib/rappels-retrait.js')
+  v('🔴 la règle se lit à l’heure de Bruxelles, plus à celle de la machine',
+    /const fin = brusselsInstant\(/.test(regle) && /const finDuJour = brusselsInstant\(/.test(regle) && !/new Date\(`\$\{commande\.date_commande\}T/.test(regle))
+
+  const bord = code('app/dashboard/page.js')
+  const i = bord.indexOf('async function annulerRemise(commande) {')
+  const annuler = i >= 0 ? bord.slice(i, bord.indexOf('async function encaisserApresCoup(', i)) : ''
+  v('🔴 le patron défait par le serveur, plus depuis son navigateur',
+    annuler.length > 100 && /postPro\('\/api\/commande\/retour-arriere'/.test(annuler) && !/supabase\s*\.from\('commandes'\)/.test(annuler))
+  v('🔴 l’encaissement après coup du patron passe par le serveur, sans rejouer la remise',
+    /\} else if \(commandeAEncaisser\.statut === 'recupere'\) \{[\s\S]{0,400}const ok = await encaisserApresCoup\(commandeAEncaisser\.id, choix\)/.test(bord)
+    && /postPro\('\/api\/commande\/encaisser', \{ commande_id: commandeId, encaissement: choix \}\)/.test(bord))
+
+  const poste = code('app/equipe/PosteEquipe.js')
+  v('🔴 Poste : « Noter l’encaissement » seulement sur une commande remise qui attend son argent',
+    /\{gestes && c\.statut === 'recupere' && !c\.encaisse_mode && resteAEncaisserCommande\(c\) > 0 && \(/.test(poste))
+  v('🔴 Poste : le retour arrière seulement dans le filtre « Récupérées », comme au tableau de bord',
+    /\{gestes && retourPossible && retourArriereAutorise\(c\) && \(/.test(poste) && /retourPossible=\{filtre === 'recupere'\}/.test(poste))
+  v('Poste : les deux gestes passent par les routes du patron',
+    /postPro\('\/api\/commande\/encaisser', \{ commande_id: c\.id, encaissement: choix \}\)/.test(poste) && /postPro\('\/api\/commande\/retour-arriere', \{ commande_id: c\.id \}\)/.test(poste))
+}
+
 console.log(`\nÉquipe : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

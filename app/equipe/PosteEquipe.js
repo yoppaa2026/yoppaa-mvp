@@ -170,7 +170,7 @@ function CarteCommande({ c, commerce, gestes = null, enCours = false, etiquettes
         </div>
       )}
       {/* Le rattrapage et les sacs en plus, sur l'appareil qui imprime seulement. */}
-      {etiquettes && c.statut === 'pret' && etiquetteConcernee(c) && (
+      {etiquettes && ['en_preparation', 'pret'].includes(c.statut) && etiquetteConcernee(c) && (
         <BoutonEtiquettes commande={c} categorie={commerce.categorie}/>
       )}
     </div>
@@ -404,7 +404,8 @@ export default function PosteEquipe({ equipe, onChanger }) {
       // ⚠️ L'ÉTIQUETTE PART ICI, AVANT LE PREMIER `await` : `geste` appelle ce
       // travail sans attendre, donc on est encore dans le toucher, ce que
       // Safari exige pour ouvrir la fenêtre d'impression. Elle ne bloque rien.
-      if (vers === 'pret') imprimerSiActive(c, { categorie })
+      // Au démarrage de la prépa (Alex, 01/10) : c'est aussi le bon de préparation.
+      if (vers === 'en_preparation') imprimerSiActive(c, { categorie })
       let encaissement = null
       if (vers === 'recupere' && !c.encaisse_mode) {
         const reste = resteAEncaisserCommande(c)

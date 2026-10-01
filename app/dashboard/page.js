@@ -849,7 +849,7 @@ function CarteCommande({ commande, numero, categorie = null, etiquettes = false,
         )}
         {/* Le rattrapage et les sacs en plus (ReglageEtiquettes.js), sur
             l'appareil qui imprime seulement. */}
-        {etiquettes && !modeHistorique && commande.statut === 'pret' && etiquetteConcernee(commande) && (
+        {etiquettes && !modeHistorique && ['en_preparation', 'pret'].includes(commande.statut) && etiquetteConcernee(commande) && (
           <BoutonEtiquettes commande={commande} categorie={categorie}/>
         )}
         {/* ⚠️ LA PORTE DE SECOURS, quand la commande est déjà remise sans que
@@ -1976,11 +1976,12 @@ export default function Dashboard() {
     // fenêtre d'impression que pendant le geste : après l'enregistrement, rien
     // ne sortirait, et sans un mot. Elle ne bloque rien : ce qui suit s'exécute
     // que l'impression ait réussi ou non.
-    // ⚠️ SEULEMENT DEPUIS « EN PRÉPARATION ». Remettre en « prête » une commande
-    // notée non retirée par erreur ne réimprime pas le sac, il existe déjà.
-    if (statut === 'pret') {
+    // ⚠️ AU DÉMARRAGE DE LA PRÉPA (Alex, 01/10) : l'étiquette est aussi le bon
+    // de préparation. Une seule fois, depuis « en attente » : rien ne doit la
+    // ressortir à « prête ».
+    if (statut === 'en_preparation') {
       const aImprimer = commandes.find(x => x.id === commandeId)
-      if (aImprimer?.statut === 'en_preparation') imprimerSiActive(aImprimer, { categorie: commercant?.categorie })
+      if (aImprimer?.statut === 'en_attente') imprimerSiActive(aImprimer, { categorie: commercant?.categorie })
     }
     // ⚠️ LE MÊME GESTE QUE SUR UN RENDEZ-VOUS, ET POUR LA MÊME RAISON. Une
     // commande payée sur place partait au comptoir sans son moyen : un Click

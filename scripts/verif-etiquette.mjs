@@ -91,7 +91,34 @@ const code = (f) => sansProse(lire(f))
   v('🔴 un sac de LIVRAISON porte sa rue', livre.adresse === 'Rue de Prée 9G, 5640 Mettet', String(livre.adresse))
   const toutLivre = JSON.stringify(livre)
   v('🔴 et toujours ni téléphone, ni email, ni nom complet', !toutLivre.includes('0470') && !toutLivre.includes('@') && !toutLivre.includes('Dupont'), toutLivre)
-  v('🔴 la rue a sa place (étiquette plus haute)', hauteurEtiquetteMm(livre) === FORMAT_ETIQUETTE.hauteurMm + SUPPLEMENT_ADRESSE_MM && hauteurEtiquetteMm(paye) === FORMAT_ETIQUETTE.hauteurMm)
+  v('🔴 la rue a sa place (étiquette plus haute)',
+    hauteurEtiquetteMm({ ...livre, lignes: [] }) === FORMAT_ETIQUETTE.hauteurMm + SUPPLEMENT_ADRESSE_MM
+    && hauteurEtiquetteMm({ ...paye, lignes: [] }) === FORMAT_ETIQUETTE.hauteurMm)
+
+  // Le bon de préparation (Alex, 01/10 : l'étiquette sort au démarrage de la prépa).
+  const prepa = contenuEtiquette({
+    ...base,
+    commande_articles: [
+      { quantite: 2, article_nom: 'Margherita', article: { nom: 'Nouveau nom au catalogue' }, options: [{ groupe_nom: 'Supplément', valeur_nom: 'olives' }] },
+      { quantite: 1, article: { nom: 'Tiramisu' } },
+      { quantite: 1, options: [] },
+      { quantite: 0, article_nom: 'Ligne vide' },
+    ],
+  })
+  // ⚠️ `?.` partout : une liste vide doit faire ROUGIR le banc, pas le planter.
+  const lp = Array.isArray(prepa.lignes) ? prepa.lignes : []
+  v('🔴 l’étiquette liste les articles à préparer', lp.length === 3 && lp[0]?.article === '2 × Margherita', JSON.stringify(prepa.lignes))
+  v('🔴 avec leurs options (ce qui se rate en cuisine)', /Supplément.: olives/.test(lp[0]?.options || ''), String(lp[0]?.options))
+  v('🔴 le nom FIGÉ à la vente passe avant le catalogue', lp.length > 0 && !JSON.stringify(lp).includes('Nouveau nom'))
+  v('sans nom figé, le catalogue ; sans rien, « retiré du catalogue »',
+    lp[1]?.article === '1 × Tiramisu' && lp[2]?.article === '1 × Article retiré du catalogue' && lp[1]?.options === null)
+  v('une ligne à zéro ne s’imprime pas', !JSON.stringify(prepa.lignes).includes('Ligne vide'))
+  v('🔴 l’étiquette s’allonge avec la commande',
+    hauteurEtiquetteMm(prepa) > hauteurEtiquetteMm({ ...prepa, lignes: [] }) && hauteurEtiquetteMm({ ...prepa, lignes: [] }) === FORMAT_ETIQUETTE.hauteurMm)
+  const court = hauteurEtiquetteMm({ lignes: [{ article: '1 × Pain', options: null }] })
+  const long = hauteurEtiquetteMm({ lignes: [{ article: `1 × ${'Pain aux céréales et graines '.repeat(3)}`, options: null }] })
+  v('🔴 un nom trop long pour la ligne compte pour deux (sinon il serait coupé)', long > court, `${court} / ${long}`)
+  v('l’étiquette d’essai a sa liste', Array.isArray(ETIQUETTE_ESSAI.lignes) && ETIQUETTE_ESSAI.lignes.length === 2)
 
   const trois = etiquettesPourSacs(paye, 3)
   v('🔴 trois sacs, trois étiquettes numérotées',
@@ -162,8 +189,11 @@ function dans(nav, travail) {
   const montant = zone && zone.enfants[0]?.enfants.at(-1)?.enfants.at(-1)
   v('« à payer » se détache (fond noir)', montant?.className === 'du', montant?.className)
   v('une étiquette = une page', zone?.enfants.length === 1 && zone.enfants[0].className === 'etiquette')
+  const liste = zone?.enfants[0]?.enfants.find(e => e.className === 'liste')
+  v('🔴 la liste des articles est imprimée', !!liste && texte(liste).includes('2 × Margherita') && texte(liste).includes('1 × Tiramisu'), liste ? texte(liste) : '')
+  v('🔴 et leurs options aussi', !!liste && liste.enfants.some(e => e.className === 'options' && /olives/.test(e.textContent)))
   const style = nav.document.getElementById('yoppaa-etiquette-style')
-  v('🔴 la page prend la taille de l’étiquette', !!style && style.textContent.includes(`@page { size: ${FORMAT_ETIQUETTE.largeurMm}mm ${FORMAT_ETIQUETTE.hauteurMm}mm; margin: 0; }`))
+  v('🔴 la page prend la taille de l’étiquette', !!style && style.textContent.includes(`@page { size: ${FORMAT_ETIQUETTE.largeurMm}mm ${hauteurEtiquetteMm(ETIQUETTE_ESSAI)}mm; margin: 0; }`))
   v('🔴 le reste de l’écran ne s’imprime pas, et SEULEMENT à l’impression',
     /@media print \{[\s\S]*body > \*:not\(#yoppaa-etiquette\) \{ display: none !important; \}/.test(style?.textContent || '')
     && /^#yoppaa-etiquette \{ display: none; \}/.test(style?.textContent || ''))
@@ -182,7 +212,9 @@ function dans(nav, travail) {
   v('🔴 chaque page porte son numéro de sac', pages.map(p => texte(p)).every((t, i) => t.includes(`Sac ${i + 1}/3`)))
   v('🔴 la rue est imprimée', pages.length > 0 && texte(pages[0]).includes('Rue de Prée 9G'))
   const style = nav.document.getElementById('yoppaa-etiquette-style')?.textContent || ''
-  v('🔴 la page grandit pour la rue', style.includes(`size: ${FORMAT_ETIQUETTE.largeurMm}mm ${FORMAT_ETIQUETTE.hauteurMm + SUPPLEMENT_ADRESSE_MM}mm`))
+  v('🔴 la page prend la hauteur de l’étiquette (rue et liste comprises)',
+    style.includes(`size: ${FORMAT_ETIQUETTE.largeurMm}mm ${hauteurEtiquetteMm(sacs[0])}mm`)
+    && hauteurEtiquetteMm(sacs[0]) > FORMAT_ETIQUETTE.hauteurMm + SUPPLEMENT_ADRESSE_MM, String(hauteurEtiquetteMm(sacs[0])))
   v('🔴 la Brother coupe entre chaque sac (une page par étiquette)', /\.etiquette \{[^}]*break-after: page;/.test(style) && /\.etiquette:last-child \{ break-after: auto;/.test(style))
   dans(nav, () => nav.declencher('afterprint'))
   v('une liste vide n’imprime rien', dans(fauxNavigateur(), () => imprimerEtiquette([])) === false)
@@ -250,11 +282,12 @@ const avantPremierAwait = (corps, appel) => {
   v('le passage de statut du tableau de bord a été retrouvé', corps.length > 500, String(corps.length))
   v('🔴 tableau de bord : l’étiquette part AVANT le premier await (sinon Safari n’imprime rien)',
     avantPremierAwait(corps, 'imprimerSiActive(aImprimer, { categorie: commercant?.categorie })'))
-  v('🔴 seulement depuis « en préparation » (une remise en prête ne réimprime pas)',
-    /if \(aImprimer\?\.statut === 'en_preparation'\) imprimerSiActive\(/.test(corps))
+  v('🔴 l’étiquette sort au DÉMARRAGE de la prépa, depuis « en attente » seulement',
+    /if \(statut === 'en_preparation'\) \{\s*const aImprimer = commandes\.find\(x => x\.id === commandeId\)\s*if \(aImprimer\?\.statut === 'en_attente'\) imprimerSiActive\(/.test(corps))
+  v('🔴 et UNE seule fois : plus rien à « prête »', (corps.match(/imprimerSiActive\(/g) || []).length === 1)
   v('🔴 le bouton appelle ce passage sans rien attendre avant',
     /onClick=\{\(\) => onChangerStatut\(commande\.id, statut\.next\)\}/.test(bord) && /onChangerStatut=\{changerStatut\}/.test(bord))
-  v('le rattrapage existe sur la carte', /\{etiquettes && !modeHistorique && commande\.statut === 'pret' && etiquetteConcernee\(commande\) && \(\s*<BoutonEtiquettes commande=\{commande\} categorie=\{categorie\}\/>/.test(bord))
+  v('🔴 le rattrapage existe sur la carte, DÈS la préparation', /\{etiquettes && !modeHistorique && \['en_preparation', 'pret'\]\.includes\(commande\.statut\) && etiquetteConcernee\(commande\) && \(\s*<BoutonEtiquettes commande=\{commande\} categorie=\{categorie\}\/>/.test(bord))
   v('🔴 le réglage est aussi sur l’écran des livraisons',
     /\{!modeHistorique && \(\s*<ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\}\/>/.test(bord) && /etiquettes=\{etiquettesIci\}/.test(bord))
 
@@ -262,12 +295,14 @@ const avantPremierAwait = (corps, appel) => {
   const j = poste.indexOf('avancer: (c) => geste(c.id, async () => {')
   const avancer = j >= 0 ? poste.slice(j, poste.indexOf('nonRetire:', j)) : ''
   v('le geste « avancer » du Poste a été retrouvé', avancer.length > 200, String(avancer.length))
-  v('🔴 Poste : l’étiquette part AVANT le premier await', avantPremierAwait(avancer, "if (vers === 'pret') imprimerSiActive(c, { categorie })"))
+  v('🔴 Poste : l’étiquette part AVANT le premier await, au démarrage de la prépa',
+    avantPremierAwait(avancer, "if (vers === 'en_preparation') imprimerSiActive(c, { categorie })"))
+  v('🔴 Poste : une seule fois', (avancer.match(/imprimerSiActive\(/g) || []).length === 1)
   const k = poste.indexOf('async function geste(id, travail) {')
   const geste = k >= 0 ? poste.slice(k, poste.indexOf('}', poste.indexOf('await travail()', k))) : ''
   v('🔴 et `geste` lance le travail sans rien attendre avant',
     /await travail\(\)/.test(geste) && geste.indexOf('await ') === geste.indexOf('await travail()'), geste.slice(0, 200))
-  v('le rattrapage existe sur la carte du Poste', /\{etiquettes && c\.statut === 'pret' && etiquetteConcernee\(c\) && \(\s*<BoutonEtiquettes commande=\{c\} categorie=\{commerce\.categorie\}\/>/.test(poste))
+  v('🔴 le rattrapage existe sur la carte du Poste, dès la préparation', /\{etiquettes && \['en_preparation', 'pret'\]\.includes\(c\.statut\) && etiquetteConcernee\(c\) && \(\s*<BoutonEtiquettes commande=\{c\} categorie=\{commerce\.categorie\}\/>/.test(poste))
   v('🔴 sans le droit « commandes », pas de réglage ni de bouton',
     /\{gestes && <ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\}\/>\}/.test(poste) && /etiquettes=\{etiquettesIci && !!gestes\}/.test(poste))
 

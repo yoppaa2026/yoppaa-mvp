@@ -32,7 +32,7 @@ function IconeImprimante({ couleur }) {
 
 // ⚠️ LE RATTRAPAGE, ET LES SACS EN PLUS (Alex, 01/10 : « coller plusieurs
 // étiquettes s'il y a plusieurs articles »). L'impression ne bloque jamais le
-// passage en « prête » : plus de papier, imprimante éteinte, et la commande
+// changement de statut : plus de papier, imprimante éteinte, et la commande
 // avance quand même. Ce bouton refait les étiquettes sans rien défaire, une
 // par sac, numérotées. Le clic sur « Imprimer » est lui-même le geste que
 // Safari exige : rien n'est attendu avant.
@@ -74,7 +74,7 @@ export default function ReglageEtiquettes({ actif, onChanger }) {
       {ouvert && (
         <div style={{ marginTop: 10 }}>
           <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: T.deep }}>
-            Quand une commande passe en « prête », son étiquette s&rsquo;imprime depuis cet appareil. La fenêtre d&rsquo;impression s&rsquo;ouvre : la première fois, choisis ta Brother, puis touche « Imprimer ». Plusieurs sacs ? Sur la commande prête, choisis leur nombre : chaque étiquette porte « Sac 1/3 », « Sac 2/3 »…
+            Quand tu démarres la préparation d&rsquo;une commande, son étiquette s&rsquo;imprime depuis cet appareil, avec la liste des articles à préparer. La fenêtre d&rsquo;impression s&rsquo;ouvre : la première fois, choisis ta Brother, puis touche « Imprimer ». Plusieurs sacs ? Sur la commande, choisis leur nombre : chaque étiquette porte « Sac 1/3 », « Sac 2/3 »…
           </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
             <button type="button" onClick={() => onChanger(!actif)}

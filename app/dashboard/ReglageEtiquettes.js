@@ -36,7 +36,7 @@ function IconeImprimante({ couleur }) {
 // avance quand même. Ce bouton refait les étiquettes sans rien défaire, une
 // par sac, numérotées. Le clic sur « Imprimer » est lui-même le geste que
 // Safari exige : rien n'est attendu avant.
-export function BoutonEtiquettes({ commande, categorie = null }) {
+export function BoutonEtiquettes({ commande, categorie = null, commerce = null }) {
   const [sacs, setSacs] = useState(1)
   const rond = { width: 30, height: 30, borderRadius: '50%', border: `1px solid ${T.pale}`, background: '#fff', color: T.ink, fontSize: 16, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1, padding: 0 }
   return (
@@ -50,7 +50,7 @@ export function BoutonEtiquettes({ commande, categorie = null }) {
         <button type="button" onClick={() => setSacs(s => Math.min(SACS_MAX, s + 1))} disabled={sacs >= SACS_MAX}
           aria-label="Un sac de plus" style={rond}>+</button>
       </div>
-      <button type="button" onClick={() => imprimerEtiquette(etiquettesPourSacs(contenuEtiquette(commande, { categorie }), sacs))}
+      <button type="button" onClick={() => imprimerEtiquette(etiquettesPourSacs(contenuEtiquette(commande, { categorie, commerce }), sacs))}
         style={{ flex: 1, minWidth: 150, padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.ink, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
         <IconeImprimante couleur={T.ink}/>
         {sacs > 1 ? `Imprimer ${sacs} étiquettes` : 'Imprimer l’étiquette'}
@@ -59,7 +59,9 @@ export function BoutonEtiquettes({ commande, categorie = null }) {
   )
 }
 
-export default function ReglageEtiquettes({ actif, onChanger }) {
+// `commerce` : son nom, imprimé en pied de l'étiquette d'essai comme sur les
+// vraies, pour régler la machine sur ce qui sortira vraiment.
+export default function ReglageEtiquettes({ actif, onChanger, commerce = null }) {
   const [ouvert, setOuvert] = useState(false)
   return (
     <div style={{ background: '#fff', border: `1px solid ${T.pale}`, borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
@@ -81,7 +83,7 @@ export default function ReglageEtiquettes({ actif, onChanger }) {
               style={{ padding: '8px 14px', borderRadius: 100, border: 'none', background: actif ? '#fff' : T.main, color: actif ? T.ink : '#fff', boxShadow: actif ? `inset 0 0 0 1px ${T.pale}` : 'none', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
               {actif ? 'Ne plus imprimer ici' : 'Imprimer depuis cet appareil'}
             </button>
-            <button type="button" onClick={() => imprimerEtiquette(ETIQUETTE_ESSAI)}
+            <button type="button" onClick={() => imprimerEtiquette({ ...ETIQUETTE_ESSAI, commerce: commerce || null })}
               style={{ padding: '8px 14px', borderRadius: 100, border: `1px solid ${T.pale}`, background: '#fff', color: T.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               Imprimer une étiquette d&rsquo;essai
             </button>

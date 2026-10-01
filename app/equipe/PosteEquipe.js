@@ -272,7 +272,7 @@ function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enC
       )}
       {/* Le rattrapage et les sacs en plus, sur l'appareil qui imprime seulement. */}
       {etiquettes && ['en_preparation', 'pret'].includes(c.statut) && etiquetteConcernee(c) && (
-        <BoutonEtiquettes commande={c} categorie={commerce.categorie}/>
+        <BoutonEtiquettes commande={c} categorie={commerce.categorie} commerce={commerce.nom}/>
       )}
     </div>
   )
@@ -298,7 +298,7 @@ function Commandes({ commandes, commerce, aujourdhui, filtres, gestes = null, ge
   return (
     <div>
       <PastillesFiltres filtres={filtres} liste={commandes} filtre={filtre} onChoisir={setFiltre}/>
-      {gestes && <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes}/>}
+      {gestes && <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commerce.nom}/>}
       {parJour.length === 0 && <p style={{ margin: '16px 0', color: T.muted, fontSize: 14 }}>Rien ici pour le moment.</p>}
       {parJour.map(([jour, liste]) => (
         <div key={jour} style={{ marginBottom: 16 }}>
@@ -603,7 +603,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
       // travail sans attendre, donc on est encore dans le toucher, ce que
       // Safari exige pour ouvrir la fenêtre d'impression. Elle ne bloque rien.
       // Au démarrage de la prépa (Alex, 01/10) : c'est aussi le bon de préparation.
-      if (vers === 'en_preparation') imprimerSiActive(c, { categorie })
+      if (vers === 'en_preparation') imprimerSiActive(c, { categorie, commerce: etat.commerce?.nom })
       let encaissement = null
       if (vers === 'recupere' && !c.encaisse_mode) {
         const reste = resteAEncaisserCommande(c)

@@ -505,7 +505,7 @@ const ACTIONS_RDV_LABEL = {
 // version y ecrivait `commercant?.categorie` : une variable inexistante, donc
 // un ecran blanc au rendu. Attrape par `verif:undef`, pas par le lint
 // principal, ou la regle `no-undef` est eteinte.
-function CarteCommande({ commande, numero, categorie = null, etiquettes = false, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, filtreCourant, modeHistorique = false }) {
+function CarteCommande({ commande, numero, categorie = null, commerceNom = null, etiquettes = false, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, filtreCourant, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const estLivraison = commande.mode_retrait === 'livraison'
@@ -855,7 +855,7 @@ function CarteCommande({ commande, numero, categorie = null, etiquettes = false,
         {/* Le rattrapage et les sacs en plus (ReglageEtiquettes.js), sur
             l'appareil qui imprime seulement. */}
         {etiquettes && !modeHistorique && ['en_preparation', 'pret'].includes(commande.statut) && etiquetteConcernee(commande) && (
-          <BoutonEtiquettes commande={commande} categorie={categorie}/>
+          <BoutonEtiquettes commande={commande} categorie={categorie} commerce={commerceNom}/>
         )}
         {/* ⚠️ LA PORTE DE SECOURS, quand la commande est déjà remise sans que
             l'encaissement ait été noté : les 66 commandes antérieures à ce
@@ -2004,7 +2004,7 @@ export default function Dashboard() {
     // ressortir à « prête ».
     if (statut === 'en_preparation') {
       const aImprimer = commandes.find(x => x.id === commandeId)
-      if (aImprimer?.statut === 'en_attente') imprimerSiActive(aImprimer, { categorie: commercant?.categorie })
+      if (aImprimer?.statut === 'en_attente') imprimerSiActive(aImprimer, { categorie: commercant?.categorie, commerce: commercant?.nom })
     }
     // ⚠️ LE MÊME GESTE QUE SUR UN RENDEZ-VOUS, ET POUR LA MÊME RAISON. Une
     // commande payée sur place partait au comptoir sans son moyen : un Click
@@ -3996,7 +3996,7 @@ export default function Dashboard() {
                 {/* Retraits ET livraisons (Alex, 01/10) : rien à régler dans
                     l'historique seulement. */}
                 {!modeHistorique && (
-                  <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes}/>
+                  <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom}/>
                 )}
                 {loading && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem', gap: 10 }}>
@@ -4024,6 +4024,7 @@ export default function Dashboard() {
                         commande={commande}
                         numero={getNumeroJour(commandes, commande.id)}
                         categorie={commercant?.categorie}
+                        commerceNom={commercant?.nom}
                         etiquettes={etiquettesIci}
                         onChangerStatut={changerStatut}
                         onLivraisonStatut={changerStatutLivraison}

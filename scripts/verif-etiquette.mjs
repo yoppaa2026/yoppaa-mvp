@@ -20,7 +20,9 @@ import { sansProse } from './lire-code.mjs'
 import {
   FORMAT_ETIQUETTE, etiquetteConcernee, nomEtiquette, quandEtiquette, articlesEtiquette,
   contenuEtiquette, ETIQUETTE_ESSAI, hauteurEtiquetteMm, etiquettesPourSacs, SACS_MAX, SUPPLEMENT_ADRESSE_MM,
+  PIED_ETIQUETTE, LISTE_ARTICLES,
 } from '../lib/etiquette-commande.js'
+import { pointsLogo } from '../lib/logo.js'
 import {
   CLE_ETIQUETTES_APPAREIL, lireImpressionActive, ecrireImpressionActive, feuilleEtiquette,
   imprimerEtiquette, imprimerSiActive,
@@ -157,7 +159,7 @@ function fauxNavigateur({ stockage = {}, stockageCasse = false, printCasse = fal
     return null
   }
   const document = {
-    head, body, createElement: creer, getElementById: (id) => chercher(head, id) || chercher(body, id),
+    head, body, createElement: creer, createElementNS: (_ns, tag) => creer(tag), getElementById: (id) => chercher(head, id) || chercher(body, id),
     addEventListener: (t, fn) => { (etat.ecouteursPage[t] ||= []).push(fn) },
     removeEventListener: (t, fn) => { etat.ecouteursPage[t] = (etat.ecouteursPage[t] || []).filter(f => f !== fn) },
   }
@@ -202,7 +204,7 @@ function dans(nav, travail) {
   v('elle porte la référence et le paiement', zone && texte(zone).includes('ESSAI') && texte(zone).includes('À payer 12,50 €'), zone ? texte(zone) : '')
   v('🔴 le nom du client reste du TEXTE, jamais du HTML',
     !nav.etat.innerHTML && zone && texte(zone).includes('<img src=x onerror=alert(1)>'))
-  const montant = zone && zone.enfants[0]?.enfants.at(-1)?.enfants.at(-1)
+  const montant = zone && zone.enfants[0]?.enfants.find(e => e.className === 'bas')?.enfants.at(-1)
   v('« à payer » se détache (fond noir)', montant?.className === 'du', montant?.className)
   v('une étiquette = une page', zone?.enfants.length === 1 && zone.enfants[0].className === 'etiquette')
   const liste = zone?.enfants[0]?.enfants.find(e => e.className === 'liste')
@@ -230,6 +232,52 @@ function dans(nav, travail) {
   dans(nav, () => imprimerEtiquette(ETIQUETTE_ESSAI))
   dans(nav, () => { nav.declencher('afterprint'); nav.toucher('keydown') })
   v('une touche du clavier (Ctrl+P d’une affichette) nettoie aussi', !nav.document.getElementById('yoppaa-etiquette-style'))
+}
+{
+  // Le pied (Alex, 01/10) : le commerce, puis yoppaa en signature.
+  const avec = contenuEtiquette({ mode_retrait: 'retrait', numero_commande: 2, numero_prefixe: 'CC', client_nom: 'Léa Martin', total: 10, paye_en_ligne: true }, { commerce: '  Chez Momo ' })
+  v('🔴 le contenu porte le nom du commerce', avec.commerce === 'Chez Momo', String(avec.commerce))
+  v('sans nom, pas de commerce inventé', contenuEtiquette({ mode_retrait: 'retrait' }).commerce === null && contenuEtiquette({ mode_retrait: 'retrait' }, { commerce: '  ' }).commerce === null)
+  const sansListe = { lignes: [] }
+  const base = FORMAT_ETIQUETTE.hauteurMm + PIED_ETIQUETTE.hauteurMm
+  v('🔴 la hauteur compte le pied', hauteurEtiquetteMm({ ...sansListe, lignes: Array.from({ length: 8 }, () => ({ article: '1 × Pain', options: null })) })
+    === Math.max(FORMAT_ETIQUETTE.largeurMm + 1, Math.ceil(base + LISTE_ARTICLES.margeMm + 8 * LISTE_ARTICLES.mmParLigne)))
+
+  const nav = fauxNavigateur()
+  dans(nav, () => imprimerEtiquette(etiquettesPourSacs({ ...ETIQUETTE_ESSAI, commerce: 'Chez Momo' }, 2)))
+  const pages = nav.document.getElementById('yoppaa-etiquette')?.enfants || []
+  const pieds = pages.map(p => p.enfants.at(-1))
+  v('🔴 chaque étiquette finit par le pied', pages.length === 2 && pieds.every(p => p?.className === 'pied'), pieds.map(p => p?.className).join(','))
+  const pied = pieds[0]
+  v('🔴 le commerce d’abord, à gauche', pied?.enfants[0]?.className === 'commerce' && pied.enfants[0].textContent === 'Chez Momo')
+  const logo = pied?.enfants[1]
+  v('🔴 puis le logo yoppaa, en minuscules', logo?.className === 'logo' && logo.enfants[0]?.className === 'marque' && logo.enfants[0].textContent === 'yoppaa')
+  const svg = logo?.enfants[1]
+  const points = svg?.enfants || []
+  const attendus = pointsLogo(PIED_ETIQUETTE.corpsLogoMm)
+  v('🔴 les cinq points, dessinés (jamais une image à charger)', svg?.tagName === 'SVG' && points.length === 5 && points.every(c => c.tagName === 'CIRCLE'))
+  v('🔴 en NOIR : la Brother n’imprime que le noir', points.every(c => c.attributs.fill === '#000'))
+  v('🔴 aux mesures de lib/logo.js (petits points, sourire)',
+    points.every((c, i) => Math.abs(Number(c.attributs.r) * 2 - attendus[i].diametre) < 0.002
+      && Math.abs(Number(c.attributs.cy) - (attendus[i].decalage + attendus[i].diametre / 2)) < 0.002),
+    points.map(c => `${c.attributs.r}/${c.attributs.cy}`).join(' '))
+  v('les points ne se chevauchent pas', points.every((c, i) => i === 0
+    || Number(c.attributs.cx) - Number(c.attributs.r) > Number(points[i - 1].attributs.cx) + Number(points[i - 1].attributs.r)))
+  const style = nav.document.getElementById('yoppaa-etiquette-style')?.textContent || ''
+  v('🔴 le wordmark au corps du pied, en Jakarta 800', style.includes(`.marque { font-family: var(--font-jakarta)`) && style.includes(`font-size: ${PIED_ETIQUETTE.corpsLogoMm}mm; font-weight: 800;`))
+  v('un nom de commerce trop long se coupe proprement', /\.commerce \{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/.test(style))
+  dans(nav, () => nav.finImpression())
+
+  const seul = fauxNavigateur()
+  dans(seul, () => imprimerEtiquette(ETIQUETTE_ESSAI))
+  const piedSeul = seul.document.getElementById('yoppaa-etiquette')?.enfants[0]?.enfants.at(-1)
+  v('sans commerce, le logo signe seul', piedSeul?.className === 'pied' && piedSeul.enfants[0].textContent === '' && piedSeul.enfants[1]?.className === 'logo')
+  dans(seul, () => seul.finImpression())
+
+  const allume = fauxNavigateur({ stockage: { [CLE_ETIQUETTES_APPAREIL]: '1' } })
+  dans(allume, () => imprimerSiActive({ mode_retrait: 'retrait', numero_commande: 4, numero_prefixe: 'CC', client_nom: 'Léa', total: 5, paye_en_ligne: true }, { commerce: 'Chez Momo' }))
+  v('🔴 l’impression automatique porte aussi le commerce', texte(allume.document.getElementById('yoppaa-etiquette')).includes('Chez Momo'))
+  dans(allume, () => allume.finImpression())
 }
 {
   const nav = fauxNavigateur()
@@ -310,35 +358,38 @@ const avantPremierAwait = (corps, appel) => {
   const corps = i >= 0 ? bord.slice(i, bord.indexOf('async function signalerEnvoi(', i)) : ''
   v('le passage de statut du tableau de bord a été retrouvé', corps.length > 500, String(corps.length))
   v('🔴 tableau de bord : l’étiquette part AVANT le premier await (sinon Safari n’imprime rien)',
-    avantPremierAwait(corps, 'imprimerSiActive(aImprimer, { categorie: commercant?.categorie })'))
+    avantPremierAwait(corps, 'imprimerSiActive(aImprimer, { categorie: commercant?.categorie, commerce: commercant?.nom })'))
   v('🔴 l’étiquette sort au DÉMARRAGE de la prépa, depuis « en attente » seulement',
     /if \(statut === 'en_preparation'\) \{\s*const aImprimer = commandes\.find\(x => x\.id === commandeId\)\s*if \(aImprimer\?\.statut === 'en_attente'\) imprimerSiActive\(/.test(corps))
   v('🔴 et UNE seule fois : plus rien à « prête »', (corps.match(/imprimerSiActive\(/g) || []).length === 1)
   v('🔴 le bouton appelle ce passage sans rien attendre avant',
     /onClick=\{\(\) => onChangerStatut\(commande\.id, statut\.next\)\}/.test(bord) && /onChangerStatut=\{changerStatut\}/.test(bord))
-  v('🔴 le rattrapage existe sur la carte, DÈS la préparation', /\{etiquettes && !modeHistorique && \['en_preparation', 'pret'\]\.includes\(commande\.statut\) && etiquetteConcernee\(commande\) && \(\s*<BoutonEtiquettes commande=\{commande\} categorie=\{categorie\}\/>/.test(bord))
+  v('🔴 le rattrapage existe sur la carte, DÈS la préparation', /\{etiquettes && !modeHistorique && \['en_preparation', 'pret'\]\.includes\(commande\.statut\) && etiquetteConcernee\(commande\) && \(\s*<BoutonEtiquettes commande=\{commande\} categorie=\{categorie\} commerce=\{commerceNom\}\/>/.test(bord))
   v('🔴 le réglage est aussi sur l’écran des livraisons',
-    /\{!modeHistorique && \(\s*<ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\}\/>/.test(bord) && /etiquettes=\{etiquettesIci\}/.test(bord))
+    /\{!modeHistorique && \(\s*<ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commercant\?\.nom\}\/>/.test(bord) && /etiquettes=\{etiquettesIci\}/.test(bord))
 
   const poste = code('app/equipe/PosteEquipe.js')
   const j = poste.indexOf('avancer: (c) => geste(c.id, async () => {')
   const avancer = j >= 0 ? poste.slice(j, poste.indexOf('nonRetire:', j)) : ''
   v('le geste « avancer » du Poste a été retrouvé', avancer.length > 200, String(avancer.length))
   v('🔴 Poste : l’étiquette part AVANT le premier await, au démarrage de la prépa',
-    avantPremierAwait(avancer, "if (vers === 'en_preparation') imprimerSiActive(c, { categorie })"))
+    avantPremierAwait(avancer, "if (vers === 'en_preparation') imprimerSiActive(c, { categorie, commerce: etat.commerce?.nom })"))
   v('🔴 Poste : une seule fois', (avancer.match(/imprimerSiActive\(/g) || []).length === 1)
   const k = poste.indexOf('async function geste(id, travail) {')
   const geste = k >= 0 ? poste.slice(k, poste.indexOf('}', poste.indexOf('await travail()', k))) : ''
   v('🔴 et `geste` lance le travail sans rien attendre avant',
     /await travail\(\)/.test(geste) && geste.indexOf('await ') === geste.indexOf('await travail()'), geste.slice(0, 200))
-  v('🔴 le rattrapage existe sur la carte du Poste, dès la préparation', /\{etiquettes && \['en_preparation', 'pret'\]\.includes\(c\.statut\) && etiquetteConcernee\(c\) && \(\s*<BoutonEtiquettes commande=\{c\} categorie=\{commerce\.categorie\}\/>/.test(poste))
+  v('🔴 le rattrapage existe sur la carte du Poste, dès la préparation', /\{etiquettes && \['en_preparation', 'pret'\]\.includes\(c\.statut\) && etiquetteConcernee\(c\) && \(\s*<BoutonEtiquettes commande=\{c\} categorie=\{commerce\.categorie\} commerce=\{commerce\.nom\}\/>/.test(poste))
   v('🔴 sans le droit « commandes », pas de réglage ni de bouton',
-    /\{gestes && <ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\}\/>\}/.test(poste) && /etiquettes=\{etiquettesIci && !!gestes\}/.test(poste))
+    /\{gestes && <ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commerce\.nom\}\/>\}/.test(poste) && /etiquettes=\{etiquettesIci && !!gestes\}/.test(poste))
 
   const reglage = code('app/dashboard/ReglageEtiquettes.js')
   v('🔴 le réglage part éteint, puis lit l’appareil', /const \[actif, setActif\] = useState\(false\)/.test(reglage) && /setActif\(lireImpressionActive\(\)\)/.test(reglage))
   v('🔴 « Imprimer » imprime UNE étiquette PAR SAC, dans le clic',
-    /onClick=\{\(\) => imprimerEtiquette\(etiquettesPourSacs\(contenuEtiquette\(commande, \{ categorie \}\), sacs\)\)\}/.test(reglage))
+    /onClick=\{\(\) => imprimerEtiquette\(etiquettesPourSacs\(contenuEtiquette\(commande, \{ categorie, commerce \}\), sacs\)\)\}/.test(reglage))
+  v('🔴 l’étiquette d’essai porte le nom du commerce, comme les vraies',
+    /onClick=\{\(\) => imprimerEtiquette\(\{ \.\.\.ETIQUETTE_ESSAI, commerce: commerce \|\| null \}\)\}/.test(reglage)
+    && /export default function ReglageEtiquettes\(\{ actif, onChanger, commerce = null \}\)/.test(reglage))
   v('le compteur part d’un sac', /const \[sacs, setSacs\] = useState\(1\)/.test(reglage))
 }
 

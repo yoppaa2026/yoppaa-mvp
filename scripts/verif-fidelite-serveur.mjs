@@ -124,8 +124,13 @@ const egal = (nom, obtenu, attendu) =>
 
   // ⚠️ LA CLÉ DE SERVICE IGNORE RLS : les deux contrôles ci-dessous sont le
   // SEUL rempart de cette route.
-  verifie('🔴 la route vérifie que le commerce lui appartient',
-    /com\.auth_user_id !== user\.id/.test(route))
+  // ⚠️ REDIRIGÉE LE 01/10 (équipe, étape 5) : la route n'est plus réservée au
+  // patron, elle s'ouvre à la case « Comptoir ». La garde exige toujours que
+  // l'appelant ait droit à CE commerce, et que ce soit vérifié AVANT toute
+  // écriture.
+  verifie('🔴 la route vérifie que l’appelant a droit à ce commerce (patron, admin ou case Comptoir), avant toute écriture',
+    /const garde = await gardeEquipe\(request, db, commercant_id, 'comptoir'\)\s*if \(!garde\.ok\) return NextResponse\.json\(\{ ok: false, error: garde\.error \}, \{ status: garde\.status \}\)/.test(route)
+    && route.indexOf("gardeEquipe(request, db, commercant_id, 'comptoir')") < route.indexOf(".from('fidelite_mouvements').insert"))
   verifie('🔴 ET que la carte est bien de CE commerce',
     /\.eq\('id', carte_id\)[\s\S]{0,80}\.eq\('commercant_id', commercant_id\)/.test(route))
   verifie('sans session, elle refuse', /non authentifié/.test(route))

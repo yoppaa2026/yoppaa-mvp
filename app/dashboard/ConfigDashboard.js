@@ -8873,21 +8873,31 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
     return () => surModifications?.(null)
   }, [surModifications, nbModifsBons, savingCfg])
 
+  // ⚠️ LE COMPTOIR PASSE PAR LE SERVEUR DEPUIS LE 01/10 (équipe, étape 5) :
+  // la même route que la case « Comptoir » du Poste. Le débit se faisait ici,
+  // en deux écritures, et deux clics rapprochés débitaient deux fois.
+  async function appelBonComptoir(corps) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return { ok: false, error: 'Session expirée, reconnecte-toi.' }
+    try {
+      const res = await fetch('/api/bons-cadeaux/comptoir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ commercant_id: commercantId, ...corps }),
+      })
+      return (await res.json().catch(() => null)) || { ok: false, error: 'Réponse illisible, réessaie.' }
+    } catch {
+      return { ok: false, error: 'Pas de connexion, réessaie.' }
+    }
+  }
+
   async function chercherBon() {
-    const code = normaliserCodeBon(codeInput)
-    if (!code) { setChercheErr('Format attendu : BC-XXXX-XXXX'); return }
+    if (!normaliserCodeBon(codeInput)) { setChercheErr('Format attendu : BC-XXXX-XXXX'); return }
     setChercheLoading(true); setChercheErr(null); setBon(null)
-    const { data, error } = await supabase
-      .from('bons_cadeaux')
-      .select('id, code, montant_initial, solde, statut, expires_at, beneficiaire_prenom, acheteur_prenom, created_at')
-      .eq('commercant_id', commercantId)
-      .eq('code', code)
-      .maybeSingle()
+    const j = await appelBonComptoir({ action: 'chercher', code: codeInput })
     setChercheLoading(false)
-    if (error) { setChercheErr('Recherche impossible, réessaie.'); return }
-    if (!data || data.statut !== 'actif') { setChercheErr('Aucun bon actif avec ce code chez toi.'); return }
-    if (data.expires_at && new Date(data.expires_at) < new Date()) { setChercheErr(`Ce bon a expiré le ${new Date(data.expires_at).toLocaleDateString('fr-BE')}.`); return }
-    setBon(data)
+    if (!j.ok) { setChercheErr(j.error || 'Recherche impossible, réessaie.'); return }
+    setBon(j.bon)
     setMontantDebit('')
   }
 
@@ -8897,18 +8907,10 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
     if (!(m > 0)) { toast('Indique le montant de l\'achat à déduire', 'error'); return }
     if (m > Number(bon.solde)) { toast(`Le solde du bon est de ${euros(bon.solde)}`, 'error'); return }
     setDebitLoading(true)
-    // Mouvement d'abord (historique), puis solde — même pattern que la fidélité
-    const { error: errMvt } = await supabase
-      .from('bons_cadeaux_mouvements')
-      .insert({ bon_id: bon.id, montant: -m, source: 'comptoir' })
-    if (errMvt) { setDebitLoading(false); toast(`Erreur : ${errMvt.message}`, 'error'); return }
-    const nouveauSolde = Math.max(0, Math.round((Number(bon.solde) - m) * 100) / 100)
-    const { error: errUp } = await supabase
-      .from('bons_cadeaux')
-      .update({ solde: nouveauSolde, updated_at: new Date().toISOString() })
-      .eq('id', bon.id)
+    const j = await appelBonComptoir({ action: 'debiter', bon_id: bon.id, montant: m })
     setDebitLoading(false)
-    if (errUp) { toast(`Erreur : ${errUp.message}`, 'error'); return }
+    if (!j.ok) { toast(j.error || 'Le bon n’a pas pu être débité.', 'error'); return }
+    const nouveauSolde = Number(j.bon.solde)
     setBon(p => ({ ...p, solde: nouveauSolde }))
     setMontantDebit('')
     fetchBons()

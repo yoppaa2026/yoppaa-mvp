@@ -18,7 +18,7 @@ import { CLES_DROITS } from '@/lib/equipe'
 import { jourBruxelles } from '@/lib/timezone'
 import {
   COLONNES_RDV_EQUIPE, COLONNES_CRENEAU_RDV_EQUIPE, COLONNES_PRATICIEN_EQUIPE, COLONNES_COMMANDE_EQUIPE, COLONNES_PRESTATION_SAISIE,
-  COLONNES_COMMERCE_POSTE, fenetres, livraisonPourLeLivreur, livraisonDuJour, trierLivraisons,
+  COLONNES_COMMERCE_POSTE, COLONNES_COMPTOIR_POSTE, fenetres, livraisonPourLeLivreur, livraisonDuJour, trierLivraisons,
 } from '@/lib/equipe-poste'
 import { STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
 
@@ -69,6 +69,15 @@ export async function POST(request) {
         praticiens: verifier('lecture de l’équipe de l’agenda', praticiens),
         prestations: verifier('lecture des prestations', prestations),
       }
+    }
+
+    // Le comptoir (étape 5) : la règle de la carte et l'état des bons, pour
+    // afficher et décider. Les cartes et les bons eux-mêmes se lisent un par
+    // un, au moment du geste (`/api/fidelite/comptoir`, `/api/bons-cadeaux/comptoir`).
+    if (permis.comptoir) {
+      const { data: cfg, error: errCfg } = await admin.from('commercants').select(COLONNES_COMPTOIR_POSTE).eq('id', commercant_id).maybeSingle()
+      if (errCfg) throw new Error(`lecture du comptoir : ${errCfg.message}`)
+      reponse.comptoir = cfg || {}
     }
 
     if (permis.commandes || permis.livraisons) {

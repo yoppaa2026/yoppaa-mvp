@@ -42,6 +42,7 @@ import { gesteLivraisonPermis } from '@/lib/livraison-geste'
 import { couleurStatutCommande } from '@/lib/couleurs-statut-commande'
 import { lirePoste, ecrirePoste } from '@/lib/poste-adresse'
 import { estLivraison, filtresCommandes, filtreValide, commandesDeLaVue, ongletsDuPoste } from '@/lib/poste-vues'
+import PosteComptoir from './PosteComptoir'
 
 // Les filtres du tableau de bord, les mêmes (lib/poste-vues.js).
 const FILTRES_RETRAIT = filtresCommandes('retrait')
@@ -616,7 +617,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
       <PosteConfirmation/>
 
       {etat.charge && !etat.erreur && onglets.length === 0 && (
-        <p style={{ color: T.muted }}>Tes cases ne donnent encore rien à afficher ici. Le comptoir arrive bientôt.</p>
+        <p style={{ color: T.muted }}>Tes cases ne donnent encore rien à afficher ici. Vois avec ton responsable.</p>
       )}
 
       {onglets.length > 1 && (
@@ -679,6 +680,10 @@ export default function PosteEquipe({ equipe, onChanger }) {
             gestesLivraison={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>
         )
         : etat.livraisons && <Livraisons livraisons={etat.livraisons} gestes={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>)}
+      {/* Le comptoir (étape 5) : seulement avec la case, le serveur ne l'envoie qu'à elle. */}
+      {actif === 'comptoir' && etat.comptoir && etat.droits?.comptoir && (
+        <PosteComptoir commercantId={equipe.commercant_id} comptoir={etat.comptoir}/>
+      )}
 
       {rdvOuvert && <DetailRdv rdv={rdvOuvert} commerce={etat.commerce} droits={etat.droits || {}} gestes={etat.droits?.agenda ? gestesRdv : null} enCours={enCours === rdvOuvert.id} onFermer={() => setRdvOuvert(null)}/>}
     </div>

@@ -29,7 +29,7 @@ import { createClient } from '@supabase/supabase-js'
 import { appliquerCredit } from '@/lib/fidelite'
 import { smsRecompenseDebloquee } from '@/lib/fidelite-sms'
 import { creerRecompensesDebloquees } from '@/lib/fidelite-recompense-server'
-import { adminVerifie } from '@/lib/api-auth'
+import { gardeEquipe, journaliserGeste } from '@/lib/equipe-server'
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -76,9 +76,11 @@ export async function POST(request) {
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
-    if (com.auth_user_id !== user.id && !(await adminVerifie(request, user))) {
-      return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
-    }
+    // ⚠️ OUVERTE À LA CASE « COMPTOIR » (équipe, étape 5, 01/10) : le patron et
+    // l'admin vérifié passent exactement comme avant, un membre s'il a la case.
+    // Même route, même calcul : le geste du comptoir ne se recopie pas.
+    const garde = await gardeEquipe(request, db, commercant_id, 'comptoir')
+    if (!garde.ok) return NextResponse.json({ ok: false, error: garde.error }, { status: garde.status })
 
     // ── La carte appartient-elle à CE commerce ? ───────────────────────────
     // ⚠️ SANS CE `.eq('commercant_id')`, un commerçant authentifié pourrait
@@ -95,6 +97,12 @@ export async function POST(request) {
 
     // ═══ SUPPRESSION ═══════════════════════════════════════════════════════
     if (action === 'supprimer') {
+      // ⚠️ SUPPRIMER UNE CARTE RESTE AU PATRON : elle efface ce qu'un client a
+      // gagné en revenant. La case « Comptoir » tamponne et honore, elle ne
+      // détruit pas.
+      if (garde.role === 'membre') {
+        return NextResponse.json({ ok: false, error: 'Seul le responsable peut supprimer une carte.' }, { status: 403 })
+      }
       const { error } = await db.from('fidelite_cartes').delete().eq('id', carte.id)
       if (error) throw new Error(error.message)
       return NextResponse.json({ ok: true, supprimee: true })
@@ -133,6 +141,7 @@ export async function POST(request) {
         .update({ recompenses_disponibles: dispo - 1, updated_at: new Date().toISOString() })
         .eq('id', carte.id).select().single()
       if (errUp) throw new Error(errUp.message)
+      await journaliserGeste(db, garde, { action: 'fidelite_recompense_utilisee', cible_type: 'fidelite_carte', cible_id: carte.id })
       return NextResponse.json({ ok: true, carte: maj })
     }
 
@@ -206,6 +215,10 @@ export async function POST(request) {
         try { sms = await smsRecompenseDebloquee(db, com, maj, debloquees) } catch { /* non bloquant */ }
       }
 
+      await journaliserGeste(db, garde, {
+        action: 'fidelite_credit', cible_type: 'fidelite_carte', cible_id: carte.id,
+        details: { type: estCagnotte ? 'cagnotte' : 'passage', valeur: estCagnotte ? credit.montant : 1, debloquees },
+      })
       return NextResponse.json({ ok: true, carte: maj, debloquees, sms })
     }
 

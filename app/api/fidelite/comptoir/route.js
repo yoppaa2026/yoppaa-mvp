@@ -19,7 +19,7 @@ import { createClient } from '@supabase/supabase-js'
 import { normaliserTelephone } from '@/lib/fidelite'
 import { smsCarteCreee } from '@/lib/fidelite-sms'
 import { verdictForfait } from '@/lib/garde-forfait'
-import { adminVerifie } from '@/lib/api-auth'
+import { gardeEquipe, journaliserGeste } from '@/lib/equipe-server'
 
 export async function POST(request) {
   try {
@@ -55,9 +55,10 @@ export async function POST(request) {
       .eq('id', commercant_id)
       .maybeSingle()
     if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
-    if (com.auth_user_id !== user.id && !(await adminVerifie(request, user))) {
-      return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
-    }
+    // ⚠️ OUVERTE À LA CASE « COMPTOIR » (équipe, étape 5, 01/10) : le patron et
+    // l'admin vérifié passent exactement comme avant, un membre s'il a la case.
+    const garde = await gardeEquipe(request, admin, commercant_id, 'comptoir')
+    if (!garde.ok) return NextResponse.json({ ok: false, error: garde.error }, { status: garde.status })
 
     // Client Yoppaa déjà inscrit avec ce numéro (comparaison chiffre à chiffre
     // via la RPC : les formats 0472..., +32472... et 0472 63 43 25 matchent).
@@ -133,6 +134,7 @@ export async function POST(request) {
       // la garde « a déjà un compte » ne pouvait donc vérifier personne. Le
       // client venait pourtant d'être identifié dix lignes plus haut.
       try { sms = await smsCarteCreee(admin, com, nouvelle, null, client?.id || null) } catch { /* non bloquant */ }
+      await journaliserGeste(admin, garde, { action: 'fidelite_carte_creee', cible_type: 'fidelite_carte', cible_id: nouvelle.id })
       return NextResponse.json({ ok: true, telephone: tel, carte: nouvelle, client, sms })
     }
 

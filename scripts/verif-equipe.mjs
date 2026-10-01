@@ -317,7 +317,9 @@ const membre = (o = {}) => ({
   }
 
   // 🔴 CE QUI NE SORT JAMAIS.
-  const toutes = `${P.COLONNES_RDV_EQUIPE}, ${P.COLONNES_COMMANDE_EQUIPE}, ${P.COLONNES_COMMERCE_POSTE}`
+  // ⚠️ LE COMPTOIR (étape 5, 01/10) ENTRE DANS CE QUI EST VÉRIFIÉ : il lit sur
+  // `commercants`, comme le reste du Poste.
+  const toutes = `${P.COLONNES_RDV_EQUIPE}, ${P.COLONNES_COMMANDE_EQUIPE}, ${P.COLONNES_COMMERCE_POSTE}, ${P.COLONNES_COMPTOIR_POSTE}`
   for (const interdit of ['annulation_token', 'stripe_', 'client_email', 'notes_commercant', 'bons_utilises', 'empreinte_', 'rgpd_', 'email', 'auth_user_id', '*']) {
     v(`🔴 le Poste ne lit jamais « ${interdit} »`, !toutes.includes(interdit))
   }
@@ -919,6 +921,122 @@ const membre = (o = {}) => ({
     && /\{gestesLivraison && estLivraison\(c\) && c\.statut === 'pret' && \(\s*<BoutonsLivraison l=\{pourLeLivreur\(c\)\} gestes=\{gestesLivraison\} enCours=\{enCours\}\/>/.test(poste))
   v('🔴 le livreur seul a les mêmes filtres', /const \[filtre, setFiltre\] = useFiltre\(FILTRES_LIVRAISON\)/.test(poste) && /<PastillesFiltres filtres=\{FILTRES_LIVRAISON\} liste=\{livraisons\}/.test(poste))
   v('🔴 plus de « En préparation » écrit sur une commande nouvelle', !/En préparation : pas encore prête/.test(poste) && /Pas encore prête à partir\./.test(poste))
+}
+
+// ═══ LE COMPTOIR (étape 5, 01/10) ══════════════════════════════════════════
+// « cases comptoir (bon cadeau, tampon fidélité) : OUI » (Alex, 29/09).
+{
+  // Une base en mémoire où `maybeSingle` rend la ligne OU null, écriture comprise.
+  const baseBons = (options = {}) => {
+    const tables = {
+      bons_cadeaux: [
+        { id: 'b1', commercant_id: 'c1', code: 'BC-ABCD-1234', montant_initial: 50, solde: 50, statut: 'actif', expires_at: '2027-12-31T00:00:00Z', beneficiaire_prenom: 'Léa', acheteur_prenom: 'Marc' },
+        { id: 'b2', commercant_id: 'c1', code: 'BC-VIEU-X000', montant_initial: 20, solde: 20, statut: 'actif', expires_at: '2026-01-01T00:00:00Z' },
+        { id: 'b3', commercant_id: 'c2', code: 'BC-AUTR-E000', montant_initial: 30, solde: 30, statut: 'actif', expires_at: null },
+        { id: 'b4', commercant_id: 'c1', code: 'BC-VIDE-0000', montant_initial: 10, solde: 0, statut: 'actif', expires_at: null },
+      ],
+      bons_cadeaux_mouvements: [],
+    }
+    const trace = { ecritures: 0 }
+    const db = {
+      trace, tables,
+      from(table) {
+        const filtres = []
+        let maj = null
+        let ajout = null
+        let unique = false
+        const b = {
+          select() { return b },
+          eq(c, x) { filtres.push(l => String(l[c]) === String(x)); return b },
+          update(m) { maj = m; return b },
+          insert(m) { ajout = m; return b },
+          maybeSingle() { unique = true; return b },
+          then(res, rej) {
+            if (ajout) {
+              if (options.mouvementKO) return Promise.resolve({ data: null, error: { message: 'insert refusé' } }).then(res, rej)
+              tables[table].push({ ...ajout }); trace.ecritures++
+              return Promise.resolve({ data: null, error: null }).then(res, rej)
+            }
+            if (maj && options.avantEcriture && !options._fait) { options._fait = true; options.avantEcriture(tables) }
+            const lignes = (tables[table] || []).filter(l => filtres.every(f => f(l)))
+            let data
+            if (maj) { lignes.forEach(l => Object.assign(l, maj)); trace.ecritures += lignes.length; data = lignes.map(l => ({ id: l.id })) }
+            else data = lignes.map(l => ({ ...l }))
+            return Promise.resolve({ data: unique ? (data[0] || null) : data, error: null }).then(res, rej)
+          },
+        }
+        return b
+      },
+    }
+    return db
+  }
+  const B = await import('../lib/bons-comptoir-serveur.js')
+  const QUAND = new Date('2026-10-01T12:00:00Z')
+  const ch = (db, code, commercantId = 'c1') => B.chercherBonComptoir(db, { commercantId, code, maintenant: QUAND })
+  v('🔴 un code mal formé est refusé', (await ch(baseBons(), 'pas un code')).code === 'format')
+  v('un code tapé en minuscules sans tirets est retrouvé', (await ch(baseBons(), 'bcabcd1234')).bon?.id === 'b1')
+  v('🔴 le bon d’un AUTRE commerce est introuvable', (await ch(baseBons(), 'BC-AUTR-E000')).code === 'introuvable')
+  v('🔴 un bon expiré est refusé', (await ch(baseBons(), 'BC-VIEU-X000')).code === 'expire')
+  v('un bon vide est dit utilisé', (await ch(baseBons(), 'BC-VIDE-0000')).code === 'epuise')
+
+  const deb = (db, montant, bonId = 'b1') => B.debiterBonComptoir(db, { commercantId: 'c1', bonId, montant, maintenant: QUAND })
+  {
+    const db = baseBons()
+    const r = await deb(db, '12,50')
+    const b1 = db.tables.bons_cadeaux.find(b => b.id === 'b1')
+    v('🔴 débit : le solde baisse, une seule fois', r.ok && b1.solde === 37.5 && r.bon.solde === 37.5 && r.debite === 12.5, JSON.stringify(r))
+    v('🔴 et le mouvement est écrit, en négatif, « comptoir »', db.tables.bons_cadeaux_mouvements.length === 1
+      && db.tables.bons_cadeaux_mouvements[0].montant === -12.5 && db.tables.bons_cadeaux_mouvements[0].source === 'comptoir')
+  }
+  {
+    const db = baseBons()
+    v('🔴 plus que le solde : refusé, rien n’est écrit', (await deb(db, 60)).code === 'depasse' && db.trace.ecritures === 0)
+    v('un montant nul ou illisible est refusé', (await deb(db, 0)).code === 'montant' && (await deb(db, 'abc')).code === 'montant')
+    v('🔴 le bon d’un autre commerce ne se débite pas', (await deb(db, 5, 'b3')).code === 'introuvable' && db.trace.ecritures === 0)
+  }
+  {
+    // 🔴 DEUX COMPTOIRS EN MÊME TEMPS : le solde bouge entre la lecture et l'écriture.
+    const db = baseBons({ avantEcriture: (t) => { t.bons_cadeaux[0].solde = 30 } })
+    const r = await deb(db, 20)
+    v('🔴 deux débits simultanés : le second est refusé, aucun mouvement',
+      !r.ok && r.code === 'deja_fait' && db.tables.bons_cadeaux_mouvements.length === 0 && db.tables.bons_cadeaux[0].solde === 30, JSON.stringify(r))
+  }
+  {
+    const db = baseBons({ mouvementKO: true })
+    let leve = false
+    try { await deb(db, 10) } catch { leve = true }
+    v('🔴 un mouvement qui échoue remet le solde (jamais un débit sans trace)', leve && db.tables.bons_cadeaux[0].solde === 50)
+  }
+
+  const route = code('app/api/bons-cadeaux/comptoir/route.js')
+  v('🔴 la route des bons exige la case « Comptoir » (le patron passe toujours)',
+    /gardeEquipe\(request, admin, commercant_id, 'comptoir'\)/.test(route) && /const commercantId = garde\.commercant\.id/.test(route))
+  v('le débit d’un membre va au journal', /action: 'bon_debite'/.test(route))
+  const cfg = code('app/dashboard/ConfigDashboard.js')
+  v('🔴 le patron ne débite plus un bon depuis son navigateur',
+    !/from\('bons_cadeaux_mouvements'\)\s*\.insert/.test(cfg) && /appelBonComptoir\(\{ action: 'debiter', bon_id: bon\.id, montant: m \}\)/.test(cfg))
+
+  for (const f of ['app/api/fidelite/comptoir/route.js', 'app/api/fidelite/mouvement/route.js']) {
+    const r = code(f)
+    v(`🔴 ${f.split('/')[3]} : ouverte à la case « Comptoir », plus réservée au patron`,
+      /gardeEquipe\(request, (?:admin|db), commercant_id, 'comptoir'\)/.test(r) && !/com\.auth_user_id !== user\.id/.test(r))
+  }
+  const mouv = code('app/api/fidelite/mouvement/route.js')
+  v('🔴 supprimer une carte reste au patron', /if \(action === 'supprimer'\) \{\s*if \(garde\.role === 'membre'\) \{\s*return NextResponse\.json\(\{ ok: false, error: 'Seul le responsable peut supprimer une carte\.' \}, \{ status: 403 \}\)/.test(mouv))
+  v('les tampons d’un membre vont au journal', /action: 'fidelite_credit'/.test(mouv) && /action: 'fidelite_recompense_utilisee'/.test(mouv))
+
+  const posteRoute = code('app/api/equipe/poste/route.js')
+  v('🔴 la règle du comptoir n’arrive qu’à la case « Comptoir »',
+    /if \(permis\.comptoir\) \{\s*const \{ data: cfg, error: errCfg \} = await admin\.from\('commercants'\)\.select\(COLONNES_COMPTOIR_POSTE\)/.test(posteRoute))
+  const V = await import('../lib/poste-vues.js')
+  v('l’onglet « Comptoir » paraît avec la case', V.ongletsDuPoste({ comptoir: {} }).map(o => o.label).join(',') === 'Comptoir')
+  const poste = code('app/equipe/PosteEquipe.js')
+  v('🔴 le Poste n’ouvre le comptoir qu’avec la case', /\{actif === 'comptoir' && etat\.comptoir && etat\.droits\?\.comptoir && \(/.test(poste))
+  const comptoir = code('app/equipe/PosteComptoir.js')
+  v('🔴 l’écran du comptoir passe par les routes du patron, et ne supprime rien',
+    /'\/api\/fidelite\/comptoir'/.test(comptoir) && /'\/api\/fidelite\/mouvement'/.test(comptoir) && /'\/api\/bons-cadeaux\/comptoir'/.test(comptoir)
+    && !/supprimer/.test(comptoir) && !/from\('/.test(comptoir))
+  v('🔴 chaque tampon porte sa clé d’anti-doublon', (comptoir.match(/cle: cleRequete\(\)/g) || []).length === 2)
 }
 
 console.log(`\nÉquipe : ${ok} vérifications`)

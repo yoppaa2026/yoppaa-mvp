@@ -252,6 +252,10 @@ const MUTATIONS = [
   // ─── LE POSTE AU QUOTIDIEN (01/10) ───────────────────────────────────────
   { nom: '🔴 « prête » perd son vert',
     fichier: 'lib/couleurs-statut-commande.js', de: '  pret: PALETTE_STATUT.vert,', vers: '  pret: PALETTE_STATUT.orange,' },
+  { nom: '🔴 l annulée redevient rouge (confondue avec « en attente »)',
+    fichier: 'lib/couleurs-statut-commande.js', de: '  annulee_client_refund: PALETTE_STATUT.gris,', vers: '  annulee_client_refund: PALETTE_STATUT.rouge,' },
+  { nom: '🔴 le tableau de bord repeint l annulée en rouge',
+    fichier: 'app/dashboard/page.js', de: "couleur: T.gris,   icon: '✕', next: null, nextLabel: null },", vers: "couleur: T.rouge,   icon: '✕', next: null, nextLabel: null }," },
   { nom: '🔴 une livraison en route n est plus bleue',
     fichier: 'lib/couleurs-statut-commande.js', de: "  if (commande?.mode_retrait === 'livraison' && ['en_livraison', 'livree'].includes(commande.statut_livraison)) {", vers: '  if (false) {' },
   { nom: '🔴 le tableau de bord recopie sa palette',

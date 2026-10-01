@@ -798,8 +798,10 @@ const membre = (o = {}) => ({
   const c = (x) => C.couleurStatutCommande(x)
   v('🔴 en attente rouge, en préparation orange, prête verte, remise bleue',
     c({ statut: 'en_attente' }) === P.rouge && c({ statut: 'en_preparation' }) === P.orange && c({ statut: 'pret' }) === P.vert && c({ statut: 'recupere' }) === P.bleu)
-  v('non retirée grise, annulée rouge, paiement refusé gris',
-    c({ statut: 'non_retire' }) === P.gris && c({ statut: 'annulee_client_refund' }) === P.rouge && c({ statut: 'annulee_paiement_ko' }) === P.gris)
+  v('🔴 tout ce qui est fini sans vente est gris : non retirée, ANNULÉE (plus rouge, Alex l’a confondue avec « en attente »), paiement refusé',
+    c({ statut: 'non_retire' }) === P.gris && c({ statut: 'annulee_client_refund' }) === P.gris && c({ statut: 'annulee_paiement_ko' }) === P.gris)
+  v('🔴 le rouge ne dit plus qu’une chose : à lancer',
+    Object.entries(C.COULEUR_PAR_STATUT).filter(([, k]) => k === P.rouge).map(([s]) => s).join(',') === 'en_attente')
   v('🔴 une livraison en route est bleue, comme au tableau de bord',
     c({ statut: 'pret', mode_retrait: 'livraison', statut_livraison: 'en_livraison' }) === P.bleu && c({ statut: 'pret', mode_retrait: 'livraison' }) === P.vert)
   v('un statut inconnu prend la couleur d’« en attente »', c({ statut: 'bizarre' }) === P.rouge && c(null) === P.rouge)
@@ -807,7 +809,7 @@ const membre = (o = {}) => ({
   const bord = code('app/dashboard/page.js')
   v('🔴 le tableau de bord lit la MÊME palette (une seule source)',
     ['gris', 'rouge', 'orange', 'vert', 'bleu'].every(k => new RegExp(`\\b${k}: +PALETTE_STATUT\\.${k},`).test(bord)))
-  const attendu = { en_attente: 'rouge', en_preparation: 'orange', pret: 'vert', recupere: 'bleu', non_retire: 'gris', annulee_client_refund: 'rouge', annulee_paiement_ko: 'gris' }
+  const attendu = { en_attente: 'rouge', en_preparation: 'orange', pret: 'vert', recupere: 'bleu', non_retire: 'gris', annulee_client_refund: 'gris', annulee_paiement_ko: 'gris' }
   const ecarts = Object.entries(attendu).filter(([s, k]) => C.COULEUR_PAR_STATUT[s] !== P[k]
     || !new RegExp(`'${s}':\\s+\\{[^}]*couleur: T\\.${k},`).test(bord))
   v('🔴 chaque statut a la même couleur au tableau de bord et au Poste', ecarts.length === 0, ecarts.map(e => e[0]).join(','))

@@ -108,7 +108,8 @@ const STATUTS = {
   'pret':                    { label: LIBELLES_STATUT_COMMANDE.pret, couleur: T.vert,   icon: '●', next: 'recupere',        nextLabel: 'Remettre au client' },
   'recupere':                { label: LIBELLES_STATUT_COMMANDE.recupere, couleur: T.bleu,   icon: '🔵', next: null,              nextLabel: null },
   'non_retire':              { label: LIBELLES_STATUT_COMMANDE.non_retire, couleur: T.gris,   icon: '⚫', next: null, nextLabel: null },
-  'annulee_client_refund':   { label: LIBELLES_STATUT_COMMANDE.annulee_client_refund, couleur: T.rouge,  icon: '✕', next: null, nextLabel: null },
+  // Gris, plus rouge (Alex, 01/10) : voir lib/couleurs-statut-commande.js.
+  'annulee_client_refund':   { label: LIBELLES_STATUT_COMMANDE.annulee_client_refund, couleur: T.gris,   icon: '✕', next: null, nextLabel: null },
   'annulee_paiement_ko':     { label: LIBELLES_STATUT_COMMANDE.annulee_paiement_ko, couleur: T.gris,   icon: '⊘', next: null, nextLabel: null },
 }
 

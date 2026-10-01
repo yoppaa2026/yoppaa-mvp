@@ -63,6 +63,9 @@ import EcranValidation from './EcranValidation'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
 import AideInstallation from './AideInstallation'
+import ReglageEtiquettes, { useEtiquettesAppareil } from './ReglageEtiquettes'
+import { imprimerSiActive, imprimerEtiquette } from '@/lib/impression-etiquette'
+import { contenuEtiquette, etiquetteConcernee } from '@/lib/etiquette-commande'
 import { ADMIN_EMAIL } from '@/lib/admin-identite'
 
 const T = {
@@ -497,7 +500,7 @@ const ACTIONS_RDV_LABEL = {
 // version y ecrivait `commercant?.categorie` : une variable inexistante, donc
 // un ecran blanc au rendu. Attrape par `verif:undef`, pas par le lint
 // principal, ou la regle `no-undef` est eteinte.
-function CarteCommande({ commande, numero, categorie = null, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, filtreCourant, modeHistorique = false }) {
+function CarteCommande({ commande, numero, categorie = null, etiquettes = false, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, filtreCourant, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const estLivraison = commande.mode_retrait === 'livraison'
@@ -842,6 +845,16 @@ function CarteCommande({ commande, numero, categorie = null, onChangerStatut, on
             onMouseOver={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'scale(0.99)' }}
             onMouseOut={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1)' }}>
             {statut.nextLabel} →
+          </button>
+        )}
+        {/* ⚠️ LE RATTRAPAGE DE L'ÉTIQUETTE. L'impression ne bloque jamais le
+            passage en « prête » : plus de papier, imprimante éteinte, et la
+            commande avance quand même. Ce bouton refait l'étiquette sans rien
+            défaire. Seulement sur l'appareil qui imprime. */}
+        {etiquettes && !modeHistorique && commande.statut === 'pret' && etiquetteConcernee(commande) && (
+          <button type="button" onClick={() => imprimerEtiquette(contenuEtiquette(commande, { categorie }))}
+            style={{ width: '100%', padding: '0.5rem', background: '#fff', color: T.ink, border: `1.5px solid ${T.pale}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: '0.76rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
+            Imprimer l&rsquo;étiquette
           </button>
         )}
         {/* ⚠️ LA PORTE DE SECOURS, quand la commande est déjà remise sans que
@@ -1232,6 +1245,8 @@ export default function Dashboard() {
   // La commande payée sur place qu'on est en train de remettre : par quel moyen
   // le commerçant vient-il d'être payé ?
   const [commandeAEncaisser, setCommandeAEncaisser] = useState(null)
+  // Cet appareil imprime-t-il les étiquettes ? (lib/impression-etiquette.js)
+  const [etiquettesIci, reglerEtiquettes] = useEtiquettesAppareil()
   const [confirmationCommandeTexte, setConfirmationCommandeTexte] = useState(null)
   // « Voir Dashboard » : l'admin Yoppaa dans le tableau de bord d'un commerçant,
   // pour le support. Lu dans l'ONGLET et confirmé par le serveur (lib/impersonation).
@@ -1962,6 +1977,16 @@ export default function Dashboard() {
   }
 
   async function changerStatut(commandeId, statut, { champs = null } = {}) {
+    // ⚠️ L'ÉTIQUETTE PART ICI, AVANT LE PREMIER `await`. Safari n'ouvre la
+    // fenêtre d'impression que pendant le geste : après l'enregistrement, rien
+    // ne sortirait, et sans un mot. Elle ne bloque rien : ce qui suit s'exécute
+    // que l'impression ait réussi ou non.
+    // ⚠️ SEULEMENT DEPUIS « EN PRÉPARATION ». Remettre en « prête » une commande
+    // notée non retirée par erreur ne réimprime pas le sac, il existe déjà.
+    if (statut === 'pret') {
+      const aImprimer = commandes.find(x => x.id === commandeId)
+      if (aImprimer?.statut === 'en_preparation') imprimerSiActive(aImprimer, { categorie: commercant?.categorie })
+    }
     // ⚠️ LE MÊME GESTE QUE SUR UN RENDEZ-VOUS, ET POUR LA MÊME RAISON. Une
     // commande payée sur place partait au comptoir sans son moyen : un Click
     // and Collect réglé en liquide et un autre au terminal se ressemblaient
@@ -3928,6 +3953,11 @@ export default function Dashboard() {
                     elle{livraisonsSansCreneau.length > 1 ? 's n\'entrent' : ' n\'entre'} dans aucune tournée, à organiser à la main.
                   </p>
                 )}
+                {/* Les étiquettes ne concernent que les retraits : rien à régler
+                    dans la vue des tournées, ni dans l'historique. */}
+                {vueMode !== 'livraison' && !modeHistorique && (
+                  <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes}/>
+                )}
                 {loading && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem', gap: 10 }}>
                     {[0,1,2].map(i => (
@@ -3954,6 +3984,7 @@ export default function Dashboard() {
                         commande={commande}
                         numero={getNumeroJour(commandes, commande.id)}
                         categorie={commercant?.categorie}
+                        etiquettes={etiquettesIci}
                         onChangerStatut={changerStatut}
                         onLivraisonStatut={changerStatutLivraison}
                         onExpedier={setCommandeAExpedier}

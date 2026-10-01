@@ -943,9 +943,15 @@ function sansCommentaires(src) {
     /tu ne perds aucun de tes/.test(encart))
 
   // La comparaison, EXÉCUTÉE. C'est elle qui porte l'urgence.
+  // ⚠️ À UN INSTANT FIXE AVANT L'OUVERTURE, JAMAIS À L'HORLOGE. Lue « aujourd'hui »,
+  // elle a rougi le 01/10 au matin : l'ancienne date d'ouverture était arrivée,
+  // et les deux nombres sont devenus égaux sans que la règle ait changé. C'est
+  // le piège de la date en dur dans un banc, une troisième fois
+  // (reference_banc_date_en_dur).
   const auLancement = joursOffertsAuLancement()
+  const avantOuverture = new Date('2026-08-20T10:00:00+02:00')
   verifier("attendre le lancement coûte vraiment des jours",
-    auLancement < joursOfferts(), `${joursOfferts()} aujourd'hui contre ${auLancement} au lancement`)
+    auLancement < joursOfferts(avantOuverture), `${joursOfferts(avantOuverture)} le 20/08 contre ${auLancement} au lancement`)
   verifier('et même en attendant, le plancher reste tenu',
     auLancement >= ESSAI_JOURS_MINIMUM, `${auLancement} jours`)
 

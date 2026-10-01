@@ -35,6 +35,9 @@ import { questionRdv, statutDepuisChoix, noShowPossible, questionEncaissement } 
 import { resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import { STATUT_SUIVANT, LIBELLE_GESTE_SUIVANT, transitionPermise } from '@/lib/statuts-commande'
 import { peutMarquerNonRetire } from '@/lib/rappels-retrait'
+import ReglageEtiquettes, { useEtiquettesAppareil } from '@/app/dashboard/ReglageEtiquettes'
+import { imprimerSiActive, imprimerEtiquette } from '@/lib/impression-etiquette'
+import { contenuEtiquette, etiquetteConcernee } from '@/lib/etiquette-commande'
 
 const T = { fond: '#F8F6FF', ink: '#1A0840', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', panel: '#160636', rouge: '#B91C1C', vert: '#047857', filet: '#E7DEF6' }
 const carte = { background: '#fff', borderRadius: 14, border: `1px solid ${T.filet}`, padding: 14, boxSizing: 'border-box' }
@@ -120,7 +123,7 @@ const FILTRES = [
   { cle: 'tout', label: 'Tout', garde: () => true },
 ]
 
-function CarteCommande({ c, commerce, gestes = null, enCours = false }) {
+function CarteCommande({ c, commerce, gestes = null, enCours = false, etiquettes = false }) {
   const vers = STATUT_SUIVANT[c.statut]
   const avancer = gestes && vers && transitionPermise(c, vers)
   const nonRetire = gestes && peutMarquerNonRetire(c, new Date())
@@ -166,12 +169,20 @@ function CarteCommande({ c, commerce, gestes = null, enCours = false }) {
           )}
         </div>
       )}
+      {/* Le rattrapage de l'étiquette, sur l'appareil qui imprime seulement. */}
+      {etiquettes && c.statut === 'pret' && etiquetteConcernee(c) && (
+        <button type="button" onClick={() => imprimerEtiquette(contenuEtiquette(c, { categorie: commerce.categorie }))}
+          style={{ ...puce(false), width: '100%', marginTop: 8, padding: '10px 14px' }}>
+          Imprimer l&rsquo;étiquette
+        </button>
+      )}
     </div>
   )
 }
 
 function Commandes({ commandes, commerce, aujourdhui, gestes = null, enCours = null }) {
   const [filtre, setFiltre] = useState('en_cours')
+  const [etiquettesIci, reglerEtiquettes] = useEtiquettesAppareil()
   const garde = FILTRES.find(f => f.cle === filtre)?.garde || (() => true)
   const visibles = commandes.filter(garde)
   const parJour = useMemo(() => {
@@ -192,12 +203,13 @@ function Commandes({ commandes, commerce, aujourdhui, gestes = null, enCours = n
           </button>
         ))}
       </div>
+      {gestes && <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes}/>}
       {parJour.length === 0 && <p style={{ margin: '16px 0', color: T.muted, fontSize: 14 }}>Rien ici pour le moment.</p>}
       {parJour.map(([jour, liste]) => (
         <div key={jour} style={{ marginBottom: 16 }}>
           <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1px' }}>{libelleJourPoste(jour, aujourdhui)}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce} gestes={gestes} enCours={enCours === c.id}/>)}
+            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce} gestes={gestes} enCours={enCours === c.id} etiquettes={etiquettesIci && !!gestes}/>)}
           </div>
         </div>
       ))}
@@ -392,6 +404,10 @@ export default function PosteEquipe({ equipe, onChanger }) {
   const gestesCommande = {
     avancer: (c) => geste(c.id, async () => {
       const vers = STATUT_SUIVANT[c.statut]
+      // ⚠️ L'ÉTIQUETTE PART ICI, AVANT LE PREMIER `await` : `geste` appelle ce
+      // travail sans attendre, donc on est encore dans le toucher, ce que
+      // Safari exige pour ouvrir la fenêtre d'impression. Elle ne bloque rien.
+      if (vers === 'pret') imprimerSiActive(c, { categorie })
       let encaissement = null
       if (vers === 'recupere' && !c.encaisse_mode) {
         const reste = resteAEncaisserCommande(c)

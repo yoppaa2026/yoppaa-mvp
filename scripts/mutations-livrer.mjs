@@ -64,7 +64,7 @@ const MUTATIONS = [
   { nom: '🔴 Poste : « prévenu » affiché même quand rien n est parti',
     fichier: POSTE, de: "      if (j.client_prevenu) dire('Noté : le client est prévenu de vous appeler.')", vers: "      dire('Noté : le client est prévenu de vous appeler.')" },
   { nom: '🔴 Poste : « Client absent » s affiche sans la règle',
-    fichier: POSTE, de: "                  {gesteLivraisonPermis(l, 'absent') && (", vers: '                  {true && (' },
+    fichier: POSTE, de: "      {gesteLivraisonPermis(l, 'absent') && (", vers: '      {true && (' },
 
   // ─── LE SERVEUR ──────────────────────────────────────────────────────────
   { nom: '🔴 la lecture oublie le commerce',
@@ -102,7 +102,7 @@ const MUTATIONS = [
   { nom: '🔴 sans la case, les boutons apparaissent',
     fichier: POSTE, de: 'gestes={etat.droits?.livraisons ? gestesLivraison : null}', vers: 'gestes={gestesLivraison}' },
   { nom: '🔴 « Partir » s affiche sans la règle',
-    fichier: POSTE, de: "                  {gesteLivraisonPermis(l, 'en_livraison') && (", vers: '                  {true && (' },
+    fichier: POSTE, de: "      {gesteLivraisonPermis(l, 'en_livraison') && (", vers: '      {true && (' },
   { nom: '🔴 la vue du livreur perd le mode (aucun bouton)',
     fichier: VUE, de: '    mode_retrait: c.mode_retrait || null,', vers: '' },
 ]

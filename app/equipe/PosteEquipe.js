@@ -24,7 +24,7 @@ import { intituleReservation } from '@/lib/reservation-metier'
 import { estReservationDeTable, couvertsDe } from '@/lib/cours-collectifs'
 import { libelleOptions } from '@/lib/options-ligne'
 import { libelleRetrait } from '@/lib/libelle-retrait'
-import { libelleStatutCommande, STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
+import { libelleStatutCommande } from '@/lib/statuts-commande'
 import { euros } from '@/lib/montants'
 import { libelleJourPoste } from '@/lib/equipe-poste'
 // ── Étape 3 : les gestes, avec les MÊMES questions et les MÊMES routes que le
@@ -41,6 +41,11 @@ import { etiquetteConcernee } from '@/lib/etiquette-commande'
 import { gesteLivraisonPermis } from '@/lib/livraison-geste'
 import { couleurStatutCommande } from '@/lib/couleurs-statut-commande'
 import { lirePoste, ecrirePoste } from '@/lib/poste-adresse'
+import { estLivraison, filtresCommandes, filtreValide, commandesDeLaVue, ongletsDuPoste } from '@/lib/poste-vues'
+
+// Les filtres du tableau de bord, les mêmes (lib/poste-vues.js).
+const FILTRES_RETRAIT = filtresCommandes('retrait')
+const FILTRES_LIVRAISON = filtresCommandes('livraison')
 
 const T = { fond: '#F8F6FF', ink: '#1A0840', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', panel: '#160636', rouge: '#B91C1C', vert: '#047857', filet: '#E7DEF6' }
 const carte = { background: '#fff', borderRadius: 14, border: `1px solid ${T.filet}`, padding: 14, boxSizing: 'border-box' }
@@ -123,15 +128,79 @@ function DetailRdv({ rdv, commerce, droits = {}, gestes = null, enCours = false,
 }
 
 // ─── Les commandes ───────────────────────────────────────────────────────────
-const FILTRES = [
-  { cle: 'en_cours', label: 'À traiter', garde: c => STATUTS_COMMANDE_EN_COURS.includes(c.statut) },
-  { cle: 'pret', label: 'Prêtes', garde: c => c.statut === 'pret' },
-  { cle: 'recupere', label: 'Remises', garde: c => c.statut === 'recupere' },
-  { cle: 'tout', label: 'Tout', garde: () => true },
-]
+// Les filtres de chaque onglet vivent dans `lib/poste-vues.js`.
 
-function CarteCommande({ c, commerce, gestes = null, enCours = false, etiquettes = false }) {
+// ─── Les gestes de livraison, UNE fois pour les deux vues ────────────────────
+// La carte complète (cuisine, onglet Livraisons) et la carte réduite du
+// livreur montrent les mêmes boutons, selon la même règle partagée.
+function BoutonsLivraison({ l, gestes, enCours = null }) {
+  if (l.statut !== 'pret') {
+    // ⚠️ « EN PRÉPARATION » ÉTAIT ÉCRIT ICI POUR TOUT, nouvelles comprises
+    // (Alex, 01/10, capture) : la pastille dit déjà le statut, on dit
+    // seulement pourquoi il n'y a pas de bouton.
+    return <p style={{ margin: '10px 0 0', fontSize: 12.5, color: T.muted, fontWeight: 700 }}>Pas encore prête à partir.</p>
+  }
+  return (
+    <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+      {gesteLivraisonPermis(l, 'en_livraison') && (
+        <button type="button" disabled={!!enCours} onClick={() => gestes.partir(l)} style={{ ...puce(false), flex: 1, padding: '11px 14px' }}>
+          {enCours === `${l.id}:partir` ? <DotsAttente label="Enregistrement"/> : 'Partir en livraison'}
+        </button>
+      )}
+      {gesteLivraisonPermis(l, 'livree') && (
+        <button type="button" disabled={!!enCours} onClick={() => gestes.livree(l)} style={{ ...puce(true), flex: 1, padding: '11px 14px', background: T.vert, borderColor: T.vert }}>
+          {enCours === `${l.id}:livree` ? <DotsAttente label="Enregistrement"/> : 'Livrée'}
+        </button>
+      )}
+      {gesteLivraisonPermis(l, 'absent') && (
+        <button type="button" disabled={!!enCours} onClick={() => gestes.absent(l)} style={{ ...puce(false), flexBasis: '100%', padding: '10px 14px' }}>
+          {enCours === `${l.id}:absent` ? <DotsAttente label="Enregistrement"/> : 'Client absent'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// La commande complète, vue par le livreur : ce que ses gestes lisent.
+function pourLeLivreur(c) {
+  const reste = resteAEncaisserCommande(c)
+  return { ...c, a_encaisser: reste > 0 ? reste : null, reference: referenceCommande(c) }
+}
+
+// ─── Les filtres, en pastilles, comme au tableau de bord ─────────────────────
+// La pastille choisie prend la couleur de son statut, et le compteur ne
+// s'écrit que s'il y a quelque chose : les mêmes règles que le patron.
+function PastillesFiltres({ filtres, liste, filtre, onChoisir }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 12 }}>
+      {filtres.map(f => {
+        const n = liste.filter(f.garde).length
+        const choisi = filtre === f.cle
+        const teinte = f.couleur || T.panel
+        return (
+          <button key={f.cle} type="button" onClick={() => onChoisir(f.cle)}
+            style={{ ...puce(choisi), ...(choisi ? { background: teinte, borderColor: teinte } : {}) }}>
+            {f.label}{n > 0 ? ` · ${n}` : ''}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Le filtre de l'onglet, repris de l'adresse et écrit dedans.
+function useFiltre(filtres) {
+  const [filtre, setFiltreEtat] = useState(() => {
+    const voulu = typeof window === 'undefined' ? null : lirePoste(window.location.search).filtre
+    return filtreValide(filtres, voulu)
+  })
+  const setFiltre = (cle) => { setFiltreEtat(cle); ecrirePoste({ filtre: cle }) }
+  return [filtre, setFiltre]
+}
+
+function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enCours = null, etiquettes = false }) {
   const vers = STATUT_SUIVANT[c.statut]
+  const occupe = enCours === c.id
   const avancer = gestes && vers && transitionPermise(c, vers)
   const nonRetire = gestes && peutMarquerNonRetire(c, new Date())
   const creneau = c.creneau || c.creneau_livraison || null
@@ -169,14 +238,19 @@ function CarteCommande({ c, commerce, gestes = null, enCours = false, etiquettes
       {(avancer || nonRetire) && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
           {avancer && (
-            <button type="button" disabled={enCours} onClick={() => gestes.avancer(c)} style={{ ...puce(true), flex: 1, padding: '11px 14px' }}>
-              {enCours ? <DotsAttente label="Enregistrement"/> : LIBELLE_GESTE_SUIVANT[c.statut]}
+            <button type="button" disabled={occupe} onClick={() => gestes.avancer(c)} style={{ ...puce(true), flex: 1, padding: '11px 14px' }}>
+              {occupe ? <DotsAttente label="Enregistrement"/> : LIBELLE_GESTE_SUIVANT[c.statut]}
             </button>
           )}
           {nonRetire && (
-            <button type="button" disabled={enCours} onClick={() => gestes.nonRetire(c)} style={{ ...puce(false), padding: '11px 14px' }}>Non retirée</button>
+            <button type="button" disabled={occupe} onClick={() => gestes.nonRetire(c)} style={{ ...puce(false), padding: '11px 14px' }}>Non retirée</button>
           )}
         </div>
+      )}
+      {/* Une livraison prête : les gestes du livreur, sur la même carte, si la
+          personne a la case « Livraisons ». */}
+      {gestesLivraison && estLivraison(c) && c.statut === 'pret' && (
+        <BoutonsLivraison l={pourLeLivreur(c)} gestes={gestesLivraison} enCours={enCours}/>
       )}
       {/* Le rattrapage et les sacs en plus, sur l'appareil qui imprime seulement. */}
       {etiquettes && ['en_preparation', 'pret'].includes(c.statut) && etiquetteConcernee(c) && (
@@ -186,14 +260,13 @@ function CarteCommande({ c, commerce, gestes = null, enCours = false, etiquettes
   )
 }
 
-function Commandes({ commandes, commerce, aujourdhui, gestes = null, enCours = null }) {
-  const [filtre, setFiltreEtat] = useState(() => {
-    const voulu = typeof window === 'undefined' ? null : lirePoste(window.location.search).filtre
-    return FILTRES.some(f => f.cle === voulu) ? voulu : 'en_cours'
-  })
-  const setFiltre = (cle) => { setFiltreEtat(cle); ecrirePoste({ filtre: cle }) }
+// La liste complète d'un onglet (Retraits OU Livraisons), groupée par jour.
+// `filtres` vient de `lib/poste-vues.js` ; `gestesLivraison` n'est donné que
+// dans l'onglet Livraisons, et seulement à qui a la case.
+function Commandes({ commandes, commerce, aujourdhui, filtres, gestes = null, gestesLivraison = null, enCours = null }) {
+  const [filtre, setFiltre] = useFiltre(filtres)
   const [etiquettesIci, reglerEtiquettes] = useEtiquettesAppareil()
-  const garde = FILTRES.find(f => f.cle === filtre)?.garde || (() => true)
+  const garde = filtres.find(f => f.cle === filtre)?.garde || (() => true)
   const visibles = commandes.filter(garde)
   const parJour = useMemo(() => {
     const m = new Map()
@@ -206,20 +279,14 @@ function Commandes({ commandes, commerce, aujourdhui, gestes = null, enCours = n
   }, [visibles])
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 12 }}>
-        {FILTRES.map(f => (
-          <button key={f.cle} type="button" onClick={() => setFiltre(f.cle)} style={puce(filtre === f.cle)}>
-            {f.label} · {commandes.filter(f.garde).length}
-          </button>
-        ))}
-      </div>
+      <PastillesFiltres filtres={filtres} liste={commandes} filtre={filtre} onChoisir={setFiltre}/>
       {gestes && <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes}/>}
       {parJour.length === 0 && <p style={{ margin: '16px 0', color: T.muted, fontSize: 14 }}>Rien ici pour le moment.</p>}
       {parJour.map(([jour, liste]) => (
         <div key={jour} style={{ marginBottom: 16 }}>
           <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1px' }}>{libelleJourPoste(jour, aujourdhui)}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce} gestes={gestes} enCours={enCours === c.id} etiquettes={etiquettesIci && !!gestes}/>)}
+            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce} gestes={gestes} gestesLivraison={gestesLivraison} enCours={enCours} etiquettes={etiquettesIci && !!gestes}/>)}
           </div>
         </div>
       ))}
@@ -228,17 +295,19 @@ function Commandes({ commandes, commerce, aujourdhui, gestes = null, enCours = n
 }
 
 // ─── Les livraisons du jour ──────────────────────────────────────────────────
+// La vue RÉDUITE du livreur sans la case « Commandes » : les livraisons du
+// jour, sans prix, avec les mêmes filtres que la cuisine.
 function Livraisons({ livraisons, gestes = null, enCours = null }) {
-  const aFaire = livraisons.filter(l => l.statut_livraison !== 'livree' && l.statut !== 'recupere')
-  const faites = livraisons.length - aFaire.length
+  const [filtre, setFiltre] = useFiltre(FILTRES_LIVRAISON)
+  const garde = FILTRES_LIVRAISON.find(f => f.cle === filtre)?.garde || (() => true)
+  const visibles = livraisons.filter(garde)
   return (
     <div>
-      <p style={{ margin: '0 0 12px', fontSize: 13.5, color: T.muted }}>
-        {aFaire.length} à livrer aujourd&rsquo;hui{faites ? ` · ${faites} déjà livrée${faites > 1 ? 's' : ''}` : ''}
-      </p>
-      {aFaire.length === 0 && <p style={{ margin: '16px 0', color: T.muted, fontSize: 14 }}>Aucune livraison à faire pour le moment.</p>}
+      <p style={{ margin: '0 0 10px', fontSize: 13.5, color: T.muted }}>Les livraisons d&rsquo;aujourd&rsquo;hui, dans l&rsquo;ordre de la tournée.</p>
+      <PastillesFiltres filtres={FILTRES_LIVRAISON} liste={livraisons} filtre={filtre} onChoisir={setFiltre}/>
+      {visibles.length === 0 && <p style={{ margin: '16px 0', color: T.muted, fontSize: 14 }}>Rien ici pour le moment.</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {aFaire.map((l, i) => (
+        {visibles.map((l, i) => (
           <div key={l.id} style={{ ...carte, borderTop: `4px solid ${couleurStatutCommande(l).border}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
               <p style={{ margin: 0, fontSize: 15.5, fontWeight: 800, color: T.ink }}>{i + 1}. {l.client_nom || 'Client'}</p>
@@ -266,29 +335,8 @@ function Livraisons({ livraisons, gestes = null, enCours = null }) {
                 ? <strong style={{ color: T.rouge }}>À encaisser : {euros(l.a_encaisser)}</strong>
                 : <span style={{ color: T.vert, fontWeight: 700 }}>Déjà payée</span>}
             </div>
-            {/* Les gestes du livreur (étape 4). Une commande pas encore prête
-                ne part pas : on le dit au lieu de cacher les boutons. */}
-            {gestes && (l.statut !== 'pret'
-              ? <p style={{ margin: '10px 0 0', fontSize: 12.5, color: T.muted, fontWeight: 700 }}>En préparation : pas encore prête à partir.</p>
-              : (
-                <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                  {gesteLivraisonPermis(l, 'en_livraison') && (
-                    <button type="button" disabled={!!enCours} onClick={() => gestes.partir(l)} style={{ ...puce(false), flex: 1, padding: '11px 14px' }}>
-                      {enCours === `${l.id}:partir` ? <DotsAttente label="Enregistrement"/> : 'Partir en livraison'}
-                    </button>
-                  )}
-                  {gesteLivraisonPermis(l, 'livree') && (
-                    <button type="button" disabled={!!enCours} onClick={() => gestes.livree(l)} style={{ ...puce(true), flex: 1, padding: '11px 14px', background: T.vert, borderColor: T.vert }}>
-                      {enCours === `${l.id}:livree` ? <DotsAttente label="Enregistrement"/> : 'Livrée'}
-                    </button>
-                  )}
-                  {gesteLivraisonPermis(l, 'absent') && (
-                    <button type="button" disabled={!!enCours} onClick={() => gestes.absent(l)} style={{ ...puce(false), flexBasis: '100%', padding: '10px 14px' }}>
-                      {enCours === `${l.id}:absent` ? <DotsAttente label="Enregistrement"/> : 'Client absent'}
-                    </button>
-                  )}
-                </div>
-              ))}
+            {/* Les gestes du livreur (étape 4), le même composant que la carte complète. */}
+            {gestes && <BoutonsLivraison l={l} gestes={gestes} enCours={enCours}/>}
           </div>
         ))}
       </div>
@@ -303,7 +351,8 @@ export default function PosteEquipe({ equipe, onChanger }) {
   // au premier (lib/poste-adresse.js). Ce composant ne naît que dans le
   // navigateur, après le choix du commerce : `window` existe ici.
   const [onglet, setOnglet] = useState(() => (typeof window === 'undefined' ? null : lirePoste(window.location.search).onglet))
-  const choisirOnglet = (cle) => { setOnglet(cle); ecrirePoste({ onglet: cle }) }
+  // ⚠️ Changer d'onglet repart de « À traiter » : chaque onglet a ses filtres.
+  const choisirOnglet = (cle) => { setOnglet(cle); ecrirePoste({ onglet: cle, filtre: null }) }
   const [rdvOuvert, setRdvOuvert] = useState(null)
   // Ce qui travaille (l'identifiant de la ligne), et ce qu'on dit après.
   const [enCours, setEnCours] = useState(null)
@@ -539,11 +588,8 @@ export default function PosteEquipe({ equipe, onChanger }) {
     }),
   }
 
-  const onglets = [
-    etat.agenda && { cle: 'agenda', label: 'Agenda' },
-    etat.commandes && { cle: 'commandes', label: 'Commandes' },
-    etat.livraisons && { cle: 'livraisons', label: 'Livraisons' },
-  ].filter(Boolean)
+  // Agenda, Retraits, Livraisons : la règle est dans lib/poste-vues.js.
+  const onglets = ongletsDuPoste(etat)
   const actif = onglet && onglets.some(o => o.cle === onglet) ? onglet : onglets[0]?.cle
 
   return (
@@ -618,8 +664,21 @@ export default function PosteEquipe({ equipe, onChanger }) {
           onDeplace={apresDeplacement}
         />
       )}
-      {actif === 'commandes' && etat.commandes && <Commandes commandes={etat.commandes} commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null} enCours={enCours}/>}
-      {actif === 'livraisons' && etat.livraisons && <Livraisons livraisons={etat.livraisons} gestes={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>}
+      {actif === 'commandes' && etat.commandes && (
+        <Commandes key="retraits" commandes={commandesDeLaVue(etat.commandes, 'retrait')} filtres={FILTRES_RETRAIT}
+          commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null} enCours={enCours}/>
+      )}
+      {/* ⚠️ LA CUISINE (case « Commandes ») voit les livraisons COMPLÈTES, tous
+          les jours ouverts, pour les préparer ; les boutons du livreur s'y
+          ajoutent si elle a aussi la case « Livraisons ». Le LIVREUR SEUL garde
+          sa vue réduite du jour, sans prix. */}
+      {actif === 'livraisons' && (etat.commandes
+        ? (
+          <Commandes key="livraisons" commandes={commandesDeLaVue(etat.commandes, 'livraison')} filtres={FILTRES_LIVRAISON}
+            commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null}
+            gestesLivraison={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>
+        )
+        : etat.livraisons && <Livraisons livraisons={etat.livraisons} gestes={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>)}
 
       {rdvOuvert && <DetailRdv rdv={rdvOuvert} commerce={etat.commerce} droits={etat.droits || {}} gestes={etat.droits?.agenda ? gestesRdv : null} enCours={enCours === rdvOuvert.id} onFermer={() => setRdvOuvert(null)}/>}
     </div>

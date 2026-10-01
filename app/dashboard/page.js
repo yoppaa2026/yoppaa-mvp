@@ -67,6 +67,7 @@ import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from './Re
 import { imprimerSiActive } from '@/lib/impression-etiquette'
 import { etiquetteConcernee } from '@/lib/etiquette-commande'
 import { PALETTE_STATUT } from '@/lib/couleurs-statut-commande'
+import { filtresCommandes } from '@/lib/poste-vues'
 import { ADMIN_EMAIL } from '@/lib/admin-identite'
 
 const T = {
@@ -2867,29 +2868,18 @@ export default function Dashboard() {
     ca:         chiffreAffaires(commandesDuJour).produits,
   }
 
-  const commandesFiltrees = commandesDuJour.filter(c => {
-    if (filtreStatut === 'actives')        return ['en_attente','en_preparation','pret'].includes(c.statut)
-    if (filtreStatut === 'en_attente')     return c.statut === 'en_attente'
-    if (filtreStatut === 'en_preparation') return c.statut === 'en_preparation'
-    if (filtreStatut === 'pret')           return c.statut === 'pret'
-    if (filtreStatut === 'recupere')       return c.statut === 'recupere'
-    if (filtreStatut === 'non_retire')     return c.statut === 'non_retire'
-    if (filtreStatut === 'annulees')       return c.statut === 'annulee_client_refund' || c.statut === 'annulee_paiement_ko'
-    return true
-  })
+  // ⚠️ LES FILTRES VIVENT DANS `lib/poste-vues.js` DEPUIS LE 01/10 : le Poste
+  // de l'équipe affiche EXACTEMENT les mêmes, dans le même ordre, avec les
+  // mêmes couleurs (Alex : « il faut reprendre la même structure »). Ils
+  // étaient écrits ici en ligne, et « Annulées » y était encore rouge alors que
+  // le statut annulé est passé au gris.
+  const filtresDeLaVue = filtresCommandes(vueMode)
+  const gardeFiltre = filtresDeLaVue.find(f => f.cle === filtreStatut)?.garde || (() => true)
+  const commandesFiltrees = commandesDuJour.filter(gardeFiltre)
 
-  const nonRetires = commandesDuJour.filter(c => c.statut === 'non_retire').length
-
-  const filtresStatut = [
-    { key: 'actives',        label: 'Actives',      count: stats.nouvelles + stats.enPrepa + stats.pretes },
-    { key: 'en_attente',     label: 'Nouvelles',    count: stats.nouvelles,  color: '#DC2626' },
-    { key: 'en_preparation', label: 'En prépa',     count: stats.enPrepa,    color: '#EA580C' },
-    { key: 'pret',           label: 'Prêtes',       count: stats.pretes,     color: '#10B981' },
-    { key: 'recupere',       label: vueMode === 'livraison' ? 'Livrées' : 'Récupérées', count: stats.recuperees, color: '#2563EB' },
-    ...(vueMode === 'livraison' ? [] : [{ key: 'non_retire', label: 'Non retirés', count: nonRetires, color: '#6B7280' }]),
-    { key: 'annulees',       label: 'Annulées',     count: stats.annulees,   color: '#DC2626' },
-    { key: 'tout',           label: 'Tout',         count: commandesDuJour.length },
-  ]
+  const filtresStatut = filtresDeLaVue.map(f => ({
+    key: f.cle, label: f.label, color: f.couleur || undefined, count: commandesDuJour.filter(f.garde).length,
+  }))
 
   const statsCards = [
     { label: 'Nouvelles',  value: stats.nouvelles,           color: '#DC2626', bg: '#FFF0F0', border: '#DC262618', pulse: stats.nouvelles > 0 },

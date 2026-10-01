@@ -851,11 +851,74 @@ const membre = (o = {}) => ({
     /function choisir\(e\) \{\s*setChoisie\(e\)\s*retenirDernierCommerce\(e\.commercant_id\)\s*ecrirePoste\(\{ commerce: e\.commercant_id \}\)/.test(page)
     && /function changer\(\) \{\s*setChoisie\(null\)\s*retenirDernierCommerce\(null\)\s*ecrirePoste\(\{ commerce: null, onglet: null, filtre: null \}\)/.test(page)
     && /onClick=\{\(\) => choisir\(e\)\}/.test(page) && /onChanger=\{etat\.equipes\.length > 1 \? changer : null\}/.test(page))
+  // ⚠️ REDIRIGÉE LE 01/10 (onglets Retraits / Livraisons) : changer d'onglet
+  // efface aussi le filtre, chaque onglet ayant les siens.
   v('🔴 l’onglet reprend celui de l’adresse, et s’y écrit',
     /useState\(\(\) => \(typeof window === 'undefined' \? null : lirePoste\(window\.location\.search\)\.onglet\)\)/.test(poste)
-    && /const choisirOnglet = \(cle\) => \{ setOnglet\(cle\); ecrirePoste\(\{ onglet: cle \}\) \}/.test(poste) && /onClick=\{\(\) => choisirOnglet\(o\.cle\)\}/.test(poste))
+    && /const choisirOnglet = \(cle\) => \{ setOnglet\(cle\); ecrirePoste\(\{ onglet: cle, filtre: null \}\) \}/.test(poste) && /onClick=\{\(\) => choisirOnglet\(o\.cle\)\}/.test(poste))
+  // ⚠️ REDIRIGÉE LE 01/10 : le filtre passe par `useFiltre` et `filtreValide`,
+  // propres à chaque onglet. La règle est EXÉCUTÉE plus bas.
   v('🔴 le filtre aussi, et un filtre inconnu retombe sur « À traiter »',
-    /return FILTRES\.some\(f => f\.cle === voulu\) \? voulu : 'en_cours'/.test(poste) && /const setFiltre = \(cle\) => \{ setFiltreEtat\(cle\); ecrirePoste\(\{ filtre: cle \}\) \}/.test(poste))
+    /return filtreValide\(filtres, voulu\)/.test(poste) && /const setFiltre = \(cle\) => \{ setFiltreEtat\(cle\); ecrirePoste\(\{ filtre: cle \}\) \}/.test(poste))
+}
+
+// ═══ RETRAITS ET LIVRAISONS, CHACUN SON ONGLET (Alex, 01/10) ═══════════════
+// « les commandes de livraison apparaissent dans commande et dans livraison.
+// Le bouton commande devrait être retrait », « il n'y a pas les pastilles de
+// statut pour les livraisons ».
+{
+  const V = await import('../lib/poste-vues.js')
+  const cc = { id: 'a', mode_retrait: 'retrait', statut: 'en_attente' }
+  const li = (statut, statut_livraison = null) => ({ id: `${statut}-${statut_livraison}`, mode_retrait: 'livraison', statut, statut_livraison })
+  const liste = [cc, li('en_attente'), li('en_preparation'), li('pret'), li('pret', 'en_livraison'), li('recupere', 'livree'), { id: 'x', mode_retrait: 'expedition', statut: 'pret' }]
+  // ⚠️ RÉÉCRITE LE 01/10 au soir (« elles sont aussi séparées dans le DB
+  // patron, il faut reprendre la même structure ») : les filtres sont ceux du
+  // tableau de bord, et les deux écrans lisent la même fonction.
+  const ret = V.commandesDeLaVue(liste, 'retrait').map(c => c.id).join(',')
+  const liv = V.commandesDeLaVue(liste, 'livraison').map(c => c.mode_retrait)
+  v('🔴 une livraison n’est plus dans « Retrait »', ret === 'a,x', ret)
+  v('🔴 et « Livraison » n’a que des livraisons', liv.length === 5 && liv.every(m => m === 'livraison'))
+  const R = V.filtresCommandes('retrait')
+  const L = V.filtresCommandes('livraison')
+  v('🔴 les filtres du tableau de bord, dans son ordre',
+    R.map(f => f.label).join(',') === 'Actives,Nouvelles,En prépa,Prêtes,Récupérées,Non retirés,Annulées,Tout', R.map(f => f.label).join(','))
+  v('🔴 en livraison : « Livrées », et jamais « Non retirés »',
+    L.map(f => f.label).join(',') === 'Actives,Nouvelles,En prépa,Prêtes,Livrées,Annulées,Tout', L.map(f => f.label).join(','))
+  const compte = (cle) => liste.filter(V.estLivraison).filter(L.find(f => f.cle === cle).garde).length
+  v('🔴 « Prêtes » comprend une livraison en route, comme au tableau de bord', compte('pret') === 2)
+  v('les compteurs suivent les statuts', compte('actives') === 4 && compte('en_attente') === 1 && compte('en_preparation') === 1 && compte('recupere') === 1 && compte('tout') === 5)
+  const P = (await import('../lib/couleurs-statut-commande.js')).PALETTE_STATUT
+  const teinte = (cle) => R.find(f => f.cle === cle).couleur
+  v('🔴 chaque pastille a la couleur de son statut, Annulées en GRIS (plus rouge)',
+    teinte('en_attente') === P.rouge.badge && teinte('en_preparation') === P.orange.badge && teinte('pret') === P.vert.badge
+    && teinte('recupere') === P.bleu.badge && teinte('non_retire') === P.gris.badge && teinte('annulees') === P.gris.badge
+    && teinte('actives') === null && teinte('tout') === null)
+  v('🔴 un filtre inconnu, ou d’une autre vue, retombe sur « Actives »',
+    V.filtreValide(L, 'non_retire') === 'actives' && V.filtreValide(L, 'pret') === 'pret' && V.filtreValide(R, null) === 'actives' && V.FILTRE_PAR_DEFAUT === 'actives')
+  const noms = (etat) => V.ongletsDuPoste(etat).map(o => o.label).join(',')
+  v('🔴 les onglets s’appellent comme au tableau de bord : « Retrait », « Livraison »', noms({ commandes: [cc], commerce: { livraison_actif: true } }) === 'Retrait,Livraison')
+  v('sans livraison au commerce : « Retrait » seul', noms({ commandes: [cc] }) === 'Retrait')
+  v('… mais une livraison présente fait paraître l’onglet', noms({ commandes: [li('pret')] }) === 'Retrait,Livraison')
+  v('le livreur seul : « Livraison » seulement', noms({ livraisons: [] }) === 'Livraison')
+
+  // Les deux écrans lisent LA MÊME fonction.
+  const bord = code('app/dashboard/page.js')
+  v('🔴 le tableau de bord lit les filtres partagés',
+    /const filtresDeLaVue = filtresCommandes\(vueMode\)/.test(bord) && /const commandesFiltrees = commandesDuJour\.filter\(gardeFiltre\)/.test(bord)
+    && /count: commandesDuJour\.filter\(f\.garde\)\.length/.test(bord) && !/label: 'Nouvelles',\s+count:/.test(bord))
+  const poste = code('app/equipe/PosteEquipe.js')
+  v('🔴 le Poste aussi', /const FILTRES_RETRAIT = filtresCommandes\('retrait'\)/.test(poste) && /const FILTRES_LIVRAISON = filtresCommandes\('livraison'\)/.test(poste))
+  v('🔴 le Poste sert chaque onglet par la règle partagée',
+    /<Commandes key="retraits" commandes=\{commandesDeLaVue\(etat\.commandes, 'retrait'\)\} filtres=\{FILTRES_RETRAIT\}/.test(poste)
+    && /<Commandes key="livraisons" commandes=\{commandesDeLaVue\(etat\.commandes, 'livraison'\)\} filtres=\{FILTRES_LIVRAISON\}/.test(poste)
+    && /const onglets = ongletsDuPoste\(etat\)/.test(poste))
+  v('🔴 la pastille choisie prend la couleur du statut, et 0 ne s’écrit pas',
+    /const teinte = f\.couleur \|\| T\.panel/.test(poste) && /\{f\.label\}\{n > 0 \? ` · \$\{n\}` : ''\}/.test(poste))
+  v('🔴 dans l’onglet Livraison, les boutons du livreur suivent SA case',
+    /gestesLivraison=\{etat\.droits\?\.livraisons \? gestesLivraison : null\} enCours=\{enCours\}\/>/.test(poste)
+    && /\{gestesLivraison && estLivraison\(c\) && c\.statut === 'pret' && \(\s*<BoutonsLivraison l=\{pourLeLivreur\(c\)\} gestes=\{gestesLivraison\} enCours=\{enCours\}\/>/.test(poste))
+  v('🔴 le livreur seul a les mêmes filtres', /const \[filtre, setFiltre\] = useFiltre\(FILTRES_LIVRAISON\)/.test(poste) && /<PastillesFiltres filtres=\{FILTRES_LIVRAISON\} liste=\{livraisons\}/.test(poste))
+  v('🔴 plus de « En préparation » écrit sur une commande nouvelle', !/En préparation : pas encore prête/.test(poste) && /Pas encore prête à partir\./.test(poste))
 }
 
 console.log(`\nÉquipe : ${ok} vérifications`)

@@ -43,6 +43,29 @@ const MUTATIONS = [
   { nom: '🔴 payée à la porte sans le moyen, ça passe',
     fichier: REGLE, de: '    if (r.refus) return { champs: null, refus: r.refus }', vers: '' },
 
+  { nom: '🔴 « absent » possible avant le départ',
+    fichier: REGLE, de: "  if (vers === 'absent') return actuel === 'en_livraison'", vers: "  if (vers === 'absent') return actuel !== 'livree'" },
+  { nom: '🔴 « absent » termine la commande',
+    fichier: REGLE, de: "  if (vers === 'absent') return { champs: { statut_livraison: null }, refus: null }", vers: "  if (vers === 'absent') return { champs: { statut_livraison: null, statut: 'recupere' }, refus: null }" },
+
+  // ─── LE CLIENT ABSENT ────────────────────────────────────────────────────
+  { nom: '🔴 « absent » ne prévient plus le client',
+    fichier: ROUTE, de: "    if (statut_livraison === 'absent') {", vers: '    if (false) {' },
+  { nom: '🔴 pas de notification au client absent',
+    fichier: 'lib/livraison-absent-serveur.js', de: '    if (client?.id) {', vers: '    if (false) {' },
+  { nom: '🔴 un email raté passe pour envoyé',
+    fichier: 'lib/livraison-absent-serveur.js', de: '  return { email: !!envoi?.ok, push }', vers: '  return { email: true, push: true }' },
+  { nom: '🔴 le bouton de l email porte le nom brut',
+    fichier: 'lib/resend.js', de: "    ctaLabel: lienTel ? `Appeler ${commerce}` : 'Voir ma commande',", vers: "    ctaLabel: lienTel ? `Appeler ${commercant_nom}` : 'Voir ma commande'," },
+  { nom: '⚠️ le lien d appel garde les espaces',
+    fichier: 'lib/resend.js', de: "  const lienTel = tel ? `tel:${tel.replace(/[^\\d+]/g, '')}` : null", vers: '  const lienTel = tel ? `tel:${tel}` : null' },
+  { nom: '🔴 tableau de bord : on ne dit plus si le client est prévenu',
+    fichier: BORD, de: "    if (statutLivraison === 'absent') {", vers: '    if (false) {' },
+  { nom: '🔴 Poste : « prévenu » affiché même quand rien n est parti',
+    fichier: POSTE, de: "      if (j.client_prevenu) dire('Noté : le client est prévenu de vous appeler.')", vers: "      dire('Noté : le client est prévenu de vous appeler.')" },
+  { nom: '🔴 Poste : « Client absent » s affiche sans la règle',
+    fichier: POSTE, de: "                  {gesteLivraisonPermis(l, 'absent') && (", vers: '                  {true && (' },
+
   // ─── LE SERVEUR ──────────────────────────────────────────────────────────
   { nom: '🔴 la lecture oublie le commerce',
     fichier: SERVEUR, de: "    .eq('id', commandeId).eq('commercant_id', commercantId).maybeSingle()", vers: "    .eq('id', commandeId).maybeSingle()" },

@@ -33,7 +33,10 @@ const commande = (x = {}) => ({
 
 // ═══ 1) QUAND LE GESTE EST PERMIS ═══════════════════════════════════════════
 {
-  v('deux gestes, dans l’ordre', GESTES_LIVRAISON.join(',') === 'en_livraison,livree')
+  v('trois gestes : partir, livrer, absent', GESTES_LIVRAISON.join(',') === 'en_livraison,livree,absent')
+  v('🔴 « absent » seulement EN ROUTE (avant le départ, personne n’a sonné)',
+    gesteLivraisonPermis(commande({ statut_livraison: 'en_livraison' }), 'absent') && !gesteLivraisonPermis(commande(), 'absent')
+    && !gesteLivraisonPermis(commande({ statut_livraison: 'livree' }), 'absent') && !gesteLivraisonPermis(commande({ statut_livraison: 'en_livraison', statut: 'recupere' }), 'absent'))
   v('🔴 une livraison prête peut partir', gesteLivraisonPermis(commande(), 'en_livraison'))
   v('🔴 une livraison prête peut être livrée directement (le livreur a oublié « Partir »)', gesteLivraisonPermis(commande(), 'livree'))
   v('🔴 en route : on ne repart pas', !gesteLivraisonPermis(commande({ statut_livraison: 'en_livraison' }), 'en_livraison'))
@@ -66,6 +69,9 @@ const commande = (x = {}) => ({
     rien.champs?.encaisse_mode === 'rien' && rien.champs?.encaisse_montant === 0 && rien.champs?.statut === 'recupere')
   const dejaEncaissee = champsLivraison(commande({ encaisse_mode: 'terminal' }), 'livree', { maintenant: MAINTENANT })
   v('🔴 déjà encaissée : on ne réécrit jamais l’argent', dejaEncaissee.refus === null && !('encaisse_mode' in (dejaEncaissee.champs || {})))
+  const absent = champsLivraison(commande({ statut_livraison: 'en_livraison' }), 'absent', { encaissement: 'especes' })
+  v('🔴 « absent » : la commande redevient prête à partir, et AUCUN argent ne bouge',
+    JSON.stringify(absent.champs) === JSON.stringify({ statut_livraison: null }) && absent.refus === null, JSON.stringify(absent))
   const interdite = champsLivraison(commande({ statut: 'en_preparation' }), 'livree', { encaissement: 'especes' })
   v('🔴 un geste refusé n’écrit rien', interdite.champs === null && !!interdite.refus)
 }
@@ -123,6 +129,14 @@ const livrer = async (tables, args, options) => {
   v('l’écran reçoit ce qui a été écrit', res.champs?.encaisse_montant === 26 && res.avant?.statut_livraison === 'en_livraison')
 }
 {
+  const { res, db, k1 } = await livrer(base({ statut_livraison: 'en_livraison' }), { vers: 'absent' })
+  v('🔴 absent : une écriture, la commande reste prête et peut repartir',
+    res.ok && db.trace.ecritures === 1 && k1.statut === 'pret' && k1.statut_livraison === null && !k1.encaisse_mode, JSON.stringify(k1))
+  const deja = await livrer(base({ statut_livraison: 'en_livraison' }), { vers: 'absent' },
+    { avantEcriture: (t) => { Object.assign(t.commandes[0], { statut_livraison: 'livree', statut: 'recupere' }) } })
+  v('🔴 livrée entre-temps : « absent » est refusé', !deja.res.ok && deja.res.code === 'deja_fait' && deja.db.trace.ecritures === 0)
+}
+{
   const { res, db } = await livrer(base(), { vers: 'livree' })
   v('🔴 payée à la porte sans le moyen : refusée, rien d’écrit', !res.ok && res.code === 'encaissement' && db.trace.ecritures === 0 && REFUS_LIVRAISON.encaissement === 400)
 }
@@ -172,6 +186,43 @@ const livrer = async (tables, args, options) => {
   v('🔴 la route exige la case « livraisons » (le patron passe toujours)', /gardeLigneEquipe\(request, admin, 'commandes', commande_id, 'livraisons'\)/.test(route))
   v('🔴 le commerce vient de la garde, jamais du corps', /commercantId: verdict\.commercant\.id,/.test(route) && !/commercant_id[^\n]*request/.test(route))
   v('le geste du livreur va au journal', /action: 'livraison_statut'/.test(route) && /journaliserGeste\(admin, verdict,/.test(route))
+  v('🔴 « absent » prévient le client APRÈS l’écriture réussie, et seulement là',
+    /if \(statut_livraison === 'absent'\) \{\s*const p = await prevenirClientAbsent\(admin, commande_id\)/.test(route)
+    && route.indexOf('prevenirClientAbsent(admin') > route.indexOf('if (!r.ok) return'))
+  // ⚠️ AUCUNE AUTRE PORTE : une route qui pourrait l'appeler sans geste
+  // enverrait « personne n'a ouvert » à volonté.
+  const { readdirSync, statSync } = await import('node:fs')
+  const appelants = []
+  const parcourir = (dossier) => {
+    for (const n of readdirSync(new URL(`../${dossier}`, import.meta.url))) {
+      const chemin = `${dossier}/${n}`
+      if (statSync(new URL(`../${chemin}`, import.meta.url)).isDirectory()) parcourir(chemin)
+      else if (/\.js$/.test(n) && /prevenirClientAbsent\(/.test(code(chemin))) appelants.push(chemin)
+    }
+  }
+  parcourir('app')
+  v('🔴 une seule route envoie « personne n’a ouvert »', appelants.join(',') === 'app/api/livraison/livrer/route.js', appelants.join(','))
+  // Le message part, EXÉCUTÉ sur de faux envois.
+  const { prevenirClientAbsent } = await import('../lib/livraison-absent-serveur.js')
+  const tablesAbsent = () => ({
+    commandes: [{ id: 'k1', numero_commande: 7, numero_prefixe: 'LI', client_email: 'lea@exemple.be', client_nom: 'Léa Martin', adresse_livraison: 'Rue 1, Mettet', commercant: { nom: 'Momo', telephone: '071 12 34 56' } }],
+    clients: [{ id: 'cli1', email: 'lea@exemple.be' }],
+  })
+  const envois = { emails: [], pushs: [] }
+  const faux = {
+    envoyerEmail: async (m) => { envois.emails.push(m); return { ok: true } },
+    envoyerPush: async (id, m) => { envois.pushs.push({ id, ...m }); return { ok: true } },
+  }
+  const p = await prevenirClientAbsent(fauxDb(tablesAbsent()), 'k1', faux)
+  v('🔴 le client absent reçoit un email, à SON adresse, avec le numéro du commerce',
+    p.email && envois.emails.length === 1 && envois.emails[0].to === 'lea@exemple.be' && /071 12 34 56/.test(envois.emails[0].html), JSON.stringify(p))
+  v('🔴 ET une notification, avec le numéro aussi', p.push && envois.pushs.length === 1 && envois.pushs[0].id === 'cli1' && /071 12 34 56/.test(envois.pushs[0].contents))
+  const sansEmail = tablesAbsent(); sansEmail.commandes[0].client_email = null
+  const avant = envois.emails.length + envois.pushs.length
+  const p2 = await prevenirClientAbsent(fauxDb(sansEmail), 'k1', faux)
+  v('sans adresse : rien ne part, et l’écran le saura', !p2.email && !p2.push && envois.emails.length + envois.pushs.length === avant)
+  const p3 = await prevenirClientAbsent(fauxDb(tablesAbsent()), 'k1', { envoyerEmail: async () => ({ ok: false, error: 'resend KO' }), envoyerPush: async () => ({ ok: false }) })
+  v('🔴 un envoi raté se dit « pas prévenu » (le livreur appelle alors)', p3.email === false && p3.push === false)
 
   const statut = code('app/api/livraison/statut/route.js')
   v('🔴 le message au client s’ouvre au livreur', /gardeLigneEquipe\(request, supabase, 'commandes', commande_id, \['commandes', 'livraisons'\]\)/.test(statut))
@@ -186,17 +237,42 @@ const livrer = async (tables, args, options) => {
   v('🔴 le tableau de bord n’écrit plus la livraison depuis le navigateur', !/supabase\.from\('commandes'\)\.update/.test(corps) && /postPro\('\/api\/livraison\/livrer'/.test(corps))
   v('🔴 il envoie le CHOIX, pas le montant', /champs\.encaisse_mode === 'rien' \? 'sans_paiement' : champs\.encaisse_mode/.test(corps) && !/encaisse_montant/.test(corps.slice(corps.indexOf("postPro('/api/livraison/livrer'"), corps.indexOf("postPro('/api/livraison/livrer'") + 200)))
   v('🔴 un refus du serveur se dit et n’avance rien', /if \(!j\?\.ok\) \{[\s\S]{0,300}alert\([\s\S]{0,300}return\s*\}/.test(corps))
+  v('🔴 absent : on dit au commerçant si le client est prévenu, et on ne renvoie pas « en route »',
+    /if \(statutLivraison === 'absent'\) \{[\s\S]{0,200}j\.client_prevenu[\s\S]{0,700}return\s*\}/.test(corps)
+    && corps.indexOf("if (statutLivraison === 'absent')") < corps.indexOf("postPro('/api/livraison/statut'"))
+  v('🔴 le bouton « Client absent » n’apparaît qu’en route',
+    /\{estLivraison && commande\.statut === 'pret' && statutLiv === 'en_livraison' && \(\s*<button onClick=\{async \(\) => \{\s*if \(await confirme\(confirmationSimple\(\{\s*titre: 'Personne à la porte \?'/.test(bord))
+  const statutRoute = code('app/api/livraison/statut/route.js')
+  v('🔴 la route des messages refuse « absent » (il ne part que du serveur)', /\['en_livraison', 'livree'\]\.includes\(statut_livraison\)/.test(statutRoute))
 
   const poste = code('app/equipe/PosteEquipe.js')
   const k = poste.indexOf('const gestesLivraison = {')
   const gl = k >= 0 ? poste.slice(k, poste.indexOf('const gestesCommande = {', k)) : ''
   v('les gestes du livreur ont été retrouvés', gl.length > 500, String(gl.length))
   v('🔴 payée à la porte : la question d’argent du comptoir', /if \(Number\(l\.a_encaisser\) > 0\) \{\s*const choix = await confirmer\(questionEncaissement\(/.test(gl))
-  v('🔴 sinon une confirmation (« Livrée » prévient le client)', /if \(choix !== 'oui'\) return/.test(gl))
+  // ⚠️ DANS LE BLOC « LIVRÉE » SEULEMENT : le geste « absent », juste après,
+  // porte la même ligne, et la garde verdissait sur lui (mesuré par mutation).
+  const kl = gl.indexOf('livree: (l) => geste(')
+  const glLivree = kl >= 0 ? gl.slice(kl, gl.indexOf('absent: (l) => geste(', kl)) : ''
+  v('🔴 sinon une confirmation (« Livrée » prévient le client)', glLivree.length > 200 && /if \(choix !== 'oui'\) return/.test(glLivree), String(glLivree.length))
   v('🔴 livrée : la fidélité, puis le message au client', gl.indexOf("prevenir('/api/fidelite/crediter'") > gl.indexOf("statut_livraison: 'livree', encaissement")
     && gl.indexOf("prevenir('/api/livraison/statut', { commande_id: l.id, statut_livraison: 'livree' }") > 0)
   v('🔴 seul un membre avec la case voit les boutons', /<Livraisons livraisons=\{etat\.livraisons\} gestes=\{etat\.droits\?\.livraisons \? gestesLivraison : null\} enCours=\{enCours\}\/>/.test(poste))
-  v('🔴 les boutons suivent la règle partagée', /\{gesteLivraisonPermis\(l, 'en_livraison'\) && \(/.test(poste) && /\{gesteLivraisonPermis\(l, 'livree'\) && \(/.test(poste))
+  v('🔴 les boutons suivent la règle partagée', /\{gesteLivraisonPermis\(l, 'en_livraison'\) && \(/.test(poste) && /\{gesteLivraisonPermis\(l, 'livree'\) && \(/.test(poste) && /\{gesteLivraisonPermis\(l, 'absent'\) && \(/.test(poste))
+  const ka = gl.indexOf('absent: (l) => geste(')
+  const ga = ka >= 0 ? gl.slice(ka) : ''
+  v('🔴 Poste : « absent » demande confirmation, puis dit si le client est prévenu',
+    /if \(choix !== 'oui'\) return\s*const j = await lire\(await postPro\('\/api\/livraison\/livrer', \{ commande_id: l\.id, statut_livraison: 'absent' \}\)\)/.test(ga)
+    && /if \(j\.client_prevenu\)/.test(ga) && !/\/api\/livraison\/statut/.test(ga))
+
+  // Le message lui-même, EXÉCUTÉ.
+  const { emailLivraisonClientAbsent } = await import('../lib/resend.js')
+  const html = emailLivraisonClientAbsent({ yopper_prenom: 'Léa', commercant_nom: '<b>Chez Momo</b>', numero_commande: 'LI7', adresse_livraison: 'Rue 1, Mettet', telephone: '071 12 34 56' })
+  v('🔴 le message dit quoi faire : appeler le commerce, avec son numéro', /071 12 34 56/.test(html) && /href="tel:071123456"/.test(html) && /nouvelle livraison/.test(html))
+  v('🔴 le nom du commerce est échappé, bouton compris', !html.includes('<b>Chez Momo</b>') && html.includes('&lt;b&gt;Chez Momo&lt;/b&gt;'))
+  v('🔴 aucune promesse de remboursement', !/rembours/i.test(html))
+  const sansTel = emailLivraisonClientAbsent({ yopper_prenom: 'Léa', commercant_nom: 'Momo', numero_commande: 'LI7' })
+  v('sans numéro : un lien vers la commande, pas un « tel: » vide', !/tel:/.test(sansTel) && /Voir ma commande/.test(sansTel))
 }
 
 console.log(`\nLivrer une commande : ${ok} vérifications`)

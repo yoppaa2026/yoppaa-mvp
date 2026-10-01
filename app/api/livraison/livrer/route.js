@@ -1,5 +1,5 @@
 // POST /api/livraison/livrer
-// Body : { commande_id, statut_livraison: 'en_livraison' | 'livree', encaissement }
+// Body : { commande_id, statut_livraison: 'en_livraison' | 'livree' | 'absent', encaissement }
 //
 // LIVRER UNE COMMANDE (équipe, étape 4, 01/10), pour le PATRON comme pour le
 // LIVREUR : une seule route, une seule règle (`lib/livraison-geste.js`). Le
@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { clientAdmin, refus } from '@/lib/api-auth'
 import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { livrerCommande, REFUS_LIVRAISON } from '@/lib/livraison-serveur'
+import { prevenirClientAbsent } from '@/lib/livraison-absent-serveur'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +41,14 @@ export async function POST(request) {
       action: 'livraison_statut', cible_type: 'commande', cible_id: commande_id,
       details: { de: r.avant.statut_livraison, vers: statut_livraison, encaissement: r.champs.encaisse_mode || null, montant: r.champs.encaisse_montant ?? null },
     })
-    return NextResponse.json({ ok: true, commande_id, champs: r.champs })
+    // ⚠️ « ABSENT » PRÉVIENT ICI, et seulement ici (voir lib/livraison-absent-serveur).
+    // L'écran dit au livreur si le client a été prévenu : sinon il l'appelle.
+    let client_prevenu = null
+    if (statut_livraison === 'absent') {
+      const p = await prevenirClientAbsent(admin, commande_id)
+      client_prevenu = p.email || p.push
+    }
+    return NextResponse.json({ ok: true, commande_id, champs: r.champs, client_prevenu })
   } catch (e) {
     console.error('[livraison/livrer] erreur', e)
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })

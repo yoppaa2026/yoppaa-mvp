@@ -267,6 +267,11 @@ function Livraisons({ livraisons, gestes = null, enCours = null }) {
                       {enCours === `${l.id}:livree` ? <DotsAttente label="Enregistrement"/> : 'Livrée'}
                     </button>
                   )}
+                  {gesteLivraisonPermis(l, 'absent') && (
+                    <button type="button" disabled={!!enCours} onClick={() => gestes.absent(l)} style={{ ...puce(false), flexBasis: '100%', padding: '10px 14px' }}>
+                      {enCours === `${l.id}:absent` ? <DotsAttente label="Enregistrement"/> : 'Client absent'}
+                    </button>
+                  )}
                 </div>
               ))}
           </div>
@@ -455,6 +460,24 @@ export default function PosteEquipe({ equipe, onChanger }) {
       dire('Commande livrée')
       await prevenir('/api/fidelite/crediter', { commande_id: l.id }, 'le crédit de fidélité du client')
       await prevenir('/api/livraison/statut', { commande_id: l.id, statut_livraison: 'livree' }, 'la notification au client')
+    }),
+    // Personne à la porte (Alex, 01/10) : la commande revient « prête », et le
+    // SERVEUR prévient le client. L'écran dit seulement si c'est parti.
+    absent: (l) => geste(`${l.id}:absent`, async () => {
+      const choix = await confirmer({
+        titre: 'Personne à la porte ?',
+        message: 'La commande revient au magasin, et le client est prévenu d’appeler pour une nouvelle livraison ou pour venir la chercher.',
+        details: [l.reference, l.client_nom].filter(Boolean).join(' · ') || null,
+        actions: [
+          { valeur: 'oui', ton: 'principal', label: 'Oui, client absent' },
+          { valeur: 'rien', ton: 'neutre', label: 'Ne rien faire' },
+        ],
+      })
+      if (choix !== 'oui') return
+      const j = await lire(await postPro('/api/livraison/livrer', { commande_id: l.id, statut_livraison: 'absent' }))
+      if (!j.ok) { dire(j.error || 'L’absence n’a pas pu être notée.', 'erreur'); return }
+      if (j.client_prevenu) dire('Noté : le client est prévenu de vous appeler.')
+      else dire(`Noté, mais le client n’a pas pu être prévenu${l.client_telephone ? ` : appelle-le au ${l.client_telephone}` : ''}.`, 'erreur')
     }),
   }
   const gestesCommande = {

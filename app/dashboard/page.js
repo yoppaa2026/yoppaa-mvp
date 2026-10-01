@@ -910,6 +910,24 @@ function CarteCommande({ commande, numero, categorie = null, etiquettes = false,
             Marquer livrée
           </button>
         )}
+        {/* ⚠️ PERSONNE À LA PORTE (Alex, 01/10). La commande revient « prête »,
+            le client est prévenu de rappeler. Seulement EN ROUTE : avant le
+            départ, personne n'a sonné. */}
+        {estLivraison && commande.statut === 'pret' && statutLiv === 'en_livraison' && (
+          <button onClick={async () => {
+            if (await confirme(confirmationSimple({
+              titre: 'Personne à la porte ?',
+              message: 'La commande revient « prête », et ton client est prévenu de t’appeler pour une nouvelle livraison ou pour venir la chercher.',
+              details: `${commande.client_nom}${commande.adresse_livraison ? ` · ${commande.adresse_livraison}` : ''}`,
+              action: 'Oui, client absent',
+            }))) {
+              onLivraisonStatut(commande.id, 'absent')
+            }
+          }}
+            style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: '#6B7280', border: '1.5px solid #E5E7EB', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
+            Client absent
+          </button>
+        )}
         {/* ⚠️ CE BOUTON N'APPARAISSAIT JAMAIS EN BOUTIQUE. Il exigeait un
             CRÉNEAU pour vérifier que l'heure était passée ; une commande de
             détail n'en a aucun, donc `creneauPasse` restait faux et le bouton
@@ -2204,6 +2222,21 @@ export default function Dashboard() {
     const patch = j.champs || { statut_livraison: statutLivraison }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
     if (statutLivraison === 'livree') crediterFideliteCommande(commandeId)
+
+    // ⚠️ « ABSENT » : le serveur a déjà prévenu le client (lui seul le peut,
+    // voir lib/livraison-absent-serveur). On DIT au commerçant si c'est parti :
+    // sinon c'est à lui d'appeler.
+    if (statutLivraison === 'absent') {
+      await confirme(confirmationInfo({
+        titre: 'Noté : client absent',
+        message: j.client_prevenu
+          ? 'Ton client est prévenu : il doit t’appeler pour une nouvelle livraison, ou pour venir la chercher.'
+          : 'Ton client n’a pas pu être prévenu. Appelle-le pour convenir de la suite.',
+        details: 'La commande revient « prête ». « Partir en livraison » la relance quand tu y retournes.',
+        action: 'J’ai compris',
+      }))
+      return
+    }
 
     // Push OneSignal au Yopper (en route / livrée). Non-bloquant : l'UI est déjà à jour.
     postPro('/api/livraison/statut', { commande_id: commandeId, statut_livraison: statutLivraison }).catch(e => console.warn('[dashboard] push livraison KO', e))

@@ -21,8 +21,11 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { formuleVendableEnLigne, resumeFormulePublique, seancesDeLaFormule } from '@/lib/abonnements'
+import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 
 export async function POST(request) {
+  // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
+  const depuisApp = estUaApp(request.headers.get('user-agent'))
   try {
     requireStripe()
 
@@ -103,8 +106,10 @@ export async function POST(request) {
         },
       }],
       customer_email: client_email,
-      success_url: `${STRIPE_CONFIG.appUrl}/commander/rdv/${commercant.slug}?abonnement=ok&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:   `${STRIPE_CONFIG.appUrl}/commander/rdv/${commercant.slug}?abonnement=annule`,
+      // ⚠️ PARTI DE L'APP, LE RETOUR PASSE PAR `/retour-app` (voir
+      // lib/retour-vers-app.js). Dans l'app, rien ne change.
+      success_url: urlDeRetour(STRIPE_CONFIG.appUrl, `/commander/rdv/${commercant.slug}?abonnement=ok&session_id={CHECKOUT_SESSION_ID}`, depuisApp),
+      cancel_url:   urlDeRetour(STRIPE_CONFIG.appUrl, `/commander/rdv/${commercant.slug}?abonnement=annule`, depuisApp),
       payment_intent_data: {
         application_fee_amount: calculApplicationFee(prixCents, commercant),   // 0 : Yoppaa ne prend rien
         metadata: buildPaymentMetadata({

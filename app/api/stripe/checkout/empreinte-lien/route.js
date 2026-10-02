@@ -21,8 +21,11 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, PAYMENT_KIND, buildPaymentMetadata } from '@/lib/stripe'
 import { chargerLienEmpreinte } from '@/lib/empreinte-lien-serveur'
 import { normaliserEmail } from '@/lib/email-normalise'
+import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 
 export async function POST(request) {
+  // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
+  const depuisApp = estUaApp(request.headers.get('user-agent'))
   try {
     requireStripe()
     const { jeton } = await request.json()
@@ -81,8 +84,11 @@ export async function POST(request) {
         commercantId: commercant.id,
         extra: { yoppaa_rdv_id: String(rdv.id), empreinte_sur_existante: '1' },
       }),
-      success_url: `${base}/empreinte/${jeton}?etat=ok`,
-      cancel_url: `${base}/empreinte/${jeton}?etat=annule`,
+      // ⚠️ PARTI DE L'APP, LE RETOUR PASSE PAR `/retour-app` (voir
+      // lib/retour-vers-app.js). Le lien d'email s'ouvre dans l'app quand
+      // elle est installée.
+      success_url: urlDeRetour(base, `/empreinte/${jeton}?etat=ok`, depuisApp),
+      cancel_url: urlDeRetour(base, `/empreinte/${jeton}?etat=annule`, depuisApp),
     }, {
       stripeAccount: commercant.stripe_account_id,
     })

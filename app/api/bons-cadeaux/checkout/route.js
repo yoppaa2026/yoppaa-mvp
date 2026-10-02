@@ -21,10 +21,13 @@ import { canDo, planEffectif } from '@/lib/plans'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { genererCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
+import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 export async function POST(request) {
+  // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
+  const depuisApp = estUaApp(request.headers.get('user-agent'))
   try {
     requireStripe()
 
@@ -149,8 +152,10 @@ export async function POST(request) {
       // aucune ressource devinable. Mettre `bon.id` dans l'URL donnerait la
       // même page à qui la partagerait, code compris, et un code est de
       // l'argent.
-      success_url: `${STRIPE_CONFIG.appUrl}${commercant.categorie === 'vitrine' ? `/commander/rdv/${commercant.slug}` : `/commander/${commercant.slug}`}?bon=ok&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:   `${STRIPE_CONFIG.appUrl}${commercant.categorie === 'vitrine' ? `/commander/rdv/${commercant.slug}` : `/commander/${commercant.slug}`}?bon=annule`,
+      // ⚠️ PARTI DE L'APP, LE RETOUR PASSE PAR `/retour-app` (voir
+      // lib/retour-vers-app.js). Dans l'app, rien ne change.
+      success_url: urlDeRetour(STRIPE_CONFIG.appUrl, `${commercant.categorie === 'vitrine' ? `/commander/rdv/${commercant.slug}` : `/commander/${commercant.slug}`}?bon=ok&session_id={CHECKOUT_SESSION_ID}`, depuisApp),
+      cancel_url:   urlDeRetour(STRIPE_CONFIG.appUrl, `${commercant.categorie === 'vitrine' ? `/commander/rdv/${commercant.slug}` : `/commander/${commercant.slug}`}?bon=annule`, depuisApp),
       payment_intent_data: {
         application_fee_amount: calculApplicationFee(montantCents, commercant),
         metadata: buildPaymentMetadata({

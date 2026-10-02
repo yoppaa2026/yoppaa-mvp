@@ -24,6 +24,9 @@ import { envoyerPush } from '../lib/onesignal.js'
 import {
   geolocNative, positionDisponible, lirePosition, etatAutorisation, codeErreurPosition,
 } from '../lib/geoloc.js'
+import {
+  MARQUE_APP, estUaApp, urlDeRetour, cheminDepuisRetour, lienVersApp, etatRetour,
+} from '../lib/retour-vers-app.js'
 
 const lire = (chemin) =>
   readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
@@ -994,6 +997,102 @@ const fenetreNative = (options = {}) => {
   verifie('🔴 aucun écran n’appelle la position du navigateur en direct', directs.length === 0, directs.join(', '))
   const appelants = fichiersApp.filter((f) => /\blirePosition\(window,/.test(codeDe(f)))
   verifie('⚠️ les trois écrans passent par `lirePosition`', appelants.length === 3, appelants.join(', '))
+}
+
+// ═══ 12) REVENIR DANS L'APP APRÈS LA BANQUE (02/10) ════════════════════════
+//
+// 🔴 LE DÉFAUT QU'ALEX A VU. Bancontact dans l'app : la page de la banque est
+// sur un autre domaine, Capacitor l'envoie dans Safari, et Stripe ramène le
+// Yopper sur notre confirmation… dans Safari. L'app reste figée sur Stripe.
+// ⚠️ ON NE RETIRE PAS BANCONTACT (Alex, 02/10) : on répare le RETOUR.
+{
+  const base = 'https://www.yoppaa.app'
+  const uaIphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
+
+  // ─── La marque : posée par l'app, lue par le serveur, LA MÊME ───
+  const conf = codeDe('capacitor.config.ts')
+  const marque = conf.match(/appendUserAgent: '([^']+)'/)?.[1]
+  egal('🔴 l’app ajoute sa marque au user-agent, celle que le serveur cherche', marque, MARQUE_APP)
+  verifie('🔴 la WebView de la nouvelle app est reconnue', estUaApp(`${uaIphone} ${marque}`) === true)
+  verifie('🔴 Safari, lui, n’est pas l’app', estUaApp(uaIphone) === false)
+  verifie('⚠️ un mot qui CONTIENT la marque n’est pas la marque',
+    estUaApp(`${uaIphone} PasYoppaaAppDuTout`) === false && estUaApp(null) === false)
+
+  // ─── L'adresse donnée à Stripe ───
+  const cheminOk = '/commander/mozz-art?paiement=ok&commande_id=c1&session_id={CHECKOUT_SESSION_ID}'
+  egal('🔴 partie de l’app, la commande revient par /retour-app',
+    urlDeRetour(base, cheminOk, true), `${base}/retour-app${cheminOk}`)
+  egal('⚠️ partie d’un navigateur, rien ne change', urlDeRetour(base, cheminOk, false), `${base}${cheminOk}`)
+  verifie('🔴 `{CHECKOUT_SESSION_ID}` reste écrit tel quel, sinon Stripe ne le remplace pas',
+    urlDeRetour(base, cheminOk, true).includes('{CHECKOUT_SESSION_ID}'))
+
+  // ─── La page reconstruit l'adresse d'origine, et rien d'autre ───
+  egal('🔴 la page d’origine est reconstruite avec ses paramètres',
+    cheminDepuisRetour(['commander', 'mozz-art'], { paiement: 'ok', commande_id: 'c1', session_id: 'cs_live_1' }),
+    '/commander/mozz-art?paiement=ok&commande_id=c1&session_id=cs_live_1')
+  egal('⚠️ un segment déjà codé n’est pas codé deux fois',
+    cheminDepuisRetour(['commander', 'mozz%27art'], {}), "/commander/mozz'art")
+  for (const [nom, segments] of [
+    ['une remontée « .. »', ['..', 'admin']],
+    ['une barre cachée dans un segment', ['commander', 'a%2F%2Fexemple.com']],
+    ['un segment vide', ['commander', '']],
+    ['un codage cassé', ['commander', '%E0%A4%A']],
+    ['aucun segment', []],
+  ]) {
+    verifie(`🔴 ${nom} ne fabrique aucune adresse`, cheminDepuisRetour(segments, {}) === null, JSON.stringify(segments))
+  }
+  egal('un paramètre répété garde ses valeurs', cheminDepuisRetour(['commander'], { a: ['1', '2'] }), '/commander?a=1&a=2')
+
+  // ─── Le lien qui rouvre l'app ───
+  egal('🔴 le lien rouvre l’app SUR la même page',
+    lienVersApp('/commander/mozz-art?paiement=ok'), 'yoppaa://www.yoppaa.app/commander/mozz-art?paiement=ok')
+  verifie('🔴 et ne fabrique jamais un lien vers un autre site', lienVersApp('//exemple.com') === null && lienVersApp('https://exemple.com') === null)
+
+  // ─── Ce que dit la page, pour les cinq tunnels ───
+  egal('commande payée', etatRetour({ paiement: 'ok' }), 'ok')
+  egal('abonnement annulé', etatRetour({ abonnement: 'annule' }), 'annule')
+  egal('bon payé', etatRetour({ bon: 'ok' }), 'ok')
+  egal('empreinte enregistrée', etatRetour({ empreinte: 'ok' }), 'ok')
+  egal('lien d’empreinte annulé', etatRetour({ etat: 'annule' }), 'annule')
+  verifie('sans résultat, on ne prétend rien', etatRetour({}) === null && etatRetour(undefined) === null)
+
+  // ─── LA RÈGLE : toute session Stripe d'un Yopper passe par urlDeRetour ───
+  //
+  // ⚠️ ON PART DES ROUTES, PAS D'UNE LISTE : une huitième route de paiement
+  // Yopper écrite demain sans `urlDeRetour` rougira ici. Celles du tableau de
+  // bord reviennent sur `/dashboard`, que l'app n'ouvre jamais.
+  const routes = readdirSync(new URL('../app/api/', import.meta.url), { recursive: true })
+    .filter((f) => typeof f === 'string' && f.endsWith('route.js'))
+    .map((f) => `app/api/${f.split('\\').join('/')}`)
+  const yopper = routes.filter((f) => {
+    const src = codeDe(f)
+    return /(success_url|cancel_url):/.test(src) && !/(success_url|cancel_url):\s*`\$\{[^}]+\}\/dashboard/.test(src)
+  })
+  verifie('⚠️ les routes de paiement Yopper sont bien trouvées (sinon la règle ne regarde rien)',
+    yopper.length === 7, `${yopper.length} : ${yopper.join(', ')}`)
+  for (const f of yopper) {
+    const src = codeDe(f)
+    const lignes = src.split('\n').filter((l) => /^\s*(success_url|cancel_url):/.test(l))
+    const directs = lignes.filter((l) => !/urlDeRetour\(/.test(l))
+    verifie(`🔴 ${f} : chaque retour de Stripe passe par urlDeRetour`,
+      lignes.length === 2 && directs.length === 0, directs.join(' | ') || `${lignes.length} ligne(s)`)
+    verifie(`🔴 ${f} : et il lui dit si la requête vient de l’app`,
+      /const depuisApp = estUaApp\(request\.headers\.get\('user-agent'\)\)/.test(src)
+      && lignes.every((l) => /, depuisApp\),\s*$/.test(l)))
+  }
+
+  // ─── La page de retour ───
+  const page = codeDe('app/retour-app/[...chemin]/page.js')
+  const iCible = page.indexOf('const cible = cheminDepuisRetour(chemin, recherche)')
+  const iApp = page.indexOf('if (estUaApp(ua)) redirect(cible)')
+  const iRendu = page.indexOf('return (')
+  verifie('🔴 dans l’app, la page renvoie aussitôt vers la page habituelle',
+    iCible > 0 && iApp > iCible && iRendu > iApp)
+  verifie('⚠️ une adresse invalide retombe sur l’accueil', /if \(!cible\) redirect\('\/commander'\)/.test(page))
+  verifie('🔴 dans le navigateur, le bouton rouvre l’app sur la même page',
+    /const lien = lienVersApp\(cible\)/.test(page) && /<a href=\{lien\}/.test(page))
+  verifie('⚠️ et la sortie de secours reste dans le navigateur', /<a href=\{cible\}/.test(page))
+  verifie('⚠️ `redirect` jette : jamais dans un `try`', !/try\s*\{[\s\S]*redirect\(/.test(page))
 }
 
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)

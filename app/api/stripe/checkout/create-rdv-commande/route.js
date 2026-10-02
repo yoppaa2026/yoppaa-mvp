@@ -50,10 +50,13 @@ import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { euros } from '@/lib/montants'
 import { creneauDejaCommence } from '@/lib/timezone'
+import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 
 const arrondiEuros = (n) => Math.round(Number(n || 0) * 100) / 100
 
 export async function POST(request) {
+  // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
+  const depuisApp = estUaApp(request.headers.get('user-agent'))
   try {
     requireStripe()
 
@@ -699,8 +702,10 @@ export async function POST(request) {
       payment_method_types: ['card', 'bancontact'],
       line_items: lineItems,
       customer_email: client_email,
-      success_url: `${STRIPE_CONFIG.appUrl}/commander/rdv/${commercant.slug}?paiement=ok&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:   `${STRIPE_CONFIG.appUrl}/commander/rdv/${commercant.slug}?paiement=annule`,
+      // ⚠️ PARTI DE L'APP, LE RETOUR PASSE PAR `/retour-app` (voir
+      // lib/retour-vers-app.js). Dans l'app, rien ne change.
+      success_url: urlDeRetour(STRIPE_CONFIG.appUrl, `/commander/rdv/${commercant.slug}?paiement=ok&session_id={CHECKOUT_SESSION_ID}`, depuisApp),
+      cancel_url:   urlDeRetour(STRIPE_CONFIG.appUrl, `/commander/rdv/${commercant.slug}?paiement=annule`, depuisApp),
       payment_intent_data: {
         application_fee_amount: calculApplicationFee(totalCents, commercant),   // 0, zéro commission Yoppaa
         metadata: buildPaymentMetadata({

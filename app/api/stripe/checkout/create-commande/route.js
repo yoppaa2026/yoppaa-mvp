@@ -56,8 +56,11 @@ import { verdictForfait } from '@/lib/garde-forfait'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { commandeAllumee } from '@/lib/plans'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 
 export async function POST(request) {
+  // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
+  const depuisApp = estUaApp(request.headers.get('user-agent'))
   try {
     // Anti-spam commandes (#3) : 10 commandes / 60 s par IP. Fail-open si Upstash
     // absent/injoignable (voir lib/ratelimit.js).
@@ -1171,8 +1174,11 @@ export async function POST(request) {
         }] : []),
       ],
       customer_email: client_email,
-      success_url: `${STRIPE_CONFIG.appUrl}/commander/${commercant.slug}?paiement=ok&commande_id=${commande.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:   `${STRIPE_CONFIG.appUrl}/commander/${commercant.slug}?paiement=annule&commande_id=${commande.id}`,
+      // ⚠️ PARTI DE L'APP, LE RETOUR PASSE PAR `/retour-app` : si la banque
+      // finit dans le navigateur, le Yopper peut revenir dans l'app (voir
+      // lib/retour-vers-app.js). Dans l'app, rien ne change.
+      success_url: urlDeRetour(STRIPE_CONFIG.appUrl, `/commander/${commercant.slug}?paiement=ok&commande_id=${commande.id}&session_id={CHECKOUT_SESSION_ID}`, depuisApp),
+      cancel_url:   urlDeRetour(STRIPE_CONFIG.appUrl, `/commander/${commercant.slug}?paiement=annule&commande_id=${commande.id}`, depuisApp),
       payment_intent_data: {
         application_fee_amount: calculApplicationFee(totalCents, commercant), // 0 (zéro commission)
         metadata: buildPaymentMetadata({

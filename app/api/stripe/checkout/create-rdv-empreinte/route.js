@@ -29,8 +29,11 @@ import { creneauDejaCommence } from '@/lib/timezone'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
 import { estParCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-collectifs'
+import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 
 export async function POST(request) {
+  // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
+  const depuisApp = estUaApp(request.headers.get('user-agent'))
   try {
     requireStripe()
 
@@ -194,8 +197,11 @@ export async function POST(request) {
         commercantId: commercant.id,
         extra: { yoppaa_rdv_id: String(rdvId || '') },
       }),
-      success_url: `${base}/commander/rdv/${commercant.slug}?empreinte=ok&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${base}/commander/rdv/${commercant.slug}?empreinte=annule`,
+      // ⚠️ PARTI DE L'APP, LE RETOUR PASSE PAR `/retour-app` (voir
+      // lib/retour-vers-app.js). Carte seule ici, mais une banque peut aussi
+      // ouvrir sa page de validation hors de l'app.
+      success_url: urlDeRetour(base, `/commander/rdv/${commercant.slug}?empreinte=ok&session_id={CHECKOUT_SESSION_ID}`, depuisApp),
+      cancel_url: urlDeRetour(base, `/commander/rdv/${commercant.slug}?empreinte=annule`, depuisApp),
     }, {
       stripeAccount: commercant.stripe_account_id,
     })

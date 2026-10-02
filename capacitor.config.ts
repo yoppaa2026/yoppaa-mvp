@@ -40,6 +40,14 @@ const config: CapacitorConfig = {
   // même travail sans alourdir l'app que les gens téléchargent.
   webDir: 'capacitor-web',
 
+  // 🔴 LA MARQUE DE L'APP DANS CHAQUE REQUÊTE (02/10). Le serveur doit savoir
+  // qu'un paiement part DE L'APP : si la banque termine dans Safari ou Chrome,
+  // Stripe ramène alors sur `/retour-app/…`, qui propose « Revenir dans
+  // Yoppaa » (voir lib/retour-vers-app.js). La WebView ajoute ce mot à son
+  // user-agent, `fetch` compris.
+  // ⚠️ LA MÊME VALEUR QUE `MARQUE_APP` : le banc compare les deux.
+  appendUserAgent: 'YoppaaApp',
+
   server: {
     // 🔴 LE SITE DE PRODUCTION, PAS UN PAQUET EMBARQUÉ. Voir l'en-tête.
     url: 'https://www.yoppaa.app',

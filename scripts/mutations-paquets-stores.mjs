@@ -42,6 +42,8 @@ const LEGAL = 'app/legal/page.js'
 const ONESIGNAL = 'lib/onesignal.js'
 const PONT = 'app/components/PontNatif.js'
 const GEOLOC = 'lib/geoloc.js'
+const RETOUR = 'lib/retour-vers-app.js'
+const PAGE_RETOUR = 'app/retour-app/[...chemin]/page.js'
 
 const MUTATIONS = [
   // ─── CE QUE LE MANIFESTE DEMANDE DOIT ETRE DECLARE AUX STORES (18/09) ───
@@ -490,6 +492,65 @@ const MUTATIONS = [
     fichier: 'app/commander/ConfirmCommune.js',
     de: '    lirePosition(window,',
     vers: '    navigator.geolocation.getCurrentPosition(' },
+
+  // ─── REVENIR DANS L APP APRES LA BANQUE (02/10) ─────────────────────────
+  //
+  // 🔴 Bancontact dans l app : la banque finit dans Safari, Stripe y ramene la
+  // confirmation, l app reste figee sur Stripe. On repare le RETOUR.
+  { nom: '🔴 l app pose une marque que le serveur ne cherche pas',
+    fichier: CONF,
+    de: "  appendUserAgent: 'YoppaaApp',",
+    vers: "  appendUserAgent: 'Yoppaa',"},
+
+  { nom: '🔴 un mot qui contient la marque passe pour l app',
+    fichier: RETOUR,
+    de: '  return typeof ua === \'string\' && /(^|\\s)YoppaaApp(\\/|\\s|$)/.test(ua)',
+    vers: "  return typeof ua === 'string' && /YoppaaApp/.test(ua)" },
+
+  { nom: '🔴 partie de l app, la commande ne passe plus par /retour-app',
+    fichier: RETOUR,
+    de: '  return depuisApp ? `${base}${PREFIXE_RETOUR}${chemin}` : `${base}${chemin}`',
+    vers: '  return `${base}${chemin}`' },
+
+  { nom: '🔴 la page de retour accepte une remontee ou une barre cachee',
+    fichier: RETOUR,
+    de: "  if (net.some((s) => s === null || s === '' || s === '.' || s === '..' || s.includes('/'))) return null",
+    vers: '  if (net.some((s) => s === null)) return null' },
+
+  { nom: '🔴 un segment deja code est code deux fois',
+    fichier: RETOUR,
+    de: '    try { return decodeURIComponent(s) } catch { return null }',
+    vers: '    return s' },
+
+  { nom: '🔴 le lien vers l app accepte un autre site',
+    fichier: RETOUR,
+    de: '  const sur = cheminInterne(chemin, null)',
+    vers: '  const sur = chemin' },
+
+  { nom: '🔴 la commande revient en direct, sans /retour-app',
+    fichier: 'app/api/stripe/checkout/create-commande/route.js',
+    de: '      success_url: urlDeRetour(STRIPE_CONFIG.appUrl, `/commander/${commercant.slug}?paiement=ok&commande_id=${commande.id}&session_id={CHECKOUT_SESSION_ID}`, depuisApp),',
+    vers: '      success_url: `${STRIPE_CONFIG.appUrl}/commander/${commercant.slug}?paiement=ok&commande_id=${commande.id}&session_id={CHECKOUT_SESSION_ID}`,' },
+
+  { nom: '🔴 l acompte croit toujours venir de l app',
+    fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    de: "  const depuisApp = estUaApp(request.headers.get('user-agent'))",
+    vers: '  const depuisApp = true' },
+
+  { nom: '🔴 le lien d empreinte revient en direct',
+    fichier: 'app/api/stripe/checkout/empreinte-lien/route.js',
+    de: '      success_url: urlDeRetour(base, `/empreinte/${jeton}?etat=ok`, depuisApp),',
+    vers: '      success_url: `${base}/empreinte/${jeton}?etat=ok`,' },
+
+  { nom: '🔴 dans l app, la page de retour s affiche au lieu de renvoyer',
+    fichier: PAGE_RETOUR,
+    de: '  if (estUaApp(ua)) redirect(cible)',
+    vers: '' },
+
+  { nom: '🔴 le bouton reste dans le navigateur au lieu de rouvrir l app',
+    fichier: PAGE_RETOUR,
+    de: '        <a href={lien} style=',
+    vers: '        <a href={cible} style=' },
 ]
 
 const lancer = () => {

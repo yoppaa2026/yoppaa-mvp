@@ -8,7 +8,7 @@ import {
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import DotsAttente from '@/app/components/DotsAttente'
 import OneSignalInit, { activerNotifications } from '@/app/components/OneSignalInit'
-import { memoriserPosition, marquerDemandee } from '@/lib/geoloc'
+import { memoriserPosition, marquerDemandee, positionDisponible, lirePosition } from '@/lib/geoloc'
 
 const T = {
   bg:      '#F8F6FF',
@@ -368,10 +368,13 @@ export default function OnboardingPage() {
       // ne viendraient jamais.
       setNote(RAISONS_PUSH[r?.raison] || RAISONS_PUSH.defaut)
     } else if (ecran.id === 'localisation') {
-      if ('geolocation' in navigator) {
+      // ⚠️ LA POSITION PASSE PAR `lirePosition` : dans l'app des stores, le
+      // module natif pose LA question du système au nom de Yoppaa, au lieu
+      // de la fenêtre « This website… » de WebKit.
+      if (positionDisponible(window)) {
         setNote(null)
         setEnAttente(true)
-        navigator.geolocation.getCurrentPosition(
+        lirePosition(window,
           (pos) => {
             // ⚠️ ON ÉCRIT DANS LA MÉMOIRE DE L'APPLICATION, PAS À CÔTÉ.
             // La position était demandée puis JETÉE. Ma première correction

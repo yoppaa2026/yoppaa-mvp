@@ -41,7 +41,8 @@ import { libelleCarteRecompenses } from '@/lib/fidelite-recompense'
 import { libelleRecompense } from '@/lib/fidelite'
 import { libelleExpedition, suiviUrl } from '@/lib/transporteurs'
 import { lirePositionMemorisee, memoriserPosition, marquerDemandee, dejaDemandee, decisionGeoloc, etatAutorisation,
-  lectureReussieDansCetteSession, marquerLectureDeCetteSession, demandeFaiteDansCetteSession, marquerDemandeDeCetteSession } from '@/lib/geoloc'
+  lectureReussieDansCetteSession, marquerLectureDeCetteSession, demandeFaiteDansCetteSession, marquerDemandeDeCetteSession,
+  positionDisponible, lirePosition } from '@/lib/geoloc'
 import PillsStatut from './PillsStatut'
 import ConfirmCommune from './ConfirmCommune'
 import ModalAvis from './ModalAvis'
@@ -2377,7 +2378,7 @@ export default function Commander() {
   // Appelée sans argument depuis le bouton « Utiliser ma position », elle
   // demande toujours : là, c'est le Yopper qui l'a voulu.
   async function geolocaliserAuDemarrage() {
-    if (!navigator.geolocation) return
+    if (!positionDisponible(window)) return
 
     // La dernière position connue s'affiche tout de suite : la commune apparaît
     // sans attendre le satellite, et même hors ligne.
@@ -2420,11 +2421,15 @@ export default function Commander() {
   // `silencieux` : rafraîchissement en arrière-plan. On garde la rue déjà
   // affichée le temps que la nouvelle arrive, au lieu de faire clignoter un
   // vide à chaque ouverture de l'application.
+  //
+  // ⚠️ LA POSITION PASSE PAR `lirePosition` : le module natif dans l'app des
+  // stores (une seule question, celle du système, au nom de Yoppaa), le
+  // navigateur ailleurs. Même signature que `getCurrentPosition`.
   function demanderGeolocalisation({ silencieux = false } = {}) {
-    if (!navigator.geolocation) return
+    if (!positionDisponible(window)) return
     setGeoLoading(true)
     if (!silencieux) setRue(null)
-    navigator.geolocation.getCurrentPosition(
+    lirePosition(window,
       async pos => {
         const { latitude: lat, longitude: lng } = pos.coords
         // ⚠️ LA PREUVE QUE L'AUTORISATION EST VIVANTE, et la seule dont on

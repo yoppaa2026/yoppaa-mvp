@@ -16,6 +16,9 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper } from '@/lib/fetch-yopper'
 import ChampCommune from '@/app/components/ChampCommune'
+// ⚠️ LA POSITION PASSE PAR `lib/geoloc` : le module natif dans l'app des
+// stores, le navigateur ailleurs (voir `lirePosition`).
+import { positionDisponible, lirePosition } from '@/lib/geoloc'
 
 // Tokens design system canonique
 const T = {
@@ -74,11 +77,11 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
       setStep('choose')
       return
     }
-    if (!navigator.geolocation) {
+    if (!positionDisponible(window)) {
       setStep('choose')
       return
     }
-    navigator.geolocation.getCurrentPosition(
+    lirePosition(window,
       async pos => {
         try {
           const url = `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&accept-language=fr&zoom=10&addressdetails=1`

@@ -21,6 +21,9 @@ import {
   cheminDeNotification, cheminDeClic, brancherClicNatif,
 } from '../lib/push-natif.js'
 import { envoyerPush } from '../lib/onesignal.js'
+import {
+  geolocNative, positionDisponible, lirePosition, etatAutorisation, codeErreurPosition,
+} from '../lib/geoloc.js'
 
 const lire = (chemin) =>
   readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
@@ -531,10 +534,11 @@ const fenetreNative = (options = {}) => {
 // ne déclarait QUE `INTERNET`, alors que `navigator.geolocation` est appelé
 // dans quatre fichiers.
 //
-// ⚠️ AUCUN PLUGIN NE LES AJOUTE À NOTRE PLACE. On utilise les API du
-// navigateur, pas `@capacitor/geolocation` ni `@capacitor/camera` : rien ne
-// fusionne de permission dans ces fichiers, contrairement à ce qu'on lit
-// partout. Les deux paquets seraient partis avec leur écran principal vide.
+// ⚠️ AUCUN PLUGIN NE LES AJOUTE À NOTRE PLACE. La caméra passe par le
+// navigateur ; la position passe depuis le 02/10 par `@capacitor/geolocation`,
+// dont le manifeste Android ne déclare AUCUNE permission (vérifié dans le
+// paquet installé). Rien ne fusionne donc dans ces fichiers, contrairement à
+// ce qu'on lit partout : nos déclarations restent la seule source.
 //
 // ⚠️ LA GARDE PART DU CODE, PAS DES MANIFESTES. Vérifier qu'une clé est
 // présente ne dit rien : c'est l'APPEL qui crée l'obligation. Le jour où un
@@ -557,7 +561,12 @@ const fenetreNative = (options = {}) => {
 
   // ⚠️ LA POSITION. Quatre fichiers l'appellent, et sans géolocalisation il
   // n'y a plus AUCUN lieu à montrer : l'écran principal se vide.
-  const veutPosition = /navigator\.geolocation/.test(toutLeCode)
+  //
+  // ⚠️ DEPUIS LE 02/10, LES ÉCRANS PASSENT PAR `lirePosition` (le module natif
+  // dans l'app, le navigateur ailleurs) : chercher le seul mot
+  // `navigator.geolocation` aurait conclu « personne ne demande la position »,
+  // et toute cette section se serait tue. On cherche les deux voies.
+  const veutPosition = /navigator\??\.geolocation|lirePosition\(/.test(toutLeCode)
   verifie('⚠️ le code appelle bien la position (sinon cette section ment)',
     veutPosition)
   if (veutPosition) {
@@ -833,6 +842,158 @@ const fenetreNative = (options = {}) => {
   verifie('⚠️ et il lit la fenêtre dans un effet, pas pendant le rendu', iEffet > 0 && iEffet < iInit)
   verifie('⚠️ une initialisation ratée n’essaie pas d’écouter', /if \(!init\.ok\) return/.test(pont))
   verifie('le toucher ouvre une page neuve', /window\.location\.assign\(chemin\)/.test(pont))
+}
+
+// ═══ 11) LA POSITION DANS L'APP PASSE PAR LE MODULE NATIF (02/10) ══════════
+//
+// 🔴 DANS L'APP, `navigator.geolocation` PASSE PAR WEBKIT, qui ajoute SA
+// fenêtre « This website will use your precise location », en anglais, au nom
+// du site. On passe par `@capacitor/geolocation` : une seule question, celle
+// du système, au nom de Yoppaa.
+//
+// ⚠️ ET L'ANCIENNE APP N'A PAS LE MODULE : le site est servi aux deux binaires
+// à la fois. Sans module, on retombe sur le navigateur.
+{
+  const attendre = (ms) => new Promise((r) => setTimeout(r, ms))
+  // Un faux téléphone. `module` : ce que rend `getCurrentPosition` (une
+  // promesse), ou rien pour l'ancienne app.
+  const telephone = ({ module, droits = 'granted', droitsJettent = false } = {}) => {
+    const journal = []
+    const plugins = {}
+    // ⚠️ COMME LE VRAI PONT : `PluginHeaders` n'est publié que par le natif,
+    // et `isPluginAvailable` ne regarde que les noms posés dans `Plugins`.
+    const entetes = []
+    if (module) {
+      entetes.push({ name: 'Geolocation', methods: [] })
+      plugins.Geolocation = {
+        getCurrentPosition: (opts) => { journal.push(['natif', JSON.stringify(opts)]); return module() },
+        checkPermissions: async () => {
+          if (droitsJettent) throw new Error('Location services are not enabled.')
+          return { location: droits, coarseLocation: droits }
+        },
+      }
+    }
+    return {
+      journal,
+      fenetre: {
+        Capacitor: {
+          isNativePlatform: () => true,
+          isPluginAvailable: (nom) => Object.prototype.hasOwnProperty.call(plugins, nom),
+          Plugins: plugins,
+          PluginHeaders: entetes,
+        },
+        navigator: { geolocation: { getCurrentPosition: (s, e, o) => journal.push(['web', JSON.stringify(o)]) } },
+      },
+    }
+  }
+  const lire = (fenetre, options, reglages) => new Promise((resoudre) => {
+    const reponses = []
+    lirePosition(fenetre,
+      (p) => reponses.push(['ok', p]),
+      (e) => reponses.push(['ko', e]),
+      options, reglages)
+    setTimeout(() => resoudre(reponses), 60)
+  })
+
+  // ─── Le bon chemin pour chaque binaire ───
+  const neuf = telephone({ module: async () => ({ coords: { latitude: 50.32, longitude: 4.65, accuracy: 12 }, timestamp: 1 }) })
+  const r1 = await lire(neuf.fenetre, { timeout: 10000, enableHighAccuracy: true })
+  verifie('🔴 la nouvelle app passe par le module natif, pas par WebKit',
+    neuf.journal.length === 1 && neuf.journal[0][0] === 'natif', JSON.stringify(neuf.journal))
+  verifie('🔴 et l’écran reçoit la position, comme du navigateur',
+    r1.length === 1 && r1[0][0] === 'ok' && r1[0][1].coords.latitude === 50.32 && r1[0][1].coords.longitude === 4.65)
+  verifie('⚠️ les options de l’écran sont transmises au module',
+    /"enableHighAccuracy":true/.test(neuf.journal[0][1]) && /"timeout":10000/.test(neuf.journal[0][1]))
+
+  const ancienne = telephone({ module: null })
+  await lire(ancienne.fenetre, { timeout: 15000 })
+  verifie('🔴 l’ancienne app, sans le module, retombe sur le navigateur',
+    ancienne.journal.length === 1 && ancienne.journal[0][0] === 'web')
+  verifie('⚠️ l’ancienne app n’a pas de module natif', geolocNative(ancienne.fenetre) === null)
+  // ⚠️ ET UN OBJET PRÉSENT N'EST PAS UN MODULE PRÉSENT. Si un jour le site
+  // importe `@capacitor/geolocation`, `Plugins.Geolocation` existera aussi dans
+  // l'ancienne app, sous forme d'un relais web : c'est Capacitor qui dit si le
+  // module NATIF est là.
+  const relais = telephone({ module: null })
+  relais.fenetre.Capacitor.Plugins.Geolocation = { getCurrentPosition: async () => ({}) }
+  verifie('⚠️ un relais web dans l’ancienne app n’est pas pris pour le module',
+    geolocNative(relais.fenetre) === null)
+
+  const navigateur = { navigator: { geolocation: { getCurrentPosition: (s, e, o) => navigateur.vu.push(JSON.stringify(o)) } }, vu: [] }
+  lirePosition(navigateur, () => {}, () => {}, { timeout: 10000, enableHighAccuracy: false })
+  egal('⚠️ dans un navigateur, l’appel part tel quel, avec ses options',
+    navigateur.vu.join(), '{"timeout":10000,"enableHighAccuracy":false}')
+  verifie('un `Capacitor` web n’est pas l’app',
+    geolocNative({ Capacitor: { isNativePlatform: () => false, PluginHeaders: [{ name: 'Geolocation' }], Plugins: { Geolocation: { getCurrentPosition() {} } } } }) === null)
+  verifie('⚠️ un accès qui jette n’est pas un module',
+    geolocNative({ get Capacitor() { throw new Error('x') } }) === null)
+
+  // ─── Disponible ? ───
+  verifie('dans la nouvelle app, la position est disponible', positionDisponible(neuf.fenetre) === true)
+  verifie('dans un navigateur avec géolocalisation aussi', positionDisponible(navigateur) === true)
+  verifie('⚠️ sans aucune des deux, non', positionDisponible({ navigator: {} }) === false && positionDisponible(undefined) === false)
+  const sans = []
+  lirePosition({ navigator: {} }, () => sans.push('ok'), (e) => sans.push(e.code))
+  egal('⚠️ et lire sans moyen répond « indisponible », sans jeter', sans.join(), '2')
+
+  // ─── Les échecs, ramenés aux codes que les écrans connaissent ───
+  const refus = telephone({ module: async () => { const e = new Error('Location permission request was denied.'); e.code = 'OS-PLUG-GLOC-0003'; throw e } })
+  const r2 = await lire(refus.fenetre, { timeout: 10000 })
+  verifie('🔴 un refus du système arrive en échec « refusé » (1)', r2.length === 1 && r2[0][0] === 'ko' && r2[0][1].code === 1)
+  egal('le délai du module devient « délai » (3)', codeErreurPosition({ code: 'OS-PLUG-GLOC-0010' }), 3)
+  egal('une restriction (contrôle parental) est un refus', codeErreurPosition({ code: 'OS-PLUG-GLOC-0008' }), 1)
+  egal('le reste est « indisponible » (2)', codeErreurPosition({ code: 'OS-PLUG-GLOC-0002' }), 2)
+
+  // 🔴 `Number(null)` VAUT 0 : une position sans chiffres situerait le Yopper
+  // dans le golfe de Guinée, à 5 000 km de chaque commerce.
+  const vide = telephone({ module: async () => ({ coords: { latitude: null, longitude: null } }) })
+  const r3 = await lire(vide.fenetre, { timeout: 10000 })
+  verifie('🔴 une position sans chiffres est un échec, pas (0, 0)',
+    r3.length === 1 && r3[0][0] === 'ko' && r3[0][1].code === 2, JSON.stringify(r3))
+
+  // ─── UNE réponse, toujours, et une seule ───
+  //
+  // 🔴 LES POINTS DE L'ONBOARDING NE S'ARRÊTENT QU'À LA RÉPONSE : un module muet
+  // (fenêtre du système laissée ouverte) les ferait tourner à vie.
+  const muet = telephone({ module: () => new Promise(() => {}) })
+  const r4 = await lire(muet.fenetre, { timeout: 5 }, { marge: 5 })
+  verifie('🔴 un module muet rend la main par un échec « délai »',
+    r4.length === 1 && r4[0][0] === 'ko' && r4[0][1].code === 3, JSON.stringify(r4))
+  let tardif = null
+  const lent = telephone({ module: () => new Promise((r) => { tardif = r }) })
+  const r5 = lire(lent.fenetre, { timeout: 5 }, { marge: 5 })
+  await attendre(40)
+  tardif({ coords: { latitude: 50, longitude: 4 } })
+  const rep5 = await r5
+  verifie('⚠️ une réponse arrivée APRÈS le filet est ignorée : l’écran a déjà repris la main',
+    rep5.length === 1 && rep5[0][0] === 'ko', JSON.stringify(rep5))
+  const rapide = telephone({ module: async () => ({ coords: { latitude: 50, longitude: 4 } }) })
+  const r6 = await lire(rapide.fenetre, { timeout: 5 }, { marge: 5 })
+  await attendre(30)
+  verifie('⚠️ une réponse à temps éteint le filet : pas de second appel',
+    r6.length === 1 && r6[0][0] === 'ok', JSON.stringify(r6))
+
+  // ─── L'état de l'autorisation, que WebKit ne disait jamais ───
+  egal('🔴 dans l’app, l’état vient du module', await etatAutorisation(telephone({ module: async () => ({}), droits: 'denied' }).fenetre), 'denied')
+  egal('⚠️ « prompt-with-rationale » (Android) est une question qu’on peut poser',
+    await etatAutorisation(telephone({ module: async () => ({}), droits: 'prompt-with-rationale' }).fenetre), 'prompt')
+  verifie('⚠️ services coupés : « on ne sait pas », pas « refusé »',
+    (await etatAutorisation(telephone({ module: async () => ({}), droitsJettent: true }).fenetre)) === null)
+
+  // ─── LA RÈGLE : plus aucun écran n'appelle WebKit directement ───
+  //
+  // ⚠️ ON VISE L'APPEL, PAS LE MOT : `lib/geoloc.js` porte forcément le seul
+  // appel au navigateur, c'est sa raison d'être.
+  const fichiersApp = ['app', 'lib'].flatMap((dossier) =>
+    readdirSync(new URL(`../${dossier}/`, import.meta.url), { recursive: true })
+      .filter((f) => typeof f === 'string' && f.endsWith('.js'))
+      .map((f) => `${dossier}/${f.split('\\').join('/')}`))
+  const directs = fichiersApp
+    .filter((f) => f !== 'lib/geoloc.js')
+    .filter((f) => /\.geolocation\??\.getCurrentPosition\(|\.geolocation\??\.watchPosition\(/.test(codeDe(f)))
+  verifie('🔴 aucun écran n’appelle la position du navigateur en direct', directs.length === 0, directs.join(', '))
+  const appelants = fichiersApp.filter((f) => /\blirePosition\(window,/.test(codeDe(f)))
+  verifie('⚠️ les trois écrans passent par `lirePosition`', appelants.length === 3, appelants.join(', '))
 }
 
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)

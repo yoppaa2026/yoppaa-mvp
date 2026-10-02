@@ -41,6 +41,7 @@ const PROFIL = 'app/commander/page.js'
 const LEGAL = 'app/legal/page.js'
 const ONESIGNAL = 'lib/onesignal.js'
 const PONT = 'app/components/PontNatif.js'
+const GEOLOC = 'lib/geoloc.js'
 
 const MUTATIONS = [
   // ─── CE QUE LE MANIFESTE DEMANDE DOIT ETRE DECLARE AUX STORES (18/09) ───
@@ -440,6 +441,55 @@ const MUTATIONS = [
     fichier: PONT,
     de: '    if (!init.ok) return',
     vers: '    if (false) return' },
+
+  // ─── LA POSITION PAR LE MODULE NATIF (02/10) ────────────────────────────
+  //
+  // 🔴 Dans l app, WebKit ajoute sa fenetre « This website will use your
+  // precise location », au nom du SITE. Et l ancienne app n a pas le module.
+  { nom: '🔴 l ancienne app prend un relais web pour le module natif',
+    fichier: GEOLOC,
+    de: '    if (!compile) return null',
+    vers: '' },
+
+  { nom: '🔴 on se fie a isPluginAvailable, qui ne regarde que les noms',
+    fichier: GEOLOC,
+    de: "      && cap.PluginHeaders.some((h) => h?.name === 'Geolocation')",
+    vers: "      && cap.isPluginAvailable?.('Geolocation') === true" },
+
+  { nom: '🔴 une position sans chiffres devient (0, 0), golfe de Guinee',
+    fichier: GEOLOC,
+    de: '        || p?.coords?.latitude == null || p?.coords?.longitude == null) {',
+    vers: '        ) {' },
+
+  { nom: '🔴 un module muet fait tourner les points a vie',
+    fichier: GEOLOC,
+    de: "  filet = setTimeout(() => conclure(echec, { code: 3, message: 'delai' }), delai + marge)",
+    vers: '  filet = null' },
+
+  { nom: '🔴 deux reponses pour une question',
+    fichier: GEOLOC,
+    de: '    if (fini) return',
+    vers: '    if (false) return' },
+
+  { nom: '🔴 un refus du systeme n est plus un refus',
+    fichier: GEOLOC,
+    de: '  if (n === 3 || n === 8) return 1',
+    vers: '  if (n === 8) return 1' },
+
+  { nom: '🔴 Android « prompt-with-rationale » devient « on ne sait pas »',
+    fichier: GEOLOC,
+    de: "      if (etat === 'prompt-with-rationale') return 'prompt'",
+    vers: '' },
+
+  { nom: '🔴 le navigateur perd les options de l ecran',
+    fichier: GEOLOC,
+    de: '    geo.getCurrentPosition(succes, echec, options)',
+    vers: '    geo.getCurrentPosition(succes, echec, {})' },
+
+  { nom: '🔴 un ecran rappelle WebKit en direct',
+    fichier: 'app/commander/ConfirmCommune.js',
+    de: '    lirePosition(window,',
+    vers: '    navigator.geolocation.getCurrentPosition(' },
 ]
 
 const lancer = () => {

@@ -69,7 +69,7 @@ const PAYANTS = ['communiquer', 'vendre']
 // besoin. Ici, aucune décision ne dépend d'un email.
 const { data: commercants, error } = await db
   .from('commercants')
-  .select('id, nom, plan, statut_publication, billing_exempt, stripe_subscription_id, subscription_status, subscription_trial_end, created_at')
+  .select('id, nom, plan, statut, statut_publication, billing_exempt, stripe_subscription_id, subscription_status, subscription_trial_end, created_at')
   .order('created_at', { ascending: true })
 
 if (error) {
@@ -81,6 +81,9 @@ const lignes = []
 let exemptes = 0
 let gratuits = 0
 let enRegle = 0
+// Les statuts d'un dossier validé : c'est la validation qui crée l'abonnement.
+const VALIDES = ['valide', 'actif']
+const aValider = []
 
 for (const c of (commercants || [])) {
   const plan = resolvePlan(c.plan) || 'exister'
@@ -94,6 +97,15 @@ for (const c of (commercants || [])) {
   if (c.billing_exempt === true) { exemptes++; continue }
 
   if (c.stripe_subscription_id) { enRegle++; continue }
+
+  // ⚠️ PAS ENCORE VALIDÉ N'EST PAS UN OUBLI (02/10, accord d'Alex). La route de
+  // validation KYB crée l'abonnement ce jour-là (`creerSubscriptionAutomatique`).
+  // Une inscription inachevée (La Table du Stock) faisait sonner l'alarme pour
+  // rien : on la range à part, on la nomme, on ne crie pas.
+  if (!VALIDES.includes(c.statut)) {
+    aValider.push({ nom: c.nom || '(sans nom)', plan, statut: c.statut || '(inconnu)' })
+    continue
+  }
 
   lignes.push({
     nom: c.nom || '(sans nom)',
@@ -112,7 +124,14 @@ console.log(`Commerçants lus   : ${(commercants || []).length}`)
 console.log(`  dont gratuits (Exister)     : ${gratuits}`)
 console.log(`  dont partenaires (exemptés) : ${exemptes}`)
 console.log(`  dont payants en règle       : ${enRegle}`)
+console.log(`  dont pas encore validés     : ${aValider.length}`)
 console.log('')
+
+if (aValider.length) {
+  console.log('ℹ️  Pas encore validés : leur abonnement se créera à la validation.')
+  for (const v of aValider) console.log(`   · ${v.nom} · forfait ${v.plan.toUpperCase()} · dossier ${v.statut}`)
+  console.log('')
+}
 
 if (!lignes.length) {
   console.log('✅ Aucun forfait payant sans abonnement. Rien à rattraper.')

@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["4PS788HD98.app.yoppaa.client"],
+        "components": [
+          { "/": "/commander*" },
+          { "/": "/carte/*" },
+          { "/": "/cadeau/*" },
+          { "/": "/empreinte/*" },
+          { "/": "/retour-app/*" }
+        ]
+      }
+    ]
+  }
+}

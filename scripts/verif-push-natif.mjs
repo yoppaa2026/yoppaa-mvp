@@ -1208,6 +1208,62 @@ const fenetreNative = (options = {}) => {
   verifie('🔴 et s’il ne porte pas les liens universels', /grep -q "applinks:www\.yoppaa\.app" droits\.txt/.test(lignesIos))
 }
 
+// ═══ 14) LES FICHIERS DES LIENS UNIVERSELS ET DES LIENS D'APP (02/10) ══════
+//
+// 🔴 SANS EUX, LES AUTORISATIONS DU BINAIRE NE SERVENT À RIEN. iOS et Android
+// ne font ouvrir l'app par un lien www.yoppaa.app que si le SITE confirme,
+// par ces deux fichiers, que l'app est bien la sienne. Un fichier absent, mal
+// servi ou qui nomme un autre identifiant : les liens d'email continuent de
+// s'ouvrir dans le navigateur, et rien ne le dit.
+//
+// ⚠️ LE TEAM ID EST ÉCRIT ICI, ET C'EST INÉVITABLE : ce fichier est public par
+// nature, Apple va le lire sur le site. La règle du workflow (jamais de Team ID
+// en dur) protège la SIGNATURE, pas ce fichier.
+{
+  const aasaBrut = existe('public/.well-known/apple-app-site-association')
+    ? lire('public/.well-known/apple-app-site-association') : ''
+  let aasa = null
+  try { aasa = JSON.parse(aasaBrut) } catch { /* rougit ci-dessous */ }
+  verifie('🔴 le fichier Apple existe et se lit en JSON', aasa !== null)
+  const details = aasa?.applinks?.details || []
+  egal('⚠️ une seule app est déclarée', details.length, 1)
+  const appId = details[0]?.appIDs?.[0] || ''
+  verifie('🔴 il nomme NOTRE app : Team ID de 10 caractères, puis app.yoppaa.client',
+    /^[A-Z0-9]{10}\.app\.yoppaa\.client$/.test(appId) && details[0]?.appIDs?.length === 1, appId)
+  // ⚠️ LA MÊME LISTE QUE LE MANIFESTE ANDROID : une page qui s'ouvre dans l'app
+  // sur un téléphone et dans le navigateur sur l'autre serait un défaut qu'on
+  // ne verrait qu'en testant les deux.
+  const chemins = (details[0]?.components || []).map((c) => c['/']).sort()
+  const manif = lire('android/app/src/main/AndroidManifest.xml').replace(/<!--[\s\S]*?-->/g, '')
+  const filtre = manif.match(/<intent-filter android:autoVerify="true">[\s\S]*?<\/intent-filter>/)?.[0] || ''
+  const prefixes = [...filtre.matchAll(/android:pathPrefix="([^"]+)"/g)].map((m) => `${m[1]}*`).sort()
+  egal('🔴 iPhone et Android ouvrent EXACTEMENT les mêmes pages dans l’app', chemins.join(' '), prefixes.join(' '))
+  verifie('🔴 et jamais le tableau de bord commerçant, qui reste une PWA',
+    !chemins.some((c) => /dashboard|admin|login|signup|equipe|pro/.test(c)), chemins.join(' '))
+  verifie('⚠️ aucune règle d’exclusion ne traîne (rien n’est ouvert hors de la liste)',
+    !(details[0]?.components || []).some((c) => c.exclude))
+
+  // 🔴 SERVI EN JSON, SINON APPLE L'IGNORE : le fichier n'a pas d'extension.
+  const nextConf = codeDe('next.config.ts')
+  verifie('🔴 le fichier Apple est servi en application/json',
+    /source: "\/\.well-known\/apple-app-site-association",\s*headers: \[\{ key: "Content-Type", value: "application\/json" \}\]/.test(nextConf))
+
+  // ─── Android ───
+  const alBrut = existe('public/.well-known/assetlinks.json') ? lire('public/.well-known/assetlinks.json') : ''
+  let al = null
+  try { al = JSON.parse(alBrut) } catch { /* rougit ci-dessous */ }
+  verifie('🔴 le fichier Android existe et se lit en JSON', Array.isArray(al) && al.length === 1)
+  const cible = al?.[0]?.target || {}
+  verifie('🔴 il nomme NOTRE app', cible.namespace === 'android_app' && cible.package_name === 'app.yoppaa.client')
+  verifie('🔴 il autorise l’app à ouvrir les liens',
+    (al?.[0]?.relation || []).includes('delegate_permission/common.handle_all_urls'))
+  const empreintes = cible.sha256_cert_fingerprints || []
+  // ⚠️ L'EMPREINTE DE LA CLÉ DE SIGNATURE PLAY, 32 octets : une empreinte
+  // tronquée ou celle d'un autre format, et Android refuse la vérification.
+  verifie('🔴 l’empreinte a la forme d’un SHA-256 complet',
+    empreintes.length === 1 && /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(empreintes[0]), empreintes.join(', '))
+}
+
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)
 if (echecs.length) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

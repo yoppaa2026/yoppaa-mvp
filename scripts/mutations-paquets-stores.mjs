@@ -48,6 +48,8 @@ const DROITS = 'ios/App/App/App.entitlements'
 const PBX = 'ios/App/App.xcodeproj/project.pbxproj'
 const SCENE = 'ios/App/App/SceneDelegate.swift'
 const ACTIVITE = 'android/app/src/main/java/app/yoppaa/client/MainActivity.java'
+const AASA = 'public/.well-known/apple-app-site-association'
+const ASSETLINKS = 'public/.well-known/assetlinks.json'
 
 const MUTATIONS = [
   // ─── CE QUE LE MANIFESTE DEMANDE DOIT ETRE DECLARE AUX STORES (18/09) ───
@@ -635,6 +637,35 @@ const MUTATIONS = [
     fichier: IOS,
     de: '          grep -q "aps-environment" droits.txt \\',
     vers: '          true \\' },
+
+  // ─── LES FICHIERS DES LIENS (02/10) ─────────────────────────────────────
+  //
+  // 🔴 Sans eux, ou mal servis, les liens d email s ouvrent dans le
+  // navigateur, et rien ne le dit.
+  { nom: '🔴 le fichier Apple oublie la page de retour apres la banque',
+    fichier: AASA,
+    de: '          { "/": "/retour-app/*" }',
+    vers: '          { "/": "/carte/*" }' },
+
+  { nom: '🔴 le fichier Apple nomme une autre app',
+    fichier: AASA,
+    de: '"appIDs": ["4PS788HD98.app.yoppaa.client"]',
+    vers: '"appIDs": ["4PS788HD98.app.yoppaa.pro"]' },
+
+  { nom: '🔴 le fichier Apple part sans son type JSON',
+    fichier: 'next.config.ts',
+    de: '        headers: [{ key: "Content-Type", value: "application/json" }],',
+    vers: '        headers: [{ key: "Cache-Control", value: "no-store" }],' },
+
+  { nom: '🔴 le fichier Android nomme une autre app',
+    fichier: ASSETLINKS,
+    de: '"package_name": "app.yoppaa.client",',
+    vers: '"package_name": "app.yoppaa.pro",' },
+
+  { nom: '🔴 l empreinte Android est tronquee',
+    fichier: ASSETLINKS,
+    de: ':02:6D:82:55:0A:60:02:F7:2E"',
+    vers: ':02:6D:82:55:0A:60:02:F7"' },
 ]
 
 const lancer = () => {

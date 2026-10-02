@@ -67,7 +67,17 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      // 🔴 LE FICHIER DES LIENS UNIVERSELS N'A PAS D'EXTENSION (02/10), et
+      // Apple exige qu'il soit servi en JSON. Sans cette ligne, il partirait
+      // en `application/octet-stream` : Apple l'ignore, et les liens d'email
+      // continuent de s'ouvrir dans Safari au lieu de l'app, sans erreur.
+      {
+        source: "/.well-known/apple-app-site-association",
+        headers: [{ key: "Content-Type", value: "application/json" }],
+      },
+    ];
   },
 };
 

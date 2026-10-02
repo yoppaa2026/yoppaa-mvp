@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.yoppaa.client",
+      "sha256_cert_fingerprints": [
+        "ED:93:DF:62:11:83:FC:47:E6:78:33:1C:B1:A8:13:C9:E8:26:BA:BA:63:AC:67:02:6D:82:55:0A:60:02:F7:2E"
+      ]
+    }
+  }
+]

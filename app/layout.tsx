@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { SPLASH_IOS } from "@/lib/splash-ios";
+import BandeauEssai from "@/app/components/BandeauEssai";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -107,7 +108,11 @@ export default function RootLayout({
           <link key={s.href} rel="apple-touch-startup-image" media={s.media} href={s.href} />
         ))}
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* Seulement quand la clé Stripe est de test (site d'essai). */}
+        <BandeauEssai />
+      </body>
     </html>
   );
 }

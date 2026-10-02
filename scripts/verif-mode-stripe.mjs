@@ -19,7 +19,7 @@ import { sansProse } from './lire-code.mjs'
 import {
   MODE_TEST, MODE_LIVE, VERDICT, COLONNES_MODE,
   modeDeLaCle, modePlateforme, verdictCompte, comptePerdu,
-  detachementCompte, naissanceCompte, messageCompte,
+  detachementCompte, naissanceCompte, messageCompte, bandeauEssaiVisible,
 } from '../lib/stripe-mode.js'
 
 const lire = (chemin) =>
@@ -327,6 +327,30 @@ const egal = (nom, obtenu, attendu) =>
     /stripe_account_id IS NOT NULL AND stripe_account_mode IS NULL/.test(sql))
   // ⚠️ RIEN DE TOUT ÇA NE DOIT FUIR DANS LA VUE PUBLIQUE.
   verifie('🔴 le contrôle vérifie la vue publique', /commercants_public/.test(sql))
+}
+
+// ═══ LE BANDEAU « SITE D'ESSAI » (02/10) ════════════════════════════════════
+// Deux sites côte à côte, www en réel et test en essai : le bandeau dit le
+// monde, pour qu'on ne teste jamais sur l'un en croyant être sur l'autre.
+{
+  egal('🔴 clé de test : le bandeau s’affiche', bandeauEssaiVisible('sk_test_51ABCdef'), true)
+  egal('🔴 clé réelle : jamais de bandeau', bandeauEssaiVisible('sk_live_51ABCdef'), false)
+  egal('clé absente : pas de bandeau (une absence ne prouve aucun monde)', bandeauEssaiVisible(undefined), false)
+  egal('clé illisible : pas de bandeau', bandeauEssaiVisible('pk_test_51ABCdef'), false)
+
+  const bandeau = codeDe('app/components/BandeauEssai.js')
+  verifie('🔴 le bandeau suit la règle mesurée ici (et rien d’autre)',
+    /if \(!bandeauEssaiVisible\(\)\) return null/.test(bandeau))
+  verifie('🔴 il laisse passer les touchers (un bouton dessous reste cliquable)',
+    /pointerEvents: 'none'/.test(bandeau))
+  verifie('il ne décale aucune mise en page', /position: 'fixed'/.test(bandeau))
+  verifie('🔴 composant serveur : la clé ne part jamais au navigateur',
+    !/^\s*['"]use client['"]/m.test(lire('app/components/BandeauEssai.js')))
+
+  const layout = codeDe('app/layout.tsx')
+  verifie('🔴 le bandeau est posé sur TOUTES les pages (layout racine)',
+    /<body[^>]*>[\s\S]*<BandeauEssai \/>[\s\S]*<\/body>/.test(layout)
+    && /import BandeauEssai from "@\/app\/components\/BandeauEssai"/.test(layout))
 }
 
 console.log(`\nMode d’un compte Stripe : ${ok} vérifications`)

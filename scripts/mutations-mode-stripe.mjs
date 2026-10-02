@@ -201,6 +201,28 @@ const MUTATIONS = [
     fichier: SQL,
     de: "         WHERE stripe_account_id IS NOT NULL AND stripe_account_mode IS NULL),",
     vers: "         WHERE stripe_account_id IS NOT NULL)," },
+
+  // ═══ Le bandeau « SITE D'ESSAI » (02/10) ═══
+  { nom: '🔴 le bandeau s affiche aussi en reel (il dirait test sur www)',
+    fichier: MODULE,
+    de: '  return modeDeLaCle(cle) === MODE_TEST',
+    vers: '  return modeDeLaCle(cle) !== null' },
+  { nom: '⚠️ le bandeau s affiche sans cle (il affirmerait un monde inconnu)',
+    fichier: MODULE,
+    de: '  return modeDeLaCle(cle) === MODE_TEST',
+    vers: '  return modeDeLaCle(cle) !== MODE_LIVE' },
+  { nom: '🔴 le bandeau bloque les touchers',
+    fichier: 'app/components/BandeauEssai.js',
+    de: "        pointerEvents: 'none',",
+    vers: "        pointerEvents: 'auto'," },
+  { nom: '🔴 le bandeau ne suit plus la regle',
+    fichier: 'app/components/BandeauEssai.js',
+    de: '  if (!bandeauEssaiVisible()) return null',
+    vers: '  if (false) return null' },
+  { nom: '🔴 le bandeau n est pose sur aucune page',
+    fichier: 'app/layout.tsx',
+    de: '        <BandeauEssai />',
+    vers: '' },
 ]
 
 const lancer = () => {

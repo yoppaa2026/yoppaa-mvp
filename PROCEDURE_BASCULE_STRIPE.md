@@ -1,5 +1,54 @@
 # Passer Stripe en live
 
+## ▶️ L'ORDRE À SUIVRE (mis à jour le 2 octobre 2026)
+
+Les deux stores ont approuvé l'app (Apple le 22/09, Google le 02/10). Le site
+d'essai `test.yoppaa.app` existe (base séparée, Stripe test). Décisions d'Alex
+du 02/10 : fin d'essai au **09/01/2027** confirmée ; pendant la revue des
+prochains builds, ce sont les **fiches de test** qui restent publiées ; les
+vrais commerces sont publiés après.
+
+🔴 **TROU DE LA VERSION DU 17/09, FERMÉ LE 02/10** : elle détachait les comptes
+de paiement (Connect), **pas les abonnements Yoppaa**. Les 8 abonnements
+« en essai » de la base n'existent qu'en test : sans les étapes 0, 5 et 6
+ci-dessous, personne n'aurait été facturé au 9 janvier, en silence.
+
+| # | Qui | Quoi |
+|---|---|---|
+| 0 | Alex | `migrations/MIGRATION_ARCHIVE_BASCULE_STRIPE.sql` en production (table d'archive, ne touche aucune ligne) |
+| 1 | Alex | Stripe en **mode réel** : 2 tarifs d'abonnement, taux de TVA, 2 webhooks, clés (section 2) |
+| 2 | Alex | `.env.local` : clés **réelles** le temps des scripts, puis `creer-produits-stripe.mjs` (à blanc, puis `--ecrire`) |
+| 3 | Alex | Vercel : chaque variable Stripe « Production and Preview » est **séparée** (la ligne existante garde la valeur de test pour Preview, une nouvelle ligne Production reçoit la valeur réelle). Puis les variables à remplir |
+| 4 | Claude puis Alex | pousser `master` (le bandeau d'essai part avec, invisible en réel) = redéploiement de la production avec les nouvelles clés |
+| 5 | Alex | `migrations/BASCULE_STRIPE_LIVE.sql`, **juste après** le déploiement |
+| 6 | Alex | `scripts/creer-abonnements-reels.mjs` (à blanc, puis `--ecrire`) : les 6 vrais commerçants |
+| 7 | Alex | contrôles : `npm run controle:tva`, `controle:prices`, `controle:abonnements` |
+| 8 | Alex | essai : webhooks de **test** vers `test.yoppaa.app` (contournement de la protection Vercel), secrets de test et Resend pour la branche `test` |
+| 9 | Alex | message aux vrais commerçants (section 6), puis publication des apps |
+
+**Les deux webhooks réels, et ce n'est pas un détail** : les paiements des
+clients sont créés SUR LE COMPTE du commerçant (`stripeAccount`), donc leurs
+événements naissent sur les comptes connectés.
+
+| Adresse | Écoute | Événements |
+|---|---|---|
+| `https://www.yoppaa.app/api/stripe/webhook` | **les comptes connectés** | `checkout.session.completed`, `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`, `charge.refunded`, `account.updated` |
+| `https://www.yoppaa.app/api/stripe/billing/webhook` | **ton compte** | `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed` |
+
+⚠️ Avant de les créer, regarder comment les webhooks de **test** sont réglés
+dans Stripe, et reproduire le même découpage.
+
+**Les vrais commerçants (classement d'Alex, 02/10)** : L'Arrosoir, Centre
+Respire, Mozz'Art, ICONIC, Le Bistrologue, Miss Bouboune (abonnement réel à
+l'étape 6) ; La Table du Stock (abonnement à sa validation). Fiches de test :
+Le traiteur Alexandre, New Signup, Sushi Yuki, et les fiches exemptées.
+
+**Instructions de revue des deux stores** : retirer la carte `4242`, dire que
+les paiements sont réels, commander chez « Chez Momo » en paiement sur place,
+prendre rendez-vous chez « Salon Nathalie ».
+
+---
+
 État au **17 septembre 2026**. Yoppaa tourne aujourd'hui **entièrement en mode
 test** : la clé de la plateforme commence par `sk_test_`, et les onze comptes
 connectés sont des comptes de test. Aucun euro réel n'a jamais transité.

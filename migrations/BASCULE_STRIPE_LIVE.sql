@@ -44,6 +44,61 @@ BEGIN
 END
 $$;
 
+-- ═══ 1 BIS. DETACHER LES ABONNEMENTS ET LES CLIENTS NES EN TEST (02/10) ════
+-- 🔴 LE TROU QUE LA VERSION DU 17/09 LAISSAIT. Elle detachait les comptes de
+-- PAIEMENT (Connect), pas les ABONNEMENTS Yoppaa. La plateforme ayant toujours
+-- tourne en test, chaque `stripe_subscription_id` de la base est un abonnement
+-- de test (8 « trialing » au releve du 02/10). Apres la bascule, la base
+-- dirait « en essai », Stripe n en connaitrait aucun, et personne ne serait
+-- facture au 9 janvier : EN SILENCE.
+-- Les vrais commercants recoivent ensuite un abonnement REEL par
+-- `scripts/creer-abonnements-reels.mjs` (lance par Alex, liste validee par lui).
+-- Leurs droits ne bougent pas entre les deux : ils dependent du forfait, pas
+-- de l abonnement.
+--
+-- ⚠️ ON NE JETTE RIEN : tout part d abord dans `stripe_bascule_archive`
+-- (`MIGRATION_ARCHIVE_BASCULE_STRIPE.sql`, a passer AVANT).
+--
+-- 🔴 UNE SEULE FOIS. Aucune colonne ne dit le monde d un abonnement : rejoue
+-- apres la creation des abonnements reels, ce bloc les detacherait. Il
+-- s arrete donc s il trouve deja une archive de test.
+DO $$
+DECLARE archives int; detaches int;
+BEGIN
+  IF to_regclass('public.stripe_bascule_archive') IS NULL THEN
+    RAISE EXCEPTION 'MIGRATION_ARCHIVE_BASCULE_STRIPE.sql doit passer AVANT. Rien n a ete fait.';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.stripe_bascule_archive WHERE monde = 'test') THEN
+    RAISE NOTICE 'Abonnements de test deja detaches lors d un passage precedent : bloc ignore.';
+    RETURN;
+  END IF;
+
+  INSERT INTO public.stripe_bascule_archive
+         (commercant_id, monde, stripe_customer_id, stripe_subscription_id,
+          subscription_status, subscription_trial_end, motif)
+  SELECT id, 'test', stripe_customer_id, stripe_subscription_id,
+         subscription_status, subscription_trial_end,
+         'bascule en reel : client et abonnement nes en test'
+    FROM public.commercants
+   WHERE stripe_subscription_id IS NOT NULL OR stripe_customer_id IS NOT NULL;
+  GET DIAGNOSTICS archives = ROW_COUNT;
+
+  UPDATE public.commercants
+     SET stripe_customer_id     = NULL,
+         stripe_subscription_id = NULL,
+         subscription_status    = NULL,
+         subscription_trial_end = NULL
+   WHERE stripe_subscription_id IS NOT NULL OR stripe_customer_id IS NOT NULL;
+  GET DIAGNOSTICS detaches = ROW_COUNT;
+
+  -- Ce qu on detache doit etre exactement ce qu on a archive.
+  IF archives <> detaches THEN
+    RAISE EXCEPTION 'Archive (%) et detachement (%) different : tout est annule.', archives, detaches;
+  END IF;
+  RAISE NOTICE 'Abonnements et clients de test archives puis detaches : %', detaches;
+END
+$$;
+
 -- ═══ 2. OUVRIR LE COMPTOIR SUR LES FICHES PUBLIEES ═════════════════════════
 -- 🔴 SANS CE BLOC, UNE FICHE PUBLIEE NE PEUT PLUS RIEN VENDRE DU TOUT. Son
 -- paiement en ligne vient de mourir ; si le comptoir n est pas ouvert,
@@ -120,6 +175,15 @@ UNION ALL
 SELECT 'H. fiches publiees, toutes confondues'::text,
        (SELECT count(*)::text FROM commercants WHERE statut_publication = 'publie'),
        'les fiches de demonstration seront depubliees avant le 1er octobre'::text
+UNION ALL
+SELECT 'J. abonnements ou clients Stripe encore en base'::text,
+       (SELECT count(*)::text FROM commercants
+         WHERE stripe_subscription_id IS NOT NULL OR stripe_customer_id IS NOT NULL),
+       '0 : chacun est un abonnement de test que personne ne facturera'::text
+UNION ALL
+SELECT 'K. abonnements et clients de test archives'::text,
+       (SELECT count(*)::text FROM stripe_bascule_archive WHERE monde = 'test'),
+       '14 au releve du 02/10 (rien n est jete)'::text
 UNION ALL
 SELECT 'I. et lesquelles'::text,
        coalesce((SELECT string_agg(nom, ' · ' ORDER BY nom) FROM commercants

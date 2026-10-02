@@ -115,8 +115,12 @@ SELECT 'S3', 'fonctions du schema public (hors extensions)',
          WHERE p.pronamespace = 'public'::regnamespace
            AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e'))::text, '44'
 UNION ALL
-SELECT 'S4', 'regles RLS du schema public',
-       (SELECT count(*) FROM pg_policies WHERE schemaname = 'public')::text, '175'
+-- Le type compte autant que le nombre : une règle restrictive devenue
+-- permissive OUVRE au lieu de fermer (43 restrictives dans la copie du 02/10).
+SELECT 'S4', 'regles RLS du schema public (total / permissives / restrictives)',
+       (SELECT count(*) || ' / ' || count(*) FILTER (WHERE permissive = 'PERMISSIVE')
+               || ' / ' || count(*) FILTER (WHERE permissive = 'RESTRICTIVE')
+          FROM pg_policies WHERE schemaname = 'public'), '175 / 132 / 43'
 UNION ALL
 SELECT 'S5', 'declencheurs du schema public',
        (SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid

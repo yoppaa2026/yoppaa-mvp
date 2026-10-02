@@ -22,7 +22,49 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!--
+              LE LIEN yoppaa:// (02/10). Le bouton « Revenir dans Yoppaa » de
+              la page /retour-app, quand la banque a fini dans Chrome. L hote
+              est fige : MainActivity n ouvre que www.yoppaa.app.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="yoppaa" android:host="www.yoppaa.app" />
+            </intent-filter>
+
+            <!--
+              LES LIENS D APP (02/10). Un lien www.yoppaa.app touche dans un
+              email ouvre l app au lieu de Chrome : connexion, commande, bon
+              cadeau. SEULES les pages Yopper : le tableau de bord commercant
+              reste une PWA dans le navigateur.
+              ⚠️ autoVerify : Android verifie le fichier
+              /.well-known/assetlinks.json du site. Tant qu il manque, les
+              liens s ouvrent dans le navigateur, comme avant.
+              ⚠️ La meme liste que l apple-app-site-association.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="www.yoppaa.app" />
+                <data android:pathPrefix="/commander" />
+                <data android:pathPrefix="/carte/" />
+                <data android:pathPrefix="/cadeau/" />
+                <data android:pathPrefix="/empreinte/" />
+                <data android:pathPrefix="/retour-app/" />
+            </intent-filter>
+
         </activity>
+
+        <!--
+          ⚠️ ONESIGNAL N OUVRE PLUS D ADRESSE TOUT SEUL (02/10). Le toucher est
+          traite par l app (PontNatif, lib/push-natif.js), qui ouvre la page
+          DANS sa vue. Sans cette ligne, une notification portant une adresse
+          l ouvrirait dans le navigateur.
+        -->
+        <meta-data android:name="com.onesignal.suppressLaunchURLs" android:value="true" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -46,9 +88,10 @@
       accorder ce que le manifeste ne demande pas : la position aurait ete
       refusee a l ouverture, en silence, et l ecran principal se serait vide.
 
-      ⚠️ AUCUN PLUGIN NE L AJOUTE A NOTRE PLACE : on utilise l API du
-      navigateur, pas `@capacitor/geolocation`. Rien ne fusionne donc de
-      permission dans ce fichier, contrairement a ce qu on lit partout.
+      ⚠️ AUCUN PLUGIN NE L AJOUTE A NOTRE PLACE. Depuis le 02/10, la position
+      passe par `@capacitor/geolocation`, et son manifeste ne declare AUCUNE
+      permission (verifie dans le paquet installe). Rien ne fusionne donc dans
+      ce fichier, contrairement a ce qu on lit partout.
 
       ⚠️ ET C EST APPLE QUI L A TROUVE, pas nous. Le mail ITMS-90683 parlait de
       l `Info.plist` ; le defaut vivait aussi ici, sans que rien ne le dise.

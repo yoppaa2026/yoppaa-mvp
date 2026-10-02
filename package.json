@@ -120,6 +120,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",
     "@capacitor/core": "8.5.2",
+    "@capacitor/geolocation": "8.2.3",
     "@stripe/stripe-js": "^9.2.0",
     "@supabase/supabase-js": "^2.103.3",
     "@upstash/ratelimit": "^2.0.8",

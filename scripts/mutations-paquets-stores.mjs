@@ -44,6 +44,10 @@ const PONT = 'app/components/PontNatif.js'
 const GEOLOC = 'lib/geoloc.js'
 const RETOUR = 'lib/retour-vers-app.js'
 const PAGE_RETOUR = 'app/retour-app/[...chemin]/page.js'
+const DROITS = 'ios/App/App/App.entitlements'
+const PBX = 'ios/App/App.xcodeproj/project.pbxproj'
+const SCENE = 'ios/App/App/SceneDelegate.swift'
+const ACTIVITE = 'android/app/src/main/java/app/yoppaa/client/MainActivity.java'
 
 const MUTATIONS = [
   // ─── CE QUE LE MANIFESTE DEMANDE DOIT ETRE DECLARE AUX STORES (18/09) ───
@@ -551,6 +555,86 @@ const MUTATIONS = [
     fichier: PAGE_RETOUR,
     de: '        <a href={lien} style=',
     vers: '        <a href={cible} style=' },
+
+  // ─── LE NATIF (02/10) ───────────────────────────────────────────────────
+  //
+  // 🔴 Trois manques du premier binaire, tous silencieux : iOS sans
+  // `aps-environment` ne recoit aucune notification ; aucun lien ne pouvait
+  // ouvrir l app ; le bouton retour Android fermait l app.
+  { nom: '🔴 iOS repart sans les notifications de production',
+    fichier: DROITS,
+    de: '	<string>production</string>',
+    vers: '	<string>development</string>' },
+
+  { nom: '🔴 une configuration Xcode signe sans les autorisations',
+    fichier: PBX,
+    de: '				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;',
+    vers: '' },
+
+  { nom: '🔴 iOS ne declare plus le schema yoppaa://',
+    fichier: PLIST,
+    de: '				<string>yoppaa</string>',
+    vers: '				<string>yoppa</string>' },
+
+  { nom: '🔴 iOS : OneSignal rouvre les adresses dans le navigateur',
+    fichier: PLIST,
+    de: '	<key>OneSignal_suppress_launch_urls</key>',
+    vers: '	<key>OneSignal_suppress_launch</key>' },
+
+  { nom: '🔴 iOS : le lien universel n ouvre plus la page',
+    fichier: SCENE,
+    de: '        if userActivity.activityType == NSUserActivityTypeBrowsingWeb, let url = userActivity.webpageURL {',
+    vers: '        if let url = Optional<URL>.none {' },
+
+  { nom: '🔴 iOS ouvre un lien vers n importe quel site',
+    fichier: SCENE,
+    de: '        guard morceaux.host?.lowercased() == hote else { return nil }',
+    vers: '' },
+
+  { nom: '🔴 iOS ouvre n importe quel schema',
+    fichier: SCENE,
+    de: '        guard let schema = morceaux.scheme?.lowercased(), schema == "yoppaa" || schema == "https" else { return nil }',
+    vers: '        guard let schema = morceaux.scheme?.lowercased() else { return nil }' },
+
+  { nom: '🔴 Android ouvre le tableau de bord commercant dans l app',
+    fichier: ANDROID_MANIFESTE,
+    de: '                <data android:pathPrefix="/retour-app/" />',
+    vers: '                <data android:pathPrefix="/retour-app/" /><data android:pathPrefix="/dashboard" />' },
+
+  { nom: '🔴 Android ne verifie plus ses liens d app',
+    fichier: ANDROID_MANIFESTE,
+    de: '<intent-filter android:autoVerify="true">',
+    vers: '<intent-filter>' },
+
+  { nom: '🔴 Android ouvre un lien vers n importe quel site',
+    fichier: ACTIVITE,
+    de: '        if (!HOTE.equalsIgnoreCase(hote)) return null;',
+    vers: '' },
+
+  { nom: '🔴 Android rejoue le lien d une activite recreee',
+    fichier: ACTIVITE,
+    de: '        if (lancement && restauree) return;',
+    vers: '' },
+
+  { nom: '🔴 Android rejoue le lien d une relance depuis les recentes',
+    fichier: ACTIVITE,
+    de: '        if ((intent.getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return;',
+    vers: '' },
+
+  { nom: '🔴 le bouton retour Android ferme l app au lieu de remonter',
+    fichier: ACTIVITE,
+    de: '                    vue.goBack();',
+    vers: '                    moveTaskToBack(true);' },
+
+  { nom: '🔴 iOS part sans le module de position',
+    fichier: 'ios/App/CapApp-SPM/Package.swift',
+    de: '                .product(name: "CapacitorGeolocation", package: "CapacitorGeolocation"),',
+    vers: '' },
+
+  { nom: '🔴 le paquet iOS ne relit plus ses notifications signees',
+    fichier: IOS,
+    de: '          grep -q "aps-environment" droits.txt \\',
+    vers: '          true \\' },
 ]
 
 const lancer = () => {

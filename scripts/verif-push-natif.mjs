@@ -1095,6 +1095,119 @@ const fenetreNative = (options = {}) => {
   verifie('⚠️ `redirect` jette : jamais dans un `try`', !/try\s*\{[\s\S]*redirect\(/.test(page))
 }
 
+// ═══ 13) LE NATIF : NOTIFICATIONS iOS, LIENS, BOUTON RETOUR (02/10) ════════
+//
+// 🔴 TROIS MANQUES DU PREMIER BINAIRE, TOUS SILENCIEUX :
+//   • iOS sans `aps-environment` : Apple ne remet AUCUNE notification à l'app ;
+//   • aucun schéma `yoppaa://`, aucun lien universel : le bouton « Revenir dans
+//     Yoppaa » et les liens d'email ne pouvaient pas ouvrir l'app ;
+//   • Android sans gestion du retour : le bouton fermait l'app depuis
+//     n'importe quelle page.
+{
+  const sansXml = (t) => t.replace(/<!--[\s\S]*?-->/g, '')
+  const HOTE_ATTENDU = 'www.yoppaa.app'
+  // ⚠️ L'HÔTE DES TROIS CÔTÉS EST LE MÊME : le site fabrique le lien, iOS et
+  // Android le vérifient. Une seule lettre de différence, et le bouton ne
+  // mène plus nulle part, sans erreur.
+  egal('le site fabrique ses liens vers www.yoppaa.app',
+    lienVersApp('/commander')?.replace(/^yoppaa:\/\//, '').split('/')[0], HOTE_ATTENDU)
+
+  // ─── iOS ───
+  verifie('🔴 iOS : le fichier d’autorisations existe', existe('ios/App/App/App.entitlements'))
+  const droits = existe('ios/App/App/App.entitlements') ? lire('ios/App/App/App.entitlements') : ''
+  verifie('🔴 iOS : les notifications sont autorisées, en production',
+    /<key>aps-environment<\/key>\s*<string>production<\/string>/.test(droits))
+  verifie('🔴 iOS : les liens universels visent www.yoppaa.app',
+    /<key>com\.apple\.developer\.associated-domains<\/key>\s*<array>\s*<string>applinks:www\.yoppaa\.app<\/string>/.test(droits))
+  const pbx = lire('ios/App/App.xcodeproj/project.pbxproj')
+  egal('🔴 iOS : le projet signe AVEC ces autorisations, en Debug et en Release',
+    (pbx.match(/CODE_SIGN_ENTITLEMENTS = App\/App\.entitlements;/g) || []).length, 2)
+  const plist = sansXml(lire('ios/App/App/Info.plist'))
+  verifie('🔴 iOS : le schéma yoppaa:// est déclaré',
+    /<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>yoppaa<\/string>/.test(plist))
+  verifie('⚠️ iOS : l’app peut être réveillée par une notification',
+    /<key>UIBackgroundModes<\/key>\s*<array>[\s\S]*?<string>remote-notification<\/string>[\s\S]*?<\/array>/.test(plist))
+  verifie('⚠️ iOS : OneSignal n’ouvre plus d’adresse tout seul',
+    /<key>OneSignal_suppress_launch_urls<\/key>\s*<true\/>/.test(plist))
+
+  const scene = lire('ios/App/App/SceneDelegate.swift')
+  // ⚠️ LES TROIS PORTES D'ENTRÉE : lancement à froid, `yoppaa://`, lien
+  // universel. En oublier une, c'est un cas qui ouvre l'accueil au lieu de la
+  // page, sans que rien ne rougisse ailleurs.
+  verifie('🔴 iOS : le lancement à froid par un lien ouvre la page',
+    /connectionOptions\.urlContexts\.first\?\.url \{\s*ouvrirDansLApp\(url\)/.test(scene)
+    && /connectionOptions\.userActivities\.first\(where: \{ \$0\.activityType == NSUserActivityTypeBrowsingWeb \}\)/.test(scene))
+  verifie('🔴 iOS : le lien yoppaa:// ouvre la page',
+    /openURLContexts URLContexts[\s\S]{0,200}if let url = URLContexts\.first\?\.url \{\s*ouvrirDansLApp\(url\)/.test(scene))
+  verifie('🔴 iOS : le lien universel ouvre la page',
+    /continue userActivity[\s\S]{0,250}userActivity\.webpageURL \{\s*ouvrirDansLApp\(url\)/.test(scene))
+  verifie('⚠️ iOS : les relais Capacitor sont toujours appelés',
+    (scene.match(/SceneDelegateProxy\.shared\.scene\(/g) || []).length === 3)
+  verifie('🔴 iOS : seul www.yoppaa.app s’ouvre, en yoppaa:// ou https',
+    new RegExp(`static let hote = "${HOTE_ATTENDU.replace(/\./g, '\\.')}"`).test(scene)
+    && /guard morceaux\.host\?\.lowercased\(\) == hote else \{ return nil \}/.test(scene)
+    && /schema == "yoppaa" \|\| schema == "https" else \{ return nil \}/.test(scene)
+    && /morceaux\.scheme = "https"/.test(scene))
+  verifie('⚠️ iOS : ni identifiant ni port dans un lien ouvert',
+    /guard morceaux\.user == nil, morceaux\.password == nil, morceaux\.port == nil else \{ return nil \}/.test(scene))
+  verifie('🔴 iOS : la page se charge dans la vue de l’app, quelle que soit la page affichée',
+    /guard let cible = LienYoppaa\.cible\(url\) else \{ return \}/.test(scene)
+    && /_ = vue\.load\(URLRequest\(url: cible\)\)/.test(scene))
+
+  // ─── Android ───
+  const manif = sansXml(lire('android/app/src/main/AndroidManifest.xml'))
+  verifie('🔴 Android : le schéma yoppaa:// est déclaré, sur www.yoppaa.app seulement',
+    /<data android:scheme="yoppaa" android:host="www\.yoppaa\.app" \/>/.test(manif))
+  const filtreLiens = manif.match(/<intent-filter android:autoVerify="true">[\s\S]*?<\/intent-filter>/)?.[0] || ''
+  verifie('🔴 Android : les liens d’app sont vérifiés (autoVerify) sur www.yoppaa.app',
+    /<data android:scheme="https" android:host="www\.yoppaa\.app" \/>/.test(filtreLiens))
+  // ⚠️ LA LISTE EXACTE. Le tableau de bord commerçant reste une PWA : un
+  // `/dashboard` ici l'ouvrirait dans l'app des Yoppers.
+  const prefixes = [...filtreLiens.matchAll(/android:pathPrefix="([^"]+)"/g)].map((m) => m[1]).sort()
+  egal('🔴 Android : les pages Yopper, et elles seules, s’ouvrent dans l’app',
+    prefixes.join(' '), ['/cadeau/', '/carte/', '/commander', '/empreinte/', '/retour-app/'].sort().join(' '))
+  verifie('⚠️ Android : OneSignal n’ouvre plus d’adresse tout seul',
+    /<meta-data android:name="com\.onesignal\.suppressLaunchURLs" android:value="true" \/>/.test(manif))
+
+  const activite = lire('android/app/src/main/java/app/yoppaa/client/MainActivity.java')
+  verifie('🔴 Android : un lien reçu app ouverte est ouvert dans la vue',
+    /protected void onNewIntent\(Intent intent\) \{\s*super\.onNewIntent\(intent\);[\s\S]{0,200}ouvrirDansLApp\(intent\);/.test(activite))
+  verifie('🔴 Android : seul www.yoppaa.app s’ouvre, en yoppaa:// ou https',
+    new RegExp(`static final String HOTE = "${HOTE_ATTENDU.replace(/\./g, '\\.')}"`).test(activite)
+    && /if \(!HOTE\.equalsIgnoreCase\(hote\)\) return null;/.test(activite)
+    && /if \(!"yoppaa"\.equalsIgnoreCase\(schema\) && !"https"\.equalsIgnoreCase\(schema\)\) return null;/.test(activite)
+    && /\.scheme\("https"\)\s*\.encodedAuthority\(HOTE\)/.test(activite))
+  verifie('⚠️ Android : ni identifiant ni port dans un lien ouvert',
+    /if \(lien\.getPort\(\) != -1 \|\| lien\.getUserInfo\(\) != null\) return null;/.test(activite))
+  // 🔴 UN LIEN DE CONNEXION NE SERT QU'UNE FOIS. Android redonne la vieille
+  // intention quand il recrée l'activité ou la relance depuis les récentes :
+  // la rouvrir afficherait « lien invalide » à quelqu'un de connecté.
+  verifie('🔴 Android : une activité recréée ne rejoue pas son lien',
+    /restauree = savedInstanceState != null;\s*super\.onCreate\(savedInstanceState\);/.test(activite)
+    && /if \(lancement && restauree\) return;/.test(activite))
+  verifie('🔴 Android : une relance depuis les récentes ne rejoue pas son lien',
+    /FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY\) != 0\) return;/.test(activite))
+  verifie('🔴 Android : le bouton retour remonte dans l’app avant d’en sortir',
+    /if \(vue != null && vue\.canGoBack\(\)\) \{\s*vue\.goBack\(\);\s*\} else \{\s*moveTaskToBack\(true\);/.test(activite))
+
+  // ─── Le module de position est bien DANS les deux projets ───
+  //
+  // ⚠️ LE WORKFLOW RESYNCHRONISE, MAIS LE DÉPÔT DOIT DÉJÀ ÊTRE JUSTE : un
+  // projet ouvert sur un Mac sans `cap sync` partirait sans le module, et le
+  // site retomberait en silence sur la fenêtre WebKit.
+  const pkg = JSON.parse(lire('package.json'))
+  verifie('🔴 le module de position est une dépendance', !!pkg.dependencies?.['@capacitor/geolocation'])
+  verifie('🔴 iOS l’embarque', /\.product\(name: "CapacitorGeolocation", package: "CapacitorGeolocation"\)/.test(lire('ios/App/CapApp-SPM/Package.swift')))
+  verifie('🔴 Android l’embarque', /implementation project\(':capacitor-geolocation'\)/.test(lire('android/app/capacitor.build.gradle')))
+
+  // ─── Le paquet iOS relit ce qu'il a signé ───
+  const ios = lire('.github/workflows/paquet-ios.yml')
+  const lignesIos = ios.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n')
+  verifie('🔴 le paquet iOS échoue s’il ne porte pas les notifications',
+    /codesign -d --entitlements - "\$APP"/.test(lignesIos) && /grep -q "aps-environment" droits\.txt/.test(lignesIos))
+  verifie('🔴 et s’il ne porte pas les liens universels', /grep -q "applinks:www\.yoppaa\.app" droits\.txt/.test(lignesIos))
+}
+
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)
 if (echecs.length) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

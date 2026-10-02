@@ -210,6 +210,16 @@ jobs:
           grep -q "app.yoppaa.client" signature.txt \
             || { echo "::error::Le paquet ne porte pas le bundle app.yoppaa.client."; exit 1; }
           echo "Signature verifiee : distribution, bundle app.yoppaa.client."
+          # 🔴 LES AUTORISATIONS SIGNEES, PAS CELLES DU FICHIER (02/10). Sans
+          # `aps-environment`, iOS ne remet AUCUNE notification a l app, et rien
+          # ne le dit nulle part ; sans `applinks`, les liens d email s ouvrent
+          # dans Safari. On lit ce que le paquet porte VRAIMENT.
+          codesign -d --entitlements - "$APP" > droits.txt 2>&1 || true
+          grep -q "aps-environment" droits.txt \
+            || { echo "::error::Le paquet ne porte pas aps-environment : aucune notification n arriverait. Le profil doit inclure Push Notifications."; exit 1; }
+          grep -q "applinks:www.yoppaa.app" droits.txt \
+            || { echo "::error::Le paquet ne porte pas applinks:www.yoppaa.app. Le profil doit inclure Associated Domains."; exit 1; }
+          echo "Autorisations verifiees : notifications et liens universels."
 
       # ⚠️ L'ARTEFACT AVANT LE TÉLÉVERSEMENT, ET DANS CET ORDRE EXPRÈS. Un dépôt
       # peut échouer pour une raison qui n'a rien à voir avec le paquet (numéro

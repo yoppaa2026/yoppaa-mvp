@@ -56,6 +56,7 @@ import { verdictForfait } from '@/lib/garde-forfait'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { commandeAllumee } from '@/lib/plans'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { moyensPaiementCheckout } from '@/lib/moyens-paiement'
 
 export async function POST(request) {
   try {
@@ -1122,7 +1123,8 @@ export async function POST(request) {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_method_types: ['card', 'bancontact'],
+      // Bancontact retiré dans l'app native (écran mort au retour de la banque).
+      payment_method_types: moyensPaiementCheckout(body),
       // Avec une remise : une seule ligne au montant restant dû (Stripe ne
       // gère pas de ligne négative en Checkout), la déduction est explicitée
       // dans le descriptif. Sans remise : lignes commande + frais classiques.

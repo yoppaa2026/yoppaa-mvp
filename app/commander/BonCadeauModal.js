@@ -9,6 +9,7 @@ import { redirectTop } from '@/lib/redirect-top'
 import { euros, INSECABLE } from '@/lib/montants'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { BON_MONTANT_MIN, BON_MONTANT_MAX, libelleBon } from '@/lib/bons-cadeaux'
+import { estAppNative } from '@/lib/push-natif'
 
 const T = {
   bgPanel: '#160636', ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4',
@@ -48,6 +49,8 @@ export default function BonCadeauModal({ commercant, validiteMois = 12, onClose 
       const r = await fetch('/api/bons-cadeaux/checkout', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Bancontact bloque l'app native au retour de la banque (lib/moyens-paiement.js).
+          app_native: estAppNative(window),
           commercant_id: commercant.id,
           montant: montantNum,
           acheteur_email: acheteur.email.trim(),

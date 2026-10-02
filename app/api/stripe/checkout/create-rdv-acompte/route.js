@@ -33,6 +33,7 @@ import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { verdictForfait } from '@/lib/garde-forfait'
 import { creneauDejaCommence } from '@/lib/timezone'
+import { moyensPaiementCheckout } from '@/lib/moyens-paiement'
 
 export async function POST(request) {
   try {
@@ -265,7 +266,8 @@ export async function POST(request) {
     // Le success_url/cancel_url restent sur la plateforme (chemin standard).
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_method_types: ['card', 'bancontact'],
+      // Bancontact retiré dans l'app native (écran mort au retour de la banque).
+      payment_method_types: moyensPaiementCheckout(body),
       line_items: [{
         quantity: 1,
         price_data: {

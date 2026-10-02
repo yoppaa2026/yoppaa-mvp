@@ -21,12 +21,14 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { formuleVendableEnLigne, resumeFormulePublique, seancesDeLaFormule } from '@/lib/abonnements'
+import { moyensPaiementCheckout } from '@/lib/moyens-paiement'
 
 export async function POST(request) {
   try {
     requireStripe()
 
-    const { formule_id, client_email, client_prenom, client_nom, client_telephone } = await request.json()
+    const corps = await request.json()
+    const { formule_id, client_email, client_prenom, client_nom, client_telephone } = corps
 
     if (!formule_id) {
       return NextResponse.json({ ok: false, error: 'formule_id requis' }, { status: 400 })
@@ -86,7 +88,8 @@ export async function POST(request) {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_method_types: ['card', 'bancontact'],
+      // Bancontact retiré dans l'app native (écran mort au retour de la banque).
+      payment_method_types: moyensPaiementCheckout(corps),
       line_items: [{
         quantity: 1,
         price_data: {

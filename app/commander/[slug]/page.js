@@ -123,6 +123,7 @@ import BlocAvis, { Etoiles } from '../BlocAvis'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Star, Flame, Calendar, Store, Check, Phone, Heart, Share2 } from 'lucide-react'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { estAppNative } from '@/lib/push-natif'
 
 const T = {
   bg:      '#F8F6FF',
@@ -3030,6 +3031,8 @@ export default function CommanderSlug() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Bancontact bloque l'app native au retour de la banque (lib/moyens-paiement.js).
+          app_native: estAppNative(window),
           paiement_mode: modeEffectif,
           commercant_id: commercant.id,
           date_commande: dateStr,

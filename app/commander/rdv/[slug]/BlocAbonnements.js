@@ -15,6 +15,7 @@ import { useState, useEffect } from 'react'
 import { resumeFormulePublique, cleAchatAbonnement } from '@/lib/abonnements'
 import { euros } from '@/lib/montants'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { estAppNative } from '@/lib/push-natif'
 
 const T = {
   main:  '#6B35C4',
@@ -76,6 +77,8 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Bancontact bloque l'app native au retour de la banque (lib/moyens-paiement.js).
+          app_native: estAppNative(window),
           formule_id: choisie.id,
           client_email: form.email.trim(),
           client_prenom: form.prenom.trim(),

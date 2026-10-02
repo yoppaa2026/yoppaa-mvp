@@ -21,6 +21,7 @@ import { canDo, planEffectif } from '@/lib/plans'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { genererCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
+import { moyensPaiementCheckout } from '@/lib/moyens-paiement'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -119,7 +120,8 @@ export async function POST(request) {
     const montantCents = Math.round(montantEUR * 100)
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_method_types: ['card', 'bancontact'],
+      // Bancontact retiré dans l'app native (écran mort au retour de la banque).
+      payment_method_types: moyensPaiementCheckout(body),
       line_items: [{
         quantity: 1,
         price_data: {

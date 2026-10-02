@@ -147,6 +147,7 @@ import { mentionVitrine } from '@/lib/stock-article'
 // pas de l'autre. Cette page n'affichait aucun avis jusqu'au 21/09.
 import BlocAvis from '../../BlocAvis'
 import { resumeAvis } from '@/lib/avis-affichage'
+import { estAppNative } from '@/lib/push-natif'
 
 // ─── Mini-calendrier mensuel (deroulant depuis le picker horizontal de 14 jours) ─
 // Affiche les jours de l'horizon, regroupes par mois. ⚠️ L'HORIZON N'EST PLUS
@@ -2082,6 +2083,8 @@ export default function CommanderRdvSlug() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              // Bancontact bloque l'app native au retour de la banque (lib/moyens-paiement.js).
+              app_native: estAppNative(window),
               commercant_id: commercant.id,
               prestation_id: prestationChoisie.id,
               praticien_id: praticienChoisi?.id || null,
@@ -2285,6 +2288,8 @@ export default function CommanderRdvSlug() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              // Bancontact bloque l'app native au retour de la banque (lib/moyens-paiement.js).
+              app_native: estAppNative(window),
               commercant_id: commercant.id,
               prestation_id: prestationChoisie.id,
               praticien_id: praticienChoisi?.id || null,

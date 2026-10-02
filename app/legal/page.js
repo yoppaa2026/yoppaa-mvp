@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { useAppNative } from '@/lib/use-app-native'
 // ⚠️ LES PRIX DE LA BOUTIQUE SE LISENT DANS LE CATALOGUE. Recopiés dans les
 // CGU, ils auraient divergé au premier ajustement, et c'est le document
 // CONTRACTUEL qui aurait eu tort face à l'écran de vente. Les tarifs SMS et
@@ -75,15 +76,33 @@ function InfoBox({ children }) {
   )
 }
 
+// ⚠️ LE RETOUR, DANS L'APP DES STORES SEULEMENT (02/10). Les liens du profil
+// ouvrent désormais cette page SUR PLACE dans l'app, au lieu de l'envoyer dans
+// Safari. Or l'iPhone n'offre aucun geste « précédent » dans une WebView : sans
+// ce bouton, le Yopper resterait bloqué ici. Dans un navigateur, la page s'est
+// ouverte dans un nouvel onglet et le navigateur a déjà son propre retour.
+function retourDepuisLegal() {
+  if (window.history.length > 1) window.history.back()
+  else window.location.href = '/commander'
+}
+
 export default function LegalPage() {
   const [activeSection, setActiveSection] = useState('mentions')
+  const natif = useAppNative()
 
   return (
     <div style={{ minHeight: '100vh', background: T.bg, fontFamily: '"DM Sans", system-ui, sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 
       {/* Header */}
-      <div style={{ background: `linear-gradient(160deg, ${T.deep} 0%, ${T.main} 100%)`, padding: '2rem 1.5rem', textAlign: 'center' }}>
+      <div style={{ position: 'relative', background: `linear-gradient(160deg, ${T.deep} 0%, ${T.main} 100%)`, padding: '2rem 1.5rem', textAlign: 'center' }}>
+        {natif && (
+          <button type="button" onClick={retourDepuisLegal}
+            style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px 6px 8px', borderRadius: 100, border: 'none', background: 'rgba(255,255,255,0.16)', color: '#fff', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+            Retour
+          </button>
+        )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 12 }}>
           {[{c:'#fff',s:9,o:0.4},{c:'#C4A0F4',s:12,o:1},{c:'#9660E0',s:9,o:1}].map((d,i) => (
             <div key={i} style={{ width: d.s, height: d.s, borderRadius: '50%', background: d.c, opacity: d.o }}/>

@@ -37,6 +37,8 @@ const ANDROID_MANIFESTE = 'android/app/src/main/AndroidManifest.xml'
 const DOSSIER = 'DOSSIER_STORES.md'
 const RACINE_PAGE = 'app/page.tsx'
 const COMPOSANT = 'app/components/RedirectionAppNative.js'
+const PROFIL = 'app/commander/page.js'
+const LEGAL = 'app/legal/page.js'
 
 const MUTATIONS = [
   // ─── CE QUE LE MANIFESTE DEMANDE DOIT ETRE DECLARE AUX STORES (18/09) ───
@@ -362,6 +364,39 @@ const MUTATIONS = [
     fichier: COMPOSANT,
     de: '  const router = useRouter()',
     vers: '  const router = useRouter(); const natif = estAppNative(window)' },
+
+  // ─── RESTER DANS L APP (02/10) ──────────────────────────────────────────
+  //
+  // 🔴 iOS envoie dans SAFARI toute nouvelle fenetre, meme vers yoppaa.app :
+  // le Yopper quittait l app pour lire les CGU, et rien ne le ramenait.
+  { nom: '🔴 les CGU repartent dans Safari depuis l app',
+    fichier: PROFIL,
+    de: "target={natif ? undefined : '_blank'} rel={natif ? undefined : 'noopener noreferrer'}",
+    vers: 'target="_blank" rel="noopener noreferrer"' },
+
+  { nom: '🔴 natif est lu pendant le rendu au lieu du crochet',
+    fichier: PROFIL,
+    de: '  const natif = useAppNative()',
+    vers: "  const natif = typeof window !== 'undefined' && !!window.Capacitor" },
+
+  // 🔴 L iPhone n offre aucun geste « precedent » dans une WebView : sans ce
+  // bouton, le Yopper reste bloque sur les CGU ouvertes sur place.
+  { nom: '🔴 la page legale perd son bouton de retour dans l app',
+    fichier: LEGAL,
+    de: '          <button type="button" onClick={retourDepuisLegal}',
+    vers: '          <button type="button" onClick={undefined}' },
+
+  { nom: '🔴 le retour de la page legale n a plus de point de chute',
+    fichier: LEGAL,
+    de: "  else window.location.href = '/commander'",
+    vers: '  else return' },
+
+  // ⚠️ LA REGLE, PAS LE CAS : un autre lien interne en nouvelle fenetre ferait
+  // sortir de l app de la meme facon.
+  { nom: '🔴 un lien interne d une page Yopper s ouvre en nouvelle fenetre',
+    fichier: 'app/commander/BonConfirmation.js',
+    de: "<a href={`/cadeau/${bon.token}`} style={{ display: 'block'",
+    vers: "<a href={`/cadeau/${bon.token}`} target=\"_blank\" style={{ display: 'block'" },
 ]
 
 const lancer = () => {

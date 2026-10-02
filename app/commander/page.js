@@ -63,6 +63,7 @@ import { libelleDecompte, PARAM_LISTE } from '@/lib/anti-gaspi'
 // celle qu'imprime le QR du kit doivent être la même : elles l'étaient par
 // recopie, elles le sont désormais par construction.
 import { lienFiche } from '@/lib/lien-fiche'
+import { useAppNative } from '@/lib/use-app-native'
 import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 
 const T = {
@@ -1596,6 +1597,8 @@ function BoutonGoodMorning({ onClick, nonVu }) {
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function Commander() {
   const router = useRouter()
+  // L'app des stores, lue APRÈS le montage (voir lib/use-app-native.js).
+  const natif = useAppNative()
 
   // Good Morning Yoppers : le bouton s'allume si le Yopper n'a pas encore
   // ouvert sa page du jour. Ça ne suffisait pas (Alex, 05/08) : le badge
@@ -5164,14 +5167,20 @@ export default function Commander() {
                     rejet classique, et il ne coûte rien à corriger.
                     Affiché pour TOUT LE MONDE, y compris sans compte : le
                     visiteur qui commande en invité a exactement les mêmes
-                    droits d'information. */}
+                    droits d'information.
+
+                    🔴 DANS L'APP DES STORES, `_blank` SORTAIT DE L'APP (02/10).
+                    Capacitor envoie toute nouvelle fenêtre dans Safari, même
+                    vers yoppaa.app : le Yopper quittait l'app pour lire trois
+                    paragraphes. Dans l'app, la page s'ouvre sur place, et
+                    `/legal` y affiche son propre bouton de retour. */}
                 <div style={{ marginTop: 22, paddingTop: 16, borderTop: `1px solid ${T.pale}`, display: 'flex', flexWrap: 'wrap', gap: 14, justifyContent: 'center' }}>
                   {[
                     { href: '/legal#cgu-client', label: 'Conditions d’utilisation' },
                     { href: '/legal#confidentialite', label: 'Confidentialité' },
                     { href: '/legal#mentions', label: 'Mentions légales' },
                   ].map(l => (
-                    <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
+                    <a key={l.href} href={l.href} target={natif ? undefined : '_blank'} rel={natif ? undefined : 'noopener noreferrer'}
                       style={{ fontSize: '0.74rem', fontWeight: 700, color: T.muted, textDecoration: 'underline', textUnderlineOffset: 3 }}>
                       {l.label}
                     </a>

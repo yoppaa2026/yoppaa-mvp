@@ -103,6 +103,14 @@ const MUTATIONS = [
     de: '    if (window.navigator?.standalone === true) return true',
     vers: '    if (false) return true' },
 
+  // 🔴 L'APP DES STORES (02/10) : une WebView Capacitor n'est ni « autonome »
+  // ni en `display-mode: standalone`. Sans ce signal, `NoteHorsApp` dit « Tu es
+  // dans ton navigateur » à quelqu'un qui est DANS l'app.
+  { nom: '🔴 la détection oublie l’app des stores',
+    fichier: 'lib/retour-app.js',
+    de: '    if (estAppNative(window)) return true',
+    vers: '    if (false) return true' },
+
   // ─── 5) LES DEUX ÉCRANS DE RETOUR SONT FRÈRES ───────────────────────────
   //
   // ⚠️ LA COMMANDE ET LE RENDEZ-VOUS S'ANNULENT TOUS LES DEUX par un lien

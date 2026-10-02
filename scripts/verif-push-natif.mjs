@@ -677,6 +677,51 @@ const fenetreNative = (options = {}) => {
   }
 }
 
+// ═══ 9) RESTER DANS L'APP (02/10) ══════════════════════════════════════════
+//
+// 🔴 LE RELEVÉ DU 02/10. Dans l'app des stores, iOS envoie dans SAFARI toute
+// nouvelle fenêtre (`target="_blank"`, `window.open`), même vers yoppaa.app
+// (`WebViewDelegationHandler.swift`, `createWebViewWith`). Le Yopper quittait
+// l'app pour lire les CGU, et rien ne le ramenait.
+{
+  const profil = codeDe('app/commander/page.js')
+  // ⚠️ ON VISE LE BLOC DES TROIS LIENS, pas le mot `_blank` : le profil en
+  // porte d'autres, légitimes (suivi du colis chez le transporteur).
+  const iLegal = profil.indexOf("{ href: '/legal#cgu-client'")
+  const blocLegal = iLegal > 0 ? profil.slice(iLegal, iLegal + 700) : ''
+  verifie('⚠️ le bloc des liens légaux est trouvé (sinon la garde ment)', blocLegal.length > 0)
+  verifie('🔴 dans l’app, les CGU s’ouvrent sur place, pas dans Safari',
+    /target=\{natif \? undefined : '_blank'\}/.test(blocLegal) && !/target="_blank"/.test(blocLegal))
+  // ⚠️ `natif` DOIT VENIR DU CROCHET, lu après le montage : lu pendant le rendu,
+  // il rouvrirait la zone morte du 03/09 et ferait diverger serveur et téléphone.
+  verifie('⚠️ et `natif` vient du crochet partagé, lu après le montage',
+    /const natif = useAppNative\(\)/.test(profil) && /from '@\/lib\/use-app-native'/.test(profil))
+
+  // 🔴 ET LA PAGE QUI S'OUVRE SUR PLACE DOIT AVOIR SON RETOUR. L'iPhone n'offre
+  // aucun geste « précédent » dans une WebView : sans bouton, le Yopper reste
+  // bloqué sur les CGU.
+  const legal = codeDe('app/legal/page.js')
+  verifie('🔴 la page légale affiche un retour dans l’app',
+    /\{natif && \([\s\S]{0,200}onClick=\{retourDepuisLegal\}/.test(legal)
+    && /const natif = useAppNative\(\)/.test(legal))
+  verifie('⚠️ et ce retour a un point de chute quand il n’y a pas d’historique',
+    /window\.history\.length > 1\) window\.history\.back\(\)[\s\S]{0,80}window\.location\.href = '\/commander'/.test(legal))
+
+  // ⚠️ LA RÈGLE, PAS SEULEMENT LE CAS. Un lien écrit en dur vers une page de
+  // Yoppaa avec `target="_blank"` ferait sortir de l'app de la même façon.
+  const pagesYopper = ['app/commander', 'app/onboarding', 'app/carte', 'app/cadeau', 'app/empreinte']
+    .flatMap((dossier) => readdirSync(new URL(`../${dossier}/`, import.meta.url), { recursive: true })
+      .filter((f) => typeof f === 'string' && f.endsWith('.js'))
+      .map((f) => `${dossier}/${f.split('\\').join('/')}`))
+  const fautifs = pagesYopper.filter((f) =>
+    /<a\b[^>]*\bhref=["'{`]+\/(?!\/)[^>]*\btarget="_blank"/.test(codeDe(f))
+    || /<a\b[^>]*\btarget="_blank"[^>]*\bhref=["'{`]+\/(?!\/)/.test(codeDe(f)))
+  verifie('🔴 aucun lien interne des pages Yopper ne s’ouvre dans une nouvelle fenêtre',
+    fautifs.length === 0, fautifs.join(', '))
+  verifie('⚠️ les pages Yopper sont bien lues (sinon la règle ne regarde rien)',
+    pagesYopper.length >= 20, `${pagesYopper.length} fichiers`)
+}
+
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)
 if (echecs.length) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

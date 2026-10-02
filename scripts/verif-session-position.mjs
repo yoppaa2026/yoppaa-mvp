@@ -432,6 +432,26 @@ function egale(nom, recu, attendu) {
     globalThis.window = { navigator: {} }
     verifie('un navigateur sans matchMedia rend « non », pas une exception',
       estDansLApp() === false)
+
+    // 🔴 L'APP DES STORES (relevé du 02/10). Une WebView Capacitor n'est ni
+    // « autonome » au sens de Safari ni en `display-mode: standalone` : sans ce
+    // cas, `NoteHorsApp` disait « Tu es dans ton navigateur » DANS l'app. Les
+    // deux autres signaux sont posés à FAUX exprès, sinon la garde serait verte
+    // grâce à eux et ne mesurerait pas Capacitor.
+    globalThis.window = {
+      Capacitor: { isNativePlatform: () => true },
+      navigator: { standalone: false },
+      matchMedia: () => ({ matches: false }),
+    }
+    verifie('🔴 dans l’app des stores, la réponse est « dans l’app »', estDansLApp() === true)
+    // ⚠️ UN `Capacitor` WEB NE COMPTE PAS : le paquet `@capacitor/core` pose ce
+    // global aussi dans un navigateur ordinaire, avec une plateforme « web ».
+    globalThis.window = {
+      Capacitor: { isNativePlatform: () => false },
+      navigator: { standalone: false },
+      matchMedia: () => ({ matches: false }),
+    }
+    verifie('⚠️ un Capacitor « web » reste un navigateur', estDansLApp() === false)
   } finally {
     if (fenetreOrigine === undefined) delete globalThis.window
     else globalThis.window = fenetreOrigine

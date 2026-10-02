@@ -50,7 +50,6 @@ import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { euros } from '@/lib/montants'
 import { creneauDejaCommence } from '@/lib/timezone'
-import { moyensPaiementCheckout } from '@/lib/moyens-paiement'
 
 const arrondiEuros = (n) => Math.round(Number(n || 0) * 100) / 100
 
@@ -697,8 +696,7 @@ export async function POST(request) {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      // Bancontact retiré dans l'app native (écran mort au retour de la banque).
-      payment_method_types: moyensPaiementCheckout(body),
+      payment_method_types: ['card', 'bancontact'],
       line_items: lineItems,
       customer_email: client_email,
       success_url: `${STRIPE_CONFIG.appUrl}/commander/rdv/${commercant.slug}?paiement=ok&session_id={CHECKOUT_SESSION_ID}`,

@@ -39,6 +39,8 @@ const RACINE_PAGE = 'app/page.tsx'
 const COMPOSANT = 'app/components/RedirectionAppNative.js'
 const PROFIL = 'app/commander/page.js'
 const LEGAL = 'app/legal/page.js'
+const ONESIGNAL = 'lib/onesignal.js'
+const PONT = 'app/components/PontNatif.js'
 
 const MUTATIONS = [
   // ─── CE QUE LE MANIFESTE DEMANDE DOIT ETRE DECLARE AUX STORES (18/09) ───
@@ -397,6 +399,47 @@ const MUTATIONS = [
     fichier: 'app/commander/BonConfirmation.js',
     de: "<a href={`/cadeau/${bon.token}`} style={{ display: 'block'",
     vers: "<a href={`/cadeau/${bon.token}`} target=\"_blank\" style={{ display: 'block'" },
+
+  // ─── TOUCHER UNE NOTIFICATION (02/10) ───────────────────────────────────
+  //
+  // 🔴 Le serveur envoyait un chemin RELATIF dans `url`, vers le web ET vers
+  // l app, et personne n ecoutait le toucher : « ta commande est prete »
+  // ouvrait l app sur la derniere page vue.
+  { nom: '🔴 le chemin d une notification n est plus filtre',
+    de: '  return cheminInterne(s, null)',
+    vers: '  return s || null' },
+
+  { nom: '🔴 l adresse de lancement passe avant le chemin des donnees',
+    de: '  return cheminDeNotification(notif?.additionalData?.chemin)',
+    vers: '  return cheminDeNotification(notif?.launchURL) || cheminDeNotification(notif?.additionalData?.chemin)' },
+
+  { nom: '🔴 un second montage rebranche un second ecouteur',
+    de: "  if (fenetre.__yoppaaClicNatif === true) return { ok: true, raison: 'deja_branche' }",
+    vers: '' },
+
+  { nom: '🔴 un toucher sans chemin valide ouvre quand meme',
+    de: '      if (chemin) ouvrir(chemin)',
+    vers: '      ouvrir(chemin)' },
+
+  { nom: '🔴 le lien repart dans `url`, donc aussi vers l app',
+    fichier: ONESIGNAL,
+    de: '  if (url) payload.web_url = url',
+    vers: '  if (url) payload.url = url' },
+
+  { nom: '🔴 l app ne recoit plus son chemin',
+    fichier: ONESIGNAL,
+    de: '  const donnees = { ...(data || {}), ...(chemin ? { chemin } : {}) }',
+    vers: '  const donnees = { ...(data || {}) }' },
+
+  { nom: '🔴 le pont natif n est plus pose dans le gabarit racine',
+    fichier: 'app/layout.tsx',
+    de: '        <PontNatif />',
+    vers: '' },
+
+  { nom: '🔴 une initialisation ratee essaie quand meme d ecouter',
+    fichier: PONT,
+    de: '    if (!init.ok) return',
+    vers: '    if (false) return' },
 ]
 
 const lancer = () => {

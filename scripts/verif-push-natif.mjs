@@ -18,7 +18,9 @@ import { sansProse } from './lire-code.mjs'
 import {
   estAppNative, pluginNatif, initialiserPushNatif, demanderPushNatif,
   etatPushNatif, taguerNatif, retirerTagNatif,
+  cheminDeNotification, cheminDeClic, brancherClicNatif,
 } from '../lib/push-natif.js'
+import { envoyerPush } from '../lib/onesignal.js'
 
 const lire = (chemin) =>
   readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
@@ -55,6 +57,12 @@ const fenetreNative = (options = {}) => {
         journal.push(['requestPermission', fallback])
         if (options.jette) throw new Error('boom')
         return options.accorde !== false
+      },
+      // Signature lue dans les types installés : `addEventListener('click', fn)`.
+      addEventListener: (nom, fn) => {
+        if (options.ecouteJette) throw new Error('ecoute')
+        journal.push(['addEventListener', nom])
+        ;(journal.ecouteurs ||= []).push(fn)
       },
     },
     User: {
@@ -720,6 +728,111 @@ const fenetreNative = (options = {}) => {
     fautifs.length === 0, fautifs.join(', '))
   verifie('⚠️ les pages Yopper sont bien lues (sinon la règle ne regarde rien)',
     pagesYopper.length >= 20, `${pagesYopper.length} fichiers`)
+}
+
+// ═══ 10) TOUCHER UNE NOTIFICATION OUVRE LA BONNE PAGE (02/10) ══════════════
+//
+// 🔴 LE SERVEUR ENVOYAIT `url: '/commander?…'`, UN CHEMIN RELATIF, vers le web
+// ET vers l'app. Dans l'app, OneSignal tentait de l'ouvrir tel quel dans un
+// navigateur ; et personne n'écoutait le toucher. « Ta commande est prête »
+// ouvrait l'app sur la dernière page vue.
+{
+  // ─── Le chemin : seul un chemin interne passe ───
+  egal('un chemin interne passe tel quel',
+    cheminDeNotification('/commander?onglet=commandes'), '/commander?onglet=commandes')
+  egal('une adresse complète de yoppaa.app devient son chemin',
+    cheminDeNotification('https://www.yoppaa.app/commander/rdv/salon'), '/commander/rdv/salon')
+  for (const [nom, adresse] of [
+    ['un autre site', 'https://exemple.com/piege'],
+    ['un sous-domaine déguisé', 'https://www.yoppaa.app.exemple.com/piege'],
+    ['une adresse sans protocole', '//exemple.com/piege'],
+    ['la barre oblique inverse', '/\\exemple.com'],
+    ['un script', 'javascript:alert(1)'],
+    ['un caractère de contrôle', '/commander\u0000'],
+  ]) {
+    verifie(`🔴 ${nom} n’est jamais ouvert dans l’app`, cheminDeNotification(adresse) === null, adresse)
+  }
+  verifie('rien, c’est rien', cheminDeNotification(undefined) === null && cheminDeNotification('') === null)
+
+  // ─── Le toucher : les données d'abord, l'adresse de lancement ensuite ───
+  const clic = (additionalData, launchURL) => ({ notification: { additionalData, launchURL } })
+  egal('🔴 le chemin des données est celui qu’on ouvre',
+    cheminDeClic(clic({ chemin: '/commander/rdv/salon' }, 'https://www.yoppaa.app/autre')), '/commander/rdv/salon')
+  egal('⚠️ une notification écrite dans le tableau de bord passe par son adresse',
+    cheminDeClic(clic({}, 'https://www.yoppaa.app/commander')), '/commander')
+  verifie('🔴 un chemin piégé dans les données n’ouvre rien',
+    cheminDeClic(clic({ chemin: 'https://exemple.com' })) === null)
+  verifie('un toucher vide n’ouvre rien', cheminDeClic({}) === null && cheminDeClic(undefined) === null)
+
+  // ─── L'écoute : une fois par page, et elle ouvre ce qu'il faut ───
+  const ouverts = []
+  const { fenetre, journal } = fenetreNative()
+  const r1 = brancherClicNatif(fenetre, (c) => ouverts.push(c))
+  verifie('🔴 l’écoute du toucher se branche dans l’app', r1.ok === true && r1.raison === null)
+  egal('sur l’événement « click »', journal.find((l) => l[0] === 'addEventListener')?.[1], 'click')
+  const r2 = brancherClicNatif(fenetre, (c) => ouverts.push(c))
+  // ⚠️ LE PLUGIN EMPILE LES ÉCOUTEURS : deux branchements ouvriraient deux fois.
+  verifie('⚠️ un second montage ne rebranche rien',
+    r2.ok === true && r2.raison === 'deja_branche' && journal.ecouteurs.length === 1)
+  journal.ecouteurs[0](clic({ chemin: '/commander?onglet=commandes' }))
+  egal('🔴 toucher la notification ouvre SA page', ouverts.join(' | '), '/commander?onglet=commandes')
+  journal.ecouteurs[0](clic({ chemin: '//exemple.com' }))
+  egal('🔴 et un chemin piégé n’ouvre rien', ouverts.length, 1)
+  egal('hors de l’app, rien ne se branche', brancherClicNatif({}, () => {}).raison, 'pas_natif')
+  egal('sans fonction pour ouvrir, on le dit', brancherClicNatif(fenetreNative().fenetre).raison, 'ouvrir_absent')
+  const casse = brancherClicNatif(fenetreNative({ ecouteJette: true }).fenetre, () => {})
+  verifie('⚠️ une écoute qui jette se nomme, sans emporter la page',
+    casse.ok === false && casse.raison === 'ecoute')
+
+  // ─── Ce que le serveur envoie, EXÉCUTÉ avec un faux réseau ───
+  //
+  // ⚠️ ON LIT LA CHARGE RÉELLEMENT ENVOYÉE, pas le texte du module : c'est elle
+  // que OneSignal reçoit.
+  const envAvant = { id: process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID, cle: process.env.ONESIGNAL_REST_API_KEY }
+  const fetchAvant = globalThis.fetch
+  const charges = []
+  try {
+    process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID = 'app-banc'
+    process.env.ONESIGNAL_REST_API_KEY = 'cle-banc'
+    globalThis.fetch = async (_url, init) => {
+      charges.push(JSON.parse(init.body))
+      return { ok: true, json: async () => ({ id: 'n1', recipients: 1 }) }
+    }
+    await envoyerPush({ headings: 'Prête', contents: 'Ta commande', url: '/commander?onglet=commandes',
+      include_aliases: { external_id: ['c1'] }, data: { kind: 'commande' } })
+    await envoyerPush({ headings: 'Actu', contents: 'Sans lien', filters: [{ field: 'tag', key: 'a', relation: '=', value: '1' }] })
+  } finally {
+    globalThis.fetch = fetchAvant
+    if (envAvant.id === undefined) delete process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
+    else process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID = envAvant.id
+    if (envAvant.cle === undefined) delete process.env.ONESIGNAL_REST_API_KEY
+    else process.env.ONESIGNAL_REST_API_KEY = envAvant.cle
+  }
+  const [avecLien, sansLien] = charges
+  verifie('⚠️ les deux envois sont partis (sinon la suite ne lit rien)', charges.length === 2, `${charges.length}`)
+  egal('🔴 le lien web part dans `web_url`, avec la même valeur qu’avant', avecLien?.web_url, '/commander?onglet=commandes')
+  verifie('🔴 et plus jamais dans `url`, qui partait aussi vers l’app',
+    avecLien && !('url' in avecLien) && !('app_url' in avecLien))
+  egal('🔴 l’app reçoit son chemin dans les données', avecLien?.data?.chemin, '/commander?onglet=commandes')
+  egal('⚠️ sans écraser les données de l’appelant', avecLien?.data?.kind, 'commande')
+  verifie('un envoi sans lien n’invente ni lien ni données',
+    sansLien && !('web_url' in sansLien) && !('data' in sansLien))
+
+  // ─── Et quelqu'un écoute, sur TOUTES les pages de l'app ───
+  //
+  // 🔴 `OneSignalInit` ne vit que sur l'accueil et l'onboarding : après un
+  // chargement complet (retour de Stripe, lien d'email, CGU), l'écouteur avait
+  // disparu avec la page. Le pont vit dans le gabarit racine.
+  const gabarit = codeDe('app/layout.tsx')
+  verifie('🔴 le pont natif est posé dans le gabarit racine', /<PontNatif \/>/.test(gabarit))
+  const pont = codeDe('app/components/PontNatif.js')
+  const iEffet = pont.indexOf('useEffect(')
+  const iInit = pont.indexOf('initialiserPushNatif(window, APP_ID, null)')
+  const iClic = pont.indexOf('brancherClicNatif(window,')
+  verifie('🔴 il initialise AVANT d’écouter (Android refuse sinon)', iInit > 0 && iClic > iInit)
+  verifie('⚠️ et il lit la fenêtre dans un effet, pas pendant le rendu', iEffet > 0 && iEffet < iInit)
+  verifie('⚠️ une initialisation ratée n’essaie pas d’écouter', /if \(!init\.ok\) return/.test(pont))
+  verifie('le toucher ouvre une page neuve', /window\.location\.assign\(chemin\)/.test(pont))
 }
 
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)

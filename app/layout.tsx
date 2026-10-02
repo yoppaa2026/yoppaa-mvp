@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { SPLASH_IOS } from "@/lib/splash-ios";
 import BandeauEssai from "@/app/components/BandeauEssai";
+import PontNatif from "@/app/components/PontNatif";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -112,6 +113,8 @@ export default function RootLayout({
         {children}
         {/* Seulement quand la clé Stripe est de test (site d'essai). */}
         <BandeauEssai />
+        {/* Seulement dans l'app des stores : le toucher d'une notification. */}
+        <PontNatif />
       </body>
     </html>
   );

@@ -641,7 +641,83 @@ sans issue.
 colis part avant toute rencontre. Si une fiche de démonstration est en
 expédition, son tunnel meurt. À basculer en retrait avant les captures.
 
-### 7.4 Le texte à coller (anglais)
+### 7.4 bis ✅ LE TEXTE À COLLER POUR LES NOUVEAUX BUILDS (02/10, STRIPE EN RÉEL)
+
+🔴 **CE TEXTE REMPLACE CELUI DE 7.4 AUX DEUX STORES**, avec les nouveaux builds.
+Décisions d'Alex du 02/10 : les paiements sont **réels** depuis la bascule, le
+relecteur commande chez **Chez Momo** en « Payer sur place » et prend rendez-vous
+chez **Salon Nathalie** ; la carte `4242` disparaît (refusée par un Stripe
+réel) ; l'aveu « otherwise distances are wrong » disparaît (24/09) ; on ne
+parle pas de Bancontact.
+
+⚠️ **AVANT DE COLLER, ALEX VÉRIFIE À L'ÉCRAN** que Salon Nathalie se réserve
+SANS acompte ni empreinte de carte : sinon le relecteur tomberait sur un
+paiement réel. Une note qui décrit un chemin faux coûte un cycle entier (7.5).
+
+**Apple, App Review Information → Notes** (2 117 caractères sur 4 000, comptés, sans gras : aucun store n’interprète le markdown) :
+
+> About Yoppaa
+>
+> Yoppaa connects people with independent shops in their own town in Belgium:
+> bakeries, restaurants, hair salons, grocers. Users browse what is open nearby,
+> order ahead, book a table or an appointment, and collect in store.
+>
+> Reviewing from outside Belgium
+>
+> The test account provided above is registered in Mettet, Belgium, so shops,
+> menus and booking appear right after sign-in.
+>
+> Choosing a location: on the home screen, tap the location field at the top
+> right and enter "Mettet" or "5640". The app shows the shops and distances
+> around the location you pick, so this step is part of the normal flow.
+> Accepting the device location prompt works too.
+>
+> The "Rien ne se perd" section lists end-of-day surplus items and follows real
+> shop hours in Belgium. It may be empty depending on the time of day and on
+> what merchants published. This is expected.
+>
+> Placing an order
+>
+> Open "Chez Momo", add an item, pick a collection slot and choose "Payer sur
+> place" (pay on site) at checkout. The order is confirmed immediately and no
+> payment details are needed.
+>
+> Booking an appointment
+>
+> Open "Salon Nathalie", choose a service and a time slot, and confirm. No
+> payment details are needed.
+>
+> Payments
+>
+> Online payments in Yoppaa are live and charge real money, so please use the
+> pay-on-site option above. Yoppaa is used to buy physical goods and real-world
+> services consumed outside the app (food collected in store, restaurant
+> tables, salon appointments, parcels shipped by post). Payment for these is
+> handled by the merchant through Stripe, in line with App Store Review
+> Guideline 3.1.3(e) for goods and services used outside the app. Gift vouchers
+> sold in the app are credit redeemable only in a physical shop, not digital
+> content.
+>
+> Account deletion
+>
+> Account deletion is available in the app under the Profile tab, button
+> "Supprimer mon compte", and also at https://www.yoppaa.app/legal. Deletion is
+> refused only while an order or a paid voucher is still outstanding, and the
+> screen then explains what remains and gives a contact address.
+>
+> Company
+>
+> Avcotech, Rue de Prée 9 G, 5640 Mettet, Belgium. Contact: hello@yoppaa.app
+
+**Google Play, Informations de connexion → instructions** (459 caractères sur
+500, comptés) :
+
+> The test account is registered in Mettet, Belgium. Shops appear right after sign-in. To choose a location, tap the location field (top right) and enter "Mettet": the app shows shops and distances around the place you pick. Accepting the location prompt works too. To order, open "Chez Momo", add an item and choose "Payer sur place" (pay on site): no payment details needed. To book, open "Salon Nathalie". Online payments are live, so please use pay on site.
+
+⚠️ **Chez Google, la réponse 3.1.3(e) n'a pas lieu d'être** : Play n'exige pas
+la facturation Play pour des biens physiques, et la question ne s'y pose pas.
+
+### 7.4 Le texte à coller (anglais) — ⚠️ PÉRIMÉ DEPUIS LA BASCULE DU 02/10, voir 7.4 bis
 
 > **About Yoppaa**
 >

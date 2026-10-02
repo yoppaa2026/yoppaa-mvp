@@ -60,6 +60,12 @@
 
 export function sansProse(texte) {
   return texte
+    // -1) Les fins de ligne Windows deviennent des fins de ligne Unix (02/10).
+    //    🔴 Un `git revert` a réécrit une route en CRLF : le code était
+    //    identique, mais une garde qui cherchait « \n      .insert » a rougi
+    //    sur du code juste. 60 bancs sur 63 lisaient sans normaliser. Le
+    //    remède est ici, une fois, pas dans chaque banc.
+    .replace(/\r\n/g, '\n')
     // 0) Les faux marqueurs venus des chaînes : `image/*`, `text/*`, `*/*`.
     .replace(/(?<=[A-Za-z0-9_*])\/\*/g, '  ')
     // 1) Sur les seules lignes de commentaire, les « /* » et « */ » deviennent

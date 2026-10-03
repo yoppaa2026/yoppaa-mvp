@@ -524,6 +524,19 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · ANNUL-I4 : LA NOTIFICATION D'ANNULATION DU STUDIO ──────────
+  { nom: '🔴 le client annule par le studio ne recoit plus de notification',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '      if (pourQui) {',
+    vers: '      if (false) {',
+    garde: 'le client annulé par le studio reçoit une notification' },
+
+  { nom: '⚠️ le client sans fiche n est plus retrouve par son adresse',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '      if (!pourQui && rdv.client_email) {',
+    vers: '      if (false) {',
+    garde: 'retrouvé par son adresse quand le rendez-vous n’a pas de fiche' },
+
   // ─── LOT 3 · AUDIT 3 I8 : PAS DE VENTE SANS COMPTE QUI ENCAISSE ─────────
   { nom: '🔴 la fiche propose d acheter un abonnement que le serveur refusera',
     banc: 'verif:abonnements', fichier: 'app/commander/rdv/[slug]/page.js',

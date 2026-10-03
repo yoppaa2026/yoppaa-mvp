@@ -945,6 +945,17 @@ for (const chemin of [
     egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
   }
 
+  // ── L'ANNULATION DU STUDIO ARRIVE AUSSI EN NOTIFICATION (Annul-I4, 03/10) ─
+  {
+    const ANNUL = sansProse(lire('app/api/rdv/annuler-commercant/route.js'))
+    verifie('🔴 le client annulé par le studio reçoit une notification',
+      /if \(pourQui\) \{[\s\S]{0,200}await envoyerPushParExternalId\(pourQui, \{/.test(ANNUL))
+    verifie('🔴 retrouvé par son adresse quand le rendez-vous n’a pas de fiche',
+      /if \(!pourQui && rdv\.client_email\) \{[\s\S]{0,200}\.eq\('email', normaliserEmail\(rdv\.client_email\)\)/.test(ANNUL))
+    verifie('⚠️ la route charge ce que la notification dit',
+      /client_id, client_email, date_rdv, heure_debut,/.test(ANNUL) && /commercant:commercants\(stripe_account_id, nom, categorie\)/.test(ANNUL))
+  }
+
   // ── UN PAIEMENT QUI NE DÉMARRE PAS SE DIT EN FRANÇAIS (Audit 2 C1, 03/10) ─
   {
     const { messagePaiementRate } = await import('../lib/refus-reservation.js')

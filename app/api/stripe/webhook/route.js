@@ -26,7 +26,7 @@ import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 // 🔴 CE QU'ON FAIT D'UN ÉVÉNEMENT DÉJÀ VU : le rejeu de Stripe était avalé, et
 // aucun handler qui lève pour obtenir un rejeu ne pouvait aboutir.
 import { decisionRejeu } from '@/lib/stripe-rejeu'
-import { envoyerAuCommercant, envoyerAuYopper, emailPlaceNonConfirmee, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
+import { envoyerAuAdmin, echapperHtml, envoyerAuCommercant, envoyerAuYopper, emailPlaceNonConfirmee, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBons, recrediterBons, regimeBonPourCommerce } from '@/lib/bons-cadeaux-server'
 import { libelleBon } from '@/lib/bons-cadeaux'
@@ -453,6 +453,30 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
   console.warn('[stripe/webhook] kind non reconnu dans payment_intent.succeeded', { kind, meta })
 }
 
+// 🔴 UN ABONNEMENT PAYÉ QUI NE NAÎT PAS SE DIT (Audit 3 I9, 03/10). Chaque
+// échec répondait 200 à Stripe sans un mot : la cliente avait payé pour rien,
+// et personne ne le savait. L'administration reçoit de quoi régulariser :
+// créer le contrat au comptoir, ou rembourser.
+async function alerterAbonnementPerdu(paymentIntent, raison) {
+  const meta = paymentIntent?.metadata || {}
+  const montant = (Number(paymentIntent?.amount_received ?? paymentIntent?.amount) || 0) / 100
+  try {
+    const envoi = await envoyerAuAdmin({
+      subject: `Abonnement payé mais pas enregistré : ${raison}`,
+      html: `<p>Un paiement d’abonnement est arrivé sans que le contrat puisse naître.</p>`
+        + `<ul><li>Paiement Stripe : ${echapperHtml(paymentIntent?.id || '?')}</li>`
+        + `<li>Montant : ${euros(montant)}</li>`
+        + `<li>Client : ${echapperHtml(meta.client_email || '?')}</li>`
+        + `<li>Formule : ${echapperHtml(meta.formule_id || '?')}</li>`
+        + `<li>Raison : ${echapperHtml(raison)}</li></ul>`
+        + `<p>À régulariser : créer le contrat au comptoir, ou rembourser depuis Stripe.</p>`,
+    })
+    if (!envoi?.ok) console.error('[stripe/webhook] alerte abonnement perdu KO', envoi?.error)
+  } catch (e) {
+    console.error('[stripe/webhook] alerte abonnement perdu KO', e?.message)
+  }
+}
+
 // ─── Abonnement acheté en ligne : paiement OK → le contrat naît ────────────
 //
 // ⚠️ LE CONTRAT NAÎT ICI ET NULLE PART AILLEURS. Le créer au moment du clic
@@ -469,6 +493,7 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
   const formuleId = meta.formule_id
   if (!formuleId) {
     console.warn('[stripe/webhook] abonnement sans formule_id', paymentIntent.id)
+    await alerterAbonnementPerdu(paymentIntent, 'paiement sans formule')
     return
   }
 
@@ -489,6 +514,7 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
     .maybeSingle()
   if (!formule) {
     console.error('[stripe/webhook] formule introuvable', formuleId)
+    await alerterAbonnementPerdu(paymentIntent, 'formule introuvable')
     return
   }
 
@@ -518,6 +544,7 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
   })
   if (!contrat) {
     console.error('[stripe/webhook] contrat incalculable', { formuleId, achatLe })
+    await alerterAbonnementPerdu(paymentIntent, 'contrat incalculable')
     return
   }
 
@@ -584,8 +611,17 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
     .single()
 
   if (error) {
+    // ⚠️ UN DOUBLON N'EST PAS UNE PANNE : un rejeu simultané vient de le créer.
+    if (String(error.code) === '23505') {
+      console.info('[stripe/webhook] abonnement créé par un rejeu simultané', paymentIntent.id)
+      return
+    }
+    // 🔴 UNE PANNE D'ÉCRITURE SE REJOUE (Audit 3 I9, 03/10) : on lève, la route
+    // répond 500, et Stripe recommence. Ce `return` silencieux répondait 200 :
+    // la cliente avait payé, son contrat n'existait pas, et rien ne rejouait.
     console.error('[stripe/webhook] insert abonnement KO', error)
-    return
+    await alerterAbonnementPerdu(paymentIntent, `écriture du contrat en échec (${error.message || error.code}), Stripe va réessayer`)
+    throw new Error(`insert abonnement KO : ${error.message || error.code}`)
   }
   console.info('[stripe/webhook] abonnement créé', { id: cree?.id, formuleId, seances: contrat.seances_total })
 

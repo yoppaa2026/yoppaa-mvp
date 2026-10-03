@@ -524,6 +524,19 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 3 I9 : UN ABONNEMENT PAYÉ QUI NE NAÎT PAS ────────────
+  { nom: '🔴 une panne d ecriture du contrat repond 200 : rien ne rejoue',
+    banc: 'verif:abonnements', fichier: 'app/api/stripe/webhook/route.js',
+    de: '    throw new Error(`insert abonnement KO : ${error.message || error.code}`)',
+    vers: '    return',
+    garde: 'une panne d’écriture du contrat se rejoue' },
+
+  { nom: '🔴 une formule introuvable se tait de nouveau',
+    banc: 'verif:abonnements', fichier: 'app/api/stripe/webhook/route.js',
+    de: "    await alerterAbonnementPerdu(paymentIntent, 'formule introuvable')",
+    vers: '',
+    garde: 'et chaque contrat qui ne peut pas naître alerte l’administration' },
+
   // ─── LOT 3 · AUDIT 2 I10 : LES REFUS D'UNE SÉANCE SUR ABONNEMENT ───────
   { nom: '🔴 une session expiree retombe dans « reessaie »',
     banc: 'verif:abonnements', fichier: 'app/commander/rdv/[slug]/page.js',

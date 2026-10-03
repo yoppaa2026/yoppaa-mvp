@@ -2319,6 +2319,19 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     !/'Abonnements',/.test(LANDING))
 }
 
+// ─── UN ABONNEMENT PAYÉ QUI NE NAÎT PAS SE DIT, OU SE REJOUE (Audit 3 I9) ──
+{
+  const WH_A = sansProse(readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8'))
+  const fonctionAbo = (/async function handleAbonnementSucceeded\(([\s\S]*?)\n}\n/.exec(WH_A) || [])[1] || ''
+  verifier('la fonction du contrat payé a été trouvée', fonctionAbo.length > 1500, `${fonctionAbo.length} caractères`)
+  verifier('🔴 une panne d’écriture du contrat se rejoue : la route lève, Stripe recommence',
+    /throw new Error\(`insert abonnement KO : /.test(fonctionAbo) && /String\(error\.code\) === '23505'/.test(fonctionAbo))
+  verifier('🔴 et chaque contrat qui ne peut pas naître alerte l’administration',
+    (fonctionAbo.match(/await alerterAbonnementPerdu\(paymentIntent, /g) || []).length === 4)
+  verifier('⚠️ l’alerte porte de quoi régulariser, échappé',
+    /async function alerterAbonnementPerdu\(paymentIntent, raison\)/.test(WH_A) && /echapperHtml\(meta\.client_email/.test(WH_A) && /await envoyerAuAdmin\(\{/.test(WH_A))
+}
+
 // ─── CHAQUE REFUS D'UNE SÉANCE SUR ABONNEMENT A SA PHRASE (Audit 2 I10) ────
 {
   const { messageRefusAbonnement: mra } = await import('../lib/abonnements.js')

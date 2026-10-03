@@ -945,6 +945,17 @@ for (const chemin of [
     egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
   }
 
+  // ── LA PAGE STRIPE SE LIT EN FRANÇAIS (Audit 2 C2, 03/10) ───────────────
+  // Ni tiret cadratin, ni date « 2026-10-05 » dans ce que le client lit en payant.
+  {
+    for (const f of ['create-rdv-acompte', 'create-rdv-commande', 'create-abonnement']) {
+      const src = sansProse(lire(`app/api/stripe/checkout/${f}/route.js`))
+      const libelles = [...src.matchAll(/(?:name|description): `([^`]*)`/g)].map(m => m[1])
+      verifie(`🔴 ${f} : aucun tiret cadratin sur la page de paiement`, libelles.length > 0 && libelles.every(l => !l.includes('—')), libelles.join(' | '))
+      verifie(`⚠️ ${f} : aucune date technique sur la page de paiement`, libelles.every(l => !/\$\{date_rdv\}/.test(l)), libelles.join(' | '))
+    }
+  }
+
   // ── LES LIENS PROFESSEUR-PRESTATION SE LISENT (Audit 1 I16, 03/10) ──────
   {
     const CONF_L = sansProse(lire('app/dashboard/ConfigDashboard.js'))

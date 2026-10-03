@@ -38,6 +38,7 @@ import { creneauDejaCommence } from '@/lib/timezone'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
 import { refusAvantPaiement } from '@/lib/refus-reservation'
+import { jourLisible } from '@/lib/attente-rdv'
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -317,8 +318,10 @@ export async function POST(request) {
           currency: 'eur',
           unit_amount: acompteCents,
           product_data: {
-            name: `Acompte — ${prestation.nom}`,
-            description: `${commercant.nom} · ${date_rdv} à ${heure_debut.slice(0,5)} · ${duree_minutes} min`,
+            // ⚠️ PAS DE TIRET CADRATIN NI DE DATE ISO SUR LA PAGE STRIPE (Audit 2 C2,
+            // 03/10) : c'est la page que le client lit en payant.
+            name: `Acompte · ${prestation.nom}`,
+            description: `${commercant.nom} · le ${jourLisible(date_rdv) || date_rdv} à ${heure_debut.slice(0,5)} · ${duree_minutes} min`,
           },
         },
       }],

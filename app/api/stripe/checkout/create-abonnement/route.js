@@ -108,7 +108,7 @@ export async function POST(request) {
           currency: 'eur',
           unit_amount: prixCents,
           product_data: {
-            name: `${formule.libelle} — ${commercant.nom}`,
+            name: `${formule.libelle} · ${commercant.nom}`,
             // ⚠️ CE QUE LE CLIENT LIT SUR LA PAGE DE PAIEMENT ET SUR SON RELEVÉ.
             // Un intitulé nu se conteste, et une contestation coûte au
             // commerçant bien plus que la ligne de description.

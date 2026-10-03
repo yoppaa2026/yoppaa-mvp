@@ -55,6 +55,7 @@ import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { verdictForfait } from '@/lib/garde-forfait'
+import { jourLisible } from '@/lib/attente-rdv'
 
 const arrondiEuros = (n) => Math.round(Number(n || 0) * 100) / 100
 
@@ -703,8 +704,9 @@ export async function POST(request) {
           currency: 'eur',
           unit_amount: acompteCents,
           product_data: {
-            name: `Acompte — ${prestation.nom}`,
-            description: `${commercant.nom} · ${date_rdv} à ${String(heure_debut).slice(0, 5)}`,
+            // ⚠️ PAS DE TIRET CADRATIN NI DE DATE ISO SUR LA PAGE STRIPE (Audit 2 C2).
+            name: `Acompte · ${prestation.nom}`,
+            description: `${commercant.nom} · le ${jourLisible(date_rdv) || date_rdv} à ${String(heure_debut).slice(0, 5)}`,
           },
         },
       })
@@ -732,7 +734,7 @@ export async function POST(request) {
           currency: 'eur',
           unit_amount: produitsAPayerCents,
           product_data: {
-            name: `Tes produits (${nbArticles}) — remises déduites`,
+            name: `Tes produits (${nbArticles}), remises déduites`,
             description: `${parts.join(' et ')} · à retirer le jour de ton rendez-vous`,
           },
         },

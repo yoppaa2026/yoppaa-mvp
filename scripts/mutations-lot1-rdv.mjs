@@ -524,6 +524,19 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 2 C2 : LA PAGE STRIPE ────────────────────────────────
+  { nom: '⚠️ la page Stripe repasse au tiret cadratin',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-abonnement/route.js',
+    de: '            name: `${formule.libelle} · ${commercant.nom}`,',
+    vers: '            name: `${formule.libelle} — ${commercant.nom}`,',
+    garde: 'create-abonnement : aucun tiret cadratin sur la page de paiement' },
+
+  { nom: '⚠️ la page Stripe repasse a la date technique',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    de: '            description: `${commercant.nom} · le ${jourLisible(date_rdv) || date_rdv} à ${heure_debut.slice(0,5)} · ${duree_minutes} min`,',
+    vers: '            description: `${commercant.nom} · ${date_rdv} à ${heure_debut.slice(0,5)} · ${duree_minutes} min`,',
+    garde: 'create-rdv-acompte : aucune date technique sur la page de paiement' },
+
   // ─── LOT 3 · AUDIT 1 I16 : LES LIENS PROFESSEUR-PRESTATION ──────────────
   { nom: '🔴 une insertion ratee des professeurs se dit « mise a jour »',
     banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/ConfigDashboard.js',

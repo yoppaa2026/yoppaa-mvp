@@ -553,7 +553,7 @@ for (const chemin of [
   const { creerReservationRdv } = await import('../lib/rdv-creation-server.js')
 
   function baseSimulee({ prestation, lieux = [], placesPrises = [], erreurInsert = null,
-                         creneaux = [], liaisons = [] }) {
+                         creneaux = [], liaisons = [], erreurPlaces = null }) {
     const vu = { payload: null, filtresPlaces: {} }
     const table = (nom) => {
       const filtres = {}
@@ -584,7 +584,9 @@ for (const chemin of [
           nom === 'commercant_lieux' ? { data: lieux }
           : nom === 'rdv_creneaux' ? { data: creneaux }
           : nom === 'rdv_creneau_prestations' ? { data: liaisons }
-          : nom === 'rdv_reservations' ? (vu.filtresPlaces = filtres, { data: placesPrises.map(place_no => ({ place_no })) })
+          : nom === 'rdv_reservations' ? (vu.filtresPlaces = filtres, erreurPlaces
+            ? { data: null, error: erreurPlaces }
+            : { data: placesPrises.map(place_no => ({ place_no })) })
           : { data: [] }
         ),
       }
@@ -672,6 +674,54 @@ for (const chemin of [
       Array.isArray(db._vu.filtresPlaces.statut)
       && db._vu.filtresPlaces.statut.includes('confirme')
       && !db._vu.filtresPlaces.statut.includes('annule_client'))
+  }
+
+  // ── 🔴 UN COURS COMPLET REFUSE (audit du 03/10) ──────────────────────────
+  //
+  // La place retombait sur « 1 » quand il n'en restait aucune, et seul l'index
+  // unique devait refuser. Or il range les places PAR PROFESSEUR : chez un
+  // studio à deux professeurs, une séance d'abonnement (sans professeur) et
+  // une réservation chez Emily ne s'y croisaient jamais. Treize inscrites dans
+  // un cours de douze. EXÉCUTÉ : le module refuse, et n'écrit rien.
+  {
+    const plein = Array.from({ length: 12 }, (_, i) => i + 1)
+    const db = baseSimulee({ prestation: PRESTA_COURS, placesPrises: plein })
+    const res = await creerReservationRdv(db, {
+      commercantId: 'c1', prestationId: 'p2',
+      dateRdv: '2026-10-07', heureDebut: '10:00',
+      champs: { client_email: 'treizieme@yoppaa.app' },
+    })
+    verifie('🔴 un cours de douze déjà plein refuse la treizième',
+      res.ok === false && res.code === 'place_prise' && res.collectif === true, JSON.stringify(res))
+    verifie('🔴 et rien n’est écrit, aucune place « 1 » de secours', db._vu.payload === null)
+
+    const presque = baseSimulee({ prestation: PRESTA_COURS, placesPrises: plein.slice(0, 11) })
+    const derniere = await creerReservationRdv(presque, {
+      commercantId: 'c1', prestationId: 'p2',
+      dateRdv: '2026-10-07', heureDebut: '10:00', champs: {},
+    })
+    verifie('✅ la douzième place, elle, se donne', derniere.ok === true && presque._vu.payload?.place_no === 12,
+      JSON.stringify(presque._vu.payload?.place_no))
+
+    // ⚠️ SANS LA LISTE DES PLACES, ON NE SAIT PAS SI LE COURS EST COMPLET.
+    const aveugle = baseSimulee({ prestation: PRESTA_COURS, erreurPlaces: { message: 'panne' } })
+    const resAveugle = await creerReservationRdv(aveugle, {
+      commercantId: 'c1', prestationId: 'p2',
+      dateRdv: '2026-10-07', heureDebut: '10:00', champs: {},
+    })
+    verifie('🔴 une lecture des places en échec refuse au lieu de deviner',
+      resAveugle.ok === false && resAveugle.code === 'ecriture_impossible' && aveugle._vu.payload === null,
+      JSON.stringify(resAveugle))
+
+    // ⚠️ ET LA BASE FERME LA COURSE ENTRE DEUX ÉCRITURES SIMULTANÉES.
+    const sql = lire('migrations/MIGRATION_PLACE_PAR_COURS.sql').replace(/^\s*--.*$/gm, ' ')
+    verifie('🔴 la base range les places par COURS, pas par professeur',
+      /CREATE UNIQUE INDEX IF NOT EXISTS rdv_une_place_par_cours\s+ON public\.rdv_reservations \(commercant_id, prestation_id, date_rdv, heure_debut, place_no\)\s+WHERE statut IN \('confirme', 'honore'\) AND deleted_at IS NULL AND capacite_creneau > 1;/.test(sql)
+      && !/rdv_une_place_par_cours[^;]*praticien_id/.test(sql))
+    verifie('⚠️ la migration refuse des doublons existants, et les nomme',
+      /IF doublons IS NOT NULL THEN\s+RAISE EXCEPTION 'PLACES_EN_DOUBLE/.test(sql))
+    verifie('⚠️ et tient dans une transaction', sql.indexOf('BEGIN;') < sql.indexOf('CREATE UNIQUE INDEX')
+      && sql.indexOf('COMMIT;') > sql.indexOf('CREATE UNIQUE INDEX'))
   }
 
   // ── LE LIEU GRAVÉ, et le choix explicite qui l'emporte ──────────────────

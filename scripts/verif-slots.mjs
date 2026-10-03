@@ -3425,6 +3425,15 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
 
     const uneChezEmily = [resa(EMILY2, 'yoga', 1)]
     egal('⚠️ sur Emily, la place prise se compte', placesVues(uneChezEmily, { id: EMILY2 }, 'yoga'), 1)
+    // 🔴 LE PROFESSEUR CHOISI (audit du 03/10). La fiche choisit d'office la
+    // seule éligible, ou la cliente en choisit une : les inscrites de l'AUTRE
+    // professeur à ce cours sortaient du compte, et l'écran annonçait des
+    // places qui n'existaient pas.
+    const uneChezCarole = [resa(CAROLE2, 'yoga', 1)]
+    egal('🔴 Emily choisie, l’inscrite chez Carole au même cours se compte aussi',
+      placesVues(uneChezCarole, { id: EMILY2 }, 'yoga'), 1)
+    egal('🔴 deux inscrites chez deux professeurs, Emily choisie : DEUX places',
+      placesVues([resa(CAROLE2, 'yoga', 1), resa(EMILY2, 'yoga', 2)], { id: EMILY2 }, 'yoga'), 2)
     // 🔴 LA LIGNE QUI RENDAIT ZÉRO AVANT LA CORRECTION.
     egal('🔴 et sans préférence AUSSI (le défaut du 18/09)',
       placesVues(uneChezEmily, null, 'yoga'), 1)

@@ -436,8 +436,9 @@ const MUTATIONS = [
   // pas une RÈGLE. Une place figée à 1 serait passée sans un rougissement.
   { nom: '🔴 la place se COMPTE au lieu de chercher la première libre',
     fichier: 'lib/rdv-creation-server.js',
-    de: '    placeNo = premierePlaceLibre(prestation, (dejaLa || []).map(r => r.place_no)) || 1',
-    vers: '    placeNo = (dejaLa || []).length + 1' },
+    // ⚠️ Repointee le 03/10 : la place libre est cherchee avant le refus du cours plein.
+    de: '    const libre = premierePlaceLibre(prestation, (dejaLa || []).map(r => r.place_no))',
+    vers: '    const libre = (dejaLa || []).length + 1' },
 
   { nom: '🔴 la capacité gravée retombe à 1, la contrainte bloque le 2e inscrit',
     fichier: 'lib/rdv-creation-server.js',

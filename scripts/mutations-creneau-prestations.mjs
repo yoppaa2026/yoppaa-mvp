@@ -33,15 +33,17 @@ const MUTATIONS = [
   // BLOQUE pas Carole : elle etait donc ecartee du filtre, et disparaissait
   // aussi du COMPTAGE. Le cours s affichait vide alors qu il ne l etait pas.
   { nom: '🔴 LE DEFAUT DU 18/09 : les inscriptions au cours cessent d etre comptees',
-    de: '  if (prestationCours) {',
-    vers: '  if (false) {' },
+    // ⚠️ Repointee le 03/10 : la reprise du cours vit dans `avecLesInscritesDuCours`.
+    de: '  if (!prestationCours) return retenues',
+    vers: '  return retenues' },
 
   // 🔴 ET LE DOUBLE COMPTAGE EST L AUTRE DEFAUT POSSIBLE : une inscription
   // bloquante ET du meme cours, comptee deux fois, prendrait deux places a elle
   // seule et fermerait le cours trop tot.
   { nom: '🔴 une inscription bloquante est comptee DEUX fois',
-    de: '      if (String(r.prestation_id) === String(prestationCours) && !dejaLa.has(r)) {',
-    vers: '      if (String(r.prestation_id) === String(prestationCours)) {' },
+    // ⚠️ Repointee le 03/10 : meme garde, dans `avecLesInscritesDuCours`.
+    de: '    if (String(r.prestation_id) === String(prestationCours) && !dejaLa.has(r)) {',
+    vers: '    if (String(r.prestation_id) === String(prestationCours)) {' },
 
   // 🔴 ET LA FICHE NE DOIT COMPTER COMME UN COURS QUE CE QUI EN EST UN : passer
   // l identifiant sur un rendez-vous INDIVIDUEL fermerait des creneaux a tort.

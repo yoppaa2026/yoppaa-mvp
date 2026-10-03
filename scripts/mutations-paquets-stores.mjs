@@ -445,6 +445,12 @@ const MUTATIONS = [
     de: '  if (adresseWeb) payload.web_url = adresseWeb',
     vers: '  if (url) payload.url = url' },
 
+  // 🔴 LE BANDEAU ANDROID (03/10) : sans canal, « Divers », aucun bandeau.
+  { nom: '🔴 un envoi personnel repart sans canal, donc sans bandeau Android',
+    fichier: ONESIGNAL,
+    de: '    payload.android_channel_id = CANAL_ANDROID_PERSONNEL',
+    vers: '' },
+
   // 🔴 LE DEFAUT DE LA NUIT DU 02 AU 03/10 : `web_url` relatif, OneSignal
   // rejette le message entier, plus rien ne part.
   { nom: '🔴 web_url repart en chemin relatif',

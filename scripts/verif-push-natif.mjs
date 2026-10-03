@@ -22,7 +22,7 @@ import {
   etatPushNatif, taguerNatif, retirerTagNatif,
   cheminDeNotification, cheminDeClic, brancherClicNatif,
 } from '../lib/push-natif.js'
-import { envoyerPush } from '../lib/onesignal.js'
+import { envoyerPush, CANAL_ANDROID_PERSONNEL } from '../lib/onesignal.js'
 import {
   geolocNative, positionDisponible, lirePosition, etatAutorisation, codeErreurPosition,
 } from '../lib/geoloc.js'
@@ -952,6 +952,16 @@ const fenetreNative = (options = {}) => {
   egal('⚠️ sans écraser les données de l’appelant', avecLien?.data?.kind, 'commande')
   verifie('un envoi sans lien n’invente ni lien ni données',
     sansLien && !('web_url' in sansLien) && !('data' in sansLien))
+
+  // 🔴 LE BANDEAU ANDROID (03/10, vu par Alex) : sans canal, OneSignal range
+  // tout dans « Divers », qui ne fait surgir aucun bandeau. Les envois
+  // personnels passent par le canal « Commandes et rendez-vous » (Urgent) ;
+  // les annonces ciblées par filtres restent discrètes.
+  egal('🔴 un envoi personnel passe par le canal qui affiche un bandeau',
+    avecLien?.android_channel_id, CANAL_ANDROID_PERSONNEL)
+  verifie('⚠️ et ce canal a la forme d’un identifiant OneSignal (un faux fait refuser le message entier)',
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(CANAL_ANDROID_PERSONNEL))
+  verifie('⚠️ une annonce de quartier ou de favoris reste discrète', sansLien && !('android_channel_id' in sansLien))
 
   // ─── Et quelqu'un écoute, sur TOUTES les pages de l'app ───
   //

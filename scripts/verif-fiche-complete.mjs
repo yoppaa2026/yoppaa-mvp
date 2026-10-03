@@ -147,7 +147,16 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   const html = emailRelanceFiche({ nom: '<b>Chez Momo</b>', criteres: b.criteres, resteAFaire: reste })
   v('la relance échappe le nom du commerce', html.includes('&lt;b&gt;Chez Momo') && !html.includes('<b>Chez Momo'))
   v('la relance porte ce qui reste à faire', html.includes('encore 2 produits, 2 photos et ton logo'))
-  v('la relance montre aussi ce qui est fait', /Fait/.test(html))
+  // 🔴 REPOINTÉE LE 03/10 : elle cherchait « Fait » dans TOUT l'email, et la
+  // pastille des deux temps de l'inscription (`deuxTemps`, ajoutée le 30/09) en
+  // porte un. Depuis ce jour-là, retirer « Fait » du tableau des critères la
+  // laissait verte : la mutation du harnais survivait. Elle vise désormais la
+  // cellule de CHAQUE critère atteint, juste après son libellé.
+  const atteints = b.criteres.filter(k => k.atteint)
+  const echappe = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  v('la relance montre aussi ce qui est fait, critère par critère',
+    atteints.length > 0 && atteints.every(k => new RegExp(`${echappe(k.label)}\\s*</td>\\s*<td[^>]*>\\s*Fait\\s*</td>`).test(html)),
+    `${atteints.length} critère(s) atteint(s)`)
   // Le texte seul : les styles portent des « 100% » qui ne sont pas des mots.
   const texte = html.replace(/style="[^"]*"/g, '')
   v('la relance ne parle jamais en pourcentage', !/\d+ ?%/.test(texte), (texte.match(/.{0,30}\d+ ?%.{0,30}/) || [''])[0])

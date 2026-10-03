@@ -702,8 +702,15 @@ const mesurerA = (texte, taille) => String(texte || '').length * taille * LARGEU
   // `changerOnglet` refuse un onglet hors forfait en ouvrant la proposition, et
   // retient un formulaire non enregistré. Un raccourci direct aurait déposé le
   // commerçant sur un onglet qu'il n'a pas, ou effacé sa saisie sans un mot.
+  // 🔴 REPOINTÉE LE 03/10 : trois onglets passent désormais un renvoi
+  // (Catalogue depuis le 06/09, Profil depuis le 09/09). La garde se
+  // contentait d'en trouver UN bon, et le harnais mutait le premier : un
+  // raccourci par `setTab` sur un seul onglet passait vert. CHAQUE renvoi doit
+  // emprunter la porte, et celui du générateur doit exister.
+  const renvois = CFG.match(/onAllerA=\{\w+\}/g) || []
   verifier('🔴 le renvoi emprunte `changerOnglet`, jamais `setTab`',
-    /onAllerA=\{changerOnglet\}/.test(CFG))
+    renvois.length >= 1 && renvois.every(r => r === 'onAllerA={changerOnglet}')
+    && /<TabGenerateur [^>]*onAllerA=\{changerOnglet\}/.test(CFG), renvois.join(' '))
   verifier('et il vise bien l’onglet des deals', /onAllerA\('deals'\)/.test(GENE2))
 
   // ⚠️ L'ADRESSE VIENT DE SA SOURCE UNIQUE, jamais recomposée à la main : c'est

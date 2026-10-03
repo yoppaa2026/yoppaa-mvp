@@ -408,10 +408,19 @@ const MUTATIONS = [
     de: "onClick={() => onAllerA('deals')}",
     vers: 'onClick={() => onAllerA(null)}' },
 
+  // ⚠️ REPOINTÉE LE 03/10 : `onAllerA={changerOnglet}` existe TROIS fois depuis
+  // le 09/09, et la mutation frappait le premier (le Catalogue) pendant que la
+  // garde trouvait les deux autres : elle restait verte. On vise la ligne du
+  // générateur, unique, et l'autre onglet par une seconde mutation.
   { nom: '🔴 le renvoi court-circuite la porte de la barre d onglets',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: 'onAllerA={changerOnglet}',
-    vers: 'onAllerA={setTab}' },
+    de: 'iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />',
+    vers: 'iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={setTab} />' },
+
+  { nom: '🔴 le catalogue court-circuite la porte de la barre d onglets',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />",
+    vers: "<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={setTab} />" },
 ]
 
 const lancer = () => {

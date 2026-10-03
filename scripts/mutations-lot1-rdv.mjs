@@ -524,6 +524,19 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 2 I10 : LES REFUS D'UNE SÉANCE SUR ABONNEMENT ───────
+  { nom: '🔴 une session expiree retombe dans « reessaie »',
+    banc: 'verif:abonnements', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "              const m = messageRefusAbonnement(j?.error === 'session_perdue' || res.status === 401 ? 'session_perdue' : j?.error, { nomCommerce: commercant.nom })",
+    vers: '              const m = messageRefusAbonnement(j?.error, { nomCommerce: commercant.nom })',
+    garde: 'la fiche reconnaît la session perdue' },
+
+  { nom: '⚠️ un cours qui n a pas lieu ne renvoie plus a la grille',
+    banc: 'verif:abonnements', fichier: 'lib/abonnements.js',
+    de: "      return { texte: 'Ce cours n’a pas lieu à cette heure-là. Choisis un autre horaire.', retourGrille: true }",
+    vers: "      return { texte: 'Ce cours n’a pas lieu à cette heure-là. Choisis un autre horaire.', retourGrille: false }",
+    garde: 'un cours qui n’a pas lieu renvoie choisir une autre heure' },
+
   // ─── LOT 3 · ANNUL-I5 : LE REFUS HORS DÉLAI ─────────────────────────────
   { nom: '🔴 le refus hors delai ne donne plus le numero du commerce',
     banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/cancel/route.js',

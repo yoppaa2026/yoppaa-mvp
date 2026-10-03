@@ -2319,6 +2319,21 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     !/'Abonnements',/.test(LANDING))
 }
 
+// ─── CHAQUE REFUS D'UNE SÉANCE SUR ABONNEMENT A SA PHRASE (Audit 2 I10) ────
+{
+  const { messageRefusAbonnement: mra } = await import('../lib/abonnements.js')
+  verifier('🔴 une session expirée dit de se reconnecter, pas de réessayer',
+    /reconnecte-toi/.test(mra('session_perdue').texte) && !/Réessaie/.test(mra('session_perdue').texte))
+  verifier('🔴 un cours qui n’a pas lieu renvoie choisir une autre heure',
+    mra('cours_introuvable').retourGrille === true && /autre horaire/.test(mra('cours_introuvable').texte))
+  verifier('⚠️ un contrat qui ne couvre pas le cours le dit', /ne couvre pas ce cours/.test(mra('abonnement_sans_cours').texte))
+  verifier('⚠️ un contrat inactif nomme le commerce à contacter', /contacte Centre Respire/.test(mra('abonnement_introuvable', { nomCommerce: 'Centre Respire' }).texte))
+  const FICHE_R = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 la fiche reconnaît la session perdue et passe par la règle',
+    /messageRefusAbonnement\(j\?\.error === 'session_perdue' \|\| res\.status === 401 \? 'session_perdue' : j\?\.error,/.test(FICHE_R)
+    && /if \(m\.retourGrille\) \{/.test(FICHE_R))
+}
+
 // ─── PAS DE VENTE EN LIGNE SANS COMPTE QUI ENCAISSE (Audit 3 I8, 03/10) ────
 {
   const FICHE_V = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))

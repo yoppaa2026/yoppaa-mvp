@@ -82,7 +82,7 @@ import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
 import ConfirmationAbonnement from './ConfirmationAbonnement'
 import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, contratQuiVientDEtreAchete,
-  abonnementsPourPrestation, expliquerRefusSeance, libellePrixSeance,
+  abonnementsPourPrestation, expliquerRefusSeance, messageRefusAbonnement, libellePrixSeance,
   trierAbonnementsPourSeance, libelleChoixAbonnement } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { fermetureQuiBloque, plagesOuvertes } from '@/lib/fermetures-rdv'
@@ -2038,10 +2038,19 @@ export default function CommanderRdvSlug() {
                 setTimeout(() => allerEtape(2), 1200)
                 return
               }
-            } else if (j?.error === 'non_authentifie') {
-              setSubmitError('Reconnecte-toi pour utiliser ton abonnement, ou décoche la case pour payer cette séance.')
             } else {
-              setSubmitError('Ta séance n’a pas pu être posée sur ton abonnement. Réessaie, ou décoche la case pour la payer.')
+              // 🔴 CHAQUE REFUS A SA PHRASE (Audit 2 I10, 03/10) : la session
+              // expirée (marqueur de `fetchYopper`), le cours qui n'a pas lieu à
+              // cette heure, le contrat qui ne le couvre pas. Voir
+              // `messageRefusAbonnement`.
+              const m = messageRefusAbonnement(j?.error === 'session_perdue' || res.status === 401 ? 'session_perdue' : j?.error, { nomCommerce: commercant.nom })
+              setSubmitError(m.texte)
+              if (m.retourGrille) {
+                setHeureChoisie(null)
+                setSubmitting(false)
+                setTimeout(() => allerEtape(2), 1200)
+                return
+              }
             }
             setSubmitting(false)
             return

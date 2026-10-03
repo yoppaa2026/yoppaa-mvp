@@ -1,6 +1,10 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { postPro } from '@/lib/fetch-pro'
+import { postPro, prevenirClient } from '@/lib/fetch-pro'
+import { toutesLesLignes } from '@/lib/toutes-les-lignes'
+import { rdvsSousLaFermeture } from '@/lib/fermetures-rdv'
+import { confirmationSeanceAnnulee } from '@/lib/confirmation-rdv'
+import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
 import {
   canDo, getIaConfig, getPlanLabel, getPrixPlan, prixTTC, isAlimentaire,
@@ -10847,9 +10851,13 @@ function TabRdvAbonnements({ commercantId, toast }) {
       supabase.from('abonnements').select('*')
         .eq('commercant_id', commercantId).is('deleted_at', null)
         .order('created_at', { ascending: false }),
-      supabase.from('rdv_reservations').select('abonnement_id, statut, date_rdv')
+      // 🔴 TOUTES LES SÉANCES, PAS LES MILLE PREMIÈRES (B3, 03/10) : trente
+      // abonnées à 36 séances dépassent le plafond silencieux de Supabase, et
+      // chaque solde se calculait sur une partie de ses séances.
+      toutesLesLignes(() => supabase.from('rdv_reservations').select('abonnement_id, statut, date_rdv')
         .eq('commercant_id', commercantId).not('abonnement_id', 'is', null)
-        .is('deleted_at', null),
+        .is('deleted_at', null)
+        .order('id', { ascending: true })),
     ])
     setFormules(f || [])
     setPrestations(p || [])
@@ -13109,6 +13117,26 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   )
 }
 
+// Les rendez-vous qu'une fermeture rattrape, nommés : quand, qui, quoi. Huit au
+// plus, puis le compte du reste : la liste ne doit pas pousser les boutons
+// hors de l'écran d'un téléphone.
+function ListeRdvTouches({ rdvs, formatDateLabel }) {
+  const visibles = (rdvs || []).slice(0, 8)
+  const reste = (rdvs || []).length - visibles.length
+  return (
+    <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {visibles.map(r => (
+        <li key={r.id} style={{ fontSize: 12, color: T.ink, lineHeight: 1.4 }}>
+          <strong>{formatDateLabel(String(r.date_rdv).slice(0, 10))} · {String(r.heure_debut || '').slice(0, 5)}</strong>
+          {' · '}{[r.client_prenom, r.client_nom].filter(Boolean).join(' ') || 'Client'}
+          {r.prestation?.nom ? <span style={{ color: T.muted }}> · {r.prestation.nom}</span> : null}
+        </li>
+      ))}
+      {reste > 0 && <li style={{ fontSize: 12, color: T.muted }}>et {reste} autre{reste > 1 ? 's' : ''}</li>}
+    </ul>
+  )
+}
+
 // Sess 6 : CRUD Fermetures exceptionnelles (congés, jours fériés, formation, etc).
 // Une fermeture bloque une plage de dates pour tous les praticiens (praticien_id = null)
 // ou pour un praticien spécifique. Impact : l'app Yopper ne propose plus ces jours à
@@ -13124,6 +13152,72 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
   const today = jourBruxelles()
   const initialForm = { praticien_id: 'tous', date_debut: today, date_fin: today, motif: '' }
   const [form, setForm] = useState(initialForm)
+
+  // 🔴 UNE FERMETURE N'ANNULAIT RIEN, ET NE LE DISAIT PAS (B2, 03/10). Elle
+  // bloque les NOUVELLES réservations ; celles déjà prises restaient debout, et
+  // la commerçante partait en congé avec trois clientes qui viendraient
+  // frapper à la porte. On les montre pendant qu'elle règle ses dates, puis on
+  // lui propose de les annuler en les prévenant. ⚠️ ELLE DÉCIDE : une
+  // fermeture posée pour bloquer la réservation en ligne n'annule pas forcément
+  // ce qui est déjà convenu.
+  const [touches, setTouches] = useState([])
+  const [apres, setApres] = useState(null)            // { touches } : la fermeture est enregistrée, que faire des rendez-vous ?
+  const [annulEnCours, setAnnulEnCours] = useState(false)
+  const [bilanAnnulation, setBilanAnnulation] = useState(null)
+  const datesValides = Boolean(form.date_debut && form.date_fin && form.date_fin >= form.date_debut)
+  useEffect(() => {
+    if (!showForm || !datesValides) return
+    let vivant = true
+    const ferm = { date_debut: form.date_debut, date_fin: form.date_fin, praticien_id: form.praticien_id === 'tous' ? null : form.praticien_id }
+    supabase.from('rdv_reservations')
+      .select('id, date_rdv, heure_debut, client_prenom, client_nom, praticien_id, statut, deleted_at, prestation:rdv_prestations(nom)')
+      .eq('commercant_id', commercantId)
+      .eq('statut', 'confirme')
+      .is('deleted_at', null)
+      .gte('date_rdv', form.date_debut)
+      .lte('date_rdv', form.date_fin)
+      .order('date_rdv', { ascending: true })
+      .order('heure_debut', { ascending: true })
+      .then(({ data }) => { if (vivant) setTouches(rdvsSousLaFermeture(data || [], ferm)) })
+    return () => { vivant = false }
+  }, [showForm, datesValides, form.date_debut, form.date_fin, form.praticien_id, commercantId])
+  const touchesAffichees = showForm && datesValides ? touches : []
+
+  // ⚠️ LE MÊME CHEMIN QUE L'ANNULATION D'UN SEUL RENDEZ-VOUS : la route
+  // rembourse, rend et recrédite, puis l'email part avec ce qu'elle a rendu.
+  // EN SÉRIE, pour qu'un échec reste attribuable.
+  async function annulerLesTouches() {
+    if (!apres?.touches?.length) return
+    setAnnulEnCours(true)
+    let faits = 0, echecs = 0, rembourse = 0, remboursementsRates = 0
+    for (const r of apres.touches) {
+      const res = await postPro('/api/rdv/annuler-commercant', { rdv_id: r.id, raison: 'commercant' })
+      const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+      if (!j?.ok) { echecs++; continue }
+      faits++
+      if (j.already_canceled) continue
+      if (j.refund_error) remboursementsRates++
+      else if (Number(j.refund_montant) > 0) rembourse += Number(j.refund_montant)
+      // ⚠️ LES MÊMES INFORMATIONS QUE LE TABLEAU DE BORD ET LE POSTE (garde de
+      // parité dans verif-equipe) : sans les montants rendus, l'email se tait.
+      await prevenirClient('/api/emails/rdv-annule', {
+        rdv_id: r.id,
+        raison_annulation: 'commercant',
+        refund_montant: j.refund_montant,
+        refund_en_cours: !!j.refund_id && !j.refund_error,
+        bon_rendu: j.bon_rendu,
+        nb_bons: j.nb_bons,
+        recompense_rendue: j.recompense_rendue,
+        produits_montant: j.produits_montant,
+      }, 'l’email d’annulation du rendez-vous')
+    }
+    setAnnulEnCours(false)
+    setBilanAnnulation(confirmationSeanceAnnulee({ faits, echecs, rembourse, remboursementsRates, rendezVous: true }))
+  }
+
+  function fermerApres() {
+    setApres(null); setBilanAnnulation(null); setShowForm(false)
+  }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAll() }, [commercantId])
@@ -13167,7 +13261,12 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
     setSaving(false)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
     toast(editId ? 'Fermeture mise à jour' : 'Fermeture enregistrée')
-    setShowForm(false); setEditId(null); setForm(initialForm)
+    // ⚠️ DES RENDEZ-VOUS TOMBENT PENDANT LA FERMETURE : la fenêtre reste
+    // ouverte et demande ce qu'on en fait, au lieu de se refermer en silence.
+    const restent = touchesAffichees
+    setEditId(null); setForm(initialForm)
+    if (restent.length > 0) setApres({ touches: restent })
+    else setShowForm(false)
     fetchAll()
   }
 
@@ -13251,7 +13350,44 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
         </div>
       )}
 
-      {showForm && (
+      {showForm && apres && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div role="dialog" aria-modal="true" style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90svh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 6 }}>Fermeture enregistrée</p>
+            {bilanAnnulation ? (
+              <p style={{ fontSize: 13, color: T.deep, lineHeight: 1.55, marginBottom: 16 }}>{bilanAnnulation}</p>
+            ) : (
+              <>
+                <p style={{ fontSize: 13, color: T.deep, lineHeight: 1.55, marginBottom: 10 }}>
+                  {apres.touches.length === 1
+                    ? 'Un rendez-vous reste prévu pendant cette fermeture. Personne ne peut plus réserver ces jours-là, mais celui-ci tient toujours.'
+                    : `${apres.touches.length} rendez-vous restent prévus pendant cette fermeture. Personne ne peut plus réserver ces jours-là, mais ceux-ci tiennent toujours.`}
+                </p>
+                <ListeRdvTouches rdvs={apres.touches} formatDateLabel={formatDateLabel} />
+                <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, margin: '10px 0 14px' }}>
+                  Les annuler : chaque client reçoit un email, un acompte payé en ligne est remboursé, un bon ou une récompense est rendu, une séance d’abonnement est recréditée.
+                </p>
+              </>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {!bilanAnnulation && (
+                <button onClick={annulerLesTouches} disabled={annulEnCours}
+                  style={{ padding: '12px', borderRadius: 100, border: 'none', background: '#DC2626', color: '#fff', fontWeight: 800, cursor: annulEnCours ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: annulEnCours ? 0.7 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  {annulEnCours
+                    ? <><DotsAttente taille={6} couleur="#fff" label="Annulation des rendez-vous en cours" /> Annulation en cours…</>
+                    : (apres.touches.length === 1 ? 'Annuler ce rendez-vous et prévenir le client' : `Annuler ces ${apres.touches.length} rendez-vous et prévenir les clients`)}
+                </button>
+              )}
+              <button onClick={fermerApres} disabled={annulEnCours}
+                style={{ padding: '12px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.deep, fontWeight: 700, cursor: annulEnCours ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14 }}>
+                {bilanAnnulation ? 'Fermer' : 'Les garder, je m’en occupe'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showForm && !apres && (
         <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90svh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
@@ -13276,6 +13412,21 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
                 <Input type="date" value={form.date_fin} onChange={e => setForm({ ...form, date_fin: e.target.value })}/>
               </div>
             </div>
+
+            {/* Ce que la fermeture rattrape, vu AVANT d'enregistrer. */}
+            {touchesAffichees.length > 0 && (
+              <div role="status" style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '10px 12px', marginBottom: 12 }}>
+                <p style={{ fontSize: 12.5, fontWeight: 800, color: '#92400E', marginBottom: 6 }}>
+                  {touchesAffichees.length === 1
+                    ? '1 rendez-vous est déjà pris pendant cette période'
+                    : `${touchesAffichees.length} rendez-vous sont déjà pris pendant cette période`}
+                </p>
+                <ListeRdvTouches rdvs={touchesAffichees} formatDateLabel={formatDateLabel} />
+                <p style={{ fontSize: 11.5, color: '#92400E', lineHeight: 1.5, marginTop: 6 }}>
+                  Après l’enregistrement, tu choisiras de les annuler en prévenant les clients, ou de les garder.
+                </p>
+              </div>
+            )}
 
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Motif (optionnel)</label>
             <Input value={form.motif} onChange={e => setForm({ ...form, motif: e.target.value })} placeholder="Congés d'été, jour férié, formation..." style={{ marginBottom: 16 }}/>

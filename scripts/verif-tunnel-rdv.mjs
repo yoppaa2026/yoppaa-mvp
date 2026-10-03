@@ -845,6 +845,68 @@ for (const chemin of [
     verifie('⚠️ une plage commune reste ouverte quand une seule professeure est absente', commune.ok === true, JSON.stringify(commune))
   }
 
+  // ── CE QU'UNE FERMETURE RATTRAPE, ET LE COURS QU'ON ANNULE (B2, B1, 03/10) ─
+  //
+  // 🔴 UNE FERMETURE N'ANNULAIT RIEN, ET NE LE DISAIT PAS ; L'AGENDA NE LA
+  // GRISAIT PAS ; ET UN COURS ENTIER NE S'ANNULAIT QU'INSCRITE PAR INSCRITE.
+  {
+    // ⚠️ `egal` compare des NOMBRES dans ce banc : ici on compare des textes.
+    const memes = (nom, obtenu, attendu) => verifie(nom, obtenu === attendu, `obtenu ${obtenu}, attendu ${attendu}`)
+    const { rdvsSousLaFermeture, fermeturesDuJour } = await import('../lib/fermetures-rdv.js')
+    const RDVS = [
+      { id: 'a', statut: 'confirme', date_rdv: '2026-10-19', praticien_id: 'emily' },
+      { id: 'b', statut: 'confirme', date_rdv: '2026-10-23', praticien_id: 'carole' },
+      { id: 'c', statut: 'confirme', date_rdv: '2026-10-25', praticien_id: null },
+      { id: 'd', statut: 'annule_client', date_rdv: '2026-10-20', praticien_id: 'emily' },
+      { id: 'e', statut: 'confirme', date_rdv: '2026-10-26', praticien_id: 'emily' },
+      { id: 'f', statut: 'honore', date_rdv: '2026-10-19', praticien_id: 'emily' },
+    ]
+    const ids = (l) => l.map(r => r.id).sort().join(',')
+    memes('🔴 une fermeture du commerce rattrape tous les rendez-vous vivants de ses dates, bornes comprises',
+      ids(rdvsSousLaFermeture(RDVS, { date_debut: '2026-10-19', date_fin: '2026-10-25', praticien_id: null })), 'a,b,c')
+    memes('🔴 l’absence d’une praticienne ne rattrape que les siens',
+      ids(rdvsSousLaFermeture(RDVS, { date_debut: '2026-10-19', date_fin: '2026-10-26', praticien_id: 'emily' })), 'a,e')
+    memes('⚠️ ni un rendez-vous annulé, ni un rendez-vous déjà honoré, ni une plage commune',
+      ids(rdvsSousLaFermeture(RDVS, { date_debut: '2026-10-19', date_fin: '2026-10-25', praticien_id: 'emily' })), 'a')
+    memes('l’agenda nomme les fermetures d’un jour',
+      fermeturesDuJour([{ date_debut: '2026-10-19', date_fin: '2026-10-25', praticien_id: null }, { date_debut: '2026-11-01', date_fin: '2026-11-01', praticien_id: 'e' }], '2026-10-25').length, 1)
+
+    const { questionSeanceAnnulee, confirmationSeanceAnnulee } = await import('../lib/confirmation-rdv.js')
+    const q = questionSeanceAnnulee(12)
+    verifie('🔴 annuler un cours : une seule question pour les douze',
+      q?.titre === 'Annuler ce cours pour les 12 personnes inscrites ?' && q.actions[0].valeur === 'annuler' && q.actions[0].ton === 'danger')
+    verifie('🔴 et elle dit honnêtement que les places se rouvrent en ligne',
+      /les places redeviennent réservables en ligne/.test(q?.details || ''))
+    verifie('rien à annuler, rien à demander', questionSeanceAnnulee(0) === null)
+    memes('⚠️ le bilan dit ce qui a été remboursé, au centime',
+      confirmationSeanceAnnulee({ faits: 3, rembourse: 25 }), '3 personnes sont désinscrites et prévenues par email. 25,00 € d’acomptes sont remboursés.')
+    verifie('🔴 et un remboursement raté se dit, au moment où on peut encore agir',
+      /1 remboursement a échoué|Un remboursement a échoué/.test(confirmationSeanceAnnulee({ faits: 2, remboursementsRates: 1 })))
+    verifie('⚠️ depuis une fermeture, ce sont des rendez-vous, pas des inscriptions',
+      /^2 rendez-vous sont annulés, leurs clients sont prévenus par email\./.test(confirmationSeanceAnnulee({ faits: 2, rendezVous: true })))
+
+    // ── Les écrans ──
+    const AGENDA = sansProse(lire('app/dashboard/AgendaRdv.js'))
+    verifie('🔴 l’agenda grise les fermetures, avec la règle du serveur',
+      /if \(fermetureQuiBloque\(fermetures, \{ dateStr: jour\.iso, praticienId: praticienFiltre === 'all' \? null : praticienFiltre \}\)\) return 'conge'/.test(AGENDA)
+      && /const bgCellule = state === 'conge'/.test(AGENDA))
+    verifie('⚠️ et nomme la fermeture dans l’en-tête du jour', /const ferm = fermeturesDuJour\(fermetures, j\.iso\)/.test(AGENDA))
+    verifie('🔴 un cours entier s’annule d’un geste, seulement ses inscrites confirmées, jamais un cours passé',
+      /onAnnulerSeance && seanceOuverte\.jourDate && isoDate\(seanceOuverte\.jourDate\) >= isoDate\(today\)/.test(AGENDA)
+      && /const aAnnuler = seanceOuverte\.inscrits\.filter\(i => i\.statut === 'confirme'\)/.test(AGENDA))
+    const BORD = sansProse(lire('app/dashboard/page.js'))
+    verifie('🔴 le tableau de bord charge les fermetures et les passe à l’agenda',
+      /\.from\('rdv_fermetures'\)/.test(BORD) && /fermetures=\{fermeturesRdv\}/.test(BORD))
+    verifie('🔴 chaque inscrite passe par l’annulation unitaire, en série',
+      /for \(const rdv of seanceAAnnuler\) \{\s*const ok = await changerStatutRdv\(rdv\.id, 'annule_commercant', 'commercant', \{/.test(BORD))
+    const CONF = sansProse(lire('app/dashboard/ConfigDashboard.js'))
+    verifie('🔴 la fermeture montre les rendez-vous qu’elle rattrape, avec la même règle',
+      /setTouches\(rdvsSousLaFermeture\(data \|\| \[\], ferm\)\)/.test(CONF))
+    verifie('🔴 et propose de les annuler au lieu de se refermer en silence',
+      /if \(restent\.length > 0\) setApres\(\{ touches: restent \}\)/.test(CONF)
+      && /const res = await postPro\('\/api\/rdv\/annuler-commercant', \{ rdv_id: r\.id, raison: 'commercant' \}\)/.test(CONF))
+  }
+
   // ── UNE PRESTATION RETIRÉE, UNE DATE TROP LOINTAINE (I9, 03/10) ─────────
   //
   // 🔴 LE SERVEUR NE FAISAIT RESPECTER NI L'UNE NI L'AUTRE. `actif` était lu et

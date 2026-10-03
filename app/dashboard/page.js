@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 // appels qui engagent le CLIENT passent par le premier : un email qui ne part
 // pas doit se voir (Alex, 27/08).
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
+import { toutesLesLignes } from '@/lib/toutes-les-lignes'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import { lireImpersonation, verifierImpersonation, effacerImpersonation, fermerImpersonationServeur, compteAChange } from '@/lib/impersonation'
@@ -16,7 +17,7 @@ import ModalNouveauRdv from './ModalNouveauRdv'
 import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme } from './PosteConfirmation'
 import { jourBruxelles } from '@/lib/timezone'
-import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, confirmationEncaissement, questionEncaissement, nomClient, noShowPossible } from '@/lib/confirmation-rdv'
+import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, questionSeanceAnnulee, confirmationSeanceAnnulee, confirmationEncaissement, questionEncaissement, nomClient, noShowPossible } from '@/lib/confirmation-rdv'
 // ⚠️ `confirmationInfo` : un seul bouton, qui EST la sortie. On annonce, on ne
 // demande rien — et surtout plus par un `alert()` du navigateur.
 import { confirmationSimple, confirmationInfo } from '@/lib/confirmations'
@@ -1230,6 +1231,7 @@ export default function Dashboard() {
   const [commandes, setCommandes] = useState([])
   const [rdvs, setRdvs] = useState([])
   const [creneauxRdv, setCreneauxRdv] = useState([])  // rdv_creneaux du commercant, pour la grille agenda (pauses)
+  const [fermeturesRdv, setFermeturesRdv] = useState([])  // rdv_fermetures : congés, absences, que l'agenda grise
   // Grilles de créneaux alimentaires (retrait + tournées), pour AFFICHER LE
   // REMPLISSAGE au commerçant. Chargées une seule fois par commerce : une grille
   // hebdomadaire ne change pas toutes les minutes, elle n'a rien à faire dans le
@@ -1260,6 +1262,10 @@ export default function Dashboard() {
   // phrase qui dira combien ont été enregistrés.
   const [seanceAHonorer, setSeanceAHonorer] = useState(null)  // tableau de rdvs
   const [confirmationSeanceTexte, setConfirmationSeanceTexte] = useState(null)
+  // Annuler un COURS ENTIER (03/10) : les inscrites encore confirmées, et la
+  // phrase qui dira combien sont prévenues et ce qui a été remboursé.
+  const [seanceAAnnuler, setSeanceAAnnuler] = useState(null)  // tableau de rdvs
+  const [confirmationAnnulationTexte, setConfirmationAnnulationTexte] = useState(null)
   // La commande payée sur place qu'on est en train de remettre : par quel moyen
   // le commerçant vient-il d'être payé ?
   const [commandeAEncaisser, setCommandeAEncaisser] = useState(null)
@@ -1544,8 +1550,13 @@ export default function Dashboard() {
   // mais on cache les supprimes du dashboard quotidien). Tri par date + heure.
   // Fetch aussi les rdv_creneaux (pauses) et rdv_prestations (modale ajout manuel).
   const chargerRdvs = useCallback(async (id) => {
+    // 🔴 TOUTES LES LIGNES, PAS LES MILLE PREMIÈRES (B3, 03/10) : voir
+    // `lib/toutes-les-lignes.js`. Un studio qui vend des abonnements à l'année
+    // dépasse le plafond silencieux de Supabase, et l'agenda perdait ses
+    // dernières séances sans un mot. L'ordre se termine par `id` : il doit
+    // être total pour que les pages ne se chevauchent pas.
     const [{ data: rdvData }, { data: crData }, { data: pData }, { data: praData }] = await Promise.all([
-      supabase
+      toutesLesLignes(() => supabase
         .from('rdv_reservations')
         // La commande liée vient avec : un rendez-vous du tunnel unique porte
         // des produits déjà payés que le commerçant doit préparer AVANT que le
@@ -1556,7 +1567,8 @@ export default function Dashboard() {
         .eq('commercant_id', id)
         .is('deleted_at', null)
         .order('date_rdv', { ascending: true })
-        .order('heure_debut', { ascending: true }),
+        .order('heure_debut', { ascending: true })
+        .order('id', { ascending: true })),
       supabase
         .from('rdv_creneaux')
         .select('*')
@@ -1617,6 +1629,15 @@ export default function Dashboard() {
     ])
     setRdvs(rdvData || [])
     setCreneauxRdv(crData || [])
+    // 🔴 L'AGENDA NE GRISAIT PAS LES FERMETURES (B2, 03/10), et son commentaire
+    // affirmait le contraire. Silencieux en cas d'échec : l'agenda garde ses
+    // rendez-vous, il perd seulement le gris.
+    const { data: fermData } = await supabase
+      .from('rdv_fermetures')
+      .select('id, date_debut, date_fin, praticien_id, motif')
+      .eq('commercant_id', id)
+      .is('deleted_at', null)
+    setFermeturesRdv(fermData || [])
     // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : un prix resté en base
     // sur une table ne s'affiche plus au téléphone et ne s'écrit plus sur la
     // réservation. Même règle, même fonction que la fiche du client.
@@ -1876,7 +1897,9 @@ export default function Dashboard() {
       setCommandes(triees)
 
       // Polling RDVs : meme interval pour eviter de multiplier les setInterval.
-      const { data: rdvsData } = await supabase
+      // ⚠️ LE RELEVÉ AUSSI LIT TOUT (B3) : sinon il remplaçait toutes les
+      // trente secondes l'agenda complet par ses mille premières lignes.
+      const { data: rdvsData } = await toutesLesLignes(() => supabase
         .from('rdv_reservations')
         // La commande liée vient avec : un rendez-vous du tunnel unique porte
         // des produits déjà payés que le commerçant doit préparer AVANT que le
@@ -1888,6 +1911,7 @@ export default function Dashboard() {
         .is('deleted_at', null)
         .order('date_rdv', { ascending: true })
         .order('heure_debut', { ascending: true })
+        .order('id', { ascending: true }))
       // ⚠️ LE SALON N'ÉTAIT PRÉVENU DE RIEN. Le commerçant alimentaire reçoit un
       // son et une notification à chaque commande ; la coiffeuse ne découvrait
       // ses nouveaux rendez-vous qu'en pensant à regarder son agenda.
@@ -2639,6 +2663,39 @@ export default function Dashboard() {
   function fermerSeance() {
     setSeanceAHonorer(null)
     setConfirmationSeanceTexte(null)
+  }
+
+  // ⚠️ ANNULER UN COURS : UNE QUESTION, UNE ANNULATION PAR PERSONNE (03/10).
+  // Exactement le chemin de l'annulation unitaire (`changerStatutRdv`) : la
+  // route rembourse, rend et recrédite, puis l'email part avec les montants
+  // qu'elle a rendus. EN SÉRIE, comme la clôture : un échec au milieu reste
+  // attribuable, et on ne lance pas douze remboursements Stripe à la fois.
+  async function repondreAnnulationSeance(choix) {
+    if (!seanceAAnnuler) return
+    if (choix !== 'annuler') { setSeanceAAnnuler(null); return }
+    setActionEnCours(true)
+    let faits = 0
+    let echecs = 0
+    let rembourse = 0
+    let remboursementsRates = 0
+    for (const rdv of seanceAAnnuler) {
+      const ok = await changerStatutRdv(rdv.id, 'annule_commercant', 'commercant', {
+        silencieux: true,
+        surRetours: (r) => {
+          if (r?.refund_error) remboursementsRates++
+          else if (Number(r?.refund_montant) > 0) rembourse += Number(r.refund_montant)
+        },
+      })
+      if (ok) faits++
+      else echecs++
+    }
+    setActionEnCours(false)
+    setConfirmationAnnulationTexte(confirmationSeanceAnnulee({ faits, echecs, rembourse, remboursementsRates }))
+  }
+
+  function fermerAnnulationSeance() {
+    setSeanceAAnnuler(null)
+    setConfirmationAnnulationTexte(null)
   }
 
   // ⚠️ LE MÊME TRIO DE RÉPONSES QUE SUR UN RENDEZ-VOUS : terminal, espèces, ou
@@ -4071,12 +4128,14 @@ export default function Dashboard() {
                   <AgendaRdv
                     rdvs={rdvs}
                     creneaux={creneauxRdv}
+                    fermetures={fermeturesRdv}
                     praticiens={praticiensRdv}
                     horairesDetail={commercant?.horaires_detail}
                     commercant={commercant}
                     onSelectRdv={(r) => setRdvSelectionne(r)}
                     onNouveauRdv={(date, heure) => setNouveauRdvSlot({ date, heure })}
                     onHonorerSeance={(inscrits) => setSeanceAHonorer(inscrits)}
+                    onAnnulerSeance={(inscrits) => setSeanceAAnnuler(inscrits)}
                     onFenetreChange={majFenetreAgenda}
                   />
                 )}
@@ -4209,6 +4268,16 @@ export default function Dashboard() {
         confirmation={confirmationSeanceTexte}
         onChoix={repondreSeance}
         onFermer={fermerSeance}
+      />
+
+      {/* ─── ANNULER UN COURS ENTIER ──────────────────────────────────────── */}
+      <ModaleConfirmation
+        ouverte={!!seanceAAnnuler}
+        {...(seanceAAnnuler && !confirmationAnnulationTexte ? (questionSeanceAnnulee(seanceAAnnuler.length) || {}) : {})}
+        enCours={actionEnCours}
+        confirmation={confirmationAnnulationTexte}
+        onChoix={repondreAnnulationSeance}
+        onFermer={fermerAnnulationSeance}
       />
 
       {/* ─── ENCAISSER UNE COMMANDE PAYÉE SUR PLACE ───────────────────────── */}

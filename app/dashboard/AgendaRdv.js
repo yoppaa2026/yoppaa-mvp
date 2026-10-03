@@ -26,6 +26,7 @@ import { contenuBlocRdv } from '@/lib/agenda-bloc'
 import { statutRdv, resumeSeance, texteResumeSeance, estAClore, compterAClore } from '@/lib/rdv-statut'
 import { etatPaiementRdv, couleurPaiement } from '@/lib/rdv-paiement'
 import { motsReservation } from '@/lib/reservation-metier'
+import { fermetureQuiBloque, fermeturesDuJour } from '@/lib/fermetures-rdv'
 
 const T = {
   bg:      '#F8F6FF',
@@ -80,7 +81,7 @@ function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 // La logique est sortie d'ici pour être testable : le calcul du contraste du
 // texte, en particulier, décide de la lisibilité de tout l'écran.
 
-export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onFenetreChange }) {
+export default function AgendaRdv({ rdvs, creneaux, fermetures = [], praticiens = [], horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onFenetreChange }) {
   // ⚠️ `commercant` FACULTATIF : sans lui, le vocabulaire du rendez-vous, donc
   // l'agenda d'un salon ne bouge pas d'un mot.
   const mots = motsReservation(commercant)
@@ -195,8 +196,15 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
     return out
   }, [heureMin, heureMax])
 
-  // État d'une cellule jour×slot : 'ferme' | 'pause' | 'libre'
+  // État d'une cellule jour×slot : 'conge' | 'ferme' | 'pause' | 'libre'
   function getSlotState(jour, slotMin) {
+    // 🔴 LES FERMETURES SE VOIENT (B2, 03/10). L'en-tête de l'onglet
+    // Fermetures promettait que « l'agenda grise les cellules concernées » : il
+    // ne lisait que les horaires, et un jour de congé s'affichait ouvert, case
+    // cliquable comprise. Même règle que le serveur : en vue « tous », seules
+    // les fermetures du commerce grisent ; l'absence d'une praticienne grise
+    // quand on regarde SON agenda, et l'en-tête du jour la nomme toujours.
+    if (fermetureQuiBloque(fermetures, { dateStr: jour.iso, praticienId: praticienFiltre === 'all' ? null : praticienFiltre })) return 'conge'
     const h = horairesDetail?.[jour.keyJour]
     if (!h?.ouvert || !h?.debut || !h?.fin) return 'ferme'
     // Plages du jour (1 ou 2 avec les horaires à pause debut2/fin2)
@@ -522,6 +530,21 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
             <div key={`h-${j.iso}`} style={{ position: 'sticky', top: 0, zIndex: 3, background: j.isToday ? T.pale : '#fff', borderBottom: `1.5px solid ${T.pale}`, padding: '8px 4px', textAlign: 'center', borderLeft: `1px solid ${T.pale}` }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: j.isToday ? T.main : T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{j.labelCourt}</div>
               <div style={{ fontSize: 16, fontWeight: 900, color: j.isToday ? T.main : T.ink, letterSpacing: '-0.5px', lineHeight: 1.1 }}>{j.numero}</div>
+              {/* La fermeture se NOMME, même quand la grille ne la grise pas
+                  (vue « tous » et absence d'une seule praticienne). */}
+              {(() => {
+                const ferm = fermeturesDuJour(fermetures, j.iso)
+                if (ferm.length === 0) return null
+                const texte = ferm.some(f => f.praticien_id == null)
+                  ? 'Fermé'
+                  : `Absence : ${ferm.map(f => praticiens.find(p => String(p.id) === String(f.praticien_id))?.prenom || '?').join(', ')}`
+                return (
+                  <div title={ferm.map(f => f.motif).filter(Boolean).join(' · ') || undefined}
+                    style={{ marginTop: 3, fontSize: 9.5, fontWeight: 800, color: '#B45309', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                    {texte}
+                  </div>
+                )
+              })()}
             </div>
           ))}
 
@@ -592,7 +615,9 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                   }
                 }
 
-                const bgCellule = state === 'ferme'
+                const bgCellule = state === 'conge'
+                  ? 'repeating-linear-gradient(135deg, #F3F4F6 0 6px, #E5E7EB 6px 8px)'
+                  : state === 'ferme'
                   ? '#F3F4F6'
                   : state === 'pause'
                     ? '#FFFBEB'
@@ -612,7 +637,7 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                     }}
                     onMouseOver={peutCreer ? (e) => e.currentTarget.style.background = T.pale + '66' : undefined}
                     onMouseOut={peutCreer ? (e) => e.currentTarget.style.background = bgCellule : undefined}
-                    title={state === 'ferme' ? 'Fermé' : state === 'pause' ? 'Pause' : peutCreer ? 'Ajouter un RDV ici' : ''}>
+                    title={state === 'conge' ? 'Fermeture exceptionnelle' : state === 'ferme' ? 'Fermé' : state === 'pause' ? 'Pause' : peutCreer ? 'Ajouter un RDV ici' : ''}>
 
                     {/* ⚠️ UN COURS COMPTE POUR UN BLOC, PAS POUR DOUZE. Les
                         blocs sont placés en position absolue sur leur heure de
@@ -1119,6 +1144,27 @@ export default function AgendaRdv({ rdvs, creneaux, praticiens = [], horairesDet
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>
                   </svg>
                   {mots.agendaInscrire} ({libres} {libres > 1 ? mots.agendaOccupes : mots.agendaOccupe} libre{libres > 1 ? 's' : ''})
+                </button>
+              )
+            })()}
+
+            {/* ─── ANNULER LE COURS ENTIER (B1 des annulations, 03/10) ────────
+                🔴 IMPOSSIBLE JUSQU'ICI : il fallait ouvrir chaque inscrite et
+                annuler une par une, cinq gestes par personne, et le panneau se
+                refermait à chaque fois. Un cours de douze, une professeure
+                malade : soixante gestes. Le geste est collectif, l'écriture
+                reste individuelle (remboursement, bon, séance d'abonnement
+                rendue, email), par la même route que l'annulation unitaire.
+                ⚠️ SEULEMENT LES INSCRITES ENCORE CONFIRMÉES, et jamais sur un
+                cours passé : on n'annule pas ce qui a eu lieu. */}
+            {onAnnulerSeance && seanceOuverte.jourDate && isoDate(seanceOuverte.jourDate) >= isoDate(today) && (() => {
+              const aAnnuler = seanceOuverte.inscrits.filter(i => i.statut === 'confirme')
+              if (aAnnuler.length === 0) return null
+              return (
+                <button
+                  onClick={() => { setSeanceOuverte(null); onAnnulerSeance(aAnnuler) }}
+                  style={{ width: '100%', marginTop: 10, padding: '11px 14px', borderRadius: 100, border: '1.5px solid #DC262655', background: '#fff', color: '#DC2626', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  Annuler ce cours ({aAnnuler.length} {aAnnuler.length > 1 ? 'inscrits' : 'inscrit'})
                 </button>
               )
             })()}

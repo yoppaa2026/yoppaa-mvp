@@ -422,6 +422,18 @@ const SALLE_SRV = SALLE.map(C1)
   verifier('⚠️ une jointure éteinte n’accueille plus de groupe de huit en ligne',
     res.ok === false && res.code === 'prestation_inactive' && db._vu.payload === null, JSON.stringify(res.code))
 }
+{
+  // 🔴 AJOUTÉ LE 03/10, PARCE QUE LE TEST CI-DESSUS NE MESURAIT PLUS LE CHOIX DU
+  // SERVEUR. Une jointure demandée directement est désormais refusée avant la
+  // salle ; ce qui reste à prouver, c'est que le serveur ne CHOISIT jamais une
+  // jointure éteinte de lui-même. Six personnes, les tables de six prises, la
+  // seule jointure éteinte : pas de table, rien d'écrit.
+  const prises = [resa('a', 't6'), resa('b', 't6', '19:00:00', '21:30:00', { place_no: 2 })]
+  const db = salleSimulee({ demandee: C1(T6), formats: [C1(T4), C1({ ...J, actif: false }), C1(T2), C1(T6)], existantes: prises })
+  const res = await reserver(db, 't6', 6)
+  verifier('🔴 le serveur ne choisit jamais une jointure éteinte, même quand elle accueillerait le groupe',
+    res.ok === false && db._vu.payload === null, JSON.stringify({ code: res.code, table: db._vu.payload?.prestation_id }))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 11. CE QUI NE S'EXÉCUTE PAS HORS NAVIGATEUR : LE CÂBLAGE

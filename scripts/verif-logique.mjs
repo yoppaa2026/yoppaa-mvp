@@ -4523,6 +4523,65 @@ verifier('les échecs sont comptés, pas alertés douze fois',
     fautifs.length === 0, fautifs.join(' | '))
 }
 
+// ─── TOUTES LES LIGNES, PAS LES MILLE PREMIÈRES (B3, audit du 03/10) ────────
+//
+// 🔴 SUPABASE REND AU PLUS 1 000 LIGNES, SANS ERREUR. L'agenda d'un studio qui
+// vend des abonnements à l'année perdait ses dernières séances, et les soldes
+// se calculaient sur une partie des réservations. On EXÉCUTE le lecteur par
+// pages avec un faux constructeur qui, comme le vrai, plafonne chaque réponse.
+{
+  const { toutesLesLignes } = await import('../lib/toutes-les-lignes.js')
+  const fauxConstructeur = (total, { panneALaPage = null } = {}) => {
+    const appels = []
+    const construire = () => ({
+      range(de, a) {
+        appels.push([de, a])
+        if (panneALaPage !== null && appels.length - 1 === panneALaPage) return Promise.resolve({ data: null, error: { message: 'réseau' } })
+        const lignes = []
+        for (let i = de; i <= Math.min(a, total - 1); i++) lignes.push({ id: i })
+        // Le vrai serveur plafonne aussi : jamais plus de mille par réponse.
+        return Promise.resolve({ data: lignes.slice(0, 1000), error: null })
+      },
+    })
+    return { construire, appels }
+  }
+
+  const grand = fauxConstructeur(2500)
+  const r1 = await toutesLesLignes(grand.construire)
+  verifier('🔴 2 500 réservations se lisent toutes, en trois pages',
+    r1.error === null && r1.data.length === 2500 && grand.appels.length === 3, `${r1.data?.length} lignes, ${grand.appels.length} pages`)
+  verifier('⚠️ sans doublon ni trou', new Set(r1.data.map(l => l.id)).size === 2500 && r1.data[2499].id === 2499)
+
+  const pile = fauxConstructeur(1000)
+  const r2 = await toutesLesLignes(pile.construire)
+  verifier('⚠️ exactement mille : une page de plus pour s’assurer qu’il n’y en a pas d’autre',
+    r2.data.length === 1000 && pile.appels.length === 2, `${pile.appels.length} pages`)
+
+  const petit = fauxConstructeur(12)
+  const r3 = await toutesLesLignes(petit.construire)
+  verifier('un petit agenda se lit en une page', r3.data.length === 12 && petit.appels.length === 1)
+
+  const panne = fauxConstructeur(2500, { panneALaPage: 1 })
+  const r4 = await toutesLesLignes(panne.construire)
+  verifier('🔴 une page en échec ne rend PAS la moitié de l’agenda comme si c’était tout',
+    r4.data === null && r4.error !== null, JSON.stringify({ n: r4.data?.length }))
+
+  // ── Et les quatre lectures qui comptent passent par lui ───────────────
+  const { sansProse } = await import('./lire-code.mjs')
+  const lireSansProse = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
+  const DASH = lireSansProse('app/dashboard/page.js')
+  verifier('🔴 l’agenda du tableau de bord lit toutes ses réservations',
+    (DASH.match(/toutesLesLignes\(\(\) => supabase\s*\.from\('rdv_reservations'\)\s*\.select\(SELECT_RDVS\)/g) || []).length === 2)
+  verifier('⚠️ dans un ordre total, pour que les pages ne se chevauchent pas',
+    (DASH.match(/\.order\('heure_debut', \{ ascending: true \}\)\s*\.order\('id', \{ ascending: true \}\)\)/g) || []).length === 2)
+  const CONFIG = lireSansProse('app/dashboard/ConfigDashboard.js')
+  verifier('🔴 la liste des abonnés compte toutes leurs séances',
+    /toutesLesLignes\(\(\) => supabase\.from\('rdv_reservations'\)\.select\('abonnement_id, statut, date_rdv'\)/.test(CONFIG))
+  const MODALE = lireSansProse('app/dashboard/ModalNouveauRdv.js')
+  verifier('🔴 le solde affiché à l’inscription aussi',
+    /toutesLesLignes\(\(\) => supabase\s*\.from\('rdv_reservations'\)\s*\.select\('abonnement_id, date_rdv, statut'\)/.test(MODALE))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

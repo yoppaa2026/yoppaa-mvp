@@ -524,6 +524,110 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 2 · B2 ET B1 : FERMETURES, AGENDA, COURS ANNULÉ ───────────────
+  { nom: '🔴 l absence d une praticienne rattrape les rendez-vous de toutes',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/fermetures-rdv.js',
+    de: '    && (fermeture.praticien_id == null || (r.praticien_id != null && String(r.praticien_id) === String(fermeture.praticien_id))))',
+    vers: '    && true)',
+    garde: 'l’absence d’une praticienne ne rattrape que les siens' },
+
+  { nom: '⚠️ une fermeture rattrape aussi les annules et les honores',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/fermetures-rdv.js',
+    de: "    r && r.statut === 'confirme' && !r.deleted_at",
+    vers: '    r && !r.deleted_at',
+    garde: 'ni un rendez-vous annulé, ni un rendez-vous déjà honoré' },
+
+  { nom: '🔴 l agenda ne grise plus les fermetures',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/AgendaRdv.js',
+    de: "    if (fermetureQuiBloque(fermetures, { dateStr: jour.iso, praticienId: praticienFiltre === 'all' ? null : praticienFiltre })) return 'conge'",
+    vers: '    void 0',
+    garde: 'l’agenda grise les fermetures' },
+
+  { nom: '⚠️ on peut annuler un cours deja passe',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/AgendaRdv.js',
+    de: '            {onAnnulerSeance && seanceOuverte.jourDate && isoDate(seanceOuverte.jourDate) >= isoDate(today) && (() => {',
+    vers: '            {onAnnulerSeance && seanceOuverte.jourDate && (() => {',
+    garde: 'un cours entier s’annule d’un geste' },
+
+  { nom: '🔴 le tableau de bord ne passe plus les fermetures a l agenda',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/page.js',
+    de: '                    fermetures={fermeturesRdv}',
+    vers: '',
+    garde: 'le tableau de bord charge les fermetures' },
+
+  { nom: '🔴 annuler un cours contourne l annulation unitaire : ni remboursement ni email',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/page.js',
+    de: "      const ok = await changerStatutRdv(rdv.id, 'annule_commercant', 'commercant', {",
+    vers: "      const ok = await Promise.resolve(rdv.id, 'annule_commercant', 'commercant', {",
+    garde: 'chaque inscrite passe par l’annulation unitaire' },
+
+  { nom: '🔴 la fermeture se referme en silence sur des rendez-vous pris',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '    if (restent.length > 0) setApres({ touches: restent })',
+    vers: '    if (false) setApres({ touches: restent })',
+    garde: 'et propose de les annuler au lieu de se refermer en silence' },
+
+  { nom: '⚠️ la fermeture liste des rendez-vous qu elle ne touche pas',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      .then(({ data }) => { if (vivant) setTouches(rdvsSousLaFermeture(data || [], ferm)) })',
+    vers: '      .then(({ data }) => { if (vivant) setTouches(data || []) })',
+    garde: 'la fermeture montre les rendez-vous qu’elle rattrape' },
+
+  { nom: '🔴 la question d annulation tait que les places se rouvrent',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/confirmation-rdv.js',
+    de: "    details: 'Attention : les places redeviennent réservables en ligne. Si c’est toute ta journée qui saute, ajoute plutôt une fermeture dans Paramètres : elle bloque les réservations et te propose d’annuler les rendez-vous déjà pris.',",
+    vers: "    details: 'Les places sont libérées.',",
+    garde: 'et elle dit honnêtement que les places se rouvrent en ligne' },
+
+  { nom: '🔴 un remboursement rate ne se dit plus',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/confirmation-rdv.js',
+    de: '  if (remboursementsRates > 0) {',
+    vers: '  if (false) {',
+    garde: 'et un remboursement raté se dit' },
+
+  { nom: '🔴 l email d annulation des fermetures perd une information',
+    banc: 'verif:equipe', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '        nb_bons: j.nb_bons,',
+    vers: '',
+    garde: 'les fermetures disent la même chose que le tableau de bord' },
+
+  // ─── LOT 2 · B3 : LE PLAFOND SILENCIEUX DES MILLE LIGNES ───────────────
+  { nom: '🔴 le lecteur s arrete a la premiere page : mille lignes au plus',
+    banc: 'verif:logique', fichier: 'lib/toutes-les-lignes.js',
+    de: '    if (lot.length < taille) return { data: lignes, error: null }',
+    vers: '    return { data: lignes, error: null }',
+    garde: '2 500 réservations se lisent toutes, en trois pages' },
+
+  { nom: '🔴 une page en echec rend la moitie de l agenda comme si c etait tout',
+    banc: 'verif:logique', fichier: 'lib/toutes-les-lignes.js',
+    de: '    if (error) return { data: null, error }',
+    vers: '    if (error) return { data: lignes, error: null }',
+    garde: 'une page en échec ne rend PAS la moitié de l’agenda' },
+
+  { nom: '🔴 le releve de l agenda repasse a mille lignes',
+    banc: 'verif:logique', fichier: 'app/dashboard/page.js',
+    de: '      const { data: rdvsData } = await toutesLesLignes(() => supabase',
+    vers: '      const { data: rdvsData } = await (() => supabase',
+    garde: 'l’agenda du tableau de bord lit toutes ses réservations' },
+
+  { nom: '⚠️ l ordre de l agenda n est plus total : des pages se chevauchent',
+    banc: 'verif:logique', fichier: 'app/dashboard/page.js',
+    de: "        .order('id', { ascending: true })),",
+    vers: '        ),',
+    garde: 'dans un ordre total, pour que les pages ne se chevauchent pas' },
+
+  { nom: '🔴 les soldes des abonnes se calculent sur mille seances',
+    banc: 'verif:logique', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "      toutesLesLignes(() => supabase.from('rdv_reservations').select('abonnement_id, statut, date_rdv')",
+    vers: "      (() => supabase.from('rdv_reservations').select('abonnement_id, statut, date_rdv')",
+    garde: 'la liste des abonnés compte toutes leurs séances' },
+
+  { nom: '🔴 le solde a l inscription se calcule sur mille seances',
+    banc: 'verif:logique', fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '        const { data } = await toutesLesLignes(() => supabase',
+    vers: '        const { data } = await (() => supabase',
+    garde: 'le solde affiché à l’inscription aussi' },
+
   // ─── LOT 2 · LA-08 ET LA-10 ────────────────────────────────────────────
   { nom: '🔴 une fenetre expiree verrouille de nouveau a vie',
     banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',

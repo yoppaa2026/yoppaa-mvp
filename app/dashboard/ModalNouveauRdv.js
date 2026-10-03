@@ -31,6 +31,7 @@ import {
   serieDeSeances, raisonSemaineEcartee, expliquerRefusCommercant, formatDateCourte,
 } from '@/lib/abonnements'
 import { fermetureQuiBloque } from '@/lib/fermetures-rdv'
+import { toutesLesLignes } from '@/lib/toutes-les-lignes'
 
 const T = {
   main:    '#6B35C4',
@@ -208,11 +209,15 @@ export default function ModalNouveauRdv({
       // temps depuis son téléphone, et le solde afficherait une séance de trop.
       let reservations = []
       if (ids.length > 0) {
-        const { data } = await supabase
+        // 🔴 TOUTES LES SÉANCES DES CONTRATS (B3, 03/10) : trente contrats à
+        // 36 séances dépassent le plafond silencieux de mille lignes, et le
+        // solde affiché ici comptait une partie des séances seulement.
+        const { data } = await toutesLesLignes(() => supabase
           .from('rdv_reservations')
           .select('abonnement_id, date_rdv, statut')
           .in('abonnement_id', ids)
           .is('deleted_at', null)
+          .order('id', { ascending: true }))
         reservations = data || []
       }
       if (annule) return

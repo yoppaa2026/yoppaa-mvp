@@ -446,6 +446,12 @@ const membre = (o = {}) => ({
   for (const url of ['/api/emails/rdv-annule', '/api/emails/rdv-no-show']) {
     v(`🔴 ${url} : mêmes informations que le tableau de bord`, cles(poste, url) !== '' && cles(poste, url) === cles(bord, url), `${cles(poste, url)} / ${cles(bord, url)}`)
   }
+  // ⚠️ ET LE TROISIÈME ÉCRAN (03/10) : les fermetures annulent aussi des
+  // rendez-vous, et leur email doit porter les mêmes montants rendus.
+  const config = code('app/dashboard/ConfigDashboard.js')
+  v('🔴 /api/emails/rdv-annule : les fermetures disent la même chose que le tableau de bord',
+    cles(config, '/api/emails/rdv-annule') !== '' && cles(config, '/api/emails/rdv-annule') === cles(bord, '/api/emails/rdv-annule'),
+    `${cles(config, '/api/emails/rdv-annule')} / ${cles(bord, '/api/emails/rdv-annule')}`)
 
   // 🔴 LES ROUTES DES GESTES.
   const venu = code('app/api/equipe/rdv/venu/route.js')

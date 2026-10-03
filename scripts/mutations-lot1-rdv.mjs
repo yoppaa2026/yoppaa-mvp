@@ -524,6 +524,13 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 3 I8 : PAS DE VENTE SANS COMPTE QUI ENCAISSE ─────────
+  { nom: '🔴 la fiche propose d acheter un abonnement que le serveur refusera',
+    banc: 'verif:abonnements', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '              {etape === 1 && formulesAbo.length > 0 && commercant?.stripe_account_charges_enabled === true && (',
+    vers: '              {etape === 1 && formulesAbo.length > 0 && (',
+    garde: 'la fiche ne propose l’achat que si le compte encaisse' },
+
   // ─── LOT 3 · AUDIT 2 C1 : UN PAIEMENT QUI NE DÉMARRE PAS ────────────────
   { nom: '🔴 une panne reseau ressort en anglais technique',
     banc: 'verif:tunnel-rdv', fichier: 'lib/refus-reservation.js',

@@ -2319,6 +2319,15 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     !/'Abonnements',/.test(LANDING))
 }
 
+// ─── PAS DE VENTE EN LIGNE SANS COMPTE QUI ENCAISSE (Audit 3 I8, 03/10) ────
+{
+  const FICHE_V = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  const ROUTE_V = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-abonnement/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 la fiche ne propose l’achat que si le compte encaisse, comme le serveur l’exige',
+    /formulesAbo\.length > 0 && commercant\?\.stripe_account_charges_enabled === true && \(/.test(FICHE_V)
+    && /!commercant\.stripe_account_charges_enabled/.test(ROUTE_V))
+}
+
 // ─── « DÉJÀ PAYÉ » DIT PAR QUEL MOYEN (Audit 1 I4, 03/10) ──────────────────
 {
   const CONF_P = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))

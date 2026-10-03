@@ -3304,7 +3304,12 @@ export default function CommanderRdvSlug() {
                   d'abord ce que fait ce commerce, on s'abonne ensuite. Et pas
                   dans la boutique : un abonnement porte une durée, un solde et
                   des règles, qui n'ont aucune place sur une fiche produit. */}
-              {etape === 1 && formulesAbo.length > 0 && (
+              {/* 🔴 PAS DE VENTE EN LIGNE SANS COMPTE QUI ENCAISSE (Audit 3 I8,
+                  03/10). La fiche proposait « Acheter » et le serveur refusait
+                  après le clic : la bascule de Stripe en réel a remis à zéro
+                  les comptes connectés, et un commerce peut vendre au comptoir
+                  sans encaisser en ligne. Même règle que le serveur. */}
+              {etape === 1 && formulesAbo.length > 0 && commercant?.stripe_account_charges_enabled === true && (
                 <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations} client={client}/>
               )}
 

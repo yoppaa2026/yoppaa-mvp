@@ -9892,12 +9892,18 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
     }
     // Sync junction prestation ↔ praticiens : delete existing puis insert selected
     // Pattern simple pour V1 (peu de lignes). Optimisable en delta plus tard si besoin.
-    await supabase.from('rdv_prestation_praticiens').delete().eq('prestation_id', prestationId)
-    if (selectedPraticiens.size > 0) {
+    // 🔴 LES DEUX ÉCRITURES SE LISENT (Audit 1 I16, 03/10). Un effacement réussi
+    // suivi d'une insertion ratée laissait le cours SANS professeur, et l'écran
+    // disait « Prestation mise à jour » : la fiche changeait de professeurs
+    // proposés sans que personne ne le sache. On le dit, avec le geste à faire.
+    const { error: errDelJ } = await supabase.from('rdv_prestation_praticiens').delete().eq('prestation_id', prestationId)
+    let liensRates = Boolean(errDelJ)
+    if (!errDelJ && selectedPraticiens.size > 0) {
       const rows = Array.from(selectedPraticiens).map(pid => ({ prestation_id: prestationId, praticien_id: pid }))
       const { error: errJ } = await supabase.from('rdv_prestation_praticiens').insert(rows)
-      if (errJ) console.warn('[TabRdvPrestations] junction insert error', errJ)
+      if (errJ) { liensRates = true; console.error('[TabRdvPrestations] junction insert error', errJ) }
     }
+    if (errDelJ) console.error('[TabRdvPrestations] junction delete error', errDelJ)
     // 🔴 UNE NOUVELLE JOINTURE SE SERT LÀ OÙ SA TABLE SE SERT (lot 3). Un service
     // qui ne prend que certaines tables ne la connaît pas encore : sans cette
     // copie, le groupe de huit ne trouverait aucune heure sur le service où ses
@@ -9920,7 +9926,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       if (copieRatee) console.error('[TabRdvPrestations] copie des services de la jointure KO', errL)
     }
     setSaving(false)
-    if (copieRatee) {
+    if (liensRates) {
+      toast(`${formEstJointure ? 'Jointure enregistrée' : 'Prestation enregistrée'}, mais pas qui la donne : rouvre-la et recoche les bonnes personnes.`, 'error')
+    } else if (copieRatee) {
       toast('Jointure autorisée. Je n’ai pas pu la rattacher à tes services qui ne prennent que certaines tables : ouvre-les dans « Services » et coche-la.', 'error')
     } else {
       toast(formEstJointure

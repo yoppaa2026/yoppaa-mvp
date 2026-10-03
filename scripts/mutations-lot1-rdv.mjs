@@ -524,6 +524,13 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 1 I16 : LES LIENS PROFESSEUR-PRESTATION ──────────────
+  { nom: '🔴 une insertion ratee des professeurs se dit « mise a jour »',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "      if (errJ) { liensRates = true; console.error('[TabRdvPrestations] junction insert error', errJ) }",
+    vers: "      if (errJ) { console.error('[TabRdvPrestations] junction insert error', errJ) }",
+    garde: 'et un échec se dit, au lieu de « Prestation mise à jour »' },
+
   // ─── LOT 3 · AUDIT 1 I13 : « PAIEMENT SUR PLACE » ───────────────────────
   { nom: '⚠️ l option paiement sur place ne previent plus les commerces de rendez-vous',
     banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/TabPaiements.js',

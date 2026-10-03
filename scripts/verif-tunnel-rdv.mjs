@@ -945,6 +945,16 @@ for (const chemin of [
     egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
   }
 
+  // ── LES LIENS PROFESSEUR-PRESTATION SE LISENT (Audit 1 I16, 03/10) ──────
+  {
+    const CONF_L = sansProse(lire('app/dashboard/ConfigDashboard.js'))
+    verifie('🔴 l’effacement des liens se lit, et l’insertion ne part que s’il a réussi',
+      /const \{ error: errDelJ \} = await supabase\.from\('rdv_prestation_praticiens'\)\.delete\(\)\.eq\('prestation_id', prestationId\)/.test(CONF_L)
+      && /if \(!errDelJ && selectedPraticiens\.size > 0\) \{/.test(CONF_L))
+    verifie('🔴 et un échec se dit, au lieu de « Prestation mise à jour »',
+      /if \(errJ\) \{ liensRates = true;/.test(CONF_L) && /if \(liensRates\) \{\s*toast\(/.test(CONF_L))
+  }
+
   // ── « PAIEMENT SUR PLACE » NE PROMET PLUS CE QU'IL NE FAIT PAS (Audit 1 I13)
   {
     const PAIE = sansProse(lire('app/dashboard/TabPaiements.js'))

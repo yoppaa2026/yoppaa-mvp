@@ -931,6 +931,20 @@ for (const chemin of [
       && /const res = await postPro\('\/api\/rdv\/annuler-commercant', \{ rdv_id: r\.id, raison: 'commercant' \}\)/.test(CONF))
   }
 
+  // ── LE RAPPEL DE LA VEILLE CHARGE CE QUE LE SOLDE LIT (Audit 2 I14, 03/10)
+  // 🔴 Le bon cadeau manquait au select : « prévois 35 € » sur une coupe déjà
+  // payée par un bon. On compare le select aux colonnes que lit `soldeRdv`.
+  {
+    const CRON = sansProse(lire('app/api/cron/rdv-reminder-9h/route.js'))
+    const sel = (/\.select\(`([\s\S]*?)`\)/.exec(CRON) || [])[1] || ''
+    for (const col of ['prix_estime', 'fidelite_remise', 'bon_cadeau_montant', 'acompte_montant']) {
+      verifie(`🔴 le rappel de la veille charge ${col}, que le solde lit`, new RegExp(`\\b${col}\\b`).test(sel), sel.slice(0, 160))
+    }
+    verifie('⚠️ et l’un des deux marqueurs d’acompte payé', /\bacompte_paye(_en_ligne)?\b/.test(sel))
+    const { soldeRdv } = await import('../lib/rdv-paiement.js')
+    egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
+  }
+
   // ── UNE ANNULATION, UN REMBOURSEMENT, UN EMAIL (Annul-I8, 03/10) ────────
   //
   // 🔴 AUCUN VERROU : un double tap, deux onglets, ou le client et le studio à

@@ -524,6 +524,13 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 2 I14 : LE RAPPEL DE LA VEILLE ET LE BON ────────────
+  { nom: '🔴 le rappel de la veille oublie de nouveau le bon cadeau',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/cron/rdv-reminder-9h/route.js',
+    de: '        bon_cadeau_montant,',
+    vers: '',
+    garde: 'le rappel de la veille charge bon_cadeau_montant' },
+
   // ─── LOT 3 · AUDIT 1 I6 : UNE PLAGE QUI NE COLLE PAS À SON COURS ───────
   { nom: '🔴 une plage trop courte pour son cours se tait',
     banc: 'verif:slots', fichier: 'lib/rdv-slots.js',

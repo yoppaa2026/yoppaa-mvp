@@ -47,6 +47,7 @@ export async function GET(request) {
       .select(`
         id, date_rdv, heure_debut, heure_fin, duree_minutes,
         prix_estime, acompte_paye_en_ligne, acompte_montant, fidelite_remise,
+        bon_cadeau_montant,
         client_email, client_prenom,
         lieu_id, lieu_libelle, lieu_adresse,
         couverts,
@@ -76,6 +77,9 @@ export async function GET(request) {
         // confirmation. La veille du rendez-vous, il aurait annoncé 28 € à
         // quelqu'un qui ne doit que 21 €. La règle vit dans `soldeRdv`, une
         // seule fois, avec la remise dedans.
+        // 🔴 ET LE BON CADEAU (Audit 2 I14, 03/10) : `bon_cadeau_montant`
+        // manquait au select, `soldeRdv` le lisait `undefined`, et la veille
+        // le client lisait « prévois 35 € » sur une coupe déjà payée par son bon.
         const solde = soldeRdv(r)
 
         const html = emailRdvReminder({

@@ -42,7 +42,7 @@ export default function TabPaiements({ commercantId, toast }) {
     setLoading(true)
     const { data } = await supabase
       .from('commercants')
-      .select('id, nom, plan, categorie, stripe_account_id, stripe_account_charges_enabled, stripe_account_details_submitted, stripe_account_payouts_enabled, stripe_onboarding_done_at, rdv_acompte_en_ligne_actif, accepte_paiement_cash')
+      .select('id, nom, plan, categorie, stripe_account_id, stripe_account_charges_enabled, stripe_account_details_submitted, stripe_account_payouts_enabled, stripe_onboarding_done_at, rdv_acompte_en_ligne_actif, accepte_paiement_cash, rdv_delai_annulation_heures')
       .eq('id', commercantId)
       .maybeSingle()
     setCommercant(data)

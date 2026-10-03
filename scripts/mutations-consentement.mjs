@@ -49,6 +49,19 @@ const MUTATIONS = [
     fichier: 'app/commander/[slug]/page.js',
     de: 'const [rgpdMarketing, setRgpdMarketing] = useState(false)',
     vers: 'const [optinOffres, setRgpdMarketing] = useState(true)' },
+
+  // 🔴 LE DÉFAUT DU 03/10 : « Prendre un autre RDV » et « Continuer » RECOCHAIENT
+  // le consentement après une réservation. La valeur de départ était juste,
+  // c'est le geste suivant qui le donnait à la place de la cliente.
+  { nom: '🔴 prendre un autre rendez-vous recoche le consentement',
+    fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                    setRgpdCommande(false); setRgpdMarketing(false)',
+    vers: '                    setRgpdCommande(false); setRgpdMarketing(true)' },
+
+  { nom: '🔴 continuer ses achats recoche le consentement',
+    fichier: 'app/commander/[slug]/page.js',
+    de: 'setRgpdCommande(false); setRgpdMarketing(false); setErreurCommande(null);',
+    vers: 'setRgpdCommande(false); setRgpdMarketing(true); setErreurCommande(null);' },
 ]
 
 const lancer = () => {

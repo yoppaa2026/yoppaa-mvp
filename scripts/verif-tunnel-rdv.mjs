@@ -2418,6 +2418,12 @@ for (const chemin of [
     verifie('🔴 la fiche retire de sa grille les plages d’une praticienne absente',
       /creneaux: plagesOuvertes\(creneauxFiltres, fermetures, dateStr\),/.test(fiche)
       && /creneaux: plagesOuvertes\(creneauxFiltres, fermetures, j\.iso\),/.test(fiche))
+    // 🔴 UN REFUS SE LIT LÀ OÙ LA FICHE RENVOIE (I1, 03/10) : à l'étape 2.
+    const etape2 = fiche.slice(fiche.indexOf('{etape === 2 && prestationChoisie && ('), fiche.indexOf('{etape === 3'))
+    verifie('🔴 le refus du serveur s’affiche à l’étape 2, où la fiche renvoie choisir',
+      etape2.length > 1000 && /\{submitError && \(\s*<div role="alert"/.test(etape2), `${etape2.length} caractères`)
+    verifie('⚠️ et s’efface quand une autre heure est choisie',
+      /if \(!pris\) \{ setHeureChoisie\(heure\); setAttenteVisee\(null\); setSubmitError\(null\) \}/.test(fiche))
     verifie('et juge les jours fermés avec la règle du serveur',
       /return !!fermetureQuiBloque\(fermetures, \{ dateStr: iso, praticienId: praticienChoisi\?\.id \?\? null \}\)/.test(fiche))
   }
@@ -2481,6 +2487,36 @@ for (const chemin of [
     verifie('⚠️ sans somme prise, on ne parle pas de remboursement',
       !/remboursé/.test(sansArgent) && /Rien n&rsquo;a été débité/.test(sansArgent))
   }
+}
+
+// ═══ LE DÉLAI D'ANNULATION D'UN COMMERCE DE SERVICES (03/10) ══════════════
+//
+// 🔴 IL NE SE RÉGLAIT QUE CHEZ UN RESTAURANT À TABLES, dans l'empreinte. Un
+// salon ou une professeure de yoga restaient à 24 heures, et deux écrans le
+// disaient faux : Paiements annonçait 24 h sans lire la colonne, l'admin
+// changeait un zéro en vingt-quatre.
+{
+  const DASH = lireCode('app/dashboard/ConfigDashboard.js')
+  const fn = DASH.slice(DASH.indexOf('function ReglageDelaiAnnulation('), DASH.indexOf('function ReglageEmpreinte('))
+  verifie('le réglage du délai pour les services existe', fn.length > 1500, `${fn.length} caractères`)
+  verifie('🔴 un commerce sans tables le voit',
+    /\{!\(estTable && prestations\.some\(p => p\.par_couverts === true && p\.actif !== false\)\) && \(\s*<ReglageDelaiAnnulation commercantId=\{commercantId\} commercant=\{commercant\} toast=\{toast\} \/>/.test(DASH))
+  verifie('🔴 il écrit la valeur validée, zéro compris, et relit ce qui a pris',
+    /\.update\(\{ rdv_delai_annulation_heures: vDelai\.valeur \}\)/.test(fn)
+    && /\.select\('rdv_delai_annulation_heures'\)\s*\.maybeSingle\(\)/.test(fn) && /if \(error \|\| !data\)/.test(fn))
+  verifie('⚠️ et il annonce le délai avec la règle commune, défaut du métier compris',
+    /delaiAnnulationHeures\(\{ \.\.\.commercant, rdv_delai_annulation_heures: vDelai\.valeur \}\)/.test(fn))
+
+  const PAIEMENTS = lireCode('app/dashboard/TabPaiements.js')
+  const sel = PAIEMENTS.match(/\.from\('commercants'\)\s*\.select\('([^']*)'\)/)
+  verifie('🔴 Paiements lit le délai avant de l’annoncer',
+    !!sel && sel[1].split(',').map(s => s.trim()).includes('rdv_delai_annulation_heures'), sel ? sel[1] : 'select introuvable')
+
+  const ADMIN = lireCode('app/admin/ModalEditCommercant.js')
+  verifie('🔴 l’admin ne change plus un zéro en vingt-quatre',
+    !/rdv_delai_annulation_heures\) \|\| 24/.test(ADMIN) && /rdv_delai_annulation_heures: vDelai\.valeur,/.test(ADMIN))
+  verifie('⚠️ ni n’écrit 24 sur un délai jamais réglé',
+    /rdv_delai_annulation_heures: commercant\.rdv_delai_annulation_heures \?\? '',/.test(ADMIN))
 }
 
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════

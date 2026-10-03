@@ -1336,6 +1336,19 @@ verifier('le webhook envoie la confirmation au client',
   /emailAbonnementConfirme\(\{/.test(srcWebhookAbo))
 verifier('et prévient le commerçant de la vente',
   /emailAbonnementVenduCommercant\(\{/.test(srcWebhookAbo))
+// 🔴 CE QUE LE CLIENT A TAPÉ PARTAIT TEL QUEL DANS L'EMAIL DU COMMERÇANT (03/10).
+// Exécuté : un nom ou une formule qui contiennent du HTML ressortent échappés.
+{
+  const { emailAbonnementVenduCommercant, emailAbonnementConfirme } = await import('../lib/resend.js')
+  const resume = { formule: 'Annuel <i>yoga</i>', seances: '36 séances', validite: 'Du 1/10 au 30/6', prix: '450,00 €', aFaire: 'Tu réserves tes séances toi-même, quand tu veux.' }
+  const pro = emailAbonnementVenduCommercant({ nom_commercant: 'Centre Respire', client_prenom: '<b>Sophie</b>', client_nom: 'Martin', resume })
+  verifier('🔴 l’email du commerçant échappe le nom du client', !/<b>Sophie<\/b>/.test(pro) && /&lt;b&gt;Sophie/.test(pro))
+  verifier('🔴 et la formule', !/<i>yoga<\/i>/.test(pro))
+  verifier('⚠️ et ne lui dit plus « tu réserves tes séances toi-même », phrase écrite pour le client',
+    !/réserves tes séances toi-même/.test(pro) && /Ton client réserve ses séances lui-même/.test(pro))
+  const client = emailAbonnementConfirme({ yopper_prenom: 'Sophie', commercant_nom: 'Centre Respire', resume, mes_abonnements_url: 'https://www.yoppaa.app/x' })
+  verifier('🔴 l’email du client échappe aussi la formule', !/<i>yoga<\/i>/.test(client) && /Annuel &lt;i&gt;yoga/.test(client))
+}
 // ⚠️ L'ENVOI NE DOIT JAMAIS FAIRE ÉCHOUER LE WEBHOOK. Une erreur remontée ferait
 // répondre 500 à Stripe, qui rejouerait l'événement : le contrat étant déjà
 // créé, on fabriquerait des doublons pour un email qui n'est pas parti.

@@ -5578,7 +5578,7 @@ export default function CommanderSlug() {
                 Retour à l&apos;accueil
               </button>
               {!cancelResult && (
-                <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(true); setErreurCommande(null); setAjustementStock(null); allerEtape(2) }}
+                <button onClick={() => { setPanier({}); setCreneauChoisi(null); setRgpdCommande(false); setRgpdMarketing(false); setErreurCommande(null); setAjustementStock(null); allerEtape(2) }}
                   style={{ width: '100%', padding: '0.875rem', background: 'transparent', color: T.main, border: `1.5px solid ${T.main}`, borderRadius: 100, fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', marginBottom: 10 }}>
                   Continuer {chezLeCommerce(commercant.nom)}
                 </button>

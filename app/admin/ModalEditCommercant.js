@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { PLANS } from '@/lib/plans'
+import { validerDelai } from '@/lib/rdv-delai-annulation'
 import { TOUS_TYPES } from '@/lib/types-commerce'
 
 const T = {
@@ -97,7 +98,9 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
       adresse: commercant.adresse || '',
       description: commercant.description || '',
       rdv_actif: !!commercant.rdv_actif,
-      rdv_delai_annulation_heures: commercant.rdv_delai_annulation_heures ?? 24,
+      // ⚠️ VIDE QUAND IL N'EST PAS RÉGLÉ : afficher 24 l'aurait écrit au premier
+      // enregistrement, y compris chez un restaurant dont le défaut est 3 h.
+      rdv_delai_annulation_heures: commercant.rdv_delai_annulation_heures ?? '',
     })
     setError(null)
   }, [commercant])
@@ -120,6 +123,9 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
     if (!form.nom.trim()) return setError('Le nom est obligatoire.')
     if (!form.slug.trim()) return setError('Le slug est obligatoire (URL de la fiche).')
     if (!/^[a-z0-9-]+$/.test(form.slug)) return setError('Slug invalide : uniquement lettres minuscules, chiffres, tirets.')
+
+    const vDelai = validerDelai(form.rdv_delai_annulation_heures)
+    if (!vDelai.ok) return setError(`Délai d’annulation : ${vDelai.message}`)
 
     setSaving(true)
     try {
@@ -149,7 +155,9 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
         adresse: form.adresse.trim() || null,
         description: form.description.trim() || null,
         rdv_actif: !!form.rdv_actif,
-        rdv_delai_annulation_heures: Number(form.rdv_delai_annulation_heures) || 24,
+        // 🔴 `|| 24` CHANGEAIT UN ZÉRO EN VINGT-QUATRE (03/10), le piège que
+        // `lib/rdv-delai-annulation.js` raconte : zéro est un choix. Vide = null.
+        rdv_delai_annulation_heures: vDelai.valeur,
       }
       // 🔴 ON N'ÉCRIT LE STATUT QUE SI C'EST UN ÉTAT CONNU, et jamais en
       // recopiant bêtement le formulaire. Une fiche `brouillon` ouverte pour
@@ -386,7 +394,7 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
             <div style={{ marginBottom: 12 }}>
               <label style={labelSt}>Délai d'annulation RDV (heures avant)</label>
               <input type="number" min="0" max="168" value={form.rdv_delai_annulation_heures} onChange={e => setField('rdv_delai_annulation_heures', e.target.value)} style={{ ...inputSt, maxWidth: 120 }}/>
-              <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>Le client peut annuler jusqu'à X heures avant le RDV (refund auto si Stripe). Par défaut 24h.</p>
+              <p style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>Le client peut annuler en ligne jusqu'à X heures avant le RDV (acompte remboursé). Vide : 24 h, 3 h pour une table. 0 : jusqu'au dernier moment.</p>
             </div>
           )}
 

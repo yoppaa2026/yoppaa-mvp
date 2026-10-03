@@ -324,6 +324,44 @@ const MUTATIONS = [
     de: '    return !!fermetureQuiBloque(fermetures, { dateStr: iso, praticienId: praticienChoisi?.id ?? null })',
     vers: '    return fermetures.some(f => f.praticien_id === null && iso >= f.date_debut && iso <= f.date_fin)',
     garde: 'et juge les jours fermés avec la règle du serveur' },
+
+  // ─── LES EMAILS D'ABONNEMENT ÉCHAPPÉS ──────────────────────────────────
+  { nom: '🔴 le nom tape par le client part tel quel chez le commercant',
+    banc: 'verif:abonnements', fichier: 'lib/resend.js',
+    de: "  const qui = echapperHtml([client_prenom, client_nom].filter(Boolean).join(' ')) || 'Un client'",
+    vers: "  const qui = [client_prenom, client_nom].filter(Boolean).join(' ') || 'Un client'",
+    garde: 'l’email du commerçant échappe le nom du client' },
+
+  { nom: '🔴 la formule part telle quelle chez le client',
+    banc: 'verif:abonnements', fichier: 'lib/resend.js',
+    de: "        ${ligne('Formule', echapperHtml(resume?.formule))}",
+    vers: "        ${ligne('Formule', resume?.formule)}",
+    garde: 'l’email du client échappe aussi la formule' },
+
+  { nom: '🔴 le refus du serveur ne se lit plus a l etape 2',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                    <div role="alert" style={{ background: \'#FEF2F2\', border: \'1.5px solid #FCA5A5\', borderRadius: 12, padding: \'0.875rem 1rem\', marginBottom: 14,',
+    vers: '                    <div style={{ background: \'#FEF2F2\', border: \'1.5px solid #FCA5A5\', borderRadius: 12, padding: \'0.875rem 1rem\', marginBottom: 14,',
+    garde: 'le refus du serveur s’affiche à l’étape 2' },
+
+  // ─── LE DÉLAI D'ANNULATION DES SERVICES ─────────────────────────────────
+  { nom: '🔴 un commerce de services ne voit plus son delai',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      {!(estTable && prestations.some(p => p.par_couverts === true && p.actif !== false)) && (',
+    vers: '      {false && (',
+    garde: 'un commerce sans tables le voit' },
+
+  { nom: '🔴 Paiements annonce de nouveau 24 h sans lire la colonne',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/TabPaiements.js',
+    de: "rdv_acompte_en_ligne_actif, accepte_paiement_cash, rdv_delai_annulation_heures')",
+    vers: "rdv_acompte_en_ligne_actif, accepte_paiement_cash')",
+    garde: 'Paiements lit le délai avant de l’annoncer' },
+
+  { nom: '🔴 l admin change de nouveau un zero en vingt-quatre',
+    banc: 'verif:tunnel-rdv', fichier: 'app/admin/ModalEditCommercant.js',
+    de: '        rdv_delai_annulation_heures: vDelai.valeur,',
+    vers: '        rdv_delai_annulation_heures: Number(form.rdv_delai_annulation_heures) || 24,',
+    garde: 'l’admin ne change plus un zéro en vingt-quatre' },
 ]
 
 const lancer = (banc) => {

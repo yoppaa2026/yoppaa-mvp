@@ -404,7 +404,7 @@ for (const composant of ['Input', 'Textarea']) {
     ['la landing', 'app/components/LandingReveal.js'],
   ]
   // Tout état dont le nom parle de consentement, de RGPD ou de marketing.
-  const ETAT = /const\s*\[\s*(\w*(?:rgpd|consent|marketing|optin|newsletter)\w*)\s*,\s*set\w+\s*\]\s*=\s*useState\(\s*(true|false)\s*\)/gi
+  const ETAT = /const\s*\[\s*(\w*(?:rgpd|consent|marketing|optin|newsletter)\w*)\s*,\s*(set\w+)\s*\]\s*=\s*useState\(\s*(true|false)\s*\)/gi
   let trouves = 0
   for (const [nom, chemin] of PORTEURS) {
     let src = null
@@ -415,7 +415,13 @@ for (const composant of ['Input', 'Textarea']) {
     let m
     while ((m = ETAT.exec(src)) !== null) {
       trouves++
-      verifier(`🔴 ${nom} : « ${m[1]} » n’est pas pré-cochée`, m[2] === 'false', `useState(${m[2]})`)
+      verifier(`🔴 ${nom} : « ${m[1]} » n’est pas pré-cochée`, m[3] === 'false', `useState(${m[3]})`)
+      // 🔴 ET PERSONNE NE LA RECOCHE ENSUITE (03/10). « Prendre un autre RDV »
+      // remettait le consentement marketing à vrai après une réservation : il
+      // partait au rendez-vous suivant sans que la cliente ait rien coché. Seul
+      // son geste peut la mettre à vrai, jamais un appel écrit `true` en dur.
+      const recoche = src.match(new RegExp(`\\b${m[2]}\\(\\s*true\\s*\\)`, 'g')) || []
+      verifier(`🔴 ${nom} : « ${m[1]} » n’est jamais recochée à la place de la cliente`, recoche.length === 0, `${recoche.length} appel(s) ${m[2]}(true)`)
     }
     // Un consentement écrit dans un objet de formulaire compte aussi.
     const champs = src.match(/\b\w*(?:consentement|marketing|newsletter)\w*\s*:\s*(true|false)\b/gi) || []

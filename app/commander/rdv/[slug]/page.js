@@ -3335,6 +3335,20 @@ export default function CommanderRdvSlug() {
               {/* ─── ÉTAPE 2 - CALENDRIER + SLOTS CRÉNEAUX ─── */}
               {etape === 2 && prestationChoisie && (
                 <div style={{ padding: '1.25rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
+                  {/* 🔴 LE REFUS DU SERVEUR SE LIT ICI AUSSI (I1, 03/10). Il ne
+                      s'affichait qu'à l'étape 3, et la fiche renvoie ici une
+                      seconde après : la cliente revoyait la grille sans savoir
+                      pourquoi son horaire avait disparu. Il s'efface dès qu'elle
+                      choisit une autre heure. */}
+                  {submitError && (
+                    <div role="alert" style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <path d="M12 9v4M12 17h.01"/>
+                      </svg>
+                      <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#DC2626', lineHeight: 1.5, flex: 1, margin: 0 }}>{submitError}</p>
+                    </div>
+                  )}
                   {/* Recap prestation choisie + bouton Changer */}
                   <div style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${T.pale}`, overflow: 'hidden', marginBottom: 18, boxShadow: '0 1px 4px rgba(107,53,196,0.04)' }}>
                     <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
@@ -3642,7 +3656,7 @@ export default function CommanderRdvSlug() {
                         return (
                           <button key={heure}
                             onClick={() => {
-                              if (!pris) { setHeureChoisie(heure); setAttenteVisee(null) }
+                              if (!pris) { setHeureChoisie(heure); setAttenteVisee(null); setSubmitError(null) }
                               else if (attenteDispo) setAttenteVisee(enAttente ? null : { heure, date: isoDate(dateChoisie), prestationId: prestationChoisie.id })
                             }}
                             disabled={pris && !attenteDispo}
@@ -4911,7 +4925,15 @@ export default function CommanderRdvSlug() {
                   <button onClick={() => {
                     setPrestationChoisie(null); setDateChoisie(null); setHeureChoisie(null)
                     setClient(p => ({ ...p, notes: '' }))
-                    setRgpdCommande(false); setRgpdMarketing(true)
+                    // 🔴 LE CONSENTEMENT NE SE RECOCHE PAS (03/10). Il repassait à
+                    // vrai ici, et partait au rendez-vous suivant sans que la
+                    // cliente ait rien coché : un consentement suppose un geste.
+                    setRgpdCommande(false); setRgpdMarketing(false)
+                    // ⚠️ ET CE QUI A ÉTÉ CONSOMMÉ NE RESTE PAS APPLIQUÉ : les bons,
+                    // la récompense et les produits du rendez-vous précédent
+                    // s'afficheraient encore sur le suivant, avec un solde périmé.
+                    setBonsAppliques([]); setBonInput(''); setBonErreur(null)
+                    setRecompenseActive(false); setPanierProduits({}); setAttenteVisee(null)
                     setRdvCree(null); setSubmitError(null)
                     allerEtape(1)
                   }}

@@ -9306,6 +9306,108 @@ function ReglageCadence({ commercantId, toast }) {
 // lui qui décide du moment où elle devient débitable. Jusqu'au 14/09 seul
 // l'administrateur pouvait le régler, donc un restaurateur ne pouvait ni le
 // voir ni le changer alors qu'il commande son argent.
+// 🔴 LE DÉLAI D'ANNULATION, RÉGLABLE PAR UN COMMERCE DE SERVICES (03/10).
+// Il n'existait que dans le réglage de l'empreinte, donc chez un restaurant à
+// tables : un salon, une professeure de yoga, un kiné restaient à 24 heures
+// sans pouvoir le changer, ni même le lire. C'est la même colonne et la même
+// règle (`lib/rdv-delai-annulation.js`) ; seul l'écran manquait.
+// ⚠️ ON DIT CE QUI SE PASSE DE CHAQUE CÔTÉ DU DÉLAI, avec un exemple : un
+// nombre d'heures seul ne dit pas à la commerçante ce que vit son client.
+const JOURS_EXEMPLE = ['jeudi', 'mercredi', 'mardi', 'lundi', 'dimanche', 'samedi', 'vendredi', 'jeudi d’avant']
+function limiteExemple(h) {
+  let jours = Math.floor(h / 24)
+  let heure = 18 - (h % 24)
+  if (heure < 0) { jours += 1; heure += 24 }
+  return `${JOURS_EXEMPLE[Math.min(jours, 7)]} à ${heure} h`
+}
+
+function ReglageDelaiAnnulation({ commercantId, commercant, toast }) {
+  const [delai, setDelai] = useState('')
+  const [enregistre, setEnregistre] = useState(null)
+  const [lecture, setLecture] = useState('lecture')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let annule = false
+    supabase.from('commercants')
+      .select('rdv_delai_annulation_heures')
+      .eq('id', commercantId).maybeSingle()
+      .then(({ data, error }) => {
+        if (annule) return
+        if (error || !data) { setLecture('erreur'); return }
+        // ⚠️ VIDE VEUT DIRE « PAS ENCORE RÉGLÉ » : le texte dit alors ce qui
+        // s'applique par défaut, jamais un zéro qui n'a pas été choisi.
+        const v = data.rdv_delai_annulation_heures
+        setDelai(v === null || v === undefined ? '' : String(v))
+        setEnregistre(v ?? null)
+        setLecture('ok')
+      })
+    return () => { annule = true }
+  }, [commercantId])
+
+  const vDelai = validerDelai(delai)
+  const parDefaut = delaiAnnulationHeures({ ...commercant, rdv_delai_annulation_heures: null })
+  const applique = vDelai.ok ? delaiAnnulationHeures({ ...commercant, rdv_delai_annulation_heures: vDelai.valeur }) : null
+  const aEnregistrer = lecture === 'ok' && vDelai.ok && vDelai.valeur !== enregistre
+
+  async function enregistrer() {
+    if (!aEnregistrer || saving) return
+    setSaving(true)
+    const { data, error } = await supabase.from('commercants')
+      .update({ rdv_delai_annulation_heures: vDelai.valeur })
+      .eq('id', commercantId)
+      // ⚠️ ON LIT LE RÉSULTAT DE L'ÉCRITURE : un réglage qui n'a pas pris et un
+      // écran qui l'affiche quand même, c'est une règle annoncée qui ne
+      // s'applique pas.
+      .select('rdv_delai_annulation_heures')
+      .maybeSingle()
+    setSaving(false)
+    if (error || !data) return toast(`Erreur : ${error?.message || 'réglage non enregistré'}. Rien n’a changé.`, 'error')
+    setEnregistre(data.rdv_delai_annulation_heures ?? null)
+    const h = delaiAnnulationHeures({ ...commercant, rdv_delai_annulation_heures: data.rdv_delai_annulation_heures })
+    toast(h === 0 ? 'Enregistré : tes clients peuvent annuler jusqu’au dernier moment' : `Enregistré : annulation en ligne jusqu’à ${h} h avant`)
+  }
+
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 12, padding: '12px 16px', marginBottom: 14 }}>
+      <p style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, margin: '0 0 3px' }}>Jusqu&rsquo;à quand tes clients peuvent annuler</p>
+      <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5, margin: '0 0 10px' }}>
+        Avant ce délai, ton client annule lui-même depuis Yoppaa : son acompte lui est remboursé, et une
+        séance d&rsquo;abonnement lui est rendue. Après, il ne peut plus annuler en ligne : il doit te
+        contacter, et c&rsquo;est toi qui décides.
+      </p>
+      {lecture === 'erreur' ? (
+        <p style={{ fontSize: 11.5, fontWeight: 700, color: '#DC2626', margin: 0 }}>
+          Impossible de lire ce réglage. Recharge la page pour réessayer.
+        </p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: T.deep, fontWeight: 700 }}>Annulation en ligne jusqu&rsquo;à</span>
+            <input type="number" inputMode="numeric" min={DELAI_MIN} max={DELAI_MAX}
+              aria-label="Heures avant le rendez-vous" value={delai} disabled={lecture !== 'ok'}
+              placeholder={String(parDefaut)}
+              onChange={(e) => setDelai(e.target.value)}
+              style={{ width: 78, padding: '8px 10px', borderRadius: 10, border: `1.5px solid ${vDelai.ok ? T.hairline : '#FCA5A5'}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', color: T.ink, background: '#fff' }}/>
+            <span style={{ fontSize: 12, color: T.deep, fontWeight: 700 }}>heures avant le rendez-vous</span>
+          </div>
+          <p style={{ fontSize: 11, color: vDelai.ok ? T.muted : '#DC2626', fontWeight: vDelai.ok ? 400 : 700, lineHeight: 1.5, margin: '6px 0 0' }}>
+            {!vDelai.ok
+              ? vDelai.message
+              : `${delai.trim() === '' ? `Laissé vide : ${parDefaut} heures s’appliquent. ` : ''}${applique === 0
+                ? 'Ton client peut annuler en ligne jusqu’au début du rendez-vous.'
+                : `Exemple : pour un rendez-vous jeudi à 18 h, ton client peut annuler en ligne jusqu’à ${limiteExemple(applique)}.`}`}
+          </p>
+          <button type="button" onClick={enregistrer} disabled={!aEnregistrer || saving}
+            style={{ marginTop: 12, padding: '8px 16px', borderRadius: 100, border: 'none', background: aEnregistrer ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#D1D5DB', color: '#fff', fontWeight: 800, fontSize: 12, cursor: aEnregistrer && !saving ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
+            {saving ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 function ReglageEmpreinte({ commercantId, commercant, toast }) {
   const [actif, setActif] = useState(false)
   const [seuil, setSeuil] = useState(String(EMPREINTE_SEUIL_DEFAUT))
@@ -10034,6 +10136,12 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
               qu'une empreinte n'a de sens que là où il y a des tables. */}
           <ReglageEmpreinte commercantId={commercantId} commercant={commercant} toast={toast} />
         </>
+      )}
+      {/* 🔴 ET LE DÉLAI D'ANNULATION PARTOUT AILLEURS (03/10) : un restaurant le
+          règle avec son empreinte, juste au-dessus ; un commerce de services
+          n'avait aucun écran pour le faire. */}
+      {!(estTable && prestations.some(p => p.par_couverts === true && p.actif !== false)) && (
+        <ReglageDelaiAnnulation commercantId={commercantId} commercant={commercant} toast={toast} />
       )}
 
       {prestationsSeules.length === 0 ? (

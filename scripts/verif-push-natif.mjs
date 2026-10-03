@@ -575,6 +575,17 @@ const fenetreNative = (options = {}) => {
   if (veutPosition) {
     verifie('🔴 iOS explique POURQUOI il demande la position',
       /<key>NSLocationWhenInUseUsageDescription<\/key>/.test(plist))
+    // 🔴 LE MODULE NATIF APPORTE SA PROPRE OBLIGATION (03/10, ITMS-90683 sur le
+    // build 1.0.1 (3)). `@capacitor/geolocation` contient du code capable de
+    // demander la position « toujours ». Nous ne l'appelons jamais, mais Apple
+    // analyse le BINAIRE, pas notre usage : sans cette phrase, le dépôt passe
+    // pour TestFlight et la SOUMISSION est refusée. C'est le même défaut que le
+    // build 1 de septembre, venu cette fois d'une bibliothèque.
+    const pkgPosition = JSON.parse(lire('package.json'))
+    if (pkgPosition.dependencies?.['@capacitor/geolocation']) {
+      verifie('🔴 iOS explique aussi la position « toujours », que le module natif référence',
+        /<key>NSLocationAlwaysAndWhenInUseUsageDescription<\/key>/.test(plist))
+    }
     verifie('🔴 Android déclare la position, sans quoi le WebView ne l’obtient jamais',
       /android\.permission\.ACCESS_FINE_LOCATION/.test(manif)
       && /android\.permission\.ACCESS_COARSE_LOCATION/.test(manif))
@@ -689,7 +700,7 @@ const fenetreNative = (options = {}) => {
   // langue de l'utilisateur. On exige donc qu'il nomme l'app et qu'il ait la
   // longueur d'une vraie phrase.
   for (const cle of ['NSCameraUsageDescription', 'NSLocationWhenInUseUsageDescription',
-    'NSPhotoLibraryUsageDescription']) {
+    'NSLocationAlwaysAndWhenInUseUsageDescription', 'NSPhotoLibraryUsageDescription']) {
     const m = plist.match(new RegExp(`<key>${cle}</key>\\s*<string>([^<]*)</string>`))
     const texte = m ? m[1] : ''
     verifie(`🔴 ${cle} dit à quoi ça sert`,

@@ -39,6 +39,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Yoppaa utilise l'appareil photo quand tu ajoutes une image à ta fiche, à tes articles ou à tes annonces.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Yoppaa utilise ta position seulement pendant que tu te sers de l'app, pour te montrer les commerces ouverts autour de toi et la distance qui t'en sépare.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Yoppaa utilise ta position pour te montrer les commerces ouverts autour de toi et la distance qui t'en sépare.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

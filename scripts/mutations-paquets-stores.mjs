@@ -662,6 +662,13 @@ const MUTATIONS = [
     de: '"package_name": "app.yoppaa.client",',
     vers: '"package_name": "app.yoppaa.pro",' },
 
+  // 🔴 ITMS-90683 SUR LE BUILD 1.0.1 (3), le 03/10 : le module de position
+  // reference la position « toujours », et Apple exige sa phrase.
+  { nom: '🔴 iOS ne dit plus pourquoi le module peut demander la position toujours',
+    fichier: PLIST,
+    de: '	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>',
+    vers: '	<key>NSLocationAlwaysUsage</key>' },
+
   { nom: '🔴 l empreinte Android est tronquee',
     fichier: ASSETLINKS,
     de: ':02:6D:82:55:0A:60:02:F7:2E"',

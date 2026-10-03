@@ -1477,6 +1477,11 @@ verifier('et un commerce fixe ne se voit pas proposer de planning',
   verifier('la création par le commerçant grave le lieu dans la réservation',
     /Object\.assign\(payload, await champsLieuPour\(/.test(src)
     || /\.\.\.lieu,/.test(src) && /const lieu = await champsLieuPour\(/.test(src))
+  // 🔴 ET CELUI DE LA PLAGE QUI ACCUEILLE L'HEURE, ce jour-là, pour CHAQUE
+  // semaine répétée (03/10). La règle elle-même est exécutée dans verif-slots.
+  verifier('🔴 la création par le commerçant grave le lieu de la plage, semaine par semaine',
+    /lieuId: lieuDeLaPlage\(dateStr\)/.test(src) && /lieuId: lieuDeLaPlage\(d\)/.test(src)
+    && /plageQuiAccueille\(creneauxDuJour\(creneaux, \{ dateStr: d, jour: jourKey \}\)/.test(src))
 }
 // Et le module grave celui des trois autres, en l'étalant DANS le payload : un
 // `champsLieuPour` appelé sans que son résultat serve laisserait la garde verte
@@ -1486,18 +1491,25 @@ verifier('le module grave le lieu dans la réservation',
   && /\.\.\.lieu,/.test(srcCreationRdv))
 // Le lieu se résout à la DATE ET À L'HEURE : c'est ce qui distingue le service
 // du midi de celui du soir chez un food truck.
+// ⚠️ REPOINTÉE LE 03/10 : le lieu transmis s'appelle désormais `lieuRetenu`.
 verifier('et il le résout à l’heure du rendez-vous',
-  /\{ jour: dateRdv, heure, lieuId \}/.test(srcCreationRdv))
+  /\{ jour: dateRdv, heure, lieuId: lieuRetenu \}/.test(srcCreationRdv))
 // ⚠️ Mais le CHOIX EXPLICITE du commerçant l'emporte : quand la plage de
 // réservation désigne un emplacement, le déduire de l'heure le contredirait.
-// Il voyage donc de l'écran jusqu'au module, en trois relais.
+//
+// 🔴 REPOINTÉE LE 03/10. Cette garde exigeait que l'ÉCRAN envoie le lieu de la
+// plage et que la route le relaie : c'était précisément le défaut, l'écran
+// prenant la plage d'un AUTRE jour. Le serveur lit désormais lui-même la plage
+// qu'il valide. La garde vérifie donc l'inverse : ni l'écran ni la route
+// n'envoient plus de lieu, et le module ne croit un lieu reçu que du
+// commerçant. Le comportement est EXÉCUTÉ dans verif-tunnel-rdv.
 const srcResaClient = sansCommentaires(
   readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
 const srcRouteReserver = sansCommentaires(
   readFileSync(new URL('../app/api/rdv/reserver/route.js', import.meta.url), 'utf8'))
-verifier('sauf si la plage désigne elle-même un emplacement',
-  /lieu_id: plageChoisie\?\.lieu_id \|\| null/.test(srcResaClient)
-  && /lieuId: lieu_id/.test(srcRouteReserver))
+verifier('sauf si la plage désigne elle-même un emplacement, que le SERVEUR lit lui-même',
+  !/lieu_id:/.test(srcResaClient) && !/lieuId: lieu_id/.test(srcRouteReserver)
+  && /champs\?\.source === 'commercant' \? lieuId : \(plageRetenue\?\.lieu_id \|\| null\)/.test(srcCreationRdv))
 
 // ─── L'ACCUEIL MESURE JUSQU'AU BON ENDROIT ────────────────────────────────
 // ⚠️ La distance se mesurait depuis le SIÈGE SOCIAL. Le food truck affichait la

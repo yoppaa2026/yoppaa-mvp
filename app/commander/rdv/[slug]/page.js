@@ -1973,9 +1973,6 @@ export default function CommanderRdvSlug() {
               date_rdv: dateStr,
               heure_debut: heureChoisie,
               notes_client: client.notes.trim() || null,
-              lieu_id: (creneauxFiltres || []).find(c =>
-                c.lieu_id && c.heure_debut?.slice(0, 5) <= heureChoisie && c.heure_fin?.slice(0, 5) > heureChoisie
-              )?.lieu_id || null,
             }),
           })
           const j = await res.json().catch(() => ({}))
@@ -2366,12 +2363,10 @@ export default function CommanderRdvSlug() {
       // navigateur n'a pas le droit de débiter un bon ni de consommer une
       // récompense, donc on refusait plutôt que d'avaler en silence.
       //
-      // ⚠️ Si la PLAGE de réservation désigne un emplacement, c'est celui-là et
-      // pas un autre : c'est le choix explicite du commerçant, et le déduire de
-      // l'heure le contredirait. Deux plages peuvent se suivre au même endroit,
-      // ou se tenir à deux adresses sans que les horaires le disent.
-      const plageChoisie = (creneauxFiltres || []).find(c =>
-        c.lieu_id && c.heure_debut?.slice(0, 5) <= heureChoisie && c.heure_fin?.slice(0, 5) > heureChoisie)
+      // 🔴 LE LIEU NE PART PLUS D'ICI (03/10). Cet écran cherchait la plage parmi
+      // TOUTES celles de la semaine, sans regarder le jour ni le cours : l'inscrite
+      // du jeudi recevait l'adresse du lundi. Le serveur prend désormais le lieu
+      // de la plage qu'il valide lui-même (`plageQuiAccueille`, lib/rdv-slots).
 
       let j
       try {
@@ -2394,7 +2389,6 @@ export default function CommanderRdvSlug() {
             client_telephone: telephone,
             notes_client: client.notes.trim() || null,
             rgpd_marketing: rgpdMarketing,
-            lieu_id: plageChoisie?.lieu_id || null,
             // ⚠️ ON N'ENVOIE QUE DES IDENTIFIANTS, jamais des montants : la
             // route recharge la récompense et le bon, revérifie tout, et
             // recalcule ce qui est déduit. L'écran calcule pour montrer, le

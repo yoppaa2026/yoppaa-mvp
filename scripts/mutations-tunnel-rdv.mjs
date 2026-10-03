@@ -486,7 +486,9 @@ const MUTATIONS = [
   // siège social, donc au DOMICILE d’une commerçante inscrite chez elle.
   { nom: '🔴 le lieu explicite de la plage est ignoré',
     fichier: 'lib/rdv-creation-server.js',
-    de: '  const lieu = await champsLieuPour(db, commercant, { jour: dateRdv, heure, lieuId })',
+    // ⚠️ REPOINTÉE LE 03/10 : le lieu transmis s'appelle `lieuRetenu` (plage validée
+    // pour un client, choix du commerçant pour le comptoir).
+    de: '  const lieu = await champsLieuPour(db, commercant, { jour: dateRdv, heure, lieuId: lieuRetenu })',
     vers: '  const lieu = await champsLieuPour(db, commercant, { jour: dateRdv, heure })' },
 
   { nom: '🔴 un chevauchement de praticien devient une panne technique',

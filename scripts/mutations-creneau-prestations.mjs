@@ -99,8 +99,10 @@ const MUTATIONS = [
   // le seul qui applique la regle A L ENVERS en silence.
   { nom: '🔴 LE DEFAUT DU 18/09 : le serveur recharge ses plages sans praticien_id',
     fichier: 'lib/rdv-creation-server.js',
-    de: ", actif, praticien_id')",
-    vers: ", actif')" },
+    // ⚠️ REPOINTÉE LE 03/10 : le select porte aussi `lieu_id` (le lieu de la
+    // plage validée). La mutation retire toujours `praticien_id`, et lui seul.
+    de: ", actif, praticien_id, lieu_id')",
+    vers: ", actif, lieu_id')" },
 
   // ⚠️ ET LA REGLE DOIT S APPELER PAREIL DES DEUX COTES.
   { nom: '🔴 la garde du serveur cesse de passer estCours',
@@ -251,12 +253,15 @@ const MUTATIONS = [
   // 🔴 SANS LE CONTROLE DE L HEURE, LA GARDE SERVEUR EST DECORATIVE : un
   // creneau du lundi accepte bien le yoga... a 10h, pas a 13h.
   { nom: '🔴 la garde serveur cesse de regarder l heure',
-    de: '    if (d < cd || f > cf) return false',
-    vers: '    if (false) return false' },
+    // ⚠️ REPOINTÉE LE 03/10 : la règle vit dans `plageContient`, partagée avec
+    // le choix du lieu (`plageQuiAccueille`). Même ligne, autre indentation.
+    de: '  if (d < cd || f > cf) return false',
+    vers: '  if (false) return false' },
 
   { nom: '🔴 la garde serveur ignore la pause',
-    de: '    if (pd !== null && pf !== null && d < pf && f > pd) return false',
-    vers: '    if (false) return false' },
+    // ⚠️ REPOINTÉE LE 03/10, même raison.
+    de: '  if (pd !== null && pf !== null && d < pf && f > pd) return false',
+    vers: '  if (false) return false' },
 
   // ⚠️ LES DEUX SORTIES QUI PROTEGENT L EXISTANT. Les casser refuserait des
   // rendez-vous que le parc entier accepte aujourd hui.

@@ -555,10 +555,18 @@ for (const chemin of [
   function baseSimulee({ prestation, lieux = [], placesPrises = [], erreurInsert = null,
                          creneaux = [], liaisons = [], erreurPlaces = null }) {
     const vu = { payload: null, filtresPlaces: {} }
+    // 🔴 LES PLAGES SONT RENDUES À TRAVERS LEUR SELECT (03/10). Le lieu de la
+    // réservation vient désormais de `rdv_creneaux.lieu_id` : si la colonne
+    // manquait au select, une fausse base qui rend l'objet COMPLET laisserait le
+    // banc vert pendant que la vraie rendrait `undefined`. C'est le défaut le
+    // plus fréquent de ce dépôt, et un banc qui ne le reproduit pas ne le voit pas.
+    const projeter = (lignes, colonnes) => (typeof colonnes !== 'string' ? lignes
+      : lignes.map(l => Object.fromEntries(colonnes.split(',').map(c => c.trim()).filter(Boolean).map(c => [c, l[c]]))))
     const table = (nom) => {
       const filtres = {}
+      let colonnes = null
       const chaine = {
-        select: () => chaine,
+        select: (cols) => { if (colonnes === null) colonnes = cols; return chaine },
         eq: (col, val) => { filtres[col] = val; return chaine },
         in: (col, val) => { filtres[col] = val; return chaine },
         is: () => chaine,
@@ -582,7 +590,7 @@ for (const chemin of [
         // doit donc être « thenable », comme l'est un client Supabase.
         then: (resoudre) => resoudre(
           nom === 'commercant_lieux' ? { data: lieux }
-          : nom === 'rdv_creneaux' ? { data: creneaux }
+          : nom === 'rdv_creneaux' ? { data: projeter(creneaux, colonnes) }
           : nom === 'rdv_creneau_prestations' ? { data: liaisons }
           : nom === 'rdv_reservations' ? (vu.filtresPlaces = filtres, erreurPlaces
             ? { data: null, error: erreurPlaces }
@@ -724,21 +732,51 @@ for (const chemin of [
       && sql.indexOf('COMMIT;') > sql.indexOf('CREATE UNIQUE INDEX'))
   }
 
-  // ── LE LIEU GRAVÉ, et le choix explicite qui l'emporte ──────────────────
+  // ── LE LIEU GRAVÉ : celui de la plage que le serveur valide (03/10) ─────
+  //
+  // 🔴 L'ÉCRAN ENVOYAIT LA PLAGE D'UN AUTRE JOUR, ET LE SERVEUR LA CROYAIT. La
+  // fiche prenait « la première plage dont les heures contiennent l'heure »
+  // parmi TOUTES celles de la semaine. Chez une professeure qui donne cours le
+  // lundi dans une salle et le jeudi dans une autre à la même heure, l'inscrite
+  // du jeudi recevait l'adresse du lundi. Et les paiements par acompte ne
+  // transmettaient aucun lieu : la plage était ignorée.
   {
     const LIEUX = [
       { id: 'L1', type: 'hebdo', jour_semaine: 'lundi', libelle: 'Salle du Centre', adresse: 'Place 3', heure_debut: '18:00', heure_fin: '21:00', actif: true },
       { id: 'L2', type: 'hebdo', jour_semaine: 'lundi', libelle: 'Salle des Fêtes', adresse: 'Rue Haute 9', heure_debut: '09:00', heure_fin: '12:00', actif: true },
     ]
-    const db = baseSimulee({ prestation: PRESTA_COURS, lieux: LIEUX })
-    await creerReservationRdv(db, {
-      commercantId: 'c1', prestationId: 'p2',
-      dateRdv: '2026-09-07', heureDebut: '18:30', lieuId: 'L2', champs: {},
-    })
-    // 🔴 SANS CE CHOIX, LA CONFIRMATION ENVOIE AU SIÈGE SOCIAL, donc au domicile
+    const PLAGE = { id: 'cr-lun', jour_semaine: 'lundi', date_specifique: null, heure_debut: '18:00:00', heure_fin: '21:00:00',
+      pause_debut: null, pause_fin: null, actif: true, praticien_id: null, lieu_id: 'L2' }
+
+    // SANS CE CHOIX, LA CONFIRMATION ENVOIE AU SIÈGE SOCIAL, donc au domicile
     // d'une commerçante inscrite chez elle mais qui donne cours en salle.
-    verifie('le lieu explicite de la plage l’emporte sur l’heure',
-      db._vu.payload.lieu_id === 'L2' && db._vu.payload.lieu_libelle === 'Salle des Fêtes')
+    // ⚠️ LA PLAGE DU JEUDI, MÊME HEURE, AUTRE SALLE, EST LUE EN PREMIER : c'est
+    // exactement le piège de l'écran. Le lundi doit garder la sienne.
+    const JEUDI = { ...PLAGE, id: 'cr-jeu', jour_semaine: 'jeudi', lieu_id: 'L1' }
+    const parLaPlage = baseSimulee({ prestation: PRESTA_COURS, lieux: LIEUX, creneaux: [JEUDI, PLAGE] })
+    await creerReservationRdv(parLaPlage, {
+      commercantId: 'c1', prestationId: 'p2', dateRdv: '2026-09-07', heureDebut: '18:30', champs: {},
+    })
+    verifie('🔴 le lieu de la plage validée l’emporte sur l’heure, sans que personne ne l’envoie',
+      parLaPlage._vu.payload.lieu_id === 'L2' && parLaPlage._vu.payload.lieu_libelle === 'Salle des Fêtes',
+      JSON.stringify(parLaPlage._vu.payload?.lieu_id))
+
+    const ecranTrompe = baseSimulee({ prestation: PRESTA_COURS, lieux: LIEUX, creneaux: [{ ...PLAGE, lieu_id: null }] })
+    await creerReservationRdv(ecranTrompe, {
+      commercantId: 'c1', prestationId: 'p2', dateRdv: '2026-09-07', heureDebut: '18:30', lieuId: 'L2', champs: {},
+    })
+    verifie('🔴 le lieu envoyé par un client ne compte plus : c’était la plage d’un autre jour',
+      ecranTrompe._vu.payload.lieu_id === 'L1', JSON.stringify(ecranTrompe._vu.payload?.lieu_id))
+
+    // ⚠️ LE COMMERÇANT, LUI, GARDE SON CHOIX. Il pose un rendez-vous où il
+    // veut, hors plage compris : c'est son agenda.
+    const auComptoir = baseSimulee({ prestation: PRESTA_COURS, lieux: LIEUX })
+    await creerReservationRdv(auComptoir, {
+      commercantId: 'c1', prestationId: 'p2', dateRdv: '2026-09-07', heureDebut: '18:30', lieuId: 'L2',
+      champs: { source: 'commercant' },
+    })
+    verifie('⚠️ le lieu choisi par le commerçant reste le sien',
+      auComptoir._vu.payload.lieu_id === 'L2', JSON.stringify(auComptoir._vu.payload?.lieu_id))
   }
   {
     const LIEUX = [

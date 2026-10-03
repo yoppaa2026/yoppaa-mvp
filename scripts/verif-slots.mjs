@@ -12,7 +12,7 @@ import {
   creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
   praticienAutorisePourPrestation, prestationSansPraticienDit,
   prestationAutoriseeSurCreneaux, coursDejaCoche, creneauHorsOuverture, coursSansHoraire,
-  horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV, ajusterPlagePourJour,
+  horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV, ajusterPlagePourJour, plageQuiAccueille,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
@@ -738,6 +738,11 @@ verifier('il relit les places EN BASE', /\.eq\('heure_debut', heure\)/.test(srcD
 verifier('et il s’exclut aussi de cette lecture',
   /filter\(r => String\(r\.id\) !== String\(rdv\.id\)\)/.test(srcDeplacer))
 verifier('il regrave le lieu au nouveau jour', /champsLieuPour\(/.test(srcDeplacer))
+// 🔴 ET CELUI DE LA PLAGE QUI ACCUEILLE LA NOUVELLE HEURE (03/10), pas celui que
+// l'heure seule désigne. `plageQuiAccueille` est exécutée plus bas.
+verifier('🔴 il regrave le lieu de la plage qui accueille la nouvelle heure',
+  /const plage = plageQuiAccueille\(creneauxJour, \{/.test(srcDeplacer)
+  && /champsLieuPour\(supabase, commercant, \{ jour: date, heure, lieuId: plage\?\.lieu_id \|\| null \}\)/.test(srcDeplacer))
 verifier('il prévient le client du changement', /deplace: true/.test(srcDeplacer))
 
 // ⚠️ ET LA CRÉATION MANUELLE JUGE AVEC LA MÊME RÈGLE. Deux copies de cinq
@@ -3559,6 +3564,83 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     verifier('⚠️ le vendredi s’arrête à 14h',
       vendredi.includes('14:00') && !vendredi.includes('15:00'), vendredi.join(' '))
   }
+}
+
+// ─── OÙ SE TIENT L'HEURE RÉSERVÉE (03/10) ───────────────────────────────────
+//
+// 🔴 L'INSCRITE DU JEUDI RECEVAIT L'ADRESSE DU LUNDI. La fiche cherchait la
+// plage du lieu parmi TOUTES celles de la semaine, sans regarder le jour ni le
+// cours, et le serveur gravait ce qu'il recevait. On exécute ici la règle qui
+// la remplace, sur la configuration de Centre Respire : deux professeures, des
+// cours à heure fixe, deux salles, et une grande plage ouverte pour les soins.
+{
+  const EMILY = 'emily', CAROLE = 'carole'
+  const CRENEAUX = [
+    { id: 'lun-yoga', jour_semaine: 'lundi', heure_debut: '10:00:00', heure_fin: '11:00:00', actif: true, praticien_id: EMILY, lieu_id: 'METTET' },
+    { id: 'jeu-yoga', jour_semaine: 'jeudi', heure_debut: '10:00:00', heure_fin: '11:00:00', actif: true, praticien_id: EMILY, lieu_id: 'NALINNES' },
+    { id: 'lun-soins', jour_semaine: 'lundi', heure_debut: '08:00:00', heure_fin: '18:00:00', actif: true, praticien_id: null, lieu_id: null },
+  ]
+  const LIAISONS = [
+    { creneau_id: 'lun-yoga', prestation_id: 'yoga' },
+    { creneau_id: 'jeu-yoga', prestation_id: 'yoga' },
+  ]
+  const lundi = creneauxDuJour(CRENEAUX, { dateStr: '2026-10-05', jour: 'lundi' })
+  const jeudi = creneauxDuJour(CRENEAUX, { dateStr: '2026-10-08', jour: 'jeudi' })
+  const HEURE = { debutMin: 600, finMin: 660 }
+
+  egal('🔴 le cours du jeudi se tient à Nalinnes, pas à la salle du lundi',
+    plageQuiAccueille(jeudi, { prestationId: 'yoga', liaisons: LIAISONS, estCours: true, ...HEURE })?.lieu_id, 'NALINNES')
+  egal('🔴 et celui du lundi à Mettet, pas dans la grande plage des soins qui contient aussi l’heure',
+    plageQuiAccueille(lundi, { prestationId: 'yoga', liaisons: LIAISONS, estCours: true, ...HEURE })?.id, 'lun-yoga')
+  // 🔴 ET UN SOIN À L'HEURE D'UN COURS COMMUN NE PREND PAS LA SALLE DU COURS :
+  // sans les liaisons, la plage la plus courte, celle du cours, l'emporterait.
+  egal('🔴 un soin posé à l’heure d’un cours commun garde la plage ouverte',
+    plageQuiAccueille(lundi.map(c => ({ ...c, praticien_id: null })), { prestationId: 'reiki', liaisons: LIAISONS, estCours: false, ...HEURE })?.id, 'lun-soins')
+  egal('un soin du lundi à 10h passe par la plage ouverte, qui ne désigne aucun lieu',
+    plageQuiAccueille(lundi, { prestationId: 'reiki', liaisons: LIAISONS, estCours: false, ...HEURE })?.id, 'lun-soins')
+
+  // ⚠️ AUCUNE LIAISON DANS LE COMMERCE : il n'a rien réglé, toutes ses plages
+  // acceptent tout, un cours compris. Sans cette nuance, `creneauAccepte`
+  // refuserait le cours partout et il n'aurait jamais de lieu.
+  egal('⚠️ sans aucune liaison, un cours trouve quand même sa plage',
+    plageQuiAccueille(jeudi, { prestationId: 'yoga', liaisons: [], estCours: true, ...HEURE })?.lieu_id, 'NALINNES')
+  egal('⚠️ et une lecture des liaisons en échec ne ferme rien non plus',
+    plageQuiAccueille(jeudi, { prestationId: 'yoga', liaisons: null, estCours: true, ...HEURE })?.lieu_id, 'NALINNES')
+
+  // ⚠️ DEUX PLAGES CONVIENNENT : la praticienne choisie d'abord, puis une plage
+  // commune, puis la plus courte.
+  const DEUX_SALLES = [
+    { id: 'emily-mettet', jour_semaine: 'lundi', heure_debut: '08:00', heure_fin: '12:00', actif: true, praticien_id: EMILY, lieu_id: 'METTET' },
+    { id: 'carole-biesme', jour_semaine: 'lundi', heure_debut: '08:00', heure_fin: '12:00', actif: true, praticien_id: CAROLE, lieu_id: 'BIESME' },
+  ]
+  egal('⚠️ un soin chez Carole se tient dans SA salle',
+    plageQuiAccueille(DEUX_SALLES, { prestationId: 'reiki', liaisons: [], ...HEURE, praticienId: CAROLE })?.lieu_id, 'BIESME')
+  egal('⚠️ et chez Emily dans la sienne, quel que soit l’ordre de lecture',
+    plageQuiAccueille([...DEUX_SALLES].reverse(), { prestationId: 'reiki', liaisons: [], ...HEURE, praticienId: EMILY })?.lieu_id, 'METTET')
+  const COMMUNE_ET_NOMMEE = [
+    { id: 'nommee', jour_semaine: 'lundi', heure_debut: '08:00', heure_fin: '12:00', actif: true, praticien_id: CAROLE, lieu_id: 'BIESME' },
+    { id: 'commune', jour_semaine: 'lundi', heure_debut: '08:00', heure_fin: '12:00', actif: true, praticien_id: null, lieu_id: 'METTET' },
+  ]
+  egal('sans préférence, la plage commune passe avant celle d’une praticienne',
+    plageQuiAccueille(COMMUNE_ET_NOMMEE, { prestationId: 'reiki', liaisons: null, ...HEURE })?.id, 'commune')
+  const LARGE_ET_PRECISE = [
+    { id: 'large', jour_semaine: 'lundi', heure_debut: '08:00', heure_fin: '18:00', actif: true, praticien_id: null, lieu_id: 'METTET' },
+    { id: 'precise', jour_semaine: 'lundi', heure_debut: '10:00', heure_fin: '11:00', actif: true, praticien_id: null, lieu_id: 'NALINNES' },
+  ]
+  egal('à égalité, la plage la plus courte dit le plus précisément où l’on sera',
+    plageQuiAccueille(LARGE_ET_PRECISE, { prestationId: 'yoga', liaisons: null, ...HEURE })?.id, 'precise')
+
+  // La plage doit CONTENIR l'heure, pause comprise : c'est la règle même du
+  // serveur, écrite une seule fois.
+  const AVEC_PAUSE = [{ id: 'p', jour_semaine: 'lundi', heure_debut: '08:00', heure_fin: '18:00', pause_debut: '12:00', pause_fin: '13:00', actif: true, praticien_id: null, lieu_id: 'METTET' }]
+  egal('une heure posée sur la pause n’a pas de plage',
+    plageQuiAccueille(AVEC_PAUSE, { prestationId: 'reiki', liaisons: null, debutMin: 720, finMin: 780 }), null)
+  egal('une heure qui déborde de la plage non plus',
+    plageQuiAccueille(AVEC_PAUSE, { prestationId: 'reiki', liaisons: null, debutMin: 1050, finMin: 1110 }), null)
+  egal('une plage éteinte ne désigne plus rien',
+    plageQuiAccueille([{ ...AVEC_PAUSE[0], actif: false }], { prestationId: 'reiki', liaisons: null, ...HEURE }), null)
+  egal('une heure illisible ne désigne rien',
+    plageQuiAccueille(AVEC_PAUSE, { prestationId: 'reiki', liaisons: null, debutMin: NaN, finMin: 660 }), null)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

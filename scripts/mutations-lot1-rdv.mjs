@@ -97,6 +97,91 @@ const MUTATIONS = [
     de: '      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,',
     vers: '      // sans expiration',
     garde: 'create-rdv-acompte/route.js : la page de paiement expire en trente minutes' },
+
+  // ─── LE LIEU : CELUI DE LA PLAGE QUI ACCUEILLE L'HEURE ──────────────────
+  { nom: '🔴 le client designe de nouveau son lieu : la plage d un autre jour',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "  const lieuRetenu = champs?.source === 'commercant' ? lieuId : (plageRetenue?.lieu_id || null)",
+    vers: "  const lieuRetenu = lieuId || plageRetenue?.lieu_id || null",
+    garde: 'le lieu envoyé par un client ne compte plus' },
+
+  { nom: '🔴 la plage validee ne donne plus son lieu',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "  const lieuRetenu = champs?.source === 'commercant' ? lieuId : (plageRetenue?.lieu_id || null)",
+    vers: "  const lieuRetenu = champs?.source === 'commercant' ? lieuId : null",
+    garde: 'le lieu de la plage validée l’emporte sur l’heure' },
+
+  { nom: '⚠️ le commercant perd le lieu qu il a choisi',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "  const lieuRetenu = champs?.source === 'commercant' ? lieuId : (plageRetenue?.lieu_id || null)",
+    vers: "  const lieuRetenu = champs?.source === 'commercant' ? null : (plageRetenue?.lieu_id || null)",
+    garde: 'le lieu choisi par le commerçant reste le sien' },
+
+  { nom: '🔴 lieu_id quitte le select des plages : undefined partout, en silence',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "      .select('id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id, lieu_id')",
+    vers: "      .select('id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id')",
+    garde: 'le lieu de la plage validée l’emporte sur l’heure' },
+
+  { nom: '🔴 la plage se cherche de nouveau parmi tous les jours',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: '    plageRetenue = plageQuiAccueille(creneauxDuJour(creneauxCom || [], { dateStr: dateRdv, jour: jourRdv }), {',
+    vers: '    plageRetenue = plageQuiAccueille(creneauxCom || [], {',
+    garde: 'le lieu de la plage validée l’emporte sur l’heure' },
+
+  { nom: '🔴 la plage ignore les liaisons : un soin prend la salle du cours',
+    banc: 'verif:slots', fichier: SLOTS,
+    de: '  const regle = Array.isArray(liaisons) && liaisons.length > 0 ? liaisons : null',
+    vers: '  const regle = null',
+    garde: 'un soin posé à l’heure d’un cours commun garde la plage ouverte' },
+
+  { nom: '⚠️ un commerce sans liaison : le cours n a plus de lieu',
+    banc: 'verif:slots', fichier: SLOTS,
+    de: '  const regle = Array.isArray(liaisons) && liaisons.length > 0 ? liaisons : null',
+    vers: '  const regle = liaisons',
+    garde: 'sans aucune liaison, un cours trouve quand même sa plage' },
+
+  { nom: '⚠️ la praticienne choisie ne passe plus d abord',
+    banc: 'verif:slots', fichier: SLOTS,
+    de: "  const rang = c => (praticienId && String(c.praticien_id ?? '') === String(praticienId) ? 0",
+    vers: "  const rang = c => (false ? 0",
+    garde: 'un soin chez Carole se tient dans SA salle' },
+
+  { nom: '⚠️ la plage la plus courte ne departage plus',
+    banc: 'verif:slots', fichier: SLOTS,
+    de: '  return [...candidates].sort((a, b) => rang(a) - rang(b) || duree(a) - duree(b))[0] || null',
+    vers: '  return [...candidates].sort((a, b) => rang(a) - rang(b))[0] || null',
+    garde: 'à égalité, la plage la plus courte' },
+
+  { nom: '🔴 le deplacement par l equipe regrave le lieu a l heure',
+    banc: 'verif:equipe', fichier: 'lib/rdv-deplacement-server.js',
+    de: '  const lieu = await champsLieuPour(db, commerce.data, { jour: date, heure, lieuId: plage?.lieu_id || null })',
+    vers: '  const lieu = await champsLieuPour(db, commerce.data, { jour: date, heure })',
+    garde: 'déplacé sur la plage du mardi, le cours prend la salle de CETTE plage' },
+
+  { nom: '🔴 la creation par l equipe grave le lieu a l heure',
+    banc: 'verif:equipe', fichier: 'app/api/equipe/rdv/creer/route.js',
+    de: '      lieuId: plage?.lieu_id || null,',
+    vers: '      lieuId: null,',
+    garde: 'créer grave le lieu de la plage qui accueille l’heure' },
+
+  { nom: '🔴 le deplacement par le patron regrave le lieu a l heure',
+    banc: 'verif:slots', fichier: 'app/dashboard/ModalDeplacerRdv.js',
+    de: '      const lieu = await champsLieuPour(supabase, commercant, { jour: date, heure, lieuId: plage?.lieu_id || null })',
+    vers: '      const lieu = await champsLieuPour(supabase, commercant, { jour: date, heure })',
+    garde: 'il regrave le lieu de la plage qui accueille la nouvelle heure' },
+
+  { nom: '🔴 les semaines repetees reprennent le lieu de l heure',
+    banc: 'verif:logique', fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '          ...(await champsLieuPour(supabase, commercant, { jour: d, heure, lieuId: lieuDeLaPlage(d) })),',
+    vers: '          ...(await champsLieuPour(supabase, commercant, { jour: d, heure })),',
+    garde: 'la création par le commerçant grave le lieu de la plage, semaine par semaine' },
+
+  { nom: '🔴 l ecran envoie de nouveau un lieu',
+    banc: 'verif:logique', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '            praticien_id: praticienChoisi?.id || null,  // null = Sans préférence',
+    vers: '            praticien_id: praticienChoisi?.id || null, lieu_id: null,',
+    garde: 'sauf si la plage désigne elle-même un emplacement, que le SERVEUR lit lui-même' },
 ]
 
 const lancer = (banc) => {

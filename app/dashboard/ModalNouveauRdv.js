@@ -11,10 +11,11 @@ import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
+import { plageQuiAccueille } from '@/lib/rdv-slots'
 import { euros } from '@/lib/montants'
 import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, bornesCouverts, couvertsValides, coursAPlace, occupationDe } from '@/lib/cours-collectifs'
 import { motsReservation } from '@/lib/reservation-metier'
-import { creneauAcceptable, creneauxDuJour, heuresLibresDuJour, premiereMinuteOuverte, dejaPasse } from '@/lib/deplacement-rdv'
+import { creneauAcceptable, creneauxDuJour, heuresLibresDuJour, premiereMinuteOuverte, dejaPasse, minutesDeLHeure } from '@/lib/deplacement-rdv'
 import {
   enModeInventaire, formatPourAffichage, plusGrandGroupe, estJointure,
   dureeDuGroupe, etatSalle, tableAPoser, phraseSalle, lireSalleDuJour,
@@ -702,7 +703,14 @@ export default function ModalNouveauRdv({
       }
       // ⚠️ LE LIEU EST GRAVÉ À LA RÉSERVATION, ici aussi. Un rendez-vous pris
       // au comptoir par le commerçant doit dire où aller comme les autres.
-      Object.assign(payload, await champsLieuPour(supabase, commercant, { jour: dateStr, heure }))
+      // 🔴 LE LIEU DE LA PLAGE QUI ACCUEILLE L'HEURE, pas celui que l'heure seule
+      // désigne (03/10) : voir `plageQuiAccueille`. Sans lui, un cours donné dans
+      // l'autre salle partait avec l'adresse de la salle principale.
+      // Chaque semaine répétée cherche la sienne, ce jour-là.
+      const lieuDeLaPlage = (d) => plageQuiAccueille(creneauxDuJour(creneaux, { dateStr: d, jour: jourKey }), {
+        prestationId: presta.id, debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMin,
+      })?.lieu_id || null
+      Object.assign(payload, await champsLieuPour(supabase, commercant, { jour: dateStr, heure, lieuId: lieuDeLaPlage(dateStr) }))
 
       // ⚠️ LES SEMAINES RÉPÉTÉES SONT DES SÉANCES À PART ENTIÈRE, pas des copies.
       // Chacune a SA place, calculée plus haut, et SON lieu : le module LIEUX
@@ -717,7 +725,7 @@ export default function ModalNouveauRdv({
           id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : undefined,
           date_rdv: d,
           place_no: placeParDate[d],
-          ...(await champsLieuPour(supabase, commercant, { jour: d, heure })),
+          ...(await champsLieuPour(supabase, commercant, { jour: d, heure, lieuId: lieuDeLaPlage(d) })),
         })
       }
       const { error: errInsert } = await supabase.from('rdv_reservations').insert(lignes)

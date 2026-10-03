@@ -514,6 +514,11 @@ const membre = (o = {}) => ({
   v('🔴 créer passe par la garde, case Agenda', /const garde = await gardeEquipe\(request, admin, commercant_id, 'agenda'\)\s*if \(!garde\.ok\) return NextResponse\.json/.test(creer))
   v('🔴 le créneau est revérifié au serveur, sur les réservations relues', /const verdict = creneauAcceptable\(\{/.test(creer) && /if \(!verdict\.ok\) return NextResponse\.json/.test(creer)
     && /\.from\('rdv_reservations'\)\.select\('id, date_rdv, statut, prestation_id, heure_debut, heure_fin'\)\s*\.eq\('commercant_id', commercant_id\)\.eq\('date_rdv', date\)/.test(creer))
+  // 🔴 LE LIEU DE LA PLAGE QUI ACCUEILLE L'HEURE (03/10), pas celui que l'heure
+  // seule désigne. La règle est exécutée dans verif-slots, le déplacement ici.
+  v('🔴 créer grave le lieu de la plage qui accueille l’heure',
+    /const plage = plageQuiAccueille\(creneauxDuJour\(creneaux\.data \|\| \[\], \{ dateStr: date, jour \}\), \{/.test(creer)
+    && /lieuId: plage\?\.lieu_id \|\| null,/.test(creer))
   v('🔴 la prestation doit appartenir au commerce', /\.from\('rdv_prestations'\)\.select\(`\$\{COLONNES_PRESTATION_SANS_COUVERTS\}, \$\{COLONNES_COUVERTS\}`\)\s*\.eq\('commercant_id', commercant_id\)/.test(creer) && /const presta = formats\.find\(/.test(creer))
   // Les deux listes du module disent la même chose, l'une avec la règle au milieu.
   v('la liste de la route et celle du Poste portent les mêmes colonnes',
@@ -641,6 +646,28 @@ const membre = (o = {}) => ({
     v('une seule ligne écrite', db.trace.ecritures === 1, String(db.trace.ecritures))
     v('🔴 l’ancienne heure revient, pour l’email « déplacé »', res.ancienne_date === '2026-10-05' && norme(res.ancienne_heure) === '10:00')
     v('🔴 l’adresse du client ne sort pas : seulement « elle existe »', res.client_a_email === true && !JSON.stringify(res).includes('client@exemple.be'))
+  }
+  {
+    // 🔴 LE LIEU SE REGRAVAIT À L'HEURE, PLAGE IGNORÉE (03/10). Le cours du
+    // mardi se donne dans l'autre salle, et c'est la PLAGE qui le dit. Déplacé
+    // du lundi au mardi, il gardait l'adresse que l'heure désigne, donc la
+    // salle principale : la cliente partait au mauvais endroit.
+    const t = base()
+    t.commercant_lieux = [
+      { id: 'L1', commercant_id: 'c1', type: 'permanent', principal: true, libelle: 'Salle du Centre', adresse: 'Place 3', actif: true },
+      { id: 'L2', commercant_id: 'c1', type: 'permanent', principal: false, libelle: 'Salle des Fêtes', adresse: 'Rue Haute 9', actif: true },
+    ]
+    t.rdv_creneaux = [
+      { id: 'cr-mar', commercant_id: 'c1', jour_semaine: 'mardi', date_specifique: null, heure_debut: '18:00:00', heure_fin: '19:00:00',
+        pause_debut: null, pause_fin: null, actif: true, deleted_at: null, praticien_id: null, lieu_id: 'L2' },
+    ]
+    const { res, tables } = await deplacer(t, { rdvId: 'y1', date: '2026-10-06', heure: '18:00' })
+    const y1 = ligne(tables, 'y1')
+    v('🔴 déplacé sur la plage du mardi, le cours prend la salle de CETTE plage',
+      res.ok === true && y1.lieu_id === 'L2' && y1.lieu_libelle === 'Salle des Fêtes', JSON.stringify({ res, lieu: y1.lieu_id }))
+    const sansPlage = await deplacer(base(), { rdvId: 'r1', date: '2026-10-05', heure: '12:00' })
+    v('et sans plage, rien ne change : le lieu se résout à l’heure, comme avant',
+      sansPlage.res.ok === true && (ligne(sansPlage.tables, 'r1').lieu_id ?? null) === null)
   }
   {
     const { res, db } = await deplacer(base(), { rdvId: 'r2', date: '2026-10-05', heure: '16:00' })

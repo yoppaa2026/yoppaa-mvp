@@ -31,6 +31,7 @@ import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
+import { plageQuiAccueille } from '@/lib/rdv-slots'
 import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, couvertsDe, coursAPlace } from '@/lib/cours-collectifs'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
@@ -348,7 +349,15 @@ export default function ModalDeplacerRdv({
       // yoga itinérante n'est pas au même endroit le lundi et le jeudi : garder
       // l'ancien lieu enverrait la cliente à la mauvaise adresse, et c'est
       // exactement le défaut que le module LIEUX a corrigé le 13/08.
-      const lieu = await champsLieuPour(supabase, commercant, { jour: date, heure })
+      // 🔴 LE LIEU DE LA PLAGE QUI ACCUEILLE L'HEURE, pas celui que l'heure seule
+      // désigne (03/10) : voir `plageQuiAccueille`. Sans lui, un cours donné dans
+      // l'autre salle partait avec l'adresse de la salle principale.
+      const plage = plageQuiAccueille(creneauxJour, {
+        prestationId: rdv.prestation_id ?? null,
+        debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMinutes,
+        praticienId: rdv.praticien_id || null,
+      })
+      const lieu = await champsLieuPour(supabase, commercant, { jour: date, heure, lieuId: plage?.lieu_id || null })
 
       const ancienneDate = rdv.date_rdv
       const ancienneHeure = rdv.heure_debut

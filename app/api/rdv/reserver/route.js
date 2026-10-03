@@ -84,7 +84,8 @@ export async function POST(request) {
       date_rdv, heure_debut,
       client_email, client_prenom, client_nom, client_telephone,
       notes_client = null, rgpd_marketing = false,
-      lieu_id = null,
+      // ⚠️ PLUS DE `lieu_id` REÇU (03/10) : l'écran envoyait la plage d'un autre
+      // jour. Le module prend le lieu de la plage qu'il valide.
       // Le nombre de personnes, pour une réservation de table. Il est REVÉRIFIÉ
       // par `creerReservationRdv` : bornes de la prestation, et place réelle
       // dans la salle à cette heure-là.
@@ -391,7 +392,6 @@ export async function POST(request) {
       prestationId: prestation.id,
       dateRdv: date_rdv,
       heureDebut: heure,
-      lieuId: lieu_id,
       champs: {
         client_id: clientId,
         praticien_id: praticien_id || null,

@@ -52,7 +52,8 @@ export async function POST(request) {
     date_rdv: dateRdv,
     heure_debut: heureDebut,
     notes_client: notes = null,
-    lieu_id: lieuId = null,
+    // ⚠️ PLUS DE `lieu_id` REÇU (03/10) : l'écran envoyait la plage d'un autre
+    // jour. Le module prend le lieu de la plage qu'il valide.
   } = corps || {}
 
   if (!abonnementId || !DATE.test(String(dateRdv)) || !HEURE.test(String(heureDebut))) {
@@ -159,7 +160,6 @@ export async function POST(request) {
     prestationId: prestation.id,
     dateRdv,
     heureDebut: heure,
-    lieuId,
     champs: {
       abonnement_id: contrat.id,
       client_email: yopper.email,

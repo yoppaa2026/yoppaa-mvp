@@ -24,7 +24,8 @@
 import { NextResponse } from 'next/server'
 import { clientAdmin } from '@/lib/api-auth'
 import { gardeEquipe, journaliserGeste } from '@/lib/equipe-server'
-import { creneauAcceptable, creneauxDuJour } from '@/lib/deplacement-rdv'
+import { creneauAcceptable, creneauxDuJour, minutesDeLHeure } from '@/lib/deplacement-rdv'
+import { plageQuiAccueille } from '@/lib/rdv-slots'
 import { capacitePrestation, estParCouverts, bornesCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-collectifs'
 import { enModeInventaire, formatPourAffichage, dureeDuGroupe } from '@/lib/inventaire-salle'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
@@ -112,8 +113,16 @@ export async function POST(request) {
     const acomptePct = presta.acompte_pourcent || commerce.data?.rdv_acompte_global || 0
     const acompte = prix != null && acomptePct > 0 ? Math.round(prix * acomptePct) / 100 : null
 
+    // 🔴 LE LIEU DE LA PLAGE QUI ACCUEILLE L'HEURE, pas celui que l'heure seule
+    // désigne (03/10) : voir `plageQuiAccueille`. Sans lui, un cours donné dans
+    // l'autre salle partait avec l'adresse de la salle principale.
+    const plage = plageQuiAccueille(creneauxDuJour(creneaux.data || [], { dateStr: date, jour }), {
+      prestationId: presta.id, debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMinutes,
+    })
+
     const res = await creerReservationRdv(admin, {
       commercantId: commercant_id, prestationId: presta.id, dateRdv: date, heureDebut: heure,
+      lieuId: plage?.lieu_id || null,
       champs: {
         ...client,
         client_id: null,

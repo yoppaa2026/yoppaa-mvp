@@ -442,8 +442,15 @@ const MUTATIONS = [
 
   { nom: '🔴 le lien repart dans `url`, donc aussi vers l app',
     fichier: ONESIGNAL,
-    de: '  if (url) payload.web_url = url',
+    de: '  if (adresseWeb) payload.web_url = adresseWeb',
     vers: '  if (url) payload.url = url' },
+
+  // 🔴 LE DEFAUT DE LA NUIT DU 02 AU 03/10 : `web_url` relatif, OneSignal
+  // rejette le message entier, plus rien ne part.
+  { nom: '🔴 web_url repart en chemin relatif',
+    fichier: ONESIGNAL,
+    de: '  if (adresseWeb) payload.web_url = adresseWeb',
+    vers: '  if (url) payload.web_url = url' },
 
   { nom: '🔴 l app ne recoit plus son chemin',
     fichier: ONESIGNAL,

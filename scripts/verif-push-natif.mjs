@@ -915,7 +915,14 @@ const fenetreNative = (options = {}) => {
   }
   const [avecLien, sansLien] = charges
   verifie('⚠️ les deux envois sont partis (sinon la suite ne lit rien)', charges.length === 2, `${charges.length}`)
-  egal('🔴 le lien web part dans `web_url`, avec la même valeur qu’avant', avecLien?.web_url, '/commander?onglet=commandes')
+  // 🔴 EN ADRESSE COMPLÈTE (03/10). Relative, elle était acceptée par `url` et
+  // fait REJETER tout le message par `web_url` : plus rien n'est parti pendant
+  // une nuit. La garde du 02/10 exigeait justement la valeur relative, « la
+  // même qu'avant » : elle a validé le défaut au lieu de l'empêcher.
+  egal('🔴 le lien web part dans `web_url`, en adresse COMPLÈTE', avecLien?.web_url, 'https://www.yoppaa.app/commander?onglet=commandes')
+  let adresseValide = false
+  try { const u = new URL(avecLien?.web_url); adresseValide = u.protocol === 'https:' && u.host === 'www.yoppaa.app' } catch { /* reste faux */ }
+  verifie('🔴 et cette adresse se lit seule, sans origine à deviner', adresseValide, avecLien?.web_url)
   verifie('🔴 et plus jamais dans `url`, qui partait aussi vers l’app',
     avecLien && !('url' in avecLien) && !('app_url' in avecLien))
   egal('🔴 l’app reçoit son chemin dans les données', avecLien?.data?.chemin, '/commander?onglet=commandes')

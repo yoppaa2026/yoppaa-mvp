@@ -653,8 +653,12 @@ parle pas de Bancontact.
 ⚠️ **AVANT DE COLLER, ALEX VÉRIFIE À L'ÉCRAN** que Salon Nathalie se réserve
 SANS acompte ni empreinte de carte : sinon le relecteur tomberait sur un
 paiement réel. Une note qui décrit un chemin faux coûte un cycle entier (7.5).
+✅ **VÉRIFIÉ PAR ALEX le 03/10** : chez Salon Nathalie, **« Coupe enfant »**
+se réserve sans acompte ; chez Chez Momo, une commande en retrait. 🔴 Les
+autres prestations du salon peuvent demander un acompte, c'est-à-dire un
+paiement RÉEL : **la note NOMME la prestation**, aux deux stores.
 
-**Apple, App Review Information → Notes** (2 117 caractères sur 4 000, comptés, sans gras : aucun store n’interprète le markdown) :
+**Apple, App Review Information → Notes** (2 243 caractères sur 4 000, recomptés le 03/10 avec « Coupe enfant », sans gras : aucun store n’interprète le markdown) :
 
 > About Yoppaa
 >
@@ -684,8 +688,9 @@ paiement réel. Une note qui décrit un chemin faux coûte un cycle entier (7.5)
 >
 > Booking an appointment
 >
-> Open "Salon Nathalie", choose a service and a time slot, and confirm. No
-> payment details are needed.
+> Open "Salon Nathalie", choose the service "Coupe enfant" (child haircut) and
+> a time slot, and confirm. This service needs no deposit and no payment
+> details. Other services may ask for a deposit, which would be a real payment.
 >
 > Payments
 >
@@ -709,10 +714,10 @@ paiement réel. Une note qui décrit un chemin faux coûte un cycle entier (7.5)
 >
 > Avcotech, Rue de Prée 9 G, 5640 Mettet, Belgium. Contact: hello@yoppaa.app
 
-**Google Play, Informations de connexion → instructions** (459 caractères sur
-500, comptés) :
+**Google Play, Informations de connexion → instructions** (433 caractères sur
+500, comptés le 03/10 après l'ajout de « Coupe enfant ») :
 
-> The test account is registered in Mettet, Belgium. Shops appear right after sign-in. To choose a location, tap the location field (top right) and enter "Mettet": the app shows shops and distances around the place you pick. Accepting the location prompt works too. To order, open "Chez Momo", add an item and choose "Payer sur place" (pay on site): no payment details needed. To book, open "Salon Nathalie". Online payments are live, so please use pay on site.
+> The test account is registered in Mettet, Belgium. Shops appear right after sign-in. To choose a location, tap the location field (top right) and enter "Mettet", or accept the location prompt. To order, open "Chez Momo", add an item and choose "Payer sur place" (pay on site): no payment details needed. To book, open "Salon Nathalie" and choose "Coupe enfant": no deposit needed. Online payments are live, so please use pay on site.
 
 ⚠️ **Chez Google, la réponse 3.1.3(e) n'a pas lieu d'être** : Play n'exige pas
 la facturation Play pour des biens physiques, et la question ne s'y pose pas.

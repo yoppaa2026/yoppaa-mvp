@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { Bell } from 'lucide-react'
 import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
 import { fetchYopper, fetchAvecPreuveSiConnecte, estSessionPerdue } from '@/lib/fetch-yopper'
@@ -1934,6 +1935,10 @@ export default function Commander() {
   // Les abonnements de la cliente. Vide pour l'immense majorité des Yoppers,
   // et c'est pour ça que leur onglet n'existe QUE s'il y en a au moins un.
   const [clientAbonnements, setClientAbonnements] = useState([])
+  // Ses listes d'attente de rendez-vous, et celle qu'il est en train de quitter
+  // (le bouton se désactive pendant l'appel : un double clic ne part qu'une fois).
+  const [clientAttentes, setClientAttentes] = useState([])
+  const [attenteEnRetrait, setAttenteEnRetrait] = useState(null)
 
   // ⚠️ L'ONGLET DES ABONNEMENTS PEUT DISPARAÎTRE SOUS LES PIEDS : il n'existe
   // que tant qu'il reste un contrat. Une résiliation, une déconnexion ou une
@@ -2009,6 +2014,8 @@ export default function Commander() {
     setFavoris([]); setCommercantsFavoris([])
     setClientCommandes([]); setClientRdvs([]); setClientAbonnements([])
     setMesCartesFid([]); setMesBons([])
+    // Ses listes d'attente disent où et quand il veut un rendez-vous.
+    setClientAttentes([])
     setCommune(null)
     // Les deux modales portent une commande nominative : ouvertes, elles
     // resteraient affichées par-dessus l'écran d'invité.
@@ -2148,7 +2155,7 @@ export default function Commander() {
         setClient(p => ({ ...p, email, nom: nom || '', prenom: prenom || '', telephone: telephone || '' }))
         setClientId(id)
         chargerFavoris(id)
-        chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient()
+        chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient(); chargerAttentesClient()
         // Sync cookie serveur AWAITED (pas fire-and-forget) : le cookie doit
         // refléter le client courant AVANT l'appel get-own (commune/profil), sinon
         // get-own lit un cookie périmé -> mauvais client -> la modale commune
@@ -2302,7 +2309,7 @@ export default function Commander() {
       if (document.visibilityState !== 'visible') return
       const email = typeof window !== 'undefined' ? localStorage.getItem('yoppaa_email') : null
       if (!email) return  // utilisateur déconnecté → on saute ce tick (mais on laisse l'interval tourner pour le cas re-login)
-      chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient()
+      chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient(); chargerAttentesClient()
     }, 15000)
     return () => clearInterval(iv)
   }, [])
@@ -2649,7 +2656,7 @@ export default function Commander() {
     const refresh = () => {
       if (document.visibilityState === 'visible') {
         chargerCommandesClient(email)
-        chargerRdvsClient(email); chargerAbonnementsClient()
+        chargerRdvsClient(email); chargerAbonnementsClient(); chargerAttentesClient()
       }
     }
     const onVisChange = () => refresh()
@@ -2898,6 +2905,48 @@ export default function Commander() {
       setClientAbonnements(body.abonnements || [])
     } catch (e) {
       console.error('[chargerAbonnementsClient] exception', e?.message)
+    }
+  }
+
+  // 🔴 « OÙ VOIT-IL QU'IL EST EN LISTE D'ATTENTE ? » (Alex, 03/10). Nulle part :
+  // une fois la fiche quittée, le Yopper n'avait plus aucune trace de son
+  // inscription, ni aucun moyen d'en sortir. La route exige une identité
+  // PROUVÉE : `fetchYopper`, jamais un `fetch` nu.
+  async function chargerAttentesClient() {
+    try {
+      const rep = await fetchYopper('/api/rdv/attente')
+      const corps = await rep.json().catch(() => ({}))
+      // ⚠️ La route répond `connecte:false` avec un code 200 quand elle ne le
+      // reconnaît plus : ce n'est pas une file vide, on garde ce qui est affiché.
+      if (estSessionPerdue(rep, corps)) { setSessionPerdue(true); return }
+      if (!corps?.ok) return
+      setClientAttentes(corps.attentes || [])
+    } catch (e) {
+      console.error('[chargerAttentesClient] exception', e?.message)
+    }
+  }
+
+  // « Ne plus me prévenir », depuis son espace. Le serveur ne retire que SES
+  // propres attentes (filtre sur son identité prouvée).
+  async function retirerAttenteClient(attente) {
+    if (!attente?.id || attenteEnRetrait) return
+    setAttenteEnRetrait(attente.id)
+    try {
+      const res = await fetchYopper('/api/rdv/attente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'retirer', id: attente.id }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (estSessionPerdue(res, body)) { setSessionPerdue(true); return }
+      if (!body?.ok) { showToast({ type: 'error', msg: body?.error || 'Impossible pour le moment, réessaie dans un instant.' }); return }
+      await chargerAttentesClient()
+      showToast({ type: 'success', msg: 'C’est noté : tu ne seras plus prévenu pour cette place.' })
+    } catch (e) {
+      console.error('[retirerAttenteClient] exception', e?.message)
+      showToast({ type: 'error', msg: 'Impossible pour le moment, réessaie dans un instant.' })
+    } finally {
+      setAttenteEnRetrait(null)
     }
   }
 
@@ -3200,7 +3249,7 @@ export default function Commander() {
     const id = j?.client?.id
     if (!id) return null
     setClientId(id); localStorage.setItem('yoppaa_client_id', id); localStorage.setItem('yoppaa_email', email); localStorage.setItem('yoppaa_nom', nom)
-    if (!j.created) { chargerFavoris(id); chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient() }
+    if (!j.created) { chargerFavoris(id); chargerCommandesClient(email); chargerRdvsClient(email); chargerAbonnementsClient(); chargerAttentesClient() }
     return id
   }
 
@@ -4558,10 +4607,58 @@ export default function Commander() {
                   </>
                 )}
 
+                {/* 🔴 « OÙ VOIT-IL QU'IL EST EN LISTE D'ATTENTE ? » (Alex,
+                    03/10). Nulle part, avant : une fois la fiche quittée, plus
+                    aucune trace de l'inscription, ni moyen d'en sortir. Sous
+                    ses rendez-vous, parce que c'est un rendez-vous qu'il
+                    attend ; et rien du tout s'il n'attend rien.
+                    ⚠️ AUCUN « une place s'est libérée » ici : la file prévient
+                    dans l'ordre, un quart d'heure d'écart, et l'écran
+                    l'annoncerait au troisième avant son tour. */}
+                {clientAttentes.length > 0 && (
+                  <div style={{ marginTop: rdvsAVenir.length > 0 ? '1.5rem' : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontWeight: 900, fontSize: '0.95rem', color: T.ink }}>Tes listes d’attente</span>
+                      <span style={{ background: T.main, color: '#fff', fontSize: '0.6rem', fontWeight: 800, padding: '2px 7px', borderRadius: 100 }}>{clientAttentes.length}</span>
+                    </div>
+                    {clientAttentes.map(a => (
+                      <div key={a.id} style={{ background: '#fff', borderRadius: 14, marginBottom: '0.625rem', border: `1.5px dashed ${T.main}55`, padding: '0.875rem 1rem' }}>
+                        <p style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+                          <Bell size={11} strokeWidth={2.4} aria-hidden="true" style={{ flexShrink: 0 }} />
+                          <span>En attente · {a.libelle}</span>
+                        </p>
+                        <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.95rem', letterSpacing: '-0.2px', lineHeight: 1.25, marginBottom: 4 }}>
+                          {a.prestation_nom || 'Prestation'}
+                        </p>
+                        {a.commercant_nom && (
+                          <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.4 }}>
+                            chez <strong style={{ color: T.deep }}>{a.commercant_nom}</strong>
+                          </p>
+                        )}
+                        <p style={{ fontSize: '0.72rem', color: T.muted, lineHeight: 1.5, marginTop: 6 }}>
+                          On te prévient par notification si une place se libère. La place n’est pas gardée : la première personne qui réserve la prend.
+                        </p>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+                          {a.commercant_slug && (
+                            <a href={`/commander/rdv/${a.commercant_slug}`}
+                              style={{ padding: '6px 12px', background: T.main, color: '#fff', borderRadius: 100, fontWeight: 800, fontSize: '0.75rem', textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}>
+                              Voir les créneaux
+                            </a>
+                          )}
+                          <button onClick={() => retirerAttenteClient(a)} disabled={attenteEnRetrait === a.id}
+                            style={{ padding: '6px 12px', background: 'transparent', color: T.muted, border: `1px solid ${T.pale}`, borderRadius: 100, fontWeight: 700, cursor: attenteEnRetrait === a.id ? 'wait' : 'pointer', opacity: attenteEnRetrait === a.id ? 0.6 : 1, fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif' }}>
+                            {attenteEnRetrait === a.id ? 'Un instant…' : 'Ne plus me prévenir'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* RDVs passes / annules */}
                 {rdvsPasses.length > 0 && (
                   <HistoriqueRepli
-                    style={{ marginTop: rdvsAVenir.length > 0 ? '1.5rem' : 0 }}
+                    style={{ marginTop: rdvsAVenir.length > 0 || clientAttentes.length > 0 ? '1.5rem' : 0 }}
                     compte={`${Math.min(rdvsPasses.length, 5)} rendez-vous`}
                   >
                     {rdvsPasses.slice(0, 5).map(r => {
@@ -4615,7 +4712,7 @@ export default function Commander() {
                 )}
 
                 {/* Empty state */}
-                {rdvsAVenir.length === 0 && rdvsPasses.length === 0 && (
+                {rdvsAVenir.length === 0 && rdvsPasses.length === 0 && clientAttentes.length === 0 && (
                   <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: T.muted }}>
                     <p style={{ fontSize: '0.9rem', fontWeight: 700, color: T.deep, marginBottom: 6 }}>Aucun rendez-vous pour l&apos;instant</p>
                     <p style={{ fontSize: '0.78rem', lineHeight: 1.5 }}>Réserve chez un coiffeur, esthéticien ou autre service depuis l&apos;onglet Accueil.</p>

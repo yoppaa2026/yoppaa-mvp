@@ -18,14 +18,28 @@
 // capacité de la prestation : cet écran ne fait que proposer le bon geste.
 
 import { useState, useEffect, useCallback } from 'react'
-import { DUREES_FENETRE, memeHeure } from '@/lib/attente-rdv'
+import { Bell } from 'lucide-react'
+import { DUREES_FENETRE, attenteSur, seanceLisible } from '@/lib/attente-rdv'
 // 🔴 JAMAIS UN `fetch` NU VERS UNE ROUTE D'IDENTITÉ. `identiteProuvee` ne
 // reconnaît personne sans le jeton en en-tête : un appel nu ferait répondre
 // « pas connecté » à TOUT LE MONDE, et le bouton n'apparaîtrait jamais. C'est
 // la panne du 30/08 sur le paiement, à l'identique.
 import { fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
+import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 
-export default function BlocAttente({ prestation, date, heure = null, T, compact = false }) {
+// ⚠️ LA PROMESSE TENUE PAR LE CODE, ET RIEN DE PLUS. La file prévient dans
+// l'ordre d'arrivée, un quart d'heure d'écart entre chaque personne, et ne
+// bloque jamais le créneau (arbitrage d'Alex, 06/09).
+//
+// 🔴 ELLE REMPLACE UNE PHRASE FAUSSE (03/10) : « Ton prénom et ton numéro seront
+// visibles par le commerçant pour te prévenir. » Aucun écran ne montre la file
+// au commerçant, et c'est la notification qui prévient, pas lui.
+const PROMESSE = 'On te prévient par notification. La place n’est pas gardée : la première personne qui réserve la prend.'
+
+// Où le Yopper retrouve ses attentes une fois la fiche quittée.
+const LIEN_MES_ATTENTES = '/commander?onglet=commandes&tab=rdvs'
+
+export default function BlocAttente({ prestation, date, heure = null, T, compact = false, onChange = null }) {
   const [etat, setEtat] = useState('chargement')   // chargement | pret | envoi
   const [connecte, setConnecte] = useState(false)
   const [deja, setDeja] = useState(null)
@@ -33,30 +47,26 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
   const [erreur, setErreur] = useState('')
 
   const surSeance = Boolean(heure)
-
-  // Reconnaît l'attente déjà posée sur CETTE cible. Une séance se reconnaît à
-  // sa date et à son heure ; une fenêtre, à sa seule prestation (en solo le
-  // plafond compte par prestation, pas par plage).
-  const memeCibleQue = useCallback((a) => {
-    if (!a || a.prestation_id !== prestation?.id) return false
-    if (surSeance) return a.portee === 'seance' && a.date_rdv === date && memeHeure(a.heure_debut, heure)
-    return a.portee === 'fenetre'
-  }, [prestation?.id, surSeance, date, heure])
+  const prestationId = prestation?.id || null
 
   const relire = useCallback(async () => {
     try {
       const r = await fetchAvecPreuveSiConnecte('/api/rdv/attente')
       const j = await r.json()
       setConnecte(Boolean(j?.connecte))
-      setDeja((j?.attentes || []).find(memeCibleQue) || null)
+      setDeja(attenteSur(j?.attentes, { prestationId, date, heure }))
     } catch {
       setConnecte(false)
       setDeja(null)
     }
     setEtat('pret')
-  }, [memeCibleQue])
+  }, [prestationId, date, heure])
 
   useEffect(() => { relire() }, [relire])
+
+  // Relit, PUIS prévient la fiche : sa grille marque la séance où il attend,
+  // et doit le savoir tout de suite, pas au prochain chargement.
+  const relireEtPrevenir = async () => { await relire(); onChange?.() }
 
   async function inscrire() {
     setEtat('envoi'); setErreur('')
@@ -72,7 +82,12 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
       })
       const j = await r.json()
       if (!j?.ok) { setErreur(j?.error || 'Impossible pour le moment.'); setEtat('pret'); return }
-      await relire()
+      // 🔴 LA FILE NE PRÉVIENT QUE PAR NOTIFICATION, ET RIEN NE LA DEMANDAIT
+      // (03/10). La réservation la propose après coup, l'inscription jamais :
+      // un Yopper sans notification attendait une alerte qui ne pouvait pas
+      // arriver. Sans effet s'il a déjà accepté ou explicitement refusé.
+      promptPushOneSignal()
+      await relireEtPrevenir()
     } catch {
       setErreur('Impossible pour le moment, réessaie dans un instant.')
       setEtat('pret')
@@ -90,7 +105,7 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
       })
       const j = await r.json()
       if (!j?.ok) setErreur(j?.error || 'Impossible pour le moment.')
-      await relire()
+      await relireEtPrevenir()
     } catch {
       setErreur('Impossible pour le moment, réessaie dans un instant.')
       setEtat('pret')
@@ -108,19 +123,41 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
   }
   const titre = { fontSize: '0.85rem', fontWeight: 800, color: T.ink, lineHeight: 1.4, letterSpacing: '-0.2px' }
   const sous = { fontSize: '0.75rem', color: T.muted, lineHeight: 1.5, marginTop: 4 }
+  const note = { ...sous, fontSize: '0.68rem', marginTop: 6 }
+
+  // 🔴 LA FENÊTRE NE DISAIT PAS CE QU'ELLE ÉTAIT (Alex, 03/10 : « quand la
+  // fenêtre s'ouvre elle ne dit pas LISTE D'ATTENTE »). Le surtitre la nomme
+  // dans les trois états, et nomme ce qu'on attend : la séance cliquée, ou la
+  // prestation en solo, où aucune séance n'est visée.
+  const quoi = surSeance ? seanceLisible(date, heure) : (prestation?.nom || '')
+  const surtitre = (
+    <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>
+      <Bell size={12} strokeWidth={2.4} aria-hidden="true" style={{ flexShrink: 0 }} />
+      <span>Liste d’attente{quoi ? ` · ${quoi}` : ''}</span>
+    </p>
+  )
 
   // ── Déjà dans la file ────────────────────────────────────────────────────
   if (deja) {
     return (
       <div style={{ ...cadre, borderColor: T.main, background: `${T.main}0A` }}>
-        <p style={titre}>Tu es dans la liste d’attente.</p>
+        {surtitre}
+        <p style={titre}>
+          {!surSeance && deja.libelle ? `Tu es sur la liste d’attente ${deja.libelle}.` : 'Tu es sur la liste d’attente.'}
+        </p>
         <p style={sous}>
           {/* ⚠️ ON NE PROMET PAS UNE PLACE GARDÉE : le créneau reste réservable
-              par n'importe qui. On promet d'être prévenu en premier, et c'est
-              ce que le code tient. */}
+              par n'importe qui. On promet d'être prévenu, dans l'ordre des
+              inscriptions, et c'est ce que le code tient. */}
           {surSeance
-            ? 'Si quelqu’un se désiste, tu es prévenu avant les autres par notification.'
-            : 'Dès qu’un créneau se libère sur cette période, tu es prévenu avant les autres.'}
+            ? 'Si quelqu’un se désiste, les personnes en attente sont prévenues dans l’ordre des inscriptions.'
+            : 'Dès qu’un créneau se libère sur cette période, les personnes en attente sont prévenues dans l’ordre des inscriptions.'}
+        </p>
+        <p style={note}>{PROMESSE}</p>
+        {/* 🔴 « OÙ VOIT-IL QU'IL EST EN LISTE D'ATTENTE ? » (Alex, 03/10). Ici,
+            et dans son espace : on lui dit où, sans quoi il l'oublie. */}
+        <p style={note}>
+          Tu la retrouves dans <a href={LIEN_MES_ATTENTES} style={{ color: T.main, fontWeight: 700 }}>Suivi, onglet Rendez-vous</a>.
         </p>
         <button onClick={seRetirer} disabled={etat === 'envoi'}
           style={{
@@ -143,9 +180,10 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
     const retour = typeof window !== 'undefined' ? window.location.pathname : '/commander'
     return (
       <div style={cadre}>
+        {surtitre}
         <p style={titre}>Une place peut se libérer.</p>
         <p style={sous}>
-          Connecte-toi pour être prévenu par notification dès qu’un désistement arrive.
+          Connecte-toi pour t’inscrire : si quelqu’un se désiste, tu reçois une notification.
         </p>
         {/* ⚠️ L'ADRESSE DE CONNEXION D'UN YOPPER EST `/commander/auth`, pas
             `/login` qui est celle du commerçant et retombe sur le tableau de
@@ -166,13 +204,17 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
   // ── Le geste ─────────────────────────────────────────────────────────────
   return (
     <div style={cadre}>
+      {surtitre}
+      {/* ⚠️ EN SOLO, LE TITRE NE RÉPÈTE PLUS LE VIDE (03/10). Il s'affiche sous
+          « Aucun créneau libre ce jour-là » : « Aucun créneau ne te convient ? »
+          redisait la même chose en posant une question. */}
       <p style={titre}>
-        {surSeance ? 'Cette séance est complète.' : 'Aucun créneau ne te convient ?'}
+        {surSeance ? 'Cette séance est complète.' : 'Une place peut encore se libérer.'}
       </p>
       <p style={sous}>
         {surSeance
-          ? 'On te prévient avant les autres si quelqu’un se désiste.'
-          : 'On te prévient avant les autres dès qu’une place se libère.'}
+          ? 'Inscris-toi : si quelqu’un se désiste, les personnes en attente sont prévenues dans l’ordre des inscriptions.'
+          : 'Choisis jusqu’à quand ça t’intéresse, à partir d’aujourd’hui.'}
       </p>
 
       {/* UN SEUL geste en plus : jusqu'à quand ça t'intéresse. Pas de
@@ -207,12 +249,8 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
         {etat === 'envoi' ? 'Un instant…' : 'Préviens-moi'}
       </button>
 
-      {/* ⚠️ LA PHRASE QUI REND LE GESTE LOYAL. Le commerçant verra le prénom et
-          le numéro pour pouvoir prévenir : ça se dit AVANT le clic, pas dans
-          une case à cocher qui ferait semblant d'être un choix. */}
-      <p style={{ ...sous, fontSize: '0.68rem', marginTop: 6 }}>
-        Ton prénom et ton numéro seront visibles par le commerçant pour te prévenir.
-      </p>
+      {/* ⚠️ LA PHRASE QUI REND LE GESTE LOYAL, dite AVANT le clic. */}
+      <p style={note}>{PROMESSE}</p>
 
       {erreur && <p style={{ ...sous, color: '#DC2626', fontWeight: 700 }}>{erreur}</p>}
     </div>

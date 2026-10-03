@@ -21,7 +21,7 @@
 // défaut relevé par Alex le 16/08.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
@@ -43,7 +43,7 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 // `lib/rdv-creation-server.js`, avec le webhook Stripe et la route d'abonnement.
 import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts, dureeSelonCouverts, sansPrixSiTable } from '@/lib/cours-collectifs'
 import { enModeInventaire, plusGrandGroupe, taillesReservables, formatPourAffichage, estJointure, plafondCadence, phraseCuisinePleine } from '@/lib/inventaire-salle'
-import { attenteOuverte } from '@/lib/attente-rdv'
+import { attenteOuverte, attenteSur } from '@/lib/attente-rdv'
 import BlocAttente from './BlocAttente'
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
 // boutique : deux écritures d'une même phrase finissent toujours par dire deux
@@ -92,7 +92,7 @@ import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
 import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
-import { Lock, Flame, Star, Phone, Calendar } from 'lucide-react'
+import { Lock, Flame, Star, Phone, Calendar, Bell, BellRing } from 'lucide-react'
 
 const T = {
   bg:       '#F8F6FF',
@@ -587,6 +587,21 @@ export default function CommanderRdvSlug() {
   const heureAttente = attenteVisee && dateChoisie && prestationChoisie
     && attenteVisee.date === isoDate(dateChoisie) && attenteVisee.prestationId === prestationChoisie.id
     ? attenteVisee.heure : null
+  // 🔴 « OÙ VOIT-IL QU'IL EST EN LISTE D'ATTENTE ? » (Alex, 03/10). La grille
+  // ne le savait pas : revenu sur la fiche, le Yopper inscrit voyait la même
+  // séance grise que tout le monde. On relit ses attentes quand la prestation
+  // choisie a une file, puis après chaque inscription ou retrait (le bloc le
+  // signale par `onChange`). Silencieux en cas d'échec : la grille garde
+  // seulement sa marque en moins.
+  const [mesAttentes, setMesAttentes] = useState([])
+  const relireMesAttentes = useCallback(() => {
+    fetchAvecPreuveSiConnecte('/api/rdv/attente')
+      .then(r => r.json())
+      .then(j => setMesAttentes(j?.ok ? (j.attentes || []) : []))
+      .catch(() => {})
+  }, [])
+  const attenteIci = !!prestationChoisie && attenteOuverte(prestationChoisie)
+  useEffect(() => { if (attenteIci) relireMesAttentes() }, [attenteIci, relireMesAttentes])
   // RDV-4c : coordonnées client + RGPD (pré-fill depuis localStorage)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '', notes: '' })
   const [clientId, setClientId] = useState(null)
@@ -3595,9 +3610,11 @@ export default function CommanderRdvSlug() {
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                     {dateChoisie && !slotsLoading && (() => {
                       const nbLibres = slots.filter(s => !s.pris).length
+                      // ⚠️ « 0 plus de créneau » (03/10) : le zéro restait
+                      // devant la phrase qui disait déjà qu'il n'y en avait plus.
                       return (
                         <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>
-                          {nbLibres} {nbLibres > 1 ? 'créneaux libres' : nbLibres === 1 ? 'créneau libre' : 'plus de créneau'}
+                          {nbLibres === 0 ? 'Aucun créneau libre' : `${nbLibres} ${nbLibres > 1 ? 'créneaux libres' : 'créneau libre'}`}
                         </span>
                       )
                     })()}
@@ -3630,8 +3647,12 @@ export default function CommanderRdvSlug() {
                       {/* ⚠️ JAMAIS SUR UN COURS : là-bas on attend UNE SÉANCE,
                           et le serveur refuserait une fenêtre. L'écran ne
                           propose que le geste que le serveur accepte. */}
-                      {prestationChoisie && !estCoursCollectif(prestationChoisie) && (
-                        <BlocAttente prestation={prestationChoisie} date={isoDate(dateChoisie)} T={T} />
+                      {/* 🔴 ET JAMAIS SUR UNE FILE FERMÉE (03/10). Une
+                          prestation réglée à 0 place d'attente affichait quand
+                          même « Préviens-moi », que le serveur refusait APRÈS
+                          le clic. La grille d'un cours le vérifiait déjà. */}
+                      {prestationChoisie && !estCoursCollectif(prestationChoisie) && attenteOuverte(prestationChoisie) && (
+                        <BlocAttente prestation={prestationChoisie} date={isoDate(dateChoisie)} T={T} onChange={relireMesAttentes} />
                       )}
                     </>
                   )}
@@ -3644,6 +3665,19 @@ export default function CommanderRdvSlug() {
                       étaient pleins n'affichait donc rien du tout, et le
                       commentaire de 13/08 disait pourtant le contraire. C'est
                       exactement le jour où la liste d'attente sert le plus. */}
+                  {/* 🔴 LA LISTE D'ATTENTE ÉTAIT INTROUVABLE (Alex, 03/10 :
+                      « si tu ne sais pas que tu dois cliquer, tu n'y arrives
+                      jamais »). Une séance grise ressemble à une séance
+                      fermée : la légende dit qu'elle se touche, et la séance
+                      elle-même porte la cloche. */}
+                  {dateChoisie && !slotsLoading && attenteIci
+                    && slots.some(s => s.pris && s.motif === 'complet') && (
+                    <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.74rem', fontWeight: 600, color: T.deep, lineHeight: 1.4, margin: '0 0 8px' }}>
+                      <Bell size={13} strokeWidth={2.4} color={T.main} aria-hidden="true" style={{ flexShrink: 0 }} />
+                      <span>Une séance complète ? Choisis-la : on te prévient si une place se libère.</span>
+                    </p>
+                  )}
+
                   {dateChoisie && !slotsLoading && slots.filter(s => !s.pris || s.motif === 'complet').length > 0 && (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(82px, 1fr))', gap: 8, marginBottom: 14 }}>
                       {/* ⚠️ UN COURS COMPLET RESTE AFFICHÉ, GRISÉ (décision Alex du
@@ -3661,6 +3695,9 @@ export default function CommanderRdvSlug() {
                         // couleur d'un créneau choisi.
                         const attenteDispo = pris && attenteOuverte(prestationChoisie)
                         const enAttente = attenteDispo && heureAttente === heure
+                        // Il est DÉJÀ dans la file de cette séance : même règle
+                        // que le bloc, pour qu'ils ne se contredisent jamais.
+                        const dansLaFile = attenteDispo && !!attenteSur(mesAttentes, { prestationId: prestationChoisie.id, date: isoDate(dateChoisie), heure })
                         return (
                           <button key={heure}
                             onClick={() => {
@@ -3668,11 +3705,11 @@ export default function CommanderRdvSlug() {
                               else if (attenteDispo) setAttenteVisee(enAttente ? null : { heure, date: isoDate(dateChoisie), prestationId: prestationChoisie.id })
                             }}
                             disabled={pris && !attenteDispo}
-                            aria-label={pris ? `${heure}, complet, être prévenu si une place se libère` : heure}
+                            aria-label={!pris ? heure : dansLaFile ? `${heure}, complet, tu es sur la liste d’attente` : attenteDispo ? `${heure}, complet, être prévenu si une place se libère` : `${heure}, complet`}
                             style={{
                               padding: jauge ? '0.6rem 0.5rem' : '0.75rem 0.5rem', borderRadius: 12,
-                              border: `1.5px solid ${pris ? (enAttente ? T.main : '#E5E7EB') : choisi ? T.main : T.pale}`,
-                              background: pris ? '#F9FAFB' : choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
+                              border: `1.5px solid ${pris ? (enAttente || dansLaFile ? T.main : '#E5E7EB') : choisi ? T.main : T.pale}`,
+                              background: pris ? (dansLaFile ? `${T.main}0A` : '#F9FAFB') : choisi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
                               color: pris ? '#9CA3AF' : choisi ? '#fff' : T.ink,
                               fontWeight: 800, fontSize: '0.95rem',
                               cursor: pris ? (attenteDispo ? 'pointer' : 'not-allowed') : 'pointer', fontFamily: '"DM Sans", sans-serif',
@@ -3696,6 +3733,16 @@ export default function CommanderRdvSlug() {
                                 {jauge}
                               </span>
                             )}
+                            {/* La cloche dit que la séance grise se touche
+                                encore ; pleine, qu'il y attend déjà. */}
+                            {attenteDispo && (
+                              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 3, marginTop: 3, fontSize: '0.58rem', fontWeight: 800, lineHeight: 1.2, color: T.main, letterSpacing: 0 }}>
+                                {dansLaFile
+                                  ? <BellRing size={10} strokeWidth={2.6} aria-hidden="true" style={{ flexShrink: 0 }} />
+                                  : <Bell size={10} strokeWidth={2.6} aria-hidden="true" style={{ flexShrink: 0 }} />}
+                                {dansLaFile ? 'Tu es en attente' : 'Liste d’attente'}
+                              </span>
+                            )}
                           </button>
                         )
                       })}
@@ -3708,7 +3755,7 @@ export default function CommanderRdvSlug() {
                   {dateChoisie && !slotsLoading && heureAttente && prestationChoisie
                     && slots.some(s => s.heure === heureAttente && s.pris && s.motif === 'complet') && (
                     <BlocAttente prestation={prestationChoisie} date={isoDate(dateChoisie)}
-                      heure={heureAttente} T={T} />
+                      heure={heureAttente} T={T} onChange={relireMesAttentes} />
                   )}
 
                   {/* SECTION 2 : DEJA PRIS - info uniquement, jamais cliquable. Affichee seulement

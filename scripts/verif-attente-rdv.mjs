@@ -20,6 +20,7 @@ import {
   fenetreDepuis, lignePourInscription, peutAttendre,
   concerneParLaPlace, fileConcernee, chaineDePushs, attenteVivante,
   libelleAttente, jourLisible, memeCible, compterMemeCible, dejaDansLaFile,
+  attenteSur, seanceLisible,
 } from '../lib/attente-rdv.js'
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
@@ -636,6 +637,116 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
     && /attente_max: Math\.max\(0, Math\.min\(50, parseInt\(form\.attente_max, 10\) \|\| 0\)\)/.test(CONFIG))
   verifier('⚠️ et retrouve la sienne en rouvrant la prestation',
     /attente_max: String\(Number\.isFinite\(Number\(p\.attente_max\)\) \? Number\(p\.attente_max\) : 3\)/.test(CONFIG))
+}
+
+// ─── LA LISTE D'ATTENTE QU'ON TROUVE (Alex, 03/10) ─────────────────────────
+//
+// 🔴 « SI TU NE SAIS PAS QUE TU DOIS CLIQUER, TU N'Y ARRIVES JAMAIS. » Une
+// séance complète ressemblait à une séance fermée, la fenêtre ne disait pas
+// LISTE D'ATTENTE, et une fois inscrit, le Yopper n'en voyait plus trace nulle
+// part. Le bloc affirmait en plus que le commerçant verrait son prénom et son
+// numéro, ce qu'aucun écran ne fait.
+{
+  // ── Ce qui s'exécute ───────────────────────────────────────────────────
+  verifier('🔴 chaque durée dit la fenêtre qu’elle surveille vraiment',
+    DUREES_FENETRE.every(d => d.libelle === `Les ${d.jours} prochains jours`),
+    DUREES_FENETRE.map(d => d.libelle).join(' / '))
+
+  const LIGNES = [
+    { id: 'a1', prestation_id: 'yoga', portee: PORTEE_SEANCE, date_rdv: '2026-10-05', heure_debut: '09:00:00' },
+    { id: 'a2', prestation_id: 'reiki', portee: PORTEE_FENETRE, date_rdv: null, heure_debut: null, date_debut: '2026-10-03', date_fin: '2026-10-10' },
+  ]
+  egal('🔴 la règle partagée reconnaît la séance où il attend',
+    attenteSur(LIGNES, { prestationId: 'yoga', date: '2026-10-05', heure: '09:00' })?.id, 'a1')
+  verifier('🔴 mais pas la même heure un autre jour',
+    attenteSur(LIGNES, { prestationId: 'yoga', date: '2026-10-12', heure: '09:00' }) === null)
+  verifier('ni une autre heure le même jour',
+    attenteSur(LIGNES, { prestationId: 'yoga', date: '2026-10-05', heure: '10:00' }) === null)
+  verifier('ni la même séance d’une autre prestation',
+    attenteSur(LIGNES, { prestationId: 'pilates', date: '2026-10-05', heure: '09:00' }) === null)
+  egal('en solo, la fenêtre se reconnaît à sa prestation',
+    attenteSur(LIGNES, { prestationId: 'reiki', date: '2026-10-08' })?.id, 'a2')
+  verifier('⚠️ une fenêtre ne passe pas pour une séance',
+    attenteSur(LIGNES, { prestationId: 'reiki', date: '2026-10-08', heure: '09:00' }) === null)
+  verifier('rien à reconnaître sans prestation',
+    attenteSur(LIGNES, {}) === null && attenteSur(null, { prestationId: 'yoga' }) === null)
+
+  // ⚠️ AUCUNE DATE RELATIVE À AUJOURD'HUI ICI : 2099 porte toujours son année,
+  // et l'année en cours se calcule.
+  egal('🔴 la séance attendue se lit en clair', seanceLisible('2099-01-05', '09:00:00'), 'lundi 5 janvier 2099 à 09:00')
+  const anneeIci = new Date().getFullYear()
+  const jourIci = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'][new Date(Date.UTC(anneeIci, 8, 10)).getUTCDay()]
+  egal('cette année, sans l’année', seanceLisible(`${anneeIci}-09-10`, '18:00'), `${jourIci} 10 septembre à 18:00`)
+  egal('une date invalide ne se lit pas', seanceLisible('10/09/2026', '18:00'), '')
+
+  // ── Le bloc ────────────────────────────────────────────────────────────
+  const BLOC = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/BlocAttente.js', import.meta.url), 'utf8'))
+  verifier('🔴 la phrase fausse a disparu : aucun écran ne montre la file au commerçant',
+    !/visibles? par le commerçant/.test(BLOC))
+  verifier('🔴 la promesse tenue est dite avant et après l’inscription',
+    /const PROMESSE = 'On te prévient par notification\. La place n’est pas gardée : la première personne qui réserve la prend\.'/.test(BLOC)
+    && (BLOC.match(/<p style=\{note\}>\{PROMESSE\}<\/p>/g) || []).length === 2)
+  verifier('🔴 la fenêtre dit LISTE D’ATTENTE dans ses trois états',
+    /<span>Liste d’attente\{quoi \? ` · \$\{quoi\}` : ''\}<\/span>/.test(BLOC)
+    && (BLOC.match(/\{surtitre\}/g) || []).length === 3)
+  verifier('et nomme ce qu’on attend',
+    /const quoi = surSeance \? seanceLisible\(date, heure\) : \(prestation\?\.nom \|\| ''\)/.test(BLOC))
+  verifier('🔴 le bloc juge avec la règle partagée',
+    /setDeja\(attenteSur\(j\?\.attentes, \{ prestationId, date, heure \}\)\)/.test(BLOC)
+    && /const prestationId = prestation\?\.id \|\| null/.test(BLOC))
+  // La file ne prévient QUE par notification : l'inscription la demande, comme
+  // la réservation, et seulement une fois l'inscription acceptée.
+  verifier('🔴 l’inscription demande les notifications dont la file dépend',
+    /import \{ promptPushOneSignal \} from '@\/app\/components\/OneSignalInit'/.test(BLOC)
+    && /if \(!j\?\.ok\) \{ setErreur\([^\n]*return \}\s*promptPushOneSignal\(\)\s*await relireEtPrevenir\(\)/.test(BLOC))
+  verifier('🔴 et prévient la fiche après une inscription comme après un retrait',
+    /const relireEtPrevenir = async \(\) => \{ await relire\(\); onChange\?\.\(\) \}/.test(BLOC)
+    && (BLOC.match(/await relireEtPrevenir\(\)/g) || []).length === 2)
+
+  // ── La fiche ───────────────────────────────────────────────────────────
+  const FICHE = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 la fiche relit les attentes du Yopper, avec sa preuve',
+    /fetchAvecPreuveSiConnecte\('\/api\/rdv\/attente'\)/.test(FICHE)
+    && /useEffect\(\(\) => \{ if \(attenteIci\) relireMesAttentes\(\) \}, \[attenteIci, relireMesAttentes\]\)/.test(FICHE))
+  verifier('🔴 la grille marque la séance où il attend, avec la même règle',
+    /const dansLaFile = attenteDispo && !!attenteSur\(mesAttentes, \{ prestationId: prestationChoisie\.id, date: isoDate\(dateChoisie\), heure \}\)/.test(FICHE))
+  verifier('🔴 la séance complète porte la cloche',
+    /\{attenteDispo && \([\s\S]{0,700}\{dansLaFile \? 'Tu es en attente' : 'Liste d’attente'\}/.test(FICHE))
+  verifier('🔴 une légende dit qu’une séance complète se touche',
+    /\{dateChoisie && !slotsLoading && attenteIci\s*&& slots\.some\(s => s\.pris && s\.motif === 'complet'\) && \(/.test(FICHE)
+    && /Une séance complète \? Choisis-la : on te prévient si une place se libère\./.test(FICHE))
+  verifier('⚠️ le compteur ne dit plus « 0 plus de créneau »',
+    !/plus de créneau/.test(FICHE) && /nbLibres === 0 \? 'Aucun créneau libre'/.test(FICHE))
+  verifier('🔴 les deux blocs préviennent la grille',
+    (FICHE.match(/onChange=\{relireMesAttentes\}/g) || []).length === 2)
+  verifier('🔴 le bloc solo ne s’affiche pas sur une file fermée',
+    /!estCoursCollectif\(prestationChoisie\) && attenteOuverte\(prestationChoisie\) && \(/.test(FICHE))
+
+  // ── L'espace du Yopper ─────────────────────────────────────────────────
+  const ESPACE = sansProse(readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
+  const charge = /async function chargerAttentesClient\(\) \{([\s\S]*?)\n  \}/.exec(ESPACE)?.[1] || ''
+  verifier('la fonction qui charge ses attentes a été trouvée', charge.length > 150, `${charge.length} caractères`)
+  verifier('🔴 l’espace charge ses attentes avec une identité prouvée',
+    /const rep = await fetchYopper\('\/api\/rdv\/attente'\)/.test(charge))
+  verifier('⚠️ une session perdue ne vide pas ses listes d’attente',
+    charge.indexOf('estSessionPerdue(rep, corps)') > 0
+    && charge.indexOf('estSessionPerdue(rep, corps)') < charge.indexOf('setClientAttentes('))
+  verifier('⚠️ elles se rechargent partout où se rechargent ses rendez-vous',
+    /chargerAbonnementsClient\(\); chargerAttentesClient\(\)/.test(ESPACE)
+    && !/chargerRdvsClient\(email\); chargerAbonnementsClient\(\)(?!; chargerAttentesClient\(\))/.test(ESPACE))
+  verifier('🔴 la section « Tes listes d’attente » s’affiche',
+    /\{clientAttentes\.length > 0 && \(/.test(ESPACE) && /Tes listes d’attente/.test(ESPACE)
+    && /\{a\.libelle\}/.test(ESPACE) && /href=\{`\/commander\/rdv\/\$\{a\.commercant_slug\}`\}/.test(ESPACE))
+  verifier('🔴 on sort de sa liste depuis son espace',
+    /onClick=\{\(\) => retirerAttenteClient\(a\)\}/.test(ESPACE)
+    && /JSON\.stringify\(\{ action: 'retirer', id: attente\.id \}\)[\s\S]{0,400}await chargerAttentesClient\(\)/.test(ESPACE))
+  // Le lien du bloc doit mener quelque part : l'onglet et le sous-onglet
+  // qu'il nomme existent, et s'ouvrent depuis l'adresse.
+  verifier('🔴 le bloc dit où retrouver l’attente',
+    /const LIEN_MES_ATTENTES = '\/commander\?onglet=commandes&tab=rdvs'/.test(BLOC) && /href=\{LIEN_MES_ATTENTES\}/.test(BLOC))
+  verifier('⚠️ et cet endroit existe sous le nom qu’il lui donne',
+    /key: 'commandes', label: 'Suivi'/.test(ESPACE) && /tabFromUrl === 'rdvs'/.test(ESPACE)
+    && /Suivi, onglet Rendez-vous/.test(BLOC))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

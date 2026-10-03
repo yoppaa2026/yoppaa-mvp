@@ -27,6 +27,13 @@
 // charge le site distant. Corriger le routage ici arrive chez le relecteur au
 // prochain déploiement, sans resoumission et sans perdre la place dans la file.
 //
+// 🔴 DEPUIS LE 03/10, CE COMPOSANT N'EST PLUS QUE LE FILET. Il agit APRÈS le
+// chargement du JavaScript : la landing restait peinte 1 à 2 s avant de
+// partir, et c'était le premier écran d'un nouveau client (vu par Alex).
+// `proxy.js` renvoie désormais l'app vers `/commander` côté serveur, avant le
+// moindre HTML, grâce à la marque `YoppaaApp`. Ce composant ne sert plus qu'à
+// une app sans marque (la 1.0) ; il reste, parce qu'il ne coûte rien.
+//
 // ⚠️ ON NE TOUCHE NI AU WEB NI À LA PWA. `estAppNative()` est vrai UNIQUEMENT
 // dans une application installée depuis un store. Un navigateur et la PWA
 // continuent de voir la landing, qui reste la porte d'entrée des commerçants et

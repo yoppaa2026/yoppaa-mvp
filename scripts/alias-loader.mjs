@@ -19,5 +19,8 @@ export function resolve(specifier, context, nextResolve) {
   if ((specifier.startsWith('./') || specifier.startsWith('../')) && sansExtension(specifier)) {
     return nextResolve(specifier + '.js', context)
   }
+  // Même tolérance pour `next/server`, que le bundler résout sans extension :
+  // sans elle, `proxy.js` ne peut pas s'exécuter au banc.
+  if (specifier === 'next/server') return nextResolve('next/server.js', context)
   return nextResolve(specifier, context)
 }

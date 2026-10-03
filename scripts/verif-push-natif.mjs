@@ -1397,6 +1397,57 @@ const fenetreNative = (options = {}) => {
     empreintes.length === 1 && /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(empreintes[0]), empreintes.join(', '))
 }
 
+// ═══ 15) L'APP NE PEINT PLUS LA LANDING (03/10) ═══════════════════════════════
+//
+// 🔴 VU PAR ALEX À LA PREMIÈRE OUVERTURE : la landing pendant 1 à 2 s, puis
+// les 4 écrans d'accueil. `RedirectionAppNative` agit après le chargement du
+// JavaScript, donc trop tard. `proxy.js` renvoie l'app vers `/commander` avant
+// le moindre HTML, grâce à la marque que la WebView ajoute à son user-agent.
+//
+// ⚠️ ON EXÉCUTE LE VRAI PROXY, avec les user-agents des deux WebView, et le
+// VRAI compilateur de `matcher` de Next. Lire le fichier ne dirait pas si
+// `'/'` couvre aussi `/commander` : ce serait une boucle, et on ne la verrait
+// qu'au téléphone.
+{
+  // ⚠️ Le serveur de Next pose ce global au démarrage, et `next/server` le
+  // réclame dès son chargement. En Node nu, on le pose comme lui.
+  globalThis.AsyncLocalStorage ??= (await import('node:async_hooks')).AsyncLocalStorage
+  const { proxy, config: confProxy } = await import('../proxy.js')
+  const { NextRequest } = await import('next/server')
+  const exiger = createRequire(import.meta.url)
+  const { getMiddlewareMatchers } = exiger('next/dist/build/analysis/get-page-static-info.js')
+
+  const UA_IOS = `Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 ${MARQUE_APP}`
+  const UA_ANDROID = `Mozilla/5.0 (Linux; Android 14; Pixel 7 Build/UQ1A.240205.004; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/129.0.6668.100 Mobile Safari/537.36 ${MARQUE_APP}`
+  const UA_SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
+  const appel = (chemin, ua) =>
+    proxy(new NextRequest(`https://www.yoppaa.app${chemin}`, { headers: ua ? { 'user-agent': ua } : {} }))
+  const renvoi = (r) => (r.status >= 300 && r.status < 400 ? r.headers.get('location') : null)
+
+  for (const [nom, ua] of [['iPhone', UA_IOS], ['Android', UA_ANDROID]]) {
+    egal(`🔴 l’app ${nom} part vers l’application avant tout HTML`,
+      renvoi(await appel('/', ua)), 'https://www.yoppaa.app/commander')
+  }
+  // ⚠️ LE WEB GARDE SA LANDING : c'est la porte des commerçants et tout le
+  // référencement de Yoppaa.
+  const web = await appel('/', UA_SAFARI)
+  egal('🔴 un navigateur garde la landing', renvoi(web), null)
+  verifie('⚠️ et la landing lui est vraiment servie', web.headers.get('x-middleware-next') === '1')
+  egal('⚠️ sans user-agent, la landing aussi', renvoi(await appel('/', null)), null)
+  egal('⚠️ un mot qui CONTIENT la marque ne passe pas pour elle',
+    renvoi(await appel('/', `${UA_SAFARI} Not${MARQUE_APP}`)), null)
+  // 🔴 LA BOUCLE : `/commander` renvoyé vers lui-même, l'app ne s'ouvrirait plus.
+  egal('🔴 /commander n’est pas renvoyé sur lui-même', renvoi(await appel('/commander', UA_IOS)), null)
+  egal('⚠️ l’API n’est jamais renvoyée vers une page', renvoi(await appel('/api/rdv/attente', UA_IOS)), null)
+
+  const compiles = getMiddlewareMatchers(confProxy.matcher, {}).map((m) => new RegExp(m.regexp))
+  const couvre = (p) => compiles.some((re) => re.test(p))
+  verifie('🔴 le proxy voit la racine', couvre('/'))
+  verifie('🔴 il ne voit aucune page de l’app',
+    !['/commander', '/onboarding', '/legal', '/retour-app/commander'].some(couvre))
+  verifie('⚠️ il voit toujours l’API, pour le compteur', couvre('/api/rdv/attente'))
+}
+
 console.log(`\nPush natif et enveloppe : ${ok} vérifications`)
 if (echecs.length) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

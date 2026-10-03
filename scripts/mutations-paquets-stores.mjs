@@ -50,6 +50,7 @@ const SCENE = 'ios/App/App/SceneDelegate.swift'
 const ACTIVITE = 'android/app/src/main/java/app/yoppaa/client/MainActivity.java'
 const AASA = 'public/.well-known/apple-app-site-association'
 const ASSETLINKS = 'public/.well-known/assetlinks.json'
+const PROXY = 'proxy.js'
 
 const MUTATIONS = [
   // ─── CE QUE LE MANIFESTE DEMANDE DOIT ETRE DECLARE AUX STORES (18/09) ───
@@ -707,6 +708,31 @@ const MUTATIONS = [
     fichier: ASSETLINKS,
     de: ':02:6D:82:55:0A:60:02:F7:2E"',
     vers: ':02:6D:82:55:0A:60:02:F7"' },
+
+  // ─── LA LANDING AVANT LES ECRANS D ACCUEIL (03/10, vu par Alex) ─────────
+  //
+  // 🔴 `RedirectionAppNative` sortait l app de la landing APRES le
+  // JavaScript : 1 a 2 s de landing au tout premier lancement. `proxy.js` la
+  // renvoie avant le moindre HTML.
+  { nom: '🔴 la racine sort du matcher : la landing revient dans l app',
+    fichier: PROXY,
+    de: "  matcher: ['/api/:path*', '/'],",
+    vers: "  matcher: ['/api/:path*']," },
+
+  { nom: '🔴 tout le monde est renvoye : le web perd sa landing',
+    fichier: PROXY,
+    de: "pathname === '/' && estUaApp(request.headers.get('user-agent'))",
+    vers: "pathname === '/'" },
+
+  { nom: '🔴 toute page de l app est renvoyee : /commander boucle sur lui-meme',
+    fichier: PROXY,
+    de: "return pathname === '/' && estUaApp(",
+    vers: "return estUaApp(" },
+
+  { nom: '🔴 l app est renvoyee sur la racine elle-meme',
+    fichier: PROXY,
+    de: "NextResponse.redirect(new URL('/commander', request.url))",
+    vers: "NextResponse.redirect(new URL('/', request.url))" },
 ]
 
 const lancer = () => {

@@ -1836,6 +1836,13 @@ export default function Commander() {
     setConfirmModal({ title, message, confirmLabel, cancelLabel, danger, onConfirm, onCancel })
   }
 
+  // 🔴 UNE ANNONCE DANS LA FENÊTRE DE L'APPLICATION, PAS UN alert() (Annul-I5,
+  // 03/10). La fenêtre native affichait l'adresse du site et un « OK » qui ne
+  // dit rien, sur le refus qui compte le plus : celui où il faut appeler.
+  function informer(title, message) {
+    askConfirm({ title, message, confirmLabel: 'J’ai compris', onConfirm: () => {} })
+  }
+
   const [commercants, setCommercants] = useState([])
   // Le chargement de la liste devait se DIRE. Tant qu'il n'existait pas, une
   // liste encore vide déclenchait « Aucun résultat », et au retour sur l'app,
@@ -2991,7 +2998,7 @@ export default function Commander() {
           return
         }
         if (!res.ok || !data.ok) {
-          alert(`Annulation impossible : ${data?.error || 'erreur inconnue'}`)
+          informer('Annulation impossible', data?.error || 'Ton rendez-vous n’a pas pu être annulé. Réessaie dans un instant.')
           return
         }
         await chargerRdvsClient(rdv.client_email)
@@ -3002,7 +3009,7 @@ export default function Commander() {
         showToast({ msg: `C'est noté ! ${data.message || mots.ecranAnnule} 🟣`, type: 'success' })
       } catch (e) {
         console.error('[annulerRdv] erreur', e)
-        alert(`Erreur : ${e?.message || 'inconnue'}`)
+        informer('Annulation impossible', 'Ton rendez-vous n’a pas pu être annulé. Vérifie ta connexion et réessaie.')
       }
     }
 
@@ -3022,7 +3029,7 @@ export default function Commander() {
       // ⚠️ UN REFUS SE DIT TOUT DE SUITE, au lieu de faire confirmer une
       // annulation que le serveur refusera à la ligne suivante.
       if (a?.ok === false && a?.cutoff_expired) {
-        alert(`Annulation impossible : ${a.error}`)
+        informer('Annulation impossible en ligne', a.error)
         return
       }
       if (a?.apercu && Number(a.montant_facturable) > 0) {

@@ -524,6 +524,19 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · ANNUL-I5 : LE REFUS HORS DÉLAI ─────────────────────────────
+  { nom: '🔴 le refus hors delai ne donne plus le numero du commerce',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/cancel/route.js',
+    de: "      const telephone = commercant?.telephone ? ` au ${commercant.telephone}` : ''",
+    vers: "      const telephone = ''",
+    garde: 'le refus hors délai dit le jour du rendez-vous et le numéro du commerce' },
+
+  { nom: '⚠️ le refus hors delai repasse par un alert()',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/page.js',
+    de: "        informer('Annulation impossible en ligne', a.error)",
+    vers: '        alert(`Annulation impossible : ${a.error}`)',
+    garde: 'et il s’affiche dans la fenêtre de l’application' },
+
   // ─── LOT 3 · ANNUL-I4 : LA NOTIFICATION D'ANNULATION DU STUDIO ──────────
   { nom: '🔴 le client annule par le studio ne recoit plus de notification',
     banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/annuler-commercant/route.js',

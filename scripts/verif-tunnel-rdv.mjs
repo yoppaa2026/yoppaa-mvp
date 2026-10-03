@@ -945,6 +945,20 @@ for (const chemin of [
     egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
   }
 
+  // ── UN REFUS HORS DÉLAI DIT LE JOUR ET OÙ APPELER (Annul-I5, 03/10) ─────
+  {
+    const CANCEL_R = sansProse(lire('app/api/rdv/cancel/route.js'))
+    verifie('🔴 le refus hors délai dit le jour du rendez-vous et le numéro du commerce',
+      /const quand = seanceLisible\(rdv\.date_rdv, heureFR\)/.test(CANCEL_R)
+      && /const telephone = commercant\?\.telephone \? ` au \$\{commercant\.telephone\}` : ''/.test(CANCEL_R)
+      && /Appelle directement \$\{commercant\?\.nom \|\| 'le commerce'\}\$\{telephone\}\./.test(CANCEL_R))
+    const ESPACE_R = sansProse(lire('app/commander/page.js'))
+    const fonctionAnnuler = (/async function annulerRdv\(rdv\) \{([\s\S]*?)\n  \}\n/.exec(ESPACE_R) || [])[1] || ''
+    verifie('🔴 et il s’affiche dans la fenêtre de l’application, plus jamais dans un alert()',
+      fonctionAnnuler.length > 500 && !/\balert\(/.test(fonctionAnnuler) && /informer\('Annulation impossible en ligne', a\.error\)/.test(fonctionAnnuler),
+      `${fonctionAnnuler.length} caractères`)
+  }
+
   // ── L'ANNULATION DU STUDIO ARRIVE AUSSI EN NOTIFICATION (Annul-I4, 03/10) ─
   {
     const ANNUL = sansProse(lire('app/api/rdv/annuler-commercant/route.js'))

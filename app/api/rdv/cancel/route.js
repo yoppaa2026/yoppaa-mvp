@@ -27,6 +27,7 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 import { rendreAvantagesRdv, lignesBonsDe, cleRemboursementRdv } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { motsReservation } from '@/lib/reservation-metier'
+import { seanceLisible } from '@/lib/attente-rdv'
 import { decisionAnnulation } from '@/lib/rdv-delai-annulation'
 import { montantAnnulationFacturable } from '@/lib/empreinte-table'
 
@@ -120,12 +121,17 @@ export async function POST(request) {
     const decision = decisionAnnulation(rdv, commercant, new Date())
     const delaiH = decision.delaiH
     if (decision.refus) {
+      // 🔴 LE REFUS DIT LE JOUR ET OÙ APPELER (Annul-I5, 03/10). Il donnait
+      // une heure sans date et « contacte directement » sans aucun numéro :
+      // le client devait chercher la fiche pour trouver comment joindre.
       const heureFR = rdv.heure_debut?.slice(0, 5) || ''
+      const quand = seanceLisible(rdv.date_rdv, heureFR)
+      const telephone = commercant?.telephone ? ` au ${commercant.telephone}` : ''
       return NextResponse.json({
         ok: false,
         cutoff_expired: true,
         cutoff_date: decision.limite ? decision.limite.toISOString() : null,
-        error: `Délai d'annulation dépassé. Tu pouvais annuler jusqu'à ${delaiH}h ${mots.ecranAvant} (${heureFR}). Contacte directement ${commercant?.nom || 'le commerçant'}.`,
+        error: `Le délai d’annulation en ligne est dépassé : c’était possible jusqu’à ${delaiH} h ${mots.ecranAvant}${quand ? `, prévu ${quand}` : ''}. Appelle directement ${commercant?.nom || 'le commerce'}${telephone}.`,
       }, { status: 403 })
     }
     const tardive = decision.tardive

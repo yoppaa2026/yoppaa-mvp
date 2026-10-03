@@ -1137,8 +1137,10 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = 
                   onClick={() => {
                     const jour = seanceOuverte.jourDate
                     const heure = seanceOuverte.heure_debut?.slice(0, 5)
+                    // Le cours vient avec : la saisie s'ouvre SUR lui (Audit 1 I8).
+                    const coursId = seanceOuverte.inscrits[0]?.prestation_id || null
                     setSeanceOuverte(null)
-                    onNouveauRdv(jour, heure)
+                    onNouveauRdv(jour, heure, coursId)
                   }}
                   style={{ width: '100%', marginTop: 14, padding: '12px 14px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, boxShadow: '0 3px 12px rgba(107,53,196,0.35)' }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">

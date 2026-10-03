@@ -945,6 +945,18 @@ for (const chemin of [
     egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
   }
 
+  // ── « INSCRIRE » DEPUIS UN COURS OUVRE LA SAISIE SUR CE COURS (Audit 1 I8) ─
+  {
+    const AG_I = sansProse(lire('app/dashboard/AgendaRdv.js'))
+    const BD_I = sansProse(lire('app/dashboard/page.js'))
+    const MO_I = sansProse(lire('app/dashboard/ModalNouveauRdv.js'))
+    verifie('🔴 le panneau d’un cours passe le cours à la saisie',
+      /const coursId = seanceOuverte\.inscrits\[0\]\?\.prestation_id \|\| null/.test(AG_I) && /onNouveauRdv\(jour, heure, coursId\)/.test(AG_I))
+    verifie('🔴 le tableau de bord le transmet, et la saisie s’ouvre sur lui',
+      /setNouveauRdvSlot\(\{ date, heure, prestationId \}\)/.test(BD_I) && /prestationInit=\{nouveauRdvSlot\.prestationId \|\| null\}/.test(BD_I)
+      && /useState\(tableSeule \? UNE_TABLE : \(prestationInit \? String\(prestationInit\) : ''\)\)/.test(MO_I))
+  }
+
   // ── UN REFUS HORS DÉLAI DIT LE JOUR ET OÙ APPELER (Annul-I5, 03/10) ─────
   {
     const CANCEL_R = sansProse(lire('app/api/rdv/cancel/route.js'))

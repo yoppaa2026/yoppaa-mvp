@@ -524,6 +524,13 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 1 I8 : « INSCRIRE » DEPUIS UN COURS ──────────────────
+  { nom: '🔴 inscrire depuis un cours ouvre de nouveau une saisie sans le cours',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/AgendaRdv.js',
+    de: '                    onNouveauRdv(jour, heure, coursId)',
+    vers: '                    onNouveauRdv(jour, heure)',
+    garde: 'le panneau d’un cours passe le cours à la saisie' },
+
   // ─── LOT 3 · AUDIT 3 I9 : UN ABONNEMENT PAYÉ QUI NE NAÎT PAS ────────────
   { nom: '🔴 une panne d ecriture du contrat repond 200 : rien ne rejoue',
     banc: 'verif:abonnements', fichier: 'app/api/stripe/webhook/route.js',

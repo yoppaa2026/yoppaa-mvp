@@ -79,6 +79,11 @@ const lireSalle = (commercantId, dateStr) => lireSalleDuJour(supabase, { commerc
 export default function ModalNouveauRdv({
   commercant, prestations, creneaux, rdvsExistants,
   dateInit, heureInit,
+  // 🔴 LE COURS DONT ON INSCRIT QUELQU'UN (Audit 1 I8, 03/10) : « Inscrire »
+  // depuis le panneau d'un cours ouvrait la saisie SANS lui, avec toutes les
+  // heures libres du jour : un geste de travers posait une séance parallèle
+  // d'une seule personne. Facultatif : l'agenda vide ne le donne pas.
+  prestationInit = null,
   onClose, onCreated,
   // 🔴 LE POSTE ÉQUIPE (29/09, étape 3b). ABSENT pour le patron : la fenêtre
   // fait exactement ce qu'elle faisait. FOURNI par le Poste équipe : un membre
@@ -113,7 +118,7 @@ export default function ModalNouveauRdv({
   const auMenu = (prestations || []).filter(p => !estJointure(p))
   // Un restaurant qui ne propose que des tables n'a rien à choisir dans un menu.
   const tableSeule = salleEnTables && autresPrestations.length === 0
-  const [prestationId, setPrestationId] = useState(tableSeule ? UNE_TABLE : '')
+  const [prestationId, setPrestationId] = useState(tableSeule ? UNE_TABLE : (prestationInit ? String(prestationInit) : ''))
   const [couverts, setCouverts] = useState('')
   // La table désignée par le restaurateur, quand il ne veut pas celle proposée.
   const [formatManuelId, setFormatManuelId] = useState(null)

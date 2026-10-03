@@ -4169,7 +4169,7 @@ export default function Dashboard() {
                     horairesDetail={commercant?.horaires_detail}
                     commercant={commercant}
                     onSelectRdv={(r) => setRdvSelectionne(r)}
-                    onNouveauRdv={(date, heure) => setNouveauRdvSlot({ date, heure })}
+                    onNouveauRdv={(date, heure, prestationId = null) => setNouveauRdvSlot({ date, heure, prestationId })}
                     onHonorerSeance={(inscrits) => setSeanceAHonorer(inscrits)}
                     onAnnulerSeance={(inscrits) => setSeanceAAnnuler(inscrits)}
                     onFenetreChange={majFenetreAgenda}
@@ -4184,6 +4184,7 @@ export default function Dashboard() {
                     rdvsExistants={rdvs}
                     dateInit={nouveauRdvSlot.date}
                     heureInit={nouveauRdvSlot.heure}
+                    prestationInit={nouveauRdvSlot.prestationId || null}
                     onClose={() => setNouveauRdvSlot(null)}
                     onCreated={() => chargerRdvs(commercant.id)}
                   />

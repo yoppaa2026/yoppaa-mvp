@@ -393,6 +393,55 @@ const MUTATIONS = [
     de: '      if (nonPosees.length > 0) {',
     vers: '      if (false) {',
     garde: 'la fenêtre reste ouverte pour dire ce qui n’a pas été posé' },
+
+  // ─── L'ABONNEMENT VENDU EN COURS DE PÉRIODE ─────────────────────────────
+  { nom: '🔴 une periode entamee se vend de nouveau au prix plein',
+    banc: 'verif:abonnements', fichier: 'lib/abonnements.js',
+    de: '    : Math.round(prixPlein * restantes.length / toutes.length * 100) / 100',
+    vers: '    : prixPlein',
+    garde: 'et coûte huit douzièmes, au prorata par défaut' },
+
+  { nom: '🔴 une periode entamee accorde de nouveau toutes ses seances',
+    banc: 'verif:abonnements', fichier: 'lib/abonnements.js',
+    de: '  const enCours = estDate(aujourdhui) && aujourdhui > formule.date_debut',
+    vers: '  const enCours = false',
+    garde: 'achetée le 7 octobre, elle accorde les huit semaines restantes' },
+
+  { nom: '🔴 une periode finie se vend encore',
+    banc: 'verif:abonnements', fichier: 'lib/abonnements.js',
+    de: '    vendable: restantes.length > 0 && prix >= 0.5,',
+    vers: '    vendable: true,',
+    garde: 'le lendemain de la fin, plus rien ne se vend' },
+
+  { nom: '🔴 la vitrine ignore de nouveau le calendrier',
+    banc: 'verif:abonnements', fichier: 'lib/abonnements.js',
+    de: '  if (estDate(aujourdhui)) return offreAuJour(formule, { aujourdhui })?.vendable === true',
+    vers: '',
+    garde: 'le lendemain de la fin, plus rien ne se vend' },
+
+  { nom: '🔴 la route encaisse le prix du catalogue',
+    banc: 'verif:abonnements', fichier: 'app/api/stripe/checkout/create-abonnement/route.js',
+    de: '    const prixCents = Math.round(Number(offre.prix) * 100)',
+    vers: '    const prixCents = Math.round(Number(formule.prix) * 100)',
+    garde: 'elle encaisse le prix du jour' },
+
+  { nom: '🔴 le contrat reprend le prix du catalogue',
+    banc: 'verif:abonnements', fichier: 'app/api/stripe/webhook/route.js',
+    de: '  if (Number.isFinite(prixPaye) && prixPaye > 0) contrat.prix = prixPaye',
+    vers: '',
+    garde: 'le contrat garde le prix payé, pas celui du catalogue' },
+
+  { nom: '🔴 la fiche annonce de nouveau le compte plein',
+    banc: 'verif:abonnements', fichier: 'app/commander/rdv/[slug]/BlocAbonnements.js',
+    de: '          const r = resumeFormulePublique(f, { achatLe: jourBruxelles() })',
+    vers: '          const r = resumeFormulePublique(f)',
+    garde: 'la vitrine de la fiche annonce l’offre du jour' },
+
+  { nom: '🔴 le choix de la commercante ne s enregistre plus',
+    banc: 'verif:abonnements', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "      prix_en_cours: form.type === 'periode' && form.prix_en_cours === PRIX_EN_COURS_FIXE ? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,",
+    vers: '',
+    garde: 'la commerçante choisit prorata ou prix fixe' },
 ]
 
 const lancer = (banc) => {

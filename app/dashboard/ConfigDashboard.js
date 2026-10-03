@@ -65,7 +65,7 @@ import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
 // la gravure du lieu n'ont pas été supprimés du projet, c'est le geste d'agenda
 // qui les reprend.
-import { exclusionsQuiSeChevauchent, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement } from '@/lib/abonnements'
+import { exclusionsQuiSeChevauchent, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import TabGenerateur from './TabGenerateur'
@@ -10794,6 +10794,8 @@ function TabRdvAbonnements({ commercantId, toast }) {
     // en particulier n'a rien à faire sur la fiche publique.
     vente_en_ligne: false,
     periodes_exclues: [],
+    // Le prix d'une période déjà commencée : au prorata par défaut, comme en base.
+    prix_en_cours: PRIX_EN_COURS_PRORATA,
   }
   const [form, setForm] = useState(initialForm)
   const [exclu, setExclu] = useState({ debut: '', fin: '', libelle: '' })
@@ -10985,6 +10987,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
       actif: f.actif !== false,
       vente_en_ligne: f.vente_en_ligne === true,
       periodes_exclues: Array.isArray(f.periodes_exclues) ? f.periodes_exclues : [],
+      prix_en_cours: f.prix_en_cours === PRIX_EN_COURS_FIXE ? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,
     })
     setExclu({ debut: '', fin: '', libelle: '' })
     setShowForm(true)
@@ -11060,6 +11063,8 @@ function TabRdvAbonnements({ commercantId, toast }) {
       seances_par_semaine: Math.max(1, parseInt(form.seances_par_semaine, 10) || 1),
       actif: !!form.actif,
       vente_en_ligne: !!form.vente_en_ligne,
+      // Un carnet n'est jamais « entamé » : il garde le défaut.
+      prix_en_cours: form.type === 'periode' && form.prix_en_cours === PRIX_EN_COURS_FIXE ? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,
     }
     setSaving(true)
     const { error } = editId
@@ -11291,6 +11296,43 @@ function TabRdvAbonnements({ commercantId, toast }) {
                 Indique un prix : une formule à 0 € ne peut pas être achetée en ligne.
               </p>
             )}
+            {/* 🔴 ACHETÉE EN COURS DE PÉRIODE (décision d'Alex, 03/10) : le choix
+                est à elle, et il s'explique avec SES chiffres. Une période
+                entamée se vendait au compte plein, même après sa fin. */}
+            {form.vente_en_ligne && form.type === 'periode' && (() => {
+              const brouillon = {
+                type: 'periode', date_debut: form.date_debut, date_fin: form.date_fin, prix: Number(form.prix) || 0,
+                seances_par_semaine: Math.max(1, parseInt(form.seances_par_semaine, 10) || 1), periodes_exclues: form.periodes_exclues,
+              }
+              // L'exemple se fait aujourd'hui si la période est en cours, sinon à mi-parcours.
+              const jour = jourExempleEnCours({ dateDebut: form.date_debut, dateFin: form.date_fin, aujourdhui: jourBruxelles() })
+              const prorata = jour ? offreAuJour({ ...brouillon, prix_en_cours: PRIX_EN_COURS_PRORATA }, { aujourdhui: jour }) : null
+              const fixe = jour ? offreAuJour({ ...brouillon, prix_en_cours: PRIX_EN_COURS_FIXE }, { aujourdhui: jour }) : null
+              const choix = (valeur, titre) => (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, color: T.ink, cursor: 'pointer', marginTop: 6 }}>
+                  <input type="radio" name="prix_en_cours" checked={form.prix_en_cours === valeur}
+                    onChange={() => setForm({ ...form, prix_en_cours: valeur })}/>
+                  {titre}
+                </label>
+              )
+              return (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${T.border}` }}>
+                  <p style={{ fontSize: 12, fontWeight: 800, color: T.ink, margin: 0 }}>Si on l&rsquo;achète en cours de période</p>
+                  {choix(PRIX_EN_COURS_PRORATA, 'Prix au prorata des semaines restantes (conseillé)')}
+                  {choix(PRIX_EN_COURS_FIXE, 'Prix fixe, quelle que soit la date d’achat')}
+                  <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
+                    Dans les deux cas, ton client reçoit une séance par semaine restante, et lit le prix et le nombre
+                    de séances avant de payer. Après la fin de la période, la formule n&rsquo;est plus en vente.
+                  </p>
+                  {prorata?.enCours && fixe && (
+                    <p style={{ fontSize: 11.5, color: T.deep, fontWeight: 700, margin: '6px 0 0', lineHeight: 1.5 }}>
+                      Exemple : achetée le {dateCourteAbo(jour)}, il reste {prorata.semainesRestantes} semaine{prorata.semainesRestantes > 1 ? 's' : ''} sur {prorata.semainesTotal}.
+                      {' '}{prorata.seances} séance{prorata.seances > 1 ? 's' : ''} pour {euros(prorata.prix)} au prorata, ou pour {euros(fixe.prix)} au prix fixe.
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

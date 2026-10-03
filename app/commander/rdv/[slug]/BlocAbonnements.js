@@ -15,6 +15,7 @@ import { useState, useEffect } from 'react'
 import { resumeFormulePublique, cleAchatAbonnement } from '@/lib/abonnements'
 import { euros } from '@/lib/montants'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { jourBruxelles } from '@/lib/timezone'
 
 const T = {
   main:  '#6B35C4',
@@ -132,7 +133,9 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {formules.map(f => {
-          const r = resumeFormulePublique(f)
+          // 🔴 L'OFFRE DU JOUR (03/10) : une période entamée s'annonce pour ses
+          // semaines restantes, au prix que la route encaissera.
+          const r = resumeFormulePublique(f, { achatLe: jourBruxelles() })
           if (!r) return null
           const presta = prestations.find(p => String(p.id) === String(f.prestation_id))
           return (
@@ -144,8 +147,10 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                     <p style={{ fontSize: '0.75rem', color: T.muted, margin: '2px 0 0', fontWeight: 600 }}>{presta.nom}</p>
                   )}
                 </div>
+                {/* ⚠️ AU CENTIME : un prix au prorata en a, et l'arrondir à l'euro
+                    annoncerait un montant que la carte ne verra pas. */}
                 <p style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, margin: 0, letterSpacing: '-0.3px', flexShrink: 0 }}>
-                  {r.prix.toFixed(0)}€
+                  {euros(r.prix)}
                 </p>
               </div>
 
@@ -156,6 +161,11 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                 <Pastille>{r.rythme}</Pastille>
               </div>
 
+              {r.enCours && (
+                <p style={{ fontSize: '0.75rem', color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '6px 9px', margin: '8px 0 0', lineHeight: 1.5 }}>
+                  {r.enCours}
+                </p>
+              )}
               <p style={{ fontSize: '0.75rem', color: T.deep, margin: '8px 0 0', lineHeight: 1.5 }}>
                 {r.reservation}
               </p>
@@ -189,7 +199,7 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                 {choisie.libelle}
                 <br/>
                 <span style={{ color: T.pale, fontSize: '0.85rem', fontWeight: 700 }}>
-                  {resumeFormulePublique(choisie)?.seancesLibelle} · {euros(choisie.prix)}
+                  {(r => `${r?.seancesLibelle} · ${euros(r?.prix)}`)(resumeFormulePublique(choisie, { achatLe: jourBruxelles() }))}
                 </span>
               </p>
             </div>

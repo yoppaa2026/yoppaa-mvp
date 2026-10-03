@@ -1407,7 +1407,7 @@ export default function CommanderRdvSlug() {
       // quelque chose à vendre.
       supabase
         .from('abonnement_formules')
-        .select('id, commercant_id, prestation_id, libelle, type, date_debut, date_fin, seances_carnet, validite_jours, periodes_exclues, prix, seances_par_semaine, actif, vente_en_ligne, deleted_at, ordre')
+        .select('id, commercant_id, prestation_id, libelle, type, date_debut, date_fin, seances_carnet, validite_jours, periodes_exclues, prix, prix_en_cours, seances_par_semaine, actif, vente_en_ligne, deleted_at, ordre')
         .eq('commercant_id', c.id)
         .eq('vente_en_ligne', true)
         .eq('actif', true)
@@ -1416,7 +1416,10 @@ export default function CommanderRdvSlug() {
         .then(({ data, error }) => {
           if (annule) return
           if (error) { console.warn('[fiche rdv] formules abonnement KO', error.message); return }
-          setFormulesAbo((data || []).filter(formuleVendableEnLigne))
+          // 🔴 AU JOUR DE BRUXELLES (03/10) : une période finie ne s'affiche plus, et
+          // une période entamée s'annonce pour ce qu'il en reste.
+          const auj = jourBruxelles()
+          setFormulesAbo((data || []).filter(f => formuleVendableEnLigne(f, { aujourdhui: auj })))
         })
       setCreneauxConfig(cren || [])
 

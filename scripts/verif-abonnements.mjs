@@ -639,8 +639,10 @@ const srcWebhook = sansComm(readFileSync(new URL('../app/api/stripe/webhook/rout
 // ⚠️ L'ÉCRAN NE PROTÈGE RIEN. Il ne montre que ce qui est vendable, mais une
 // requête forgée n'a pas d'écran : sans revalidation serveur, n'importe qui
 // achèterait un brouillon ou un tarif négocié en devinant son identifiant.
+// ⚠️ REPOINTÉE LE 03/10 : la revalidation passe désormais le jour de Bruxelles,
+// pour refuser aussi une période finie.
 verifier('le serveur revalide qu’une formule est bien en vente',
-  /formuleVendableEnLigne\(formule\)/.test(srcCheckout))
+  /formuleVendableEnLigne\(formule, \{ aujourdhui \}\)/.test(srcCheckout))
 // L'argent va au commerçant, jamais à la plateforme.
 verifier('le paiement part sur le compte du commerçant',
   /stripeAccount: commercant\.stripe_account_id/.test(srcCheckout))
@@ -902,8 +904,9 @@ verifier('la date d’achat vient du paiement, pas de l’horloge du serveur',
 // ⚠️ LE NOMBRE DE SÉANCES VOYAGE AVEC LE PAIEMENT. Un commerçant qui modifie
 // ses congés entre le clic et l'encaissement livrerait sinon autre chose que ce
 // qui a été payé, et c'est le client qui aurait raison.
+// ⚠️ REPOINTÉE LE 03/10 : ce sont les séances de l'OFFRE DU JOUR qui voyagent.
 verifier('le nombre de séances payées voyage dans le paiement',
-  /seances_total: String\(seances\)/.test(srcCheckout))
+  /seances_total: String\(offre\.seances\)/.test(srcCheckout))
 verifier('et le webhook le respecte plutôt que de recalculer',
   /meta\.seances_total/.test(srcWebhook))
 
@@ -2020,6 +2023,96 @@ egal('un nombre négatif non plus', semainesSuivantes('2026-09-07', { nombre: -3
     semainesSuivantes('2026-10-05', { nombre: 4, periodesExclues: AUTOMNE }), plus4.dates)
   verifier('chaque raison se dit en mots',
     ['deja_prise', 'conge', 'fermeture', 'complet', 'creneau'].every(r => raisonSemaineEcartee(r) !== 'non posée'))
+}
+
+// ─── 🔴 LA VENTE EN COURS DE PÉRIODE (décision d'Alex, 03/10) ─────────────
+//
+// Une formule de période se vendait au compte PLEIN après son début, et même
+// après sa fin. Compté à la main : du lundi 7 septembre au dimanche 29 novembre,
+// douze semaines, 120 €, une séance par semaine.
+{
+  const { offreAuJour, phraseOffreEnCours, resumeFormulePublique: resume, formuleVendableEnLigne: vendable } = await import('../lib/abonnements.js')
+  const F = { type: 'periode', date_debut: '2026-09-07', date_fin: '2026-11-29', prix: 120, seances_par_semaine: 1,
+    vente_en_ligne: true, actif: true, deleted_at: null, periodes_exclues: [] }
+
+  const avant = offreAuJour(F, { aujourdhui: '2026-09-01' })
+  egal('avant le début, tout au prix plein', [avant.enCours, avant.seances, avant.prix], [false, 12, 120])
+
+  // Mercredi 7 octobre : la semaine du 5 compte encore, il en reste huit.
+  const octobre = offreAuJour(F, { aujourdhui: '2026-10-07' })
+  egal('🔴 achetée le 7 octobre, elle accorde les huit semaines restantes', [octobre.enCours, octobre.semainesRestantes, octobre.seances], [true, 8, 8])
+  egal('🔴 et coûte huit douzièmes, au prorata par défaut', [octobre.mode, octobre.prix], ['prorata', 80])
+  egal('🔴 au prix fixe, le prix ne bouge pas, les séances si',
+    (o => [o.prix, o.seances])(offreAuJour({ ...F, prix_en_cours: 'fixe' }, { aujourdhui: '2026-10-07' })), [120, 8])
+  egal('⚠️ un congé ne se paie pas : sept semaines sur onze, au centime',
+    (o => [o.semainesRestantes, o.semainesTotal, o.prix])(offreAuJour({ ...F, periodes_exclues: [{ debut: '2026-10-26', fin: '2026-11-01' }] }, { aujourdhui: '2026-10-07' })),
+    [7, 11, 76.36])
+  egal('⚠️ deux séances par semaine, le double de séances',
+    offreAuJour({ ...F, seances_par_semaine: 2 }, { aujourdhui: '2026-10-07' }).seances, 16)
+  egal('le dernier jour, la dernière semaine se vend encore', (o => [o.vendable, o.seances, o.prix])(offreAuJour(F, { aujourdhui: '2026-11-29' })), [true, 1, 10])
+  verifier('🔴 le lendemain de la fin, plus rien ne se vend', offreAuJour(F, { aujourdhui: '2026-11-30' }).vendable === false
+    && vendable(F, { aujourdhui: '2026-11-30' }) === false && vendable(F, { aujourdhui: '2026-11-29' }) === true)
+  verifier('⚠️ jamais sous 0,50 € : Stripe refuse, et trois centimes n’ont de sens pour personne',
+    offreAuJour({ ...F, prix: 3 }, { aujourdhui: '2026-11-29' }).vendable === false)
+  egal('un carnet ne s’entame pas', (o => [o.enCours, o.prix, o.seances])(offreAuJour({ type: 'carnet', seances_carnet: 10, validite_jours: 180, prix: 90 }, { aujourdhui: '2026-10-07' })), [false, 90, 10])
+
+  // ── Ce que la cliente lit AVANT de payer ──
+  const r = resume(F, { achatLe: '2026-10-07' })
+  egal('🔴 la vitrine annonce le prix et les séances du jour', [r.prix, r.seancesLibelle], [80, '8 séances'])
+  verifier('🔴 et dit pourquoi', /il reste 8 semaines, soit 8 séances/.test(r.enCours) && /au prorata \(8 semaines sur 12\)/.test(r.enCours), r.enCours)
+  verifier('⚠️ sa période part du jour de l’achat', /^Du 7 octobre au 29 novembre$/.test(r.validite), r.validite)
+  verifier('⚠️ au prix fixe, elle ne parle pas de prorata',
+    !/prorata/.test(phraseOffreEnCours(offreAuJour({ ...F, prix_en_cours: 'fixe' }, { aujourdhui: '2026-10-07' }))))
+  verifier('avant le début, rien à expliquer', resume(F, { achatLe: '2026-09-01' }).enCours === null)
+  const { jourExempleEnCours } = await import('../lib/abonnements.js')
+  egal('l’exemple de la commerçante se fait aujourd’hui si sa période est en cours',
+    jourExempleEnCours({ dateDebut: '2026-09-07', dateFin: '2026-11-29', aujourdhui: '2026-10-07' }), '2026-10-07')
+  egal('sinon au milieu de la période', jourExempleEnCours({ dateDebut: '2026-09-07', dateFin: '2026-11-29', aujourdhui: '2026-12-15' }), '2026-10-18')
+
+  // ── La route de paiement et le webhook appliquent la MÊME offre ──
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-abonnement/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 la route refuse une formule qui ne se vend plus ce jour-là',
+    /if \(!formuleVendableEnLigne\(formule, \{ aujourdhui \}\)\)/.test(ROUTE))
+  verifier('🔴 elle encaisse le prix du jour', /const prixCents = Math\.round\(Number\(offre\.prix\) \* 100\)/.test(ROUTE))
+  verifier('🔴 et transmet séances, prix et début du jour au webhook',
+    /seances_total: String\(offre\.seances\),/.test(ROUTE) && /prix: String\(offre\.prix\),/.test(ROUTE) && /date_debut: String\(offre\.debut \|\| ''\),/.test(ROUTE))
+  const WH = sansProse(readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 le contrat garde le prix payé, pas celui du catalogue',
+    /if \(Number\.isFinite\(prixPaye\) && prixPaye > 0\) contrat\.prix = prixPaye/.test(WH))
+  verifier('🔴 et commence le jour de l’achat quand la période était entamée',
+    /contrat\.date_debut = meta\.date_debut/.test(WH))
+  verifier('⚠️ la preuve d’achat dit ce qui a été payé', /prix_paye: contrat\.prix/.test(WH))
+
+  // ── La fiche annonce ce que la route encaissera ──
+  const FICHE = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 la fiche lit le choix de la commerçante',
+    /\.from\('abonnement_formules'\)\s*\.select\('[^']*\bprix_en_cours\b[^']*'\)/.test(FICHE))
+  verifier('🔴 et n’affiche plus une période finie',
+    /\.filter\(f => formuleVendableEnLigne\(f, \{ aujourdhui: auj \}\)\)/.test(FICHE))
+  const BLOC = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/BlocAbonnements.js', import.meta.url), 'utf8'))
+  verifier('🔴 la vitrine de la fiche annonce l’offre du jour',
+    (BLOC.match(/resumeFormulePublique\((f|choisie), \{ achatLe: jourBruxelles\(\) \}\)/g) || []).length === 2
+    && !/resumeFormulePublique\((f|choisie)\)/.test(BLOC))
+  verifier('⚠️ au centime, avec la raison d’une période entamée', /\{euros\(r\.prix\)\}/.test(BLOC) && /\{r\.enCours\}/.test(BLOC))
+
+  // ── La commerçante choisit, et le choix s'écrit ──
+  const DASH = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 la commerçante choisit prorata ou prix fixe',
+    /name="prix_en_cours"/.test(DASH)
+    && /prix_en_cours: form\.type === 'periode' && form\.prix_en_cours === PRIX_EN_COURS_FIXE \? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,/.test(DASH))
+  verifier('⚠️ et retrouve son choix en rouvrant la formule',
+    /prix_en_cours: f\.prix_en_cours === PRIX_EN_COURS_FIXE \? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,/.test(DASH))
+  verifier('⚠️ l’exemple se calcule sur ses chiffres, avec la règle de la vente',
+    /offreAuJour\(\{ \.\.\.brouillon, prix_en_cours: PRIX_EN_COURS_PRORATA \}, \{ aujourdhui: jour \}\)/.test(DASH))
+
+  // ── La colonne, posée par une migration qui se contrôle ──
+  const SQL = readFileSync(new URL('../migrations/MIGRATION_ABONNEMENT_EN_COURS.sql', import.meta.url), 'utf8')
+  verifier('🔴 la migration pose la colonne, au prorata par défaut',
+    /ADD COLUMN IF NOT EXISTS prix_en_cours text NOT NULL DEFAULT 'prorata'/.test(SQL)
+    && /CHECK \(prix_en_cours IN \('prorata', 'fixe'\)\)/.test(SQL))
+  verifier('⚠️ et redit les droits de la colonne',
+    /GRANT SELECT \(prix_en_cours\) ON public\.abonnement_formules TO anon, authenticated;/.test(SQL)
+    && /GRANT INSERT \(prix_en_cours\), UPDATE \(prix_en_cours\) ON public\.abonnement_formules TO authenticated;/.test(SQL))
 }
 
 // ─── LE REFUS, DIT AU COMMERÇANT ──────────────────────────────────────────

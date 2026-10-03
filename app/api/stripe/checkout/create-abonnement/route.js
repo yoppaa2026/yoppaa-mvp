@@ -20,7 +20,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
-import { formuleVendableEnLigne, resumeFormulePublique, seancesDeLaFormule } from '@/lib/abonnements'
+import { formuleVendableEnLigne, resumeFormulePublique, offreAuJour } from '@/lib/abonnements'
+import { jourBruxelles } from '@/lib/timezone'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 import { fichePubliee } from '@/lib/statut-commercant'
 
@@ -63,7 +64,11 @@ export async function POST(request) {
     // ce qui est vendable, mais une requête forgée n'a pas d'écran : sans ce
     // contrôle, n'importe qui achèterait un brouillon ou un tarif négocié en
     // devinant son identifiant.
-    if (!formuleVendableEnLigne(formule)) {
+    // 🔴 LE JOUR DE BRUXELLES DÉCIDE DE L'OFFRE (03/10) : une période entamée se
+    // vend pour ses semaines restantes, une période finie ne se vend plus. La
+    // fiche a annoncé exactement ce calcul (`offreAuJour`), avec le même jour.
+    const aujourdhui = jourBruxelles()
+    if (!formuleVendableEnLigne(formule, { aujourdhui })) {
       return NextResponse.json({ ok: false, error: 'cette formule n\'est pas en vente en ligne' }, { status: 400 })
     }
 
@@ -86,13 +91,13 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'ce commerçant n\'a pas encore activé les paiements en ligne' }, { status: 400 })
     }
 
-    const prixCents = Math.round(Number(formule.prix) * 100)
+    const offre = offreAuJour(formule, { aujourdhui })
+    const prixCents = Math.round(Number(offre.prix) * 100)
     if (!Number.isFinite(prixCents) || prixCents < 50) {
       return NextResponse.json({ ok: false, error: 'montant trop faible (minimum 0,50 € chez Stripe)' }, { status: 400 })
     }
 
-    const resume = resumeFormulePublique(formule)
-    const seances = seancesDeLaFormule(formule)
+    const resume = resumeFormulePublique(formule, { achatLe: aujourdhui })
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -128,8 +133,12 @@ export async function POST(request) {
             // webhook depuis la formule laisserait un commerçant qui modifie
             // ses congés entre le clic et l'encaissement livrer autre chose que
             // ce qui a été payé.
-            seances_total: String(seances),
-            prix: String(Number(formule.prix)),
+            // ⚠️ L'OFFRE DU JOUR VOYAGE JUSQU'AU WEBHOOK : il peut arriver après
+            // minuit, et le contrat doit dire ce qui a été vendu, pas ce que le
+            // calendrier dirait le lendemain.
+            seances_total: String(offre.seances),
+            prix: String(offre.prix),
+            date_debut: String(offre.debut || ''),
             client_email: String(client_email).trim().toLowerCase(),
             client_prenom: String(client_prenom).trim().slice(0, 80),
             client_nom: String(client_nom).trim().slice(0, 80),

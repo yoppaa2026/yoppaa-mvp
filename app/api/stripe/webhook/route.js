@@ -528,6 +528,16 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
   if (Number.isFinite(seancesPayees) && seancesPayees > 0) {
     contrat.seances_total = seancesPayees
   }
+  // 🔴 LE CONTRAT DIT CE QUI A ÉTÉ VENDU (03/10). Le prix venait du catalogue :
+  // une période entamée, vendue au prorata, s'enregistrait au prix plein, et
+  // l'export comptable comptait un argent jamais encaissé. Le prix et le début
+  // sont ceux de l'offre que la route a encaissée, transmis par Stripe.
+  const prixPaye = Number(meta.prix)
+  if (Number.isFinite(prixPaye) && prixPaye > 0) contrat.prix = prixPaye
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(meta.date_debut || ''))
+      && meta.date_debut >= contrat.date_debut && meta.date_debut <= contrat.date_fin) {
+    contrat.date_debut = meta.date_debut
+  }
 
   // ⚠️ LA VENTE D'UN ABONNEMENT N'EXISTAIT DANS AUCUN DOCUMENT COMPTABLE (Alex,
   // 17/08). Elle n'écrit que dans `abonnements`, jamais une commande, et
@@ -595,7 +605,7 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
     const { data: com } = await supabase
       .from('commercants').select('nom, slug').eq('id', formule.commercant_id).maybeSingle()
     const resume = resumeContratAchete(
-      { ...contrat, prix_paye: formule.prix },
+      { ...contrat, prix_paye: contrat.prix },
       { nomCommerce: com?.nom || '', nomFormule: formule.libelle || '' },
     )
     if (contrat.client_email) {

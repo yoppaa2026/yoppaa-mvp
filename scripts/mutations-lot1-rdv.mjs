@@ -524,6 +524,43 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 2 · RÉSILIER UN ABONNEMENT PAR LE SERVEUR ─────────────────────
+  { nom: '🔴 la resiliation annule la seance deja donnee le matin',
+    banc: 'verif:abonnements', fichier: 'lib/abonnements.js',
+    de: "    r && r.statut === 'confirme' && !r.deleted_at && !commencee(r.date_rdv, String(r.heure_debut || '').slice(0, 5)))",
+    vers: "    r && r.statut === 'confirme' && !r.deleted_at)",
+    garde: 'la résiliation n’annule que les séances qui n’ont pas commencé' },
+
+  { nom: '🔴 deux clics font deux resiliations et deux emails',
+    banc: 'verif:abonnements', fichier: 'app/api/rdv/resilier-abonnement/route.js',
+    de: "      .eq('statut', contrat.statut)",
+    vers: '',
+    garde: 'un seul gagnant' },
+
+  { nom: '🔴 un membre sans la case Argent resilie un contrat',
+    banc: 'verif:abonnements', fichier: 'app/api/rdv/resilier-abonnement/route.js',
+    de: "    const verdict = await gardeLigneEquipe(request, supabase, 'abonnements', abonnement_id, 'argent')",
+    vers: "    const verdict = await gardeLigneEquipe(request, supabase, 'abonnements', abonnement_id, 'agenda')",
+    garde: 'la route garde le geste derrière la case Argent' },
+
+  { nom: '🔴 les rappels partent encore pour des seances annulees',
+    banc: 'verif:abonnements', fichier: 'app/api/rdv/resilier-abonnement/route.js',
+    de: '        if (s.rappel_push_id) {',
+    vers: '        if (false) {',
+    garde: 'leurs rappels de la veille sont coupés' },
+
+  { nom: '🔴 le prenom tape par la cliente part en HTML',
+    banc: 'verif:abonnements', fichier: 'lib/resend.js',
+    de: "    intro: `${yopper_prenom ? `${echapperHtml(yopper_prenom)}, ton` : 'Ton'} abonnement${formule",
+    vers: "    intro: `${yopper_prenom ? `${yopper_prenom}, ton` : 'Ton'} abonnement${formule",
+    garde: 'ce qu’elle a tapé ne devient jamais du HTML' },
+
+  { nom: '🔴 le tableau de bord resilie de nouveau lui-meme',
+    banc: 'verif:abonnements', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "    const res = await postPro('/api/rdv/resilier-abonnement', { abonnement_id: a.id })",
+    vers: "    const res = await supabase.from('abonnements').update({ statut: 'resilie' }).eq('id', a.id)",
+    garde: 'le tableau de bord ne résilie plus lui-même' },
+
   // ─── LOT 2 · « À REMBOURSER » ALORS QUE C'ÉTAIT FAIT ────────────────────
   { nom: '🔴 un acompte rembourse par Yoppaa se redit « a rembourser »',
     banc: 'verif:logique', fichier: 'lib/rdv-paiement.js',

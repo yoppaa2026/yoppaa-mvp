@@ -2319,6 +2319,56 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     !/'Abonnements',/.test(LANDING))
 }
 
+// ─── LA RÉSILIATION PASSE PAR LE SERVEUR (Abo-I2, 03/10) ──────────────────
+//
+// 🔴 ELLE S'ÉCRIVAIT DEPUIS LE NAVIGATEUR : cliente jamais prévenue, rappels
+// qui partaient quand même, séance déjà donnée le matin annulée, et « places
+// libérées » affiché sans avoir lu la réponse.
+{
+  const { seancesAnnuleesParResiliation } = await import('../lib/abonnements.js')
+  const SEANCES = [
+    { id: 'matin', statut: 'confirme', date_rdv: '2026-10-05', heure_debut: '09:00:00' },
+    { id: 'soir', statut: 'confirme', date_rdv: '2026-10-05', heure_debut: '18:00:00' },
+    { id: 'demain', statut: 'confirme', date_rdv: '2026-10-06', heure_debut: '09:00:00' },
+    { id: 'annulee', statut: 'annule_client', date_rdv: '2026-10-06', heure_debut: '10:00:00' },
+    { id: 'effacee', statut: 'confirme', date_rdv: '2026-10-07', heure_debut: '10:00:00', deleted_at: '2026-10-01T00:00:00Z' },
+  ]
+  // Il est 11 h le 5 : la séance de 9 h a eu lieu, celle de 18 h pas encore.
+  const commencee = (d, h) => d < '2026-10-05' || (d === '2026-10-05' && h <= '11:00')
+  egal('🔴 la résiliation n’annule que les séances qui n’ont pas commencé',
+    seancesAnnuleesParResiliation(SEANCES, { dejaCommencee: commencee }).map(s => s.id), ['soir', 'demain'])
+  verifier('⚠️ l’heure arrive sans ses secondes à la règle du temps',
+    seancesAnnuleesParResiliation([{ id: 'x', statut: 'confirme', date_rdv: '2026-10-05', heure_debut: '09:00:00' }],
+      { dejaCommencee: (d, h) => h === '09:00' }).length === 0)
+
+  const { emailAbonnementResilie } = await import('../lib/resend.js')
+  const html = emailAbonnementResilie({ yopper_prenom: '<b>Sophie</b>', commercant_nom: 'Centre Respire', formule: 'Yoga <année>', seances: ['lundi 5 octobre à 18:00', 'mardi 6 octobre à 09:00'], fiche_url: 'https://www.yoppaa.app/commander/rdv/centre-respire' })
+  verifier('🔴 la cliente lit ses séances annulées, une par une',
+    /Tes 2 séances à venir sont annulées/.test(html) && /lundi 5 octobre à 18:00/.test(html) && /mardi 6 octobre à 09:00/.test(html))
+  verifier('🔴 ce qu’elle a tapé ne devient jamais du HTML', !/<b>Sophie<\/b>/.test(html) && !/Yoga <année>/.test(html))
+  verifier('⚠️ l’email ne promet aucun remboursement : il renvoie vers le commerce',
+    !/sera remboursé|est remboursé|te rembourse/.test(html) && /Contacte directement Centre Respire/.test(html))
+
+  const ROUTE_R = sansProse(readFileSync(new URL('../app/api/rdv/resilier-abonnement/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 la route garde le geste derrière la case Argent',
+    /gardeLigneEquipe\(request, supabase, 'abonnements', abonnement_id, 'argent'\)/.test(ROUTE_R) && /if \(nonAutorise\) return nonAutorise/.test(ROUTE_R))
+  verifier('🔴 un seul gagnant : deux clics ne font qu’une résiliation et qu’un email',
+    /\.update\(\{ statut: 'resilie' \}\)\s*\.eq\('id', abonnement_id\)\s*\.eq\('statut', contrat\.statut\)\s*\.select\('id'\)/.test(ROUTE_R)
+    && /if \(!bascule \|\| bascule\.length === 0\) return/.test(ROUTE_R))
+  verifier('🔴 les séances annulées sont celles que la règle choisit, à l’heure de Bruxelles',
+    /seancesAnnuleesParResiliation\(seances, \{\s*dejaCommencee: \(d, h\) => creneauDejaCommence\(d, h, maintenant\),/.test(ROUTE_R))
+  verifier('🔴 leurs rappels de la veille sont coupés', /if \(s\.rappel_push_id\) \{\s*const r = await annulerPush\(s\.rappel_push_id\)/.test(ROUTE_R))
+  verifier('🔴 la cliente est prévenue de ce qui est RÉELLEMENT annulé',
+    /seances: annulees\.map\(s => seanceLisible\(s\.date_rdv, s\.heure_debut\)\)/.test(ROUTE_R) && /envoyerAuYopper\(/.test(ROUTE_R))
+
+  const DASH_R = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 le tableau de bord ne résilie plus lui-même',
+    /postPro\('\/api\/rdv\/resilier-abonnement', \{ abonnement_id: a\.id \}\)/.test(DASH_R)
+    && !/from\('abonnements'\)\s*\.update\(\{ statut: 'resilie' \}\)/.test(DASH_R))
+  verifier('⚠️ et lit la réponse avant d’annoncer quoi que ce soit',
+    /if \(!j\?\.ok\) return toast\(/.test(DASH_R) && /Yoppaa ne rembourse rien automatiquement/.test(DASH_R))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

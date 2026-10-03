@@ -10970,28 +10970,27 @@ function TabRdvAbonnements({ commercantId, toast }) {
     fetchAll()
   }
 
+  // 🔴 LA RÉSILIATION PASSE PAR LE SERVEUR (Abo-I2, 03/10) : voir
+  // `app/api/rdv/resilier-abonnement`. Elle s'écrivait d'ici, sans prévenir la
+  // cliente, sans couper ses rappels, en annulant aussi la séance déjà donnée
+  // le matin, et annonçait « places libérées » sans avoir lu la réponse.
+  // ⚠️ LA QUESTION PARLE D'ARGENT : Yoppaa ne rembourse rien à la résiliation.
   async function resilier(a) {
-    if (!await confirme(confirmationSimple({ titre: `Résilier l’abonnement de ${a.client_prenom} ?`, message: 'Ses séances à venir seront annulées. Celles déjà passées restent dans ton historique.', action: 'Oui, résilier l’abonnement' }))) return
-    // ⚠️ EN HEURE BELGE, sinon une résiliation prononcée à 00h30 travaillerait
-    // sur la journée de la VEILLE et emporterait les séances d'aujourd'hui.
-    const aujourdhui = jourBruxelles()
-    const { error } = await supabase.from('abonnements')
-      .update({ statut: 'resilie' }).eq('id', a.id)
-    if (error) return toast(`Erreur : ${error.message}`, 'error')
-    // ⚠️ LES SÉANCES PASSÉES NE BOUGENT PAS. Elles ont eu lieu, elles comptent
-    // dans l'historique et dans les statistiques ; seul l'avenir se libère.
-    //
-    // ⚠️ ET LE STATUT S'ÉCRIT `annule_commercant`, jamais « annule » tout
-    // court : cette valeur-là n'existe pas en base. Le projet distingue qui a
-    // annulé, et trois statuts inventés de mémoire ont déjà faussé des
-    // statistiques entières.
-    await supabase.from('rdv_reservations')
-      .update({ statut: 'annule_commercant' })
-      .eq('abonnement_id', a.id)
-      .gte('date_rdv', aujourdhui)
-      .eq('statut', 'confirme')
-    toast('Abonnement résilié, les places à venir sont libérées')
+    if (!await confirme(confirmationSimple({
+      titre: `Résilier l’abonnement de ${a.client_prenom} ?`,
+      message: `Ses séances à venir sont annulées${a.client_email ? ', et un email l’en informe' : '. Son contrat n’a pas d’adresse email : rien ne l’en informe, fais-le toi-même'}. Celles déjà passées restent dans ton historique.`,
+      details: 'Yoppaa ne rembourse rien automatiquement. Si tu lui rends une partie du prix, fais-le depuis ton tableau Stripe pour un paiement en ligne, ou de la main à la main.',
+      action: 'Oui, résilier l’abonnement',
+    }))) return
+    const res = await postPro('/api/rdv/resilier-abonnement', { abonnement_id: a.id })
+    const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
     fetchAll()
+    if (!j?.ok) return toast(j?.error || 'La résiliation n’a pas pu aboutir. Réessaie dans un instant.', 'error')
+    if (j.deja) return toast('Cet abonnement était déjà résilié')
+    const n = Number(j.seances_annulees) || 0
+    const seancesTxt = n === 0 ? 'Aucune séance à venir à annuler' : n === 1 ? '1 séance à venir annulée' : `${n} séances à venir annulées`
+    const emailTxt = j.email === 'envoye' ? ', un email en informe ' + a.client_prenom : j.email === 'echec' ? `. L’email n’est pas parti : préviens ${a.client_prenom} toi-même` : `. Pas d’email sur le contrat : préviens ${a.client_prenom} toi-même`
+    toast(`Abonnement résilié. ${seancesTxt}${emailTxt}.`, j.email === 'envoye' ? undefined : 'error')
   }
 
   function openNew() {

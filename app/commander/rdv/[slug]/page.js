@@ -44,6 +44,7 @@ import { textesConfirmation, RETRAIT_RDV } from '@/lib/ecran-retrait'
 import { capacitePrestation, estCoursCollectif, libellePlaces, estParCouverts, bornesCouverts, dureeSelonCouverts, sansPrixSiTable } from '@/lib/cours-collectifs'
 import { enModeInventaire, plusGrandGroupe, taillesReservables, formatPourAffichage, estJointure, plafondCadence, phraseCuisinePleine } from '@/lib/inventaire-salle'
 import { attenteOuverte, attenteSur } from '@/lib/attente-rdv'
+import { messagePaiementRate } from '@/lib/refus-reservation'
 import BlocAttente from './BlocAttente'
 // ⚠️ LA PHRASE DU RESTE DU BON VIT DANS LE MODULE, avec celle du tunnel
 // boutique : deux écritures d'une même phrase finissent toujours par dire deux
@@ -1813,7 +1814,7 @@ export default function CommanderRdvSlug() {
       const { data: busy, error: errBusy } = await supabase.rpc('rdv_slots_busy', { p_commercant_id: commercant.id, p_date: dateStr })
       if (errBusy) {
         console.error('[rdv] RPC rdv_slots_busy KO', errBusy)
-        setSubmitError('Impossible de vérifier la disponibilité (RPC). Reessaie dans quelques secondes.')
+        setSubmitError('Impossible de vérifier les places pour le moment. Réessaie dans quelques secondes.')
         setSubmitting(false); return
       }
       const busyFiltres = filtrerReservationsPourSlots(busy, praticienChoisi, praticiensEligibles, { prestationCours: coursPourComptage() })
@@ -2234,12 +2235,13 @@ export default function CommanderRdvSlug() {
             return
           }
 
-          if (!j.ok || !j.url) throw new Error(j.error || 'Erreur création du paiement')
+          if (!j.ok || !j.url) throw Object.assign(new Error(j.error || ''), { duServeur: Boolean(j.error) })
           redirectTop(j.url)
           return
         } catch (e) {
           console.error('[rdv] erreur Stripe Checkout tunnel unique', e)
-          setSubmitError(`Erreur paiement : ${e.message}. Réessaie ou contacte ${commercant.nom}.`)
+          // Audit 2 C1 : la phrase du serveur telle quelle, sinon une phrase humaine.
+          setSubmitError(messagePaiementRate(e, commercant.nom))
           setSubmitting(false)
           return
         }
@@ -2373,7 +2375,7 @@ export default function CommanderRdvSlug() {
             return
           }
           if (!j.ok || !j.url) {
-            throw new Error(j.error || 'Erreur création Checkout')
+            throw Object.assign(new Error(j.error || ''), { duServeur: Boolean(j.error) })
           }
           // Redirect Stripe Checkout. Au retour ?paiement=ok le webhook aura cree le RDV.
           // redirectTop : sort d'une éventuelle iframe via <a target="_top">.
@@ -2383,7 +2385,7 @@ export default function CommanderRdvSlug() {
           return
         } catch (e) {
           console.error('[rdv] erreur Stripe Checkout', e)
-          setSubmitError(`Erreur paiement : ${e.message}. Reessaie ou contacte ${commercant.nom}.`)
+          setSubmitError(messagePaiementRate(e, commercant.nom))
           setSubmitting(false)
           return
         }

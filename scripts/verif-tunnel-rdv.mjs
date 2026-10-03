@@ -945,6 +945,22 @@ for (const chemin of [
     egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
   }
 
+  // ── UN PAIEMENT QUI NE DÉMARRE PAS SE DIT EN FRANÇAIS (Audit 2 C1, 03/10) ─
+  {
+    const { messagePaiementRate } = await import('../lib/refus-reservation.js')
+    const reseau = messagePaiementRate(new TypeError('Failed to fetch'), 'Centre Respire')
+    verifie('🔴 une panne réseau ne sort plus en anglais technique',
+      !/Failed to fetch|Erreur paiement/.test(reseau) && /réessaie, ou contacte Centre Respire/.test(reseau), reseau)
+    verifie('🔴 la phrase du serveur passe telle quelle, sans « Erreur paiement : » ni second « réessaie »',
+      messagePaiementRate(Object.assign(new Error('La dernière place vient d’être prise. Choisis un autre horaire.'), { duServeur: true }), 'X')
+        === 'La dernière place vient d’être prise. Choisis un autre horaire.')
+    const FICHE_E = sansProse(lire('app/commander/rdv/[slug]/page.js'))
+    verifie('⚠️ la fiche n’affiche plus aucun message brut de paiement',
+      !/Erreur paiement : \$\{e\.message\}/.test(FICHE_E) && !/\(RPC\)/.test(FICHE_E) && !/Reessaie/.test(FICHE_E)
+      && (FICHE_E.match(/setSubmitError\(messagePaiementRate\(e, commercant\.nom\)\)/g) || []).length === 2
+      && (FICHE_E.match(/throw Object\.assign\(new Error\(j\.error \|\| ''\), \{ duServeur: Boolean\(j\.error\) \}\)/g) || []).length === 2)
+  }
+
   // ── L'ÉCRAN DE CONFIRMATION NE PROMET QUE CE QUI ARRIVERA (Audit 2 C4, Annul-C3)
   {
     const { rappelDeLaVeillePartira } = await import('../lib/timezone.js')

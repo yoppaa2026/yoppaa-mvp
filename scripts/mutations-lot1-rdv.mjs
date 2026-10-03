@@ -524,6 +524,19 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 2 C1 : UN PAIEMENT QUI NE DÉMARRE PAS ────────────────
+  { nom: '🔴 une panne reseau ressort en anglais technique',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/refus-reservation.js',
+    de: '  if (erreur?.duServeur && phrase) return phrase',
+    vers: '  if (phrase) return phrase',
+    garde: 'une panne réseau ne sort plus en anglais technique' },
+
+  { nom: '⚠️ la phrase du serveur n est plus reconnue : remplacee par le message generique',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "          if (!j.ok || !j.url) throw Object.assign(new Error(j.error || ''), { duServeur: Boolean(j.error) })",
+    vers: "          if (!j.ok || !j.url) throw new Error(j.error || '')",
+    garde: 'la fiche n’affiche plus aucun message brut de paiement' },
+
   // ─── LOT 3 · AUDIT 2 C4 ET ANNUL-C3 : CE QUE PROMET LA CONFIRMATION ────
   { nom: '🔴 le rappel de la veille se promet meme reserve trop tard',
     banc: 'verif:tunnel-rdv', fichier: 'lib/timezone.js',

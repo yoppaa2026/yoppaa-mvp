@@ -3756,8 +3756,25 @@ const NO_SHOW_ACOMPTE = { statut: 'no_show', prix_estime: 35, acompte_montant: 8
 const ANNULE_ACOMPTE = { statut: 'annule_commercant', prix_estime: 35, acompte_montant: 8.75, acompte_paye: true }
 verifier('no-show : l’acompte encaissé reste acquis',
   /acquis/.test(etatPaiementRdv(NO_SHOW_ACOMPTE).detail || ''))
+// ⚠️ REPOINTÉE LE 03/10 : la phrase dit maintenant POURQUOI il reste un geste
+// (aucun remboursement enregistré), parce qu'un remboursement fait par Yoppaa
+// se lit désormais autrement, juste en dessous.
 verifier('annulation : l’acompte est à rembourser',
-  /rembourser/.test(etatPaiementRdv(ANNULE_ACOMPTE).detail || ''))
+  /aucun remboursement enregistré : rembourse-le depuis ton tableau Stripe/.test(etatPaiementRdv(ANNULE_ACOMPTE).detail || ''))
+// 🔴 ET QUAND YOPPAA L'A DÉJÀ REMBOURSÉ (B2 des annulations, 03/10), la ligne
+// le dit : la commerçante ne rembourse pas une seconde fois à la main.
+{
+  const REMBOURSE = { ...ANNULE_ACOMPTE, stripe_refund_id: 're_1', stripe_refund_amount: 8.75, stripe_refund_date: '2026-10-03T10:00:00Z' }
+  const e = etatPaiementRdv(REMBOURSE)
+  verifier('🔴 un acompte déjà remboursé se dit remboursé, avec son montant et sa date',
+    e.cle === 'rembourse' && /^Acompte remboursé 8,75\s€$/.test(e.libelle) && /le 3 octobre, rien à faire/.test(e.detail || ''), JSON.stringify(e))
+  verifier('⚠️ un remboursement partiel dit ce qui a été rendu, sur quoi',
+    /Remboursé 5,00\s€ sur 8,75\s€/.test(etatPaiementRdv({ ...REMBOURSE, stripe_refund_amount: 5 }).detail || ''))
+  verifier('⚠️ un no-show ne se dit jamais remboursé : l’acompte reste acquis',
+    etatPaiementRdv({ ...REMBOURSE, statut: 'no_show' }).cle !== 'rembourse')
+  verifier('⚠️ sans identifiant de remboursement, rien ne passe pour remboursé',
+    etatPaiementRdv({ ...REMBOURSE, stripe_refund_id: null }).cle !== 'rembourse')
+}
 verifier('et aucun des deux ne réclame le solde',
   !/à payer/i.test(etatPaiementRdv(NO_SHOW_ACOMPTE).libelle)
   && !/à payer/i.test(etatPaiementRdv(ANNULE_ACOMPTE).libelle))

@@ -524,6 +524,25 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 2 · « À REMBOURSER » ALORS QUE C'ÉTAIT FAIT ────────────────────
+  { nom: '🔴 un acompte rembourse par Yoppaa se redit « a rembourser »',
+    banc: 'verif:logique', fichier: 'lib/rdv-paiement.js',
+    de: "    if (acomptePaye && statut !== 'no_show' && rdv.stripe_refund_id && rembourse !== null && rembourse > 0) {",
+    vers: '    if (false) {',
+    garde: 'un acompte déjà remboursé se dit remboursé' },
+
+  { nom: '🔴 un no-show se dit rembourse',
+    banc: 'verif:logique', fichier: 'lib/rdv-paiement.js',
+    de: "    if (acomptePaye && statut !== 'no_show' && rdv.stripe_refund_id && rembourse !== null && rembourse > 0) {",
+    vers: '    if (acomptePaye && rdv.stripe_refund_id && rembourse !== null && rembourse > 0) {',
+    garde: 'un no-show ne se dit jamais remboursé' },
+
+  { nom: '⚠️ un remboursement partiel se dit complet',
+    banc: 'verif:logique', fichier: 'lib/rdv-paiement.js',
+    de: '      const partiel = rembourse < acompte - 0.005',
+    vers: '      const partiel = false',
+    garde: 'un remboursement partiel dit ce qui a été rendu' },
+
   // ─── LOT 2 · B2 ET B1 : FERMETURES, AGENDA, COURS ANNULÉ ───────────────
   { nom: '🔴 l absence d une praticienne rattrape les rendez-vous de toutes',
     banc: 'verif:tunnel-rdv', fichier: 'lib/fermetures-rdv.js',

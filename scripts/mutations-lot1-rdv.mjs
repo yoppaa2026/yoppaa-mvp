@@ -524,6 +524,13 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 1 I13 : « PAIEMENT SUR PLACE » ───────────────────────
+  { nom: '⚠️ l option paiement sur place ne previent plus les commerces de rendez-vous',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/TabPaiements.js',
+    de: "              {commercant.categorie === 'vitrine' && ' Tes rendez-vous ne sont pas concernés : ils se règlent sur place, sauf l’acompte en ligne que tu demandes plus haut.'}",
+    vers: '',
+    garde: 'et dit aux commerces de rendez-vous qu’elle ne les concerne pas' },
+
   // ─── LOT 3 · ANNUL-I1 : LE STUDIO APPREND L'ÉCHEC DU REMBOURSEMENT ─────
   { nom: '🔴 un remboursement rate n alerte plus le studio',
     banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/cancel/route.js',

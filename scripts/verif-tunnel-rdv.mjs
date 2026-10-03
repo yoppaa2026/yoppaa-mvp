@@ -945,6 +945,15 @@ for (const chemin of [
     egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
   }
 
+  // ── « PAIEMENT SUR PLACE » NE PROMET PLUS CE QU'IL NE FAIT PAS (Audit 1 I13)
+  {
+    const PAIE = sansProse(lire('app/dashboard/TabPaiements.js'))
+    verifie('🔴 l’option ne prétend plus rendre le paiement en ligne obligatoire pour tout',
+      !/Désactivé = paiement en ligne obligatoire/.test(PAIE) && /Pour tes commandes : quand c’est activé/.test(PAIE))
+    verifie('⚠️ et dit aux commerces de rendez-vous qu’elle ne les concerne pas',
+      /\{commercant\.categorie === 'vitrine' && ' Tes rendez-vous ne sont pas concernés/.test(PAIE))
+  }
+
   // ── LE STUDIO APPREND L'ÉCHEC D'UN REMBOURSEMENT (Annul-I1, 03/10) ──────
   {
     const { emailRemboursementEchoue } = await import('../lib/resend.js')

@@ -292,9 +292,16 @@ export default function TabPaiements({ commercantId, toast }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0, marginBottom: 4 }}>Paiement sur place</p>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 900, color: T.ink, margin: 0, letterSpacing: '-0.3px' }}>Accepter le cash / carte sur place</h3>
+            {/* 🔴 CETTE PHRASE PROMETTAIT CE QUE L'OPTION NE FAIT PAS (Audit 1
+                I13, 03/10) : « Désactivé = paiement en ligne obligatoire ». Elle
+                ne règle que les COMMANDES ; un rendez-vous se paie sur place
+                quoi qu'il arrive, sauf un acompte demandé en ligne. Une
+                commerçante de services l'aurait désactivée en croyant faire
+                payer ses séances d'avance. */}
             <p style={{ fontSize: '0.82rem', color: T.muted, lineHeight: 1.5, marginTop: 6 }}>
-              Quand activé, tes clients peuvent payer en espèces ou par carte directement chez toi
-              (en plus du paiement en ligne). Désactivé = paiement en ligne obligatoire.
+              Pour tes commandes : quand c’est activé, tes clients peuvent payer en espèces ou par
+              carte en venant chercher (en plus du paiement en ligne). Désactivé, ils paient en ligne.
+              {commercant.categorie === 'vitrine' && ' Tes rendez-vous ne sont pas concernés : ils se règlent sur place, sauf l’acompte en ligne que tu demandes plus haut.'}
             </p>
           </div>
           <label style={{ position: 'relative', display: 'inline-block', width: 48, height: 26, flexShrink: 0, cursor: 'pointer' }}>

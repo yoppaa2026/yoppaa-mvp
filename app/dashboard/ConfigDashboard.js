@@ -9495,7 +9495,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   const [saving, setSaving] = useState(false)
   // ⚠️ `jointure_de` et `jointure_tables` restent VIDES pour tout ce qui n'est
   // pas une jointure : c'est ce qui dit au formulaire de quoi il parle.
-  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [], quantite: '', jointure_de: '', jointure_tables: '' }
+  // ⚠️ `attente_max` À 3 PAR DÉFAUT, comme la colonne en base : une prestation
+  // créée ici a la même liste d'attente que si elle l'avait été ailleurs.
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [], quantite: '', jointure_de: '', jointure_tables: '', attente_max: '3' }
   const [form, setForm] = useState(initialForm)
   // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : « la seule qu'on va
   // faire payer, c'est un montant forfaitaire par personne à partir d'un
@@ -9631,6 +9633,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       // Une prestation d'avant la bascule n'a pas de capacité : elle vaut 1,
       // c'est-à-dire ce qu'elle a toujours été.
       capacite: String(capacitePrestation(p)),
+      attente_max: String(Number.isFinite(Number(p.attente_max)) ? Number(p.attente_max) : 3),
       // ⚠️ Les bornes restent VIDES quand elles ne sont pas réglées, jamais à
       // zéro : une borne à zéro passerait la contrainte de base pour une
       // valeur voulue, et le client se verrait proposer « 0 personne ».
@@ -9754,6 +9757,12 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       // « pas d'inventaire », c'est un format qui n'existe pas, et la contrainte
       // de base le refuse.
       quantite: estTable && form.par_couverts && form.quantite !== '' ? Number(form.quantite) : null,
+      // 🔴 LA LISTE D'ATTENTE SE RÈGLE ICI (03/10). La colonne valait 3 pour
+      // tout le parc et aucun écran ne la montrait : chaque cours avait une file
+      // que sa professeure ignorait, et qu'elle ne pouvait pas fermer.
+      // ⚠️ Une table ne s'attend pas encore (LA-10) : son réglage n'est pas
+      // touché. Vide vaut zéro, c'est-à-dire « pas de liste ».
+      ...(form.par_couverts ? {} : { attente_max: Math.max(0, Math.min(50, parseInt(form.attente_max, 10) || 0)) }),
     }
     setSaving(true)
     // INSERT/UPDATE prestation
@@ -10375,6 +10384,29 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                 </p>
               </div>
             )}
+
+            {/* 🔴 LA LISTE D'ATTENTE, RÉGLÉE ET EXPLIQUÉE (03/10). Elle était
+                ouverte à trois personnes sur chaque prestation, sans qu'aucun
+                écran ne le dise. On dit ce qu'elle fait, et surtout ce qu'elle
+                ne fait pas : elle prévient, elle ne garde aucune place. */}
+            {!form.par_couverts && (() => {
+              const n = Math.max(0, Math.min(50, parseInt(form.attente_max, 10) || 0))
+              const cours = capacitePrestation({ capacite: form.capacite }) > 1
+              return (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
+                    Liste d&rsquo;attente
+                  </label>
+                  <Input type="number" min="0" max="50" value={form.attente_max}
+                    onChange={e => setForm({ ...form, attente_max: e.target.value })}/>
+                  <p style={{ fontSize: 11, color: T.muted, margin: '4px 0 0', lineHeight: 1.45 }}>
+                    {n === 0
+                      ? 'Pas de liste d’attente : quand c’est complet, tes clients choisissent un autre horaire.'
+                      : `Jusqu’à ${n} personne${n > 1 ? 's' : ''} peuvent attendre ${cours ? 'une séance complète' : 'un créneau'}. Quand quelqu’un annule sa place en ligne, elles sont prévenues l’une après l’autre, à un quart d’heure d’intervalle : la première qui réserve prend la place. Mets 0 pour ne pas en proposer.`}
+                  </p>
+                </div>
+              )
+            })()}
 
             {/* ⚠️ LES BORNES DE LA TABLE, et le maximum n'est pas décoratif : au
                 delà, la fiche invite à appeler plutôt que de laisser le client

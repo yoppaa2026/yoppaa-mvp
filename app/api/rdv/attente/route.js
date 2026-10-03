@@ -43,6 +43,11 @@ const MESSAGES = {
   // commerce qui a choisi de ne pas encore se montrer.
   commerce_ferme: 'Ce commerçant ne propose pas de liste d’attente sur cette prestation.',
   identite_requise: 'Connecte-toi pour rejoindre la liste d’attente.',
+  // 🔴 LA SÉANCE EST RELUE AVANT D'INSCRIRE (LA-05, 03/10).
+  seance_passee: 'Cette séance a déjà commencé.',
+  places_libres: 'Il reste de la place à ce cours : réserve-le directement.',
+  seance_introuvable: 'Ce cours n’a pas lieu à cette heure-là.',
+  deja_reserve: 'Tu as déjà ta place à ce cours.',
   introuvable: 'Cette attente n’existe plus.',
 }
 const message = (code) => MESSAGES[code] || 'Impossible pour le moment, réessaie dans un instant.'
@@ -113,12 +118,13 @@ export async function POST(request) {
       prestationId: corps?.prestation_id,
       clientId: identite.client_id,
       authUserId: identite.auth_user_id,
+      email: identite.email || null,
       dateRdv: corps?.date_rdv,
       heureDebut: corps?.heure_debut,
       duree: corps?.duree,
     })
     if (!res.ok) {
-      const statut = res.error === 'deja_inscrit' || res.error === 'complete' ? 409 : 400
+      const statut = ['deja_inscrit', 'complete', 'deja_reserve', 'places_libres'].includes(res.error) ? 409 : 400
       return NextResponse.json({ ok: false, error: message(res.error), raison: res.error }, { status: statut })
     }
 

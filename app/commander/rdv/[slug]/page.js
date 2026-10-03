@@ -574,11 +574,19 @@ export default function CommanderRdvSlug() {
   const [heureChoisie, setHeureChoisie] = useState(null)      // "HH:MM"
   const [slots, setSlots] = useState([])  // [{ heure, pris, motif }]
   // La séance complète sur laquelle le Yopper a demandé à être prévenu.
-  const [heureAttente, setHeureAttente] = useState(null)
+  // 🔴 AVEC SON JOUR ET SA PRESTATION (LA-04, 03/10). Seule l'heure était
+  // retenue, et rien ne l'effaçait au changement de jour ou de prestation :
+  // « Cette séance est complète » restait affiché sous un mercredi libre, et
+  // l'inscription partait sur le mauvais cours. On garde ce qui a été cliqué,
+  // et on ne le montre que là où il a été cliqué.
+  const [attenteVisee, setAttenteVisee] = useState(null)   // { heure, date, prestationId }
   const [reservationsJour, setReservationsJour] = useState([])  // [{ heure_debut, heure_fin }] pour la section 'Deja pris'
   const [showMiniCal, setShowMiniCal] = useState(false)  // toggle mini-calendrier mensuel pour jours > J+14
   const [reservations60j, setReservations60j] = useState([])  // toutes les resa du commercant sur 60j, pour points dispo mini-cal
   const [slotsLoading, setSlotsLoading] = useState(false)
+  const heureAttente = attenteVisee && dateChoisie && prestationChoisie
+    && attenteVisee.date === isoDate(dateChoisie) && attenteVisee.prestationId === prestationChoisie.id
+    ? attenteVisee.heure : null
   // RDV-4c : coordonnées client + RGPD (pré-fill depuis localStorage)
   const [client, setClient] = useState({ prenom: '', nom: '', email: '', telephone: '', notes: '' })
   const [clientId, setClientId] = useState(null)
@@ -3634,8 +3642,8 @@ export default function CommanderRdvSlug() {
                         return (
                           <button key={heure}
                             onClick={() => {
-                              if (!pris) { setHeureChoisie(heure); setHeureAttente(null) }
-                              else if (attenteDispo) setHeureAttente(enAttente ? null : heure)
+                              if (!pris) { setHeureChoisie(heure); setAttenteVisee(null) }
+                              else if (attenteDispo) setAttenteVisee(enAttente ? null : { heure, date: isoDate(dateChoisie), prestationId: prestationChoisie.id })
                             }}
                             disabled={pris && !attenteDispo}
                             aria-label={pris ? `${heure}, complet, être prévenu si une place se libère` : heure}
@@ -3675,7 +3683,8 @@ export default function CommanderRdvSlug() {
                   {/* 🔴 LE POINT D'ENTRÉE DU COLLECTIF : LA SÉANCE GRISÉE.
                       Le client voit la séance qu'il veut, il clique dessus, et
                       le bloc s'ouvre juste dessous. Rien à chercher. */}
-                  {dateChoisie && !slotsLoading && heureAttente && prestationChoisie && (
+                  {dateChoisie && !slotsLoading && heureAttente && prestationChoisie
+                    && slots.some(s => s.heure === heureAttente && s.pris && s.motif === 'complet') && (
                     <BlocAttente prestation={prestationChoisie} date={isoDate(dateChoisie)}
                       heure={heureAttente} T={T} />
                   )}

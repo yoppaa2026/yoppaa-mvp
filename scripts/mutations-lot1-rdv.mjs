@@ -257,6 +257,73 @@ const MUTATIONS = [
     de: '        creneaux: plagesOuvertes(creneauxFiltres, fermetures, dateStr),',
     vers: '        creneaux: creneauxFiltres,',
     garde: 'la fiche retire de sa grille les plages d’une praticienne absente' },
+
+  // ─── LA LISTE D'ATTENTE : LA-01 ET LA-05 ────────────────────────────────
+  { nom: '🔴 la personne servie sans client_id reste dans la file',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: '    if (!qui && clientEmail && concernees.length > 0) {',
+    vers: '    if (false) {',
+    garde: 'la personne servie par un abonnement sort de la file' },
+
+  { nom: '🔴 la creation ne passe plus l adresse a la file',
+    banc: 'verif:attente', fichier: CREATION,
+    de: '    clientEmail: champs?.client_email || null,',
+    vers: '    clientEmail: null,',
+    garde: 'la création passe l’adresse à la file' },
+
+  { nom: '🔴 l inscription ne relit plus la seance',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: '  if (ligne.portee === PORTEE_SEANCE) {',
+    vers: '  if (false) {',
+    garde: 'un cours où il reste de la place ne s’attend pas' },
+
+  { nom: '🔴 un cours qui n a pas lieu s attend quand meme',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "  if (essai.code === 'place_prise') return { ok: true }",
+    vers: "  if (essai.code === 'place_prise' || essai.code === 'prestation_hors_creneau') return { ok: true }",
+    garde: 'un cours qui n’a pas lieu à cette heure ne s’attend pas' },
+
+  { nom: '🔴 on attend sa propre place prise sur un abonnement',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: '    || (adresse && normaliserEmail(r.client_email) === adresse))',
+    vers: '    || false)',
+    garde: 'on n’attend pas sa propre place, même prise sur un abonnement' },
+
+  { nom: '🔴 une seance commencee s attend encore',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "  if (creneauDejaCommence(dateRdv, heure, maintenant)) return { ok: false, raison: 'seance_passee' }",
+    vers: "  if (false) return { ok: false, raison: 'seance_passee' }",
+    garde: 'une séance commencée ne s’attend plus' },
+
+  { nom: '⚠️ l horizon de la fiche ne borne plus la file',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "  if (limite && dateRdv > limite) return { ok: false, raison: 'demande_invalide' }",
+    vers: "  if (false) return { ok: false, raison: 'demande_invalide' }",
+    garde: 'au-delà de l’horizon de la fiche' },
+
+  { nom: '🔴 l attente oublie son jour : le bloc reste sous un autre jour',
+    banc: 'verif:attente', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '    && attenteVisee.date === isoDate(dateChoisie) && attenteVisee.prestationId === prestationChoisie.id',
+    vers: '    && true',
+    garde: 'et ne vaut que sur ce jour et cette prestation' },
+
+  { nom: '⚠️ le bloc d attente s ouvre sous une seance libre',
+    banc: 'verif:attente', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "                    && slots.some(s => s.heure === heureAttente && s.pris && s.motif === 'complet') && (",
+    vers: '                    && (',
+    garde: 'le bloc ne s’ouvre que sous une séance réellement complète' },
+
+  { nom: '🔴 la taille de la liste d attente ne s enregistre plus',
+    banc: 'verif:attente', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      ...(form.par_couverts ? {} : { attente_max: Math.max(0, Math.min(50, parseInt(form.attente_max, 10) || 0)) }),',
+    vers: '      ...({}),',
+    garde: 'la commerçante règle la taille de sa liste d’attente' },
+
+  { nom: '🔴 la fiche juge de nouveau les jours fermes a sa facon',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '    return !!fermetureQuiBloque(fermetures, { dateStr: iso, praticienId: praticienChoisi?.id ?? null })',
+    vers: '    return fermetures.some(f => f.praticien_id === null && iso >= f.date_debut && iso <= f.date_fin)',
+    garde: 'et juge les jours fermés avec la règle du serveur' },
 ]
 
 const lancer = (banc) => {

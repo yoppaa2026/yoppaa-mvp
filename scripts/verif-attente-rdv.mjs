@@ -479,6 +479,165 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
     /prévenu avant les autres/.test(SERVEUR))
 }
 
+// ─── LA FILE, EXÉCUTÉE SUR UNE FAUSSE BASE (LA-01 et LA-05, 03/10) ─────────
+//
+// 🔴 DEUX DÉFAUTS QU'AUCUNE LECTURE DE CODE N'AVAIT VUS :
+//   • LA-01 : la personne servie par un abonnement, un acompte ou une empreinte
+//     restait dans la file, faute de `client_id` ; elle reprenait une place au
+//     rang suivant et recevait un push pour son propre cours ;
+//   • LA-05 : l'inscription ne relisait pas la séance. On attendait un cours
+//     qui n'a pas lieu, un cours où il reste de la place, ou sa propre place.
+//
+// ⚠️ LES DATES SE CALCULENT DEPUIS AUJOURD'HUI, jamais en dur : un banc daté
+// rougit le jour où sa date passe, sans que rien n'ait changé.
+{
+  const S = await import('../lib/attente-rdv-server.js')
+  const { jourBruxelles, brusselsInstant } = await import('../lib/timezone.js')
+  const { jourSemaineDate } = await import('../lib/rdv-slots.js')
+  const { jourPlus: plus } = await import('../lib/attente-rdv.js')
+
+  const norme = (x) => (/^\d{2}:\d{2}(:\d{2})?$/.test(String(x)) ? String(x).slice(0, 5) : x)
+  const fauxDb = (tables) => ({
+    from(table) {
+      const filtres = []
+      let maj = null, ajout = null, unique = false
+      const b = {
+        select() { return b }, order() { return b }, limit() { return b },
+        eq(c, x) { filtres.push(l => String(norme(l[c])) === String(norme(x))); return b },
+        neq(c, x) { filtres.push(l => String(norme(l[c])) !== String(norme(x))); return b },
+        in(c, xs) { filtres.push(l => xs.map(String).includes(String(l[c]))); return b },
+        is(c, x) { filtres.push(l => (l[c] ?? null) === x); return b },
+        update(m) { maj = m; return b },
+        insert(r) { ajout = Array.isArray(r) ? r : [r]; return b },
+        maybeSingle() { unique = true; return b },
+        single() { unique = true; return b },
+        then(ok, ko) {
+          const lignes = tables[table] || (tables[table] = [])
+          let rep
+          if (ajout) {
+            const neuves = ajout.map((x, i) => ({ id: `${table}-${lignes.length + i + 1}`, created_at: new Date().toISOString(), ...x }))
+            lignes.push(...neuves)
+            rep = { data: unique ? neuves[0] : neuves, error: null }
+          } else if (maj) {
+            const l = lignes.filter(r => filtres.every(f => f(r)))
+            l.forEach(r => Object.assign(r, maj))
+            rep = { data: l, error: null }
+          } else {
+            const l = lignes.filter(r => filtres.every(f => f(r))).map(r => ({ ...r }))
+            rep = { data: unique ? (l[0] || null) : l, error: null }
+          }
+          return Promise.resolve(rep).then(ok, ko)
+        },
+      }
+      return b
+    },
+  })
+
+  const D = plus(jourBruxelles(), 7)
+  const JOUR = jourSemaineDate(new Date(`${D}T12:00:00`))
+  const inscrite = (id, extra = {}) => ({ id, commercant_id: 'c1', prestation_id: 'yoga', date_rdv: D, heure_debut: '18:00:00',
+    statut: 'confirme', deleted_at: null, place_no: Number(id.slice(-1)), client_id: null, client_email: null, ...extra })
+  const base = ({ inscrits = [inscrite('r1'), inscrite('r2')], horizon = null } = {}) => ({
+    commercants: [{ id: 'c1', nom: 'Centre', statut_publication: 'publie', rdv_horizon_jours: horizon, adresse: 'Rue 1', siege_social_est_lieu_activite: true }],
+    rdv_prestations: [{ id: 'yoga', commercant_id: 'c1', nom: 'Yoga', capacite: 2, attente_max: 5, actif: true, deleted_at: null,
+      par_couverts: false, duree_minutes: 60, tva_taux: 6 }],
+    rdv_creneaux: [{ id: 'cr-yoga', commercant_id: 'c1', jour_semaine: JOUR, date_specifique: null, heure_debut: '18:00:00', heure_fin: '19:00:00',
+      pause_debut: null, pause_fin: null, actif: true, deleted_at: null, praticien_id: null, lieu_id: null }],
+    rdv_creneau_prestations: [{ creneau_id: 'cr-yoga', prestation_id: 'yoga' }],
+    rdv_fermetures: [], commercant_lieux: [], rdv_attente: [],
+    clients: [{ id: 'cl-sophie', email: 'sophie@exemple.be' }, { id: 'cl-marc', email: 'marc@exemple.be' }],
+    rdv_reservations: inscrits,
+  })
+  const SOPHIE = { prestationId: 'yoga', clientId: 'cl-sophie', email: 'sophie@exemple.be', dateRdv: D, heureDebut: '18:00' }
+
+  // ── LA-05 : la séance est relue ──────────────────────────────────────
+  {
+    const t = base()
+    const r = await S.inscrire(fauxDb(t), SOPHIE)
+    verifier('🔴 un cours complet s’attend : l’inscription passe', r.ok === true && t.rdv_attente.length === 1, JSON.stringify(r))
+  }
+  {
+    const t = base({ inscrits: [inscrite('r1')] })
+    const r = await S.inscrire(fauxDb(t), SOPHIE)
+    verifier('🔴 un cours où il reste de la place ne s’attend pas : on le réserve',
+      r.ok === false && r.error === 'places_libres' && t.rdv_attente.length === 0, JSON.stringify(r))
+  }
+  {
+    const t = base()
+    const r = await S.inscrire(fauxDb(t), { ...SOPHIE, heureDebut: '13:00' })
+    verifier('🔴 un cours qui n’a pas lieu à cette heure ne s’attend pas',
+      r.ok === false && r.error === 'seance_introuvable' && t.rdv_attente.length === 0, JSON.stringify(r))
+  }
+  {
+    // ⚠️ SA PLACE A ÉTÉ PRISE SUR SON ABONNEMENT : pas de `client_id`, seulement
+    // son adresse, écrite autrement.
+    const t = base({ inscrits: [inscrite('r1', { client_email: 'Sophie@Exemple.be' }), inscrite('r2')] })
+    const r = await S.inscrire(fauxDb(t), SOPHIE)
+    verifier('🔴 on n’attend pas sa propre place, même prise sur un abonnement',
+      r.ok === false && r.error === 'deja_reserve' && t.rdv_attente.length === 0, JSON.stringify(r))
+  }
+  {
+    const t = base({ horizon: 30 })
+    const loin = plus(jourBruxelles(), 45)
+    const r = await S.inscrire(fauxDb(t), { ...SOPHIE, dateRdv: loin })
+    verifier('⚠️ au-delà de l’horizon de la fiche, la séance ne s’attend pas encore',
+      r.ok === false && r.error === 'demande_invalide', JSON.stringify(r))
+  }
+  {
+    const apres = brusselsInstant(D, '18:05').getTime()
+    const v = await S.seanceAttendable(fauxDb(base()), {
+      prestation: base().rdv_prestations[0], commerce: base().commercants[0],
+      ligne: { date_rdv: D, heure_debut: '18:00' }, clientId: 'cl-sophie', maintenant: apres,
+    })
+    verifier('🔴 une séance commencée ne s’attend plus', v.ok === false && v.raison === 'seance_passee', JSON.stringify(v))
+  }
+
+  // ── LA-01 : la personne servie sort de la file, par tous les chemins ──
+  {
+    const t = base()
+    t.rdv_attente.push(
+      { id: 'a1', commercant_id: 'c1', prestation_id: 'yoga', client_id: 'cl-sophie', portee: 'seance', date_rdv: D, heure_debut: '18:00:00', statut: 'prevenu', push_id: null, created_at: '2026-10-01T10:00:00Z' },
+      { id: 'a2', commercant_id: 'c1', prestation_id: 'yoga', client_id: 'cl-marc', portee: 'seance', date_rdv: D, heure_debut: '18:00:00', statut: 'prevenu', push_id: null, created_at: '2026-10-01T11:00:00Z' },
+    )
+    // Sa séance arrive par l'abonnement, sans `client_id`, l'adresse écrite autrement.
+    const r = await S.placePrise(fauxDb(t), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00', clientId: null, clientEmail: ' Sophie@Exemple.be' })
+    const a1 = t.rdv_attente.find(l => l.id === 'a1'), a2 = t.rdv_attente.find(l => l.id === 'a2')
+    verifier('🔴 la personne servie par un abonnement sort de la file', r.ok === true && r.servis === 1 && a1.statut === 'servi', JSON.stringify({ r, a1: a1.statut }))
+    verifier('⚠️ et l’autre reste en file, sans notification en attente', a2.statut === 'en_attente' && a2.push_id === null, a2.statut)
+  }
+  {
+    const CREATION_SRC = sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+    verifier('🔴 la création passe l’adresse à la file',
+      /clientId: champs\?\.client_id \|\| null,\s+clientEmail: champs\?\.client_email \|\| null,/.test(CREATION_SRC))
+    const ROUTE_SRC = sansProse(readFileSync(new URL('../app/api/rdv/attente/route.js', import.meta.url), 'utf8'))
+    verifier('et la route d’inscription passe l’adresse prouvée', /email: identite\.email \|\| null,/.test(ROUTE_SRC))
+  }
+}
+
+// ─── LA SÉANCE ATTENDUE RESTE CELLE QUI A ÉTÉ CLIQUÉE (LA-04, 03/10) ────────
+//
+// 🔴 SEULE L'HEURE ÉTAIT RETENUE, et rien ne l'effaçait au changement de jour
+// ou de prestation : « Cette séance est complète » restait sous un mercredi
+// libre, et l'inscription partait sur le mauvais cours.
+{
+  const FICHE = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 l’attente retient son jour et sa prestation',
+    /setAttenteVisee\(enAttente \? null : \{ heure, date: isoDate\(dateChoisie\), prestationId: prestationChoisie\.id \}\)/.test(FICHE))
+  verifier('🔴 et ne vaut que sur ce jour et cette prestation',
+    /attenteVisee\.date === isoDate\(dateChoisie\) && attenteVisee\.prestationId === prestationChoisie\.id/.test(FICHE))
+  verifier('⚠️ le bloc ne s’ouvre que sous une séance réellement complète',
+    /&& slots\.some\(s => s\.heure === heureAttente && s\.pris && s\.motif === 'complet'\) && \(/.test(FICHE))
+
+  // 🔴 LE RÉGLAGE QUI N'EXISTAIT PAS (03/10) : trois places d'attente sur chaque
+  // prestation, qu'aucun écran ne montrait ni ne permettait de fermer.
+  const CONFIG = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 la commerçante règle la taille de sa liste d’attente',
+    /value=\{form\.attente_max\}/.test(CONFIG)
+    && /attente_max: Math\.max\(0, Math\.min\(50, parseInt\(form\.attente_max, 10\) \|\| 0\)\)/.test(CONFIG))
+  verifier('⚠️ et retrouve la sienne en rouvrant la prestation',
+    /attente_max: String\(Number\.isFinite\(Number\(p\.attente_max\)\) \? Number\(p\.attente_max\) : 3\)/.test(CONFIG))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

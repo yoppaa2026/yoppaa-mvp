@@ -7,6 +7,7 @@
 // Validations server-side : overlap RDV existants + horaires shop + pause.
 
 import { useState, useEffect, useMemo } from 'react'
+import EnCours from './EnCours'
 import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
@@ -365,7 +366,11 @@ export default function ModalNouveauRdv({
   //   • pour un cours, il reste une place.
   // Et jamais avant le quart d'heure en cours : on ne propose pas hier à
   // quelqu'un qui appelle. La boucle est celle du déplacement, dans le module.
-  const heuresLibres = useMemo(() => {
+  // ⚠️ PLUS DE `useMemo` ICI (lot 2, 03/10) : le compilateur React refusait
+  // de l'optimiser (« la mémoïsation existante ne peut pas être préservée ») et
+  // sautait TOUT le composant. Calculé à chaque rendu, il mémoïse lui-même ce
+  // qui peut l'être ; la fenêtre ne compte que les quarts d'heure d'un jour.
+  const heuresLibres = (() => {
     if (!dateValide || depuis === null) return []
     const regle = (h, p, duree) => creneauAcceptable({
       dateStr: date, heureDebut: h, dureeMinutes: duree, horaireJour, creneauxJour,
@@ -411,7 +416,7 @@ export default function ModalNouveauRdv({
         return true
       },
     })
-  }, [dateValide, depuis, date, horaireJour, creneauxJour, rdvsExistants, prestations, enTable, tableHorsInventaire, nombreSaisi, referenceGroupe, dureeGroupe, salleConnue, salle, nCouverts, presta, dureeMin, couverts])
+  })()
 
   // Le prix de la prestation. Plus de fourchette depuis le 27/08 : le prix est
   // le prix, et ce qu'on ajoute se règle à la caisse.
@@ -1311,7 +1316,7 @@ export default function ModalNouveauRdv({
                 la cuisine a déjà son compte sur ce quart d'heure (lot 5), il ne
                 dit plus « Confirmer » comme si de rien n'était. Et sur une heure
                 déjà passée, on ne confirme rien à personne : on note. */}
-            {submitting ? 'Enregistrement…' : passe ? 'Noter après coup ✓' : (choixTable?.forcer || cadenceDepassee) ? 'Poser quand même ✓' : `${mots.manuelConfirmer} ✓`}
+            {submitting ? <EnCours /> : passe ? 'Noter après coup ✓' : (choixTable?.forcer || cadenceDepassee) ? 'Poser quand même ✓' : `${mots.manuelConfirmer} ✓`}
           </button>
           </>)}
         </div>

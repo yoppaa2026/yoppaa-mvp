@@ -4599,6 +4599,30 @@ verifier('les échecs sont comptés, pas alertés douze fois',
     /toutesLesLignes\(\(\) => supabase\s*\.from\('rdv_reservations'\)\s*\.select\('abonnement_id, date_rdv, statut'\)/.test(MODALE))
 }
 
+// ─── AUCUN « ENREGISTREMENT… » IMMOBILE (lot 2, 03/10) ──────────────────────
+//
+// 🔴 DIX-NEUF BOUTONS DU TABLEAU DE BORD CHANGEAIENT DE MOT ET C'ÉTAIT TOUT : un
+// texte figé se lit comme un écran planté. Ils passent tous par `EnCours`, qui
+// porte les cinq points du logo. On COMPTE les textes nus, fichier par fichier.
+{
+  const { readdirSync } = await import('node:fs')
+  const { sansProse } = await import('./lire-code.mjs')
+  const dossier = new URL('../app/dashboard/', import.meta.url)
+  const fichiers = readdirSync(dossier).filter(f => f.endsWith('.js') && f !== 'EnCours.js')
+  const nus = []
+  for (const f of fichiers) {
+    const src = sansProse(readFileSync(new URL(f, dossier), 'utf8'))
+    const n = (src.match(/'Enregistrement…'/g) || []).length
+    if (n > 0) nus.push(`${f} (${n})`)
+  }
+  verifier('🔴 le dossier du tableau de bord a bien été lu', fichiers.length > 10, `${fichiers.length} fichiers`)
+  verifier('🔴 aucun bouton du tableau de bord ne dit « Enregistrement… » sans les points qui travaillent',
+    nus.length === 0, nus.join(', '))
+  const ENCOURS = readFileSync(new URL('EnCours.js', dossier), 'utf8')
+  verifier('⚠️ et ces points sont ceux du logo, à la couleur du bouton',
+    /<DotsAttente couleur="currentColor" taille=\{5\} label=\{texte\} \/>/.test(ENCOURS))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

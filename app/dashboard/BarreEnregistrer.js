@@ -12,6 +12,7 @@
 // fermer l'application. D'où les deux pièces de ce fichier.
 
 import { useEffect } from 'react'
+import EnCours from './EnCours'
 import { AlertTriangle, Check, RotateCcw, X } from 'lucide-react'
 import { MESSAGE_QUITTER, libelleModifications } from '@/lib/formulaire-modifie'
 
@@ -102,7 +103,7 @@ export function BarreEnregistrer({ visible, nb = 0, saving = false, onEnregistre
             cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1,
             boxShadow: '0 3px 12px rgba(107,53,196,0.45)',
           }}>
-          <Check size={14} strokeWidth={2.4}/> {saving ? 'Enregistrement…' : libelleAction}
+          <Check size={14} strokeWidth={2.4}/> {saving ? <EnCours /> : libelleAction}
         </button>
       </span>
     </div>
@@ -150,7 +151,7 @@ export function ModaleQuitter({ ouverte, nb = 0, saving = false, onEnregistrer, 
             onClick={onEnregistrer}
             disabled={saving}
             style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 16px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13.5, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>
-            <Check size={15} strokeWidth={2.4}/> {saving ? 'Enregistrement…' : 'Enregistrer et continuer'}
+            <Check size={15} strokeWidth={2.4}/> {saving ? <EnCours /> : 'Enregistrer et continuer'}
           </button>
           <button
             type="button"

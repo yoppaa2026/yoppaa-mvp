@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import EnCours from './EnCours'
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { toutesLesLignes } from '@/lib/toutes-les-lignes'
 import { rdvsSousLaFermeture } from '@/lib/fermetures-rdv'
@@ -1337,7 +1338,7 @@ function TabMenu({ commercantId, commercant, toast }) {
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>
-            <Icon name="check" size={14}/> {saving ? 'Enregistrement…' : 'Enregistrer'}
+            <Icon name="check" size={14}/> {saving ? <EnCours /> : 'Enregistrer'}
           </button>
           <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
         </div>
@@ -3871,7 +3872,7 @@ function TabDeals({ commercantId, commercant, toast }) {
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveDeal} disabled={saving}>
-              <Icon name="check" size={14}/> {saving ? 'Enregistrement…' : 'Enregistrer'}
+              <Icon name="check" size={14}/> {saving ? <EnCours /> : 'Enregistrer'}
             </button>
             <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
           </div>
@@ -4321,7 +4322,7 @@ function TabActus({ commercantId, commercant, toast }) {
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveActu} disabled={saving}>
-              <Icon name="check" size={14}/> {saving ? 'Enregistrement…' : 'Publier'}
+              <Icon name="check" size={14}/> {saving ? <EnCours /> : 'Publier'}
             </button>
             <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowForm(false)}>Annuler</button>
           </div>
@@ -5574,7 +5575,7 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
       </div>
 
       <button onClick={sauvegarder} disabled={saving} style={{ width: '100%', padding: 14, borderRadius: 12, border: 'none', background: saving ? T.muted : T.main, color: '#fff', fontWeight: 800, fontSize: 15, cursor: saving ? 'default' : 'pointer' }}>
-        {saving ? 'Enregistrement…' : 'Enregistrer la livraison'}
+        {saving ? <EnCours /> : 'Enregistrer la livraison'}
       </button>
 
       <div style={{ marginTop: 22 }}>
@@ -6213,7 +6214,7 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
             </label>
             <div style={{ display: 'flex', gap: 8 }}>
               <button style={btnPlein} disabled={saving} onClick={() => sauverConfig(!actif)}>
-                {saving ? 'Enregistrement…' : actif ? 'Enregistrer' : 'Activer la fidélité (25 SMS offerts)'}
+                {saving ? <EnCours /> : actif ? 'Enregistrer' : 'Activer la fidélité (25 SMS offerts)'}
               </button>
               {actif && <button style={btnGhost} onClick={() => setShowConfig(false)}>Annuler</button>}
             </div>
@@ -8971,7 +8972,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
           <p style={{ fontSize: 10.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>12 mois par défaut. S&rsquo;applique aux bons vendus après l&rsquo;enregistrement.</p>
         </div>
         <button style={{ ...s.btn, ...s.btnPrimary, marginTop: 8 }} onClick={saveCfg} disabled={savingCfg}>
-          <Icon name="check" size={14}/> {savingCfg ? 'Enregistrement…' : 'Enregistrer'}
+          <Icon name="check" size={14}/> {savingCfg ? <EnCours /> : 'Enregistrer'}
         </button>
       </div>
 
@@ -9275,7 +9276,7 @@ function ReglageCadence({ commercantId, toast }) {
             <span style={{ fontSize: 12, color: T.deep, fontWeight: 700 }}>personnes par quart d&rsquo;heure</span>
             <button type="button" onClick={enregistrer} disabled={!aEnregistrer || saving}
               style={{ padding: '8px 16px', borderRadius: 100, border: 'none', background: aEnregistrer ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#D1D5DB', color: '#fff', fontWeight: 800, fontSize: 12, cursor: aEnregistrer && !saving ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
-              {saving ? 'Enregistrement…' : 'Enregistrer'}
+              {saving ? <EnCours /> : 'Enregistrer'}
             </button>
           </div>
           {!verdict.ok && (
@@ -9404,7 +9405,7 @@ function ReglageDelaiAnnulation({ commercantId, commercant, toast }) {
           </p>
           <button type="button" onClick={enregistrer} disabled={!aEnregistrer || saving}
             style={{ marginTop: 12, padding: '8px 16px', borderRadius: 100, border: 'none', background: aEnregistrer ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#D1D5DB', color: '#fff', fontWeight: 800, fontSize: 12, cursor: aEnregistrer && !saving ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
+            {saving ? <EnCours /> : 'Enregistrer'}
           </button>
         </>
       )}
@@ -9573,7 +9574,7 @@ function ReglageEmpreinte({ commercantId, commercant, toast }) {
           )}
           <button type="button" onClick={enregistrer} disabled={!aEnregistrer || saving}
             style={{ marginTop: 12, padding: '8px 16px', borderRadius: 100, border: 'none', background: aEnregistrer ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#D1D5DB', color: '#fff', fontWeight: 800, fontSize: 12, cursor: aEnregistrer && !saving ? 'pointer' : 'default', fontFamily: '"DM Sans", sans-serif' }}>
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
+            {saving ? <EnCours /> : 'Enregistrer'}
           </button>
         </>
       )}
@@ -10735,7 +10736,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
               </button>
               <button onClick={save} disabled={saving}
                 style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
-                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : formEstJointure ? 'Autoriser cette jointure' : 'Créer la prestation')}
+                {saving ? <EnCours /> : (editId ? 'Enregistrer' : formEstJointure ? 'Autoriser cette jointure' : 'Créer la prestation')}
               </button>
             </div>
           </div>
@@ -11371,7 +11372,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={save} disabled={saving}
               style={{ ...s.btn, ...s.btnPrimary, opacity: saving ? 0.6 : 1, flex: '1 1 140px' }}>
-              {saving ? 'Enregistrement…' : (editId ? 'Mettre à jour' : 'Créer la formule')}
+              {saving ? <EnCours /> : (editId ? 'Mettre à jour' : 'Créer la formule')}
             </button>
             <button onClick={() => { setShowForm(false); setEditId(null); setForm(initialForm) }}
               style={{ ...s.btn, ...s.btnGhost, flex: '0 1 auto' }}>Annuler</button>
@@ -11888,7 +11889,7 @@ function TabRdvPraticiens({ commercantId, commercant, toast }) {
               </button>
               <button onClick={save} disabled={saving}
                 style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
-                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : mots.praticienCreer)}
+                {saving ? <EnCours /> : (editId ? 'Enregistrer' : mots.praticienCreer)}
               </button>
             </div>
           </div>
@@ -13106,7 +13107,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
               </button>
               <button onClick={save} disabled={saving}
                 style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
-                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer le créneau')}
+                {saving ? <EnCours /> : (editId ? 'Enregistrer' : 'Créer le créneau')}
               </button>
             </div>
           </div>
@@ -13437,7 +13438,7 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
               </button>
               <button onClick={save} disabled={saving}
                 style={{ flex: 2, padding: '12px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: saving ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', fontSize: 14, opacity: saving ? 0.6 : 1, boxShadow: `0 4px 14px ${T.main}55` }}>
-                {saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer la fermeture')}
+                {saving ? <EnCours /> : (editId ? 'Enregistrer' : 'Créer la fermeture')}
               </button>
             </div>
           </div>
@@ -15078,7 +15079,7 @@ function BlocFacturation({ commercant, toast, onSaved }) {
       <div style={s.card}>
         <button onClick={enregistrer} disabled={envoi}
           style={{ ...s.btn, ...s.btnPrimary, opacity: envoi ? 0.6 : 1, width: '100%' }}>
-          {envoi ? 'Enregistrement…' : 'Enregistrer mes coordonnées'}
+          {envoi ? <EnCours /> : 'Enregistrer mes coordonnées'}
         </button>
       </div>
     </div>

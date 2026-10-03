@@ -1407,8 +1407,12 @@ verifier('une commande remise sans moyen garde son rattrapage',
   // ⚠️ DEUX, PAS UN : l'inscription qui ouvre le contrat, et la résiliation qui
   // décide quelles séances sont « à venir ». À 00h30, la seconde travaillerait
   // sur la veille et emporterait les séances d'aujourd'hui.
+  // ⚠️ REPOINTÉE LE 03/10 (Abo-I2) : la résiliation est partie dans une route
+  // serveur, qui juge « à venir » à la minute de Bruxelles (`creneauDejaCommence`,
+  // plus strict qu'un jour). On compte l'inscription ici, la résiliation là-bas.
   egal('l’inscription et la résiliation datent en heure belge',
-    (srcConfigDates.match(/const aujourdhui = jourBruxelles\(\)/g) || []).length, 2)
+    (srcConfigDates.match(/const aujourdhui = jourBruxelles\(\)/g) || []).length
+    + (/creneauDejaCommence\(d, h, maintenant\)/.test(readFileSync(new URL('../app/api/rdv/resilier-abonnement/route.js', import.meta.url), 'utf8')) ? 1 : 0), 2)
 }
 
 // ⚠️ UN FRAIS INCONNU RESTE VIDE, JAMAIS 0,00 (Alex, 19/08). Ses quatre

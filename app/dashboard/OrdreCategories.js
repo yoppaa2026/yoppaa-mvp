@@ -15,6 +15,7 @@
 // mental, et laisserait la liste à moitié rangée si l'une d'elles échouait.
 
 import { useState, useEffect } from 'react'
+import EnCours from './EnCours'
 import { supabase } from '@/lib/supabase'
 import { listeAOrdonner, ordrePourEnregistrer } from '@/lib/categories-catalogue'
 
@@ -143,7 +144,7 @@ export default function OrdreCategories({ commercantId, commercant, categories =
             background: modifie && !envoi ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E9E7F2',
             color: modifie && !envoi ? '#fff' : T.muted,
           }}>
-          {envoi ? 'Enregistrement…' : 'Enregistrer cet ordre'}
+          {envoi ? <EnCours /> : 'Enregistrer cet ordre'}
         </button>
         {commercant?.ordre_categories?.length > 0 && (
           <button type="button" onClick={reinitialiser}

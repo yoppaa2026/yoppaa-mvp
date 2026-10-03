@@ -524,6 +524,19 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 2 · LES BOUTONS « ENREGISTREMENT… » QUI TRAVAILLENT ───────────
+  { nom: '⚠️ un bouton redit « Enregistrement… » sans les points',
+    banc: 'verif:logique', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "{saving ? <EnCours /> : (editId ? 'Enregistrer' : 'Créer la fermeture')}",
+    vers: "{saving ? 'Enregistrement…' : (editId ? 'Enregistrer' : 'Créer la fermeture')}",
+    garde: 'aucun bouton du tableau de bord ne dit « Enregistrement… » sans les points' },
+
+  { nom: '⚠️ les points disparaissent du composant',
+    banc: 'verif:logique', fichier: 'app/dashboard/EnCours.js',
+    de: '      <DotsAttente couleur="currentColor" taille={5} label={texte} />',
+    vers: '',
+    garde: 'et ces points sont ceux du logo' },
+
   // ─── LOT 2 · I12 : LA FILE CÔTÉ COMMERÇANTE ; LA-03 ─────────────────────
   { nom: '🔴 un second declenchement reprevient toute la file',
     banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',

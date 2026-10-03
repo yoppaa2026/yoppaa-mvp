@@ -438,14 +438,20 @@ const srcConfig = sansCommentaires(readFileSync(new URL('../app/dashboard/Config
   verifier('les bancs se balaient', bancs.length > 40, `${bancs.length} bancs`)
   verifier('🔴 aucun banc ne passe au moteur de créneaux une date écrite en dur', fautifs.length === 0, fautifs.join(' | '))
 }
+// ⚠️ REPOINTÉES LE 03/10 (Abo-I2) : la résiliation ne s'écrit plus depuis le
+// tableau de bord mais dans `app/api/rdv/resilier-abonnement`. Les deux règles
+// restent les mêmes, lues là où elles vivent désormais ; la seconde est même
+// plus stricte : « à venir » veut dire « pas encore commencée », à l'heure de
+// Bruxelles, et plus « à partir d'aujourd'hui ».
+const srcResiliation = sansCommentaires(readFileSync(new URL('../app/api/rdv/resilier-abonnement/route.js', import.meta.url), 'utf8'))
 verifier('résilier un abonnement écrit un statut qui existe',
-  /statut: 'annule_commercant'/.test(srcConfig))
+  /statut: 'annule_commercant'/.test(srcResiliation))
 verifier('et jamais « annule » tout court',
-  !/statut: 'annule'/.test(srcConfig))
+  !/statut: 'annule'/.test(srcConfig) && !/statut: 'annule'/.test(srcResiliation))
 // ⚠️ Seules les séances À VENIR se libèrent : les passées ont eu lieu et
 // comptent dans l'historique comme dans les statistiques.
 verifier('la résiliation ne touche que les séances à venir',
-  /\.gte\('date_rdv', aujourdhui\)/.test(srcConfig))
+  /seancesAnnuleesParResiliation\(seances, \{\s*dejaCommencee: \(d, h\) => creneauDejaCommence\(d, h, maintenant\),/.test(srcResiliation))
 // ⚠️ LE PRIX VIT SUR LE CONTRAT, PAS SUR CHAQUE SÉANCE. Le recopier trente-six
 // fois multiplierait le chiffre d'affaires par trente-six.
 //

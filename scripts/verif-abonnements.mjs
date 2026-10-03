@@ -2319,6 +2319,15 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     !/'Abonnements',/.test(LANDING))
 }
 
+// ─── « DÉJÀ PAYÉ » DIT PAR QUEL MOYEN (Audit 1 I4, 03/10) ──────────────────
+{
+  const CONF_P = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 un contrat « déjà payé » exige son moyen de paiement',
+    /if \(insc\.paye && !insc\.mode_paiement\) return toast\(/.test(CONF_P)
+    && /mode_paiement: insc\.paye \? insc\.mode_paiement : null,/.test(CONF_P))
+  verifier('⚠️ et « sur place » ne s’invente plus jamais', !/insc\.mode_paiement \|\| 'sur_place'/.test(CONF_P))
+}
+
 // ─── UN ABONNEMENT À VENIR N'EST PAS « TERMINÉ » (Audit 3 I4, 03/10) ───────
 {
   const { etatAbonnement: etatA, resumeAbonnementClient: resumeA } = await import('../lib/abonnements.js')

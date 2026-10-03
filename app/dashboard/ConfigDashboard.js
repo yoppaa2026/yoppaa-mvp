@@ -10907,6 +10907,11 @@ function TabRdvAbonnements({ commercantId, toast }) {
     // l'interdire, et la contrainte de la base est tombée avec la migration.
     const presta = prestations.find(p => p.id === formule.prestation_id)
     if (!presta) return toast('Le cours de cette formule n’existe plus', 'error')
+    // 🔴 « DÉJÀ PAYÉ » SANS MOYEN S'ÉCRIVAIT « SUR PLACE » (Audit 1 I4, 03/10),
+    // contre la règle du 17/08 : la comptabilité recevait un montant sans
+    // savoir s'il fallait le chercher dans le tiroir, sur le terminal ou sur
+    // le relevé. Le moyen se demande, il ne se devine pas.
+    if (insc.paye && !insc.mode_paiement) return toast('Dis comment tu as été payé : terminal, espèces ou virement', 'error')
 
     // ⚠️ EN HEURE BELGE. `toISOString()` rend le jour de Greenwich : une
     // inscription prise à 00h30 aurait fait démarrer le contrat la VEILLE.
@@ -10941,7 +10946,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
       statut: 'actif',
       paye: !!insc.paye,
       paye_le: insc.paye ? new Date().toISOString() : null,
-      mode_paiement: insc.paye ? (insc.mode_paiement || 'sur_place') : null,
+      mode_paiement: insc.paye ? insc.mode_paiement : null,
       // ⚠️ TVA FIGÉE À LA SIGNATURE, comme le prix juste au-dessus et comme le
       // fait un rendez-vous. Sans elle, l'abonnement entrait en Comptabilité
       // sans taux, et un contrat vendu cette année serait ventilé l'an prochain

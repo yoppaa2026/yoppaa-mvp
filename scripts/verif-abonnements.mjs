@@ -2319,6 +2319,20 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     !/'Abonnements',/.test(LANDING))
 }
 
+// ─── UN ABONNEMENT À VENIR N'EST PAS « TERMINÉ » (Audit 3 I4, 03/10) ───────
+{
+  const { etatAbonnement: etatA, resumeAbonnementClient: resumeA } = await import('../lib/abonnements.js')
+  const CONTRAT = { id: 'k1', statut: 'actif', date_debut: '2026-11-02', date_fin: '2027-06-30', seances_total: 30 }
+  const etat = etatA(CONTRAT, [], { aujourdhui: '2026-10-04' })
+  const r = resumeA(etat)
+  verifier('🔴 acheté ce matin pour le mois prochain : la carte dit quand il commence',
+    etat.aVenir === true && etat.termine === false && /^Commence le /.test(r.titre) && r.ton !== 'termine', JSON.stringify({ aVenir: etat.aVenir, r }))
+  verifier('⚠️ et le premier jour, il est en cours',
+    etatA(CONTRAT, [], { aujourdhui: '2026-11-02' }).aVenir === false && resumeA(etatA(CONTRAT, [], { aujourdhui: '2026-11-02' })).ton !== 'termine')
+  verifier('⚠️ un contrat résilié avant son début reste résilié',
+    resumeA(etatA({ ...CONTRAT, statut: 'resilie' }, [], { aujourdhui: '2026-10-04' })).titre === 'Abonnement résilié')
+}
+
 // ─── UNE SÉANCE D'ABONNEMENT EST DÉJÀ PAYÉE, ET LE DIT (Audit 2 I2-I3, 03/10)
 //
 // 🔴 LE RÉCAP DISAIT « TU RÈGLES SUR PLACE », L'EMAIL « PRIX 0,00 € », LE

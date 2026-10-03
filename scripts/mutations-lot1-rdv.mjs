@@ -524,6 +524,13 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 3 I4 : UN ABONNEMENT À VENIR ─────────────────────────
+  { nom: '🔴 un abonnement achete pour le mois prochain se dit « Termine »',
+    banc: 'verif:abonnements', fichier: 'lib/abonnements.js',
+    de: '  if (etat.aVenir) {',
+    vers: '  if (false) {',
+    garde: 'acheté ce matin pour le mois prochain : la carte dit quand il commence' },
+
   // ─── LOT 3 · LA-07 : NI COURS RETIRÉ, NI JOUR FERMÉ ─────────────────────
   { nom: '🔴 la file est prevenue pour un cours retire',
     banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',

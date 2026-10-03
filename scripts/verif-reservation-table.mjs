@@ -2990,9 +2990,14 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // Une tournure sans genre ni métier est juste dans les deux cas, et c'est
   // exactement le genre de faux-vert qu'un banc doit figer.
   // (Les apostrophes sont échappées dans le source : on vise le texte entre.)
+  // ⚠️ REPOINTÉE LE 03/10 : « C'est bien confirmé » promettait sans savoir (la
+  // place peut avoir disparu pendant le paiement, et le webhook rembourse
+  // alors). La phrase dit désormais les deux issues possibles, toujours sans
+  // vocabulaire de métier.
   verifier('le retour de Stripe reste neutre, faute de connaître le métier',
-    /bien confirmé, tu recevras/.test(TUNNEL)
-    && /Rien n.{0,2}a été réservé, tu peux réessayer/.test(TUNNEL))
+    /Tu recevras un email qui confirme ta place, ou ton remboursement intégral/.test(TUNNEL)
+    && /Rien n.{0,2}a été réservé, tu peux réessayer/.test(TUNNEL)
+    && !/session expirée\)\.[^']{0,160}\b(RDV|rendez-vous|table)\b/.test(TUNNEL))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

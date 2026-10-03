@@ -46,6 +46,7 @@ import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { chargerBonsValides, debiterBons, recrediterBons } from '@/lib/bons-cadeaux-server'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
+import { refusAvantPaiement } from '@/lib/refus-reservation'
 import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { euros } from '@/lib/montants'
@@ -168,6 +169,27 @@ export async function POST(request) {
     }
     if (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled) {
       return NextResponse.json({ ok: false, error: 'Le paiement en ligne n\'est pas encore activé chez ce commerçant.' }, { status: 400 })
+    }
+
+    // 🔴 LA PLACE EST VÉRIFIÉE AVANT LE PAIEMENT ET AVANT LA COMMANDE (03/10),
+    // comme l'acompte seul : sinon on encaissait l'acompte et les produits
+    // d'un rendez-vous dont la place n'existait plus. En simple vérification,
+    // rien n'est écrit.
+    const essai = await creerReservationRdv(supabase, {
+      commercantId: commercant.id,
+      prestationId: prestation.id,
+      dateRdv: date_rdv,
+      heureDebut: heure_debut,
+      champs: {
+        praticien_id: praticien_id || null,
+        heure_fin,
+        duree_minutes: Number(duree_minutes) || null,
+      },
+      simulation: true,
+    })
+    if (!essai.ok) {
+      const { status, corps } = refusAvantPaiement(essai, { nom: commercant.nom })
+      return NextResponse.json(corps, { status })
     }
 
     // ─── Acompte du rendez-vous ────────────────────────────────────────────
@@ -731,6 +753,9 @@ export async function POST(request) {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      // 🔴 UNE PAGE DE PAIEMENT NE RESTE PAS OUVERTE DES HEURES (03/10), comme
+      // l'acompte seul : trente minutes, le minimum que Stripe accepte.
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
       payment_method_types: ['card', 'bancontact'],
       line_items: lineItems,
       customer_email: client_email,

@@ -36,6 +36,8 @@ import { fichePubliee } from '@/lib/statut-commercant'
 import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
+import { creerReservationRdv } from '@/lib/rdv-creation-server'
+import { refusAvantPaiement } from '@/lib/refus-reservation'
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -268,8 +270,30 @@ export async function POST(request) {
       }, { status: 400 })
     }
 
-    // TODO : valider l'overlap/horaires/pause ici (réutiliser logique existante).
-    // Pour l'instant, le FE valide. Mais on devrait re-vérifier server-side pour sécurité.
+    // 🔴 LA PLACE EST VÉRIFIÉE AVANT LE PAIEMENT (audit du 03/10). Ici vivait un
+    // « TODO : valider ici » : la cliente payait son acompte, puis le webhook
+    // découvrait que le cours était complet ou l'horaire fermé, levait, et
+    // Stripe rejouait trois jours sans que personne ne rembourse. La
+    // réservation passe donc par TOUTES les règles du module de création, en
+    // simple vérification, avant d'ouvrir Stripe. La course entre ce contrôle
+    // et le paiement reste possible : le webhook la rattrape en remboursant.
+    const essai = await creerReservationRdv(supabase, {
+      commercantId: commercant.id,
+      prestationId: prestation.id,
+      dateRdv: date_rdv,
+      heureDebut: heure_debut,
+      champs: {
+        praticien_id: praticien_id || null,
+        heure_fin,
+        duree_minutes: Number(duree_minutes) || null,
+        ...(Number(couverts) ? { couverts: Number(couverts) } : {}),
+      },
+      simulation: true,
+    })
+    if (!essai.ok) {
+      const { status, corps } = refusAvantPaiement(essai, { nom: commercant.nom })
+      return NextResponse.json(corps, { status })
+    }
 
     // Crée la Checkout Session en DIRECT CHARGE (cf. memory project-paiement-stripe).
     // Le paiement est cree DANS le compte du connected account (pas la plateforme),
@@ -282,6 +306,10 @@ export async function POST(request) {
     // Le success_url/cancel_url restent sur la plateforme (chemin standard).
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      // 🔴 UNE PAGE DE PAIEMENT NE RESTE PAS OUVERTE DES HEURES (03/10). Payée
+      // le soir pour un cours du matin, elle arrivait sur une place prise
+      // depuis longtemps. Trente minutes, le minimum que Stripe accepte.
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
       payment_method_types: ['card', 'bancontact'],
       line_items: [{
         quantity: 1,

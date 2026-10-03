@@ -20,13 +20,13 @@
 // signature (signature calculée sur le body byte-par-byte, pas après JSON.parse).
 
 import { NextResponse } from 'next/server'
-import { eurosNus } from '@/lib/montants'
+import { eurosNus, euros } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 // 🔴 CE QU'ON FAIT D'UN ÉVÉNEMENT DÉJÀ VU : le rejeu de Stripe était avalé, et
 // aucun handler qui lève pour obtenir un rejeu ne pouvait aboutir.
 import { decisionRejeu } from '@/lib/stripe-rejeu'
-import { envoyerAuCommercant, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
+import { envoyerAuCommercant, envoyerAuYopper, emailPlaceNonConfirmee, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBons, recrediterBons, regimeBonPourCommerce } from '@/lib/bons-cadeaux-server'
 import { libelleBon } from '@/lib/bons-cadeaux'
@@ -37,7 +37,7 @@ import { programmerRappelRdv } from '@/lib/rappels'
 import { recupererFraisStripe, ventilerFrais, instantPaiement } from '@/lib/stripe-frais'
 import { crediterFidelite } from '@/lib/fidelite-server'
 import { canDo, planEffectif } from '@/lib/plans'
-import { jourBruxelles, rappelVeillePossible } from '@/lib/timezone'
+import { jourBruxelles, rappelVeillePossible, creneauDejaCommence } from '@/lib/timezone'
 import { motsReservation, objetReservation } from '@/lib/reservation-metier'
 import { contratDepuisFormule, resumeContratAchete } from '@/lib/abonnements'
 import { adresseRendezVous } from '@/lib/lieu-fige'
@@ -47,6 +47,7 @@ import { creerReservationRdv, appliquerAvantagesRdv, lignesBonsDeMeta } from '@/
 import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
 import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { estRefusDeRegle, motifApresPaiement } from '@/lib/refus-reservation'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -311,6 +312,13 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       console.warn('[webhook] frais Stripe RDV non enregistrés (non bloquant)', e?.message)
     }
 
+    // 🔴 UN PAIEMENT ARRIVÉ APRÈS LE DÉBUT DU CRÉNEAU NE CRÉE RIEN (03/10) : un
+    // rejeu tardif posait sinon un rendez-vous dans le passé. On rembourse.
+    if (creneauDejaCommence(meta.date_rdv, String(meta.heure_debut || ''))) {
+      await refuserApresPaiement(supabase, { code: 'creneau_passe', meta, paymentIntent, compte: eventAccount || paymentIntent.on_behalf_of || null, avecProduits })
+      return
+    }
+
     // ⚠️ LE LIEU GRAVÉ, LA CAPACITÉ GRAVÉE, LA PREMIÈRE PLACE LIBRE ET LA TVA
     // FIGÉE VIENNENT DU MODULE. Ces quatre gestes vivaient en quatre copies :
     // ici, dans la route d'abonnement, dans la modale du tableau de bord, et
@@ -325,10 +333,20 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       heureDebut: meta.heure_debut,
       champs,
     })
-    // ⚠️ ON RELANCE, comme avant : Stripe rejouera le webhook, et le garde
-    // anti-double-création en tête de ce handler absorbe le rejeu. Le client a
-    // payé, un rendez-vous manquant ne doit pas se perdre en silence.
-    if (!resa.ok) throw new Error(`création RDV impossible (${resa.code}) : ${resa.error?.message || resa.code}`)
+    if (!resa.ok) {
+      // 🔴 UN REFUS DE RÈGLE NE SE REJOUE PLUS, IL SE REMBOURSE (03/10). La
+      // place prise entre le contrôle et le paiement, l'horaire fermé entre-
+      // temps : aucun rejeu n'y changera rien. Avant, on relançait, Stripe
+      // rejouait trois jours, et la cliente avait payé sans place ni
+      // remboursement. On rembourse, on le lui écrit, et on s'arrête.
+      if (estRefusDeRegle(resa.code)) {
+        await refuserApresPaiement(supabase, { code: resa.code, meta, paymentIntent, compte: eventAccount || paymentIntent.on_behalf_of || null, avecProduits })
+        return
+      }
+      // ⚠️ UNE PANNE, ELLE, SE REJOUE : Stripe relancera, et le garde
+      // anti-double-création en tête de ce handler absorbe le rejeu.
+      throw new Error(`création RDV impossible (${resa.code}) : ${resa.error?.message || resa.code}`)
+    }
     const payload = resa.payload
     console.info('[stripe/webhook] RDV créé via paiement Stripe', { rdvId, pi: paymentIntent.id })
 
@@ -1029,6 +1047,90 @@ async function handlePaymentIntentFailed(paymentIntent, supabase) {
   console.info('[webhook/PI failed] commande annulée KO + stock libéré', { commandeId, pi: paymentIntent.id })
 }
 
+// ─── LE PAIEMENT EST ARRIVÉ, LA PLACE N'EXISTAIT PLUS (03/10) ──────────────
+//
+// 🔴 AVANT : le webhook levait, Stripe rejouait trois jours, personne ne
+// remboursait, et l'écran de retour avait dit « confirmé ». Désormais :
+//   1. on rembourse TOUT le paiement (acompte, et produits s'il y en a) ;
+//   2. on marque le paiement d'un `yoppaa_refus`, que l'écran de retour lit
+//      pour dire la vérité au lieu de « confirmé » ;
+//   3. la commande de produits en attente est libérée, stock compris ;
+//   4. on écrit à la cliente : ce qui s'est passé, et que son argent revient.
+// Pour une table garantie par carte (`setupIntentId`), rien n'a été débité :
+// seuls le marquage et l'email restent.
+//
+// ⚠️ UN REMBOURSEMENT QUI ÉCHOUE SE REJOUE : on lève, Stripe relancera, et la
+// clé d'idempotence empêche un double remboursement. « Déjà remboursé » (clé
+// expirée après 24 h) est un succès, pas une panne.
+async function refuserApresPaiement(supabase, { code, meta = {}, paymentIntent = null, setupIntentId = null, compte = null, avecProduits = false }) {
+  const options = compte ? { stripeAccount: compte } : undefined
+  let montant = null
+
+  if (paymentIntent) {
+    try {
+      await stripe.refunds.create({
+        payment_intent: paymentIntent.id,
+        reason: 'requested_by_customer',
+        metadata: { yoppaa_motif: 'refus_reservation', yoppaa_refus: String(code) },
+      }, { ...(options || {}), idempotencyKey: `yoppaa-refus-${paymentIntent.id}` })
+    } catch (e) {
+      if (e?.code !== 'charge_already_refunded') {
+        throw new Error(`remboursement après refus impossible (${code}) : ${e?.message || e}`)
+      }
+    }
+    const centimes = Number(paymentIntent.amount_received ?? paymentIntent.amount) || 0
+    montant = centimes > 0 ? centimes / 100 : null
+    try {
+      await stripe.paymentIntents.update(paymentIntent.id, { metadata: { yoppaa_refus: String(code) } }, options)
+    } catch (e) {
+      console.warn('[webhook/refus] marquage du paiement KO (non bloquant)', e?.message)
+    }
+    if (avecProduits) await handlePaymentIntentFailed(paymentIntent, supabase)
+  } else if (setupIntentId) {
+    try {
+      await stripe.setupIntents.update(setupIntentId, { metadata: { yoppaa_refus: String(code) } }, options)
+    } catch (e) {
+      console.warn('[webhook/refus] marquage de l’empreinte KO (non bloquant)', e?.message)
+    }
+  }
+
+  console.warn('[webhook/refus] réservation refusée après paiement', {
+    code, pi: paymentIntent?.id || null, setupIntentId, rembourse: !!paymentIntent,
+  })
+
+  // ⚠️ L'EMAIL NE BLOQUE RIEN : l'argent est déjà rendu, un envoi raté ne doit
+  // pas faire rejouer un remboursement.
+  try {
+    if (!meta.client_email) return
+    const [{ data: commerce }, { data: presta }] = await Promise.all([
+      supabase.from('commercants').select('nom, slug').eq('id', meta.yoppaa_commercant_id).maybeSingle(),
+      supabase.from('rdv_prestations').select('nom').eq('id', meta.prestation_id).maybeSingle(),
+    ])
+    const jour = meta.date_rdv
+      ? new Date(`${meta.date_rdv}T12:00:00Z`).toLocaleDateString('fr-BE', { timeZone: 'Europe/Brussels', weekday: 'long', day: 'numeric', month: 'long' })
+      : null
+    const heure = String(meta.heure_debut || '').slice(0, 5)
+    const html = emailPlaceNonConfirmee({
+      prenom: meta.client_prenom || null,
+      commercantNom: commerce?.nom || '',
+      prestation: presta?.nom || null,
+      quand: jour ? `${jour}${heure ? ` à ${heure}` : ''}` : null,
+      motif: motifApresPaiement(code),
+      montant: montant ? euros(montant) : null,
+      lienFiche: commerce?.slug ? `${STRIPE_CONFIG.appUrl}/commander/rdv/${commerce.slug}` : null,
+    })
+    await envoyerAuYopper({
+      to: normaliserEmail(meta.client_email),
+      subject: commerce?.nom
+        ? `Ta place ${chezLeCommerce(commerce.nom)} n’a pas pu être confirmée`
+        : 'Ta place n’a pas pu être confirmée',
+      html,
+    })
+  } catch (e) {
+    console.error('[webhook/refus] email à la cliente KO (non bloquant)', e?.message)
+  }
+}
+
 // charge.refunded : met à jour le RDV/commande avec l'info de refund
 async function handleChargeRefunded(charge, supabase) {
   const paymentIntentId = charge.payment_intent
@@ -1280,10 +1382,17 @@ async function handleEmpreinteSetup(session, supabase, compteConnecte) {
     heureDebut: meta.heure_debut,
     champs,
   })
-  // ⚠️ ON RELANCE, comme sur le chemin de l'acompte : Stripe rejouera, et le
-  // garde ci-dessus absorbe le rejeu. Une table perdue en silence, c'est un
-  // client qui se présente devant une salle qui ne l'attend pas.
-  if (!resa.ok) throw new Error(`création table impossible (${resa.code}) : ${resa.error?.message || resa.code}`)
+  // 🔴 UN REFUS DE RÈGLE NE SE REJOUE PLUS (03/10), comme sur le chemin de
+  // l'acompte : rien n'a été débité ici, mais le client doit savoir que sa
+  // table n'existe pas, sinon il se présente devant une salle qui ne l'attend
+  // pas. Une panne, elle, se rejoue.
+  if (!resa.ok) {
+    if (estRefusDeRegle(resa.code)) {
+      await refuserApresPaiement(supabase, { code: resa.code, meta, setupIntentId, compte: compteConnecte })
+      return
+    }
+    throw new Error(`création table impossible (${resa.code}) : ${resa.error?.message || resa.code}`)
+  }
 
   console.info('[webhook/empreinte] table créée avec sa garantie', { rdvId, setupIntentId, montant })
 

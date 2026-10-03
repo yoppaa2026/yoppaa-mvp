@@ -48,6 +48,55 @@ const MUTATIONS = [
     de: '  ON public.rdv_reservations (commercant_id, prestation_id, date_rdv, heure_debut, place_no)',
     vers: '  ON public.rdv_reservations (commercant_id, prestation_id, praticien_id, date_rdv, heure_debut, place_no)',
     garde: 'la base range les places par COURS, pas par professeur' },
+
+  // ─── L'ACOMPTE ENCAISSÉ SANS PLACE ──────────────────────────────────────
+  { nom: '🔴 la verification sans ecriture ecrit quand meme',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: '  if (simulation) return { ok: true, simulation: true, place_no: placeNo }',
+    vers: '  if (false) return { ok: true, simulation: true, place_no: placeNo }',
+    garde: 'et n’écrit RIEN' },
+
+  { nom: '🔴 l acompte ouvre Stripe meme quand la place n existe plus',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    de: '    if (!essai.ok) {',
+    vers: '    if (false) {',
+    garde: 'create-rdv-acompte/route.js répond le refus en clair' },
+
+  { nom: '🔴 une panne d ecriture se rembourse au lieu de se rejouer',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/refus-reservation.js',
+    de: "  'couverts_invalides', 'groupe_trop_grand', 'creneau_passe',",
+    vers: "  'couverts_invalides', 'groupe_trop_grand', 'creneau_passe', 'ecriture_impossible',",
+    garde: 'une panne d’écriture N’EST PAS un refus de règle' },
+
+  { nom: '🔴 le webhook ne rembourse plus un refus de regle',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/webhook/route.js',
+    de: '        await refuserApresPaiement(supabase, { code: resa.code, meta, paymentIntent,',
+    vers: '        if (false) await refuserApresPaiement(supabase, { code: resa.code, meta, paymentIntent,',
+    garde: 'acompte : un refus de règle se rembourse au lieu de se rejouer' },
+
+  { nom: '🔴 le remboursement perd sa cle d idempotence : un rejeu rembourserait deux fois',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/webhook/route.js',
+    de: '}, { ...(options || {}), idempotencyKey: `yoppaa-refus-${paymentIntent.id}` })',
+    vers: '}, { ...(options || {}) })',
+    garde: 'le remboursement porte une clé d’idempotence' },
+
+  { nom: '🔴 l ecran de retour annonce confirme avant le serveur',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '          _attenteConfirmation: !!sessionId,',
+    vers: '          _attenteConfirmation: false,',
+    garde: 'au retour de Stripe, l’écran attend avant de dire « confirmé »' },
+
+  { nom: '🔴 l email de refus insere le prenom tel quel',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/resend.js',
+    de: "    intro: `${prenom ? `${echapperHtml(prenom)}, ta` : 'Ta'} réservation",
+    vers: "    intro: `${prenom ? `${prenom}, ta` : 'Ta'} réservation",
+    garde: 'ce qui vient de la cliente ou du commerce est échappé' },
+
+  { nom: '⚠️ la page de paiement de l acompte reste ouverte des heures',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    de: '      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,',
+    vers: '      // sans expiration',
+    garde: 'create-rdv-acompte/route.js : la page de paiement expire en trente minutes' },
 ]
 
 const lancer = (banc) => {

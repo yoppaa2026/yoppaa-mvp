@@ -1111,6 +1111,11 @@ export default function CommanderRdvSlug() {
         if (snapshot.client) setClient(p => ({ ...p, ...snapshot.client }))
         setRdvCree({
           _viaStripe: true,
+          // 🔴 ON N'ANNONCE PAS « CONFIRMÉ » AVANT LE SERVEUR (03/10). Le
+          // rendez-vous naît au webhook, et la place peut avoir disparu entre
+          // le contrôle et le paiement : il est alors remboursé, pas créé.
+          // L'écran attend la réponse avant de dire quoi que ce soit.
+          _attenteConfirmation: !!sessionId,
           stripe_checkout_session_id: sessionId,
           statut: 'confirme',
           // ⚠️ UNE EMPREINTE N'EST PAS UN ACOMPTE : rien n'a été payé, et le
@@ -1139,17 +1144,28 @@ export default function CommanderRdvSlug() {
               const res = await fetch(`/api/rdv/from-session?session_id=${encodeURIComponent(sessionId)}&slug=${encodeURIComponent(slug)}`)
               const j = await res.json()
               console.info('[rdv stripe] poll response', j)
-              if (j.ok && j.rdv?.numero_rdv) {
-                setRdvCree(p => ({ ...(p || {}), id: j.rdv.id, numero_rdv: j.rdv.numero_rdv, numero_prefixe: j.rdv.numero_prefixe, acompte_montant: j.rdv.acompte_montant ?? p?.acompte_montant }))
+              if (j.ok && j.rdv) {
+                setRdvCree(p => ({ ...(p || {}), _attenteConfirmation: false, id: j.rdv.id, numero_rdv: j.rdv.numero_rdv, numero_prefixe: j.rdv.numero_prefixe, acompte_montant: j.rdv.acompte_montant ?? p?.acompte_montant }))
                 clearInterval(pollInterval)
                 console.info('[rdv stripe] numero recupere', j.rdv.numero_rdv)
+              } else if (j.refuse) {
+                // 🔴 LA PLACE A DISPARU PENDANT LE PAIEMENT : le serveur a
+                // remboursé. On le dit, au lieu d'un écran « confirmé ».
+                setRdvCree(p => ({ ...(p || {}), _attenteConfirmation: false, _refus: { motif: j.motif, rembourse: !!j.rembourse, montant: j.montant ?? null } }))
+                clearInterval(pollInterval)
               } else if (attempts >= MAX_ATTEMPTS) {
+                // ⚠️ PAS DE RÉPONSE N'EST PAS UN SUCCÈS : on dit ce qu'on sait,
+                // et l'email tranchera.
                 console.warn('[rdv stripe] poll numero_rdv timeout - RDV pas trouve apres 15s')
+                setRdvCree(p => ({ ...(p || {}), _attenteConfirmation: false, _confirmationTardive: true }))
                 clearInterval(pollInterval)
               }
             } catch (e) {
               console.error('[rdv stripe] poll error', e)
-              if (attempts >= MAX_ATTEMPTS) clearInterval(pollInterval)
+              if (attempts >= MAX_ATTEMPTS) {
+                setRdvCree(p => ({ ...(p || {}), _attenteConfirmation: false, _confirmationTardive: true }))
+                clearInterval(pollInterval)
+              }
             }
           }, 1000)
         }
@@ -1160,9 +1176,11 @@ export default function CommanderRdvSlug() {
         // encore : `motsReservation` n'a pas sa catégorie et retomberait sur
         // « Ton RDV », y compris chez un restaurant. Une tournure sans genre ni
         // métier est juste dans les deux cas.
+        // 🔴 « C'EST BIEN CONFIRMÉ » N'ÉTAIT PAS VÉRIFIÉ (03/10) : la place peut
+        // avoir disparu pendant le paiement. On dit ce qu'on sait.
         setSubmitError(viaEmpreinte
-          ? 'Carte enregistrée, mais impossible d\'afficher le récap (session expirée). Rien n\'a été débité, et tu recevras l\'email de confirmation.'
-          : 'Paiement reçu, mais impossible d\'afficher le récap (session expirée). C\'est bien confirmé, tu recevras l\'email de confirmation.')
+          ? 'Carte enregistrée, mais impossible d\'afficher le récap (session expirée). Rien n\'a été débité. Tu recevras un email qui confirme ta réservation, ou qui t\'explique pourquoi elle n\'a pas pu être faite.'
+          : 'Paiement reçu, mais impossible d\'afficher le récap (session expirée). Tu recevras un email qui confirme ta place, ou ton remboursement intégral si elle n\'a pas pu être gardée.')
       }
       try { sessionStorage.removeItem(STORAGE_KEY) } catch (_) {}
     } else if (retour === 'annule') {
@@ -4593,7 +4611,54 @@ export default function CommanderRdvSlug() {
               )}
 
               {/* ─── ÉTAPE 4 - CONFIRMATION "Ton RDV est Yoppé ! 🟣" ─── */}
-              {etape === 4 && rdvCree && (
+              {/* 🔴 LE RETOUR DE STRIPE N'EST PAS UNE CONFIRMATION (03/10). Tant
+                  que le serveur n'a pas créé le rendez-vous, on ne montre pas
+                  l'écran « confirmé » : on attend, on dit un refus remboursé,
+                  ou on avoue un retard, sans jamais promettre ce qu'on ne sait
+                  pas. */}
+              {etape === 4 && rdvCree && (rdvCree._refus || rdvCree._attenteConfirmation || rdvCree._confirmationTardive) && (
+                <div style={{ padding: '2rem 1.25rem', animation: 'fadeUp 0.4s ease', textAlign: 'center' }}>
+                  {rdvCree._refus ? (
+                    <>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: '50%', background: '#FEF3C7', marginBottom: '1rem' }}>
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10"/><path d="M12 7v6"/><path d="M12 16.5h.01"/>
+                        </svg>
+                      </div>
+                      <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, marginBottom: '0.75rem', letterSpacing: '-0.5px' }}>
+                        Ta place n’a pas pu être confirmée
+                      </h2>
+                      <p style={{ color: T.deep, fontSize: '0.92rem', lineHeight: 1.55, marginBottom: '0.75rem' }}>
+                        {`${String(rdvCree._refus.motif || 'la réservation n’a pas pu être enregistrée').replace(/^./, c => c.toUpperCase())}.`}
+                      </p>
+                      <p style={{ background: '#ECFDF5', border: '1.5px solid #10B981', borderRadius: 14, padding: '0.875rem 1rem', color: '#065F46', fontSize: '0.86rem', lineHeight: 1.5, marginBottom: '1.25rem', textAlign: 'left' }}>
+                        {rdvCree._refus.rembourse
+                          ? `Ton paiement${rdvCree._refus.montant ? ` de ${euros(rdvCree._refus.montant)}` : ''} t’est remboursé intégralement. Il apparaîtra sur ton compte d’ici 5 à 10 jours ouvrables, selon ta banque. Un email te le confirme.`
+                          : 'Rien n’a été débité, et ta carte n’est gardée pour aucune garantie.'}
+                      </p>
+                      <button type="button"
+                        onClick={() => { setRdvCree(null); setHeureChoisie(null); allerEtape(2) }}
+                        style={{ width: '100%', padding: '0.95rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.98rem', cursor: 'pointer' }}>
+                        Choisir un autre horaire
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <h2 style={{ fontWeight: 900, fontSize: '1.4rem', color: T.ink, marginBottom: '0.75rem', letterSpacing: '-0.5px', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                        {rdvCree._empreinte ? 'Carte enregistrée' : 'Paiement reçu'}
+                        {rdvCree._attenteConfirmation && <DotsAttente couleur={T.main} taille={6} label="Confirmation en cours"/>}
+                      </h2>
+                      <p style={{ color: T.deep, fontSize: '0.92rem', lineHeight: 1.55 }}>
+                        {rdvCree._attenteConfirmation
+                          ? `On confirme ta place ${chezLeCommerce(commercant.nom)}, encore un instant.`
+                          : `La confirmation prend plus de temps que prévu. Tu la recevras par email d’ici quelques minutes. ${rdvCree._empreinte ? 'Si ta réservation n’a pas pu être faite, l’email te le dira, et rien n’aura été débité.' : 'Si ta place n’a pas pu être gardée, ton paiement te sera remboursé intégralement, et l’email te le dira.'}`}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {etape === 4 && rdvCree && !(rdvCree._refus || rdvCree._attenteConfirmation || rdvCree._confirmationTardive) && (
                 <div style={{ padding: '1.5rem 1rem 2rem', animation: 'fadeUp 0.4s ease' }}>
                   <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                     {/* Même grammaire visuelle que l'écran de retrait : l'icône

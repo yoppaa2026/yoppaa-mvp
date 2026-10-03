@@ -32,6 +32,8 @@ import { normaliserEmail } from '@/lib/email-normalise'
 import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
 import { estParCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-collectifs'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
+import { creerReservationRdv } from '@/lib/rdv-creation-server'
+import { refusAvantPaiement } from '@/lib/refus-reservation'
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -143,6 +145,28 @@ export async function POST(request) {
     // que d'en demander une pour rien.
     if (!(montant > 0)) {
       return NextResponse.json({ ok: false, error: 'cette réservation ne demande pas d\'empreinte', pas_d_empreinte: true }, { status: 400 })
+    }
+
+    // 🔴 LA TABLE EST VÉRIFIÉE AVANT DE DEMANDER LA CARTE (03/10), comme
+    // l'acompte : salle, cadence, horaire, par le module de création en simple
+    // vérification. Rien n'est débité ici, mais une carte donnée pour une table
+    // déjà prise finissait sur un écran « table garantie » qui mentait.
+    const essai = await creerReservationRdv(supabase, {
+      commercantId: commercant.id,
+      prestationId: prestation.id,
+      dateRdv: date_rdv,
+      heureDebut: heure_debut,
+      champs: {
+        praticien_id: praticien_id || null,
+        heure_fin,
+        duree_minutes: Number(duree_minutes) || null,
+        couverts: couvertsRetenus,
+      },
+      simulation: true,
+    })
+    if (!essai.ok) {
+      const { status, corps } = refusAvantPaiement(essai, { nom: commercant.nom })
+      return NextResponse.json(corps, { status })
     }
 
     const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null

@@ -2137,9 +2137,25 @@ for (const chemin of [
     'app/api/rdv/no-show/route.js': 'no_show',
   }
   verifie('la sonde a trouvé des remboursements', rembourseurs.length >= 4, String(rembourseurs.length))
+  // ✅ ET UN SEUL QUI REMBOURSE SANS RIEN ANNULER, PARCE QU'IL N'Y A RIEN (03/10) :
+  // le webhook, quand la place a disparu entre le contrôle et le paiement.
+  // Aucune réservation n'existe à annuler ; la garde vérifie donc qu'il ne
+  // rembourse QUE là, dans `refuserApresPaiement`, une seule fois.
+  const REMBOURSENT_SANS_RESERVATION = ['app/api/stripe/webhook/route.js']
   verifie('🔴 seules les routes qui changent le statut remboursent',
-    JSON.stringify([...rembourseurs].sort()) === JSON.stringify(Object.keys(ANNULENT_EN_REMBOURSANT).sort()),
+    JSON.stringify([...rembourseurs].sort())
+      === JSON.stringify([...Object.keys(ANNULENT_EN_REMBOURSANT), ...REMBOURSENT_SANS_RESERVATION].sort()),
     rembourseurs.sort().join(' | '))
+  {
+    const wh = lireCode('app/api/stripe/webhook/route.js')
+    const appels = wh.match(/refunds\.create\(/g) || []
+    const iFn = wh.indexOf('async function refuserApresPaiement(')
+    const iRefund = wh.indexOf('refunds.create(')
+    const iFnSuivante = wh.indexOf('\nasync function ', iFn + 10)
+    verifie('🔴 le webhook ne rembourse qu’une fois, dans le refus d’une réservation qui n’existe pas',
+      appels.length === 1 && iFn > 0 && iRefund > iFn && (iFnSuivante === -1 || iRefund < iFnSuivante),
+      `${appels.length} appel(s)`)
+  }
   for (const [chemin, statut] of Object.entries(ANNULENT_EN_REMBOURSANT)) {
     verifie(`🔴 ${chemin.split('/').slice(-3, -1).join('/')} écrit « ${statut} » en remboursant`,
       new RegExp(`statut: '${statut}'`).test(lireCode(chemin)))
@@ -2212,6 +2228,142 @@ for (const chemin of [
     // mutation le 14/09. Une garde qui cherche un mot ne garde rien.
     verifie(`${court} : la catégorie est dans le select des commerçants`,
       /commercants\([^)]*\bcategorie\b[^)]*\)/.test(src))
+  }
+}
+
+// ═══ L'ACOMPTE ENCAISSÉ SANS PLACE (audit du 03/10) ══════════════════════
+//
+// 🔴 LE DÉFAUT. La route d'acompte ouvrait Stripe avec un « TODO : valider
+// ici » : la place n'était vérifiée qu'au webhook. Cours complet entre-temps,
+// le webhook levait, Stripe rejouait trois jours, personne ne remboursait, et
+// l'écran de retour disait « confirmé ». Désormais : vérification sans
+// écriture AVANT le paiement, remboursement au webhook si la place a quand
+// même disparu, et un écran de retour qui attend la réponse du serveur.
+{
+  const { estRefusDeRegle, refusAvantPaiement, motifApresPaiement } = await import('../lib/refus-reservation.js')
+  const { creerReservationRdv } = await import('../lib/rdv-creation-server.js')
+
+  // ─── Le module des refus, exécuté ─────────────────────────────────────
+  for (const code of ['place_prise', 'salle_complete', 'prestation_hors_creneau', 'creneau_passe', 'couverts_invalides']) {
+    verifie(`🔴 « ${code} » est un refus de règle : il se rembourse, il ne se rejoue pas`, estRefusDeRegle(code))
+  }
+  verifie('🔴 une panne d’écriture N’EST PAS un refus de règle : elle se rejoue', !estRefusDeRegle('ecriture_impossible'))
+  verifie('⚠️ un code inconnu non plus', !estRefusDeRegle('quelque_chose') && !estRefusDeRegle(undefined))
+  const pris = refusAvantPaiement({ code: 'place_prise', collectif: true })
+  verifie('🔴 avant le paiement, une place prise renvoie choisir une autre heure, en clair',
+    pris.status === 409 && pris.corps.creneau_refuse === true && /dernière place vient d’être prise/.test(pris.corps.error), JSON.stringify(pris))
+  verifie('⚠️ jamais un code brut à l’écran', !/^place_prise$/.test(pris.corps.error))
+  verifie('⚠️ une panne avant paiement ne renvoie pas choisir une heure',
+    refusAvantPaiement({ code: 'ecriture_impossible' }).corps.creneau_refuse !== true)
+  verifie('🔴 après le paiement, la cliente lit ce qui s’est passé',
+    /dernière place a été prise/.test(motifApresPaiement('place_prise')) && /déjà passé/.test(motifApresPaiement('creneau_passe')))
+
+  // ─── La vérification sans écriture, exécutée ──────────────────────────
+  // Une fausse base minimale : la prestation, et les places déjà prises.
+  const fausseBase = (placesPrises) => {
+    const vu = { insere: false }
+    return {
+      _vu: vu,
+      from(nom) {
+        const chaine = {
+          select: () => chaine, eq: () => chaine, in: () => chaine, is: () => chaine, neq: () => chaine,
+          maybeSingle: async () => ({ data: nom === 'rdv_prestations'
+            ? { id: 'p2', nom: 'Hatha yoga', capacite: 12, tva_taux: 6, duree_minutes: 60, commercant_id: 'c1' }
+            : nom === 'commercants' ? { id: 'c1', nom: 'Centre Respire', adresse: 'Rue 1' } : null }),
+          single: async () => ({ data: { id: 'rdv-x', place_no: 1 }, error: null }),
+          insert: () => { vu.insere = true; return chaine },
+          then: (r) => r(nom === 'rdv_reservations' ? { data: placesPrises.map(place_no => ({ place_no })) } : { data: [] }),
+        }
+        return chaine
+      },
+    }
+  }
+  const libre = fausseBase([1, 2])
+  const essaiLibre = await creerReservationRdv(libre, {
+    commercantId: 'c1', prestationId: 'p2', dateRdv: '2026-10-07', heureDebut: '10:00', champs: {}, simulation: true,
+  })
+  verifie('🔴 la vérification sans écriture dit oui sur un cours avec de la place',
+    essaiLibre.ok === true && essaiLibre.simulation === true && essaiLibre.place_no === 3, JSON.stringify(essaiLibre))
+  verifie('🔴 et n’écrit RIEN', libre._vu.insere === false)
+  const plein = fausseBase(Array.from({ length: 12 }, (_, i) => i + 1))
+  const essaiPlein = await creerReservationRdv(plein, {
+    commercantId: 'c1', prestationId: 'p2', dateRdv: '2026-10-07', heureDebut: '10:00', champs: {}, simulation: true,
+  })
+  verifie('🔴 et dit non sur un cours complet, AVANT tout paiement',
+    essaiPlein.ok === false && essaiPlein.code === 'place_prise' && plein._vu.insere === false, JSON.stringify(essaiPlein))
+
+  // ─── Les trois routes vérifient AVANT d'ouvrir Stripe ─────────────────
+  for (const f of [
+    'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    'app/api/stripe/checkout/create-rdv-empreinte/route.js',
+    'app/api/stripe/checkout/create-rdv-commande/route.js',
+  ]) {
+    const src = lireCode(f)
+    const iEssai = src.search(/creerReservationRdv\(supabase, \{[\s\S]{0,400}?simulation: true,/)
+    const iStripe = src.indexOf('stripe.checkout.sessions.create(')
+    verifie(`🔴 ${f} vérifie la place avant d’ouvrir le paiement`, iEssai > 0 && iStripe > iEssai, `${iEssai} / ${iStripe}`)
+    verifie(`⚠️ ${f} répond le refus en clair`,
+      /if \(!essai\.ok\) \{\s+const \{ status, corps \} = refusAvantPaiement\(essai, \{ nom: commercant\.nom \}\)\s+return NextResponse\.json\(corps, \{ status \}\)/.test(src))
+  }
+  {
+    const commande = lireCode('app/api/stripe/checkout/create-rdv-commande/route.js')
+    verifie('🔴 le rendez-vous avec produits vérifie la place AVANT de poser la commande et le stock',
+      commande.search(/simulation: true,/) < commande.indexOf(".from('commandes')"))
+  }
+  verifie('🔴 plus de « TODO : valider ici » sur l’acompte',
+    !/TODO : valider l'overlap/.test(lire('app/api/stripe/checkout/create-rdv-acompte/route.js')))
+  for (const f of ['app/api/stripe/checkout/create-rdv-acompte/route.js', 'app/api/stripe/checkout/create-rdv-commande/route.js']) {
+    verifie(`⚠️ ${f} : la page de paiement expire en trente minutes`,
+      /expires_at: Math\.floor\(Date\.now\(\) \/ 1000\) \+ 30 \* 60,/.test(lireCode(f)))
+  }
+
+  // ─── Le webhook rembourse un refus de règle, et rejoue une panne ──────
+  {
+    const wh = lireCode('app/api/stripe/webhook/route.js')
+    verifie('🔴 acompte : un refus de règle se rembourse au lieu de se rejouer',
+      /if \(!resa\.ok\) \{\s+if \(estRefusDeRegle\(resa\.code\)\) \{\s+await refuserApresPaiement\(supabase, \{ code: resa\.code, meta, paymentIntent,[^}]*avecProduits \}\)\s+return\s+\}\s+throw new Error\(`création RDV impossible/.test(wh))
+    verifie('🔴 table garantie : même règle, sans argent en jeu',
+      /if \(!resa\.ok\) \{\s+if \(estRefusDeRegle\(resa\.code\)\) \{\s+await refuserApresPaiement\(supabase, \{ code: resa\.code, meta, setupIntentId, compte: compteConnecte \}\)\s+return\s+\}\s+throw new Error\(`création table impossible/.test(wh))
+    const iPasse = wh.indexOf("code: 'creneau_passe'")
+    verifie('🔴 un paiement arrivé après le début du créneau ne crée rien, il se rembourse',
+      iPasse > 0 && iPasse < wh.indexOf('const resa = await creerReservationRdv(supabase, {'))
+    const fn = wh.slice(wh.indexOf('async function refuserApresPaiement('))
+    verifie('🔴 le remboursement porte une clé d’idempotence', /idempotencyKey: `yoppaa-refus-\$\{paymentIntent\.id\}`/.test(fn))
+    verifie('⚠️ « déjà remboursé » est un succès, toute autre erreur se rejoue',
+      /if \(e\?\.code !== 'charge_already_refunded'\) \{\s+throw new Error/.test(fn))
+    verifie('🔴 le paiement est marqué pour l’écran de retour', /paymentIntents\.update\(paymentIntent\.id, \{ metadata: \{ yoppaa_refus:/.test(fn))
+    verifie('🔴 la commande de produits est libérée, stock compris', /if \(avecProduits\) await handlePaymentIntentFailed\(paymentIntent, supabase\)/.test(fn))
+    verifie('⚠️ la cliente reçoit un email', /emailPlaceNonConfirmee\(\{/.test(fn) && /envoyerAuYopper\(\{/.test(fn))
+  }
+
+  // ─── L'écran de retour attend le serveur ──────────────────────────────
+  {
+    const fs = lireCode('app/api/rdv/from-session/route.js')
+    verifie('🔴 sans rendez-vous, le retour demande à Stripe si le paiement a été refusé',
+      /intention\.metadata\?\.yoppaa_refus/.test(fs) && /refuse: true/.test(fs))
+    const page = lireCode('app/commander/rdv/[slug]/page.js')
+    verifie('🔴 au retour de Stripe, l’écran attend avant de dire « confirmé »',
+      /_attenteConfirmation: !!sessionId,/.test(page)
+      && /\{etape === 4 && rdvCree && !\(rdvCree\._refus \|\| rdvCree\._attenteConfirmation \|\| rdvCree\._confirmationTardive\) && \(/.test(page))
+    verifie('🔴 un refus remboursé se dit, avec un geste pour repartir',
+      /\} else if \(j\.refuse\) \{/.test(page) && /Ta place n’a pas pu être confirmée/.test(page) && /Choisir un autre horaire/.test(page))
+    verifie('⚠️ pas de réponse n’est pas un succès', /_confirmationTardive: true/.test(page))
+    verifie('⚠️ et le retour sans récap ne promet plus « c’est bien confirmé »', !/C\\'est bien confirmé/.test(lire('app/commander/rdv/[slug]/page.js')))
+  }
+
+  // ─── L'email, exécuté ─────────────────────────────────────────────────
+  {
+    const { emailPlaceNonConfirmee } = await import('../lib/resend.js')
+    const html = emailPlaceNonConfirmee({
+      prenom: '<b>Marie</b>', commercantNom: 'Centre <i>Respire</i>', prestation: 'Hatha',
+      quand: 'mercredi 7 octobre à 10:00', motif: motifApresPaiement('place_prise'), montant: '4,50 €',
+    })
+    verifie('🔴 l’email dit le remboursement et son montant', /remboursé intégralement/.test(html) && /4,50 €/.test(html))
+    verifie('🔴 ce qui vient de la cliente ou du commerce est échappé',
+      !/<b>Marie<\/b>/.test(html) && !/<i>Respire<\/i>/.test(html))
+    const sansArgent = emailPlaceNonConfirmee({ prenom: 'Marie', commercantNom: 'Le Bistrologue', motif: 'x', montant: null })
+    verifie('⚠️ sans somme prise, on ne parle pas de remboursement',
+      !/remboursé/.test(sansArgent) && /Rien n&rsquo;a été débité/.test(sansArgent))
   }
 }
 

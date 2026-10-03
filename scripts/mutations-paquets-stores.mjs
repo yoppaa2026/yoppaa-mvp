@@ -650,6 +650,17 @@ const MUTATIONS = [
     de: '                .product(name: "CapacitorGeolocation", package: "CapacitorGeolocation"),',
     vers: '' },
 
+  // ─── L APK D ESSAI (03/10) ──────────────────────────────────────────────
+  { nom: '🔴 bundletool signe avec notre cle sans verifier son empreinte',
+    fichier: ANDROID,
+    de: '          echo "${BT_SHA256}  bundletool.jar" | sha256sum -c - \\',
+    vers: '          true \\' },
+
+  { nom: '🔴 la cle de signature peut rester sur la machine si une etape echoue',
+    fichier: ANDROID,
+    de: "          trap 'rm -f cle.jks' EXIT",
+    vers: '' },
+
   { nom: '🔴 le paquet iOS ne relit plus ses notifications signees',
     fichier: IOS,
     de: '          grep -q "aps-environment" droits.txt \\',

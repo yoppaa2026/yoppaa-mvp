@@ -443,6 +443,29 @@ const fenetreNative = (options = {}) => {
   verifie('🔴 le numéro de build posé est relu',
     /grep -q "versionCode/.test(android) && /Le numero de build n a pas ete pose/.test(android))
 
+  // ─── LE FICHIER D'ESSAI POUR UN TÉLÉPHONE (03/10) ───────────────────────
+  //
+  // 🔴 Le partage interne de Play Console est refusé tant que l'app n'a jamais
+  // été publiée : sans un APK installable, la version Android partait en revue
+  // sans avoir tourné une seule fois sur un vrai téléphone.
+  {
+    const lignesAndroid = lignesYml.join('\n')
+    verifie('🔴 la fabrication Android produit aussi un APK d’essai',
+      /bundletool\.jar build-apks --bundle="\$AAB"[\s\S]{0,80}--mode=universal/.test(lignesAndroid)
+      && /yoppaa-essai\.apk/.test(lignesAndroid))
+    // ⚠️ L'OUTIL QUI SIGNE AVEC NOTRE CLÉ EST FIGÉ ET VÉRIFIÉ : un jar remplacé
+    // signerait n'importe quoi au nom d'Avcotech.
+    verifie('🔴 bundletool est figé à une version et vérifié par son empreinte',
+      /BT_VERSION=\d+\.\d+\.\d+/.test(lignesAndroid) && /BT_SHA256=[0-9a-f]{64}/.test(lignesAndroid)
+      && /sha256sum -c -/.test(lignesAndroid))
+    const iVerif = lignesAndroid.indexOf('sha256sum -c -')
+    const iUsage = lignesAndroid.indexOf('java -jar bundletool.jar')
+    verifie('🔴 et vérifié AVANT de s’en servir', iVerif > -1 && iUsage > iVerif)
+    verifie('⚠️ la clé est effacée quoi qu’il arrive', /trap 'rm -f cle\.jks' EXIT/.test(lignesAndroid))
+    verifie('⚠️ l’APK d’essai est récupéré avec le bundle',
+      /path: \|\s*\n\s*android\/app\/build\/outputs\/bundle\/release\/\*\.aab\s*\n\s*android\/app\/build\/outputs\/bundle\/release\/yoppaa-essai\.apk/.test(android))
+  }
+
   // ═══ LE WORKFLOW iOS, QUI N'A JAMAIS TOURNÉ (17/09) ═════════════════════
   //
   // 🔴 C'EST EXACTEMENT LA SITUATION DU MATIN. Le workflow Android portait CINQ

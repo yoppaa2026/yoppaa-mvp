@@ -127,6 +127,8 @@ jobs:
             fi
           done
           echo "$CLE_ANDROID_B64" | base64 -d > cle.jks
+          # ⚠️ LA CLE PART QUOI QU IL ARRIVE, meme si une etape plus bas echoue.
+          trap 'rm -f cle.jks' EXIT
           # 🔴 `jarsigner`, PAS `apksigner` : ce dernier ne traite que les APK et
           # refuse un Android App Bundle. Play App Signing resigne de toute
           # facon avec sa propre cle ; celle-ci n'est que la cle d'envoi.
@@ -151,13 +153,41 @@ jobs:
             echo "::error::Le bundle n est PAS signe. jarsigner n a pas ecrit « jar verified »."
             exit 1
           fi
-          rm -f cle.jks verif.txt
           echo "Bundle signe et verifie."
+
+          # 🔴 LE FICHIER D ESSAI, POUR UN TELEPHONE (03/10). Le partage interne
+          # de Play Console est REFUSE tant que l app n a jamais ete publiee :
+          # sans ce fichier, la version Android partait en revue sans avoir
+          # tourne une seule fois sur un vrai telephone. bundletool tire du
+          # bundle un APK universel, installable directement.
+          #
+          # ⚠️ SIGNE AVEC LA CLE D ENVOI, PAS AVEC CELLE DE GOOGLE : les liens
+          # d email ne l ouvriront pas (assetlinks.json porte la cle de Google).
+          # Tout le reste se teste. Il ne part JAMAIS chez Google : c est le
+          # .aab qu on depose.
+          #
+          # ⚠️ L OUTIL EST FIGE ET VERIFIE. Un jar telecharge a chaque build,
+          # sans empreinte, signerait notre application avec notre cle : c est
+          # la porte qu un fichier remplace ouvrirait.
+          BT_VERSION=1.18.3
+          BT_SHA256=a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29
+          curl -fsSL -o bundletool.jar "https://github.com/google/bundletool/releases/download/${BT_VERSION}/bundletool-all-${BT_VERSION}.jar"
+          echo "${BT_SHA256}  bundletool.jar" | sha256sum -c - \
+            || { echo "::error::bundletool ne correspond pas a son empreinte. On ne signe rien avec un outil inconnu."; exit 1; }
+          java -jar bundletool.jar build-apks --bundle="$AAB" --output=essai.apks --mode=universal \
+            --ks=cle.jks --ks-pass=pass:"$CLE_ANDROID_MDP" --ks-key-alias="$CLE_ANDROID_ALIAS" --key-pass=pass:"$CLE_ANDROID_MDP"
+          unzip -o -q essai.apks universal.apk
+          test -s universal.apk || { echo "::error::Aucun APK d essai produit."; exit 1; }
+          mv universal.apk android/app/build/outputs/bundle/release/yoppaa-essai.apk
+          rm -f cle.jks verif.txt bundletool.jar essai.apks
+          echo "APK d essai produit."
 
       - name: Récupérer le paquet
         uses: actions/upload-artifact@v4
         with:
           name: yoppaa-android-${{ inputs.version_nom }}
-          path: android/app/build/outputs/bundle/release/*.aab
+          path: |
+            android/app/build/outputs/bundle/release/*.aab
+            android/app/build/outputs/bundle/release/yoppaa-essai.apk
           if-no-files-found: error
           retention-days: 30

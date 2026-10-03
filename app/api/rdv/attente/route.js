@@ -112,6 +112,7 @@ export async function POST(request) {
     const res = await inscrire(admin(), {
       prestationId: corps?.prestation_id,
       clientId: identite.client_id,
+      authUserId: identite.auth_user_id,
       dateRdv: corps?.date_rdv,
       heureDebut: corps?.heure_debut,
       duree: corps?.duree,

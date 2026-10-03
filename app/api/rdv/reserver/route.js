@@ -39,6 +39,7 @@ import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { verdictForfait } from '@/lib/garde-forfait'
 import { fichePubliee } from '@/lib/statut-commercant'
+import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
 import { chargerRecompensePourYopper } from '@/lib/fidelite-recompense-server'
 import { chargerBonsValides } from '@/lib/bons-cadeaux-server'
@@ -146,7 +147,10 @@ export async function POST(request) {
     // ⚠️ LE CLIENT REÇOIT LE MÊME MESSAGE QUE POUR L'AGENDA ÉTEINT : nos états
     // internes ne le regardent pas, et ce refus-ci lui apprendrait l'existence
     // d'un commerce qui a justement choisi de ne pas encore exister.
-    if (!fichePubliee(commercant)) {
+    //
+    // ⚠️ SAUF UNE FICHE RÉSERVÉE À LA VÉRIFICATION, pour les seuls comptes de
+    // la liste (relecteurs des stores) : voir `lib/relecture-serveur.js`.
+    if (!fichePubliee(commercant) && !(await relectureAutorisee(db, commercant, () => compteDeLaRequete(request)))) {
       return NextResponse.json(
         { ok: false, error: 'Ce commerçant ne prend pas encore de rendez-vous en ligne.', code: 'fiche_non_publiee' },
         { status: 400 }

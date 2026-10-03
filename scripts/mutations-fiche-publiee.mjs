@@ -38,8 +38,9 @@ const MUTATIONS = [
   // ─── LA ROUTE QUI POSAIT LE RENDEZ-VOUS ─────────────────────────────────
   { nom: '🔴 le rendez-vous se repose chez un commerce en preparation',
     fichier: 'app/api/rdv/reserver/route.js',
-    de: '    if (!fichePubliee(commercant)) {',
-    vers: '    if (false) {' },
+    // ⚠️ Repointee le 03/10 : la regle publique est suivie de la relecture.
+    de: '    if (!fichePubliee(commercant) && !(await relectureAutorisee(db, commercant,',
+    vers: '    if (false && !(await relectureAutorisee(db, commercant,' },
 
   { nom: '🔴 LE SYMETRIQUE : la colonne quitte le select et la route refuse TOUS ses clients',
     fichier: 'app/api/rdv/reserver/route.js',
@@ -54,8 +55,9 @@ const MUTATIONS = [
   // ─── LES DEUX SOEURS DU COEUR TRANSACTIONNEL ────────────────────────────
   { nom: '🔴 la commande passe chez un commerce non publie',
     fichier: 'app/api/stripe/checkout/create-commande/route.js',
-    de: '    if (!fichePubliee(commercant)) {',
-    vers: '    if (false) {' },
+    // ⚠️ Repointee le 03/10 : la regle publique est suivie de la relecture.
+    de: '    if (!fichePubliee(commercant) && !(await relectureAutorisee(supabase, commercant,',
+    vers: '    if (false && !(await relectureAutorisee(supabase, commercant,' },
 
   { nom: '🔴 le bon cadeau se vend chez un commerce non publie',
     fichier: 'app/api/bons-cadeaux/checkout/route.js',
@@ -65,8 +67,9 @@ const MUTATIONS = [
   // ─── LA LISTE D'ATTENTE ─────────────────────────────────────────────────
   { nom: '🔴 la file accepte un commerce dont la page n existe pour personne',
     fichier: 'lib/attente-rdv-server.js',
-    de: "  if (!fichePubliee(commerce)) return { ok: false, error: 'commerce_ferme' }",
-    vers: "  if (false) return { ok: false, error: 'commerce_ferme' }" },
+    // ⚠️ Repointee le 03/10 : la regle publique est suivie de la relecture.
+    de: '  if (!fichePubliee(commerce) && !(await relectureAutorisee(supabase, commerce,',
+    vers: '  if (false && !(await relectureAutorisee(supabase, commerce,' },
 
   { nom: '🔴 une panne de lecture est annoncee comme un commerce ferme',
     fichier: 'lib/attente-rdv-server.js',

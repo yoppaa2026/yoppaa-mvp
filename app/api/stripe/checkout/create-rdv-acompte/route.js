@@ -32,6 +32,8 @@ import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { verdictForfait } from '@/lib/garde-forfait'
+import { fichePubliee } from '@/lib/statut-commercant'
+import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 
@@ -91,7 +93,7 @@ export async function POST(request) {
     // Récupère commerçant + prestation pour calculer montants
     const [{ data: commercant }, { data: prestation }] = await Promise.all([
       // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait en dépend.
-      supabase.from('commercants').select('id, nom, slug, categorie, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, rdv_actif, plan, essai_plan, created_at').eq('id', commercant_id).single(),
+      supabase.from('commercants').select('id, nom, slug, categorie, statut_publication, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, rdv_actif, plan, essai_plan, created_at').eq('id', commercant_id).single(),
       // ⚠️ `par_couverts` (10/09 au soir) : une table n'a pas de prix, et
       // `prixPrestationServeur` ne le sait que si la colonne arrive jusqu'à lui.
       // Sans elle, le prix resté en base sur une table partait en acompte.
@@ -100,6 +102,18 @@ export async function POST(request) {
 
     if (!commercant) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
     if (!prestation) return NextResponse.json({ ok: false, error: 'prestation introuvable' }, { status: 404 })
+
+    // 🔴 LA FICHE N'ÉTAIT PAS REGARDÉE (relevé du 03/10), alors que sa sœur
+    // `/api/rdv/reserver` le fait depuis le 16/09 : un acompte s'encaissait
+    // chez un commerce non publié. Même place (avant le forfait), même refus.
+    // ⚠️ Sauf une fiche réservée à la vérification, pour un compte de la
+    // liste : voir `lib/relecture-serveur.js`.
+    if (!fichePubliee(commercant) && !(await relectureAutorisee(supabase, commercant, () => compteDeLaRequete(request)))) {
+      return NextResponse.json(
+        { ok: false, error: 'Ce commerçant ne prend pas encore de rendez-vous en ligne.', code: 'fiche_non_publiee' },
+        { status: 400 }
+      )
+    }
 
     // 🔴 LE FORFAIT N'ÉTAIT PAS VÉRIFIÉ ICI NON PLUS. Cette route est appelée
     // PUBLIQUEMENT, par n'importe quel Yopper, y compris un invité : elle

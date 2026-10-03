@@ -54,6 +54,7 @@ import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffr
 import { normaliserEmail } from '@/lib/email-normalise'
 import { verdictForfait } from '@/lib/garde-forfait'
 import { fichePubliee } from '@/lib/statut-commercant'
+import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { commandeAllumee } from '@/lib/plans'
 import { chezLeCommerce } from '@/lib/nom-commerce'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
@@ -142,7 +143,9 @@ export async function POST(request) {
     if (errC || !commercant) {
       return NextResponse.json({ ok: false, error: 'Commerçant introuvable.' }, { status: 404 })
     }
-    if (!fichePubliee(commercant)) {
+    // ⚠️ Une fiche réservée à la vérification n'accueille que les comptes de
+    // la liste (relecteurs des stores) : voir `lib/relecture-serveur.js`.
+    if (!fichePubliee(commercant) && !(await relectureAutorisee(supabase, commercant, () => compteDeLaRequete(request)))) {
       return NextResponse.json({ ok: false, error: 'Ce commerçant n\'accepte pas encore de commandes.' }, { status: 400 })
     }
 

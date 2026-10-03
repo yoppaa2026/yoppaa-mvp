@@ -65,6 +65,7 @@ import { libelleDecompte, PARAM_LISTE } from '@/lib/anti-gaspi'
 // recopie, elles le sont désormais par construction.
 import { lienFiche } from '@/lib/lien-fiche'
 import { useAppNative } from '@/lib/use-app-native'
+import { PUBLICATIONS_DE_LA_VUE } from '@/lib/statut-commercant'
 import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 
 const T = {
@@ -2531,7 +2532,10 @@ export default function Commander() {
         supabase
           .from('commercants_public')  // vue publique (colonnes sûres, publiés) — RLS commercants
           .select('*')
-          .eq('statut_publication', 'publie')
+          // ⚠️ CE QUE LA VUE PEUT RENDRE, ET RIEN DE PLUS : les fiches
+          // publiées, et celles réservées à la vérification que la base ne
+          // confie qu'aux comptes de la liste (relecteurs des stores).
+          .in('statut_publication', PUBLICATIONS_DE_LA_VUE)
           .order('nom')
           .abortSignal(abandon.signal),
         echeance,
@@ -2839,7 +2843,7 @@ export default function Commander() {
         .from('commercants_public')  // vue publique — RLS commercants
         .select('*')
         .in('id', ids)
-        .eq('statut_publication', 'publie')
+        .in('statut_publication', PUBLICATIONS_DE_LA_VUE)
       setCommercantsFavoris(comms||[])
     }
   }

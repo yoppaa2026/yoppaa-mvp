@@ -25,12 +25,16 @@ const T = {
   hairline: '#EEE9F5',
 }
 
-// ⚠️ LES CINQ ÉTATS RÉELS, ET LEUR SENS EN CLAIR. `brouillon` manquait : une
+// ⚠️ LES SIX ÉTATS RÉELS (le sixième depuis le 03/10), ET LEUR SENS EN CLAIR. `brouillon` manquait : une
 // inscription commencée et jamais soumise tombait donc dans aucune option, et
 // le menu affichait « publie » à sa place. Le libellé dit ce que l'état FAIT,
 // parce que « en_attente » ne dit pas qui attend quoi.
 const STATUTS_PUB = [
   { valeur: 'publie', label: 'publie — visible par les Yoppers' },
+  // 🔴 LE SIXIÈME (03/10) : les fiches de démonstration des relecteurs
+  // d'Apple et de Google. Invisibles du public, visibles des seuls comptes
+  // inscrits dans `comptes_relecture` (voir lib/statut-commercant.js).
+  { valeur: 'relecture', label: 'relecture — démo, visible des seuls relecteurs des stores' },
   { valeur: 'en_attente', label: 'en_attente — soumise, attend TA validation' },
   { valeur: 'brouillon', label: 'brouillon — inscription jamais terminée' },
   { valeur: 'rejete', label: 'rejete — refusée, motif envoyé' },

@@ -22,6 +22,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { formuleVendableEnLigne, resumeFormulePublique, seancesDeLaFormule } from '@/lib/abonnements'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
+import { fichePubliee } from '@/lib/statut-commercant'
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -68,11 +69,17 @@ export async function POST(request) {
 
     const { data: commercant } = await supabase
       .from('commercants')
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled')
+      .select('id, nom, slug, statut_publication, stripe_account_id, stripe_account_charges_enabled')
       .eq('id', formule.commercant_id)
       .maybeSingle()
 
-    if (!commercant) {
+    // 🔴 LA FICHE N'ÉTAIT PAS REGARDÉE (relevé du 03/10). Un abonnement se
+    // vendait chez un commerce non publié, à qui connaissait l'identifiant de
+    // la formule : une page qui n'existe pour personne encaissait quand même.
+    // ⚠️ RÉPONSE IDENTIQUE À « INTROUVABLE », comme le bon cadeau : nos états
+    // internes ne regardent pas le client. Et `fichePubliee` STRICTE : cette
+    // route est appelée sans jeton, elle ne saurait reconnaître un relecteur.
+    if (!commercant || !fichePubliee(commercant)) {
       return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
     }
     if (!commercant.stripe_account_id || !commercant.stripe_account_charges_enabled) {

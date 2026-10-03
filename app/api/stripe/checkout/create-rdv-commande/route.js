@@ -51,6 +51,9 @@ import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { euros } from '@/lib/montants'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
+import { fichePubliee } from '@/lib/statut-commercant'
+import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
+import { verdictForfait } from '@/lib/garde-forfait'
 
 const arrondiEuros = (n) => Math.round(Number(n || 0) * 100) / 100
 
@@ -114,7 +117,10 @@ export async function POST(request) {
 
     const [{ data: commercant }, { data: prestation }] = await Promise.all([
       supabase.from('commercants')
-        .select('id, nom, slug, categorie, plan, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, tva_taux_defaut')
+        // ⚠️ `statut_publication`, `rdv_actif`, `essai_plan` ET `created_at` :
+        // les trois gardes plus bas en dépendent, et une colonne absente les
+        // ferait refuser TOUT LE MONDE, en silence.
+        .select('id, nom, slug, categorie, statut_publication, rdv_actif, plan, essai_plan, created_at, stripe_account_id, stripe_account_charges_enabled, rdv_acompte_en_ligne_actif, rdv_acompte_global, tva_taux_defaut')
         .eq('id', commercant_id).single(),
       supabase.from('rdv_prestations')
         // ⚠️ `par_couverts` (10/09 au soir) : une table n'a pas de prix, et
@@ -126,6 +132,32 @@ export async function POST(request) {
     if (!commercant) return NextResponse.json({ ok: false, error: 'Commerçant introuvable.' }, { status: 404 })
     if (!prestation || prestation.commercant_id !== commercant.id) {
       return NextResponse.json({ ok: false, error: 'Prestation introuvable.' }, { status: 404 })
+    }
+
+    // 🔴 CETTE ROUTE NE VÉRIFIAIT NI LA FICHE, NI LE FORFAIT, NI L'AGENDA
+    // (relevé du 03/10). Sa sœur `create-rdv-acompte` vérifie les trois : un
+    // rendez-vous avec produits se payait donc chez un commerce non publié,
+    // sans l'agenda dans sa formule, ou l'agenda éteint. Mêmes gardes, même
+    // ordre, mêmes refus.
+    // ⚠️ Sauf une fiche réservée à la vérification, pour un compte de la
+    // liste : voir `lib/relecture-serveur.js`.
+    if (!fichePubliee(commercant) && !(await relectureAutorisee(supabase, commercant, () => compteDeLaRequete(request)))) {
+      return NextResponse.json(
+        { ok: false, error: 'Ce commerçant ne prend pas encore de rendez-vous en ligne.', code: 'fiche_non_publiee' },
+        { status: 400 }
+      )
+    }
+    for (const feature of ['rdv', 'paiement_ligne']) {
+      const verdict = verdictForfait(commercant, feature)
+      if (!verdict.ok) {
+        return NextResponse.json(
+          { ok: false, error: 'Ce commerçant ne prend pas encore de rendez-vous en ligne.', code: verdict.code },
+          { status: verdict.statut }
+        )
+      }
+    }
+    if (!commercant.rdv_actif) {
+      return NextResponse.json({ ok: false, error: 'Ce commerçant ne prend pas encore de rendez-vous en ligne.' }, { status: 400 })
     }
     // ✅ RIEN NE S'ACHÈTE AVEC UNE TABLE (Alex, 10/09 au soir) : « ils restent si
     // à emporter, ils partent si résa table ». La page de réservation ne le

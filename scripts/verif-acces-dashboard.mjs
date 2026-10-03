@@ -25,7 +25,10 @@ import {
   attenteDepuis, joursOuvresEntre,
   remplissageInscription, CHAMPS_INSCRIPTION, dossiersEnRetard,
   publicationDifferee, attendUneValidation, COLONNES_PUBLICATION_DIFFEREE,
+  PUBLICATION_RELECTURE, ficheEnRelecture, ficheRendueParLaVue, PUBLICATIONS_DE_LA_VUE,
 } from '../lib/statut-commercant.js'
+// ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE : la porte des démos des stores (03/10).
+import { relectureAutorisee } from '../lib/relecture-serveur.js'
 // ⚠️ IMPORTÉE POUR ÊTRE EXÉCUTÉE, avec un faux client Supabase : c'est la
 // seule façon de savoir ce que la file RÉPOND, et non ce qu'elle a l'air de
 // répondre. Le résolveur d'alias de `verif:acces` rend ce module atteignable.
@@ -1080,6 +1083,242 @@ function sansCommentaires(src) {
     // La tâche doit être PLANIFIÉE, sinon elle ne tournera jamais.
     verifier('🔴 elle est déclarée dans vercel.json',
       /"\/api\/cron\/relance-inscriptions"/.test(lire('vercel.json')))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LE TROISIÈME ÉTAT : RÉSERVÉ À LA VÉRIFICATION DES STORES (03/10)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 CE QU'ON PROTÈGE, DANS LES DEUX SENS. Les relecteurs d'Apple et de Google
+// doivent pouvoir commander chez les démos ; le public ne doit JAMAIS les voir,
+// ni les recevoir dans un envoi collectif. Une fiche en `relecture` ne s'ouvre
+// donc qu'aux comptes de `comptes_relecture`, et seule cette valeur-là peut
+// s'ouvrir : une fiche en préparation reste fermée aux relecteurs eux-mêmes.
+{
+  const codeDe = (f) => sansProse(lire(f))
+
+  // ─── LA RÈGLE PURE ─────────────────────────────────────────────────────
+  verifier('🔴 une fiche en relecture N’EST PAS publiée : aucun envoi collectif ne la prend',
+    fichePubliee({ statut_publication: PUBLICATION_RELECTURE }) === false)
+  verifier('la relecture se reconnaît', ficheEnRelecture({ statut_publication: 'relecture' }) === true
+    && ficheEnRelecture({ statut_publication: 'publie' }) === false && ficheEnRelecture(null) === false)
+  verifier('⚠️ la vue peut rendre la fiche publiée et la relecture, rien d’autre',
+    ficheRendueParLaVue({ statut_publication: 'publie' }) && ficheRendueParLaVue({ statut_publication: 'relecture' })
+    && !['en_attente', 'brouillon', 'rejete', 'suspendu', 'archive_2027', undefined]
+      .some((s) => ficheRendueParLaVue({ statut_publication: s })))
+  verifier('⚠️ la liste de la vue est nommée une fois',
+    JSON.stringify(PUBLICATIONS_DE_LA_VUE) === JSON.stringify(['publie', 'relecture']), JSON.stringify(PUBLICATIONS_DE_LA_VUE))
+
+  // ─── LA PORTE DU SERVEUR, EXÉCUTÉE ─────────────────────────────────────
+  // Le faux client rend la ligne de `comptes_relecture` SEULEMENT pour
+  // l'identifiant qu'on lui demande, comme la base.
+  const fauxListe = (comptes, { erreur = null } = {}) => {
+    const vues = []
+    return {
+      vues,
+      from(table) {
+        vues.push(table)
+        let cherche = null
+        const q = {
+          select() { return q },
+          eq(_col, valeur) { cherche = valeur; return q },
+          async maybeSingle() {
+            if (erreur) return { data: null, error: erreur }
+            return { data: comptes.includes(cherche) ? { user_id: cherche } : null, error: null }
+          },
+        }
+        return q
+      },
+    }
+  }
+  const RELECTURE = { id: 'c1', statut_publication: 'relecture' }
+  const relecteur = async () => 'u-relecteur'
+  let lu = 0
+  const compteurDeLecture = async () => { lu++; return 'u-relecteur' }
+
+  verifier('🔴 un relecteur de la liste entre dans une fiche en relecture',
+    await relectureAutorisee(fauxListe(['u-relecteur']), RELECTURE, relecteur) === true)
+  verifier('🔴 un compte hors de la liste reste dehors',
+    await relectureAutorisee(fauxListe(['u-relecteur']), RELECTURE, async () => 'u-voisin') === false)
+  const sansCompte = fauxListe(['u-relecteur'])
+  verifier('🔴 sans compte (invité, appel direct), la porte reste close',
+    await relectureAutorisee(sansCompte, RELECTURE, async () => null) === false)
+  verifier('⚠️ et la liste n’est même pas consultée', sansCompte.vues.length === 0, sansCompte.vues.join(','))
+  verifier('🔴 une liste illisible ferme la porte',
+    await relectureAutorisee(fauxListe(['u-relecteur'], { erreur: { message: 'panne' } }), RELECTURE, relecteur) === false)
+  for (const etat of ['en_attente', 'brouillon', 'rejete', 'suspendu']) {
+    lu = 0
+    const db = fauxListe(['u-relecteur'])
+    verifier(`🔴 une fiche « ${etat} » reste fermée, même au relecteur`,
+      await relectureAutorisee(db, { id: 'c1', statut_publication: etat }, compteurDeLecture) === false)
+    verifier(`⚠️ et pour « ${etat} », ni le compte ni la liste ne sont lus`, lu === 0 && db.vues.length === 0)
+  }
+
+  // ─── LA LISTE D'ATTENTE, EXÉCUTÉE ──────────────────────────────────────
+  const fileFaux = (commerce, comptes) => {
+    const vues = []
+    const reponses = {
+      rdv_prestations: { data: { id: 'p1', nom: 'Coupe enfant', commercant_id: 'c1', capacite: 1, attente_max: 3, actif: true, deleted_at: null, par_couverts: false }, error: null },
+      commercants: { data: commerce, error: null },
+      rdv_attente: { data: [], error: null },
+    }
+    return {
+      vues,
+      from(table) {
+        vues.push(table)
+        let cherche = null
+        const rep = table === 'comptes_relecture'
+          ? () => ({ data: comptes.includes(cherche) ? { user_id: cherche } : null, error: null })
+          : () => reponses[table] || { data: null, error: null }
+        const base = {
+          eq: (_c, v) => { cherche = v; return q },
+          single: async () => rep(),
+          maybeSingle: async () => rep(),
+          then: (res, rej) => Promise.resolve(rep()).then(res, rej),
+        }
+        const q = new Proxy(base, {
+          get: (cible, prop) => (prop in cible ? cible[prop] : (typeof prop === 'symbol' ? undefined : () => q)),
+        })
+        return q
+      },
+    }
+  }
+  const demande = (authUserId) => ({ prestationId: 'p1', clientId: 'y1', authUserId, dateRdv: '2026-10-20', heureDebut: '10:00', duree: 30 })
+  const dbOk = fileFaux({ id: 'c1', statut_publication: 'relecture' }, ['u-relecteur'])
+  const okRelecteur = await inscrire(dbOk, demande('u-relecteur'))
+  verifier('🔴 EXÉCUTÉE : le relecteur entre dans la file d’une démo',
+    okRelecteur?.error !== 'commerce_ferme', JSON.stringify(okRelecteur))
+  const refuse = await inscrire(fileFaux({ id: 'c1', statut_publication: 'relecture' }, ['u-relecteur']), demande('u-voisin'))
+  verifier('🔴 EXÉCUTÉE : un autre compte n’y entre pas',
+    refuse?.ok === false && refuse?.error === 'commerce_ferme', JSON.stringify(refuse))
+  const invite = await inscrire(fileFaux({ id: 'c1', statut_publication: 'relecture' }, ['u-relecteur']), demande(null))
+  verifier('🔴 EXÉCUTÉE : sans compte non plus', invite?.error === 'commerce_ferme', JSON.stringify(invite))
+
+  // ─── ET LA FILE NE PRÉVIENT PERSONNE CHEZ UN COMMERCE FERMÉ ────────────
+  {
+    const { prevenirLaFile } = await import('../lib/attente-rdv-server.js')
+    for (const etat of ['en_attente', 'relecture', 'suspendu']) {
+      const vues = []
+      const db = {
+        from(table) {
+          vues.push(table)
+          const rep = table === 'rdv_prestations'
+            ? { data: { id: 'p1', nom: 'Coupe enfant', commercant_id: 'c1', commercant: { nom: 'Salon', slug: 's', statut_publication: etat } }, error: null }
+            : { data: [], error: null }
+          const base = { single: async () => rep, maybeSingle: async () => rep, then: (r, j) => Promise.resolve(rep).then(r, j) }
+          const q = new Proxy(base, { get: (c, p) => (p in c ? c[p] : (typeof p === 'symbol' ? undefined : () => q)) })
+          return q
+        },
+      }
+      const res = await prevenirLaFile(db, { prestationId: 'p1', dateRdv: '2026-10-20', heureDebut: '10:00' })
+      verifier(`🔴 EXÉCUTÉE : une place libérée chez un commerce « ${etat} » ne prévient personne`,
+        res?.ok === true && res?.prevenus === 0 && res?.raison === 'commerce_ferme', JSON.stringify(res))
+      verifier(`⚠️ et pour « ${etat} », la file n’est même pas lue`, !vues.includes('rdv_attente'), vues.join(' → '))
+    }
+  }
+
+  // ─── LES ROUTES : LA RÈGLE PUBLIQUE D'ABORD, LA RELECTURE ENSUITE ──────
+  // ⚠️ ELLES NE S'EXÉCUTENT PAS AU BANC (Supabase, Stripe). On vérifie la
+  // FORME exacte : `!fichePubliee(commercant) && !(await relectureAutorisee(`.
+  // Un `||` à la place du `&&` refuserait tous les commerces publiés ; une
+  // relecture lue seule ouvrirait les fiches en préparation.
+  const FORME = /if \(!fichePubliee\(commercant\) && !\(await relectureAutorisee\((?:supabase|db), commercant, \(\) => compteDeLaRequete\(request\)\)\)\) \{/
+  for (const f of [
+    'app/api/rdv/reserver/route.js',
+    'app/api/stripe/checkout/create-commande/route.js',
+    'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    'app/api/stripe/checkout/create-rdv-empreinte/route.js',
+    'app/api/stripe/checkout/create-rdv-commande/route.js',
+  ]) {
+    const src = codeDe(f)
+    verifier(`🔴 ${f} : fiche publiée, ou relecture d’un compte de la liste`, FORME.test(src))
+    verifier(`🔴 ${f} lit la colonne qu’il juge`,
+      /from\('commercants'\)[\s\S]{0,400}?\.select\([^)]*statut_publication/.test(src))
+  }
+  // 🔴 LES QUATRE QUI NE REGARDAIENT RIEN (relevé du 03/10). L'abonnement n'a
+  // pas de jeton : il ne peut reconnaître aucun relecteur, il reste strict.
+  {
+    const abo = codeDe('app/api/stripe/checkout/create-abonnement/route.js')
+    verifier('🔴 l’abonnement ne se vend plus chez un commerce non publié',
+      /if \(!commercant \|\| !fichePubliee\(commercant\)\) \{/.test(abo)
+      && /\.select\('id, nom, slug, statut_publication,/.test(abo))
+    verifier('⚠️ et il ne prétend pas reconnaître un relecteur sans jeton', !/relectureAutorisee/.test(abo))
+    const combine = codeDe('app/api/stripe/checkout/create-rdv-commande/route.js')
+    const iFiche = combine.indexOf('!fichePubliee(commercant)')
+    const iForfait = combine.indexOf("for (const feature of ['rdv', 'paiement_ligne'])")
+    const iAgenda = combine.indexOf('if (!commercant.rdv_actif)')
+    verifier('🔴 le rendez-vous avec produits vérifie la fiche, puis le forfait, puis l’agenda',
+      iFiche > 0 && iForfait > iFiche && iAgenda > iForfait, `${iFiche} / ${iForfait} / ${iAgenda}`)
+    verifier('⚠️ et il charge ce que ses gardes lisent',
+      /statut_publication, rdv_actif, plan, essai_plan, created_at,/.test(combine))
+  }
+  // ⚠️ La file d'attente : la même forme, avec le compte passé par la route.
+  {
+    const lib = codeDe('lib/attente-rdv-server.js')
+    verifier('🔴 la file : fiche publiée, ou relecture du compte inscrit',
+      /if \(!fichePubliee\(commerce\) && !\(await relectureAutorisee\(supabase, commerce, async \(\) => authUserId\)\)\) return \{ ok: false, error: 'commerce_ferme' \}/.test(lib))
+    verifier('🔴 la route lui passe le compte PROUVÉ', /authUserId: identite\.auth_user_id,/.test(codeDe('app/api/rdv/attente/route.js')))
+    verifier('🔴 l’identité prouvée porte le compte', /auth_user_id: user\.id,/.test(codeDe('lib/yopper-auth.js')))
+  }
+
+  // ─── LES ENVOIS COLLECTIFS NE CONNAISSENT QUE LA RÈGLE STRICTE ─────────
+  for (const f of [
+    'app/api/cron/morning-yoppers/route.js',
+    'app/api/deals/notify-favoris/route.js',
+    'app/api/actus/notify-favoris/route.js',
+    'lib/morning-eligibilite.js',
+  ]) {
+    const src = codeDe(f)
+    verifier(`🔴 ${f} n’envoie jamais une démo`,
+      /fichePubliee\(/.test(src) && !/relectureAutorisee|ficheRendueParLaVue|PUBLICATIONS_DE_LA_VUE|ficheEnRelecture/.test(src))
+  }
+
+  // ─── LES ÉCRANS ACCEPTENT CE QUE LA VUE LEUR CONFIE, ET RIEN D'AUTRE ───
+  for (const f of ['app/commander/[slug]/page.js', 'app/commander/rdv/[slug]/page.js']) {
+    const src = codeDe(f)
+    verifier(`🔴 ${f} n’écarte pas une démo que la base lui a confiée`,
+      /if \(!ficheRendueParLaVue\(c\)\) \{/.test(src) && !/fichePubliee\(/.test(src))
+  }
+  {
+    const accueil = codeDe('app/commander/page.js')
+    const filtres = accueil.match(/\.in\('statut_publication', PUBLICATIONS_DE_LA_VUE\)/g) || []
+    verifier('🔴 l’accueil et les favoris demandent ce que la vue peut rendre', filtres.length === 2, `${filtres.length} trouvé(s)`)
+    verifier('⚠️ et plus aucun filtre « publie » recopié à la main',
+      !/\.eq\('statut_publication', 'publie'\)/.test(accueil))
+  }
+
+  // ─── L'ADMINISTRATION NOMME L'ÉTAT ─────────────────────────────────────
+  verifier('⚠️ la fenêtre d’édition propose la relecture',
+    /\{ valeur: 'relecture', label: '[^']+' \}/.test(codeDe('app/admin/ModalEditCommercant.js')))
+  verifier('⚠️ la liste lui donne son badge',
+    /relecture: \s*\{ bg: '[^']+', color: '[^']+', label: 'Démo stores' \}/.test(codeDe('app/admin/SectionTousCommercants.js')))
+
+  // ─── LA MIGRATION ──────────────────────────────────────────────────────
+  {
+    const sql = lire('migrations/MIGRATION_RELECTURE_STORES.sql').replace(/^\s*--.*$/gm, ' ')
+    verifier('🔴 la vue rend la relecture aux seuls comptes de la liste',
+      /WHERE statut_publication = 'publie'::text\s+OR \(statut_publication = 'relecture'::text AND public\.est_compte_relecture\(\)\);/.test(sql))
+    verifier('🔴 l’agenda, les actus, les deals et les photos aussi',
+      /SELECT id FROM commercants\s+WHERE statut_publication = 'publie'\s+OR \(statut_publication = 'relecture' AND public\.est_compte_relecture\(\)\)/.test(sql))
+    verifier('🔴 le catalogue aussi, propriétaire et admin gardés',
+      /c\.statut_publication = 'publie'\s+OR c\.auth_user_id = auth\.uid\(\)\s+OR \(c\.statut_publication = 'relecture' AND public\.est_compte_relecture\(\)\)\)\s+\) OR COALESCE\(public\.is_yoppaa_admin\(\), false\)/.test(sql))
+    verifier('🔴 la liste n’est lisible par personne depuis le navigateur',
+      /ENABLE ROW LEVEL SECURITY;/.test(sql) && /REVOKE ALL ON public\.comptes_relecture FROM anon, authenticated;/.test(sql)
+      && !/CREATE POLICY/i.test(sql))
+    verifier('⚠️ la liste désigne des COMPTES, pas des adresses',
+      /user_id\s+uuid PRIMARY KEY REFERENCES auth\.users\(id\) ON DELETE CASCADE/.test(sql) && !/\bemail\b/i.test(sql))
+    verifier('⚠️ la question du relecteur tourne avec les droits du propriétaire',
+      /FUNCTION public\.est_compte_relecture\(\)[\s\S]{0,120}SECURITY DEFINER/.test(sql))
+    verifier('🔴 la migration refuse une vue qui a dérivé, et le dit',
+      /IF vivant IS DISTINCT FROM attendu THEN\s+RAISE EXCEPTION 'VUE_DERIVEE/.test(sql))
+    verifier('⚠️ elle repose les options de la vue', /ALTER VIEW public\.commercants_public SET \(%s\)/.test(sql))
+    verifier('🔴 la vue reste en lecture seule pour les deux rôles',
+      /REVOKE INSERT, UPDATE, DELETE ON public\.commercants_public FROM anon, authenticated;/.test(sql))
+    verifier('⚠️ tout tient dans UNE transaction',
+      sql.indexOf('BEGIN;') >= 0 && sql.indexOf('BEGIN;') < sql.indexOf('CREATE TABLE') && sql.indexOf('COMMIT;') > sql.lastIndexOf('GRANT SELECT ON public.commercants_public'))
+    verifier('🔴 elle n’active rien : aucune fiche ni aucun compte posé',
+      !/UPDATE public\.commercants|INSERT INTO public\.comptes_relecture/i.test(sql))
   }
 }
 

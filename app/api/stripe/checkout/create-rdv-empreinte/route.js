@@ -25,6 +25,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, PAYMENT_KIND, buildPaymentMetadata } from '@/lib/stripe'
 import { verdictForfait } from '@/lib/garde-forfait'
+import { fichePubliee } from '@/lib/statut-commercant'
+import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
@@ -68,7 +70,7 @@ export async function POST(request) {
       // ⚠️ `plan`, `essai_plan` et `created_at` : la garde de forfait en dépend.
       // Les trois colonnes d'empreinte : la règle en dépend.
       supabase.from('commercants').select(
-        'id, nom, slug, categorie, stripe_account_id, stripe_account_charges_enabled, rdv_actif, plan, essai_plan, created_at, rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne'
+        'id, nom, slug, categorie, statut_publication, stripe_account_id, stripe_account_charges_enabled, rdv_actif, plan, essai_plan, created_at, rdv_empreinte_actif, rdv_empreinte_seuil_couverts, rdv_empreinte_par_personne'
       ).eq('id', commercant_id).single(),
       // 🔴 `COLONNES_COUVERTS` ET PAS UNE LISTE RECOPIÉE (16/09) : `capacite`
       // manquait, donc la capacité valait 1, donc les bornes valaient { 1, 1 },
@@ -85,6 +87,18 @@ export async function POST(request) {
     // arrivant du même écran ne prouvent pas qu'ils vont ensemble.
     if (prestation.commercant_id !== commercant.id) {
       return NextResponse.json({ ok: false, error: 'prestation introuvable' }, { status: 404 })
+    }
+
+    // 🔴 LA FICHE N'ÉTAIT PAS REGARDÉE (relevé du 03/10) : une carte
+    // s'enregistrait chez un commerce non publié. Même place que sa sœur
+    // `/api/rdv/reserver` (avant le forfait), même refus.
+    // ⚠️ Sauf une fiche réservée à la vérification, pour un compte de la
+    // liste : voir `lib/relecture-serveur.js`.
+    if (!fichePubliee(commercant) && !(await relectureAutorisee(supabase, commercant, () => compteDeLaRequete(request)))) {
+      return NextResponse.json(
+        { ok: false, error: 'Ce commerçant ne prend pas encore de réservations en ligne.', code: 'fiche_non_publiee' },
+        { status: 400 }
+      )
     }
 
     // ⚠️ MÊMES GARDES QUE L'ACOMPTE : le forfait ouvre l'agenda, l'interrupteur

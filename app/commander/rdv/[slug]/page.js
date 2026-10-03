@@ -31,7 +31,7 @@ import { supabase } from '@/lib/supabase'
 // `commande` à l'alimentaire alors que cette fiche sert les vitrines.
 import { isVitrine, canDo, planEffectif } from '@/lib/plans'
 import { reservationActive, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
-import { fichePubliee } from '@/lib/statut-commercant'
+import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
 import { lienFiche } from '@/lib/lien-fiche'
 import { reprendrePanierPourRdv, deposerPanierPourBoutique } from '@/lib/panier-partage'
@@ -1218,7 +1218,9 @@ export default function CommanderRdvSlug() {
         router.replace(`/commander/${slug}`)
         return
       }
-      if (!fichePubliee(c)) {
+      // ⚠️ SAUF LA RELECTURE : la vue ne rend une fiche réservée à la
+      // vérification qu'aux comptes de la liste (relecteurs des stores).
+      if (!ficheRendueParLaVue(c)) {
         setCommercant({ ...c, _nonPublie: true })
         setLoading(false)
         return

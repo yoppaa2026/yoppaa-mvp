@@ -10,7 +10,7 @@ import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompen
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
 import { canDo, isVitrine, isAlimentaire, planEffectif, commandeAllumee } from '@/lib/plans'
 import { reservationActive, motReservation } from '@/lib/reservation-metier'
-import { fichePubliee } from '@/lib/statut-commercant'
+import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { nomDeLaCarte } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09) : une seule règle
 // pour la carte, la limite du panier et le tableau de bord.
@@ -1824,7 +1824,10 @@ export default function CommanderSlug() {
     if (!c) { router.push('/commander'); return }
     // Bloque l'accès aux fiches non publiées (brouillon, en_attente, refusée).
     // L'admin a une route d'aperçu dédiée - à coder plus tard.
-    if (!fichePubliee(c)) {
+    // ⚠️ SAUF LA RELECTURE : la vue ne rend une fiche réservée à la
+    // vérification qu'aux comptes de la liste. L'écran n'a pas à refaire ce tri,
+    // seulement à ne pas écarter ce que la base lui a confié.
+    if (!ficheRendueParLaVue(c)) {
       setLoading(false)
       setCommercant({ ...c, _nonPublie: true })
       return

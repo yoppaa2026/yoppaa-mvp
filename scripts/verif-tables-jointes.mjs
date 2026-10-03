@@ -415,8 +415,12 @@ const SALLE_SRV = SALLE.map(C1)
 {
   const db = salleSimulee({ demandee: C1({ ...J, actif: false }), formats: [C1(T4), C1({ ...J, actif: false }), C1(T2), C1(T6)] })
   const res = await reserver(db, 'j', 8)
+  // ⚠️ REPOINTÉE LE 03/10 (I9) : une prestation désactivée est désormais
+  // refusée en ligne AVANT le calcul de la salle, avec son propre motif. Ce
+  // banc attendait `groupe_trop_grand`, qui venait de la salle ; le refus et
+  // l'absence d'écriture sont les mêmes, seul le motif est plus juste.
   verifier('⚠️ une jointure éteinte n’accueille plus de groupe de huit en ligne',
-    res.ok === false && res.code === 'groupe_trop_grand' && db._vu.payload === null, JSON.stringify(res.code))
+    res.ok === false && res.code === 'prestation_inactive' && db._vu.payload === null, JSON.stringify(res.code))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

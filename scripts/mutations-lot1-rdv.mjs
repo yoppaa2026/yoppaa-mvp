@@ -481,6 +481,86 @@ const MUTATIONS = [
     vers: '  const acompteEnLigneActif = true',
     garde: 'la commerçante sait, en le réglant, si son acompte est vraiment demandé' },
 
+  // ─── LOT 2 · I9 : PRESTATION RETIRÉE, DATE TROP LOINTAINE ──────────────
+  { nom: '🔴 une prestation supprimee se reserve encore',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "  if (prestation.deleted_at) return { ok: false, code: 'prestation_introuvable' }",
+    vers: "  if (false) return { ok: false, code: 'prestation_introuvable' }",
+    garde: 'une prestation supprimée ne se réserve plus, pour personne' },
+
+  { nom: '🔴 deleted_at sort du select : la suppression redevient invisible',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: 'duree_paliers, quantite, actif, deleted_at, jointure_de',
+    vers: 'duree_paliers, quantite, actif, jointure_de',
+    garde: 'une prestation supprimée ne se réserve plus, pour personne' },
+
+  { nom: '🔴 une prestation desactivee se reserve encore en ligne',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "  if (prestation.actif === false && champs?.source !== 'commercant') {",
+    vers: '  if (false) {',
+    garde: 'une prestation désactivée ne se réserve plus en ligne' },
+
+  { nom: '⚠️ la commercante ne peut plus poser une prestation desactivee',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "  if (prestation.actif === false && champs?.source !== 'commercant') {",
+    vers: '  if (prestation.actif === false) {',
+    garde: 'la commerçante, elle, la pose encore dans son agenda' },
+
+  { nom: '🔴 l horizon ne borne plus le serveur',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "    if (limite && dateRdv > limite) return { ok: false, code: 'hors_horizon' }",
+    vers: "    if (false) return { ok: false, code: 'hors_horizon' }",
+    garde: 'une date au-delà de l’horizon de la fiche est refusée' },
+
+  { nom: '⚠️ l horizon du commerce sort du select : retombe sur 60 jours',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: '    .select(`${COLONNES_LIEU}, rdv_horizon_jours`)',
+    vers: '    .select(COLONNES_LIEU)',
+    garde: 'l’horizon est celui que la commerçante a réglé' },
+
+  { nom: '🔴 les deux refus se rejouent au lieu de se rembourser',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/refus-reservation.js',
+    de: "  'prestation_inactive', 'hors_horizon',",
+    vers: '',
+    garde: 'les deux refus se remboursent après un paiement' },
+
+  // ─── LOT 2 · LA-08 ET LA-10 ────────────────────────────────────────────
+  { nom: '🔴 une fenetre expiree verrouille de nouveau a vie',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: '  if (ligne.portee === PORTEE_FENETRE) {',
+    vers: '  if (false) {',
+    garde: 'une fenêtre expirée ne verrouille plus : la réinscription passe' },
+
+  { nom: '🔴 la purge efface les fenetres expirees des autres',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "      .eq('client_id', clientId)",
+    vers: "      .neq('client_id', '')",
+    garde: 'et seule SA fenêtre expirée s’efface' },
+
+  { nom: '🔴 la purge efface aussi une fenetre encore ouverte',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "      .lt('date_fin', jour)",
+    vers: "      .neq('date_fin', '')",
+    garde: 'une fenêtre encore ouverte reste « déjà inscrit »' },
+
+  { nom: '⚠️ une attente expiree compte encore comme deja inscrit',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv.js',
+    de: '    && (jourISO === null || attenteVivante(l, jourISO)))',
+    vers: '    && true)',
+    garde: 'une attente expirée ne compte plus comme « déjà inscrit »' },
+
+  { nom: '🔴 une table a de nouveau une liste d attente qui echoue apres le clic',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv.js',
+    de: '  if (prestation?.par_couverts === true) return false',
+    vers: '  if (false) return false',
+    garde: 'et la règle partagée la dit fermée, même réglée à 3' },
+
+  { nom: '⚠️ une file fermee repond « demande invalide »',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "  if (!attenteOuverte(prestation)) return { ok: false, error: 'fermee' }",
+    vers: "  if (false) return { ok: false, error: 'fermee' }",
+    garde: 'une table n’a pas de liste d’attente : refus clair' },
+
   // ─── LA LISTE D'ATTENTE QU'ON TROUVE (Alex, 03/10) ─────────────────────
   { nom: '⚠️ la duree promet de nouveau « cette semaine » pour sept jours',
     banc: 'verif:attente', fichier: 'lib/attente-rdv.js',

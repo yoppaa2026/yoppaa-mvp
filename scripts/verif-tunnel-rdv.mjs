@@ -554,7 +554,7 @@ for (const chemin of [
 
   function baseSimulee({ prestation, lieux = [], placesPrises = [], erreurInsert = null,
                          creneaux = [], liaisons = [], erreurPlaces = null,
-                         fermetures = [], erreurFermetures = null }) {
+                         fermetures = [], erreurFermetures = null, commercant = null }) {
     const vu = { payload: null, filtresPlaces: {} }
     // 🔴 LES PLAGES SONT RENDUES À TRAVERS LEUR SELECT (03/10). Le lieu de la
     // réservation vient désormais de `rdv_creneaux.lieu_id` : si la colonne
@@ -577,9 +577,12 @@ for (const chemin of [
         // chemin qui n'avait jamais tourné. Une fausse base incomplète est un
         // banc qui se croit plus large qu'il n'est.
         neq: (col, val) => { filtres[col] = val; return chaine },
+        // ⚠️ LA PRESTATION AUSSI PASSE PAR SON SELECT (I9, 03/10) : `deleted_at`
+        // absent du select, la vraie base rendrait `undefined` et une prestation
+        // supprimée se réserverait ; un objet complet ici l'aurait caché.
         maybeSingle: async () => ({
-          data: nom === 'rdv_prestations' ? prestation
-            : nom === 'commercants' ? { id: 'c1', nom: 'Ciseaux et Soins', adresse: 'Rue du Siège 1' }
+          data: nom === 'rdv_prestations' ? (prestation ? projeter([prestation], colonnes)[0] : prestation)
+            : nom === 'commercants' ? projeter([commercant || { id: 'c1', nom: 'Ciseaux et Soins', adresse: 'Rue du Siège 1' }], colonnes)[0]
             : null,
         }),
         single: async () => ({
@@ -840,6 +843,60 @@ for (const chemin of [
     verifie('la semaine suivante, son cours rouvre', semaineSuivante.ok === true, JSON.stringify(semaineSuivante))
     const commune = await creerReservationRdv(base([{ ...PLAGE_EMILY, praticien_id: null }]), { ...RESA, champs: {} })
     verifie('⚠️ une plage commune reste ouverte quand une seule professeure est absente', commune.ok === true, JSON.stringify(commune))
+  }
+
+  // ── UNE PRESTATION RETIRÉE, UNE DATE TROP LOINTAINE (I9, 03/10) ─────────
+  //
+  // 🔴 LE SERVEUR NE FAISAIT RESPECTER NI L'UNE NI L'AUTRE. `actif` était lu et
+  // jamais vérifié, `deleted_at` n'était pas lu, et l'horizon n'existait qu'à
+  // l'écran : une fiche restée ouverte ou un acompte posaient un rendez-vous
+  // sur un cours retiré, ou dans six mois.
+  // ⚠️ DATES CALCULÉES DEPUIS AUJOURD'HUI : un banc daté rougit le jour où sa
+  // date passe.
+  {
+    const { jourBruxelles } = await import('../lib/timezone.js')
+    const { jourPlus } = await import('../lib/attente-rdv.js')
+    const PROCHE = jourPlus(jourBruxelles(), 7)
+    const LOIN = jourPlus(jourBruxelles(), 75)
+    const RESA = { commercantId: 'c1', prestationId: 'p1', heureDebut: '10:00' }
+
+    const retiree = baseSimulee({ prestation: { ...PRESTA_SOLO, actif: false } })
+    const r1 = await creerReservationRdv(retiree, { ...RESA, dateRdv: PROCHE, champs: {} })
+    verifie('🔴 une prestation désactivée ne se réserve plus en ligne, et rien ne s’écrit',
+      r1.ok === false && r1.code === 'prestation_inactive' && retiree._vu.payload === null, JSON.stringify(r1))
+    const auComptoir = await creerReservationRdv(baseSimulee({ prestation: { ...PRESTA_SOLO, actif: false } }), { ...RESA, dateRdv: PROCHE, champs: { source: 'commercant' } })
+    verifie('⚠️ la commerçante, elle, la pose encore dans son agenda', auComptoir.ok === true, JSON.stringify(auComptoir))
+
+    const supprimee = { ...PRESTA_SOLO, deleted_at: '2026-10-01T10:00:00Z' }
+    const r2 = await creerReservationRdv(baseSimulee({ prestation: supprimee }), { ...RESA, dateRdv: PROCHE, champs: {} })
+    const r3 = await creerReservationRdv(baseSimulee({ prestation: supprimee }), { ...RESA, dateRdv: PROCHE, champs: { source: 'commercant' } })
+    verifie('🔴 une prestation supprimée ne se réserve plus, pour personne',
+      r2.ok === false && r2.code === 'prestation_introuvable' && r3.ok === false && r3.code === 'prestation_introuvable',
+      JSON.stringify([r2, r3]))
+
+    const loin = baseSimulee({ prestation: PRESTA_SOLO })
+    const r4 = await creerReservationRdv(loin, { ...RESA, dateRdv: LOIN, champs: {} })
+    verifie('🔴 une date au-delà de l’horizon de la fiche est refusée, et rien ne s’écrit',
+      r4.ok === false && r4.code === 'hors_horizon' && loin._vu.payload === null, JSON.stringify(r4))
+    const sim = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO }), { ...RESA, dateRdv: LOIN, champs: {}, simulation: true })
+    verifie('🔴 la vérification avant paiement la refuse aussi', sim.ok === false && sim.code === 'hors_horizon', JSON.stringify(sim))
+    const ouvertLoin = baseSimulee({ prestation: PRESTA_SOLO, commercant: { id: 'c1', nom: 'Ciseaux et Soins', adresse: 'Rue du Siège 1', rdv_horizon_jours: 90 } })
+    const r5 = await creerReservationRdv(ouvertLoin, { ...RESA, dateRdv: LOIN, champs: {} })
+    verifie('⚠️ l’horizon est celui que la commerçante a réglé', r5.ok === true, JSON.stringify(r5))
+    const r6 = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO }), { ...RESA, dateRdv: LOIN, champs: { source: 'commercant' } })
+    verifie('⚠️ et la commerçante pose ses rendez-vous au-delà', r6.ok === true, JSON.stringify(r6))
+    const r7 = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO }), { ...RESA, dateRdv: PROCHE, champs: {} })
+    verifie('une date proche se réserve', r7.ok === true, JSON.stringify(r7))
+
+    const { estRefusDeRegle: regle, refusAvantPaiement: avant, motifApresPaiement: apres } = await import('../lib/refus-reservation.js')
+    verifie('🔴 les deux refus se remboursent après un paiement, sans se rejouer',
+      regle('prestation_inactive') && regle('hors_horizon'))
+    verifie('🔴 et chacun se dit avant le paiement : l’horizon renvoie à la grille, le retrait non',
+      avant({ code: 'hors_horizon' }).corps.creneau_refuse === true
+      && avant({ code: 'prestation_inactive' }, { nom: 'Centre Respire' }).corps.error === 'Centre Respire ne propose plus cette prestation en ligne.'
+      && !avant({ code: 'prestation_inactive' }).corps.creneau_refuse)
+    verifie('⚠️ et après le paiement, avec leur raison',
+      apres('prestation_inactive') !== apres('inconnu') && apres('hors_horizon') !== apres('inconnu'))
   }
 
   // ── CE QUE LE MODULE DÉCIDE L'EMPORTE SUR CE QU'ON LUI PASSE ────────────

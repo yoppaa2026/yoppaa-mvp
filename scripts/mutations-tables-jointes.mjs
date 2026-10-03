@@ -86,9 +86,11 @@ const MUTATIONS = [
   // colonnes que la règle des couverts déclare elle-même (`capacite` y
   // manquait ailleurs, et toute table devenait invalide). Elle vise la fin de
   // la DÉFINITION, pas la fin d'une chaîne.
+  // ⚠️ ET RÉORIENTÉE LE 03/10 : `deleted_at` s'est glissé entre `actif` et la
+  // composition (I9). La mutation retire toujours la seule composition.
   { nom: '🔴 le serveur ne lit plus la composition des formats', banc: 'verif:jointes', fichier: 'lib/rdv-creation-server.js',
-    de: ', quantite, actif, jointure_de, jointure_tables, ${COLONNES_COUVERTS}`',
-    vers: ', quantite, actif, ${COLONNES_COUVERTS}`' },
+    de: ', quantite, actif, deleted_at, jointure_de, jointure_tables, ${COLONNES_COUVERTS}`',
+    vers: ', quantite, actif, deleted_at, ${COLONNES_COUVERTS}`' },
   { nom: '🔴 une jointure passe dans une salle comptée en couverts', banc: 'verif:jointes', fichier: 'lib/rdv-creation-server.js',
     de: '    if (estJointure(prestation) && !enModeInventaire(formatsTable)) {',
     vers: '    if (false) {' },

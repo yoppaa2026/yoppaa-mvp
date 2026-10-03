@@ -501,11 +501,14 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
   const fauxDb = (tables) => ({
     from(table) {
       const filtres = []
-      let maj = null, ajout = null, unique = false
+      let maj = null, ajout = null, unique = false, effacer = false
       const b = {
         select() { return b }, order() { return b }, limit() { return b },
         eq(c, x) { filtres.push(l => String(norme(l[c])) === String(norme(x))); return b },
         neq(c, x) { filtres.push(l => String(norme(l[c])) !== String(norme(x))); return b },
+        // LA-08 : la purge des fenêtres expirées.
+        lt(c, x) { filtres.push(l => l[c] != null && String(l[c]) < String(x)); return b },
+        delete() { effacer = true; return b },
         in(c, xs) { filtres.push(l => xs.map(String).includes(String(l[c]))); return b },
         is(c, x) { filtres.push(l => (l[c] ?? null) === x); return b },
         update(m) { maj = m; return b },
@@ -515,7 +518,19 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
         then(ok, ko) {
           const lignes = tables[table] || (tables[table] = [])
           let rep
-          if (ajout) {
+          // ⚠️ L'INDEX D'UNICITÉ DE LA VRAIE BASE (rdv_attente_unique_fenetre) :
+          // une fenêtre par personne et par prestation tant qu'elle n'est pas
+          // servie, EXPIRÉE COMPRISE. Sans lui, ce banc ne verrait pas LA-08.
+          const doublonFenetre = table === 'rdv_attente' && ajout && ajout.some(x => x.portee === 'fenetre'
+            && lignes.some(l => l.portee === 'fenetre' && l.statut !== 'servi' && l.client_id === x.client_id && l.prestation_id === x.prestation_id))
+          if (effacer) {
+            const garder = lignes.filter(r => !filtres.every(f => f(r)))
+            const n = lignes.length - garder.length
+            lignes.splice(0, lignes.length, ...garder)
+            rep = { data: null, error: null, count: n }
+          } else if (doublonFenetre) {
+            rep = { data: null, error: { code: '23505', message: 'rdv_attente_unique_fenetre' } }
+          } else if (ajout) {
             const neuves = ajout.map((x, i) => ({ id: `${table}-${lignes.length + i + 1}`, created_at: new Date().toISOString(), ...x }))
             lignes.push(...neuves)
             rep = { data: unique ? neuves[0] : neuves, error: null }
@@ -612,6 +627,46 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
       /clientId: champs\?\.client_id \|\| null,\s+clientEmail: champs\?\.client_email \|\| null,/.test(CREATION_SRC))
     const ROUTE_SRC = sansProse(readFileSync(new URL('../app/api/rdv/attente/route.js', import.meta.url), 'utf8'))
     verifier('et la route d’inscription passe l’adresse prouvée', /email: identite\.email \|\| null,/.test(ROUTE_SRC))
+  }
+
+  // ── LA-08 : une fenêtre expirée ne verrouille plus à vie ─────────────
+  // ── LA-10 : une table n'a pas de liste d'attente ───────────────────────
+  {
+    const AUJ = jourBruxelles()
+    const REIKI = { id: 'reiki', commercant_id: 'c1', nom: 'Reiki', capacite: 1, attente_max: 3, actif: true, deleted_at: null, par_couverts: false, duree_minutes: 60, tva_taux: 21 }
+    const TABLE = { id: 'table4', commercant_id: 'c1', nom: 'Table de 4', capacite: 4, attente_max: 3, actif: true, deleted_at: null, par_couverts: true, duree_minutes: 90, tva_taux: 12 }
+    const fenetre = (id, client, debut, fin, extra = {}) => ({ id, commercant_id: 'c1', prestation_id: 'reiki', client_id: client, portee: 'fenetre',
+      date_rdv: null, heure_debut: null, date_debut: debut, date_fin: fin, statut: 'en_attente', push_id: null, created_at: '2026-09-01T10:00:00Z', ...extra })
+    const avec = (attentes) => { const t = base(); t.rdv_prestations.push(REIKI, TABLE); t.rdv_attente.push(...attentes); return t }
+    const SOPHIE_REIKI = { prestationId: 'reiki', clientId: 'cl-sophie', email: 'sophie@exemple.be', duree: 'semaine' }
+
+    {
+      const t = avec([fenetre('vieille', 'cl-sophie', plus(AUJ, -10), plus(AUJ, -3)), fenetre('marc', 'cl-marc', plus(AUJ, -10), plus(AUJ, -3))])
+      const r = await S.inscrire(fauxDb(t), SOPHIE_REIKI)
+      const siennes = t.rdv_attente.filter(l => l.client_id === 'cl-sophie')
+      verifier('🔴 une fenêtre expirée ne verrouille plus : la réinscription passe',
+        r.ok === true && siennes.length === 1 && siennes[0].date_debut === AUJ && siennes[0].id !== 'vieille', JSON.stringify({ r, siennes }))
+      verifier('⚠️ et seule SA fenêtre expirée s’efface, pas celle d’une autre personne',
+        t.rdv_attente.some(l => l.id === 'marc'))
+    }
+    {
+      const t = avec([fenetre('vivante', 'cl-sophie', AUJ, plus(AUJ, 5))])
+      const r = await S.inscrire(fauxDb(t), SOPHIE_REIKI)
+      verifier('⚠️ une fenêtre encore ouverte reste « déjà inscrit », et ne s’efface pas',
+        r.ok === false && r.error === 'deja_inscrit' && t.rdv_attente.some(l => l.id === 'vivante'), JSON.stringify(r))
+    }
+    verifier('une attente expirée ne compte plus comme « déjà inscrit »',
+      !dejaDansLaFile([fenetre('x', 'y1', '2026-09-01', '2026-09-08')], { prestation_id: 'reiki', portee: 'fenetre' }, 'y1', '2026-10-03')
+      && dejaDansLaFile([fenetre('x', 'y1', '2026-09-01', '2026-10-08')], { prestation_id: 'reiki', portee: 'fenetre' }, 'y1', '2026-10-03'))
+
+    {
+      const t = avec([])
+      const r = await S.inscrire(fauxDb(t), { prestationId: 'table4', clientId: 'cl-sophie', email: 'sophie@exemple.be', duree: 'semaine' })
+      verifier('🔴 une table n’a pas de liste d’attente : refus clair, rien d’écrit',
+        r.ok === false && r.error === 'fermee' && t.rdv_attente.length === 0, JSON.stringify(r))
+    }
+    verifier('🔴 et la règle partagée la dit fermée, même réglée à 3',
+      attenteOuverte({ par_couverts: true, attente_max: 3 }) === false && attenteOuverte({ par_couverts: false, attente_max: 3 }) === true)
   }
 }
 

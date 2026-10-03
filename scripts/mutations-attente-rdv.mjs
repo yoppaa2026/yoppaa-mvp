@@ -82,9 +82,12 @@ const MUTATIONS = [
     de: "    return String(a.date_rdv || '') === String(b.date_rdv || '')",
     vers: "    return true || String(a.date_rdv || '') === String(b.date_rdv || '')" },
 
+  // ⚠️ ANCRE RÉORIENTÉE LE 03/10 (LA-08) : la condition continue sur une
+  // ligne de plus (l'attente doit être vivante). La mutation retire toujours
+  // la seule comparaison de la personne.
   { nom: '🔴 on ne reconnait plus qui attend deja : double inscription',
-    de: "    l.statut !== STATUT_SERVI && String(l.client_id) === String(clientId) && memeCible(l, cible))",
-    vers: '    l.statut !== STATUT_SERVI && memeCible(l, cible))' },
+    de: "    l.statut !== STATUT_SERVI && String(l.client_id) === String(clientId) && memeCible(l, cible)",
+    vers: '    l.statut !== STATUT_SERVI && memeCible(l, cible)' },
 
   // ─── L'INSCRIPTION ──────────────────────────────────────────────────────
   { nom: '🔴 on peut attendre une seance deja passee : la ligne dort pour rien',

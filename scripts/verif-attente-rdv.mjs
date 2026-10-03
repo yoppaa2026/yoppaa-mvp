@@ -707,6 +707,25 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
         r.ok === true && r.file === 1, JSON.stringify(r))
     }
 
+    // LA-07, exécuté : ni un cours retiré, ni un jour fermé.
+    {
+      const publie = { nom: 'Centre', slug: 'centre', statut_publication: 'publie' }
+      const t = base()
+      t.rdv_prestations[0] = { ...t.rdv_prestations[0], actif: false, commercant: publie }
+      t.rdv_attente.push(ligne('a'))
+      const r = await S.prevenirLaFile(fauxDb(t), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00' })
+      verifier('🔴 un cours retiré ne fait prévenir personne', r.ok === true && r.file === 0 && r.raison === 'prestation_retiree', JSON.stringify(r))
+    }
+    {
+      const publie = { nom: 'Centre', slug: 'centre', statut_publication: 'publie' }
+      const t = base()
+      t.rdv_prestations[0].commercant = publie
+      t.rdv_fermetures.push({ commercant_id: 'c1', date_debut: D, date_fin: D, praticien_id: null, deleted_at: null })
+      t.rdv_attente.push(ligne('a'))
+      const r = await S.prevenirLaFile(fauxDb(t), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00' })
+      verifier('🔴 un jour fermé ne fait prévenir personne', r.ok === true && r.file === 0 && r.raison === 'jour_ferme', JSON.stringify(r))
+    }
+
     // Le bouton de la commerçante, exécuté.
     {
       const r = await S.prevenirSurDemande(fauxDb(base()), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00' })

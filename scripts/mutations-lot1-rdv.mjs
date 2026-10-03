@@ -524,6 +524,19 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · LA-07 : NI COURS RETIRÉ, NI JOUR FERMÉ ─────────────────────
+  { nom: '🔴 la file est prevenue pour un cours retire',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "    if (prestation.actif === false || prestation.deleted_at) return { ok: true, prevenus: 0, file: 0, raison: 'prestation_retiree' }",
+    vers: "    if (false) return { ok: true, prevenus: 0, file: 0, raison: 'prestation_retiree' }",
+    garde: 'un cours retiré ne fait prévenir personne' },
+
+  { nom: '🔴 la file est prevenue pendant les conges',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "    if (fermetureQuiBloque(fermetures, { dateStr: dateRdv, praticienId: null })) return { ok: true, prevenus: 0, file: 0, raison: 'jour_ferme' }",
+    vers: "    if (false) return { ok: true, prevenus: 0, file: 0, raison: 'jour_ferme' }",
+    garde: 'un jour fermé ne fait prévenir personne' },
+
   // ─── LOT 3 · UNE SÉANCE D'ABONNEMENT EST DÉJÀ PAYÉE ─────────────────────
   { nom: '🔴 l email redit « Prix 0,00 € » a une abonnee',
     banc: 'verif:abonnements', fichier: 'lib/resend.js',

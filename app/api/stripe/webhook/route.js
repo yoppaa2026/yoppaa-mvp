@@ -1491,6 +1491,7 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       annulation_token, commande_id,
       lieu_id, lieu_libelle, lieu_adresse,
       couverts,
+      abonnement_id,
       commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques, categorie),
       prestation:rdv_prestations(nom, par_couverts),
       praticien:rdv_praticiens(prenom, nom, couleur_hex)
@@ -1564,6 +1565,9 @@ async function envoyerEmailsRdvConfirme(supabase, rdvId, _fallbackPayload) {
       heure_fin:               rdv.heure_fin,
       duree_minutes:           rdv.duree_minutes,
       prix_estime:             rdv.prix_estime,
+      // Même champ que la route de confirmation (garde de parité) : une séance
+      // d'abonnement n'a pas de prix, elle est déjà payée.
+      seance_abonnement:       !!rdv.abonnement_id,
       // La MÊME référence qu'à l'écran et qu'à l'agenda du commerçant : « RV12 ».
       numero_rdv:              referenceRdv(rdv),
       acompte_paye:            !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),

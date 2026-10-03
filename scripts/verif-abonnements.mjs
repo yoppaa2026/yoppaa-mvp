@@ -2360,7 +2360,7 @@ verifier('la sortie « hors abonnement » existe et est écrite',
 
   const ROUTE_C = sansProse(readFileSync(new URL('../app/api/emails/rdv-confirme/route.js', import.meta.url), 'utf8'))
   verifier('🔴 la route lit le contrat et le passe à l’email comme au calendrier',
-    /couverts, abonnement_id,/.test(ROUTE_C) && /seance_abonnement:\s*!!rdv\.abonnement_id,/.test(ROUTE_C)
+    /^\s*abonnement_id,\s*$/m.test(ROUTE_C) && /seance_abonnement:\s*!!rdv\.abonnement_id,/.test(ROUTE_C)
     && /prix_estime: rdv\.abonnement_id \? null : rdv\.prix_estime,/.test(ROUTE_C))
   const FICHE_A = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
   verifier('🔴 le récap de la fiche ne dit plus « tu règles sur place » à une abonnée',

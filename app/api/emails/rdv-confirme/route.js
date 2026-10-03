@@ -75,7 +75,8 @@ export async function POST(request) {
         empreinte_statut, empreinte_montant,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
         annulation_token, lieu_id, lieu_libelle, lieu_adresse, commande_id,
-        couverts, abonnement_id,
+        couverts,
+        abonnement_id,
         commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques, categorie),
         prestation:rdv_prestations(nom, duree_minutes, par_couverts),
         praticien:rdv_praticiens(prenom, nom, couleur_hex)

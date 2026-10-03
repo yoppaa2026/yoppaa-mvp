@@ -461,6 +461,25 @@ const MUTATIONS = [
     de: '                        const etiquette = f.actif === false',
     vers: '                        const etiquette = false',
     garde: 'la carte de la liste dit le même état' },
+
+  // ─── PLUS D'ACOMPTE « SUR PLACE » ───────────────────────────────────────
+  { nom: '🔴 la liste annonce de nouveau un acompte qui ne se paie pas en ligne',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                                {p.acompte_pourcent > 0 && acompteEnLigneDispo && (',
+    vers: '                                {p.acompte_pourcent > 0 && (',
+    garde: 'la liste des prestations ne parle d’acompte que s’il se paie en ligne' },
+
+  { nom: '🔴 la carte annonce de nouveau un acompte sur place',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                      {prestationChoisie.acompte_pourcent > 0 && !seanceSurAbo && acompteEnLigneDispo && (',
+    vers: '                      {prestationChoisie.acompte_pourcent > 0 && !seanceSurAbo && (',
+    garde: 'la carte du rendez-vous non plus' },
+
+  { nom: '🔴 la commercante ne sait plus que son acompte n est pas demande',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '  const acompteEnLigneActif = commercant?.rdv_acompte_en_ligne_actif === true && compteEncaisse(commercant)',
+    vers: '  const acompteEnLigneActif = true',
+    garde: 'la commerçante sait, en le réglant, si son acompte est vraiment demandé' },
 ]
 
 const lancer = (banc) => {

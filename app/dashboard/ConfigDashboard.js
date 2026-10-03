@@ -9585,6 +9585,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   // réservation de table. Partout ailleurs la case n'aurait aucun sens.
   const estTable = isAlimentaire(commercant) && peutReserver(commercant)
   const mots = motsReservation(commercant)
+  // L'acompte se demande-t-il vraiment ? La même condition que la fiche :
+  // l'option de Paiements ET un compte Stripe qui encaisse.
+  const acompteEnLigneActif = commercant?.rdv_acompte_en_ligne_actif === true && compteEncaisse(commercant)
   const [prestations, setPrestations] = useState([])
   const [praticiens, setPraticiens] = useState([])
   // Sess 5d : junction prestation ↔ praticien. Aucun coché = tous les praticiens
@@ -10166,7 +10169,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                         « Prix sur demande », ni acompte en pourcentage sur sa
                         carte, même si un ancien réglage en garde un en base. */}
                     {p.par_couverts !== true && <span><strong style={{ color: T.main }}>{prixLabel}</strong></span>}
-                    {p.par_couverts !== true && p.acompte_pourcent > 0 && <span>Acompte <strong style={{ color: T.ink }}>{p.acompte_pourcent}%</strong></span>}
+                    {p.par_couverts !== true && p.acompte_pourcent > 0 && <span>Acompte <strong style={{ color: T.ink }}>{p.acompte_pourcent}%</strong>{!acompteEnLigneActif && <span style={{ color: '#B45309', fontWeight: 700 }}> · pas encore demandé</span>}</span>}
                     {/* 🔴 LA CARTE DISAIT LA CAPACITÉ DE SALLE, PAS LA TABLE. Une
                         table de quatre s'annonçait « jusqu'à 6 couverts », parce
                         que `capacite` portait tout autre chose. Pour une table,
@@ -10439,6 +10442,17 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                 </div>
               )}
             </div>
+            {/* 🔴 UN ACOMPTE NE SE DEMANDE QU'EN LIGNE (Alex, 03/10). Réglé ici
+                sans l'option de Paiements, il n'était ni demandé ni encaissé,
+                et la fiche affichait « acompte à régler sur place ». La
+                commerçante doit le savoir AU MOMENT où elle le règle. */}
+            {!formEstTable && Number(form.acompte_pourcent) > 0 && (
+              <p style={{ fontSize: 11, lineHeight: 1.5, margin: '-4px 0 12px', fontWeight: acompteEnLigneActif ? 400 : 700, color: acompteEnLigneActif ? T.muted : '#B45309' }}>
+                {acompteEnLigneActif
+                  ? 'Ton client paie cet acompte en ligne au moment de réserver. Il le récupère s’il annule dans les délais.'
+                  : 'Cet acompte n’est pas encore demandé : active « Acompte en ligne » dans l’onglet Paiements, avec ton compte Stripe actif. En attendant, ton client ne voit aucun acompte et paie tout sur place.'}
+              </p>
+            )}
 
             {/* ⚠️ COMBIEN DE PERSONNES SUR UN MÊME CRÉNEAU. Yoppaa ne
                 connaissait qu'un modèle, une personne pour un créneau, ce qui

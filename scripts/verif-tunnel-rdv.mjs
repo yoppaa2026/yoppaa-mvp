@@ -2519,6 +2519,34 @@ for (const chemin of [
     /rdv_delai_annulation_heures: commercant\.rdv_delai_annulation_heures \?\? '',/.test(ADMIN))
 }
 
+// ═══ PLUS D'« ACOMPTE À RÉGLER SUR PLACE » (Alex, 03/10) ══════════════════
+//
+// 🔴 « En le payant sur place, ce n'est plus un acompte. » Sans l'acompte en
+// ligne, rien n'était demandé ni enregistré (la ventilation le met à zéro), mais
+// la fiche affichait « Acompte 30 % à régler sur place · 15,00 € ». Le client
+// lisait une avance à verser, la commerçante ignorait qu'elle n'était pas
+// demandée.
+{
+  const FICHE = lireCode('app/commander/rdv/[slug]/page.js')
+  verifie('🔴 la liste des prestations ne parle d’acompte que s’il se paie en ligne',
+    /\{p\.acompte_pourcent > 0 && acompteEnLigneDispo && \(/.test(FICHE))
+  verifie('🔴 la carte du rendez-vous non plus',
+    /\{prestationChoisie\.acompte_pourcent > 0 && !seanceSurAbo && acompteEnLigneDispo && \(/.test(FICHE))
+  verifie('⚠️ et le mot « sur place » ne qualifie plus jamais un acompte',
+    !/acompteEnLigneDispo \? '[^']*' : '(sur place|à régler sur place)'/.test(FICHE) && !/'à régler sur place'/.test(FICHE))
+  const { ventilerTunnelRdv: ventiler } = await import('../lib/tunnel-rdv-montants.js')
+  verifie('et rien n’est compté comme acompte sans paiement en ligne',
+    ventiler({ prixPrestation: 50, acomptePourcent: 30, acompteEnLigne: false }).acompte === 0
+    && ventiler({ prixPrestation: 50, acomptePourcent: 30, acompteEnLigne: true }).acompte === 15)
+
+  const DASH = lireCode('app/dashboard/ConfigDashboard.js')
+  verifie('🔴 la commerçante sait, en le réglant, si son acompte est vraiment demandé',
+    /const acompteEnLigneActif = commercant\?\.rdv_acompte_en_ligne_actif === true && compteEncaisse\(commercant\)/.test(DASH)
+    && /Cet acompte n’est pas encore demandé : active « Acompte en ligne » dans l’onglet Paiements/.test(DASH))
+  verifie('⚠️ et la liste de ses prestations le dit aussi',
+    /\{!acompteEnLigneActif && <span[^>]*> · pas encore demandé<\/span>\}/.test(DASH))
+}
+
 // ═══ RÉSULTAT ════════════════════════════════════════════════════════════
 console.log(`\nTunnel rendez-vous : ${ok + echecs.length} vérifications`)
 if (echecs.length) {

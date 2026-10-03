@@ -3224,9 +3224,14 @@ export default function CommanderRdvSlug() {
                                     prélevé, et Alex l'a signalé comme un bug de
                                     paiement alors que rien n'avait été promis à
                                     Stripe. On distingue les deux cas. */}
-                                {p.acompte_pourcent > 0 && (
+                                {/* 🔴 PLUS D'« ACOMPTE SUR PLACE » (Alex, 03/10 : « en le
+                                    payant sur place ce n'est plus un acompte »). Rien
+                                    n'était encaissé ni enregistré, la fiche l'affichait
+                                    seulement. Sans acompte en ligne, on n'en parle pas :
+                                    le client paie le prix sur place, c'est tout. */}
+                                {p.acompte_pourcent > 0 && acompteEnLigneDispo && (
                                   <span style={{ fontSize: '0.62rem', fontWeight: 800, color: T.deep, background: T.pale, padding: '2px 7px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                                    Acompte {pourcent(p.acompte_pourcent)} {acompteEnLigneDispo ? 'en ligne' : 'sur place'}
+                                    Acompte {pourcent(p.acompte_pourcent)} en ligne
                                   </span>
                                 )}
                                 {/* ⚠️ ICI ON INFORME, ON NE DÉCIDE PAS. Le choix
@@ -3822,9 +3827,10 @@ export default function CommanderRdvSlug() {
                           payée depuis le jour de l'achat du contrat. Laisser
                           cette ligne annoncerait un prélèvement qui n'aura
                           jamais lieu. */}
-                      {prestationChoisie.acompte_pourcent > 0 && !seanceSurAbo && (
+                      {/* 🔴 SEULEMENT S'IL SE PAIE EN LIGNE (03/10) : voir plus haut. */}
+                      {prestationChoisie.acompte_pourcent > 0 && !seanceSurAbo && acompteEnLigneDispo && (
                         <p style={{ margin: 0, fontSize: '0.74rem', color: T.deep, fontWeight: 700, background: T.pale, borderRadius: 8, padding: '6px 10px' }}>
-                          Acompte {pourcent(prestationChoisie.acompte_pourcent)} {acompteEnLigneDispo ? 'à payer en ligne maintenant' : 'à régler sur place'}
+                          Acompte {pourcent(prestationChoisie.acompte_pourcent)} à payer en ligne maintenant
                           {(() => {
                             // ⚠️ L'ACOMPTE SUIT LE PRIX REMISÉ : sur un soin à 50 €
                             // remisé à 40 € avec 50 % d'acompte, c'est 20 € et non 25.

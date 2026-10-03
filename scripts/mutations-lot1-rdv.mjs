@@ -362,6 +362,37 @@ const MUTATIONS = [
     de: '        rdv_delai_annulation_heures: vDelai.valeur,',
     vers: '        rdv_delai_annulation_heures: Number(form.rdv_delai_annulation_heures) || 24,',
     garde: 'l’admin ne change plus un zéro en vingt-quatre' },
+
+  // ─── « RÉPÉTER / TOUT LE CONTRAT » ──────────────────────────────────────
+  { nom: '🔴 la serie pose de nouveau une seance en plein conge',
+    banc: 'verif:abonnements', fichier: 'lib/abonnements.js',
+    de: "    if (dateEcartee(curseur, periodesExclues)) { ecartees.push({ date: curseur, raison: 'conge' }); continue }",
+    vers: '',
+    garde: '« + 4 » depuis le 5 octobre saute le congé d’automne' },
+
+  { nom: '🔴 la serie ignore de nouveau les fermetures',
+    banc: 'verif:abonnements', fichier: 'lib/abonnements.js',
+    de: "    if (typeof estFermee === 'function' && estFermee(curseur)) { ecartees.push({ date: curseur, raison: 'fermeture' }); continue }",
+    vers: '',
+    garde: 'un jour où l’agenda est fermé est sauté' },
+
+  { nom: '🔴 la modale ne charge plus les conges de la formule',
+    banc: 'verif:abonnements', fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: 'formule:abonnement_formules(libelle, periodes_exclues)',
+    vers: 'formule:abonnement_formules(libelle)',
+    garde: 'la modale charge les congés de la formule' },
+
+  { nom: '🔴 les semaines repetees ne sont plus jugees au clic',
+    banc: 'verif:abonnements', fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '          return v.ok',
+    vers: '          return true',
+    garde: 'chaque semaine répétée est jugée au clic' },
+
+  { nom: '🔴 la fenetre se ferme avant de dire ce qui manque',
+    banc: 'verif:abonnements', fichier: 'app/dashboard/ModalNouveauRdv.js',
+    de: '      if (nonPosees.length > 0) {',
+    vers: '      if (false) {',
+    garde: 'la fenêtre reste ouverte pour dire ce qui n’a pas été posé' },
 ]
 
 const lancer = (banc) => {

@@ -1994,6 +1994,34 @@ egal('sans date de départ, aucune série', semainesSuivantes(null, { nombre: 4 
 egal('un nombre nul ne pose rien', semainesSuivantes('2026-09-07', { nombre: 0 }).length, 0)
 egal('un nombre négatif non plus', semainesSuivantes('2026-09-07', { nombre: -3 }).length, 0)
 
+// ─── 🔴 LA SÉRIE SAUTE ET NOMME LES CONGÉS ET LES FERMETURES (03/10) ───────
+//
+// L'audit avant Centre Respire, sur ses vraies dates : « + 4 » depuis le 5
+// octobre posait le 26 en plein congé d'automne, et « Tout le contrat » posait
+// sept séances sur des dates que la FORMULE écartait. Le contrat ne connaît pas
+// ses congés ; seule la formule les porte, et la série ne les lisait pas.
+{
+  const { serieDeSeances, raisonSemaineEcartee } = await import('../lib/abonnements.js')
+  const AUTOMNE = [{ debut: '2026-10-26', fin: '2026-10-30' }]
+  const plus4 = serieDeSeances('2026-10-05', { nombre: 4, periodesExclues: AUTOMNE })
+  egal('🔴 « + 4 » depuis le 5 octobre saute le congé d’automne', plus4.dates, ['2026-10-12', '2026-10-19', '2026-11-02'])
+  egal('🔴 et le nomme', plus4.ecartees, [{ date: '2026-10-26', raison: 'conge' }])
+  const fermee = serieDeSeances('2026-10-05', { nombre: 4, estFermee: (d) => d === '2026-10-19' })
+  egal('🔴 un jour où l’agenda est fermé est sauté, et nommé',
+    [fermee.dates.includes('2026-10-19'), fermee.ecartees], [false, [{ date: '2026-10-19', raison: 'fermeture' }]])
+  const prise = serieDeSeances('2026-10-05', { nombre: 2, datesDejaPrises: ['2026-10-14'] })
+  egal('une semaine déjà prise est nommée aussi', prise.ecartees, [{ date: '2026-10-12', raison: 'deja_prise' }])
+  // ⚠️ UN CONGÉ NE CONSOMME PAS LE SOLDE : trois séances restantes donnent trois
+  // séances, posées autour du congé.
+  egal('⚠️ un congé ne consomme pas le solde',
+    serieDeSeances('2026-10-05', { nombre: 8, soldeRestant: 3, periodesExclues: AUTOMNE }).dates,
+    ['2026-10-12', '2026-10-19', '2026-11-02'])
+  egal('les seules dates restent celles de la série',
+    semainesSuivantes('2026-10-05', { nombre: 4, periodesExclues: AUTOMNE }), plus4.dates)
+  verifier('chaque raison se dit en mots',
+    ['deja_prise', 'conge', 'fermeture', 'complet', 'creneau'].every(r => raisonSemaineEcartee(r) !== 'non posée'))
+}
+
 // ─── LE REFUS, DIT AU COMMERÇANT ──────────────────────────────────────────
 //
 // ⚠️ DEUX PUBLICS, DEUX VOIX, UNE SEULE RÈGLE. `expliquerRefusSeance` tutoie la
@@ -2039,6 +2067,23 @@ egal('et le lieu est résolu date par date',
   (srcModale.match(/champsLieuPour\(supabase, commercant/g) || []).length, 2)
 verifier('la sortie « hors abonnement » existe et est écrite',
   /hors abonnement/.test(srcModale))
+// 🔴 « RÉPÉTER » LIT LES CONGÉS DE LA FORMULE ET LES FERMETURES (03/10), juge
+// chaque semaine au clic, liste les dates avant, et dit ce qui n'a pas été posé.
+{
+  const modale = sansProse(srcModale)
+  verifier('🔴 la modale charge les congés de la formule',
+    /formule:abonnement_formules\(libelle, periodes_exclues\)/.test(modale))
+  verifier('🔴 la série saute les congés et les fermetures',
+    /periodesExclues: aboChoisi\.contrat\.formule\?\.periodes_exclues \|\| \[\],/.test(modale)
+    && /estFermee: \(d\) => !!fermetureQuiBloque\(fermeturesAgenda \|\| \[\], \{ dateStr: d,/.test(modale))
+  verifier('🔴 chaque semaine répétée est jugée au clic, sur l’agenda relu',
+    /repeteesJugees = datesRepetees\.filter\(d => \{\s*const v = creneauAcceptable\(\{/.test(modale)
+    && /if \(!v\.ok\) nonPosees\.push\(/.test(modale) && /return v\.ok/.test(modale))
+  verifier('⚠️ les dates se lisent avant d’enregistrer',
+    /\[dateChoisie, \.\.\.datesRepetees\]\.map\(d => formatDateCourte\(d\)\)\.join\(' · '\)/.test(modale))
+  verifier('🔴 la fenêtre reste ouverte pour dire ce qui n’a pas été posé',
+    /if \(nonPosees\.length > 0\) \{[\s\S]{0,160}setBilanSerie\(/.test(modale))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // L'ARGENT DU COMPTOIR ET LE SOLDE, DEUX TROUS TROUVÉS PAR ALEX LE 19/08

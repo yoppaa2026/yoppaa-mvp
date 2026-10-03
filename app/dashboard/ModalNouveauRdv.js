@@ -28,8 +28,9 @@ import {
 // commerçante obtiennent deux réponses différentes sur la même séance.
 import {
   peutReserverSurAbonnement, seancesConsommees, datesConsommees, soldeAbonnement,
-  semainesSuivantes, expliquerRefusCommercant, formatDateCourte,
+  serieDeSeances, raisonSemaineEcartee, expliquerRefusCommercant, formatDateCourte,
 } from '@/lib/abonnements'
+import { fermetureQuiBloque } from '@/lib/fermetures-rdv'
 
 const T = {
   main:    '#6B35C4',
@@ -165,6 +166,25 @@ export default function ModalNouveauRdv({
   const [abonnes, setAbonnes] = useState([])
   const [aboChoisiId, setAboChoisiId] = useState(null)
   const [repeter, setRepeter] = useState(0)
+  // 🔴 LES FERMETURES DE L'AGENDA, POUR LA SÉRIE (03/10). « Répéter » posait des
+  // séances en plein congé : rien ne les lisait ici. `null` = lecture en échec,
+  // et l'aperçu le DIT au lieu de faire comme s'il n'y en avait aucune.
+  const [fermeturesAgenda, setFermeturesAgenda] = useState([])
+  // Ce qui a été posé, et ce qui ne l'a pas été, quand une série est incomplète.
+  // ⚠️ LA FENÊTRE RESTE OUVERTE pour le dire : le message partait juste avant sa
+  // fermeture, et la commerçante ne le lisait jamais.
+  const [bilanSerie, setBilanSerie] = useState(null)
+
+  useEffect(() => {
+    if (serveur) return
+    let annule = false
+    supabase.from('rdv_fermetures')
+      .select('date_debut, date_fin, praticien_id')
+      .eq('commercant_id', commercant.id)
+      .is('deleted_at', null)
+      .then(({ data, error }) => { if (!annule) setFermeturesAgenda(error ? null : (data || [])) })
+    return () => { annule = true }
+  }, [commercant.id, serveur])
 
   useEffect(() => {
     let annule = false
@@ -176,7 +196,7 @@ export default function ModalNouveauRdv({
     ;(async () => {
       const { data: contrats } = await supabase
         .from('abonnements')
-        .select('id, client_prenom, client_nom, client_telephone, client_email, statut, date_debut, date_fin, seances_total, seances_par_semaine, formule:abonnement_formules(libelle)')
+        .select('id, client_prenom, client_nom, client_telephone, client_email, statut, date_debut, date_fin, seances_total, seances_par_semaine, formule:abonnement_formules(libelle, periodes_exclues)')
         .eq('commercant_id', commercant.id)
         .eq('prestation_id', prestationId)
         .eq('statut', 'actif')
@@ -406,16 +426,26 @@ export default function ModalNouveauRdv({
     : null
   const surAbonnement = !!(aboChoisi && verdictAbo?.ok)
 
+  // La plage qui accueille l'heure tel jour : son praticien dit qui serait absent.
+  const plageCeJour = (d) => plageQuiAccueille(creneauxDuJour(creneaux, { dateStr: d, jour: jourKey }), {
+    prestationId: presta?.id, debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMin,
+  })
+
   // Les dates que le bouton « répéter » poserait vraiment, bornes comprises.
-  const datesRepetees = surAbonnement && repeter > 0
-    ? semainesSuivantes(dateChoisie, {
+  // 🔴 LES CONGÉS DE LA FORMULE ET LES FERMETURES DE L'AGENDA SONT SAUTÉS, et
+  // nommés (03/10) : voir `serieDeSeances`.
+  const serie = surAbonnement && repeter > 0
+    ? serieDeSeances(dateChoisie, {
         nombre: repeter,
         jusqua: aboChoisi.contrat.date_fin,
         datesDejaPrises: aboChoisi.datesPrises,
         // ⚠️ Moins un : la séance du jour consomme déjà une unité du solde.
         soldeRestant: aboChoisi.solde === null ? null : Math.max(0, aboChoisi.solde - 1),
+        periodesExclues: aboChoisi.contrat.formule?.periodes_exclues || [],
+        estFermee: (d) => !!fermetureQuiBloque(fermeturesAgenda || [], { dateStr: d, praticienId: plageCeJour(d)?.praticien_id ?? null }),
       })
-    : []
+    : { dates: [], ecartees: [] }
+  const datesRepetees = serie.dates
 
   // ⚠️ L'IDENTITÉ VIENT DU CONTRAT quand on pose sur un abonnement : le nom et
   // le téléphone sont ceux de la souscription, et le formulaire n'a plus à être
@@ -567,7 +597,35 @@ export default function ModalNouveauRdv({
         return
       }
 
-      const toutesLesDates = [dateStr, ...datesRepetees]
+      // 🔴 CHAQUE SEMAINE RÉPÉTÉE EST JUGÉE COMME LA PREMIÈRE (03/10). Seule la
+      // date du jour passait par `creneauAcceptable` : les suivantes se posaient
+      // par-dessus un autre rendez-vous, sans un mot. On relit l'agenda de ces
+      // jours-là, en base, au moment d'écrire.
+      const nonPosees = []
+      let repeteesJugees = datesRepetees
+      if (datesRepetees.length > 0) {
+        const { data: agendaSerie, error: errSerie } = await supabase
+          .from('rdv_reservations')
+          .select('id, date_rdv, statut, prestation_id, heure_debut, heure_fin')
+          .eq('commercant_id', commercant.id)
+          .in('date_rdv', datesRepetees)
+          .is('deleted_at', null)
+        if (errSerie) {
+          setError(`Impossible de relire ton agenda des semaines suivantes : ${errSerie.message}`)
+          setSubmitting(false)
+          return
+        }
+        repeteesJugees = datesRepetees.filter(d => {
+          const v = creneauAcceptable({
+            dateStr: d, heureDebut: heure, dureeMinutes: dureeMin, horaireJour,
+            creneauxJour: creneauxDuJour(creneaux, { dateStr: d, jour: jourKey }),
+            rdvsExistants: agendaSerie || [], capacite, prestationId: presta.id, prestations,
+          })
+          if (!v.ok) nonPosees.push({ date: d, raison: 'creneau', message: v.message })
+          return v.ok
+        })
+      }
+      const toutesLesDates = [dateStr, ...repeteesJugees]
       const placeParDate = {}
       if (estParCouverts(presta)) {
         // 🔴 UNE TABLE CHERCHE SON RANG PARMI TOUTES LES RÉSERVATIONS DE L'HEURE
@@ -623,9 +681,7 @@ export default function ModalNouveauRdv({
           setSubmitting(false)
           return
         }
-        if (completes.length > 0) {
-          setError(`${completes.length} semaine${completes.length > 1 ? 's' : ''} déjà complète${completes.length > 1 ? 's' : ''} : ${completes.map(d => formatDateCourte(d)).join(', ')}. Les autres séances vont être posées.`)
-        }
+        for (const d of completes) nonPosees.push({ date: d, raison: 'complet' })
       } else {
         for (const d of toutesLesDates) placeParDate[d] = 1
       }
@@ -760,6 +816,12 @@ export default function ModalNouveauRdv({
 
       // 5) Success : callback + close
       if (onCreated) onCreated()
+      if (nonPosees.length > 0) {
+        nonPosees.sort((a, b) => a.date.localeCompare(b.date))
+        setBilanSerie({ posees: datesAPoser.length, nonPosees })
+        setSubmitting(false)
+        return
+      }
       onClose()
 
     } catch (e) {
@@ -1127,9 +1189,27 @@ export default function ModalNouveauRdv({
                       ? 'Une seule séance sera posée.'
                       : `${datesRepetees.length + 1} séances au total, jusqu’au ${formatDateCourte(datesRepetees[datesRepetees.length - 1] || dateChoisie)}.`}
                   </p>
-                  {repeter > 0 && datesRepetees.length + 1 < repeter + 1 && (
+                  {/* 🔴 LES DATES, AVANT D'ENREGISTRER (03/10) : un nombre ne
+                      montre pas qu'une séance tombe en plein congé. Et ce qui est
+                      sauté est nommé, avec sa raison. */}
+                  {repeter > 0 && (
+                    <p style={{ fontSize: '0.72rem', color: T.deep, margin: '4px 0 0', lineHeight: 1.6 }}>
+                      {[dateChoisie, ...datesRepetees].map(d => formatDateCourte(d)).join(' · ')}
+                    </p>
+                  )}
+                  {repeter > 0 && serie.ecartees.length > 0 && (
+                    <p style={{ fontSize: '0.72rem', color: '#92400E', margin: '4px 0 0', lineHeight: 1.5 }}>
+                      Pas de séance : {serie.ecartees.map(e => `${formatDateCourte(e.date)} (${raisonSemaineEcartee(e.raison)})`).join(', ')}.
+                    </p>
+                  )}
+                  {repeter > 0 && fermeturesAgenda === null && (
+                    <p style={{ fontSize: '0.72rem', color: '#DC2626', fontWeight: 700, margin: '4px 0 0', lineHeight: 1.5 }}>
+                      Impossible de lire tes fermetures : vérifie toi-même qu&rsquo;aucune de ces dates ne tombe pendant un congé.
+                    </p>
+                  )}
+                  {repeter > 0 && datesRepetees.length + serie.ecartees.length < repeter && (
                     <p style={{ fontSize: '0.72rem', color: T.muted, margin: '4px 0 0', lineHeight: 1.5 }}>
-                      Moins que demandé : le contrat s’arrête, le solde ne suffit plus, ou ces semaines ont déjà leur séance.
+                      Moins que demandé : le contrat s’arrête, ou le solde ne suffit plus.
                     </p>
                   )}
                 </div>
@@ -1182,6 +1262,18 @@ export default function ModalNouveauRdv({
               style={{ ...inputSt, resize: 'vertical', minHeight: 56 }}/>
           </div>
 
+          {/* 🔴 LE BILAN D'UNE SÉRIE INCOMPLÈTE (03/10), lu AVANT de fermer. */}
+          {bilanSerie && (
+            <div role="status" style={{ ...boiteSt('alerte'), marginBottom: 12 }}>
+              <p style={titreBoiteSt('alerte')}>
+                {bilanSerie.posees} séance{bilanSerie.posees > 1 ? 's' : ''} posée{bilanSerie.posees > 1 ? 's' : ''}.
+              </p>
+              <p style={{ fontSize: '0.78rem', color: '#92400E', margin: '4px 0 0', lineHeight: 1.5 }}>
+                Pas posées : {bilanSerie.nonPosees.map(n => `${formatDateCourte(n.date)} (${raisonSemaineEcartee(n.raison)})`).join(', ')}.
+              </p>
+            </div>
+          )}
+
           {/* Erreur */}
           {error && (
             <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 10, padding: '0.625rem 0.875rem', marginBottom: 12 }}>
@@ -1192,6 +1284,12 @@ export default function ModalNouveauRdv({
 
         {/* Footer actions */}
         <div style={{ display: 'flex', gap: 8, padding: '0.75rem 1.125rem 1.125rem', borderTop: `1px solid ${T.pale}`, background: '#FAFAFA' }}>
+          {bilanSerie ? (
+            <button onClick={onClose}
+              style={{ flex: 1, padding: '0.75rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif' }}>
+              Fermer
+            </button>
+          ) : (<>
           <button onClick={onClose} disabled={submitting}
             style={{ flex: 1, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.muted, fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
             Annuler
@@ -1210,6 +1308,7 @@ export default function ModalNouveauRdv({
                 déjà passée, on ne confirme rien à personne : on note. */}
             {submitting ? 'Enregistrement…' : passe ? 'Noter après coup ✓' : (choixTable?.forcer || cadenceDepassee) ? 'Poser quand même ✓' : `${mots.manuelConfirmer} ✓`}
           </button>
+          </>)}
         </div>
       </div>
     </div>,

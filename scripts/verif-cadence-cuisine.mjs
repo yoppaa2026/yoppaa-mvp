@@ -394,7 +394,13 @@ verifier('⚠️ avec la phrase du module', /import \{ phraseCuisinePleine \} fr
   // réponse ; seule l'écriture impossible reste une panne.
   const codes = [...new Set([...CREA.matchAll(/code: '([a-z_]+)'/g)].map(m => m[1]))]
   const traduits = new Set([...ROUTE.matchAll(/res\.code === '([a-z_]+)'/g)].map(m => m[1]))
-  const oublies = codes.filter(c => c !== 'ecriture_impossible' && !traduits.has(c))
+  // ⚠️ REPOINTÉE LE 03/10 : la route dit désormais TOUT refus de règle par
+  // `refusAvantPaiement`, en dernier recours (un jour fermé tombait dans le
+  // 500). Un code est donc traduit s'il a sa branche, OU s'il figure dans
+  // REFUS_DE_REGLE et que ce recours existe bien dans la route.
+  const { REFUS_DE_REGLE } = await import('../lib/refus-reservation.js')
+  const recours = /if \(estRefusDeRegle\(res\.code\)\) \{\s*const \{ status, corps \} = refusAvantPaiement\(res, /.test(ROUTE)
+  const oublies = codes.filter(c => c !== 'ecriture_impossible' && !traduits.has(c) && !(recours && REFUS_DE_REGLE.includes(c)))
   verifier('le serveur a bien des codes de refus', codes.length >= 10, codes.join(', '))
   verifier('🔴 aucun refus du serveur ne tombe dans le 500 de la route', oublies.length === 0, oublies.join(', '))
 }

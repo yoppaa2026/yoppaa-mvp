@@ -26,6 +26,7 @@ import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { peutReserverSurAbonnement, seancesConsommees, datesConsommees } from '@/lib/abonnements'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
+import { estRefusDeRegle, refusAvantPaiement } from '@/lib/refus-reservation'
 import { creneauDejaCommence } from '@/lib/timezone'
 
 function admin() {
@@ -190,6 +191,14 @@ export async function POST(request) {
     }
     if (res.code === 'prestation_hors_commerce' || res.code === 'prestation_introuvable') {
       return NextResponse.json({ ok: false, error: 'cours_introuvable' }, { status: 409 })
+    }
+    // 🔴 TOUT AUTRE REFUS DE RÈGLE SE DIT (03/10). Un jour fermé ou un horaire
+    // qui n'accueille pas ce cours rendaient `ecriture_impossible`, et la fiche
+    // affichait « Réessaie » sur une demande qui ne passerait jamais. La phrase
+    // est celle des routes de paiement ; `creneau_refuse` renvoie choisir.
+    if (estRefusDeRegle(res.code)) {
+      const { status, corps } = refusAvantPaiement(res, {})
+      return NextResponse.json({ ok: false, error: 'refus_regle', message: corps.error, creneau_refuse: !!corps.creneau_refuse }, { status })
     }
     console.error('[rdv/reserver-abonnement] insert', res.error)
     return NextResponse.json({ ok: false, error: 'ecriture_impossible' }, { status: 500 })

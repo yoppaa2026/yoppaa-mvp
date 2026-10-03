@@ -46,6 +46,7 @@ import { chargerBonsValides } from '@/lib/bons-cadeaux-server'
 import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { creerReservationRdv, appliquerAvantagesRdv } from '@/lib/rdv-creation-server'
+import { estRefusDeRegle, refusAvantPaiement } from '@/lib/refus-reservation'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { creneauxDuJour } from '@/lib/ouverture'
 import { jourSemaineDe } from '@/lib/creneaux'
@@ -493,6 +494,14 @@ export async function POST(request) {
       }
       if (res.code === 'couverts_invalides') {
         return NextResponse.json({ ok: false, error: 'Ce nombre de personnes n’est pas accepté pour cette réservation.' }, { status: 400 })
+      }
+      // 🔴 TOUT AUTRE REFUS DE RÈGLE SE DIT, avec la phrase commune aux routes
+      // de paiement (03/10). Un jour fermé ou un horaire passé tombaient dans le
+      // 500 « Réessaie » : la cliente relançait une demande que le serveur ne
+      // pouvait pas accepter, sans jamais savoir pourquoi.
+      if (estRefusDeRegle(res.code)) {
+        const { status, corps } = refusAvantPaiement(res, { nom: commercant.nom })
+        return NextResponse.json(corps, { status })
       }
       console.error('[rdv/reserver] insert KO', res.error)
       return NextResponse.json({ ok: false, error: 'Ta réservation n\'a pas pu être enregistrée. Réessaie.' }, { status: 500 })

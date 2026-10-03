@@ -553,7 +553,8 @@ for (const chemin of [
   const { creerReservationRdv } = await import('../lib/rdv-creation-server.js')
 
   function baseSimulee({ prestation, lieux = [], placesPrises = [], erreurInsert = null,
-                         creneaux = [], liaisons = [], erreurPlaces = null }) {
+                         creneaux = [], liaisons = [], erreurPlaces = null,
+                         fermetures = [], erreurFermetures = null }) {
     const vu = { payload: null, filtresPlaces: {} }
     // 🔴 LES PLAGES SONT RENDUES À TRAVERS LEUR SELECT (03/10). Le lieu de la
     // réservation vient désormais de `rdv_creneaux.lieu_id` : si la colonne
@@ -592,6 +593,7 @@ for (const chemin of [
           nom === 'commercant_lieux' ? { data: lieux }
           : nom === 'rdv_creneaux' ? { data: projeter(creneaux, colonnes) }
           : nom === 'rdv_creneau_prestations' ? { data: liaisons }
+          : nom === 'rdv_fermetures' ? { data: erreurFermetures ? null : fermetures, error: erreurFermetures }
           : nom === 'rdv_reservations' ? (vu.filtresPlaces = filtres, erreurPlaces
             ? { data: null, error: erreurPlaces }
             : { data: placesPrises.map(place_no => ({ place_no })) })
@@ -789,6 +791,55 @@ for (const chemin of [
     })
     verifie('et sans plage désignée, le lieu se résout à l’heure',
       db._vu.payload.lieu_id === 'L1')
+  }
+
+  // ── LES FERMETURES SE RESPECTENT AU SERVEUR (03/10) ──────────────────────
+  //
+  // 🔴 AUCUNE ROUTE NE LISAIT `rdv_fermetures`. La fiche grisait les jours de
+  // congé, mais une fiche restée ouverte, une requête forgée ou le webhook d'un
+  // acompte posaient un rendez-vous en plein congé.
+  {
+    const CONGES = [{ date_debut: '2026-09-07', date_fin: '2026-09-11', praticien_id: null }]
+    const RESA = { commercantId: 'c1', prestationId: 'p1', dateRdv: '2026-09-07', heureDebut: '10:00' }
+    const ferme = baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES })
+    const r1 = await creerReservationRdv(ferme, { ...RESA, champs: {} })
+    verifie('🔴 un jour de congé refuse la réservation, et n’écrit rien',
+      r1.ok === false && r1.code === 'jour_ferme' && ferme._vu.payload === null, JSON.stringify(r1))
+    // ⚠️ ET AVANT LE PAIEMENT : les routes d'acompte vérifient par ce chemin-là.
+    const sim = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, champs: {}, simulation: true })
+    verifie('🔴 la vérification avant paiement le refuse aussi', sim.ok === false && sim.code === 'jour_ferme', JSON.stringify(sim))
+    const dernierJour = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, dateRdv: '2026-09-11', champs: {} })
+    verifie('⚠️ le dernier jour de la fermeture est fermé aussi', dernierJour.ok === false && dernierJour.code === 'jour_ferme')
+    const lendemain = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, dateRdv: '2026-09-12', champs: {} })
+    verifie('le lendemain de la fermeture se réserve', lendemain.ok === true, JSON.stringify(lendemain))
+    const comptoir = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, champs: { source: 'commercant' } })
+    verifie('⚠️ le commerçant, lui, pose ce qu’il veut dans son agenda', comptoir.ok === true, JSON.stringify(comptoir))
+    const panne = baseSimulee({ prestation: PRESTA_SOLO, erreurFermetures: { message: 'délai dépassé' } })
+    const r2 = await creerReservationRdv(panne, { ...RESA, champs: {} })
+    verifie('⚠️ une lecture des fermetures en échec refuse, sans écrire',
+      r2.ok === false && r2.code === 'ecriture_impossible' && panne._vu.payload === null, JSON.stringify(r2))
+  }
+  {
+    // 🔴 LE COURS DE LA PROFESSEURE EN CONGÉ, RÉSERVÉ « SANS PRÉFÉRENCE ». Seules
+    // les fermetures du commerce bloquaient un jour : la cliente n'avait nommé
+    // personne, et la plage, qui dit qui donne le cours, n'était pas lue.
+    const PLAGE_EMILY = { id: 'cr-emily', jour_semaine: 'lundi', date_specifique: null, heure_debut: '18:00:00', heure_fin: '19:00:00',
+      pause_debut: null, pause_fin: null, actif: true, praticien_id: 'emily', lieu_id: null }
+    const LIAISONS = [{ creneau_id: 'cr-emily', prestation_id: 'p2' }]
+    const ABSENTE = [{ date_debut: '2026-09-07', date_fin: '2026-09-07', praticien_id: 'emily' }]
+    const RESA = { commercantId: 'c1', prestationId: 'p2', dateRdv: '2026-09-07', heureDebut: '18:00' }
+    const base = (creneaux = [PLAGE_EMILY]) => baseSimulee({ prestation: PRESTA_COURS, creneaux, liaisons: LIAISONS, fermetures: ABSENTE })
+
+    const db = base()
+    const r = await creerReservationRdv(db, { ...RESA, champs: {} })
+    verifie('🔴 sans préférence, le cours d’une professeure absente est refusé',
+      r.ok === false && r.code === 'jour_ferme' && db._vu.payload === null, JSON.stringify(r))
+    const nommee = await creerReservationRdv(base(), { ...RESA, champs: { praticien_id: 'emily' } })
+    verifie('🔴 et nommément aussi', nommee.ok === false && nommee.code === 'jour_ferme', JSON.stringify(nommee))
+    const semaineSuivante = await creerReservationRdv(base(), { ...RESA, dateRdv: '2026-09-14', champs: {} })
+    verifie('la semaine suivante, son cours rouvre', semaineSuivante.ok === true, JSON.stringify(semaineSuivante))
+    const commune = await creerReservationRdv(base([{ ...PLAGE_EMILY, praticien_id: null }]), { ...RESA, champs: {} })
+    verifie('⚠️ une plage commune reste ouverte quand une seule professeure est absente', commune.ok === true, JSON.stringify(commune))
   }
 
   // ── CE QUE LE MODULE DÉCIDE L'EMPORTE SUR CE QU'ON LUI PASSE ────────────
@@ -2295,6 +2346,14 @@ for (const chemin of [
     refusAvantPaiement({ code: 'ecriture_impossible' }).corps.creneau_refuse !== true)
   verifie('🔴 après le paiement, la cliente lit ce qui s’est passé',
     /dernière place a été prise/.test(motifApresPaiement('place_prise')) && /déjà passé/.test(motifApresPaiement('creneau_passe')))
+  // 🔴 UN JOUR FERMÉ (03/10) : un refus de règle comme les autres, dit en clair
+  // avant le paiement, remboursé après.
+  const ferme = refusAvantPaiement({ code: 'jour_ferme' }, { nom: 'Centre Respire' })
+  verifie('🔴 un jour fermé se dit en clair et renvoie choisir une autre date',
+    ferme.status === 409 && ferme.corps.creneau_refuse === true
+    && /Centre Respire ne prend pas de rendez-vous ce jour-là/.test(ferme.corps.error), JSON.stringify(ferme))
+  verifie('🔴 un jour fermé après paiement se rembourse, et la cliente lit pourquoi',
+    estRefusDeRegle('jour_ferme') && /fermé à la réservation/.test(motifApresPaiement('jour_ferme')))
 
   // ─── La vérification sans écriture, exécutée ──────────────────────────
   // Une fausse base minimale : la prestation, et les places déjà prises.
@@ -2342,6 +2401,25 @@ for (const chemin of [
     verifie(`🔴 ${f} vérifie la place avant d’ouvrir le paiement`, iEssai > 0 && iStripe > iEssai, `${iEssai} / ${iStripe}`)
     verifie(`⚠️ ${f} répond le refus en clair`,
       /if \(!essai\.ok\) \{\s+const \{ status, corps \} = refusAvantPaiement\(essai, \{ nom: commercant\.nom \}\)\s+return NextResponse\.json\(corps, \{ status \}\)/.test(src))
+  }
+  {
+    // 🔴 LES DEUX ROUTES SANS PAIEMENT DISENT AUSSI TOUT REFUS DE RÈGLE (03/10).
+    // Un jour fermé tombait dans le 500 « Réessaie », et la séance d'abonnement
+    // rendait `ecriture_impossible` à tout ce qu'elle ne connaissait pas.
+    const reserver = lireCode('app/api/rdv/reserver/route.js')
+    verifie('🔴 la réservation sans paiement dit tout refus de règle, sans « Réessaie »',
+      /if \(estRefusDeRegle\(res\.code\)\) \{\s+const \{ status, corps \} = refusAvantPaiement\(res, \{ nom: commercant\.nom \}\)\s+return NextResponse\.json\(corps, \{ status \}\)/.test(reserver))
+    const abo = lireCode('app/api/rdv/reserver-abonnement/route.js')
+    verifie('🔴 la séance d’abonnement aussi',
+      /if \(estRefusDeRegle\(res\.code\)\) \{\s+const \{ status, corps \} = refusAvantPaiement\(res, \{\}\)\s+return NextResponse\.json\(\{ ok: false, error: 'refus_regle', message: corps\.error, creneau_refuse: !!corps\.creneau_refuse \}, \{ status \}\)/.test(abo))
+    const fiche = lireCode('app/commander/rdv/[slug]/page.js')
+    verifie('🔴 et la fiche affiche la raison du serveur pour une séance d’abonnement',
+      /j\?\.error === 'refus_regle' && j\.message\) \{\s+setSubmitError\(j\.message\)/.test(fiche))
+    verifie('🔴 la fiche retire de sa grille les plages d’une praticienne absente',
+      /creneaux: plagesOuvertes\(creneauxFiltres, fermetures, dateStr\),/.test(fiche)
+      && /creneaux: plagesOuvertes\(creneauxFiltres, fermetures, j\.iso\),/.test(fiche))
+    verifie('et juge les jours fermés avec la règle du serveur',
+      /return !!fermetureQuiBloque\(fermetures, \{ dateStr: iso, praticienId: praticienChoisi\?\.id \?\? null \}\)/.test(fiche))
   }
   {
     const commande = lireCode('app/api/stripe/checkout/create-rdv-commande/route.js')

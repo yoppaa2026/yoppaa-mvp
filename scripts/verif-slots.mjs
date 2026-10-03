@@ -3643,6 +3643,39 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     plageQuiAccueille(AVEC_PAUSE, { prestationId: 'reiki', liaisons: null, debutMin: NaN, finMin: 660 }), null)
 }
 
+// ─── LES FERMETURES EXCEPTIONNELLES (03/10) ─────────────────────────────────
+//
+// 🔴 ELLES NE S'APPLIQUAIENT QU'À L'ÉCRAN, et « sans préférence » laissait
+// passer le cours d'une professeure en congé. La règle est écrite une fois,
+// pour la fiche et pour le serveur.
+{
+  const { fermetureQuiBloque, plagesOuvertes } = await import('../lib/fermetures-rdv.js')
+  const CONGES = { date_debut: '2026-10-26', date_fin: '2026-10-30', praticien_id: null }
+  const ABSENTE = { date_debut: '2026-10-05', date_fin: '2026-10-05', praticien_id: 'emily' }
+  egal('une fermeture du commerce ferme son premier jour', !!fermetureQuiBloque([CONGES], { dateStr: '2026-10-26' }), true)
+  egal('⚠️ et son dernier, bornes comprises', !!fermetureQuiBloque([CONGES], { dateStr: '2026-10-30' }), true)
+  egal('le lendemain rouvre', fermetureQuiBloque([CONGES], { dateStr: '2026-10-31' }), null)
+  egal('la veille aussi', fermetureQuiBloque([CONGES], { dateStr: '2026-10-25' }), null)
+  egal('🔴 l’absence d’une praticienne ferme le rendez-vous qu’on lui destine',
+    !!fermetureQuiBloque([ABSENTE], { dateStr: '2026-10-05', praticienId: 'emily' }), true)
+  egal('mais pas celui de sa collègue', fermetureQuiBloque([ABSENTE], { dateStr: '2026-10-05', praticienId: 'carole' }), null)
+  egal('ni un rendez-vous sans praticienne désignée', fermetureQuiBloque([ABSENTE], { dateStr: '2026-10-05' }), null)
+  egal('une date illisible ne ferme rien', fermetureQuiBloque([CONGES], { dateStr: 'demain' }), null)
+  egal('⚠️ une date rendue avec son heure se lit au jour',
+    !!fermetureQuiBloque([{ ...CONGES, date_debut: '2026-10-26T00:00:00', date_fin: '2026-10-30T00:00:00' }], { dateStr: '2026-10-30' }), true)
+
+  const PLAGES = [
+    { id: 'yoga-emily', praticien_id: 'emily' },
+    { id: 'pilates-carole', praticien_id: 'carole' },
+    { id: 'commune', praticien_id: null },
+  ]
+  egal('🔴 la plage d’une praticienne absente sort de la grille, les autres restent',
+    plagesOuvertes(PLAGES, [ABSENTE], '2026-10-05').map(c => c.id), ['pilates-carole', 'commune'])
+  egal('le lendemain, elle revient', plagesOuvertes(PLAGES, [ABSENTE], '2026-10-06').map(c => c.id), ['yoga-emily', 'pilates-carole', 'commune'])
+  egal('une fermeture du commerce vide la journée', plagesOuvertes(PLAGES, [CONGES], '2026-10-27'), [])
+  egal('sans fermeture, rien ne bouge', plagesOuvertes(PLAGES, [], '2026-10-05').length, 3)
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

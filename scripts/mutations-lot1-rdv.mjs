@@ -125,8 +125,10 @@ const MUTATIONS = [
 
   { nom: '🔴 la plage se cherche de nouveau parmi tous les jours',
     banc: 'verif:tunnel-rdv', fichier: CREATION,
-    de: '    plageRetenue = plageQuiAccueille(creneauxDuJour(creneauxCom || [], { dateStr: dateRdv, jour: jourRdv }), {',
-    vers: '    plageRetenue = plageQuiAccueille(creneauxCom || [], {',
+    // ⚠️ REPOINTÉE LE 03/10 : les plages du jour sont calculées une fois, pour
+    // le lieu ET pour les fermetures.
+    de: '    const plagesDuJour = creneauxDuJour(creneauxCom || [], { dateStr: dateRdv, jour: jourRdv })',
+    vers: '    const plagesDuJour = creneauxCom || []',
     garde: 'le lieu de la plage validée l’emporte sur l’heure' },
 
   { nom: '🔴 la plage ignore les liaisons : un soin prend la salle du cours',
@@ -182,6 +184,79 @@ const MUTATIONS = [
     de: '            praticien_id: praticienChoisi?.id || null,  // null = Sans préférence',
     vers: '            praticien_id: praticienChoisi?.id || null, lieu_id: null,',
     garde: 'sauf si la plage désigne elle-même un emplacement, que le SERVEUR lit lui-même' },
+
+  // ─── LES FERMETURES, AU SERVEUR ET À L'ÉCRAN ────────────────────────────
+  { nom: '🔴 le serveur ne lit plus les fermetures du commerce',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: '    if (fermetureQuiBloque(fermetures, { dateStr: dateRdv, praticienId: champs?.praticien_id || null })) {',
+    vers: '    if (false) {',
+    garde: 'un jour de congé refuse la réservation, et n’écrit rien' },
+
+  { nom: '🔴 une lecture des fermetures en panne laisse passer',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "    if (errFermetures) return { ok: false, code: 'ecriture_impossible', error: errFermetures }",
+    vers: "    if (false) return { ok: false, code: 'ecriture_impossible', error: errFermetures }",
+    garde: 'une lecture des fermetures en échec refuse, sans écrire' },
+
+  { nom: '🔴 sans preference, le cours de l absente se reserve de nouveau',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "    if (!plageRetenue && plageQuiAccueille(plagesDuJour, pourCetteHeure)) return { ok: false, code: 'jour_ferme' }",
+    vers: "    if (false) return { ok: false, code: 'jour_ferme' }",
+    garde: 'sans préférence, le cours d’une professeure absente est refusé' },
+
+  { nom: '⚠️ la plage d une absente donne encore son lieu',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: '    plageRetenue = plageQuiAccueille(plagesOuvertes(plagesDuJour, fermetures, dateRdv), pourCetteHeure)',
+    vers: '    plageRetenue = plageQuiAccueille(plagesDuJour, pourCetteHeure)',
+    garde: 'sans préférence, le cours d’une professeure absente est refusé' },
+
+  { nom: '⚠️ le dernier jour d une fermeture se rouvre',
+    banc: 'verif:slots', fichier: 'lib/fermetures-rdv.js',
+    de: '  return debut <= dateStr && dateStr <= fin',
+    vers: '  return debut <= dateStr && dateStr < fin',
+    garde: 'et son dernier, bornes comprises' },
+
+  { nom: '🔴 l absence d une praticienne ne ferme plus son rendez-vous',
+    banc: 'verif:slots', fichier: 'lib/fermetures-rdv.js',
+    de: '    if (praticienId != null && String(f.praticien_id) === String(praticienId)) return f',
+    vers: '    if (false) return f',
+    garde: 'l’absence d’une praticienne ferme le rendez-vous qu’on lui destine' },
+
+  { nom: '🔴 la plage d une absente reste dans la grille',
+    banc: 'verif:slots', fichier: 'lib/fermetures-rdv.js',
+    de: '  return (creneauxJour || []).filter(c => c?.praticien_id == null || !absents.has(String(c.praticien_id)))',
+    vers: '  return creneauxJour || []',
+    garde: 'la plage d’une praticienne absente sort de la grille' },
+
+  { nom: '⚠️ une fermeture du commerce laisse des plages ouvertes',
+    banc: 'verif:slots', fichier: 'lib/fermetures-rdv.js',
+    de: '  if (ferme.some(f => f.praticien_id == null)) return []',
+    vers: '  if (false) return []',
+    garde: 'une fermeture du commerce vide la journée' },
+
+  { nom: '🔴 un jour ferme apres paiement se rejoue au lieu de se rembourser',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/refus-reservation.js',
+    de: "  'couverts_invalides', 'groupe_trop_grand', 'creneau_passe', 'jour_ferme',",
+    vers: "  'couverts_invalides', 'groupe_trop_grand', 'creneau_passe',",
+    garde: 'un jour fermé après paiement se rembourse' },
+
+  { nom: '🔴 la reservation gratuite retombe dans Reessaie sur un refus de regle',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/reserver/route.js',
+    de: '      if (estRefusDeRegle(res.code)) {',
+    vers: '      if (false) {',
+    garde: 'la réservation sans paiement dit tout refus de règle' },
+
+  { nom: '🔴 la seance d abonnement rend de nouveau ecriture_impossible',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/reserver-abonnement/route.js',
+    de: '    if (estRefusDeRegle(res.code)) {',
+    vers: '    if (false) {',
+    garde: 'la séance d’abonnement aussi' },
+
+  { nom: '🔴 la fiche propose encore le cours de l absente',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '        creneaux: plagesOuvertes(creneauxFiltres, fermetures, dateStr),',
+    vers: '        creneaux: creneauxFiltres,',
+    garde: 'la fiche retire de sa grille les plages d’une praticienne absente' },
 ]
 
 const lancer = (banc) => {

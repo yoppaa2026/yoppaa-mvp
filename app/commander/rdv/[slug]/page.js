@@ -84,6 +84,7 @@ import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, co
   abonnementsPourPrestation, expliquerRefusSeance, libellePrixSeance,
   trierAbonnementsPourSeance, libelleChoixAbonnement } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
+import { fermetureQuiBloque, plagesOuvertes } from '@/lib/fermetures-rdv'
 import { libelleApporteUnLieu } from '@/lib/adresse-localite'
 import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
 // ⚠️ LA MÊME RÈGLE QUE LE SERVEUR, et le serveur la rejoue : cet écran décide
@@ -1515,7 +1516,10 @@ export default function CommanderRdvSlug() {
       const list = genererSlots({
         dateChoisie,
         dureeMinutes: dureeRetenue,
-        creneaux: creneauxFiltres,
+        // 🔴 SANS LES PLAGES D'UNE PRATICIENNE ABSENTE CE JOUR-LÀ (03/10). « Sans
+        // préférence », son cours restait proposé pendant ses congés, et le
+        // serveur le refuse désormais : l'écran doit lire la même chose.
+        creneaux: plagesOuvertes(creneauxFiltres, fermetures, dateStr),
         reservations: reservationsFiltrees,
         horairesDetail: commercant.horaires_detail,
         // ⚠️ La capacité fait la différence entre « ce créneau est pris » et
@@ -1539,7 +1543,7 @@ export default function CommanderRdvSlug() {
   // seulement pour quelques centaines de millisecondes au premier chargement,
   // c'est-à-dire exactement le genre de défaut qu'on ne reproduit jamais.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
-  }, [etape, dateChoisie, prestationChoisie, praticienChoisi, commercant, creneauxConfig, liaisonsCreneaux])
+  }, [etape, dateChoisie, prestationChoisie, praticienChoisi, commercant, creneauxConfig, liaisonsCreneaux, fermetures])
 
   function choisirPrestation(p) {
     setPrestationChoisie(p)
@@ -1594,15 +1598,12 @@ export default function CommanderRdvSlug() {
 
   // Helper Sess 6 : est-ce que la date ISO est dans une fermeture applicable ?
   // Fermeture applicable = globale (praticien_id null) OU celle du praticien choisi.
-  // Si "Sans préférence" (praticienChoisi null) : seules les fermetures globales bloquent
-  // (un praticien peut peut-être encore prendre, sinon pas de créneau dispo = déjà filtré).
+  // « Sans préférence », seules les fermetures globales ferment la JOURNÉE ; les
+  // plages d'une praticienne absente sont retirées de la grille (`plagesOuvertes`).
+  // ⚠️ LA RÈGLE VIT DANS `lib/fermetures-rdv.js`, et le serveur l'applique aussi
+  // depuis le 03/10 : l'écran et lui lisent la même chose.
   function estFerme(iso) {
-    return fermetures.some(f => {
-      if (iso < f.date_debut || iso > f.date_fin) return false
-      if (f.praticien_id === null) return true  // fermeture globale, bloque tout
-      if (praticienChoisi && f.praticien_id === praticienChoisi.id) return true  // praticien choisi indispo
-      return false
-    })
+    return !!fermetureQuiBloque(fermetures, { dateStr: iso, praticienId: praticienChoisi?.id ?? null })
   }
 
   // Liste des jours disponibles (60 prochains pour les RDV vitrines - l'anticipation
@@ -1630,7 +1631,7 @@ export default function CommanderRdvSlug() {
     const list = genererSlots({
       dateChoisie: j.date,
       dureeMinutes: dureeRetenue,
-      creneaux: creneauxFiltres,
+      creneaux: plagesOuvertes(creneauxFiltres, fermetures, j.iso),
       reservations: resaFiltree,
       horairesDetail: commercant?.horaires_detail,
       // Le mini-calendrier doit compter pareil : sans la capacité, un jour de
@@ -1999,6 +2000,17 @@ export default function CommanderRdvSlug() {
               setSubmitting(false)
               setTimeout(() => allerEtape(2), 1200)
               return
+            } else if (j?.error === 'refus_regle' && j.message) {
+              // 🔴 LE SERVEUR DIT POURQUOI (03/10) : jour fermé, horaire qui
+              // n'accueille plus ce cours. « Réessaie » faisait relancer une
+              // demande qui ne passerait jamais.
+              setSubmitError(j.message)
+              if (j.creneau_refuse) {
+                setHeureChoisie(null)
+                setSubmitting(false)
+                setTimeout(() => allerEtape(2), 1200)
+                return
+              }
             } else if (j?.error === 'non_authentifie') {
               setSubmitError('Reconnecte-toi pour utiliser ton abonnement, ou décoche la case pour payer cette séance.')
             } else {

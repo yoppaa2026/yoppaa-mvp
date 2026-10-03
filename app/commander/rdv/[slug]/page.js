@@ -4594,7 +4594,13 @@ export default function CommanderRdvSlug() {
                                   une tout autre raison : on ne nomme le bon que
                                   s'il a réellement déduit quelque chose. */}
                               <span style={{ fontSize: '0.82rem', color: T.deep, fontWeight: 700 }}>
-                                {surPlace == null
+                                {/* 🔴 UNE SÉANCE D'ABONNEMENT N'A RIEN À RÉGLER SUR
+                                    PLACE (Audit 2 I2, 03/10) : elle lisait « tu
+                                    règles sur place », et l'abonnée venait avec
+                                    son portefeuille pour une séance déjà payée. */}
+                                {seanceSurAbo
+                                  ? 'Séance comprise dans ton abonnement : rien à régler, ni maintenant ni sur place.'
+                                  : surPlace == null
                                   ? 'Rien à payer maintenant, tu règles sur place.'
                                   : surPlace > 0
                                     ? `Rien à payer maintenant, tu règles ${euros(surPlace)} sur place.`
@@ -4892,11 +4898,17 @@ export default function CommanderRdvSlug() {
                       </span>
                     </div>
                     )}
-                    {rdvCree.acompte_montant && (
+                    {/* 🔴 FRÈRE OUBLIÉ DE `2f89d67` (relu le 03/10) : « Acompte
+                        15,00 € sur place » survivait sur l'écran de
+                        confirmation. Un acompte ne se paie qu'en ligne
+                        (décision d'Alex, 03/10) : sans paiement Stripe, il n'y
+                        en a pas, et rien ne s'affiche. Et un montant « 0.00 »
+                        rendu en texte par la base n'est plus vrai. */}
+                    {Number(rdvCree.acompte_montant) > 0 && rdvCree._viaStripe && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Acompte</span>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: rdvCree._viaStripe ? '#059669' : T.deep }}>
-                          {euros(rdvCree.acompte_montant)} {rdvCree._viaStripe ? '✓ payé en ligne' : 'sur place'}
+                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669' }}>
+                          {euros(rdvCree.acompte_montant)} ✓ payé en ligne
                         </span>
                       </div>
                     )}

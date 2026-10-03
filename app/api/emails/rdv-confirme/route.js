@@ -75,7 +75,7 @@ export async function POST(request) {
         empreinte_statut, empreinte_montant,
         client_email, client_prenom, client_nom, client_telephone, notes_client,
         annulation_token, lieu_id, lieu_libelle, lieu_adresse, commande_id,
-        couverts,
+        couverts, abonnement_id,
         commercant:commercants(id, nom, slug, adresse, telephone, email, rdv_delai_annulation_heures, notif_mode, infos_pratiques, categorie),
         prestation:rdv_prestations(nom, duree_minutes, par_couverts),
         praticien:rdv_praticiens(prenom, nom, couleur_hex)
@@ -120,7 +120,8 @@ export async function POST(request) {
           // ATTENDEE : sans lui, iOS ne propose pas le calendrier.
           client_email: rdv.client_email,
           client_nom: [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
-          prix_estime: rdv.prix_estime,
+          // 🔴 PAS DE « PRIX : 0,00 € » DANS LE CALENDRIER D'UNE ABONNÉE (03/10).
+          prix_estime: rdv.abonnement_id ? null : rdv.prix_estime,
           // ⚠️ L'ALARME DE LA VEILLE SEULEMENT SI ELLE PEUT ENCORE SONNER.
           rappel_24h: rappel24h,
           table,
@@ -155,6 +156,7 @@ export async function POST(request) {
           heure_fin:               rdv.heure_fin,
           duree_minutes:           rdv.duree_minutes,
           prix_estime:             rdv.prix_estime,
+          seance_abonnement:       !!rdv.abonnement_id,
           // La MÊME référence qu'à l'écran et qu'à l'agenda du commerçant.
           numero_rdv:              referenceRdv(rdv),
           acompte_paye:            !!(rdv.acompte_paye_en_ligne && rdv.acompte_montant),

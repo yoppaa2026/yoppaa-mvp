@@ -2319,6 +2319,33 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     !/'Abonnements',/.test(LANDING))
 }
 
+// ─── UNE SÉANCE D'ABONNEMENT EST DÉJÀ PAYÉE, ET LE DIT (Audit 2 I2-I3, 03/10)
+//
+// 🔴 LE RÉCAP DISAIT « TU RÈGLES SUR PLACE », L'EMAIL « PRIX 0,00 € », LE
+// CALENDRIER AUSSI. L'abonnée venait avec son portefeuille, ou croyait à une
+// erreur de prix.
+{
+  const { emailRdvConfirme } = await import('../lib/resend.js')
+  const base = { yopper_prenom: 'Sophie', commercant_nom: 'Centre Respire', prestation_nom: 'Hatha', date_rdv: '2026-10-05', heure_debut: '18:00', heure_fin: '19:00', duree_minutes: 60, acompte_paye: false, acompte_montant: 0 }
+  const abo = emailRdvConfirme({ ...base, prix_estime: 0, seance_abonnement: true })
+  const htmlAbo = typeof abo === 'string' ? abo : (abo?.html || JSON.stringify(abo))
+  verifier('🔴 l’email d’une séance d’abonnement dit « compris dans ton abonnement », jamais « 0,00 € »',
+    /Compris dans ton abonnement/.test(htmlAbo) && !/>Prix</.test(htmlAbo) && !/0,00/.test(htmlAbo))
+  const unite = emailRdvConfirme({ ...base, prix_estime: 15 })
+  const htmlUnite = typeof unite === 'string' ? unite : (unite?.html || JSON.stringify(unite))
+  verifier('⚠️ une séance à l’unité garde son prix', />Prix</.test(htmlUnite) && /15,00/.test(htmlUnite) && !/Compris dans ton abonnement/.test(htmlUnite))
+
+  const ROUTE_C = sansProse(readFileSync(new URL('../app/api/emails/rdv-confirme/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 la route lit le contrat et le passe à l’email comme au calendrier',
+    /couverts, abonnement_id,/.test(ROUTE_C) && /seance_abonnement:\s*!!rdv\.abonnement_id,/.test(ROUTE_C)
+    && /prix_estime: rdv\.abonnement_id \? null : rdv\.prix_estime,/.test(ROUTE_C))
+  const FICHE_A = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 le récap de la fiche ne dit plus « tu règles sur place » à une abonnée',
+    /\{seanceSurAbo\s*\? 'Séance comprise dans ton abonnement : rien à régler, ni maintenant ni sur place\.'/.test(FICHE_A))
+  verifier('🔴 et l’écran de confirmation ne parle d’acompte que payé en ligne',
+    /\{Number\(rdvCree\.acompte_montant\) > 0 && rdvCree\._viaStripe && \(/.test(FICHE_A) && !/'sur place'\}/.test(FICHE_A))
+}
+
 // ─── LA RÉSILIATION PASSE PAR LE SERVEUR (Abo-I2, 03/10) ──────────────────
 //
 // 🔴 ELLE S'ÉCRIVAIT DEPUIS LE NAVIGATEUR : cliente jamais prévenue, rappels

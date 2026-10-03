@@ -524,6 +524,37 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · UNE SÉANCE D'ABONNEMENT EST DÉJÀ PAYÉE ─────────────────────
+  { nom: '🔴 l email redit « Prix 0,00 € » a une abonnee',
+    banc: 'verif:abonnements', fichier: 'lib/resend.js',
+    de: '        ${seance_abonnement',
+    vers: '        ${false',
+    garde: 'l’email d’une séance d’abonnement dit « compris dans ton abonnement »' },
+
+  { nom: '🔴 la route ne dit plus a l email que c est une seance d abonnement',
+    banc: 'verif:abonnements', fichier: 'app/api/emails/rdv-confirme/route.js',
+    de: '          seance_abonnement:       !!rdv.abonnement_id,',
+    vers: '',
+    garde: 'la route lit le contrat et le passe à l’email' },
+
+  { nom: '⚠️ le calendrier de l abonnee annonce « Prix : 0,00 € »',
+    banc: 'verif:abonnements', fichier: 'app/api/emails/rdv-confirme/route.js',
+    de: '          prix_estime: rdv.abonnement_id ? null : rdv.prix_estime,',
+    vers: '          prix_estime: rdv.prix_estime,',
+    garde: 'la route lit le contrat et le passe à l’email' },
+
+  { nom: '🔴 le recap redit « tu regles sur place » a une abonnee',
+    banc: 'verif:abonnements', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: "                                  ? 'Séance comprise dans ton abonnement : rien à régler, ni maintenant ni sur place.'",
+    vers: "                                  ? 'Rien à payer maintenant, tu règles sur place.'",
+    garde: 'le récap de la fiche ne dit plus « tu règles sur place »' },
+
+  { nom: '🔴 la confirmation redit « acompte sur place »',
+    banc: 'verif:abonnements', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                    {Number(rdvCree.acompte_montant) > 0 && rdvCree._viaStripe && (',
+    vers: '                    {Number(rdvCree.acompte_montant) > 0 && (',
+    garde: 'l’écran de confirmation ne parle d’acompte que payé en ligne' },
+
   // ─── LOT 3 · ANNUL-I8 : UNE ANNULATION, UN REMBOURSEMENT, UN EMAIL ─────
   { nom: '🔴 le studio rembourse deux fois sur un double tap',
     banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/annuler-commercant/route.js',

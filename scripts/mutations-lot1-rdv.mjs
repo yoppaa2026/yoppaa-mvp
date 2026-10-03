@@ -524,6 +524,25 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 1 I15 : SUPPRIMER UNE PLAGE QUI PORTE DES RDV ────────
+  { nom: '🔴 la plage d une prof compte les rendez-vous de toutes',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/fermetures-rdv.js',
+    de: "    return plage.praticien_id == null || String(r.praticien_id ?? '') === String(plage.praticien_id)",
+    vers: '    return true',
+    garde: 'supprimer une plage dit ce qu’elle porte encore' },
+
+  { nom: '⚠️ la plage compte le rendez-vous qui commence a sa fin',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/fermetures-rdv.js',
+    de: '    if (!(h >= debut && h < fin)) return false',
+    vers: '    if (!(h >= debut && h <= fin)) return false',
+    garde: 'supprimer une plage dit ce qu’elle porte encore' },
+
+  { nom: '🔴 supprimer une plage se tait de nouveau sur ses rendez-vous',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '    const poses = rdvsSurLaPlage(avenir || [], c, { aujourdhui: jourBruxelles() })',
+    vers: '    const poses = []',
+    garde: 'la suppression d’une plage compte ses rendez-vous' },
+
   // ─── LOT 3 · AUDIT 1 I4 : « DÉJÀ PAYÉ » DIT PAR QUEL MOYEN ──────────────
   { nom: '🔴 deja paye sans moyen s ecrit de nouveau « sur place »',
     banc: 'verif:abonnements', fichier: 'app/dashboard/ConfigDashboard.js',

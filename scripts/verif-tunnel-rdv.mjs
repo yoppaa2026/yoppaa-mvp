@@ -885,6 +885,27 @@ for (const chemin of [
     verifie('⚠️ depuis une fermeture, ce sont des rendez-vous, pas des inscriptions',
       /^2 rendez-vous sont annulés, leurs clients sont prévenus par email\./.test(confirmationSeanceAnnulee({ faits: 2, rendezVous: true })))
 
+    // ── Supprimer une plage : ce qu'elle porte encore (Audit 1 I15) ──
+    {
+      const { rdvsSurLaPlage } = await import('../lib/fermetures-rdv.js')
+      // 2026-10-19 et 2026-10-26 sont des lundis, 2026-10-20 un mardi.
+      const PLAGE = { jour_semaine: 'lundi', date_specifique: null, heure_debut: '18:00:00', heure_fin: '20:00:00', praticien_id: 'emily' }
+      const R = [
+        { id: 'oui', statut: 'confirme', date_rdv: '2026-10-19', heure_debut: '18:30:00', praticien_id: 'emily' },
+        { id: 'autre-prof', statut: 'confirme', date_rdv: '2026-10-19', heure_debut: '18:30:00', praticien_id: 'carole' },
+        { id: 'mardi', statut: 'confirme', date_rdv: '2026-10-20', heure_debut: '18:30:00', praticien_id: 'emily' },
+        { id: 'fin-exclue', statut: 'confirme', date_rdv: '2026-10-26', heure_debut: '20:00:00', praticien_id: 'emily' },
+        { id: 'annule', statut: 'annule_client', date_rdv: '2026-10-26', heure_debut: '18:00:00', praticien_id: 'emily' },
+        { id: 'passe', statut: 'confirme', date_rdv: '2026-10-12', heure_debut: '18:00:00', praticien_id: 'emily' },
+      ]
+      memes('🔴 supprimer une plage dit ce qu’elle porte encore : son jour, ses heures, sa praticienne, à venir',
+        R.length && rdvsSurLaPlage(R, PLAGE, { aujourdhui: '2026-10-15' }).map(r => r.id).join(','), 'oui')
+      memes('⚠️ une plage commune porte les rendez-vous de toute la maison',
+        rdvsSurLaPlage(R, { ...PLAGE, praticien_id: null }, { aujourdhui: '2026-10-15' }).map(r => r.id).join(','), 'oui,autre-prof')
+      memes('⚠️ une plage d’un seul jour ne regarde que ce jour-là',
+        rdvsSurLaPlage(R, { ...PLAGE, jour_semaine: null, date_specifique: '2026-10-20' }, { aujourdhui: '2026-10-15' }).map(r => r.id).join(','), 'mardi')
+    }
+
     // ── Les écrans ──
     const AGENDA = sansProse(lire('app/dashboard/AgendaRdv.js'))
     verifie('🔴 l’agenda grise les fermetures, avec la règle du serveur',
@@ -902,6 +923,9 @@ for (const chemin of [
     const CONF = sansProse(lire('app/dashboard/ConfigDashboard.js'))
     verifie('🔴 la fermeture montre les rendez-vous qu’elle rattrape, avec la même règle',
       /setTouches\(rdvsSousLaFermeture\(data \|\| \[\], ferm\)\)/.test(CONF))
+    verifie('🔴 la suppression d’une plage compte ses rendez-vous avant de demander',
+      /const poses = rdvsSurLaPlage\(avenir \|\| \[\], c, \{ aujourdhui: jourBruxelles\(\) \}\)/.test(CONF)
+      && /message: `Tes clients ne pourront plus réserver sur cette plage\.\$\{avertissement\}`/.test(CONF))
     verifie('🔴 et propose de les annuler au lieu de se refermer en silence',
       /if \(restent\.length > 0\) setApres\(\{ touches: restent \}\)/.test(CONF)
       && /const res = await postPro\('\/api\/rdv\/annuler-commercant', \{ rdv_id: r\.id, raison: 'commercant' \}\)/.test(CONF))

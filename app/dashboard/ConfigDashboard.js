@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import EnCours from './EnCours'
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { toutesLesLignes } from '@/lib/toutes-les-lignes'
-import { rdvsSousLaFermeture } from '@/lib/fermetures-rdv'
+import { rdvsSousLaFermeture, rdvsSurLaPlage } from '@/lib/fermetures-rdv'
 import { confirmationSeanceAnnulee } from '@/lib/confirmation-rdv'
 import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
@@ -12480,7 +12480,21 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
   }
 
   async function softDelete(c) {
-    if (!await confirme(confirmationSimple({ titre: 'Supprimer ce créneau de rendez-vous ?', message: 'Tes clients ne pourront plus réserver sur cette plage.', details: `${c.jour_semaine} ${c.heure_debut?.slice(0,5)} – ${c.heure_fin?.slice(0,5)}`, action: 'Oui, supprimer ce créneau' }))) return
+    // 🔴 LES RENDEZ-VOUS DÉJÀ POSÉS SUR CETTE PLAGE SE DISENT AVANT (Audit 1
+    // I15, 03/10). La supprimer ne les annule pas : ils restaient prévus, sans
+    // que la commerçante le sache, et ses clientes venaient à une séance qui
+    // n'existait plus dans son planning. Une lecture ratée ne bloque rien :
+    // la question part simplement sans le compte.
+    const { data: avenir } = await toutesLesLignes(() => supabase.from('rdv_reservations')
+      .select('id, date_rdv, heure_debut, praticien_id, statut, deleted_at')
+      .eq('commercant_id', commercantId).eq('statut', 'confirme').is('deleted_at', null)
+      .gte('date_rdv', jourBruxelles())
+      .order('id', { ascending: true }))
+    const poses = rdvsSurLaPlage(avenir || [], c, { aujourdhui: jourBruxelles() })
+    const avertissement = poses.length === 0 ? '' : poses.length === 1
+      ? ' Attention : 1 rendez-vous à venir est déjà posé sur cette plage. Il reste prévu : annule-le depuis l’agenda si ce créneau n’a plus lieu.'
+      : ` Attention : ${poses.length} rendez-vous à venir sont déjà posés sur cette plage. Ils restent prévus : annule-les depuis l’agenda si ce créneau n’a plus lieu.`
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer ce créneau de rendez-vous ?', message: `Tes clients ne pourront plus réserver sur cette plage.${avertissement}`, details: `${c.jour_semaine} ${c.heure_debut?.slice(0,5)} – ${c.heure_fin?.slice(0,5)}`, action: 'Oui, supprimer ce créneau' }))) return
     const { error } = await supabase.from('rdv_creneaux').update({ deleted_at: new Date().toISOString() }).eq('id', c.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
     toast('Créneau supprimé')

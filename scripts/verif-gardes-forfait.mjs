@@ -452,8 +452,11 @@ for (const r of ROUTES) {
     { nom: 'l’éligibilité au Good Morning', chemin: 'lib/morning-eligibilite.js', regles: [
       ['l’actu lit le forfait effectif', /canDo\(planEffectif\(c, maintenant\), 'actu_gmy'\)/],
     ] },
-    { nom: 'la page Good Morning', chemin: 'app/commander/morning/page.js', regles: [],
-      selects: [/adresse, plan, essai_plan, created_at, statut_publication,/g, 2] },
+    // ⚠️ DÉPLACÉ LE 03/10 : la page ET la pastille lisent désormais le commerce
+    // par `rattacherCommerces`, dans la vue publique, avec UNE liste de
+    // colonnes. La règle reste la même, elle vise l'endroit où elle vit.
+    { nom: 'le commerce du Good Morning', chemin: 'lib/morning-contenu.js', regles: [],
+      selects: [/adresse, plan, essai_plan, created_at, statut_publication,/g, 1] },
     { nom: 'le balisage Google de la fiche', chemin: 'app/commander/[slug]/layout.js', regles: [
       ['charge l’essai', /longitude, plan, essai_plan, created_at'/],
     ] },

@@ -32,7 +32,7 @@ import {
 import { jourBruxelles } from '@/lib/timezone'
 // La MÊME règle que celle du badge : l'édition et la pastille ne peuvent pas
 // se contredire sur ce qui est nouveau ce matin.
-import { actuNouvelleCeMatin } from '@/lib/morning-contenu'
+import { actuNouvelleCeMatin, rattacherCommerces } from '@/lib/morning-contenu'
 
 // ─── Tokens design system (canoniques) ─────────────────────────────
 const T = {
@@ -103,7 +103,7 @@ async function fetchMorningData(commune) {
   const today = jourBruxelles()
   const cpDeLaCommune = new Set(commune.codes_postaux)
 
-  const [{ data: dealsRaw }, { data: actusCommercantRaw }] = await Promise.all([
+  const [{ data: dealsBruts }, { data: actusBruts }] = await Promise.all([
     // 1) Deals de l'ÉDITION du jour : uniquement ceux retenus par le cron de
     //    7h30 (statut_morning='envoye', deadline 23 h la veille). Un deal publié
     //    après coup vit sur la fiche (pastille pill DEAL), pas dans le Morning.
@@ -111,8 +111,7 @@ async function fetchMorningData(commune) {
       .from('yoppaa_deals')
       .select(`
         id, titre, description, prix_deal, prix_original, date_deal, article_id, cta_appeler_reserver, photo_url,
-        deal_type, remise_pct,
-        commercant:commercants ( id, nom, type, adresse, plan, essai_plan, created_at, statut_publication, logo_url, slug, telephone )
+        deal_type, remise_pct, commercant_id
       `)
       .eq('actif', true)
       .eq('inclus_morning', true)
@@ -124,8 +123,7 @@ async function fetchMorningData(commune) {
     supabase
       .from('actualites')
       .select(`
-        id, titre, contenu, type, date_debut, date_fin, urgence, photo_url, push_envoye_at,
-        commercant:commercants ( id, nom, type, adresse, plan, essai_plan, created_at, statut_publication, logo_url, slug )
+        id, titre, contenu, type, date_debut, date_fin, urgence, photo_url, push_envoye_at, commercant_id
       `)
       .not('commercant_id', 'is', null)
       .eq('actif', true)
@@ -135,6 +133,13 @@ async function fetchMorningData(commune) {
       .gte('date_fin', today),
     // Les actus des services publics ont été retirées du Morning avec le reste
     // du module (Alex, 09/08).
+  ])
+  // 🔴 LE COMMERCE VIENT DE LA VUE PUBLIQUE, plus de la table : un Yopper n'a
+  // pas le droit de lire la table, et l'édition restait vide pour tous (voir
+  // `rattacherCommerces`, partagée avec la pastille « Nouveau »).
+  const [dealsRaw, actusCommercantRaw] = await Promise.all([
+    rattacherCommerces(supabase, dealsBruts),
+    rattacherCommerces(supabase, actusBruts),
   ])
 
   // Filtres : définis une seule fois dans lib/morning-eligibilite, partagés

@@ -223,6 +223,88 @@ verifier('une actu qui court le dit au lieu de se faire passer pour neuve',
 verifier('« aujourd\'hui » est devenu conditionnel',
   /d\.nouvelle \? <>aujourd&rsquo;hui<\/>/.test(morning))
 
+// ─── LE COMMERCE SE LIT DANS LA VUE PUBLIQUE (03/10) ───────────────────────
+//
+// 🔴 LE GOOD MORNING ÉTAIT VIDE POUR TOUS LES YOPPERS. La page et la pastille
+// demandaient le commerce dans la TABLE `commercants`, qu'un Yopper ne peut
+// pas lire : seuls le commerçant et l'admin le peuvent. Le commerce revenait
+// `null`, la règle l'écartait, et rien ne s'affichait. Sauf chez Alex, admin.
+//
+// ⚠️ ON EXÉCUTE, AVEC UN FAUX CLIENT QUI SE COMPORTE COMME LA BASE : il ne
+// connaît pas la table `commercants`, et il ne rend QUE les colonnes
+// demandées. Un retour à la table ne trouverait rien, une colonne oubliée
+// manquerait à la règle : dans les deux cas, le banc rougit.
+{
+  const { rattacherCommerces, morningADuContenu } = await import('../lib/morning-contenu.js')
+  const fauxClient = (tables) => {
+    const journal = []
+    return {
+      journal,
+      from(table) {
+        const appel = { table, colonnes: null, dans: null }
+        journal.push(appel)
+        const chaine = {
+          select(c) { appel.colonnes = c; return chaine },
+          eq() { return chaine }, not() { return chaine }, lte() { return chaine }, gte() { return chaine },
+          in(col, valeurs) { appel.dans = [col, valeurs]; return chaine },
+          then(ok, ko) {
+            const lignes = tables[table]
+            if (!lignes) return Promise.resolve({ data: null, error: { message: `${table} illisible` } }).then(ok, ko)
+            const noms = String(appel.colonnes).split(',').map((s) => s.trim())
+            const gardees = appel.dans ? lignes.filter((l) => appel.dans[1].includes(l[appel.dans[0]])) : lignes
+            const data = gardees.map((l) => Object.fromEntries(noms.filter((n) => n in l).map((n) => [n, l[n]])))
+            return Promise.resolve({ data, error: null }).then(ok, ko)
+          },
+        }
+        return chaine
+      },
+    }
+  }
+  const MOMO = { id: 'c1', nom: 'Chez Momo', type: 'Snack', ...PUBLIE_VENDRE, essai_plan: null, created_at: '2026-01-01T00:00:00Z' }
+
+  const sb = fauxClient({ commercants_public: [MOMO] })
+  const lignes = await rattacherCommerces(sb, [
+    { id: 'd1', commercant_id: 'c1' }, { id: 'd2', commercant_id: 'c1' }, { id: 'd3', commercant_id: 'cX' },
+  ])
+  egal('🔴 le commerce se lit dans la vue publique, jamais dans la table',
+    sb.journal.map((a) => a.table), ['commercants_public'])
+  egal('⚠️ une seule lecture, chaque commerce demandé une fois', sb.journal[0].dans, ['id', ['c1', 'cX']])
+  egal('le deal reçoit son commerce', lignes[0].commercant?.nom, 'Chez Momo')
+  egal('⚠️ un commerce absent de la vue, donc non publié, vaut null', lignes[2].commercant, null)
+  const vide = fauxClient({})
+  egal('sans deal, aucune lecture', [(await rattacherCommerces(vide, [])).length, vide.journal.length], [0, 0])
+  egal('⚠️ une liste absente ne casse rien', (await rattacherCommerces(vide, null)).length, 0)
+
+  // La pastille « Nouveau », de bout en bout.
+  const commune = { codes_postaux: ['5640'] }
+  const deals = [{ id: 'd1', commercant_id: 'c1' }]
+  verifier('🔴 un deal d’un commerce publié allume la pastille',
+    await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [MOMO] }), commune))
+  verifier('⚠️ le même deal, commerce absent de la vue : la pastille reste éteinte',
+    !(await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [] }), commune)))
+  verifier('une actu poussée ce matin allume la pastille',
+    await morningADuContenu(fauxClient({
+      yoppaa_deals: [],
+      actualites: [{ id: 'a1', commercant_id: 'c1', push_envoye_at: new Date().toISOString() }],
+      commercants_public: [{ ...MOMO, plan: 'exister' }],
+    }), commune))
+  // 🔴 L'ESSAI : un commerce resté sur le forfait gratuit mais en essai de
+  // Vendre a droit aux deals. La pastille ne demandait ni `essai_plan` ni
+  // `created_at`, et le jugeait donc sur son forfait gratuit.
+  const enEssai = { ...MOMO, plan: 'exister', essai_plan: 'vendre', created_at: new Date(Date.now() - 5 * 86400000).toISOString() }
+  verifier('🔴 un commerce en essai de Vendre allume la pastille avec son deal',
+    await morningADuContenu(fauxClient({ yoppaa_deals: deals, actualites: [], commercants_public: [enEssai] }), commune))
+
+  // ⚠️ ET PLUS AUCUN ÉCRAN YOPPER NE DEMANDE LA TABLE. On compte, on ne cherche
+  // pas : la page, la pastille, et tout ce qui vit sous /commander.
+  const ecransYopper = ['app/commander/morning/page.js', 'lib/morning-contenu.js', 'lib/morning-eligibilite.js']
+  const sousCommander = (dossier) => readdirSync(new URL(`../${dossier}`, import.meta.url), { withFileTypes: true })
+    .flatMap((e) => e.isDirectory() ? sousCommander(`${dossier}/${e.name}`) : (/\.(js|jsx|ts|tsx)$/.test(e.name) ? [`${dossier}/${e.name}`] : []))
+  const fautifs = [...ecransYopper, ...sousCommander('app/commander')]
+    .filter((f) => /:\s*commercants\s*(!\w+)?\s*\(/.test(sansProse(lire(f))))
+  verifier('🔴 aucun écran Yopper ne lit le commerce dans la table', fautifs.length === 0, fautifs.join(', '))
+}
+
 // ─── QUI REÇOIT LE GOOD MORNING (12/09) ────────────────────────────────────
 //
 // 🔴 MESURÉ EN BASE : 23 Yoppers, 18 avaient CHOISI leur commune, UN SEUL

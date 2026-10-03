@@ -35,7 +35,9 @@ const SMS = 'app/api/fidelite/sms-packs/checkout/route.js'
 const WEBHOOK = 'app/api/stripe/webhook/route.js'
 const CRON_GMY = 'app/api/cron/morning-yoppers/route.js'
 const RECAP = 'app/api/cron/recap-jour-8h/route.js'
-const PAGE_GMY = 'app/commander/morning/page.js'
+// ⚠️ 03/10 : la page et la pastille lisent le commerce dans la vue publique,
+// par UNE fonction partagée. C'est elle qui porte désormais les colonnes.
+const GMY_COMMERCE = 'lib/morning-contenu.js'
 const BALISAGE = 'app/commander/[slug]/layout.js'
 const KIT = 'app/kit/[slug]/page.js'
 const BORD = 'app/dashboard/ConfigDashboard.js'
@@ -171,8 +173,8 @@ const MUTATIONS = [
     vers: "c.plan === 'vendre'" },
 
   // ─── LES ÉCRANS ET LE BALISAGE ──────────────────────────────────────────
-  { nom: '🔴 une requête de la page Good Morning ne charge plus l’essai',
-    fichier: PAGE_GMY,
+  { nom: '🔴 le commerce du Good Morning ne charge plus l’essai',
+    fichier: GMY_COMMERCE,
     de: 'plan, essai_plan, created_at, statut_publication, logo_url, slug, telephone',
     vers: 'plan, statut_publication, logo_url, slug, telephone' },
 

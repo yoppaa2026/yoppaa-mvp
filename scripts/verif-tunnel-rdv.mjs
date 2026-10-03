@@ -945,6 +945,24 @@ for (const chemin of [
     egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
   }
 
+  // ── L'ÉCRAN DE CONFIRMATION NE PROMET QUE CE QUI ARRIVERA (Audit 2 C4, Annul-C3)
+  {
+    const { rappelDeLaVeillePartira } = await import('../lib/timezone.js')
+    verifie('🔴 réservé avant le passage du matin de la veille : le rappel partira',
+      rappelDeLaVeillePartira('2026-10-06', Date.parse('2026-10-05T06:59:00Z')) === true)
+    verifie('🔴 réservé après : il ne partira pas, et l’écran ne le promet plus',
+      rappelDeLaVeillePartira('2026-10-06', Date.parse('2026-10-05T07:01:00Z')) === false
+      && rappelDeLaVeillePartira('2026-10-06', Date.parse('2026-10-06T05:00:00Z')) === false)
+    const { textesConfirmation: textesC, RETRAIT_RDV: RDV_C } = await import('../lib/ecran-retrait.js')
+    verifie('⚠️ sans rappel, l’étape renvoie à l’email et à l’agenda',
+      !textesC(RDV_C, { rappelVeille: false }).etapes.some(e => /la veille/.test(e))
+      && textesC(RDV_C, {}).etapes.some(e => /la veille/.test(e)))
+    const FICHE_C = sansProse(lire('app/commander/rdv/[slug]/page.js'))
+    verifie('🔴 la fiche dit à l’écran si le rappel partira', /rappelVeille: rappelDeLaVeillePartira\(rdvCree\?\.date_rdv\),/.test(FICHE_C))
+    verifie('🔴 et ne promet plus de « reporter » : aucun écran ne le permet au client',
+      !/annuler ou reporter|annuler\/reporter/.test(FICHE_C))
+  }
+
   // ── LA PAGE STRIPE SE LIT EN FRANÇAIS (Audit 2 C2, 03/10) ───────────────
   // Ni tiret cadratin, ni date « 2026-10-05 » dans ce que le client lit en payant.
   {

@@ -524,6 +524,25 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 2 C4 ET ANNUL-C3 : CE QUE PROMET LA CONFIRMATION ────
+  { nom: '🔴 le rappel de la veille se promet meme reserve trop tard',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/timezone.js',
+    de: '  return Number.isFinite(ref) && ref < passage.getTime()',
+    vers: '  return Number.isFinite(ref)',
+    garde: 'réservé après : il ne partira pas' },
+
+  { nom: '🔴 la fiche ne dit plus a l ecran si le rappel partira',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                            rappelVeille: rappelDeLaVeillePartira(rdvCree?.date_rdv),',
+    vers: '',
+    garde: 'la fiche dit à l’écran si le rappel partira' },
+
+  { nom: '⚠️ la confirmation promet de nouveau de « reporter »',
+    banc: 'verif:tunnel-rdv', fichier: 'app/commander/rdv/[slug]/page.js',
+    de: '                      Tu pourras annuler jusqu&apos;à {delaiAnnulationHeures(commercant)}h {mots.avant}.',
+    vers: '                      Tu pourras annuler ou reporter jusqu&apos;à {delaiAnnulationHeures(commercant)}h {mots.avant}.',
+    garde: 'et ne promet plus de « reporter »' },
+
   // ─── LOT 3 · AUDIT 2 C2 : LA PAGE STRIPE ────────────────────────────────
   { nom: '⚠️ la page Stripe repasse au tiret cadratin',
     banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-abonnement/route.js',

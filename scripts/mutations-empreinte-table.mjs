@@ -458,8 +458,9 @@ const MUTATIONS = [
 
   { nom: '🔴 le seul message restant fige le delai au lieu de lire le reglage',
     fichier: FICHE,
-    de: '                                  ? `Tu peux annuler ou reporter sans frais jusqu’à ${delaiAnnulationHeures(commercant)} h avant.`',
-    vers: '                                  ? `Tu peux annuler ou reporter sans frais jusqu’à 24 h avant.`' },
+    // ⚠️ ANCRE RÉORIENTÉE LE 03/10 (Annul-C3) : « ou reporter » a quitté la phrase.
+    de: '                                  ? `Tu peux annuler sans frais jusqu’à ${delaiAnnulationHeures(commercant)} h avant.`',
+    vers: '                                  ? `Tu peux annuler sans frais jusqu’à 24 h avant.`' },
 
   { nom: '🔴 la route gratuite recopie sa liste de colonnes a la main',
     fichier: RESERVER,

@@ -1259,10 +1259,13 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // ⚠️ DONC LE SEUL MESSAGE RESTANT PORTE TOUT : le montant, le délai sans
   // frais, et le fait qu'on peut aussi REPORTER. Le délai suit le réglage du
   // commerçant, et zéro heure est une valeur qu'on écrit au lieu de se taire.
+  // ⚠️ REPOINTÉES LE 03/10 (Annul-C3) : « ou reporter » a quitté la phrase.
+  // Aucun écran ne permet au client de reporter lui-même ; la promesse était
+  // fausse. Le délai et le zéro restent exactement ce que ces gardes surveillent.
   verifie('🔴 le message de l’empreinte porte le délai d’annulation sans frais',
-    /Tu peux annuler ou reporter sans frais jusqu’à \$\{delaiAnnulationHeures\(commercant\)\} h avant\./.test(TUNNEL))
+    /Tu peux annuler sans frais jusqu’à \$\{delaiAnnulationHeures\(commercant\)\} h avant\./.test(TUNNEL))
   verifie('⚠️ et il le dit encore quand ce délai vaut zéro',
-    /Tu peux annuler ou reporter sans frais jusqu’au dernier moment\./.test(TUNNEL))
+    /Tu peux annuler sans frais jusqu’au dernier moment\./.test(TUNNEL))
   verifie('⚠️ le bouton dit le geste', /'Enregistrer ma carte et réserver'/.test(TUNNEL))
   verifie('🔴 aucune somme annoncée comme bloquée sur la fiche',
     !/(bloqu|retenu|g[eé]l[eé])\w*\s+(sur\s+)?(ta|ton|sa|son|le|la)\s+(carte|compte)/i.test(TUNNEL))

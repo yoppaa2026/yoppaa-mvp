@@ -86,7 +86,7 @@ import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, co
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { fermetureQuiBloque, plagesOuvertes } from '@/lib/fermetures-rdv'
 import { libelleApporteUnLieu } from '@/lib/adresse-localite'
-import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
+import { jourLocalISO, jourBruxelles, rappelDeLaVeillePartira } from '@/lib/timezone'
 // ⚠️ LA MÊME RÈGLE QUE LE SERVEUR, et le serveur la rejoue : cet écran décide
 // seulement d'afficher, jamais de demander.
 import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
@@ -4648,8 +4648,8 @@ export default function CommanderRdvSlug() {
                                   dernier moment, et c'est ce qu'on écrit. */}
                               {`Le restaurant ne peut facturer ${euros(montantEmpreinte(commercant, prestationChoisie, couverts))} que si personne ne se présente. `
                                 + (delaiAnnulationHeures(commercant) > 0
-                                  ? `Tu peux annuler ou reporter sans frais jusqu’à ${delaiAnnulationHeures(commercant)} h avant.`
-                                  : 'Tu peux annuler ou reporter sans frais jusqu’au dernier moment.')}
+                                  ? `Tu peux annuler sans frais jusqu’à ${delaiAnnulationHeures(commercant)} h avant.`
+                                  : 'Tu peux annuler sans frais jusqu’au dernier moment.')}
                             </p>
                           </div>
                         )}
@@ -4695,7 +4695,7 @@ export default function CommanderRdvSlug() {
                       dans la phrase de l'empreinte. */}
                   {montantEmpreinte(commercant, prestationChoisie, couverts) === 0 && (
                     <p style={{ fontSize: '0.7rem', color: T.muted, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
-                      Tu pourras annuler ou reporter jusqu&apos;à {delaiAnnulationHeures(commercant)}h {mots.avant}.
+                      Tu pourras annuler jusqu&apos;à {delaiAnnulationHeures(commercant)}h {mots.avant}.
                     </p>
                   )}
                 </div>
@@ -4860,8 +4860,9 @@ export default function CommanderRdvSlug() {
                             commercantNom: commercant.nom,
                             avecProduits: lignesPanier.length > 0,
                             commercant,
+                            rappelVeille: rappelDeLaVeillePartira(rdvCree?.date_rdv),
                           }).etapes,
-                          `Tu peux annuler ou reporter depuis ton espace Yoppaa jusqu'à **${delaiAnnulationHeures(commercant)}h avant**.`,
+                          `Tu peux annuler depuis ton espace Yoppaa jusqu'à **${delaiAnnulationHeures(commercant)}h avant**.`,
                         ].map((texte, i) => (
                           <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: '0.85rem', color: T.deep, lineHeight: 1.5 }}>
                             <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginTop: 1, boxShadow: `0 2px 6px ${T.main}33` }}>{i + 1}</span>
@@ -4969,7 +4970,7 @@ export default function CommanderRdvSlug() {
                             Suis ce RDV depuis ton espace 🟣
                           </p>
                           <p style={{ fontSize: '0.78rem', color: T.light, lineHeight: 1.45, margin: 0, marginBottom: 10, opacity: 0.95 }}>
-                            Crée ton compte Yopper en 30s pour annuler/reporter, suivre tes prochains RDV et retrouver tes favoris.
+                            Crée ton compte Yopper en 30s pour annuler, suivre tes prochains RDV et retrouver tes favoris.
                           </p>
                           <button onClick={() => router.push(`/commander/auth?redirect=/commander`)}
                             style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.625rem 1.125rem', background: '#fff', color: T.main, border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 4px 14px rgba(0,0,0,0.18)' }}>

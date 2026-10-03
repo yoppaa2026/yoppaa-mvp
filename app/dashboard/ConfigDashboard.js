@@ -40,7 +40,7 @@ import { formaterBCECompact } from '@/lib/kyb'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
 import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
-import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
+import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import BlocAide, { EtapeAide, enGras } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
@@ -13112,6 +13112,23 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                     plage avec son praticien ou son emplacement.
                   </p>
                 )}
+                {/* 🔴 UNE PLAGE QUI NE COLLE PAS À SON COURS (Audit 1 I6, 03/10) :
+                    plus longue, la fiche propose plusieurs départs comme autant
+                    de cours ; plus courte, le cours n'est jamais proposé. Dit
+                    PENDANT qu'elle règle la plage, avec l'heure de fin juste. */}
+                {!form.toutesPrestations && (() => {
+                  const cours = coursDejaCoche(form.prestations, prestationsRdv)
+                  const e = cours ? ecartPlageCours({ heureDebut: form.heure_debut, heureFin: form.heure_fin, cours, pas: form.pas_minutes }) : null
+                  if (!e || (!e.tropCourte && e.departs.length <= 1)) return null
+                  const liste = e.departs.length > 1 ? `${e.departs.slice(0, -1).join(', ')} et ${e.departs[e.departs.length - 1]}` : ''
+                  return (
+                    <p role="status" style={{ fontSize: 11.5, fontWeight: 700, color: '#92400E', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 10, padding: '8px 10px', lineHeight: 1.5, marginTop: 8 }}>
+                      {e.tropCourte
+                        ? `Cette plage dure ${e.longueur} min pour un cours de ${e.duree} min : il ne sera jamais proposé. Fais-la finir à ${e.finIdeale}.`
+                        : `Cette plage dure ${e.longueur} min pour un cours de ${e.duree} min : ta fiche le proposera à ${liste}, comme ${e.departs.length} cours différents. Pour un cours à heure fixe, fais-la finir à ${e.finIdeale}.`}
+                    </p>
+                  )
+                })()}
               </div>
             )}
 

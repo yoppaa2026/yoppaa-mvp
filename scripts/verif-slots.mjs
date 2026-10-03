@@ -3682,6 +3682,25 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   egal('sans fermeture, rien ne bouge', plagesOuvertes(PLAGES, [], '2026-10-05').length, 3)
 }
 
+// ─── UNE PLAGE QUI NE COLLE PAS À SON COURS (Audit 1 I6, 03/10) ────────────
+// 🔴 Yoga de 60 min sur 18:15-19:45 : la fiche proposait trois départs, comme
+// trois cours. Plus courte que le cours : rien, sans un mot. L'écran le dit
+// maintenant pendant le réglage ; le moteur, lui, n'a pas bougé (choix d'Alex).
+{
+  const { ecartPlageCours } = await import('../lib/rdv-slots.js')
+  const YOGA = { duree_minutes: 60 }
+  egal('🔴 une plage plus longue que son cours dit ses départs, et la bonne heure de fin',
+    ecartPlageCours({ heureDebut: '18:15', heureFin: '19:45', cours: YOGA }), { tropCourte: false, longueur: 90, duree: 60, departs: ['18:15', '18:30', '18:45'], finIdeale: '19:15' })
+  verifier('🔴 une plage plus courte que son cours dit qu’il ne sera jamais proposé',
+    ecartPlageCours({ heureDebut: '18:15', heureFin: '19:00', cours: YOGA })?.tropCourte === true)
+  verifier('une plage qui colle au cours ne dit rien', ecartPlageCours({ heureDebut: '18:15', heureFin: '19:15', cours: YOGA }) === null)
+  egal('⚠️ les départs suivent le pas de la plage',
+    ecartPlageCours({ heureDebut: '18:15', heureFin: '19:45', cours: YOGA, pas: 30 })?.departs, ['18:15', '18:45'])
+  verifier('🔴 l’écran le dit pendant le réglage de la plage',
+    /const e = cours \? ecartPlageCours\(\{ heureDebut: form\.heure_debut, heureFin: form\.heure_fin, cours, pas: form\.pas_minutes \}\) : null/.test(srcConfig)
+    && /if \(!e \|\| \(!e\.tropCourte && e\.departs\.length <= 1\)\) return null/.test(srcConfig))
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {

@@ -524,6 +524,25 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · AUDIT 1 I6 : UNE PLAGE QUI NE COLLE PAS À SON COURS ───────
+  { nom: '🔴 une plage trop courte pour son cours se tait',
+    banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '  if (longueur < duree) return { tropCourte: true, longueur, duree, departs: [], finIdeale: minutesToTime(d + duree) }',
+    vers: '  if (false) return { tropCourte: true, longueur, duree, departs: [], finIdeale: minutesToTime(d + duree) }',
+    garde: 'une plage plus courte que son cours dit qu’il ne sera jamais proposé' },
+
+  { nom: '🔴 une plage trop longue tait ses departs multiples',
+    banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '  for (let m = d; m + duree <= f; m += p) departs.push(minutesToTime(m))',
+    vers: '  departs.push(minutesToTime(d))',
+    garde: 'une plage plus longue que son cours dit ses départs' },
+
+  { nom: '🔴 le formulaire de plage ne previent plus',
+    banc: 'verif:slots', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                  if (!e || (!e.tropCourte && e.departs.length <= 1)) return null',
+    vers: '                  return null',
+    garde: 'l’écran le dit pendant le réglage de la plage' },
+
   // ─── LOT 3 · AUDIT 1 I15 : SUPPRIMER UNE PLAGE QUI PORTE DES RDV ────────
   { nom: '🔴 la plage d une prof compte les rendez-vous de toutes',
     banc: 'verif:tunnel-rdv', fichier: 'lib/fermetures-rdv.js',

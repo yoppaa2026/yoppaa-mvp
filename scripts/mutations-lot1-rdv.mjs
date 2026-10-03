@@ -524,6 +524,55 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 2 · I12 : LA FILE CÔTÉ COMMERÇANTE ; LA-03 ─────────────────────
+  { nom: '🔴 un second declenchement reprevient toute la file',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: '      .filter(l => !dejaPrevenueEnCours(l, maintenantMs))',
+    vers: '      .filter(() => true)',
+    garde: 'un second déclenchement ne reprévient pas' },
+
+  { nom: '🔴 le bouton previent la file d un cours complet',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "  if ((inscrits || []).length >= Number(prestation.capacite)) return { ok: false, error: 'complet' }",
+    vers: "  if (false) return { ok: false, error: 'complet' }",
+    garde: 'le bouton refuse sur un cours encore complet' },
+
+  { nom: '⚠️ le bouton previent pendant le cours',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "  if (creneauDejaCommence(dateRdv, heure, maintenant)) return { ok: false, error: 'seance_passee' }",
+    vers: "  if (false) return { ok: false, error: 'seance_passee' }",
+    garde: 'un cours commencé ne se prévient plus' },
+
+  { nom: '⚠️ le bouton previent un rendez-vous individuel',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "  if (prestation.par_couverts === true || porteeDe(prestation) !== PORTEE_SEANCE) return { ok: false, error: 'pas_un_cours' }",
+    vers: "  if (false) return { ok: false, error: 'pas_un_cours' }",
+    garde: 'seul un cours collectif se prévient d’un bouton' },
+
+  { nom: '🔴 la commercante recoit l identite de ceux qui attendent',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: ".select('prestation_id, portee, date_rdv, heure_debut, date_debut, date_fin, statut')",
+    vers: ".select('prestation_id, portee, date_rdv, heure_debut, date_debut, date_fin, statut, client_id')",
+    garde: 'aucun nom ni contact ne sort pour la commerçante' },
+
+  { nom: '⚠️ les attentes expirees se comptent encore',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv.js',
+    de: '    if (!attenteVivante(l, jourISO)) continue',
+    vers: '    void 0',
+    garde: 'vivants seulement' },
+
+  { nom: '🔴 prevenir lit le commerce dans le corps de la requete',
+    banc: 'verif:attente', fichier: 'app/api/rdv/attente-commerce/route.js',
+    de: "      const garde = await gardeLigneEquipe(request, admin, 'rdv_prestations', corps?.prestation_id, 'agenda')",
+    vers: "      const garde = await gardeEquipe(request, admin, corps?.commercant_id, 'agenda')",
+    garde: 'prévenir lit le commerce DANS la prestation' },
+
+  { nom: '⚠️ le bouton de la file s affiche sur un cours complet',
+    banc: 'verif:attente', fichier: 'app/dashboard/AgendaRdv.js',
+    de: '                  {onPrevenirFile && avenir && libres > 0 && (',
+    vers: '                  {onPrevenirFile && (',
+    garde: 'le panneau d’un cours dit combien attendent' },
+
   // ─── LOT 2 · RÉSILIER UN ABONNEMENT PAR LE SERVEUR ─────────────────────
   { nom: '🔴 la resiliation annule la seance deja donnee le matin',
     banc: 'verif:abonnements', fichier: 'lib/abonnements.js',

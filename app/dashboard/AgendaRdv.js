@@ -27,6 +27,7 @@ import { statutRdv, resumeSeance, texteResumeSeance, estAClore, compterAClore } 
 import { etatPaiementRdv, couleurPaiement } from '@/lib/rdv-paiement'
 import { motsReservation } from '@/lib/reservation-metier'
 import { fermetureQuiBloque, fermeturesDuJour } from '@/lib/fermetures-rdv'
+import { cleSeance } from '@/lib/attente-rdv'
 
 const T = {
   bg:      '#F8F6FF',
@@ -81,7 +82,7 @@ function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 // La logique est sortie d'ici pour être testable : le calcul du contraste du
 // texte, en particulier, décide de la lisibilité de tout l'écran.
 
-export default function AgendaRdv({ rdvs, creneaux, fermetures = [], praticiens = [], horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onFenetreChange }) {
+export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = null, praticiens = [], horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onPrevenirFile, onFenetreChange }) {
   // ⚠️ `commercant` FACULTATIF : sans lui, le vocabulaire du rendez-vous, donc
   // l'agenda d'un salon ne bouge pas d'un mot.
   const mots = motsReservation(commercant)
@@ -1145,6 +1146,35 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], praticiens 
                   </svg>
                   {mots.agendaInscrire} ({libres} {libres > 1 ? mots.agendaOccupes : mots.agendaOccupe} libre{libres > 1 ? 's' : ''})
                 </button>
+              )
+            })()}
+
+            {/* ─── LA LISTE D'ATTENTE DE CE COURS (I12, 03/10) ────────────────
+                🔴 ELLE ÉTAIT INVISIBLE : ouverte sur tous les cours, sans que
+                la commerçante sache que quelqu'un attendait. Un nombre, pas des
+                noms. Et quand une place est libre, le bouton prévient la file :
+                sur SON annulation, c'est elle qui décide (Alex, 06/09). */}
+            {attentes && (() => {
+              const prestationId = seanceOuverte.inscrits[0]?.prestation_id
+              const n = prestationId && seanceOuverte.jourDate
+                ? (attentes.seances?.[cleSeance(prestationId, isoDate(seanceOuverte.jourDate), seanceOuverte.heure_debut)] || 0)
+                : 0
+              if (n === 0) return null
+              const libres = Math.max(0, seanceOuverte.capacite - resumeSeance(seanceOuverte.inscrits).couverts)
+              const avenir = isoDate(seanceOuverte.jourDate) >= isoDate(today)
+              return (
+                <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 12, background: `${T.main}0D`, border: `1.5px solid ${T.main}33` }}>
+                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: T.deep }}>
+                    {n === 1 ? '1 personne attend une place' : `${n} personnes attendent une place`}
+                  </p>
+                  {onPrevenirFile && avenir && libres > 0 && (
+                    <button
+                      onClick={() => { const s = seanceOuverte; setSeanceOuverte(null); onPrevenirFile({ prestationId, date: isoDate(s.jourDate), heure: s.heure_debut, nombre: n }) }}
+                      style={{ marginTop: 8, width: '100%', padding: '10px 12px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      Prévenir la liste d’attente ({libres} {libres > 1 ? 'places libres' : 'place libre'})
+                    </button>
+                  )}
+                </div>
               )
             })()}
 

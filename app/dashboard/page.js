@@ -1232,6 +1232,7 @@ export default function Dashboard() {
   const [rdvs, setRdvs] = useState([])
   const [creneauxRdv, setCreneauxRdv] = useState([])  // rdv_creneaux du commercant, pour la grille agenda (pauses)
   const [fermeturesRdv, setFermeturesRdv] = useState([])  // rdv_fermetures : congés, absences, que l'agenda grise
+  const [attentesRdv, setAttentesRdv] = useState(null)    // { seances, fenetres } : combien attendent, jamais qui
   // Grilles de créneaux alimentaires (retrait + tournées), pour AFFICHER LE
   // REMPLISSAGE au commerçant. Chargées une seule fois par commerce : une grille
   // hebdomadaire ne change pas toutes les minutes, elle n'a rien à faire dans le
@@ -1638,6 +1639,12 @@ export default function Dashboard() {
       .eq('commercant_id', id)
       .is('deleted_at', null)
     setFermeturesRdv(fermData || [])
+    // 🔴 LA FILE D'ATTENTE, EN NOMBRES PAR SÉANCE (I12, 03/10) : la table n'a
+    // aucune policy, la route est la seule porte. Une lecture ratée n'affiche
+    // rien, plutôt que « personne n'attend ».
+    const repAtt = await postPro('/api/rdv/attente-commerce', { action: 'compter', commercant_id: id })
+    const jAtt = await (repAtt?.json ? repAtt.json().catch(() => ({})) : Promise.resolve({}))
+    setAttentesRdv(jAtt?.ok ? { seances: jAtt.seances || {}, fenetres: jAtt.fenetres || {} } : null)
     // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : un prix resté en base
     // sur une table ne s'affiche plus au téléphone et ne s'écrit plus sur la
     // réservation. Même règle, même fonction que la fiche du client.
@@ -2696,6 +2703,29 @@ export default function Dashboard() {
   function fermerAnnulationSeance() {
     setSeanceAAnnuler(null)
     setConfirmationAnnulationTexte(null)
+  }
+
+  // 🔴 PRÉVENIR LA FILE D'UN COURS, D'UN BOUTON (I12, 03/10). Quand c'est la
+  // commerçante qui libère une place, la file n'est pas prévenue seule (Alex,
+  // 06/09) : c'est son geste. La route revérifie qu'une place est bien libre.
+  // ⚠️ LA PROMESSE TENUE, PAS PLUS : on prévient dans l'ordre, la place n'est
+  // pas gardée. Et si personne n'a pu être joint, on le dit.
+  async function prevenirFileSeance({ prestationId, date, heure, nombre }) {
+    if (!await confirme(confirmationSimple({
+      titre: nombre === 1 ? 'Prévenir la personne qui attend ?' : `Prévenir les ${nombre} personnes qui attendent ?`,
+      message: 'Une notification part tout de suite à la première personne inscrite, puis à la suivante un quart d’heure plus tard, dans l’ordre d’inscription.',
+      details: 'La place n’est pas gardée : la première personne qui réserve la prend.',
+      action: 'Oui, prévenir',
+      ton: 'principal',
+    }))) return
+    const res = await postPro('/api/rdv/attente-commerce', { action: 'prevenir', prestation_id: prestationId, date_rdv: date, heure_debut: heure })
+    const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+    await confirme(confirmationInfo(j?.ok
+      ? (j.prevenus > 0
+        ? { titre: j.prevenus === 1 ? '1 personne prévenue' : `${j.prevenus} personnes prévenues`, message: 'Les notifications partent dans l’ordre d’inscription. La place reste réservable par tout le monde.', action: 'Parfait' }
+        : { titre: 'Personne n’a pu être prévenu', message: 'Les personnes en attente n’ont pas activé les notifications, ou viennent déjà d’être prévenues pour ce cours.', action: 'J’ai compris' })
+      : { titre: 'La file n’a pas été prévenue', message: j?.error || 'Réessaie dans un instant.', action: 'J’ai compris' }))
+    if (commercant?.id) chargerRdvs(commercant.id)
   }
 
   // ⚠️ LE MÊME TRIO DE RÉPONSES QUE SUR UN RENDEZ-VOUS : terminal, espèces, ou
@@ -4129,6 +4159,8 @@ export default function Dashboard() {
                     rdvs={rdvs}
                     creneaux={creneauxRdv}
                     fermetures={fermeturesRdv}
+                    attentes={attentesRdv}
+                    onPrevenirFile={prevenirFileSeance}
                     praticiens={praticiensRdv}
                     horairesDetail={commercant?.horaires_detail}
                     commercant={commercant}

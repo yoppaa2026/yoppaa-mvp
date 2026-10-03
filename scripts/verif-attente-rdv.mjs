@@ -668,6 +668,96 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
     verifier('🔴 et la règle partagée la dit fermée, même réglée à 3',
       attenteOuverte({ par_couverts: true, attente_max: 3 }) === false && attenteOuverte({ par_couverts: false, attente_max: 3 }) === true)
   }
+
+  // ── I12 : la file côté commerçante ; LA-03 : pas de chaîne en double ──
+  // ⚠️ AUCUN PUSH RÉEL PENDANT UN BANC : sans clé, l'envoi s'arrête avant le
+  // réseau. On s'en assure plutôt que de le supposer.
+  delete process.env.ONESIGNAL_REST_API_KEY
+  delete process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
+  {
+    const A = await import('../lib/attente-rdv.js')
+    const DEMAIN = plus(jourBruxelles(), 1)
+    const ligne = (id, extra) => ({ id, commercant_id: 'c1', prestation_id: 'yoga', client_id: `cl-${id}`, portee: 'seance', date_rdv: D, heure_debut: '18:00:00', statut: 'en_attente', push_id: null, created_at: `2026-10-01T1${id.length}:00:00Z`, ...extra })
+    const comptes = A.compterAttentes([
+      ligne('a'), ligne('b'),
+      ligne('c', { statut: 'servi' }),
+      ligne('d', { date_rdv: plus(jourBruxelles(), -2) }),
+      { id: 'f', prestation_id: 'reiki', portee: 'fenetre', date_debut: jourBruxelles(), date_fin: DEMAIN, statut: 'en_attente' },
+    ], jourBruxelles())
+    verifier('🔴 la commerçante voit combien attendent chaque séance, vivants seulement',
+      comptes.seances[A.cleSeance('yoga', D, '18:00')] === 2 && comptes.fenetres.reiki === 1, JSON.stringify(comptes))
+    verifier('⚠️ « 18:00:00 » et « 18:00 » désignent la même séance', A.cleSeance('yoga', D, '18:00:00') === A.cleSeance('yoga', D, '18:00'))
+    const maintenant = Date.now()
+    verifier('🔴 une personne prévenue dont la priorité court n’est pas reprévenue',
+      A.dejaPrevenueEnCours({ statut: 'prevenu', priorite_jusqu: new Date(maintenant + 600000).toISOString() }, maintenant)
+      && !A.dejaPrevenueEnCours({ statut: 'prevenu', priorite_jusqu: new Date(maintenant - 600000).toISOString() }, maintenant)
+      && !A.dejaPrevenueEnCours({ statut: 'en_attente', priorite_jusqu: new Date(maintenant + 600000).toISOString() }, maintenant))
+
+    // LA-03, exécuté : une chaîne en cours ne repart pas de zéro.
+    {
+      const t = base()
+      // La fausse base ne résout pas les jointures : le commerce publié voyage dans la ligne.
+      t.rdv_prestations[0].commercant = { nom: 'Centre', slug: 'centre', statut_publication: 'publie' }
+      t.rdv_attente.push(
+        ligne('a', { statut: 'prevenu', priorite_jusqu: new Date(maintenant + 600000).toISOString() }),
+        ligne('bb'),
+      )
+      const r = await S.prevenirLaFile(fauxDb(t), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00' })
+      verifier('🔴 un second déclenchement ne reprévient pas celle qui vient de l’être',
+        r.ok === true && r.file === 1, JSON.stringify(r))
+    }
+
+    // Le bouton de la commerçante, exécuté.
+    {
+      const r = await S.prevenirSurDemande(fauxDb(base()), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00' })
+      verifier('🔴 le bouton refuse sur un cours encore complet', r.ok === false && r.error === 'complet', JSON.stringify(r))
+    }
+    {
+      const t = base({ inscrits: [inscrite('r1')] })
+      // La fausse base ne résout pas les jointures : le commerce publié voyage dans la ligne.
+      t.rdv_prestations[0].commercant = { nom: 'Centre', slug: 'centre', statut_publication: 'publie' }
+      t.rdv_attente.push(ligne('a'), ligne('bb'))
+      const r = await S.prevenirSurDemande(fauxDb(t), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00' })
+      verifier('🔴 une place libre : la file est prévenue', r.ok === true && r.file === 2, JSON.stringify(r))
+    }
+    {
+      const apres = brusselsInstant(D, '18:05').getTime()
+      const t = base({ inscrits: [inscrite('r1')] })
+      const r = await S.prevenirSurDemande(fauxDb(t), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00', maintenant: apres })
+      verifier('⚠️ un cours commencé ne se prévient plus', r.ok === false && r.error === 'seance_passee', JSON.stringify(r))
+    }
+    {
+      const t = base()
+      t.rdv_prestations.push({ id: 'reiki', commercant_id: 'c1', nom: 'Reiki', capacite: 1, attente_max: 3, actif: true, deleted_at: null, par_couverts: false })
+      const r = await S.prevenirSurDemande(fauxDb(t), { prestationId: 'reiki', dateRdv: D, heureDebut: '18:00' })
+      verifier('⚠️ seul un cours collectif se prévient d’un bouton', r.ok === false && r.error === 'pas_un_cours', JSON.stringify(r))
+    }
+    {
+      const t = base()
+      t.rdv_attente.push(ligne('a'), ligne('bb', { statut: 'servi' }))
+      const c = await S.attentesDuCommerce(fauxDb(t), 'c1')
+      verifier('la route compte la file du commerce, servis exclus', c?.seances?.[A.cleSeance('yoga', D, '18:00')] === 1, JSON.stringify(c))
+    }
+
+    // ── Les écrans et la route ──
+    const SRV = sansProse(readFileSync(new URL('../lib/attente-rdv-server.js', import.meta.url), 'utf8'))
+    verifier('🔴 aucun nom ni contact ne sort pour la commerçante',
+      /\.select\('prestation_id, portee, date_rdv, heure_debut, date_debut, date_fin, statut'\)/.test(SRV))
+    const ROUTE_C = sansProse(readFileSync(new URL('../app/api/rdv/attente-commerce/route.js', import.meta.url), 'utf8'))
+    verifier('🔴 compter passe par la garde du commerce, case Agenda',
+      /gardeEquipe\(request, admin, corps\?\.commercant_id, 'agenda'\)/.test(ROUTE_C))
+    verifier('🔴 prévenir lit le commerce DANS la prestation, jamais dans le corps',
+      /gardeLigneEquipe\(request, admin, 'rdv_prestations', corps\?\.prestation_id, 'agenda'\)/.test(ROUTE_C))
+    const AG = sansProse(readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
+    verifier('🔴 le panneau d’un cours dit combien attendent, et propose de prévenir seulement s’il reste une place',
+      /attentes\.seances\?\.\[cleSeance\(prestationId, isoDate\(seanceOuverte\.jourDate\), seanceOuverte\.heure_debut\)\]/.test(AG)
+      && /\{onPrevenirFile && avenir && libres > 0 && \(/.test(AG))
+    const BD = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+    verifier('🔴 le tableau de bord charge la file et branche le bouton',
+      /postPro\('\/api\/rdv\/attente-commerce', \{ action: 'compter', commercant_id: id \}\)/.test(BD)
+      && /attentes=\{attentesRdv\}/.test(BD) && /onPrevenirFile=\{prevenirFileSeance\}/.test(BD)
+      && /postPro\('\/api\/rdv\/attente-commerce', \{ action: 'prevenir', prestation_id: prestationId, date_rdv: date, heure_debut: heure \}\)/.test(BD))
+  }
 }
 
 // ─── LA SÉANCE ATTENDUE RESTE CELLE QUI A ÉTÉ CLIQUÉE (LA-04, 03/10) ────────

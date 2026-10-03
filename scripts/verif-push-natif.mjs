@@ -14,6 +14,8 @@
 // navigateur et sans téléphone.
 
 import { readFileSync, readdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 import { sansProse } from './lire-code.mjs'
 import {
   estAppNative, pluginNatif, initialiserPushNatif, demanderPushNatif,
@@ -99,6 +101,86 @@ const fenetreNative = (options = {}) => {
   verifie('le plugin natif, lui, est reconnu', pluginNatif(fenetre) !== null)
   verifie('hors de l’app, aucun plugin n’est rendu',
     pluginNatif({ OneSignal: { initialize: () => {} } }) === null)
+}
+
+// ═══ 1 bis) LE VRAI PLUGIN, RANGÉ COMME CORDOVA LE RANGE (03/10) ═══════════
+//
+// 🔴 LE DÉFAUT QU'ALEX A TROUVÉ SUR LE BUILD 1.0.1 (3). Tout ce banc simulait
+// un `window.OneSignal` à la forme qu'on CROYAIT : les méthodes directement
+// dessus. Or le plugin 5.5.7 est un MODULE, et Cordova pose sous
+// `window.OneSignal` l'objet de ses EXPORTS (`{ default, LogLevel, … }`).
+// `pluginNatif` ne trouvait donc jamais rien : aucune notification native n'a
+// jamais pu marcher, et le banc était vert.
+//
+// ✅ ON NE SIMULE PLUS LE PLUGIN, ON LE CHARGE. Le fichier est celui que
+// `plugin.xml` désigne et que `cap sync` copie dans l'app ; on le range comme
+// `cordova.js` le fait (`modulemapper`, stratégie « clobbers » : la cible
+// reçoit les exports tels quels). Seul `cordova.exec`, le pont vers le natif,
+// est imité. Une montée de version du plugin qui changerait encore sa forme
+// rougira ICI, avant un build.
+{
+  const racinePlugin = new URL('../node_modules/onesignal-cordova-plugin/', import.meta.url)
+  const pluginXml = readFileSync(new URL('plugin.xml', racinePlugin), 'utf8')
+  const declaration = pluginXml.match(/<js-module src="([^"]+)"[^>]*>\s*<clobbers target="([^"]+)"/)
+  verifie('⚠️ plugin.xml désigne bien un fichier et une cible (sinon la suite ne lit rien)', !!declaration)
+  egal('🔴 Cordova range le plugin sous le nom que le code lit', declaration?.[2], 'OneSignal')
+
+  const appels = []
+  let clicNatif = null
+  const fenetreAvant = globalThis.window
+  try {
+    globalThis.window = {
+      cordova: {
+        exec: (ok, ko, service, action, args) => {
+          appels.push(`${service}.${action}(${JSON.stringify(args || [])})`)
+          if (action === 'requestPermission') ok(true)
+          if (action === 'addNotificationClickListener') clicNatif = ok
+        },
+      },
+    }
+    const exiger = createRequire(import.meta.url)
+    const fichier = fileURLToPath(new URL(declaration?.[1] || 'dist/index.cjs', racinePlugin))
+    delete exiger.cache[fichier]
+    const exportsDuModule = exiger(fichier)
+    const fenetre = globalThis.window
+    // Ce que fait `cordova.js`, ni plus ni moins.
+    fenetre[declaration?.[2] || 'OneSignal'] = exportsDuModule
+    fenetre.Capacitor = { isNativePlatform: () => true }
+
+    verifie('🔴 le VRAI plugin, rangé par Cordova, est trouvé', pluginNatif(fenetre) !== null)
+    const init = initialiserPushNatif(fenetre, 'app-banc', 'yopper-1')
+    verifie('🔴 l’initialisation part vers le natif',
+      init.ok === true && appels.includes('OneSignalPush.init(["app-banc"])'), appels.join(' · '))
+    verifie('🔴 et le Yopper est identifié', appels.includes('OneSignalPush.login(["yopper-1"])'))
+    const demande = await demanderPushNatif(fenetre)
+    verifie('🔴 « Activer » pose VRAIMENT la question du téléphone',
+      demande.ok === true && appels.includes('OneSignalPush.requestPermission([true])'), JSON.stringify(demande))
+    verifie('les étiquettes partent vers le natif',
+      taguerNatif(fenetre, { code_postal: '5640' }) === true
+      && appels.includes('OneSignalPush.addTags([{"code_postal":"5640"}])'))
+    const ouverts = []
+    delete fenetre.__yoppaaClicNatif
+    const branche = brancherClicNatif(fenetre, (c) => ouverts.push(c))
+    verifie('🔴 l’écoute du toucher est enregistrée auprès du natif',
+      branche.ok === true && typeof clicNatif === 'function')
+    // Le natif rappelle avec la forme que le plugin attend, et c'est LUI qui
+    // la transforme avant de nous la passer.
+    clicNatif?.({ notification: { notificationId: 'n1', additionalData: { chemin: '/commander?onglet=commandes' } }, result: {} })
+    egal('🔴 et le toucher ouvre la page, à travers le vrai plugin', ouverts.join(), '/commander?onglet=commandes')
+  } finally {
+    if (fenetreAvant === undefined) delete globalThis.window
+    else globalThis.window = fenetreAvant
+  }
+
+  // ⚠️ LES AUTRES FORMES RESTENT RECONNUES, et le SDK web reste écarté, quelle
+  // que soit la forme sous laquelle il se présenterait.
+  const natif = { initialize: () => {} }
+  const cap = { isNativePlatform: () => true }
+  verifie('la forme posée par le plugin lui-même (`plugins`) est reconnue',
+    pluginNatif({ Capacitor: cap, plugins: { OneSignal: natif } }) === natif)
+  verifie('l’ancienne forme directe aussi', pluginNatif({ Capacitor: cap, OneSignal: natif }) === natif)
+  verifie('🔴 le SDK web n’est jamais pris, même sous `default`',
+    pluginNatif({ Capacitor: cap, OneSignal: { default: { init: () => {} } } }) === null)
 }
 
 // ═══ 2) L'INITIALISATION ═══════════════════════════════════════════════════

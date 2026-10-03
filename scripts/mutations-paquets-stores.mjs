@@ -327,8 +327,8 @@ const MUTATIONS = [
 
   // ─── LE PLUGIN NATIF, QUI PORTE LE MEME NOM QUE LE SDK WEB ──────────────
   { nom: '🔴 le natif et le web ne se distinguent plus : personne ne recoit jamais rien',
-    de: "  return typeof os?.initialize === 'function' ? os : null",
-    vers: '  return os || null' },
+    de: "    return candidats.find((os) => typeof os?.initialize === 'function') || null",
+    vers: '    return candidats.find((os) => !!os) || null' },
 
   // ⚠️ CELLE-CI REMET UN DEFAUT PLAUSIBLE, pas un cas invente. Croire une
   // autorisation accordee alors qu elle ne l est pas fait afficher « tu es
@@ -408,6 +408,16 @@ const MUTATIONS = [
     fichier: 'app/commander/BonConfirmation.js',
     de: "<a href={`/cadeau/${bon.token}`} style={{ display: 'block'",
     vers: "<a href={`/cadeau/${bon.token}`} target=\"_blank\" style={{ display: 'block'" },
+
+  // ─── LE VRAI PLUGIN (03/10, trouve par Alex sur le build 1.0.1 (3)) ─────
+  //
+  // 🔴 L ANCIENNE RECHERCHE : `window.OneSignal.initialize`. Le plugin 5.5.7
+  // est un module, Cordova pose ses EXPORTS sous `window.OneSignal` : rien
+  // n etait trouve, aucune notification native n a jamais marche, et le banc
+  // etait vert parce qu il imitait le plugin au lieu de le charger.
+  { nom: '🔴 on ne cherche plus que window.OneSignal, comme avant le 03/10',
+    de: '    const candidats = [fenetre?.plugins?.OneSignal, fenetre?.OneSignal?.default, fenetre?.OneSignal]',
+    vers: '    const candidats = [fenetre?.OneSignal]' },
 
   // ─── TOUCHER UNE NOTIFICATION (02/10) ───────────────────────────────────
   //

@@ -210,9 +210,10 @@ const MUTATIONS = [
   { nom: '🔴 le statut brut revient à l’écran', banc: 'verif:table', fichier: 'app/api/rdv/cancel/route.js',
     de: '          : `${mots.ecranNonHonore} Contacte directement',
     vers: '          : `Annulation impossible : ce RDV est au statut "${rdv.statut}". Contacte directement' },
+  // ⚠️ ANCRE RÉORIENTÉE LE 03/10 (Annul-I5) : la phrase a pris le jour et le numéro.
   { nom: '🔴 le délai dépassé redit « avant ton RDV »', banc: 'verif:table', fichier: 'app/api/rdv/cancel/route.js',
-    de: '${delaiH}h ${mots.ecranAvant} (',
-    vers: '${delaiH}h avant ton RDV (' },
+    de: '${delaiH} h ${mots.ecranAvant}${quand',
+    vers: '${delaiH} h avant ton RDV${quand' },
   { nom: '🔴 une phrase de fin redit « Ton RDV est annulé. »', banc: 'verif:table', fichier: 'app/api/rdv/cancel/route.js',
     de: '      message = `${mots.ecranAnnule}${retours}`',
     vers: '      message = `Ton RDV est annulé.${retours}`' },

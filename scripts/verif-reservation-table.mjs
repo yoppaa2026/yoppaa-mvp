@@ -2900,7 +2900,9 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 « déjà annulée » dans les mots du métier', /message: mots\.ecranDejaAnnule,/.test(CANCEL))
   verifier('🔴 un rendez-vous passé ou non honoré se dit en phrase, plus en statut',
     /\? mots\.ecranDejaEuLieu\s*:\s*`\$\{mots\.ecranNonHonore\} /.test(CANCEL) && !/\$\{rdv\.statut\}/.test(CANCEL))
-  verifier('🔴 le délai dépassé dit « avant ta réservation »', /\$\{delaiH\}h \$\{mots\.ecranAvant\} \(/.test(CANCEL))
+  // ⚠️ REPOINTÉE LE 03/10 (Annul-I5) : la phrase dit maintenant le jour et le
+  // numéro du commerce ; « avant ta réservation » vient toujours des mots du métier.
+  verifier('🔴 le délai dépassé dit « avant ta réservation »', /\$\{delaiH\} h \$\{mots\.ecranAvant\}\$\{quand/.test(CANCEL))
   const enDurCancel = ['Ton RDV est annulé', 'Ce RDV est déjà annulé', 'avant ton RDV', 'au statut'].filter(s => CANCEL.includes(s))
   verifier('🔴 plus aucune phrase d’écran en dur dans la route', enDurCancel.length === 0, enDurCancel.join(' | '))
   const blocMessage = CANCEL.slice(CANCEL.indexOf('let message'), CANCEL.indexOf('return NextResponse.json({', CANCEL.indexOf('let message')))

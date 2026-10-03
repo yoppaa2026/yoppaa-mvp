@@ -1029,8 +1029,10 @@ verifier('le panneau des inscrits sait ajouter quelqu’un',
   && /agendaInscrire: 'Inscrire quelqu’un',/.test(srcMetier))
 // Le bouton appelle le MÊME chemin que la création depuis une case libre : une
 // seconde façon de créer un rendez-vous finirait par diverger de la première.
+// ⚠️ REPOINTÉE LE 03/10 (Audit 1 I8) : le bouton passe désormais aussi le
+// cours, pour que la saisie s'ouvre dessus. Le chemin reste le même.
 verifier('et il passe par la création de rendez-vous existante',
-  /onNouveauRdv\(jour, heure\)/.test(srcAgenda))
+  /onNouveauRdv\(jour, heure, coursId\)/.test(srcAgenda))
 // ⚠️ SANS LE JOUR, RIEN N'EST POSSIBLE : le bloc de cours ne porte que des
 // heures, la date vit sur la colonne de l'agenda.
 verifier('le jour voyage avec le cours ouvert',

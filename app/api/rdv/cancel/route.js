@@ -18,7 +18,7 @@ import { libelleBon } from '@/lib/bons-cadeaux'
 import { euros } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
-import { envoyerAuCommercant, emailRdvAnnule } from '@/lib/resend'
+import { envoyerAuCommercant, emailRdvAnnule, emailRemboursementEchoue } from '@/lib/resend'
 import { generateRdvIcs, icsToBase64Attachment, sequenceAnnulation } from '@/lib/ical'
 import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
@@ -537,6 +537,29 @@ export async function POST(request) {
         })
       } catch (e) {
         console.error('[rdv/cancel] envoi email Yopper KO', e?.message)
+      }
+    }
+
+    // 🔴 LE STUDIO APPREND L'ÉCHEC DU REMBOURSEMENT (Annul-I1, 03/10). Le client
+    // lit juste en dessous que le commerçant s'en occupe : il fallait le lui
+    // dire. ⚠️ Un email raté ne défait pas l'annulation, il se journalise.
+    if (refundError && commercant?.email) {
+      try {
+        const envoi = await envoyerAuCommercant({
+          to: commercant.email,
+          subject: `Remboursement à faire : ${[rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' ') || 'un client'} a annulé`,
+          html: emailRemboursementEchoue({
+            commercant_nom: commercant.nom || '',
+            client: [rdv.client_prenom, rdv.client_nom].filter(Boolean).join(' '),
+            montant: aRembourser,
+            date_rdv: rdv.date_rdv,
+            heure_debut: rdv.heure_debut,
+            prestation_nom: rdv.prestation?.nom || '',
+          }),
+        })
+        if (!envoi?.ok) console.error('[rdv/cancel] alerte remboursement au commerçant KO', envoi?.error)
+      } catch (e) {
+        console.error('[rdv/cancel] alerte remboursement au commerçant KO', e?.message)
       }
     }
 

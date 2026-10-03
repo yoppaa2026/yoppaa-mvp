@@ -945,6 +945,18 @@ for (const chemin of [
     egal('et le solde déduit bien le bon', soldeRdv({ prix_estime: 35, bon_cadeau_montant: 35 }), 0)
   }
 
+  // ── LE STUDIO APPREND L'ÉCHEC D'UN REMBOURSEMENT (Annul-I1, 03/10) ──────
+  {
+    const { emailRemboursementEchoue } = await import('../lib/resend.js')
+    const html = String(emailRemboursementEchoue({ commercant_nom: 'Centre Respire', client: '<i>Sophie</i>', montant: 15, date_rdv: '2026-10-05', heure_debut: '18:00:00', prestation_nom: 'Hatha' }))
+    verifie('🔴 la commerçante lit le montant à rembourser et le geste à faire',
+      /15,00/.test(html) && /Rembourse-le depuis ton tableau Stripe/.test(html) && /18:00/.test(html))
+    verifie('⚠️ le nom tapé par le client ne devient pas du HTML', !/<i>Sophie<\/i>/.test(html))
+    const CANCEL = sansProse(lire('app/api/rdv/cancel/route.js'))
+    verifie('🔴 la route l’envoie dès que le remboursement échoue',
+      /if \(refundError && commercant\?\.email\) \{[\s\S]{0,300}html: emailRemboursementEchoue\(\{/.test(CANCEL))
+  }
+
   // ── UNE ANNULATION, UN REMBOURSEMENT, UN EMAIL (Annul-I8, 03/10) ────────
   //
   // 🔴 AUCUN VERROU : un double tap, deux onglets, ou le client et le studio à

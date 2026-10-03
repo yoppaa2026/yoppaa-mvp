@@ -524,6 +524,19 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · ANNUL-I1 : LE STUDIO APPREND L'ÉCHEC DU REMBOURSEMENT ─────
+  { nom: '🔴 un remboursement rate n alerte plus le studio',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/cancel/route.js',
+    de: '    if (refundError && commercant?.email) {',
+    vers: '    if (false) {',
+    garde: 'la route l’envoie dès que le remboursement échoue' },
+
+  { nom: '⚠️ l alerte de remboursement tait le montant',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/resend.js',
+    de: "    intro: `<strong>${echapperHtml(client) || 'Un client'}</strong> vient d’annuler son rendez-vous à temps, mais le remboursement automatique de <strong>${euros(Number(montant) || 0)}</strong> a échoué.`,",
+    vers: "    intro: `<strong>${echapperHtml(client) || 'Un client'}</strong> vient d’annuler son rendez-vous à temps, mais le remboursement automatique a échoué.`,",
+    garde: 'la commerçante lit le montant à rembourser' },
+
   // ─── LOT 3 · AUDIT 2 I14 : LE RAPPEL DE LA VEILLE ET LE BON ────────────
   { nom: '🔴 le rappel de la veille oublie de nouveau le bon cadeau',
     banc: 'verif:tunnel-rdv', fichier: 'app/api/cron/rdv-reminder-9h/route.js',

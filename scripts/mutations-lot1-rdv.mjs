@@ -524,6 +524,43 @@ const MUTATIONS = [
     vers: '',
     garde: 'les deux refus se remboursent après un paiement' },
 
+  // ─── LOT 3 · ANNUL-I8 : UNE ANNULATION, UN REMBOURSEMENT, UN EMAIL ─────
+  { nom: '🔴 le studio rembourse deux fois sur un double tap',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '          }, { stripeAccount: rdv.commercant.stripe_account_id, idempotencyKey: cleRemboursementRdv(rdv.id) })',
+    vers: '          }, { stripeAccount: rdv.commercant.stripe_account_id })',
+    garde: 'le studio : un seul remboursement par rendez-vous' },
+
+  { nom: '🔴 le client rembourse deux fois sur un double tap',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/cancel/route.js',
+    de: '          idempotencyKey: cleRemboursementRdv(rdv.id),',
+    vers: '',
+    garde: 'le client : un seul remboursement par rendez-vous' },
+
+  { nom: '🔴 deux annulations du studio ecrivent toutes les deux',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: "      .eq('id', rdv.id).eq('statut', rdv.statut).select('id')",
+    vers: "      .eq('id', rdv.id).select('id')",
+    garde: 'le studio : le statut ne s’écrit que s’il n’a pas changé' },
+
+  { nom: '🔴 deux annulations du client ecrivent toutes les deux',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/rdv/cancel/route.js',
+    de: "      .eq('statut', rdv.statut)",
+    vers: '',
+    garde: 'le client : le statut ne s’écrit que s’il n’a pas changé' },
+
+  { nom: '⚠️ le tableau de bord renvoie l email d une annulation deja faite',
+    banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/page.js',
+    de: '      if (j.already_canceled) return true',
+    vers: '',
+    garde: 'le tableau de bord ne renvoie pas l’email' },
+
+  { nom: '⚠️ le Poste renvoie l email d une annulation deja faite',
+    banc: 'verif:tunnel-rdv', fichier: 'app/equipe/PosteEquipe.js',
+    de: "      if (j.already_canceled) { dire('Cette réservation était déjà annulée'); return }",
+    vers: '',
+    garde: 'le Poste équipe non plus' },
+
   // ─── LOT 2 · LES BOUTONS « ENREGISTREMENT… » QUI TRAVAILLENT ───────────
   { nom: '⚠️ un bouton redit « Enregistrement… » sans les points',
     banc: 'verif:logique', fichier: 'app/dashboard/ConfigDashboard.js',

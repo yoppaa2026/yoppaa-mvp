@@ -28,7 +28,7 @@ import { refus } from '@/lib/api-auth'
 // 🔴 LE PATRON, L'ADMIN ET L'ÉQUIPE PAR LA MÊME GARDE (29/09, étape 3) : le
 // patron et l'admin passent comme avant, un membre avec la case agenda.
 import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
-import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
+import { rendreAvantagesRdv, lignesBonsDe, cleRemboursementRdv } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { annulerPush } from '@/lib/onesignal'
 
@@ -162,11 +162,18 @@ export async function POST(request) {
       } else {
         try {
           requireStripe()
+          // 🔴 UNE CLÉ D'IDEMPOTENCE PAR RENDEZ-VOUS (Annul-I8, 03/10). Deux
+          // annulations simultanées (double tap, deux onglets, le client et le
+          // studio à la même minute) créaient deux remboursements : le second
+          // échouait, et le client recevait un email « remboursement échoué »
+          // sur un acompte bel et bien rendu. Même clé ici et côté client :
+          // Stripe ne rembourse ce rendez-vous qu'une fois, et rend la même
+          // réponse au second appel.
           const refund = await stripe.refunds.create({
             payment_intent: rdv.stripe_payment_intent_id,
             reason: 'requested_by_customer',
             metadata: { yoppaa_rdv_id: rdv.id, yoppaa_motif: raison },
-          }, { stripeAccount: rdv.commercant.stripe_account_id })
+          }, { stripeAccount: rdv.commercant.stripe_account_id, idempotencyKey: cleRemboursementRdv(rdv.id) })
           refundId = refund.id
           refundMontant = aRembourser
         } catch (e) {
@@ -183,10 +190,17 @@ export async function POST(request) {
       updateData.stripe_refund_amount = refundMontant
       updateData.stripe_refund_date = new Date().toISOString()
     }
-    const { error: errUpd } = await supabase.from('rdv_reservations').update(updateData).eq('id', rdv.id)
+    // ⚠️ UN SEUL GAGNANT : le statut ne s'écrit que s'il n'a pas changé depuis
+    // la lecture. La seconde annulation simultanée apprend qu'elle arrive
+    // après, et l'écran n'envoie pas un second email.
+    const { data: ecrit, error: errUpd } = await supabase.from('rdv_reservations').update(updateData)
+      .eq('id', rdv.id).eq('statut', rdv.statut).select('id')
     if (errUpd) {
       console.error('[rdv/annuler-commercant] UPDATE KO', errUpd)
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour du rendez-vous.' }, { status: 500 })
+    }
+    if (!ecrit || ecrit.length === 0) {
+      return NextResponse.json({ ok: true, already_canceled: true, rdv_id: rdv.id })
     }
 
     if (commandeLiee) {

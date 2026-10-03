@@ -24,7 +24,7 @@ import { brusselsInstant } from '@/lib/timezone'
 import { annulerPush } from '@/lib/onesignal'
 import { prevenirLaFile } from '@/lib/attente-rdv-server'
 import { adresseRendezVous } from '@/lib/lieu-fige'
-import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
+import { rendreAvantagesRdv, lignesBonsDe, cleRemboursementRdv } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { motsReservation } from '@/lib/reservation-metier'
 import { decisionAnnulation } from '@/lib/rdv-delai-annulation'
@@ -334,6 +334,9 @@ export async function POST(request) {
           },
         }, {
           stripeAccount: commercant.stripe_account_id,
+          // 🔴 LA MÊME CLÉ QUE L'ANNULATION DU STUDIO (Annul-I8, 03/10) : un
+          // double tap ne rembourse qu'une fois, sans « échec » au second.
+          idempotencyKey: cleRemboursementRdv(rdv.id),
         })
         refundId = refund.id
         refundStatus = refund.status
@@ -386,13 +389,21 @@ export async function POST(request) {
       updateData.stripe_refund_date = new Date().toISOString()
     }
     if (commandeLiee) updateData.produits_annulation = produits_choix
-    const { error: errUpd } = await supabase
+    // ⚠️ UN SEUL GAGNANT (Annul-I8, 03/10) : le statut ne s'écrit que s'il n'a
+    // pas changé depuis la lecture. Le second appel simultané ne prévient pas
+    // la file une seconde fois et n'envoie pas un second email.
+    const { data: ecrit, error: errUpd } = await supabase
       .from('rdv_reservations')
       .update(updateData)
       .eq('id', rdv.id)
+      .eq('statut', rdv.statut)
+      .select('id')
     if (errUpd) {
       console.error('[rdv/cancel] UPDATE statut KO', errUpd)
       return NextResponse.json({ ok: false, error: 'Erreur mise à jour RDV.' }, { status: 500 })
+    }
+    if (!ecrit || ecrit.length === 0) {
+      return NextResponse.json({ ok: true, already_canceled: true, rdv_id: rdv.id, message: mots.ecranDejaAnnule })
     }
 
     // ─── 6 ter) UNE CARTE QUI NE SERT PLUS À RIEN SE DÉTACHE (15/09) ───────

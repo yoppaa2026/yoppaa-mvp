@@ -907,6 +907,29 @@ for (const chemin of [
       && /const res = await postPro\('\/api\/rdv\/annuler-commercant', \{ rdv_id: r\.id, raison: 'commercant' \}\)/.test(CONF))
   }
 
+  // ── UNE ANNULATION, UN REMBOURSEMENT, UN EMAIL (Annul-I8, 03/10) ────────
+  //
+  // 🔴 AUCUN VERROU : un double tap, deux onglets, ou le client et le studio à
+  // la même minute lançaient deux remboursements (le second « échouait », email
+  // orange sur un acompte rendu), deux chaînes de la file, deux emails.
+  {
+    const { cleRemboursementRdv } = await import('../lib/rdv-annulation-server.js')
+    verifie('🔴 la clé de remboursement est la même pour un même rendez-vous, et propre à lui',
+      cleRemboursementRdv('r1') === cleRemboursementRdv('r1') && cleRemboursementRdv('r1') !== cleRemboursementRdv('r2'))
+    for (const [nom, fichier] of [['le studio', 'app/api/rdv/annuler-commercant/route.js'], ['le client', 'app/api/rdv/cancel/route.js']]) {
+      const src = sansProse(lire(fichier))
+      verifie(`🔴 ${nom} : un seul remboursement par rendez-vous chez Stripe`,
+        /idempotencyKey: cleRemboursementRdv\(rdv\.id\)/.test(src))
+      verifie(`🔴 ${nom} : le statut ne s’écrit que s’il n’a pas changé, et le second l’apprend`,
+        /\.eq\('id', rdv\.id\)\s*\.eq\('statut', rdv\.statut\)\s*\.select\('id'\)/.test(src)
+        && /if \(!ecrit \|\| ecrit\.length === 0\) \{\s*return NextResponse\.json\(\{ ok: true, already_canceled: true/.test(src))
+    }
+    verifie('⚠️ le tableau de bord ne renvoie pas l’email d’une annulation déjà faite',
+      /if \(j\.already_canceled\) return true/.test(sansProse(lire('app/dashboard/page.js'))))
+    verifie('⚠️ le Poste équipe non plus',
+      /if \(j\.already_canceled\) \{ dire\('Cette réservation était déjà annulée'\); return \}/.test(sansProse(lire('app/equipe/PosteEquipe.js'))))
+  }
+
   // ── UNE PRESTATION RETIRÉE, UNE DATE TROP LOINTAINE (I9, 03/10) ─────────
   //
   // 🔴 LE SERVEUR NE FAISAIT RESPECTER NI L'UNE NI L'AUTRE. `actif` était lu et

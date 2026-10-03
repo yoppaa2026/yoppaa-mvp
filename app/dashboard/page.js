@@ -2448,6 +2448,10 @@ export default function Dashboard() {
         return false
       }
       setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut, motif_annulation: raison } : r))
+      // ⚠️ DÉJÀ ANNULÉ PAR UN AUTRE GESTE (double tap, deux onglets, le client
+      // à la même minute) : rien n'a été rendu par CET appel, et l'email est
+      // déjà parti. On ne le renvoie pas (Annul-I8, 03/10).
+      if (j.already_canceled) return true
       // 🔴 ET LE COMMERÇANT LIT CE QU'IL VIENT DE DÉCLENCHER (Alex, 30/08 au
       // soir). La fenêtre disait « il vient d'en être prévenu par email » sur un
       // clic qui rembourse une carte, recrédite un bon, rend une récompense et

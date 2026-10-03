@@ -468,6 +468,9 @@ export default function PosteEquipe({ equipe, onChanger }) {
       const j = await lire(await postPro('/api/rdv/annuler-commercant', { rdv_id: rdv.id, raison: d.raison }))
       if (!j.ok) { dire(j.error || 'La réservation n’a pas pu être annulée.', 'erreur'); return }
       setRdvOuvert(null)
+      // ⚠️ DÉJÀ ANNULÉE PAR UN AUTRE GESTE : l'email est déjà parti, on ne le
+      // renvoie pas (Annul-I8, 03/10), comme au tableau de bord.
+      if (j.already_canceled) { dire('Cette réservation était déjà annulée'); return }
       dire('Réservation annulée')
       await prevenir('/api/emails/rdv-annule', {
         rdv_id: rdv.id,

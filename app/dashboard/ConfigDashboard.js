@@ -11062,7 +11062,9 @@ function TabRdvAbonnements({ commercantId, toast }) {
       prix: form.prix === '' ? 0 : Number(form.prix),
       seances_par_semaine: Math.max(1, parseInt(form.seances_par_semaine, 10) || 1),
       actif: !!form.actif,
-      vente_en_ligne: !!form.vente_en_ligne,
+      // ⚠️ UNE FORMULE PLUS PROPOSÉE N'EST JAMAIS « EN VENTE » : les formules
+      // enregistrées avant le 03/10 pouvaient porter les deux à la fois.
+      vente_en_ligne: !!form.actif && !!form.vente_en_ligne,
       // Un carnet n'est jamais « entamé » : il garde le défaut.
       prix_en_cours: form.type === 'periode' && form.prix_en_cours === PRIX_EN_COURS_FIXE ? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,
     }
@@ -11273,24 +11275,32 @@ function TabRdvAbonnements({ commercantId, toast }) {
             )}
           </div>
 
-          <div style={{ marginBottom: 10 }}>
-            <Toggle value={form.actif} onChange={v => setForm({ ...form, actif: v })} label="Formule proposée"/>
-          </div>
-
-          {/* ⚠️ LA MISE EN VITRINE EST UN GESTE À PART, et volontairement
-              séparée de « Formule proposée ». Une formule peut très bien
-              exister pour l'usage du commerçant seul, un tarif négocié ou un
-              brouillon, sans jamais s'afficher au public. La colonne vaut faux
-              par défaut en base : rien ne se publie tout seul, y compris le
-              jour où la migration passe sur des formules déjà créées. */}
+          {/* 🔴 QUI PEUT PRENDRE CETTE FORMULE (Alex, 03/10 : « pas très clair
+              les 2 toggles »). Deux interrupteurs dépendaient l'un de l'autre
+              sans le dire : « Formule proposée » éteint et « Vendre en ligne »
+              allumé affichait une formule en vente qui ne l'était pas. Une
+              seule question, trois réponses, et la combinaison trompeuse
+              n'existe plus. Mêmes colonnes en base, écrites ensemble.
+              ⚠️ « Seulement par toi » reste le défaut d'une formule neuve :
+              rien ne se publie tout seul, comme la colonne le veut en base. */}
+          {(() => {
+            const dispo = !form.actif ? 'retiree' : form.vente_en_ligne ? 'en_ligne' : 'a_la_main'
+            const choisir = (v) => setForm({ ...form, actif: v !== 'retiree', vente_en_ligne: v === 'en_ligne' })
+            const option = (valeur, titre, texte) => (
+              <label key={valeur} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 10, border: `1.5px solid ${dispo === valeur ? T.main : T.border}`, background: dispo === valeur ? '#fff' : 'transparent', cursor: 'pointer', marginTop: 6 }}>
+                <input type="radio" name="disponibilite_formule" checked={dispo === valeur} onChange={() => choisir(valeur)} style={{ marginTop: 2, flexShrink: 0 }}/>
+                <span>
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, color: T.ink }}>{titre}</span>
+                  <span style={{ display: 'block', fontSize: 11, color: T.muted, lineHeight: 1.5, marginTop: 2 }}>{texte}</span>
+                </span>
+              </label>
+            )
+            return (
           <div style={{ marginBottom: 14, background: T.bg, borderRadius: 10, padding: '10px 12px', border: `1px solid ${T.border}` }}>
-            <Toggle value={form.vente_en_ligne} onChange={v => setForm({ ...form, vente_en_ligne: v })}
-              label="Vendre cette formule en ligne"/>
-            <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
-              {form.vente_en_ligne
-                ? <>Elle apparaît sur ta fiche publique. Le client paie en une fois par Bancontact ou par carte, et <strong>l&rsquo;argent arrive directement sur ton compte</strong>. Il réserve ensuite ses séances lui-même, dans la limite que tu as fixée par semaine.</>
-                : <>Elle reste pour toi seul : tu inscris tes clients à la main et tu encaisses comme tu veux. Coche pour la mettre en vente sur ta fiche.</>}
-            </p>
+            <p style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, margin: 0 }}>Qui peut prendre cette formule ?</p>
+            {option('en_ligne', 'En vente sur ta fiche', <>Tes clients l&rsquo;achètent en ligne, en une fois, par Bancontact ou par carte, et <strong>l&rsquo;argent arrive directement sur ton compte</strong>. Ils réservent ensuite leurs séances eux-mêmes, dans la limite que tu as fixée par semaine. Tu peux aussi inscrire quelqu&rsquo;un toi-même.</>)}
+            {option('a_la_main', 'Seulement par toi', 'Elle n’apparaît pas sur ta fiche : tu inscris tes clients toi-même et tu encaisses comme tu veux, pour un tarif négocié ou un paiement au comptoir.')}
+            {option('retiree', 'Plus proposée', 'Plus personne ne peut la prendre. Tes abonnés en cours gardent leur abonnement jusqu’à la fin.')}
             {form.vente_en_ligne && !(Number(form.prix) > 0) && (
               <p style={{ fontSize: 11.5, color: '#B45309', margin: '6px 0 0', fontWeight: 700, lineHeight: 1.5 }}>
                 Indique un prix : une formule à 0 € ne peut pas être achetée en ligne.
@@ -11334,6 +11344,8 @@ function TabRdvAbonnements({ commercantId, toast }) {
               )
             })()}
           </div>
+            )
+          })()}
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={save} disabled={saving}
@@ -11365,11 +11377,23 @@ function TabRdvAbonnements({ commercantId, toast }) {
                           ce que ses clients voient sans rouvrir chaque formule
                           une par une, et il finirait par vendre sans le savoir
                           ou par croire vendre alors que rien n'est publié. */}
-                      {f.vente_en_ligne && (
-                        <span style={{ fontSize: 10, fontWeight: 800, color: '#065F46', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 100, padding: '2px 7px', whiteSpace: 'nowrap' }}>
-                          En vente
-                        </span>
-                      )}
+                      {/* ⚠️ LE MÊME ÉTAT QUE LE FORMULAIRE (03/10). « En vente »
+                          s'affichait sur une formule plus proposée, et sur une
+                          période finie que plus personne ne peut acheter. */}
+                      {(() => {
+                        const etiquette = f.actif === false
+                          ? { texte: 'Plus proposée', encre: T.muted, fond: '#F3F4F6', bord: '#E5E7EB' }
+                          : !f.vente_en_ligne
+                          ? { texte: 'Seulement par toi', encre: T.deep, fond: '#F5F3FF', bord: '#DDD6FE' }
+                          : offreAuJour(f, { aujourdhui: jourBruxelles() })?.vendable === false
+                          ? { texte: 'Période terminée', encre: '#92400E', fond: '#FFFBEB', bord: '#FDE68A' }
+                          : { texte: 'En vente', encre: '#065F46', fond: '#ECFDF5', bord: '#A7F3D0' }
+                        return (
+                          <span style={{ fontSize: 10, fontWeight: 800, color: etiquette.encre, background: etiquette.fond, border: `1px solid ${etiquette.bord}`, borderRadius: 100, padding: '2px 7px', whiteSpace: 'nowrap' }}>
+                            {etiquette.texte}
+                          </span>
+                        )
+                      })()}
                     </div>
                     <p style={{ fontSize: 12, color: T.muted, marginTop: 3, overflowWrap: 'anywhere' }}>
                       {presta ? `${presta.nom} · ` : ''}{resume}

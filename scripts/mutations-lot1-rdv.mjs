@@ -442,6 +442,25 @@ const MUTATIONS = [
     de: "      prix_en_cours: form.type === 'periode' && form.prix_en_cours === PRIX_EN_COURS_FIXE ? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,",
     vers: '',
     garde: 'la commerçante choisit prorata ou prix fixe' },
+
+  // ─── QUI PEUT PRENDRE UNE FORMULE (trois réponses) ──────────────────────
+  { nom: '🔴 plus proposee remet la formule en vente',
+    banc: 'verif:abonnements', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "            const choisir = (v) => setForm({ ...form, actif: v !== 'retiree', vente_en_ligne: v === 'en_ligne' })",
+    vers: "            const choisir = (v) => setForm({ ...form, actif: v !== 'retiree', vente_en_ligne: v !== 'a_la_main' })",
+    garde: 'chaque réponse écrit les deux colonnes ensemble' },
+
+  { nom: '🔴 la combinaison trompeuse s enregistre de nouveau',
+    banc: 'verif:abonnements', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '      vente_en_ligne: !!form.actif && !!form.vente_en_ligne,',
+    vers: '      vente_en_ligne: !!form.vente_en_ligne,',
+    garde: 'une formule plus proposée ne s’enregistre jamais « en vente »' },
+
+  { nom: '⚠️ la carte dit de nouveau En vente sur une formule retiree',
+    banc: 'verif:abonnements', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '                        const etiquette = f.actif === false',
+    vers: '                        const etiquette = false',
+    garde: 'la carte de la liste dit le même état' },
 ]
 
 const lancer = (banc) => {

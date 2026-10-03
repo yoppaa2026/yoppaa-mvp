@@ -2102,6 +2102,19 @@ egal('un nombre négatif non plus', semainesSuivantes('2026-09-07', { nombre: -3
     && /prix_en_cours: form\.type === 'periode' && form\.prix_en_cours === PRIX_EN_COURS_FIXE \? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,/.test(DASH))
   verifier('⚠️ et retrouve son choix en rouvrant la formule',
     /prix_en_cours: f\.prix_en_cours === PRIX_EN_COURS_FIXE \? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,/.test(DASH))
+  // 🔴 QUI PEUT PRENDRE CETTE FORMULE (Alex, 03/10) : une question, trois
+  // réponses, à la place de deux interrupteurs qui pouvaient se contredire.
+  verifier('🔴 une seule question, trois réponses',
+    /name="disponibilite_formule"/.test(DASH)
+    && ['En vente sur ta fiche', 'Seulement par toi', 'Plus proposée'].every(t => DASH.includes(`'${t}'`)))
+  verifier('🔴 chaque réponse écrit les deux colonnes ensemble',
+    /const choisir = \(v\) => setForm\(\{ \.\.\.form, actif: v !== 'retiree', vente_en_ligne: v === 'en_ligne' \}\)/.test(DASH)
+    && /const dispo = !form\.actif \? 'retiree' : form\.vente_en_ligne \? 'en_ligne' : 'a_la_main'/.test(DASH))
+  verifier('🔴 une formule plus proposée ne s’enregistre jamais « en vente »',
+    /vente_en_ligne: !!form\.actif && !!form\.vente_en_ligne,/.test(DASH))
+  verifier('⚠️ la carte de la liste dit le même état',
+    /const etiquette = f\.actif === false\s*\? \{ texte: 'Plus proposée'/.test(DASH)
+    && /offreAuJour\(f, \{ aujourdhui: jourBruxelles\(\) \}\)\?\.vendable === false\s*\? \{ texte: 'Période terminée'/.test(DASH))
   verifier('⚠️ l’exemple se calcule sur ses chiffres, avec la règle de la vente',
     /offreAuJour\(\{ \.\.\.brouillon, prix_en_cours: PRIX_EN_COURS_PRORATA \}, \{ aujourdhui: jour \}\)/.test(DASH))
 

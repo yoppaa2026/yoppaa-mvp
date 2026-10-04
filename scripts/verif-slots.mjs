@@ -10,7 +10,7 @@ import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
   creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
-  praticienAutorisePourPrestation, prestationSansPraticienDit, praticiensPourLaSaisie, choixPraticienSaisie,
+  praticienAutorisePourPrestation, prestationSansPraticienDit, praticiensPourLaSaisie, choixPraticienSaisie, praticiensQuiAssurent, praticienPourRendezVous,
   prestationAutoriseeSurCreneaux, coursDejaCoche, creneauHorsOuverture, coursSansHoraire,
   horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV, ajusterPlagePourJour, plageQuiAccueille,
 } from '../lib/rdv-slots.js'
@@ -3162,6 +3162,66 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     choixPraticienSaisie([EQUIPE[0]], null).praticienId === 'emily' && choixPraticienSaisie([EQUIPE[0]], null).requis === false)
   verifier('⚠️ D1 : personne dans l’équipe, rien à demander',
     choixPraticienSaisie([], null).requis === false && choixPraticienSaisie([], null).praticienId === null)
+
+  // 🔴 LE REIKI DE CAROLE (04/10, trouvé par Alex) : « avec Carole » puis
+  // « sans préférence » sur le même créneau passaient tous les deux.
+  const EQ = [{ id: 'carole', actif: true }, { id: 'emily', actif: true }]
+  const PLAGES = [
+    { id: 'pl-carole', praticien_id: 'carole', jour_semaine: 'lundi', heure_debut: '09:00', heure_fin: '17:00', actif: true },
+    { id: 'pl-emily', praticien_id: 'emily', jour_semaine: 'lundi', heure_debut: '09:00', heure_fin: '17:00', actif: true },
+  ]
+  const LIAISONS = [{ creneau_id: 'pl-carole', prestation_id: 'reiki' }, { creneau_id: 'pl-emily', prestation_id: 'coupe' }]
+  const qui = (o) => praticiensQuiAssurent({ praticiens: EQ, creneaux: PLAGES, liaisons: LIAISONS, prestationId: 'reiki', ...o }).map(p => p.id).join(',')
+  verifier('🔴 Reiki : la fiche ne compte que Carole, la seule à avoir une plage de Reiki (pas de « sans préférence »)',
+    qui({}) === 'carole')
+  verifier('⚠️ une plage commune vaut pour toute l’équipe',
+    qui({ creneaux: [...PLAGES, { id: 'pl-maison', praticien_id: null, jour_semaine: 'lundi', heure_debut: '09:00', heure_fin: '17:00', actif: true }],
+      liaisons: [...LIAISONS, { creneau_id: 'pl-maison', prestation_id: 'reiki' }] }) === 'carole,emily')
+  verifier('⚠️ sans plages lues, on garde la liste (une ignorance n’exclut personne)', qui({ creneaux: null }) === 'carole,emily')
+  verifier('⚠️ la prestation qui nomme ses praticiennes reste la première règle', qui({ liens: ['emily'] }) === 'emily')
+
+  const CAND = EQ
+  const regle = (o) => praticienPourRendezVous({
+    candidats: CAND, plagesDuJour: PLAGES, liaisons: LIAISONS, prestationId: 'reiki',
+    debutMin: timeToMinutes('10:00'), finMin: timeToMinutes('11:00'), reservations: [], ...o,
+  })
+  const carole10h = { praticien_id: 'carole', heure_debut: '10:00', heure_fin: '11:00', statut: 'confirme' }
+  egal('🔴 « sans préférence » désigne Carole quand elle seule donne le Reiki', regle({}), { praticienId: 'carole' })
+  egal('🔴 Carole prise à 10 h : « sans préférence » est refusé, plus de doublon', regle({ reservations: [carole10h] }), { refus: 'place_prise' })
+  egal('🔴 un ancien « sans préférence » à 10 h bloque aussi un « avec Carole »',
+    regle({ choisi: 'carole', reservations: [{ ...carole10h, praticien_id: null }] }), { refus: 'place_prise' })
+  egal('⚠️ un rendez-vous qui ne chevauche pas ne bloque rien',
+    regle({ reservations: [{ ...carole10h, heure_debut: '11:00', heure_fin: '12:00' }] }), { praticienId: 'carole' })
+  egal('⚠️ un rendez-vous annulé ne bloque rien', regle({ reservations: [{ ...carole10h, statut: 'annule_client' }] }), { praticienId: 'carole' })
+  egal('⚠️ Carole absente ce jour-là : personne à désigner, les autres gardes jugent',
+    regle({ absente: (id) => id === 'carole' }), { praticienId: null })
+  // Deux praticiennes qui donnent toutes les deux : la libre est retenue.
+  const LIAISONS2 = [...LIAISONS, { creneau_id: 'pl-emily', prestation_id: 'reiki' }]
+  egal('⚠️ deux possibles, Carole prise : Emily est retenue',
+    regle({ liaisons: LIAISONS2, reservations: [carole10h] }), { praticienId: 'emily' })
+  egal('⚠️ deux possibles, une prise et un ancien vide : complet',
+    regle({ liaisons: LIAISONS2, reservations: [carole10h, { ...carole10h, praticien_id: null }] }), { refus: 'place_prise' })
+  egal('⚠️ choisie et déjà prise : la base refusera, la règle la laisse dire',
+    regle({ choisi: 'carole', reservations: [carole10h] }), { praticienId: 'carole' })
+
+  // Les branchements : le serveur résout avant d'écrire, la fiche compte juste.
+  const CREA = sansCommentaires(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur désigne quelqu’un pour « sans préférence », avant d’écrire',
+    /if \(!estParCouverts\(prestation\) && capacitePrestation\(prestation\) === 1\) \{/.test(CREA)
+    && /if \(quiPour\.refus\) return \{ ok: false, code: quiPour\.refus \}\s*if \(!champs\?\.praticien_id && quiPour\.praticienId\) champs = \{ \.\.\.champs, praticien_id: quiPour\.praticienId \}/.test(CREA)
+    && CREA.indexOf('const quiPour = praticienPourRendezVous(') > 0
+    && CREA.indexOf('const quiPour = praticienPourRendezVous(') < CREA.indexOf('.insert(payload)'))
+  verifier('⚠️ il lit les rendez-vous du jour sans le rendez-vous lui-même, et une lecture ratée refuse',
+    /reservations: \(duJour\.data \|\| \[\]\)\.filter\(r => \(!rdvId \|\| String\(r\.id\) !== String\(rdvId\)\)/.test(CREA)
+    && /\.select\('id, praticien_id, heure_debut, heure_fin, statut, capacite_creneau, prestation:rdv_prestations\(par_couverts\)'\)/.test(CREA))
+  verifier('🔴 un cours collectif ou une table sans praticienne n’occupe personne',
+    /&& \(r\.praticien_id != null \|\| \(r\.prestation\?\.par_couverts !== true && \(r\.capacite_creneau == null \|\| Number\(r\.capacite_creneau\) <= 1\)\)\)\),/.test(CREA)
+    && /if \(equipeLue\.error \|\| duJour\.error\) return \{ ok: false, code: 'ecriture_impossible'/.test(CREA))
+  const FICHE = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 la fiche compte les praticiennes qui ont une plage de la prestation',
+    /const praticiensEligibles = !prestationChoisie \? \[\] : praticiensQuiAssurent\(\{\s*praticiens,\s*liens: junctionMap\[prestationChoisie\.id\] \|\| null,\s*creneaux: creneauxConfig,\s*liaisons: liaisonsCreneaux,/.test(FICHE))
+  verifier('⚠️ et choisit la seule possible quand les données arrivent',
+    /\}, \[prestationChoisie, praticiens, junctionMap, creneauxConfig, liaisonsCreneaux\]\)/.test(FICHE))
 
   // L'avertissement au commerçant, et son seuil.
   verifier('une prestation muette est signalée dans une équipe',

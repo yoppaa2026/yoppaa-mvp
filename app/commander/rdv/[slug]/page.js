@@ -141,7 +141,7 @@ function formatPrix(prestation, deals = []) {
   return null
 }
 
-import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit } from '@/lib/rdv-slots'
+import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit, praticiensQuiAssurent } from '@/lib/rdv-slots'
 import { chezLeCommerce } from '@/lib/nom-commerce'
 // La mention d'un produit en vitrine, au mot du métier (30/09).
 import { mentionVitrine } from '@/lib/stock-article'
@@ -1613,12 +1613,19 @@ export default function CommanderRdvSlug() {
   // Praticiens éligibles pour la prestation choisie (junction) :
   //   • junction vide pour cette prestation = TOUS les praticiens actifs peuvent
   //   • junction renseignée = SEULS les praticiens listés (avec fallback si supprimés)
-  const praticiensEligibles = (() => {
-    if (!prestationChoisie || praticiens.length === 0) return []
-    const junctionIds = junctionMap[prestationChoisie.id]
-    if (!junctionIds || junctionIds.length === 0) return praticiens  // tous éligibles
-    return praticiens.filter(p => junctionIds.includes(p.id))
-  })()
+  // 🔴 ET SEULEMENT CEUX QUI ONT UNE PLAGE OÙ ELLE SE DONNE (04/10, trouvé par
+  // Alex) : le Reiki ne se donnait que sur les plages de Carole, mais ne
+  // nommait personne. La fiche comptait toute l'équipe, proposait « sans
+  // préférence », et ce choix ne heurtait jamais Carole. Voir
+  // `praticiensQuiAssurent` ; le serveur, lui, désigne une personne libre.
+  const praticiensEligibles = !prestationChoisie ? [] : praticiensQuiAssurent({
+    praticiens,
+    liens: junctionMap[prestationChoisie.id] || null,
+    creneaux: creneauxConfig,
+    liaisons: liaisonsCreneaux,
+    prestationId: prestationChoisie.id,
+    estCours: estCoursCollectif(prestationChoisie),
+  })
 
   // Auto-select silencieux si 1 seul praticien éligible pour cette prestation
   // (l'UI de sélection n'est pas montrée). Si aucun praticien : praticienChoisi
@@ -1628,8 +1635,11 @@ export default function CommanderRdvSlug() {
     if (praticiensEligibles.length === 1 && !praticienChoisi) {
       setPraticienChoisi(praticiensEligibles[0])
     }
+  // ⚠️ LES LIENS ET LES PLAGES ARRIVENT APRÈS L'ÉQUIPE (04/10) : sans eux dans
+  // la liste, l'effet jugeait sur toute l'équipe et ne se refaisait jamais,
+  // au retour de Stripe surtout, où la prestation est restaurée d'avance.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
-  }, [prestationChoisie, praticiens])
+  }, [prestationChoisie, praticiens, junctionMap, creneauxConfig, liaisonsCreneaux])
 
   // Filtre les créneaux config selon le praticien choisi :
   //   • praticienChoisi = null (Sans préférence ou pas encore choisi) : tous créneaux

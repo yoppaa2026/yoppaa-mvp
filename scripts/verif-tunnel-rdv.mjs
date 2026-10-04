@@ -378,6 +378,67 @@ for (const [nom, chemin] of [
     !/update\(\{ statut: 'annule_commercant' \}\)/.test(src))
   verifie('l’email d’annulation porte les montants rendus',
     /bon_rendu: j\.bon_rendu/.test(src))
+  // 🔴 ANNUL-I2 (04/10) : « Remettre en confirmé » s'écrivait d'ici, par-dessus
+  // un acompte remboursé et des bons rendus. Il passe par le serveur.
+  verifie('🔴 « Remettre en confirmé » passe par le serveur',
+    /if \(statut === 'confirme'\) \{\s*const res = await postPro\('\/api\/rdv\/reconfirmer', \{ rdv_id: rdvId \}\)/.test(src))
+  verifie('et l’écran dit pourquoi le serveur refuse',
+    /alert\(j\?\.error \|\| 'Le rendez-vous n’a pas pu être remis en confirmé/.test(src))
+}
+
+// ═══ ANNUL-I2 (04/10) : UN RENDEZ-VOUS ANNULÉ NE REVIENT PAS GRATUIT ═══════
+{
+  const { refusRemiseEnConfirme } = await import('../lib/rdv-reconfirmation.js')
+  const { euros } = await import('../lib/montants.js')
+  const code = (etat) => refusRemiseEnConfirme(etat)?.code ?? null
+  verifie('rien n’a bougé : il revient', code({ statut: 'annule_commercant' }) === null)
+  verifie('une absence notée par erreur aussi', code({ statut: 'no_show' }) === null)
+  verifie('🔴 un acompte remboursé le bloque', code({ statut: 'annule_commercant', rembourse: 20 }) === 'rembourse')
+  verifie('🔴 un bon rendu aussi', code({ statut: 'annule_commercant', bonsRendus: 35 }) === 'bon_rendu')
+  verifie('🔴 une récompense rendue aussi', code({ statut: 'no_show', recompenseRendue: true }) === 'recompense_rendue')
+  verifie('🔴 des produits annulés aussi', code({ statut: 'annule_commercant', produitsAnnules: true }) === 'produits_annules')
+  verifie('🔴 une absence facturée aussi', code({ statut: 'no_show', absenceFacturee: true }) === 'absence_facturee')
+  verifie('un abonnement résilié aussi', code({ statut: 'annule_commercant', abonnementResilie: true }) === 'abonnement_resilie')
+  verifie('un cours annulé pour tous aussi', code({ statut: 'annule_commercant', fermeture: 'seance' }) === 'seance_fermee')
+  verifie('un jour fermé aussi', code({ statut: 'annule_commercant', fermeture: 'jour' }) === 'jour_ferme')
+  verifie('🔴 l’annulation du client ne se défait pas d’ici', code({ statut: 'annule_client' }) === 'statut')
+  verifie('ni un rendez-vous honoré', code({ statut: 'honore' }) === 'statut')
+  verifie('le refus dit le montant, à la belge',
+    (refusRemiseEnConfirme({ statut: 'annule_commercant', rembourse: 20 })?.message || '').includes(euros(20)))
+  verifie('et propose le geste qui marche',
+    /nouveau rendez-vous/.test(refusRemiseEnConfirme({ statut: 'annule_commercant', bonsRendus: 5 })?.message || ''))
+
+  const src = lireCode('app/api/rdv/reconfirmer/route.js')
+  verifie('🔴 la route est gardée comme l’annulation',
+    /gardeLigneEquipe\(request, supabase, 'rdv_reservations', rdv_id, 'agenda'\)/.test(src) && /refus\(verdict, NextResponse\)/.test(src))
+  const selectR = (src.match(/\.select\(`([^`]*)`\)/) || ['', ''])[1]
+  for (const col of ['stripe_refund_amount', 'commande_id', 'abonnement_id', 'fidelite_recompense_id', 'empreinte_debit_at', 'prestation_id', 'praticien_id']) {
+    verifie(`🔴 le select charge ${col}`, new RegExp(`\\b${col}\\b`).test(selectR))
+  }
+  verifie('🔴 elle relit les bons rendus au rendez-vous',
+    /from\('bons_cadeaux_mouvements'\)\.select\('montant'\)\.eq\('rdv_id', rdv\.id\)\.eq\('source', 'annulation'\)/.test(src))
+  verifie('🔴 une lecture ratée refuse, elle ne laisse pas passer',
+    /const echec = lectures\.find\(l => l\?\.error\)\s*if \(echec\) \{[\s\S]{0,360}status: 500/.test(src))
+  verifie('🔴 la règle commune décide',
+    /const refusMotif = refusRemiseEnConfirme\(\{/.test(src) && /if \(refusMotif\) return NextResponse\.json\(/.test(src))
+  verifie('la récompense rendue se lit à `utilisee_at` vide',
+    /recompenseRendue: !!rdv\.fidelite_recompense_id && !!recompense && !recompense\.utilisee_at/.test(src))
+  verifie('🔴 un seul gagnant si deux écrans cliquent', /\.eq\('id', rdv\.id\)\.eq\('statut', rdv\.statut\)/.test(src))
+  verifie('🔴 une place reprise se dit en français',
+    /errU\.code === '23505' \|\| errU\.code === '23P01'/.test(src))
+  verifie('le rappel de la veille est reprogrammé', /programmerRappelRdv\(rdv\.id, supabase\)/.test(src))
+  verifie('🔴 la personne est prévenue par email', /emailRdvRetabli\(\{/.test(src) && /envoyerAuYopper\(\{/.test(src))
+
+  const { emailRdvRetabli } = await import('../lib/resend.js')
+  const avenir = emailRdvRetabli({ yopper_prenom: '<b>Sophie</b>', commercant_nom: 'Centre Respire', prestation_nom: 'Hatha', date_rdv: '2026-10-08', heure_debut: '18:30:00' })
+  verifie('l’email dit « maintenu » et l’heure', /maintenu/.test(avenir) && /18:30/.test(avenir))
+  verifie('🔴 et il échappe le prénom', !/<b>Sophie<\/b>/.test(avenir) && /&lt;b&gt;Sophie/.test(avenir))
+  const passe = emailRdvRetabli({ commercant_nom: 'Centre Respire', date_rdv: '2026-10-01', heure_debut: '09:00', passe: true })
+  verifie('une absence corrigée retire le reproche, sans « on t’attend »', /erreur/.test(passe) && !/on t’attend/.test(passe))
+
+  const { confirmationRdv } = await import('../lib/confirmation-rdv.js')
+  verifie('🔴 le commerce apprend si l’email n’est pas parti',
+    /préviens cette personne toi-même/.test(confirmationRdv('confirme', { rdv: { client_prenom: 'Sophie' }, retours: { email: 'echec' } })))
 }
 {
   const src = lireCode('app/api/rdv/annuler-commercant/route.js')

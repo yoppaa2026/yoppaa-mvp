@@ -2536,6 +2536,24 @@ export default function Dashboard() {
       return true
     }
 
+    // 🔴 « REMETTRE EN CONFIRMÉ » PASSE PAR LE SERVEUR (Annul-I2, 04/10). C'était
+    // une écriture d'ici, par-dessus un acompte remboursé, des bons et une
+    // récompense rendus, des produits annulés : un rendez-vous gratuit, et un
+    // client qui avait reçu « annulé » sans plus rien savoir. La route refuse
+    // dès que l'argent a bougé (en disant pourquoi), et prévient la personne.
+    if (statut === 'confirme') {
+      const res = await postPro('/api/rdv/reconfirmer', { rdv_id: rdvId })
+      const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+      if (!j?.ok) {
+        console.error('[dashboard] remise en confirmé KO', j?.code || j?.error || res?.status)
+        if (!silencieux) alert(j?.error || 'Le rendez-vous n’a pas pu être remis en confirmé. Réessaie dans un instant.')
+        return false
+      }
+      setRdvs(prev => prev.map(r => r.id === rdvId ? { ...r, statut: 'confirme', motif_annulation: null } : r))
+      if (surRetours) surRetours({ email: j.email, notifie: j.notifie })
+      return true
+    }
+
     const payload = { statut, ...(champs || {}) }
     // ⚠️ CET `update` NE TOUCHE PLUS À L'ARGENT DE L'EMPREINTE, et la base le
     // refuserait : un trigger verrouille ces dix colonnes depuis

@@ -1066,8 +1066,9 @@ const MUTATIONS = [
     garde: 'la fiche retire la séance fermée de la grille ET des pastilles' },
   { nom: '🔴 « Annuler ce cours » desinscrit sans fermer',
     banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/page.js',
-    de: "    const { error: errFermeture } = await supabase.from('rdv_fermetures').insert({",
-    vers: "    const { error: errFermeture } = await Promise.resolve({ error: null }); void ({",
+    // ⚠️ ANCRE REPOINTÉE LE 04/10 : l'insertion rend son identifiant (file vidée).
+    de: "    const { data: fermetureCreee, error: errFermeture } = await supabase.from('rdv_fermetures').insert({",
+    vers: "    const { data: fermetureCreee, error: errFermeture } = await Promise.resolve({ data: null, error: null }); void ({",
     garde: '« Annuler ce cours » ferme la séance AVANT de désinscrire' },
   { nom: '⚠️ une fermeture du cours ratee se tait',
     banc: 'verif:tunnel-rdv', fichier: 'lib/confirmation-rdv.js',

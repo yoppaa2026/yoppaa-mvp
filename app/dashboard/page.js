@@ -2724,7 +2724,7 @@ export default function Dashboard() {
     // ⚠️ UN ÉCHEC NE BLOQUE PAS L'ANNULATION (la professeure est malade, les
     // personnes doivent être prévenues), mais il se DIT dans la confirmation.
     const seance = seanceAAnnuler[0]
-    const { error: errFermeture } = await supabase.from('rdv_fermetures').insert({
+    const { data: fermetureCreee, error: errFermeture } = await supabase.from('rdv_fermetures').insert({
       commercant_id: commercant.id,
       praticien_id: null,
       date_debut: seance.date_rdv,
@@ -2732,8 +2732,16 @@ export default function Dashboard() {
       prestation_id: seance.prestation_id,
       heure_debut: String(seance.heure_debut || '').slice(0, 5),
       motif: 'Cours annulé',
-    })
+    }).select('id').maybeSingle()
     if (errFermeture) console.error('[dashboard] fermeture du cours annulé KO', errFermeture.message)
+    // 🔴 SA LISTE D'ATTENTE SE VIDE (oubli du 04/10) : elle restait jusqu'à la
+    // date, et une notification « place libérée » déjà programmée partait
+    // quand même. La route relit la fermeture et prévient les personnes.
+    // AU MIEUX : l'annulation continue.
+    if (fermetureCreee?.id) {
+      postPro('/api/rdv/fermeture-file', { fermeture_id: fermetureCreee.id })
+        .catch(e => console.warn('[dashboard] liste d’attente du cours annulé non vidée', e))
+    }
     let faits = 0
     let echecs = 0
     let rembourse = 0

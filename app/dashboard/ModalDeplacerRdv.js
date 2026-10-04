@@ -412,6 +412,12 @@ export default function ModalDeplacerRdv({
         .then(r => { if (!r.ok) console.warn('[ModalDeplacerRdv] rappel push non replanifié', r.statut, r.erreur) })
         .catch(e => console.warn('[ModalDeplacerRdv] rappel push non replanifié', e?.message))
 
+      // 🔴 LA LISTE D'ATTENTE DE LA NOUVELLE SÉANCE L'APPREND (LA-02, 04/10) :
+      // une place reprise par un déplacement laissait partir les notifications
+      // d'une place libre. AU MIEUX : le déplacement est fait.
+      postPro('/api/rdv/place-prise', { rdv_ids: [rdv.id] })
+        .catch(e => console.warn('[ModalDeplacerRdv] liste d’attente non mise à jour', e))
+
       // ⚠️ LE CLIENT DOIT L'APPRENDRE, sinon il vient à l'ancienne heure. Envoi
       // non bloquant : le déplacement est fait, l'email ne doit pas pouvoir
       // l'annuler. Le fichier calendrier joint porte un numéro de séquence

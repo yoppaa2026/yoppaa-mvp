@@ -826,6 +826,15 @@ export default function ModalNouveauRdv({
         return
       }
 
+      // 🔴 LA LISTE D'ATTENTE L'APPREND (LA-02, 04/10). Une place reprise au
+      // comptoir laissait partir les notifications d'une place libérée, vers un
+      // cours de nouveau complet, et la personne inscrite restait dans la file.
+      // AU MIEUX : le rendez-vous existe, une file non mise à jour ne le défait pas.
+      const idsPoses = lignes.map(l => l.id).filter(Boolean)
+      if (idsPoses.length > 0) {
+        postPro('/api/rdv/place-prise', { rdv_ids: idsPoses }).catch(e => console.warn('[ModalNouveauRdv] liste d’attente non mise à jour', e))
+      }
+
       // 4) Email de confirmation au Yopper (non-bloquant, fire-and-forget).
       //    Pas d'email commercant (c'est lui qui cree le RDV, il sait deja).
       //

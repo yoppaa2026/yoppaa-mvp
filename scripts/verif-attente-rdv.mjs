@@ -646,6 +646,52 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
   })
   const SOPHIE = { prestationId: 'yoga', clientId: 'cl-sophie', email: 'sophie@exemple.be', dateRdv: D, heureDebut: '18:00' }
 
+  // ── 04/10 : UNE FERMETURE VIDE LES FILES QU'ELLE REND SANS OBJET ─────────
+  // 🔴 Un cours annulé gardait sa liste d'attente jusqu'à la date, et une
+  // notification « place libérée » déjà programmée partait quand même.
+  {
+    const { attentesFermeesPar } = await import('../lib/attente-rdv.js')
+    const L = (id, extra = {}) => ({ id, commercant_id: 'c1', prestation_id: 'yoga', client_id: 'cl-sophie', portee: 'seance',
+      date_rdv: D, heure_debut: '18:00:00', statut: 'en_attente', push_id: null, created_at: '2026-10-01T10:00:00Z', ...extra })
+    const lignes = [
+      L('a1'),
+      L('a2', { heure_debut: '19:00:00' }),
+      L('a3', { prestation_id: 'pilates' }),
+      // ⚠️ AVEC une date de séance : le harnais l'a dit, sans elle la ligne
+      // n'était jamais visée et la garde de portée ne mesurait rien.
+      L('a4', { portee: 'fenetre', date_rdv: D, heure_debut: '18:00:00', date_debut: D, date_fin: D }),
+      L('a5', { statut: 'servi' }),
+      L('a6', { date_rdv: plus(D, 1) }),
+    ]
+    const ids = (r) => r.map(l => l.id).sort().join(',')
+    const coursAnnule = { commercant_id: 'c1', praticien_id: null, date_debut: D, date_fin: D, prestation_id: 'yoga', heure_debut: '18:00' }
+    verifier('🔴 un cours annulé vide la file de CETTE séance seulement', ids(attentesFermeesPar(lignes, coursAnnule)) === 'a1',
+      ids(attentesFermeesPar(lignes, coursAnnule)))
+    const jourFerme = { commercant_id: 'c1', praticien_id: null, date_debut: D, date_fin: D, prestation_id: null, heure_debut: null }
+    verifier('🔴 un jour fermé vide toutes les séances de ce jour', ids(attentesFermeesPar(lignes, jourFerme)) === 'a1,a2,a3',
+      ids(attentesFermeesPar(lignes, jourFerme)))
+    verifier('une attente « fenêtre » survit à un jour fermé', !attentesFermeesPar(lignes, jourFerme).some(l => l.id === 'a4'))
+    verifier('une personne déjà servie n’est pas touchée', !attentesFermeesPar(lignes, jourFerme).some(l => l.id === 'a5'))
+    verifier('⚠️ l’absence d’une praticienne ne ferme aucune file',
+      attentesFermeesPar(lignes, { ...jourFerme, praticien_id: 'emily' }).length === 0)
+    verifier('une fermeture supprimée ne ferme rien', attentesFermeesPar(lignes, { ...jourFerme, deleted_at: '2026-10-04' }).length === 0)
+    verifier('une période couvre ses deux bornes',
+      ids(attentesFermeesPar(lignes, { ...jourFerme, date_fin: plus(D, 1) })) === 'a1,a2,a3,a6')
+
+    // Exécuté sur la fausse base : les lignes visées disparaissent, les autres restent.
+    // ⚠️ L'AUTRE COMMERCE D'ABORD, sur une file intacte : le harnais l'a dit,
+    // passé après, il ne trouvait plus rien à prendre et restait vert.
+    const t = base()
+    t.rdv_attente = lignes.map(l => ({ ...l }))
+    const autreCommerce = await S.fermerLesFiles(fauxDb(t), { ...coursAnnule, commercant_id: 'c2' }, { prevenir: false })
+    verifier('🔴 la fermeture d’un autre commerce ne touche à rien', autreCommerce.ok && autreCommerce.retires === 0 && t.rdv_attente.length === lignes.length,
+      JSON.stringify(autreCommerce))
+    const r = await S.fermerLesFiles(fauxDb(t), coursAnnule, { prevenir: false })
+    verifier('🔴 fermerLesFiles retire la ligne de la séance annulée', r.ok && r.retires === 1 && !t.rdv_attente.some(l => l.id === 'a1'),
+      JSON.stringify(r))
+    verifier('et laisse les autres en place', t.rdv_attente.length === lignes.length - 1)
+  }
+
   // ── LA-05 : la séance est relue ──────────────────────────────────────
   {
     const t = base()
@@ -1059,6 +1105,52 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
   verifier('⚠️ et cet endroit existe sous le nom qu’il lui donne',
     /key: 'commandes', label: 'Suivi'/.test(ESPACE) && /tabFromUrl === 'rdvs'/.test(ESPACE)
     && /Suivi, onglet Rendez-vous/.test(BLOC))
+}
+
+// ═══ LA-02 ET L'OUBLI DU COURS ANNULÉ (04/10) : QUI PRÉVIENT LA FILE ═══════
+//
+// 🔴 `placePrise` ne vivait que dans `creerReservationRdv` : la saisie au
+// comptoir, le déplacement et la remise en confirmé reprenaient une place sans
+// le dire à la file, et les notifications d'une place libérée partaient vers
+// une séance de nouveau complète. Et une fermeture (cours annulé, jour fermé)
+// ne vidait aucune file.
+{
+  const lire = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
+  const ROUTE_PP = lire('app/api/rdv/place-prise/route.js')
+  verifier('🔴 la route « place reprise » est gardée « Agenda »',
+    /gardeLigneEquipe\(request, supabase, 'rdv_reservations', ids\[0\], 'agenda'\)/.test(ROUTE_PP) && /refus\(verdict, NextResponse\)/.test(ROUTE_PP))
+  verifier('🔴 et bornée au commerce du premier rendez-vous',
+    /\.in\('id', ids\)\s*\.eq\('commercant_id', premier\.commercant_id\)/.test(ROUTE_PP))
+  verifier('elle relit chaque rendez-vous et appelle placePrise',
+    /placePrise\(supabase, \{[\s\S]{0,200}clientEmail: r\.client_email/.test(ROUTE_PP))
+  verifier('🔴 la saisie au comptoir prévient la file',
+    /postPro\('\/api\/rdv\/place-prise', \{ rdv_ids: idsPoses \}\)/.test(lire('app/dashboard/ModalNouveauRdv.js')))
+  verifier('🔴 le déplacement du patron aussi',
+    /postPro\('\/api\/rdv\/place-prise', \{ rdv_ids: \[rdv\.id\] \}\)/.test(lire('app/dashboard/ModalDeplacerRdv.js')))
+  const DEPL = lire('lib/rdv-deplacement-server.js')
+  verifier('🔴 le déplacement de l’équipe aussi, à la NOUVELLE séance',
+    /const suite = await placePrise\(db, \{\s*prestationId: maj\.prestation_id \?\? rdv\.prestation_id,\s*dateRdv: date,/.test(DEPL)
+    && DEPL.indexOf('await placePrise(db') > DEPL.indexOf("return refus('deja_modifiee')"))
+  const RECONF = lire('app/api/rdv/reconfirmer/route.js')
+  verifier('🔴 la remise en confirmé aussi, après l’écriture',
+    /const suite = await placePrise\(supabase, \{/.test(RECONF)
+    && RECONF.indexOf('await placePrise(') > RECONF.indexOf('if (!ecrit || ecrit.length === 0)'))
+
+  const ROUTE_FF = lire('app/api/rdv/fermeture-file/route.js')
+  verifier('🔴 la route qui vide les files est gardée par la fermeture',
+    /gardeLigneEquipe\(request, supabase, 'rdv_fermetures', fermeture_id, 'agenda'\)/.test(ROUTE_FF) && /refus\(verdict, NextResponse\)/.test(ROUTE_FF))
+  verifier('elle relit la fermeture, cours et heure compris',
+    /\.select\('id, commercant_id, praticien_id, date_debut, date_fin, prestation_id, heure_debut, deleted_at'\)/.test(ROUTE_FF)
+    && /fermerLesFiles\(supabase, fermeture\)/.test(ROUTE_FF))
+  verifier('🔴 annuler un cours vide sa file',
+    /postPro\('\/api\/rdv\/fermeture-file', \{ fermeture_id: fermetureCreee\.id \}\)/.test(lire('app/dashboard/page.js')))
+  verifier('🔴 poser une fermeture vide les files du jour',
+    /postPro\('\/api\/rdv\/fermeture-file', \{ fermeture_id: ecrite\.id \}\)/.test(lire('app/dashboard/ConfigDashboard.js')))
+  const SRV = lire('lib/attente-rdv-server.js')
+  const corps = SRV.slice(SRV.indexOf('export async function fermerLesFiles'))
+  verifier('🔴 la notification programmée tombe avec la ligne',
+    /if \(l\.push_id\) \{\s*const r = await annulerPush\(l\.push_id\)/.test(corps))
+  verifier('et la règle commune choisit les lignes', /const visees = attentesFermeesPar\(data \|\| \[\], fermeture\)/.test(corps))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

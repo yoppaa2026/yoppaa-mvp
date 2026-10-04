@@ -1075,7 +1075,9 @@ for (const chemin of [
         /\.filter\(s => !seanceFermee\(fermetures, \{ dateStr, prestationId: prestationChoisie\?\.id, heure: s\.heure \}\)\)/.test(FICHE_F)
         && /!s\.pris && !seanceFermee\(fermetures, \{ dateStr: j\.iso, prestationId: prestationChoisie\?\.id, heure: s\.heure \}\)/.test(FICHE_F))
       const BORD_F = lireCode('app/dashboard/page.js')
-      const iFerme = BORD_F.indexOf("const { error: errFermeture } = await supabase.from('rdv_fermetures').insert({")
+      // ⚠️ ANCRE REPOINTÉE LE 04/10 : l'insertion rend son identifiant
+      // (`fermetureCreee`), pour vider la liste d'attente du cours annulé.
+      const iFerme = BORD_F.indexOf("const { data: fermetureCreee, error: errFermeture } = await supabase.from('rdv_fermetures').insert({")
       const iBoucle = BORD_F.indexOf('for (const rdv of seanceAAnnuler) {')
       verifie('🔴 « Annuler ce cours » ferme la séance AVANT de désinscrire',
         iFerme > 0 && iBoucle > iFerme

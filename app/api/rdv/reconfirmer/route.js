@@ -26,6 +26,7 @@ import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { motsReservation } from '@/lib/reservation-metier'
 import { jourLisible } from '@/lib/attente-rdv'
+import { placePrise } from '@/lib/attente-rdv-server'
 
 export async function POST(request) {
   try {
@@ -122,6 +123,17 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Le rendez-vous n’a pas pu être remis en confirmé.' }, { status: 500 })
     }
     if (!ecrit || ecrit.length === 0) return NextResponse.json({ ok: true, deja: true })
+
+    // 🔴 LA PLACE EST REPRISE : la liste d'attente l'apprend (LA-02). L'annulation
+    // avait pu lancer la chaîne de notifications d'une place libre. AU MIEUX.
+    const suite = await placePrise(supabase, {
+      prestationId: rdv.prestation_id,
+      dateRdv: rdv.date_rdv,
+      heureDebut: String(rdv.heure_debut || '').slice(0, 5),
+      clientId: rdv.client_id || null,
+      clientEmail: rdv.client_email || null,
+    })
+    if (!suite?.ok) console.error('[rdv/reconfirmer] file d’attente non mise à jour', suite?.error)
 
     // Le rappel de la veille, que l'annulation avait retiré. AU MIEUX.
     const passe = creneauDejaCommence(rdv.date_rdv, String(rdv.heure_debut || '').slice(0, 5))

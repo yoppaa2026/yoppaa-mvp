@@ -13309,11 +13309,18 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
       motif: form.motif.trim() || null,
     }
     setSaving(true)
-    const { error } = editId
-      ? await supabase.from('rdv_fermetures').update(payload).eq('id', editId)
-      : await supabase.from('rdv_fermetures').insert(payload)
+    const { data: ecrite, error } = editId
+      ? await supabase.from('rdv_fermetures').update(payload).eq('id', editId).select('id').maybeSingle()
+      : await supabase.from('rdv_fermetures').insert(payload).select('id').maybeSingle()
     setSaving(false)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
+    // 🔴 LES FILES D'ATTENTE DES SÉANCES FERMÉES SE VIDENT (04/10) : elles
+    // restaient jusqu'à la date, et une notification « place libérée » déjà
+    // programmée partait vers un jour fermé. AU MIEUX : la fermeture est posée.
+    if (ecrite?.id) {
+      postPro('/api/rdv/fermeture-file', { fermeture_id: ecrite.id })
+        .catch(e => console.warn('[fermetures] listes d’attente non vidées', e))
+    }
     toast(editId ? 'Fermeture mise à jour' : 'Fermeture enregistrée')
     // ⚠️ DES RENDEZ-VOUS TOMBENT PENDANT LA FERMETURE : la fenêtre reste
     // ouverte et demande ce qu'on en fait, au lieu de se refermer en silence.

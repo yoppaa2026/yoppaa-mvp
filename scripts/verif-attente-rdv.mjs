@@ -754,6 +754,38 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
   // réseau. On s'en assure plutôt que de le supposer.
   delete process.env.ONESIGNAL_REST_API_KEY
   delete process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
+
+  // ── « VOIR QUI ATTEND », EXÉCUTÉ (Alex, 04/10) ────────────────────────
+  // Le test 4 ne se jouait pas sur le site d'essai (les notifications n'y
+  // s'activent pas, donc personne ne peut s'inscrire) : le banc rejoue le cas
+  // à travers le vrai code serveur, sur une fausse base.
+  {
+    const JOUR_C = plus(jourBruxelles(), 8)
+    const t = {
+      rdv_attente: [
+        { id: 'w2', commercant_id: 'c1', prestation_id: 'yoga', client_id: 'cl-b', portee: 'seance', date_rdv: JOUR_C, heure_debut: '18:15:00', statut: 'prevenu', created_at: '2026-10-02T09:00:00Z' },
+        { id: 'w1', commercant_id: 'c1', prestation_id: 'yoga', client_id: 'cl-a', portee: 'seance', date_rdv: JOUR_C, heure_debut: '18:15:00', statut: 'en_attente', created_at: '2026-10-01T09:00:00Z' },
+        { id: 'w3', commercant_id: 'c1', prestation_id: 'yoga', client_id: 'cl-c', portee: 'seance', date_rdv: JOUR_C, heure_debut: '19:30:00', statut: 'en_attente', created_at: '2026-10-01T08:00:00Z' },
+        { id: 'w4', commercant_id: 'c1', prestation_id: 'yoga', client_id: 'cl-d', portee: 'seance', date_rdv: JOUR_C, heure_debut: '18:15:00', statut: 'servi', created_at: '2026-09-30T08:00:00Z' },
+      ],
+      clients: [
+        { id: 'cl-a', prenom: 'Léa', telephone: '0470 11 22 33', email: 'lea@exemple.be', nom: 'Martin' },
+        { id: 'cl-b', prenom: 'Tom', telephone: null, email: 'tom@exemple.be', nom: 'Dupont' },
+      ],
+    }
+    const r = await S.personnesDeLaSeance(fauxDb(t), { prestationId: 'yoga', dateRdv: JOUR_C, heureDebut: '18:15' })
+    egal('🔴 la commerçante voit qui attend, dans l’ordre, avec prénom et téléphone, et rien d’autre', r, {
+      ok: true,
+      personnes: [
+        { rang: 1, prenom: 'Léa', telephone: '0470 11 22 33', prevenu: false },
+        { rang: 2, prenom: 'Tom', telephone: null, prevenu: true },
+      ],
+    })
+    const vide = await S.personnesDeLaSeance(fauxDb(t), { prestationId: 'yoga', dateRdv: JOUR_C, heureDebut: '17:00' })
+    egal('⚠️ une séance sans file rend une liste vide, pas une erreur', vide, { ok: true, personnes: [] })
+    verifier('⚠️ une demande incomplète est refusée',
+      (await S.personnesDeLaSeance(fauxDb(t), { prestationId: 'yoga', dateRdv: JOUR_C, heureDebut: '18' })).error === 'demande_invalide')
+  }
   {
     const A = await import('../lib/attente-rdv.js')
     const DEMAIN = plus(jourBruxelles(), 1)

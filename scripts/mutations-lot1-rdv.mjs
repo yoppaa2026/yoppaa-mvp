@@ -1217,6 +1217,12 @@ const MUTATIONS = [
     vers: "    .select('id, prenom, telephone, email')",
     garde: 'le serveur ne donne au commerce rien de plus' },
 
+  { nom: '🔴 la commercante ne recoit plus le telephone de qui attend',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: '        telephone: fiche.telephone || null,',
+    vers: '        telephone: null,',
+    garde: 'la commerçante voit qui attend, dans l’ordre, avec prénom et téléphone' },
+
   { nom: '🔴 les personnes en attente sortent sans garde',
     banc: 'verif:attente', fichier: 'app/api/rdv/attente-commerce/route.js',
     de: "    if (corps?.action === 'liste') {",

@@ -36,7 +36,7 @@ const T = {
 // son propriétaire : avec un autre, l'abonnement existe, le commerçant le voit,
 // et l'acheteur ne le retrouvera jamais dans son espace. Alex l'a vécu, et le
 // commentaire posé sous ce champ disait déjà que cet email était la clé.
-export default function BlocAbonnements({ commercant, formules = [], prestations = [], client = null }) {
+export default function BlocAbonnements({ commercant, formules = [], prestations = [], client = null, sansCompte = false }) {
   const [choisie, setChoisie] = useState(null)
   const [form, setForm] = useState({ prenom: '', nom: '', email: '', telephone: '' })
   // Zéro friction : ce qu'on connaît déjà, on ne le redemande pas. Et ce qu'on
@@ -67,6 +67,11 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
   const emailSaisi = form.email.trim().toLowerCase()
   const emailCompte = String(client?.email || '').trim().toLowerCase()
   const emailDifferent = !!emailCompte && emailSaisi.includes('@') && emailSaisi !== emailCompte
+
+  // L'offre du jour de la formule choisie, calculée UNE fois : l'en-tête de la
+  // fenêtre et le bouton « Payer » disent le même montant, celui que la route
+  // encaissera.
+  const offreChoisie = choisie ? resumeFormulePublique(choisie, { achatLe: jourBruxelles() }) : null
 
   async function payer() {
     if (!valide || envoi || !choisie) return
@@ -102,6 +107,9 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
         sessionStorage.setItem(cleAchatAbonnement(commercant?.slug), JSON.stringify({
           formuleId: choisie.id,
           partiA: new Date().toISOString(),
+          // L'adresse du contrat (Abo-I7) : sans compte, c'est avec elle qu'il
+          // faudra se connecter, et l'écran de retour la nomme.
+          email: form.email.trim().toLowerCase(),
         }))
       } catch { /* navigation privée : on affichera l'écran sans le détail */ }
       window.location.href = body.url
@@ -199,7 +207,7 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                 {choisie.libelle}
                 <br/>
                 <span style={{ color: T.pale, fontSize: '0.85rem', fontWeight: 700 }}>
-                  {(r => `${r?.seancesLibelle} · ${euros(r?.prix)}`)(resumeFormulePublique(choisie, { achatLe: jourBruxelles() }))}
+                  {(r => `${r?.seancesLibelle} · ${euros(r?.prix)}`)(offreChoisie)}
                 </span>
               </p>
             </div>
@@ -225,6 +233,16 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                 <p style={{ fontSize: '0.68rem', color: T.muted, marginTop: 3, lineHeight: 1.45 }}>
                   C&apos;est avec cet email que tu retrouveras ton solde de séances.
                 </p>
+                {/* 🔴 L'INVITÉ PAYAIT SANS SAVOIR QU'IL DEVRAIT SE CONNECTER
+                    (Abo-I7, 04/10). Ses séances ne se réservent qu'avec une
+                    identité prouvée : on le dit AVANT qu'il paie, sans l'en
+                    empêcher (offrir, jamais forcer, règle du 14/07). */}
+                {sansCompte && (
+                  <p style={{ fontSize: '0.7rem', color: T.deep, background: '#F5F3FF', border: `1px solid ${T.pale}`, borderRadius: 8, padding: '7px 9px', marginTop: 6, lineHeight: 1.5 }}>
+                    Pour réserver tes séances en ligne, tu te connecteras ensuite avec cette adresse :
+                    un lien reçu par email suffit, sans mot de passe.
+                  </p>
+                )}
                 {/* ⚠️ ACHETER SOUS UNE AUTRE ADRESSE QUE CELLE DE SON COMPTE.
                     Alex l'a fait volontairement pour tester, et rien ne le lui a
                     dit. Un vrai client qui met son adresse professionnelle par
@@ -275,7 +293,10 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                   color: '#fff', fontWeight: 800, cursor: (!valide || envoi) ? 'default' : 'pointer',
                   fontSize: '0.95rem', fontFamily: '"DM Sans", sans-serif',
                 }}>
-                {envoi ? 'Redirection…' : `Payer ${euros(choisie.prix)}`}
+                {/* 🔴 LE PRIX DU JOUR, PAS LE PRIX PLEIN (04/10). Sur une période
+                    entamée, la carte annonçait le prix réduit et ce bouton le
+                    prix plein, alors que Stripe encaisse le prix réduit. */}
+                {envoi ? 'Redirection…' : `Payer ${euros(offreChoisie?.prix ?? choisie.prix)}`}
               </button>
             </div>
           </div>

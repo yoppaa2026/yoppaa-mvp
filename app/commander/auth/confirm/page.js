@@ -3,6 +3,7 @@ import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { poserIdentiteLocale, effacerIdentiteLocale } from '@/lib/identite-locale'
+import { cheminInterne } from '@/lib/chemin-interne'
 
 const T = { main: '#6B35C4', light: '#C4A0F4', mid: '#9660E0', deep: '#2D0F6B' }
 
@@ -13,7 +14,10 @@ function ConfirmHandler() {
   useEffect(() => {
     const token_hash = searchParams.get('token_hash')
     const type = searchParams.get('type')
-    const next = searchParams.get('next') || '/commander'
+    // 🔴 UN CHEMIN INTERNE SEULEMENT (04/10) : le lien de connexion portait
+    // n'importe quelle adresse, et une adresse externe aurait envoyé la
+    // personne, à peine connectée, chez quelqu'un d'autre.
+    const next = cheminInterne(searchParams.get('next'), '/commander')
 
     async function confirmer() {
       if (token_hash && type) {

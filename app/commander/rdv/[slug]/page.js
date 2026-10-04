@@ -64,7 +64,7 @@ function enGras(texte) {
   )
 }
 import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
-import { poserIdentiteLocale } from '@/lib/identite-locale'
+import { poserIdentiteLocale, CLE_EMAIL_CONNEXION } from '@/lib/identite-locale'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { euros, pourcent } from '@/lib/montants'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
@@ -398,6 +398,9 @@ export default function CommanderRdvSlug() {
   const [abonnementRetour, setAbonnementRetour] = useState(null)  // idem, achat d'abonnement
   const [contratAchete, setContratAchete] = useState(null)  // le contrat relu en base après paiement
   const [aboEnAttente, setAboEnAttente] = useState(false)   // on interroge encore, le webhook n'a pas fini
+  const [aboSansCompte, setAboSansCompte] = useState(false) // payé sans être connecté : le contrat ne se relit pas (Abo-I7)
+  const [aboEmailAchat, setAboEmailAchat] = useState('')    // l'adresse tapée à l'achat, la clé du contrat
+  const [sessionProuvee, setSessionProuvee] = useState(null) // null = pas encore su ; faux = visiteur sans compte
   const [mesAbos, setMesAbos] = useState([])                // les abonnements du client chez CE commerçant
   const [payerAvecAbo, setPayerAvecAbo] = useState(true)    // son choix à l'étape 3
   const [aboChoisiId, setAboChoisiId] = useState(null)      // lequel, quand il en a plusieurs
@@ -1061,12 +1064,24 @@ export default function CommanderRdvSlug() {
       if (brut) repere = JSON.parse(brut)
     } catch { /* onglet sans mémoire : on affichera l'écran sans le détail */ }
 
+    if (repere?.email) setAboEmailAchat(repere.email)
+
     let tentatives = 0
     const MAX = 15
     const timer = setInterval(async () => {
       tentatives++
       try {
         const res = await fetchYopper('/api/yopper/abonnements')
+        // 🔴 PAS CONNECTÉ : LE REFUS EST UNE RÉPONSE, PAS UNE ATTENTE (Abo-I7,
+        // 04/10). L'invité recevait ce 401 quinze fois de suite avant un
+        // message faux. On s'arrête et on lui dit de se connecter.
+        if (res.status === 401) {
+          if (!vivant) return
+          setAboSansCompte(true)
+          setAboEnAttente(false)
+          clearInterval(timer)
+          return
+        }
         const j = await res.json()
         const trouve = contratQuiVientDEtreAchete(j?.abonnements || [], {
           formuleId: repere?.formuleId || null,
@@ -1716,7 +1731,9 @@ export default function CommanderRdvSlug() {
     if (!commercant?.id) return
     let vivant = true
     fetchYopper('/api/yopper/abonnements')
-      .then(r => r.json())
+      // ⚠️ LE STATUT DIT AUSSI SI LA PERSONNE EST CONNECTÉE (Abo-I7) : le bloc
+      // d'achat prévient un invité qu'il devra se connecter pour réserver.
+      .then(r => { if (vivant) setSessionProuvee(r.status !== 401); return r.json() })
       .then(j => { if (vivant) setMesAbos(j?.ok ? (j.abonnements || []) : []) })
       // Un visiteur sans compte reçoit 401 : ce n'est pas une panne, c'est la
       // réponse normale. Rien à afficher, et surtout rien à dire.
@@ -3333,7 +3350,7 @@ export default function CommanderRdvSlug() {
                   les comptes connectés, et un commerce peut vendre au comptoir
                   sans encaisser en ligne. Même règle que le serveur. */}
               {etape === 1 && formulesAbo.length > 0 && commercant?.stripe_account_charges_enabled === true && (
-                <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations} client={client}/>
+                <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations} client={client} sansCompte={sessionProuvee === false}/>
               )}
 
               {/* ✅ PAS DE PRODUITS SUR UNE RÉSERVATION DE TABLE (Alex, 10/09) :
@@ -5051,6 +5068,14 @@ export default function CommanderRdvSlug() {
                   commercant={commercant}
                   contrat={contratAchete}
                   enAttente={aboEnAttente}
+                  sansCompte={aboSansCompte}
+                  emailAchat={aboEmailAchat}
+                  onConnecter={() => {
+                    // ⚠️ L'ADRESSE PASSE PAR LA MÉMOIRE DE L'ONGLET, PAS PAR
+                    // L'URL : une adresse dans une URL finit dans les journaux.
+                    try { if (aboEmailAchat) sessionStorage.setItem(CLE_EMAIL_CONNEXION, aboEmailAchat) } catch { /* navigation privée */ }
+                    router.push(`/commander/auth?redirect=${encodeURIComponent(`/commander/rdv/${slug}`)}`)
+                  }}
                   onReserver={() => {
                     setAbonnementRetour(null)
                     setContratAchete(null)

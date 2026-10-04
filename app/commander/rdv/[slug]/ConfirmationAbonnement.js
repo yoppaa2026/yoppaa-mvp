@@ -51,15 +51,18 @@ export default function ConfirmationAbonnement({
   enAttente = false,    // on interroge encore
   onReserver,           // « Réserver ma première séance » → retour à la fiche
   onAccueil,            // « Retour à l'accueil »
+  sansCompte = false,   // pas connecté : le contrat ne se relit pas, il faut se connecter (Abo-I7)
+  emailAchat = '',      // l'adresse tapée à l'achat, la clé du contrat
+  onConnecter,          // « Me connecter pour réserver »
 }) {
-  const m = messageRetourAbonnement('ok', { nomCommerce: commercant?.nom || '' })
+  const m = messageRetourAbonnement('ok', { nomCommerce: commercant?.nom || '', sansCompte })
   const resume = contrat
     ? resumeContratAchete(
         { ...contrat, prix_paye: contrat.prix, seances_total: contrat.total, date_debut: contrat.debut, date_fin: contrat.fin },
         { nomCommerce: commercant?.nom || '', nomFormule: contrat.formule?.libelle || '' },
       )
     : null
-  const etapes = etapesApresAbonnement({ nomCommerce: commercant?.nom || '' })
+  const etapes = etapesApresAbonnement({ nomCommerce: commercant?.nom || '', sansCompte, email: emailAchat })
   const seances = Number.isFinite(Number(contrat?.total)) && Number(contrat?.total) > 0
     ? Number(contrat.total) : null
 
@@ -118,12 +121,27 @@ export default function ConfirmationAbonnement({
       {/* ⚠️ L'ATTENTE SE DIT. Le contrat naît dans le webhook Stripe, quelques
           secondes après le retour du client : afficher un écran vide pendant ce
           temps-là ferait croire que le paiement s'est perdu. */}
-      {!contrat && (
+      {/* 🔴 SANS COMPTE, ON NE FAIT PLUS ATTENDRE QUINZE SECONDES POUR RIEN
+          (Abo-I7, 04/10). Le contrat ne se lit qu'avec une identité prouvée :
+          l'invité recevait un refus à chaque relecture, puis « tu le
+          retrouveras dans Commandes et rendez-vous », ce qui était faux. On
+          lui dit avec quelle adresse se connecter, et le bouton le fait. */}
+      {!contrat && sansCompte && (
+        <div style={{ background: '#F5F3FF', border: `1.5px solid ${T.light}`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '1rem' }}>
+          <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: T.deep, lineHeight: 1.5 }}>
+            Ton abonnement est rattaché à {emailAchat ? <strong>{emailAchat}</strong> : 'l’adresse de ton achat'}.
+            Pour réserver tes séances et voir ton solde, connecte-toi avec cette adresse : un lien reçu par email suffit, sans mot de passe.
+          </p>
+        </div>
+      )}
+      {!contrat && !sansCompte && (
         <div style={{ background: enAttente ? '#F5F3FF' : '#FFFBEB', border: `1.5px solid ${enAttente ? T.light : '#FCD34D'}`, borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '1rem' }}>
           <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: enAttente ? T.deep : '#78350F', lineHeight: 1.5 }}>
             {enAttente
               ? 'Ton paiement est passé. On enregistre ton abonnement, ça prend quelques secondes.'
-              : 'Ton paiement est bien passé. Le détail de ton abonnement met un peu plus de temps que prévu à s’afficher, mais il t’arrive par email et tu le retrouveras dans Commandes et rendez-vous.'}
+              // ⚠️ L'ADRESSE EST NOMMÉE (Abo-I7) : achetée sous une autre adresse
+              // que celle du compte, l'abonnement ne s'affiche qu'avec elle.
+              : `Ton paiement est bien passé. Le détail de ton abonnement met un peu plus de temps que prévu à s’afficher, mais il t’arrive par email${emailAchat ? ` à ${emailAchat}` : ''}, et tu le retrouveras dans Commandes et rendez-vous en te connectant avec cette adresse.`}
           </p>
         </div>
       )}
@@ -174,9 +192,12 @@ export default function ConfirmationAbonnement({
           une place fixe. Le jour fixe n'existe plus depuis le 18/08, et cette
           condition n'a de toute façon jamais pu être vraie ici : cet écran suit
           un paiement en ligne, où personne n'a posé la moindre séance. */}
-      <button onClick={onReserver}
+      {/* 🔴 SANS COMPTE, « RÉSERVER » MENAIT À UN PIÈGE (Abo-I7) : la fiche ne
+          connaît pas son abonnement, et la séance se serait payée au prix
+          normal. Le geste utile est de se connecter, qui ramène ici. */}
+      <button onClick={sansCompte ? onConnecter : onReserver}
         style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '0.875rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 6px 24px ${T.main}55`, marginBottom: 10 }}>
-        Réserver ma première séance
+        {sansCompte ? 'Me connecter pour réserver' : 'Réserver ma première séance'}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 12h14"/><path d="M12 5l7 7-7 7"/>
         </svg>

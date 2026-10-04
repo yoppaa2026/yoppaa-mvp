@@ -4,7 +4,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
 import TurnstileWidget from '@/app/components/TurnstileWidget'
-import { poserIdentiteLocale, effacerIdentiteLocale } from '@/lib/identite-locale'
+import { poserIdentiteLocale, effacerIdentiteLocale, prendreEmailConnexion } from '@/lib/identite-locale'
+import { cheminInterne } from '@/lib/chemin-interne'
 
 const T = {
   bgPanel: '#160636',
@@ -46,7 +47,9 @@ const IconArrowRight = ({ size = 14, color = 'currentColor' }) => (
 function AuthForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/commander'
+  // 🔴 UN CHEMIN INTERNE SEULEMENT (04/10), comme la connexion commerçant :
+  // un lien piégé ne renvoie plus vers un site externe après la connexion.
+  const redirect = cheminInterne(searchParams.get('redirect'), '/commander')
 
   const [mode, setMode] = useState('magic')
   const [email, setEmail] = useState('')
@@ -58,6 +61,13 @@ function AuthForm() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
   const turnstileRef = useRef(null)
+
+  // L'adresse d'un abonnement payé sans compte (Abo-I7) : la bonne adresse est
+  // déjà écrite, il n'y a plus qu'à recevoir le lien.
+  useEffect(() => {
+    const proposee = prendreEmailConnexion()
+    if (proposee) setEmail(p => p || proposee)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

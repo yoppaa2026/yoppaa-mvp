@@ -1379,8 +1379,9 @@ verifier('l’email dit qu’il est la preuve d’achat',
 // que de ne pas le savoir.
 // ═══════════════════════════════════════════════════════════════════════════
 const srcBlocAbo = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/BlocAbonnements.js', import.meta.url), 'utf8'))
+// ⚠️ RÉORIENTÉE LE 04/10 (Abo-I7) : la signature reçoit aussi `sansCompte`.
 verifier('le bloc d’achat reçoit l’identité du client',
-  /client = null \}\) \{/.test(srcBlocAbo))
+  /client = null, sansCompte = false \}\) \{/.test(srcBlocAbo))
 verifier('et il préremplit ce qu’on connaît déjà',
   /email: p\.email \|\| client\.email \|\| ''/.test(srcBlocAbo))
 // ⚠️ ON NE PIÉTINE PAS UNE SAISIE EN COURS. Garder ce que le client a commencé
@@ -1460,6 +1461,99 @@ verifier('un vieux mode passé par erreur ne change plus rien',
 // Sans nom de commerce, la phrase reste une phrase française.
 verifier('sans nom de commerce, la phrase tient debout',
   !/ de ,|depuis la fiche de\./.test(etapesApresAbonnement({ mode: 'credit' })[1]))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴 ABO-I7 (04/10) : L'INVITÉ PAYAIT UN ABONNEMENT QU'IL NE POUVAIT PAS UTILISER
+//
+// Le contrat ne se lit qu'avec une identité PROUVÉE. Un invité payait, la fiche
+// relisait quinze fois un refus, puis disait « tu le retrouveras dans Commandes
+// et rendez-vous », ce qui était faux ; « Réserver ma première séance » le
+// menait vers une séance au prix normal ; et l'email ne disait pas de se
+// connecter avec CETTE adresse. Et le bouton « Payer » annonçait le prix plein
+// d'une période entamée que Stripe encaissait au prix réduit.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const { PHRASE_CONNEXION_ABONNEMENT } = await import('../lib/abonnements.js')
+  const invite = etapesApresAbonnement({ nomCommerce: 'Centre Respire', sansCompte: true, email: 'sophie@exemple.be' })
+  egal('sans compte : toujours trois lignes', invite.length, 3)
+  verifier('🔴 sans compte : la troisième dit avec quelle adresse se connecter',
+    /connecte-toi avec sophie@exemple\.be/.test(invite[2]) && !/Commandes et rendez-vous/.test(invite[2]), invite[2])
+  verifier('et qu’aucun mot de passe n’est demandé', /sans mot de passe/.test(invite[2]))
+  verifier('sans adresse connue, la phrase tient debout',
+    /l’adresse de ton achat/.test(etapesApresAbonnement({ sansCompte: true })[2]))
+  verifier('connecté : la troisième ligne ne change pas',
+    /Commandes et rendez-vous/.test(etapesApresAbonnement({ nomCommerce: 'Centre Respire' })[2]))
+
+  const retourInvite = messageRetourAbonnement('ok', { nomCommerce: 'Centre Respire', sansCompte: true })
+  verifier('🔴 sans compte : on n’annonce pas « actif » sans l’avoir relu',
+    !/actif/.test(`${retourInvite?.titre} ${retourInvite?.message}`), retourInvite?.message)
+  verifier('et la suite dit de se connecter', /connecte-toi/.test(retourInvite?.suite || ''))
+  egal('un paramètre inconnu reste muet, même sans compte', messageRetourAbonnement('bidon', { sansCompte: true }), null)
+
+  verifier('la phrase de l’email dit « cette adresse » et « sans mot de passe »',
+    /connecte-toi/.test(PHRASE_CONNEXION_ABONNEMENT) && /cette adresse/.test(PHRASE_CONNEXION_ABONNEMENT)
+    && /sans mot de passe/.test(PHRASE_CONNEXION_ABONNEMENT))
+  const { emailAbonnementConfirme } = await import('../lib/resend.js')
+  const mail = emailAbonnementConfirme({ yopper_prenom: 'Sophie', commercant_nom: 'Centre Respire', resume: { aFaire: 'x' }, mes_abonnements_url: 'https://www.yoppaa.app/commander/auth?redirect=%2Fcommander%2Frdv%2Fcentre', connexion: PHRASE_CONNEXION_ABONNEMENT, cta_label: 'Réserver mes séances' })
+  verifier('🔴 l’email porte la phrase de connexion', mail.includes('connecte-toi sur Yoppaa avec cette adresse'))
+  verifier('et son bouton dit le geste', /Réserver mes séances/.test(mail))
+
+  // ─── Les branchements ─────────────────────────────────────────────────────
+  const poll = (srcFicheAbo.match(/const timer = setInterval\(async \(\) => \{[\s\S]*?\}, 1000\)/) || [''])[0]
+  verifier('🔴 la relecture s’arrête au premier refus « pas connecté »',
+    /if \(res\.status === 401\) \{[\s\S]{0,120}setAboSansCompte\(true\)[\s\S]{0,60}setAboEnAttente\(false\)[\s\S]{0,40}clearInterval\(timer\)/.test(poll)
+    && poll.indexOf('res.status === 401') < poll.indexOf('await res.json()'), poll.slice(0, 200))
+  verifier('l’écran de confirmation reçoit « sans compte » et l’adresse',
+    /sansCompte=\{aboSansCompte\}/.test(srcFicheAbo) && /emailAchat=\{aboEmailAchat\}/.test(srcFicheAbo))
+  verifier('🔴 « Me connecter » mène à la connexion, puis revient sur la fiche',
+    /onConnecter=\{\(\) => \{[\s\S]{0,400}router\.push\(`\/commander\/auth\?redirect=\$\{encodeURIComponent\(`\/commander\/rdv\/\$\{slug\}`\)\}`\)/.test(srcFicheAbo))
+  verifier('et l’adresse passe par la mémoire de l’onglet, pas par l’URL',
+    /sessionStorage\.setItem\(CLE_EMAIL_CONNEXION, aboEmailAchat\)/.test(srcFicheAbo) && !/[?&]email=/.test(srcFicheAbo))
+  verifier('le bloc d’achat sait si la personne est connectée',
+    /sansCompte=\{sessionProuvee === false\}/.test(srcFicheAbo) && /setSessionProuvee\(r\.status !== 401\)/.test(srcFicheAbo))
+
+  const srcConfAbo = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/ConfirmationAbonnement.js', import.meta.url), 'utf8'))
+  verifier('🔴 sans compte, le bouton principal connecte au lieu de réserver au prix normal',
+    /onClick=\{sansCompte \? onConnecter : onReserver\}/.test(srcConfAbo))
+  verifier('et les textes de l’écran suivent « sans compte »',
+    /etapesApresAbonnement\(\{ nomCommerce: commercant\?\.nom \|\| '', sansCompte, email: emailAchat \}\)/.test(srcConfAbo)
+    && /messageRetourAbonnement\('ok', \{ nomCommerce: commercant\?\.nom \|\| '', sansCompte \}\)/.test(srcConfAbo))
+
+  verifier('le bloc d’achat garde l’adresse pour l’écran de retour',
+    /email: form\.email\.trim\(\)\.toLowerCase\(\),/.test(srcBlocAbo))
+  verifier('🔴 le bouton « Payer » annonce le prix du jour, celui que Stripe encaisse',
+    /Payer \$\{euros\(offreChoisie\?\.prix \?\? choisie\.prix\)\}/.test(srcBlocAbo)
+    && /const offreChoisie = choisie \? resumeFormulePublique\(choisie, \{ achatLe: jourBruxelles\(\) \}\) : null/.test(srcBlocAbo)
+    && !/euros\(choisie\.prix\)/.test(srcBlocAbo))
+  verifier('l’invité est prévenu avant de payer', /\{sansCompte && \(/.test(srcBlocAbo))
+
+  verifier('🔴 le webhook passe la phrase de connexion à l’email',
+    /connexion: PHRASE_CONNEXION_ABONNEMENT,/.test(srcWebhookAbo)
+    && /\/commander\/auth\?redirect=\$\{encodeURIComponent\(`\/commander\/rdv\/\$\{com\.slug\}`\)\}/.test(srcWebhookAbo))
+
+  // L'écran de connexion propose l'adresse, une fois, et ne suit qu'un chemin interne.
+  const srcAuth = sansCommentaires(readFileSync(new URL('../app/commander/auth/page.js', import.meta.url), 'utf8'))
+  const srcConfirm = sansCommentaires(readFileSync(new URL('../app/commander/auth/confirm/page.js', import.meta.url), 'utf8'))
+  verifier('la connexion préremplit l’adresse proposée', /const proposee = prendreEmailConnexion\(\)/.test(srcAuth))
+  verifier('🔴 la connexion ne suit qu’un chemin interne',
+    /const redirect = cheminInterne\(searchParams\.get\('redirect'\), '\/commander'\)/.test(srcAuth))
+  verifier('🔴 le lien reçu par email non plus',
+    /const next = cheminInterne\(searchParams\.get\('next'\), '\/commander'\)/.test(srcConfirm))
+
+  // `prendreEmailConnexion`, exécuté sur une fausse mémoire d'onglet.
+  const memoire = new Map()
+  const avaitWindow = 'window' in globalThis
+  if (!avaitWindow) globalThis.window = {}
+  globalThis.sessionStorage = { getItem: k => memoire.get(k) ?? null, setItem: (k, v) => memoire.set(k, String(v)), removeItem: k => memoire.delete(k) }
+  const { prendreEmailConnexion, CLE_EMAIL_CONNEXION } = await import('../lib/identite-locale.js')
+  memoire.set(CLE_EMAIL_CONNEXION, ' Sophie@Exemple.be ')
+  verifier('l’adresse proposée sort normalisée', prendreEmailConnexion() === 'sophie@exemple.be')
+  verifier('🔴 et une seule fois', prendreEmailConnexion() === '' && !memoire.has(CLE_EMAIL_CONNEXION))
+  memoire.set(CLE_EMAIL_CONNEXION, 'pas-une-adresse')
+  verifier('ce qui n’est pas une adresse n’est pas proposé', prendreEmailConnexion() === '')
+  delete globalThis.sessionStorage
+  if (!avaitWindow) delete globalThis.window
+}
 
 // ─── RETROUVER LE CONTRAT QU'ON VIENT DE PAYER ────────────────────────────
 //
@@ -1567,8 +1661,11 @@ verifier('l’écran reprend les textes du module partagé',
 // secondes sur un achat à trois chiffres.
 verifier('aucun chiffre affiché avant que le contrat existe',
   /seances !== null && \(/.test(srcConfAbo))
+// ⚠️ RÉORIENTÉE LE 04/10 (Abo-I7) : deux encadrés, avec et sans compte. Chacun
+// dit quelque chose, aucun blanc.
 verifier('et l’attente se dit au lieu de laisser un blanc',
-  /!contrat && \(/.test(srcConfAbo) && /On enregistre ton abonnement/.test(srcConfAbo))
+  /!contrat && !sansCompte && \(/.test(srcConfAbo) && /On enregistre ton abonnement/.test(srcConfAbo)
+  && /!contrat && sansCompte && \(/.test(srcConfAbo))
 
 // ─── CE QUE LA ROUTE DOIT RENDRE ──────────────────────────────────────────
 //

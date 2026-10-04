@@ -1649,8 +1649,9 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // qu'elles donnent à la règle ce dont elle a besoin, et le rang de l'heure.
   const MODALE_N = sansProse(readFileSync(new URL('../app/dashboard/ModalNouveauRdv.js', import.meta.url), 'utf8'))
   const MODALE_D = sansProse(readFileSync(new URL('../app/dashboard/ModalDeplacerRdv.js', import.meta.url), 'utf8'))
+  // ⚠️ RÉORIENTÉE LE 04/10 (D1) : suivent la praticienne et ses absences.
   verifier('🔴 la saisie au téléphone donne le catalogue à la règle',
-    /const verdict = creneauAcceptable\(\{[\s\S]{0,600}?prestationId: presta\.id,\s*prestations,\s*\}\)/.test(MODALE_N))
+    /const verdict = creneauAcceptable\(\{[\s\S]{0,600}?prestationId: presta\.id,\s*prestations,\s*\.\.\.chezLaPersonne,\s*\}\)/.test(MODALE_N))
   // ⚠️ PRÉCISÉE LE 10/09 TARD : le contexte du déplacement porte aussi l'heure
   // qu'il est, pour refuser le passé. Le catalogue doit toujours y être.
   // ⚠️ RÉORIENTÉE LE 04/10 (Annul-I6) : suivent la praticienne et les fermetures.

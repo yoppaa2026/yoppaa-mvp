@@ -12,7 +12,7 @@ import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
-import { plageQuiAccueille, seancesDuCoursPour } from '@/lib/rdv-slots'
+import { plageQuiAccueille, seancesDuCoursPour, praticiensPourLaSaisie, choixPraticienSaisie } from '@/lib/rdv-slots'
 import { euros } from '@/lib/montants'
 import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, bornesCouverts, couvertsValides, coursAPlace, occupationDe } from '@/lib/cours-collectifs'
 import { motsReservation } from '@/lib/reservation-metier'
@@ -95,6 +95,11 @@ export default function ModalNouveauRdv({
   // revérifient tout. Les heures libres, elles, restent calculées ICI, par le
   // même code pour les deux : aucune copie qui pourrait diverger.
   serveur = null,
+  // 🔴 QUI ASSURE LE RENDEZ-VOUS (D1, 04/10) : l'équipe de l'agenda, et qui
+  // fait quoi. Le patron lit les liens ici ; le Poste équipe les reçoit de sa
+  // route (`liensPraticiens`), faute d'accès à la base.
+  praticiens = null,
+  liensPraticiens = null,
 }) {
   // 🔴 LE TÉLÉPHONE EST LE PREMIER CANAL D'UN RESTAURANT, ET CETTE MODALE
   // COMPTAIT CHAQUE APPEL POUR UNE PERSONNE. Une table de six prise de vive
@@ -197,6 +202,22 @@ export default function ModalNouveauRdv({
       .then(({ data, error }) => { if (!annule) setFermeturesAgenda(error ? null : (data || [])) })
     return () => { annule = true }
   }, [commercant.id, serveur])
+
+  // Qui fait quoi (`rdv_prestation_praticiens`), comme la fiche en ligne.
+  // ⚠️ `null` = lecture ratée : toute l'équipe active reste proposée.
+  const [liensLus, setLiensLus] = useState(null)
+  useEffect(() => {
+    if (serveur || !(praticiens || []).length) return
+    let annule = false
+    const ids = (prestations || []).map(p => p.id).filter(Boolean)
+    if (ids.length === 0) return
+    supabase.from('rdv_prestation_praticiens')
+      .select('prestation_id, praticien_id')
+      .in('prestation_id', ids)
+      .then(({ data, error }) => { if (!annule) setLiensLus(error ? null : (data || [])) })
+    return () => { annule = true }
+  }, [prestations, praticiens, serveur])
+  const [praticienChoisi, setPraticienChoisi] = useState(null)
 
   useEffect(() => {
     let annule = false
@@ -322,6 +343,22 @@ export default function ModalNouveauRdv({
   const presta = enTable
     ? (choixTable?.format || null)
     : prestations.find(p => String(p.id) === String(prestationId))
+
+  // 🔴 LA PRATICIENNE (D1, 04/10) : voir `praticiensPourLaSaisie`. Une table
+  // n'a personne à désigner : chez un restaurant, le « praticien » est une
+  // salle, et c'est la salle qui donne la table.
+  const eligibles = presta && !estParCouverts(presta)
+    ? praticiensPourLaSaisie({ praticiens, liens: serveur ? liensPraticiens : liensLus, prestationId: presta.id })
+    : []
+  const choixPrat = choixPraticienSaisie(eligibles, praticienChoisi)
+  const praticienRetenu = choixPrat.praticienId
+  // Son absence notée bloque ; les fermetures de toute la maison, elles,
+  // gardent la règle de la saisie (on peut noter un rendez-vous après coup).
+  const absencesRetenue = praticienRetenu != null && Array.isArray(fermeturesAgenda)
+    ? fermeturesAgenda.filter(f => f.praticien_id != null && String(f.praticien_id) === String(praticienRetenu))
+    : null
+  // Ce que la règle des créneaux reçoit, aux trois endroits qui la posent.
+  const chezLaPersonne = { praticienId: praticienRetenu, fermetures: absencesRetenue }
   // ⚠️ LA DURÉE SUIT LE GROUPE ICI AUSSI, et c'est la fonction du serveur,
   // `dureeDuGroupe`. Elle calculait la sienne sur la table choisie : un couple
   // posé au téléphone sur une table de quatre bloquait deux heures, le même
@@ -385,6 +422,7 @@ export default function ModalNouveauRdv({
     const regle = (h, p, duree) => creneauAcceptable({
       dateStr: date, heureDebut: h, dureeMinutes: duree, horaireJour, creneauxJour,
       rdvsExistants, capacite: capacitePrestation(p), prestationId: p.id, prestations,
+      ...chezLaPersonne,
     }).ok
     // 🔴 LA CUISINE, AVEC LA RÈGLE DU SERVEUR (lot 5) : la cadence et les
     // arrivées viennent de la salle relue en base.
@@ -476,7 +514,7 @@ export default function ModalNouveauRdv({
   // rempli. Un abonné sans téléphone existe, la garde ne doit donc pas l'exiger.
   // ⚠️ `presta` ET PAS SEULEMENT `prestationId` : « une table » n'est choisie
   // qu'une fois la salle lue et le nombre saisi. Avant, il n'y a rien à écrire.
-  const formValide = !!(prestationId && presta && dateValide && heureValide && (
+  const formValide = !!(prestationId && presta && dateValide && heureValide && !choixPrat.manque && (
     aboChoisi ? true : (prenom.trim() && nom.trim() && tel.trim())
   ))
 
@@ -546,6 +584,9 @@ export default function ModalNouveauRdv({
         // CONFLIT (10/09) : le restaurateur ne pouvait pas prendre au téléphone
         // une table à 19h30 si une autre était assise depuis 19h.
         prestations,
+        // 🔴 D1 (04/10) : le chevauchement se juge chez la personne qui
+        // assure, et son absence notée refuse.
+        ...chezLaPersonne,
       })
       if (!verdict.ok) {
         console.warn('[ModalNouveauRdv] créneau refusé', verdict)
@@ -605,6 +646,7 @@ export default function ModalNouveauRdv({
       if (serveur) {
         const r = await serveur.creer({
           prestation_id: presta.id, date: dateStr, heure, couverts: couvertsRetenus,
+          praticien_id: praticienRetenu,
           client_prenom: prenom.trim(), client_nom: nom.trim(), client_telephone: tel.trim(),
           client_email: email.trim() || null, notes_client: notes.trim() || null,
         })
@@ -630,7 +672,7 @@ export default function ModalNouveauRdv({
       if (datesRepetees.length > 0) {
         const { data: agendaSerie, error: errSerie } = await supabase
           .from('rdv_reservations')
-          .select('id, date_rdv, statut, prestation_id, heure_debut, heure_fin')
+          .select('id, date_rdv, statut, prestation_id, praticien_id, heure_debut, heure_fin')
           .eq('commercant_id', commercant.id)
           .in('date_rdv', datesRepetees)
           .is('deleted_at', null)
@@ -644,6 +686,7 @@ export default function ModalNouveauRdv({
             dateStr: d, heureDebut: heure, dureeMinutes: dureeMin, horaireJour,
             creneauxJour: creneauxDuJour(creneaux, { dateStr: d, jour: jourKey }),
             rdvsExistants: agendaSerie || [], capacite, prestationId: presta.id, prestations,
+            ...chezLaPersonne,
           })
           if (!v.ok) nonPosees.push({ date: d, raison: 'creneau', message: v.message })
           return v.ok
@@ -742,6 +785,9 @@ export default function ModalNouveauRdv({
         commercant_id: commercant.id,
         client_id: null,                    // saisie manuelle, pas de lien clients (decision Alex)
         prestation_id: presta.id,
+        // 🔴 D1 (04/10) : la personne qui assure. Vide, le rendez-vous
+        // chevauchait toute l'équipe et sortait des agendas filtrés.
+        praticien_id: praticienRetenu ?? null,
         ...identite,
         date_rdv: dateStr,
         heure_debut: heure,
@@ -938,6 +984,28 @@ export default function ModalNouveauRdv({
               {!enTable && presta && heureFin && (
                 <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, marginTop: 5 }}>
                   {mots.numeroLabel} de {dureeMin}min : {heure} → {heureFin}{prixEstime != null ? ` · ${prixEstime.toFixed(0)}€` : ''}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* 🔴 AVEC QUI (D1, 04/10) : obligatoire dès que deux personnes
+              peuvent assurer ce rendez-vous. Une seule : elle est posée sans
+              rien demander. Les heures libres ci-dessous deviennent les
+              siennes. */}
+          {choixPrat.requis && (
+            <div style={{ marginBottom: 12 }}>
+              <label htmlFor="mn-rdv-praticien" style={labelSt}>Avec qui ? *</label>
+              <select id="mn-rdv-praticien" value={praticienRetenu ?? ''}
+                onChange={(e) => setPraticienChoisi(e.target.value || null)} style={inputSt}>
+                <option value="">Choisir la personne qui assure le rendez-vous</option>
+                {eligibles.map(p => (
+                  <option key={p.id} value={p.id}>{[p.prenom, p.nom].filter(Boolean).join(' ')}</option>
+                ))}
+              </select>
+              {choixPrat.manque && (
+                <p style={{ fontSize: '0.72rem', color: T.muted, marginTop: 5, lineHeight: 1.45 }}>
+                  {eligibles.length} personnes peuvent assurer ce rendez-vous : dis laquelle, pour qu&rsquo;il entre dans son agenda.
                 </p>
               )}
             </div>

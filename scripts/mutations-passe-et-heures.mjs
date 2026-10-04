@@ -104,8 +104,9 @@ const MUTATIONS = [
     de: "  const salleConnue = salle.etat === 'ok' && salle.date === date",
     vers: "  const salleConnue = salle.etat === 'ok'" },
   { nom: '⚠️ une date ou une heure vidée s’enregistre', banc: 'verif:slots', fichier: 'app/dashboard/ModalNouveauRdv.js',
-    de: '  const formValide = !!(prestationId && presta && dateValide && heureValide && (',
-    vers: '  const formValide = !!(prestationId && presta && (' },
+    // ⚠️ REPOINTÉE LE 04/10 (D1) : la ligne exige aussi la praticienne.
+    de: '  const formValide = !!(prestationId && presta && dateValide && heureValide && !choixPrat.manque && (',
+    vers: '  const formValide = !!(prestationId && presta && !choixPrat.manque && (' },
   { nom: '🔴 les places se lisent à l’heure de la case de départ', banc: 'verif:slots', fichier: 'app/dashboard/ModalNouveauRdv.js',
     de: ".eq('heure_debut', heure)",
     vers: ".eq('heure_debut', heureInit)" },

@@ -4256,7 +4256,7 @@ export default function Dashboard() {
                     prestations={prestationsRdv}
                     creneaux={creneauxRdv}
                     liaisons={liaisonsRdv}
-                    rdvsExistants={rdvs}
+                    rdvsExistants={rdvs} praticiens={praticiensRdv}
                     dateInit={nouveauRdvSlot.date}
                     heureInit={nouveauRdvSlot.heure}
                     prestationInit={nouveauRdvSlot.prestationId || null}

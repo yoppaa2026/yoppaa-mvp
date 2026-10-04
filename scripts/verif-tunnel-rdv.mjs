@@ -1126,8 +1126,11 @@ for (const chemin of [
       /onAnnulerSeance && seanceOuverte\.jourDate && isoDate\(seanceOuverte\.jourDate\) >= isoDate\(today\)/.test(AGENDA)
       && /const aAnnuler = seanceOuverte\.inscrits\.filter\(i => i\.statut === 'confirme'\)/.test(AGENDA))
     const BORD = sansProse(lire('app/dashboard/page.js'))
+    // ⚠️ VISÉE SUR L'AGENDA LE 04/10 : depuis Annul-I6, la fenêtre de
+    // déplacement reçoit aussi `fermetures={fermeturesRdv}`, et la garde la
+    // trouvait là quand l'agenda l'avait perdue (piège du jumeau).
     verifie('🔴 le tableau de bord charge les fermetures et les passe à l’agenda',
-      /\.from\('rdv_fermetures'\)/.test(BORD) && /fermetures=\{fermeturesRdv\}/.test(BORD))
+      /\.from\('rdv_fermetures'\)/.test(BORD) && /<AgendaRdv\s+rdvs=\{rdvs\}[^>]*?\sfermetures=\{fermeturesRdv\}/.test(BORD))
     verifie('🔴 chaque inscrite passe par l’annulation unitaire, en série',
       /for \(const rdv of seanceAAnnuler\) \{\s*const ok = await changerStatutRdv\(rdv\.id, 'annule_commercant', 'commercant', \{/.test(BORD))
     const CONF = sansProse(lire('app/dashboard/ConfigDashboard.js'))

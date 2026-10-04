@@ -698,6 +698,8 @@ export default function PosteEquipe({ equipe, onChanger }) {
           creneaux={etat.agenda.creneaux}
           liaisons={etat.agenda.liaisons ?? null}
           rdvsExistants={etat.agenda.rdvs}
+          praticiens={etat.agenda.praticiens}
+          liensPraticiens={etat.agenda.liensPraticiens ?? null}
           dateInit={saisie.date}
           heureInit={saisie.heure}
           serveur={serveurSaisie}

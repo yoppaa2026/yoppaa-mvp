@@ -518,8 +518,38 @@ const membre = (o = {}) => ({
 
   const creer = code('app/api/equipe/rdv/creer/route.js')
   v('🔴 créer passe par la garde, case Agenda', /const garde = await gardeEquipe\(request, admin, commercant_id, 'agenda'\)\s*if \(!garde\.ok\) return NextResponse\.json/.test(creer))
+  // ⚠️ REPOINTÉE LE 04/10 (D1) : le select relu porte `praticien_id`, sans
+  // lequel le chevauchement ne se jugerait pas chez la personne qui assure.
   v('🔴 le créneau est revérifié au serveur, sur les réservations relues', /const verdict = creneauAcceptable\(\{/.test(creer) && /if \(!verdict\.ok\) return NextResponse\.json/.test(creer)
-    && /\.from\('rdv_reservations'\)\.select\('id, date_rdv, statut, prestation_id, heure_debut, heure_fin'\)\s*\.eq\('commercant_id', commercant_id\)\.eq\('date_rdv', date\)/.test(creer))
+    && /\.from\('rdv_reservations'\)\.select\('id, date_rdv, statut, prestation_id, praticien_id, heure_debut, heure_fin'\)\s*\.eq\('commercant_id', commercant_id\)\.eq\('date_rdv', date\)/.test(creer))
+  // 🔴 D1 (04/10) : QUI ASSURE LE RENDEZ-VOUS, recompté au serveur.
+  v('🔴 D1 : créer exige la personne quand deux peuvent assurer le rendez-vous',
+    /const eligibles = praticiensPourLaSaisie\(\{ praticiens: equipeAgenda\.data \|\| \[\], liens: liensPrat\.error \? null : \(liensPrat\.data \|\| \[\]\), prestationId: presta\.id \}\)/.test(creer)
+    && /const choix = choixPraticienSaisie\(eligibles, demande\)\s*if \(choix\.manque\) return NextResponse\.json\(\{ ok: false,/.test(creer))
+  v('🔴 D1 : une personne qui ne fait pas ce rendez-vous est refusée',
+    /if \(demande && !eligibles\.some\(p => String\(p\.id\) === String\(demande\)\)\) \{\s*return NextResponse\.json\(\{ ok: false,/.test(creer))
+  v('🔴 D1 : le chevauchement et l’écriture portent la personne retenue',
+    /prestations: formats,\s*praticienId,\s*\}\)/.test(creer) && /couverts,\s*praticien_id: praticienId,\s*\},/.test(creer))
+  v('⚠️ D1 : le poste reçoit qui fait quoi, et une lecture ratée ne ferme rien',
+    /reponse\.agenda\.liensPraticiens = liensPrat\.error \? null : \(liensPrat\.data \|\| \[\]\)/.test(poste))
+  {
+    const modale = code('app/dashboard/ModalNouveauRdv.js')
+    v('🔴 D1 : la fenêtre ne valide pas sans la personne, quand il faut la choisir',
+      /const formValide = !!\(prestationId && presta && dateValide && heureValide && !choixPrat\.manque && \(/.test(modale))
+    v('🔴 D1 : la fenêtre écrit la personne (patron) et l’envoie (poste)',
+      /prestation_id: presta\.id,\s*praticien_id: praticienRetenu \?\? null,\s*\.\.\.identite,/.test(modale)
+      && /couverts: couvertsRetenus,\s*praticien_id: praticienRetenu,/.test(modale))
+    v('🔴 D1 : les heures libres, le clic et chaque semaine répétée se jugent chez elle',
+      /const chezLaPersonne = \{ praticienId: praticienRetenu, fermetures: absencesRetenue \}/.test(modale)
+      && (modale.match(/\.\.\.chezLaPersonne,/g) || []).length === 3
+      && /prestations,\s*\.\.\.chezLaPersonne,\s*\}\)\.ok/.test(modale)
+      && /prestations,\s*\.\.\.chezLaPersonne,\s*\}\)\s*if \(!verdict\.ok\)/.test(modale)
+      && /prestations,\s*\.\.\.chezLaPersonne,\s*\}\)\s*if \(!v\.ok\)/.test(modale)
+      && /\.select\('id, date_rdv, statut, prestation_id, praticien_id, heure_debut, heure_fin'\)/.test(modale))
+    v('⚠️ D1 : les deux appelants donnent l’équipe à la fenêtre',
+      /rdvsExistants=\{rdvs\}\s*praticiens=\{praticiensRdv\}/.test(code('app/dashboard/page.js'))
+      && /praticiens=\{etat\.agenda\.praticiens\}\s*liensPraticiens=\{etat\.agenda\.liensPraticiens \?\? null\}/.test(code('app/equipe/PosteEquipe.js')))
+  }
   // 🔴 LE LIEU DE LA PLAGE QUI ACCUEILLE L'HEURE (03/10), pas celui que l'heure
   // seule désigne. La règle est exécutée dans verif-slots, le déplacement ici.
   v('🔴 créer grave le lieu de la plage qui accueille l’heure',

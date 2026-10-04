@@ -77,6 +77,13 @@ export async function POST(request) {
         ? await admin.from('rdv_creneau_prestations').select('creneau_id, prestation_id').in('creneau_id', idsPlages)
         : { data: [], error: null }
       reponse.agenda.liaisons = liens.error ? null : (liens.data || [])
+      // 🔴 QUI FAIT QUOI (D1, 04/10) : la saisie demande la personne qui assure
+      // le rendez-vous. ⚠️ Ratée, `null` : toute l'équipe active est proposée.
+      const idsPrestations = reponse.agenda.prestations.map(p => p.id)
+      const liensPrat = idsPrestations.length > 0
+        ? await admin.from('rdv_prestation_praticiens').select('prestation_id, praticien_id').in('prestation_id', idsPrestations)
+        : { data: [], error: null }
+      reponse.agenda.liensPraticiens = liensPrat.error ? null : (liensPrat.data || [])
     }
 
     // Le comptoir (étape 5) : la règle de la carte et l'état des bons, pour

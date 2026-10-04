@@ -25,7 +25,7 @@ import { NextResponse } from 'next/server'
 import { clientAdmin } from '@/lib/api-auth'
 import { gardeEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { creneauAcceptable, creneauxDuJour, minutesDeLHeure } from '@/lib/deplacement-rdv'
-import { plageQuiAccueille } from '@/lib/rdv-slots'
+import { plageQuiAccueille, praticiensPourLaSaisie, choixPraticienSaisie } from '@/lib/rdv-slots'
 import { capacitePrestation, estParCouverts, bornesCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-collectifs'
 import { enModeInventaire, formatPourAffichage, dureeDuGroupe } from '@/lib/inventaire-salle'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
@@ -47,6 +47,8 @@ const REFUS = {
   salle_complete: 'La salle est complète à cette heure pour ce groupe. Choisis une autre heure.',
   cadence_atteinte: 'La cuisine a déjà trop d’arrivées sur ce quart d’heure.',
   place_prise: 'Cette place vient d’être prise pendant ta saisie. Réessaie.',
+  praticien_hors_commerce: 'Cette personne ne fait plus partie de l’agenda.',
+  jour_ferme: 'Une absence ou une fermeture est notée à cette date.',
 }
 
 export async function POST(request) {
@@ -76,7 +78,7 @@ export async function POST(request) {
         .eq('commercant_id', commercant_id).eq('actif', true).is('deleted_at', null),
       admin.from('rdv_creneaux').select(COLONNES_CRENEAU_RDV_EQUIPE)
         .eq('commercant_id', commercant_id).eq('actif', true).is('deleted_at', null),
-      admin.from('rdv_reservations').select('id, date_rdv, statut, prestation_id, heure_debut, heure_fin')
+      admin.from('rdv_reservations').select('id, date_rdv, statut, prestation_id, praticien_id, heure_debut, heure_fin')
         .eq('commercant_id', commercant_id).eq('date_rdv', date).is('deleted_at', null),
     ])
     for (const [quoi, r] of [['commerce', commerce], ['prestations', prestations], ['créneaux', creneaux], ['réservations', rdvsDuJour]]) {
@@ -88,6 +90,26 @@ export async function POST(request) {
     if (!presta) return NextResponse.json({ ok: false, error: 'Cette prestation n’est plus disponible.' }, { status: 404 })
 
     // ── Les couverts et la durée : les règles de la fenêtre ────────────────
+    // 🔴 QUI ASSURE LE RENDEZ-VOUS (D1, 04/10) : obligatoire dès que deux
+    // personnes le peuvent, comme dans la fenêtre. Le serveur refait le compte :
+    // l'écran ne fait que proposer. Une table n'a personne à désigner.
+    let praticienId = null
+    if (!estParCouverts(presta)) {
+      const [equipeAgenda, liensPrat] = await Promise.all([
+        admin.from('rdv_praticiens').select('id, actif, deleted_at').eq('commercant_id', commercant_id).is('deleted_at', null),
+        admin.from('rdv_prestation_praticiens').select('prestation_id, praticien_id').eq('prestation_id', presta.id),
+      ])
+      if (equipeAgenda.error) throw new Error(`lecture de l’équipe de l’agenda : ${equipeAgenda.error.message}`)
+      const eligibles = praticiensPourLaSaisie({ praticiens: equipeAgenda.data || [], liens: liensPrat.error ? null : (liensPrat.data || []), prestationId: presta.id })
+      const demande = corps.praticien_id || null
+      if (demande && !eligibles.some(p => String(p.id) === String(demande))) {
+        return NextResponse.json({ ok: false, error: 'Cette personne ne peut pas assurer ce rendez-vous. Choisis quelqu’un d’autre.' }, { status: 409 })
+      }
+      const choix = choixPraticienSaisie(eligibles, demande)
+      if (choix.manque) return NextResponse.json({ ok: false, error: 'Dis qui assure ce rendez-vous.' }, { status: 400 })
+      praticienId = choix.praticienId
+    }
+
     const couverts = estParCouverts(presta)
       ? couvertsValides(presta, corps.couverts === '' || corps.couverts == null ? bornesCouverts(presta).min : corps.couverts)
       : 1
@@ -105,6 +127,7 @@ export async function POST(request) {
       creneauxJour: creneauxDuJour(creneaux.data || [], { dateStr: date, jour }),
       rdvsExistants: rdvsDuJour.data || [],
       capacite: capacitePrestation(presta), prestationId: presta.id, prestations: formats,
+      praticienId,
     })
     if (!verdict.ok) return NextResponse.json({ ok: false, error: verdict.message }, { status: 409 })
 
@@ -118,6 +141,7 @@ export async function POST(request) {
     // l'autre salle partait avec l'adresse de la salle principale.
     const plage = plageQuiAccueille(creneauxDuJour(creneaux.data || [], { dateStr: date, jour }), {
       prestationId: presta.id, debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMinutes,
+      praticienId,
     })
 
     const res = await creerReservationRdv(admin, {
@@ -135,6 +159,7 @@ export async function POST(request) {
         rgpd_marketing: false,
         source: 'commercant',
         couverts,
+        praticien_id: praticienId,
       },
     })
     if (!res.ok) {

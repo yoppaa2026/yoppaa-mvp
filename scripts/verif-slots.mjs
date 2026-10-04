@@ -10,7 +10,7 @@ import {
   timeToMinutes, minutesToTime, jourSemaineDate, isoDate,
   filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation,
   creneauAccepte, creneauxPourPrestation, prestationSansCreneauDedie,
-  praticienAutorisePourPrestation, prestationSansPraticienDit,
+  praticienAutorisePourPrestation, prestationSansPraticienDit, praticiensPourLaSaisie, choixPraticienSaisie,
   prestationAutoriseeSurCreneaux, coursDejaCoche, creneauHorsOuverture, coursSansHoraire,
   horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV, ajusterPlagePourJour, plageQuiAccueille,
 } from '../lib/rdv-slots.js'
@@ -3126,6 +3126,33 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // une ignorance viderait des agendas que personne ne saurait rouvrir.
   verifier('🔴 des liaisons non chargées ouvrent, elles ne ferment pas',
     praticienAutorisePourPrestation('carole', 'reiki', null))
+
+  // 🔴 D1 (04/10) : LA SAISIE AU COMPTOIR DEMANDE QUI ASSURE LE RENDEZ-VOUS.
+  const EQUIPE = [
+    { id: 'emily', prenom: 'Emily', actif: true },
+    { id: 'carole', prenom: 'Carole', actif: true },
+    { id: 'zoe', prenom: 'Zoé', actif: false },
+    { id: 'lea', prenom: 'Léa', actif: true, deleted_at: '2026-09-01T10:00:00Z' },
+  ]
+  const ids = (l) => l.map(p => p.id).join(',')
+  verifier('🔴 D1 : la prestation qui nomme ses praticiennes ne propose qu’elles',
+    ids(praticiensPourLaSaisie({ praticiens: EQUIPE, liens: L, prestationId: 'reiki' })) === 'emily')
+  verifier('⚠️ D1 : une prestation que personne ne réclame propose toute l’équipe ACTIVE',
+    ids(praticiensPourLaSaisie({ praticiens: EQUIPE, liens: L, prestationId: 'massage' })) === 'emily,carole')
+  verifier('⚠️ D1 : des liens illisibles proposent toute l’équipe active, sans fermer la saisie',
+    ids(praticiensPourLaSaisie({ praticiens: EQUIPE, liens: null, prestationId: 'reiki' })) === 'emily,carole')
+  const deux = praticiensPourLaSaisie({ praticiens: EQUIPE, liens: L, prestationId: 'coupe' })
+  verifier('🔴 D1 : deux personnes possibles, le choix est EXIGÉ',
+    choixPraticienSaisie(deux, null).requis === true && choixPraticienSaisie(deux, null).manque === true
+    && choixPraticienSaisie(deux, null).praticienId === null)
+  verifier('🔴 D1 : le choix fait est retenu',
+    choixPraticienSaisie(deux, 'carole').praticienId === 'carole' && choixPraticienSaisie(deux, 'carole').manque === false)
+  verifier('⚠️ D1 : une personne hors de la liste ne passe pas pour un choix',
+    choixPraticienSaisie(deux, 'zoe').manque === true && choixPraticienSaisie(deux, 'zoe').praticienId === null)
+  verifier('⚠️ D1 : une seule personne possible est posée sans rien demander',
+    choixPraticienSaisie([EQUIPE[0]], null).praticienId === 'emily' && choixPraticienSaisie([EQUIPE[0]], null).requis === false)
+  verifier('⚠️ D1 : personne dans l’équipe, rien à demander',
+    choixPraticienSaisie([], null).requis === false && choixPraticienSaisie([], null).praticienId === null)
 
   // L'avertissement au commerçant, et son seuil.
   verifier('une prestation muette est signalée dans une équipe',

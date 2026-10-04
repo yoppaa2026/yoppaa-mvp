@@ -199,6 +199,7 @@ export default function LegalPage() {
 
             <H3>3. Rendez-vous en ligne</H3>
             <P>Pour les commerçants de services, le Client peut réserver une prestation en ligne (choix de la prestation, du praticien le cas échéant, de la date et de l'heure). Certains commerçants demandent un acompte payé en ligne au moment de la réservation : son montant et les conditions d'annulation sont affichés avant la confirmation. Des rappels automatiques peuvent être envoyés avant le rendez-vous.</P>
+            <P>Lorsqu'un cours est complet ou qu'aucun créneau n'est libre, le Client peut s'inscrire sur une liste d'attente, à condition d'avoir autorisé les notifications : c'est par elles qu'il est prévenu, dans l'ordre des inscriptions, si une place se libère. La place n'est pas réservée pour autant. <strong>Le commerçant voit le prénom et le numéro de téléphone des personnes inscrites sur sa liste d'attente</strong>, pour pouvoir les recontacter si une place se libère.</P>
 
             <H3>4. Prix et paiement</H3>
             <P>Les prix affichés sont fixés par les commerçants partenaires, exprimés en euros TTC. Le paiement en ligne est effectué via Stripe, prestataire de paiement sécurisé (cartes de paiement, Bancontact). Les données bancaires du Client ne sont jamais accessibles à Yoppaa ni aux commerçants.</P>

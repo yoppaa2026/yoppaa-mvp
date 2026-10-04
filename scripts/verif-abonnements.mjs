@@ -2557,6 +2557,44 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     /if \(!j\?\.ok\) return toast\(/.test(DASH_R) && /Yoppaa ne rembourse rien automatiquement/.test(DASH_R))
 }
 
+// ── 🔴 Abo-I10 (04/10) : UN COMPTE NE PART PAS AVEC UN ABONNEMENT EN COURS ──
+// Décision d'Alex : suppression BLOQUÉE tant qu'un contrat court ; les contrats
+// finis sont gardés sept ans, ANONYMISÉS.
+{
+  const { abonnementsQuiBloquentLaSuppression: bloquent } = await import('../lib/abonnements.js')
+  const AUJ = '2026-10-05'
+  const base = { type: 'carnet', date_debut: '2026-09-01', date_fin: '2027-03-01', seances_total: 10, statut: 'actif' }
+  const CONTRATS = [
+    { ...base, id: 'en-cours' },
+    { ...base, id: 'resilie', statut: 'resilie' },
+    { ...base, id: 'fini', date_fin: '2026-10-01' },
+    { ...base, id: 'epuise', seances_total: 2 },
+    { ...base, id: 'a-venir', date_debut: '2026-11-01' },
+    { ...base, id: 'efface', deleted_at: '2026-10-01T10:00:00Z' },
+  ]
+  const SEANCES = [
+    { abonnement_id: 'epuise', statut: 'honore' }, { abonnement_id: 'epuise', statut: 'no_show' },
+    { abonnement_id: 'en-cours', statut: 'honore' },
+  ]
+  egal('🔴 seuls les contrats qui courent bloquent la suppression (celui du mois prochain aussi)',
+    bloquent(CONTRATS, SEANCES, { aujourdhui: AUJ }).map(a => a.id), ['en-cours', 'a-venir'])
+  egal('⚠️ le même contrat sans ses séances bloque : le solde se compte sur les réservations',
+    bloquent([CONTRATS[3]], [], { aujourdhui: AUJ }).map(a => a.id), ['epuise'])
+
+  const SUPPR = sansProse(readFileSync(new URL('../app/api/yopper/supprimer-compte/route.js', import.meta.url), 'utf8'))
+  const debutBlocage = SUPPR.indexOf('abonnementsQuiBloquentLaSuppression(contrats')
+  verifier('🔴 la route bloque sur la règle, AVANT le verdict des blocages',
+    debutBlocage > 0 && debutBlocage < SUPPR.indexOf('if (blocages.length > 0)')
+    && /const enCours = abonnementsQuiBloquentLaSuppression\(contrats, seancesAbo, \{ aujourdhui \}\)\s*if \(enCours\.length > 0\) \{\s*blocages\.push\(/.test(SUPPR))
+  verifier('⚠️ le solde se compte sur les séances du contrat, lues avec leur statut',
+    /\.select\('abonnement_id, statut'\)\s*\.in\('abonnement_id', idsContrats\)/.test(SUPPR)
+    && /\.select\('id, statut, type, date_debut, date_fin, seances_total, deleted_at'\)\s*\.eq\('client_email', email\)/.test(SUPPR))
+  verifier('⚠️ une lecture ratée bloque au lieu de laisser partir le compte',
+    /if \(errAbo \|\| errSeances\) \{\s*return NextResponse\.json\(\{ ok: false,/.test(SUPPR))
+  verifier('🔴 les contrats finis sont anonymisés, notes comprises',
+    /from\('abonnements'\)\s*\.update\(\{ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes: null \}\)\s*\.eq\('client_email', email\)/.test(SUPPR))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

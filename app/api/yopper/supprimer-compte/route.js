@@ -24,6 +24,7 @@ import { normaliserTelephone } from '@/lib/fidelite'
 import { jourBruxelles } from '@/lib/timezone'
 import { casquettesDuCompte } from '@/lib/casquettes-server'
 import { connexionEffacable, raisonDeGarder, preinscriptionsAEffacer } from '@/lib/casquettes'
+import { abonnementsQuiBloquentLaSuppression } from '@/lib/abonnements'
 
 // Statuts qui signifient « le commerçant attend encore quelque chose de moi ».
 const COMMANDES_EN_COURS = ['paiement_en_attente', 'en_attente', 'en_preparation', 'pret']
@@ -117,6 +118,32 @@ export async function POST(request) {
         : 'Un bon a encore du solde à utiliser.')
     }
 
+    // 🔴 UN ABONNEMENT EN COURS BLOQUE AUSSI (Abo-I10, 04/10, décision d'Alex).
+    // Le contrat est relié par l'email seul : il n'a pas de `client_id`.
+    // ⚠️ UNE LECTURE RATÉE BLOQUE : on ne supprime pas un compte sur un « on ne
+    // sait pas », la personne réessaie.
+    if (email) {
+      const { data: contrats, error: errAbo } = await admin
+        .from('abonnements')
+        .select('id, statut, type, date_debut, date_fin, seances_total, deleted_at')
+        .eq('client_email', email)
+        .is('deleted_at', null)
+      const idsContrats = (contrats || []).map(a => a.id)
+      const { data: seancesAbo, error: errSeances } = idsContrats.length > 0
+        ? await admin.from('rdv_reservations').select('abonnement_id, statut')
+            .in('abonnement_id', idsContrats).is('deleted_at', null)
+        : { data: [], error: null }
+      if (errAbo || errSeances) {
+        return NextResponse.json({ ok: false, error: 'Tes abonnements n’ont pas pu être vérifiés. Réessaie dans un instant.' }, { status: 500 })
+      }
+      const enCours = abonnementsQuiBloquentLaSuppression(contrats, seancesAbo, { aujourdhui })
+      if (enCours.length > 0) {
+        blocages.push(enCours.length > 1
+          ? `${enCours.length} abonnements sont encore en cours. Demande au commerce de les résilier, ou attends leur fin.`
+          : 'Un abonnement est encore en cours. Demande au commerce de le résilier, ou attends sa fin.')
+      }
+    }
+
     if (blocages.length > 0) {
       return NextResponse.json({
         ok: false,
@@ -178,6 +205,14 @@ export async function POST(request) {
         .update({ beneficiaire_email: EMAIL_ANONYME, beneficiaire_prenom: 'Compte supprimé', message: null })
         .eq('beneficiaire_email', email)
         .lte('solde', 0)
+
+      // 🔴 LES ABONNEMENTS TERMINÉS OU RÉSILIÉS (Abo-I10, 04/10) : gardés sept
+      // ans pour la comptabilité, comme les commandes, mais ANONYMISÉS. Ceux en
+      // cours ont bloqué plus haut : il ne reste ici que des contrats finis.
+      // `notes` part aussi : c'est ce que le commerce a écrit sur la personne.
+      await admin.from('abonnements')
+        .update({ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes: null })
+        .eq('client_email', email)
     }
 
     // La ligne clients est conservée mais vidée : les commandes et les

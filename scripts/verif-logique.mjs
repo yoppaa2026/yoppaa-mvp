@@ -4594,8 +4594,10 @@ verifier('les échecs sont comptés, pas alertés douze fois',
   verifier('⚠️ dans un ordre total, pour que les pages ne se chevauchent pas',
     (DASH.match(/\.order\('heure_debut', \{ ascending: true \}\)\s*\.order\('id', \{ ascending: true \}\)\)/g) || []).length === 2)
   const CONFIG = lireSansProse('app/dashboard/ConfigDashboard.js')
+  // ⚠️ REPOINTÉE LE 04/10 (Abo-I1) : le select porte aussi `id` et l'heure,
+  // pour la part non utilisée d'un remboursement.
   verifier('🔴 la liste des abonnés compte toutes leurs séances',
-    /toutesLesLignes\(\(\) => supabase\.from\('rdv_reservations'\)\.select\('abonnement_id, statut, date_rdv'\)/.test(CONFIG))
+    /toutesLesLignes\(\(\) => supabase\.from\('rdv_reservations'\)\.select\('id, abonnement_id, statut, date_rdv, heure_debut'\)/.test(CONFIG))
   const MODALE = lireSansProse('app/dashboard/ModalNouveauRdv.js')
   verifier('🔴 le solde affiché à l’inscription aussi',
     /toutesLesLignes\(\(\) => supabase\s*\.from\('rdv_reservations'\)\s*\.select\('abonnement_id, date_rdv, statut'\)/.test(MODALE))

@@ -925,9 +925,9 @@ const MUTATIONS = [
     garde: 'la route garde le geste derrière la case Argent' },
 
   { nom: '🔴 les rappels partent encore pour des seances annulees',
-    banc: 'verif:abonnements', fichier: 'app/api/rdv/resilier-abonnement/route.js',
-    de: '        if (s.rappel_push_id) {',
-    vers: '        if (false) {',
+    banc: 'verif:abonnements', fichier: 'lib/abonnement-resiliation-server.js',
+    de: '      if (s.rappel_push_id) {',
+    vers: '      if (false) {',
     garde: 'leurs rappels de la veille sont coupés' },
 
   { nom: '🔴 le prenom tape par la cliente part en HTML',
@@ -1164,8 +1164,8 @@ const MUTATIONS = [
 
   { nom: '🔴 les soldes des abonnes se calculent sur mille seances',
     banc: 'verif:logique', fichier: 'app/dashboard/ConfigDashboard.js',
-    de: "      toutesLesLignes(() => supabase.from('rdv_reservations').select('abonnement_id, statut, date_rdv')",
-    vers: "      (() => supabase.from('rdv_reservations').select('abonnement_id, statut, date_rdv')",
+    de: "      toutesLesLignes(() => supabase.from('rdv_reservations').select('id, abonnement_id, statut, date_rdv, heure_debut')",
+    vers: "      (() => supabase.from('rdv_reservations').select('id, abonnement_id, statut, date_rdv, heure_debut')",
     garde: 'la liste des abonnés compte toutes leurs séances' },
 
   { nom: '🔴 le solde a l inscription se calcule sur mille seances',

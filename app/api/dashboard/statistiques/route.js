@@ -136,7 +136,7 @@ export async function GET(request) {
         // `created_at` : c'est la date retenue en Comptabilité (décision
         // d'Alex, 17/08), et les deux écrans doivent raconter la même histoire.
         supabase.from('abonnements')
-          .select('id, prix, paye, paye_le, mode_paiement')
+          .select('id, prix, paye, paye_le, mode_paiement, rembourse_montant')
           .eq('commercant_id', commercantId),
       ])
 

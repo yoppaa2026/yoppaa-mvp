@@ -1323,6 +1323,34 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
       cmdId: cmd.id, refund: refundId, isRefundTotal, newStatut: updates.statut || cmd.statut,
     })
   }
+
+  // ─── 🔴 Et l'abonnement (Abo-I1, 04/10) ────────────────────────────────
+  //
+  // Remboursé par « Rembourser », la route a déjà écrit le montant : on ne
+  // pose que la trace Stripe si elle manque. Remboursé DEPUIS LE TABLEAU
+  // STRIPE, Yoppaa l'apprend ici, et l'export le contrepasse. ⚠️ LE CUMUL,
+  // comme partout : deux remboursements partiels font la somme des deux.
+  // ⚠️ L'ARGENT SEULEMENT : une résiliation reste une décision du commerce,
+  // un geste fait dans Stripe ne coupe pas les séances à sa place.
+  const { data: abo, error: errAboLu } = await supabase
+    .from('abonnements')
+    .select('id, rembourse_montant, stripe_refund_id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+  if (errAboLu) throw new Error(`lecture de l’abonnement remboursé : ${errAboLu.message}`)
+  if (abo) {
+    const memeMontant = Number(abo.rembourse_montant) === montant
+    const maj = memeMontant
+      ? (!abo.stripe_refund_id && refundId ? { stripe_refund_id: refundId } : null)
+      : { rembourse_montant: montant, rembourse_le: new Date().toISOString(), rembourse_moyen: 'en_ligne', ...(refundId ? { stripe_refund_id: refundId } : {}) }
+    if (maj) {
+      // ⚠️ UNE ÉCRITURE RATÉE SE REJOUE : sans elle, l'export compterait la
+      // vente entière d'un argent reparti.
+      const { error: errAbo } = await supabase.from('abonnements').update(maj).eq('id', abo.id)
+      if (errAbo) throw new Error(`remboursement de l’abonnement non écrit : ${errAbo.message}`)
+    }
+    console.info('[stripe/webhook] refund enregistré sur abonnement', { aboId: abo.id, refund: refundId, montant, memeMontant })
+  }
 }
 
 // checkout.session.completed : stocke le session_id sur le RDV qui correspond

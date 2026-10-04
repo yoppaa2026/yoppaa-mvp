@@ -2544,9 +2544,18 @@ verifier('la sortie « hors abonnement » existe et est écrite',
   verifier('🔴 un seul gagnant : deux clics ne font qu’une résiliation et qu’un email',
     /\.update\(\{ statut: 'resilie' \}\)\s*\.eq\('id', abonnement_id\)\s*\.eq\('statut', contrat\.statut\)\s*\.select\('id'\)/.test(ROUTE_R)
     && /if \(!bascule \|\| bascule\.length === 0\) return/.test(ROUTE_R))
+  // ⚠️ REPOINTÉES LE 04/10 (Abo-I1) : les séances, leurs rappels et leurs
+  // files vivent dans `lib/abonnement-resiliation-server`, que « Résilier »
+  // et « Rembourser » appellent tous les deux. On vérifie la règle là-bas, et
+  // l'appel ici.
+  const RESIL_R = sansProse(readFileSync(new URL('../lib/abonnement-resiliation-server.js', import.meta.url), 'utf8'))
   verifier('🔴 les séances annulées sont celles que la règle choisit, à l’heure de Bruxelles',
-    /seancesAnnuleesParResiliation\(seances, \{\s*dejaCommencee: \(d, h\) => creneauDejaCommence\(d, h, maintenant\),/.test(ROUTE_R))
-  verifier('🔴 leurs rappels de la veille sont coupés', /if \(s\.rappel_push_id\) \{\s*const r = await annulerPush\(s\.rappel_push_id\)/.test(ROUTE_R))
+    /seancesAnnuleesParResiliation\(seances, \{\s*dejaCommencee: \(d, h\) => creneauDejaCommence\(d, h, maintenant\),/.test(RESIL_R)
+    && /const seances = await annulerLesSeancesDuContrat\(supabase, abonnement_id\)/.test(ROUTE_R))
+  verifier('🔴 leurs rappels de la veille sont coupés', /if \(s\.rappel_push_id\) \{\s*const r = await annulerPush\(s\.rappel_push_id\)/.test(RESIL_R))
+  verifier('🔴 « recommence » termine une résiliation restée à moitié',
+    /const dejaResilie = contrat\.statut === 'resilie'\s*if \(!dejaResilie\) \{/.test(ROUTE_R)
+    && /if \(dejaResilie && annulees\.length === 0\) return NextResponse\.json\(\{ ok: true, deja: true/.test(ROUTE_R))
   verifier('🔴 la cliente est prévenue de ce qui est RÉELLEMENT annulé',
     /seances: annulees\.map\(s => seanceLisible\(s\.date_rdv, s\.heure_debut\)\)/.test(ROUTE_R) && /envoyerAuYopper\(/.test(ROUTE_R))
 
@@ -2554,8 +2563,9 @@ verifier('la sortie « hors abonnement » existe et est écrite',
   verifier('🔴 le tableau de bord ne résilie plus lui-même',
     /postPro\('\/api\/rdv\/resilier-abonnement', \{ abonnement_id: a\.id \}\)/.test(DASH_R)
     && !/from\('abonnements'\)\s*\.update\(\{ statut: 'resilie' \}\)/.test(DASH_R))
+  // ⚠️ REPOINTÉE LE 04/10 (Abo-I1) : la question renvoie vers « Rembourser ».
   verifier('⚠️ et lit la réponse avant d’annoncer quoi que ce soit',
-    /if \(!j\?\.ok\) return toast\(/.test(DASH_R) && /Yoppaa ne rembourse rien automatiquement/.test(DASH_R))
+    /if \(!j\?\.ok\) return toast\(/.test(DASH_R) && /Résilier ne rembourse rien\. Pour rendre une partie du prix, utilise plutôt « Rembourser » : il résilie aussi\./.test(DASH_R))
 }
 
 // ── 🔴 Abo-I10 (04/10) : UN COMPTE NE PART PAS AVEC UN ABONNEMENT EN COURS ──
@@ -2594,6 +2604,134 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     /if \(errAbo \|\| errSeances\) \{\s*return NextResponse\.json\(\{ ok: false,/.test(SUPPR))
   verifier('🔴 les contrats finis sont anonymisés, notes comprises',
     /from\('abonnements'\)\s*\.update\(\{ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes: null \}\)\s*\.eq\('client_email', email\)/.test(SUPPR))
+}
+
+// ── 🔴 Abo-I1 (04/10) : RENDRE L'ARGENT D'UN ABONNEMENT ─────────────────────
+// Décisions d'Alex : montant libre plafonné au prix, part non utilisée
+// proposée, rembourser RÉSILIE toujours, comptoir = remboursement NOTÉ, case
+// Argent, email à la cliente, contrepassation à l'export.
+{
+  const {
+    MOYENS_REMBOURSEMENT, partNonUtilisee, verdictRemboursementAbonnement: verdictR,
+    messageRefusRemboursement: msgR, libelleRemboursement,
+  } = await import('../lib/abonnements.js')
+
+  // Les moyens, confrontés à la MIGRATION, pas à la constante.
+  const MIG_R = readFileSync(new URL('../migrations/MIGRATION_ABONNEMENT_REMBOURSEMENT_REPRISE.sql', import.meta.url), 'utf8')
+  const checkMoyens = (MIG_R.match(/rembourse_moyen IN \(([^)]*)\)/) || [])[1] || ''
+  egal('⚠️ les moyens de remboursement sont ceux de la contrainte de la base',
+    [...checkMoyens.matchAll(/'([a-z_]+)'/g)].map(m => m[1]).sort(), [...MOYENS_REMBOURSEMENT].sort())
+
+  // Un carnet de 10 séances à 150 € : 3 données, 1 absence, 2 à venir.
+  const CARNET = { id: 'c1', prix: 150, seances_total: 10, statut: 'actif', paye: true }
+  const S = [
+    { id: 'a', abonnement_id: 'c1', statut: 'honore', date_rdv: '2026-09-01', heure_debut: '10:00' },
+    { id: 'b', abonnement_id: 'c1', statut: 'honore', date_rdv: '2026-09-08', heure_debut: '10:00' },
+    { id: 'c', abonnement_id: 'c1', statut: 'confirme', date_rdv: '2026-09-15', heure_debut: '10:00' },
+    { id: 'd', abonnement_id: 'c1', statut: 'no_show', date_rdv: '2026-09-22', heure_debut: '10:00' },
+    { id: 'e', abonnement_id: 'c1', statut: 'confirme', date_rdv: '2026-10-20', heure_debut: '10:00' },
+    { id: 'f', abonnement_id: 'c1', statut: 'confirme', date_rdv: '2026-10-27', heure_debut: '10:00:00' },
+    { id: 'g', abonnement_id: 'c1', statut: 'annule_client', date_rdv: '2026-09-29', heure_debut: '10:00' },
+    { id: 'x', abonnement_id: 'autre', statut: 'honore', date_rdv: '2026-09-01', heure_debut: '10:00' },
+  ]
+  const commencee = (d) => d < '2026-10-05'
+  const part = partNonUtilisee(CARNET, S, { dejaCommencee: commencee })
+  egal('🔴 la part non utilisée rend les séances à venir que la résiliation annule',
+    part, { restantes: 6, total: 10, montant: 90 })
+  verifier('⚠️ les séances d’un autre contrat ne comptent pas',
+    partNonUtilisee(CARNET, S.filter(s => s.id === 'x'), { dejaCommencee: commencee })?.montant === 150)
+  verifier('⚠️ un contrat sans nombre de séances ne propose rien (et surtout pas 0)',
+    partNonUtilisee({ ...CARNET, seances_total: null }, S, { dejaCommencee: commencee }) === null
+    && partNonUtilisee({ ...CARNET, prix: 0 }, S, { dejaCommencee: commencee }) === null)
+  egal('⚠️ au centime, sans dépasser le prix',
+    partNonUtilisee({ id: 'c2', prix: 100, seances_total: 3 }, [], {})?.montant, 100)
+  egal('⚠️ un tiers de 100 € se propose au centime',
+    partNonUtilisee({ id: 'c2', prix: 100, seances_total: 3 }, [{ id: 'z', abonnement_id: 'c2', statut: 'honore' }], {})?.montant, 66.67)
+
+  const EN_LIGNE = { ...CARNET, mode_paiement: 'en_ligne', stripe_payment_intent_id: 'pi_1' }
+  const COMPTOIR = { ...CARNET, mode_paiement: 'especes' }
+  egal('🔴 en ligne : le montant libre part chez Stripe', verdictR(EN_LIGNE, { montant: '90,50' }),
+    { ok: true, montant: 90.5, moyen: 'en_ligne', enLigne: true })
+  egal('🔴 au comptoir : le moyen est exigé, et retenu', verdictR(COMPTOIR, { montant: 40, moyen: 'virement' }),
+    { ok: true, montant: 40, moyen: 'virement', enLigne: false })
+  verifier('🔴 au comptoir sans moyen : refusé', verdictR(COMPTOIR, { montant: 40 }).code === 'moyen_requis')
+  verifier('⚠️ en ligne, un moyen envoyé par le navigateur ne détourne pas Stripe',
+    verdictR(EN_LIGNE, { montant: 40, moyen: 'especes' }).moyen === 'en_ligne')
+  verifier('🔴 jamais plus que le prix payé',
+    verdictR(EN_LIGNE, { montant: 150.01 }).code === 'montant_trop_eleve' && verdictR(EN_LIGNE, { montant: 150.01 }).plafond === 150
+    && verdictR(EN_LIGNE, { montant: 150 }).ok === true)
+  verifier('🔴 zéro, vide, null ou du texte ne sont pas des montants (piège du zéro)',
+    ['0', 0, '', null, undefined, 'abc', -5, true].every(m => verdictR(EN_LIGNE, { montant: m }).code === 'montant_invalide'))
+  verifier('🔴 un contrat non payé ne se rembourse pas', verdictR({ ...EN_LIGNE, paye: false }, { montant: 10 }).code === 'non_paye')
+  verifier('🔴 un contrat déjà remboursé ne se rembourse pas deux fois',
+    verdictR({ ...EN_LIGNE, rembourse_montant: 20 }, { montant: 10 }).code === 'deja_rembourse')
+  verifier('⚠️ un paiement en ligne sans trace Stripe se dit',
+    verdictR({ ...EN_LIGNE, stripe_payment_intent_id: null }, { montant: 10 }).code === 'paiement_introuvable')
+  verifier('⚠️ chaque refus a sa phrase, et le plafond se dit en euros',
+    ['introuvable', 'non_paye', 'deja_rembourse', 'montant_invalide', 'paiement_introuvable', 'moyen_requis', 'stripe']
+      .every(c => msgR(c) && msgR(c) !== msgR('inconnu'))
+    && msgR('montant_trop_eleve', { plafond: 150 }).includes(euros(150)))
+  verifier('⚠️ la carte dit ce qui a été rendu, et comment',
+    libelleRemboursement({ rembourse_montant: 90, rembourse_moyen: 'en_ligne' }) === `Remboursé ${euros(90)} · sur la carte`
+    && libelleRemboursement({ rembourse_montant: 40, rembourse_moyen: 'especes' }) === `Remboursé ${euros(40)} · espèces`
+    && libelleRemboursement({ rembourse_montant: null }) === null)
+
+  const { emailAbonnementResilie: mailR } = await import('../lib/resend.js')
+  const htmlCarte = mailR({ yopper_prenom: 'Sophie', commercant_nom: 'Centre Respire', formule: 'Yoga', seances: ['mardi 20 octobre à 10:00'], fiche_url: null, remboursement: { montant: 90, moyen: 'en_ligne' } })
+  const htmlComptoir = mailR({ yopper_prenom: 'Sophie', commercant_nom: 'Centre Respire', formule: 'Yoga', seances: [], fiche_url: null, remboursement: { montant: 40, moyen: 'especes' } })
+  verifier('🔴 l’email du remboursement dit le montant et la carte',
+    htmlCarte.includes(euros(90)) && /sur la carte utilisée pour l’achat/.test(htmlCarte) && /mardi 20 octobre à 10:00/.test(htmlCarte))
+  verifier('🔴 au comptoir, il dit le moyen et ne parle pas de carte',
+    htmlComptoir.includes(euros(40)) && /en espèces/.test(htmlComptoir) && !/carte utilisée/.test(htmlComptoir))
+
+  // ── La route : garde, règle, verrou, ordre ─────────────────────────────────
+  const REMB = sansProse(readFileSync(new URL('../app/api/rdv/rembourser-abonnement/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 rembourser passe par la case Argent',
+    /gardeLigneEquipe\(request, supabase, 'abonnements', abonnement_id, 'argent'\)/.test(REMB) && /if \(nonAutorise\) return nonAutorise/.test(REMB))
+  verifier('🔴 la route applique la règle exécutée par ce banc, sur le contrat relu',
+    /const regle = verdictRemboursementAbonnement\(contrat, \{ montant, moyen \}\)\s*if \(!regle\.ok\) \{/.test(REMB)
+    && /\.select\('id, statut, prix, paye, mode_paiement, stripe_payment_intent_id, rembourse_montant,/.test(REMB))
+  verifier('🔴 un seul gagnant : le montant ne s’inscrit que sur un contrat payé jamais remboursé',
+    /\.update\(\{ rembourse_montant: regle\.montant, rembourse_le: new Date\(\)\.toISOString\(\), rembourse_moyen: regle\.moyen \}\)\s*\.eq\('id', abonnement_id\)\s*\.eq\('paye', true\)\s*\.is\('rembourse_montant', null\)\s*\.select\('id'\)/.test(REMB)
+    && /if \(!verrou \|\| verrou\.length === 0\) \{/.test(REMB))
+  verifier('🔴 Stripe rend le MONTANT choisi, sur le compte du commerce, une seule fois',
+    /amount: Math\.round\(regle\.montant \* 100\),/.test(REMB)
+    && /stripeAccount: contrat\.commercant\.stripe_account_id, idempotencyKey: `abo-remb-\$\{contrat\.id\}-\$\{Math\.round\(regle\.montant \* 100\)\}`/.test(REMB))
+  verifier('🔴 un refus de Stripe lève le verrou et ne résilie rien',
+    /\.update\(\{ rembourse_montant: null, rembourse_le: null, rembourse_moyen: null \}\)\s*\.eq\('id', abonnement_id\)\s*\.is\('stripe_refund_id', null\)\s*return NextResponse\.json\(\{ ok: false, code: 'stripe',/.test(REMB)
+    && REMB.indexOf("code: 'stripe'") < REMB.indexOf("update({ statut: 'resilie' })"))
+  verifier('🔴 rembourser résilie toujours, par la règle commune des séances',
+    /\.update\(\{ statut: 'resilie' \}\)\s*\.eq\('id', abonnement_id\)\s*\.eq\('statut', contrat\.statut\)/.test(REMB)
+    && /const seances = await annulerLesSeancesDuContrat\(supabase, abonnement_id\)/.test(REMB))
+  verifier('⚠️ l’email dit le montant et le moyen',
+    /remboursement: \{ montant: regle\.montant, moyen: regle\.moyen \},/.test(REMB) && /envoyerAuYopper\(/.test(REMB))
+
+  // ── L'écran ────────────────────────────────────────────────────────────────
+  const DASH_I1 = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 l’écran pose la même question que la route, avant d’envoyer',
+    /const regle = verdictRemboursementAbonnement\(a, \{ montant: rembMontant, moyen: rembMoyen \}\)\s*if \(!regle\.ok\) return toast\(messageRefusRemboursement\(regle\.code, regle\), 'error'\)/.test(DASH_I1)
+    && /postPro\('\/api\/rdv\/rembourser-abonnement', \{ abonnement_id: a\.id, montant: regle\.montant, moyen: regle\.moyen \}\)/.test(DASH_I1))
+  verifier('🔴 la part proposée se calcule sur les séances avec leur heure',
+    /select\('id, abonnement_id, statut, date_rdv, heure_debut'\)/.test(DASH_I1)
+    && /partNonUtilisee\(a, reservationsAbo, \{\s*dejaCommencee: \(d, h\) => creneauDejaCommence\(d, h, Date\.now\(\)\),/.test(DASH_I1))
+  verifier('⚠️ « Rembourser » reste offert sur un contrat résilié, jamais deux fois',
+    /const peutRembourser = a\.paye && !rembourse/.test(DASH_I1) && /\{\(!resilie \|\| peutRembourser\) && \(/.test(DASH_I1))
+}
+
+// ── 🔴 Abo-I1 : LE WEBHOOK APPREND UN REMBOURSEMENT FAIT DANS STRIPE ─────────
+{
+  const WH = sansProse(readFileSync(new URL('../app/api/stripe/webhook/route.js', import.meta.url), 'utf8'))
+  const debut = WH.indexOf('async function handleChargeRefunded(')
+  const corps = WH.slice(debut, WH.indexOf('\n}\n', debut))
+  verifier('🔴 charge.refunded cherche aussi l’abonnement du paiement',
+    /\.from\('abonnements'\)\s*\.select\('id, rembourse_montant, stripe_refund_id'\)\s*\.eq\('stripe_payment_intent_id', paymentIntentId\)/.test(corps))
+  verifier('🔴 un montant différent s’écrit (le cumul Stripe), en ligne, daté',
+    /: \{ rembourse_montant: montant, rembourse_le: new Date\(\)\.toISOString\(\), rembourse_moyen: 'en_ligne',/.test(corps))
+  verifier('⚠️ le même montant ne réécrit que la trace manquante',
+    /const memeMontant = Number\(abo\.rembourse_montant\) === montant/.test(corps)
+    && /\? \(!abo\.stripe_refund_id && refundId \? \{ stripe_refund_id: refundId \} : null\)/.test(corps))
+  verifier('🔴 une écriture ratée se rejoue au lieu de se taire',
+    /if \(errAbo\) throw new Error\(/.test(corps) && /if \(errAboLu\) throw new Error\(/.test(corps))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

@@ -443,7 +443,10 @@ const srcConfig = sansCommentaires(readFileSync(new URL('../app/dashboard/Config
 // restent les mêmes, lues là où elles vivent désormais ; la seconde est même
 // plus stricte : « à venir » veut dire « pas encore commencée », à l'heure de
 // Bruxelles, et plus « à partir d'aujourd'hui ».
-const srcResiliation = sansCommentaires(readFileSync(new URL('../app/api/rdv/resilier-abonnement/route.js', import.meta.url), 'utf8'))
+// ⚠️ REPOINTÉES UNE SECONDE FOIS LE 04/10 (Abo-I1) : la règle des séances
+// vit dans `lib/abonnement-resiliation-server`, que « Résilier » et
+// « Rembourser » appellent tous les deux.
+const srcResiliation = sansCommentaires(readFileSync(new URL('../lib/abonnement-resiliation-server.js', import.meta.url), 'utf8'))
 verifier('résilier un abonnement écrit un statut qui existe',
   /statut: 'annule_commercant'/.test(srcResiliation))
 verifier('et jamais « annule » tout court',

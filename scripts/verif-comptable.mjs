@@ -1412,7 +1412,9 @@ verifier('une commande remise sans moyen garde son rattrapage',
   // plus strict qu'un jour). On compte l'inscription ici, la résiliation là-bas.
   egal('l’inscription et la résiliation datent en heure belge',
     (srcConfigDates.match(/const aujourdhui = jourBruxelles\(\)/g) || []).length
-    + (/creneauDejaCommence\(d, h, maintenant\)/.test(readFileSync(new URL('../app/api/rdv/resilier-abonnement/route.js', import.meta.url), 'utf8')) ? 1 : 0), 2)
+    // ⚠️ REPOINTÉE LE 04/10 (Abo-I1) : la règle des séances résiliées vit
+    // dans `lib/abonnement-resiliation-server`, commune à « Rembourser ».
+    + (/creneauDejaCommence\(d, h, maintenant\)/.test(readFileSync(new URL('../lib/abonnement-resiliation-server.js', import.meta.url), 'utf8')) ? 1 : 0), 2)
 }
 
 // ⚠️ UN FRAIS INCONNU RESTE VIDE, JAMAIS 0,00 (Alex, 19/08). Ses quatre
@@ -2291,6 +2293,49 @@ verifier('une commande remise sans moyen garde son rattrapage',
     appelsVus >= 3, `${appelsVus} appels vus`)
   verifier('🔴 le compte connecté est toujours en TROISIÈME argument',
     fautifs.length === 0, fautifs.join(' | '))
+}
+
+// ── 🔴 Abo-I1 (04/10) : UN ABONNEMENT REMBOURSÉ SE CONTREPASSE ─────────────
+// Décision d'Alex : la contrepassation à l'export. La vente reste dans son
+// mois, entière ; le remboursement sort dans le mois où l'argent repart, sur
+// la carte (Stripe) ou au comptoir avec son moyen.
+{
+  const ABO_R = { id: 'ar1', prix: 150, paye: true, paye_le: '2026-09-02T09:00:00.000Z', mode_paiement: 'en_ligne', tva_taux: 21, statut: 'resilie',
+    stripe_frais: 2.5, stripe_net: 147.5, rembourse_montant: 90, rembourse_le: '2026-10-05T10:00:00.000Z', rembourse_moyen: 'en_ligne' }
+  const SEPT = { du: '2026-09-01', au: '2026-09-30' }
+  const OCT = { du: '2026-10-01', au: '2026-10-31' }
+  const sep = construireLignes({ abonnements: [ABO_R], periode: SEPT })
+  const oct = construireLignes({ abonnements: [ABO_R], periode: OCT })
+  verifier('🔴 la vente d’un abonnement remboursé reste dans son mois, entière',
+    sep.length === 1 && sep[0].total === 150 && !sep[0].remboursement)
+  verifier('🔴 son remboursement sort dans le mois où l’argent repart, en négatif, sur la carte',
+    oct.length === 1 && oct[0].remboursement === true && oct[0].total === -90 && oct[0].enLigne === -90
+    && oct[0].comptoir === 0 && oct[0].netStripe === -90 && oct[0].date === '2026-10-05' && oct[0].type === 'Remboursement')
+  const AU_COMPTOIR = { ...ABO_R, id: 'ar2', mode_paiement: 'especes', stripe_frais: null, stripe_net: null, rembourse_montant: 40, rembourse_moyen: 'virement' }
+  const comp = construireLignes({ abonnements: [AU_COMPTOIR], periode: OCT })
+  verifier('🔴 au comptoir, la contrepassation sort du comptoir et nomme le moyen',
+    comp.length === 1 && comp[0].comptoir === -40 && comp[0].enLigne === 0 && comp[0].netStripe === 0 && comp[0].modeEncaissement === 'virement')
+  verifier('⚠️ sans période, la vente et son remboursement sortent ensemble',
+    construireLignes({ abonnements: [ABO_R] }).length === 2)
+  verifier('⚠️ un remboursement ne dépasse jamais la vente',
+    construireLignes({ abonnements: [{ ...ABO_R, rembourse_montant: 999 }], periode: OCT })[0]?.total === -150)
+  verifier('⚠️ un contrat jamais remboursé ne produit qu’une ligne',
+    construireLignes({ abonnements: [{ ...ABO_R, rembourse_montant: null, rembourse_le: null, rembourse_moyen: null }] }).length === 1)
+
+  const ROUTE_EXP = sansProse(readFileSync(new URL('../app/api/dashboard/export-comptable/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 l’export lit les colonnes du remboursement',
+    /\.from\('abonnements'\)\s*\.select\('[^']*rembourse_montant, rembourse_le, rembourse_moyen[^']*'\)/.test(ROUTE_EXP))
+  verifier('🔴 et charge les contrats remboursés pendant la période, vendus avant',
+    /const jourRemb = a\?\.rembourse_le \? jourBruxelles\(a\.rembourse_le\) : null\s*return \(jour >= du && jour <= au\) \|\| \(jourRemb !== null && jourRemb >= du && jourRemb <= au\)/.test(ROUTE_EXP))
+
+  const { chiffreAffaires: ca, valeurAbonnement } = await import('../lib/statistiques.js')
+  egal('🔴 les statistiques déduisent ce qui a été rendu', valeurAbonnement({ prix: 150, rembourse_montant: 90 }), 60)
+  egal('⚠️ et jamais en dessous de zéro', valeurAbonnement({ prix: 150, rembourse_montant: 500 }), 0)
+  egal('⚠️ le chiffre d’affaires des abonnements suit',
+    ca([], [], [{ id: 'x', prix: 150, paye: true, paye_le: '2026-09-02T09:00:00Z', rembourse_montant: 90 }]).abonnements, 60)
+  verifier('⚠️ la route des statistiques lit le remboursement',
+    /\.from\('abonnements'\)\s*\.select\('id, prix, paye, paye_le, mode_paiement, rembourse_montant'\)/.test(
+      sansProse(readFileSync(new URL('../app/api/dashboard/statistiques/route.js', import.meta.url), 'utf8'))))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

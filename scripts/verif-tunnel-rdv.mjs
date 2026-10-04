@@ -2803,6 +2803,10 @@ for (const chemin of [
     'app/api/rdv/cancel/route.js': 'annule_client',
     'app/api/rdv/annuler-commercant/route.js': 'annule_commercant',
     'app/api/rdv/no-show/route.js': 'no_show',
+    // 🔴 Abo-I1 (04/10) : rembourser un abonnement le RÉSILIE toujours
+    // (décision d'Alex). La règle de la sonde tient : pas de remboursement
+    // sans changement de statut.
+    'app/api/rdv/rembourser-abonnement/route.js': 'resilie',
   }
   verifie('la sonde a trouvé des remboursements', rembourseurs.length >= 4, String(rembourseurs.length))
   // ✅ ET UN SEUL QUI REMBOURSE SANS RIEN ANNULER, PARCE QU'IL N'Y A RIEN (03/10) :

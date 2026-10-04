@@ -227,7 +227,7 @@ export async function GET(request) {
     // dans un fichier qui sort de l'application.
     const { data: abonnementsTous } = await admin
       .from('abonnements')
-      .select('id, statut, prix, paye, paye_le, mode_paiement, tva_taux, stripe_frais, stripe_net, client_prenom, client_nom, numero_abonnement, numero_prefixe')
+      .select('id, statut, prix, paye, paye_le, mode_paiement, tva_taux, stripe_frais, stripe_net, rembourse_montant, rembourse_le, rembourse_moyen, client_prenom, client_nom, numero_abonnement, numero_prefixe')
       .eq('commercant_id', commercantId)
     const abonnements = (abonnementsTous || []).filter(a => {
       // ⚠️ EN HEURE BELGE. Ce filtre decoupait l instant en temps universel :
@@ -236,7 +236,11 @@ export async function GET(request) {
       // decalee. Ecriture differente du meme defaut, que la garde du banc ne
       // voyait pas : elle ne cherchait que `toISOString()`.
       const jour = jourBruxelles(a?.paye_le)
-      return jour >= du && jour <= au
+      // 🔴 ET LES CONTRATS REMBOURSÉS PENDANT LA PÉRIODE (Abo-I1, 04/10), même
+      // vendus avant : leur contrepassation appartient à ce mois-ci.
+      // `construireLignes` juge ensuite chaque ligne sur sa propre date.
+      const jourRemb = a?.rembourse_le ? jourBruxelles(a.rembourse_le) : null
+      return (jour >= du && jour <= au) || (jourRemb !== null && jourRemb >= du && jourRemb <= au)
     })
 
     // ─── ET LES BONS CADEAUX VENDUS, QUI N'ÉCRIVAIENT AUCUNE LIGNE ────────

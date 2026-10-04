@@ -70,7 +70,7 @@ import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
 // la gravure du lieu n'ont pas été supprimés du projet, c'est le geste d'agenda
 // qui les reprend.
-import { exclusionsQuiSeChevauchent, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
+import { exclusionsQuiSeChevauchent, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, partNonUtilisee, verdictRemboursementAbonnement, messageRefusRemboursement, libelleRemboursement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import TabGenerateur from './TabGenerateur'
@@ -110,7 +110,7 @@ import BandeDefilante from '@/app/components/BandeDefilante'
 // et un food truck n'ont pas le même métier et ont le même besoin. Cette
 // section a cessé d'être conditionnée au métier le 12/08, et son dernier usage,
 // un titre qui changeait selon la catégorie, est parti le 13/08.
-import { jourLocalISO, jourSemaineLocal, jourBruxelles } from '@/lib/timezone'
+import { jourLocalISO, jourSemaineLocal, jourBruxelles, creneauDejaCommence } from '@/lib/timezone'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
@@ -10865,6 +10865,12 @@ function TabRdvAbonnements({ commercantId, toast }) {
   const [reservationsAbo, setReservationsAbo] = useState([])
   const [encaisseOuvert, setEncaisseOuvert] = useState(null)
   const [encaissantId, setEncaissantId] = useState(null)
+  // 🔴 LE REMBOURSEMENT (Abo-I1, 04/10) : une carte à la fois, comme
+  // l'encaissement. Le montant proposé est la part non utilisée.
+  const [rembOuvert, setRembOuvert] = useState(null)
+  const [rembMontant, setRembMontant] = useState('')
+  const [rembMoyen, setRembMoyen] = useState(null)
+  const [rembEnCours, setRembEnCours] = useState(false)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAll() }, [commercantId])
@@ -10897,7 +10903,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
       // 🔴 TOUTES LES SÉANCES, PAS LES MILLE PREMIÈRES (B3, 03/10) : trente
       // abonnées à 36 séances dépassent le plafond silencieux de Supabase, et
       // chaque solde se calculait sur une partie de ses séances.
-      toutesLesLignes(() => supabase.from('rdv_reservations').select('abonnement_id, statut, date_rdv')
+      toutesLesLignes(() => supabase.from('rdv_reservations').select('id, abonnement_id, statut, date_rdv, heure_debut')
         .eq('commercant_id', commercantId).not('abonnement_id', 'is', null)
         .is('deleted_at', null)
         .order('id', { ascending: true })),
@@ -11027,7 +11033,11 @@ function TabRdvAbonnements({ commercantId, toast }) {
     if (!await confirme(confirmationSimple({
       titre: `Résilier l’abonnement de ${a.client_prenom} ?`,
       message: `Ses séances à venir sont annulées${a.client_email ? ', et un email l’en informe' : '. Son contrat n’a pas d’adresse email : rien ne l’en informe, fais-le toi-même'}. Celles déjà passées restent dans ton historique.`,
-      details: 'Yoppaa ne rembourse rien automatiquement. Si tu lui rends une partie du prix, fais-le depuis ton tableau Stripe pour un paiement en ligne, ou de la main à la main.',
+      // 🔴 « REMBOURSER » EXISTE DEPUIS LE 04/10 (Abo-I1) : la phrase
+      // renvoyait vers le tableau Stripe, Yoppaa n'en savait rien.
+      details: a.paye && !(Number(a.rembourse_montant) > 0)
+        ? 'Résilier ne rembourse rien. Pour rendre une partie du prix, utilise plutôt « Rembourser » : il résilie aussi.'
+        : undefined,
       action: 'Oui, résilier l’abonnement',
     }))) return
     const res = await postPro('/api/rdv/resilier-abonnement', { abonnement_id: a.id })
@@ -11041,6 +11051,50 @@ function TabRdvAbonnements({ commercantId, toast }) {
     // Les places libérées préviennent leur file (04/10) : on le dit.
     const fileTxt = Number(j.file_prevenue) > 0 ? ' La liste d’attente est prévenue des places libres.' : ''
     toast(`Abonnement résilié. ${seancesTxt}${emailTxt}.${fileTxt}`, j.email === 'envoye' ? undefined : 'error')
+  }
+
+  // ═══ RENDRE L'ARGENT (Abo-I1, 04/10) ═══════════════════════════════════
+  //
+  // ✅ DÉCISIONS D'ALEX : montant libre plafonné au prix, part non utilisée
+  // proposée, rembourser RÉSILIE toujours, payé au comptoir = remboursement
+  // NOTÉ avec son moyen. L'écran pose la même question que la route
+  // (`verdictRemboursementAbonnement`) : un refus se dit avant l'envoi.
+  // La part se calcule à l'heure de Bruxelles, après la résiliation que le
+  // remboursement déclenche : les séances à venir reviennent au solde.
+  const partProposee = (a) => partNonUtilisee(a, reservationsAbo, {
+    dejaCommencee: (d, h) => creneauDejaCommence(d, h, Date.now()),
+  })
+  function ouvrirRemboursement(a) {
+    const part = partProposee(a)
+    setRembMontant(part ? String(part.montant).replace('.', ',') : '')
+    setRembMoyen(null)
+    setRembOuvert(a.id)
+  }
+  async function rembourser(a) {
+    const regle = verdictRemboursementAbonnement(a, { montant: rembMontant, moyen: rembMoyen })
+    if (!regle.ok) return toast(messageRefusRemboursement(regle.code, regle), 'error')
+    const resilie = a.statut === 'resilie'
+    if (!await confirme(confirmationSimple({
+      titre: `Rembourser ${euros(regle.montant)} à ${a.client_prenom} ?`,
+      message: regle.enLigne
+        ? 'Stripe rend ce montant sur la carte utilisée pour l’achat. C’est définitif.'
+        : `Yoppaa note que tu as rendu ce montant (${libelleMoyenEncaissement(regle.moyen)}). Pense à le rendre réellement.`,
+      details: resilie ? undefined : `L’abonnement est aussi résilié : ses séances à venir sont annulées${a.client_email ? ', et un email l’en informe' : ''}.`,
+      action: resilie ? 'Oui, rembourser' : 'Oui, rembourser et résilier',
+    }))) return
+    setRembEnCours(true)
+    const res = await postPro('/api/rdv/rembourser-abonnement', { abonnement_id: a.id, montant: regle.montant, moyen: regle.moyen })
+    const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+    setRembEnCours(false)
+    fetchAll()
+    if (!j?.ok) return toast(j?.error || 'Le remboursement n’a pas pu aboutir. Réessaie dans un instant.', 'error')
+    setRembOuvert(null)
+    const n = Number(j.seances_annulees) || 0
+    const seancesTxt = resilie ? '' : n === 0 ? ' Abonnement résilié, aucune séance à venir.' : ` Abonnement résilié, ${n === 1 ? '1 séance à venir annulée' : `${n} séances à venir annulées`}.`
+    const emailTxt = j.email === 'envoye' ? ` Un email en informe ${a.client_prenom}.` : ` Préviens ${a.client_prenom} toi-même.`
+    // ⚠️ L'ARGENT EST RENDU MAIS LA RÉSILIATION A CALÉ : on le dit d'abord.
+    if (j.partiel) return toast(`${euros(j.montant)} remboursés. ${j.error}`, 'error')
+    toast(`${euros(j.montant)} remboursés${j.moyen === 'en_ligne' ? ' sur la carte' : ''}.${seancesTxt}${emailTxt}`, j.email === 'envoye' ? undefined : 'error')
   }
 
   function openNew() {
@@ -11616,13 +11670,18 @@ function TabRdvAbonnements({ commercantId, toast }) {
                 const posees = seancesConsommees(reservationsAbo, { abonnementId: a.id })
                 const restantes = soldeAbonnement(a, posees)
                 const moyen = libelleMoyenEncaissement(a.mode_paiement)
+                // 🔴 RENDRE L'ARGENT (Abo-I1) : un contrat payé, pas encore
+                // remboursé, résilié ou non (on rend souvent APRÈS l'arrêt).
+                const rembourse = libelleRemboursement(a)
+                const peutRembourser = a.paye && !rembourse
                 return (
-                  <div key={a.id} style={{ background: '#fff', borderRadius: 12, padding: 14, border: `1px solid ${T.hairline}`, opacity: resilie ? 0.5 : 1, minWidth: 0 }}>
+                  <div key={a.id} style={{ background: '#fff', borderRadius: 12, padding: 14, border: `1px solid ${T.hairline}`, opacity: resilie && rembOuvert !== a.id ? 0.5 : 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
                       <div style={{ flex: '1 1 180px', minWidth: 0 }}>
                         <p style={{ fontSize: 14, fontWeight: 800, color: T.ink, overflowWrap: 'anywhere' }}>
                           {a.client_prenom} {a.client_nom || ''}
                           {resilie && <span style={{ ...s.tag, background: '#FEE2E2', color: '#B91C1C', marginLeft: 8 }}>Résilié</span>}
+                          {rembourse && <span style={{ ...s.tag, background: '#E0F2FE', color: '#075985', marginLeft: 8 }}>{rembourse}</span>}
                         </p>
                         <p style={{ fontSize: 12, color: T.muted, marginTop: 3, overflowWrap: 'anywhere' }}>
                           {/* ⚠️ LE SOLDE, PAS LE TOTAL. Cette ligne annonçait
@@ -11656,19 +11715,25 @@ function TabRdvAbonnements({ commercantId, toast }) {
                             : <span style={{ color: '#B45309', fontWeight: 700 }}>Paiement en attente</span>}
                         </p>
                       </div>
-                      {!resilie && (
-                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {(!resilie || peutRembourser) && (
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
                           {/* ⚠️ LE GESTE QUI MANQUAIT. Sans lui, la seule action
                               offerte sur un contrat impayé était « Résilier » :
                               on encaissait 400 € au comptoir et l'écran n'avait
                               aucune porte pour le dire. */}
-                          {!a.paye && (
+                          {!resilie && !a.paye && (
                             <button onClick={() => setEncaisseOuvert(encaisseOuvert === a.id ? null : a.id)}
                               style={{ ...s.btn, ...s.btnPrimary, padding: '7px 12px', fontSize: 12 }}>
                               {encaisseOuvert === a.id ? 'Fermer' : 'Encaisser'}
                             </button>
                           )}
-                          <button onClick={() => resilier(a)} style={{ ...s.btn, ...s.btnDanger, padding: '7px 12px', fontSize: 12 }}>Résilier</button>
+                          {peutRembourser && (
+                            <button onClick={() => (rembOuvert === a.id ? setRembOuvert(null) : ouvrirRemboursement(a))}
+                              style={{ ...s.btn, ...s.btnGhost, padding: '7px 12px', fontSize: 12 }}>
+                              {rembOuvert === a.id ? 'Fermer' : 'Rembourser'}
+                            </button>
+                          )}
+                          {!resilie && <button onClick={() => resilier(a)} style={{ ...s.btn, ...s.btnDanger, padding: '7px 12px', fontSize: 12 }}>Résilier</button>}
                         </div>
                       )}
                     </div>
@@ -11693,6 +11758,50 @@ function TabRdvAbonnements({ commercantId, toast }) {
                         </div>
                       </div>
                     )}
+
+                    {/* 🔴 LE REMBOURSEMENT (Abo-I1, 04/10) : la part non
+                        utilisée est proposée, le montant reste libre jusqu'au
+                        prix payé. Au comptoir, le moyen se choisit d'une
+                        touche, comme à l'encaissement. */}
+                    {peutRembourser && rembOuvert === a.id && (() => {
+                      const part = partProposee(a)
+                      const enLigne = a.mode_paiement === 'en_ligne'
+                      return (
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.hairline}` }}>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: T.ink, marginBottom: 4 }}>
+                            Rembourser {a.client_prenom}
+                          </p>
+                          <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5, marginBottom: 8 }}>
+                            {part ? `Part non utilisée : ${part.restantes} séance${part.restantes > 1 ? 's' : ''} sur ${part.total}, soit ${euros(part.montant)}. ` : ''}
+                            Tu peux changer le montant, jusqu&rsquo;à {euros(a.prix)}.
+                            {enLigne ? ' Stripe le rend sur la carte utilisée pour l’achat.' : ' Tu rends l’argent toi-même, Yoppaa le note.'}
+                            {!resilie ? ' Rembourser résilie aussi l’abonnement : ses séances à venir sont annulées.' : ''}
+                          </p>
+                          <label htmlFor={`remb-${a.id}`} style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: T.ink, marginBottom: 4 }}>Montant à rembourser (€)</label>
+                          <input id={`remb-${a.id}`} type="text" inputMode="decimal" value={rembMontant}
+                            onChange={(e) => setRembMontant(e.target.value)}
+                            style={{ ...s.input, maxWidth: 160, marginBottom: 8 }}/>
+                          {!enLigne && (
+                            <div style={{ marginBottom: 8 }}>
+                              <p style={{ fontSize: 11.5, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Comment rends-tu l&rsquo;argent ?</p>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {MOYENS_ENCAISSEMENT.map(m => (
+                                  <button key={m.cle} type="button" aria-pressed={rembMoyen === m.cle}
+                                    onClick={() => setRembMoyen(m.cle)}
+                                    style={{ ...s.btn, ...(rembMoyen === m.cle ? s.btnPrimary : s.btnGhost), padding: '8px 12px', fontSize: 12 }}>
+                                    {m.libelle}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <button type="button" disabled={rembEnCours} onClick={() => rembourser(a)}
+                            style={{ ...s.btn, ...s.btnDanger, padding: '8px 14px', fontSize: 12, opacity: rembEnCours ? 0.6 : 1 }}>
+                            {rembEnCours ? 'Remboursement…' : (resilie ? 'Rembourser' : 'Rembourser et résilier')}
+                          </button>
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })}

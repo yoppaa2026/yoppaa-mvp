@@ -67,8 +67,8 @@ const MUTATIONS = [
 
   { nom: '🔴 la contrepassation porte à nouveau un frais, qui compte double',
     banc: 'verif:comptable', fichier: MODULE,
-    de: '    fraisStripe: 0,\n    netStripe: surBon ? 0 : arrondi(-part),',
-    vers: '    fraisStripe: origine.fraisStripe,\n    netStripe: surBon ? 0 : arrondi(-part),' },
+    de: '    fraisStripe: 0,\n    netStripe: surBon || auComptoir ? 0 : arrondi(-part),',
+    vers: '    fraisStripe: origine.fraisStripe,\n    netStripe: surBon || auComptoir ? 0 : arrondi(-part),' },
 
   // ─── LA VALIDATION D'ALEX : une ligne à SA date ───────────────────────────
   { nom: '🔴 la contrepassation reprend la date de la vente',
@@ -98,8 +98,8 @@ const MUTATIONS = [
 
   { nom: '🔴 le remboursement d’un bon fait baisser l’encaissement en ligne',
     banc: 'verif:comptable', fichier: MODULE,
-    de: '    enLigne: surBon ? 0 : arrondi(-part),',
-    vers: '    enLigne: arrondi(-part),' },
+    de: '    enLigne: surBon || auComptoir ? 0 : arrondi(-part),',
+    vers: '    enLigne: auComptoir ? 0 : arrondi(-part),' },
 
   { nom: '🔴 la contrepassation se compte comme une référence ambiguë de plus',
     banc: 'verif:comptable', fichier: MODULE,

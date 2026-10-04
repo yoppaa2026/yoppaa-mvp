@@ -435,7 +435,9 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
   verifier('⚠️ et la fermeture d’une journée non plus',
     /\{ rdv_id: r\.id, raison: 'commercant', prevenir_file: false \}/.test(sansProse(lire('app/dashboard/ConfigDashboard.js'))))
   // 🔴 LA RÉSILIATION LIBÈRE DES PLACES (04/10) : chacune prévient sa file.
-  const RESIL = sansProse(lire('app/api/rdv/resilier-abonnement/route.js'))
+  // ⚠️ REPOINTÉE LE 04/10 (Abo-I1) : la règle commune aux deux routes qui
+  // résilient (« Résilier », « Rembourser ») vit dans ce module.
+  const RESIL = sansProse(lire('lib/abonnement-resiliation-server.js'))
   verifier('🔴 la résiliation d’un abonnement prévient la file de chaque séance libérée',
     /\.select\('id, prestation_id, date_rdv, heure_debut, statut, deleted_at, rappel_push_id'\)/.test(RESIL)
     && /for \(const s of annulees\) \{\s*if \(!s\.prestation_id\) continue\s*const file = await prevenirLaFile\(supabase, \{\s*prestationId: s\.prestation_id,/.test(RESIL))
@@ -450,7 +452,9 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
       && !/liste d’attente/.test(conf('annule_commercant', { rdv: RDV, retours: { file_prevenue: 0 } })))
     verifier('⚠️ les deux routes le rendent, et le tableau de bord le transmet',
       /file_prevenue: filePrevenue,/.test(ANNUL_PRO)
-      && /file_prevenue: filePrevenue \}\)/.test(RESIL)
+      // ⚠️ La réponse reste celle de la route (le compte vient du module commun).
+      && /file_prevenue: filePrevenue \}\)/.test(sansProse(lire('app/api/rdv/resilier-abonnement/route.js')))
+      && /else filePrevenue \+= Number\(file\.prevenus\) \|\| 0/.test(RESIL)
       && /file_prevenue: j\.file_prevenue,/.test(BORD))
   }
 

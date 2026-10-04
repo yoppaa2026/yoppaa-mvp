@@ -596,7 +596,9 @@ for (const chemin of [
           nom === 'commercant_lieux' ? { data: lieux }
           : nom === 'rdv_creneaux' ? { data: projeter(creneaux, colonnes) }
           : nom === 'rdv_creneau_prestations' ? { data: liaisons }
-          : nom === 'rdv_fermetures' ? { data: erreurFermetures ? null : fermetures, error: erreurFermetures }
+          // ⚠️ À TRAVERS LE SELECT (04/10) : sans `prestation_id, heure_debut`,
+          // la fermeture d'une séance se lirait comme une journée entière.
+          : nom === 'rdv_fermetures' ? { data: erreurFermetures ? null : projeter(fermetures, colonnes), error: erreurFermetures }
           : nom === 'rdv_reservations' ? (vu.filtresPlaces = filtres, erreurPlaces
             ? { data: null, error: erreurPlaces }
             // ⚠️ À TRAVERS LE SELECT (04/10) : une inscription peut porter son
@@ -814,6 +816,17 @@ for (const chemin of [
     // ⚠️ ET AVANT LE PAIEMENT : les routes d'acompte vérifient par ce chemin-là.
     const sim = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, champs: {}, simulation: true })
     verifie('🔴 la vérification avant paiement le refuse aussi', sim.ok === false && sim.code === 'jour_ferme', JSON.stringify(sim))
+    // 🔴 UN COURS ANNULÉ (question 1, 04/10) : cette séance seulement.
+    const COURS_ANNULE = [{ date_debut: '2026-09-07', date_fin: '2026-09-07', praticien_id: null, prestation_id: 'p2', heure_debut: '18:00:00' }]
+    const SEANCE = { commercantId: 'c1', prestationId: 'p2', dateRdv: '2026-09-07', heureDebut: '18:00' }
+    const annule = baseSimulee({ prestation: PRESTA_COURS, fermetures: COURS_ANNULE })
+    const r9 = await creerReservationRdv(annule, { ...SEANCE, champs: {} })
+    verifie('🔴 un cours annulé se refuse en ligne, avec son propre motif, et rien ne s’écrit',
+      r9.ok === false && r9.code === 'seance_fermee' && annule._vu.payload === null, JSON.stringify(r9))
+    const r10 = await creerReservationRdv(baseSimulee({ prestation: PRESTA_COURS, fermetures: COURS_ANNULE }), { ...SEANCE, heureDebut: '19:00', champs: {} })
+    verifie('⚠️ le même cours, à une autre heure du même jour, se réserve', r10.ok === true, JSON.stringify(r10))
+    const r11 = await creerReservationRdv(baseSimulee({ prestation: PRESTA_COURS, fermetures: COURS_ANNULE }), { ...SEANCE, champs: { source: 'commercant' } })
+    verifie('⚠️ la commerçante, elle, peut encore y inscrire quelqu’un au comptoir', r11.ok === true, JSON.stringify(r11))
     const dernierJour = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, dateRdv: '2026-09-11', champs: {} })
     verifie('⚠️ le dernier jour de la fermeture est fermé aussi', dernierJour.ok === false && dernierJour.code === 'jour_ferme')
     const lendemain = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, dateRdv: '2026-09-12', champs: {} })
@@ -878,8 +891,68 @@ for (const chemin of [
     const q = questionSeanceAnnulee(12)
     verifie('🔴 annuler un cours : une seule question pour les douze',
       q?.titre === 'Annuler ce cours pour les 12 personnes inscrites ?' && q.actions[0].valeur === 'annuler' && q.actions[0].ton === 'danger')
-    verifie('🔴 et elle dit honnêtement que les places se rouvrent en ligne',
-      /les places redeviennent réservables en ligne/.test(q?.details || ''))
+    // ⚠️ REPOINTÉE LE 04/10 (question 1) : les places ne se rouvrent plus, le
+    // cours se ferme. La question doit dire CE qui arrive, comme avant.
+    verifie('🔴 et elle dit que le cours se ferme aussi à la réservation en ligne',
+      /Le cours est aussi fermé à la réservation en ligne\./.test(q?.details || '') && !/redeviennent réservables/.test(q?.details || ''))
+    verifie('🔴 une fermeture du cours ratée se dit, avec le geste qui répare',
+      /le cours n’a pas pu être fermé à la réservation en ligne/.test(confirmationSeanceAnnulee({ faits: 2, coursFerme: false }))
+      && !/pas pu être fermé/.test(confirmationSeanceAnnulee({ faits: 2 })))
+
+    // ── LA FERMETURE D'UNE SÉANCE (question 1, Alex 04/10) ───────────────
+    {
+      const { fermetureQuiBloque: bloque, plagesOuvertes: ouvertes, seanceFermee, estFermetureDeSeance } = await import('../lib/fermetures-rdv.js')
+      const YOGA_LUNDI = { date_debut: '2026-10-19', date_fin: '2026-10-19', praticien_id: null, prestation_id: 'yoga', heure_debut: '18:00:00' }
+      verifie('🔴 un cours annulé bloque CE cours à CETTE heure',
+        bloque([YOGA_LUNDI], { dateStr: '2026-10-19', prestationId: 'yoga', heure: '18:00' }) === YOGA_LUNDI && estFermetureDeSeance(YOGA_LUNDI))
+      verifie('🔴 et rien d’autre : une autre heure, un autre cours, la journée',
+        bloque([YOGA_LUNDI], { dateStr: '2026-10-19', prestationId: 'yoga', heure: '19:00' }) === null
+        && bloque([YOGA_LUNDI], { dateStr: '2026-10-19', prestationId: 'pilates', heure: '18:00' }) === null
+        && bloque([YOGA_LUNDI], { dateStr: '2026-10-19' }) === null)
+      memes('🔴 l’agenda ne lit pas un cours annulé comme une journée fermée',
+        fermeturesDuJour([YOGA_LUNDI], '2026-10-19').length, 0)
+      memes('⚠️ et aucune plage ne se ferme pour lui',
+        ouvertes([{ id: 'k', praticien_id: null }], [YOGA_LUNDI], '2026-10-19').length, 1)
+      verifie('⚠️ la grille de la fiche retire la séance, et elle seule',
+        seanceFermee([YOGA_LUNDI], { dateStr: '2026-10-19', prestationId: 'yoga', heure: '18:00' })
+        && !seanceFermee([YOGA_LUNDI], { dateStr: '2026-10-19', prestationId: 'yoga', heure: '18:15' })
+        && !seanceFermee([YOGA_LUNDI], { dateStr: '2026-10-20', prestationId: 'yoga', heure: '18:00' }))
+      memes('⚠️ elle ne rattrape que les inscrites de ce cours, à cette heure',
+        ids(rdvsSousLaFermeture([
+          { id: 'y1', statut: 'confirme', date_rdv: '2026-10-19', heure_debut: '18:00:00', prestation_id: 'yoga' },
+          { id: 'y2', statut: 'confirme', date_rdv: '2026-10-19', heure_debut: '19:00:00', prestation_id: 'yoga' },
+          { id: 'p1', statut: 'confirme', date_rdv: '2026-10-19', heure_debut: '18:00:00', prestation_id: 'pilates' },
+        ], YOGA_LUNDI)), 'y1')
+      const { refusAvantPaiement: avantF, motifApresPaiement: apresF, estRefusDeRegle: regleF } = await import('../lib/refus-reservation.js')
+      verifie('🔴 le refus d’un cours annulé renvoie à la grille, et se rembourse après paiement',
+        avantF({ code: 'seance_fermee' }).corps.creneau_refuse === true
+        && avantF({ code: 'seance_fermee' }).corps.error === 'Ce cours a été annulé par le commerce. Choisis un autre horaire.'
+        && regleF('seance_fermee') && apresF('seance_fermee') !== apresF('inconnu'))
+      // 🔴 CHAQUE LECTEUR DEMANDE LES DEUX COLONNES : sans elles, une séance
+      // fermée se lit comme une JOURNÉE fermée (aucun praticien), et l'agenda,
+      // la saisie au comptoir ou la fiche fermeraient toute la journée.
+      for (const [f, motif] of [
+        ['lib/rdv-creation-server.js', /\.from\('rdv_fermetures'\)\s*\.select\('date_debut, date_fin, praticien_id, prestation_id, heure_debut'\)/],
+        ['lib/attente-rdv-server.js', /\.from\('rdv_fermetures'\)\s*\.select\('date_debut, date_fin, praticien_id, prestation_id, heure_debut'\)/],
+        ['app/commander/rdv/[slug]/page.js', /\.from\('rdv_fermetures'\)\s*\.select\('date_debut, date_fin, praticien_id, prestation_id, heure_debut'\)/],
+        ['app/dashboard/ModalNouveauRdv.js', /\.from\('rdv_fermetures'\)\s*\.select\('date_debut, date_fin, praticien_id, prestation_id, heure_debut'\)/],
+        ['app/dashboard/page.js', /\.from\('rdv_fermetures'\)\s*\.select\('id, date_debut, date_fin, praticien_id, motif, prestation_id, heure_debut'\)/],
+      ]) verifie(`🔴 ${f} lit la fermeture d’une séance`, motif.test(lireCode(f)))
+      const FICHE_F = lireCode('app/commander/rdv/[slug]/page.js')
+      verifie('🔴 la fiche retire la séance fermée de la grille ET des pastilles',
+        /\.filter\(s => !seanceFermee\(fermetures, \{ dateStr, prestationId: prestationChoisie\?\.id, heure: s\.heure \}\)\)/.test(FICHE_F)
+        && /!s\.pris && !seanceFermee\(fermetures, \{ dateStr: j\.iso, prestationId: prestationChoisie\?\.id, heure: s\.heure \}\)/.test(FICHE_F))
+      const BORD_F = lireCode('app/dashboard/page.js')
+      const iFerme = BORD_F.indexOf("const { error: errFermeture } = await supabase.from('rdv_fermetures').insert({")
+      const iBoucle = BORD_F.indexOf('for (const rdv of seanceAAnnuler) {')
+      verifie('🔴 « Annuler ce cours » ferme la séance AVANT de désinscrire',
+        iFerme > 0 && iBoucle > iFerme
+        && /prestation_id: seance\.prestation_id,\s*heure_debut: String\(seance\.heure_debut \|\| ''\)\.slice\(0, 5\),/.test(BORD_F)
+        && /coursFerme: !errFermeture/.test(BORD_F))
+      // ── QUESTION 7 : le calendrier lit toutes ses pages ────────────────────
+      verifie('🔴 le calendrier à pastilles lit toutes les réservations, pas les 1 000 premières',
+        /await toutesLesLignes\(\(\) => supabase\.rpc\('rdv_slots_busy_range', \{/.test(FICHE_F))
+    }
     verifie('rien à annuler, rien à demander', questionSeanceAnnulee(0) === null)
     memes('⚠️ le bilan dit ce qui a été remboursé, au centime',
       confirmationSeanceAnnulee({ faits: 3, rembourse: 25 }), '3 personnes sont désinscrites et prévenues par email. 25,00 € d’acomptes sont remboursés.')

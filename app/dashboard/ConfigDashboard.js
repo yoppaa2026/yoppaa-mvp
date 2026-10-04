@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import EnCours from './EnCours'
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { toutesLesLignes } from '@/lib/toutes-les-lignes'
-import { rdvsSousLaFermeture, rdvsSurLaPlage } from '@/lib/fermetures-rdv'
+import { rdvsSousLaFermeture, rdvsSurLaPlage, estFermetureDeSeance } from '@/lib/fermetures-rdv'
 import { confirmationSeanceAnnulee } from '@/lib/confirmation-rdv'
 import DotsAttente from '@/app/components/DotsAttente'
 import { supabase } from '@/lib/supabase'
@@ -13192,6 +13192,9 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
   const mots = motsReservation(commercant)
   const [fermetures, setFermetures] = useState([])
   const [praticiens, setPraticiens] = useState([])
+  // Le nom des cours, pour lire une séance fermée (« Yoga, 18:00 ») au lieu
+  // d'une journée (question 1, 04/10).
+  const [nomsCours, setNomsCours] = useState({})
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -13273,12 +13276,14 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: fer }, { data: prat }] = await Promise.all([
+    const [{ data: fer }, { data: prat }, { data: presta }] = await Promise.all([
       supabase.from('rdv_fermetures').select('*').eq('commercant_id', commercantId).is('deleted_at', null).order('date_debut', { ascending: true }),
       supabase.from('rdv_praticiens').select('id, prenom, nom, couleur_hex, photo_url, actif').eq('commercant_id', commercantId).eq('actif', true).is('deleted_at', null).order('ordre', { ascending: true }),
+      supabase.from('rdv_prestations').select('id, nom').eq('commercant_id', commercantId),
     ])
     setFermetures(fer || [])
     setPraticiens(prat || [])
+    setNomsCours(Object.fromEntries((presta || []).map(p => [p.id, p.nom])))
     setLoading(false)
   }
 
@@ -13320,13 +13325,21 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
   }
 
   async function softDelete(f) {
-    const label = f.date_debut === f.date_fin
+    // ⚠️ UNE SÉANCE FERMÉE SE ROUVRE (question 1, 04/10) : la question dit ce
+    // qui arrive vraiment, le cours redevient réservable en ligne. Les
+    // personnes désinscrites ne sont pas réinscrites.
+    const seance = estFermetureDeSeance(f)
+    const label = seance
+      ? `${nomsCours[f.prestation_id] || 'Cours'}, le ${f.date_debut} à ${String(f.heure_debut).slice(0, 5)}`
+      : f.date_debut === f.date_fin
       ? `Supprimer la fermeture du ${f.date_debut} ?`
       : `Supprimer la fermeture du ${f.date_debut} au ${f.date_fin} ?`
-    if (!await confirme(confirmationSimple({ titre: 'Supprimer cette fermeture ?', message: 'Ces jours redeviendront ouverts à la réservation.', details: label, action: 'Oui, supprimer la fermeture' }))) return
+    if (!await confirme(confirmationSimple(seance
+      ? { titre: 'Rouvrir ce cours ?', message: 'Il redevient réservable en ligne. Les personnes désinscrites à l’annulation ne sont pas réinscrites.', details: label, action: 'Oui, rouvrir le cours' }
+      : { titre: 'Supprimer cette fermeture ?', message: 'Ces jours redeviendront ouverts à la réservation.', details: label, action: 'Oui, supprimer la fermeture' }))) return
     const { error } = await supabase.from('rdv_fermetures').update({ deleted_at: new Date().toISOString() }).eq('id', f.id)
     if (error) return toast(`Erreur : ${error.message}`, 'error')
-    toast('Fermeture supprimée')
+    toast(seance ? 'Cours rouvert à la réservation' : 'Fermeture supprimée')
     fetchAll()
   }
 
@@ -13370,11 +13383,17 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
           {fermetures.map(f => {
             const couleur = praticienCouleur(f.praticien_id)
             const isPast = f.date_fin < today
+            // 🔴 UNE SÉANCE FERMÉE N'EST PAS UNE JOURNÉE (question 1, 04/10) :
+            // elle se lit « cours annulé », se rouvre, et ne se modifie pas
+            // (une date de fin changée la transformerait en autre chose).
+            const seance = estFermetureDeSeance(f)
             return (
               <div key={f.id} style={{ background: '#fff', borderRadius: 12, padding: '12px 14px', border: `1px solid ${T.hairline}`, borderLeft: `4px solid ${couleur}`, opacity: isPast ? 0.55 : 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontWeight: 800, fontSize: 14, color: T.ink, marginBottom: 2 }}>
-                    {f.date_debut === f.date_fin
+                    {seance
+                      ? `${nomsCours[f.prestation_id] || 'Cours'}, ${formatDateLabel(f.date_debut)} à ${String(f.heure_debut).slice(0, 5)}`
+                      : f.date_debut === f.date_fin
                       ? formatDateLabel(f.date_debut)
                       : `${formatDateLabel(f.date_debut)} → ${formatDateLabel(f.date_fin)}`}
                     {isPast && <span style={{ fontSize: 11, color: T.muted, fontWeight: 600, marginLeft: 8 }}>(passée)</span>}
@@ -13382,16 +13401,16 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
                   <div style={{ fontSize: 12, color: T.muted, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: couleur }}/>
-                      {praticienLabel(f.praticien_id)}
+                      {seance ? 'Cours annulé, fermé à la réservation en ligne' : praticienLabel(f.praticien_id)}
                     </span>
                     {f.motif && <span style={{ fontStyle: 'italic' }}>{f.motif}</span>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <button onClick={() => openEdit(f)}
-                    style={{ padding: '6px 10px', border: `1px solid ${T.main}44`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.main, fontFamily: '"DM Sans", sans-serif' }}>Modif.</button>
+                  {!seance && <button onClick={() => openEdit(f)}
+                    style={{ padding: '6px 10px', border: `1px solid ${T.main}44`, background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: T.main, fontFamily: '"DM Sans", sans-serif' }}>Modif.</button>}
                   <button onClick={() => softDelete(f)}
-                    style={{ padding: '6px 10px', border: '1px solid #DC262644', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: '#DC2626', fontFamily: '"DM Sans", sans-serif' }}>Suppr.</button>
+                    style={{ padding: '6px 10px', border: '1px solid #DC262644', background: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 11, color: '#DC2626', fontFamily: '"DM Sans", sans-serif' }}>{seance ? 'Rouvrir' : 'Suppr.'}</button>
                 </div>
               </div>
             )

@@ -85,7 +85,8 @@ import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, co
   abonnementsPourPrestation, expliquerRefusSeance, messageRefusAbonnement, libellePrixSeance,
   trierAbonnementsPourSeance, libelleChoixAbonnement } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
-import { fermetureQuiBloque, plagesOuvertes } from '@/lib/fermetures-rdv'
+import { fermetureQuiBloque, plagesOuvertes, seanceFermee } from '@/lib/fermetures-rdv'
+import { toutesLesLignes } from '@/lib/toutes-les-lignes'
 import { libelleApporteUnLieu } from '@/lib/adresse-localite'
 import { jourLocalISO, jourBruxelles, rappelDeLaVeillePartira } from '@/lib/timezone'
 // ⚠️ LA MÊME RÈGLE QUE LE SERVEUR, et le serveur la rejoue : cet écran décide
@@ -1387,7 +1388,9 @@ export default function CommanderRdvSlug() {
         // Filtrage cote client sur date_debut/date_fin pour bloquer les jours concernes.
         supabase
           .from('rdv_fermetures')
-          .select('date_debut, date_fin, praticien_id')
+          // ⚠️ `prestation_id, heure_debut` (04/10) : sans elles, la fermeture d'UNE
+          // séance se lirait comme une journée entière fermée (aucun praticien).
+          .select('date_debut, date_fin, praticien_id, prestation_id, heure_debut')
           .eq('commercant_id', c.id)
           .is('deleted_at', null)
           .gte('date_fin', todayISO),
@@ -1510,11 +1513,17 @@ export default function CommanderRdvSlug() {
       const today = new Date(); today.setHours(0,0,0,0)
       // ⚠️ L'HORIZON VIENT DU COMMERÇANT, plus d'une constante écrite ici.
       const end = new Date(today); end.setDate(today.getDate() + horizonRdv(commercant))
-      const { data, error } = await supabase.rpc('rdv_slots_busy_range', {
+      // 🔴 PAR PAGES DE 1 000 (question 7, 04/10). Supabase n'en rend que
+      // 1 000 par appel, sans le dire : un restaurant chargé y arrive en vingt
+      // jours, et les jours complets d'après s'affichaient en vert. La fonction
+      // rend ses lignes dans un ordre total (`MIGRATION_CALENDRIER_PAGES.sql`).
+      // ⚠️ UNE PAGE RATÉE REND `null` : on retombe sur « pas de pastille »,
+      // jamais sur la moitié du calendrier présentée comme le tout.
+      const { data, error } = await toutesLesLignes(() => supabase.rpc('rdv_slots_busy_range', {
         p_commercant_id: commercant.id,
         p_date_start: isoDate(today),
         p_date_end: isoDate(end),
-      })
+      }))
       if (annule) return
       if (error) {
         console.warn('[rdv-60j] rpc error', error)
@@ -1556,6 +1565,10 @@ export default function CommanderRdvSlug() {
         ...regleOccupation(reservations),
         liaisonsCreneaux,
       })
+      // 🔴 UN COURS ANNULÉ NE SE PROPOSE PLUS (question 1, 04/10) : sa
+      // fermeture ne couvre que cette séance, la plage reste ouverte pour le
+      // reste. Le serveur la refuse aussi (`seance_fermee`).
+        .filter(s => !seanceFermee(fermetures, { dateStr, prestationId: prestationChoisie?.id, heure: s.heure }))
       setSlots(list)
       // Tri des reservations par heure_debut pour la section info 'Deja pris'
       const sorted = (reservations || []).slice().sort((a, b) => (a.heure_debut || '').localeCompare(b.heure_debut || ''))
@@ -1668,7 +1681,8 @@ export default function CommanderRdvSlug() {
       ...regleOccupation(resaDuJour),
       liaisonsCreneaux,
     })
-    return { ...j, nbLibres: list.filter(s => !s.pris).length }
+    // ⚠️ LA MÊME QUE LA GRILLE : un cours annulé ne compte pas comme libre.
+    return { ...j, nbLibres: list.filter(s => !s.pris && !seanceFermee(fermetures, { dateStr: j.iso, prestationId: prestationChoisie?.id, heure: s.heure })).length }
   })
 
   // Auto-sélectionne le premier jour ouvert quand on entre à l'étape 2

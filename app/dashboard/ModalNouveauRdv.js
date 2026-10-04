@@ -186,7 +186,9 @@ export default function ModalNouveauRdv({
     if (serveur) return
     let annule = false
     supabase.from('rdv_fermetures')
-      .select('date_debut, date_fin, praticien_id')
+      // ⚠️ `prestation_id, heure_debut` (04/10) : sans elles, la fermeture d'UNE
+      // séance se lirait comme une journée entière fermée (aucun praticien).
+      .select('date_debut, date_fin, praticien_id, prestation_id, heure_debut')
       .eq('commercant_id', commercant.id)
       .is('deleted_at', null)
       .then(({ data, error }) => { if (!annule) setFermeturesAgenda(error ? null : (data || [])) })

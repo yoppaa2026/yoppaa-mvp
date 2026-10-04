@@ -1635,7 +1635,9 @@ export default function Dashboard() {
     // rendez-vous, il perd seulement le gris.
     const { data: fermData } = await supabase
       .from('rdv_fermetures')
-      .select('id, date_debut, date_fin, praticien_id, motif')
+      // ⚠️ `prestation_id, heure_debut` (04/10) : sans elles, un cours annulé
+      // griserait toute la journée de l'agenda (« Fermé »).
+      .select('id, date_debut, date_fin, praticien_id, motif, prestation_id, heure_debut')
       .eq('commercant_id', id)
       .is('deleted_at', null)
     setFermeturesRdv(fermData || [])
@@ -2686,6 +2688,23 @@ export default function Dashboard() {
     if (!seanceAAnnuler) return
     if (choix !== 'annuler') { setSeanceAAnnuler(null); return }
     setActionEnCours(true)
+    // 🔴 LE COURS SE FERME D'ABORD (question 1, décision d'Alex du 04/10). Les
+    // places se rouvraient à la réservation en ligne : quelqu'un pouvait
+    // reprendre le cours annulé dans la minute, pendant même que les
+    // désinscriptions s'enchaînaient. La fermeture ne couvre QUE cette séance.
+    // ⚠️ UN ÉCHEC NE BLOQUE PAS L'ANNULATION (la professeure est malade, les
+    // personnes doivent être prévenues), mais il se DIT dans la confirmation.
+    const seance = seanceAAnnuler[0]
+    const { error: errFermeture } = await supabase.from('rdv_fermetures').insert({
+      commercant_id: commercant.id,
+      praticien_id: null,
+      date_debut: seance.date_rdv,
+      date_fin: seance.date_rdv,
+      prestation_id: seance.prestation_id,
+      heure_debut: String(seance.heure_debut || '').slice(0, 5),
+      motif: 'Cours annulé',
+    })
+    if (errFermeture) console.error('[dashboard] fermeture du cours annulé KO', errFermeture.message)
     let faits = 0
     let echecs = 0
     let rembourse = 0
@@ -2705,7 +2724,8 @@ export default function Dashboard() {
       else echecs++
     }
     setActionEnCours(false)
-    setConfirmationAnnulationTexte(confirmationSeanceAnnulee({ faits, echecs, rembourse, remboursementsRates }))
+    setConfirmationAnnulationTexte(confirmationSeanceAnnulee({ faits, echecs, rembourse, remboursementsRates, coursFerme: !errFermeture }))
+    if (commercant?.id) chargerRdvs(commercant.id)
   }
 
   function fermerAnnulationSeance() {

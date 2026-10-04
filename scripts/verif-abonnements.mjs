@@ -2599,7 +2599,8 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     && /const enCours = abonnementsQuiBloquentLaSuppression\(contrats, seancesAbo, \{ aujourdhui \}\)\s*if \(enCours\.length > 0\) \{\s*blocages\.push\(/.test(SUPPR))
   verifier('⚠️ le solde se compte sur les séances du contrat, lues avec leur statut',
     /\.select\('abonnement_id, statut'\)\s*\.in\('abonnement_id', idsContrats\)/.test(SUPPR)
-    && /\.select\('id, statut, type, date_debut, date_fin, seances_total, deleted_at'\)\s*\.eq\('client_email', email\)/.test(SUPPR))
+    // ⚠️ REPOINTÉE LE 04/10 (Abo-I3) : le solde lit aussi les séances d'avant Yoppaa.
+    && /\.select\('id, statut, type, date_debut, date_fin, seances_total, seances_deja_faites, deleted_at'\)\s*\.eq\('client_email', email\)/.test(SUPPR))
   verifier('⚠️ une lecture ratée bloque au lieu de laisser partir le compte',
     /if \(errAbo \|\| errSeances\) \{\s*return NextResponse\.json\(\{ ok: false,/.test(SUPPR))
   verifier('🔴 les contrats finis sont anonymisés, notes comprises',
@@ -2732,6 +2733,103 @@ verifier('la sortie « hors abonnement » existe et est écrite',
     && /\? \(!abo\.stripe_refund_id && refundId \? \{ stripe_refund_id: refundId \} : null\)/.test(corps))
   verifier('🔴 une écriture ratée se rejoue au lieu de se taire',
     /if \(errAbo\) throw new Error\(/.test(corps) && /if \(errAboLu\) throw new Error\(/.test(corps))
+}
+
+// ── 🔴 Abo-I3 (04/10) : MODIFIER UN CONTRAT, ET LA REPRISE AU COMPTOIR ───────
+// Décisions d'Alex : identité, séances en plus, date de fin (prix et cours
+// figés, plafond hebdomadaire gardé) ; email corrigeable avec avertissement +
+// email à la nouvelle adresse ; reprise = début passé + « X séances déjà faites ».
+{
+  const {
+    soldeAbonnement: solde, etatAbonnement: etat, seancesAvantYoppaa, peutPoserSeance: peutPoser,
+    verdictModificationAbonnement: modifier, messageRefusModification: msgM,
+    verdictReprise, messageRefusReprise: msgRep, partNonUtilisee: partNU,
+  } = await import('../lib/abonnements.js')
+  const REPRIS = { id: 'r1', type: 'carnet', statut: 'actif', prix: 200, seances_total: 20, seances_deja_faites: 12,
+    date_debut: '2026-08-01', date_fin: '2027-01-28', seances_par_semaine: 2 }
+  const S3 = [{ id: 's1', abonnement_id: 'r1', statut: 'honore', date_rdv: '2026-10-01' }, { id: 's2', abonnement_id: 'r1', statut: 'confirme', date_rdv: '2026-10-08' }]
+  egal('🔴 le solde retire les séances suivies avant Yoppaa', solde(REPRIS, 2), 6)
+  egal('⚠️ un contrat sans la colonne garde son solde', solde({ ...REPRIS, seances_deja_faites: undefined }, 2), 18)
+  const e3 = etat(REPRIS, S3, { aujourdhui: '2026-10-05' })
+  verifier('🔴 l’état ne les compte qu’une fois : 6 restantes, 14 faites sur 20',
+    e3.solde === 6 && e3.consommees === 14 && /6/.test(e3.libelle || '') && !/^-|−/.test(e3.libelle || ''), JSON.stringify({ s: e3.solde, c: e3.consommees, l: e3.libelle }))
+  verifier('⚠️ et l’écran de la séance ne les retire pas deux fois',
+    peutPoser(e3, { date: '2026-10-20' }).ok === true)
+  egal('⚠️ la part non utilisée d’une reprise compte aussi les séances d’avant', partNU(REPRIS, S3, { dejaCommencee: (d) => d < '2026-10-05' })?.restantes, 7)
+  verifier('⚠️ une valeur illisible vaut zéro', seancesAvantYoppaa({ seances_deja_faites: 'abc' }) === 0 && seancesAvantYoppaa(null) === 0)
+
+  // La modification.
+  const C = { id: 'm1', statut: 'actif', date_debut: '2026-09-01', date_fin: '2027-06-30', seances_total: 36, client_email: 'sophie@ex.be' }
+  const ok1 = modifier(C, { client_prenom: ' Sophie ', client_email: 'Sophie@Ex.be', seances_en_plus: '2', date_fin: '2027-07-15' }, { derniereSeance: '2027-06-01' })
+  egal('🔴 identité, séances en plus et date de fin : le contrat reçoit exactement ça',
+    ok1, { ok: true, maj: { client_prenom: 'Sophie', client_nom: null, client_telephone: null, client_email: 'sophie@ex.be', date_fin: '2027-07-15', seances_total: 38 },
+      emailChange: false, nouvelEmail: 'sophie@ex.be', seancesEnPlus: 2 })
+  verifier('🔴 le prix et le cours ne se modifient jamais, même envoyés',
+    !('prix' in (modifier(C, { client_prenom: 'S', prix: 1, prestation_id: 'x', formule_id: 'y', seances_par_semaine: 9 }).maj || {}))
+    && !('prestation_id' in modifier(C, { client_prenom: 'S', prestation_id: 'x' }).maj)
+    && !('seances_par_semaine' in modifier(C, { client_prenom: 'S', seances_par_semaine: 9 }).maj))
+  verifier('🔴 un email changé se signale (avertissement + email à la nouvelle adresse)',
+    modifier(C, { client_prenom: 'S', client_email: 'nouvelle@ex.be' }).emailChange === true)
+  verifier('⚠️ un email mal formé est refusé', modifier(C, { client_prenom: 'S', client_email: 'pas-un-email' }).code === 'email_invalide')
+  verifier('⚠️ le prénom est obligatoire', modifier(C, { client_prenom: '  ' }).code === 'prenom_requis')
+  verifier('🔴 séances en plus : entier de 0 à 200, jamais négatif ni décimal',
+    ['-1', '1.5', '201', 'abc'].every(v => modifier(C, { client_prenom: 'S', seances_en_plus: v }).code === 'seances_invalides')
+    && modifier(C, { client_prenom: 'S', seances_en_plus: '' }).ok === true)
+  verifier('🔴 la fin ne passe ni avant le début, ni avant une séance déjà posée',
+    modifier(C, { client_prenom: 'S', date_fin: '2026-08-01' }).code === 'fin_avant_debut'
+    && modifier(C, { client_prenom: 'S', date_fin: '2027-05-01' }, { derniereSeance: '2027-06-01' }).code === 'fin_avant_seances')
+  verifier('⚠️ un contrat résilié ne se modifie plus', modifier({ ...C, statut: 'resilie' }, { client_prenom: 'S' }).code === 'resilie')
+  verifier('⚠️ chaque refus a sa phrase',
+    ['introuvable', 'resilie', 'prenom_requis', 'email_invalide', 'seances_invalides', 'fin_invalide', 'fin_avant_debut', 'total_inconnu'].every(c => msgM(c) && msgM(c) !== msgM('x'))
+    && /1 juin 2027|1er juin 2027/.test(msgM('fin_avant_seances', { derniereSeance: '2027-06-01' })))
+
+  // La reprise.
+  const CARNET10 = { type: 'carnet', seances_carnet: 10, validite_jours: 180 }
+  const rep = verdictReprise(CARNET10, { debut: '2026-09-01', dejaFaites: '4', aujourdhui: '2026-10-05' })
+  verifier('🔴 un carnet repris part de sa vraie date d’achat, avec ses séances faites',
+    rep.ok === true && rep.fenetre.debut === '2026-09-01' && rep.faites === 4 && rep.reprise === true)
+  verifier('⚠️ sans reprise, rien ne change (aujourd’hui, zéro)',
+    verdictReprise(CARNET10, { debut: '2026-10-05', dejaFaites: 0, aujourdhui: '2026-10-05' }).reprise === false)
+  verifier('🔴 il doit rester au moins une séance',
+    verdictReprise(CARNET10, { dejaFaites: 10, aujourdhui: '2026-10-05' }).code === 'faites_trop')
+  verifier('⚠️ un début futur ou un carnet déjà expiré sont refusés',
+    verdictReprise(CARNET10, { debut: '2026-12-01', aujourdhui: '2026-10-05' }).code === 'debut_futur'
+    && verdictReprise(CARNET10, { debut: '2025-01-01', aujourdhui: '2026-10-05' }).code === 'deja_expire')
+  verifier('⚠️ un nombre faux de séances faites est refusé',
+    verdictReprise(CARNET10, { dejaFaites: '-2', aujourdhui: '2026-10-05' }).code === 'faites_invalides'
+    && verdictReprise(CARNET10, { dejaFaites: '2.5', aujourdhui: '2026-10-05' }).code === 'faites_invalides')
+  verifier('⚠️ chaque refus de reprise a sa phrase',
+    ['faites_invalides', 'debut_futur', 'formule'].every(c => msgRep(c)) && /10 séances/.test(msgRep('faites_trop', { total: 10 })))
+
+  // Les branchements.
+  const MODIF = sansProse(readFileSync(new URL('../app/api/rdv/modifier-abonnement/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 modifier passe par la case Argent',
+    /gardeLigneEquipe\(request, supabase, 'abonnements', abonnement_id, 'argent'\)/.test(MODIF) && /if \(nonAutorise\) return nonAutorise/.test(MODIF))
+  verifier('🔴 la route applique la règle du banc, avec la dernière séance posée',
+    /const regle = verdictModificationAbonnement\(contrat, corps, \{ derniereSeance: derniere\?\.\[0\]\?\.date_rdv \?\? null \}\)/.test(MODIF)
+    && /\.update\(regle\.maj\)\s*\.eq\('id', abonnement_id\)\s*\.eq\('statut', contrat\.statut\)/.test(MODIF))
+  verifier('🔴 les séances à venir suivent la nouvelle identité',
+    /client_email: regle\.maj\.client_email,\s*\}/.test(MODIF)
+    && /\.update\(identiteSeances\)\s*\.eq\('abonnement_id', abonnement_id\)\s*\.eq\('statut', 'confirme'\)\s*\.gte\('date_rdv', jourBruxelles\(\)\)/.test(MODIF))
+  verifier('🔴 la nouvelle adresse reçoit un email',
+    /if \(regle\.emailChange && regle\.nouvelEmail\) \{/.test(MODIF) && /envoyerAuYopper\(\{ to: regle\.nouvelEmail,/.test(MODIF))
+  const DASH_I3 = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 l’écran pose la même question que la route, et avertit d’un email changé',
+    /const regle = verdictModificationAbonnement\(a, modif, \{ derniereSeance: derniereSeanceDe\(a\) \}\)\s*if \(!regle\.ok\) return toast\(messageRefusModification\(regle\.code, regle\), 'error'\)\s*if \(regle\.emailChange && !await confirme\(/.test(DASH_I3))
+  verifier('🔴 l’inscription passe par la règle de la reprise et écrit les séances faites',
+    /const reprise = verdictReprise\(formule, \{/.test(DASH_I3) && /seances_deja_faites: reprise\.faites,/.test(DASH_I3)
+    && /: reprise\.reprise && fenetre\.debut < aujourdhui \? `\$\{fenetre\.debut\}T10:00:00\.000Z`/.test(DASH_I3))
+  for (const [f, re] of [
+    ['app/api/rdv/reserver-abonnement/route.js', /seances_total, seances_deja_faites,/],
+    ['app/api/yopper/abonnements/route.js', /seances_total, seances_deja_faites,/],
+    ['app/api/yopper/supprimer-compte/route.js', /seances_total, seances_deja_faites,/],
+    ['app/dashboard/ModalNouveauRdv.js', /seances_total, seances_deja_faites,/],
+  ]) verifier(`🔴 ${f.split('/').slice(-2).join('/')} lit les séances d’avant Yoppaa`, re.test(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')))
+
+  const { emailAbonnementNouvelleAdresse: mailN } = await import('../lib/resend.js')
+  const hN = mailN({ yopper_prenom: '<b>Léa</b>', commercant_nom: 'Centre Respire', formule: 'Yoga', connexion: 'Connecte-toi avec cette adresse.', connexion_url: 'https://www.yoppaa.app/commander/auth?redirect=%2Fcommander%2Frdv%2Fx' })
+  verifier('⚠️ l’email de la nouvelle adresse dit le commerce et mène à la connexion, sans HTML injecté',
+    /relié à cette adresse/.test(hN) && /Centre Respire/.test(hN) && /commander\/auth\?redirect=/.test(hN) && !/<b>Léa<\/b>/.test(hN))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

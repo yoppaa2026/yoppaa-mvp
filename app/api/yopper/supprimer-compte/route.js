@@ -125,7 +125,7 @@ export async function POST(request) {
     if (email) {
       const { data: contrats, error: errAbo } = await admin
         .from('abonnements')
-        .select('id, statut, type, date_debut, date_fin, seances_total, deleted_at')
+        .select('id, statut, type, date_debut, date_fin, seances_total, seances_deja_faites, deleted_at')
         .eq('client_email', email)
         .is('deleted_at', null)
       const idsContrats = (contrats || []).map(a => a.id)

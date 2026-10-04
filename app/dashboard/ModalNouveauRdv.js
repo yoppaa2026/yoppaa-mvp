@@ -229,7 +229,7 @@ export default function ModalNouveauRdv({
     ;(async () => {
       const { data: contrats } = await supabase
         .from('abonnements')
-        .select('id, client_prenom, client_nom, client_telephone, client_email, statut, date_debut, date_fin, seances_total, seances_par_semaine, formule:abonnement_formules(libelle, periodes_exclues)')
+        .select('id, client_prenom, client_nom, client_telephone, client_email, statut, date_debut, date_fin, seances_total, seances_deja_faites, seances_par_semaine, formule:abonnement_formules(libelle, periodes_exclues)')
         .eq('commercant_id', commercant.id)
         .eq('prestation_id', prestationId)
         .eq('statut', 'actif')

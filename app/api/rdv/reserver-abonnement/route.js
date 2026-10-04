@@ -77,7 +77,7 @@ export async function POST(request) {
   // semaine. C'est le défaut le plus fréquent de ce projet.
   const { data: contrat, error: errContrat } = await db
     .from('abonnements')
-    .select('id, commercant_id, prestation_id, formule_id, client_email, client_prenom, client_nom, client_telephone, statut, mode, date_debut, date_fin, seances_total, seances_par_semaine, deleted_at')
+    .select('id, commercant_id, prestation_id, formule_id, client_email, client_prenom, client_nom, client_telephone, statut, mode, date_debut, date_fin, seances_total, seances_deja_faites, seances_par_semaine, deleted_at')
     .eq('id', abonnementId)
     .maybeSingle()
 

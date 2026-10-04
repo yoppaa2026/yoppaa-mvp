@@ -70,7 +70,7 @@ import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
 // la gravure du lieu n'ont pas été supprimés du projet, c'est le geste d'agenda
 // qui les reprend.
-import { exclusionsQuiSeChevauchent, seancesDeLaFormule, fenetreDeValidite, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, partNonUtilisee, verdictRemboursementAbonnement, messageRefusRemboursement, libelleRemboursement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
+import { exclusionsQuiSeChevauchent, seancesDeLaFormule, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, verdictReprise, messageRefusReprise, verdictModificationAbonnement, messageRefusModification, partNonUtilisee, verdictRemboursementAbonnement, messageRefusRemboursement, libelleRemboursement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import TabGenerateur from './TabGenerateur'
@@ -10839,6 +10839,8 @@ function TabRdvAbonnements({ commercantId, toast }) {
     formule_id: '',
     client_prenom: '', client_nom: '', client_telephone: '', client_email: '',
     paye: false, mode_paiement: '',
+    // La reprise d'un contrat déjà commencé (Abo-I3).
+    reprise: false, date_debut: '', seances_deja_faites: '',
   }
   const [insc, setInsc] = useState(initialInscription)
   const [loading, setLoading] = useState(true)
@@ -10871,6 +10873,11 @@ function TabRdvAbonnements({ commercantId, toast }) {
   const [rembMontant, setRembMontant] = useState('')
   const [rembMoyen, setRembMoyen] = useState(null)
   const [rembEnCours, setRembEnCours] = useState(false)
+  // 🔴 MODIFIER UN CONTRAT (Abo-I3, 04/10) : identité, séances en plus, date
+  // de fin. Une carte à la fois.
+  const [modifOuvert, setModifOuvert] = useState(null)
+  const [modif, setModif] = useState(null)
+  const [modifEnCours, setModifEnCours] = useState(false)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchAll() }, [commercantId])
@@ -10964,11 +10971,18 @@ function TabRdvAbonnements({ commercantId, toast }) {
     // ⚠️ EN HEURE BELGE. `toISOString()` rend le jour de Greenwich : une
     // inscription prise à 00h30 aurait fait démarrer le contrat la VEILLE.
     const aujourdhui = jourBruxelles()
-    const fenetre = fenetreDeValidite(formule, { achatLe: aujourdhui })
-    if (!fenetre) return toast('Cette formule est incomplète, corrige-la d’abord', 'error')
-
     const total = seancesDeLaFormule(formule)
     if (total <= 0) return toast('Cette formule n’accorde aucune séance, corrige-la d’abord', 'error')
+
+    // 🔴 LA REPRISE (Abo-I3, décision d'Alex) : début passé pour un carnet,
+    // « X séances déjà faites » pour tous. La règle est pure et passe au banc.
+    const reprise = verdictReprise(formule, {
+      debut: insc.reprise && insc.date_debut ? insc.date_debut : aujourdhui,
+      dejaFaites: insc.reprise ? insc.seances_deja_faites : 0,
+      aujourdhui,
+    })
+    if (!reprise.ok) return toast(messageRefusReprise(reprise.code, reprise), 'error')
+    const fenetre = reprise.fenetre
 
     const contrat = {
       commercant_id: commercantId,
@@ -10993,7 +11007,13 @@ function TabRdvAbonnements({ commercantId, toast }) {
       seances_par_semaine: formule.seances_par_semaine || 1,
       statut: 'actif',
       paye: !!insc.paye,
-      paye_le: insc.paye ? new Date().toISOString() : null,
+      // ⚠️ UNE REPRISE A ÉTÉ PAYÉE À SON DÉBUT, PAS AUJOURD'HUI : l'écrire au
+      // jour de l'inscription la ferait entrer une seconde fois dans le
+      // chiffre d'affaires du mois (elle est déjà dans les comptes papier).
+      paye_le: !insc.paye ? null
+        : reprise.reprise && fenetre.debut < aujourdhui ? `${fenetre.debut}T10:00:00.000Z`
+        : new Date().toISOString(),
+      seances_deja_faites: reprise.faites,
       mode_paiement: insc.paye ? insc.mode_paiement : null,
       // ⚠️ TVA FIGÉE À LA SIGNATURE, comme le prix juste au-dessus et comme le
       // fait un rendez-vous. Sans elle, l'abonnement entrait en Comptabilité
@@ -11095,6 +11115,46 @@ function TabRdvAbonnements({ commercantId, toast }) {
     // ⚠️ L'ARGENT EST RENDU MAIS LA RÉSILIATION A CALÉ : on le dit d'abord.
     if (j.partiel) return toast(`${euros(j.montant)} remboursés. ${j.error}`, 'error')
     toast(`${euros(j.montant)} remboursés${j.moyen === 'en_ligne' ? ' sur la carte' : ''}.${seancesTxt}${emailTxt}`, j.email === 'envoye' ? undefined : 'error')
+  }
+
+  // ═══ MODIFIER UN CONTRAT (Abo-I3, 04/10) ════════════════════════════════
+  //
+  // ✅ DÉCISIONS D'ALEX : identité, séances EN PLUS, date de fin ; le prix et
+  // le cours restent figés, le plafond hebdomadaire reste. L'email se corrige
+  // avec un avertissement, et la nouvelle adresse est prévenue.
+  // L'écran pose la même question que la route (`verdictModificationAbonnement`).
+  const derniereSeanceDe = (a) => (reservationsAbo || [])
+    .filter(r => String(r.abonnement_id) === String(a.id) && r.statut === 'confirme')
+    .map(r => r.date_rdv).sort().pop() || null
+  function ouvrirModification(a) {
+    setModif({
+      client_prenom: a.client_prenom || '', client_nom: a.client_nom || '',
+      client_telephone: a.client_telephone || '', client_email: a.client_email || '',
+      seances_en_plus: '', date_fin: a.date_fin || '',
+    })
+    setModifOuvert(a.id)
+  }
+  async function enregistrerModification(a) {
+    const regle = verdictModificationAbonnement(a, modif, { derniereSeance: derniereSeanceDe(a) })
+    if (!regle.ok) return toast(messageRefusModification(regle.code, regle), 'error')
+    if (regle.emailChange && !await confirme(confirmationSimple({
+      titre: 'Changer l’adresse email du contrat ?',
+      message: regle.nouvelEmail
+        ? `L’abonnement et ses séances à venir passent sur ${regle.nouvelEmail}. Un email part à cette adresse ; l’ancienne ne verra plus l’abonnement dans l’application.`
+        : 'Sans email, l’abonnement n’apparaît plus dans l’application de la personne : c’est toi qui poseras ses séances.',
+      action: 'Oui, changer l’adresse',
+    }))) return
+    setModifEnCours(true)
+    const res = await postPro('/api/rdv/modifier-abonnement', { abonnement_id: a.id, ...modif })
+    const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+    setModifEnCours(false)
+    fetchAll()
+    if (!j?.ok) return toast(j?.error || 'La modification n’a pas pu aboutir. Réessaie dans un instant.', 'error')
+    setModifOuvert(null)
+    const plus = Number(j.seances_en_plus) || 0
+    const plusTxt = plus > 0 ? ` ${plus === 1 ? '1 séance ajoutée' : `${plus} séances ajoutées`}.` : ''
+    const emailTxt = j.email === 'envoye' ? ' Un email est parti à la nouvelle adresse.' : j.email === 'echec' ? ' L’email à la nouvelle adresse n’est pas parti : préviens la personne toi-même.' : ''
+    toast(`Contrat modifié.${plusTxt}${emailTxt}`, j.email === 'echec' || j.partiel ? 'error' : undefined)
   }
 
   function openNew() {
@@ -11608,6 +11668,34 @@ function TabRdvAbonnements({ commercantId, toast }) {
                   : 'Sans email, c’est toi qui poseras toutes ses séances : l’application ne lui permettra pas de réserver.'}
               </p>
 
+              {/* 🔴 LA REPRISE AU COMPTOIR (Abo-I3, 04/10) : un contrat déjà
+                  commencé ailleurs (un carnet papier). Son vrai début, et les
+                  séances déjà suivies, sinon le solde repart de zéro. */}
+              <div style={{ marginBottom: 12 }}>
+                <Toggle value={insc.reprise} onChange={v => setInsc({ ...insc, reprise: v, date_debut: '', seances_deja_faites: '' })} label="Contrat déjà commencé (reprise)"/>
+              </div>
+              {insc.reprise && (() => {
+                const f = formules.find(x => x.id === insc.formule_id)
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: f?.type === 'carnet' ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 12 }}>
+                    {f?.type === 'carnet' && (
+                      <label style={{ fontSize: 11.5, fontWeight: 700, color: T.ink }}>
+                        Date d&rsquo;achat du carnet
+                        <input type="date" value={insc.date_debut} max={jourBruxelles()}
+                          onChange={e => setInsc({ ...insc, date_debut: e.target.value })}
+                          style={{ ...s.input, marginTop: 4 }}/>
+                      </label>
+                    )}
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: T.ink }}>
+                      Séances déjà faites
+                      <input type="number" inputMode="numeric" min={0} value={insc.seances_deja_faites}
+                        onChange={e => setInsc({ ...insc, seances_deja_faites: e.target.value })}
+                        placeholder="0" style={{ ...s.input, marginTop: 4 }}/>
+                    </label>
+                  </div>
+                )
+              })()}
+
               <div style={{ marginBottom: 12 }}>
                 <Toggle value={insc.paye} onChange={v => setInsc({ ...insc, paye: v })} label="Déjà payé"/>
               </div>
@@ -11622,7 +11710,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
                 // à trois chiffres se règle couramment ainsi.
                 <select value={insc.mode_paiement} onChange={e => setInsc({ ...insc, mode_paiement: e.target.value })}
                   style={{ ...s.input, marginBottom: 12 }}>
-                  <option value="">— Comment as-tu été payé ? —</option>
+                  <option value="">Choisir le moyen de paiement</option>
                   <option value="terminal">Terminal (Bancontact, carte)</option>
                   <option value="especes">Espèces</option>
                   <option value="virement">Virement</option>
@@ -11733,6 +11821,12 @@ function TabRdvAbonnements({ commercantId, toast }) {
                               {rembOuvert === a.id ? 'Fermer' : 'Rembourser'}
                             </button>
                           )}
+                          {!resilie && (
+                            <button onClick={() => (modifOuvert === a.id ? setModifOuvert(null) : ouvrirModification(a))}
+                              style={{ ...s.btn, ...s.btnGhost, padding: '7px 12px', fontSize: 12 }}>
+                              {modifOuvert === a.id ? 'Fermer' : 'Modifier'}
+                            </button>
+                          )}
                           {!resilie && <button onClick={() => resilier(a)} style={{ ...s.btn, ...s.btnDanger, padding: '7px 12px', fontSize: 12 }}>Résilier</button>}
                         </div>
                       )}
@@ -11755,6 +11849,45 @@ function TabRdvAbonnements({ commercantId, toast }) {
                               <span style={{ color: T.muted, fontWeight: 600 }}> · {m.detail}</span>
                             </button>
                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 🔴 MODIFIER LE CONTRAT (Abo-I3, 04/10) : le prix et le
+                        cours ne se modifient pas, ils ont été vendus. */}
+                    {!resilie && modifOuvert === a.id && modif && (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.hairline}`, display: 'grid', gap: 8 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <input value={modif.client_prenom} onChange={e => setModif({ ...modif, client_prenom: e.target.value })} placeholder="Prénom *" aria-label="Prénom" style={s.input}/>
+                          <input value={modif.client_nom} onChange={e => setModif({ ...modif, client_nom: e.target.value })} placeholder="Nom" aria-label="Nom" style={s.input}/>
+                          <input value={modif.client_telephone} onChange={e => setModif({ ...modif, client_telephone: e.target.value })} placeholder="Téléphone" aria-label="Téléphone" inputMode="tel" style={s.input}/>
+                          <input value={modif.client_email} onChange={e => setModif({ ...modif, client_email: e.target.value })} placeholder="Email" aria-label="Email" inputMode="email" style={s.input}/>
+                        </div>
+                        {(modif.client_email || '').trim().toLowerCase() !== (a.client_email || '').trim().toLowerCase() && (
+                          <p style={{ fontSize: 11.5, color: '#B45309', lineHeight: 1.5, margin: 0 }}>
+                            L&rsquo;abonnement et ses séances à venir passeront sur cette adresse : c&rsquo;est elle qui ouvre l&rsquo;application.
+                          </p>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <label style={{ fontSize: 11.5, fontWeight: 700, color: T.ink }}>
+                            Séances en plus
+                            <input type="number" inputMode="numeric" min={0} value={modif.seances_en_plus}
+                              onChange={e => setModif({ ...modif, seances_en_plus: e.target.value })} placeholder="0" style={{ ...s.input, marginTop: 4 }}/>
+                          </label>
+                          <label style={{ fontSize: 11.5, fontWeight: 700, color: T.ink }}>
+                            Date de fin
+                            <input type="date" value={modif.date_fin} min={a.date_debut || undefined}
+                              onChange={e => setModif({ ...modif, date_fin: e.target.value })} style={{ ...s.input, marginTop: 4 }}/>
+                          </label>
+                        </div>
+                        <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5, margin: 0 }}>
+                          Le prix, le cours et le nombre de séances par semaine restent ceux du contrat vendu.
+                        </p>
+                        <div>
+                          <button type="button" disabled={modifEnCours} onClick={() => enregistrerModification(a)}
+                            style={{ ...s.btn, ...s.btnPrimary, padding: '8px 14px', fontSize: 12, opacity: modifEnCours ? 0.6 : 1 }}>
+                            {modifEnCours ? <><DotsAttente taille={6} couleur="#fff" label="Enregistrement du contrat en cours" /> Enregistrement…</> : 'Enregistrer'}
+                          </button>
                         </div>
                       </div>
                     )}
@@ -11797,7 +11930,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
                           )}
                           <button type="button" disabled={rembEnCours} onClick={() => rembourser(a)}
                             style={{ ...s.btn, ...s.btnDanger, padding: '8px 14px', fontSize: 12, opacity: rembEnCours ? 0.6 : 1 }}>
-                            {rembEnCours ? 'Remboursement…' : (resilie ? 'Rembourser' : 'Rembourser et résilier')}
+                            {rembEnCours ? <><DotsAttente taille={6} couleur="#DC2626" label="Remboursement en cours" /> Remboursement…</> : (resilie ? 'Rembourser' : 'Rembourser et résilier')}
                           </button>
                         </div>
                       )

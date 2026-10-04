@@ -56,7 +56,7 @@ export async function GET(request) {
     // d'en afficher le nom. Sans eux, l'écran de confirmation d'achat annonce
     // « ton abonnement » sans jamais dire lequel, et la fiche ne peut pas
     // reconnaître le cours que la cliente a déjà payé.
-    .select('id, commercant_id, formule_id, prestation_id, type, mode, statut, prix, seances_total, seances_par_semaine, date_debut, date_fin, created_at')
+    .select('id, commercant_id, formule_id, prestation_id, type, mode, statut, prix, seances_total, seances_deja_faites, seances_par_semaine, date_debut, date_fin, created_at')
     // L'email est stocké en minuscules partout où il s'écrit (contrat en ligne
     // comme inscription à la main), et `identiteProuvee` le rend en minuscules.
     // Les deux se rencontrent donc toujours.

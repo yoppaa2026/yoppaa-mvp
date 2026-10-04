@@ -583,6 +583,9 @@ const membre = (o = {}) => ({
           select() { return b },
           order() { return b },
           eq(c, x) { filtres.push(l => norme(l[c]) === norme(x)); return b },
+          // 04/10 (LA-02) : le déplacement prévient la file (`placePrise`), qui
+          // lit la file sans les servis. Sans `neq`, ce chemin plantait en silence.
+          neq(c, x) { filtres.push(l => norme(l[c]) !== norme(x)); return b },
           in(c, xs) { filtres.push(l => xs.includes(l[c])); return b },
           is(c, x) { filtres.push(l => (l[c] ?? null) === x); return b },
           update(m) { maj = m; return b },
@@ -1085,6 +1088,9 @@ const membre = (o = {}) => ({
         const b = {
           select() { return b },
           eq(c, x) { filtres.push(l => l[c] === x); return b },
+          // 04/10 (LA-02) : le déplacement prévient la file (`placePrise`), qui
+          // lit la file sans les servis. Sans `neq`, ce chemin plantait en silence.
+          neq(c, x) { filtres.push(l => l[c] !== x); return b },
           is(c, x) { filtres.push(l => (l[c] ?? null) === x); return b },
           update(m) { maj = m; return b },
           maybeSingle() { unique = true; return b },

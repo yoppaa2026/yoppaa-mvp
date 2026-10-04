@@ -63,6 +63,9 @@ export default function ModalDeplacerRdv({
   // Quelles plages nomment quel cours (`rdv_creneau_prestations`), pour ne
   // proposer qu'une séance de cours (04/10). `null` : la grille d'avant.
   liaisons = null,
+  // Les fermetures du commerce (Annul-I6, 04/10). `null` : non lues, la règle
+  // ne les regarde pas (le serveur de l'équipe les relit de son côté).
+  fermetures = null,
   onClose, onDeplace,
   // Le Poste équipe : { lireSalle(date), deplacer(corps) }. Absent chez le patron.
   serveur = null,
@@ -182,13 +185,18 @@ export default function ModalDeplacerRdv({
     // 🔴 ET ON NE DÉPLACE PAS DANS LE PASSÉ (Alex, 10/09 tard : « ça ne doit
     // pas être possible »).
     maintenant,
+    // 🔴 LA PRATICIENNE ET LES FERMETURES (Annul-I6, 04/10) : ses plages et ses
+    // rendez-vous à elle, pas ceux d'une collègue ; ni jour fermé, ni cours
+    // annulé, ni absence. Les mêmes que le serveur de l'équipe.
+    praticienId: rdv?.praticien_id ?? null,
+    fermetures,
   }
 
   // LE VERDICT S'AFFICHE AVANT DE CONFIRMER, il ne sanctionne pas après coup.
   // Même principe que l'aperçu des abonnements : l'écran est le garde-fou.
   const verdict = useMemo(() => creneauAcceptable({ ...contexte, heureDebut: heure }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [date, heure, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, maintenant])
+    [date, heure, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, maintenant, fermetures, rdv?.praticien_id])
 
   // LES HEURES QUI RESTENT LIBRES CE JOUR-LÀ, proposées d'un tap.
   // Zéro friction : le commerçant ne devine pas ses propres trous, il les voit.
@@ -226,7 +234,7 @@ export default function ModalDeplacerRdv({
       },
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, estTable, salleEnTables, salleLue, salleConnue, salle, maintenant, liaisons])
+  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, estTable, salleEnTables, salleLue, salleConnue, salle, maintenant, liaisons, fermetures, rdv?.praticien_id])
 
   const utile = deplacementUtile(rdv, { date, heure })
   const heureFin = heureDeFin(heure, dureeMinutes)

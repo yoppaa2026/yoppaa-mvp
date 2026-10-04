@@ -553,6 +553,39 @@ egal('deux heures à 17h débordent la fermeture',
   creneauAcceptable({ ...BASE, heureDebut: '17:00', dureeMinutes: 120, horaireJour: { ouvert: true, debut: '09:00', fin: '20:00' } }).raison,
   'depasse_creneau')
 
+// ─── 🔴 LA PRATICIENNE ET LES FERMETURES (Annul-I6, 04/10) ─────────────────
+// Le déplacement refusait le rendez-vous d'Emily à 14h parce que Pierre y
+// avait un client, l'acceptait dans une plage que seul Pierre assure, et ne
+// lisait aucune fermeture.
+{
+  const H = { ouvert: true, debut: '09:00', fin: '18:00' }
+  const PLAGES = [
+    { praticien_id: 'emily', heure_debut: '09:00', heure_fin: '12:00' },
+    { praticien_id: 'pierre', heure_debut: '13:00', heure_fin: '17:00' },
+  ]
+  const CHEZ_PIERRE = [{ id: 'x', date_rdv: '2026-09-07', statut: 'confirme', prestation_id: 'p1', praticien_id: 'pierre', heure_debut: '14:00', heure_fin: '15:00' }]
+  const j = (extra) => creneauAcceptable({ ...BASE, horaireJour: H, creneauxJour: PLAGES, rdvsExistants: CHEZ_PIERRE, ...extra })
+  egal('Emily dans sa plage : accepté', j({ heureDebut: '10:00', praticienId: 'emily' }).ok, true)
+  egal('🔴 Emily dans la plage de Pierre seulement : refusé', j({ heureDebut: '14:00', praticienId: 'emily' }).raison, 'hors_plage_praticien')
+  egal('🔴 Emily à 14h sur une plage commune : le client de Pierre ne la gêne pas',
+    j({ heureDebut: '14:00', praticienId: 'emily', creneauxJour: [...PLAGES, { praticien_id: null, heure_debut: '13:00', heure_fin: '17:00' }] }).ok, true)
+  egal('Pierre, lui, est pris à 14h', j({ heureDebut: '14:00', praticienId: 'pierre' }).raison, 'conflit')
+  egal('⚠️ un rendez-vous sans praticienne connue gêne tout le monde',
+    j({ heureDebut: '10:00', praticienId: 'emily', rdvsExistants: [{ ...CHEZ_PIERRE[0], praticien_id: null, heure_debut: '10:00', heure_fin: '11:00' }] }).raison, 'conflit')
+  egal('sans praticienne fournie, rien ne change : 14h reste un conflit', j({ heureDebut: '14:00' }).raison, 'conflit')
+  egal('Emily ne déborde pas de sa plage', j({ heureDebut: '11:30', praticienId: 'emily' }).raison, 'hors_plage_praticien')
+
+  const JOUR_FERME = [{ date_debut: '2026-09-07', date_fin: '2026-09-07', praticien_id: null, prestation_id: null, heure_debut: null }]
+  const ABSENCE_EMILY = [{ date_debut: '2026-09-01', date_fin: '2026-09-10', praticien_id: 'emily', prestation_id: null, heure_debut: null }]
+  const COURS_ANNULE = [{ date_debut: '2026-09-07', date_fin: '2026-09-07', praticien_id: null, prestation_id: 'p1', heure_debut: '10:00' }]
+  egal('🔴 un jour fermé refuse', j({ heureDebut: '10:00', praticienId: 'emily', fermetures: JOUR_FERME }).raison, 'ferme')
+  egal('🔴 l’absence d’Emily la refuse', j({ heureDebut: '10:00', praticienId: 'emily', fermetures: ABSENCE_EMILY }).raison, 'absence')
+  egal('et laisse Pierre travailler', j({ heureDebut: '13:00', praticienId: 'pierre', fermetures: ABSENCE_EMILY }).ok, true)
+  egal('🔴 un cours annulé refuse CETTE séance', j({ heureDebut: '10:00', praticienId: 'emily', fermetures: COURS_ANNULE }).raison, 'seance_fermee')
+  egal('et pas l’heure d’après', j({ heureDebut: '11:00', praticienId: 'emily', fermetures: COURS_ANNULE }).ok, true)
+  egal('des fermetures non lues ne refusent rien', j({ heureDebut: '10:00', praticienId: 'emily', fermetures: null }).ok, true)
+}
+
 // ─── LE CHEVAUCHEMENT, ET SON EXCEPTION ────────────────────────────────────
 const DEJA_LA = [
   { id: 'r1', prestation_id: 'p1', date_rdv: '2026-09-07', heure_debut: '10:00', heure_fin: '11:00', statut: 'confirme' },
@@ -760,7 +793,24 @@ verifier('la création manuelle juge avec la même règle',
 // ─── 🔴 LE PASSÉ, DANS LES DEUX FENÊTRES (10/09 tard) ──────────────────────
 // Elles ne s'exécutent pas hors navigateur : on vérifie qu'elles donnent à la
 // règle ce qu'elle exécute plus haut, et qu'elles relisent l'heure au clic.
-verifier('🔴 le déplacement donne l’heure qu’il est à la règle', /prestations,\s*maintenant,\s*\}/.test(srcDeplacer))
+// ⚠️ RÉORIENTÉE LE 04/10 (Annul-I6) : le contexte porte ensuite la praticienne
+// et les fermetures ; ce qui compte reste que `maintenant` y soit.
+verifier('🔴 le déplacement donne l’heure qu’il est à la règle',
+  /prestations,\s*maintenant,\s*praticienId: rdv\?\.praticien_id \?\? null,\s*fermetures,\s*\}/.test(srcDeplacer))
+{
+  // 🔴 ANNUL-I6 (04/10) : le serveur de l'équipe et le tableau de bord donnent
+  // à la règle la praticienne et les fermetures, et le serveur les LIT.
+  const srcSrvDepl = sansCommentaires(readFileSync(new URL('../lib/rdv-deplacement-server.js', import.meta.url), 'utf8'))
+  verifier('🔴 le serveur du déplacement passe la praticienne et les fermetures',
+    /praticienId: rdv\.praticien_id \?\? null,\s*fermetures: fermetures\.data \|\| \[\],/.test(srcSrvDepl))
+  verifier('🔴 et il lit les fermetures du jour, séance comprise',
+    /from\('rdv_fermetures'\)\.select\('date_debut, date_fin, praticien_id, prestation_id, heure_debut'\)/.test(srcSrvDepl))
+  verifier('🔴 et la praticienne des rendez-vous du jour',
+    /from\('rdv_reservations'\)\.select\('id, date_rdv, statut, prestation_id, praticien_id, heure_debut, heure_fin'\)/.test(srcSrvDepl))
+  const srcBordDepl = sansCommentaires(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 le tableau de bord donne ses fermetures à la fenêtre de déplacement',
+    /<ModalDeplacerRdv[\s\S]{0,400}fermetures=\{fermeturesRdv\}/.test(srcBordDepl))
+}
 verifier('🔴 et la relit au clic, avant d’écrire quoi que ce soit',
   /async function valider\(\) \{\s*if \(!peutValider\) return\s*const verdictAuClic = creneauAcceptable\(\{ \.\.\.contexte, heureDebut: heure, maintenant: new Date\(\) \}\)\s*if \(!verdictAuClic\.ok\) \{/.test(srcDeplacer))
 verifier('⚠️ et l’heure avance pendant que la fenêtre reste ouverte',

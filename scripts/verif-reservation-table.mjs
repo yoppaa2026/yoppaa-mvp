@@ -1653,8 +1653,9 @@ egal('la réservation d’un restaurant s’atteint quand même',
     /const verdict = creneauAcceptable\(\{[\s\S]{0,600}?prestationId: presta\.id,\s*prestations,\s*\}\)/.test(MODALE_N))
   // ⚠️ PRÉCISÉE LE 10/09 TARD : le contexte du déplacement porte aussi l'heure
   // qu'il est, pour refuser le passé. Le catalogue doit toujours y être.
+  // ⚠️ RÉORIENTÉE LE 04/10 (Annul-I6) : suivent la praticienne et les fermetures.
   verifier('🔴 et le déplacement aussi',
-    /exclureId: rdv\?\.id \?\? null,\s*prestations,\s*maintenant,\s*\}/.test(MODALE_D))
+    /exclureId: rdv\?\.id \?\? null,\s*prestations,\s*maintenant,\s*praticienId: rdv\?\.praticien_id \?\? null,\s*fermetures,\s*\}/.test(MODALE_D))
   // ⚠️ PRÉCISÉE LE 10/09 TARD : l'heure se choisit dans la fenêtre (`heure`) ;
   // la case de départ (`heureInit`) ne doit plus décider du rang.
   verifier('🔴 la saisie cherche le rang d’une table sur toute l’heure',

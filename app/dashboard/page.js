@@ -4314,7 +4314,7 @@ export default function Dashboard() {
           prestations={prestationsRdv}
           creneaux={creneauxRdv}
           liaisons={liaisonsRdv}
-          rdvsExistants={rdvs}
+          rdvsExistants={rdvs} fermetures={fermeturesRdv}
           onClose={() => setRdvADeplacer(null)}
           onDeplace={() => {
             // Le déplacement se confirme comme le reste : la modale se ferme,

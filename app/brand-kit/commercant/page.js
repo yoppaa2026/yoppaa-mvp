@@ -378,7 +378,7 @@ export default function KitCommercant() {
                     MONTRE l'horizontalité au lieu de la déclarer, trois lignes avant
                     les pastilles qui l'annoncent. */}
                 <p style={S.chapo}>
-                  Tes clients habitent à trois rues. Ils ne savent pas que tu es ouvert ce midi,
+                  Tes clients habitent à trois rues. Ils ne savent pas que ton commerce est ouvert ce midi,
                   que tu prends les rendez-vous en ligne, ni que tu as ce qu&rsquo;ils cherchent.
                 </p>
 

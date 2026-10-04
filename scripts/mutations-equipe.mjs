@@ -209,7 +209,7 @@ const MUTATIONS = [
   { nom: '🔴 la fenêtre de déplacement s ouvre sans la case Agenda',
     fichier: 'app/equipe/PosteEquipe.js', de: '      {aDeplacer && etat.agenda && etat.droits?.agenda && (', vers: '      {aDeplacer && etat.agenda && (' },
   { nom: '⚠️ le client sans adresse n est plus signalé',
-    fichier: 'app/equipe/PosteEquipe.js', de: "    else if (!clientAEmail) dire(`Réservation déplacée au ${quand}. Pas d’email pour ce client : préviens-le${rdv.client_telephone ? ` au ${rdv.client_telephone}` : ''}.`, 'erreur')", vers: '' },
+    fichier: 'app/equipe/PosteEquipe.js', de: "    else if (!clientAEmail) dire(`Réservation déplacée au ${quand}. Pas d’email pour ce client : préviens cette personne${rdv.client_telephone ? ` au ${rdv.client_telephone}` : ''}.`, 'erreur')", vers: '' },
   { nom: '🔴 « absent » proposé sans la case Argent',
     fichier: 'app/equipe/PosteEquipe.js', de: 'const absentPossible = enAttente && droits.argent && noShowPossible(rdv, new Date())', vers: 'const absentPossible = enAttente && noShowPossible(rdv, new Date())' },
   { nom: '🔴 l email d annulation perd une information',

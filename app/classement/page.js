@@ -141,7 +141,7 @@ export default async function ClassementPage() {
           </p>
           <p style={{ margin: '6px 0 0', fontSize: '0.85rem', fontWeight: 600, color: 'rgba(255,255,255,0.94)', lineHeight: 1.5 }}>
             Ta présence est gratuite et Yoppaa ne prend rien sur tes ventes.
-            Tu es payé directement sur ton IBAN. Ta place ne s&rsquo;achète pas. 🟣
+            L’argent arrive directement sur ton IBAN. Ta place ne s&rsquo;achète pas. 🟣
           </p>
         </div>
 

@@ -294,7 +294,7 @@ export default function AbonnementPage() {
           </div>
           {isExempt && (
             <p style={{ fontSize: 13, color: T.muted, margin: '12px 0 0', lineHeight: 1.55 }}>
-              Tu as un accès gratuit à Yoppaa au titre du partenariat de lancement. Aucune facturation en cours. Quand tu seras prêt à activer ta formule payante, écris-nous à <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
+              Tu as un accès gratuit à Yoppaa au titre du partenariat de lancement. Aucune facturation en cours. Le jour où tu voudras activer ta formule payante, écris-nous à <a href="mailto:hello@yoppaa.app" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>hello@yoppaa.app</a>.
             </p>
           )}
           {hasActiveSub && (

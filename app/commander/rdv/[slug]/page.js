@@ -234,7 +234,7 @@ function MiniCalendrier({ jours, dateChoisie, onSelect }) {
                 const dotColor = !ouvert ? '#D1D5DB' : (nbLibres > 0 ? '#10B981' : '#FCA5A5')
                 return (
                   <button key={i} onClick={() => ouvert && onSelect(c.j.date)} disabled={!ouvert}
-                    title={!ouvert ? 'Fermé' : complet ? 'Complet, être prévenu si une place se libère' : `${nbLibres} créneau${nbLibres>1?'x':''} libre${nbLibres>1?'s':''}`}
+                    title={!ouvert ? 'Fermé' : complet ? 'Complet, recevoir une alerte si une place se libère' : `${nbLibres} créneau${nbLibres>1?'x':''} libre${nbLibres>1?'s':''}`}
                     style={{
                       aspectRatio: '1',
                       borderRadius: 8,
@@ -3752,7 +3752,7 @@ export default function CommanderRdvSlug() {
                               else if (attenteDispo) setAttenteVisee(enAttente ? null : { heure, date: isoDate(dateChoisie), prestationId: prestationChoisie.id })
                             }}
                             disabled={pris && !attenteDispo}
-                            aria-label={!pris ? heure : dansLaFile ? `${heure}, complet, tu es sur la liste d’attente` : attenteDispo ? `${heure}, complet, être prévenu si une place se libère` : `${heure}, complet`}
+                            aria-label={!pris ? heure : dansLaFile ? `${heure}, complet, tu es sur la liste d’attente` : attenteDispo ? `${heure}, complet, recevoir une alerte si une place se libère` : `${heure}, complet`}
                             style={{
                               padding: jauge ? '0.6rem 0.5rem' : '0.75rem 0.5rem', borderRadius: 12,
                               border: `1.5px solid ${pris ? (enAttente || dansLaFile ? T.main : '#E5E7EB') : choisi ? T.main : T.pale}`,

@@ -765,8 +765,9 @@ function sansCommentaires(src) {
   // le lancement. La raison de s'inscrire tôt reste entière, mais ce n'est pas
   // de gagner des jours de vente : c'est d'avoir le temps de tout préparer, et
   // d'ouvrir prêt le jour J.
+  // ⚠️ REPOINTÉE LE 04/10 (D2) : « tu ouvres prêt » supposait un homme.
   verifier("le hero dit à quoi sert le temps d'ici l'ouverture",
-    /tu ouvres prêt/.test(reveal))
+    /tu ouvres\s+avec tout en place/.test(reveal))
   verifier("l'appel final n'invite plus à attendre",
     !/Rendez-vous le \{libelleLancement\(\)\}\./.test(reveal),
     '« Rendez-vous le 1er octobre » disait le contraire de tout le reste')

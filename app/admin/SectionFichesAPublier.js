@@ -222,7 +222,7 @@ export default function SectionFichesAPublier({ toast }) {
                   </>
                 ) : confirme === 'publier' ? (
                   <>
-                    <span style={{ fontSize: 12.5, color: T.deep, fontWeight: 700 }}>Mettre {f.nom} en ligne ? Il reçoit son email et son kit.</span>
+                    <span style={{ fontSize: 12.5, color: T.deep, fontWeight: 700 }}>Mettre {f.nom} en ligne ? Son email et son kit partent aussitôt.</span>
                     <button onClick={() => publier(f)} style={boutonPlein(T.vert)}>Publier</button>
                     <button onClick={() => setAConfirmer(null)} style={boutonVide}>Ne rien faire</button>
                   </>

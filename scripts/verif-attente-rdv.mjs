@@ -556,8 +556,9 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
     verifier(`⚠️ ${nom} ne promet aucune place gardée`,
       !/place (est|t’est|vous est) (gardée|réservée)/i.test(src) && !/réservée pour toi/i.test(src))
   }
+  // ⚠️ REPOINTÉE LE 04/10 (D2) : « Tu es prévenu » supposait un homme.
   verifier('⚠️ le push dit qu’on est prévenu avant les autres',
-    /prévenu avant les autres/.test(SERVEUR))
+    /Tu reçois l’alerte avant les autres/.test(SERVEUR))
 }
 
 // ─── LA FILE, EXÉCUTÉE SUR UNE FAUSSE BASE (LA-01 et LA-05, 03/10) ─────────

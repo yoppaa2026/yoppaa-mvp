@@ -28,7 +28,7 @@ const MUTATIONS = [
   // ─── 1) « SESSION EXPIRÉE » DIT À QUELQU'UN QUI N'A JAMAIS EU DE SESSION ─
   { nom: '🔴 une absence de session redevient une « expiration »',
     fichier: 'lib/retour-app.js',
-    de: '    titre: \'Pas encore connecté ici\',',
+    de: '    titre: \'Pas encore de connexion ici\',',
     vers: '    titre: \'Session expirée\',' },
 
   { nom: '🔴 on dit « RECONNECTE-toi » à qui ne s’est jamais connecté ici',

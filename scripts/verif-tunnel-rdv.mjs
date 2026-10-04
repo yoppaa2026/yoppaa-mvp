@@ -2024,8 +2024,9 @@ for (const chemin of [
 
   // ── Rien d'engagé : on ne compose pas une phrase vide ───────────────────
   const nu = questionRdv('annule_commercant', { client_prenom: 'Zoé', date_rdv: '2026-09-02', heure_debut: '10:00' })
+  // ⚠️ REPOINTÉE LE 04/10 (D2) : « Il n’a rien avancé » supposait un homme.
   verifie('sans argent, la fenêtre le dit simplement',
-    /n’a rien avancé/.test(nu.message) && !/€/.test(nu.message), nu.message)
+    /Rien n’a été avancé/.test(nu.message) && !/€/.test(nu.message), nu.message)
 
   // ── ⚠️ UNE COMMANDE DÉJÀ ANNULÉE NE SE REMBOURSE PAS DEUX FOIS ──────────
   const dejaAnnulee = questionRdv('annule_commercant', {

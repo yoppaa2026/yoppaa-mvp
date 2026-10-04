@@ -750,7 +750,7 @@ const MUTATIONS = [
   // ─── LOT 3 · AUDIT 1 I4 : « DÉJÀ PAYÉ » DIT PAR QUEL MOYEN ──────────────
   { nom: '🔴 deja paye sans moyen s ecrit de nouveau « sur place »',
     banc: 'verif:abonnements', fichier: 'app/dashboard/ConfigDashboard.js',
-    de: "    if (insc.paye && !insc.mode_paiement) return toast('Dis comment tu as été payé : terminal, espèces ou virement', 'error')",
+    de: "    if (insc.paye && !insc.mode_paiement) return toast('Dis comment ce paiement a été reçu : terminal, espèces ou virement', 'error')",
     vers: '',
     garde: 'un contrat « déjà payé » exige son moyen de paiement' },
 

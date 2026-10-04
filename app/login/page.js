@@ -168,7 +168,7 @@ function Login() {
     <div style={{ minHeight: '100dvh', background: `linear-gradient(160deg, ${T.bgPanel} 0%, #2D0F6B 50%, ${T.ink} 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', fontFamily: '"DM Sans", sans-serif' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
       <div style={{ width: '100%', maxWidth: 400, background: '#fff', borderRadius: 18, padding: '1.75rem' }}>
-        <p style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6B6485', textTransform: 'uppercase', letterSpacing: '0.6px', margin: '0 0 6px' }}>Déjà connecté</p>
+        <p style={{ fontSize: '0.72rem', fontWeight: 800, color: '#6B6485', textTransform: 'uppercase', letterSpacing: '0.6px', margin: '0 0 6px' }}>Session déjà ouverte</p>
         <h1 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#1A0840', margin: '0 0 6px', letterSpacing: '-0.3px', wordBreak: 'break-word' }}>
           {dejaConnecte}
         </h1>
@@ -341,7 +341,7 @@ function Login() {
                 <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
                   <a href="/signup"
                     style={{ display: 'inline-block', color: T.light, fontSize: '0.85rem', fontWeight: 700, textDecoration: 'none', padding: '8px 4px', letterSpacing: '-0.2px' }}>
-                    Pas encore inscrit&nbsp;? <span style={{ color: '#fff', textDecoration: 'underline' }}>Découvrir Yoppaa Pro →</span>
+                    Pas encore de compte&nbsp;? <span style={{ color: '#fff', textDecoration: 'underline' }}>Découvrir Yoppaa Pro →</span>
                   </a>
                 </div>
               )}

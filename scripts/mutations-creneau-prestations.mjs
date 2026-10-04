@@ -60,8 +60,8 @@ const MUTATIONS = [
   // le click & collect.
   { nom: '🔴 la config RDV cesse de dire les heures d ouverture',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '{nomJour}, tu es ouvert de <strong style={{ color: T.ink }}>',
-    vers: '{nomJour}, tu es la <strong style={{ color: T.ink }}>' },
+    de: '{nomJour}, ton commerce est ouvert de <strong style={{ color: T.ink }}>',
+    vers: '{nomJour}, ton commerce est la <strong style={{ color: T.ink }}>' },
 
   // ⚠️ LE CAS QUE PERSONNE NE DISAIT : une plage a cheval s enregistre et le
   // moteur l ecrete EN SILENCE. Le commercant croit ouvrir sa fin de journee.

@@ -294,7 +294,7 @@ function AuthForm() {
       {mode === 'magic' && (
         <div>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.82rem', fontWeight: 500, lineHeight: 1.6, marginBottom: '1.25rem', textAlign: 'center' }}>
-            Reçois un lien magique par email.<br/>Un clic et tu es connecté - sans mot de passe.
+            Reçois un lien magique par email.<br/>Un clic suffit pour te connecter - sans mot de passe.
           </p>
           <input placeholder="ton@email.com" type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && envoyerMagicLink()} style={inputSt} autoFocus/>
           <button onClick={envoyerMagicLink} disabled={!email.trim() || loading}

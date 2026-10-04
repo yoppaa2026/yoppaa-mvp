@@ -196,7 +196,7 @@ const MUTATIONS = [
 
   { nom: '🔴 le push promet une place gardee que le code ne tient pas',
     fichier: SERVEUR,
-    de: 'Tu es prévenu avant les autres.',
+    de: 'Tu reçois l’alerte avant les autres.',
     vers: 'Ta place est gardée 15 minutes.' },
 
   // 🔴 LE DEFAUT TROUVE PAR UNE QUESTION D'ALEX, 07/09. Le mini-calendrier

@@ -1379,7 +1379,7 @@ function EncartOffreLancement({ onRejoindre }) {
             les commerces, les commandes.
             {(avance > 0 || !ouvertureDatee()) && <> D&rsquo;ici là, tu prépares ta page, ton catalogue et tes
               créneaux tranquillement. <strong style={{ color: '#fff' }}>Le jour J, tu ouvres
-              prêt, et tu ne perds aucun de tes {garantis} jours.</strong></>}
+              avec tout en place, et tu ne perds aucun de tes {garantis} jours.</strong></>}
           </p>
           {/* ⚠️ Style écrit ici, PAS `btnPrimaire` : celui-ci vit DANS le
               composant principal, donc l'appeler d'ici serait une variable
@@ -2142,7 +2142,7 @@ export default function LandingReveal({ referent = null }) {
           {ouvertureDatee() && <CompteurLancement/>}
           <p style={{ margin: '18px auto 0', maxWidth: 520, fontSize: 14, fontWeight: 600, lineHeight: 1.6, color: 'rgba(255,255,255,0.82)' }}>
             Inscris-toi maintenant : tu prépares ta page, ton catalogue et tes créneaux
-            sans te presser, et le jour J tu ouvres prêt, sans perdre un seul jour.
+            sans te presser, et le jour J tu ouvres avec tout en place, sans perdre un seul jour.
           </p>
           {/* ⚠️ ALEX, 26/08 : « rends-les plus visibles, je recrute pour les
               réseaux ». Une ligne soulignée en petit sous un compte à rebours
@@ -2209,7 +2209,7 @@ export default function LandingReveal({ referent = null }) {
             aux places de marché qui doivent rentabiliser chaque vendeur. */}
         <p style={{ fontSize: '0.98rem', color: T.deep, lineHeight: 1.7, maxWidth: 640, margin: '22px auto 0', fontWeight: 600 }}>
           Personne n&rsquo;est trop petit pour Yoppaa. La formule Exister est gratuite, pour toujours :
-          que tu sois seul ou toute une équipe, ouvert tous les jours ou juste le samedi, tu as ta
+          que tu travailles en solo ou en équipe, que tu ouvres tous les jours ou juste le samedi, tu as ta
           place ici. 🟣
         </p>
       </section>
@@ -2783,7 +2783,7 @@ export default function LandingReveal({ referent = null }) {
                   onChange={e => setForm(p => ({ ...p, consentement_marketing: e.target.checked }))}
                   style={{ marginTop: 2, width: 15, height: 15, accentColor: '#9660E0', flexShrink: 0, cursor: 'pointer' }}/>
                 <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, fontWeight: 600 }}>
-                  J&rsquo;accepte d&rsquo;être prévenu du lancement et de recevoir les actualités de Yoppaa. <span style={{ color: '#C4A0F4' }}>*</span>
+                  J&rsquo;accepte de recevoir l&rsquo;annonce du lancement et les actualités de Yoppaa. <span style={{ color: '#C4A0F4' }}>*</span>
                 </span>
               </label>
 

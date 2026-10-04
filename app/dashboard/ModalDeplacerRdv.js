@@ -644,7 +644,7 @@ export default function ModalDeplacerRdv({
                 ? <>Prévenir {nomClient} par email si son adresse est connue, avec la mise à jour de son calendrier.</>
                 : rdv.client_email
                 ? <>Prévenir {nomClient} par email, avec la mise à jour de son calendrier.</>
-                : <>Pas d&apos;email pour ce client : préviens-le toi-même{rdv.client_telephone ? ` au ${rdv.client_telephone}` : ''}.</>}
+                : <>Pas d&apos;email pour ce client : préviens cette personne toi-même{rdv.client_telephone ? ` au ${rdv.client_telephone}` : ''}.</>}
             </span>
           </label>
 

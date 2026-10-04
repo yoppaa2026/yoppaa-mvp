@@ -1213,8 +1213,10 @@ egal('un choix incohérent n’écrit rien', statutDepuisChoix('no_show', 'lieu'
 // Ce qu'on lit APRÈS. Les deux annulations ne racontent PAS la même histoire.
 verifier('la confirmation d’annulation nomme le client',
   /Sophie Martin/.test(confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM, raison: 'commercant' })))
+// ⚠️ REPOINTÉE LE 04/10 (D2, textes au neutre) : « Il vient d’en être
+// prévenu » supposait un homme ; la phrase dit maintenant qui l’informe.
 verifier('l’annulation ordinaire dit que le client est prévenu',
-  /prévenu/.test(confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM, raison: 'commercant' })))
+  /Un email vient de l’en informer/.test(confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM, raison: 'commercant' })))
 verifier('l’annulation pour changement de lieu l’invite à reprendre sa place',
   /reprendre sa place/.test(confirmationRdv('annule_commercant', { rdv: RDV_CONFIRM, raison: 'lieu' })))
 verifier('les deux annulations ne disent PAS la même chose',
@@ -2592,13 +2594,15 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('⚠️ les deux copies annoncent ce qu’elles ont ajusté',
     (CONFIG.match(/Copier en ajustant/g) || []).length >= 2
     && (CONFIG.match(/Tes horaires ne sont pas les mêmes ces jours-là/g) || []).length >= 2)
+  // ⚠️ REPOINTÉES LE 04/10 (D2) : « tu es fermé / ouvert » supposait un
+  // homme ; c’est le commerce qui est fermé ou ouvert, et la règle reste.
   // 🔴 « TU ES FERMÉ » NE SE DIT QUE SI C'EST VRAI (Alex, 07/09). Un jour bien
   // ouvert qui ferme plus tôt n'est pas un jour fermé, et il l'a contesté dans
   // la minute.
   verifier('🔴 le refus dit lequel des deux motifs',
-    /ajuste\.raison === 'jour_ferme'\s*\n?\s*\? `\$\{j\} \$\{heure\} : tu es fermé ce jour-là`/.test(CONFIG))
+    /ajuste\.raison === 'jour_ferme'\s*\n?\s*\? `\$\{j\} \$\{heure\} : ton commerce est fermé ce jour-là`/.test(CONFIG))
   verifier('⚠️ et cite les heures réelles quand le jour est ouvert',
-    /tu es ouvert \$\{\(ajuste\.heures \|\| \[\]\)\.join\(' et '\)\}/.test(CONFIG))
+    /ton commerce est ouvert \$\{\(ajuste\.heures \|\| \[\]\)\.join\(' et '\)\}/.test(CONFIG))
   // 🔴 L'EMPLACEMENT EST UNE QUESTION, PAS UNE NOTE (Alex, 07/09 : « il doit
   // spécifier que l'emplacement ne correspond pas au jour, et demander ce que
   // tu veux faire »). Il y a un vrai choix derrière, et c'est lui qui sait.
@@ -2676,7 +2680,7 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // n'aurait cherché que les phrases serait restée VERTE grâce au jumeau, en
   // ne mesurant plus rien. C'est le piège du 07/09, deuxième fois.
   verifier('⚠️ la copie des commandes dit fermé OU hors des heures',
-    /\? `\$\{cible\} \$\{heure\} : tu es fermé ce jour-là`[\s\S]{0,140}?: `\$\{cible\} \$\{heure\} : tu es ouvert \$\{\(ajuste\.heures \|\| \[\]\)\.join\(' et '\)\}`/.test(CONFIG))
+    /\? `\$\{cible\} \$\{heure\} : ton commerce est fermé ce jour-là`[\s\S]{0,140}?: `\$\{cible\} \$\{heure\} : ton commerce est ouvert \$\{\(ajuste\.heures \|\| \[\]\)\.join\(' et '\)\}`/.test(CONFIG))
 
   // 🔴 LE PAVÉ COLLÉ, le frère non traité du 07/09 : le HTML ignore les
   // retours à la ligne d'une chaîne.
@@ -2818,8 +2822,10 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('⚠️ le refus dit où élargir les horaires',
     /Élargis tes horaires dans Paramètres → Profil/.test(CONFIG)
     && /Ouvre d’abord ce jour dans Paramètres → Profil/.test(CONFIG))
+  // ⚠️ REPOINTÉE LE 04/10 (D2) : la phrase dit « ton commerce est ouvert »,
+  // une garde restée sur « tu es ouvert » ne verrait plus la promesse revenir.
   verifier('🔴 elle ne promet plus que le dépassement sera écarté',
-    !/Le \$\{jourActif\}, tu es ouvert \$\{heures\}\. Ce qui dépasse ne sera pas proposé/.test(CONFIG))
+    !/Le \$\{jourActif\}, (tu es|ton commerce est) ouvert \$\{heures\}\. Ce qui dépasse ne sera pas proposé/.test(CONFIG))
   verifier('🔴 ni qu’aucune commande ne pourra s’y poser',
     !/aucune commande ne pourra s’y poser/.test(CONFIG)
     && /Un créneau en dehors serait proposé à tes clients, qui viendraient devant une porte fermée/.test(CONFIG))
@@ -2973,7 +2979,7 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // ⚠️ ET LA PHRASE RESTE, LÀ OÙ ELLE EST VRAIE : le moteur de rendez-vous
   // écrête vraiment. La retirer des deux modules aurait été aussi faux.
   verifier('⚠️ le rendez-vous garde sa phrase, qui y est vraie',
-    /Le \$\{form\.jour_semaine\}, tu es ouvert \$\{heures\}\. Ce qui dépasse ne sera pas proposé/.test(CONFIG))
+    /Le \$\{form\.jour_semaine\}, ton commerce est ouvert \$\{heures\}\. Ce qui dépasse ne sera pas proposé/.test(CONFIG))
   const MOTEUR = lire('lib/rdv-slots.js')
   verifier('⚠️ et c’est vrai parce que le moteur écrête',
     /if \(shopOpen     !== null\) debut = Math\.max\(debut, shopOpen\)/.test(MOTEUR)
@@ -3630,13 +3636,13 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
       readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
 
     // ⚠️ ON COMPTE, ON NE CHERCHE PAS, et une mutation restée verte l'a appris :
-    // « tu es ouvert de » s'écrit dans LES TROIS cas, donc en retirer un seul
+    // « ton commerce est ouvert de » s'écrit dans LES TROIS cas, donc en retirer un seul
     // laissait la garde tranquille. Troisième fois ce motif aujourd'hui.
-    const foisOuvert = (cfg.match(/tu es ouvert de/g) || []).length
+    const foisOuvert = (cfg.match(/ton commerce est ouvert de/g) || []).length
     egal('🔴 la config des créneaux RDV dit les heures d’ouverture dans les 3 cas',
       foisOuvert, 3)
     verifier('🔴 et elle nomme le jour fermé sans le confondre avec une fermeture d’heure',
-      /tu es fermé<\/strong> selon tes horaires/.test(cfg))
+      /ton commerce est fermé<\/strong> selon tes horaires/.test(cfg))
     // ⚠️ LES TROIS CAS SE DISENT DIFFÉREMMENT. « Tu es fermé » sur une plage qui
     // déborde serait faux, et Alex l'avait déjà relevé le 08/09 : « je ne
     // comprends pas, je ne suis pas fermé le mercredi ».

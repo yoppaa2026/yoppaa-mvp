@@ -186,7 +186,7 @@ export default function AdminPage() {
   async function valider(commercant_id) {
     // ⚠️ VALIDER N'EST PLUS PUBLIER (28/09) : l'espace s'ouvre, la fiche reste
     // invisible jusqu'au clic « Publier » (bloc « Fiches à mettre en ligne »).
-    if (!confirm('Valider ce commerçant ? Son tableau de bord s’ouvre et il reçoit un email avec ce qu’il doit compléter. Sa fiche reste invisible jusqu’à ce que tu la publies.')) return
+    if (!confirm('Valider ce commerçant ? Son tableau de bord s’ouvre et un email lui dit ce qu’il reste à compléter. Sa fiche reste invisible jusqu’à ce que tu la publies.')) return
     setActionEnCours(commercant_id)
     try {
       const res = await fetch('/api/admin/valider', {

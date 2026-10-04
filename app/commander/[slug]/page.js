@@ -5500,7 +5500,7 @@ export default function CommanderSlug() {
                   </p>
                   <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5, marginBottom: 12 }}>
                     {estLivraisonConfirmee
-                      ? <>Tu as commandé depuis ton PC. Installe l&apos;app sur ton téléphone pour être prévenu quand ta commande part en livraison et arrive.<br/></>
+                      ? <>Tu as commandé depuis ton PC. Installe l&apos;app sur ton téléphone pour recevoir une alerte quand ta commande part en livraison et arrive.<br/></>
                       : <>Tu as commandé depuis ton PC. Pour utiliser l&apos;écran de retrait prioritaire Yoppaa chez le commerçant, télécharge l&apos;app sur ton téléphone.<br/></>}
                     <strong style={{ color: T.light }}>Tes identifiants restent les mêmes.</strong>
                   </p>

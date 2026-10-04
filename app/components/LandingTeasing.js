@@ -207,8 +207,8 @@ export default function LandingTeasing({ referent = null }) {
   // Texte du sous-bloc formulaire : different selon la phase (avant dev. on
   // promet la decouverte ; entre dev. et lancement on promet le telechargement)
   const sousTexteForm = phase === 'devoile'
-    ? `Laisse-nous ton email, et le ${LAUNCH_LABEL} tu seras parmi les premiers à télécharger Yoppaa.`
-    : `Laisse-nous ton email, et le ${REVEAL_LABEL} tu seras parmi les premiers à découvrir Yoppaa.`
+    ? `Laisse-nous ton email, et le ${LAUNCH_LABEL} tu feras partie des premières personnes à télécharger Yoppaa.`
+    : `Laisse-nous ton email, et le ${REVEAL_LABEL} tu feras partie des premières personnes à découvrir Yoppaa.`
 
   return (
     <div style={{ minHeight: '100svh', background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff', fontFamily: '"DM Sans", sans-serif', position: 'relative', overflowX: 'hidden' }}>
@@ -534,7 +534,7 @@ function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey,
         </p>
         <p style={{ margin: 0, fontSize: 13.5, fontWeight: 500, color: 'rgba(255,255,255,0.92)', lineHeight: 1.55 }}>
           Commerçant alimentaire, de service ou de détail : tu peux <strong style={{ color: '#fff', fontWeight: 800 }}>exister</strong> et te faire connaître dans ton quartier.<br/>
-          Simplement curieux ? Suis la vie de tes commerces et <strong style={{ color: '#fff', fontWeight: 800 }}>rejoins la tribu Yoppaa</strong>. 🟣
+          Simple curiosité ? Suis la vie de tes commerces et <strong style={{ color: '#fff', fontWeight: 800 }}>rejoins la tribu Yoppaa</strong>. 🟣
         </p>
       </div>
 
@@ -568,7 +568,7 @@ function CompteurEtForm({ statut, form, setForm, soumettre, formValide, siteKey,
         </div>
       ) : (
         <form onSubmit={soumettre} style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%' }}>
-          <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.8 }}>Sois prévenu en premier</p>
+          <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.8 }}>Reçois la nouvelle en premier</p>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.82)', margin: '0 0 16px', lineHeight: 1.5 }}>
             {sousTexteForm}
           </p>

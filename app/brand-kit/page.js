@@ -618,7 +618,7 @@ export default function BrandKit() {
         // ⚠️ ACCENTS RÉTABLIS. Ce texte part sur Facebook tel quel : « Tu es
         // commercant ? » sans cédille est une faute PUBLIÉE, sur un visuel qui
         // sert justement à convaincre des commerçants.
-        titre: 'Tu es commerçant ?',
+        titre: 'Tu tiens un commerce ?',
         sousTitre: 'Crée ta fiche Yoppaa en 5 minutes sur www.yoppaa.app',
         showFooter: true, bigDotsSignature: true,
       },

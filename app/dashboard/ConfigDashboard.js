@@ -4650,7 +4650,7 @@ function TabCreneaux({ commercantId, toast }) {
         const propose = morceaux.map(m => `${m.debut}–${m.fin}`).join(' et ')
         if (!await confirme(confirmationSimple({
           titre: 'Ce créneau déborde de tes heures d’ouverture',
-          message: `Le ${jourActif}, tu es ouvert ${heures}. Un créneau en dehors serait proposé à tes clients, qui viendraient devant une porte fermée.`,
+          message: `Le ${jourActif}, ton commerce est ouvert ${heures}. Un créneau en dehors serait proposé à tes clients, qui viendraient devant une porte fermée.`,
           details: [`Ramené à tes heures, tu obtiens ${propose}.`],
           action: `Créer ${propose}`,
           ton: 'principal',
@@ -4661,11 +4661,11 @@ function TabCreneaux({ commercantId, toast }) {
         // pourquoi, et on dit où le changer.
         await confirme(confirmationInfo({
           titre: dehorsCmd.raison === 'jour_ferme'
-            ? `Tu es fermé le ${jourActif}`
+            ? `Ton commerce est fermé le ${jourActif}`
             : 'Ce créneau est hors de tes heures d’ouverture',
           message: dehorsCmd.raison === 'jour_ferme'
             ? `Ouvre d’abord ce jour dans Paramètres → Profil, et ce créneau deviendra possible.`
-            : `Le ${jourActif}, tu es ouvert ${heures}. Élargis tes horaires dans Paramètres → Profil si tu veux vendre à cette heure-là.`,
+            : `Le ${jourActif}, ton commerce est ouvert ${heures}. Élargis tes horaires dans Paramètres → Profil si tu veux vendre à cette heure-là.`,
         }))
         return
       }
@@ -4797,8 +4797,8 @@ function TabCreneaux({ commercantId, toast }) {
           // fermé » sur un jour bien ouvert qui ferme simplement plus tôt est
           // un message que le commerçant ne peut que contester.
           ignoresCopie.push(ajuste.raison === 'jour_ferme'
-            ? `${cible} ${heure} : tu es fermé ce jour-là`
-            : `${cible} ${heure} : tu es ouvert ${(ajuste.heures || []).join(' et ')}`)
+            ? `${cible} ${heure} : ton commerce est fermé ce jour-là`
+            : `${cible} ${heure} : ton commerce est ouvert ${(ajuste.heures || []).join(' et ')}`)
           continue
         }
         // 🔴 UN MORCEAU PAR SERVICE (Alex, 08/09). Un créneau 08:00-23:00 copié
@@ -4978,7 +4978,7 @@ function TabCreneaux({ commercantId, toast }) {
           <strong> + Ajouter</strong> sert au cas
           particulier : une seule plage, à la main. Si elle déborde, il la ramène à tes heures ;
           si elle tombe entièrement dehors, <strong>il la refuse</strong> et te dit où élargir
-          tes horaires. <strong>Aucun créneau ne peut exister quand tu es fermé</strong> : ton
+          tes horaires. <strong>Aucun créneau ne peut exister quand ton commerce est fermé</strong> : ton
           client viendrait devant une porte close.
         </EtapeAide>
         <EtapeAide n={3} titre="Choisis ta façon de compter" T={T}>
@@ -6256,8 +6256,8 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
                   rattachée à son compte, il la verra dans son appli. */}
               <p style={{ margin: '0 0 10px', fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
                 {clientTrouve
-                  ? <>C&rsquo;est le numéro de <strong style={{ color: T.main }}>{[clientTrouve.prenom, clientTrouve.nom].filter(Boolean).join(' ')}</strong>, déjà inscrit sur Yoppaa : sa carte sera reliée à son compte.</>
-                  : 'Ce numéro n’a pas encore de compte Yoppaa : la carte fonctionnera quand même, il la retrouvera dès son inscription.'}
+                  ? <>C&rsquo;est le numéro de <strong style={{ color: T.main }}>{[clientTrouve.prenom, clientTrouve.nom].filter(Boolean).join(' ')}</strong>, qui a déjà un compte Yoppaa : sa carte y sera reliée.</>
+                  : 'Ce numéro n’a pas encore de compte Yoppaa : la carte fonctionnera quand même, elle rejoindra son compte dès l’inscription.'}
               </p>
               <button style={btnPlein} disabled={busy} onClick={creerCarte}>Créer sa carte 🟣</button>
             </div>
@@ -8089,7 +8089,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
             <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${T.pale}` }}>
               <p style={{ ...s.label, marginBottom: 6 }}>Notifications {noun} par email</p>
               <p style={{ fontSize: 11, color: T.muted, marginBottom: 10, lineHeight: 1.5 }}>
-                Comment veux-tu être prévenu(e) des nouvelles {noun} en plus du dashboard ?
+                Comment veux-tu recevoir une alerte pour les nouvelles {noun} en plus du dashboard ?
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {[
@@ -8956,7 +8956,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
           <li><strong>C&rsquo;est l&rsquo;acheteur qui choisit le montant</strong>, librement, entre {BON_MONTANT_MIN} et {BON_MONTANT_MAX} €. Tu n&rsquo;as rien à préparer ni à mettre en vente.</li>
           <li><strong>Un {nomBon} est une somme, pas un article.</strong> Le bénéficiaire l&rsquo;utilise sur ce qu&rsquo;il veut chez toi, ce qui t&rsquo;évite de devoir garder un produit en réserve pendant des mois.</li>
           <li><strong>Il s&rsquo;utilise en plusieurs fois.</strong> Un bon de 50 € dépensé à hauteur de 30 € en garde 20 pour la prochaine visite, en ligne comme au comptoir.</li>
-          <li><strong>Tu es payé tout de suite</strong>, à l&rsquo;achat du bon, sur ton compte. Quand le bénéficiaire vient le dépenser, il ne te doit plus rien : c&rsquo;est déjà encaissé.</li>
+          <li><strong>Tu encaisses tout de suite</strong>, à l&rsquo;achat du bon, sur ton compte. Quand le bénéficiaire vient le dépenser, il ne te doit plus rien : c&rsquo;est déjà encaissé.</li>
           <li><strong>La validité court à partir de la vente</strong> et se règle juste en dessous. Passé ce délai, le bon ne peut plus être utilisé.</li>
         </ul>
       </div>
@@ -10953,7 +10953,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
     // contre la règle du 17/08 : la comptabilité recevait un montant sans
     // savoir s'il fallait le chercher dans le tiroir, sur le terminal ou sur
     // le relevé. Le moyen se demande, il ne se devine pas.
-    if (insc.paye && !insc.mode_paiement) return toast('Dis comment tu as été payé : terminal, espèces ou virement', 'error')
+    if (insc.paye && !insc.mode_paiement) return toast('Dis comment ce paiement a été reçu : terminal, espèces ou virement', 'error')
 
     // ⚠️ EN HEURE BELGE. `toISOString()` rend le jour de Greenwich : une
     // inscription prise à 00h30 aurait fait démarrer le contrat la VEILLE.
@@ -11550,8 +11550,8 @@ function TabRdvAbonnements({ commercantId, toast }) {
                   simplement empêchée d'être inscrite. */}
               <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, margin: '-6px 0 12px' }}>
                 {insc.client_email.trim()
-                  ? 'Avec son email, elle pourra réserver ses séances elle-même depuis l’application.'
-                  : 'Sans email, c’est toi qui poseras toutes ses séances : elle ne pourra pas réserver depuis l’application.'}
+                  ? 'Avec son email, l’application lui permettra de réserver ses séances en autonomie.'
+                  : 'Sans email, c’est toi qui poseras toutes ses séances : l’application ne lui permettra pas de réserver.'}
               </p>
 
               <div style={{ marginBottom: 12 }}>
@@ -11643,7 +11643,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
                               rien. On lit désormais ce qui est VRAI, la présence
                               d'un email, qui est exactement ce qui lui ouvre
                               l'application. */}
-                          {a.client_email ? ' · elle peut réserver elle-même' : ' · c’est toi qui poses ses séances'}
+                          {a.client_email ? ' · réserve en ligne de son côté' : ' · c’est toi qui poses ses séances'}
                         </p>
                         <p style={{ fontSize: 11.5, color: T.muted, marginTop: 3 }}>
                           Du {dateCourte(a.date_debut)} au {dateCourte(a.date_fin)}
@@ -11679,7 +11679,7 @@ function TabRdvAbonnements({ commercantId, toast }) {
                     {!resilie && !a.paye && encaisseOuvert === a.id && (
                       <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.hairline}` }}>
                         <p style={{ fontSize: 12, fontWeight: 700, color: T.ink, marginBottom: 8 }}>
-                          Comment {a.client_prenom} a-t-elle payé ses {euros(a.prix)} ?
+                          Comment ont été réglés les {euros(a.prix)} de {a.client_prenom} ?
                         </p>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {MOYENS_ENCAISSEMENT.map(m => (
@@ -12181,7 +12181,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     // Jour fermé au Profil : le créneau ne servira à rien tant que les horaires
     // ne sont pas ouverts (le moteur de slots croise les deux). On prévient.
     if (joursFermesProfil.includes(form.jour_semaine) &&
-        !await confirme(confirmationSimple({ titre: `Tu es déclaré fermé le ${form.jour_semaine}`, message: 'C’est ce que disent tes horaires dans le Profil. Tant que tu ne les ouvres pas, ce créneau ne s’affichera pas chez tes clients.', action: 'Le créer quand même', ton: 'principal' }))) return
+        !await confirme(confirmationSimple({ titre: `Ton commerce est déclaré fermé le ${form.jour_semaine}`, message: 'C’est ce que disent tes horaires dans le Profil. Tant que tu ne les ouvres pas, ce créneau ne s’affichera pas chez tes clients.', action: 'Le créer quand même', ton: 'principal' }))) return
 
     // 🔴 ET LES HEURES, QUE PERSONNE NE VÉRIFIAIT (Alex, 07/09). Une plage
     // 20:00-22:00 dans un commerce qui ferme à 19h s'enregistrait sans un mot
@@ -12196,8 +12196,8 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     if (dehors && dehors.raison !== 'jour_ferme') {
       const heures = dehors.plages.join(' et ')
       const message = dehors.raison === 'hors_ouverture'
-        ? `Le ${form.jour_semaine}, tu es ouvert ${heures}. Cette plage tombe entièrement en dehors : aucun rendez-vous ne sera proposé dessus.`
-        : `Le ${form.jour_semaine}, tu es ouvert ${heures}. Ce qui dépasse ne sera pas proposé à tes clients.`
+        ? `Le ${form.jour_semaine}, ton commerce est ouvert ${heures}. Cette plage tombe entièrement en dehors : aucun rendez-vous ne sera proposé dessus.`
+        : `Le ${form.jour_semaine}, ton commerce est ouvert ${heures}. Ce qui dépasse ne sera pas proposé à tes clients.`
       if (!await confirme(confirmationSimple({
         titre: 'Cette plage sort de tes heures d’ouverture',
         message,
@@ -12358,8 +12358,8 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
           // ne peut que contester : Alex l'a fait dans la minute.
           const heure = `${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)}`
           ignorees.push(ajuste.raison === 'jour_ferme'
-            ? `${j} ${heure} : tu es fermé ce jour-là`
-            : `${j} ${heure} : tu es ouvert ${(ajuste.heures || []).join(' et ')}`)
+            ? `${j} ${heure} : ton commerce est fermé ce jour-là`
+            : `${j} ${heure} : ton commerce est ouvert ${(ajuste.heures || []).join(' et ')}`)
           continue
         }
         // 🔴 UN MORCEAU PAR SERVICE (Alex, 08/09). Une plage qui couvrait la
@@ -12914,7 +12914,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
               if (h.ouvert === false) {
                 return (
                   <div style={{ ...cadre, background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', fontWeight: 600 }}>
-                    <strong>{nomJour} : tu es fermé</strong> selon tes horaires. Cette plage ne proposera rien tant que tu ne les auras pas ouverts.
+                    <strong>{nomJour} : ton commerce est fermé</strong> selon tes horaires. Cette plage ne proposera rien tant que tu ne les auras pas ouverts.
                   </div>
                 )
               }
@@ -12939,7 +12939,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
               if (!ecart) {
                 return (
                   <div style={{ ...cadre, background: T.bg, color: T.muted, fontWeight: 600 }}>
-                    {nomJour}, tu es ouvert de <strong style={{ color: T.ink }}>{services.join(' et de ')}</strong>.
+                    {nomJour}, ton commerce est ouvert de <strong style={{ color: T.ink }}>{services.join(' et de ')}</strong>.
                   </div>
                 )
               }
@@ -12948,7 +12948,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
               if (ecart.raison === 'hors_ouverture') {
                 return (
                   <div style={{ ...cadre, background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', fontWeight: 600 }}>
-                    {nomJour}, tu es ouvert de <strong>{services.join(' et de ')}</strong>.<br/>
+                    {nomJour}, ton commerce est ouvert de <strong>{services.join(' et de ')}</strong>.<br/>
                     Cette plage est <strong>entièrement en dehors</strong> : elle ne proposera aucun créneau.
                   </div>
                 )
@@ -12958,7 +12958,7 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
               // silence. C'est le cas qu'aucun écran ne disait.
               return (
                 <div style={{ ...cadre, background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', fontWeight: 600 }}>
-                  {nomJour}, tu es ouvert de <strong>{services.join(' et de ')}</strong>.<br/>
+                  {nomJour}, ton commerce est ouvert de <strong>{services.join(' et de ')}</strong>.<br/>
                   Cette plage déborde : elle sera proposée de <strong>{reel || services.join(' et de ')}</strong>.
                 </div>
               )
@@ -14126,7 +14126,7 @@ function TabEnvies({ commercantId, toast }) {
           <button onClick={() => setOuvrirReglages(v => !v)}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
             <Icon name="sliders" size={16} color={T.muted}/>
-            <span style={{ fontWeight: 800, fontSize: 14, color: T.ink, flex: 1 }}>Quand veux-tu être prévenu ?</span>
+            <span style={{ fontWeight: 800, fontSize: 14, color: T.ink, flex: 1 }}>Quand veux-tu recevoir une alerte ?</span>
             {enregistre && <span style={{ fontSize: 11, fontWeight: 800, color: '#10B981' }}>Enregistré</span>}
             <Icon name={ouvrirReglages ? 'chevU' : 'chevD'} size={16} color={T.muted}/>
           </button>
@@ -15365,7 +15365,7 @@ function BlocAcces({ commercant, toast }) {
           Tu regardes ce dossier depuis un autre compte que le sien. Changer un email
           ou un mot de passe depuis cet écran agirait sur <strong>ton</strong> compte,
           pas sur celui-ci : les deux gestes sont donc masqués ici. Pour les faire,
-          il faut être connecté avec le compte du commerce.
+          il faut se connecter avec le compte du commerce.
         </p>
       </div>
     )

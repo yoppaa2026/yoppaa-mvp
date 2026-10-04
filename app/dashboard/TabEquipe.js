@@ -319,7 +319,7 @@ export default function TabEquipe({ commercantId, toast }) {
               <div>
                 <label style={etiquette} htmlFor="equipe-email">Adresse email</label>
                 <input id="equipe-email" type="email" inputMode="email" autoComplete="off" style={champ} value={email} onChange={e => setEmail(e.target.value)} placeholder="julie@exemple.be"/>
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: T.muted }}>Elle recevra l&rsquo;invitation à cette adresse, et devra se connecter avec elle.</p>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: T.muted }}>L&rsquo;invitation part à cette adresse, et c&rsquo;est avec elle qu&rsquo;il faudra se connecter.</p>
               </div>
               <div>
                 <span style={etiquette}>Ce que cette personne peut faire</span>

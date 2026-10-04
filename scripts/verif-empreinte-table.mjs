@@ -518,12 +518,14 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     verifie('🔴 un refus connu est traduit et dit la suite à donner',
       /pas assez approvisionné/.test(messageRefus({ decline_code: 'insufficient_funds', message: 'Your card has insufficient funds.' }))
       && /réessayer plus tard/.test(messageRefus({ decline_code: 'insufficient_funds' })))
+    // ⚠️ REPOINTÉES LE 04/10 (D2, textes au neutre) : « il », « le » et « son
+    // écran » désignaient le client ; les messages le nomment désormais.
     verifie('⚠️ une carte expirée renvoie vers le client, pas vers un nouvel essai',
-      /contacter directement|contacte le client/i.test(messageRefus({ decline_code: 'expired_card' }))
+      /contacter le client directement|contacte le client/i.test(messageRefus({ decline_code: 'expired_card' }))
       && !/réessay/i.test(messageRefus({ decline_code: 'expired_card' })))
     // 🔴 CELUI-CI EST À PART : personne ne peut authentifier, le client n'est pas là.
     verifie('🔴 une authentification réclamée hors session est expliquée',
-      /pas devant son écran/.test(messageRefus({ code: 'authentication_required' })))
+      /personne n’est devant l’écran/.test(messageRefus({ code: 'authentication_required' })))
     // ⚠️ UN CODE INCONNU GARDE LE MESSAGE DE STRIPE plutôt que d'inventer une
     // raison, mais SANS son point final : « declined.. » se lit comme une faute.
     egal('🔴 un code inconnu garde le message de Stripe, sans double point',
@@ -1078,8 +1080,9 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
   // « le message n'est pas clair pour moi »). Il disait « TA table » à celui
   // qui tient le restaurant, et expliquait un mécanisme — « le lien la garantit,
   // il ne la crée pas » — au lieu de dire ce qui va se passer.
+  // ⚠️ REPOINTÉE LE 04/10 (D2) : « S’il ne clique pas » supposait un homme.
   verifie('⚠️ et le message rappelle que la table reste réservée',
-    /S’il ne clique pas, elle le reste, simplement sans garantie/.test(DASH2)
+    /Sans clic sur le lien, elle le reste, simplement sans garantie/.test(DASH2)
     && /La table reste réservée\. Tu peux corriger le numéro/.test(DASH2))
   verifie('🔴 et il ne tutoie plus le restaurateur sur la table de son client',
     !/Ta table reste réservée/.test(DASH2))

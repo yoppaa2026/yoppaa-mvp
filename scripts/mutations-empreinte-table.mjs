@@ -324,7 +324,7 @@ const MUTATIONS = [
 
   { nom: '🔴 le message reparle de « TA table » au restaurateur',
     fichier: DASH,
-    de: '      details: \'Sa table est déjà réservée. S’il ne clique pas, elle le reste, simplement sans garantie.\',',
+    de: '      details: \'Sa table est déjà réservée. Sans clic sur le lien, elle le reste, simplement sans garantie.\',',
     vers: '      details: \'Ta table reste réservée tant qu’il n’a pas confirmé.\',' },
 
   { nom: '🔴 un envoi rate ne dit plus pourquoi',

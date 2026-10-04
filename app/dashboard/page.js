@@ -954,7 +954,7 @@ function CarteCommande({ commande, numero, categorie = null, commerceNom = null,
                 titre: 'Ce client n’est pas venu chercher sa commande ?',
                 message: 'Les articles retournent en stock, et la commande sort de ta liste du jour.',
                 details: `${commande.client_nom} · ${quand}`,
-                action: 'Oui, il n’est pas venu',
+                action: 'Oui, absence confirmée',
               }))) {
                 onChangerStatut(commande.id, 'non_retire')
               }
@@ -971,7 +971,7 @@ function CarteCommande({ commande, numero, categorie = null, commerceNom = null,
           <button onClick={async () => {
             if (await confirme(confirmationSimple({
               titre: 'Remettre cette commande en « Prête » ?',
-              message: 'Le client est finalement passé, ou tu l’avais marquée absent par erreur.',
+              message: 'Le client est finalement passé, ou l’absence a été notée par erreur.',
               action: 'Oui, la remettre en Prête', ton: 'principal',
             }))) {
               onChangerStatut(commande.id, 'pret')
@@ -2283,8 +2283,8 @@ export default function Dashboard() {
       await confirme(confirmationInfo({
         titre: 'Noté : client absent',
         message: j.client_prevenu
-          ? 'Ton client est prévenu : il doit t’appeler pour une nouvelle livraison, ou pour venir la chercher.'
-          : 'Ton client n’a pas pu être prévenu. Appelle-le pour convenir de la suite.',
+          ? 'Ton client est prévenu : on lui demande de t’appeler pour une nouvelle livraison, ou de venir la chercher.'
+          : 'Ton client n’a pas pu être prévenu. Téléphone-lui pour convenir de la suite.',
         details: 'La commande revient « prête ». « Partir en livraison » la relance quand tu y retournes.',
         action: 'J’ai compris',
       }))
@@ -2408,7 +2408,7 @@ export default function Dashboard() {
       // celui qui tient le restaurant : ce n'est pas la sienne, c'est celle de
       // son client. Et « le lien la garantit, il ne la crée pas » explique un
       // mécanisme au lieu de dire ce qui va se passer.
-      details: 'Sa table est déjà réservée. S’il ne clique pas, elle le reste, simplement sans garantie.',
+      details: 'Sa table est déjà réservée. Sans clic sur le lien, elle le reste, simplement sans garantie.',
       action: 'Parfait',
     }))
     return true
@@ -2532,7 +2532,7 @@ export default function Dashboard() {
         bon_garde: j.garde_sur_bon,
         bon_restitue: j.bon_restitue,
         recompense_rendue: j.recompense_rendue,
-      }, 'l’email « tu n’es pas venu »')
+      }, 'l’email d’absence')
       return true
     }
 
@@ -3547,7 +3547,7 @@ export default function Dashboard() {
             <strong>MODE ADMIN</strong>
           </span>
           <span style={{ opacity: 0.92 }}>
-            Tu es connecté en tant que <strong>{commercant.nom}</strong>
+            Tu utilises le compte de <strong>{commercant.nom}</strong>
             {impersonationFin && <> · jusqu’à {new Date(impersonationFin).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Brussels' })}</>}
           </span>
           <button onClick={quitterImpersonation}
@@ -3637,7 +3637,7 @@ export default function Dashboard() {
                 qui décide si le commerçant apprend qu'une commande est tombée.
                 Éteint, il appelle ; allumé, il se contente de confirmer. */}
             <button onClick={activerNotifications}
-              title={notificationsActives ? 'Tu es prévenu à chaque commande' : 'Active les alertes pour être prévenu'}
+              title={notificationsActives ? 'Une alerte à chaque commande' : 'Active les alertes pour ne rien manquer'}
               style={{ display: 'flex', alignItems: 'flex-start', gap: 8, textAlign: 'left', padding: '0.6rem 0.875rem', borderRadius: 10, border: `1.5px solid ${notificationsActives ? '#10B98166' : '#F59E0B99'}`, background: notificationsActives ? '#10B9811F' : '#F59E0B22', color: notificationsActives ? '#D1FAE5' : '#FDE68A', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 700, fontSize: '0.78rem', transition: 'all 0.15s' }}>
               <IconBell size={15} color={notificationsActives ? '#6EE7B7' : '#FCD34D'} active={notificationsActives}/>
               {notificationsActives ? (
@@ -3783,7 +3783,7 @@ export default function Dashboard() {
                   {envoiRate.quoi} n&rsquo;a pas abouti
                 </p>
                 <p style={{ margin: '2px 0 0', fontSize: '0.74rem', fontWeight: 600, color: '#92400E', lineHeight: 1.45, overflowWrap: 'anywhere' }}>
-                  {envoiRate.suite || 'Ta commande est bien à jour, ton client la voit dans son application. Tu peux le prévenir par téléphone si c’est urgent.'}
+                  {envoiRate.suite || 'Ta commande est bien à jour, ton client la voit dans son application. Tu peux lui téléphoner si c’est urgent.'}
                   {envoiRate.erreur ? ` (${envoiRate.erreur})` : ''}
                 </p>
               </div>

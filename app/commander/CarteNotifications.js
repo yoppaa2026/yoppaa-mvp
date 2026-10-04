@@ -38,7 +38,7 @@ export default function CarteNotifications() {
     try {
       const res = await activerNotifications()
       if (res.ok && res.id) {
-        setMessage({ type: 'ok', texte: 'Notifications activées. Tu seras prévenu du statut de tes commandes.' })
+        setMessage({ type: 'ok', texte: 'Notifications activées. Tu recevras chaque étape de tes commandes.' })
       } else if (res.ok) {
         // Permission OK mais l'abonnement (service worker) ne s'est pas créé : on affiche
         // l'erreur exacte du service worker pour diagnostiquer.

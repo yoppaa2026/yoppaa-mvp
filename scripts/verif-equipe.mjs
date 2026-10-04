@@ -853,7 +853,8 @@ const membre = (o = {}) => ({
   v('🔴 la fenêtre de déplacement ne s’ouvre qu’avec la case Agenda', /\{aDeplacer && etat\.agenda && etat\.droits\?\.agenda && \(\s*<ModalDeplacerRdv/.test(ecran))
   v('elle reçoit l’accès serveur', /<ModalDeplacerRdv[\s\S]*?serveur=\{serveurSaisie\}[\s\S]*?\/>/.test(ecran))
   v('🔴 « plutôt le déplacer » ouvre la fenêtre au lieu d’annuler', /if \(choix === 'deplacer'\) \{ setRdvOuvert\(null\); setADeplacer\(rdv\); return \}\s*const d = statutDepuisChoix\('annule_commercant', choix\)/.test(ecran))
-  v('🔴 un client sans adresse se dit, avec son téléphone', /Pas d’email pour ce client : préviens-le/.test(lire('app/equipe/PosteEquipe.js')))
+  // ⚠️ REPOINTÉE LE 04/10 (D2) : « préviens-le » supposait un homme.
+  v('🔴 un client sans adresse se dit, avec son téléphone', /Pas d’email pour ce client : préviens cette personne/.test(lire('app/equipe/PosteEquipe.js')))
 }
 
 // ═══ LE POSTE AU QUOTIDIEN (Alex, 01/10, en testant chez MOMO) ═════════════

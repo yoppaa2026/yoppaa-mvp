@@ -60,7 +60,12 @@ for (const nom of HARNAIS) {
   for (const b of blocs) {
     const nomM = (b.match(/^'([^']*)'/) || b.match(/^"([^"]*)"/) || [])[1] || '(sans nom)'
     const fm = b.match(/fichier:\s*([A-Z_][A-Z_0-9]*|'[^']*')/)
-    const dm = b.match(/\n\s*de:\s*((?:'(?:[^'\\]|\\.)*')|(?:"(?:[^"\\]|\\.)*")|(?:`(?:[^`\\]|\\.)*`))/)
+    // 🔴 `de:` APRÈS UNE VIRGULE AUSSI (04/10). La regex n'acceptait `de:` qu'en
+    // début de ligne : une mutation écrite d'une traite (`fichier: …, de: …`)
+    // passait SANS ÊTRE LUE, et son ancre périmée par D2 n'a été vue que par le
+    // harnais lui-même (« introuvable »). Un vérificateur qui saute ce qu'il ne
+    // sait pas lire laisse croire qu'il a tout relu.
+    const dm = b.match(/(?:\n|,)\s*de:\s*((?:'(?:[^'\\]|\\.)*')|(?:"(?:[^"\\]|\\.)*")|(?:`(?:[^`\\]|\\.)*`))/)
     if (!dm) continue
 
     let de

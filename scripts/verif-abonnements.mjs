@@ -1347,8 +1347,9 @@ verifier('et prévient le commerçant de la vente',
   const pro = emailAbonnementVenduCommercant({ nom_commercant: 'Centre Respire', client_prenom: '<b>Sophie</b>', client_nom: 'Martin', resume })
   verifier('🔴 l’email du commerçant échappe le nom du client', !/<b>Sophie<\/b>/.test(pro) && /&lt;b&gt;Sophie/.test(pro))
   verifier('🔴 et la formule', !/<i>yoga<\/i>/.test(pro))
+  // ⚠️ REPOINTÉE LE 04/10 (D2) : « lui-même » devient « en autonomie ».
   verifier('⚠️ et ne lui dit plus « tu réserves tes séances toi-même », phrase écrite pour le client',
-    !/réserves tes séances toi-même/.test(pro) && /Ton client réserve ses séances lui-même/.test(pro))
+    !/réserves tes séances toi-même/.test(pro) && /Ton client réserve ses séances en autonomie/.test(pro))
   const client = emailAbonnementConfirme({ yopper_prenom: 'Sophie', commercant_nom: 'Centre Respire', resume, mes_abonnements_url: 'https://www.yoppaa.app/x' })
   verifier('🔴 l’email du client échappe aussi la formule', !/<i>yoga<\/i>/.test(client) && /Annuel &lt;i&gt;yoga/.test(client))
 }

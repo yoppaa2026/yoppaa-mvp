@@ -497,7 +497,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
         bon_garde: j.garde_sur_bon,
         bon_restitue: j.bon_restitue,
         recompense_rendue: j.recompense_rendue,
-      }, 'l’email « tu n’es pas venu »')
+      }, 'l’email d’absence')
     }),
     // La fenêtre du patron fait le reste : verdict, salle, serveur, rappel, email.
     deplacer: (rdv) => { setAvis(null); setRdvOuvert(null); setADeplacer(rdv) },
@@ -508,7 +508,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
   function apresDeplacement(rdv, { clientAEmail, emailParti } = {}) {
     const quand = `${libelleJourPoste(rdv.date_rdv)} à ${String(rdv.heure_debut || '').slice(0, 5)}`
     if (emailParti) dire(`Réservation déplacée au ${quand}. Le client reçoit un email.`)
-    else if (!clientAEmail) dire(`Réservation déplacée au ${quand}. Pas d’email pour ce client : préviens-le${rdv.client_telephone ? ` au ${rdv.client_telephone}` : ''}.`, 'erreur')
+    else if (!clientAEmail) dire(`Réservation déplacée au ${quand}. Pas d’email pour ce client : préviens cette personne${rdv.client_telephone ? ` au ${rdv.client_telephone}` : ''}.`, 'erreur')
     else dire(`Réservation déplacée au ${quand}. Le client n’a pas été prévenu.`, 'erreur')
     charger()
   }
@@ -567,7 +567,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
       const j = await lire(await postPro('/api/livraison/livrer', { commande_id: l.id, statut_livraison: 'absent' }))
       if (!j.ok) { dire(j.error || 'L’absence n’a pas pu être notée.', 'erreur'); return }
       if (j.client_prevenu) dire('Noté : le client est prévenu de vous appeler.')
-      else dire(`Noté, mais le client n’a pas pu être prévenu${l.client_telephone ? ` : appelle-le au ${l.client_telephone}` : ''}.`, 'erreur')
+      else dire(`Noté, mais le client n’a pas pu être prévenu${l.client_telephone ? ` : téléphone-lui au ${l.client_telephone}` : ''}.`, 'erreur')
     }),
   }
   // ─── APRÈS LA REMISE (01/10) ─────────────────────────────────────────────

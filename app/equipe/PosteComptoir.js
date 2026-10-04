@@ -130,8 +130,8 @@ function Fidelite({ commercantId, regle }) {
           <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 800, color: T.ink }}>Aucune carte pour {afficherTelephone(sansCarte)}.</p>
           <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
             {nomClient
-              ? <>C&rsquo;est le numéro de <strong style={{ color: T.main }}>{nomClient}</strong>, déjà inscrit sur Yoppaa : sa carte sera reliée à son compte.</>
-              : 'Ce numéro n’a pas encore de compte Yoppaa : la carte fonctionne quand même, il la retrouvera à son inscription.'}
+              ? <>C&rsquo;est le numéro de <strong style={{ color: T.main }}>{nomClient}</strong>, qui a déjà un compte Yoppaa : sa carte y sera reliée.</>
+              : 'Ce numéro n’a pas encore de compte Yoppaa : la carte fonctionne quand même, elle rejoindra son compte à l’inscription.'}
           </p>
           <button type="button" disabled={!!occupe} onClick={creer} style={bouton()}>
             {occupe === 'creer' ? <DotsAttente couleur="#fff" label="Création"/> : 'Créer sa carte'}

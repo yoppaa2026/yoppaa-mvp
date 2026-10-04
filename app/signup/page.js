@@ -642,7 +642,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
       ) : (
         <Card titre="Ton compte">
           <p style={{ fontSize: '0.875rem', color: T.deep, margin: 0 }}>
-            Connecté : <strong>{session.user.email}</strong>
+            Compte connecté : <strong>{session.user.email}</strong>
           </p>
         </Card>
       )}
@@ -789,7 +789,7 @@ function Etape1Compte({ session, commercant, onCompte }) {
       <TurnstileWidget ref={turnstileRef} />
 
       <p style={{ fontSize: 11, color: T.muted, textAlign: 'center', marginTop: 12 }}>
-        Déjà inscrit ? <a href="/login" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>Se connecter</a>
+        Déjà un compte ? <a href="/login" style={{ color: T.main, fontWeight: 700, textDecoration: 'none' }}>Se connecter</a>
       </p>
 
       {/* ⚠️ LE BLOC « ADMINISTRATION COMMUNALE » A ÉTÉ RETIRÉ (demande d'Alex,
@@ -1063,7 +1063,7 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
       // fonctions pour décider s'il paie. Un frituriste à qui l'on propose des
       // « bons cadeaux » se dit que ce n'est pas pour lui et passe la ligne.
       Icon: Gift, titre: libelleBon(categorie, { pluriel: true, majuscule: true }),
-      desc: `Tes clients achètent un ${libelleBon(categorie)} d’un montant qu’ils choisissent, à offrir. Le bénéficiaire le fait valoir chez toi, et le solde restant se garde pour la prochaine fois. Tu es payé à l’achat du bon.`,
+      desc: `Tes clients achètent un ${libelleBon(categorie)} d’un montant qu’ils choisissent, à offrir. Le bénéficiaire le fait valoir chez toi, et le solde restant se garde pour la prochaine fois. Tu encaisses à l’achat du bon.`,
       plan: 'vendre',
     },
     {
@@ -2304,7 +2304,7 @@ function BandeauRecapPlan({ plan }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <CheckCircle size={18} strokeWidth={2.2} color="#10B981"/>
           <p style={{ fontSize: 13, fontWeight: 800, color: '#065F46', margin: 0 }}>
-            Tu es prêt(e) à exister sur Yoppaa
+            Tout est prêt pour exister sur Yoppaa
           </p>
         </div>
         <p style={{ fontSize: 12.5, color: '#065F46', margin: 0, lineHeight: 1.5 }}>
@@ -2346,7 +2346,7 @@ function BandeauRecapPlan({ plan }) {
           ? <>Aucun prélèvement avant le <strong>{libelleFinEssaiLancement()}</strong>. </>
           : <>Aucun prélèvement pendant {ESSAI_JOURS_MINIMUM} jours. </>}
         Ensuite, <strong>{tarifFormate}&euro; HTVA / mois</strong>,
-        sans engagement, résiliable à tout moment. Tu seras invité(e) à renseigner tes
+        sans engagement, résiliable à tout moment. On te demandera de renseigner tes
         informations de paiement après validation de ta fiche par l&rsquo;équipe Yoppaa.
       </p>
     </div>

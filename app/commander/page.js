@@ -2948,7 +2948,7 @@ export default function Commander() {
       if (estSessionPerdue(res, body)) { setSessionPerdue(true); return }
       if (!body?.ok) { showToast({ type: 'error', msg: body?.error || 'Impossible pour le moment, réessaie dans un instant.' }); return }
       await chargerAttentesClient()
-      showToast({ type: 'success', msg: 'C’est noté : tu ne seras plus prévenu pour cette place.' })
+      showToast({ type: 'success', msg: 'C’est noté : plus aucune alerte ne partira pour cette place.' })
     } catch (e) {
       console.error('[retirerAttenteClient] exception', e?.message)
       showToast({ type: 'error', msg: 'Impossible pour le moment, réessaie dans un instant.' })

@@ -46,7 +46,7 @@ import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
-import { capacitePrestation, palierNettoyes, estCoursCollectif } from '@/lib/cours-collectifs'
+import { capacitePrestation, palierNettoyes, estCoursCollectif, avertissementChangementCours } from '@/lib/cours-collectifs'
 import {
   enModeInventaire, formatsSansQuantite, tablesTotales, couvertsTotaux,
   estJointure, tablesDeLaJointure, baseDeLaJointure, basesJoignables, jointuresDe,
@@ -9874,6 +9874,34 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       // touché. Vide vaut zéro, c'est-à-dire « pas de liste ».
       ...(form.par_couverts ? {} : { attente_max: Math.max(0, Math.min(50, parseInt(form.attente_max, 10) || 0)) }),
     }
+    // 🔴 CHANGER LA DURÉE OU LA CAPACITÉ D'UN COURS DÉJÀ RÉSERVÉ SE DIT AVANT
+    // (Audit 1 I7, 04/10). Rien ne prévenait : la professeure découvrait
+    // ensuite ses séances « complètes » ou ses inscrits à l'ancienne heure. Le
+    // texte vient de `avertissementChangementCours`, exécuté au banc.
+    // ⚠️ Une lecture ratée n'empêche pas d'enregistrer : on ne dit simplement rien.
+    const avant = editId ? prestations.find(p => String(p.id) === String(editId)) : null
+    const capaciteAvant = avant ? capacitePrestation(avant) : 1
+    const coursConcerne = !!avant && !payload.par_couverts && (capaciteAvant > 1 || payload.capacite > 1)
+      && (Number(avant.duree_minutes) !== duree || capaciteAvant !== payload.capacite)
+    if (coursConcerne) {
+      const { data: aVenir, error: errAVenir } = await supabase.from('rdv_reservations')
+        .select('date_rdv, heure_debut')
+        .eq('prestation_id', editId).eq('statut', 'confirme').is('deleted_at', null)
+        .gte('date_rdv', jourBruxelles())
+      if (!errAVenir && (aVenir || []).length > 0) {
+        const parSeance = new Map()
+        for (const r of aVenir) {
+          const cle = `${r.date_rdv}|${String(r.heure_debut || '').slice(0, 5)}`
+          parSeance.set(cle, (parSeance.get(cle) || 0) + 1)
+        }
+        const avis = avertissementChangementCours({
+          dureeAvant: avant.duree_minutes, dureeApres: duree,
+          capaciteAvant, capaciteApres: payload.capacite,
+          inscriptions: aVenir.length, plusRemplie: Math.max(0, ...parSeance.values()),
+        })
+        if (avis && !await confirme(confirmationSimple({ titre: avis.titre, message: avis.message, action: 'Oui, enregistrer', ton: 'principal' }))) return
+      }
+    }
     setSaving(true)
     // INSERT/UPDATE prestation
     let prestationId = editId
@@ -9882,6 +9910,12 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       // figée, et `payload` ne la porte pas.
       const { error } = await supabase.from('rdv_prestations').update(payload).eq('id', editId)
       if (error) { setSaving(false); return toast(messageRefusTable(error), 'error') }
+      // 🔴 DES PLACES AJOUTÉES À UN COURS PRÉVIENNENT LA FILE (Audit 1 I7, 04/10) :
+      // « c'est une place de libre » (Alex). AU MIEUX : la prestation est enregistrée.
+      if (!payload.par_couverts && payload.capacite > capaciteAvant && payload.capacite > 1) {
+        postPro('/api/rdv/attente-commerce', { action: 'prevenir-cours', prestation_id: editId })
+          .catch(e => console.warn('[TabRdvPrestations] liste d’attente non prévenue', e))
+      }
     } else {
       const aCreer = formEstJointure
         ? { ...payload, jointure_de: form.jointure_de, jointure_tables: Number(form.jointure_tables) }

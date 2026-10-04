@@ -3,6 +3,7 @@
 // { action: 'compter', commercant_id }                       → { ok, seances, fenetres }
 // { action: 'prevenir', prestation_id, date_rdv, heure_debut } → { ok, prevenus, file }
 // { action: 'liste', prestation_id, date_rdv, heure_debut }    → { ok, personnes }
+// { action: 'prevenir-cours', prestation_id }                   → { ok, prevenus, seances }
 //
 // 🔴 LA FILE D'ATTENTE N'EXISTAIT PAS CÔTÉ COMMERÇANTE (I12, audit du 03/10).
 // Elle était ouverte sur tous ses cours (trois places par défaut), mais elle ne
@@ -18,7 +19,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { refus } from '@/lib/api-auth'
 import { gardeEquipe, gardeLigneEquipe } from '@/lib/equipe-server'
-import { attentesDuCommerce, prevenirSurDemande, personnesDeLaSeance } from '@/lib/attente-rdv-server'
+import { attentesDuCommerce, prevenirSurDemande, personnesDeLaSeance, prevenirLesSeancesDuCours } from '@/lib/attente-rdv-server'
 
 const MESSAGES = {
   demande_invalide: 'Cette séance n’est pas reconnue.',
@@ -60,6 +61,17 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: MESSAGES[res.error] || 'Impossible de prévenir la file pour le moment.' }, { status: res.error === 'lecture_ko' ? 500 : 409 })
       }
       return NextResponse.json({ ok: true, prevenus: res.prevenus || 0, file: res.file || 0 })
+    }
+
+    // 🔴 UN COURS PREND DES PLACES (Audit 1 I7, 04/10) : chaque séance à venir
+    // où quelqu'un attend est prévenue, si une place y est vraiment libre.
+    if (corps?.action === 'prevenir-cours') {
+      const gardeCours = await gardeLigneEquipe(request, admin, 'rdv_prestations', corps?.prestation_id, 'agenda')
+      const nonAutorise = refus(gardeCours, NextResponse)
+      if (nonAutorise) return nonAutorise
+      const res = await prevenirLesSeancesDuCours(admin, corps.prestation_id)
+      if (!res.ok) return NextResponse.json({ ok: false, error: MESSAGES[res.error] || 'Impossible de prévenir la file pour le moment.' }, { status: 500 })
+      return NextResponse.json({ ok: true, prevenus: res.prevenus, seances: res.seances })
     }
 
     if (corps?.action === 'liste') {

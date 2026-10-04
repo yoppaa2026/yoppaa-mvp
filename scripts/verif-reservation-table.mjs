@@ -1766,7 +1766,8 @@ egal('la réservation d’un restaurant s’atteint quand même',
     && !/timeToMinutes\(r\.heure_debut\) === slotMin/.test(AGENDA_S))
   verifier('🔴 les tables sortent des blocs de cours et entrent dans leur service',
     /const rdvsCommencantIci = debutsIci\.filter\(r => !estReservationDeTable\(r\)\)/.test(AGENDA_S)
-    && /const blocsIci = \[\.\.\.servicesIci, \.\.\.blocsAgenda\(rdvsCommencantIci\)\]/.test(AGENDA_S))
+    // ⚠️ RÉORIENTÉE LE 04/10 (Audit 1 I7) : l'appel reçoit le catalogue.
+    && /const blocsIci = \[\.\.\.servicesIci, \.\.\.blocsAgenda\(rdvsCommencantIci, \{ prestations \}\)\]/.test(AGENDA_S))
   verifier('🔴 le service s’ouvre sur la liste de TOUTES ses tables',
     /setServiceOuvert\(\{ \.\.\.service, jourDate: j\.date \}\)/.test(AGENDA_S)
     && /const tables = serviceOuvert\.tables \|\| \[\]/.test(AGENDA_S) && /\{tables\.map\(i => \{/.test(AGENDA_S))

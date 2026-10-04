@@ -1288,6 +1288,44 @@ verifier('la troisième inscrite d’un cours de douze passe', !c.conflit, JSON.
 egal('et le compte des inscrites est juste', c.inscrits, 2)
 egal('les places déjà tenues sont rendues', c.placesOccupees, [1, 2])
 
+// 🔴 LA DURÉE DU COURS A CHANGÉ (Audit 1 I7, 04/10) : les inscrites gardent leur
+// fin de 11:00, la séance dure maintenant 1 h 30. Elles sont la MÊME séance :
+// les compter comme une autre occupation fermait tout le cours en ligne.
+c = conflitReservation({ debut: 600, fin: 690, prestationId: COURS, capacite: 12, reservations: DEUX_INSCRITES })
+verifier('🔴 une durée changée : les inscrites restent la même séance', !c.conflit && c.inscrits === 2, JSON.stringify(c))
+// ⚠️ Mais un AUTRE cours à la même heure reste une autre occupation.
+c = conflitReservation({ debut: 600, fin: 690, prestationId: AUTRE, capacite: 12, reservations: DEUX_INSCRITES })
+verifier('un autre cours à la même heure reste une occupation', c.conflit && c.raison === 'occupe', JSON.stringify(c))
+// ⚠️ Et une heure de début différente aussi : 10:00 et 10:30 ne coexistent pas.
+c = conflitReservation({ debut: 630, fin: 690, prestationId: COURS, capacite: 12, reservations: DEUX_INSCRITES })
+verifier('10:30 n’est pas la séance de 10:00', c.conflit, JSON.stringify(c))
+
+// ─── 🔴 L'AGENDA AFFICHE LA CAPACITÉ DU COURS AUJOURD'HUI (Audit 1 I7) ─────
+{
+  const inscrits = [1, 2, 3].map(i => ({ id: `r${i}`, date_rdv: '2026-10-08', heure_debut: '10:00', heure_fin: '11:00', prestation_id: COURS, capacite_creneau: 3, place_no: i }))
+  const sans = blocsAgenda(inscrits).find(b => b.type === 'seance')
+  egal('sans catalogue, la capacité gravée', sans?.capacite, 3)
+  const avec = blocsAgenda(inscrits, { prestations: [{ id: COURS, capacite: 8 }] }).find(b => b.type === 'seance')
+  egal('🔴 avec le catalogue, la capacité d’aujourd’hui : la séance n’est plus « complète »', avec?.capacite, 8)
+  egal('⚠️ un cours devenu individuel garde sa capacité gravée', blocsAgenda(inscrits, { prestations: [{ id: COURS, capacite: 1 }] }).find(b => b.type === 'seance')?.capacite, 3)
+  egal('et le regroupement suit toujours la réservation', blocsAgenda(inscrits, { prestations: [{ id: COURS, capacite: 8 }] }).filter(b => b.type === 'seance').length, 1)
+}
+
+// ─── 🔴 L'AVERTISSEMENT AVANT DE CHANGER UN COURS RÉSERVÉ (Audit 1 I7) ─────
+{
+  const { avertissementChangementCours: av } = await import('../lib/cours-collectifs.js')
+  egal('sans inscription à venir, rien à dire', av({ dureeAvant: 60, dureeApres: 90, capaciteAvant: 8, capaciteApres: 8, inscriptions: 0 }), null)
+  egal('rien de changé, rien à dire', av({ dureeAvant: 60, dureeApres: 60, capaciteAvant: 8, capaciteApres: 8, inscriptions: 5 }), null)
+  const duree = av({ dureeAvant: 60, dureeApres: 90, capaciteAvant: 8, capaciteApres: 8, inscriptions: 5 })
+  verifier('🔴 une durée changée dit que les inscriptions gardent l’ancienne', /gardent la durée qui leur a été annoncée \(60 min\)/.test(duree?.message || '') && /90 min/.test(duree?.message || ''), duree?.message)
+  const plus = av({ dureeAvant: 60, dureeApres: 60, capaciteAvant: 8, capaciteApres: 12, inscriptions: 5 })
+  verifier('🔴 des places en plus : elles s’ouvrent et la file est prévenue', /de 8 à 12/.test(plus?.message || '') && /liste d’attente/.test(plus?.message || ''), plus?.message)
+  const moins = av({ dureeAvant: 60, dureeApres: 60, capaciteAvant: 12, capaciteApres: 8, inscriptions: 15, plusRemplie: 10 })
+  verifier('🔴 moins de places qu’une séance n’a d’inscrits : personne n’est désinscrit', /déjà 10 inscriptions, plus que 8/.test(moins?.message || '') && /personne n’est désinscrit/.test(moins?.message || ''), moins?.message)
+  verifier('le titre compte les inscriptions', /5 inscriptions à venir/.test(duree?.titre || ''))
+  verifier('au singulier, une phrase juste', /L’inscription à venir garde/.test(av({ dureeAvant: 60, dureeApres: 45, capaciteAvant: 8, capaciteApres: 8, inscriptions: 1 })?.message || ''))
+}
+
 // ⚠️ LE COMPORTEMENT D'AVANT LES COURS COLLECTIFS, INTACT. Sans capacité, un
 // chevauchement reste un refus : c'est le cas de l'immense majorité des
 // métiers, et c'est ce que ce banc protège depuis le premier jour.
@@ -1639,8 +1677,22 @@ const srcAgendaBlocs = sansCommentaires(readFileSync(new URL('../app/dashboard/A
 // ⚠️ DEPUIS LE 10/09, LES SERVICES D'UNE SALLE ENTRENT DANS LA MÊME LISTE : une
 // seule liste par cellule, services puis blocs de cours, et c'est toujours elle
 // qui donne l'indice de colonne.
+// ⚠️ RÉORIENTÉE LE 04/10 (Audit 1 I7) : l'appel reçoit le catalogue, pour la
+// capacité du cours aujourd'hui. Il reste UN appel, sur la même liste.
 verifier('les blocs d’une cellule sont calculés une seule fois',
-  /const blocsIci = \[\.\.\.servicesIci, \.\.\.blocsAgenda\(rdvsCommencantIci\)\]/.test(srcAgendaBlocs))
+  /const blocsIci = \[\.\.\.servicesIci, \.\.\.blocsAgenda\(rdvsCommencantIci, \{ prestations \}\)\]/.test(srcAgendaBlocs))
+verifier('🔴 l’agenda reçoit le catalogue du tableau de bord et du Poste équipe',
+  /<AgendaRdv\s+rdvs=\{rdvs\}\s+prestations=\{prestationsRdv\}/.test(sansCommentaires(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')))
+  && /prestations=\{etat\.agenda\.prestations \?\? null\}/.test(sansCommentaires(readFileSync(new URL('../app/equipe/PosteEquipe.js', import.meta.url), 'utf8'))))
+{
+  const CONF = sansCommentaires(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  verifier('🔴 changer un cours réservé passe par l’avertissement',
+    /const avis = avertissementChangementCours\(\{/.test(CONF)
+    && /if \(avis && !await confirme\(confirmationSimple\(\{ titre: avis\.titre, message: avis\.message/.test(CONF)
+    && CONF.indexOf('const avis = avertissementChangementCours(') < CONF.indexOf("await supabase.from('rdv_prestations').update(payload).eq('id', editId)"))
+  verifier('🔴 et des places ajoutées préviennent la file',
+    /if \(!payload\.par_couverts && payload\.capacite > capaciteAvant && payload\.capacite > 1\) \{\s*postPro\('\/api\/rdv\/attente-commerce', \{ action: 'prevenir-cours', prestation_id: editId \}\)/.test(CONF))
+}
 egal('et plus aucun appel séparé ne subsiste',
   (srcAgendaBlocs.match(/blocsAgenda\(/g) || []).length, 1)
 

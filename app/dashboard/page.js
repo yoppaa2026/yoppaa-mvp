@@ -4233,6 +4233,7 @@ export default function Dashboard() {
                 {!loading && (
                   <AgendaRdv
                     rdvs={rdvs}
+                    prestations={prestationsRdv}
                     creneaux={creneauxRdv}
                     fermetures={fermeturesRdv}
                     attentes={attentesRdv}

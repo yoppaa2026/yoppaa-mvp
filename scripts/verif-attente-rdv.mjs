@@ -692,6 +692,26 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
     verifier('et laisse les autres en place', t.rdv_attente.length === lignes.length - 1)
   }
 
+  // ── AUDIT 1 I7 (04/10) : DES PLACES AJOUTÉES PRÉVIENNENT LA FILE ─────────
+  {
+    const t = base()
+    const L = (id, extra = {}) => ({ id, commercant_id: 'c1', prestation_id: 'yoga', client_id: 'cl-sophie', portee: 'seance',
+      date_rdv: D, heure_debut: '18:00:00', statut: 'en_attente', push_id: null, created_at: '2026-10-01T10:00:00Z', ...extra })
+    t.rdv_attente = [
+      L('b1'), L('b2', { client_id: 'cl-marc' }),                       // la même séance, deux personnes
+      L('b3', { date_rdv: plus(jourBruxelles(), -2) }),                 // une séance passée
+      L('b4', { portee: 'fenetre', date_rdv: null, heure_debut: null }), // pas une séance
+    ]
+    const r = await S.prevenirLesSeancesDuCours(fauxDb(t), 'yoga')
+    verifier('🔴 une seule séance à venir est visée, comptée une fois', r.ok && r.seances === 1, JSON.stringify(r))
+    const vide = await S.prevenirLesSeancesDuCours(fauxDb(t), null)
+    verifier('sans cours, rien', !vide.ok && vide.seances === 0)
+    const ROUTE = sansProse(readFileSync(new URL('../app/api/rdv/attente-commerce/route.js', import.meta.url), 'utf8'))
+    verifier('🔴 l’action « prevenir-cours » est gardée par le cours',
+      /if \(corps\?\.action === 'prevenir-cours'\) \{\s*const gardeCours = await gardeLigneEquipe\(request, admin, 'rdv_prestations', corps\?\.prestation_id, 'agenda'\)/.test(ROUTE)
+      && /refus\(gardeCours, NextResponse\)/.test(ROUTE))
+  }
+
   // ── LA-05 : la séance est relue ──────────────────────────────────────
   {
     const t = base()

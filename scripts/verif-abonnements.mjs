@@ -2354,7 +2354,11 @@ verifier('la sortie « hors abonnement » existe et est écrite',
   // pas. C'est LE défaut le plus fréquent du projet, la colonne absente d'un
   // select : aucune erreur, un repli silencieux, et chaque abonnée réaffiche
   // son solde plein. Mesuré muet, puis resserré.
-  const selectResa = srcConfig.match(/from\('rdv_reservations'\)\s*\.select\('([^']*)'\)/)
+  // ⚠️ RÉORIENTÉE LE 04/10 : le PREMIER `select` de `rdv_reservations` du
+  // fichier n'est plus celui des abonnés (l'avertissement d'un cours modifié,
+  // Audit 1 I7, lit les inscriptions à venir plus haut). Piège du jumeau : on
+  // vise la lecture des abonnés, qui passe par `toutesLesLignes`.
+  const selectResa = srcConfig.match(/toutesLesLignes\(\(\) => supabase\.from\('rdv_reservations'\)\.select\('([^']*)'\)/)
   verifier('la liste des abonnés charge les séances déjà posées', !!selectResa)
   verifier('… avec le contrat auquel chaque séance appartient',
     !!selectResa && /\babonnement_id\b/.test(selectResa[1]), selectResa ? selectResa[1] : '')

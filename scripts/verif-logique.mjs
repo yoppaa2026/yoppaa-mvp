@@ -1255,8 +1255,10 @@ egal('deux cours différents au même horaire font deux blocs',
   ]).length, 2)
 egal('une liste vide ne casse rien', [blocsAgenda([]).length, blocsAgenda().length], [0, 0])
 
+// ⚠️ RÉORIENTÉE LE 04/10 (Audit 1 I7) : l'appel reçoit le catalogue, pour la
+// capacité du cours aujourd'hui.
 verifier('l’agenda regroupe les inscrits en séances',
-  /blocsAgenda\(rdvsCommencantIci\)/.test(srcAgenda))
+  /blocsAgenda\(rdvsCommencantIci, \{ prestations \}\)/.test(srcAgenda))
 verifier('et n’empile plus un bloc par inscrit',
   !/\{rdvsCommencantIci\.map\(r =>/.test(srcAgenda))
 // ⚠️ ANCRÉ SUR LA RÈGLE, PAS SUR L'ARGUMENT. Ce test exigeait

@@ -82,7 +82,7 @@ function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 // La logique est sortie d'ici pour être testable : le calcul du contraste du
 // texte, en particulier, décide de la lisibilité de tout l'écran.
 
-export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = null, praticiens = [], horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onPrevenirFile, onListerFile = null, onFenetreChange }) {
+export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = null, praticiens = [], prestations = null, horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onPrevenirFile, onListerFile = null, onFenetreChange }) {
   // ⚠️ `commercant` FACULTATIF : sans lui, le vocabulaire du rendez-vous, donc
   // l'agenda d'un salon ne bouge pas d'un mot.
   const mots = motsReservation(commercant)
@@ -610,7 +610,8 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = 
                 //
                 // Les blocs se partagent donc la largeur de la cellule. Trois
                 // colonnes étroites valent mieux qu'une seule qui ment.
-                const blocsIci = [...servicesIci, ...blocsAgenda(rdvsCommencantIci)]
+                // 🔴 LA CAPACITÉ DU COURS AUJOURD'HUI (Audit 1 I7, 04/10) : voir `blocsAgenda`.
+                const blocsIci = [...servicesIci, ...blocsAgenda(rdvsCommencantIci, { prestations })]
                 const nbColonnes = Math.max(1, blocsIci.length)
                 function colonne(index) {
                   const largeur = 100 / nbColonnes

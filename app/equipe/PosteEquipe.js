@@ -686,7 +686,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
       )}
       {actif === 'agenda' && etat.agenda && (
         <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${T.filet}`, overflow: 'hidden' }}>
-          <AgendaRdv rdvs={etat.agenda.rdvs} creneaux={etat.agenda.creneaux} praticiens={etat.agenda.praticiens}
+          <AgendaRdv rdvs={etat.agenda.rdvs} creneaux={etat.agenda.creneaux} praticiens={etat.agenda.praticiens} prestations={etat.agenda.prestations ?? null}
             horairesDetail={etat.commerce?.horaires_detail} commercant={etat.commerce} onSelectRdv={setRdvOuvert}
             onNouveauRdv={etat.droits?.agenda ? (date, heure) => setSaisie({ date, heure }) : undefined}/>
         </div>

@@ -31,7 +31,7 @@ import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
-import { plageQuiAccueille } from '@/lib/rdv-slots'
+import { plageQuiAccueille, seancesDuCoursPour } from '@/lib/rdv-slots'
 import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, couvertsDe, coursAPlace } from '@/lib/cours-collectifs'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
@@ -60,6 +60,9 @@ function aujourdhuiIso() {
 
 export default function ModalDeplacerRdv({
   commercant, rdv, prestations = [], creneaux = [], rdvsExistants = [],
+  // Quelles plages nomment quel cours (`rdv_creneau_prestations`), pour ne
+  // proposer qu'une séance de cours (04/10). `null` : la grille d'avant.
+  liaisons = null,
   onClose, onDeplace,
   // Le Poste équipe : { lireSalle(date), deplacer(corps) }. Absent chez le patron.
   serveur = null,
@@ -208,6 +211,9 @@ export default function ModalDeplacerRdv({
       creneauxJour,
       dureeMinutes,
       depuis: premiereMinuteOuverte(date, maintenant),
+      // 🔴 UN COURS SE DÉPLACE SUR UNE DE SES SÉANCES (04/10), pas sur un quart
+      // d'heure qu'aucune professeure ne donne. Voir `seancesDuCoursPour`.
+      seances: estCours ? seancesDuCoursPour(creneauxJour, rdv?.prestation_id, liaisons, { dureeMinutes }) : null,
       accepte: (h) => {
         if (!creneauAcceptable({ ...contexte, heureDebut: h }).ok) return false
         if (estCours && !coursAPlace({ id: rdv?.prestation_id, capacite }, rdvsExistants, { dateStr: date, heure: h, exclureId: rdv?.id })) return false
@@ -220,7 +226,7 @@ export default function ModalDeplacerRdv({
       },
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, estTable, salleEnTables, salleLue, salleConnue, salle, maintenant])
+  }, [date, dureeMinutes, capacite, horaireJour, creneauxJour, rdvsExistants, prestations, estTable, salleEnTables, salleLue, salleConnue, salle, maintenant, liaisons])
 
   const utile = deplacementUtile(rdv, { date, heure })
   const heureFin = heureDeFin(heure, dureeMinutes)

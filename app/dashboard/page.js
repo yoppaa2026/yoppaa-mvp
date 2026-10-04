@@ -1231,6 +1231,9 @@ export default function Dashboard() {
   const [commandes, setCommandes] = useState([])
   const [rdvs, setRdvs] = useState([])
   const [creneauxRdv, setCreneauxRdv] = useState([])  // rdv_creneaux du commercant, pour la grille agenda (pauses)
+  // Quelles plages nomment quel cours : « Déplacer » et « Nouveau rendez-vous »
+  // ne proposent qu'une séance de cours (04/10). `null` = non lues.
+  const [liaisonsRdv, setLiaisonsRdv] = useState(null)
   const [fermeturesRdv, setFermeturesRdv] = useState([])  // rdv_fermetures : congés, absences, que l'agenda grise
   const [attentesRdv, setAttentesRdv] = useState(null)    // { seances, fenetres } : combien attendent, jamais qui
   // Grilles de créneaux alimentaires (retrait + tournées), pour AFFICHER LE
@@ -1630,6 +1633,14 @@ export default function Dashboard() {
     ])
     setRdvs(rdvData || [])
     setCreneauxRdv(crData || [])
+    // ⚠️ UNE LECTURE À PART, PAS UNE JOINTURE DANS LE SELECT DES PLAGES : une
+    // jointure qui échoue ferait échouer toute la lecture des plages. Ratée,
+    // elle laisse `null`, et les fenêtres gardent leur grille d'avant.
+    const idsPlages = (crData || []).map(c => c.id)
+    const { data: liensData, error: errLiens } = idsPlages.length > 0
+      ? await supabase.from('rdv_creneau_prestations').select('creneau_id, prestation_id').in('creneau_id', idsPlages)
+      : { data: [], error: null }
+    setLiaisonsRdv(errLiens ? null : (liensData || []))
     // 🔴 L'AGENDA NE GRISAIT PAS LES FERMETURES (B2, 03/10), et son commentaire
     // affirmait le contraire. Silencieux en cas d'échec : l'agenda garde ses
     // rendez-vous, il perd seulement le gris.
@@ -4217,6 +4228,7 @@ export default function Dashboard() {
                     commercant={commercant}
                     prestations={prestationsRdv}
                     creneaux={creneauxRdv}
+                    liaisons={liaisonsRdv}
                     rdvsExistants={rdvs}
                     dateInit={nouveauRdvSlot.date}
                     heureInit={nouveauRdvSlot.heure}
@@ -4275,6 +4287,7 @@ export default function Dashboard() {
           rdv={rdvADeplacer}
           prestations={prestationsRdv}
           creneaux={creneauxRdv}
+          liaisons={liaisonsRdv}
           rdvsExistants={rdvs}
           onClose={() => setRdvADeplacer(null)}
           onDeplace={() => {

@@ -3732,6 +3732,48 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   verifier('⚠️ une plage qui ne nomme pas ce cours ne lui impose rien',
     cadenceDuCours(P1815, 'pilates', LIE, { estCours: true, dureeMinutes: 60 }) === null
     && cadenceDuCours(P1815, 'yoga', LIE, { estCours: false, dureeMinutes: 60 }) === null)
+  // ── LE TABLEAU DE BORD PROPOSE LES SÉANCES D'UN COURS (Annul-I6/I14, 04/10) ─
+  // 🔴 Alex : « normal qu'il me propose toujours un cours toutes les 15 min ? »
+  // « Déplacer » et « Nouveau rendez-vous » avaient leur propre grille au quart
+  // d'heure, sur toutes les plages, cours compris.
+  {
+    const { seancesDuCoursPour } = await import('../lib/rdv-slots.js')
+    const JOURNEE = { id: 'k-jour', heure_debut: '09:00:00', heure_fin: '18:00:00', pas_minutes: 15, praticien_id: null }
+    const SOIR = { id: 'k-soir', heure_debut: '18:15:00', heure_fin: '19:45:00', pas_minutes: 15, praticien_id: null }
+    const COMMUNE = { id: 'k-commune', heure_debut: '09:00:00', heure_fin: '12:00:00', pas_minutes: 15, praticien_id: null }
+    const LIENS = [{ creneau_id: 'k-jour', prestation_id: 'yoga' }, { creneau_id: 'k-soir', prestation_id: 'yoga' }]
+    const libres = (creneauxJour, seances, duree = 60) => heuresLibresDuJour({ creneauxJour, dureeMinutes: duree, seances })
+    egal('🔴 un cours sur une journée qui le nomme : une séance par heure, plus tous les quarts d’heure',
+      libres([JOURNEE], seancesDuCoursPour([JOURNEE], 'yoga', LIENS, { dureeMinutes: 60 })),
+      ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'])
+    egal('🔴 et sur 18:15-19:45, la seule séance de 18:15',
+      libres([SOIR], seancesDuCoursPour([SOIR], 'yoga', LIENS, { dureeMinutes: 60 })), ['18:15'])
+    egal('⚠️ une plage qui ne nomme pas ce cours ne lui propose rien, quand une autre le nomme',
+      libres([JOURNEE, COMMUNE], seancesDuCoursPour([JOURNEE, COMMUNE], 'yoga', LIENS, { dureeMinutes: 60 })).length, 9)
+    verifier('⚠️ aucune plage ne le nomme ce jour-là, ou liaisons non lues : la grille d’avant',
+      seancesDuCoursPour([COMMUNE], 'yoga', LIENS, { dureeMinutes: 60 }) === null
+      && seancesDuCoursPour([JOURNEE], 'yoga', null, { dureeMinutes: 60 }) === null
+      && libres([COMMUNE], null).length === 9)
+    verifier('⚠️ un rendez-vous individuel garde ses quarts d’heure', libres([SOIR], null).length === 3)
+    // Le branchement : les deux fenêtres, leurs deux sources, et le passage.
+    const lire = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
+    const DEPL = lire('app/dashboard/ModalDeplacerRdv.js')
+    const SAISIE = lire('app/dashboard/ModalNouveauRdv.js')
+    const BORD = lire('app/dashboard/page.js')
+    const POSTE = lire('app/api/equipe/poste/route.js')
+    const POSTE_ECRAN = lire('app/equipe/PosteEquipe.js')
+    verifier('🔴 « Déplacer » propose les séances d’un cours',
+      /seances: estCours \? seancesDuCoursPour\(creneauxJour, rdv\?\.prestation_id, liaisons, \{ dureeMinutes \}\) : null,/.test(DEPL))
+    verifier('🔴 « Nouveau rendez-vous » aussi, et pas pour une table',
+      /seances: capacitePrestation\(presta\) > 1 && !estParCouverts\(presta\)\s*\? seancesDuCoursPour\(creneauxJour, presta\.id, liaisons, \{ dureeMinutes: dureeMin \}\) : null,/.test(SAISIE))
+    verifier('🔴 le tableau de bord lit les liaisons à part, et les passe aux deux fenêtres',
+      /\.from\('rdv_creneau_prestations'\)\.select\('creneau_id, prestation_id'\)\.in\('creneau_id', idsPlages\)/.test(BORD)
+      && /setLiaisonsRdv\(errLiens \? null : \(liensData \|\| \[\]\)\)/.test(BORD)
+      && (BORD.match(/liaisons=\{liaisonsRdv\}/g) || []).length === 2)
+    verifier('⚠️ le poste équipe aussi, sans se fermer si la lecture rate',
+      /reponse\.agenda\.liaisons = liens\.error \? null : \(liens\.data \|\| \[\]\)/.test(POSTE)
+      && (POSTE_ECRAN.match(/liaisons=\{etat\.agenda\.liaisons \?\? null\}/g) || []).length === 2)
+  }
   verifier('🔴 le serveur lit le pas de la plage (sinon il retombe sur 15)',
     /lieu_id, pas_minutes'\)/.test(sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))))
 }

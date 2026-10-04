@@ -696,6 +696,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
           commercant={etat.commerce}
           prestations={etat.agenda.prestations || []}
           creneaux={etat.agenda.creneaux}
+          liaisons={etat.agenda.liaisons ?? null}
           rdvsExistants={etat.agenda.rdvs}
           dateInit={saisie.date}
           heureInit={saisie.heure}
@@ -710,6 +711,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
           rdv={aDeplacer}
           prestations={etat.agenda.prestations || []}
           creneaux={etat.agenda.creneaux}
+          liaisons={etat.agenda.liaisons ?? null}
           rdvsExistants={etat.agenda.rdvs}
           serveur={serveurSaisie}
           onClose={() => setADeplacer(null)}

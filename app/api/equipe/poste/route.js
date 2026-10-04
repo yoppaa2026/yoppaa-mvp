@@ -69,6 +69,14 @@ export async function POST(request) {
         praticiens: verifier('lecture de l’équipe de l’agenda', praticiens),
         prestations: verifier('lecture des prestations', prestations),
       }
+      // Quelles plages nomment quel cours : la saisie et le déplacement ne
+      // proposent qu'une séance de cours (04/10). ⚠️ Ratée, elle rend `null`
+      // et les fenêtres gardent leur grille d'avant : le poste reste ouvert.
+      const idsPlages = reponse.agenda.creneaux.map(c => c.id)
+      const liens = idsPlages.length > 0
+        ? await admin.from('rdv_creneau_prestations').select('creneau_id, prestation_id').in('creneau_id', idsPlages)
+        : { data: [], error: null }
+      reponse.agenda.liaisons = liens.error ? null : (liens.data || [])
     }
 
     // Le comptoir (étape 5) : la règle de la carte et l'état des bons, pour

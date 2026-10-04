@@ -12,7 +12,7 @@ import { postPro } from '@/lib/fetch-pro'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
-import { plageQuiAccueille } from '@/lib/rdv-slots'
+import { plageQuiAccueille, seancesDuCoursPour } from '@/lib/rdv-slots'
 import { euros } from '@/lib/montants'
 import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, bornesCouverts, couvertsValides, coursAPlace, occupationDe } from '@/lib/cours-collectifs'
 import { motsReservation } from '@/lib/reservation-metier'
@@ -78,6 +78,9 @@ const lireSalle = (commercantId, dateStr) => lireSalleDuJour(supabase, { commerc
 
 export default function ModalNouveauRdv({
   commercant, prestations, creneaux, rdvsExistants,
+  // Quelles plages nomment quel cours (`rdv_creneau_prestations`), pour ne
+  // proposer qu'une séance de cours (04/10). `null` : la grille d'avant.
+  liaisons = null,
   dateInit, heureInit,
   // 🔴 LE COURS DONT ON INSCRIT QUELQU'UN (Audit 1 I8, 03/10) : « Inscrire »
   // depuis le panneau d'un cours ouvrait la saisie SANS lui, avec toutes les
@@ -407,6 +410,10 @@ export default function ModalNouveauRdv({
     const groupe = couverts === '' ? bornesCouverts(presta).min : Math.floor(Number(couverts)) || 1
     return heuresLibresDuJour({
       creneauxJour, dureeMinutes: dureeMin, depuis,
+      // 🔴 UN COURS SE PROPOSE À SES SÉANCES (04/10), pas tous les quarts
+      // d'heure. Une table n'est pas un cours : elle garde sa grille.
+      seances: capacitePrestation(presta) > 1 && !estParCouverts(presta)
+        ? seancesDuCoursPour(creneauxJour, presta.id, liaisons, { dureeMinutes: dureeMin }) : null,
       accepte: (h) => {
         if (!regle(h, presta, dureeMin)) return false
         if (estParCouverts(presta)) {

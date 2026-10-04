@@ -37,8 +37,9 @@ const MUTATIONS = [
 
   // ─── LA BOUCLE DES HEURES LIBRES ────────────────────────────────────────
   { nom: '🔴 les heures partent d’une heure déjà passée', banc: 'verif:slots',
-    de: '      if (m < borne) continue',
-    vers: '      void borne' },
+    // ⚠️ ANCRE REPOINTÉE LE 04/10 : la boucle peut partir d'une séance de cours.
+    de: '      if (m < borne || m < debut) continue',
+    vers: '      if (m < debut) continue' },
   { nom: '🔴 un service après minuit ne propose plus rien', banc: 'verif:slots',
     de: '    const finUtile = Math.min(finApresMinuit(debut, fin), 24 * 60)',
     vers: '    const finUtile = fin' },

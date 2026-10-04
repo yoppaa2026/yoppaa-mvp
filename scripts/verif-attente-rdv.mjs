@@ -843,10 +843,13 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
     verifier('🔴 aucun nom ni contact ne sort pour la commerçante',
       /\.select\('prestation_id, portee, date_rdv, heure_debut, date_debut, date_fin, statut'\)/.test(SRV))
     const ROUTE_C = sansProse(readFileSync(new URL('../app/api/rdv/attente-commerce/route.js', import.meta.url), 'utf8'))
+    // ⚠️ REPOINTÉES LE 04/10 SUR LEUR BLOC : depuis l'action `liste`, la même
+    // garde existe deux fois dans la route. Chercher la ligne n'importe où
+    // trouvait le JUMEAU, et la mutation de `prévenir` passait (vu au harnais).
     verifier('🔴 compter passe par la garde du commerce, case Agenda',
-      /gardeEquipe\(request, admin, corps\?\.commercant_id, 'agenda'\)/.test(ROUTE_C))
+      /if \(corps\?\.action === 'compter'\) \{\s*const garde = await gardeEquipe\(request, admin, corps\?\.commercant_id, 'agenda'\)/.test(ROUTE_C))
     verifier('🔴 prévenir lit le commerce DANS la prestation, jamais dans le corps',
-      /gardeLigneEquipe\(request, admin, 'rdv_prestations', corps\?\.prestation_id, 'agenda'\)/.test(ROUTE_C))
+      /if \(corps\?\.action === 'prevenir'\) \{[\s\S]{0,300}?const garde = await gardeLigneEquipe\(request, admin, 'rdv_prestations', corps\?\.prestation_id, 'agenda'\)\s*const nonAutorise = refus\(garde, NextResponse\)/.test(ROUTE_C))
     const AG = sansProse(readFileSync(new URL('../app/dashboard/AgendaRdv.js', import.meta.url), 'utf8'))
     verifier('🔴 le panneau d’un cours dit combien attendent, et propose de prévenir seulement s’il reste une place',
       /attentes\.seances\?\.\[cleSeance\(prestationId, isoDate\(seanceOuverte\.jourDate\), seanceOuverte\.heure_debut\)\]/.test(AG)

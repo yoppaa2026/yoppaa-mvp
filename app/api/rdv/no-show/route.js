@@ -40,6 +40,7 @@ import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { restitutionNoShow } from '@/lib/rdv-paiement'
 import { rendreAvantagesRdv, lignesBonsDe } from '@/lib/rdv-annulation-server'
 import { repartirRestitution } from '@/lib/bons-cadeaux'
+import { resteARembourser } from '@/lib/remboursements'
 import { annulerPush } from '@/lib/onesignal'
 import { stripe, requireStripe } from '@/lib/stripe'
 
@@ -67,7 +68,8 @@ export async function POST(request) {
     //
     // 🔴 LES TROIS DERNIÈRES SONT ARRIVÉES AVEC LE REMBOURSEMENT (31/08).
     // `stripe_payment_intent_id` désigne le paiement à rembourser,
-    // `stripe_refund_id` empêche de rembourser deux fois, et le compte connecté
+    // `stripe_refund_id` et `stripe_refund_amount` (04/10) disent ce qui est déjà
+    // parti, pour ne jamais rembourser deux fois, et le compte connecté
     // du commerçant est l'endroit OÙ le remboursement se fait. Sans elles, la
     // route aurait calculé une restitution qu'elle n'aurait jamais versée.
     const { data: rdv } = await supabase
@@ -76,7 +78,7 @@ export async function POST(request) {
         id, statut, acompte_paye, acompte_paye_en_ligne, acompte_montant, acompte_du,
         bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id, fidelite_remise,
         rappel_push_id, commercant_id,
-        stripe_payment_intent_id, stripe_refund_id,
+        stripe_payment_intent_id, stripe_refund_id, stripe_refund_amount,
         commercant:commercants(stripe_account_id)
       `)
       .eq('id', rdv_id)
@@ -158,8 +160,13 @@ export async function POST(request) {
     let refundId = null
     let refundError = null
     const aPayeEnLigne = Boolean(rdv.acompte_paye_en_ligne) && !!rdv.stripe_payment_intent_id
+    // 🔴 CE QUI RESTE À RENDRE (Annul-I7, 04/10). Un geste déjà fait depuis
+    // Stripe se déduit : sinon le commerçant le paierait deux fois. Et un geste
+    // partiel n'empêche plus de rendre le reste.
+    const reste = resteARembourser(part.carteRestituee, rdv)
+    const dejaRembourse = Math.round((Number(rdv.stripe_refund_amount) || 0) * 100) / 100
 
-    if (part.carteRestituee > 0 && aPayeEnLigne && !rdv.stripe_refund_id) {
+    if (reste > 0 && aPayeEnLigne) {
       if (!rdv.commercant?.stripe_account_id) {
         refundError = 'Compte Stripe indisponible'
       } else {
@@ -167,14 +174,14 @@ export async function POST(request) {
           requireStripe()
           const refund = await stripe.refunds.create({
             payment_intent: rdv.stripe_payment_intent_id,
-            amount: Math.round(part.carteRestituee * 100),
+            amount: Math.round(reste * 100),
             reason: 'requested_by_customer',
             metadata: { yoppaa_rdv_id: rdv.id, yoppaa_motif: 'no_show_au_dela_garantie' },
           }, { stripeAccount: rdv.commercant.stripe_account_id })
           refundId = refund.id
           await supabase.from('rdv_reservations').update({
             stripe_refund_id: refund.id,
-            stripe_refund_amount: part.carteRestituee,
+            stripe_refund_amount: Math.round((dejaRembourse + reste) * 100) / 100,
             stripe_refund_date: new Date().toISOString(),
           }).eq('id', rdv.id)
         } catch (e) {
@@ -204,8 +211,8 @@ export async function POST(request) {
       // ⚠️ ON REND CE QUI EST DÛ **ET** CE QUI EST RÉELLEMENT PARTI. Les deux
       // coïncident presque toujours ; le jour où ils divergent, c'est
       // exactement ce que l'écran doit pouvoir dire.
-      carte_a_restituer: part.carteRestituee,
-      carte_restituee: refundId ? part.carteRestituee : 0,
+      carte_a_restituer: reste,
+      carte_restituee: refundId ? reste : 0,
       remboursement_erreur: refundError,
     })
   } catch (e) {

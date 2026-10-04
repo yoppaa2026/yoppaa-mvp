@@ -299,6 +299,18 @@ for (const [nom, chemin] of [
   verifie(`${nom} : le select du rendez-vous charge bon_cadeau_id`,
     /bon_cadeau_id/.test(selectRdv))
   verifie(`${nom} : et bon_cadeau_montant`, /bon_cadeau_montant/.test(selectRdv))
+  // 🔴 CE QUI RESTE À RENDRE, PAS « RIEN SI UN IDENTIFIANT EXISTE » (Annul-I7,
+  // 04/10). Un geste partiel fait depuis Stripe posait `stripe_refund_id` : le
+  // studio qui annulait ensuite ne rendait plus le reste. La règle s'exécute au
+  // banc plus bas ; ici, chaque route la suit, avec le cumul déjà parti.
+  verifie(`${nom} : le select du rendez-vous charge stripe_refund_amount`,
+    /stripe_refund_amount/.test(selectRdv))
+  verifie(`${nom} : rembourse ce qui reste, plus seulement « s’il n’y a rien eu »`,
+    /const reste = resteARembourser\(aRembourser, rdv\)/.test(src)
+    && /if \(aDejaPaye && reste > 0\)/.test(src) && !/!rdv\.stripe_refund_id/.test(src))
+  verifie(`${nom} : annonce ce geste, et écrit le cumul`,
+    /refundMontant = reste\n/.test(src)
+    && /stripe_refund_amount = arr\(dejaRembourse \+ refundMontant\)/.test(src))
   // 🔴 CES TROIS GARDES CHERCHAIENT `recrediterBon(`, `rec?.ok` et
   // `rendreRecompense(` DANS LA ROUTE, jusqu'au 30/08 au soir. Elles ont rougi
   // sur du code juste le jour où le geste a déménagé dans un module, et elles
@@ -344,6 +356,12 @@ for (const [nom, chemin] of [
   const src = lireCode('app/api/rdv/cancel/route.js')
   // ⚠️ LE CLIENT QUI GARDE SES PRODUITS NE RÉCUPÈRE PAS LEUR PART DE BON.
   verifie('les produits gardés ne rendent pas leur bon', /!gardeSesProduits/.test(src))
+  // 🔴 ET LE MONTANT DE CE REMBOURSEMENT PARTIEL EST CE QUI RESTE (Annul-I7,
+  // 04/10). Le harnais l'a dit : rembourser `aRembourser` après un geste déjà
+  // fait depuis Stripe rendait ce geste une seconde fois, et la garde de la
+  // boucle ne regarde pas cette ligne-là.
+  verifie('le client qui garde ses produits ne se fait rendre que ce qui reste',
+    /\.\.\.\(gardeSesProduits \? \{ amount: Math\.round\(reste \* 100\) \} : \{\}\),/.test(src))
   // Et le message le dit : sans ça, il lit « 43,80 € reviennent » et croit
   // avoir perdu son bon.
   verifie('le message annonce le bon recrédité', /phraseBon/.test(src))
@@ -371,7 +389,11 @@ for (const [nom, chemin] of [
   // ⚠️ IDEMPOTENCE : un rejeu ne rembourse pas deux fois.
   verifie('un rendez-vous déjà annulé ne rembourse pas une seconde fois',
     /already_canceled/.test(src))
-  verifie('et un remboursement déjà fait non plus', /!rdv\.stripe_refund_id/.test(src))
+  // ⚠️ RÉORIENTÉE LE 04/10 (Annul-I7) : « déjà fait » se lit au MONTANT déjà
+  // rendu, plus à la seule présence d'un identifiant (gardes de la boucle
+  // ci-dessus, règle exécutée au banc `resteARembourser`).
+  verifie('et un remboursement déjà fait non plus',
+    /resteARembourser\(aRembourser, rdv\)/.test(src) && /stripe_refund_id, stripe_refund_amount/.test(src))
 }
 
 // ═══ 4) LE WEBHOOK NE COUPE PLUS LA BRANCHE COMMANDE ══════════════════════
@@ -399,6 +421,55 @@ for (const [nom, chemin] of [
   verifie('il rend la récompense du rendez-vous',
     /rdv\.fidelite_recompense_id/.test(finBloc))
   verifie('et il traite toujours la commande', /from\('commandes'\)/.test(finBloc))
+
+  // 🔴 ANNUL-I7 (04/10) : LE WEBHOOK RENDAIT TOUT SUR UN REMBOURSEMENT PARTIEL.
+  // L'absent dont la route garde le bon de garantie le récupérait entier ici,
+  // et un geste de 5 € rendait 40 € de bon. Et il lisait `charge.refunds`, une
+  // liste que Stripe n'inclut plus par défaut depuis l'API 2022-11-15.
+  verifie('🔴 le webhook lit le cumul et « tout rendu » par la règle commune',
+    /lireRemboursementCharge\(charge\)/.test(finBloc) && !/charge\.refunds\?\.data/.test(finBloc))
+  verifie('🔴 il ne rend les bons qu’avec la permission de la règle',
+    /if \(rendreAvantages && Array\.isArray\(rdv\.bons_utilises\)/.test(finBloc))
+  verifie('🔴 ni la récompense',
+    /if \(rendreAvantages && rdv\.fidelite_recompense_id\)/.test(finBloc))
+  verifie('🔴 la permission lit le statut du rendez-vous, chargé',
+    /webhookRendLesAvantagesRdv\(\{ total, statut: rdv\.statut \}\)/.test(finBloc)
+    && /\.select\('id, statut, bon_cadeau_id/.test(finBloc))
+  verifie('🔴 la commande juge « total » sur le cumul, plus sur le dernier remboursement',
+    /const isRefundTotal = total\n/.test(finBloc) && !/refund\.amount/.test(finBloc))
+  verifie('il reçoit le compte du commerce pour relire l’identifiant',
+    /handleChargeRefunded\(event\.data\.object, supabase, event\.account\)/.test(src))
+}
+
+// ═══ 4 bis) LA RÈGLE DU REMBOURSEMENT, EXÉCUTÉE (Annul-I7, 04/10) ═════════
+{
+  const { resteARembourser, lireRemboursementCharge, webhookRendLesAvantagesRdv } =
+    await import('../lib/remboursements.js')
+  egal('rien de rendu : tout reste dû', resteARembourser(30, { stripe_refund_id: null, stripe_refund_amount: null }), 30)
+  egal('🔴 un geste de 10 € depuis Stripe : 20 € restent', resteARembourser(30, { stripe_refund_id: 're_1', stripe_refund_amount: 10 }), 20)
+  egal('tout rendu : plus rien', resteARembourser(30, { stripe_refund_id: 're_1', stripe_refund_amount: 30 }), 0)
+  egal('plus que dû (paiement partagé avec des produits) : plus rien', resteARembourser(30, { stripe_refund_id: 're_1', stripe_refund_amount: 45 }), 0)
+  egal('🔴 un identifiant sans montant : prudence, rien', resteARembourser(30, { stripe_refund_id: 're_1', stripe_refund_amount: null }), 0)
+  egal('ni identifiant ni montant : tout reste dû', resteARembourser(30, {}), 30)
+  egal('un montant lu comme texte', resteARembourser(30, { stripe_refund_id: 're_1', stripe_refund_amount: '12.5' }), 17.5)
+  egal('rien à rendre : zéro', resteARembourser(0, {}), 0)
+
+  const partiel = lireRemboursementCharge({ amount_refunded: 1000, refunded: false })
+  egal('🔴 sans liste dans l’événement, le cumul se lit quand même', partiel.montant, 10)
+  verifie('un partiel n’est pas total', partiel.total === false)
+  verifie('et l’identifiant manque, sans planter', partiel.refundId === null)
+  const complet = lireRemboursementCharge({ amount_refunded: 3000, refunded: true, refunds: { data: [{ id: 're_9', amount: 2000 }] } })
+  egal('🔴 le montant est le CUMUL, pas le dernier remboursement', complet.montant, 30)
+  verifie('« refunded » dit tout rendu', complet.total === true)
+  verifie('l’identifiant vient de la liste quand elle est là', complet.refundId === 're_9', String(complet.refundId))
+  egal('rien de rendu : zéro', lireRemboursementCharge({ amount_refunded: 0, refunded: false }).montant, 0)
+
+  verifie('annulé et tout rendu : le secours rend les avantages', webhookRendLesAvantagesRdv({ total: true, statut: 'annule_commercant' }) === true)
+  verifie('annulé par le client aussi', webhookRendLesAvantagesRdv({ total: true, statut: 'annule_client' }) === true)
+  verifie('🔴 un geste partiel ne rend rien', webhookRendLesAvantagesRdv({ total: false, statut: 'annule_commercant' }) === false)
+  verifie('🔴 l’absent garde sa garantie', webhookRendLesAvantagesRdv({ total: true, statut: 'no_show' }) === false)
+  verifie('🔴 un rendez-vous encore debout garde ses avantages', webhookRendLesAvantagesRdv({ total: true, statut: 'confirme' }) === false)
+  verifie('un rendez-vous honoré aussi', webhookRendLesAvantagesRdv({ total: true, statut: 'honore' }) === false)
 }
 
 // ═══ 5) UN SEUL CALCUL, PARTAGÉ ═══════════════════════════════════════════
@@ -2288,21 +2359,29 @@ for (const chemin of [
   // Cette route ne remboursait RIEN, et ça suffisait tant que l'encaissé ne
   // pouvait pas dépasser la garantie. Calculer une restitution sans la verser,
   // ce serait annoncer un geste qu'on ne fait pas.
-  for (const col of ['stripe_payment_intent_id', 'stripe_refund_id', 'stripe_account_id']) {
+  // ⚠️ `stripe_refund_amount` AJOUTÉE LE 04/10 (Annul-I7) : c'est elle qui dit
+  // combien est déjà parti, et donc ce qui reste à rendre.
+  for (const col of ['stripe_payment_intent_id', 'stripe_refund_id', 'stripe_refund_amount', 'stripe_account_id']) {
     verifie(`🔴 le select du no-show charge ${col}`,
       new RegExp(col).test(selectRdv), selectRdv.slice(0, 320))
   }
+  // ⚠️ GARDES RÉORIENTÉES LE 04/10 (Annul-I7) : la route ne rembourse plus
+  // `part.carteRestituee` « sauf si un identifiant existe », elle rembourse CE
+  // QUI RESTE une fois déduit ce que Stripe a déjà rendu. La règle s'exécute
+  // au banc plus bas (`resteARembourser`) ; ici on vérifie que la route la suit.
   verifie('🔴 la route rembourse ce qui dépasse la garantie',
-    /part\.carteRestituee > 0/.test(src) && /stripe\.refunds\.create/.test(src))
+    /const reste = resteARembourser\(part\.carteRestituee, rdv\)/.test(src)
+    && /if \(reste > 0 && aPayeEnLigne\)/.test(src) && /stripe\.refunds\.create/.test(src))
   // ⚠️ LE MONTANT EST OBLIGATOIRE. Un `refunds.create` sans `amount` rend TOUT
   // le paiement : le commerçant perdrait la garantie qu'il a le droit de garder.
   verifie('🔴 et il rembourse un MONTANT, pas la totalité du paiement',
-    /amount: Math\.round\(part\.carteRestituee \* 100\)/.test(src),
+    /amount: Math\.round\(reste \* 100\)/.test(src),
     'refunds.create sans amount rembourserait aussi la garantie')
   verifie('un remboursement déjà fait n’est pas rejoué',
-    /!rdv\.stripe_refund_id/.test(src))
-  verifie('et la trace du remboursement est écrite',
-    /stripe_refund_id: refund\.id/.test(src) && /stripe_refund_amount: part\.carteRestituee/.test(src))
+    /resteARembourser\(part\.carteRestituee, rdv\)/.test(src) && !/part\.carteRestituee > 0 && aPayeEnLigne/.test(src))
+  verifie('et la trace du remboursement est écrite, en cumul',
+    /stripe_refund_id: refund\.id/.test(src)
+    && /stripe_refund_amount: Math\.round\(\(dejaRembourse \+ reste\) \* 100\) \/ 100/.test(src))
   // 🔴 L'ORDRE, ET C'EST LA LEÇON DU 30/08 AU SOIR : on rend les avantages
   // AVANT de rembourser, sinon le webhook `charge.refunded` passe devant nous
   // et refait les mêmes gestes pendant qu'on les fait.
@@ -2311,9 +2390,10 @@ for (const chemin of [
     'le remboursement passe avant la restitution : le webhook doublera')
   // ⚠️ ON ANNONCE L'ÉTAT, PAS NOTRE INTENTION. Les deux champs se distinguent :
   // ce qui est DÛ, et ce qui est réellement PARTI.
+  // ⚠️ RÉORIENTÉE LE 04/10 : le dû est ce qui RESTE, pas la part brute.
   verifie('la réponse distingue le dû du versé',
-    /carte_a_restituer: part\.carteRestituee/.test(src)
-    && /carte_restituee: refundId \?/.test(src))
+    /carte_a_restituer: reste,/.test(src)
+    && /carte_restituee: refundId \? reste : 0/.test(src))
   verifie('et un échec de remboursement remonte jusqu’à l’écran',
     /remboursement_erreur: refundError/.test(src))
 }

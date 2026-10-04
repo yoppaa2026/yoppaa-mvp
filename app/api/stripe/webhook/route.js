@@ -48,6 +48,7 @@ import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
 import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 import { chezLeCommerce } from '@/lib/nom-commerce'
 import { estRefusDeRegle, motifApresPaiement } from '@/lib/refus-reservation'
+import { lireRemboursementCharge, webhookRendLesAvantagesRdv } from '@/lib/remboursements'
 
 // Service role (bypass RLS pour les UPDATE depuis webhook)
 // Note : en App Router Next.js, pas besoin de `export const config = {api:{bodyParser:false}}`
@@ -164,7 +165,7 @@ export async function POST(request) {
         break
 
       case 'charge.refunded':
-        await handleChargeRefunded(event.data.object, supabase)
+        await handleChargeRefunded(event.data.object, supabase, event.account)
         break
 
       case 'account.updated':
@@ -1198,17 +1199,32 @@ async function refuserApresPaiement(supabase, { code, meta = {}, paymentIntent =
 }
 
 // charge.refunded : met à jour le RDV/commande avec l'info de refund
-async function handleChargeRefunded(charge, supabase) {
+async function handleChargeRefunded(charge, supabase, compte = null) {
   const paymentIntentId = charge.payment_intent
   if (!paymentIntentId) return
 
-  const refund = charge.refunds?.data?.[0]
-  if (!refund) return
+  // 🔴 LE CUMUL ET « TOUT EST RENDU », PAS LE DERNIER REMBOURSEMENT (Annul-I7,
+  // 04/10). La règle et son pourquoi vivent dans `lib/remboursements`.
+  const { montant, total, refundId: idDansLEvenement } = lireRemboursementCharge(charge)
+  if (!(montant > 0)) return
+
+  // L'identifiant n'est qu'une trace (l'écran l'affiche) : la liste n'est plus
+  // dans l'événement, on la relit chez Stripe, sur le compte du commerce. Une
+  // lecture ratée ne bloque pas le reste.
+  let refundId = idDansLEvenement
+  if (!refundId && charge.id) {
+    try {
+      const liste = await stripe.refunds.list({ charge: charge.id, limit: 1 }, compte ? { stripeAccount: compte } : undefined)
+      refundId = liste?.data?.[0]?.id || null
+    } catch (e) {
+      console.warn('[webhook/refund] identifiant du remboursement illisible', e?.message, { charge: charge.id })
+    }
+  }
 
   const updateData = {
-    stripe_refund_id: refund.id,
-    stripe_refund_amount: refund.amount / 100,
+    stripe_refund_amount: montant,
     stripe_refund_date: new Date().toISOString(),
+    ...(refundId ? { stripe_refund_id: refundId } : {}),
   }
 
   // ─── Le rendez-vous ────────────────────────────────────────────────────
@@ -1228,12 +1244,16 @@ async function handleChargeRefunded(charge, supabase) {
   // On traite maintenant les deux, dans l'ordre, et on ne sort plus.
   const { data: rdv } = await supabase
     .from('rdv_reservations')
-    .select('id, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id')
+    .select('id, statut, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
+  // 🔴 LES AVANTAGES NE REVIENNENT QUE SUR UN RENDEZ-VOUS ANNULÉ ET TOUT REMBOURSÉ
+  // (Annul-I7, 04/10). Ils revenaient sur tout remboursement : l'absent dont la
+  // route garde le bon de garantie le récupérait entier par ici.
+  const rendreAvantages = rdv ? webhookRendLesAvantagesRdv({ total, statut: rdv.statut }) : false
   if (rdv) {
     await supabase.from('rdv_reservations').update(updateData).eq('id', rdv.id)
-    if (Array.isArray(rdv.bons_utilises) && rdv.bons_utilises.length > 0) {
+    if (rendreAvantages && Array.isArray(rdv.bons_utilises) && rdv.bons_utilises.length > 0) {
       // Idempotent via l'index unique (bon_id, rdv_id) sur source='annulation' :
       // déjà fait si /api/rdv/cancel est passée avant ce webhook.
       // 🔴 TOUS LES BONS : `bons_utilises` fait foi, `bon_cadeau_id` n'en
@@ -1241,7 +1261,7 @@ async function handleChargeRefunded(charge, supabase) {
       const rec = await recrediterBons(supabase, rdv.bons_utilises, { rdv_id: rdv.id })
       if (!rec.ok) console.error('[webhook/refund] re-crédit bons RDV KO', rec.echecs, { rdvId: rdv.id })
     }
-    if (rdv.fidelite_recompense_id) {
+    if (rendreAvantages && rdv.fidelite_recompense_id) {
       const { data: recFid } = await supabase
         .from('fidelite_recompenses')
         .select('id, carte_id, utilisee_at')
@@ -1249,7 +1269,7 @@ async function handleChargeRefunded(charge, supabase) {
         .maybeSingle()
       if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
     }
-    console.info('[stripe/webhook] refund enregistré sur RDV', { rdvId: rdv.id, refund: refund.id })
+    console.info('[stripe/webhook] refund enregistré sur RDV', { rdvId: rdv.id, refund: refundId, montant, total, rendreAvantages })
   }
 
   // ─── Et la commande, qui peut porter le MÊME paiement ──────────────────
@@ -1261,7 +1281,10 @@ async function handleChargeRefunded(charge, supabase) {
   if (cmd) {
     // Si refund total (montant = total commande), on bascule en annulée.
     // Si refund partiel, on garde le statut courant (commande honorée + remboursement partiel).
-    const isRefundTotal = Math.abs((refund.amount / 100) - Number(charge.amount) / 100) < 0.01
+    // ⚠️ `total` = `charge.refunded` : deux remboursements partiels qui couvrent
+    // tout le paiement sont un remboursement total. Comparer le DERNIER
+    // remboursement au paiement ne le voyait jamais.
+    const isRefundTotal = total
     const updates = { ...updateData }
     if (isRefundTotal && !['annulee_client_refund', 'annulee_paiement_ko'].includes(cmd.statut)) {
       updates.statut = 'annulee_client_refund'
@@ -1291,7 +1314,7 @@ async function handleChargeRefunded(charge, supabase) {
       if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
     }
     console.info('[stripe/webhook] refund enregistré sur commande', {
-      cmdId: cmd.id, refund: refund.id, isRefundTotal, newStatut: updates.statut || cmd.statut,
+      cmdId: cmd.id, refund: refundId, isRefundTotal, newStatut: updates.statut || cmd.statut,
     })
   }
 }

@@ -26,6 +26,7 @@ import { prevenirLaFile } from '@/lib/attente-rdv-server'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { rendreAvantagesRdv, lignesBonsDe, cleRemboursementRdv } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
+import { resteARembourser } from '@/lib/remboursements'
 import { motsReservation } from '@/lib/reservation-metier'
 import { seanceLisible } from '@/lib/attente-rdv'
 import { decisionAnnulation } from '@/lib/rdv-delai-annulation'
@@ -57,7 +58,7 @@ export async function POST(request) {
     // ─── 1) Récup RDV + commerçant + prestation (lookup par id OU par token) ─
     const selectCols = `
       id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id,
-      stripe_refund_id, client_email, client_prenom, client_nom, annulation_token,
+      stripe_refund_id, stripe_refund_amount, client_email, client_prenom, client_nom, annulation_token,
       date_rdv, heure_debut, heure_fin, duree_minutes, motif_annulation,
       commercant_id, prestation_id, rappel_push_id, commande_id, fidelite_recompense_id,
       lieu_id, lieu_libelle, lieu_adresse,
@@ -318,8 +319,12 @@ export async function POST(request) {
       ? acompteMontant
       : arr(acompteMontant + produitsPayesCarte)
     const aDejaPaye = (rdv.acompte_paye || !!commandeLiee) && rdv.stripe_payment_intent_id
+    // 🔴 CE QUI RESTE À RENDRE, PAS « RIEN SI UN REMBOURSEMENT EXISTE » (Annul-I7,
+    // 04/10) : un geste partiel fait depuis Stripe ne garde pas le reste.
+    const reste = resteARembourser(aRembourser, rdv)
+    const dejaRembourse = arr(Number(rdv.stripe_refund_amount) || 0)
 
-    if (aDejaPaye && !rdv.stripe_refund_id && aRembourser > 0) {
+    if (aDejaPaye && reste > 0) {
       if (!commercant?.stripe_account_id) {
         return NextResponse.json({
           ok: false,
@@ -332,7 +337,7 @@ export async function POST(request) {
           reason: 'requested_by_customer',
           // Remboursement partiel quand le client garde ses produits. Sans
           // `amount`, Stripe rembourse la totalité, produits compris.
-          ...(gardeSesProduits ? { amount: Math.round(aRembourser * 100) } : {}),
+          ...(gardeSesProduits ? { amount: Math.round(reste * 100) } : {}),
           metadata: {
             yoppaa_rdv_id: rdv.id,
             yoppaa_motif: 'client',
@@ -346,7 +351,7 @@ export async function POST(request) {
         })
         refundId = refund.id
         refundStatus = refund.status
-        refundMontant = aRembourser
+        refundMontant = reste
       } catch (e) {
         console.error('[rdv/cancel] refund Stripe KO', e?.message, { rdv_id: rdv.id, pi: rdv.stripe_payment_intent_id })
         refundError = e?.message || 'Refund Stripe échoué'
@@ -390,8 +395,8 @@ export async function POST(request) {
     if (refundId) {
       updateData.stripe_refund_id = refundId
       // Le montant réellement remboursé, pas l'acompte : quand le client rend
-      // ses produits, il récupère aussi leur prix.
-      updateData.stripe_refund_amount = refundMontant
+      // ses produits, il récupère aussi leur prix. Et le CUMUL, comme le webhook.
+      updateData.stripe_refund_amount = arr(dejaRembourse + refundMontant)
       updateData.stripe_refund_date = new Date().toISOString()
     }
     if (commandeLiee) updateData.produits_annulation = produits_choix

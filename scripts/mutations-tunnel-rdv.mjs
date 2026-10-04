@@ -63,8 +63,9 @@ const MUTATIONS = [
   // ─── 4) LE WEBHOOK QUI COUPAIT LA BRANCHE COMMANDE ────────────────────
   { nom: '🔴 le webhook recommence à sortir dès qu’il trouve le rendez-vous',
     fichier: 'app/api/stripe/webhook/route.js',
-    de: "    console.info('[stripe/webhook] refund enregistré sur RDV', { rdvId: rdv.id, refund: refund.id })\n  }",
-    vers: "    console.info('[stripe/webhook] refund enregistré sur RDV', { rdvId: rdv.id, refund: refund.id })\n    return\n  }" },
+    // ⚠️ ANCRE REPOINTÉE LE 04/10 (Annul-I7) : la trace porte le cumul et la décision.
+    de: "    console.info('[stripe/webhook] refund enregistré sur RDV', { rdvId: rdv.id, refund: refundId, montant, total, rendreAvantages })\n  }",
+    vers: "    console.info('[stripe/webhook] refund enregistré sur RDV', { rdvId: rdv.id, refund: refundId, montant, total, rendreAvantages })\n    return\n  }" },
 
   // ─── 5) LA VENTILATION : LE SENS NE DOIT JAMAIS S'INVERSER ────────────
   // 🔴 C'EST LE CŒUR. Si le bon cesse de mordre sur les produits, on revient
@@ -591,13 +592,14 @@ const MUTATIONS = [
 
   { nom: '🔴 le remboursement rend TOUT le paiement, garantie comprise',
     fichier: 'app/api/rdv/no-show/route.js',
-    de: '            amount: Math.round(part.carteRestituee * 100),',
+    // ⚠️ ANCRE REPOINTÉE LE 04/10 : le montant est ce qui RESTE à rendre.
+    de: '            amount: Math.round(reste * 100),',
     vers: '' },
 
   { nom: '🔴 la route ne charge plus l’intention de paiement',
     fichier: 'app/api/rdv/no-show/route.js',
-    de: '        stripe_payment_intent_id, stripe_refund_id,',
-    vers: '' },
+    de: '        stripe_payment_intent_id, stripe_refund_id, stripe_refund_amount,',
+    vers: '        stripe_refund_id, stripe_refund_amount,' },
 
   { nom: '🔴 ni le compte Stripe du commerçant',
     fichier: 'app/api/rdv/no-show/route.js',
@@ -611,8 +613,8 @@ const MUTATIONS = [
 
   { nom: '🔴 l’écran ne distingue plus le dû du versé',
     fichier: 'app/api/rdv/no-show/route.js',
-    de: '      carte_restituee: refundId ? part.carteRestituee : 0,',
-    vers: '      carte_restituee: part.carteRestituee,' },
+    de: '      carte_restituee: refundId ? reste : 0,',
+    vers: '      carte_restituee: reste,' },
 
   // ─── LA REMISE SUR UNE PRESTATION (06/09) ────────────────────────────────
   //
@@ -744,6 +746,84 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '                  <optgroup label="Un produit précis">',
     vers: '                  <optgroup label="Zzz un produit précis">' },
+
+  // ─── ANNUL-I7 (04/10) : UN REMBOURSEMENT PARTIEL NE REND PAS TOUT ─────────
+  // 🔴 Le webhook rendait bons et récompense sur tout remboursement : l'absent
+  // récupérait le bon de garantie, un geste de 5 € rendait 40 € de bon. Et les
+  // routes sautaient Stripe dès qu'un identifiant existait : le reste d'un
+  // geste partiel n'était jamais rendu.
+  { nom: '🔴 le webhook rend de nouveau les bons sur tout remboursement',
+    fichier: 'app/api/stripe/webhook/route.js',
+    de: '    if (rendreAvantages && Array.isArray(rdv.bons_utilises) && rdv.bons_utilises.length > 0) {',
+    vers: '    if (Array.isArray(rdv.bons_utilises) && rdv.bons_utilises.length > 0) {' },
+  { nom: '🔴 et la récompense',
+    fichier: 'app/api/stripe/webhook/route.js',
+    de: '    if (rendreAvantages && rdv.fidelite_recompense_id) {',
+    vers: '    if (rdv.fidelite_recompense_id) {' },
+  { nom: '🔴 la règle oublie « tout rendu »',
+    fichier: 'lib/remboursements.js',
+    de: '  return total === true && STATUTS_RDV_ANNULES.includes(statut)',
+    vers: '  return STATUTS_RDV_ANNULES.includes(statut)' },
+  { nom: '🔴 la règle oublie le statut',
+    fichier: 'lib/remboursements.js',
+    de: '  return total === true && STATUTS_RDV_ANNULES.includes(statut)',
+    vers: '  return total === true' },
+  { nom: '🔴 l’absent compte comme annulé',
+    fichier: 'lib/remboursements.js',
+    de: "export const STATUTS_RDV_ANNULES = ['annule_client', 'annule_commercant']",
+    vers: "export const STATUTS_RDV_ANNULES = ['annule_client', 'annule_commercant', 'no_show']" },
+  { nom: '🔴 « tout rendu » redevient « quelque chose rendu »',
+    fichier: 'lib/remboursements.js',
+    de: '    total: charge?.refunded === true,',
+    vers: '    total: Number(charge?.amount_refunded) > 0,' },
+  { nom: '🔴 le montant redevient le dernier remboursement',
+    fichier: 'lib/remboursements.js',
+    de: '  const centimes = Number(charge?.amount_refunded)',
+    vers: '  const centimes = Number(charge?.refunds?.data?.[0]?.amount)' },
+  { nom: '🔴 la commande juge de nouveau « total » sur le dernier remboursement',
+    fichier: 'app/api/stripe/webhook/route.js',
+    de: '    const isRefundTotal = total',
+    vers: '    const isRefundTotal = Math.abs(montant - Number(charge.amount) / 100) < 0.01' },
+  { nom: '🔴 le reste ignore ce qui est déjà parti',
+    fichier: 'lib/remboursements.js',
+    de: '  return arrondi(Math.max(0, base - Math.max(0, deja)))',
+    vers: '  return base' },
+  { nom: '🔴 un identifiant sans montant fait rembourser à l’aveugle',
+    fichier: 'lib/remboursements.js',
+    de: '  if (!Number.isFinite(deja)) return ligne?.stripe_refund_id ? 0 : base',
+    vers: '  if (!Number.isFinite(deja)) return base' },
+  { nom: '🔴 le piège du zéro : l’absence de montant passe pour « rien rendu »',
+    fichier: 'lib/remboursements.js',
+    de: "  const deja = brut === null || brut === undefined || brut === '' ? NaN : Number(brut)",
+    vers: '  const deja = Number(brut)' },
+  { nom: '🔴 le studio ne rend plus le reste après un geste partiel',
+    fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '    if (aDejaPaye && reste > 0) {',
+    vers: '    if (aDejaPaye && !rdv.stripe_refund_id && reste > 0) {' },
+  { nom: '🔴 le client non plus',
+    fichier: 'app/api/rdv/cancel/route.js',
+    de: '    if (aDejaPaye && reste > 0) {',
+    vers: '    if (aDejaPaye && !rdv.stripe_refund_id && reste > 0) {' },
+  { nom: '🔴 le studio annonce le dû entier au lieu de ce geste',
+    fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '          refundMontant = reste',
+    vers: '          refundMontant = aRembourser' },
+  { nom: '🔴 le client garde ses produits : le montant ignore le déjà rendu',
+    fichier: 'app/api/rdv/cancel/route.js',
+    de: '          ...(gardeSesProduits ? { amount: Math.round(reste * 100) } : {}),',
+    vers: '          ...(gardeSesProduits ? { amount: Math.round(aRembourser * 100) } : {}),' },
+  { nom: '🔴 le cumul n’est plus écrit, seulement ce geste',
+    fichier: 'app/api/rdv/cancel/route.js',
+    de: '      updateData.stripe_refund_amount = arr(dejaRembourse + refundMontant)',
+    vers: '      updateData.stripe_refund_amount = refundMontant' },
+  { nom: '🔴 l’absent : un geste déjà fait est remboursé une seconde fois',
+    fichier: 'app/api/rdv/no-show/route.js',
+    de: '    const reste = resteARembourser(part.carteRestituee, rdv)',
+    vers: '    const reste = part.carteRestituee' },
+  { nom: '🔴 la sélection perd le montant déjà rendu',
+    fichier: 'app/api/rdv/annuler-commercant/route.js',
+    de: '        id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id, stripe_refund_amount,',
+    vers: '        id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id,' },
 ]
 
 function lancer() {

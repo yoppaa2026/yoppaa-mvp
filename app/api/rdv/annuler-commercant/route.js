@@ -30,6 +30,7 @@ import { refus } from '@/lib/api-auth'
 import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { rendreAvantagesRdv, lignesBonsDe, cleRemboursementRdv } from '@/lib/rdv-annulation-server'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
+import { resteARembourser } from '@/lib/remboursements'
 import { annulerPush, envoyerPushParExternalId } from '@/lib/onesignal'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { motsReservation } from '@/lib/reservation-metier'
@@ -60,7 +61,7 @@ export async function POST(request) {
     const { data: rdv } = await supabase
       .from('rdv_reservations')
       .select(`
-        id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id,
+        id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id, stripe_refund_amount,
         commande_id, fidelite_recompense_id, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
         rappel_push_id, commercant_id,
         client_id, client_email, date_rdv, heure_debut, prestation_id,
@@ -163,8 +164,13 @@ export async function POST(request) {
     let refundError = null
     let refundMontant = null
     const aDejaPaye = (rdv.acompte_paye || !!commandeLiee) && rdv.stripe_payment_intent_id
+    // 🔴 CE QUI RESTE, PAS « RIEN SI UN REMBOURSEMENT EXISTE » (Annul-I7, 04/10) :
+    // un geste de 10 € fait depuis Stripe ne doit pas garder les 20 € restants.
+    // Sans `amount`, Stripe rend justement le reste du paiement.
+    const reste = resteARembourser(aRembourser, rdv)
+    const dejaRembourse = arr(Number(rdv.stripe_refund_amount) || 0)
 
-    if (aDejaPaye && !rdv.stripe_refund_id && aRembourser > 0) {
+    if (aDejaPaye && reste > 0) {
       if (!rdv.commercant?.stripe_account_id) {
         refundError = 'Compte Stripe indisponible'
       } else {
@@ -183,7 +189,7 @@ export async function POST(request) {
             metadata: { yoppaa_rdv_id: rdv.id, yoppaa_motif: raison },
           }, { stripeAccount: rdv.commercant.stripe_account_id, idempotencyKey: cleRemboursementRdv(rdv.id) })
           refundId = refund.id
-          refundMontant = aRembourser
+          refundMontant = reste
         } catch (e) {
           console.error('[rdv/annuler-commercant] refund KO', e?.message, { rdvId: rdv.id })
           refundError = e?.message || 'Refund Stripe échoué'
@@ -195,7 +201,8 @@ export async function POST(request) {
     const updateData = { statut: 'annule_commercant', motif_annulation: raison }
     if (refundId) {
       updateData.stripe_refund_id = refundId
-      updateData.stripe_refund_amount = refundMontant
+      // Le CUMUL, comme l'écrit le webhook : ce qui était déjà parti, plus ce geste.
+      updateData.stripe_refund_amount = arr(dejaRembourse + refundMontant)
       updateData.stripe_refund_date = new Date().toISOString()
     }
     // ⚠️ UN SEUL GAGNANT : le statut ne s'écrit que s'il n'a pas changé depuis

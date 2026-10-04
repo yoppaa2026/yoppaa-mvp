@@ -213,6 +213,26 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
         .maybeSingle()
       if (existing) return  // RDV déjà créé, skip
     }
+    // 🔴 L'ACOMPTE N'ENVOIE PAS `yoppaa_rdv_id` (relevé du 04/10) : la garde
+    // ci-dessus ne s'exécutait donc jamais sur ce chemin, et chaque rejeu tirait
+    // un NOUVEL identifiant. Un événement repris après une erreur recréait le
+    // rendez-vous ; sur un créneau individuel, la règle de place le refusait et
+    // le paiement était REMBOURSÉ alors que le premier rendez-vous existait. Le
+    // paiement, lui, ne change pas d'un rejeu à l'autre : c'est lui qui dit si
+    // le rendez-vous est déjà né. Un refus de « déjà inscrit » sur un cours
+    // (04/10) aurait fait de même.
+    // ⚠️ UNE LECTURE EN ÉCHEC SE REJOUE : sans elle, on ne sait pas.
+    {
+      const { data: dejaPaye, error: errDeja } = await supabase
+        .from('rdv_reservations')
+        .select('id')
+        .eq('stripe_payment_intent_id', paymentIntent.id).limit(1)
+      if (errDeja) throw new Error(`lecture du rendez-vous déjà payé impossible : ${errDeja.message}`)
+      if ((dejaPaye || []).length > 0) {
+        console.info('[stripe/webhook] rendez-vous déjà né de ce paiement, rejeu absorbé', { pi: paymentIntent.id })
+        return
+      }
+    }
 
     // Crée le RDV avec acompte_paye_en_ligne=true
     //

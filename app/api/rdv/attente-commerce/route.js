@@ -2,6 +2,7 @@
 //
 // { action: 'compter', commercant_id }                       → { ok, seances, fenetres }
 // { action: 'prevenir', prestation_id, date_rdv, heure_debut } → { ok, prevenus, file }
+// { action: 'liste', prestation_id, date_rdv, heure_debut }    → { ok, personnes }
 //
 // 🔴 LA FILE D'ATTENTE N'EXISTAIT PAS CÔTÉ COMMERÇANTE (I12, audit du 03/10).
 // Elle était ouverte sur tous ses cours (trois places par défaut), mais elle ne
@@ -9,15 +10,15 @@
 // c'était ELLE qui libérait une place. La table `rdv_attente` n'a AUCUNE
 // policy : cette route est la seule porte, derrière la garde commune.
 //
-// ⚠️ DES NOMBRES, PAS DES PERSONNES : aucun nom ni contact ne sort d'ici (voir
-// `compterAttentes`). Ce que la commerçante voit des personnes reste un choix
-// d'Alex.
+// ⚠️ LE COMPTE NE PORTE AUCUN NOM. Les personnes d'UNE séance (prénom et
+// téléphone, décision d'Alex du 04/10) ne sortent que par `liste`, quand la
+// commerçante les demande, derrière la même garde que `prevenir`.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { refus } from '@/lib/api-auth'
 import { gardeEquipe, gardeLigneEquipe } from '@/lib/equipe-server'
-import { attentesDuCommerce, prevenirSurDemande } from '@/lib/attente-rdv-server'
+import { attentesDuCommerce, prevenirSurDemande, personnesDeLaSeance } from '@/lib/attente-rdv-server'
 
 const MESSAGES = {
   demande_invalide: 'Cette séance n’est pas reconnue.',
@@ -59,6 +60,21 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: MESSAGES[res.error] || 'Impossible de prévenir la file pour le moment.' }, { status: res.error === 'lecture_ko' ? 500 : 409 })
       }
       return NextResponse.json({ ok: true, prevenus: res.prevenus || 0, file: res.file || 0 })
+    }
+
+    if (corps?.action === 'liste') {
+      // ⚠️ DES DONNÉES PERSONNELLES : le commerce vient de la prestation,
+      // jamais du corps, et seule la case agenda les ouvre.
+      const gardeListe = await gardeLigneEquipe(request, admin, 'rdv_prestations', corps?.prestation_id, 'agenda')
+      const nonAutorise = refus(gardeListe, NextResponse)
+      if (nonAutorise) return nonAutorise
+      const res = await personnesDeLaSeance(admin, {
+        prestationId: corps.prestation_id, dateRdv: corps.date_rdv, heureDebut: corps.heure_debut,
+      })
+      if (!res.ok) {
+        return NextResponse.json({ ok: false, error: MESSAGES[res.error] || 'Impossible de lire la liste d’attente pour le moment.' }, { status: res.error === 'lecture_ko' ? 500 : 400 })
+      }
+      return NextResponse.json({ ok: true, personnes: res.personnes })
     }
 
     return NextResponse.json({ ok: false, error: 'Action inconnue.' }, { status: 400 })

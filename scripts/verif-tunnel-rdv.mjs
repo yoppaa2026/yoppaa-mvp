@@ -599,7 +599,10 @@ for (const chemin of [
           : nom === 'rdv_fermetures' ? { data: erreurFermetures ? null : fermetures, error: erreurFermetures }
           : nom === 'rdv_reservations' ? (vu.filtresPlaces = filtres, erreurPlaces
             ? { data: null, error: erreurPlaces }
-            : { data: placesPrises.map(place_no => ({ place_no })) })
+            // ⚠️ À TRAVERS LE SELECT (04/10) : une inscription peut porter son
+            // adresse et sa fiche, et le refus « déjà inscrit » ne les voit que
+            // si le select les demande.
+            : { data: projeter(placesPrises.map(p => (typeof p === 'object' ? p : { place_no: p })), colonnes) })
           : { data: [] }
         ),
       }
@@ -928,7 +931,9 @@ for (const chemin of [
       && /message: `Tes clients ne pourront plus réserver sur cette plage\.\$\{avertissement\}`/.test(CONF))
     verifie('🔴 et propose de les annuler au lieu de se refermer en silence',
       /if \(restent\.length > 0\) setApres\(\{ touches: restent \}\)/.test(CONF)
-      && /const res = await postPro\('\/api\/rdv\/annuler-commercant', \{ rdv_id: r\.id, raison: 'commercant' \}\)/.test(CONF))
+      // ⚠️ REPOINTÉE LE 04/10 : l'appel porte aussi `prevenir_file: false` (une journée
+      // fermée ne libère aucune place), mesuré dans verif:attente.
+      && /const res = await postPro\('\/api\/rdv\/annuler-commercant', \{ rdv_id: r\.id, raison: 'commercant', prevenir_file: false \}\)/.test(CONF))
   }
 
   // ── LE RAPPEL DE LA VEILLE CHARGE CE QUE LE SOLDE LIT (Audit 2 I14, 03/10)
@@ -1133,6 +1138,67 @@ for (const chemin of [
       && !avant({ code: 'prestation_inactive' }).corps.creneau_refuse)
     verifie('⚠️ et après le paiement, avec leur raison',
       apres('prestation_inactive') !== apres('inconnu') && apres('hors_horizon') !== apres('inconnu'))
+  }
+
+  // ── LA MÊME PERSONNE DEUX FOIS AU MÊME COURS (Audit 2 I5, Alex 04/10) ───
+  //
+  // 🔴 RIEN NE L'EMPÊCHAIT : un double clic, un retour arrière après paiement,
+  // et la cliente occupait deux places d'un cours. Refus en ligne, par la fiche
+  // OU par l'adresse ; le comptoir reste libre.
+  {
+    const { jourBruxelles } = await import('../lib/timezone.js')
+    const { jourPlus } = await import('../lib/attente-rdv.js')
+    const JOUR = jourPlus(jourBruxelles(), 5)
+    const COURS = { commercantId: 'c1', prestationId: 'p2', dateRdv: JOUR, heureDebut: '18:30' }
+    const LEA = { place_no: 1, client_id: null, client_email: 'Lea@Exemple.be ' }
+
+    const parAdresse = baseSimulee({ prestation: PRESTA_COURS, placesPrises: [LEA] })
+    const r1 = await creerReservationRdv(parAdresse, { ...COURS, champs: { client_email: 'lea@exemple.be' } })
+    verifie('🔴 la même adresse sur la même séance est refusée en ligne, et rien ne s’écrit',
+      r1.ok === false && r1.code === 'deja_inscrit' && parAdresse._vu.payload === null, JSON.stringify(r1))
+    const r2 = await creerReservationRdv(baseSimulee({ prestation: PRESTA_COURS, placesPrises: [{ place_no: 1, client_id: 'cl-9', client_email: null }] }),
+      { ...COURS, champs: { client_id: 'cl-9', client_email: 'autre@exemple.be' } })
+    verifie('🔴 et la même fiche aussi, quelle que soit l’adresse saisie', r2.ok === false && r2.code === 'deja_inscrit', JSON.stringify(r2))
+    const r3 = await creerReservationRdv(baseSimulee({ prestation: PRESTA_COURS, placesPrises: [LEA] }), { ...COURS, champs: { client_email: 'lea@exemple.be' }, simulation: true })
+    verifie('🔴 la vérification avant paiement la refuse aussi', r3.ok === false && r3.code === 'deja_inscrit', JSON.stringify(r3))
+    const comptoir = baseSimulee({ prestation: PRESTA_COURS, placesPrises: [LEA] })
+    const r4 = await creerReservationRdv(comptoir, { ...COURS, champs: { client_email: 'lea@exemple.be', source: 'commercant' } })
+    egal('⚠️ au comptoir, la commerçante inscrit une deuxième personne sous la même adresse', r4.ok === true ? comptoir._vu.payload.place_no : -1, 2)
+    const autre = baseSimulee({ prestation: PRESTA_COURS, placesPrises: [LEA] })
+    const r5 = await creerReservationRdv(autre, { ...COURS, champs: { client_email: 'tom@exemple.be' } })
+    egal('une autre personne prend la place suivante', r5.ok === true ? autre._vu.payload.place_no : -1, 2)
+    const r6 = await creerReservationRdv(baseSimulee({ prestation: PRESTA_COURS, placesPrises: [{ place_no: 1, client_id: null, client_email: null }] }), { ...COURS, champs: {} })
+    verifie('⚠️ deux absences d’adresse ne désignent pas la même personne', r6.ok === true, JSON.stringify(r6))
+    const plein = Array.from({ length: 12 }, (_, i) => (i === 3 ? { ...LEA, place_no: 4 } : { place_no: i + 1, client_id: null, client_email: `p${i}@exemple.be` }))
+    const r7 = await creerReservationRdv(baseSimulee({ prestation: PRESTA_COURS, placesPrises: plein }), { ...COURS, champs: { client_email: 'lea@exemple.be' } })
+    verifie('⚠️ sur un cours complet, elle apprend qu’elle a déjà sa place, pas que c’est complet', r7.ok === false && r7.code === 'deja_inscrit', JSON.stringify(r7))
+
+    const { estRefusDeRegle: regle, refusAvantPaiement: avant, motifApresPaiement: apres } = await import('../lib/refus-reservation.js')
+    const dit = avant({ code: 'deja_inscrit' }, { nom: 'Centre Respire' })
+    verifie('🔴 le refus se dit avant le paiement, sans renvoyer à la grille, et nomme le commerce à contacter',
+      dit.status === 409 && !dit.corps.creneau_refuse && dit.corps.error === 'Tu as déjà une place à ce cours, à cette heure-là. Pour inscrire une autre personne, contacte Centre Respire.',
+      JSON.stringify(dit))
+    verifie('🔴 et après un paiement, il se rembourse avec sa raison, sans se rejouer',
+      regle('deja_inscrit') && apres('deja_inscrit') !== apres('inconnu'))
+
+    // Les trois routes de paiement passent l'adresse à leur vérification : sans
+    // elle, le doublon passerait le contrôle et ne serait refusé qu'au webhook,
+    // APRÈS l'encaissement.
+    for (const route of ['create-rdv-acompte', 'create-rdv-commande', 'create-rdv-empreinte']) {
+      const code = sansProse(lire(`app/api/stripe/checkout/${route}/route.js`))
+      const debut = code.indexOf('const essai = await creerReservationRdv(')
+      const bloc = debut >= 0 ? code.slice(debut, code.indexOf('simulation: true', debut)) : ''
+      verifie(`🔴 ${route} : la vérification avant Stripe reçoit l’adresse`, /\n\s*client_email: emailEssai,\n/.test(bloc) && /const emailEssai = normaliserEmail\(client_email\)\n/.test(code), bloc.slice(0, 200))
+    }
+
+    // 🔴 LE REJEU D'UN ACOMPTE NE REMBOURSE PLUS UN RENDEZ-VOUS NÉ. L'acompte
+    // n'envoie pas `yoppaa_rdv_id` : chaque rejeu tirait un nouvel identifiant,
+    // et la règle de place (ou « déjà inscrit ») remboursait le paiement d'un
+    // rendez-vous qui existait. Le paiement est relu AVANT de créer.
+    const webhook = sansProse(lire('app/api/stripe/webhook/route.js'))
+    const garde = webhook.indexOf(".eq('stripe_payment_intent_id', paymentIntent.id).limit(1)")
+    const creation = webhook.indexOf('const rdvId = meta.yoppaa_rdv_id ||')
+    verifie('🔴 le webhook de l’acompte relit le paiement avant de créer le rendez-vous', garde > 0 && creation > garde, `${garde} / ${creation}`)
   }
 
   // ── CE QUE LE MODULE DÉCIDE L'EMPORTE SUR CE QU'ON LUI PASSE ────────────

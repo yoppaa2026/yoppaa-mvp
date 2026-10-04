@@ -39,6 +39,7 @@ import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
 import { refusAvantPaiement } from '@/lib/refus-reservation'
 import { jourLisible } from '@/lib/attente-rdv'
+import { normaliserEmail } from '@/lib/email-normalise'
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -278,6 +279,9 @@ export async function POST(request) {
     // réservation passe donc par TOUTES les règles du module de création, en
     // simple vérification, avant d'ouvrir Stripe. La course entre ce contrôle
     // et le paiement reste possible : le webhook la rattrape en remboursant.
+    // ⚠️ L'ADRESSE AUSSI (04/10) : la même personne déjà inscrite à ce cours se
+    // refuse AVANT Stripe, pas après un paiement à rembourser.
+    const emailEssai = normaliserEmail(client_email)
     const essai = await creerReservationRdv(supabase, {
       commercantId: commercant.id,
       prestationId: prestation.id,
@@ -285,6 +289,7 @@ export async function POST(request) {
       heureDebut: heure_debut,
       champs: {
         praticien_id: praticien_id || null,
+        client_email: emailEssai,
         heure_fin,
         duree_minutes: Number(duree_minutes) || null,
         ...(Number(couverts) ? { couverts: Number(couverts) } : {}),

@@ -33,13 +33,16 @@ import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
 import { annulerPush, envoyerPushParExternalId } from '@/lib/onesignal'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { motsReservation } from '@/lib/reservation-metier'
-import { jourLisible } from '@/lib/attente-rdv'
+import { jourLisible, annulationPrevientLaFile } from '@/lib/attente-rdv'
+import { prevenirLaFile } from '@/lib/attente-rdv-server'
 
 const arr = (n) => Math.round(Number(n || 0) * 100) / 100
 
 export async function POST(request) {
   try {
-    const { rdv_id, raison = 'commercant' } = await request.json()
+    // `prevenir_file` : faux quand c'est tout le cours qui est annulé (aucune
+    // place ne se libère, le cours n'a plus lieu) ou depuis une fermeture.
+    const { rdv_id, raison = 'commercant', prevenir_file = true } = await request.json()
     if (!rdv_id) {
       return NextResponse.json({ ok: false, error: 'rdv_id requis.' }, { status: 400 })
     }
@@ -60,7 +63,8 @@ export async function POST(request) {
         id, statut, acompte_paye, acompte_montant, stripe_payment_intent_id, stripe_refund_id,
         commande_id, fidelite_recompense_id, fidelite_remise, bon_cadeau_id, bon_cadeau_montant, bons_utilises,
         rappel_push_id, commercant_id,
-        client_id, client_email, date_rdv, heure_debut,
+        client_id, client_email, date_rdv, heure_debut, prestation_id,
+        prestation:rdv_prestations(capacite, par_couverts),
         commercant:commercants(stripe_account_id, nom, categorie)
       `)
       .eq('id', rdv_id)
@@ -260,6 +264,26 @@ export async function POST(request) {
       console.warn('[rdv/annuler-commercant] notification au client KO', e?.message)
     }
 
+    // 🔴 UNE PLACE LIBÉRÉE DANS UN COURS PRÉVIENT LA FILE (décision d'Alex du
+    // 04/10 : « c'est une place de libre »). Depuis le 06/09, seule l'annulation
+    // du CLIENT prévenait, et la commerçante devait penser au bouton : une
+    // personne désinscrite par le studio laissait sa place vide pendant que
+    // trois autres l'attendaient. La règle (quand oui, quand non) vit dans
+    // `annulationPrevientLaFile`, exécutée au banc.
+    // ⚠️ `prevenirLaFile` relit le cours, les fermetures et la fiche : un jour
+    // fermé ou un cours retiré ne prévient personne. AU MIEUX : une file non
+    // prévenue ne défait pas l'annulation.
+    let filePrevenue = 0
+    if (annulationPrevientLaFile(rdv, { prevenirFile: prevenir_file, raison })) {
+      const file = await prevenirLaFile(supabase, {
+        prestationId: rdv.prestation_id,
+        dateRdv: rdv.date_rdv,
+        heureDebut: String(rdv.heure_debut || '').slice(0, 5),
+      })
+      if (!file?.ok) console.error('[rdv/annuler-commercant] liste d’attente non prévenue', file?.error)
+      else filePrevenue = Number(file.prevenus) || 0
+    }
+
     // Le geste d'un membre de l'équipe, au journal (rien pour le patron).
     await journaliserGeste(supabase, verdict, { action: 'rdv_annule', cible_type: 'rdv', cible_id: rdv.id, details: { raison: raison || 'commercant', rembourse: refundMontant || 0 } })
 
@@ -267,6 +291,7 @@ export async function POST(request) {
       ok: true,
       rdv_id: rdv.id,
       notifie,
+      file_prevenue: filePrevenue,
       refund_id: refundId,
       refund_montant: refundMontant,
       refund_error: refundError,

@@ -3686,21 +3686,54 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
 
 // ─── UNE PLAGE QUI NE COLLE PAS À SON COURS (Audit 1 I6, 03/10) ────────────
 // 🔴 Yoga de 60 min sur 18:15-19:45 : la fiche proposait trois départs, comme
-// trois cours. Plus courte que le cours : rien, sans un mot. L'écran le dit
-// maintenant pendant le réglage ; le moteur, lui, n'a pas bougé (choix d'Alex).
+// trois cours. Plus courte que le cours : rien, sans un mot.
+// ✅ 04/10 (décision d'Alex, « que son heure de début ») : les séances d'un
+// cours partent du début de SA plage et se suivent bout à bout, jamais en
+// chevauchement. Appliquée ainsi parce que le cas du 18/09 ci-dessus (plage
+// 09:00-18:00 nommée « Yoga » au pas de 60, un cours chaque heure) doit vivre.
 {
-  const { ecartPlageCours } = await import('../lib/rdv-slots.js')
+  const { ecartPlageCours, cadenceDuCours, departSurLaCadence } = await import('../lib/rdv-slots.js')
   const YOGA = { duree_minutes: 60 }
-  egal('🔴 une plage plus longue que son cours dit ses départs, et la bonne heure de fin',
-    ecartPlageCours({ heureDebut: '18:15', heureFin: '19:45', cours: YOGA }), { tropCourte: false, longueur: 90, duree: 60, departs: ['18:15', '18:30', '18:45'], finIdeale: '19:15' })
+  egal('🔴 une plage plus longue que son cours dit sa séance, ce qui reste bloqué, et la bonne heure de fin',
+    ecartPlageCours({ heureDebut: '18:15', heureFin: '19:45', cours: YOGA }), { tropCourte: false, longueur: 90, duree: 60, departs: ['18:15'], reste: 30, finIdeale: '19:15' })
   verifier('🔴 une plage plus courte que son cours dit qu’il ne sera jamais proposé',
     ecartPlageCours({ heureDebut: '18:15', heureFin: '19:00', cours: YOGA })?.tropCourte === true)
   verifier('une plage qui colle au cours ne dit rien', ecartPlageCours({ heureDebut: '18:15', heureFin: '19:15', cours: YOGA }) === null)
-  egal('⚠️ les départs suivent le pas de la plage',
-    ecartPlageCours({ heureDebut: '18:15', heureFin: '19:45', cours: YOGA, pas: 30 })?.departs, ['18:15', '18:45'])
+  verifier('⚠️ ni une journée de séances bout à bout (le cas du 18/09)',
+    ecartPlageCours({ heureDebut: '09:00', heureFin: '18:00', cours: YOGA, pas: 60 }) === null)
+  egal('⚠️ un pas plus long que le cours garde sa pause entre deux séances',
+    ecartPlageCours({ heureDebut: '09:00', heureFin: '12:30', cours: YOGA, pas: 90 })?.departs, ['09:00', '10:30'])
   verifier('🔴 l’écran le dit pendant le réglage de la plage',
     /const e = cours \? ecartPlageCours\(\{ heureDebut: form\.heure_debut, heureFin: form\.heure_fin, cours, pas: form\.pas_minutes \}\) : null/.test(srcConfig)
-    && /if \(!e \|\| \(!e\.tropCourte && e\.departs\.length <= 1\)\) return null/.test(srcConfig))
+    && /if \(!e \|\| \(!e\.tropCourte && e\.reste < 15\)\) return null/.test(srcConfig))
+
+  // ── LA GRILLE ET LE SERVEUR, SUR LE CAS EXACT DE L'AUDIT ────────────────
+  // ⚠️ DATE CALCULÉE DEPUIS AUJOURD'HUI : un banc daté rougit le jour où elle passe.
+  const { sansProse } = await import('./lire-code.mjs')
+  const D = new Date()
+  D.setHours(12, 0, 0, 0)
+  D.setDate(D.getDate() + 10)
+  const P1815 = { id: 'k-1815', jour_semaine: jourSemaineDate(D), date_specifique: null, heure_debut: '18:15:00', heure_fin: '19:45:00', pas_minutes: 15, praticien_id: null, actif: true }
+  const LIE = [{ creneau_id: 'k-1815', prestation_id: 'yoga' }]
+  const HOR = { [jourSemaineDate(D)]: { ouvert: true, debut: '08:00', fin: '21:00' } }
+  const grille = (capacite, liaisons = LIE) => genererSlots({ dateChoisie: D, dureeMinutes: 60, creneaux: [P1815], reservations: [], horairesDetail: HOR, capacite, prestationId: 'yoga', liaisonsCreneaux: liaisons }).map(s => s.heure)
+  egal('🔴 le cours de 60 min sur 18:15-19:45 n’est proposé qu’à 18:15', grille(12), ['18:15'])
+  egal('⚠️ un rendez-vous individuel garde toute la grille de sa plage', grille(1), ['18:15', '18:30', '18:45'])
+  egal('⚠️ des liaisons non chargées gardent la grille d’avant (on ouvre, on ne ferme pas)', grille(12, null), ['18:15', '18:30', '18:45'])
+  const serveur = (heure) => prestationAutoriseeSurCreneaux({
+    creneaux: [P1815], liaisons: LIE, prestationId: 'yoga', dateStr: isoDate(D), jour: jourSemaineDate(D),
+    debutMin: timeToMinutes(heure), finMin: timeToMinutes(heure) + 60, estCours: true,
+  })
+  verifier('🔴 le serveur refuse le cours à 18:30, et l’accepte à 18:15', serveur('18:30') === false && serveur('18:15') === true)
+  const cad = cadenceDuCours(P1815, 'yoga', LIE, { estCours: true, dureeMinutes: 60 })
+  verifier('⚠️ la cadence part du début de la plage et avance de la durée du cours',
+    cad?.origine === timeToMinutes('18:15') && cad?.pas === 60
+    && departSurLaCadence(cad, timeToMinutes('18:15')) && !departSurLaCadence(cad, timeToMinutes('18:00')))
+  verifier('⚠️ une plage qui ne nomme pas ce cours ne lui impose rien',
+    cadenceDuCours(P1815, 'pilates', LIE, { estCours: true, dureeMinutes: 60 }) === null
+    && cadenceDuCours(P1815, 'yoga', LIE, { estCours: false, dureeMinutes: 60 }) === null)
+  verifier('🔴 le serveur lit le pas de la plage (sinon il retombe sur 15)',
+    /lieu_id, pas_minutes'\)/.test(sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

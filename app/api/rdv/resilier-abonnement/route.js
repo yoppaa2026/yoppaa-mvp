@@ -15,8 +15,10 @@
 // arrêt maladie, un départ, un litige. Le montant rendu est une décision de la
 // commerçante, et l'écran le lui dit. L'email de la cliente la renvoie vers
 // elle, sans rien promettre.
-// ⚠️ LA FILE D'ATTENTE N'EST PAS PRÉVENUE : même règle que toute annulation
-// décidée par le commerce (décision d'Alex, 06/09). À rediscuter si besoin.
+// 🔴 LA FILE D'ATTENTE EST PRÉVENUE pour chaque séance libérée (décision
+// d'Alex du 04/10 : « c'est une place de libre »). La cliente part, le cours a
+// toujours lieu : la place est réellement libre, ce n'est pas le commerce qui
+// s'absente. Elle ne l'était pas depuis le 06/09.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -26,6 +28,7 @@ import { annulerPush } from '@/lib/onesignal'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { seancesAnnuleesParResiliation } from '@/lib/abonnements'
 import { seanceLisible } from '@/lib/attente-rdv'
+import { prevenirLaFile } from '@/lib/attente-rdv-server'
 import { emailAbonnementResilie, envoyerAuYopper } from '@/lib/resend'
 import { lienFicheRdv } from '@/lib/lien-fiche'
 
@@ -71,7 +74,7 @@ export async function POST(request) {
     // Les séances à venir, et seulement celles qui n'ont pas commencé.
     const { data: seances, error: errS } = await supabase
       .from('rdv_reservations')
-      .select('id, date_rdv, heure_debut, statut, deleted_at, rappel_push_id')
+      .select('id, prestation_id, date_rdv, heure_debut, statut, deleted_at, rappel_push_id')
       .eq('abonnement_id', abonnement_id)
       .eq('statut', 'confirme')
       .is('deleted_at', null)
@@ -109,6 +112,21 @@ export async function POST(request) {
       }
     }
 
+    // Chaque séance libérée prévient sa file. `prevenirLaFile` relit le cours,
+    // les fermetures et la fiche, et ne programme rien après le début.
+    // ⚠️ AU MIEUX : une file non prévenue ne défait pas la résiliation.
+    let filePrevenue = 0
+    for (const s of annulees) {
+      if (!s.prestation_id) continue
+      const file = await prevenirLaFile(supabase, {
+        prestationId: s.prestation_id,
+        dateRdv: s.date_rdv,
+        heureDebut: String(s.heure_debut || '').slice(0, 5),
+      })
+      if (!file?.ok) console.error('[resilier-abonnement] liste d’attente non prévenue', s.id, file?.error)
+      else filePrevenue += Number(file.prevenus) || 0
+    }
+
     // ⚠️ L'EMAIL DIT CE QUI EST RÉELLEMENT ANNULÉ, ligne par ligne.
     let email = 'sans_email'
     if (contrat.client_email) {
@@ -129,7 +147,7 @@ export async function POST(request) {
       details: { seances_annulees: annulees.length },
     })
 
-    return NextResponse.json({ ok: true, seances_annulees: annulees.length, email })
+    return NextResponse.json({ ok: true, seances_annulees: annulees.length, email, file_prevenue: filePrevenue })
   } catch (e) {
     console.error('[resilier-abonnement]', e)
     return NextResponse.json({ ok: false, error: 'Erreur serveur.' }, { status: 500 })

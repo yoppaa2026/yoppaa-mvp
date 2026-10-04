@@ -471,7 +471,8 @@ export default function PosteEquipe({ equipe, onChanger }) {
       // ⚠️ DÉJÀ ANNULÉE PAR UN AUTRE GESTE : l'email est déjà parti, on ne le
       // renvoie pas (Annul-I8, 03/10), comme au tableau de bord.
       if (j.already_canceled) { dire('Cette réservation était déjà annulée'); return }
-      dire('Réservation annulée')
+      // La place libérée d'un cours prévient la file (04/10) : on le dit.
+      dire(Number(j.file_prevenue) > 0 ? 'Réservation annulée, la liste d’attente est prévenue' : 'Réservation annulée')
       await prevenir('/api/emails/rdv-annule', {
         rdv_id: rdv.id,
         raison_annulation: d.raison,

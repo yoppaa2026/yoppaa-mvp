@@ -25,16 +25,22 @@ import { DUREES_FENETRE, attenteSur, seanceLisible } from '@/lib/attente-rdv'
 // « pas connecté » à TOUT LE MONDE, et le bouton n'apparaîtrait jamais. C'est
 // la panne du 30/08 sur le paiement, à l'identique.
 import { fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
-import { promptPushOneSignal } from '@/app/components/OneSignalInit'
+// 🔴 LES NOTIFICATIONS D'ABORD (Alex, 04/10 : « il doit avoir les notifs ») :
+// voir `lib/notifs-attente`. L'activation se demande DANS le clic, avant
+// l'inscription : sur iPhone, un `await` placé avant ferait perdre le geste.
+import { activerNotifications, lireEtatPush } from '@/app/components/OneSignalInit'
+import { etatNotifsAttente, phraseNotifsRefusees, phraseNotifsAvant } from '@/lib/notifs-attente'
 
 // ⚠️ LA PROMESSE TENUE PAR LE CODE, ET RIEN DE PLUS. La file prévient dans
 // l'ordre d'arrivée, un quart d'heure d'écart entre chaque personne, et ne
 // bloque jamais le créneau (arbitrage d'Alex, 06/09).
 //
-// 🔴 ELLE REMPLACE UNE PHRASE FAUSSE (03/10) : « Ton prénom et ton numéro seront
-// visibles par le commerçant pour te prévenir. » Aucun écran ne montre la file
-// au commerçant, et c'est la notification qui prévient, pas lui.
-const PROMESSE = 'On te prévient par notification. La place n’est pas gardée : la première personne qui réserve la prend.'
+// 🔴 ET ELLE DIT QUI VOIT QUOI (04/10). Depuis la décision d'Alex, la commerçante
+// voit le prénom et le téléphone des personnes qui attendent un cours, pour
+// pouvoir appeler quand une place se libère au dernier moment. La personne le
+// sait AVANT de s'inscrire : c'est la condition pour que ce soit loyal (RGPD).
+// C'est toujours la notification qui prévient, dans l'ordre.
+const PROMESSE = 'On te prévient par notification. Le commerce voit ton prénom et ton téléphone. La place n’est pas gardée : la première personne qui réserve la prend.'
 
 // Où le Yopper retrouve ses attentes une fois la fiche quittée.
 const LIEN_MES_ATTENTES = '/commander?onglet=commandes&tab=rdvs'
@@ -45,6 +51,7 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
   const [deja, setDeja] = useState(null)
   const [duree, setDuree] = useState('semaine')
   const [erreur, setErreur] = useState('')
+  const [notif, setNotif] = useState('inconnu')
 
   const surSeance = Boolean(heure)
   const prestationId = prestation?.id || null
@@ -64,12 +71,41 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
 
   useEffect(() => { relire() }, [relire])
 
+  // L'état des notifications. Le module se charge après la page : on relit
+  // SIX FOIS AU PLUS, puis on s'arrête (le clic retentera de toute façon).
+  // ⚠️ UNE RELECTURE BORNÉE, PAS UN RELEVÉ : rien ne tourne au-delà de cinq
+  // secondes, écran allumé ou non.
+  useEffect(() => {
+    let essais = 0
+    let t = null
+    const lire = () => {
+      const e = lireEtatPush()
+      setNotif(etatNotifsAttente(e))
+      return Boolean(e?.pret)
+    }
+    const essayer = () => { essais++; if (!lire() && essais < 6) t = setTimeout(essayer, 800) }
+    if (!lire()) t = setTimeout(essayer, 800)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Demande les notifications. `true` si elles sont actives au retour.
+  // ⚠️ APPELÉE EN PREMIER DANS LE CLIC, sans `await` avant elle.
+  async function exigerNotifications() {
+    if (etatNotifsAttente(lireEtatPush()) === 'actif') return true
+    const res = await activerNotifications()
+    setNotif(etatNotifsAttente(lireEtatPush()))
+    if (!res?.ok) { setErreur(phraseNotifsRefusees(res?.raison)); return false }
+    setNotif('actif')
+    return true
+  }
+
   // Relit, PUIS prévient la fiche : sa grille marque la séance où il attend,
   // et doit le savoir tout de suite, pas au prochain chargement.
   const relireEtPrevenir = async () => { await relire(); onChange?.() }
 
   async function inscrire() {
     setEtat('envoi'); setErreur('')
+    if (!await exigerNotifications()) { setEtat('pret'); return }
     try {
       const r = await fetchAvecPreuveSiConnecte('/api/rdv/attente', {
         method: 'POST',
@@ -82,11 +118,6 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
       })
       const j = await r.json()
       if (!j?.ok) { setErreur(j?.error || 'Impossible pour le moment.'); setEtat('pret'); return }
-      // 🔴 LA FILE NE PRÉVIENT QUE PAR NOTIFICATION, ET RIEN NE LA DEMANDAIT
-      // (03/10). La réservation la propose après coup, l'inscription jamais :
-      // un Yopper sans notification attendait une alerte qui ne pouvait pas
-      // arriver. Sans effet s'il a déjà accepté ou explicitement refusé.
-      promptPushOneSignal()
       await relireEtPrevenir()
     } catch {
       setErreur('Impossible pour le moment, réessaie dans un instant.')
@@ -154,6 +185,22 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
             : 'Dès qu’un créneau se libère sur cette période, les personnes en attente sont prévenues dans l’ordre des inscriptions.'}
         </p>
         <p style={note}>{PROMESSE}</p>
+        {/* 🔴 DÉJÀ INSCRIT, NOTIFICATIONS COUPÉES (04/10) : il croirait être
+            prévenu. On le dit, et on propose de les rallumer. */}
+        {(notif === 'a_demander' || notif === 'bloque' || notif === 'non_supporte') && (
+          <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 10, background: '#FFFBEB', border: '1.5px solid #FCD34D' }}>
+            <p style={{ ...sous, marginTop: 0, color: '#92400E', fontWeight: 700 }}>
+              Tes notifications sont coupées : on ne pourra pas te prévenir.
+              {notif !== 'a_demander' ? ` ${phraseNotifsAvant(notif)}` : ''}
+            </p>
+            {notif !== 'non_supporte' && (
+              <button onClick={async () => { setErreur(''); await exigerNotifications() }}
+                style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, color: '#92400E', fontSize: '0.75rem', fontWeight: 800, textDecoration: 'underline', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                Activer les notifications
+              </button>
+            )}
+          </div>
+        )}
         {/* 🔴 « OÙ VOIT-IL QU'IL EST EN LISTE D'ATTENTE ? » (Alex, 03/10). Ici,
             et dans son espace : on lui dit où, sans quoi il l'oublie. */}
         <p style={note}>
@@ -237,7 +284,11 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
         </div>
       )}
 
-      <button onClick={inscrire} disabled={etat === 'envoi'}
+      {/* ⚠️ DIT AVANT LE CLIC quand les notifications manquent : sur un
+          navigateur qui ne les reçoit pas, pas de bouton, on dit quoi faire. */}
+      {phraseNotifsAvant(notif) && <p style={{ ...note, color: notif === 'actif' ? T.muted : '#92400E', fontWeight: 700 }}>{phraseNotifsAvant(notif)}</p>}
+
+      {notif !== 'non_supporte' && <button onClick={inscrire} disabled={etat === 'envoi'}
         style={{
           marginTop: 10, width: '100%', padding: '0.65rem 1rem', borderRadius: 10,
           border: 'none', background: T.main, color: '#fff',
@@ -246,8 +297,8 @@ export default function BlocAttente({ prestation, date, heure = null, T, compact
           opacity: etat === 'envoi' ? 0.7 : 1,
           fontFamily: '"DM Sans", sans-serif',
         }}>
-        {etat === 'envoi' ? 'Un instant…' : 'Préviens-moi'}
-      </button>
+        {etat === 'envoi' ? 'Un instant…' : notif === 'actif' ? 'Préviens-moi' : 'Activer les notifications et m’inscrire'}
+      </button>}
 
       {/* ⚠️ LA PHRASE QUI REND LE GESTE LOYAL, dite AVANT le clic. */}
       <p style={note}>{PROMESSE}</p>

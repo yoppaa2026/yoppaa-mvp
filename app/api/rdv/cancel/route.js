@@ -439,10 +439,10 @@ export async function POST(request) {
     }
 
     // ─── 6 bis) LA PLACE EST VRAIMENT LIBRE : ON PRÉVIENT LA FILE ──────────
-    // 🔴 SEULE L'ANNULATION DU CLIENT DÉCLENCHE (décision d'Alex, 06/09).
-    // Quand le commerçant annule, c'est très souvent parce qu'il n'est pas là :
-    // pousser enverrait quelqu'un vers un créneau qu'il n'honorera pas. Sa
-    // route à lui propose un bouton, parce que lui seul sait pourquoi il annule.
+    // 🔴 L'ANNULATION DU CLIENT DÉCLENCHE TOUJOURS (décision d'Alex, 06/09).
+    // Côté commerce (04/10) : une place de COURS libérée prévient aussi, et la
+    // résiliation d'un abonnement aussi ; un rendez-vous individuel annulé par
+    // le commerce, non (il n'est souvent pas là), d'où le bouton du panneau.
     //
     // ⚠️ ON ATTEND LE RÉSULTAT ET ON LE LIT. Un appel détaché n'a aucune
     // garantie de survivre à la fin de la fonction, et un `await` dont on

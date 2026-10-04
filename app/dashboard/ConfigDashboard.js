@@ -11004,7 +11004,9 @@ function TabRdvAbonnements({ commercantId, toast }) {
     const n = Number(j.seances_annulees) || 0
     const seancesTxt = n === 0 ? 'Aucune séance à venir à annuler' : n === 1 ? '1 séance à venir annulée' : `${n} séances à venir annulées`
     const emailTxt = j.email === 'envoye' ? ', un email en informe ' + a.client_prenom : j.email === 'echec' ? `. L’email n’est pas parti : préviens ${a.client_prenom} toi-même` : `. Pas d’email sur le contrat : préviens ${a.client_prenom} toi-même`
-    toast(`Abonnement résilié. ${seancesTxt}${emailTxt}.`, j.email === 'envoye' ? undefined : 'error')
+    // Les places libérées préviennent leur file (04/10) : on le dit.
+    const fileTxt = Number(j.file_prevenue) > 0 ? ' La liste d’attente est prévenue des places libres.' : ''
+    toast(`Abonnement résilié. ${seancesTxt}${emailTxt}.${fileTxt}`, j.email === 'envoye' ? undefined : 'error')
   }
 
   function openNew() {
@@ -13121,19 +13123,20 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                   </p>
                 )}
                 {/* 🔴 UNE PLAGE QUI NE COLLE PAS À SON COURS (Audit 1 I6, 03/10) :
-                    plus longue, la fiche propose plusieurs départs comme autant
-                    de cours ; plus courte, le cours n'est jamais proposé. Dit
-                    PENDANT qu'elle règle la plage, avec l'heure de fin juste. */}
+                    plus courte, le cours n'est jamais proposé ; plus longue que
+                    ses séances bout à bout (04/10), la fin reste réservée au
+                    cours sans servir à rien. Dit PENDANT qu'elle règle la
+                    plage, avec l'heure de fin juste. Un reste de moins d'un
+                    quart d'heure peut être voulu (vestiaire) : on se tait. */}
                 {!form.toutesPrestations && (() => {
                   const cours = coursDejaCoche(form.prestations, prestationsRdv)
                   const e = cours ? ecartPlageCours({ heureDebut: form.heure_debut, heureFin: form.heure_fin, cours, pas: form.pas_minutes }) : null
-                  if (!e || (!e.tropCourte && e.departs.length <= 1)) return null
-                  const liste = e.departs.length > 1 ? `${e.departs.slice(0, -1).join(', ')} et ${e.departs[e.departs.length - 1]}` : ''
+                  if (!e || (!e.tropCourte && e.reste < 15)) return null
                   return (
                     <p role="status" style={{ fontSize: 11.5, fontWeight: 700, color: '#92400E', background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 10, padding: '8px 10px', lineHeight: 1.5, marginTop: 8 }}>
                       {e.tropCourte
                         ? `Cette plage dure ${e.longueur} min pour un cours de ${e.duree} min : il ne sera jamais proposé. Fais-la finir à ${e.finIdeale}.`
-                        : `Cette plage dure ${e.longueur} min pour un cours de ${e.duree} min : ta fiche le proposera à ${liste}, comme ${e.departs.length} cours différents. Pour un cours à heure fixe, fais-la finir à ${e.finIdeale}.`}
+                        : `Cette plage dure ${e.longueur} min pour un cours de ${e.duree} min : ta fiche propose ${e.departs.length === 1 ? `le cours à ${e.departs[0]}` : `${e.departs.length} séances, de ${e.departs[0]} à ${e.departs[e.departs.length - 1]}`}, et les ${e.reste} dernières minutes restent bloquées pour lui. Pour les rendre à tes autres prestations, fais-la finir à ${e.finIdeale}.`}
                     </p>
                   )
                 })()}
@@ -13235,7 +13238,9 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
     setAnnulEnCours(true)
     let faits = 0, echecs = 0, rembourse = 0, remboursementsRates = 0
     for (const r of apres.touches) {
-      const res = await postPro('/api/rdv/annuler-commercant', { rdv_id: r.id, raison: 'commercant' })
+      // ⚠️ `prevenir_file: false` : la journée est fermée, aucune place ne se
+      // libère (la route le revérifie aussi par les fermetures).
+      const res = await postPro('/api/rdv/annuler-commercant', { rdv_id: r.id, raison: 'commercant', prevenir_file: false })
       const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
       if (!j?.ok) { echecs++; continue }
       faits++

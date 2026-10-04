@@ -119,8 +119,9 @@ const MUTATIONS = [
 
   { nom: '🔴 lieu_id quitte le select des plages : undefined partout, en silence',
     banc: 'verif:tunnel-rdv', fichier: CREATION,
-    de: "      .select('id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id, lieu_id')",
-    vers: "      .select('id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id')",
+    // ⚠️ ANCRE REPOINTÉE LE 04/10 : `pas_minutes` suit `lieu_id`.
+    de: "      .select('id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id, lieu_id, pas_minutes')",
+    vers: "      .select('id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id, pas_minutes')",
     garde: 'le lieu de la plage validée l’emporte sur l’heure' },
 
   { nom: '🔴 la plage se cherche de nouveau parmi tous les jours',
@@ -670,23 +671,61 @@ const MUTATIONS = [
     garde: 'le rappel de la veille charge bon_cadeau_montant' },
 
   // ─── LOT 3 · AUDIT 1 I6 : UNE PLAGE QUI NE COLLE PAS À SON COURS ───────
+  // ⚠️ REPOINTÉES LE 04/10 : la règle a changé (séances bout à bout).
   { nom: '🔴 une plage trop courte pour son cours se tait',
     banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
-    de: '  if (longueur < duree) return { tropCourte: true, longueur, duree, departs: [], finIdeale: minutesToTime(d + duree) }',
-    vers: '  if (false) return { tropCourte: true, longueur, duree, departs: [], finIdeale: minutesToTime(d + duree) }',
+    de: '  if (longueur < duree) return { tropCourte: true, longueur, duree, departs: [], reste: 0, finIdeale: minutesToTime(d + duree) }',
+    vers: '  if (false) return { tropCourte: true, longueur, duree, departs: [], reste: 0, finIdeale: minutesToTime(d + duree) }',
     garde: 'une plage plus courte que son cours dit qu’il ne sera jamais proposé' },
 
-  { nom: '🔴 une plage trop longue tait ses departs multiples',
+  { nom: '🔴 l avertissement compte de nouveau des departs qui se chevauchent',
     banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
-    de: '  for (let m = d; m + duree <= f; m += p) departs.push(minutesToTime(m))',
-    vers: '  departs.push(minutesToTime(d))',
-    garde: 'une plage plus longue que son cours dit ses départs' },
+    de: '  const p = Math.max(Number(pas) > 0 ? Number(pas) : 15, duree)',
+    vers: '  const p = Number(pas) > 0 ? Number(pas) : 15',
+    garde: 'une plage plus longue que son cours dit sa séance' },
 
   { nom: '🔴 le formulaire de plage ne previent plus',
     banc: 'verif:slots', fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '                  if (!e || (!e.tropCourte && e.departs.length <= 1)) return null',
+    de: '                  if (!e || (!e.tropCourte && e.reste < 15)) return null',
     vers: '                  return null',
     garde: 'l’écran le dit pendant le réglage de la plage' },
+
+  // ─── 04/10 · Q5 : LES SÉANCES D'UN COURS SE SUIVENT BOUT À BOUT ─────────
+  { nom: '🔴 la grille propose de nouveau 18:15, 18:30 et 18:45 pour un meme cours',
+    banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '    const seancesCours = cadenceDuCours(cr, prestationId, liaisonsCreneaux, { estCours, dureeMinutes })',
+    vers: '    const seancesCours = null',
+    garde: 'le cours de 60 min sur 18:15-19:45 n’est proposé qu’à 18:15' },
+
+  { nom: '🔴 le serveur accepte de nouveau le cours a 18:30',
+    banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '    && departSurLaCadence(cadenceDuCours(c, prestationId, liaisons, { estCours, dureeMinutes: f - d }), d))',
+    vers: '    && true)',
+    garde: 'le serveur refuse le cours à 18:30' },
+
+  { nom: '🔴 la cadence ignore la duree : les seances se chevauchent',
+    banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '  return { origine, pas: Math.max(pasPlage, duree) }',
+    vers: '  return { origine, pas: pasPlage }',
+    garde: 'le cours de 60 min sur 18:15-19:45 n’est proposé qu’à 18:15' },
+
+  { nom: '🔴 la cadence s impose a une plage qui ne nomme pas ce cours',
+    banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '  if (!nomme) return null',
+    vers: '',
+    garde: 'une plage qui ne nomme pas ce cours ne lui impose rien' },
+
+  { nom: '🔴 la cadence s impose a un rendez-vous individuel',
+    banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '  if (!estCours || !creneau || !prestationId || !Array.isArray(liaisons)) return null',
+    vers: '  if (!creneau || !prestationId || !Array.isArray(liaisons)) return null',
+    garde: 'un rendez-vous individuel garde toute la grille de sa plage' },
+
+  { nom: '🔴 le pas de la plage quitte le select du serveur',
+    banc: 'verif:slots', fichier: CREATION,
+    de: "pause_debut, pause_fin, actif, praticien_id, lieu_id, pas_minutes')",
+    vers: "pause_debut, pause_fin, actif, praticien_id, lieu_id')",
+    garde: 'le serveur lit le pas de la plage' },
 
   // ─── LOT 3 · AUDIT 1 I15 : SUPPRIMER UNE PLAGE QUI PORTE DES RDV ────────
   { nom: '🔴 la plage d une prof compte les rendez-vous de toutes',
@@ -1086,11 +1125,48 @@ const MUTATIONS = [
     vers: "  return `${jour}${h.length === 5 ? ` à ${h}` : ''}`",
     garde: 'la séance attendue se lit en clair' },
 
-  { nom: '🔴 le bloc promet de nouveau que le commercant voit le prenom et le numero',
+  // ⚠️ REPOINTÉE LE 04/10 : la promesse dit maintenant ce que le commerce voit.
+  { nom: '🔴 le bloc reprend la phrase d avant : le commercant « pour te prevenir »',
     banc: 'verif:attente', fichier: 'app/commander/rdv/[slug]/BlocAttente.js',
-    de: "const PROMESSE = 'On te prévient par notification. La place n’est pas gardée : la première personne qui réserve la prend.'",
+    de: "const PROMESSE = 'On te prévient par notification. Le commerce voit ton prénom et ton téléphone. La place n’est pas gardée : la première personne qui réserve la prend.'",
     vers: "const PROMESSE = 'Ton prénom et ton numéro seront visibles par le commerçant pour te prévenir.'",
-    garde: 'la phrase fausse a disparu' },
+    garde: 'la phrase d’avant a disparu' },
+
+  { nom: '🔴 la promesse tait de nouveau que le commerce voit le prenom et le telephone',
+    banc: 'verif:attente', fichier: 'app/commander/rdv/[slug]/BlocAttente.js',
+    de: "const PROMESSE = 'On te prévient par notification. Le commerce voit ton prénom et ton téléphone. La place n’est pas gardée : la première personne qui réserve la prend.'",
+    vers: "const PROMESSE = 'On te prévient par notification. La place n’est pas gardée : la première personne qui réserve la prend.'",
+    garde: 'la promesse tenue est dite avant et après l’inscription' },
+
+  { nom: '🔴 le serveur donne aussi l adresse email au commerce',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',
+    de: "    .select('id, prenom, telephone')",
+    vers: "    .select('id, prenom, telephone, email')",
+    garde: 'le serveur ne donne au commerce rien de plus' },
+
+  { nom: '🔴 les personnes en attente sortent sans garde',
+    banc: 'verif:attente', fichier: 'app/api/rdv/attente-commerce/route.js',
+    de: "    if (corps?.action === 'liste') {",
+    vers: "    if (corps?.action === 'liste') { const res = await personnesDeLaSeance(admin, { prestationId: corps.prestation_id, dateRdv: corps.date_rdv, heureDebut: corps.heure_debut }); return NextResponse.json({ ok: true, personnes: res.personnes })",
+    garde: 'les personnes ne sortent que derrière la garde de la case agenda' },
+
+  { nom: '🔴 la liste d une seance perd l ordre d inscription',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv.js',
+    de: "    .sort((x, y) => String(x.created_at || '').localeCompare(String(y.created_at || '')))",
+    vers: '    .slice()',
+    garde: 'la liste d’une séance suit l’ordre d’inscription' },
+
+  { nom: '⚠️ la liste d une seance compte les attentes servies ou d une autre heure',
+    banc: 'verif:attente', fichier: 'lib/attente-rdv.js',
+    de: "    .filter(l => l?.portee === PORTEE_SEANCE && attenteVivante(l, jourISO)",
+    vers: '    .filter(l => l?.portee === PORTEE_SEANCE',
+    garde: 'la liste d’une séance suit l’ordre d’inscription' },
+
+  { nom: '⚠️ l agenda montre la liste de la seance precedente',
+    banc: 'verif:attente', fichier: 'app/dashboard/AgendaRdv.js',
+    de: '              const vue = fileVue?.cle === cle ? fileVue : null',
+    vers: '              const vue = fileVue',
+    garde: 'l’agenda ne les charge qu’à la demande' },
 
   { nom: '⚠️ une fois inscrit, plus rien ne dit que la place n est pas gardee',
     banc: 'verif:attente', fichier: 'app/commander/rdv/[slug]/BlocAttente.js',
@@ -1110,11 +1186,42 @@ const MUTATIONS = [
     vers: '      setDeja((j?.attentes || []).find(a => a.prestation_id === prestationId) || null)',
     garde: 'le bloc juge avec la règle partagée' },
 
+  // ⚠️ REPOINTÉES LE 04/10 : les notifications sont exigées AVANT l'inscription.
   { nom: '🔴 l inscription ne demande plus les notifications : l alerte ne peut pas arriver',
     banc: 'verif:attente', fichier: 'app/commander/rdv/[slug]/BlocAttente.js',
-    de: '      promptPushOneSignal()',
-    vers: '      void 0',
-    garde: 'l’inscription demande les notifications dont la file dépend' },
+    de: "    if (!await exigerNotifications()) { setEtat('pret'); return }",
+    vers: '    void 0',
+    garde: 'l’inscription exige les notifications AVANT d’écrire' },
+
+  { nom: '🔴 un refus des notifications inscrit quand meme',
+    banc: 'verif:attente', fichier: 'app/commander/rdv/[slug]/BlocAttente.js',
+    de: '    if (!res?.ok) { setErreur(phraseNotifsRefusees(res?.raison)); return false }',
+    vers: '    if (!res?.ok) { setErreur(phraseNotifsRefusees(res?.raison)); return true }',
+    garde: 'l’inscription exige les notifications AVANT d’écrire' },
+
+  { nom: '🔴 autorise mais desabonne passe pour actif : OneSignal n enverra rien',
+    banc: 'verif:attente', fichier: 'lib/notifs-attente.js',
+    de: "  if (etat.permission === 'granted' && etat.optedIn !== false) return 'actif'",
+    vers: "  if (etat.permission === 'granted') return 'actif'",
+    garde: 'autorisées mais désabonnées : on redemande' },
+
+  { nom: '🔴 un refus du navigateur se lit comme a demander',
+    banc: 'verif:attente', fichier: 'lib/notifs-attente.js',
+    de: "  if (etat.permission === 'denied') return 'bloque'",
+    vers: '',
+    garde: 'refusées dans le navigateur : bloqué' },
+
+  { nom: '🔴 un iPhone hors de l app recoit un bouton qui ne marchera jamais',
+    banc: 'verif:attente', fichier: 'lib/notifs-attente.js',
+    de: "  if (etat.supporte === false) return 'non_supporte'",
+    vers: '',
+    garde: 'un navigateur sans notifications (iPhone hors de l’app) renvoie vers l’app' },
+
+  { nom: '⚠️ deja inscrit sans notifications, rien ne le dit',
+    banc: 'verif:attente', fichier: 'app/commander/rdv/[slug]/BlocAttente.js',
+    de: "        {(notif === 'a_demander' || notif === 'bloque' || notif === 'non_supporte') && (",
+    vers: '        {false && (',
+    garde: 'déjà inscrit sans notifications : on le dit' },
 
   { nom: '🔴 les listes d attente restent a l ecran apres la deconnexion',
     banc: 'verif:session', fichier: 'app/commander/page.js',
@@ -1199,6 +1306,67 @@ const MUTATIONS = [
     de: '      await chargerAttentesClient()',
     vers: '      await Promise.resolve()',
     garde: 'on sort de sa liste depuis son espace' },
+
+  // ─── 04/10 · Q4 : LA MÊME PERSONNE DEUX FOIS AU MÊME COURS ──────────────
+  { nom: '🔴 la meme adresse reprend une deuxieme place du cours',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "      if (dejaInscrit) return { ok: false, code: 'deja_inscrit' }",
+    vers: "      if (false) return { ok: false, code: 'deja_inscrit' }",
+    garde: 'la même adresse sur la même séance est refusée en ligne' },
+
+  { nom: '🔴 les places ne portent plus qui les occupe : le doublon passe',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "      .select('place_no, client_id, client_email')",
+    vers: "      .select('place_no')",
+    garde: 'la même adresse sur la même séance est refusée en ligne' },
+
+  { nom: '⚠️ la meme fiche sous une autre adresse passe',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: '      const dejaInscrit = (dejaLa || []).some(r => (qui && String(r.client_id) === qui)',
+    vers: '      const dejaInscrit = (dejaLa || []).some(r => (false)',
+    garde: 'et la même fiche aussi, quelle que soit l’adresse saisie' },
+
+  { nom: '⚠️ le comptoir ne peut plus inscrire un enfant sous l adresse du parent',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "    if (champs?.source !== 'commercant') { // le comptoir inscrit librement",
+    vers: '    if (true) {',
+    garde: 'au comptoir, la commerçante inscrit une deuxième personne' },
+
+  { nom: '🔴 deja inscrit se rejoue apres paiement au lieu de se rembourser',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/refus-reservation.js',
+    de: "  'deja_inscrit',",
+    vers: '',
+    garde: 'et après un paiement, il se rembourse avec sa raison' },
+
+  { nom: '⚠️ deja inscrit tombe dans le message generique « reessaie »',
+    banc: 'verif:tunnel-rdv', fichier: 'lib/refus-reservation.js',
+    de: "  if (code === 'deja_inscrit') {",
+    vers: '  if (false) {',
+    garde: 'le refus se dit avant le paiement, sans renvoyer à la grille' },
+
+  { nom: '🔴 l acompte ne passe plus l adresse a sa verification : le doublon est encaisse',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
+    de: '        client_email: emailEssai,',
+    vers: '',
+    garde: 'create-rdv-acompte : la vérification avant Stripe reçoit l’adresse' },
+
+  { nom: '🔴 le tunnel avec produits ne passe plus l adresse',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '        client_email: emailEssai,',
+    vers: '',
+    garde: 'create-rdv-commande : la vérification avant Stripe reçoit l’adresse' },
+
+  { nom: '⚠️ l empreinte ne passe plus l adresse',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/checkout/create-rdv-empreinte/route.js',
+    de: '        client_email: emailEssai,',
+    vers: '',
+    garde: 'create-rdv-empreinte : la vérification avant Stripe reçoit l’adresse' },
+
+  { nom: '🔴 le rejeu d un acompte rembourse de nouveau un rendez-vous ne',
+    banc: 'verif:tunnel-rdv', fichier: 'app/api/stripe/webhook/route.js',
+    de: "        .eq('stripe_payment_intent_id', paymentIntent.id).limit(1)",
+    vers: "        .eq('id', paymentIntent.id).limit(1)",
+    garde: 'le webhook de l’acompte relit le paiement avant de créer' },
 ]
 
 const lancer = (banc) => {

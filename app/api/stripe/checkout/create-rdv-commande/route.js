@@ -176,6 +176,9 @@ export async function POST(request) {
     // comme l'acompte seul : sinon on encaissait l'acompte et les produits
     // d'un rendez-vous dont la place n'existait plus. En simple vérification,
     // rien n'est écrit.
+    // ⚠️ L'ADRESSE AUSSI (04/10) : la même personne déjà inscrite à ce cours se
+    // refuse AVANT Stripe, pas après un paiement à rembourser.
+    const emailEssai = normaliserEmail(client_email)
     const essai = await creerReservationRdv(supabase, {
       commercantId: commercant.id,
       prestationId: prestation.id,
@@ -183,6 +186,7 @@ export async function POST(request) {
       heureDebut: heure_debut,
       champs: {
         praticien_id: praticien_id || null,
+        client_email: emailEssai,
         heure_fin,
         duree_minutes: Number(duree_minutes) || null,
       },

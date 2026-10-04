@@ -50,8 +50,9 @@ const MUTATIONS = [
   // ─── 3) L'ANNULATION COMMERÇANT QUI NE REMBOURSAIT RIEN ────────────────
   { nom: '🔴 le tableau de bord réécrit le statut sans passer par le serveur',
     fichier: 'app/dashboard/page.js',
-    de: "      const res = await postPro('/api/rdv/annuler-commercant', { rdv_id: rdvId, raison })",
-    vers: "      const res = await postPro('/api/emails/rdv-annule', { rdv_id: rdvId, raison })" },
+    // ⚠️ ANCRE REPOINTÉE LE 04/10 : l'appel porte aussi `prevenir_file`.
+    de: "      const res = await postPro('/api/rdv/annuler-commercant', { rdv_id: rdvId, raison, prevenir_file: prevenirFile })",
+    vers: "      const res = await postPro('/api/emails/rdv-annule', { rdv_id: rdvId, raison, prevenir_file: prevenirFile })" },
 
   { nom: '🔴 la route d’annulation commerçant perd sa garde d’autorisation',
     fichier: 'app/api/rdv/annuler-commercant/route.js',
@@ -179,7 +180,8 @@ const MUTATIONS = [
 
   { nom: '🔴 la fenêtre d’après redevient muette sur l’argent parti',
     fichier: 'lib/confirmation-rdv.js',
-    de: '    return `${base}${retours ? libelleRetoursFaits({ ...retours, categorie }) : \'\'}`',
+    // ⚠️ ANCRE REPOINTÉE LE 04/10 : la phrase de la liste d'attente suit.
+    de: '    return `${base}${retours ? libelleRetoursFaits({ ...retours, categorie }) : \'\'}${file}`',
     vers: '    return base' },
 
   // 🔴 UN REMBOURSEMENT RATÉ QUI SE TAIT EST PIRE QUE PAS DE MESSAGE : le

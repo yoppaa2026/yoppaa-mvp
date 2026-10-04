@@ -101,8 +101,9 @@ const MUTATIONS = [
     fichier: 'lib/rdv-creation-server.js',
     // ⚠️ REPOINTÉE LE 03/10 : le select porte aussi `lieu_id` (le lieu de la
     // plage validée). La mutation retire toujours `praticien_id`, et lui seul.
-    de: ", actif, praticien_id, lieu_id')",
-    vers: ", actif, lieu_id')" },
+    // ⚠️ REPOINTÉE LE 04/10 : `pas_minutes` suit (séances d'un cours bout à bout).
+    de: ", actif, praticien_id, lieu_id, pas_minutes')",
+    vers: ", actif, lieu_id, pas_minutes')" },
 
   // ⚠️ ET LA REGLE DOIT S APPELER PAREIL DES DEUX COTES.
   { nom: '🔴 la garde du serveur cesse de passer estCours',

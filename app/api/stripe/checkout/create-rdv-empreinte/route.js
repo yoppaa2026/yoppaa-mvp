@@ -151,6 +151,9 @@ export async function POST(request) {
     // l'acompte : salle, cadence, horaire, par le module de création en simple
     // vérification. Rien n'est débité ici, mais une carte donnée pour une table
     // déjà prise finissait sur un écran « table garantie » qui mentait.
+    // ⚠️ L'ADRESSE AUSSI (04/10) : la même personne déjà inscrite à ce cours se
+    // refuse AVANT Stripe, pas après un paiement à rembourser.
+    const emailEssai = normaliserEmail(client_email)
     const essai = await creerReservationRdv(supabase, {
       commercantId: commercant.id,
       prestationId: prestation.id,
@@ -158,6 +161,7 @@ export async function POST(request) {
       heureDebut: heure_debut,
       champs: {
         praticien_id: praticien_id || null,
+        client_email: emailEssai,
         heure_fin,
         duree_minutes: Number(duree_minutes) || null,
         couverts: couvertsRetenus,

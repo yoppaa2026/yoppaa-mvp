@@ -2430,7 +2430,7 @@ export default function Dashboard() {
     return true
   }
 
-  async function changerStatutRdv(rdvId, statut, raison = 'commercant', { silencieux = false, champs = null, surRetours = null } = {}) {
+  async function changerStatutRdv(rdvId, statut, raison = 'commercant', { silencieux = false, champs = null, surRetours = null, prevenirFile = true } = {}) {
     // 🔴 L'ANNULATION PAR LE COMMERÇANT PASSE PAR LE SERVEUR, ET C'EST NEUF.
     //
     // Elle se contentait d'écrire le statut depuis ce navigateur, et le
@@ -2440,7 +2440,7 @@ export default function Dashboard() {
     // n'était même pas responsable. La route rembourse, recrédite et rend, puis
     // l'email dit ce qui revient.
     if (statut === 'annule_commercant') {
-      const res = await postPro('/api/rdv/annuler-commercant', { rdv_id: rdvId, raison })
+      const res = await postPro('/api/rdv/annuler-commercant', { rdv_id: rdvId, raison, prevenir_file: prevenirFile })
       const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
       if (!j?.ok) {
         console.error('[dashboard] annulation RDV KO', j?.error || res?.status)
@@ -2464,6 +2464,7 @@ export default function Dashboard() {
         bon_rendu: j.bon_rendu,
         recompense_rendue: j.recompense_rendue,
         produits_montant: j.produits_montant,
+        file_prevenue: j.file_prevenue,
       })
       // ⚠️ L'EMAIL PORTE LES MONTANTS RENDUS PAR LA ROUTE. Sans eux le gabarit
       // se rabat sur le seul acompte, et se tait dès qu'il vaut zéro.
@@ -2692,6 +2693,9 @@ export default function Dashboard() {
     for (const rdv of seanceAAnnuler) {
       const ok = await changerStatutRdv(rdv.id, 'annule_commercant', 'commercant', {
         silencieux: true,
+        // ⚠️ LE COURS ENTIER N'A PLUS LIEU : aucune place ne se libère, et la
+        // file ne doit pas apprendre « une place s'est libérée » (04/10).
+        prevenirFile: false,
         surRetours: (r) => {
           if (r?.refund_error) remboursementsRates++
           else if (Number(r?.refund_montant) > 0) rembourse += Number(r.refund_montant)
@@ -2709,9 +2713,9 @@ export default function Dashboard() {
     setConfirmationAnnulationTexte(null)
   }
 
-  // 🔴 PRÉVENIR LA FILE D'UN COURS, D'UN BOUTON (I12, 03/10). Quand c'est la
-  // commerçante qui libère une place, la file n'est pas prévenue seule (Alex,
-  // 06/09) : c'est son geste. La route revérifie qu'une place est bien libre.
+  // 🔴 PRÉVENIR LA FILE D'UN COURS, D'UN BOUTON (I12, 03/10). Depuis le 04/10,
+  // une place de cours annulée prévient déjà seule : le bouton sert à une place
+  // ouverte autrement. La route revérifie qu'une place est bien libre.
   // ⚠️ LA PROMESSE TENUE, PAS PLUS : on prévient dans l'ordre, la place n'est
   // pas gardée. Et si personne n'a pu être joint, on le dit.
   async function prevenirFileSeance({ prestationId, date, heure, nombre }) {
@@ -2730,6 +2734,17 @@ export default function Dashboard() {
         : { titre: 'Personne n’a pu être prévenu', message: 'Les personnes en attente n’ont pas activé les notifications, ou viennent déjà d’être prévenues pour ce cours.', action: 'J’ai compris' })
       : { titre: 'La file n’a pas été prévenue', message: j?.error || 'Réessaie dans un instant.', action: 'J’ai compris' }))
     if (commercant?.id) chargerRdvs(commercant.id)
+  }
+
+  // 🔴 QUI ATTEND CE COURS (Alex, 04/10 : « prénom et téléphone »). Chargé à la
+  // demande, pour UNE séance : l'agenda n'a pas à porter les contacts de toute
+  // la file pour afficher un nombre. Rend la liste, ou lève avec la phrase de
+  // la route : l'agenda l'affiche telle quelle.
+  async function listerFileSeance({ prestationId, date, heure }) {
+    const res = await postPro('/api/rdv/attente-commerce', { action: 'liste', prestation_id: prestationId, date_rdv: date, heure_debut: heure })
+    const j = await (res?.json ? res.json().catch(() => ({})) : Promise.resolve({}))
+    if (!j?.ok) throw new Error(j?.error || 'Impossible de lire la liste d’attente pour le moment.')
+    return Array.isArray(j.personnes) ? j.personnes : []
   }
 
   // ⚠️ LE MÊME TRIO DE RÉPONSES QUE SUR UN RENDEZ-VOUS : terminal, espèces, ou
@@ -4165,6 +4180,7 @@ export default function Dashboard() {
                     fermetures={fermeturesRdv}
                     attentes={attentesRdv}
                     onPrevenirFile={prevenirFileSeance}
+                    onListerFile={listerFileSeance}
                     praticiens={praticiensRdv}
                     horairesDetail={commercant?.horaires_detail}
                     commercant={commercant}

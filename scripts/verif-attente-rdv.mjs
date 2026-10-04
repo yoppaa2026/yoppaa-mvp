@@ -20,7 +20,7 @@ import {
   fenetreDepuis, lignePourInscription, peutAttendre,
   concerneParLaPlace, fileConcernee, chaineDePushs, attenteVivante,
   libelleAttente, jourLisible, memeCible, compterMemeCible, dejaDansLaFile,
-  attenteSur, seanceLisible,
+  attenteSur, seanceLisible, annulationPrevientLaFile,
 } from '../lib/attente-rdv.js'
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
@@ -394,13 +394,93 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
   verifier('l’annulation du client prévient la file',
     /prevenirLaFile\(/.test(CANCEL) && /from '@\/lib\/attente-rdv-server'/.test(CANCEL))
 
-  // 🔴 LA GARDE QUI PROTÈGE UNE DÉCISION D'ALEX. Le commerçant annule très
-  // souvent parce qu'il n'est pas là : pousser automatiquement enverrait
-  // quelqu'un vers un créneau qu'il n'honorera pas. Lui seul sait pourquoi il
-  // annule, donc chez lui c'est un bouton, jamais un déclenchement.
-  const ANNUL_PRO = lire('app/api/rdv/annuler-commercant/route.js')
-  verifier('🔴 l’annulation du commerçant ne prévient PERSONNE toute seule',
-    !/prevenirLaFile\(/.test(ANNUL_PRO))
+  // 🔴 LA GARDE QUI PROTÈGE DEUX DÉCISIONS D'ALEX. 06/09 : le commerçant annule
+  // souvent parce qu'il n'est pas là, donc un rendez-vous INDIVIDUEL qu'il
+  // annule ne prévient personne. 04/10 : une place de COURS qu'il libère, elle,
+  // prévient (« c'est une place de libre »), sauf quand tout le cours saute.
+  // ⚠️ REPOINTÉE LE 04/10 : elle exigeait qu'aucun `prevenirLaFile(` n'existe
+  // dans la route. Elle exige maintenant que la route passe par la règle, et
+  // la règle est exécutée ci-dessous, cas par cas.
+  const ANNUL_PRO = sansProse(lire('app/api/rdv/annuler-commercant/route.js'))
+  const appelsFile = ANNUL_PRO.split('prevenirLaFile(').length - 1
+  verifier('🔴 l’annulation du commerçant ne prévient la file QUE par la règle, une seule fois',
+    appelsFile === 1
+    && /if \(annulationPrevientLaFile\(rdv, \{ prevenirFile: prevenir_file, raison \}\)\) \{\s*const file = await prevenirLaFile\(/.test(ANNUL_PRO),
+    `${appelsFile} appel(s)`)
+  verifier('⚠️ et la règle a de quoi décider : la capacité et la table sont lues',
+    /prestation_id,\s*prestation:rdv_prestations\(capacite, par_couverts\),/.test(ANNUL_PRO))
+  {
+    const place = (prestation, extra = {}) => ({ prestation_id: 'p', prestation, ...extra })
+    verifier('🔴 une place de cours libérée par le commerce prévient la file',
+      annulationPrevientLaFile(place({ capacite: 12, par_couverts: false })) === true)
+    verifier('🔴 un rendez-vous individuel annulé par le commerce ne prévient personne (06/09)',
+      annulationPrevientLaFile(place({ capacite: 1, par_couverts: false })) === false
+      && annulationPrevientLaFile(place({ capacite: null })) === false)
+    verifier('🔴 un cours ENTIER annulé ne prévient personne : aucune place ne se libère',
+      annulationPrevientLaFile(place({ capacite: 12 }), { prevenirFile: false }) === false)
+    verifier('⚠️ un changement de lieu non plus : la place reste promise à son client',
+      annulationPrevientLaFile(place({ capacite: 12 }), { raison: 'lieu' }) === false)
+    verifier('⚠️ ni une table, ni une prestation illisible',
+      annulationPrevientLaFile(place({ capacite: 40, par_couverts: true })) === false
+      && annulationPrevientLaFile({ prestation_id: 'p' }) === false
+      && annulationPrevientLaFile(null) === false)
+  }
+  // Les deux gestes qui annulent TOUT ne préviennent pas : le cours entier, et
+  // la journée fermée.
+  const BORD = sansProse(lire('app/dashboard/page.js'))
+  const debutCours = BORD.indexOf('async function repondreAnnulationSeance(')
+  verifier('🔴 « Annuler ce cours » demande à la route de ne pas prévenir la file',
+    debutCours > 0 && /prevenirFile: false,/.test(BORD.slice(debutCours, BORD.indexOf('function fermerAnnulationSeance', debutCours)))
+    && /\{ rdv_id: rdvId, raison, prevenir_file: prevenirFile \}/.test(BORD))
+  verifier('⚠️ et la fermeture d’une journée non plus',
+    /\{ rdv_id: r\.id, raison: 'commercant', prevenir_file: false \}/.test(sansProse(lire('app/dashboard/ConfigDashboard.js'))))
+  // 🔴 LA RÉSILIATION LIBÈRE DES PLACES (04/10) : chacune prévient sa file.
+  const RESIL = sansProse(lire('app/api/rdv/resilier-abonnement/route.js'))
+  verifier('🔴 la résiliation d’un abonnement prévient la file de chaque séance libérée',
+    /\.select\('id, prestation_id, date_rdv, heure_debut, statut, deleted_at, rappel_push_id'\)/.test(RESIL)
+    && /for \(const s of annulees\) \{\s*if \(!s\.prestation_id\) continue\s*const file = await prevenirLaFile\(supabase, \{\s*prestationId: s\.prestation_id,/.test(RESIL))
+
+  // ⚠️ ET LA COMMERÇANTE L'APPREND : sans quoi elle appuierait ensuite sur
+  // « Prévenir » à la main, pour une file déjà prévenue.
+  {
+    const { confirmationRdv: conf } = await import('../lib/confirmation-rdv.js')
+    const RDV = { client_prenom: 'Léa', client_nom: 'Martin' }
+    verifier('⚠️ la confirmation dit que la file est prévenue, et seulement si elle l’est',
+      /Les personnes en liste d’attente sont prévenues/.test(conf('annule_commercant', { rdv: RDV, retours: { file_prevenue: 2 } }))
+      && !/liste d’attente/.test(conf('annule_commercant', { rdv: RDV, retours: { file_prevenue: 0 } })))
+    verifier('⚠️ les deux routes le rendent, et le tableau de bord le transmet',
+      /file_prevenue: filePrevenue,/.test(ANNUL_PRO)
+      && /file_prevenue: filePrevenue \}\)/.test(RESIL)
+      && /file_prevenue: j\.file_prevenue,/.test(BORD))
+  }
+
+  // 🔴 QUI ATTEND CE COURS : PRÉNOM ET TÉLÉPHONE (Alex, 04/10). Une séance à la
+  // fois, à la demande, dans l'ordre où la file prévient.
+  {
+    const { fileDeLaSeance: file, cleSeance: cle, compterAttentes: compterTout } = await import('../lib/attente-rdv.js')
+    const JOUR = '2026-10-04'
+    const L = (id, extra) => ({ id, portee: PORTEE_SEANCE, prestation_id: 'yoga', date_rdv: '2026-10-12', heure_debut: '18:00:00', statut: STATUT_EN_ATTENTE, ...extra })
+    const lignes = [
+      L('c', { created_at: '2026-10-03T10:00:00Z' }),
+      L('a', { created_at: '2026-10-01T10:00:00Z' }),
+      L('autre-heure', { heure_debut: '19:00:00', created_at: '2026-09-30T10:00:00Z' }),
+      L('autre-cours', { prestation_id: 'pilates', created_at: '2026-09-30T10:00:00Z' }),
+      L('servie', { statut: STATUT_SERVI, created_at: '2026-09-29T10:00:00Z' }),
+      L('b', { created_at: '2026-10-02T10:00:00Z', statut: STATUT_PREVENU }),
+    ]
+    egal('🔴 la liste d’une séance suit l’ordre d’inscription, celui où la file prévient',
+      file(lignes, { prestationId: 'yoga', dateRdv: '2026-10-12', heure: '18:00' }, JOUR).map(l => l.id), ['a', 'b', 'c'])
+    verifier('⚠️ elle compte exactement ce que le panneau annonce',
+      file(lignes, { prestationId: 'yoga', dateRdv: '2026-10-12', heure: '18:00' }, JOUR).length
+      === (compterTout(lignes, JOUR).seances[cle('yoga', '2026-10-12', '18:00')] || 0))
+    const ROUTE = sansProse(lire('app/api/rdv/attente-commerce/route.js'))
+    verifier('🔴 les personnes ne sortent que derrière la garde de la case agenda, le commerce lu sur la prestation',
+      /if \(corps\?\.action === 'liste'\) \{[\s\S]{0,200}const gardeListe = await gardeLigneEquipe\(request, admin, 'rdv_prestations', corps\?\.prestation_id, 'agenda'\)\s*const nonAutorise = refus\(gardeListe, NextResponse\)\s*if \(nonAutorise\) return nonAutorise\s*const res = await personnesDeLaSeance\(/.test(ROUTE))
+    const AGENDA = sansProse(lire('app/dashboard/AgendaRdv.js'))
+    verifier('⚠️ l’agenda ne les charge qu’à la demande, et jamais pour une autre séance',
+      /\{onListerFile && !vue\?\.personnes && \(\s*<button onClick=\{voirQui\}/.test(AGENDA)
+      && /const vue = fileVue\?\.cle === cle \? fileVue : null/.test(AGENDA))
+  }
 
   // ⚠️ POSÉ DANS LE MODULE COMMUN, PAS CHEZ LES APPELANTS. Quatre chemins
   // créent un rendez-vous : posé chez chacun, ce geste serait oublié par le
@@ -845,11 +925,17 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
 
   // ── Le bloc ────────────────────────────────────────────────────────────
   const BLOC = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/BlocAttente.js', import.meta.url), 'utf8'))
-  verifier('🔴 la phrase fausse a disparu : aucun écran ne montre la file au commerçant',
+  // ⚠️ REPOINTÉE LE 04/10 : la phrase « visibles par le commerçant » était
+  // fausse le 03/10, aucun écran ne montrait la file. Depuis la décision d'Alex
+  // (prénom et téléphone), la commerçante les voit : la promesse doit le dire,
+  // et le serveur ne doit rien donner de plus que ce qu'elle annonce.
+  verifier('🔴 la phrase d’avant a disparu (« le commerçant pour te prévenir » : c’est la notification qui prévient)',
     !/visibles? par le commerçant/.test(BLOC))
   verifier('🔴 la promesse tenue est dite avant et après l’inscription',
-    /const PROMESSE = 'On te prévient par notification\. La place n’est pas gardée : la première personne qui réserve la prend\.'/.test(BLOC)
+    /const PROMESSE = 'On te prévient par notification\. Le commerce voit ton prénom et ton téléphone\. La place n’est pas gardée : la première personne qui réserve la prend\.'/.test(BLOC)
     && (BLOC.match(/<p style=\{note\}>\{PROMESSE\}<\/p>/g) || []).length === 2)
+  verifier('🔴 et le serveur ne donne au commerce rien de plus que ce qu’elle annonce',
+    /\.from\('clients'\)\s*\.select\('id, prenom, telephone'\)/.test(sansProse(readFileSync(new URL('../lib/attente-rdv-server.js', import.meta.url), 'utf8'))))
   verifier('🔴 la fenêtre dit LISTE D’ATTENTE dans ses trois états',
     /<span>Liste d’attente\{quoi \? ` · \$\{quoi\}` : ''\}<\/span>/.test(BLOC)
     && (BLOC.match(/\{surtitre\}/g) || []).length === 3)
@@ -858,11 +944,38 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
   verifier('🔴 le bloc juge avec la règle partagée',
     /setDeja\(attenteSur\(j\?\.attentes, \{ prestationId, date, heure \}\)\)/.test(BLOC)
     && /const prestationId = prestation\?\.id \|\| null/.test(BLOC))
-  // La file ne prévient QUE par notification : l'inscription la demande, comme
-  // la réservation, et seulement une fois l'inscription acceptée.
-  verifier('🔴 l’inscription demande les notifications dont la file dépend',
-    /import \{ promptPushOneSignal \} from '@\/app\/components\/OneSignalInit'/.test(BLOC)
-    && /if \(!j\?\.ok\) \{ setErreur\([^\n]*return \}\s*promptPushOneSignal\(\)\s*await relireEtPrevenir\(\)/.test(BLOC))
+  // 🔴 LA FILE NE PRÉVIENT QUE PAR NOTIFICATION : l'inscription les EXIGE
+  // (Alex, 04/10). ⚠️ REPOINTÉE : le 03/10 elle les demandait APRÈS
+  // l'inscription, et un refus laissait inscrit pour rien. L'activation se
+  // demande maintenant en premier dans le clic, et un échec n'inscrit pas.
+  verifier('🔴 l’inscription exige les notifications AVANT d’écrire, sinon elle s’arrête',
+    /import \{ activerNotifications, lireEtatPush \} from '@\/app\/components\/OneSignalInit'/.test(BLOC)
+    && /async function inscrire\(\) \{\s*setEtat\('envoi'\); setErreur\(''\)\s*if \(!await exigerNotifications\(\)\) \{ setEtat\('pret'\); return \}/.test(BLOC)
+    && /if \(etatNotifsAttente\(lireEtatPush\(\)\) === 'actif'\) return true\s*const res = await activerNotifications\(\)/.test(BLOC)
+    && /if \(!res\?\.ok\) \{ setErreur\(phraseNotifsRefusees\(res\?\.raison\)\); return false \}/.test(BLOC))
+  verifier('⚠️ un navigateur qui ne reçoit pas les notifications n’a pas de bouton, mais une phrase',
+    /\{notif !== 'non_supporte' && <button onClick=\{inscrire\}/.test(BLOC)
+    && /\{phraseNotifsAvant\(notif\) && <p /.test(BLOC))
+  verifier('⚠️ déjà inscrit sans notifications : on le dit, et on propose de les rallumer',
+    /\(notif === 'a_demander' \|\| notif === 'bloque' \|\| notif === 'non_supporte'\) && \(/.test(BLOC)
+    && /Tes notifications sont coupées : on ne pourra pas te prévenir\./.test(BLOC))
+  {
+    const { etatNotifsAttente: etatN, phraseNotifsRefusees: refusN, phraseNotifsAvant: avantN } = await import('../lib/notifs-attente.js')
+    verifier('🔴 autorisées et abonnées : on inscrit directement',
+      etatN({ pret: true, supporte: true, permission: 'granted', optedIn: true }) === 'actif'
+      && etatN({ pret: true, natif: true, optedIn: true }) === 'actif')
+    verifier('🔴 autorisées mais désabonnées : on redemande, OneSignal n’enverrait rien',
+      etatN({ pret: true, supporte: true, permission: 'granted', optedIn: false }) === 'a_demander')
+    verifier('🔴 refusées dans le navigateur : bloqué, et on dit où les rouvrir',
+      etatN({ pret: true, supporte: true, permission: 'denied' }) === 'bloque' && /réglages/.test(avantN('bloque')))
+    verifier('🔴 un navigateur sans notifications (iPhone hors de l’app) renvoie vers l’app',
+      etatN({ pret: true, supporte: false, permission: 'default' }) === 'non_supporte' && /Installe l’app Yoppaa/.test(avantN('non_supporte')))
+    verifier('⚠️ l’app sans autorisation redemande, le module pas encore chargé tente au clic',
+      etatN({ pret: true, natif: true, optedIn: false }) === 'a_demander' && etatN({ pret: false }) === 'inconnu' && etatN(null) === 'inconnu')
+    verifier('⚠️ chaque échec dit quoi faire, et un inconnu ne reste pas muet',
+      refusN('refuse_os') !== refusN('incomplet') && refusN('non_supporte') !== refusN('erreur') && refusN(undefined).length > 20
+      && avantN('actif') === null)
+  }
   verifier('🔴 et prévient la fiche après une inscription comme après un retrait',
     /const relireEtPrevenir = async \(\) => \{ await relire\(\); onChange\?\.\(\) \}/.test(BLOC)
     && (BLOC.match(/await relireEtPrevenir\(\)/g) || []).length === 2)

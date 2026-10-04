@@ -82,7 +82,7 @@ function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 // La logique est sortie d'ici pour être testable : le calcul du contraste du
 // texte, en particulier, décide de la lisibilité de tout l'écran.
 
-export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = null, praticiens = [], horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onPrevenirFile, onFenetreChange }) {
+export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = null, praticiens = [], horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onPrevenirFile, onListerFile = null, onFenetreChange }) {
   // ⚠️ `commercant` FACULTATIF : sans lui, le vocabulaire du rendez-vous, donc
   // l'agenda d'un salon ne bouge pas d'un mot.
   const mots = motsReservation(commercant)
@@ -94,6 +94,10 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = 
   // fiche d'un rendez-vous, il ouvre SA LISTE : c'est de là qu'on choisit
   // ensuite la personne dont on veut le détail.
   const [seanceOuverte, setSeanceOuverte] = useState(null)
+  // Qui attend la séance ouverte (prénom et téléphone, Alex 04/10), chargé à la
+  // demande. `cle` dit pour quelle séance : en ouvrir une autre ne montre
+  // jamais la liste de la précédente.
+  const [fileVue, setFileVue] = useState(null)
   // 🔴 LE SERVICE D'UNE SALLE (Alex, 10/09 : « quand je clique il ne me donne
   // pas le résumé complet »). Toutes les tables de la soirée qui se chevauchent,
   // quels que soient leur format et leur heure d'arrivée, dans UNE liste.
@@ -1153,9 +1157,10 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = 
 
             {/* ─── LA LISTE D'ATTENTE DE CE COURS (I12, 03/10) ────────────────
                 🔴 ELLE ÉTAIT INVISIBLE : ouverte sur tous les cours, sans que
-                la commerçante sache que quelqu'un attendait. Un nombre, pas des
-                noms. Et quand une place est libre, le bouton prévient la file :
-                sur SON annulation, c'est elle qui décide (Alex, 06/09). */}
+                la commerçante sache que quelqu'un attendait. Le nombre, puis,
+                à sa demande, qui (prénom et téléphone, Alex 04/10) : elle peut
+                appeler quand une place se libère au dernier moment. Et quand
+                une place est libre, le bouton prévient la file. */}
             {attentes && (() => {
               const prestationId = seanceOuverte.inscrits[0]?.prestation_id
               const n = prestationId && seanceOuverte.jourDate
@@ -1164,11 +1169,46 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = 
               if (n === 0) return null
               const libres = Math.max(0, seanceOuverte.capacite - resumeSeance(seanceOuverte.inscrits).couverts)
               const avenir = isoDate(seanceOuverte.jourDate) >= isoDate(today)
+              const cle = cleSeance(prestationId, isoDate(seanceOuverte.jourDate), seanceOuverte.heure_debut)
+              const vue = fileVue?.cle === cle ? fileVue : null
+              const voirQui = async () => {
+                setFileVue({ cle, chargement: true })
+                try {
+                  const personnes = await onListerFile({ prestationId, date: isoDate(seanceOuverte.jourDate), heure: seanceOuverte.heure_debut })
+                  setFileVue({ cle, personnes })
+                } catch (e) {
+                  setFileVue({ cle, erreur: e?.message || 'Impossible de lire la liste d’attente pour le moment.' })
+                }
+              }
               return (
                 <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 12, background: `${T.main}0D`, border: `1.5px solid ${T.main}33` }}>
                   <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: T.deep }}>
                     {n === 1 ? '1 personne attend une place' : `${n} personnes attendent une place`}
                   </p>
+                  {onListerFile && !vue?.personnes && (
+                    <button onClick={voirQui} disabled={Boolean(vue?.chargement)}
+                      style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, color: T.main, fontWeight: 800, fontSize: 12.5, textDecoration: 'underline', cursor: vue?.chargement ? 'wait' : 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      {vue?.chargement ? 'Un instant…' : 'Voir qui attend'}
+                    </button>
+                  )}
+                  {vue?.erreur && <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 700, color: '#B91C1C' }}>{vue.erreur}</p>}
+                  {vue?.personnes && (
+                    vue.personnes.length === 0
+                      ? <p style={{ margin: '6px 0 0', fontSize: 12, color: T.muted }}>Plus personne n’attend ce cours.</p>
+                      : (
+                        <ol style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {vue.personnes.map(p => (
+                            <li key={p.rang} style={{ fontSize: 12.5, color: T.deep, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                              <span style={{ fontWeight: 800 }}>{p.rang}. {p.prenom || 'Prénom non renseigné'}</span>
+                              {p.telephone
+                                ? <a href={`tel:${p.telephone}`} style={{ color: T.main, fontWeight: 700 }}>{p.telephone}</a>
+                                : <span style={{ color: T.muted }}>sans téléphone</span>}
+                              {p.prevenu && <span style={{ color: T.muted }}>· notification envoyée</span>}
+                            </li>
+                          ))}
+                        </ol>
+                      )
+                  )}
                   {onPrevenirFile && avenir && libres > 0 && (
                     <button
                       onClick={() => { const s = seanceOuverte; setSeanceOuverte(null); onPrevenirFile({ prestationId, date: isoDate(s.jourDate), heure: s.heure_debut, nombre: n }) }}

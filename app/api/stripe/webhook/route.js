@@ -1305,7 +1305,12 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
     let basculeeIci = false
     if (isRefundTotal && !STATUTS_COMMANDE_ANNULEE.includes(cmd.statut)) {
       const { data: b, error: errBascule } = await supabase.from('commandes')
-        .update({ statut: 'annulee_commercant', annulee_at: new Date().toISOString(), annulation_motif: 'stripe' })
+        // ⚠️ `annulation_motif` N'ACCEPTE QUE QUATRE VALEURS (contrainte
+        // `commandes_annulation_motif_check`, posée hors des migrations du
+        // dépôt, lue en base le 05/10) : client, commercant, paiement_ko,
+        // cutoff_expire. « stripe » était refusé, et la commande restait en
+        // attente. Rembourser depuis Stripe EST un geste du commerce.
+        .update({ statut: 'annulee_commercant', annulee_at: new Date().toISOString(), annulation_motif: 'commercant' })
         .eq('id', cmd.id)
         .not('statut', 'in', `(${STATUTS_COMMANDE_ANNULEE.join(',')})`)
         .select('id')

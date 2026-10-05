@@ -1508,7 +1508,26 @@ verifier('et range la commande du bon côté',
   // Le webhook : un remboursement fait dans Stripe.
   const wh = sansProse(lire('app/api/stripe/webhook/route.js'))
   verifier('🔴 I5 un remboursement total fait dans Stripe = « annulée par le commerce »',
-    /statut: 'annulee_commercant', annulee_at: new Date\(\)\.toISOString\(\), annulation_motif: 'stripe'/.test(wh))
+    /statut: 'annulee_commercant', annulee_at: new Date\(\)\.toISOString\(\), annulation_motif: 'commercant'/.test(wh))
+  // 🔴 CETTE GARDE EXIGEAIT « stripe », UNE VALEUR QUE LA BASE REFUSE (test 3
+  // d'Alex, 05/10) : verte et complice. La contrainte
+  // `commandes_annulation_motif_check`, lue en base ce jour-là, n'accepte que
+  // ces quatre valeurs ; chaque motif écrit par le code doit en faire partie.
+  {
+    const MOTIFS_EN_BASE = ['client', 'commercant', 'paiement_ko', 'cutoff_expire']
+    const { readdirSync } = await import('node:fs')
+    const horsListe = []
+    for (const racine of ['app', 'lib']) {
+      for (const f of readdirSync(new URL(`../${racine}`, import.meta.url), { recursive: true })) {
+        if (!/\.js$/.test(String(f))) continue
+        const chemin = `${racine}/${String(f).replace(/\\/g, '/')}`
+        for (const m of sansProse(lire(chemin)).matchAll(/annulation_motif: '([^']*)'/g)) {
+          if (!MOTIFS_EN_BASE.includes(m[1])) horsListe.push(`${chemin} : ${m[1]}`)
+        }
+      }
+    }
+    verifier('🔴 I5 chaque motif d’annulation écrit est accepté par la base', horsListe.length === 0, horsListe.join(' | '))
+  }
   verifier('🔴 I5 et ses effets ne partent qu’une fois, sur une bascule lue',
     /basculeeIci = \(b \|\| \[\]\)\.length > 0/.test(wh) && /if \(basculeeIci\) \{\s*await effetsAnnulationCommande\(supabase, cmd/.test(wh))
   verifier('I5 pas d’email « commerce » pour une commande liée à un rendez-vous',

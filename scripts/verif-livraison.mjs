@@ -32,6 +32,10 @@ import { euros } from '../lib/montants.js'
 import { prenomClient, nomCompletClient } from '../lib/nom-client.js'
 import { reponseRefuse, motifDuRefus } from '../lib/verdict-reponse.js'
 import { estFermeExceptionnellement } from '../lib/ouverture.js'
+import {
+  COLONNES_BEST, decouperLigneCsv, indexColonnes, adresseDeLigne,
+  normaliserRecherche, baseNumero, estimerPositions,
+} from '../lib/best-adresse.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -185,6 +189,77 @@ verifier('le minimum porte sur le total des articles',
   verifier('I7 dernier jour du congé fermé', estFermeExceptionnellement(conge, '2026-10-12'))
   verifier('I7 le lendemain ouvert', !estFermeExceptionnellement(conge, '2026-10-13'))
   verifier('I7 un congé d\'un jour sans fin', estFermeExceptionnellement([{ date_debut: '2026-10-10T00:00:00' }], '2026-10-10'))
+}
+
+// ═══ LE RÉFÉRENTIEL BeSt ADDRESS (chantier zone, 05/10) ═══════════════════
+{
+  // Le découpage CSV : 4 172 lignes du vrai fichier ont une virgule entre
+  // guillemets ; un découpage naïf décale toutes les colonnes.
+  const champs = decouperLigneCsv('1,2,"Weiherstraße,Recht",,"dit ""x""",fin')
+  egal('BeSt une virgule entre guillemets reste dans le champ', champs, ['1', '2', 'Weiherstraße,Recht', '', 'dit "x"', 'fin'])
+  egal('BeSt une fin de ligne Windows est retirée', decouperLigneCsv('a,b\r'), ['a', 'b'])
+
+  const entete = COLONNES_BEST.join(',')
+  const idx = indexColonnes(entete)
+  let formatChange = false
+  try { indexColonnes(entete.replace('house_number', 'numero_maison')) } catch { formatChange = true }
+  verifier('🔴 BeSt un fichier dont une colonne a changé n\'écrit rien', formatChange)
+  verifier('BeSt l\'en-tête avec BOM est lu', indexColonnes('﻿' + entete)['EPSG:31370_x'] === 0)
+
+  const ligne = (o) => COLONNES_BEST.map(c => o[c] ?? '').join(',')
+  const base = {
+    'EPSG:31370_x': '166864.2', 'EPSG:4326_lat': '50.31175', 'EPSG:4326_lon': '4.60552',
+    house_number: '6 a', postcode: '5640', postname_fr: 'Biesme', municipality_name_fr: 'Mettet',
+    street_id: '7752850', streetname_fr: 'Rue de la Belle Haie', status: 'current',
+  }
+  const a = adresseDeLigne(decouperLigneCsv(ligne(base)), idx)
+  verifier('BeSt une adresse complète est lue', a && a.rue_id === 7752850 && a.code_postal === '5640' && a.localite === 'Biesme')
+  verifier('BeSt le numéro est normalisé (« 6 a » = « 6A »)', a?.numero === '6A')
+  // 🔴 LE PIÈGE DU FICHIER : 104 304 maisons ont 0,0, converti en un point en France.
+  const sansPos = adresseDeLigne(decouperLigneCsv(ligne({ ...base, 'EPSG:31370_x': '0.00000', 'EPSG:4326_lat': '49.29392', 'EPSG:4326_lon': '2.30551' })), idx)
+  verifier('🔴 BeSt le faux point en France n\'est JAMAIS gardé comme position', sansPos && sansPos.lat === null && sansPos.lng === null)
+  verifier('BeSt une adresse retirée est écartée', adresseDeLigne(decouperLigneCsv(ligne({ ...base, status: 'retired' })), idx) === null)
+  verifier('BeSt rue germanophone : le nom allemand prend le relais',
+    adresseDeLigne(decouperLigneCsv(ligne({ ...base, streetname_fr: '', streetname_de: 'Hauptstraße' })), idx)?.nom === 'Hauptstraße')
+
+  egal('BeSt recherche sans accents ni apostrophes', normaliserRecherche("Rue de l'Église"), 'rue de l eglise')
+  egal('BeSt recherche : ß devient ss', normaliserRecherche('Weiherstraße,Recht'), 'weiherstrasse recht')
+  egal('BeSt base d\'un numéro', [baseNumero('15A'), baseNumero('2/1'), baseNumero('B3')], [15, 2, null])
+
+  // L'estimation par les voisins (décision d'Alex, 05/10).
+  const rue = [
+    { numero: '13', lat: 50.0, lng: 4.0 },
+    { numero: '17', lat: 50.4, lng: 4.4 },
+    { numero: '14', lat: 51.0, lng: 5.0 },
+    { numero: '15', lat: null, lng: null },
+    { numero: '13A', lat: null, lng: null },
+    { numero: '1', lat: null, lng: null },
+    { numero: 'B', lat: null, lng: null },
+  ]
+  const res = estimerPositions(rue)
+  const de = (n) => res.find(m => m.numero === n)
+  verifier('BeSt le 15 tombe entre le 13 et le 17, du même côté (pas vers le 14)',
+    Math.abs(de('15')?.lat - 50.2) < 1e-9 && Math.abs(de('15')?.lng - 4.2) < 1e-9, JSON.stringify(de('15')))
+  verifier('BeSt une maison estimée le dit', de('15')?.origine_position === 'voisins' && de('13')?.origine_position === 'officielle')
+  verifier('BeSt le 13A reprend la position du 13', de('13A')?.lat === 50.0 && de('13A')?.lng === 4.0)
+  verifier('BeSt un seul voisin du même côté : on prend le plus proche', de('1')?.lat === 50.0)
+  verifier('BeSt un numéro sans chiffre reste sans position', !de('B'))
+  verifier('🔴 BeSt une rue sans aucune maison située ne range rien',
+    estimerPositions([{ numero: '1', lat: null, lng: null }, { numero: '3', lat: null, lng: null }]).length === 0)
+  verifier('BeSt l\'entrée n\'est pas modifiée', rue[3].lat === null)
+
+  // Le script d'import : les garde-fous qui empêchent d'abîmer une base.
+  const imp = lire('scripts/import-best-adresses.mjs')
+  const impCode = imp.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+  verifier('🔴 BeSt import : le projet annoncé doit être celui de l\'adresse',
+    /if \(!hote\.startsWith\(`\$\{PROJETS\[projet\]\}\.`\)\)/.test(impCode))
+  verifier('🔴 BeSt import : sans --ecrire, rien n\'est écrit',
+    impCode.indexOf('if (!ECRIRE) {') !== -1 && impCode.indexOf('if (!ECRIRE) {') < impCode.indexOf('createClient(url, cle'))
+  verifier('🔴 BeSt import : un fichier trop petit n\'écrit rien', /if \(lignesMaisons\.length < MINIMUM_MAISONS\) stop\(/.test(impCode))
+  verifier('🔴 BeSt import : on n\'efface qu\'APRÈS avoir tout écrit',
+    impCode.indexOf(".delete().lt('import_le', importLe)") > impCode.indexOf("await ecrireTout('best_adresses'"))
+  verifier('BeSt import : une écriture ratée sort avant l\'effacement',
+    /catch \(e\) \{[\s\S]{0,300}process\.exit\(1\)/.test(impCode))
 }
 
 // La route des statuts n'accepte que les deux états connus.

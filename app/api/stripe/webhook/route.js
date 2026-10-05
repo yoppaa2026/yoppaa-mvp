@@ -1294,7 +1294,8 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
     // remboursement au paiement ne le voyait jamais.
     const isRefundTotal = total
     // La trace du remboursement, toujours.
-    await supabase.from('commandes').update(updateData).eq('id', cmd.id)
+    const { error: errTrace } = await supabase.from('commandes').update(updateData).eq('id', cmd.id)
+    if (errTrace) throw new Error(`commande ${cmd.id} : trace du remboursement non écrite : ${errTrace.message}`)
     // 🔴 UN REMBOURSEMENT TOTAL QUE NOS ROUTES N'ONT PAS FAIT vient du TABLEAU
     // STRIPE, donc du commerce (I5, 05/10). Il devenait « Annulée par client »,
     // sans email, sans stock rendu. Nos deux routes d'annulation basculent la
@@ -1303,11 +1304,15 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
     // ⚠️ LA BASCULE EST FILTRÉE ET LUE : un webhook rejoué ne rend rien deux fois.
     let basculeeIci = false
     if (isRefundTotal && !STATUTS_COMMANDE_ANNULEE.includes(cmd.statut)) {
-      const { data: b } = await supabase.from('commandes')
+      const { data: b, error: errBascule } = await supabase.from('commandes')
         .update({ statut: 'annulee_commercant', annulee_at: new Date().toISOString(), annulation_motif: 'stripe' })
         .eq('id', cmd.id)
         .not('statut', 'in', `(${STATUTS_COMMANDE_ANNULEE.join(',')})`)
         .select('id')
+      // 🔴 L'ERREUR SE LIT (05/10, test 3 d'Alex) : elle était jetée, et la
+      // commande restait « en attente » sans un mot, ni email ni trace. On
+      // lève : l'événement passe en échec et Stripe le renverra.
+      if (errBascule) throw new Error(`commande ${cmd.id} : bascule « annulée par le commerce » refusée : ${errBascule.message}`)
       basculeeIci = (b || []).length > 0
     }
     if (basculeeIci) {

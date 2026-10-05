@@ -1552,7 +1552,8 @@ export default function Dashboard() {
     if (!id) return
     const { data } = await supabase
       .from('creneaux_blocages')
-      .select('id, creneau_id, date_blocage')
+      // I7 (05/10) : la tournée fermée vit dans la même table, sa colonne à elle.
+      .select('id, creneau_id, livraison_creneau_id, date_blocage')
       .eq('commercant_id', id)
     setBlocages(data || [])
   }, [])
@@ -2244,13 +2245,18 @@ export default function Dashboard() {
   // bloqué côté serveur. Ici, on ne fait que cacher et informer. Un onglet
   // client resté ouvert depuis dix minutes ne verra pas ce blocage, et c'est
   // exactement pour lui que la garde serveur existe.
+  //
+  // ⚠️ ET LA TOURNÉE DE LIVRAISON DEPUIS I7 (05/10) : même table, colonne
+  // `livraison_creneau_id`. La vue affichée dit laquelle des deux on ferme.
   async function basculerBlocageCreneau(creneauId, estBloque) {
     if (!commercant?.id || !creneauId) return
+    const champ = vueMode === 'livraison' ? 'livraison_creneau_id' : 'creneau_id'
     if (estBloque) {
       const { error } = await supabase
         .from('creneaux_blocages')
         .delete()
-        .eq('creneau_id', creneauId)
+        .eq('commercant_id', commercant.id)
+        .eq(champ, creneauId)
         .eq('date_blocage', jourActif)
       // ⚠️ `alert` ET NON `toast` : ce fichier n'a pas de toast, et `verif:undef`
       // l'a attrapé. Sans lui, la fonction aurait planté au premier clic, sans
@@ -2260,7 +2266,7 @@ export default function Dashboard() {
     } else {
       const { error } = await supabase
         .from('creneaux_blocages')
-        .insert({ commercant_id: commercant.id, creneau_id: creneauId, date_blocage: jourActif })
+        .insert({ commercant_id: commercant.id, [champ]: creneauId, date_blocage: jourActif })
       // ⚠️ 23505 = la contrainte d'unicité. Deux taps rapides, ou deux
       // appareils, et le second arrive après le premier : ce n'est pas une
       // erreur à montrer, le créneau est fermé, c'est ce qu'il voulait.
@@ -3053,7 +3059,12 @@ export default function Dashboard() {
     : commandesDuJourTous
 
   // Les créneaux que le commerçant a fermés lui-même, POUR LE JOUR AFFICHÉ.
-  const blocagesDuJour = indexBlocages(blocages.filter(b => b.date_blocage === jourActif))
+  // ⚠️ La colonne lue suit la vue : une tournée et un créneau de retrait ne
+  // partagent pas leurs identifiants (I7, 05/10).
+  const blocagesDuJour = indexBlocages(
+    blocages.filter(b => b.date_blocage === jourActif),
+    vueMode === 'livraison' ? 'livraison_creneau_id' : 'creneau_id',
+  )
 
   // Livraisons du jour encore à livrer, GROUPÉES PAR CRÉNEAU.
   //
@@ -4134,9 +4145,9 @@ export default function Dashboard() {
                         const couleur = bloque ? '#6B7280' : complet ? T.rouge.badge : bientot ? T.orange.badge : presque ? '#CA8A04' : T.vert.badge
                         const ratio = capacite > 0 ? Math.min(1, utiliseEff / capacite) : 0
                         const etat = etatCreneau(rempli)
-                        // Le blocage ne concerne que les créneaux de RETRAIT :
-                        // les tournées vivent dans une autre table.
-                        const peutBloquer = vueMode !== 'livraison' && !modeHistorique
+                        // Créneau de retrait OU tournée depuis I7 (05/10).
+                        const peutBloquer = !modeHistorique
+                        const estTournee = vueMode === 'livraison'
                         return (
                           <div key={creneau.id} style={{ minWidth: 98, flexShrink: 0, borderRadius: 10, padding: '8px 10px', background: bloque ? '#F3F4F6' : complet ? T.rouge.cardBg : '#FBFAFF', border: `1.5px solid ${couleur}33` }}>
                             <p style={{ fontSize: '0.72rem', fontWeight: 800, color: T.ink, letterSpacing: '-0.2px' }}>
@@ -4162,9 +4173,13 @@ export default function Dashboard() {
                             {peutBloquer && (
                               <button type="button"
                                 onClick={() => basculerBlocageCreneau(creneau.id, bloque)}
-                                title={bloque
-                                  ? 'Rouvrir ce créneau aux commandes Yoppaa'
-                                  : 'Ne plus accepter de commande sur ce créneau. Celles déjà prises restent.'}
+                                title={estTournee
+                                  ? (bloque
+                                    ? 'Rouvrir cette tournée aux livraisons Yoppaa'
+                                    : 'Ne plus accepter de livraison sur cette tournée. Celles déjà prises restent.')
+                                  : (bloque
+                                    ? 'Rouvrir ce créneau aux commandes Yoppaa'
+                                    : 'Ne plus accepter de commande sur ce créneau. Celles déjà prises restent.')}
                                 style={{ width: '100%', marginTop: 6, padding: '4px 0', borderRadius: 7, border: `1px solid ${bloque ? T.vert.badge + '55' : T.pale}`, background: bloque ? '#F0FDF4' : '#fff', color: bloque ? T.vert.badge : T.muted, fontWeight: 800, fontSize: '0.58rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.2px' }}>
                                 {bloque ? 'Rouvrir' : 'Fermer'}
                               </button>

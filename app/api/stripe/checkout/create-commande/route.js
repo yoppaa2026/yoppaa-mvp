@@ -44,9 +44,9 @@ import { modesPaiementOuverts } from '@/lib/modes-paiement'
 import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
-import { calculerCapaciteCreneau, creneauCommandable, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
+import { commandeDeborde, capaciteDuCreneau, creneauCommandable, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
-import { joursRetraitBoutique } from '@/lib/ouverture'
+import { joursRetraitBoutique, estFermeExceptionnellement } from '@/lib/ouverture'
 import { jourPlus } from '@/lib/statut-commerce'
 import { delaiDuPanier, refusDeMelange, pretA, premierJourBoutique, libelleDuree, libelleMoment } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
@@ -217,7 +217,26 @@ export async function POST(request) {
     // Les congés et fermetures ponctuelles du commerçant. Relevés une seule
     // fois, lus deux fois : par la date de retrait en boutique, puis par le
     // délai de préparation, plus bas, quand le panier existe enfin.
+    //
+    // 🔴 I7 (audit livraison, 05/10) : ILS N'ÉTAIENT RELUS QUE POUR LA
+    // BOUTIQUE. Un retrait ou une livraison de l'alimentaire tombait en plein
+    // congé : seule la fiche cachait le jour, un onglet ouvert d'avant le congé
+    // passait. Relevés maintenant pour tout ce qui a un jour (pas le colis).
+    //
+    // ⚠️ ERREUR LUE, ET ON REFUSE : sans la liste, on ne sait pas si le
+    // commerce est en congé, et accepter serait parier sur la réponse.
     let fermeturesCommercant = []
+    if (!estExpedition) {
+      const { data: lues, error: errFerm } = await supabase
+        .from('fermetures_exceptionnelles')
+        .select('date_debut, date_fin')
+        .eq('commercant_id', commercant.id)
+      if (errFerm) {
+        console.error('[create-commande] lecture fermetures KO', errFerm)
+        return NextResponse.json({ ok: false, error: 'Impossible de vérifier les jours d\'ouverture. Réessaie dans un instant.' }, { status: 500 })
+      }
+      fermeturesCommercant = lues || []
+    }
 
     if (estBoutique) {
       // Monde boutique : détail ET vitrine (vente de produits au salon, 31/07)
@@ -248,15 +267,9 @@ export async function POST(request) {
       // ⚠️ Un COLIS n'a pas de jour de retrait : il part quand le commerçant
       // l'emballe. On ne lui applique aucune de ces règles.
       if (estRetraitBoutique) {
-        // ⚠️ ELLES SORTENT DE CE BLOC DEPUIS LE 04/09 : le contrôle du délai
-        // par article en a besoin plus bas, et le panier n'est construit
-        // qu'après. Deux relevés auraient interrogé la base pour la même
-        // réponse, et rien n'aurait garanti qu'ils la lisent au même instant.
-        const { data: lues } = await supabase
-          .from('fermetures_exceptionnelles')
-          .select('date_debut, date_fin')
-          .eq('commercant_id', commercant.id)
-        fermeturesCommercant = lues || []
+        // ⚠️ LES FERMETURES SONT RELEVÉES PLUS HAUT, pour tous les modes qui
+        // ont un jour (I7, 05/10). Deux relevés auraient interrogé la base pour
+        // la même réponse, sans garantie de la lire au même instant.
         // ⚠️ HEURE BELGE, PAS CELLE DU SERVEUR. Vercel tourne en temps
         // universel : `jourLocalISO(new Date())` y rendrait la veille entre
         // minuit et 2h du matin, et refuserait une commande parfaitement
@@ -622,6 +635,16 @@ export async function POST(request) {
             : `Il est trop tard pour ce créneau : ${commercant.nom} demande de commander au moins ${etatCreneau.heures} h à l'avance. Choisis un créneau plus tardif.`
         return NextResponse.json({ ok: false, error: message, creneau_indisponible: true }, { status: 409 })
       }
+      // 🔴 I7 : LE CONGÉ, côté serveur. La boutique a sa propre borne
+      // (`joursRetraitBoutique`), appliquée plus haut ; ici le retrait et la
+      // livraison de l'alimentaire, qui n'en avaient aucune.
+      if (estFermeExceptionnellement(fermeturesCommercant, date_commande)) {
+        return NextResponse.json({
+          ok: false,
+          error: `${commercant.nom} est fermé ce jour-là. Choisis un autre jour.`,
+          creneau_indisponible: true,
+        }, { status: 409 })
+      }
     }
 
     // ─── 4.7) LE DÉLAI DE PRÉPARATION, ET L'HORIZON ────────────────────────
@@ -735,24 +758,39 @@ export async function POST(request) {
     // celle qu'on est en train de créer. C'est la règle d'Alex, « ce qui est
     // vendu reste vendu ».
     //
-    // ⚠️ ELLE NE VAUT QUE POUR LE RETRAIT. `creneaux_blocages.creneau_id` pointe
-    // `creneaux` ; les tournées de livraison vivent dans `livraison_creneaux` et
-    // ne sont donc PAS couvertes. Ce n'est pas un oubli, c'est nommé : fermer
-    // une tournée demande une colonne de plus dans la table de blocage, donc
-    // une seconde migration. Inscrit dans la todo.
-    if (creneau && !estBoutique && !estLivraison) {
-      const { data: blocage } = await supabase
+    // ⚠️ ET POUR LES TOURNÉES DEPUIS I7 (05/10) : une ligne de blocage désigne
+    // soit un créneau de retrait (`creneau_id`), soit une tournée
+    // (`livraison_creneau_id`).
+    //
+    // 🔴 FILTRÉE SUR LE COMMERCE, PAS SEULEMENT SUR LE CRÉNEAU. La policy
+    // d'écriture ne vérifiait pas à qui appartenait le créneau : une ligne au
+    // nom d'un commerce pouvait pointer le créneau d'un autre, et cette garde,
+    // qui cherchait par créneau seul, fermait le créneau de l'autre. La
+    // migration I7 corrige la policy ; ce filtre ferme la porte de ce côté-ci.
+    //
+    // ⚠️ ERREUR LUE : un blocage qu'on n'a pas pu lire n'est pas une absence
+    // de blocage.
+    if (creneau && !estBoutique) {
+      const colonneBlocage = estLivraison ? 'livraison_creneau_id' : 'creneau_id'
+      const { data: blocage, error: errBlocage } = await supabase
         .from('creneaux_blocages')
         .select('id')
-        .eq('creneau_id', creneau.id)
+        .eq('commercant_id', commercant.id)
+        .eq(colonneBlocage, creneau.id)
         .eq('date_blocage', date_commande)
         .maybeSingle()
+      if (errBlocage) {
+        console.error('[create-commande] lecture blocage KO', errBlocage)
+        return NextResponse.json({ ok: false, error: 'Impossible de vérifier ce créneau. Réessaie dans un instant.' }, { status: 500 })
+      }
       if (blocage) {
         return NextResponse.json({
           ok: false,
           // Le commerçant n'a pas à se justifier auprès du client, et son motif
           // est une note interne : on dit le fait, pas la raison.
-          error: `${commercant.nom} ne prend plus de commande sur ce créneau. Choisis-en un autre.`,
+          error: estLivraison
+            ? `${commercant.nom} ne prend plus de livraison sur cette tournée. Choisis-en une autre.`
+            : `${commercant.nom} ne prend plus de commande sur ce créneau. Choisis-en un autre.`,
           creneau_indisponible: true,
         }, { status: 409 })
       }
@@ -779,54 +817,70 @@ export async function POST(request) {
     // `calculerCapaciteCreneau` compare `utilise >= capacite` ; avec une
     // capacité nulle ou absente, `null` devient 0 et la comparaison est vraie
     // pour n'importe quelle commande. Sans cette garde, un commerçant qui n'a
-    // jamais rempli le champ verrait TOUTES ses commandes refusées.
-    const capaciteFixee = ((creneau?.mode_capacite || commercant.mode_capacite) === 'temps')
-      ? Number(creneau?.capacite_temps) > 0
-      : Number(creneau?.max_commandes) > 0
-    if (creneau && !estBoutique && capaciteFixee) {
+    // jamais rempli le champ verrait TOUTES ses commandes refusées. C'est
+    // `capaciteDuCreneau` qui la porte : capacité vide ou nulle = `null`.
+    //
+    // 🔴 I8 (05/10) : CE CONTRÔLE N'EST PLUS QU'UN REFUS RAPIDE. Compter puis
+    // insérer en deux appels laisse passer deux clients qui paient à la même
+    // seconde. La décision finale est prise SOUS VERROU par le déclencheur
+    // `commandes_capacite_creneau`, à l'insertion (voir plus bas, CRENEAU_COMPLET).
+    // Les deux appliquent `commandeDeborde` : déjà pris + elle > capacité.
+    //
+    // Ce que la commande ajoute au créneau en mode temps. Calculé ici pour
+    // tous les créneaux : la commande le garde (`temps_prepa_minutes`), et le
+    // déclencheur le lit, ses lignes n'existant pas encore à l'insertion.
+    // Un article sans temps compte 1 minute, comme `charge_creneaux_par_jour`.
+    const tempsCommande = lignes.reduce((s, l) => {
+      const art = (articlesData || []).find(a => String(a.id) === String(l.article_id))
+      return s + Number(l.quantite || 0) * Number(art?.temps_prepa ?? 1)
+    }, 0)
+    const { modeTemps, capacite: capaciteReglee } = capaciteDuCreneau(creneau, commercant.mode_capacite)
+    if (creneau && !estBoutique && capaciteReglee !== null) {
       const colonneCreneau = estLivraison ? 'creneau_livraison_id' : 'creneau_id'
-      const { data: cmdMemeCreneau } = await supabase
+      const { data: cmdMemeCreneau, error: errOccupe } = await supabase
         .from('commandes')
-        .select('id')
+        .select('id, temps_prepa_minutes')
         .eq('commercant_id', commercant.id)
         .eq(colonneCreneau, creneau.id)
         .eq('date_commande', date_commande)
         .in('statut', STATUTS_OCCUPENT_CRENEAU)
+      if (errOccupe) {
+        console.error('[create-commande] lecture capacite KO', errOccupe)
+        return NextResponse.json({ ok: false, error: 'Impossible de vérifier ce créneau. Réessaie dans un instant.' }, { status: 500 })
+      }
       const occupantes = cmdMemeCreneau || []
 
-      // Mode « temps » : le plafond est une durée, pas un nombre de commandes.
-      // Il faut donc la somme des temps de préparation déjà engagés, plus celui
-      // de la commande en cours de création.
-      const modeTemps = (creneau.mode_capacite || commercant.mode_capacite) === 'temps'
+      // Mode « temps » : le plafond est une durée. Le temps figé sur la
+      // commande d'abord ; les commandes d'avant I8 n'en ont pas, on le
+      // recalcule depuis leurs lignes.
       let tempsCumul = 0
-      if (modeTemps && occupantes.length > 0) {
-        const { data: lignesExistantes } = await supabase
-          .from('commande_articles')
-          .select('quantite, article:articles(temps_prepa)')
-          .in('commande_id', occupantes.map(c => c.id))
-        for (const l of lignesExistantes || []) {
-          tempsCumul += Number(l.quantite || 0) * Number(l.article?.temps_prepa ?? 1)
+      if (modeTemps) {
+        const sansTemps = []
+        for (const c of occupantes) {
+          if (c.temps_prepa_minutes === null || c.temps_prepa_minutes === undefined) sansTemps.push(c.id)
+          else tempsCumul += Number(c.temps_prepa_minutes) || 0
+        }
+        if (sansTemps.length > 0) {
+          const { data: lignesExistantes, error: errLignes } = await supabase
+            .from('commande_articles')
+            .select('quantite, article:articles(temps_prepa)')
+            .in('commande_id', sansTemps)
+          if (errLignes) {
+            console.error('[create-commande] lecture lignes capacite KO', errLignes)
+            return NextResponse.json({ ok: false, error: 'Impossible de vérifier ce créneau. Réessaie dans un instant.' }, { status: 500 })
+          }
+          for (const l of lignesExistantes || []) {
+            tempsCumul += Number(l.quantite || 0) * Number(l.article?.temps_prepa ?? 1)
+          }
         }
       }
-      // Ce que la commande en cours ajoute au créneau.
-      const tempsDemande = modeTemps
-        ? lignes.reduce((s, l) => {
-            const art = (articlesData || []).find(a => String(a.id) === String(l.article_id))
-            return s + Number(l.quantite || 0) * Number(art?.temps_prepa ?? 1)
-          }, 0)
-        : 0
 
-      const etat = calculerCapaciteCreneau(
-        {
-          ...creneau,
-          count: occupantes.length + 1,
-          temps_cumul: tempsCumul + tempsDemande,
-        },
-        { modeCapaciteDefaut: commercant.mode_capacite }
-      )
-      // `complet` est calculé EN INCLUANT la commande en cours : s'il est vrai,
-      // c'est que celle-ci ferait déborder le créneau.
-      if (etat.complet) {
+      if (commandeDeborde(creneau, {
+        modeCapaciteDefaut: commercant.mode_capacite,
+        existantes: occupantes.length,
+        tempsExistant: tempsCumul,
+        tempsDemande: tempsCommande,
+      })) {
         return NextResponse.json({
           ok: false,
           error: estLivraison
@@ -956,9 +1010,23 @@ export async function POST(request) {
         statut: 'paiement_en_attente',
         date_commande,
         paye_en_ligne: false,
+        // I8 : lu par le déclencheur de capacité, qui ne voit pas encore les
+        // lignes de cette commande. Sans créneau (boutique), rien à mesurer.
+        temps_prepa_minutes: estBoutique ? null : tempsCommande,
       })
       .select()
       .single()
+    // 🔴 I8 : LE REFUS SOUS VERROU. Le contrôle plus haut a vu une place,
+    // mais un autre client l'a prise entre-temps : même réponse que lui.
+    if (errInsert && String(errInsert.message || '').includes('CRENEAU_COMPLET')) {
+      return NextResponse.json({
+        ok: false,
+        error: estLivraison
+          ? 'Ce créneau de livraison vient d\'être complet. Choisis-en un autre.'
+          : 'Ce créneau vient d\'être complet. Choisis-en un autre.',
+        creneau_complet: true,
+      }, { status: 409 })
+    }
     if (errInsert || !commande) {
       console.error('[create-commande] insert commande KO', errInsert)
       return NextResponse.json({ ok: false, error: `Création commande échouée : ${errInsert?.message || 'erreur inconnue'}` }, { status: 500 })

@@ -6,7 +6,7 @@
 // pouvait servir, soit en accepter plus qu'on ne peut préparer.
 
 import { normaliserTelephone, afficherTelephone, appliquerCredit, libelleRecompense, presetFidelite } from '../lib/fidelite.js'
-import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe, remplissageCreneaux, STATUTS_OCCUPENT_CRENEAU } from '../lib/creneaux.js'
+import { calculerCapaciteCreneau, commandeDeborde, creneauCommandable, jourSemaineDe, remplissageCreneaux, STATUTS_OCCUPENT_CRENEAU } from '../lib/creneaux.js'
 import { brusselsInstant, jourLocalISO, jourSemaineLocal } from '../lib/timezone.js'
 import { estFoodTruck } from '../lib/types-commerce.js'
 import { readFileSync } from 'node:fs'
@@ -329,9 +329,55 @@ verifier('5 commandes sur 5 : complet',
 // La route doit donc vérifier la capacité, ET ne le faire que si elle est fixée.
 const route = lireBrut('app/api/stripe/checkout/create-commande/route.js')
 const routeCode = route.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
-verifier('la route contrôle la capacité côté serveur', /calculerCapaciteCreneau\(/.test(routeCode))
-verifier('elle ne contrôle que si une capacité est fixée', /capaciteFixee/.test(routeCode))
-verifier('elle compte la commande en cours de création', /count: occupantes\.length \+ 1/.test(routeCode))
+// 🔴 REPOINTÉES LE 05/10 (audit I8). La garde exigeait `count: occupantes.length
+// + 1` passé à `calculerCapaciteCreneau`, dont `complet` veut dire « plein » :
+// 4 commandes sur 5 plus la nouvelle donnaient 5 sur 5, donc REFUS. La 5e place
+// ne se vendait jamais, et un créneau réglé sur 1 ne prenait rien. La garde
+// était VERTE ET COMPLICE (reference_garde_desarmee). La règle est maintenant
+// « la commande DÉBORDERAIT », éprouvée par exécution juste en dessous.
+verifier('la route contrôle la capacité côté serveur', /commandeDeborde\(creneau, \{/.test(routeCode))
+verifier('elle ne contrôle que si une capacité est fixée',
+  /capaciteDuCreneau\(creneau, commercant\.mode_capacite\)/.test(routeCode) && /capaciteReglee !== null/.test(routeCode))
+verifier('elle passe les commandes DÉJÀ prises, sans la nouvelle', /existantes: occupantes\.length,/.test(routeCode))
+verifier('🔴 elle ne compte plus la commande en cours deux fois', !/occupantes\.length \+ 1/.test(routeCode))
+verifier('🔴 I8 4 commandes sur 5 : la 5e passe',
+  !commandeDeborde({ max_commandes: 5 }, { existantes: 4 }))
+verifier('🔴 I8 5 commandes sur 5 : la 6e est refusée',
+  commandeDeborde({ max_commandes: 5 }, { existantes: 5 }))
+verifier('🔴 I8 un créneau réglé sur 1 prend sa première commande',
+  !commandeDeborde({ max_commandes: 1 }, { existantes: 0 }))
+verifier('I8 capacité vide : rien n\'est refusé',
+  !commandeDeborde({ max_commandes: null }, { existantes: 99 }) && !commandeDeborde({}, { existantes: 99 }))
+verifier('I8 capacité 0 : rien n\'est refusé (pas réglé)', !commandeDeborde({ max_commandes: 0 }, { existantes: 3 }))
+verifier('I8 mode temps : 20 + 10 sur 30 passe',
+  !commandeDeborde({ mode_capacite: 'temps', capacite_temps: 30 }, { tempsExistant: 20, tempsDemande: 10 }))
+verifier('I8 mode temps : 20 + 11 sur 30 est refusé',
+  commandeDeborde({ mode_capacite: 'temps', capacite_temps: 30 }, { tempsExistant: 20, tempsDemande: 11 }))
+verifier('I8 mode temps hérité du commerce',
+  commandeDeborde({ capacite_temps: 30, max_commandes: 99 }, { modeCapaciteDefaut: 'temps', tempsExistant: 31, existantes: 0 }))
+verifier('I8 mode du créneau prioritaire sur celui du commerce',
+  !commandeDeborde({ mode_capacite: 'commandes', max_commandes: 5, capacite_temps: 1 }, { modeCapaciteDefaut: 'temps', existantes: 0, tempsExistant: 50 }))
+// La décision finale est SOUS VERROU, à l'insertion : le refus rapide ne suffit
+// pas contre deux paiements à la même seconde.
+verifier('🔴 I8 la route écrit le temps de la commande pour le déclencheur',
+  /temps_prepa_minutes: estBoutique \? null : tempsCommande/.test(routeCode))
+verifier('🔴 I8 la route traduit le refus sous verrou en 409',
+  /errInsert && String\(errInsert\.message \|\| ''\)\.includes\('CRENEAU_COMPLET'\)[\s\S]{0,400}creneau_complet: true[\s\S]{0,40}status: 409/.test(routeCode))
+{
+  const sql = lireBrut('migrations/MIGRATION_I7_I8_TOURNEE_FERMEE_CAPACITE.sql')
+  const fn = sql.slice(sql.indexOf('FUNCTION public.commandes_capacite_creneau()'), sql.indexOf('REVOKE ALL ON FUNCTION public.commandes_capacite_creneau'))
+  verifier('I8 le déclencheur se découpe', fn.length > 500)
+  verifier('🔴 I8 il verrouille (créneau, jour)', /pg_advisory_xact_lock\(\s*hashtextextended\('capacite:' \|\| v_creneau::text \|\| ':' \|\| NEW\.date_commande::date::text/.test(fn))
+  verifier('🔴 I8 même règle que la route (déborderait)',
+    /IF v_nb \+ 1 > v_max THEN/.test(fn) && /IF v_cumul \+ COALESCE\(NEW\.temps_prepa_minutes, 1\) > v_temps THEN/.test(fn))
+  verifier('I8 il ne vérifie que si une capacité est réglée',
+    /IF COALESCE\(v_temps, 0\) <= 0 THEN RETURN NEW;/.test(fn) && /IF COALESCE\(v_max, 0\) <= 0 THEN RETURN NEW;/.test(fn))
+  // Mêmes statuts occupants que le serveur, comptés deux fois (nombre et temps).
+  const statutsSql = `'${STATUTS_OCCUPENT_CRENEAU.join("', '")}'`
+  verifier('I8 mêmes statuts occupants que lib/creneaux.js',
+    fn.split(`c.statut IN (${statutsSql})`).length - 1 === 2 && fn.includes(`NEW.statut NOT IN (${statutsSql})`))
+  verifier('I8 il est VOLATILE (image neuve après le verrou)', /\bVOLATILE\b/.test(fn))
+}
 verifier('elle se limite au même jour', /\.eq\('date_commande', date_commande\)/.test(routeCode))
 verifier('elle exclut les annulées via la liste partagée', /STATUTS_OCCUPENT_CRENEAU/.test(routeCode))
 verifier('elle traite aussi la livraison', /creneau_livraison_id.*creneau_id|colonneCreneau/.test(routeCode))

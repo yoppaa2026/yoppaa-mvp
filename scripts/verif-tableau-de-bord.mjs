@@ -244,6 +244,11 @@ const verifie = (nom, cond, detail = '') => {
   verifie('liste vide → aucun blocage', indexBlocages([]).size === 0)
   verifie('liste absente → aucun blocage', indexBlocages(null).size === 0)
   verifie('une entrée sans créneau est ignorée', indexBlocages([{ date_blocage: 'x' }]).size === 0)
+  // I7 (05/10) : la tournée a sa colonne, et les deux ne se mélangent pas.
+  const mixte = [{ creneau_id: 'R1', date_blocage: 'j' }, { livraison_creneau_id: 'T1', date_blocage: 'j' }]
+  verifie('I7 la tournée fermée est reconnue par sa colonne', indexBlocages(mixte, 'livraison_creneau_id').has('T1'))
+  verifie('I7 un créneau de retrait n\'entre pas dans les tournées', !indexBlocages(mixte, 'livraison_creneau_id').has('R1'))
+  verifie('I7 une tournée n\'entre pas dans le retrait', !indexBlocages(mixte).has('T1') && indexBlocages(mixte).has('R1'))
 
   const libre = { capacite: 5, utilise: 2, utiliseEff: 2, complet: false, places: 3, bientot: false, presque: true }
   const ferme = appliquerBlocage(libre, true)
@@ -287,10 +292,11 @@ const verifie = (nom, cond, detail = '') => {
   const capOuverte = calculerCapaciteCreneau({ max_commandes: 5, count: 2 })
   verifie('un créneau sans drapeau reste ouvert',
     capOuverte.complet === false && capOuverte.bloque === false)
-  // ⚠️ LE DÉFAUT DOIT ÊTRE SÛR : les tournées de livraison passent par la même
-  // fonction sans jamais connaître les blocages, qui ne valent que pour le
-  // retrait. Une absence, ou toute valeur qui n'est pas exactement `true`, ne
-  // doit fermer rien du tout (reference_deux_formes_absence).
+  // ⚠️ LE DÉFAUT DOIT ÊTRE SÛR : un créneau qui arrive sans le drapeau (cache
+  // ancien, appelant qui ne connaît pas les blocages) ne doit pas se fermer.
+  // Une absence, ou toute valeur qui n'est pas exactement `true`, ne doit
+  // fermer rien du tout (reference_deux_formes_absence). Les tournées
+  // connaissent leurs blocages depuis I7 (05/10).
   verifie('un drapeau absent ne ferme rien',
     calculerCapaciteCreneau({ max_commandes: 5, count: 0, bloque: undefined }).complet === false)
   verifie('un drapeau nul non plus',
@@ -311,8 +317,20 @@ const verifie = (nom, cond, detail = '') => {
   const bloc = debut === -1 ? '' : route.slice(debut, route.indexOf('4.7)', debut))
   verifie('la garde serveur se découpe', bloc.length > 300)
   verifie('🔴 le serveur interroge les blocages', /from\('creneaux_blocages'\)/.test(bloc))
+  // ⚠️ REPOINTÉE LE 05/10 (I7) : la colonne suit le mode (créneau de retrait
+  // OU tournée), et la recherche est filtrée sur le COMMERCE. Sans ce filtre,
+  // une ligne écrite au nom d'un commerce sur le créneau d'un autre fermait
+  // le créneau de l'autre.
   verifie('🔴 pour CE créneau et CE jour',
-    /\.eq\('creneau_id', creneau\.id\)/.test(bloc) && /\.eq\('date_blocage', date_commande\)/.test(bloc))
+    /colonneBlocage = estLivraison \? 'livraison_creneau_id' : 'creneau_id'/.test(bloc)
+      && /\.eq\(colonneBlocage, creneau\.id\)/.test(bloc)
+      && /\.eq\('date_blocage', date_commande\)/.test(bloc))
+  verifie('🔴 I7 et CHEZ CE commerce seulement', /\.eq\('commercant_id', commercant\.id\)/.test(bloc),
+    'un blocage pointant le créneau d\'un autre commerce le fermerait')
+  verifie('🔴 I7 la garde vaut aussi pour la livraison',
+    /if \(creneau && !estBoutique\) \{/.test(bloc) && !/!estLivraison\) \{/.test(bloc),
+    'la tournée fermée resterait commandable')
+  verifie('I7 une erreur de lecture n\'est pas une absence de blocage', /if \(errBlocage\)/.test(bloc))
   verifie('🔴 et il refuse la commande', /status: 409/.test(bloc))
   // ⚠️ MESURÉ : les gardes ci-dessus jugeaient la REQUÊTE et le CODE DE REFUS,
   // pas la CONDITION entre les deux. En neutralisant le `if`, le serveur
@@ -359,9 +377,15 @@ const verifie = (nom, cond, detail = '') => {
   // est la seule qui marche pour la fiche publique). Le `motif` est une note
   // que le commerçant écrit POUR LUI — « je suis débordé », « je pars tôt ».
   // La fiche ne doit demander que ce dont elle a besoin.
+  // ⚠️ REPOINTÉE LE 05/10 (I7) : la colonne de la tournée s'ajoute, le motif
+  // reste dehors.
   verifie('la fiche ne rapatrie PAS le motif interne du commerçant',
-    /from\('creneaux_blocages'\)\.select\('creneau_id, date_blocage'\)/.test(fiche),
+    /from\('creneaux_blocages'\)\.select\('creneau_id, livraison_creneau_id, date_blocage'\)/.test(fiche),
     'le motif partirait dans le navigateur du client')
+  verifie('🔴 I7 la fiche ferme aussi les TOURNÉES',
+    /construireJoursDispos\(data\.commercant, data\.livraisonCreneaux \|\| \[\], data\.fermetures, data\.chargeLivraison \|\| \{\}, data\.blocagesLivraison \|\| \[\]\)/.test(fiche)
+      && /blocagesLivraison: \(blocagesCren \|\| \[\]\)\s*\.filter\(b => b\.livraison_creneau_id\)/.test(fiche),
+    'une tournée fermée resterait proposée au client')
 
   const dash = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
   const bascule = dash.slice(dash.indexOf('async function basculerBlocageCreneau'), dash.indexOf('async function annulerRemise'))
@@ -378,9 +402,15 @@ const verifie = (nom, cond, detail = '') => {
   // ⚠️ CES DEUX GARDES MANQUAIENT, ET LA MUTATION LES A RÉCLAMÉES. Sans elles,
   // le blocage pouvait valoir pour TOUS LES JOURS, ou n'être plus appliqué du
   // tout au remplissage, sans que rien ne rougisse.
+  // ⚠️ REPOINTÉE LE 05/10 (I7) : l'index lit la colonne de la vue affichée.
   verifie('🔴 le blocage est filtré sur LE JOUR AFFICHÉ',
-    /indexBlocages\(blocages\.filter\(b => b\.date_blocage === jourActif\)\)/.test(dash),
-    'un blocage vaudrait pour tous les jours')
+    /indexBlocages\(\s*blocages\.filter\(b => b\.date_blocage === jourActif\),\s*vueMode === 'livraison' \? 'livraison_creneau_id' : 'creneau_id',\s*\)/.test(dash),
+    'un blocage vaudrait pour tous les jours, ou pour la mauvaise table')
+  verifie('🔴 I7 le geste écrit la colonne de la vue',
+    /const champ = vueMode === 'livraison' \? 'livraison_creneau_id' : 'creneau_id'/.test(bascule)
+      && /\[champ\]: creneauId/.test(bascule) && /\.eq\(champ, creneauId\)/.test(bascule))
+  verifie('I7 le bouton existe aussi sur les tournées',
+    /const peutBloquer = !modeHistorique\r?\n/.test(dash))
   verifie('et il est bien appliqué au remplissage',
     /appliquerBlocage\(c, blocagesDuJour\.has\(c\.creneau\?\.id\)\)/.test(dash))
 }

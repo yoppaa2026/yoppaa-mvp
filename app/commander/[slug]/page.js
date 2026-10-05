@@ -1801,7 +1801,7 @@ export default function CommanderSlug() {
     // lirait l'ancienne, c'est-à-dire vide.
     buildJoursDispos(data.commercant, data.creneaux, data.fermetures, data.chargeCreneaux || {}, data.blocagesCreneaux || [])
     setLivraisonConfig(data.livraisonConfig || null)
-    setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures, data.chargeLivraison || {}))
+    setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures, data.chargeLivraison || {}, data.blocagesLivraison || []))
     setFoodtruckEmps(data.foodtruckEmps || [])
     setLoading(false)
     // Deep link partage : ?article=<id> ouvre directement la fiche de l'article
@@ -1876,7 +1876,9 @@ export default function CommanderSlug() {
       // ⚠️ LES CRÉNEAUX QUE LE COMMERÇANT A FERMÉS À LA VOLÉE, par jour. On ne
       // lit QUE d'aujourd'hui vers l'avant : un blocage passé ne concerne plus
       // personne, et le calendrier ne propose jamais la veille.
-      supabase.from('creneaux_blocages').select('creneau_id, date_blocage')
+      // ⚠️ DEPUIS I7 (05/10), une ligne ferme SOIT un créneau de retrait, SOIT
+      // une tournée : les deux colonnes sont lues, et séparées plus bas.
+      supabase.from('creneaux_blocages').select('creneau_id, livraison_creneau_id, date_blocage')
         .eq('commercant_id', c.id).gte('date_blocage', jourBruxelles()),
     ])
 
@@ -2006,7 +2008,12 @@ export default function CommanderSlug() {
       // ⚠️ LES BLOCAGES VOYAGENT AVEC LA CHARGE, ET POUR LA MÊME RAISON : un
       // créneau est une grille HEBDOMADAIRE, un blocage vaut pour UN JOUR. Les
       // coller sur la ligne de créneau fermerait tous les vendredis.
-      blocagesCreneaux: blocagesCren || [],
+      blocagesCreneaux: (blocagesCren || []).filter(b => b.creneau_id),
+      // Les tournées fermées, remises à la forme que lit `construireJoursDispos`
+      // (`creneau_id`), qui ne sait pas de quelle table vient le créneau.
+      blocagesLivraison: (blocagesCren || [])
+        .filter(b => b.livraison_creneau_id)
+        .map(b => ({ creneau_id: b.livraison_creneau_id, date_blocage: b.date_blocage })),
       // La charge voyage à part des créneaux : un créneau est une grille
       // hebdomadaire, sa charge dépend du jour affiché.
       chargeCreneaux: chargeParJour,

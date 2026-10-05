@@ -31,6 +31,7 @@ import { nomTransporteur, suiviUrl, libelleExpedition } from '../lib/transporteu
 import { euros } from '../lib/montants.js'
 import { prenomClient, nomCompletClient } from '../lib/nom-client.js'
 import { reponseRefuse, motifDuRefus } from '../lib/verdict-reponse.js'
+import { estFermeExceptionnellement } from '../lib/ouverture.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
 
@@ -162,6 +163,28 @@ verifier('le minimum porte sur le total des articles',
   verifier('la route charge les bons par le module partagé', posBons !== -1)
   verifier('le minimum est vérifié avant les bons cadeaux',
     posMinimum !== -1 && posBons !== -1 && posMinimum < posBons)
+}
+
+// 🔴 I7 (05/10) : LE CONGÉ ÉTAIT IGNORÉ PAR LE SERVEUR pour le retrait et la
+// livraison de l'alimentaire. Les fermetures n'étaient relues que pour la
+// boutique ; seule la fiche cachait le jour.
+{
+  const posLecture = routeCode.indexOf(".from('fermetures_exceptionnelles')")
+  const posBoutique = routeCode.indexOf('if (estBoutique) {')
+  verifier('🔴 I7 les fermetures sont relues AVANT le bloc boutique (donc pour tous)',
+    posLecture !== -1 && posBoutique !== -1 && posLecture < posBoutique)
+  verifier('I7 relues une seule fois', routeCode.split(".from('fermetures_exceptionnelles')").length - 1 === 1)
+  verifier('I7 sauf pour le colis, qui n\'a pas de jour', /if \(!estExpedition\) \{\s*const \{ data: lues, error: errFerm \}/.test(routeCode))
+  verifier('I7 une erreur de lecture refuse au lieu de parier', /if \(errFerm\) \{/.test(routeCode))
+  verifier('🔴 I7 le congé refuse le retrait ET la livraison',
+    /if \(estFermeExceptionnellement\(fermeturesCommercant, date_commande\)\) \{/.test(routeCode)
+      && /if \(creneau && !estBoutique\) \{\s*const etatCreneau = creneauCommandable/.test(routeCode))
+  // Et la règle elle-même, exécutée : le dernier jour du congé est fermé.
+  const conge = [{ date_debut: '2026-10-10', date_fin: '2026-10-12' }]
+  verifier('I7 premier jour du congé fermé', estFermeExceptionnellement(conge, '2026-10-10'))
+  verifier('I7 dernier jour du congé fermé', estFermeExceptionnellement(conge, '2026-10-12'))
+  verifier('I7 le lendemain ouvert', !estFermeExceptionnellement(conge, '2026-10-13'))
+  verifier('I7 un congé d\'un jour sans fin', estFermeExceptionnellement([{ date_debut: '2026-10-10T00:00:00' }], '2026-10-10'))
 }
 
 // La route des statuts n'accepte que les deux états connus.

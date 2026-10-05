@@ -433,9 +433,11 @@ export default function LegalPage() {
             ]}/>
 
             <H3 id="cartographie">Localisation et cartographie</H3>
-            <P>Situer un commerce, calculer une distance ou préparer une tournée de livraison suppose de convertir des adresses en coordonnées. Yoppaa ne dispose pas de sa propre cartographie et fait appel à deux services européens.</P>
+            <P>Situer un commerce, calculer une distance ou préparer une tournée de livraison suppose de convertir des adresses en coordonnées. Yoppaa s'appuie pour cela sur le référentiel officiel des adresses, dont il conserve une copie, et sur des services européens.</P>
             <Ul items={[
-              'OpenStreetMap / Nominatim (OpenStreetMap Foundation) : conversion des adresses en coordonnées et l’inverse. Lui sont transmis, selon le cas, l’adresse de livraison que vous saisissez, l’adresse que vous tapez pour vous situer, ou vos coordonnées GPS lorsque vous autorisez la géolocalisation. Cette dernière requête part directement de votre appareil.',
+              'BeSt Address (SPF Stratégie et Appui, BOSA) : la liste officielle des adresses de Wallonie et de leurs coordonnées, publiée sous licence Creative Commons Attribution 4.0 (CC BY 4.0). Yoppaa en conserve une copie : l’adresse de livraison que vous choisissez est vérifiée sur cette copie, sans être transmise à un tiers. Lorsque le fichier officiel ne donne pas la position d’une maison, Yoppaa l’estime à partir des numéros voisins de la même rue.',
+              'OpenStreetMap / Nominatim (OpenStreetMap Foundation) : conversion de certaines adresses en coordonnées et l’inverse. Lui sont transmis, selon le cas, l’adresse que vous tapez pour vous situer, vos coordonnées GPS lorsque vous autorisez la géolocalisation, ou l’adresse qu’un commerçant saisit pour son commerce. Ces requêtes partent directement de l’appareil utilisé, sauf pour le point de départ d’une tournée de livraison dont le lieu n’est pas situé : Yoppaa le demande alors lui-même.',
+              'OpenStreetMap (fond de carte) : affiché uniquement aux commerçants, lorsqu’ils dessinent leur zone de livraison. Leur navigateur charge alors les images de la carte depuis les serveurs d’OpenStreetMap. Les clients ne voient jamais cette carte.',
               'OpenRouteService (Allemagne) : calcul des distances entre votre position et les commerces affichés, et optimisation de l’ordre de passage des livraisons d’un commerçant. Lui sont transmises des coordonnées géographiques, jamais votre nom ni vos coordonnées de contact.',
             ]}/>
             <P>Ces appels n'ont lieu que lorsque la fonction concernée est utilisée. <strong>Refuser la géolocalisation reste possible à tout moment</strong> : vous pouvez alors indiquer votre commune à la main, et aucune coordonnée n'est transmise.</P>
@@ -498,7 +500,7 @@ export default function LegalPage() {
             {/* Footer */}
             <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: `1px solid ${T.pale}`, textAlign: 'center' }}>
               <p style={{ fontSize: '0.75rem', color: T.muted, marginBottom: 4 }}>
-                Dernière mise à jour : 30 juillet 2026
+                Dernière mise à jour : 5 octobre 2026
               </p>
               <p style={{ fontSize: '0.75rem', color: T.muted }}>
                 Avcotech SRL · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9 G, 5640 Mettet

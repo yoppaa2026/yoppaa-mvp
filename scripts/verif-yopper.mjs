@@ -621,8 +621,22 @@ for (const t of TIERS_DECLARABLES) {
 verifier('Brevo est décrit pour les SMS, pas seulement pour les emails',
   /Brevo : SMS de service/.test(legal))
 // La géolocalisation part directement de l'appareil du Yopper : ça se dit.
+// ⚠️ REPOINTÉE LE 05/10 (chantier zone) : la phrase couvre désormais aussi
+// l'adresse saisie par un commerçant, d'où le pluriel. La règle ne change pas.
 verifier('la page dit que la requête part de l\'appareil',
-  /part directement de votre appareil/.test(legal))
+  /Ces requêtes partent directement de l’appareil utilisé/.test(legal))
+// Chantier zone (05/10) : l'adresse de livraison ne part PLUS chez Nominatim,
+// la page ne doit plus le dire ; le référentiel BeSt exige sa mention (CC BY).
+verifier('la page ne dit plus que l\'adresse de livraison part chez Nominatim',
+  !/l’adresse de livraison que vous saisissez/.test(legal))
+verifier('le référentiel BeSt est cité avec sa licence (CC BY 4.0, obligatoire)',
+  /BeSt Address \(SPF Stratégie et Appui, BOSA\)/.test(legal) && /CC BY 4\.0/.test(legal))
+{
+  const carte = (() => { try { return lire('app/dashboard/CarteZoneEtoile.js') } catch { return '' } })()
+  if (/tile\.openstreetmap\.org/.test(carte)) {
+    verifier('le fond de carte OpenStreetMap figure dans la page légale', /OpenStreetMap \(fond de carte\)/.test(legal))
+  }
+}
 verifier('la page rappelle qu\'on peut refuser la géolocalisation',
   /Refuser la géolocalisation reste possible/.test(legal))
 

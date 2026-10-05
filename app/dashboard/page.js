@@ -2087,8 +2087,36 @@ export default function Dashboard() {
       return
     }
 
-    const payloadCmd = { statut, ...(champs || {}) }
-    await supabase.from('commandes').update(payloadCmd).eq('id', commandeId)
+    // 🔴 PAR LE SERVEUR DEPUIS LE 05/10 (audit livraison I3). Cette ligne
+    // écrivait le statut depuis le navigateur, sans relire la commande : une
+    // commande annulée et remboursée pouvait repasser « prête », et le client
+    // recevait le push et l'email « c'est prêt ». Le résultat n'était même pas
+    // lu : l'écran passait au vert sur un refus.
+    //   • « non retirée » → « prête » : `/api/commande/remettre-prete`, qui
+    //     reprend le stock des versions que « non retiré » avait rendu ;
+    //   • un pas en avant : `/api/equipe/commande/statut`, la route du Poste,
+    //     qui applique `transitionPermise` sur la commande RELUE et n'écrit que
+    //     si elle est encore dans ce statut. Le navigateur n'envoie que le
+    //     CHOIX d'encaissement, le montant est recalculé en base.
+    const actuelle = commandes.find(x => x.id === commandeId)
+    const versPrete = statut === 'pret' && actuelle?.statut === 'non_retire'
+    const encaissement = champs?.encaisse_mode
+      ? (champs.encaisse_mode === 'rien' ? 'sans_paiement' : champs.encaisse_mode)
+      : null
+    const res = versPrete
+      ? await postPro('/api/commande/remettre-prete', { commande_id: commandeId })
+      : await postPro('/api/equipe/commande/statut', { commande_id: commandeId, statut, encaissement })
+    const j = await (res?.json ? res.json().catch(() => null) : Promise.resolve(null))
+    if (!j?.ok) {
+      alert(`Erreur : ${j?.error || (res?.sansSession ? 'session expirée, reconnecte-toi' : res?.erreurReseau ? 'pas de connexion, réessaie' : 'le statut n’a pas pu être enregistré')}`)
+      // L'écran se recale sur la base : la commande a peut-être changé ailleurs.
+      if (commercant?.id) chargerCommandes(commercant.id)
+      return
+    }
+    if (versPrete && j.stock_manquant > 0) {
+      alert(`Commande remise en « Prête ». Attention : ${j.stock_manquant} pièce(s) rendue(s) au stock ont été revendues entre-temps. Vérifie ton stock.`)
+    }
+    const payloadCmd = versPrete ? j.champs : { statut, ...(j.encaisse || {}) }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...payloadCmd } : c))
 
     // Statut final : la commande récupérée remplit la carte de fidélité
@@ -2133,13 +2161,18 @@ export default function Dashboard() {
   // Boutique détail : marque la commande expédiée (statut final recupere) avec
   // le n° de suivi saisi à la main (MVP expédition, colonne expedition_suivi).
   async function expedierCommande(commandeId, { transporteur = null, suivi = null } = {}) {
-    const patch = {
-      statut: 'recupere',
-      expedition_suivi: suivi || null,
-      expedition_transporteur: transporteur || null,
+    // 🔴 PAR LE SERVEUR DEPUIS LE 05/10 (audit livraison I3) : le navigateur
+    // écrivait sans lire le statut, et une commande annulée pouvait passer
+    // « expédiée », email et fidélité compris. La route n'accepte qu'un colis
+    // PRÊT, et valide le transporteur et le numéro de suivi.
+    const res = await postPro('/api/commande/expedier', { commande_id: commandeId, transporteur: transporteur || null, suivi: suivi || null })
+    const j = await (res?.json ? res.json().catch(() => null) : Promise.resolve(null))
+    if (!j?.ok) {
+      alert(`Erreur : ${j?.error || (res?.sansSession ? 'session expirée, reconnecte-toi' : res?.erreurReseau ? 'pas de connexion, réessaie' : 'l’expédition n’a pas pu être enregistrée')}`)
+      if (commercant?.id) chargerCommandes(commercant.id)
+      return
     }
-    const { error } = await supabase.from('commandes').update(patch).eq('id', commandeId)
-    if (error) { alert(`Erreur : ${error.message}`); return }
+    const patch = j.champs
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
     crediterFideliteCommande(commandeId)
 

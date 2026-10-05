@@ -827,8 +827,14 @@ verifier('remettre une commande payée sur place demande le moyen',
   /setCommandeAEncaisser\(c\)/.test(srcDashCmd))
 verifier('et seulement s’il reste quelque chose à encaisser',
   /!c\.encaisse_mode && resteAEncaisserCommande\(c\) > 0/.test(srcDashCmd))
-verifier('le moyen part dans la même écriture que le statut',
-  /const payloadCmd = \{ statut, \.\.\.\(champs \|\| \{\}\) \}/.test(srcDashCmd))
+// ⚠️ REPOINTÉE LE 05/10 (audit livraison I3) : l'écriture a quitté le
+// navigateur. Deux maillons à tenir : l'écran envoie le CHOIX dans la même
+// requête que le statut, et la route l'écrit dans le MÊME `update`.
+verifier('le moyen part dans la même requête que le statut',
+  /postPro\('\/api\/equipe\/commande\/statut', \{ commande_id: commandeId, statut, encaissement \}\)/.test(srcDashCmd))
+verifier('et la route l’écrit dans la même écriture que le statut',
+  /\.update\(\{ statut, \.\.\.\(champs \|\| \{\}\) \}\)/.test(
+    readFileSync(new URL('../app/api/equipe/commande/statut/route.js', import.meta.url), 'utf8')))
 verifier('l’inscription d’un abonnement demande le moyen, plus « sur place »',
   /<option value="terminal">/.test(srcComptaEcran) && /<option value="especes">/.test(srcComptaEcran))
 verifier('et l’écran isole les trois seaux',

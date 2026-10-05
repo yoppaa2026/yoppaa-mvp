@@ -52,6 +52,7 @@ import { delaiDuPanier, refusDeMelange, pretA, premierJourBoutique, libelleDuree
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
+import { refusCoordonnees } from '@/lib/coordonnees-client'
 import { verdictForfait } from '@/lib/garde-forfait'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
@@ -118,6 +119,12 @@ export async function POST(request) {
     }
     if (!client_email || !client_prenom || !client_nom || !client_telephone) {
       return NextResponse.json({ ok: false, error: 'Coordonnées client incomplètes.' }, { status: 400 })
+    }
+    // 🔴 LA FORME, PLUS SEULEMENT LA PRÉSENCE (audit I9, 05/10) : ces deux
+    // valeurs partent telles quelles dans l'email du commerçant.
+    {
+      const refusCoord = refusCoordonnees({ email: client_email, telephone: client_telephone })
+      if (refusCoord) return NextResponse.json({ ok: false, error: refusCoord }, { status: 400 })
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date_commande)) {
       return NextResponse.json({ ok: false, error: 'Date commande invalide (format attendu YYYY-MM-DD).' }, { status: 400 })

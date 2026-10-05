@@ -3227,9 +3227,15 @@ for (const [chemin, sortie] of [
 ]) {
   const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
   verifier(`${sortie} rend le stock`, /restaurerStockVariantes\(/.test(src), chemin)
+  // ⚠️ REPOINTÉE LE 05/10 (audit I4) : l'annulation client filtre désormais
+  // sur les statuts ANNULABLES (plus strict que « pas déjà annulée »), et sort
+  // si rien n'a basculé, avant de rendre quoi que ce soit.
   verifier(`${sortie} ne le rend que sur une bascule réelle`,
     /\.eq\('statut', 'paiement_en_attente'\)[\s\S]{0,80}?\.select\('id'\)/.test(src)
-    || /\.neq\('statut', 'annulee_client_refund'\)[\s\S]{0,80}?\.select\('id'\)/.test(src), chemin)
+    || /\.neq\('statut', 'annulee_client_refund'\)[\s\S]{0,80}?\.select\('id'\)/.test(src)
+    || (/\.in\('statut', statutsAnnulables\)[\s\S]{0,80}?\.select\('id'\)/.test(src)
+        && /if \(!basculees \|\| basculees\.length === 0\) \{\s*return /.test(src)
+        && src.indexOf('if (!basculees || basculees.length === 0)') < src.indexOf('restaurerStockVariantes(supabase')), chemin)
 }
 // Et la version doit être ENREGISTRÉE, sans quoi il n'y a rien à rendre.
 verifier('la ligne de commande retient la version vendue',

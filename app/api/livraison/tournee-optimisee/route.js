@@ -24,7 +24,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { geocoderAdresse } from '@/lib/geocode'
-import { STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
+import { STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { jourLocalISO } from '@/lib/timezone'
 
@@ -187,7 +187,12 @@ export async function POST(request) {
       .eq('mode_retrait', 'livraison')
       .eq('creneau_livraison_id', creneau_livraison_id)
       .eq('date_commande', date)
-      .in('statut', STATUTS_OCCUPENT_CRENEAU)
+      // 🔴 LES COMMANDES EN COURS, PAS CELLES QUI OCCUPENT UN CRÉNEAU (audit
+      // I6, 05/10). `STATUTS_OCCUPENT_CRENEAU` compte `paiement_en_attente`,
+      // et c'est juste pour la CAPACITÉ (la place est tenue le temps de
+      // Stripe). Dans une TOURNÉE, ça envoyait le livreur chez quelqu'un qui
+      // n'avait jamais payé, panier abandonné compris.
+      .in('statut', STATUTS_COMMANDE_EN_COURS)
       .or('statut_livraison.is.null,statut_livraison.neq.livree')
 
     if (error) {

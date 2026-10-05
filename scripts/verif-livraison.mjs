@@ -276,9 +276,18 @@ verifier('les livrées sont exclues', /statut_livraison\.neq\.livree/.test(tourn
 // elle trouvait la constante dans la LIGNE D'IMPORT : remplacer le filtre par
 // une liste écrite à la main la laissait parfaitement verte, et la tournée
 // aurait oublié les commandes en préparation. Mesurée par mutation le 23/08.
-verifier('les statuts occupants viennent du module partagé',
-  /\.in\('statut', STATUTS_OCCUPENT_CRENEAU\)/.test(tourneeCode),
+// ⚠️ REPOINTÉE LE 05/10 (audit I6) : la tournée lit les commandes EN COURS,
+// plus celles qui OCCUPENT un créneau (qui comptent les paniers en paiement).
+// Toujours le module partagé, jamais une liste à la main.
+verifier('les statuts de la tournée viennent du module partagé',
+  /\.in\('statut', STATUTS_COMMANDE_EN_COURS\)/.test(tourneeCode),
   'une liste écrite à la main divergerait du reste de l\'application')
+{
+  const { STATUTS_COMMANDE_EN_COURS } = await import('../lib/statuts-commande.js')
+  verifier('🔴 I6 un panier pas encore payé n’entre pas dans la tournée',
+    !STATUTS_COMMANDE_EN_COURS.includes('paiement_en_attente'))
+  verifier('I6 une commande prête y entre', STATUTS_COMMANDE_EN_COURS.includes('pret'))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 6 bis. LES MESSAGES AU YOPPER, SELON LE MODE
@@ -693,8 +702,11 @@ verifier('et range la commande du bon côté',
     .replace(/^[ \t]*\/\/.*$/gm, ' ')
   verifier('le tableau de bord n\'ouvre plus de prompt système',
     !/window\.prompt/.test(codeSeul(dash)))
+  // ⚠️ REPOINTÉE LE 05/10 (audit I3) : l'écriture vit dans la route serveur.
+  // L'écran envoie le transporteur, la route l'écrit.
   verifier('la commande est marquée avec son transporteur',
-    /expedition_transporteur: transporteur \|\| null/.test(dash))
+    /postPro\('\/api\/commande\/expedier', \{ commande_id: commandeId, transporteur: transporteur \|\| null/.test(dash)
+    && /expedition_transporteur: cle,/.test(lire('app/api/commande/expedier/route.js')))
   const appli = lire('app/commander/page.js')
   verifier('le Yopper voit le transporteur dans ses commandes',
     /libelleExpedition\(c\.expedition_transporteur, c\.expedition_suivi\)/.test(appli))
@@ -1290,6 +1302,149 @@ verifier('et range la commande du bon côté',
     /debut\.getTime\(\) >= pretLivraison\.getTime\(\)/.test(blocSlots))
   verifier('🔴 C5 un choix de tournée qui n’est plus proposée n’allume pas le paiement',
     /cpDansZone && choixLivraisonValable\)/.test(fiche) && !/cpDansZone && creneauLivraisonChoisi\)/.test(fiche))
+}
+
+// ═══ AUDIT LIVRAISON I3 : PLUS AUCUNE COMMANDE ÉCRITE PAR LE NAVIGATEUR ═════
+{
+  const { sansProse } = await import('./lire-code.mjs')
+  const { reprendreStockVariantes } = await import('../lib/stock-variantes-server.js')
+
+  // Le tableau de bord, et tout ce que le navigateur charge, n'écrit plus
+  // `commandes`. La condition du déclencheur de colonnes réservées (I2).
+  const dash = sansProse(lire('app/dashboard/page.js'))
+  verifier('🔴 I3 le tableau de bord n’écrit plus aucune commande',
+    !/from\('commandes'\)\s*\.(update|insert|delete|upsert)\(/.test(dash))
+  const config = sansProse(lire('app/dashboard/ConfigDashboard.js'))
+  verifier('🔴 I3 la configuration non plus',
+    !/from\('commandes'\)\s*\.(update|insert|delete|upsert)\(/.test(config))
+  verifier('I3 un pas en avant passe par la route du Poste',
+    /postPro\('\/api\/equipe\/commande\/statut'/.test(dash))
+  verifier('I3 « remettre en Prête » passe par sa route',
+    /postPro\('\/api\/commande\/remettre-prete'/.test(dash))
+  verifier('I3 « Marquer expédiée » passe par sa route',
+    /postPro\('\/api\/commande\/expedier'/.test(dash))
+  verifier('🔴 I3 un refus du serveur ne passe pas l’écran au vert',
+    (dash.match(/if \(!j\?\.ok\) \{\s*alert\(`Erreur : \$\{j\?\.error/g) || []).length >= 3)
+
+  const remettre = sansProse(lire('app/api/commande/remettre-prete/route.js'))
+  verifier('🔴 I3 remettre en Prête n’écrit que depuis « non retirée »',
+    /\.update\(\{ statut: 'pret' \}\)\s*\.eq\('id', commande_id\)\s*\.eq\('statut', 'non_retire'\)/.test(remettre))
+  verifier('🔴 I3 et reprend le stock APRÈS la bascule seulement',
+    remettre.indexOf('if (!basculee)') > -1
+    && remettre.indexOf('if (!basculee)') < remettre.indexOf('reprendreStockVariantes(admin'))
+  verifier('I3 remettre en Prête passe la garde de l’équipe',
+    /gardeLigneEquipe\(request, admin, 'commandes', commande_id, 'commandes'\)/.test(remettre))
+
+  const expedier = sansProse(lire('app/api/commande/expedier/route.js'))
+  verifier('🔴 I3 seul un colis prêt s’expédie',
+    /c\.mode_retrait !== 'expedition' \|\| c\.statut !== 'pret'/.test(expedier)
+    && /\.eq\('statut', 'pret'\)\.eq\('mode_retrait', 'expedition'\)/.test(expedier))
+  verifier('🔴 I3 le transporteur est une clé connue',
+    /!CLES_TRANSPORTEUR\.includes\(cle\)/.test(expedier))
+  verifier('🔴 I3 le numéro de suivi est borné',
+    /RE_SUIVI = \/\^\[A-Za-z0-9 -\]\{1,60\}\$\//.test(expedier) && /!RE_SUIVI\.test\(numero\)/.test(expedier))
+  verifier('I3 expédier passe la garde de l’équipe',
+    /gardeLigneEquipe\(request, admin, 'commandes', commande_id, 'commandes'\)/.test(expedier))
+
+  // La reprise du stock, en comportement, sur une base simulée.
+  const baseSimulee = (lignes, versions) => {
+    const ecrits = {}
+    const db = {
+      from: (table) => {
+        const q = { _t: table, _set: null, _id: null }
+        q.select = () => q
+        q.in = () => q
+        q.not = () => q
+        q.update = (v) => { q._set = v; return q }
+        q.eq = (_c, val) => { q._id = val; return q }
+        q.then = (ok) => {
+          if (q._set) { ecrits[q._id] = q._set.stock; return Promise.resolve({ error: null }).then(ok) }
+          const data = table === 'commande_articles' ? lignes : versions
+          return Promise.resolve({ data, error: null }).then(ok)
+        }
+        return q
+      },
+    }
+    return { db, ecrits }
+  }
+  {
+    const { db, ecrits } = baseSimulee(
+      [{ variante_id: 'a', quantite: 2 }, { variante_id: 'a', quantite: 1 }, { variante_id: 'b', quantite: 1 }],
+      [{ id: 'a', stock: 5 }, { id: 'b', stock: 0 }])
+    const r = await reprendreStockVariantes(db, ['c1'])
+    verifier('I3 la reprise additionne les lignes d’une même version', ecrits.a === 2, JSON.stringify(ecrits))
+    verifier('🔴 I3 la reprise ne descend jamais sous zéro', ecrits.b === 0, JSON.stringify(ecrits))
+    verifier('🔴 I3 et elle compte ce qui manque', r.manquantes === 1 && r.reprises === 2, JSON.stringify(r))
+  }
+  {
+    const { db } = baseSimulee([], [])
+    const r = await reprendreStockVariantes(db, [])
+    verifier('I3 rien à reprendre, rien d’écrit', r.ok && r.reprises === 0)
+  }
+}
+
+// ═══ AUDIT LIVRAISON I4 : L'ANNULATION PAR LE CLIENT ════════════════════════
+{
+  const { sansProse } = await import('./lire-code.mjs')
+  const annul = sansProse(lire('app/api/commande/cancel/route.js'))
+  const iBascule = annul.indexOf(".in('statut', statutsAnnulables)")
+  const iRefund = annul.indexOf('stripe.refunds.create(')
+  verifier('🔴 I4 la commande bascule AVANT le remboursement, sur un statut encore annulable',
+    iBascule > -1 && iRefund > -1 && iBascule < iRefund)
+  verifier('🔴 I4 zéro ligne basculée = ni argent ni email',
+    /if \(!basculees \|\| basculees\.length === 0\) \{\s*return NextResponse\.json/.test(annul)
+    && annul.indexOf('if (!basculees || basculees.length === 0)') < iRefund)
+  verifier('🔴 I4 le remboursement porte un montant et une clé d’idempotence',
+    /amount: reste,/.test(annul) && /idempotencyKey: `cmd-annul-client-\$\{cmd\.id\}-\$\{reste\}`/.test(annul))
+  verifier('🔴 I4 un refus de Stripe défait l’annulation',
+    /\.update\(\{ statut: cmd\.statut, annulee_at: null, annulation_motif: null \}\)\s*\.eq\('id', cmd\.id\)\s*\.eq\('statut', 'annulee_client_refund'\)/.test(annul))
+  verifier('🔴 I4 le délai lit aussi la tournée de livraison',
+    /cmd\.creneau\?\.heure_debut \|\| cmd\.creneau_livraison\?\.heure_debut \|\| '23:59:59'/.test(annul)
+    && /creneau_livraison:livraison_creneaux!creneau_livraison_id \(heure_debut\)/.test(annul))
+  verifier('🔴 I4 une commande liée à un rendez-vous ne rembourse pas son paiement ici',
+    /if \(cmd\.rdv_reservation_id\) \{/.test(annul) && annul.indexOf('if (cmd.rdv_reservation_id)') < iBascule)
+  verifier('I4 le refus d’une commande prête ne parle plus de retrait',
+    !/prête à retirer/.test(annul))
+}
+
+// ═══ AUDIT LIVRAISON I9 : LES COORDONNÉES DU CLIENT ═════════════════════════
+{
+  const { emailValide, telephoneValide, refusCoordonnees } = await import('../lib/coordonnees-client.js')
+  const { emailNouvelleCommandeCommercant } = await import('../lib/resend.js')
+  const { sansProse } = await import('./lire-code.mjs')
+
+  verifier('I9 une adresse ordinaire passe', emailValide('jean.dupont+test@gmail.com'))
+  verifier('🔴 I9 du HTML dans l’email est refusé', !emailValide('<b>x</b>@a.be'))
+  verifier('🔴 I9 une adresse sans domaine est refusée', !emailValide('jean@'))
+  verifier('I9 une adresse trop longue est refusée', !emailValide(`${'a'.repeat(250)}@a.be`))
+  verifier('I9 un GSM belge passe, avec ses séparateurs', telephoneValide('0470 12 34 56') && telephoneValide('0470/12.34.56'))
+  verifier('I9 un numéro français passe aussi', telephoneValide('+33 6 12 34 56 78'))
+  verifier('🔴 I9 du texte n’est pas un numéro', !telephoneValide('<script>') && !telephoneValide('appelez-moi'))
+  verifier('I9 un numéro trop court est refusé', !telephoneValide('1234'))
+  verifier('I9 la phrase dit quoi corriger', /email/.test(refusCoordonnees({ email: 'x', telephone: '0470123456' }) || '')
+    && /téléphone/.test(refusCoordonnees({ email: 'a@b.be', telephone: 'x' }) || '')
+    && refusCoordonnees({ email: 'a@b.be', telephone: '0470123456' }) === null)
+
+  // Le gabarit, EXÉCUTÉ avec des valeurs piégées : rien ne doit ressortir brut.
+  const html = emailNouvelleCommandeCommercant({
+    nom_commercant: 'Chez Momo', yopper_prenom: 'A', yopper_nom: 'B',
+    yopper_email: '<img src=x onerror=alert(1)>@a.be', yopper_telephone: '<script>alert(2)</script>',
+    numero_commande: 'LI1', articles: [], total: 10, date_retrait: '2026-10-05', heure_debut: '18:00', heure_fin: '19:00',
+  })
+  verifier('🔴 I9 l’email du client sort échappé dans l’email du commerçant',
+    !/<img src=x/.test(html) && /&lt;img src=x/.test(html))
+  verifier('🔴 I9 le téléphone aussi', !/<script>alert\(2\)/.test(html) && /&lt;script&gt;alert\(2\)/.test(html))
+
+  // Et plus aucun gabarit n'insère un email ou un téléphone brut.
+  const resend = sansProse(lire('lib/resend.js'))
+  // Une INSERTION directe (`${x}` ou `${x || '—'}`), pas une condition
+  // (`${x ? … : ''}`), dont la branche échappe elle-même la valeur.
+  const bruts = resend.match(/\$\{\s*(yopper_email|yopper_telephone|client_email|client_telephone|telephone|email|acheteur_email|beneficiaire_email)\s*(\}|\|\|)/g) || []
+  verifier('🔴 I9 aucun email ni téléphone inséré sans échappement', bruts.length === 0, bruts.join(' | '))
+
+  const cc = sansProse(lire('app/api/stripe/checkout/create-commande/route.js'))
+  verifier('🔴 I9 la commande refuse des coordonnées mal formées',
+    /refusCoordonnees\(\{ email: client_email, telephone: client_telephone \}\)/.test(cc))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

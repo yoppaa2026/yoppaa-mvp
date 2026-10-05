@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS public.best_adresses (
   PRIMARY KEY (rue_id, code_postal, numero)
 );
 
+-- ⚠️ L'index sur `import_le` vit dans MIGRATION_BEST_INDEX_IMPORT.sql (05/10) :
+-- sans lui, le nettoyage d'après import dépassait le délai maximal en prod.
+
 COMMENT ON TABLE public.best_rues IS
   'Rues wallonnes (BeSt Address, SPF BOSA, CC BY 4.0). Rempli par scripts/import-best-adresses.mjs. Lu par le serveur seulement.';
 COMMENT ON TABLE public.best_adresses IS

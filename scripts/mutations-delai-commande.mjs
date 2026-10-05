@@ -359,9 +359,11 @@ const MUTATIONS = [
 
   { nom: '🔴 l’horizon n’est plus demande en base (il vaudra le defaut, en silence)',
     fichier: ROUTE,
-    // ⚠️ REPOINTÉE LE 05/10 : le select finit désormais par `livraison_actif`.
-    de: 'boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif\'',
-    vers: 'boutique_delai_heures, plan, essai_plan, created_at, livraison_actif\'' },
+    // ⚠️ REPOINTÉE DEUX FOIS LE 05/10 : le select s'allonge à chaque chantier
+    // (`livraison_actif`, puis `latitude, longitude` pour l'étoile). L'ancre
+    // vise désormais le voisinage de `horizon_commande`, plus la fin de ligne.
+    de: 'boutique_delai_heures, horizon_commande, plan, essai_plan,',
+    vers: 'boutique_delai_heures, plan, essai_plan,' },
 
   { nom: '🔴 les fermetures ne sont plus partagees entre les deux controles',
     fichier: ROUTE,

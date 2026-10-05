@@ -40,6 +40,7 @@ import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { zoneCouverte } from '@/lib/livraison'
+import { zoneValide, dansEtoile, phraseHorsZone } from '@/lib/zone-etoile'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -3161,7 +3162,10 @@ export default function CommanderSlug() {
 
   // Livraison : dispo si le commerce l'active + zone configurée. Slots aplatis
   // (tournées à venir tous jours confondus). Vérif CP dans la zone.
-  const livraisonDispo = !!(commercant?.livraison_actif && livraisonConfig && livraisonConfig.codes_postaux?.length > 0)
+  // ⚠️ UNE ÉTOILE DESSINÉE SUFFIT (chantier zone, 05/10) : un commerce qui ne
+  // garde aucun code postal ne doit pas perdre sa livraison pour autant.
+  const livraisonDispo = !!(commercant?.livraison_actif && livraisonConfig
+    && (livraisonConfig.codes_postaux?.length > 0 || zoneValide(livraisonConfig.zone_rayons_m)))
 
   // ─── Persistance localStorage (mode + adresse de livraison) ────────────────
   // 1) Au montage : pré-remplit l'adresse et charge la préférence de mode.
@@ -3210,10 +3214,22 @@ export default function CommanderSlug() {
       const debut = brusselsInstant(dateStr, slot.heure_debut)
       return !!debut && !isNaN(debut.getTime()) && debut.getTime() >= pretLivraison.getTime()
     })
-  // Même comparaison que le serveur (`zoneCouverte`, normalisée des deux côtés) :
-  // l'écran comparait la chaîne brute, et un code saisi en base avec une espace
-  // faisait dire « hors zone » à l'écran pour une adresse que le serveur acceptait.
-  const cpDansZone = zoneCouverte(livraisonConfig?.codes_postaux, adresseLivraison.code_postal)
+  // 🔴 UNE SEULE RÈGLE À LA FOIS, LA MÊME QUE LE SERVEUR (Alex, 05/10) :
+  // l'étoile si le commerçant l'a dessinée, jugée sur la position de la maison
+  // TROUVÉE ; sinon les codes postaux, comparés comme le serveur
+  // (`zoneCouverte`, normalisée des deux côtés). Cet écran informe, il ne
+  // protège rien : `create-commande` refait le calcul.
+  const avecEtoile = zoneValide(livraisonConfig?.zone_rayons_m)
+  const verdictEtoile = avecEtoile && adresseLivraison.situee === true
+    ? dansEtoile({
+        centre: { lat: commercant?.latitude, lng: commercant?.longitude },
+        rayons: livraisonConfig.zone_rayons_m,
+        point: { lat: adresseLivraison.lat, lng: adresseLivraison.lng },
+      })
+    : null
+  const cpDansZone = avecEtoile
+    ? verdictEtoile?.dedans === true
+    : zoneCouverte(livraisonConfig?.codes_postaux, adresseLivraison.code_postal)
   // ⚠️ UN CHOIX FAIT AVANT QUE LA TOURNÉE FERME NE COMPTE PLUS : l'onglet reste
   // ouvert, l'heure tourne, et le bouton de paiement ne doit pas s'allumer
   // pour une tournée que la liste ne montre plus.
@@ -4854,8 +4870,15 @@ export default function CommanderSlug() {
                       telephoneCommerce={commercant?.telephone || null}
                     />
                     <input value={adresseLivraison.complement} onChange={e => setAdresseLivraison(p => ({ ...p, complement: e.target.value }))} placeholder="Boîte, étage, digicode... (optionnel)" style={inputSt} />
-                    {adresseLivraison.code_postal.trim().length === 4 && !cpDansZone && (
+                    {!avecEtoile && adresseLivraison.code_postal.trim().length === 4 && !cpDansZone && (
                       <p style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 700, margin: '2px 0 0' }}>Ce code postal n&rsquo;est pas dans la zone de livraison.</p>
+                    )}
+                    {/* L'étoile ne juge qu'une maison TROUVÉE : avant, rien à dire. */}
+                    {avecEtoile && verdictEtoile && !verdictEtoile.dedans && (
+                      <p style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 700, margin: '2px 0 0' }}>{phraseHorsZone(verdictEtoile)}</p>
+                    )}
+                    {avecEtoile && adresseLivraison.situee === true && !verdictEtoile && (
+                      <p style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 700, margin: '2px 0 0' }}>La livraison n&rsquo;est pas disponible pour le moment chez ce commerce. Choisis le retrait.</p>
                     )}
                     <NoteLivraison
                       valeur={adresseLivraison.note}

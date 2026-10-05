@@ -33,6 +33,10 @@ import { prenomClient, nomCompletClient } from '../lib/nom-client.js'
 import { reponseRefuse, motifDuRefus } from '../lib/verdict-reponse.js'
 import { estFermeExceptionnellement } from '../lib/ouverture.js'
 import {
+  distanceMetres, capDegres, pointA, cercle, limiteDansDirection, dansEtoile, zoneValide,
+  contourEtoile, phraseHorsZone, NB_POIGNEES, PAS_DEGRES, RAYON_DEFAUT_M, RAYON_MAX_M,
+} from '../lib/zone-etoile.js'
+import {
   COLONNES_BEST, decouperLigneCsv, indexColonnes, adresseDeLigne,
   normaliserRecherche, baseNumero, estimerPositions,
 } from '../lib/best-adresse.js'
@@ -262,6 +266,90 @@ verifier('le minimum porte sur le total des articles',
     /catch \(e\) \{[\s\S]{0,300}process\.exit\(1\)/.test(impCode))
 }
 
+// ═══ LA ZONE EN ÉTOILE (Alex 25/09 et 05/10) ═══════════════════════════════
+{
+  const ficheEtoile = lire('app/commander/[slug]/page.js')
+  // Un centre réel : la Rue de la Belle Haie à Biesme (référentiel BeSt).
+  const biesme = { lat: 50.31155, lng: 4.60511 }
+  const nord5km = pointA(biesme, 0, 5000)
+  verifier('étoile : un point posé à 5 km est mesuré à 5 km',
+    Math.abs(distanceMetres(biesme, nord5km) - 5000) < 2, String(distanceMetres(biesme, nord5km)))
+  verifier('étoile : il est bien au nord (cap 0°)', Math.abs(capDegres(biesme, nord5km)) < 0.01 || Math.abs(capDegres(biesme, nord5km) - 360) < 0.01)
+  verifier('étoile : l\'est est à 90°', Math.abs(capDegres(biesme, pointA(biesme, 90, 3000)) - 90) < 0.01)
+
+  const rond = cercle()
+  verifier('étoile : le départ est un cercle de 5 km (Alex)', rond.length === NB_POIGNEES && rond.every(r => r === RAYON_DEFAUT_M) && RAYON_DEFAUT_M === 5000)
+  verifier('étoile : 12 poignées, une tous les 30°', NB_POIGNEES === 12 && PAS_DEGRES === 30)
+  verifier('étoile : poignées plafonnées à 30 km (Alex)', RAYON_MAX_M === 30000 && cercle(99999)[0] === 30000)
+
+  // La forme : 8 km au nord, 3 km à l'est, 5 km ailleurs.
+  const forme = cercle(5000); forme[0] = 8000; forme[3] = 3000
+  egal('étoile : sur une poignée, la limite est la poignée', Math.round(limiteDansDirection(forme, 0)), 8000)
+  egal('étoile : à mi-chemin entre deux poignées, la limite est la moyenne', Math.round(limiteDansDirection(forme, 15)), 6500)
+  egal('étoile : à 345°, entre la 12e et la 1re poignée', Math.round(limiteDansDirection(forme, 345)), 6500)
+  egal('étoile : un cap négatif ou au-delà de 360 se ramène', Math.round(limiteDansDirection(forme, 360 + 90)), 3000)
+
+  const v1 = dansEtoile({ centre: biesme, rayons: forme, point: pointA(biesme, 0, 7500) })
+  verifier('🔴 étoile : 7,5 km au nord est DEDANS (limite 8 km)', v1?.dedans === true, JSON.stringify(v1))
+  const v2 = dansEtoile({ centre: biesme, rayons: forme, point: pointA(biesme, 90, 3500) })
+  verifier('🔴 étoile : 3,5 km à l\'est est DEHORS (limite 3 km)', v2?.dedans === false && v2.limite_m === 3000, JSON.stringify(v2))
+  verifier('étoile : le refus dit la distance, la limite et l\'issue',
+    phraseHorsZone(v2) === 'Tu es à 3,5 km du commerce, et il livre jusqu\'à 3,0 km dans ta direction. Tu peux choisir le retrait.', phraseHorsZone(v2))
+
+  // 🔴 L'ABSENCE NE VAUT JAMAIS « DEDANS ».
+  verifier('🔴 étoile : sans centre, aucune décision (null)', dansEtoile({ centre: { lat: null, lng: null }, rayons: forme, point: biesme }) === null)
+  verifier('🔴 étoile : centre 0,0 refusé', dansEtoile({ centre: { lat: 0, lng: 0 }, rayons: forme, point: biesme }) === null)
+  verifier('étoile : une zone de 11 poignées n\'est pas une zone', !zoneValide(forme.slice(0, 11)) && dansEtoile({ centre: biesme, rayons: forme.slice(0, 11), point: biesme }) === null)
+  verifier('étoile : une poignée sous 300 m est refusée', !zoneValide([...cercle().slice(0, 11), 200]))
+  verifier('étoile : une poignée à virgule est refusée (entiers comme en base)', !zoneValide([...cercle().slice(0, 11), 5000.5]))
+  verifier('étoile : `null` = pas d\'étoile', !zoneValide(null))
+
+  // Le contour tracé est la MÊME fonction : chaque point est à la limite.
+  const contour = contourEtoile(biesme, forme, 30)
+  verifier('étoile : la carte trace la limite, point par point',
+    contour.length === 12 && contour.every((p, i) => Math.abs(distanceMetres(biesme, p) - limiteDansDirection(forme, i * 30)) < 2))
+
+  // La contrainte en base reprend la règle.
+  const migZone = lire('migrations/MIGRATION_ZONE_ETOILE.sql')
+  verifier('étoile : la base exige 12 valeurs entre 300 m et 30 km',
+    /cardinality\(zone_rayons_m\) = 12/.test(migZone) && /300 <= ALL \(zone_rayons_m\)/.test(migZone) && /30000 >= ALL \(zone_rayons_m\)/.test(migZone)
+      && /array_position\(zone_rayons_m, NULL\) IS NULL/.test(migZone))
+
+  // Le serveur : une seule règle à la fois, sur la position de la maison.
+  verifier('🔴 étoile : le serveur lit l\'étoile et le centre',
+    /\.select\('codes_postaux, frais_fixe, gratuit_des, minimum_commande, actif, zone_rayons_m'\)/.test(routeCode)
+      && /livraison_actif, latitude, longitude'\)/.test(routeCode))
+  verifier('🔴 étoile : avec une étoile, le code postal ne décide plus',
+    /const avecEtoile = zoneValide\(cfg\.zone_rayons_m\)/.test(routeCode) && /if \(!avecEtoile && !zoneCouverte\(cfg\.codes_postaux, code_postal_livraison\)\)/.test(routeCode))
+  verifier('🔴 étoile : jugée sur la position de la MAISON du référentiel',
+    /point: \{ lat: maison\.lat, lng: maison\.lng \}/.test(routeCode) && /centre: \{ lat: commercant\.latitude, lng: commercant\.longitude \}/.test(routeCode))
+  verifier('🔴 étoile : sans centre, le serveur refuse (ne parie pas)', /if \(!verdict\) \{[\s\S]{0,200}code: 'zone_indisponible'/.test(routeCode))
+  verifier('🔴 étoile : hors zone, refus avec la phrase', /if \(!verdict\.dedans\) \{[\s\S]{0,120}code: 'hors_zone',\s*error: phraseHorsZone\(verdict\)/.test(routeCode))
+  verifier('étoile : la maison est jugée AVANT l\'insertion',
+    routeCode.indexOf('dansEtoile({') !== -1 && routeCode.indexOf('dansEtoile({') < routeCode.indexOf(".from('commandes')\n      .insert("))
+
+  // L'écran : même règle, il informe.
+  verifier('étoile : la fiche juge comme le serveur',
+    /const cpDansZone = avecEtoile\s*\?\s*verdictEtoile\?\.dedans === true\s*:\s*zoneCouverte\(livraisonConfig\?\.codes_postaux, adresseLivraison\.code_postal\)/.test(ficheEtoile))
+  verifier('étoile : la fiche ne juge qu\'une maison TROUVÉE', /const verdictEtoile = avecEtoile && adresseLivraison\.situee === true/.test(ficheEtoile))
+  verifier('🔴 étoile : une étoile dessinée suffit à proposer la livraison',
+    /livraisonConfig\.codes_postaux\?\.length > 0 \|\| zoneValide\(livraisonConfig\.zone_rayons_m\)/.test(ficheEtoile))
+  verifier('🔴 étoile : AUCUNE carte dans la fiche client (décision du 25/09)',
+    !/CarteZoneEtoile|from 'leaflet'|import\('leaflet'\)|tile\.openstreetmap/.test(ficheEtoile))
+
+  // Le réglage : la carte, chargée à la demande, trace la même fonction.
+  const carteSrc = lire('app/dashboard/CarteZoneEtoile.js')
+  verifier('étoile : la carte trace `contourEtoile`', /contourEtoile\(centre, r\)/.test(carteSrc))
+  verifier('étoile : Leaflet n\'est chargé que dans le navigateur', /import\('leaflet'\)/.test(carteSrc) && !/^import L from 'leaflet'/m.test(carteSrc))
+  const cfgDash = lire('app/dashboard/ConfigDashboard.js')
+  verifier('étoile : la carte est chargée à la demande', /dynamic\(\(\) => import\('\.\/CarteZoneEtoile'\), \{\s*ssr: false/.test(cfgDash))
+  verifier('étoile : le réglage enregistre l\'étoile (ou null)', /zone_rayons_m: zoneRayons,/.test(cfgDash))
+  verifier('étoile : une étoile dessinée dispense des codes postaux',
+    /if \(zoneRayons === null && codesPostaux\.length === 0\)/.test(cfgDash))
+  verifier('étoile : le centre vient de la fiche, jamais saisi',
+    /from\('commercants'\)\.select\('latitude, longitude, adresse'\)\.eq\('id', commercantId\)/.test(cfgDash))
+}
+
 // La route des statuts n'accepte que les deux états connus.
 const routeStatut = lire('app/api/livraison/statut/route.js')
 for (const s of STATUTS_LIVRAISON) {
@@ -481,8 +569,10 @@ verifier('la bascule n\'apparaît que si le commerce livre', /const livraisonAct
 const fiche = lire('app/commander/[slug]/page.js')
 // Côté client : le mode livraison n'existe que si le commerçant l'a activé ET
 // configuré. Un commerce sans zone ne doit pas proposer un choix qui échouera.
+// ⚠️ REPOINTÉE LE 05/10 (étoile) : la configuration, c'est des codes postaux
+// OU une étoile dessinée. La règle reste : activation ET une zone.
 verifier('la livraison client exige activation ET configuration',
-  /livraison_actif && livraisonConfig && livraisonConfig\.codes_postaux\?\.length > 0/.test(fiche))
+  /livraison_actif && livraisonConfig\s*&& \(livraisonConfig\.codes_postaux\?\.length > 0 \|\| zoneValide\(livraisonConfig\.zone_rayons_m\)\)/.test(fiche))
 // Les créneaux ne se mélangent jamais : deux tables, deux états, deux
 // calendriers.
 verifier('les créneaux de livraison sont un état séparé', /joursDisposLivraison/.test(fiche))
@@ -580,8 +670,10 @@ verifier('et range la commande du bon côté',
     /<ChampAdresseLivraison\s/.test(blocLiv) && !/<ChampAdresse\s/.test(blocLiv))
   verifier('🔴 BeSt le paiement exige une maison TROUVÉE (règle B)',
     /const livraisonFormOk = !!\(adresseLivraison\.situee === true && adresseLivraison\.rue_id && cpDansZone && choixLivraisonValable\)/.test(fiche))
+  // ⚠️ REPOINTÉE LE 05/10 (étoile) : sans étoile, la comparaison normalisée
+  // reste celle du serveur ; avec, c'est l'étoile (gardée dans le bloc étoile).
   verifier('BeSt l\'écran compare la zone comme le serveur',
-    /const cpDansZone = zoneCouverte\(livraisonConfig\?\.codes_postaux, adresseLivraison\.code_postal\)/.test(fiche))
+    /:\s*zoneCouverte\(livraisonConfig\?\.codes_postaux, adresseLivraison\.code_postal\)/.test(fiche))
   verifier('BeSt une adresse mémorisée est REVÉRIFIÉE au retour',
     /setAdresseLivraison\(prev => \(\{ \.\.\.prev, \.\.\.p, situee: null, lat: null, lng: null \}\)\)/.test(fiche))
   // Visée sur le CODE (l'adresse du service, l'import de l'ancien champ), pas

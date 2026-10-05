@@ -73,6 +73,14 @@ import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 import { exclusionsQuiSeChevauchent, seancesDeLaFormule, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, verdictReprise, messageRefusReprise, verdictModificationAbonnement, messageRefusModification, partNonUtilisee, verdictRemboursementAbonnement, messageRefusRemboursement, libelleRemboursement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
 import ChampAdresse from '@/app/components/ChampAdresse'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
+import dynamic from 'next/dynamic'
+import { zoneValide, centreValide, cercle, libelleKm, RAYON_MIN_M, RAYON_MAX_M } from '@/lib/zone-etoile'
+// La carte (et Leaflet, sa feuille de style comprise) ne se charge que si le
+// commerçant ouvre le dessin de sa zone : personne d'autre ne la paie.
+const CarteZoneEtoile = dynamic(() => import('./CarteZoneEtoile'), {
+  ssr: false,
+  loading: () => <div style={{ height: 380, borderRadius: 12, background: '#F4F2FA' }} />,
+})
 import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import { champsModifies } from '@/lib/formulaire-modifie'
@@ -5413,6 +5421,11 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
   const [fraisFixe, setFraisFixe] = useState('')
   const [gratuitDes, setGratuitDes] = useState('')
   const [minimumCommande, setMinimumCommande] = useState('')
+  // 🔴 LA ZONE EN ÉTOILE (chantier zone, 05/10) : 12 distances en mètres, ou
+  // `null` tant qu'il n'a rien dessiné (les codes postaux décident alors). Le
+  // centre est la position de SA fiche : relu ici, jamais saisi.
+  const [zoneRayons, setZoneRayons] = useState(null)
+  const [centreFiche, setCentreFiche] = useState(null)   // { lat, lng, adresse } ou null
   // Cet écran n'a pas d'objet `form` unique, ses valeurs vivent dans quatre
   // états séparés. On en fabrique donc l'image pour la comparaison, et
   // seulement pour elle.
@@ -5420,21 +5433,40 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('livraison_config').select('*').eq('commercant_id', commercantId).maybeSingle()
+      const [{ data }, { data: fiche }] = await Promise.all([
+        supabase.from('livraison_config').select('*').eq('commercant_id', commercantId).maybeSingle(),
+        supabase.from('commercants').select('latitude, longitude, adresse').eq('id', commercantId).maybeSingle(),
+      ])
       const valeurs = {
         codesPostaux: data?.codes_postaux || [],
         fraisFixe: data?.frais_fixe != null ? String(data.frais_fixe) : '',
         gratuitDes: data?.gratuit_des != null ? String(data.gratuit_des) : '',
         minimumCommande: data?.minimum_commande != null ? String(data.minimum_commande) : '',
+        zoneRayons: zoneValide(data?.zone_rayons_m) ? data.zone_rayons_m : null,
       }
       setCodesPostaux(valeurs.codesPostaux)
       setFraisFixe(valeurs.fraisFixe)
       setGratuitDes(valeurs.gratuitDes)
       setMinimumCommande(valeurs.minimumCommande)
+      setZoneRayons(valeurs.zoneRayons)
+      setCentreFiche(centreValide({ lat: fiche?.latitude, lng: fiche?.longitude })
+        ? { lat: Number(fiche.latitude), lng: Number(fiche.longitude), adresse: fiche.adresse || '' }
+        : null)
       setInitial(valeurs)
       setLoading(false)
     })()
   }, [commercantId])
+
+  // Le curseur général : agrandit ou réduit TOUTES les poignées dans la même
+  // proportion, pour garder la forme qu'il a déjà dessinée.
+  function changerTaille(kmVoulus) {
+    setZoneRayons(prev => {
+      if (!Array.isArray(prev)) return prev
+      const moyenne = prev.reduce((s, r) => s + r, 0) / prev.length
+      const facteur = (Number(kmVoulus) * 1000) / moyenne
+      return prev.map(r => Math.round(Math.min(RAYON_MAX_M, Math.max(RAYON_MIN_M, r * facteur))))
+    })
+  }
 
   function ajouterCP() {
     const cp = inputCP.trim()
@@ -5450,7 +5482,9 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
   // l'écriture a réussi avant de démonter l'écran. Le bouton du bas ignore ce
   // retour et se comporte comme avant.
   async function sauvegarder() {
-    if (codesPostaux.length === 0) { toast('Ajoute au moins un code postal de livraison', 'error'); return false }
+    // Une zone dessinée suffit ; sans elle, il faut au moins un code postal.
+    if (zoneRayons !== null && !zoneValide(zoneRayons)) { toast('La zone dessinée n’est pas valide, redessine-la', 'error'); return false }
+    if (zoneRayons === null && codesPostaux.length === 0) { toast('Ajoute au moins un code postal de livraison, ou dessine ta zone', 'error'); return false }
     const frais = parseFloat((fraisFixe || '0').replace(',', '.'))
     if (isNaN(frais) || frais < 0) { toast('Frais de livraison invalide', 'error'); return false }
     let gratuit = null
@@ -5472,17 +5506,19 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
       frais_fixe: frais,
       gratuit_des: gratuit,
       minimum_commande: mini,
+      // `null` = pas d'étoile, les codes postaux décident (Alex, 05/10).
+      zone_rayons_m: zoneRayons,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'commercant_id' })
     setSaving(false)
     if (error) { toast('Erreur : ' + error.message, 'error'); return false }
-    setInitial({ codesPostaux, fraisFixe, gratuitDes, minimumCommande })
+    setInitial({ codesPostaux, fraisFixe, gratuitDes, minimumCommande, zoneRayons })
     toast('Livraison enregistrée', 'success')
     return true
   }
 
   // ─── Le garde-fou des modifications non enregistrées ─────────────────────
-  const courantLivraison = { codesPostaux, fraisFixe, gratuitDes, minimumCommande }
+  const courantLivraison = { codesPostaux, fraisFixe, gratuitDes, minimumCommande, zoneRayons }
   const nbModifsLivraison = champsModifies(initial, courantLivraison).length
   useAvertirAvantDeQuitter(nbModifsLivraison > 0)
   const actionsLivraison = useRef({})
@@ -5493,6 +5529,7 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
       setFraisFixe(initial.fraisFixe)
       setGratuitDes(initial.gratuitDes)
       setMinimumCommande(initial.minimumCommande)
+      setZoneRayons(initial.zoneRayons)
       toast('Modifications abandonnées')
     },
   }
@@ -5511,7 +5548,64 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
       {/* Zone de livraison */}
       <div style={card}>
         <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: T.ink }}>Zone de livraison</h3>
+        {/* 🔴 L'ÉTOILE OU LES CODES POSTAUX, JAMAIS LES DEUX (Alex, 05/10).
+            Dessinée, la zone décide seule ; les codes postaux restent gardés
+            pour qui revient en arrière. */}
+        {zoneRayons !== null ? (
+          <>
+            <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
+              Tire les points pour suivre tes routes : chacun règle jusqu&rsquo;où tu livres dans sa direction.
+              Le centre est l&rsquo;adresse de ta fiche{centreFiche?.adresse ? <> : <strong style={{ color: T.ink }}>{centreFiche.adresse}</strong></> : ''}.
+            </p>
+            {centreFiche ? (
+              <CarteZoneEtoile centre={centreFiche} rayons={zoneRayons} onChange={setZoneRayons} couleur={T.main} />
+            ) : (
+              <p style={{ fontSize: 12.5, color: '#B91C1C', fontWeight: 700, margin: '0 0 10px', lineHeight: 1.5 }}>
+                Ta fiche n&rsquo;a pas de position sur la carte : la zone ne peut pas être dessinée, et la livraison sera refusée tant que ce n&rsquo;est pas réglé.
+                Corrige l&rsquo;adresse de ta fiche, puis reviens ici.
+              </p>
+            )}
+            <label style={{ display: 'block', marginTop: 12 }}>
+              <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
+                <span>Tout agrandir ou réduire</span>
+                <span style={{ color: T.ink, fontVariantNumeric: 'tabular-nums' }}>
+                  de {libelleKm(Math.min(...zoneRayons))} à {libelleKm(Math.max(...zoneRayons))} selon la direction
+                </span>
+              </span>
+              <input
+                type="range"
+                min={1} max={20} step={0.5}
+                value={Math.round((zoneRayons.reduce((s, r) => s + r, 0) / zoneRayons.length) / 500) / 2}
+                onChange={e => changerTaille(e.target.value)}
+                style={{ width: '100%', accentColor: T.main }}
+                aria-label="Taille moyenne de la zone, en kilomètres"
+              />
+            </label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+              <button type="button" onClick={() => setZoneRayons(cercle())}
+                style={{ padding: '8px 12px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.ink, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                Repartir d&rsquo;un cercle de 5 km
+              </button>
+              <button type="button" onClick={() => setZoneRayons(null)}
+                style={{ padding: '8px 12px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                Revenir aux codes postaux
+              </button>
+            </div>
+            <p style={{ margin: '10px 0 0', fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+              Le client tape son adresse, Yoppaa la situe et lui dit tout de suite s&rsquo;il est livré. S&rsquo;il est trop loin,
+              il lit à combien de kilomètres il se trouve et peut choisir le retrait. Il ne voit jamais ta carte.
+            </p>
+          </>
+        ) : (
+        <>
         <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted }}>Les codes postaux que tu livres. Un Yopper hors zone ne verra pas l&rsquo;option livraison.</p>
+        <button type="button" onClick={() => setZoneRayons(cercle())} disabled={!centreFiche}
+          style={{ width: '100%', padding: '10px 12px', marginBottom: 12, borderRadius: 10, border: `1.5px dashed ${T.main}`, background: T.pale, color: T.main, fontWeight: 800, fontSize: 13.5, cursor: centreFiche ? 'pointer' : 'default', opacity: centreFiche ? 1 : 0.6 }}>
+          Dessiner ma zone sur une carte (plus précis qu&rsquo;un code postal)
+        </button>
+        {!centreFiche && (
+          <p style={{ fontSize: 12, color: T.muted, margin: '-6px 0 12px' }}>Pour dessiner ta zone, ta fiche doit d&rsquo;abord avoir une adresse située sur la carte.</p>
+        )}
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <input
             value={inputCP}
@@ -5538,6 +5632,8 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
               ))}
             </div>
         }
+        </>
+        )}
       </div>
 
       {/* Frais de livraison */}

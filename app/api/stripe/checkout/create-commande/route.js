@@ -50,6 +50,7 @@ import { joursRetraitBoutique, estFermeExceptionnellement } from '@/lib/ouvertur
 import { jourPlus } from '@/lib/statut-commerce'
 import { delaiDuPanier, refusDeMelange, pretA, premierJourBoutique, libelleDuree, libelleMoment } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
+import { zoneValide, dansEtoile, phraseHorsZone } from '@/lib/zone-etoile'
 import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { refusCoordonnees } from '@/lib/coordonnees-client'
@@ -150,7 +151,9 @@ export async function POST(request) {
       // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait juste en
       // dessous en dépend, et sans elles elle se trompe EN SILENCE.
       // ⚠️ `livraison_actif` : l'interrupteur de la livraison, lu plus bas.
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif')
+      // ⚠️ `latitude`, `longitude` : le centre de l'étoile. Absentes, `dansEtoile`
+      // rendrait `null` et TOUTE livraison serait refusée chez qui a dessiné.
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif, latitude, longitude')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -348,17 +351,25 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: 'Créneau de livraison introuvable ou inactif.' }, { status: 400 })
       }
       creneau = cl
-      const { data: cfg } = await supabase
+      // ⚠️ `zone_rayons_m` : l'étoile, quand le commerçant l'a dessinée.
+      const { data: cfg, error: errCfg } = await supabase
         .from('livraison_config')
-        .select('codes_postaux, frais_fixe, gratuit_des, minimum_commande, actif')
+        .select('codes_postaux, frais_fixe, gratuit_des, minimum_commande, actif, zone_rayons_m')
         .eq('commercant_id', commercant.id)
         .maybeSingle()
+      if (errCfg) {
+        console.error('[create-commande] lecture livraison_config KO', errCfg)
+        return NextResponse.json({ ok: false, error: 'Impossible de vérifier la livraison. Réessaie dans un instant.' }, { status: 500 })
+      }
       if (!cfg || cfg.actif === false) {
         return NextResponse.json({ ok: false, error: 'La livraison n\'est pas configurée chez ce commerçant.' }, { status: 400 })
       }
+      // 🔴 UNE SEULE RÈGLE À LA FOIS (Alex, 05/10) : l'étoile, si le commerçant
+      // l'a dessinée ; sinon la liste de codes postaux, comme avant.
+      const avecEtoile = zoneValide(cfg.zone_rayons_m)
       // Comparaison normalisée des deux côtés : un code saisi avec une espace
       // insécable ne doit pas faire refuser une livraison sans raison lisible.
-      if (!zoneCouverte(cfg.codes_postaux, code_postal_livraison)) {
+      if (!avecEtoile && !zoneCouverte(cfg.codes_postaux, code_postal_livraison)) {
         return NextResponse.json({ ok: false, error: 'Ce code postal n\'est pas dans la zone de livraison.' }, { status: 400 })
       }
       // 🔴 I1 + RÈGLE B (chantier zone, 05/10) : LA MAISON DOIT EXISTER. Le code
@@ -381,6 +392,34 @@ export async function POST(request) {
           code: 'adresse_introuvable',
           error: 'Cette adresse n\'est pas dans la liste officielle des adresses, la livraison n\'est donc pas possible. Choisis le retrait, ou appelle le commerce.',
         }, { status: 400 })
+      }
+      // 🔴 L'ÉTOILE DÉCIDE SUR LA POSITION DE LA MAISON, celle du référentiel,
+      // jamais sur ce que le navigateur envoie. Sans centre utilisable (fiche
+      // sans position), on NE PARIE PAS : la livraison est refusée, avec une
+      // issue. `dansEtoile` rend `null` dans ce cas, jamais « dedans ».
+      if (avecEtoile) {
+        const verdict = dansEtoile({
+          centre: { lat: commercant.latitude, lng: commercant.longitude },
+          rayons: cfg.zone_rayons_m,
+          point: { lat: maison.lat, lng: maison.lng },
+        })
+        if (!verdict) {
+          console.error('[create-commande] etoile sans centre utilisable', commercant.id)
+          return NextResponse.json({
+            ok: false,
+            code: 'zone_indisponible',
+            error: 'La livraison n\'est pas disponible pour le moment chez ce commerce. Choisis le retrait.',
+          }, { status: 400 })
+        }
+        if (!verdict.dedans) {
+          return NextResponse.json({
+            ok: false,
+            code: 'hors_zone',
+            error: phraseHorsZone(verdict),
+            distance_m: verdict.distance_m,
+            limite_m: verdict.limite_m,
+          }, { status: 400 })
+        }
       }
       maisonLivraison = maison
       livraisonConfig = cfg

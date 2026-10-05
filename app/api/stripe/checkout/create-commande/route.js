@@ -33,8 +33,8 @@ import { libelleBon } from '@/lib/bons-cadeaux'
 import { eurosNus } from '@/lib/montants'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
-import { geocoderAdresse } from '@/lib/geocode'
-import { coordonneesPlausibles, requeteGeocodage, NOTE_MAX } from '@/lib/adresse-livraison'
+import { composerAdresseLivraison, NOTE_MAX } from '@/lib/adresse-livraison'
+import { situerMaison } from '@/lib/best-adresse-serveur'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { repartirBons } from '@/lib/bons-cadeaux'
@@ -80,7 +80,12 @@ export async function POST(request) {
       // Envoyés depuis le 22/08 : la requête de géocodage PROPRE (sans le
       // complément), les coordonnées quand le Yopper a choisi son adresse dans
       // les suggestions, et son mot au livreur.
-      adresse_geocodage, livraison_lat, livraison_lng, note_livraison,
+      // ⚠️ `adresse_geocodage`, `livraison_lat` et `livraison_lng` sont encore
+      // envoyés par l'écran mais NE SONT PLUS LUS (chantier zone, 05/10).
+      note_livraison,
+      // 🔴 La maison du référentiel BeSt (chantier zone, 05/10) : en livraison,
+      // seule source de la position et de l'adresse enregistrée.
+      best_rue_id, numero_livraison, complement_livraison,
       paiement_mode, bon_cadeau_code,
       // 🔴 LA LISTE DES BONS (01/09). L'ancien champ au singulier reste
       // accepté : les deux tunnels ne se déploient pas à la seconde près, et
@@ -323,7 +328,7 @@ export async function POST(request) {
     // ─── 3) Récup créneau (retrait OU livraison) + check actif ──────────────
     // En livraison : créneau depuis livraison_creneaux + vérif zone (code postal).
     // livraisonConfig est stocké ici, les frais sont calculés plus bas (besoin du total).
-    let creneau = null, livraisonConfig = null
+    let creneau = null, livraisonConfig = null, maisonLivraison = null
     if (estBoutique) {
       // Pas de créneau pour la boutique détail (retrait libre / expédition)
     } else if (estLivraison) {
@@ -356,6 +361,28 @@ export async function POST(request) {
       if (!zoneCouverte(cfg.codes_postaux, code_postal_livraison)) {
         return NextResponse.json({ ok: false, error: 'Ce code postal n\'est pas dans la zone de livraison.' }, { status: 400 })
       }
+      // 🔴 I1 + RÈGLE B (chantier zone, 05/10) : LA MAISON DOIT EXISTER. Le code
+      // postal était DÉCLARÉ, rien ne le reliait à l'adresse : on pouvait taper
+      // 5640 et habiter ailleurs. La maison est cherchée dans le référentiel
+      // officiel PAR CE code postal ; absente, la livraison est refusée
+      // (décision d'Alex). Les coordonnées envoyées par le navigateur ne sont
+      // plus lues : la position vient d'ici, et nulle part ailleurs.
+      const maison = await situerMaison(supabase, {
+        rueId: best_rue_id,
+        codePostal: code_postal_livraison,
+        numero: numero_livraison,
+      })
+      if (!maison.ok) {
+        return NextResponse.json({ ok: false, error: 'Impossible de vérifier l\'adresse. Réessaie dans un instant.' }, { status: 503 })
+      }
+      if (!maison.trouvee) {
+        return NextResponse.json({
+          ok: false,
+          code: 'adresse_introuvable',
+          error: 'Cette adresse n\'est pas dans la liste officielle des adresses, la livraison n\'est donc pas possible. Choisis le retrait, ou appelle le commerce.',
+        }, { status: 400 })
+      }
+      maisonLivraison = maison
       livraisonConfig = cfg
     } else {
       const { data: cr, error: errCre } = await supabase
@@ -937,26 +964,28 @@ export async function POST(request) {
     // le banc interdit cette forme d'écriture et la trouvait ici, dans le texte
     // qui l'explique. Un commentaire n'a pas besoin de citer ce qu'il proscrit.
     //
-    // Deux changements, dans cet ordre de préférence :
-    //   1. le navigateur envoie des coordonnées quand le Yopper a CHOISI son
-    //      adresse dans les suggestions. C'est la source la plus sûre : elle
-    //      vient du même moteur, mais avec un humain qui a validé le résultat.
-    //   2. sinon, on géocode une requête PROPRE (`adresse_geocodage`), sans
-    //      complément et sans répétition.
+    // 🔴 DEPUIS LE CHANTIER ZONE (05/10), PLUS AUCUN GÉOCODEUR NI AUCUNE
+    // COORDONNÉE DU NAVIGATEUR. La position est celle de la maison trouvée
+    // dans le référentiel officiel BeSt (plus haut, `situerMaison`) : la
+    // commande n'existe pas sans elle (règle B, Alex). Nominatim n'est plus
+    // appelé, et `livraison_lat`/`livraison_lng` envoyés par l'écran ne sont
+    // plus lus.
     //
-    // ⚠️ LES COORDONNÉES DU NAVIGATEUR SONT REVALIDÉES ICI. Elles viennent de
-    // l'extérieur : un Yopper ne peut fausser que sa propre livraison, mais une
-    // coordonnée absurde ferait diverger l'itinéraire de toute la tournée.
-    //
-    // ⚠️ ET RIEN DE TOUT CECI NE BLOQUE LA VENTE. Une rue neuve que le moteur
-    // ne connaît pas ne doit pas coûter une commande : la tournée annonce déjà
-    // les arrêts sans coordonnées au lieu de les taire.
-    let coordsLivraison = null
-    if (estLivraison) {
-      coordsLivraison = coordonneesPlausibles(livraison_lat, livraison_lng)
-        ? { lat: Number(livraison_lat), lng: Number(livraison_lng) }
-        : await geocoderAdresse(adresse_geocodage || requeteGeocodage({ rue: adresse_livraison, code_postal: code_postal_livraison }))
-    }
+    // ⚠️ L'ADRESSE ENREGISTRÉE EST RECOMPOSÉE ICI depuis le nom OFFICIEL de la
+    // rue et de la localité : c'est elle que le commerçant lit et que la
+    // tournée suit. Seuls le complément (boîte, étage) et la note viennent du
+    // client, et ils ne décident de rien.
+    const coordsLivraison = estLivraison && maisonLivraison
+      ? { lat: maisonLivraison.lat, lng: maisonLivraison.lng }
+      : null
+    const adresseEnregistree = estLivraison && maisonLivraison
+      ? composerAdresseLivraison({
+          rue: `${maisonLivraison.rue} ${maisonLivraison.numero}`,
+          complement: String(complement_livraison ?? '').slice(0, 120),
+          code_postal: code_postal_livraison,
+          ville: maisonLivraison.localite,
+        })
+      : adresse_livraison
 
     // ─── 6) INSERT commande avec statut='paiement_en_attente' ──────────────
     const nomComplet = `${client_prenom} ${client_nom}`.trim()
@@ -974,7 +1003,7 @@ export async function POST(request) {
         tva_taux_livraison: fraisLivraisonEUR > 0
           ? tauxFraisLivraison(lignes.map(l => l.tva_taux), commercant.tva_taux_defaut)
           : null,
-        adresse_livraison: (estLivraison || estExpedition) ? adresse_livraison : null,
+        adresse_livraison: (estLivraison || estExpedition) ? adresseEnregistree : null,
         livraison_lat: coordsLivraison?.lat ?? null,
         livraison_lng: coordsLivraison?.lng ?? null,
         // ⚠️ TRONQUÉE ICI AUSSI, pas seulement à l'écran. Le champ du navigateur

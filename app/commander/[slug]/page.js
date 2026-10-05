@@ -38,7 +38,8 @@ import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
 import { lieuxDuJour, estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
-import ChampAdresse from '@/app/components/ChampAdresse'
+import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
+import { zoneCouverte } from '@/lib/livraison'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -60,15 +61,16 @@ function enGras(texte) {
 // bleu au fond de l'allée ». Sans cet endroit, on aurait gagné la tournée et
 // perdu ce qui permet de trouver la porte.
 //
-// ⚠️ ET ELLE CHANGE DE TON QUAND L'ADRESSE N'EST PAS LOCALISÉE. Ce n'est pas
-// décoratif : à ce moment-là, la note devient la SEULE chose qui aidera le
-// livreur, et le Yopper doit le savoir avant de valider, pas après.
-function NoteLivraison({ valeur, onChange, localisee, aSaisiUneRue, expedition = false }) {
+// ⚠️ ELLE NE DIT PLUS « TA COMMANDE PASSE QUAND MÊME » (chantier zone, 05/10).
+// Elle prévenait quand Nominatim ne reconnaissait pas l'adresse. En livraison,
+// une maison absente du référentiel ne se livre plus (règle B, Alex) et
+// `ChampAdresseLivraison` le dit lui-même ; en expédition, un colis n'a pas
+// besoin de position. L'avertissement aurait menti dans les deux cas.
+function NoteLivraison({ valeur, onChange, expedition = false }) {
   // ⚠️ LA MÊME LIMITE QUE CELLE QUI TRONQUE À L'ENVOI. Deux nombres écrits
   // séparément finiraient par diverger, et le Yopper verrait « 200/200 » sur un
   // texte silencieusement coupé plus tôt.
   const MAX = NOTE_MAX
-  const alerte = aSaisiUneRue && !localisee
   return (
     <div style={{ marginTop: 10 }}>
       <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: T.deep, marginBottom: 4 }}>
@@ -79,18 +81,11 @@ function NoteLivraison({ valeur, onChange, localisee, aSaisiUneRue, expedition =
         onChange={e => onChange(e.target.value.slice(0, MAX))}
         rows={2}
         placeholder={expedition ? 'Boîte à l’arrière, laisser chez le voisin…' : 'Portail bleu, sonner deux fois, 3e étage sans ascenseur…'}
-        style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: 12, border: `1.5px solid ${alerte ? '#FDBA74' : T.pale}`, fontSize: '0.85rem', fontFamily: '"DM Sans", sans-serif', resize: 'vertical', boxSizing: 'border-box' }}
+        style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: 12, border: `1.5px solid ${T.pale}`, fontSize: '0.85rem', fontFamily: '"DM Sans", sans-serif', resize: 'vertical', boxSizing: 'border-box' }}
       />
-      {alerte ? (
-        <p style={{ fontSize: '0.72rem', color: '#9A3412', fontWeight: 700, margin: '4px 0 0', lineHeight: 1.45 }}>
-          Cette adresse n&rsquo;a pas été reconnue automatiquement. Ta commande passe quand même,
-          mais choisis-la dans la liste si elle y apparaît, ou décris ici comment te trouver.
-        </p>
-      ) : (
-        <p style={{ fontSize: '0.7rem', color: T.muted, fontWeight: 600, margin: '4px 0 0' }}>
-          {valeur.length}/{MAX} · ce mot s&rsquo;affiche en évidence sur la commande du commerçant.
-        </p>
-      )}
+      <p style={{ fontSize: '0.7rem', color: T.muted, fontWeight: 600, margin: '4px 0 0' }}>
+        {valeur.length}/{MAX} · ce mot s&rsquo;affiche en évidence sur la commande du commerçant.
+      </p>
     </div>
   )
 }
@@ -1234,24 +1229,29 @@ export default function CommanderSlug() {
   // (« Boîte 3 ») voyage avec l'adresse ; la note (« portail bleu, sonner deux
   // fois ») ne doit JAMAIS partir au géocodeur. C'est précisément ce mélange
   // qui empêchait Nominatim de trouver quoi que ce soit.
-  const [adresseLivraison, setAdresseLivraison] = useState({ rue: '', code_postal: '', ville: '', complement: '', note: '', lat: null, lng: null })
+  //
+  // 🔴 EN LIVRAISON, L'ADRESSE VIENT DU RÉFÉRENTIEL OFFICIEL (chantier zone,
+  // 05/10) : `rue_id` + `numero`, choisis dans `ChampAdresseLivraison`, et
+  // `situee` dit si la maison existe. `rue` n'est plus que leur affichage.
+  // L'expédition garde la saisie libre (décision d'Alex, 05/10).
+  const [adresseLivraison, setAdresseLivraison] = useState({ rue: '', code_postal: '', ville: '', complement: '', note: '', lat: null, lng: null, rue_id: null, rue_nom: '', numero: '', situee: null, estimee: false })
 
   // Toute saisie manuelle d'un champ d'adresse invalide les coordonnées.
   function majAdresse(champs) {
     setAdresseLivraison(p => ({ ...p, ...champs, lat: null, lng: null }))
   }
 
-  // Choix d'une suggestion : c'est le seul chemin qui rapporte des coordonnées.
-  function choisirAdresse(a) {
-    setAdresseLivraison(p => ({
-      ...p,
-      rue: a.rue || a.adresse || p.rue,
-      code_postal: a.code_postal || p.code_postal,
-      ville: a.ville || p.ville,
-      lat: Number.isFinite(a.latitude) ? a.latitude : null,
-      lng: Number.isFinite(a.longitude) ? a.longitude : null,
-    }))
+  // Ce que rend `ChampAdresseLivraison`. La ligne affichée (« Rue X 12 ») se
+  // recompose à chaque changement, pour que l'adresse montrée et mémorisée
+  // soit toujours celle qui a été vérifiée.
+  function majAdresseLivraison(patch) {
+    setAdresseLivraison(p => {
+      const n = { ...p, ...patch }
+      n.rue = n.rue_nom ? `${n.rue_nom}${String(n.numero || '').trim() ? ` ${String(n.numero).trim()}` : ''}` : ''
+      return n
+    })
   }
+
   // Persistance localStorage : préférence de mode + adresse mémorisées entre commandes.
   const modePrefRef = useRef(null)      // 'retrait' | 'livraison' | null (préférence sauvegardée)
   const modeAppliqueRef = useRef(false) // pour n'appliquer la préférence livraison qu'une fois
@@ -3168,7 +3168,7 @@ export default function CommanderSlug() {
   useEffect(() => {
     try {
       const a = localStorage.getItem('yoppaa.livraison.adresse')
-      if (a) { const p = JSON.parse(a); if (p && typeof p === 'object') setAdresseLivraison(prev => ({ ...prev, ...p })) }
+      if (a) { const p = JSON.parse(a); if (p && typeof p === 'object') setAdresseLivraison(prev => ({ ...prev, ...p, situee: null, lat: null, lng: null })) }
       const m = localStorage.getItem('yoppaa.commande.mode')
       if (m === 'retrait' || m === 'livraison') modePrefRef.current = m
     } catch { /* localStorage indispo (mode privé) : on ignore */ }
@@ -3185,9 +3185,11 @@ export default function CommanderSlug() {
   // 3) Sauvegarde l'adresse dès qu'elle a du contenu (jamais d'écrasement à vide).
   useEffect(() => {
     try {
-      const { rue, code_postal, ville, complement } = adresseLivraison
+      // ⚠️ `situee` N'EST PAS MÉMORISÉ : au retour, la maison est revérifiée
+      // (le référentiel a pu changer), jamais crue sur parole.
+      const { rue, code_postal, ville, complement, rue_id, rue_nom, numero } = adresseLivraison
       if (rue || code_postal || ville || complement) {
-        localStorage.setItem('yoppaa.livraison.adresse', JSON.stringify({ rue, code_postal, ville, complement }))
+        localStorage.setItem('yoppaa.livraison.adresse', JSON.stringify({ rue, code_postal, ville, complement, rue_id, rue_nom, numero }))
       }
     } catch { /* ignore */ }
   }, [adresseLivraison])
@@ -3208,13 +3210,18 @@ export default function CommanderSlug() {
       const debut = brusselsInstant(dateStr, slot.heure_debut)
       return !!debut && !isNaN(debut.getTime()) && debut.getTime() >= pretLivraison.getTime()
     })
-  const cpDansZone = !!livraisonConfig?.codes_postaux?.includes((adresseLivraison.code_postal || '').trim())
+  // Même comparaison que le serveur (`zoneCouverte`, normalisée des deux côtés) :
+  // l'écran comparait la chaîne brute, et un code saisi en base avec une espace
+  // faisait dire « hors zone » à l'écran pour une adresse que le serveur acceptait.
+  const cpDansZone = zoneCouverte(livraisonConfig?.codes_postaux, adresseLivraison.code_postal)
   // ⚠️ UN CHOIX FAIT AVANT QUE LA TOURNÉE FERME NE COMPTE PLUS : l'onglet reste
   // ouvert, l'heure tourne, et le bouton de paiement ne doit pas s'allumer
   // pour une tournée que la liste ne montre plus.
   const choixLivraisonValable = !!creneauLivraisonChoisi && slotsLivraison.some(s =>
     s.id === creneauLivraisonChoisi.id && s._date?.getTime?.() === creneauLivraisonChoisi._date?.getTime?.())
-  const livraisonFormOk = !!(adresseLivraison.rue.trim() && adresseLivraison.code_postal.trim() && adresseLivraison.ville.trim() && cpDansZone && choixLivraisonValable)
+  // 🔴 LA MAISON DOIT ÊTRE TROUVÉE (règle B, Alex 05/10) : une rue et un numéro
+  // tapés ne suffisent plus, il faut que le référentiel les connaisse.
+  const livraisonFormOk = !!(adresseLivraison.situee === true && adresseLivraison.rue_id && cpDansZone && choixLivraisonValable)
   const modeBoutiqueEff = estDetail ? (boutiqueModes.includes(modeBoutique) ? modeBoutique : boutiqueModes[0]) : null
 
   const cpExpe = (adresseLivraison.code_postal || '').trim()
@@ -4791,21 +4798,13 @@ export default function CommanderSlug() {
                     ) : (
                       <div style={{ background: '#fff', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1.25rem', border: `1.5px solid ${T.pale}` }}>
                         <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px' }}>Adresse d&rsquo;expédition</p>
-                        {/* ⚠️ LA MÊME SAISIE QU'EN LIVRAISON, ET C'EST VOULU. Un
-                            colis ne se géolocalise pas, mais une adresse choisie
-                            dans une liste est une adresse qui EXISTE : c'est ce
-                            qui évite le paquet renvoyé pour numéro introuvable.
-                            Deux saisies d'adresse différentes dans le même
-                            tunnel finiraient par diverger. */}
-                        <ChampAdresse
-                          valeur={adresseLivraison.rue}
-                          position={{ latitude: adresseLivraison.lat, longitude: adresseLivraison.lng }}
-                          onTexte={v => majAdresse({ rue: v })}
-                          onChoisir={choisirAdresse}
-                          placeholder="Rue et numéro"
-                          style={inputSt}
-                          couleurs={{ hairline: T.pale, deep: T.ink, muted: T.muted }}
-                        />
+                        {/* ⚠️ SAISIE LIBRE, DÉCISION D'ALEX (05/10). Un colis peut
+                            partir à Bruxelles ou en Flandre, que le référentiel
+                            wallon ne couvre pas, et il n'a pas besoin de
+                            position. L'ancien champ interrogeait Nominatim depuis
+                            le navigateur à chaque frappe : usage interdit par
+                            leur politique, retiré ici comme en livraison. */}
+                        <input value={adresseLivraison.rue} onChange={e => majAdresse({ rue: e.target.value })} placeholder="Rue et numéro" autoComplete="street-address" style={inputSt} />
                         <div style={{ display: 'flex', gap: 8 }}>
                           <input value={adresseLivraison.code_postal} onChange={e => majAdresse({ code_postal: e.target.value.replace(/\D/g, '').slice(0,4) })} inputMode="numeric" placeholder="Code postal" style={{ ...inputSt, flex: '0 0 40%' }} />
                           <input value={adresseLivraison.ville} onChange={e => majAdresse({ ville: e.target.value })} placeholder="Ville" style={{ ...inputSt, flex: 1 }} />
@@ -4817,8 +4816,6 @@ export default function CommanderSlug() {
                         <NoteLivraison
                           valeur={adresseLivraison.note}
                           onChange={v => setAdresseLivraison(p => ({ ...p, note: v }))}
-                          localisee={Number.isFinite(adresseLivraison.lat)}
-                          aSaisiUneRue={!!adresseLivraison.rue.trim()}
                           expedition
                         />
                         <p style={{ fontSize: '0.72rem', color: T.muted, fontWeight: 600, margin: '8px 0 0' }}>
@@ -4845,33 +4842,24 @@ export default function CommanderSlug() {
                 {!estDetail && modeCommande === 'livraison' && (
                   <div style={{ background: '#fff', borderRadius: 16, padding: '1rem 1.125rem', marginBottom: '1.25rem', border: `1.5px solid ${T.pale}` }}>
                     <p style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px' }}>Adresse de livraison</p>
-                    {/* ⚠️ CHOISIR DANS LA LISTE EST LE SEUL CHEMIN QUI DONNE DES
-                        COORDONNÉES, et c'est ce qui permet au commerçant de
-                        calculer sa tournée. Taper à la main reste possible :
-                        une vente ne se refuse pas parce qu'un moteur de
-                        géocodage ne connaît pas une rue neuve. */}
-                    <ChampAdresse
-                      valeur={adresseLivraison.rue}
-                      position={{ latitude: adresseLivraison.lat, longitude: adresseLivraison.lng }}
-                      onTexte={v => majAdresse({ rue: v })}
-                      onChoisir={choisirAdresse}
-                      placeholder="Rue et numéro"
+                    {/* 🔴 LE RÉFÉRENTIEL OFFICIEL, PLUS NOMINATIM (chantier zone,
+                        05/10). Code postal, puis rue choisie dans la liste,
+                        puis numéro vérifié. Une maison absente ne se livre
+                        pas (règle B, Alex) : le champ le dit tout de suite. */}
+                    <ChampAdresseLivraison
+                      valeur={adresseLivraison}
+                      onChange={majAdresseLivraison}
                       style={inputSt}
                       couleurs={{ hairline: T.pale, deep: T.ink, muted: T.muted }}
+                      telephoneCommerce={commercant?.telephone || null}
                     />
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input value={adresseLivraison.code_postal} onChange={e => majAdresse({ code_postal: e.target.value.replace(/\D/g, '').slice(0,4) })} inputMode="numeric" placeholder="Code postal" style={{ ...inputSt, flex: '0 0 40%' }} />
-                      <input value={adresseLivraison.ville} onChange={e => majAdresse({ ville: e.target.value })} placeholder="Ville" style={{ ...inputSt, flex: 1 }} />
-                    </div>
-                    <input value={adresseLivraison.complement} onChange={e => majAdresse({ complement: e.target.value })} placeholder="Étage, digicode... (optionnel)" style={inputSt} />
-                    {adresseLivraison.code_postal.trim() && !cpDansZone && (
+                    <input value={adresseLivraison.complement} onChange={e => setAdresseLivraison(p => ({ ...p, complement: e.target.value }))} placeholder="Boîte, étage, digicode... (optionnel)" style={inputSt} />
+                    {adresseLivraison.code_postal.trim().length === 4 && !cpDansZone && (
                       <p style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 700, margin: '2px 0 0' }}>Ce code postal n&rsquo;est pas dans la zone de livraison.</p>
                     )}
                     <NoteLivraison
                       valeur={adresseLivraison.note}
                       onChange={v => setAdresseLivraison(p => ({ ...p, note: v }))}
-                      localisee={Number.isFinite(adresseLivraison.lat)}
-                      aSaisiUneRue={!!adresseLivraison.rue.trim()}
                     />
                   </div>
                 )}

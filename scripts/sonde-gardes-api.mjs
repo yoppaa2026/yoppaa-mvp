@@ -65,6 +65,10 @@ const MARQUEURS = [
 const PUBLIQUES_ASSUMEES = {
   'app/api/pre-inscription/route.js': 'formulaire public de la landing, protégé par Turnstile',
   'app/api/communes/stats/route.js': 'compteurs publics de communes, aucune donnée personnelle',
+  // Chantier zone (05/10) : le référentiel officiel BeSt Address (données
+  // publiques CC BY 4.0, aucune donnée personnelle), limité en débit par IP.
+  'app/api/adresse/rues/route.js': 'noms de rues publics d\'un code postal (BeSt), limité en débit, jamais les numéros en bloc',
+  'app/api/adresse/situer/route.js': 'une maison publique à la fois (BeSt), limité en débit',
   'app/api/fiche/vue/route.js': 'incrément d\'un compteur de vues, aucune lecture',
   'app/api/deals/track/route.js': 'incrément d\'un compteur, colonne choisie dans une liste blanche',
   'app/api/articles/like/route.js': 'compteur public de likes',

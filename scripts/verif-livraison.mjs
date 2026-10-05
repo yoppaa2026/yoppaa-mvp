@@ -574,16 +574,32 @@ verifier('et range la commande du bon côté',
   // composant en `<NoteLivraisonRetiree` laissait la garde VERTE, parce que
   // `<NoteLivraison` en est un préfixe. Un motif qui n'exige pas la fin d'un
   // nom accepte tous ses homonymes plus longs.
-  verifier('l\'adresse de livraison se choisit dans des suggestions',
-    /<ChampAdresse\s/.test(blocLiv))
+  // ⚠️ REPOINTÉE LE 05/10 (chantier zone) : la livraison passe par le
+  // référentiel officiel (`ChampAdresseLivraison`), plus par Nominatim.
+  verifier('l\'adresse de livraison se choisit dans le référentiel officiel',
+    /<ChampAdresseLivraison\s/.test(blocLiv) && !/<ChampAdresse\s/.test(blocLiv))
+  verifier('🔴 BeSt le paiement exige une maison TROUVÉE (règle B)',
+    /const livraisonFormOk = !!\(adresseLivraison\.situee === true && adresseLivraison\.rue_id && cpDansZone && choixLivraisonValable\)/.test(fiche))
+  verifier('BeSt l\'écran compare la zone comme le serveur',
+    /const cpDansZone = zoneCouverte\(livraisonConfig\?\.codes_postaux, adresseLivraison\.code_postal\)/.test(fiche))
+  verifier('BeSt une adresse mémorisée est REVÉRIFIÉE au retour',
+    /setAdresseLivraison\(prev => \(\{ \.\.\.prev, \.\.\.p, situee: null, lat: null, lng: null \}\)\)/.test(fiche))
+  // Visée sur le CODE (l'adresse du service, l'import de l'ancien champ), pas
+  // sur le mot : les commentaires qui racontent pourquoi on l'a retiré le citent.
+  verifier('🔴 BeSt plus aucun appel à Nominatim dans la fiche',
+    !/nominatim\.openstreetmap\.org/.test(fiche) && !/from '@\/app\/components\/ChampAdresse'/.test(fiche))
+  verifier('🔴 BeSt ni dans le nouveau champ', !/nominatim\.openstreetmap\.org/.test(lire('app/components/ChampAdresseLivraison.js')))
   verifier('et la note est juste en dessous', /<NoteLivraison\s/.test(blocLiv))
 
   const debutExp = fiche.indexOf('Adresse d&rsquo;expédition</p>')
   const blocExp = debutExp === -1 ? '' : fiche.slice(debutExp, debutExp + 2200)
   verifier('le bloc d\'adresse d\'expédition se découpe', blocExp.length > 500)
-  // ⚠️ LA MÊME SAISIE DES DEUX CÔTÉS. Deux champs d'adresse différents dans le
-  // même tunnel finiraient par diverger (feedback_appliquer_partout).
-  verifier('l\'expédition a la MÊME saisie d\'adresse', /<ChampAdresse\s/.test(blocExp))
+  // ⚠️ REPOINTÉE LE 05/10 : DEUX SAISIES DIFFÉRENTES, PAR DÉCISION D'ALEX. Un
+  // colis peut partir hors de Wallonie, que le référentiel ne couvre pas, et
+  // il n'a pas besoin de position : saisie libre, sans Nominatim.
+  verifier('l\'expédition garde une saisie LIBRE, sans suggestions',
+    /<input value=\{adresseLivraison\.rue\} onChange=\{e => majAdresse\(\{ rue: e\.target\.value \}\)\}/.test(blocExp)
+      && !/<ChampAdresse/.test(blocExp))
   // ⚠️ ON COMPTE LES DEUX, ON N'EN VÉRIFIE PAS UN. Mesuré : la note est posée
   // à DEUX endroits, et l'expédition vient AVANT la livraison dans le fichier.
   // Une garde qui n'inspectait que le bloc livraison restait verte quand celle
@@ -601,10 +617,25 @@ verifier('et range la commande du bon côté',
     /function majAdresse\(champs\) \{\s*\n\s*setAdresseLivraison\(p => \(\{ \.\.\.p, \.\.\.champs, lat: null, lng: null \}\)\)/.test(fiche))
 
   // ─── Le serveur ─────────────────────────────────────────────────────────
-  verifier('le serveur préfère les coordonnées du navigateur',
-    /coordonneesPlausibles\(livraison_lat, livraison_lng\)/.test(route))
-  verifier('et se rabat sur une requête PROPRE',
-    /geocoderAdresse\(adresse_geocodage/.test(route))
+  // 🔴 REPOINTÉES LE 05/10 (chantier zone, I1). Elles exigeaient que le serveur
+  // CROIE les coordonnées du navigateur, puis géocode chez Nominatim. Les deux
+  // sont désormais interdites : la position vient de la maison du référentiel.
+  verifier('🔴 I1 le serveur ne lit plus les coordonnées du navigateur',
+    !/livraison_lat\)|Number\(livraison_lat\)|coordonneesPlausibles\(/.test(routeCode))
+  verifier('🔴 I1 et n\'appelle plus aucun géocodeur', !/geocoderAdresse\(/.test(routeCode) && !/lib\/geocode/.test(routeCode))
+  verifier('🔴 I1 la maison est cherchée PAR le code postal de la commande',
+    /situerMaison\(supabase, \{\s*rueId: best_rue_id,\s*codePostal: code_postal_livraison,\s*numero: numero_livraison,\s*\}\)/.test(routeCode))
+  verifier('🔴 règle B une maison absente refuse la livraison',
+    /if \(!maison\.trouvee\) \{[\s\S]{0,120}code: 'adresse_introuvable'/.test(routeCode))
+  verifier('BeSt une base muette refuse aussi (pas de pari)', /if \(!maison\.ok\) \{/.test(routeCode))
+  verifier('BeSt la position enregistrée est celle de la maison',
+    /const coordsLivraison = estLivraison && maisonLivraison\s*\?\s*\{ lat: maisonLivraison\.lat, lng: maisonLivraison\.lng \}/.test(routeCode))
+  verifier('BeSt l\'adresse enregistrée porte le nom OFFICIEL de la rue',
+    /rue: `\$\{maisonLivraison\.rue\} \$\{maisonLivraison\.numero\}`/.test(routeCode)
+      && /adresse_livraison: \(estLivraison \|\| estExpedition\) \? adresseEnregistree : null/.test(routeCode))
+  verifier('BeSt la maison est cherchée APRÈS la zone et AVANT l\'insertion',
+    routeCode.indexOf('zoneCouverte(cfg.codes_postaux') < routeCode.indexOf('situerMaison(supabase')
+      && routeCode.indexOf('situerMaison(supabase') < routeCode.indexOf(".from('commandes')\n      .insert("))
   // ⚠️ IL NE DOIT PLUS JAMAIS GÉOCODER LA CHAÎNE D'AFFICHAGE : c'est la forme
   // exacte du défaut du 22/08.
   verifier('il ne géocode plus la chaîne d\'affichage',

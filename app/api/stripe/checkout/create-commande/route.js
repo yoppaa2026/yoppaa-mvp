@@ -50,7 +50,7 @@ import { joursRetraitBoutique, estFermeExceptionnellement } from '@/lib/ouvertur
 import { jourPlus } from '@/lib/statut-commerce'
 import { delaiDuPanier, refusDeMelange, pretA, premierJourBoutique, libelleDuree, libelleMoment } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
-import { zoneValide, dansEtoile, phraseHorsZone } from '@/lib/zone-etoile'
+import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
 import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { refusCoordonnees } from '@/lib/coordonnees-client'
@@ -398,8 +398,20 @@ export async function POST(request) {
       // sans position), on NE PARIE PAS : la livraison est refusée, avec une
       // issue. `dansEtoile` rend `null` dans ce cas, jamais « dedans ».
       if (avecEtoile) {
+        // Le centre : le lieu d'activité permanent principal, sinon la fiche
+        // (Alex, 05/10). Erreur de lecture : on ne parie pas sur la fiche.
+        const { data: lieuxEtoile, error: errLieux } = await supabase
+          .from('commercant_lieux')
+          .select('type, principal, actif, latitude, longitude, adresse')
+          .eq('commercant_id', commercant.id)
+          .eq('actif', true)
+        if (errLieux) {
+          console.error('[create-commande] lecture lieux KO', errLieux)
+          return NextResponse.json({ ok: false, error: 'Impossible de vérifier la livraison. Réessaie dans un instant.' }, { status: 500 })
+        }
+        const centre = centreDeLaZone({ lieux: lieuxEtoile || [], commercant })
         const verdict = dansEtoile({
-          centre: { lat: commercant.latitude, lng: commercant.longitude },
+          centre,
           rayons: cfg.zone_rayons_m,
           point: { lat: maison.lat, lng: maison.lng },
         })

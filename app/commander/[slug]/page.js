@@ -40,7 +40,7 @@ import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { zoneCouverte } from '@/lib/livraison'
-import { zoneValide, dansEtoile, phraseHorsZone } from '@/lib/zone-etoile'
+import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -3222,7 +3222,9 @@ export default function CommanderSlug() {
   const avecEtoile = zoneValide(livraisonConfig?.zone_rayons_m)
   const verdictEtoile = avecEtoile && adresseLivraison.situee === true
     ? dansEtoile({
-        centre: { lat: commercant?.latitude, lng: commercant?.longitude },
+        // Même centre que le serveur : le lieu permanent principal, sinon la
+        // fiche (Alex, 05/10). `foodtruckEmps` = tous les lieux actifs.
+        centre: centreDeLaZone({ lieux: foodtruckEmps, commercant }),
         rayons: livraisonConfig.zone_rayons_m,
         point: { lat: adresseLivraison.lat, lng: adresseLivraison.lng },
       })

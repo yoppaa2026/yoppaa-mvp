@@ -71,10 +71,11 @@ import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // la gravure du lieu n'ont pas été supprimés du projet, c'est le geste d'agenda
 // qui les reprend.
 import { exclusionsQuiSeChevauchent, seancesDeLaFormule, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, verdictReprise, messageRefusReprise, verdictModificationAbonnement, messageRefusModification, partNonUtilisee, verdictRemboursementAbonnement, messageRefusRemboursement, libelleRemboursement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
-import ChampAdresse from '@/app/components/ChampAdresse'
+// 🔴 Le référentiel officiel, plus Nominatim (Alex, 05/10) : voir le composant.
+import ChampAdresseOfficielle from '@/app/components/ChampAdresseOfficielle'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import dynamic from 'next/dynamic'
-import { zoneValide, centreValide, cercle, libelleKm, RAYON_MIN_M, RAYON_MAX_M } from '@/lib/zone-etoile'
+import { zoneValide, centreDeLaZone, cercle, libelleKm, RAYON_MIN_M, RAYON_MAX_M } from '@/lib/zone-etoile'
 // La carte (et Leaflet, sa feuille de style comprise) ne se charge que si le
 // commerçant ouvre le dessin de sa zone : personne d'autre ne la paie.
 const CarteZoneEtoile = dynamic(() => import('./CarteZoneEtoile'), {
@@ -5433,9 +5434,11 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
 
   useEffect(() => {
     (async () => {
-      const [{ data }, { data: fiche }] = await Promise.all([
+      const [{ data }, { data: fiche }, { data: lieux }] = await Promise.all([
         supabase.from('livraison_config').select('*').eq('commercant_id', commercantId).maybeSingle(),
         supabase.from('commercants').select('latitude, longitude, adresse').eq('id', commercantId).maybeSingle(),
+        // Le centre de l'étoile est le lieu permanent principal (Alex, 05/10).
+        supabase.from('commercant_lieux').select('type, principal, actif, latitude, longitude, adresse').eq('commercant_id', commercantId).eq('actif', true),
       ])
       const valeurs = {
         codesPostaux: data?.codes_postaux || [],
@@ -5449,9 +5452,8 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
       setGratuitDes(valeurs.gratuitDes)
       setMinimumCommande(valeurs.minimumCommande)
       setZoneRayons(valeurs.zoneRayons)
-      setCentreFiche(centreValide({ lat: fiche?.latitude, lng: fiche?.longitude })
-        ? { lat: Number(fiche.latitude), lng: Number(fiche.longitude), adresse: fiche.adresse || '' }
-        : null)
+      // Même règle que le serveur et la fiche client : `centreDeLaZone`.
+      setCentreFiche(centreDeLaZone({ lieux: lieux || [], commercant: fiche }))
       setInitial(valeurs)
       setLoading(false)
     })()
@@ -5555,14 +5557,14 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
           <>
             <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
               Tire les points pour suivre tes routes : chacun règle jusqu&rsquo;où tu livres dans sa direction.
-              Le centre est l&rsquo;adresse de ta fiche{centreFiche?.adresse ? <> : <strong style={{ color: T.ink }}>{centreFiche.adresse}</strong></> : ''}.
+              Le centre est {centreFiche?.source === 'lieu' ? <>ton lieu d&rsquo;activité principal</> : <>l&rsquo;adresse de ta fiche</>}{centreFiche?.adresse ? <> : <strong style={{ color: T.ink }}>{centreFiche.adresse}</strong></> : ''}.
             </p>
             {centreFiche ? (
               <CarteZoneEtoile centre={centreFiche} rayons={zoneRayons} onChange={setZoneRayons} couleur={T.main} />
             ) : (
               <p style={{ fontSize: 12.5, color: '#B91C1C', fontWeight: 700, margin: '0 0 10px', lineHeight: 1.5 }}>
-                Ta fiche n&rsquo;a pas de position sur la carte : la zone ne peut pas être dessinée, et la livraison sera refusée tant que ce n&rsquo;est pas réglé.
-                Corrige l&rsquo;adresse de ta fiche, puis reviens ici.
+                Ni ton lieu d&rsquo;activité ni ta fiche n&rsquo;ont de position sur la carte : la zone ne peut pas être dessinée, et la livraison sera refusée tant que ce n&rsquo;est pas réglé.
+                Ajoute ou corrige ton lieu d&rsquo;activité dans le Profil, section « Où me trouver », puis reviens ici.
               </p>
             )}
             <label style={{ display: 'block', marginTop: 12 }}>
@@ -5604,7 +5606,7 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
           Dessiner ma zone sur une carte (plus précis qu&rsquo;un code postal)
         </button>
         {!centreFiche && (
-          <p style={{ fontSize: 12, color: T.muted, margin: '-6px 0 12px' }}>Pour dessiner ta zone, ta fiche doit d&rsquo;abord avoir une adresse située sur la carte.</p>
+          <p style={{ fontSize: 12, color: T.muted, margin: '-6px 0 12px' }}>Pour dessiner ta zone, ton lieu d&rsquo;activité doit d&rsquo;abord avoir une adresse située sur la carte (Profil, section « Où me trouver »).</p>
         )}
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <input
@@ -6894,10 +6896,9 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderRadius: 10, border: `1px dashed ${T.pale}`, padding: '10px 12px' }}>
             <input style={field} placeholder="Nom du lieu (ex : Salle Saint-Roch)" value={perm.libelle}
               onChange={e => setPerm(p => ({ ...p, libelle: e.target.value }))}/>
-            <ChampAdresse style={field} valeur={perm.adresse} position={perm}
-              placeholder="Adresse complète (pour l’itinéraire)"
-              couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
-              onTexte={v => setPerm(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+            <ChampAdresseOfficielle style={field} valeur={perm.adresse} position={perm}
+              couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted, accent: T.main }}
+              libelleValider="Choisir cette adresse"
               onChoisir={({ adresse, latitude, longitude }) => setPerm(p => ({ ...p, adresse, latitude, longitude }))}/>
             <button onClick={ajouterPermanent} style={{ ...btnMini, alignSelf: 'flex-start' }}>Utiliser cette adresse</button>
           </div>
@@ -7029,10 +7030,9 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
               {enEdition && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                   <input style={field} placeholder="Nom du lieu" value={formHebdo.libelle} onChange={ev => setFormHebdo(p => ({ ...p, libelle: ev.target.value }))}/>
-                  <ChampAdresse style={field} valeur={formHebdo.adresse} position={formHebdo}
-                    placeholder="Adresse complète"
-                    couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
-                    onTexte={v => setFormHebdo(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+                  <ChampAdresseOfficielle style={field} valeur={formHebdo.adresse} position={formHebdo}
+                    couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted, accent: T.main }}
+                    libelleValider="Choisir cette adresse"
                     onChoisir={({ adresse, latitude, longitude }) => setFormHebdo(p => ({ ...p, adresse, latitude, longitude }))}/>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input type="time" style={{ ...field, flex: 1 }} value={formHebdo.heure_debut} onChange={ev => setFormHebdo(p => ({ ...p, heure_debut: ev.target.value }))}/>
@@ -7096,10 +7096,9 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input style={field} placeholder="Nom du lieu (ex : Place du Marché)" value={auj.libelle}
             onChange={e => setAuj(p => ({ ...p, libelle: e.target.value }))}/>
-          <ChampAdresse style={field} valeur={auj.adresse} position={auj}
-            placeholder="Adresse complète (pour l’itinéraire)"
-            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
-            onTexte={v => setAuj(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+          <ChampAdresseOfficielle style={field} valeur={auj.adresse} position={auj}
+            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted, accent: T.main }}
+            libelleValider="Choisir cette adresse"
             onChoisir={({ adresse, latitude, longitude }) => setAuj(p => ({ ...p, adresse, latitude, longitude }))}/>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="time" style={{ ...field, flex: 1 }} value={auj.heure_debut} onChange={e => setAuj(p => ({ ...p, heure_debut: e.target.value }))}/>
@@ -7137,10 +7136,9 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input type="date" min={todayISO} style={field} value={futur.date_jour} onChange={e => setFutur(p => ({ ...p, date_jour: e.target.value }))}/>
           <input style={field} placeholder="Nom du lieu (ex : Marché de Mettet)" value={futur.libelle} onChange={e => setFutur(p => ({ ...p, libelle: e.target.value }))}/>
-          <ChampAdresse style={field} valeur={futur.adresse} position={futur}
-            placeholder="Adresse complète"
-            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted }}
-            onTexte={v => setFutur(p => ({ ...p, adresse: v, latitude: null, longitude: null }))}
+          <ChampAdresseOfficielle style={field} valeur={futur.adresse} position={futur}
+            couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted, accent: T.main }}
+            libelleValider="Choisir cette adresse"
             onChoisir={({ adresse, latitude, longitude }) => setFutur(p => ({ ...p, adresse, latitude, longitude }))}/>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="time" style={{ ...field, flex: 1 }} value={futur.heure_debut} onChange={e => setFutur(p => ({ ...p, heure_debut: e.target.value }))}/>

@@ -8,7 +8,7 @@
 //
 //   npm run verif:session
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { decisionGeoloc } from '../lib/geoloc.js'
 
 // ⚠️ `lib/session-permanente` importe le client Supabase, qui exige son URL AU
@@ -748,12 +748,17 @@ function egale(nom, recu, attendu) {
 // ⚠️ Les appels `/reverse` sont exclus À DESSEIN : on leur donne des
 // coordonnées et ils rendent une adresse, un filtre pays n'y veut rien dire.
 {
+  // ⚠️ REPOINTÉE LE 05/10 (Alex : « supprimer Nominatim ») : `ChampAdresse.js`
+  // et `lib/geocode.js` sont SUPPRIMÉS, remplacés par le référentiel officiel
+  // BeSt. Il ne reste qu'une recherche Nominatim, côté Yopper, en attente de
+  // la même bascule. La garde vérifie aussi qu'ils ne reviennent pas.
   const FICHIERS = [
     'app/commander/page.js',
-    'app/components/ChampAdresse.js',
-    'lib/geocode.js',
     'app/commander/ConfirmCommune.js',
   ]
+  for (const retire of ['app/components/ChampAdresse.js', 'lib/geocode.js']) {
+    verifie(`🔴 ${retire} reste supprimé (Nominatim retiré)`, !existsSync(retire))
+  }
   let recherches = 0
   for (const chemin of FICHIERS) {
     const src = readFileSync(chemin, 'utf8').replace(/\r\n/g, '\n')
@@ -789,8 +794,8 @@ function egale(nom, recu, attendu) {
   // à la main, donc un quatrième géocodeur, même correctement filtré, doit
   // faire rougir pour qu'on pense à l'ajouter ici. Une garde qui s'adapte
   // toute seule à ce qu'elle trouve ne garde plus rien.
-  const ATTENDUS = 3
-  verifie('⚠️ les trois appels de recherche sont bien là où on les cherche',
+  const ATTENDUS = 1
+  verifie('⚠️ le seul appel de recherche restant est bien là où on le cherche',
     recherches === ATTENDUS,
     `${recherches} appel(s) trouvé(s), attendu ${ATTENDUS} : un géocodeur a été ajouté, déplacé ou renommé, relis la liste FICHIERS`)
 }

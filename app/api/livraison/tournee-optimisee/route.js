@@ -23,7 +23,6 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { geocoderAdresse } from '@/lib/geocode'
 import { STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { jourLocalISO } from '@/lib/timezone'
@@ -234,8 +233,8 @@ export async function POST(request) {
     // `commercants.latitude/longitude` existe déjà et sert au calcul des
     // distances sur l'accueil. L'ancienne version interrogeait Nominatim à
     // chaque optimisation : gaspillage, lenteur, et un service public dont la
-    // règle d'usage est d'une requête par seconde. Le géocodage ne reste qu'en
-    // dernier recours, pour un commerce dont la fiche n'a pas de coordonnées.
+    // règle d'usage est d'une requête par seconde. Le dernier recours au
+    // géocodage a disparu le 05/10 (voir plus bas).
     // ⚠️ ET LE DÉPART EST LE LIEU D'ACTIVITÉ, PLUS LE SIÈGE (Alex, 15/08).
     // L'adresse d'inscription ne sert qu'à valider le dossier : faire partir la
     // tournée de là enverrait le livreur au domicile d'un commerçant inscrit
@@ -249,11 +248,19 @@ export async function POST(request) {
       .eq('actif', true)
     const departLieu = lieuxDuJour({ lieux: lieuxCom || [], jour: jourLocalISO(new Date()) })[0] || null
 
+    // 🔴 PLUS DE GÉOCODAGE DE SECOURS (Alex, 05/10 : « supprimer Nominatim »).
+    // Les lieux se saisissent désormais dans le référentiel officiel et
+    // reçoivent leur position à la saisie. Un lieu ancien sans position est
+    // signalé (message juste en dessous) au lieu d'être deviné : le commerçant
+    // le corrige une fois dans « Où me trouver ».
+    // ⚠️ `latitude: null` : `Number(null)` vaut 0, fini, donc « valide ». On
+    // teste l'ABSENCE avant le nombre (reference_deux_formes_absence).
     let depart = null
-    if (Number.isFinite(Number(departLieu?.latitude)) && Number.isFinite(Number(departLieu?.longitude))) {
-      depart = { lat: Number(departLieu.latitude), lng: Number(departLieu.longitude) }
-    } else if (departLieu?.adresse) {
-      depart = await geocoderAdresse(departLieu.adresse)
+    const latDepart = departLieu?.latitude
+    const lngDepart = departLieu?.longitude
+    if (latDepart !== null && latDepart !== undefined && lngDepart !== null && lngDepart !== undefined
+        && Number.isFinite(Number(latDepart)) && Number.isFinite(Number(lngDepart))) {
+      depart = { lat: Number(latDepart), lng: Number(lngDepart) }
     }
     if (!depart) {
       return NextResponse.json({

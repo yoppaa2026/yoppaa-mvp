@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { normaliserRecherche } from '@/lib/best-adresse'
+import { filtrerRues } from '@/lib/best-adresse'
+import { useRuesBest } from './useRuesBest'
 
 // LA SAISIE D'UNE ADRESSE DE LIVRAISON, DANS LE RÉFÉRENTIEL OFFICIEL.
 //
@@ -37,30 +38,12 @@ export default function ChampAdresseLivraison({ valeur, onChange, style, couleur
     erreur: couleurs.erreur || '#DC2626',
   }
   const cp = valeur?.code_postal || ''
-  const [rues, setRues] = useState({ cp: null, liste: [], etat: 'vide' })   // vide | charge | ok | erreur
+  // Les rues du code postal : une requête par code postal (hook partagé).
+  const rues = useRuesBest(cp)
   const [texteRue, setTexteRue] = useState(valeur?.rue_nom || '')
   const [ouvert, setOuvert] = useState(false)
   const [verif, setVerif] = useState('repos')   // repos | cherche | erreur
   const minuteur = useRef(null)
-
-  // 1. Les rues du code postal, une fois par code postal.
-  useEffect(() => {
-    if (!/^\d{4}$/.test(cp)) return
-    if (rues.cp === cp && rues.etat !== 'erreur') return
-    let annule = false
-    setRues({ cp, liste: [], etat: 'charge' })
-    fetch(`/api/adresse/rues?cp=${cp}`)
-      .then(r => r.json().then(d => ({ ok: r.ok && d?.ok, d })))
-      .then(({ ok, d }) => {
-        if (annule) return
-        setRues(ok
-          ? { cp, liste: (d.rues || []).map(r => ({ ...r, r: normaliserRecherche(r.nom) })), etat: 'ok' }
-          : { cp, liste: [], etat: 'erreur' })
-      })
-      .catch(() => { if (!annule) setRues({ cp, liste: [], etat: 'erreur' }) })
-    return () => { annule = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cp])
 
   // Une adresse mémorisée arrive APRÈS le premier rendu (lue dans le stockage
   // du navigateur) : le texte de la rue doit la suivre.
@@ -69,20 +52,11 @@ export default function ChampAdresseLivraison({ valeur, onChange, style, couleur
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valeur?.rue_id])
 
-  // 2. Les suggestions : chaque mot tapé doit se retrouver dans le nom.
-  const suggestions = useMemo(() => {
-    const mots = normaliserRecherche(texteRue).split(' ').filter(Boolean)
-    if (mots.length === 0 || rues.etat !== 'ok') return []
-    const debutDeMot = (r, m) => (' ' + r).includes(' ' + m)
-    return rues.liste
-      .filter(x => mots.every(m => x.r.includes(m)))
-      .sort((a, b) => {
-        const sa = mots.filter(m => debutDeMot(a.r, m)).length
-        const sb = mots.filter(m => debutDeMot(b.r, m)).length
-        return sb - sa || a.r.localeCompare(b.r)
-      })
-      .slice(0, MAX_SUGGESTIONS)
-  }, [texteRue, rues])
+  // 2. Les suggestions : la même règle que le champ des commerçants.
+  const suggestions = useMemo(
+    () => (rues.etat === 'ok' ? filtrerRues(rues.liste, texteRue, MAX_SUGGESTIONS) : []),
+    [texteRue, rues],
+  )
 
   // 3. Le numéro, vérifié quand la frappe s'arrête. Aussi au retour d'une
   // adresse mémorisée : `situee` vaut alors null, on revérifie.

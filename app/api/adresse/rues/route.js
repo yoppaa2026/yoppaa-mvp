@@ -39,7 +39,9 @@ export async function GET(request) {
 
   const res = NextResponse.json({
     ok: true,
-    rues: rues.map(r => ({ id: r.rue_id, nom: r.nom, localite: r.localite })),
+    // Le centre de la rue sert aux lieux d'activité sans numéro (une place, un
+    // parking). Donnée publique, comme le nom.
+    rues: rues.map(r => ({ id: r.rue_id, nom: r.nom, localite: r.localite, lat: r.lat, lng: r.lng })),
   })
   // Une liste vide n'est pas mise en cache longtemps : c'est aussi ce qu'on
   // rend avant le premier import, et elle ne doit pas survivre à l'import.

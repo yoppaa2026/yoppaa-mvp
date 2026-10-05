@@ -158,26 +158,16 @@ const MUTATIONS = [
     de: "&accept-language=fr&countrycodes=be`, { headers: { 'Accept': 'application/json' } })",
     vers: "&accept-language=fr`, { headers: { 'Accept': 'application/json' } })" },
 
-  // ⚠️ LES DEUX FRERES, qui filtrent depuis toujours. La garde vise la
-  // FAMILLE : un geocodeur ajoute demain sans filtre doit rougir aussi.
-  { nom: '🔴 le champ d adresse partage sort de Belgique',
-    fichier: 'app/components/ChampAdresse.js',
-    de: '&accept-language=fr&countrycodes=be&addressdetails=1',
-    vers: '&accept-language=fr&addressdetails=1' },
-
-  { nom: '🔴 le geocodeur serveur sort de Belgique',
-    fichier: 'lib/geocode.js',
-    de: '&format=json&limit=1&countrycodes=be',
-    vers: '&format=json&limit=1' },
-
-  // 🔴 ET LE COMPTEUR, QUI A DEJA SERVI. Ma premiere version de la garde ne
-  // voyait qu UN appel sur trois : deux passent par une constante interpolee,
-  // et leur ligne d appel ne contient pas un mot de « nominatim ». Sans le
-  // compte, une boucle vide se serait lue « tout va bien ».
-  { nom: '🔴 la constante est renommee : la boucle se vide et la garde devient muette',
-    fichier: 'lib/geocode.js',
-    de: "const NOMINATIM = 'https://nominatim.openstreetmap.org/search'",
-    vers: "const NOMINATIM_RECHERCHE = 'https://nominatim.openstreetmap.org/search'" },
+  // ⚠️ LES TROIS MUTATIONS QUI SUIVAIENT VISAIENT `ChampAdresse.js` ET
+  // `lib/geocode.js`, SUPPRIMES LE 05/10 (Alex : « supprimer Nominatim », le
+  // referentiel officiel BeSt les remplace). Elles sont retirees avec eux : une
+  // mutation sur un fichier absent ne mesure rien. La garde verifie desormais
+  // que ces deux fichiers ne reviennent pas ; celle-ci la fait rougir.
+  { nom: '🔴 le compte exact des recherches Nominatim reste mesure',
+    fichier: ACCUEIL,
+    de: "&accept-language=fr&countrycodes=be`, { headers: { 'Accept': 'application/json' } })",
+    // Un second appel, sur SA ligne : le compte passe a deux, la garde rougit.
+    vers: "&accept-language=fr&countrycodes=be`, { headers: { 'Accept': 'application/json' } })\n      void `https://nominatim.openstreetmap.org/search?q=x&countrycodes=be`" },
 ]
 
 const lancer = () => {

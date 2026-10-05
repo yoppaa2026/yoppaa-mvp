@@ -35,10 +35,11 @@ import { estFermeExceptionnellement } from '../lib/ouverture.js'
 import {
   distanceMetres, capDegres, pointA, cercle, limiteDansDirection, dansEtoile, zoneValide,
   contourEtoile, phraseHorsZone, NB_POIGNEES, PAS_DEGRES, RAYON_DEFAUT_M, RAYON_MAX_M,
+  centreDeLaZone,
 } from '../lib/zone-etoile.js'
 import {
   COLONNES_BEST, decouperLigneCsv, indexColonnes, adresseDeLigne,
-  normaliserRecherche, baseNumero, estimerPositions,
+  normaliserRecherche, baseNumero, estimerPositions, filtrerRues, composerAdresseOfficielle,
 } from '../lib/best-adresse.js'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -252,6 +253,44 @@ verifier('le minimum porte sur le total des articles',
     estimerPositions([{ numero: '1', lat: null, lng: null }, { numero: '3', lat: null, lng: null }]).length === 0)
   verifier('BeSt l\'entrée n\'est pas modifiée', rue[3].lat === null)
 
+  // La recherche de rues, PARTAGÉE par les deux champs (livraison, commerçant).
+  const ruesTest = [
+    { nom: 'Rue de la Belle Haie' }, { nom: 'Place du Marché' }, { nom: 'Rue Haute' }, { nom: 'Chemin de la Haie' },
+  ]
+  egal('rues : chaque mot tapé doit se retrouver', filtrerRues(ruesTest, 'belle haie').map(r => r.nom), ['Rue de la Belle Haie'])
+  egal('rues : sans accents', filtrerRues(ruesTest, 'marche').map(r => r.nom), ['Place du Marché'])
+  egal('rues : un début de mot passe devant', filtrerRues(ruesTest, 'haie').map(r => r.nom)[0], 'Chemin de la Haie')
+  egal('rues : rien tapé, rien proposé', filtrerRues(ruesTest, '  '), [])
+  egal('rues : plafond de suggestions', filtrerRues(ruesTest, 'r', 2).length, 2)
+  egal('adresse lisible avec numéro', composerAdresseOfficielle({ rue: 'Rue du Mont', numero: '9A', code_postal: '5640', localite: 'Biesme' }), 'Rue du Mont 9A, 5640 Biesme')
+  egal('adresse lisible sans numéro (une place)', composerAdresseOfficielle({ rue: 'Place du Marché', code_postal: '5070', localite: 'Fosses-la-Ville' }), 'Place du Marché, 5070 Fosses-la-Ville')
+  {
+    const champLiv = lire('app/components/ChampAdresseLivraison.js')
+    const champOff = lire('app/components/ChampAdresseOfficielle.js')
+    verifier('rues : les deux champs passent par le même filtre et le même chargement',
+      /filtrerRues\(rues\.liste, texteRue, MAX_SUGGESTIONS\)/.test(champLiv) && /filtrerRues\(rues\.liste, texteRue, MAX_SUGGESTIONS\)/.test(champOff)
+        && /useRuesBest\(cp\)/.test(champLiv) && /useRuesBest\(cp\)/.test(champOff))
+    verifier('🔴 commerçant (A) : sans numéro, le centre de la rue, et c\'est dit',
+      /if \(lat === null && Number\.isFinite\(rue\.lat\) && Number\.isFinite\(rue\.lng\)\) \{\s*lat = rue\.lat; lng = rue\.lng; approximative = true/.test(champOff)
+        && /Position approximative : le centre de la rue\./.test(champOff))
+    verifier('🔴 commerçant (B) : saisie libre hors Wallonie, SANS position',
+      /onChoisir\?\.\(\{ adresse, latitude: null, longitude: null, approximative: false \}\)/.test(champOff))
+    verifier('🔴 commerçant : rien n\'est envoyé avant le geste « Utiliser »', (champOff.match(/onChoisir\?\.\(/g) || []).length === 2)
+    verifier('🔴 plus aucun appel à Nominatim dans les champs d\'adresse', !/nominatim/i.test(champOff.replace(/^\s*\/\/.*$/gm, '')))
+    const inscription = lire('app/signup/page.js')
+    verifier('🔴 inscription : le siège passe par le référentiel, libre hors Wallonie',
+      /<ChampAdresseOfficielle\s[\s\S]{0,200}libreHorsWallonie/.test(inscription) && !/<ChampAdresse\s/.test(inscription))
+    verifier('🔴 inscription : un siège sans position n\'est admis que choisi exprès',
+      /\(\(form\.latitude && form\.longitude\) \|\| sansPositionAssumee\)/.test(inscription)
+        && /setSansPositionAssumee\(latitude === null \|\| longitude === null\)/.test(inscription))
+    const dashLieux = lire('app/dashboard/ConfigDashboard.js')
+    egal('🔴 lieux : les 4 champs passent par le référentiel', (dashLieux.match(/<ChampAdresseOfficielle style=\{field\}/g) || []).length, 4)
+    verifier('lieux : pas de saisie libre hors Wallonie (un lieu doit être situé)',
+      !/<ChampAdresseOfficielle style=\{field\}[^>]*libreHorsWallonie/.test(dashLieux))
+    verifier('🔴 l\'ancien champ n\'est plus importé nulle part',
+      ![inscription, dashLieux, lire('app/commander/[slug]/page.js')].some(s => /components\/ChampAdresse'/.test(s)))
+  }
+
   // Le script d'import : les garde-fous qui empêchent d'abîmer une base.
   const imp = lire('scripts/import-best-adresses.mjs')
   const impCode = imp.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
@@ -321,8 +360,39 @@ verifier('le minimum porte sur le total des articles',
       && /livraison_actif, latitude, longitude'\)/.test(routeCode))
   verifier('🔴 étoile : avec une étoile, le code postal ne décide plus',
     /const avecEtoile = zoneValide\(cfg\.zone_rayons_m\)/.test(routeCode) && /if \(!avecEtoile && !zoneCouverte\(cfg\.codes_postaux, code_postal_livraison\)\)/.test(routeCode))
+  // ⚠️ REPOINTÉE LE 05/10 (décision C d'Alex) : le centre n'est plus la fiche
+  // (= le SIÈGE saisi à l'inscription), mais le lieu permanent principal.
   verifier('🔴 étoile : jugée sur la position de la MAISON du référentiel',
-    /point: \{ lat: maison\.lat, lng: maison\.lng \}/.test(routeCode) && /centre: \{ lat: commercant\.latitude, lng: commercant\.longitude \}/.test(routeCode))
+    /point: \{ lat: maison\.lat, lng: maison\.lng \}/.test(routeCode))
+  verifier('🔴 étoile (C) : le serveur centre sur le lieu principal, sinon la fiche',
+    /\.from\('commercant_lieux'\)\s*\.select\('type, principal, actif, latitude, longitude, adresse'\)/.test(routeCode)
+      && /const centre = centreDeLaZone\(\{ lieux: lieuxEtoile \|\| \[\], commercant \}\)/.test(routeCode)
+      && /dansEtoile\(\{\s*centre,/.test(routeCode)
+      && /if \(errLieux\) \{/.test(routeCode))
+  {
+    const fiche3 = lire('app/commander/[slug]/page.js')
+    const dash3 = lire('app/dashboard/ConfigDashboard.js')
+    verifier('🔴 étoile (C) : la fiche client centre comme le serveur',
+      /centre: centreDeLaZone\(\{ lieux: foodtruckEmps, commercant \}\)/.test(fiche3))
+    verifier('🔴 étoile (C) : le réglage centre comme le serveur',
+      /setCentreFiche\(centreDeLaZone\(\{ lieux: lieux \|\| \[\], commercant: fiche \}\)\)/.test(dash3))
+  }
+  // La règle du centre, exécutée.
+  {
+    const fiche = { latitude: 50.32, longitude: 4.65, adresse: 'Siège' }
+    const lieuP = { type: 'permanent', principal: true, actif: true, latitude: 50.31, longitude: 4.60, adresse: 'Lieu' }
+    const lieu2 = { type: 'permanent', principal: false, actif: true, latitude: 50.40, longitude: 4.70, adresse: 'Autre' }
+    egal('🔴 centre : le lieu principal gagne sur la fiche', centreDeLaZone({ lieux: [lieu2, lieuP], commercant: fiche })?.adresse, 'Lieu')
+    egal('centre : sans principal, le premier lieu permanent', centreDeLaZone({ lieux: [{ ...lieu2 }], commercant: fiche })?.adresse, 'Autre')
+    egal('centre : un lieu sans position cède à la fiche',
+      centreDeLaZone({ lieux: [{ ...lieuP, latitude: null, longitude: null }], commercant: fiche })?.source, 'fiche')
+    egal('centre : un lieu hebdomadaire ne compte pas',
+      centreDeLaZone({ lieux: [{ ...lieuP, type: 'hebdo' }], commercant: fiche })?.source, 'fiche')
+    egal('centre : un lieu inactif ne compte pas',
+      centreDeLaZone({ lieux: [{ ...lieuP, actif: false }], commercant: fiche })?.source, 'fiche')
+    verifier('🔴 centre : rien de situé, aucun centre (jamais 0,0)',
+      centreDeLaZone({ lieux: [], commercant: { latitude: null, longitude: null } }) === null)
+  }
   verifier('🔴 étoile : sans centre, le serveur refuse (ne parie pas)', /if \(!verdict\) \{[\s\S]{0,200}code: 'zone_indisponible'/.test(routeCode))
   verifier('🔴 étoile : hors zone, refus avec la phrase', /if \(!verdict\.dedans\) \{[\s\S]{0,120}code: 'hors_zone',\s*error: phraseHorsZone\(verdict\)/.test(routeCode))
   verifier('étoile : la maison est jugée AVANT l\'insertion',
@@ -443,8 +513,11 @@ verifier('et de ses coordonnées', /departLieu\?\.latitude/.test(tourneeCode))
 // ⚠️ Et pas d'un géocodage à chaque clic. Nominatim est un service public dont
 // la règle d'usage est d'une requête par seconde : le rappeler à chaque
 // optimisation est un gaspillage et un risque de blocage.
-verifier('le géocodage n\'est qu\'un dernier recours',
-  tourneeCode.indexOf('departLieu?.latitude') < tourneeCode.indexOf('geocoderAdresse(departLieu'))
+// ⚠️ REPOINTÉE LE 05/10 (Alex : « supprimer Nominatim ») : le dernier recours
+// a disparu avec `lib/geocode.js`. Un lieu sans position est signalé, pas deviné.
+verifier('🔴 plus aucun géocodage dans la tournée', !/geocoderAdresse\(|lib\/geocode/.test(tourneeCode))
+verifier('un départ sans position n\'est pas lu comme 0,0',
+  /latDepart !== null && latDepart !== undefined && lngDepart !== null && lngDepart !== undefined/.test(tourneeCode))
 // Et le message d'erreur envoie au bon endroit : « Profil », section des lieux,
 // et non plus vers une adresse que le commerçant ne peut pas corriger là.
 verifier('un lieu non géolocalisable renvoie vers la bonne section',

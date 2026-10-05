@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
-import ChampAdresse from '@/app/components/ChampAdresse'
+import ChampAdresseOfficielle from '@/app/components/ChampAdresseOfficielle'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan, TVA_ABONNEMENT_POURCENT } from '@/lib/plans'
@@ -351,7 +351,8 @@ export default function Signup() {
 function extractVille(adresse) {
   if (!adresse) return null
   const parts = adresse.split(',').map(p => p.trim())
-  // Format Nominatim typique : "Rue X 12, 5640 Mettet, Belgique"
+  // Format du référentiel : "Rue X 12, 5640 Mettet" (et l'ancien format
+  // Nominatim "Rue X 12, 5640 Mettet, Belgique", encore en base)
   for (const part of parts) {
     const m = part.match(/^\d{4}\s+(.+)$/)
     if (m) return m[1]
@@ -1150,7 +1151,7 @@ function GlossaireFeatures({ categorie = 'alimentaire' }) {
 }
 
 // ─── ÉTAPE 2 : INFOS DE BASE ──────────────────────────────────────────────────
-// - Nom, type, adresse (autocomplete Nominatim), téléphone, description ≥20
+// - Nom, type, adresse (référentiel officiel BeSt depuis le 05/10), téléphone, description ≥20
 // - Sauvegarde auto champ par champ (debounce 600ms)
 // - Update onboarding_commercants.infos_ok = true quand tous les champs requis
 function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, avancer, retour }) {
@@ -1172,6 +1173,12 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
   const [iaMessage, setIaMessage] = useState(null)
   const [saving, setSaving] = useState(false)
   const debounceRef = useRef(null)
+  // ⚠️ UN SIÈGE HORS WALLONIE N'A PAS DE POSITION, ET C'EST ADMIS (Alex, 05/10,
+  // décision B) : le référentiel officiel ne couvre que la Wallonie, et le
+  // siège ne sert qu'à valider le dossier. Le choix explicite « sans position »
+  // du champ lève l'exigence de coordonnées ; une adresse tapée sans choix,
+  // non.
+  const [sansPositionAssumee, setSansPositionAssumee] = useState(false)
 
   // ─── Le siège social est-il le lieu de l'activité ? ──────────────────────
   //
@@ -1229,7 +1236,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
     form.adresse.trim().length > 0 &&
     form.telephone.trim().length >= 8 &&
     presentationManque === 0 &&
-    form.latitude && form.longitude
+    ((form.latitude && form.longitude) || sansPositionAssumee)
 
   // Sauvegarde auto (debounced)
   function updateField(k, v) {
@@ -1341,13 +1348,15 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
           adresses n'en font qu'une, et le formulaire ne s'allonge pas d'un pouce. */}
       <Card titre="Localisation" sous="On distingue l'adresse de ton entreprise de l'endroit où se passe ton activité.">
         <Field label="Adresse du siège social *">
-          <ChampAdresse
+          {/* 🔴 LE RÉFÉRENTIEL OFFICIEL, PLUS NOMINATIM (Alex, 05/10). Hors
+              Wallonie, saisie libre sans position (décision B). */}
+          <ChampAdresseOfficielle
             style={inputStyle()}
             valeur={form.adresse}
             position={form}
-            placeholder="Ex: Place Meunier 1, 5640 Mettet"
-            onTexte={v => updateField('adresse', v)}
+            libreHorsWallonie
             onChoisir={({ adresse, latitude, longitude }) => {
+              setSansPositionAssumee(latitude === null || longitude === null)
               setForm(p => ({ ...p, adresse, latitude, longitude }))
               sauvegarder({ ...form, adresse, latitude, longitude })
             }}
@@ -1458,8 +1467,8 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
 
       <NavEtape retour={retourAvecSauvegarde} continuer={continuer} valide={valide} saving={saving}
         hint={valide ? null
-          : (form.adresse.trim().length > 0 && (!form.latitude || !form.longitude))
-            ? 'Sélectionne ton adresse dans la liste de suggestions pour la localiser sur la carte.'
+          : (!form.adresse.trim() || ((!form.latitude || !form.longitude) && !sansPositionAssumee))
+            ? 'Indique ton adresse : code postal, rue choisie dans la liste, puis « Utiliser cette adresse ».'
             : presentationManque > 0
               ? `Ta présentation doit faire au moins ${MIN_PRESENTATION} caractères : il en manque ${presentationManque}.`
               : 'Complète tous les champs pour continuer.'}/>

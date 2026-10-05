@@ -450,14 +450,25 @@ verifier('l’alerte dit à quoi sert l’adresse d’inscription',
 // OpenStreetMap : le projet en fait trois usages sans rapport, l'autocomplétion
 // d'une adresse saisie, le géocodage inverse d'une position, et la résolution
 // d'une adresse unique. Les confondre ferait rougir le banc pour rien.
+// ⚠️ REPOINTÉE LE 05/10 (Alex : « supprimer Nominatim »). Le champ à
+// suggestions Nominatim a disparu ; la règle de fond reste : UNE seule façon de
+// chercher une rue. Le chargement vit dans `useRuesBest`, le filtre dans
+// `filtrerRues` (lib/best-adresse.js), et les deux champs s'en servent.
 const champsAutocomplete = fichiersJs(['app', 'lib']).filter(f => {
   const src = readFileSync(f, 'utf8')
   return /nominatim\.openstreetmap\.org\/search/.test(src) && /suggestions/.test(src)
 })
-egal('un seul champ d’adresse à suggestions dans tout le projet',
-  champsAutocomplete.length, 1)
-verifier('et il vit dans le composant partagé',
-  /ChampAdresse\.js$/.test(String(champsAutocomplete[0] || '')))
+egal('plus aucun champ d’adresse à suggestions Nominatim',
+  champsAutocomplete.length, 0)
+// Visée sur l'APPEL (`fetch`), pas sur le chemin : le commentaire d'en-tête de
+// la route le cite, et la garde le comptait (faux rouge, 05/10).
+const chargeursRues = fichiersJs(['app', 'lib']).filter(f => /fetch\(`\/api\/adresse\/rues\?/.test(readFileSync(f, 'utf8')))
+egal('une seule pièce charge les rues d’un code postal', chargeursRues.length, 1)
+verifier('et c’est le hook partagé',
+  /useRuesBest\.js$/.test(String(chargeursRues[0] || '')))
+const filtresRues = fichiersJs(['app', 'lib']).filter(f => /export function filtrerRues/.test(readFileSync(f, 'utf8')))
+verifier('le filtre des rues n’existe qu’une fois, dans la règle partagée',
+  filtresRues.length === 1 && /best-adresse\.js$/.test(String(filtresRues[0])))
 
 // ─── L'ÉDITEUR DE LIEUX, ouvert à tous ────────────────────────────────────
 // ⚠️ Cette section était conditionnée à `estFoodTruck`, ce qui la rendait

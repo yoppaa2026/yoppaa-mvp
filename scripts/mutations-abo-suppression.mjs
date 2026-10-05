@@ -67,8 +67,10 @@ const MUTATIONS = [
 
   { nom: '🔴 les contrats finis gardent le nom et l’email',
     banc: BANC, fichier: ROUTE,
-    de: "        .update({ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes: null })",
-    vers: "        .update({ client_telephone: null })",
+    // ⚠️ RÉINDENTÉE LE 05/10 : l'écriture vit désormais dans la liste
+    // `anonymisations`, dont chaque erreur est lue.
+    de: "          .update({ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes: null })",
+    vers: "          .update({ client_telephone: null })",
     garde: '🔴 les contrats finis sont anonymisés' },
 ]
 

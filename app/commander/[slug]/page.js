@@ -3185,9 +3185,29 @@ export default function CommanderSlug() {
     } catch { /* ignore */ }
   }, [adresseLivraison])
 
+  // 🔴 LES TOURNÉES NE PASSAIENT PAR AUCUNE RÈGLE (audit livraison, 05/10). Le
+  // retrait filtre ses créneaux par `creneauxProposables` ; la livraison
+  // affichait tout, y compris une tournée fermée par le délai du commerçant ou
+  // déjà partie. Le client la choisissait et le serveur la refusait au
+  // paiement. Mêmes deux bornes que le retrait : la règle du créneau, la MÊME
+  // fonction que le serveur, puis le délai du panier par-dessus.
+  const pretLivraison = pretA(delaiPanier.minutes)
   const slotsLivraison = joursDisposLivraison.flatMap(j => (j.creneaux || []).map(cr => ({ ...cr, _date: j.date, _jourLabel: j.label })))
+    .filter(slot => {
+      if (!slot._date) return false
+      const dateStr = jourLocalISO(slot._date)
+      if (!creneauCommandable(slot, { dateStr, instantDebut: brusselsInstant }).ok) return false
+      if (delaiPanier.minutes <= 0) return true
+      const debut = brusselsInstant(dateStr, slot.heure_debut)
+      return !!debut && !isNaN(debut.getTime()) && debut.getTime() >= pretLivraison.getTime()
+    })
   const cpDansZone = !!livraisonConfig?.codes_postaux?.includes((adresseLivraison.code_postal || '').trim())
-  const livraisonFormOk = !!(adresseLivraison.rue.trim() && adresseLivraison.code_postal.trim() && adresseLivraison.ville.trim() && cpDansZone && creneauLivraisonChoisi)
+  // ⚠️ UN CHOIX FAIT AVANT QUE LA TOURNÉE FERME NE COMPTE PLUS : l'onglet reste
+  // ouvert, l'heure tourne, et le bouton de paiement ne doit pas s'allumer
+  // pour une tournée que la liste ne montre plus.
+  const choixLivraisonValable = !!creneauLivraisonChoisi && slotsLivraison.some(s =>
+    s.id === creneauLivraisonChoisi.id && s._date?.getTime?.() === creneauLivraisonChoisi._date?.getTime?.())
+  const livraisonFormOk = !!(adresseLivraison.rue.trim() && adresseLivraison.code_postal.trim() && adresseLivraison.ville.trim() && cpDansZone && choixLivraisonValable)
   const modeBoutiqueEff = estDetail ? (boutiqueModes.includes(modeBoutique) ? modeBoutique : boutiqueModes[0]) : null
 
   const cpExpe = (adresseLivraison.code_postal || '').trim()

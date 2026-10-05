@@ -26,6 +26,7 @@ const MOTIFS = {
   fidelite_inactive: 'la carte de fidélité n\'est pas ouverte sur cette fiche, ou le forfait ne donne pas le crédit automatique',
   telephone_invalide: 'cette commande n\'a pas de numéro de GSM, et le GSM est la clé de la carte',
   commande_introuvable: 'commande introuvable',
+  commande_non_finalisee: 'la commande n\'est pas encore récupérée',
   carte_introuvable: 'la carte n\'a pas pu être créée',
   exception: 'une erreur interne a interrompu le crédit',
 }

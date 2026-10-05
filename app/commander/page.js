@@ -572,12 +572,16 @@ function PickupScreen({ commande, clientPrenom, onConfirm, onFermer }) {
       }
       // 2) elle arrive avec un instant de retard sur le retour de paiement :
       //    on relit la commande pour l'obtenir.
+      //    ⚠️ PAR LA ROUTE SERVEUR, PLUS PAR LA VUE PUBLIQUE (audit livraison,
+      //    05/10) : `commandes_stats` publiait l'identifiant de TOUTES les
+      //    commandes pour servir cette seule ligne. La route rend le même
+      //    numéro, et rien de personnel.
       if (commande.id) {
-        const { data: fresh } = await supabase
-          .from('commandes_stats')
-          .select('numero_commande, numero_prefixe, numero_semaine')
-          .eq('id', commande.id)
-          .maybeSingle()
+        const fresh = await fetchYopper('/api/yopper/commandes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'get-one', commande_id: commande.id }),
+        }).then(r => r.json()).then(j => j?.commande).catch(() => null)
         const relue = referenceCommande(fresh || {})
         if (relue) {
           if (!annule) setNumeroCalcule(relue)

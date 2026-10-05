@@ -1036,8 +1036,13 @@ verifier('le serveur refuse aussi, et nomme sa raison',
 // `fidelite_remise` le 26/08 : le verrouillage de forme, une fois de plus. Une
 // liste de colonnes n'a pas à être identique, elle doit CONTENIR ce dont le
 // calcul a besoin. On nomme donc chaque colonne, séparément.
+//
+// ⚠️ REPOINTÉE LE 05/10 : le select commence désormais par `id, statut,
+// statut_livraison` (la règle de réception les lit). On vise le select DU
+// BLOC de la réception, plus son début exact.
 {
-  const selectReception = (srcRouteYopper.match(/\.select\('id, mode_retrait, client_email[^']*'\)/) || [])[0] || ''
+  const blocReceptionC = srcRouteYopper.slice(srcRouteYopper.indexOf("action === 'confirmer-reception'"))
+  const selectReception = (blocReceptionC.match(/\.select\('id, [^']*\bclient_email\b[^']*'\)/) || [])[0] || ''
   for (const col of ['total', 'paye_en_ligne', 'bon_cadeau_montant', 'fidelite_remise']) {
     verifier(`et il charge ${col} pour calculer ce solde`, selectReception.includes(col))
   }

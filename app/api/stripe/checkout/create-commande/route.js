@@ -137,7 +137,8 @@ export async function POST(request) {
       // boutique n'était vérifiée NULLE PART côté serveur (voir plus bas).
       // ⚠️ `plan`, `essai_plan` ET `created_at` : la garde de forfait juste en
       // dessous en dépend, et sans elles elle se trompe EN SILENCE.
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at')
+      // ⚠️ `livraison_actif` : l'interrupteur de la livraison, lu plus bas.
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -192,6 +193,17 @@ export async function POST(request) {
         return NextResponse.json(
           { ok: false, error: 'La livraison n\'est pas proposée chez ce commerçant.', code: verdictLiv.code },
           { status: verdictLiv.statut }
+        )
+      }
+      // 🔴 ET L'INTERRUPTEUR, QUE PERSONNE NE LISAIT ICI (audit livraison,
+      // 05/10). Même raison que `commandeAllumee` juste au-dessus : le forfait
+      // dit le DROIT, `livraison_actif` dit la VOLONTÉ. Un commerçant qui
+      // coupe sa livraison (livreur malade, véhicule en panne) ne la montre
+      // plus sur sa fiche, mais un onglet ouvert ou un lien direct passait.
+      if (commercant.livraison_actif !== true) {
+        return NextResponse.json(
+          { ok: false, error: 'La livraison n\'est pas proposée en ce moment chez ce commerçant. Choisis le retrait, ou réessaie plus tard.', code: 'livraison_eteinte' },
+          { status: 403 }
         )
       }
     }
@@ -300,7 +312,11 @@ export async function POST(request) {
         // ⚠️ max_commandes / capacite_temps / mode_capacite sont INDISPENSABLES :
         // sans elles, le contrôle de capacité plus bas calcule sur `undefined`
         // et ne bloque jamais rien. Il aurait l'air correct et ne servirait à rien.
-        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite')
+        // 🔴 `cutoff_heures` MANQUAIT AUSSI (audit livraison, 05/10), et c'est
+        // exactement ce défaut-là : `creneauCommandable` plus bas lisait
+        // `undefined`, donc « pas de délai ». Le « commandes fermées 2 h avant »
+        // réglé par le commerçant ne fermait rien côté serveur.
+        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_heures')
         .eq('id', creneau_livraison_id)
         .single()
       if (errCL || !cl || cl.commercant_id !== commercant.id || !cl.actif) {
@@ -325,8 +341,9 @@ export async function POST(request) {
       const { data: cr, error: errCre } = await supabase
         .from('creneaux')
         // Mêmes colonnes de capacité que la livraison : les deux partagent le
-        // modèle de lib/creneaux.js, elles doivent se lire pareil.
-        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite')
+        // modèle de lib/creneaux.js, elles doivent se lire pareil. Le délai
+        // limite compris : il est réglable sur un créneau de retrait aussi.
+        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_heures')
         .eq('id', creneau_id)
         .single()
       if (errCre || !cr || cr.commercant_id !== commercant.id || !cr.actif) {

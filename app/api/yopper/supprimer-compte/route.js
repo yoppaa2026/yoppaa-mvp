@@ -188,31 +188,53 @@ export async function POST(request) {
     // ── 3. Anonymisation de ce que la comptabilité impose de garder ─────────
     const EMAIL_ANONYME = 'compte-supprime@yoppaa.invalid'
     if (email) {
-      await admin.from('commandes')
-        .update({ client_nom: 'Compte supprimé', client_email: EMAIL_ANONYME, client_telephone: null })
+      // 🔴 L'ADRESSE DE LIVRAISON RESTAIT (audit livraison, 05/10) : la rue, le
+      // point GPS au mètre près et la note (« code 1234, 2e étage ») survivaient
+      // à l'effacement, sous un nom pourtant anonymisé. La comptabilité garde le
+      // montant et la date, jamais l'endroit où vit la personne.
+      // ⚠️ ET L'ERREUR SE LIT : une écriture ratée ici est un effacement promis
+      // et pas fait. Le compte ne part pas tant que ses données restent.
+      const { error: errCmd } = await admin.from('commandes')
+        .update({
+          client_nom: 'Compte supprimé', client_email: EMAIL_ANONYME, client_telephone: null,
+          adresse_livraison: null, livraison_lat: null, livraison_lng: null, note_livraison: null,
+        })
         .eq('client_email', email)
+      if (errCmd) {
+        console.error('[yopper/supprimer-compte] anonymisation commandes KO', errCmd.message)
+        return NextResponse.json({ ok: false, error: 'La suppression n’a pas pu aboutir. Réessaie dans un instant, ou écris-nous.' }, { status: 500 })
+      }
 
-      await admin.from('rdv_reservations')
-        .update({ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes_client: null })
-        .eq('client_email', email)
-
-      // L'achat est soldé : on efface l'acheteur. Le bénéficiaire d'un bon
-      // encore valable, lui, n'est pas forcément la personne qui part.
-      await admin.from('bons_cadeaux')
-        .update({ acheteur_email: EMAIL_ANONYME, acheteur_prenom: 'Compte supprimé' })
-        .eq('acheteur_email', email)
-      await admin.from('bons_cadeaux')
-        .update({ beneficiaire_email: EMAIL_ANONYME, beneficiaire_prenom: 'Compte supprimé', message: null })
-        .eq('beneficiaire_email', email)
-        .lte('solde', 0)
-
-      // 🔴 LES ABONNEMENTS TERMINÉS OU RÉSILIÉS (Abo-I10, 04/10) : gardés sept
-      // ans pour la comptabilité, comme les commandes, mais ANONYMISÉS. Ceux en
-      // cours ont bloqué plus haut : il ne reste ici que des contrats finis.
-      // `notes` part aussi : c'est ce que le commerce a écrit sur la personne.
-      await admin.from('abonnements')
-        .update({ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes: null })
-        .eq('client_email', email)
+      // ⚠️ LES FRÈRES, MÊME LECTURE D'ERREUR : un `await` dont personne ne lit
+      // le résultat est un espoir, pas un effacement.
+      const anonymisations = [
+        ['rdv_reservations', admin.from('rdv_reservations')
+          .update({ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes_client: null })
+          .eq('client_email', email)],
+        // L'achat est soldé : on efface l'acheteur. Le bénéficiaire d'un bon
+        // encore valable, lui, n'est pas forcément la personne qui part.
+        ['bons_cadeaux acheteur', admin.from('bons_cadeaux')
+          .update({ acheteur_email: EMAIL_ANONYME, acheteur_prenom: 'Compte supprimé' })
+          .eq('acheteur_email', email)],
+        ['bons_cadeaux beneficiaire', admin.from('bons_cadeaux')
+          .update({ beneficiaire_email: EMAIL_ANONYME, beneficiaire_prenom: 'Compte supprimé', message: null })
+          .eq('beneficiaire_email', email)
+          .lte('solde', 0)],
+        // 🔴 LES ABONNEMENTS TERMINÉS OU RÉSILIÉS (Abo-I10, 04/10) : gardés sept
+        // ans pour la comptabilité, comme les commandes, mais ANONYMISÉS. Ceux en
+        // cours ont bloqué plus haut : il ne reste ici que des contrats finis.
+        // `notes` part aussi : c'est ce que le commerce a écrit sur la personne.
+        ['abonnements', admin.from('abonnements')
+          .update({ client_prenom: 'Compte', client_nom: 'supprimé', client_email: EMAIL_ANONYME, client_telephone: null, notes: null })
+          .eq('client_email', email)],
+      ]
+      for (const [quoi, requete] of anonymisations) {
+        const { error: errAnon } = await requete
+        if (errAnon) {
+          console.error(`[yopper/supprimer-compte] anonymisation ${quoi} KO`, errAnon.message)
+          return NextResponse.json({ ok: false, error: 'La suppression n’a pas pu aboutir. Réessaie dans un instant, ou écris-nous.' }, { status: 500 })
+        }
+      }
     }
 
     // La ligne clients est conservée mais vidée : les commandes et les

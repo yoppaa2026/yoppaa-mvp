@@ -1181,6 +1181,117 @@ verifier('et range la commande du bon côté',
     nomCompletClient({ client_prenom: 'Alexandre', client_nom: 'Verstappen' }) === 'Alexandre Verstappen')
 }
 
+// ═══ AUDIT LIVRAISON, LES CINQ CRITIQUES (05/10) ════════════════════════════
+//
+// Chacun était une règle que l'écran respectait et que le serveur ignorait, ou
+// une donnée personnelle qui sortait ou restait. Les contrôles de code lisent
+// le code SANS SA PROSE : un mot trouvé dans un commentaire ne prouve rien.
+{
+  const { receptionConfirmableParClient } = await import('../lib/statuts-commande.js')
+  const { sansProse } = await import('./lire-code.mjs')
+
+  // C2 : la règle, en comportement.
+  verifier('C2 un retrait prêt se confirme',
+    receptionConfirmableParClient({ statut: 'pret', mode_retrait: 'retrait' }) === true)
+  verifier('🔴 C2 un retrait en préparation ne se confirme pas',
+    receptionConfirmableParClient({ statut: 'en_preparation', mode_retrait: 'retrait' }) === false)
+  verifier('🔴 C2 une commande annulée et remboursée ne se confirme pas',
+    receptionConfirmableParClient({ statut: 'annulee_client_refund', mode_retrait: 'retrait' }) === false)
+  verifier('🔴 C2 une commande déjà récupérée ne se confirme pas deux fois',
+    receptionConfirmableParClient({ statut: 'recupere', mode_retrait: 'retrait' }) === false)
+  verifier('C2 une livraison en route se confirme',
+    receptionConfirmableParClient({ statut: 'pret', mode_retrait: 'livraison', statut_livraison: 'en_livraison' }) === true)
+  verifier('🔴 C2 une livraison prête mais pas partie ne se confirme pas',
+    receptionConfirmableParClient({ statut: 'pret', mode_retrait: 'livraison', statut_livraison: null }) === false)
+  verifier('🔴 C2 une expédition ne se confirme jamais chez le client',
+    receptionConfirmableParClient({ statut: 'pret', mode_retrait: 'expedition' }) === false)
+  verifier('C2 une commande absente ne passe pas', receptionConfirmableParClient(null) === false)
+
+  const routeYopper = sansProse(lire('app/api/yopper/commandes/route.js'))
+  const blocReception = routeYopper.slice(routeYopper.indexOf("action === 'confirmer-reception'"))
+  verifier('🔴 C2 la route applique la règle avant d’écrire',
+    blocReception.indexOf('receptionConfirmableParClient(cmd)') > -1
+    && blocReception.indexOf('receptionConfirmableParClient(cmd)') < blocReception.indexOf('.update(patch)'))
+  verifier('🔴 C2 l’écriture est filtrée sur le statut lu, et le nombre de lignes est lu',
+    /\.update\(patch\)\.eq\('id', id\)\.eq\('statut', 'pret'\)/.test(blocReception)
+    && /ecriture\.eq\('statut_livraison', 'en_livraison'\)/.test(blocReception)
+    && /if \(!ecrit \|\| ecrit\.length === 0\)/.test(blocReception))
+  verifier('🔴 C2 le select rapporte statut et statut_livraison',
+    /\.select\('id, statut, statut_livraison, mode_retrait,/.test(blocReception))
+
+  // C2 (suite) : la fidélité refuse ce qui n'est pas récupéré, à la source.
+  const fidServeur = sansProse(lire('lib/fidelite-server.js'))
+  const blocCredit = fidServeur.slice(fidServeur.indexOf('export async function crediterFideliteCommande'))
+  verifier('🔴 C2 le crédit d’une commande exige « récupérée »',
+    /\.select\('id, statut, commercant_id,/.test(blocCredit)
+    && /if \(cmd\.statut !== 'recupere'\) return \{ ok: false, reason: 'commande_non_finalisee' \}/.test(blocCredit))
+
+  // C1 : la relecture sans identité ne rend rien de personnel.
+  const blocGetOne = routeYopper.slice(routeYopper.indexOf("action === 'get-one'"), routeYopper.indexOf('session_yopper_manquante'))
+  const selectGetOne = (blocGetOne.match(/\.select\('([^']*)'\)/) || [])[1] || ''
+  verifier('🔴 C1 la relecture par UUID a bien un select', selectGetOne.length > 0, blocGetOne.slice(0, 200))
+  for (const col of ['client_nom', 'client_email', 'client_telephone', 'total', 'adresse_livraison', 'note_livraison', 'livraison_lat']) {
+    verifier(`🔴 C1 la relecture par UUID ne rend pas ${col}`, !new RegExp(`\\b${col}\\b`).test(selectGetOne), selectGetOne)
+  }
+  // C1 (suite) : plus aucun code ne lit la vue publique par l'identifiant
+  // d'une commande. C'est la condition pour retirer `id` de la vue en SQL sans
+  // rien casser : une colonne absente fait échouer TOUTE la requête.
+  {
+    const { readdirSync } = await import('node:fs')
+    const lecteurs = []
+    for (const racine of ['app', 'lib']) {
+      const fichiers = readdirSync(new URL(`../${racine}`, import.meta.url), { recursive: true })
+        .filter(f => /\.js$/.test(String(f)))
+      for (const f of fichiers) {
+        const chemin = `${racine}/${String(f).replace(/\\/g, '/')}`
+        const code = sansProse(lire(chemin))
+        let i = code.indexOf("from('commandes_stats')")
+        while (i > -1) {
+          const requete = code.slice(i, code.indexOf(')', code.indexOf('.select(', i) + 8) + 400)
+          const finInstruction = requete.search(/\n\s*\n|;\s*\n/)
+          const corps = finInstruction > -1 ? requete.slice(0, finInstruction) : requete
+          if (/\.(eq|in)\('id'/.test(corps) || /\.select\('[^']*\bid\b[^']*'\)/.test(corps)) lecteurs.push(chemin)
+          i = code.indexOf("from('commandes_stats')", i + 1)
+        }
+      }
+    }
+    verifier('🔴 C1 aucun code ne lit commandes_stats par son id', lecteurs.length === 0, lecteurs.join(', '))
+  }
+
+  // C3 : l'effacement du compte efface l'adresse, et lit ses erreurs.
+  const suppr = sansProse(lire('app/api/yopper/supprimer-compte/route.js'))
+  const blocCmd = suppr.slice(suppr.indexOf("admin.from('commandes')"), suppr.indexOf("admin.from('commandes')") + 400)
+  for (const col of ['adresse_livraison', 'livraison_lat', 'livraison_lng', 'note_livraison']) {
+    verifier(`🔴 C3 la suppression du compte efface ${col}`, new RegExp(`${col}: null`).test(blocCmd), blocCmd)
+  }
+  verifier('🔴 C3 l’erreur d’anonymisation des commandes est lue',
+    /const \{ error: errCmd \} = await admin\.from\('commandes'\)/.test(suppr) && /if \(errCmd\)/.test(suppr))
+  verifier('C3 les frères aussi : chaque anonymisation est lue',
+    /for \(const \[quoi, requete\] of anonymisations\)/.test(suppr) && /if \(errAnon\)/.test(suppr))
+
+  // C4 et C5 : la création de commande.
+  const cc = sansProse(lire('app/api/stripe/checkout/create-commande/route.js'))
+  verifier('🔴 C4 le commerçant est lu avec son interrupteur de livraison',
+    /\.from\('commercants'\)\s*\.select\('[^']*\blivraison_actif\b[^']*'\)/.test(cc))
+  const iInter = cc.indexOf("if (commercant.livraison_actif !== true)")
+  verifier('🔴 C4 une livraison éteinte est refusée, dans le bloc livraison',
+    iInter > cc.indexOf("verdictForfait(commercant, 'livraison')") && iInter < cc.indexOf('fermeturesCommercant = []'))
+  verifier('🔴 C5 le créneau de livraison est lu avec son délai',
+    /\.from\('livraison_creneaux'\)\s*\.select\('[^']*\bcutoff_heures\b[^']*'\)/.test(cc))
+  verifier('🔴 C5 le créneau de retrait est lu avec son délai',
+    /\.from\('creneaux'\)\s*\.select\('[^']*\bcutoff_heures\b[^']*'\)/.test(cc))
+
+  // C5 (écran) : les tournées passent par la même règle que le serveur.
+  const fiche = sansProse(lire('app/commander/[slug]/page.js'))
+  const blocSlots = fiche.slice(fiche.indexOf('const slotsLivraison ='), fiche.indexOf('const cpDansZone'))
+  verifier('🔴 C5 les tournées affichées passent par creneauCommandable',
+    /creneauCommandable\(slot, \{ dateStr, instantDebut: brusselsInstant \}\)/.test(blocSlots))
+  verifier('C5 et par le délai du panier',
+    /debut\.getTime\(\) >= pretLivraison\.getTime\(\)/.test(blocSlots))
+  verifier('🔴 C5 un choix de tournée qui n’est plus proposée n’allume pas le paiement',
+    /cpDansZone && choixLivraisonValable\)/.test(fiche) && !/cpDansZone && creneauLivraisonChoisi\)/.test(fiche))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

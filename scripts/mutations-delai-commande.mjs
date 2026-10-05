@@ -359,8 +359,9 @@ const MUTATIONS = [
 
   { nom: '🔴 l’horizon n’est plus demande en base (il vaudra le defaut, en silence)',
     fichier: ROUTE,
-    de: 'boutique_delai_heures, horizon_commande, plan, essai_plan, created_at\'',
-    vers: 'boutique_delai_heures, plan, essai_plan, created_at\'' },
+    // ⚠️ REPOINTÉE LE 05/10 : le select finit désormais par `livraison_actif`.
+    de: 'boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif\'',
+    vers: 'boutique_delai_heures, plan, essai_plan, created_at, livraison_actif\'' },
 
   { nom: '🔴 les fermetures ne sont plus partagees entre les deux controles',
     fichier: ROUTE,

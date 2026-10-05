@@ -28,6 +28,7 @@ import { createClient } from '@supabase/supabase-js'
 import { crediterFideliteCommande } from '@/lib/fidelite-server'
 import { referenceCommande } from '@/lib/numero-commande'
 import { resteAEncaisserCommande } from '@/lib/rdv-paiement'
+import { receptionConfirmableParClient } from '@/lib/statuts-commande'
 
 function admin() {
   return createClient(
@@ -99,9 +100,14 @@ export async function POST(request) {
       //
       // Le contexte d'affichage doit se dériver de la commande RELUE, jamais
       // d'un état d'écran qui ne survit pas à un aller-retour de paiement.
+      //
+      // 🔴 MAIS RIEN DE PERSONNEL (audit livraison, 05/10). Cette action répond
+      // SANS identité : `client_nom` et `total` y partaient pour quiconque
+      // tenait l'UUID, et l'écran de confirmation n'en lit aucun des deux
+      // (il ne lit que l'id, le mode, le créneau et le numéro).
       const { data } = await supabase
         .from('commandes')
-        .select('id, numero_commande, numero_prefixe, numero_semaine, total, date_commande, statut, client_nom, mode_retrait, creneau_id, creneau:creneaux(heure_debut, heure_fin)')
+        .select('id, numero_commande, numero_prefixe, numero_semaine, date_commande, statut, mode_retrait, creneau_id, creneau:creneaux(heure_debut, heure_fin)')
         .eq('id', id)
         .maybeSingle()
       const commande = data ? enrichirNumeros([data])[0] : null
@@ -153,10 +159,17 @@ export async function POST(request) {
         // ⚠️ `fidelite_remise` MANQUAIT, et l'oubli allait dans l'autre sens :
         // la garde refusait le geste au Yopper qui avait tout réglé, parce
         // qu'elle croyait qu'il restait la valeur de la récompense à payer.
-        .select('id, mode_retrait, client_email, total, paye_en_ligne, bon_cadeau_montant, fidelite_remise')
+        // ⚠️ `statut` ET `statut_livraison` : la règle ci-dessous les lit.
+        .select('id, statut, statut_livraison, mode_retrait, client_email, total, paye_en_ligne, bon_cadeau_montant, fidelite_remise')
         .eq('id', id).maybeSingle()
       if (!cmd || cmd.client_email?.toLowerCase() !== yopper.email) {
         return NextResponse.json({ ok: false, error: 'commande_introuvable' }, { status: 404 })
+      }
+      // 🔴 AUCUN STATUT N'ÉTAIT VÉRIFIÉ (audit livraison, 05/10) : une commande
+      // en préparation, ou annulée et remboursée, passait « récupérée », et la
+      // carte de fidélité se remplissait sur une commande jamais remise.
+      if (!receptionConfirmableParClient(cmd)) {
+        return NextResponse.json({ ok: false, error: 'statut_non_confirmable' }, { status: 409 })
       }
       // ⚠️ UN DROIT NE SE DÉCIDE JAMAIS DANS LE NAVIGATEUR. L'écran client
       // n'affiche plus le geste quand il reste à payer, mais l'écran peut être
@@ -175,8 +188,14 @@ export async function POST(request) {
       const patch = cmd.mode_retrait === 'livraison'
         ? { statut: 'recupere', statut_livraison: 'livree' }
         : { statut: 'recupere' }
-      const { error } = await supabase.from('commandes').update(patch).eq('id', id)
+      // ⚠️ SUR L'ÉTAT LU : un commerçant qui annule, ou un livreur qui note
+      // « absent » entre la lecture et l'écriture, gagne. Zéro ligne écrite =
+      // rien n'a changé, et rien ne se crédite.
+      let ecriture = supabase.from('commandes').update(patch).eq('id', id).eq('statut', 'pret')
+      if (cmd.mode_retrait === 'livraison') ecriture = ecriture.eq('statut_livraison', 'en_livraison')
+      const { data: ecrit, error } = await ecriture.select('id')
       if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+      if (!ecrit || ecrit.length === 0) return NextResponse.json({ ok: false, error: 'statut_non_confirmable' }, { status: 409 })
 
       // Crédit fidélité automatique (Vendre). Le geste du Yopper est UN des
       // chemins vers « récupérée » ; le rendez-vous honoré en est un autre

@@ -59,9 +59,19 @@ export default function SupprimerCompte({ email, onSupprime }) {
     setEnvoi(false)
   }
 
+  // 🔴 « THE OBJECT CAN NOT BE FOUND HERE » (iPhone, 05/10, trouvé par Alex).
+  // iOS repère l'adresse email affichée plus bas et la remplace par un LIEN,
+  // dans le dos de React. Au passage à « Ton compte est supprimé », React
+  // réutilisait les paragraphes de même place et retirait leurs anciens
+  // morceaux de texte un par un : il cherchait celui de l'email, qu'iOS avait
+  // déjà remplacé, et l'écran entier tombait. D'où deux précautions :
+  //   • une `key` par état : React REMPLACE le cadre en entier, sans rien
+  //     réutiliser à l'intérieur ;
+  //   • l'email dans son propre `<span>` : ce qu'iOS fait dedans reste dedans.
+  // (Et `formatDetection` coupe la détection pour toute l'app : app/layout.tsx.)
   if (fait) {
     return (
-      <div style={{ marginTop: 14, background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 14, padding: '14px 16px' }}>
+      <div key="supprime" style={{ marginTop: 14, background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 14, padding: '14px 16px' }}>
         <p style={{ margin: '0 0 4px', fontSize: '0.9rem', fontWeight: 800, color: '#065F46' }}>Ton compte est supprimé</p>
         <p style={{ margin: 0, fontSize: '0.8rem', color: '#047857', lineHeight: 1.55 }}>
           Tes données personnelles ont été effacées. Merci d&rsquo;avoir fait un bout de chemin avec nous 🟣
@@ -80,11 +90,11 @@ export default function SupprimerCompte({ email, onSupprime }) {
   }
 
   return (
-    <div style={{ marginTop: 14, background: '#FEF2F2', border: `1px solid ${ROUGE}33`, borderRadius: 14, padding: '16px 18px' }}>
+    <div key="confirmer" style={{ marginTop: 14, background: '#FEF2F2', border: `1px solid ${ROUGE}33`, borderRadius: 14, padding: '16px 18px' }}>
       <p style={{ margin: '0 0 8px', fontSize: '0.92rem', fontWeight: 900, color: ROUGE }}>Supprimer définitivement mon compte</p>
 
       <p style={{ margin: '0 0 10px', fontSize: '0.8rem', color: T.ink, lineHeight: 1.6 }}>
-        <strong>Ce qui disparaît pour de bon :</strong> ton compte et ton adresse {email}, tes favoris,
+        <strong>Ce qui disparaît pour de bon :</strong> ton compte et ton adresse <span>{email}</span>, tes favoris,
         tes cartes de fidélité et les points qu&rsquo;elles contiennent, tes avis et tes suggestions.
       </p>
       <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: T.ink, lineHeight: 1.6 }}>

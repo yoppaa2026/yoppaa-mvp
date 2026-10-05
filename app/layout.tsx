@@ -47,6 +47,17 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "Yoppaa",
   },
+  // 🔴 iOS NE RÉÉCRIT PLUS LA PAGE DANS LE DOS DE REACT (05/10). Il repérait
+  // les emails, numéros et adresses affichés et les remplaçait par des liens.
+  // Quand React retirait ensuite ce texte, il ne le retrouvait plus : « The
+  // object can not be found here », écran entier par terre (suppression de
+  // compte, iPhone, trouvé par Alex). Les numéros utiles sont déjà de vrais
+  // liens `tel:` : rien de perdu.
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
   // Favicon + icône : on force l'icône Yoppaa (sinon fallback favicon.ico = triangle Vercel).
   icons: {
     icon: "/icon-192.png",

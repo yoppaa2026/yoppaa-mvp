@@ -46,7 +46,7 @@ import { libelleOptions } from '@/lib/options-ligne'
 import { bonsDuJour, resumeBonsVendus, texteBonVendu } from '@/lib/bons-vendus'
 import { euros } from '@/lib/montants'
 // Les mots des statuts de commande, partagés avec le Poste équipe (29/09).
-import { LIBELLES_STATUT_COMMANDE, libelleStatutCommande } from '@/lib/statuts-commande'
+import { LIBELLES_STATUT_COMMANDE, libelleStatutCommande, estCommandeAnnulee } from '@/lib/statuts-commande'
 // ⚠️ LE CHIFFRE D'AFFAIRES A UNE SEULE DÉFINITION, ET ELLE VIT ICI. Le pavé
 // « CA du jour » avait la sienne, écrite à la main, et elle se trompait de
 // quatre façons à la fois (voir le calcul de `stats.ca`).
@@ -112,6 +112,7 @@ const STATUTS = {
   'non_retire':              { label: LIBELLES_STATUT_COMMANDE.non_retire, couleur: T.gris,   icon: '⚫', next: null, nextLabel: null },
   // Gris, plus rouge (Alex, 01/10) : voir lib/couleurs-statut-commande.js.
   'annulee_client_refund':   { label: LIBELLES_STATUT_COMMANDE.annulee_client_refund, couleur: T.gris,   icon: '✕', next: null, nextLabel: null },
+  'annulee_commercant':      { label: LIBELLES_STATUT_COMMANDE.annulee_commercant, couleur: T.gris,   icon: '✕', next: null, nextLabel: null },
   'annulee_paiement_ko':     { label: LIBELLES_STATUT_COMMANDE.annulee_paiement_ko, couleur: T.gris,   icon: '⊘', next: null, nextLabel: null },
 }
 
@@ -506,7 +507,7 @@ const ACTIONS_RDV_LABEL = {
 // version y ecrivait `commercant?.categorie` : une variable inexistante, donc
 // un ecran blanc au rendu. Attrape par `verif:undef`, pas par le lint
 // principal, ou la regle `no-undef` est eteinte.
-function CarteCommande({ commande, numero, categorie = null, commerceNom = null, etiquettes = false, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, filtreCourant, modeHistorique = false }) {
+function CarteCommande({ commande, numero, categorie = null, commerceNom = null, etiquettes = false, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, onAnnulerCommerce = null, filtreCourant, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const estLivraison = commande.mode_retrait === 'livraison'
@@ -934,6 +935,35 @@ function CarteCommande({ commande, numero, categorie = null, commerceNom = null,
             Client absent
           </button>
         )}
+        {/* « RETIRÉE AU MAGASIN » (I5, Alex 05/10) : le client vient chercher
+            sa livraison au comptoir, souvent après « Client absent ». Pas
+            depuis la route : une commande dans la camionnette n'est pas au
+            comptoir. Les frais de livraison restent dus, l'email le dit. */}
+        {estLivraison && commande.statut === 'pret' && !statutLiv && (
+          <button onClick={async () => {
+            if (await confirme(confirmationSimple({
+              titre: 'Ton client a retiré sa commande au magasin ?',
+              message: 'Elle se termine comme une commande remise. Les frais de livraison restent dus, et ton client reçoit un reçu qui le dit.',
+              details: `${commande.client_nom}`,
+              action: 'Oui, retirée au magasin', ton: 'principal',
+            }))) {
+              onLivraisonStatut(commande.id, 'retiree_magasin')
+            }
+          }}
+            style={{ width: '100%', padding: '0.5rem', background: '#fff', color: T.deep, border: `1.5px solid ${T.pale}`, borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
+            Retirée au magasin
+          </button>
+        )}
+        {/* « ANNULER ET REMBOURSER » (I5, Alex 05/10) : le commerce annule
+            (rupture, fermeture, livreur indisponible, client injoignable).
+            Tout revient au client : la carte, les bons, la récompense. Une
+            commande liée à un rendez-vous suit l'annulation du rendez-vous. */}
+        {!modeHistorique && ['en_attente', 'en_preparation', 'pret'].includes(commande.statut) && !commande.rdv_reservation_id && onAnnulerCommerce && (
+          <button onClick={() => onAnnulerCommerce(commande)}
+            style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: '#B91C1C', border: '1.5px solid #FECACA', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontSize: '0.75rem', fontFamily: '"DM Sans", sans-serif', marginTop: 6 }}>
+            {commande.paye_en_ligne ? 'Annuler et rembourser' : 'Annuler la commande'}
+          </button>
+        )}
         {/* ⚠️ CE BOUTON N'APPARAISSAIT JAMAIS EN BOUTIQUE. Il exigeait un
             CRÉNEAU pour vérifier que l'heure était passée ; une commande de
             détail n'en a aucun, donc `creneauPasse` restait faux et le bouton
@@ -1088,7 +1118,7 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
             préparer AVANT que le client arrive : c'est toute la promesse du
             tunnel unique, il repart avec en sortant du fauteuil. Une commande
             annulée ne s'affiche plus, le client ayant été remboursé. */}
-        {rdv.commande && !['annulee_client_refund', 'annulee_paiement_ko'].includes(rdv.commande.statut) && (rdv.commande.commande_articles || []).length > 0 && (
+        {rdv.commande && !estCommandeAnnulee(rdv.commande) && (rdv.commande.commande_articles || []).length > 0 && (
           <div style={{ background: '#ECFDF5', borderRadius: 8, padding: '0.5rem 0.75rem', marginBottom: 8, border: '1px solid #A7F3D0' }}>
             {/* ⚠️ CE BLOC NE DISAIT PAS DE QUELLE COMMANDE IL PARLAIT. Les mêmes
                 produits vivent en double : ici, et dans l'onglet Commandes sous
@@ -2256,6 +2286,36 @@ export default function Dashboard() {
     setCommandes(prev => prev.map(c => c.id === commande.id ? { ...c, ...j.champs } : c))
   }
 
+  // ⚠️ « ANNULER ET REMBOURSER » (I5, Alex 05/10), PAR LE SERVEUR : la route
+  // bascule la commande, rembourse la carte de ce qu'elle a payé (montant lu
+  // chez Stripe), rend bons, récompense et stock, puis prévient le client.
+  // La question dit CE QUI VA SE PASSER, argent compris : un remboursement ne
+  // se défait pas.
+  async function annulerParLeCommerce(commande) {
+    const ref = referenceCommande(commande) ? `#${referenceCommande(commande)}` : 'cette commande'
+    const enLigne = !!commande.paye_en_ligne
+    const ok = await confirme(confirmationSimple({
+      titre: enLigne ? `Annuler ${ref} et rembourser ton client ?` : `Annuler ${ref} ?`,
+      message: enLigne
+        ? 'Ton client est remboursé sur sa carte de ce qu’il a payé, ses bons et sa récompense lui reviennent, et il reçoit un email. Un remboursement ne se défait pas.'
+        : 'Ses bons et sa récompense lui reviennent, et il reçoit un email. Rien n’a été payé en ligne, il n’y a rien à rembourser.',
+      details: `${commande.client_nom || ''}`,
+      action: enLigne ? 'Oui, annuler et rembourser' : 'Oui, annuler',
+    }))
+    if (!ok) return
+    const res = await postPro('/api/commande/annuler-commercant', { commande_id: commande.id })
+    const j = await (res?.json ? res.json().catch(() => null) : Promise.resolve(null))
+    if (!j?.ok) {
+      alert(`Erreur : ${j?.error || (res?.sansSession ? 'session expirée, reconnecte-toi' : res?.erreurReseau ? 'pas de connexion, réessaie' : 'l’annulation n’a pas pu être enregistrée')}`)
+      if (commercant?.id) chargerCommandes(commercant.id)
+      return
+    }
+    setCommandes(prev => prev.map(c => c.id === commande.id ? { ...c, ...j.champs } : c))
+    if (!j.email_client) {
+      setEnvoiRate({ quoi: 'l’email d’annulation à ton client', erreur: 'non parti', suite: 'La commande est bien annulée. Préviens ton client toi-même.' })
+    }
+  }
+
   // ⚠️ L'ENCAISSEMENT NOTÉ APRÈS COUP, PAR LE SERVEUR (01/10) : la même route
   // que le Poste. Le navigateur n'envoie que le CHOIX ; le montant est
   // recalculé sur la commande relue en base. Rend `true` si c'est écrit.
@@ -2284,10 +2344,13 @@ export default function Dashboard() {
     // ouvre la même fenêtre, et `repondreCommande` sait maintenant qu'une
     // livraison doit aussi passer en « livrée ». Deux copies de cette règle
     // finiraient par diverger, et l'une des deux mentirait sur l'argent.
-    if (statutLivraison === 'livree' && !champs) {
+    // ⚠️ « RETIRÉE AU MAGASIN » TERMINE AUSSI LA COMMANDE (I5, 05/10) : même
+    // question du moyen s'il reste à payer. `_viaLivraison` retient QUEL geste
+    // reprendre une fois la réponse donnée.
+    if ((statutLivraison === 'livree' || statutLivraison === 'retiree_magasin') && !champs) {
       const c = commandes.find(x => x.id === commandeId)
       if (c && !c.encaisse_mode && resteAEncaisserCommande(c) > 0) {
-        setCommandeAEncaisser({ ...c, _viaLivraison: true })
+        setCommandeAEncaisser({ ...c, _viaLivraison: statutLivraison })
         return
       }
     }
@@ -2307,7 +2370,7 @@ export default function Dashboard() {
     }
     const patch = j.champs || { statut_livraison: statutLivraison }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
-    if (statutLivraison === 'livree') crediterFideliteCommande(commandeId)
+    if (statutLivraison === 'livree' || statutLivraison === 'retiree_magasin') crediterFideliteCommande(commandeId)
 
     // ⚠️ « ABSENT » : le serveur a déjà prévenu le client (lui seul le peut,
     // voir lib/livraison-absent-serveur). On DIT au commerçant si c'est parti :
@@ -2858,7 +2921,7 @@ export default function Dashboard() {
     // course resterait éternellement « en livraison » dans la tournée et le
     // Yopper ne recevrait jamais sa notification d'arrivée.
     if (commandeAEncaisser._viaLivraison) {
-      await changerStatutLivraison(commandeAEncaisser.id, 'livree', { champs })
+      await changerStatutLivraison(commandeAEncaisser.id, commandeAEncaisser._viaLivraison === 'retiree_magasin' ? 'retiree_magasin' : 'livree', { champs })
     } else if (commandeAEncaisser.statut === 'recupere') {
       // ⚠️ DÉJÀ REMISE (« Noter l'encaissement ») : par le serveur, et sans
       // rejouer la remise. Repasser par `changerStatut` réécrivait le statut et
@@ -3049,7 +3112,7 @@ export default function Dashboard() {
     enPrepa:    commandesDuJour.filter(c => c.statut === 'en_preparation').length,
     pretes:     commandesDuJour.filter(c => c.statut === 'pret').length,
     recuperees: commandesDuJour.filter(c => c.statut === 'recupere').length,
-    annulees:   commandesDuJour.filter(c => c.statut === 'annulee_client_refund' || c.statut === 'annulee_paiement_ko').length,
+    annulees:   commandesDuJour.filter(estCommandeAnnulee).length,
     // 🔴 CE CHIFFRE MENTAIT DE QUATRE FAÇONS À LA FOIS (Alex, 28/08 : un nœud
     // papillon à 8 € entièrement payé par une récompense entrait quand même
     // pour 8 € dans le CA du jour). Il additionnait `total`, le tarif BRUT, et
@@ -4224,6 +4287,7 @@ export default function Dashboard() {
                         etiquettes={etiquettesIci}
                         onChangerStatut={changerStatut}
                         onLivraisonStatut={changerStatutLivraison}
+                        onAnnulerCommerce={annulerParLeCommerce}
                         onExpedier={setCommandeAExpedier}
                         onProduitsRemis={produitsRemis}
                         onRetourArriere={annulerRemise}

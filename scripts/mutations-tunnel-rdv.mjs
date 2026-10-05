@@ -176,7 +176,8 @@ const MUTATIONS = [
 
   { nom: '🔴 une commande déjà annulée est remboursée une seconde fois',
     fichier: 'lib/rdv-paiement.js',
-    de: "  const vivante = !!cmd && !['annulee_client_refund', 'annulee_paiement_ko'].includes(cmd.statut)",
+    // ⚠️ REPOINTÉE LE 05/10 (I5) : la liste partagée des trois annulations.
+    de: "  const vivante = !!cmd && !estCommandeAnnulee(cmd)",
     vers: '  const vivante = !!cmd' },
 
   { nom: '🔴 la fenêtre d’après redevient muette sur l’argent parti',

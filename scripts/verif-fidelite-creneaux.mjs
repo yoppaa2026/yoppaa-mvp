@@ -290,8 +290,10 @@ verifier('elle passe l\'heure belge au calcul', /instantDebut: brusselsInstant/.
 
 // Quelles commandes occupent un créneau. Confronté à la SOURCE, la contrainte
 // CHECK de la base, et pas à une liste écrite de mémoire.
-const migrationStatuts = lireBrut('migrations/MIGRATION_COMMANDES_STATUT_CHECK.sql')
-const blocCheck = migrationStatuts.slice(migrationStatuts.indexOf('CHECK (statut IN ('))
+// ⚠️ REPOINTÉE LE 05/10 (I5) : la contrainte en vigueur, son bloc seul.
+const migrationStatuts = lireBrut('migrations/MIGRATION_I5_ANNULEE_COMMERCE_RETIREE_MAGASIN.sql')
+const debutCheck = migrationStatuts.indexOf('CHECK (statut IN (')
+const blocCheck = migrationStatuts.slice(debutCheck, migrationStatuts.indexOf('));', debutCheck))
 const statutsEnBase = [...blocCheck.matchAll(/'([a-z_]+)'/g)].map(m => m[1])
 for (const s of STATUTS_OCCUPENT_CRENEAU) {
   verifier(`« ${s} » existe vraiment en base`, statutsEnBase.includes(s))

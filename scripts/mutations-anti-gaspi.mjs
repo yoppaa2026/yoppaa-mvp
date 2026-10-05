@@ -416,7 +416,8 @@ const MUTATIONS = [
     // un commentaire promettant qu'elles disaient la même chose. `String.replace`
     // prenait la première — celle du stock — et le banc restait vert à juste
     // titre. La duplication est retirée : une seule constante, deux lecteurs.
-    de: 'export const STATUTS_QUI_NE_CONSOMMENT_PAS = \'("non_retire","annulee_paiement_ko","annulee_client_refund")\'',
+    // ⚠️ REPOINTÉE LE 05/10 (I5) : la liste apprend `annulee_commercant`.
+    de: 'export const STATUTS_QUI_NE_CONSOMMENT_PAS = \'("non_retire","annulee_paiement_ko","annulee_client_refund","annulee_commercant")\'',
     vers: 'export const STATUTS_QUI_NE_CONSOMMENT_PAS = \'("non_retire")\'' },
 
   { nom: '🔴 le select des deals ne demande plus la quantite',

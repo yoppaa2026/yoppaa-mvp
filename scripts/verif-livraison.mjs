@@ -528,8 +528,11 @@ verifier('et range la commande du bon côté',
     /resteAEncaisserCommande\(c\) > 0/.test(corpsCSL) && /setCommandeAEncaisser\(/.test(corpsCSL))
   // ⚠️ ET LA RÈGLE EST RÉUTILISÉE, PAS RECOPIÉE : deux copies finiraient par
   // diverger, et l'une des deux mentirait sur l'argent.
+  // ⚠️ REPOINTÉE LE 05/10 (I5) : la réponse reprend LE geste qui l'a
+  // demandée, « livrée » ou « retirée au magasin ».
   verifier('la réponse d\'encaissement sait clore une LIVRAISON',
-    /_viaLivraison/.test(dash) && /changerStatutLivraison\(commandeAEncaisser\.id, 'livree', \{ champs \}\)/.test(dash))
+    /_viaLivraison/.test(dash)
+    && /changerStatutLivraison\(commandeAEncaisser\.id, commandeAEncaisser\._viaLivraison === 'retiree_magasin' \? 'retiree_magasin' : 'livree', \{ champs \}\)/.test(dash))
   verifier('la note du Yopper s\'affiche sur la carte du commerçant',
     /commande\.note_livraison && \(/.test(dash))
   verifier('et une adresse non localisée est annoncée', /non localisée/.test(dash))
@@ -1387,15 +1390,20 @@ verifier('et range la commande du bon côté',
 {
   const { sansProse } = await import('./lire-code.mjs')
   const annul = sansProse(lire('app/api/commande/cancel/route.js'))
+  // ⚠️ REPOINTÉES LE 05/10 (I5) : le remboursement vit dans
+  // `rembourserCarteCommande` (lib/commande-annulation-server), partagé avec
+  // l'annulation par le commerce. La route l'appelle APRÈS la bascule.
   const iBascule = annul.indexOf(".in('statut', statutsAnnulables)")
-  const iRefund = annul.indexOf('stripe.refunds.create(')
+  const iRefund = annul.indexOf('rembourserCarteCommande({')
   verifier('🔴 I4 la commande bascule AVANT le remboursement, sur un statut encore annulable',
     iBascule > -1 && iRefund > -1 && iBascule < iRefund)
   verifier('🔴 I4 zéro ligne basculée = ni argent ni email',
     /if \(!basculees \|\| basculees\.length === 0\) \{\s*return NextResponse\.json/.test(annul)
     && annul.indexOf('if (!basculees || basculees.length === 0)') < iRefund)
+  const partage = sansProse(lire('lib/commande-annulation-server.js'))
   verifier('🔴 I4 le remboursement porte un montant et une clé d’idempotence',
-    /amount: reste,/.test(annul) && /idempotencyKey: `cmd-annul-client-\$\{cmd\.id\}-\$\{reste\}`/.test(annul))
+    /amount: reste,/.test(partage) && /idempotencyKey: `cmd-annul-\$\{origine\}-\$\{commande\.id\}-\$\{reste\}`/.test(partage)
+    && /origine: 'client'/.test(annul))
   verifier('🔴 I4 un refus de Stripe défait l’annulation',
     /\.update\(\{ statut: cmd\.statut, annulee_at: null, annulation_motif: null \}\)\s*\.eq\('id', cmd\.id\)\s*\.eq\('statut', 'annulee_client_refund'\)/.test(annul))
   verifier('🔴 I4 le délai lit aussi la tournée de livraison',
@@ -1405,6 +1413,125 @@ verifier('et range la commande du bon côté',
     /if \(cmd\.rdv_reservation_id\) \{/.test(annul) && annul.indexOf('if (cmd.rdv_reservation_id)') < iBascule)
   verifier('I4 le refus d’une commande prête ne parle plus de retrait',
     !/prête à retirer/.test(annul))
+}
+
+// ═══ AUDIT LIVRAISON I5 : ANNULÉE PAR LE COMMERCE, RETIRÉE AU MAGASIN ═══════
+{
+  const { sansProse } = await import('./lire-code.mjs')
+  const sc = await import('../lib/statuts-commande.js')
+  const { gesteLivraisonPermis, champsLivraison, GESTES_LIVRAISON } = await import('../lib/livraison-geste.js')
+  const { emailCommandeAnnuleeYopper, emailLivraisonRetireeMagasin } = await import('../lib/resend.js')
+
+  // Le statut, en comportement.
+  verifier('I5 le statut a son libellé', sc.LIBELLES_STATUT_COMMANDE.annulee_commercant === 'Annulée par le commerce')
+  verifier('🔴 I5 les trois annulations sont des annulations',
+    ['annulee_client_refund', 'annulee_commercant', 'annulee_paiement_ko'].every(s => sc.estCommandeAnnulee({ statut: s }))
+    && !sc.estCommandeAnnulee({ statut: 'pret' }) && !sc.estCommandeAnnulee(null))
+  verifier('🔴 I5 les filtres PostgREST excluent l’annulation par le commerce',
+    sc.FILTRE_STATUTS_INACTIFS.includes('annulee_commercant') && sc.FILTRE_STATUTS_TERMINES.includes('annulee_commercant')
+    && sc.FILTRE_STATUTS_TERMINES.includes('recupere') && !sc.FILTRE_STATUTS_INACTIFS.includes('recupere'))
+
+  // 🔴 LE BALAYAGE : toute liste qui nomme deux annulations sans la troisième
+  // l'a oubliée. C'est ainsi que naissent les commandes annulées qui pèsent
+  // encore sur le stock (5 listes concernées le 05/10).
+  {
+    const { readdirSync } = await import('node:fs')
+    const oublis = []
+    for (const racine of ['app', 'lib']) {
+      for (const f of readdirSync(new URL(`../${racine}`, import.meta.url), { recursive: true })) {
+        if (!/\.js$/.test(String(f))) continue
+        const chemin = `${racine}/${String(f).replace(/\\/g, '/')}`
+        const code = sansProse(lire(chemin))
+        for (const ligne of code.split('\n')) {
+          if (/annulee_client_refund/.test(ligne) && /annulee_paiement_ko/.test(ligne) && !/annulee_commercant/.test(ligne)) {
+            oublis.push(`${chemin} : ${ligne.trim().slice(0, 90)}`)
+          }
+        }
+      }
+    }
+    verifier('🔴 I5 aucune liste d’annulations n’oublie « annulee_commercant »', oublis.length === 0, oublis.join(' | '))
+  }
+
+  // Le geste « retirée au magasin », en comportement.
+  const prete = { statut: 'pret', mode_retrait: 'livraison', statut_livraison: null, total: 20, paye_en_ligne: true, bon_cadeau_montant: 0, fidelite_remise: 0 }
+  verifier('I5 « retirée au magasin » est un geste de livraison', GESTES_LIVRAISON.includes('retiree_magasin'))
+  verifier('I5 il se fait depuis « prête, pas en route »', gesteLivraisonPermis(prete, 'retiree_magasin'))
+  verifier('🔴 I5 jamais depuis la route : la commande est dans la camionnette',
+    !gesteLivraisonPermis({ ...prete, statut_livraison: 'en_livraison' }, 'retiree_magasin'))
+  verifier('I5 ni sur un retrait', !gesteLivraisonPermis({ ...prete, mode_retrait: 'retrait' }, 'retiree_magasin'))
+  {
+    const r = champsLivraison(prete, 'retiree_magasin')
+    verifier('🔴 I5 il termine la commande, suivi « retiree_magasin »',
+      r.champs?.statut === 'recupere' && r.champs?.statut_livraison === 'retiree_magasin', JSON.stringify(r))
+    const aPayer = champsLivraison({ ...prete, paye_en_ligne: false }, 'retiree_magasin')
+    verifier('🔴 I5 s’il reste à payer (frais compris), il demande le moyen',
+      aPayer.champs === null && /Dis comment le client a payé/.test(aPayer.refus || ''))
+    const auTerminal = champsLivraison({ ...prete, paye_en_ligne: false }, 'retiree_magasin', { encaissement: 'terminal' })
+    verifier('I5 et il encaisse le tout, frais de livraison compris',
+      auTerminal.champs?.encaisse_mode === 'terminal' && auTerminal.champs?.encaisse_montant === 20, JSON.stringify(auTerminal))
+  }
+  verifier('I5 le libellé dit « Retirée au magasin »',
+    sc.libelleStatutCommande({ mode_retrait: 'livraison', statut: 'recupere', statut_livraison: 'retiree_magasin' }) === 'Retirée au magasin')
+  verifier('I5 et une livrée reste « Livrée »',
+    sc.libelleStatutCommande({ mode_retrait: 'livraison', statut: 'recupere', statut_livraison: 'livree' }) === 'Livrée')
+
+  // Les emails, EXÉCUTÉS.
+  const annulee = emailCommandeAnnuleeYopper({
+    yopper_prenom: 'Alex', commercant_nom: 'Chez Momo', numero_commande: 'LI3', total: 20,
+    paye_en_ligne: true, par_commerce: true, motif: '<b>Rupture</b> de pâte',
+  })
+  verifier('🔴 I5 l’email dit que c’est le commerce qui annule', /a dû annuler ta commande/.test(annulee))
+  verifier('🔴 I5 le mot du commerce sort échappé', /&lt;b&gt;Rupture&lt;\/b&gt; de pâte/.test(annulee) && !/<b>Rupture/.test(annulee))
+  const parClient = emailCommandeAnnuleeYopper({ yopper_prenom: 'Alex', commercant_nom: 'Chez Momo', total: 20 })
+  verifier('I5 l’annulation par le client garde ses mots', /a bien été annulée/.test(parClient) && !/a dû annuler/.test(parClient))
+  const recu = emailLivraisonRetireeMagasin({ yopper_prenom: 'Alex', commercant_nom: 'Chez Momo', numero_commande: 'LI3', frais_livraison: 3.5 })
+  verifier('🔴 I5 le reçu dit que les frais restent dus, et combien', /restent dus/.test(recu) && /3,50/.test(recu))
+  verifier('I5 sans frais, le reçu n’en parle pas',
+    !/restent dus/.test(emailLivraisonRetireeMagasin({ yopper_prenom: 'A', commercant_nom: 'B', frais_livraison: 0 })))
+
+  // La route du commerce, dans l'ordre qui protège l'argent.
+  const route = sansProse(lire('app/api/commande/annuler-commercant/route.js'))
+  verifier('🔴 I5 rembourser est un geste de la case « argent »',
+    /gardeLigneEquipe\(request, admin, 'commandes', commande_id, 'argent'\)/.test(route))
+  const iB = route.indexOf(".in('statut', ANNULABLES)")
+  const iR = route.indexOf('rembourserCarteCommande({')
+  const iE = route.indexOf('effetsAnnulationCommande(admin')
+  verifier('🔴 I5 bascule, PUIS remboursement, PUIS effets', iB > -1 && iB < iR && iR < iE)
+  verifier('🔴 I5 zéro ligne basculée = on s’arrête',
+    /if \(!basculees \|\| basculees\.length === 0\) \{\s*return /.test(route) && route.indexOf('if (!basculees') < iR)
+  verifier('🔴 I5 un refus de Stripe défait l’annulation',
+    /\.update\(\{ statut: cmd\.statut, annulee_at: null, annulation_motif: null \}\)\s*\.eq\('id', cmd\.id\)\.eq\('statut', 'annulee_commercant'\)/.test(route))
+  verifier('I5 une commande liée à un rendez-vous suit le rendez-vous',
+    /if \(cmd\.rdv_reservation_id\) \{/.test(route) && route.indexOf('if (cmd.rdv_reservation_id)') < iB)
+  verifier('I5 le remboursement du commerce a sa propre clé', /origine: 'commercant'/.test(route))
+
+  // Le webhook : un remboursement fait dans Stripe.
+  const wh = sansProse(lire('app/api/stripe/webhook/route.js'))
+  verifier('🔴 I5 un remboursement total fait dans Stripe = « annulée par le commerce »',
+    /statut: 'annulee_commercant', annulee_at: new Date\(\)\.toISOString\(\), annulation_motif: 'stripe'/.test(wh))
+  verifier('🔴 I5 et ses effets ne partent qu’une fois, sur une bascule lue',
+    /basculeeIci = \(b \|\| \[\]\)\.length > 0/.test(wh) && /if \(basculeeIci\) \{\s*await effetsAnnulationCommande\(supabase, cmd/.test(wh))
+  verifier('I5 pas d’email « commerce » pour une commande liée à un rendez-vous',
+    /if \(!cmd\.rdv_reservation_id\) await prevenirClientAnnulationCommerce\(supabase, cmd\.id\)/.test(wh))
+
+  // La fin de livraison crédite la fidélité côté serveur, et prévient.
+  const livrer = sansProse(lire('app/api/livraison/livrer/route.js'))
+  verifier('🔴 I5 livrée ou retirée : la fidélité se crédite côté serveur',
+    /if \(statut_livraison === 'livree' \|\| statut_livraison === 'retiree_magasin'\) \{\s*await crediterFideliteCommande\(admin, commande_id/.test(livrer))
+  verifier('I5 retirée : le client reçoit son reçu', /prevenirClientRetireeMagasin\(admin, commande_id\)/.test(livrer))
+
+  // Les boutons, et la migration.
+  const dashI5 = sansProse(lire('app/dashboard/page.js'))
+  verifier('I5 le bouton « Retirée au magasin » existe, hors de la route',
+    /estLivraison && commande\.statut === 'pret' && !statutLiv && \(/.test(dashI5) && /onLivraisonStatut\(commande\.id, 'retiree_magasin'\)/.test(dashI5))
+  verifier('I5 le bouton « Annuler et rembourser » passe par la route',
+    /postPro\('\/api\/commande\/annuler-commercant'/.test(dashI5) && /onAnnulerCommerce=\{annulerParLeCommerce\}/.test(dashI5))
+  const sqlI5 = lire('migrations/MIGRATION_I5_ANNULEE_COMMERCE_RETIREE_MAGASIN.sql')
+  verifier('🔴 I5 la migration élargit les deux contraintes',
+    /'annulee_commercant'\s*\)\);/.test(sqlI5) && /'retiree_magasin'\)\);/.test(sqlI5))
+  verifier('🔴 I5 la migration apprend le statut aux trois fonctions de stock',
+    /p\.proname IN \('reserver_stock_atomique', 'vendu_par_offre', 'stock_commande_par_article'\)/.test(sqlI5)
+    && /RAISE EXCEPTION 'Fonction % : filtre de statut non reconnu/.test(sqlI5))
 }
 
 // ═══ AUDIT LIVRAISON I9 : LES COORDONNÉES DU CLIENT ═════════════════════════

@@ -257,7 +257,7 @@ const MUTATIONS = [
   { nom: '🔴 le tableau de bord repeint l annulée en rouge',
     fichier: 'app/dashboard/page.js', de: "couleur: T.gris,   icon: '✕', next: null, nextLabel: null },", vers: "couleur: T.rouge,   icon: '✕', next: null, nextLabel: null }," },
   { nom: '🔴 une livraison en route n est plus bleue',
-    fichier: 'lib/couleurs-statut-commande.js', de: "  if (commande?.mode_retrait === 'livraison' && ['en_livraison', 'livree'].includes(commande.statut_livraison)) {", vers: '  if (false) {' },
+    fichier: 'lib/couleurs-statut-commande.js', de: "  if (commande?.mode_retrait === 'livraison' && ['en_livraison', 'livree', 'retiree_magasin'].includes(commande.statut_livraison)) {", vers: '  if (false) {' }, // repointée le 05/10 (I5)
   { nom: '🔴 le tableau de bord recopie sa palette',
     fichier: 'app/dashboard/page.js', de: '  vert:    PALETTE_STATUT.vert,', vers: "  vert:    { border: '#10B981', badge: '#10B981', cardBg: '#F0FDF4' }," },
   { nom: '🔴 le Poste repeint tout en violet',

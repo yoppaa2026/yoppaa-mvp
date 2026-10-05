@@ -12,6 +12,7 @@ import { libelleRetrait } from '@/lib/libelle-retrait'
 // pure et testée : un voile éteint au mauvais moment cache du contenu.
 import { bordsDefilement } from '@/lib/responsive'
 import { referenceCommande } from '@/lib/numero-commande'
+import { estCommandeAnnulee } from '@/lib/statuts-commande'
 import { resteAEncaisserCommande, etatPaiementClient, couleurPaiement, montantNetCommande, montantNetRdv, phraseAvantages, annonceRetoursClient } from '@/lib/rdv-paiement'
 import { euros } from '@/lib/montants'
 import { libelleBon } from '@/lib/bons-cadeaux'
@@ -3428,7 +3429,7 @@ export default function Commander() {
   // Historique : commandes recuperees + annulees (par client ou paiement_ko) + non_retire.
   // On garde la commande visible avec son statut final pour que le Yopper ait toujours
   // accès à son historique (signale par Alex : la commande annulee ne doit pas disparaitre).
-  const commandesTerminees = clientCommandes.filter(c => ['recupere', 'annulee_client_refund', 'annulee_paiement_ko', 'non_retire'].includes(c.statut))
+  const commandesTerminees = clientCommandes.filter(c => c.statut === 'recupere' || c.statut === 'non_retire' || estCommandeAnnulee(c))
   // RDV vitrine a venir : statut confirme + date >= aujourd'hui
   const _todayMidnight = new Date(); _todayMidnight.setHours(0,0,0,0)
   const rdvsAVenir = clientRdvs
@@ -4412,14 +4413,21 @@ export default function Commander() {
                     const statutMapCmd = {
                       recupere:              { label: '✓ Récupérée',           bg: '#F3F4F6', color: '#6B7280' },
                       annulee_client_refund: { label: 'Annulée par toi',       bg: '#FEF2F2', color: '#DC2626' },
+                      // I5 (05/10) : annulée et remboursée par le commerce.
+                      annulee_commercant:    { label: 'Annulée par le commerce', bg: '#FEF2F2', color: '#DC2626' },
                       annulee_paiement_ko:   { label: 'Paiement échoué',       bg: '#FEF2F2', color: '#DC2626' },
                       non_retire:            { label: 'Non retirée',           bg: '#F9FAFB', color: '#6B7280' },
                     }
                     // Colis expédié : libellé dédié + numéro de suivi affiché
                     const estColisExpedie = c.mode_retrait === 'expedition' && c.statut === 'recupere'
+                    // Une livraison terminée n'a pas été « récupérée » : elle a
+                    // été livrée, ou retirée au magasin (I5, 05/10).
+                    const estLivraisonTerminee = c.mode_retrait === 'livraison' && c.statut === 'recupere'
                     const sc = estColisExpedie
                       ? { label: '✓ Expédiée', bg: '#FFF7ED', color: '#EA580C' }
-                      : statutMapCmd[c.statut] || { label: c.statut, bg: T.pale, color: T.muted }
+                      : estLivraisonTerminee
+                        ? { label: c.statut_livraison === 'retiree_magasin' ? '✓ Retirée au magasin' : '✓ Livrée', bg: '#F3F4F6', color: '#6B7280' }
+                        : statutMapCmd[c.statut] || { label: c.statut, bg: T.pale, color: T.muted }
                     return (
                       <div key={c.id} style={{ background: '#fff', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.5rem', border: `1px solid ${T.pale}`, opacity: 0.75, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>

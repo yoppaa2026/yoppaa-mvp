@@ -15,13 +15,10 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { stripe, requireStripe } from '@/lib/stripe'
+import { requireStripe } from '@/lib/stripe'
 import { envoyerAuCommercant, emailCommandeAnnuleeYopper, emailCommandeAnnuleeCommercant } from '@/lib/resend'
 import { brusselsInstant } from '@/lib/timezone'
-import { annulerPush } from '@/lib/onesignal'
-import { recrediterBons } from '@/lib/bons-cadeaux-server'
-import { rendreRecompense } from '@/lib/fidelite-recompense-server'
-import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
+import { rembourserCarteCommande, effetsAnnulationCommande } from '@/lib/commande-annulation-server'
 import { referenceCommande } from '@/lib/numero-commande'
 import { libelleOptions } from '@/lib/options-ligne'
 import { chezLeCommerce } from '@/lib/nom-commerce'
@@ -194,29 +191,15 @@ export async function POST(request) {
     // ⚠️ SI STRIPE REFUSE, L'ANNULATION EST DÉFAITE. Laisser la commande
     // annulée sans argent rendu promettait au client un remboursement que
     // personne ne ferait ; il peut réessayer, la clé protège du doublon.
+    // ⚠️ LE CALCUL ET LA CLÉ VIVENT DANS `lib/commande-annulation-server.js`
+    // depuis le 05/10 : le commerce rembourse par la même fonction (I5).
     let refundId = null
     let refundStatus = null
     if (remboursable) {
       try {
-        const options = { stripeAccount: commercant.stripe_account_id }
-        const pi = await stripe.paymentIntents.retrieve(cmd.stripe_payment_intent_id, { expand: ['latest_charge'] }, options)
-        const charge = typeof pi?.latest_charge === 'object' ? pi.latest_charge : null
-        const capture = Number(charge?.amount_captured ?? pi?.amount_received ?? 0)
-        const dejaRendu = Number(charge?.amount_refunded ?? 0)
-        const reste = Math.max(0, capture - dejaRendu)
-        if (reste > 0) {
-          const refund = await stripe.refunds.create({
-            payment_intent: cmd.stripe_payment_intent_id,
-            amount: reste,
-            reason: 'requested_by_customer',
-            metadata: {
-              yoppaa_commande_id: cmd.id,
-              yoppaa_motif: 'client',
-            },
-          }, { ...options, idempotencyKey: `cmd-annul-client-${cmd.id}-${reste}` })
-          refundId = refund.id
-          refundStatus = refund.status
-        }
+        const r = await rembourserCarteCommande({ commande: cmd, compteStripe: commercant.stripe_account_id, origine: 'client' })
+        refundId = r.refundId
+        refundStatus = r.refundStatus
       } catch (e) {
         console.error('[commande/cancel] refund Stripe KO, annulation défaite', e?.message, { commande_id: cmd.id, pi: cmd.stripe_payment_intent_id })
         const { error: errRetour } = await supabase.from('commandes')
@@ -231,63 +214,12 @@ export async function POST(request) {
       }
     }
 
-    // ─── Rendre le stock des VERSIONS (boutique détail) ────────────────────
-    // Leur stock est décrémenté EN DUR à la commande, avant le paiement, et
-    // personne ne le rendait : une annulation retirait la pièce des rayons de
-    // Yoppaa alors qu'elle était toujours sur l'étagère du magasin.
-    // La bascule a eu lieu (sinon on est sorti plus haut) : on rend une fois.
-    {
-      const restitution = await restaurerStockVariantes(supabase, [cmd.id])
-      if (!restitution.ok) {
-        console.error('[commande/cancel] restitution stock versions KO', restitution.error, { commande_id: cmd.id })
-      }
-    }
-
-    // Bon cadeau utilisé sur la commande : la part payée par le bon revient
-    // SUR le bon (le refund Stripe ne couvre que la part carte). Idempotent
-    // via l'index unique source='annulation' — le webhook charge.refunded
-    // fait le même appel en backup, un seul des deux passe.
-    //
-    // 🔴 TOUS LES BONS DEPUIS LE 01/09, ET C'EST CE RECRÉDIT QUI JUSTIFIAIT LA
-    // MIGRATION. Lire `bon_cadeau_id` ne rendrait que le PREMIER bon : les
-    // autres seraient débités et jamais rendus. C'est le défaut du 29/08,
-    // « bon jamais recrédité », et il coûterait ici l'argent du Yopper.
-    if (Array.isArray(cmd.bons_utilises) && cmd.bons_utilises.length > 0) {
-      const rec = await recrediterBons(supabase, cmd.bons_utilises, { commande_id: cmd.id })
-      // ⚠️ ON NOMME CHAQUE BON QUI N'A PAS ÉTÉ RENDU : sans son identifiant, le
-      // support ne peut ni le rejouer, ni expliquer au client ce qui manque.
-      if (!rec.ok) console.error('[commande/cancel] re-crédit bons KO', rec.echecs, { commande_id: cmd.id })
-    }
-
-    // ⚠️ ET LA RÉCOMPENSE DE FIDÉLITÉ AVEC, pour la même raison exactement :
-    // une commande annulée n'a pas eu lieu. La laisser consommée ferait perdre
-    // au Yopper une carte entière sur une commande qu'il n'a jamais reçue, et
-    // il n'a aucun moyen de la récupérer lui-même. `rendreRecompense` ne rend
-    // que ce qui est effectivement pris : le webhook de remboursement fait le
-    // même appel en secours, un seul des deux passe.
-    if (cmd.fidelite_recompense_id) {
-      const { data: recFid } = await supabase
-        .from('fidelite_recompenses')
-        .select('id, carte_id, utilisee_at')
-        .eq('id', cmd.fidelite_recompense_id)
-        .maybeSingle()
-      if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
-    }
-
-    // Annule le rappel push programmé (30 min avant retrait) s'il existe :
-    // sinon le Yopper recevrait « bientôt l'heure de ton retrait » sur une
-    // commande annulée. Best-effort, non bloquant.
-    if (cmd.rappel_push_id) {
-      annulerPush(cmd.rappel_push_id).catch(() => {})
-    }
-
-    // ─── 7) Cleanup réservations stock résiduelles ─────────────────────────
-    // Normalement déjà nettoyé par le webhook commande-succeeded, mais defensive
-    // pour le cas annulation pendant 'paiement_en_attente' (avant webhook).
-    await supabase
-      .from('commande_stock_reservation')
-      .delete()
-      .eq('commande_id', cmd.id)
+    // ─── Ce que l'annulation rend ───────────────────────────────────────────
+    // Le stock des versions, TOUS les bons, la récompense, le rappel de retrait
+    // et la place retenue : `effetsAnnulationCommande`, partagée avec
+    // l'annulation par le commerce (I5, 05/10). La bascule a eu lieu (sinon on
+    // est sorti plus haut) : on rend une fois.
+    await effetsAnnulationCommande(supabase, cmd, '[commande/cancel]')
 
     // ─── 8) Email confirmation annulation ──────────────────────────────────
     // Appel DIRECT des helpers (pas de fetch HTTP interne fragile, cf. pattern RDV)

@@ -33,7 +33,9 @@ const commande = (x = {}) => ({
 
 // ═══ 1) QUAND LE GESTE EST PERMIS ═══════════════════════════════════════════
 {
-  v('trois gestes : partir, livrer, absent', GESTES_LIVRAISON.join(',') === 'en_livraison,livree,absent')
+  // ⚠️ QUATRE DEPUIS LE 05/10 (I5, décision d'Alex) : « retirée au magasin ».
+  v('quatre gestes : partir, livrer, absent, retirée au magasin',
+    GESTES_LIVRAISON.join(',') === 'en_livraison,livree,absent,retiree_magasin')
   v('🔴 « absent » seulement EN ROUTE (avant le départ, personne n’a sonné)',
     gesteLivraisonPermis(commande({ statut_livraison: 'en_livraison' }), 'absent') && !gesteLivraisonPermis(commande(), 'absent')
     && !gesteLivraisonPermis(commande({ statut_livraison: 'livree' }), 'absent') && !gesteLivraisonPermis(commande({ statut_livraison: 'en_livraison', statut: 'recupere' }), 'absent'))

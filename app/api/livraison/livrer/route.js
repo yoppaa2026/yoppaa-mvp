@@ -17,7 +17,8 @@ import { NextResponse } from 'next/server'
 import { clientAdmin, refus } from '@/lib/api-auth'
 import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { livrerCommande, REFUS_LIVRAISON } from '@/lib/livraison-serveur'
-import { prevenirClientAbsent } from '@/lib/livraison-absent-serveur'
+import { prevenirClientAbsent, prevenirClientRetireeMagasin } from '@/lib/livraison-absent-serveur'
+import { crediterFideliteCommande } from '@/lib/fidelite-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +48,19 @@ export async function POST(request) {
     if (statut_livraison === 'absent') {
       const p = await prevenirClientAbsent(admin, commande_id)
       client_prevenu = p.email || p.push
+    }
+    // « RETIRÉE AU MAGASIN » (I5, 05/10) : le reçu, qui dit pourquoi les frais
+    // restent dus.
+    if (statut_livraison === 'retiree_magasin') {
+      const p = await prevenirClientRetireeMagasin(admin, commande_id)
+      client_prevenu = p.email
+    }
+    // ⚠️ LA FIDÉLITÉ SE CRÉDITE ICI, CÔTÉ SERVEUR, pour les deux fins de
+    // livraison. Elle ne dépendait que d'un second appel de l'écran, que le
+    // Poste du livreur ne faisait pas. Idempotent : l'appel que fait encore le
+    // tableau de bord ne compte pas deux fois.
+    if (statut_livraison === 'livree' || statut_livraison === 'retiree_magasin') {
+      await crediterFideliteCommande(admin, commande_id, '[livraison/livrer]')
     }
     return NextResponse.json({ ok: true, commande_id, champs: r.champs, client_prevenu })
   } catch (e) {

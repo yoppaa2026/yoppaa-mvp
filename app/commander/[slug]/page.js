@@ -1869,7 +1869,7 @@ export default function CommanderSlug() {
       supabase.from('livraison_creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
       // `date_commande` est indispensable ici aussi : sans elle, une tournée de
       // jeudi déjà pleine pesait sur le créneau de mardi, et inversement.
-      supabase.from('commandes_stats').select('creneau_livraison_id, date_commande').eq('commercant_id', c.id).eq('mode_retrait', 'livraison').not('statut', 'in', '(recupere,non_retire,annulee_client_refund,annulee_paiement_ko)'),
+      supabase.from('commandes_stats').select('creneau_livraison_id, date_commande').eq('commercant_id', c.id).eq('mode_retrait', 'livraison').not('statut', 'in', '(recupere,non_retire,annulee_client_refund,annulee_paiement_ko,annulee_commercant)'),
       // M5 food truck : emplacements (ponctuels + tournée hebdo) pour remplacer
       // l'adresse affichée par l'emplacement du jour
       supabase.from('commercant_lieux').select('*').eq('commercant_id', c.id).eq('actif', true),

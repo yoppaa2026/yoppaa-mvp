@@ -359,7 +359,9 @@ const egal = (nom, obtenu, attendu) =>
   // Ce qui ne doit pas changer : la RÉFÉRENCE reste un OBJET nommé. Passée nue,
   // elle serait ignorée et le bon jamais recrédité, EN SILENCE — c'est ce qui
   // avait justifié cette garde en août.
-  for (const chemin of ['app/api/commande/cancel/route.js', 'app/api/stripe/webhook/route.js']) {
+  // ⚠️ REPOINTÉE LE 05/10 (I5) : le recrédit d'une commande annulée vit dans
+  // `lib/commande-annulation-server.js`, partagé par le client et le commerce.
+  for (const chemin of ['lib/commande-annulation-server.js', 'app/api/stripe/webhook/route.js']) {
     const src = lireCode(chemin)
     verifie(`${chemin.split('/').slice(-2).join('/')} passe une référence nommée`,
       /recrediterBons\(supabase, [^)]*\{ (commande_id|rdv_id)/.test(src))
@@ -1685,7 +1687,11 @@ const egal = (nom, obtenu, attendu) =>
   const ARGENT = {
     'app/api/stripe/checkout/create-commande/route.js': ['debiterBons'],
     'app/api/stripe/webhook/route.js': ['debiterBons', 'recrediterBons'],
-    'app/api/commande/cancel/route.js': ['recrediterBons'],
+    // ⚠️ REPOINTÉ LE 05/10 (I5) : les deux annulations passent par la
+    // fonction partagée, qui recrédite TOUS les bons (vérifiée juste dessous).
+    'app/api/commande/cancel/route.js': ['effetsAnnulationCommande'],
+    'app/api/commande/annuler-commercant/route.js': ['effetsAnnulationCommande'],
+    'lib/commande-annulation-server.js': ['recrediterBons'],
   }
   for (const [f, attendus] of Object.entries(ARGENT)) {
     const src = lireCode(f)

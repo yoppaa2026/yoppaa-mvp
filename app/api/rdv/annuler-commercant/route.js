@@ -36,6 +36,7 @@ import { normaliserEmail } from '@/lib/email-normalise'
 import { motsReservation } from '@/lib/reservation-metier'
 import { jourLisible, annulationPrevientLaFile } from '@/lib/attente-rdv'
 import { prevenirLaFile } from '@/lib/attente-rdv-server'
+import { STATUTS_COMMANDE_ANNULEE, estCommandeAnnulee } from '@/lib/statuts-commande'
 
 const arr = (n) => Math.round(Number(n || 0) * 100) / 100
 
@@ -90,7 +91,7 @@ export async function POST(request) {
         .select('id, statut, total, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_remise, fidelite_recompense_id')
         .eq('id', rdv.commande_id)
         .maybeSingle()
-      if (cmd && !['annulee_client_refund', 'annulee_paiement_ko'].includes(cmd.statut)) commandeLiee = cmd
+      if (cmd && !estCommandeAnnulee(cmd)) commandeLiee = cmd
     }
 
     const produitsPayesCarte = commandeLiee
@@ -222,9 +223,11 @@ export async function POST(request) {
       // ⚠️ `.neq(...).select()` : l'écriture ne rend une ligne QUE si elle a
       // réellement fait basculer la commande. C'est cette bascule-là, et elle
       // seule, qui autorise à rendre le stock juste en dessous.
+      // 🔴 « PAR LE COMMERCE », PLUS « PAR CLIENT » (I5, 05/10) : c'est le
+      // commerce qui annule ce rendez-vous, l'historique du client le dit.
       const { data: basculees, error: errCmd } = await supabase
-        .from('commandes').update({ statut: 'annulee_client_refund' })
-        .eq('id', commandeLiee.id).neq('statut', 'annulee_client_refund').select('id')
+        .from('commandes').update({ statut: 'annulee_commercant', annulee_at: new Date().toISOString(), annulation_motif: 'commercant' })
+        .eq('id', commandeLiee.id).not('statut', 'in', `(${STATUTS_COMMANDE_ANNULEE.join(',')})`).select('id')
       if (errCmd) console.error('[rdv/annuler-commercant] annulation commande liée KO', errCmd.message)
       // ⚠️ ET LE STOCK DES VERSIONS REVIENT, comme sur les quatre autres
       // sorties. Trois chemins d'annulation appelaient `restaurerStockVariantes`,

@@ -3220,12 +3220,21 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
 // un `update(...)` filtré sur l'ancien statut, dont on lit le résultat. Sans
 // cette précaution, un webhook rejoué rendrait le stock une seconde fois et le
 // commerçant vendrait des pièces qu'il n'a pas.
+// ⚠️ REPOINTÉE LE 05/10 (I5) : les deux annulations (client et commerce)
+// rendent le stock par `effetsAnnulationCommande`, qui appelle elle-même
+// `restaurerStockVariantes` (contrôlé juste après la boucle). Une route
+// qui passe par elle rend donc le stock ; la position est vérifiée pareil.
+const RENDU_PARTAGE = /effetsAnnulationCommande\(supabase|effetsAnnulationCommande\(admin/
 for (const [chemin, sortie] of [
   ['app/api/cron/expire-reservations/route.js', 'l\'expiration par le cron'],
   ['app/api/commande/cancel/route.js', 'l\'annulation par le client'],
+  ['app/api/commande/annuler-commercant/route.js', 'l\'annulation par le commerce'],
   ['app/api/stripe/webhook/route.js', 'l\'abandon du paiement'],
 ]) {
-  const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+  const brut = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
+  // Le point de rendu, quel que soit son nom : la fonction directe, ou la
+  // fonction partagée qui l'appelle.
+  const src = brut.replace(RENDU_PARTAGE, m => `restaurerStockVariantes(${m.includes('admin') ? 'admin' : 'supabase'} /* via ${m} */`)
   verifier(`${sortie} rend le stock`, /restaurerStockVariantes\(/.test(src), chemin)
   // ⚠️ REPOINTÉE LE 05/10 (audit I4) : l'annulation client filtre désormais
   // sur les statuts ANNULABLES (plus strict que « pas déjà annulée »), et sort
@@ -3233,9 +3242,15 @@ for (const [chemin, sortie] of [
   verifier(`${sortie} ne le rend que sur une bascule réelle`,
     /\.eq\('statut', 'paiement_en_attente'\)[\s\S]{0,80}?\.select\('id'\)/.test(src)
     || /\.neq\('statut', 'annulee_client_refund'\)[\s\S]{0,80}?\.select\('id'\)/.test(src)
-    || (/\.in\('statut', statutsAnnulables\)[\s\S]{0,80}?\.select\('id'\)/.test(src)
+    || (/\.in\('statut', (statutsAnnulables|ANNULABLES)\)[\s\S]{0,80}?\.select\('id'\)/.test(src)
         && /if \(!basculees \|\| basculees\.length === 0\) \{\s*return /.test(src)
-        && src.indexOf('if (!basculees || basculees.length === 0)') < src.indexOf('restaurerStockVariantes(supabase')), chemin)
+        && src.indexOf('if (!basculees || basculees.length === 0)') < src.search(/restaurerStockVariantes\((supabase|admin)/)), chemin)
+}
+{
+  // Et la fonction partagée rend bien le stock, sur la commande qu'on lui passe.
+  const partage = readFileSync(new URL('../lib/commande-annulation-server.js', import.meta.url), 'utf8')
+  verifier('la fonction partagée d’annulation rend le stock des versions',
+    /export async function effetsAnnulationCommande[\s\S]*?restaurerStockVariantes\(supabase, \[commande\.id\]\)/.test(partage))
 }
 // Et la version doit être ENREGISTRÉE, sans quoi il n'y a rien à rendre.
 verifier('la ligne de commande retient la version vendue',

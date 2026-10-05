@@ -31,6 +31,7 @@ import { motsReservation } from '@/lib/reservation-metier'
 import { seanceLisible } from '@/lib/attente-rdv'
 import { decisionAnnulation } from '@/lib/rdv-delai-annulation'
 import { montantAnnulationFacturable } from '@/lib/empreinte-table'
+import { estCommandeAnnulee, STATUTS_COMMANDE_ANNULEE } from '@/lib/statuts-commande'
 
 export async function POST(request) {
   try {
@@ -172,7 +173,7 @@ export async function POST(request) {
         .eq('id', rdv.commande_id)
         .maybeSingle()
       // Une commande déjà annulée ne pose plus de question.
-      if (cmd && !['annulee_client_refund', 'annulee_paiement_ko'].includes(cmd.statut)) {
+      if (cmd && !estCommandeAnnulee(cmd)) {
         commandeLiee = cmd
       }
     }
@@ -371,7 +372,9 @@ export async function POST(request) {
         .from('commandes')
         .update({ statut: 'annulee_client_refund' })
         .eq('id', commandeLiee.id)
-        .neq('statut', 'annulee_client_refund')
+        // ⚠️ LES TROIS ANNULATIONS (I5, 05/10) : une commande déjà annulée par
+        // le commerce ne rebascule pas, et ne rend pas son stock deux fois.
+        .not('statut', 'in', `(${STATUTS_COMMANDE_ANNULEE.join(',')})`)
         .select('id')
       if (errCmd) console.error('[rdv/cancel] annulation commande liée KO', errCmd.message, { commandeId: commandeLiee.id })
       // ⚠️ ET LE STOCK DES VERSIONS REVIENT, comme sur les autres sorties. Le

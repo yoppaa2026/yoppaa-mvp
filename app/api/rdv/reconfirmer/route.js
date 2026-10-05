@@ -99,7 +99,7 @@ export async function POST(request) {
       rembourse: rdv.stripe_refund_amount,
       bonsRendus: (mvts || []).reduce((s, m) => s + (Number(m.montant) || 0), 0),
       recompenseRendue: !!rdv.fidelite_recompense_id && !!recompense && !recompense.utilisee_at,
-      produitsAnnules: commande?.statut === 'annulee_client_refund',
+      produitsAnnules: ['annulee_client_refund', 'annulee_commercant'].includes(commande?.statut),
       absenceFacturee: !!rdv.empreinte_debit_at,
       abonnementResilie: abonnement?.statut === 'resilie',
       fermeture: fermeture ? (estFermetureDeSeance(fermeture) ? 'seance' : 'jour') : null,

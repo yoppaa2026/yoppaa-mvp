@@ -42,6 +42,8 @@ import { motsReservation, objetReservation } from '@/lib/reservation-metier'
 import { contratDepuisFormule, resumeContratAchete, PHRASE_CONNEXION_ABONNEMENT } from '@/lib/abonnements'
 import { adresseRendezVous } from '@/lib/lieu-fige'
 import { restaurerStockVariantes } from '@/lib/stock-variantes-server'
+import { STATUTS_COMMANDE_ANNULEE } from '@/lib/statuts-commande'
+import { effetsAnnulationCommande, prevenirClientAnnulationCommerce } from '@/lib/commande-annulation-server'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { creerReservationRdv, appliquerAvantagesRdv, lignesBonsDeMeta } from '@/lib/rdv-creation-server'
 import { chargerProduitsDuRdv } from '@/lib/rdv-produits-server'
@@ -1281,7 +1283,7 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
   // ─── Et la commande, qui peut porter le MÊME paiement ──────────────────
   const { data: cmd } = await supabase
     .from('commandes')
-    .select('id, statut, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id')
+    .select('id, statut, bon_cadeau_id, bon_cadeau_montant, bons_utilises, fidelite_recompense_id, rappel_push_id, rdv_reservation_id')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
   if (cmd) {
@@ -1291,11 +1293,29 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
     // tout le paiement sont un remboursement total. Comparer le DERNIER
     // remboursement au paiement ne le voyait jamais.
     const isRefundTotal = total
-    const updates = { ...updateData }
-    if (isRefundTotal && !['annulee_client_refund', 'annulee_paiement_ko'].includes(cmd.statut)) {
-      updates.statut = 'annulee_client_refund'
+    // La trace du remboursement, toujours.
+    await supabase.from('commandes').update(updateData).eq('id', cmd.id)
+    // 🔴 UN REMBOURSEMENT TOTAL QUE NOS ROUTES N'ONT PAS FAIT vient du TABLEAU
+    // STRIPE, donc du commerce (I5, 05/10). Il devenait « Annulée par client »,
+    // sans email, sans stock rendu. Nos deux routes d'annulation basculent la
+    // commande AVANT de rembourser : si elle est encore en cours ici, c'est que
+    // personne chez nous ne l'a annulée.
+    // ⚠️ LA BASCULE EST FILTRÉE ET LUE : un webhook rejoué ne rend rien deux fois.
+    let basculeeIci = false
+    if (isRefundTotal && !STATUTS_COMMANDE_ANNULEE.includes(cmd.statut)) {
+      const { data: b } = await supabase.from('commandes')
+        .update({ statut: 'annulee_commercant', annulee_at: new Date().toISOString(), annulation_motif: 'stripe' })
+        .eq('id', cmd.id)
+        .not('statut', 'in', `(${STATUTS_COMMANDE_ANNULEE.join(',')})`)
+        .select('id')
+      basculeeIci = (b || []).length > 0
     }
-    await supabase.from('commandes').update(updates).eq('id', cmd.id)
+    if (basculeeIci) {
+      await effetsAnnulationCommande(supabase, cmd, '[webhook/refund]')
+      // Une commande liée à un rendez-vous suit le message du rendez-vous :
+      // un second email « le commerce a annulé » le contredirait.
+      if (!cmd.rdv_reservation_id) await prevenirClientAnnulationCommerce(supabase, cmd.id)
+    }
     // Refund total d'une commande partiellement payée par bon cadeau : le
     // Stripe ne rembourse que la part carte, la part bon revient SUR le bon.
     // Idempotent (index unique source='annulation'), déjà fait si la route
@@ -1320,7 +1340,7 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
       if (recFid?.utilisee_at) await rendreRecompense(supabase, recFid)
     }
     console.info('[stripe/webhook] refund enregistré sur commande', {
-      cmdId: cmd.id, refund: refundId, isRefundTotal, newStatut: updates.statut || cmd.statut,
+      cmdId: cmd.id, refund: refundId, isRefundTotal, newStatut: basculeeIci ? 'annulee_commercant' : cmd.statut,
     })
   }
 

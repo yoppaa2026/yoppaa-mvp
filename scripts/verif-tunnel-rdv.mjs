@@ -1946,8 +1946,11 @@ for (const chemin of [
       /restaurerStockVariantes\(supabase, \[/.test(src))
     // ⚠️ SUR UNE BASCULE RÉELLE SEULEMENT : `restaurerStockVariantes` n'est pas
     // idempotente, c'est à l'appelant de ne l'appeler qu'une fois.
+    // ⚠️ REPOINTÉE LE 05/10 (I5) : le filtre exclut désormais les TROIS
+    // annulations (plus strict), par la liste partagée.
     verifie(`${court} : et seulement si la commande a vraiment basculé`,
-      /\.neq\('statut', 'annulee_client_refund'\)/.test(src))
+      /\.neq\('statut', 'annulee_client_refund'\)/.test(src)
+      || /\.not\('statut', 'in', `\(\$\{STATUTS_COMMANDE_ANNULEE\.join\(','\)\}\)`\)/.test(src))
     // ⚠️ ET JAMAIS DEUX FOIS LA MÊME LIGNE DE RÉCOMPENSE. Tant qu'on ne
     // comptait que ce qu'on rendait soi-même, la seconde passe se taisait
     // d'elle-même. Depuis qu'on annonce l'ÉTAT, il faut l'écrire.
@@ -2791,7 +2794,10 @@ for (const chemin of [
       const p = join(d, e)
       if (statSync(p).isDirectory()) { parcourir(p); continue }
       if (!/\.jsx?$/.test(e)) continue
-      if (/refunds\.create\(/.test(sansProse(readFileSync(p, 'utf8')))) {
+      // ⚠️ DEPUIS LE 05/10 (I5), UNE ROUTE PEUT REMBOURSER PAR DÉLÉGATION :
+      // `rembourserCarteCommande` (lib/commande-annulation-server). Elle compte
+      // donc comme une route qui rembourse, et doit changer le statut pareil.
+      if (/refunds\.create\(|rembourserCarteCommande\(/.test(sansProse(readFileSync(p, 'utf8')))) {
         rembourseurs.push(p.replace(/\\/g, '/').replace(/^.*?\/(app|lib)\//, '$1/'))
       }
     }
@@ -2807,8 +2813,21 @@ for (const chemin of [
     // (décision d'Alex). La règle de la sonde tient : pas de remboursement
     // sans changement de statut.
     'app/api/rdv/rembourser-abonnement/route.js': 'resilie',
+    // 🔴 I5 (05/10) : « Annuler et rembourser » du commerce.
+    'app/api/commande/annuler-commercant/route.js': 'annulee_commercant',
   }
   verifie('la sonde a trouvé des remboursements', rembourseurs.length >= 4, String(rembourseurs.length))
+  // Le module délégué ne rembourse qu'à UN endroit, dans la fonction que les
+  // deux routes d'annulation appellent APRÈS avoir changé le statut.
+  const MODULES_DELEGUES = ['lib/commande-annulation-server.js']
+  {
+    const mod = lireCode('lib/commande-annulation-server.js')
+    const iFn = mod.indexOf('export async function rembourserCarteCommande(')
+    const iSuiv = mod.indexOf('\nexport async function ', iFn + 10)
+    const iRef = mod.indexOf('refunds.create(')
+    verifie('🔴 le module d’annulation ne rembourse que dans rembourserCarteCommande',
+      (mod.match(/refunds\.create\(/g) || []).length === 1 && iFn > -1 && iRef > iFn && (iSuiv === -1 || iRef < iSuiv))
+  }
   // ✅ ET UN SEUL QUI REMBOURSE SANS RIEN ANNULER, PARCE QU'IL N'Y A RIEN (03/10) :
   // le webhook, quand la place a disparu entre le contrôle et le paiement.
   // Aucune réservation n'existe à annuler ; la garde vérifie donc qu'il ne
@@ -2816,7 +2835,7 @@ for (const chemin of [
   const REMBOURSENT_SANS_RESERVATION = ['app/api/stripe/webhook/route.js']
   verifie('🔴 seules les routes qui changent le statut remboursent',
     JSON.stringify([...rembourseurs].sort())
-      === JSON.stringify([...Object.keys(ANNULENT_EN_REMBOURSANT), ...REMBOURSENT_SANS_RESERVATION].sort()),
+      === JSON.stringify([...Object.keys(ANNULENT_EN_REMBOURSANT), ...REMBOURSENT_SANS_RESERVATION, ...MODULES_DELEGUES].sort()),
     rembourseurs.sort().join(' | '))
   {
     const wh = lireCode('app/api/stripe/webhook/route.js')

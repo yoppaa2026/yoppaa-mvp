@@ -52,10 +52,14 @@ verifier('les deux fenêtres se touchent sans se chevaucher', f.debutPrecedent <
 // le code. Un test qui partage les fantasmes du code ne prouve rien.
 //
 // On confronte donc la liste à sa SOURCE : la contrainte CHECK de la base.
-const migrationStatuts = lireBrut('migrations/MIGRATION_COMMANDES_STATUT_CHECK.sql')
-const blocCheck = migrationStatuts.slice(migrationStatuts.indexOf('CHECK (statut IN ('))
+// ⚠️ REPOINTÉE LE 05/10 (I5) : la contrainte en vigueur est celle de la
+// migration I5, qui ajoute `annulee_commercant`. On lit son bloc SEUL, jusqu'à
+// sa parenthèse fermante : d'autres valeurs entre guillemets le suivent.
+const migrationStatuts = lireBrut('migrations/MIGRATION_I5_ANNULEE_COMMERCE_RETIREE_MAGASIN.sql')
+const debutCheck = migrationStatuts.indexOf('CHECK (statut IN (')
+const blocCheck = migrationStatuts.slice(debutCheck, migrationStatuts.indexOf('));', debutCheck))
 const statutsEnBase = [...blocCheck.matchAll(/'([a-z_]+)'/g)].map(m => m[1])
-verifier('la contrainte de base est lisible', statutsEnBase.length === 8, `${statutsEnBase.length} trouvés`)
+verifier('la contrainte de base est lisible', statutsEnBase.length === 9, `${statutsEnBase.length} trouvés`)
 for (const s of STATUTS_COMMANDE) {
   verifier(`« ${s} » existe vraiment en base`, statutsEnBase.includes(s))
 }

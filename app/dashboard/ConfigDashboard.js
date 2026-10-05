@@ -79,6 +79,7 @@ import { champsModifies } from '@/lib/formulaire-modifie'
 import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
 import { choixDeDelai, libelleChoixDelai } from '@/lib/delai-commande'
 import { jourSemaineDe } from '@/lib/creneaux'
+import { FILTRE_STATUTS_INACTIFS, FILTRE_STATUTS_TERMINES } from '@/lib/statuts-commande'
 import {
   NOM_FONCTION_COMMERCANT, TITRE_YOPPER, CONSEIL_REMISE, MINUTES_UTILES_MINIMUM,
   fenetreParDefaut, fermetureDuJour, prixConseille, lignePublication,
@@ -659,7 +660,10 @@ function TabMenu({ commercantId, commercant, toast }) {
       .select('id, date_commande')
       .eq('commercant_id', commercantId)
       .in('date_commande', jours)
-      .neq('statut', 'non_retire')
+      // ⚠️ LES ANNULÉES NE CONSOMMENT RIEN (05/10) : seul `non_retire` était
+      // exclu, et une commande annulée et remboursée retirait encore son
+      // article du stock affiché au commerçant.
+      .not('statut', 'in', FILTRE_STATUTS_INACTIFS)
     if (!cmds || cmds.length === 0) { poserSiChange(memoireCommandesJour, {}, setCommandesParArticleJour); return }
     const jourParCmd = Object.fromEntries(cmds.map(c => [c.id, jourKeyParDate[String(c.date_commande).slice(0, 10)]]))
     const { data: lignes } = await supabase
@@ -4558,7 +4562,7 @@ function TabCreneaux({ commercantId, toast }) {
   // ─── Fix suppression individuelle ─────────────────────────────────────────
   async function deleteCreneau(id) {
     if (!await confirme(confirmationSimple({ titre: 'Supprimer ce créneau ?', message: 'Tes clients ne pourront plus le choisir.', action: 'Oui, supprimer ce créneau' }))) return
-    const { data: cmdLiees } = await supabase.from('commandes').select('id').eq('creneau_id', id).not('statut', 'in', '(recupere,non_retire)')
+    const { data: cmdLiees } = await supabase.from('commandes').select('id').eq('creneau_id', id).not('statut', 'in', FILTRE_STATUTS_TERMINES)
     if (cmdLiees?.length > 0) { toast(`Impossible : ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error'); return }
     const { error } = await supabase.from('creneaux').delete().eq('id', id)
     if (error) { toast('Erreur suppression : ' + error.message, 'error'); return }
@@ -4579,7 +4583,7 @@ function TabCreneaux({ commercantId, toast }) {
     const avecCmd = []
     const sansCmd = []
     for (const c of crenJour) {
-      const { data } = await supabase.from('commandes').select('id').eq('creneau_id', c.id).not('statut', 'in', '(recupere,non_retire)')
+      const { data } = await supabase.from('commandes').select('id').eq('creneau_id', c.id).not('statut', 'in', FILTRE_STATUTS_TERMINES)
       if (data?.length > 0) avecCmd.push(c.id)
       else sansCmd.push(c.id)
     }
@@ -4876,7 +4880,7 @@ function TabCreneaux({ commercantId, toast }) {
     if (aRemplacer.length > 0) {
       const { data: liees, error: errLect } = await supabase.from('commandes')
         .select('creneau_id').in('creneau_id', aRemplacer.map(c => c.id))
-        .not('statut', 'in', '(recupere,non_retire,annulee_client,annulee_commercant)')
+        .not('statut', 'in', FILTRE_STATUTS_TERMINES)
       if (errLect) { toast('Erreur : ' + errLect.message, 'error'); return }
       const avecCmd = new Set((liees || []).map(l => l.creneau_id))
       occupes = aRemplacer.filter(c => avecCmd.has(c.id))
@@ -5655,7 +5659,7 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
   async function supprimer(c) {
     const { data: liees, error: errLect } = await supabase.from('commandes')
       .select('id').eq('creneau_livraison_id', c.id)
-      .not('statut', 'in', '(recupere,non_retire,annulee_client,annulee_commercant)')
+      .not('statut', 'in', FILTRE_STATUTS_TERMINES)
     if (errLect) { toast('Erreur : ' + errLect.message, 'error'); return }
     if ((liees || []).length > 0) {
       toast(`Impossible : ${liees.length} commande(s) active(s) sur cette tournée`, 'error'); return

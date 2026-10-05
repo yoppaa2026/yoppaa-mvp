@@ -286,8 +286,13 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
 
   const cancel = lireCode('app/api/commande/cancel/route.js')
   // Même précaution : la condition fait partie de la garde.
+  // ⚠️ REPOINTÉE LE 05/10 (I5) : le rendu vit dans `effetsAnnulationCommande`,
+  // partagée par l'annulation du client et celle du commerce. Deux maillons :
+  // la route l'appelle, et elle rend la récompense, sous la même condition.
+  const partage = lireCode('lib/commande-annulation-server.js')
   verifie('une annulation rend la récompense',
-    /if \(recFid\?\.utilisee_at\) await rendreRecompense\(supabase, recFid\)/.test(cancel))
+    /effetsAnnulationCommande\(supabase, cmd/.test(cancel)
+    && /if \(recFid\?\.utilisee_at\) await rendreRecompense\(supabase, recFid\)/.test(partage))
   verifie('et la colonne est dans le select de l\'annulation',
     /fidelite_recompense_id/.test(cancel.split('const query =')[0]))
 

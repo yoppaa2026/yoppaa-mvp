@@ -35,7 +35,9 @@ const MUTATIONS = [
   { nom: '🔴 une commande pas prête, ou un retrait, se livre',
     fichier: REGLE, de: "  if (!commande || commande.mode_retrait !== 'livraison' || commande.statut !== 'pret') return false", vers: '  if (!commande) return false' },
   { nom: '🔴 « Livrée » ne termine plus la commande',
-    fichier: REGLE, de: "  return { champs: { statut_livraison: 'livree', statut: 'recupere', ...(argent || {}) }, refus: null }", vers: "  return { champs: { statut_livraison: 'livree', ...(argent || {}) }, refus: null }" },
+    // ⚠️ REPOINTÉE LE 05/10 (I5) : « livrée » et « retirée au magasin »
+    // terminent par la même ligne, le suivi choisi juste au-dessus.
+    fichier: REGLE, de: "  return { champs: { statut_livraison: fin, statut: 'recupere', ...(argent || {}) }, refus: null }", vers: "  return { champs: { statut_livraison: fin, ...(argent || {}) }, refus: null }" },
   { nom: '🔴 « En route » termine la commande',
     fichier: REGLE, de: "  if (vers === 'en_livraison') return { champs: { statut_livraison: 'en_livraison' }, refus: null }", vers: "  if (vers === 'en_livraison') return { champs: { statut_livraison: 'en_livraison', statut: 'recupere' }, refus: null }" },
   { nom: '🔴 l argent déjà encaissé se réécrit',

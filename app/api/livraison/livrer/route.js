@@ -10,8 +10,9 @@
 // déduit de la commande, jamais du corps de la requête.
 //
 // ⚠️ LA SUITE EST CELLE DU TABLEAU DE BORD : l'écran appelle ensuite
-// `/api/livraison/statut` (le message au client) et, à « livrée »,
-// `/api/fidelite/crediter`, les mêmes routes pour tous.
+// `/api/livraison/statut` (le message au client). La fidélité, elle, est
+// créditée ICI, à « livrée » ou « retirée au magasin » (plus d'appel écran
+// depuis le 06/10).
 
 import { NextResponse } from 'next/server'
 import { clientAdmin, refus } from '@/lib/api-auth'

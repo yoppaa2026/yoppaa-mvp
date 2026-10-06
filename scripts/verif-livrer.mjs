@@ -228,9 +228,14 @@ const livrer = async (tables, args, options) => {
 
   const statut = code('app/api/livraison/statut/route.js')
   v('🔴 le message au client s’ouvre au livreur', /gardeLigneEquipe\(request, supabase, 'commandes', commande_id, \['commandes', 'livraisons'\]\)/.test(statut))
+  // ⚠️ REPOINTÉE LE 06/10 : la garde lit aussi le statut de la COMMANDE (une
+  // commande annulée en tournée gardait `en_livraison`), via `annonceConforme`
+  // (lib/notif-statut.js), exécutée au banc livraison.
   v('🔴 et ne raconte que ce qui est écrit en base',
-    /adresse_livraison, statut_livraison,/.test(statut) && /if \(cmd\.statut_livraison !== statut_livraison\) \{\s*return NextResponse\.json\(\{ ok: false/.test(statut)
-    && statut.indexOf('if (cmd.statut_livraison !== statut_livraison)') < statut.indexOf('envoyerAuCommercant('))
+    /adresse_livraison, statut_livraison, statut, mode_retrait,/.test(statut) && /if \(!annonceConforme\(cmd, statut_livraison\)\) \{\s*return NextResponse\.json\(\{ ok: false/.test(statut)
+    && statut.indexOf('if (!annonceConforme(cmd, statut_livraison))') < statut.indexOf('envoyerAuCommercant('))
+  v('🔴 l’email « ta commande arrive » qui n’est pas parti se dit (502)',
+    /emailParti = !!envoi\?\.ok/.test(statut) && /\(emailDu && !emailParti\)[\s\S]{0,200}status: 502/.test(statut))
 
   const bord = code('app/dashboard/page.js')
   const i = bord.indexOf('async function changerStatutLivraison(')
@@ -257,8 +262,18 @@ const livrer = async (tables, args, options) => {
   const kl = gl.indexOf('livree: (l) => geste(')
   const glLivree = kl >= 0 ? gl.slice(kl, gl.indexOf('absent: (l) => geste(', kl)) : ''
   v('🔴 sinon une confirmation (« Livrée » prévient le client)', glLivree.length > 200 && /if \(choix !== 'oui'\) return/.test(glLivree), String(glLivree.length))
-  v('🔴 livrée : la fidélité, puis le message au client', gl.indexOf("prevenir('/api/fidelite/crediter'") > gl.indexOf("statut_livraison: 'livree', encaissement")
-    && gl.indexOf("prevenir('/api/livraison/statut', { commande_id: l.id, statut_livraison: 'livree' }") > 0)
+  // ⚠️ REPOINTÉE LE 06/10. La fidélité d'une livraison est créditée PAR LE
+  // SERVEUR (`livraison/livrer`), plus par l'écran. Et l'ancienne garde était
+  // COMPLICE : `gl.indexOf(...)` trouvait l'appel du RETRAIT AU COMPTOIR, plus
+  // loin dans le fichier, et restait verte quoi qu'il arrive au bloc « livrée ».
+  v('🔴 livrée : plus de crédit écran, le message au client part après',
+    !/prevenir\('\/api\/fidelite\/crediter'/.test(glLivree)
+    && glLivree.indexOf("prevenir('/api/livraison/statut', { commande_id: l.id, statut_livraison: 'livree' }") > glLivree.indexOf("statut_livraison: 'livree', encaissement"))
+  {
+    const routeLivrer = code('app/api/livraison/livrer/route.js')
+    v('🔴 livrée ou retirée au magasin : le SERVEUR crédite la fidélité',
+      /if \(statut_livraison === 'livree' \|\| statut_livraison === 'retiree_magasin'\) \{\s*await crediterFideliteCommande\(admin, commande_id, '\[livraison\/livrer\]'\)/.test(routeLivrer))
+  }
   v('🔴 seul un membre avec la case voit les boutons', /<Livraisons livraisons=\{etat\.livraisons\} gestes=\{etat\.droits\?\.livraisons \? gestesLivraison : null\} enCours=\{enCours\}\/>/.test(poste))
   v('🔴 les boutons suivent la règle partagée', /\{gesteLivraisonPermis\(l, 'en_livraison'\) && \(/.test(poste) && /\{gesteLivraisonPermis\(l, 'livree'\) && \(/.test(poste) && /\{gesteLivraisonPermis\(l, 'absent'\) && \(/.test(poste))
   const ka = gl.indexOf('absent: (l) => geste(')

@@ -15,7 +15,7 @@ import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import ModaleConfirmation from './ModaleConfirmation'
-import PosteConfirmation, { confirme } from './PosteConfirmation'
+import PosteConfirmation, { confirme, confirmeAvecTexte } from './PosteConfirmation'
 import { jourBruxelles } from '@/lib/timezone'
 import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, questionSeanceAnnulee, confirmationSeanceAnnulee, confirmationEncaissement, questionEncaissement, nomClient, noShowPossible } from '@/lib/confirmation-rdv'
 // ⚠️ `confirmationInfo` : un seul bouton, qui EST la sortie. On annonce, on ne
@@ -2301,16 +2301,22 @@ export default function Dashboard() {
   async function annulerParLeCommerce(commande) {
     const ref = referenceCommande(commande) ? `#${referenceCommande(commande)}` : 'cette commande'
     const enLigne = !!commande.paye_en_ligne
-    const ok = await confirme(confirmationSimple({
-      titre: enLigne ? `Annuler ${ref} et rembourser ton client ?` : `Annuler ${ref} ?`,
-      message: enLigne
-        ? 'Ton client est remboursé sur sa carte de ce qu’il a payé, ses bons et sa récompense lui reviennent, et il reçoit un email. Un remboursement ne se défait pas.'
-        : 'Ses bons et sa récompense lui reviennent, et il reçoit un email. Rien n’a été payé en ligne, il n’y a rien à rembourser.',
-      details: `${commande.client_nom || ''}`,
-      action: enLigne ? 'Oui, annuler et rembourser' : 'Oui, annuler',
-    }))
-    if (!ok) return
-    const res = await postPro('/api/commande/annuler-commercant', { commande_id: commande.id })
+    // 🟡 UN MOT POUR LE CLIENT (06/10, mineur de l'audit) : la route acceptait
+    // un `motif` et l'email l'affichait, mais la fenêtre n'avait aucun champ.
+    // Le client recevait « annulée » sans jamais savoir pourquoi.
+    const { oui, texte: motif } = await confirmeAvecTexte({
+      ...confirmationSimple({
+        titre: enLigne ? `Annuler ${ref} et rembourser ton client ?` : `Annuler ${ref} ?`,
+        message: enLigne
+          ? 'Ton client est remboursé sur sa carte de ce qu’il a payé, ses bons et sa récompense lui reviennent, et il reçoit un email. Un remboursement ne se défait pas.'
+          : 'Ses bons et sa récompense lui reviennent, et il reçoit un email. Rien n’a été payé en ligne, il n’y a rien à rembourser.',
+        details: `${commande.client_nom || ''}`,
+        action: enLigne ? 'Oui, annuler et rembourser' : 'Oui, annuler',
+      }),
+      champ: { label: 'Un mot pour ton client (facultatif)', placeholder: 'Ex : rupture de pâte, désolé ! Ce sera pour la prochaine fois.', max: 300 },
+    })
+    if (!oui) return
+    const res = await postPro('/api/commande/annuler-commercant', { commande_id: commande.id, ...(motif ? { motif } : {}) })
     const j = await (res?.json ? res.json().catch(() => null) : Promise.resolve(null))
     if (!j?.ok) {
       alert(`Erreur : ${j?.error || (res?.sansSession ? 'session expirée, reconnecte-toi' : res?.erreurReseau ? 'pas de connexion, réessaie' : 'l’annulation n’a pas pu être enregistrée')}`)
@@ -2377,7 +2383,10 @@ export default function Dashboard() {
     }
     const patch = j.champs || { statut_livraison: statutLivraison }
     setCommandes(prev => prev.map(c => c.id === commandeId ? { ...c, ...patch } : c))
-    if (statutLivraison === 'livree' || statutLivraison === 'retiree_magasin') crediterFideliteCommande(commandeId)
+    // 🟡 PLUS D'APPEL DE FIDÉLITÉ ICI (06/10, mineur de l'audit) : la route
+    // `livraison/livrer` crédite elle-même la carte au moment de « livrée » ou
+    // « retirée au magasin ». Ce second appel ne faisait rien (le crédit est
+    // idempotent), sinon laisser croire que l'écran décidait.
 
     // ⚠️ « ABSENT » : le serveur a déjà prévenu le client (lui seul le peut,
     // voir lib/livraison-absent-serveur). On DIT au commerçant si c'est parti :

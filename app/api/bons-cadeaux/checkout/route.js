@@ -22,8 +22,12 @@ import { fichePubliee } from '@/lib/statut-commercant'
 import { genererCodeBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from '@/lib/bons-cadeaux'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
+import { emailValide, NOM_MAX } from '@/lib/coordonnees-client'
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+// 🟡 LA RÈGLE DES COMMANDES, PLUS UNE REGEX LOCALE (frère de l'audit I9,
+// 06/10) : l'ancienne laissait passer < > " et n'avait pas de longueur, alors
+// que ces adresses et prénoms finissent dans deux emails et chez Stripe.
+const EMAIL_RE = { test: (v) => emailValide(v) }
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -63,6 +67,10 @@ export async function POST(request) {
     }
     if (modeDest === 'offrir' && !String(beneficiaire_prenom || '').trim()) {
       return NextResponse.json({ ok: false, error: 'Le prénom de la personne à qui tu offres le bon est requis.' }, { status: 400 })
+    }
+    if (String(acheteur_prenom || '').trim().length > NOM_MAX
+      || (modeDest === 'offrir' && String(beneficiaire_prenom || '').trim().length > NOM_MAX)) {
+      return NextResponse.json({ ok: false, error: `Un prénom ne peut pas dépasser ${NOM_MAX} caractères.` }, { status: 400 })
     }
 
     const supabase = createClient(

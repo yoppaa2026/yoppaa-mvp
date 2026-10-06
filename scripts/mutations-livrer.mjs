@@ -84,7 +84,8 @@ const MUTATIONS = [
   { nom: '🔴 le commerce ne vient plus de la garde',
     fichier: ROUTE, de: '      commercantId: verdict.commercant.id,', vers: '      commercantId: verdict.commercant?.id || null,' },
   { nom: '🔴 le message au client part sans que rien soit écrit',
-    fichier: STATUT, de: '    if (cmd.statut_livraison !== statut_livraison) {', vers: '    if (false) {' },
+    // ⚠️ ANCRE REPOINTÉE LE 06/10 : la garde passe par `annonceConforme`.
+    fichier: STATUT, de: '    if (!annonceConforme(cmd, statut_livraison)) {', vers: '    if (false) {' },
   { nom: '🔴 le livreur ne peut plus prévenir le client',
     fichier: STATUT, de: "gardeLigneEquipe(request, supabase, 'commandes', commande_id, ['commandes', 'livraisons'])", vers: "gardeLigneEquipe(request, supabase, 'commandes', commande_id, 'commandes')" },
 
@@ -99,8 +100,10 @@ const MUTATIONS = [
     fichier: POSTE, de: '      if (Number(l.a_encaisser) > 0) {', vers: '      if (false) {' },
   { nom: '🔴 « Livrée » part sans confirmation',
     fichier: POSTE, de: "        if (choix !== 'oui') return", vers: '' },
+  // ⚠️ ANCRE REPOINTÉE LE 06/10 : le crédit d'une livraison est fait par la
+  // route `livrer`, plus par le Poste.
   { nom: '🔴 la livraison ne crédite plus la fidélité',
-    fichier: POSTE, de: "      await prevenir('/api/fidelite/crediter', { commande_id: l.id }, 'le crédit de fidélité du client')", vers: '' },
+    fichier: ROUTE, de: "      await crediterFideliteCommande(admin, commande_id, '[livraison/livrer]')", vers: '' },
   { nom: '🔴 sans la case, les boutons apparaissent',
     fichier: POSTE, de: 'gestes={etat.droits?.livraisons ? gestesLivraison : null}', vers: 'gestes={gestesLivraison}' },
   { nom: '🔴 « Partir » s affiche sans la règle',

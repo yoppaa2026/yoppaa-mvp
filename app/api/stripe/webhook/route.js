@@ -1231,10 +1231,16 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
   // dans l'événement, on la relit chez Stripe, sur le compte du commerce. Une
   // lecture ratée ne bloque pas le reste.
   let refundId = idDansLEvenement
-  if (!refundId && charge.id) {
+  // 🟡 LE MOTIF POSÉ PAR NOS ROUTES (06/10, frère de l'audit) : `rdv/cancel`
+  // marque `yoppaa_motif: 'client'`. C'est le filet de la course où ce webhook
+  // passe avant la bascule de la route : sans lui, la commande devenait
+  // « Annulée par le commerce » alors que le client avait annulé.
+  let refundMotif = charge?.refunds?.data?.[0]?.metadata?.yoppaa_motif || null
+  if ((!refundId || !refundMotif) && charge.id) {
     try {
       const liste = await stripe.refunds.list({ charge: charge.id, limit: 1 }, compte ? { stripeAccount: compte } : undefined)
-      refundId = liste?.data?.[0]?.id || null
+      refundId = refundId || liste?.data?.[0]?.id || null
+      refundMotif = refundMotif || liste?.data?.[0]?.metadata?.yoppaa_motif || null
     } catch (e) {
       console.warn('[webhook/refund] identifiant du remboursement illisible', e?.message, { charge: charge.id })
     }
@@ -1314,6 +1320,9 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
     // personne chez nous ne l'a annulée.
     // ⚠️ LA BASCULE EST FILTRÉE ET LUE : un webhook rejoué ne rend rien deux fois.
     let basculeeIci = false
+    // Un remboursement marqué « client » par notre route d'annulation de
+    // rendez-vous reste une annulation DU CLIENT (voir `refundMotif` plus haut).
+    const parLeClient = refundMotif === 'client'
     if (isRefundTotal && !STATUTS_COMMANDE_ANNULEE.includes(cmd.statut)) {
       const { data: b, error: errBascule } = await supabase.from('commandes')
         // ⚠️ `annulation_motif` N'ACCEPTE QUE QUATRE VALEURS (contrainte
@@ -1321,7 +1330,9 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
         // dépôt, lue en base le 05/10) : client, commercant, paiement_ko,
         // cutoff_expire. « stripe » était refusé, et la commande restait en
         // attente. Rembourser depuis Stripe EST un geste du commerce.
-        .update({ statut: 'annulee_commercant', annulee_at: new Date().toISOString(), annulation_motif: 'commercant' })
+        .update(parLeClient
+          ? { statut: 'annulee_client_refund', annulee_at: new Date().toISOString(), annulation_motif: 'client' }
+          : { statut: 'annulee_commercant', annulee_at: new Date().toISOString(), annulation_motif: 'commercant' })
         .eq('id', cmd.id)
         .not('statut', 'in', `(${STATUTS_COMMANDE_ANNULEE.join(',')})`)
         .select('id')
@@ -1335,7 +1346,7 @@ async function handleChargeRefunded(charge, supabase, compte = null) {
       await effetsAnnulationCommande(supabase, cmd, '[webhook/refund]')
       // Une commande liée à un rendez-vous suit le message du rendez-vous :
       // un second email « le commerce a annulé » le contredirait.
-      if (!cmd.rdv_reservation_id) await prevenirClientAnnulationCommerce(supabase, cmd.id)
+      if (!cmd.rdv_reservation_id && !parLeClient) await prevenirClientAnnulationCommerce(supabase, cmd.id)
     }
     // Refund total d'une commande partiellement payée par bon cadeau : le
     // Stripe ne rembourse que la part carte, la part bon revient SUR le bon.

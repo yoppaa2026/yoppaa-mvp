@@ -19,6 +19,7 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 // route annonçait « Commande introuvable » sur une commande bien présente.
 import { prenomClient } from '@/lib/nom-client'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { annonceConforme } from '@/lib/notif-statut'
 
 export async function POST(request) {
   try {
@@ -52,7 +53,7 @@ export async function POST(request) {
     const { data: cmd, error } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, numero_prefixe, client_email, client_nom, mode_retrait,
+        id, numero_commande, numero_prefixe, client_email, client_nom, mode_retrait, statut, statut_livraison,
         lieu_id, lieu_libelle, lieu_adresse,
         adresse_livraison,
         total, paye_en_ligne, bon_cadeau_montant, fidelite_remise, encaisse_mode, encaisse_montant,
@@ -93,6 +94,13 @@ export async function POST(request) {
         { ok: false, error: `lecture impossible : ${error.message || error.code || 'erreur inconnue'}` },
         { status: 500 }
       )
+    }
+
+    // 🔴 « PRÊTE » SEULEMENT SI ELLE L'EST (06/10, mineur de l'audit) : sans
+    // cette garde, l'email partait pour une commande annulée et remboursée,
+    // et le client se déplaçait pour rien. La règle : lib/notif-statut.js.
+    if (!annonceConforme(cmd, 'pret')) {
+      return NextResponse.json({ ok: false, error: 'La commande n’est pas prête : rien n’a été envoyé.' }, { status: 409 })
     }
 
     if (!cmd.client_email) {

@@ -292,6 +292,41 @@ export async function POST(request) {
     bonRendu = arr(bonRendu)
     recompenseRendue = arr(recompenseRendue)
 
+    // ─── 4.9) Sort de la commande liée, AVANT LE REMBOURSEMENT ──────────────
+    // Le client rend ses produits : la commande est annulée et le stock
+    // redevient disponible, le statut 'annulee_client_refund' étant justement
+    // celui que le comptage de stock ignore. S'il les garde, la commande vit
+    // sa vie : elle sera retirée en boutique.
+    //
+    // 🔴 AVANT `refunds.create`, PLUS APRÈS (06/10, frère de l'audit). Stripe
+    // émet `charge.refunded` dès le remboursement : le webhook arrivait parfois
+    // AVANT cette bascule, trouvait la commande encore active et la classait
+    // « Annulée par le commerce ». Le client avait annulé, l'historique, les
+    // stats et l'export disaient l'inverse. Les deux autres routes d'annulation
+    // basculent déjà avant de rembourser ; c'est le comportement d'avant pour
+    // le reste : la commande était annulée même si le remboursement échouait.
+    if (commandeLiee && !gardeSesProduits) {
+      // ⚠️ `.neq(...).select()` : l'écriture ne rend une ligne QUE si elle a
+      // réellement fait basculer la commande, et c'est cette bascule seule qui
+      // autorise à rendre le stock.
+      const { data: basculees, error: errCmd } = await supabase
+        .from('commandes')
+        .update({ statut: 'annulee_client_refund' })
+        .eq('id', commandeLiee.id)
+        // ⚠️ LES TROIS ANNULATIONS (I5, 05/10) : une commande déjà annulée par
+        // le commerce ne rebascule pas, et ne rend pas son stock deux fois.
+        .not('statut', 'in', `(${STATUTS_COMMANDE_ANNULEE.join(',')})`)
+        .select('id')
+      if (errCmd) console.error('[rdv/cancel] annulation commande liée KO', errCmd.message, { commandeId: commandeLiee.id })
+      // ⚠️ ET LE STOCK DES VERSIONS REVIENT, comme sur les autres sorties. Le
+      // tunnel du rendez-vous ne vend pas encore d'article à versions : c'est
+      // sans effet aujourd'hui, et ce serait un piège le jour où il en vendra.
+      else if ((basculees || []).length > 0) {
+        const rest = await restaurerStockVariantes(supabase, [commandeLiee.id])
+        if (!rest.ok) console.error('[rdv/cancel] restitution stock versions KO', rest.error, { commandeId: commandeLiee.id })
+      }
+    }
+
     // ─── 5) Refund Stripe (Direct Charge sur compte connecté) ──────────────
     //
     // Montant remboursé :
@@ -356,33 +391,6 @@ export async function POST(request) {
       } catch (e) {
         console.error('[rdv/cancel] refund Stripe KO', e?.message, { rdv_id: rdv.id, pi: rdv.stripe_payment_intent_id })
         refundError = e?.message || 'Refund Stripe échoué'
-      }
-    }
-
-    // ─── 5.5) Sort de la commande liée ─────────────────────────────────────
-    // Le client rend ses produits : la commande est annulée et le stock
-    // redevient disponible, le statut 'annulee_client_refund' étant justement
-    // celui que le comptage de stock ignore. S'il les garde, la commande vit
-    // sa vie : elle sera retirée en boutique.
-    if (commandeLiee && !gardeSesProduits) {
-      // ⚠️ `.neq(...).select()` : l'écriture ne rend une ligne QUE si elle a
-      // réellement fait basculer la commande, et c'est cette bascule seule qui
-      // autorise à rendre le stock.
-      const { data: basculees, error: errCmd } = await supabase
-        .from('commandes')
-        .update({ statut: 'annulee_client_refund' })
-        .eq('id', commandeLiee.id)
-        // ⚠️ LES TROIS ANNULATIONS (I5, 05/10) : une commande déjà annulée par
-        // le commerce ne rebascule pas, et ne rend pas son stock deux fois.
-        .not('statut', 'in', `(${STATUTS_COMMANDE_ANNULEE.join(',')})`)
-        .select('id')
-      if (errCmd) console.error('[rdv/cancel] annulation commande liée KO', errCmd.message, { commandeId: commandeLiee.id })
-      // ⚠️ ET LE STOCK DES VERSIONS REVIENT, comme sur les autres sorties. Le
-      // tunnel du rendez-vous ne vend pas encore d'article à versions : c'est
-      // sans effet aujourd'hui, et ce serait un piège le jour où il en vendra.
-      else if ((basculees || []).length > 0) {
-        const rest = await restaurerStockVariantes(supabase, [commandeLiee.id])
-        if (!rest.ok) console.error('[rdv/cancel] restitution stock versions KO', rest.error, { commandeId: commandeLiee.id })
       }
     }
 

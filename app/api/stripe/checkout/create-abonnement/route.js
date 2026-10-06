@@ -18,6 +18,7 @@
 // l'acompte d'un rendez-vous depuis le 04/08.
 
 import { NextResponse } from 'next/server'
+import { refusCoordonnees } from '@/lib/coordonnees-client'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { formuleVendableEnLigne, resumeFormulePublique, offreAuJour } from '@/lib/abonnements'
@@ -38,6 +39,12 @@ export async function POST(request) {
     }
     if (!client_email || !client_prenom || !client_nom) {
       return NextResponse.json({ ok: false, error: 'coordonnées incomplètes' }, { status: 400 })
+    }
+    // 🟡 LA FORME ET LA LONGUEUR (frère de l'audit I9, 06/10). Le téléphone
+    // reste facultatif ici, comme avant ; fourni, il doit être un numéro.
+    {
+      const refusCoord = refusCoordonnees({ email: client_email, telephone: client_telephone, prenom: client_prenom, nom: client_nom, telephoneFacultatif: true })
+      if (refusCoord) return NextResponse.json({ ok: false, error: refusCoord }, { status: 400 })
     }
 
     // service_role : la route est publique, un visiteur sans compte doit

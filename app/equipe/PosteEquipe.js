@@ -548,7 +548,8 @@ export default function PosteEquipe({ equipe, onChanger }) {
       const j = await lire(await postPro('/api/livraison/livrer', { commande_id: l.id, statut_livraison: 'livree', encaissement }))
       if (!j.ok) { dire(j.error || 'La livraison n’a pas pu être enregistrée.', 'erreur'); return }
       dire('Commande livrée')
-      await prevenir('/api/fidelite/crediter', { commande_id: l.id }, 'le crédit de fidélité du client')
+      // Le crédit de fidélité est fait par `livraison/livrer` (06/10) : plus
+      // de second appel depuis l'écran.
       await prevenir('/api/livraison/statut', { commande_id: l.id, statut_livraison: 'livree' }, 'la notification au client')
     }),
     // Personne à la porte (Alex, 01/10) : la commande revient « prête », et le

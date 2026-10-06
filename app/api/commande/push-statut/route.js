@@ -22,6 +22,7 @@ import { envoyerPushParExternalId } from '@/lib/onesignal'
 import { referenceCommande } from '@/lib/numero-commande'
 import { nomTransporteur } from '@/lib/transporteurs'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { annonceConforme } from '@/lib/notif-statut'
 
 const URL_COMMANDES = '/commander?onglet=commandes'
 
@@ -53,7 +54,7 @@ export async function POST(request) {
     const { data: cmd, error } = await supabase
       .from('commandes')
       .select(`
-        id, numero_commande, numero_prefixe, client_email, mode_retrait,
+        id, numero_commande, numero_prefixe, client_email, mode_retrait, statut, statut_livraison,
         expedition_suivi, expedition_transporteur,
         commercant:commercants(nom),
         creneau:creneaux(heure_debut, heure_fin)
@@ -63,6 +64,12 @@ export async function POST(request) {
 
     if (error || !cmd) {
       return NextResponse.json({ ok: false, error: 'Commande introuvable' }, { status: 404 })
+    }
+    // 🔴 ON N'ANNONCE QUE CE QUI EST VRAI (06/10, mineur de l'audit). Le
+    // statut venait de l'écran : « prête à retirer » pouvait partir pour une
+    // commande annulée et remboursée. La règle : lib/notif-statut.js.
+    if (!annonceConforme(cmd, statut)) {
+      return NextResponse.json({ ok: false, error: 'La commande n’est pas dans ce statut : rien n’a été envoyé.' }, { status: 409 })
     }
     if (!cmd.client_email) {
       return NextResponse.json({ ok: true, skipped: 'no_email' })

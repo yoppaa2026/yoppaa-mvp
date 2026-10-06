@@ -348,7 +348,11 @@ verifier('sans poste monté, on ne détruit rien',
   /if \(typeof ouvrirLaFenetre !== 'function'\) return Promise\.resolve\(null\)/.test(srcPoste))
 // Une promesse laissée en suspens gèle l'appelant sur un `await` qui ne revient
 // jamais : le commerçant croirait que son clic n'a rien fait.
-verifier('la promesse se résout toujours', /demande\?\.resoudre\?\.\(valeur \?\? null\)/.test(srcPoste))
+// ⚠️ REPOINTÉE LE 06/10 : avec un champ texte (« un mot pour ton client »),
+// la promesse rend `{ valeur, texte }` ; sans champ, la valeur seule comme
+// avant. Dans les deux cas, elle se résout, `null` compris.
+verifier('la promesse se résout toujours',
+  /demande\?\.resoudre\?\.\(avecChamp && valeur != null \? \{ valeur, texte \} : \(valeur \?\? null\)\)/.test(srcPoste))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 7. UN CHAMP QUI SE REMPLIT TOUT SEUL DOIT LE MONTRER

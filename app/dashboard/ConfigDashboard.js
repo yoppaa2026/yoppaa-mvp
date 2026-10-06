@@ -4571,7 +4571,10 @@ function TabCreneaux({ commercantId, toast }) {
   // ─── Fix suppression individuelle ─────────────────────────────────────────
   async function deleteCreneau(id) {
     if (!await confirme(confirmationSimple({ titre: 'Supprimer ce créneau ?', message: 'Tes clients ne pourront plus le choisir.', action: 'Oui, supprimer ce créneau' }))) return
-    const { data: cmdLiees } = await supabase.from('commandes').select('id').eq('creneau_id', id).not('statut', 'in', FILTRE_STATUTS_TERMINES)
+    // 🟡 L'ERREUR SE LIT (06/10, mineur de l'audit) : une lecture ratée valait
+    // « aucune commande », et le créneau d'une commande active partait.
+    const { data: cmdLiees, error: errLiees } = await supabase.from('commandes').select('id').eq('creneau_id', id).not('statut', 'in', FILTRE_STATUTS_TERMINES)
+    if (errLiees) { toast('Vérification des commandes impossible, rien n’a été supprimé. Réessaie.', 'error'); return }
     if (cmdLiees?.length > 0) { toast(`Impossible : ${cmdLiees.length} commande(s) active(s) sur ce créneau`, 'error'); return }
     const { error } = await supabase.from('creneaux').delete().eq('id', id)
     if (error) { toast('Erreur suppression : ' + error.message, 'error'); return }
@@ -4592,7 +4595,9 @@ function TabCreneaux({ commercantId, toast }) {
     const avecCmd = []
     const sansCmd = []
     for (const c of crenJour) {
-      const { data } = await supabase.from('commandes').select('id').eq('creneau_id', c.id).not('statut', 'in', FILTRE_STATUTS_TERMINES)
+      // 🟡 L'ERREUR SE LIT (06/10) : une lecture ratée ne vaut pas « libre ».
+      const { data, error: errLect } = await supabase.from('commandes').select('id').eq('creneau_id', c.id).not('statut', 'in', FILTRE_STATUTS_TERMINES)
+      if (errLect) { toast('Vérification des commandes impossible, rien n’a été supprimé. Réessaie.', 'error'); return }
       if (data?.length > 0) avecCmd.push(c.id)
       else sansCmd.push(c.id)
     }

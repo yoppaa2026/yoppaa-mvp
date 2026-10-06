@@ -24,6 +24,7 @@ import { referenceCommande } from '@/lib/numero-commande'
 // route annonçait « Commande introuvable » sur une commande bien présente.
 import { prenomClient } from '@/lib/nom-client'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { annonceConforme } from '@/lib/notif-statut'
 
 export async function POST(request) {
   try {
@@ -51,7 +52,7 @@ export async function POST(request) {
       .from('commandes')
       .select(`
         id, numero_commande, numero_prefixe, client_email, client_nom,
-        adresse_livraison, statut_livraison,
+        adresse_livraison, statut_livraison, statut, mode_retrait,
         commercant:commercants(nom, slug),
         creneau_livraison:livraison_creneaux(heure_debut, heure_fin)
       `)
@@ -68,7 +69,11 @@ export async function POST(request) {
     // commande arrive » au client d'une commande encore en préparation, autant
     // de fois qu'il le voulait. Le statut se pose AVANT, par
     // `/api/livraison/livrer` ; ici on vérifie qu'il est bien en base.
-    if (cmd.statut_livraison !== statut_livraison) {
+    //
+    // ⚠️ ET LE STATUT DE LA COMMANDE AUSSI (06/10, mineur de l'audit) : une
+    // commande annulée pendant la tournée gardait `en_livraison`, et « ta
+    // commande arrive » pouvait encore partir. La règle : lib/notif-statut.js.
+    if (!annonceConforme(cmd, statut_livraison)) {
       return NextResponse.json({ ok: false, error: 'Le statut de livraison n’est pas celui-là : rien n’a été envoyé.' }, { status: 409 })
     }
 
@@ -81,9 +86,14 @@ export async function POST(request) {
     //
     // « Livrée » ne déclenche pas d'email : le client vient de recevoir sa
     // commande en main propre, lui écrire pour le lui apprendre n'apporte rien.
+    // 🟡 LE RÉSULTAT DE L'ENVOI EST LU (06/10) : `envoyer` ne lève jamais, et
+    // la route répondait « ok » même quand l'email n'était pas parti. Le Poste
+    // et le tableau de bord croyaient le client prévenu.
+    let emailDu = false, emailParti = false
     if (statut_livraison === 'en_livraison' && cmd.client_email) {
+      emailDu = true
       try {
-        await envoyerAuCommercant({
+        const envoi = await envoyerAuCommercant({
           to: cmd.client_email,
           subject: `🛵 Ta commande #${referenceCommande(cmd) || ''} arrive`,
           html: emailCommandeEnLivraison({
@@ -95,14 +105,19 @@ export async function POST(request) {
             heure_fin: cmd.creneau_livraison?.heure_fin,
           }),
         })
+        emailParti = !!envoi?.ok
+        if (!emailParti) console.error('[livraison/statut] email en route non parti', envoi?.error)
       } catch (e) {
         console.error('[livraison/statut] email en route KO', e?.message)
       }
     }
+    const reponseEmail = (corps) => (emailDu && !emailParti)
+      ? NextResponse.json({ ...corps, ok: false, email: false, error: 'Le client n’a pas reçu l’email « ta commande arrive ».' }, { status: 502 })
+      : NextResponse.json(emailDu ? { ...corps, email: true } : corps)
 
     // Résolution external_id = clients.id via l'email de la commande.
     if (!cmd.client_email) {
-      return NextResponse.json({ ok: true, skipped: 'no_email' })
+      return reponseEmail({ ok: true, skipped: 'no_email' })
     }
     const { data: client } = await supabase
       .from('clients')
@@ -111,7 +126,7 @@ export async function POST(request) {
       .single()
 
     if (!client?.id) {
-      return NextResponse.json({ ok: true, skipped: 'no_client' })
+      return reponseEmail({ ok: true, skipped: 'no_client' })
     }
 
     const nomCommerce = cmd.commercant?.nom || 'ton commerçant'
@@ -137,8 +152,8 @@ export async function POST(request) {
 
     const res = await envoyerPushParExternalId(client.id, { ...contenu, url, high_priority: true })
 
-    // On renvoie toujours 200 : le push est best-effort, le statut est déjà en DB.
-    return NextResponse.json({ ok: true, push: res })
+    // Le push est best-effort ; l'email, lui, est dit (voir plus haut).
+    return reponseEmail({ ok: true, push: res })
 
   } catch (e) {
     console.error('[livraison/statut] exception', e)

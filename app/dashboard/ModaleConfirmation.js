@@ -34,6 +34,11 @@ export default function ModaleConfirmation({
   actions = [],
   enCours = false,
   confirmation = null,   // une fois l'action faite : la phrase à lire
+  // Un champ texte FACULTATIF (06/10, « un mot pour ton client » à
+  // l'annulation) : { label, placeholder, max }. Sans lui, rien ne change.
+  champ = null,
+  texte = '',
+  onTexte = null,
   onChoix,
   onFermer,
 }) {
@@ -104,6 +109,24 @@ export default function ModaleConfirmation({
                     ))
                   : details}
               </div>
+            )}
+
+            {champ && (
+              <label style={{ display: 'block', marginBottom: 16 }}>
+                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, color: T.ink, marginBottom: 6 }}>{champ.label}</span>
+                <textarea
+                  value={texte}
+                  onChange={e => onTexte?.(e.target.value.slice(0, champ.max || 300))}
+                  placeholder={champ.placeholder || ''}
+                  rows={3}
+                  maxLength={champ.max || 300}
+                  disabled={enCours}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${T.pale}`, fontFamily: '"DM Sans", sans-serif', fontSize: 13, color: T.ink, resize: 'vertical' }}
+                />
+                <span style={{ display: 'block', textAlign: 'right', fontSize: 11, color: T.muted, marginTop: 3 }}>
+                  {texte.length} / {champ.max || 300}
+                </span>
+              </label>
             )}
 
             {/* ⚠️ CHAQUE BOUTON PORTE LA PHRASE DE CE QU'IL FAIT. Jamais « OK »

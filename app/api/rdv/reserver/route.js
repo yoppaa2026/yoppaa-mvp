@@ -33,6 +33,7 @@
 // règle, écrite dans `ventilerTunnelRdv`.
 
 import { NextResponse } from 'next/server'
+import { refusCoordonnees } from '@/lib/coordonnees-client'
 import { prixPrestationServeur } from '@/lib/prix-prestation-server'
 import { createClient } from '@supabase/supabase-js'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
@@ -106,6 +107,12 @@ export async function POST(request) {
     }
     if (!client_email || !client_prenom || !client_nom || !client_telephone) {
       return NextResponse.json({ ok: false, error: 'Coordonnées incomplètes.' }, { status: 400 })
+    }
+    // 🟡 LA FORME ET LA LONGUEUR, PAS SEULEMENT LA PRÉSENCE (frère de l'audit
+    // I9, 06/10) : même règle que la commande (lib/coordonnees-client.js).
+    {
+      const refusCoord = refusCoordonnees({ email: client_email, telephone: client_telephone, prenom: client_prenom, nom: client_nom })
+      if (refusCoord) return NextResponse.json({ ok: false, error: refusCoord }, { status: 400 })
     }
     const heure = String(heure_debut).slice(0, 5)
     const email = normaliserEmail(client_email)

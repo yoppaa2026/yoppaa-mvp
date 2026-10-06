@@ -22,6 +22,7 @@
 // entre comptes connectés.
 
 import { NextResponse } from 'next/server'
+import { refusCoordonnees } from '@/lib/coordonnees-client'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, PAYMENT_KIND, buildPaymentMetadata } from '@/lib/stripe'
 import { verdictForfait } from '@/lib/garde-forfait'
@@ -54,6 +55,12 @@ export async function POST(request) {
     }
     if (!client_email || !client_prenom || !client_nom || !client_telephone) {
       return NextResponse.json({ ok: false, error: 'coordonnées client incomplètes' }, { status: 400 })
+    }
+    // 🟡 LA FORME ET LA LONGUEUR, PAS SEULEMENT LA PRÉSENCE (frère de l'audit
+    // I9, 06/10) : même règle que la commande (lib/coordonnees-client.js).
+    {
+      const refusCoord = refusCoordonnees({ email: client_email, telephone: client_telephone, prenom: client_prenom, nom: client_nom })
+      if (refusCoord) return NextResponse.json({ ok: false, error: refusCoord }, { status: 400 })
     }
     // ⚠️ UN CRÉNEAU DÉJÀ COMMENCÉ SE REFUSE AVANT D'OUVRIR QUOI QUE CE SOIT,
     // comme chez le frère : sinon le client donne sa carte pour une table dont

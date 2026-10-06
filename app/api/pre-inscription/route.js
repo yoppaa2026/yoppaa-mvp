@@ -32,9 +32,12 @@ import { syncContactToBrevo, pickBrevoListId } from '@/lib/brevo'
 import { envoyerAuCommercant } from '@/lib/resend'
 import { emailMerciPreinscription } from '@/lib/resend-landing'
 import { getLandingMode } from '@/lib/landing-mode'
+import { emailValide } from '@/lib/coordonnees-client'
 
 const TYPES_AUTORISES = ['yopper', 'commercant', 'curieux']
-const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// 🟡 LA RÈGLE DES COMMANDES, PLUS UNE REGEX LOCALE (frère de l'audit I9,
+// 06/10) : l'ancienne laissait passer < > " et n'avait pas de longueur.
+const RE_EMAIL = { test: (v) => emailValide(v) }
 const RE_CP_BE = /^\d{4}$/
 
 // Slug de partage perso du commerçant (Kit Ch3). Dérivé du nom du commerce, unique.

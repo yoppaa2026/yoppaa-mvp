@@ -1286,10 +1286,9 @@ const MUTATIONS = [
     de: '  const plusieurs = Number(nb_bons) > 1\n  const motBon = libelleBon(commercant_categorie, { pluriel: plusieurs })',
     vers: '  const plusieurs = false\n  const motBon = libelleBon(commercant_categorie, { pluriel: plusieurs })' },
 
-  { nom: '🔴 la route d’annulation ne compte plus les bons',
-    banc: 'verif:livraison', fichier: 'app/api/emails/commande-annulee/route.js',
-    de: '        fidelite_remise, bon_cadeau_montant, bons_utilises,',
-    vers: '        fidelite_remise, bon_cadeau_montant,' },
+  // ⚠️ RETIRÉE LE 06/10 : elle visait `app/api/emails/commande-annulee`,
+  // supprimée (route morte qui échouait à chaque appel). La route qui tourne,
+  // `commande/cancel`, reste mesurée par le banc livraison.
 
   // 🔴 ET LE FRERE COTE RENDEZ-VOUS, dont la phrase existait depuis le 29/08
   // mais restait au singulier.

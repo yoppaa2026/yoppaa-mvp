@@ -30,10 +30,21 @@ export async function confirme(config) {
   return (await confirmer(config)) === 'oui'
 }
 
+// Avec un champ texte facultatif (`champ: { label, placeholder, max }`) :
+// rend `{ oui: boolean, texte: string }`. Un refus ou une fermeture rend
+// `{ oui: false }`, comme `confirme`.
+export async function confirmeAvecTexte(config) {
+  const r = await confirmer(config)
+  if (!r || typeof r !== 'object') return { oui: false, texte: '' }
+  return { oui: r.valeur === 'oui', texte: String(r.texte || '').trim() }
+}
+
 export default function PosteConfirmation() {
   const [demande, setDemande] = useState(null)   // { config, resoudre }
+  const [texte, setTexte] = useState('')
 
   const ouvrir = useCallback((config) => new Promise(resoudre => {
+    setTexte('')
     setDemande({ config: config || {}, resoudre })
   }), [])
 
@@ -46,7 +57,10 @@ export default function PosteConfirmation() {
     // ⚠️ ON RÉSOUT AVANT DE FERMER, et on résout TOUJOURS. Une promesse laissée
     // en suspens gèle l'appelant sur un `await` qui ne revient jamais : le
     // commerçant croirait que son clic n'a rien fait.
-    demande?.resoudre?.(valeur ?? null)
+    // Avec un champ, on rend aussi ce qui a été tapé ; sans, la valeur seule,
+    // comme avant (aucun appelant existant ne change).
+    const avecChamp = !!demande?.config?.champ
+    demande?.resoudre?.(avecChamp && valeur != null ? { valeur, texte } : (valeur ?? null))
     setDemande(null)
   }
 
@@ -54,6 +68,8 @@ export default function PosteConfirmation() {
     <ModaleConfirmation
       ouverte={!!demande}
       {...(demande?.config || {})}
+      texte={texte}
+      onTexte={setTexte}
       onChoix={repondre}
       onFermer={() => repondre(null)}
     />

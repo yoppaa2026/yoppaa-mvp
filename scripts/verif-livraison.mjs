@@ -668,6 +668,70 @@ verifier('le minimum porte sur le total des articles',
   verifier('purge : /legal le dit', /Adresse, position et note de livraison d’une commande : effacées 6 mois après la commande/.test(lire('app/legal/page.js')))
 }
 
+// ═══ MINEURS DE L'AUDIT (06/10) : ANNONCES VRAIES, COORDONNÉES, MOT AU CLIENT ═
+{
+  const { annonceConforme } = await import('../lib/notif-statut.js')
+  const { sansProse } = await import('./lire-code.mjs')
+  const cmd = (o) => ({ statut: 'pret', statut_livraison: null, mode_retrait: 'retrait', ...o })
+  verifier('annonce : « prête » pour une commande prête', annonceConforme(cmd({}), 'pret'))
+  verifier('🔴 annonce : jamais « prête » pour une commande annulée',
+    !annonceConforme(cmd({ statut: 'annulee_commercant' }), 'pret') && !annonceConforme(cmd({ statut: 'annulee_client_refund' }), 'pret'))
+  verifier('annonce : « en préparation » seulement si elle l\'est', annonceConforme(cmd({ statut: 'en_preparation' }), 'en_preparation') && !annonceConforme(cmd({}), 'en_preparation'))
+  verifier('annonce : « colis parti » seulement pour une expédition passée en récupérée',
+    annonceConforme(cmd({ statut: 'recupere', mode_retrait: 'expedition' }), 'expediee') && !annonceConforme(cmd({ statut: 'recupere' }), 'expediee'))
+  verifier('🔴 annonce : « ta commande arrive » jamais pour une commande annulée en tournée',
+    annonceConforme(cmd({ mode_retrait: 'livraison', statut_livraison: 'en_livraison' }), 'en_livraison')
+      && !annonceConforme(cmd({ mode_retrait: 'livraison', statut_livraison: 'en_livraison', statut: 'annulee_commercant' }), 'en_livraison'))
+  verifier('annonce : « livrée » seulement si livrée et terminée',
+    annonceConforme(cmd({ mode_retrait: 'livraison', statut_livraison: 'livree', statut: 'recupere' }), 'livree')
+      && !annonceConforme(cmd({ mode_retrait: 'livraison', statut_livraison: 'livree', statut: 'pret' }), 'livree'))
+  verifier('annonce : un statut inconnu ne part jamais', !annonceConforme(cmd({}), 'nimporte'))
+  for (const [chemin, appel, cols] of [
+    ['app/api/commande/push-statut/route.js', 'if (!annonceConforme(cmd, statut)) {', 'mode_retrait, statut, statut_livraison,'],
+    ['app/api/emails/commande-prete/route.js', "if (!annonceConforme(cmd, 'pret')) {", 'mode_retrait, statut, statut_livraison,'],
+  ]) {
+    const src = sansProse(lire(chemin))
+    const iGarde = src.indexOf(appel)
+    const iEnvoi = Math.max(src.indexOf('envoyerPushParExternalId('), src.indexOf('envoyerAuCommercant('))
+    verifier(`🔴 ${chemin} : relit le statut et refuse AVANT d'envoyer`, src.includes(cols) && iGarde > 0 && iGarde < iEnvoi, `${iGarde} / ${iEnvoi}`)
+  }
+
+  // Les coordonnées, vérifiées partout où un client les tape.
+  for (const chemin of ['app/api/stripe/checkout/create-rdv-acompte/route.js', 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    'app/api/stripe/checkout/create-rdv-empreinte/route.js', 'app/api/rdv/reserver/route.js']) {
+    verifier(`🔴 coordonnées vérifiées (forme + longueur) : ${chemin}`,
+      /refusCoordonnees\(\{ email: client_email, telephone: client_telephone, prenom: client_prenom, nom: client_nom \}\)/.test(sansProse(lire(chemin))))
+  }
+  verifier('coordonnées : l\'abonnement garde son téléphone facultatif',
+    /refusCoordonnees\(\{[^}]*telephoneFacultatif: true \}\)/.test(sansProse(lire('app/api/stripe/checkout/create-abonnement/route.js'))))
+  verifier('coordonnées : bons cadeaux et préinscription suivent la même règle d\'email',
+    /emailValide\(v\)/.test(sansProse(lire('app/api/bons-cadeaux/checkout/route.js'))) && /emailValide\(v\)/.test(sansProse(lire('app/api/pre-inscription/route.js'))))
+  const { refusCoordonnees } = await import('../lib/coordonnees-client.js')
+  verifier('téléphone facultatif : absent, ça passe ; fourni et faux, refusé',
+    refusCoordonnees({ email: 'a@b.be', telephone: '', telephoneFacultatif: true }) === null
+      && /téléphone/.test(refusCoordonnees({ email: 'a@b.be', telephone: 'abc', telephoneFacultatif: true }) || ''))
+
+  // Un mot pour le client à l'annulation.
+  const bord = sansProse(lire('app/dashboard/page.js'))
+  verifier('🔴 mot au client : la fenêtre d\'annulation a son champ, et le mot part au serveur',
+    /champ: \{ label: 'Un mot pour ton client \(facultatif\)'/.test(bord)
+      && /postPro\('\/api\/commande\/annuler-commercant', \{ commande_id: commande\.id, \.\.\.\(motif \? \{ motif \} : \{\}\) \}\)/.test(bord))
+  const poste = sansProse(lire('app/dashboard/PosteConfirmation.js'))
+  verifier('mot au client : la fenêtre rend le texte seulement quand elle a un champ (rien ne change ailleurs)',
+    /avecChamp && valeur != null \? \{ valeur, texte \} : \(valeur \?\? null\)/.test(poste))
+
+  // Les suppressions de créneau lisent leur erreur.
+  const cfg = sansProse(lire('app/dashboard/ConfigDashboard.js'))
+  verifier('créneaux : une lecture ratée ne vaut pas « aucune commande »',
+    /const \{ data: cmdLiees, error: errLiees \}[\s\S]{0,200}if \(errLiees\)/.test(cfg) && /const \{ data, error: errLect \}[\s\S]{0,200}if \(errLect\)/.test(cfg))
+  verifier('fidélité : plus de second appel écran après « livrer »',
+    !/statutLivraison === 'livree' \|\| statutLivraison === 'retiree_magasin'\) crediterFideliteCommande/.test(bord)
+      // Le Poste : seulement dans la séquence « livrée » (le retrait au
+      // comptoir, lui, garde son crédit).
+      && !/dire\('Commande livrée'\)\s*await prevenir\('\/api\/fidelite\/crediter'/.test(sansProse(lire('app/equipe/PosteEquipe.js')))
+      && /dire\('Commande livrée'\)\s*await prevenir\('\/api\/livraison\/statut'/.test(sansProse(lire('app/equipe/PosteEquipe.js'))))
+}
+
 // La route des statuts n'accepte que les deux états connus.
 const routeStatut = lire('app/api/livraison/statut/route.js')
 for (const s of STATUTS_LIVRAISON) {
@@ -1447,15 +1511,14 @@ verifier('et range la commande du bon côté',
 
   // ⚠️ ET LA ROUTE DOIT CHARGER LES COLONNES, sinon les gabarits se taisent
   // sans lever la moindre erreur. C'est LE défaut le plus fréquent du projet.
-  const routeAnn = lire('app/api/emails/commande-annulee/route.js')
-  verifier('la route d\'annulation charge la remise et le bon',
-    /fidelite_remise, bon_cadeau_montant/.test(routeAnn))
-  verifier('🔴 et la LISTE des bons, pour compter combien il y en a',
-    /bon_cadeau_montant, bons_utilises/.test(routeAnn))
-  // 🔴 LES DEUX ROUTES D'ANNULATION PASSENT LE COMPTE. Elles composent chacune
-  // leurs appels : le 30/08, une correction n'en avait touché qu'une, et le
-  // gabarit se taisait en silence de l'autre côté.
-  for (const f of ['app/api/emails/commande-annulee/route.js', 'app/api/commande/cancel/route.js']) {
+  // ⚠️ REPOINTÉES LE 06/10 : `app/api/emails/commande-annulee` est SUPPRIMÉE
+  // (mineur de l'audit). Elle demandait `prix_total` et `option_libelle`, qui
+  // n'existent pas sur `commande_articles` : chaque appel échouait (« Commande
+  // introuvable »), et plus rien ne l'appelait. Reste la route qui tourne.
+  verifier('🔴 la route morte commande-annulee reste supprimée',
+    (() => { try { lire('app/api/emails/commande-annulee/route.js'); return false } catch { return true } })())
+  // 🔴 LA ROUTE D'ANNULATION PASSE LE COMPTE aux deux gabarits.
+  for (const f of ['app/api/commande/cancel/route.js']) {
     const src = lire(f)
     verifier(`${f} : passe le nombre de bons aux DEUX gabarits`,
       (src.match(/nb_bons:\s+\(cmd\.bons_utilises \|\| \[\]\)\.length/g) || []).length === 2,
@@ -1646,8 +1709,8 @@ verifier('et range la commande du bon côté',
 // allé voir. Les deux doivent passer LES MÊMES COLONNES, sinon ils divergeront
 // encore.
 {
+  // ⚠️ REPOINTÉE LE 06/10 : `emails/commande-annulee` supprimée (route morte).
   for (const [nom, chemin] of [
-    ['/api/emails/commande-annulee', 'app/api/emails/commande-annulee/route.js'],
     ['/api/commande/cancel',         'app/api/commande/cancel/route.js'],
   ]) {
     const src = lire(chemin)
@@ -1694,7 +1757,7 @@ verifier('et range la commande du bon côté',
   const ROUTES_COMMANDES = [
     'app/api/emails/commande-prete/route.js',
     'app/api/emails/commande-expediee/route.js',
-    'app/api/emails/commande-annulee/route.js',
+    // `emails/commande-annulee` : supprimée le 06/10 (route morte).
     'app/api/livraison/statut/route.js',
     'app/api/cron/rappels-retrait/route.js',
     'app/api/commande/cancel/route.js',
@@ -2072,8 +2135,22 @@ verifier('et range la commande du bon côté',
   }
   verifier('🔴 I5 et ses effets ne partent qu’une fois, sur une bascule lue',
     /basculeeIci = \(b \|\| \[\]\)\.length > 0/.test(wh) && /if \(basculeeIci\) \{\s*await effetsAnnulationCommande\(supabase, cmd/.test(wh))
+  // ⚠️ REPOINTÉE LE 06/10 : ni pour une commande liée à un rendez-vous, ni
+  // pour un remboursement que NOTRE route marque « client » (la course).
   verifier('I5 pas d’email « commerce » pour une commande liée à un rendez-vous',
-    /if \(!cmd\.rdv_reservation_id\) await prevenirClientAnnulationCommerce\(supabase, cmd\.id\)/.test(wh))
+    /if \(!cmd\.rdv_reservation_id && !parLeClient\) await prevenirClientAnnulationCommerce\(supabase, cmd\.id\)/.test(wh))
+  verifier('🔴 course rdv+produits : un remboursement marqué « client » reste une annulation du client',
+    /let refundMotif = charge\?\.refunds\?\.data\?\.\[0\]\?\.metadata\?\.yoppaa_motif \|\| null/.test(wh)
+      && /const parLeClient = refundMotif === 'client'/.test(wh)
+      && /\.update\(parLeClient\s*\? \{ statut: 'annulee_client_refund'[^}]*annulation_motif: 'client' \}/.test(wh))
+  {
+    const rc = sansProse(lire('app/api/rdv/cancel/route.js'))
+    const iBascule = rc.indexOf(".update({ statut: 'annulee_client_refund' })")
+    const iRefund = rc.indexOf('stripe.refunds.create(')
+    verifier('🔴 course rdv+produits : la route bascule la commande AVANT de rembourser',
+      iBascule > 0 && iRefund > 0 && iBascule < iRefund, `bascule ${iBascule}, remboursement ${iRefund}`)
+    verifier('course rdv+produits : le remboursement porte le motif « client »', /yoppaa_motif: 'client'/.test(rc))
+  }
 
   // La fin de livraison crédite la fidélité côté serveur, et prévient.
   const livrer = sansProse(lire('app/api/livraison/livrer/route.js'))

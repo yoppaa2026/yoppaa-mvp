@@ -360,7 +360,7 @@ export default function TabPaiements({ commercantId, toast }) {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
               <input id="plafond-sur-place" inputMode="decimal" placeholder="Pas de limite"
                 value={plafondSurPlace}
-                onChange={e => setPlafondSurPlace(e.target.value.replace(/[^d,.]/g, '').slice(0, 8))}
+                onChange={e => setPlafondSurPlace(e.target.value.replace(/[^\d,.]/g, '').slice(0, 8))}
                 style={{ width: 130, padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontFamily: 'inherit' }}/>
               <span style={{ fontSize: '0.86rem', color: T.muted, fontWeight: 700 }}>€ par commande</span>
               <button type="button" onClick={enregistrerPlafond} disabled={savingPlafond}

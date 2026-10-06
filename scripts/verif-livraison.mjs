@@ -638,6 +638,15 @@ verifier('le minimum porte sur le total des articles',
     /GRANT UPDATE \(paiement_sur_place_max\) ON public\.commercants TO authenticated/.test(migSP)
       && /paiement_sur_place_max > 0 AND paiement_sur_place_max <= 10000/.test(migSP))
   const tp = sansProse(lire('app/dashboard/TabPaiements.js'))
+  // 🔴 TROUVÉ PAR ALEX LE 06/10 : « je ne sais rien taper dans le champ ».
+  // Le filtre avait perdu sa barre oblique inverse (`/[^d,.]/g`) : il effaçait
+  // tous les chiffres. La garde EXÉCUTE le filtre du fichier sur une saisie.
+  {
+    const m = tp.match(/setPlafondSurPlace\(e\.target\.value\.replace\((\/[^/]+\/g), ''\)\.slice\(0, 8\)\)/)
+    const filtre = m ? new Function(`return ${m[1]}`)() : null
+    verifier('🔴 sur place : le champ du plafond accepte les chiffres (« 12,50 » reste « 12,50 »)',
+      !!filtre && '12,50'.replace(filtre, '') === '12,50' && 'a1b2'.replace(filtre, '') === '12', m ? m[1] : 'filtre introuvable')
+  }
   verifier('sur place : le commerçant règle son plafond (vide = pas de limite)',
     /\.update\(\{ paiement_sur_place_max: valeur === null \? null :/.test(tp) && /Paiement sur place jusqu’à/.test(tp))
 

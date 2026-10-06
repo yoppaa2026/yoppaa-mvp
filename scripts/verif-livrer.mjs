@@ -248,6 +248,11 @@ const livrer = async (tables, args, options) => {
   v('la livraison du tableau de bord a été retrouvée', corps.length > 300, String(corps.length))
   v('🔴 le tableau de bord n’écrit plus la livraison depuis le navigateur', !/supabase\.from\('commandes'\)\.update/.test(corps) && /postPro\('\/api\/livraison\/livrer'/.test(corps))
   v('🔴 il envoie le CHOIX, pas le montant', /champs\.encaisse_mode === 'rien' \? 'sans_paiement' : champs\.encaisse_mode/.test(corps) && !/encaisse_montant/.test(corps.slice(corps.indexOf("postPro('/api/livraison/livrer'"), corps.indexOf("postPro('/api/livraison/livrer'") + 200)))
+  // 🔴 AJOUTÉE LE 06/10 (mutation restée VERTE) : le changement de statut d'une
+  // COMMANDE envoie le même choix au serveur, qui refuse « rien ». La garde
+  // ci-dessus ne lit que la livraison : on COMPTE les deux traductions.
+  v('🔴 « rien » devient « sans_paiement » dans les DEUX gestes du tableau de bord',
+    (bord.match(/champs\.encaisse_mode === 'rien' \? 'sans_paiement' : champs\.encaisse_mode/g) || []).length === 2)
   v('🔴 un refus du serveur se dit et n’avance rien', /if \(!j\?\.ok\) \{[\s\S]{0,300}alert\([\s\S]{0,300}return\s*\}/.test(corps))
   v('🔴 absent : on dit au commerçant si le client est prévenu, et on ne renvoie pas « en route »',
     /if \(statutLivraison === 'absent'\) \{[\s\S]{0,200}j\.client_prevenu[\s\S]{0,700}return\s*\}/.test(corps)
@@ -261,11 +266,14 @@ const livrer = async (tables, args, options) => {
   const k = poste.indexOf('const gestesLivraison = {')
   const gl = k >= 0 ? poste.slice(k, poste.indexOf('const gestesCommande = {', k)) : ''
   v('les gestes du livreur ont été retrouvés', gl.length > 500, String(gl.length))
-  v('🔴 payée à la porte : la question d’argent du comptoir', /if \(Number\(l\.a_encaisser\) > 0\) \{\s*const choix = await confirmer\(questionEncaissement\(/.test(gl))
   // ⚠️ DANS LE BLOC « LIVRÉE » SEULEMENT : le geste « absent », juste après,
   // porte la même ligne, et la garde verdissait sur lui (mesuré par mutation).
   const kl = gl.indexOf('livree: (l) => geste(')
   const glLivree = kl >= 0 ? gl.slice(kl, gl.indexOf('absent: (l) => geste(', kl)) : ''
+  // 🔴 REPOINTÉE LE 06/10 (mutation restée VERTE) : elle lisait tout `gl`, où
+  // « Retirée au magasin » porte la même question d'argent. « Livrée » pouvait
+  // la perdre, la garde la trouvait chez le voisin. Elle vise le bloc « livrée ».
+  v('🔴 payée à la porte : la question d’argent du comptoir', /if \(Number\(l\.a_encaisser\) > 0\) \{\s*const choix = await confirmer\(questionEncaissement\(/.test(glLivree))
   v('🔴 sinon une confirmation (« Livrée » prévient le client)', glLivree.length > 200 && /if \(choix !== 'oui'\) return/.test(glLivree), String(glLivree.length))
   // ⚠️ REPOINTÉE LE 06/10. La fidélité d'une livraison est créditée PAR LE
   // SERVEUR (`livraison/livrer`), plus par l'écran. Et l'ancienne garde était
@@ -309,6 +317,51 @@ const livrer = async (tables, args, options) => {
   v('🔴 aucune promesse de remboursement', !/rembours/i.test(html))
   const sansTel = emailLivraisonClientAbsent({ yopper_prenom: 'Léa', commercant_nom: 'Momo', numero_commande: 'LI7' })
   v('sans numéro : un lien vers la commande, pas un « tel: » vide', !/tel:/.test(sansTel) && /Voir ma commande/.test(sansTel))
+}
+
+// ═══ AUDIT ÉCRAN CLIENT, 06/10 : LE RÉCAP DE 8 H ET LE TOTAL ═══════════════
+// Décisions d'Alex (tableau) : deux blocs « À livrer » / « À retirer » triés
+// par heure, la LOCALITÉ seule (jamais la rue), 8 h toute l'année.
+{
+  const { estHeureDuRecap, lignesRecapCommandes, blocsRecapCommandes } = await import('../lib/recap-commandes.js')
+  const { emailRecapCommandesJour } = await import('../lib/resend.js')
+
+  // 8 h à Bruxelles, été (UTC+2) comme hiver (UTC+1).
+  v('🔴 été : 6 h UTC = 8 h, on envoie', estHeureDuRecap(new Date('2026-07-01T06:00:00Z')) === true)
+  v('🔴 été : 7 h UTC = 9 h, on n’envoie pas deux fois', estHeureDuRecap(new Date('2026-07-01T07:00:00Z')) === false)
+  v('🔴 hiver : 6 h UTC = 7 h, plus d’envoi à 7 h', estHeureDuRecap(new Date('2026-12-01T06:00:00Z')) === false)
+  v('🔴 hiver : 7 h UTC = 8 h, on envoie', estHeureDuRecap(new Date('2026-12-01T07:00:00Z')) === true)
+
+  const cmds = [
+    { id: 3, numero_commande: 3, client_nom: 'Léa Dupont', mode_retrait: 'retrait', creneau: { heure_debut: '10:30:00' }, commande_articles: [{ quantite: 2 }], total: 12 },
+    { id: 1, numero_commande: 1, client_nom: 'Marc Petit', mode_retrait: 'livraison', adresse_livraison: 'Rue du Moulin 20, Boîte 2, 5640 Biesme', creneau_livraison: { heure_debut: '11:00:00' }, commande_articles: [{ quantite: 1 }], total: 30 },
+    { id: 2, numero_commande: 2, client_nom: 'Zoé Lambert', mode_retrait: 'livraison', adresse_livraison: 'Rue Haute 3, 5640 Mettet', creneau_livraison: { heure_debut: '09:00:00' }, commande_articles: [{ quantite: 4 }], total: 45 },
+  ]
+  const lignes = lignesRecapCommandes(cmds)
+  v('🔴 la livraison porte sa localité', lignes[1].localite === 'Biesme', lignes[1].localite)
+  v('🔴 et JAMAIS sa rue : aucune ligne ne garde l’adresse', lignes.every(l => !('adresse_livraison' in l) && !JSON.stringify(l).includes('Moulin')))
+  v('un retrait n’a pas de localité', lignes[0].localite === null && lignes[0].mode === 'retrait')
+  const blocs = blocsRecapCommandes(lignes)
+  v('🔴 deux blocs, « À livrer » d’abord', blocs.map(b => b.titre).join('|') === 'À livrer|À retirer', blocs.map(b => b.titre).join('|'))
+  v('🔴 chaque bloc trié par heure, pas par numéro', blocs[0].commandes.map(c => c.heure_debut).join(',') === '09:00:00,11:00:00')
+  const html = emailRecapCommandesJour({ nom_commercant: 'Chez Momo', date_jour: '2026-10-07', commandes: lignes, bons_vendus: [] })
+  v('🔴 l’email montre les deux blocs', /À livrer · 2/.test(html) && /À retirer · 1/.test(html))
+  v('🔴 l’email montre la localité et pas la rue', /Biesme/.test(html) && !/Moulin/.test(html) && !/Rue Haute/.test(html))
+  v('sans commande, l’email le dit toujours', /Aucune commande aujourd/.test(emailRecapCommandesJour({ nom_commercant: 'X', date_jour: '2026-10-07', commandes: [] })))
+
+  const cron = code('app/api/cron/recap-jour-8h/route.js')
+  v('🔴 le cron s’arrête hors de 8 h à Bruxelles', /if \(!forcer && !estHeureDuRecap\(new Date\(\)\)\) \{/.test(cron))
+  v('🔴 le cron lit le mode et passe par les lignes du récap', /mode_retrait, adresse_livraison/.test(cron) && /const cmdsFlat = lignesRecapCommandes\(cmds \|\| \[\]\)/.test(cron))
+  v('🔴 « la veille » va de minuit à minuit À BRUXELLES, la veille',
+    /\.gte\('created_at', debutVeille\)/.test(cron) && /\.lt\('created_at', debutJour\)/.test(cron)
+    && /jourCivilPlus\(dateJour, -1\)/.test(cron))
+  const planning = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'))
+  const recap = (planning.crons || []).find(c => c.path === '/api/cron/recap-jour-8h')
+  v('🔴 le cron passe à 6 h ET 7 h UTC', recap?.schedule === '0 6,7 * * *', recap?.schedule)
+
+  // Le total d'une commande s'additionne en CENTIMES : 10,1 + 2,2 en euros vaut 12,299999999999999.
+  const cc = code('app/api/stripe/checkout/create-commande/route.js')
+  v('🔴 le total enregistré est additionné en centimes', /total: \(totalCents \+ fraisLivraisonCents\) \/ 100,/.test(cc))
 }
 
 console.log(`\nLivrer une commande : ${ok} vérifications`)

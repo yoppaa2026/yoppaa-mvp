@@ -892,17 +892,38 @@ verifier('les segments s\'enchaînent', /origine = destination/.test(tourneeCode
 // d'inscription. Celle-ci ne sert plus qu'à valider le dossier : faire partir
 // une tournée de là enverrait le livreur au DOMICILE d'un commerçant inscrit
 // chez lui, et lui ferait recalculer tout son trajet depuis le mauvais point.
-verifier('le départ vient du lieu d’activité du jour',
-  /lieuxDuJour\(\{ lieux: lieuxCom/.test(tourneeCode))
-verifier('et de ses coordonnées', /departLieu\?\.latitude/.test(tourneeCode))
+// ⚠️ REPOINTÉE LE 06/10 (Alex, tableau) : plus le « lieu du jour » (calculé à
+// la date d'AUJOURD'HUI, drapeau `principal` ignoré), mais le lieu principal
+// permanent, le MÊME point que le centre de la zone. On EXÉCUTE la règle.
+verifier('🔴 le départ est le centre de la zone, une seule règle',
+  /const depart = centreDeLaZone\(\{ lieux: lieuxCom \|\| \[\] \}\)/.test(tourneeCode)
+  && !/lieuxDuJour/.test(tourneeCode))
+{
+  const { centreDeLaZone } = await import('../lib/zone-etoile.js')
+  const p = (o) => ({ actif: true, adresse: 'x', ...o })
+  const lieux = [
+    p({ type: 'permanent', principal: false, latitude: 50.40, longitude: 4.60 }),
+    p({ type: 'hebdo', jour_semaine: 1, latitude: 50.50, longitude: 4.70 }),
+    p({ type: 'permanent', principal: true, latitude: 50.32, longitude: 4.65 }),
+  ]
+  const d = centreDeLaZone({ lieux })
+  verifier('🔴 deux lieux permanents : on part du PRINCIPAL, pas du premier', d?.lat === 50.32 && d?.lng === 4.65, JSON.stringify(d))
+  verifier('🔴 un lieu principal sans position : pas de départ inventé',
+    centreDeLaZone({ lieux: [p({ type: 'permanent', principal: true, latitude: null, longitude: null })] }) === null)
+  verifier('un marché de la semaine seul ne fait pas un départ',
+    centreDeLaZone({ lieux: [p({ type: 'hebdo', jour_semaine: 1, latitude: 50.5, longitude: 4.7 })] }) === null)
+}
 // ⚠️ Et pas d'un géocodage à chaque clic. Nominatim est un service public dont
 // la règle d'usage est d'une requête par seconde : le rappeler à chaque
 // optimisation est un gaspillage et un risque de blocage.
 // ⚠️ REPOINTÉE LE 05/10 (Alex : « supprimer Nominatim ») : le dernier recours
 // a disparu avec `lib/geocode.js`. Un lieu sans position est signalé, pas deviné.
 verifier('🔴 plus aucun géocodage dans la tournée', !/geocoderAdresse\(|lib\/geocode/.test(tourneeCode))
+// ⚠️ REPOINTÉE LE 06/10 : le test d'absence vit dans `centreValide`, et le
+// banc l'EXÉCUTE plus haut (« un lieu principal sans position »). Ici, on
+// vérifie que la tournée refuse bien quand il n'y a pas de départ.
 verifier('un départ sans position n\'est pas lu comme 0,0',
-  /latDepart !== null && latDepart !== undefined && lngDepart !== null && lngDepart !== undefined/.test(tourneeCode))
+  /const depart = centreDeLaZone\([^)]*\)\s*\n(?:\s*const lieuDepart = [^\n]*\n)?\s*if \(!depart\) \{/.test(tourneeCode))
 // Et le message d'erreur envoie au bon endroit : « Profil », section des lieux,
 // et non plus vers une adresse que le commerçant ne peut pas corriger là.
 verifier('un lieu non géolocalisable renvoie vers la bonne section',

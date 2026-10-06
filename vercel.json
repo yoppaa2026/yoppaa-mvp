@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/recap-jour-8h",
-      "schedule": "0 6 * * *"
+      "schedule": "0 6,7 * * *"
     },
     {
       "path": "/api/cron/rdv-reminder-9h",

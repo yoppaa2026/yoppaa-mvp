@@ -1109,7 +1109,10 @@ export async function POST(request) {
         client_telephone,
         rgpd_commande: true,
         rgpd_marketing: !!rgpd_marketing,
-        total: totalEUR + fraisLivraisonEUR,
+        // ⚠️ ADDITIONNÉ EN CENTIMES (audit, 06/10) : 10,1 + 2,2 vaut
+        // 12,299999999999999 en euros à virgule. Les deux montants existent
+        // déjà en centimes entiers : on les additionne là, puis on divise.
+        total: (totalCents + fraisLivraisonCents) / 100,
         bon_cadeau_id: bonCadeau?.id || null,
         bon_cadeau_montant: remiseBonEUR,
         // 🔴 LA LISTE FAIT FOI POUR L'ARGENT. `bon_cadeau_id` ne garde que le

@@ -24,8 +24,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
-import { lieuxDuJour } from '@/lib/lieux-activite'
-import { jourLocalISO } from '@/lib/timezone'
+import { centreDeLaZone } from '@/lib/zone-etoile'
+import { lieuPrincipal } from '@/lib/lieux-activite'
 import { refus } from '@/lib/api-auth'
 import { gardeEquipe } from '@/lib/equipe-server'
 
@@ -227,29 +227,33 @@ export async function POST(request) {
     // L'adresse d'inscription ne sert qu'à valider le dossier : faire partir la
     // tournée de là enverrait le livreur au domicile d'un commerçant inscrit
     // chez lui, et lui ferait recalculer tout son trajet depuis le mauvais
-    // point. On part du lieu où il exerce aujourd'hui, celui-là même que ses
-    // clients voient sur sa fiche.
+    // point.
+    //
+    // 🔴 ET C'EST LE LIEU PRINCIPAL PERMANENT, CELUI DE LA ZONE (Alex, 06/10,
+    // tableau). La tournée partait du « lieu du jour » calculé à la date
+    // d'AUJOURD'HUI (pas celle de la tournée), qui ignorait le drapeau
+    // `principal` : un commerce à deux lieux permanents pouvait partir de
+    // l'autre, et une tournée préparée la veille partait du lieu de la veille.
+    // Pendant ce temps, la zone de livraison est centrée sur le lieu principal
+    // (`centreDeLaZone`). Une seule règle pour les deux : la zone ET la tournée
+    // partent du même point. Les food trucks ne livrent pas (Alex, 05/10).
     const { data: lieuxCom } = await supabase
       .from('commercant_lieux')
-      .select('id, type, jour_semaine, date_jour, libelle, adresse, latitude, longitude, heure_debut, heure_fin, principal, actif')
+      .select('id, type, libelle, adresse, latitude, longitude, principal, actif')
       .eq('commercant_id', commercant.id)
       .eq('actif', true)
-    const departLieu = lieuxDuJour({ lieux: lieuxCom || [], jour: jourLocalISO(new Date()) })[0] || null
 
     // 🔴 PLUS DE GÉOCODAGE DE SECOURS (Alex, 05/10 : « supprimer Nominatim »).
     // Les lieux se saisissent désormais dans le référentiel officiel et
     // reçoivent leur position à la saisie. Un lieu ancien sans position est
     // signalé (message juste en dessous) au lieu d'être deviné : le commerçant
     // le corrige une fois dans « Où me trouver ».
-    // ⚠️ `latitude: null` : `Number(null)` vaut 0, fini, donc « valide ». On
-    // teste l'ABSENCE avant le nombre (reference_deux_formes_absence).
-    let depart = null
-    const latDepart = departLieu?.latitude
-    const lngDepart = departLieu?.longitude
-    if (latDepart !== null && latDepart !== undefined && lngDepart !== null && lngDepart !== undefined
-        && Number.isFinite(Number(latDepart)) && Number.isFinite(Number(lngDepart))) {
-      depart = { lat: Number(latDepart), lng: Number(lngDepart) }
-    }
+    // ⚠️ `latitude: null` : `centreValide` lit `Number(null)`, soit 0, hors de
+    // Belgique, donc refusé (reference_deux_formes_absence).
+    const depart = centreDeLaZone({ lieux: lieuxCom || [] })
+    // Le même lieu, pour son libellé (« Atelier », « Boutique du centre ») :
+    // `centreDeLaZone` le choisit déjà par `lieuPrincipal`.
+    const lieuDepart = lieuPrincipal({ lieux: lieuxCom || [] })
     if (!depart) {
       return NextResponse.json({
         ok: false,
@@ -278,7 +282,7 @@ export async function POST(request) {
       methode,
       // ⚠️ JAMAIS l'adresse de la fiche (celle de l'inscription) comme départ
       // affiché (règle d'Alex, 05/10) : sans lieu, on n'en invente pas.
-      depart: { nom: departLieu?.libelle || commercant.nom, adresse: departLieu?.adresse || null },
+      depart: { nom: lieuDepart?.libelle || commercant.nom, adresse: depart.adresse || null },
       ordre,
       itineraires: liensItineraire(depart, ordreArrets),
       sans_coords: sansCoords,

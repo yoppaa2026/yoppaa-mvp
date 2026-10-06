@@ -113,6 +113,22 @@ const MUTATIONS = [
     fichier: POSTE, de: "      {gestes?.partir && gesteLivraisonPermis(l, 'en_livraison') && (", vers: '      {gestes?.partir && true && (' },
   { nom: '🔴 la vue du livreur perd le mode (aucun bouton)',
     fichier: VUE, de: '    mode_retrait: c.mode_retrait || null,', vers: '' },
+
+  // ─── AUDIT ÉCRAN CLIENT, 06/10 : RÉCAP DE 8 H ET TOTAL ───────────────────
+  { nom: '🔴 le récap repart à 7 h en hiver',
+    fichier: 'lib/recap-commandes.js', de: '  return partiesBruxelles(instant)?.heure === HEURE_DU_RECAP', vers: '  return new Date(instant).getUTCHours() === 6' },
+  { nom: '🔴 la rue part dans l email',
+    fichier: 'lib/recap-commandes.js', de: "      localite: mode === 'livraison' ? localiteDeAdresse(cmd.adresse_livraison) : null,", vers: "      localite: mode === 'livraison' ? cmd.adresse_livraison : null," },
+  { nom: '🔴 livraisons et retraits remélangés',
+    fichier: 'lib/recap-commandes.js', de: "filter(l => (l.mode || 'retrait') === b.mode)", vers: 'filter(() => b.mode === BLOCS_RECAP[0].mode)' },
+  { nom: '🔴 le tri revient au numéro',
+    fichier: 'lib/recap-commandes.js', de: '    if (ha !== hb) return ha < hb ? -1 : 1', vers: '' },
+  { nom: '🔴 le cron n attend plus 8 h',
+    fichier: 'app/api/cron/recap-jour-8h/route.js', de: '  if (!forcer && !estHeureDuRecap(new Date())) {', vers: '  if (false) {' },
+  { nom: '🔴 « la veille » relit aujourd hui',
+    fichier: 'app/api/cron/recap-jour-8h/route.js', de: "    const debutVeille = brusselsInstant(jourCivilPlus(dateJour, -1), '00:00').toISOString()", vers: "    const debutVeille = brusselsInstant(dateJour, '00:00').toISOString()" },
+  { nom: '🔴 le total se réadditionne en euros',
+    fichier: 'app/api/stripe/checkout/create-commande/route.js', de: '        total: (totalCents + fraisLivraisonCents) / 100,', vers: '        total: totalEUR + fraisLivraisonEUR,' },
 ]
 
 const lancer = (banc) => {

@@ -6,13 +6,18 @@
 //   • alimentaire Vendre            → emailRecapCommandesJour (commandes du jour)
 //
 // Securite : verifie le header Authorization: Bearer <CRON_SECRET>.
-// Configuration vercel.json : { "path": "...", "schedule": "0 8 * * *" }
+// Configuration vercel.json : { "path": "...", "schedule": "0 6,7 * * *" }
+//
+// 🔴 8 H TOUTE L'ANNÉE (audit, 06/10, décision d'Alex). Vercel planifie en
+// temps universel : « 0 6 » tombait à 8 h en été et à 7 h en HIVER. Le cron
+// passe donc à 6 h ET 7 h UTC, et seul le passage où il est 8 h à Bruxelles
+// envoie (`estHeureDuRecap`). L'autre rend « pas l'heure » sans rien faire.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRecapRdvJour, emailRecapCommandesJour } from '@/lib/resend'
 import { planEffectif } from '@/lib/plans'
-import { referenceCommande, referenceRdv } from '@/lib/numero-commande'
+import { referenceRdv } from '@/lib/numero-commande'
 import { motsReservation, reservationActive } from '@/lib/reservation-metier'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
 import { envoyerAuAdmin, emailDossiersEnAttente } from '@/lib/resend'
@@ -21,10 +26,18 @@ import { envoyerAuAdmin, emailDossiersEnAttente } from '@/lib/resend'
 import { dossiersEnRetard, COLONNES_PUBLICATION_DIFFEREE } from '@/lib/statut-commercant'
 import { surveillerCompteur } from '@/lib/sonde-compteur'
 import { bonsLimiter } from '@/lib/ratelimit'
+import { jourBruxelles, jourCivilPlus, brusselsInstant } from '@/lib/timezone'
+import { estHeureDuRecap, lignesRecapCommandes } from '@/lib/recap-commandes'
 
 export async function GET(request) {
   const refuse = refusCron(gardeCron(request, 'cron/recap-jour-8h'), NextResponse)
   if (refuse) return refuse
+
+  // Un appel manuel (secret exigé plus haut) peut forcer l'envoi hors de 8 h.
+  const forcer = new URL(request.url).searchParams.get('forcer') === '1'
+  if (!forcer && !estHeureDuRecap(new Date())) {
+    return NextResponse.json({ ok: true, ignore: 'pas_8h_a_bruxelles' })
+  }
 
   try {
     const supabase = createClient(
@@ -33,12 +46,16 @@ export async function GET(request) {
       { auth: { persistSession: false } }
     )
 
-    // Date d'aujourd'hui
-    const today = new Date()
-    const yyyy = today.getFullYear()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    const dd = String(today.getDate()).padStart(2, '0')
-    const dateJour = `${yyyy}-${mm}-${dd}`
+    // ⚠️ LE JOUR DE BRUXELLES, PAS CELUI DE LA MACHINE (Vercel tourne en temps
+    // universel). À 8 h ils coïncident, mais un appel forcé après 22 h ou 23 h
+    // UTC aurait pris la veille.
+    const dateJour = jourBruxelles()
+    // 🔴 « LA VEILLE » ÉTAIT AUJOURD'HUI (audit, 06/10) : la requête des bons
+    // lisait `dateJour` de 00:00 à 23:59, sans fuseau. À 8 h, elle ne voyait
+    // donc que les bons vendus entre minuit et 6 h du matin (UTC), presque
+    // aucun. La veille va de minuit à minuit À BRUXELLES, été comme hiver.
+    const debutVeille = brusselsInstant(jourCivilPlus(dateJour, -1), '00:00').toISOString()
+    const debutJour = brusselsInstant(dateJour, '00:00').toISOString()
 
     // Fetch les commercants en notif_mode='recap_jour'
     const { data: commercants } = await supabase
@@ -136,8 +153,12 @@ export async function GET(request) {
           // silencieux → data null → « 0 commandes » à tort (bug Alex 28/07).
           const { data: cmds, error: errCmds } = await supabase
             .from('commandes')
+            // 🔴 `mode_retrait` ET `adresse_livraison` (audit, 06/10) : sans
+            // eux, une livraison de 11 h et un retrait de 11 h se lisaient
+            // pareil. L'adresse ne sert qu'à en tirer la LOCALITÉ
+            // (`lignesRecapCommandes`) : la rue ne part jamais par email.
             .select(`
-              id, numero_commande, numero_prefixe, total, client_nom,
+              id, numero_commande, numero_prefixe, total, client_nom, mode_retrait, adresse_livraison,
               creneau:creneaux(heure_debut),
               creneau_livraison:livraison_creneaux(heure_debut),
               commande_articles(quantite)
@@ -151,17 +172,7 @@ export async function GET(request) {
             throw new Error(errCmds.message)
           }
 
-          const cmdsFlat = (cmds || []).map(cmd => {
-            const [prenom, ...reste] = String(cmd.client_nom || '').split(' ')
-            return {
-              heure_debut:     cmd.creneau?.heure_debut || cmd.creneau_livraison?.heure_debut,
-              numero_commande: referenceCommande(cmd),
-              yopper_prenom:   prenom || cmd.client_nom,
-              yopper_nom:      reste.join(' '),
-              nb_articles:     (cmd.commande_articles || []).reduce((s, a) => s + (a.quantite || 0), 0),
-              total:           cmd.total,
-            }
-          })
+          const cmdsFlat = lignesRecapCommandes(cmds || [])
 
           // ⚠️ LES BONS CADEAUX VENDUS LA VEILLE. Un commerçant réglé sur ce
           // récapitulatif ne recevait AUCUN email quand on lui achetait un bon :
@@ -172,8 +183,8 @@ export async function GET(request) {
             .from('bons_cadeaux')
             .select('id, montant_initial')
             .eq('commercant_id', c.id)
-            .gte('created_at', `${dateJour}T00:00:00`)
-            .lte('created_at', `${dateJour}T23:59:59`)
+            .gte('created_at', debutVeille)
+            .lt('created_at', debutJour)
 
           // ⚠️ `null` QUAND CE COMMERCE N'A PAS DE SALLE, jamais `[]` : le
           // gabarit distingue « pas concerné » (aucune section) de « concerné,

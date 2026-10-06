@@ -75,7 +75,7 @@ import { exclusionsQuiSeChevauchent, seancesDeLaFormule, phraseApercuFormule, ex
 import ChampAdresseOfficielle from '@/app/components/ChampAdresseOfficielle'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import dynamic from 'next/dynamic'
-import { zoneValide, centreDeLaZone, cercle, libelleKm, RAYON_MIN_M, RAYON_MAX_M } from '@/lib/zone-etoile'
+import { zoneValide, centreValide, centreDeLaZone, cercle, libelleKm, RAYON_MIN_M, RAYON_MAX_M } from '@/lib/zone-etoile'
 // La carte (et Leaflet, sa feuille de style comprise) ne se charge que si le
 // commerçant ouvre le dessin de sa zone : personne d'autre ne la paie.
 const CarteZoneEtoile = dynamic(() => import('./CarteZoneEtoile'), {
@@ -6528,6 +6528,14 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
   // Banque-Carrefour désigne une unité d'établissement déclarée, ce qu'une
   // salle louée n'est pas, et il ferait croire à une formalité administrative.
   const [perm, setPerm] = useState({ libelle: '', adresse: '', latitude: null, longitude: null })
+  // 🔴 « MON ADRESSE » EN UNE ÉTAPE (Alex, 06/10). `inscription` = l'adresse
+  // du dossier, PROPOSÉE seulement : rien ne s'enregistre sans le clic du
+  // commerçant, l'inscription ne localise jamais le commerce d'elle-même.
+  const [inscription, setInscription] = useState(null)        // { nom, adresse, latitude, longitude }
+  const [avecEtoile, setAvecEtoile] = useState(false)         // retirer l'adresse suspend ses livraisons
+  const [formPermOuvert, setFormPermOuvert] = useState(false) // « Une autre adresse »
+  const [permEnModif, setPermEnModif] = useState(null)        // id du lieu permanent modifié
+  const [retraitAConfirmer, setRetraitAConfirmer] = useState(null)
   // ⚠️ LE SYSTÈME CLASSIQUE RESTE LA NORME, et cette case est DÉCOCHÉE par
   // défaut. Une boulangerie, un salon ou un cabinet ne bougeront jamais : leur
   // demander à chaque plage horaire « et c'était à quel endroit ? » serait une
@@ -6548,14 +6556,17 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { charger() }, [commercantId])
   async function charger() {
-    const [{ data, error }, { data: c }] = await Promise.all([
+    const [{ data, error }, { data: c }, { data: liv }] = await Promise.all([
       supabase.from('commercant_lieux').select('*').eq('commercant_id', commercantId),
-      supabase.from('commercants').select('planning_par_lieu, siege_social_est_lieu_activite').eq('id', commercantId).maybeSingle(),
+      supabase.from('commercants').select('planning_par_lieu, siege_social_est_lieu_activite, nom, adresse, latitude, longitude').eq('id', commercantId).maybeSingle(),
+      supabase.from('livraison_config').select('zone_rayons_m').eq('commercant_id', commercantId).maybeSingle(),
     ])
     if (error) { toast(`Erreur : ${error.message}`, 'error'); setLoading(false); return }
     setEmps(data || [])
     setPlanningParLieu(c?.planning_par_lieu === true)
     setSiegeEstLeLieu(c?.siege_social_est_lieu_activite !== false)
+    setInscription(c ? { nom: c.nom || '', adresse: c.adresse || '', latitude: c.latitude, longitude: c.longitude } : null)
+    setAvecEtoile(zoneValide(liv?.zone_rayons_m))
     // ⚠️ SANS CETTE ÉCRITURE, LE COMMERCE PASSERAIT POUR FERMÉ TOUTE LA
     // SEMAINE. Les horaires ne servent pas qu'à l'affichage : le moteur de
     // créneaux les croise avec les plages de rendez-vous et écarte tout créneau
@@ -6823,23 +6834,81 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
   // il l'apprendrait en voyant un client ne pas venir.
   const aucunLieuAlorsQuIlEnFaut = emps.length === 0
 
-  async function ajouterPermanent() {
-    if (!perm.libelle.trim() || !perm.adresse.trim()) { toast('Nom du lieu et adresse obligatoires', 'error'); return }
-    // ⚠️ LE PREMIER LIEU DÉCLARÉ DEVIENT LE PRINCIPAL. C'est celui que le signup
-    // a créé, ou à défaut celui-ci : sans lieu principal, un commerçant qui a
-    // décoché la case n'aurait aucune adresse de référence.
+  // ⚠️ LE NOM DU LIEU EST FACULTATIF (Alex, 06/10) : « Salle Saint-Roch » n'a
+  // aucun sens pour une boulangerie. Vide, c'est le nom du commerce (la colonne
+  // `libelle` est obligatoire en base).
+  const libelleOuNom = (libelle) => String(libelle || '').trim() || String(inscription?.nom || '').trim() || 'Mon commerce'
+
+  // `valeurs` : celles du formulaire, ou l'adresse d'inscription acceptée d'un
+  // clic. Dans les deux cas, une adresse SITUÉE : sans position, la card n'a
+  // pas de distance et la livraison pas de point de départ.
+  async function ajouterPermanent(valeurs = perm) {
+    if (!String(valeurs.adresse || '').trim() || valeurs.latitude == null || valeurs.longitude == null) {
+      toast('Choisis ton adresse dans la liste pour la situer sur la carte', 'error'); return
+    }
+    // ⚠️ LE PREMIER LIEU DÉCLARÉ DEVIENT LE PRINCIPAL : sans lieu principal, le
+    // commerçant n'aurait aucune adresse de référence.
     const { error } = await supabase.from('commercant_lieux').insert({
       commercant_id: commercantId, type: 'permanent',
-      libelle: perm.libelle.trim(), adresse: perm.adresse.trim(),
-      latitude: perm.latitude, longitude: perm.longitude,
+      libelle: libelleOuNom(valeurs.libelle), adresse: String(valeurs.adresse).trim(),
+      latitude: valeurs.latitude, longitude: valeurs.longitude,
       principal: permanents.length === 0,
       actif: true,
     })
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    toast('Lieu ajouté')
+    toast('Ton adresse est enregistrée : tes clients la voient sur ta fiche')
     setPerm({ libelle: '', adresse: '', latitude: null, longitude: null })
+    setFormPermOuvert(false)
     charger()
   }
+
+  // Modifier plutôt que retirer puis recréer : le lieu garde son id, donc ses
+  // rendez-vous, ses plages et son statut de lieu principal.
+  async function modifierPermanent() {
+    const existant = emps.find(e => e.id === permEnModif)
+    if (!existant) { setPermEnModif(null); return }
+    if (!String(perm.adresse || '').trim() || perm.latitude == null || perm.longitude == null) {
+      toast('Choisis ton adresse dans la liste pour la situer sur la carte', 'error'); return
+    }
+    // Changer l'adresse déplace tous les rendez-vous qui s'y tiennent.
+    if (perm.adresse.trim() !== existant.adresse) {
+      const bloquants = await rdvsQuiBloquent(existant.id)
+      if (bloquants > 0) {
+        toast(`${bloquants} rendez-vous ${bloquants > 1 ? 'sont prévus' : 'est prévu'} à cet endroit. Annule-les depuis l’agenda avant de le déplacer, et propose une nouvelle place à tes clients.`, 'error')
+        return
+      }
+    }
+    const { error } = await supabase.from('commercant_lieux').update({
+      libelle: libelleOuNom(perm.libelle), adresse: perm.adresse.trim(),
+      latitude: perm.latitude, longitude: perm.longitude,
+    }).eq('id', existant.id)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    toast('Ton adresse est mise à jour')
+    setPerm({ libelle: '', adresse: '', latitude: null, longitude: null })
+    setPermEnModif(null)
+    charger()
+  }
+
+  function ouvrirModifPermanent(e) {
+    setRetraitAConfirmer(null)
+    setPermEnModif(e.id)
+    setPerm({
+      libelle: e.libelle === inscription?.nom ? '' : (e.libelle || ''),
+      adresse: e.adresse || '', latitude: e.latitude ?? null, longitude: e.longitude ?? null,
+    })
+  }
+
+  function annulerSaisiePermanent() {
+    setPermEnModif(null)
+    setFormPermOuvert(false)
+    setPerm({ libelle: '', adresse: '', latitude: null, longitude: null })
+  }
+
+  // La proposition d'un clic n'existe que si l'adresse d'inscription est
+  // SITUÉE (trouvée dans le référentiel à l'inscription, donc en Wallonie).
+  const propositionInscription = permanents.length === 0
+    && !!String(inscription?.adresse || '').trim()
+    && centreValide({ lat: inscription?.latitude, lng: inscription?.longitude })
 
   const field = { padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${T.hairline}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box' }
   const btnMini = { padding: '5px 12px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main, fontWeight: 800, fontSize: 11.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }
@@ -6847,26 +6916,26 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
   if (loading) return null
 
   return (
-    <div id="ou-me-trouver" style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginTop: 16, scrollMarginTop: 90 }}>
+    // ⚠️ DEUX PLACES À L'ÉCRAN (Alex, 06/10). Le commerce fixe voit son adresse
+    // JUSTE SOUS la question « Où tes clients te trouvent-ils ? », avant ses
+    // horaires : c'est le seul champ obligatoire, il ne doit plus être tout en
+    // bas. Il vit alors DANS la carte de la question, sans cadre à lui. Le
+    // commerce qui bouge garde sa section à part, sous la question.
+    <div id="ou-me-trouver" style={mobile
+      ? { background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginTop: 16, scrollMarginTop: 90 }
+      : { margin: '0 0 18px', scrollMarginTop: 90 }}>
+      {mobile && (<>
       <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Où me trouver</p>
       <p style={{ margin: '0 0 14px', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
-        {mobile ? (
-          <>
-            Tu as répondu que tu changes d’endroit : c’est donc ton planning qui dit
-            où tu es, jour par jour. Ta fiche annonce l’endroit du jour, et un
-            emplacement exceptionnel remplace ton planning ce jour-là.
-            <span style={{ display: 'block', marginTop: 4 }}>
-              Les heures que tu poses ici deviennent tes horaires d’ouverture : tu n’as
-              rien à saisir deux fois.
-            </span>
-          </>
-        ) : (
-          <>
-            Tu as répondu que tes clients te trouvent toujours au même endroit.
-            Une seule adresse suffit donc, et tes horaires se règlent au-dessus.
-          </>
-        )}
+        Tu as répondu que tu changes d’endroit : c’est donc ton planning qui dit
+        où tu es, jour par jour. Ta fiche annonce l’endroit du jour, et un
+        emplacement exceptionnel remplace ton planning ce jour-là.
+        <span style={{ display: 'block', marginTop: 4 }}>
+          Les heures que tu poses ici deviennent tes horaires d’ouverture : tu n’as
+          rien à saisir deux fois.
+        </span>
       </p>
+      </>)}
 
       {/* ─── LE RAPPEL, et il n'est pas décoratif ────────────────────────────
           ⚠️ C'est lui qui rend sans danger le fait que l'adresse d'inscription
@@ -6896,39 +6965,110 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
           et le commerçant n'a aucun moyen de savoir laquelle sa fiche retient.
           C'est le « IDEM ? » d'Alex, et il n'avait pas de réponse. */}
       {!mobile && (<>
-      <p style={{ margin: '0 0 2px', fontSize: 12, fontWeight: 800, color: T.deep, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mon adresse</p>
-      <p style={{ margin: '0 0 8px', fontSize: 11, color: T.muted, lineHeight: 1.45 }}>
-        {permanents.length === 0
-          ? 'Ta fiche utilise l’adresse de ton inscription. Tu peux en indiquer une autre ici.'
-          : 'Cette adresse remplace celle de ton inscription sur ta fiche.'}
+      <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 800, color: T.ink }}>Mon adresse</p>
+      {/* 🔴 LA PHRASE D'AVANT ÉTAIT FAUSSE (relevé du 06/10) : « Ta fiche
+          utilise l'adresse de ton inscription ». C'est faux depuis le 15/08, et
+          l'alerte juste au-dessus disait l'inverse : le commerçant retenait la
+          phrase qui le rassurait à tort. */}
+      <p style={{ margin: '0 0 10px', fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+        C’est l’adresse que voient tes clients sur ta fiche, et d’où se mesure la distance qui leur est affichée.
+        Si tu livres, c’est aussi ton point de départ.
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-        {permanents.map(e => (
-          <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, border: `1px solid ${T.hairline}`, padding: '8px 12px' }}>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {e.libelle}{e.principal ? ' · principal' : ''}
+
+      {/* L'adresse enregistrée : la lire, la modifier, la retirer. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {permanents.map(e => permEnModif === e.id ? null : (
+          <div key={e.id} style={{ borderRadius: 12, border: `1.5px solid ${T.pale}`, background: '#fff', padding: '10px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, flexWrap: 'wrap' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}>
+                <path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/>
+              </svg>
+              <span style={{ flex: '1 1 180px', minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: T.ink, overflowWrap: 'anywhere' }}>{e.adresse}</span>
+                {e.libelle && e.libelle !== inscription?.nom && (
+                  <span style={{ display: 'block', fontSize: 11.5, color: T.muted, marginTop: 1 }}>{e.libelle}</span>
+                )}
+                {(e.latitude == null || e.longitude == null) && (
+                  <span style={{ display: 'block', fontSize: 11.5, color: '#B45309', fontWeight: 700, marginTop: 3, lineHeight: 1.45 }}>
+                    Cette adresse n’est pas située sur la carte : tes clients ne voient pas la distance.
+                    Clique sur « Modifier » et choisis-la dans la liste.
+                  </span>
+                )}
               </span>
-              <span style={{ display: 'block', fontSize: 11.5, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {e.adresse}
+              <span style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button onClick={() => ouvrirModifPermanent(e)} style={btnMini}>Modifier</button>
+                <button onClick={() => setRetraitAConfirmer(e.id)} style={{ ...btnMini, color: '#DC2626', borderColor: '#FCA5A5' }}>Retirer</button>
               </span>
-            </span>
-            <button onClick={() => supprimer(e.id)} style={{ ...btnMini, color: '#DC2626', borderColor: '#FCA5A5', flexShrink: 0 }}>Retirer</button>
+            </div>
+            {/* ⚠️ RETIRER SE CONFIRME : sans adresse, la fiche n'en affiche
+                plus aucune, et une zone dessinée perd son point de départ. */}
+            {retraitAConfirmer === e.id && (
+              <div style={{ marginTop: 10, background: '#FEF2F2', borderRadius: 10, padding: '10px 12px' }}>
+                <p style={{ margin: 0, fontSize: 12, color: '#7F1D1D', fontWeight: 700, lineHeight: 1.5 }}>
+                  {permanents.length === 1
+                    ? <>Ta fiche n’affichera plus d’adresse{avecEtoile ? ', et tes livraisons seront suspendues' : ''}. Retirer cette adresse ?</>
+                    : <>Retirer cette adresse ?</>}
+                </p>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button onClick={async () => { setRetraitAConfirmer(null); await supprimer(e.id); charger() }}
+                    style={{ ...btnMini, background: '#DC2626', borderColor: '#DC2626', color: '#fff' }}>Oui, retirer</button>
+                  <button onClick={() => setRetraitAConfirmer(null)} style={btnMini}>Garder mon adresse</button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
-        {/* ⚠️ UNE SEULE, PAS DEUX. Le formulaire disparaît dès qu'une adresse
-            est posée : deux adresses permanentes rouvriraient exactement
-            l'ambiguïté qu'on vient de fermer. Pour deux endroits, il faut
-            répondre « je change d'endroit » au-dessus. */}
-        {permanents.length === 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderRadius: 10, border: `1px dashed ${T.pale}`, padding: '10px 12px' }}>
-            <input style={field} placeholder="Nom du lieu (ex : Salle Saint-Roch)" value={perm.libelle}
-              onChange={e => setPerm(p => ({ ...p, libelle: e.target.value }))}/>
-            <ChampAdresseOfficielle style={field} valeur={perm.adresse} position={perm}
-              couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted, accent: T.main }}
-              libelleValider="Choisir cette adresse"
-              onChoisir={({ adresse, latitude, longitude }) => setPerm(p => ({ ...p, adresse, latitude, longitude }))}/>
-            <button onClick={ajouterPermanent} style={{ ...btnMini, alignSelf: 'flex-start' }}>Utiliser cette adresse</button>
+
+        {/* 🔴 LA PROPOSITION (Alex, 06/10) : l'adresse de l'inscription,
+            souvent la même, acceptée d'UN clic. Jamais enregistrée sans lui. */}
+        {propositionInscription && !formPermOuvert && (
+          <div style={{ borderRadius: 12, border: `1.5px dashed ${T.main}`, background: T.pale, padding: '11px 13px' }}>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Proposition : l’adresse de ton inscription
+            </p>
+            <p style={{ margin: '4px 0 10px', fontSize: 13, fontWeight: 800, color: T.ink, overflowWrap: 'anywhere' }}>{inscription.adresse}</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => ajouterPermanent({ libelle: '', adresse: inscription.adresse, latitude: inscription.latitude, longitude: inscription.longitude })}
+                style={{ padding: '9px 14px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                C’est bien là que mes clients viennent
+              </button>
+              <button onClick={() => setFormPermOuvert(true)} style={btnMini}>Une autre adresse</button>
+            </div>
+          </div>
+        )}
+
+        {/* ⚠️ UNE SEULE ADRESSE, PAS DEUX. Le formulaire d'ajout disparaît dès
+            qu'une adresse est posée : deux adresses permanentes rouvriraient
+            l'ambiguïté qu'on a fermée. Pour deux endroits, il faut répondre
+            « je change d'endroit » au-dessus. */}
+        {(permEnModif || (permanents.length === 0 && (!propositionInscription || formPermOuvert))) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, borderRadius: 12, border: `1.5px dashed ${T.pale}`, padding: '11px 13px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: T.deep }}>Adresse</span>
+              <ChampAdresseOfficielle style={field} valeur={perm.adresse} position={perm}
+                couleurs={{ hairline: T.hairline, deep: T.deep, muted: T.muted, accent: T.main }}
+                libelleValider="Choisir cette adresse"
+                onChoisir={({ adresse, latitude, longitude }) => setPerm(p => ({ ...p, adresse, latitude, longitude }))}/>
+            </div>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, fontWeight: 700, color: T.deep }}>
+              Nom du lieu (facultatif)
+              <input style={field} placeholder={`Par défaut : ${inscription?.nom || 'le nom de ton commerce'}`} value={perm.libelle}
+                onChange={e => setPerm(p => ({ ...p, libelle: e.target.value }))}/>
+            </label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {(() => {
+                const prete = !!String(perm.adresse || '').trim() && perm.latitude != null && perm.longitude != null
+                return (
+                  <button onClick={() => (permEnModif ? modifierPermanent() : ajouterPermanent())} disabled={!prete}
+                    style={{ padding: '9px 14px', borderRadius: 100, border: 'none', background: prete ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#E5E7EB', color: prete ? '#fff' : T.muted, fontWeight: 800, fontSize: 12.5, cursor: prete ? 'pointer' : 'not-allowed', fontFamily: '"DM Sans", sans-serif' }}>
+                    Enregistrer mon adresse
+                  </button>
+                )
+              })()}
+              {(permEnModif || propositionInscription) && (
+                <button onClick={annulerSaisiePermanent} style={btnMini}>Annuler</button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -7933,6 +8073,12 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
       {sousOnglet === 'lieux' && (<>
       <div style={s.card}>
         <ChoixLieuUnique commercantId={commercantId} valeur={siegeEstLeLieu} onChange={setSiegeEstLeLieu} toast={toast}/>
+        {/* 🔴 L'ADRESSE AVANT LES HORAIRES (Alex, 06/10) : c'est le seul
+            champ obligatoire de l'écran, il était tout en bas, après sept
+            jours d'horaires. */}
+        {siegeEstLeLieu === true && (
+          <SectionLieux commercantId={commercantId} toast={toast} mobile={siegeEstLeLieu === false}/>
+        )}
         {siegeEstLeLieu !== false && (
         <div style={{ display: 'grid', gap: 14 }}>
           <div>
@@ -8055,7 +8201,9 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
             la grille d'horaires ci-dessus ; elle pilote maintenant aussi ce que
             cette section propose, sinon le commerçant lit deux réponses à la
             même question sans savoir laquelle sa fiche retiendra. */}
-        <SectionLieux commercantId={commercantId} toast={toast} mobile={siegeEstLeLieu === false}/>
+        {siegeEstLeLieu === false && (
+          <SectionLieux commercantId={commercantId} toast={toast} mobile={siegeEstLeLieu === false}/>
+        )}
       </>)}
 
       {/* ─── REGLAGES : le fonctionnement, pas la vitrine ─────────────────── */}

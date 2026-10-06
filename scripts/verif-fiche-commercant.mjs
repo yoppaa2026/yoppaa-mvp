@@ -1145,8 +1145,46 @@ egal('les deux éditeurs proposent les mêmes emplacements du jour',
 // adresse où personne ne les attend, et ils ne l'apprendraient qu'en arrivant.
 verifier('un emplacement qui porte des rendez-vous est verrouillé',
   /async function rdvsQuiBloquent\(lieuId\)/.test(configSrc))
-egal('le verrou protège la suppression ET la modification',
-  (configSrc.match(/await rdvsQuiBloquent\(/g) || []).length, 2)
+// ⚠️ REPOINTÉE LE 06/10 : 3 et non plus 2. « Mon adresse » se MODIFIE
+// désormais (Alex), et modifier une adresse déplace ses rendez-vous comme
+// modifier un emplacement : le verrou y est aussi.
+egal('le verrou protège la suppression ET les deux modifications',
+  (configSrc.match(/await rdvsQuiBloquent\(/g) || []).length, 3)
+verifier('modifier « Mon adresse » passe par le verrou quand l’adresse change',
+  /if \(perm\.adresse\.trim\(\) !== existant\.adresse\) \{\s*const bloquants = await rdvsQuiBloquent\(existant\.id\)/.test(configSrc))
+
+// ─── « MON ADRESSE », CLAIRE EN UNE ÉTAPE (Alex, 06/10) ───────────────────
+{
+  const brut = lire('app/dashboard/ConfigDashboard.js')
+  verifier('🔴 la phrase fausse a disparu : la fiche N’utilise PAS l’adresse d’inscription',
+    !/Ta fiche utilise l’adresse de ton inscription/.test(configSrc) && !/remplace celle de ton inscription sur ta fiche/.test(configSrc))
+  verifier('« Mon adresse » dit à quoi elle sert',
+    /C’est l’adresse que voient tes clients sur ta fiche/.test(configSrc))
+  // L'ordre À L'ÉCRAN : la question, l'adresse, puis les horaires.
+  const iQuestion = brut.indexOf('<ChoixLieuUnique commercantId=')
+  const iAdresse = brut.indexOf('{siegeEstLeLieu === true && (\n          <SectionLieux')
+  const iHoraires = brut.indexOf('<label style={s.label}>Horaires d\'ouverture</label>')
+  verifier('🔴 l’adresse du commerce fixe passe AVANT ses horaires',
+    iQuestion > 0 && iAdresse > iQuestion && iHoraires > iAdresse, `${iQuestion} / ${iAdresse} / ${iHoraires}`)
+  verifier('le commerce qui bouge garde sa section sous la carte',
+    /\{siegeEstLeLieu === false && \(\s*<SectionLieux/.test(configSrc))
+  // La proposition : un clic du commerçant, jamais un enregistrement tout seul.
+  verifier('🔴 l’adresse d’inscription est PROPOSÉE, enregistrée seulement au clic',
+    /<button onClick=\{\(\) => ajouterPermanent\(\{ libelle: '', adresse: inscription\.adresse, latitude: inscription\.latitude, longitude: inscription\.longitude \}\)\}/.test(configSrc)
+      && (configSrc.match(/ajouterPermanent\(/g) || []).length === 3)
+  verifier('la proposition n’existe que pour une adresse d’inscription située',
+    /const propositionInscription = permanents\.length === 0\s*&& !!String\(inscription\?\.adresse \|\| ''\)\.trim\(\)\s*&& centreValide\(\{ lat: inscription\?\.latitude, lng: inscription\?\.longitude \}\)/.test(configSrc))
+  verifier('le nom du lieu est facultatif, le nom du commerce sinon',
+    /Nom du lieu \(facultatif\)/.test(configSrc) && /const libelleOuNom = \(libelle\) => String\(libelle \|\| ''\)\.trim\(\) \|\| String\(inscription\?\.nom \|\| ''\)\.trim\(\)/.test(configSrc))
+  verifier('🔴 une adresse sans position n’est jamais enregistrée',
+    (configSrc.match(/latitude == null \|\| [a-z.]*longitude == null\) \{\s*toast\('Choisis ton adresse dans la liste pour la situer sur la carte'/g) || []).length === 2)
+  verifier('un seul bouton final, qui dit le geste, grisé tant que l’adresse n’est pas choisie',
+    /disabled=\{!prete\}[\s\S]{0,400}Enregistrer mon adresse/.test(configSrc) && !/Utiliser cette adresse/.test(configSrc))
+  verifier('🔴 retirer la dernière adresse se confirme, et dit ce que ça coûte',
+    /onClick=\{\(\) => setRetraitAConfirmer\(e\.id\)\}/.test(configSrc)
+      && /Ta fiche n’affichera plus d’adresse\{avecEtoile \? ', et tes livraisons seront suspendues' : ''\}/.test(configSrc))
+  verifier('plus de mention « principal » à côté d’une adresse unique', !/' · principal'/.test(configSrc))
+}
 // ⚠️ Seuls les rendez-vous À VENIR et encore debout bloquent : un rendez-vous
 // honoré la semaine dernière appartient au passé et ne doit rien interdire.
 verifier('seuls les rendez-vous à venir et confirmés bloquent',

@@ -353,6 +353,28 @@ const egal = (nom, obtenu, attendu) =>
     && /import BandeauEssai from "@\/app\/components\/BandeauEssai"/.test(layout))
 }
 
+// ═══ LA PROD NE TRAITE QUE LES ÉVÉNEMENTS DE SON MONDE (06/10) ═════════════
+//
+// 🔴 Constaté sur le tableau de bord Stripe : une destination du MODE TEST
+// pointait vers www, et la route de facturation de la prod acceptait ses
+// événements (0 % d'erreur) en essayant les DEUX secrets. Les commerçants de
+// l'essai sont des copies de la prod, mêmes identifiants clients du mode test :
+// un abonnement de l'essai pouvait changer un forfait EN PROD.
+{
+  for (const [chemin, nom] of [['app/api/stripe/billing/webhook/route.js', 'facturation'], ['app/api/stripe/webhook/route.js', 'paiements Connect']]) {
+    const src = codeDe(chemin)
+    const iGarde = src.indexOf('if (event.livemode !== !isStripeTestMode()) {')
+    const iEcrit = src.indexOf(".from('stripe_webhook_events')")
+    verifie(`🔴 ${nom} : un événement d'un autre mode est refusé AVANT toute écriture`,
+      iGarde > 0 && iEcrit > iGarde && /if \(event\.livemode !== !isStripeTestMode\(\)\) \{[\s\S]{0,200}return NextResponse\.json\(\{ ok: true, ignore: 'autre_mode' \}\)/.test(src),
+      `garde ${iGarde}, première écriture ${iEcrit}`)
+  }
+  const facturation = codeDe('app/api/stripe/billing/webhook/route.js')
+  verifie('🔴 facturation : un seul secret, celui du monde de la plateforme',
+    /const secret = isStripeTestMode\(\)\s*\? process\.env\.STRIPE_BILLING_WEBHOOK_SECRET_TEST\s*: process\.env\.STRIPE_BILLING_WEBHOOK_SECRET_LIVE\s*return \[secret\]\.filter\(Boolean\)/.test(facturation)
+      && !/\[test, live\]|\[live, test\]/.test(facturation))
+}
+
 console.log(`\nMode d’un compte Stripe : ${ok} vérifications`)
 if (echecs.length) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

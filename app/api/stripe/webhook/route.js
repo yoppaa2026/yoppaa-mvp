@@ -26,6 +26,7 @@ import { stripe, STRIPE_CONFIG, PAYMENT_KIND } from '@/lib/stripe'
 // 🔴 CE QU'ON FAIT D'UN ÉVÉNEMENT DÉJÀ VU : le rejeu de Stripe était avalé, et
 // aucun handler qui lève pour obtenir un rejeu ne pouvait aboutir.
 import { decisionRejeu } from '@/lib/stripe-rejeu'
+import { isStripeTestMode } from '@/lib/stripe-billing'
 import { envoyerAuAdmin, echapperHtml, envoyerAuCommercant, envoyerAuYopper, emailPlaceNonConfirmee, emailRdvConfirme, emailNouveauRdvCommercant, emailBonCadeauBeneficiaire, emailBonCadeauAcheteur, emailBonCadeauVenduCommercant, emailAbonnementConfirme, emailAbonnementVenduCommercant } from '@/lib/resend'
 import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { debiterBons, recrediterBons, regimeBonPourCommerce } from '@/lib/bons-cadeaux-server'
@@ -82,6 +83,16 @@ export async function POST(request) {
   } catch (e) {
     console.error('[stripe/webhook] invalid signature', e.message)
     return NextResponse.json({ ok: false, error: 'signature invalide' }, { status: 401 })
+  }
+
+  // 🔴 LE MONDE DE L'ÉVÉNEMENT DOIT ÊTRE CELUI DE LA PLATEFORME (06/10). Même
+  // garde que la facturation, où les deux secrets laissaient la prod traiter
+  // les événements du mode test envoyés par le site d'essai. Ici un seul
+  // secret, mais un secret mal rangé dans l'hébergeur suffirait. Rien n'est
+  // écrit : 200 pour que Stripe n'insiste pas.
+  if (event.livemode !== !isStripeTestMode()) {
+    console.warn('[stripe/webhook] événement d\'un autre mode ignoré', { type: event.type, livemode: event.livemode })
+    return NextResponse.json({ ok: true, ignore: 'autre_mode' })
   }
 
   const supabase = getSupabaseAdmin()

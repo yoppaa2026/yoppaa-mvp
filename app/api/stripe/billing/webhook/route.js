@@ -21,13 +21,24 @@ import { isStripeTestMode } from '@/lib/stripe-billing'
 import { produitParType } from '@/lib/produits-boutique'
 import { envoyerAuAdmin, envoyerAuCommercant, emailAccompagnementPayeAdmin, emailAccompagnementPayeCommercant } from '@/lib/resend'
 
-// Récupère les 2 secrets webhook Billing (Test + Live) avec priorité sur celui
-// du mode détecté dans STRIPE_SECRET_KEY. On tente quand même l'autre en
-// fallback pour supporter les bascules ponctuelles Test/Live sans recompiler.
+// 🔴 UN SEUL SECRET : CELUI DU MONDE DE LA PLATEFORME (06/10).
+//
+// Avant, la route essayait les DEUX secrets « pour supporter les bascules ».
+// Résultat constaté le 06/10 sur le tableau de bord Stripe : une destination
+// du MODE TEST pointait vers www, et la PROD acceptait ses événements (0 %
+// d'erreur). Or les commerçants du site d'essai sont des COPIES de la prod
+// (02/10), avec les mêmes identifiants clients Stripe du mode test : un
+// abonnement souscrit sur l'essai pouvait changer le FORFAIT du même
+// commerçant en prod.
+//
+// Une bascule de mode change de toute façon STRIPE_SECRET_KEY, donc
+// `isStripeTestMode()` : le bon secret suit sans recompiler. Le second
+// n'apportait que la fuite.
 function getWebhookSecretsOrdered() {
-  const test = process.env.STRIPE_BILLING_WEBHOOK_SECRET_TEST
-  const live = process.env.STRIPE_BILLING_WEBHOOK_SECRET_LIVE
-  return (isStripeTestMode() ? [test, live] : [live, test]).filter(Boolean)
+  const secret = isStripeTestMode()
+    ? process.env.STRIPE_BILLING_WEBHOOK_SECRET_TEST
+    : process.env.STRIPE_BILLING_WEBHOOK_SECRET_LIVE
+  return [secret].filter(Boolean)
 }
 
 function getSupabaseAdmin() {
@@ -86,6 +97,14 @@ export async function POST(request) {
   if (!event) {
     console.error('[stripe/billing/webhook] invalid signature (aucun secret n\'a validé)', lastError?.message)
     return NextResponse.json({ ok: false, error: 'signature invalide' }, { status: 401 })
+  }
+
+  // 🔴 ET LE MONDE DE L'ÉVÉNEMENT DOIT ÊTRE CELUI DE LA PLATEFORME, même si un
+  // secret venait à valider (secret mal rangé dans l'hébergeur, par exemple).
+  // Rien n'est écrit, pas même le journal : 200 pour que Stripe n'insiste pas.
+  if (event.livemode !== !isStripeTestMode()) {
+    console.warn('[stripe/billing/webhook] événement d\'un autre mode ignoré', { type: event.type, livemode: event.livemode })
+    return NextResponse.json({ ok: true, ignore: 'autre_mode' })
   }
 
   const supabase = getSupabaseAdmin()

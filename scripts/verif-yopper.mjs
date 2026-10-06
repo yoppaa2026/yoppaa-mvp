@@ -1683,6 +1683,19 @@ for (const chemin of routesAdmin) {
     verifier('🔴 l’onboarding sait qu’il attend', /const \[enAttente, setEnAttente\]/.test(onb))
     verifier('🔴 et son bouton se désactive pendant ce temps', /disabled=\{enAttente\}/.test(onb))
 
+    // 🔴 APPLE 5.1.1(iv), REFUS DU 06/10 : l'écran qui précède une demande
+    // d'autorisation MÈNE à la demande. Bouton neutre, aucune échappée
+    // (« Pas maintenant », « Passer »). On lit CHAQUE écran, pas le fichier.
+    for (const id of ['notifications', 'localisation']) {
+      const bloc = (onb.match(new RegExp(`id: '${id}',[\\s\\S]*?\\n  \\},`)) || [''])[0]
+      verifier(`🔴 écran « ${id} » : bouton « Continuer »`, /cta: 'Continuer',/.test(bloc), bloc.slice(0, 80))
+      verifier(`🔴 écran « ${id} » : aucune échappée avant la demande`, bloc !== '' && !/ctaSecondaire/.test(bloc) && /skip: false,/.test(bloc))
+    }
+    // Après un refus, « Continuer » AVANCE : sinon l'écran devient une impasse.
+    verifier('🔴 après un refus, « Continuer » avance',
+      /if \(dejaDemande === ecran\.id\) \{ allerEcranSuivant\(\); return \}/.test(onb)
+      && /setDejaDemande\('notifications'\)/.test(onb) && /setDejaDemande\('localisation'\)/.test(onb))
+
     // 🔴 L'ÉTAT RETOMBE SUR TOUS LES CHEMINS, ET C'EST LE VRAI DANGER. Un état
     // d'attente qui ne revient jamais, c'est un bouton MORT. Ça nous est déjà
     // arrivé au retour de Stripe, où le navigateur restaure la page telle

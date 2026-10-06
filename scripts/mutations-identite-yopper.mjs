@@ -59,6 +59,22 @@ const MUTATIONS = [
     de: '      setEnAttente(false)',
     vers: '      void 0' },
 
+  // 🔴 APPLE 5.1.1(iv), REFUS DU 06/10 : l ecran avant une demande
+  // d autorisation y mene, bouton neutre, sans echappee. `replace` prend la
+  // premiere occurrence : l ecran des notifications.
+  { nom: '🔴 l ecran avant la demande reprend un bouton qui pousse a accepter',
+    fichier: 'app/onboarding/page.js',
+    de: "    cta: 'Continuer',",
+    vers: "    cta: 'Me prévenir'," },
+  { nom: '🔴 « Pas maintenant » revient avant la demande',
+    fichier: 'app/onboarding/page.js',
+    de: "    cta: 'Continuer',",
+    vers: "    cta: 'Continuer', ctaSecondaire: 'Pas maintenant'," },
+  { nom: '🔴 apres un refus, « Continuer » repose la question : impasse',
+    fichier: 'app/onboarding/page.js',
+    de: '    if (dejaDemande === ecran.id) { allerEcranSuivant(); return }',
+    vers: '' },
+
   // 🔴 ET LE DELAI, sans lequel les points tournent a vie : `getCurrentPosition`
   // n appelle AUCUNE de ses deux fonctions tant que la fenetre du systeme reste
   // ouverte. Quelqu un qui la laisse de cote bloquait le bouton pour de bon.

@@ -54,9 +54,13 @@ const ECRANS = [
     // seuls. C'est d'ailleurs plus fort qu'un plafond, parce que c'est lui qui
     // tient la liste.
     sousTitre: 'Marque tes commerçants préférés et reçois leurs deals et leurs actus. Eux seuls, et rien d’autre.',
-    cta: 'Me prévenir',
-    ctaSecondaire: 'Pas maintenant',
-    skip: true,
+    // 🔴 APPLE, GUIDELINE 5.1.1(iv), REFUS DU 06/10. Un écran qui précède une
+    // demande d'autorisation doit TOUJOURS y mener : un bouton neutre
+    // (« Continuer »), et ni « Pas maintenant » ni « Passer » pour la
+    // contourner. Le refus, c'est la fenêtre du système qui l'offre. Apple
+    // visait la position ; les notifications suivent la même règle.
+    cta: 'Continuer',
+    skip: false,
   },
   {
     id: 'localisation',
@@ -64,9 +68,10 @@ const ECRANS = [
     visuel: 'maps',
     titre: 'Les commerçants\nprès de chez toi.',
     sousTitre: 'Ta position sert à une seule chose : te montrer ce qui est ouvert, maintenant, à deux pas de toi.',
-    cta: 'Utiliser ma position',
-    ctaSecondaire: 'Pas maintenant',
-    skip: true,
+    // 🔴 MÊME RÈGLE (Apple 5.1.1(iv), 06/10) : c'est CET écran qu'Apple a
+    // refusé, pour « Utiliser ma position » et « Pas maintenant ».
+    cta: 'Continuer',
+    skip: false,
   },
   {
     id: 'connexion',
@@ -309,6 +314,11 @@ export default function OnboardingPage() {
   // qui ne revient jamais, c'est un bouton mort — et ça nous est déjà arrivé au
   // retour de Stripe, où le navigateur restaure la page telle qu'il l'a quittée.
   const [enAttente, setEnAttente] = useState(false)
+  // ⚠️ L'ÉCRAN DONT LA DEMANDE A DÉJÀ ÉTÉ POSÉE ET REFUSÉE. Sans « Pas
+  // maintenant », « Continuer » est la seule sortie : après un refus, il doit
+  // AVANCER, pas reposer une question que le système ne reposera plus (iOS
+  // répond « refusé » tout de suite, et l'écran serait une impasse).
+  const [dejaDemande, setDejaDemande] = useState(null)
 
   const ecran = ECRANS[ecranIdx]
 
@@ -346,6 +356,7 @@ export default function OnboardingPage() {
   }
 
   async function gererCta() {
+    if (dejaDemande === ecran.id) { allerEcranSuivant(); return }
     if (ecran.id === 'notifications') {
       // ⚠️ `activerNotifications()` ET SURTOUT PAS `Notification.requestPermission()`.
       // Nos push passent par OneSignal : demander la permission en direct la
@@ -367,6 +378,7 @@ export default function OnboardingPage() {
       // croire que c'est activé, et le client attendrait des notifications qui
       // ne viendraient jamais.
       setNote(RAISONS_PUSH[r?.raison] || RAISONS_PUSH.defaut)
+      setDejaDemande('notifications')
     } else if (ecran.id === 'localisation') {
       // ⚠️ LA POSITION PASSE PAR `lirePosition` : dans l'app des stores, le
       // module natif pose LA question du système au nom de Yoppaa, au lieu
@@ -394,6 +406,7 @@ export default function OnboardingPage() {
           () => {
             setEnAttente(false)
             setNote('La position n’a pas été autorisée. Tu peux continuer, et indiquer ta commune toi-même.')
+            setDejaDemande('localisation')
           },
           // 🔴 UN DÉLAI, SANS QUOI LES POINTS TOURNERAIENT À VIE. `getCurrentPosition`
           // n'appelle NI l'une NI l'autre de ses fonctions tant que la fenêtre du

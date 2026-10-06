@@ -209,11 +209,24 @@ verifier('le minimum porte sur le total des articles',
   let formatChange = false
   try { indexColonnes(entete.replace('house_number', 'numero_maison')) } catch { formatChange = true }
   verifier('🔴 BeSt un fichier dont une colonne a changé n\'écrit rien', formatChange)
-  verifier('BeSt l\'en-tête avec BOM est lu', indexColonnes('﻿' + entete)['EPSG:31370_x'] === 0)
+  // ⚠️ REPOINTÉE LE 06/10 : `EPSG:31370_x` n'est plus exigée (BOSA la remplace
+  // le 11/10) ; la première colonne de la liste est désormais la latitude.
+  verifier('BeSt l\'en-tête avec BOM est lu', indexColonnes('﻿' + entete)['EPSG:4326_lat'] === 0)
+  // 🔴 L'AVIS BOSA DU 11/10 : les deux formats d'en-tête doivent passer.
+  const TOUTES = ['EPSG:31370_x', 'EPSG:31370_y', 'EPSG:4326_lat', 'EPSG:4326_lon', 'address_id',
+    'box_number', 'house_number', 'municipality_id', 'municipality_name_de', 'municipality_name_fr',
+    'municipality_name_nl', 'postcode', 'postname_fr', 'postname_nl', 'street_id', 'streetname_de',
+    'streetname_fr', 'streetname_nl', 'region_code', 'status']
+  let ancienOk = true, nouveauOk = true
+  try { indexColonnes(TOUTES.join(',')) } catch { ancienOk = false }
+  try { indexColonnes(TOUTES.join(',').replace('EPSG:31370_x', 'EPSG:3812_x').replace('EPSG:31370_y', 'EPSG:3812_y')) } catch { nouveauOk = false }
+  verifier('🔴 BeSt l\'en-tête d\'avant le 11/10 (Lambert 72) est accepté', ancienOk)
+  verifier('🔴 BeSt l\'en-tête d\'après le 11/10 (Lambert 2008, EPSG:3812) est accepté', nouveauOk)
+  verifier('BeSt aucune colonne Lambert n\'est exigée (on ne les lit pas)', !COLONNES_BEST.some(c => /31370|3812/.test(c)))
 
   const ligne = (o) => COLONNES_BEST.map(c => o[c] ?? '').join(',')
   const base = {
-    'EPSG:31370_x': '166864.2', 'EPSG:4326_lat': '50.31175', 'EPSG:4326_lon': '4.60552',
+    'EPSG:4326_lat': '50.31175', 'EPSG:4326_lon': '4.60552',
     house_number: '6 a', postcode: '5640', postname_fr: 'Biesme', municipality_name_fr: 'Mettet',
     street_id: '7752850', streetname_fr: 'Rue de la Belle Haie', status: 'current',
   }
@@ -221,7 +234,7 @@ verifier('le minimum porte sur le total des articles',
   verifier('BeSt une adresse complète est lue', a && a.rue_id === 7752850 && a.code_postal === '5640' && a.localite === 'Biesme')
   verifier('BeSt le numéro est normalisé (« 6 a » = « 6A »)', a?.numero === '6A')
   // 🔴 LE PIÈGE DU FICHIER : 104 304 maisons ont 0,0, converti en un point en France.
-  const sansPos = adresseDeLigne(decouperLigneCsv(ligne({ ...base, 'EPSG:31370_x': '0.00000', 'EPSG:4326_lat': '49.29392', 'EPSG:4326_lon': '2.30551' })), idx)
+  const sansPos = adresseDeLigne(decouperLigneCsv(ligne({ ...base, 'EPSG:4326_lat': '49.29392', 'EPSG:4326_lon': '2.30551' })), idx)
   verifier('🔴 BeSt le faux point en France n\'est JAMAIS gardé comme position', sansPos && sansPos.lat === null && sansPos.lng === null)
   verifier('BeSt une adresse retirée est écartée', adresseDeLigne(decouperLigneCsv(ligne({ ...base, status: 'retired' })), idx) === null)
   verifier('BeSt rue germanophone : le nom allemand prend le relais',

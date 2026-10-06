@@ -359,6 +359,39 @@ const livrer = async (tables, args, options) => {
   const recap = (planning.crons || []).find(c => c.path === '/api/cron/recap-jour-8h')
   v('🔴 le cron passe à 6 h ET 7 h UTC', recap?.schedule === '0 6,7 * * *', recap?.schedule)
 
+  // ─── L'ÉCRAN CLIENT COMPTE COMME LE SERVEUR (points 10 à 12) ─────────────
+  // On EXÉCUTE les deux cas de l'audit avec la fonction que l'écran appelle.
+  const { construireLignesCommande } = await import('../lib/lignes-commande.js')
+  const { fraisLivraison: regleFrais, minimumAtteint } = await import('../lib/livraison.js')
+  const art = { id: 'a1', nom: 'Tarte', prix: 3.3, categorie: 'Pâtisserie', actif: true, commercant_id: 'c1' }
+  const base = { articlesData: [art], optionsValeurs: [], variantesData: [], commercant: { tva_taux_defaut: 6 }, regime: undefined }
+  const trois = construireLignesCommande({ ...base, panier: [{ id: 'a1', quantite: 3 }], dealsData: [], dateCommande: '2026-10-07' })
+  v('🔴 3 × 3,30 € = 990 centimes, pas 9,8999…', trois.ok && trois.totalCents === 990, JSON.stringify(trois.totalCents))
+  v('🔴 et la livraison est offerte pile au seuil de 9,90 €', regleFrais({ total: trois.totalCents / 100, frais_fixe: 3, gratuit_des: 9.9 }).montant === 0)
+  const dealAujourdhui = { id: 'd1', actif: true, deal_type: 'remise_pct', remise_pct: 20, article_id: 'a1', date_deal: '2026-10-07' }
+  const aujourdhui = construireLignesCommande({ ...base, panier: [{ id: 'a1', quantite: 10 }], dealsData: [dealAujourdhui], dateCommande: '2026-10-07' })
+  const demain = construireLignesCommande({ ...base, panier: [{ id: 'a1', quantite: 10 }], dealsData: [dealAujourdhui], dateCommande: '2026-10-08' })
+  v('🔴 un deal d’aujourd’hui ne vaut pas pour une livraison demain', aujourdhui.totalCents === 2640 && demain.totalCents === 3300, `${aujourdhui.totalCents} / ${demain.totalCents}`)
+  v('le minimum se dit avec ce qui manque', minimumAtteint({ total: 18, minimum: 25 }).manque === 7)
+
+  const fiche = code('app/commander/[slug]/page.js')
+  v('🔴 l’écran appelle la fonction du serveur, avec TOUS les deals et la date de la commande',
+    /const r = construireLignesCommande\(\{[\s\S]{0,400}dealsData: dealsTous,[\s\S]{0,200}dateCommande: dateDeLaCommande\(\),/.test(fiche))
+  v('🔴 le total du panier vient de ce calcul, en centimes',
+    /function totalPanierCents\(\) \{\s*const r = calculDuServeur\(\)\s*if \(r\) return r\.totalCents/.test(fiche)
+    && /function totalPanier\(\) \{ return totalPanierCents\(\) \/ 100 \}/.test(fiche))
+  v('🔴 l’envoi part avec la MÊME date et le MÊME panier que l’affichage',
+    /const dateStr = dateDeLaCommande\(\)/.test(fiche) && /const articlesPayload = articlesDuPanier\(\)/.test(fiche))
+  v('🔴 les frais passent par la règle du serveur', /return regleFraisLivraison\(\{\s*total: totalPanier\(\),/.test(fiche))
+  v('🔴 total + frais additionnés en centimes', /function totalAvecFrais\(\) \{ return \(totalPanierCents\(\) \+ Math\.round\(fraisLivraison\(\) \* 100\)\) \/ 100 \}/.test(fiche))
+  v('🔴 les lignes du panier affichent le prix du jour de la commande',
+    (fiche.match(/prixLigne\(item, i\)|prixDeLigne=\{prixLigne\}/g) || []).length === 2)
+  v('🔴 le minimum est dit avant le paiement', /La livraison démarre à \{euros\(minimumLivraison\(\)\.seuil\)\}/.test(fiche))
+  v('🔴 et il bloque le bouton de paiement', /const livraisonFormOk = !!\([^\n]*&& minimumLivraison\(\)\.ok\)/.test(fiche))
+  v('🔴 tous les deals voyagent dans le cache et l’état', /dealsTous: dealsData \|\| \[\],/.test(fiche) && /setDealsTous\(data\.dealsTous \|\| data\.dealsActifs \|\| \[\]\)/.test(fiche))
+  v('🔴 l’écran se redessine chaque minute (tournée passée)', /setInterval\(\(\) => setMinuteEcran\(m => m \+ 1\), 60000\)/.test(fiche))
+  v('🔴 `modeBoutiqueEff` déclaré AVANT le minimum qui le lit', fiche.indexOf('const modeBoutiqueEff =') > 0 && fiche.indexOf('const modeBoutiqueEff =') < fiche.indexOf('const livraisonFormOk ='))
+
   // Le total d'une commande s'additionne en CENTIMES : 10,1 + 2,2 en euros vaut 12,299999999999999.
   const cc = code('app/api/stripe/checkout/create-commande/route.js')
   v('🔴 le total enregistré est additionné en centimes', /total: \(totalCents \+ fraisLivraisonCents\) \/ 100,/.test(cc))

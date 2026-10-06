@@ -39,7 +39,8 @@ import { lieuxDuJour, estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
-import { zoneCouverte } from '@/lib/livraison'
+import { zoneCouverte, fraisLivraison as regleFraisLivraison, minimumAtteint } from '@/lib/livraison'
+import { construireLignesCommande } from '@/lib/lignes-commande'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
@@ -369,7 +370,9 @@ function VariantesSelector({ article, variantes, onAjouter }) {
 }
 
 // ─── RecapPanier - FIX STOCK : prop getStockMax, bouton + bloqué ──────────────
-function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax, labelValider = 'Choisir mon heure de retrait', noteSousTotal = null }) {
+// `prixDeLigne(item, index)` : le montant de la ligne au jour de la commande,
+// calculé comme le serveur (06/10). Sans lui, le prix figé à l'ajout.
+function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax, labelValider = 'Choisir mon heure de retrait', noteSousTotal = null, prixDeLigne = null }) {
   const items = Object.entries(panier)
   if (items.length === 0) return null
   function labelOptions(options) {
@@ -391,7 +394,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
         </p>
       </div>
       <div style={{ padding: '0.5rem 1.25rem' }}>
-        {items.map(([key, item]) => {
+        {items.map(([key, item], index) => {
           const opts = item.variante?.label || labelOptions(item.options)
           const prixUnitaire = item.prix + (item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0)
           // FIX STOCK : vérifier la limite par article dans le panier
@@ -426,7 +429,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
                   <p style={{ fontSize: '0.68rem', color: T.main, fontWeight: 700, marginTop: 2 }}>Stock disponible atteint</p>
                 )}
               </div>
-              <p style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem', flexShrink: 0 }}>{euros((prixUnitaire * item.quantite))}</p>
+              <p style={{ fontWeight: 800, color: T.main, fontSize: '0.9rem', flexShrink: 0 }}>{euros(prixDeLigne ? prixDeLigne(item, index) : prixUnitaire * item.quantite)}</p>
             </div>
           )
         })}
@@ -1314,6 +1317,16 @@ export default function CommanderSlug() {
   // lib/deals.js : les lots et duos deviennent des cartes séparées, les remises
   // modifient le prix de l'article, y compris quand elles visent sa catégorie.
   const [dealsActifs, setDealsActifs] = useState([])
+  const [dealsTous, setDealsTous] = useState([])
+  // ⚠️ L'HORLOGE DE L'ÉCRAN (audit, 06/10). Les tournées et les créneaux se
+  // filtrent sur l'heure au RENDU, et rien ne rendait de nouveau un onglet
+  // laissé ouvert : à 14 h, il proposait encore la tournée de 11 h (refusée
+  // dès qu'on la choisissait). Un rendu par minute suffit à la faire partir.
+  const [, setMinuteEcran] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setMinuteEcran(m => m + 1), 60000)
+    return () => clearInterval(t)
+  }, [])
   // 🔴 CE QUI A DÉJÀ ÉTÉ VENDU SUR CHAQUE OFFRE. `yoppaa_deals.quantite` est le
   // total PUBLIÉ, pas ce qui reste : l'afficher tel quel dirait « il en reste
   // 3 » quand deux sont partis. Et l'écran ne peut pas le calculer lui-même, un
@@ -1784,6 +1797,9 @@ export default function CommanderSlug() {
     setActualites(data.actualites || [])
     setDealActif(data.dealActif)
     setDealsActifs(data.dealsActifs || [])
+    // Un cache d'avant le 06/10 n'a que les deals du jour : on s'en contente
+    // jusqu'au prochain chargement, le serveur reste juge du prix.
+    setDealsTous(data.dealsTous || data.dealsActifs || [])
     setFermetures(data.fermetures)
     // Un cache écrit avant le 10/08 ne porte pas la charge : on retombe sur un
     // objet vide, les créneaux s'affichent libres, et le prochain chargement
@@ -2028,6 +2044,10 @@ export default function CommanderSlug() {
       galerie: galerieAutres,
       dealActif: deal,
       dealsActifs,
+      // ⚠️ TOUS LES DEALS, PAS SEULEMENT CEUX D'AUJOURD'HUI (audit, 06/10).
+      // Le serveur remise au jour de la COMMANDE (retrait ou livraison
+      // demain) : l'écran doit pouvoir faire le même calcul pour ce jour-là.
+      dealsTous: dealsData || [],
       fermetures: fermeturesData || [],
       actualites: actusActives,
       livraisonConfig: livConfig || null,
@@ -2621,11 +2641,104 @@ export default function CommanderSlug() {
     return etatStock({ article, entreeJour: entryDay, dejaCommande }).dispo
   }
 
-  function totalPanier() {
+  // ─── LE TOTAL QUE LE SERVEUR FACTURERA (audit écran client, 06/10) ──────
+  //
+  // 🔴 L'ÉCRAN ET LE SERVEUR NE COMPTAIENT PAS PAREIL, de deux façons :
+  //   • en euros à virgule : 3 × 3,30 € donnait 9,8999… €, sous un seuil de
+  //     9,90 €, quand le serveur comptait 990 centimes et offrait la livraison ;
+  //   • avec les deals d'AUJOURD'HUI, quand le serveur remise au jour de la
+  //     COMMANDE : un « -20 % aujourd'hui seulement » pour une livraison demain
+  //     affichait 32 € plus les frais, et le serveur facturait 40 € sans frais.
+  //
+  // ⚠️ LE REMÈDE N'EST PAS UNE COPIE DU CALCUL, C'EST LE MÊME : l'écran appelle
+  // `construireLignesCommande`, la fonction du serveur, avec ses propres
+  // données et la date que la commande portera. Une seule règle, deux
+  // appelants. Le serveur relit tout en base et reste juge.
+
+  // La date envoyée au serveur (`date_commande`), calculée à UN endroit pour
+  // l'envoi ET pour l'affichage. Un colis part quand le commerçant l'emballe :
+  // sa date reste celle de la commande.
+  function dateDeLaCommande() {
+    if (estDetail) {
+      return modeBoutiqueEff === 'expedition'
+        ? jourLocalISO(new Date())
+        : (jourRetraitBoutique || jourLocalISO(new Date()))
+    }
+    const jourDate = (modeCommande === 'livraison' ? creneauLivraisonChoisi?._date : joursDispos[jourSelectionne]?.date) || new Date()
+    return jourLocalISO(new Date(jourDate))
+  }
+
+  // Le panier tel que le serveur le reçoit : identifiants et quantités.
+  function articlesDuPanier() {
+    return Object.values(panier).map(i => ({
+      id: i.id,
+      quantite: i.quantite,
+      variante_id: i.variante?.id || undefined,
+      deal_id: i.deal_id || undefined,
+      options: i.options
+        ? Object.entries(i.options).map(([groupe_id, valeurs]) => ({
+            groupe_id,
+            valeur_ids: valeurs.map(v => v.id),
+          }))
+        : [],
+    }))
+  }
+
+  function calculDuServeur() {
+    const items = articlesDuPanier()
+    if (items.length === 0) return null
+    try {
+      // Les valeurs d'options à plat, chacune avec son groupe : la forme que le
+      // serveur lit en base (`article_options_valeurs` + son groupe).
+      const optionsValeurs = Object.values(optionsParArticle || {}).flat()
+        .flatMap(g => (g?.valeurs || []).map(v => ({ ...v, article_options_groupes: { article_id: g.article_id, nom: g.nom } })))
+      const r = construireLignesCommande({
+        panier: items,
+        articlesData: articles,
+        optionsValeurs,
+        variantesData: Object.values(variantesParArticle || {}).flat(),
+        dealsData: dealsTous,
+        commercant: commercant || {},
+        regime: undefined,
+        dateCommande: dateDeLaCommande(),
+      })
+      return r?.ok ? r : null
+    } catch {
+      return null
+    }
+  }
+
+  // ⚠️ EN CENTIMES ENTIERS. Si le calcul du serveur refuse (article retiré
+  // entre-temps, deal expiré), le repli fait la même addition en centimes sur
+  // les prix du panier ; le serveur dira pourquoi au paiement.
+  function totalPanierCents() {
+    const r = calculDuServeur()
+    if (r) return r.totalCents
     return Object.values(panier).reduce((acc, i) => {
       const supplement = i.options ? Object.values(i.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
-      return acc + (i.prix + supplement) * i.quantite
+      return acc + Math.round((Number(i.prix) + supplement) * 100) * i.quantite
     }, 0)
+  }
+  function totalPanier() { return totalPanierCents() / 100 }
+
+  // Le prix d'une ligne du panier, au jour de la commande. Même ordre que
+  // `articlesDuPanier` (donc que `Object.values(panier)`).
+  function prixLigne(item, index) {
+    const r = calculDuServeur()
+    const ligne = r?.lignes?.[index]
+    if (ligne) return Math.round(Number(ligne.prix_unitaire) * 100) * item.quantite / 100
+    const supplement = item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
+    return Math.round((Number(item.prix) + supplement) * 100) * item.quantite / 100
+  }
+
+  // 🔴 LE MINIMUM DE LIVRAISON, DIT AVANT LE PAIEMENT (audit, 06/10). Il
+  // n'apparaissait nulle part : le client remplissait son adresse, choisissait
+  // sa tournée, cliquait sur payer, et apprenait seulement là que « la
+  // livraison démarre à 25 € ». Même règle que le serveur (`minimumAtteint`),
+  // sur le même total d'articles.
+  function minimumLivraison() {
+    if (modeCommande !== 'livraison' || !livraisonConfig) return { ok: true, seuil: null, manque: 0 }
+    return minimumAtteint({ total: totalPanier(), minimum: livraisonConfig.minimum_commande })
   }
 
   // Frais de livraison côté client (confort d'affichage ; le serveur recalcule et
@@ -2640,11 +2753,16 @@ export default function CommanderSlug() {
       return Number(commercant?.boutique_frais_port || 0)
     }
     if (modeCommande !== 'livraison' || !livraisonConfig) return 0
-    const g = livraisonConfig.gratuit_des
-    if (g != null && totalPanier() >= Number(g)) return 0
-    return Number(livraisonConfig.frais_fixe || 0)
+    // ⚠️ LA RÈGLE DU SERVEUR (`lib/livraison.js`), plus une recopie : elle
+    // sait que `gratuit_des` vide veut dire « jamais offert ».
+    return regleFraisLivraison({
+      total: totalPanier(),
+      frais_fixe: livraisonConfig.frais_fixe,
+      gratuit_des: livraisonConfig.gratuit_des,
+    }).montant
   }
-  function totalAvecFrais() { return totalPanier() + fraisLivraison() }
+  // En centimes, puis en euros : 10,1 + 2,2 ne doit pas afficher 12,299999.
+  function totalAvecFrais() { return (totalPanierCents() + Math.round(fraisLivraison() * 100)) / 100 }
   // Retour Stripe après achat d'un bon : ?bon=ok|annule (+ session_id) →
   // écran de confirmation + URL nettoyée.
   //
@@ -2984,28 +3102,13 @@ export default function CommanderSlug() {
       // protégé par ses créneaux, la boutique n'en a pas.
       // Un colis, lui, part quand le commerçant l'emballe : sa date reste celle
       // de la commande.
-      const jourDate = estDetail
-        ? (modeBoutiqueEff === 'expedition' ? new Date() : new Date(`${jourRetraitBoutique || jourLocalISO(new Date())}T12:00:00Z`))
-        : ((modeCommande === 'livraison' ? creneauLivraisonChoisi?._date : joursDispos[jourSelectionne]?.date) || new Date())
-      const d = new Date(jourDate)
-      const dateStr = estDetail && modeBoutiqueEff !== 'expedition'
-        ? (jourRetraitBoutique || jourLocalISO(new Date()))
-        : jourLocalISO(d)
+      // ⚠️ LA MÊME FONCTION QUE L'AFFICHAGE DU TOTAL (06/10) : le prix montré
+      // est calculé pour la date qui part ici, jamais pour une autre.
+      const dateStr = dateDeLaCommande()
 
       // Payload articles avec options structurées (groupe_id + valeur_ids)
       // La route recalcule tout server-side (anti-tampering)
-      const articlesPayload = Object.values(panier).map(i => ({
-        id: i.id,
-        quantite: i.quantite,
-        variante_id: i.variante?.id || undefined,
-        deal_id: i.deal_id || undefined,
-        options: i.options
-          ? Object.entries(i.options).map(([groupe_id, valeurs]) => ({
-              groupe_id,
-              valeur_ids: valeurs.map(v => v.id),
-            }))
-          : [],
-      }))
+      const articlesPayload = articlesDuPanier()
 
       // Mode de paiement effectif : choix explicite du Yopper, sinon défaut
       // selon ce que le commerçant propose (en ligne prioritaire).
@@ -3239,8 +3342,13 @@ export default function CommanderSlug() {
     s.id === creneauLivraisonChoisi.id && s._date?.getTime?.() === creneauLivraisonChoisi._date?.getTime?.())
   // 🔴 LA MAISON DOIT ÊTRE TROUVÉE (règle B, Alex 05/10) : une rue et un numéro
   // tapés ne suffisent plus, il faut que le référentiel les connaisse.
-  const livraisonFormOk = !!(adresseLivraison.situee === true && adresseLivraison.rue_id && cpDansZone && choixLivraisonValable)
+  // ⚠️ DÉCLARÉ AVANT `livraisonFormOk` : le minimum ci-dessous passe par
+  // `dateDeLaCommande`, qui lit `modeBoutiqueEff`. Lu avant sa déclaration
+  // pendant le rendu, il ferait un écran blanc (reference_zone_morte).
   const modeBoutiqueEff = estDetail ? (boutiqueModes.includes(modeBoutique) ? modeBoutique : boutiqueModes[0]) : null
+  // 🔴 ET LE MINIMUM BLOQUE LE BOUTON (audit, 06/10) : le serveur le refuse
+  // de toute façon, autant ne pas proposer de payer.
+  const livraisonFormOk = !!(adresseLivraison.situee === true && adresseLivraison.rue_id && cpDansZone && choixLivraisonValable && minimumLivraison().ok)
 
   const cpExpe = (adresseLivraison.code_postal || '').trim()
   const zoneExpe = Array.isArray(commercant?.boutique_expedition_cp) ? commercant.boutique_expedition_cp : []
@@ -4551,6 +4659,7 @@ export default function CommanderSlug() {
                       onRetirer={retirerDuPanier}
                       onAjouter={incrementerPanier}
                       total={totalPanier()}
+                      prixDeLigne={prixLigne}
                       onValider={() => allerEtape(3)}
                       getStockMax={getStockMax}
                       labelValider={estDetail
@@ -4712,25 +4821,34 @@ export default function CommanderSlug() {
                     </span>
                     <div style={{ flex: 1, height: 1, background: T.pale }}/>
                   </div>
-                  {Object.values(panier).map((item, i) => {
-                    const supplement = item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
-                    return (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 3 }}>
-                        <span style={{ color: T.ink, fontWeight: 600 }}>{item.quantite}× {item.nom}</span>
-                        <span style={{ color: T.main, fontWeight: 800 }}>{euros(((item.prix + supplement) * item.quantite))}</span>
-                      </div>
-                    )
-                  })}
+                  {Object.values(panier).map((item, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 3 }}>
+                      <span style={{ color: T.ink, fontWeight: 600 }}>{item.quantite}× {item.nom}</span>
+                      <span style={{ color: T.main, fontWeight: 800 }}>{euros(prixLigne(item, i))}</span>
+                    </div>
+                  ))}
                   {(modeCommande === 'livraison' || (estDetail && modeBoutiqueEff === 'expedition')) && (
                     <>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginTop: 6, color: T.deep }}>
                         <span style={{ fontWeight: 600 }}>{estDetail ? 'Frais de port' : 'Frais de livraison'}</span>
                         <span style={{ fontWeight: 800 }}>{fraisLivraison() === 0 ? 'Offerts' : `+${euros(fraisLivraison())}`}</span>
                       </div>
-                      {livraisonConfig?.gratuit_des != null && (
-                        fraisLivraison() > 0
-                          ? <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '4px 0 0' }}>Plus que {euros((Number(livraisonConfig.gratuit_des) - totalPanier()))} pour la livraison offerte</p>
+                      {/* ⚠️ LE MANQUE VIENT DE LA RÈGLE DU SERVEUR, arrondi au
+                          centime : « Plus que 0,00 € » s'affichait quand le
+                          panier valait 9,8999… € pour un seuil de 9,90 €. */}
+                      {!estDetail && livraisonConfig?.gratuit_des != null && livraisonConfig.gratuit_des !== '' && (() => {
+                        const regle = regleFraisLivraison({ total: totalPanier(), frais_fixe: livraisonConfig.frais_fixe, gratuit_des: livraisonConfig.gratuit_des })
+                        return regle.manquePourGratuit != null && regle.montant > 0
+                          ? <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '4px 0 0' }}>Plus que {euros(regle.manquePourGratuit)} pour la livraison offerte</p>
                           : <p style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, margin: '4px 0 0' }}>Livraison offerte à partir de {euros(Number(livraisonConfig.gratuit_des))}</p>
+                      })()}
+                      {/* 🔴 LE MINIMUM, DIT AVANT LE PAIEMENT (audit, 06/10).
+                          Même phrase que le refus du serveur, mais au moment où
+                          le client peut encore ajouter un article. */}
+                      {!estDetail && !minimumLivraison().ok && (
+                        <p role="status" style={{ fontSize: '0.75rem', color: '#B45309', fontWeight: 700, margin: '6px 0 0', lineHeight: 1.45 }}>
+                          La livraison démarre à {euros(minimumLivraison().seuil)}. Il te manque {euros(minimumLivraison().manque)}, ou choisis le retrait.
+                        </p>
                       )}
                     </>
                   )}

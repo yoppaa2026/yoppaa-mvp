@@ -1148,7 +1148,8 @@ verifier('et range la commande du bon côté',
   verifier('l\'adresse de livraison se choisit dans le référentiel officiel',
     /<ChampAdresseLivraison\s/.test(blocLiv) && !/<ChampAdresse\s/.test(blocLiv))
   verifier('🔴 BeSt le paiement exige une maison TROUVÉE (règle B)',
-    /const livraisonFormOk = !!\(adresseLivraison\.situee === true && adresseLivraison\.rue_id && cpDansZone && choixLivraisonValable\)/.test(fiche))
+    // ⚠️ REPOINTÉE LE 06/10 : la ligne porte aussi le minimum de livraison.
+    /const livraisonFormOk = !!\(adresseLivraison\.situee === true && adresseLivraison\.rue_id && cpDansZone && choixLivraisonValable && minimumLivraison\(\)\.ok\)/.test(fiche))
   // ⚠️ REPOINTÉE LE 05/10 (étoile) : sans étoile, la comparaison normalisée
   // reste celle du serveur ; avec, c'est l'étoile (gardée dans le bloc étoile).
   verifier('BeSt l\'écran compare la zone comme le serveur',
@@ -2003,7 +2004,8 @@ verifier('et range la commande du bon côté',
   verifier('C5 et par le délai du panier',
     /debut\.getTime\(\) >= pretLivraison\.getTime\(\)/.test(blocSlots))
   verifier('🔴 C5 un choix de tournée qui n’est plus proposée n’allume pas le paiement',
-    /cpDansZone && choixLivraisonValable\)/.test(fiche) && !/cpDansZone && creneauLivraisonChoisi\)/.test(fiche))
+    // ⚠️ REPOINTÉE LE 06/10 : `&& minimumLivraison().ok` suit désormais.
+    /cpDansZone && choixLivraisonValable && minimumLivraison\(\)\.ok\)/.test(fiche) && !/cpDansZone && creneauLivraisonChoisi\b/.test(fiche))
 }
 
 // ═══ AUDIT LIVRAISON I3 : PLUS AUCUNE COMMANDE ÉCRITE PAR LE NAVIGATEUR ═════

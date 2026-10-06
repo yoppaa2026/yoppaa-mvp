@@ -254,9 +254,19 @@ const membre = (o = {}) => ({
 
   const bord = code('app/dashboard/ConfigDashboard.js')
   v('🔴 l’onglet passe par la matrice des forfaits', /\{ id: 'equipe', label: 'Mon équipe', icon: 'user', feature: 'equipe' \}/.test(bord))
-  v('l’onglet attend le Poste équipe pour entrer dans la barre', /EQUIPE_DANS_LA_BARRE && \{ id: 'equipe'/.test(bord) && EQUIPE_DANS_LA_BARRE === false)
+  // ⚠️ REPOINTÉE LE 06/10 : l'onglet reste HORS de la barre par décision
+  // d'Alex (seize onglets), et sa porte est le pied des deux barres.
+  v('l’onglet reste hors de la barre (décision du 06/10)', /EQUIPE_DANS_LA_BARRE && \{ id: 'equipe'/.test(bord) && EQUIPE_DANS_LA_BARRE === false)
   v('l’écran est rendu', /\{tab === 'equipe' && <TabEquipe commercantId=\{commercantId\} toast=\{showToast\} \/>\}/.test(bord))
-  v('🔴 l’adresse ?config=equipe est acceptée', /'compte',\s*'equipe'\]/.test(code('app/dashboard/page.js')))
+  const page = code('app/dashboard/page.js')
+  v('🔴 l’adresse ?config=equipe est acceptée', /'compte',\s*'equipe'\]/.test(page))
+  // La porte du pied : UNE par barre (colonne et mobile), chacune derrière la
+  // MÊME règle que les routes. Compter, pas chercher un mot.
+  v('🔴 le pied ouvre « Mon équipe » selon le forfait', /const equipeOuverte = commerceAUneEquipe\(commercant\)/.test(page))
+  const portes = page.match(/\{equipeOuverte && \(\s*<button onClick=\{\(\) => ouvrirConfig\('equipe'\)\}/g) || []
+  v('une porte « Mon équipe » dans chacune des deux barres', portes.length === 2, `${portes.length} trouvée(s)`)
+  v('« Mon équipe » ne s’ouvre que derrière la règle', (page.match(/ouvrirConfig\('equipe'\)/g) || []).length === portes.length)
+  v('le pied l’ouvre pour Vendre, pas pour Exister', commerceAUneEquipe(VENDRE, MAINTENANT) === true && commerceAUneEquipe(EXISTER, MAINTENANT) === false)
 
   const ecran = code('app/dashboard/TabEquipe.js')
   v('🔴 l’écran ne touche jamais la base', !/supabase\.from\(/.test(ecran) && !/from '@\/lib\/supabase'/.test(ecran))

@@ -36,6 +36,7 @@ import { Reply, ClipboardList } from 'lucide-react'
 // vraiment en vigueur. ⚠️ Cette fonction a besoin de `created_at` : le
 // chargement de cet écran fait bien `select('*')`.
 import { canDo, planEffectif } from '@/lib/plans'
+import { commerceAUneEquipe } from '@/lib/equipe'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { remplissageCreneaux } from '@/lib/creneaux'
 import BandeDefilante from '@/app/components/BandeDefilante'
@@ -295,6 +296,17 @@ function IconCompte({ size = 18, color = '#fff' }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
       <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
       <circle cx="12" cy="7" r="4" stroke={color} strokeWidth="2"/>
+    </svg>
+  )
+}
+// Deux silhouettes : « Mon équipe » se distingue de « Mon compte » d'un coup
+// d'œil, même en 32 px sur la barre mobile.
+function IconEquipe({ size = 18, color = '#fff' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="9" cy="7" r="4" stroke={color} strokeWidth="2"/>
+      <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
 }
@@ -1434,6 +1446,11 @@ export default function Dashboard() {
   // l'intérieur, alors que le premier suit (`onOngletChange`). Lire la clé
   // laisserait le bouton allumé sur les seize autres onglets.
   const surCompte = ongletPrincipal === 'config' && configTabUrl === 'compte'
+  // « MON ÉQUIPE » VIT DANS LE PIED, PAS DANS LA BARRE (Alex, 06/10) : la barre
+  // comptait déjà seize onglets, et l'équipe se règle une fois, comme le
+  // compte. Vendre seulement : la même règle que chaque route de l'équipe.
+  const surEquipe = ongletPrincipal === 'config' && configTabUrl === 'equipe'
+  const equipeOuverte = commerceAUneEquipe(commercant)
 
   // 🔴 ON OUVRE SUR CE QUE LE COMMERCE REÇOIT (Alex, 08/09). Tout le monde
   // tombait sur « Commandes », y compris un centre de yoga dont la journée
@@ -3777,6 +3794,15 @@ export default function Dashboard() {
               <IconCompte size={15} color={T.colTexte}/>
               Mon compte
             </button>
+            {equipeOuverte && (
+              <button onClick={() => ouvrirConfig('equipe')}
+                title="Ton personnel et tes livreurs"
+                aria-current={surEquipe ? 'page' : undefined}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.875rem', borderRadius: 10, border: `1px solid ${T.main}${surEquipe ? 'CC' : '44'}`, background: surEquipe ? `${T.main}33` : 'transparent', color: T.colTexte, fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}>
+                <IconEquipe size={15} color={T.colTexte}/>
+                Mon équipe
+              </button>
+            )}
             <button onClick={seDeconnecter}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.875rem', borderRadius: 10, border: '1px solid #DC262633', background: '#DC262611', color: '#FCA5A5', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', fontWeight: 600, fontSize: '0.78rem' }}>
               <IconLogout size={15}/>
@@ -3869,6 +3895,15 @@ export default function Dashboard() {
                   style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${T.main}${surCompte ? 'CC' : '44'}`, background: surCompte ? `${T.main}33` : 'transparent', cursor: 'pointer' }}>
                   <IconCompte size={15} color={T.colTexte}/>
                 </button>
+                {equipeOuverte && (
+                  <button onClick={() => ouvrirConfig('equipe')}
+                    title="Mon équipe"
+                    aria-label="Mon équipe"
+                    aria-current={surEquipe ? 'page' : undefined}
+                    style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: `1px solid ${T.main}${surEquipe ? 'CC' : '44'}`, background: surEquipe ? `${T.main}33` : 'transparent', cursor: 'pointer' }}>
+                    <IconEquipe size={15} color={T.colTexte}/>
+                  </button>
+                )}
                 <button onClick={seDeconnecter}
                   style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, border: '1px solid #DC262333', background: '#DC262311', cursor: 'pointer', flexShrink: 0 }}>
                   <IconLogout size={15}/>

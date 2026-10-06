@@ -243,8 +243,11 @@ const MUTATIONS = [
     fichier: 'lib/resend.js', de: '  const commercantNom = commercantNomBrut ? echapperHtml(commercantNomBrut) : \'\'', vers: '  const commercantNom = commercantNomBrut || \'\'' },
   { nom: '🔴 la migration ouvre une règle d accès',
     fichier: 'migrations/MIGRATION_EQUIPE_MEMBRES.sql', de: 'ALTER TABLE public.equipe_journal ENABLE ROW LEVEL SECURITY;', vers: 'ALTER TABLE public.equipe_journal ENABLE ROW LEVEL SECURITY; CREATE POLICY equipe_lit ON public.equipe_membres FOR SELECT TO authenticated USING (true);' },
-  { nom: '🔴 l onglet entre dans la barre sans le Poste équipe',
+  // ⚠️ RENOMMÉE LE 06/10 : la barre reste sans l'équipe par décision d'Alex.
+  { nom: '⚠️ l onglet entre dans la barre malgré la décision du 06/10',
     fichier: 'lib/equipe.js', de: 'export const EQUIPE_DANS_LA_BARRE = false', vers: 'export const EQUIPE_DANS_LA_BARRE = true' },
+  { nom: '🔴 le pied montre « Mon équipe » à tous les forfaits',
+    fichier: 'app/dashboard/page.js', de: '  const equipeOuverte = commerceAUneEquipe(commercant)', vers: '  const equipeOuverte = true' },
   { nom: '⚠️ ?config=equipe retombe sur l accueil',
     fichier: 'app/dashboard/page.js', de: "    'equipe']", vers: "    ]" },
   { nom: '🔴 la matrice ouvre l équipe à Exister',

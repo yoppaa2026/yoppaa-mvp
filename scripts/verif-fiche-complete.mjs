@@ -43,7 +43,7 @@ const BOULANGERIE = {
   horaires_detail: HORAIRES, accepte_paiement_cash: true, stripe_account_charges_enabled: false,
   statut: 'valide', statut_publication: 'en_attente',
 }
-const bilan = (c, nbCatalogue = 5, nbPhotos = 3) => ficheComplete({ commercant: c, nbCatalogue, nbPhotos, maintenant: MAINTENANT })
+const bilan = (c, nbCatalogue = 5, nbPhotos = 3, nbLieuxSitues = 1) => ficheComplete({ commercant: c, nbCatalogue, nbPhotos, nbLieuxSitues, maintenant: MAINTENANT })
 const cles = (b) => b.criteres.map(k => k.cle).join(',')
 const manque = (b) => b.manquants.map(k => k.cle).join(',')
 
@@ -52,9 +52,10 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('les seuils sont ceux décidés le 28/09', MIN_CATALOGUE === 3 && MIN_PHOTOS === 2 && MIN_PRESENTATION === 20,
     `${MIN_CATALOGUE}/${MIN_PHOTOS}/${MIN_PRESENTATION}`)
   const b = bilan(BOULANGERIE)
-  v('une fiche en Vendre porte les six critères', cles(b) === 'catalogue,photos,logo,presentation,horaires,paiement', cles(b))
+  // ⚠️ REPOINTÉE LE 06/10 : un septième critère, « Où me trouver » (Alex).
+  v('une fiche en Vendre porte les sept critères', cles(b) === 'catalogue,photos,logo,presentation,lieu,horaires,paiement', cles(b))
   v('une fiche qui a tout est complète', b.complet === true && b.manquants.length === 0, manque(b))
-  v('le compte « fait » suit', b.faits === 6 && b.total === 6, `${b.faits}/${b.total}`)
+  v('le compte « fait » suit', b.faits === 7 && b.total === 7, `${b.faits}/${b.total}`)
   v('chaque critère mène à un onglet du tableau de bord',
     b.criteres.every(k => ['menu', 'rdv', 'profil', 'paiements'].includes(k.onglet)), b.criteres.map(k => k.onglet).join(','))
 }
@@ -87,6 +88,28 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('20 caractères suffisent', bilan({ ...BOULANGERIE, description: 'x'.repeat(20) }).complet === true)
   v('des espaces ne comptent pas dans la présentation',
     manque(bilan({ ...BOULANGERIE, description: `  ${d19}  ` })) === 'presentation')
+}
+
+// ═══ 3 bis) « OÙ ME TROUVER » EST OBLIGATOIRE (Alex, 06/10) ═════════════════
+//
+// 🔴 L'adresse d'inscription ne localise JAMAIS le commerce : c'est d'un lieu
+// situé que se mesure la distance des cards. Une seule règle, pour tous, sans
+// exception : le food truck la remplit avec ses emplacements.
+{
+  v('aucun lieu situé : il manque l adresse', manque(bilan(BOULANGERIE, 5, 3, 0)) === 'lieu')
+  v('un lieu situé suffit', bilan(BOULANGERIE, 5, 3, 1).complet === true)
+  v('un comptage illisible vaut zéro, jamais « complet »', bilan(BOULANGERIE, 5, 3, NaN).complet === false)
+  v('sans comptage fourni, le lieu manque (jamais présumé)', manque(ficheComplete({ commercant: BOULANGERIE, nbCatalogue: 5, nbPhotos: 3, maintenant: MAINTENANT })) === 'lieu')
+  const camion = { ...BOULANGERIE, siege_social_est_lieu_activite: false, horaires_detail: null }
+  v('🔴 le commerce mobile n en est PAS dispensé', manque(bilan(camion, 5, 3, 0)) === 'lieu')
+  const coiffeur = { ...BOULANGERIE, categorie: 'vitrine', plan: 'exister', horaires_detail: null }
+  v('le service en Exister non plus', manque(bilan(coiffeur, 5, 3, 0)) === 'lieu')
+  const k = bilan(BOULANGERIE, 5, 3, 0).criteres.find(x => x.cle === 'lieu')
+  v('le critère mène au sous-onglet « Où me trouver »', k.onglet === 'profil' && k.sousOnglet === 'lieux', `${k.onglet}/${k.sousOnglet}`)
+  v('l aide dit que l inscription ne localise pas', /inscription ne sert qu’à valider ton dossier/.test(k.aide), k.aide)
+  const bandeau = code('app/dashboard/BandeauFicheAPublier.js')
+  v('« Compléter » écrit le sous-onglet AVANT d ouvrir le Profil',
+    /if \(k\.sousOnglet\) ecrireSousOnglet\(k\.sousOnglet\)\s*onAllerA\(k\.onglet\)/.test(bandeau))
 }
 
 // ═══ 4) LES HORAIRES, ET CEUX QUI N'EN ONT PAS ══════════════════════════════
@@ -252,8 +275,11 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
     .map(x => `${x[1]}${x[2].replace(/commercantId|commercant\.id/g, 'ID').replace(/\s+/g, '').replace(/\)+$/, '')}`)
     .sort()
   const fs = filtres(serveur), fb = filtres(bandeau)
-  v('le serveur compte trois choses', fs.length === 3, fs.join(' | '))
-  v('l encart compte les trois mêmes, avec les mêmes filtres', fs.join(' | ') === fb.join(' | '), `serveur: ${fs.join(' | ')} / encart: ${fb.join(' | ')}`)
+  // ⚠️ REPOINTÉE LE 06/10 : quatre comptes, les lieux situés en plus.
+  v('le serveur compte quatre choses', fs.length === 4, fs.join(' | '))
+  v('le serveur compte les lieux actifs ET situés',
+    fs.includes("commercant_lieux.eq('commercant_id',ID).eq('actif',true).not('latitude','is',null).not('longitude','is',null"), fs.join(' | '))
+  v('l encart compte les quatre mêmes, avec les mêmes filtres', fs.join(' | ') === fb.join(' | '), `serveur: ${fs.join(' | ')} / encart: ${fb.join(' | ')}`)
   // ⚠️ UN ESSAI, PAS UN MOT CHERCHÉ. La première version cherchait
   // `if (error) throw` et le trouvait dans la fonction VOISINE du même
   // fichier : la mutation qui désarmait le comptage restait verte.
@@ -264,9 +290,15 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
       return q
     },
   })
-  const sain = { articles: { count: 2, error: null }, rdv_prestations: { count: 1, error: null }, commercant_photos: { count: 2, error: null } }
+  const sain = { articles: { count: 2, error: null }, rdv_prestations: { count: 1, error: null }, commercant_photos: { count: 2, error: null }, commercant_lieux: { count: 1, error: null } }
   const comptes = await comptesDeLaFiche(fauxClient(sain), 'id')
   v('le serveur additionne articles et prestations', comptes.nbCatalogue === 3 && comptes.nbPhotos === 2, JSON.stringify(comptes))
+  v('le serveur rend le nombre de lieux situés', comptes.nbLieuxSitues === 1, JSON.stringify(comptes))
+  let leveLieux = null
+  try {
+    await comptesDeLaFiche(fauxClient({ ...sain, commercant_lieux: { count: null, error: { message: 'refus' } } }), 'id')
+  } catch (e) { leveLieux = e.message }
+  v('une lecture des lieux en échec n est pas un zéro', /lieux impossible : refus/.test(leveLieux || ''), String(leveLieux))
   let leve = null
   try {
     await comptesDeLaFiche(fauxClient({ ...sain, articles: { count: null, error: { message: 'permission refusée' } } }), 'id')

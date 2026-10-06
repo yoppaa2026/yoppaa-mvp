@@ -62,6 +62,7 @@ import { accesDashboard } from '@/lib/statut-commercant'
 import { raisonDebitImpossible, compteEncaisse, libelleRelance, raisonLienImpossible, messageLienImpossible } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
+import BandeauOuMeTrouver from './BandeauOuMeTrouver'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
 import AideInstallation from './AideInstallation'
 import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from './ReglageEtiquettes'
@@ -4090,6 +4091,13 @@ export default function Dashboard() {
                 téléphone, un encart fixe mangerait l'écran de travail. */}
             {commercant && (
               <BandeauFicheAPublier commercant={commercant} onAllerA={ouvrirConfig}
+                cleRafraichir={`${ongletPrincipal}:${configTabUrl}`}/>
+            )}
+            {/* 🔴 « OÙ ME TROUVER » EST OBLIGATOIRE (Alex, 06/10) : une fiche
+                déjà en ligne sans lieu situé n'a ni adresse ni distance, et une
+                étoile sans point de départ suspend les livraisons. */}
+            {commercant && (
+              <BandeauOuMeTrouver commercant={commercant} onAllerA={ouvrirConfig}
                 cleRafraichir={`${ongletPrincipal}:${configTabUrl}`}/>
             )}
             {/* ⚠️ DANS LA ZONE QUI DÉFILE, comme le bandeau de la fiche : jamais

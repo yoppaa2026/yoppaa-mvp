@@ -355,43 +355,99 @@ verifier('le minimum porte sur le total des articles',
       && /array_position\(zone_rayons_m, NULL\) IS NULL/.test(migZone))
 
   // Le serveur : une seule règle à la fois, sur la position de la maison.
-  verifier('🔴 étoile : le serveur lit l\'étoile et le centre',
+  // ⚠️ REPOINTÉE LE 06/10 : la position de la FICHE n'est plus lue par le
+  // serveur (plus de repli, Alex 05/10 au soir). Le centre vient des lieux,
+  // garde suivante ; ici on vérifie qu'elle n'est plus chargée du tout.
+  verifier('🔴 étoile : le serveur lit l\'étoile, et plus la position de la fiche',
     /\.select\('codes_postaux, frais_fixe, gratuit_des, minimum_commande, actif, zone_rayons_m'\)/.test(routeCode)
-      && /livraison_actif, latitude, longitude'\)/.test(routeCode))
+      && /horizon_commande, plan, essai_plan, created_at, livraison_actif'\)/.test(routeCode)
+      && !/commercant\.(latitude|longitude)\b/.test(routeCode))
   verifier('🔴 étoile : avec une étoile, le code postal ne décide plus',
     /const avecEtoile = zoneValide\(cfg\.zone_rayons_m\)/.test(routeCode) && /if \(!avecEtoile && !zoneCouverte\(cfg\.codes_postaux, code_postal_livraison\)\)/.test(routeCode))
   // ⚠️ REPOINTÉE LE 05/10 (décision C d'Alex) : le centre n'est plus la fiche
   // (= le SIÈGE saisi à l'inscription), mais le lieu permanent principal.
   verifier('🔴 étoile : jugée sur la position de la MAISON du référentiel',
     /point: \{ lat: maison\.lat, lng: maison\.lng \}/.test(routeCode))
-  verifier('🔴 étoile (C) : le serveur centre sur le lieu principal, sinon la fiche',
+  // ⚠️ REPOINTÉE LE 06/10 : « sinon la fiche » est retiré (Alex : l'adresse
+  // d'inscription ne localise JAMAIS le commerce). La fiche n'est plus passée.
+  verifier('🔴 étoile (C) : le serveur centre sur le lieu principal, jamais la fiche',
     /\.from\('commercant_lieux'\)\s*\.select\('type, principal, actif, latitude, longitude, adresse'\)/.test(routeCode)
-      && /const centre = centreDeLaZone\(\{ lieux: lieuxEtoile \|\| \[\], commercant \}\)/.test(routeCode)
+      && /const centre = centreDeLaZone\(\{ lieux: lieuxEtoile \|\| \[\] \}\)/.test(routeCode)
       && /dansEtoile\(\{\s*centre,/.test(routeCode)
       && /if \(errLieux\) \{/.test(routeCode))
   {
     const fiche3 = lire('app/commander/[slug]/page.js')
     const dash3 = lire('app/dashboard/ConfigDashboard.js')
+    // ⚠️ REPOINTÉES LE 06/10 : plus de fiche passée en repli, ni côté client
+    // ni côté réglage (qui ne lit même plus `commercants`).
     verifier('🔴 étoile (C) : la fiche client centre comme le serveur',
-      /centre: centreDeLaZone\(\{ lieux: foodtruckEmps, commercant \}\)/.test(fiche3))
+      /centre: centreDeLaZone\(\{ lieux: foodtruckEmps \}\)/.test(fiche3))
     verifier('🔴 étoile (C) : le réglage centre comme le serveur',
-      /setCentreFiche\(centreDeLaZone\(\{ lieux: lieux \|\| \[\], commercant: fiche \}\)\)/.test(dash3))
+      /setPointDepart\(centreDeLaZone\(\{ lieux: lieux \|\| \[\] \}\)\)/.test(dash3))
+    verifier('🔴 aucun appelant ne repasse la fiche au centre',
+      ![routeCode, fiche3, dash3].some(src => /centreDeLaZone\(\{[^}]*commercant/.test(src)))
+    // Le libellé demandé par Alex (05/10) et l'issue quand le départ manque.
+    verifier('le réglage dit « Ton point de départ des livraisons »',
+      /Ton point de départ des livraisons : <strong/.test(dash3) && !/Le centre est \{/.test(dash3))
+    verifier('🔴 étoile sans départ : l écran dit que les livraisons sont suspendues, avec le chemin',
+      /Tes livraisons sont suspendues : ton point de départ n&rsquo;est plus défini\./.test(dash3)
+        && /function allerOuMeTrouver\(\) \{ setAncreProfil\('ou-me-trouver'\); changerOnglet\('profil'\) \}/.test(dash3)
+        && /<TabLivraison [^>]*onAllerOuMeTrouver=\{allerOuMeTrouver\}/.test(dash3)
+        && /if \(ancre === 'ou-me-trouver'\) setSousOnglet\('lieux'\)/.test(dash3)
+        && /<div id="ou-me-trouver"/.test(dash3))
+    verifier('🔴 sans départ, le dessin reste bloqué', /onClick=\{\(\) => setZoneRayons\(cercle\(\)\)\} disabled=\{!pointDepart\}/.test(dash3))
   }
   // La règle du centre, exécutée.
   {
     const fiche = { latitude: 50.32, longitude: 4.65, adresse: 'Siège' }
     const lieuP = { type: 'permanent', principal: true, actif: true, latitude: 50.31, longitude: 4.60, adresse: 'Lieu' }
     const lieu2 = { type: 'permanent', principal: false, actif: true, latitude: 50.40, longitude: 4.70, adresse: 'Autre' }
-    egal('🔴 centre : le lieu principal gagne sur la fiche', centreDeLaZone({ lieux: [lieu2, lieuP], commercant: fiche })?.adresse, 'Lieu')
-    egal('centre : sans principal, le premier lieu permanent', centreDeLaZone({ lieux: [{ ...lieu2 }], commercant: fiche })?.adresse, 'Autre')
-    egal('centre : un lieu sans position cède à la fiche',
-      centreDeLaZone({ lieux: [{ ...lieuP, latitude: null, longitude: null }], commercant: fiche })?.source, 'fiche')
-    egal('centre : un lieu hebdomadaire ne compte pas',
-      centreDeLaZone({ lieux: [{ ...lieuP, type: 'hebdo' }], commercant: fiche })?.source, 'fiche')
-    egal('centre : un lieu inactif ne compte pas',
-      centreDeLaZone({ lieux: [{ ...lieuP, actif: false }], commercant: fiche })?.source, 'fiche')
+    egal('🔴 centre : le lieu principal gagne', centreDeLaZone({ lieux: [lieu2, lieuP] })?.adresse, 'Lieu')
+    egal('centre : sans principal, le premier lieu permanent', centreDeLaZone({ lieux: [{ ...lieu2 }] })?.adresse, 'Autre')
+    // ⚠️ REPOINTÉES LE 06/10 : ces trois cas cédaient à la fiche. Ils rendent
+    // désormais `null`, MÊME quand on passe une fiche située : c'est la règle
+    // d'Alex, et la fiche passée ici prouve qu'elle est ignorée.
+    egal('🔴 centre : un lieu sans position ne cède PLUS à la fiche',
+      centreDeLaZone({ lieux: [{ ...lieuP, latitude: null, longitude: null }], commercant: fiche }), null)
+    egal('🔴 centre : un lieu hebdomadaire ne compte pas, et la fiche non plus',
+      centreDeLaZone({ lieux: [{ ...lieuP, type: 'hebdo' }], commercant: fiche }), null)
+    egal('🔴 centre : un lieu inactif ne compte pas, et la fiche non plus',
+      centreDeLaZone({ lieux: [{ ...lieuP, actif: false }], commercant: fiche }), null)
+    egal('🔴 centre : aucun lieu, une fiche située ne suffit pas', centreDeLaZone({ lieux: [], commercant: fiche }), null)
     verifier('🔴 centre : rien de situé, aucun centre (jamais 0,0)',
-      centreDeLaZone({ lieux: [], commercant: { latitude: null, longitude: null } }) === null)
+      centreDeLaZone({ lieux: [] }) === null)
+  }
+  // L'encart du tableau de bord : les deux cas, exécutés.
+  {
+    const { etatOuMeTrouver } = await import('../lib/ou-me-trouver.js')
+    {
+      const situe = { type: 'permanent', principal: true, actif: true, latitude: 50.3, longitude: 4.6, adresse: 'x' }
+      const hebdo = { ...situe, type: 'hebdo', principal: false }
+      const forme = cercle()
+      const e1 = etatOuMeTrouver({ publiee: true, lieux: [] })
+      verifier('🔴 encart : fiche en ligne sans lieu situé, on le dit', e1.aucunLieu === true)
+      verifier('encart : fiche en ligne avec un emplacement de food truck, rien à dire',
+        etatOuMeTrouver({ publiee: true, lieux: [hebdo] }).aucunLieu === false)
+      verifier('encart : un lieu sans position ne compte pas',
+        etatOuMeTrouver({ publiee: true, lieux: [{ ...situe, latitude: null }] }).aucunLieu === true)
+      verifier('encart : fiche pas encore publiée, c est l autre encart qui parle',
+        etatOuMeTrouver({ publiee: false, lieux: [] }).aucunLieu === false)
+      verifier('🔴 encart : étoile + livraison active sans lieu permanent, livraisons suspendues',
+        etatOuMeTrouver({ publiee: true, livraisonActive: true, lieux: [hebdo], zoneRayons: forme }).etoileSansDepart === true)
+      verifier('encart : étoile avec lieu permanent situé, rien à dire',
+        etatOuMeTrouver({ publiee: true, livraisonActive: true, lieux: [situe], zoneRayons: forme }).etoileSansDepart === false)
+      verifier('encart : sans étoile (codes postaux), pas de point de départ exigé',
+        etatOuMeTrouver({ publiee: true, livraisonActive: true, lieux: [hebdo], zoneRayons: null }).etoileSansDepart === false)
+      verifier('encart : livraison coupée, l étoile ne compte pas',
+        etatOuMeTrouver({ publiee: true, livraisonActive: false, lieux: [], zoneRayons: forme }).etoileSansDepart === false)
+    }
+    const bandeau = lire('app/dashboard/BandeauOuMeTrouver.js')
+    verifier('encart : il lit la règle exécutée ci-dessus, jamais une copie',
+      /import \{ etatOuMeTrouver \} from '@\/lib\/ou-me-trouver'/.test(bandeau) && /setEtat\(etatOuMeTrouver\(\{/.test(bandeau))
+    verifier('🔴 encart : une lecture en échec n affiche rien', /if \(errLieux \|\| cfg\.error\) \{ setEtat\(null\); return \}/.test(bandeau))
+    verifier('encart : il ouvre « Où me trouver », pas « Ma fiche »', /ecrireSousOnglet\('lieux'\)\s*onAllerA\?\.\('profil'\)/.test(bandeau))
+    verifier('encart : il est affiché dans le tableau de bord',
+      /<BandeauOuMeTrouver commercant=\{commercant\} onAllerA=\{ouvrirConfig\}/.test(lire('app/dashboard/page.js')))
   }
   verifier('🔴 étoile : sans centre, le serveur refuse (ne parie pas)', /if \(!verdict\) \{[\s\S]{0,200}code: 'zone_indisponible'/.test(routeCode))
   verifier('🔴 étoile : hors zone, refus avec la phrase', /if \(!verdict\.dedans\) \{[\s\S]{0,120}code: 'hors_zone',\s*error: phraseHorsZone\(verdict\)/.test(routeCode))
@@ -416,8 +472,11 @@ verifier('le minimum porte sur le total des articles',
   verifier('étoile : le réglage enregistre l\'étoile (ou null)', /zone_rayons_m: zoneRayons,/.test(cfgDash))
   verifier('étoile : une étoile dessinée dispense des codes postaux',
     /if \(zoneRayons === null && codesPostaux\.length === 0\)/.test(cfgDash))
-  verifier('étoile : le centre vient de la fiche, jamais saisi',
-    /from\('commercants'\)\.select\('latitude, longitude, adresse'\)\.eq\('id', commercantId\)/.test(cfgDash))
+  // ⚠️ REPOINTÉE LE 06/10 : le centre ne vient plus de la fiche mais des lieux
+  // (« Où me trouver ») ; il reste relu, jamais saisi.
+  verifier('étoile : le point de départ vient des lieux, jamais saisi',
+    /from\('commercant_lieux'\)\.select\('type, principal, actif, latitude, longitude, adresse'\)\.eq\('commercant_id', commercantId\)\.eq\('actif', true\)/.test(cfgDash)
+      && !/from\('commercants'\)\.select\('latitude, longitude, adresse'\)\.eq\('id', commercantId\)/.test(cfgDash))
 }
 
 // La route des statuts n'accepte que les deux états connus.

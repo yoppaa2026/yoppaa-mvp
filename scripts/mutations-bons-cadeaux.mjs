@@ -664,10 +664,13 @@ const MUTATIONS = [
   // libellé qu'on regèle par réflexe. Aucune ne fait planter quoi que ce soit,
   // toutes affichent un texte lisible et faux : c'est exactement pour ça
   // qu'elles doivent rougir.
+  // ⚠️ ANCRE REPOINTÉE LE 06/10 : la signature a reçu `onAllerOuMeTrouver`
+  // (le chemin vers « Où me trouver »). La mutation retire toujours la seule
+  // `categorie`, le reste de la signature est recopié tel quel.
   { nom: '🔴 TabLivraison ne reçoit plus la catégorie',
     banc: 'verif:bons', fichier: 'app/dashboard/ConfigDashboard.js',
-    de: 'function TabLivraison({ commercantId, categorie, toast, surModifications }) {',
-    vers: 'function TabLivraison({ commercantId, toast, surModifications }) {' },
+    de: 'function TabLivraison({ commercantId, categorie, toast, surModifications, onAllerOuMeTrouver = null }) {',
+    vers: 'function TabLivraison({ commercantId, toast, surModifications, onAllerOuMeTrouver = null }) {' },
 
   { nom: '🔴 l’appel de TabComptabilite cesse de passer la catégorie',
     banc: 'verif:bons', fichier: 'app/dashboard/ConfigDashboard.js',

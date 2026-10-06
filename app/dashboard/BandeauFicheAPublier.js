@@ -19,6 +19,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ficheAPublier, ficheComplete } from '@/lib/fiche-complete'
 import { attenteDepuis } from '@/lib/statut-commercant'
+import { ecrireSousOnglet } from '@/lib/onglet-url'
 
 const T = {
   main: '#6B35C4', pale: '#EDE0FF', ink: '#1A0840', deep: '#2D0F6B', muted: '#6B7280',
@@ -64,15 +65,17 @@ export default function BandeauFicheAPublier({ commercant, onAllerA, cleRafraich
   const lire = useCallback(async () => {
     if (!commercant?.id) return
     try {
-      const [articles, prestations, photos] = await Promise.all([
+      const [articles, prestations, photos, lieux] = await Promise.all([
         compter(supabase.from('articles').select('id', { count: 'exact', head: true })
           .eq('commercant_id', commercant.id).eq('actif', true)),
         compter(supabase.from('rdv_prestations').select('id', { count: 'exact', head: true })
           .eq('commercant_id', commercant.id).eq('actif', true).is('deleted_at', null)),
         compter(supabase.from('commercant_photos').select('id', { count: 'exact', head: true })
           .eq('commercant_id', commercant.id).not('url', 'is', null)),
+        compter(supabase.from('commercant_lieux').select('id', { count: 'exact', head: true })
+          .eq('commercant_id', commercant.id).eq('actif', true).not('latitude', 'is', null).not('longitude', 'is', null)),
       ])
-      setComptes({ nbCatalogue: articles + prestations, nbPhotos: photos })
+      setComptes({ nbCatalogue: articles + prestations, nbPhotos: photos, nbLieuxSitues: lieux })
       setErreur(null)
     } catch (e) {
       setErreur(e.message)
@@ -169,7 +172,13 @@ export default function BandeauFicheAPublier({ commercant, onAllerA, cleRafraich
                 )}
               </div>
               {!k.atteint && onAllerA && (
-                <button onClick={() => onAllerA(k.onglet)}
+                <button onClick={() => {
+                  // Le sous-onglet s'écrit dans l'adresse AVANT d'ouvrir le
+                  // Profil : c'est là qu'il le lit en arrivant. Sans lui, « Où
+                  // me trouver » s'ouvrirait sur « Ma fiche ».
+                  if (k.sousOnglet) ecrireSousOnglet(k.sousOnglet)
+                  onAllerA(k.onglet)
+                }}
                   style={{ background: T.pale, color: T.main, border: 'none', borderRadius: 9, padding: '6px 11px', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
                   Compléter
                 </button>

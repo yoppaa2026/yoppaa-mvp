@@ -3222,9 +3222,9 @@ export default function CommanderSlug() {
   const avecEtoile = zoneValide(livraisonConfig?.zone_rayons_m)
   const verdictEtoile = avecEtoile && adresseLivraison.situee === true
     ? dansEtoile({
-        // Même centre que le serveur : le lieu permanent principal, sinon la
-        // fiche (Alex, 05/10). `foodtruckEmps` = tous les lieux actifs.
-        centre: centreDeLaZone({ lieux: foodtruckEmps, commercant }),
+        // Même centre que le serveur : le lieu permanent principal, jamais
+        // la fiche (Alex, 05/10). `foodtruckEmps` = tous les lieux actifs.
+        centre: centreDeLaZone({ lieux: foodtruckEmps }),
         rayons: livraisonConfig.zone_rayons_m,
         point: { lat: adresseLivraison.lat, lng: adresseLivraison.lng },
       })

@@ -5414,7 +5414,7 @@ function TabCreneaux({ commercantId, toast }) {
 // ailleurs). Sans elle, `libelleBon()` retomberait sur « cadeau » chez un
 // commerce alimentaire, et ce serait un défaut silencieux : le texte s'affiche,
 // il est simplement faux. Voir lib/bons-cadeaux.js.
-function TabLivraison({ commercantId, categorie, toast, surModifications }) {
+function TabLivraison({ commercantId, categorie, toast, surModifications, onAllerOuMeTrouver = null }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [codesPostaux, setCodesPostaux] = useState([])
@@ -5424,9 +5424,10 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
   const [minimumCommande, setMinimumCommande] = useState('')
   // 🔴 LA ZONE EN ÉTOILE (chantier zone, 05/10) : 12 distances en mètres, ou
   // `null` tant qu'il n'a rien dessiné (les codes postaux décident alors). Le
-  // centre est la position de SA fiche : relu ici, jamais saisi.
+  // centre est son POINT DE DÉPART : le lieu permanent de « Où me trouver »,
+  // relu ici, jamais saisi, jamais l'adresse d'inscription (Alex, 05/10).
   const [zoneRayons, setZoneRayons] = useState(null)
-  const [centreFiche, setCentreFiche] = useState(null)   // { lat, lng, adresse } ou null
+  const [pointDepart, setPointDepart] = useState(null)   // { lat, lng, adresse } ou null
   // Cet écran n'a pas d'objet `form` unique, ses valeurs vivent dans quatre
   // états séparés. On en fabrique donc l'image pour la comparaison, et
   // seulement pour elle.
@@ -5434,10 +5435,10 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
 
   useEffect(() => {
     (async () => {
-      const [{ data }, { data: fiche }, { data: lieux }] = await Promise.all([
+      const [{ data }, { data: lieux }] = await Promise.all([
         supabase.from('livraison_config').select('*').eq('commercant_id', commercantId).maybeSingle(),
-        supabase.from('commercants').select('latitude, longitude, adresse').eq('id', commercantId).maybeSingle(),
-        // Le centre de l'étoile est le lieu permanent principal (Alex, 05/10).
+        // Le point de départ est le lieu permanent principal (Alex, 05/10).
+        // La fiche n'est plus lue : son adresse est celle de l'inscription.
         supabase.from('commercant_lieux').select('type, principal, actif, latitude, longitude, adresse').eq('commercant_id', commercantId).eq('actif', true),
       ])
       const valeurs = {
@@ -5453,7 +5454,7 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
       setMinimumCommande(valeurs.minimumCommande)
       setZoneRayons(valeurs.zoneRayons)
       // Même règle que le serveur et la fiche client : `centreDeLaZone`.
-      setCentreFiche(centreDeLaZone({ lieux: lieux || [], commercant: fiche }))
+      setPointDepart(centreDeLaZone({ lieux: lieux || [] }))
       setInitial(valeurs)
       setLoading(false)
     })()
@@ -5557,15 +5558,34 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
           <>
             <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
               Tire les points pour suivre tes routes : chacun règle jusqu&rsquo;où tu livres dans sa direction.
-              Le centre est {centreFiche?.source === 'lieu' ? <>ton lieu d&rsquo;activité principal</> : <>l&rsquo;adresse de ta fiche</>}{centreFiche?.adresse ? <> : <strong style={{ color: T.ink }}>{centreFiche.adresse}</strong></> : ''}.
             </p>
-            {centreFiche ? (
-              <CarteZoneEtoile centre={centreFiche} rayons={zoneRayons} onChange={setZoneRayons} couleur={T.main} />
-            ) : (
-              <p style={{ fontSize: 12.5, color: '#B91C1C', fontWeight: 700, margin: '0 0 10px', lineHeight: 1.5 }}>
-                Ni ton lieu d&rsquo;activité ni ta fiche n&rsquo;ont de position sur la carte : la zone ne peut pas être dessinée, et la livraison sera refusée tant que ce n&rsquo;est pas réglé.
-                Ajoute ou corrige ton lieu d&rsquo;activité dans le Profil, section « Où me trouver », puis reviens ici.
+            {pointDepart && (
+              <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
+                Ton point de départ des livraisons : <strong style={{ color: T.ink }}>{pointDepart.adresse || 'ton adresse dans « Où me trouver »'}</strong>.
+                Il se change dans « Où me trouver ».
               </p>
+            )}
+            {pointDepart ? (
+              <CarteZoneEtoile centre={pointDepart} rayons={zoneRayons} onChange={setZoneRayons} couleur={T.main} />
+            ) : (
+              // 🔴 UNE ÉTOILE SANS POINT DE DÉPART : le lieu a été retiré ou n'a
+              // plus de position. Le serveur refuse alors toute livraison
+              // (`zone_indisponible`) : le commerçant doit le lire ICI, pas
+              // l'apprendre par un client.
+              <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '11px 13px', margin: '0 0 10px' }}>
+                <p style={{ fontSize: 12.5, color: '#B91C1C', fontWeight: 800, margin: 0, lineHeight: 1.5 }}>
+                  Tes livraisons sont suspendues : ton point de départ n&rsquo;est plus défini.
+                </p>
+                <p style={{ fontSize: 12, color: '#7F1D1D', fontWeight: 600, margin: '3px 0 0', lineHeight: 1.5 }}>
+                  Il faut l&rsquo;adresse de ton commerce dans « Où me trouver ». Tant qu&rsquo;elle manque, tes clients ne peuvent commander qu&rsquo;en retrait.
+                </p>
+                {onAllerOuMeTrouver && (
+                  <button type="button" onClick={onAllerOuMeTrouver}
+                    style={{ marginTop: 8, padding: '8px 12px', borderRadius: 10, border: 'none', background: '#B91C1C', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+                    Ajouter mon adresse dans « Où me trouver »
+                  </button>
+                )}
+              </div>
             )}
             <label style={{ display: 'block', marginTop: 12 }}>
               <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>
@@ -5601,12 +5621,20 @@ function TabLivraison({ commercantId, categorie, toast, surModifications }) {
         ) : (
         <>
         <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted }}>Les codes postaux que tu livres. Un Yopper hors zone ne verra pas l&rsquo;option livraison.</p>
-        <button type="button" onClick={() => setZoneRayons(cercle())} disabled={!centreFiche}
-          style={{ width: '100%', padding: '10px 12px', marginBottom: 12, borderRadius: 10, border: `1.5px dashed ${T.main}`, background: T.pale, color: T.main, fontWeight: 800, fontSize: 13.5, cursor: centreFiche ? 'pointer' : 'default', opacity: centreFiche ? 1 : 0.6 }}>
+        <button type="button" onClick={() => setZoneRayons(cercle())} disabled={!pointDepart}
+          style={{ width: '100%', padding: '10px 12px', marginBottom: 12, borderRadius: 10, border: `1.5px dashed ${T.main}`, background: T.pale, color: T.main, fontWeight: 800, fontSize: 13.5, cursor: pointDepart ? 'pointer' : 'default', opacity: pointDepart ? 1 : 0.6 }}>
           Dessiner ma zone sur une carte (plus précis qu&rsquo;un code postal)
         </button>
-        {!centreFiche && (
-          <p style={{ fontSize: 12, color: T.muted, margin: '-6px 0 12px' }}>Pour dessiner ta zone, ton lieu d&rsquo;activité doit d&rsquo;abord avoir une adresse située sur la carte (Profil, section « Où me trouver »).</p>
+        {!pointDepart && (
+          <p style={{ fontSize: 12, color: T.muted, margin: '-6px 0 12px', lineHeight: 1.5 }}>
+            Pour dessiner ta zone, ajoute d&rsquo;abord l&rsquo;adresse de ton commerce dans « Où me trouver » : c&rsquo;est ton point de départ des livraisons.
+            {onAllerOuMeTrouver && (
+              <>{' '}<button type="button" onClick={onAllerOuMeTrouver}
+                style={{ background: 'none', border: 'none', padding: 0, color: T.main, fontWeight: 800, fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}>
+                Y aller
+              </button></>
+            )}
+          </p>
         )}
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <input
@@ -6819,7 +6847,7 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
   if (loading) return null
 
   return (
-    <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginTop: 16 }}>
+    <div id="ou-me-trouver" style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginTop: 16, scrollMarginTop: 90 }}>
       <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Où me trouver</p>
       <p style={{ margin: '0 0 14px', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
         {mobile ? (
@@ -7313,6 +7341,9 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
   useEffect(() => {
     if (!ancre || loading) return
     if (ancre === 'activer-livraison') setSousOnglet('reglages')
+    // Le point de départ des livraisons manque : on dépose le commerçant sur
+    // « Où me trouver », pas en haut de « Ma fiche ».
+    if (ancre === 'ou-me-trouver') setSousOnglet('lieux')
     let essais = 0
     let minuteur = null
     const chercher = () => {
@@ -16118,6 +16149,9 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
   // lui-même ne doit pas refaire défiler l'écran sous ses yeux.
   const [ancreProfil, setAncreProfil] = useState(null)
   const oublierAncre = useCallback(() => setAncreProfil(null), [])
+  // Le point de départ des livraisons manque : Profil, sous-onglet « Où me
+  // trouver » (Alex, 06/10).
+  function allerOuMeTrouver() { setAncreProfil('ou-me-trouver'); changerOnglet('profil') }
   // ⚠️ ON PRÉVIENT LE PARENT POUR L'ADRESSE, ET RIEN DE PLUS. Il ne doit
   // surtout pas remonter ce composant : sa clé dépend de l'onglet, et un
   // remontage fermerait le formulaire ouvert en perdant la saisie.
@@ -16554,7 +16588,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
           n'a pas, ou fait disparaître sa saisie sans un mot. */}
       {tab === 'ia'       && iaActif && <TabGenerateur commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />}
       {tab === 'creneaux' && peut(commercant, 'commande') && <TabCreneaux commercantId={commercantId} toast={showToast} />}
-      {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} surModifications={declarerModifications} />}
+      {tab === 'livraison' && peutLivraison && <TabLivraison commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} surModifications={declarerModifications} onAllerOuMeTrouver={allerOuMeTrouver} />}
       {/* 🔴 UN ONGLET VIDE N'EST PAS UNE RÉPONSE (Alex, 08/09). Tant que la
           livraison n'était pas cochée dans le Profil, cet onglet n'affichait
           RIEN : ni ce qui manquait, ni où le régler. Le commerçant conclut que

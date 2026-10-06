@@ -153,7 +153,7 @@ export async function POST(request) {
       // ⚠️ `livraison_actif` : l'interrupteur de la livraison, lu plus bas.
       // ⚠️ `latitude`, `longitude` : le centre de l'étoile. Absentes, `dansEtoile`
       // rendrait `null` et TOUTE livraison serait refusée chez qui a dessiné.
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif, latitude, longitude')
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -394,12 +394,12 @@ export async function POST(request) {
         }, { status: 400 })
       }
       // 🔴 L'ÉTOILE DÉCIDE SUR LA POSITION DE LA MAISON, celle du référentiel,
-      // jamais sur ce que le navigateur envoie. Sans centre utilisable (fiche
-      // sans position), on NE PARIE PAS : la livraison est refusée, avec une
-      // issue. `dansEtoile` rend `null` dans ce cas, jamais « dedans ».
+      // jamais sur ce que le navigateur envoie. Sans centre utilisable (aucun
+      // lieu permanent situé), on NE PARIE PAS : la livraison est refusée,
+      // avec une issue. `dansEtoile` rend `null` dans ce cas, jamais « dedans ».
       if (avecEtoile) {
-        // Le centre : le lieu d'activité permanent principal, sinon la fiche
-        // (Alex, 05/10). Erreur de lecture : on ne parie pas sur la fiche.
+        // Le centre : le lieu permanent principal de « Où me trouver », JAMAIS
+        // la fiche, qui porte l'adresse d'inscription (Alex, 05/10).
         const { data: lieuxEtoile, error: errLieux } = await supabase
           .from('commercant_lieux')
           .select('type, principal, actif, latitude, longitude, adresse')
@@ -409,7 +409,7 @@ export async function POST(request) {
           console.error('[create-commande] lecture lieux KO', errLieux)
           return NextResponse.json({ ok: false, error: 'Impossible de vérifier la livraison. Réessaie dans un instant.' }, { status: 500 })
         }
-        const centre = centreDeLaZone({ lieux: lieuxEtoile || [], commercant })
+        const centre = centreDeLaZone({ lieux: lieuxEtoile || [] })
         const verdict = dansEtoile({
           centre,
           rayons: cfg.zone_rayons_m,

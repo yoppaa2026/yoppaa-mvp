@@ -1,6 +1,7 @@
 // GET / POST /api/cron/billing-relances
 //
-// Cron quotidien Vercel (08:00 UTC = 09:00 Brussels en hiver, 10:00 en été)
+// Cron quotidien Vercel : 10:00 à Bruxelles, été comme hiver (passe à 8 h et
+// 9 h UTC, seul le passage de 10 h travaille : `lib/heure-cron.js`, 06/10)
 // qui orchestre les 5 relances Stripe Billing :
 //
 //   • trial_j_minus_7 / trial_j_minus_3            → rappels avant fin d'essai
@@ -23,6 +24,7 @@ import { stripe } from '@/lib/stripe'
 import { sendBillingRelance } from '@/lib/billing-emails'
 import { getPrixPlan } from '@/lib/plans'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
+import { horsDeSonHeure } from '@/lib/heure-cron'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -186,6 +188,8 @@ async function processCommercant(commercant, supabase, stats) {
 async function handler(req) {
   const refuse = refusCron(gardeCron(req, 'cron/billing-relances'), NextResponse)
   if (refuse) return refuse
+  // 🔴 10 H À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
+  if (horsDeSonHeure(req, '/api/cron/billing-relances')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
 
   const supabase = getSupabaseAdmin()
 

@@ -30,6 +30,7 @@ import { fusionnerIds } from '@/lib/morning-eligibilite'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { jourBruxelles } from '@/lib/timezone'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
+import { horsDeSonHeure } from '@/lib/heure-cron'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -49,6 +50,8 @@ function extraireCodePostal(adresse) {
 async function handle(req) {
   const refuse = refusCron(gardeCron(req, 'cron/morning-yoppers'), NextResponse)
   if (refuse) return refuse
+  // 🔴 7 H 30 À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
+  if (horsDeSonHeure(req, '/api/cron/morning-yoppers')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
 
   const supabase = getSupabaseAdmin()
   const today = jourBruxelles()

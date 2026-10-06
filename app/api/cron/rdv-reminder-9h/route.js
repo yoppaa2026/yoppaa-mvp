@@ -19,12 +19,15 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 import { soldeRdv } from '@/lib/rdv-paiement'
 import { motsReservation } from '@/lib/reservation-metier'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
+import { horsDeSonHeure } from '@/lib/heure-cron'
 import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 
 export async function GET(request) {
   // 1) Securite : la garde partagee refuse aussi quand CRON_SECRET est absente.
   const refuse = refusCron(gardeCron(request, 'cron/rdv-reminder-9h'), NextResponse)
   if (refuse) return refuse
+  // 🔴 9 H À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
+  if (horsDeSonHeure(request, '/api/cron/rdv-reminder-9h')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
 
   try {
     const supabase = createClient(

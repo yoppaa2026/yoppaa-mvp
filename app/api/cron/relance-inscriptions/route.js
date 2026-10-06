@@ -29,6 +29,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
+import { horsDeSonHeure } from '@/lib/heure-cron'
 import { envoyerAuCommercant, emailRelanceInscription } from '@/lib/resend'
 import { PUBLICATION_BROUILLON } from '@/lib/statut-commercant'
 import { trierPourRelance, COLONNES_RELANCE, LIMITE_RELANCE_JOURS } from '@/lib/relance-inscription'
@@ -46,6 +47,8 @@ function admin() {
 export async function GET(request) {
   const refus = refusCron(gardeCron(request, 'relance-inscriptions'), NextResponse)
   if (refus) return refus
+  // 🔴 10 H À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
+  if (horsDeSonHeure(request, '/api/cron/relance-inscriptions')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
 
   const db = admin()
   const maintenant = new Date()

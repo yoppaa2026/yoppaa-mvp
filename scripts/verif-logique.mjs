@@ -2440,9 +2440,11 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
     clesInconnues.length === 0, clesInconnues.join(', '))
 
   const cron = (conf.crons || []).find(c => c.path.includes('rappels-retrait'))
-  const heureCron = Number((cron?.schedule || '').split(' ')[1])
+  // ⚠️ REPOINTÉE LE 06/10 : le cron passe deux fois (été, hiver), « 9,10 ».
+  // `Number('9,10')` vaut NaN : on lit CHAQUE heure de la liste.
+  const heuresCron = (cron?.schedule || '').split(' ')[1]?.split(',').map(Number) || []
   verifier('les rappels partent à une heure décente',
-    heureCron >= 6 && heureCron <= 18, `heure UTC = ${heureCron}`)
+    heuresCron.length > 0 && heuresCron.every(h => h >= 6 && h <= 18), `heures UTC = ${heuresCron.join(',')}`)
 
   const routeRappels = sansCommentaires(readFileSync(new URL('../app/api/cron/rappels-retrait/route.js', import.meta.url), 'utf8'))
   verifier('le cron applique la règle partagée', /rappelAEnvoyer\(cmd, maintenant\)/.test(routeRappels))

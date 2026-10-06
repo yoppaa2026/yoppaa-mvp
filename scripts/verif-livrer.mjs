@@ -359,6 +359,34 @@ const livrer = async (tables, args, options) => {
   const recap = (planning.crons || []).find(c => c.path === '/api/cron/recap-jour-8h')
   v('🔴 le cron passe à 6 h ET 7 h UTC', recap?.schedule === '0 6,7 * * *', recap?.schedule)
 
+  // ─── TOUS LES CRONS À LEUR HEURE BELGE, ÉTÉ COMME HIVER (Alex, 06/10) ────
+  {
+    const { HEURES_CRON, horsDeSonHeure, heuresUtcAttendues } = await import('../lib/heure-cron.js')
+    const req = (q = '') => ({ url: `https://www.yoppaa.app/api/cron/x${q}` })
+    // Le rappel RDV de 9 h : 7 h UTC en été, 8 h UTC en hiver.
+    const ch = '/api/cron/rdv-reminder-9h'
+    v('🔴 été : 7 h UTC = 9 h, le rappel part', horsDeSonHeure(req(), ch, new Date('2026-07-01T07:00:00Z')) === false)
+    v('🔴 été : 8 h UTC = 10 h, il ne part pas deux fois', horsDeSonHeure(req(), ch, new Date('2026-07-01T08:00:00Z')) === true)
+    v('🔴 hiver : 7 h UTC = 8 h, plus de rappel à 8 h', horsDeSonHeure(req(), ch, new Date('2026-12-01T07:00:00Z')) === true)
+    v('🔴 hiver : 8 h UTC = 9 h, le rappel part', horsDeSonHeure(req(), ch, new Date('2026-12-01T08:00:00Z')) === false)
+    v('un appel manuel peut forcer', horsDeSonHeure(req('?forcer=1'), ch, new Date('2026-12-01T07:00:00Z')) === false)
+    v('un cron absent de la table n’est jamais bloqué', horsDeSonHeure(req(), '/api/cron/inconnu', new Date()) === false)
+
+    const crons = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')).crons || []
+    for (const [chemin, cible] of Object.entries(HEURES_CRON)) {
+      const planifie = crons.find(c => c.path === chemin)
+      const [minute, heures] = (planifie?.schedule || '').split(' ')
+      const attendues = heuresUtcAttendues(cible.heure)
+      v(`🔴 ${chemin} passe à ${attendues.join(' h et ')} h UTC`,
+        !!planifie && attendues.every(h => (heures || '').split(',').map(Number).includes(h)), planifie?.schedule)
+      v(`${chemin} à la bonne minute`, Number(minute) === (cible.minute || 0), planifie?.schedule)
+      if (chemin === '/api/cron/recap-jour-8h') continue  // sa garde est `estHeureDuRecap`, vérifiée plus haut
+      const route = code(`app${chemin}/route.js`)
+      v(`🔴 ${chemin} lit SA ligne de la table`,
+        new RegExp(`if \\(horsDeSonHeure\\((request|req), '${chemin.replace(/\//g, '\\/')}'\\)\\) return NextResponse\\.json\\(\\{ ok: true, ignore: 'pas_son_heure' \\}\\)`).test(route))
+    }
+  }
+
   // ─── L'ÉCRAN CLIENT COMPTE COMME LE SERVEUR (points 10 à 12) ─────────────
   // On EXÉCUTE les deux cas de l'audit avec la fonction que l'écran appelle.
   const { construireLignesCommande } = await import('../lib/lignes-commande.js')

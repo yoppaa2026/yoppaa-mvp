@@ -20,10 +20,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { crediterFideliteRdv } from '@/lib/fidelite-server'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
+import { horsDeSonHeure } from '@/lib/heure-cron'
 
 export async function GET(request) {
   const refuse = refusCron(gardeCron(request, 'cron/fidelite-rdv'), NextResponse)
   if (refuse) return refuse
+  // 🔴 9 H À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
+  if (horsDeSonHeure(request, '/api/cron/fidelite-rdv')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
 
   try {
     const supabase = createClient(

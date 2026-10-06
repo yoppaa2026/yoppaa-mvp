@@ -128,9 +128,10 @@ verifier('le SMS de récompense n\'est PAS filtré par le compte', !/aUnCompte/.
 const vercel = JSON.parse(lire('vercel.json'))
 const cronFid = vercel.crons.find(c => c.path.includes('fidelite-rdv'))
 verifier('le cron fidélité existe toujours', !!cronFid)
-const heureCron = Number(cronFid.schedule.split(' ')[1])
-verifier('le cron fidélité tourne en journée (UTC+2 en été)',
-  heureCron >= 6 && heureCron <= 18, `${cronFid.schedule}`)
+// ⚠️ REPOINTÉE LE 06/10 : deux passages (été, hiver), « 7,8 ». On lit chaque heure.
+const heuresCronFid = cronFid.schedule.split(' ')[1].split(',').map(Number)
+verifier('le cron fidélité tourne en journée (été comme hiver)',
+  heuresCronFid.length > 0 && heuresCronFid.every(h => h >= 6 && h <= 18), `${cronFid.schedule}`)
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 3. LE BADGE « NOUVEAU » DU GOOD MORNING — ne promettre que ce qui existe

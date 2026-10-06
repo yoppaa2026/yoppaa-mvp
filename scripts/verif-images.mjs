@@ -258,7 +258,10 @@ verifie('seuil photo = 800', TAILLE_CONSEILLEE.photo === 800, `reçu ${TAILLE_CO
     // ⚠️ ET ELLE DIT QUOI FAIRE. Un constat sans geste ne se traite pas.
     verifie('elle dit de demander la reprise avant de publier', /avant de publier/.test(carte))
     // Une fiche sans aucune photo est une information, pas un vide.
-    verifie('elle nomme le cas « aucune photo »', /Aucune photo/.test(carte))
+    // ⚠️ REPOINTÉE LE 07/10 (capture d'Alex) : depuis l'inscription en 3
+    // étapes, « pas de photo » est la situation NORMALE d'un dossier à valider.
+    // Le cas est toujours nommé, sans alarme, et dit où elles viendront.
+    verifie('elle nomme le cas « aucune photo »', /Pas encore de photo : elle les ajoutera depuis son tableau de bord/.test(carte))
   }
 
   // ⚠️ LA LECTURE PASSE PAR L'API, ET C'EST UNE CONSÉQUENCE DE LA RLS DU 21/08 :

@@ -456,13 +456,11 @@ export default function AdminPage() {
 // ─── Carte d'un commerçant à valider ──────────────────────────────────────
 function CarteAValider({ commercant: c, photos = [], onValider, onRejeter, disabled }) {
   const ob = Array.isArray(c.onboarding_commercants) ? c.onboarding_commercants[0] : c.onboarding_commercants
-  const score = ob?.validation_auto_score ?? null
   const successPack = ob?.success_pack_choisi
   const dateSoumission = ob?.completed_at || c.created_at
   // ⚠️ UNE DATE N'EST PAS UNE ATTENTE. « Soumis le 13 septembre » laisse le
   // calcul à faire, et un dossier oublié ne fait aucun bruit.
   const attente = attenteDepuis(dateSoumission)
-  const couleurScore = score == null ? T.muted : score >= 80 ? '#10B981' : score >= 60 ? '#EA580C' : '#DC2626'
 
   // ⚠️ ARBITRAGE D'ALEX, 21/08 : une image trop petite ne bloque plus le
   // commerçant, c'est ICI qu'on la voit, et c'est ici qu'on demande la reprise
@@ -513,11 +511,11 @@ function CarteAValider({ commercant: c, photos = [], onValider, onRejeter, disab
                 <><Croissant size={12} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Alimentaire</>
               )}
             </span>
-            {score != null && (
-              <span style={{ fontSize: 11, fontWeight: 800, color: couleurScore, background: '#F9FAFB', padding: '3px 9px', borderRadius: 100, border: `1px solid ${couleurScore}33` }}>
-                Score {score}/100
-              </span>
-            )}
+            {/* 🔴 PLUS DE BADGE « SCORE » (vu par Alex le 07/10, « Score
+                50/100 » en rouge). Le score comptait photos, logo et horaires,
+                que l'inscription en 3 étapes ne demande plus : tout nouvel
+                inscrit s'y lisait en dossier incomplet. Valider ouvre l'espace ;
+                c'est la publication qui juge la fiche (« fiche complète »). */}
             {successPack && (
               <span style={{ fontSize: 10, fontWeight: 800, color: '#fff', background: T.bgPanel, padding: '3px 9px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 Pack {successPack}
@@ -557,9 +555,12 @@ function CarteAValider({ commercant: c, photos = [], onValider, onRejeter, disab
         <p style={{ fontSize: 10.5, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px', margin: '0 0 8px' }}>
           Sa fiche en images · {photos.length}
         </p>
+        {/* ⚠️ PAS UN DÉFAUT DEPUIS LE 06/10 : l'inscription ne demande plus de
+            photos, elles se mettent au tableau de bord, et « Publier » les
+            exige. Le texte le dit, en gris, sans alarme. */}
         {photos.length === 0 ? (
-          <p style={{ fontSize: 12.5, color: '#B45309', fontWeight: 700, margin: 0 }}>
-            Aucune photo. Sa fiche n&apos;aura que sa bannière et son logo.
+          <p style={{ fontSize: 12.5, color: T.muted, fontWeight: 600, margin: 0 }}>
+            Pas encore de photo : elle les ajoutera depuis son tableau de bord, et la publication les exigera.
           </p>
         ) : (
           <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>

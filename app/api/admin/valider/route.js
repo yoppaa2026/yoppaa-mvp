@@ -21,7 +21,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailEspaceOuvert } from '@/lib/resend'
 import { clientAdmin, adminVerifie } from '@/lib/api-auth'
 import { bilanDeLaFiche } from '@/lib/fiche-complete-server'
-import { fichePubliee } from '@/lib/statut-commercant'
+import { fichePubliee, refusKyb } from '@/lib/statut-commercant'
 
 
 // Slugify : normalise un nom en slug URL-safe (sans accents, lowercase, tirets).
@@ -79,11 +79,16 @@ export async function POST(request) {
     // Fetch préalable : on a besoin du nom pour générer un slug si manquant
     const { data: existant } = await supabase
       .from('commercants')
-      .select('id, nom, slug, statut_publication')
+      .select('id, nom, slug, statut_publication, kyb_statut')
       .eq('id', commercant_id)
       .single()
     if (!existant) {
       return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
+    }
+    // 🔴 PAS D'ESPACE OUVERT SANS IDENTITÉ VÉRIFIÉE (06/10) : `refusKyb`.
+    const refusIdentite = refusKyb(existant)
+    if (refusIdentite) {
+      return NextResponse.json({ ok: false, error: `impossible d’ouvrir ce compte : ${refusIdentite}` }, { status: 409 })
     }
 
     // ⚠️ UNE FICHE DÉJÀ EN LIGNE LE RESTE. Cette route sert aussi à revalider

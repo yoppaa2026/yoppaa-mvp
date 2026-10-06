@@ -253,7 +253,8 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('Valider : le kit ne part plus à la validation', !/emailKitBienvenue/.test(valider))
   v('Valider : l email annonce l espace ouvert', /emailEspaceOuvert\(/.test(valider))
   v('Valider : la statut_publication d origine est bien lue',
-    /\.select\('id, nom, slug, statut_publication'\)/.test(valider))
+    // ⚠️ REPOINTÉE LE 06/10 : le select lit aussi `kyb_statut`.
+    /\.select\('id, nom, slug, statut_publication, kyb_statut'\)/.test(valider))
   v('Publier : c est lui qui envoie désormais la page en ligne et le kit',
     /emailValidationCommercant\(/.test(publier) && /emailKitBienvenue\(/.test(publier))
 
@@ -394,6 +395,36 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
     !/split\('\/'\)\.pop\(\)/.test(dash + signup) && !/segments\[segments\.length - 1\]/.test(signup))
   v('les pièces d identité gardent leur propre rangement',
     /const fileName = `\$\{user\.id\}\/\$\{commercant\.id\}_\$\{kind\}_/.test(signup))
+}
+
+// ═══ PAS D'ESPACE OUVERT NI DE FICHE EN LIGNE SANS KYB (Alex, 06/10) ═══════
+// Trois portes, une règle (`refusKyb`), et la même en base.
+{
+  const { refusKyb } = await import('../lib/statut-commercant.js')
+  v('🔴 KYB validé : rien ne bloque', refusKyb({ kyb_statut: 'valide' }) === null)
+  v('🔴 KYB en attente, refusé, jamais démarré ou absent : refusé',
+    ['en_attente', 'rejete', 'non_demarre', null, undefined].every(k => typeof refusKyb({ kyb_statut: k }) === 'string')
+    && typeof refusKyb(null) === 'string')
+
+  const valider = code('app/api/admin/valider/route.js')
+  v('🔴 « Valider » lit le KYB et refuse AVANT d’écrire',
+    /select\('id, nom, slug, statut_publication, kyb_statut'\)/.test(valider)
+    && /const refusIdentite = refusKyb\(existant\)\s*if \(refusIdentite\) \{\s*return NextResponse\.json/.test(valider)
+    && valider.indexOf('refusKyb(existant)') < valider.indexOf('.update(updates)'))
+  const publier = code('app/api/admin/publier/route.js')
+  v('🔴 « Publier » lit le KYB et refuse AVANT d’écrire',
+    /\.select\('statut_publication, kyb_statut'\)/.test(publier)
+    && /const refusIdentite = refusKyb\(identite\)\s*if \(refusIdentite\) \{\s*return NextResponse\.json/.test(publier)
+    && publier.indexOf('refusKyb(identite)') < publier.indexOf("statut_publication: 'publie'"))
+  v('« Publier » : une lecture du KYB en échec n’est pas un feu vert', /if \(errKyb\) return NextResponse\.json\(\{ ok: false/.test(publier))
+  const modale = code('app/admin/ModalEditCommercant.js')
+  v('🔴 la fenêtre « Modifier » ne met plus une fiche en ligne',
+    /if \(form\.statut_publication === PUBLICATION_OUVERTE && commercant\.statut_publication !== PUBLICATION_OUVERTE\) \{\s*return setError\(/.test(modale)
+    && modale.indexOf('PUBLICATION_OUVERTE && commercant.statut_publication !== PUBLICATION_OUVERTE) {') < modale.indexOf(".from('commercants')\n        .update(updates)"))
+  const sql = lire('migrations/MIGRATION_KYB_AVANT_PUBLICATION.sql').split('-- ─── Contrôle')[0]
+  v('🔴 la base refuse d’ouvrir sans KYB', /IF NEW\.statut IN \('valide', 'actif'\)\s*AND \(TG_OP = 'INSERT' OR OLD\.statut IS DISTINCT FROM NEW\.statut\) THEN\s*RAISE EXCEPTION/.test(sql))
+  v('🔴 la base refuse de publier sans KYB', /IF NEW\.statut_publication = 'publie'\s*AND \(TG_OP = 'INSERT' OR OLD\.statut_publication IS DISTINCT FROM 'publie'\) THEN\s*RAISE EXCEPTION/.test(sql))
+  v('le déclencheur porte sur ouverture, publication et KYB', /BEFORE INSERT OR UPDATE OF statut, statut_publication, kyb_statut ON public\.commercants/.test(sql))
 }
 
 console.log(`\nUne fiche n'est montrée que complète : ${ok} vérifications`)

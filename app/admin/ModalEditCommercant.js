@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { PLANS } from '@/lib/plans'
 import { validerDelai } from '@/lib/rdv-delai-annulation'
 import { TOUS_TYPES } from '@/lib/types-commerce'
+import { PUBLICATION_OUVERTE } from '@/lib/statut-commercant'
 
 const T = {
   bg:       '#F8F6FF',
@@ -126,6 +127,16 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
 
     const vDelai = validerDelai(form.rdv_delai_annulation_heures)
     if (!vDelai.ok) return setError(`Délai d’annulation : ${vDelai.message}`)
+
+    // 🔴 CETTE FENÊTRE NE MET PLUS UNE FICHE EN LIGNE (06/10). Elle écrivait
+    // « publie » directement en base, sans vérifier ni la fiche complète ni
+    // l'identité (KYB) : une troisième porte à côté de « Publier ». Mettre en
+    // ligne passe par « Publier », qui vérifie les deux. Une fiche DÉJÀ en
+    // ligne garde son état, et la base refuse de toute façon une publication
+    // sans KYB validé (MIGRATION_KYB_AVANT_PUBLICATION).
+    if (form.statut_publication === PUBLICATION_OUVERTE && commercant.statut_publication !== PUBLICATION_OUVERTE) {
+      return setError('Pour mettre une fiche en ligne, utilise « Publier » dans « Fiches à publier » : ce bouton vérifie que la fiche est complète et que l’identité est validée.')
+    }
 
     setSaving(true)
     try {
@@ -360,7 +371,14 @@ export default function ModalEditCommercant({ commercant, onClose, onSaved, onDe
                       : '(aucun état en base, à ne pas enregistrer tel quel)'}
                   </option>
                 )}
-                {STATUTS_PUB.map(s => <option key={s.valeur} value={s.valeur}>{s.label}</option>)}
+                {STATUTS_PUB.map(s => (
+                  <option key={s.valeur} value={s.valeur}
+                    disabled={s.valeur === PUBLICATION_OUVERTE && commercant.statut_publication !== PUBLICATION_OUVERTE}>
+                    {s.valeur === PUBLICATION_OUVERTE && commercant.statut_publication !== PUBLICATION_OUVERTE
+                      ? `${s.label} (via « Publier »)`
+                      : s.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>

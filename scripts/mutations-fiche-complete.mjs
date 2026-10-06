@@ -139,6 +139,20 @@ const MUTATIONS = [
   // 🔴 LA LANDING PROMETTRAIT DE NOUVEAU UNE MISE EN LIGNE A LA VALIDATION.
   { nom: '🔴 la landing promet encore la mise en ligne des la validation', banc: 'verif:lancement',
     fichier: LANDING, de: 'Ta commune est déjà ouverte et ta page part en ligne dès qu&rsquo;elle est complète.', vers: 'Ta commune est déjà ouverte et ta page part en ligne dès sa validation.' },
+
+  // ─── PAS D ESPACE OUVERT NI DE FICHE EN LIGNE SANS KYB (06/10) ──────────
+  { nom: '🔴 la regle laisse passer un KYB en attente',
+    fichier: 'lib/statut-commercant.js', de: '  if (commercant?.[COLONNE_KYB] === KYB_VALIDE) return null', vers: "  if (commercant?.[COLONNE_KYB] !== 'rejete') return null" },
+  { nom: '🔴 Valider ouvre sans lire le KYB',
+    fichier: VALIDER, de: '    const refusIdentite = refusKyb(existant)', vers: '    const refusIdentite = null' },
+  { nom: '🔴 Publier met en ligne sans lire le KYB',
+    fichier: PUBLIER, de: '    const refusIdentite = refusKyb(identite)', vers: '    const refusIdentite = null' },
+  { nom: '🔴 Publier prend une lecture ratee pour un feu vert',
+    fichier: PUBLIER, de: "    if (errKyb) return NextResponse.json({ ok: false, error: `vérification du KYB impossible : ${errKyb.message}` }, { status: 500 })", vers: '' },
+  { nom: '🔴 la fenetre Modifier publie de nouveau',
+    fichier: 'app/admin/ModalEditCommercant.js', de: '    if (form.statut_publication === PUBLICATION_OUVERTE && commercant.statut_publication !== PUBLICATION_OUVERTE) {', vers: '    if (false) {' },
+  { nom: '🔴 la base laisse publier sans KYB',
+    fichier: 'migrations/MIGRATION_KYB_AVANT_PUBLICATION.sql', de: "    IF NEW.statut_publication = 'publie'", vers: "    IF NEW.statut_publication = 'jamais'" },
 ]
 
 const lancer = (banc = BANC) => {

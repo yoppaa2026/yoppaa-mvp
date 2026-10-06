@@ -20,7 +20,7 @@ import { NextResponse } from 'next/server'
 import { utilisateurAppelant, adminVerifie, clientAdmin } from '@/lib/api-auth'
 import { bilanDeLaFiche } from '@/lib/fiche-complete-server'
 import { phraseManquants } from '@/lib/fiche-complete'
-import { STATUTS_ACCES_AUTORISE, fichePubliee } from '@/lib/statut-commercant'
+import { STATUTS_ACCES_AUTORISE, fichePubliee, refusKyb } from '@/lib/statut-commercant'
 import { envoyerAuCommercant, emailValidationCommercant, emailKitBienvenue } from '@/lib/resend'
 import { avantLancement } from '@/lib/lancement'
 
@@ -44,8 +44,19 @@ export async function POST(request) {
     if (!STATUTS_ACCES_AUTORISE.includes(commercant.statut)) {
       return NextResponse.json({ ok: false, error: 'valide d’abord ce compte : son espace est encore fermé' }, { status: 409 })
     }
-    if (fichePubliee(commercant)) {
+    // 🔴 PAS DE FICHE EN LIGNE SANS IDENTITÉ VÉRIFIÉE (06/10) : `refusKyb`.
+    // L'état de publication et celui du KYB sont relus ENSEMBLE, à part :
+    // `COLONNES_FICHE_COMPLETE` sert aussi au tableau de bord, qui n'a pas à
+    // transporter l'état du KYB.
+    const { data: identite, error: errKyb } = await admin
+      .from('commercants').select('statut_publication, kyb_statut').eq('id', commercant_id).maybeSingle()
+    if (errKyb) return NextResponse.json({ ok: false, error: `vérification du KYB impossible : ${errKyb.message}` }, { status: 500 })
+    if (fichePubliee(identite)) {
       return NextResponse.json({ ok: true, deja: true })
+    }
+    const refusIdentite = refusKyb(identite)
+    if (refusIdentite) {
+      return NextResponse.json({ ok: false, error: `publication impossible : ${refusIdentite}` }, { status: 409 })
     }
     if (!bilan.complet) {
       return NextResponse.json({

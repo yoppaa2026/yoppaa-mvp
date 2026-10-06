@@ -10,7 +10,7 @@
 --
 --   • `idx_best_adresses_lat_lng` : trouver la maison la plus proche d'une
 --     position sans relire 1,6 million de lignes (route /api/adresse/proche).
---   • `best_localites` : une ligne par (code postal, localité), ~3 000, avec
+--   • `best_localites` : une ligne par (code postal, localité), 1 885 en Wallonie, avec
 --     sa position moyenne pondérée par le nombre de maisons. La liste est
 --     chargée une fois et filtrée SUR LE TÉLÉPHONE : ce que le Yopper tape ne
 --     sort pas de son appareil.
@@ -89,7 +89,7 @@ SELECT * FROM (
          'oui'
   UNION ALL SELECT 7, 'localites rangees',
          (SELECT count(*) FROM public.best_localites)::text,
-         'entre 2500 et 4000'
+         '1885 (mesure a l essai le 06/10, meme fichier BeSt que la prod)'
   UNION ALL SELECT 8, 'Mettet et Biesme presentes (note de revue Apple : « Mettet or 5640 »)',
          (SELECT string_agg(localite || ' ' || code_postal, ', ' ORDER BY localite) FROM public.best_localites
            WHERE code_postal = '5640')::text,

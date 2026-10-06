@@ -6,7 +6,7 @@
 // ne sort pas de son téléphone.
 //
 // ⚠️ DONNÉES PUBLIQUES (BeSt Address, SPF BOSA, CC BY 4.0) : des noms de
-// localités et une position moyenne, aucune donnée personnelle. ~3 000 lignes,
+// localités et une position moyenne, aucune donnée personnelle. ~1 900 lignes,
 // mises en cache par le CDN un jour.
 
 import { NextResponse } from 'next/server'

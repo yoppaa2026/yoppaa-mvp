@@ -472,6 +472,14 @@ verifier('et l\'appui court garde son comportement',
 
 const accueil2 = lire('app/commander/page.js')
 verifier('le démarrage passe par la décision', /geolocaliserAuDemarrage\(\)/.test(accueil2))
+// 🔴 Capture d'Alex, 06/10 : la fenêtre d'iOS se posait sur le PREMIER écran
+// de l'onboarding. On vise le corps de la fonction, pas le fichier.
+{
+  const corps = (sansProse(accueil2).match(/async function geolocaliserAuDemarrage\(\) \{[\s\S]*?\n {2}\}\n/) || [''])[0]
+  verifier('🔴 aucune demande de position avant la fin de l’onboarding',
+    /try \{ if \(!localStorage\.getItem\('yoppaa_onboarding_done'\)\) return \} catch \{ return \}/.test(corps)
+    && corps.indexOf("yoppaa_onboarding_done") < corps.indexOf('decisionGeoloc('), corps.slice(0, 60))
+}
 verifier('la position est mémorisée', /memoriserPosition\(/.test(accueil2))
 // Le bouton « Utiliser ma position » doit rester un chemin direct : c'est le
 // geste volontaire, il ne passe pas par la décision.

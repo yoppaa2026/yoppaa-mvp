@@ -2387,6 +2387,13 @@ export default function Commander() {
   // demande toujours : là, c'est le Yopper qui l'a voulu.
   async function geolocaliserAuDemarrage() {
     if (!positionDisponible(window)) return
+    // 🔴 PAS AVANT L'ONBOARDING (capture d'Alex, 06/10, app iOS). Au premier
+    // lancement, cette page redirige vers `/onboarding`, mais son effet de
+    // montage part quand même : la fenêtre d'iOS « Autoriser Yoppaa à utiliser
+    // votre position ? » se posait sur le PREMIER écran (« Ton quartier »),
+    // avant celui qui explique à quoi sert la position. C'est l'écran de
+    // position qui pose la question, et lui seul.
+    try { if (!localStorage.getItem('yoppaa_onboarding_done')) return } catch { return }
 
     // La dernière position connue s'affiche tout de suite : la commune apparaît
     // sans attendre le satellite, et même hors ligne.

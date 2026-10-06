@@ -75,6 +75,11 @@ const MUTATIONS = [
     de: '    if (dejaDemande === ecran.id) { allerEcranSuivant(); return }',
     vers: '' },
 
+  { nom: '🔴 la position se demande avant la fin de l onboarding',
+    fichier: 'app/commander/page.js',
+    de: "    try { if (!localStorage.getItem('yoppaa_onboarding_done')) return } catch { return }",
+    vers: '' },
+
   // 🔴 ET LE DELAI, sans lequel les points tournent a vie : `getCurrentPosition`
   // n appelle AUCUNE de ses deux fonctions tant que la fenetre du systeme reste
   // ouverte. Quelqu un qui la laisse de cote bloquait le bouton pour de bon.

@@ -794,7 +794,12 @@ function egale(nom, recu, attendu) {
   // à la main, donc un quatrième géocodeur, même correctement filtré, doit
   // faire rougir pour qu'on pense à l'ajouter ici. Une garde qui s'adapte
   // toute seule à ce qu'elle trouve ne garde plus rien.
-  const ATTENDUS = 1
+  // ⚠️ REPOINTÉE LE 06/10 : 0 et non plus 1. La dernière recherche Nominatim
+  // (la localité tapée à l'accueil) est remplacée par la liste des localités
+  // BeSt, filtrée sur l'appareil : « 5640 » ne peut plus sortir de Wallonie
+  // (exécuté au banc livraison). Une recherche Nominatim qui reviendrait, même
+  // filtrée, doit faire rougir : Alex a décidé de supprimer Nominatim.
+  const ATTENDUS = 0
   verifie('⚠️ le seul appel de recherche restant est bien là où on le cherche',
     recherches === ATTENDUS,
     `${recherches} appel(s) trouvé(s), attendu ${ATTENDUS} : un géocodeur a été ajouté, déplacé ou renommé, relis la liste FICHIERS`)

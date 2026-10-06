@@ -131,10 +131,12 @@ const MUTATIONS = [
     de: '  "font-src \'self\' data: https://fonts.gstatic.com",',
     vers: '  "font-src \'self\' https://fonts.gstatic.com",' },
 
+  // ⚠️ ANCRE REPOINTÉE LE 06/10 : Nominatim a quitté la CSP (Nominatim retiré
+  // côté Yopper). La mutation retire toujours le seul CDN de la police.
   { nom: '🔴 connect-src n autorise plus le CDN de la police',
     fichier: CONFIG,
-    de: 'https://nominatim.openstreetmap.org https://cdn.jsdelivr.net',
-    vers: 'https://nominatim.openstreetmap.org' },
+    de: 'https://challenges.cloudflare.com https://cdn.jsdelivr.net${isDev',
+    vers: 'https://challenges.cloudflare.com${isDev' },
 ]
 
 const lancer = () => {

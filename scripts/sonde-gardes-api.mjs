@@ -69,6 +69,10 @@ const PUBLIQUES_ASSUMEES = {
   // publiques CC BY 4.0, aucune donnée personnelle), limité en débit par IP.
   'app/api/adresse/rues/route.js': 'noms de rues publics d\'un code postal (BeSt), limité en débit, jamais les numéros en bloc',
   'app/api/adresse/situer/route.js': 'une maison publique à la fois (BeSt), limité en débit',
+  // 06/10, Nominatim retiré côté Yopper : utilisées AVANT toute connexion
+  // (accueil, choix de commune), elles ne peuvent pas exiger une session.
+  'app/api/adresse/localites/route.js': 'noms et position moyenne des localités wallonnes, publics (BeSt), limité en débit, mis en cache',
+  'app/api/adresse/proche/route.js': 'rend la rue publique la plus proche d\'une position arrondie, en POST, limité en débit, ni journalisée ni gardée',
   'app/api/fiche/vue/route.js': 'incrément d\'un compteur de vues, aucune lecture',
   'app/api/deals/track/route.js': 'incrément d\'un compteur, colonne choisie dans une liste blanche',
   'app/api/articles/like/route.js': 'compteur public de likes',

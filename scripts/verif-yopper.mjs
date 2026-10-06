@@ -609,9 +609,22 @@ const TIERS_DECLARABLES = [
   { nom: 'Upstash', motif: /@upstash\/ratelimit/, attendu: /Upstash/ },
   { nom: 'Brevo', motif: /transactionalSMS/, attendu: /Brevo/ },
 ]
-const codeComplet = ['lib/geocode.js', 'lib/brevo.js', 'lib/ratelimit.js',
-  'app/api/distance/route.js', 'app/api/livraison/tournee-optimisee/route.js',
-  'app/commander/page.js'].map(f => { try { return lire(f) } catch { return '' } }).join('\n')
+// ⚠️ REPOINTÉE LE 06/10 : la liste était FIXE (six fichiers), et
+// `ConfirmCommune.js`, qui appelait Nominatim, n'y figurait pas. Un tiers
+// branché dans un fichier hors liste passait sans bruit. On lit désormais TOUT
+// le code de app/ et lib/, commentaires retirés (un mot dans un commentaire
+// n'appelle personne).
+const fichiersCode = (rel) => {
+  const out = []
+  for (const e of readdirSync(new URL(`../${rel}`, import.meta.url), { withFileTypes: true })) {
+    const chemin = `${rel}/${e.name}`
+    if (e.isDirectory()) out.push(...fichiersCode(chemin))
+    else if (/\.(js|mjs|ts|tsx)$/.test(e.name)) out.push(chemin)
+  }
+  return out
+}
+const codeComplet = [...fichiersCode('app'), ...fichiersCode('lib')]
+  .map(f => { try { return sansProse(lire(f)) } catch { return '' } }).join('\n')
 for (const t of TIERS_DECLARABLES) {
   if (!t.motif.test(codeComplet)) continue   // service retiré du code : plus rien à déclarer
   verifier(`${t.nom} reçoit des données et figure dans la page légale`, t.attendu.test(legal))
@@ -620,11 +633,26 @@ for (const t of TIERS_DECLARABLES) {
 // d'emailing marketing annonce la mauvaise donnée et la mauvaise finalité.
 verifier('Brevo est décrit pour les SMS, pas seulement pour les emails',
   /Brevo : SMS de service/.test(legal))
-// La géolocalisation part directement de l'appareil du Yopper : ça se dit.
-// ⚠️ REPOINTÉE LE 05/10 (chantier zone) : la phrase couvre désormais aussi
-// l'adresse saisie par un commerçant, d'où le pluriel. La règle ne change pas.
-verifier('la page dit que la requête part de l\'appareil',
-  /Ces requêtes partent directement de l’appareil utilisé/.test(legal))
+// ⚠️ REPOINTÉE LE 06/10 (Nominatim retiré côté Yopper) : la position ne part
+// plus de l'appareil vers OpenStreetMap, elle va à NOS serveurs, arrondie, et
+// n'y reste pas. La page doit dire exactement cela.
+verifier('la page dit où va la position, arrondie, et qu\'elle n\'est pas gardée',
+  /votre position est envoyée aux serveurs de Yoppaa, arrondie à une dizaine de mètres/.test(legal)
+    && /puis oubliée : elle n’est ni enregistrée ni transmise à un tiers/.test(legal))
+verifier('la page dit que la localité tapée reste sur l\'appareil',
+  /La localité que vous tapez pour vous situer est, elle, recherchée sur votre appareil/.test(legal))
+// 🔴 Plus aucun appel à Nominatim dans le code : la page ne doit plus le
+// nommer comme destinataire (une déclaration fausse, même « en trop »,
+// contredit ce qu'on annonce aux stores).
+verifier('🔴 plus aucun appel à Nominatim dans app/ et lib/', !/nominatim\.openstreetmap\.org/.test(codeComplet))
+verifier('la page ne nomme plus Nominatim comme destinataire', !/Nominatim/.test(legal))
+// 🔴 La page disait qu'OpenRouteService calcule « les distances entre votre
+// position et les commerces affichés » : faux depuis le 05/07, elles se
+// calculent sur le téléphone. ORS ne sert qu'à la tournée.
+verifier('la page ne prête plus à OpenRouteService les distances affichées',
+  !/calcul des distances entre votre position/.test(legal) && /Votre position n’y est jamais envoyée/.test(legal))
+verifier('🔴 la route ouverte /api/distance (clé ORS, sans limite) a disparu',
+  (() => { try { lire('app/api/distance/route.js'); return false } catch { return true } })())
 // Chantier zone (05/10) : l'adresse de livraison ne part PLUS chez Nominatim,
 // la page ne doit plus le dire ; le référentiel BeSt exige sa mention (CC BY).
 verifier('la page ne dit plus que l\'adresse de livraison part chez Nominatim',

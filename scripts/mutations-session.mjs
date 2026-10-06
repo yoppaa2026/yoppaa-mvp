@@ -153,21 +153,17 @@ const MUTATIONS = [
   //
   // ⚠️ « Mettet » en toutes lettres marchait : seul le code postal echouait,
   // c est-a-dire l essai que la note conseille.
-  { nom: '🔴 LE DEFAUT D ORIGINE : un code postal belge peut renvoyer en Australie',
+  // ⚠️ REPOINTEES LE 06/10 : la derniere recherche Nominatim (la localite
+  // tapee a l accueil) a disparu, remplacee par la liste BeSt filtree sur
+  // l appareil. Le defaut d origine (« 5640 » en Australie) ne peut plus
+  // exister : il est mesure au banc livraison (« Bruxelles » ne rend rien,
+  // « 5640 » rend les localites de 5640). Les deux mutations d avant visaient
+  // la ligne supprimee ; une seule reste : une recherche Nominatim qui
+  // REVIENT, meme filtree, fait passer le compte de 0 a 1 et la garde rougit.
+  { nom: '🔴 une recherche Nominatim qui revient est vue (compte exact a 0)',
     fichier: ACCUEIL,
-    de: "&accept-language=fr&countrycodes=be`, { headers: { 'Accept': 'application/json' } })",
-    vers: "&accept-language=fr`, { headers: { 'Accept': 'application/json' } })" },
-
-  // ⚠️ LES TROIS MUTATIONS QUI SUIVAIENT VISAIENT `ChampAdresse.js` ET
-  // `lib/geocode.js`, SUPPRIMES LE 05/10 (Alex : « supprimer Nominatim », le
-  // referentiel officiel BeSt les remplace). Elles sont retirees avec eux : une
-  // mutation sur un fichier absent ne mesure rien. La garde verifie desormais
-  // que ces deux fichiers ne reviennent pas ; celle-ci la fait rougir.
-  { nom: '🔴 le compte exact des recherches Nominatim reste mesure',
-    fichier: ACCUEIL,
-    de: "&accept-language=fr&countrycodes=be`, { headers: { 'Accept': 'application/json' } })",
-    // Un second appel, sur SA ligne : le compte passe a deux, la garde rougit.
-    vers: "&accept-language=fr&countrycodes=be`, { headers: { 'Accept': 'application/json' } })\n      void `https://nominatim.openstreetmap.org/search?q=x&countrycodes=be`" },
+    de: '  function validerLocaliteTapee() {',
+    vers: '  function validerLocaliteTapee() {\n    void `https://nominatim.openstreetmap.org/search?q=x&countrycodes=be`' },
 ]
 
 const lancer = () => {

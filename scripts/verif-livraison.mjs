@@ -479,6 +479,107 @@ verifier('le minimum porte sur le total des articles',
       && !/from\('commercants'\)\.select\('latitude, longitude, adresse'\)\.eq\('id', commercantId\)/.test(cfgDash))
 }
 
+// ═══ SITUER LE YOPPER SANS NOMINATIM (06/10) ═══════════════════════════════
+//
+// 🔴 La position GPS précise et le texte tapé partaient du téléphone vers
+// OpenStreetMap. Ils passent sur notre référentiel. On EXÉCUTE les règles.
+{
+  const L = await import('../lib/localiser.js')
+  const { localitesDesRues } = await import('../lib/best-adresse.js')
+  const mettet = { lat: 50.3200455, lng: 4.6580641 }
+
+  egal('position : arrondie à ~11 m (4 décimales)', L.arrondirPosition({ lat: 50.123456, lng: 4.987654 }), { lat: 50.1235, lng: 4.9877 })
+  verifier('position : un texte n\'est pas une position', L.arrondirPosition({ lat: 'x', lng: 4 }) === null)
+  verifier('position : Mettet et Bruxelles sont plausibles', L.positionPlausible(mettet) && L.positionPlausible({ lat: 50.8467, lng: 4.3525 }))
+  verifier('🔴 position : 0,0 refusé (le piège du zéro)', !L.positionPlausible({ lat: 0, lng: 0 }))
+  verifier('position : absente refusée', !L.positionPlausible({ lat: null, lng: null }) && !L.positionPlausible({}))
+  verifier('position : Paris est hors du cadre (on ne lit même pas la base)', !L.positionPlausible({ lat: 48.8566, lng: 2.3522 }))
+
+  const r = L.rectangleAutour(mettet, 150)
+  const bordNord = distanceMetres(mettet, { lat: r.latMax, lng: mettet.lng })
+  const bordEst = distanceMetres(mettet, { lat: mettet.lat, lng: r.lngMax })
+  verifier('rectangle : ses bords sont au rayon demandé (le cercle y tient)',
+    Math.abs(bordNord - 150) < 1 && Math.abs(bordEst - 150) < 1, `${bordNord.toFixed(1)} / ${bordEst.toFixed(1)}`)
+  egal('recherche : deux passes, 60 m puis 150 m', L.RAYONS_RECHERCHE_M, [60, 150])
+
+  const pres = { ...pointA(mettet, 0, 40), numero: '2' }
+  const loin = { ...pointA(mettet, 90, 120), numero: '9' }
+  egal('maison proche : la plus proche gagne', L.plusProche(mettet, [loin, pres], 150)?.maison?.numero, '2')
+  verifier('🔴 maison proche : au-delà du rayon, rien (pas une rue fausse)', L.plusProche(mettet, [loin], 60) === null)
+  verifier('maison proche : aucune candidate, rien', L.plusProche(mettet, [], 150) === null)
+  egal('pastille : rue et numéro', L.libellePastille({ rue: 'Rue Reine Elisabeth', numero: '2' }), 'Rue Reine Elisabeth 2')
+  egal('pastille : sans rue, rien (l\'écran dit « Près de toi »)', L.libellePastille({ rue: '', numero: '2' }), null)
+
+  // La liste des localités, filtrée sur l'appareil.
+  const liste = [
+    { cp: '5640', nom: 'Mettet', commune: 'Mettet', lat: 50.32, lng: 4.66, n: 3000 },
+    { cp: '5640', nom: 'Biesme', commune: 'Mettet', lat: 50.33, lng: 4.61, n: 600 },
+    { cp: '5640', nom: 'Saint-Gérard', commune: 'Mettet', lat: 50.35, lng: 4.73, n: 900 },
+    { cp: '5070', nom: 'Fosses-la-Ville', commune: 'Fosses-la-Ville', lat: 50.39, lng: 4.69, n: 2500 },
+    { cp: '6200', nom: 'Châtelet', commune: 'Châtelet', lat: 50.40, lng: 4.52, n: 9000 },
+  ]
+  const noms = (t, max) => L.filtrerLocalites(liste, t, max).map(x => x.nom).join(',')
+  verifier('🔴 « Mettet » rend Mettet en premier (note de revue Apple)', noms('Mettet').startsWith('Mettet'), noms('Mettet'))
+  egal('🔴 « 5640 » rend les localités de 5640, les plus grandes d\'abord (note de revue Apple)', noms('5640'), 'Mettet,Saint-Gérard,Biesme')
+  egal('« 56 » : le début du code postal suffit', noms('56'), 'Mettet,Saint-Gérard,Biesme')
+  egal('les accents ne comptent pas : « saint gerard »', noms('saint gerard'), 'Saint-Gérard')
+  egal('« chatelet » trouve Châtelet', noms('chatelet'), 'Châtelet')
+  egal('le nom de la commune trouve ses localités : « mettet » montre aussi Biesme', noms('mettet', 8).split(',').includes('Biesme'), true)
+  egal('🔴 hors Wallonie : rien (l\'écran le dit, il n\'invente pas)', noms('Bruxelles'), '')
+  egal('rien tapé, rien proposé', noms('   '), '')
+
+  // Le calcul des localités, identique au premier remplissage SQL.
+  const loc = localitesDesRues([
+    { code_postal: '5640', localite: 'Biesme', commune: 'Mettet', lat: 50.0, lng: 4.0, nb_maisons: 1 },
+    { code_postal: '5640', localite: 'Biesme', commune: 'Mettet', lat: 51.0, lng: 5.0, nb_maisons: 3 },
+    { code_postal: '4780', localite: null, commune: 'Sankt Vith', lat: 50.28, lng: 6.12, nb_maisons: 10 },
+    { code_postal: '5640', localite: 'Oret', commune: 'Mettet', lat: null, lng: null, nb_maisons: 5 },
+  ])
+  const biesme = loc.find(l => l.localite === 'Biesme')
+  verifier('localités : la position est pondérée par le nombre de maisons',
+    biesme && biesme.lat === 50.75 && biesme.lng === 4.75 && biesme.nb_maisons === 4, JSON.stringify(biesme))
+  verifier('localités : sans nom de localité, celui de la commune', loc.some(l => l.localite === 'Sankt Vith' && l.code_postal === '4780'))
+  verifier('localités : une rue non située ne compte pas', !loc.some(l => l.localite === 'Oret'))
+  const migLoc = lire('migrations/MIGRATION_BEST_LOCALITES_PROCHE.sql')
+  verifier('🔴 le SQL et le script appliquent la MÊME règle (nom de repli, min(commune), pondération)',
+    /COALESCE\(NULLIF\(localite, ''\), commune\)/.test(migLoc) && /min\(commune\)/.test(migLoc)
+      && /sum\(lat \* nb_maisons\) \/ sum\(nb_maisons\)/.test(migLoc) && /WHERE lat IS NOT NULL AND lng IS NOT NULL AND nb_maisons > 0/.test(migLoc))
+  verifier('la table des localités est fermée aux navigateurs comme les autres',
+    /REVOKE ALL ON public\.best_localites FROM PUBLIC, anon, authenticated/.test(migLoc) && /permissive/.test(migLoc))
+  const script = lire('scripts/import-best-adresses.mjs')
+  verifier('l\'import recalcule les localités et nettoie les anciennes',
+    /const lignesLocalites = localitesDesRues\(lignesRues\)/.test(script)
+      && /ecrireTout\('best_localites', 'code_postal,localite'/.test(script)
+      && /for \(const table of \['best_adresses', 'best_rues', 'best_localites'\]\)/.test(script))
+
+  // 🔴 LA POSITION D'UN YOPPER EST UNE DONNÉE PERSONNELLE.
+  const proche = lire('app/api/adresse/proche/route.js')
+  const procheCode = proche.replace(/^\s*\/\/.*$/gm, '')
+  verifier('🔴 /proche : POST seulement (jamais la position dans l\'adresse, journalisée)',
+    /export async function POST\(/.test(procheCode) && !/export async function GET\(/.test(procheCode))
+  verifier('🔴 /proche : jamais mis en cache', /res\.headers\.set\('Cache-Control', 'no-store'\)/.test(procheCode))
+  verifier('🔴 /proche : aucune écriture de journal dans la route', !/console\./.test(procheCode))
+  verifier('/proche : limité en débit', /checkLimit\(adressesLimiter, clientIp\(request\)/.test(procheCode))
+  verifier('/proche : la position est arrondie AVANT toute lecture', procheCode.indexOf('arrondirPosition(corps)') > 0
+    && procheCode.indexOf('arrondirPosition(corps)') < procheCode.indexOf('maisonLaPlusProche('))
+  const serveur = lire('lib/best-adresse-serveur.js')
+  const fn = serveur.slice(serveur.indexOf('export async function maisonLaPlusProche'), serveur.indexOf('export async function toutesLesLocalites'))
+  verifier('🔴 maisonLaPlusProche ne journalise jamais la position',
+    fn.length > 100 && !/console\.[a-z]+\([^)]*\b(p|position|lat|lng|r)\b[,)]/.test(fn) && !/console\.[a-z]+\([^)]*\$\{p/.test(fn))
+  const accueil = lire('app/commander/page.js')
+  const commune = lire('app/commander/ConfirmCommune.js')
+  verifier('accueil : la position part arrondie, en POST, vers notre route',
+    /const arrondie = arrondirPosition\(\{ lat, lng \}\)\s*const res = await fetch\('\/api\/adresse\/proche', \{\s*method: 'POST'/.test(accueil))
+  verifier('commune : même route, position arrondie',
+    /fetch\('\/api\/adresse\/proche', \{\s*method: 'POST'[\s\S]{0,120}arrondirPosition\(\{ lat: pos\.coords\.latitude, lng: pos\.coords\.longitude \}\)/.test(commune))
+  verifier('accueil : la localité tapée est filtrée sur l\'appareil',
+    /const localitesBest = useLocalitesBest\(showLocManuelle\)/.test(accueil) && /filtrerLocalites\(localitesBest\.liste, t, 6\)/.test(accueil))
+  verifier('accueil : hors Wallonie, on le dit',
+    /Aucune localité wallonne ne correspond\. Yoppaa couvre la Wallonie : choisis une localité wallonne\./.test(accueil))
+  verifier('🔴 la CSP n\'autorise plus Nominatim : un appel oublié serait BLOQUÉ',
+    !/nominatim\.openstreetmap\.org/.test(lire('next.config.ts').replace(/^\s*\/\/.*$/gm, '')))
+}
+
 // La route des statuts n'accepte que les deux états connus.
 const routeStatut = lire('app/api/livraison/statut/route.js')
 for (const s of STATUTS_LIVRAISON) {

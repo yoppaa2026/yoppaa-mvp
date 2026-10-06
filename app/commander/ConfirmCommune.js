@@ -3,7 +3,8 @@
 // Reusable : déclenchée au 1er login (commune_id null) ou via "Changer ma commune".
 //
 // Flow :
-// 1. Demande géoloc → reverse geocoding Nominatim → trouve la commune par code postal
+// 1. Demande géoloc → maison la plus proche dans notre référentiel
+//    (/api/adresse/proche, plus Nominatim depuis le 06/10) → commune par code postal
 // 2. Si trouvée : "Tu es à Mettet ? [Oui c'est ma commune] [Choisir autre]"
 // 3. Si refus géoloc ou commune non détectée : liste déroulante de TOUTES les communes
 // 4. À la validation : UPDATE clients.commune_id
@@ -19,6 +20,7 @@ import ChampCommune from '@/app/components/ChampCommune'
 // ⚠️ LA POSITION PASSE PAR `lib/geoloc` : le module natif dans l'app des
 // stores, le navigateur ailleurs (voir `lirePosition`).
 import { positionDisponible, lirePosition } from '@/lib/geoloc'
+import { arrondirPosition } from '@/lib/localiser'
 
 // Tokens design system canonique
 const T = {
@@ -70,7 +72,7 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
     return () => { annule = true }
   }, [])
 
-  // Tente la détection auto via géoloc + Nominatim
+  // Tente la détection auto via géoloc + notre référentiel
   useEffect(() => {
     if (mode === 'change') {
       // En mode changement : on passe direct à la liste (pas de redétection)
@@ -84,10 +86,16 @@ export default function ConfirmCommune({ currentCommuneId, mode = 'first', onClo
     lirePosition(window,
       async pos => {
         try {
-          const url = `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json&accept-language=fr&zoom=10&addressdetails=1`
-          const res = await fetch(url, { headers: { Accept: 'application/json' } })
+          // 🔴 PLUS DE NOMINATIM (06/10) : la position partait du téléphone
+          // vers OpenStreetMap. Elle va à notre serveur, arrondie à ~11 m, en
+          // POST, et n'y est pas gardée. Seul le code postal sert ici. Hors
+          // Wallonie : rien de trouvé, la liste s'ouvre (comme avant).
+          const res = await fetch('/api/adresse/proche', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(arrondirPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude })),
+          })
           const data = await res.json()
-          const codePostal = data?.address?.postcode
+          const codePostal = data?.trouvee ? data.code_postal : null
           if (!codePostal) {
             setStep('choose')
             return

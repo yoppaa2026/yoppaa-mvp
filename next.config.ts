@@ -35,10 +35,12 @@ const csp = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
-  // nominatim.openstreetmap.org = autocomplete adresse du signup (étape 2).
   // cdn.jsdelivr.net = police Plus Jakarta téléchargée par la page interne /brand-kit.
-  // (Audit 22/07 : seuls appels fetch() externes côté navigateur de tout le code.)
-  `connect-src 'self' ${supabaseOrigin} ${supabaseWss} https://api.onesignal.com https://*.onesignal.com https://onesignal.com https://*.os.tc https://challenges.cloudflare.com https://nominatim.openstreetmap.org https://cdn.jsdelivr.net${isDev ? " ws:" : ""}`,
+  // 🔴 nominatim.openstreetmap.org RETIRÉ (06/10, Alex : « supprimer Nominatim ») :
+  // plus aucun appel ne part du navigateur vers OpenStreetMap (adresses et
+  // position passent par notre référentiel BeSt). Le retirer d'ici garantit
+  // qu'un appel oublié serait BLOQUÉ, pas envoyé en silence.
+  `connect-src 'self' ${supabaseOrigin} ${supabaseWss} https://api.onesignal.com https://*.onesignal.com https://onesignal.com https://*.os.tc https://challenges.cloudflare.com https://cdn.jsdelivr.net${isDev ? " ws:" : ""}`,
   "frame-src 'self' https://challenges.cloudflare.com https://*.onesignal.com https://onesignal.com",
   "worker-src 'self' blob:",
   "media-src 'self'",

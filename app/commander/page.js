@@ -66,6 +66,10 @@ import { libelleDecompte, PARAM_LISTE } from '@/lib/anti-gaspi'
 // celle qu'imprime le QR du kit doivent être la même : elles l'étaient par
 // recopie, elles le sont désormais par construction.
 import { lienFiche } from '@/lib/lien-fiche'
+// 🔴 Nominatim retiré côté Yopper (06/10) : la rue vient de notre référentiel,
+// la localité tapée est filtrée sur l'appareil.
+import { arrondirPosition, libellePastille, filtrerLocalites } from '@/lib/localiser'
+import { useLocalitesBest } from '@/app/components/useLocalitesBest'
 import { useAppNative } from '@/lib/use-app-native'
 import { PUBLICATIONS_DE_LA_VUE } from '@/lib/statut-commercant'
 import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
@@ -1921,6 +1925,8 @@ export default function Commander() {
   const appuiLongRef = useRef(false)
   const minuteurAppuiRef = useRef(null)
   const [locManuelle, setLocManuelle] = useState('')
+  // Les localités ne se chargent qu'à l'ouverture du champ, une fois par visite.
+  const localitesBest = useLocalitesBest(showLocManuelle)
   // Filtre accueil : famille (3 catégories commerçant) + métier précis optionnel
   const [familleActive, setFamilleActive] = useState('tous')
   const [metierActif, setMetierActif] = useState(null)
@@ -2375,24 +2381,6 @@ export default function Commander() {
     return () => { annule = true }
   }, [clientCommandes, clientId, avisCommande])
 
-  // Cache reverse geocoding : si on a deja resolu une position proche (~100m), on
-  // reutilise la valeur en localStorage et on evite de pinger Nominatim a chaque refresh
-  // (leur API publique gratuite a une politique 1 req/s max - sinon ils repondent vide).
-  function libelleAdresse(addr) {
-    if (!addr) return null
-    const rue = addr.road || addr.pedestrian || addr.footway || addr.street || addr.path
-    const n = addr.house_number
-    if (rue) return n ? `${rue} ${n}` : rue
-    return addr.quarter
-        || addr.neighbourhood
-        || addr.suburb
-        || addr.hamlet
-        || addr.village
-        || addr.town
-        || addr.city
-        || addr.municipality
-        || null
-  }
 
   // Au démarrage : on n'ouvre la fenêtre du navigateur que si c'est justifié.
   // Appelée sans argument depuis le bouton « Utiliser ma position », elle
@@ -2457,7 +2445,9 @@ export default function Commander() {
         // ouvrir de fenêtre : elle vient de ne pas s'ouvrir.
         marquerLectureDeCetteSession()
         setPosition({ lat, lng })
-        // Clé cache : position arrondie à 3 décimales (~100m de précision)
+        // Clé cache : position arrondie à 3 décimales (~100m de précision).
+        // Une rue déjà trouvée tout près n'est pas redemandée au serveur à
+        // chaque ouverture : la position ne part que si elle a bougé.
         const cacheKey = `yoppaa_geo_${lat.toFixed(3)}_${lng.toFixed(3)}`
         try {
           const cached = typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null
@@ -2469,10 +2459,18 @@ export default function Commander() {
           }
         } catch {}
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=fr&zoom=18&addressdetails=1`, { headers: { 'Accept': 'application/json' } })
+          // 🔴 PLUS DE NOMINATIM (06/10) : la position partait du téléphone
+          // vers OpenStreetMap. Elle va à NOTRE serveur, arrondie à ~11 m, en
+          // POST (jamais dans l'adresse, qui est journalisée), et n'y est pas
+          // gardée. Hors Wallonie, pas de rue : « Près de toi » (Alex).
+          const arrondie = arrondirPosition({ lat, lng })
+          const res = await fetch('/api/adresse/proche', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(arrondie),
+          })
           if (res.ok) {
             const data = await res.json()
-            const lib = libelleAdresse(data.address) || 'Près de toi'
+            const lib = (data?.trouvee && libellePastille(data)) || 'Près de toi'
             setRue(lib)
             memoriserPosition({ lat, lng, rue: lib })
             try { localStorage.setItem(cacheKey, lib) } catch {}
@@ -3212,43 +3210,30 @@ export default function Commander() {
     setCommercants(avecDistances(liste, pos))
   }
 
-  async function geocoderAdresseManuelle(adresse) {
-    if (!adresse.trim()) return
-    setGeoLoading(true)
-    try {
-      // 🔴 `countrycodes=be` MANQUAIT ICI, ET NULLE PART AILLEURS (21/09). C'était
-      // le SEUL appel à Nominatim du dépôt sans filtre pays : `ChampAdresse.js`
-      // et `lib/geocode.js` le posent tous les deux, et `geocode.js:9` explique
-      // même pourquoi.
-      //
-      // ⚠️ ET C'EST NOTRE PROPRE NOTE DE REVUE QUI TOMBAIT DEDANS. Elle dit au
-      // relecteur « tap the location field and enter Mettet or 5640 ». Sans
-      // filtre, « 5640 » rend « 5640, Campoona, Australie méridionale » :
-      // 16 000 km, toutes les distances fausses, et « Rien ne se perd » vide
-      // puisqu'il filtre à 25 km. Soit exactement l'écran « app incomplète »
-      // dont cette note devait le protéger, provoqué par la note elle-même.
-      // Mesuré le 21/09 en rejouant la requête : avec le filtre, « 5640 » rend
-      // bien « 5640, Mettet, Namur, Wallonie ».
-      //
-      // ⚠️ Un nom de ville en toutes lettres marchait, un code postal non : le
-      // défaut ne se voyait donc qu'en tapant ce que la note conseille.
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(adresse)}&format=json&limit=1&accept-language=fr&countrycodes=be`, { headers: { 'Accept': 'application/json' } })
-      if (res.ok) {
-        const data = await res.json()
-        if (data && data.length > 0) {
-          const { lat, lon, display_name } = data[0]
-          const newPos = { lat: parseFloat(lat), lng: parseFloat(lon) }
-          setPosition(newPos)
-          const parts = display_name.split(',')
-          setRue(parts.slice(0, 2).join(',').trim())
-          calculerDistances(commercants, newPos)
-        } else {
-          setRue(adresse)
-        }
-      }
-    } catch { setRue(adresse) }
-    setGeoLoading(false)
+  // 🔴 LA LOCALITÉ TAPÉE, SANS NOMINATIM (06/10). Le texte partait du
+  // téléphone vers OpenStreetMap ; il est désormais comparé à la liste des
+  // localités wallonnes, chargée une fois et filtrée SUR L'APPAREIL. Rien de ce
+  // que le Yopper tape ne sort de son téléphone.
+  //
+  // ⚠️ LA NOTE DE REVUE D'APPLE dit au relecteur « enter Mettet or 5640 » :
+  // les deux doivent marcher (`filtrerLocalites`, mesuré au banc). Le 21/09,
+  // « 5640 » sans filtre pays rendait une ville d'Australie : avec notre liste
+  // wallonne, ce défaut ne peut plus exister.
+  //
+  // ✅ Alex, 06/10 : une localité ou un code postal, plus une rue ; hors
+  // Wallonie, on le dit au lieu d'inventer une position.
+  function choisirLocalite(l) {
+    if (!l || l.lat == null || l.lng == null) return
+    const newPos = { lat: Number(l.lat), lng: Number(l.lng) }
+    setPosition(newPos)
+    setRue(l.nom)
+    setLocManuelle('')
+    calculerDistances(commercants, newPos)
     setShowLocManuelle(false)
+  }
+  function validerLocaliteTapee() {
+    const premiere = filtrerLocalites(localitesBest.liste, locManuelle, 1)[0]
+    if (premiere) choisirLocalite(premiere)
   }
 
   async function getOuCreerClient(email, nom) {
@@ -3899,22 +3884,45 @@ export default function Commander() {
                   <path d="M12 15 C12 15 6 20 6 22 Q6 24 12 24 Q18 24 18 22 C18 20 12 15 12 15Z" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinejoin="round" fill="none"/>
                 </svg>
                 <input
-                  placeholder="Ville, rue, code postal..."
+                  placeholder="Ta localité ou ton code postal"
                   value={locManuelle}
                   onChange={e => setLocManuelle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) { geocoderAdresseManuelle(locManuelle.trim()) } }}
+                  onKeyDown={e => { if (e.key === 'Enter' && locManuelle.trim()) validerLocaliteTapee() }}
                   autoFocus
+                  autoComplete="off"
+                  aria-label="Ta localité ou ton code postal"
                   style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif', boxSizing: 'border-box', outline: 'none' }}
                 />
-                {locManuelle && (
-                  <button onClick={() => { if (locManuelle.trim()) geocoderAdresseManuelle(locManuelle.trim()) }}
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: T.main, border: 'none', borderRadius: 8, padding: '4px 10px', color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-                    OK
-                  </button>
-                )}
               </div>
+              {/* Les localités qui correspondent, filtrées sur l'appareil. */}
+              {(() => {
+                const t = locManuelle.trim()
+                if (!t) return null
+                const msg = (texte) => (
+                  <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.75)', margin: '6px 0 0', paddingLeft: 4, lineHeight: 1.45 }}>{texte}</p>
+                )
+                if (localitesBest.etat === 'charge' || localitesBest.etat === 'vide') return msg('Chargement des localités…')
+                if (localitesBest.etat === 'erreur') return msg('La liste des localités ne répond pas. Réessaie dans un instant, ou utilise ta position.')
+                const suggestions = filtrerLocalites(localitesBest.liste, t, 6)
+                if (suggestions.length === 0) {
+                  return msg('Aucune localité wallonne ne correspond. Yoppaa couvre la Wallonie : choisis une localité wallonne.')
+                }
+                return (
+                  <div role="listbox" style={{ marginTop: 6, background: '#fff', borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 24px rgba(26,8,64,0.25)' }}>
+                    {suggestions.map(l => (
+                      <button key={`${l.cp}-${l.nom}`} role="option" aria-selected="false" onClick={() => choisirLocalite(l)}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.9rem', border: 'none', borderBottom: '1px solid #F0EBF8', background: '#fff', color: '#1A0840', fontSize: '0.84rem', fontWeight: 700, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        {l.nom}
+                        <span style={{ fontWeight: 500, color: '#6B7280' }}>
+                          {' '}· {l.cp}{l.commune && l.commune !== l.nom ? `, ${l.commune}` : ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, paddingLeft: 4 }}>
-                <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.45)', margin: 0 }}>Entrée ou OK pour valider</p>
+                <p style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.45)', margin: 0 }}>Choisis ta localité dans la liste</p>
                 {/* Relance du GPS depuis le panneau (la pill n'appelle plus la géoloc) */}
                 <button onClick={() => { demanderGeolocalisation(); setShowLocManuelle(false) }}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'rgba(196,160,244,0.9)', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: '"DM Sans", sans-serif' }}>

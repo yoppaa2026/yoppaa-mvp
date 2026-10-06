@@ -1,7 +1,8 @@
 // ─── IMPORTER LES ADRESSES WALLONNES (BeSt Address) DANS LA BASE ───────────
 //
 // Remplit `best_rues` et `best_adresses` (MIGRATION_BEST_ADRESSES.sql, à passer
-// AVANT). Règles partagées : lib/best-adresse.js.
+// AVANT), et recalcule `best_localites` (MIGRATION_BEST_LOCALITES_PROCHE.sql,
+// 06/10). Règles partagées : lib/best-adresse.js.
 //
 // UTILISATION (à lancer par Alex, jamais par l'assistant : clé de service) :
 //
@@ -29,7 +30,7 @@
 import { createReadStream, existsSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { createClient } from '@supabase/supabase-js'
-import { decouperLigneCsv, indexColonnes, adresseDeLigne, normaliserRecherche, estimerPositions } from '@/lib/best-adresse'
+import { decouperLigneCsv, indexColonnes, adresseDeLigne, normaliserRecherche, estimerPositions, localitesDesRues } from '@/lib/best-adresse'
 
 const PROJETS = { essai: 'nmkvizwxoebevjxkfhkx', prod: 'iahdkkzqtdarullvvvaq' }
 const MINIMUM_MAISONS = 1_000_000
@@ -120,7 +121,10 @@ for (const r of rues.values()) {
   })
 }
 
-console.log(`Lignes lues : ${lues} · écartées : ${ecartees} · rues rangées : ${lignesRues.length}`)
+// Les localités (06/10) : la liste que le Yopper filtre sur son téléphone pour
+// se situer. Même règle que le premier remplissage SQL (`localitesDesRues`).
+const lignesLocalites = localitesDesRues(lignesRues)
+console.log(`Lignes lues : ${lues} · écartées : ${ecartees} · rues rangées : ${lignesRues.length} · localités : ${lignesLocalites.length}`)
 console.log(`Maisons : ${officielles} position officielle · ${estimees} estimées par les voisins · ${sansPosition} impossibles à situer (non rangées)`)
 if (exemple) console.log(`Exemple : ${exemple}`)
 if (exempleEstime) console.log(`Exemple estimé : ${exempleEstime}`)
@@ -162,6 +166,7 @@ async function ecrireTout(table, conflit, toutes) {
 try {
   await ecrireTout('best_rues', 'rue_id,code_postal', lignesRues.map(r => ({ ...r, import_le: importLe })))
   await ecrireTout('best_adresses', 'rue_id,code_postal,numero', lignesMaisons.map(m => ({ ...m, import_le: importLe })))
+  await ecrireTout('best_localites', 'code_postal,localite', lignesLocalites.map(l => ({ ...l, import_le: importLe })))
 } catch (e) {
   console.error(`🔴 Écriture interrompue : ${e.message}`)
   console.error('   Rien n\'a été effacé : l\'ancien référentiel reste en place. Relance la même commande.')
@@ -169,7 +174,7 @@ try {
 }
 
 // ─── 3. EFFACER CE QUI N'EXISTE PLUS, SEULEMENT MAINTENANT ──────────────────
-for (const table of ['best_adresses', 'best_rues']) {
+for (const table of ['best_adresses', 'best_rues', 'best_localites']) {
   const { error } = await db.from(table).delete().lt('import_le', importLe)
   if (error) {
     console.error(`🔴 ${table} : nettoyage des anciennes lignes impossible (${error.message}).`)
@@ -182,4 +187,4 @@ const compte = async (table) => {
   const { count, error } = await db.from(table).select('*', { count: 'exact', head: true })
   return error ? `illisible (${error.message})` : count
 }
-console.log(`✅ Import terminé : ${await compte('best_rues')} rues, ${await compte('best_adresses')} maisons.`)
+console.log(`✅ Import terminé : ${await compte('best_rues')} rues, ${await compte('best_adresses')} maisons, ${await compte('best_localites')} localités.`)

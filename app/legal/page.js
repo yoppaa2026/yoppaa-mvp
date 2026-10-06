@@ -433,14 +433,14 @@ export default function LegalPage() {
             ]}/>
 
             <H3 id="cartographie">Localisation et cartographie</H3>
-            <P>Situer un commerce, calculer une distance ou préparer une tournée de livraison suppose de convertir des adresses en coordonnées. Yoppaa s'appuie pour cela sur le référentiel officiel des adresses, dont il conserve une copie, et sur des services européens.</P>
+            <P>Situer un commerce, calculer une distance ou préparer une tournée de livraison suppose de convertir des adresses en coordonnées. Yoppaa s'appuie pour cela sur le référentiel officiel des adresses, dont il conserve une copie, et, pour deux usages précis, sur des services extérieurs.</P>
             <Ul items={[
-              'BeSt Address (SPF Stratégie et Appui, BOSA) : la liste officielle des adresses de Wallonie et de leurs coordonnées, publiée sous licence Creative Commons Attribution 4.0 (CC BY 4.0). Yoppaa en conserve une copie : l’adresse de livraison que vous choisissez, comme l’adresse qu’un commerçant saisit pour son commerce, est vérifiée sur cette copie, sans être transmise à un tiers. Lorsque le fichier officiel ne donne pas la position d’une maison, Yoppaa l’estime à partir des numéros voisins de la même rue.',
-              'OpenStreetMap / Nominatim (OpenStreetMap Foundation) : retrouver votre commune. Lui sont transmis, selon le cas, la localité que vous tapez pour vous situer, ou vos coordonnées GPS lorsque vous autorisez la géolocalisation. Ces requêtes partent directement de l’appareil utilisé.',
+              'BeSt Address (SPF Stratégie et Appui, BOSA) : la liste officielle des adresses de Wallonie et de leurs coordonnées, publiée sous licence Creative Commons Attribution 4.0 (CC BY 4.0). Yoppaa en conserve une copie, et toutes les recherches d’adresse se font sur elle : l’adresse de livraison que vous choisissez, l’adresse qu’un commerçant saisit pour son commerce, la localité que vous tapez pour vous situer, la rue affichée en haut de l’accueil et la commune qui vous est proposée. Aucune de ces recherches n’est transmise à un tiers. Lorsque le fichier officiel ne donne pas la position d’une maison, Yoppaa l’estime à partir des numéros voisins de la même rue.',
+              'Votre position, lorsque vous autorisez la géolocalisation : la distance qui vous sépare de chaque commerce est calculée sur votre appareil. Pour afficher votre rue et vous proposer votre commune, votre position est envoyée aux serveurs de Yoppaa, arrondie à une dizaine de mètres, comparée au référentiel ci-dessus, puis oubliée : elle n’est ni enregistrée ni transmise à un tiers. La localité que vous tapez pour vous situer est, elle, recherchée sur votre appareil.',
               'OpenStreetMap (fond de carte) : affiché uniquement aux commerçants, lorsqu’ils dessinent leur zone de livraison. Leur navigateur charge alors les images de la carte depuis les serveurs d’OpenStreetMap. Les clients ne voient jamais cette carte.',
-              'OpenRouteService (Allemagne) : calcul des distances entre votre position et les commerces affichés, et optimisation de l’ordre de passage des livraisons d’un commerçant. Lui sont transmises des coordonnées géographiques, jamais votre nom ni vos coordonnées de contact.',
+              'OpenRouteService (Allemagne) : optimisation de l’ordre de passage des livraisons d’un commerçant. Lui sont transmises les coordonnées des adresses à livrer, jamais le nom ni les coordonnées de contact des clients. Votre position n’y est jamais envoyée.',
             ]}/>
-            <P>Ces appels n'ont lieu que lorsque la fonction concernée est utilisée. <strong>Refuser la géolocalisation reste possible à tout moment</strong> : vous pouvez alors indiquer votre commune à la main, et aucune coordonnée n'est transmise.</P>
+            <P>Ces appels n'ont lieu que lorsque la fonction concernée est utilisée. <strong>Refuser la géolocalisation reste possible à tout moment</strong> : vous pouvez alors indiquer votre localité à la main, et aucune coordonnée ne quitte votre appareil.</P>
           </Section>
 
           {/* 5. DPA */}
@@ -500,7 +500,7 @@ export default function LegalPage() {
             {/* Footer */}
             <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: `1px solid ${T.pale}`, textAlign: 'center' }}>
               <p style={{ fontSize: '0.75rem', color: T.muted, marginBottom: 4 }}>
-                Dernière mise à jour : 5 octobre 2026
+                Dernière mise à jour : 6 octobre 2026
               </p>
               <p style={{ fontSize: '0.75rem', color: T.muted }}>
                 Avcotech SRL · BCE 0731.637.148 · TVA BE0731.637.148 · Rue de Prée 9 G, 5640 Mettet

@@ -2055,9 +2055,22 @@ verifier('et range la commande du bon côté',
   const bruts = resend.match(/\$\{\s*(yopper_email|yopper_telephone|client_email|client_telephone|telephone|email|acheteur_email|beneficiaire_email)\s*(\}|\|\|)/g) || []
   verifier('🔴 I9 aucun email ni téléphone inséré sans échappement', bruts.length === 0, bruts.join(' | '))
 
+  // ⚠️ REPOINTÉE LE 06/10 : l'appel porte aussi les longueurs (prénom, nom,
+  // adresse d'expédition), mineur de l'audit.
   const cc = sansProse(lire('app/api/stripe/checkout/create-commande/route.js'))
-  verifier('🔴 I9 la commande refuse des coordonnées mal formées',
-    /refusCoordonnees\(\{ email: client_email, telephone: client_telephone \}\)/.test(cc))
+  verifier('🔴 I9 la commande refuse des coordonnées mal formées ou trop longues',
+    /refusCoordonnees\(\{\s*email: client_email, telephone: client_telephone,\s*prenom: client_prenom, nom: client_nom,\s*\.\.\.\(estExpedition \? \{ adresse: adresse_livraison \} : \{\}\),\s*\}\)/.test(cc))
+
+  // Les longueurs maximales, exécutées.
+  const { NOM_MAX, ADRESSE_MAX } = await import('../lib/coordonnees-client.js')
+  const ok2 = { email: 'a@b.be', telephone: '0470123456' }
+  verifier('longueurs : un nom normal passe', refusCoordonnees({ ...ok2, prenom: 'Marie-Christine', nom: 'Van den Bossche' }) === null)
+  verifier('🔴 longueurs : un nom démesuré est refusé, et la phrase le dit',
+    /nom est trop long/.test(refusCoordonnees({ ...ok2, nom: 'x'.repeat(NOM_MAX + 1) }) || ''))
+  verifier('longueurs : un prénom démesuré aussi', /prénom est trop long/.test(refusCoordonnees({ ...ok2, prenom: 'x'.repeat(NOM_MAX + 1) }) || ''))
+  verifier('🔴 longueurs : une adresse démesurée est refusée', /adresse est trop longue/.test(refusCoordonnees({ ...ok2, adresse: 'x'.repeat(ADRESSE_MAX + 1) }) || ''))
+  verifier('longueurs : pile à la borne, ça passe', refusCoordonnees({ ...ok2, nom: 'x'.repeat(NOM_MAX), adresse: 'x'.repeat(ADRESSE_MAX) }) === null)
+  verifier('longueurs : sans champ fourni, rien n\'est exigé (les autres tunnels)', refusCoordonnees(ok2) === null)
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

@@ -2349,6 +2349,24 @@ verifier('une commande remise sans moyen garde son rattrapage',
       sansProse(readFileSync(new URL('../app/api/dashboard/statistiques/route.js', import.meta.url), 'utf8'))))
 }
 
+// ═══ UNE CELLULE NE DEVIENT JAMAIS UNE FORMULE (audit livraison, 06/10) ═══
+// 🔴 Le nom ou la note d'un client finit dans l'export que le commerçant ouvre
+// dans Excel : « =HYPERLINK(...) » y serait exécuté. On EXÉCUTE la règle, et on
+// la fait passer par le vrai générateur de fichier.
+{
+  const { neutraliserFormule, champ } = await import('../lib/export-comptable.js')
+  for (const piege of ['=1+1', '+32 470', '-cmd|calc', '@SUM(A1)', '\t=1', '\r=1']) {
+    verifier(`CSV : « ${JSON.stringify(piege)} » est neutralisé`, neutraliserFormule(piege) === `'${piege}`, neutraliserFormule(piege))
+  }
+  verifier('🔴 CSV : un remboursement « -12,50 » reste un nombre', neutraliserFormule('-12,50') === '-12,50')
+  verifier('CSV : « -3 » et « -3.5 » restent des nombres', neutraliserFormule('-3') === '-3' && neutraliserFormule('-3.5') === '-3.5')
+  verifier('CSV : un texte ordinaire ne change pas', neutraliserFormule('Pain au levain') === 'Pain au levain')
+  verifier('CSV : la neutralisation passe AVANT les guillemets', champ('=1;2') === `"'=1;2"`, champ('=1;2'))
+  verifier('CSV : un retour chariot dans un champ est mis entre guillemets', champ('a\rb') === '"a\rb"')
+  const src = sansProse(readFileSync(new URL('../lib/export-comptable.js', import.meta.url), 'utf8'))
+  verifier('CSV : toute cellule passe par `champ`', /function ligneCsv\(cells\) \{\s*return cells\.map\(champ\)\.join\(';'\)/.test(src))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

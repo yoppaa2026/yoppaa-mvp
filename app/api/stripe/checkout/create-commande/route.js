@@ -129,7 +129,14 @@ export async function POST(request) {
     // 🔴 LA FORME, PLUS SEULEMENT LA PRÉSENCE (audit I9, 05/10) : ces deux
     // valeurs partent telles quelles dans l'email du commerçant.
     {
-      const refusCoord = refusCoordonnees({ email: client_email, telephone: client_telephone })
+      // L'adresse n'est bornée qu'en EXPÉDITION : en livraison, elle est
+      // recomposée plus bas depuis le référentiel officiel (le complément est
+      // déjà coupé à 120 caractères, la note à NOTE_MAX).
+      const refusCoord = refusCoordonnees({
+        email: client_email, telephone: client_telephone,
+        prenom: client_prenom, nom: client_nom,
+        ...(estExpedition ? { adresse: adresse_livraison } : {}),
+      })
       if (refusCoord) return NextResponse.json({ ok: false, error: refusCoord }, { status: 400 })
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date_commande)) {

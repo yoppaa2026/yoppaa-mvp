@@ -26,6 +26,8 @@ import { createClient } from '@supabase/supabase-js'
 import { STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { jourLocalISO } from '@/lib/timezone'
+import { refus } from '@/lib/api-auth'
+import { gardeEquipe } from '@/lib/equipe-server'
 
 const ORS_OPTIM = 'https://api.openrouteservice.org/optimization'
 
@@ -43,26 +45,8 @@ function admin() {
   )
 }
 
-// Même schéma de propriété que l'export comptable, les signaux et les
-// statistiques : la colonne s'appelle `auth_user_id`, jamais `user_id`.
-async function commercantDuProprietaire(supabase, request, commercantId) {
-  const jeton = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!jeton || !commercantId) return null
-  const authClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${jeton}` } } }
-  )
-  const { data: { user } = {} } = await authClient.auth.getUser()
-  if (!user) return null
-  const { data: c } = await supabase
-    .from('commercants')
-    .select('id, nom, adresse, latitude, longitude, auth_user_id')
-    .eq('id', commercantId)
-    .maybeSingle()
-  if (!c || c.auth_user_id !== user.id) return null
-  return c
-}
+// ⚠️ L'ANCIENNE GARDE « PROPRIÉTAIRE SEULEMENT » (`commercantDuProprietaire`) EST
+// RETIRÉE LE 06/10 : la route passe par `gardeEquipe` (case « Livraisons »).
 
 // Distance à vol d'oiseau (km) entre deux points {lat,lng}.
 function haversineKm(a, b) {
@@ -158,10 +142,14 @@ export async function POST(request) {
     }
 
     const supabase = admin()
-    const commercant = await commercantDuProprietaire(supabase, request, commercant_id)
-    if (!commercant) {
-      return NextResponse.json({ ok: false, error: 'acces_refuse' }, { status: 403 })
-    }
+    // 🟡 OUVERTE AU LIVREUR (décision d'Alex, 06/10) : le patron et l'admin
+    // passent comme avant, un membre avec la case « Livraisons » aussi. Elle
+    // était réservée au propriétaire : le livreur, celui qui conduit, ne
+    // pouvait pas avoir son itinéraire.
+    const verdict = await gardeEquipe(request, supabase, commercant_id, 'livraisons')
+    const nonAutorise = refus(verdict, NextResponse)
+    if (nonAutorise) return nonAutorise
+    const commercant = verdict.commercant
 
     // Les commandes de CE créneau, CE jour, chez CE commerçant. Les statuts
     // retenus sont ceux d'une commande encore à livrer : les livrées et les
@@ -288,7 +276,9 @@ export async function POST(request) {
     return NextResponse.json({
       ok: true,
       methode,
-      depart: { nom: departLieu?.libelle || commercant.nom, adresse: departLieu?.adresse || commercant.adresse },
+      // ⚠️ JAMAIS l'adresse de la fiche (celle de l'inscription) comme départ
+      // affiché (règle d'Alex, 05/10) : sans lieu, on n'en invente pas.
+      depart: { nom: departLieu?.libelle || commercant.nom, adresse: departLieu?.adresse || null },
       ordre,
       itineraires: liensItineraire(depart, ordreArrets),
       sans_coords: sansCoords,

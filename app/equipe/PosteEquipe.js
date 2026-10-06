@@ -30,7 +30,7 @@ import { libelleJourPoste } from '@/lib/equipe-poste'
 // ── Étape 3 : les gestes, avec les MÊMES questions et les MÊMES routes que le
 // tableau de bord du patron (29/09).
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
-import PosteConfirmation, { confirmer } from '@/app/dashboard/PosteConfirmation'
+import PosteConfirmation, { confirmer, confirmeAvecTexte } from '@/app/dashboard/PosteConfirmation'
 import { questionRdv, statutDepuisChoix, noShowPossible, questionEncaissement } from '@/lib/confirmation-rdv'
 import { resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import { retourArriereAutorise } from '@/lib/tableau-de-bord'
@@ -136,25 +136,44 @@ function DetailRdv({ rdv, commerce, droits = {}, gestes = null, enCours = false,
 // La carte complète (cuisine, onglet Livraisons) et la carte réduite du
 // livreur montrent les mêmes boutons, selon la même règle partagée.
 function BoutonsLivraison({ l, gestes, enCours = null }) {
+  // 🟡 « ↩ ANNULER LA LIVRAISON » POUR LE LIVREUR (décision d'Alex, 06/10) :
+  // une livraison du jour touchée « Livrée » par erreur. Le serveur vérifie
+  // le jour et la case ; la fidélité repart avec.
+  if (l.statut === 'recupere') {
+    if (!gestes?.retourArriere || !['livree', 'retiree_magasin'].includes(l.statut_livraison)) return null
+    return (
+      <button type="button" disabled={!!enCours} onClick={() => gestes.retourArriere(l)}
+        style={{ ...puce(false), width: '100%', marginTop: 10, padding: '10px 14px', color: T.muted }}>
+        {enCours === `${l.id}:retour` ? <DotsAttente label="Enregistrement"/> : '↩ Annuler la livraison'}
+      </button>
+    )
+  }
   if (l.statut !== 'pret') {
     // ⚠️ « EN PRÉPARATION » ÉTAIT ÉCRIT ICI POUR TOUT, nouvelles comprises
     // (Alex, 01/10, capture) : la pastille dit déjà le statut, on dit
     // seulement pourquoi il n'y a pas de bouton.
     return <p style={{ margin: '10px 0 0', fontSize: 12.5, color: T.muted, fontWeight: 700 }}>Pas encore prête à partir.</p>
   }
+  // ⚠️ CHAQUE BOUTON VÉRIFIE QUE SON GESTE EST DONNÉ : la case « Commandes »
+  // seule ne reçoit que « Retirée au magasin » (décision d'Alex, 06/10).
   return (
     <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-      {gesteLivraisonPermis(l, 'en_livraison') && (
+      {gestes?.retireeMagasin && gesteLivraisonPermis(l, 'retiree_magasin') && (
+        <button type="button" disabled={!!enCours} onClick={() => gestes.retireeMagasin(l)} style={{ ...puce(false), flexBasis: '100%', padding: '10px 14px' }}>
+          {enCours === `${l.id}:retiree` ? <DotsAttente label="Enregistrement"/> : 'Retirée au magasin'}
+        </button>
+      )}
+      {gestes?.partir && gesteLivraisonPermis(l, 'en_livraison') && (
         <button type="button" disabled={!!enCours} onClick={() => gestes.partir(l)} style={{ ...puce(false), flex: 1, padding: '11px 14px' }}>
           {enCours === `${l.id}:partir` ? <DotsAttente label="Enregistrement"/> : 'Partir en livraison'}
         </button>
       )}
-      {gesteLivraisonPermis(l, 'livree') && (
+      {gestes?.livree && gesteLivraisonPermis(l, 'livree') && (
         <button type="button" disabled={!!enCours} onClick={() => gestes.livree(l)} style={{ ...puce(true), flex: 1, padding: '11px 14px', background: T.vert, borderColor: T.vert }}>
           {enCours === `${l.id}:livree` ? <DotsAttente label="Enregistrement"/> : 'Livrée'}
         </button>
       )}
-      {gesteLivraisonPermis(l, 'absent') && (
+      {gestes?.absent && gesteLivraisonPermis(l, 'absent') && (
         <button type="button" disabled={!!enCours} onClick={() => gestes.absent(l)} style={{ ...puce(false), flexBasis: '100%', padding: '10px 14px' }}>
           {enCours === `${l.id}:absent` ? <DotsAttente label="Enregistrement"/> : 'Client absent'}
         </button>
@@ -205,6 +224,9 @@ function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enC
   const occupe = enCours === c.id
   const avancer = gestes && vers && transitionPermise(c, vers)
   const nonRetire = gestes && peutMarquerNonRetire(c, new Date())
+  // La case « Argent » seulement (le geste n'est donné qu'à elle), et jamais
+  // sur une commande liée à un rendez-vous : elle suit le rendez-vous.
+  const annulable = !!gestes?.annulerCommerce && ['en_attente', 'en_preparation', 'pret'].includes(c.statut) && !c.rdv_reservation_id
   const creneau = c.creneau || c.creneau_livraison || null
   const paiement = etatPaiementCommande(c, { categorie: commerce.categorie })
   const retrait = libelleRetrait({ ...c, commercant: commerce }, creneau, { court: true })
@@ -237,7 +259,7 @@ function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enC
         {c.client_telephone ? <Telephone numero={c.client_telephone}/> : <span/>}
         {paiement && <span style={{ color: T.muted }}><strong style={{ color: T.ink }}>{paiement.libelle}</strong>{Number(c.total) > 0 ? ` · ${euros(c.total)}` : ''}</span>}
       </div>
-      {(avancer || nonRetire) && (
+      {(avancer || nonRetire || annulable) && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
           {avancer && (
             <button type="button" disabled={occupe} onClick={() => gestes.avancer(c)} style={{ ...puce(true), flex: 1, padding: '11px 14px' }}>
@@ -246,6 +268,9 @@ function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enC
           )}
           {nonRetire && (
             <button type="button" disabled={occupe} onClick={() => gestes.nonRetire(c)} style={{ ...puce(false), padding: '11px 14px' }}>Non retirée</button>
+          )}
+          {annulable && (
+            <button type="button" disabled={occupe} onClick={() => gestes.annulerCommerce(c)} style={{ ...puce(false), padding: '11px 14px', color: T.rouge }}>Annulée par le commerce</button>
           )}
         </div>
       )}
@@ -319,9 +344,56 @@ function Livraisons({ livraisons, gestes = null, enCours = null }) {
   const [filtre, setFiltre] = useFiltre(FILTRES_LIVRAISON)
   const garde = FILTRES_LIVRAISON.find(f => f.cle === filtre)?.garde || (() => true)
   const visibles = livraisons.filter(garde)
+  // 🟡 LA TOURNÉE OPTIMISÉE POUR LE LIVREUR (décision d'Alex, 06/10) : un
+  // bouton par créneau qui a encore des livraisons à faire, les mêmes liens
+  // Maps que le tableau de bord (découpés par dix arrêts).
+  const [tournees, setTournees] = useState({})
+  const [calcul, setCalcul] = useState(null)
+  const creneaux = []
+  for (const l of livraisons) {
+    if (!l.creneau_livraison_id || l.statut === 'recupere' || creneaux.some(c => c.id === l.creneau_livraison_id)) continue
+    creneaux.push({ id: l.creneau_livraison_id, creneau: l.creneau })
+  }
+  async function itineraire(creneauId) {
+    if (!gestes?.tournee) return
+    setCalcul(creneauId)
+    const data = await gestes.tournee(creneauId)
+    setCalcul(null)
+    if (data) setTournees(prev => ({ ...prev, [creneauId]: data }))
+  }
   return (
     <div>
       <p style={{ margin: '0 0 10px', fontSize: 13.5, color: T.muted }}>Les livraisons d&rsquo;aujourd&rsquo;hui, dans l&rsquo;ordre de la tournée.</p>
+      {gestes?.tournee && creneaux.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          {creneaux.map(c => {
+            const t = tournees[c.id]
+            const heures = c.creneau ? `${String(c.creneau.heure_debut).slice(0, 5)} – ${String(c.creneau.heure_fin).slice(0, 5)}` : ''
+            return (
+              <div key={c.id} style={{ ...carte, padding: '10px 12px' }}>
+                <button type="button" disabled={!!calcul} onClick={() => itineraire(c.id)} style={{ ...puce(true), width: '100%', padding: '10px 14px' }}>
+                  {calcul === c.id ? <DotsAttente label="Calcul de la tournée"/> : `Itinéraire de la tournée${heures ? ` ${heures}` : ''}`}
+                </button>
+                {t && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                    {(t.itineraires || []).map((seg, i) => (
+                      <a key={i} href={seg.url} target="_blank" rel="noopener noreferrer"
+                        style={{ padding: '8px 14px', borderRadius: 100, background: T.ink, color: '#fff', fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
+                        {(t.itineraires || []).length > 1 ? `Itinéraire ${i + 1}/${t.itineraires.length}` : 'Ouvrir l’itinéraire'}
+                      </a>
+                    ))}
+                    {t.sans_coords?.length > 0 && (
+                      <p style={{ margin: 0, fontSize: 12, color: '#B45309' }}>
+                        {t.sans_coords.length} adresse{t.sans_coords.length > 1 ? 's' : ''} hors itinéraire, à faire à la main.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
       <PastillesFiltres filtres={FILTRES_LIVRAISON} liste={livraisons} filtre={filtre} onChoisir={setFiltre}/>
       {visibles.length === 0 && <p style={{ margin: '16px 0', color: T.muted, fontSize: 14 }}>Rien ici pour le moment.</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -570,7 +642,61 @@ export default function PosteEquipe({ equipe, onChanger }) {
       if (j.client_prevenu) dire('Noté : le client est prévenu de vous appeler.')
       else dire(`Noté, mais le client n’a pas pu être prévenu${l.client_telephone ? ` : téléphone-lui au ${l.client_telephone}` : ''}.`, 'erreur')
     }),
+    // 🟡 « RETIRÉE AU MAGASIN » AU POSTE (décision d'Alex, 06/10) : le client
+    // vient chercher sa livraison au comptoir. Même route et même question
+    // d'argent que le tableau de bord ; le serveur prévient le client.
+    retireeMagasin: (l) => geste(`${l.id}:retiree`, async () => {
+      let encaissement = null
+      if (Number(l.a_encaisser) > 0) {
+        const choix = await confirmer(questionEncaissement({ montant: l.a_encaisser, nom: l.client_nom }))
+        if (!choix || choix === 'rien') return
+        encaissement = choix
+      } else {
+        const choix = await confirmer({
+          titre: 'Retirée au magasin ?',
+          message: 'Le client est venu chercher sa commande au comptoir. Les frais de livraison restent dus.',
+          details: [l.reference, l.client_nom].filter(Boolean).join(' · ') || null,
+          actions: [
+            { valeur: 'oui', ton: 'principal', label: 'Oui, il l’a retirée' },
+            { valeur: 'rien', ton: 'neutre', label: 'Ne rien faire' },
+          ],
+        })
+        if (choix !== 'oui') return
+      }
+      const j = await lire(await postPro('/api/livraison/livrer', { commande_id: l.id, statut_livraison: 'retiree_magasin', encaissement }))
+      if (!j.ok) { dire(j.error || 'Le retrait n’a pas pu être enregistré.', 'erreur'); return }
+      dire('Retirée au magasin')
+    }),
+    // « ↩ Annuler la livraison » : la même route que le patron, qui vérifie
+    // la case et le jour. Défini ici pour la vue du livreur.
+    retourArriere: (l) => geste(`${l.id}:retour`, async () => {
+      const choix = await confirmer({
+        titre: 'Annuler la livraison ?',
+        message: 'La commande redevient « prête », comme si elle n’avait pas été livrée. Le point de fidélité du client repart aussi, et reviendra à la vraie livraison.',
+        details: [l.reference, l.client_nom].filter(Boolean).join(' · ') || null,
+        actions: [
+          { valeur: 'oui', ton: 'danger', label: 'Oui, annuler la livraison' },
+          { valeur: 'rien', ton: 'neutre', label: 'Ne rien faire' },
+        ],
+      })
+      if (choix !== 'oui') return
+      const j = await lire(await postPro('/api/commande/retour-arriere', { commande_id: l.id }))
+      if (!j.ok) { dire(j.error || 'Le retour arrière n’a pas pu être enregistré.', 'erreur'); return }
+      dire('C’est défait : la commande est de nouveau prête.')
+    }),
   }
+  // La tournée optimisée du créneau, pour le livreur (06/10). Rend la réponse
+  // ou `null` (l'erreur est dite).
+  gestesLivraison.tournee = async (creneauId) => {
+    const j = await lire(await postPro('/api/livraison/tournee-optimisee', {
+      commercant_id: equipe.commercant_id, date: etat.aujourdhui, creneau_livraison_id: creneauId,
+    }))
+    if (!j.ok) { dire(j.error || 'La tournée n’a pas pu être calculée.', 'erreur'); return null }
+    return j
+  }
+  // La case « Commandes » SEULE ne reçoit que « Retirée au magasin » (geste de
+  // comptoir, décision d'Alex du 06/10).
+  const gestesLivraisonComptoir = { retireeMagasin: gestesLivraison.retireeMagasin }
   // ─── APRÈS LA REMISE (01/10) ─────────────────────────────────────────────
   // Les mêmes routes que le patron : `/api/commande/encaisser` et
   // `/api/commande/retour-arriere`, qui relisent la commande et la règle.
@@ -639,6 +765,31 @@ export default function PosteEquipe({ equipe, onChanger }) {
       if (!j.ok) { dire(j.error || 'La commande n’a pas pu être notée non retirée.', 'erreur'); return }
       dire('Commande notée non retirée')
     }),
+    // 🟡 « ANNULÉE PAR LE COMMERCE » AU POSTE (décision d'Alex, 06/10), pour
+    // la case « Argent » seulement : ce geste REMBOURSE. Même route, même
+    // question et même mot au client que le tableau de bord.
+    ...(etat.droits?.argent ? {
+      annulerCommerce: (c) => geste(c.id, async () => {
+        const ref = referenceCommande(c) ? `#${referenceCommande(c)}` : 'cette commande'
+        const enLigne = !!c.paye_en_ligne
+        const { oui, texte: motif } = await confirmeAvecTexte({
+          titre: enLigne ? `Annuler ${ref} et rembourser le client ?` : `Annuler ${ref} ?`,
+          message: enLigne
+            ? 'Le client est remboursé sur sa carte de ce qu’il a payé, ses bons et sa récompense lui reviennent, et il reçoit un email. Un remboursement ne se défait pas.'
+            : 'Ses bons et sa récompense lui reviennent, et il reçoit un email. Rien n’a été payé en ligne, il n’y a rien à rembourser.',
+          details: c.client_nom || null,
+          actions: [
+            { valeur: 'oui', ton: 'danger', label: enLigne ? 'Oui, annuler et rembourser' : 'Oui, annuler' },
+            { valeur: 'non', ton: 'neutre', label: 'Ne rien faire' },
+          ],
+          champ: { label: 'Un mot pour le client (facultatif)', placeholder: 'Ex : rupture de pâte, désolé ! Ce sera pour la prochaine fois.', max: 300 },
+        })
+        if (!oui) return
+        const j = await lire(await postPro('/api/commande/annuler-commercant', { commande_id: c.id, ...(motif ? { motif } : {}) }))
+        if (!j.ok) { dire(j.error || 'L’annulation n’a pas pu être enregistrée.', 'erreur'); return }
+        dire(j.email_client ? 'Commande annulée, le client est prévenu.' : 'Commande annulée, mais l’email au client n’est pas parti : préviens-le toi-même.', j.email_client ? undefined : 'erreur')
+      }),
+    } : {}),
   }
 
   // Agenda, Retraits, Livraisons : la règle est dans lib/poste-vues.js.
@@ -733,7 +884,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
         ? (
           <Commandes key="livraisons" commandes={commandesDeLaVue(etat.commandes, 'livraison')} filtres={FILTRES_LIVRAISON}
             commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null}
-            gestesLivraison={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>
+            gestesLivraison={etat.droits?.livraisons ? gestesLivraison : (etat.droits?.commandes ? gestesLivraisonComptoir : null)} enCours={enCours}/>
         )
         : etat.livraisons && <Livraisons livraisons={etat.livraisons} gestes={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>)}
       {/* Le comptoir (étape 5) : seulement avec la case, le serveur ne l'envoie qu'à elle. */}

@@ -27,9 +27,15 @@ export async function POST(request) {
   try {
     const { commande_id, statut_livraison, encaissement = null } = await request.json().catch(() => ({}))
     const admin = clientAdmin()
-    const verdict = await gardeLigneEquipe(request, admin, 'commandes', commande_id, 'livraisons')
+    // 🟡 « RETIRÉE AU MAGASIN » EST AUSSI UN GESTE DE COMPTOIR (décision
+    // d'Alex, 06/10) : la case « Commandes » y a droit. Les autres étapes
+    // (partir, livrée, absent) restent à la case « Livraisons ».
+    const verdict = await gardeLigneEquipe(request, admin, 'commandes', commande_id, ['livraisons', 'commandes'])
     const nonAutorise = refus(verdict, NextResponse)
     if (nonAutorise) return nonAutorise
+    if (verdict.role === 'membre' && !verdict.permis?.livraisons && statut_livraison !== 'retiree_magasin') {
+      return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
+    }
 
     const r = await livrerCommande(admin, {
       commandeId: commande_id,
@@ -58,8 +64,8 @@ export async function POST(request) {
     }
     // ⚠️ LA FIDÉLITÉ SE CRÉDITE ICI, CÔTÉ SERVEUR, pour les deux fins de
     // livraison. Elle ne dépendait que d'un second appel de l'écran, que le
-    // Poste du livreur ne faisait pas. Idempotent : l'appel que fait encore le
-    // tableau de bord ne compte pas deux fois.
+    // Poste du livreur ne faisait pas. Idempotent. (Les écrans ne l'appellent
+    // plus depuis le 06/10.)
     if (statut_livraison === 'livree' || statut_livraison === 'retiree_magasin') {
       await crediterFideliteCommande(admin, commande_id, '[livraison/livrer]')
     }

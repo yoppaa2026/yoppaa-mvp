@@ -66,7 +66,8 @@ const MUTATIONS = [
   { nom: '🔴 Poste : « prévenu » affiché même quand rien n est parti',
     fichier: POSTE, de: "      if (j.client_prevenu) dire('Noté : le client est prévenu de vous appeler.')", vers: "      dire('Noté : le client est prévenu de vous appeler.')" },
   { nom: '🔴 Poste : « Client absent » s affiche sans la règle',
-    fichier: POSTE, de: "      {gesteLivraisonPermis(l, 'absent') && (", vers: '      {true && (' },
+    // ⚠️ ANCRES REPOINTÉES LE 06/10 : chaque bouton vérifie aussi son geste.
+    fichier: POSTE, de: "      {gestes?.absent && gesteLivraisonPermis(l, 'absent') && (", vers: '      {gestes?.absent && true && (' },
 
   // ─── LE SERVEUR ──────────────────────────────────────────────────────────
   { nom: '🔴 la lecture oublie le commerce',
@@ -80,7 +81,9 @@ const MUTATIONS = [
 
   // ─── LES ROUTES ──────────────────────────────────────────────────────────
   { nom: '🔴 la route s ouvre sans la case « livraisons »',
-    fichier: ROUTE, de: "gardeLigneEquipe(request, admin, 'commandes', commande_id, 'livraisons')", vers: "gardeLigneEquipe(request, admin, 'commandes', commande_id, ['livraisons', 'agenda'])" },
+    // ⚠️ ANCRE REPOINTÉE LE 06/10 : la garde s'ouvre à « Commandes » pour le
+    // seul « Retirée au magasin » ; la mutation retire ce verrou.
+    fichier: ROUTE, de: "    if (verdict.role === 'membre' && !verdict.permis?.livraisons && statut_livraison !== 'retiree_magasin') {", vers: '    if (false) {' },
   { nom: '🔴 le commerce ne vient plus de la garde',
     fichier: ROUTE, de: '      commercantId: verdict.commercant.id,', vers: '      commercantId: verdict.commercant?.id || null,' },
   { nom: '🔴 le message au client part sans que rien soit écrit',
@@ -107,7 +110,7 @@ const MUTATIONS = [
   { nom: '🔴 sans la case, les boutons apparaissent',
     fichier: POSTE, de: 'gestes={etat.droits?.livraisons ? gestesLivraison : null}', vers: 'gestes={gestesLivraison}' },
   { nom: '🔴 « Partir » s affiche sans la règle',
-    fichier: POSTE, de: "      {gesteLivraisonPermis(l, 'en_livraison') && (", vers: '      {true && (' },
+    fichier: POSTE, de: "      {gestes?.partir && gesteLivraisonPermis(l, 'en_livraison') && (", vers: '      {gestes?.partir && true && (' },
   { nom: '🔴 la vue du livreur perd le mode (aucun bouton)',
     fichier: VUE, de: '    mode_retrait: c.mode_retrait || null,', vers: '' },
 ]

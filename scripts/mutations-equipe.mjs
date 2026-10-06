@@ -351,7 +351,9 @@ const MUTATIONS = [
   { nom: '🔴 la cuisine ne voit plus l onglet Livraisons',
     fichier: 'lib/poste-vues.js', de: '    || (!!commandes && (etat.commerce?.livraison_actif === true || commandes.some(estLivraison)))', vers: '' },
   { nom: '🔴 les boutons du livreur sans la case « Livraisons »',
-    fichier: 'app/equipe/PosteEquipe.js', de: 'gestesLivraison={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>', vers: 'gestesLivraison={gestesLivraison} enCours={enCours}/>' },
+    // ⚠️ ANCRE REPOINTÉE LE 06/10 : la case « Commandes » seule reçoit le
+    // geste de comptoir (« Retirée au magasin »).
+    fichier: 'app/equipe/PosteEquipe.js', de: 'gestesLivraison={etat.droits?.livraisons ? gestesLivraison : (etat.droits?.commandes ? gestesLivraisonComptoir : null)} enCours={enCours}/>', vers: 'gestesLivraison={gestesLivraison} enCours={enCours}/>' },
   { nom: '🔴 les boutons du livreur sur un retrait',
     fichier: 'app/equipe/PosteEquipe.js', de: "      {gestesLivraison && estLivraison(c) && c.statut === 'pret' && (", vers: '      {gestesLivraison && (' },
   { nom: '⚠️ « En préparation » revient sur une commande nouvelle',

@@ -732,6 +732,73 @@ verifier('le minimum porte sur le total des articles',
       && /dire\('Commande livrée'\)\s*await prevenir\('\/api\/livraison\/statut'/.test(sansProse(lire('app/equipe/PosteEquipe.js'))))
 }
 
+// ═══ DÉCISIONS D'ALEX DU 06/10 : FIDÉLITÉ RETIRÉE, PAS DE LIVRAISON AU FUTUR ═
+{
+  const { retirerCredit, appliquerCredit } = await import('../lib/fidelite.js')
+  const { livraisonAuFutur, champsLivraison } = await import('../lib/livraison-geste.js')
+  const { sansProse } = await import('./lire-code.mjs')
+  const passages = { fidelite_mecanique: 'passages', fidelite_seuil_passages: 5 }
+  const cagnotte = { fidelite_mecanique: 'cagnotte', fidelite_taux_cagnotte: 10, fidelite_seuil_cagnotte: 10 }
+
+  // Un aller-retour exact : créditer puis retirer rend la carte d'avant.
+  {
+    const avant = { passages: 2, cagnotte: 0, recompenses_disponibles: 0 }
+    const { patch } = appliquerCredit(passages, avant, { passages: 1 })
+    const r = retirerCredit(passages, patch, { type: 'passage', valeur: 1 })
+    verifier('🔴 fidélité : créditer puis retirer un passage rend la carte d\'avant',
+      r.patch.passages === 2 && r.patch.recompenses_disponibles === 0 && r.aRetirer === 0 && r.manque === 0, JSON.stringify(r))
+  }
+  {
+    // Le 5e passage débloque une récompense : la retirer la reprend.
+    const { patch, debloquees } = appliquerCredit(passages, { passages: 4, recompenses_disponibles: 0 }, { passages: 1 })
+    const r = retirerCredit(passages, patch, { type: 'passage', valeur: 1 })
+    verifier('🔴 fidélité : la récompense débloquée par ce passage repart avec lui',
+      debloquees === 1 && r.patch.passages === 4 && r.patch.recompenses_disponibles === 0 && r.aRetirer === 1, JSON.stringify(r))
+  }
+  {
+    // Récompense déjà utilisée : jamais de carte négative, et on le dit.
+    const r = retirerCredit(passages, { passages: 0, recompenses_disponibles: 0 }, { type: 'passage', valeur: 1 })
+    verifier('🔴 fidélité : récompense déjà utilisée, la carte reste à zéro (jamais négative), et c\'est dit',
+      r.patch.passages === 0 && r.patch.recompenses_disponibles === 0 && r.manque === 1 && r.aRetirer === 0, JSON.stringify(r))
+  }
+  {
+    // Cagnotte : 10 % de 30 € = 3 €, retirés au même taux.
+    const { patch } = appliquerCredit(cagnotte, { cagnotte: 4, recompenses_disponibles: 0 }, { montant: 30 })
+    const r = retirerCredit(cagnotte, patch, { type: 'cagnotte', valeur: 30 })
+    verifier('🔴 fidélité : la cagnotte rend exactement ce qu\'elle avait reçu', patch.cagnotte === 7 && r.patch.cagnotte === 4 && r.retire === 3, JSON.stringify(r))
+    const { patch: p2, debloquees } = appliquerCredit(cagnotte, { cagnotte: 8, recompenses_disponibles: 0 }, { montant: 30 })
+    const r2 = retirerCredit(cagnotte, p2, { type: 'cagnotte', valeur: 30 })
+    verifier('fidélité : cagnotte qui avait débloqué une récompense : elle repart, la cagnotte revient',
+      debloquees === 1 && r2.patch.cagnotte === 8 && r2.patch.recompenses_disponibles === 0 && r2.aRetirer === 1, JSON.stringify(r2))
+  }
+  verifier('fidélité : un mouvement inconnu ne touche à rien',
+    retirerCredit(passages, { passages: 3, recompenses_disponibles: 1 }, { type: 'ajustement' }).patch.passages === 3)
+
+  // ⚠️ DANS LA FONCTION DE RETRAIT SEULEMENT : `crediterFidelite`, plus haut,
+  // porte la même mise à jour de carte (le mot présent AILLEURS).
+  const fsTout = sansProse(lire('lib/fidelite-server.js'))
+  const iRetrait = fsTout.indexOf('export async function retirerFideliteCommande(')
+  const fs = iRetrait >= 0 ? fsTout.slice(iRetrait, fsTout.indexOf('export async function crediterFideliteRdv(', iRetrait)) : ''
+  verifier('🔴 fidélité : la ligne de crédit est supprimée AVANT de toucher la carte (deux retraits ne retirent qu\'une fois)',
+    fs.indexOf(".from('fidelite_mouvements').delete().eq('id', mvt.id)") > 0
+      && fs.indexOf(".from('fidelite_mouvements').delete().eq('id', mvt.id)") < fs.indexOf(".from('fidelite_cartes').update(patch).eq('id', carte.id)"))
+  verifier('fidélité : une récompense réservée par une commande ou un RDV en cours n\'est jamais retirée',
+    /const aSupprimer = ids\.filter\(id => !reservees\.has\(id\)\)\.slice\(0, aRetirer\)/.test(fs))
+  verifier('🔴 fidélité : retirée au retour arrière ET à l\'annulation',
+    /const fidelite = await retirerFideliteCommande\(admin, c\.id, '\[commande\/retour-arriere\]'\)/.test(sansProse(lire('lib/commande-gestes-serveur.js')))
+      && /await retirerFideliteCommande\(supabase, commande\.id, journal\)/.test(sansProse(lire('lib/commande-annulation-server.js'))))
+
+  // Pas de livraison au futur.
+  const maintenant = new Date('2026-10-06T10:00:00Z')
+  const cmd = (o) => ({ mode_retrait: 'livraison', statut: 'pret', statut_livraison: null, total: 0, paye_en_ligne: true, ...o })
+  verifier('🔴 livraison : demain ne part pas aujourd\'hui', livraisonAuFutur(cmd({ date_commande: '2026-10-07' }), maintenant)
+    && /prévue le 07\/10/.test(champsLivraison(cmd({ date_commande: '2026-10-07' }), 'en_livraison', { maintenant }).refus || ''))
+  verifier('livraison : aujourd\'hui passe', champsLivraison(cmd({ date_commande: '2026-10-06' }), 'livree', { maintenant }).refus === null)
+  verifier('livraison : hier se clôture encore (oubli)', champsLivraison(cmd({ date_commande: '2026-10-05' }), 'livree', { maintenant }).refus === null)
+  verifier('livraison : sans date connue, on ne bloque pas', !livraisonAuFutur(cmd({}), maintenant))
+  verifier('livraison : le serveur lit la date', /mode_retrait, date_commande, total/.test(lire('lib/livraison-serveur.js')))
+}
+
 // La route des statuts n'accepte que les deux états connus.
 const routeStatut = lire('app/api/livraison/statut/route.js')
 for (const s of STATUTS_LIVRAISON) {
@@ -772,12 +839,18 @@ const tourneeCode = tournee.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l
 // cherchaient `auth_user_id !== user.id` n'importe où dans le fichier : ils
 // restaient verts quand on supprimait l'APPEL en gardant la fonction. Un
 // garde-fou jamais appelé ne garde rien.
-verifier('la tournée exige un jeton', /authorization/i.test(tourneeCode))
-verifier('le contrôle de propriété existe', /auth_user_id !== user\.id/.test(tourneeCode))
-verifier('et il est réellement APPELÉ',
-  /const commercant = await commercantDuProprietaire\(supabase, request, commercant_id\)/.test(tourneeCode))
-verifier('son échec coupe la requête',
-  /if \(!commercant\) \{[\s\S]{0,120}?status: 403/.test(tourneeCode))
+// ⚠️ REPOINTÉES LE 06/10 : la route est ouverte au livreur (décision d'Alex).
+// Le contrôle n'est plus « propriétaire seulement » mais la garde d'équipe
+// (`gardeEquipe`, case « Livraisons »), qui authentifie et refuse elle-même :
+// patron et admin passent, un membre seulement avec la case.
+verifier('le contrôle passe par la garde d\'équipe, case « Livraisons »',
+  /const verdict = await gardeEquipe\(request, supabase, commercant_id, 'livraisons'\)/.test(tourneeCode))
+verifier('et son refus coupe la requête AVANT toute lecture',
+  /const nonAutorise = refus\(verdict, NextResponse\)\s*if \(nonAutorise\) return nonAutorise/.test(tourneeCode)
+    && tourneeCode.indexOf('if (nonAutorise) return nonAutorise') < tourneeCode.indexOf(".from('commandes')"))
+verifier('le commerce vient de la garde, jamais du corps de la requête seul',
+  /const commercant = verdict\.commercant/.test(tourneeCode))
+verifier('l\'ancienne garde « propriétaire seulement » a disparu', !/async function commercantDuProprietaire/.test(tourneeCode))
 // LE TEST QUI COMPTE : la route ne doit accepter AUCUN identifiant de commande.
 // C'est elle qui choisit les commandes, à partir du commerce authentifié.
 verifier('la route n\'accepte plus de liste de commandes', !/commande_ids/.test(tourneeCode))

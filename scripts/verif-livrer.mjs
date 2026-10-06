@@ -185,7 +185,12 @@ const livrer = async (tables, args, options) => {
 // ═══ 5) CEUX QUI L'APPELLENT ════════════════════════════════════════════════
 {
   const route = code('app/api/livraison/livrer/route.js')
-  v('🔴 la route exige la case « livraisons » (le patron passe toujours)', /gardeLigneEquipe\(request, admin, 'commandes', commande_id, 'livraisons'\)/.test(route))
+  // ⚠️ REPOINTÉE LE 06/10 (décision d'Alex) : « Retirée au magasin » est un
+  // geste de comptoir, ouvert aussi à la case « Commandes ». Les autres étapes
+  // restent à la case « Livraisons » : un membre sans elle est refusé (403).
+  v('🔴 la route exige la case « livraisons » (le patron passe toujours)',
+    /gardeLigneEquipe\(request, admin, 'commandes', commande_id, \['livraisons', 'commandes'\]\)/.test(route)
+    && /if \(verdict\.role === 'membre' && !verdict\.permis\?\.livraisons && statut_livraison !== 'retiree_magasin'\) \{\s*return NextResponse\.json\(\{ ok: false, error: 'accès refusé' \}, \{ status: 403 \}\)/.test(route))
   v('🔴 le commerce vient de la garde, jamais du corps', /commercantId: verdict\.commercant\.id,/.test(route) && !/commercant_id[^\n]*request/.test(route))
   v('le geste du livreur va au journal', /action: 'livraison_statut'/.test(route) && /journaliserGeste\(admin, verdict,/.test(route))
   v('🔴 « absent » prévient le client APRÈS l’écriture réussie, et seulement là',
@@ -275,7 +280,21 @@ const livrer = async (tables, args, options) => {
       /if \(statut_livraison === 'livree' \|\| statut_livraison === 'retiree_magasin'\) \{\s*await crediterFideliteCommande\(admin, commande_id, '\[livraison\/livrer\]'\)/.test(routeLivrer))
   }
   v('🔴 seul un membre avec la case voit les boutons', /<Livraisons livraisons=\{etat\.livraisons\} gestes=\{etat\.droits\?\.livraisons \? gestesLivraison : null\} enCours=\{enCours\}\/>/.test(poste))
-  v('🔴 les boutons suivent la règle partagée', /\{gesteLivraisonPermis\(l, 'en_livraison'\) && \(/.test(poste) && /\{gesteLivraisonPermis\(l, 'livree'\) && \(/.test(poste) && /\{gesteLivraisonPermis\(l, 'absent'\) && \(/.test(poste))
+  // ⚠️ REPOINTÉE LE 06/10 : chaque bouton vérifie AUSSI que son geste est
+  // donné (la case « Commandes » seule ne reçoit que « Retirée au magasin »).
+  v('🔴 les boutons suivent la règle partagée',
+    /\{gestes\?\.partir && gesteLivraisonPermis\(l, 'en_livraison'\) && \(/.test(poste) && /\{gestes\?\.livree && gesteLivraisonPermis\(l, 'livree'\) && \(/.test(poste)
+    && /\{gestes\?\.absent && gesteLivraisonPermis\(l, 'absent'\) && \(/.test(poste) && /\{gestes\?\.retireeMagasin && gesteLivraisonPermis\(l, 'retiree_magasin'\) && \(/.test(poste))
+  v('🔴 la case « Commandes » seule ne reçoit que « Retirée au magasin »',
+    /const gestesLivraisonComptoir = \{ retireeMagasin: gestesLivraison\.retireeMagasin \}/.test(poste)
+    && /gestesLivraison=\{etat\.droits\?\.livraisons \? gestesLivraison : \(etat\.droits\?\.commandes \? gestesLivraisonComptoir : null\)\}/.test(poste))
+  v('🔴 le livreur peut annuler sa livraison (« ↩ Annuler la livraison »), via la route du patron',
+    /if \(!gestes\?\.retourArriere \|\| !\['livree', 'retiree_magasin'\]\.includes\(l\.statut_livraison\)\) return null/.test(poste)
+    && /retourArriere: \(l\) => geste\(`\$\{l\.id\}:retour`[\s\S]{0,900}postPro\('\/api\/commande\/retour-arriere', \{ commande_id: l\.id \}\)/.test(poste))
+  v('🔴 « Annulée par le commerce » au Poste : la case « Argent » seulement, avec le mot au client',
+    /\.\.\.\(etat\.droits\?\.argent \? \{\s*annulerCommerce:/.test(poste)
+    && /postPro\('\/api\/commande\/annuler-commercant', \{ commande_id: c\.id, \.\.\.\(motif \? \{ motif \} : \{\}\) \}\)/.test(poste))
+  v('la tournée optimisée est proposée au livreur', /gestesLivraison\.tournee = async \(creneauId\) =>/.test(poste) && /postPro\('\/api\/livraison\/tournee-optimisee'/.test(poste))
   const ka = gl.indexOf('absent: (l) => geste(')
   const ga = ka >= 0 ? gl.slice(ka) : ''
   v('🔴 Poste : « absent » demande confirmation, puis dit si le client est prévenu',

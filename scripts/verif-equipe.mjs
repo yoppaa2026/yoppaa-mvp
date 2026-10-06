@@ -983,8 +983,10 @@ const membre = (o = {}) => ({
     && /const onglets = ongletsDuPoste\(etat\)/.test(poste))
   v('🔴 la pastille choisie prend la couleur du statut, et 0 ne s’écrit pas',
     /const teinte = f\.couleur \|\| T\.panel/.test(poste) && /\{f\.label\}\{n > 0 \? ` · \$\{n\}` : ''\}/.test(poste))
+  // ⚠️ REPOINTÉE LE 06/10 : sans la case « Livraisons », la case « Commandes »
+  // reçoit le seul geste de comptoir « Retirée au magasin » (décision d'Alex).
   v('🔴 dans l’onglet Livraison, les boutons du livreur suivent SA case',
-    /gestesLivraison=\{etat\.droits\?\.livraisons \? gestesLivraison : null\} enCours=\{enCours\}\/>/.test(poste)
+    /gestesLivraison=\{etat\.droits\?\.livraisons \? gestesLivraison : \(etat\.droits\?\.commandes \? gestesLivraisonComptoir : null\)\} enCours=\{enCours\}\/>/.test(poste)
     && /\{gestesLivraison && estLivraison\(c\) && c\.statut === 'pret' && \(\s*<BoutonsLivraison l=\{pourLeLivreur\(c\)\} gestes=\{gestesLivraison\} enCours=\{enCours\}\/>/.test(poste))
   v('🔴 le livreur seul a les mêmes filtres', /const \[filtre, setFiltre\] = useFiltre\(FILTRES_LIVRAISON\)/.test(poste) && /<PastillesFiltres filtres=\{FILTRES_LIVRAISON\} liste=\{livraisons\}/.test(poste))
   v('🔴 plus de « En préparation » écrit sur une commande nouvelle', !/En préparation : pas encore prête/.test(poste) && /Pas encore prête à partir\./.test(poste))
@@ -1182,10 +1184,18 @@ const membre = (o = {}) => ({
     v('🔴 défaite ailleurs entre-temps : refusée, rien n’est réécrit', !r.ok && r.code === 'deja_fait' && db.trace.ecritures === 0)
   }
 
-  for (const f of ['app/api/commande/encaisser/route.js', 'app/api/commande/retour-arriere/route.js']) {
-    const r = code(f)
-    v(`🔴 ${f.split('/')[3]} : la case « Commandes », le commerce déduit de la commande`,
+  // ⚠️ REPOINTÉE LE 06/10 : `retour-arriere` s'ouvre aussi à la case
+  // « Livraisons », pour une livraison DU JOUR seulement (décision d'Alex) ;
+  // `encaisser` reste à la seule case « Commandes ».
+  {
+    const r = code('app/api/commande/encaisser/route.js')
+    v('🔴 encaisser : la case « Commandes », le commerce déduit de la commande',
       /gardeLigneEquipe\(request, admin, 'commandes', commande_id, 'commandes'\)/.test(r) && /commercantId: verdict\.commercant\.id/.test(r))
+    const ra = code('app/api/commande/retour-arriere/route.js')
+    v('🔴 retour-arriere : « Commandes » ou « Livraisons », le commerce déduit de la commande',
+      /gardeLigneEquipe\(request, admin, 'commandes', commande_id, \['commandes', 'livraisons'\]\)/.test(ra) && /commercantId: verdict\.commercant\.id/.test(ra))
+    v('🔴 retour-arriere : sans la case « Commandes », une livraison du jour seulement',
+      /const livraisonDuJourSeulement = verdict\.role === 'membre' && !verdict\.permis\?\.commandes/.test(ra) && /livraisonDuJourSeulement \}\)/.test(ra))
   }
   const nonRetire = code('app/api/commande/non-retire/route.js')
   v('🔴 « non retirée » : le serveur applique la règle d’heure AVANT d’écrire',

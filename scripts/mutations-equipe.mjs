@@ -21,8 +21,9 @@ const MUTATIONS = [
   // ─── LES RÈGLES ──────────────────────────────────────────────────────────
   { nom: '🔴 la chaîne "false" coche une case',
     fichier: 'lib/equipe.js', de: 'droits[colonneDroit(cle)] = entree?.[cle] === true || entree?.[colonneDroit(cle)] === true', vers: 'droits[colonneDroit(cle)] = !!entree?.[cle] || !!entree?.[colonneDroit(cle)]' },
-  { nom: '🔴 « argent » sans « agenda » passe',
-    fichier: 'lib/equipe.js', de: '  if (d.droit_argent && !d.droit_agenda) {', vers: '  if (false) {' },
+  // ⚠️ ANCRE REPOINTÉE LE 06/10 : « Argent » demande « Agenda » OU « Commandes ».
+  { nom: '🔴 « argent » sans « agenda » ni « commandes » passe',
+    fichier: 'lib/equipe.js', de: '  if (d.droit_argent && !d.droit_agenda && !d.droit_commandes) {', vers: '  if (false) {' },
   { nom: '🔴 un droit inconnu répond au lieu de lever',
     fichier: 'lib/equipe.js', de: "  if (!CLES_DROITS.includes(cle)) throw new Error(`droit d'équipe inconnu : ${cle}`)", vers: '' },
   { nom: '🔴 le forfait n est plus vérifié',

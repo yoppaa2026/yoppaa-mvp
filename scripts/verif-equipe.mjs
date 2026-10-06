@@ -52,8 +52,13 @@ const membre = (o = {}) => ({
     && droitsDepuis({ agenda: 'true' }).droit_agenda === false && droitsDepuis({ commandes: 1 }).droit_commandes === false)
   v('les colonnes aussi se lisent', droitsDepuis({ droit_livraisons: true }).droit_livraisons === true)
   v('🔴 aucune case : refusé', refusDroits(cases({})) !== null)
-  v('🔴 « argent » sans « agenda » : refusé', refusDroits(cases({ argent: true, commandes: true })) !== null)
+  // ⚠️ REPOINTÉE LE 06/10 (décision d'Alex) : « Argent » demande « Agenda »
+  // OU « Commandes » (il annule et rembourse aussi une commande).
+  v('🔴 « argent » sans « agenda » ni « commandes » : refusé', refusDroits(cases({ argent: true, livraisons: true })) !== null)
+  v('« argent » avec « commandes » seule : accepté (commerce sans rendez-vous)', refusDroits(cases({ argent: true, commandes: true })) === null)
   v('« argent » avec « agenda » : accepté', refusDroits(cases({ argent: true, agenda: true })) === null)
+  v('🔴 la base dit la même chose',
+    /CHECK \(NOT droit_argent OR droit_agenda OR droit_commandes\)/.test(readFileSync(new URL('../migrations/MIGRATION_EQUIPE_ARGENT_SANS_AGENDA.sql', import.meta.url), 'utf8')))
   v('un livreur, « livraisons » seule : accepté', refusDroits(cases({ livraisons: true })) === null)
   v('« comptoir » seule : acceptée', refusDroits(cases({ comptoir: true })) === null)
 }

@@ -60,6 +60,8 @@ import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { commandeAllumee } from '@/lib/plans'
 import { chezLeCommerce } from '@/lib/nom-commerce'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
+import { refusSurPlace, compterSurPlaceDuClient } from '@/lib/sur-place'
+import { STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -160,7 +162,7 @@ export async function POST(request) {
       // ⚠️ `livraison_actif` : l'interrupteur de la livraison, lu plus bas.
       // ⚠️ `latitude`, `longitude` : le centre de l'étoile. Absentes, `dansEtoile`
       // rendrait `null` et TOUTE livraison serait refusée chez qui a dessiné.
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif')
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, paiement_sur_place_max, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -681,6 +683,32 @@ export async function POST(request) {
     if (!couvertSansPaiement) {
       if (surPlace && !cashAutorise) {
         return NextResponse.json({ ok: false, error: 'Le paiement sur place n\'est pas proposé chez ce commerçant.' }, { status: 400 })
+      }
+      // 🟡 LES LIMITES DU « SUR PLACE » (audit livraison, décision d'Alex le
+      // 06/10) : au plus 2 commandes sur place EN COURS par email ou par
+      // téléphone chez ce commerce, et le plafond par commande s'il en a posé
+      // un. Sans elles, de fausses commandes gratuites bloquaient créneaux et
+      // stock. Une lecture en échec ne laisse PAS passer : on ne compte pas
+      // zéro à la place d'une erreur.
+      if (surPlace) {
+        const { data: enCoursSurPlace, error: errSurPlace } = await supabase
+          .from('commandes')
+          .select('client_email, client_telephone')
+          .eq('commercant_id', commercant.id)
+          .eq('paye_en_ligne', false)
+          .in('statut', STATUTS_COMMANDE_EN_COURS)
+          .limit(1000)
+        if (errSurPlace) {
+          console.error('[create-commande] lecture des commandes sur place KO', errSurPlace.message)
+          return NextResponse.json({ ok: false, error: 'Impossible de vérifier ta commande. Réessaie dans un instant.' }, { status: 500 })
+        }
+        const refus = refusSurPlace({
+          duEUR,
+          plafond: commercant.paiement_sur_place_max,
+          enCours: compterSurPlaceDuClient(enCoursSurPlace, { email: client_email, telephone: client_telephone }),
+          enLigneAutorise: enLigneAutorise && !!commercant.stripe_account_id,
+        })
+        if (refus) return NextResponse.json({ ok: false, code: 'sur_place_limite', error: refus }, { status: 400 })
       }
       // ⚠️ ET LE PAIEMENT EN LIGNE SE REFUSE AUSSI. Le serveur ne vérifiait que
       // le compte Stripe : un commerçant de détail qui a choisi d'encaisser AU

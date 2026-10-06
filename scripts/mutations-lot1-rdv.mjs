@@ -353,10 +353,12 @@ const MUTATIONS = [
     vers: '      {false && (',
     garde: 'un commerce sans tables le voit' },
 
+  // ⚠️ ANCRE REPOINTÉE LE 06/10 : le select lit aussi `paiement_sur_place_max`
+  // (plafond du sur place). La mutation retire toujours le seul délai.
   { nom: '🔴 Paiements annonce de nouveau 24 h sans lire la colonne',
     banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/TabPaiements.js',
-    de: "rdv_acompte_en_ligne_actif, accepte_paiement_cash, rdv_delai_annulation_heures')",
-    vers: "rdv_acompte_en_ligne_actif, accepte_paiement_cash')",
+    de: "accepte_paiement_cash, paiement_sur_place_max, rdv_delai_annulation_heures')",
+    vers: "accepte_paiement_cash, paiement_sur_place_max')",
     garde: 'Paiements lit le délai avant de l’annoncer' },
 
   { nom: '🔴 l admin change de nouveau un zero en vingt-quatre',

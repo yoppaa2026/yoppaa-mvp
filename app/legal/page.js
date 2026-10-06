@@ -388,6 +388,7 @@ export default function LegalPage() {
             <H3>Durée de conservation</H3>
             <Ul items={[
               'Données de commande et de rendez-vous : 7 ans (obligations comptables et fiscales belges), sous forme anonymisée après suppression du compte',
+              'Adresse, position et note de livraison d’une commande : effacées 6 mois après la commande ; le reste de la commande est conservé comme ci-dessus',
               'Données de compte : durée de vie du compte, puis effacement immédiat à la suppression',
               'Données de consentement : 3 ans',
               'Logs techniques : 12 mois maximum',

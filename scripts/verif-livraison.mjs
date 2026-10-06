@@ -593,6 +593,72 @@ verifier('le minimum porte sur le total des articles',
     !/nominatim\.openstreetmap\.org/.test(lire('next.config.ts').replace(/^\s*\/\/.*$/gm, '')))
 }
 
+// ═══ MINEURS DE L'AUDIT (06/10) : SUR PLACE LIMITÉ, ADRESSES PURGÉES ════════
+{
+  const SP = await import('../lib/sur-place.js')
+  const PL = await import('../lib/purge-livraison.js')
+  const { sansProse } = await import('./lire-code.mjs')
+
+  // Le « sur place » : 2 en cours au plus, et le plafond du commerçant.
+  egal('sur place : au plus 2 en cours (décision d\'Alex)', SP.MAX_SUR_PLACE_EN_COURS, 2)
+  const enCours = [
+    { client_email: 'Jean@Exemple.be', client_telephone: '0470 12 34 56' },
+    { client_email: 'autre@x.be', client_telephone: '0470/123456' },
+    { client_email: 'tiers@x.be', client_telephone: '0499000000' },
+  ]
+  egal('🔴 sur place : reconnu par l\'email (casse ignorée) OU le téléphone (séparateurs ignorés)',
+    SP.compterSurPlaceDuClient(enCours, { email: 'jean@exemple.be', telephone: '0470123456' }), 2)
+  egal('sur place : changer d\'email ne remet pas le compteur à zéro',
+    SP.compterSurPlaceDuClient(enCours, { email: 'nouveau@x.be', telephone: '+32 0470 12 34 56'.replace('+32 ', '') }), 2)
+  egal('sur place : un inconnu n\'a rien en cours', SP.compterSurPlaceDuClient(enCours, { email: 'n@x.be', telephone: '0488112233' }), 0)
+  verifier('🔴 sur place : la 3e commande en cours est refusée, avec l\'issue en ligne',
+    /déjà 2 commandes[\s\S]*choisis le paiement en ligne/.test(SP.refusSurPlace({ duEUR: 10, enCours: 2, enLigneAutorise: true }) || ''))
+  verifier('sur place : sans paiement en ligne, on ne renvoie pas vers une porte fermée',
+    /appelle le commerce/.test(SP.refusSurPlace({ duEUR: 10, enCours: 2, enLigneAutorise: false }) || ''))
+  verifier('sur place : la 2e passe', SP.refusSurPlace({ duEUR: 10, enCours: 1 }) === null)
+  verifier('🔴 sur place : au-dessus du plafond, refus qui dit le montant',
+    /limité à 40 € par commande/.test(SP.refusSurPlace({ duEUR: 40.01, plafond: 40, enLigneAutorise: true }) || ''))
+  verifier('sur place : pile au plafond, ça passe', SP.refusSurPlace({ duEUR: 40, plafond: 40 }) === null)
+  verifier('sur place : plafond vide = aucune limite (le comportement d\'avant)',
+    SP.refusSurPlace({ duEUR: 9999, plafond: null }) === null && SP.refusSurPlace({ duEUR: 9999, plafond: '' }) === null)
+  verifier('sur place : un plafond à virgule se lit', /limité à 12,50 €/.test(SP.refusSurPlace({ duEUR: 13, plafond: 12.5 }) || ''))
+
+  const cc = sansProse(lire('app/api/stripe/checkout/create-commande/route.js'))
+  const iGarde = cc.indexOf('const refus = refusSurPlace({')
+  const iInsert = cc.indexOf(".from('commandes')\n      .insert(")
+  verifier('🔴 sur place : la règle s\'applique AVANT la création de la commande', iGarde > 0 && iInsert > iGarde)
+  verifier('sur place : seulement pour un paiement sur place, après le calcul du dû',
+    /if \(surPlace\) \{\s*const \{ data: enCoursSurPlace, error: errSurPlace \}/.test(cc) && cc.indexOf('const duEUR =') < iGarde)
+  verifier('🔴 sur place : une lecture en échec REFUSE (pas un zéro)', /if \(errSurPlace\) \{[\s\S]{0,400}status: 500/.test(cc))
+  verifier('sur place : on compte les commandes EN COURS non payées en ligne du commerce',
+    /\.eq\('commercant_id', commercant\.id\)\s*\.eq\('paye_en_ligne', false\)\s*\.in\('statut', STATUTS_COMMANDE_EN_COURS\)/.test(cc))
+  verifier('sur place : le plafond est lu avec le commerçant', /accepte_paiement_cash, paiement_sur_place_max, categorie/.test(cc))
+  const migSP = lire('migrations/MIGRATION_PLAFOND_SUR_PLACE.sql')
+  verifier('sur place : la colonne a son droit de mise à jour et sa contrainte',
+    /GRANT UPDATE \(paiement_sur_place_max\) ON public\.commercants TO authenticated/.test(migSP)
+      && /paiement_sur_place_max > 0 AND paiement_sur_place_max <= 10000/.test(migSP))
+  const tp = sansProse(lire('app/dashboard/TabPaiements.js'))
+  verifier('sur place : le commerçant règle son plafond (vide = pas de limite)',
+    /\.update\(\{ paiement_sur_place_max: valeur === null \? null :/.test(tp) && /Paiement sur place jusqu’à/.test(tp))
+
+  // L'adresse de livraison : effacée 6 mois après.
+  egal('purge : 6 mois (décision d\'Alex)', PL.DUREE_ADRESSE_LIVRAISON_MOIS, 6)
+  egal('purge : le 6 octobre → le 6 avril', PL.dateLimitePurge(new Date('2026-10-06T10:00:00Z')), '2026-04-06')
+  egal('🔴 purge : le 31 août → le 28 février, jamais le 3 mars', PL.dateLimitePurge(new Date('2026-08-31T10:00:00Z')), '2026-02-28')
+  egal('purge : on traverse l\'année', PL.dateLimitePurge(new Date('2026-03-15T10:00:00Z')), '2025-09-15')
+  egal('purge : la date est celle de Bruxelles (23 h 30 UTC le 31/12 = 1er janvier)',
+    PL.dateLimitePurge(new Date('2026-12-31T23:30:00Z')), '2026-07-01')
+  egal('🔴 purge : seules l\'adresse, la position et la note partent (le total et la TVA restent)',
+    PL.COLONNES_PURGEES, ['adresse_livraison', 'livraison_lat', 'livraison_lng', 'note_livraison'])
+  const purge = sansProse(lire('app/api/cron/purge-adresses-livraison/route.js'))
+  verifier('🔴 purge : sans secret, la tâche refuse', /refusCron\(gardeCron\(req, 'cron\/purge-adresses-livraison'\), NextResponse\)/.test(purge))
+  verifier('purge : seulement avant la date limite', /\.update\(effacement\(\)\)\s*\.lt\('date_commande', limite\)/.test(purge))
+  verifier('purge : aucune adresse dans le journal', !/console\.[a-z]+\([^)]*adresse_livraison/.test(purge))
+  verifier('purge : la tâche est programmée chaque mois',
+    (JSON.parse(lire('vercel.json')).crons || []).some(c => c.path === '/api/cron/purge-adresses-livraison' && c.schedule === '0 3 1 * *'))
+  verifier('purge : /legal le dit', /Adresse, position et note de livraison d’une commande : effacées 6 mois après la commande/.test(lire('app/legal/page.js')))
+}
+
 // La route des statuts n'accepte que les deux états connus.
 const routeStatut = lire('app/api/livraison/statut/route.js')
 for (const s of STATUTS_LIVRAISON) {

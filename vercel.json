@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/signaux-hebdo",
       "schedule": "30 7 * * 2"
+    },
+    {
+      "path": "/api/cron/purge-adresses-livraison",
+      "schedule": "0 3 1 * *"
     }
   ]
 }

@@ -10,6 +10,7 @@
 //   • Alimentaire Vendre : paiement obligatoire à la commande C&C
 
 import { useState, useEffect, useCallback } from 'react'
+import DotsAttente from '@/app/components/DotsAttente'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { supabase } from '@/lib/supabase'
 import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
@@ -36,16 +37,21 @@ export default function TabPaiements({ commercantId, toast }) {
   useResetAuRetourDePaiement(() => setConnecting(false))
   const [refreshing, setRefreshing] = useState(false)
   const [savingToggle, setSavingToggle] = useState(false)
+  // 🟡 LE PLAFOND DU « SUR PLACE » (décision d'Alex, 06/10) : vide = aucun
+  // plafond, le comportement d'avant. Le serveur l'applique (lib/sur-place.js).
+  const [plafondSurPlace, setPlafondSurPlace] = useState('')
+  const [savingPlafond, setSavingPlafond] = useState(false)
 
   const charger = useCallback(async () => {
     if (!commercantId) return
     setLoading(true)
     const { data } = await supabase
       .from('commercants')
-      .select('id, nom, plan, categorie, stripe_account_id, stripe_account_charges_enabled, stripe_account_details_submitted, stripe_account_payouts_enabled, stripe_onboarding_done_at, rdv_acompte_en_ligne_actif, accepte_paiement_cash, rdv_delai_annulation_heures')
+      .select('id, nom, plan, categorie, stripe_account_id, stripe_account_charges_enabled, stripe_account_details_submitted, stripe_account_payouts_enabled, stripe_onboarding_done_at, rdv_acompte_en_ligne_actif, accepte_paiement_cash, paiement_sur_place_max, rdv_delai_annulation_heures')
       .eq('id', commercantId)
       .maybeSingle()
     setCommercant(data)
+    setPlafondSurPlace(data?.paiement_sur_place_max != null ? String(data.paiement_sur_place_max).replace('.', ',') : '')
     setLoading(false)
   }, [commercantId])
 
@@ -150,6 +156,24 @@ export default function TabPaiements({ commercantId, toast }) {
     }
     setCommercant(c => ({ ...c, accepte_paiement_cash: actif }))
     toast?.(actif ? 'Paiement cash accepté' : 'Paiement cash désactivé', 'success')
+  }
+
+  async function enregistrerPlafond() {
+    const brut = plafondSurPlace.trim().replace(',', '.')
+    const valeur = brut === '' ? null : Number(brut)
+    if (valeur !== null && (!Number.isFinite(valeur) || valeur <= 0 || valeur > 10000)) {
+      toast?.('Indique un montant entre 1 et 10 000 €, ou laisse vide pour ne pas limiter', 'error')
+      return
+    }
+    setSavingPlafond(true)
+    const { error } = await supabase
+      .from('commercants')
+      .update({ paiement_sur_place_max: valeur === null ? null : Math.round(valeur * 100) / 100 })
+      .eq('id', commercantId)
+    setSavingPlafond(false)
+    if (error) { toast?.(`Erreur : ${error.message}`, 'error'); return }
+    setCommercant(c => ({ ...c, paiement_sur_place_max: valeur }))
+    toast?.(valeur === null ? 'Plus de plafond pour le paiement sur place' : 'Plafond enregistré', 'success')
   }
 
   if (loading) {
@@ -328,6 +352,29 @@ export default function TabPaiements({ commercantId, toast }) {
             </span>
           </label>
         </div>
+        {commercant.accepte_paiement_cash && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${T.hairline}` }}>
+            <label htmlFor="plafond-sur-place" style={{ display: 'block', fontSize: '0.86rem', fontWeight: 800, color: T.ink }}>
+              Paiement sur place jusqu’à
+            </label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+              <input id="plafond-sur-place" inputMode="decimal" placeholder="Pas de limite"
+                value={plafondSurPlace}
+                onChange={e => setPlafondSurPlace(e.target.value.replace(/[^d,.]/g, '').slice(0, 8))}
+                style={{ width: 130, padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${T.hairline}`, fontSize: 14, fontFamily: 'inherit' }}/>
+              <span style={{ fontSize: '0.86rem', color: T.muted, fontWeight: 700 }}>€ par commande</span>
+              <button type="button" onClick={enregistrerPlafond} disabled={savingPlafond}
+                style={{ padding: '9px 14px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 13, cursor: savingPlafond ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+                {savingPlafond ? <><DotsAttente taille={6} couleur="#fff" label="Enregistrement du plafond en cours" /> Enregistrement…</> : 'Enregistrer le plafond'}
+              </button>
+            </div>
+            <p style={{ fontSize: '0.78rem', color: T.muted, lineHeight: 1.5, margin: '8px 0 0' }}>
+              Au-delà, ton client paie en ligne. Laisse vide pour ne pas limiter.
+              Dans tous les cas, un même client ne peut pas avoir plus de 2 commandes à payer sur place en cours chez toi :
+              ça protège tes créneaux et ton stock des fausses commandes.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ─── Info doc / sécurité ─── */}

@@ -22,6 +22,7 @@ import { ClipboardList, Phone, Mail, RefreshCw } from 'lucide-react'
 import {
   attenteDepuis, PUBLICATION_BROUILLON, remplissageInscription, COLONNES_INSCRIPTION,
 } from '@/lib/statut-commercant'
+import { libelleEtape, decompteParEtape } from '@/lib/etapes-inscription'
 
 const T = {
   main: '#6B35C4', pale: '#EDE0FF', ink: '#1A0840', deep: '#2D0F6B',
@@ -37,6 +38,7 @@ export default function SectionInscriptionsEnCours() {
   const [lignes, setLignes] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
+  const [etapes, setEtapes] = useState({ parCommerce: {}, erreur: null })
 
   const charger = useCallback(async () => {
     setLoading(true); setErr(null)
@@ -56,6 +58,19 @@ export default function SectionInscriptionsEnCours() {
     // 🔴 ON LIT L'ERREUR. Un tableau vide et une requête en échec se
     // ressemblent à l'écran, et le second se lirait « personne n'attend ».
     if (error) { setErr(error.message); setLoading(false); return }
+    // 🔴 L'ÉTAPE OÙ L'ON S'EST ARRÊTÉ (Alex, 06/10 : « mesurer où l'on
+    // décroche »). `etape_actuelle` était écrite à chaque étape et lue nulle
+    // part. Lue À PART : un échec ici ne doit pas effacer la liste, il se dit.
+    const ids = (data || []).map(c => c.id)
+    let parCommerce = {}
+    let errEtapes = null
+    if (ids.length) {
+      const { data: obs, error: e2 } = await supabase
+        .from('onboarding_commercants').select('commercant_id, etape_actuelle').in('commercant_id', ids)
+      if (e2) errEtapes = e2.message
+      parCommerce = Object.fromEntries((obs || []).map(o => [o.commercant_id, o.etape_actuelle]))
+    }
+    setEtapes({ parCommerce, erreur: errEtapes })
     setLignes(data || [])
     setLoading(false)
   }, [])
@@ -94,6 +109,19 @@ export default function SectionInscriptionsEnCours() {
         </p>
       )}
 
+      {/* Le décompte par étape : où l'inscription perd du monde. */}
+      {!err && lignes.length > 0 && (
+        <p style={{ fontSize: 12.5, color: T.deep, margin: '0 0 12px', fontWeight: 700, lineHeight: 1.6 }}>
+          Arrêtées à :{' '}
+          {decompteParEtape(lignes, etapes.parCommerce).map(e => `${e.label} ${e.nb}`).join(' · ')}
+          {etapes.erreur && (
+            <span style={{ display: 'block', color: '#B91C1C' }}>
+              Étapes illisibles ({etapes.erreur}) : le décompte n&apos;est pas fiable.
+            </span>
+          )}
+        </p>
+      )}
+
       {!err && lignes.length === 0 && (
         <p style={{ fontSize: 13, color: T.muted, margin: 0 }}>
           Personne en ce moment : toutes les inscriptions commencées ont été menées au bout.
@@ -119,7 +147,7 @@ export default function SectionInscriptionsEnCours() {
                   calcul, « le 13 septembre » demande un effort à chaque coup
                   d'œil. */}
               <p style={{ margin: 0, fontSize: 12.5, color: T.deep, fontWeight: 700 }}>
-                Commencée {depuis.texte} · {rempli.texte}
+                Commencée {depuis.texte} · {rempli.texte} · arrêtée à « {libelleEtape(etapes.parCommerce[c.id])} »
               </p>
             </div>
             {/* Le geste attendu : le rappeler. Les coordonnées sont donc des

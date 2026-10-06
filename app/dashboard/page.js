@@ -62,6 +62,8 @@ import { accesDashboard } from '@/lib/statut-commercant'
 // bouton qui s'affiche sur une table que le serveur refusera de facturer.
 import { raisonDebitImpossible, compteEncaisse, libelleRelance, raisonLienImpossible, messageLienImpossible } from '@/lib/empreinte-table'
 import EcranValidation from './EcranValidation'
+import EcranCgu from './EcranCgu'
+import { cguAJour } from '@/lib/cgu'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
 import BandeauOuMeTrouver from './BandeauOuMeTrouver'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
@@ -3344,6 +3346,19 @@ export default function Dashboard() {
       raison={refusAcces.raison}
       motif={refusAcces.motif}
       nomCommerce={refusAcces.nom}
+      onDeconnexion={seDeconnecter}
+    />
+  )
+
+  // 🔴 LES CGU, ACCEPTÉES UNE FOIS PAR LES DÉJÀ INSCRITS (Alex, 06/10). Rien ne
+  // les faisait accepter. Le titulaire du compte les accepte ici avant d'entrer
+  // (et de nouveau à chaque nouvelle version). ⚠️ PAS EN MODE « EMPRUNT » :
+  // l'admin regarde un dossier, il n'accepte rien au nom du commerçant (la
+  // route le refuserait de toute façon).
+  if (commercant && !impersonating && !cguAJour(commercant)) return (
+    <EcranCgu
+      commercant={commercant}
+      onAccepte={maj => setCommercant(c => ({ ...c, ...maj }))}
       onDeconnexion={seDeconnecter}
     />
   )

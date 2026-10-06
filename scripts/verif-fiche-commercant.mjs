@@ -666,14 +666,13 @@ for (const [nom, marqueur] of [
 // résultat qu'il ne verrait jamais là où on le lui annonçait.
 verifier('le signup ne demande plus de photo de couverture',
   !/<Card titre="Photo de couverture"/.test(signupSrcTxt))
-verifier('mais il montre le haut de fiche généré',
-  /<BanniereCommerce nom=/.test(signupSrcTxt))
-// ⚠️ `photo_ok` PORTE 20 DES 100 POINTS, et le seuil pour soumettre est 60. Le
-// laisser branché sur une photo qu'on ne demande plus aurait rendu ces points
-// inatteignables : un commerçant de service, qui peut déjà passer les horaires,
-// se serait retrouvé bloqué sous le seuil sans comprendre pourquoi.
-verifier('le score compte désormais les photos de galerie',
-  /photo_ok: galerie\.length > 0/.test(signupSrcTxt))
+// ⚠️ RETIRÉES LE 06/10 (décision d'Alex : inscription en 3 étapes) : l'étape
+// « Visuels » n'existe plus. Le signup ne montre plus d'aperçu de haut de
+// fiche, et le score de 60 qui comptait `photo_ok` ne bloque plus rien. Les
+// photos se règlent au tableau de bord, et « fiche complète » les exige avant
+// la publication (gardé par verif:fiche-complete). Ce qui reste vrai :
+verifier('le signup ne demande plus aucune photo (06/10)',
+  !/supabase\.storage\.from\('logos'\)/.test(sansCommentaires(signupSrcTxt)))
 
 // ─── LE LOGO DIT LE MÉTIER, PLUS UNE INITIALE ─────────────────────────────
 // ⚠️ Sur l'accueil, la vignette fait 68 pixels : un « C » blanc dans un cercle
@@ -744,10 +743,14 @@ verifier('et il n’écrit aucune initiale', !/<text|font-size/.test(svgLogo))
 // ⚠️ Demande d'Alex : le logo touche à l'identité du commerçant, c'est ce qui
 // permet au Yopper de le retrouver. Le signup le présentait comme un ornement
 // « affiché dans la card flottante », ce qui ne dit rien à personne.
-verifier('le signup explique à quoi sert le logo',
-  /tes clients te reconnaîtront/.test(signupSrcTxt))
+// ⚠️ REPOINTÉES LE 06/10 : le logo provisoire a quitté l'inscription (étape
+// « Visuels » supprimée) pour le Profil du tableau de bord. Mêmes mots, même
+// grille, autre écran. `logoBrut` garde le texte affiché, commentaires retirés.
+const logoBrut = sansCommentaires(lire('app/dashboard/ConfigDashboard.js'))
+verifier('le tableau de bord explique à quoi sert le logo',
+  /tes clients te reconnaîtront/.test(logoBrut))
 verifier('et rappelle que le sien vaut mieux que le nôtre',
-  /Le tien vaut mieux que le nôtre/.test(signupSrcTxt))
+  /Le tien vaut mieux que le nôtre/.test(logoBrut))
 // La grille est affichée, et chaque vignette déclenche la génération de CE
 // choix-là : sans les paramètres, tous les boutons rendraient le même logo.
 // ⚠️ ANCRÉ SUR LE PARCOURS, pas sur le nom de la fonction. La première version
@@ -759,20 +762,24 @@ verifier('et rappelle que le sien vaut mieux que le nôtre',
 // l'appel pour l'annuler passerait encore. C'est la ligne suivante qui porte la
 // vraie garantie, parce qu'elle lie chaque vignette à SON symbole : sans elle,
 // tous les boutons rendraient le même logo, ce qui se verrait à l'écran.
-verifier('le signup affiche la grille de propositions',
-  /propositionsLogo\(\{[^}]*\}\)\.map\(p => \(/.test(signupSrcTxt))
+verifier('le tableau de bord affiche la grille de propositions',
+  /propositionsLogo\(\{[^}]*\}\)\.map\(p => \(/.test(logoBrut))
 verifier('et chaque vignette applique son propre symbole',
-  /genererLogoAuto\(\{ symbole: p\.symbole, teinte: p\.teinte \}\)/.test(signupSrcTxt))
+  /choisirLogoProvisoire\(\{ symbole: p\.symbole, teinte: p\.teinte \}\)/.test(logoBrut))
+// 🔴 ET LE SERVICE N'A PAS DISPARU AVEC L'ÉTAPE : la grille ne s'offre que tant
+// qu'il n'y a pas de logo, et l'image passe par le même tracé SVG.
+verifier('la grille ne s’offre que sans logo', /\{!logoPreview && \(\s*<div style=\{\{ marginTop: 14 \}\}>/.test(logoBrut))
+verifier('l’image vient du tracé partagé', /const blob = await logoProvisoirePng\(\{ nom, type: form\.type, choix \}\)/.test(logoBrut))
 
 // ─── DIRE QUE C'EST PROVISOIRE, ET POURQUOI ON Y TIENT ────────────────────
 // ⚠️ Demande d'Alex du 14/08. « Yoppaa exige un logo pour l'uniformité de
 // l'application » est vrai et se lit comme une contrainte administrative : le
 // commerçant y entend une case à cocher de plus, et il passe. Ce qui le
 // convainc, c'est ce que ça lui rapporte à LUI.
-verifier('le signup dit que le logo prêté est provisoire',
-  /C&apos;est un dépannage/.test(signupSrcTxt))
+verifier('le tableau de bord dit que le logo prêté est provisoire',
+  /C&apos;est un dépannage/.test(logoBrut))
 verifier('et explique ce que ça lui rapporte, pas ce que Yoppaa exige',
-  /retrouve son boulanger dans une liste/.test(signupSrcTxt))
+  /retrouve son boulanger dans une liste/.test(logoBrut))
 // ⚠️ Le mot qui ne doit PAS apparaître : on n'impose pas, on explique. Un
 // commerçant à qui l'on dit « la plateforme exige » cherche comment y couper.
 // ⚠️ SUR L'AFFICHÉ, PAS SUR LE SOURCE BRUT. Ce test a rougi à sa première
@@ -1031,15 +1038,16 @@ verifier('ni la réservation de table comme acquise',
 // déduisent des emplacements, un commerçant qui change d'endroit remplissait
 // sept lignes à l'inscription pour se les faire RÉÉCRIRE dès sa première
 // tournée déclarée. Une question sans réponse, posée au pire moment.
-verifier('l’étape horaires reconnaît qui change d’endroit',
+// ⚠️ RETIRÉES LE 06/10 (décision d'Alex : inscription en 3 étapes) : l'étape
+// « Horaires » n'existe plus, la question n'est donc plus posée à personne à
+// l'inscription. Les horaires se règlent au tableau de bord, où « fiche
+// complète » ne les exige que si `horairesRequis` (verif:fiche-complete). La
+// règle qui reconnaît qui change d'endroit reste, et sert encore au score
+// transmis à l'admin :
+verifier('la règle qui reconnaît qui change d’endroit reste en place',
   /function horairesViennentDesLieux/.test(signupSrcTxt))
-// ⚠️ ON COMPTE : le message apparaît DEUX fois, dans l'encadré du haut et dans
-// l'indication sous le bouton. En décrocher un laissait le test vert puisque
-// l'autre suffisait, et le commerçant qui ne lit que le bouton n'aurait rien su.
-egal('elle le lui dit aux deux endroits',
-  (signupSrcTxt.match(/tes horaires viendront de tes emplacements/g) || []).length, 2)
-verifier('et elle le laisse passer',
-  /\|\| horairesViennentDesLieux\(commercant\)/.test(signupSrcTxt))
+verifier('🔴 l’inscription ne demande plus les horaires (06/10)',
+  !/horaires_detail/.test(sansCommentaires(signupSrcTxt)))
 
 // ─── LES EXEMPLES DOIVENT PARLER À CEUX QU'ON VISE ────────────────────────
 // ⚠️ Un studio de yoga, un coach ou une auto-école lisaient « Coiffeur,
@@ -1267,9 +1275,17 @@ verifier('l’adresse du siège est masquée quand le commerce est ailleurs',
 
 const signup = lire('app/signup/page.js')
 verifier('le signup demande le site web', /site_web/.test(signup))
-verifier('le signup guide ce qu\'il faut donner à l\'IA', /Donne trois éléments/.test(signup))
-verifier('le signup affiche le nombre de demandes restantes', /restant/.test(signup))
-verifier('le texte proposé reste modifiable', /c'est le tien|c\\'est le tien/.test(signup))
+// ⚠️ REPOINTÉES LE 06/10 (décision d'Alex : la présentation quitte
+// l'inscription). La rédaction assistée vit au Profil du tableau de bord
+// (`BoutonIaFiche`), à partir de ce que le commerçant a tapé ET de son site.
+const boutonIa = sansCommentaires(lire('app/dashboard/BoutonIaFiche.js'))
+verifier('le Profil rédige la présentation avec l’IA, depuis ses mots et son site',
+  /<BoutonIaFiche commercantId=\{commercantId\} champ="presentation"\s*mots=\{form\.description\} siteWeb=\{form\.site_web\}/.test(lire('app/dashboard/ConfigDashboard.js')))
+verifier('l’IA reçoit bien le site web', /\.\.\.\(siteWeb \? \{ site_web: siteWeb \} : \{\}\)/.test(boutonIa))
+verifier('le quota se dit avec les mots du serveur', /toast\?\.\(j\?\.message \|\| j\?\.error/.test(boutonIa))
+verifier('le texte proposé reste modifiable', /Choisis, puis arrange à ta façon/.test(boutonIa))
+verifier('🔴 l’inscription ne demande plus la présentation (06/10)',
+  !/updateField\('description'/.test(signup) && !/MIN_PRESENTATION/.test(sansCommentaires(signup)))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LE PANIER NE DOIT JAMAIS ÊTRE UN CUL-DE-SAC (Alex, 09/08)

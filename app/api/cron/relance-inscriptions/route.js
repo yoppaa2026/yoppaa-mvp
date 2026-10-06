@@ -31,6 +31,7 @@ import { createClient } from '@supabase/supabase-js'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
 import { horsDeSonHeure } from '@/lib/heure-cron'
 import { envoyerAuCommercant, emailRelanceInscription } from '@/lib/resend'
+import { libelleEtape } from '@/lib/etapes-inscription'
 import { PUBLICATION_BROUILLON } from '@/lib/statut-commercant'
 import { trierPourRelance, COLONNES_RELANCE, LIMITE_RELANCE_JOURS } from '@/lib/relance-inscription'
 
@@ -77,6 +78,17 @@ export async function GET(request) {
 
   const { retenus, ecartes } = trierPourRelance(lignes || [], maintenant)
 
+  // L'étape où chacun s'est arrêté, pour le lui dire (06/10). Lue À PART : un
+  // échec ici ne bloque aucune relance, l'email reste juste plus général.
+  let etapeParCommerce = {}
+  if (retenus.length) {
+    const { data: obs, error: errEtapes } = await db
+      .from('onboarding_commercants').select('commercant_id, etape_actuelle')
+      .in('commercant_id', retenus.map(c => c.id))
+    if (errEtapes) console.error('[relance-inscriptions] étapes illisibles :', errEtapes.message)
+    etapeParCommerce = Object.fromEntries((obs || []).map(o => [o.commercant_id, o.etape_actuelle]))
+  }
+
   let envoyes = 0
   const echecs = []
   for (const c of retenus) {
@@ -99,7 +111,10 @@ export async function GET(request) {
     const envoi = await envoyerAuCommercant({
       to: c.email,
       subject: `Ton inscription Yoppaa t’attend, ${c.nom}`,
-      html: emailRelanceInscription({ nom: c.nom }),
+      html: emailRelanceInscription({
+        nom: c.nom,
+        etape: c.id in etapeParCommerce ? libelleEtape(etapeParCommerce[c.id]) : null,
+      }),
     })
     if (envoi?.ok) { envoyes++; continue }
     // ⚠️ L'ENVOI A ÉCHOUÉ APRÈS LE MARQUAGE : on rend la fiche relançable, sinon

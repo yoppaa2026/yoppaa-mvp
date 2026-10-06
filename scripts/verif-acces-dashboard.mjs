@@ -988,10 +988,12 @@ function sansCommentaires(src) {
     const pleine = Object.fromEntries(CHAMPS_INSCRIPTION.map(c => [c, 'x']))
     egalNombre('un dossier complet est compté entier',
       remplissageInscription(pleine).remplis, CHAMPS_INSCRIPTION.length)
-    verifier('⚠️ et il se dit « 7 champs sur 7 », jamais en pourcentage',
+    verifier('⚠️ et il se dit « 6 champs sur 6 », jamais en pourcentage',
       remplissageInscription(pleine).texte === `${CHAMPS_INSCRIPTION.length} champs sur ${CHAMPS_INSCRIPTION.length} renseignés`)
+    // ⚠️ REPOINTÉE LE 06/10 : la présentation n'est plus un champ de
+    // l'inscription (elle se fait au tableau de bord) ; on retire le téléphone.
     egalNombre('un champ manquant se voit',
-      remplissageInscription({ ...pleine, description: null }).remplis, CHAMPS_INSCRIPTION.length - 1)
+      remplissageInscription({ ...pleine, telephone: null }).remplis, CHAMPS_INSCRIPTION.length - 1)
     // ⚠️ UN CHAMP D'ESPACES N'EST PAS UN CHAMP REMPLI.
     egalNombre('un champ d’espaces ne compte pas',
       remplissageInscription({ ...pleine, adresse: '   ' }).remplis, CHAMPS_INSCRIPTION.length - 1)
@@ -1003,8 +1005,10 @@ function sansCommentaires(src) {
       adresse: 'Rue d’Orbey 15, 5070 Fosses-la-Ville', telephone: '0471074349',
       email: 'un@exemple.be', description: 'Parking gratuit, salle de réception à l’étage',
     }
+    // ⚠️ REPOINTÉE LE 06/10 : six champs depuis que l'inscription ne demande
+    // plus la présentation ; sa description ne compte plus, le reste est entier.
     verifier('🔴 le dossier réel se lit enfin pour ce qu’il est',
-      remplissageInscription(laTableDuStock).texte === '7 champs sur 7 renseignés',
+      remplissageInscription(laTableDuStock).texte === '6 champs sur 6 renseignés',
       remplissageInscription(laTableDuStock).texte)
   }
 

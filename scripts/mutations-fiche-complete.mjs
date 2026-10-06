@@ -107,20 +107,33 @@ const MUTATIONS = [
   { nom: '⚠️ la relance ne montre plus ce qui est deja fait',
     fichier: EMAILS, de: "        ${k.atteint ? 'Fait' : echapperHtml(k.avancement || 'À faire')}", vers: "        ${echapperHtml(k.avancement || 'À faire')}" },
 
-  // ─── LA PRESENTATION A L INSCRIPTION (Alex, 29/09) ───────────────────────
-  { nom: '🔴 le compteur compte de nouveau les espaces',
-    fichier: 'app/signup/page.js', de: '  const presentationLongueur = form.description.trim().length', vers: '  const presentationLongueur = form.description.length' },
-  { nom: '⚠️ le compteur ne passe plus au rouge',
-    fichier: 'app/signup/page.js', de: "color: presentationManque > 0 ? '#B91C1C' : '#047857'", vers: "color: '#6B7280'" },
-  { nom: '⚠️ l aide du bas redevient generique',
-    fichier: 'app/signup/page.js', de: '            : presentationManque > 0', vers: '            : false' },
+  // ─── L INSCRIPTION EN 3 ETAPES (Alex, 06/10) ─────────────────────────────
+  // ⚠️ Les trois mutations du compteur de la presentation (29/09) sont
+  // RETIREES : le compteur a quitte l inscription avec la presentation.
+  { nom: '🔴 le dossier part sans les CGU',
+    fichier: 'app/signup/page.js', de: '  const peutSoumettre = kybRempli && cguCochees', vers: '  const peutSoumettre = kybRempli' },
+  { nom: '🔴 la route accepte une ancienne version des CGU',
+    fichier: 'app/api/commercant/accepter-cgu/route.js', de: '    if (version !== CGU_COMMERCANT_VERSION) {', vers: '    if (false) {' },
+  { nom: '🔴 n importe qui accepte au nom d un commerce',
+    fichier: 'app/api/commercant/accepter-cgu/route.js', de: '    if (!ids.includes(commercant_id)) {', vers: '    if (false) {' },
+  { nom: '🔴 les inscrits d avant entrent sans accepter',
+    fichier: 'app/dashboard/page.js', de: '  if (commercant && !impersonating && !cguAJour(commercant)) return (', vers: '  if (false) return (' },
+  { nom: '🔴 la base laisse le navigateur ecrire l acceptation',
+    fichier: 'migrations/MIGRATION_CGU_COMMERCANT.sql', de: '  IF auth.uid() IS NULL THEN', vers: '  IF true THEN' },
+  { nom: '🔴 une inscription de l ancien parcours tombe sur une etape qui n existe plus',
+    fichier: 'lib/etapes-inscription.js', de: '  return Math.min(n, DERNIERE_ETAPE)', vers: '  return n' },
+  { nom: '🔴 la presentation bloque de nouveau l inscription', banc: 'verif:fiche-complete',
+    fichier: 'app/signup/page.js', de: '    form.telephone.trim().length >= 8 &&', vers: '    form.telephone.trim().length >= 8 && String(commercant.description || \'\').trim().length >= 20 &&' },
   { nom: '⚠️ le score d inscription reprend son propre seuil',
     fichier: 'lib/score-onboarding.js', de: "      atteint: (commercant.description || '').trim().length >= MIN_PRESENTATION,", vers: "      atteint: (commercant.description || '').trim().length >= 20," },
   { nom: '🔴 le bloc renvoie de nouveau vers une fiche publique inexistante',
     fichier: SECTION, de: '              <button onClick={() => voir(f)} disabled={occupe}', vers: '              <a href={`/commander/${f.slug}`} onClick={() => voir(f)} disabled={occupe}' },
 
   { nom: '🔴 le titre de la landing promet de nouveau la page en ligne',
-    fichier: LANDING, de: '                Cinq étapes, et ton espace s&rsquo;ouvre.', vers: '                Cinq étapes, et ta page part en ligne.' },
+    // ⚠️ ANCRE REPOINTEE LE 06/10 : trois etapes, plus cinq.
+    fichier: LANDING, de: '                Trois étapes, et ton espace s&rsquo;ouvre.', vers: '                Trois étapes, et ta page part en ligne.' },
+  { nom: '🔴 la maquette de la landing remontre cinq etapes',
+    fichier: LANDING, de: "          {['Compte', 'L’essentiel', 'Vérification'].map((e, i) => (", vers: "          {['Compte', 'Infos', 'Visuels', 'Horaires', 'Validation'].map((e, i) => (" },
   { nom: '⚠️ l avertissement des papiers disparait de l inscription',
     fichier: 'app/signup/page.js', de: '          Avant de commencer, garde ceci sous la main', vers: '          Bon à savoir' },
 

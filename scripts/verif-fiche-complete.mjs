@@ -334,20 +334,14 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
 // bouton toujours gris.
 {
   const signup = code('app/signup/page.js')
-  v('le compteur retire les espaces, comme la règle',
-    /const presentationLongueur = form\.description\.trim\(\)\.length/.test(signup))
-  v('le bouton se débloque sur le même compte',
-    /const presentationManque = Math\.max\(0, MIN_PRESENTATION - presentationLongueur\)/.test(signup)
-    && /presentationManque === 0 &&/.test(signup))
-  v('le seuil vient de la règle de la fiche complète, pas d un 20 recopié',
-    /import \{ MIN_PRESENTATION \} from '@\/lib\/fiche-complete'/.test(signup) && !/description\.trim\(\)\.length >= 20/.test(signup))
-  v('rouge tant qu il manque, vert quand c est bon',
-    /color: presentationManque > 0 \? '#B91C1C' : '#047857'/.test(signup))
-  v('il dit combien il en manque', /`Encore \$\{presentationManque\} caractère/.test(signup))
-  // ⚠️ LA CONDITION, PAS LA PHRASE : la première version cherchait « il en
-  // manque », qui restait écrit même quand plus rien ne l'affichait.
-  v('l aide du bas nomme la présentation quand c est elle qui bloque',
-    /: presentationManque > 0\s*\? `Ta présentation doit faire au moins \$\{MIN_PRESENTATION\} caractères : il en manque \$\{presentationManque\}\.`/.test(signup))
+  // ⚠️ RETIRÉES LE 06/10 (décision d'Alex : inscription en 3 étapes) : la
+  // présentation a quitté l'inscription, son compteur avec elle. Le blocage du
+  // 29/09 ne peut donc plus se produire ici ; la présentation s'écrit au
+  // tableau de bord, et « fiche complète » l'exige avant la publication avec le
+  // même seuil (MIN_PRESENTATION, gardé plus haut dans ce banc).
+  v('🔴 la présentation ne bloque plus l’inscription (06/10)',
+    !/presentationManque/.test(signup) && !/MIN_PRESENTATION/.test(signup)
+    && /const valide =\s*form\.nom\.trim\(\)\.length >= 2 &&\s*form\.type\.trim\(\)\.length > 0 &&\s*form\.adresse\.trim\(\)\.length > 0 &&\s*form\.telephone\.trim\(\)\.length >= 8 &&\s*\(\(form\.latitude && form\.longitude\) \|\| sansPositionAssumee\)/.test(signup))
   // 🔴 CE QU'IL FAUT AVOIR SOUS LA MAIN, DIT EN PREMIER (Alex, 29/09) : le
   // contrôle d'identité arrive à la dernière étape, c'est là qu'on abandonne.
   const iAvant = signup.indexOf('Avant de commencer, garde ceci sous la main')
@@ -358,8 +352,12 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('elle nomme la carte d identité et le numéro d entreprise',
     /Ta carte d&rsquo;identité<\/strong>/.test(signup) && /Ton numéro d&rsquo;entreprise \(BCE\)<\/strong>/.test(signup))
   const landing = code('app/components/LandingReveal.js')
-  v('la landing ne promet plus la page en ligne au bout des cinq étapes',
-    !/Cinq étapes, et ta page part en ligne/.test(landing) && /Cinq étapes, et ton espace s&rsquo;ouvre\./.test(landing))
+  // ⚠️ REPOINTÉE LE 06/10 : trois étapes, plus cinq (décision d'Alex). La
+  // landing et sa maquette disent le parcours tel qu'il est.
+  v('la landing ne promet plus la page en ligne au bout des étapes',
+    !/étapes, et ta page part en ligne/.test(landing) && /Trois étapes, et ton espace s&rsquo;ouvre\./.test(landing))
+  v('🔴 la maquette de la landing montre les trois étapes, sans score de 60',
+    /\['Compte', 'L’essentiel', 'Vérification'\]\.map/.test(landing) && !/Minimum 60 \/ 100/.test(landing) && !/Étape 5 sur 5/.test(landing))
   v('la landing prévient aussi des papiers', /garde sous la main ta carte d&rsquo;identité/.test(landing))
   v('le score d inscription exige la même longueur',
     /trim\(\)\.length >= MIN_PRESENTATION/.test(code('lib/score-onboarding.js')))
@@ -390,11 +388,64 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   const envois = (src) => (src.match(/\.from\('logos'\)\.upload\(/g) || []).length
   const ranges = (src) => (src.match(/const fileName = cheminImage\(/g) || []).length
   v('chaque envoi du tableau de bord passe par la règle', envois(dash) >= 10 && ranges(dash) === envois(dash), `${ranges(dash)} / ${envois(dash)}`)
-  v('chaque envoi de l inscription passe par la règle', envois(signup) >= 4 && ranges(signup) === envois(signup), `${ranges(signup)} / ${envois(signup)}`)
+  // ⚠️ REPOINTÉE LE 06/10 : l'inscription n'envoie plus aucune image (étape
+  // « Visuels » supprimée) ; le logo provisoire, venu d'elle, passe par la règle
+  // au tableau de bord (compté dans la ligne au-dessus).
+  v('l inscription n envoie plus aucune image au bucket public (06/10)', envois(signup) === 0, `${envois(signup)}`)
   v('aucune suppression ne coupe l adresse au dernier « / »',
     !/split\('\/'\)\.pop\(\)/.test(dash + signup) && !/segments\[segments\.length - 1\]/.test(signup))
   v('les pièces d identité gardent leur propre rangement',
     /const fileName = `\$\{user\.id\}\/\$\{commercant\.id\}_\$\{kind\}_/.test(signup))
+}
+
+// ═══ L'INSCRIPTION EN 3 ÉTAPES ET LES CGU PROUVÉES (Alex, 06/10) ════════════
+{
+  const { ETAPES_INSCRIPTION, DERNIERE_ETAPE, etapeReprise, libelleEtape, decompteParEtape } = await import('../lib/etapes-inscription.js')
+  v('🔴 trois étapes : Compte, L’essentiel, Vérification',
+    ETAPES_INSCRIPTION.map(e => e.label).join('|') === 'Compte|L’essentiel|Vérification' && DERNIERE_ETAPE === 3)
+  v('🔴 une inscription de l’ancien parcours reprend à la vérification',
+    [3, 4, 5].every(n => etapeReprise(n) === 3), [3, 4, 5].map(etapeReprise).join(','))
+  v('une étape absente ou illisible reprend à L’essentiel',
+    etapeReprise(null) === 2 && etapeReprise(undefined) === 2 && etapeReprise('x') === 2 && etapeReprise(1) === 2 && etapeReprise(2) === 2)
+  v('l’admin lit le nom de l’étape', libelleEtape(5) === 'Vérification' && libelleEtape(2) === 'L’essentiel')
+  const d = decompteParEtape([{ id: 'a' }, { id: 'b' }, { id: 'c' }], { a: 2, b: 5, c: 4 })
+  v('le décompte par étape compte les anciennes étapes à la vérification',
+    d.map(e => `${e.label}:${e.nb}`).join(',') === 'L’essentiel:1,Vérification:2', JSON.stringify(d))
+
+  const { CGU_COMMERCANT_VERSION, cguAJour } = await import('../lib/cgu.js')
+  v('🔴 la version des CGU suit la date de la page légale',
+    /Dernière mise à jour : 6 octobre 2026/.test(lire('app/legal/page.js')) && CGU_COMMERCANT_VERSION === '2026-10-06')
+  v('🔴 seule la version EN VIGUEUR vaut acceptation',
+    cguAJour({ cgu_version: CGU_COMMERCANT_VERSION }) && !cguAJour({ cgu_version: '2026-01-01' }) && !cguAJour({}) && !cguAJour(null))
+
+  const signup = code('app/signup/page.js')
+  v('🔴 l’envoi attend le KYB ET la case des CGU, plus aucun score',
+    /const peutSoumettre = kybRempli && cguCochees/.test(signup) && !/score\.peutSoumettre/.test(signup) && !/SEUIL_SOUMISSION/.test(signup))
+  v('🔴 les CGU sont enregistrées par le serveur AVANT que le dossier parte',
+    signup.indexOf("fetch('/api/commercant/accepter-cgu'") > 0
+    && signup.indexOf("fetch('/api/commercant/accepter-cgu'") < signup.indexOf("statut: 'en_attente_validation'"))
+  v('un refus d’enregistrement arrête l’envoi', /if \(!rCgu\.ok \|\| !jCgu\?\.ok\) \{[\s\S]{0,200}setSubmitting\(false\)\s*return\s*\}/.test(signup))
+  v('l’inscription reprend par la règle partagée', (signup.match(/etapeReprise\(/g) || []).length === 2)
+
+  const route = code('app/api/commercant/accepter-cgu/route.js')
+  v('🔴 la route n’accepte que la version en vigueur', /if \(version !== CGU_COMMERCANT_VERSION\) \{\s*return NextResponse\.json/.test(route))
+  v('🔴 la route refuse qui n’est pas le titulaire (pas d’exception admin)',
+    /\.eq\('auth_user_id', user\.id\)/.test(route) && /if \(!ids\.includes\(commercant_id\)\) \{\s*return NextResponse\.json\(\{ ok: false, error: 'accès refusé' \}, \{ status: 403 \}\)/.test(route)
+    && !/adminVerifie|gardeCommercant/.test(route))
+  v('🔴 l’heure est celle du serveur, et le journal est écrit avant la fiche',
+    /const maintenant = new Date\(\)\.toISOString\(\)/.test(route)
+    && route.indexOf(".from('cgu_acceptations').insert(") < route.indexOf(".from('commercants')\n      .update({ cgu_version"))
+
+  const bord = code('app/dashboard/page.js')
+  v('🔴 un inscrit d’avant accepte à sa prochaine connexion, jamais en mode emprunt',
+    /if \(commercant && !impersonating && !cguAJour\(commercant\)\) return \(\s*<EcranCgu/.test(bord))
+  v('l’écran d’acceptation passe par la route', /fetch\('\/api\/commercant\/accepter-cgu'/.test(code('app/dashboard/EcranCgu.js')))
+
+  const sql = lire('migrations/MIGRATION_CGU_COMMERCANT.sql').split('-- ─── Contrôle')[0]
+  v('🔴 la base refuse que le navigateur écrive l’acceptation',
+    /IF auth\.uid\(\) IS NULL THEN\s*RETURN NEW;/.test(sql) && /BEFORE INSERT OR UPDATE OF cgu_version, cgu_acceptees_at ON public\.commercants/.test(sql))
+  v('le journal est fermé à tous sauf au serveur',
+    /ALTER TABLE public\.cgu_acceptations ENABLE ROW LEVEL SECURITY;/.test(sql) && /REVOKE ALL ON public\.cgu_acceptations FROM PUBLIC, anon, authenticated;/.test(sql) && !/CREATE POLICY/.test(sql))
 }
 
 // ═══ PAS D'ESPACE OUVERT NI DE FICHE EN LIGNE SANS KYB (Alex, 06/10) ═══════

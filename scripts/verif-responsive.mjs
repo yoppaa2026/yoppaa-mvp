@@ -530,34 +530,17 @@ function hauteurNecessaire({ retrait, rem, lignes }) {
   return retrait + (rem * PX_PAR_REM * HAUTEUR_LIGNE * lignes) + HAUTEUR_POINTS
 }
 
-// La hauteur réelle de l'aperçu, lue dans le signup et non recopiée ici.
-const hauteurApercu = Number(signupB.match(/height: (\d+), borderRadius: 14, overflow: 'hidden'/)?.[1])
-verifier('la hauteur de l’aperçu est bien lue dans le signup', hauteurApercu > 0, `${hauteurApercu}`)
-
-// Les mesures du bureau, lues dans la CSS.
+// ⚠️ RETIRÉES LE 06/10 (décision d'Alex : inscription en 3 étapes) : l'aperçu
+// compact du haut de fiche vivait dans l'étape « Visuels », supprimée. Ces
+// gardes mesuraient un aperçu qui n'existe plus. Si un aperçu compact revient
+// un jour, la règle CSS `.banniere-compacte` est toujours là, et ce calcul se
+// remet en place avec lui. Ce qui reste vrai : plus aucun aperçu dans le signup.
+verifier('le signup ne montre plus d’aperçu du haut de fiche (06/10)', !/<BanniereCommerce/.test(signupB))
 const retraitBureau = Number(cssB.match(/\.banniere-commerce \{\s*padding-top: (\d+)px/)?.[1])
 const remBureau = Number(cssB.match(/\.banniere-nom \{[^}]*font-size: calc\(([\d.]+)rem/)?.[1])
 verifier('les mesures du bandeau de bureau sont lisibles',
-  retraitBureau > 0 && remBureau > 0, `${retraitBureau} / ${remBureau}`)
-
-// ⚠️ ON MESURE LE DÉFAUT : avec les mesures du hero, l'aperçu déborde MÊME SUR
-// UNE SEULE LIGNE. Sans cette vérification, la règle compacte pourrait être
-// supprimée un jour sans que personne ne comprenne pourquoi elle existait.
-verifier('les mesures du hero ne peuvent PAS tenir dans l’aperçu',
-  hauteurNecessaire({ retrait: retraitBureau, rem: remBureau, lignes: 1 }) > hauteurApercu,
-  `${Math.round(hauteurNecessaire({ retrait: retraitBureau, rem: remBureau, lignes: 1 }))} px pour ${hauteurApercu}`)
-
-// Et les mesures compactes, elles, tiennent sur DEUX lignes.
-const retraitCompact = Number(cssB.match(/\.banniere-compacte \{\s*padding-top: (\d+)px/)?.[1])
-const remCompact = Number(cssB.match(/\.banniere-compacte \.banniere-nom \{[^}]*font-size: calc\(([\d.]+)rem/)?.[1])
-verifier('l’aperçu a ses propres mesures sur ordinateur',
-  retraitCompact > 0 && remCompact > 0, `${retraitCompact} / ${remCompact}`)
-verifier('et elles tiennent, même sur deux lignes',
-  hauteurNecessaire({ retrait: retraitCompact, rem: remCompact, lignes: 2 }) <= hauteurApercu,
-  `${Math.round(hauteurNecessaire({ retrait: retraitCompact, rem: remCompact, lignes: 2 }))} px pour ${hauteurApercu}`)
-
-// L'aperçu doit se déclarer comme tel, sinon la règle compacte ne l'atteint pas.
-verifier('l’aperçu du signup se déclare compact', /<BanniereCommerce[^/]*compact/.test(signupB))
+  retraitBureau > 0 && remBureau > 0 && hauteurNecessaire({ retrait: retraitBureau, rem: remBureau, lignes: 1 }) > 0,
+  `${retraitBureau} / ${remBureau}`)
 
 // ⚠️ L'ÉCHELLE MULTIPLIE, elle ne remplace pas : sans le facteur dans le
 // `calc`, un nom long reprendrait la taille pleine et redéborderait.

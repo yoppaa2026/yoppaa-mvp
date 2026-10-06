@@ -194,10 +194,15 @@ verifie('seuil photo = 800', TAILLE_CONSEILLEE.photo === 800, `reçu ${TAILLE_CO
     return fin === -1 ? null : src.slice(debut, fin)
   }
 
+  // ⚠️ RETIRÉES LE 06/10 (décision d'Alex : inscription en 3 étapes) : les
+  // cartes « Mon commerce en images » et « Ton logo » vivaient dans l'étape
+  // « Visuels », supprimée. Le signup ne manipule plus aucune image ; la
+  // garde ci-dessous le dit, et les règles de placement restent écrites pour
+  // le jour où une carte d'image y reviendrait.
+  verifie('le signup ne manipule plus aucune image (06/10)',
+    !/<Card titre=\{`Mon commerce en images/.test(src) && !/<Card titre="Ton logo"/.test(src) && !/msgGalerie|msgLogo/.test(src))
   const carteGalerie = carte('<Card titre={`Mon commerce en images')
   const carteLogo = carte('<Card titre="Ton logo"')
-  verifie('la carte « Mon commerce en images » se découpe', !!carteGalerie)
-  verifie('la carte « Ton logo » se découpe', !!carteLogo)
 
   if (carteGalerie && carteLogo) {
     // ⚠️ LE CŒUR DU CORRECTIF : chaque message est DANS sa carte, et le message
@@ -213,16 +218,15 @@ verifie('seuil photo = 800', TAILLE_CONSEILLEE.photo === 800, `reçu ${TAILLE_CO
   const finLogo = src.indexOf('<Card titre="Ton logo"')
   const nav = src.indexOf('<NavEtape', finLogo)
   const pied = finLogo !== -1 && nav !== -1 ? src.slice(src.indexOf('</Card>', finLogo), nav) : null
-  verifie('le pied de l\'étape Visuels se découpe', !!pied)
   if (pied) {
     verifie('plus aucun bandeau d\'erreur en pied d\'étape', !/\{error &&/.test(pied),
       'un `{error &&` subsiste entre la carte logo et NavEtape')
   }
 
   // Le texte d'aide ne doit plus annoncer un minimum qu'on n'applique plus.
-  const aide = src.slice(src.indexOf('Format accepté'), src.indexOf('Format accepté') + 120)
-  verifie('l\'aide dit « conseillés » et non « minimum »',
-    /conseill/.test(aide) && !/minimum/.test(aide), aide.trim())
+  // (Retirée le 06/10 avec l'étape « Visuels » : plus de « Format accepté »
+  // dans le signup. Le refus de taille reste interdit, ligne suivante.)
+  verifie('le signup n’annonce plus aucun minimum d’image (06/10)', !/Format accepté/.test(src))
 
   // La taille en pixels ne doit plus produire de refus nulle part dans le signup.
   verifie('aucun refus « Image trop petite » dans le signup', !/Image trop petite/.test(src))
@@ -386,9 +390,11 @@ console.log(`\nQualité des images : ${ok} vérifications`)
     return src.slice(debut, suite < 0 ? src.length : suite)
   }
 
+  // ⚠️ L'INSCRIPTION RETIRÉE DE LA LISTE LE 06/10 : elle ne gère plus aucune
+  // photo (étape « Visuels » supprimée, décision d'Alex). Les photos vivent au
+  // tableau de bord, seul écran à les remplacer.
   for (const [chemin, etiquette] of [
     ['app/dashboard/ConfigDashboard.js', 'le tableau de bord'],
-    ['app/signup/page.js', "l'inscription"],
   ]) {
     const src = readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
     const corps = corpsDe(src, 'remplacerPhotoGalerie')

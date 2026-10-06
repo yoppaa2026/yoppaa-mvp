@@ -3,16 +3,11 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { marquerDeconnexionVoulue } from '@/lib/session-permanente'
 import ChampAdresseOfficielle from '@/app/components/ChampAdresseOfficielle'
-import BanniereCommerce from '@/app/components/BanniereCommerce'
 import { useRouter } from 'next/navigation'
 import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan, TVA_ABONNEMENT_POURCENT } from '@/lib/plans'
-import { compresserImage } from '@/lib/compress-image'
-import { TAILLE_CONSEILLEE, avertissementTaille, refusFichierImage, mesurerFichierImage } from '@/lib/image-qualite'
-import { logoProvisoireSvg, propositionsLogo } from '@/lib/logo-provisoire'
-import { scoreOnboarding, SEUIL_SOUMISSION } from '@/lib/score-onboarding'
-import { MIN_PRESENTATION } from '@/lib/fiche-complete'
-import { cheminImage, objetDepuisUrl } from '@/lib/stockage-images'
-import { conseilPhoto, MAX_PHOTOS } from '@/lib/guide-photos'
+import { scoreOnboarding } from '@/lib/score-onboarding'
+import { ETAPES_INSCRIPTION, DERNIERE_ETAPE, etapeReprise } from '@/lib/etapes-inscription'
+import { CGU_COMMERCANT_VERSION, LIEN_CGU_COMMERCANT } from '@/lib/cgu'
 import { SHOP_PRODUCTS, classerProduitsParCategorie, prixProduitTexte } from '@/lib/produits-boutique'
 import { FRAIS_STRIPE_TEXTE } from '@/lib/frais-paiement'
 import { libelleBon } from '@/lib/bons-cadeaux'
@@ -23,7 +18,7 @@ import {
   Croissant, Scissors, ShoppingBag,
   User, Heart, Radio, Sun, Megaphone, Flame, AlertTriangle, Bell, Mail, Sparkles, BarChart3,
   ShoppingCart, Bike, Utensils, Calendar, Briefcase, Clock, Users, Package, CreditCard, Star, Download,
-  Smartphone, Printer, Camera, FileText, Pencil, CheckCircle, Check, Circle, Shield, IdCard,
+  Smartphone, Printer, FileText, Pencil, CheckCircle, Check, Circle, Shield, IdCard,
   MapPin, Gift, Sunset, Ticket,
 } from 'lucide-react'
 // Logo canonique Yoppaa : wordmark + 5 dots V2-B (spec validee 12/06).
@@ -66,40 +61,6 @@ function horairesViennentDesLieux(commercant) {
   return commercant?.siege_social_est_lieu_activite === false
 }
 
-// ─── GENERATEURS DE VISUELS AUTO (fallback branded Yoppaa) ────────────────────
-// Quand le commercant n'a pas de logo/photo, on lui propose de generer un
-// visuel propre dans la charte Yoppaa. Esprit Gmail/Notion : cercle initiale.
-// Cover : gradient violet + nom + 3 dots tricolores (signature canonique).
-async function canvasVersBlob(canvas) {
-  return new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png', 0.95))
-}
-
-// ⚠️ L'INITIALE A ÉTÉ REMPLACÉE PAR LE SYMBOLE DU MÉTIER (Alex, 14/08). Sur
-// l'accueil, la vignette d'un commerce fait 68 pixels de côté : un « C » blanc
-// dans un cercle violet peut être Ciseaux, Carrefour ou Chez Momo. Ça
-// ressemblait à un avatar par défaut, c'est-à-dire à l'absence de logo, et ça
-// desservait exactement ce qu'un logo doit servir : reconnaître un commerce
-// sans avoir à lire.
-//
-// Le tracé vit dans lib/logo-provisoire.js, qui n'a besoin ni du navigateur ni
-// de React : il rend un SVG, donc il se teste au banc.
-async function logoProvisoireCanvas(nom, type, choix = null) {
-  const svg = logoProvisoireSvg({ nom, type, taille: 512, symbole: choix?.symbole, teinte: choix?.teinte })
-  const image = new Image()
-  // On passe par une data URI plutôt que par un blob object URL : pas d'URL à
-  // révoquer, donc pas de fuite si la génération échoue en cours de route.
-  image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
-  await new Promise((resolve, reject) => {
-    image.onload = resolve
-    image.onerror = () => reject(new Error('SVG illisible'))
-  })
-  const canvas = document.createElement('canvas')
-  canvas.width = 512
-  canvas.height = 512
-  canvas.getContext('2d').drawImage(image, 0, 0, 512, 512)
-  return canvas
-}
-
 // Dots V2-B (5 dots maillon) — spec canonique 2026-06-12, fond fonce.
 // Sequence : grand / mini / grand / mini / grand, decalage vertical 0.4*base
 // sur les 4 dots du milieu pour former le sourire.
@@ -119,13 +80,16 @@ const T = {
   hairline: '#EEE9F5',
 }
 
-const ETAPES = [
-  { n: 1, label: 'Compte' },
-  { n: 2, label: 'Infos' },
-  { n: 3, label: 'Visuels' },
-  { n: 4, label: 'Horaires' },
-  { n: 5, label: 'Validation' },
-]
+// 🔴 TROIS ÉTAPES, PLUS CINQ (Alex, 06/10, tableau : « alléger le signup »).
+// Les Visuels, les Horaires et la présentation se redemandaient ensuite au
+// tableau de bord : le commerçant remplissait deux fois, et le score de 60
+// exigeait photos, logo et horaires AVANT même que son compte soit ouvert. Ils
+// vivent désormais au tableau de bord, où « fiche complète » les exige avant
+// la PUBLICATION. L'inscription ne garde que ce qui sert à OUVRIR le compte :
+// qui il est, et la vérification de son identité.
+// La liste et la reprise vivent dans `lib/etapes-inscription.js` : l'admin
+// et la relance lisent les mêmes étapes, et le banc les exécute.
+const ETAPES = ETAPES_INSCRIPTION
 
 // ─── COMPOSANT PRINCIPAL ──────────────────────────────────────────────────────
 // Crée le commerçant + sa ligne d'onboarding (nécessite une session Supabase active,
@@ -199,7 +163,7 @@ export default function Signup() {
             setOnboarding(ob)
             // Déjà validé → redirige vers dashboard
             if (ob.statut === 'valide') { router.push('/dashboard'); return }
-            setEtape(ob.etape_actuelle || 2)
+            setEtape(etapeReprise(ob.etape_actuelle))
           } else {
             // Compte + commerçant existent mais pas d'onboarding (cas de session déjà
             // existante de /login). On en crée un pour reprendre proprement.
@@ -223,7 +187,7 @@ export default function Signup() {
             if (annule) return
             if (res.commercant) {
               setCommercant(res.commercant)
-              if (res.onboarding) { setOnboarding(res.onboarding); setEtape(res.onboarding.etape_actuelle || 2) }
+              if (res.onboarding) { setOnboarding(res.onboarding); setEtape(etapeReprise(res.onboarding.etape_actuelle)) }
               else setEtape(2)
             }
           }
@@ -302,40 +266,18 @@ export default function Signup() {
             onUpdate={c => setCommercant(c)}
             onUpdateOb={ob => setOnboarding(ob)}
             onSaving={signalerSauvegarde}
-            avancer={() => avancerVers(3)}
+            avancer={() => avancerVers(DERNIERE_ETAPE)}
             retour={() => avancerVers(1)}
           />
         )}
-        {etape === 3 && commercant && (
-          <Etape3Visuels
+        {etape === DERNIERE_ETAPE && commercant && onboarding && (
+          <EtapeVerification
             commercant={commercant}
             onboarding={onboarding}
             onUpdate={c => setCommercant(c)}
             onUpdateOb={ob => setOnboarding(ob)}
             onSaving={signalerSauvegarde}
-            avancer={() => avancerVers(4)}
             retour={() => avancerVers(2)}
-          />
-        )}
-        {etape === 4 && commercant && (
-          <Etape4Horaires
-            commercant={commercant}
-            onboarding={onboarding}
-            onUpdate={c => setCommercant(c)}
-            onUpdateOb={ob => setOnboarding(ob)}
-            onSaving={signalerSauvegarde}
-            avancer={() => avancerVers(5)}
-            retour={() => avancerVers(3)}
-          />
-        )}
-        {etape === 5 && commercant && onboarding && (
-          <Etape5Validation
-            commercant={commercant}
-            onboarding={onboarding}
-            onUpdate={c => setCommercant(c)}
-            onUpdateOb={ob => setOnboarding(ob)}
-            onSaving={signalerSauvegarde}
-            retour={() => avancerVers(4)}
             aller={n => avancerVers(n)}
           />
         )}
@@ -1160,17 +1102,14 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
     type: commercant.type === 'À définir' ? '' : (commercant.type || ''),
     adresse: commercant.adresse || '',
     telephone: commercant.telephone || '',
-    description: commercant.description || '',
     site_web: commercant.site_web || '',
     latitude: commercant.latitude,
     longitude: commercant.longitude,
   })
-  // Rédaction assistée de la présentation : quelques mots du commerçant, plus
-  // son site s'il en a un, contre trois propositions modifiables.
-  const [motsCles, setMotsCles] = useState('')
-  const [propositions, setPropositions] = useState([])
-  const [iaEnCours, setIaEnCours] = useState(false)
-  const [iaMessage, setIaMessage] = useState(null)
+  // 🔴 LA PRÉSENTATION A QUITTÉ L'INSCRIPTION (Alex, 06/10, « alléger le
+  // signup »). Elle bloquait déjà des commerçants le 29/09, et se redemandait
+  // au tableau de bord : elle s'y écrit désormais, avec le même assistant
+  // (`BoutonIaFiche`), et « fiche complète » l'exige avant la publication.
   const [saving, setSaving] = useState(false)
   const debounceRef = useRef(null)
   // ⚠️ UN SIÈGE HORS WALLONIE N'A PAS DE POSITION, ET C'EST ADMIS (Alex, 05/10,
@@ -1221,21 +1160,13 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
   // fiche n'annonce plus rien, et « Mes lieux » réclame le complément dès la
   // première connexion au tableau de bord. Le client n'est jamais envoyé chez
   // un commerçant qui n'a pas dit où il accueille.
-  // 🔴 LA PRÉSENTATION BLOQUAIT SANS LE DIRE (Alex, 29/09 : « des commerçants
-  // se sont déjà retrouvés bloqués à cet endroit »). Trois défauts cumulés :
-  // le compteur comptait les espaces alors que la règle les retire (« 20 / 20 »
-  // affiché, bouton toujours gris) ; il était écrit en petit gris dans le
-  // sous-titre, loin du champ ; et l'aide du bas disait seulement « complète
-  // tous les champs ». Le seuil vient désormais de la règle de la fiche
-  // complète : l'inscription et le tableau de bord ne peuvent plus diverger.
-  const presentationLongueur = form.description.trim().length
-  const presentationManque = Math.max(0, MIN_PRESENTATION - presentationLongueur)
+  // ⚠️ PLUS DE PRÉSENTATION À CETTE ÉTAPE (06/10, voir plus haut) : la
+  // présentation bloquait déjà des commerçants ici le 29/09.
   const valide =
     form.nom.trim().length >= 2 &&
     form.type.trim().length > 0 &&
     form.adresse.trim().length > 0 &&
     form.telephone.trim().length >= 8 &&
-    presentationManque === 0 &&
     ((form.latitude && form.longitude) || sansPositionAssumee)
 
   // Sauvegarde auto (debounced)
@@ -1252,7 +1183,6 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
       type: values.type.trim() || 'À définir',
       adresse: values.adresse.trim() || null,
       telephone: values.telephone.trim() || null,
-      description: values.description.trim() || null,
       site_web: values.site_web?.trim() || null,
       latitude: values.latitude || null,
       longitude: values.longitude || null,
@@ -1260,39 +1190,6 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
     const { data } = await supabase.from('commercants').update(payload).eq('id', commercant.id).select().single()
     if (data) onUpdate(data)
     setSaving(false); onSaving?.('saved')
-  }
-
-  // Trois propositions de présentation, à partir des mots du commerçant et de
-  // son site s'il en a déclaré un. Le nombre de demandes est plafonné côté
-  // serveur : on affiche le décompte plutôt que de couper sans prévenir.
-  async function genererPresentation() {
-    if (iaEnCours) return
-    if (!form.nom.trim()) { setIaMessage({ type: 'error', texte: 'Renseigne d\'abord le nom de ton commerce.' }); return }
-    setIaEnCours(true); setIaMessage(null)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { setIaMessage({ type: 'error', texte: 'Session expirée, reconnecte-toi.' }); setIaEnCours(false); return }
-      const r = await fetch('/api/ia/presentation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ commercant_id: commercant.id, mots: motsCles, site_web: form.site_web }),
-      })
-      const j = await r.json()
-      if (!j?.ok) {
-        setIaMessage({ type: 'error', texte: j?.message || j?.error || 'La rédaction a échoué, réessaie.' })
-        setIaEnCours(false)
-        return
-      }
-      setPropositions(j.variantes || [])
-      setIaMessage({
-        type: 'ok',
-        texte: `${j.site_lu ? 'On a lu ton site pour t\'aider. ' : ''}Choisis le texte le plus juste, tu pourras le modifier.${
-          j.restant > 0 ? ` Il te reste ${j.restant} demande${j.restant > 1 ? 's' : ''}.` : ' C\'était ta dernière demande.'}`,
-      })
-    } catch {
-      setIaMessage({ type: 'error', texte: 'La rédaction a échoué, réessaie dans un instant.' })
-    }
-    setIaEnCours(false)
   }
 
   // ⚠️ LA RECHERCHE D'ADRESSE VIT DANS `ChampAdresse`, hissé au niveau du
@@ -1324,10 +1221,11 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
   return (
     <div>
       <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
-        Présente ton commerce
+        L’essentiel sur ton commerce
       </h1>
       <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
-        Ces infos apparaîtront sur ta page Yoppaa. Tu peux les modifier à tout moment.
+        Quatre informations, et c’est tout pour l’instant. Ta présentation, tes photos et tes horaires
+        se font ensuite depuis ton tableau de bord, à ton rythme.
       </p>
 
       <Card titre="Identité">
@@ -1393,7 +1291,7 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
         </Field>
       </Card>
 
-      <Card titre="Site web" sous="Facultatif. Si tu en as un, l'assistant s'en servira pour rédiger ta présentation.">
+      <Card titre="Site web" sous="Facultatif. Si tu en as un, l'assistant de ton tableau de bord s'en servira pour rédiger ta présentation.">
         <input type="url" inputMode="url" value={form.site_web}
           onChange={e => updateField('site_web', e.target.value)}
           placeholder="www.mon-commerce.be" style={inputStyle()}/>
@@ -1402,637 +1300,11 @@ function Etape2Infos({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, a
         </p>
       </Card>
 
-      <Card titre="Ta présentation" sous={`Au moins ${MIN_PRESENTATION} caractères, quelques mots suffisent.`}>
-        {/* Écrire sur soi est l'étape où l'on abandonne une inscription. Trois
-            textes à choisir et à retoucher lèvent ce blocage, et le commerçant
-            découvre au passage l'assistant de rédaction. */}
-        <div style={{ background: T.pale, borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
-          <p style={{ margin: '0 0 8px', fontSize: 12.5, fontWeight: 800, color: T.deep }}>
-            Tu ne sais pas par où commencer ? Donne trois éléments, on te propose des textes.
-          </p>
-          <p style={{ margin: '0 0 8px', fontSize: 11.5, color: T.muted, lineHeight: 1.55 }}>
-            Ce que tu vends ou proposes, depuis quand tu es là, et ce qui te distingue du voisin.
-            Par exemple : <em>« pains au levain, cuisson maison, ouvert depuis 1998, on connaît nos clients par leur prénom »</em>.
-          </p>
-          <textarea value={motsCles} onChange={e => setMotsCles(e.target.value)}
-            placeholder="Tes mots à toi, en vrac. Pas besoin de faire des phrases."
-            rows={2}
-            style={{ ...inputStyle(), minHeight: 56, resize: 'vertical', marginBottom: 8 }}/>
-          <button type="button" onClick={genererPresentation} disabled={iaEnCours}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 100, border: 'none', background: iaEnCours ? T.muted : T.bgPanel, color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: iaEnCours ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
-            {iaEnCours ? 'Rédaction en cours…' : 'Proposer des textes'}
-          </button>
-          {iaMessage && (
-            <p style={{ margin: '8px 0 0', fontSize: 11.5, color: iaMessage.type === 'error' ? '#B45309' : T.muted, lineHeight: 1.5 }}>
-              {iaMessage.texte}
-            </p>
-          )}
-          {propositions.length > 0 && (
-            <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-              {propositions.map((p, i) => (
-                <button key={i} type="button" onClick={() => { updateField('description', p); setIaMessage({ type: 'ok', texte: 'Texte repris. Modifie-le autant que tu veux, c\'est le tien.' }) }}
-                  style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${form.description === p ? T.main : '#EDE0FF'}`, background: form.description === p ? '#FAF8FE' : '#fff', fontSize: 12.5, color: T.ink, cursor: 'pointer', lineHeight: 1.5, fontFamily: 'inherit' }}>
-                  {p}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <textarea value={form.description} onChange={e => updateField('description', e.target.value)}
-          placeholder="Quelques mots qui décrivent ton commerce, ce qui te rend unique…"
-          rows={4}
-          aria-describedby="presentation-etat"
-          style={{ ...inputStyle(), minHeight: 90, resize: 'vertical', borderColor: presentationManque > 0 ? '#FCA5A5' : '#6EE7B7' }}/>
-        {/* ⚠️ SOUS LE CHAMP, EN COULEUR, ET CE QU'IL RESTE À ÉCRIRE : rouge tant
-            qu'il manque des caractères, vert quand c'est bon. Les espaces ne
-            comptent pas, exactement comme la règle qui débloque le bouton. */}
-        <p id="presentation-etat" aria-live="polite"
-          style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 0', fontSize: 12.5, fontWeight: 800, color: presentationManque > 0 ? '#B91C1C' : '#047857' }}>
-          {presentationManque > 0 ? (
-            <>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
-              {presentationLongueur === 0
-                ? `Écris au moins ${MIN_PRESENTATION} caractères pour continuer.`
-                : `Encore ${presentationManque} caractère${presentationManque > 1 ? 's' : ''} pour continuer (${presentationLongueur} / ${MIN_PRESENTATION}).`}
-            </>
-          ) : (
-            <>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>
-              C&rsquo;est bon, ta présentation est suffisante.
-            </>
-          )}
-        </p>
-      </Card>
-
       <NavEtape retour={retourAvecSauvegarde} continuer={continuer} valide={valide} saving={saving}
         hint={valide ? null
           : (!form.adresse.trim() || ((!form.latitude || !form.longitude) && !sansPositionAssumee))
             ? 'Indique ton adresse : code postal, rue choisie dans la liste, puis « Utiliser cette adresse ».'
-            : presentationManque > 0
-              ? `Ta présentation doit faire au moins ${MIN_PRESENTATION} caractères : il en manque ${presentationManque}.`
-              : 'Complète tous les champs pour continuer.'}/>
-    </div>
-  )
-}
-
-// ─── ÉTAPE 3 : VISUELS ────────────────────────────────────────────────────────
-// - Upload photo de couverture (16:9 conseillé) + logo (carré conseillé)
-// - Validation : JPG / PNG / WEBP, 800px min, 8MB max
-// - Stockage Supabase Storage bucket 'logos' (existant) avec préfixes différents
-// - URL couverture insérée dans commercant_photos (type='couverture')
-function Etape3Visuels({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, avancer, retour }) {
-  const [logoUrl, setLogoUrl] = useState(commercant.logo_url || null)
-  // S4 : galerie = jusqu'a 4 photos supplementaires affichees en carrousel
-  // sur la fiche client. Stockees en commercant_photos type='galerie'.
-  const [galerie, setGalerie] = useState([])
-  const [uploadingLogo, setUploadingLogo] = useState(false)
-  const [uploadingGalerie, setUploadingGalerie] = useState(false)
-  // ⚠️ UN MESSAGE PAR CARTE, ET C'EST LE CORRECTIF PRINCIPAL (Alex, 21/08).
-  // Un état `error` UNIQUE, rendu tout en bas de l'étape, faisait s'afficher le
-  // refus d'une photo de GALERIE sous la carte du LOGO, collé au bouton
-  // « Continuer ». Alex a cru que son logo venait d'être refusé : le message
-  // accusait le mauvais bloc, à deux cartes du geste.
-  // Un message se lit LÀ OÙ LE GESTE A EU LIEU.
-  const [msgLogo, setMsgLogo] = useState(null)      // { ton, titre, detail }
-  const [msgGalerie, setMsgGalerie] = useState(null)
-  // Tailles mesurées des images, pour que l'avertissement RESTE visible sur la
-  // vignette au lieu de disparaître avec le message.
-  const [dimsImages, setDimsImages] = useState({})  // { logo | <id photo> : { w, h } }
-  const [saving, setSaving] = useState(false)
-  // La couverture compte pour une : neuf de plus font dix photos en tout.
-  const MAX_GALERIE = MAX_PHOTOS - 1
-
-  // Charge couverture + galerie au mount
-  useEffect(() => {
-    let annule = false
-    supabase.from('commercant_photos')
-      .select('id, url, type, ordre')
-      .eq('commercant_id', commercant.id)
-      .order('ordre')
-      .then(({ data }) => {
-        if (annule) return
-        setGalerie((data || []).filter(p => p.type === 'galerie' && p.url))
-      })
-    return () => { annule = true }
-  }, [commercant.id])
-
-  // ⚠️ LA TAILLE EN PIXELS NE BLOQUE PLUS (arbitrage d'Alex, 21/08). Ce qui
-  // bloque encore : un fichier qui n'est pas une image, trop lourd, ou que le
-  // navigateur ne sait pas décoder. La règle et ses textes vivent dans
-  // `lib/image-qualite`, une seule fois, pour le signup ET le tableau de bord.
-  // Retourne les dimensions si le fichier passe, null sinon.
-  async function controlerImage(file, poser) {
-    poser(null)
-    const refus = refusFichierImage(file)
-    if (refus) { poser({ ton: 'erreur', titre: refus }); return null }
-    const dims = await mesurerFichierImage(file)
-    if (!dims) {
-      poser({ ton: 'erreur', titre: 'Cette image ne s\'ouvre pas.',
-        detail: 'Le fichier est peut-être abîmé, ou dans un format que ton navigateur ne lit pas. Réessaie avec une autre image.' })
-      return null
-    }
-    return dims
-  }
-
-  async function uploadLogo(file) {
-    const dims = await controlerImage(file, setMsgLogo)
-    if (!dims) return
-    setUploadingLogo(true)
-    // Compression client automatique (feedback_zero_friction)
-    const compressed = await compresserImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 })
-    const fileName = cheminImage(commercant.id, `logo-${commercant.id}-${Date.now()}.jpg`)
-    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
-    if (upErr) { setMsgLogo({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); setUploadingLogo(false); return }
-    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
-    const url = urlData.publicUrl
-    const { data: c } = await supabase.from('commercants').update({ logo_url: url }).eq('id', commercant.id).select().single()
-    if (c) onUpdate(c)
-    setLogoUrl(url)
-    setDimsImages(prev => ({ ...prev, logo: dims }))
-    // ⚠️ L'AVERTISSEMENT ARRIVE APRÈS LE SUCCÈS, PAS À LA PLACE. Le logo est
-    // en ligne : on le dit d'abord en le montrant, et on signale ensuite ce
-    // qu'il gagnerait à devenir. Un avertissement n'est pas un refus.
-    const av = avertissementTaille(dims, TAILLE_CONSEILLEE.logo, 'logo')
-    setMsgLogo(av ? { ton: 'avertissement', titre: av.titre, detail: av.detail } : null)
-    setUploadingLogo(false)
-  }
-
-  // Fallback "Genere-moi" : produit un cercle violet avec initiale du nom
-  // dans la charte Yoppaa. Pas de friction, propre, identitaire.
-  async function genererLogoAuto(choix = null) {
-    setMsgLogo(null)
-    setUploadingLogo(true)
-    onSaving?.('saving')
-    try {
-      const nom = commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Y'
-      const canvas = await logoProvisoireCanvas(nom, commercant.type, choix)
-      const blob = await canvasVersBlob(canvas)
-      if (!blob) { setMsgLogo({ ton: 'erreur', titre: 'Génération du logo impossible.' }); return }
-      const fileName = cheminImage(commercant.id, `logo-${commercant.id}-${Date.now()}.png`)
-      const { error: upErr } = await supabase.storage.from('logos').upload(fileName, blob, { upsert: true, contentType: 'image/png' })
-      if (upErr) { setMsgLogo({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); return }
-      const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
-      const url = urlData.publicUrl
-      const { data: c } = await supabase.from('commercants').update({ logo_url: url }).eq('id', commercant.id).select().single()
-      if (c) onUpdate(c)
-      setLogoUrl(url)
-      // Le logo provisoire est dessiné en 512 px : jamais d'avertissement ici,
-      // et surtout pas celui d'une image précédente resté à l'écran.
-      setDimsImages(prev => ({ ...prev, logo: { w: canvas.width, h: canvas.height } }))
-      onSaving?.('saved')
-    } finally {
-      setUploadingLogo(false)
-    }
-  }
-
-
-
-  // S4 : ajout d'une photo a la galerie (max 4). Ordre = max courant + 1
-  // pour preserver l'ordre d'affichage du carousel cote fiche client.
-  async function uploadPhotoGalerie(file) {
-    if (galerie.length >= MAX_GALERIE) {
-      setMsgGalerie({ ton: 'erreur', titre: `Maximum ${MAX_GALERIE} photos supplémentaires.` })
-      return
-    }
-    const dims = await controlerImage(file, setMsgGalerie)
-    if (!dims) return
-    setUploadingGalerie(true)
-    onSaving?.('saving')
-    // Compression client automatique (feedback_zero_friction) — galerie carousel
-    const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
-    const fileName = cheminImage(commercant.id, `gal-${commercant.id}-${Date.now()}.jpg`)
-    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
-    if (upErr) { setMsgGalerie({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); setUploadingGalerie(false); return }
-    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
-    const url = urlData.publicUrl
-    const ordreSuivant = galerie.length > 0 ? Math.max(...galerie.map(p => p.ordre || 0)) + 1 : 1
-    const { data: row, error: insErr } = await supabase.from('commercant_photos').insert({
-      commercant_id: commercant.id,
-      type: 'galerie',
-      url,
-      ordre: ordreSuivant,
-    }).select().single()
-    if (insErr) { setMsgGalerie({ ton: 'erreur', titre: `Enregistrement échoué : ${insErr.message}` }); setUploadingGalerie(false); return }
-    setGalerie(prev => [...prev, row])
-    if (row?.id) setDimsImages(prev => ({ ...prev, [row.id]: dims }))
-    const av = avertissementTaille(dims, TAILLE_CONSEILLEE.photo, 'photo')
-    setMsgGalerie(av ? { ton: 'avertissement', titre: av.titre, detail: av.detail } : null)
-    setUploadingGalerie(false)
-    onSaving?.('saved')
-  }
-
-  // Remplace une photo SANS lui faire perdre sa place dans la série. Supprimer
-  // puis rajouter la renverrait en dernier, et l'ordre compte : l'écran dit
-  // lui-même qu'on regarde rarement plus loin que la troisième.
-  //
-  // ⚠️ L'ANCIEN FICHIER EST EFFACÉ APRÈS, et seulement après. L'effacer avant
-  // laisserait, si l'envoi échoue, une ligne pointant vers un objet disparu :
-  // une image cassée sur la fiche publique, et personne pour s'en apercevoir.
-  async function remplacerPhotoGalerie(photo, file) {
-    // ⚠️ LE MÊME CONTRÔLE QUE L'AJOUT, ET SURTOUT PAS UN CONTRÔLE MAISON.
-    // `controlerImage` refuse les formats impossibles ET les fichiers abîmés,
-    // en posant lui-même le message. Un remplacement plus permissif que l'ajout
-    // laisserait passer par la petite porte ce que la grande refuse.
-    const dims = await controlerImage(file, setMsgGalerie)
-    if (!dims) return
-    setUploadingGalerie(true)
-    onSaving?.('saving')
-    const compressed = await compresserImage(file, { maxWidth: 1600, maxHeight: 1200, quality: 0.85 })
-    const fileName = cheminImage(commercant.id, `gal-${commercant.id}-${Date.now()}.jpg`)
-    const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
-    if (upErr) { setMsgGalerie({ ton: 'erreur', titre: `Upload échoué : ${upErr.message}` }); setUploadingGalerie(false); return }
-    const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
-    const { error: majErr } = await supabase.from('commercant_photos')
-      .update({ url: urlData.publicUrl }).eq('id', photo.id)
-    if (majErr) { setMsgGalerie({ ton: 'erreur', titre: `Enregistrement échoué : ${majErr.message}` }); setUploadingGalerie(false); return }
-    setGalerie(prev => prev.map(p => (p.id === photo.id ? { ...p, url: urlData.publicUrl } : p)))
-    setDimsImages(prev => ({ ...prev, [photo.id]: dims }))
-    try {
-      const ancien = objetDepuisUrl(photo.url)
-      if (ancien) await supabase.storage.from('logos').remove([ancien])
-    } catch { /* nettoyage best-effort, l'image orpheline ne casse rien */ }
-    const av = avertissementTaille(dims, TAILLE_CONSEILLEE.photo, 'photo')
-    setMsgGalerie(av ? { ton: 'avertissement', titre: av.titre, detail: av.detail } : null)
-    setUploadingGalerie(false)
-    onSaving?.('saved')
-  }
-
-  async function supprimerPhotoGalerie(photo) {
-    onSaving?.('saving')
-    await supabase.from('commercant_photos').delete().eq('id', photo.id)
-    // Supprime aussi le fichier dans storage (nom = derniere segment de l'url)
-    try {
-      const objectName = objetDepuisUrl(photo.url)
-      if (objectName) await supabase.storage.from('logos').remove([objectName])
-    } catch { /* nettoyage best-effort, l'image orpheline ne casse rien */ }
-    setGalerie(prev => prev.filter(p => p.id !== photo.id))
-    onSaving?.('saved')
-  }
-
-  async function continuer() {
-    setSaving(true)
-    if (onboarding) {
-      // ⚠️ `photo_ok` PORTE 20 DES 100 POINTS DU SCORE, et le seuil pour
-      // soumettre est de 60. Le brancher sur une photo de couverture qu'on ne
-      // demande plus aurait rendu ces 20 points inatteignables : un commerçant
-      // de service, qui peut déjà passer les horaires, se serait retrouvé
-      // bloqué sous le seuil sans comprendre pourquoi.
-      // Il porte donc désormais sur la galerie, qui est ce qu'on lui demande
-      // vraiment et ce que ses clients verront.
-      const { data } = await supabase.from('onboarding_commercants')
-        .update({ photo_ok: galerie.length > 0 }).eq('id', onboarding.id).select().single()
-      if (data) onUpdateOb(data)
-    }
-    setSaving(false)
-    avancer()
-  }
-
-  return (
-    <div>
-      <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
-        Tes visuels
-      </h1>
-      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 12px' }}>
-        {/* ⚠️ « +40 % DE CLICS » A ÉTÉ RETIRÉ D'ICI. Ce chiffre ne reposait sur
-            aucune mesure : ni sur les statistiques de Yoppaa, qui n'existaient
-            pas encore, ni sur une étude citée. Une allégation chiffrée
-            invérifiable est une promesse commerciale, et le commerçant qui ne
-            voit pas ces 40 % arriver a raison de nous le reprocher. On dit
-            plutôt ce qui est vrai et vérifiable : la photo est ce qu'on voit
-            avant le nom. */}
-        Ta photo est ce qu&rsquo;un client voit avant même ton nom, dans la liste des commerces autour de lui. Tu pourras en ajouter d&rsquo;autres plus tard.
-      </p>
-
-      {/* Bloc d'aide : ce qui fonctionne, ce qui ne fonctionne pas */}
-      <div style={{ background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: '14px 16px 12px', marginBottom: 14 }}>
-        <p style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: '0.7px' }}>
-          Pour des photos qui convertissent
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div style={{ background: '#F0FDF4', borderRadius: 10, padding: '10px 12px', border: '1px solid #BBF7D0' }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#15803D', margin: '0 0 6px' }}>✓ Bon</p>
-            <ul style={{ fontSize: 11.5, color: '#166534', margin: 0, paddingLeft: 14, lineHeight: 1.55 }}>
-              <li>Façade reconnaissable (premier repère client)</li>
-              <li>Format paysage 16:9 (1200×675 px ou +)</li>
-              <li>Lumière naturelle de jour, image nette</li>
-              <li>Enseigne lisible et bien cadrée</li>
-              <li>Qualité maximale (pas de compression douteuse)</li>
-            </ul>
-          </div>
-          <div style={{ background: '#FEF2F2', borderRadius: 10, padding: '10px 12px', border: '1px solid #FECACA' }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: '#B91C1C', margin: '0 0 6px' }}>✗ Pas bon</p>
-            <ul style={{ fontSize: 11.5, color: '#991B1B', margin: 0, paddingLeft: 14, lineHeight: 1.55 }}>
-              <li>Photo verticale (portrait) sur la couverture</li>
-              <li>Floue, sombre ou contre-jour</li>
-              <li>Filtres lourds, cadres déco, watermark</li>
-              <li>Photo de logo en couverture (utilise le champ Logo dédié)</li>
-              <li>Capture d&apos;écran d&apos;un autre site</li>
-              <li>Image basse qualité ou recadrée à l&apos;arrache</li>
-            </ul>
-          </div>
-        </div>
-        {/* ⚠️ « MINIMUM » EST DEVENU « CONSEILLÉ », ET C'EST MAINTENANT VRAI :
-            une photo plus petite passe, on te dit simplement ce qu'elle vaudra.
-            Annoncer un minimum qu'on n'applique plus serait pire que de ne rien
-            annoncer du tout. */}
-        <p style={{ fontSize: 10.5, color: T.muted, margin: '10px 0 0', fontWeight: 600, lineHeight: 1.4 }}>
-          Format accepté : JPG, PNG, WEBP · 800 px conseillés sur le grand côté · 15 Mo max
-        </p>
-      </div>
-
-      {/* ⚠️ « PHOTO DE COUVERTURE » RETIRÉE ICI (Alex, 14/08). Elle ne
-          devenait PAS la bannière du haut de fiche : celle-ci est dessinée par
-          le composant BanniereCommerce, à partir du nom, et ne lit aucune
-          image. On demandait donc un travail au commerçant pour une photo qui
-          n'apparaissait pas là où le titre le laissait croire.
-          À la place, il voit ce que sa fiche donnera vraiment. */}
-      <Card titre="Le haut de ta fiche" sous="Il est créé automatiquement à partir du nom de ton commerce. Rien à faire, et rien à uploader.">
-        <div style={{ position: 'relative', height: 150, borderRadius: 14, overflow: 'hidden', border: `1px solid ${T.hairline}` }}>
-          <BanniereCommerce nom={commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Ton commerce'} taillePolice="1.3rem" compact/>
-        </div>
-        <p style={{ fontSize: 11.5, color: T.muted, margin: '10px 0 0', lineHeight: 1.5 }}>
-          C&apos;est la signature Yoppaa : un Yopper reconnaît une fiche Yoppaa avant même
-          de lire. Tes photos à toi, elles, s&apos;affichent juste en dessous.
-        </p>
-      </Card>
-
-      <Card titre={`Mon commerce en images (${galerie.length + 1}/${MAX_PHOTOS})`} sous="Elles défilent dans cet ordre sur ta page. Rien n'est obligatoire, mais trois photos valent mieux qu'une.">
-        {/* « Ajoute des photos » ne dit rien à personne. Une consigne par place,
-            en revanche, se comprend et se fait : c'est la demande d'Alex du
-            05/08, et c'est ce qui fait la différence entre une fiche vide et
-            une fiche qui donne envie. */}
-        <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-          {[2, 3, 4].map(position => {
-            // Conseils adaptés au métier : un food truck n'a pas de devanture,
-            // un salon ne vend pas des rayons.
-            const c = conseilPhoto(position, { categorie: commercant.categorie, type: commercant.type })
-            return (
-              <p key={position} style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
-                <strong style={{ color: T.bgPanel }}>Photo {position} · {c.titre}</strong> {c.aide}
-              </p>
-            )
-          })}
-          <p style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
-            Clique une vignette pour la remplacer, la croix pour la retirer. Au-delà, tu peux aller
-            jusqu&rsquo;à {MAX_PHOTOS} photos et changer leur ordre depuis ton tableau de bord.
-          </p>
-        </div>
-        <GalerieMini
-          photos={galerie}
-          max={MAX_GALERIE}
-          uploading={uploadingGalerie}
-          onFile={uploadPhotoGalerie}
-          onSupprimer={supprimerPhotoGalerie}
-          onRemplacer={remplacerPhotoGalerie}
-          dims={dimsImages}
-          onMesure={(id, d) => setDimsImages(prev => (prev[id] ? prev : { ...prev, [id]: d }))}
-        />
-        <MessageImage msg={msgGalerie}/>
-        <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
-          Format paysage idéal, mais tous les ratios passent. Compression automatique.
-        </div>
-      </Card>
-
-      {/* ⚠️ LE LOGO N'EST PAS UN ORNEMENT, et le texte doit le dire (Alex,
-          14/08). C'est la seule image qui accompagne un commerce PARTOUT :
-          l'accueil, la liste des favoris, le suivi de commande. Un Yopper
-          retrouve son boulanger à sa vignette avant de lire son nom. On peut
-          lui en générer un, mais son vrai logo vaudra toujours mieux : c'est
-          son identité, pas la nôtre. */}
-      <Card titre="Ton logo" sous="C'est à ça que tes clients te reconnaîtront dans la liste des commerces, dans leurs favoris et sur leurs commandes.">
-        <UploadZone
-          url={logoUrl}
-          uploading={uploadingLogo}
-          aspect="1/1"
-          minHeight={120}
-          label="Ajouter le logo"
-          onFile={uploadLogo}
-          maxWidth={140}
-          dims={dimsImages.logo}
-          onMesure={d => setDimsImages(prev => (prev.logo ? prev : { ...prev, logo: d }))}
-          minPx={TAILLE_CONSEILLEE.logo}
-          quoi="logo"
-        />
-        <MessageImage msg={msgLogo}/>
-        {/* ⚠️ ON PROPOSE, ON N'IMPOSE PAS (Alex, 14/08). Un logo qu'on choisit
-            devient le sien ; un logo imposé reste « celui de Yoppaa », et le
-            commerçant s'en détache au lieu de se l'approprier. Le premier de
-            la grille est le symbole le plus attendu pour son métier, dans une
-            teinte dérivée de son nom : c'est une proposition, pas un verdict. */}
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px dashed ${T.hairline}` }}>
-          <p style={{ fontSize: 12, fontWeight: 800, color: T.bgPanel, margin: '0 0 3px' }}>
-            Pas encore de logo ? Choisis-en un en attendant
-          </p>
-          <p style={{ fontSize: 11, color: T.muted, margin: '0 0 10px', lineHeight: 1.45 }}>
-            Il reprend le symbole de ton métier. Tu le remplaceras par le tien quand tu voudras.
-          </p>
-
-          {/* ⚠️ DIRE QUE C'EST PROVISOIRE, ET POURQUOI ON Y TIENT (Alex, 14/08).
-              Formuler ça comme une règle de la plateforme serait exact et
-              contre-productif : le commerçant y entendrait une case à cocher de
-              plus, et chercherait comment y couper. Ce qui le convainc, c'est ce
-              que ça lui rapporte à LUI, et ça se démontre en une image : une
-              liste de commerces sans vignette est illisible, et celui qui n'en a
-              pas est celui qu'on ne remarque pas. */}
-          <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: T.pale, borderRadius: 12, padding: '11px 13px', marginBottom: 12 }}>
-            <span style={{ flexShrink: 0, marginTop: 1, color: T.main }}><Sparkles size={16} strokeWidth={2.2}/></span>
-            <p style={{ margin: 0, fontSize: 11.5, color: T.deep, fontWeight: 700, lineHeight: 1.5 }}>
-              C&apos;est un dépannage, et ça se remplace en dix secondes.
-              <span style={{ display: 'block', fontWeight: 500, color: T.muted, marginTop: 3 }}>
-                Sur Yoppaa, chaque commerce a sa vignette : c&apos;est à ça qu&apos;un habitant
-                retrouve son boulanger dans une liste, d&apos;un coup d&apos;œil et sans lire.
-                Celui qui n&apos;en a pas est celui qu&apos;on ne remarque pas. Alors on t&apos;en
-                prête un, le temps que tu mettes le tien.
-              </span>
-            </p>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(58px, 1fr))', gap: 8 }}>
-            {propositionsLogo({ nom: commercant.nom && commercant.nom !== 'Mon commerce' ? commercant.nom : 'Yoppaa', type: commercant.type }).map(p => (
-              <button key={p.cle} type="button" disabled={uploadingLogo}
-                onClick={() => genererLogoAuto({ symbole: p.symbole, teinte: p.teinte })}
-                aria-label={`Choisir ce logo, symbole ${p.symbole}`}
-                style={{ padding: 0, border: `2px solid ${T.hairline}`, borderRadius: 14, background: 'none', cursor: uploadingLogo ? 'wait' : 'pointer', aspectRatio: '1/1', overflow: 'hidden', lineHeight: 0, transition: 'border-color 0.15s, transform 0.15s' }}
-                onMouseOver={e => { if (!uploadingLogo) { e.currentTarget.style.borderColor = T.main; e.currentTarget.style.transform = 'translateY(-2px)' } }}
-                onMouseOut={e => { e.currentTarget.style.borderColor = T.hairline; e.currentTarget.style.transform = 'none' }}>
-                {/* Le SVG est rendu tel quel : pas d'aller-retour au serveur
-                    pour un aperçu, et ce qu'il voit est exactement ce qu'il
-                    obtiendra en cliquant. */}
-                <span style={{ display: 'block', width: '100%' }} dangerouslySetInnerHTML={{ __html: p.svg.replace('width="512" height="512"', 'width="100%" height="100%"') }}/>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{ marginTop: 10, fontSize: 11, color: T.muted, fontWeight: 600, lineHeight: 1.5 }}>
-          <strong style={{ color: T.bgPanel }}>Le tien vaut mieux que le nôtre :</strong> c&apos;est ton identité,
-          celle qu&apos;on retrouve sur ta vitrine et sur tes sacs. Ton logo seul sur fond uni,
-          ou une photo carrée bien recadrée sur ton enseigne.
-          <span style={{ display: 'block', marginTop: 4 }}>
-            Si tu n&apos;en as pas encore, on t&apos;en fabrique un aux couleurs de ton métier
-            pour que ta fiche ne reste pas vide. Tu le remplaceras quand tu voudras.
-          </span>
-        </div>
-      </Card>
-
-      {/* ⚠️ PLUS AUCUN BANDEAU D'ERREUR ICI. C'est ce bandeau, rendu après les
-          deux cartes, qui affichait le refus d'une photo de galerie juste sous
-          la carte du logo. Chaque message est désormais dans SA carte. */}
-
-      <NavEtape
-        retour={retour}
-        continuer={continuer}
-        valide={true}
-        saving={saving}
-        hint={logoUrl || galerie.length > 0 ? null : 'Sans logo ni photo, ta fiche paraît vide. Tu peux aussi les ajouter plus tard depuis ton tableau de bord.'}
-      />
-    </div>
-  )
-}
-
-// ⚠️ UN MESSAGE SE LIT LÀ OÙ LE GESTE A EU LIEU. Rendu DANS la carte concernée,
-// jamais en pied d'étape. Deux tons, et ils ne disent pas la même chose :
-//   • erreur         → rien n'a été enregistré, il faut recommencer.
-//   • avertissement  → c'est enregistré, et voilà ce que ça vaudra.
-// Le rouge est réservé à ce qui a échoué (feedback_boutons_qui_disent_le_geste).
-function MessageImage({ msg }) {
-  if (!msg) return null
-  const erreur = msg.ton === 'erreur'
-  const couleurs = erreur
-    ? { fond: '#FEE2E2', bord: '#FCA5A5', texte: '#7F1D1D', doux: '#991B1B' }
-    : { fond: '#FFF7ED', bord: '#FED7AA', texte: '#7C2D12', doux: '#9A3412' }
-  return (
-    <div role={erreur ? 'alert' : 'status'}
-      style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: couleurs.fond, border: `1px solid ${couleurs.bord}`, borderRadius: 10, padding: '10px 13px', marginTop: 12 }}>
-      <span style={{ flexShrink: 0, marginTop: 1, color: couleurs.texte }}>
-        <AlertTriangle size={15} strokeWidth={2}/>
-      </span>
-      <div style={{ minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: couleurs.texte, lineHeight: 1.45 }}>{msg.titre}</p>
-        {msg.detail && (
-          <p style={{ margin: '3px 0 0', fontSize: 11.5, fontWeight: 500, color: couleurs.doux, lineHeight: 1.5 }}>{msg.detail}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Pastille posée sur une vignette quand l'image est sous sa taille conseillée.
-// ⚠️ ELLE SURVIT AU MESSAGE. Le texte d'avertissement disparaît au téléversement
-// suivant ; la pastille, elle, est encore là au retour sur l'étape, et c'est ce
-// qui permet de savoir LAQUELLE des six photos reprendre.
-function PastilleTaille({ dims, minPx, quoi = 'photo' }) {
-  const av = avertissementTaille(dims, minPx, quoi)
-  if (!av) return null
-  return (
-    <span title={`${av.titre}. ${av.detail}`}
-      style={{ position: 'absolute', left: 4, bottom: 4, background: 'rgba(124,45,18,0.92)', color: '#fff', fontSize: 9.5, fontWeight: 800, padding: '2px 6px', borderRadius: 100, letterSpacing: '0.2px', pointerEvents: 'none' }}>
-      {av.grandCote} px
-    </span>
-  )
-}
-
-// Grille de thumbs galerie + bouton "+" pour ajouter une photo (max atteint).
-// Affiche une croix sur chaque thumb pour supprimer.
-// ⚠️ `onRemplacer` EST FACULTATIF, ET C'EST VOULU. Le composant sert aussi là
-// où le remplacement n'a pas de sens ; sans la fonction, la vignette redevient
-// une simple image et rien ne promet un geste qui n'arriverait pas.
-function GalerieMini({ photos, max, uploading, onFile, onSupprimer, onRemplacer, dims = {}, onMesure }) {
-  const inputRef = useRef(null)
-  const peutAjouter = photos.length < max
-  return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10 }}>
-        {photos.map(p => (
-          <div key={p.id} style={{ position: 'relative', aspectRatio: '4/3', borderRadius: 12, overflow: 'hidden', border: `1px solid ${T.hairline}` }}>
-            {/* ⚠️ ON MESURE L'IMAGE EN LIGNE, PAS SEULEMENT LE FICHIER TÉLÉVERSÉ.
-                La compression ne fait que RÉDUIRE : une source de 640 px reste
-                à 640 px une fois stockée. La mesure au chargement donne donc la
-                même réponse, et elle vaut aussi pour les photos déjà en place
-                avant aujourd'hui. Aucune migration, aucune colonne à remplir. */}
-            {/* ⚠️ UN `label`, PAS UN `button` QUI CLIQUE UN INPUT : iOS exige
-                un geste utilisateur DIRECT pour ouvrir le sélecteur de
-                fichiers, et refuse un clic relayé par du code. */}
-            <label title={onRemplacer ? 'Cliquer pour remplacer cette photo' : undefined}
-              style={{ display: 'block', width: '100%', height: '100%', cursor: onRemplacer ? (uploading ? 'wait' : 'pointer') : 'default' }}>
-              <img decoding="async" loading="lazy" src={p.url} alt=""
-                onLoad={e => onMesure?.(p.id, { w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-              {onRemplacer && (
-                <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploading}
-                  onChange={e => { if (e.target.files?.[0]) onRemplacer(p, e.target.files[0]); e.target.value = '' }}/>
-              )}
-            </label>
-            <PastilleTaille dims={dims[p.id]} minPx={TAILLE_CONSEILLEE.photo}/>
-            <button type="button" onClick={() => onSupprimer(p)} aria-label="Supprimer"
-              style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(22,6,54,0.85)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, lineHeight: 1, padding: 0 }}>
-              <span style={{ marginTop: -1 }}>×</span>
-            </button>
-          </div>
-        ))}
-        {peutAjouter && (
-          <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
-            style={{ aspectRatio: '4/3', borderRadius: 12, border: `2px dashed ${T.hairline}`, background: '#FAFAFA', cursor: uploading ? 'wait' : 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, fontFamily: '"DM Sans", sans-serif' }}>
-            {uploading ? (
-              <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel }}>Upload…</span>
-            ) : (
-              <>
-                <Camera size={20} strokeWidth={1.8} color={T.main}/>
-                <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Ajouter</span>
-              </>
-            )}
-          </button>
-        )}
-      </div>
-      {/* ⚠️ `image/*` ET NON UNE LISTE DE TROIS FORMATS. Un iPhone propose ses
-          photos en HEIC : la liste étroite les grisait dans le sélecteur, alors
-          que le tableau de bord les accepte. Safari sait les décoder, la
-          compression les ressort en JPEG, et ce qui ne se décode pas est
-          attrapé par la mesure avec un message clair. */}
-      <input ref={inputRef} type="file" accept="image/*"
-        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
-        style={{ display: 'none' }}/>
-    </div>
-  )
-}
-
-function UploadZone({ url, uploading, aspect, minHeight, label, onFile, maxWidth, dims, onMesure, minPx, quoi }) {
-  const inputRef = useRef(null)
-  return (
-    <div style={{ maxWidth }}>
-      <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
-        style={{ width: '100%', minHeight, aspectRatio: aspect, borderRadius: 14, border: `2px dashed ${url ? T.bgPanel : T.hairline}`, background: url ? '#fff' : '#FAFAFA', cursor: uploading ? 'wait' : 'pointer', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"DM Sans", sans-serif', padding: 0 }}>
-        {url ? (
-          <img decoding="async" loading="lazy" src={url} alt=""
-            onLoad={e => onMesure?.({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-        ) : (
-          <div style={{ textAlign: 'center', padding: 16 }}>
-            <Camera size={26} strokeWidth={1.8} color={T.main} style={{ marginBottom: 6 }}/>
-            <p style={{ fontSize: 13, color: T.muted, fontWeight: 700 }}>{label}</p>
-            <p style={{ fontSize: 11, color: T.muted, fontWeight: 500, marginTop: 4 }}>JPG, PNG ou WEBP · 15 Mo max</p>
-          </div>
-        )}
-        {url && minPx ? <PastilleTaille dims={dims} minPx={minPx} quoi={quoi}/> : null}
-        {uploading && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: T.bgPanel }}>
-            Upload en cours…
-          </div>
-        )}
-      </button>
-      {/* ⚠️ `image/*` ET NON UNE LISTE DE TROIS FORMATS. Un iPhone propose ses
-          photos en HEIC : la liste étroite les grisait dans le sélecteur, alors
-          que le tableau de bord les accepte. Safari sait les décoder, la
-          compression les ressort en JPEG, et ce qui ne se décode pas est
-          attrapé par la mesure avec un message clair. */}
-      <input ref={inputRef} type="file" accept="image/*"
-        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
-        style={{ display: 'none' }}/>
-      {url && (
-        <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
-          style={{ marginTop: 8, padding: '6px 12px', background: 'none', border: `1px solid ${T.hairline}`, borderRadius: 100, color: T.muted, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-          Remplacer
-        </button>
-      )}
+            : 'Complète tous les champs pour continuer.'}/>
     </div>
   )
 }
@@ -2081,208 +1353,6 @@ function NavEtape({ retour, continuer, valide, saving, hint, plusTard, plusTardL
   )
 }
 
-// ─── ÉTAPE 4 : HORAIRES ───────────────────────────────────────────────────────
-// Grille 7 jours avec heures début/fin + toggle ouvert/fermé.
-// Bouton "Copier lundi → tous les jours" pour gagner du temps.
-const JOURS = [
-  { key: 'lundi',    label: 'Lundi' },
-  { key: 'mardi',    label: 'Mardi' },
-  { key: 'mercredi', label: 'Mercredi' },
-  { key: 'jeudi',    label: 'Jeudi' },
-  { key: 'vendredi', label: 'Vendredi' },
-  { key: 'samedi',   label: 'Samedi' },
-  { key: 'dimanche', label: 'Dimanche' },
-]
-
-function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, avancer, retour }) {
-  const initial = commercant.horaires_detail || {}
-  const [horaires, setHoraires] = useState(() => {
-    const out = {}
-    JOURS.forEach(j => {
-      const h = initial[j.key]
-      out[j.key] = h
-        ? { ouvert: h.ouvert !== false, debut: h.debut || '09:00', fin: h.fin || '18:00', debut2: h.debut2 || null, fin2: h.fin2 || null }
-        : { ouvert: true, debut: '09:00', fin: '18:00', debut2: null, fin2: null }
-    })
-    return out
-  })
-  const [saving, setSaving] = useState(false)
-  const debounceRef = useRef(null)
-
-  function updateJour(jour, patch) {
-    setHoraires(prev => {
-      const next = { ...prev, [jour]: { ...prev[jour], ...patch } }
-      clearTimeout(debounceRef.current)
-      debounceRef.current = setTimeout(() => sauvegarder(next), 500)
-      return next
-    })
-  }
-
-  function copierLundi() {
-    const lun = horaires.lundi
-    const next = {}
-    JOURS.forEach(j => { next[j.key] = { ...lun } })
-    setHoraires(next)
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => sauvegarder(next), 200)
-  }
-
-  async function sauvegarder(values) {
-    setSaving(true); onSaving?.('saving')
-    const { data } = await supabase.from('commercants')
-      .update({ horaires_detail: values })
-      .eq('id', commercant.id)
-      .select()
-      .single()
-    if (data) onUpdate(data)
-    setSaving(false); onSaving?.('saved')
-  }
-
-  // Valide si au moins 1 jour est ouvert
-  const valide = Object.values(horaires).some(h => h.ouvert)
-
-  // Skip-logic : un service vitrine en plan Exister peut ne pas avoir d'horaires
-  // (coiffeur 100% RDV, garagiste sur appel...). Master section 4.
-  const plan = getPlanActif(commercant, onboarding)
-  // ⚠️ ET CELUI QUI CHANGE D'ENDROIT PEUT PASSER AUSSI, quel que soit son plan
-  // et sa catégorie : ses horaires ne se saisissent pas ici, ils se déduisent
-  // de ses emplacements. Le bloquer sur une grille qu'on va réécrire serait
-  // lui faire perdre son temps au pire moment, celui de l'inscription.
-  const skipAutorise = peutSkipperHoraires(plan, commercant.categorie)
-    || horairesViennentDesLieux(commercant)
-
-  async function continuer() {
-    if (!valide) return
-    clearTimeout(debounceRef.current)
-    await sauvegarder(horaires)
-    if (onboarding) {
-      const { data } = await supabase.from('onboarding_commercants')
-        .update({ horaires_ok: true }).eq('id', onboarding.id).select().single()
-      if (data) onUpdateOb(data)
-    }
-    avancer()
-  }
-
-  // Save on back : flush le debounce pour ne pas perdre les saisies horaires
-  async function retourAvecSauvegarde() {
-    clearTimeout(debounceRef.current)
-    if (saving) return retour()
-    await sauvegarder(horaires)
-    retour()
-  }
-
-  async function configurerPlusTard() {
-    clearTimeout(debounceRef.current)
-    if (onboarding) {
-      const { data } = await supabase.from('onboarding_commercants')
-        .update({ horaires_ok: false }).eq('id', onboarding.id).select().single()
-      if (data) onUpdateOb(data)
-    }
-    avancer()
-  }
-
-  return (
-    <div>
-      <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
-        Tes horaires d&rsquo;ouverture
-      </h1>
-      <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 24px' }}>
-        Configure ton planning hebdomadaire. Tu pourras gérer les fermetures exceptionnelles depuis ton tableau de bord.
-      </p>
-
-      {/* ⚠️ CE COMMERÇANT N'A PAS D'HORAIRES FIXES, et lui en demander ici est
-          une question sans réponse. Il a dit à l'étape précédente que son
-          activité ne se passe pas à l'adresse de son siège : depuis le 13/08,
-          ses horaires sont DÉDUITS de ses emplacements, et ce qu'il saisirait
-          ici serait réécrit dès sa première tournée déclarée. */}
-      {horairesViennentDesLieux(commercant) && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: T.pale, border: `1.5px solid ${T.main}44`, borderRadius: 14, padding: '13px 15px', marginBottom: 16 }}>
-          <span style={{ flexShrink: 0, marginTop: 1, color: T.main }}><MapPin size={17} strokeWidth={2.2}/></span>
-          <p style={{ margin: 0, fontSize: 12.5, color: T.deep, fontWeight: 700, lineHeight: 1.5 }}>
-            Tu changes d’endroit : tes horaires viendront de tes emplacements.
-            <span style={{ display: 'block', fontWeight: 500, marginTop: 3, color: T.muted }}>
-              Tu déclareras où tu es et à quelles heures depuis ton tableau de bord,
-              et tes horaires d’ouverture en découleront tout seuls. Tu peux donc passer
-              cette étape, ou poser ici des heures indicatives en attendant.
-            </span>
-          </p>
-        </div>
-      )}
-
-      <Card titre="Planning hebdomadaire" sous="Astuce : configure lundi puis copie sur tous les jours.">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-          <button type="button" onClick={copierLundi}
-            style={{ padding: '6px 12px', background: T.pale, color: T.bgPanel, border: `1px solid ${T.main}33`, borderRadius: 100, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-            ⤵ Copier lundi sur tous les jours
-          </button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {JOURS.map(j => {
-            const h = horaires[j.key]
-            const aPause = !!(h.debut2 || h.fin2)
-            return (
-              <div key={j.key} style={{ padding: '8px 12px', borderRadius: 10, background: h.ouvert ? '#FAFAFA' : '#F3F4F6', border: `1px solid ${T.hairline}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: '0 0 110px' }}>
-                    <input type="checkbox" checked={h.ouvert} onChange={e => updateJour(j.key, { ouvert: e.target.checked })} style={{ width: 16, height: 16, cursor: 'pointer' }}/>
-                    <span style={{ fontWeight: 700, fontSize: 13, color: h.ouvert ? T.ink : T.muted }}>{j.label}</span>
-                  </label>
-                  {h.ouvert ? (
-                    <>
-                      <input type="time" value={h.debut} onChange={e => updateJour(j.key, { debut: e.target.value })}
-                        style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
-                      <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>→</span>
-                      <input type="time" value={h.fin} onChange={e => updateJour(j.key, { fin: e.target.value })}
-                        style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
-                      {!aPause && (
-                        <button type="button" onClick={() => updateJour(j.key, { debut2: '18:00', fin2: '22:00' })}
-                          title="Ajouter une 2e plage (ex : service du soir)"
-                          style={{ padding: '4px 9px', background: 'none', border: `1px dashed ${T.main}55`, borderRadius: 100, color: T.main, fontWeight: 800, fontSize: 11, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                          + pause
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <span style={{ fontSize: 12, color: T.muted, fontStyle: 'italic' }}>Fermé</span>
-                  )}
-                </div>
-                {/* 2e plage : horaires à pause (restauration 11:00-14:00 puis 18:00-22:00) */}
-                {h.ouvert && aPause && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-                    <span style={{ flex: '0 0 110px', fontSize: 11, fontWeight: 700, color: T.muted, textAlign: 'right' }}>puis</span>
-                    <input type="time" value={h.debut2 || ''} onChange={e => updateJour(j.key, { debut2: e.target.value })}
-                      style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
-                    <span style={{ fontSize: 12, color: T.muted, fontWeight: 600 }}>→</span>
-                    <input type="time" value={h.fin2 || ''} onChange={e => updateJour(j.key, { fin2: e.target.value })}
-                      style={{ ...inputStyle(), width: 110, padding: '6px 10px', fontSize: 13 }}/>
-                    <button type="button" onClick={() => updateJour(j.key, { debut2: null, fin2: null })} title="Retirer la 2e plage"
-                      style={{ width: 22, height: 22, borderRadius: 100, border: 'none', background: '#FEE2E2', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontWeight: 800, flexShrink: 0, lineHeight: '22px', padding: 0 }}>
-                      ✕
-                    </button>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </Card>
-
-      <NavEtape
-        retour={retourAvecSauvegarde}
-        continuer={continuer}
-        valide={valide}
-        saving={saving}
-        hint={valide ? null : (horairesViennentDesLieux(commercant)
-          ? 'Tu peux passer : tes horaires viendront de tes emplacements.'
-          : skipAutorise ? 'Tu peux passer cette étape si tu fonctionnes uniquement sur RDV.'
-          : 'Coche au moins un jour d\'ouverture.')}
-        plusTard={skipAutorise ? configurerPlusTard : null}
-        plusTardLabel="Je fonctionne sur RDV uniquement, je configurerai plus tard →"
-      />
-    </div>
-  )
-}
-
 // ─── ÉTAPE 5 : SUCCESS PACK + SOUMISSION ──────────────────────────────────────
 // - Choix optionnel de matériel et d'accompagnement, lus dans le CATALOGUE
 //   (lib/produits-boutique.js). ⚠️ Cette ligne annonçait « STARTER 49€ ou
@@ -2290,9 +1360,11 @@ function Etape4Horaires({ commercant, onboarding, onUpdate, onUpdateOb, onSaving
 //   gamme du 24/08, à des prix qui n'ont jamais été ceux d'aujourd'hui. Un
 //   commentaire faux est plus coûteux qu'un commentaire absent : il fait
 //   croire qu'on sait.
-// - Calcul du score automatique 0-100 (visible en live)
 // - Soumission (statut = en_attente_validation + email Yoppaa via Resend)
-// - Bouton verrouille si score < 60
+// - 🔴 DEPUIS LE 06/10 : plus de score de 60 (il exigeait photos, logo et
+//   horaires avant l'ouverture du compte). Le bouton attend la VÉRIFICATION
+//   (KYB complet) et l'acceptation des CGU, rien d'autre. Le score reste
+//   calculé pour l'admin (`validation_auto_score`), il ne bloque plus.
 //
 // Refactor 17/06 (S2a) : passage de 2 packs uniques (Starter 49 + Premium 249)
 // à une vraie boutique Yoppaa avec 4 produits cumulables.
@@ -2640,7 +1712,7 @@ function UploadIdentite({ kind, url, uploading, onFile, disabled }) {
   )
 }
 
-function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, retour, aller }) {
+function EtapeVerification({ commercant, onboarding, onUpdate, onUpdateOb, onSaving, retour, aller }) {
   // S2a (17/06) : shopChoices = Set des types de produits choisis.
   // Persistance locale pour l'instant ; migration DB + paiement Stripe en S2b.
   // Pour compat ascendante : si onboarding.success_pack_choisi existe (ancien
@@ -2729,12 +1801,37 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
   if (!commercant.kyb_id_recto_url) kybManques.push('carte d\'identité recto')
   if (!commercant.kyb_id_verso_url) kybManques.push('carte d\'identité verso')
   const kybRempli = kybManques.length === 0
-  const peutSoumettre = score.peutSoumettre && kybRempli
+  // 🔴 LES CGU, COCHÉES ET PROUVÉES (Alex, 06/10). Rien ne les faisait
+  // accepter : ni case ni trace. La case est obligatoire, et c'est le SERVEUR
+  // qui enregistre l'acceptation (`/api/commercant/accepter-cgu`), avec son
+  // heure, avant que le dossier parte.
+  const [cguCochees, setCguCochees] = useState(false)
+  const peutSoumettre = kybRempli && cguCochees
 
   async function soumettre() {
     if (!peutSoumettre || submitting) return
     setSubmitting(true)
     setError('')
+
+    // 0) L'ACCEPTATION DES CGU D'ABORD : sans elle, le dossier ne part pas.
+    try {
+      const { data: { session: sCgu } } = await supabase.auth.getSession()
+      const rCgu = await fetch('/api/commercant/accepter-cgu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sCgu?.access_token || ''}` },
+        body: JSON.stringify({ commercant_id: commercant.id, version: CGU_COMMERCANT_VERSION }),
+      })
+      const jCgu = await rCgu.json().catch(() => ({}))
+      if (!rCgu.ok || !jCgu?.ok) {
+        setError(jCgu?.error || 'L’acceptation des conditions n’a pas pu être enregistrée. Réessaie.')
+        setSubmitting(false)
+        return
+      }
+    } catch {
+      setError('L’acceptation des conditions n’a pas pu être enregistrée. Vérifie ta connexion et réessaie.')
+      setSubmitting(false)
+      return
+    }
 
     // ⚠️ CE CHAMP EST UN VESTIGE, ET IL NE SERT PLUS QU'À L'ADMIN. Il ne retient
     // qu'une valeur, et seulement le Success Pack : c'est un drapeau, pas un
@@ -2893,7 +1990,6 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: T.deep, lineHeight: 1.9 }}>
             <li><strong>Commerce :</strong> {commercant.nom}</li>
             <li><strong>Plan choisi :</strong> {PLAN_LABEL[commercant.plan]}</li>
-            <li><strong>Ta fiche :</strong> {score.pourcentage} % complète{score.complet ? ' 🟣' : ''}</li>
             {[...shopChoices].map(type => {
               const p = SHOP_PRODUCTS.find(p => p.type === type)
               if (!p) return null
@@ -2927,10 +2023,10 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
   return (
     <div>
       <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: T.ink, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
-        Dernière étape&nbsp;: validation
+        Dernière étape&nbsp;: vérification
       </h1>
       <p style={{ fontSize: '0.95rem', color: T.muted, margin: '0 0 18px' }}>
-        Choisis si tu veux être accompagné, puis envoie ta demande d&rsquo;activation.
+        On vérifie que ton entreprise est bien la tienne, puis tu envoies ta demande d&rsquo;activation.
       </p>
 
       <BandeauRecapPlan plan={getPlanActif(commercant, onboarding)} commercant={commercant}/>
@@ -2958,10 +2054,10 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
             Corrige directement →
           </p>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            {/* ⚠️ UNE SEULE ÉTAPE À CORRIGER DEPUIS LE 06/10 : les visuels et
+                les horaires se règlent au tableau de bord, plus ici. */}
             {[
-              { n: 2, Icon: Pencil,  label: 'Infos commerce' },
-              { n: 3, Icon: Camera,  label: 'Visuels' },
-              { n: 4, Icon: Clock,   label: 'Horaires' },
+              { n: 2, Icon: Pencil,  label: 'L’essentiel' },
             ].map(s => (
               <button key={s.n} type="button" onClick={() => aller && aller(s.n)}
                 style={{ padding: '7px 12px', borderRadius: 100, border: '1.5px solid #FB923C', background: '#fff', color: '#9A3412', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -2974,50 +2070,6 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
           </p>
         </div>
       )}
-
-      {/* ─── LE SCORE, ET LA VICTOIRE QU'IL DOIT PERMETTRE ────────────────
-          ⚠️ IL ÉTAIT IMPOSSIBLE D'ATTEINDRE 100 %. Dix points étaient donnés
-          pour « au moins un article au menu », or aucun écran du signup ne
-          permet d'en ajouter : le commerçant plafonnait à 90 % sans comprendre
-          ce qui manquait, et terminait son inscription sur un échec.
-          Le calcul vit désormais dans lib/score-onboarding.js, qui ne compte
-          que ce qui est FAISABLE ICI, et qui retire les horaires de la liste
-          quand ils ne concernent pas ce commerçant. Tout le monde peut donc
-          arriver à 100 %. */}
-      <Card titre="Où tu en es" sous={`Il t'en faut ${SEUIL_SOUMISSION} % pour envoyer ton dossier.`}>
-        <ScoreBar score={score.pourcentage}/>
-
-        {score.complet ? (
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#ECFDF5', border: '1.5px solid #A7F3D0', borderRadius: 12, padding: '12px 14px', marginTop: 14 }}>
-            <span style={{ flexShrink: 0, marginTop: 1, color: '#065F46' }}><CheckCircle size={18} strokeWidth={2.4}/></span>
-            <p style={{ margin: 0, fontSize: 12.5, color: '#065F46', fontWeight: 800, lineHeight: 1.5 }}>
-              Ta fiche est complète. 🟣
-              <span style={{ display: 'block', fontWeight: 500, marginTop: 3 }}>
-                Tout y est, et tu peux envoyer ton dossier. Le reste, ton catalogue,
-                tes créneaux, tes deals, t&apos;attend dans ton tableau de bord : tu
-                l&apos;ajouteras tranquillement une fois ton compte validé.
-              </span>
-            </p>
-          </div>
-        ) : (
-          <p style={{ fontSize: 11.5, color: T.muted, margin: '12px 0 0', lineHeight: 1.5 }}>
-            {score.manquants.length === 1
-              ? 'Il ne te manque plus qu’une chose : '
-              : `Il te reste ${score.manquants.length} points à compléter, en commençant par le plus utile : `}
-            <strong style={{ color: T.deep }}>{score.manquants[0]?.label.toLowerCase()}</strong>.
-            {score.manquants[0]?.aide ? ` ${score.manquants[0].aide}` : ''}
-          </p>
-        )}
-
-        {/* La liste vient de la règle : un critère qui ne concerne pas ce
-            commerçant n'y figure pas du tout, au lieu de rester rouge à vie. */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 14, fontSize: 12 }}>
-          {score.criteres.map(c => (
-            <ScoreItem key={c.cle} label={c.label} ok={c.atteint} pts={c.poids}/>
-          ))}
-        </div>
-      </Card>
-
 
       {/* Boutique Yoppaa : Success Pack + Kits hardware + Consommables */}
       <Card titre="Boutique Yoppaa" sous="Du matériel et de l'accompagnement, si tu en veux.">
@@ -3092,6 +2144,24 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
         </p>
       </Card>
 
+      {/* 🔴 LES CONDITIONS, COCHÉES ET PROUVÉES (06/10). Le lien ouvre la
+          page légale dans un nouvel onglet : on ne perd pas son inscription
+          pour les lire. */}
+      <Card titre="Conditions d’utilisation">
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', fontSize: 13, color: T.ink, lineHeight: 1.5 }}>
+          <input type="checkbox" checked={cguCochees} onChange={e => setCguCochees(e.target.checked)}
+            style={{ width: 18, height: 18, marginTop: 1, accentColor: T.main, flexShrink: 0, cursor: 'pointer' }}/>
+          <span>
+            J’ai lu et j’accepte les{' '}
+            <a href={LIEN_CGU_COMMERCANT} target="_blank" rel="noopener noreferrer"
+              style={{ color: T.main, fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+              conditions générales d’utilisation pour les commerçants
+            </a>
+            , y compris les frais de paiement et les règles de remboursement.
+          </span>
+        </label>
+      </Card>
+
       {error && (
         <div style={{ background: '#FEE2E2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '10px 14px', marginBottom: 14, color: '#7F1D1D', fontSize: 13, fontWeight: 600 }}>
           {error}
@@ -3110,7 +2180,7 @@ function Etape5Validation({ commercant, onboarding, onUpdate, onUpdateOb, onSavi
                 </span>
               </>
             ) : (
-              `Il te manque encore un peu : ${score.pourcentage} % sur les ${SEUIL_SOUMISSION} % attendus. Reviens aux étapes précédentes pour compléter.`
+              'Coche la case des conditions d’utilisation pour envoyer ta demande.'
             )}
           </p>
         )}
@@ -3223,31 +2293,6 @@ function ProduitCard({ produit, actif, onToggle, secondaire = false }) {
         <span>{actif ? 'Ajouté à ta commande' : 'Cliquer pour ajouter'}</span>
       </div>
     </button>
-  )
-}
-
-function ScoreBar({ score }) {
-  const couleur = score >= 80 ? '#10B981' : score >= 60 ? '#EA580C' : '#DC2626'
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Score actuel</span>
-        <span style={{ fontWeight: 900, fontSize: 22, color: couleur, letterSpacing: '-0.5px' }}>{score} <span style={{ fontSize: 12, color: T.muted, fontWeight: 700 }}>/ 100</span></span>
-      </div>
-      <div style={{ width: '100%', height: 10, background: T.hairline, borderRadius: 100, overflow: 'hidden' }}>
-        <div style={{ width: `${score}%`, height: '100%', background: `linear-gradient(90deg, ${couleur}, ${couleur}cc)`, transition: 'width 0.3s ease' }}/>
-      </div>
-    </div>
-  )
-}
-
-function ScoreItem({ label, ok, pts }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' }}>
-      <span style={{ width: 16, height: 16, borderRadius: '50%', background: ok ? '#10B981' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 10, color: '#fff', fontWeight: 900 }}>{ok ? '✓' : '·'}</span>
-      <span style={{ fontWeight: 600, color: ok ? T.ink : T.muted, flex: 1 }}>{label}</span>
-      <span style={{ fontSize: 10, fontWeight: 700, color: ok ? '#10B981' : T.muted }}>+{pts}</span>
-    </div>
   )
 }
 

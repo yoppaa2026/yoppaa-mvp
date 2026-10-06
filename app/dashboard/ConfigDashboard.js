@@ -166,6 +166,8 @@ import OrdreCategories from '@/app/dashboard/OrdreCategories'
 import TabEquipe from '@/app/dashboard/TabEquipe'
 import { EQUIPE_DANS_LA_BARRE } from '@/lib/equipe'
 import { cheminImage, objetDepuisUrl } from '@/lib/stockage-images'
+import { propositionsLogo } from '@/lib/logo-provisoire'
+import { logoProvisoirePng } from '@/lib/logo-provisoire-image'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -7706,6 +7708,33 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
     toast('Logo mis à jour'); setUploadingLogo(false)
   }
 
+  // 🔴 LE LOGO PROVISOIRE, VENU DE L'INSCRIPTION (06/10). L'étape « Visuels »
+  // a quitté le parcours d'inscription ; elle était le seul endroit où l'on
+  // prêtait un logo aux couleurs du métier à qui n'en a pas. « Fiche
+  // complète » exige un logo : sans ce service, le commerçant sans logo
+  // restait bloqué avant la publication.
+  async function choisirLogoProvisoire(choix) {
+    if (uploadingLogo) return
+    setUploadingLogo(true)
+    try {
+      const nom = form.nom && form.nom !== 'Mon commerce' ? form.nom : 'Y'
+      const blob = await logoProvisoirePng({ nom, type: form.type, choix })
+      if (!blob) { toast('Génération du logo impossible', 'error'); return }
+      const fileName = cheminImage(commercantId, `logo-${commercantId}-${Date.now()}.png`)
+      const { error } = await supabase.storage.from('logos').upload(fileName, blob, { upsert: true, contentType: 'image/png' })
+      if (error) { toast('Erreur upload logo', 'error'); return }
+      const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+      const { error: errMaj } = await supabase.from('commercants').update({ logo_url: urlData.publicUrl }).eq('id', commercantId)
+      if (errMaj) { toast('Logo non enregistré, réessaie', 'error'); return }
+      setLogoPreview(urlData.publicUrl)
+      toast('Logo provisoire en place. Tu le remplaceras quand tu voudras.')
+    } catch {
+      toast('Génération du logo impossible', 'error')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
   async function supprimerLogo() {
     if (!await confirme(confirmationSimple({ titre: 'Supprimer ton logo ?', message: 'Ta fiche reprendra le logo provisoire en attendant.', action: 'Oui, supprimer le logo' }))) return
     await supabase.from('commercants').update({ logo_url: null }).eq('id', commercantId)
@@ -7865,6 +7894,34 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
           </div>
         </div>
         {logoPreview && <AvertissementTaille dims={dimsImages.logo} quoi="logo"/>}
+        {/* Pas encore de logo : on en prête un aux couleurs de son métier, le
+            temps qu'il mette le sien. Le SVG est rendu tel quel : ce qu'il voit
+            est exactement ce qu'il obtiendra en cliquant. */}
+        {!logoPreview && (
+          <div style={{ marginTop: 14 }}>
+            {/* ⚠️ LES MOTS VALIDÉS PAR ALEX LE 14/08, venus de l'inscription :
+                dire que c'est provisoire, et ce que ça LUI rapporte, jamais ce
+                que la plateforme « exige ». */}
+            <p style={{ fontSize: 12, color: T.deep, fontWeight: 700, margin: '0 0 8px', lineHeight: 1.5 }}>
+              Pas encore de logo ? On t&apos;en prête un aux couleurs de ton métier. C&apos;est un dépannage, et ça se remplace en dix secondes.
+              <span style={{ display: 'block', fontWeight: 500, color: T.muted, marginTop: 2 }}>
+                Sur Yoppaa, chaque commerce a sa vignette : c&apos;est à ça qu&apos;un habitant retrouve son boulanger dans une liste,
+                d&apos;un coup d&apos;œil et sans lire, et que tes clients te reconnaîtront.{' '}
+                <strong style={{ color: T.deep }}>Le tien vaut mieux que le nôtre</strong> : tu le remplaceras quand tu voudras.
+              </span>
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(58px, 1fr))', gap: 8, maxWidth: 420 }}>
+              {propositionsLogo({ nom: form.nom && form.nom !== 'Mon commerce' ? form.nom : 'Yoppaa', type: form.type }).map(p => (
+                <button key={p.cle} type="button" disabled={uploadingLogo}
+                  onClick={() => choisirLogoProvisoire({ symbole: p.symbole, teinte: p.teinte })}
+                  aria-label={`Choisir ce logo provisoire, symbole ${p.symbole}`}
+                  style={{ padding: 0, border: `2px solid ${T.pale}`, borderRadius: 14, background: 'none', cursor: uploadingLogo ? 'wait' : 'pointer', aspectRatio: '1/1', overflow: 'hidden', lineHeight: 0 }}>
+                  <span style={{ display: 'block', width: '100%' }} dangerouslySetInnerHTML={{ __html: p.svg.replace('width="512" height="512"', 'width="100%" height="100%"') }}/>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Photos de la fiche : la principale + neuf autres, ordonnées.

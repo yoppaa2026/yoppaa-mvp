@@ -177,8 +177,10 @@ const MUTATIONS = [
     vers: "    texte: remplis === 0 ? 'dossier vide' : `dossier rempli à ${Math.round(remplis * 100 / total)} %`," },
 
   { nom: '🔴 un champ quitte la regle : le dossier parait moins rempli qu il est',
-    de: "export const CHAMPS_INSCRIPTION = ['nom', 'type', 'categorie', 'adresse', 'telephone', 'email', 'description']",
-    vers: "export const CHAMPS_INSCRIPTION = ['nom', 'type', 'categorie', 'adresse', 'telephone', 'email']" },
+    // ⚠️ ANCRE REPOINTÉE LE 06/10 : la présentation a quitté la règle (elle
+    // n'est plus demandée à l'inscription) ; la mutation retire l'email.
+    de: "export const CHAMPS_INSCRIPTION = ['nom', 'type', 'categorie', 'adresse', 'telephone', 'email']",
+    vers: "export const CHAMPS_INSCRIPTION = ['nom', 'type', 'categorie', 'adresse', 'telephone']" },
 
   { nom: '🔴 l ecran recopie les colonnes comptees et en oublie une',
     fichier: 'app/admin/SectionInscriptionsEnCours.js',

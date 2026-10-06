@@ -1196,41 +1196,29 @@ function MockOnboarding() {
     <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '25px 11px 11px', flexShrink: 0 }}>
         <p style={{ margin: 0, fontSize: 6.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Créer mon commerce</p>
-        <p style={{ margin: '2px 0 0', fontWeight: 900, fontSize: 12, color: '#fff', letterSpacing: '-0.3px' }}>Étape 5 sur 5 · Validation</p>
+        {/* 🔴 TROIS ÉTAPES DEPUIS LE 06/10 (décision d'Alex : alléger
+            l'inscription). La maquette montrait encore « 5 sur 5 », les
+            visuels, les horaires et le score de 60 : une capture fausse est
+            une promesse fausse. */}
+        <p style={{ margin: '2px 0 0', fontWeight: 900, fontSize: 12, color: '#fff', letterSpacing: '-0.3px' }}>Étape 3 sur 3 · Vérification</p>
         {/* Fil des étapes */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 9 }}>
-          {['Compte', 'Infos', 'Visuels', 'Horaires', 'Validation'].map((e, i) => (
+          {['Compte', 'L’essentiel', 'Vérification'].map((e, i) => (
             <div key={e} style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ height: 3, borderRadius: 100, background: i <= 4 ? T.light : 'rgba(255,255,255,0.18)' }}/>
-              <p style={{ margin: '3px 0 0', fontSize: 5.5, fontWeight: 800, color: i === 4 ? '#fff' : 'rgba(255,255,255,0.6)', letterSpacing: '0.2px' }}>{e}</p>
+              <div style={{ height: 3, borderRadius: 100, background: i <= 2 ? T.light : 'rgba(255,255,255,0.18)' }}/>
+              <p style={{ margin: '3px 0 0', fontSize: 5.5, fontWeight: 800, color: i === 2 ? '#fff' : 'rgba(255,255,255,0.6)', letterSpacing: '0.2px' }}>{e}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Score de complétude */}
-      <div style={{ margin: '9px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, padding: '9px 10px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 5 }}>
-          <div>
-            <p style={{ margin: 0, fontSize: 8.5, fontWeight: 900, color: T.ink }}>Ton score de complétude</p>
-            <p style={{ margin: '1px 0 0', fontSize: 6.5, color: T.muted, fontWeight: 600 }}>Minimum 60 / 100 pour soumettre.</p>
-          </div>
-          <p style={{ margin: 0, fontWeight: 900, fontSize: 15, color: '#10B981', letterSpacing: '-0.5px', lineHeight: 1 }}>
-            82<span style={{ fontSize: 7.5, color: T.muted, fontWeight: 700 }}> / 100</span>
-          </p>
-        </div>
-        <div style={{ height: 7, borderRadius: 100, background: T.pale, overflow: 'hidden' }}>
-          <div style={{ width: '82%', height: '100%', background: 'linear-gradient(90deg, #10B981, #10B981cc)' }}/>
-        </div>
-      </div>
-
-      {/* Ce qui est déjà rempli */}
-      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+      {/* Ce qui est déjà fait : l'essentiel, puis la vérification */}
+      <div style={{ margin: '9px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
         {[
-          'Infos du commerce et adresse',
-          'Logo et photo de couverture',
-          'Horaires d’ouverture',
-          'Catalogue : 6 articles publiés',
+          'Nom, type, adresse et téléphone',
+          'Numéro d’entreprise (BCE)',
+          'Carte d’identité, recto et verso',
+          'Conditions d’utilisation acceptées',
         ].map(l => (
           <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <IconCheck size={9}/>
@@ -2392,8 +2380,8 @@ export default function LandingReveal({ referent = null }) {
             </div>
           </div>
 
-          {/* L'inscription, montrée telle qu'elle est : cinq étapes guidées et
-              un score de complétude, pour désamorcer la peur du dossier. */}
+          {/* L'inscription, montrée telle qu'elle est : trois étapes guidées
+              (depuis le 06/10), pour désamorcer la peur du dossier. */}
           <div style={{ display: 'flex', gap: 'clamp(24px, 5vw, 56px)', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', marginTop: 52 }}>
             <div style={{ flex: '1 1 320px', maxWidth: 440, textAlign: 'left' }}>
               <SectionEyebrow dark>Ton inscription</SectionEyebrow>
@@ -2402,14 +2390,14 @@ export default function LandingReveal({ referent = null }) {
                     Valider ouvre l'espace ; la page part quand elle est
                     complète (lib/fiche-complete.js). Titre changé à la
                     demande d'Alex. */}
-                Cinq étapes, et ton espace s&rsquo;ouvre.
+                Trois étapes, et ton espace s&rsquo;ouvre.
               </h3>
               <p style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.88)', lineHeight: 1.65, fontWeight: 500, margin: 0 }}>
-                Ton compte, tes infos, tes visuels, tes horaires, et c&rsquo;est envoyé. Un score de
-                complétude te dit en direct où tu en es, donc tu ne devines jamais ce qu&rsquo;il te
-                manque. Nous validons ton dossier et ton tableau de bord s&rsquo;ouvre : tu y ajoutes
-                ton catalogue et tes photos, puis ta page part en ligne et ton kit de bienvenue
-                arrive dans ta boîte mail.
+                Ton compte, l&rsquo;essentiel sur ton commerce, la vérification de ton identité, et
+                c&rsquo;est envoyé. Nous validons ton dossier et ton tableau de bord s&rsquo;ouvre : tu y
+                ajoutes ta présentation, tes photos, tes horaires et ton catalogue, avec une liste qui
+                te guide point par point, puis ta page part en ligne et ton kit de bienvenue arrive dans
+                ta boîte mail.
               </p>
               {/* Même avertissement qu'en tête de l'inscription : le contrôle
                   d'identité arrive à la dernière étape, et c'est là qu'on

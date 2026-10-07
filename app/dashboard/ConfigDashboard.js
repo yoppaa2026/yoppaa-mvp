@@ -22,7 +22,7 @@ import {
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { nomDeLaCarte, sertAManger } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09, décisions d'Alex).
-import { MODES_STOCK, LIBELLES_MODE_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour } from '@/lib/stock-article'
+import { choixDeStock, MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour } from '@/lib/stock-article'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
@@ -399,28 +399,66 @@ function PropositionsIa({ propositions, onChoisir, onFermer, avecLong = false })
 // « Le commerçant doit comprendre sans chercher ce que fait l'une ou l'autre
 // option » : un interrupteur éteint obligeait à deviner. Sert à « vendu en
 // ligne / en vitrine » et à « sur ta fiche / masqué ».
-function ChoixCartes({ label, choix, estChoisi, onChoisir }) {
+// ✅ 07/10, « ODOO MIND » (Alex) : des champs faciles à repérer, des couleurs
+// contrastées, et plus de « pattes de mouche ». Le texte de chaque choix se lit
+// en 13 px, les exemples aussi ; le choix retenu se voit de loin (bordure
+// pleine, fond, pastille cochée).
+function ChoixCartes({ label, choix, estChoisi, onChoisir, colonnes = 180 }) {
   return (
     <div>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 5 }}>{label}</label>
-      <div role="radiogroup" aria-label={label} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+      {label && <label style={{ display: 'block', fontSize: 14, fontWeight: 800, color: T.ink, marginBottom: 8 }}>{label}</label>}
+      <div role="radiogroup" aria-label={label || undefined} style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${colonnes}px, 1fr))`, gap: 10 }}>
         {choix.map(c => {
           const choisi = estChoisi(c)
           return (
             <button key={c.titre} type="button" role="radio" aria-checked={choisi}
               onClick={() => onChoisir(c)}
-              style={{ textAlign: 'left', padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${choisi ? T.main : T.hairline}`, background: choisi ? T.pale : '#fff', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <span aria-hidden="true" style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${choisi ? T.main : '#C9C3D6'}`, flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {choisi && <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.main }}/>}
+              style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: `2px solid ${choisi ? T.main : '#D6D0E4'}`, background: choisi ? '#F3ECFF' : '#fff', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', gap: 10, alignItems: 'flex-start', boxShadow: choisi ? `0 2px 10px ${T.main}22` : 'none' }}>
+              <span aria-hidden="true" style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${choisi ? T.main : '#9C93B3'}`, background: choisi ? T.main : '#fff', flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {choisi && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+                )}
               </span>
               <span>
-                <span style={{ display: 'block', fontSize: 13, fontWeight: 800, color: T.ink }}>{c.titre}</span>
-                <span style={{ display: 'block', fontSize: 11, color: T.muted, marginTop: 2, lineHeight: 1.45 }}>{c.phrase}</span>
+                <span style={{ display: 'block', fontSize: 14.5, fontWeight: 800, color: T.ink }}>{c.titre}</span>
+                <span style={{ display: 'block', fontSize: 13, color: '#3F3A4F', marginTop: 3, lineHeight: 1.5 }}>{c.phrase}</span>
+                {c.exemples && (
+                  <span style={{ display: 'block', fontSize: 13, color: T.main, marginTop: 5, lineHeight: 1.45 }}>
+                    <strong>Par exemple :</strong> {c.exemples}
+                  </span>
+                )}
               </span>
             </button>
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// Une section du formulaire : un titre lisible, une phrase qui dit à quoi elle
+// sert, et ses champs en dessous. Le cadre et la bande de titre la rendent
+// repérable d'un coup d'œil, comme un formulaire Odoo.
+function SectionFormulaire({ titre, phrase, children }) {
+  return (
+    <section style={{ border: '1.5px solid #DDD3F3', borderRadius: 14, background: '#fff', overflow: 'hidden' }}>
+      <div style={{ background: '#F5F0FF', borderBottom: '1.5px solid #DDD3F3', padding: '10px 16px' }}>
+        <h4 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: T.ink }}>{titre}</h4>
+        {phrase && <p style={{ margin: '3px 0 0', fontSize: 13, color: '#3F3A4F', lineHeight: 1.45 }}>{phrase}</p>}
+      </div>
+      <div style={{ padding: 16, display: 'grid', gap: 16 }}>{children}</div>
+    </section>
+  )
+}
+
+// Un champ : son nom bien visible, le contrôle, puis une aide LISIBLE (13 px,
+// gris foncé), jamais de pattes de mouche.
+function ChampFormulaire({ label, aide, children }) {
+  return (
+    <div>
+      {label && <label style={{ display: 'block', fontSize: 14, fontWeight: 800, color: T.ink, marginBottom: 6 }}>{label}</label>}
+      {children}
+      {aide && <p style={{ margin: '6px 0 0', fontSize: 13, color: '#3F3A4F', lineHeight: 1.5 }}>{aide}</p>}
     </div>
   )
 }
@@ -500,6 +538,21 @@ function TabMenu({ commercantId, commercant, toast }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- on ne relit la liste qu'au changement de commerce, jamais par-dessus un geste en cours
   }, [commercant?.id])
   const categories = categoriesDuCommerce(articles, listeCats)
+
+  // ⚠️ LE TEMPS DE PRÉPARATION NE SERT QU'AUX CRÉNEAUX COMPTÉS EN MINUTES
+  // (Alex, 07/10) : pour une boulangerie qui compte ses commandes, ce champ ne
+  // voulait rien dire. Le mode se règle pour le commerce OU créneau par
+  // créneau : on lit les deux. Une valeur déjà saisie garde le champ visible.
+  const [capaciteEnMinutes, setCapaciteEnMinutes] = useState(commercant?.mode_capacite === 'temps')
+  useEffect(() => {
+    if (commercant?.mode_capacite === 'temps') { setCapaciteEnMinutes(true); return }
+    let annule = false
+    supabase.from('creneaux').select('id', { count: 'exact', head: true })
+      .eq('commercant_id', commercantId).eq('mode_capacite', 'temps')
+      .then(({ count, error }) => { if (!annule && !error) setCapaciteEnMinutes((count || 0) > 0) })
+    return () => { annule = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- relu au changement de commerce seulement
+  }, [commercantId, commercant?.mode_capacite])
   // Écrit la liste et la pose à l'écran SEULEMENT si la base l'a acceptée.
   async function ecrireListeCats(liste) {
     const { error } = await supabase.from('commercants').update({ ordre_categories: liste }).eq('id', commercantId)
@@ -1224,84 +1277,95 @@ function TabMenu({ commercantId, commercant, toast }) {
             ? (estVitrine ? 'Modifier le produit' : 'Modifier l’article')
             : (estVitrine ? 'Nouveau produit phare' : 'Nouvel article')}
         </h3>
-        <div style={{ display: 'grid', gap: 12 }}>
-          <div><label style={s.label}>Nom *</label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder={estVitrine ? 'Ex: Monture Lindberg Air Titanium' : estDetail ? 'Ex: Jean slim brut' : 'Ex: Croissant beurre'}/></div>
-          <div>
-            <label style={s.label}>Catégorie</label>
-            <select value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))}
-              style={{ ...s.input, cursor: 'pointer' }}>
-              <option value="">— Sans catégorie —</option>
-              {/* Sous-catégories « Parent · Enfant » groupées en optgroup */}
-              {(() => {
-                const parents = [...new Set(categories.filter(c => c.includes(' · ')).map(c => c.split(' · ')[0]))]
-                const simples = categories.filter(c => !c.includes(' · ') && !parents.includes(c))
-                return (
-                  <>
-                    {simples.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    {parents.map(p => (
-                      <optgroup key={p} label={p}>
-                        {categories.includes(p) && <option value={p}>{p} (général)</option>}
-                        {categories.filter(c => c.startsWith(p + ' · ')).map(c => (
-                          <option key={c} value={c}>{c.slice(p.length + 3)}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </>
-                )
-              })()}
-            </select>
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
-              <label style={{ ...s.label, marginBottom: 0 }}>Description</label>
-              <BoutonIaInline commercantId={commercantId} surface="article" brief={form.nom}
-                infos={form.description}
-                briefManquantMsg={'Donne d’abord un nom à l’article, l’IA s’en inspire.'}
-                onVariantes={vs => setPropsIa(vs)}
-                toast={toast} />
+        {/* ✅ « ODOO MIND » (Alex, 07/10) : le formulaire était une seule
+            colonne de champs, avec des aides en 10 px. Il se range maintenant
+            en SECTIONS repérables (cadre + bande de titre), les aides se lisent
+            en 13 px, et chaque choix de stock dit à quoi il sert, avec des
+            exemples de plusieurs métiers. La LOGIQUE ne change pas : mêmes
+            champs, mêmes écritures, mêmes gardes. */}
+        <div style={{ display: 'grid', gap: 16 }}>
+
+          <SectionFormulaire titre={estVitrine ? 'Le produit' : 'L’article'} phrase="Ce que tes clients lisent sur ta fiche.">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+              <ChampFormulaire label="Nom *">
+                <Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} placeholder={estVitrine ? 'Ex: Monture Lindberg Air Titanium' : estDetail ? 'Ex: Jean slim brut' : 'Ex: Croissant beurre'}/>
+              </ChampFormulaire>
+              {/* ✅ UN SEUL FORMULAIRE POUR TOUS LES MÉTIERS (30/09) : le prix
+                  est toujours ferme. */}
+              <ChampFormulaire label="Prix (€) *" aide="Le prix payé par le client, TVA comprise.">
+                <Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder={estAlimentaire ? '1.20' : '49.90'}/>
+              </ChampFormulaire>
             </div>
-            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder={estVitrine ? 'Ex: Titane japonais, charnières flex, 12 coloris…' : estDetail ? 'Ex: Coton bio, coupe droite, fabriqué au Portugal…' : 'Ex: Feuilleté, pur beurre AOP...'}/>
-            {propsIa.length > 0 ? (
-              <PropositionsIa propositions={propsIa}
-                onChoisir={v => { setForm(p => ({ ...p, description: v.court || v.long })); setPropsIa([]) }}
-                onFermer={() => setPropsIa([])} />
-            ) : (
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>{estDetail || estVitrine ? 'Astuce : note tes matières ou atouts en vrac (coton bio, fabrication européenne…) puis clique sur Rédiger avec l’IA.' : 'Astuce : note tes ingrédients ou atouts en vrac (pur beurre, producteur local…) puis clique sur Rédiger avec l’IA.'}</p>
-            )}
-          </div>
-          {/* ✅ UN SEUL FORMULAIRE POUR TOUS LES MÉTIERS (30/09, décisions
-              d'Alex) : le prix est toujours ferme, l'article est vendu en ligne
-              ou seulement montré (« en vitrine »), et son stock se compte sans
-              limite, par jour ou en magasin. */}
-          <div><label style={s.label}>Prix (€) *</label><Input type="number" step="0.10" min="0" value={form.prix} onChange={e => setForm(p => ({ ...p, prix: e.target.value }))} placeholder={estAlimentaire ? '1.20' : '49.90'}/></div>
-          {/* ✅ DEUX CHOIX VISIBLES, CHACUN AVEC SA PHRASE (Alex, 30/09 : « le
-              commerçant doit comprendre sans chercher ce que fait l'une ou
-              l'autre option »). Un interrupteur éteint obligeait à deviner. */}
-          <ChoixCartes label="Comment le client l’achète ?" choix={choixDeVente(commercant)}
-            estChoisi={c => !!form.vendable === c.vendable}
-            onChoisir={c => setForm(p => ({ ...p, vendable: c.vendable }))}/>
-          {form.vendable && !canDo(planEffectif(commercant), 'commande') && (
-            <p style={{ fontSize: 10, color: T.muted, marginTop: -4 }}>La commande en ligne s&rsquo;active avec la formule Vendre. En attendant, l&rsquo;article s&rsquo;affiche avec son prix.</p>
-          )}
-          {form.vendable && (
-            <div>
-              <label style={s.label}>Stock</label>
-              <div role="radiogroup" aria-label="Comment se compte le stock" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {MODES_STOCK.map(m => {
-                  const choisi = form.stock_mode === m
+            <ChampFormulaire label="Catégorie">
+              <select value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))}
+                style={{ ...s.input, cursor: 'pointer' }}>
+                <option value="">— Sans catégorie —</option>
+                {/* Sous-catégories « Parent · Enfant » groupées en optgroup */}
+                {(() => {
+                  const parents = [...new Set(categories.filter(c => c.includes(' · ')).map(c => c.split(' · ')[0]))]
+                  const simples = categories.filter(c => !c.includes(' · ') && !parents.includes(c))
                   return (
-                    <button key={m} type="button" role="radio" aria-checked={choisi}
-                      onClick={() => setForm(p => ({ ...p, stock_mode: m }))}
-                      style={{ padding: '7px 12px', borderRadius: 100, border: `1.5px solid ${choisi ? T.bgPanel : T.hairline}`, background: choisi ? T.bgPanel : '#fff', color: choisi ? '#fff' : T.ink, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      {LIBELLES_MODE_STOCK[m].titre}
-                    </button>
+                    <>
+                      {simples.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                      {parents.map(p => (
+                        <optgroup key={p} label={p}>
+                          {categories.includes(p) && <option value={p}>{p} (général)</option>}
+                          {categories.filter(c => c.startsWith(p + ' · ')).map(c => (
+                            <option key={c} value={c}>{c.slice(p.length + 3)}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </>
                   )
-                })}
+                })()}
+              </select>
+            </ChampFormulaire>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                <label style={{ fontSize: 14, fontWeight: 800, color: T.ink }}>Description</label>
+                <BoutonIaInline commercantId={commercantId} surface="article" brief={form.nom}
+                  infos={form.description}
+                  briefManquantMsg={'Donne d’abord un nom à l’article, l’IA s’en inspire.'}
+                  onVariantes={vs => setPropsIa(vs)}
+                  toast={toast} />
               </div>
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>{LIBELLES_MODE_STOCK[form.stock_mode]?.aide}</p>
+              <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder={estVitrine ? 'Ex: Titane japonais, charnières flex, 12 coloris…' : estDetail ? 'Ex: Coton bio, coupe droite, fabriqué au Portugal…' : 'Ex: Feuilleté, pur beurre AOP...'}/>
+              {propsIa.length > 0 ? (
+                <PropositionsIa propositions={propsIa}
+                  onChoisir={v => { setForm(p => ({ ...p, description: v.court || v.long })); setPropsIa([]) }}
+                  onFermer={() => setPropsIa([])} />
+              ) : (
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#3F3A4F', lineHeight: 1.5 }}>{estDetail || estVitrine ? 'Astuce : note tes matières ou atouts en vrac (coton bio, fabrication européenne…) puis clique sur Rédiger avec l’IA.' : 'Astuce : note tes ingrédients ou atouts en vrac (pur beurre, producteur local…) puis clique sur Rédiger avec l’IA.'}</p>
+              )}
+            </div>
+          </SectionFormulaire>
+
+          <SectionFormulaire titre="La vente" phrase="Comment ton client l’achète, et s’il le voit sur ta fiche.">
+            {/* ✅ DEUX CHOIX VISIBLES, CHACUN AVEC SA PHRASE (Alex, 30/09). */}
+            <ChoixCartes label="Comment le client l’achète ?" choix={choixDeVente(commercant)}
+              estChoisi={c => !!form.vendable === c.vendable}
+              onChoisir={c => setForm(p => ({ ...p, vendable: c.vendable }))}/>
+            {form.vendable && !canDo(planEffectif(commercant), 'commande') && (
+              <p style={{ margin: 0, fontSize: 13, color: '#92400E', background: '#FFFBEB', border: '1px solid #F59E0B55', borderRadius: 10, padding: '8px 12px', lineHeight: 1.5 }}>La commande en ligne s&rsquo;active avec la formule Vendre. En attendant, l&rsquo;article s&rsquo;affiche avec son prix.</p>
+            )}
+            <ChoixCartes label="Sur ta fiche ?" choix={CHOIX_VISIBILITE}
+              estChoisi={c => !!form.actif === c.actif}
+              onChoisir={c => setForm(p => ({ ...p, actif: c.actif }))}/>
+          </SectionFormulaire>
+
+          {form.vendable && (
+            <SectionFormulaire titre="Le stock" phrase="Comment se compte ce que tu peux vendre en ligne. Choisis ce qui ressemble le plus à cet article.">
+              {/* ✅ 07/10 : TROIS CARTES QUI DISENT À QUOI ELLES SERVENT, avec
+                  des exemples de plusieurs métiers (`choixDeStock`), au lieu de
+                  trois pastilles muettes. */}
+              <ChoixCartes label="Comment se compte le stock ?" choix={choixDeStock(commercant)} colonnes={220}
+                estChoisi={c => form.stock_mode === c.mode}
+                onChoisir={c => setForm(p => ({ ...p, stock_mode: c.mode }))}/>
               {form.stock_mode !== 'illimite' && (
-                <div style={{ marginTop: 8 }}>
-                  <label style={s.label}>{form.stock_mode === 'jour' ? 'Quantité par jour *' : 'Quantité en magasin *'}</label>
+                <ChampFormulaire label={form.stock_mode === 'jour' ? 'Quantité par jour *' : 'Quantité en stock *'}
+                  aide={form.stock_mode === 'jour'
+                    ? 'La quantité de chaque jour. Tu peux la changer jour par jour sur la carte de l’article (« Vendu en ligne par jour »).'
+                    : (variantesCategorie ? 'Si l’article a des variantes, le stock se gère par variante.' : null)}>
                   <Input type="number" min={form.stock_mode === 'jour' ? 1 : 0} value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder={form.stock_mode === 'jour' ? '30' : '12'}/>
                   {/* 🔴 LA GRILLE REMPLACE CE CHIFFRE, ET ON LE DIT (Alex, 07/10) :
                       « 30 » ici, « 3 » sur la carte, et la fiche vendait 3. */}
@@ -1311,13 +1375,13 @@ function TabMenu({ commercantId, commercant, toast }) {
                       .filter(([, e]) => e && e.actif !== false)
                     if (remplaces.length === 0) return null
                     return (
-                      <div style={{ marginTop: 6, padding: '8px 10px', borderRadius: 10, background: '#FFFBEB', border: '1px solid #F59E0B55' }}>
-                        <p style={{ fontSize: 11, color: '#92400E', margin: 0, lineHeight: 1.45 }}>
+                      <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, background: '#FFFBEB', border: '1.5px solid #F59E0B88' }}>
+                        <p style={{ fontSize: 13, color: '#92400E', margin: 0, lineHeight: 1.5 }}>
                           Remplacée sur la carte de l&rsquo;article pour : {remplaces.map(([j, e]) => `${j} (${e.stock ?? 0})`).join(', ')}.
                           Ces jours-là, c&rsquo;est ce chiffre qui est vendu en ligne.
                         </p>
                         <button type="button" onClick={() => revenirAuDefaut(editId)}
-                          style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: T.main, background: '#fff', border: `1px solid ${T.main}44`, padding: '4px 10px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          style={{ marginTop: 8, fontSize: 13, fontWeight: 800, color: T.main, background: '#fff', border: `1.5px solid ${T.main}66`, padding: '6px 12px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
                           {/* ⚠️ LE CHIFFRE ENREGISTRÉ, pas celui en cours de frappe :
                               c'est lui qui vaudra une fois la grille effacée. */}
                           Revenir à {articles.find(x => x.id === editId)?.stock_jour || 'la quantité par défaut'} tous les jours
@@ -1325,157 +1389,126 @@ function TabMenu({ commercantId, commercant, toast }) {
                       </div>
                     )
                   })()}
-                  {form.stock_mode === 'magasin' && variantesCategorie && (
-                    <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Si l&rsquo;article a des variantes, le stock se gère par variante.</p>
-                  )}
-                </div>
+                </ChampFormulaire>
               )}
-            </div>
+              {/* ⚠️ SEULEMENT SI LES CRÉNEAUX SE COMPTENT EN MINUTES (Alex, 07/10).
+                  Une valeur déjà saisie le garde visible : on ne cache pas un
+                  réglage qui agit. */}
+              {estAlimentaire && (capaciteEnMinutes || Number(form.temps_prepa) > 0) && (
+                <ChampFormulaire label="Temps de préparation (minutes)"
+                  aide="Tes créneaux se remplissent en minutes : 5 minutes par article, et le créneau se déclare complet quand le temps est atteint.">
+                  <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 1 = 1 min · 5 = 5 min"/>
+                </ChampFormulaire>
+              )}
+            </SectionFormulaire>
           )}
-          {estAlimentaire && form.vendable && (
-            <div>
-              <label style={s.label}>Temps de préparation (min)</label>
-              <Input type="number" min="0" step="0.5" value={form.temps_prepa} onChange={e => setForm(p => ({ ...p, temps_prepa: e.target.value }))} placeholder="0 = non défini · 1 = 1 min · 5 = 5 min"/>
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Utilisé en mode Temps de préparation</p>
-            </div>
-          )}
-          {/* ⚠️ LE DÉLAI N'EST PAS LE TEMPS DE PRÉPARATION, et les deux champs
-              se suivent exprès pour qu'on ne les confonde pas.
 
-              Le TEMPS DE PRÉPARATION sert à remplir un créneau : cinq minutes
-              par pain, et le créneau de 11 h se déclare complet.
-
-              Le DÉLAI dit à partir de QUAND l'article peut être retiré. La
-              tarte demande 48 h, le sandwich une heure, la baguette rien.
-
-              ⚠️ ET IL NE S'AFFICHE PAS EN VITRINE : rien ne s'y commande, donc
-              rien n'y a de délai. Ni pour un article montré sans être vendu. */}
+          {/* ⚠️ LE DÉLAI N'EST PAS LE TEMPS DE PRÉPARATION. Le DÉLAI dit à
+              partir de QUAND l'article peut être retiré. Pas en vitrine : rien
+              ne s'y commande. */}
           {!estVitrine && form.vendable && (
-            <div>
-              <label style={s.label}>Délai de commande</label>
-              {/* ⚠️ UNE LISTE, PAS UN CHAMP LIBRE. Un boulanger pense « 48 h »,
-                  pas « 2880 ». Et un champ libre autorise la faute de frappe qui
-                  rend l'article commandable par personne, en silence : les deux
-                  calculs du premier retrait n'explorent que quatorze jours. */}
-              <select
-                value={String(form.delai_minutes ?? 0)}
-                onChange={e => setForm(p => ({ ...p, delai_minutes: e.target.value }))}
-                style={{ ...s.input, width: '100%' }}
-              >
-                {choixDeDelai(form.delai_minutes).map(m => (
-                  <option key={m} value={m}>{libelleChoixDelai(m)}</option>
-                ))}
-              </select>
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>
-                Le temps qu&rsquo;il te faut pour préparer <strong>cet article</strong>, en jours : « 2 jours »
-                veut dire commandé jeudi, retiré samedi. Tes clients le voient sur la carte, avec la date limite.
-                Pour ne le vendre que certains jours, coche-les sur sa carte (« Jours de vente » ou « Vendu en ligne par jour »).
-              </p>
-              {/* « RÉSERVABLE JUSQU'À » (Alex, 07/10). Une liste fermée, comme
-                  le délai. Vide, le calcul est automatique : une semaine après
-                  le délai. Il n'ouvre que plus loin, jamais moins. */}
-              <label style={{ ...s.label, marginTop: 10, display: 'block' }}>Réservable jusqu&rsquo;à</label>
-              <select
-                value={form.horizon_jours === null || form.horizon_jours === undefined ? '' : String(form.horizon_jours)}
-                onChange={e => setForm(p => ({ ...p, horizon_jours: e.target.value }))}
-                style={{ ...s.input, width: '100%' }}
-              >
-                {[...HORIZONS_ARTICLE, ...(form.horizon_jours && !HORIZONS_ARTICLE.includes(Number(form.horizon_jours)) ? [Number(form.horizon_jours)] : [])].map(h => (
-                  <option key={String(h)} value={h === null ? '' : String(h)}>{libelleHorizonArticle(h)}</option>
-                ))}
-              </select>
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>
-                Jusqu&rsquo;à quand tes clients peuvent le commander à l&rsquo;avance (un gâteau de communion, un buffet).
-                Les autres articles de ta fiche deviennent commandables pour ces jours-là aussi.
-              </p>
-            </div>
+            <SectionFormulaire titre="Quand peut-on le commander ?" phrase="Pour les articles que tu prépares à l’avance : une tarte, un gâteau, un plateau, le pain du week-end.">
+              {/* ⚠️ UNE LISTE, PAS UN CHAMP LIBRE : un boulanger pense « 2 jours »,
+                  pas « 2880 », et la faute de frappe rendrait l'article
+                  commandable par personne, en silence. */}
+              <ChampFormulaire label="Délai de commande"
+                aide="En jours : « 2 jours » veut dire commandé jeudi, retiré samedi. Tes clients le voient sur la carte, avec la date limite. Pour ne le vendre que certains jours, coche-les sur la carte de l’article.">
+                <select
+                  value={String(form.delai_minutes ?? 0)}
+                  onChange={e => setForm(p => ({ ...p, delai_minutes: e.target.value }))}
+                  style={{ ...s.input, width: '100%' }}
+                >
+                  {choixDeDelai(form.delai_minutes).map(m => (
+                    <option key={m} value={m}>{libelleChoixDelai(m)}</option>
+                  ))}
+                </select>
+              </ChampFormulaire>
+              {/* « RÉSERVABLE JUSQU'À » (Alex, 07/10). Vide = automatique. Il
+                  n'ouvre que plus loin, jamais moins. */}
+              <ChampFormulaire label="Réservable jusqu’à"
+                aide="Jusqu’à quand tes clients peuvent le commander à l’avance (un gâteau de communion, un buffet). Les autres articles de ta fiche deviennent commandables pour ces jours-là aussi.">
+                <select
+                  value={form.horizon_jours === null || form.horizon_jours === undefined ? '' : String(form.horizon_jours)}
+                  onChange={e => setForm(p => ({ ...p, horizon_jours: e.target.value }))}
+                  style={{ ...s.input, width: '100%' }}
+                >
+                  {[...HORIZONS_ARTICLE, ...(form.horizon_jours && !HORIZONS_ARTICLE.includes(Number(form.horizon_jours)) ? [Number(form.horizon_jours)] : [])].map(h => (
+                    <option key={String(h)} value={h === null ? '' : String(h)}>{libelleHorizonArticle(h)}</option>
+                  ))}
+                </select>
+              </ChampFormulaire>
+            </SectionFormulaire>
           )}
-          {/* TVA. Le prix saisi est TTC : le taux ne change pas ce que paie le
-              client, il détermine la part de TVA à l'intérieur. Deux taux pour
-              l'alimentaire, parce qu'en Belgique la même denrée relève de la
-              livraison de biens à emporter et de la restauration servie en
-              salle, ce qui n'est pas le même régime. */}
-          <div>
-            {/* ⚠️ LES EXEMPLES SONT CEUX DU MÉTIER (Alex, 17/08 : « ils parlent
-                de boissons, boissons alcoolisées, sur place, emporté. Pas top
-                quand on est coiffeur, prof de yoga ou boutique de vêtements »).
-                Aucun taux n'est masqué ni présélectionné : on nomme seulement
-                celui qui est le plus courant chez lui. */}
-            <label style={s.label}>TVA{estAlimentaire ? ' à emporter' : ''}</label>
-            <select value={form.tva_taux ?? ''} onChange={e => setForm(p => ({ ...p, tva_taux: e.target.value }))}
-              style={{ ...s.input, cursor: 'pointer' }}>
-              <option value="">— À définir —</option>
-              {optionsTaux(tvaRefs, commercant?.categorie).map(t => (
-                <option key={t.taux} value={t.taux}>{t.texte}</option>
-              ))}
-            </select>
-            {estAlimentaire && (
-              <div style={{ marginTop: 10 }}>
-                <label style={s.label}>TVA sur place (si consommation en salle)</label>
-                <select value={form.tva_taux_sur_place ?? ''} onChange={e => setForm(p => ({ ...p, tva_taux_sur_place: e.target.value }))}
+
+          {/* TVA. Le prix saisi est TTC : le taux détermine la part de TVA à
+              l'intérieur. Deux taux pour l'alimentaire (à emporter, sur place).
+              ⚠️ LES EXEMPLES SONT CEUX DU MÉTIER (Alex, 17/08). */}
+          <SectionFormulaire titre="TVA" phrase="Le prix que tu saisis est le prix payé par le client, TVA comprise. En cas de doute sur le taux, consulte ton comptable ou le SPF Finances.">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+              <ChampFormulaire label={`TVA${estAlimentaire ? ' à emporter' : ''}`}>
+                <select value={form.tva_taux ?? ''} onChange={e => setForm(p => ({ ...p, tva_taux: e.target.value }))}
                   style={{ ...s.input, cursor: 'pointer' }}>
-                  <option value="">— Même taux qu&rsquo;à emporter —</option>
+                  <option value="">— À définir —</option>
                   {optionsTaux(tvaRefs, commercant?.categorie).map(t => (
                     <option key={t.taux} value={t.taux}>{t.texte}</option>
                   ))}
                 </select>
-              </div>
-            )}
-            <p style={{ fontSize: 10, color: T.muted, marginTop: 4, lineHeight: 1.5 }}>
-              Le prix que tu saisis est le prix payé par le client, TVA comprise. En cas de doute
-              sur le taux applicable, consulte ton comptable ou le SPF Finances.
-            </p>
-          </div>
-
-          <ChoixCartes label="Sur ta fiche ?" choix={CHOIX_VISIBILITE}
-            estChoisi={c => !!form.actif === c.actif}
-            onChoisir={c => setForm(p => ({ ...p, actif: c.actif }))}/>
-
-          {/* Photo de couverture */}
-          <div>
-            <label style={s.label}>Photo de couverture</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', background: T.hairline, flexShrink: 0, position: 'relative', border: `1px solid ${T.hairline}` }}>
-                {form.photo_url ? (
-                  <>
-                    <img decoding="async" loading="lazy" src={form.photo_url} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                    <button type="button" onClick={() => setForm(f => ({ ...f, photo_url: '' }))}
-                      style={{ position: 'absolute', top: 2, right: 2, width: 20, height: 20, borderRadius: 100, border: 'none', background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer', fontSize: 13, lineHeight: '20px', padding: 0 }} title="Retirer">×</button>
-                  </>
-                ) : (
-                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted }}>
-                    <Camera size={20} strokeWidth={1.6}/>
-                  </div>
-                )}
-              </div>
-              <label style={{ ...s.btn, ...s.btnGhost, cursor: uploadingPhoto ? 'wait' : 'pointer' }}>
-                {uploadingPhoto ? 'Chargement…' : (form.photo_url ? 'Remplacer' : 'Ajouter une photo')}
-                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhotoArticle(e.target.files?.[0])} disabled={uploadingPhoto}/>
-              </label>
+              </ChampFormulaire>
+              {estAlimentaire && (
+                <ChampFormulaire label="TVA sur place (si consommation en salle)">
+                  <select value={form.tva_taux_sur_place ?? ''} onChange={e => setForm(p => ({ ...p, tva_taux_sur_place: e.target.value }))}
+                    style={{ ...s.input, cursor: 'pointer' }}>
+                    <option value="">— Même taux qu&rsquo;à emporter —</option>
+                    {optionsTaux(tvaRefs, commercant?.categorie).map(t => (
+                      <option key={t.taux} value={t.taux}>{t.texte}</option>
+                    ))}
+                  </select>
+                </ChampFormulaire>
+              )}
             </div>
-            <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Facultatif. Compressée automatiquement. Format idéal carré, minimum 800×800 px.</p>
-          </div>
+          </SectionFormulaire>
 
-          {/* Galerie (article existant uniquement) */}
-          {editId && (
-            <div>
-              <label style={s.label}>Galerie ({galerie.length})</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {galerie.map(p => (
-                  <div key={p.id} style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}` }}>
-                    <img decoding="async" loading="lazy" src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                    <button type="button" onClick={() => deleteGaleriePhoto(p.id)}
-                      style={{ position: 'absolute', top: 1, right: 1, width: 18, height: 18, borderRadius: 100, border: 'none', background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer', fontSize: 12, lineHeight: '18px', padding: 0 }} title="Supprimer">×</button>
-                  </div>
-                ))}
-                <label style={{ width: 60, height: 60, borderRadius: 10, border: `1.5px dashed ${T.main}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: uploadingGalerie ? 'wait' : 'pointer', color: T.main }}>
-                  {uploadingGalerie ? '…' : <Icon name="plus" size={16} color={T.main}/>}
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadGaleriePhoto(e.target.files?.[0], editId)} disabled={uploadingGalerie}/>
+          <SectionFormulaire titre="Photos" phrase="Facultatif. Une photo aide beaucoup à vendre en ligne.">
+            <ChampFormulaire label="Photo de couverture" aide="Compressée automatiquement. Format idéal carré, minimum 800 × 800 px.">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', background: T.hairline, flexShrink: 0, position: 'relative', border: `1px solid ${T.hairline}` }}>
+                  {form.photo_url ? (
+                    <>
+                      <img decoding="async" loading="lazy" src={form.photo_url} alt="Couverture" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                      <button type="button" onClick={() => setForm(f => ({ ...f, photo_url: '' }))}
+                        style={{ position: 'absolute', top: 2, right: 2, width: 20, height: 20, borderRadius: 100, border: 'none', background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer', fontSize: 13, lineHeight: '20px', padding: 0 }} title="Retirer">×</button>
+                    </>
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.muted }}>
+                      <Camera size={20} strokeWidth={1.6}/>
+                    </div>
+                  )}
+                </div>
+                <label style={{ ...s.btn, ...s.btnGhost, cursor: uploadingPhoto ? 'wait' : 'pointer' }}>
+                  {uploadingPhoto ? 'Chargement…' : (form.photo_url ? 'Remplacer' : 'Ajouter une photo')}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhotoArticle(e.target.files?.[0])} disabled={uploadingPhoto}/>
                 </label>
               </div>
-              <p style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Photos supplémentaires montrées sur ta fiche.</p>
-            </div>
-          )}
+            </ChampFormulaire>
+            {/* Galerie (article existant uniquement) */}
+            {editId && (
+              <ChampFormulaire label={`Galerie (${galerie.length})`} aide="Photos supplémentaires montrées sur ta fiche.">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {galerie.map(p => (
+                    <div key={p.id} style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}` }}>
+                      <img decoding="async" loading="lazy" src={p.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                      <button type="button" onClick={() => deleteGaleriePhoto(p.id)}
+                        style={{ position: 'absolute', top: 1, right: 1, width: 18, height: 18, borderRadius: 100, border: 'none', background: 'rgba(0,0,0,0.55)', color: '#fff', cursor: 'pointer', fontSize: 12, lineHeight: '18px', padding: 0 }} title="Supprimer">×</button>
+                    </div>
+                  ))}
+                  <label style={{ width: 60, height: 60, borderRadius: 10, border: `1.5px dashed ${T.main}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: uploadingGalerie ? 'wait' : 'pointer', color: T.main }}>
+                    {uploadingGalerie ? '…' : <Icon name="plus" size={16} color={T.main}/>}
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadGaleriePhoto(e.target.files?.[0], editId)} disabled={uploadingGalerie}/>
+                  </label>
+                </div>
+              </ChampFormulaire>
+            )}
+          </SectionFormulaire>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveArticle} disabled={saving}>

@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, etatStock,
-  revientUnAutreJour, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour,
+  revientUnAutreJour, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour, choixDeStock,
 } from '../lib/stock-article.js'
 import { CHAMPS_COPIES } from '../lib/catalogue-copie.js'
 
@@ -134,6 +134,25 @@ const code = (f) => sansProse(lire(f))
     /<ChoixCartes label="Sur ta fiche \?" choix=\{CHOIX_VISIBILITE\}/.test(bord) && !/label=\{estVitrine \? 'Produit visible' : 'Article disponible'\}/.test(bord))
   v('choisir règle la visibilité', /onChoisir=\{c => setForm\(p => \(\{ \.\.\.p, actif: c\.actif \}\)\)\}/.test(bord) && /estChoisi=\{c => !!form\.actif === c\.actif\}/.test(bord))
   v('🔴 la carte de choix dit bien son choix (radio)', /role="radio" aria-checked=\{choisi\}\s*onClick=\{\(\) => onChoisir\(c\)\}/.test(bord))
+
+  // ✅ 07/10, « ODOO MIND » (Alex) : le stock se choisit sur trois cartes qui
+  // disent à quoi elles servent, avec des exemples ; l'alimentaire a ses mots.
+  const alim = choixDeStock({ categorie: 'alimentaire', type: 'Boulangerie' })
+  const det = choixDeStock({ categorie: 'detail', type: 'Vêtements' })
+  v('trois choix, dans l’ordre des modes', alim.map(c => c.mode).join(',') === 'illimite,jour,magasin' && det.map(c => c.mode).join(',') === 'illimite,jour,magasin')
+  v('🔴 chaque choix a une phrase ET des exemples', [...alim, ...det].every(c => c.titre && c.phrase && c.phrase.length > 20 && c.exemples && c.exemples.length > 10))
+  v('🔴 en alimentaire, plus de « Stock en magasin » : « Produit emballé »', alim[2].titre === 'Produit emballé' && /confitures/.test(alim[2].exemples))
+  v('les boutiques gardent « Stock en magasin »', det[2].titre === 'Stock en magasin')
+  v('un service compte comme une boutique', choixDeStock({ categorie: 'vitrine' })[2].titre === 'Stock en magasin')
+  v('🔴 le formulaire montre les cartes du stock, branchées sur le mode',
+    /<ChoixCartes label="Comment se compte le stock \?" choix=\{choixDeStock\(commercant\)\}/.test(bord)
+    && /estChoisi=\{c => form\.stock_mode === c\.mode\}/.test(bord) && /onChoisir=\{c => setForm\(p => \(\{ \.\.\.p, stock_mode: c\.mode \}\)\)\}/.test(bord))
+  v('🔴 les exemples s’affichent sous chaque choix', /\{c\.exemples && \(/.test(bord) && /<strong>Par exemple :<\/strong> \{c\.exemples\}/.test(bord))
+  v('🔴 plus de pattes de mouche dans le formulaire article (aucun texte en 10 px)',
+    (() => { const i = bord.indexOf('function renderArticleForm()'); const f = bord.slice(i, bord.indexOf('function renderArticleCard(a)', i)); return i > 0 && !/fontSize: 10\b/.test(f) })())
+  v('🔴 le temps de préparation ne paraît que si les créneaux se comptent en minutes (ou s’il est déjà réglé)',
+    /\{estAlimentaire && \(capaciteEnMinutes \|\| Number\(form\.temps_prepa\) > 0\) && \(/.test(bord)
+    && /\.eq\('commercant_id', commercantId\)\.eq\('mode_capacite', 'temps'\)/.test(bord))
 }
 
 // ═══ 6) LA FICHE : UNE SEULE RÈGLE, ET PLUS DE « DÈS » ══════════════════════

@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, etatStock,
-  revientUnAutreJour, mentionVitrine, choixDeVente, CHOIX_VISIBILITE,
+  revientUnAutreJour, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour,
 } from '../lib/stock-article.js'
 import { CHAMPS_COPIES } from '../lib/catalogue-copie.js'
 
@@ -90,6 +90,20 @@ const code = (f) => sansProse(lire(f))
   v('jamais négatif', e({ stock_mode: 'magasin', stock_jour: 2 }, null, 5).dispo === 0)
   v('🔴 un stock en magasin ne revient pas demain', revientUnAutreJour({ stock_mode: 'magasin' }) === false
     && revientUnAutreJour({ stock_mode: 'jour' }) === true && revientUnAutreJour({ stock_mode: 'illimite' }) === true)
+
+  // 🔴 LE COMPTOIR DU JOUR (Alex, 07/10) : saisi pour CE jour, il fait foi.
+  const AUJ = '2026-10-07', DEMAIN = '2026-10-08'
+  const croissant = { stock_mode: 'jour', stock_jour: 30, stock_comptoir: 12, stock_comptoir_le: AUJ }
+  const c = (article, jour, entreeJour = null, deja = 0) => etatStock({ article, entreeJour, dejaCommande: deja, jour })
+  v('🔴 aujourd’hui, le comptoir remplace la quantité du jour', c(croissant, AUJ, null, 3).dispo === 9)
+  v('🔴 demain, la quantité sur commande revient', c(croissant, DEMAIN, null, 3).dispo === 27)
+  v('🔴 sans jour donné, le comptoir ne dit rien', etatStock({ article: croissant, dejaCommande: 0 }).dispo === 30)
+  v('🔴 un jour indisponible le reste, comptoir ou pas', c(croissant, AUJ, { actif: false }).actif === false)
+  v('🔴 un article « sans limite » plafonné par son comptoir du matin',
+    c({ stock_mode: 'illimite', stock_comptoir: 5, stock_comptoir_le: AUJ }, AUJ).dispo === 5)
+  v('🔴 zéro au comptoir, c’est épuisé', c({ ...croissant, stock_comptoir: 0 }, AUJ).dispo === 0 && c({ ...croissant, stock_comptoir: 0 }, AUJ).gere === true)
+  v('un comptoir vide ne dit rien', comptoirDuJour({ stock_comptoir: null, stock_comptoir_le: AUJ }, AUJ) === null
+    && comptoirDuJour({ stock_comptoir: '', stock_comptoir_le: AUJ }, AUJ) === null)
 }
 
 // ═══ 5) LA VITRINE : LE MOT DU MÉTIER ═══════════════════════════════════════
@@ -125,8 +139,9 @@ const code = (f) => sansProse(lire(f))
 // ═══ 6) LA FICHE : UNE SEULE RÈGLE, ET PLUS DE « DÈS » ══════════════════════
 {
   const fiche = code('app/commander/[slug]/page.js')
-  v('🔴 la carte de l’article lit la règle partagée', /const etat = etatStock\(\{ article, entreeJour: entryDay, dejaCommande \}\)/.test(fiche))
-  v('🔴 la limite du panier lit la MÊME règle', /return etatStock\(\{ article, entreeJour: entryDay, dejaCommande \}\)\.dispo/.test(fiche))
+  // ⚠️ RÉORIENTÉES LE 07/10 : le jour passe aussi (comptoir du jour).
+  v('🔴 la carte de l’article lit la règle partagée', /const etat = etatStock\(\{ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO\(jourDateSelectionne\) \}\)/.test(fiche))
+  v('🔴 la limite du panier lit la MÊME règle', /return etatStock\(\{ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO\(jourDateSelectionne\) \}\)\.dispo/.test(fiche))
   v('🔴 l’ancien calcul recopié a disparu', !/if \(!article\.stock_jour \|\| article\.stock_jour <= 0\) return Infinity/.test(fiche))
   v('🔴 un stock en magasin épuisé ne promet pas « demain »', /const prochain = epuiseAujourdhui && revientUnAutreJour\(article\) \? prochainJourDispo\(\) : null/.test(fiche))
   v('🔴 plus de « dès » ni de « Prix sur demande » sur la fiche', !/>\s*dès\s*</.test(fiche) && !/Prix sur demande/.test(fiche))
@@ -163,6 +178,33 @@ const code = (f) => sansProse(lire(f))
   v('un article sans limite rouvre un jour sans quantité', /async function rouvrirJour\(articleId, jourSemaine\)/.test(bord) && /onRouvrirJour=\{rouvrirJour\}/.test(bord))
   v('🔴 une prestation a toujours son prix (sauf une table)', /if \(!formEstTable && String\(form\.prix \?\? ''\)\.trim\(\) === ''\) \{/.test(bord))
   v('🔴 la copie d’un article emporte son mode de stock', CHAMPS_COPIES.includes('stock_mode') && !CHAMPS_COPIES.includes('stock_maj_le'))
+
+  // 🔴 LE COMPTOIR (07/10) : écrit pour AUJOURD'HUI (jour belge, celui que
+  // compare le serveur), avec l'erreur lue, et retirable.
+  v('🔴 le comptoir s’écrit daté du jour belge, ou se retire',
+    /\? \{ stock_comptoir: null, stock_comptoir_le: null \}\s*: \{ stock_comptoir: Math\.max\(0, parseInt\(brut, 10\) \|\| 0\), stock_comptoir_le: jourBruxelles\(\) \}/.test(bord))
+  v('et une écriture refusée se dit', /if \(error\) \{ toast\(`Le comptoir n’a pas pu être enregistré : \$\{error\.message\}`, 'error'\); return \}/.test(bord))
+  v('🔴 il saisit ce qui RESTE : on enregistre le reste plus le déjà commandé', /onSetComptoir\(a\.id, reste \+ dejaCommande\)/.test(bord))
+  v('🔴 la carte lit le comptoir d’aujourd’hui par la règle partagée', /const comptoirAuj = comptoirDuJour\(a, jourBruxelles\(\)\)/.test(bord))
+  v('la carte reçoit la fonction', /onSetComptoir=\{setComptoir\}/.test(bord))
+  v('🔴 la copie emporte « Réservable jusqu’à », pas le comptoir du jour',
+    CHAMPS_COPIES.includes('horizon_jours') && !CHAMPS_COPIES.includes('stock_comptoir') && !CHAMPS_COPIES.includes('stock_comptoir_le'))
+  v('🔴 le formulaire enregistre « Réservable jusqu’à », vide = automatique',
+    /horizon_jours: \(estVitrine \|\| !form\.vendable \|\| form\.horizon_jours === '' \|\| form\.horizon_jours == null\)\s*\? null : \(parseInt\(form\.horizon_jours, 10\) \|\| null\),/.test(save))
+}
+
+// ═══ 8) LE COMPTOIR, CÔTÉ FICHE ET SERVEUR (07/10) ═════════════════════════
+{
+  const fiche = code('app/commander/[slug]/page.js')
+  v('🔴 la carte de la fiche passe le jour au calcul du stock',
+    /etatStock\(\{ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO\(jourDateSelectionne\) \}\)/.test(fiche))
+  v('🔴 le panier aussi (getStockMax)',
+    /return etatStock\(\{ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO\(jourDateSelectionne\) \}\)\.dispo/.test(fiche))
+  const lc = code('lib/lignes-commande.js')
+  v('🔴 le serveur lit le comptoir des articles', /\.select\('id, stock_jour, stock_comptoir, stock_comptoir_le'\)/.test(lc))
+  v('🔴 et le fait passer devant la grille, après le jour indisponible',
+    /const stockBrut = comptoir !== null\s*\? comptoir\s*: stockEntry/.test(lc)
+    && lc.indexOf("if (stockEntry?.actif === false)") < lc.indexOf('const stockBrut = comptoir !== null'))
 }
 
 console.log(`\nStock et vitrine : ${ok} vérifications`)

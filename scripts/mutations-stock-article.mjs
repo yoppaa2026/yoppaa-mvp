@@ -65,7 +65,17 @@ const MUTATIONS = [
 
   // ─── LA FICHE ────────────────────────────────────────────────────────────
   { nom: '🔴 la limite du panier recalcule à sa façon',
-    fichier: FICHE, de: '    return etatStock({ article, entreeJour: entryDay, dejaCommande }).dispo', vers: '    return (article.stock_jour > 0) ? Math.max(0, article.stock_jour - dejaCommande) : Infinity' },
+    // ⚠️ Ancre reorientee le 07/10 : le jour passe (comptoir).
+    fichier: FICHE, de: '    return etatStock({ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO(jourDateSelectionne) }).dispo', vers: '    return (article.stock_jour > 0) ? Math.max(0, article.stock_jour - dejaCommande) : Infinity' },
+  // 🔴 LE COMPTOIR DU JOUR (07/10).
+  { nom: '🔴 le comptoir ne plafonne plus rien a l ecran',
+    fichier: 'lib/stock-article.js', de: '  if (comptoir !== null) return { actif: true, gere: true, brut: comptoir, dispo: Math.max(0, comptoir - deja) }', vers: '' },
+  { nom: '🔴 un comptoir de mardi plafonne mercredi',
+    fichier: 'lib/stock-article.js', de: '  if (!article || !jour || article.stock_comptoir_le !== jour) return null', vers: '  if (!article) return null' },
+  { nom: '🔴 le comptoir se date du jour de la machine',
+    fichier: 'app/dashboard/ConfigDashboard.js', de: 'stock_comptoir_le: jourBruxelles() }', vers: 'stock_comptoir_le: new Date().toISOString().slice(0, 10) }' },
+  { nom: '🔴 le reste saisi oublie le deja commande',
+    fichier: 'app/dashboard/ConfigDashboard.js', de: '                    onSetComptoir(a.id, reste + dejaCommande)', vers: '                    onSetComptoir(a.id, reste)' },
   { nom: '🔴 la carte promet « demain » sur un stock en magasin',
     fichier: FICHE, de: '  const prochain = epuiseAujourdhui && revientUnAutreJour(article) ? prochainJourDispo() : null', vers: '  const prochain = epuiseAujourdhui ? prochainJourDispo() : null' },
   { nom: '🔴 le « dès » revient sur la fiche',

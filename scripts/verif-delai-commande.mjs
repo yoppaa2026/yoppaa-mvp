@@ -24,6 +24,7 @@ import {
   DELAIS_PROPOSES, choixDeDelai, libelleChoixDelai,
   delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier,
   libelleJoursVente, mentionDisponibilite, propositionPourArticle,
+  HORIZONS_ARTICLE, libelleHorizonArticle,
 } from '../lib/delai-commande.js'
 import { jourPlus as jourPlusBanc } from '../lib/statut-commerce.js'
 import { brusselsInstant } from '../lib/timezone.js'
@@ -197,6 +198,19 @@ egal('🔴 un invendu ne tire pas le panier',
   egal('🔴 et avec le pain au panier : pareil', propose(CROISSANT, [PAIN], SAM), { type: 'ok' })
   egal('🔴 la baguette part avec la tarte samedi : plus de refus « deux délais »',
     propose({ nom: 'Baguette' }, [{ nom: 'Tarte', d: 2 }], SAM), { type: 'ok' })
+
+  // « RÉSERVABLE JUSQU'À » (temps 2, 07/10) : il allonge, jamais ne raccourcit.
+  egal('🔴 « 3 semaines » ouvre 22 jours (aujourd’hui compris)',
+    longueurCalendrier({ horizon: 2, articles: [{ delaiJours: 0, indispo: [], horizonJours: 21 }] }), 22)
+  egal('🔴 un réglage plus court que l’automatique ne raccourcit rien',
+    longueurCalendrier({ horizon: 2, articles: [{ ...PLF, horizonJours: 3 }] }), 9)
+  egal('vide, il reste automatique', longueurCalendrier({ horizon: 2, articles: [{ ...PLF, horizonJours: null }] }), 9)
+  egal('les libellés de la liste',
+    HORIZONS_ARTICLE.map(libelleHorizonArticle),
+    ['Automatique (une semaine après le délai)', 'Jusqu’à 2 semaines à l’avance', 'Jusqu’à 3 semaines à l’avance', 'Jusqu’à 1 mois à l’avance'])
+  verifier('🔴 la liste reste sous la borne de la base (60 jours)', HORIZONS_ARTICLE.every(h => h === null || (h >= 1 && h <= 60)))
+  egal('🔴 un délai de 14 jours se dit en jours', mentionDisponibilite({ delaiJours: 14 }), 'Commande 14 jours à l\'avance')
+  verifier('🔴 J+14 se lit bien comme 14 jours', delaiEnJours({ delai_minutes: 20160 }) === 14)
 
   // LE DUO
   egal('🔴 un duo prend le plus long de ses deux articles',
@@ -439,9 +453,14 @@ verifier('elle est triée', DELAIS_PROPOSES.every((m, i) => i === 0 || m > DELAI
 // en production depuis le 09/08. Les mettre aussi sur l article fabriquerait
 // deux reglages voisins dont un seul agit : exactement le defaut retire le
 // matin meme avec le champ « Delai » des creneaux.
-egal('🔴 la liste tient en quatre choix', DELAIS_PROPOSES.length, 4)
+// ⚠️ RÉORIENTÉES LE 07/10 : J+5, J+7 et J+14 s'ajoutent (Alex, traiteurs et
+// pâtissiers). La règle reste : des JOURS, une liste fermée, rien au-delà de
+// la borne de la base (20 160 minutes).
+egal('🔴 la liste tient en sept choix', DELAIS_PROPOSES.length, 7)
 egal('et ils se comptent en JOURS, jamais en heures',
-  DELAIS_PROPOSES, [0, 1440, 2880, 4320])
+  DELAIS_PROPOSES, [0, 1440, 2880, 4320, 7200, 10080, 20160])
+verifier('🔴 tous des jours entiers, sous la borne de la base (14 jours)',
+  DELAIS_PROPOSES.every(m => m % 1440 === 0 && m >= 0 && m <= 20160))
 verifier('🔴 aucune duree courte ne concurrence la cloture du creneau',
   !DELAIS_PROPOSES.some(m => m > 0 && m < 1440), JSON.stringify(DELAIS_PROPOSES))
 verifier('elle couvre la tarte et les 72 h',
@@ -449,7 +468,7 @@ verifier('elle couvre la tarte et les 72 h',
 // 🔴 UNE VALEUR HORS LISTE NE DOIT JAMAIS DISPARAÎTRE EN SILENCE. Le commerçant
 // enregistrerait son prix et perdrait son délai sans qu'aucun écran ne le dise.
 egal('🔴 un délai hors liste est ajouté, à sa place',
-  choixDeDelai(2160), [0, 1440, 2160, 2880, 4320])
+  choixDeDelai(2160), [0, 1440, 2160, 2880, 4320, 7200, 10080, 20160])
 egal('une valeur déjà dans la liste ne se duplique pas',
   choixDeDelai(1440), DELAIS_PROPOSES)
 egal('une valeur absente ne change rien', choixDeDelai(null), DELAIS_PROPOSES)
@@ -565,6 +584,13 @@ egal('sans nom d’article, la phrase tient debout',
     /const longueurCal = longueurDuCatalogue\(data\.commercant, data\.articles, data\.stocksJour\)/.test(FICHE)
     && /data\.blocagesCreneaux \|\| \[\], longueurCal\)/.test(FICHE) && /data\.blocagesLivraison \|\| \[\], longueurCal\)/.test(FICHE))
   verifier('et la boutique aussi', /horizon: Math\.max\(7, longueurDuCatalogue\(commercant, articles, stocksJour\)\)/.test(FICHE))
+  // 🔴 TEMPS 2 (07/10) : « Réservable jusqu'à » entre dans le calcul de la
+  // fiche, et le formulaire l'enregistre (vide = automatique).
+  verifier('🔴 la fiche passe « Réservable jusqu’à » au calcul du calendrier',
+    /indispo: joursIndisponibles\(stocks\?\.\[a\.id\]\), horizonJours: a\.horizon_jours \}\)\)/.test(FICHE))
+  verifier('🔴 le formulaire enregistre « Réservable jusqu’à »',
+    /horizon_jours: \(estVitrine \|\| !form\.vendable \|\| form\.horizon_jours === '' \|\| form\.horizon_jours == null\)\s*\? null : \(parseInt\(form\.horizon_jours, 10\) \|\| null\),/.test(BORD))
+  verifier('et il propose la liste fermée', /\[\.\.\.HORIZONS_ARTICLE,/.test(BORD) && /libelleHorizonArticle\(h\)/.test(BORD))
   verifier('🔴 la longueur passe vraiment dans le calendrier',
     /const horizon = Number\.isFinite\(Number\(longueur\)\) && Number\(longueur\) >= 1/.test(FICHE))
 
@@ -744,14 +770,14 @@ egal('sans nom d’article, la phrase tient debout',
     && ROUTE.indexOf('l.delai_minutes = delaiDeLOffre(') < ROUTE.indexOf('const n = delaiEnJours(l)'))
   // 🔴 L'HORIZON S'ALLONGE AVEC LE CATALOGUE, lu en entier (pas le panier).
   verifier('🔴 l’horizon se calcule sur TOUT le catalogue actif, avec ses jours de vente',
-    /supabase\.from\('articles'\)\.select\('id, delai_minutes'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(ROUTE)
+    /supabase\.from\('articles'\)\.select\('id, delai_minutes, horizon_jours'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(ROUTE)
     && /supabase\.from\('article_stock_jour'\)\.select\('article_id, jour_semaine'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', false\)/.test(ROUTE)
     && /const horizon = longueurCalendrier\(\{\s*horizon: commercant\.horizon_commande,/.test(ROUTE))
   // 🔴 ET LES JOURS DE VENTE Y ENTRENT : sans eux, un pain du seul samedi sans
   // délai n'allongerait rien, et samedi serait refusé le lundi.
   verifier('🔴 les jours de vente de chaque article entrent dans le calcul',
     /for \(const o of joursOff \|\| \[\]\) \(offParArticle\[o\.article_id\] \|\|= \[\]\)\.push\(o\.jour_semaine\)/.test(ROUTE)
-    && /articles: \(catalogue \|\| \[\]\)\.map\(a => \(\{ delaiJours: delaiEnJours\(a\), indispo: offParArticle\[a\.id\] \|\| \[\] \}\)\)/.test(ROUTE))
+    && /articles: \(catalogue \|\| \[\]\)\.map\(a => \(\{ delaiJours: delaiEnJours\(a\), indispo: offParArticle\[a\.id\] \|\| \[\], horizonJours: a\.horizon_jours \}\)\)/.test(ROUTE))
   verifier('🔴 et une lecture du catalogue en échec refuse',
     /if \(errCat \|\| errOff\) \{\s*return NextResponse\.json/.test(ROUTE))
 

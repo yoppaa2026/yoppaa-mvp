@@ -490,7 +490,9 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, optionsParA
   // réglage du jour. Les deux calculs recopiés ici ont vécu jusqu'au 30/09.
   const entryDay = stocksArticle[jourNomSelectionne]
   const dejaCommande = (commandesParArticleJour && commandesParArticleJour[article.id]) || 0
-  const etat = etatStock({ article, entreeJour: entryDay, dejaCommande })
+  // ⚠️ LE JOUR PASSE AUSSI : c'est lui qui dit si le comptoir saisi ce matin
+  // fait foi (07/10).
+  const etat = etatStock({ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO(jourDateSelectionne) })
   const actifCeJour = etat.actif
   const stockGere = etat.gere
   const stockAujourdhui = stockGere ? etat.dispo : 0
@@ -2228,7 +2230,7 @@ export default function CommanderSlug() {
       horizon: c?.horizon_commande,
       articles: (arts || [])
         .filter(a => a && a.actif !== false && !a.est_vitrine)
-        .map(a => ({ delaiJours: delaiEnJours(a), indispo: joursIndisponibles(stocks?.[a.id]) })),
+        .map(a => ({ delaiJours: delaiEnJours(a), indispo: joursIndisponibles(stocks?.[a.id]), horizonJours: a.horizon_jours })),
     })
   }
 
@@ -2685,7 +2687,7 @@ export default function CommanderSlug() {
     const dejaCommande = commandesParArticleJour[articleId] || 0
     // ⚠️ LA RÈGLE DE LA CARTE DE L'ARTICLE, par la même fonction (30/09) :
     // sans limite, par jour, en magasin (à 0, épuisé et non plus illimité).
-    return etatStock({ article, entreeJour: entryDay, dejaCommande }).dispo
+    return etatStock({ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO(jourDateSelectionne) }).dispo
   }
 
   // ─── LE TOTAL QUE LE SERVEUR FACTURERA (audit écran client, 06/10) ──────

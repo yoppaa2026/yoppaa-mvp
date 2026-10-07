@@ -861,7 +861,7 @@ export async function POST(request) {
       // refusé sans lui, selon l'ordre des clics.
       if (!estBoutique) {
         const [{ data: catalogue, error: errCat }, { data: joursOff, error: errOff }] = await Promise.all([
-          supabase.from('articles').select('id, delai_minutes').eq('commercant_id', commercant.id).eq('actif', true),
+          supabase.from('articles').select('id, delai_minutes, horizon_jours').eq('commercant_id', commercant.id).eq('actif', true),
           supabase.from('article_stock_jour').select('article_id, jour_semaine').eq('commercant_id', commercant.id).eq('actif', false),
         ])
         // ⚠️ UNE LECTURE EN ÉCHEC N'EST PAS « RIEN À ALLONGER » : on refuse
@@ -873,7 +873,7 @@ export async function POST(request) {
         for (const o of joursOff || []) (offParArticle[o.article_id] ||= []).push(o.jour_semaine)
         const horizon = longueurCalendrier({
           horizon: commercant.horizon_commande,
-          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [] })),
+          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], horizonJours: a.horizon_jours })),
         })
         const aujourdhui = jourBruxelles()
         const dernier = jourPlus(aujourdhui, horizon - 1)

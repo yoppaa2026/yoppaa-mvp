@@ -180,8 +180,12 @@ const MUTATIONS = [
   // CLOTURE DU CRENEAU, en production depuis le 09/08. Les remettre sur
   // l article recreerait deux reglages voisins dont un seul agit.
   { nom: '🔴 les courtes durees reviennent concurrencer la cloture du creneau',
-    de: 'export const DELAIS_PROPOSES = [0, 1440, 2880, 4320]',
-    vers: 'export const DELAIS_PROPOSES = [0, 30, 60, 120, 240, 1440, 2880, 4320]' },
+    // ⚠️ Ancre reorientee le 07/10 : J+5, J+7, J+14 s ajoutent.
+    de: 'export const DELAIS_PROPOSES = [0, 1440, 2880, 4320, 7200, 10080, 20160]',
+    vers: 'export const DELAIS_PROPOSES = [0, 30, 60, 120, 240, 1440, 2880, 4320, 7200, 10080, 20160]' },
+  { nom: '🔴 la liste depasse la borne de la base (J+30 refuse a l enregistrement)',
+    de: 'export const DELAIS_PROPOSES = [0, 1440, 2880, 4320, 7200, 10080, 20160]',
+    vers: 'export const DELAIS_PROPOSES = [0, 1440, 2880, 4320, 7200, 10080, 43200]' },
 
   { nom: '🔴 la liste des delais n’est plus triee',
     de: '  return liste.sort((a, b) => a - b)',
@@ -422,8 +426,25 @@ const MUTATIONS = [
 
   { nom: '🔴 le serveur ne lit plus les jours de vente du catalogue',
     fichier: ROUTE,
-    de: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [] })),',
-    vers: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: [] })),' },
+    de: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], horizonJours: a.horizon_jours })),',
+    vers: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: [], horizonJours: a.horizon_jours })),' },
+  // 🔴 TEMPS 2 (07/10) : « Reservable jusqu a ».
+  { nom: '🔴 le serveur ignore « Reservable jusqu a »',
+    fichier: ROUTE,
+    de: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], horizonJours: a.horizon_jours })),',
+    vers: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [] })),' },
+  { nom: '🔴 la regle ignore « Reservable jusqu a »',
+    fichier: 'lib/delai-commande.js',
+    de: '    if (Number.isFinite(h) && h >= 1) n = Math.max(n, Math.floor(h) + 1)',
+    vers: '' },
+  { nom: '🔴 la fiche ignore « Reservable jusqu a »',
+    fichier: FICHE,
+    de: 'indispo: joursIndisponibles(stocks?.[a.id]), horizonJours: a.horizon_jours })),',
+    vers: 'indispo: joursIndisponibles(stocks?.[a.id]) })),' },
+  { nom: '🔴 le formulaire n enregistre plus « Reservable jusqu a »',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '        ? null : (parseInt(form.horizon_jours, 10) || null),',
+    vers: '        ? null : null,' },
 
   // ⚠️ HORIZON ET DÉLAI SONT DEUX BORNES OPPOSÉES : plafond et plancher.
   { nom: '🔴 l’horizon ne plafonne plus rien cote serveur',

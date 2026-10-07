@@ -255,6 +255,28 @@ stock = await verifierStockDisponible({
 })
 verifier('sans entrée de stock NI stock global = pas de limite', stock.ok)
 
+// ═══ 🔴 LE COMPTOIR DU JOUR (Alex, 07/10) ══════════════════════════════════
+//
+// Saisi pour CE jour, il fait foi à la place de la grille ; un autre jour, il
+// ne dit rien. Un jour indisponible reste indisponible.
+{
+  const grille = [{ article_id: 'a1', jour_semaine: 'mercredi', stock: 10, actif: true }]
+  const avec = (art, stocks = grille) => verifierStockDisponible({
+    supabase: supabaseFactice({ stocks, articles: [{ id: 'a1', stock_jour: 0, ...art }] }),
+    lignes: lignesStock, commercantId: 'c1', dateCommande: JOUR,
+  })
+  let s = await avec({ stock_comptoir: 4, stock_comptoir_le: JOUR })
+  verifier('🔴 le comptoir du jour plafonne à la place de la grille (4 < 5 demandés)', !s.ok && s.status === 409, JSON.stringify(s))
+  s = await avec({ stock_comptoir: 6, stock_comptoir_le: JOUR })
+  verifier('le comptoir suffit : ça passe', s.ok, JSON.stringify(s))
+  s = await avec({ stock_comptoir: 1, stock_comptoir_le: '2026-08-04' })
+  verifier('🔴 un comptoir d’un autre jour ne dit rien (la grille de 10 revient)', s.ok, JSON.stringify(s))
+  s = await avec({ stock_comptoir: 0, stock_comptoir_le: JOUR })
+  verifier('🔴 zéro au comptoir, c’est épuisé (pas « sans limite »)', !s.ok, JSON.stringify(s))
+  s = await avec({ stock_comptoir: 50, stock_comptoir_le: JOUR }, [{ article_id: 'a1', jour_semaine: 'mercredi', stock: 10, actif: false }])
+  verifier('🔴 un jour indisponible le reste, comptoir ou pas', !s.ok, JSON.stringify(s))
+}
+
 // ═══ 🔴 LE STOCK GLOBAL, QUE LE SERVEUR IGNORAIT (31/08) ═══════════════════
 //
 // Le champ « Stock du jour (défaut) » n'était plafonné QUE par le navigateur.

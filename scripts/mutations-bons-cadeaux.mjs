@@ -526,7 +526,8 @@ const MUTATIONS = [
   // fois : l'écran calcule, le serveur décide.
   { nom: '🔴 le serveur cesse de lire le stock global',
     banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
-    de: "    supabase.from('articles')\n      .select('id, stock_jour')\n      .in('id', stockArticleIds),",
+    // ⚠️ Ancre reorientee le 07/10 : le comptoir du jour s ajoute au select.
+    de: "    supabase.from('articles')\n      .select('id, stock_jour, stock_comptoir, stock_comptoir_le')\n      .in('id', stockArticleIds),",
     vers: "    Promise.resolve({ data: [] })," },
 
   { nom: '🔴 l’absence d’entrée redevient « aucune limite »',
@@ -539,10 +540,21 @@ const MUTATIONS = [
     de: '      ? (stockEntry.stock || 0)',
     vers: '      ? Math.max(stockEntry.stock || 0, stockGlobalParArticle[artId] || 0)' },
 
+  // 🔴 LE COMPTOIR DU JOUR (07/10), mesure par le comportement (verif:logique).
+  { nom: '🔴 le serveur ignore le comptoir du jour',
+    banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: '    comptoirParArticle[a.id] = comptoirDuJour(a, dateCommande)',
+    vers: '    comptoirParArticle[a.id] = null' },
+  { nom: '🔴 le comptoir rouvre un jour rendu indisponible',
+    banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
+    de: '    if (stockEntry?.actif === false) {',
+    vers: '    if (stockEntry?.actif === false && (comptoirParArticle[artId] ?? null) === null) {' },
+
   { nom: '🔴 une grille à zéro retombe sur le stock global',
     banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
-    de: '    const stockBrut = stockEntry',
-    vers: '    const stockBrut = (stockEntry && stockEntry.stock > 0)' },
+    // ⚠️ Ancre reorientee le 07/10 : le comptoir passe devant, la grille suit.
+    de: '      : stockEntry\n        ? (stockEntry.stock || 0)',
+    vers: '      : (stockEntry && stockEntry.stock > 0)\n        ? (stockEntry.stock || 0)' },
 
   // ⚠️ ET LA MOITIÉ SQL COMPTE AUTANT : sans elle, la course reste ouverte.
   { nom: '🔴 la fonction atomique perd son repli sur le stock global',

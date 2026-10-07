@@ -22,7 +22,7 @@ import {
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { nomDeLaCarte, sertAManger } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09, décisions d'Alex).
-import { MODES_STOCK, LIBELLES_MODE_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE } from '@/lib/stock-article'
+import { MODES_STOCK, LIBELLES_MODE_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour } from '@/lib/stock-article'
 import { phraseEnvieFonction } from '@/lib/signaux'
 // ⚠️ Les bornes viennent de la source unique : écrites à la main dans ce texte,
 // elles auraient menti au commerçant le jour où on les change.
@@ -86,7 +86,7 @@ import TabGenerateur from './TabGenerateur'
 import BoutonIaInline from './BoutonIaInline'
 import { champsModifies } from '@/lib/formulaire-modifie'
 import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
-import { choixDeDelai, libelleChoixDelai } from '@/lib/delai-commande'
+import { choixDeDelai, libelleChoixDelai, HORIZONS_ARTICLE, libelleHorizonArticle } from '@/lib/delai-commande'
 import { categoriesDuCommerce, listeApresAjout, renommage, listeApresSuppression, parentDe, feuilleDe } from '@/lib/categories-catalogue'
 import { jourSemaineDe } from '@/lib/creneaux'
 import { FILTRE_STATUTS_INACTIFS, FILTRE_STATUTS_TERMINES } from '@/lib/statuts-commande'
@@ -741,14 +741,14 @@ function TabMenu({ commercantId, commercant, toast }) {
   }, [])
 
   function openNew() {
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: 0, photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '' })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
     // ⚠️ « Sans limite » n'a pas de quantité : le champ repart vide si l'on
     // change d'avis, au lieu d'afficher le 0 technique qui la représente.
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '' })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
@@ -783,6 +783,9 @@ function TabMenu({ commercantId, commercant, toast }) {
       // implicite, mais le module, lui, lit `Number()` : autant n'avoir qu'une
       // seule forme dans la colonne.
       delai_minutes: (estVitrine || !form.vendable) ? 0 : (parseInt(form.delai_minutes, 10) || 0),
+      // « Réservable jusqu'à » (07/10) : vide = automatique, écrit `null`.
+      horizon_jours: (estVitrine || !form.vendable || form.horizon_jours === '' || form.horizon_jours == null)
+        ? null : (parseInt(form.horizon_jours, 10) || null),
       photo_url: form.photo_url || null,
       // ✅ EN VITRINE = PAS VENDU EN LIGNE, pour tous les métiers (30/09) : la
       // boutique qui montre ses vêtements et vend ses accessoires, le plat
@@ -1082,6 +1085,19 @@ function TabMenu({ commercantId, commercant, toast }) {
     setArticles(prev => prev.map(a => a.id === id ? { ...a, ...maj } : a))
   }
 
+  // 🔴 LE COMPTOIR D'AUJOURD'HUI (Alex, 07/10). `brut` = ce qu'il reste plus ce
+  // qui est déjà commandé aujourd'hui (la carte le calcule), ou `null` pour le
+  // retirer. Daté du jour BELGE : c'est la date que le serveur compare.
+  async function setComptoir(id, brut) {
+    const maj = brut === null
+      ? { stock_comptoir: null, stock_comptoir_le: null }
+      : { stock_comptoir: Math.max(0, parseInt(brut, 10) || 0), stock_comptoir_le: jourBruxelles() }
+    const { error } = await supabase.from('articles').update(maj).eq('id', id)
+    if (error) { toast(`Le comptoir n’a pas pu être enregistré : ${error.message}`, 'error'); return }
+    setArticles(prev => prev.map(a => a.id === id ? { ...a, ...maj } : a))
+    toast(brut === null ? 'Comptoir retiré : la quantité du jour revient.' : 'Comptoir enregistré pour aujourd’hui.')
+  }
+
   // Un jour rendu à nouveau disponible, pour un article SANS LIMITE : le
   // réglage du jour disparaît, il n'y a aucune quantité à y mettre.
   async function rouvrirJour(articleId, jourSemaine) {
@@ -1304,6 +1320,23 @@ function TabMenu({ commercantId, commercant, toast }) {
                 veut dire commandé jeudi, retiré samedi. Tes clients le voient sur la carte, avec la date limite.
                 Pour ne le vendre que certains jours, coche-les sur sa carte (« Jours de vente » ou « Stock par jour »).
               </p>
+              {/* « RÉSERVABLE JUSQU'À » (Alex, 07/10). Une liste fermée, comme
+                  le délai. Vide, le calcul est automatique : une semaine après
+                  le délai. Il n'ouvre que plus loin, jamais moins. */}
+              <label style={{ ...s.label, marginTop: 10, display: 'block' }}>Réservable jusqu&rsquo;à</label>
+              <select
+                value={form.horizon_jours === null || form.horizon_jours === undefined ? '' : String(form.horizon_jours)}
+                onChange={e => setForm(p => ({ ...p, horizon_jours: e.target.value }))}
+                style={{ ...s.input, width: '100%' }}
+              >
+                {[...HORIZONS_ARTICLE, ...(form.horizon_jours && !HORIZONS_ARTICLE.includes(Number(form.horizon_jours)) ? [Number(form.horizon_jours)] : [])].map(h => (
+                  <option key={String(h)} value={h === null ? '' : String(h)}>{libelleHorizonArticle(h)}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>
+                Jusqu&rsquo;à quand tes clients peuvent le commander à l&rsquo;avance (un gâteau de communion, un buffet).
+                Les autres articles de ta fiche deviennent commandables pour ces jours-là aussi.
+              </p>
             </div>
           )}
           {/* TVA. Le prix saisi est TTC : le taux ne change pas ce que paie le
@@ -1411,7 +1444,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // ⚠️ DEPUIS LE 30/09, `estVitrine` / `estDetail` DISENT LA CATÉGORIE DU
     // COMMERCE (variantes ou options, temps de préparation). Le stock et la
     // vitrine se lisent sur l'ARTICLE : son mode, et « vendu en ligne ».
-    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir}/>
   }
 
   return (
@@ -2669,7 +2702,7 @@ function VariantesArticle({ article, toast, articles = [] }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -2692,10 +2725,19 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
   // Conso par jour de RETRAIT (bug 14) : dejaCommande = celle d'aujourd'hui
   const dejaCommande = consoParJour[jourActuelKey] || 0
 
+  // 🔴 LE COMPTOIR D'AUJOURD'HUI (Alex, 07/10) : saisi ce matin, il remplace la
+  // quantité du jour, aujourd'hui seulement. MÊME RÈGLE que la fiche et le
+  // serveur (`comptoirDuJour`).
+  const comptoirAuj = comptoirDuJour(a, jourBruxelles())
+
   const dispoEffectif = (jour) => {
     const entry = stockParJour[jour]
     // Conso du jour de RETRAIT (plus seulement aujourd'hui, bug 14)
     const conso = consoParJour[jour] || 0
+    if (entry?.actif === false) return { dispo: 0, ferme: true, override: true, brut: entry.stock }
+    if (jour === jourActuelKey && comptoirAuj !== null) {
+      return { dispo: Math.max(0, comptoirAuj - conso), ferme: false, override: true, brut: comptoirAuj, comptoir: true }
+    }
     if (entry) {
       if (entry.actif === false) return { dispo: 0, ferme: true, override: true, brut: entry.stock }
       if (sansLimite) return { dispo: Infinity, ferme: false, override: false, brut: 0 }
@@ -2811,11 +2853,11 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui (horaires)</span>
             ) : effAuj.ferme ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui</span>
-            ) : sansLimite ? (
+            ) : sansLimite && !effAuj.comptoir ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: '#10B981', background: '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>Sans limite</span>
-            ) : stockBrutAuj > 0 ? (
+            ) : (stockBrutAuj > 0 || effAuj.comptoir) ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#10B981', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
-                Aujourd&rsquo;hui&nbsp;: {stockRestant} dispo {dejaCommande > 0 && <span style={{ opacity: 0.65 }}>({dejaCommande} commandé{dejaCommande > 1 ? 's' : ''})</span>}
+                {effAuj.comptoir ? 'Au comptoir aujourd’hui' : 'Aujourd’hui'}&nbsp;: {stockRestant} dispo {dejaCommande > 0 && <span style={{ opacity: 0.65 }}>({dejaCommande} commandé{dejaCommande > 1 ? 's' : ''})</span>}
               </span>
             ) : (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Non géré</span>
@@ -2824,6 +2866,31 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
               <span style={{ fontSize: 11, fontWeight: 700, color: T.main, background: T.pale, padding: '3px 8px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 {mentionVitrineTexte} · pas vendu en ligne
               </span>
+            )}
+            {/* 🔴 LE COMPTOIR (Alex, 07/10) : « il m'en reste 12 au comptoir »,
+                dit le matin, pour AUJOURD'HUI seulement. Les autres jours
+                gardent la quantité sur commande (la grille ci-dessous). Il
+                saisit ce qu'il RESTE, comme pour la grille : on enregistre ce
+                reste plus ce qui est déjà commandé aujourd'hui. */}
+            {parJours && onSetComptoir && !effAuj.ferme && !congeAuj && (
+              <>
+                <button type="button"
+                  onClick={() => {
+                    const v = window.prompt('Combien en reste-t-il au comptoir, maintenant ? (pour aujourd’hui seulement)', effAuj.comptoir ? String(stockRestant) : '')
+                    if (v === null || String(v).trim() === '') return
+                    const reste = Math.max(0, parseInt(v, 10) || 0)
+                    onSetComptoir(a.id, reste + dejaCommande)
+                  }}
+                  style={{ fontSize: 11, fontWeight: 700, color: T.main, background: '#fff', border: `1px solid ${T.main}44`, padding: '3px 9px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {effAuj.comptoir ? 'Modifier le comptoir' : 'Comptoir aujourd’hui'}
+                </button>
+                {effAuj.comptoir && (
+                  <button type="button" onClick={() => onSetComptoir(a.id, null)}
+                    style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#fff', border: '1px solid #E5E7EB', padding: '3px 9px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Retirer le comptoir
+                  </button>
+                )}
+              </>
             )}
           </div>
 

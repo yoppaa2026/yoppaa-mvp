@@ -20,7 +20,7 @@ import {
 
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
-import { categoriesOrdonnees, ordrePourEnregistrer } from '../lib/categories-catalogue.js'
+import { categoriesOrdonnees, ordrePourEnregistrer, categoriesDuCommerce, listeApresAjout, renommage, listeApresSuppression, parentDe, feuilleDe } from '../lib/categories-catalogue.js'
 
 let ok = 0
 const echecs = []
@@ -546,6 +546,64 @@ v('le tableau de bord nomme le statut souhaite sans parler de dette',
   // ⚠️ DES FLÈCHES, PAS D'EMOJI : la règle d'Alex, icônes SVG dans l'interface.
   v('les boutons portent des icônes SVG', /<svg /.test(ecran))
   v('et ils nomment le geste pour qui n’y voit pas', /aria-label=\{`Monter /.test(ecran))
+
+  // ─── LA LISTE DES CATÉGORIES DU COMMERCE (Alex, 07/10) ──────────────────
+  //
+  // 🔴 « certaines s'effacent à l'enregistrement, elles ne s'enregistrent pas
+  // si on change l'ordre, s'efface quand on corrige l'orthographe, je ne sais
+  // plus mettre catégorie parent ». Quatre défauts, trois causes : une
+  // catégorie n'existait que par ses articles, l'écran d'ordre relisait un
+  // objet figé, le renommage oubliait enfants et place.
+  const ART = [{ categorie: 'Pains' }, { categorie: 'Sandwichs · Classiques' }, { categorie: 'Pains' }, { categorie: null }]
+  v('🔴 une catégorie sans article existe, à sa place dans la liste',
+    joint(categoriesDuCommerce(ART, ['Viennoiseries', 'Pains'])) === joint(['Viennoiseries', 'Pains', 'Sandwichs · Classiques']))
+  v('sans liste, les catégories des articles, dans leur ordre', joint(categoriesDuCommerce(ART, null)) === joint(['Pains', 'Sandwichs · Classiques']))
+
+  v('🔴 une catégorie créée entre dans la liste', joint(listeApresAjout(['Pains'], 'Tartes')) === joint(['Pains', 'Tartes']))
+  v('un doublon est refusé', listeApresAjout(['Pains'], 'Pains') === null)
+  v('une sous-catégorie se range juste après son groupe',
+    joint(listeApresAjout(['Sandwichs · Classiques', 'Pains'], 'Sandwichs · Spéciaux')) === joint(['Sandwichs · Classiques', 'Sandwichs · Spéciaux', 'Pains']))
+
+  {
+    const r = renommage(['Pains', 'Viennoiseries', 'Sandwichs'], 'Viennoiseries', 'Viennoiserie')
+    v('🔴 corriger l’orthographe garde la place dans la liste', joint(r.liste) === joint(['Pains', 'Viennoiserie', 'Sandwichs']))
+  }
+  {
+    const r = renommage(['Sandwichs', 'Sandwichs · Classiques', 'Pains'], 'Sandwichs', 'Sandwiches')
+    v('🔴 les enfants suivent leur parent renommé', joint(r.liste) === joint(['Sandwiches', 'Sandwiches · Classiques', 'Pains']))
+    v('et chaque article à réécrire est nommé',
+      JSON.stringify(r.correspondances) === JSON.stringify([{ de: 'Sandwichs', vers: 'Sandwiches' }, { de: 'Sandwichs · Classiques', vers: 'Sandwiches · Classiques' }]))
+  }
+  {
+    const r = renommage(['Classiques', 'Sandwichs · Spéciaux'], 'Classiques', 'Sandwichs · Classiques')
+    v('🔴 une catégorie existante se range sous un parent', joint(r.liste) === joint(['Sandwichs · Classiques', 'Sandwichs · Spéciaux']))
+    const r2 = renommage(['Sandwichs · Classiques'], 'Sandwichs · Classiques', 'Classiques')
+    v('et en ressort', joint(r2.liste) === joint(['Classiques']))
+  }
+  v('un nom pris est refusé', !!renommage(['A', 'B'], 'A', 'B').refus)
+  v('un nom vide est refusé', !!renommage(['A'], 'A', '  ').refus)
+  v('un parent avec enfants ne devient pas enfant (un seul niveau)', !!renommage(['A', 'A · x', 'B'], 'A', 'B · A').refus)
+  v('rien ne se range sous soi-même', !!renommage(['A'], 'A', 'A · A').refus)
+  v('le même nom ne réécrit rien', renommage(['A'], 'A', 'A').correspondances.length === 0)
+  v('🔴 supprimer sort la catégorie de la liste, ses enfants restent',
+    joint(listeApresSuppression(['A', 'A · x', 'B'], 'A')) === joint(['A · x', 'B']))
+  v('parent et feuille se lisent sur le nom', parentDe('A · x') === 'A' && feuilleDe('A · x') === 'x' && parentDe('B') === null && feuilleDe('B') === 'B')
+
+  // L'ÉCRAN : chaque geste écrit la liste, et seulement si la base l'a prise.
+  v('🔴 les catégories se déduisent des articles ET de la liste enregistrée',
+    /const categories = categoriesDuCommerce\(articles, listeCats\)/.test(config) && !/setCategories\(/.test(config))
+  v('🔴 la liste n’est posée à l’écran qu’après une écriture acceptée',
+    /async function ecrireListeCats\(liste\) \{\s*const \{ error \} = await supabase\.from\('commercants'\)\.update\(\{ ordre_categories: liste \}\)\.eq\('id', commercantId\)\s*if \(error\) \{[\s\S]{0,200}?return false \}\s*setListeCats\(liste\)/.test(config))
+  v('🔴 créer enregistre', /const liste = listeApresAjout\(categories, nom\)[\s\S]{0,200}if \(!await ecrireListeCats\(liste\)\) return/.test(config))
+  v('🔴 renommer réécrit chaque article (enfants compris), puis la liste',
+    /for \(const \{ de, vers \} of r\.correspondances\) \{[\s\S]{0,300}\.update\(\{ categorie: vers \}\)[\s\S]{0,200}\.eq\('categorie', de\)/.test(config)
+    && /const ok = await ecrireListeCats\(r\.liste\)/.test(config))
+  v('🔴 supprimer sort aussi de la liste', /await ecrireListeCats\(listeApresSuppression\(categories, cat\)\)/.test(config))
+  v('🔴 le parent se choisit au renommage', /aria-label="Sous-catégorie de"/.test(config) && /const newCat = renameParent \? `\$\{renameParent\} · \$\{feuille\}` : feuille/.test(config))
+  v('🔴 l’écran d’ordre lit la liste du parent, plus l’objet figé',
+    /<OrdreCategories commercantId=\{commercantId\} ordre=\{listeCats\}\s*onEnregistre=\{setListeCats\}/.test(config)
+    && /listeAOrdonner\(categories, ordre\)/.test(ecran) && !/commercant\?\.ordre_categories/.test(ecran))
+  v('🔴 et il rend la liste enregistrée au parent', /onEnregistre\?\.\(aEcrire\)\s*setModifie\(false\)/.test(ecran))
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -87,6 +87,7 @@ import BoutonIaInline from './BoutonIaInline'
 import { champsModifies } from '@/lib/formulaire-modifie'
 import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
 import { choixDeDelai, libelleChoixDelai } from '@/lib/delai-commande'
+import { categoriesDuCommerce, listeApresAjout, renommage, listeApresSuppression, parentDe, feuilleDe } from '@/lib/categories-catalogue'
 import { jourSemaineDe } from '@/lib/creneaux'
 import { FILTRE_STATUTS_INACTIFS, FILTRE_STATUTS_TERMINES } from '@/lib/statuts-commande'
 import {
@@ -485,7 +486,27 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [searchQuery, setSearchQuery] = useState('')
 
   const [articles, setArticles] = useState([])
-  const [categories, setCategories] = useState([])
+  // 🔴 LES CATÉGORIES ONT UNE EXISTENCE PROPRE (Alex, 07/10). Elles ne
+  // vivaient qu'à travers les articles : créée ou renommée sans article, une
+  // catégorie disparaissait au premier rechargement. La liste du commerce
+  // (`ordre_categories`) les garde, rangées, et chaque geste l'écrit.
+  //
+  // ⚠️ ELLE VIT ICI, PAS DANS `commercant` : cet objet est celui reçu à
+  // l'ouverture et ne bouge jamais. Lu après un enregistrement, il ramenait
+  // l'ancien ordre à l'écran (« elles se remettent comme au départ »).
+  const [listeCats, setListeCats] = useState(() => (Array.isArray(commercant?.ordre_categories) ? commercant.ordre_categories : null))
+  useEffect(() => {
+    setListeCats(Array.isArray(commercant?.ordre_categories) ? commercant.ordre_categories : null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- on ne relit la liste qu'au changement de commerce, jamais par-dessus un geste en cours
+  }, [commercant?.id])
+  const categories = categoriesDuCommerce(articles, listeCats)
+  // Écrit la liste et la pose à l'écran SEULEMENT si la base l'a acceptée.
+  async function ecrireListeCats(liste) {
+    const { error } = await supabase.from('commercants').update({ ordre_categories: liste }).eq('id', commercantId)
+    if (error) { toast(`La liste des catégories n’a pas pu être enregistrée : ${error.message}`, 'error'); return false }
+    setListeCats(liste)
+    return true
+  }
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
@@ -570,6 +591,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   // Renommage catégorie
   const [renamingCat, setRenamingCat] = useState(null) // nom de la cat en cours de renommage
   const [renameValue, setRenameValue] = useState('')
+  const [renameParent, setRenameParent] = useState('') // '' = catégorie principale
   const [renameSaving, setRenameSaving] = useState(false)
   // Photos article : couverture (articles.photo_url) + galerie (article_photos)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -595,9 +617,9 @@ function TabMenu({ commercantId, commercant, toast }) {
   async function fetchArticles() {
     if (firstLoadRef.current) setLoading(true)
     const { data } = await supabase.from('articles').select('*').eq('commercant_id', commercantId).order('categorie').order('nom')
+    // Les catégories se DÉDUISENT (`categoriesDuCommerce`) : rien à poser ici,
+    // et c'est ce qui faisait disparaître celles qui n'avaient pas d'article.
     setArticles(data || [])
-    const cats = [...new Set((data || []).map(a => a.categorie).filter(Boolean))]
-    setCategories(cats)
     if (firstLoadRef.current) {
       setLoading(false)
       firstLoadRef.current = false
@@ -793,8 +815,10 @@ function TabMenu({ commercantId, commercant, toast }) {
     if (!nouvelleCat.trim()) return
     // Sous-catégorie : stockée « Parent · Enfant » (convention, zéro migration)
     const nom = nouvelleCatParent ? `${nouvelleCatParent} · ${nouvelleCat.trim()}` : nouvelleCat.trim()
-    if (categories.includes(nom)) { toast('Catégorie déjà existante', 'error'); return }
-    setCategories(prev => [...prev, nom].sort())
+    const liste = listeApresAjout(categories, nom)
+    if (!liste) { toast('Catégorie déjà existante', 'error'); return }
+    // 🔴 ENREGISTRÉE, plus seulement posée à l'écran (07/10).
+    if (!await ecrireListeCats(liste)) return
     setCatActive(nom)
     setNouvelleCat('')
     setNouvelleCatParent('')
@@ -803,35 +827,52 @@ function TabMenu({ commercantId, commercant, toast }) {
   }
 
   // ─── Renommer une catégorie ────────────────────────────────────────────────
+  // ⚠️ LE PARENT SE CHOISIT AUSSI APRÈS COUP (Alex, 07/10) : « je ne sais
+  // plus mettre catégorie parent ». Il n'existait qu'à la création ; le
+  // renommage propose maintenant le nom ET le parent.
   function startRename(cat) {
     setRenamingCat(cat)
-    setRenameValue(cat)
+    setRenameValue(feuilleDe(cat))
+    setRenameParent(parentDe(cat) || '')
   }
 
   async function saveRename(oldCat) {
-    const newCat = renameValue.trim()
-    if (!newCat) return toast('Nom obligatoire', 'error')
-    if (newCat === oldCat) { setRenamingCat(null); return }
-    if (categories.includes(newCat)) { toast('Ce nom existe déjà', 'error'); return }
+    const feuille = renameValue.trim()
+    if (!feuille) return toast('Nom obligatoire', 'error')
+    const newCat = renameParent ? `${renameParent} · ${feuille}` : feuille
+    const r = renommage(categories, oldCat, newCat)
+    if (r.refus) { toast(r.refus, 'error'); return }
+    if (r.correspondances.length === 0) { setRenamingCat(null); return }
     setRenameSaving(true)
-    const { error } = await supabase
-      .from('articles')
-      .update({ categorie: newCat })
-      .eq('commercant_id', commercantId)
-      .eq('categorie', oldCat)
+    // 🔴 LES ENFANTS SUIVENT LEUR PARENT, et chaque écriture est lue. Les
+    // articles d'abord : s'ils échouent, la liste garde l'ancien nom et rien
+    // ne se désaccorde.
+    for (const { de, vers } of r.correspondances) {
+      const { error } = await supabase
+        .from('articles')
+        .update({ categorie: vers })
+        .eq('commercant_id', commercantId)
+        .eq('categorie', de)
+      if (error) { setRenameSaving(false); toast(`Erreur : ${error.message}`, 'error'); fetchArticles(); return }
+    }
+    const ok = await ecrireListeCats(r.liste)
     setRenameSaving(false)
-    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    toast('Catégorie renommée')
+    fetchArticles()
+    if (!ok) return
+    toast(renameParent !== (parentDe(oldCat) || '') ? 'Catégorie déplacée' : 'Catégorie renommée')
     setRenamingCat(null)
     if (catActive === oldCat) setCatActive(newCat)
-    fetchArticles()
   }
 
   async function supprimerCategorie(cat) {
     if (!await confirme(confirmationSimple({ titre: `Supprimer la catégorie « ${cat} » ?`, message: 'Tes articles restent en place, ils se retrouvent simplement sans catégorie.', action: 'Oui, supprimer la catégorie' }))) return
     const { error } = await supabase.from('articles').update({ categorie: null }).eq('commercant_id', commercantId).eq('categorie', cat)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    toast('Catégorie supprimée'); fetchArticles()
+    // ⚠️ ET ELLE SORT DE LA LISTE, sinon elle reviendrait, vide.
+    const ok = await ecrireListeCats(listeApresSuppression(categories, cat))
+    fetchArticles()
+    if (!ok) return
+    toast('Catégorie supprimée')
     if (catActive === cat) setCatActive('Tous')
   }
 
@@ -1259,8 +1300,9 @@ function TabMenu({ commercantId, commercant, toast }) {
                 ))}
               </select>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>
-                Le temps qu&rsquo;il te faut pour préparer <strong>cet article</strong>. Un article à délai se
-                commande à part : ton client ne pourra pas le mélanger avec des articles d&rsquo;un autre délai.
+                Le temps qu&rsquo;il te faut pour préparer <strong>cet article</strong>, en jours : « 2 jours »
+                veut dire commandé jeudi, retiré samedi. Tes clients le voient sur la carte, avec la date limite.
+                Pour ne le vendre que certains jours, coche-les sur sa carte (« Jours de vente » ou « Stock par jour »).
               </p>
             </div>
           )}
@@ -1615,8 +1657,8 @@ function TabMenu({ commercantId, commercant, toast }) {
               commerçant qui ouvre cet onglet vient d'abord voir ce que ses
               clients voient. Le bloc se tait tout seul en dessous de deux
               catégories, où il n'y a rien à ranger. */}
-          <OrdreCategories commercantId={commercantId} commercant={commercant}
-            categories={categories} toast={toast}/>
+          <OrdreCategories commercantId={commercantId} ordre={listeCats}
+            onEnregistre={setListeCats} categories={categories} toast={toast}/>
           {showCatForm && (
             <div style={{ ...s.cardActive, padding: 16, marginBottom: 12 }}>
               {/* Sous-catégories (demande Alex 24/07) : convention « Parent · Enfant »
@@ -1662,11 +1704,29 @@ function TabMenu({ commercantId, commercant, toast }) {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {isRenaming ? (
-                        <input value={renameValue}
-                          onChange={e => setRenameValue(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') saveRename(cat); if (e.key === 'Escape') setRenamingCat(null) }}
-                          autoFocus
-                          style={{ ...s.input, padding: '6px 10px', fontSize: 14, fontWeight: 700 }}/>
+                        <>
+                          <input value={renameValue}
+                            onChange={e => setRenameValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') saveRename(cat); if (e.key === 'Escape') setRenamingCat(null) }}
+                            autoFocus aria-label="Nom de la catégorie"
+                            style={{ ...s.input, padding: '6px 10px', fontSize: 14, fontWeight: 700 }}/>
+                          {/* Le parent se choisit ici aussi (07/10). Un parent
+                              qui a des sous-catégories reste principal : un
+                              seul niveau. */}
+                          {!categories.some(c => parentDe(c) === cat) && (() => {
+                            // ⚠️ « Sandwichs » peut n'exister que par ses enfants :
+                            // la racine se lit sur le nom, comme à la création.
+                            const racines = [...new Set(categories.map(c => parentDe(c) || c))].filter(r => r !== cat)
+                            return racines.length > 0 && (
+                              <select value={renameParent} onChange={e => setRenameParent(e.target.value)}
+                                aria-label="Sous-catégorie de"
+                                style={{ ...s.input, padding: '6px 10px', fontSize: 12, marginTop: 6, cursor: 'pointer' }}>
+                                <option value="">Catégorie principale</option>
+                                {racines.map(r => <option key={r} value={r}>Sous-catégorie de « {r} »</option>)}
+                              </select>
+                            )
+                          })()}
+                        </>
                       ) : (
                         <>
                           <p style={{ fontWeight: 800, color: T.ink, fontSize: 14, margin: 0 }}>{cat}</p>

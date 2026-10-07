@@ -21,11 +21,17 @@ import { listeAOrdonner, ordrePourEnregistrer } from '@/lib/categories-catalogue
 
 const T = { main: '#6B35C4', mid: '#9660E0', pale: '#EDE0FF', ink: '#1A0840', deep: '#2D0F6B', muted: '#6B7280' }
 
-export default function OrdreCategories({ commercantId, commercant, categories = [], toast }) {
+// 🔴 L'ORDRE REVENAIT COMME AU DÉPART (Alex, 07/10). Cet écran relisait
+// `commercant.ordre_categories`, l'objet reçu à l'ouverture de la page, qui ne
+// bouge jamais : après « Enregistrer cet ordre », la liste se recalculait sur
+// l'ANCIEN ordre. La base avait bien reçu le nouveau, l'écran le reniait.
+// Le parent tient maintenant la liste (`ordre`) et la reçoit à chaque écriture
+// réussie (`onEnregistre`).
+export default function OrdreCategories({ commercantId, ordre = null, onEnregistre, categories = [], toast }) {
   // La liste affichée part de la règle partagée : l'écran de réglage et la
   // fiche publique montrent le même ordre, sinon le commerçant range une liste
   // et ses clients en voient une autre.
-  const [liste, setListe] = useState(() => listeAOrdonner(categories, commercant?.ordre_categories))
+  const [liste, setListe] = useState(() => listeAOrdonner(categories, ordre))
   const [envoi, setEnvoi] = useState(false)
   const [modifie, setModifie] = useState(false)
 
@@ -37,8 +43,8 @@ export default function OrdreCategories({ commercantId, commercant, categories =
   // enregistrés, on ne lui reprend pas sa liste sous les doigts.
   useEffect(() => {
     if (modifie) return
-    setListe(listeAOrdonner(categories, commercant?.ordre_categories))
-  }, [categories.join('|'), (commercant?.ordre_categories || []).join('|'), modifie]) // eslint-disable-line react-hooks/exhaustive-deps
+    setListe(listeAOrdonner(categories, ordre))
+  }, [categories.join('|'), (ordre || []).join('|'), modifie]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (categories.length < 2) return null
 
@@ -85,12 +91,18 @@ export default function OrdreCategories({ commercantId, commercant, categories =
     // composants, et il n'était écrit nulle part. La garde qui le mesure vit
     // dans `verif-tableau-de-bord.mjs`.
     if (error) { toast?.(`Le classement n'a pas pu être enregistré : ${error.message}`, 'error'); return }
+    // ⚠️ LE PARENT REÇOIT LA LISTE AVANT que `modifie` retombe : sinon le
+    // recalcul repartirait de l'ancienne, l'espace d'un rendu.
+    onEnregistre?.(aEcrire)
     setModifie(false)
     toast?.('Ordre des catégories enregistré. Tes clients le voient tout de suite.')
   }
 
+  // ⚠️ DEPUIS LE 07/10, « L'ORDRE PAR DÉFAUT » N'EXISTE PLUS : la liste des
+  // catégories EST la liste rangée. Le bouton range donc par ordre
+  // alphabétique, et il le dit.
   function reinitialiser() {
-    setListe([...categories])
+    setListe([...categories].sort((a, b) => a.localeCompare(b, 'fr')))
     setModifie(true)
   }
 
@@ -146,10 +158,10 @@ export default function OrdreCategories({ commercantId, commercant, categories =
           }}>
           {envoi ? <EnCours /> : 'Enregistrer cet ordre'}
         </button>
-        {commercant?.ordre_categories?.length > 0 && (
+        {ordre?.length > 0 && (
           <button type="button" onClick={reinitialiser}
             style={{ padding: '0.6rem 0.9rem', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.deep, fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
-            Revenir à l&rsquo;ordre par défaut
+            Ranger par ordre alphabétique
           </button>
         )}
       </div>

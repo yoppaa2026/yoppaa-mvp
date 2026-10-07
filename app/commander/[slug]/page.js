@@ -17,7 +17,7 @@ import { nomDeLaCarte } from '@/lib/types-commerce'
 import { etatStock, revientUnAutreJour, mentionVitrine } from '@/lib/stock-article'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
-import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionArticle, libelleMoment, avertissementDelai } from '@/lib/delai-commande'
+import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionCarte, libelleMoment, avertissementDelai, refusAjoutDelai, refusDelaisMelanges, delaiDeLOffre } from '@/lib/delai-commande'
 // ⚠️ C'EST LA PRÉSENCE DE LA FENÊTRE QUI FAIT L'INVENDU, et on la lit avec la
 // fonction du module : recopier le test ici ferait passer chaque bonne affaire
 // de la semaine pour un invendu de fin de journée.
@@ -372,7 +372,7 @@ function VariantesSelector({ article, variantes, onAjouter }) {
 // ─── RecapPanier - FIX STOCK : prop getStockMax, bouton + bloqué ──────────────
 // `prixDeLigne(item, index)` : le montant de la ligne au jour de la commande,
 // calculé comme le serveur (06/10). Sans lui, le prix figé à l'ajout.
-function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax, labelValider = 'Choisir mon heure de retrait', noteSousTotal = null, prixDeLigne = null }) {
+function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockMax, labelValider = 'Choisir mon heure de retrait', noteSousTotal = null, prixDeLigne = null, blocage = null }) {
   const items = Object.entries(panier)
   if (items.length === 0) return null
   function labelOptions(options) {
@@ -442,10 +442,19 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
         {noteSousTotal && (
           <p style={{ fontSize: '0.72rem', color: T.main, fontWeight: 700, margin: '0 0 12px' }}>{noteSousTotal}</p>
         )}
-        <button onClick={onValider}
-          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: 'pointer', fontSize: '1rem', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', boxShadow: `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
+        {/* 🔴 UN PANIER DÉJÀ MÉLANGÉ (Alex, 07/10) : il revient du retour de
+            Stripe, de la fiche rendez-vous ou d'un onglet d'hier. On ne retire
+            rien à sa place : on nomme les articles, et le bouton reste grisé
+            tant qu'un des deux délais est là. */}
+        {blocage && (
+          <p role="alert" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#B91C1C', background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 12, padding: '0.625rem 0.75rem', margin: '0 0 12px', lineHeight: 1.45 }}>
+            {blocage}
+          </p>
+        )}
+        <button onClick={() => { if (!blocage) onValider() }} disabled={!!blocage}
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, fontWeight: 800, cursor: blocage ? 'not-allowed' : 'pointer', fontSize: '1rem', background: blocage ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: blocage ? '#9CA3AF' : '#fff', boxShadow: blocage ? 'none' : `0 6px 24px ${T.main}55`, fontFamily: '"DM Sans", sans-serif' }}>
           {labelValider}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={blocage ? '#9CA3AF' : '#fff'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14"/>
             <path d="M12 5l7 7-7 7"/>
           </svg>
@@ -459,7 +468,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 // `jourRetrait` ('YYYY-MM-DD' ou null) : le jour SOUHAITÉ en boutique. Quand il
 // est fourni, il prime sur `joursDispos[jourSelectionne]`, qui est le sélecteur
 // de l'alimentaire et ne concerne pas une boutique.
-function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
+function ArticleRow({ article, panier = {}, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -562,16 +571,27 @@ function ArticleRow({ article, optionsParArticle, ajouterAuPanier, retirerDuPani
                 baguette deviendrait du décor, et plus personne ne la verrait là
                 où elle compte. `mentionArticle` rend `null`, la carte reste nue.
 
-                ⚠️ NI EN VITRINE : rien ne s'y commande, donc rien n'y attend. */}
-            {!article.est_vitrine && !modeVitrine && mentionArticle(article.delai_minutes) && (
-              <span style={{ fontSize: '0.65rem', fontWeight: 800, color: T.main, background: T.pale, padding: '3px 9px', borderRadius: 100, border: `1px solid ${T.main}22`, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M12 6v6l4 2"/>
-                </svg>
-                {mentionArticle(article.delai_minutes)}
-              </span>
-            )}
+                ⚠️ NI EN VITRINE : rien ne s'y commande, donc rien n'y attend.
+
+                🔴 ET ELLE CHANGE AVEC LE PANIER (Alex, 07/10) : quand le panier
+                porte un autre délai, la carte dit « Commande séparée » AVANT le
+                clic, en ambre pour se distinguer de la simple durée. */}
+            {(() => {
+              if (article.est_vitrine || modeVitrine) return null
+              const mention = mentionCarte(article.delai_minutes, panier)
+              if (!mention) return null
+              const separee = mention.startsWith('Commande séparée')
+              const coul = separee ? '#B45309' : T.main
+              return (
+                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: coul, background: separee ? '#FFFBEB' : T.pale, padding: '3px 9px', borderRadius: separee ? 10 : 100, lineHeight: 1.35, border: `1px solid ${separee ? '#F59E0B55' : `${T.main}22`}`, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={coul} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 6v6l4 2"/>
+                  </svg>
+                  {mention}
+                </span>
+              )
+            })()}
             {hasOptions && (
               <button onClick={e => { e.stopPropagation(); setShowOptions(v => !v) }}
                 aria-label="Composer cet article"
@@ -2206,11 +2226,10 @@ export default function CommanderSlug() {
 
   // ─── LE DÉLAI DU PANIER ────────────────────────────────────────────────
   //
-  // ⚠️ LE PLUS CONTRAIGNANT GAGNE, ET ON NOMME LE COUPABLE. Une commande part
-  // en une seule fois, à un seul créneau : la tarte de 48 h emmène la baguette
-  // avec elle. Dire seulement « cette commande demande 48 h » obligerait le
-  // Yopper à rouvrir ses six articles un par un pour trouver lequel bloque. Il
-  // ne le fera pas, il fermera l'onglet.
+  // ⚠️ UN SEUL DÉLAI PAR COMMANDE DEPUIS LE 07/10 (la tarte de 48 h n'emmène
+  // plus la baguette : deux commandes, voir `refusDelai` plus bas). Le délai
+  // du panier est donc celui de la commande, et on NOMME l'article : dire
+  // seulement « cette commande demande 48 h » laisserait le Yopper chercher.
   //
   // 🔴 ET RIEN DE TOUT CECI N'EST UNE PROTECTION. C'est `create-commande` qui
   // doit refuser : un onglet ouvert depuis ce matin, un panier restauré au
@@ -2221,6 +2240,33 @@ export default function CommanderSlug() {
   // fenêtre ferme ce soir ; un panier qui le mélange à une tarte de 48 h n'a
   // aucun moment de retrait possible, et on le dit AVANT le paiement.
   const refusMelange = useMemo(() => refusDeMelange(panier), [panier])
+
+  // 🔴 UN SEUL DÉLAI PAR COMMANDE (Alex, 07/10). Deux gestes :
+  //   • à l'AJOUT, une fenêtre nomme les deux articles (`refusDelai`), et le
+  //     panier n'est jamais vidé ;
+  //   • un panier DÉJÀ mélangé (retour de Stripe, fiche rendez-vous, onglet
+  //     d'hier) s'affiche tel quel, avec l'encadré, et « Continuer » grisé.
+  // Le serveur refuse aussi : rien ici n'est une protection.
+  const [refusDelai, setRefusDelai] = useState(null)
+  const delaisMelanges = useMemo(() => refusDelaisMelanges(panier), [panier])
+  // Un panier mélangé qui arrive à l'étape du retrait (onglet ouvert avant le
+  // 07/10, reprise d'un paiement annulé) revient au panier, où l'encadré dit
+  // pourquoi. Sans ce retour, il remplirait l'étape pour se faire refuser au
+  // paiement.
+  useEffect(() => {
+    if (etape === 3 && delaisMelanges) allerEtape(2)
+  }, [etape, delaisMelanges])
+  function refuseParDelai(ligne) {
+    const refus = refusAjoutDelai(panier, ligne)
+    if (refus) setRefusDelai(refus)
+    return !!refus
+  }
+  function delaiDuDeal(deal, article) {
+    const second = deal?.deal_type === 'bundle' && deal.article2_id
+      ? (articles || []).find(a => a.id === deal.article2_id) || null
+      : null
+    return delaiDeLOffre(article, second)
+  }
 
   const premierRetraitPanier = useMemo(() => {
     if (delaiPanier.minutes <= 0) return null
@@ -2429,6 +2475,10 @@ export default function CommanderSlug() {
   }
 
   function ajouterAuPanier(article, options = null, variante = null) {
+    // 🔴 UN SEUL DÉLAI PAR COMMANDE (Alex, 07/10) : la tarte de 48 h ne rejoint
+    // pas la baguette du jour. Placé AVANT la variante et les options, qui
+    // passent toutes par ici.
+    if (refuseParDelai(article)) return
     if (variante) {
       // Item à variante : le stock de LA variante fait foi (modèle détail)
       const key = `${article.id}_v${variante.id}`
@@ -2476,6 +2526,8 @@ export default function CommanderSlug() {
     // les voir refuser au paiement.
     const plafond = plafondDeLOffre(deal)
     if (plafond !== null && (panier[key]?.quantite || 0) + 1 > plafond) return
+    const delaiOffre = delaiDuDeal(deal, article)
+    if (refuseParDelai({ nom: deal.titre, delai_minutes: delaiOffre, offre: { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin } })) return
     const prixDeal = Number(deal.prix_deal)
     const prixAvant = deal.prix_original != null ? Number(deal.prix_original) : null
     setPanier(prev => ({ ...prev, [key]: {
@@ -2490,7 +2542,10 @@ export default function CommanderSlug() {
       // « 3 tartes + 1 » partait donc pour le jour même, pendant que la tarte à
       // l'unité, elle, demandait ses 48 h. Le commerçant aurait découvert une
       // commande impossible, sans qu'aucun écran ne l'ait annoncée.
-      delai_minutes: article?.delai_minutes ?? 0,
+      // 🔴 ET LE DUO PERDAIT CELUI DE SON SECOND ARTICLE (07/10) : « café +
+      // tarte » partait pour le jour même. `delaiDuDeal` prend le plus long
+      // des deux, comme le serveur.
+      delai_minutes: delaiOffre,
       // ⚠️ ET LA FENÊTRE VOYAGE AVEC LA LIGNE. C'est elle, et rien d'autre, qui
       // fait une offre de fin de journée : pas de drapeau à côté qui pourrait
       // dire le contraire des heures. Sur un deal ordinaire, les deux valeurs
@@ -3988,6 +4043,33 @@ export default function CommanderSlug() {
             un raccourci vers ce qu'on regarde déjà n'est plus un raccourci,
             il cache le bas de l'écran et il fait hésiter entre deux boutons
             violets. Le pourquoi complet est dans `lib/bouton-flottant.js`. */}
+        {/* 🔴 L'AJOUT REFUSÉ, EXPLIQUÉ (Alex, 07/10). La fenêtre nomme les deux
+            articles et le geste ; un seul bouton, et le panier n'est jamais
+            touché : ce que le Yopper a déjà choisi reste à sa place. */}
+        {refusDelai && (
+          <div role="dialog" aria-modal="true" aria-labelledby="refus-delai-titre"
+            onClick={() => setRefusDelai(null)}
+            style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(22,6,54,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 380, background: '#fff', borderRadius: 18, padding: '22px 20px 18px', boxShadow: '0 12px 40px rgba(22,6,54,0.25)', fontFamily: '"DM Sans", sans-serif' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <span style={{ width: 34, height: 34, borderRadius: 10, background: '#FFFBEB', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 6v6l4 2"/>
+                  </svg>
+                </span>
+                <h2 id="refus-delai-titre" style={{ fontSize: '1.05rem', fontWeight: 900, color: T.ink, margin: 0, letterSpacing: '-0.3px' }}>Une commande à part</h2>
+              </div>
+              <p style={{ fontSize: '0.9rem', color: T.ink, lineHeight: 1.5, margin: '0 0 16px' }}>{refusDelai}</p>
+              <button onClick={() => setRefusDelai(null)} autoFocus
+                style={{ width: '100%', padding: '0.8rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif' }}>
+                Compris
+              </button>
+            </div>
+          </div>
+        )}
+
         {etape === 2 && peutCommander && nbArticlesPanier() > 0 && montrerFlottant && (
           <button onClick={scrollVersPanier}
             aria-label="Voir ma commande"
@@ -4660,6 +4742,7 @@ export default function CommanderSlug() {
                       onAjouter={incrementerPanier}
                       total={totalPanier()}
                       prixDeLigne={prixLigne}
+                      blocage={delaisMelanges}
                       onValider={() => allerEtape(3)}
                       getStockMax={getStockMax}
                       labelValider={estDetail

@@ -48,7 +48,7 @@ import { commandeDeborde, capaciteDuCreneau, creneauCommandable, STATUTS_OCCUPEN
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
 import { joursRetraitBoutique, estFermeExceptionnellement } from '@/lib/ouverture'
 import { jourPlus } from '@/lib/statut-commerce'
-import { delaiDuPanier, refusDeMelange, pretA, premierJourBoutique, libelleDuree, libelleMoment } from '@/lib/delai-commande'
+import { delaiDuPanier, refusDeMelange, refusDelaisMelanges, delaiDeLOffre, pretA, premierJourBoutique, libelleDuree, libelleMoment } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
 import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
@@ -777,6 +777,28 @@ export async function POST(request) {
     // depuis `articles` : un panier trafiqué ne peut pas s'inventer un délai
     // de zéro.
     {
+      // 🔴 LE DUO NE LISAIT QUE SON PREMIER ARTICLE (07/10). Le second n'est
+      // pas dans `articlesData` (chargé sur les identifiants du panier) : un
+      // duo « café + tarte à 48 h » partait donc pour le jour même. On lit son
+      // délai en base, sur ce commerce seulement, et le plus long des deux
+      // devient celui de la ligne (`delaiDeLOffre`, la même règle que l'écran).
+      const seconds = [...new Set(lignes.map(l => l.deal_article2_id).filter(Boolean))]
+      if (seconds.length > 0) {
+        const { data: arts2, error: errArts2 } = await supabase
+          .from('articles').select('id, delai_minutes')
+          .in('id', seconds).eq('commercant_id', commercant.id)
+        // ⚠️ UNE LECTURE EN ÉCHEC N'EST PAS « AUCUN DÉLAI » : on refuse plutôt
+        // que de vendre pour aujourd'hui une tarte qui en demande deux.
+        if (errArts2) {
+          return NextResponse.json({ ok: false, error: 'Impossible de vérifier ta commande. Réessaie dans un instant.' }, { status: 500 })
+        }
+        const parId = Object.fromEntries((arts2 || []).map(a => [String(a.id), a]))
+        for (const l of lignes) {
+          if (!l.deal_article2_id) continue
+          l.delai_minutes = delaiDeLOffre({ delai_minutes: l.delai_minutes }, parId[String(l.deal_article2_id)])
+        }
+      }
+
       const { minutes: delaiMinutes, nom: articleLent } = delaiDuPanier(lignes)
 
       // 🔴 L'INVENDU NE SE REPORTE PAS. Sa fenêtre ferme ce soir ; mélangé à un
@@ -787,6 +809,15 @@ export async function POST(request) {
       const refusMelange = refusDeMelange(lignes)
       if (refusMelange) {
         return NextResponse.json({ ok: false, error: refusMelange }, { status: 409 })
+      }
+
+      // 🔴 UN SEUL DÉLAI PAR COMMANDE (Alex, 10/09, tranché le 07/10), partout :
+      // alimentaire, boutique, expédition. L'écran refuse à l'ajout et grise
+      // « Continuer » ; un onglet d'avant, un panier restauré ou une requête
+      // fabriquée n'y passent pas. C'est ICI que la règle tient.
+      const refusDelais = refusDelaisMelanges(lignes)
+      if (refusDelais) {
+        return NextResponse.json({ ok: false, error: refusDelais }, { status: 409 })
       }
 
       if (delaiMinutes > 0 && creneau && !estBoutique) {

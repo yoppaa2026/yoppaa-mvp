@@ -1259,8 +1259,8 @@ function TabMenu({ commercantId, commercant, toast }) {
                 ))}
               </select>
               <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>
-                Le temps qu&rsquo;il te faut pour préparer <strong>cet article</strong>. Dans une commande qui en
-                mélange plusieurs, c&rsquo;est le plus long qui compte, et le client voit lequel.
+                Le temps qu&rsquo;il te faut pour préparer <strong>cet article</strong>. Un article à délai se
+                commande à part : ton client ne pourra pas le mélanger avec des articles d&rsquo;un autre délai.
               </p>
             </div>
           )}

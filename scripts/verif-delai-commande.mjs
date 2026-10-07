@@ -22,6 +22,7 @@ import {
   premierCreneauPossible, premierJourBoutique,
   libelleDuree, mentionArticle, libelleMoment, avertissementDelai,
   DELAIS_PROPOSES, choixDeDelai, libelleChoixDelai,
+  refusAjoutDelai, refusDelaisMelanges, mentionCarte, delaiDeLOffre,
 } from '../lib/delai-commande.js'
 import { brusselsInstant } from '../lib/timezone.js'
 import { readFileSync } from 'node:fs'
@@ -99,6 +100,62 @@ egal('🔴 le panier de la fiche, qui est un objet, se lit aussi',
   delaiDuPanier({ a: BAGUETTE, b: TARTE }), { minutes: 2880, nom: 'Tarte aux pommes' })
 egal('🔴 un invendu ne tire pas le panier',
   delaiDuPanier([BAGUETTE, TARTE_INVENDUE]), { minutes: 0, nom: null })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2 BIS. UN SEUL DÉLAI PAR COMMANDE (Alex, 10/09, tranché le 07/10)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 🔴 LA RÈGLE « LE PLUS CONTRAIGNANT GAGNE » EST REMPLACÉE. La tarte de 48 h
+// ne part plus avec la baguette du jour : deux commandes. Le maximum de la
+// section 2 reste juste, parce qu'un panier n'a plus qu'un délai.
+{
+  const PAIN = { nom: 'Pain gris', delai_minutes: 0 }
+  const GATEAU = { nom: 'Gâteau d’anniversaire', delai_minutes: 1440 }
+  const TARTE2 = { nom: 'Tarte au riz', delai_minutes: 2880 }
+
+  // À L'AJOUT
+  verifier('un panier vide accepte tout', refusAjoutDelai({}, TARTE) === null)
+  verifier('deux articles du jour vont ensemble', refusAjoutDelai([BAGUETTE], PAIN) === null)
+  verifier('🔴 deux tartes au même délai vont ensemble', refusAjoutDelai([TARTE], TARTE2) === null)
+  {
+    const r = refusAjoutDelai({ b: BAGUETTE }, TARTE)
+    verifier('🔴 la tarte de 48 h ne rejoint pas la baguette', r !== null)
+    verifier('et le refus nomme la tarte ET la baguette', /Tarte aux pommes/.test(r || '') && /Baguette/.test(r || ''), String(r))
+    verifier('et dit la durée et le geste', /2 jours à l'avance/.test(r || '') && /à part/.test(r || ''), String(r))
+  }
+  verifier('🔴 ni la baguette la tarte (dans l’autre sens)', refusAjoutDelai([TARTE], BAGUETTE) !== null)
+  verifier('🔴 ni 24 h avec 48 h', refusAjoutDelai([GATEAU], TARTE) !== null)
+  // ⚠️ LE DÉLAI EFFECTIF : l'invendu est déjà fait, il part avec le pain.
+  verifier('🔴 l’invendu (délai annulé) rejoint la baguette', refusAjoutDelai([BAGUETTE], TARTE_INVENDUE) === null)
+  verifier('🔴 mais pas la tarte à 48 h', refusAjoutDelai([TARTE], TARTE_INVENDUE) !== null)
+  verifier('une ligne absente ne refuse rien', refusAjoutDelai([TARTE], null) === null)
+
+  // LE PANIER DÉJÀ MÉLANGÉ (retour de Stripe, fiche rendez-vous, onglet d'hier)
+  verifier('un panier d’un seul délai passe', refusDelaisMelanges([TARTE, TARTE2]) === null)
+  verifier('un panier d’un article passe', refusDelaisMelanges([TARTE]) === null)
+  {
+    const r = refusDelaisMelanges({ a: BAGUETTE, b: TARTE })
+    verifier('🔴 un panier mélangé est refusé, objet de la fiche compris', r !== null)
+    verifier('et le refus nomme les deux articles', /Baguette/.test(r || '') && /Tarte aux pommes/.test(r || ''), String(r))
+  }
+  verifier('🔴 l’ordre du panier ne change pas le verdict', refusDelaisMelanges([TARTE, BAGUETTE, TARTE2]) !== null)
+
+  // LA CARTE, AVANT LE CLIC
+  egal('panier vide : la mention habituelle', mentionCarte(2880, {}), 'Commande 2 jours à l\'avance')
+  egal('panier vide, article du jour : rien', mentionCarte(0, {}), null)
+  egal('même délai : la mention habituelle', mentionCarte(2880, [TARTE2]), 'Commande 2 jours à l\'avance')
+  egal('🔴 la tarte, panier du jour : commande séparée',
+    mentionCarte(2880, [BAGUETTE]), 'Commande séparée (2 jours à l\'avance) : ton panier contient des articles du jour')
+  egal('🔴 la baguette, panier à 48 h : commande séparée',
+    mentionCarte(0, [TARTE]), 'Commande séparée : ton panier se commande 2 jours à l\'avance')
+  egal('l’invendu dans le panier compte comme du jour', mentionCarte(0, [TARTE_INVENDUE]), null)
+
+  // LE DUO
+  egal('🔴 un duo prend le plus long de ses deux articles',
+    delaiDeLOffre({ delai_minutes: 0 }, { delai_minutes: 2880 }), 2880)
+  egal('un lot n’a qu’un article', delaiDeLOffre({ delai_minutes: 1440 }), 1440)
+  egal('rien d’illisible ne crée un délai', delaiDeLOffre(null, { delai_minutes: 'x' }), 0)
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 3. L'INVENDU NE SE REPORTE PAS
@@ -421,11 +478,26 @@ egal('sans nom d’article, la phrase tient debout',
 
   // 🔴 LA MENTION SUR LA CARTE PRODUIT. Sans elle, le Yopper découvre les 48 h
   // au moment de choisir son créneau, après avoir rempli son panier.
-  verifier('🔴 la carte produit affiche la mention du délai',
-    /\{mentionArticle\(article\.delai_minutes\)\}/.test(FICHE))
+  // ⚠️ RÉORIENTÉE LE 07/10 : la carte lit maintenant le PANIER aussi
+  // (`mentionCarte`), pour dire « Commande séparée » avant le clic.
+  verifier('🔴 la carte produit affiche la mention du délai, panier compris',
+    /const mention = mentionCarte\(article\.delai_minutes, panier\)/.test(FICHE) && /\{mention\}/.test(FICHE))
   // ⚠️ RIEN EN VITRINE : rien ne s'y commande, donc rien n'y attend.
   verifier('et pas en vitrine',
-    /!article\.est_vitrine && !modeVitrine && mentionArticle/.test(FICHE))
+    /if \(article\.est_vitrine \|\| modeVitrine\) return null\s*const mention = mentionCarte/.test(FICHE))
+
+  // 🔴 UN SEUL DÉLAI PAR COMMANDE (07/10) : refus à l'ajout, partout où un
+  // article entre au panier, et panier déjà mélangé bloqué.
+  verifier('🔴 l’ajout d’un article passe par le refus du délai, avant la variante',
+    /function ajouterAuPanier\(article, options = null, variante = null\) \{\s*if \(refuseParDelai\(article\)\) return\s*if \(variante\)/.test(FICHE))
+  verifier('🔴 l’ajout d’un lot ou d’un duo aussi',
+    /const delaiOffre = delaiDuDeal\(deal, article\)\s*if \(refuseParDelai\(\{ nom: deal\.titre, delai_minutes: delaiOffre,/.test(FICHE))
+  verifier('le refus se lit sur le panier en cours et s’affiche',
+    /const refus = refusAjoutDelai\(panier, ligne\)\s*if \(refus\) setRefusDelai\(refus\)/.test(FICHE) && /\{refusDelai && \(/.test(FICHE))
+  verifier('🔴 un panier déjà mélangé grise « Continuer »',
+    /blocage=\{delaisMelanges\}/.test(FICHE) && /disabled=\{!!blocage\}/.test(FICHE) && /onClick=\{\(\) => \{ if \(!blocage\) onValider\(\) \}\}/.test(FICHE))
+  verifier('et ramène au panier s’il arrive à l’étape du retrait',
+    /if \(etape === 3 && delaisMelanges\) allerEtape\(2\)/.test(FICHE))
 
   // 🔴 L'HEURE BELGE DES DEUX CÔTÉS. Cet écran fabriquait son instant dans le
   // fuseau de la MACHINE : il aurait montré des créneaux que le serveur refuse.
@@ -448,10 +520,15 @@ egal('sans nom d’article, la phrase tient debout',
 
   // 🔴 LE LOT PERDAIT LE DÉLAI DE SON ARTICLE. `ajouterDealAuPanier` construit
   // sa ligne à la main : un lot « 3 tartes + 1 » partait pour le jour même.
-  verifier('🔴 la ligne d’un lot recopie le délai de son article',
-    /delai_minutes: article\?\.delai_minutes \?\? 0/.test(FICHE))
+  // ⚠️ RÉORIENTÉE LE 07/10 : la ligne prend `delaiDuDeal`, qui ajoute le
+  // second article d'un duo (il était ignoré).
+  verifier('🔴 la ligne d’un lot recopie le délai de son article (et du second d’un duo)',
+    /delai_minutes: delaiOffre,/.test(FICHE)
+    && /deal\?\.deal_type === 'bundle' && deal\.article2_id[\s\S]{0,120}return delaiDeLOffre\(article, second\)/.test(FICHE))
+  // ⚠️ VISÉE SUR LA LIGNE DU PANIER (07/10) : l'appel du refus porte la même
+  // fenêtre, et la garde y trouvait son texte pendant que la ligne la perdait.
   verifier('🔴 et la fenêtre de l’offre voyage avec elle',
-    /offre: \{ heure_debut: deal\.heure_debut, heure_fin: deal\.heure_fin \}/.test(FICHE))
+    /delai_minutes: delaiOffre,\s*offre: \{ heure_debut: deal\.heure_debut, heure_fin: deal\.heure_fin \},/.test(FICHE))
 
   // 🔴 LE COMMERÇANT PEUT RÉGLER LE DÉLAI, ET IL EST ENREGISTRÉ.
   verifier('🔴 le formulaire article propose le délai',
@@ -550,6 +627,17 @@ egal('sans nom d’article, la phrase tient debout',
     refusServeur !== null, String(refusServeur))
   verifier('et son message nomme l’article', /Tarte aux pommes/.test(refusServeur || ''), String(refusServeur))
 
+  // 🔴 UN SEUL DÉLAI (07/10), VU SUR LES LIGNES SERVEUR : la baguette et la
+  // tarte, construites en base, sont refusées ensemble ; l'invendu et la
+  // baguette passent.
+  {
+    const r = refusDelaisMelanges(simple.lignes)
+    verifier('🔴 le serveur refuse baguette + tarte à 48 h', r !== null, String(r))
+    verifier('et nomme les deux, lus sous `article_nom`', /Baguette/.test(r || '') && /Tarte aux pommes/.test(r || ''), String(r))
+    const ok2 = construire([{ id: 'a1', quantite: 1 }, { id: 'a2', quantite: 1, deal_id: 'd2' }], [INVENDU])
+    verifier('🔴 l’invendu et la baguette passent ensemble', ok2.ok && refusDelaisMelanges(ok2.lignes) === null)
+  }
+
   // ⚠️ LES COLONNES DOIVENT ÊTRE DEMANDÉES, sans quoi tout ce qui précède lit
   // `undefined` et conclut « aucun délai ». Une colonne absente d'un select est
   // LE défaut le plus fréquent de ce projet, six fois.
@@ -572,6 +660,17 @@ egal('sans nom d’article, la phrase tient debout',
     /delaiDuPanier\(lignes\)/.test(ROUTE))
   verifier('🔴 elle refuse le mélange avant le paiement',
     /refusDeMelange\(lignes\)/.test(ROUTE) && /refusMelange\)/.test(ROUTE))
+  verifier('🔴 elle refuse deux délais dans la même commande (07/10)',
+    /const refusDelais = refusDelaisMelanges\(lignes\)\s*if \(refusDelais\) \{\s*return NextResponse\.json\(\{ ok: false, error: refusDelais \}, \{ status: 409 \}\)/.test(ROUTE))
+  verifier('🔴 elle lit le délai du second article d’un duo, sur CE commerce',
+    /\.from\('articles'\)\.select\('id, delai_minutes'\)\s*\.in\('id', seconds\)\.eq\('commercant_id', commercant\.id\)/.test(ROUTE)
+    && /l\.delai_minutes = delaiDeLOffre\(\{ delai_minutes: l\.delai_minutes \}, parId\[String\(l\.deal_article2_id\)\]\)/.test(ROUTE))
+  verifier('🔴 et une lecture en échec refuse au lieu de vendre pour aujourd’hui',
+    /if \(errArts2\) \{\s*return NextResponse\.json/.test(ROUTE))
+  // ⚠️ L'ORDRE COMPTE : le duo doit être corrigé AVANT les refus qui le lisent.
+  verifier('et le duo est corrigé avant que le délai soit lu',
+    ROUTE.indexOf('l.delai_minutes = delaiDeLOffre(') > 0
+    && ROUTE.indexOf('l.delai_minutes = delaiDeLOffre(') < ROUTE.indexOf('delaiDuPanier(lignes)'))
   verifier('🔴 elle compare le début du créneau au moment où ce sera prêt',
     /debutCreneau\.getTime\(\) < pret\.getTime\(\)/.test(ROUTE))
   verifier('🔴 elle applique le délai en boutique aussi',

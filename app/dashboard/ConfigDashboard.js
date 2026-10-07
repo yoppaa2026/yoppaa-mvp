@@ -1124,6 +1124,22 @@ function TabMenu({ commercantId, commercant, toast }) {
     })
   }
 
+  // 🔴 « REVENIR À LA QUANTITÉ PAR DÉFAUT » (Alex, 07/10). La grille de la carte
+  // REMPLACE, jour par jour, la quantité du formulaire : « Appliquer à tous :
+  // 3 » laissait le formulaire afficher 30 pendant que la fiche vendait 3, sans
+  // qu'aucun écran ne le dise. On efface les remplacements, et on GARDE les
+  // jours rendus indisponibles (ce sont eux qui font le lunch du jour).
+  async function revenirAuDefaut(articleId) {
+    const { error } = await supabase.from('article_stock_jour')
+      .delete().eq('article_id', articleId).eq('actif', true)
+    if (error) { toast(`Les quantités par jour n’ont pas pu être retirées : ${error.message}`, 'error'); return }
+    setStockParJourMap(prev => {
+      const jours = Object.fromEntries(Object.entries(prev[articleId] || {}).filter(([, e]) => e?.actif === false))
+      return { ...prev, [articleId]: jours }
+    })
+    toast('La quantité par défaut vaut de nouveau pour tous les jours.')
+  }
+
   async function deleteArticle(id) {
     if (!await confirme(confirmationSimple({ titre: 'Supprimer cet article ?', message: 'Il disparaît de ta carte. Les commandes déjà passées ne changent pas.', action: 'Oui, supprimer cet article' }))) return
     const { data, error } = await supabase.from('articles').delete().eq('id', id).select()
@@ -1287,6 +1303,28 @@ function TabMenu({ commercantId, commercant, toast }) {
                 <div style={{ marginTop: 8 }}>
                   <label style={s.label}>{form.stock_mode === 'jour' ? 'Quantité par jour *' : 'Quantité en magasin *'}</label>
                   <Input type="number" min={form.stock_mode === 'jour' ? 1 : 0} value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder={form.stock_mode === 'jour' ? '30' : '12'}/>
+                  {/* 🔴 LA GRILLE REMPLACE CE CHIFFRE, ET ON LE DIT (Alex, 07/10) :
+                      « 30 » ici, « 3 » sur la carte, et la fiche vendait 3. */}
+                  {form.stock_mode === 'jour' && editId && (() => {
+                    const remplaces = JOURS_KEYS
+                      .map(j => [j, stockParJourMap[editId]?.[j]])
+                      .filter(([, e]) => e && e.actif !== false)
+                    if (remplaces.length === 0) return null
+                    return (
+                      <div style={{ marginTop: 6, padding: '8px 10px', borderRadius: 10, background: '#FFFBEB', border: '1px solid #F59E0B55' }}>
+                        <p style={{ fontSize: 11, color: '#92400E', margin: 0, lineHeight: 1.45 }}>
+                          Remplacée sur la carte de l&rsquo;article pour : {remplaces.map(([j, e]) => `${j} (${e.stock ?? 0})`).join(', ')}.
+                          Ces jours-là, c&rsquo;est ce chiffre qui est vendu en ligne.
+                        </p>
+                        <button type="button" onClick={() => revenirAuDefaut(editId)}
+                          style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: T.main, background: '#fff', border: `1px solid ${T.main}44`, padding: '4px 10px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {/* ⚠️ LE CHIFFRE ENREGISTRÉ, pas celui en cours de frappe :
+                              c'est lui qui vaudra une fois la grille effacée. */}
+                          Revenir à {articles.find(x => x.id === editId)?.stock_jour || 'la quantité par défaut'} tous les jours
+                        </button>
+                      </div>
+                    )
+                  })()}
                   {form.stock_mode === 'magasin' && variantesCategorie && (
                     <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>Si l&rsquo;article a des variantes, le stock se gère par variante.</p>
                   )}
@@ -2743,12 +2781,15 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
   // serveur (`comptoirDuJour`).
   const comptoirAuj = comptoirDuJour(a, jourBruxelles())
 
-  const dispoEffectif = (jour) => {
+  // ⚠️ `avecComptoir` : SEULE la pastille du jour le lit. La grille montre
+  // toujours la quantité VENDUE EN LIGNE PAR JOUR (Alex, 07/10 : « Mer 3 »
+  // était le comptoir, et passait pour la quantité du mercredi).
+  const dispoEffectif = (jour, avecComptoir = false) => {
     const entry = stockParJour[jour]
     // Conso du jour de RETRAIT (plus seulement aujourd'hui, bug 14)
     const conso = consoParJour[jour] || 0
     if (entry?.actif === false) return { dispo: 0, ferme: true, override: true, brut: entry.stock }
-    if (jour === jourActuelKey && comptoirAuj !== null) {
+    if (avecComptoir && jour === jourActuelKey && comptoirAuj !== null) {
       return { dispo: Math.max(0, comptoirAuj - conso), ferme: false, override: true, brut: comptoirAuj, comptoir: true }
     }
     if (entry) {
@@ -2762,7 +2803,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
     return { dispo: Math.max(0, brut - conso), ferme: false, override: false, brut }
   }
 
-  const effAuj = dispoEffectif(jourActuelKey)
+  const effAuj = dispoEffectif(jourActuelKey, true)
   const stockBrutAuj = effAuj.brut
   const stockRestant = effAuj.dispo
   // Commerce fermé aujourd'hui (horaires Profil), sans dérogation de stock active
@@ -2889,24 +2930,25 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
                 journée, plus rien ne se retire aujourd'hui, le comptoir
                 n'aurait aucun effet. */}
             {parJours && onSetComptoir && !effAuj.ferme && !congeAuj && !journeeFinie && (
-              <>
-                <button type="button"
-                  onClick={() => {
-                    const v = window.prompt('Combien en reste-t-il au comptoir, maintenant ?\nPour aujourd’hui seulement. Demain, la quantité vendue en ligne par jour revient.', effAuj.comptoir ? String(stockRestant) : '')
-                    if (v === null || String(v).trim() === '') return
-                    const reste = Math.max(0, parseInt(v, 10) || 0)
-                    onSetComptoir(a.id, reste + dejaCommande)
-                  }}
-                  style={{ fontSize: 11, fontWeight: 700, color: T.main, background: '#fff', border: `1px solid ${T.main}44`, padding: '3px 9px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  {effAuj.comptoir ? 'Modifier le comptoir' : 'Reste au comptoir aujourd’hui'}
-                </button>
-                {effAuj.comptoir && (
-                  <button type="button" onClick={() => onSetComptoir(a.id, null)}
-                    style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#fff', border: '1px solid #E5E7EB', padding: '3px 9px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    Retirer le comptoir
-                  </button>
-                )}
-              </>
+              <button type="button"
+                onClick={() => {
+                  const v = window.prompt('Combien en reste-t-il au comptoir, maintenant ?\nPour aujourd’hui seulement. Demain, la quantité vendue en ligne par jour revient.', effAuj.comptoir ? String(stockRestant) : '')
+                  if (v === null || String(v).trim() === '') return
+                  const reste = Math.max(0, parseInt(v, 10) || 0)
+                  onSetComptoir(a.id, reste + dejaCommande)
+                }}
+                style={{ fontSize: 11, fontWeight: 700, color: T.main, background: '#fff', border: `1px solid ${T.main}44`, padding: '3px 9px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {effAuj.comptoir ? 'Modifier le comptoir' : 'Reste au comptoir aujourd’hui'}
+              </button>
+            )}
+            {/* ⚠️ « RETIRER » RESTE VISIBLE TANT QU'UN COMPTOIR EST SAISI, soir
+                compris (Alex, 07/10) : la pastille le montre, il doit pouvoir
+                l'effacer. */}
+            {onSetComptoir && effAuj.comptoir && (
+              <button type="button" onClick={() => onSetComptoir(a.id, null)}
+                style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#fff', border: '1px solid #E5E7EB', padding: '3px 9px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Retirer le comptoir
+              </button>
             )}
           </div>
 
@@ -2954,7 +2996,10 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
                   : { bg: '#F0FDF4', color: '#10B981', border: '#86EFAC' }
                 return (
                   <button key={jour} onClick={() => ouvrirEdition(jour)}
-                    title={conge ? `Fermeture exceptionnelle${conge.motif ? ` : ${conge.motif}` : ''}` : fermeCommerce ? (derogation ? 'Stock prévu malgré la fermeture (horaires du Profil)' : 'Commerce fermé ce jour (horaires du Profil)') : undefined}
+                    // ⚠️ 07/10 : un jour qui REMPLACE la quantité par défaut le dit au
+                    // survol, sans changer de couleur (Alex, 23/07 : la nuance ne
+                    // doit pas encombrer la grille ; le formulaire l'annonce).
+                    title={conge ? `Fermeture exceptionnelle${conge.motif ? ` : ${conge.motif}` : ''}` : fermeCommerce ? (derogation ? 'Stock prévu malgré la fermeture (horaires du Profil)' : 'Commerce fermé ce jour (horaires du Profil)') : (!sansLimite && eff.override && !ferme) ? `Remplace la quantité par défaut (${a.stock_jour || 0})` : undefined}
                     style={{ padding: '4px 8px', borderRadius: 8, border: `1.5px solid ${enEdition ? T.bgPanel : aujourdhui ? T.main : couleurs.border}`, background: couleurs.bg, color: couleurs.color, fontSize: 11, fontWeight: 700, cursor: 'pointer', minWidth: 52, fontFamily: 'inherit', transition: 'all 0.15s', position: 'relative' }}>
                     {aujourdhui && <span title="Aujourd'hui" style={{ position: 'absolute', top: 3, right: 4, width: 5, height: 5, borderRadius: '50%', background: enEdition ? '#fff' : T.main }}/>}
                     <span style={{ display: 'block', fontSize: 9, opacity: 0.7 }}>{JOURS_LABELS_COURT[idx]}</span>

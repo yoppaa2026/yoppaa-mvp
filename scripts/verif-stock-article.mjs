@@ -194,6 +194,20 @@ const code = (f) => sansProse(lire(f))
     && /journeeFinie=\{journeeFinieAuj\}/.test(bord))
   v('🔴 « journée finie » lit la fermeture du jour (dernière plage) à l’heure belge',
     /const f = fermetureDuJour\(commercant\?\.horaires_detail, nom\)\s*const m = minutesBruxelles\(\)\s*return f !== null && m !== null && m >= f/.test(bord))
+  // 🔴 07/10 : « Mer 3 » ÉTAIT LE COMPTOIR. La grille ne le lit plus ; seule la
+  // pastille du jour le lit. Et « Retirer » reste visible le soir.
+  v('🔴 seule la pastille du jour lit le comptoir, pas la grille',
+    /const effAuj = dispoEffectif\(jourActuelKey, true\)/.test(bord) && /if \(avecComptoir && jour === jourActuelKey && comptoirAuj !== null\)/.test(bord)
+    && /const eff = dispoEffectif\(jour\)\s*const ferme = eff\.ferme/.test(bord))
+  v('🔴 « Retirer le comptoir » reste visible tant qu’un comptoir est saisi',
+    /\{onSetComptoir && effAuj\.comptoir && \(\s*<button type="button" onClick=\{\(\) => onSetComptoir\(a\.id, null\)\}/.test(bord))
+  // 🔴 LE FORMULAIRE DIT QUAND LA GRILLE LE REMPLACE (Alex, 07/10).
+  v('🔴 le formulaire annonce les jours où la grille remplace la quantité',
+    /form\.stock_mode === 'jour' && editId && \(\(\) => \{\s*const remplaces = JOURS_KEYS/.test(bord) && /\.filter\(\(\[, e\]\) => e && e\.actif !== false\)/.test(bord))
+  v('🔴 « Revenir à … tous les jours » efface les remplacements, garde les jours fermés',
+    /\.delete\(\)\.eq\('article_id', articleId\)\.eq\('actif', true\)\s*if \(error\) \{ toast\(`Les quantités par jour n’ont pas pu être retirées/.test(bord)
+    && /onClick=\{\(\) => revenirAuDefaut\(editId\)\}/.test(bord))
+  v('et il annonce le chiffre ENREGISTRÉ, pas celui en cours de frappe', /Revenir à \{articles\.find\(x => x\.id === editId\)\?\.stock_jour/.test(bord))
   v('les libellés disent ce qui est vendu en ligne et ce qui reste au comptoir',
     /'Jours de vente' : 'Vendu en ligne par jour'/.test(bord) && /'Reste au comptoir aujourd’hui'/.test(bord))
   v('🔴 la copie emporte « Réservable jusqu’à », pas le comptoir du jour',

@@ -181,8 +181,9 @@ const MUTATIONS = [
   // celui qui le contient a chaque rendu.
   { nom: '🔴 les deux niveaux de sous-onglets partagent la meme cle',
     fichier: ECRAN,
-    de: "    ['articles', 'categories', 'personnalisation'], 'articles', CLE_SOUS_ONGLET_2,",
-    vers: "    ['articles', 'categories', 'personnalisation'], 'articles'," },
+    // ⚠️ Ancre reorientee le 07/10 : le sous-onglet « Comptoir du jour » s ajoute.
+    de: "    ['articles', 'comptoir', 'categories', 'personnalisation'], 'articles', CLE_SOUS_ONGLET_2,",
+    vers: "    ['articles', 'comptoir', 'categories', 'personnalisation'], 'articles'," },
 
   { nom: '🔴 un ecran retombe sur un etat qui ne survit pas au rechargement',
     fichier: ECRAN,

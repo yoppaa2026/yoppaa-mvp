@@ -150,6 +150,23 @@ const code = (f) => sansProse(lire(f))
   v('🔴 les exemples s’affichent sous chaque choix', /\{c\.exemples && \(/.test(bord) && /<strong>Par exemple :<\/strong> \{c\.exemples\}/.test(bord))
   v('🔴 plus de pattes de mouche dans le formulaire article (aucun texte en 10 px)',
     (() => { const i = bord.indexOf('function renderArticleForm()'); const f = bord.slice(i, bord.indexOf('function renderArticleCard(a)', i)); return i > 0 && !/fontSize: 10\b/.test(f) })())
+  // ✅ « COMPTOIR DU JOUR » (Alex, 07/10) : une page, tous les articles « par
+  // jour », un seul bouton ; même règle que la carte (reste + déjà commandé,
+  // jour belge), et chaque écriture lue.
+  v('🔴 l’onglet « Comptoir du jour » existe, en alimentaire seulement',
+    /\['articles', 'comptoir', 'categories', 'personnalisation'\]/.test(bord)
+    && /\.\.\.\(estAlimentaire \? \[\{ id: 'comptoir', label: 'Comptoir du jour', icon: 'clock' \}\] : \[\]\)/.test(bord)
+    && /\{subTab === 'comptoir' && estAlimentaire && \(\(\) => \{/.test(bord))
+  v('🔴 il liste les articles « Quantité par jour » actifs et vendus en ligne',
+    /return articles\.filter\(a => a\.actif !== false && a\.est_vitrine !== true && modeStockDe\(a\) === 'jour'\)/.test(bord))
+  v('🔴 il enregistre le reste plus le déjà commandé, daté du jour belge',
+    /const deja = commandesParArticleJour\[a\.id\]\?\.\[jourKey\] \|\| 0\s*const maj = \{ stock_comptoir: reste \+ deja, stock_comptoir_le: jour \}/.test(bord)
+    && /async function enregistrerComptoir\(\) \{[\s\S]{0,120}const jour = jourBruxelles\(\)/.test(bord))
+  v('🔴 seul ce que la base a accepté s’affiche, et un échec se dit',
+    /const ok = resultats\.filter\(r => !r\.error\)/.test(bord) && /if \(ko\.length > 0\) \{/.test(bord))
+  v('🔴 la journée finie bloque la saisie', /disabled=\{envoiComptoir \|\| journeeFinieAuj\}/.test(bord) && /disabled=\{journeeFinieAuj\}/.test(bord))
+  v('🔴 l’horizon et « Réservable jusqu’à » se nomment l’un l’autre',
+    /Ton horizon de réservation \(onglet Créneaux\) est de \$\{/.test(bord) && /se règle sur sa fiche : « Réservable jusqu&rsquo;à »/.test(bord))
   v('🔴 le temps de préparation ne paraît que si les créneaux se comptent en minutes (ou s’il est déjà réglé)',
     /\{estAlimentaire && \(capaciteEnMinutes \|\| Number\(form\.temps_prepa\) > 0\) && \(/.test(bord)
     && /\.eq\('commercant_id', commercantId\)\.eq\('mode_capacite', 'temps'\)/.test(bord))

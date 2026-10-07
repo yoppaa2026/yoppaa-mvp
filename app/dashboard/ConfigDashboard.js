@@ -519,7 +519,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   // déjà entre Produits et Abonnements. Une seule clé d'adresse pour les deux,
   // et celui-ci écraserait celui-là à chaque rendu.
   const [subTab, setSubTab] = useSousOnglet(
-    ['articles', 'categories', 'personnalisation'], 'articles', CLE_SOUS_ONGLET_2,
+    ['articles', 'comptoir', 'categories', 'personnalisation'], 'articles', CLE_SOUS_ONGLET_2,
   )
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -1164,6 +1164,47 @@ function TabMenu({ commercantId, commercant, toast }) {
     toast(brut === null ? 'Comptoir retiré : la quantité du jour revient.' : 'Comptoir enregistré pour aujourd’hui.')
   }
 
+  // ─── LE COMPTOIR DU JOUR, EN UNE PAGE (Alex, 07/10) ───────────────────────
+  //
+  // « Comment et où on modifie le stock comptoir ? » Article par article, sur
+  // la carte, c'était lent et peu visible le matin. Cette page liste tous les
+  // articles « Quantité par jour » ; il tape ce qu'il RESTE, un seul bouton
+  // enregistre tout. Même règle que la carte : on écrit le reste plus ce qui
+  // est déjà commandé aujourd'hui, daté du jour belge.
+  const [saisiesComptoir, setSaisiesComptoir] = useState({})
+  const [envoiComptoir, setEnvoiComptoir] = useState(false)
+  function articlesDuComptoir() {
+    return articles.filter(a => a.actif !== false && a.est_vitrine !== true && modeStockDe(a) === 'jour')
+  }
+  async function enregistrerComptoir() {
+    if (envoiComptoir) return
+    const jour = jourBruxelles()
+    const jourKey = jourSemaineDe(jour)
+    const aEcrire = articlesDuComptoir().filter(a => String(saisiesComptoir[a.id] ?? '').trim() !== '')
+    if (aEcrire.length === 0) { toast('Indique au moins une quantité.', 'error'); return }
+    setEnvoiComptoir(true)
+    const resultats = await Promise.all(aEcrire.map(async a => {
+      const reste = Math.max(0, parseInt(saisiesComptoir[a.id], 10) || 0)
+      const deja = commandesParArticleJour[a.id]?.[jourKey] || 0
+      const maj = { stock_comptoir: reste + deja, stock_comptoir_le: jour }
+      const { error } = await supabase.from('articles').update(maj).eq('id', a.id)
+      return { id: a.id, maj, error }
+    }))
+    setEnvoiComptoir(false)
+    // ⚠️ SEUL CE QUE LA BASE A ACCEPTÉ S'AFFICHE : un échec ne doit pas passer
+    // pour un comptoir enregistré.
+    const ok = resultats.filter(r => !r.error)
+    setArticles(prev => prev.map(x => { const r = ok.find(o => o.id === x.id); return r ? { ...x, ...r.maj } : x }))
+    const ko = resultats.filter(r => r.error)
+    if (ko.length > 0) {
+      setSaisiesComptoir(prev => Object.fromEntries(Object.entries(prev).filter(([id]) => ko.some(k => String(k.id) === String(id)))))
+      toast(`${ko.length} article${ko.length > 1 ? 's n’ont' : ' n’a'} pas pu être enregistré${ko.length > 1 ? 's' : ''} : ${ko[0].error.message}`, 'error')
+      return
+    }
+    setSaisiesComptoir({})
+    toast(`Comptoir enregistré pour aujourd’hui (${ok.length} article${ok.length > 1 ? 's' : ''}). Demain, la quantité par jour revient.`)
+  }
+
   // Un jour rendu à nouveau disponible, pour un article SANS LIMITE : le
   // réglage du jour disparaît, il n'y a aucune quantité à y mettre.
   async function rouvrirJour(articleId, jourSemaine) {
@@ -1264,6 +1305,9 @@ function TabMenu({ commercantId, commercant, toast }) {
   // ─── Sous-onglets Menu : Articles | Catégories | Personnalisation ───────
   const SUB_TABS = [
     { id: 'articles',         label: 'Articles',        icon: 'box' },
+    // ✅ 07/10 (Alex, tableau) : la routine du matin, tous les articles
+    // « Quantité par jour » sur une page. L'alimentaire seulement.
+    ...(estAlimentaire ? [{ id: 'comptoir', label: 'Comptoir du jour', icon: 'clock' }] : []),
     { id: 'categories',       label: 'Catégories',      icon: 'tag' },
     { id: 'personnalisation', label: 'Personnalisation', icon: 'sliders' },
   ]
@@ -1425,8 +1469,11 @@ function TabMenu({ commercantId, commercant, toast }) {
               </ChampFormulaire>
               {/* « RÉSERVABLE JUSQU'À » (Alex, 07/10). Vide = automatique. Il
                   n'ouvre que plus loin, jamais moins. */}
+              {/* ✅ 07/10 (Alex, tableau) : ce réglage et l'HORIZON du commerce
+                  se nomment l'un l'autre, avec le vrai chiffre. Le délai est un
+                  PLANCHER, l'horizon et « Réservable jusqu'à » des PLAFONDS. */}
               <ChampFormulaire label="Réservable jusqu’à"
-                aide="Jusqu’à quand tes clients peuvent le commander à l’avance (un gâteau de communion, un buffet). Les autres articles de ta fiche deviennent commandables pour ces jours-là aussi.">
+                aide={`Jusqu’à quand tes clients peuvent le commander à l’avance (un gâteau de communion, un buffet). Ton horizon de réservation (onglet Créneaux) est de ${Number(commercant?.horizon_commande) >= 1 ? Math.floor(Number(commercant.horizon_commande)) : 2} jour${Number(commercant?.horizon_commande) > 1 || !(Number(commercant?.horizon_commande) >= 1) ? 's' : ''} pour tout ton catalogue : ce réglage ne sert qu’à aller plus loin pour cet article, et les autres articles deviennent commandables ces jours-là aussi.`}>
                 <select
                   value={form.horizon_jours === null || form.horizon_jours === undefined ? '' : String(form.horizon_jours)}
                   onChange={e => setForm(p => ({ ...p, horizon_jours: e.target.value }))}
@@ -1766,6 +1813,82 @@ function TabMenu({ commercantId, commercant, toast }) {
           )}
         </>
       )}
+
+      {/* ───────────── SUB-TAB : COMPTOIR DU JOUR (07/10) ───────────── */}
+      {subTab === 'comptoir' && estAlimentaire && (() => {
+        const jour = jourBruxelles()
+        const jourKey = jourSemaineDe(jour)
+        const liste = articlesDuComptoir()
+        // ⚠️ PAS DE BANDE QUI DÉFILE (règle des bandes, verif) : chaque ligne
+        // passe à la ligne sur un téléphone, et les chiffres portent leur nom.
+        const col = { display: 'flex', flexWrap: 'wrap', gap: '8px 14px', alignItems: 'center' }
+        return (
+          <SectionFormulaire titre="Le comptoir du jour"
+            phrase="Chaque matin, indique ce qu’il te reste au comptoir pour aujourd’hui. Tes clients ne pourront pas en commander plus en ligne. Demain, la quantité par jour revient toute seule.">
+            {journeeFinieAuj && (
+              <p style={{ margin: 0, fontSize: 13.5, color: '#92400E', background: '#FFFBEB', border: '1.5px solid #F59E0B88', borderRadius: 10, padding: '10px 12px', lineHeight: 1.5 }}>
+                Ta journée est finie : plus rien ne se retire aujourd&rsquo;hui, le comptoir ne compte plus. Reviens demain matin.
+              </p>
+            )}
+            {liste.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 13.5, color: '#3F3A4F', lineHeight: 1.5 }}>
+                Aucun article en « Quantité par jour ». Le comptoir sert aux articles préparés chaque jour (croissants, pains, plat du jour) : choisis ce mode dans la section « Le stock » de leur fiche.
+              </p>
+            ) : (
+              <div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {liste.map(a => {
+                    const entree = stockParJourMap[a.id]?.[jourKey]
+                    const pasAujourdhui = entree?.actif === false
+                    const enLigne = entree ? (entree.stock || 0) : (a.stock_jour || 0)
+                    const deja = commandesParArticleJour[a.id]?.[jourKey] || 0
+                    const comptoir = comptoirDuJour(a, jour)
+                    return (
+                      <div key={a.id} style={{ ...col, background: comptoir !== null ? '#F3ECFF' : '#fff', border: `1.5px solid ${comptoir !== null ? T.main : '#DDD3F3'}`, borderRadius: 12, padding: '10px 12px' }}>
+                        <span style={{ flex: '1 1 200px', minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 14.5, fontWeight: 800, color: T.ink }}>{a.nom}</span>
+                          <span style={{ display: 'block', fontSize: 13, color: '#3F3A4F', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                            {pasAujourdhui ? 'Pas vendu aujourd’hui' : `Prévu en ligne aujourd’hui : ${enLigne}`} · Déjà commandé : {deja}
+                          </span>
+                        </span>
+                        {pasAujourdhui ? (
+                          <span style={{ fontSize: 13, color: '#6B6480' }}>Pas vendu aujourd&rsquo;hui</span>
+                        ) : (
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '0 1 190px' }}>
+                            <span style={{ fontSize: 12.5, fontWeight: 800, color: T.ink }}>Il en reste au comptoir</span>
+                            <input type="number" min="0" inputMode="numeric"
+                              aria-label={`Il en reste au comptoir : ${a.nom}`}
+                              value={saisiesComptoir[a.id] ?? ''}
+                              placeholder={comptoir !== null ? `${Math.max(0, comptoir - deja)} (saisi)` : String(Math.max(0, enLigne - deja))}
+                              disabled={journeeFinieAuj}
+                              onChange={e => setSaisiesComptoir(p => ({ ...p, [a.id]: e.target.value }))}
+                              style={{ ...s.input, padding: '8px 10px', fontSize: 15, fontWeight: 700, width: '100%' }}/>
+                            {comptoir !== null && (
+                              <button type="button" onClick={() => setComptoir(a.id, null)}
+                                style={{ alignSelf: 'flex-start', fontSize: 12.5, fontWeight: 700, color: T.main, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>
+                                Retirer le comptoir
+                              </button>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            {liste.length > 0 && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button type="button" onClick={enregistrerComptoir} disabled={envoiComptoir || journeeFinieAuj}
+                  style={{ ...s.btn, ...s.btnPrimary, padding: '10px 18px', fontSize: 14, opacity: journeeFinieAuj ? 0.5 : 1 }}>
+                  <Icon name="check" size={14}/> {envoiComptoir ? <EnCours /> : 'Enregistrer le comptoir'}
+                </button>
+                <span style={{ fontSize: 13, color: '#3F3A4F' }}>Laisse vide un article qui ne change pas.</span>
+              </div>
+            )}
+          </SectionFormulaire>
+        )
+      })()}
 
       {/* ───────────── SUB-TAB : CATÉGORIES ───────────── */}
       {subTab === 'categories' && (
@@ -5289,7 +5412,13 @@ function TabCreneaux({ commercantId, toast }) {
       {/* ─── Horizon ─── */}
       <div style={{ ...s.card, marginBottom: 16, background: T.pale, border: `1.5px solid ${T.main}22`, boxShadow: 'none' }}>
         <h3 style={{ fontWeight: 800, fontSize: 14, color: T.deep, marginBottom: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Calendar size={15} strokeWidth={1.8}/> Horizon de réservation</h3>
-        <p style={{ fontSize: 12, color: T.muted, marginBottom: 12, lineHeight: 1.5 }}>Jusqu'à combien de jours à l'avance tes clients peuvent réserver ?</p>
+        <p style={{ fontSize: 13, color: '#3F3A4F', marginBottom: 6, lineHeight: 1.5 }}>Jusqu'à combien de jours à l'avance tes clients peuvent réserver, pour tout ton catalogue ?</p>
+        {/* ✅ 07/10 (Alex, tableau) : l'horizon et « Réservable jusqu'à » se
+            nomment l'un l'autre. Le délai d'un article est un PLANCHER (pas
+            avant), l'horizon un PLAFOND (pas après). */}
+        <p style={{ fontSize: 13, color: '#3F3A4F', marginBottom: 12, lineHeight: 1.5 }}>
+          Un article commandé longtemps à l&rsquo;avance (gâteau de communion, buffet) se règle sur sa fiche : « Réservable jusqu&rsquo;à ». Et son délai (« 2 jours à l&rsquo;avance ») dit à partir de quand on peut le retirer : ce n&rsquo;est pas un doublon, c&rsquo;est l&rsquo;autre borne.
+        </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
           {HORIZONS.map(h => (
             <button key={h.val} onClick={() => saveHorizon(h.val)} disabled={savingHorizon}

@@ -226,6 +226,10 @@ async function handler(req) {
   }
 
   console.info('[cron/billing-relances] terminé', stats)
+  console.log('[cron] /api/cron/billing-relances : envoyé', JSON.stringify({
+    envoyes: stats.sent.length, basculesExister: stats.basculesExister.length,
+    dejaEnvoyes: stats.skippedAlreadySent, echecs: stats.errors.length,
+  }))
   return NextResponse.json({ ok: true, ...stats })
 }
 

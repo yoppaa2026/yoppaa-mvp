@@ -425,6 +425,14 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
     signup.indexOf("fetch('/api/commercant/accepter-cgu'") > 0
     && signup.indexOf("fetch('/api/commercant/accepter-cgu'") < signup.indexOf("statut: 'en_attente_validation'"))
   v('un refus d’enregistrement arrête l’envoi', /if \(!rCgu\.ok \|\| !jCgu\?\.ok\) \{[\s\S]{0,200}setSubmitting\(false\)\s*return\s*\}/.test(signup))
+  // 🔴 07/10 : la fiche passait en troisième, sans que personne lise son
+  // erreur. « Demande envoyée ! » s'affichait sur une fiche restée brouillon.
+  const posFiche = signup.indexOf("statut_publication: 'en_attente',")
+  v('🔴 la fiche passe en attente AVANT l’onboarding, une seule fois',
+    posFiche > 0 && posFiche < signup.indexOf("statut: 'en_attente_validation'")
+    && signup.indexOf("statut_publication: 'en_attente',", posFiche + 1) === -1)
+  v('🔴 un échec de la fiche arrête l’envoi (rien n’est annoncé)',
+    /if \(cErr \|\| !c\) \{[\s\S]{0,200}setSubmitting\(false\)\s*return\s*\}\s*onUpdate\(c\)/.test(signup))
   v('l’inscription reprend par la règle partagée', (signup.match(/etapeReprise\(/g) || []).length === 2)
 
   const route = code('app/api/commercant/accepter-cgu/route.js')

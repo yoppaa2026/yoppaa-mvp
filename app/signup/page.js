@@ -1844,7 +1844,37 @@ function EtapeVerification({ commercant, onboarding, onUpdate, onUpdateOb, onSav
     // touche à l'argent finit par décider quelqu'un.
     const aSuccessPack = shopChoices.has('success_pack')
 
-    // 1) Update onboarding : statut + score + success_pack_choisi (legacy)
+    // 1) Update commerçant : statut publication = brouillon → en_attente
+    //    + kyb_statut = en_attente (S5 : Yoppaa doit valider la conformite KYB
+    //    avant publication de la fiche). La fiche ne sera publiee que quand
+    //    statut_publication='valide' ET kyb_statut='valide' (croisement).
+    //    Et on efface le motif_rejet précédent : la re-soumission corrige
+    //    forcément le problème, plus de raison d'afficher l'ancien motif.
+    //
+    // 🔴 LA FICHE D'ABORD, ET ON LIT SA RÉPONSE (07/10). Cette écriture venait
+    // en troisième et personne n'écoutait son erreur : l'onboarding passait
+    // « en attente de validation », le commerçant lisait « Demande envoyée ! »
+    // (et le relisait à chaque retour, puisque `submitted` naît de l'onboarding),
+    // pendant que sa fiche restait `brouillon` : absente des dossiers à valider,
+    // et relancée le lendemain comme une inscription abandonnée.
+    const { data: c, error: cErr } = await supabase.from('commercants')
+      .update({
+        statut_publication: 'en_attente',
+        motif_rejet: null,
+        kyb_statut: commercant.kyb_statut === 'valide' ? 'valide' : 'en_attente',
+        kyb_motif_rejet: null,
+      })
+      .eq('id', commercant.id)
+      .select()
+      .single()
+    if (cErr || !c) {
+      setError('Ta demande n’a pas pu être envoyée. Vérifie ta connexion et réessaie.')
+      setSubmitting(false)
+      return
+    }
+    onUpdate(c)
+
+    // 2) Update onboarding : statut + score + success_pack_choisi (legacy)
     const { data: ob, error: obErr } = await supabase.from('onboarding_commercants')
       .update({
         statut: 'en_attente_validation',
@@ -1864,7 +1894,7 @@ function EtapeVerification({ commercant, onboarding, onUpdate, onUpdateOb, onSav
     if (obErr) { setError(`Erreur : ${obErr.message}`); setSubmitting(false); return }
     onUpdateOb(ob)
 
-    // 2) LES CHOIX DE LA BOUTIQUE, ENREGISTRÉS PAR LE SERVEUR.
+    // 3) LES CHOIX DE LA BOUTIQUE, ENREGISTRÉS PAR LE SERVEUR.
     //
     // ⚠️ CE BLOC ÉCRIVAIT DANS `success_packs` DEPUIS LE NAVIGATEUR, avec
     // `montant_ht: 199` EN DUR, et uniquement pour le Success Pack. Trois
@@ -1894,24 +1924,6 @@ function EtapeVerification({ commercant, onboarding, onUpdate, onUpdateOb, onSav
         body: JSON.stringify({ commercant_id: commercant.id, produits: [...shopChoices] }),
       })
     } catch { /* voir ci-dessus : jamais bloquant */ }
-
-    // 3) Update commerçant : statut publication = brouillon → en_attente
-    //    + kyb_statut = en_attente (S5 : Yoppaa doit valider la conformite KYB
-    //    avant publication de la fiche). La fiche ne sera publiee que quand
-    //    statut_publication='valide' ET kyb_statut='valide' (croisement).
-    //    Et on efface le motif_rejet précédent : la re-soumission corrige
-    //    forcément le problème, plus de raison d'afficher l'ancien motif.
-    const { data: c } = await supabase.from('commercants')
-      .update({
-        statut_publication: 'en_attente',
-        motif_rejet: null,
-        kyb_statut: commercant.kyb_statut === 'valide' ? 'valide' : 'en_attente',
-        kyb_motif_rejet: null,
-      })
-      .eq('id', commercant.id)
-      .select()
-      .single()
-    if (c) onUpdate(c)
 
     // 4) Email à Yoppaa via API route Resend (à implémenter — pour le MVP
     //    on log juste un avertissement console + on continue. Quand l'API

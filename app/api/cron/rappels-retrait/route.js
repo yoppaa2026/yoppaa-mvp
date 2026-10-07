@@ -181,6 +181,7 @@ export async function GET(request) {
     }
 
     console.info('[cron/rappels-retrait]', { examinees: commandes?.length || 0, envoyes, ignores, details })
+    console.log('[cron] /api/cron/rappels-retrait : envoyé', JSON.stringify({ examinees: commandes?.length || 0, envoyes, ignores }))
     return NextResponse.json({ ok: true, examinees: commandes?.length || 0, envoyes, ignores, details })
 
   } catch (e) {

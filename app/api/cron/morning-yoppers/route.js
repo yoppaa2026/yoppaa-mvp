@@ -145,6 +145,7 @@ async function handle(req) {
   }
 
   if (tousDealIds.length === 0 && tousActuIds.length === 0) {
+    console.log('[cron] /api/cron/morning-yoppers : rien à envoyer (aucun deal ni actu éligible)', today)
     return NextResponse.json({
       status: 'ok',
       date: today,
@@ -224,6 +225,10 @@ async function handle(req) {
     }
   }
 
+  console.log('[cron] /api/cron/morning-yoppers : envoyé', JSON.stringify({
+    date: today, communes: stats.communes, deals: stats.deals, actus: stats.actus,
+    push_sent: stats.push_sent, push_failed: stats.push_failed, communes_sans_yoppers: stats.communes_sans_yoppers,
+  }))
   return NextResponse.json({
     status: 'ok',
     date: today,

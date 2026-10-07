@@ -112,6 +112,8 @@ const MUTATIONS = [
   // RETIREES : le compteur a quitte l inscription avec la presentation.
   { nom: '🔴 le dossier part sans les CGU',
     fichier: 'app/signup/page.js', de: '  const peutSoumettre = kybRempli && cguCochees', vers: '  const peutSoumettre = kybRempli' },
+  { nom: '🔴 Demande envoyee sur une fiche restee brouillon',
+    fichier: 'app/signup/page.js', de: '    if (cErr || !c) {', vers: '    if (false) {' },
   { nom: '🔴 la route accepte une ancienne version des CGU',
     fichier: 'app/api/commercant/accepter-cgu/route.js', de: '    if (version !== CGU_COMMERCANT_VERSION) {', vers: '    if (false) {' },
   { nom: '🔴 n importe qui accepte au nom d un commerce',

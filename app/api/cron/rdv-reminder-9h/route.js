@@ -123,6 +123,7 @@ export async function GET(request) {
     }
 
     console.info('[cron/rdv-reminder-9h]', { dateRdv, total: rdvs?.length || 0, sent, failed })
+    console.log('[cron] /api/cron/rdv-reminder-9h : envoyé', JSON.stringify({ date_rdv: dateRdv, total: rdvs?.length || 0, sent, failed }))
     return NextResponse.json({ ok: true, date_rdv: dateRdv, total: rdvs?.length || 0, sent, failed })
 
   } catch (e) {

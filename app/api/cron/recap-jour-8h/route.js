@@ -36,6 +36,9 @@ export async function GET(request) {
   // Un appel manuel (secret exigé plus haut) peut forcer l'envoi hors de 8 h.
   const forcer = new URL(request.url).searchParams.get('forcer') === '1'
   if (!forcer && !estHeureDuRecap(new Date())) {
+    // Le journal dit aussi le passage qui s'abstient (07/10) : sans lui, les
+    // deux passages répondent 200 et rien ne dit lequel a envoyé.
+    console.log('[cron] /api/cron/recap-jour-8h : pas son heure, rien envoyé')
     return NextResponse.json({ ok: true, ignore: 'pas_8h_a_bruxelles' })
   }
 
@@ -272,6 +275,7 @@ export async function GET(request) {
       console.error('[cron/recap-jour-8h] filet des dossiers en attente KO', e?.message || e)
     }
 
+    console.log('[cron] /api/cron/recap-jour-8h : envoyé', JSON.stringify({ date_jour: dateJour, sent, failed, forcer }))
     return NextResponse.json({ ok: true, date_jour: dateJour, sent, failed, details, compteur, enRetard })
 
   } catch (e) {

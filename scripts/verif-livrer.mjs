@@ -372,6 +372,27 @@ const livrer = async (tables, args, options) => {
     v('un appel manuel peut forcer', horsDeSonHeure(req('?forcer=1'), ch, new Date('2026-12-01T07:00:00Z')) === false)
     v('un cron absent de la table n’est jamais bloqué', horsDeSonHeure(req(), '/api/cron/inconnu', new Date()) === false)
 
+    // 🔴 07/10 : les deux passages du Good Morning répondaient 200 sans un mot,
+    // impossible de dire lequel avait envoyé. On EXÉCUTE : un vrai passage (sans
+    // instant) écrit sa ligne, une simulation (avec instant) n'écrit rien.
+    {
+      const lignes = []
+      const vraiLog = console.log
+      console.log = (...a) => lignes.push(a.join(' '))
+      let reponse
+      try { reponse = horsDeSonHeure(req(), ch) } finally { console.log = vraiLog }
+      v('🔴 un vrai passage écrit au journal s’il travaille ou non',
+        lignes.length === 1 && lignes[0].startsWith(`[cron] ${ch} : `)
+        && lignes[0].includes(reponse ? 'pas son heure' : 'il travaille'), JSON.stringify(lignes))
+    }
+    {
+      const lignes = []
+      const vraiLog = console.log
+      console.log = (...a) => lignes.push(a.join(' '))
+      try { horsDeSonHeure(req(), ch, new Date('2026-12-01T07:00:00Z')) } finally { console.log = vraiLog }
+      v('une simulation du banc n’écrit rien', lignes.length === 0, JSON.stringify(lignes))
+    }
+
     const crons = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8')).crons || []
     for (const [chemin, cible] of Object.entries(HEURES_CRON)) {
       const planifie = crons.find(c => c.path === chemin)

@@ -104,6 +104,7 @@ export async function GET(request) {
       })
     }
 
+    console.log('[cron] /api/cron/signaux-hebdo : envoyé', JSON.stringify({ envoyes, ignores, echecs }))
     return NextResponse.json({ ok: true, envoyes, ignores, echecs, details })
   } catch (e) {
     console.error('[cron/signaux-hebdo]', e)

@@ -76,6 +76,7 @@ export async function GET(request) {
     }
 
     console.info('[cron/fidelite-rdv]', { dateHier, rdvs: (rdvs || []).length, credites, deja, ignores })
+    console.log('[cron] /api/cron/fidelite-rdv : fait', JSON.stringify({ date: dateHier, rdvs: (rdvs || []).length, credites, deja, ignores }))
     return NextResponse.json({ ok: true, date: dateHier, rdvs: (rdvs || []).length, credites, deja, ignores })
   } catch (e) {
     console.error('[cron/fidelite-rdv] exception', e)

@@ -121,7 +121,7 @@ import BandeDefilante from '@/app/components/BandeDefilante'
 // et un food truck n'ont pas le même métier et ont le même besoin. Cette
 // section a cessé d'être conditionnée au métier le 12/08, et son dernier usage,
 // un titre qui changeait selon la catégorie, est parti le 13/08.
-import { jourLocalISO, jourSemaineLocal, jourBruxelles, creneauDejaCommence } from '@/lib/timezone'
+import { jourLocalISO, jourSemaineLocal, jourBruxelles, creneauDejaCommence, minutesBruxelles } from '@/lib/timezone'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
@@ -1085,6 +1085,19 @@ function TabMenu({ commercantId, commercant, toast }) {
     setArticles(prev => prev.map(a => a.id === id ? { ...a, ...maj } : a))
   }
 
+  // ⚠️ LA JOURNÉE EST-ELLE FINIE ? (Alex, 07/10) Le soir, boutique fermée, plus
+  // rien ne se retire aujourd'hui : le comptoir n'a plus d'effet, et son
+  // bouton piégeait (« commande pour demain affiche le stock de demain »). On
+  // le cache. `fermetureDuJour` sait qu'une boulangerie fermée le midi rouvre
+  // l'après-midi. Sans horaires connus, on ne cache rien.
+  const journeeFinieAuj = (() => {
+    const nom = jourSemaineDe(jourBruxelles())
+    if (joursFermes.includes(nom)) return true
+    const f = fermetureDuJour(commercant?.horaires_detail, nom)
+    const m = minutesBruxelles()
+    return f !== null && m !== null && m >= f
+  })()
+
   // 🔴 LE COMPTOIR D'AUJOURD'HUI (Alex, 07/10). `brut` = ce qu'il reste plus ce
   // qui est déjà commandé aujourd'hui (la carte le calcule), ou `null` pour le
   // retirer. Daté du jour BELGE : c'est la date que le serveur compare.
@@ -1318,7 +1331,7 @@ function TabMenu({ commercantId, commercant, toast }) {
               <p style={{ fontSize: 10, color: T.muted, marginTop: 3 }}>
                 Le temps qu&rsquo;il te faut pour préparer <strong>cet article</strong>, en jours : « 2 jours »
                 veut dire commandé jeudi, retiré samedi. Tes clients le voient sur la carte, avec la date limite.
-                Pour ne le vendre que certains jours, coche-les sur sa carte (« Jours de vente » ou « Stock par jour »).
+                Pour ne le vendre que certains jours, coche-les sur sa carte (« Jours de vente » ou « Vendu en ligne par jour »).
               </p>
               {/* « RÉSERVABLE JUSQU'À » (Alex, 07/10). Une liste fermée, comme
                   le délai. Vide, le calcul est automatique : une semaine après
@@ -1444,7 +1457,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // ⚠️ DEPUIS LE 30/09, `estVitrine` / `estDetail` DISENT LA CATÉGORIE DU
     // COMMERCE (variantes ou options, temps de préparation). Le stock et la
     // vitrine se lisent sur l'ARTICLE : son mode, et « vendu en ligne ».
-    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir} journeeFinie={journeeFinieAuj}/>
   }
 
   return (
@@ -2702,7 +2715,7 @@ function VariantesArticle({ article, toast, articles = [] }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -2857,7 +2870,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
               <span style={{ fontSize: 11, fontWeight: 700, color: '#10B981', background: '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>Sans limite</span>
             ) : (stockBrutAuj > 0 || effAuj.comptoir) ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#10B981', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
-                {effAuj.comptoir ? 'Au comptoir aujourd’hui' : 'Aujourd’hui'}&nbsp;: {stockRestant} dispo {dejaCommande > 0 && <span style={{ opacity: 0.65 }}>({dejaCommande} commandé{dejaCommande > 1 ? 's' : ''})</span>}
+                {effAuj.comptoir ? 'Comptoir (aujourd’hui)' : 'Aujourd’hui'}&nbsp;: {stockRestant} dispo {dejaCommande > 0 && <span style={{ opacity: 0.65 }}>({dejaCommande} commandé{dejaCommande > 1 ? 's' : ''})</span>}
               </span>
             ) : (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Non géré</span>
@@ -2872,17 +2885,20 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
                 gardent la quantité sur commande (la grille ci-dessous). Il
                 saisit ce qu'il RESTE, comme pour la grille : on enregistre ce
                 reste plus ce qui est déjà commandé aujourd'hui. */}
-            {parJours && onSetComptoir && !effAuj.ferme && !congeAuj && (
+            {/* ⚠️ CACHÉ LE SOIR (Alex, 07/10) : boutique fermée pour la
+                journée, plus rien ne se retire aujourd'hui, le comptoir
+                n'aurait aucun effet. */}
+            {parJours && onSetComptoir && !effAuj.ferme && !congeAuj && !journeeFinie && (
               <>
                 <button type="button"
                   onClick={() => {
-                    const v = window.prompt('Combien en reste-t-il au comptoir, maintenant ? (pour aujourd’hui seulement)', effAuj.comptoir ? String(stockRestant) : '')
+                    const v = window.prompt('Combien en reste-t-il au comptoir, maintenant ?\nPour aujourd’hui seulement. Demain, la quantité vendue en ligne par jour revient.', effAuj.comptoir ? String(stockRestant) : '')
                     if (v === null || String(v).trim() === '') return
                     const reste = Math.max(0, parseInt(v, 10) || 0)
                     onSetComptoir(a.id, reste + dejaCommande)
                   }}
                   style={{ fontSize: 11, fontWeight: 700, color: T.main, background: '#fff', border: `1px solid ${T.main}44`, padding: '3px 9px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  {effAuj.comptoir ? 'Modifier le comptoir' : 'Comptoir aujourd’hui'}
+                  {effAuj.comptoir ? 'Modifier le comptoir' : 'Reste au comptoir aujourd’hui'}
                 </button>
                 {effAuj.comptoir && (
                   <button type="button" onClick={() => onSetComptoir(a.id, null)}
@@ -2899,7 +2915,7 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
               pour un stock en magasin (un seul chiffre, plus haut). */}
           {parJours && <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{sansLimite ? 'Jours de vente' : 'Stock par jour'}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{sansLimite ? 'Jours de vente' : 'Vendu en ligne par jour'}</span>
               {!sansLimite && <button onClick={() => {
                 const v = window.prompt('Stock disponible à appliquer aux 7 jours :', String(stockRestant))
                 if (v !== null) {

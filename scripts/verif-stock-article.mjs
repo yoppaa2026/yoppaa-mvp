@@ -187,6 +187,15 @@ const code = (f) => sansProse(lire(f))
   v('🔴 il saisit ce qui RESTE : on enregistre le reste plus le déjà commandé', /onSetComptoir\(a\.id, reste \+ dejaCommande\)/.test(bord))
   v('🔴 la carte lit le comptoir d’aujourd’hui par la règle partagée', /const comptoirAuj = comptoirDuJour\(a, jourBruxelles\(\)\)/.test(bord))
   v('la carte reçoit la fonction', /onSetComptoir=\{setComptoir\}/.test(bord))
+  // 🔴 CACHÉ LE SOIR (Alex, 07/10) : boutique fermée pour la journée, le
+  // comptoir n'a plus d'effet et piégeait le test du mercredi soir.
+  v('🔴 le bouton du comptoir disparaît quand la journée est finie',
+    /\{parJours && onSetComptoir && !effAuj\.ferme && !congeAuj && !journeeFinie && \(/.test(bord)
+    && /journeeFinie=\{journeeFinieAuj\}/.test(bord))
+  v('🔴 « journée finie » lit la fermeture du jour (dernière plage) à l’heure belge',
+    /const f = fermetureDuJour\(commercant\?\.horaires_detail, nom\)\s*const m = minutesBruxelles\(\)\s*return f !== null && m !== null && m >= f/.test(bord))
+  v('les libellés disent ce qui est vendu en ligne et ce qui reste au comptoir',
+    /'Jours de vente' : 'Vendu en ligne par jour'/.test(bord) && /'Reste au comptoir aujourd’hui'/.test(bord))
   v('🔴 la copie emporte « Réservable jusqu’à », pas le comptoir du jour',
     CHAMPS_COPIES.includes('horizon_jours') && !CHAMPS_COPIES.includes('stock_comptoir') && !CHAMPS_COPIES.includes('stock_comptoir_le'))
   v('🔴 le formulaire enregistre « Réservable jusqu’à », vide = automatique',

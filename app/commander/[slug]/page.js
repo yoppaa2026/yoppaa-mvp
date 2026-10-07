@@ -16,8 +16,8 @@ import { nomDeLaCarte } from '@/lib/types-commerce'
 // pour la carte, la limite du panier et le tableau de bord.
 import { etatStock, revientUnAutreJour, mentionVitrine } from '@/lib/stock-article'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
-import { calculerCapaciteCreneau, creneauCommandable } from '@/lib/creneaux'
-import { delaiDuPanier, refusDeMelange, pretA, premierCreneauPossible, mentionCarte, libelleMoment, avertissementDelai, refusAjoutDelai, refusDelaisMelanges, delaiDeLOffre } from '@/lib/delai-commande'
+import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe } from '@/lib/creneaux'
+import { refusDeMelange, libelleMoment, delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier, mentionDisponibilite, propositionPourArticle } from '@/lib/delai-commande'
 // ⚠️ C'EST LA PRÉSENCE DE LA FENÊTRE QUI FAIT L'INVENDU, et on la lit avec la
 // fonction du module : recopier le test ici ferait passer chaque bonne affaire
 // de la semaine pour un invendu de fin de journée.
@@ -468,7 +468,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 // `jourRetrait` ('YYYY-MM-DD' ou null) : le jour SOUHAITÉ en boutique. Quand il
 // est fourni, il prime sur `joursDispos[jourSelectionne]`, qui est le sélecteur
 // de l'alimentaire et ne concerne pas une boutique.
-function ArticleRow({ article, panier = {}, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
+function ArticleRow({ article, mentionDispo = null, etatJour = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -517,7 +517,7 @@ function ArticleRow({ article, panier = {}, optionsParArticle, ajouterAuPanier, 
   const stockAtteint = stockGere && stockAujourdhui > 0 && qteTotale >= stockAujourdhui
 
   return (
-    <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${(epuiseComplet || inactifCeJour) ? '#E5E7EB' : qteTotale > 0 ? T.main+'44' : T.pale}`, boxShadow: qteTotale > 0 ? `0 2px 12px ${T.main}18` : '0 1px 4px rgba(107,53,196,0.04)', opacity: (epuiseComplet || inactifCeJour) ? 0.6 : 1, transition: 'all 0.2s' }}>
+    <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${(epuiseComplet || inactifCeJour) ? '#E5E7EB' : qteTotale > 0 ? T.main+'44' : T.pale}`, boxShadow: qteTotale > 0 ? `0 2px 12px ${T.main}18` : '0 1px 4px rgba(107,53,196,0.04)', opacity: (epuiseComplet || inactifCeJour) && !etatJour?.premierLibelle ? 0.6 : 1, transition: 'all 0.2s' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
         {/* Photo d'article (Module 1/2 boutique) : pas de bloc image si absente
             (décision placeholders : les listes restent texte-only sans photo) */}
@@ -573,17 +573,18 @@ function ArticleRow({ article, panier = {}, optionsParArticle, ajouterAuPanier, 
 
                 ⚠️ NI EN VITRINE : rien ne s'y commande, donc rien n'y attend.
 
-                🔴 ET ELLE CHANGE AVEC LE PANIER (Alex, 07/10) : quand le panier
-                porte un autre délai, la carte dit « Commande séparée » AVANT le
-                clic, en ambre pour se distinguer de la simple durée. */}
+                🔴 ET ELLE DIT LES JOURS ET LA DATE LIMITE (Alex, 07/10) :
+                « Samedi et dimanche seulement · commande au plus tard jeudi
+                pour samedi ». C'est la phrase du comptoir, et le délai
+                « s'adapte » tout seul : lundi pour samedi passe. La fiche la
+                calcule (`mentionDisponibilite`) et la passe ici. */}
             {(() => {
               if (article.est_vitrine || modeVitrine) return null
-              const mention = mentionCarte(article.delai_minutes, panier)
+              const mention = mentionDispo
               if (!mention) return null
-              const separee = mention.startsWith('Commande séparée')
-              const coul = separee ? '#B45309' : T.main
+              const coul = T.main
               return (
-                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: coul, background: separee ? '#FFFBEB' : T.pale, padding: '3px 9px', borderRadius: separee ? 10 : 100, lineHeight: 1.35, border: `1px solid ${separee ? '#F59E0B55' : `${T.main}22`}`, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: coul, background: T.pale, padding: '3px 9px', borderRadius: 10, lineHeight: 1.35, border: `1px solid ${T.main}22`, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={coul} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M12 6v6l4 2"/>
@@ -619,7 +620,28 @@ function ArticleRow({ article, panier = {}, optionsParArticle, ajouterAuPanier, 
               la card n'affiche que dispo/épuisé, le détail vit dans la fiche.
               ⚠️ PAS EN VITRINE (30/09) : la commerçante n'y suit aucun stock
               (Alex : les vêtements, trop de retours de tailles). */}
-          {hasVariantes && !article.est_vitrine ? (() => {
+          {/* 🔴 L'ARTICLE NE VA PAS AVEC LE JOUR CHOISI (Alex, 07/10) : on dit
+              pourquoi, et on propose son premier jour. Le bouton passe par
+              `ajouterAuPanier`, qui ouvre la fenêtre de choix : rien ne
+              change de jour sans le clic du client. */}
+          {etatJour && !article.est_vitrine && !modeVitrine && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F9FAFB', color: T.muted, padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9CA3AF', flexShrink: 0 }}/>
+                {etatJour.raison === 'jour'
+                  ? `Pas le ${etatJour.jourSemaine}`
+                  : `À commander ${etatJour.delaiJours} jour${etatJour.delaiJours > 1 ? 's' : ''} avant`}
+              </span>
+              {etatJour.premierLibelle && (
+                <button onClick={e => { e.stopPropagation(); if (hasOptions || hasVariantes) setShowOptions(true); else ajouterAuPanier(article) }}
+                  style={{ fontSize: '0.72rem', fontWeight: 800, color: T.main, background: '#fff', border: `1.5px solid ${T.main}55`, borderRadius: 100, padding: '4px 11px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                  Commander pour {etatJour.premierLibelle} →
+                </button>
+              )}
+            </div>
+          )}
+
+          {hasVariantes && !article.est_vitrine && !etatJour ? (() => {
             const dispoVar = (variantes || []).some(v => v.actif !== false && (v.stock ?? 0) > 0)
             return dispoVar ? (
               <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#F0FDF4', color: '#10B981', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
@@ -635,7 +657,7 @@ function ArticleRow({ article, panier = {}, optionsParArticle, ajouterAuPanier, 
           })() : null}
 
           {/* Indicateur stock 3 niveaux - clair et pro (articles SANS variantes) */}
-          {!hasVariantes && stockGere && !article.est_vitrine && (() => {
+          {!hasVariantes && stockGere && !article.est_vitrine && !etatJour && (() => {
             // Pastilles status : dot taille 9 statique pour harmonisation YOPPAA (status indicator, pas live event)
             if (inactifCeJour) {
               return prochain ? (
@@ -675,7 +697,7 @@ function ArticleRow({ article, panier = {}, optionsParArticle, ajouterAuPanier, 
           })()}
         </div>
 
-        {!modeVitrine && !article.est_vitrine && !epuiseComplet && !inactifCeJour && !epuiseAujourdhui && (
+        {!modeVitrine && !article.est_vitrine && !epuiseComplet && !inactifCeJour && !epuiseAujourdhui && !etatJour && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, flexShrink: 0 }}>
             {(hasOptions || hasVariantes) ? (
               // hasOptions : "+ " ouvre les options (au lieu d'ajouter direct). Compteur visible si qte > 0.
@@ -1542,7 +1564,8 @@ export default function CommanderSlug() {
         depuis: jourLocalISO(new Date()),
         maintenant: maintenantMinutes,
         delaiHeures: commercant?.boutique_delai_heures,
-        horizon: 7,
+        // ⚠️ UNE SEMAINE, OU PLUS si un article à délai l'ouvre (07/10).
+        horizon: Math.max(7, longueurDuCatalogue(commercant, articles, stocksJour)),
       })
     : []
   // Le jour retenu : celui que le client a choisi, à défaut le premier proposé.
@@ -1836,9 +1859,10 @@ export default function CommanderSlug() {
     // ⚠️ ET ON LES PASSE ICI EN CLAIR, sans compter sur l'état. `setState` ne
     // change rien avant le rendu suivant : la valeur par défaut du paramètre
     // lirait l'ancienne, c'est-à-dire vide.
-    buildJoursDispos(data.commercant, data.creneaux, data.fermetures, data.chargeCreneaux || {}, data.blocagesCreneaux || [])
+    const longueurCal = longueurDuCatalogue(data.commercant, data.articles, data.stocksJour)
+    buildJoursDispos(data.commercant, data.creneaux, data.fermetures, data.chargeCreneaux || {}, data.blocagesCreneaux || [], longueurCal)
     setLivraisonConfig(data.livraisonConfig || null)
-    setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures, data.chargeLivraison || {}, data.blocagesLivraison || []))
+    setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures, data.chargeLivraison || {}, data.blocagesLivraison || [], longueurCal))
     setFoodtruckEmps(data.foodtruckEmps || [])
     setLoading(false)
     // Deep link partage : ?article=<id> ouvre directement la fiche de l'article
@@ -2105,9 +2129,14 @@ export default function CommanderSlug() {
   // appellent cette même fonction et ne connaissent pas les blocages, qui ne
   // valent que pour les créneaux de retrait. Une valeur par défaut vide les
   // laisse passer sans rien filtrer.
-  function construireJoursDispos(c, creneauxAvecCount, fermeturesData, chargeParJour = {}, blocagesCren = []) {
+  function construireJoursDispos(c, creneauxAvecCount, fermeturesData, chargeParJour = {}, blocagesCren = [], longueur = null) {
     const horizonBrut = Number(c.horizon_commande)
-    const horizon = Number.isFinite(horizonBrut) && horizonBrut >= 1 ? horizonBrut : HORIZON_DEFAUT
+    // 🔴 LE CALENDRIER S'ALLONGE AVEC LE CATALOGUE (Alex, 07/10) : un article à
+    // délai ou vendu certains jours ouvre une semaine après son délai. La
+    // longueur vient de `longueurCalendrier`, la MÊME règle que le serveur.
+    const horizon = Number.isFinite(Number(longueur)) && Number(longueur) >= 1
+      ? Math.floor(Number(longueur))
+      : (Number.isFinite(horizonBrut) && horizonBrut >= 1 ? horizonBrut : HORIZON_DEFAUT)
     const now = maintenant()
     const joursDispos = []
     const today = new Date(); today.setHours(0,0,0,0)
@@ -2187,9 +2216,20 @@ export default function CommanderSlug() {
   }
 
   // Wrapper : construit + pose l'état des jours de RETRAIT.
-  function buildJoursDispos(c, creneauxAvecCount, fermeturesData, charge = chargeCreneaux, blocagesCren = blocagesCreneaux) {
-    setJoursDispos(construireJoursDispos(c, creneauxAvecCount, fermeturesData, charge, blocagesCren))
+  function buildJoursDispos(c, creneauxAvecCount, fermeturesData, charge = chargeCreneaux, blocagesCren = blocagesCreneaux, longueur = null) {
+    setJoursDispos(construireJoursDispos(c, creneauxAvecCount, fermeturesData, charge, blocagesCren, longueur))
     setJourSelectionne(0)
+  }
+
+  // La longueur du calendrier, lue sur TOUT le catalogue (jamais le panier :
+  // samedi ne doit pas apparaître ou disparaître selon l'ordre des clics).
+  function longueurDuCatalogue(c, arts, stocks) {
+    return longueurCalendrier({
+      horizon: c?.horizon_commande,
+      articles: (arts || [])
+        .filter(a => a && a.actif !== false && !a.est_vitrine)
+        .map(a => ({ delaiJours: delaiEnJours(a), indispo: joursIndisponibles(stocks?.[a.id]) })),
+    })
   }
 
   // Les créneaux réellement PROPOSABLES pour le jour affiché.
@@ -2224,60 +2264,17 @@ export default function CommanderSlug() {
     return () => { annule = true }
   }, [dealsActifs])
 
-  // ─── LE DÉLAI DU PANIER ────────────────────────────────────────────────
-  //
-  // ⚠️ UN SEUL DÉLAI PAR COMMANDE DEPUIS LE 07/10 (la tarte de 48 h n'emmène
-  // plus la baguette : deux commandes, voir `refusDelai` plus bas). Le délai
-  // du panier est donc celui de la commande, et on NOMME l'article : dire
-  // seulement « cette commande demande 48 h » laisserait le Yopper chercher.
-  //
-  // 🔴 ET RIEN DE TOUT CECI N'EST UNE PROTECTION. C'est `create-commande` qui
-  // doit refuser : un onglet ouvert depuis ce matin, un panier restauré au
-  // retour de Stripe ou une requête fabriquée ne passent jamais par ces lignes.
-  const delaiPanier = useMemo(() => delaiDuPanier(panier), [panier])
-
   // ⚠️ L'INVENDU ANNULE LE DÉLAI DE SON ARTICLE, MAIS NE SE REPORTE PAS. Sa
-  // fenêtre ferme ce soir ; un panier qui le mélange à une tarte de 48 h n'a
-  // aucun moment de retrait possible, et on le dit AVANT le paiement.
+  // fenêtre ferme ce soir ; on le dit AVANT le paiement. (Le délai en jours et
+  // le jour choisi vivent plus bas, après `modeBoutiqueEff` : « LE JOUR CHOISI ».)
   const refusMelange = useMemo(() => refusDeMelange(panier), [panier])
 
-  // 🔴 UN SEUL DÉLAI PAR COMMANDE (Alex, 07/10). Deux gestes :
-  //   • à l'AJOUT, une fenêtre nomme les deux articles (`refusDelai`), et le
-  //     panier n'est jamais vidé ;
-  //   • un panier DÉJÀ mélangé (retour de Stripe, fiche rendez-vous, onglet
-  //     d'hier) s'affiche tel quel, avec l'encadré, et « Continuer » grisé.
-  // Le serveur refuse aussi : rien ici n'est une protection.
-  const [refusDelai, setRefusDelai] = useState(null)
-  const delaisMelanges = useMemo(() => refusDelaisMelanges(panier), [panier])
-  // Un panier mélangé qui arrive à l'étape du retrait (onglet ouvert avant le
-  // 07/10, reprise d'un paiement annulé) revient au panier, où l'encadré dit
-  // pourquoi. Sans ce retour, il remplirait l'étape pour se faire refuser au
-  // paiement.
-  useEffect(() => {
-    if (etape === 3 && delaisMelanges) allerEtape(2)
-  }, [etape, delaisMelanges])
-  function refuseParDelai(ligne) {
-    const refus = refusAjoutDelai(panier, ligne)
-    if (refus) setRefusDelai(refus)
-    return !!refus
-  }
   function delaiDuDeal(deal, article) {
     const second = deal?.deal_type === 'bundle' && deal.article2_id
       ? (articles || []).find(a => a.id === deal.article2_id) || null
       : null
     return delaiDeLOffre(article, second)
   }
-
-  const premierRetraitPanier = useMemo(() => {
-    if (delaiPanier.minutes <= 0) return null
-    return premierCreneauPossible({
-      minutes: delaiPanier.minutes,
-      jours: (joursDispos || [])
-        .filter(j => j?.date)
-        .map(j => ({ jour: jourLocalISO(j.date), creneaux: j.creneaux || [] })),
-      instantDebut: brusselsInstant,
-    })
-  }, [delaiPanier, joursDispos])
 
   function creneauxProposables(index = jourSelectionne) {
     const jour = joursDispos[index]
@@ -2290,21 +2287,16 @@ export default function CommanderSlug() {
     // Yopper voyage : il aurait vu des créneaux que le serveur refuse, ou
     // l'inverse. Une seule fonction pour les deux côtés, celle qui connaît
     // l'heure d'été.
-    const pret = pretA(delaiPanier.minutes)
-    return liste.filter(cr => {
-      if (!creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok) return false
-      // ⚠️ ET LE DÉLAI DU PANIER PAR-DESSUS, qui est une borne différente. Un
-      // créneau parfaitement ouvert n'est pas proposable si la tarte qu'on veut
-      // y mettre n'est pas encore faite.
-      if (delaiPanier.minutes <= 0) return true
-      const debut = brusselsInstant(dateStr, cr.heure_debut)
-      return !!debut && !isNaN(debut.getTime()) && debut.getTime() >= pret.getTime()
-    })
+    //
+    // ⚠️ LE DÉLAI DES ARTICLES NE FILTRE PLUS LES HEURES (07/10) : il se
+    // compte en JOURS, et le jour est déjà choisi. Un panier qui ne va pas
+    // avec ce jour est arrêté au panier (`refusPanierCeJour`).
+    return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok)
   }
 
   useEffect(() => {
     if (commercant && creneaux.length > 0) {
-      buildJoursDispos(commercant, creneaux, fermetures, chargeCreneaux, blocagesCreneaux)
+      buildJoursDispos(commercant, creneaux, fermetures, chargeCreneaux, blocagesCreneaux, longueurDuCatalogue(commercant, articles, stocksJour))
     }
   // ⚠️ `blocagesCreneaux` EST DANS LES DÉPENDANCES, et il doit y rester : sans
   // lui, le calendrier gardait son calcul d'avant et ignorait les créneaux
@@ -2475,10 +2467,10 @@ export default function CommanderSlug() {
   }
 
   function ajouterAuPanier(article, options = null, variante = null) {
-    // 🔴 UN SEUL DÉLAI PAR COMMANDE (Alex, 07/10) : la tarte de 48 h ne rejoint
-    // pas la baguette du jour. Placé AVANT la variante et les options, qui
-    // passent toutes par ici.
-    if (refuseParDelai(article)) return
+    // 🔴 L'ARTICLE DOIT ALLER AVEC LE JOUR CHOISI (Alex, 07/10) : son délai en
+    // jours et ses jours de vente. Sinon, la fenêtre propose son premier jour.
+    // Placé AVANT la variante et les options, qui passent toutes par ici.
+    if (refuseParDelai(article, { article, options, variante })) return
     if (variante) {
       // Item à variante : le stock de LA variante fait foi (modèle détail)
       const key = `${article.id}_v${variante.id}`
@@ -2527,7 +2519,7 @@ export default function CommanderSlug() {
     const plafond = plafondDeLOffre(deal)
     if (plafond !== null && (panier[key]?.quantite || 0) + 1 > plafond) return
     const delaiOffre = delaiDuDeal(deal, article)
-    if (refuseParDelai({ nom: deal.titre, delai_minutes: delaiOffre, offre: { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin } })) return
+    if (refuseParDelai({ id: article.id, nom: deal.titre, delai_minutes: delaiOffre, offre: { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin } }, { deal, article })) return
     const prixDeal = Number(deal.prix_deal)
     const prixAvant = deal.prix_original != null ? Number(deal.prix_original) : null
     setPanier(prev => ({ ...prev, [key]: {
@@ -3361,16 +3353,18 @@ export default function CommanderSlug() {
   // affichait tout, y compris une tournée fermée par le délai du commerçant ou
   // déjà partie. Le client la choisissait et le serveur la refusait au
   // paiement. Mêmes deux bornes que le retrait : la règle du créneau, la MÊME
-  // fonction que le serveur, puis le délai du panier par-dessus.
-  const pretLivraison = pretA(delaiPanier.minutes)
+  // fonction que le serveur, puis le panier par-dessus.
+  //
+  // ⚠️ DEPUIS LE 07/10, LE PANIER SE JUGE AU JOUR : une tournée n'est
+  // proposable que si CHAQUE article se livre ce jour-là (délai en jours,
+  // jours de vente). `panierVaCeJour` est une déclaration de fonction, lue
+  // ici avant d'être écrite plus bas : c'est permis, elle est hissée.
   const slotsLivraison = joursDisposLivraison.flatMap(j => (j.creneaux || []).map(cr => ({ ...cr, _date: j.date, _jourLabel: j.label })))
     .filter(slot => {
       if (!slot._date) return false
       const dateStr = jourLocalISO(slot._date)
       if (!creneauCommandable(slot, { dateStr, instantDebut: brusselsInstant }).ok) return false
-      if (delaiPanier.minutes <= 0) return true
-      const debut = brusselsInstant(dateStr, slot.heure_debut)
-      return !!debut && !isNaN(debut.getTime()) && debut.getTime() >= pretLivraison.getTime()
+      return panierVaCeJour(dateStr)
     })
   // 🔴 UNE SEULE RÈGLE À LA FOIS, LA MÊME QUE LE SERVEUR (Alex, 05/10) :
   // l'étoile si le commerçant l'a dessinée, jugée sur la position de la maison
@@ -3401,6 +3395,124 @@ export default function CommanderSlug() {
   // `dateDeLaCommande`, qui lit `modeBoutiqueEff`. Lu avant sa déclaration
   // pendant le rendu, il ferait un écran blanc (reference_zone_morte).
   const modeBoutiqueEff = estDetail ? (boutiqueModes.includes(modeBoutique) ? modeBoutique : boutiqueModes[0]) : null
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // LE JOUR CHOISI, ET LE DÉLAI EN JOURS (Alex, 07/10)
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // ⚠️ ICI ET PAS PLUS HAUT : tout ce bloc lit `modeBoutiqueEff`, déclaré
+  // juste au-dessus. Lu avant sa déclaration pendant le rendu, il donnerait un
+  // écran blanc (la zone morte).
+  //
+  // ⚠️ LE CLIENT CHOISIT SON JOUR (« Je récupère le »), ET C'EST SON ACCORD.
+  // Un article se commande pour ce jour s'il respecte son délai en JOURS et
+  // ses jours de vente. Sinon, on ne le pousse nulle part en silence : une
+  // fenêtre propose son premier jour possible (« Commander pour samedi »), et
+  // si le panier n'est pas vide, « Tout retirer samedi » ou « Garder ma
+  // commande ». Le panier n'est jamais vidé.
+  //
+  // 🔴 RIEN ICI N'EST UNE PROTECTION : `create-commande` refait le compte.
+  const [propositionJour, setPropositionJour] = useState(null)
+  const [ajoutEnAttente, setAjoutEnAttente] = useState(null)
+
+  function aujourdhuiISO() { return jourLocalISO(new Date()) }
+  function regleArticle(ligne) {
+    return { delaiJours: delaiEnJours(ligne), indispo: joursIndisponibles(stocksJour?.[ligne?.id]) }
+  }
+  // Le jour de retrait du panier. `null` en expédition : pas de jour, donc
+  // rien à refuser (le délai y dit quand le colis part).
+  function jourDuPanier() {
+    if (estDetail) return modeBoutiqueEff === 'retrait' ? jourRetraitBoutique : null
+    const d = joursDispos[jourSelectionne]?.date
+    return d ? jourLocalISO(d) : null
+  }
+  function joursDuCalendrier() {
+    return (estDetail ? joursBoutique.map(j => j.jour) : joursDispos.filter(j => j?.date).map(j => jourLocalISO(j.date))).sort()
+  }
+  function panierVaCeJour(jour) {
+    return Object.values(panier).every(l => !refusDuJour({ ...regleArticle(l), jour, aujourdhui: aujourdhuiISO() }))
+  }
+  // `rejouer` : de quoi refaire l'ajout une fois le jour changé.
+  function refuseParDelai(ligne, rejouer) {
+    const jour = jourDuPanier()
+    if (!jour) return false
+    const p = propositionPourArticle({
+      candidat: ligne, panier, jourChoisi: jour, aujourdhui: aujourdhuiISO(),
+      jours: joursDuCalendrier(), regle: regleArticle,
+    })
+    if (p.type === 'ok') return false
+    setPropositionJour({ ...p, nomArticle: ligne?.nom || 'Cet article', rejouer })
+    return true
+  }
+  function passerAuJour(jour) {
+    if (estDetail) {
+      const i = joursBoutique.findIndex(j => j.jour === jour)
+      if (i >= 0) setJourBoutiqueChoisi(i)
+    } else {
+      const i = joursDispos.findIndex(j => j?.date && jourLocalISO(j.date) === jour)
+      if (i >= 0) setJourSelectionne(i)
+    }
+    setCreneauChoisi(null)
+  }
+  function accepterProposition() {
+    const p = propositionJour
+    setPropositionJour(null)
+    if (!p?.jour) return
+    passerAuJour(p.jour)
+    // ⚠️ L'AJOUT SE REJOUE AU RENDU SUIVANT, une fois le jour changé : refait
+    // tout de suite, il lirait encore l'ancien jour (et son stock).
+    if (p.rejouer) setAjoutEnAttente(p.rejouer)
+  }
+  useEffect(() => {
+    if (!ajoutEnAttente) return
+    const a = ajoutEnAttente
+    setAjoutEnAttente(null)
+    if (a.deal) ajouterDealAuPanier(a.deal, a.article)
+    else ajouterAuPanier(a.article, a.options || null, a.variante || null)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- rejoue un ajout une seule fois, au rendu qui suit le changement de jour
+  }, [ajoutEnAttente])
+
+  // Ce que la carte dit quand l'article ne va pas avec le jour choisi.
+  function etatJourArticle(article) {
+    const jour = jourDuPanier()
+    if (!jour || !article || article.est_vitrine) return null
+    const r = regleArticle(article)
+    const refus = refusDuJour({ ...r, jour, aujourdhui: aujourdhuiISO() })
+    if (!refus) return null
+    const premier = joursDuCalendrier().find(j => !refusDuJour({ ...r, jour: j, aujourdhui: aujourdhuiISO() })) || null
+    return {
+      raison: refus.raison,
+      delaiJours: r.delaiJours,
+      jourSemaine: jourSemaineDe(jour),
+      premierLibelle: premier ? libelleMoment({ jour: premier, aujourdhui: aujourdhuiISO() }) : null,
+    }
+  }
+
+  // 🔴 UN PANIER QUI NE VA PAS AVEC LE JOUR CHOISI : retour de Stripe, fiche
+  // rendez-vous, onglet ouvert d'hier. On ne retire rien à sa place : on
+  // nomme l'article, et « Continuer » reste grisé.
+  function refusPanierCeJour() {
+    const jour = jourDuPanier()
+    if (!jour) return null
+    const auj = aujourdhuiISO()
+    for (const l of Object.values(panier)) {
+      const r = regleArticle(l)
+      const refus = refusDuJour({ ...r, jour, aujourdhui: auj })
+      if (!refus) continue
+      if (refus.raison === 'jour') {
+        return `« ${l.nom} » ne se vend pas le ${jourSemaineDe(jour)}. Retire-le de ton panier, ou choisis un autre jour en haut de la page.`
+      }
+      const quand = libelleMoment({ jour, aujourdhui: auj }) || 'aujourd’hui'
+      return `« ${l.nom} » se commande ${r.delaiJours} jour${r.delaiJours > 1 ? 's' : ''} à l'avance, pas pour ${quand}. Retire-le de ton panier, ou choisis un autre jour en haut de la page.`
+    }
+    return null
+  }
+  const blocagePanier = refusPanierCeJour()
+  // Arrivé à l'étape du retrait avec un tel panier, on revient au panier, où
+  // l'encadré dit pourquoi.
+  useEffect(() => {
+    if (etape === 3 && blocagePanier) allerEtape(2)
+  }, [etape, blocagePanier])
   // 🔴 ET LE MINIMUM BLOQUE LE BOUTON (audit, 06/10) : le serveur le refuse
   // de toute façon, autant ne pas proposer de payer.
   const livraisonFormOk = !!(adresseLivraison.situee === true && adresseLivraison.rue_id && cpDansZone && choixLivraisonValable && minimumLivraison().ok)
@@ -4043,32 +4155,70 @@ export default function CommanderSlug() {
             un raccourci vers ce qu'on regarde déjà n'est plus un raccourci,
             il cache le bas de l'écran et il fait hésiter entre deux boutons
             violets. Le pourquoi complet est dans `lib/bouton-flottant.js`. */}
-        {/* 🔴 L'AJOUT REFUSÉ, EXPLIQUÉ (Alex, 07/10). La fenêtre nomme les deux
-            articles et le geste ; un seul bouton, et le panier n'est jamais
-            touché : ce que le Yopper a déjà choisi reste à sa place. */}
-        {refusDelai && (
-          <div role="dialog" aria-modal="true" aria-labelledby="refus-delai-titre"
-            onClick={() => setRefusDelai(null)}
-            style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(22,6,54,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div onClick={e => e.stopPropagation()}
-              style={{ width: '100%', maxWidth: 380, background: '#fff', borderRadius: 18, padding: '22px 20px 18px', boxShadow: '0 12px 40px rgba(22,6,54,0.25)', fontFamily: '"DM Sans", sans-serif' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                <span style={{ width: 34, height: 34, borderRadius: 10, background: '#FFFBEB', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M12 6v6l4 2"/>
-                  </svg>
-                </span>
-                <h2 id="refus-delai-titre" style={{ fontSize: '1.05rem', fontWeight: 900, color: T.ink, margin: 0, letterSpacing: '-0.3px' }}>Une commande à part</h2>
+        {/* 🔴 L'ARTICLE NE VA PAS AVEC LE JOUR CHOISI (Alex, 07/10). Rien ne
+            bouge sans son clic, et le panier n'est jamais vidé :
+              • panier vide : « Commander pour samedi » ;
+              • panier qui peut suivre : « Tout retirer samedi » ou « Garder ma
+                commande d'aujourd'hui » ;
+              • panier qui ne peut pas suivre : on nomme l'article qui bloque.
+            Le texte dit l'ÉTAT (« se retire au plus tôt samedi »), pas notre
+            geste. */}
+        {propositionJour && (() => {
+          const p = propositionJour
+          const auj = aujourdhuiISO()
+          const quand = p.jour ? (libelleMoment({ jour: p.jour, aujourdhui: auj }) || 'aujourd’hui') : ''
+          const dateLongue = p.jour ? new Date(`${p.jour}T12:00:00Z`).toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }) : ''
+          const actuel = jourDuPanier()
+          const garder = !actuel || actuel === auj
+            ? 'Garder ma commande d’aujourd’hui'
+            : `Garder ma commande pour ${libelleMoment({ jour: actuel, aujourdhui: auj })}`
+          const titre = p.type === 'vide' ? `Pour ${quand}`
+            : p.type === 'tout' ? `Tout retirer ${quand} ?`
+            : p.type === 'incompatible' ? 'Une commande à part'
+            : 'Pas commandable pour l’instant'
+          const texte = p.type === 'vide'
+            ? `« ${p.nomArticle} » se retire au plus tôt ${dateLongue}.`
+            : p.type === 'tout'
+              ? `« ${p.nomArticle} » se retire au plus tôt ${dateLongue}. Tu peux retirer tout ton panier ce jour-là, ou terminer d’abord ta commande actuelle et commander « ${p.nomArticle} » à part.`
+              : p.type === 'incompatible'
+                ? `« ${p.nomArticle} » se retire au plus tôt ${dateLongue}, mais « ${p.nom || 'un article de ton panier'} » ne se retire pas ce jour-là. Termine d’abord ta commande actuelle, puis commande « ${p.nomArticle} » à part.`
+                : `« ${p.nomArticle} » ne se retire dans aucun des jours proposés pour le moment.`
+          const choix = p.type === 'vide' || p.type === 'tout'
+          const btn = { width: '100%', padding: '0.8rem', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }
+          return (
+            <div role="dialog" aria-modal="true" aria-labelledby="proposition-jour-titre"
+              onClick={() => setPropositionJour(null)}
+              style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(22,6,54,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ width: '100%', maxWidth: 380, background: '#fff', borderRadius: 18, padding: '22px 20px 18px', boxShadow: '0 12px 40px rgba(22,6,54,0.25)', fontFamily: '"DM Sans", sans-serif' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <span style={{ width: 34, height: 34, borderRadius: 10, background: '#FFFBEB', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B45309" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="5" width="18" height="16" rx="2"/>
+                      <path d="M3 9h18M8 3v4M16 3v4"/>
+                    </svg>
+                  </span>
+                  <h2 id="proposition-jour-titre" style={{ fontSize: '1.05rem', fontWeight: 900, color: T.ink, margin: 0, letterSpacing: '-0.3px' }}>{titre}</h2>
+                </div>
+                <p style={{ fontSize: '0.9rem', color: T.ink, lineHeight: 1.5, margin: '0 0 16px' }}>{texte}</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {choix && (
+                    <button onClick={accepterProposition} autoFocus
+                      style={{ ...btn, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff' }}>
+                      {p.type === 'vide' ? `Commander pour ${quand}` : `Tout retirer ${quand}`}
+                    </button>
+                  )}
+                  <button onClick={() => setPropositionJour(null)} autoFocus={!choix}
+                    style={choix
+                      ? { ...btn, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.main }
+                      : { ...btn, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff' }}>
+                    {p.type === 'vide' ? 'Annuler' : p.type === 'tout' ? garder : 'Compris'}
+                  </button>
+                </div>
               </div>
-              <p style={{ fontSize: '0.9rem', color: T.ink, lineHeight: 1.5, margin: '0 0 16px' }}>{refusDelai}</p>
-              <button onClick={() => setRefusDelai(null)} autoFocus
-                style={{ width: '100%', padding: '0.8rem', border: 'none', borderRadius: 100, fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif' }}>
-                Compris
-              </button>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {etape === 2 && peutCommander && nbArticlesPanier() > 0 && montrerFlottant && (
           <button onClick={scrollVersPanier}
@@ -4668,7 +4818,7 @@ export default function CommanderSlug() {
                       <div className="articles-grid">
                         {artsDecat.map(a => (
                           <div key={a.id}>
-                            <ArticleRow article={a} panier={panier} optionsParArticle={optionsParArticle}
+                            <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
                               ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                               stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
                               onCommanderDemain={commanderPourJour}
@@ -4702,7 +4852,7 @@ export default function CommanderSlug() {
                     <div className="articles-grid">
                       {sansCat.map(a => (
                         <div key={a.id}>
-                          <ArticleRow article={a} panier={panier} optionsParArticle={optionsParArticle}
+                          <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
                             onCommanderDemain={commanderPourJour}
@@ -4742,7 +4892,7 @@ export default function CommanderSlug() {
                       onAjouter={incrementerPanier}
                       total={totalPanier()}
                       prixDeLigne={prixLigne}
-                      blocage={delaisMelanges}
+                      blocage={blocagePanier}
                       onValider={() => allerEtape(3)}
                       getStockMax={getStockMax}
                       labelValider={estDetail
@@ -5127,30 +5277,6 @@ export default function CommanderSlug() {
                   <div style={{ flex: 1, height: 1, background: T.pale }}/>
                 </div>
 
-                {/* ⚠️ L'AVERTISSEMENT VIT ICI, PAS DANS UNE MODALE À L'AJOUT.
-                    Décision arrêtée avec Alex : une fenêtre qui surgit quand on
-                    clique sur la tarte interrompt la commande pour une règle
-                    qui ne gêne pas encore. C'est au moment de CHOISIR SON
-                    CRÉNEAU que l'information sert, parce que c'est là que le
-                    Yopper se demande pourquoi ce matin n'est pas proposé.
-
-                    Et elle DIT L'ÉTAT, PAS NOTRE GESTE : on n'écrit pas « nous
-                    avons masqué des créneaux », on dit quand il peut venir. */}
-                {delaiPanier.minutes > 0 && (
-                  <p style={{ fontSize: '0.8rem', fontWeight: 700, color: T.deep, background: T.pale, border: `1.5px solid ${T.main}33`, borderRadius: 12, padding: '0.625rem 0.75rem', margin: '0 0 0.875rem' }}>
-                    {avertissementDelai({
-                      minutes: delaiPanier.minutes,
-                      nom: delaiPanier.nom,
-                      moment: premierRetraitPanier
-                        ? libelleMoment({
-                            jour: premierRetraitPanier.jour,
-                            heure: premierRetraitPanier.creneau?.heure_debut,
-                            aujourdhui: jourLocalISO(new Date()),
-                          })
-                        : null,
-                    })}
-                  </p>
-                )}
 
                 {/* 🔴 CELUI-CI N'EST PAS UN AVERTISSEMENT, C'EST UN REFUS. Le
                     panier n'a aucun moment de retrait possible, et le laisser

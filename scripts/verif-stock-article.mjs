@@ -132,7 +132,9 @@ const code = (f) => sansProse(lire(f))
   v('🔴 plus de « dès » ni de « Prix sur demande » sur la fiche', !/>\s*dès\s*</.test(fiche) && !/Prix sur demande/.test(fiche))
   v('🔴 en vitrine, le sélecteur d’ACHAT des versions ne s’ouvre pas', /\{showOptions && hasVariantes && !article\.est_vitrine && \(\s*<VariantesSelector/.test(fiche))
   v('en vitrine, les versions se lisent', /\{showOptions && hasVariantes && article\.est_vitrine && \(\s*<VariantesVitrine/.test(fiche) && /function VariantesVitrine\(/.test(fiche))
-  v('🔴 en vitrine, aucune pastille de stock', /\{hasVariantes && !article\.est_vitrine \? \(\(\) => \{/.test(fiche) && /\{!hasVariantes && stockGere && !article\.est_vitrine && \(\(\) => \{/.test(fiche))
+  // ⚠️ RÉORIENTÉE LE 07/10 : `!etatJour` suit sur les deux pastilles (l'article
+  // hors du jour choisi a sa propre ligne). La condition vitrine reste visée.
+  v('🔴 en vitrine, aucune pastille de stock', /\{hasVariantes && !article\.est_vitrine && !etatJour \? \(\(\) => \{/.test(fiche) && /\{!hasVariantes && stockGere && !article\.est_vitrine && !etatJour && \(\(\) => \{/.test(fiche))
   v('la mention du métier arrive aux deux cartes', (fiche.match(/mentionVitrineTexte=\{mentionVitrine\(commercant\)\}/g) || []).length === 2)
   v('la fenêtre de l’article dit la mention et montre les versions', /\{mentionVitrine\(commercant\)\}/.test(fiche) && /\{hasVar && <VariantesVitrine article=\{article\} variantes=\{variantes\}\/>\}/.test(fiche))
   v('🔴 rien ne s’achète en vitrine depuis la fenêtre de l’article', /\{hasVar && onAjouterVariante && !article\.est_vitrine \? \(/.test(fiche) && /\(!hasVar && onAjouter && !article\.est_vitrine\) \? \(/.test(fiche))

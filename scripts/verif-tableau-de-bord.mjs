@@ -367,7 +367,8 @@ const verifie = (nom, cond, detail = '') => {
     /setBlocagesCreneaux\(data\.blocagesCreneaux \|\| \[\]\)/.test(fiche),
     'l\'état resterait vide, le marquage serait inerte')
   verifie('🔴 et ils sont passés EN CLAIR au premier calcul',
-    /buildJoursDispos\(data\.commercant, data\.creneaux, data\.fermetures, data\.chargeCreneaux \|\| \{\}, data\.blocagesCreneaux \|\| \[\]\)/.test(fiche),
+    // ⚠️ RÉORIENTÉE LE 07/10 : la longueur du calendrier suit (`longueurCal`).
+    /buildJoursDispos\(data\.commercant, data\.creneaux, data\.fermetures, data\.chargeCreneaux \|\| \{\}, data\.blocagesCreneaux \|\| \[\], longueurCal\)/.test(fiche),
     'setState ne vaut qu\'au rendu suivant, le calcul lirait l\'ancien tableau vide')
   verifie('🔴 et le calendrier se recalcule quand ils changent',
     /\}, \[commercant, creneaux, fermetures, chargeCreneaux, blocagesCreneaux\]\)/.test(fiche),
@@ -383,7 +384,7 @@ const verifie = (nom, cond, detail = '') => {
     /from\('creneaux_blocages'\)\.select\('creneau_id, livraison_creneau_id, date_blocage'\)/.test(fiche),
     'le motif partirait dans le navigateur du client')
   verifie('🔴 I7 la fiche ferme aussi les TOURNÉES',
-    /construireJoursDispos\(data\.commercant, data\.livraisonCreneaux \|\| \[\], data\.fermetures, data\.chargeLivraison \|\| \{\}, data\.blocagesLivraison \|\| \[\]\)/.test(fiche)
+    /construireJoursDispos\(data\.commercant, data\.livraisonCreneaux \|\| \[\], data\.fermetures, data\.chargeLivraison \|\| \{\}, data\.blocagesLivraison \|\| \[\], longueurCal\)/.test(fiche)
       && /blocagesLivraison: \(blocagesCren \|\| \[\]\)\s*\.filter\(b => b\.livraison_creneau_id\)/.test(fiche),
     'une tournée fermée resterait proposée au client')
 

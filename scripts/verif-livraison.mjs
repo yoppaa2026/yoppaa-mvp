@@ -2001,8 +2001,10 @@ verifier('et range la commande du bon côté',
   const blocSlots = fiche.slice(fiche.indexOf('const slotsLivraison ='), fiche.indexOf('const cpDansZone'))
   verifier('🔴 C5 les tournées affichées passent par creneauCommandable',
     /creneauCommandable\(slot, \{ dateStr, instantDebut: brusselsInstant \}\)/.test(blocSlots))
-  verifier('C5 et par le délai du panier',
-    /debut\.getTime\(\) >= pretLivraison\.getTime\(\)/.test(blocSlots))
+  // ⚠️ RÉORIENTÉE LE 07/10 : le délai se compte en JOURS (Alex) ; une tournée
+  // n'est proposée que si tout le panier se livre ce jour-là.
+  verifier('C5 et par le jour du panier (délai en jours, jours de vente)',
+    /return panierVaCeJour\(dateStr\)/.test(blocSlots))
   verifier('🔴 C5 un choix de tournée qui n’est plus proposée n’allume pas le paiement',
     // ⚠️ REPOINTÉE LE 06/10 : `&& minimumLivraison().ok` suit désormais.
     /cpDansZone && choixLivraisonValable && minimumLivraison\(\)\.ok\)/.test(fiche) && !/cpDansZone && creneauLivraisonChoisi\b/.test(fiche))

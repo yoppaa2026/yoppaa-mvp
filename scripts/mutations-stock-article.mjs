@@ -73,7 +73,8 @@ const MUTATIONS = [
   { nom: '🔴 en vitrine, les versions s achètent',
     fichier: FICHE, de: '      {showOptions && hasVariantes && !article.est_vitrine && (', vers: '      {showOptions && hasVariantes && (' },
   { nom: '⚠️ en vitrine, une pastille « Épuisé » s affiche',
-    fichier: FICHE, de: '          {!hasVariantes && stockGere && !article.est_vitrine && (() => {', vers: '          {!hasVariantes && stockGere && (() => {' },
+    // ⚠️ Ancre reorientee le 07/10 : `!etatJour` suit (l article hors du jour choisi).
+    fichier: FICHE, de: '          {!hasVariantes && stockGere && !article.est_vitrine && !etatJour && (() => {', vers: '          {!hasVariantes && stockGere && !etatJour && (() => {' },
   { nom: '🔴 la fenêtre de l article vend en vitrine',
     fichier: FICHE, de: '          ) : (!hasVar && onAjouter && !article.est_vitrine) ? (', vers: '          ) : (!hasVar && onAjouter) ? (' },
   { nom: '🔴 « Sur demande » revient sur la fiche des rendez-vous',

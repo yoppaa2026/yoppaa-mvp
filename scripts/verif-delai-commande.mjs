@@ -22,8 +22,10 @@ import {
   premierCreneauPossible, premierJourBoutique,
   libelleDuree, mentionArticle, libelleMoment, avertissementDelai,
   DELAIS_PROPOSES, choixDeDelai, libelleChoixDelai,
-  refusAjoutDelai, refusDelaisMelanges, mentionCarte, delaiDeLOffre,
+  delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier,
+  libelleJoursVente, mentionDisponibilite, propositionPourArticle,
 } from '../lib/delai-commande.js'
+import { jourPlus as jourPlusBanc } from '../lib/statut-commerce.js'
 import { brusselsInstant } from '../lib/timezone.js'
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
@@ -102,53 +104,99 @@ egal('🔴 un invendu ne tire pas le panier',
   delaiDuPanier([BAGUETTE, TARTE_INVENDUE]), { minutes: 0, nom: null })
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 2 BIS. UN SEUL DÉLAI PAR COMMANDE (Alex, 10/09, tranché le 07/10)
+// 2 BIS. LE DÉLAI EN JOURS DE CALENDRIER, ET LE JOUR CHOISI (Alex, 07/10)
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// 🔴 LA RÈGLE « LE PLUS CONTRAIGNANT GAGNE » EST REMPLACÉE. La tarte de 48 h
-// ne part plus avec la baguette du jour : deux commandes. Le maximum de la
-// section 2 reste juste, parce qu'un panier n'a plus qu'un délai.
+// 🔴 LES CAS D'ALEX, EXÉCUTÉS. Le pain longue fermentation se vend samedi et
+// dimanche, à J+2 : commandé jeudi pour samedi, vendredi pour dimanche, et
+// dès lundi pour samedi. Semaine du lundi 12 au dimanche 18 octobre 2026.
 {
-  const PAIN = { nom: 'Pain gris', delai_minutes: 0 }
-  const GATEAU = { nom: 'Gâteau d’anniversaire', delai_minutes: 1440 }
-  const TARTE2 = { nom: 'Tarte au riz', delai_minutes: 2880 }
+  const LUN = '2026-10-12', MAR = '2026-10-13', JEU = '2026-10-15', VEN = '2026-10-16'
+  const SAM = '2026-10-17', DIM = '2026-10-18', DIM_AVANT = '2026-10-11', SAM_SUIVANT = '2026-10-24'
+  const SEMAINE = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi']
+  const PLF = { delaiJours: 2, indispo: SEMAINE }
 
-  // À L'AJOUT
-  verifier('un panier vide accepte tout', refusAjoutDelai({}, TARTE) === null)
-  verifier('deux articles du jour vont ensemble', refusAjoutDelai([BAGUETTE], PAIN) === null)
-  verifier('🔴 deux tartes au même délai vont ensemble', refusAjoutDelai([TARTE], TARTE2) === null)
+  // LE DÉLAI EN JOURS
+  egal('2 jours = J+2', delaiEnJours({ delai_minutes: 2880 }), 2)
+  egal('1 jour = J+1', delaiEnJours({ delai_minutes: 1440 }), 1)
+  egal('🔴 moins d’un jour vaut zéro (les heures sont à la clôture du créneau)', delaiEnJours({ delai_minutes: 60 }), 0)
+  egal('36 h hors liste s’arrondit à 2 jours', delaiEnJours({ delai_minutes: 2160 }), 2)
+  egal('🔴 l’invendu n’a pas de délai', delaiEnJours(TARTE_INVENDUE), 0)
+  egal('rien ne vaut zéro', delaiEnJours(null), 0)
+  egal('les jours de vente se lisent sur les réglages du jour',
+    joursIndisponibles({ lundi: { actif: false }, samedi: { actif: true }, mardi: { stock: 4 } }), ['lundi'])
+
+  // LE JOUR CHOISI
+  verifier('🔴 lundi pour samedi : le pain passe (J+5)', refusDuJour({ ...PLF, jour: SAM, aujourdhui: LUN }) === null)
+  verifier('🔴 jeudi pour samedi : J+2 exact, à n’importe quelle heure', refusDuJour({ ...PLF, jour: SAM, aujourdhui: JEU }) === null)
+  egal('🔴 vendredi pour samedi : trop tard, le plus tôt est dimanche',
+    refusDuJour({ ...PLF, jour: SAM, aujourdhui: VEN }), { raison: 'delai', plancher: DIM })
+  verifier('🔴 vendredi pour dimanche : ça passe', refusDuJour({ ...PLF, jour: DIM, aujourdhui: VEN }) === null)
+  verifier('🔴 samedi pour le samedi suivant : ça passe', refusDuJour({ ...PLF, jour: SAM_SUIVANT, aujourdhui: SAM }) === null)
+  egal('🔴 pas en semaine', refusDuJour({ ...PLF, jour: VEN, aujourdhui: LUN }), { raison: 'jour' })
+  // ⚠️ ALEX : LES FERMETURES NE PROLONGENT PAS LE J+n. Fermé le lundi, la
+  // tarte commandée dimanche se retire mardi.
+  verifier('🔴 les fermetures ne prolongent pas le délai (dimanche → mardi à J+2)',
+    refusDuJour({ delaiJours: 2, jour: MAR, aujourdhui: DIM_AVANT }) === null)
+  verifier('un article sans règle passe tous les jours', refusDuJour({ jour: LUN, aujourdhui: LUN }) === null)
+
+  // LE CALENDRIER S'ALLONGE AVEC LE CATALOGUE
+  egal('sans article particulier, l’horizon du commerce', longueurCalendrier({ horizon: 2, articles: [{ delaiJours: 0, indispo: [] }] }), 2)
+  egal('🔴 un pain à J+2 ouvre une semaine APRÈS son délai (9 jours)', longueurCalendrier({ horizon: 2, articles: [PLF] }), 9)
+  egal('un article du seul dimanche ouvre 7 jours', longueurCalendrier({ horizon: 2, articles: [{ delaiJours: 0, indispo: ['lundi'] }] }), 7)
+  egal('un horizon plus long reste', longueurCalendrier({ horizon: 10, articles: [PLF] }), 10)
+  egal('un horizon illisible vaut 2', longueurCalendrier({ horizon: null }), 2)
+  // 🔴 « 7 JOURS » NE SUFFISAIT PAS : le samedi, le samedi suivant est J+7.
+  // Quel que soit le jour où l'on commande, un samedi doit être proposé.
   {
-    const r = refusAjoutDelai({ b: BAGUETTE }, TARTE)
-    verifier('🔴 la tarte de 48 h ne rejoint pas la baguette', r !== null)
-    verifier('et le refus nomme la tarte ET la baguette', /Tarte aux pommes/.test(r || '') && /Baguette/.test(r || ''), String(r))
-    verifier('et dit la durée et le geste', /2 jours à l'avance/.test(r || '') && /à part/.test(r || ''), String(r))
+    const n = longueurCalendrier({ horizon: 2, articles: [PLF] })
+    const manques = []
+    for (let i = 0; i < 7; i++) {
+      const auj = jourPlusBanc(LUN, i)
+      const jours = Array.from({ length: n }, (_, k) => jourPlusBanc(auj, k))
+      if (!jours.some(j => refusDuJour({ ...PLF, jour: j, aujourdhui: auj }) === null && new Date(`${j}T12:00:00Z`).getUTCDay() === 6)) manques.push(auj)
+    }
+    egal('🔴 chaque jour de la semaine, un samedi reste commandable', manques, [])
   }
-  verifier('🔴 ni la baguette la tarte (dans l’autre sens)', refusAjoutDelai([TARTE], BAGUETTE) !== null)
-  verifier('🔴 ni 24 h avec 48 h', refusAjoutDelai([GATEAU], TARTE) !== null)
-  // ⚠️ LE DÉLAI EFFECTIF : l'invendu est déjà fait, il part avec le pain.
-  verifier('🔴 l’invendu (délai annulé) rejoint la baguette', refusAjoutDelai([BAGUETTE], TARTE_INVENDUE) === null)
-  verifier('🔴 mais pas la tarte à 48 h', refusAjoutDelai([TARTE], TARTE_INVENDUE) !== null)
-  verifier('une ligne absente ne refuse rien', refusAjoutDelai([TARTE], null) === null)
 
-  // LE PANIER DÉJÀ MÉLANGÉ (retour de Stripe, fiche rendez-vous, onglet d'hier)
-  verifier('un panier d’un seul délai passe', refusDelaisMelanges([TARTE, TARTE2]) === null)
-  verifier('un panier d’un article passe', refusDelaisMelanges([TARTE]) === null)
-  {
-    const r = refusDelaisMelanges({ a: BAGUETTE, b: TARTE })
-    verifier('🔴 un panier mélangé est refusé, objet de la fiche compris', r !== null)
-    verifier('et le refus nomme les deux articles', /Baguette/.test(r || '') && /Tarte aux pommes/.test(r || ''), String(r))
-  }
-  verifier('🔴 l’ordre du panier ne change pas le verdict', refusDelaisMelanges([TARTE, BAGUETTE, TARTE2]) !== null)
+  // CE QUE LA CARTE DIT
+  egal('les jours de vente du week-end', libelleJoursVente(SEMAINE), 'Samedi et dimanche')
+  egal('tous les jours : rien à dire', libelleJoursVente([]), null)
+  egal('une suite de jours', libelleJoursVente(['lundi', 'dimanche']), 'Du mardi au samedi')
+  egal('un seul jour', libelleJoursVente(['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'dimanche']), 'Le samedi')
+  egal('des jours épars', libelleJoursVente(['mardi', 'jeudi', 'samedi', 'dimanche']), 'Lundi, mercredi et vendredi')
+  egal('🔴 la carte du pain dit la date limite, comme au comptoir', mentionDisponibilite(PLF),
+    'Samedi et dimanche seulement · commande au plus tard jeudi pour samedi, vendredi pour dimanche')
+  egal('un délai seul dit la durée', mentionDisponibilite({ delaiJours: 2 }), 'Commande 2 jours à l\'avance')
+  egal('des jours seuls', mentionDisponibilite({ indispo: SEMAINE }), 'Samedi et dimanche seulement')
+  egal('ni délai ni jours : la carte reste nue', mentionDisponibilite({}), null)
+  egal('🔴 une semaine de délai ne dit pas « samedi pour samedi »',
+    mentionDisponibilite({ delaiJours: 7, indispo: SEMAINE }), 'Samedi et dimanche seulement · commande 7 jours à l\'avance')
+  egal('J+1 le samedi : la veille', mentionDisponibilite({ delaiJours: 1, indispo: ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'dimanche'] }),
+    'Le samedi seulement · commande au plus tard vendredi pour samedi')
 
-  // LA CARTE, AVANT LE CLIC
-  egal('panier vide : la mention habituelle', mentionCarte(2880, {}), 'Commande 2 jours à l\'avance')
-  egal('panier vide, article du jour : rien', mentionCarte(0, {}), null)
-  egal('même délai : la mention habituelle', mentionCarte(2880, [TARTE2]), 'Commande 2 jours à l\'avance')
-  egal('🔴 la tarte, panier du jour : commande séparée',
-    mentionCarte(2880, [BAGUETTE]), 'Commande séparée (2 jours à l\'avance) : ton panier contient des articles du jour')
-  egal('🔴 la baguette, panier à 48 h : commande séparée',
-    mentionCarte(0, [TARTE]), 'Commande séparée : ton panier se commande 2 jours à l\'avance')
-  egal('l’invendu dans le panier compte comme du jour', mentionCarte(0, [TARTE_INVENDUE]), null)
+  // CE QUE L'AJOUT PROPOSE (Alex : « je dois pouvoir dire, je suis d'accord
+  // de les prendre en même temps que le reste »)
+  const regle = l => ({ delaiJours: l.d || 0, indispo: l.off || [] })
+  const CAL = Array.from({ length: 9 }, (_, k) => jourPlusBanc(LUN, k))
+  const PAIN = { nom: 'Pain longue fermentation', d: 2, off: SEMAINE }
+  const CROISSANT = { nom: 'Croissant' }
+  const PAIN_SEMAINE = { nom: 'Pain de semaine', off: ['samedi', 'dimanche'] }
+  const propose = (candidat, panier, jourChoisi) => propositionPourArticle({ candidat, panier, jourChoisi, aujourdhui: LUN, jours: CAL, regle })
+  egal('le pain un samedi choisi : il va', propose(PAIN, [], SAM), { type: 'ok' })
+  egal('🔴 panier vide, lundi : on propose samedi', propose(PAIN, [], LUN), { type: 'vide', jour: SAM })
+  egal('🔴 croissants du jour au panier : « Tout retirer samedi »', propose(PAIN, [CROISSANT], LUN), { type: 'tout', jour: SAM })
+  egal('🔴 un pain de semaine au panier : on nomme ce qui bloque',
+    propose(PAIN, [PAIN_SEMAINE], LUN), { type: 'incompatible', jour: SAM, nom: 'Pain de semaine' })
+  egal('le panier ne suit que le dimanche : on propose dimanche',
+    propose(PAIN, [{ nom: 'Brioche du dimanche', off: ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'] }], LUN), { type: 'tout', jour: DIM })
+  egal('un article vendu nulle part dans le calendrier', propose({ nom: 'X', off: [...SEMAINE, 'samedi', 'dimanche'] }, [], LUN), { type: 'aucun' })
+  // 🔴 L'ORDRE DES CLICS NE CHANGE RIEN (cas 4 et 6 du tableau) : samedi
+  // choisi, le croissant va, qu'il y ait du pain au panier ou non.
+  egal('🔴 croissants seuls pour samedi, commandés lundi : ils vont', propose(CROISSANT, [], SAM), { type: 'ok' })
+  egal('🔴 et avec le pain au panier : pareil', propose(CROISSANT, [PAIN], SAM), { type: 'ok' })
+  egal('🔴 la baguette part avec la tarte samedi : plus de refus « deux délais »',
+    propose({ nom: 'Baguette' }, [{ nom: 'Tarte', d: 2 }], SAM), { type: 'ok' })
 
   // LE DUO
   egal('🔴 un duo prend le plus long de ses deux articles',
@@ -156,6 +204,7 @@ egal('🔴 un invendu ne tire pas le panier',
   egal('un lot n’a qu’un article', delaiDeLOffre({ delai_minutes: 1440 }), 1440)
   egal('rien d’illisible ne crée un délai', delaiDeLOffre(null, { delai_minutes: 'x' }), 0)
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 3. L'INVENDU NE SE REPORTE PAS
@@ -476,28 +525,48 @@ egal('sans nom d’article, la phrase tient debout',
   const FICHE = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
   const BORD = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
 
-  // 🔴 LA MENTION SUR LA CARTE PRODUIT. Sans elle, le Yopper découvre les 48 h
-  // au moment de choisir son créneau, après avoir rempli son panier.
-  // ⚠️ RÉORIENTÉE LE 07/10 : la carte lit maintenant le PANIER aussi
-  // (`mentionCarte`), pour dire « Commande séparée » avant le clic.
-  verifier('🔴 la carte produit affiche la mention du délai, panier compris',
-    /const mention = mentionCarte\(article\.delai_minutes, panier\)/.test(FICHE) && /\{mention\}/.test(FICHE))
+  // 🔴 LA MENTION SUR LA CARTE : les jours de vente et la date limite
+  // (07/10), calculées par la fiche et passées à la carte.
+  verifier('🔴 la carte affiche la mention des jours et de la date limite',
+    /mentionDispo=\{mentionDisponibilite\(regleArticle\(a\)\)\}/.test(FICHE) && /const mention = mentionDispo/.test(FICHE) && /\{mention\}/.test(FICHE))
   // ⚠️ RIEN EN VITRINE : rien ne s'y commande, donc rien n'y attend.
   verifier('et pas en vitrine',
-    /if \(article\.est_vitrine \|\| modeVitrine\) return null\s*const mention = mentionCarte/.test(FICHE))
+    /if \(article\.est_vitrine \|\| modeVitrine\) return null\s*const mention = mentionDispo/.test(FICHE))
+  verifier('🔴 les deux listes d’articles passent la mention ET l’état du jour',
+    (FICHE.match(/mentionDispo=\{mentionDisponibilite\(regleArticle\(a\)\)\} etatJour=\{etatJourArticle\(a\)\}/g) || []).length === 2)
 
-  // 🔴 UN SEUL DÉLAI PAR COMMANDE (07/10) : refus à l'ajout, partout où un
-  // article entre au panier, et panier déjà mélangé bloqué.
-  verifier('🔴 l’ajout d’un article passe par le refus du délai, avant la variante',
-    /function ajouterAuPanier\(article, options = null, variante = null\) \{\s*if \(refuseParDelai\(article\)\) return\s*if \(variante\)/.test(FICHE))
-  verifier('🔴 l’ajout d’un lot ou d’un duo aussi',
-    /const delaiOffre = delaiDuDeal\(deal, article\)\s*if \(refuseParDelai\(\{ nom: deal\.titre, delai_minutes: delaiOffre,/.test(FICHE))
-  verifier('le refus se lit sur le panier en cours et s’affiche',
-    /const refus = refusAjoutDelai\(panier, ligne\)\s*if \(refus\) setRefusDelai\(refus\)/.test(FICHE) && /\{refusDelai && \(/.test(FICHE))
-  verifier('🔴 un panier déjà mélangé grise « Continuer »',
-    /blocage=\{delaisMelanges\}/.test(FICHE) && /disabled=\{!!blocage\}/.test(FICHE) && /onClick=\{\(\) => \{ if \(!blocage\) onValider\(\) \}\}/.test(FICHE))
+  // 🔴 LE JOUR CHOISI EST L'ACCORD DU CLIENT (Alex, 07/10).
+  verifier('🔴 l’ajout d’un article passe par le jour choisi, avant la variante',
+    /function ajouterAuPanier\(article, options = null, variante = null\) \{\s*if \(refuseParDelai\(article, \{ article, options, variante \}\)\) return\s*if \(variante\)/.test(FICHE))
+  verifier('🔴 l’ajout d’un lot ou d’un duo aussi, avec l’article pour ses jours de vente',
+    /const delaiOffre = delaiDuDeal\(deal, article\)\s*if \(refuseParDelai\(\{ id: article\.id, nom: deal\.titre, delai_minutes: delaiOffre,/.test(FICHE))
+  verifier('la proposition se calcule sur le panier, le jour choisi et le calendrier',
+    /const p = propositionPourArticle\(\{\s*candidat: ligne, panier, jourChoisi: jour, aujourdhui: aujourdhuiISO\(\),\s*jours: joursDuCalendrier\(\), regle: regleArticle,/.test(FICHE)
+    && /if \(p\.type === 'ok'\) return false\s*setPropositionJour/.test(FICHE))
+  verifier('🔴 en expédition (pas de jour), rien n’est refusé',
+    /const jour = jourDuPanier\(\)\s*if \(!jour\) return false/.test(FICHE)
+    && /if \(estDetail\) return modeBoutiqueEff === 'retrait' \? jourRetraitBoutique : null/.test(FICHE))
+  verifier('🔴 les jours de vente se lisent sur les réglages du jour de l’article',
+    /indispo: joursIndisponibles\(stocksJour\?\.\[ligne\?\.id\]\)/.test(FICHE))
+  verifier('🔴 accepter change le jour, puis rejoue l’ajout au rendu suivant',
+    /passerAuJour\(p\.jour\)\s*if \(p\.rejouer\) setAjoutEnAttente\(p\.rejouer\)/.test(FICHE)
+    && /if \(a\.deal\) ajouterDealAuPanier\(a\.deal, a\.article\)\s*else ajouterAuPanier\(a\.article, a\.options \|\| null, a\.variante \|\| null\)/.test(FICHE))
+  verifier('la fenêtre s’affiche, avec ses deux choix',
+    /\{propositionJour && \(\(\) => \{/.test(FICHE) && /<button onClick=\{accepterProposition\}/.test(FICHE))
+  verifier('🔴 un panier qui ne va pas avec le jour grise « Continuer »',
+    /blocage=\{blocagePanier\}/.test(FICHE) && /disabled=\{!!blocage\}/.test(FICHE) && /onClick=\{\(\) => \{ if \(!blocage\) onValider\(\) \}\}/.test(FICHE))
   verifier('et ramène au panier s’il arrive à l’étape du retrait',
-    /if \(etape === 3 && delaisMelanges\) allerEtape\(2\)/.test(FICHE))
+    /if \(etape === 3 && blocagePanier\) allerEtape\(2\)/.test(FICHE))
+  verifier('🔴 les tournées ne sont proposées que si tout le panier va ce jour-là',
+    /if \(!creneauCommandable\(slot, \{ dateStr, instantDebut: brusselsInstant \}\)\.ok\) return false\s*return panierVaCeJour\(dateStr\)/.test(FICHE))
+
+  // 🔴 LE CALENDRIER S'ALLONGE AVEC LE CATALOGUE, lu sur TOUT le catalogue.
+  verifier('🔴 le calendrier de retrait et de livraison prend la longueur du catalogue',
+    /const longueurCal = longueurDuCatalogue\(data\.commercant, data\.articles, data\.stocksJour\)/.test(FICHE)
+    && /data\.blocagesCreneaux \|\| \[\], longueurCal\)/.test(FICHE) && /data\.blocagesLivraison \|\| \[\], longueurCal\)/.test(FICHE))
+  verifier('et la boutique aussi', /horizon: Math\.max\(7, longueurDuCatalogue\(commercant, articles, stocksJour\)\)/.test(FICHE))
+  verifier('🔴 la longueur passe vraiment dans le calendrier',
+    /const horizon = Number\.isFinite\(Number\(longueur\)\) && Number\(longueur\) >= 1/.test(FICHE))
 
   // 🔴 L'HEURE BELGE DES DEUX CÔTÉS. Cet écran fabriquait son instant dans le
   // fuseau de la MACHINE : il aurait montré des créneaux que le serveur refuse.
@@ -505,16 +574,11 @@ egal('sans nom d’article, la phrase tient debout',
     /creneauCommandable\(cr, \{ dateStr, instantDebut: brusselsInstant \}\)/.test(FICHE))
   verifier('🔴 et plus aucun instant fabriqué à la main dans le sélecteur',
     !/x\.setHours\(hh, mm \|\| 0, 0, 0\)/.test(FICHE))
+  // ⚠️ RETIRÉES LE 07/10 : « le délai du panier filtre les créneaux » et
+  // « l'avertissement nomme le coupable ». Le délai se compte en JOURS et le
+  // jour est choisi avant le panier : aucune heure n'est plus à filtrer, et
+  // l'article qui ne va pas est nommé à l'ajout et au panier (gardes au-dessus).
 
-  // 🔴 LE DÉLAI DU PANIER ÉCARTE LES CRÉNEAUX TROP PROCHES.
-  verifier('🔴 le délai du panier filtre les créneaux',
-    /debut\.getTime\(\) >= pret\.getTime\(\)/.test(FICHE))
-
-  // 🔴 L'AVERTISSEMENT NOMME LE COUPABLE, et le refus de mélange s'affiche.
-  verifier('🔴 le sélecteur affiche l’avertissement du délai',
-    /avertissementDelai\(\{/.test(FICHE))
-  verifier('et il lui passe le nom de l’article coupable',
-    /nom: delaiPanier\.nom/.test(FICHE))
   verifier('🔴 le refus de mélange s’affiche',
     /\{refusMelange &&/.test(FICHE))
 
@@ -627,15 +691,17 @@ egal('sans nom d’article, la phrase tient debout',
     refusServeur !== null, String(refusServeur))
   verifier('et son message nomme l’article', /Tarte aux pommes/.test(refusServeur || ''), String(refusServeur))
 
-  // 🔴 UN SEUL DÉLAI (07/10), VU SUR LES LIGNES SERVEUR : la baguette et la
-  // tarte, construites en base, sont refusées ensemble ; l'invendu et la
-  // baguette passent.
+  // 🔴 LE JOUR, VU SUR LES LIGNES SERVEUR (07/10) : la tarte construite en
+  // base porte ses 2 jours, et la règle du serveur la refuse pour aujourd'hui,
+  // l'accepte pour le surlendemain. La baguette va tous les jours.
   {
-    const r = refusDelaisMelanges(simple.lignes)
-    verifier('🔴 le serveur refuse baguette + tarte à 48 h', r !== null, String(r))
-    verifier('et nomme les deux, lus sous `article_nom`', /Baguette/.test(r || '') && /Tarte aux pommes/.test(r || ''), String(r))
-    const ok2 = construire([{ id: 'a1', quantite: 1 }, { id: 'a2', quantite: 1, deal_id: 'd2' }], [INVENDU])
-    verifier('🔴 l’invendu et la baguette passent ensemble', ok2.ok && refusDelaisMelanges(ok2.lignes) === null)
+    const parNom = Object.fromEntries(simple.lignes.map(l => [l.article_nom, l]))
+    egal('🔴 la ligne serveur de la tarte se lit en jours', delaiEnJours(parNom['Tarte aux pommes']), 2)
+    egal('🔴 refusée pour aujourd’hui, avec son premier jour',
+      refusDuJour({ delaiJours: delaiEnJours(parNom['Tarte aux pommes']), jour: MARDI, aujourdhui: MARDI }), { raison: 'delai', plancher: JEUDI })
+    verifier('acceptée pour jeudi (J+2)',
+      refusDuJour({ delaiJours: delaiEnJours(parNom['Tarte aux pommes']), jour: JEUDI, aujourdhui: MARDI }) === null)
+    verifier('🔴 la baguette part avec elle jeudi', refusDuJour({ delaiJours: delaiEnJours(parNom.Baguette), jour: JEUDI, aujourdhui: MARDI }) === null)
   }
 
   // ⚠️ LES COLONNES DOIVENT ÊTRE DEMANDÉES, sans quoi tout ce qui précède lit
@@ -656,25 +722,39 @@ egal('sans nom d’article, la phrase tient debout',
 {
   const ROUTE = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-commande/route.js', import.meta.url), 'utf8'))
 
-  verifier('🔴 la route calcule le délai du panier',
-    /delaiDuPanier\(lignes\)/.test(ROUTE))
-  verifier('🔴 elle refuse le mélange avant le paiement',
+  verifier('🔴 elle refuse le mélange avec l’invendu avant le paiement',
     /refusDeMelange\(lignes\)/.test(ROUTE) && /refusMelange\)/.test(ROUTE))
-  verifier('🔴 elle refuse deux délais dans la même commande (07/10)',
-    /const refusDelais = refusDelaisMelanges\(lignes\)\s*if \(refusDelais\) \{\s*return NextResponse\.json\(\{ ok: false, error: refusDelais \}, \{ status: 409 \}\)/.test(ROUTE))
+  // 🔴 07/10 : LE DÉLAI EN JOURS, LIGNE PAR LIGNE, au jour choisi.
+  verifier('🔴 elle juge chaque ligne en jours de calendrier au jour de la commande',
+    /for \(const l of lignes\) \{\s*const n = delaiEnJours\(l\)\s*const refus = refusDuJour\(\{ delaiJours: n, jour: date_commande, aujourdhui \}\)\s*if \(refus\?\.raison === 'delai'\) \{/.test(ROUTE))
+  verifier('🔴 partout sauf l’expédition (pas de jour de retrait)',
+    /if \(!estBoutique \|\| estRetraitBoutique\) \{\s*const aujourdhui = jourBruxelles\(\)\s*for \(const l of lignes\)/.test(ROUTE))
+  verifier('et le refus nomme l’article et son premier jour',
+    /se commande \$\{n\} jour\$\{n > 1 \? 's' : ''\} à l'avance : le plus tôt, c'est \$\{libelleMoment\(\{ jour: refus\.plancher, aujourdhui \}\)\}/.test(ROUTE))
+  verifier('🔴 plus de refus « deux délais » ni de compte en minutes',
+    !/refusDelaisMelanges|debutCreneau\.getTime\(\) < pret\.getTime\(\)|premierJourBoutique\(/.test(ROUTE))
   verifier('🔴 elle lit le délai du second article d’un duo, sur CE commerce',
     /\.from\('articles'\)\.select\('id, delai_minutes'\)\s*\.in\('id', seconds\)\.eq\('commercant_id', commercant\.id\)/.test(ROUTE)
     && /l\.delai_minutes = delaiDeLOffre\(\{ delai_minutes: l\.delai_minutes \}, parId\[String\(l\.deal_article2_id\)\]\)/.test(ROUTE))
   verifier('🔴 et une lecture en échec refuse au lieu de vendre pour aujourd’hui',
     /if \(errArts2\) \{\s*return NextResponse\.json/.test(ROUTE))
-  // ⚠️ L'ORDRE COMPTE : le duo doit être corrigé AVANT les refus qui le lisent.
-  verifier('et le duo est corrigé avant que le délai soit lu',
+  // ⚠️ L'ORDRE COMPTE : le duo doit être corrigé AVANT la règle qui le lit.
+  verifier('et le duo est corrigé avant que le délai soit jugé',
     ROUTE.indexOf('l.delai_minutes = delaiDeLOffre(') > 0
-    && ROUTE.indexOf('l.delai_minutes = delaiDeLOffre(') < ROUTE.indexOf('delaiDuPanier(lignes)'))
-  verifier('🔴 elle compare le début du créneau au moment où ce sera prêt',
-    /debutCreneau\.getTime\(\) < pret\.getTime\(\)/.test(ROUTE))
-  verifier('🔴 elle applique le délai en boutique aussi',
-    /premierJourBoutique\(\{/.test(ROUTE) && /date_commande < premier/.test(ROUTE))
+    && ROUTE.indexOf('l.delai_minutes = delaiDeLOffre(') < ROUTE.indexOf('const n = delaiEnJours(l)'))
+  // 🔴 L'HORIZON S'ALLONGE AVEC LE CATALOGUE, lu en entier (pas le panier).
+  verifier('🔴 l’horizon se calcule sur TOUT le catalogue actif, avec ses jours de vente',
+    /supabase\.from\('articles'\)\.select\('id, delai_minutes'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(ROUTE)
+    && /supabase\.from\('article_stock_jour'\)\.select\('article_id, jour_semaine'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', false\)/.test(ROUTE)
+    && /const horizon = longueurCalendrier\(\{\s*horizon: commercant\.horizon_commande,/.test(ROUTE))
+  // 🔴 ET LES JOURS DE VENTE Y ENTRENT : sans eux, un pain du seul samedi sans
+  // délai n'allongerait rien, et samedi serait refusé le lundi.
+  verifier('🔴 les jours de vente de chaque article entrent dans le calcul',
+    /for \(const o of joursOff \|\| \[\]\) \(offParArticle\[o\.article_id\] \|\|= \[\]\)\.push\(o\.jour_semaine\)/.test(ROUTE)
+    && /articles: \(catalogue \|\| \[\]\)\.map\(a => \(\{ delaiJours: delaiEnJours\(a\), indispo: offParArticle\[a\.id\] \|\| \[\] \}\)\)/.test(ROUTE))
+  verifier('🔴 et une lecture du catalogue en échec refuse',
+    /if \(errCat \|\| errOff\) \{\s*return NextResponse\.json/.test(ROUTE))
+
   // ⚠️ L'HORIZON EST UN PLAFOND, le délai un PLANCHER. Les deux manquaient.
   verifier('🔴 elle applique l’horizon du commerçant',
     /commercant\.horizon_commande/.test(ROUTE) && /date_commande > dernier/.test(ROUTE))

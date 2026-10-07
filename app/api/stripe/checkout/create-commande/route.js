@@ -48,7 +48,7 @@ import { commandeDeborde, capaciteDuCreneau, creneauCommandable, STATUTS_OCCUPEN
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
 import { joursRetraitBoutique, estFermeExceptionnellement } from '@/lib/ouverture'
 import { jourPlus } from '@/lib/statut-commerce'
-import { delaiDuPanier, refusDeMelange, refusDelaisMelanges, delaiDeLOffre, pretA, premierJourBoutique, libelleDuree, libelleMoment } from '@/lib/delai-commande'
+import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, libelleMoment } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
 import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
@@ -799,7 +799,6 @@ export async function POST(request) {
         }
       }
 
-      const { minutes: delaiMinutes, nom: articleLent } = delaiDuPanier(lignes)
 
       // 🔴 L'INVENDU NE SE REPORTE PAS. Sa fenêtre ferme ce soir ; mélangé à un
       // article qu'il faut encore préparer, le panier n'a aucun moment de
@@ -811,53 +810,32 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: refusMelange }, { status: 409 })
       }
 
-      // 🔴 UN SEUL DÉLAI PAR COMMANDE (Alex, 10/09, tranché le 07/10), partout :
-      // alimentaire, boutique, expédition. L'écran refuse à l'ajout et grise
-      // « Continuer » ; un onglet d'avant, un panier restauré ou une requête
-      // fabriquée n'y passent pas. C'est ICI que la règle tient.
-      const refusDelais = refusDelaisMelanges(lignes)
-      if (refusDelais) {
-        return NextResponse.json({ ok: false, error: refusDelais }, { status: 409 })
-      }
-
-      if (delaiMinutes > 0 && creneau && !estBoutique) {
-        const debutCreneau = brusselsInstant(date_commande, creneau.heure_debut)
-        const pret = pretA(delaiMinutes)
-        if (debutCreneau && !isNaN(debutCreneau.getTime()) && pret
-            && debutCreneau.getTime() < pret.getTime()) {
-          // ⚠️ LE MESSAGE NOMME L'ARTICLE COUPABLE. « Ce créneau est trop tôt »
-          // laisserait le Yopper chercher lequel de ses six articles bloque
-          // tout ; il ne cherchera pas, il partira.
-          const quoi = articleLent || 'Un article de ta commande'
-          return NextResponse.json({
-            ok: false,
-            error: `${quoi} demande ${libelleDuree(delaiMinutes)} de préparation. Ce créneau est trop tôt, choisis-en un plus tardif.`,
-            creneau_indisponible: true,
-          }, { status: 409 })
-        }
-      }
-
-      // ⚠️ LA BOUTIQUE N'A PAS DE CRÉNEAU : le Yopper indique un JOUR souhaité.
-      // Le délai décale donc le premier jour possible, et `premierJourBoutique`
-      // sait déjà qu'une préparation finie après la fermeture bascule au
-      // lendemain. Même fonction que l'écran, pour que les deux disent la même
-      // chose.
-      if (delaiMinutes > 0 && estRetraitBoutique) {
-        const premier = premierJourBoutique({
-          minutes: delaiMinutes,
-          horairesDetail: commercant.horaires_detail,
-          fermetures: fermeturesCommercant,
-          delaiHeures: commercant.boutique_delai_heures,
-        })
-        if (!premier || date_commande < premier) {
-          const quoi = articleLent || 'Un article de ta commande'
-          const quand = premier
-            ? ` Le plus tôt possible, c'est ${libelleMoment({ jour: premier, aujourdhui: jourBruxelles() })}.`
-            : ''
-          return NextResponse.json({
-            ok: false,
-            error: `${quoi} demande ${libelleDuree(delaiMinutes)} de préparation.${quand} Choisis un autre jour de retrait.`,
-          }, { status: 400 })
+      // 🔴 LE DÉLAI EN JOURS DE CALENDRIER, ARTICLE PAR ARTICLE (Alex, 07/10).
+      // J+2 = le surlendemain, à n'importe quelle heure : jeudi pour samedi.
+      // Le compte en minutes refusait le samedi matin d'une commande passée
+      // jeudi après-midi. Les fermetures ne prolongent rien.
+      //
+      // ⚠️ PLUS DE REFUS « DEUX DÉLAIS » : le client a CHOISI ce jour, et une
+      // baguette part avec la tarte samedi. Chaque ligne doit seulement
+      // pouvoir se retirer ce jour-là (ses jours de vente sont vérifiés par
+      // `verifierStockDisponible`, avec le stock du jour).
+      //
+      // ⚠️ SAUF L'EXPÉDITION : il n'y a pas de jour de retrait. Le délai y dit
+      // quand le colis part, il ne refuse rien.
+      if (!estBoutique || estRetraitBoutique) {
+        const aujourdhui = jourBruxelles()
+        for (const l of lignes) {
+          const n = delaiEnJours(l)
+          const refus = refusDuJour({ delaiJours: n, jour: date_commande, aujourdhui })
+          if (refus?.raison === 'delai') {
+            // ⚠️ LE MESSAGE NOMME L'ARTICLE ET LE PREMIER JOUR. « Trop tôt »
+            // laisserait le Yopper chercher lequel de ses six articles bloque.
+            return NextResponse.json({
+              ok: false,
+              error: `« ${l.article_nom || 'Un article'} » se commande ${n} jour${n > 1 ? 's' : ''} à l'avance : le plus tôt, c'est ${libelleMoment({ jour: refus.plancher, aujourdhui })}. Choisis un autre jour.`,
+              creneau_indisponible: true,
+            }, { status: 409 })
+          }
         }
       }
 
@@ -875,9 +853,28 @@ export async function POST(request) {
       //
       // ⚠️ ET LA BOUTIQUE EN EST EXCLUE : sa borne à elle est
       // `joursRetraitBoutique`, déjà appliquée plus haut avec ses horaires.
+      //
+      // 🔴 ET IL S'ALLONGE AVEC LE CATALOGUE (Alex, 07/10), exactement comme le
+      // calendrier de la fiche : un article à délai ou vendu certains jours
+      // ouvre une semaine complète après son délai. On lit TOUT le catalogue
+      // actif, pas le panier : sinon samedi serait accepté avec le pain et
+      // refusé sans lui, selon l'ordre des clics.
       if (!estBoutique) {
-        const brut = Number(commercant.horizon_commande)
-        const horizon = Number.isFinite(brut) && brut >= 1 ? Math.floor(brut) : 2
+        const [{ data: catalogue, error: errCat }, { data: joursOff, error: errOff }] = await Promise.all([
+          supabase.from('articles').select('id, delai_minutes').eq('commercant_id', commercant.id).eq('actif', true),
+          supabase.from('article_stock_jour').select('article_id, jour_semaine').eq('commercant_id', commercant.id).eq('actif', false),
+        ])
+        // ⚠️ UNE LECTURE EN ÉCHEC N'EST PAS « RIEN À ALLONGER » : on refuse
+        // plutôt que de rejeter une commande valable en silence.
+        if (errCat || errOff) {
+          return NextResponse.json({ ok: false, error: 'Impossible de vérifier ta commande. Réessaie dans un instant.' }, { status: 500 })
+        }
+        const offParArticle = {}
+        for (const o of joursOff || []) (offParArticle[o.article_id] ||= []).push(o.jour_semaine)
+        const horizon = longueurCalendrier({
+          horizon: commercant.horizon_commande,
+          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [] })),
+        })
         const aujourdhui = jourBruxelles()
         const dernier = jourPlus(aujourdhui, horizon - 1)
         if (date_commande < aujourdhui || (dernier && date_commande > dernier)) {

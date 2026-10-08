@@ -201,6 +201,12 @@ const MUTATIONS = [
     fichier: FICHE, de: '  const circuitAffiche = circuitDuJour({ commercant, jour: jourDuPanier(), aujourdhui: aujourdhuiISO() })', vers: '  const circuitAffiche = null' },
   { nom: '🔴 la regle du jour de la fiche ignore les circuits',
     fichier: FICHE, de: '    let circuits = circuitsDeLArticle(article, commercant)', vers: '    let circuits = null' },
+  { nom: '🔴 le sandwich epuise propose demain (jour meme seulement)',
+    fichier: FICHE, de: "    if (circuitAffiche !== 'A' || article?.commande_active !== true || article.est_vitrine) return null", vers: "    if (circuitAffiche !== 'A' || article.est_vitrine) return null" },
+  { nom: '🔴 le relais propose aujourd hui',
+    fichier: FICHE, de: '    const jour = joursDuCalendrier().find(j => j > auj && !refusDuJour({ ...r, jour: j, aujourdhui: auj })) || null', vers: '    const jour = joursDuCalendrier().find(j => !refusDuJour({ ...r, jour: j, aujourdhui: auj })) || null' },
+  { nom: '🔴 epuise ne dit plus qu il se commande un autre jour',
+    fichier: FICHE, de: '              if (relais && onCommanderAutreJour) {', vers: '              if (false) {' },
   // Le tableau de bord
   { nom: '🔴 le tableau de bord met tout dans A',
     fichier: BORD, de: "    const cible = info.circuit === 'A' ? map : mapB", vers: '    const cible = map' },

@@ -468,7 +468,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 // `jourRetrait` ('YYYY-MM-DD' ou null) : le jour SOUHAITÉ en boutique. Quand il
 // est fourni, il prime sur `joursDispos[jourSelectionne]`, qui est le sélecteur
 // de l'alimentaire et ne concerne pas une boutique.
-function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
+function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = null, relais = null, onCommanderAutreJour = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -524,7 +524,7 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
   const stockAtteint = stockGere && stockAujourdhui > 0 && qteTotale >= stockAujourdhui
 
   return (
-    <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${(epuiseComplet || inactifCeJour) ? '#E5E7EB' : qteTotale > 0 ? T.main+'44' : T.pale}`, boxShadow: qteTotale > 0 ? `0 2px 12px ${T.main}18` : '0 1px 4px rgba(107,53,196,0.04)', opacity: (epuiseComplet || inactifCeJour) && !etatJour?.premierLibelle ? 0.6 : 1, transition: 'all 0.2s' }}>
+    <div className="art-card" style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '0.625rem', border: `1.5px solid ${(epuiseComplet || inactifCeJour) ? '#E5E7EB' : qteTotale > 0 ? T.main+'44' : T.pale}`, boxShadow: qteTotale > 0 ? `0 2px 12px ${T.main}18` : '0 1px 4px rgba(107,53,196,0.04)', opacity: (epuiseComplet || inactifCeJour) && !etatJour?.premierLibelle && !relais ? 0.6 : 1, transition: 'all 0.2s' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
         {/* Photo d'article (Module 1/2 boutique) : pas de bloc image si absente
             (décision placeholders : les listes restent texte-only sans photo) */}
@@ -682,6 +682,23 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
               )
             }
             if (stockAujourdhui === 0) {
+              // 🔴 ÉPUISÉ AUJOURD'HUI, MAIS SUR COMMANDE UN AUTRE JOUR (Alex,
+              // 08/10) : on le dit, et on propose le premier jour possible. Le
+              // bouton passe par la fenêtre habituelle, jamais en silence.
+              if (relais && onCommanderAutreJour) {
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#DC2626', flexShrink: 0 }}/>
+                      Épuisé aujourd&rsquo;hui
+                    </span>
+                    <button onClick={e => { e.stopPropagation(); onCommanderAutreJour(article, !(hasOptions || hasVariantes)) }}
+                      style={{ fontSize: '0.72rem', fontWeight: 800, color: T.main, background: '#fff', border: `1.5px solid ${T.main}55`, borderRadius: 100, padding: '4px 11px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                      Commander pour {relais.libelle} →
+                    </button>
+                  </div>
+                )
+              }
               return (
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, background: '#FEE2E2', color: '#DC2626', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                   <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#DC2626', flexShrink: 0 }}/>
@@ -3525,6 +3542,30 @@ export default function CommanderSlug() {
     }
   }
 
+  // 🔴 ÉPUISÉ AUJOURD'HUI, MAIS SUR COMMANDE UN AUTRE JOUR (Alex, 08/10 au
+  // test, tableau) : « le client ne sait pas qu'il peut commander pour les
+  // autres jours ». Le premier jour du calendrier, après aujourd'hui, où
+  // l'article se commande ; `null` hors circuit A ou sans circuit B.
+  function relaisAutreJour(article) {
+    if (circuitAffiche !== 'A' || article?.commande_active !== true || article.est_vitrine) return null
+    const auj = aujourdhuiISO()
+    const r = regleArticle(article)
+    const jour = joursDuCalendrier().find(j => j > auj && !refusDuJour({ ...r, jour: j, aujourdhui: auj })) || null
+    return jour ? { jour, libelle: libelleMoment({ jour, aujourdhui: auj }) } : null
+  }
+  // Le bouton ouvre la fenêtre habituelle (« Pour demain », « Tout retirer
+  // demain ? ») : rien ne change de jour sans le clic, le panier n'est jamais
+  // vidé. `ajout` : rejouer l'ajout après le changement de jour (sans options).
+  function commanderUnAutreJour(article, ajout) {
+    const auj = aujourdhuiISO()
+    const p = propositionPourArticle({
+      candidat: article, panier, jourChoisi: null, aujourdhui: auj,
+      jours: joursDuCalendrier().filter(j => j > auj), regle: regleArticle,
+    })
+    if (p.type === 'ok') return
+    setPropositionJour({ ...p, nomArticle: article?.nom || 'Cet article', rejouer: ajout ? { article } : null })
+  }
+
   // 🔴 UN PANIER QUI NE VA PAS AVEC LE JOUR CHOISI : retour de Stripe, fiche
   // rendez-vous, onglet ouvert d'hier. On ne retire rien à sa place : on
   // nomme l'article, et « Continuer » reste grisé.
@@ -4862,7 +4903,7 @@ export default function CommanderSlug() {
                             <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
                               ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                               stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
-                              onCommanderDemain={commanderPourJour} circuit={circuitAffiche}
+                              onCommanderDemain={commanderPourJour} circuit={circuitAffiche} relais={relaisAutreJour(a)} onCommanderAutreJour={commanderUnAutreJour}
                               getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                               variantes={variantesParArticle[a.id] || []}
@@ -4896,7 +4937,7 @@ export default function CommanderSlug() {
                           <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
-                            onCommanderDemain={commanderPourJour} circuit={circuitAffiche}
+                            onCommanderDemain={commanderPourJour} circuit={circuitAffiche} relais={relaisAutreJour(a)} onCommanderAutreJour={commanderUnAutreJour}
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}

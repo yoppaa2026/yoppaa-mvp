@@ -506,6 +506,15 @@ const code = (f) => sansProse(lire(f))
   v('🔴 fiche : la règle du jour part des circuits de l’article',
     /let circuits = circuitsDeLArticle\(article, commercant\)/.test(fiche)
     && /circuits = circuitsCommuns\(circuits, circuitsDeLArticle\(second, commercant\)\)/.test(fiche))
+  // 🔴 ALEX, 08/10 AU TEST : « épuisé » sans dire qu'il se commande demain.
+  v('🔴 fiche : épuisé aujourd’hui + premier autre jour, seulement en A et pour un article sur commande',
+    /if \(circuitAffiche !== 'A' \|\| article\?\.commande_active !== true \|\| article\.est_vitrine\) return null/.test(fiche)
+    && /const jour = joursDuCalendrier\(\)\.find\(j => j > auj && !refusDuJour\(\{ \.\.\.r, jour: j, aujourdhui: auj \}\)\) \|\| null/.test(fiche)
+    && (fiche.match(/relais=\{relaisAutreJour\(a\)\} onCommanderAutreJour=\{commanderUnAutreJour\}/g) || []).length === 2)
+  v('🔴 fiche : le bouton passe par la fenêtre habituelle (panier jamais vidé)',
+    /jours: joursDuCalendrier\(\)\.filter\(j => j > auj\), regle: regleArticle,/.test(fiche)
+    && /setPropositionJour\(\{ \.\.\.p, nomArticle: article\?\.nom \|\| 'Cet article', rejouer: ajout \? \{ article \} : null \}\)/.test(fiche)
+    && /if \(relais && onCommanderAutreJour\) \{/.test(fiche) && /Commander pour \{relais\.libelle\} →/.test(fiche))
   v('🔴 fiche : le panier compte le circuit du jour affiché',
     /const circuit = circuitDuJour\(\{ commercant, jour, aujourdhui: jourLocalISO\(new Date\(\)\) \}\)/.test(fiche))
   v('🔴 fiche : le calendrier lit les circuits (même règle que le serveur)',

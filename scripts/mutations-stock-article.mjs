@@ -65,8 +65,9 @@ const MUTATIONS = [
 
   // ─── LA FICHE ────────────────────────────────────────────────────────────
   { nom: '🔴 la limite du panier recalcule à sa façon',
-    // ⚠️ Ancre reorientee le 07/10 : le jour passe (comptoir).
-    fichier: FICHE, de: '    return etatStock({ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO(jourDateSelectionne) }).dispo', vers: '    return (article.stock_jour > 0) ? Math.max(0, article.stock_jour - dejaCommande) : Infinity' },
+    // ⚠️ Ancre reorientee le 07/10 : le jour passe (comptoir). Et le 08/10 :
+    // le circuit et l invendu (temps 3).
+    fichier: FICHE, de: '    return etatStock({ article, entreeJour: entryDay, dejaCommande, jour, circuit, invendu }).dispo', vers: '    return (article.stock_jour > 0) ? Math.max(0, article.stock_jour - dejaCommande) : Infinity' },
   // 🔴 LE COMPTOIR DU JOUR (07/10).
   { nom: '🔴 le comptoir ne plafonne plus rien a l ecran',
     fichier: 'lib/stock-article.js', de: '  if (comptoir !== null) return { actif: true, gere: true, brut: comptoir, dispo: Math.max(0, comptoir - deja) }', vers: '' },
@@ -75,7 +76,8 @@ const MUTATIONS = [
   { nom: '🔴 le comptoir se date du jour de la machine',
     fichier: 'app/dashboard/ConfigDashboard.js', de: 'stock_comptoir_le: jourBruxelles() }', vers: 'stock_comptoir_le: new Date().toISOString().slice(0, 10) }' },
   { nom: '🔴 le bouton du comptoir reste visible le soir',
-    fichier: 'app/dashboard/ConfigDashboard.js', de: '            {parJours && onSetComptoir && !effAuj.ferme && !congeAuj && !journeeFinie && (', vers: '            {parJours && onSetComptoir && !effAuj.ferme && !congeAuj && (' },
+    // ⚠️ Ancre reorientee le 08/10 : `venteJour` s ajoute (temps 3).
+    fichier: 'app/dashboard/ConfigDashboard.js', de: '            {parJours && venteJour && onSetComptoir && !effAuj.ferme && !congeAuj && !journeeFinie && (', vers: '            {parJours && venteJour && onSetComptoir && !effAuj.ferme && !congeAuj && (' },
   { nom: '🔴 la grille affiche de nouveau le comptoir (« Mer 3 »)',
     fichier: 'app/dashboard/ConfigDashboard.js', de: '    if (avecComptoir && jour === jourActuelKey && comptoirAuj !== null) {', vers: '    if (jour === jourActuelKey && comptoirAuj !== null) {' },
   { nom: '🔴 « Retirer le comptoir » disparait le soir',
@@ -86,7 +88,9 @@ const MUTATIONS = [
     fichier: 'app/dashboard/ConfigDashboard.js', de: "      .delete().eq('article_id', articleId).eq('actif', true)\n    if (error) { toast(`Les quantités", vers: "      .delete().eq('article_id', articleId)\n    if (error) { toast(`Les quantités" },
   // ✅ « ODOO MIND » (07/10).
   { nom: '🔴 le croissant redevient « Stock en magasin » en alimentaire',
-    fichier: 'lib/stock-article.js', de: "    titre: 'Produit emballé',", vers: "    titre: 'Stock en magasin'," },
+    // ⚠️ Ancre reorientee le 08/10 : la carte s appelle « Stock qui baisse »
+    // (mots du modele valide par Alex), toujours pas « Stock en magasin ».
+    fichier: 'lib/stock-article.js', de: "    titre: 'Stock qui baisse',", vers: "    titre: 'Stock en magasin'," },
   { nom: '🔴 les exemples disparaissent des cartes',
     fichier: 'app/dashboard/ConfigDashboard.js', de: '                {c.exemples && (', vers: '                {false && (' },
   { nom: '🔴 le temps de preparation revient partout',
@@ -96,7 +100,8 @@ const MUTATIONS = [
   { nom: '🔴 le comptoir du jour oublie le deja commande',
     fichier: 'app/dashboard/ConfigDashboard.js', de: '      const maj = { stock_comptoir: reste + deja, stock_comptoir_le: jour }', vers: '      const maj = { stock_comptoir: reste, stock_comptoir_le: jour }' },
   { nom: '🔴 le comptoir du jour liste aussi les articles sans limite',
-    fichier: 'app/dashboard/ConfigDashboard.js', de: "    return articles.filter(a => a.actif !== false && a.est_vitrine !== true && modeStockDe(a) === 'jour')", vers: '    return articles.filter(a => a.actif !== false && a.est_vitrine !== true)' },
+    // ⚠️ Ancre reorientee le 08/10 : le circuit A s ajoute au filtre.
+    fichier: 'app/dashboard/ConfigDashboard.js', de: "    return articles.filter(a => a.actif !== false && a.est_vitrine !== true && modeStockDe(a) === 'jour' && (!deuxCircuits || a.vente_jour !== false))", vers: '    return articles.filter(a => a.actif !== false && a.est_vitrine !== true && (!deuxCircuits || a.vente_jour !== false))' },
   { nom: '🔴 un echec du comptoir passe pour un succes',
     fichier: 'app/dashboard/ConfigDashboard.js', de: '    const ok = resultats.filter(r => !r.error)', vers: '    const ok = resultats' },
   { nom: '🔴 le comptoir se saisit le soir',
@@ -107,7 +112,8 @@ const MUTATIONS = [
     // ⚠️ Ancre reorientee le 07/10 : le bloc a ete scinde (indentation).
     fichier: 'app/dashboard/ConfigDashboard.js', de: '                  onSetComptoir(a.id, reste + dejaCommande)', vers: '                  onSetComptoir(a.id, reste)' },
   { nom: '🔴 la carte promet « demain » sur un stock en magasin',
-    fichier: FICHE, de: '  const prochain = epuiseAujourdhui && revientUnAutreJour(article) ? prochainJourDispo() : null', vers: '  const prochain = epuiseAujourdhui ? prochainJourDispo() : null' },
+    // ⚠️ Ancre reorientee le 08/10 : la condition vit dans `revient` (temps 3).
+    fichier: FICHE, de: '  const revient = revientUnAutreJour(article) && (circuit === null || article.commande_active === true)', vers: '  const revient = true' },
   { nom: '🔴 le « dès » revient sur la fiche',
     fichier: FICHE, de: "                  <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{euros(Number(article.prix))}</p>", vers: "                  <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}><span>dès</span> {euros(Number(article.prix))}</p>" },
   { nom: '🔴 en vitrine, les versions s achètent',
@@ -134,13 +140,78 @@ const MUTATIONS = [
   { nom: '🔴 un stock ajusté sur la carte garde son ancienne date',
     fichier: BORD, de: '    const maj = { stock_jour: n, stock_maj_le: new Date().toISOString() }', vers: '    const maj = { stock_jour: n }' },
   { nom: '⚠️ un article sans limite affiche 0 sur ses jours',
-    fichier: BORD, de: "{afficheFerme ? '✕' : sansLimite ? '∞' : eff.dispo}", vers: "{afficheFerme ? '✕' : eff.dispo}" },
+    // ⚠️ Ancre reorientee le 08/10 : « sur commande seulement » affiche ✓ (temps 3).
+    fichier: BORD, de: "{afficheFerme ? '✕' : !venteJour ? '✓' : sansLimite ? '∞' : eff.dispo}", vers: "{afficheFerme ? '✕' : !venteJour ? '✓' : eff.dispo}" },
   { nom: '🔴 une prestation sans prix s enregistre',
     fichier: BORD, de: "    if (!formEstTable && String(form.prix ?? '').trim() === '') {", vers: '    if (false) {' },
   { nom: '🔴 le « Prix indicatif » revient au tableau de bord',
     fichier: BORD, de: "            const prixLabel = p.prix != null ? euros(p.prix) : 'Prix à indiquer'", vers: "            const prixLabel = p.prix != null ? euros(p.prix) : 'Prix sur demande'" },
   { nom: '🔴 la copie oublie le mode de stock',
     fichier: 'lib/catalogue-copie.js', de: "  'nom', 'description', 'prix', 'stock_jour', 'stock_mode', 'actif', 'categorie',", vers: "  'nom', 'description', 'prix', 'stock_jour', 'actif', 'categorie'," },
+
+  // ─── TEMPS 3 : LES DEUX CIRCUITS (08/10) ─────────────────────────────────
+  // La regle
+  { nom: '🔴 B vend un article qui ne se prend pas sur commande',
+    fichier: LIB, de: "    if (article?.commande_active !== true) return { actif: false, gere: true, brut: 0, dispo: 0, raison: 'pas_sur_commande' }", vers: '' },
+  { nom: '🔴 B oublie ce qui est deja reserve',
+    fichier: LIB, de: '    return { actif: true, gere: true, brut: max, dispo: Math.max(0, max - deja) }', vers: '    return { actif: true, gere: true, brut: max, dispo: max }' },
+  { nom: '🔴 A vend aujourd hui un article sur commande seulement',
+    fichier: LIB, de: "  if (circuit === 'A' && article?.vente_jour === false) {", vers: '  if (false) {' },
+  { nom: '🔴 l invendu d un article sur commande est refuse a l ecran',
+    fichier: LIB, de: '    if (invendu) return { actif: true, gere: false, brut: 0, dispo: Infinity }', vers: '' },
+  { nom: '🔴 tous les jours deviennent A',
+    fichier: LIB, de: "  return jour > aujourdhui ? 'B' : 'A'", vers: "  return 'A'" },
+  { nom: '🔴 une ligne lue sans ses colonnes passe pour « sur commande »',
+    fichier: LIB, de: '    surCommande: article?.commande_active === true,', vers: '    surCommande: article?.commande_active !== false,' },
+  { nom: '🔴 un article ni le jour meme ni sur commande s enregistre',
+    fichier: LIB, de: "  if (!a && !b) return 'Choisis au moins une façon de le vendre : le jour même, ou sur commande.'", vers: '' },
+  { nom: '🔴 un delai reste ecrit hors de B',
+    fichier: LIB, de: '    delai_minutes: b ? Math.max(1440, parseInt(form?.delai_minutes, 10) || 0) : 0,', vers: '    delai_minutes: parseInt(form?.delai_minutes, 10) || 0,' },
+  { nom: '🔴 le sandwich se commande pour samedi',
+    fichier: 'lib/delai-commande.js', de: "    if (!circuits.surCommande) return { raison: 'aujourdhui_seulement' }", vers: '' },
+  { nom: '🔴 l invendu retrouve son delai',
+    fichier: 'lib/delai-commande.js', de: '  if (invendu) return null', vers: '' },
+  { nom: '🔴 la pizzeria s ouvre sur huit jours (A + B J+1)',
+    fichier: 'lib/delai-commande.js', de: '      if (!a.circuits.aujourdhui || dB >= 2) n = Math.max(n, dB + FENETRE_APRES_DELAI)', vers: '      n = Math.max(n, dB + FENETRE_APRES_DELAI)' },
+  { nom: '🔴 une mention sur chaque croissant (decor)',
+    fichier: 'lib/delai-commande.js', de: '    if (nB === 1) return jours ? `${jours} seulement` : null', vers: '' },
+  // Le serveur
+  { nom: '🔴 serveur, A : la commande de la veille entame le comptoir',
+    fichier: 'lib/lignes-commande.js', de: "    if (circuit === 'A' && jourBelgeDeCreation(r.commande?.created_at) !== dateCommande) return", vers: '' },
+  { nom: '🔴 serveur, B : un article du jour meme se prend pour samedi',
+    fichier: 'lib/lignes-commande.js', de: '      if (art?.commande_active !== true) {', vers: '      if (false) {' },
+  { nom: '🔴 serveur : l invendu d un article sur commande est refuse',
+    fichier: 'lib/lignes-commande.js', de: '      if (invenduParArticle[artId]) continue', vers: '' },
+  { nom: '🔴 serveur : une tarte a l unite passe pour un invendu',
+    fichier: 'lib/lignes-commande.js', de: '    invenduParArticle[ligne.article_id] = (invenduParArticle[ligne.article_id] ?? true) && inv', vers: '    invenduParArticle[ligne.article_id] = (invenduParArticle[ligne.article_id] ?? false) || inv' },
+  { nom: '🔴 la reservation ne recoit plus le drapeau de l invendu',
+    fichier: 'lib/lignes-commande.js', de: '    inv[article_id] ? { article_id, quantite, invendu: true } : { article_id, quantite }', vers: '    ({ article_id, quantite })' },
+  { nom: '🔴 serveur : une lecture en echec vaut zero vendu',
+    fichier: 'lib/lignes-commande.js', de: '  if (errGrille || errArticles || errCommandes || errReservations) {', vers: '  if (false) {' },
+  { nom: '🔴 created_at lu comme une heure belge (23 h 30 la veille = le jour)',
+    fichier: 'lib/heure-belge.js', de: '  const avecFuseau = /([zZ]|[+-]\\d{2}:?\\d{2})$/.test(brut) ? brut : `${brut}Z`', vers: '  const avecFuseau = brut' },
+  { nom: '🔴 create-commande ne dit plus le commerce au controle du stock',
+    fichier: 'app/api/stripe/checkout/create-commande/route.js', de: '      supabase, lignes, commercantId: commercant.id, dateCommande: date_commande, commercant,', vers: '      supabase, lignes, commercantId: commercant.id, dateCommande: date_commande,' },
+  { nom: '🔴 create-commande renvoie les items sans drapeau',
+    fichier: 'app/api/stripe/checkout/create-commande/route.js', de: '      const items = itemsDeReservation(verifStock)', vers: '      const items = Object.entries(verifStock.consoParArticle || {}).map(([article_id, quantite]) => ({ article_id, quantite }))' },
+  { nom: '🔴 la migration de la prod refuse l invendu',
+    fichier: 'migrations/MIGRATION_TEMPS3_DEUX_CIRCUITS.sql', de: "          IF (v_item->>'invendu') = 'true' THEN", vers: '          IF false THEN' },
+  // La fiche
+  { nom: '🔴 la fiche oublie le circuit du jour',
+    fichier: FICHE, de: '  const circuitAffiche = circuitDuJour({ commercant, jour: jourDuPanier(), aujourdhui: aujourdhuiISO() })', vers: '  const circuitAffiche = null' },
+  { nom: '🔴 la regle du jour de la fiche ignore les circuits',
+    fichier: FICHE, de: '    let circuits = circuitsDeLArticle(article, commercant)', vers: '    let circuits = null' },
+  // Le tableau de bord
+  { nom: '🔴 le tableau de bord met tout dans A',
+    fichier: BORD, de: "    const cible = info.circuit === 'A' ? map : mapB", vers: '    const cible = map' },
+  { nom: '🔴 le formulaire enregistre un reglage impossible',
+    fichier: BORD, de: '    const refusB = avecCircuits ? refusCircuits(form) : null', vers: '    const refusB = null' },
+  { nom: '🔴 le comptoir du jour liste les articles sur commande seulement',
+    fichier: BORD, de: "    return articles.filter(a => a.actif !== false && a.est_vitrine !== true && modeStockDe(a) === 'jour' && (!deuxCircuits || a.vente_jour !== false))", vers: "    return articles.filter(a => a.actif !== false && a.est_vitrine !== true && modeStockDe(a) === 'jour')" },
+  { nom: '🔴 SELECT_ARTICLES oublie les circuits (tout autre jour refuse)',
+    fichier: 'lib/lignes-commande.js', de: 'tva_taux_sur_place, delai_minutes, vente_jour, commande_active\'', vers: 'tva_taux_sur_place, delai_minutes\'' },
+  { nom: '🔴 la copie oublie les circuits',
+    fichier: 'lib/catalogue-copie.js', de: "  'vente_jour', 'commande_active', 'commande_max_jour',", vers: '' },
 ]
 
 const lancer = (banc) => {

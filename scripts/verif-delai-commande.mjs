@@ -131,7 +131,8 @@ egal('🔴 un invendu ne tire pas le panier',
   verifier('🔴 lundi pour samedi : le pain passe (J+5)', refusDuJour({ ...PLF, jour: SAM, aujourdhui: LUN }) === null)
   verifier('🔴 jeudi pour samedi : J+2 exact, à n’importe quelle heure', refusDuJour({ ...PLF, jour: SAM, aujourdhui: JEU }) === null)
   egal('🔴 vendredi pour samedi : trop tard, le plus tôt est dimanche',
-    refusDuJour({ ...PLF, jour: SAM, aujourdhui: VEN }), { raison: 'delai', plancher: DIM })
+    // ⚠️ 08/10 : le refus dit aussi le délai appliqué (`jours`), lu par les messages.
+    refusDuJour({ ...PLF, jour: SAM, aujourdhui: VEN }), { raison: 'delai', plancher: DIM, jours: 2 })
   verifier('🔴 vendredi pour dimanche : ça passe', refusDuJour({ ...PLF, jour: DIM, aujourdhui: VEN }) === null)
   verifier('🔴 samedi pour le samedi suivant : ça passe', refusDuJour({ ...PLF, jour: SAM_SUIVANT, aujourdhui: SAM }) === null)
   egal('🔴 pas en semaine', refusDuJour({ ...PLF, jour: VEN, aujourdhui: LUN }), { raison: 'jour' })
@@ -565,8 +566,11 @@ egal('sans nom d’article, la phrase tient debout',
   verifier('🔴 en expédition (pas de jour), rien n’est refusé',
     /const jour = jourDuPanier\(\)\s*if \(!jour\) return false/.test(FICHE)
     && /if \(estDetail\) return modeBoutiqueEff === 'retrait' \? jourRetraitBoutique : null/.test(FICHE))
+  // ⚠️ RÉORIENTÉE LE 08/10 (temps 3) : `regleArticle` construit ses jours en
+  // deux temps (ceux de l'article, puis ceux du second article d'un duo).
   verifier('🔴 les jours de vente se lisent sur les réglages du jour de l’article',
-    /indispo: joursIndisponibles\(stocksJour\?\.\[ligne\?\.id\]\)/.test(FICHE))
+    /let indispo = joursIndisponibles\(stocksJour\?\.\[ligne\?\.id\]\)/.test(FICHE)
+    && /indispo = \[\.\.\.new Set\(\[\.\.\.indispo, \.\.\.joursIndisponibles\(stocksJour\?\.\[second\.id\]\)\]\)\]/.test(FICHE))
   verifier('🔴 accepter change le jour, puis rejoue l’ajout au rendu suivant',
     /passerAuJour\(p\.jour\)\s*if \(p\.rejouer\) setAjoutEnAttente\(p\.rejouer\)/.test(FICHE)
     && /if \(a\.deal\) ajouterDealAuPanier\(a\.deal, a\.article\)\s*else ajouterAuPanier\(a\.article, a\.options \|\| null, a\.variante \|\| null\)/.test(FICHE))
@@ -587,7 +591,8 @@ egal('sans nom d’article, la phrase tient debout',
   // 🔴 TEMPS 2 (07/10) : « Réservable jusqu'à » entre dans le calcul de la
   // fiche, et le formulaire l'enregistre (vide = automatique).
   verifier('🔴 la fiche passe « Réservable jusqu’à » au calcul du calendrier',
-    /indispo: joursIndisponibles\(stocks\?\.\[a\.id\]\), horizonJours: a\.horizon_jours \}\)\)/.test(FICHE))
+    // ⚠️ RÉORIENTÉE LE 08/10 : les circuits suivent l'horizon (temps 3).
+    /indispo: joursIndisponibles\(stocks\?\.\[a\.id\]\), horizonJours: a\.horizon_jours, circuits: circuitsDeLArticle\(a, c\) \}\)\)/.test(FICHE))
   verifier('🔴 le formulaire enregistre « Réservable jusqu’à »',
     /horizon_jours: \(estVitrine \|\| !form\.vendable \|\| form\.horizon_jours === '' \|\| form\.horizon_jours == null\)\s*\? null : \(parseInt\(form\.horizon_jours, 10\) \|\| null\),/.test(BORD))
   verifier('et il propose la liste fermée', /\[\.\.\.HORIZONS_ARTICLE,/.test(BORD) && /libelleHorizonArticle\(h\)/.test(BORD))
@@ -621,8 +626,12 @@ egal('sans nom d’article, la phrase tient debout',
     /delai_minutes: delaiOffre,\s*offre: \{ heure_debut: deal\.heure_debut, heure_fin: deal\.heure_fin \},/.test(FICHE))
 
   // 🔴 LE COMMERÇANT PEUT RÉGLER LE DÉLAI, ET IL EST ENREGISTRÉ.
-  verifier('🔴 le formulaire article propose le délai',
-    /choixDeDelai\(form\.delai_minutes\)/.test(BORD))
+  // ⚠️ RÉORIENTÉE LE 08/10 : DEUX listes désormais, celle de la boutique et
+  // celle de « Sur commande » (temps 3). Chercher le mot une fois laissait la
+  // garde COMPLICE : elle le trouvait dans le jumeau quand on cassait l'autre.
+  verifier('🔴 le formulaire article propose le délai (boutique, et sur commande)',
+    /\{choixDeDelai\(form\.delai_minutes\)\.map\(m => \(/.test(BORD)
+    && /\{choixDeDelai\(form\.delai_minutes\)\.filter\(m => m >= 1440\)\.map\(m => \(/.test(BORD))
   // ⚠️ RÉORIENTÉE LE 30/09 : un article montré sans être vendu en ligne
   // (« en vitrine », tous métiers) n'a pas de délai non plus.
   verifier('🔴 et il l’enregistre en nombre',
@@ -724,7 +733,7 @@ egal('sans nom d’article, la phrase tient debout',
     const parNom = Object.fromEntries(simple.lignes.map(l => [l.article_nom, l]))
     egal('🔴 la ligne serveur de la tarte se lit en jours', delaiEnJours(parNom['Tarte aux pommes']), 2)
     egal('🔴 refusée pour aujourd’hui, avec son premier jour',
-      refusDuJour({ delaiJours: delaiEnJours(parNom['Tarte aux pommes']), jour: MARDI, aujourdhui: MARDI }), { raison: 'delai', plancher: JEUDI })
+      refusDuJour({ delaiJours: delaiEnJours(parNom['Tarte aux pommes']), jour: MARDI, aujourdhui: MARDI }), { raison: 'delai', plancher: JEUDI, jours: 2 })
     verifier('acceptée pour jeudi (J+2)',
       refusDuJour({ delaiJours: delaiEnJours(parNom['Tarte aux pommes']), jour: JEUDI, aujourdhui: MARDI }) === null)
     verifier('🔴 la baguette part avec elle jeudi', refusDuJour({ delaiJours: delaiEnJours(parNom.Baguette), jour: JEUDI, aujourdhui: MARDI }) === null)
@@ -751,16 +760,19 @@ egal('sans nom d’article, la phrase tient debout',
   verifier('🔴 elle refuse le mélange avec l’invendu avant le paiement',
     /refusDeMelange\(lignes\)/.test(ROUTE) && /refusMelange\)/.test(ROUTE))
   // 🔴 07/10 : LE DÉLAI EN JOURS, LIGNE PAR LIGNE, au jour choisi.
+  // ⚠️ RÉORIENTÉES LE 08/10 (temps 3) : la ligne passe aussi ses circuits et
+  // l'invendu, et le message dit le délai APPLIQUÉ (`refus.jours`).
   verifier('🔴 elle juge chaque ligne en jours de calendrier au jour de la commande',
-    /for \(const l of lignes\) \{\s*const n = delaiEnJours\(l\)\s*const refus = refusDuJour\(\{ delaiJours: n, jour: date_commande, aujourdhui \}\)\s*if \(refus\?\.raison === 'delai'\) \{/.test(ROUTE))
+    /for \(const l of lignes\) \{\s*const n = delaiEnJours\(l\)[\s\S]{0,400}const refus = refusDuJour\(\{ delaiJours: n, jour: date_commande, aujourdhui, circuits, invendu: porteUneFenetre\(l\.offre\) \}\)\s*if \(refus\?\.raison === 'delai'\) \{/.test(ROUTE))
   verifier('🔴 partout sauf l’expédition (pas de jour de retrait)',
-    /if \(!estBoutique \|\| estRetraitBoutique\) \{\s*const aujourdhui = jourBruxelles\(\)\s*for \(const l of lignes\)/.test(ROUTE))
+    /if \(!estBoutique \|\| estRetraitBoutique\) \{\s*const aujourdhui = jourBruxelles\(\)\s*const articleEnBase = [^\n]+\s*for \(const l of lignes\)/.test(ROUTE))
   verifier('et le refus nomme l’article et son premier jour',
-    /se commande \$\{n\} jour\$\{n > 1 \? 's' : ''\} à l'avance : le plus tôt, c'est \$\{libelleMoment\(\{ jour: refus\.plancher, aujourdhui \}\)\}/.test(ROUTE))
+    /const j = refus\.jours \?\? n/.test(ROUTE)
+    && /se commande \$\{j\} jour\$\{j > 1 \? 's' : ''\} à l'avance : le plus tôt, c'est \$\{libelleMoment\(\{ jour: refus\.plancher, aujourdhui \}\)\}/.test(ROUTE))
   verifier('🔴 plus de refus « deux délais » ni de compte en minutes',
     !/refusDelaisMelanges|debutCreneau\.getTime\(\) < pret\.getTime\(\)|premierJourBoutique\(/.test(ROUTE))
   verifier('🔴 elle lit le délai du second article d’un duo, sur CE commerce',
-    /\.from\('articles'\)\.select\('id, delai_minutes'\)\s*\.in\('id', seconds\)\.eq\('commercant_id', commercant\.id\)/.test(ROUTE)
+    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active'\)\s*\.in\('id', seconds\)\.eq\('commercant_id', commercant\.id\)/.test(ROUTE)
     && /l\.delai_minutes = delaiDeLOffre\(\{ delai_minutes: l\.delai_minutes \}, parId\[String\(l\.deal_article2_id\)\]\)/.test(ROUTE))
   verifier('🔴 et une lecture en échec refuse au lieu de vendre pour aujourd’hui',
     /if \(errArts2\) \{\s*return NextResponse\.json/.test(ROUTE))
@@ -770,14 +782,14 @@ egal('sans nom d’article, la phrase tient debout',
     && ROUTE.indexOf('l.delai_minutes = delaiDeLOffre(') < ROUTE.indexOf('const n = delaiEnJours(l)'))
   // 🔴 L'HORIZON S'ALLONGE AVEC LE CATALOGUE, lu en entier (pas le panier).
   verifier('🔴 l’horizon se calcule sur TOUT le catalogue actif, avec ses jours de vente',
-    /supabase\.from\('articles'\)\.select\('id, delai_minutes, horizon_jours'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(ROUTE)
+    /supabase\.from\('articles'\)\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(ROUTE)
     && /supabase\.from\('article_stock_jour'\)\.select\('article_id, jour_semaine'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', false\)/.test(ROUTE)
     && /const horizon = longueurCalendrier\(\{\s*horizon: commercant\.horizon_commande,/.test(ROUTE))
   // 🔴 ET LES JOURS DE VENTE Y ENTRENT : sans eux, un pain du seul samedi sans
   // délai n'allongerait rien, et samedi serait refusé le lundi.
   verifier('🔴 les jours de vente de chaque article entrent dans le calcul',
     /for \(const o of joursOff \|\| \[\]\) \(offParArticle\[o\.article_id\] \|\|= \[\]\)\.push\(o\.jour_semaine\)/.test(ROUTE)
-    && /articles: \(catalogue \|\| \[\]\)\.map\(a => \(\{ delaiJours: delaiEnJours\(a\), indispo: offParArticle\[a\.id\] \|\| \[\], horizonJours: a\.horizon_jours \}\)\)/.test(ROUTE))
+    && /articles: \(catalogue \|\| \[\]\)\.map\(a => \(\{ delaiJours: delaiEnJours\(a\), indispo: offParArticle\[a\.id\] \|\| \[\], horizonJours: a\.horizon_jours, circuits: circuitsDeLArticle\(a, commercant\) \}\)\)/.test(ROUTE))
   verifier('🔴 et une lecture du catalogue en échec refuse',
     /if \(errCat \|\| errOff\) \{\s*return NextResponse\.json/.test(ROUTE))
 

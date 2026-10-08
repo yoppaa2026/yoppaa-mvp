@@ -51,7 +51,9 @@ import { jourPlus } from '@/lib/statut-commerce'
 import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, libelleMoment } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
-import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
+import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, messageCircuit, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
+import { circuitsDeLArticle, circuitsCommuns } from '@/lib/stock-article'
+import { porteUneFenetre } from '@/lib/anti-gaspi'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { refusCoordonnees } from '@/lib/coordonnees-client'
 import { verdictForfait } from '@/lib/garde-forfait'
@@ -776,6 +778,9 @@ export async function POST(request) {
     // navigateur a envoyé. `construireLignesCommande` a résolu chaque ligne
     // depuis `articles` : un panier trafiqué ne peut pas s'inventer un délai
     // de zéro.
+    // ⚠️ ET LES CIRCUITS DU SECOND ARTICLE D'UN DUO (temps 3), lus ici avec son
+    // délai : la boucle du jour, plus bas, en a besoin.
+    const secondDuDuoParId = {}
     {
       // 🔴 LE DUO NE LISAIT QUE SON PREMIER ARTICLE (07/10). Le second n'est
       // pas dans `articlesData` (chargé sur les identifiants du panier) : un
@@ -785,7 +790,7 @@ export async function POST(request) {
       const seconds = [...new Set(lignes.map(l => l.deal_article2_id).filter(Boolean))]
       if (seconds.length > 0) {
         const { data: arts2, error: errArts2 } = await supabase
-          .from('articles').select('id, delai_minutes')
+          .from('articles').select('id, delai_minutes, vente_jour, commande_active')
           .in('id', seconds).eq('commercant_id', commercant.id)
         // ⚠️ UNE LECTURE EN ÉCHEC N'EST PAS « AUCUN DÉLAI » : on refuse plutôt
         // que de vendre pour aujourd'hui une tarte qui en demande deux.
@@ -793,6 +798,7 @@ export async function POST(request) {
           return NextResponse.json({ ok: false, error: 'Impossible de vérifier ta commande. Réessaie dans un instant.' }, { status: 500 })
         }
         const parId = Object.fromEntries((arts2 || []).map(a => [String(a.id), a]))
+        Object.assign(secondDuDuoParId, parId)
         for (const l of lignes) {
           if (!l.deal_article2_id) continue
           l.delai_minutes = delaiDeLOffre({ delai_minutes: l.delai_minutes }, parId[String(l.deal_article2_id)])
@@ -822,17 +828,34 @@ export async function POST(request) {
       //
       // ⚠️ SAUF L'EXPÉDITION : il n'y a pas de jour de retrait. Le délai y dit
       // quand le colis part, il ne refuse rien.
+      //
+      // 🔴 ET LES DEUX CIRCUITS DE L'ALIMENTAIRE (temps 3, 08/10) : aujourd'hui
+      // = A, sans délai ; un autre jour = B, avec le délai. Les circuits se
+      // lisent sur l'article EN BASE (`articlesData`), et ceux d'un duo sont
+      // ceux que ses deux articles ont en commun. L'invendu les ignore.
       if (!estBoutique || estRetraitBoutique) {
         const aujourdhui = jourBruxelles()
+        const articleEnBase = Object.fromEntries((articlesData || []).map(a => [String(a.id), a]))
         for (const l of lignes) {
           const n = delaiEnJours(l)
-          const refus = refusDuJour({ delaiJours: n, jour: date_commande, aujourdhui })
+          let circuits = circuitsDeLArticle(articleEnBase[String(l.article_id)], commercant)
+          if (l.deal_article2_id) circuits = circuitsCommuns(circuits, circuitsDeLArticle(secondDuDuoParId[String(l.deal_article2_id)], commercant))
+          const refus = refusDuJour({ delaiJours: n, jour: date_commande, aujourdhui, circuits, invendu: porteUneFenetre(l.offre) })
           if (refus?.raison === 'delai') {
             // ⚠️ LE MESSAGE NOMME L'ARTICLE ET LE PREMIER JOUR. « Trop tôt »
             // laisserait le Yopper chercher lequel de ses six articles bloque.
+            // ⚠️ `refus.jours` : en B, un article réglé sans délai compte 1 jour.
+            const j = refus.jours ?? n
             return NextResponse.json({
               ok: false,
-              error: `« ${l.article_nom || 'Un article'} » se commande ${n} jour${n > 1 ? 's' : ''} à l'avance : le plus tôt, c'est ${libelleMoment({ jour: refus.plancher, aujourdhui })}. Choisis un autre jour.`,
+              error: `« ${l.article_nom || 'Un article'} » se commande ${j} jour${j > 1 ? 's' : ''} à l'avance : le plus tôt, c'est ${libelleMoment({ jour: refus.plancher, aujourdhui })}. Choisis un autre jour.`,
+              creneau_indisponible: true,
+            }, { status: 409 })
+          }
+          if (refus?.raison === 'aujourdhui_seulement') {
+            return NextResponse.json({
+              ok: false,
+              error: messageCircuit('ARTICLE_PAS_SUR_COMMANDE', l.article_nom || 'Un article'),
               creneau_indisponible: true,
             }, { status: 409 })
           }
@@ -861,7 +884,8 @@ export async function POST(request) {
       // refusé sans lui, selon l'ordre des clics.
       if (!estBoutique) {
         const [{ data: catalogue, error: errCat }, { data: joursOff, error: errOff }] = await Promise.all([
-          supabase.from('articles').select('id, delai_minutes, horizon_jours').eq('commercant_id', commercant.id).eq('actif', true),
+          // ⚠️ `vente_jour`, `commande_active` : le calendrier suit les circuits (temps 3).
+          supabase.from('articles').select('id, delai_minutes, horizon_jours, vente_jour, commande_active').eq('commercant_id', commercant.id).eq('actif', true),
           supabase.from('article_stock_jour').select('article_id, jour_semaine').eq('commercant_id', commercant.id).eq('actif', false),
         ])
         // ⚠️ UNE LECTURE EN ÉCHEC N'EST PAS « RIEN À ALLONGER » : on refuse
@@ -873,7 +897,7 @@ export async function POST(request) {
         for (const o of joursOff || []) (offParArticle[o.article_id] ||= []).push(o.jour_semaine)
         const horizon = longueurCalendrier({
           horizon: commercant.horizon_commande,
-          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], horizonJours: a.horizon_jours })),
+          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], horizonJours: a.horizon_jours, circuits: circuitsDeLArticle(a, commercant) })),
         })
         const aujourdhui = jourBruxelles()
         const dernier = jourPlus(aujourdhui, horizon - 1)
@@ -1033,8 +1057,9 @@ export async function POST(request) {
     }
 
     // ─── 5) Vérif stock : commandes du jour + réservations en cours ────────
+    // ⚠️ `commercant` : il dit si le commerce vend en deux circuits (temps 3).
     const verifStock = await verifierStockDisponible({
-      supabase, lignes, commercantId: commercant.id, dateCommande: date_commande,
+      supabase, lignes, commercantId: commercant.id, dateCommande: date_commande, commercant,
     })
     if (!verifStock.ok) {
       return NextResponse.json({
@@ -1064,7 +1089,6 @@ export async function POST(request) {
         ...(verifOffres.stock_insuffisant ? { stock_insuffisant: true } : {}),
       }, { status: verifOffres.status })
     }
-    const consoParArticle = verifStock.consoParArticle || {}
     const jourSemaine = verifStock.jourSemaine
 
     // ─── Coordonnées de livraison, pour la tournée optimisée ───────────────
@@ -1185,8 +1209,9 @@ export async function POST(request) {
     // deux). Avant l'insert des lignes → un échec ne laisse qu'une commande à supprimer.
     if (!estBoutique) {
       // Items AGRÉGÉS par article (cf. consoParArticle étape 5) : inclut les
-      // seconds articles des duos et évite les doublons article_id à la RPC
-      const items = Object.entries(consoParArticle).map(([article_id, quantite]) => ({ article_id, quantite }))
+      // seconds articles des duos et évite les doublons article_id à la RPC.
+      // ⚠️ ET LE DRAPEAU DE L'INVENDU (temps 3) : `itemsDeReservation`.
+      const items = itemsDeReservation(verifStock)
       const { error: errStock } = await supabase.rpc('reserver_stock_atomique', {
         p_commande_id: commande.id,
         p_commercant_id: commercant.id,
@@ -1196,17 +1221,9 @@ export async function POST(request) {
       })
       if (errStock) {
         await supabase.from('commandes').delete().eq('id', commande.id)
-        const msg = errStock.message || ''
-        const mStock = msg.match(/STOCK_INSUFFISANT:([0-9a-fA-F-]+):(\d+)/)
-        const mInactif = msg.match(/ARTICLE_INACTIF:([0-9a-fA-F-]+)/)
-        if (mStock) {
-          const nom = nomParArticle[mStock[1]] || 'un article'
-          return NextResponse.json({ ok: false, error: `Stock insuffisant pour "${nom}" : ${mStock[2]} disponible(s) (quelqu'un vient de commander).`, article_id: mStock[1], stock_disponible: Number(mStock[2]) }, { status: 409 })
-        }
-        if (mInactif) {
-          const nom = nomParArticle[mInactif[1]] || 'un article'
-          return NextResponse.json({ ok: false, error: `Article "${nom}" non disponible ce jour-là.` }, { status: 400 })
-        }
+        // Stock, jour indisponible, et les deux circuits (temps 3).
+        const refus = refusDeReservation(errStock.message, nomParArticle)
+        if (refus) return NextResponse.json(refus.body, { status: refus.status })
         console.error('[create-commande] reserver_stock_atomique KO', errStock)
         return NextResponse.json({ ok: false, error: 'Impossible de réserver le stock, réessaie dans un instant.' }, { status: 500 })
       }

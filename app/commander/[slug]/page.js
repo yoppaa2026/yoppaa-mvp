@@ -14,7 +14,7 @@ import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { nomDeLaCarte } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09) : une seule règle
 // pour la carte, la limite du panier et le tableau de bord.
-import { etatStock, revientUnAutreJour, mentionVitrine } from '@/lib/stock-article'
+import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour } from '@/lib/stock-article'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe } from '@/lib/creneaux'
 import { refusDeMelange, libelleMoment, delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier, mentionDisponibilite, propositionPourArticle } from '@/lib/delai-commande'
@@ -399,7 +399,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
           const prixUnitaire = item.prix + (item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0)
           // FIX STOCK : vérifier la limite par article dans le panier
           // (item à variante : le stock de LA variante fait foi)
-          const stockMax = item.variante ? (item.variante.stock ?? Infinity) : (getStockMax ? getStockMax(item.id) : Infinity)
+          const stockMax = item.variante ? (item.variante.stock ?? Infinity) : (getStockMax ? getStockMax(item.id, { invendu: porteUneFenetre(item.offre) }) : Infinity)
           // Une ligne deal consomme unites_par_deal unités de stock par +
           const unitesLigne = item.deal_id ? (item.unites_par_deal || 1) : 1
           const stockAtteintPanier = stockMax !== Infinity && (item.quantite + 1) * unitesLigne > stockMax
@@ -468,7 +468,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 // `jourRetrait` ('YYYY-MM-DD' ou null) : le jour SOUHAITÉ en boutique. Quand il
 // est fourni, il prime sur `joursDispos[jourSelectionne]`, qui est le sélecteur
 // de l'alimentaire et ne concerne pas une boutique.
-function ArticleRow({ article, mentionDispo = null, etatJour = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
+function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -492,7 +492,9 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, optionsParA
   const dejaCommande = (commandesParArticleJour && commandesParArticleJour[article.id]) || 0
   // ⚠️ LE JOUR PASSE AUSSI : c'est lui qui dit si le comptoir saisi ce matin
   // fait foi (07/10).
-  const etat = etatStock({ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO(jourDateSelectionne) })
+  // 🔴 ET LE CIRCUIT (temps 3) : aujourd'hui, les 5 croissants du comptoir ;
+  // samedi, les 40 sur commande. Calculé par la fiche (`circuitDuJour`).
+  const etat = etatStock({ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO(jourDateSelectionne), circuit })
   const actifCeJour = etat.actif
   const stockGere = etat.gere
   const stockAujourdhui = stockGere ? etat.dispo : 0
@@ -512,7 +514,10 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, optionsParA
 
   // ⚠️ UN STOCK EN MAGASIN NE REVIENT PAS DEMAIN : épuisé, il n'a pas de
   // « prochain jour ». « Disponible jeudi » y serait une promesse fausse.
-  const prochain = epuiseAujourdhui && revientUnAutreJour(article) ? prochainJourDispo() : null
+  // ⚠️ NI UN ARTICLE VENDU LE JOUR MÊME SEULEMENT (temps 3) : le sandwich
+  // épuisé ne se commande pas pour demain.
+  const revient = revientUnAutreJour(article) && (circuit === null || article.commande_active === true)
+  const prochain = epuiseAujourdhui && revient ? prochainJourDispo() : null
   const epuiseComplet = epuiseAujourdhui && !prochain
   const inactifCeJour = !actifCeJour
   // Stock limit : bloquer le + quand panier atteint le stock dispo
@@ -632,7 +637,9 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, optionsParA
                 <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#9CA3AF', flexShrink: 0 }}/>
                 {etatJour.raison === 'jour'
                   ? `Pas le ${etatJour.jourSemaine}`
-                  : `À commander ${etatJour.delaiJours} jour${etatJour.delaiJours > 1 ? 's' : ''} avant`}
+                  : etatJour.raison === 'aujourdhui_seulement'
+                    ? 'Le jour même seulement'
+                    : `À commander ${etatJour.delaiJours} jour${etatJour.delaiJours > 1 ? 's' : ''} avant`}
               </span>
               {etatJour.premierLibelle && (
                 <button onClick={e => { e.stopPropagation(); if (hasOptions || hasVariantes) setShowOptions(true); else ajouterAuPanier(article) }}
@@ -2230,7 +2237,8 @@ export default function CommanderSlug() {
       horizon: c?.horizon_commande,
       articles: (arts || [])
         .filter(a => a && a.actif !== false && !a.est_vitrine)
-        .map(a => ({ delaiJours: delaiEnJours(a), indispo: joursIndisponibles(stocks?.[a.id]), horizonJours: a.horizon_jours })),
+        // ⚠️ `circuits` (temps 3) : A + B à J+1 suit l'horizon du commerce.
+        .map(a => ({ delaiJours: delaiEnJours(a), indispo: joursIndisponibles(stocks?.[a.id]), horizonJours: a.horizon_jours, circuits: circuitsDeLArticle(a, c) })),
     })
   }
 
@@ -2510,7 +2518,8 @@ export default function CommanderSlug() {
     const key = `deal_${deal.id}`
     // Plafond stock : un lot consomme unites_par_deal unités de l'article
     // (lot 3+1 = 4). Même garde silencieuse que les ajouts unitaires.
-    const stockMax = getStockMax(article.id)
+    // ⚠️ L'INVENDU d'un article « sur commande seulement » ignore le circuit.
+    const stockMax = getStockMax(article.id, { invendu: porteUneFenetre(deal) })
     const unites = deal.unites_par_deal || 1
     if (stockMax !== Infinity && qteTotaleArticle(article.id) + unites > stockMax) return
     // 🔴 ET LE PLAFOND DE L'OFFRE, QUI N'ÉTAIT NULLE PART. La fiche ne lisait
@@ -2590,7 +2599,7 @@ export default function CommanderSlug() {
       setPanier(prev => ({ ...prev, [key]: { ...item, quantite: (prev[key]?.quantite || 0) + 1 } }))
       return
     }
-    const stockMax = getStockMax(item.id)
+    const stockMax = getStockMax(item.id, { invendu: porteUneFenetre(item.offre) })
     // Une ligne deal ajoute unites_par_deal unités d'un coup, une ligne
     // classique en ajoute une seule
     const ajout = item.deal_id ? (item.unites_par_deal || 1) : 1
@@ -2673,7 +2682,8 @@ export default function CommanderSlug() {
   // 2) sinon, fallback sur articles.stock_jour global
   // 3) si rien de défini (les deux à 0/null) → Infinity = stock non géré.
   // Toujours soustrait les commandes déjà passées (sync temps réel).
-  function getStockMax(articleId) {
+  // `invendu` : la ligne est une offre de fin de journée (elle ignore le circuit).
+  function getStockMax(articleId, { invendu = false } = {}) {
     const article = articles.find(a => a.id === articleId)
     if (!article) return Infinity
     const stocksArticle = stocksJour[articleId] || {}
@@ -2685,9 +2695,12 @@ export default function CommanderSlug() {
     const jourNomSelectionne = JOURS[jourIdx(jourDateSelectionne)]
     const entryDay = stocksArticle[jourNomSelectionne]
     const dejaCommande = commandesParArticleJour[articleId] || 0
+    const jour = jourLocalISO(jourDateSelectionne)
     // ⚠️ LA RÈGLE DE LA CARTE DE L'ARTICLE, par la même fonction (30/09) :
     // sans limite, par jour, en magasin (à 0, épuisé et non plus illimité).
-    return etatStock({ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO(jourDateSelectionne) }).dispo
+    // 🔴 ET LE CIRCUIT DU JOUR (temps 3) : aujourd'hui A, un autre jour B.
+    const circuit = circuitDuJour({ commercant, jour, aujourdhui: jourLocalISO(new Date()) })
+    return etatStock({ article, entreeJour: entryDay, dejaCommande, jour, circuit, invendu }).dispo
   }
 
   // ─── LE TOTAL QUE LE SERVEUR FACTURERA (audit écran client, 06/10) ──────
@@ -3418,9 +3431,27 @@ export default function CommanderSlug() {
   const [ajoutEnAttente, setAjoutEnAttente] = useState(null)
 
   function aujourdhuiISO() { return jourLocalISO(new Date()) }
+  // 🔴 LES DEUX CIRCUITS (temps 3) SE LISENT SUR L'ARTICLE DU CATALOGUE, pas
+  // sur la ligne du panier : une ligne revenue du cache, ou celle d'une offre
+  // construite à la main, n'a pas forcément les colonnes. Un duo n'a que les
+  // circuits (et les jours) que ses deux articles ont en commun. L'invendu les
+  // ignore (règle du 04/09).
   function regleArticle(ligne) {
-    return { delaiJours: delaiEnJours(ligne), indispo: joursIndisponibles(stocksJour?.[ligne?.id]) }
+    const article = articles.find(a => a.id === ligne?.id) || ligne
+    let circuits = circuitsDeLArticle(article, commercant)
+    let indispo = joursIndisponibles(stocksJour?.[ligne?.id])
+    const deal = ligne?.deal_id ? (dealsActifs || []).find(d => d.id === ligne.deal_id) : null
+    // ⚠️ Le second article ne compte que pour un DUO, comme au serveur
+    // (`deal_article2_id`) et comme `delaiDuDeal`.
+    const second = deal?.deal_type === 'bundle' && deal.article2_id ? articles.find(a => a.id === deal.article2_id) : null
+    if (second) {
+      circuits = circuitsCommuns(circuits, circuitsDeLArticle(second, commercant))
+      indispo = [...new Set([...indispo, ...joursIndisponibles(stocksJour?.[second.id])])]
+    }
+    return { delaiJours: delaiEnJours(ligne), indispo, circuits, invendu: porteUneFenetre(ligne?.offre) }
   }
+  // Le circuit du jour affiché : les cartes comptent A aujourd'hui, B ensuite.
+  const circuitAffiche = circuitDuJour({ commercant, jour: jourDuPanier(), aujourdhui: aujourdhuiISO() })
   // Le jour de retrait du panier. `null` en expédition : pas de jour, donc
   // rien à refuser (le délai y dit quand le colis part).
   function jourDuPanier() {
@@ -3479,14 +3510,18 @@ export default function CommanderSlug() {
     const jour = jourDuPanier()
     if (!jour || !article || article.est_vitrine) return null
     const r = regleArticle(article)
-    const refus = refusDuJour({ ...r, jour, aujourdhui: aujourdhuiISO() })
+    const auj = aujourdhuiISO()
+    const refus = refusDuJour({ ...r, jour, aujourdhui: auj })
     if (!refus) return null
-    const premier = joursDuCalendrier().find(j => !refusDuJour({ ...r, jour: j, aujourdhui: aujourdhuiISO() })) || null
+    const premier = joursDuCalendrier().find(j => !refusDuJour({ ...r, jour: j, aujourdhui: auj })) || null
     return {
       raison: refus.raison,
-      delaiJours: r.delaiJours,
+      // ⚠️ `refus.jours` : en B, un article réglé sans délai compte 1 jour.
+      delaiJours: refus.jours ?? r.delaiJours,
       jourSemaine: jourSemaineDe(jour),
-      premierLibelle: premier ? libelleMoment({ jour: premier, aujourdhui: aujourdhuiISO() }) : null,
+      // ⚠️ `libelleMoment` rend VIDE pour aujourd'hui sans heure : le sandwich
+      // vendu le jour même seulement doit pouvoir dire « aujourd'hui ».
+      premierLibelle: premier ? (libelleMoment({ jour: premier, aujourdhui: auj }) || 'aujourd’hui') : null,
     }
   }
 
@@ -3504,8 +3539,12 @@ export default function CommanderSlug() {
       if (refus.raison === 'jour') {
         return `« ${l.nom} » ne se vend pas le ${jourSemaineDe(jour)}. Retire-le de ton panier, ou choisis un autre jour en haut de la page.`
       }
+      if (refus.raison === 'aujourdhui_seulement') {
+        return `« ${l.nom} » se vend le jour même seulement. Retire-le de ton panier, ou choisis aujourd’hui en haut de la page.`
+      }
       const quand = libelleMoment({ jour, aujourdhui: auj }) || 'aujourd’hui'
-      return `« ${l.nom} » se commande ${r.delaiJours} jour${r.delaiJours > 1 ? 's' : ''} à l'avance, pas pour ${quand}. Retire-le de ton panier, ou choisis un autre jour en haut de la page.`
+      const n = refus.jours ?? r.delaiJours
+      return `« ${l.nom} » se commande ${n} jour${n > 1 ? 's' : ''} à l'avance, pas pour ${quand}. Retire-le de ton panier, ou choisis un autre jour en haut de la page.`
     }
     return null
   }
@@ -4823,7 +4862,7 @@ export default function CommanderSlug() {
                             <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
                               ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                               stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
-                              onCommanderDemain={commanderPourJour}
+                              onCommanderDemain={commanderPourJour} circuit={circuitAffiche}
                               getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                               photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                               variantes={variantesParArticle[a.id] || []}
@@ -4857,7 +4896,7 @@ export default function CommanderSlug() {
                           <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
-                            onCommanderDemain={commanderPourJour}
+                            onCommanderDemain={commanderPourJour} circuit={circuitAffiche}
                             getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
                             photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
                             variantes={variantesParArticle[a.id] || []}

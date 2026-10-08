@@ -40,7 +40,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { REGIME_EMPORTER } from '@/lib/tva'
-import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
+import { construireLignesCommande, verifierStockDisponible, itemsDeReservation, refusDeReservation, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
@@ -436,8 +436,10 @@ export async function POST(request) {
 
     // Stock du jour du rendez-vous : les produits sont mis de côté pour ce
     // jour-là, puisque c'est là qu'ils seront retirés.
+    // ⚠️ `commercant` : en alimentaire, un rendez-vous dans trois jours prend
+    // ses produits dans le circuit « sur commande » (temps 3, 08/10).
     const verifStock = await verifierStockDisponible({
-      supabase, lignes, commercantId: commercant.id, dateCommande: date_rdv,
+      supabase, lignes, commercantId: commercant.id, dateCommande: date_rdv, commercant,
     })
     if (!verifStock.ok) {
       return NextResponse.json({
@@ -516,21 +518,13 @@ export async function POST(request) {
       p_commercant_id: commercant.id,
       p_date: date_rdv,
       p_jour_semaine: verifStock.jourSemaine,
-      p_items: Object.entries(verifStock.consoParArticle || {}).map(([article_id, quantite]) => ({ article_id, quantite })),
+      p_items: itemsDeReservation(verifStock),
     })
     if (errStock) {
       await supabase.from('commandes').delete().eq('id', commande.id)
-      const msg = errStock.message || ''
-      const mStock = msg.match(/STOCK_INSUFFISANT:([0-9a-fA-F-]+):(\d+)/)
-      const mInactif = msg.match(/ARTICLE_INACTIF:([0-9a-fA-F-]+)/)
-      if (mStock) {
-        const nom = nomParArticle[mStock[1]] || 'un article'
-        return NextResponse.json({ ok: false, error: `Stock insuffisant pour "${nom}" : ${mStock[2]} disponible(s) (quelqu'un vient de commander).`, article_id: mStock[1], stock_disponible: Number(mStock[2]) }, { status: 409 })
-      }
-      if (mInactif) {
-        const nom = nomParArticle[mInactif[1]] || 'un article'
-        return NextResponse.json({ ok: false, error: `Article "${nom}" non disponible ce jour-là.` }, { status: 400 })
-      }
+      // Stock, jour indisponible, et les deux circuits (temps 3).
+      const refus = refusDeReservation(errStock.message, nomParArticle)
+      if (refus) return NextResponse.json(refus.body, { status: refus.status })
       console.error('[create-rdv-commande] reserver_stock_atomique KO', errStock)
       return NextResponse.json({ ok: false, error: 'Impossible de réserver le stock, réessaie dans un instant.' }, { status: 500 })
     }

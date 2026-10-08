@@ -28,6 +28,10 @@
 --
 -- ⚠️ LES DEUX FONCTIONS SONT REPRISES DE LEUR TEXTE RÉEL EN BASE (lu le 07/10),
 -- correctif I5 (`'annulee_commercant'`) et comptoir du temps 2 compris.
+--
+-- ✅ CE FICHIER EST CELUI DE LA PROD, À JOUR : fuseau (08/10, contrôle 17) et
+-- invendu (08/10, contrôle 10b). L'essai a reçu les deux à part
+-- (MIGRATION_TEMPS3_CORRECTIF_FUSEAU, MIGRATION_TEMPS3_INVENDU).
 
 BEGIN;
 
@@ -174,6 +178,12 @@ BEGIN
       IF v_ab THEN
         SELECT vente_jour INTO v_vente_jour FROM articles WHERE id = v_article_id;
         IF v_vente_jour IS FALSE THEN
+          -- 🔴 L'INVENDU DE FIN DE JOURNÉE (08/10) : la tarte à J+2 restée sur
+          -- le comptoir à 17 h est FAITE, et son offre la plafonne. Le serveur
+          -- marque l'article quand TOUTE sa consommation vient d'une offre.
+          IF (v_item->>'invendu') = 'true' THEN
+            CONTINUE;
+          END IF;
           RAISE EXCEPTION 'ARTICLE_PAS_AUJOURDHUI:%', v_article_id USING ERRCODE = 'P0001';
         END IF;
       END IF;
@@ -334,6 +344,11 @@ SELECT '10 la reservation separe les deux circuits',
                      AND prosrc LIKE '%ARTICLE_PAS_AUJOURDHUI%'
                      AND prosrc LIKE '%(c.created_at AT TIME ZONE ''UTC'' AT TIME ZONE ''Europe/Brussels'')::date = p_date%'
                 THEN 'oui' ELSE 'non' END
+          FROM pg_proc WHERE proname = 'reserver_stock_atomique')::text,
+       'oui'::text
+UNION ALL
+SELECT '10b l invendu passe (offre de fin de journee)',
+       (SELECT CASE WHEN prosrc LIKE '%(v_item->>''invendu'') = ''true''%' THEN 'oui' ELSE 'non' END
           FROM pg_proc WHERE proname = 'reserver_stock_atomique')::text,
        'oui'::text
 UNION ALL

@@ -244,8 +244,9 @@ const MUTATIONS = [
     vers: '' },
   { nom: '🔴 les jours de vente ne sont plus lus a l ecran',
     fichier: FICHE,
-    de: '    return { delaiJours: delaiEnJours(ligne), indispo: joursIndisponibles(stocksJour?.[ligne?.id]) }',
-    vers: '    return { delaiJours: delaiEnJours(ligne), indispo: [] }' },
+    // ⚠️ Ancre reorientee le 08/10 (temps 3) : les jours se lisent en deux temps.
+    de: '    let indispo = joursIndisponibles(stocksJour?.[ligne?.id])',
+    vers: '    let indispo = []' },
   { nom: '🔴 l expedition se met a refuser (pas de jour)',
     fichier: FICHE,
     de: '    if (estDetail) return modeBoutiqueEff === \'retrait\' ? jourRetraitBoutique : null',
@@ -342,6 +343,11 @@ const MUTATIONS = [
     fichier: BORD,
     de: '                {choixDeDelai(form.delai_minutes).map(m => (',
     vers: '                {choixDeDelai(0).map(m => (' },
+  // 🔴 TEMPS 3 (08/10) : le jumeau de « Sur commande ».
+  { nom: '🔴 un delai hors liste disparait de « Sur commande »',
+    fichier: BORD,
+    de: '{choixDeDelai(form.delai_minutes).filter(m => m >= 1440).map(m => (',
+    vers: '{choixDeDelai(0).filter(m => m >= 1440).map(m => (' },
 
   { nom: '🔴 le delai s’enregistre en CHAINE au lieu d’un nombre',
     fichier: BORD,
@@ -397,8 +403,9 @@ const MUTATIONS = [
   // projet, six fois. Elle ne leve rien : elle rend `undefined`.
   { nom: '🔴 le select des articles ne demande plus le delai',
     fichier: LIGNES,
-    de: 'tva_taux, tva_taux_sur_place, delai_minutes\'',
-    vers: 'tva_taux, tva_taux_sur_place\'' },
+    // ⚠️ Ancre reorientee le 08/10 : les circuits suivent le delai (temps 3).
+    de: 'tva_taux, tva_taux_sur_place, delai_minutes, vente_jour, commande_active\'',
+    vers: 'tva_taux, tva_taux_sur_place, vente_jour, commande_active\'' },
 
   { nom: '🔴 le select des deals ne demande plus la fenetre',
     fichier: LIGNES,
@@ -426,21 +433,22 @@ const MUTATIONS = [
 
   { nom: '🔴 le serveur ne lit plus les jours de vente du catalogue',
     fichier: ROUTE,
-    de: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], horizonJours: a.horizon_jours })),',
-    vers: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: [], horizonJours: a.horizon_jours })),' },
+    // ⚠️ Ancres reorientees le 08/10 : les circuits s ajoutent a la ligne.
+    de: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], horizonJours: a.horizon_jours, circuits: circuitsDeLArticle(a, commercant) })),',
+    vers: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: [], horizonJours: a.horizon_jours, circuits: circuitsDeLArticle(a, commercant) })),' },
   // 🔴 TEMPS 2 (07/10) : « Reservable jusqu a ».
   { nom: '🔴 le serveur ignore « Reservable jusqu a »',
     fichier: ROUTE,
-    de: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], horizonJours: a.horizon_jours })),',
-    vers: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [] })),' },
+    de: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], horizonJours: a.horizon_jours, circuits: circuitsDeLArticle(a, commercant) })),',
+    vers: '          articles: (catalogue || []).map(a => ({ delaiJours: delaiEnJours(a), indispo: offParArticle[a.id] || [], circuits: circuitsDeLArticle(a, commercant) })),' },
   { nom: '🔴 la regle ignore « Reservable jusqu a »',
     fichier: 'lib/delai-commande.js',
     de: '    if (Number.isFinite(h) && h >= 1) n = Math.max(n, Math.floor(h) + 1)',
     vers: '' },
   { nom: '🔴 la fiche ignore « Reservable jusqu a »',
     fichier: FICHE,
-    de: 'indispo: joursIndisponibles(stocks?.[a.id]), horizonJours: a.horizon_jours })),',
-    vers: 'indispo: joursIndisponibles(stocks?.[a.id]) })),' },
+    de: 'indispo: joursIndisponibles(stocks?.[a.id]), horizonJours: a.horizon_jours, circuits: circuitsDeLArticle(a, c) })),',
+    vers: 'indispo: joursIndisponibles(stocks?.[a.id]), circuits: circuitsDeLArticle(a, c) })),' },
   { nom: '🔴 le formulaire n enregistre plus « Reservable jusqu a »',
     fichier: 'app/dashboard/ConfigDashboard.js',
     de: '        ? null : (parseInt(form.horizon_jours, 10) || null),',

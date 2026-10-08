@@ -103,7 +103,12 @@ const v = (nom, cond, detail = '') => {
     ? Object.keys(champsStock({ mode: 'magasin', saisie: '3' })).filter(c => c !== 'stock_maj_le')
     : []
   v('le stock du formulaire vient bien de champsStock', colonnesStock.length > 0)
-  const champsPayload = [...[...bloc.matchAll(/^\s{6}([a-z_]+):/gm)].map(m => m[1]), ...colonnesStock]
+  // 🔴 TEMPS 3 (08/10) : LES DEUX CIRCUITS S'ÉTALENT AUSSI, par `champsCircuits`.
+  // Même lecture que pour le stock : la règle partagée dit ses colonnes.
+  const { champsCircuits } = await import('../lib/stock-article.js')
+  const colonnesCircuits = /^\s{6}\.\.\.\(circuits \|\| \{\}\),$/m.test(bloc) ? Object.keys(champsCircuits({})) : []
+  v('les deux circuits du formulaire viennent bien de champsCircuits', colonnesCircuits.length > 0)
+  const champsPayload = [...[...bloc.matchAll(/^\s{6}([a-z_]+):/gm)].map(m => m[1]), ...colonnesStock, ...colonnesCircuits]
     .filter(c => c !== 'commercant_id')
   const manquants = champsPayload.filter(c => !CHAMPS_COPIES.includes(c))
   v('aucun champ du formulaire n’est oublié par la copie',

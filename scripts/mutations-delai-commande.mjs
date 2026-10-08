@@ -404,8 +404,8 @@ const MUTATIONS = [
   { nom: '🔴 le select des articles ne demande plus le delai',
     fichier: LIGNES,
     // ⚠️ Ancre reorientee le 08/10 : les circuits suivent le delai (temps 3).
-    de: 'tva_taux, tva_taux_sur_place, delai_minutes, vente_jour, commande_active\'',
-    vers: 'tva_taux, tva_taux_sur_place, vente_jour, commande_active\'' },
+    de: 'tva_taux, tva_taux_sur_place, delai_minutes, vente_jour, commande_active, stock_mode\'',
+    vers: 'tva_taux, tva_taux_sur_place, vente_jour, commande_active, stock_mode\'' },
 
   { nom: '🔴 le select des deals ne demande plus la fenetre',
     fichier: LIGNES,

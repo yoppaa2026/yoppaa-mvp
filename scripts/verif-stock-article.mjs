@@ -17,7 +17,7 @@ import {
   MODES_STOCK, modeStockDe, modeStockParDefaut, refusQuantite, champsStock, etatStock,
   revientUnAutreJour, mentionVitrine, choixDeVente, CHOIX_VISIBILITE, comptoirDuJour, choixDeStock,
   aDeuxCircuits, circuitsDeLArticle, circuitsCommuns, circuitDuJour, maximumSurCommande,
-  refusCircuits, champsCircuits,
+  refusCircuits, champsCircuits, dejaCommandePourStock,
 } from '../lib/stock-article.js'
 import { refusDuJour, longueurCalendrier, mentionDisponibilite, delaiEnJours, propositionPourArticle } from '../lib/delai-commande.js'
 import { verifierStockDisponible, itemsDeReservation, refusDeReservation, messageCircuit, SELECT_ARTICLES } from '../lib/lignes-commande.js'
@@ -282,7 +282,8 @@ const code = (f) => sansProse(lire(f))
   v('🔴 le panier aussi (getStockMax)',
     /const jour = jourLocalISO\(jourDateSelectionne\)[\s\S]{0,600}return etatStock\(\{ article, entreeJour: entryDay, dejaCommande, jour, circuit, invendu \}\)\.dispo/.test(fiche))
   const lc = code('lib/lignes-commande.js')
-  v('🔴 le serveur lit le comptoir des articles', /\.select\('id, stock_jour, stock_comptoir, stock_comptoir_le, vente_jour, commande_active, commande_max_jour'\)/.test(lc))
+  // ⚠️ RÉORIENTÉE LE 08/10 : + le stock qui baisse (mode, saisie, variantes).
+  v('🔴 le serveur lit le comptoir des articles', /\.select\('id, stock_jour, stock_comptoir, stock_comptoir_le, vente_jour, commande_active, commande_max_jour, stock_mode, stock_maj_le, gere_variantes'\)/.test(lc))
   v('🔴 et le fait passer devant la grille, après le jour indisponible',
     /const stockBrut = comptoir !== null\s*\? comptoir\s*: stockEntry/.test(lc)
     && lc.indexOf("if (stockEntry?.actif === false)") < lc.indexOf('const stockBrut = comptoir !== null'))
@@ -318,7 +319,8 @@ const code = (f) => sansProse(lire(f))
   v('🔴 une ligne lue SANS les colonnes : A ouvert (défaut en base), B fermé (comme IS NOT TRUE)',
     JSON.stringify(circuitsDeLArticle({}, ALIM)) === '{"aujourdhui":true,"surCommande":false}')
   v('un duo n’a que les circuits communs à ses deux articles',
-    JSON.stringify(circuitsCommuns(circuitsDeLArticle(croissant, ALIM), circuitsDeLArticle(pot, ALIM))) === '{"aujourdhui":true,"surCommande":false}'
+    // ⚠️ RÉORIENTÉE LE 08/10 : le sandwich, le pot n'ayant plus de circuit.
+    JSON.stringify(circuitsCommuns(circuitsDeLArticle(croissant, ALIM), circuitsDeLArticle(sandwich, ALIM))) === '{"aujourdhui":true,"surCommande":false}'
     && circuitsCommuns(null, null) === null)
   v('le maximum par jour : vide = sans limite, 40 = 40',
     maximumSurCommande(tarteSpeciale) === null && maximumSurCommande(croissant) === 40 && maximumSurCommande({ commande_max_jour: '' }) === null)
@@ -364,16 +366,26 @@ const code = (f) => sansProse(lire(f))
     v('tarte aux pommes : la mention dit les deux',
       mentionDisponibilite(regle(tartePommes)) === "Le jour même, ou commande 2 jours à l'avance", mentionDisponibilite(regle(tartePommes)))
   }
-  // ─── 5) Le pot : A, stock qui baisse 8 ───
+  // ─── 5) Le pot : stock qui baisse 8, PARTAGÉ ENTRE TOUS LES JOURS ───
+  // ⚠️ RÉORIENTÉ LE 08/10 (Alex au test : « le pot doit partir avec une
+  // commande pour samedi, tant qu'il y en a ») : il n'a plus de circuit.
   {
-    v('🔴 pot aujourd’hui : son stock', etatStock({ article: pot, jour: AUJ, circuit: 'A', dejaCommande: 3 }).dispo === 5)
-    v('🔴 pot demain : le jour même seulement',
-      refusDuJour({ ...regle(pot), jour: DEMAIN, aujourdhui: AUJ })?.raison === 'aujourdhui_seulement'
-      && etatStock({ article: pot, jour: DEMAIN, circuit: 'B' }).raison === 'pas_sur_commande')
+    v('🔴 pot aujourd’hui : son stock moins le vendu depuis la saisie', etatStock({ article: pot, jour: AUJ, circuit: 'A', dejaCommande: 3 }).dispo === 5)
+    v('🔴 pot samedi : se commande, sur le MÊME stock (pas de circuit)',
+      circuitsDeLArticle(pot, ALIM) === null
+      && refusDuJour({ ...regle(pot), jour: SAMEDI, aujourdhui: AUJ }) === null
+      && etatStock({ article: pot, jour: SAMEDI, circuit: 'B', dejaCommande: 3 }).dispo === 5)
+    v('🔴 le vendu se lit tous jours confondus pour le pot, au jour pour les autres',
+      dejaCommandePourStock({ article: pot, duJour: { po: 1 }, ventesMagasin: { po: 3 } }) === 3
+      && dejaCommandePourStock({ article: croissant, duJour: { c: 2 }, ventesMagasin: { c: 9 } }) === 2)
   }
   // ─── 6) Le sandwich : A seul ───
   {
     v('🔴 sandwich samedi : le jour même seulement', refusDuJour({ ...regle(sandwich), jour: SAMEDI, aujourdhui: AUJ })?.raison === 'aujourdhui_seulement')
+    // ⚠️ REPRISE DU POT (08/10) : c'est lui qui portait cette garde avant que le
+    // stock qui baisse sorte des circuits.
+    v('🔴 sandwich samedi : le stock de B le refuse aussi (pas sur commande)',
+      etatStock({ article: sandwich, jour: SAMEDI, circuit: 'B' }).raison === 'pas_sur_commande')
     v('sandwich : aucune mention (rien ne le distingue de la baguette d’avant)', mentionDisponibilite(regle(sandwich)) === null)
     const p = propositionPourArticle({ candidat: sandwich, panier: [], jourChoisi: SAMEDI, aujourdhui: AUJ, jours: [AUJ, DEMAIN, SAMEDI], regle: l => regle(l) })
     v('🔴 sandwich choisi pour samedi : la fiche propose aujourd’hui', p.type === 'vide' && p.jour === AUJ, JSON.stringify(p))
@@ -419,7 +431,7 @@ const code = (f) => sansProse(lire(f))
   const fausseBase = (tables, panne = null) => ({
     from(t) {
       const res = { data: tables[t] ?? [], error: panne === t ? { message: 'panne' } : null }
-      const q = { select: () => q, in: () => q, eq: () => q, not: () => q, gt: () => q, then: (ok, ko) => Promise.resolve(res).then(ok, ko) }
+      const q = { select: () => q, in: () => q, eq: () => q, not: () => q, gt: () => q, gte: () => q, then: (ok, ko) => Promise.resolve(res).then(ok, ko) }
       return q
     },
   })
@@ -459,6 +471,20 @@ const code = (f) => sansProse(lire(f))
   const robe = { id: 'r', nom: 'Robe', stock_jour: 3, stock_mode: 'magasin' }
   const bout = await verif(robe, [ligne(robe, 2)], SAMEDI, [cmd(robe, 2, '2026-10-01T10:00:00')], BOUTIQUE)
   v('🔴 serveur, boutique : rien ne change (3 - 2 = 1, 2 est refusé, sans colonne de circuit)', bout.ok === false && bout.stock_disponible === 1, JSON.stringify(bout))
+  // 🔴 LE STOCK QUI BAISSE, PARTAGÉ (08/10) : 8 pots saisis le 05/10. Vendus
+  // depuis : 3 (pour samedi). Avant la saisie : 2, qui ne comptent plus.
+  {
+    const potM = { ...pot, stock_maj_le: '2026-10-05T00:00:00+00:00', gere_variantes: false }
+    const ventes = [cmd(potM, 3, '2026-10-06T09:00:00'), cmd(potM, 2, '2026-10-01T09:00:00')]
+    v('🔴 serveur, pot pour samedi : 8 − 3 vendus depuis la saisie = 5 passent', (await verif(potM, [ligne(potM, 5)], SAMEDI, ventes)).ok === true)
+    const potTrop = await verif(potM, [ligne(potM, 6)], AUJ, ventes)
+    v('🔴 serveur, pot pour aujourd’hui : la commande de SAMEDI compte aussi (6 sur 5 refusé)',
+      potTrop.ok === false && potTrop.stock_disponible === 5, JSON.stringify(potTrop))
+    const potVar = { ...potM, gere_variantes: true, stock_jour: 0 }
+    v('les variantes gardent leur propre stock (article à 0 non bloqué)', (await verif(potVar, [ligne(potVar, 1)], SAMEDI)).ok === true)
+    v('🔴 la réservation sait aussi que le stock qui baisse n’a pas de circuit',
+      refusDuJour({ ...regle(Object.fromEntries(SELECT_ARTICLES.split(',').map(c => c.trim()).filter(c => c in pot).map(c => [c, pot[c]]))), jour: SAMEDI, aujourdhui: AUJ }) === null)
+  }
   const panne = await verif(croissant, [ligne(croissant, 1)], SAMEDI, [], ALIM, 'articles')
   v('🔴 serveur : une lecture en échec refuse (503), ni « zéro vendu » ni « pas sur commande »', panne.ok === false && panne.status === 503, JSON.stringify(panne))
 
@@ -488,9 +514,9 @@ const code = (f) => sansProse(lire(f))
     && /circuits = circuitsCommuns\(circuits, circuitsDeLArticle\(secondDuDuoParId\[String\(l\.deal_article2_id\)\], commercant\)\)/.test(cc)
     && /if \(refus\?\.raison === 'aujourdhui_seulement'\)/.test(cc))
   v('🔴 create-commande : le second article d’un duo est lu AVEC ses circuits',
-    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active'\)/.test(cc))
+    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active, stock_mode'\)/.test(cc))
   v('🔴 create-commande : l’horizon lit les circuits du catalogue',
-    /\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active'\)/.test(cc) && /horizonJours: a\.horizon_jours, circuits: circuitsDeLArticle\(a, commercant\)/.test(cc))
+    /\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active, stock_mode'\)/.test(cc) && /horizonJours: a\.horizon_jours, circuits: circuitsDeLArticle\(a, commercant\)/.test(cc))
   const rdv = code('app/api/stripe/checkout/create-rdv-commande/route.js')
   v('🔴 create-rdv-commande : même contrôle, même réservation, mêmes refus',
     /dateCommande: date_rdv, commercant,/.test(rdv) && /p_items: itemsDeReservation\(verifStock\)/.test(rdv) && /refusDeReservation\(errStock\.message, nomParArticle\)/.test(rdv))
@@ -523,6 +549,21 @@ const code = (f) => sansProse(lire(f))
     /getStockMax\(article\.id, \{ invendu: porteUneFenetre\(deal\) \}\)/.test(fiche) && (fiche.match(/getStockMax\(item\.id, \{ invendu: porteUneFenetre\(item\.offre\) \}\)/g) || []).length === 2)
   const sql = lire('migrations/MIGRATION_TEMPS3_DEUX_CIRCUITS.sql')
   v('🔴 la migration de la prod laisse passer l’invendu', /IF \(v_item->>'invendu'\) = 'true' THEN\s*CONTINUE;/.test(sql))
+  const sqlP = lire('migrations/MIGRATION_STOCK_PARTAGE.sql')
+  v('🔴 la migration du stock partagé compte depuis la saisie, tous jours, avant les circuits, variantes à part',
+    /IF v_mode = 'magasin' THEN\s*-- [^\n]*\n\s*IF v_var THEN\s*CONTINUE;/.test(sqlP)
+    && /AND \(c\.created_at AT TIME ZONE 'UTC'\) >= v_maj/.test(sqlP)
+    && sqlP.indexOf("IF v_mode = 'magasin' THEN") < sqlP.indexOf('IF v_circuit_b THEN'))
+  v('🔴 et la fonction des ventes dit le même compte', /AND \(c\.created_at AT TIME ZONE 'UTC'\) >= a\.stock_maj_le/.test(sqlP))
+  v('🔴 fiche : le pot lit le vendu depuis la saisie (ventes_stock_magasin)',
+    /supabase\.rpc\('ventes_stock_magasin', \{ p_commercant_id: commercant\.id \}\)/.test(fiche)
+    && /if \(modeStockDe\(a\) === 'magasin'\) map\[a\.id\] = dejaCommandePourStock\(\{ article: a, duJour, ventesMagasin \}\)/.test(fiche))
+  v('🔴 tableau de bord : la carte montre le RESTE, pas le chiffre saisi',
+    /const st = Math\.max\(0, \(a\.stock_jour \|\| 0\) - venduDepuisSaisie\)/.test(code('app/dashboard/ConfigDashboard.js'))
+    && /supabase\.rpc\('ventes_stock_magasin', \{ p_commercant_id: commercantId \}\)/.test(code('app/dashboard/ConfigDashboard.js')))
+  v('🔴 le serveur lit le stock qui baisse sur tous les jours, depuis la saisie',
+    /const dispoM = Math\.max\(0, Number\(art\.stock_jour\) \|\| 0\) - \(venduMagasin\[artId\] \|\| 0\) - \(reserveMagasin\[artId\] \|\| 0\)/.test(lc)
+    && /if \(vendu === null \|\| vendu < saisie\) return/.test(lc))
 
   // ─── LE TABLEAU DE BORD : LES DEUX SECTIONS, EXÉCUTÉES PUIS VISÉES ───
   v('🔴 ni le jour même ni sur commande : refusé', refusCircuits({ vente_jour: false, commande_active: false }) !== null)

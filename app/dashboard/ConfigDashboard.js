@@ -791,6 +791,24 @@ function TabMenu({ commercantId, commercant, toast }) {
     poserSiChange(memoireCommandesB, mapB, setCommandesSurCommande)
   }, [commercantId, deuxCircuits])
 
+  // 🔴 LE STOCK QUI BAISSE (08/10) : ce qui est vendu DEPUIS LA SAISIE, tous
+  // jours de retrait. La carte affichait la quantité saisie, sans les ventes.
+  // Même compte que la réservation (`ventes_stock_magasin`).
+  const [venduDepuisSaisie, setVenduDepuisSaisie] = useState({})
+  const memoireVenduSaisie = useRef(null)
+  const chargerVentesMagasin = useCallback(async () => {
+    if (!commercantId) return
+    const { data, error } = await supabase.rpc('ventes_stock_magasin', { p_commercant_id: commercantId })
+    if (error) return
+    poserSiChange(memoireVenduSaisie, Object.fromEntries((data || []).map(r => [r.article_id, Number(r.quantite) || 0])), setVenduDepuisSaisie)
+  }, [commercantId])
+  useEffect(() => {
+    if (!commercantId) return
+    chargerVentesMagasin()
+    const id = setInterval(() => { if (ecranRegarde()) chargerVentesMagasin() }, 30000)
+    return () => clearInterval(id)
+  }, [commercantId, chargerVentesMagasin])
+
   // ⚠️ MÊME DÉFAUT QUE SUR LA FICHE CLIENT, TROUVÉ EN CHERCHANT SES FRÈRES.
   // Ce relevé tournait toutes les cinq secondes, sans regarder si le commerçant
   // avait les yeux sur l'écran, et reposait la carte des quantités avec un
@@ -911,7 +929,8 @@ function TabMenu({ commercantId, commercant, toast }) {
     }
     setSaving(false)
     toast(editId ? 'Article mis à jour' : 'Article ajouté')
-    setShowForm(false); fetchArticles()
+    // Un stock qui baisse ressaisi repart de zéro vente : on relit le compte.
+    setShowForm(false); fetchArticles(); chargerVentesMagasin()
   }
 
   async function ajouterCategorie() {
@@ -1183,6 +1202,9 @@ function TabMenu({ commercantId, commercant, toast }) {
     const { error } = await supabase.from('articles').update(maj).eq('id', id)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     setArticles(prev => prev.map(a => a.id === id ? { ...a, ...maj } : a))
+    // ⚠️ La saisie remet le compteur des ventes à zéro : on le relit tout de
+    // suite, sinon la carte retirerait 30 s les anciennes ventes du nouveau stock.
+    chargerVentesMagasin()
   }
 
   // ⚠️ LA JOURNÉE EST-ELLE FINIE ? (Alex, 07/10) Le soir, boutique fermée, plus
@@ -1522,7 +1544,7 @@ function TabMenu({ commercantId, commercant, toast }) {
             <SectionFormulaire titre="Sur commande, pour un autre jour" phrase="Ce que ton client réserve pour demain ou plus tard. Tu le prépares exprès, à part de ce que tu vends le jour même.">
               {form.vente_jour !== false && form.stock_mode === 'magasin' ? (
                 <p style={{ margin: 0, fontSize: 14, color: '#3F3A4F', background: '#F8F6FF', border: '1px solid #E4DCF7', borderRadius: 10, padding: '10px 12px', lineHeight: 1.5 }}>
-                  Un produit au stock qui baisse se vend sur son stock, le jour même : il ne se prend pas sur commande.
+                  Un produit au stock qui baisse se commande pour n&rsquo;importe quel jour, tant qu&rsquo;il en reste : il n&rsquo;a pas besoin de « sur commande ».
                 </p>
               ) : (<>
                 <ChoixCartes label="Se prend-il sur commande ?" choix={CHOIX_SUR_COMMANDE}
@@ -1697,7 +1719,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // ⚠️ DEPUIS LE 30/09, `estVitrine` / `estDetail` DISENT LA CATÉGORIE DU
     // COMMERCE (variantes ou options, temps de préparation). Le stock et la
     // vitrine se lisent sur l'ARTICLE : son mode, et « vendu en ligne ».
-    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir} journeeFinie={journeeFinieAuj} deuxCircuits={deuxCircuits} surCommande={commandesSurCommande[a.id] || {}}/>
+    return <ArticleCard key={a.id} a={a} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir} journeeFinie={journeeFinieAuj} deuxCircuits={deuxCircuits} surCommande={commandesSurCommande[a.id] || {}} venduDepuisSaisie={venduDepuisSaisie[a.id] || 0}/>
   }
 
   return (
@@ -3031,7 +3053,7 @@ function VariantesArticle({ article, toast, articles = [] }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
-function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, surCommande = {} }) {
+function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, surCommande = {}, venduDepuisSaisie = 0 }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -3175,13 +3197,16 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
               </span>
             )}
             {/* Stock en magasin : un chiffre, cliquable pour l'ajuster */}
-            {vendable && venteJour && mode === 'magasin' && (() => {
-              const st = a.stock_jour || 0
+            {/* 🔴 LE STOCK QUI BAISSE (08/10) : le RESTE (saisi − vendu depuis la
+                saisie, tous jours), pas le chiffre saisi. Corriger le stock
+                repart de ce qu'il compte en rayon : une nouvelle saisie. */}
+            {vendable && mode === 'magasin' && (() => {
+              const st = Math.max(0, (a.stock_jour || 0) - venduDepuisSaisie)
               return (
-                <button type="button" title="Modifier le stock"
-                  onClick={() => { const v = window.prompt('Stock disponible :', String(st)); if (v !== null) onUpdateStock(a.id, v) }}
-                  style={{ fontSize: 11, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: st === 0 ? '#DC2626' : st <= 2 ? '#EA580C' : '#10B981', background: st === 0 ? '#FEE2E2' : st <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
-                  {st === 0 ? 'Épuisé' : `Stock : ${st}`}
+                <button type="button" title="Corriger le stock (ce que tu as en rayon maintenant)"
+                  onClick={() => { const v = window.prompt('Combien en as-tu en rayon, maintenant ?', String(st)); if (v !== null) onUpdateStock(a.id, v) }}
+                  style={{ fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: st === 0 ? '#DC2626' : st <= 2 ? '#EA580C' : '#10B981', background: st === 0 ? '#FEE2E2' : st <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 9px', borderRadius: 100 }}>
+                  {st === 0 ? 'Épuisé' : `Stock : ${st}`}{venduDepuisSaisie > 0 ? ` (${venduDepuisSaisie} vendu${venduDepuisSaisie > 1 ? 's' : ''})` : ''}
                 </button>
               )
             })()}

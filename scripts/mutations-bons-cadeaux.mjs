@@ -528,7 +528,7 @@ const MUTATIONS = [
     banc: 'verif:logique', fichier: 'lib/lignes-commande.js',
     // ⚠️ Ancre reorientee le 07/10 : le comptoir du jour s ajoute au select.
     // ⚠️ Et le 08/10 : les deux circuits (temps 3) aussi.
-    de: "    supabase.from('articles')\n      .select('id, stock_jour, stock_comptoir, stock_comptoir_le, vente_jour, commande_active, commande_max_jour')\n      .in('id', stockArticleIds),",
+    de: "    supabase.from('articles')\n      .select('id, stock_jour, stock_comptoir, stock_comptoir_le, vente_jour, commande_active, commande_max_jour, stock_mode, stock_maj_le, gere_variantes')\n      .in('id', stockArticleIds),",
     vers: "    Promise.resolve({ data: [] })," },
 
   { nom: '🔴 l’absence d’entrée redevient « aucune limite »',

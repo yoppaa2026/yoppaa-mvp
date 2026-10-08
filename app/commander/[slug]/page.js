@@ -14,7 +14,7 @@ import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { nomDeLaCarte } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09) : une seule règle
 // pour la carte, la limite du panier et le tableau de bord.
-import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour } from '@/lib/stock-article'
+import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour, modeStockDe, dejaCommandePourStock } from '@/lib/stock-article'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe } from '@/lib/creneaux'
 import { refusDeMelange, libelleMoment, delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier, mentionDisponibilite, propositionPourArticle } from '@/lib/delai-commande'
@@ -2361,12 +2361,26 @@ export default function CommanderSlug() {
       p_date: dateStr,
     })
     if (error) { console.warn('[stock jour] rpc KO', error.message); return }
-    const map = {}
+    const duJour = {}
     ;(lignes || []).forEach(r => {
-      map[r.article_id] = Number(r.quantite) || 0
+      duJour[r.article_id] = Number(r.quantite) || 0
     })
+    // 🔴 LE STOCK QUI BAISSE, PARTAGÉ ENTRE TOUS LES JOURS (Alex, 08/10) : pour
+    // ces articles, ce qui compte est le vendu DEPUIS LA SAISIE, quel que soit
+    // le jour de retrait. Même compte que la réservation (`ventes_stock_magasin`).
+    // ⚠️ Une lecture en échec ne vaut pas « rien vendu » : on garde l'ancien état.
+    let ventesMagasin = {}
+    if ((articles || []).some(a => modeStockDe(a) === 'magasin')) {
+      const { data: ventes, error: errVentes } = await supabase.rpc('ventes_stock_magasin', { p_commercant_id: commercant.id })
+      if (errVentes) { console.warn('[stock partage] rpc KO', errVentes.message); return }
+      ventesMagasin = Object.fromEntries((ventes || []).map(r => [r.article_id, Number(r.quantite) || 0]))
+    }
+    const map = { ...duJour }
+    for (const a of articles || []) {
+      if (modeStockDe(a) === 'magasin') map[a.id] = dejaCommandePourStock({ article: a, duJour, ventesMagasin })
+    }
     poserSiChange(memoireCommandes, map, setCommandesParArticleJour)
-  }, [commercant, joursDispos, jourSelectionne, estDetail, jourRetraitBoutique])
+  }, [commercant, joursDispos, jourSelectionne, estDetail, jourRetraitBoutique, articles])
 
   // Recharge à chaque changement de jour ou de commerçant
   useEffect(() => {

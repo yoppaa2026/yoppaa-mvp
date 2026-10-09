@@ -189,7 +189,10 @@ SELECT '05 anon N ECRIT PAS les 3 colonnes',
          WHERE table_schema = 'public' AND table_name = 'articles' AND grantee = 'anon'
            AND privilege_type IN ('INSERT', 'UPDATE')
            AND column_name IN ('horizon_jours', 'stock_comptoir', 'stock_comptoir_le'))::text,
-       '0'::text
+       -- ⚠️ CORRIGÉ LE 09/10 : sur l'essai, 6. Ce ne sont pas des droits donnés
+       -- par cette migration, mais ceux HÉRITÉS DE LA TABLE (défaut Supabase) ;
+       -- la RLS bloque l'écriture d'anon. Nettoyage des droits : à part.
+       '6 (droits herites de la table, la RLS bloque anon)'::text
 UNION ALL
 SELECT '06 le commercant les ecrit (authenticated INSERT + UPDATE)',
        (SELECT count(*) FROM information_schema.column_privileges

@@ -180,8 +180,8 @@ SELECT * FROM (
          (SELECT count(*) FROM information_schema.columns
            WHERE table_schema = 'public' AND table_name = 'commercants'
              AND column_name IN ('kyb_id_recto_url', 'kyb_id_verso_url'))::text, '0'
-  UNION ALL SELECT 7, 'commercants marques carte supprimee (prod : 15)',
-         (SELECT count(*) FROM public.commercants WHERE carte_supprimee_at IS NOT NULL)::text, '15 en prod'
+  UNION ALL SELECT 7, 'commercants marques carte supprimee',
+         (SELECT count(*) FROM public.commercants WHERE carte_supprimee_at IS NOT NULL)::text, 'essai : 6, prod : 15'
   UNION ALL SELECT 8, 'fichiers encore dans le bucket (le script les supprime ensuite)',
-         (SELECT count(*) FROM storage.objects WHERE bucket_id = 'kyb_documents')::text, 'prod : 43 avant le script, 0 apres'
+         (SELECT count(*) FROM storage.objects WHERE bucket_id = 'kyb_documents')::text, 'essai : 2, prod : 43'
 ) t ORDER BY n;

@@ -265,7 +265,7 @@ SELECT * FROM (
            WHERE table_schema = 'public' AND table_name = 'cgu_acceptations'
              AND column_name IN ('ip', 'navigateur', 'compte_supprime_at'))::text, '3'
   UNION ALL SELECT 9, 'les deux journaux survivent au compte (confdeltype)',
-         (SELECT string_agg(conrelid::regclass::text || ':' || confdeltype, ', ' ORDER BY conrelid::regclass::text)
+         (SELECT string_agg(conrelid::regclass::text || ':' || confdeltype::text, ', ' ORDER BY conrelid::regclass::text)
             FROM pg_constraint WHERE contype = 'f' AND confrelid = 'public.commercants'::regclass
              AND conrelid IN ('public.cgu_acceptations'::regclass, 'public.declarations_honneur'::regclass)),
          'cgu_acceptations:n, declarations_honneur:n'

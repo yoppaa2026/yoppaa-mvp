@@ -12,7 +12,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { globalLimiter, formulairesLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
-import { envieConnue, motifAvisConnu, motifFicheConnu, libelleMotifAvis } from '@/lib/signaux'
+import { envieConnue, motifAvisConnu, motifFicheConnu, libelleMotifAvis, libelleMotifFiche, MOTIFS_FICHE_GRAVES } from '@/lib/signaux'
 import { envoyerAuAdmin, emailSuggestionCommerce, emailSignalementFiche, emailSignalementAvis } from '@/lib/resend'
 
 // Prévenir l'administration, SANS jamais faire échouer le geste de l'habitant.
@@ -160,8 +160,11 @@ export async function POST(request) {
         const { data } = await supabase.from('commercants').select('nom').eq('id', body.commercant_id).maybeSingle()
         cibleNom = data?.nom || null
       }
+      // 🔴 UNE USURPATION SE LIT EN PREMIER (09/10) : le sujet le dit, pour
+      // qu'elle ne se noie pas parmi les horaires à corriger.
+      const grave = MOTIFS_FICHE_GRAVES.includes(motif)
       await prevenirLAdmin(
-        `Signalement · ${cibleNom || 'une fiche'}`,
+        `${grave ? `URGENT ${libelleMotifFiche(motif)}` : 'Signalement'} · ${cibleNom || 'une fiche'}`,
         emailSignalementFiche({ motif, description, cible_nom: cibleNom, commercant_id: body.commercant_id, service_id: body.service_id }),
       )
       return NextResponse.json({ ok: true })

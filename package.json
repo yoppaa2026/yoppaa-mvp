@@ -100,6 +100,8 @@
     "demo:gratuites": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/fiches-demo-gratuites.mjs",
     "controle:prices": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-prices-stripe.mjs",
     "controle:abonnements": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-abonnements-manquants.mjs",
+    "cartes:supprimer": "node --env-file=.env.local scripts/supprimer-cartes-identite.mjs",
+    "cartes:supprimer:essai": "node --env-file=.env.essai scripts/supprimer-cartes-identite.mjs",
     "mutations:forfaits": "node scripts/mutations-forfaits-annonces.mjs",
     "verif:catalogue-prices": "node --no-warnings scripts/verif-catalogue-prices.mjs",
     "mutations:catalogue-prices": "node scripts/mutations-catalogue-prices.mjs",

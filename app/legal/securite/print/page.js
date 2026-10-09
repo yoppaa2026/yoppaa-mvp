@@ -224,7 +224,8 @@ export default function NoteSecuritePrint() {
             'Cloudflare Turnstile sur les formulaires sensibles (anti-bot)',
             'Rate limiting en cours de déploiement progressif sur les routes sensibles',
             'Audit régulier des dépendances (mises à jour de sécurité automatiques)',
-            'Vérification BCE des commerçants à l\'inscription (registre belge)',
+            'Numéro d\'entreprise (BCE) des commerçants contrôlé à l\'inscription, puis vérifié par l\'équipe Yoppaa au registre public',
+            'Déclaration sur l\'honneur des commerçants prouvée (date, adresse IP) ; aucune pièce d\'identité collectée',
           ]} small/>
 
           <H3>4.4 · Code & déploiement</H3>

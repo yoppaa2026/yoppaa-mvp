@@ -116,13 +116,15 @@ const MUTATIONS = [
 
   { nom: '🔴 l erreur d ecriture du lien n est plus lue : compte cree chez Stripe, orphelin chez nous',
     fichier: LIEN,
-    de: "      const { error: errLien } = await supabase",
-    vers: "      const errLien = null; await supabase" },
+    // ⚠️ ANCRE SUIVIE LE 09/10 : l'écriture passe par la clé du serveur.
+    de: "      const { error: errLien } = await admin",
+    vers: "      const errLien = null; await admin" },
 
   { nom: '🔴 l erreur de detachement n est plus lue : deux comptes, un seul lien',
     fichier: LIEN,
-    de: "      const { error: errDetach } = await supabase",
-    vers: "      const errDetach = null; await supabase" },
+    // ⚠️ ANCRE SUIVIE LE 09/10 : l'écriture passe par la clé du serveur.
+    de: "      const { error: errDetach } = await admin",
+    vers: "      const errDetach = null; await admin" },
 
   { nom: '🔴 ON DESARME LA GARDE DE FORFAIT pour tout le monde, pas juste pour un compte perdu',
     fichier: LIEN,

@@ -12,6 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailKYBValide } from '@/lib/resend'
 import { creerSubscriptionAutomatique } from '@/lib/stripe-billing'
 import { adminVerifie } from '@/lib/api-auth'
+import { DECLARATION_VERSION } from '@/lib/declaration'
 
 
 export async function POST(request) {
@@ -38,6 +39,27 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'acces refuse' }, { status: 403 })
     }
 
+    // 0) 🔴 PAS DE VALIDATION SANS DÉCLARATION SUR L'HONNEUR (09/10). Elle
+    // remplace la carte d'identité : un dossier sans elle n'a rien qui engage
+    // le déclarant. On le rejette, il la coche en renvoyant son dossier.
+    const { data: avant, error: errAvant } = await supabase
+      .from('commercants')
+      .select('declaration_version')
+      .eq('id', commercant_id)
+      .maybeSingle()
+    if (errAvant) {
+      return NextResponse.json({ ok: false, error: `lecture echouee : ${errAvant.message}` }, { status: 500 })
+    }
+    if (!avant) {
+      return NextResponse.json({ ok: false, error: 'commercant introuvable' }, { status: 404 })
+    }
+    if (avant.declaration_version !== DECLARATION_VERSION) {
+      return NextResponse.json({
+        ok: false,
+        error: 'Pas de declaration sur l honneur en vigueur : rejette le dossier en demandant de le renvoyer.',
+      }, { status: 409 })
+    }
+
     // 1) Update commercant + recup colonnes necessaires pour la creation Stripe
     const { data: commercant, error: errC } = await supabase
       .from('commercants')
@@ -55,12 +77,18 @@ export async function POST(request) {
     }
 
     // 2) Log de l'action (table admin_validations existante, action='kyb_valide')
-    await supabase.from('admin_validations').insert({
+    // 🔴 CETTE ÉCRITURE ÉCHOUAIT TOUJOURS, EN SILENCE (relevé du 09/10) : la
+    // contrainte du journal n'admettait pas `kyb_valide`, et personne ne lisait
+    // l'erreur. Aucune décision KYB n'a jamais été journalisée. La contrainte
+    // est élargie (MIGRATION_VERIFICATION_1) et l'erreur est lue. Elle ne
+    // bloque pas : la décision est prise, le journal le dit à l'admin.
+    const { error: errJournal } = await supabase.from('admin_validations').insert({
       commercant_id,
       action: 'kyb_valide',
       motif: null,
       validated_by_email: user.email,
     })
+    if (errJournal) console.error('[admin/kyb/valider] journal non ecrit', { commercant_id, msg: errJournal.message })
 
     // 3) Offre de lancement : si le commercant est sur un plan payant
     //    (communiquer ou vendre) ET qu'il n'a pas deja une subscription Stripe,
@@ -111,6 +139,7 @@ export async function POST(request) {
       ok: true,
       commercant_id,
       email: emailResult.ok ? 'envoye' : `echec : ${emailResult.error}`,
+      journal: errJournal ? `echec : ${errJournal.message}` : 'ecrit',
       stripe: stripeResult,
     })
   } catch (e) {

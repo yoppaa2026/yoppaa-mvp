@@ -17,6 +17,7 @@
 import { NextResponse } from 'next/server'
 import { utilisateurAppelant, clientAdmin } from '@/lib/api-auth'
 import { CGU_COMMERCANT_VERSION } from '@/lib/cgu'
+import { origineRequete } from '@/lib/declaration'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,10 +45,14 @@ export async function POST(request) {
     }
 
     const maintenant = new Date().toISOString()
+    // ⚠️ L'ADRESSE IP ET LE NAVIGATEUR (09/10) : sans eux, l'acceptation dit
+    // QUAND et QUEL COMPTE, pas D'OÙ. C'est ce qui départage un « ce n'était
+    // pas moi ».
+    const { ip, navigateur } = origineRequete(request.headers)
     // Le journal d'abord : une acceptation sans trace ne vaut rien, une trace
     // sans mise à jour de la fiche se rattrape à la connexion suivante.
     const { error: errJournal } = await admin.from('cgu_acceptations').insert(
-      ids.map(id => ({ commercant_id: id, auth_user_id: user.id, version: CGU_COMMERCANT_VERSION, acceptee_at: maintenant })),
+      ids.map(id => ({ commercant_id: id, auth_user_id: user.id, version: CGU_COMMERCANT_VERSION, acceptee_at: maintenant, ip, navigateur })),
     )
     if (errJournal) return NextResponse.json({ ok: false, error: 'enregistrement impossible, réessaie' }, { status: 500 })
 

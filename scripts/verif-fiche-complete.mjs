@@ -349,8 +349,12 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   const iCompte = signup.indexOf('<Card titre="Ton compte">')
   v('l inscription annonce les papiers AVANT tout le reste de la première page',
     iAvant > 0 && iAvant < iOffre && iAvant < iCompte)
-  v('elle nomme la carte d identité et le numéro d entreprise',
-    /Ta carte d&rsquo;identité<\/strong>/.test(signup) && /Ton numéro d&rsquo;entreprise \(BCE\)<\/strong>/.test(signup))
+  // ⚠️ REPOINTÉE LE 09/10 : la carte d'identité n'est plus demandée (Alex,
+  // « socle minimal »). L'encadré nomme le numéro, et DIT qu'aucune pièce
+  // d'identité n'est demandée : c'est elle qui faisait fuir.
+  v('elle nomme le numéro d entreprise, et dit qu aucune pièce d identité n est demandée',
+    /Ton numéro d&rsquo;entreprise \(BCE\)<\/strong>/.test(signup) && !/Ta carte d&rsquo;identité<\/strong>/.test(signup)
+    && /Aucune pièce d&rsquo;identité n&rsquo;est demandée/.test(signup))
   const landing = code('app/components/LandingReveal.js')
   // ⚠️ REPOINTÉE LE 06/10 : trois étapes, plus cinq (décision d'Alex). La
   // landing et sa maquette disent le parcours tel qu'il est.
@@ -358,7 +362,10 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
     !/étapes, et ta page part en ligne/.test(landing) && /Trois étapes, et ton espace s&rsquo;ouvre\./.test(landing))
   v('🔴 la maquette de la landing montre les trois étapes, sans score de 60',
     /\['Compte', 'L’essentiel', 'Vérification'\]\.map/.test(landing) && !/Minimum 60 \/ 100/.test(landing) && !/Étape 5 sur 5/.test(landing))
-  v('la landing prévient aussi des papiers', /garde sous la main ta carte d&rsquo;identité/.test(landing))
+  // ⚠️ REPOINTÉE LE 09/10 : le numéro seul, et plus de carte, ni dans le
+  // texte ni dans la maquette.
+  v('la landing prévient du numéro, et plus de la carte',
+    /garde sous la main ton numéro d&rsquo;entreprise/.test(landing) && !/carte d&rsquo;identité|Carte d’identité/.test(landing))
   v('le score d inscription exige la même longueur',
     /trim\(\)\.length >= MIN_PRESENTATION/.test(code('lib/score-onboarding.js')))
 }
@@ -394,8 +401,11 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('l inscription n envoie plus aucune image au bucket public (06/10)', envois(signup) === 0, `${envois(signup)}`)
   v('aucune suppression ne coupe l adresse au dernier « / »',
     !/split\('\/'\)\.pop\(\)/.test(dash + signup) && !/segments\[segments\.length - 1\]/.test(signup))
-  v('les pièces d identité gardent leur propre rangement',
-    /const fileName = `\$\{user\.id\}\/\$\{commercant\.id\}_\$\{kind\}_/.test(signup))
+  // ⚠️ RETIRÉE LE 09/10, AVEC SON MOTIF : elle gardait le rangement des
+  // pièces d'identité, et il n'y a plus de pièces d'identité. Remplacée par
+  // l'inverse : plus aucun envoi vers leur espace, nulle part.
+  v('🔴 plus aucun envoi vers l espace des cartes d identité (09/10)',
+    !/kyb_documents/.test(signup) && !/kyb_documents/.test(dash) && !/kyb_id_(recto|verso)_url/.test(signup + dash))
 }
 
 // ═══ L'INSCRIPTION EN 3 ÉTAPES ET LES CGU PROUVÉES (Alex, 06/10) ════════════
@@ -419,8 +429,9 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
     cguAJour({ cgu_version: CGU_COMMERCANT_VERSION }) && !cguAJour({ cgu_version: '2026-01-01' }) && !cguAJour({}) && !cguAJour(null))
 
   const signup = code('app/signup/page.js')
-  v('🔴 l’envoi attend le KYB ET la case des CGU, plus aucun score',
-    /const peutSoumettre = kybRempli && cguCochees/.test(signup) && !/score\.peutSoumettre/.test(signup) && !/SEUIL_SOUMISSION/.test(signup))
+  // ⚠️ SUIVIE LE 09/10 : la déclaration sur l'honneur s'ajoute aux deux.
+  v('🔴 l’envoi attend le KYB, la case des CGU ET la déclaration, plus aucun score',
+    /const peutSoumettre = kybRempli && cguCochees && declarationCochee && !!texteDecl/.test(signup) && !/score\.peutSoumettre/.test(signup) && !/SEUIL_SOUMISSION/.test(signup))
   v('🔴 les CGU sont enregistrées par le serveur AVANT que le dossier parte',
     signup.indexOf("fetch('/api/commercant/accepter-cgu'") > 0
     && signup.indexOf("fetch('/api/commercant/accepter-cgu'") < signup.indexOf("statut: 'en_attente_validation'"))
@@ -484,6 +495,156 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('🔴 la base refuse d’ouvrir sans KYB', /IF NEW\.statut IN \('valide', 'actif'\)\s*AND \(TG_OP = 'INSERT' OR OLD\.statut IS DISTINCT FROM NEW\.statut\) THEN\s*RAISE EXCEPTION/.test(sql))
   v('🔴 la base refuse de publier sans KYB', /IF NEW\.statut_publication = 'publie'\s*AND \(TG_OP = 'INSERT' OR OLD\.statut_publication IS DISTINCT FROM 'publie'\) THEN\s*RAISE EXCEPTION/.test(sql))
   v('le déclencheur porte sur ouverture, publication et KYB', /BEFORE INSERT OR UPDATE OF statut, statut_publication, kyb_statut ON public\.commercants/.test(sql))
+}
+
+// ═══ LA FIN DE LA CARTE D'IDENTITÉ, LA DÉCLARATION SUR L'HONNEUR (Alex, 09/10) ═
+// « Socle minimal » : plus de carte, le BCE vérifié au registre, une
+// déclaration PROUVÉE, et les colonnes sensibles réservées au serveur.
+{
+  const { DECLARATION_VERSION, texteDeclaration, declarationAJour, lienFicheBCE, origineRequete } = await import('../lib/declaration.js')
+  // ⚠️ « a AVANT b » EXIGE QUE LES DEUX EXISTENT : un texte introuvable rend -1,
+  // et -1 est « avant » tout. Sans cette exigence, la garde est verte à vide.
+  const avant = (s, a, b) => { const i = s.indexOf(a), j = s.indexOf(b); return i >= 0 && j >= 0 && i < j }
+
+  // ── La règle, EXÉCUTÉE ────────────────────────────────────────────────────
+  const t = texteDeclaration({ prenom: ' Alex ', nom: 'Martin', bce: '0731.637.148', commerce: 'Chez Momo' })
+  v('🔴 la déclaration nomme la personne, le numéro formaté et le commerce',
+    typeof t === 'string' && t.includes('Alex Martin') && t.includes('0731.637.148') && t.includes('« Chez Momo »'), t)
+  v('🔴 pas de déclaration à trous : numéro invalide, nom trop court ou commerce absent',
+    texteDeclaration({ prenom: 'Alex', nom: 'Martin', bce: '0731.637.149', commerce: 'X' }) === null
+    && texteDeclaration({ prenom: 'A', nom: 'Martin', bce: '0731637148', commerce: 'X' }) === null
+    && texteDeclaration({ prenom: 'Alex', nom: 'Martin', bce: '0731637148', commerce: ' ' }) === null
+    && texteDeclaration({}) === null)
+  v('le même numéro saisi autrement donne le même texte (le serveur compare des textes)',
+    texteDeclaration({ prenom: 'Alex', nom: 'Martin', bce: 'BE 0731 637 148', commerce: 'Chez Momo' }) === t)
+  v('aucun tiret cadratin dans le texte déclaré', !/—/.test(t))
+  v('🔴 seule la version EN VIGUEUR vaut déclaration',
+    declarationAJour({ declaration_version: DECLARATION_VERSION }) && !declarationAJour({ declaration_version: '2026-01-01' })
+    && !declarationAJour({}) && !declarationAJour(null))
+  v('le lien du registre vise le numéro, et rien pour un numéro faux',
+    lienFicheBCE('0731.637.148') === 'https://kbopub.economie.fgov.be/kbopub/toonondernemingps.html?ondernemingsnummer=0731637148&lang=fr'
+    && lienFicheBCE('0731.637.149') === null && lienFicheBCE(null) === null)
+  const h = (o) => ({ get: (k) => o[k] ?? null })
+  const o1 = origineRequete(h({ 'x-forwarded-for': ' 81.2.3.4 , 10.0.0.1', 'user-agent': 'Mozilla/5.0' }))
+  v('🔴 l’adresse IP est celle du client (la première), pas celle d’un relais',
+    o1.ip === '81.2.3.4' && o1.navigateur === 'Mozilla/5.0', JSON.stringify(o1))
+  const o2 = origineRequete(h({ 'x-real-ip': '9.9.9.9', 'user-agent': 'x'.repeat(900) }))
+  v('repli sur x-real-ip, et un navigateur borné', o2.ip === '9.9.9.9' && o2.navigateur.length === 400)
+  const o3 = origineRequete(h({}))
+  v('sans en-têtes : null, jamais une chaîne vide', o3.ip === null && o3.navigateur === null)
+
+  // ── La route : le titulaire seul, le texte vu, la preuve d'abord ──────────
+  const route = code('app/api/commercant/declarer/route.js')
+  v('🔴 la route refuse qui n’est pas le titulaire (pas d’exception admin)',
+    /if \(!fiche \|\| fiche\.auth_user_id !== user\.id\) \{\s*return NextResponse\.json\(\{ ok: false, error: 'accès refusé' \}, \{ status: 403 \}\)/.test(route)
+    && !/adminVerifie|gardeCommercant/.test(route))
+  v('🔴 la route n’accepte que la version en vigueur', /if \(version !== DECLARATION_VERSION\) \{\s*return NextResponse\.json/.test(route))
+  v('🔴 le texte enregistré est celui que l’écran a montré, sinon refus',
+    /if \(!texteServeur \|\| texte !== texteServeur\) \{\s*return NextResponse\.json/.test(route)
+    && avant(route, 'texte !== texteServeur', ".from('declarations_honneur').insert("))
+  v('🔴 la fiche fait foi : la requête ne complète que ce qui manque',
+    /const bce = bceFiche\.valide \? bceFiche\.raw : \(bceDemande\.valide \? bceDemande\.raw : null\)/.test(route)
+    && /if \(!bceFiche\.valide\) complement\.bce = bce/.test(route))
+  v('🔴 la preuve d’abord, la fiche ensuite, et les deux erreurs sont lues',
+    avant(route, ".from('declarations_honneur').insert(", "declaration_version: DECLARATION_VERSION, declaration_acceptee_at: maintenant")
+    && /if \(errJournal\) \{/.test(route) && /if \(errMaj\) return NextResponse\.json/.test(route))
+  v('🔴 la preuve garde le texte, le numéro, les noms, l’IP et le navigateur',
+    /texte: texteServeur,\s*bce,\s*representant_prenom: prenom,\s*representant_nom: nom,\s*ip,\s*navigateur,/.test(route))
+  v('les CGU gardent aussi l’IP et le navigateur',
+    /acceptee_at: maintenant, ip, navigateur \}/.test(code('app/api/commercant/accepter-cgu/route.js')))
+
+  // ── Les écrans ────────────────────────────────────────────────────────────
+  const bord = code('app/dashboard/page.js')
+  v('🔴 un inscrit d’avant déclare à sa prochaine connexion, après les CGU, jamais en mode emprunt',
+    /if \(commercant && !impersonating && !declarationAJour\(commercant\)\) return \(\s*<EcranDeclaration/.test(bord)
+    && avant(bord, '!cguAJour(commercant)', '!declarationAJour(commercant)'))
+  const ecran = code('app/dashboard/EcranDeclaration.js')
+  v('l’écran envoie le texte qu’il affiche, construit par la règle partagée',
+    /const texte = texteDeclaration\(/.test(ecran) && /fetch\('\/api\/commercant\/declarer'/.test(ecran)
+    && /body: JSON\.stringify\(\{ commercant_id: commercant\.id, version: DECLARATION_VERSION, texte,/.test(ecran))
+  v('l’écran dit à ceux qui en avaient envoyé une que leur carte est supprimée',
+    /\{commercant\.carte_supprimee_at && \(/.test(ecran))
+  v('le bouton montre qu’il travaille', /\{enCours && <DotsAttente/.test(ecran))
+
+  const signup = code('app/signup/page.js')
+  v('🔴 à l’inscription, la déclaration part APRÈS les CGU et AVANT le dossier',
+    avant(signup, "fetch('/api/commercant/accepter-cgu'", "fetch('/api/commercant/declarer'")
+    && avant(signup, "fetch('/api/commercant/declarer'", "statut_publication: 'en_attente',"))
+  v('🔴 un refus de la déclaration arrête l’envoi', /if \(!rDecl\.ok \|\| !jDecl\?\.ok\) \{[\s\S]{0,200}setSubmitting\(false\)\s*return\s*\}/.test(signup))
+  v('🔴 le texte déclaré vient de la fiche ENREGISTRÉE, pas de la saisie en cours',
+    /const texteDecl = texteDeclaration\(\{\s*prenom: commercant\.representant_legal_prenom,\s*nom: commercant\.representant_legal_nom,\s*bce: commercant\.bce,\s*commerce: commercant\.nom,\s*\}\)/.test(signup))
+  v('un texte qui change décoche la case', /useEffect\(\(\) => \{ setDeclarationCochee\(false\) \}, \[texteDecl\]\)/.test(signup))
+  v('🔴 la carte d’identité n’est plus exigée pour envoyer', !/kybManques\.push\('carte/.test(signup) && !/UploadIdentite/.test(signup))
+
+  // ── L'admin ──────────────────────────────────────────────────────────────
+  const valider = code('app/api/admin/kyb/valider/route.js')
+  v('🔴 pas de validation sans déclaration en vigueur, refus AVANT d’écrire',
+    /if \(avant\.declaration_version !== DECLARATION_VERSION\) \{\s*return NextResponse\.json/.test(valider)
+    && avant(valider, 'avant.declaration_version !== DECLARATION_VERSION', "kyb_statut: 'valide',"))
+  for (const [nom, src] of [['valider', valider], ['rejeter', code('app/api/admin/kyb/rejeter/route.js')]]) {
+    v(`🔴 « ${nom} » lit l’erreur du journal et la rend à l’écran`,
+      /const \{ error: errJournal \} = await supabase\.from\('admin_validations'\)\.insert\(/.test(src)
+      && /journal: errJournal \? `echec : \$\{errJournal\.message\}` : 'ecrit'/.test(src))
+  }
+  const section = code('app/admin/SectionKYBAValider.js')
+  v('l’admin ouvre la fiche du registre, et ne valide pas sans déclaration',
+    /const lienRegistre = lienFicheBCE\(dossier\.bce\)/.test(section) && /disabled=\{disabled \|\| !declare\}/.test(section)
+    && !/kyb_documents|createSignedUrl|kyb_id_/.test(section))
+  v('la suppression d’un commerçant n’efface pas les preuves',
+    !/'kyb_documents'|'cgu_acceptations'|'declarations_honneur'/.test(code('app/api/admin/commercants/route.js')))
+
+  // ── Le compte de paiement s'écrit par le serveur ─────────────────────────
+  const lien = code('app/api/stripe/connect/create-account-link/route.js')
+  const etat = code('app/api/stripe/connect/refresh-status/route.js')
+  v('🔴 la route de connexion écrit le compte avec la clé du serveur, deux fois',
+    (lien.match(/await admin\s*\.from\('commercants'\)\s*\.update\(/g) || []).length === 2
+    && !/await supabase\s*\.from\('commercants'\)\s*\.update\(/.test(lien))
+  v('🔴 et la propriété est vérifiée AVANT', avant(lien, 'commercant.auth_user_id !== user.id', 'const admin = clientAdmin()'))
+  v('🔴 la route d’état aussi, et elle lit son erreur',
+    /const \{ error: errMaj \} = await clientAdmin\(\)\s*\.from\('commercants'\)\s*\.update\(updates\)/.test(etat)
+    && !/await supabase\s*\.from\('commercants'\)\s*\.update\(/.test(etat)
+    && avant(etat, 'commercant.auth_user_id !== user.id', 'clientAdmin()'))
+
+  // ── Les migrations ────────────────────────────────────────────────────────
+  const m1 = lire('migrations/MIGRATION_VERIFICATION_1_DECLARATION.sql').split('-- ─── CONTRÔLE')[0]
+  v('🔴 le journal des déclarations est fermé à tous sauf au serveur',
+    /ALTER TABLE public\.declarations_honneur ENABLE ROW LEVEL SECURITY;/.test(m1)
+    && /REVOKE ALL ON public\.declarations_honneur FROM PUBLIC, anon, authenticated;/.test(m1) && !/CREATE POLICY/.test(m1))
+  v('🔴 les preuves survivent au compte (SET NULL, et la date de suppression notée AVANT)',
+    /commercant_id\s+uuid REFERENCES public\.commercants\(id\) ON DELETE SET NULL/.test(m1)
+    && /FOREIGN KEY \(commercant_id\) REFERENCES public\.commercants\(id\) ON DELETE SET NULL/.test(m1)
+    && /BEFORE DELETE ON public\.commercants/.test(m1))
+  v('🔴 la base refuse que le navigateur écrive la déclaration',
+    /BEFORE INSERT OR UPDATE OF declaration_version, declaration_acceptee_at, carte_supprimee_at/.test(m1))
+  v('les contraintes sont LUES avant d’être remplacées',
+    /RAISE EXCEPTION 'admin_validations : contrainte inattendue/.test(m1) && /RAISE EXCEPTION 'signalements_type_check : motif % absent/.test(m1))
+
+  const m2 = lire('migrations/MIGRATION_VERIFICATION_2_VERROUS_FIN_CARTE.sql').split('-- ─── CONTRÔLE')[0]
+  const verrou = (m2.split('CREATE OR REPLACE FUNCTION public.commercants_colonnes_serveur()')[1] || '').split('$$;')[0]
+  const colonnesStripe = ['stripe_account_id', 'stripe_account_id_precedent', 'stripe_account_mode',
+    'stripe_account_charges_enabled', 'stripe_account_details_submitted', 'stripe_account_payouts_enabled', 'stripe_onboarding_done_at']
+  // 🔴 ORDRE MESURÉ PAR POSITION DE REGEX, JAMAIS PAR `indexOf` d'un texte à
+  // espace simple : la migration aligne ses colonnes avec plusieurs espaces,
+  // `indexOf` rendait -1, et -1 est plus petit que tout. La garde était verte
+  // à vide ; la mutation « l'admin peut changer le compte » l'a montré.
+  const posStripe = colonnesStripe.map(c => verrou.search(new RegExp(`NEW\\.${c}\\s+IS DISTINCT FROM OLD\\.${c}`)))
+  const posAdmin = verrou.search(/IF public\.is_yoppaa_admin\(\) THEN/)
+  v('🔴 le verrou refuse au navigateur CHAQUE colonne du compte de paiement, admin compris',
+    posStripe.every(p => p > 0) && posAdmin > 0 && posStripe.every(p => p < posAdmin), `${posStripe.join(',')} / admin ${posAdmin}`)
+  v('🔴 une entreprise vérifiée ne change plus d’identité depuis le navigateur',
+    /IF coalesce\(OLD\.kyb_statut, ''\) = 'valide'\s*AND \(NEW\.bce IS DISTINCT FROM OLD\.bce/.test(verrou))
+  v('🔴 une fiche créée depuis le navigateur naît sans compte de paiement',
+    colonnesStripe.every(c => new RegExp(`NEW\\.${c}\\s*:=`).test(verrou)))
+  v('🔴 le verrou s’arrête si une colonne qu’il nomme manque (sinon plus rien ne s’enregistre)',
+    avant(m2, "RAISE EXCEPTION 'Colonnes absentes de commercants", 'CREATE OR REPLACE FUNCTION public.commercants_colonnes_serveur()'))
+  v('🔴 plus aucune règle d’accès aux cartes, et les concernés marqués AVANT la suppression des chemins',
+    ['kyb_insert_own', 'kyb_delete_own', 'kyb_select_own_or_admin'].every(p => m2.includes(`DROP POLICY IF EXISTS ${p} ON storage.objects;`))
+    && avant(m2, 'SET carte_supprimee_at = now()', 'DROP COLUMN IF EXISTS kyb_id_recto_url'))
+  const script = code('scripts/supprimer-cartes-identite.mjs')
+  v('🔴 le script est à blanc par défaut, et exige l’identifiant du projet',
+    /const supprimer = args\.includes\('--supprimer'\)/.test(script) && /if \(projetConfirme !== ref\) \{/.test(script)
+    && avant(script, 'if (!supprimer)', '.remove(lot)'))
+  v('le script relit avant de supprimer l’espace', avant(script, 'const restants = await lister()', 'deleteBucket(ESPACE)'))
 }
 
 console.log(`\nUne fiche n'est montrée que complète : ${ok} vérifications`)

@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe } from '@/lib/stripe'
 import { verdictCompte, messageCompte, VERDICT } from '@/lib/stripe-mode'
+import { clientAdmin } from '@/lib/api-auth'
 
 export async function POST(request) {
   try {
@@ -92,10 +93,22 @@ export async function POST(request) {
       updates.stripe_onboarding_done_at = new Date().toISOString()
     }
 
-    await supabase
+    // 🔴 PAR LA CLÉ DU SERVEUR (09/10) : la base réserve ces colonnes au
+    // serveur, un commerçant ne peut plus se déclarer « paiements actifs »
+    // lui-même. La propriété est vérifiée plus haut.
+    // ⚠️ ET ON LIT L'ERREUR : sans elle, l'écran annonçait des paiements actifs
+    // que la fiche ne retenait pas.
+    const { error: errMaj } = await clientAdmin()
       .from('commercants')
       .update(updates)
       .eq('id', commercant_id)
+    if (errMaj) {
+      console.error('[stripe/connect/refresh-status] mise a jour impossible', { commercant_id, msg: errMaj.message })
+      return NextResponse.json({
+        ok: false,
+        error: 'L’état de ton compte de paiement n’a pas pu être enregistré. Réessaie dans un instant.',
+      }, { status: 500 })
+    }
 
     return NextResponse.json({
       ok: true,

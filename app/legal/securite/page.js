@@ -249,7 +249,8 @@ export default function NoteSecurite() {
               'Cloudflare Turnstile sur les formulaires d\'inscription et de contact (protection bots)',
               'Limitation du nombre de requêtes par adresse IP (rate limiting) en cours de déploiement progressif sur les routes sensibles',
               'Audit régulier des dépendances (mises à jour de sécurité automatiques)',
-              'Vérification BCE des commerçants à l\'inscription (registre belge)',
+              'Numéro d\'entreprise (BCE) des commerçants contrôlé à l\'inscription, puis vérifié par l\'équipe Yoppaa au registre public avant l\'ouverture de leur espace',
+              'Déclaration sur l\'honneur des commerçants, conservée avec sa date, son heure, l\'adresse IP et le navigateur ; aucune pièce d\'identité n\'est collectée',
             ]}/>
 
             <H3>4.4. Code & déploiement</H3>

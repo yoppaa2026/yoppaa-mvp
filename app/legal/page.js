@@ -363,16 +363,25 @@ export default function LegalPage() {
           <Section id="confidentialite" title="4. Politique de confidentialité et cookies">
             <H3>Responsable du traitement</H3>
             <P>Avcotech SRL · BCE 0731.637.148 · dpo@yoppaa.app</P>
+            {/* ⚠️ LA DATE DU PIED DE PAGE SUIT LES CGU COMMERÇANT (lib/cgu.js) :
+                la changer forcerait chaque commerçant à les accepter de
+                nouveau. Une mise à jour de cette seule politique se date ici. */}
+            <P>Politique de confidentialité mise à jour le 9 octobre 2026.</P>
 
             <H3>Données collectées</H3>
             <P><strong>Clients :</strong> prénom, nom, email, téléphone, adresse de livraison (si livraison ou expédition), historique des commandes et rendez-vous, consentements RGPD, identifiant de notifications push (si activées), données de localisation (si autorisées).</P>
-            <P><strong>Commerçants :</strong> données d'identification, coordonnées, BCE, données de facturation, données d'activité.</P>
+            {/* ⚠️ 09/10 : plus aucune pièce d'identité n'est demandée aux
+                commerçants. La déclaration sur l'honneur la remplace, et sa
+                preuve (adresse IP, navigateur) est une donnée personnelle
+                qu'il faut annoncer ici, avec sa durée. */}
+            <P><strong>Commerçants :</strong> données d'identification, coordonnées, numéro d&rsquo;entreprise (BCE), nom et prénom du représentant légal, données de facturation, données d'activité, ainsi que la preuve de la déclaration sur l&rsquo;honneur et de l&rsquo;acceptation des conditions (texte accepté, date et heure, adresse IP, navigateur). Yoppaa ne demande aucune pièce d&rsquo;identité aux commerçants ; l&rsquo;identité de ceux qui encaissent des paiements en ligne est vérifiée par Stripe, selon ses propres règles.</P>
             <P><strong>Préinscrits (site de lancement) :</strong> email, code postal, type d'utilisateur (curieux ou commerçant), nom de commerce éventuel, message facultatif, consentement marketing (opt-in facultatif, jamais pré-coché).</P>
 
             <H3>Finalités du traitement</H3>
             <Ul items={[
               'Exécution des commandes, rendez-vous et gestion des créneaux',
               'Authentification et gestion des comptes',
+              'Vérification de l’entreprise des commerçants (numéro BCE contrôlé au registre public, déclaration sur l’honneur) et preuve de leurs engagements, pour protéger les habitants contre les fausses fiches et l’usurpation',
               'Facturation et traitement des paiements (via Stripe)',
               'Communications relatives aux commandes et rendez-vous (confirmations, rappels)',
               'Gestion des cartes de fidélité des commerçants (identifiées par le numéro de téléphone) et SMS de service associés (ouverture de la carte, récompense débloquée)',
@@ -390,6 +399,7 @@ export default function LegalPage() {
               'Données de commande et de rendez-vous : 7 ans (obligations comptables et fiscales belges), sous forme anonymisée après suppression du compte',
               'Adresse, position et note de livraison d’une commande : effacées 6 mois après la commande ; le reste de la commande est conservé comme ci-dessus',
               'Données de compte : durée de vie du compte, puis effacement immédiat à la suppression',
+              'Déclaration sur l’honneur et acceptation des conditions par un commerçant : durée de vie du compte, puis 5 ans après sa suppression, pour pouvoir établir ce qui a été déclaré et accepté en cas de litige',
               'Données de consentement : 3 ans',
               'Logs techniques : 12 mois maximum',
             ]}/>

@@ -21,6 +21,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG } from '@/lib/stripe'
 import { verdictForfait } from '@/lib/garde-forfait'
 import { comptePerdu, detachementCompte, naissanceCompte } from '@/lib/stripe-mode'
+import { clientAdmin } from '@/lib/api-auth'
 
 export async function POST(request) {
   try {
@@ -67,6 +68,16 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
     }
 
+    // 🔴 LES COLONNES DU COMPTE DE PAIEMENT S'ÉCRIVENT AVEC LA CLÉ DU SERVEUR
+    // (09/10). Elles s'écrivaient avec le jeton du commerçant : la base devait
+    // donc le laisser les écrire, et n'importe quel commerçant connecté pouvait
+    // se déclarer « paiements actifs » depuis la console de son navigateur, ou
+    // relier sa fiche au compte Stripe d'un autre. La base les réserve
+    // désormais au serveur (MIGRATION_VERIFICATION_2). La lecture ci-dessus
+    // reste faite avec SON jeton, et la propriété est vérifiée avant toute
+    // écriture.
+    const admin = clientAdmin()
+
     // 0. LE COMPTE EST-IL ENCORE ATTEIGNABLE ?
     //
     // 🔴 SANS CE BLOC, UN COMMERÇANT EST COINCÉ POUR TOUJOURS APRÈS LA BASCULE.
@@ -89,7 +100,7 @@ export async function POST(request) {
       // ⚠️ SI LE DÉTACHEMENT ÉCHOUE, ON S'ARRÊTE. Continuer créerait un second
       // compte Stripe pendant que la fiche pointe toujours vers le premier :
       // deux comptes, un seul lien, et l'argent du bon sur le mauvais.
-      const { error: errDetach } = await supabase
+      const { error: errDetach } = await admin
         .from('commercants')
         .update(detachementCompte(commercant))
         .eq('id', commercant_id)
@@ -160,7 +171,7 @@ export async function POST(request) {
       // ⚠️ ON LIT LE RÉSULTAT. Un `await` dont on ignore l'erreur est un espoir,
       // pas une action : ici, le compte existerait chez Stripe sans être relié
       // au commerçant, et personne ne le saurait.
-      const { error: errLien } = await supabase
+      const { error: errLien } = await admin
         .from('commercants')
         .update(naissanceCompte(accountId))
         .eq('id', commercant_id)

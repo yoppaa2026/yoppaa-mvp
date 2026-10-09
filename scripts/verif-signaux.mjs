@@ -11,7 +11,7 @@ import {
   libelleEnvie, phraseHorsOuverture, enviesAAlerter, peutEnvoyerEmail,
   LIBELLE_ENVIE, TYPES_ENVIE, envieConnue,
   MOTIFS_AVIS, TYPES_MOTIF_AVIS, motifAvisConnu, libelleMotifAvis,
-  MOTIFS_FICHE, TYPES_MOTIF_FICHE, motifFicheConnu,
+  MOTIFS_FICHE, TYPES_MOTIF_FICHE, motifFicheConnu, MOTIFS_FICHE_GRAVES,
   envoyerSignal, messageEchecSignal, MESSAGE_SIGNAL_RESEAU,
   ENVIE_VERS_FONCTION, fonctionDeLEnvie, envieDeLaFonction, phraseEnvieFonction,
   enviesProposables,
@@ -724,9 +724,24 @@ egal('un commerce sans code postal ne crée pas de fausse commune',
   // lit du JavaScript ne voit pas une contrainte SQL ; ce qu'il PEUT voir, c'est
   // que les listes du module sont bien celles que le serveur vérifie et que
   // l'écran affiche. Le reste tient à la migration, et elle est passée.
-  verifier('les huit motifs de fiche sont exactement ceux que la base autorise',
-    TYPES_MOTIF_FICHE.length === 8 && TYPES_MOTIF_FICHE.every(k => typeof MOTIFS_FICHE[k] === 'string'),
-    `${TYPES_MOTIF_FICHE.length} motifs de fiche : la contrainte SQL en autorise huit, tout écart rendra 500`)
+  // ⚠️ REPOINTÉE LE 09/10 : dix motifs (« usurpation » et « trompeur »
+  // ajoutés). Le banc ne COMPTE plus un chiffre recopié : il lit la liste de la
+  // dernière migration qui a posé la contrainte, et compare les deux
+  // ensembles. Un motif ajouté d'un seul côté rougit ici.
+  const sqlMotifs = readFileSync(new URL('../migrations/MIGRATION_VERIFICATION_1_DECLARATION.sql', import.meta.url), 'utf8')
+  const blocContrainte = (sqlMotifs.split('ADD CONSTRAINT signalements_type_check')[1] || '').split(');')[0]
+  const autorises = [...blocContrainte.matchAll(/'([a-z_]+)'::text/g)].map(m => m[1])
+  const familles = new Set([...TYPES_MOTIF_FICHE, ...TYPES_MOTIF_AVIS])
+  verifier('🔴 les motifs du code (fiche + avis) sont exactement ceux que la base autorise',
+    autorises.length > 0 && autorises.length === familles.size && autorises.every(m => familles.has(m))
+      && TYPES_MOTIF_FICHE.every(k => typeof MOTIFS_FICHE[k] === 'string'),
+    `base : ${autorises.join(',')} ; code : ${[...familles].join(',')}`)
+  verifier('🔴 l’usurpation se signale, et l’admin la reçoit comme une alerte',
+    motifFicheConnu('usurpation') && motifFicheConnu('trompeur')
+      && MOTIFS_FICHE_GRAVES.every(m => motifFicheConnu(m)) && MOTIFS_FICHE_GRAVES.includes('usurpation'))
+  verifier('🔴 le sujet de l’email dit URGENT pour un motif grave',
+    /const grave = MOTIFS_FICHE_GRAVES\.includes\(motif\)/.test(ROUTE_AVIS)
+      && /\$\{grave \? `URGENT \$\{libelleMotifFiche\(motif\)\}` : 'Signalement'\}/.test(ROUTE_AVIS))
   verifier('« autre » appartient aux deux familles',
     motifFicheConnu('autre') && motifAvisConnu('autre'))
   verifier('🔴 un motif de fiche inventé est refusé, comme pour les avis',

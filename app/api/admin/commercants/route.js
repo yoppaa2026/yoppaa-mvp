@@ -254,7 +254,13 @@ export async function DELETE(request) {
       'livraison_creneaux', 'livraison_config',
       'yoppaa_deals', 'actualites', 'avis', 'favoris',
       'commercant_photos', 'ia_generations', 'signalements',
-      'admin_impersonations', 'admin_validations', 'kyb_documents',
+      // ⚠️ `kyb_documents` RETIRÉ LE 09/10 : ce n'était pas une table mais le
+      // nom d'un espace de fichiers (les cartes d'identité), et la ligne
+      // échouait en silence. Les cartes n'existent plus.
+      // ⚠️ `cgu_acceptations` et `declarations_honneur` N'Y SONT PAS, et
+      // c'est voulu : ce sont des PREUVES, gardées 5 ans après le compte
+      // (leur lien passe à NULL, la date de suppression est notée en base).
+      'admin_impersonations', 'admin_validations',
       'onboarding_commercants', 'suggestions_commercants', 'upgrade_requests',
       'success_packs', 'billing_relances_log',
       'articles',

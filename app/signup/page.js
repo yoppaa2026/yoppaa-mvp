@@ -8,6 +8,7 @@ import { PLAN_LABEL, plansDispoPourCategorie, getPrixPlan, TVA_ABONNEMENT_POURCE
 import { scoreOnboarding } from '@/lib/score-onboarding'
 import { ETAPES_INSCRIPTION, DERNIERE_ETAPE, etapeReprise } from '@/lib/etapes-inscription'
 import { CGU_COMMERCANT_VERSION, LIEN_CGU_COMMERCANT } from '@/lib/cgu'
+import { DECLARATION_VERSION, texteDeclaration } from '@/lib/declaration'
 import { SHOP_PRODUCTS, classerProduitsParCategorie, prixProduitTexte } from '@/lib/produits-boutique'
 import { FRAIS_STRIPE_TEXTE } from '@/lib/frais-paiement'
 import { libelleBon } from '@/lib/bons-cadeaux'
@@ -18,7 +19,7 @@ import {
   Croissant, Scissors, ShoppingBag,
   User, Heart, Radio, Sun, Megaphone, Flame, AlertTriangle, Bell, Mail, Sparkles, BarChart3,
   ShoppingCart, Bike, Utensils, Calendar, Briefcase, Clock, Users, Package, CreditCard, Star, Download,
-  Smartphone, Printer, FileText, Pencil, CheckCircle, Check, Circle, Shield, IdCard,
+  Smartphone, Printer, FileText, Pencil, CheckCircle, Check, Circle, Shield,
   MapPin, Gift, Sunset, Ticket,
 } from 'lucide-react'
 // Logo canonique Yoppaa : wordmark + 5 dots V2-B (spec validee 12/06).
@@ -525,26 +526,27 @@ function Etape1Compte({ session, commercant, onCompte }) {
       </p>
 
       {/* 🔴 CE QU'IL FAUT AVOIR SOUS LA MAIN, DIT AVANT DE COMMENCER (Alex,
-          29/09). Le contrôle d'identité arrive à la DERNIÈRE étape et bloque
-          l'envoi du dossier : un commerçant qui découvre là qu'il lui faut sa
-          carte d'identité et son numéro d'entreprise s'arrête, et beaucoup ne
-          reviennent pas. Le dire ici lui laisse le choix d'aller les chercher
-          avant, plutôt que d'abandonner au bout de vingt minutes.
+          29/09). Le contrôle de l'entreprise arrive à la DERNIÈRE étape et
+          bloque l'envoi du dossier : un commerçant qui découvre là qu'il lui
+          faut son numéro d'entreprise s'arrête, et beaucoup ne reviennent pas.
+          Le dire ici lui laisse le choix d'aller le chercher avant, plutôt que
+          d'abandonner au bout de vingt minutes.
           ⚠️ LA LISTE EST CELLE QUE LE DOSSIER EXIGE (`kybManques`), rien de
           plus : pas de numéro de TVA à part, c'est le même que le numéro
-          d'entreprise pour un commerce assujetti. */}
+          d'entreprise pour un commerce assujetti.
+          ⚠️ PLUS DE CARTE D'IDENTITÉ (09/10) : la déclaration sur l'honneur
+          la remplace, et l'annoncer ici rassure ceux qu'elle faisait fuir. */}
       <div role="note" style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 14, padding: '14px 16px', marginBottom: 22 }}>
         <p style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px', fontSize: 14, fontWeight: 900, color: '#78350F' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg>
           Avant de commencer, garde ceci sous la main
         </p>
         <ul style={{ margin: '0 0 8px', paddingLeft: 20, fontSize: 13, color: '#78350F', lineHeight: 1.6 }}>
-          <li><strong>Ta carte d&rsquo;identité</strong> : on te demandera une photo du recto et du verso.</li>
           <li><strong>Ton numéro d&rsquo;entreprise (BCE)</strong>. C&rsquo;est aussi ton numéro de TVA si ton commerce y est assujetti.</li>
           <li><strong>Le nom et le prénom</strong> de la personne qui représente légalement le commerce.</li>
         </ul>
         <p style={{ margin: 0, fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
-          Sans eux, tu ne pourras pas envoyer ton dossier. Tout ce que tu remplis est enregistré au fur et à mesure : tu peux t&rsquo;arrêter et reprendre plus tard.
+          Aucune pièce d&rsquo;identité n&rsquo;est demandée : tu confirmes ces informations sur l&rsquo;honneur, et nous vérifions ton numéro au registre des entreprises. Tout ce que tu remplis est enregistré au fur et à mesure : tu peux t&rsquo;arrêter et reprendre plus tard.
         </p>
       </div>
 
@@ -1436,18 +1438,19 @@ function BandeauRecapPlan({ plan }) {
 
 // ─── CARD KYB (verification entreprise) ──────────────────────────────────────
 // Plan = TOUS (Exister/Communiquer/Vendre/Public). Etape obligatoire avant
-// soumission. Collecte BCE + nom prenom representant legal + carte ID recto/
-// verso. Stockage dans bucket Supabase 'kyb_documents' (prive, RLS strict).
-// La fiche du commercant ne sera PUBLIEE qu'apres validation manuelle par
-// Yoppaa (kyb_statut='valide').
+// soumission. Collecte BCE + nom prenom representant legal. La fiche du
+// commercant ne sera PUBLIEE qu'apres validation manuelle par Yoppaa
+// (kyb_statut='valide').
+//
+// 🔴 PLUS DE CARTE D'IDENTITÉ (Alex, 09/10, « socle minimal »). Elle ne
+// prouvait rien (personne ne la comparait à rien), elle faisait abandonner, et
+// elle nous faisait garder des pièces d'identité. La remplacent : le BCE
+// vérifié par Yoppaa sur le registre public, et la déclaration sur l'honneur
+// cochée à l'envoi (`lib/declaration.js`), prouvée par le serveur.
 function CardKYB({ commercant, onUpdate, onSaving }) {
   const [bce, setBce] = useState(commercant.bce ? formaterBCECompact(commercant.bce.replace(/\D/g, '')) : '')
   const [nomRep, setNomRep] = useState(commercant.representant_legal_nom || '')
   const [prenomRep, setPrenomRep] = useState(commercant.representant_legal_prenom || '')
-  const [rectoUrl, setRectoUrl] = useState(commercant.kyb_id_recto_url || null)
-  const [versoUrl, setVersoUrl] = useState(commercant.kyb_id_verso_url || null)
-  const [uploadingRecto, setUploadingRecto] = useState(false)
-  const [uploadingVerso, setUploadingVerso] = useState(false)
   const [erreurLocal, setErreurLocal] = useState('')
   const debounceRef = useRef(null)
 
@@ -1516,43 +1519,12 @@ function CardKYB({ commercant, onUpdate, onSaving }) {
      
   }, [])
 
-  async function uploaderIdentite(file, kind) {
-    if (!file) return
-    setErreurLocal('')
-    // Validation cote client : type + taille
-    const okType = /^(image\/(jpeg|jpg|png)|application\/pdf)$/.test(file.type)
-    if (!okType) { setErreurLocal('Format invalide. JPG, PNG ou PDF uniquement.'); return }
-    if (file.size > 5 * 1024 * 1024) { setErreurLocal('Fichier trop lourd. Maximum 5 Mo.'); return }
-    const setUploading = kind === 'recto' ? setUploadingRecto : setUploadingVerso
-    const setUrl = kind === 'recto' ? setRectoUrl : setVersoUrl
-    const colonne = kind === 'recto' ? 'kyb_id_recto_url' : 'kyb_id_verso_url'
-    setUploading(true)
-    onSaving?.('saving')
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setErreurLocal('Session expirée, reconnecte-toi.'); return }
-      const ext = file.name.split('.').pop().toLowerCase()
-      // Path = ${auth.uid}/${commercant_id}_${kind}.${ext} (matche policy RLS)
-      const fileName = `${user.id}/${commercant.id}_${kind}_${Date.now()}.${ext}`
-      const { error: upErr } = await supabase.storage.from('kyb_documents').upload(fileName, file, { upsert: true, contentType: file.type })
-      if (upErr) { setErreurLocal(`Upload échoué : ${upErr.message}`); return }
-      // L'URL n'est PAS publique : on stocke juste le chemin storage pour signature ulterieure
-      const cheminStockage = fileName
-      const { data } = await supabase.from('commercants').update({ [colonne]: cheminStockage }).eq('id', commercant.id).select().single()
-      if (data) onUpdate(data)
-      setUrl(cheminStockage)
-      onSaving?.('saved')
-    } finally {
-      setUploading(false)
-    }
-  }
-
   const statut = commercant.kyb_statut || 'non_demarre'
   const dejaSoumis = statut === 'en_attente' || statut === 'valide'
   const rejete = statut === 'rejete'
 
   return (
-    <Card titre="Vérification de ton entreprise" sous="Conforme RGPD. Obligatoire avant publication de ta fiche. Ces infos restent privées.">
+    <Card titre="Vérification de ton entreprise" sous="Obligatoire avant l’ouverture de ton espace. Yoppaa vérifie ton numéro au registre public des entreprises. Ces informations restent privées.">
       {/* Badge statut KYB */}
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 100, marginBottom: 12,
         background: statut === 'valide' ? '#ECFDF5' : statut === 'en_attente' ? '#FEF3C7' : statut === 'rejete' ? '#FEE2E2' : T.bg,
@@ -1654,15 +1626,10 @@ function CardKYB({ commercant, onUpdate, onSaving }) {
           />
         </div>
       </div>
-      <p style={{ fontSize: 11, color: T.muted, marginTop: -8, marginBottom: 14, lineHeight: 1.5, fontStyle: 'italic' }}>
-        Le prénom et le nom doivent figurer dans les statuts publiés au BCE.
+      <p style={{ fontSize: 12, color: T.muted, marginTop: -8, marginBottom: 14, lineHeight: 1.5 }}>
+        C&rsquo;est la personne inscrite à la BCE comme titulaire de l&rsquo;entreprise ou comme administrateur.
+        Aucune pièce d&rsquo;identité n&rsquo;est demandée : tu confirmeras ces informations sur l&rsquo;honneur au moment d&rsquo;envoyer ton dossier.
       </p>
-
-      {/* Upload carte ID */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <UploadIdentite kind="recto" url={rectoUrl} uploading={uploadingRecto} onFile={f => uploaderIdentite(f, 'recto')} disabled={dejaSoumis}/>
-        <UploadIdentite kind="verso" url={versoUrl} uploading={uploadingVerso} onFile={f => uploaderIdentite(f, 'verso')} disabled={dejaSoumis}/>
-      </div>
 
       {erreurLocal && (
         <div style={{ marginTop: 10, padding: '8px 12px', background: '#FEE2E2', borderLeft: '3px solid #DC2626', borderRadius: 6, fontSize: 12.5, color: '#7F1D1D', fontWeight: 600 }}>
@@ -1670,45 +1637,6 @@ function CardKYB({ commercant, onUpdate, onSaving }) {
         </div>
       )}
     </Card>
-  )
-}
-
-function UploadIdentite({ kind, url, uploading, onFile, disabled }) {
-  const inputRef = useRef(null)
-  return (
-    <div>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: T.deep, marginBottom: 6, letterSpacing: '0.3px' }}>
-        Carte d&apos;identité {kind === 'recto' ? 'recto' : 'verso'} *
-      </label>
-      <button type="button" onClick={() => !disabled && inputRef.current?.click()} disabled={uploading || disabled}
-        style={{
-          width: '100%', minHeight: 100, aspectRatio: '16/10', borderRadius: 10,
-          border: `1.5px dashed ${url ? '#10B981' : T.hairline}`,
-          background: url ? '#ECFDF5' : disabled ? T.bg : '#FAFAFA',
-          cursor: disabled ? 'not-allowed' : uploading ? 'wait' : 'pointer',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
-          fontFamily: '"DM Sans", sans-serif', padding: 12,
-        }}>
-        {uploading ? (
-          <span style={{ fontSize: 12, fontWeight: 700, color: T.bgPanel }}>Téléversement…</span>
-        ) : url ? (
-          <>
-            <CheckCircle size={22} strokeWidth={2.2} color="#10B981"/>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#065F46' }}>Fichier ajouté</span>
-            {!disabled && <span style={{ fontSize: 10, fontWeight: 600, color: '#065F46', textDecoration: 'underline' }}>Remplacer</span>}
-          </>
-        ) : (
-          <>
-            <IdCard size={22} strokeWidth={1.8} color={T.main}/>
-            <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textAlign: 'center' }}>Ajouter le {kind}</span>
-            <span style={{ fontSize: 10, fontWeight: 500, color: T.muted }}>JPG, PNG, PDF · 5 Mo max</span>
-          </>
-        )}
-      </button>
-      <input ref={inputRef} type="file" accept="image/jpeg,image/png,application/pdf"
-        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }}
-        style={{ display: 'none' }}/>
-    </div>
   )
 }
 
@@ -1791,22 +1719,36 @@ function EtapeVerification({ commercant, onboarding, onUpdate, onUpdateOb, onSav
     horairesRequis: !peutSkipperHoraires(getPlanActif(commercant, onboarding), commercant.categorie)
       && !horairesViennentDesLieux(commercant),
   })
-  // S5 : KYB obligatoire avant soumission. Sans KYB rempli (BCE + nom prenom +
-  // recto + verso), bouton "Envoyer" disabled. La validation FINALE (kyb_statut
-  // = 'valide') est faite par Yoppaa cote admin avant publication de la fiche.
+  // S5 : KYB obligatoire avant soumission. Sans KYB rempli (BCE + nom prenom),
+  // bouton "Envoyer" disabled. La validation FINALE (kyb_statut = 'valide') est
+  // faite par Yoppaa cote admin avant l'ouverture de l'espace.
+  // ⚠️ PLUS DE CARTE D'IDENTITÉ DANS CETTE LISTE (09/10) : la déclaration sur
+  // l'honneur la remplace, cochée plus bas.
   const kybManques = []
   if (!commercant.bce || !validerBCE(commercant.bce).valide) kybManques.push('numéro BCE')
   if (!commercant.representant_legal_prenom) kybManques.push('prénom du représentant légal')
   if (!commercant.representant_legal_nom) kybManques.push('nom du représentant légal')
-  if (!commercant.kyb_id_recto_url) kybManques.push('carte d\'identité recto')
-  if (!commercant.kyb_id_verso_url) kybManques.push('carte d\'identité verso')
   const kybRempli = kybManques.length === 0
   // 🔴 LES CGU, COCHÉES ET PROUVÉES (Alex, 06/10). Rien ne les faisait
   // accepter : ni case ni trace. La case est obligatoire, et c'est le SERVEUR
   // qui enregistre l'acceptation (`/api/commercant/accepter-cgu`), avec son
   // heure, avant que le dossier parte.
   const [cguCochees, setCguCochees] = useState(false)
-  const peutSoumettre = kybRempli && cguCochees
+  // 🔴 LA DÉCLARATION SUR L'HONNEUR (Alex, 09/10). Son texte est construit à
+  // partir de la fiche ENREGISTRÉE (pas de la saisie en cours) : c'est ce que
+  // le serveur reconstruit et compare, et il refuse s'il ne retrouve pas le
+  // même. Tant que le numéro ou les noms manquent, il n'y a rien à déclarer.
+  const texteDecl = texteDeclaration({
+    prenom: commercant.representant_legal_prenom,
+    nom: commercant.representant_legal_nom,
+    bce: commercant.bce,
+    commerce: commercant.nom,
+  })
+  const [declarationCochee, setDeclarationCochee] = useState(false)
+  // ⚠️ UN TEXTE QUI CHANGE SE RELIT : si le numéro ou les noms bougent après
+  // la case cochée, la case se décoche. On ne déclare pas ce qu'on n'a pas lu.
+  useEffect(() => { setDeclarationCochee(false) }, [texteDecl])
+  const peutSoumettre = kybRempli && cguCochees && declarationCochee && !!texteDecl
 
   async function soumettre() {
     if (!peutSoumettre || submitting) return
@@ -1829,6 +1771,27 @@ function EtapeVerification({ commercant, onboarding, onUpdate, onUpdateOb, onSav
       }
     } catch {
       setError('L’acceptation des conditions n’a pas pu être enregistrée. Vérifie ta connexion et réessaie.')
+      setSubmitting(false)
+      return
+    }
+
+    // 0 bis) LA DÉCLARATION SUR L'HONNEUR, ENREGISTRÉE PAR LE SERVEUR : sans
+    // elle non plus, le dossier ne part pas.
+    try {
+      const { data: { session: sDecl } } = await supabase.auth.getSession()
+      const rDecl = await fetch('/api/commercant/declarer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sDecl?.access_token || ''}` },
+        body: JSON.stringify({ commercant_id: commercant.id, version: DECLARATION_VERSION, texte: texteDecl }),
+      })
+      const jDecl = await rDecl.json().catch(() => ({}))
+      if (!rDecl.ok || !jDecl?.ok) {
+        setError(jDecl?.error || 'La déclaration n’a pas pu être enregistrée. Réessaie.')
+        setSubmitting(false)
+        return
+      }
+    } catch {
+      setError('La déclaration n’a pas pu être enregistrée. Vérifie ta connexion et réessaie.')
       setSubmitting(false)
       return
     }
@@ -2159,7 +2122,7 @@ function EtapeVerification({ commercant, onboarding, onUpdate, onUpdateOb, onSav
       {/* 🔴 LES CONDITIONS, COCHÉES ET PROUVÉES (06/10). Le lien ouvre la
           page légale dans un nouvel onglet : on ne perd pas son inscription
           pour les lire. */}
-      <Card titre="Conditions d’utilisation">
+      <Card titre="Conditions et déclaration">
         <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', fontSize: 13, color: T.ink, lineHeight: 1.5 }}>
           <input type="checkbox" checked={cguCochees} onChange={e => setCguCochees(e.target.checked)}
             style={{ width: 18, height: 18, marginTop: 1, accentColor: T.main, flexShrink: 0, cursor: 'pointer' }}/>
@@ -2170,6 +2133,15 @@ function EtapeVerification({ commercant, onboarding, onUpdate, onUpdateOb, onSav
               conditions générales d’utilisation pour les commerçants
             </a>
             , y compris les frais de paiement et les règles de remboursement.
+          </span>
+        </label>
+        {/* 🔴 LA DÉCLARATION SUR L'HONNEUR (09/10), à la place de la carte
+            d'identité. Le texte affiché est celui que le serveur gardera. */}
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: texteDecl ? 'pointer' : 'not-allowed', fontSize: 13, color: T.ink, lineHeight: 1.55, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${T.hairline}` }}>
+          <input type="checkbox" checked={declarationCochee} disabled={!texteDecl} onChange={e => setDeclarationCochee(e.target.checked)}
+            style={{ width: 18, height: 18, marginTop: 1, accentColor: T.main, flexShrink: 0, cursor: 'inherit' }}/>
+          <span>
+            {texteDecl || 'La déclaration sur l’honneur apparaîtra ici dès que ton numéro d’entreprise et le nom du représentant légal seront enregistrés.'}
           </span>
         </label>
       </Card>
@@ -2191,8 +2163,10 @@ function EtapeVerification({ commercant, onboarding, onUpdate, onUpdateOb, onSav
                   Complète la carte «&nbsp;Vérification de ton entreprise&nbsp;» ci-dessus, puis attends quelques secondes que la sauvegarde soit prise en compte.
                 </span>
               </>
-            ) : (
+            ) : !cguCochees ? (
               'Coche la case des conditions d’utilisation pour envoyer ta demande.'
+            ) : (
+              'Coche la déclaration sur l’honneur pour envoyer ta demande.'
             )}
           </p>
         )}

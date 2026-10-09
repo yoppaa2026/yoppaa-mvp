@@ -1217,8 +1217,8 @@ function MockOnboarding() {
         {[
           'Nom, type, adresse et téléphone',
           'Numéro d’entreprise (BCE)',
-          'Carte d’identité, recto et verso',
-          'Conditions d’utilisation acceptées',
+          'Représentant légal',
+          'Conditions et déclaration acceptées',
         ].map(l => (
           <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <IconCheck size={9}/>
@@ -2393,19 +2393,20 @@ export default function LandingReveal({ referent = null }) {
                 Trois étapes, et ton espace s&rsquo;ouvre.
               </h3>
               <p style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.88)', lineHeight: 1.65, fontWeight: 500, margin: 0 }}>
-                Ton compte, l&rsquo;essentiel sur ton commerce, la vérification de ton identité, et
+                Ton compte, l&rsquo;essentiel sur ton commerce, la vérification de ton entreprise, et
                 c&rsquo;est envoyé. Nous validons ton dossier et ton tableau de bord s&rsquo;ouvre : tu y
                 ajoutes ta présentation, tes photos, tes horaires et ton catalogue, avec une liste qui
                 te guide point par point, puis ta page part en ligne et ton kit de bienvenue arrive dans
                 ta boîte mail.
               </p>
               {/* Même avertissement qu'en tête de l'inscription : le contrôle
-                  d'identité arrive à la dernière étape, et c'est là qu'on
-                  abandonne quand on n'a pas ses papiers. */}
+                  de l'entreprise arrive à la dernière étape, et c'est là qu'on
+                  abandonne quand on n'a pas son numéro. ⚠️ 09/10 : plus de
+                  carte d'identité, le dire rassure ceux qu'elle faisait fuir. */}
               <p style={{ fontSize: '0.88rem', color: '#fff', lineHeight: 1.6, fontWeight: 600, margin: '14px 0 0', padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.22)' }}>
-                Avant de commencer, garde sous la main ta carte d&rsquo;identité et ton numéro
-                d&rsquo;entreprise (BCE, qui est aussi ton numéro de TVA). Ils sont demandés
-                pour envoyer ton dossier.
+                Avant de commencer, garde sous la main ton numéro d&rsquo;entreprise (BCE, qui
+                est aussi ton numéro de TVA) : il est demandé pour envoyer ton dossier. Aucune
+                pièce d&rsquo;identité n&rsquo;est demandée.
               </p>
             </div>
             <PhoneFrame label="La dernière étape : tu relis ton dossier, puis tu l'envoies">

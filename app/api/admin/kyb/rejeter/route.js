@@ -56,12 +56,15 @@ export async function POST(request) {
     }
 
     // 2) Log
-    await supabase.from('admin_validations').insert({
+    // 🔴 ÉCHOUAIT TOUJOURS EN SILENCE (09/10) : `kyb_rejete` était refusé par
+    // la contrainte du journal, et l'erreur n'était pas lue. Elle l'est.
+    const { error: errJournal } = await supabase.from('admin_validations').insert({
       commercant_id,
       action: 'kyb_rejete',
       motif: motifClean,
       validated_by_email: user.email,
     })
+    if (errJournal) console.error('[admin/kyb/rejeter] journal non ecrit', { commercant_id, msg: errJournal.message })
 
     // 3) Email au commercant (non bloquant)
     let emailResult = { ok: false, error: 'pas d\'email destinataire' }
@@ -77,6 +80,7 @@ export async function POST(request) {
       ok: true,
       commercant_id,
       email: emailResult.ok ? 'envoye' : `echec : ${emailResult.error}`,
+      journal: errJournal ? `echec : ${errJournal.message}` : 'ecrit',
     })
   } catch (e) {
     console.error('[admin/kyb/rejeter] erreur', e)

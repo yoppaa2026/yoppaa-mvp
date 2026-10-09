@@ -64,6 +64,8 @@ import { raisonDebitImpossible, compteEncaisse, libelleRelance, raisonLienImposs
 import EcranValidation from './EcranValidation'
 import EcranCgu from './EcranCgu'
 import { cguAJour } from '@/lib/cgu'
+import EcranDeclaration from './EcranDeclaration'
+import { declarationAJour } from '@/lib/declaration'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
 import BandeauOuMeTrouver from './BandeauOuMeTrouver'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
@@ -3359,6 +3361,18 @@ export default function Dashboard() {
     <EcranCgu
       commercant={commercant}
       onAccepte={maj => setCommercant(c => ({ ...c, ...maj }))}
+      onDeconnexion={seDeconnecter}
+    />
+  )
+
+  // 🔴 LA DÉCLARATION SUR L'HONNEUR, FAITE UNE FOIS PAR LES DÉJÀ INSCRITS
+  // (Alex, 09/10). Elle remplace la carte d'identité. Après les CGU, et pour
+  // la même raison PAS EN MODE « EMPRUNT » : l'admin ne déclare rien au nom du
+  // commerçant (la route le refuserait de toute façon).
+  if (commercant && !impersonating && !declarationAJour(commercant)) return (
+    <EcranDeclaration
+      commercant={commercant}
+      onDeclare={maj => setCommercant(c => ({ ...c, ...maj }))}
       onDeconnexion={seDeconnecter}
     />
   )

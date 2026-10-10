@@ -24,8 +24,7 @@ import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
 import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
 import { jourPlus } from '@/lib/statut-commerce'
-import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE, creneauTermine, delaiArticleNonRespecte } from '@/lib/commande-encodee'
-import { libelleMoment } from '@/lib/delai-commande'
+import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE, creneauTermine, etatTuile } from '@/lib/commande-encodee'
 
 const T = {
   bg: '#F8F6FF', ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -284,20 +283,29 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
                       {liste.map(a => {
                         const dansPanier = panier.filter(l => l.id === a.id).reduce((s, l) => s + l.quantite, 0)
-                        // ⚠️ LE DÉLAI DE L'ARTICLE SE LIT SUR LA TUILE, avant
-                        // le geste : la même règle que le serveur, qui
+                        // ⚠️ CE QUE LA FICHE DIT DE L'ARTICLE CE JOUR-LÀ SE LIT
+                        // SUR LA TUILE, avant le geste : délai, jours de vente,
+                        // circuits, stock restant (`etatTuile`). Le serveur
                         // préviendra encore à l'encodage.
-                        const tropTot = delaiArticleNonRespecte({ article: a, commercant: donnees?.commercant, jour: date, aujourdhui })
+                        const tuile = etatTuile({
+                          article: a, stocksArticle: donnees?.stocksJour?.[a.id] || {},
+                          dejaCommande: donnees?.dejaCommande ? (donnees.dejaCommande[a.id] || 0) : null,
+                          commercant: donnees?.commercant, jour: date, aujourdhui,
+                        })
+                        const epuise = !tuile.hors && tuile.gere && tuile.dispo <= 0
+                        const depasse = !tuile.hors && tuile.gere && dansPanier > tuile.dispo
                         return (
-                          <button key={a.id} type="button" onClick={() => toucher(a)} title={tropTot?.message}
-                            style={{ position: 'relative', padding: '10px 8px', minHeight: 64, borderRadius: 12, border: `1.5px solid ${dansPanier ? T.main : T.hairline}`, background: dansPanier ? '#FAF7FF' : '#fff', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
-                            <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: T.ink, lineHeight: 1.25 }}>{a.nom}</span>
+                          <button key={a.id} type="button" onClick={() => toucher(a)} title={tuile.hors?.message}
+                            style={{ position: 'relative', padding: '10px 8px', minHeight: 64, borderRadius: 12, border: `1.5px solid ${dansPanier ? T.main : T.hairline}`, background: dansPanier ? '#FAF7FF' : (tuile.hors || epuise) ? '#FAFAFA' : '#fff', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                            <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: (tuile.hors || epuise) ? T.muted : T.ink, lineHeight: 1.25 }}>{a.nom}</span>
                             <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: T.main, marginTop: 4 }}>{euros(Number(a.prix))}</span>
-                            {tropTot && (
-                              <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.alerte, marginTop: 3 }}>
-                                Trop tôt : dès {libelleMoment({ jour: tropTot.plancher, aujourdhui })}
+                            {tuile.hors ? (
+                              <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.alerte, marginTop: 3 }}>{tuile.hors.court}</span>
+                            ) : tuile.gere && Number.isFinite(tuile.dispo) ? (
+                              <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: (epuise || depasse) ? T.erreur : T.muted, marginTop: 3 }}>
+                                {epuise ? 'Épuisé ce jour' : `Reste ${tuile.dispo}`}
                               </span>
-                            )}
+                            ) : null}
                             {dansPanier > 0 && (
                               <span style={{ position: 'absolute', top: 6, right: 6, minWidth: 22, height: 22, borderRadius: 11, background: T.main, color: '#fff', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{dansPanier}</span>
                             )}

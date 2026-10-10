@@ -24,7 +24,7 @@ import {
   DELAIS_PROPOSES, choixDeDelai, libelleChoixDelai,
   delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier,
   libelleJoursVente, mentionDisponibilite, propositionPourArticle,
-  HORIZONS_ARTICLE, libelleHorizonArticle,
+  HORIZONS_ARTICLE, libelleHorizonArticle, premierJourPossible, jourEnClair,
 } from '../lib/delai-commande.js'
 import { jourPlus as jourPlusBanc } from '../lib/statut-commerce.js'
 import { brusselsInstant } from '../lib/timezone.js'
@@ -755,6 +755,25 @@ egal('sans nom d’article, la phrase tient debout',
 // ⚠️ CES GARDES-LÀ LISENT LA ROUTE, faute de pouvoir la faire tourner sans
 // Stripe ni base. Elles sont toutes mesurées par le harnais de mutation.
 {
+  // 🔴 LE PREMIER JOUR POSSIBLE (Alex, 10/10) : samedi 10/10, un pain vendu le
+  // samedi et le dimanche, à J+2. Plancher lundi 12, mais lundi il ne se vend
+  // pas : le premier jour est samedi 17.
+  {
+    const semaine = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi']
+    const pain = { delaiJours: 2, indispo: semaine, circuits: { aujourdhui: false, surCommande: true } }
+    verifier('🔴 pain du week-end à J+2, un samedi : premier jour samedi 17, pas lundi 12',
+      premierJourPossible({ regle: pain, aujourdhui: '2026-10-10' }) === '2026-10-17')
+    verifier('sans jours de vente limités, le premier jour est le plancher du délai',
+      premierJourPossible({ regle: { ...pain, indispo: [] }, aujourdhui: '2026-10-10' }) === '2026-10-12')
+    verifier('un article vendu aujourd’hui sans délai : aujourd’hui',
+      premierJourPossible({ regle: { delaiJours: 0, indispo: [], circuits: { aujourdhui: true, surCommande: false } }, aujourdhui: '2026-10-10' }) === '2026-10-10')
+    verifier('jamais vendu : aucun jour, pas une date inventée',
+      premierJourPossible({ regle: { delaiJours: 0, indispo: [...semaine, 'samedi', 'dimanche'] }, aujourdhui: '2026-10-10' }) === null)
+    verifier('🔴 au-delà de demain, le jour est dit avec sa date (« samedi 17 octobre »)',
+      jourEnClair('2026-10-17', '2026-10-10') === 'samedi 17 octobre' && jourEnClair('2026-10-11', '2026-10-10') === 'demain'
+      && jourEnClair('2026-10-10', '2026-10-10') === 'aujourd’hui', jourEnClair('2026-10-17', '2026-10-10'))
+  }
+
   const ROUTE = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-commande/route.js', import.meta.url), 'utf8'))
 
   verifier('🔴 elle refuse le mélange avec l’invendu avant le paiement',
@@ -765,10 +784,16 @@ egal('sans nom d’article, la phrase tient debout',
   verifier('🔴 elle juge chaque ligne en jours de calendrier au jour de la commande',
     /for \(const l of lignes\) \{\s*const n = delaiEnJours\(l\)[\s\S]{0,400}const refus = refusDuJour\(\{ delaiJours: n, jour: date_commande, aujourdhui, circuits, invendu: porteUneFenetre\(l\.offre\) \}\)\s*if \(refus\?\.raison === 'delai'\) \{/.test(ROUTE))
   verifier('🔴 partout sauf l’expédition (pas de jour de retrait)',
-    /if \(!estBoutique \|\| estRetraitBoutique\) \{\s*const aujourdhui = jourBruxelles\(\)\s*const articleEnBase = [^\n]+\s*for \(const l of lignes\)/.test(ROUTE))
-  verifier('et le refus nomme l’article et son premier jour',
+    // (10/10) la lecture des jours de vente des lignes s'intercale avant la boucle.
+    /if \(!estBoutique \|\| estRetraitBoutique\) \{\s*const aujourdhui = jourBruxelles\(\)\s*const articleEnBase = [^\n]+[\s\S]{0,900}?for \(const l of lignes\) \{\s*const n = delaiEnJours\(l\)/.test(ROUTE))
+  // 🔴 (10/10) LE PREMIER JOUR TIENT COMPTE DES JOURS DE VENTE : « le plus tôt,
+  // c'est lundi » pour un pain du week-end était faux. Une lecture ratée refuse.
+  verifier('et le refus nomme l’article et son PREMIER JOUR POSSIBLE (jours de vente compris)',
     /const j = refus\.jours \?\? n/.test(ROUTE)
-    && /se commande \$\{j\} jour\$\{j > 1 \? 's' : ''\} à l'avance : le plus tôt, c'est \$\{libelleMoment\(\{ jour: refus\.plancher, aujourdhui \}\)\}/.test(ROUTE))
+    && /\.from\('article_stock_jour'\)\.select\('article_id, jour_semaine, actif'\)\s*\.in\('article_id', \[\.\.\.new Set\(lignes\.map\(l => l\.article_id\)\)\]\)\.eq\('actif', false\)/.test(ROUTE)
+    && /if \(errOffLignes\) \{\s*return NextResponse\.json\(\{ ok: false/.test(ROUTE)
+    && /const premier = premierJourPossible\(\{ regle: \{ delaiJours: n, indispo, circuits \}, aujourdhui \}\) \|\| refus\.plancher/.test(ROUTE)
+    && /se commande \$\{j\} jour\$\{j > 1 \? 's' : ''\} à l'avance : le premier jour possible, c'est \$\{jourEnClair\(premier, aujourdhui\)\}/.test(ROUTE))
   verifier('🔴 plus de refus « deux délais » ni de compte en minutes',
     !/refusDelaisMelanges|debutCreneau\.getTime\(\) < pret\.getTime\(\)|premierJourBoutique\(/.test(ROUTE))
   verifier('🔴 elle lit le délai du second article d’un duo, sur CE commerce',

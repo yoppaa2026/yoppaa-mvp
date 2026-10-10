@@ -49,8 +49,9 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { eurosNus } from '@/lib/montants'
 import {
   ORIGINE_COMMERCANT, MODES_ENCODEE, clientEncode, champsPaiementEncodee,
-  avertissement, confirmationRequise, jugementMoment, creneauTermine, delaiArticleNonRespecte,
+  avertissement, confirmationRequise, jugementMoment, creneauTermine, articleHorsJour,
 } from '@/lib/commande-encodee'
+import { joursIndisponibles } from '@/lib/delai-commande'
 
 export const dynamic = 'force-dynamic'
 
@@ -151,13 +152,6 @@ export async function POST(request) {
     for (const v of calcul.stocksVariantesCourts || []) {
       avertissements.push(avertissement(`stock:${v.article_id}`, `${v.nom} : il en reste ${v.disponible}.`))
     }
-    // Le délai propre à chaque article (la tarte à J+2), lu sur l'article EN
-    // BASE : la même règle que la commande en ligne, en avertissement.
-    for (const id of new Set(lignes.map(l => String(l.article_id)))) {
-      const art = articlesData.find(a => String(a.id) === id)
-      const trop = delaiArticleNonRespecte({ article: art, commercant, jour: date_commande, aujourdhui: jourBruxelles() })
-      if (trop) avertissements.push(avertissement(`delai_article:${id}`, trop.message))
-    }
 
     // ── La livraison : adresse, zone, minimum, frais ──────────────────────
     let fraisLivraisonCents = 0
@@ -229,13 +223,40 @@ export async function POST(request) {
       })) avertissements.push(avertissement('creneau_plein'))
     }
 
-    // ── Le stock : la même règle, mais un refus devient un avertissement ──
-    const verifStock = await verifierStockDisponible({
-      supabase: admin, lignes, commercantId: commercant.id, dateCommande: date_commande, commercant,
-    })
-    if (!verifStock.ok) {
-      if (verifStock.status >= 500) return non(verifStock.error, verifStock.status)
-      avertissements.push(avertissement(`stock:${verifStock.article_id || 'circuit'}`, verifStock.error))
+    // ── Chaque article, ce jour-là : ses règles, puis son stock ───────────
+    // 🔴 UN AVERTISSEMENT PAR ARTICLE, TOUS EN UNE FOIS (Alex, 10/10). La
+    // tarte à J+2 s'encodait sans un mot, et `verifierStockDisponible` s'arrête
+    // au PREMIER problème : le commerçant confirmait, puis en découvrait un
+    // deuxième, puis un troisième.
+    //   1) la règle de la fiche (`articleHorsJour` : délai, jours de vente,
+    //      circuits), lue sur l'article EN BASE, avec son premier jour possible ;
+    //   2) sinon le stock, par LA fonction de la commande en ligne, article
+    //      par article (une panne de lecture reste une erreur).
+    const idsPanier = [...new Set(lignes.map(l => String(l.article_id)))]
+    const { data: joursOff, error: errOff } = await admin
+      .from('article_stock_jour').select('article_id, jour_semaine, stock, actif').in('article_id', idsPanier)
+    if (errOff) return non('Impossible de vérifier les jours de vente. Réessaie.', 500)
+    const aujourdhui = jourBruxelles()
+    const aVerifier = []
+    for (const id of idsPanier) {
+      const art = articlesData.find(a => String(a.id) === id)
+      const entrees = {}
+      for (const s of joursOff || []) if (String(s.article_id) === id) entrees[s.jour_semaine] = { stock: s.stock, actif: s.actif }
+      const hors = articleHorsJour({ article: art, indispo: joursIndisponibles(entrees), commercant, jour: date_commande, aujourdhui })
+      if (hors) avertissements.push(avertissement(`article:${id}`, hors.message))
+      else aVerifier.push(id)
+    }
+    const verifs = await Promise.all(aVerifier.map(id => verifierStockDisponible({
+      supabase: admin, lignes: lignes.filter(l => String(l.article_id) === id),
+      commercantId: commercant.id, dateCommande: date_commande, commercant,
+    }).then(v => ({ id, v }))))
+    for (const { id, v } of verifs) {
+      if (v.ok) continue
+      if (v.status >= 500) return non(v.error, v.status)
+      const nomArt = articlesData.find(a => String(a.id) === id)?.nom || 'Cet article'
+      avertissements.push(avertissement(`stock:${id}`, Number.isFinite(v.stock_disponible)
+        ? `« ${nomArt} » : il en reste ${v.stock_disponible}.`
+        : v.error))
     }
 
     // ── Prévenir avant d'écrire ───────────────────────────────────────────

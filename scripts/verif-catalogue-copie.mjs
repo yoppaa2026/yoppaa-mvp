@@ -861,7 +861,8 @@ const v = (nom, cond, detail = '') => {
     /articles: trierArticles\(arts \|\| \[\]\),/.test(fiche) && /poserSiChange\(memoireArticles, trierArticles\(arts\), setArticles\)/.test(fiche))
   v('🔴 la carte de table lit `ordre` et trie par la règle',
     /const COLONNES_ARTICLE = '[^']*\bordre\b'/.test(menu) && /articles: trierArticles\(articles\.data \|\| \[\]\)/.test(menu))
-  v('la commande encodée trie par la règle', /trierArticles\(\(articles\.data \|\| \[\]\)\.filter/.test(cata) && /gere_variantes, ordre`/.test(cata))
+  // (10/10) les colonnes du stock suivent désormais `ordre` dans le select.
+  v('la commande encodée trie par la règle', /trierArticles\(\(articles\.data \|\| \[\]\)\.filter/.test(cata) && /\.select\(`\$\{SELECT_ARTICLES\}, gere_variantes, ordre[,`]/.test(cata))
   v('🔴 les flèches écrivent par la règle, sur ce commerce seulement, et lisent leur résultat',
     /const patchs = deplacementDansCategorie\(articles, a\.id, sens\)/.test(config)
     && /\.update\(\{ ordre: p\.ordre \}\)\.eq\('id', p\.id\)\.eq\('commercant_id', commercantId\)\.select\('id'\)/.test(config)

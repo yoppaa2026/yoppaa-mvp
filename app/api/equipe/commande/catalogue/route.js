@@ -19,6 +19,7 @@ import { clientAdmin } from '@/lib/api-auth'
 import { gardeEquipe } from '@/lib/equipe-server'
 import { SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { trierArticles } from '@/lib/ordre-articles'
+import { modeStockDe, dejaCommandePourStock } from '@/lib/stock-article'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,9 @@ export async function POST(request) {
 
     const [commerce, articles, deals, retrait, livraison, jour] = await Promise.all([
       admin.from('commercants').select('id, nom, categorie, mode_capacite, tva_taux_defaut, ordre_categories').eq('id', commercant_id).maybeSingle(),
-      admin.from('articles').select(`${SELECT_ARTICLES}, gere_variantes, ordre`).eq('commercant_id', commercant_id).eq('actif', true).order('categorie').order('nom'),
+      // ⚠️ Les colonnes du stock : celles que `etatStock` lit (comptoir, maximum
+      // sur commande, stock qui baisse), comme `verifierStockDisponible`.
+      admin.from('articles').select(`${SELECT_ARTICLES}, gere_variantes, ordre, stock_jour, stock_comptoir, stock_comptoir_le, commande_max_jour, stock_maj_le`).eq('commercant_id', commercant_id).eq('actif', true).order('categorie').order('nom'),
       admin.from('yoppaa_deals').select(SELECT_DEALS).eq('commercant_id', commercant_id).eq('actif', true),
       admin.from('creneaux').select(COLONNES_CRENEAU).eq('commercant_id', commercant_id).eq('actif', true).order('heure_debut'),
       admin.from('livraison_creneaux').select(COLONNES_CRENEAU).eq('commercant_id', commercant_id).eq('actif', true).order('heure_debut'),
@@ -54,18 +57,42 @@ export async function POST(request) {
     const vendables = trierArticles((articles.data || []).filter(a => !a.est_vitrine && !a.gere_variantes))
     const ids = vendables.map(a => a.id)
     let groupes = []
+    // ── Ce que la fiche lit pour dire « pas ce jour-là », « épuisé », « reste 3 »
+    // 🔴 LA GRILLE NE SAVAIT RIEN DES JOURS DE VENTE NI DU STOCK (Alex, 10/10) :
+    // mêmes sources que la fiche (`article_stock_jour`, `stock_commande_par_article`,
+    // `ventes_stock_magasin`), même calcul (`etatTuile` → `etatStock`).
+    const stocksJour = {}
+    let dejaCommande = null
     if (ids.length > 0) {
-      const { data, error } = await admin.from('article_options_groupes')
-        .select('id, article_id, nom, type, obligatoire, created_at, valeurs:article_options_valeurs(id, nom, prix_supplement, groupe_id)')
-        .in('article_id', ids).order('created_at')
-      if (error) return NextResponse.json({ ok: false, error: 'Lecture impossible, réessaie.' }, { status: 500 })
-      groupes = data || []
+      const aMagasin = vendables.some(a => modeStockDe(a) === 'magasin')
+      const [opts, grille, vendu, magasin] = await Promise.all([
+        admin.from('article_options_groupes')
+          .select('id, article_id, nom, type, obligatoire, created_at, valeurs:article_options_valeurs(id, nom, prix_supplement, groupe_id)')
+          .in('article_id', ids).order('created_at'),
+        admin.from('article_stock_jour').select('article_id, jour_semaine, stock, actif').in('article_id', ids),
+        admin.rpc('stock_commande_par_article', { p_commercant_id: commercant_id, p_date: date }),
+        aMagasin ? admin.rpc('ventes_stock_magasin', { p_commercant_id: commercant_id }) : Promise.resolve({ data: [], error: null }),
+      ])
+      if (opts.error || grille.error) return NextResponse.json({ ok: false, error: 'Lecture impossible, réessaie.' }, { status: 500 })
+      groupes = opts.data || []
+      for (const s of grille.data || []) (stocksJour[s.article_id] ||= {})[s.jour_semaine] = { stock: s.stock, actif: s.actif }
+      // ⚠️ UN VENDU ILLISIBLE N'EST PAS « RIEN VENDU » : `null`, et la grille
+      // ne dit rien du stock (le serveur vérifie de toute façon à l'encodage).
+      if (vendu.error || magasin.error) {
+        console.error('[equipe/commande/catalogue] vendu illisible', vendu.error?.message || magasin.error?.message)
+      } else {
+        const duJour = Object.fromEntries((vendu.data || []).map(r => [r.article_id, Number(r.quantite) || 0]))
+        const ventesMagasin = Object.fromEntries((magasin.data || []).map(r => [r.article_id, Number(r.quantite) || 0]))
+        dejaCommande = Object.fromEntries(vendables.map(a => [a.id, dejaCommandePourStock({ article: a, duJour, ventesMagasin })]))
+      }
     }
     return NextResponse.json({
       ok: true,
       commercant: commerce.data,
       articles: vendables,
       groupes,
+      stocksJour,
+      dejaCommande,
       deals: deals.data || [],
       creneauxRetrait: retrait.data || [],
       creneauxLivraison: livraison.data || [],

@@ -50,7 +50,7 @@ import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
 import { joursRetraitBoutique, estFermeExceptionnellement } from '@/lib/ouverture'
 import { jourPlus } from '@/lib/statut-commerce'
-import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, libelleMoment } from '@/lib/delai-commande'
+import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, premierJourPossible, jourEnClair } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
 import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, messageCircuit, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
@@ -838,6 +838,15 @@ export async function POST(request) {
       if (!estBoutique || estRetraitBoutique) {
         const aujourdhui = jourBruxelles()
         const articleEnBase = Object.fromEntries((articlesData || []).map(a => [String(a.id), a]))
+        // 🔴 LE PREMIER JOUR ANNONCÉ TIENT COMPTE DES JOURS DE VENTE (10/10) :
+        // un pain du week-end à J+2, refusé un samedi pour dimanche, annonçait
+        // « le plus tôt, c'est lundi », jour où il ne se vend pas.
+        const { data: offLignes, error: errOffLignes } = await supabase
+          .from('article_stock_jour').select('article_id, jour_semaine, actif')
+          .in('article_id', [...new Set(lignes.map(l => l.article_id))]).eq('actif', false)
+        if (errOffLignes) {
+          return NextResponse.json({ ok: false, error: 'Impossible de vérifier ta commande. Réessaie dans un instant.' }, { status: 500 })
+        }
         for (const l of lignes) {
           const n = delaiEnJours(l)
           let circuits = circuitsDeLArticle(articleEnBase[String(l.article_id)], commercant)
@@ -848,9 +857,11 @@ export async function POST(request) {
             // laisserait le Yopper chercher lequel de ses six articles bloque.
             // ⚠️ `refus.jours` : en B, un article réglé sans délai compte 1 jour.
             const j = refus.jours ?? n
+            const indispo = (offLignes || []).filter(o => String(o.article_id) === String(l.article_id)).map(o => o.jour_semaine)
+            const premier = premierJourPossible({ regle: { delaiJours: n, indispo, circuits }, aujourdhui }) || refus.plancher
             return NextResponse.json({
               ok: false,
-              error: `« ${l.article_nom || 'Un article'} » se commande ${j} jour${j > 1 ? 's' : ''} à l'avance : le plus tôt, c'est ${libelleMoment({ jour: refus.plancher, aujourdhui })}. Choisis un autre jour.`,
+              error: `« ${l.article_nom || 'Un article'} » se commande ${j} jour${j > 1 ? 's' : ''} à l'avance : le premier jour possible, c'est ${jourEnClair(premier, aujourdhui)}. Choisis un autre jour.`,
               creneau_indisponible: true,
             }, { status: 409 })
           }

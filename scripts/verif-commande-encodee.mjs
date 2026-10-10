@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   ORIGINE_COMMERCANT, PAIEMENTS_ENCODEE, clientEncode, champsPaiementEncodee,
-  avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne, creneauTermine, delaiArticleNonRespecte,
+  avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne, creneauTermine, articleHorsJour, etatTuile,
 } from '../lib/commande-encodee.js'
 
 let ok = 0
@@ -92,23 +92,47 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('un créneau qui passe minuit finit le lendemain', !t('22:00:00', '00:30:00'))
   v('demain, rien n’est terminé',
     !creneauTermine({ heure_debut: '07:00:00', heure_fin: '07:15:00' }, { dateStr: '2026-10-11', maintenant: MAINTENANT, instant }))
-  // Le délai propre à l'article (la tarte à J+2), samedi 10/10 pour dimanche 11.
+  // 🔴 LES RÈGLES DE L'ARTICLE CE JOUR-LÀ (Alex, 10/10), samedi 10/10.
   const commerce = { categorie: 'alimentaire' }
+  const SEMAINE = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi']
   const tarte = { id: 't1', nom: 'Tarte aux pommes', delai_minutes: 2880, vente_jour: false, commande_active: true }
   const croissant = { id: 'c1', nom: 'Croissant', delai_minutes: 1440, vente_jour: true, commande_active: true }
-  const dTarte = delaiArticleNonRespecte({ article: tarte, commercant: commerce, jour: '2026-10-11', aujourdhui: auj })
-  v('🔴 la tarte à J+2 pour demain : trop tôt, dès lundi, le message nomme l’article',
-    dTarte?.jours === 2 && dTarte.plancher === '2026-10-12' && /« Tarte aux pommes » se commande 2 jours à l’avance : le plus tôt, c’est lundi\./.test(dTarte.message),
-    JSON.stringify(dTarte))
-  v('🔴 la tarte pour lundi passe', delaiArticleNonRespecte({ article: tarte, commercant: commerce, jour: '2026-10-12', aujourdhui: auj }) === null)
+  const pain = { id: 'p1', nom: 'Pain longue fermentation', delai_minutes: 2880, vente_jour: false, commande_active: true }
+  const hors = (article, jour, indispo = []) => articleHorsJour({ article, indispo, commercant: commerce, jour, aujourdhui: auj })
+  const hTarte = hors(tarte, '2026-10-11')
+  v('🔴 la tarte à J+2 pour demain : trop tôt, premier jour lundi 12 octobre, le message nomme l’article',
+    hTarte?.raison === 'delai' && hTarte.premier === '2026-10-12' && hTarte.court === 'Trop tôt · dès lundi 12 octobre'
+    && hTarte.message === '« Tarte aux pommes » se commande 2 jours à l’avance. Le premier jour possible : lundi 12 octobre.',
+    JSON.stringify(hTarte))
+  const hPain = hors(pain, '2026-10-11', SEMAINE)
+  v('🔴 LE PAIN DU WEEK-END À J+2 : pas « dès lundi », le premier jour est samedi 17',
+    hPain?.raison === 'delai' && hPain.premier === '2026-10-17' && /Le premier jour possible : samedi 17 octobre\./.test(hPain.message),
+    JSON.stringify(hPain))
+  const hPainLundi = hors(pain, '2026-10-12', SEMAINE)
+  v('🔴 le même pain pour lundi : il ne se vend pas le lundi, et le premier jour reste samedi 17',
+    hPainLundi?.raison === 'jour' && hPainLundi.court === 'Pas le lundi · dès samedi 17 octobre'
+    && hPainLundi.message === '« Pain longue fermentation » ne se vend pas le lundi. Le premier jour possible : samedi 17 octobre.',
+    JSON.stringify(hPainLundi))
+  v('le pain pour samedi 17 passe', hors(pain, '2026-10-17', SEMAINE) === null)
+  v('🔴 la tarte pour lundi passe', hors(tarte, '2026-10-12') === null)
   v('🔴 le croissant à J+1 pour demain passe, un article sans délai aussi',
-    delaiArticleNonRespecte({ article: croissant, commercant: commerce, jour: '2026-10-11', aujourdhui: auj }) === null
-    && delaiArticleNonRespecte({ article: { nom: 'Baguette', vente_jour: true }, commercant: commerce, jour: auj, aujourdhui: auj }) === null)
+    hors(croissant, '2026-10-11') === null && hors({ nom: 'Baguette', vente_jour: true }, auj) === null)
   const gateau = { nom: 'Gâteau d’anniversaire', delai_minutes: 0, vente_jour: false, commande_active: true }
   v('🔴 un article SUR COMMANDE SEULEMENT, sans délai réglé, pour aujourd’hui : dès demain (les circuits comptent)',
-    delaiArticleNonRespecte({ article: gateau, commercant: commerce, jour: auj, aujourdhui: auj })?.plancher === '2026-10-11')
-  v('le circuit (« pas sur commande ») n’est pas un délai : il passe par le contrôle du stock',
-    delaiArticleNonRespecte({ article: { nom: 'Pain du jour', vente_jour: true, commande_active: false }, commercant: commerce, jour: '2026-10-11', aujourdhui: auj }) === null)
+    hors(gateau, auj)?.premier === '2026-10-11')
+  const hJour = hors({ nom: 'Pain du jour', vente_jour: true, commande_active: false }, '2026-10-11')
+  v('🔴 un article du jour même seulement, pour demain : signalé, sans premier jour inventé dans le court',
+    hJour?.raison === 'aujourdhui_seulement' && hJour.court === 'Le jour même seulement', JSON.stringify(hJour))
+
+  // La tuile : la règle d'abord, puis le stock par LA fonction de la fiche.
+  const tuile = (article, o = {}) => etatTuile({ article, commercant: commerce, jour: '2026-10-11', aujourdhui: auj, dejaCommande: 0, ...o })
+  v('🔴 la tuile d’un article hors jour ne parle pas de stock', tuile(tarte).hors?.raison === 'delai' && tuile(tarte).gere === false)
+  const max5 = { ...croissant, commande_max_jour: 5 }
+  v('🔴 la tuile dit le reste du jour (maximum sur commande 5, 3 déjà commandés : reste 2)',
+    tuile(max5, { dejaCommande: 3 }).gere === true && tuile(max5, { dejaCommande: 3 }).dispo === 2)
+  v('🔴 épuisé : 0', tuile(max5, { dejaCommande: 5 }).dispo === 0)
+  v('🔴 un vendu illisible (null) ne dit rien du stock, jamais « plein »', tuile(max5, { dejaCommande: null }).gere === false)
+  v('sans limite : rien à dire', tuile(croissant).gere === false)
 
   v('sans heure de fin ou sans horloge : rien n’est caché',
     !creneauTermine({ heure_debut: '07:00:00' }, { dateStr: auj, maintenant: MAINTENANT, instant }) && !creneauTermine({ heure_fin: '07:15:00' }, { dateStr: auj }))
@@ -133,10 +157,17 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /construireLignesCommande\(\{[\s\S]{0,300}stockVarianteIndicatif: true,/.test(r))
   v('🔴 la capacité : le même compte partagé et la même règle',
     /occupationDuCreneau\(\{/.test(r) && /commandeDeborde\(creneau, \{/.test(r) && /avertissements\.push\(avertissement\('creneau_plein'\)\)/.test(r))
-  v('🔴 le stock : la même vérification, un refus devient un avertissement (une panne reste une erreur)',
-    /const verifStock = await verifierStockDisponible\(\{/.test(r)
-    && /if \(verifStock\.status >= 500\) return non\(/.test(r)
-    && /avertissements\.push\(avertissement\(`stock:\$\{verifStock\.article_id \|\| 'circuit'\}`, verifStock\.error\)\)/.test(r))
+  // (10/10) réorientée : la même vérification, désormais ARTICLE PAR ARTICLE,
+  // pour que tous les problèmes sortent en une fois.
+  v('🔴 le stock : la même vérification, article par article ; un refus devient un avertissement, une panne reste une erreur',
+    /verifierStockDisponible\(\{\s*supabase: admin, lignes: lignes\.filter\(l => String\(l\.article_id\) === id\),/.test(r)
+    && /if \(v\.status >= 500\) return non\(v\.error, v\.status\)/.test(r)
+    && /avertissements\.push\(avertissement\(`stock:\$\{id\}`, Number\.isFinite\(v\.stock_disponible\)/.test(r))
+  v('🔴 les règles de l’article (délai, jours de vente, circuits) avant le stock, un avertissement par article',
+    /const hors = articleHorsJour\(\{ article: art, indispo: joursIndisponibles\(entrees\), commercant, jour: date_commande, aujourdhui \}\)/.test(r)
+    && /if \(hors\) avertissements\.push\(avertissement\(`article:\$\{id\}`, hors\.message\)\)\s*else aVerifier\.push\(id\)/.test(r)
+    && /if \(errOff\) return non\(/.test(r)
+    && avant(r, 'articleHorsJour({ article: art', 'confirmationRequise(avertissements, corps.confirmes)'))
   v('🔴 on prévient AVANT d’écrire', avant(r, 'confirmationRequise(avertissements, corps.confirmes)', ".from('commandes')\n      .insert("))
   v('🔴 la commande naît encodée, confirmée, sans Stripe',
     /origine: ORIGINE_COMMERCANT,/.test(r) && /statut: 'en_attente',/.test(r) && /\.\.\.paiement\.champs,/.test(r)
@@ -153,10 +184,7 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('🔴 un créneau terminé est refusé par le serveur, à l’heure de Bruxelles, avant toute écriture',
     /termine: creneauTermine\(creneau, \{ dateStr: date_commande, instant: brusselsInstant \}\),/.test(r)
     && avant(r, 'termine: creneauTermine(', 'if (moment.refus) return non(moment.refus)'))
-  v('🔴 le délai de chaque article, lu EN BASE, devient un avertissement par article, avant de demander confirmation',
-    /const art = articlesData\.find\(a => String\(a\.id\) === id\)/.test(r)
-    && /if \(trop\) avertissements\.push\(avertissement\(`delai_article:\$\{id\}`, trop\.message\)\)/.test(r)
-    && avant(r, 'delaiArticleNonRespecte({ article: art', 'confirmationRequise(avertissements, corps.confirmes)'))
+  v('🔴 l’article est lu EN BASE, jamais dans le corps', /const art = articlesData\.find\(a => String\(a\.id\) === id\)/.test(r))
 }
 
 // ═══ 3) LA LECTURE POUR LA FENÊTRE ══════════════════════════════════════════
@@ -167,6 +195,14 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /select\('statut, date_commande, creneau_id, creneau_livraison_id, commande_articles\(quantite, article:articles\(temps_prepa\)\)'\)/.test(r)
     && !/client_nom|client_email|client_telephone/.test(r))
   v('ni prix indicatif ni versions', /filter\(a => !a\.est_vitrine && !a\.gere_variantes\)/.test(r))
+  v('🔴 la grille lit les jours de vente et le vendu du jour aux sources de la fiche',
+    /\.from\('article_stock_jour'\)\.select\('article_id, jour_semaine, stock, actif'\)\.in\('article_id', ids\)/.test(r)
+    && /rpc\('stock_commande_par_article', \{ p_commercant_id: commercant_id, p_date: date \}\)/.test(r)
+    && /dejaCommandePourStock\(\{ article: a, duJour, ventesMagasin \}\)/.test(r))
+  v('🔴 un vendu illisible reste null (jamais « rien vendu »)',
+    /let dejaCommande = null/.test(r) && /if \(vendu\.error \|\| magasin\.error\) \{/.test(r))
+  v('les colonnes que `etatStock` lit sont lues',
+    /stock_jour, stock_comptoir, stock_comptoir_le, commande_max_jour, stock_maj_le/.test(r))
 }
 
 // ═══ 4) LES ÉCRANS ══════════════════════════════════════════════════════════
@@ -181,9 +217,10 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /useEffect\(\(\) => \{ setAvertissements\(null\) \}, \[mode, date, creneauId, panier, adresse, paiement\]\)/.test(m))
   v('🔴 « encoder quand même » renvoie les codes montrés', /encoder\(avertissements \? avertissements\.map\(a => a\.code\) : \[\]\)/.test(m))
   v('le bouton montre qu’il travaille', /\{envoi && <DotsAttente/.test(m))
-  v('🔴 la tuile dit « Trop tôt » pour le jour choisi, par la règle du serveur',
-    /const tropTot = delaiArticleNonRespecte\(\{ article: a, commercant: donnees\?\.commercant, jour: date, aujourdhui \}\)/.test(m)
-    && /\{tropTot && \(/.test(m))
+  v('🔴 la tuile dit la règle du jour, puis le stock, par la règle du serveur ; un vendu illisible reste null',
+    /const tuile = etatTuile\(\{/.test(m)
+    && /dejaCommande: donnees\?\.dejaCommande \? \(donnees\.dejaCommande\[a\.id\] \|\| 0\) : null,/.test(m)
+    && /\{tuile\.hors \? \(/.test(m) && /\{epuise \? 'Épuisé ce jour' : `Reste \$\{tuile\.dispo\}`\}/.test(m))
   v('🔴 la fenêtre cache les créneaux terminés, relus chaque minute, et lâche un choix terminé',
     /\}\)\.filter\(\(\{ creneau \}\) => !creneauTermine\(creneau, \{ dateStr: date, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\)/.test(m)
     && /setInterval\(\(\) => setMinute\(Date\.now\(\)\), 60000\)/.test(m)

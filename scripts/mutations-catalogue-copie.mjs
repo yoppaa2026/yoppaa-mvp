@@ -365,6 +365,20 @@ const MUTATIONS = [
     fichier: ECRAN,
     de: '    const groupeId = idParArticle.get(String(g.article_id))',
     vers: '    const groupeId = (crees || [])[i]?.id' },
+
+  // ─── LE GROUPE CRÉÉ SUR L ARTICLE PRÉVIENT LE PARENT (Alex, 10/10) ───────
+  { nom: '🔴 une option ajoutée ne prévient plus le parent : vignette et bibliothèque périmées',
+    fichier: ECRAN,
+    de: "    toast('Option ajoutée'); apresEcriture()",
+    vers: "    toast('Option ajoutée'); fetchGroupes()" },
+  { nom: '🔴 le chemin après écriture ne prévient plus personne',
+    fichier: ECRAN,
+    de: '    if (onCopie) onCopie([articleId])',
+    vers: '    if (false) onCopie([articleId])' },
+  { nom: '⚠️ le bouton Dupliquer redevient une icône muette',
+    fichier: ECRAN,
+    de: '<Copy size={14} strokeWidth={1.8} color={T.bgPanel}/> Dupliquer',
+    vers: '<Copy size={14} strokeWidth={1.8} color={T.bgPanel}/>' },
 ]
 
 const lancer = (banc = BANC) => {

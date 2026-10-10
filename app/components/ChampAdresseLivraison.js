@@ -29,7 +29,7 @@ import { useRuesBest } from './useRuesBest'
 
 const MAX_SUGGESTIONS = 8
 
-export default function ChampAdresseLivraison({ valeur, onChange, style, couleurs = {}, telephoneCommerce = null }) {
+export default function ChampAdresseLivraison({ valeur, onChange, style, couleurs = {}, telephoneCommerce = null, pourCommercant = false }) {
   const C = {
     hairline: couleurs.hairline || '#E7E3F5',
     deep: couleurs.deep || '#2D0F6B',
@@ -166,7 +166,15 @@ export default function ChampAdresseLivraison({ valeur, onChange, style, couleur
           Adresse trouvée{valeur?.ville ? ` · ${valeur.ville}` : ''}
         </p>
       )}
-      {valeur?.situee === false && (
+      {/* ⚠️ LE COMMERÇANT QUI ENCODE (10/10) n'est pas refusé : il connaît son
+          client, la commande se livre, elle n'aura juste pas de place sur la
+          tournée. Il ne lit pas « appelle le commerce ». */}
+      {valeur?.situee === false && pourCommercant && (
+        <p style={{ ...etiquette, color: C.erreur }}>
+          Adresse absente de la liste officielle : note-la en entier juste en dessous. Elle sera livrée, mais sans position sur ta tournée.
+        </p>
+      )}
+      {valeur?.situee === false && !pourCommercant && (
         <p style={{ ...etiquette, color: C.erreur }}>
           Cette adresse n&rsquo;est pas dans la liste officielle des adresses, la livraison n&rsquo;est donc pas possible.
           Choisis le retrait{telephoneCommerce ? <>, ou appelle le commerce au <a href={`tel:${telephoneCommerce}`} style={{ color: C.erreur }}>{telephoneCommerce}</a></> : ', ou appelle le commerce'}.

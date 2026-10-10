@@ -338,8 +338,19 @@ const routeCode = route.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).j
 verifier('la route contrôle la capacité côté serveur', /commandeDeborde\(creneau, \{/.test(routeCode))
 verifier('elle ne contrôle que si une capacité est fixée',
   /capaciteDuCreneau\(creneau, commercant\.mode_capacite\)/.test(routeCode) && /capaciteReglee !== null/.test(routeCode))
-verifier('elle passe les commandes DÉJÀ prises, sans la nouvelle', /existantes: occupantes\.length,/.test(routeCode))
-verifier('🔴 elle ne compte plus la commande en cours deux fois', !/occupantes\.length \+ 1/.test(routeCode))
+// ⚠️ REPOINTÉES LE 10/10 : le compte vit dans `occupationDuCreneau`, partagé
+// avec la commande encodée par le commerçant. On vise l'appel, et le module.
+verifier('elle passe les commandes DÉJÀ prises, sans la nouvelle', /existantes: occupation\.existantes,/.test(routeCode)
+  && /occupationDuCreneau\(\{/.test(routeCode))
+verifier('🔴 elle ne compte plus la commande en cours deux fois', !/occupantes\.length \+ 1/.test(routeCode) && !/existantes \+ 1/.test(routeCode))
+{
+  const occ = lireBrut('lib/occupation-creneau-server.js')
+  verifier('🔴 le compte partagé lit les statuts qui occupent, le bon jour et le bon créneau',
+    /\.in\('statut', STATUTS_OCCUPENT_CRENEAU\)/.test(occ) && /\.eq\('date_commande', date\)/.test(occ)
+    && /const colonneCreneau = estLivraison \? 'creneau_livraison_id' : 'creneau_id'/.test(occ))
+  verifier('🔴 une lecture ratée n’est jamais « zéro commande »', /if \(error\) return \{ ok: false, error: error\.message \}/.test(occ)
+    && /if \(errLignes\) return \{ ok: false/.test(occ))
+}
 verifier('🔴 I8 4 commandes sur 5 : la 5e passe',
   !commandeDeborde({ max_commandes: 5 }, { existantes: 4 }))
 verifier('🔴 I8 5 commandes sur 5 : la 6e est refusée',
@@ -378,8 +389,11 @@ verifier('🔴 I8 la route traduit le refus sous verrou en 409',
     fn.split(`c.statut IN (${statutsSql})`).length - 1 === 2 && fn.includes(`NEW.statut NOT IN (${statutsSql})`))
   verifier('I8 il est VOLATILE (image neuve après le verrou)', /\bVOLATILE\b/.test(fn))
 }
-verifier('elle se limite au même jour', /\.eq\('date_commande', date_commande\)/.test(routeCode))
-verifier('elle exclut les annulées via la liste partagée', /STATUTS_OCCUPENT_CRENEAU/.test(routeCode))
+// ⚠️ REPOINTÉES LE 10/10 : le jour et la liste des statuts sont passés au
+// compte partagé (`occupationDuCreneau`), dont le texte est vérifié plus haut.
+verifier('elle se limite au même jour', /estLivraison, date: date_commande, modeTemps,/.test(routeCode))
+verifier('elle exclut les annulées via la liste partagée',
+  /\.in\('statut', STATUTS_OCCUPENT_CRENEAU\)/.test(lireBrut('lib/occupation-creneau-server.js')))
 verifier('elle traite aussi la livraison', /creneau_livraison_id.*creneau_id|colonneCreneau/.test(routeCode))
 verifier('elle répond 409 et non 400', /creneau_complet: true[\s\S]{0,80}status: 409/.test(routeCode))
 

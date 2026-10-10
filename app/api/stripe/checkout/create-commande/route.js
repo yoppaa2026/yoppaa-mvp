@@ -44,7 +44,9 @@ import { modesPaiementOuverts } from '@/lib/modes-paiement'
 import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
-import { commandeDeborde, capaciteDuCreneau, creneauCommandable, STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
+import { commandeDeborde, capaciteDuCreneau, creneauCommandable } from '@/lib/creneaux'
+import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
+import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
 import { joursRetraitBoutique, estFermeExceptionnellement } from '@/lib/ouverture'
 import { jourPlus } from '@/lib/statut-commerce'
@@ -1001,49 +1003,22 @@ export async function POST(request) {
     }, 0)
     const { modeTemps, capacite: capaciteReglee } = capaciteDuCreneau(creneau, commercant.mode_capacite)
     if (creneau && !estBoutique && capaciteReglee !== null) {
-      const colonneCreneau = estLivraison ? 'creneau_livraison_id' : 'creneau_id'
-      const { data: cmdMemeCreneau, error: errOccupe } = await supabase
-        .from('commandes')
-        .select('id, temps_prepa_minutes')
-        .eq('commercant_id', commercant.id)
-        .eq(colonneCreneau, creneau.id)
-        .eq('date_commande', date_commande)
-        .in('statut', STATUTS_OCCUPENT_CRENEAU)
-      if (errOccupe) {
-        console.error('[create-commande] lecture capacite KO', errOccupe)
+      // ⚠️ LE COMPTE VIT DANS `occupationDuCreneau` (10/10) : la commande
+      // encodée par le commerçant compte EXACTEMENT pareil. Une lecture ratée
+      // n'est jamais « zéro commande ».
+      const occupation = await occupationDuCreneau({
+        supabase, commercantId: commercant.id, creneauId: creneau.id,
+        estLivraison, date: date_commande, modeTemps,
+      })
+      if (!occupation.ok) {
+        console.error('[create-commande] lecture capacite KO', occupation.error)
         return NextResponse.json({ ok: false, error: 'Impossible de vérifier ce créneau. Réessaie dans un instant.' }, { status: 500 })
-      }
-      const occupantes = cmdMemeCreneau || []
-
-      // Mode « temps » : le plafond est une durée. Le temps figé sur la
-      // commande d'abord ; les commandes d'avant I8 n'en ont pas, on le
-      // recalcule depuis leurs lignes.
-      let tempsCumul = 0
-      if (modeTemps) {
-        const sansTemps = []
-        for (const c of occupantes) {
-          if (c.temps_prepa_minutes === null || c.temps_prepa_minutes === undefined) sansTemps.push(c.id)
-          else tempsCumul += Number(c.temps_prepa_minutes) || 0
-        }
-        if (sansTemps.length > 0) {
-          const { data: lignesExistantes, error: errLignes } = await supabase
-            .from('commande_articles')
-            .select('quantite, article:articles(temps_prepa)')
-            .in('commande_id', sansTemps)
-          if (errLignes) {
-            console.error('[create-commande] lecture lignes capacite KO', errLignes)
-            return NextResponse.json({ ok: false, error: 'Impossible de vérifier ce créneau. Réessaie dans un instant.' }, { status: 500 })
-          }
-          for (const l of lignesExistantes || []) {
-            tempsCumul += Number(l.quantite || 0) * Number(l.article?.temps_prepa ?? 1)
-          }
-        }
       }
 
       if (commandeDeborde(creneau, {
         modeCapaciteDefaut: commercant.mode_capacite,
-        existantes: occupantes.length,
-        tempsExistant: tempsCumul,
+        existantes: occupation.existantes,
+        tempsExistant: occupation.tempsExistant,
         tempsDemande: tempsCommande,
       })) {
         return NextResponse.json({
@@ -1273,18 +1248,9 @@ export async function POST(request) {
     // Décrément immédiat à la commande (cash ET en ligne). Conservateur : un
     // paiement Stripe abandonné laisse le stock décrémenté jusqu'à l'annulation
     // (pas de survente possible). Restauration à l'annulation = backlog.
-    const varianteParId = Object.fromEntries((variantesData || []).map(v => [v.id, v]))
-    for (const item of articles) {
-      if (!item.variante_id) continue
-      const v = varianteParId[item.variante_id]
-      if (!v) continue
-      const q = parseInt(item.quantite, 10) || 0
-      const { error: errVar } = await supabase
-        .from('article_variantes')
-        .update({ stock: Math.max(0, (v.stock || 0) - q) })
-        .eq('id', v.id)
-      if (errVar) console.error('[create-commande] décrément variante KO (non-bloquant)', errVar.message)
-    }
+    // ⚠️ 10/10 : à partir des LIGNES du serveur (plus du corps de la requête),
+    // et partagé avec la commande encodée (`preleverStockVariantes`).
+    await preleverStockVariantes(supabase, lignes, variantesData)
 
     // ─── 8) Réservations stock : déjà posées atomiquement à l'étape 6.5 ─────
 

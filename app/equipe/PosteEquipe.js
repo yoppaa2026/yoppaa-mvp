@@ -15,6 +15,7 @@ import AgendaRdv from '@/app/dashboard/AgendaRdv'
 // La fenêtre de saisie DU PATRON, avec l'accès serveur (étape 3b) : les heures
 // libres se calculent par le même code pour les deux écrans.
 import ModalNouveauRdv from '@/app/dashboard/ModalNouveauRdv'
+import ModalNouvelleCommande from '@/app/dashboard/ModalNouvelleCommande'
 // Et SA fenêtre de déplacement (30/09), même réglage `serveur`.
 import ModalDeplacerRdv from '@/app/dashboard/ModalDeplacerRdv'
 import { statutRdv } from '@/lib/rdv-statut'
@@ -449,6 +450,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
   const [avis, setAvis] = useState(null)   // { texte, ton: 'ok' | 'erreur' }
   // La fenêtre de saisie ouverte : { date: Date, heure: 'HH:MM' | '' }.
   const [saisie, setSaisie] = useState(null)
+  const [encoder, setEncoder] = useState(false)
   // ⚠️ STABLE pour la vie du poste : la fenêtre s'en sert dans ses effets.
   const serveurSaisie = useMemo(() => ({
     lireSalle: async (date) => {
@@ -870,6 +872,24 @@ export default function PosteEquipe({ equipe, onChanger }) {
           serveur={serveurSaisie}
           onClose={() => setADeplacer(null)}
           onDeplace={apresDeplacement}
+        />
+      )}
+      {/* 🔴 LA COMMANDE DU TÉLÉPHONE (Alex, 10/10) : celui qui décroche encode,
+          avec la case « Commandes ». La même fenêtre que le patron, par le
+          même serveur. */}
+      {(actif === 'commandes' || actif === 'livraisons') && etat.commandes && etat.droits?.commandes && etat.commerce?.categorie === 'alimentaire' && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <button type="button" onClick={() => setEncoder(true)} style={{ ...puce(true), padding: '10px 16px' }}>
+            + Encoder une commande
+          </button>
+        </div>
+      )}
+      {encoder && (
+        <ModalNouvelleCommande
+          commercantId={equipe.commercant_id}
+          jourInitial={etat.aujourdhui}
+          onFerme={() => setEncoder(false)}
+          onCree={() => { setEncoder(false); dire('Commande encodée'); charger() }}
         />
       )}
       {actif === 'commandes' && etat.commandes && (

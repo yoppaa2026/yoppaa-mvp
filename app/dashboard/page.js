@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
 import ModalNouveauRdv from './ModalNouveauRdv'
+import ModalNouvelleCommande from './ModalNouvelleCommande'
 import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme, confirmeAvecTexte } from './PosteConfirmation'
 import { jourBruxelles } from '@/lib/timezone'
@@ -66,6 +67,7 @@ import EcranCgu from './EcranCgu'
 import { cguAJour } from '@/lib/cgu'
 import EcranDeclaration from './EcranDeclaration'
 import { declarationAJour } from '@/lib/declaration'
+import { nombreArriveesEnLigne, ORIGINE_COMMERCANT } from '@/lib/commande-encodee'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
 import BandeauOuMeTrouver from './BandeauOuMeTrouver'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
@@ -629,6 +631,13 @@ function CarteCommande({ commande, numero, categorie = null, commerceNom = null,
                   s'il prépare un colis, une remise au comptoir ou une tournée ;
                   la DATE dit pour quand. Sans ça il ouvrait chaque commande. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, flexWrap: 'wrap' }}>
+                {/* La commande prise au téléphone ou au comptoir (10/10) : le
+                    commerçant sait qu'elle ne vient pas de l'app. */}
+                {commande.origine === ORIGINE_COMMERCANT && (
+                  <span style={{ fontSize: 12, fontWeight: 800, color: T.deep, background: T.pale, padding: '1px 8px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+                    Encodée
+                  </span>
+                )}
                 <span style={{ fontSize: '0.62rem', fontWeight: 800, color: couleur.border, background: `${couleur.border}14`, border: `1px solid ${couleur.border}33`, padding: '1px 7px', borderRadius: 100, whiteSpace: 'nowrap' }}>
                   {libelleMode}
                 </span>
@@ -1351,6 +1360,9 @@ export default function Dashboard() {
   // sinon `{ raison, motif, nom }` et on montre l'écran d'attente à la place.
   const [refusAcces, setRefusAcces] = useState(null)
   const [erreurFiches, setErreurFiches] = useState(null)
+  // La commande encodée à la main (10/10) : la fenêtre, et ce qu'on dit après.
+  const [encoderOuvert, setEncoderOuvert] = useState(false)
+  const [messageEncodee, setMessageEncodee] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
@@ -1597,7 +1609,7 @@ export default function Dashboard() {
       .order('created_at', { ascending: true })
     const triees = trierCommandes(data)
     setCommandes(triees)
-    dernierNombreRef.current = triees.length
+    dernierNombreRef.current = nombreArriveesEnLigne(triees)
     setLoading(false)
     // Sélectionner aujourd'hui par défaut
     const todayKey = dateKey(new Date())
@@ -1948,8 +1960,10 @@ export default function Dashboard() {
         .order('created_at', { ascending: true })
       const triees = trierCommandes(data)
 
-      // Nouvelle commande arrivée
-      if (dernierNombreRef.current > 0 && triees.length > dernierNombreRef.current) {
+      // Nouvelle commande arrivée. ⚠️ EN LIGNE SEULEMENT (10/10) : une
+      // commande que le commerçant vient d'encoder ne le fait pas sonner.
+      const arrivees = nombreArriveesEnLigne(triees)
+      if (dernierNombreRef.current > 0 && arrivees > dernierNombreRef.current) {
         if (notificationsActives) jouerSon()
         setNouvelleCommande(true)
         setTimeout(() => setNouvelleCommande(false), 6000)
@@ -1976,7 +1990,7 @@ export default function Dashboard() {
         return prev
       })
 
-      dernierNombreRef.current = triees.length
+      dernierNombreRef.current = arrivees
       setCommandes(triees)
 
       // Polling RDVs : meme interval pour eviter de multiplier les setInterval.
@@ -4212,6 +4226,38 @@ export default function Dashboard() {
             {commercant && <AideInstallation/>}
             {ongletPrincipal === 'commandes' && (
               <>
+                {/* 🔴 LA COMMANDE DU TÉLÉPHONE (Alex, 10/10). Elle remplit les
+                    mêmes créneaux et le même stock que les commandes en ligne :
+                    le commerçant voit sa vraie soirée. Alimentaire seulement :
+                    le détail n'a pas d'heure promise. */}
+                {commercant?.categorie === 'alimentaire' && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                    <button type="button" onClick={() => { setMessageEncodee(null); setEncoderOuvert(true) }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.deep}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                      Encoder une commande
+                    </button>
+                    <span style={{ fontSize: 13, color: T.muted }}>Téléphone, comptoir : elle prend sa place dans tes créneaux.</span>
+                  </div>
+                )}
+                {messageEncodee && (
+                  <p role="status" style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '10px 14px', color: '#065F46', fontSize: 14, fontWeight: 700, margin: '0 0 12px' }}>
+                    {messageEncodee}
+                  </p>
+                )}
+                {encoderOuvert && commercant && (
+                  <ModalNouvelleCommande
+                    commercantId={commercant.id}
+                    jourInitial={jourActif}
+                    onFerme={() => setEncoderOuvert(false)}
+                    onCree={(r) => {
+                      setEncoderOuvert(false)
+                      const ref = referenceCommande({ numero_commande: r?.numero, numero_prefixe: r?.prefixe })
+                      setMessageEncodee(`Commande encodée${ref ? ` (n° ${ref})` : ''}.${r?.confirmation_envoyee ? ' La confirmation est partie par e-mail.' : ''}`)
+                      chargerCommandes(commercant.id)
+                    }}
+                  />
+                )}
                 {/* ⚠️ LES BONS CADEAUX VENDUS, que le commerçant ne voyait NULLE
                     PART. Il n'a rien à préparer, d'où le bandeau discret plutôt
                     qu'une vignette de commande avec ses boutons : mais quelqu'un

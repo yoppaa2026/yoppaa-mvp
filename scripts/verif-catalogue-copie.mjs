@@ -803,6 +803,25 @@ const v = (nom, cond, detail = '') => {
     String((config.match(/<VariantesArticle article=\{a\} articles=\{articles\}/g) || []).length))
 }
 
+// ═══ LE GROUPE CRÉÉ SUR L'ARTICLE PRÉVIENT LE PARENT (Alex, 10/10) ═══════════
+// 🔴 « Lorsque je crée le groupe directement sur l'article, il ne se rattache
+// pas à l'article sauf si je le duplique. » Le groupe était en base ; la
+// vignette et la bibliothèque, chargées par le parent, ne relisaient qu'après
+// une copie. Chaque écriture du panneau passe maintenant par `apresEcriture`.
+{
+  const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  const debut = config.indexOf('function OptionsArticle(')
+  const panneau = config.slice(debut, config.indexOf('\nfunction ', debut + 10))
+  v('🔴 le panneau a un seul chemin après écriture, qui prévient le parent',
+    /function apresEcriture\(\) \{\s*if \(onCopie\) onCopie\(\[articleId\]\)\s*else fetchGroupes\(\)\s*\}/.test(panneau))
+  for (const f of ['saveGroupe', 'updateGroupe', 'deleteGroupe', 'addValeur', 'deleteValeur']) {
+    const i = panneau.indexOf(`async function ${f}(`)
+    const corps = i >= 0 ? panneau.slice(i, panneau.indexOf('\n  }\n', i)) : ''
+    v(`🔴 « ${f} » prévient le parent`, corps.length > 0 && /apresEcriture\(\)/.test(corps) && !/fetchGroupes\(\)/.test(corps))
+  }
+  v('🔴 le bouton « Dupliquer » dit son geste', /<Copy size=\{14\} strokeWidth=\{1\.8\} color=\{T\.bgPanel\}\/> Dupliquer/.test(config))
+}
+
 console.log(`\nCopier dans le catalogue : ${ok} vérifications`)
 
 if (echecs.length > 0) {

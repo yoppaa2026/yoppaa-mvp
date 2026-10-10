@@ -2495,6 +2495,18 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
     setLoading(false)
   }
 
+  // 🔴 LE GROUPE « NE SE RATTACHAIT PAS » À L'ARTICLE (Alex, 10/10). Il était
+  // bien enregistré, mais la vignette de l'article (« Pas d'options ») et la
+  // bibliothèque « Tes groupes d'options » lisent ce que le PARENT a chargé, et
+  // le parent ne relisait qu'après une COPIE. Créer, modifier ou supprimer un
+  // groupe ou une option ici laissait donc l'écran périmé, jusqu'à ce qu'Alex
+  // duplique le groupe ailleurs. Chaque écriture prévient maintenant le parent,
+  // qui relit pour tout le monde (et ce panneau suit par `version`).
+  function apresEcriture() {
+    if (onCopie) onCopie([articleId])
+    else fetchGroupes()
+  }
+
   async function saveGroupe() {
     if (!formGroupe.nom.trim()) return toast('Nom obligatoire', 'error')
     setSaving(true)
@@ -2502,13 +2514,13 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
     setSaving(false)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast('Groupe ajouté')
-    setFormGroupe({ nom: '', type: 'unique', obligatoire: false }); setShowForm(false); fetchGroupes()
+    setFormGroupe({ nom: '', type: 'unique', obligatoire: false }); setShowForm(false); apresEcriture()
   }
 
   async function updateGroupe(id, patch) {
     const { error } = await supabase.from('article_options_groupes').update(patch).eq('id', id)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
-    fetchGroupes()
+    apresEcriture()
   }
 
   async function deleteGroupe(id) {
@@ -2516,7 +2528,7 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
     const { data, error } = await supabase.from('article_options_groupes').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
-    toast('Groupe supprimé'); fetchGroupes()
+    toast('Groupe supprimé'); apresEcriture()
   }
 
   async function addValeur(groupeId) {
@@ -2525,14 +2537,14 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
     const { error } = await supabase.from('article_options_valeurs').insert({ groupe_id: groupeId, nom: f.nom.trim(), prix_supplement: parseFloat(f.prix_supplement) || 0 })
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     setValeursForms(p => ({ ...p, [groupeId]: { nom: '', prix_supplement: 0 } }))
-    toast('Option ajoutée'); fetchGroupes()
+    toast('Option ajoutée'); apresEcriture()
   }
 
   async function deleteValeur(id) {
     const { data, error } = await supabase.from('article_options_valeurs').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
-    fetchGroupes()
+    apresEcriture()
   }
 
   // ─── OUVRIR LE PANNEAU DE COPIE ──────────────────────────────────────────
@@ -3424,8 +3436,11 @@ function ArticleCard({ a, estVitrine = false, estDetail = false, mentionVitrineT
               rouge, et il ne demande aucune confirmation puisque rien n'est
               perdu si le commerçant s'est trompé. */}
           {onDupliquer && (
-            <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12 }} onClick={() => onDupliquer(a)} title="Dupliquer cet article">
-              <Copy size={14} strokeWidth={1.8} color={T.bgPanel}/>
+            // 🔴 IL EXISTAIT, PERSONNE NE LE TROUVAIT (Alex, 10/10 : « il faudrait
+            // pouvoir dupliquer des articles »). Une icône seule, sans un mot :
+            // le bouton dit maintenant son geste.
+            <button style={{ ...s.btn, ...s.btnGhost, padding: '6px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => onDupliquer(a)} title="Dupliquer cet article, avec ses options">
+              <Copy size={14} strokeWidth={1.8} color={T.bgPanel}/> Dupliquer
             </button>
           )}
           <button style={{ ...s.btn, ...s.btnDanger, padding: '6px 10px', fontSize: 12 }} onClick={() => onDelete(a.id)} title="Supprimer">

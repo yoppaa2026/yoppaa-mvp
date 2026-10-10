@@ -218,6 +218,8 @@ const MUTATIONS = [
     fichier: 'app/admin/page.js', de: "      const res = await fetch('/api/admin/valider', {", vers: "      const jetonOuverture = session.access_token; const res = await fetch('/api/admin/valider', {" },
   { nom: '🔴 la section KYB reprend un jeton garde en memoire',
     fichier: 'app/admin/SectionKYBAValider.js', de: '    const jeton = await jetonActuel()', vers: '    const jeton = window.__jetonGarde' },
+  { nom: '🔴 une lecture ratee des fiches renvoie de nouveau a la connexion, sans un mot',
+    fichier: 'app/dashboard/page.js', de: '      if (errFiches) {', vers: '      if (false) {' },
   { nom: '🔴 le script supprime sans l identifiant du projet',
     fichier: 'scripts/supprimer-cartes-identite.mjs', de: 'if (projetConfirme !== ref) {', vers: 'if (false) {' },
 ]

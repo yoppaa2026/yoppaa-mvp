@@ -1350,6 +1350,7 @@ export default function Dashboard() {
   // Verdict d'accès au tableau de bord. `null` tant qu'on n'a rien décidé,
   // sinon `{ raison, motif, nom }` et on montre l'écran d'attente à la place.
   const [refusAcces, setRefusAcces] = useState(null)
+  const [erreurFiches, setErreurFiches] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
@@ -1756,7 +1757,16 @@ export default function Dashboard() {
         return
       }
       // ─── FLOW NORMAL : commercant connecte par son propre compte ───
-      const { data } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).order('nom')
+      const { data, error: errFiches } = await supabase.from('commercants').select('*').eq('auth_user_id', user.id).order('nom')
+      // 🔴 UNE LECTURE RATÉE N'EST PAS « AUCUNE FICHE » (10/10). L'erreur
+      // n'était pas lue : une lecture refusée passait pour un compte sans
+      // commerce, renvoyé à la connexion, qui renvoyait ici. Une boucle, sans
+      // un mot. On le dit, et on laisse recharger.
+      if (errFiches) {
+        console.error('[dashboard] lecture des fiches impossible', errFiches.message)
+        setErreurFiches(errFiches.message || 'lecture impossible')
+        return
+      }
       if (!data || data.length === 0) {
         // 🔴 L'ADMIN N'EST PLUS PROPULSÉ DANS SON ESPACE (Alex, 14/09 : « pas
         // normal d'accéder au db admin aussi facilement »). Taper l'adresse du
@@ -3343,6 +3353,29 @@ export default function Dashboard() {
   // rediriger : une redirection vers /login ferait croire à un problème de mot
   // de passe alors que le compte est parfaitement valide, juste pas encore
   // ouvert. La personne doit lire POURQUOI.
+  if (erreurFiches) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem 1rem', background: '#F8F6FF', fontFamily: '"DM Sans", sans-serif' }}>
+      <div role="alert" style={{ background: '#fff', borderRadius: 20, padding: '1.5rem', maxWidth: 480, width: '100%', border: '1.5px solid #EDE0FF' }}>
+        <h1 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#1A0840', margin: '0 0 8px' }}>Ton espace n’a pas pu se charger</h1>
+        <p style={{ fontSize: 14, color: '#5B6170', lineHeight: 1.6, margin: '0 0 16px' }}>
+          La lecture de ta fiche a échoué. Recharge la page ; si le problème revient, écris-nous à
+          {' '}<a href="mailto:support@yoppaa.app" style={{ color: '#6B35C4', fontWeight: 700 }}>support@yoppaa.app</a>{' '}
+          en recopiant ce message : <strong>{erreurFiches}</strong>
+        </p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => window.location.reload()}
+            style={{ flex: 1, padding: '0.8rem 1.2rem', borderRadius: 100, border: 'none', background: 'linear-gradient(135deg, #2D0F6B, #6B35C4)', color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Recharger
+          </button>
+          <button type="button" onClick={seDeconnecter}
+            style={{ flex: 1, padding: '0.8rem 1.2rem', borderRadius: 100, border: '1.5px solid #EDE0FF', background: '#fff', color: '#5B6170', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Me déconnecter
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   if (refusAcces) return (
     <EcranValidation
       raison={refusAcces.raison}

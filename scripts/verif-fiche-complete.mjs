@@ -558,6 +558,11 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('🔴 un inscrit d’avant déclare à sa prochaine connexion, après les CGU, jamais en mode emprunt',
     /if \(commercant && !impersonating && !declarationAJour\(commercant\)\) return \(\s*<EcranDeclaration/.test(bord)
     && avant(bord, '!cguAJour(commercant)', '!declarationAJour(commercant)'))
+  // 🔴 10/10 : une lecture ratée des fiches passait pour « aucune fiche », et
+  // renvoyait à la connexion, qui renvoyait ici. L'erreur est lue AVANT.
+  v('🔴 une lecture ratée des fiches est dite, jamais prise pour « aucune fiche »',
+    /const \{ data, error: errFiches \} = await supabase\.from\('commercants'\)\.select\('\*'\)\.eq\('auth_user_id', user\.id\)/.test(bord)
+    && avant(bord, 'if (errFiches) {', "if (!data || data.length === 0) {") && /if \(erreurFiches\) return \(/.test(bord))
   const ecran = code('app/dashboard/EcranDeclaration.js')
   v('l’écran envoie le texte qu’il affiche, construit par la règle partagée',
     /const texte = texteDeclaration\(/.test(ecran) && /fetch\('\/api\/commercant\/declarer'/.test(ecran)

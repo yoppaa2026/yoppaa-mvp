@@ -35,18 +35,20 @@ const T = {
   hairline: '#EEE9F5',
 }
 
+// 🔴 LE JETON SE RELIT AU MOMENT DE L'APPEL (10/10) : gardé depuis l'ouverture,
+// il périme au bout d'une heure, et la page principale avait le même défaut
+// AVANT le code à six chiffres (jeton sans double authentification, refusé).
+async function jetonActuel() {
+  const { data: { session: s } } = await supabase.auth.getSession()
+  return s?.access_token || null
+}
+
 export default function SectionKYBAValider({ toast }) {
-  const [session, setSession] = useState(null)
   const [dossiers, setDossiers] = useState([])
   const [loading, setLoading] = useState(true)
   const [actionEnCours, setActionEnCours] = useState(null)
   const [rejetEnCours, setRejetEnCours] = useState(null)
   const [motifRejet, setMotifRejet] = useState('')
-
-  // Charge la session pour avoir le token JWT a passer aux routes API
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s))
-  }, [])
 
   const charger = useCallback(async () => {
     setLoading(true)
@@ -67,13 +69,14 @@ export default function SectionKYBAValider({ toast }) {
   useEffect(() => { charger() }, [charger])
 
   async function valider(commercant_id) {
-    if (!session) { toast?.('Session expiree', 'error'); return }
     if (!confirm('Valider ce KYB ? Le commercant pourra etre publie quand sa fiche sera aussi validee.')) return
+    const jeton = await jetonActuel()
+    if (!jeton) { toast?.('Session expirée, reconnecte-toi', 'error'); return }
     setActionEnCours(commercant_id)
     try {
       const res = await fetch('/api/admin/kyb/valider', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}` },
         body: JSON.stringify({ commercant_id }),
       })
       const json = await res.json()
@@ -101,7 +104,7 @@ export default function SectionKYBAValider({ toast }) {
     try {
       const res = await fetch('/api/admin/kyb/rejeter', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await jetonActuel() || ''}` },
         body: JSON.stringify({ commercant_id, motif: motifRejet.trim() }),
       })
       const json = await res.json()

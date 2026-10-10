@@ -590,6 +590,15 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('l’admin ouvre la fiche du registre, et ne valide pas sans déclaration',
     /const lienRegistre = lienFicheBCE\(dossier\.bce\)/.test(section) && /disabled=\{disabled \|\| !declare\}/.test(section)
     && !/kyb_documents|createSignedUrl|kyb_id_/.test(section))
+  // 🔴 10/10, TROUVÉ PAR ALEX : « valider espace = erreur, accès refusé ». La
+  // page admin gardait le jeton lu à son ouverture, AVANT le code à six
+  // chiffres : sans double authentification, toutes les routes le refusaient.
+  for (const f of ['app/admin/page.js', 'app/admin/SectionKYBAValider.js']) {
+    const src = code(f)
+    v(`🔴 ${f} relit le jeton au moment de l’appel, jamais celui de l’ouverture`,
+      !/session\??\.access_token/.test(src) && (src.match(/await jetonActuel\(\)/g) || []).length >= 2
+      && /async function jetonActuel\(\) \{\s*const \{ data: \{ session: s \} \} = await supabase\.auth\.getSession\(\)/.test(src))
+  }
   v('la suppression d’un commerçant n’efface pas les preuves',
     !/'kyb_documents'|'cgu_acceptations'|'declarations_honneur'/.test(code('app/api/admin/commercants/route.js')))
 

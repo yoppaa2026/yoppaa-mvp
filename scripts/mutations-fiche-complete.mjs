@@ -214,6 +214,10 @@ const MUTATIONS = [
     fichier: 'migrations/MIGRATION_VERIFICATION_1_DECLARATION.sql', de: '  commercant_id       uuid REFERENCES public.commercants(id) ON DELETE SET NULL,', vers: '  commercant_id       uuid REFERENCES public.commercants(id) ON DELETE CASCADE,' },
   { nom: '🔴 une regle d acces aux cartes survit a la migration',
     fichier: 'migrations/MIGRATION_VERIFICATION_2_VERROUS_FIN_CARTE.sql', de: 'DROP POLICY IF EXISTS kyb_select_own_or_admin ON storage.objects;', vers: '' },
+  { nom: '🔴 la page admin valide avec le jeton de l ouverture (avant le code)',
+    fichier: 'app/admin/page.js', de: "      const res = await fetch('/api/admin/valider', {", vers: "      const jetonOuverture = session.access_token; const res = await fetch('/api/admin/valider', {" },
+  { nom: '🔴 la section KYB reprend un jeton garde en memoire',
+    fichier: 'app/admin/SectionKYBAValider.js', de: '    const jeton = await jetonActuel()', vers: '    const jeton = window.__jetonGarde' },
   { nom: '🔴 le script supprime sans l identifiant du projet',
     fichier: 'scripts/supprimer-cartes-identite.mjs', de: 'if (projetConfirme !== ref) {', vers: 'if (false) {' },
 ]

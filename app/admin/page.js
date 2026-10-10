@@ -37,6 +37,16 @@ const T = {
   hairline: '#EEE9F5',
 }
 
+// 🔴 LE JETON SE RELIT AU MOMENT DE L'APPEL, JAMAIS À L'OUVERTURE (10/10,
+// trouvé par Alex : « valider espace = erreur, accès refusé »). La page
+// gardait la session lue à son ouverture, AVANT le code à six chiffres : un
+// jeton sans double authentification, que toutes les routes admin refusent.
+// Il périmait aussi au bout d'une heure. `getSession` rend la session à jour.
+async function jetonActuel() {
+  const { data: { session: s } } = await supabase.auth.getSession()
+  return s?.access_token || ''
+}
+
 export default function AdminPage() {
   const router = useRouter()
   const [session, setSession] = useState(null)
@@ -112,7 +122,7 @@ export default function AdminPage() {
     // fiche sur une information fausse.
     try {
       const resP = await fetch('/api/admin/commercants', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${await jetonActuel()}` },
       })
       const jsonP = await resP.json()
       if (!resP.ok || !jsonP.ok) throw new Error(jsonP.error || 'lecture impossible')
@@ -193,7 +203,7 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${await jetonActuel()}`,
         },
         body: JSON.stringify({ commercant_id }),
       })
@@ -224,7 +234,7 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${await jetonActuel()}`,
         },
         body: JSON.stringify({ commercant_id, motif: motifRejet.trim() }),
       })

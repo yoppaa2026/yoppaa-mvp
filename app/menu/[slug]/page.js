@@ -25,6 +25,7 @@ import { sertAManger, nomDeLaCarte } from '@/lib/types-commerce'
 import { nomDuJour } from '@/lib/heure-belge'
 import { lienFiche } from '@/lib/lien-fiche'
 import { carteDeLaTable } from '@/lib/carte-table'
+import { trierArticles } from '@/lib/ordre-articles'
 
 // La carte change quand le commerçant la change, et le plat du jour change à
 // minuit : jamais de page figée.
@@ -37,7 +38,9 @@ export const dynamic = 'force-dynamic'
 // absente d'un select ne lève rien quand on lit `*` : ici on les nomme, et une
 // absence fait ÉCHOUER la lecture au lieu de faire mentir la page.
 const COLONNES_COMMERCE = 'id, nom, slug, type, logo_url, statut_publication, plan, essai_plan, created_at, ordre_categories, photos_catalogue_actif'
-const COLONNES_ARTICLE = 'id, nom, description, prix, categorie, photo_url, est_vitrine, actif'
+// ⚠️ `ordre` (10/10, MIGRATION_ORDRE_ARTICLES) : sans lui, la carte de table
+// retomberait sur l'ordre alphabétique.
+const COLONNES_ARTICLE = 'id, nom, description, prix, categorie, photo_url, est_vitrine, actif, ordre'
 
 const lireCarte = cache(async (slug) => {
   const supabase = createClient(
@@ -68,7 +71,8 @@ const lireCarte = cache(async (slug) => {
   if (articles.error) throw new Error(`carte ${slug}, articles : ${articles.error.message}`)
   if (reglages.error) throw new Error(`carte ${slug}, jours : ${reglages.error.message}`)
 
-  return { commercant, articles: articles.data || [], reglagesDuJour: reglages.data || [] }
+  // ⚠️ 10/10 : l'ordre choisi par le commerçant, la règle de la fiche.
+  return { commercant, articles: trierArticles(articles.data || []), reglagesDuJour: reglages.data || [] }
 })
 
 export async function generateMetadata({ params }) {

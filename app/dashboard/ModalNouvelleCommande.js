@@ -18,6 +18,7 @@ import { postPro } from '@/lib/fetch-pro'
 import DotsAttente from '@/app/components/DotsAttente'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { remplissageCreneaux } from '@/lib/creneaux'
+import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { construireLignesCommande } from '@/lib/lignes-commande'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
@@ -135,6 +136,8 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
     const q = recherche.trim().toLowerCase()
     return q ? articles.filter(a => a.nom.toLowerCase().includes(q)) : articles
   }, [articles, recherche])
+  // Les rubriques dans l'ordre de la fiche (`categoriesOrdonnees`), les
+  // articles dans l'ordre choisi par le commerçant (triés par le serveur).
   const parRubrique = useMemo(() => {
     const m = new Map()
     for (const a of articlesFiltres) {
@@ -142,8 +145,10 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
       if (!m.has(r)) m.set(r, [])
       m.get(r).push(a)
     }
-    return [...m.entries()]
-  }, [articlesFiltres])
+    const ordre = categoriesOrdonnees([...m.keys()].filter(r => r !== 'Autres'), donnees?.commercant?.ordre_categories)
+    const rubriques = m.has('Autres') ? [...ordre, 'Autres'] : ordre
+    return rubriques.map(r => [r, m.get(r)])
+  }, [articlesFiltres, donnees])
 
   const manque = !creneauId ? (mode === 'livraison' ? 'la tournée' : 'le créneau')
     : panier.length === 0 ? 'les articles'

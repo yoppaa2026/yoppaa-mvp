@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server'
 import { clientAdmin } from '@/lib/api-auth'
 import { gardeEquipe } from '@/lib/equipe-server'
 import { SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
+import { trierArticles } from '@/lib/ordre-articles'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,8 +34,8 @@ export async function POST(request) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return NextResponse.json({ ok: false, error: 'Date invalide.' }, { status: 400 })
 
     const [commerce, articles, deals, retrait, livraison, jour] = await Promise.all([
-      admin.from('commercants').select('id, nom, categorie, mode_capacite, tva_taux_defaut').eq('id', commercant_id).maybeSingle(),
-      admin.from('articles').select(`${SELECT_ARTICLES}, gere_variantes`).eq('commercant_id', commercant_id).eq('actif', true).order('categorie').order('nom'),
+      admin.from('commercants').select('id, nom, categorie, mode_capacite, tva_taux_defaut, ordre_categories').eq('id', commercant_id).maybeSingle(),
+      admin.from('articles').select(`${SELECT_ARTICLES}, gere_variantes, ordre`).eq('commercant_id', commercant_id).eq('actif', true).order('categorie').order('nom'),
       admin.from('yoppaa_deals').select(SELECT_DEALS).eq('commercant_id', commercant_id).eq('actif', true),
       admin.from('creneaux').select(COLONNES_CRENEAU).eq('commercant_id', commercant_id).eq('actif', true).order('heure_debut'),
       admin.from('livraison_creneaux').select(COLONNES_CRENEAU).eq('commercant_id', commercant_id).eq('actif', true).order('heure_debut'),
@@ -49,7 +50,8 @@ export async function POST(request) {
       }
     }
     // Ni prix indicatif, ni versions (taille, couleur) : la boutique de détail.
-    const vendables = (articles.data || []).filter(a => !a.est_vitrine && !a.gere_variantes)
+    // L'ordre choisi par le commerçant (10/10), la règle de la fiche.
+    const vendables = trierArticles((articles.data || []).filter(a => !a.est_vitrine && !a.gere_variantes))
     const ids = vendables.map(a => a.id)
     let groupes = []
     if (ids.length > 0) {

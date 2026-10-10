@@ -888,8 +888,12 @@ egal('et sans rien du tout, on ne fabrique pas de phrase',
   aideTaux(9, SERVICE, null), null)
 
 // Les deux écrans de saisie passent par le module.
-verifier('la fiche article prend les exemples du métier du commerce',
-  (srcConfigAbo.match(/optionsTaux\(tvaRefs, commercant\?\.categorie\)/g) || []).length === 2)
+// ⚠️ REPOINTÉE LE 10/10 : QUATRE appels (le formulaire d'un article, à
+// emporter et sur place, PLUS le lot « Taux de TVA », à emporter et sur place).
+// Tous passent par la même règle, avec la catégorie du commerce.
+verifier('la fiche article et le lot TVA prennent les exemples du métier du commerce',
+  (srcConfigAbo.match(/optionsTaux\(tvaRefs, commercant\?\.categorie\)/g) || []).length === 4
+  && !/optionsTaux\(tvaRefs\)/.test(srcConfigAbo))
 // ⚠️ UNE PRESTATION EST UNE PRESTATION DE SERVICES, quelle que soit la
 // catégorie du commerce : en Belgique c'est la NATURE DE L'OPÉRATION qui
 // commande le taux, jamais le rayon du magasin.

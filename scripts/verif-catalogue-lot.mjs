@@ -31,8 +31,9 @@ const CATALOGUE = [
 
 // ═══ 1) QUI EST VISÉ ══════════════════════════════════════════════════════
 {
-  v('les quatre actions sont nommées',
-    ACTIONS_LOT.join(',') === 'disponible,indisponible,categorie,prix', ACTIONS_LOT.join(','))
+  // ⚠️ REPOINTÉE LE 10/10 : sept actions (stock, TVA, temps de préparation).
+  v('les sept actions sont nommées',
+    ACTIONS_LOT.join(',') === 'disponible,indisponible,categorie,prix,stock,tva,temps_prepa', ACTIONS_LOT.join(','))
 
   v('la sélection retrouve ses articles',
     articlesDuLot(CATALOGUE, [1, 3]).map(a => a.nom).join(',') === 'Margherita,Tiramisu',
@@ -163,6 +164,44 @@ const CATALOGUE = [
     /Coche des articles/.test(resumeDuLot({ action: 'disponible', patchs: [], coches: 0 })))
 }
 
+// ═══ 5 bis) STOCK, TVA, TEMPS DE PRÉPARATION (Alex, 10/10), EXÉCUTÉS ═════════
+{
+  const { patchsDuLot: P, refusDuLot: R, resumeDuLot: S, TVA_INCHANGEE: X } = await import('../lib/catalogue-lot.js')
+  const MAINTENANT = new Date('2026-10-10T08:00:00Z')
+  const arts = [
+    { id: 1, stock_mode: 'jour', stock_jour: 30, tva_taux: 6, tva_taux_sur_place: null, temps_prepa: 8 },
+    { id: 2, stock_mode: 'illimite', stock_jour: 0, tva_taux: null, tva_taux_sur_place: 12, temps_prepa: null },
+    { id: 3, stock_mode: 'magasin', stock_jour: 5, tva_taux: 21, tva_taux_sur_place: 21, temps_prepa: 10 },
+  ]
+  // Le stock : la règle d'un seul article, sans écriture inutile.
+  const pj = P({ action: 'stock', articles: arts, valeur: { mode: 'jour', quantite: '30' }, maintenant: MAINTENANT })
+  v('🔴 stock : l’article déjà à 30 par jour n’est pas réécrit', !pj.some(p => p.id === 1) && pj.length === 2)
+  v('🔴 stock : le passage en magasin est daté (les ventes comptent à partir de là)',
+    P({ action: 'stock', articles: [arts[0]], valeur: { mode: 'magasin', quantite: '12' }, maintenant: MAINTENANT })[0]?.patch.stock_maj_le === MAINTENANT.toISOString())
+  v('🔴 stock : un magasin inchangé n’est pas redaté',
+    P({ action: 'stock', articles: [arts[2]], valeur: { mode: 'magasin', quantite: '5' }, maintenant: MAINTENANT }).length === 0)
+  v('stock : « sans limite » remet la quantité à 0',
+    P({ action: 'stock', articles: [arts[0]], valeur: { mode: 'illimite', quantite: '' } })[0]?.patch.stock_jour === 0)
+  v('🔴 stock : 0 par jour est refusé, avec les mots du formulaire',
+    /commence à 1/.test(R({ action: 'stock', articles: arts, valeur: { mode: 'jour', quantite: '0' } }) || '')
+    && P({ action: 'stock', articles: arts, valeur: { mode: 'jour', quantite: '0' } }).length === 0)
+  v('stock : un type inconnu est refusé', !!R({ action: 'stock', articles: arts, valeur: { mode: 'kilo', quantite: '3' } }))
+  // La TVA : chaque champ peut rester tel quel.
+  const pt = P({ action: 'tva', articles: arts, valeur: { emporter: '6', surPlace: X } })
+  v('🔴 TVA : seuls les articles à un autre taux changent, et « ne pas changer » n’écrit rien',
+    pt.length === 2 && pt.every(p => p.patch.tva_taux === 6 && !('tva_taux_sur_place' in p.patch)))
+  v('TVA : « à définir » remet null',
+    P({ action: 'tva', articles: [arts[2]], valeur: { emporter: X, surPlace: '' } })[0]?.patch.tva_taux_sur_place === null)
+  v('🔴 TVA : rien choisi est refusé', !!R({ action: 'tva', articles: arts, valeur: { emporter: X, surPlace: X } }))
+  // Le temps de préparation.
+  const pp = P({ action: 'temps_prepa', articles: arts, valeur: '8' })
+  v('🔴 temps : l’article déjà à 8 min n’est pas réécrit, l’article sans temps l’est',
+    pp.length === 2 && pp.some(p => p.id === 2) && pp.every(p => p.patch.temps_prepa === 8))
+  v('temps : une saisie non entière est refusée', !!R({ action: 'temps_prepa', articles: arts, valeur: '7,5' }) && !!R({ action: 'temps_prepa', articles: arts, valeur: '' }))
+  v('le résumé dit que les quantités jour par jour restent prioritaires',
+    /restent prioritaires/.test(S({ action: 'stock', patchs: pj, coches: 3, valeur: { mode: 'jour', quantite: '30' } })))
+}
+
 // ═══ 6) LE BRANCHEMENT, CÔTÉ ÉCRAN ════════════════════════════════════════
 {
   const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
@@ -175,8 +214,11 @@ const CATALOGUE = [
   for (const fn of ['articlesDuLot', 'patchsDuLot']) {
     v(`l’écran appelle ${fn} au lieu de refaire la règle`, new RegExp(`${fn}\\(`).test(bloc), fn)
   }
-  v('le refus d’ajustement est consulté avant d’écrire',
-    /refusDAjustement\(/.test(config))
+  // ⚠️ REPOINTÉE LE 10/10 : le refus passe par `refusDuLot`, qui garde celui du
+  // prix (`refusDAjustement`) et ajoute ceux du stock, de la TVA et du temps.
+  v('le refus est consulté AVANT de calculer et d’écrire, pour le prix comme pour le reste',
+    /if \(\['prix', 'stock', 'tva', 'temps_prepa'\]\.includes\(lotAction\)\) \{\s*const refus = refusDuLot\(\{ action: lotAction, articles: vises, valeur \}\)\s*if \(refus\) \{ toast\(refus, 'error'\); return \}/.test(bloc)
+    && bloc.indexOf('refusDuLot(') < bloc.indexOf('patchsDuLot('))
   v('le résumé affiché vient du module', /resumeDuLot\(/.test(config))
 
   // ⚠️ LE PRIX EXIGE UNE CONFIRMATION, les deux autres non : une action qui ne

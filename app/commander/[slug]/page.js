@@ -37,6 +37,7 @@ import { jourLocalISO, jourBruxelles, brusselsInstant } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
 import { lieuxDuJour, estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
+import { trierArticles } from '@/lib/ordre-articles'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { zoneCouverte, fraisLivraison as regleFraisLivraison, minimumAtteint } from '@/lib/livraison'
@@ -2090,7 +2091,9 @@ export default function CommanderSlug() {
 
     const cacheData = {
       commercant: c,
-      articles: arts || [],
+      // ⚠️ 10/10 : l'ordre choisi par le commerçant (`comparerArticles`), la
+      // même règle que son tableau de bord.
+      articles: trierArticles(arts || []),
       creneaux: creneauxAvecCount,
       // ⚠️ LES BLOCAGES VOYAGENT AVEC LA CHARGE, ET POUR LA MÊME RAISON : un
       // créneau est une grille HEBDOMADAIRE, un blocage vaut pour UN JOUR. Les
@@ -2398,7 +2401,7 @@ export default function CommanderSlug() {
       .eq('commercant_id', commercant.id)
       .eq('actif', true)
       .order('categorie').order('nom')
-    if (arts) poserSiChange(memoireArticles, arts, setArticles)
+    if (arts) poserSiChange(memoireArticles, trierArticles(arts), setArticles)
     const artIds = (arts || []).map(a => a.id)
     if (artIds.length > 0) {
       const [{ data: stocksData }, { data: groupesData }] = await Promise.all([

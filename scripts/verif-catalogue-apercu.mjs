@@ -205,8 +205,11 @@ const v = (nom, cond, detail = '') => {
     !/\.select\('article_id, nom'\)/.test(config))
   v('et le parent les charge pour tout le catalogue',
     /select\('id, article_id, nom, type, obligatoire, valeurs:article_options_valeurs\(\*\)'\)/.test(config))
+  // ⚠️ REPOINTÉE LE 10/10 : CINQ lectures (« + Nouveau groupe » s'ajoute), toutes
+  // sur les groupes du parent ; aucune ne lit la base pour son compte.
   v('les conflits se lisent sur les groupes du parent',
-    (config.match(/conflitsDeGroupe\([^)]*groupesParArticle\)/g) || []).length === 4,
+    (config.match(/conflitsDeGroupe\([^)]*groupesParArticle\)/g) || []).length === 5
+    && (config.match(/conflitsDeGroupe\(/g) || []).length === 5,
     String((config.match(/conflitsDeGroupe\([^)]*groupesParArticle\)/g) || []).length))
   v('la bibliothèque consomme cette lecture au lieu de la refaire',
     /function BibliothequeGroupes\(\{ articles = \[\], toast, onApplique, tousLesGroupes = \[\], groupesParArticle = \{\} \}\)/.test(config))

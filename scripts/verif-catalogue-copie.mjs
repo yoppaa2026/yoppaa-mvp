@@ -620,8 +620,10 @@ const v = (nom, cond, detail = '') => {
 
   // ⚠️ ET LES DEUX ÉCRANS PASSENT VRAIMENT PAR ELLE. Compter les appels : si
   // l'un des deux se remettait à écrire pour son compte, cette garde le dirait.
-  v('les deux écrans passent par l’écriture partagée',
-    (config.match(/await ecrireCopiesDeGroupe\(/g) || []).length === 2,
+  // ⚠️ REPOINTÉE LE 10/10 : TROIS écrans (« + Nouveau groupe » s'ajoute au
+  // panneau d'un article et à la bibliothèque), toujours par la même écriture.
+  v('les trois écrans passent par l’écriture partagée',
+    (config.match(/await ecrireCopiesDeGroupe\(/g) || []).length === 3,
     String((config.match(/await ecrireCopiesDeGroupe\(/g) || []).length))
 
   // ─── LA BIBLIOTHÈQUE ─────────────────────────────────────────────────────
@@ -820,6 +822,78 @@ const v = (nom, cond, detail = '') => {
     v(`🔴 « ${f} » prévient le parent`, corps.length > 0 && /apresEcriture\(\)/.test(corps) && !/fetchGroupes\(\)/.test(corps))
   }
   v('🔴 le bouton « Dupliquer » dit son geste', /<Copy size=\{14\} strokeWidth=\{1\.8\} color=\{T\.bgPanel\}\/> Dupliquer/.test(config))
+}
+
+// ═══ L'ORDRE DES ARTICLES DANS UNE CATÉGORIE (Alex, 10/10), EXÉCUTÉ ═════════
+{
+  const { comparerArticles, trierArticles, positionDansCategorie, deplacementDansCategorie } = await import('../lib/ordre-articles.js')
+  const arts = [
+    { id: 'c', nom: 'Calzone', categorie: 'Pizzas', ordre: null },
+    { id: 'm', nom: 'Margherita', categorie: 'Pizzas', ordre: 1 },
+    { id: 'e', nom: 'Écrasée', categorie: 'Pizzas', ordre: null },
+    { id: 'k', nom: 'Coca', categorie: 'Boissons', ordre: null },
+  ]
+  const pizzas = trierArticles(arts.filter(a => a.categorie === 'Pizzas')).map(a => a.id).join(',')
+  v('🔴 le rang d’abord, puis les non rangés par nom à la française (É avec E)', pizzas === 'm,c,e', pizzas)
+  v('le tri ne touche pas la liste reçue', arts[0].id === 'c' && trierArticles(arts) !== arts)
+  // ⚠️ UN CAS QUI MET L'ACCENT À L'ÉPREUVE : en ordre brut, « É » passe après
+  // « F » ; à la française, « Écrasée » passe avant « Funghi ».
+  v('🔴 « Écrasée » passe avant « Funghi » (à la française, pas en ordre brut)',
+    trierArticles([{ id: 'f', nom: 'Funghi' }, { id: 'e', nom: 'Écrasée' }])[0].id === 'e')
+  v('un rang 0 passe avant un rang 1', comparerArticles({ ordre: 0, nom: 'Z' }, { ordre: 1, nom: 'A' }) < 0)
+  const d1 = deplacementDansCategorie(arts, 'e', -1)
+  v('🔴 monter « Écrasée » renumérote la catégorie, et seuls les rangs qui changent s’écrivent',
+    JSON.stringify(d1) === JSON.stringify([{ id: 'e', ordre: 2 }, { id: 'c', ordre: 3 }]), JSON.stringify(d1))
+  v('🔴 jamais hors de sa catégorie : le Coca seul ne bouge pas', deplacementDansCategorie(arts, 'k', -1).length === 0 && deplacementDansCategorie(arts, 'k', 1).length === 0)
+  v('le premier ne monte pas, le dernier ne descend pas',
+    deplacementDansCategorie(arts, 'm', -1).length === 0 && deplacementDansCategorie(arts, 'e', 1).length === 0)
+  v('un sens inconnu ne fait rien', deplacementDansCategorie(arts, 'c', 2).length === 0)
+  const pos = positionDansCategorie(arts, 'c')
+  v('la position grise la bonne flèche', !pos.premier && !pos.dernier && positionDansCategorie(arts, 'm').premier && positionDansCategorie(arts, 'k').premier && positionDansCategorie(arts, 'k').dernier)
+
+  // Une règle, partout : le tableau de bord, la fiche, la carte de table, la commande encodée.
+  const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  const fiche = sansProse(readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8'))
+  const menu = sansProse(readFileSync(new URL('../app/menu/[slug]/page.js', import.meta.url), 'utf8'))
+  const cata = sansProse(readFileSync(new URL('../app/api/equipe/commande/catalogue/route.js', import.meta.url), 'utf8'))
+  v('🔴 le tableau de bord trie par la règle', /setArticles\(trierArticles\(data \|\| \[\]\)\)/.test(config))
+  v('🔴 la fiche trie par la règle, au chargement et au rafraîchissement',
+    /articles: trierArticles\(arts \|\| \[\]\),/.test(fiche) && /poserSiChange\(memoireArticles, trierArticles\(arts\), setArticles\)/.test(fiche))
+  v('🔴 la carte de table lit `ordre` et trie par la règle',
+    /const COLONNES_ARTICLE = '[^']*\bordre\b'/.test(menu) && /articles: trierArticles\(articles\.data \|\| \[\]\)/.test(menu))
+  v('la commande encodée trie par la règle', /trierArticles\(\(articles\.data \|\| \[\]\)\.filter/.test(cata) && /gere_variantes, ordre`/.test(cata))
+  v('🔴 les flèches écrivent par la règle, sur ce commerce seulement, et lisent leur résultat',
+    /const patchs = deplacementDansCategorie\(articles, a\.id, sens\)/.test(config)
+    && /\.update\(\{ ordre: p\.ordre \}\)\.eq\('id', p\.id\)\.eq\('commercant_id', commercantId\)\.select\('id'\)/.test(config)
+    && /const rate = resultats\.some\(r => r\.error \|\| !r\.data \|\| r\.data\.length === 0\)\s*if \(rate\) toast\('L’ordre n’a pas pu être enregistré\. Réessaie\.', 'error'\)/.test(config))
+  v('pas de flèches pendant une recherche', /const position = searchQuery\.trim\(\) \? null : positionDansCategorie\(articles, a\.id\)/.test(config))
+  const sql = readFileSync(new URL('../migrations/MIGRATION_ORDRE_ARTICLES.sql', import.meta.url), 'utf8')
+  v('🔴 la migration recopie les droits de `nom` (sinon la fiche publique tombe)',
+    /column_name = 'nom' AND grantee IN \('anon', 'authenticated', 'service_role'\)/.test(sql) && /GRANT %s \(ordre\) ON public\.articles TO %I/.test(sql))
+}
+
+// ═══ « + NOUVEAU GROUPE » DEPUIS PERSONNALISATION (Alex, 10/10) ═════════════
+{
+  const { nouveauGroupe } = await import('../lib/catalogue-copie.js')
+  const ok1 = nouveauGroupe({ nom: '  Sauces  ', type: 'multiple', obligatoire: true, options: [
+    { nom: 'Ketchup', prix_supplement: '' }, { nom: ' ketchup ', prix_supplement: '0,5' }, { nom: 'Samouraï', prix_supplement: '0,50' }, { nom: '', prix_supplement: '1' },
+  ] })
+  v('🔴 le groupe est nettoyé : nom, doublons d’options, lignes vides, virgule décimale',
+    ok1.ok && ok1.groupe.nom === 'Sauces' && ok1.groupe.type === 'multiple' && ok1.groupe.obligatoire === true
+    && ok1.groupe.valeurs.length === 2 && ok1.groupe.valeurs[1].prix_supplement === 0.5, JSON.stringify(ok1))
+  v('🔴 sans nom ou sans option : refus lisible',
+    !nouveauGroupe({ nom: ' ', options: [{ nom: 'A' }] }).ok && !nouveauGroupe({ nom: 'Sauces', options: [{ nom: '' }] }).ok)
+  v('un supplément négatif est refusé', !nouveauGroupe({ nom: 'S', options: [{ nom: 'A', prix_supplement: '-1' }] }).ok)
+  v('un type inconnu devient « 1 choix »', nouveauGroupe({ nom: 'S', type: 'x', options: [{ nom: 'A' }] }).groupe.type === 'unique')
+  const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  const i = config.indexOf('function NouveauGroupe(')
+  const bloc = i >= 0 ? config.slice(i, config.indexOf('\nfunction ', i + 10)) : ''
+  v('🔴 il écrit par le chemin de « Appliquer à… », sans doublon de nom, et le parent relit',
+    /const r = await ecrireCopiesDeGroupe\(v\.groupe, aCopier\)/.test(bloc) && /repartirCibles\(cibles, conflits\)/.test(bloc)
+    && /onCree\?\.\(aCopier\)/.test(bloc))
+  v('il est affiché dans Personnalisation, même sans groupe existant',
+    /<NouveauGroupe articles=\{articles\} toast=\{toast\} onCree=\{noterOptionsTouchees\}/.test(config))
+  v('le bouton montre qu’il travaille', /\{envoi && <DotsAttente/.test(bloc))
 }
 
 console.log(`\nCopier dans le catalogue : ${ok} vérifications`)

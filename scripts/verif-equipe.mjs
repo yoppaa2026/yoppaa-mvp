@@ -17,6 +17,7 @@ import {
   refusAcceptation, membrePourLePatron, libelleFinAcces, EQUIPE_DANS_LA_BARRE,
 } from '../lib/equipe.js'
 import { empreinteJeton, nouveauJeton, adresseMasquee, lienInvitation, COLONNES_MEMBRE } from '../lib/equipe-server.js'
+import { baseDuSite } from '../lib/stripe-mode.js'
 import { layout, emailInvitationEquipe } from '../lib/resend.js'
 import { PLAN_FEATURES } from '../lib/plans.js'
 
@@ -153,7 +154,15 @@ const membre = (o = {}) => ({
   v('🔴 deux jetons ne se ressemblent pas', j1 !== j2 && j1.length >= 43)
   v('🔴 l’empreinte n’est pas le jeton', empreinteJeton(j1) !== j1 && /^[0-9a-f]{64}$/.test(empreinteJeton(j1)))
   v('l’empreinte est stable', empreinteJeton('abc') === empreinteJeton('abc'))
-  v('le lien porte le jeton encodé', lienInvitation('a/b+c') === 'https://www.yoppaa.app/equipe/rejoindre?invitation=a%2Fb%2Bc')
+  // (10/10) le site suit la plateforme (`baseDuSite`) : l'essai invite vers l'essai.
+  v('le lien porte le jeton encodé, sur le site qui connaît ce jeton',
+    lienInvitation('a/b+c') === `${baseDuSite()}/equipe/rejoindre?invitation=a%2Fb%2Bc`)
+  v('🔴 une clé de test mène à l’essai, une clé réelle à la prod, une clé absente à la prod',
+    baseDuSite('sk_test_x') === 'https://test.yoppaa.app' && baseDuSite('sk_live_x') === 'https://www.yoppaa.app'
+    && baseDuSite('') === 'https://www.yoppaa.app')
+  // Sans clé au banc, www et `baseDuSite()` se confondent : on vise aussi le code.
+  v('🔴 le lien d’invitation passe par `baseDuSite()`, jamais par une adresse en dur',
+    /return `\$\{baseDuSite\(\)\}\/equipe\/rejoindre\?invitation=/.test(readFileSync(new URL('../lib/equipe-server.js', import.meta.url), 'utf8')))
   v('l’adresse se masque', adresseMasquee('julie@exemple.be') === 'j***@exemple.be' && adresseMasquee('') === '')
   v('la date de fin se lit en heure belge', libelleFinAcces('2026-10-04T21:00:00Z') === 'dimanche 4 octobre à 23:00', libelleFinAcces('2026-10-04T21:00:00Z'))
 }

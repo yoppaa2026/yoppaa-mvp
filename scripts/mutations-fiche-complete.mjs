@@ -220,6 +220,12 @@ const MUTATIONS = [
     fichier: 'app/admin/SectionKYBAValider.js', de: '    const jeton = await jetonActuel()', vers: '    const jeton = window.__jetonGarde' },
   { nom: '🔴 une lecture ratee des fiches renvoie de nouveau a la connexion, sans un mot',
     fichier: 'app/dashboard/page.js', de: '      if (errFiches) {', vers: '      if (false) {' },
+  { nom: '⚠️ le retour de Stripe Connect retombe sur Commandes',
+    fichier: 'app/api/stripe/connect/create-account-link/route.js', de: '/dashboard?onglet=config&config=paiements&stripe=connected', vers: '/dashboard?stripe=connected' },
+  { nom: '⚠️ le retour des packs SMS vise un onglet qui n existe pas',
+    fichier: 'app/api/fidelite/sms-packs/checkout/route.js', de: '/dashboard?onglet=config&config=fidelite&sms=ok', vers: '/dashboard?onglet=config&config=sms&sms=ok' },
+  { nom: '⚠️ au retour de Stripe, l onglet est efface avec le parametre',
+    fichier: 'app/dashboard/TabPaiements.js', de: "      propre.searchParams.delete('stripe')", vers: "      propre.search = ''" },
   { nom: '🔴 le script supprime sans l identifiant du projet',
     fichier: 'scripts/supprimer-cartes-identite.mjs', de: 'if (projetConfirme !== ref) {', vers: 'if (false) {' },
 ]

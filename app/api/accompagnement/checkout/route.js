@@ -119,8 +119,10 @@ export async function POST(request) {
       mode: 'payment',
       customer: customer.id,
       line_items: lineItems,
-      success_url: `${STRIPE_CONFIG.appUrl}/dashboard?accompagnement=ok`,
-      cancel_url:  `${STRIPE_CONFIG.appUrl}/dashboard?accompagnement=annule`,
+      // ⚠️ LE RETOUR VISE L'ONGLET D'OÙ L'ON VIENT (10/10), comme celui de
+      // Stripe Connect : sans `onglet`, on retombait sur « Commandes ».
+      success_url: `${STRIPE_CONFIG.appUrl}/dashboard?onglet=config&config=accompagnement&accompagnement=ok`,
+      cancel_url:  `${STRIPE_CONFIG.appUrl}/dashboard?onglet=config&config=accompagnement&accompagnement=annule`,
       metadata: {
         yoppaa_kind: PAYMENT_KIND.ACCOMPAGNEMENT,
         yoppaa_commercant_id: com.id,

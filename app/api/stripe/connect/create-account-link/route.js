@@ -192,8 +192,11 @@ export async function POST(request) {
     // return_url  : Stripe redirige ici quand le commerçant finit son onboarding (success ou abandon).
     const link = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${STRIPE_CONFIG.appUrl}/dashboard?stripe=refresh`,
-      return_url:  `${STRIPE_CONFIG.appUrl}/dashboard?stripe=connected`,
+      // ⚠️ LE RETOUR VISE L'ONGLET PAIEMENTS (10/10, vu par Alex) : sans
+      // `onglet`, le tableau de bord ouvrait « Commandes », et le commerçant
+      // devait chercher où il en était.
+      refresh_url: `${STRIPE_CONFIG.appUrl}/dashboard?onglet=config&config=paiements&stripe=refresh`,
+      return_url:  `${STRIPE_CONFIG.appUrl}/dashboard?onglet=config&config=paiements&stripe=connected`,
       type: 'account_onboarding',
     })
 

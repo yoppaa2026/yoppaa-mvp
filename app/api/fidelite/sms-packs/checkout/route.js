@@ -93,8 +93,10 @@ export async function POST(request) {
       mode: 'payment',
       customer: customer.id,
       line_items: [{ price: priceId, quantity: 1, tax_rates: [tvaBelge] }],
-      success_url: `${STRIPE_CONFIG.appUrl}/dashboard?sms=ok`,
-      cancel_url:  `${STRIPE_CONFIG.appUrl}/dashboard?sms=annule`,
+      // ⚠️ LE RETOUR VISE L'ONGLET D'OÙ L'ON VIENT (10/10), comme celui de
+      // Stripe Connect : sans `onglet`, on retombait sur « Commandes ».
+      success_url: `${STRIPE_CONFIG.appUrl}/dashboard?onglet=config&config=fidelite&sms=ok`,
+      cancel_url:  `${STRIPE_CONFIG.appUrl}/dashboard?onglet=config&config=fidelite&sms=annule`,
       metadata: {
         yoppaa_kind: PAYMENT_KIND.SMS_PACK,
         yoppaa_commercant_id: com.id,

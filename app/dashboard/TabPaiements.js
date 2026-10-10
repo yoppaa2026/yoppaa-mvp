@@ -62,8 +62,12 @@ export default function TabPaiements({ commercantId, toast }) {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     if (params.get('stripe') === 'connected' || params.get('stripe') === 'refresh') {
-      // Nettoie l'URL puis refresh
-      window.history.replaceState({}, '', window.location.pathname)
+      // Nettoie l'URL puis refresh. ⚠️ SEUL `stripe` PART (10/10) : effacer
+      // toute l'adresse retirait aussi l'onglet, et un rechargement ramenait
+      // sur « Commandes ».
+      const propre = new URL(window.location.href)
+      propre.searchParams.delete('stripe')
+      window.history.replaceState(window.history.state, '', propre.pathname + propre.search)
       rafraichirStatus()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

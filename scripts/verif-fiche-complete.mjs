@@ -613,6 +613,25 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('🔴 la route de connexion écrit le compte avec la clé du serveur, deux fois',
     (lien.match(/await admin\s*\.from\('commercants'\)\s*\.update\(/g) || []).length === 2
     && !/await supabase\s*\.from\('commercants'\)\s*\.update\(/.test(lien))
+  // ⚠️ 10/10, VU PAR ALEX : au retour de Stripe, on tombait sur « Commandes ».
+  // Chaque retour vise l'onglet d'où l'on vient, et un onglet qui existe.
+  {
+    const retours = [
+      [lien, 'paiements'],
+      [code('app/api/accompagnement/checkout/route.js'), 'accompagnement'],
+      [code('app/api/fidelite/sms-packs/checkout/route.js'), 'fidelite'],
+    ]
+    const configValides = (code('app/dashboard/page.js').match(/const CONFIG_VALIDES = \[([\s\S]*?)\]/) || [])[1] || ''
+    for (const [src, onglet] of retours) {
+      const adresses = src.match(/appUrl\}\/dashboard\?[^`]*/g) || []
+      v(`le retour de paiement rouvre l’onglet « ${onglet} », et cet onglet existe`,
+        adresses.length === 2 && adresses.every(a => a.includes(`onglet=config&config=${onglet}&`))
+        && configValides.includes(`'${onglet}'`), adresses.join(' | '))
+    }
+    v('au retour de Stripe, seul le paramètre `stripe` est effacé, l’onglet reste',
+      /propre\.searchParams\.delete\('stripe'\)/.test(code('app/dashboard/TabPaiements.js'))
+      && !/replaceState\(\{\}, '', window\.location\.pathname\)/.test(code('app/dashboard/TabPaiements.js')))
+  }
   v('🔴 et la propriété est vérifiée AVANT', avant(lien, 'commercant.auth_user_id !== user.id', 'const admin = clientAdmin()'))
   v('🔴 la route d’état aussi, et elle lit son erreur',
     /const \{ error: errMaj \} = await clientAdmin\(\)\s*\.from\('commercants'\)\s*\.update\(updates\)/.test(etat)

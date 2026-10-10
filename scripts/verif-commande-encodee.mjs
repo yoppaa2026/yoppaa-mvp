@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   ORIGINE_COMMERCANT, PAIEMENTS_ENCODEE, clientEncode, champsPaiementEncodee,
-  avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne, creneauTermine,
+  avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne, creneauTermine, delaiArticleNonRespecte,
 } from '../lib/commande-encodee.js'
 
 let ok = 0
@@ -92,6 +92,24 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('un créneau qui passe minuit finit le lendemain', !t('22:00:00', '00:30:00'))
   v('demain, rien n’est terminé',
     !creneauTermine({ heure_debut: '07:00:00', heure_fin: '07:15:00' }, { dateStr: '2026-10-11', maintenant: MAINTENANT, instant }))
+  // Le délai propre à l'article (la tarte à J+2), samedi 10/10 pour dimanche 11.
+  const commerce = { categorie: 'alimentaire' }
+  const tarte = { id: 't1', nom: 'Tarte aux pommes', delai_minutes: 2880, vente_jour: false, commande_active: true }
+  const croissant = { id: 'c1', nom: 'Croissant', delai_minutes: 1440, vente_jour: true, commande_active: true }
+  const dTarte = delaiArticleNonRespecte({ article: tarte, commercant: commerce, jour: '2026-10-11', aujourdhui: auj })
+  v('🔴 la tarte à J+2 pour demain : trop tôt, dès lundi, le message nomme l’article',
+    dTarte?.jours === 2 && dTarte.plancher === '2026-10-12' && /« Tarte aux pommes » se commande 2 jours à l’avance : le plus tôt, c’est lundi\./.test(dTarte.message),
+    JSON.stringify(dTarte))
+  v('🔴 la tarte pour lundi passe', delaiArticleNonRespecte({ article: tarte, commercant: commerce, jour: '2026-10-12', aujourdhui: auj }) === null)
+  v('🔴 le croissant à J+1 pour demain passe, un article sans délai aussi',
+    delaiArticleNonRespecte({ article: croissant, commercant: commerce, jour: '2026-10-11', aujourdhui: auj }) === null
+    && delaiArticleNonRespecte({ article: { nom: 'Baguette', vente_jour: true }, commercant: commerce, jour: auj, aujourdhui: auj }) === null)
+  const gateau = { nom: 'Gâteau d’anniversaire', delai_minutes: 0, vente_jour: false, commande_active: true }
+  v('🔴 un article SUR COMMANDE SEULEMENT, sans délai réglé, pour aujourd’hui : dès demain (les circuits comptent)',
+    delaiArticleNonRespecte({ article: gateau, commercant: commerce, jour: auj, aujourdhui: auj })?.plancher === '2026-10-11')
+  v('le circuit (« pas sur commande ») n’est pas un délai : il passe par le contrôle du stock',
+    delaiArticleNonRespecte({ article: { nom: 'Pain du jour', vente_jour: true, commande_active: false }, commercant: commerce, jour: '2026-10-11', aujourdhui: auj }) === null)
+
   v('sans heure de fin ou sans horloge : rien n’est caché',
     !creneauTermine({ heure_debut: '07:00:00' }, { dateStr: auj, maintenant: MAINTENANT, instant }) && !creneauTermine({ heure_fin: '07:15:00' }, { dateStr: auj }))
 
@@ -135,6 +153,10 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('🔴 un créneau terminé est refusé par le serveur, à l’heure de Bruxelles, avant toute écriture',
     /termine: creneauTermine\(creneau, \{ dateStr: date_commande, instant: brusselsInstant \}\),/.test(r)
     && avant(r, 'termine: creneauTermine(', 'if (moment.refus) return non(moment.refus)'))
+  v('🔴 le délai de chaque article, lu EN BASE, devient un avertissement par article, avant de demander confirmation',
+    /const art = articlesData\.find\(a => String\(a\.id\) === id\)/.test(r)
+    && /if \(trop\) avertissements\.push\(avertissement\(`delai_article:\$\{id\}`, trop\.message\)\)/.test(r)
+    && avant(r, 'delaiArticleNonRespecte({ article: art', 'confirmationRequise(avertissements, corps.confirmes)'))
 }
 
 // ═══ 3) LA LECTURE POUR LA FENÊTRE ══════════════════════════════════════════
@@ -159,6 +181,9 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /useEffect\(\(\) => \{ setAvertissements\(null\) \}, \[mode, date, creneauId, panier, adresse, paiement\]\)/.test(m))
   v('🔴 « encoder quand même » renvoie les codes montrés', /encoder\(avertissements \? avertissements\.map\(a => a\.code\) : \[\]\)/.test(m))
   v('le bouton montre qu’il travaille', /\{envoi && <DotsAttente/.test(m))
+  v('🔴 la tuile dit « Trop tôt » pour le jour choisi, par la règle du serveur',
+    /const tropTot = delaiArticleNonRespecte\(\{ article: a, commercant: donnees\?\.commercant, jour: date, aujourdhui \}\)/.test(m)
+    && /\{tropTot && \(/.test(m))
   v('🔴 la fenêtre cache les créneaux terminés, relus chaque minute, et lâche un choix terminé',
     /\}\)\.filter\(\(\{ creneau \}\) => !creneauTermine\(creneau, \{ dateStr: date, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\)/.test(m)
     && /setInterval\(\(\) => setMinute\(Date\.now\(\)\), 60000\)/.test(m)

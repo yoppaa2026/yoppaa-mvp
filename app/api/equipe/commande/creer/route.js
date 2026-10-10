@@ -49,7 +49,7 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { eurosNus } from '@/lib/montants'
 import {
   ORIGINE_COMMERCANT, MODES_ENCODEE, clientEncode, champsPaiementEncodee,
-  avertissement, confirmationRequise, jugementMoment, creneauTermine,
+  avertissement, confirmationRequise, jugementMoment, creneauTermine, delaiArticleNonRespecte,
 } from '@/lib/commande-encodee'
 
 export const dynamic = 'force-dynamic'
@@ -150,6 +150,13 @@ export async function POST(request) {
     const { lignes, totalCents } = calcul
     for (const v of calcul.stocksVariantesCourts || []) {
       avertissements.push(avertissement(`stock:${v.article_id}`, `${v.nom} : il en reste ${v.disponible}.`))
+    }
+    // Le délai propre à chaque article (la tarte à J+2), lu sur l'article EN
+    // BASE : la même règle que la commande en ligne, en avertissement.
+    for (const id of new Set(lignes.map(l => String(l.article_id)))) {
+      const art = articlesData.find(a => String(a.id) === id)
+      const trop = delaiArticleNonRespecte({ article: art, commercant, jour: date_commande, aujourdhui: jourBruxelles() })
+      if (trop) avertissements.push(avertissement(`delai_article:${id}`, trop.message))
     }
 
     // ── La livraison : adresse, zone, minimum, frais ──────────────────────

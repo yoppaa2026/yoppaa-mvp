@@ -17,7 +17,7 @@ import ModalNouveauRdv from './ModalNouveauRdv'
 import ModalNouvelleCommande from './ModalNouvelleCommande'
 import ModaleConfirmation from './ModaleConfirmation'
 import PosteConfirmation, { confirme, confirmeAvecTexte } from './PosteConfirmation'
-import { jourBruxelles } from '@/lib/timezone'
+import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
 import { questionRdv, confirmationRdv, statutDepuisChoix, questionSeanceHonoree, confirmationSeanceHonoree, questionSeanceAnnulee, confirmationSeanceAnnulee, confirmationEncaissement, questionEncaissement, nomClient, noShowPossible } from '@/lib/confirmation-rdv'
 // ⚠️ `confirmationInfo` : un seul bouton, qui EST la sortie. On annonce, on ne
 // demande rien — et surtout plus par un `alert()` du navigateur.
@@ -67,7 +67,7 @@ import EcranCgu from './EcranCgu'
 import { cguAJour } from '@/lib/cgu'
 import EcranDeclaration from './EcranDeclaration'
 import { declarationAJour } from '@/lib/declaration'
-import { nombreArriveesEnLigne, ORIGINE_COMMERCANT } from '@/lib/commande-encodee'
+import { nombreArriveesEnLigne, ORIGINE_COMMERCANT, creneauTermine } from '@/lib/commande-encodee'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
 import BandeauOuMeTrouver from './BandeauOuMeTrouver'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
@@ -1879,6 +1879,14 @@ export default function Dashboard() {
     }
   }, [commercant?.id, chargerCommandes, chargerRdvs])
 
+  // L'heure, relue chaque minute : la bande de remplissage lâche un créneau
+  // dès qu'il se termine, sans attendre un rechargement.
+  const [minuteBande, setMinuteBande] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setMinuteBande(Date.now()), 60000)
+    return () => clearInterval(t)
+  }, [])
+
   // ─── Grilles de créneaux, pour afficher le remplissage ────────────────────
   // Volontairement HORS du polling : ces grilles sont une configuration, pas un
   // flux. Ce qui bouge d'une minute à l'autre, ce sont les commandes, et elles
@@ -3171,13 +3179,18 @@ export default function Dashboard() {
   // ⚠️ LE BLOCAGE S'AJOUTE AU REMPLISSAGE, IL NE LE REMPLACE PAS.
   // `remplissageCreneaux` reste seul juge des commandes déjà prises : fermer un
   // créneau ne change pas ce qui est vendu, il met à zéro ce qui reste.
+  // 🔴 UN CRÉNEAU TERMINÉ N'Y EST PLUS (Alex, 10/10 : « le commerçant doit voir
+  // uniquement le nécessaire »). La même règle que la fenêtre d'encodage
+  // (`creneauTermine`) : celui en cours reste. Les commandes d'un créneau
+  // terminé restent dans la liste, seule la case de remplissage part.
   const creneauxRemplis = (modeHistorique ? [] : remplissageCreneaux({
     creneaux: vueMode === 'livraison' ? creneauxLivraison : creneauxRetrait,
     commandes,
     jour: jourActif,
     modeCapaciteDefaut: commercant?.mode_capacite,
     champCreneau: vueMode === 'livraison' ? 'creneau_livraison_id' : 'creneau_id',
-  })).map(c => ({ ...c, ...appliquerBlocage(c, blocagesDuJour.has(c.creneau?.id)) }))
+  })).filter(({ creneau }) => !creneauTermine(creneau, { dateStr: jourActif, maintenant: new Date(minuteBande), instant: brusselsInstant }))
+    .map(c => ({ ...c, ...appliquerBlocage(c, blocagesDuJour.has(c.creneau?.id)) }))
 
   const stats = {
     nouvelles:  commandesDuJour.filter(c => c.statut === 'en_attente').length,

@@ -171,6 +171,9 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('le bouton n’apparaît qu’en alimentaire avec des créneaux',
     /commercant\?\.categorie === 'alimentaire' && \(creneauxRetrait\.length > 0 \|\| creneauxLivraison\.length > 0\)/.test(bord))
   v('la carte dit qu’une commande est encodée', /commande\.origine === ORIGINE_COMMERCANT/.test(bord))
+  v('🔴 la bande de remplissage cache les créneaux terminés, à l’heure relue chaque minute',
+    /\}\)\)\.filter\(\(\{ creneau \}\) => !creneauTermine\(creneau, \{ dateStr: jourActif, maintenant: new Date\(minuteBande\), instant: brusselsInstant \}\)\)/.test(bord)
+    && /setInterval\(\(\) => setMinuteBande\(Date\.now\(\)\), 60000\)/.test(bord))
 
   const poste = code('app/equipe/PosteEquipe.js')
   v('🔴 l’équipe encode seulement avec la case « Commandes »',

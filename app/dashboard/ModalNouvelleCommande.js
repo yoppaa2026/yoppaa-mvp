@@ -22,9 +22,9 @@ import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { construireLignesCommande } from '@/lib/lignes-commande'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
-import { jourBruxelles } from '@/lib/timezone'
+import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
 import { jourPlus } from '@/lib/statut-commerce'
-import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE } from '@/lib/commande-encodee'
+import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE, creneauTermine } from '@/lib/commande-encodee'
 
 const T = {
   bg: '#F8F6FF', ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -106,12 +106,25 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
   }), [panier, articles, optionsValeurs, deals, commercant, date])
 
   // ── Les créneaux du jour, avec leur remplissage réel ──────────────────────
+  // ⚠️ UN CRÉNEAU TERMINÉ N'EST PAS MONTRÉ (`creneauTermine`), celui en cours
+  // l'est. L'heure est relue chaque minute : une fenêtre ouverte à 11 h 58 ne
+  // propose plus le créneau de 11 h 45 à midi passé.
+  const [minute, setMinute] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setMinute(Date.now()), 60000)
+    return () => clearInterval(t)
+  }, [])
   const creneaux = useMemo(() => remplissageCreneaux({
     creneaux: mode === 'livraison' ? donnees?.creneauxLivraison : donnees?.creneauxRetrait,
     commandes: donnees?.commandesDuJour || [], jour: date, modeCapaciteDefaut: donnees?.commercant?.mode_capacite,
     champCreneau: mode === 'livraison' ? 'creneau_livraison_id' : 'creneau_id',
-  }), [mode, date, donnees])
+  }).filter(({ creneau }) => !creneauTermine(creneau, { dateStr: date, maintenant: new Date(minute), instant: brusselsInstant })),
+  [mode, date, donnees, minute])
   useEffect(() => { setCreneauId(null) }, [mode, date])
+  // Le créneau choisi vient de se terminer : il n'est plus choisi.
+  useEffect(() => {
+    if (creneauId && !creneaux.some(({ creneau }) => creneau.id === creneauId)) setCreneauId(null)
+  }, [creneaux, creneauId])
 
   // ── Le client, la livraison, le paiement ─────────────────────────────────
   const [nom, setNom] = useState('')
@@ -224,7 +237,11 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
           </div>
           <p style={titre}>{mode === 'livraison' ? 'Tournée' : 'Créneau'}</p>
           {creneaux.length === 0 ? (
-            <p style={{ fontSize: 14, color: T.muted, margin: 0 }}>Aucun {mode === 'livraison' ? 'créneau de tournée' : 'créneau'} ce jour-là.</p>
+            <p style={{ fontSize: 14, color: T.muted, margin: 0 }}>
+              {date === aujourdhui && (mode === 'livraison' ? donnees?.creneauxLivraison : donnees?.creneauxRetrait)?.length > 0
+                ? `Plus aucun ${mode === 'livraison' ? 'créneau de tournée' : 'créneau'} aujourd’hui : choisis Demain ou une autre date.`
+                : `Aucun ${mode === 'livraison' ? 'créneau de tournée' : 'créneau'} ce jour-là.`}
+            </p>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: 8 }}>
               {creneaux.map(({ creneau, complet: completBrut, utilise, capacite, modeTemps }) => {

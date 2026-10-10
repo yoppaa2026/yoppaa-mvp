@@ -49,7 +49,7 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { eurosNus } from '@/lib/montants'
 import {
   ORIGINE_COMMERCANT, MODES_ENCODEE, clientEncode, champsPaiementEncodee,
-  avertissement, confirmationRequise, jugementMoment,
+  avertissement, confirmationRequise, jugementMoment, creneauTermine,
 } from '@/lib/commande-encodee'
 
 export const dynamic = 'force-dynamic'
@@ -101,6 +101,7 @@ export async function POST(request) {
       verdict: creneauCommandable(creneau, { dateStr: date_commande, instantDebut: brusselsInstant }),
       dateCommande: date_commande,
       aujourdhui: jourBruxelles(),
+      termine: creneauTermine(creneau, { dateStr: date_commande, instant: brusselsInstant }),
     })
     if (moment.refus) return non(moment.refus)
     if (moment.avertissement) avertissements.push(moment.avertissement)

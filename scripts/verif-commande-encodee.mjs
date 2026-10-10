@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   ORIGINE_COMMERCANT, PAIEMENTS_ENCODEE, clientEncode, champsPaiementEncodee,
-  avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne,
+  avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne, creneauTermine,
 } from '../lib/commande-encodee.js'
 
 let ok = 0
@@ -80,6 +80,20 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     jugementMoment({ verdict: { ok: false, raison: 'passe' }, dateCommande: auj, aujourdhui: auj }).avertissement?.code === 'creneau_commence'
     && jugementMoment({ verdict: { ok: false, raison: 'cutoff' }, dateCommande: auj, aujourdhui: auj }).avertissement?.code === 'delai_depasse'
     && !jugementMoment({ verdict: { ok: false, raison: 'cutoff' }, dateCommande: auj, aujourdhui: auj }).refus)
+  v('🔴 un créneau TERMINÉ est refusé, même commencé',
+    !!jugementMoment({ verdict: { ok: false, raison: 'passe' }, dateCommande: auj, aujourdhui: auj, termine: true }).refus)
+
+  // Heure murale de Bruxelles en été : UTC+2 (11 h 30 à Bruxelles = 09:30Z).
+  const instant = (d, h) => new Date(`${d}T${h.length === 5 ? `${h}:00` : h}+02:00`)
+  const t = (debut, fin) => creneauTermine({ heure_debut: debut, heure_fin: fin }, { dateStr: auj, maintenant: MAINTENANT, instant })
+  v('🔴 terminé à 11 h 30 : le créneau de 7 h, et celui qui finit pile à 11 h 30',
+    t('07:00:00', '07:15:00') && t('11:15:00', '11:30:00'))
+  v('🔴 le créneau EN COURS reste, l’avenir aussi', !t('11:15:00', '11:45:00') && !t('12:00:00', '12:15:00'))
+  v('un créneau qui passe minuit finit le lendemain', !t('22:00:00', '00:30:00'))
+  v('demain, rien n’est terminé',
+    !creneauTermine({ heure_debut: '07:00:00', heure_fin: '07:15:00' }, { dateStr: '2026-10-11', maintenant: MAINTENANT, instant }))
+  v('sans heure de fin ou sans horloge : rien n’est caché',
+    !creneauTermine({ heure_debut: '07:00:00' }, { dateStr: auj, maintenant: MAINTENANT, instant }) && !creneauTermine({ heure_fin: '07:15:00' }, { dateStr: auj }))
 
   const liste = [
     { statut: 'en_attente', origine: 'en_ligne' },
@@ -118,6 +132,9 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('la livraison hors du référentiel se note quand même, avec avertissement',
     /avertissements\.push\(avertissement\('adresse_non_situee'\)\)/.test(r) && /avertissements\.push\(avertissement\('hors_zone'\)\)/.test(r))
   v('le geste d’un membre est journalisé', /journaliserGeste\(admin, garde, \{\s*action: 'commande_encodee'/.test(r))
+  v('🔴 un créneau terminé est refusé par le serveur, à l’heure de Bruxelles, avant toute écriture',
+    /termine: creneauTermine\(creneau, \{ dateStr: date_commande, instant: brusselsInstant \}\),/.test(r)
+    && avant(r, 'termine: creneauTermine(', 'if (moment.refus) return non(moment.refus)'))
 }
 
 // ═══ 3) LA LECTURE POUR LA FENÊTRE ══════════════════════════════════════════
@@ -142,6 +159,10 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /useEffect\(\(\) => \{ setAvertissements\(null\) \}, \[mode, date, creneauId, panier, adresse, paiement\]\)/.test(m))
   v('🔴 « encoder quand même » renvoie les codes montrés', /encoder\(avertissements \? avertissements\.map\(a => a\.code\) : \[\]\)/.test(m))
   v('le bouton montre qu’il travaille', /\{envoi && <DotsAttente/.test(m))
+  v('🔴 la fenêtre cache les créneaux terminés, relus chaque minute, et lâche un choix terminé',
+    /\}\)\.filter\(\(\{ creneau \}\) => !creneauTermine\(creneau, \{ dateStr: date, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\)/.test(m)
+    && /setInterval\(\(\) => setMinute\(Date\.now\(\)\), 60000\)/.test(m)
+    && /if \(creneauId && !creneaux\.some\(\(\{ creneau \}\) => creneau\.id === creneauId\)\) setCreneauId\(null\)/.test(m))
 
   const bord = code('app/dashboard/page.js')
   v('🔴 la sonnerie ne compte que les arrivées en ligne (trois endroits)',

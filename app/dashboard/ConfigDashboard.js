@@ -158,6 +158,7 @@ import {
   axesDeLArticle, conflitsDeVariantes, resumeDeVariantes,
   copieDePrestation, aVerifierApresCopie, lignesDeFenetre,
   doitOuvrirFenetre, resumeCourt, nouveauGroupe,
+  planModificationGroupe, resumeModification,
 } from '@/lib/catalogue-copie'
 // ⚠️ ET CE QUI S'APPLIQUE À PLUSIEURS ARTICLES SE DÉCIDE AUSSI DANS UN MODULE :
 // ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
@@ -2396,6 +2397,110 @@ async function ecrireCopiesDeGroupe(groupe, cibleIds) {
   return { ok: true, combien: crees?.length || aEcrire.length }
 }
 
+// ─── ÉCRIRE LA MODIFICATION D'UN GROUPE (10/10) ─────────────────────────────
+//
+// Le plan vient de `planModificationGroupe` : les options sont MODIFIÉES SUR
+// PLACE (un panier en cours garde leurs identifiants), ajoutées, puis enfin
+// retirées, dans cet ordre (une panne laisse des options en trop, jamais un
+// groupe vidé).
+// ⚠️ CHAQUE ÉCRITURE RELIT CE QU'ELLE A TOUCHÉ (`select`) : la RLS refuse en
+// rendant zéro ligne, sans erreur. Un « Enregistré » sur rien serait un
+// mensonge.
+async function ecrireModificationGroupe(plan) {
+  const refus = (quoi) => ({ ok: false, partiel: true, erreur: `${quoi} n’a pas pu être enregistré. Recharge la page et vérifie le groupe.` })
+  for (const { id, patch } of plan.groupes) {
+    const { data, error } = await supabase.from('article_options_groupes').update(patch).eq('id', id).select('id')
+    if (error || !data?.length) return refus('Le groupe')
+  }
+  for (const { id, patch } of plan.valeurs) {
+    const { data, error } = await supabase.from('article_options_valeurs').update(patch).eq('id', id).select('id')
+    if (error || !data?.length) return refus(`L’option « ${patch.nom} »`)
+  }
+  if (plan.ajouts.length > 0) {
+    const { data, error } = await supabase.from('article_options_valeurs').insert(plan.ajouts).select('id')
+    if (error || (data?.length || 0) !== plan.ajouts.length) return refus('Une option ajoutée')
+  }
+  if (plan.suppressions.length > 0) {
+    const { data, error } = await supabase.from('article_options_valeurs').delete().in('id', plan.suppressions).select('id')
+    if (error || (data?.length || 0) !== plan.suppressions.length) return refus('Le retrait d’une option')
+  }
+  return { ok: true }
+}
+
+// ─── LE FORMULAIRE D'ÉDITION D'UN GROUPE, PARTAGÉ (10/10) ───────────────────
+//
+// Un seul formulaire pour les deux portées (décision d'Alex) : la bibliothèque
+// lui passe TOUTES les copies du nom, le panneau d'un article la sienne seule.
+// Le plan, le résumé et l'écriture sont les mêmes.
+function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = {}, toast, onFini, onAnnule }) {
+  const depart = modele || copies[0] || {}
+  const [form, setForm] = useState(() => ({
+    nom: depart.nom || '', type: depart.type === 'multiple' ? 'multiple' : 'unique', obligatoire: depart.obligatoire === true,
+    options: (depart.valeurs || []).map(v => ({ origine: v.nom, nom: v.nom, prix_supplement: Number(v.prix_supplement) > 0 ? String(v.prix_supplement).replace('.', ',') : '' })),
+  }))
+  const [envoi, setEnvoi] = useState(false)
+  const plan = planModificationGroupe({ copies, edition: form, groupesParArticle })
+  const majOption = (i, patch) => setForm(f => ({ ...f, options: f.options.map((o, k) => k === i ? { ...o, ...patch } : o) }))
+
+  async function enregistrer() {
+    if (envoi) return
+    if (!plan.ok) { toast(plan.error, 'error'); return }
+    if (plan.groupes.length + plan.valeurs.length + plan.ajouts.length + plan.suppressions.length === 0) { onAnnule?.(); return }
+    setEnvoi(true)
+    const r = await ecrireModificationGroupe(plan)
+    setEnvoi(false)
+    if (!r.ok) { toast(r.erreur, 'error'); onFini?.(plan.articles, false); return }
+    toast(plan.articles.length === 1 ? `« ${plan.groupe.nom} » modifié.` : `« ${plan.groupe.nom} » modifié sur ${plan.articles.length} articles.`)
+    onFini?.(plan.articles, true)
+  }
+
+  return (
+    <div style={{ background: '#FAFAFA', borderRadius: 10, padding: 12, margin: '10px 0', border: `1.5px solid ${T.bgPanel}` }}>
+      <div style={{ display: 'grid', gap: 10 }}>
+        <input value={form.nom} onChange={e => setForm(f => ({ ...f, nom: e.target.value }))} aria-label="Nom du groupe"
+          style={{ ...s.input, fontSize: 14 }}/>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {[['unique', '1 choix'], ['multiple', 'Plusieurs choix']].map(([t, l]) => (
+            <button key={t} type="button" onClick={() => setForm(f => ({ ...f, type: t }))} aria-pressed={form.type === t}
+              style={{ ...s.btn, padding: '6px 12px', fontSize: 12.5, background: form.type === t ? T.bgPanel : '#fff', color: form.type === t ? '#fff' : T.ink, border: `1.5px solid ${form.type === t ? T.bgPanel : T.hairline}` }}>{l}</button>
+          ))}
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: T.ink, cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.obligatoire} onChange={e => setForm(f => ({ ...f, obligatoire: e.target.checked }))} style={{ width: 16, height: 16 }}/>
+            Obligatoire
+          </label>
+        </div>
+        <div style={{ display: 'grid', gap: 6 }}>
+          <p style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, margin: 0 }}>Les options et leur supplément</p>
+          {form.options.map((o, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input value={o.nom} onChange={e => majOption(i, { nom: e.target.value })} aria-label={`Option ${i + 1}`}
+                style={{ ...s.input, flex: 1, fontSize: 13 }}/>
+              <input value={o.prix_supplement} onChange={e => majOption(i, { prix_supplement: e.target.value })} placeholder="+€" inputMode="decimal"
+                aria-label={`Supplément de l’option ${i + 1}`} style={{ ...s.input, width: 80, fontSize: 13, textAlign: 'center' }}/>
+              <button type="button" onClick={() => setForm(f => ({ ...f, options: f.options.filter((_, k) => k !== i) }))} aria-label={`Retirer l’option ${i + 1}`}
+                style={{ ...s.btn, ...s.btnGhost, padding: '6px 9px' }}><Icon name="trash" size={13} color="#DC2626"/></button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setForm(f => ({ ...f, options: [...f.options, { origine: null, nom: '', prix_supplement: '' }] }))}
+            style={{ ...s.btn, ...s.btnGhost, padding: '6px 12px', fontSize: 12.5, justifySelf: 'start' }}>+ Une option</button>
+        </div>
+        <p style={{ fontSize: 12, color: plan.ok ? T.muted : '#B91C1C', fontWeight: plan.ok ? 500 : 700, margin: 0, lineHeight: 1.5 }}>
+          {plan.ok ? resumeModification(plan, { versions }) : plan.error}
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" onClick={onAnnule} disabled={envoi}
+            style={{ ...s.btn, ...s.btnGhost, padding: '8px 14px', fontSize: 13 }}>Annuler</button>
+          <button type="button" onClick={enregistrer} disabled={envoi || !plan.ok}
+            style={{ ...s.btn, ...s.btnPrimary, padding: '8px 16px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {copies.length > 1 ? `Enregistrer sur ${plan.ok ? plan.articles.length : copies.length} articles` : 'Enregistrer'}
+            {envoi && <DotsAttente couleur="#fff" taille={4} label="Enregistrement"/>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── « + NOUVEAU GROUPE », DEPUIS « PERSONNALISATION » (Alex, 10/10) ────────
 //
 // 🔴 « Il faut pouvoir créer un groupe comme un article. » Le commerçant pense
@@ -2526,6 +2631,7 @@ function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} })
 // « sur 3 articles » quand une copie venait d'en faire quinze.
 function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes = [], groupesParArticle = {} }) {
   const [choisi, setChoisi] = useState(null)   // le nom du groupe déplié
+  const [enEdition, setEnEdition] = useState(null) // le nom du groupe qu'on modifie
   const [cibles, setCibles] = useState([])
   const [envoi, setEnvoi] = useState(false)
 
@@ -2594,11 +2700,25 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
                     {phraseDeBibliotheque(entree)}
                   </p>
                 </div>
-                <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11, flexShrink: 0 }}
-                  onClick={() => { setChoisi(ouvert ? null : entree.nom); setCibles([]) }}>
-                  <Copy size={13} strokeWidth={1.8}/> {ouvert ? 'Fermer' : 'Appliquer à…'}
-                </button>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  {/* 🔴 MODIFIER, UNE FOIS, SUR TOUTES LES COPIES (Alex, 10/10). */}
+                  <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                    onClick={() => { setEnEdition(enEdition === entree.nom ? null : entree.nom); setChoisi(null) }}>
+                    <Icon name="edit" size={13} color={T.bgPanel}/> {enEdition === entree.nom ? 'Fermer' : 'Modifier'}
+                  </button>
+                  <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                    onClick={() => { setChoisi(ouvert ? null : entree.nom); setCibles([]); setEnEdition(null) }}>
+                    <Copy size={13} strokeWidth={1.8}/> {ouvert ? 'Fermer' : 'Appliquer à…'}
+                  </button>
+                </div>
               </div>
+
+              {enEdition === entree.nom && (
+                <EditionGroupe key={entree.nom} copies={entree.copies} modele={entree.modele} versions={entree.versions}
+                  groupesParArticle={groupesParArticle} toast={toast}
+                  onAnnule={() => setEnEdition(null)}
+                  onFini={(ids) => { setEnEdition(null); onApplique?.(ids) }}/>
+              )}
 
               {/* Les options du modèle, pour qu'il sache ce qu'il pose. */}
               {ouvert && (
@@ -2680,6 +2800,7 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
   // `article_id` : il appartient à un article, et rien ne permettait de le
   // donner à ses voisins.
   const [copieDe, setCopieDe] = useState(null)      // le groupe qu'on copie
+  const [editionDe, setEditionDe] = useState(null)  // le groupe qu'on modifie (10/10)
   const [cibles, setCibles] = useState([])          // ids cochés
   // ⚠️ LES GROUPES DES AUTRES ARTICLES VIENNENT DU PARENT, qui les lit une
   // seule fois : ce panneau ne fait plus sa propre requête.
@@ -2875,6 +2996,12 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
               </button>
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {/* 🔴 MODIFIER CE GROUPE ICI SEULEMENT : nom, options et
+                  suppléments (Alex, 10/10, les exceptions d'un article). */}
+              <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                onClick={() => { setEditionDe(editionDe === g.id ? null : g.id); setCopieDe(null) }}>
+                <Icon name="edit" size={13} color={T.bgPanel}/> {editionDe === g.id ? 'Fermer' : 'Modifier'}
+              </button>
               {/* ⚠️ LE BOUTON DIT LE GESTE, et il ne s'affiche que s'il y a
                   quelque part où copier : seul dans son catalogue, le
                   commerçant n'a pas besoin d'un bouton qui ouvre une liste
@@ -2891,6 +3018,12 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
               </button>
             </div>
           </div>
+
+          {editionDe === g.id && (
+            <EditionGroupe key={g.id} copies={[g]} modele={g} groupesParArticle={groupesParArticle} toast={toast}
+              onAnnule={() => setEditionDe(null)}
+              onFini={() => { setEditionDe(null); apresEcriture() }}/>
+          )}
 
           {/* ─── PANNEAU DE COPIE ──────────────────────────────────────────
               ⚠️ MÊME GESTE QUE « Copier vers… » DES CRÉNEAUX : le commerçant

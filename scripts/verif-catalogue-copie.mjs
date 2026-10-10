@@ -19,6 +19,7 @@ import {
   axesDeLArticle, conflitsDeVariantes, resumeDeVariantes,
   CHAMPS_PRESTATION, copieDePrestation,
   aVerifierApresCopie, lignesDeFenetre, doitOuvrirFenetre, resumeCourt,
+  planModificationGroupe, resumeModification,
 } from '../lib/catalogue-copie.js'
 
 let ok = 0
@@ -895,6 +896,66 @@ const v = (nom, cond, detail = '') => {
   v('il est affiché dans Personnalisation, même sans groupe existant',
     /<NouveauGroupe articles=\{articles\} toast=\{toast\} onCree=\{noterOptionsTouchees\}/.test(config))
   v('le bouton montre qu’il travaille', /\{envoi && <DotsAttente/.test(bloc))
+}
+
+// ═══ MODIFIER UN GROUPE, PARTOUT OU SUR UN ARTICLE (Alex, 10/10) ════════════
+{
+  // Deux versions de « Sauces » : A (Ketchup, Samouraï 0,50) sur 2 articles,
+  // B (Ketchup, Samouraï 0,50, Andalouse) sur 1.
+  const va = (id, nom, prix = 0) => ({ id, nom, prix_supplement: prix })
+  const copies = [
+    { id: 'g1', article_id: 'a1', nom: 'Sauces', type: 'multiple', obligatoire: false, valeurs: [va('v1', 'Ketchup'), va('v2', 'Samouraï', 0.5)] },
+    { id: 'g2', article_id: 'a2', nom: 'Sauces', type: 'multiple', obligatoire: false, valeurs: [va('v3', 'Ketchup'), va('v4', 'Samouraï', 0.5)] },
+    { id: 'g3', article_id: 'a3', nom: 'Sauces', type: 'multiple', obligatoire: false, valeurs: [va('v5', 'Ketchup'), va('v6', 'Samouraï', 0.5), va('v7', 'Andalouse')] },
+  ]
+  const parArticle = { a1: [copies[0]], a2: [copies[1]], a3: [copies[2], { id: 'g9', article_id: 'a3', nom: 'Crudités', valeurs: [] }] }
+  // Samouraï passe à 0,60 et devient « Samouraï maison », Mayo s'ajoute, Andalouse n'est pas dans le formulaire.
+  const edition = { nom: 'Sauces', type: 'multiple', obligatoire: true, options: [
+    { origine: 'Ketchup', nom: 'Ketchup', prix_supplement: '' },
+    { origine: 'Samouraï', nom: 'Samouraï maison', prix_supplement: '0,60' },
+    { origine: null, nom: 'Mayo', prix_supplement: '' },
+  ] }
+  const p = planModificationGroupe({ copies, edition, groupesParArticle: parArticle })
+  v('🔴 partout : les trois copies reçoivent le nom, le type et « obligatoire »',
+    p.ok && p.groupes.length === 3 && p.groupes.every(x => x.patch.obligatoire === true && x.patch.nom === 'Sauces'), JSON.stringify(p))
+  v('🔴 une option renommée et re-prixée est MODIFIÉE SUR PLACE (mêmes identifiants), jamais recréée',
+    ['v2', 'v4', 'v6'].every(id => p.valeurs.some(x => x.id === id && x.patch.nom === 'Samouraï maison' && x.patch.prix_supplement === 0.6))
+    && !p.valeurs.some(x => ['v1', 'v3', 'v5'].includes(x.id)))
+  v('🔴 l’option nouvelle s’ajoute sur chaque copie', p.ajouts.length === 3 && p.ajouts.every(x => x.nom === 'Mayo' && x.prix_supplement === 0))
+  v('🔴 l’option propre à une autre version est retirée (les versions deviennent identiques)',
+    JSON.stringify(p.suppressions) === JSON.stringify(['v7']))
+  v('🔴 le résumé le dit avant : combien d’articles, versions, options retirées',
+    resumeModification(p, { versions: 2 }) === '« Sauces » sera modifié sur 3 articles. Les 2 versions deviendront identiques. 1 option sera retirée.',
+    resumeModification(p, { versions: 2 }))
+  const renomme = planModificationGroupe({ copies, edition: { ...edition, nom: 'Crudités' }, groupesParArticle: parArticle })
+  v('🔴 renommer vers le nom d’un AUTRE groupe du même article : refus, rien n’est écrit',
+    !renomme.ok && JSON.stringify(renomme.conflits) === JSON.stringify(['a3']) && /a déjà un autre groupe « Crudités »/.test(renomme.error))
+  const seul = planModificationGroupe({ copies: [copies[2]], edition: { nom: 'Sauces', type: 'multiple', obligatoire: false, options: [
+    { origine: 'Ketchup', nom: 'Ketchup', prix_supplement: '' }, { origine: 'Samouraï', nom: 'Samouraï', prix_supplement: '0,50' }, { origine: 'Andalouse', nom: 'Andalouse', prix_supplement: '0,30' },
+  ] }, groupesParArticle: parArticle })
+  v('🔴 sur un article : seule SA copie bouge (l’exception)',
+    seul.ok && seul.articles.length === 1 && seul.groupes.length === 0 && seul.valeurs.length === 1 && seul.valeurs[0].id === 'v7'
+    && seul.valeurs[0].patch.prix_supplement === 0.3 && seul.ajouts.length === 0 && seul.suppressions.length === 0, JSON.stringify(seul))
+  const rien = planModificationGroupe({ copies: [copies[0]], edition: { nom: 'Sauces', type: 'multiple', obligatoire: false, options: [
+    { origine: 'Ketchup', nom: 'Ketchup' }, { origine: 'Samouraï', nom: 'Samouraï', prix_supplement: '0.5' }] }, groupesParArticle: parArticle })
+  v('sans changement : rien à écrire, et c’est dit', rien.ok && resumeModification(rien) === 'Rien n’a changé.')
+  v('🔴 une édition invalide est refusée par la règle de création (sans option, prix négatif)',
+    !planModificationGroupe({ copies, edition: { nom: 'Sauces', options: [] } }).ok
+    && !planModificationGroupe({ copies, edition: { nom: 'Sauces', options: [{ nom: 'X', prix_supplement: '-1' }] } }).ok)
+
+  const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  v('🔴 la bibliothèque a « Modifier », sur TOUTES les copies du nom',
+    /<EditionGroupe key=\{entree\.nom\} copies=\{entree\.copies\} modele=\{entree\.modele\} versions=\{entree\.versions\}/.test(config)
+    && /onFini=\{\(ids\) => \{ setEnEdition\(null\); onApplique\?\.\(ids\) \}\}/.test(config))
+  v('🔴 l’article a « Modifier », sur SA copie seule, et le parent relit',
+    /<EditionGroupe key=\{g\.id\} copies=\{\[g\]\} modele=\{g\}/.test(config) && /onFini=\{\(\) => \{ setEditionDe\(null\); apresEcriture\(\) \}\}/.test(config))
+  v('🔴 l’écriture modifie sur place, ajoute, PUIS retire ; chaque écriture relit ce qu’elle a touché',
+    /\.from\('article_options_valeurs'\)\.update\(patch\)\.eq\('id', id\)\.select\('id'\)/.test(config)
+    && /\.from\('article_options_valeurs'\)\.insert\(plan\.ajouts\)\.select\('id'\)/.test(config)
+    && /\.from\('article_options_valeurs'\)\.delete\(\)\.in\('id', plan\.suppressions\)\.select\('id'\)/.test(config)
+    && config.indexOf('.insert(plan.ajouts)') > 0 && config.indexOf('.insert(plan.ajouts)') < config.indexOf('.in(\'id\', plan.suppressions)'))
+  v('le formulaire dit le résumé avant d’enregistrer, et le bouton montre qu’il travaille',
+    /\{plan\.ok \? resumeModification\(plan, \{ versions \}\) : plan\.error\}/.test(config) && /\{envoi && <DotsAttente couleur="#fff" taille=\{4\} label="Enregistrement"\/>\}/.test(config))
 }
 
 console.log(`\nCopier dans le catalogue : ${ok} vérifications`)

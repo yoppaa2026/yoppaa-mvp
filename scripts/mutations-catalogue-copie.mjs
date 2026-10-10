@@ -26,6 +26,22 @@ const LOT = 'lib/catalogue-lot.js'
 const ECRAN = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── MODIFIER UN GROUPE (10/10) ──────────────────────────────────────────
+  { nom: '🔴 une option modifiée est recréée (le panier en cours la perd)',
+    fichier: COPIE, de: '      let k = origines[i] ? restantes.findIndex(x => cleNom(x?.nom) === origines[i]) : -1', vers: '      let k = -2' },
+  { nom: '🔴 les versions ne deviennent pas identiques : l option en trop reste',
+    fichier: COPIE, de: '    for (const r of restantes) if (r?.id != null) suppressions.push(r.id)', vers: '' },
+  { nom: '🔴 renommer vers un groupe existant du même article passe',
+    fichier: COPIE, de: '  if (enConflit.length > 0) {', vers: '  if (false) {' },
+  { nom: '⚠️ le résumé tait les options retirées',
+    fichier: COPIE, de: '  if (plan.suppressions.length > 0) {', vers: '  if (false) {' },
+  { nom: '⚠️ « obligatoire » n est plus porté par la modification',
+    fichier: COPIE, de: '      groupes.push({ id: g.id, patch: { nom: cible.nom, type: cible.type, obligatoire: cible.obligatoire } })', vers: '      groupes.push({ id: g.id, patch: { nom: cible.nom, type: cible.type } })' },
+  { nom: '🔴 la bibliothèque ne modifie qu une copie',
+    fichier: ECRAN, de: '<EditionGroupe key={entree.nom} copies={entree.copies}', vers: '<EditionGroupe key={entree.nom} copies={[entree.modele]}' },
+  { nom: '🔴 la modification d une option ne relit plus ce qu elle a touché (refus RLS muet)',
+    fichier: ECRAN, de: "    const { data, error } = await supabase.from('article_options_valeurs').update(patch).eq('id', id).select('id')", vers: "    const { data, error } = await supabase.from('article_options_valeurs').update(patch).eq('id', id)" },
+
   // ─── LA COPIE D UN ARTICLE ───────────────────────────────────────────────
   //
   // 🔴 UNE COPIE QUI NAIT ACTIVE est une promesse faite au client : elle porte

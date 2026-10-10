@@ -891,7 +891,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
           commercantId={equipe.commercant_id}
           jourInitial={etat.aujourdhui}
           onFerme={() => setEncoder(false)}
-          onCree={() => { setEncoder(false); dire('Commande encodée'); charger() }}
+          onCree={() => charger()}
         />
       )}
       {actif === 'commandes' && etat.commandes && (

@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   ORIGINE_COMMERCANT, PAIEMENTS_ENCODEE, clientEncode, champsPaiementEncodee,
-  avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne, creneauTermine, articleHorsJour, etatTuile,
+  avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne, creneauTermine, articleHorsJour, etatTuile, joursDuCalendrier, horsCalendrier,
 } from '../lib/commande-encodee.js'
 
 let ok = 0
@@ -124,6 +124,17 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('🔴 un article du jour même seulement, pour demain : signalé, sans premier jour inventé dans le court',
     hJour?.raison === 'aujourdhui_seulement' && hJour.court === 'Le jour même seulement', JSON.stringify(hJour))
 
+  // 🔴 LE CALENDRIER DE LA FICHE (Alex, 10/10) : samedi 10/10, longueur 8.
+  const cal = joursDuCalendrier({ aujourdhui: auj, longueur: 8, fermetures: [{ date_debut: '2026-10-13', date_fin: '2026-10-14' }] })
+  v('🔴 les jours du calendrier : aujourd’hui compris, sans les jours de fermeture, longueur respectée',
+    JSON.stringify(cal) === JSON.stringify(['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-15', '2026-10-16', '2026-10-17']), JSON.stringify(cal))
+  v('🔴 aujourd’hui sans créneau restant : il n’est pas proposé (comme la fiche)',
+    joursDuCalendrier({ aujourdhui: auj, longueur: 3, aujourdhuiOuvert: false })[0] === '2026-10-11')
+  v('🔴 au-delà du calendrier : signalé ; dedans, non',
+    horsCalendrier({ jour: '2026-10-18', aujourdhui: auj, longueur: 8 }) && !horsCalendrier({ jour: '2026-10-17', aujourdhui: auj, longueur: 8 })
+    && !horsCalendrier({ jour: auj, aujourdhui: auj, longueur: 8 }))
+  v('l’avertissement « hors calendrier » dit le fait', /au-delà de ton calendrier/.test(avertissement('hors_calendrier').message))
+
   // La tuile : la règle d'abord, puis le stock par LA fonction de la fiche.
   const tuile = (article, o = {}) => etatTuile({ article, commercant: commerce, jour: '2026-10-11', aujourdhui: auj, dejaCommande: 0, ...o })
   v('🔴 la tuile d’un article hors jour ne parle pas de stock', tuile(tarte).hors?.raison === 'delai' && tuile(tarte).gere === false)
@@ -185,6 +196,20 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /termine: creneauTermine\(creneau, \{ dateStr: date_commande, instant: brusselsInstant \}\),/.test(r)
     && avant(r, 'termine: creneauTermine(', 'if (moment.refus) return non(moment.refus)'))
   v('🔴 l’article est lu EN BASE, jamais dans le corps', /const art = articlesData\.find\(a => String\(a\.id\) === id\)/.test(r))
+  v('🔴 au-delà du calendrier de la fiche : avertissement, et une lecture ratée est une erreur',
+    /const calendrier = await calendrierDuCommerce\(\{ supabase: admin, commercant \}\)/.test(r)
+    && /if \(!calendrier\.ok\) return non\(/.test(r)
+    && /if \(horsCalendrier\(\{ jour: date_commande, aujourdhui: jourBruxelles\(\), longueur: calendrier\.longueur \}\)\) \{\s*avertissements\.push\(avertissement\('hors_calendrier'\)\)/.test(r)
+    && /horizon_commande'\)/.test(r))
+
+  // Le module qui lit le calendrier : la longueur de la fiche, sur tout le catalogue.
+  const cs = code('lib/calendrier-commande-server.js')
+  v('🔴 le calendrier : `longueurCalendrier` sur TOUT le catalogue actif hors vitrine, jours de vente compris',
+    /\.from\('articles'\)\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active, stock_mode, est_vitrine'\)\s*\.eq\('commercant_id', commercant\.id\)\.eq\('actif', true\)/.test(cs)
+    && /\.from\('article_stock_jour'\)\.select\('article_id, jour_semaine'\)\.eq\('commercant_id', commercant\.id\)\.eq\('actif', false\)/.test(cs)
+    && /horizon: commercant\.horizon_commande,/.test(cs) && /\.filter\(a => !a\.est_vitrine\)/.test(cs)
+    && /delaiJours: delaiEnJours\(a\), indispo: offParArticle\[a\.id\] \|\| \[\], horizonJours: a\.horizon_jours, circuits: circuitsDeLArticle\(a, commercant\)/.test(cs)
+    && /if \(errCat \|\| errOff \|\| errF\) return \{ ok: false \}/.test(cs))
 }
 
 // ═══ 3) LA LECTURE POUR LA FENÊTRE ══════════════════════════════════════════
@@ -201,6 +226,11 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     && /dejaCommandePourStock\(\{ article: a, duJour, ventesMagasin \}\)/.test(r))
   v('🔴 un vendu illisible reste null (jamais « rien vendu »)',
     /let dejaCommande = null/.test(r) && /if \(vendu\.error \|\| magasin\.error\) \{/.test(r))
+  v('🔴 la fenêtre reçoit le calendrier de la fiche, et une lecture ratée est une erreur',
+    /const calendrier = commerce\.data \? await calendrierDuCommerce\(\{ supabase: admin, commercant: commerce\.data \}\) : \{ ok: false \}/.test(r)
+    && /if \(!calendrier\.ok\) return NextResponse\.json\(\{ ok: false/.test(r)
+    && /calendrier: \{ longueur: calendrier\.longueur, fermetures: calendrier\.fermetures \}/.test(r)
+    && /ordre_categories, horizon_commande'\)/.test(r))
   v('les colonnes que `etatStock` lit sont lues',
     /stock_jour, stock_comptoir, stock_comptoir_le, commande_max_jour, stock_maj_le/.test(r))
 }
@@ -221,6 +251,21 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /const tuile = etatTuile\(\{/.test(m)
     && /dejaCommande: donnees\?\.dejaCommande \? \(donnees\.dejaCommande\[a\.id\] \|\| 0\) : null,/.test(m)
     && /\{tuile\.hors \? \(/.test(m) && /\{epuise \? 'Épuisé ce jour' : `Reste \$\{tuile\.dispo\}`\}/.test(m))
+  v('🔴 les pastilles sont les jours du calendrier de la fiche ; « Aujourd’hui » seulement s’il reste un créneau',
+    /return joursDuCalendrier\(\{ aujourdhui, longueur: donnees\.calendrier\.longueur, fermetures: donnees\.calendrier\.fermetures, aujourdhuiOuvert \}\)/.test(m)
+    && /&& !creneauTermine\(c, \{ dateStr: aujourdhui, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\)/.test(m)
+    && /\{jours\.map\(d => \{/.test(m))
+  v('🔴 un jour hors des pastilles retombe sur le premier jour, sauf « Autre date »',
+    /if \(!autreDate && jours\.length > 0 && !jours\.includes\(date\)\) setDate\(jours\[0\]\)/.test(m))
+  v('🔴 « Autre date » : le champ libre, et la mention au-delà du calendrier',
+    /\{autreDate && \(\s*<input type="date"/.test(m) && /horsCalendrier\(\{ jour: date, aujourdhui, longueur: donnees\.calendrier\.longueur \}\)/.test(m))
+  v('🔴 ON ENCHAÎNE : pop-up de deux secondes, fenêtre vidée, remplissage relu, la fenêtre ne se ferme pas',
+    /setEnregistree\(\{ ref: referenceCommande\(/.test(m) && /nouvelleCommande\(\)\s*setEnvoi\(false\)\s*setRelecture\(v => v \+ 1\)\s*onCree\?\.\(j\)/.test(m)
+    && /setTimeout\(\(\) => setEnregistree\(null\), 2000\)/.test(m)
+    && /\}, \[commercantId, date, relecture\]\)/.test(m)
+    && /function nouvelleCommande\(\) \{\s*setPanier\(\[\]\); setCreneauId\(null\)/.test(m) && /setPaiement\(null\); setAvertissements\(null\)/.test(m))
+  v('🔴 le tableau de bord et le poste relisent leur liste SANS fermer la fenêtre',
+    /onCree=\{\(\) => chargerCommandes\(commercant\.id\)\}/.test(code('app/dashboard/page.js')) && /onCree=\{\(\) => charger\(\)\}/.test(code('app/equipe/PosteEquipe.js')))
   v('🔴 la fenêtre cache les créneaux terminés, relus chaque minute, et lâche un choix terminé',
     /\}\)\.filter\(\(\{ creneau \}\) => !creneauTermine\(creneau, \{ dateStr: date, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\)/.test(m)
     && /setInterval\(\(\) => setMinute\(Date\.now\(\)\), 60000\)/.test(m)

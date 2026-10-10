@@ -49,8 +49,9 @@ import { envoyerEmailsCommande } from '@/lib/commande-notifs'
 import { eurosNus } from '@/lib/montants'
 import {
   ORIGINE_COMMERCANT, MODES_ENCODEE, clientEncode, champsPaiementEncodee,
-  avertissement, confirmationRequise, jugementMoment, creneauTermine, articleHorsJour,
+  avertissement, confirmationRequise, jugementMoment, creneauTermine, articleHorsJour, horsCalendrier,
 } from '@/lib/commande-encodee'
+import { calendrierDuCommerce } from '@/lib/calendrier-commande-server'
 import { joursIndisponibles } from '@/lib/delai-commande'
 
 export const dynamic = 'force-dynamic'
@@ -78,7 +79,7 @@ export async function POST(request) {
     // ── Le commerce, relu en base ─────────────────────────────────────────
     const { data: commercant, error: errC } = await admin
       .from('commercants')
-      .select('id, nom, categorie, tva_taux_defaut, mode_capacite, plan, essai_plan, created_at')
+      .select('id, nom, categorie, tva_taux_defaut, mode_capacite, plan, essai_plan, created_at, horizon_commande')
       .eq('id', commercant_id)
       .maybeSingle()
     if (errC || !commercant) return non('Commerce introuvable.', 404)
@@ -111,6 +112,13 @@ export async function POST(request) {
       .from('fermetures_exceptionnelles').select('date_debut, date_fin').eq('commercant_id', commercant.id)
     if (errF) return non('Impossible de vérifier les fermetures. Réessaie.', 500)
     if (estFermeExceptionnellement(fermetures || [], date_commande)) avertissements.push(avertissement('jour_ferme'))
+    // L'exception « Autre date » (Alex, 10/10) : au-delà du calendrier de la
+    // fiche, on prévient. Même longueur que la fiche (`calendrierDuCommerce`).
+    const calendrier = await calendrierDuCommerce({ supabase: admin, commercant })
+    if (!calendrier.ok) return non('Impossible de lire ton calendrier. Réessaie.', 500)
+    if (horsCalendrier({ jour: date_commande, aujourdhui: jourBruxelles(), longueur: calendrier.longueur })) {
+      avertissements.push(avertissement('hors_calendrier'))
+    }
 
     const colonneBlocage = estLivraison ? 'livraison_creneau_id' : 'creneau_id'
     const { data: blocage, error: errB } = await admin

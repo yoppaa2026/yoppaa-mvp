@@ -13,18 +13,19 @@
 // refait tout, et renvoie ses avertissements (créneau plein, stock court…) ;
 // l'écran les montre, et le commerçant confirme d'un second geste.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { postPro } from '@/lib/fetch-pro'
 import DotsAttente from '@/app/components/DotsAttente'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
-import { remplissageCreneaux } from '@/lib/creneaux'
+import { remplissageCreneaux, jourSemaineDe } from '@/lib/creneaux'
+import { referenceCommande } from '@/lib/numero-commande'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { construireLignesCommande } from '@/lib/lignes-commande'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
 import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
 import { jourPlus } from '@/lib/statut-commerce'
-import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE, creneauTermine, etatTuile } from '@/lib/commande-encodee'
+import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE, creneauTermine, etatTuile, joursDuCalendrier, horsCalendrier } from '@/lib/commande-encodee'
 
 const T = {
   bg: '#F8F6FF', ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -39,6 +40,9 @@ const heure = (h) => String(h || '').slice(0, 5)
 
 export default function ModalNouvelleCommande({ commercantId, jourInitial, onFerme, onCree }) {
   const aujourdhui = jourBruxelles()
+  // Le libellé des pastilles, celui du tableau de bord : « lun. 12 oct. ».
+  const libelleJour = (d) => d === aujourdhui ? 'Aujourd’hui' : d === jourPlus(aujourdhui, 1) ? 'Demain'
+    : new Date(`${d}T12:00:00Z`).toLocaleDateString('fr-BE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
   const [mode, setMode] = useState('retrait')
   const [date, setDate] = useState(jourInitial && jourInitial >= aujourdhui ? jourInitial : aujourdhui)
   const [creneauId, setCreneauId] = useState(null)
@@ -52,6 +56,9 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
   const [recherche, setRecherche] = useState('')
   const [enOptions, setEnOptions] = useState(null)      // article dont on choisit les options
   const [selections, setSelections] = useState({})
+  // Relue après chaque encodage : le remplissage et le stock ont bougé.
+  const [relecture, setRelecture] = useState(0)
+  const fond = useRef(null)
 
   useEffect(() => {
     let annule = false
@@ -64,7 +71,7 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
       setDonnees(j); setCatalogue('ok')
     })()
     return () => { annule = true }
-  }, [commercantId, date])
+  }, [commercantId, date, relecture])
 
   const commercant = useMemo(() => donnees?.commercant || { id: commercantId }, [donnees, commercantId])
   const articles = useMemo(() => donnees?.articles || [], [donnees])
@@ -121,6 +128,23 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
   }).filter(({ creneau }) => !creneauTermine(creneau, { dateStr: date, maintenant: new Date(minute), instant: brusselsInstant })),
   [mode, date, donnees, minute])
   useEffect(() => { setCreneauId(null) }, [mode, date])
+
+  // ── Les jours : ceux du calendrier de la fiche (`joursDuCalendrier`) ─────
+  // « Aujourd'hui » n'y est que s'il reste un créneau, comme sur la fiche.
+  const [autreDate, setAutreDate] = useState(false)
+  const jours = useMemo(() => {
+    if (!donnees?.calendrier) return []
+    const source = (mode === 'livraison' ? donnees.creneauxLivraison : donnees.creneauxRetrait) || []
+    const nomDuJour = jourSemaineDe(aujourdhui)
+    const aujourdhuiOuvert = source.some(c => (!c.jour_semaine || c.jour_semaine === nomDuJour)
+      && !creneauTermine(c, { dateStr: aujourdhui, maintenant: new Date(minute), instant: brusselsInstant }))
+    return joursDuCalendrier({ aujourdhui, longueur: donnees.calendrier.longueur, fermetures: donnees.calendrier.fermetures, aujourdhuiOuvert })
+  }, [donnees, mode, aujourdhui, minute])
+  // Un jour hors des pastilles (onglet du tableau de bord, aujourd'hui passé)
+  // retombe sur le premier jour du calendrier, sauf choix « Autre date ».
+  useEffect(() => {
+    if (!autreDate && jours.length > 0 && !jours.includes(date)) setDate(jours[0])
+  }, [jours, date, autreDate])
   // Le créneau choisi vient de se terminer : il n'est plus choisi.
   useEffect(() => {
     if (creneauId && !creneaux.some(({ creneau }) => creneau.id === creneauId)) setCreneauId(null)
@@ -199,14 +223,48 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
       setErreur(j?.error || 'La commande n’a pas pu être enregistrée. Réessaie.')
       setEnvoi(false); return
     }
+    // 🔴 ON ENCHAÎNE (Alex, 10/10) : « juste un pop-up qui confirme
+    // l'enregistrement et basta ». La fenêtre reste ouverte, vidée pour la
+    // commande suivante (même jour, même mode), et le remplissage est relu.
+    setEnregistree({ ref: referenceCommande({ numero_commande: j?.numero, numero_prefixe: j?.prefixe }), email: !!j?.confirmation_envoyee })
+    nouvelleCommande()
+    setEnvoi(false)
+    setRelecture(v => v + 1)
     onCree?.(j)
   }
+
+  function nouvelleCommande() {
+    setPanier([]); setCreneauId(null); setRecherche(''); setEnOptions(null)
+    setNom(''); setTelephone(''); setEmail(''); setConfirmation(true); setNote('')
+    setAdresse({ code_postal: '', rue_id: null, rue_nom: '', numero: '', situee: null, ville: '' })
+    setComplement(''); setAdresseLibre(''); setNoteLivraison('')
+    setPaiement(null); setAvertissements(null); setErreur(null)
+    fond.current?.scrollTo?.({ top: 0 })
+  }
+
+  // Le pop-up de confirmation part tout seul après deux secondes.
+  const [enregistree, setEnregistree] = useState(null)
+  useEffect(() => {
+    if (!enregistree) return
+    const t = setTimeout(() => setEnregistree(null), 2000)
+    return () => clearTimeout(t)
+  }, [enregistree])
 
   const totalLignes = calcul?.ok ? calcul.totalCents / 100 : null
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Encoder une commande" onClick={() => !envoi && onFerme?.()}
+    <div ref={fond} role="dialog" aria-modal="true" aria-label="Encoder une commande" onClick={() => !envoi && onFerme?.()}
       style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.6)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '16px 12px', overflowY: 'auto', fontFamily: '"DM Sans", sans-serif' }}>
+      {enregistree && (
+        <div role="status" aria-live="polite" onClick={e => { e.stopPropagation(); setEnregistree(null) }}
+          style={{ position: 'fixed', top: '38%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1001, background: '#fff', borderRadius: 16, padding: '18px 26px', boxShadow: '0 20px 50px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 12, border: `2px solid ${T.ok}` }}>
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="11" fill={T.ok}/><path d="M7 12.5l3.2 3.2L17 9" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span>
+            <span style={{ display: 'block', fontSize: 17, fontWeight: 900, color: T.ink }}>Commande enregistrée{enregistree.ref ? ` · n° ${enregistree.ref}` : ''}</span>
+            {enregistree.email && <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: T.muted, marginTop: 2 }}>Confirmation envoyée par e-mail</span>}
+          </span>
+        </div>
+      )}
       <div onClick={e => e.stopPropagation()}
         style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 760, padding: 18, boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
@@ -227,14 +285,28 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
               ))}
             </div>
           )}
+          {/* ⚠️ LES JOURS DE LA FICHE, en pastilles comme le tableau de bord
+              (Alex, 10/10) ; « Autre date » reste l'exception, prévenue. */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-            {[[aujourdhui, 'Aujourd’hui'], [jourPlus(aujourdhui, 1), 'Demain']].map(([d, l]) => (
-              <button key={d} type="button" onClick={() => setDate(d)} aria-pressed={date === d}
-                style={{ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${date === d ? T.main : T.hairline}`, background: date === d ? T.pale : '#fff', color: T.deep, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>{l}</button>
-            ))}
-            <input type="date" value={date} min={aujourdhui} onChange={e => e.target.value && setDate(e.target.value)}
-              aria-label="Autre date" style={{ ...champ, width: 'auto', padding: '7px 10px', fontSize: 14 }}/>
+            {jours.map(d => {
+              const choisi = !autreDate && date === d
+              return (
+                <button key={d} type="button" onClick={() => { setAutreDate(false); setDate(d) }} aria-pressed={choisi}
+                  style={{ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${choisi ? T.main : T.hairline}`, background: choisi ? T.pale : '#fff', color: T.deep, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>{libelleJour(d)}</button>
+              )
+            })}
+            <button type="button" onClick={() => setAutreDate(true)} aria-pressed={autreDate}
+              style={{ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${autreDate ? T.main : T.hairline}`, background: autreDate ? T.pale : '#fff', color: T.deep, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Autre date</button>
+            {autreDate && (
+              <input type="date" value={date} min={aujourdhui} onChange={e => e.target.value && setDate(e.target.value)}
+                aria-label="Autre date" style={{ ...champ, width: 'auto', padding: '7px 10px', fontSize: 14 }}/>
+            )}
           </div>
+          {autreDate && donnees?.calendrier && horsCalendrier({ jour: date, aujourdhui, longueur: donnees.calendrier.longueur }) && (
+            <p style={{ fontSize: 13, fontWeight: 700, color: T.alerte, margin: '0 0 10px' }}>
+              Au-delà de ton calendrier de commande en ligne : tu devras confirmer.
+            </p>
+          )}
           <p style={titre}>{mode === 'livraison' ? 'Tournée' : 'Créneau'}</p>
           {creneaux.length === 0 ? (
             <p style={{ fontSize: 14, color: T.muted, margin: 0 }}>

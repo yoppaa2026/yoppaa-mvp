@@ -1366,9 +1366,8 @@ export default function Dashboard() {
   // sinon `{ raison, motif, nom }` et on montre l'écran d'attente à la place.
   const [refusAcces, setRefusAcces] = useState(null)
   const [erreurFiches, setErreurFiches] = useState(null)
-  // La commande encodée à la main (10/10) : la fenêtre, et ce qu'on dit après.
+  // La commande encodée à la main (10/10) : la fenêtre, qui confirme elle-même.
   const [encoderOuvert, setEncoderOuvert] = useState(false)
-  const [messageEncodee, setMessageEncodee] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
@@ -4251,7 +4250,7 @@ export default function Dashboard() {
                     le détail n'a pas d'heure promise. */}
                 {commercant?.categorie === 'alimentaire' && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-                    <button type="button" onClick={() => { setMessageEncodee(null); setEncoderOuvert(true) }}
+                    <button type="button" onClick={() => setEncoderOuvert(true)}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.deep}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                       Encoder une commande
@@ -4259,22 +4258,14 @@ export default function Dashboard() {
                     <span style={{ fontSize: 13, color: T.muted }}>Téléphone, comptoir : elle prend sa place dans tes créneaux.</span>
                   </div>
                 )}
-                {messageEncodee && (
-                  <p role="status" style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: '10px 14px', color: '#065F46', fontSize: 14, fontWeight: 700, margin: '0 0 12px' }}>
-                    {messageEncodee}
-                  </p>
-                )}
                 {encoderOuvert && commercant && (
                   <ModalNouvelleCommande
                     commercantId={commercant.id}
                     jourInitial={jourActif}
                     onFerme={() => setEncoderOuvert(false)}
-                    onCree={(r) => {
-                      setEncoderOuvert(false)
-                      const ref = referenceCommande({ numero_commande: r?.numero, numero_prefixe: r?.prefixe })
-                      setMessageEncodee(`Commande encodée${ref ? ` (n° ${ref})` : ''}.${r?.confirmation_envoyee ? ' La confirmation est partie par e-mail.' : ''}`)
-                      chargerCommandes(commercant.id)
-                    }}
+                    // ⚠️ LA FENÊTRE RESTE OUVERTE ET CONFIRME ELLE-MÊME (Alex,
+                    // 10/10 : enchaîner les commandes). On relit seulement la liste.
+                    onCree={() => chargerCommandes(commercant.id)}
                   />
                 )}
                 {/* ⚠️ LES BONS CADEAUX VENDUS, que le commerçant ne voyait NULLE

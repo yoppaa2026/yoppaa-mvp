@@ -20,6 +20,7 @@ import { gardeEquipe } from '@/lib/equipe-server'
 import { SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
 import { trierArticles } from '@/lib/ordre-articles'
 import { modeStockDe, dejaCommandePourStock } from '@/lib/stock-article'
+import { calendrierDuCommerce } from '@/lib/calendrier-commande-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,7 @@ export async function POST(request) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return NextResponse.json({ ok: false, error: 'Date invalide.' }, { status: 400 })
 
     const [commerce, articles, deals, retrait, livraison, jour] = await Promise.all([
-      admin.from('commercants').select('id, nom, categorie, mode_capacite, tva_taux_defaut, ordre_categories').eq('id', commercant_id).maybeSingle(),
+      admin.from('commercants').select('id, nom, categorie, mode_capacite, tva_taux_defaut, ordre_categories, horizon_commande').eq('id', commercant_id).maybeSingle(),
       // ⚠️ Les colonnes du stock : celles que `etatStock` lit (comptoir, maximum
       // sur commande, stock qui baisse), comme `verifierStockDisponible`.
       admin.from('articles').select(`${SELECT_ARTICLES}, gere_variantes, ordre, stock_jour, stock_comptoir, stock_comptoir_le, commande_max_jour, stock_maj_le`).eq('commercant_id', commercant_id).eq('actif', true).order('categorie').order('nom'),
@@ -52,6 +53,10 @@ export async function POST(request) {
         return NextResponse.json({ ok: false, error: 'Lecture impossible, réessaie.' }, { status: 500 })
       }
     }
+    // Le calendrier de la fiche (longueur, fermetures) : les pastilles de jours.
+    const calendrier = commerce.data ? await calendrierDuCommerce({ supabase: admin, commercant: commerce.data }) : { ok: false }
+    if (!calendrier.ok) return NextResponse.json({ ok: false, error: 'Lecture impossible, réessaie.' }, { status: 500 })
+
     // Ni prix indicatif, ni versions (taille, couleur) : la boutique de détail.
     // L'ordre choisi par le commerçant (10/10), la règle de la fiche.
     const vendables = trierArticles((articles.data || []).filter(a => !a.est_vitrine && !a.gere_variantes))
@@ -93,6 +98,7 @@ export async function POST(request) {
       groupes,
       stocksJour,
       dejaCommande,
+      calendrier: { longueur: calendrier.longueur, fermetures: calendrier.fermetures },
       deals: deals.data || [],
       creneauxRetrait: retrait.data || [],
       creneauxLivraison: livraison.data || [],

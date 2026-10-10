@@ -253,6 +253,8 @@ function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enC
           )
         })}
       </ul>
+      {/* La note dictée au téléphone (« sans oignons ») : la cuisine la lit ici (10/10). */}
+      {c.notes_client && <p style={{ margin: '8px 0 0', fontSize: 13.5, color: T.ink, background: T.fond, borderRadius: 10, padding: '8px 10px' }}>« {c.notes_client} »</p>}
       {c.mode_retrait === 'livraison' && c.adresse_livraison && (
         <p style={{ margin: '10px 0 0', fontSize: 13 }}><a href={lienCarte(c.adresse_livraison)} target="_blank" rel="noopener noreferrer" style={{ color: T.main, fontWeight: 700 }}>{c.adresse_livraison}</a></p>
       )}

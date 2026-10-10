@@ -690,6 +690,12 @@ function CarteCommande({ commande, numero, categorie = null, commerceNom = null,
                   géocodeur, c'est ici que vivent « portail bleu » et « sonner
                   chez le voisin » : sans mise en évidence, on aurait gagné la
                   tournée et perdu la porte. */}
+              {/* La note pour la cuisine, dictée au téléphone (10/10). */}
+              {commande.notes_client && (
+                <p style={{ margin: '5px 0 0', background: '#F5F3FF', border: `1px solid ${T.pale}`, borderRadius: 8, padding: '5px 8px', fontSize: 13, color: T.ink, fontWeight: 600, lineHeight: 1.4 }}>
+                  « {commande.notes_client} »
+                </p>
+              )}
               {(estLivraison || estExpedition) && commande.note_livraison && (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 5, background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '5px 8px' }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 2 }}><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" stroke="#B45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>

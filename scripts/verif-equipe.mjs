@@ -325,7 +325,14 @@ const membre = (o = {}) => ({
 
   // 🔴 UNE COLONNE ABSENTE FAIT ÉCHOUER TOUTE LA LECTURE : chaque nom existe.
   const cmd = tableDuSchema('commandes')
-  const absentesCmd = colonnes(P.COLONNES_COMMANDE_EQUIPE).filter(c => !cmd.includes(c))
+  // ⚠️ 10/10 : `notes_client` et `origine` arrivent avec la commande encodée ;
+  // elles se prouvent par LEUR migration, comme les couverts plus bas.
+  const migEncodee = lire('migrations/MIGRATION_COMMANDE_ENCODEE.sql')
+  const APRES_RELEVE_CMD = {
+    notes_client: /ADD COLUMN IF NOT EXISTS notes_client text/.test(migEncodee),
+    origine: /ADD COLUMN IF NOT EXISTS origine text NOT NULL DEFAULT 'en_ligne'/.test(migEncodee),
+  }
+  const absentesCmd = colonnes(P.COLONNES_COMMANDE_EQUIPE).filter(c => !cmd.includes(c) && !APRES_RELEVE_CMD[c])
   v('🔴 chaque colonne lue sur `commandes` existe', cmd.length > 30 && absentesCmd.length === 0, absentesCmd.join(', '))
   // Les colonnes arrivées APRÈS le relevé du 28/08 se prouvent par leur migration.
   const APRES_RELEVE = { couverts: 'MIGRATION_COUVERTS_TABLE.sql' }

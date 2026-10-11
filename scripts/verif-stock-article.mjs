@@ -265,8 +265,19 @@ const code = (f) => sansProse(lire(f))
     /\.delete\(\)\.eq\('article_id', articleId\)\.eq\('actif', true\)\s*if \(error\) \{ toast\(`Les quantités par jour n’ont pas pu être retirées/.test(bord)
     && /onClick=\{\(\) => revenirAuDefaut\(editId\)\}/.test(bord))
   v('et il annonce le chiffre ENREGISTRÉ, pas celui en cours de frappe', /Revenir à \{articles\.find\(x => x\.id === editId\)\?\.stock_jour/.test(bord))
-  v('les libellés disent ce qui est vendu en ligne et ce qui reste au comptoir',
-    /'Jours de vente' : 'Vendu en ligne par jour'/.test(bord) && /'Reste au comptoir aujourd’hui'/.test(bord))
+  // (10/10, réorientée) « Vendu en ligne par jour » n'était pas clair (Alex) :
+  // deux blocs titrés, « Le jour même » puis « Sur commande, à l'avance ».
+  v('les libellés disent le jour même, la quantité chaque jour et le comptoir',
+    /'Jours de vente' : 'Quantité chaque jour'/.test(bord) && /'Reste au comptoir aujourd’hui'/.test(bord)
+    && /\{parJours && <p style=\{titreBlocCarte\}>Le jour même<\/p>\}/.test(bord) && !/Vendu en ligne par jour/.test(bord))
+  v('🔴 « Sur commande, à l’avance » a son bloc : APRÈS la grille quand l’article se vend aussi le jour même, AVANT sinon',
+    /<p style=\{titreBlocCarte\}>Sur commande, à l&rsquo;avance<\/p>/.test(bord)
+    && /\{!venteJour && blocSurCommande\(\)\}/.test(bord) && /\{venteJour && blocSurCommande\(\)\}/.test(bord)
+    && bord.indexOf('{!venteJour && blocSurCommande()}') > 0
+    && bord.indexOf("'Jours de vente' : 'Quantité chaque jour'") > bord.indexOf('{!venteJour && blocSurCommande()}')
+    && bord.indexOf('{venteJour && blocSurCommande()}') > bord.indexOf("'Jours de vente' : 'Quantité chaque jour'"))
+  v('le bloc « Sur commande » dit l’avance, le maximum et ce qui est commandé à l’avance',
+    /Au plus tard la veille/.test(bord) && /au maximum par jour/.test(bord) && /Déjà commandé à l&rsquo;avance : /.test(bord))
   v('🔴 la copie emporte « Réservable jusqu’à », pas le comptoir du jour',
     CHAMPS_COPIES.includes('horizon_jours') && !CHAMPS_COPIES.includes('stock_comptoir') && !CHAMPS_COPIES.includes('stock_comptoir_le'))
   v('🔴 le formulaire enregistre « Réservable jusqu’à », vide = automatique',
@@ -607,7 +618,8 @@ const code = (f) => sansProse(lire(f))
   v('🔴 le comptoir du jour ne liste que ce qui se vend le jour même',
     /modeStockDe\(a\) === 'jour' && \(!deuxCircuits \|\| a\.vente_jour !== false\)\)/.test(bord))
   v('🔴 la carte : B se lit à part, et sans le jour même ni pastille ni comptoir',
-    /const venteJour = !deuxCircuits \|\| a\.vente_jour !== false/.test(bord) && /\{enB && \(\(\) => \{/.test(bord)
+    // (10/10) le bloc B est devenu une fonction (`blocSurCommande`), gardée par `enB`.
+    /const venteJour = !deuxCircuits \|\| a\.vente_jour !== false/.test(bord) && /function blocSurCommande\(\) \{\s*if \(!enB\) return null/.test(bord)
     && /\{parJours && venteJour && \(congeAuj \?/.test(bord) && /surCommande=\{commandesSurCommande\[a\.id\] \|\| \{\}\}/.test(bord))
 }
 

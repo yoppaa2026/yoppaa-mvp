@@ -1549,7 +1549,7 @@ function TabMenu({ commercantId, commercant, toast }) {
               {form.stock_mode !== 'illimite' && (
                 <ChampFormulaire label={form.stock_mode === 'jour' ? 'Quantité par jour *' : 'Quantité en stock *'}
                   aide={form.stock_mode === 'jour'
-                    ? 'La quantité de chaque jour. Tu peux la changer jour par jour sur la carte de l’article (« Vendu en ligne par jour »).'
+                    ? 'La quantité de chaque jour. Tu peux la changer jour par jour sur la carte de l’article (« Quantité chaque jour »).'
                     : (variantesCategorie ? 'Si l’article a des variantes, le stock se gère par variante.' : null)}>
                   <Input type="number" min={form.stock_mode === 'jour' ? 1 : 0} value={form.stock_jour} onChange={e => setForm(p => ({ ...p, stock_jour: e.target.value }))} placeholder={form.stock_mode === 'jour' ? '30' : '12'}/>
                   {/* 🔴 LA GRILLE REMPLACE CE CHIFFRE, ET ON LE DIT (Alex, 07/10) :
@@ -3453,6 +3453,9 @@ function VariantesArticle({ article, toast, articles = [] }) {
 const JOURS_KEYS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
 const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
+// Le titre d'un bloc de la carte (« Le jour même », « Sur commande, à l'avance »).
+const titreBlocCarte = { fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 4px' }
+
 function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, surCommande = {}, venduDepuisSaisie = 0 }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
@@ -3547,6 +3550,32 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
     fermerEdition()
   }
 
+  // 🔴 TEMPS 3, B : SUR COMMANDE, À L'AVANCE. Son propre bloc titré (Alex,
+  // 10/10 : « Sur commande… il affiche la quantité journalière et les ventes du
+  // jour ? Pas très clair »). Il ne dit QUE l'avance : le délai, le maximum par
+  // jour de retrait, et ce qui est déjà commandé à l'avance (aujourd'hui
+  // compris : ces commandes-là sont préparées à part).
+  function blocSurCommande() {
+    if (!enB) return null
+    const n = Math.max(1, Math.round((Number(a.delai_minutes) || 0) / 1440))
+    const max = maximumSurCommande(a)
+    const ordre = [...JOURS_KEYS.slice(jourActuelIdx), ...JOURS_KEYS.slice(0, jourActuelIdx)]
+    const reserves = ordre
+      .filter(j => (surCommande[j] || 0) > 0)
+      .map(j => `${j === jourActuelKey ? 'aujourd’hui' : j} ${surCommande[j]}${max ? ` sur ${max}` : ''}`)
+    const quand = n === 1 ? 'Au plus tard la veille' : `Au plus tard ${n} jours avant`
+    return (
+      <div style={{ marginTop: 10 }}>
+        <p style={titreBlocCarte}>Sur commande, à l&rsquo;avance</p>
+        <p style={{ fontSize: 13, color: T.deep, margin: '0 0 8px', lineHeight: 1.5 }}>
+          {quand} · {max ? `${max} au maximum par jour` : 'sans maximum par jour'}
+          <br/>
+          {reserves.length > 0 ? <>Déjà commandé à l&rsquo;avance : {reserves.join(', ')}</> : 'Rien de commandé à l’avance pour l’instant'}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div style={{ ...s.card, opacity: a.actif ? 1 : 0.6, borderLeft: `4px solid ${a.actif ? T.main : '#E5E7EB'}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -3611,8 +3640,14 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
               )
             })()}
             {!estVitrine && !estDetail && vendable && (a.temps_prepa || 0) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: T.bgPanel, background: '#F8F6FF', padding: '3px 9px', borderRadius: 100, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="clock" size={11} color={T.bgPanel}/>{a.temps_prepa} min</span>}
+          </div>
+          {/* 🔴 LE JOUR MÊME : son bloc titré (Alex, 10/10). Ce qui reste
+              aujourd'hui, le geste du comptoir, puis la grille « Quantité chaque
+              jour » ; « Sur commande » vient après, dans le sien. */}
+          {parJours && <p style={titreBlocCarte}>Le jour même</p>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
             {parJours && !venteJour && (
-              <span style={{ fontSize: 13, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 9px', borderRadius: 100 }}>Pas le jour même</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 9px', borderRadius: 100 }}>Pas vendu le jour même</span>
             )}
             {parJours && venteJour && (congeAuj ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.main, background: T.pale, padding: '3px 8px', borderRadius: 100 }}>Fermé aujourd&rsquo;hui (congés)</span>
@@ -3624,7 +3659,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
               <span style={{ fontSize: 11, fontWeight: 700, color: '#10B981', background: '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>Sans limite</span>
             ) : (stockBrutAuj > 0 || effAuj.comptoir) ? (
               <span style={{ fontSize: 11, fontWeight: 700, color: stockRestant === 0 ? '#DC2626' : stockRestant <= 2 ? '#EA580C' : '#10B981', background: stockRestant === 0 ? '#FEE2E2' : stockRestant <= 2 ? '#FFF7ED' : '#F0FDF4', padding: '3px 8px', borderRadius: 100 }}>
-                {effAuj.comptoir ? 'Comptoir (aujourd’hui)' : 'Aujourd’hui'}&nbsp;: {stockRestant} dispo {dejaCommande > 0 && <span style={{ opacity: 0.65 }}>({dejaCommande} commandé{dejaCommande > 1 ? 's' : ''})</span>}
+                {effAuj.comptoir ? 'Comptoir (aujourd’hui)' : 'Aujourd’hui'}&nbsp;: {stockRestant} disponible{stockRestant > 1 ? 's' : ''} {dejaCommande > 0 && <span style={{ opacity: 0.65 }}>({dejaCommande} commandé{dejaCommande > 1 ? 's' : ''})</span>}
               </span>
             ) : (
               <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, background: '#F9FAFB', padding: '3px 8px', borderRadius: 100 }}>Non géré</span>
@@ -3645,7 +3680,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
             {parJours && venteJour && onSetComptoir && !effAuj.ferme && !congeAuj && !journeeFinie && (
               <button type="button"
                 onClick={() => {
-                  const v = window.prompt('Combien en reste-t-il au comptoir, maintenant ?\nPour aujourd’hui seulement. Demain, la quantité vendue en ligne par jour revient.', effAuj.comptoir ? String(stockRestant) : '')
+                  const v = window.prompt('Combien en reste-t-il au comptoir, maintenant ?\nPour aujourd’hui seulement. Demain, la quantité de la grille « Quantité chaque jour » revient.', effAuj.comptoir ? String(stockRestant) : '')
                   if (v === null || String(v).trim() === '') return
                   const reste = Math.max(0, parseInt(v, 10) || 0)
                   onSetComptoir(a.id, reste + dejaCommande)
@@ -3665,31 +3700,15 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
             )}
           </div>
 
-          {/* 🔴 TEMPS 3, B : SUR COMMANDE. Ce qui est déjà réservé pour les
-              prochains jours se lit ici, jamais sur la grille, qui est celle
-              du jour même. Aujourd'hui compris : les commandes passées un jour
-              d'avant pour aujourd'hui sont préparées à part. */}
-          {enB && (() => {
-            const n = Math.max(1, Math.round((Number(a.delai_minutes) || 0) / 1440))
-            const max = maximumSurCommande(a)
-            const ordre = [...JOURS_KEYS.slice(jourActuelIdx), ...JOURS_KEYS.slice(0, jourActuelIdx)]
-            const reserves = ordre
-              .filter(j => (surCommande[j] || 0) > 0)
-              .map(j => `${j === jourActuelKey ? 'aujourd’hui' : j} ${surCommande[j]}${max ? ` sur ${max}` : ''}`)
-            return (
-              <p style={{ fontSize: 13, color: T.deep, margin: '0 0 8px', lineHeight: 1.5 }}>
-                <strong>Sur commande</strong> : {n} jour{n > 1 ? 's' : ''} à l&rsquo;avance · {max ? `${max} par jour` : 'sans limite'}
-                {reserves.length > 0 ? <> · déjà réservé : {reserves.join(', ')}</> : ' · rien de réservé pour l’instant'}
-              </p>
-            )
-          })()}
+          {/* Un article SUR COMMANDE SEULEMENT : son bloc avant ses jours de vente. */}
+          {!venteJour && blocSurCommande()}
 
           {/* 7 chips par jour : quantité par jour, ou seulement « vendu ce
               jour ou non » pour un article sans limite. Rien en vitrine, rien
               pour un stock en magasin (un seul chiffre, plus haut). */}
           {parJours && <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{sansQuantite ? 'Jours de vente' : 'Vendu en ligne par jour'}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{sansQuantite ? 'Jours de vente' : 'Quantité chaque jour'}</span>
               {!sansQuantite && <button onClick={() => {
                 const v = window.prompt('Stock disponible à appliquer aux 7 jours :', String(stockRestant))
                 if (v !== null) {
@@ -3697,7 +3716,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
                   onSetStockTousJours(a.id, dispo, consoParJour)
                 }
               }} style={{ ...s.btn, ...s.btnGhost, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
-                Appliquer à tous
+                Même quantité tous les jours
               </button>}
             </div>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -3810,6 +3829,8 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
               )
             })()}
           </div>}
+          {/* Vendu aussi le jour même : « Sur commande » APRÈS la grille du jour même. */}
+          {venteJour && blocSurCommande()}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
           <Toggle value={a.actif} onChange={() => onToggle(a)}/>

@@ -37,7 +37,7 @@ import { resteAEncaisser, resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import { retourArriereAutorise } from '@/lib/tableau-de-bord'
 import { STATUT_SUIVANT, LIBELLE_GESTE_SUIVANT, transitionPermise } from '@/lib/statuts-commande'
 import { peutMarquerNonRetire } from '@/lib/rappels-retrait'
-import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from '@/app/dashboard/ReglageEtiquettes'
+import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes, useStationComptoir } from '@/app/dashboard/ReglageEtiquettes'
 import { imprimerSiActive } from '@/lib/impression-etiquette'
 import { etiquetteConcernee } from '@/lib/etiquette-commande'
 import { gesteLivraisonPermis } from '@/lib/livraison-geste'
@@ -220,7 +220,7 @@ function useFiltre(filtres) {
   return [filtre, setFiltre]
 }
 
-function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enCours = null, etiquettes = false, retourPossible = false }) {
+function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enCours = null, etiquettes = false, comptoir = null, retourPossible = false }) {
   const vers = STATUT_SUIVANT[c.statut]
   const occupe = enCours === c.id
   const avancer = gestes && vers && transitionPermise(c, vers)
@@ -300,7 +300,7 @@ function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enC
       )}
       {/* Le rattrapage et les sacs en plus, sur l'appareil qui imprime seulement. */}
       {etiquettes && ['en_preparation', 'pret'].includes(c.statut) && etiquetteConcernee(c) && (
-        <BoutonEtiquettes commande={c} categorie={commerce.categorie} commerce={commerce.nom}/>
+        <BoutonEtiquettes commande={c} categorie={commerce.categorie} commerce={commerce.nom} comptoir={comptoir}/>
       )}
     </div>
   )
@@ -309,7 +309,7 @@ function CarteCommande({ c, commerce, gestes = null, gestesLivraison = null, enC
 // La liste complète d'un onglet (Retraits OU Livraisons), groupée par jour.
 // `filtres` vient de `lib/poste-vues.js` ; `gestesLivraison` n'est donné que
 // dans l'onglet Livraisons, et seulement à qui a la case.
-function Commandes({ commandes, commerce, aujourdhui, filtres, gestes = null, gestesLivraison = null, enCours = null }) {
+function Commandes({ commandes, commerce, aujourdhui, filtres, gestes = null, gestesLivraison = null, enCours = null, comptoir = null }) {
   const [filtre, setFiltre] = useFiltre(filtres)
   const [etiquettesIci, reglerEtiquettes] = useEtiquettesAppareil()
   const garde = filtres.find(f => f.cle === filtre)?.garde || (() => true)
@@ -326,13 +326,13 @@ function Commandes({ commandes, commerce, aujourdhui, filtres, gestes = null, ge
   return (
     <div>
       <PastillesFiltres filtres={filtres} liste={commandes} filtre={filtre} onChoisir={setFiltre}/>
-      {gestes && <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commerce.nom}/>}
+      {gestes && <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commerce.nom} comptoir={comptoir}/>}
       {parJour.length === 0 && <p style={{ margin: '16px 0', color: T.muted, fontSize: 14 }}>Rien ici pour le moment.</p>}
       {parJour.map(([jour, liste]) => (
         <div key={jour} style={{ marginBottom: 16 }}>
           <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '1px' }}>{libelleJourPoste(jour, aujourdhui)}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce} gestes={gestes} gestesLivraison={gestesLivraison} enCours={enCours} etiquettes={etiquettesIci && !!gestes} retourPossible={filtre === 'recupere'}/>)}
+            {liste.map(c => <CarteCommande key={c.id} c={c} commerce={commerce} gestes={gestes} gestesLivraison={gestesLivraison} enCours={enCours} etiquettes={(etiquettesIci || !!comptoir?.aStation) && !!gestes} comptoir={comptoir} retourPossible={filtre === 'recupere'}/>)}
           </div>
         </div>
       ))}
@@ -440,6 +440,8 @@ function Livraisons({ livraisons, gestes = null, enCours = null }) {
 // ─── Le poste ────────────────────────────────────────────────────────────────
 export default function PosteEquipe({ equipe, onChanger }) {
   const [etat, setEtat] = useState({ charge: false })
+  // La tablette du comptoir (« Yoppaa Comptoir », 11/10).
+  const comptoir = useStationComptoir(equipe.commercant_id)
   // L'onglet reprend celui de l'adresse : un rafraîchissement ne ramène plus
   // au premier (lib/poste-adresse.js). Ce composant ne naît que dans le
   // navigateur, après le choix du commerce : `window` existe ici.
@@ -738,7 +740,9 @@ export default function PosteEquipe({ equipe, onChanger }) {
       // travail sans attendre, donc on est encore dans le toucher, ce que
       // Safari exige pour ouvrir la fenêtre d'impression. Elle ne bloque rien.
       // Au démarrage de la prépa (Alex, 01/10) : c'est aussi le bon de préparation.
-      if (vers === 'en_preparation') imprimerSiActive(c, { categorie, commerce: etat.commerce?.nom })
+      // 🔴 AVEC UNE TABLETTE DU COMPTOIR, le serveur dépose l'étiquette dans la
+      // file (11/10) : le navigateur se tait, sinon elle sortirait deux fois.
+      if (vers === 'en_preparation' && !comptoir.aStation) imprimerSiActive(c, { categorie, commerce: etat.commerce?.nom })
       let encaissement = null
       if (vers === 'recupere' && !c.encaisse_mode) {
         const reste = resteAEncaisserCommande(c)
@@ -896,7 +900,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
       )}
       {actif === 'commandes' && etat.commandes && (
         <Commandes key="retraits" commandes={commandesDeLaVue(etat.commandes, 'retrait')} filtres={FILTRES_RETRAIT}
-          commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null} enCours={enCours}/>
+          commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null} enCours={enCours} comptoir={comptoir}/>
       )}
       {/* ⚠️ LA CUISINE (case « Commandes ») voit les livraisons COMPLÈTES, tous
           les jours ouverts, pour les préparer ; les boutons du livreur s'y
@@ -906,7 +910,7 @@ export default function PosteEquipe({ equipe, onChanger }) {
         ? (
           <Commandes key="livraisons" commandes={commandesDeLaVue(etat.commandes, 'livraison')} filtres={FILTRES_LIVRAISON}
             commerce={etat.commerce} aujourdhui={etat.aujourdhui} gestes={etat.droits?.commandes ? gestesCommande : null}
-            gestesLivraison={etat.droits?.livraisons ? gestesLivraison : (etat.droits?.commandes ? gestesLivraisonComptoir : null)} enCours={enCours}/>
+            gestesLivraison={etat.droits?.livraisons ? gestesLivraison : (etat.droits?.commandes ? gestesLivraisonComptoir : null)} enCours={enCours} comptoir={comptoir}/>
         )
         : etat.livraisons && <Livraisons livraisons={etat.livraisons} gestes={etat.droits?.livraisons ? gestesLivraison : null} enCours={enCours}/>)}
       {/* Le comptoir (étape 5) : seulement avec la case, le serveur ne l'envoie qu'à elle. */}

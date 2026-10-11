@@ -1022,7 +1022,8 @@ const membre = (o = {}) => ({
   // ⚠️ REPOINTÉE LE 06/10 : sans la case « Livraisons », la case « Commandes »
   // reçoit le seul geste de comptoir « Retirée au magasin » (décision d'Alex).
   v('🔴 dans l’onglet Livraison, les boutons du livreur suivent SA case',
-    /gestesLivraison=\{etat\.droits\?\.livraisons \? gestesLivraison : \(etat\.droits\?\.commandes \? gestesLivraisonComptoir : null\)\} enCours=\{enCours\}\/>/.test(poste)
+    // Réorientée le 11/10 : la carte reçoit aussi la tablette du comptoir.
+    /gestesLivraison=\{etat\.droits\?\.livraisons \? gestesLivraison : \(etat\.droits\?\.commandes \? gestesLivraisonComptoir : null\)\} enCours=\{enCours\} comptoir=\{comptoir\}\/>/.test(poste)
     && /\{gestesLivraison && estLivraison\(c\) && c\.statut === 'pret' && \(\s*<BoutonsLivraison l=\{pourLeLivreur\(c\)\} gestes=\{gestesLivraison\} enCours=\{enCours\}\/>/.test(poste))
   v('🔴 le livreur seul a les mêmes filtres', /const \[filtre, setFiltre\] = useFiltre\(FILTRES_LIVRAISON\)/.test(poste) && /<PastillesFiltres filtres=\{FILTRES_LIVRAISON\} liste=\{livraisons\}/.test(poste))
   v('🔴 plus de « En préparation » écrit sur une commande nouvelle', !/En préparation : pas encore prête/.test(poste) && /Pas encore prête à partir\./.test(poste))

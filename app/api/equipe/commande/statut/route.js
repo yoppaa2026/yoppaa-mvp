@@ -22,8 +22,23 @@ import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { resteAEncaisserCommande } from '@/lib/rdv-paiement'
 import { champsEncaissement } from '@/lib/encaissement'
 import { transitionPermise } from '@/lib/statuts-commande'
+import { etiquetteADeposer } from '@/lib/file-etiquettes'
 
 export const dynamic = 'force-dynamic'
+
+// 'deposee' | 'sans_station' | 'non_concernee' | 'echec'
+async function deposerEtiquette(admin, { commande, commercantId, deStatut, versStatut }) {
+  if (deStatut !== 'en_attente' || versStatut !== 'en_preparation') return 'non_concernee'
+  const { data: station, error: errS } = await admin.from('stations_impression')
+    .select('commercant_id').eq('commercant_id', commercantId).maybeSingle()
+  if (errS) { console.error('[equipe/commande/statut] station illisible', errS.message); return 'echec' }
+  if (!etiquetteADeposer({ commande, deStatut, versStatut, stationExiste: !!station })) return station ? 'non_concernee' : 'sans_station'
+  const { error } = await admin.from('etiquettes_impression').insert({
+    commercant_id: commercantId, commande_id: commande.id, origine: 'demarrage', sacs: 1,
+  })
+  if (error) { console.error('[equipe/commande/statut] étiquette non déposée', error.message); return 'echec' }
+  return 'deposee'
+}
 
 // Ce que lisent la transition et `resteAEncaisserCommande`, et rien d'autre.
 const COLONNES = 'id, statut, mode_retrait, total, paye_en_ligne, bon_cadeau_montant, fidelite_remise, encaisse_mode'
@@ -61,7 +76,15 @@ export async function POST(request) {
       action: 'commande_statut', cible_type: 'commande', cible_id: commande_id,
       details: { de: c.statut, vers: statut, encaissement: champs?.encaisse_mode || null, montant: champs?.encaisse_montant ?? null },
     })
-    return NextResponse.json({ ok: true, commande_id, statut, encaisse: champs })
+
+    // 🖨️ L'ÉTIQUETTE DANS LA FILE DU COMPTOIR (« Yoppaa Comptoir », 11/10).
+    // Décision d'Alex : TOUTES les étiquettes passent par la file, d'où que
+    // vienne le geste (tablette, téléphone, PC). Ici, et nulle part ailleurs :
+    // c'est la route que prennent le tableau de bord ET le Poste.
+    // ⚠️ L'étiquette n'empêche jamais la commande d'avancer : un échec se dit
+    // dans la réponse (`etiquette`), il ne la refuse pas.
+    const etiquette = await deposerEtiquette(admin, { commande: c, commercantId: verdict.commercant.id, deStatut: c.statut, versStatut: statut })
+    return NextResponse.json({ ok: true, commande_id, statut, encaisse: champs, etiquette })
   } catch (e) {
     console.error('[equipe/commande/statut] erreur', e)
     return NextResponse.json({ ok: false, error: e?.message || String(e) }, { status: 500 })

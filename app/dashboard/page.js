@@ -73,7 +73,7 @@ import BandeauFicheAPublier from './BandeauFicheAPublier'
 import BandeauOuMeTrouver from './BandeauOuMeTrouver'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
 import AideInstallation from './AideInstallation'
-import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from './ReglageEtiquettes'
+import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes, useStationComptoir } from './ReglageEtiquettes'
 import { imprimerSiActive } from '@/lib/impression-etiquette'
 import { etiquetteConcernee } from '@/lib/etiquette-commande'
 import { PALETTE_STATUT, COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
@@ -528,7 +528,7 @@ const ACTIONS_RDV_LABEL = {
 // version y ecrivait `commercant?.categorie` : une variable inexistante, donc
 // un ecran blanc au rendu. Attrape par `verif:undef`, pas par le lint
 // principal, ou la regle `no-undef` est eteinte.
-function CarteCommande({ commande, numero, categorie = null, commerceNom = null, etiquettes = false, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, onAnnulerCommerce = null, filtreCourant, modeHistorique = false }) {
+function CarteCommande({ commande, numero, categorie = null, commerceNom = null, etiquettes = false, comptoir = null, onChangerStatut, onLivraisonStatut, onExpedier, onProduitsRemis, onRetourArriere, onAnnulerCommerce = null, filtreCourant, modeHistorique = false }) {
   const statut = STATUTS[commande.statut] || STATUTS['en_attente']
   const { couleur } = statut
   const estLivraison = commande.mode_retrait === 'livraison'
@@ -891,7 +891,7 @@ function CarteCommande({ commande, numero, categorie = null, commerceNom = null,
         {/* Le rattrapage et les sacs en plus (ReglageEtiquettes.js), sur
             l'appareil qui imprime seulement. */}
         {etiquettes && !modeHistorique && ['en_preparation', 'pret'].includes(commande.statut) && etiquetteConcernee(commande) && (
-          <BoutonEtiquettes commande={commande} categorie={categorie} commerce={commerceNom}/>
+          <BoutonEtiquettes commande={commande} categorie={categorie} commerce={commerceNom} comptoir={comptoir}/>
         )}
         {/* ⚠️ LA PORTE DE SECOURS, quand la commande est déjà remise sans que
             l'encaissement ait été noté : les 66 commandes antérieures à ce
@@ -1364,6 +1364,9 @@ export default function Dashboard() {
 
 
   const [commercant, setCommercant] = useState(null)
+  // La tablette du comptoir (« Yoppaa Comptoir », 11/10) : avec elle, toutes
+  // les étiquettes passent par la file, et le navigateur n'imprime plus.
+  const comptoir = useStationComptoir(commercant?.id)
   // Verdict d'accès au tableau de bord. `null` tant qu'on n'a rien décidé,
   // sinon `{ raison, motif, nom }` et on montre l'écran d'attente à la place.
   const [refusAcces, setRefusAcces] = useState(null)
@@ -2143,7 +2146,9 @@ export default function Dashboard() {
     // ressortir à « prête ».
     if (statut === 'en_preparation') {
       const aImprimer = commandes.find(x => x.id === commandeId)
-      if (aImprimer?.statut === 'en_attente') imprimerSiActive(aImprimer, { categorie: commercant?.categorie, commerce: commercant?.nom })
+      // 🔴 AVEC UNE TABLETTE DU COMPTOIR, le serveur dépose l'étiquette dans la
+      // file (11/10) : le navigateur se tait, sinon elle sortirait deux fois.
+      if (aImprimer?.statut === 'en_attente' && !comptoir.aStation) imprimerSiActive(aImprimer, { categorie: commercant?.categorie, commerce: commercant?.nom })
     }
     // ⚠️ LE MÊME GESTE QUE SUR UN RENDEZ-VOUS, ET POUR LA MÊME RAISON. Une
     // commande payée sur place partait au comptoir sans son moyen : un Click
@@ -4443,7 +4448,7 @@ export default function Dashboard() {
                         numero={getNumeroJour(commandes, commande.id)}
                         categorie={commercant?.categorie}
                         commerceNom={commercant?.nom}
-                        etiquettes={etiquettesIci}
+                        etiquettes={etiquettesIci || comptoir.aStation} comptoir={comptoir}
                         onChangerStatut={changerStatut}
                         onLivraisonStatut={changerStatutLivraison}
                         onAnnulerCommerce={annulerParLeCommerce}
@@ -4461,7 +4466,7 @@ export default function Dashboard() {
                     l'appareil, pas une information du travail. */}
                 {!modeHistorique && (
                   <div style={{ marginTop: 16 }}>
-                    <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom}/>
+                    <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom} comptoir={comptoir}/>
                   </div>
                 )}
               </>
@@ -4591,7 +4596,7 @@ export default function Dashboard() {
                 numero={getNumeroJour(commandes, ouverte.id)}
                 categorie={commercant?.categorie}
                 commerceNom={commercant?.nom}
-                etiquettes={etiquettesIci}
+                etiquettes={etiquettesIci || comptoir.aStation} comptoir={comptoir}
                 onChangerStatut={changerStatut}
                 onLivraisonStatut={changerStatutLivraison}
                 onAnnulerCommerce={annulerParLeCommerce}

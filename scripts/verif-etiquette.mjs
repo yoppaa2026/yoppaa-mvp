@@ -360,14 +360,18 @@ const avantPremierAwait = (corps, appel) => {
   v('🔴 tableau de bord : l’étiquette part AVANT le premier await (sinon Safari n’imprime rien)',
     avantPremierAwait(corps, 'imprimerSiActive(aImprimer, { categorie: commercant?.categorie, commerce: commercant?.nom })'))
   v('🔴 l’étiquette sort au DÉMARRAGE de la prépa, depuis « en attente » seulement',
-    /if \(statut === 'en_preparation'\) \{\s*const aImprimer = commandes\.find\(x => x\.id === commandeId\)\s*if \(aImprimer\?\.statut === 'en_attente'\) imprimerSiActive\(/.test(corps))
+    // Réorientée le 11/10 : avec une tablette du comptoir, le navigateur se tait.
+    /if \(statut === 'en_preparation'\) \{\s*const aImprimer = commandes\.find\(x => x\.id === commandeId\)\s*(\/\/[^\n]*\n\s*)*if \(aImprimer\?\.statut === 'en_attente' && !comptoir\.aStation\) imprimerSiActive\(/.test(corps))
   v('🔴 et UNE seule fois : plus rien à « prête »', (corps.match(/imprimerSiActive\(/g) || []).length === 1)
   v('🔴 le bouton appelle ce passage sans rien attendre avant',
-    /onClick=\{\(\) => onChangerStatut\(commande\.id, statut\.next\)\}/.test(bord) && /onChangerStatut=\{changerStatut\}/.test(bord))
-  v('🔴 le rattrapage existe sur la carte, DÈS la préparation', /\{etiquettes && !modeHistorique && \['en_preparation', 'pret'\]\.includes\(commande\.statut\) && etiquetteConcernee\(commande\) && \(\s*<BoutonEtiquettes commande=\{commande\} categorie=\{categorie\} commerce=\{commerceNom\}\/>/.test(bord))
+    // ⚠️ (11/10) DEUX cartes complètes : la grille ET la carte ouverte. Les
+    // deux, comptées : une seule trouvée laissait passer l'autre.
+    /onClick=\{\(\) => onChangerStatut\(commande\.id, statut\.next\)\}/.test(bord) && bord.split('onChangerStatut={changerStatut}').length === 3)
+  v('🔴 le rattrapage existe sur la carte, DÈS la préparation (et suit la tablette du comptoir)', /\{etiquettes && !modeHistorique && \['en_preparation', 'pret'\]\.includes\(commande\.statut\) && etiquetteConcernee\(commande\) && \(\s*<BoutonEtiquettes commande=\{commande\} categorie=\{categorie\} commerce=\{commerceNom\} comptoir=\{comptoir\}\/>/.test(bord))
   v('🔴 le réglage est aussi sur l’écran des livraisons',
     // (11/10) en bas de l'onglet, dans son bloc : un réglage de l'appareil.
-    /\{!modeHistorique && \(\s*<div style=\{\{ marginTop: 16 \}\}>\s*<ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commercant\?\.nom\}\/>/.test(bord) && /etiquettes=\{etiquettesIci\}/.test(bord))
+    // Réorientée le 11/10 : le réglage et les cartes suivent la tablette du comptoir.
+    /\{!modeHistorique && \(\s*<div style=\{\{ marginTop: 16 \}\}>\s*<ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commercant\?\.nom\} comptoir=\{comptoir\}\/>/.test(bord) && /etiquettes=\{etiquettesIci \|\| comptoir\.aStation\} comptoir=\{comptoir\}/.test(bord))
   // 🔴 (11/10) LA CARTE COMPACTE IMPRIME AUSSI AU DÉMARRAGE : elle passe par
   // `changerStatut`, qui lance l'étiquette avant son premier `await`.
   v('🔴 la carte compacte démarre la prépa par LE geste qui imprime',
@@ -378,23 +382,32 @@ const avantPremierAwait = (corps, appel) => {
   const avancer = j >= 0 ? poste.slice(j, poste.indexOf('nonRetire:', j)) : ''
   v('le geste « avancer » du Poste a été retrouvé', avancer.length > 200, String(avancer.length))
   v('🔴 Poste : l’étiquette part AVANT le premier await, au démarrage de la prépa',
-    avantPremierAwait(avancer, "if (vers === 'en_preparation') imprimerSiActive(c, { categorie, commerce: etat.commerce?.nom })"))
+    avantPremierAwait(avancer, "if (vers === 'en_preparation' && !comptoir.aStation) imprimerSiActive(c, { categorie, commerce: etat.commerce?.nom })"))
   v('🔴 Poste : une seule fois', (avancer.match(/imprimerSiActive\(/g) || []).length === 1)
   const k = poste.indexOf('async function geste(id, travail) {')
   const geste = k >= 0 ? poste.slice(k, poste.indexOf('}', poste.indexOf('await travail()', k))) : ''
   v('🔴 et `geste` lance le travail sans rien attendre avant',
     /await travail\(\)/.test(geste) && geste.indexOf('await ') === geste.indexOf('await travail()'), geste.slice(0, 200))
-  v('🔴 le rattrapage existe sur la carte du Poste, dès la préparation', /\{etiquettes && \['en_preparation', 'pret'\]\.includes\(c\.statut\) && etiquetteConcernee\(c\) && \(\s*<BoutonEtiquettes commande=\{c\} categorie=\{commerce\.categorie\} commerce=\{commerce\.nom\}\/>/.test(poste))
+  v('🔴 le rattrapage existe sur la carte du Poste, dès la préparation (et suit la tablette du comptoir)', /\{etiquettes && \['en_preparation', 'pret'\]\.includes\(c\.statut\) && etiquetteConcernee\(c\) && \(\s*<BoutonEtiquettes commande=\{c\} categorie=\{commerce\.categorie\} commerce=\{commerce\.nom\} comptoir=\{comptoir\}\/>/.test(poste))
+  // Réorientée le 11/10 : la tablette du comptoir ouvre aussi le bouton, jamais sans le droit.
   v('🔴 sans le droit « commandes », pas de réglage ni de bouton',
-    /\{gestes && <ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commerce\.nom\}\/>\}/.test(poste) && /etiquettes=\{etiquettesIci && !!gestes\}/.test(poste))
+    /\{gestes && <ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commerce\.nom\} comptoir=\{comptoir\}\/>\}/.test(poste) && /etiquettes=\{\(etiquettesIci \|\| !!comptoir\?\.aStation\) && !!gestes\}/.test(poste))
 
   const reglage = code('app/dashboard/ReglageEtiquettes.js')
   v('🔴 le réglage part éteint, puis lit l’appareil', /const \[actif, setActif\] = useState\(false\)/.test(reglage) && /setActif\(lireImpressionActive\(\)\)/.test(reglage))
-  v('🔴 « Imprimer » imprime UNE étiquette PAR SAC, dans le clic',
-    /onClick=\{\(\) => imprimerEtiquette\(etiquettesPourSacs\(contenuEtiquette\(commande, \{ categorie, commerce \}\), sacs\)\)\}/.test(reglage))
+  // Réorientée le 11/10 : sans tablette, l'impression du navigateur part
+  // AVANT tout `await` (le geste de Safari) ; avec, la demande va à la file.
+  const iImprimer = reglage.indexOf('async function imprimer() {')
+  const corpsImprimer = iImprimer >= 0 ? reglage.slice(iImprimer, reglage.indexOf('\n  }\n', iImprimer)) : ''
+  const iRetour = corpsImprimer.lastIndexOf('return\n')
+  const iNavig = corpsImprimer.indexOf('imprimerEtiquette(etiquettesPourSacs(contenuEtiquette(commande, { categorie, commerce }), sacs))')
+  v('🔴 « Imprimer » imprime UNE étiquette PAR SAC, dans le clic ; avec une tablette, par la file',
+    /onClick=\{imprimer\}/.test(reglage) && iNavig > 0 && iRetour > 0 && iNavig > iRetour
+    && !/await/.test(corpsImprimer.slice(iRetour, iNavig))
+    && /if \(comptoir\?\.aStation\) \{[\s\S]*?comptoir\.demander\(\{ origine: 'reimpression', commande_id: commande\.id, sacs \}\)[\s\S]*?return\s*\}/.test(corpsImprimer))
   v('🔴 l’étiquette d’essai porte le nom du commerce, comme les vraies',
     /onClick=\{\(\) => imprimerEtiquette\(\{ \.\.\.ETIQUETTE_ESSAI, commerce: commerce \|\| null \}\)\}/.test(reglage)
-    && /export default function ReglageEtiquettes\(\{ actif, onChanger, commerce = null \}\)/.test(reglage))
+    && /export default function ReglageEtiquettes\(\{ actif, onChanger, commerce = null, comptoir = null \}\)/.test(reglage))
   v('le compteur part d’un sac', /const \[sacs, setSacs\] = useState\(1\)/.test(reglage))
 }
 

@@ -1884,7 +1884,8 @@ const verifie = (nom, cond, detail = '') => {
   verifie('🔴 la carte complète s’ouvre avec TOUS ses gestes, relue dans `commandes`, sous les confirmations',
     /const ouverte = commandes\.find\(x => x\.id === commandeOuverteId\)/.test(page)
     && /zIndex: 9990/.test(page)
-    && ['onChangerStatut={changerStatut}', 'onLivraisonStatut={changerStatutLivraison}', 'onAnnulerCommerce={annulerParLeCommerce}', 'onExpedier={setCommandeAExpedier}', 'onProduitsRemis={produitsRemis}', 'onRetourArriere={annulerRemise}', 'etiquettes={etiquettesIci}']
+    // Réorientée le 11/10 : les étiquettes suivent aussi la tablette du comptoir.
+    && ['onChangerStatut={changerStatut}', 'onLivraisonStatut={changerStatutLivraison}', 'onAnnulerCommerce={annulerParLeCommerce}', 'onExpedier={setCommandeAExpedier}', 'onProduitsRemis={produitsRemis}', 'onRetourArriere={annulerRemise}', 'etiquettes={etiquettesIci || comptoir.aStation} comptoir={comptoir}']
       .every(p => page.split(p).length >= 3))
   verifie('🔴 la carte compacte : un seul geste (`actionSuivante`), l’étape lancée DANS le clic (l’étiquette s’imprime pendant le geste), le reste par « ⋯ »',
     /const action = actionSuivante\(commande\)/.test(vue) && /try \{ await onAvancer\(commande, action\.statut\) \} finally \{ setEnvoi\(false\) \}/.test(vue)

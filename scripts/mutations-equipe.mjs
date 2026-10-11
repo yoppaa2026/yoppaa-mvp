@@ -357,7 +357,7 @@ const MUTATIONS = [
   { nom: '🔴 les boutons du livreur sans la case « Livraisons »',
     // ⚠️ ANCRE REPOINTÉE LE 06/10 : la case « Commandes » seule reçoit le
     // geste de comptoir (« Retirée au magasin »).
-    fichier: 'app/equipe/PosteEquipe.js', de: 'gestesLivraison={etat.droits?.livraisons ? gestesLivraison : (etat.droits?.commandes ? gestesLivraisonComptoir : null)} enCours={enCours}/>', vers: 'gestesLivraison={gestesLivraison} enCours={enCours}/>' },
+    fichier: 'app/equipe/PosteEquipe.js', de: 'gestesLivraison={etat.droits?.livraisons ? gestesLivraison : (etat.droits?.commandes ? gestesLivraisonComptoir : null)} enCours={enCours} comptoir={comptoir}/>', vers: 'gestesLivraison={gestesLivraison} enCours={enCours} comptoir={comptoir}/>' },
   { nom: '🔴 les boutons du livreur sur un retrait',
     fichier: 'app/equipe/PosteEquipe.js', de: "      {gestesLivraison && estLivraison(c) && c.statut === 'pret' && (", vers: '      {gestesLivraison && (' },
   { nom: '⚠️ « En préparation » revient sur une commande nouvelle',

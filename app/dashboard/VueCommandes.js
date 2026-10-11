@@ -22,8 +22,9 @@ import { confirme } from './PosteConfirmation'
 import { confirmationSimple } from '@/lib/confirmations'
 import {
   colonnesDeCommandes, actionSuivante, enRetard, lignesCourtes, heureDeRetrait,
-  aPreparer, periodeExport, csvCommandes,
+  aPreparer, periodeExport,
 } from '@/lib/vue-commandes'
+import { donneesExport, pdfCommandes } from '@/lib/export-commandes-pdf'
 
 const T = {
   ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', pale: '#EDE0FF', muted: '#5B6170',
@@ -189,8 +190,7 @@ export function BandeCreneaux({ creneauxRemplis = [], estTournee = false, etatCr
 // ─── « À PRÉPARER » ET L'EXPORT ─────────────────────────────────────────────
 const CLE_OUVERT = 'yoppaa:a-preparer-ouvert'
 
-function telecharger(nomFichier, texte) {
-  const blob = new Blob([texte], { type: 'text/csv;charset=utf-8' })
+function telecharger(nomFichier, blob) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url; a.download = nomFichier
@@ -210,15 +210,27 @@ export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], j
     return () => clearTimeout(t)
   }, [message])
   const prep = aPreparer(commandesDuJour)
+  const [enExport, setEnExport] = useState(null) // 'jour' | 'semaine'
 
-  function exporter(quoi) {
+  // 🔴 EN PDF (Alex, 11/10) : un A4 couché, un bandeau par jour, une commande
+  // par ligne. Les données sont rangées par `donneesExport` (pur, mesuré).
+  async function exporter(quoi) {
+    if (enExport) return
     const periode = periodeExport(jour, quoi)
     if (!periode) return
-    const { nombre, texte } = csvCommandes(toutesCommandes, { ...periode, categorie })
-    if (nombre === 0) { setMessage(quoi === 'semaine' ? 'Aucune commande cette semaine.' : 'Aucune commande ce jour-là.'); return }
-    const base = String(commerceNom || 'commandes').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()
-    telecharger(`${base}-${periode.debut}${periode.fin !== periode.debut ? `_${periode.fin}` : ''}.csv`, texte)
-    setMessage(`${nombre} commande${nombre > 1 ? 's' : ''} exportée${nombre > 1 ? 's' : ''} (du ${periode.debut.split('-').reverse().join('/')}${periode.fin !== periode.debut ? ` au ${periode.fin.split('-').reverse().join('/')}` : ''}).`)
+    const donnees = donneesExport(toutesCommandes, { ...periode, categorie })
+    if (donnees.nombre === 0) { setMessage(quoi === 'semaine' ? 'Aucune commande cette semaine.' : 'Aucune commande ce jour-là.'); return }
+    setEnExport(quoi)
+    try {
+      const blob = await pdfCommandes(donnees, { commerceNom, periode })
+      const base = String(commerceNom || 'commandes').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()
+      telecharger(`${base}-${periode.debut}${periode.fin !== periode.debut ? `_${periode.fin}` : ''}.pdf`, blob)
+      setMessage(`${donnees.nombre} commande${donnees.nombre > 1 ? 's' : ''} exportée${donnees.nombre > 1 ? 's' : ''} (du ${periode.debut.split('-').reverse().join('/')}${periode.fin !== periode.debut ? ` au ${periode.fin.split('-').reverse().join('/')}` : ''}).`)
+    } catch (e) {
+      setMessage('Le PDF n’a pas pu être créé. Réessaie.')
+    } finally {
+      setEnExport(null)
+    }
   }
 
   const resume = prep.articles.slice(0, 4).map(a => `${a.quantite} ${a.nom}`).join(' · ')
@@ -235,8 +247,14 @@ export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], j
           </span>
         </button>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button type="button" onClick={() => exporter('jour')} style={boutonExport}>Exporter le jour</button>
-          <button type="button" onClick={() => exporter('semaine')} style={boutonExport}>Exporter la semaine</button>
+          {[['jour', 'PDF du jour'], ['semaine', 'PDF de la semaine']].map(([q, l]) => (
+            <button key={q} type="button" onClick={() => exporter(q)} disabled={!!enExport}
+              style={{ ...boutonExport, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+              {l}
+              {enExport === q && <DotsAttente couleur={T.main} taille={4} label="Création du PDF"/>}
+            </button>
+          ))}
         </div>
         {message && <p role="status" style={{ flexBasis: '100%', margin: 0, fontSize: 13, fontWeight: 700, color: T.main }}>{message}</p>}
       </div>
@@ -257,11 +275,18 @@ export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], j
           </div>
           <div>
             <p style={titrePanneau}>Par heure</p>
-            <div style={{ display: 'grid', gap: 6 }}>
+            {/* (11/10, Alex : « plus clair, séparation par ligne ou par
+                encadré ») : un encadré par heure, un article par ligne. */}
+            <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}>
               {prep.parHeure.map(h => (
-                <div key={h.heure} style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 14, fontWeight: 900, color: T.main, minWidth: 48, fontVariantNumeric: 'tabular-nums' }}>{h.heure}</span>
-                  <span style={{ fontSize: 13, color: T.ink, fontWeight: 600, lineHeight: 1.4 }}>{h.articles.map(a => `${a.quantite} ${a.nom}`).join(' · ')}</span>
+                <div key={h.heure} style={{ border: `1.5px solid ${T.hairline}`, borderRadius: 10, overflow: 'hidden' }}>
+                  <p style={{ margin: 0, padding: '5px 10px', background: T.pale, fontSize: 14, fontWeight: 900, color: T.deep, fontVariantNumeric: 'tabular-nums' }}>{h.heure}</p>
+                  {h.articles.map((a, i) => (
+                    <div key={a.nom} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 10px', borderTop: i ? `1px solid ${T.hairline}` : 'none', fontSize: 13.5 }}>
+                      <span style={{ color: T.ink, fontWeight: 600 }}>{a.nom}</span>
+                      <span style={{ color: T.ink, fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{a.quantite}</span>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>

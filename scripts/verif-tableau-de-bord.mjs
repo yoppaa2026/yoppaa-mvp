@@ -1820,15 +1820,28 @@ const verifie = (nom, cond, detail = '') => {
     JSON.stringify(V.periodeExport('2026-10-11', 'semaine')) === JSON.stringify({ debut: '2026-10-05', fin: '2026-10-11' })
     && JSON.stringify(V.periodeExport('2026-10-14', 'semaine')) === JSON.stringify({ debut: '2026-10-12', fin: '2026-10-18' })
     && JSON.stringify(V.periodeExport('2026-10-14')) === JSON.stringify({ debut: '2026-10-14', fin: '2026-10-14' }))
-  const csv = V.csvCommandes([
-    cmd({ id: 1, client_nom: 'Dupont; "Jo"', total: 12.5, numero_commande: 7, numero_prefixe: 'CC', creneau: cr('08:00', '08:15'), commande_articles: [ligne('Croissant', 2)] }),
+  // 🔴 L'EXPORT EN PDF (Alex, 11/10) : ce qui part dans le document.
+  const P = await import('../lib/export-commandes-pdf.js')
+  const ex = P.donneesExport([
+    cmd({ id: 1, client_nom: 'Dupont', total: 12.5, numero_commande: 7, numero_prefixe: 'CC', creneau: cr('08:00', '08:15'), commande_articles: [ligne('Croissant', 2, ['Beurre'])], notes_client: 'sans sucre' }),
+    cmd({ id: 4, date_commande: '2026-10-06', client_nom: 'Lundi', total: 3, commande_articles: [ligne('Pain', 1)] }),
+    cmd({ id: 5, statut: 'annulee_commercant', client_nom: 'Annulée', total: 40, commande_articles: [ligne('Croissant', 10)] }),
     cmd({ id: 2, statut: 'annulee_paiement_ko', client_nom: 'Fantôme' }),
     cmd({ id: 3, date_commande: '2026-10-20', client_nom: 'Hors période' }),
   ], { debut: '2026-10-05', fin: '2026-10-11' })
-  verifie('🔴 export CSV : BOM, « ; », virgule décimale, guillemets échappés, paiements échoués et hors période exclus',
-    csv.nombre === 1 && csv.texte.startsWith('﻿Date;Heure;N°;Statut;Client;')
-    && csv.texte.includes('"Dupont; ""Jo"""') && csv.texte.includes(';12,50;') && csv.texte.includes('2× Croissant')
-    && !csv.texte.includes('Fantôme') && !csv.texte.includes('Hors période'), csv.texte)
+  const tous = ex.jours.flatMap(j => j.commandes)
+  verifie('🔴 export PDF : un bloc par jour dans l’ordre, paiements échoués et hors période exclus, annulées listées mais marquées',
+    ex.nombre === 3 && ex.jours.map(j => j.jour).join('|') === '2026-10-06|2026-10-11'
+    && !tous.some(r => r.client === 'Fantôme' || r.client === 'Hors période') && tous.find(r => r.client === 'Annulée')?.annulee === true, JSON.stringify(ex))
+  verifie('🔴 export PDF : les annulées ne comptent ni dans le chiffre ni dans le total par article',
+    ex.total === '15,50 €' && ex.jours[1].total === '12,50 €'
+    && JSON.stringify(ex.production) === JSON.stringify([{ nom: 'Croissant', quantite: 2 }, { nom: 'Pain', quantite: 1 }]), JSON.stringify(ex))
+  const dupont = tous.find(r => r.client === 'Dupont')
+  verifie('export PDF : la ligne dit l’heure, la référence, les articles avec options, la note et le paiement',
+    dupont.heure === '08:00' && dupont.ref === '#CC7' && dupont.articles[0] === '2× Croissant (Beurre)' && dupont.note === 'sans sucre'
+    && dupont.total === '12,50 €' && typeof dupont.paiement === 'string' && dupont.paiement.length > 0, JSON.stringify(dupont))
+  verifie('🔴 le PDF n’imprime que ce que ses polices savent écrire (accents et € gardés, emoji et flèches remplacés)',
+    P.texteSur('Crème brûlée → 3,50 € 🥐') === 'Crème brûlée -> 3,50 € ' && P.jourEnLettres('2026-10-12') === 'lundi 12 octobre')
 
   // Le branchement, visé à l'endroit.
   const page = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
@@ -1860,7 +1873,14 @@ const verifie = (nom, cond, detail = '') => {
     && /onBasculer=\{basculerBlocageCreneau\}/.test(page))
   verifie('« À préparer » et l’export reçoivent le jour et TOUTES les commandes (la semaine)',
     /<PanneauAPreparer commandesDuJour=\{commandesDuJourTous\} toutesCommandes=\{commandes\} jour=\{jourActif\}/.test(page)
-    && /csvCommandes\(toutesCommandes, \{ \.\.\.periode, categorie \}\)/.test(vue))
+    && /const donnees = donneesExport\(toutesCommandes, \{ \.\.\.periode, categorie \}\)/.test(vue)
+    && /const blob = await pdfCommandes\(donnees, \{ commerceNom, periode \}\)/.test(vue) && /\.pdf`, blob\)/.test(vue))
+  verifie('le bouton d’export montre qu’il travaille, et un échec se dit',
+    /\{enExport === q && <DotsAttente/.test(vue) && /setMessage\('Le PDF n’a pas pu être créé\. Réessaie\.'\)/.test(vue))
+  const pdfSrc = sansProse(readFileSync(new URL('../lib/export-commandes-pdf.js', import.meta.url), 'utf8'))
+  verifie('🔴 `jspdf` est chargé à la demande (jamais au premier affichage), et chaque commande a son filet',
+    /const \{ jsPDF \} = await import\('jspdf'\)/.test(pdfSrc) && !/^import .*jspdf/m.test(pdfSrc)
+    && /pdf\.line\(MARGE, y, L - MARGE, y\)/.test(pdfSrc))
 }
 
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du

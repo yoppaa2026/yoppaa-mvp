@@ -9,9 +9,11 @@
 //
 // ⚠️ CE FICHIER N'ÉCRIT RIEN. Il appelle les gestes du tableau de bord
 // (`onAvancer` = `changerStatut`, `onBasculerCreneau` = fermer / rouvrir) et
-// les règles pures de `lib/vue-commandes.js`.
+// les règles pures de `lib/vue-commandes.js`. Il LIT une seule chose : le nom
+// du second article d'un duo, pour « À préparer » (11/10).
 
 import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 import DotsAttente from '@/app/components/DotsAttente'
 import { euros } from '@/lib/montants'
 import { referenceCommande } from '@/lib/numero-commande'
@@ -23,7 +25,7 @@ import { confirme } from './PosteConfirmation'
 import { confirmationSimple } from '@/lib/confirmations'
 import {
   colonnesDeCommandes, actionSuivante, enRetard, lignesCourtes, heureDeRetrait,
-  aPreparer, periodeExport,
+  aPreparer, periodeExport, articlesDeDuo,
 } from '@/lib/vue-commandes'
 import { donneesExport, pdfCommandes } from '@/lib/export-commandes-pdf'
 
@@ -210,7 +212,20 @@ export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], j
     const t = setTimeout(() => setMessage(null), 4000)
     return () => clearTimeout(t)
   }, [message])
-  const prep = aPreparer(commandesDuJour)
+  // Le nom du second article d'un duo : il n'est pas joint aux lignes (pas de
+  // clé étrangère, voir MIGRATION_LOTS_STOCK_REEL). Lu à la demande, et
+  // seulement s'il y a un duo.
+  const idsDuo = articlesDeDuo(toutesCommandes).join(',')
+  const [nomsArticles, setNomsArticles] = useState({})
+  useEffect(() => {
+    if (!idsDuo) return
+    let annule = false
+    supabase.from('articles').select('id, nom').in('id', idsDuo.split(',')).then(({ data }) => {
+      if (!annule && data) setNomsArticles(Object.fromEntries(data.map(a => [a.id, a.nom])))
+    })
+    return () => { annule = true }
+  }, [idsDuo])
+  const prep = aPreparer(commandesDuJour, { nomsArticles })
   const [enExport, setEnExport] = useState(null) // 'jour' | 'semaine'
 
   // 🔴 EN PDF (Alex, 11/10) : un A4 couché, un bandeau par jour, une commande
@@ -219,7 +234,7 @@ export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], j
     if (enExport) return
     const periode = periodeExport(jour, quoi)
     if (!periode) return
-    const donnees = donneesExport(toutesCommandes, { ...periode, categorie })
+    const donnees = donneesExport(toutesCommandes, { ...periode, categorie, nomsArticles })
     if (donnees.nombre === 0) { setMessage(quoi === 'semaine' ? 'Aucune commande cette semaine.' : 'Aucune commande ce jour-là.'); return }
     setEnExport(quoi)
     try {

@@ -1813,6 +1813,27 @@ const verifie = (nom, cond, detail = '') => {
   verifie('🔴 « À préparer » : nouvelles et en prépa seulement, total par article, puis par heure dans l’ordre',
     prep.total === 6 && prep.articles[0].nom === 'Croissant' && prep.articles[0].quantite === 5 && prep.articles[1].quantite === 1
     && prep.parHeure.map(h => h.heure).join('|') === '07:00|08:00' && prep.parHeure[0].articles[0].quantite === 3, JSON.stringify(prep))
+  // 🔴 LES UNITÉS RÉELLES (Alex, 11/10 : « 3+1 offert : 1 » là où le
+  // boulanger sort 4 croissants). La même règle que le stock.
+  const lotDe4 = { quantite: 2, quantite_stock: 8, deal_id: 'dLot', article_nom: '3+1 offert', article: { nom: 'Croissant' } }
+  const duo = { quantite: 3, quantite_stock: 3, deal_id: 'dDuo', article_nom: 'Croissant + café', article: { nom: 'Croissant' }, duo_article_id: 'f1' }
+  const ancien = { quantite: 1, quantite_stock: null, deal_id: 'dLot', article_nom: '3+1 offert', article: { nom: 'Croissant' } }
+  const prepLots = V.aPreparer([cmd({ commande_articles: [lotDe4, duo, ligne('Pain', 1)] })], { nomsArticles: { f1: 'Café' } })
+  verifie('🔴 « À préparer » compte les CROISSANTS (2 lots de 4 + 3 duos = 11), pas les offres, et le second article du duo',
+    JSON.stringify(prepLots.articles) === JSON.stringify([{ nom: 'Croissant', quantite: 11 }, { nom: 'Café', quantite: 3 }, { nom: 'Pain', quantite: 1 }])
+    && prepLots.total === 15, JSON.stringify(prepLots))
+  verifie('une ligne d’avant le 11/10 (sans quantite_stock) garde sa quantité ; un duo sans nom connu reste compté',
+    JSON.stringify(V.unitesDeLigne(ancien)) === JSON.stringify([{ nom: 'Croissant', quantite: 1 }])
+    && V.unitesDeLigne(duo)[1]?.nom === 'Second article d’un duo' && V.unitesDeLigne(duo)[1]?.quantite === 3
+    && JSON.stringify(V.articlesDeDuo([cmd({ commande_articles: [lotDe4, duo, duo] })])) === JSON.stringify(['f1']))
+  verifie('🔴 une ligne SIMPLE garde son nom figé à la vente (pas celui du catalogue, renommé depuis)',
+    JSON.stringify(V.unitesDeLigne({ quantite: 2, article_nom: 'Pain gris', article: { nom: 'Pain gris 800 g' } })) === JSON.stringify([{ nom: 'Pain gris', quantite: 2 }]))
+  {
+    const P0 = await import('../lib/export-commandes-pdf.js')
+    const exLots = P0.donneesExport([cmd({ total: 20, commande_articles: [lotDe4, duo] })], { debut: '2026-10-05', fin: '2026-10-11', nomsArticles: { f1: 'Café' } })
+    verifie('🔴 le PDF : le même « Total par article » en unités réelles',
+      JSON.stringify(exLots.production) === JSON.stringify([{ nom: 'Croissant', quantite: 11 }, { nom: 'Café', quantite: 3 }]), JSON.stringify(exLots.production))
+  }
   verifie('les lignes courtes disent la quantité, le nom et les options',
     JSON.stringify(V.lignesCourtes(cmd({ commande_articles: [ligne('Pizza', 2, ['Grande', 'Olives'])] }))) === JSON.stringify([{ texte: '2× Pizza', options: 'Grande, Olives' }]))
 
@@ -1873,7 +1894,10 @@ const verifie = (nom, cond, detail = '') => {
     && /onBasculer=\{basculerBlocageCreneau\}/.test(page))
   verifie('« À préparer » et l’export reçoivent le jour et TOUTES les commandes (la semaine)',
     /<PanneauAPreparer commandesDuJour=\{commandesDuJourTous\} toutesCommandes=\{commandes\} jour=\{jourActif\}/.test(page)
-    && /const donnees = donneesExport\(toutesCommandes, \{ \.\.\.periode, categorie \}\)/.test(vue)
+    // Réorientée le 11/10 (soir) : l'export reçoit aussi les noms des duos.
+    && /const donnees = donneesExport\(toutesCommandes, \{ \.\.\.periode, categorie, nomsArticles \}\)/.test(vue)
+    && /const prep = aPreparer\(commandesDuJour, \{ nomsArticles \}\)/.test(vue)
+    && /supabase\.from\('articles'\)\.select\('id, nom'\)\.in\('id', idsDuo\.split\(','\)\)/.test(vue)
     && /const blob = await pdfCommandes\(donnees, \{ commerceNom, periode \}\)/.test(vue) && /\.pdf`, blob\)/.test(vue))
   verifie('le bouton d’export montre qu’il travaille, et un échec se dit',
     /\{enExport === q && <DotsAttente/.test(vue) && /setMessage\('Le PDF n’a pas pu être créé\. Réessaie\.'\)/.test(vue))

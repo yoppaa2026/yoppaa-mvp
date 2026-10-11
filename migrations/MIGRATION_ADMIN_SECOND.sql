@@ -48,7 +48,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT COALESCE(
-    lower(auth.email()) IN ('verstappenalexandre@gmail.com', 'carole.mackowiak@gmail.com')
+    lower(auth.email()) IN ('verstappenalexandre@gmail.com', 'carole@avcotech.be')
     AND coalesce(auth.jwt() ->> 'aal', '') = 'aal2',
     false
   )
@@ -78,23 +78,24 @@ SELECT * FROM (
          'oui'::text AS attendu
   UNION ALL SELECT 2, 'Alex, mot de passe seul', pg_temp.essai_admin('{"email":"verstappenalexandre@gmail.com","aal":"aal1"}'), 'false'
   UNION ALL SELECT 3, 'Alex, avec le code', pg_temp.essai_admin('{"email":"verstappenalexandre@gmail.com","aal":"aal2"}'), 'true'
-  UNION ALL SELECT 4, 'Carole, mot de passe seul', pg_temp.essai_admin('{"email":"carole.mackowiak@gmail.com","aal":"aal1"}'), 'false'
-  UNION ALL SELECT 5, 'Carole, avec le code', pg_temp.essai_admin('{"email":"carole.mackowiak@gmail.com","aal":"aal2"}'), 'true'
-  UNION ALL SELECT 6, 'Carole, adresse en majuscules, avec le code', pg_temp.essai_admin('{"email":"Carole.Mackowiak@gmail.com","aal":"aal2"}'), 'true'
+  UNION ALL SELECT 4, 'Carole, mot de passe seul', pg_temp.essai_admin('{"email":"carole@avcotech.be","aal":"aal1"}'), 'false'
+  UNION ALL SELECT 5, 'Carole, avec le code', pg_temp.essai_admin('{"email":"carole@avcotech.be","aal":"aal2"}'), 'true'
+  UNION ALL SELECT 6, 'Carole, adresse en majuscules, avec le code', pg_temp.essai_admin('{"email":"Carole@Avcotech.be","aal":"aal2"}'), 'true'
   UNION ALL SELECT 7, 'un autre compte, avec un code', pg_temp.essai_admin('{"email":"commercant@exemple.be","aal":"aal2"}'), 'false'
-  UNION ALL SELECT 8, 'un alias de l adresse de Carole, avec un code', pg_temp.essai_admin('{"email":"carole.mackowiak+x@gmail.com","aal":"aal2"}'), 'false'
+  UNION ALL SELECT 8, 'un alias de l adresse de Carole, avec un code', pg_temp.essai_admin('{"email":"carole+x@avcotech.be","aal":"aal2"}'), 'false'
   UNION ALL SELECT 9, 'personne', pg_temp.essai_admin('{}'), 'false'
+  UNION ALL SELECT 13, 'la Gmail de Carole (son compte Yopper), avec un code', pg_temp.essai_admin('{"email":"carole.mackowiak@gmail.com","aal":"aal2"}'), 'false'
   UNION ALL SELECT 10, 'la fonction reste SECURITY DEFINER',
          (SELECT p.prosecdef::text FROM pg_proc p JOIN pg_namespace s ON s.oid = p.pronamespace
            WHERE s.nspname = 'public' AND p.proname = 'is_yoppaa_admin'), 'true'
   UNION ALL SELECT 11, 'aucune autre fonction n ecrit une adresse admin',
          (SELECT count(*) FROM pg_proc p JOIN pg_namespace s ON s.oid = p.pronamespace
            WHERE s.nspname = 'public' AND p.proname <> 'is_yoppaa_admin'
-             AND (p.prosrc ILIKE '%verstappenalexandre@gmail.com%' OR p.prosrc ILIKE '%carole.mackowiak@gmail.com%'))::text,
+             AND (p.prosrc ILIKE '%verstappenalexandre@gmail.com%' OR p.prosrc ILIKE '%carole@avcotech.be%'))::text,
          '0'
   UNION ALL SELECT 12, 'policies qui ecrivent une adresse admin (nom:type)',
          coalesce((SELECT string_agg(tablename || '.' || policyname || ':' || permissive, ', ')
             FROM pg_policies
-           WHERE (coalesce(qual, '') || coalesce(with_check, '')) ILIKE ANY (ARRAY['%verstappenalexandre@gmail.com%', '%carole.mackowiak@gmail.com%'])), 'aucune')::text,
+           WHERE (coalesce(qual, '') || coalesce(with_check, '')) ILIKE ANY (ARRAY['%verstappenalexandre@gmail.com%', '%carole@avcotech.be%'])), 'aucune')::text,
          'aucune'
 ) t ORDER BY n;

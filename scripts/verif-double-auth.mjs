@@ -49,12 +49,14 @@ function fichiers(dossier, acc = []) {
   v('reconnaître reste distinct d autoriser', estAdminYoppaa(admin) === true)
 
   // 🔴 LA SECONDE ADMIN (11/10) : Carole, avec les MÊMES exigences.
-  const carole = { email: 'carole.mackowiak@gmail.com' }
-  v('🔴 la seconde admin est reconnue (casse comprise), et passe avec le code',
-    estAdresseAdmin('Carole.Mackowiak@gmail.com') === true && reglesAdmin({ user: carole, aal: 'aal2', exiger: true }) === true)
+  // Son adresse professionnelle (choix d'Alex, 11/10) ; sa Gmail reste à son
+  // compte Yopper et n'est PAS admin.
+  const carole = { email: 'carole@avcotech.be' }
+  v('🔴 la seconde admin est reconnue (casse comprise), et passe avec le code ; sa Gmail, non',
+    estAdresseAdmin('Carole@Avcotech.be') === true && estAdresseAdmin('carole.mackowiak@gmail.com') === false && reglesAdmin({ user: carole, aal: 'aal2', exiger: true }) === true)
   v('🔴 la seconde admin, mot de passe seul : refusée', reglesAdmin({ user: carole, aal: 'aal1', exiger: true }) === false)
   v('🔴 un alias (« +x ») d une adresse admin n est PAS admin',
-    estAdresseAdmin('carole.mackowiak+x@gmail.com') === false && estAdresseAdmin('verstappenalexandre+test@gmail.com') === false)
+    estAdresseAdmin('carole+x@avcotech.be') === false && estAdresseAdmin('verstappenalexandre+test@gmail.com') === false)
   v('la liste est courte, figée, et Alex reste l admin principal',
     ADMIN_EMAILS.length === 2 && Object.isFrozen(ADMIN_EMAILS) && ADMIN_EMAIL === 'verstappenalexandre@gmail.com')
 }

@@ -1881,6 +1881,11 @@ const verifie = (nom, cond, detail = '') => {
   verifie('🔴 `jspdf` est chargé à la demande (jamais au premier affichage), et chaque commande a son filet',
     /const \{ jsPDF \} = await import\('jspdf'\)/.test(pdfSrc) && !/^import .*jspdf/m.test(pdfSrc)
     && /pdf\.line\(MARGE, y, L - MARGE, y\)/.test(pdfSrc))
+  verifie('🔴 (Alex, 11/10) un jour qui continue sur la page suivante répète son bandeau « (suite) »',
+    /if \(y \+ hauteur > BAS\) \{ nouvellePage\(\); bandeau\(jour, true\) \}/.test(pdfSrc) && /\$\{lib\} \(suite\)/.test(pdfSrc))
+  verifie('🔴 (Alex, 11/10) le statut et le paiement passent à la ligne, jamais coupés, et comptent dans la hauteur',
+    /pdf\.text\(lignesStatut, x \+ 2, y \+ 4\.4\)/.test(pdfSrc) && /pdf\.text\(lignesPaiement, x \+ 2, y \+ 4\.4\)/.test(pdfSrc)
+    && /lignesClient\.length, lignesStatut\.length, lignesPaiement\.length\)/.test(pdfSrc))
 }
 
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du

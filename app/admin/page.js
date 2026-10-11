@@ -1,6 +1,6 @@
 'use client'
 // Console admin Yoppaa — valider/rejeter les commerçants en attente.
-// Accès restreint à ADMIN_EMAIL (vérification côté client + côté API + RLS DB).
+// Accès restreint aux adresses admin, `ADMIN_EMAILS` (vérification côté client + côté API + RLS DB).
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -20,7 +20,7 @@ import SectionSuggestions from './SectionSuggestions'
 import SectionDiagnosticRatelimit from './SectionDiagnosticRatelimit'
 import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Lock, AlertTriangle } from 'lucide-react'
 import { TAILLE_CONSEILLEE, avertissementTaille, bilanTaillesImages } from '@/lib/image-qualite'
-import { ADMIN_EMAIL } from '@/lib/admin-identite'
+import { estAdresseAdmin } from '@/lib/admin-identite'
 import { EcranCodeAdmin, SectionSecuriteAdmin, etatDoubleAuth } from './DoubleAuth'
 
 
@@ -73,7 +73,7 @@ export default function AdminPage() {
       if (annule) return
       setSession(s)
       if (!s) { router.push('/login?next=/admin'); return }
-      if (s.user.email !== ADMIN_EMAIL) {
+      if (!estAdresseAdmin(s.user.email)) {
         setChecking(false)
         return // affichera l'écran "accès refusé"
       }
@@ -90,7 +90,7 @@ export default function AdminPage() {
 
   // ─── Chargement données ────────────────────────────────────────────────
   const charger = useCallback(async () => {
-    if (!session || session.user.email !== ADMIN_EMAIL) return
+    if (!session || !estAdresseAdmin(session.user.email)) return
     // Rien ne se charge derrière la porte : le code n'a pas encore été donné.
     if (niveau === 'code' || niveau === null) return
     setLoading(true)
@@ -175,7 +175,7 @@ export default function AdminPage() {
   // qui reprenait donc à la connexion suivante, et elle ne lisait pas son
   // résultat : le défaut n°2 du 14/09, corrigé au tableau de bord mais pas ici.
   async function seDeconnecter() {
-    if (session?.user?.email === ADMIN_EMAIL) {
+    if (estAdresseAdmin(session?.user?.email)) {
       // La connexion en tant que commerçant vit dans un onglet, et on ne sait
       // pas lequel : on les ferme toutes au journal, tant que le jeton vit.
       const fermees = await fermerImpersonationServeur(supabase, { toutes: true })
@@ -253,10 +253,10 @@ export default function AdminPage() {
   // ─── Écrans de garde ───────────────────────────────────────────────────
   if (checking) return <CenteredMsg>Vérification…</CenteredMsg>
   if (!session) return null // redirect en cours
-  if (session.user.email === ADMIN_EMAIL && niveau === 'code') {
+  if (estAdresseAdmin(session.user.email) && niveau === 'code') {
     return <EcranCodeAdmin onValide={relireNiveau} onDeconnexion={seDeconnecter}/>
   }
-  if (session.user.email !== ADMIN_EMAIL) {
+  if (!estAdresseAdmin(session.user.email)) {
     return <CenteredMsg variant="error">
       <strong>Accès refusé.</strong><br/>
       Cette page est réservée à l&apos;équipe Yoppaa.<br/>

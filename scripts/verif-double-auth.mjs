@@ -11,7 +11,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { sansProse } from './lire-code.mjs'
 import { reglesAdmin, estAdminYoppaa, EXIGER_DOUBLE_AUTH_ADMIN } from '../lib/api-auth.js'
-import { ADMIN_EMAIL, estAdresseAdmin } from '../lib/admin-identite.js'
+import { ADMIN_EMAIL, ADMIN_EMAILS, estAdresseAdmin } from '../lib/admin-identite.js'
 
 let ok = 0
 const echecs = []
@@ -47,6 +47,30 @@ function fichiers(dossier, acc = []) {
   v('l adresse se reconnaît quelle que soit la casse', estAdresseAdmin(ADMIN_EMAIL.toUpperCase()) === true)
   v('une adresse voisine ne passe pas', estAdresseAdmin(`x${ADMIN_EMAIL}`) === false && estAdresseAdmin('') === false)
   v('reconnaître reste distinct d autoriser', estAdminYoppaa(admin) === true)
+
+  // 🔴 LA SECONDE ADMIN (11/10) : Carole, avec les MÊMES exigences.
+  const carole = { email: 'carole.mackowiak@gmail.com' }
+  v('🔴 la seconde admin est reconnue (casse comprise), et passe avec le code',
+    estAdresseAdmin('Carole.Mackowiak@gmail.com') === true && reglesAdmin({ user: carole, aal: 'aal2', exiger: true }) === true)
+  v('🔴 la seconde admin, mot de passe seul : refusée', reglesAdmin({ user: carole, aal: 'aal1', exiger: true }) === false)
+  v('🔴 un alias (« +x ») d une adresse admin n est PAS admin',
+    estAdresseAdmin('carole.mackowiak+x@gmail.com') === false && estAdresseAdmin('verstappenalexandre+test@gmail.com') === false)
+  v('la liste est courte, figée, et Alex reste l admin principal',
+    ADMIN_EMAILS.length === 2 && Object.isFrozen(ADMIN_EMAILS) && ADMIN_EMAIL === 'verstappenalexandre@gmail.com')
+}
+
+// ═══ 1 bis) LA MÊME LISTE EN BASE ════════════════════════════════════════════
+// Une adresse ajoutée au code sans la base ouvrirait les écrans sans les
+// données ; l'inverse, les données sans les écrans.
+{
+  const sql = lire('migrations/MIGRATION_ADMIN_SECOND.sql')
+  const enBase = (sql.match(/lower\(auth\.email\(\)\) IN \(([^)]*)\)/) || [])[1] || ''
+  const adressesBase = enBase.split(',').map(s => s.trim().replace(/^'|'$/g, '')).filter(Boolean)
+  v('🔴 la base accepte EXACTEMENT les adresses du code', JSON.stringify(adressesBase) === JSON.stringify([...ADMIN_EMAILS]), enBase)
+  v('🔴 la base exige le code pour TOUTES (une seule condition, liée par AND)',
+    /lower\(auth\.email\(\)\) IN \([^)]*\)\s*AND coalesce\(auth\.jwt\(\) ->> 'aal', ''\) = 'aal2',/.test(sql) && !/\bOR\b/.test(sql.slice(sql.indexOf('AS $$', sql.indexOf('FUNCTION public.is_yoppaa_admin')), sql.indexOf('GRANT EXECUTE'))))
+  v('🔴 la migration s arrête si l adresse est encore écrite ailleurs en base',
+    /IF autres IS NOT NULL THEN\s+RAISE EXCEPTION/.test(sql))
 }
 
 // ═══ 2) L'ADRESSE N'EXISTE QU'EN UN ENDROIT ═════════════════════════════════
@@ -84,7 +108,8 @@ function fichiers(dossier, acc = []) {
 {
   const page = code('app/admin/page.js')
   const porte = code('app/admin/DoubleAuth.js')
-  const iPorte = page.indexOf("if (session.user.email === ADMIN_EMAIL && niveau === 'code') {")
+  // Réorientée le 11/10 : deux adresses admin, la porte passe par `estAdresseAdmin`.
+  const iPorte = page.indexOf("if (estAdresseAdmin(session.user.email) && niveau === 'code') {")
   const iContenu = page.indexOf('// ─── Page admin principale')
   const iContenuCode = page.indexOf('<main style=')
   v('la porte passe AVANT le contenu', iPorte > 0 && iContenuCode > iPorte, `${iPorte} / ${iContenuCode} / ${iContenu}`)

@@ -79,7 +79,7 @@ import { etiquetteConcernee } from '@/lib/etiquette-commande'
 import { PALETTE_STATUT, COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
 import { filtresCommandes } from '@/lib/poste-vues'
 import { ColonnesCommandes, BandeCreneaux, PanneauAPreparer } from './VueCommandes'
-import { ADMIN_EMAIL } from '@/lib/admin-identite'
+import { estAdresseAdmin } from '@/lib/admin-identite'
 
 const T = {
   bg:      '#F8F6FF',
@@ -1760,9 +1760,8 @@ export default function Dashboard() {
       // Au moindre doute : pas de mode admin, retour à /admin avec la raison.
       // ⚠️ La base laisse l'admin tout lire (policy « Admin Yoppaa FULL ») :
       // c'est pour ça que la question se pose ici, et pas seulement en base.
-      const adminEmail = ADMIN_EMAIL
       const imp = lireImpersonation()
-      if (user.email === adminEmail && imp) {
+      if (estAdresseAdmin(user.email) && imp) {
         const verdict = await verifierImpersonation(supabase, imp)
         const { data: c } = verdict.ok
           ? await supabase.from('commercants').select('*').eq('id', imp.commercantId).maybeSingle()

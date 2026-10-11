@@ -242,7 +242,9 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   const supplement = Object.values(selections).flat().reduce((acc, v) => acc + (v.prix_supplement||0), 0)
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
-      <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Personnalise ton {article.nom}</p>
+      {/* Ni « ton » ni « ta » : le genre de l'article est inconnu (« ton
+          Brochette », vu par Alex le 11/10). */}
+      <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Tes choix pour {article.nom}</p>
       {groupes.map(g => {
         const isUnique = g.type === 'unique'
         return (

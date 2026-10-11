@@ -36,9 +36,17 @@
 BEGIN;
 
 -- ─── A. LES COLONNES ───────────────────────────────────────────────────────
+-- 🔴 `duo_article_id` N'A PAS DE CLÉ ÉTRANGÈRE, ET C'EST VOULU (11/10). Une
+-- première version en posait une vers `articles` : la ligne avait alors DEUX
+-- liens vers les articles, et toute lecture `commande_articles(…,
+-- article:articles(…))` était REFUSÉE comme ambiguë (tableau de bord, e-mails,
+-- encodage, annulation : tout l'essai, vu par Alex). La colonne ne sert qu'à
+-- compter le stock : un article supprimé n'y fait aucun tort. Le DROP répare
+-- l'essai, où la première version est passée.
 ALTER TABLE public.commande_articles
   ADD COLUMN IF NOT EXISTS quantite_stock integer,
-  ADD COLUMN IF NOT EXISTS duo_article_id uuid REFERENCES public.articles(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS duo_article_id uuid;
+ALTER TABLE public.commande_articles DROP CONSTRAINT IF EXISTS commande_articles_duo_article_id_fkey;
 
 ALTER TABLE public.commande_articles DROP CONSTRAINT IF EXISTS commande_articles_quantite_stock_borne;
 ALTER TABLE public.commande_articles
@@ -140,4 +148,9 @@ SELECT * FROM (
          (has_function_privilege('anon', 'public.stock_commande_par_article(uuid, date)', 'EXECUTE')
           AND has_function_privilege('anon', 'public.ventes_stock_magasin(uuid)', 'EXECUTE'))::text,
          'true'
+  UNION ALL SELECT 13, 'un SEUL lien de commande_articles vers articles (sinon lectures refusees)',
+         (SELECT count(*) FROM pg_constraint
+           WHERE conrelid = 'public.commande_articles'::regclass AND contype = 'f'
+             AND confrelid = 'public.articles'::regclass)::text,
+         '1'
 ) t ORDER BY n;

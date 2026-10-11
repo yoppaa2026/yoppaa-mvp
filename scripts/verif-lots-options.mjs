@@ -130,6 +130,8 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     /\(!hasVar && onAjouter && !article\.est_vitrine && groupes\.length > 0\) \? \(\s*<OptionsSelector article=\{article\} groupes=\{groupes\}\s*onAjouter=\{\(a, opts\) => \{ onAjouter\(a, opts\); onClose\(\) \}\}\/>/.test(fiche)
     && fiche.includes('groupes={optionsParArticle[articleDetail.id] || []}')
     && fiche.includes('onAjouter={peutCommander ? (a, opts = null) => ajouterAuPanier(a, opts) : null}'))
+  v('le titre du choix ne présume pas du genre de l’article (« Tes choix pour … », jamais « Personnalise ton »)',
+    fiche.includes('>Tes choix pour {article.nom}</p>') && !/Personnalise (ton|ta) \{article\.nom\}/.test(fiche))
   v('🔴 panier venu du rendez-vous : un article à choix obligatoire reste derrière, et le client est prévenu',
     fiche.includes('if ((optionsParArticle[article.id] || []).some(g => g.obligatoire)) { ignores.push(article.nom); continue }')
     && fiche.includes('setPanierRepris({ repris, ignores })'))
@@ -152,7 +154,13 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   const sql = lire('migrations/MIGRATION_LOTS_STOCK_REEL.sql')
   v('🔴 migration : les deux colonnes, la vue qui ajoute le second article du duo',
     sql.includes('ADD COLUMN IF NOT EXISTS quantite_stock integer')
-    && sql.includes('ADD COLUMN IF NOT EXISTS duo_article_id uuid REFERENCES public.articles(id) ON DELETE SET NULL')
+    // 🔴 SANS CLÉ ÉTRANGÈRE (11/10) : un second lien vers `articles` rendait
+    // ambiguë toute lecture `article:articles(…)` depuis les lignes, et
+    // l'essai entier refusait ses commandes (vu par Alex).
+    && /ADD COLUMN IF NOT EXISTS duo_article_id uuid;/.test(sql)
+    && !/duo_article_id uuid REFERENCES/.test(sql)
+    && sql.includes('DROP CONSTRAINT IF EXISTS commande_articles_duo_article_id_fkey;')
+    && sql.includes("'1'\n) t ORDER BY n;".replace('\n', sql.includes('\r\n') ? '\r\n' : '\n'))
     && /SELECT ca\.commande_id, ca\.article_id, COALESCE\(ca\.quantite_stock, ca\.quantite\) AS quantite\s+FROM public\.commande_articles ca\s+UNION ALL\s+SELECT ca\.commande_id, ca\.duo_article_id AS article_id, ca\.quantite\s+FROM public\.commande_articles ca\s+WHERE ca\.duo_article_id IS NOT NULL;/.test(sql))
   v('🔴 migration : la vue applique la RLS (security_invoker) et reste fermée aux visiteurs',
     sql.includes('CREATE OR REPLACE VIEW public.consommation_stock WITH (security_invoker = true) AS')

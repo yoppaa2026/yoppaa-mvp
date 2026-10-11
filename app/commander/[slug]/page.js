@@ -27,7 +27,7 @@ import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurA
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
-import { joursRetraitBoutique } from '@/lib/ouverture'
+import { joursRetraitBoutique, creneauRetraitHorsHoraires, estOuvertCeJour } from '@/lib/ouverture'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import { categorieAtteinte, barreDetachee } from '@/lib/responsive'
 // ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
@@ -1889,7 +1889,7 @@ export default function CommanderSlug() {
     const longueurCal = longueurDuCatalogue(data.commercant, data.articles, data.stocksJour)
     buildJoursDispos(data.commercant, data.creneaux, data.fermetures, data.chargeCreneaux || {}, data.blocagesCreneaux || [], longueurCal)
     setLivraisonConfig(data.livraisonConfig || null)
-    setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures, data.chargeLivraison || {}, data.blocagesLivraison || [], longueurCal))
+    setJoursDisposLivraison(construireJoursDispos(data.commercant, data.livraisonCreneaux || [], data.fermetures, data.chargeLivraison || {}, data.blocagesLivraison || [], longueurCal, false))
     setFoodtruckEmps(data.foodtruckEmps || [])
     setLoading(false)
     // Deep link partage : ?article=<id> ouvre directement la fiche de l'article
@@ -2158,7 +2158,11 @@ export default function CommanderSlug() {
   // appellent cette même fonction et ne connaissent pas les blocages, qui ne
   // valent que pour les créneaux de retrait. Une valeur par défaut vide les
   // laisse passer sans rien filtrer.
-  function construireJoursDispos(c, creneauxAvecCount, fermeturesData, chargeParJour = {}, blocagesCren = [], longueur = null) {
+  // 🔴 `horaires` (Alex, 11/10) : pour le RETRAIT, un jour fermé dans les
+  // horaires disparaît et un créneau hors des heures d'ouverture n'est pas
+  // proposé (`creneauRetraitHorsHoraires`, la règle du serveur). Les tournées
+  // de livraison passent `false` : elles roulent boutique fermée.
+  function construireJoursDispos(c, creneauxAvecCount, fermeturesData, chargeParJour = {}, blocagesCren = [], longueur = null, horaires = true) {
     const horizonBrut = Number(c.horizon_commande)
     // 🔴 LE CALENDRIER S'ALLONGE AVEC LE CATALOGUE (Alex, 07/10) : un article à
     // délai ou vendu certains jours ouvre une semaine après son délai. La
@@ -2211,6 +2215,7 @@ export default function CommanderSlug() {
       )
       return creneauxAvecCount
         .filter(cr => cr.jour_semaine === nomJour || cr.jour_semaine === null)
+        .filter(cr => !horaires || !creneauRetraitHorsHoraires({ creneau: cr, dateStr: jourISO, horairesDetail: c.horaires_detail }))
         .map(cr => ({
           ...cr,
           // Lu par `calculerCapaciteCreneau`, qui met la capacité restante à
@@ -2221,7 +2226,10 @@ export default function CommanderSlug() {
         }))
     }
 
-    if (!estEnFermeture(today)) {
+    // Un jour FERMÉ dans les horaires se saute, comme une fermeture (retrait).
+    const fermeCeJour = (date) => estEnFermeture(date) || (horaires && !estOuvertCeJour(c.horaires_detail, JOURS[jourIdx(date)]))
+
+    if (!fermeCeJour(today)) {
       const crensAujourdhui = creneauxPourDate(today).filter(cr => heureEnMinutes(cr.heure_debut) > now)
       if (crensAujourdhui.length > 0) {
         joursDispos.push({ date: new Date(today), label: "Aujourd'hui", creneaux: creneauxPourDate(today) })
@@ -2232,7 +2240,7 @@ export default function CommanderSlug() {
     // et demain, ce que dit exactement le libellé du tableau de bord.
     for (let i = 1; i < horizon; i++) {
       const d = new Date(today); d.setDate(d.getDate() + i)
-      if (estEnFermeture(d)) continue
+      if (fermeCeJour(d)) continue
       const label = i === 1 ? 'Demain' : d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })
       joursDispos.push({ date: d, label, creneaux: creneauxPourDate(d) })
     }

@@ -48,7 +48,7 @@ import { commandeDeborde, capaciteDuCreneau, creneauCommandable } from '@/lib/cr
 import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
-import { joursRetraitBoutique, estFermeExceptionnellement } from '@/lib/ouverture'
+import { joursRetraitBoutique, estFermeExceptionnellement, creneauRetraitHorsHoraires, messageHorsHoraires } from '@/lib/ouverture'
 import { jourPlus } from '@/lib/statut-commerce'
 import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, premierJourPossible, jourEnClair } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
@@ -761,6 +761,16 @@ export async function POST(request) {
           error: `${commercant.nom} est fermé ce jour-là. Choisis un autre jour.`,
           creneau_indisponible: true,
         }, { status: 409 })
+      }
+      // 🔴 LES HORAIRES, POUR LE RETRAIT (Alex, 11/10) : le mardi « Fermé » et
+      // le créneau 15:00-18:00 d'un jour qui ferme à 15:00 passaient. La règle
+      // de la fiche (`creneauRetraitHorsHoraires`). La tournée roule boutique
+      // fermée : elle n'y passe pas.
+      if (!estLivraison) {
+        const hors = creneauRetraitHorsHoraires({ creneau, dateStr: date_commande, horairesDetail: commercant.horaires_detail })
+        if (hors) {
+          return NextResponse.json({ ok: false, error: messageHorsHoraires(hors, date_commande), creneau_indisponible: true }, { status: 409 })
+        }
       }
     }
 

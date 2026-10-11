@@ -68,6 +68,7 @@ import { cguAJour } from '@/lib/cgu'
 import EcranDeclaration from './EcranDeclaration'
 import { declarationAJour } from '@/lib/declaration'
 import { nombreArriveesEnLigne, ORIGINE_COMMERCANT, creneauTermine } from '@/lib/commande-encodee'
+import { creneauRetraitHorsHoraires } from '@/lib/ouverture'
 import BandeauFicheAPublier from './BandeauFicheAPublier'
 import BandeauOuMeTrouver from './BandeauOuMeTrouver'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
@@ -3189,6 +3190,9 @@ export default function Dashboard() {
     modeCapaciteDefaut: commercant?.mode_capacite,
     champCreneau: vueMode === 'livraison' ? 'creneau_livraison_id' : 'creneau_id',
   })).filter(({ creneau }) => !creneauTermine(creneau, { dateStr: jourActif, maintenant: new Date(minuteBande), instant: brusselsInstant }))
+    // 🔴 (11/10) Retrait : un créneau hors des horaires n'est proposé à
+    // personne, il n'a rien à remplir (ses éventuelles commandes restent listées).
+    .filter(({ creneau }) => vueMode === 'livraison' || !creneauRetraitHorsHoraires({ creneau, dateStr: jourActif, horairesDetail: commercant?.horaires_detail }))
     .map(c => ({ ...c, ...appliquerBlocage(c, blocagesDuJour.has(c.creneau?.id)) }))
 
   const stats = {

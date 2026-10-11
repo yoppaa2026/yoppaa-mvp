@@ -15,6 +15,7 @@
 //   npm run verif:encodee
 
 import { readFileSync } from 'node:fs'
+import { creneauRetraitHorsHoraires, messageHorsHoraires } from '../lib/ouverture.js'
 import { sansProse } from './lire-code.mjs'
 import {
   ORIGINE_COMMERCANT, PAIEMENTS_ENCODEE, clientEncode, champsPaiementEncodee,
@@ -135,6 +136,31 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     && !horsCalendrier({ jour: auj, aujourdhui: auj, longueur: 8 }))
   v('l’avertissement « hors calendrier » dit le fait', /au-delà de ton calendrier/.test(avertissement('hors_calendrier').message))
 
+  // 🔴 LES HORAIRES, POUR LE RETRAIT (Alex, 11/10 : « mardi est fermé et il le propose »).
+  const H = {
+    mardi: { ouvert: false },
+    mercredi: { ouvert: true, debut: '07:00', fin: '15:00' },
+    jeudi: { creneaux: [['07:00', '12:00'], ['14:00', '18:00']] },
+    vendredi: { ouvert: true, debut: '14:00', fin: '02:00' },
+  }
+  const hh = (debut, fin, dateStr) => creneauRetraitHorsHoraires({ creneau: { heure_debut: debut, heure_fin: fin }, dateStr, horairesDetail: H })
+  v('🔴 le mardi fermé : refusé, quel que soit le créneau', hh('10:00:00', '10:15:00', '2026-10-13')?.raison === 'jour_ferme')
+  v('🔴 mercredi fermé à 15:00 : 14:45-15:00 passe, 15:00-15:15 et 14:50-15:10 non (avec les heures)',
+    hh('14:45:00', '15:00:00', '2026-10-14') === null && hh('15:00:00', '15:15:00', '2026-10-14')?.raison === 'hors_ouverture'
+    && hh('14:50:00', '15:10:00', '2026-10-14')?.raison === 'hors_ouverture' && hh('15:00:00', '15:15:00', '2026-10-14').plages[0] === '07:00–15:00')
+  v('🔴 l’autre écriture des horaires (`creneaux`) compte aussi, pause de midi comprise',
+    hh('12:30:00', '12:45:00', '2026-10-15')?.raison === 'hors_ouverture' && hh('14:00:00', '14:15:00', '2026-10-15') === null)
+  v('une fermeture après minuit garde le soir ouvert', hh('23:30:00', '23:45:00', '2026-10-16') === null)
+  v('🔴 sans horaires connus pour ce jour, ou sans horaires du tout : on ne juge pas',
+    hh('10:00:00', '10:15:00', '2026-10-17') === null
+    && creneauRetraitHorsHoraires({ creneau: { heure_debut: '10:00', heure_fin: '10:15' }, dateStr: '2026-10-13', horairesDetail: null }) === null)
+  v('le message dit le jour et les heures, au client et au commerçant',
+    messageHorsHoraires(hh('10:00:00', '10:15:00', '2026-10-13'), '2026-10-13') === 'Le commerce est fermé le mardi. Choisis un autre jour.'
+    && messageHorsHoraires(hh('15:00:00', '15:15:00', '2026-10-14'), '2026-10-14', { pourCommercant: true }) === 'Ce créneau dépasse tes heures d’ouverture du mercredi (07:00–15:00).')
+  v('🔴 les pastilles du retrait sautent le mardi fermé',
+    !joursDuCalendrier({ aujourdhui: auj, longueur: 8, horairesDetail: H }).includes('2026-10-13')
+    && joursDuCalendrier({ aujourdhui: auj, longueur: 8 }).includes('2026-10-13'))
+
   // La tuile : la règle d'abord, puis le stock par LA fonction de la fiche.
   const tuile = (article, o = {}) => etatTuile({ article, commercant: commerce, jour: '2026-10-11', aujourdhui: auj, dejaCommande: 0, ...o })
   v('🔴 la tuile d’un article hors jour ne parle pas de stock', tuile(tarte).hors?.raison === 'delai' && tuile(tarte).gere === false)
@@ -196,11 +222,26 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /termine: creneauTermine\(creneau, \{ dateStr: date_commande, instant: brusselsInstant \}\),/.test(r)
     && avant(r, 'termine: creneauTermine(', 'if (moment.refus) return non(moment.refus)'))
   v('🔴 l’article est lu EN BASE, jamais dans le corps', /const art = articlesData\.find\(a => String\(a\.id\) === id\)/.test(r))
+  v('🔴 horaires : l’encodage d’un retrait hors horaires prévient (avertissement), la tournée non',
+    /if \(!estLivraison\) \{\s*const hors = creneauRetraitHorsHoraires\(\{ creneau, dateStr: date_commande, horairesDetail: commercant\.horaires_detail \}\)\s*if \(hors\) avertissements\.push\(avertissement\('hors_horaires', messageHorsHoraires\(hors, date_commande, \{ pourCommercant: true \}\)\)\)/.test(r)
+    && /created_at, horizon_commande, horaires_detail'\)/.test(r))
+
+  // Les autres portes : la fiche, le serveur en ligne, la bande du tableau de bord.
+  const fiche = code('app/commander/[slug]/page.js')
+  v('🔴 horaires : la fiche saute un jour fermé et cache un créneau hors horaires (retrait), pas la tournée',
+    /\.filter\(cr => !horaires \|\| !creneauRetraitHorsHoraires\(\{ creneau: cr, dateStr: jourISO, horairesDetail: c\.horaires_detail \}\)\)/.test(fiche)
+    && /const fermeCeJour = \(date\) => estEnFermeture\(date\) \|\| \(horaires && !estOuvertCeJour\(c\.horaires_detail, JOURS\[jourIdx\(date\)\]\)\)/.test(fiche)
+    && /if \(!fermeCeJour\(today\)\)/.test(fiche) && /if \(fermeCeJour\(d\)\) continue/.test(fiche)
+    && /data\.blocagesLivraison \|\| \[\], longueurCal, false\)\)/.test(fiche))
+  const enLigne = code('app/api/stripe/checkout/create-commande/route.js')
+  v('🔴 horaires : le serveur en ligne REFUSE un retrait hors horaires (409), pas la tournée',
+    /if \(!estLivraison\) \{\s*const hors = creneauRetraitHorsHoraires\(\{ creneau, dateStr: date_commande, horairesDetail: commercant\.horaires_detail \}\)\s*if \(hors\) \{\s*return NextResponse\.json\(\{ ok: false, error: messageHorsHoraires\(hors, date_commande\), creneau_indisponible: true \}, \{ status: 409 \}\)/.test(enLigne)
+    && /horaires_detail, boutique_delai_heures/.test(enLigne))
   v('🔴 au-delà du calendrier de la fiche : avertissement, et une lecture ratée est une erreur',
     /const calendrier = await calendrierDuCommerce\(\{ supabase: admin, commercant \}\)/.test(r)
     && /if \(!calendrier\.ok\) return non\(/.test(r)
     && /if \(horsCalendrier\(\{ jour: date_commande, aujourdhui: jourBruxelles\(\), longueur: calendrier\.longueur \}\)\) \{\s*avertissements\.push\(avertissement\('hors_calendrier'\)\)/.test(r)
-    && /horizon_commande'\)/.test(r))
+    && /horizon_commande, horaires_detail'\)/.test(r))
 
   // Le module qui lit le calendrier : la longueur de la fiche, sur tout le catalogue.
   const cs = code('lib/calendrier-commande-server.js')
@@ -226,11 +267,12 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     && /dejaCommandePourStock\(\{ article: a, duJour, ventesMagasin \}\)/.test(r))
   v('🔴 un vendu illisible reste null (jamais « rien vendu »)',
     /let dejaCommande = null/.test(r) && /if \(vendu\.error \|\| magasin\.error\) \{/.test(r))
+  v('🔴 horaires : la grille reçoit les horaires', /ordre_categories, horizon_commande, horaires_detail'\)/.test(r))
   v('🔴 la fenêtre reçoit le calendrier de la fiche, et une lecture ratée est une erreur',
     /const calendrier = commerce\.data \? await calendrierDuCommerce\(\{ supabase: admin, commercant: commerce\.data \}\) : \{ ok: false \}/.test(r)
     && /if \(!calendrier\.ok\) return NextResponse\.json\(\{ ok: false/.test(r)
     && /calendrier: \{ longueur: calendrier\.longueur, fermetures: calendrier\.fermetures \}/.test(r)
-    && /ordre_categories, horizon_commande'\)/.test(r))
+    && /ordre_categories, horizon_commande, horaires_detail'\)/.test(r))
   v('les colonnes que `etatStock` lit sont lues',
     /stock_jour, stock_comptoir, stock_comptoir_le, commande_max_jour, stock_maj_le/.test(r))
 }
@@ -252,9 +294,15 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     && /dejaCommande: donnees\?\.dejaCommande \? \(donnees\.dejaCommande\[a\.id\] \|\| 0\) : null,/.test(m)
     && /\{tuile\.hors \? \(/.test(m) && /\{epuise \? 'Épuisé ce jour' : `Reste \$\{tuile\.dispo\}`\}/.test(m))
   v('🔴 les pastilles sont les jours du calendrier de la fiche ; « Aujourd’hui » seulement s’il reste un créneau',
-    /return joursDuCalendrier\(\{ aujourdhui, longueur: donnees\.calendrier\.longueur, fermetures: donnees\.calendrier\.fermetures, aujourdhuiOuvert \}\)/.test(m)
-    && /&& !creneauTermine\(c, \{ dateStr: aujourdhui, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\)/.test(m)
+    /return joursDuCalendrier\(\{ aujourdhui, longueur: donnees\.calendrier\.longueur, fermetures: donnees\.calendrier\.fermetures, aujourdhuiOuvert, horairesDetail: horaires \}\)/.test(m)
+    && /&& !creneauTermine\(c, \{ dateStr: aujourdhui, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\s*&& !\(horaires && creneauRetraitHorsHoraires\(\{ creneau: c, dateStr: aujourdhui, horairesDetail: horaires \}\)\)\)/.test(m)
     && /\{jours\.map\(d => \{/.test(m))
+  v('🔴 horaires : la fenêtre cache les créneaux de retrait hors horaires et les jours fermés (pas en livraison)',
+    /\.filter\(\(\{ creneau \}\) => mode !== 'retrait' \|\| !creneauRetraitHorsHoraires\(\{ creneau, dateStr: date, horairesDetail: donnees\?\.commercant\?\.horaires_detail \}\)\)/.test(m)
+    && /const horaires = mode === 'retrait' \? donnees\.commercant\?\.horaires_detail : null/.test(m)
+    && /aujourdhuiOuvert, horairesDetail: horaires \}\)/.test(m))
+  v('🔴 horaires : la bande du tableau de bord cache les créneaux de retrait hors horaires',
+    /\.filter\(\(\{ creneau \}\) => vueMode === 'livraison' \|\| !creneauRetraitHorsHoraires\(\{ creneau, dateStr: jourActif, horairesDetail: commercant\?\.horaires_detail \}\)\)/.test(code('app/dashboard/page.js')))
   v('🔴 un jour hors des pastilles retombe sur le premier jour, sauf « Autre date »',
     /if \(!autreDate && jours\.length > 0 && !jours\.includes\(date\)\) setDate\(jours\[0\]\)/.test(m))
   v('🔴 « Autre date » : le champ libre, et la mention au-delà du calendrier',

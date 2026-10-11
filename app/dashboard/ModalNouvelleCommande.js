@@ -19,6 +19,7 @@ import DotsAttente from '@/app/components/DotsAttente'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { remplissageCreneaux, jourSemaineDe } from '@/lib/creneaux'
 import { referenceCommande } from '@/lib/numero-commande'
+import { creneauRetraitHorsHoraires } from '@/lib/ouverture'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { construireLignesCommande } from '@/lib/lignes-commande'
 import { REGIME_EMPORTER } from '@/lib/tva'
@@ -125,7 +126,10 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
     creneaux: mode === 'livraison' ? donnees?.creneauxLivraison : donnees?.creneauxRetrait,
     commandes: donnees?.commandesDuJour || [], jour: date, modeCapaciteDefaut: donnees?.commercant?.mode_capacite,
     champCreneau: mode === 'livraison' ? 'creneau_livraison_id' : 'creneau_id',
-  }).filter(({ creneau }) => !creneauTermine(creneau, { dateStr: date, maintenant: new Date(minute), instant: brusselsInstant })),
+  }).filter(({ creneau }) => !creneauTermine(creneau, { dateStr: date, maintenant: new Date(minute), instant: brusselsInstant }))
+    // 🔴 (11/10) Retrait : un créneau hors des horaires n'est pas proposé (la
+    // règle de la fiche) ; via « Autre date », le serveur prévient.
+    .filter(({ creneau }) => mode !== 'retrait' || !creneauRetraitHorsHoraires({ creneau, dateStr: date, horairesDetail: donnees?.commercant?.horaires_detail })),
   [mode, date, donnees, minute])
   useEffect(() => { setCreneauId(null) }, [mode, date])
 
@@ -136,9 +140,11 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
     if (!donnees?.calendrier) return []
     const source = (mode === 'livraison' ? donnees.creneauxLivraison : donnees.creneauxRetrait) || []
     const nomDuJour = jourSemaineDe(aujourdhui)
+    const horaires = mode === 'retrait' ? donnees.commercant?.horaires_detail : null
     const aujourdhuiOuvert = source.some(c => (!c.jour_semaine || c.jour_semaine === nomDuJour)
-      && !creneauTermine(c, { dateStr: aujourdhui, maintenant: new Date(minute), instant: brusselsInstant }))
-    return joursDuCalendrier({ aujourdhui, longueur: donnees.calendrier.longueur, fermetures: donnees.calendrier.fermetures, aujourdhuiOuvert })
+      && !creneauTermine(c, { dateStr: aujourdhui, maintenant: new Date(minute), instant: brusselsInstant })
+      && !(horaires && creneauRetraitHorsHoraires({ creneau: c, dateStr: aujourdhui, horairesDetail: horaires })))
+    return joursDuCalendrier({ aujourdhui, longueur: donnees.calendrier.longueur, fermetures: donnees.calendrier.fermetures, aujourdhuiOuvert, horairesDetail: horaires })
   }, [donnees, mode, aujourdhui, minute])
   // Un jour hors des pastilles (onglet du tableau de bord, aujourd'hui passé)
   // retombe sur le premier jour du calendrier, sauf choix « Autre date ».

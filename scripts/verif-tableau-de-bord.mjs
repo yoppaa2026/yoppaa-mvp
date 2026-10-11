@@ -384,7 +384,8 @@ const verifie = (nom, cond, detail = '') => {
     /from\('creneaux_blocages'\)\.select\('creneau_id, livraison_creneau_id, date_blocage'\)/.test(fiche),
     'le motif partirait dans le navigateur du client')
   verifie('🔴 I7 la fiche ferme aussi les TOURNÉES',
-    /construireJoursDispos\(data\.commercant, data\.livraisonCreneaux \|\| \[\], data\.fermetures, data\.chargeLivraison \|\| \{\}, data\.blocagesLivraison \|\| \[\], longueurCal\)/.test(fiche)
+    // (11/10) + `false` : la tournée n'est pas jugée sur les horaires de la boutique.
+    /construireJoursDispos\(data\.commercant, data\.livraisonCreneaux \|\| \[\], data\.fermetures, data\.chargeLivraison \|\| \{\}, data\.blocagesLivraison \|\| \[\], longueurCal, false\)/.test(fiche)
       && /blocagesLivraison: \(blocagesCren \|\| \[\]\)\s*\.filter\(b => b\.livraison_creneau_id\)/.test(fiche),
     'une tournée fermée resterait proposée au client')
 

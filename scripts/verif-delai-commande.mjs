@@ -586,7 +586,8 @@ egal('sans nom d’article, la phrase tient debout',
   // 🔴 LE CALENDRIER S'ALLONGE AVEC LE CATALOGUE, lu sur TOUT le catalogue.
   verifier('🔴 le calendrier de retrait et de livraison prend la longueur du catalogue',
     /const longueurCal = longueurDuCatalogue\(data\.commercant, data\.articles, data\.stocksJour\)/.test(FICHE)
-    && /data\.blocagesCreneaux \|\| \[\], longueurCal\)/.test(FICHE) && /data\.blocagesLivraison \|\| \[\], longueurCal\)/.test(FICHE))
+    // (11/10) la tournée reçoit en plus `false` (pas jugée sur les horaires).
+    && /data\.blocagesCreneaux \|\| \[\], longueurCal\)/.test(FICHE) && /data\.blocagesLivraison \|\| \[\], longueurCal, false\)/.test(FICHE))
   verifier('et la boutique aussi', /horizon: Math\.max\(7, longueurDuCatalogue\(commercant, articles, stocksJour\)\)/.test(FICHE))
   // 🔴 TEMPS 2 (07/10) : « Réservable jusqu'à » entre dans le calcul de la
   // fiche, et le formulaire l'enregistre (vide = automatique).

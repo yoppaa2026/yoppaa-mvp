@@ -39,7 +39,7 @@ import { commandeDeborde, capaciteDuCreneau, creneauCommandable } from '@/lib/cr
 import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles } from '@/lib/timezone'
-import { estFermeExceptionnellement } from '@/lib/ouverture'
+import { estFermeExceptionnellement, creneauRetraitHorsHoraires, messageHorsHoraires } from '@/lib/ouverture'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { zoneValide, dansEtoile, centreDeLaZone } from '@/lib/zone-etoile'
 import { situerMaison } from '@/lib/best-adresse-serveur'
@@ -79,7 +79,7 @@ export async function POST(request) {
     // ── Le commerce, relu en base ─────────────────────────────────────────
     const { data: commercant, error: errC } = await admin
       .from('commercants')
-      .select('id, nom, categorie, tva_taux_defaut, mode_capacite, plan, essai_plan, created_at, horizon_commande')
+      .select('id, nom, categorie, tva_taux_defaut, mode_capacite, plan, essai_plan, created_at, horizon_commande, horaires_detail')
       .eq('id', commercant_id)
       .maybeSingle()
     if (errC || !commercant) return non('Commerce introuvable.', 404)
@@ -112,6 +112,12 @@ export async function POST(request) {
       .from('fermetures_exceptionnelles').select('date_debut, date_fin').eq('commercant_id', commercant.id)
     if (errF) return non('Impossible de vérifier les fermetures. Réessaie.', 500)
     if (estFermeExceptionnellement(fermetures || [], date_commande)) avertissements.push(avertissement('jour_ferme'))
+    // 🔴 (11/10) LES HORAIRES, POUR LE RETRAIT : la règle de la fiche et du
+    // serveur en ligne, en AVERTISSEMENT ici (« Autre date » reste possible).
+    if (!estLivraison) {
+      const hors = creneauRetraitHorsHoraires({ creneau, dateStr: date_commande, horairesDetail: commercant.horaires_detail })
+      if (hors) avertissements.push(avertissement('hors_horaires', messageHorsHoraires(hors, date_commande, { pourCommercant: true })))
+    }
     // L'exception « Autre date » (Alex, 10/10) : au-delà du calendrier de la
     // fiche, on prévient. Même longueur que la fiche (`calendrierDuCommerce`).
     const calendrier = await calendrierDuCommerce({ supabase: admin, commercant })

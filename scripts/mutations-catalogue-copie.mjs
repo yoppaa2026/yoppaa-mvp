@@ -288,6 +288,26 @@ const MUTATIONS = [
   // mutait `Math.round(base * 100)` en `base * 100` : sur 9,50 € les deux
   // donnent 950, la mutation ne changeait donc RIEN et restait verte. Une
   // mutation doit rejouer le defaut, pas le frole.
+  // ─── LE STOCK EN LOT ET LA GRILLE (10/10) ────────────────────────────────
+  { nom: '🔴 la grille jour par jour n est plus remplacée (le Croissant reste à 30)',
+    fichier: ECRAN, banc: 'verif:lot',
+    de: "        .delete().in('article_id', grilles.articleIds).eq('actif', true).select('id')", vers: "        .select('id').in('article_id', grilles.articleIds).eq('actif', true)" },
+  { nom: '🔴 le lot efface aussi les jours fermés',
+    fichier: ECRAN, banc: 'verif:lot',
+    de: "        .delete().in('article_id', grilles.articleIds).eq('actif', true).select('id')", vers: "        .delete().in('article_id', grilles.articleIds).select('id')" },
+  { nom: '⚠️ un article dont seule la grille change n est pas compté',
+    fichier: LOT, banc: 'verif:lot',
+    de: "    ...(action === 'stock' ? (grilles?.articleIds || []).map(String) : []),", vers: '' },
+  { nom: '⚠️ le résumé ne nomme plus les grilles remplacées',
+    fichier: LOT, banc: 'verif:lot',
+    de: '      if (grilles?.details?.length) morceaux.push(', vers: '      if (false) morceaux.push(' },
+  { nom: '🔴 un jour fermé compte comme une quantité à remplacer',
+    fichier: LOT, banc: 'verif:lot',
+    de: '    const actifs = jours.filter(e => e && e.actif !== false)', vers: '    const actifs = jours.filter(e => e)' },
+  { nom: '🔴 l écran retombe sur « déjà ce stock » au lieu du refus',
+    fichier: ECRAN, banc: 'verif:lot',
+    de: '                          {refus || resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles })}', vers: '                          {resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles })}' },
+
   { nom: '🔴 l ajustement de prix repart des euros et derive d un centime',
     fichier: LOT,
     banc: 'verif:lot',

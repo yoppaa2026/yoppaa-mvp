@@ -164,7 +164,7 @@ import {
 // ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
 // commerçant lit avant de valider. Le prix ne se défait pas, la règle non plus.
 import {
-  articlesDuLot, patchsDuLot, resumeDuLot, refusDuLot, TVA_INCHANGEE,
+  articlesDuLot, patchsDuLot, resumeDuLot, refusDuLot, TVA_INCHANGEE, grillesARemplacer,
 } from '@/lib/catalogue-lot'
 import OrdreCategories from '@/app/dashboard/OrdreCategories'
 import TabEquipe from '@/app/dashboard/TabEquipe'
@@ -1054,7 +1054,10 @@ function TabMenu({ commercantId, commercant, toast }) {
     }
 
     const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur })
-    if (patchs.length === 0) { toast(resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur }), 'error'); return }
+    // 🔴 « 15 par jour » remplace aussi la grille jour par jour (Alex, 10/10).
+    const grilles = lotAction === 'stock' ? grillesARemplacer({ articles: vises, valeur, grilles: stockParJourMap }) : null
+    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String)])
+    if (touches.size === 0) { toast(resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles }), 'error'); return }
 
     if (lotAction === 'prix') {
       // ⚠️ LE VERDICT PORTE UN NOM À LUI, et ce n'est pas un détail de style :
@@ -1081,17 +1084,27 @@ function TabMenu({ commercantId, commercant, toast }) {
       const { error } = await supabase.from('articles').update(patch).in('id', ids)
       if (error) rates += ids.length
     }
+    // La grille jour par jour : le geste de « Revenir à la quantité par défaut »,
+    // les jours fermés restent. Relu : la RLS refuse en rendant zéro ligne.
+    let grilleRatee = false
+    if (grilles?.articleIds.length > 0) {
+      const { data: effaces, error: errGrille } = await supabase.from('article_stock_jour')
+        .delete().in('article_id', grilles.articleIds).eq('actif', true).select('id')
+      if (errGrille || !effaces?.length) grilleRatee = true
+    }
     setLotEnCours(false)
     fetchArticles()
     // ⚠️ ON DIT COMBIEN ONT VRAIMENT BOUGÉ. « C'est fait » sur un échec partiel
     // laisserait le commerçant vendre ce qu'il croyait avoir retiré.
-    if (rates > 0) {
-      toast(`${patchs.length - rates} article(s) modifié(s), ${rates} en échec. Réessaie sur ceux qui restent.`, 'error')
+    if (rates > 0 || grilleRatee) {
+      toast(grilleRatee
+        ? 'Les quantités jour par jour n’ont pas pu être remplacées : vérifie la grille des articles concernés.'
+        : `${touches.size - rates} article(s) modifié(s), ${rates} en échec. Réessaie sur ceux qui restent.`, 'error')
       return
     }
     setLotIds([])
     setLotAction(null)
-    toast(patchs.length === 1 ? '1 article modifié.' : `${patchs.length} articles modifiés.`)
+    toast(touches.size === 1 ? '1 article modifié.' : `${touches.size} articles modifiés.`)
   }
 
   // ─── RANGER UN ARTICLE DANS SA CATÉGORIE (Alex, 10/10) ───────────────────
@@ -1991,13 +2004,24 @@ function TabMenu({ commercantId, commercant, toast }) {
                     const vises = articlesDuLot(articles, lotIds)
                     const valeur = valeurDuLot(lotAction)
                     const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur })
+                    const grilles = lotAction === 'stock' ? grillesARemplacer({ articles: vises, valeur, grilles: stockParJourMap }) : null
+                    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String)])
+                    // 🔴 LE REFUS SE LIT AVANT TOUT (Alex, 10/10 : « 0 : pas de
+                    // message, rien ne se passe ») : il disait « déjà ce stock ».
+                    const refus = ['prix', 'stock', 'tva', 'temps_prepa'].includes(lotAction) && lotIds.length > 0
+                      ? refusDuLot({ action: lotAction, articles: vises, valeur }) : null
+                    // Rien de saisi : la consigne en gris, pas une erreur en rouge.
+                    const rienSaisi = (lotAction === 'stock' && lotStock.mode !== 'illimite' && String(lotStock.quantite ?? '').trim() === '')
+                      || (lotAction === 'prix' && String(lotValeur ?? '').trim() === '')
+                      || (lotAction === 'temps_prepa' && String(lotTemps ?? '').trim() === '')
+                    const rouge = !!refus && !rienSaisi
                     return (
                       <>
-                        <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
-                          {resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur })}
+                        <p style={{ fontSize: 11.5, color: rouge ? '#B91C1C' : T.muted, fontWeight: rouge ? 700 : 400, margin: '0 0 10px', lineHeight: 1.5 }}>
+                          {refus || resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles })}
                         </p>
                         <button style={{ ...s.btn, ...s.btnPrimary, padding: '7px 14px', fontSize: 12 }}
-                          onClick={appliquerLot} disabled={lotEnCours || patchs.length === 0}>
+                          onClick={appliquerLot} disabled={lotEnCours || !!refus || touches.size === 0}>
                           {lotEnCours ? 'En cours…' : 'Appliquer'}
                         </button>
                       </>
@@ -2319,9 +2343,26 @@ function TabMenu({ commercantId, commercant, toast }) {
                   <Icon name="chevR" size={16} color={T.muted}/>
                 </summary>
                 <div style={{ padding: '0 16px 14px', borderTop: `1px solid ${T.hairline}` }}>
+                  {/* 🔴 UNE CROIX POUR REFERMER (Alex, 10/10) : remonter
+                      jusqu'au nom de l'article pour le refermer, après une
+                      longue liste d'options, c'était chercher la sortie. */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
+                    <button type="button" aria-label={`Refermer ${a.nom}`}
+                      onClick={e => e.currentTarget.closest('details')?.removeAttribute('open')}
+                      style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="x" size={13} color={T.ink}/> Fermer
+                    </button>
+                  </div>
                   {variantesCategorie
                     ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
                     : <OptionsArticle articleId={a.id} articles={articles} version={optionsTouchees[String(a.id)] || 0} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
+                    <button type="button" aria-label={`Refermer ${a.nom}`}
+                      onClick={e => e.currentTarget.closest('details')?.removeAttribute('open')}
+                      style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="x" size={13} color={T.ink}/> Fermer
+                    </button>
+                  </div>
                 </div>
               </details>
             ))

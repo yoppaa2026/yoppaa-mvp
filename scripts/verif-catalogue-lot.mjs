@@ -198,8 +198,25 @@ const CATALOGUE = [
   v('🔴 temps : l’article déjà à 8 min n’est pas réécrit, l’article sans temps l’est',
     pp.length === 2 && pp.some(p => p.id === 2) && pp.every(p => p.patch.temps_prepa === 8))
   v('temps : une saisie non entière est refusée', !!R({ action: 'temps_prepa', articles: arts, valeur: '7,5' }) && !!R({ action: 'temps_prepa', articles: arts, valeur: '' }))
-  v('le résumé dit que les quantités jour par jour restent prioritaires',
-    /restent prioritaires/.test(S({ action: 'stock', patchs: pj, coches: 3, valeur: { mode: 'jour', quantite: '30' } })))
+  // 🔴 (10/10, réorientée) LA GRILLE JOUR PAR JOUR EST REMPLACÉE (décision
+  // d'Alex) : « restent prioritaires » laissait le Croissant à 30 sans un mot.
+  const { grillesARemplacer: G } = await import('../lib/catalogue-lot.js')
+  const grilles = {
+    1: { lundi: { stock: 30, actif: true }, mardi: { stock: 30, actif: true } },
+    2: { samedi: { stock: 60, actif: true }, lundi: { stock: 20, actif: true }, dimanche: { stock: 0, actif: false } },
+  }
+  const arts2 = [{ ...arts[0], nom: 'Croissant' }, { ...arts[1], nom: 'Pain' }, { ...arts[2], nom: 'Tarte' }]
+  const g15 = G({ articles: arts2, valeur: { mode: 'jour', quantite: '15' }, grilles })
+  v('🔴 grille : les articles qui ont des quantités jour par jour sont nommés, avec ce qu’ils avaient',
+    JSON.stringify(g15.articleIds) === '[1,2]' && g15.details[0] === 'Croissant (30 par jour)' && g15.details[1] === 'Pain (de 20 à 60 selon le jour)', JSON.stringify(g15))
+  v('🔴 grille : un jour fermé se signale (il reste fermé)', g15.joursFermes === true)
+  v('grille : rien hors « par jour », rien sur 0', G({ articles: arts2, valeur: { mode: 'magasin', quantite: '5' }, grilles }).articleIds.length === 0
+    && G({ articles: arts2, valeur: { mode: 'jour', quantite: '0' }, grilles }).articleIds.length === 0)
+  const p30 = P({ action: 'stock', articles: arts2, valeur: { mode: 'jour', quantite: '30' } })
+  const r30 = S({ action: 'stock', patchs: p30, coches: 3, valeur: { mode: 'jour', quantite: '30' }, grilles: G({ articles: arts2, valeur: { mode: 'jour', quantite: '30' }, grilles }) })
+  v('🔴 l’article déjà à 30 mais avec une grille COMPTE (sa grille change) : 3 articles, et le résumé dit ce qui se passe',
+    r30 === '3 articles passeront à 30 par jour, tous les jours où ils se vendent. Quantités jour par jour remplacées : Croissant (30 par jour), Pain (de 20 à 60 selon le jour). Les jours où ils ne se vendent pas restent fermés.', r30)
+  v('🔴 plus jamais « restent prioritaires »', !/prioritaires/.test(r30))
 }
 
 // ═══ 6) LE BRANCHEMENT, CÔTÉ ÉCRAN ════════════════════════════════════════
@@ -220,6 +237,16 @@ const CATALOGUE = [
     /if \(\['prix', 'stock', 'tva', 'temps_prepa'\]\.includes\(lotAction\)\) \{\s*const refus = refusDuLot\(\{ action: lotAction, articles: vises, valeur \}\)\s*if \(refus\) \{ toast\(refus, 'error'\); return \}/.test(bloc)
     && bloc.indexOf('refusDuLot(') < bloc.indexOf('patchsDuLot('))
   v('le résumé affiché vient du module', /resumeDuLot\(/.test(config))
+  v('🔴 la grille est remplacée par le geste « Revenir à la quantité par défaut » (jours fermés gardés), relu',
+    /\.from\('article_stock_jour'\)\s*\.delete\(\)\.in\('article_id', grilles\.articleIds\)\.eq\('actif', true\)\.select\('id'\)/.test(bloc)
+    && /if \(errGrille \|\| !effaces\?\.length\) grilleRatee = true/.test(bloc))
+  v('🔴 le compte annoncé = articles ou grilles touchés',
+    /const touches = new Set\(\[\.\.\.patchs\.map\(p => String\(p\.id\)\), \.\.\.\(grilles\?\.articleIds \|\| \[\]\)\.map\(String\)\]\)/.test(bloc))
+  v('🔴 L’ÉCRAN DIT LE REFUS AVANT TOUT (le 0 disait « déjà ce stock » et le bouton ne faisait rien)',
+    /\{refus \|\| resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles \}\)\}/.test(config)
+    && /disabled=\{lotEnCours \|\| !!refus \|\| touches\.size === 0\}/.test(config))
+  v('une croix referme l’article ouvert dans Personnalisation (en haut et en bas)',
+    (config.match(/onClick=\{e => e\.currentTarget\.closest\('details'\)\?\.removeAttribute\('open'\)\}/g) || []).length === 2)
 
   // ⚠️ LE PRIX EXIGE UNE CONFIRMATION, les deux autres non : une action qui ne
   // se défait pas ne part pas sur un clic.

@@ -789,8 +789,11 @@ function TabMenu({ commercantId, commercant, toast }) {
     const aujourdhuiIso = jours[0]
     const circuitDe = c => (!deuxCircuits || (String(c.date_commande).slice(0, 10) === aujourdhuiIso && jourBelgeDeCreation(c.created_at) === aujourdhuiIso)) ? 'A' : 'B'
     const parCmd = Object.fromEntries(cmds.map(c => [c.id, { jk: jourKeyParDate[String(c.date_commande).slice(0, 10)], circuit: circuitDe(c) }]))
+    // 🔴 CE QUE CHAQUE LIGNE RETIRE VRAIMENT (11/10) : un lot de 4 compte 4,
+    // le second article d'un duo compte aussi. La vue est celle des fonctions
+    // de stock du serveur (MIGRATION_LOTS_STOCK_REEL) : un seul comptage.
     const { data: lignes } = await supabase
-      .from('commande_articles')
+      .from('consommation_stock')
       .select('article_id, quantite, commande_id')
       .in('commande_id', cmds.map(c => c.id))
     const map = {}

@@ -34,7 +34,7 @@
 import { NextResponse } from 'next/server'
 import { clientAdmin } from '@/lib/api-auth'
 import { gardeEquipe, journaliserGeste } from '@/lib/equipe-server'
-import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
+import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS } from '@/lib/lignes-commande'
 import { commandeDeborde, capaciteDuCreneau, creneauCommandable } from '@/lib/creneaux'
 import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
@@ -141,13 +141,16 @@ export async function POST(request) {
       { data: optionsValeurs, error: eO },
       { data: variantesData, error: eV },
       { data: dealsData, error: eD },
+      { data: groupesOptions, error: eG },
     ] = await Promise.all([
       admin.from('articles').select(SELECT_ARTICLES).in('id', articleIds),
-      admin.from('article_options_valeurs').select('id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'),
+      // Les options des articles du panier seulement, et leurs groupes (11/10).
+      admin.from('article_options_valeurs').select(SELECT_OPTIONS_VALEURS).in('article_options_groupes.article_id', articleIds),
       admin.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
       admin.from('yoppaa_deals').select(SELECT_DEALS).eq('commercant_id', commercant.id).eq('actif', true),
+      admin.from('article_options_groupes').select(SELECT_GROUPES_OPTIONS).in('article_id', articleIds),
     ])
-    if (eA || eO || eV || eD) return non('Impossible de lire le catalogue. Réessaie.', 500)
+    if (eA || eO || eV || eD || eG) return non('Impossible de lire le catalogue. Réessaie.', 500)
     if (!articlesData || articlesData.length !== articleIds.length) return non('Un ou plusieurs articles sont introuvables.')
     for (const a of articlesData) {
       if (a.commercant_id !== commercant.id) return non(`« ${a.nom} » n’appartient pas à ce commerce.`)
@@ -158,6 +161,7 @@ export async function POST(request) {
     const panierPropre = panier.map(({ id, quantite, variante_id, options }) => ({ id, quantite, variante_id: variante_id || null, options }))
     const calcul = construireLignesCommande({
       panier: panierPropre, articlesData, optionsValeurs, variantesData, dealsData,
+      groupesOptions: groupesOptions || [],
       commercant, regime: REGIME_EMPORTER, dateCommande: date_commande,
       stockVarianteIndicatif: true,
     })
@@ -325,6 +329,9 @@ export async function POST(request) {
       variante_id: l.variante_id || null,
       deal_id: null,
       quantite: l.quantite,
+      // Le stock réellement retiré, figé (MIGRATION_LOTS_STOCK_REEL, 11/10).
+      quantite_stock: l.quantite_stock,
+      duo_article_id: l.deal_article2_id || null,
       prix_unitaire: l.prix_unitaire,
       options: l.options,
       tva_taux: l.tva_taux,

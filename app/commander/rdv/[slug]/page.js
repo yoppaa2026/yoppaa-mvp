@@ -636,6 +636,9 @@ export default function CommanderRdvSlug() {
   }
 
   function ajouterProduit(article) {
+    // Un choix obligatoire se fait en boutique (11/10) : ni tuile ni reprise
+    // ne l'ajoutent ici.
+    if (article?.choix_obligatoire) return
     setPanierProduits(prev => ({
       ...prev,
       [article.id]: {
@@ -834,7 +837,7 @@ export default function CommanderRdvSlug() {
     const ajouts = {}
     for (const l of depot.articles) {
       const article = produits.find(p => p.id === l.id)
-      if (!article || article.est_vitrine || !(Number(article.prix) > 0)) continue
+      if (!article || article.est_vitrine || !(Number(article.prix) > 0) || article.choix_obligatoire) continue
       ajouts[article.id] = { article, prix: prixProduit(article), quantite: l.quantite }
     }
     if (Object.keys(ajouts).length > 0) setPanierProduits(prev => ({ ...prev, ...ajouts }))
@@ -1338,7 +1341,21 @@ export default function CommanderRdvSlug() {
           .order('nom')
         if (errArts) console.warn('[rdv fiche] fetch produits KO', errArts.message)
         if (annule) return
-        setProduits(arts || [])
+        // 🔴 (11/10) UN ARTICLE À CHOIX OBLIGATOIRE (cuisson, base) ne
+        // s'achète pas ici : ce tunnel n'a pas d'écran d'options, et le
+        // serveur refuse désormais un choix obligatoire manquant. Il se
+        // compose dans la boutique, où mène sa tuile. ⚠️ Une lecture en échec
+        // ferme l'achat de TOUS les produits plutôt que d'en laisser passer.
+        const ids = (arts || []).map(a => a.id)
+        let obligatoires = new Set()
+        if (ids.length > 0) {
+          const { data: grp, error: errGrp } = await supabase
+            .from('article_options_groupes').select('article_id').eq('obligatoire', true).in('article_id', ids)
+          if (annule) return
+          obligatoires = errGrp ? new Set(ids) : new Set((grp || []).map(g => g.article_id))
+          if (errGrp) console.warn('[rdv fiche] fetch options KO', errGrp.message)
+        }
+        setProduits((arts || []).map(a => ({ ...a, choix_obligatoire: obligatoires.has(a.id) })))
       }
 
       // ⚠️ OÙ SE PASSE L'ACTIVITÉ, ET LE MODULE LIEUX N'ÉTAIT JAMAIS ARRIVÉ ICI.
@@ -2631,7 +2648,7 @@ export default function CommanderRdvSlug() {
             const qte = panierProduits[p.id]?.quantite || 0
             // Un produit en vitrine s'affiche à son prix FERME, sans achat en
             // ligne (Alex, 30/09) : la mention du métier le dit.
-            const achetable = produitsAchetables && !p.est_vitrine && Number(p.prix) > 0
+            const achetable = produitsAchetables && !p.est_vitrine && Number(p.prix) > 0 && !p.choix_obligatoire
             return (
             <div key={p.id}
               style={{ flexShrink: 0, width: 118, background: '#fff', border: `1px solid ${qte > 0 ? T.main + '55' : T.pale}`, borderRadius: 14, overflow: 'hidden', boxShadow: qte > 0 ? `0 2px 10px ${T.main}22` : 'none' }}>
@@ -2658,6 +2675,12 @@ export default function CommanderRdvSlug() {
                 )}
                 {p.est_vitrine && (
                   <p style={{ margin: '3px 0 0', fontSize: '0.62rem', fontWeight: 700, color: T.muted }}>{mentionVitrine(commercant)}</p>
+                )}
+                {produitsAchetables && !p.est_vitrine && p.choix_obligatoire && (
+                  <a href={`/commander/${commercant.slug}?article=${p.id}`} onClick={emporterPanierVersBoutique}
+                    style={{ display: 'block', marginTop: 7, fontSize: '0.72rem', fontWeight: 800, color: T.main, textDecoration: 'none' }}>
+                    À composer en boutique
+                  </a>
                 )}
                 {achetable && (qte > 0 ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 7 }}>

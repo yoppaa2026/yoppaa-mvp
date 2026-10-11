@@ -53,7 +53,7 @@ import { jourPlus } from '@/lib/statut-commerce'
 import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, premierJourPossible, jourEnClair } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
-import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, messageCircuit, SELECT_ARTICLES, SELECT_DEALS } from '@/lib/lignes-commande'
+import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, messageCircuit, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS } from '@/lib/lignes-commande'
 import { circuitsDeLArticle, circuitsCommuns } from '@/lib/stock-article'
 import { porteUneFenetre } from '@/lib/anti-gaspi'
 import { normaliserEmail } from '@/lib/email-normalise'
@@ -473,12 +473,16 @@ export async function POST(request) {
 
     const [
       { data: articlesData },
-      { data: optionsValeurs },
+      { data: optionsValeurs, error: errOptions },
       { data: variantesData },
       { data: dealsData },
+      { data: groupesOptions, error: errGroupes },
     ] = await Promise.all([
       supabase.from('articles').select(SELECT_ARTICLES).in('id', articleIds),
-      supabase.from('article_options_valeurs').select('id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'),
+      // 🔴 LES OPTIONS DES ARTICLES DU PANIER, PAS DE TOUTE LA PLATEFORME (11/10).
+      // Sans filtre, la lecture plafonnée à 1 000 lignes pouvait perdre une
+      // option choisie : elle disparaissait de la commande, son supplément avec.
+      supabase.from('article_options_valeurs').select(SELECT_OPTIONS_VALEURS).in('article_options_groupes.article_id', articleIds),
       // Variantes (Module 2 boutique) : revalidation server-side prix + stock
       supabase.from('article_variantes').select('id, article_id, axe1_valeur, axe2_valeur, prix, stock, actif').in('article_id', articleIds),
       // Deals : revalidation server-side du prix selon le type. Les lots et les
@@ -486,8 +490,16 @@ export async function POST(request) {
       // pourcentage ou en prix promo, s'appliquent au prix de l'article et sont
       // recalculées ici même quand le navigateur ne les a pas vues.
       supabase.from('yoppaa_deals').select(SELECT_DEALS).eq('commercant_id', commercant_id).eq('actif', true),
+      // Les groupes, pour savoir lesquels sont OBLIGATOIRES (11/10).
+      supabase.from('article_options_groupes').select(SELECT_GROUPES_OPTIONS).in('article_id', articleIds),
     ])
 
+    // ⚠️ UNE OPTION ILLISIBLE N'EST PAS « AUCUNE OPTION » : on ne vend pas une
+    // pizza sans savoir si sa base était obligatoire, ni sans son supplément.
+    if (errOptions || errGroupes) {
+      console.error('[create-commande] lecture des options KO', errOptions?.message || errGroupes?.message)
+      return NextResponse.json({ ok: false, error: 'Impossible de vérifier les options. Réessaie.' }, { status: 500 })
+    }
     if (!articlesData || articlesData.length !== articleIds.length) {
       return NextResponse.json({ ok: false, error: 'Un ou plusieurs articles introuvables.' }, { status: 400 })
     }
@@ -518,6 +530,7 @@ export async function POST(request) {
     const calcul = construireLignesCommande({
       panier: articles,
       articlesData, optionsValeurs, variantesData, dealsData,
+      groupesOptions: groupesOptions || [],
       commercant,
       regime: regimeTva,
       dateCommande: date_commande,
@@ -1254,6 +1267,13 @@ export async function POST(request) {
         // distinguaient une ligne vendue en promotion d'une ligne au prix plein.
         deal_id: l.deal_id || null,
         quantite: l.quantite,
+        // 🔴 LE STOCK RÉELLEMENT RETIRÉ, FIGÉ (11/10). Un lot « 3+1 » enregistrait
+        // `quantite` = 1 : après les 5 minutes de la réservation, toutes les
+        // sommes de stock relisaient 1 au lieu de 4, et le second article d'un
+        // duo n'était jamais retiré. La vue `consommation_stock` lit ces deux
+        // colonnes (MIGRATION_LOTS_STOCK_REEL).
+        quantite_stock: l.quantite_stock,
+        duo_article_id: l.deal_article2_id || null,
         prix_unitaire: l.prix_unitaire,
         options: l.options,
         tva_taux: l.tva_taux,

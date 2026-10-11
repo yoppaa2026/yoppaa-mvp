@@ -944,7 +944,7 @@ function getDeviceId() {
 // commerçant, mosaïque photos façon réseau social (tap = plein écran),
 // description riche (les emojis et sauts de ligne du commerçant respectés),
 // cœur + partage, puis achat (VariantesSelector si variantes). Tous catalogues.
-function ArticleDetailModal({ article, variantes, photosActives, commercant, social, onToggleLike, onPartager, partageEtat, onClose, onAjouter, onAjouterVariante, remise = null }) {
+function ArticleDetailModal({ article, variantes, groupes = [], photosActives, commercant, social, onToggleLike, onPartager, partageEtat, onClose, onAjouter, onAjouterVariante, remise = null }) {
   const [galerie, setGalerie] = useState([])
   const [photoIdx, setPhotoIdx] = useState(null)   // index de la photo ouverte en plein écran
   const touchXRef = useRef(null)                   // swipe gauche/droite dans le viewer
@@ -1078,6 +1078,12 @@ function ArticleDetailModal({ article, variantes, photosActives, commercant, soc
           {hasVar && onAjouterVariante && !article.est_vitrine ? (
             <VariantesSelector article={article} variantes={variantes}
               onAjouter={(a, v) => { onAjouterVariante(a, v); onClose() }}/>
+          ) : (!hasVar && onAjouter && !article.est_vitrine && groupes.length > 0) ? (
+            // 🔴 (11/10) CE BOUTON AJOUTAIT L'ARTICLE SANS SES OPTIONS : une
+            // pizza partait sans sa base obligatoire. La fiche détaillée
+            // passe par le même choix que la ligne du catalogue.
+            <OptionsSelector article={article} groupes={groupes}
+              onAjouter={(a, opts) => { onAjouter(a, opts); onClose() }}/>
           ) : (!hasVar && onAjouter && !article.est_vitrine) ? (
             <button onClick={() => { onAjouter(article); onClose() }}
               style={{ width: '100%', padding: '0.8rem', border: 'none', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: '0.9rem', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 14px ${T.main}44` }}>
@@ -2686,9 +2692,14 @@ export default function CommanderSlug() {
     panierReprisRef.current = true
     if (!depot) return
     const ajouts = {}
+    const ignores = [...depot.ignores]
     for (const l of depot.articles) {
       const article = articles.find(a => String(a.id) === String(l.id))
       if (!article || article.est_vitrine || !(Number(article.prix) > 0)) continue
+      // 🔴 (11/10) UN CHOIX OBLIGATOIRE NE SE DEVINE PAS : l'article venu du
+      // rendez-vous arrivait sans ses options, et le serveur le refuse
+      // désormais. Il reste derrière, et le client est prévenu.
+      if ((optionsParArticle[article.id] || []).some(g => g.obligatoire)) { ignores.push(article.nom); continue }
       const stockMax = getStockMax(article.id)
       const qte = stockMax === Infinity ? l.quantite : Math.min(l.quantite, stockMax)
       if (qte <= 0) continue
@@ -2703,8 +2714,8 @@ export default function CommanderSlug() {
     }
     const repris = Object.keys(ajouts).length
     if (repris > 0) setPanier(prev => ({ ...prev, ...ajouts }))
-    if (repris > 0 || depot.ignores.length > 0) {
-      setPanierRepris({ repris, ignores: depot.ignores })
+    if (repris > 0 || ignores.length > 0) {
+      setPanierRepris({ repris, ignores })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- ne doit tourner qu'une fois, au premier catalogue chargé
   }, [slug, articles.length, commercant?.plan])
@@ -3901,6 +3912,7 @@ export default function CommanderSlug() {
       {articleDetail && (
         <ArticleDetailModal article={articleDetail}
           variantes={variantesParArticle[articleDetail.id] || []}
+          groupes={optionsParArticle[articleDetail.id] || []}
           photosActives={commercant?.photos_catalogue_actif !== false}
           commercant={commercant}
           social={articleSocial}
@@ -3909,7 +3921,7 @@ export default function CommanderSlug() {
           partageEtat={partageEtat}
           onClose={() => setArticleDetail(null)}
           remise={remiseSurArticle(articleDetail, dealsActifs)}
-          onAjouter={peutCommander ? (a) => ajouterAuPanier(a) : null}
+          onAjouter={peutCommander ? (a, opts = null) => ajouterAuPanier(a, opts) : null}
           onAjouterVariante={peutCommander ? (a, v) => ajouterAuPanier(a, null, v) : null}/>
       )}
 

@@ -18,6 +18,7 @@ import { referenceCommande } from '@/lib/numero-commande'
 import { etatPaiementCommande, couleurPaiement } from '@/lib/rdv-paiement'
 import { getMinutesBrussels } from '@/lib/ouverture'
 import { ORIGINE_COMMERCANT } from '@/lib/commande-encodee'
+import { COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
 import { confirme } from './PosteConfirmation'
 import { confirmationSimple } from '@/lib/confirmations'
 import {
@@ -76,7 +77,7 @@ function CarteCompacte({ commande, couleur, aujourdhui, maintenantMin, categorie
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 14, fontWeight: 800, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{commande.client_nom || 'Client'}</span>
         {commande.origine === ORIGINE_COMMERCANT && <span style={puce(T.pale, T.deep)}>Encodée</span>}
-        {commande.mode_retrait === 'livraison' && <span style={puce('#EEF2FF', '#3730A3')}>Livraison</span>}
+        {commande.mode_retrait === 'livraison' && <span style={puce(COULEUR_LIVRAISON.pale, COULEUR_LIVRAISON.texte)}>Livraison</span>}
         {commande.mode_retrait === 'expedition' && <span style={puce('#EEF2FF', '#3730A3')}>Colis</span>}
         {commande.rdv_reservation_id && <span style={puce(T.pale, T.deep)}>Rendez-vous</span>}
       </div>

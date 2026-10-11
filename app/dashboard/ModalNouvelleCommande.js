@@ -20,6 +20,7 @@ import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { remplissageCreneaux, jourSemaineDe } from '@/lib/creneaux'
 import { referenceCommande } from '@/lib/numero-commande'
 import { creneauRetraitHorsHoraires } from '@/lib/ouverture'
+import { COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { construireLignesCommande } from '@/lib/lignes-commande'
 import { REGIME_EMPORTER } from '@/lib/tva'
@@ -301,7 +302,7 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
               {[['retrait', 'Retrait'], ['livraison', 'Livraison']].map(([m, l]) => (
                 <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={mode === m}
-                  style={{ flex: 1, padding: '9px 12px', borderRadius: 100, border: `1.5px solid ${mode === m ? T.main : T.hairline}`, background: mode === m ? T.pale : '#fff', color: T.deep, fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>{l}</button>
+                  style={{ flex: 1, padding: '9px 12px', borderRadius: 100, border: `1.5px solid ${mode === m ? (m === 'livraison' ? COULEUR_LIVRAISON.fort : T.main) : T.hairline}`, background: mode === m ? (m === 'livraison' ? COULEUR_LIVRAISON.pale : T.pale) : '#fff', color: m === 'livraison' ? COULEUR_LIVRAISON.texte : T.deep, fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>{l}</button>
               ))}
             </div>
           )}

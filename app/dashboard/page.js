@@ -76,7 +76,7 @@ import AideInstallation from './AideInstallation'
 import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes } from './ReglageEtiquettes'
 import { imprimerSiActive } from '@/lib/impression-etiquette'
 import { etiquetteConcernee } from '@/lib/etiquette-commande'
-import { PALETTE_STATUT } from '@/lib/couleurs-statut-commande'
+import { PALETTE_STATUT, COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
 import { filtresCommandes } from '@/lib/poste-vues'
 import { ColonnesCommandes, BandeCreneaux, PanneauAPreparer } from './VueCommandes'
 import { ADMIN_EMAIL } from '@/lib/admin-identite'
@@ -1620,9 +1620,11 @@ export default function Dashboard() {
     setCommandes(triees)
     dernierNombreRef.current = nombreArriveesEnLigne(triees)
     setLoading(false)
-    // Sélectionner aujourd'hui par défaut
-    const todayKey = dateKey(new Date())
-    setJourSelectionne(todayKey)
+    // 🔴 LE JOUR CHOISI N'EST PLUS REMIS À AUJOURD'HUI (Alex, 11/10 : « l'écran
+    // retourne sur aujourd'hui alors que je suis sur demain »). Cette lecture
+    // tourne toutes les 60 s, au retour sur l'onglet et après un encodage :
+    // elle ne touche plus au jour. Aujourd'hui reste le défaut (`null`), et un
+    // jour qui n'est plus proposé (minuit passé) y retombe par `jourActif`.
   }, [])
 
   // Fetch des RDVs d'un commercant. Filtre deleted_at IS NULL (legal Belgique 7 ans
@@ -4178,7 +4180,8 @@ export default function Dashboard() {
                         <button key={m.v} onClick={() => { setVueMode(m.v); setFiltreStatut('actives') }}
                           /* T.hairline n'existe pas dans la palette de cet écran : le bouton
                              inactif rendait « 2px solid undefined », donc AUCUN contour. */
-                          style={{ position: 'relative', flex: 1, padding: '9px', borderRadius: 10, border: `2px solid ${vueMode === m.v ? T.main : T.pale}`, background: vueMode === m.v ? T.main : '#fff', color: vueMode === m.v ? '#fff' : T.ink, fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                          /* Retrait en violet, Livraison en bleu (COULEUR_LIVRAISON, Alex 11/10). */
+                          style={{ position: 'relative', flex: 1, padding: '9px', borderRadius: 10, border: `2px solid ${m.v === 'livraison' ? (vueMode === m.v ? COULEUR_LIVRAISON.fort : `${COULEUR_LIVRAISON.fort}40`) : (vueMode === m.v ? T.main : T.pale)}`, background: vueMode === m.v ? (m.v === 'livraison' ? COULEUR_LIVRAISON.fort : T.main) : (m.v === 'livraison' ? COULEUR_LIVRAISON.pale : '#fff'), color: vueMode === m.v ? '#fff' : (m.v === 'livraison' ? COULEUR_LIVRAISON.texte : T.ink), fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                           {m.label}{m.n > 0 ? ` · ${m.n}` : ''}
                           {/* La pastille ne vit QUE sur l'onglet qu'il ne
                               regarde pas : une alerte sur la vue courante

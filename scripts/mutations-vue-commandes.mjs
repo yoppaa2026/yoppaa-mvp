@@ -61,6 +61,17 @@ const MUTATIONS = [
     de: '    if (ok) onBasculer(r.creneau.id, bloque)', vers: '    onBasculer(r.creneau.id, bloque)' },
   { nom: '🔴 la carte compacte avance deux étapes (clic sans garde « envoi »)', fichier: VUE,
     de: '    try { await onAvancer(commande, action.statut) } finally { setEnvoi(false) }', vers: '    onAvancer(commande, action.statut); setEnvoi(false)' },
+  // Alex, 11/10 soir.
+  { nom: '🔴 la relecture des 60 s remet le jour sur aujourd hui', fichier: BORD,
+    de: "    // 🔴 LE JOUR CHOISI N'EST PLUS REMIS À AUJOURD'HUI (Alex, 11/10 : « l'écran", vers: '    setJourSelectionne(dateKey(new Date()))' },
+  { nom: '⚠️ un jour qui n est plus proposé ne retombe plus sur aujourd hui', fichier: BORD,
+    de: '  const jourActif = (jourSelectionne && joursDispos.includes(jourSelectionne)) ? jourSelectionne : todayKey', vers: '  const jourActif = jourSelectionne || todayKey' },
+  { nom: '⚠️ la bascule Livraison redevient violette', fichier: BORD,
+    de: "background: vueMode === m.v ? (m.v === 'livraison' ? COULEUR_LIVRAISON.fort : T.main)", vers: 'background: vueMode === m.v ? (T.main)' },
+  { nom: '⚠️ la pastille Livraison prend une autre couleur', fichier: VUE,
+    de: 'puce(COULEUR_LIVRAISON.pale, COULEUR_LIVRAISON.texte)}>Livraison', vers: "puce('#EEF2FF', '#3730A3')}>Livraison" },
+  { nom: '⚠️ la fenêtre d encodage garde le violet pour la livraison', fichier: 'app/dashboard/ModalNouvelleCommande.js',
+    de: "background: mode === m ? (m === 'livraison' ? COULEUR_LIVRAISON.pale : T.pale)", vers: 'background: mode === m ? (T.pale)' },
 ]
 
 const lancer = () => {

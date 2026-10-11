@@ -1888,6 +1888,34 @@ const verifie = (nom, cond, detail = '') => {
     && /lignesClient\.length, lignesStatut\.length, lignesPaiement\.length\)/.test(pdfSrc))
 }
 
+// 🔴 LE JOUR CHOISI RESTE CHOISI (Alex, 11/10 : « l'écran retourne sur
+// aujourd'hui alors que je suis sur demain, après X secondes »). La relecture
+// des commandes tourne toutes les 60 s : elle ne doit pas toucher au jour.
+{
+  const page = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+  const debut = page.indexOf('const chargerCommandes = useCallback(async (id) => {')
+  const corps = debut > -1 ? page.slice(debut, page.indexOf('}, [])', debut)) : ''
+  verifie('🔴 la relecture des commandes (60 s, focus, encodage) ne remet plus le jour sur aujourd’hui',
+    corps.length > 0 && /setCommandes\(triees\)/.test(corps) && !/setJourSelectionne/.test(corps))
+  verifie('🔴 aujourd’hui reste le défaut, et un jour qui n’est plus proposé y retombe',
+    /const \[jourSelectionne, setJourSelectionne\] = useState\(null\)/.test(page)
+    && /const jourActif = \(jourSelectionne && joursDispos\.includes\(jourSelectionne\)\) \? jourSelectionne : todayKey/.test(page))
+
+  // 🔴 RETRAIT EN VIOLET, LIVRAISON EN BLEU, PARTOUT LE MÊME (Alex, 11/10).
+  const couleurs = readFileSync(new URL('../lib/couleurs-statut-commande.js', import.meta.url), 'utf8')
+  const fen = sansProse(readFileSync(new URL('../app/dashboard/ModalNouvelleCommande.js', import.meta.url), 'utf8'))
+  const vue = sansProse(readFileSync(new URL('../app/dashboard/VueCommandes.js', import.meta.url), 'utf8'))
+  verifie('🔴 la livraison a UNE couleur, le bleu de « En livraison »',
+    /export const COULEUR_LIVRAISON = \{ fort: PALETTE_STATUT\.bleu\.badge, pale: PALETTE_STATUT\.bleu\.cardBg, texte: '#1E40AF' \}/.test(couleurs))
+  verifie('🔴 la bascule du tableau de bord : Livraison en bleu, Retrait en violet',
+    /background: vueMode === m\.v \? \(m\.v === 'livraison' \? COULEUR_LIVRAISON\.fort : T\.main\)/.test(page))
+  verifie('🔴 la bascule de la fenêtre d’encodage : la même couleur',
+    /background: mode === m \? \(m === 'livraison' \? COULEUR_LIVRAISON\.pale : T\.pale\)/.test(fen)
+    && /border: `1\.5px solid \$\{mode === m \? \(m === 'livraison' \? COULEUR_LIVRAISON\.fort : T\.main\) : T\.hairline\}`/.test(fen))
+  verifie('🔴 la pastille « Livraison » des cartes : la même couleur',
+    /\{commande\.mode_retrait === 'livraison' && <span style=\{puce\(COULEUR_LIVRAISON\.pale, COULEUR_LIVRAISON\.texte\)\}>Livraison<\/span>\}/.test(vue))
+}
+
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du
 // fichier et n'annonçait donc qu'un tiers du travail.
 console.log(`\nTableau de bord : ${ok} vérifications`)

@@ -130,8 +130,8 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     /\(!hasVar && onAjouter && !article\.est_vitrine && groupes\.length > 0\) \? \(\s*<OptionsSelector article=\{article\} groupes=\{groupes\}\s*onAjouter=\{\(a, opts\) => \{ onAjouter\(a, opts\); onClose\(\) \}\}\/>/.test(fiche)
     && fiche.includes('groupes={optionsParArticle[articleDetail.id] || []}')
     && fiche.includes('onAjouter={peutCommander ? (a, opts = null) => ajouterAuPanier(a, opts) : null}'))
-  v('le titre du choix ne présume pas du genre de l’article (« Tes choix pour … », jamais « Personnalise ton »)',
-    fiche.includes('>Tes choix pour {article.nom}</p>') && !/Personnalise (ton|ta) \{article\.nom\}/.test(fiche))
+  v('le titre du choix ne présume pas du genre de l’article (« Ta personnalisation : … », choisi par Alex ; jamais « Personnalise ton »)',
+    fiche.includes('>Ta personnalisation : {article.nom}</p>') && !/Personnalise (ton|ta) \{article\.nom\}/.test(fiche))
   v('🔴 panier venu du rendez-vous : un article à choix obligatoire reste derrière, et le client est prévenu',
     fiche.includes('if ((optionsParArticle[article.id] || []).some(g => g.obligatoire)) { ignores.push(article.nom); continue }')
     && fiche.includes('setPanierRepris({ repris, ignores })'))

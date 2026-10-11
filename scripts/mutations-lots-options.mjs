@@ -76,7 +76,7 @@ const MUTATIONS = [
   { nom: '🔴 l essai garde son second lien (pas de DROP)', fichier: SQL,
     de: 'ALTER TABLE public.commande_articles DROP CONSTRAINT IF EXISTS commande_articles_duo_article_id_fkey;', vers: '' },
   { nom: '🔴 la fiche redit « Personnalise ton »', fichier: FICHE,
-    de: '>Tes choix pour {article.nom}</p>', vers: '>Personnalise ton {article.nom}</p>' },
+    de: '>Ta personnalisation : {article.nom}</p>', vers: '>Personnalise ton {article.nom}</p>' },
   { nom: '🔴 la vue oublie le second article du duo', fichier: SQL,
     de: '   WHERE ca.duo_article_id IS NOT NULL;', vers: '   WHERE false;' },
   { nom: '🔴 la vue ignore la RLS', fichier: SQL,

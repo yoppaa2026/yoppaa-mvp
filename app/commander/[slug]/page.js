@@ -243,8 +243,8 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
       {/* Ni « ton » ni « ta » : le genre de l'article est inconnu (« ton
-          Brochette », vu par Alex le 11/10). */}
-      <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Tes choix pour {article.nom}</p>
+          Brochette », vu par Alex le 11/10). Libellé choisi par Alex. */}
+      <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Ta personnalisation : {article.nom}</p>
       {groupes.map(g => {
         const isUnique = g.type === 'unique'
         return (

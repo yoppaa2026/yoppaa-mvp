@@ -26,7 +26,7 @@ import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
 import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
 import { jourPlus } from '@/lib/statut-commerce'
-import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE, creneauTermine, etatTuile, joursDuCalendrier, horsCalendrier } from '@/lib/commande-encodee'
+import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE, creneauTermine, etatTuile, joursDuCalendrier, avisAutreDate } from '@/lib/commande-encodee'
 
 const T = {
   bg: '#F8F6FF', ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -118,6 +118,8 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
   // l'est. L'heure est relue chaque minute : une fenêtre ouverte à 11 h 58 ne
   // propose plus le créneau de 11 h 45 à midi passé.
   const [minute, setMinute] = useState(() => Date.now())
+  // « Autre date » : l'exception d'Alex (10/10), hors des pastilles du calendrier.
+  const [autreDate, setAutreDate] = useState(false)
   useEffect(() => {
     const t = setInterval(() => setMinute(Date.now()), 60000)
     return () => clearInterval(t)
@@ -128,14 +130,18 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
     champCreneau: mode === 'livraison' ? 'creneau_livraison_id' : 'creneau_id',
   }).filter(({ creneau }) => !creneauTermine(creneau, { dateStr: date, maintenant: new Date(minute), instant: brusselsInstant }))
     // 🔴 (11/10) Retrait : un créneau hors des horaires n'est pas proposé (la
-    // règle de la fiche) ; via « Autre date », le serveur prévient.
-    .filter(({ creneau }) => mode !== 'retrait' || !creneauRetraitHorsHoraires({ creneau, dateStr: date, horairesDetail: donnees?.commercant?.horaires_detail })),
-  [mode, date, donnees, minute])
+    // règle de la fiche). SAUF sur « Autre date », l'exception d'Alex : il
+    // est montré, marqué « hors horaires », et le serveur fait confirmer
+    // (`hors_horaires`). Sans cela, un mardi fermé ne donnait que « Aucun
+    // créneau ce jour-là », sans un mot ni un moyen (Alex, 11/10).
+    .map(r => ({ ...r, horsHoraires: mode === 'retrait' && !!creneauRetraitHorsHoraires({ creneau: r.creneau, dateStr: date, horairesDetail: donnees?.commercant?.horaires_detail }) }))
+    .filter(r => autreDate || !r.horsHoraires),
+  [mode, date, donnees, minute, autreDate])
   useEffect(() => { setCreneauId(null) }, [mode, date])
 
   // ── Les jours : ceux du calendrier de la fiche (`joursDuCalendrier`) ─────
   // « Aujourd'hui » n'y est que s'il reste un créneau, comme sur la fiche.
-  const [autreDate, setAutreDate] = useState(false)
+  // (`autreDate` est déclaré plus haut : le calcul des créneaux le lit.)
   const jours = useMemo(() => {
     if (!donnees?.calendrier) return []
     const source = (mode === 'livraison' ? donnees.creneauxLivraison : donnees.creneauxRetrait) || []
@@ -146,6 +152,11 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
       && !(horaires && creneauRetraitHorsHoraires({ creneau: c, dateStr: aujourdhui, horairesDetail: horaires })))
     return joursDuCalendrier({ aujourdhui, longueur: donnees.calendrier.longueur, fermetures: donnees.calendrier.fermetures, aujourdhuiOuvert, horairesDetail: horaires })
   }, [donnees, mode, aujourdhui, minute])
+  // Ce que ce jour a d'exceptionnel, dit AVANT le choix du créneau.
+  const avisDate = useMemo(() => (autreDate && donnees?.calendrier ? avisAutreDate({
+    jour: date, aujourdhui, longueur: donnees.calendrier.longueur, fermetures: donnees.calendrier.fermetures,
+    horairesDetail: mode === 'retrait' ? donnees.commercant?.horaires_detail : null,
+  }) : []), [autreDate, donnees, date, aujourdhui, mode])
   // Un jour hors des pastilles (onglet du tableau de bord, aujourd'hui passé)
   // retombe sur le premier jour du calendrier, sauf choix « Autre date ».
   useEffect(() => {
@@ -308,10 +319,11 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                 aria-label="Autre date" style={{ ...champ, width: 'auto', padding: '7px 10px', fontSize: 14 }}/>
             )}
           </div>
-          {autreDate && donnees?.calendrier && horsCalendrier({ jour: date, aujourdhui, longueur: donnees.calendrier.longueur }) && (
-            <p style={{ fontSize: 13, fontWeight: 700, color: T.alerte, margin: '0 0 10px' }}>
-              Au-delà de ton calendrier de commande en ligne : tu devras confirmer.
-            </p>
+          {avisDate.length > 0 && (
+            <div role="note" style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
+              {avisDate.map(a => <p key={a} style={{ fontSize: 13, fontWeight: 700, color: '#92400E', margin: '0 0 3px' }}>{a}</p>)}
+              <p style={{ fontSize: 13, color: '#92400E', margin: 0 }}>Tu peux quand même encoder : tu devras confirmer.</p>
+            </div>
           )}
           <p style={titre}>{mode === 'livraison' ? 'Tournée' : 'Créneau'}</p>
           {creneaux.length === 0 ? (
@@ -322,7 +334,7 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
             </p>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: 8 }}>
-              {creneaux.map(({ creneau, complet: completBrut, utilise, capacite, modeTemps }) => {
+              {creneaux.map(({ creneau, complet: completBrut, utilise, capacite, modeTemps, horsHoraires }) => {
                 const choisi = creneauId === creneau.id
                 // ⚠️ SANS CAPACITÉ RÉGLÉE, RIEN N'EST PLEIN : `calculerCapaciteCreneau`
                 // compare alors à une capacité vide, et 0 >= null vaut vrai.
@@ -336,6 +348,7 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                         {complet ? 'Plein' : modeTemps ? `${Math.round(utilise)} / ${capacite} min` : `${utilise} / ${capacite}`}
                       </span>
                     ) : <span style={{ display: 'block', fontSize: 12, color: T.muted }}>sans limite</span>}
+                    {horsHoraires && <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.alerte }}>hors horaires</span>}
                   </button>
                 )
               })}

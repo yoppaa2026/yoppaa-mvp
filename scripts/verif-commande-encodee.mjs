@@ -20,6 +20,7 @@ import { sansProse } from './lire-code.mjs'
 import {
   ORIGINE_COMMERCANT, PAIEMENTS_ENCODEE, clientEncode, champsPaiementEncodee,
   avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne, creneauTermine, articleHorsJour, etatTuile, joursDuCalendrier, horsCalendrier,
+  avisAutreDate, AVERTISSEMENTS,
 } from '../lib/commande-encodee.js'
 
 let ok = 0
@@ -135,6 +136,20 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     horsCalendrier({ jour: '2026-10-18', aujourdhui: auj, longueur: 8 }) && !horsCalendrier({ jour: '2026-10-17', aujourdhui: auj, longueur: 8 })
     && !horsCalendrier({ jour: auj, aujourdhui: auj, longueur: 8 }))
   v('l’avertissement « hors calendrier » dit le fait', /au-delà de ton calendrier/.test(avertissement('hors_calendrier').message))
+
+  // 🔴 « AUTRE DATE » DIT POURQUOI (Alex, 11/10 : un mardi fermé ne donnait que
+  // « Aucun créneau ce jour-là »). Samedi 10/10, mardi fermé, congé le 14.
+  const HA = { mardi: { ouvert: false }, mercredi: { ouvert: true, debut: '07:00', fin: '18:00' } }
+  const ferm = [{ date_debut: '2026-10-14', date_fin: '2026-10-14' }]
+  const av = (jour, horairesDetail = HA, longueur = 8) => avisAutreDate({ jour, aujourdhui: auj, longueur, fermetures: ferm, horairesDetail })
+  v('🔴 « Autre date » sur un mardi fermé : l’encadré le dit, avec la phrase du serveur',
+    JSON.stringify(av('2026-10-13')) === JSON.stringify(['Tes horaires disent que tu es fermé le mardi.']), JSON.stringify(av('2026-10-13')))
+  v('🔴 un jour de fermeture notée, un jour au-delà du calendrier : dits aussi ; un jour normal : rien',
+    av('2026-10-14')[0] === AVERTISSEMENTS.jour_ferme && av('2026-10-14').length === 1
+    && JSON.stringify(av('2026-10-20')) === JSON.stringify(['Tes horaires disent que tu es fermé le mardi.', AVERTISSEMENTS.hors_calendrier])
+    && av('2026-10-15').length === 0, JSON.stringify([av('2026-10-14'), av('2026-10-20'), av('2026-10-15')]))
+  v('🔴 en livraison (pas d’horaires passés), le mardi n’est pas « fermé » ; date invalide : rien',
+    av('2026-10-13', null).length === 0 && av('n importe quoi').length === 0)
 
   // 🔴 LES HORAIRES, POUR LE RETRAIT (Alex, 11/10 : « mardi est fermé et il le propose »).
   const H = {
@@ -297,16 +312,25 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /return joursDuCalendrier\(\{ aujourdhui, longueur: donnees\.calendrier\.longueur, fermetures: donnees\.calendrier\.fermetures, aujourdhuiOuvert, horairesDetail: horaires \}\)/.test(m)
     && /&& !creneauTermine\(c, \{ dateStr: aujourdhui, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\s*&& !\(horaires && creneauRetraitHorsHoraires\(\{ creneau: c, dateStr: aujourdhui, horairesDetail: horaires \}\)\)\)/.test(m)
     && /\{jours\.map\(d => \{/.test(m))
-  v('🔴 horaires : la fenêtre cache les créneaux de retrait hors horaires et les jours fermés (pas en livraison)',
-    /\.filter\(\(\{ creneau \}\) => mode !== 'retrait' \|\| !creneauRetraitHorsHoraires\(\{ creneau, dateStr: date, horairesDetail: donnees\?\.commercant\?\.horaires_detail \}\)\)/.test(m)
+  // Réorientée le 11/10 (soir) : le filtre est devenu un marquage, puis un
+  // filtre levé par « Autre date » seulement (un mardi fermé restait muet).
+  v('🔴 horaires : la fenêtre cache les créneaux de retrait hors horaires et les jours fermés (pas en livraison) ; « Autre date » les montre, marqués',
+    /\.map\(r => \(\{ \.\.\.r, horsHoraires: mode === 'retrait' && !!creneauRetraitHorsHoraires\(\{ creneau: r\.creneau, dateStr: date, horairesDetail: donnees\?\.commercant\?\.horaires_detail \}\) \}\)\)\s*\.filter\(r => autreDate \|\| !r\.horsHoraires\)/.test(m)
+    && /\{horsHoraires && <span[^>]*>hors horaires<\/span>\}/.test(m)
+    && m.indexOf('const [autreDate, setAutreDate] = useState(false)') > -1
+    && m.indexOf('const [autreDate, setAutreDate] = useState(false)') < m.indexOf('const creneaux = useMemo(')
     && /const horaires = mode === 'retrait' \? donnees\.commercant\?\.horaires_detail : null/.test(m)
     && /aujourdhuiOuvert, horairesDetail: horaires \}\)/.test(m))
   v('🔴 horaires : la bande du tableau de bord cache les créneaux de retrait hors horaires',
     /\.filter\(\(\{ creneau \}\) => vueMode === 'livraison' \|\| !creneauRetraitHorsHoraires\(\{ creneau, dateStr: jourActif, horairesDetail: commercant\?\.horaires_detail \}\)\)/.test(code('app/dashboard/page.js')))
   v('🔴 un jour hors des pastilles retombe sur le premier jour, sauf « Autre date »',
     /if \(!autreDate && jours\.length > 0 && !jours\.includes\(date\)\) setDate\(jours\[0\]\)/.test(m))
-  v('🔴 « Autre date » : le champ libre, et la mention au-delà du calendrier',
-    /\{autreDate && \(\s*<input type="date"/.test(m) && /horsCalendrier\(\{ jour: date, aujourdhui, longueur: donnees\.calendrier\.longueur \}\)/.test(m))
+  // Réorientée le 11/10 (soir) : la mention seule est devenue l'encadré
+  // `avisAutreDate` (fermeture, jour fermé, au-delà du calendrier).
+  v('🔴 « Autre date » : le champ libre, et l’encadré jaune qui dit pourquoi le jour sort de la fiche',
+    /\{autreDate && \(\s*<input type="date"/.test(m)
+    && /const avisDate = useMemo\(\(\) => \(autreDate && donnees\?\.calendrier \? avisAutreDate\(\{\s*jour: date, aujourdhui, longueur: donnees\.calendrier\.longueur, fermetures: donnees\.calendrier\.fermetures,\s*horairesDetail: mode === 'retrait' \? donnees\.commercant\?\.horaires_detail : null,/.test(m)
+    && /\{avisDate\.length > 0 && \(\s*<div role="note"/.test(m) && /\{avisDate\.map\(a => <p key=\{a\}/.test(m))
   v('🔴 ON ENCHAÎNE : pop-up de deux secondes, fenêtre vidée, remplissage relu, la fenêtre ne se ferme pas',
     /setEnregistree\(\{ ref: referenceCommande\(/.test(m) && /nouvelleCommande\(\)\s*setEnvoi\(false\)\s*setRelecture\(v => v \+ 1\)\s*onCree\?\.\(j\)/.test(m)
     && /setTimeout\(\(\) => setEnregistree\(null\), 2000\)/.test(m)

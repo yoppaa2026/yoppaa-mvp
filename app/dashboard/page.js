@@ -4427,7 +4427,7 @@ export default function Dashboard() {
                   <div style={{ textAlign: 'center', padding: '4rem 0' }}>
                     <div style={{ marginBottom: '0.75rem' }}/>
                     <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4 }}>Aucune commande ici</p>
-                    <p style={{ fontSize: '0.875rem', color: T.muted }}>Rien dans ce filtre pour ce jour.</p>
+                    <p style={{ fontSize: '0.875rem', color: T.muted }}>{modeHistorique ? 'L’historique garde les commandes des jours passés. Il n’y en a pas encore dans ce filtre.' : 'Rien dans ce filtre pour ce jour.'}</p>
                   </div>
                 )}
                 {!(filtreStatut === 'actives' && !modeHistorique) && <div className="commandes-grid">

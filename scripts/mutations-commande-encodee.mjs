@@ -148,6 +148,19 @@ const MUTATIONS = [
     fichier: FENETRE, de: '  useEffect(() => { setAvertissements(null) }, [mode, date, creneauId, panier, adresse, paiement])', vers: '' },
   { nom: '🔴 le tableau de bord recompte toutes les commandes pour sonner',
     fichier: BORD, de: '      const arrivees = nombreArriveesEnLigne(triees)', vers: '      const arrivees = triees.length' },
+  // « Autre date » dit pourquoi (Alex, 11/10 soir : un mardi fermé restait muet).
+  { nom: '🔴 « Autre date » sur un mardi fermé : rien n est dit',
+    fichier: REGLE, de: "    avis.push(messageHorsHoraires({ raison: 'jour_ferme', plages: [] }, jour, { pourCommercant: true }))", vers: '    void 0' },
+  { nom: '🔴 « Autre date » sur un jour de fermeture notée : rien n est dit',
+    fichier: REGLE, de: '  if (estFermeExceptionnellement(fermetures, jour)) avis.push(AVERTISSEMENTS.jour_ferme)', vers: '' },
+  { nom: '⚠️ « Autre date » au-delà du calendrier : rien n est dit',
+    fichier: REGLE, de: '  if (horsCalendrier({ jour, aujourdhui, longueur })) avis.push(AVERTISSEMENTS.hors_calendrier)', vers: '' },
+  { nom: '🔴 « Autre date » : les créneaux hors horaires restent cachés (aucun moyen d encoder)',
+    fichier: FENETRE, de: '    .filter(r => autreDate || !r.horsHoraires),', vers: '    .filter(r => !r.horsHoraires),' },
+  { nom: '🔴 hors « Autre date », les créneaux hors horaires sont proposés',
+    fichier: FENETRE, de: '    .filter(r => autreDate || !r.horsHoraires),', vers: '    .filter(r => autreDate || true),' },
+  { nom: '⚠️ l encadré jaune n est plus affiché',
+    fichier: FENETRE, de: '          {avisDate.length > 0 && (', vers: '          {false && (' },
 
   // ─── LA MIGRATION ────────────────────────────────────────────────────────
   { nom: '🔴 l exemption passe avant le filtre des statuts',

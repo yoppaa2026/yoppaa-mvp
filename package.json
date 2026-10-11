@@ -101,6 +101,7 @@
     "controle:prices": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-prices-stripe.mjs",
     "controle:abonnements": "node --env-file=.env.local --experimental-loader ./scripts/alias-loader.mjs scripts/controle-abonnements-manquants.mjs",
     "mutations:encodee": "node scripts/mutations-commande-encodee.mjs",
+    "mutations:vue-commandes": "node scripts/mutations-vue-commandes.mjs",
     "verif:encodee":"node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-commande-encodee.mjs",
     "cartes:supprimer":"node --env-file=.env.local scripts/supprimer-cartes-identite.mjs",
     "cartes:supprimer:essai": "node --env-file=.env.essai scripts/supprimer-cartes-identite.mjs",

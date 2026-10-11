@@ -727,7 +727,10 @@ egal('les statuts occupants sont les mêmes en SQL et en JavaScript',
 const dash = lireBrut('app/dashboard/page.js')
 verifier('le tableau de bord appelle le calcul de remplissage',
   /const creneauxRemplis = [\s\S]{0,80}?remplissageCreneaux\(\{/.test(dash))
-verifier('il l\'affiche vraiment', /creneauxRemplis\.map\(/.test(dash))
+// (11/10, réorientée) l'affichage vit dans la bande compacte (`BandeCreneaux`) :
+// le tableau de bord lui passe le calcul, elle le parcourt.
+verifier('il l\'affiche vraiment', /<BandeCreneaux creneauxRemplis=\{creneauxRemplis\}/.test(dash)
+  && /creneauxRemplis\.map\(r => \{/.test(lireBrut('app/dashboard/VueCommandes.js')))
 verifier('il bascule sur les créneaux de livraison dans la vue Livraison',
   /vueMode === 'livraison' \? creneauxLivraison : creneauxRetrait/.test(dash))
 verifier('et il compte alors les commandes par leur créneau de livraison',

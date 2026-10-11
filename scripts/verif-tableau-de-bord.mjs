@@ -411,8 +411,11 @@ const verifie = (nom, cond, detail = '') => {
   verifie('🔴 I7 le geste écrit la colonne de la vue',
     /const champ = vueMode === 'livraison' \? 'livraison_creneau_id' : 'creneau_id'/.test(bascule)
       && /\[champ\]: creneauId/.test(bascule) && /\.eq\(champ, creneauId\)/.test(bascule))
+  // (11/10, réorientée) le geste vit dans la bande compacte, rendue hors
+  // historique pour les DEUX vues (retrait et tournées).
   verifie('I7 le bouton existe aussi sur les tournées',
-    /const peutBloquer = !modeHistorique\r?\n/.test(dash))
+    /\{!modeHistorique && \(\s*<BandeCreneaux creneauxRemplis=\{creneauxRemplis\} estTournee=\{vueMode === 'livraison'\}/.test(dash)
+      && /onBasculer=\{basculerBlocageCreneau\}/.test(dash))
   verifie('et il est bien appliqué au remplissage',
     /appliquerBlocage\(c, blocagesDuJour\.has\(c\.creneau\?\.id\)\)/.test(dash))
 }
@@ -1765,6 +1768,99 @@ const verifie = (nom, cond, detail = '') => {
     appels >= 30, `${appels} appel(s) trouvé(s)`)
   verifie('aucun appel à toast ne passe un objet en premier argument',
     fautifs.length === 0, fautifs.join(' · '))
+}
+
+// ═══ L'ÉCRAN DE TRAVAIL DES COMMANDES (Alex, 11/10, « Odoo mind ») ══════════
+{
+  const V = await import('../lib/vue-commandes.js')
+  const cmd = (o) => ({ id: o.id, statut: 'en_attente', date_commande: '2026-10-11', numero_commande: 1, commande_articles: [], ...o })
+  const cr = (d, f) => ({ heure_debut: `${d}:00`, heure_fin: `${f}:00` })
+
+  // L'étape suivante : LA règle partagée, avec l'exclusion de la carte complète.
+  verifie('🔴 étape suivante : nouvelle → prépa, prépa → prête, prête (retrait) → remise, libellés partagés',
+    V.actionSuivante(cmd({ statut: 'en_attente' }))?.statut === 'en_preparation' && V.actionSuivante(cmd({ statut: 'en_attente' })).libelle === 'Démarrer la prépa'
+    && V.actionSuivante(cmd({ statut: 'en_preparation' }))?.statut === 'pret'
+    && V.actionSuivante(cmd({ statut: 'pret' }))?.statut === 'recupere')
+  verifie('🔴 une livraison ou une expédition prête n’a PAS de bouton direct (sa sortie est dans la carte complète)',
+    V.actionSuivante(cmd({ statut: 'pret', mode_retrait: 'livraison' })) === null && V.actionSuivante(cmd({ statut: 'pret', mode_retrait: 'expedition' })) === null
+    && V.actionSuivante(cmd({ statut: 'recupere' })) === null)
+
+  const cols = V.colonnesDeCommandes([
+    cmd({ id: 'b', creneau: cr('08:00', '08:15'), numero_commande: 2 }),
+    cmd({ id: 'a', creneau: cr('07:15', '07:30'), numero_commande: 5 }),
+    cmd({ id: 'c', statut: 'en_preparation', creneau: cr('07:00', '07:15') }),
+    cmd({ id: 'd', statut: 'pret', creneau: cr('09:00', '09:15') }),
+    cmd({ id: 'x', statut: 'recupere' }),
+  ])
+  verifie('🔴 trois colonnes dans l’ordre du travail, chacune triée par heure, rien d’autre',
+    cols.map(c => c.titre).join('|') === 'Nouvelles|En prépa|Prêtes'
+    && cols[0].commandes.map(c => c.id).join('') === 'ab' && cols[1].commandes[0].id === 'c' && cols[2].commandes[0].id === 'd'
+    && cols.every(c => !c.commandes.some(x => x.id === 'x')))
+
+  const r = (o, maintenantMin) => V.enRetard(cmd(o), { aujourdhui: '2026-10-11', maintenantMin })
+  verifie('🔴 en retard : créneau fini et pas prête ; pas avant la fin ; une prête n’est jamais « en retard » de notre côté',
+    r({ creneau: cr('07:00', '07:15') }, 7 * 60 + 20) && !r({ creneau: cr('07:00', '07:15') }, 7 * 60 + 10)
+    && !r({ statut: 'pret', creneau: cr('07:00', '07:15') }, 9 * 60) && r({ date_commande: '2026-10-10' }, 0)
+    && !r({ statut: 'recupere', date_commande: '2026-10-10' }, 0) && !r({ date_commande: '2026-10-12', creneau: cr('07:00', '07:15') }, 23 * 60))
+
+  const ligne = (nom, q, options = []) => ({ quantite: q, article_nom: nom, options: options.map(v => ({ valeur_nom: v })) })
+  const prep = V.aPreparer([
+    cmd({ creneau: cr('08:00', '08:15'), commande_articles: [ligne('Croissant', 2), ligne('Pain', 1)] }),
+    cmd({ statut: 'en_preparation', creneau: cr('07:00', '07:15'), commande_articles: [ligne('Croissant', 3, ['Beurre'])] }),
+    cmd({ statut: 'pret', commande_articles: [ligne('Croissant', 10)] }),
+    cmd({ statut: 'annulee_commercant', commande_articles: [ligne('Croissant', 10)] }),
+  ])
+  verifie('🔴 « À préparer » : nouvelles et en prépa seulement, total par article, puis par heure dans l’ordre',
+    prep.total === 6 && prep.articles[0].nom === 'Croissant' && prep.articles[0].quantite === 5 && prep.articles[1].quantite === 1
+    && prep.parHeure.map(h => h.heure).join('|') === '07:00|08:00' && prep.parHeure[0].articles[0].quantite === 3, JSON.stringify(prep))
+  verifie('les lignes courtes disent la quantité, le nom et les options',
+    JSON.stringify(V.lignesCourtes(cmd({ commande_articles: [ligne('Pizza', 2, ['Grande', 'Olives'])] }))) === JSON.stringify([{ texte: '2× Pizza', options: 'Grande, Olives' }]))
+
+  verifie('🔴 export : la semaine va du lundi au dimanche (dimanche 11 → 5-11, mercredi 14 → 12-18), le jour reste le jour',
+    JSON.stringify(V.periodeExport('2026-10-11', 'semaine')) === JSON.stringify({ debut: '2026-10-05', fin: '2026-10-11' })
+    && JSON.stringify(V.periodeExport('2026-10-14', 'semaine')) === JSON.stringify({ debut: '2026-10-12', fin: '2026-10-18' })
+    && JSON.stringify(V.periodeExport('2026-10-14')) === JSON.stringify({ debut: '2026-10-14', fin: '2026-10-14' }))
+  const csv = V.csvCommandes([
+    cmd({ id: 1, client_nom: 'Dupont; "Jo"', total: 12.5, numero_commande: 7, numero_prefixe: 'CC', creneau: cr('08:00', '08:15'), commande_articles: [ligne('Croissant', 2)] }),
+    cmd({ id: 2, statut: 'annulee_paiement_ko', client_nom: 'Fantôme' }),
+    cmd({ id: 3, date_commande: '2026-10-20', client_nom: 'Hors période' }),
+  ], { debut: '2026-10-05', fin: '2026-10-11' })
+  verifie('🔴 export CSV : BOM, « ; », virgule décimale, guillemets échappés, paiements échoués et hors période exclus',
+    csv.nombre === 1 && csv.texte.startsWith('﻿Date;Heure;N°;Statut;Client;')
+    && csv.texte.includes('"Dupont; ""Jo"""') && csv.texte.includes(';12,50;') && csv.texte.includes('2× Croissant')
+    && !csv.texte.includes('Fantôme') && !csv.texte.includes('Hors période'), csv.texte)
+
+  // Le branchement, visé à l'endroit.
+  const page = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+  const vue = sansProse(readFileSync(new URL('../app/dashboard/VueCommandes.js', import.meta.url), 'utf8'))
+  const iBarre = page.indexOf("{ongletPrincipal === 'commandes' && (\n            <div className=\"sticky-header\">")
+  const iZone = page.indexOf('<div className="scroll-zone">')
+  const iEncoder = page.indexOf('onClick={() => setEncoderOuvert(true)}')
+  const iCondition = page.indexOf("{commercant?.categorie === 'alimentaire' && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (\n                    <button type=\"button\" onClick={() => setEncoderOuvert(true)}")
+  verifie('🔴 « Encoder une commande » vit dans la BARRE FIXE des commandes (plus dans ce qui défile), une seule fois, avec SA condition',
+    iBarre > 0 && iZone > iBarre && iEncoder > iBarre && iEncoder < iZone && page.split('onClick={() => setEncoderOuvert(true)}').length === 2
+    && iCondition > iBarre && iCondition < iZone)
+  verifie('🔴 les raccourcis : une seule liste, en icônes dans la barre, en rangée dans l’onglet Rendez-vous',
+    /\{raccourcisComptoir\.map\(a => \(/.test(page) && /const actions = raccourcisComptoir/.test(page)
+    && /\{ongletPrincipal === 'rdv' && commercant && \(\(\) => \{/.test(page) && !/const statsCards = \[/.test(page))
+  verifie('🔴 les colonnes sur « Actives » seulement, hors historique ; le bouton appelle LE geste du tableau de bord',
+    /\{!loading && filtreStatut === 'actives' && !modeHistorique && \(\s*<ColonnesCommandes commandes=\{commandesFiltrees\}/.test(page)
+    && /onAvancer=\{\(c, statut\) => changerStatut\(c\.id, statut\)\}/.test(page)
+    && /\{!\(filtreStatut === 'actives' && !modeHistorique\) && <div className="commandes-grid">/.test(page))
+  verifie('🔴 la carte complète s’ouvre avec TOUS ses gestes, relue dans `commandes`, sous les confirmations',
+    /const ouverte = commandes\.find\(x => x\.id === commandeOuverteId\)/.test(page)
+    && /zIndex: 9990/.test(page)
+    && ['onChangerStatut={changerStatut}', 'onLivraisonStatut={changerStatutLivraison}', 'onAnnulerCommerce={annulerParLeCommerce}', 'onExpedier={setCommandeAExpedier}', 'onProduitsRemis={produitsRemis}', 'onRetourArriere={annulerRemise}', 'etiquettes={etiquettesIci}']
+      .every(p => page.split(p).length >= 3))
+  verifie('🔴 la carte compacte : un seul geste (`actionSuivante`), l’étape lancée DANS le clic (l’étiquette s’imprime pendant le geste), le reste par « ⋯ »',
+    /const action = actionSuivante\(commande\)/.test(vue) && /try \{ await onAvancer\(commande, action\.statut\) \} finally \{ setEnvoi\(false\) \}/.test(vue)
+    && /aria-label="Toutes les actions de la commande"/.test(vue) && /\{envoi && <DotsAttente/.test(vue))
+  verifie('🔴 fermer un créneau depuis la bande demande confirmation avant le geste',
+    /const ok = await confirme\(confirmationSimple\(\{/.test(vue) && /if \(ok\) onBasculer\(r\.creneau\.id, bloque\)/.test(vue)
+    && /onBasculer=\{basculerBlocageCreneau\}/.test(page))
+  verifie('« À préparer » et l’export reçoivent le jour et TOUTES les commandes (la semaine)',
+    /<PanneauAPreparer commandesDuJour=\{commandesDuJourTous\} toutesCommandes=\{commandes\} jour=\{jourActif\}/.test(page)
+    && /csvCommandes\(toutesCommandes, \{ \.\.\.periode, categorie \}\)/.test(vue))
 }
 
 // ⚠️ LE TOTAL SE DIT ICI, QUAND TOUT A TOURNÉ. Il vivait au deux tiers du

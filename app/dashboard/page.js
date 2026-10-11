@@ -78,6 +78,7 @@ import { imprimerSiActive } from '@/lib/impression-etiquette'
 import { etiquetteConcernee } from '@/lib/etiquette-commande'
 import { PALETTE_STATUT } from '@/lib/couleurs-statut-commande'
 import { filtresCommandes } from '@/lib/poste-vues'
+import { ColonnesCommandes, BandeCreneaux, PanneauAPreparer } from './VueCommandes'
 import { ADMIN_EMAIL } from '@/lib/admin-identite'
 
 const T = {
@@ -1369,6 +1370,8 @@ export default function Dashboard() {
   const [erreurFiches, setErreurFiches] = useState(null)
   // La commande encodée à la main (10/10) : la fenêtre, qui confirme elle-même.
   const [encoderOuvert, setEncoderOuvert] = useState(false)
+  // La carte complète d'une commande, ouverte depuis une carte compacte (11/10).
+  const [commandeOuverteId, setCommandeOuverteId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [listeCommercants, setListeCommercants] = useState([])
   const [ongletPrincipal, setOngletPrincipal] = useState('commandes')
@@ -3238,12 +3241,31 @@ export default function Dashboard() {
     key: f.cle, label: f.label, color: f.couleur || undefined, count: commandesDuJour.filter(f.garde).length,
   }))
 
-  const statsCards = [
-    { label: 'Nouvelles',  value: stats.nouvelles,           color: '#DC2626', bg: '#FFF0F0', border: '#DC262618', pulse: stats.nouvelles > 0 },
-    { label: 'En prépa',   value: stats.enPrepa,             color: '#EA580C', bg: '#FFF7ED', border: '#EA580C18', pulse: false },
-    { label: 'Prêtes',     value: stats.pretes,              color: '#10B981', bg: '#F0FDF4', border: '#10B98118', pulse: false },
-    { label: 'CA du jour', value: euros(stats.ca),           color: T.main,   bg: T.pale,   border: `${T.main}18`, pulse: false },
-  ]
+  // ─── Actions rapides (esprit ODOO : les gestes de comptoir sont à portée de
+  // clic, sans fouiller les Paramètres ; Alex 01/08). Une seule liste : en
+  // rangée dans l'onglet Rendez-vous, en icônes dans la barre fixe des
+  // Commandes (Alex, 11/10).
+  const raccourcisComptoir = commercant ? [
+    canDo(planEffectif(commercant), 'fidelite') && {
+      key: 'fidelite',
+      label: commercant.fidelite_actif ? 'Carte de fidélité' : 'Activer la fidélité',
+      aide: commercant.fidelite_actif ? 'Pointer un client au comptoir' : 'Programme en 2 minutes',
+      icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/></svg>,
+    },
+    canDo(planEffectif(commercant), 'bons_cadeaux') && commercant.bons_cadeaux_actif && {
+      key: 'bons',
+      label: libelleBon(commercant?.categorie, { majuscule: true }),
+      aide: 'Encaisser un code',
+      icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>,
+    },
+    canDo(planEffectif(commercant), 'deals') && {
+      key: 'deals',
+      label: 'Deal du jour',
+      aide: 'Créer une offre',
+      icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12l-8.5 8.5a2 2 0 01-2.83 0L2 13.83V4h9.83L20 12z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>,
+    },
+  ].filter(Boolean) : []
+
 
   // ─── RDVs : calculs derives ────────────────────────────────────────────────
   // Tous les filtres sur 'rdvs' qui alimentent l'onglet RDV (similaire a stats commandes).
@@ -4047,27 +4069,10 @@ export default function Dashboard() {
           {/* ─── Actions rapides (esprit ODOO : les gestes de comptoir sont à
               portée de clic depuis l'écran d'accueil, sans fouiller les
               Paramètres). Demande Alex 01/08. ─── */}
-          {ongletPrincipal !== 'config' && commercant && (() => {
-            const actions = [
-              canDo(planEffectif(commercant), 'fidelite') && {
-                key: 'fidelite',
-                label: commercant.fidelite_actif ? 'Carte de fidélité' : 'Activer la fidélité',
-                aide: commercant.fidelite_actif ? 'Pointer un client au comptoir' : 'Programme en 2 minutes',
-                icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/></svg>,
-              },
-              canDo(planEffectif(commercant), 'bons_cadeaux') && commercant.bons_cadeaux_actif && {
-                key: 'bons',
-                label: libelleBon(commercant?.categorie, { majuscule: true }),
-                aide: 'Encaisser un code',
-                icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>,
-              },
-              canDo(planEffectif(commercant), 'deals') && {
-                key: 'deals',
-                label: 'Deal du jour',
-                aide: 'Créer une offre',
-                icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12l-8.5 8.5a2 2 0 01-2.83 0L2 13.83V4h9.83L20 12z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>,
-              },
-            ].filter(Boolean)
+          {/* ⚠️ (11/10) DANS L'ONGLET COMMANDES, ILS VIVENT DANS LA BARRE FIXE, en
+              icônes (Alex : toujours visibles, sans prendre une rangée). */}
+          {ongletPrincipal === 'rdv' && commercant && (() => {
+            const actions = raccourcisComptoir
             if (actions.length === 0) return null
             return (
               <BandeDefilante libelle="les raccourcis" style={{ display: 'flex', gap: 8, padding: '0 1rem', marginBottom: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
@@ -4116,22 +4121,42 @@ export default function Dashboard() {
           {/* Sticky header */}
           {ongletPrincipal === 'commandes' && (
             <div className="sticky-header">
-              {/* Stats */}
-              {periodeStats && (
-                <p style={{ margin: '0 0 6px', fontSize: '0.62rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                  {periodeStats}
-                </p>
-              )}
-              <div className="stats-grid">
-                {statsCards.map((s, i) => (
-                  <div key={i} style={{ background: s.bg, borderRadius: 12, padding: '0.5rem 0.75rem', border: `1.5px solid ${s.border}` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                      {s.pulse && <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color, display: 'inline-block', animation: 'pulse 1.5s ease infinite', flexShrink: 0 }}/>}
-                      <p style={{ fontSize: '0.58rem', color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{s.label}</p>
-                    </div>
-                    <p style={{ fontSize: '1.4rem', fontWeight: 900, color: s.color, letterSpacing: '-1px', lineHeight: 1 }}>{s.value}</p>
-                  </div>
-                ))}
+              {/* 🔴 LA BARRE FIXE (Alex, 11/10, « Odoo mind ») : la période et
+                  le chiffre d'affaires à gauche, les gestes à droite, TOUJOURS
+                  visibles (« + Encoder » disparaissait au défilement). Les
+                  quatre grandes tuiles sont parties : leurs chiffres vivent sur
+                  les filtres de statut, juste en dessous. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+                  {periodeStats && (
+                    <p style={{ margin: 0, fontSize: '0.66rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{periodeStats}</p>
+                  )}
+                  <p style={{ margin: '2px 0 0', fontSize: '0.9rem', fontWeight: 800, color: T.ink }}>
+                    CA <span style={{ fontSize: '1.15rem', fontWeight: 900, color: T.main, fontVariantNumeric: 'tabular-nums' }}>{euros(stats.ca)}</span>
+                    {stats.nouvelles > 0 && (
+                      <span style={{ marginLeft: 10, fontSize: '0.78rem', fontWeight: 800, color: '#DC2626', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#DC2626', animation: 'pulse 1.5s ease infinite' }}/>
+                        {stats.nouvelles} nouvelle{stats.nouvelles > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  {raccourcisComptoir.map(a => (
+                    <button key={a.key} type="button" onClick={() => ouvrirConfig(a.key)} title={`${a.label} · ${a.aide}`} aria-label={a.label}
+                      style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 11, border: `1.5px solid ${T.pale}`, background: '#fff', cursor: 'pointer' }}>
+                      {a.icone}
+                    </button>
+                  ))}
+                  {/* LA COMMANDE DU TÉLÉPHONE (10/10) : alimentaire avec créneaux. */}
+                  {commercant?.categorie === 'alimentaire' && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (
+                    <button type="button" onClick={() => setEncoderOuvert(true)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 16px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg, ${T.deep}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                      Encoder une commande
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Bascule Retrait / Livraison (si le commerce livre) */}
@@ -4249,19 +4274,8 @@ export default function Dashboard() {
             {ongletPrincipal === 'commandes' && (
               <>
                 {/* 🔴 LA COMMANDE DU TÉLÉPHONE (Alex, 10/10). Elle remplit les
-                    mêmes créneaux et le même stock que les commandes en ligne :
-                    le commerçant voit sa vraie soirée. Alimentaire seulement :
-                    le détail n'a pas d'heure promise. */}
-                {commercant?.categorie === 'alimentaire' && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-                    <button type="button" onClick={() => setEncoderOuvert(true)}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.deep}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                      Encoder une commande
-                    </button>
-                    <span style={{ fontSize: 13, color: T.muted }}>Téléphone, comptoir : elle prend sa place dans tes créneaux.</span>
-                  </div>
-                )}
+                    mêmes créneaux et le même stock que les commandes en ligne.
+                    Son bouton vit dans la barre fixe depuis le 11/10. */}
                 {encoderOuvert && commercant && (
                   <ModalNouvelleCommande
                     commercantId={commercant.id}
@@ -4300,69 +4314,20 @@ export default function Dashboard() {
                     Le commerçant règle « max 5 » ou « 30 min » dans sa configuration et
                     son client lit « presque plein » sur la fiche : jusqu'ici, lui seul
                     ne voyait rien et devait compter ses commandes à la main. */}
-                {creneauxRemplis.length > 0 && (
-                  <div style={{ background: '#fff', borderRadius: 14, padding: '12px 14px', marginBottom: 12, border: `1px solid ${T.pale}` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                      <p style={{ fontSize: '0.62rem', fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Remplissage {vueMode === 'livraison' ? 'des tournées' : 'des créneaux'}
-                      </p>
-                      <span style={{ fontSize: '0.62rem', fontWeight: 700, color: T.main }}>{dateLabel(jourActif + 'T00:00:00')}</span>
-                    </div>
-                    <BandeDefilante libelle="les créneaux" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
-                      {creneauxRemplis.map((rempli) => {
-                        const { creneau, modeTemps, capacite, utiliseEff, complet, bientot, presque, bloque } = rempli
-                        // ⚠️ « FERMÉ » A SA PROPRE COULEUR, DISTINCTE DE
-                        // « COMPLET ». Les confondre ferait chercher au
-                        // commerçant des commandes qui n'existent pas : complet
-                        // veut dire que ses clients ont rempli, fermé qu'il a
-                        // fermé lui-même.
-                        const couleur = bloque ? '#6B7280' : complet ? T.rouge.badge : bientot ? T.orange.badge : presque ? '#CA8A04' : T.vert.badge
-                        const ratio = capacite > 0 ? Math.min(1, utiliseEff / capacite) : 0
-                        const etat = etatCreneau(rempli)
-                        // Créneau de retrait OU tournée depuis I7 (05/10).
-                        const peutBloquer = !modeHistorique
-                        const estTournee = vueMode === 'livraison'
-                        return (
-                          <div key={creneau.id} style={{ minWidth: 98, flexShrink: 0, borderRadius: 10, padding: '8px 10px', background: bloque ? '#F3F4F6' : complet ? T.rouge.cardBg : '#FBFAFF', border: `1.5px solid ${couleur}33` }}>
-                            <p style={{ fontSize: '0.72rem', fontWeight: 800, color: T.ink, letterSpacing: '-0.2px' }}>
-                              {String(creneau.heure_debut || '').slice(0, 5)}–{String(creneau.heure_fin || '').slice(0, 5)}
-                            </p>
-                            <p style={{ fontSize: '0.95rem', fontWeight: 900, color: couleur, lineHeight: 1.2, marginTop: 2 }}>
-                              {Math.round(utiliseEff)}<span style={{ color: T.muted, fontWeight: 800 }}>/{Math.round(capacite)}</span>
-                              {modeTemps && <span style={{ fontSize: '0.58rem', fontWeight: 700, color: T.muted, marginLeft: 3 }}>min</span>}
-                            </p>
-                            <div style={{ height: 4, borderRadius: 100, background: '#EEE9F8', overflow: 'hidden', marginTop: 5 }}>
-                              <div style={{ width: `${ratio * 100}%`, height: '100%', background: couleur, borderRadius: 100 }}/>
-                            </div>
-                            <p style={{ fontSize: '0.56rem', fontWeight: 800, color: couleur, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.3px' }}>{etat}</p>
-                            {/* ⚠️ LE GESTE EST LÀ OÙ IL REGARDE. Le commerçant
-                                débordé n'ira pas dans sa configuration des
-                                créneaux : il a les mains dans la farine et
-                                trente secondes. Le bouton vit donc sur la bande
-                                qu'il consulte déjà (demande relayée par Alex).
-
-                                ⚠️ PAS DE ROUGE POUR FERMER : rien n'est détruit,
-                                et les commandes déjà prises restent
-                                (feedback_boutons_qui_disent_le_geste). */}
-                            {peutBloquer && (
-                              <button type="button"
-                                onClick={() => basculerBlocageCreneau(creneau.id, bloque)}
-                                title={estTournee
-                                  ? (bloque
-                                    ? 'Rouvrir cette tournée aux livraisons Yoppaa'
-                                    : 'Ne plus accepter de livraison sur cette tournée. Celles déjà prises restent.')
-                                  : (bloque
-                                    ? 'Rouvrir ce créneau aux commandes Yoppaa'
-                                    : 'Ne plus accepter de commande sur ce créneau. Celles déjà prises restent.')}
-                                style={{ width: '100%', marginTop: 6, padding: '4px 0', borderRadius: 7, border: `1px solid ${bloque ? T.vert.badge + '55' : T.pale}`, background: bloque ? '#F0FDF4' : '#fff', color: bloque ? T.vert.badge : T.muted, fontWeight: 800, fontSize: '0.58rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', letterSpacing: '0.2px' }}>
-                                {bloque ? 'Rouvrir' : 'Fermer'}
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </BandeDefilante>
-                  </div>
+                {/* 🔴 (11/10) EN UNE LIGNE : une puce par créneau (heure,
+                    remplissage, barre). Fermer / rouvrir d'un clic, confirmé.
+                    ⚠️ « FERMÉ » GARDE SA PROPRE COULEUR, distincte de
+                    « COMPLET » : complet, ses clients ont rempli ; fermé, il a
+                    fermé lui-même. */}
+                {!modeHistorique && (
+                  <BandeCreneaux creneauxRemplis={creneauxRemplis} estTournee={vueMode === 'livraison'} etatCreneau={etatCreneau}
+                    couleurDe={(r) => r.bloque ? '#6B7280' : r.complet ? T.rouge.badge : r.bientot ? T.orange.badge : r.presque ? '#CA8A04' : T.vert.badge}
+                    onBasculer={basculerBlocageCreneau}/>
+                )}
+                {/* « À préparer » et l'export (Alex, 11/10). */}
+                {!modeHistorique && (
+                  <PanneauAPreparer commandesDuJour={commandesDuJourTous} toutesCommandes={commandes} jour={jourActif}
+                    commerceNom={commercant?.nom} categorie={commercant?.categorie}/>
                 )}
 
                 {/* Tournées du jour, UNE PAR CRÉNEAU (vue Livraison) */}
@@ -4441,11 +4406,6 @@ export default function Dashboard() {
                     elle{livraisonsSansCreneau.length > 1 ? 's n\'entrent' : ' n\'entre'} dans aucune tournée, à organiser à la main.
                   </p>
                 )}
-                {/* Retraits ET livraisons (Alex, 01/10) : rien à régler dans
-                    l'historique seulement. */}
-                {!modeHistorique && (
-                  <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom}/>
-                )}
                 {loading && (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem', gap: 10 }}>
                     {[0,1,2].map(i => (
@@ -4453,16 +4413,24 @@ export default function Dashboard() {
                     ))}
                   </div>
                 )}
-                {!loading && commandesFiltrees.length === 0 && (
+                {/* 🔴 L'ÉCRAN DE TRAVAIL (Alex, 11/10) : sur « Actives », trois
+                    colonnes Nouvelles → En prépa → Prêtes, cartes compactes,
+                    UN bouton, tout le reste dans la carte complète (⋯). Les
+                    autres filtres et l'historique gardent la grille des cartes
+                    complètes : on y cherche, on n'y travaille pas. */}
+                {!loading && filtreStatut === 'actives' && !modeHistorique && (
+                  <ColonnesCommandes commandes={commandesFiltrees} aujourdhui={todayKey} categorie={commercant?.categorie}
+                    onAvancer={(c, statut) => changerStatut(c.id, statut)}
+                    onOuvrir={(c) => setCommandeOuverteId(c.id)}/>
+                )}
+                {!loading && !(filtreStatut === 'actives' && !modeHistorique) && commandesFiltrees.length === 0 && (
                   <div style={{ textAlign: 'center', padding: '4rem 0' }}>
                     <div style={{ marginBottom: '0.75rem' }}/>
                     <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4 }}>Aucune commande ici</p>
-                    <p style={{ fontSize: '0.875rem', color: T.muted }}>
-                      {filtreStatut === 'actives' ? 'Toutes les commandes sont traitées !' : 'Rien dans ce filtre pour ce jour.'}
-                    </p>
+                    <p style={{ fontSize: '0.875rem', color: T.muted }}>Rien dans ce filtre pour ce jour.</p>
                   </div>
                 )}
-                <div className="commandes-grid">
+                {!(filtreStatut === 'actives' && !modeHistorique) && <div className="commandes-grid">
                   {commandesFiltrees.map(commande => {
                     // Le jour n'entre plus dans le calcul du numéro : la
                     // référence est portée par la commande elle-même.
@@ -4485,7 +4453,15 @@ export default function Dashboard() {
                       />
                     )
                   })}
-                </div>
+                </div>}
+                {/* Retraits ET livraisons (Alex, 01/10) : rien à régler dans
+                    l'historique. En bas depuis le 11/10 : un réglage de
+                    l'appareil, pas une information du travail. */}
+                {!modeHistorique && (
+                  <div style={{ marginTop: 16 }}>
+                    <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom}/>
+                  </div>
+                )}
               </>
             )}
 
@@ -4592,6 +4568,45 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ─── LA CARTE COMPLÈTE D'UNE COMMANDE (11/10) ─────────────────────────
+          Ouverte depuis une carte compacte (clic ou « ⋯ ») : TOUS les gestes
+          d'avant y sont, intacts (livraison, expédition, étiquettes, annuler,
+          non retiré, encaissement…). Relue dans `commandes` à chaque rendu :
+          elle suit les changements de statut. HORS de `.scroll-zone`, comme la
+          modale du rendez-vous, pour le piège iPhone décrit plus haut ; sous
+          les fenêtres de confirmation (9999), qui doivent passer devant. */}
+      {commandeOuverteId && (() => {
+        const ouverte = commandes.find(x => x.id === commandeOuverteId)
+        if (!ouverte) return null
+        return (
+          <div onClick={() => setCommandeOuverteId(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(26,8,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9990, padding: '1rem' }}>
+            <div role="dialog" aria-modal="true" aria-label="Détail de la commande" onClick={(e) => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 480, maxHeight: '88dvh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <CarteCommande
+                commande={ouverte}
+                numero={getNumeroJour(commandes, ouverte.id)}
+                categorie={commercant?.categorie}
+                commerceNom={commercant?.nom}
+                etiquettes={etiquettesIci}
+                onChangerStatut={changerStatut}
+                onLivraisonStatut={changerStatutLivraison}
+                onAnnulerCommerce={annulerParLeCommerce}
+                onExpedier={setCommandeAExpedier}
+                onProduitsRemis={produitsRemis}
+                onRetourArriere={annulerRemise}
+                filtreCourant={filtreStatut}
+                modeHistorique={false}
+              />
+              <button onClick={() => setCommandeOuverteId(null)}
+                style={{ width: '100%', marginTop: 12, padding: '0.75rem', background: '#fff', border: `1.5px solid ${T.pale}`, borderRadius: 100, color: T.ink, fontWeight: 800, cursor: 'pointer', fontSize: '0.875rem', fontFamily: '"DM Sans", sans-serif' }}>
+                Fermer
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ─── Modale « Déplacer ce RDV » ────────────────────────────────────── */}
       {rdvADeplacer && commercant && (

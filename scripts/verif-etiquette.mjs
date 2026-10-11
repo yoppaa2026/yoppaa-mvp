@@ -366,7 +366,12 @@ const avantPremierAwait = (corps, appel) => {
     /onClick=\{\(\) => onChangerStatut\(commande\.id, statut\.next\)\}/.test(bord) && /onChangerStatut=\{changerStatut\}/.test(bord))
   v('🔴 le rattrapage existe sur la carte, DÈS la préparation', /\{etiquettes && !modeHistorique && \['en_preparation', 'pret'\]\.includes\(commande\.statut\) && etiquetteConcernee\(commande\) && \(\s*<BoutonEtiquettes commande=\{commande\} categorie=\{categorie\} commerce=\{commerceNom\}\/>/.test(bord))
   v('🔴 le réglage est aussi sur l’écran des livraisons',
-    /\{!modeHistorique && \(\s*<ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commercant\?\.nom\}\/>/.test(bord) && /etiquettes=\{etiquettesIci\}/.test(bord))
+    // (11/10) en bas de l'onglet, dans son bloc : un réglage de l'appareil.
+    /\{!modeHistorique && \(\s*<div style=\{\{ marginTop: 16 \}\}>\s*<ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commercant\?\.nom\}\/>/.test(bord) && /etiquettes=\{etiquettesIci\}/.test(bord))
+  // 🔴 (11/10) LA CARTE COMPACTE IMPRIME AUSSI AU DÉMARRAGE : elle passe par
+  // `changerStatut`, qui lance l'étiquette avant son premier `await`.
+  v('🔴 la carte compacte démarre la prépa par LE geste qui imprime',
+    /onAvancer=\{\(c, statut\) => changerStatut\(c\.id, statut\)\}/.test(bord))
 
   const poste = code('app/equipe/PosteEquipe.js')
   const j = poste.indexOf('avancer: (c) => geste(c.id, async () => {')

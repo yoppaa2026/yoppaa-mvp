@@ -26,7 +26,7 @@ import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
 import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
 import { jourPlus } from '@/lib/statut-commerce'
-import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE, creneauTermine, etatTuile, joursDuCalendrier, avisAutreDate } from '@/lib/commande-encodee'
+import { PAIEMENTS_ENCODEE, LIBELLES_PAIEMENT_ENCODEE, creneauTermine, etatTuile, joursDuCalendrier, avisAutreDate, resumeLivraison, conditionsLivraison } from '@/lib/commande-encodee'
 
 const T = {
   bg: '#F8F6FF', ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', mid: '#9660E0',
@@ -268,6 +268,9 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
   }, [enregistree])
 
   const totalLignes = calcul?.ok ? calcul.totalCents / 100 : null
+  // Les frais de livraison, comme le serveur les comptera (`resumeLivraison`).
+  const configLivraison = donnees?.configLivraison || null
+  const fraisDuPanier = mode === 'livraison' && totalLignes !== null ? resumeLivraison({ totalArticles: totalLignes, config: configLivraison }) : null
 
   return (
     <div ref={fond} role="dialog" aria-modal="true" aria-label="Encoder une commande" onClick={() => !envoi && onFerme?.()}
@@ -353,6 +356,12 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                 )
               })}
             </div>
+          )}
+          {/* Les conditions, avant même le panier : la question du client. */}
+          {mode === 'livraison' && configLivraison && (
+            <p style={{ fontSize: 13, color: T.muted, margin: '8px 0 0' }}>
+              {conditionsLivraison(configLivraison, euros)}
+            </p>
           )}
         </section>
 
@@ -467,7 +476,34 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                 <span>Total des articles</span>
                 <span>{totalLignes !== null ? euros(totalLignes) : '…'}</span>
               </p>
-              {mode === 'livraison' && <p style={{ fontSize: 12, color: T.muted, margin: '2px 0 0' }}>Les frais de livraison s’ajoutent selon ta configuration.</p>}
+              {/* 🔴 LES FRAIS, EN CHIFFRES (Alex, 11/10) : au téléphone, le
+                  commerçant dit au client ce qu'il paiera et ce qui manque pour
+                  ne pas payer la livraison. */}
+              {fraisDuPanier && (
+                <div style={{ marginTop: 6, display: 'grid', gap: 3 }}>
+                  <p style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, color: T.ink, margin: 0 }}>
+                    <span>Livraison</span>
+                    <span style={{ color: fraisDuPanier.offert ? T.ok : T.ink }}>{fraisDuPanier.offert ? 'offerte' : euros(fraisDuPanier.frais)}</span>
+                  </p>
+                  <p style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 900, color: T.ink, margin: 0 }}>
+                    <span>Total à payer</span>
+                    <span>{euros(fraisDuPanier.total)}</span>
+                  </p>
+                  {fraisDuPanier.manquePourGratuit !== null && fraisDuPanier.frais > 0 && (
+                    <p style={{ fontSize: 13, fontWeight: 700, color: T.main, margin: 0 }}>
+                      Encore {euros(fraisDuPanier.manquePourGratuit)} d’articles et la livraison est offerte (dès {euros(fraisDuPanier.seuilGratuit)}).
+                    </p>
+                  )}
+                  {fraisDuPanier.manqueMinimum > 0 && (
+                    <p style={{ fontSize: 13, fontWeight: 700, color: T.alerte, margin: 0 }}>
+                      Minimum de livraison {euros(fraisDuPanier.minimum)} : il manque {euros(fraisDuPanier.manqueMinimum)}.
+                    </p>
+                  )}
+                </div>
+              )}
+              {mode === 'livraison' && totalLignes !== null && !configLivraison && (
+                <p style={{ fontSize: 12, color: T.alerte, margin: '2px 0 0' }}>Ta livraison n’est pas encore réglée (frais, zone) : règle-la dans tes paramètres.</p>
+              )}
               {calcul && !calcul.ok && <p role="alert" style={{ fontSize: 13, color: T.erreur, margin: '4px 0 0' }}>{calcul.error}</p>}
             </div>
           )}

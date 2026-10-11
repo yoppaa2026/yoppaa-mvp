@@ -20,7 +20,7 @@ import { sansProse } from './lire-code.mjs'
 import {
   ORIGINE_COMMERCANT, PAIEMENTS_ENCODEE, clientEncode, champsPaiementEncodee,
   avertissement, confirmationRequise, jugementMoment, nombreArriveesEnLigne, creneauTermine, articleHorsJour, etatTuile, joursDuCalendrier, horsCalendrier,
-  avisAutreDate, AVERTISSEMENTS,
+  avisAutreDate, AVERTISSEMENTS, resumeLivraison, conditionsLivraison,
 } from '../lib/commande-encodee.js'
 
 let ok = 0
@@ -136,6 +136,40 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     horsCalendrier({ jour: '2026-10-18', aujourdhui: auj, longueur: 8 }) && !horsCalendrier({ jour: '2026-10-17', aujourdhui: auj, longueur: 8 })
     && !horsCalendrier({ jour: auj, aujourdhui: auj, longueur: 8 }))
   v('l’avertissement « hors calendrier » dit le fait', /au-delà de ton calendrier/.test(avertissement('hors_calendrier').message))
+
+  // 🔴 LES FRAIS DE LIVRAISON, DITS AU TÉLÉPHONE (Alex, 11/10).
+  const CL = { frais_fixe: 3.5, gratuit_des: 25, minimum_commande: 15 }
+  const r12 = resumeLivraison({ totalArticles: 12, config: CL })
+  v('🔴 panier de 12 € : 3,50 € de frais, total 15,50 €, encore 13 € pour la livraison offerte, 3 € sous le minimum',
+    r12.frais === 3.5 && r12.total === 15.5 && r12.manquePourGratuit === 13 && r12.seuilGratuit === 25 && r12.manqueMinimum === 3 && r12.minimum === 15 && !r12.offert,
+    JSON.stringify(r12))
+  const r30 = resumeLivraison({ totalArticles: 30, config: CL })
+  v('🔴 panier de 30 € : livraison offerte, total = articles, plus rien ne manque',
+    r30.offert && r30.frais === 0 && r30.total === 30 && r30.manquePourGratuit === null && r30.manqueMinimum === 0, JSON.stringify(r30))
+  v('🔴 sans « offerte dès » ni minimum (null, le piège du zéro) : frais fixes, rien d’autre ; sans configuration : null',
+    JSON.stringify(resumeLivraison({ totalArticles: 0, config: { frais_fixe: 2, gratuit_des: null, minimum_commande: null } }))
+      === JSON.stringify({ frais: 2, offert: false, seuilGratuit: null, manquePourGratuit: null, minimum: null, manqueMinimum: 0, total: 2 })
+    && resumeLivraison({ totalArticles: 10, config: null }) === null)
+  v('🔴 les conditions en une phrase, avant le panier',
+    conditionsLivraison(CL) === 'Livraison 3.5 € · offerte dès 25 € · minimum 15 €'
+    && conditionsLivraison({ frais_fixe: 0, gratuit_des: 20, minimum_commande: null }) === 'Livraison offerte'
+    && conditionsLivraison({ frais_fixe: 4, gratuit_des: null, minimum_commande: 0 }) === 'Livraison 4 €'
+    && conditionsLivraison(null) === null, conditionsLivraison(CL))
+  {
+    const cat = code('app/api/equipe/commande/catalogue/route.js')
+    const fen = code('app/dashboard/ModalNouvelleCommande.js')
+    v('🔴 frais : la route du catalogue lit la configuration (mêmes colonnes que l’encodage) et la renvoie',
+      /admin\.from\('livraison_config'\)\.select\('frais_fixe, gratuit_des, minimum_commande'\)\.eq\('commercant_id', commercant_id\)\.maybeSingle\(\)/.test(cat)
+      && /for \(const r of \[commerce, articles, deals, retrait, livraison, jour, configLivraison\]\)/.test(cat)
+      && /configLivraison: configLivraison\.data \|\| null,/.test(cat))
+    v('🔴 frais : la fenêtre calcule par `resumeLivraison` sur le total des articles, et affiche frais, total, seuil et minimum',
+      /const fraisDuPanier = mode === 'livraison' && totalLignes !== null \? resumeLivraison\(\{ totalArticles: totalLignes, config: configLivraison \}\) : null/.test(fen)
+      && /\{fraisDuPanier\.offert \? 'offerte' : euros\(fraisDuPanier\.frais\)\}/.test(fen)
+      && /<span>\{euros\(fraisDuPanier\.total\)\}<\/span>/.test(fen)
+      && /Encore \{euros\(fraisDuPanier\.manquePourGratuit\)\} d’articles et la livraison est offerte/.test(fen)
+      && /il manque \{euros\(fraisDuPanier\.manqueMinimum\)\}/.test(fen)
+      && /\{conditionsLivraison\(configLivraison, euros\)\}/.test(fen))
+  }
 
   // 🔴 « AUTRE DATE » DIT POURQUOI (Alex, 11/10 : un mardi fermé ne donnait que
   // « Aucun créneau ce jour-là »). Samedi 10/10, mardi fermé, congé le 14.

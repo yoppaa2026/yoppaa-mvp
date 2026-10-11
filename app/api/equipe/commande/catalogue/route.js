@@ -35,7 +35,7 @@ export async function POST(request) {
     if (!garde.ok) return NextResponse.json({ ok: false, error: garde.error }, { status: garde.status })
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return NextResponse.json({ ok: false, error: 'Date invalide.' }, { status: 400 })
 
-    const [commerce, articles, deals, retrait, livraison, jour] = await Promise.all([
+    const [commerce, articles, deals, retrait, livraison, jour, configLivraison] = await Promise.all([
       admin.from('commercants').select('id, nom, categorie, mode_capacite, tva_taux_defaut, ordre_categories, horizon_commande, horaires_detail').eq('id', commercant_id).maybeSingle(),
       // ⚠️ Les colonnes du stock : celles que `etatStock` lit (comptoir, maximum
       // sur commande, stock qui baisse), comme `verifierStockDisponible`.
@@ -46,8 +46,11 @@ export async function POST(request) {
       admin.from('commandes')
         .select('statut, date_commande, creneau_id, creneau_livraison_id, commande_articles(quantite, article:articles(temps_prepa))')
         .eq('commercant_id', commercant_id).eq('date_commande', date),
+      // Les frais de livraison, dits au téléphone (Alex, 11/10) : les colonnes
+      // que la route d'encodage lit pour les calculer.
+      admin.from('livraison_config').select('frais_fixe, gratuit_des, minimum_commande').eq('commercant_id', commercant_id).maybeSingle(),
     ])
-    for (const r of [commerce, articles, deals, retrait, livraison, jour]) {
+    for (const r of [commerce, articles, deals, retrait, livraison, jour, configLivraison]) {
       if (r.error) {
         console.error('[equipe/commande/catalogue] lecture KO', r.error.message)
         return NextResponse.json({ ok: false, error: 'Lecture impossible, réessaie.' }, { status: 500 })
@@ -102,6 +105,7 @@ export async function POST(request) {
       deals: deals.data || [],
       creneauxRetrait: retrait.data || [],
       creneauxLivraison: livraison.data || [],
+      configLivraison: configLivraison.data || null,
       commandesDuJour: jour.data || [],
     })
   } catch (e) {

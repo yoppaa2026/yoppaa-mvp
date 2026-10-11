@@ -115,7 +115,7 @@ SELECT * FROM (
            WHERE conrelid = 'public.etiquettes_impression'::regclass AND conname = 'etiquettes_impression_sacs_check')::text,
          'CHECK (((sacs >= 1) AND (sacs <= 20)))'
   UNION ALL SELECT 9, 'liens effaces avec le commerce et la commande (cascade)',
-         (SELECT string_agg(confrelid::regclass::text || ':' || confdeltype, ', ' ORDER BY confrelid::regclass::text) FROM pg_constraint
+         (SELECT string_agg(confrelid::regclass::text || ':' || confdeltype::text, ', ' ORDER BY confrelid::regclass::text) FROM pg_constraint
            WHERE contype = 'f' AND conrelid IN ('public.stations_impression'::regclass, 'public.etiquettes_impression'::regclass))::text,
          'commandes:c, commercants:c, commercants:c'
   UNION ALL SELECT 10, 'index de la file',

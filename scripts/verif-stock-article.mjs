@@ -278,6 +278,9 @@ const code = (f) => sansProse(lire(f))
     && bord.indexOf('{venteJour && blocSurCommande()}') > bord.indexOf("'Jours de vente' : 'Quantité chaque jour'"))
   v('le bloc « Sur commande » dit l’avance, le maximum et ce qui est commandé à l’avance',
     /Au plus tard la veille/.test(bord) && /au maximum par jour/.test(bord) && /Déjà commandé à l&rsquo;avance : /.test(bord))
+  v('🔴 « Déjà commandé à l’avance » : les jours À VENIR seulement, jamais aujourd’hui (il ne bouge plus)',
+    /const ordre = \[\.\.\.JOURS_KEYS\.slice\(jourActuelIdx \+ 1\), \.\.\.JOURS_KEYS\.slice\(0, jourActuelIdx\)\]/.test(bord)
+    && /\.map\(j => `\$\{j\} \$\{surCommande\[j\]\}/.test(bord) && /Rien de commandé à l’avance pour les prochains jours/.test(bord))
   v('🔴 la copie emporte « Réservable jusqu’à », pas le comptoir du jour',
     CHAMPS_COPIES.includes('horizon_jours') && !CHAMPS_COPIES.includes('stock_comptoir') && !CHAMPS_COPIES.includes('stock_comptoir_le'))
   v('🔴 le formulaire enregistre « Réservable jusqu’à », vide = automatique',

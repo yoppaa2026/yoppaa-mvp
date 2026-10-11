@@ -3559,10 +3559,13 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
     if (!enB) return null
     const n = Math.max(1, Math.round((Number(a.delai_minutes) || 0) / 1440))
     const max = maximumSurCommande(a)
-    const ordre = [...JOURS_KEYS.slice(jourActuelIdx), ...JOURS_KEYS.slice(0, jourActuelIdx)]
+    // ⚠️ LES JOURS À VENIR SEULEMENT (Alex, 11/10) : pour aujourd'hui, plus
+    // rien ne se commande à l'avance, le chiffre ne bouge plus ; ces commandes
+    // se préparent depuis l'onglet Commandes. Ici, on lit ce qu'il reste à vendre.
+    const ordre = [...JOURS_KEYS.slice(jourActuelIdx + 1), ...JOURS_KEYS.slice(0, jourActuelIdx)]
     const reserves = ordre
       .filter(j => (surCommande[j] || 0) > 0)
-      .map(j => `${j === jourActuelKey ? 'aujourd’hui' : j} ${surCommande[j]}${max ? ` sur ${max}` : ''}`)
+      .map(j => `${j} ${surCommande[j]}${max ? ` sur ${max}` : ''}`)
     const quand = n === 1 ? 'Au plus tard la veille' : `Au plus tard ${n} jours avant`
     return (
       <div style={{ marginTop: 10 }}>
@@ -3570,7 +3573,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
         <p style={{ fontSize: 13, color: T.deep, margin: '0 0 8px', lineHeight: 1.5 }}>
           {quand} · {max ? `${max} au maximum par jour` : 'sans maximum par jour'}
           <br/>
-          {reserves.length > 0 ? <>Déjà commandé à l&rsquo;avance : {reserves.join(', ')}</> : 'Rien de commandé à l’avance pour l’instant'}
+          {reserves.length > 0 ? <>Déjà commandé à l&rsquo;avance : {reserves.join(', ')}</> : 'Rien de commandé à l’avance pour les prochains jours'}
         </p>
       </div>
     )

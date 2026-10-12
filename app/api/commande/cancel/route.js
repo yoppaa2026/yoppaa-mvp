@@ -233,7 +233,7 @@ export async function POST(request) {
       .from('commandes')
       .select(`
         creneau:creneaux(heure_debut, heure_fin),
-        articles:commande_articles(quantite, prix_unitaire, options, article:articles(nom))
+        articles:commande_articles(quantite, prix_unitaire, options, article:articles!commande_articles_article_id_fkey(nom))
       `)
       .eq('id', cmd.id)
       .single()

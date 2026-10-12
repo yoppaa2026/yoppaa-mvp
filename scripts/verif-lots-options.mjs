@@ -180,6 +180,31 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     && sql.includes("'30f9a6390691143e65b54ac84c8c5491'"))
 }
 
+// ═══ 5. LE LIEN NOMMÉ (12/10) ════════════════════════════════════════════════
+// 🔴 « Could not embed because more than one relationship was found for
+// 'commande_articles' and 'articles' » : le tableau de bord de Chez Momo
+// n'affichait plus aucune commande (Alex, 12/10). Un second chemin entre les
+// lignes et les articles rend AMBIGUË toute lecture `article:articles(…)`
+// depuis les lignes, et Supabase refuse la requête ENTIÈRE. Le lien est donc
+// TOUJOURS nommé : un chemin ajouté demain ne cassera plus rien.
+{
+  const { readdirSync, statSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const tous = []
+  const parcourir = (d) => {
+    for (const n of readdirSync(new URL(d, RACINE))) {
+      const rel = join(d, n).replace(/\\/g, '/')
+      if (statSync(new URL(rel, RACINE)).isDirectory()) { if (n !== 'node_modules') parcourir(rel + '/') }
+      else if (/\.(js|jsx|ts|tsx)$/.test(n)) tous.push(rel)
+    }
+  }
+  parcourir('app/'); parcourir('lib/')
+  const nus = tous.filter(f => /article:articles\(/.test(code(f)))
+  v('🔴 aucune lecture `article:articles(…)` sans le lien nommé (`!commande_articles_article_id_fkey`)', nus.length === 0, nus.join(', '))
+  v('le tableau de bord nomme le lien dans ses deux lectures de commandes',
+    (code('app/dashboard/page.js').match(/article:articles!commande_articles_article_id_fkey\(/g) || []).length === 2)
+}
+
 console.log(`\nLots et options : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

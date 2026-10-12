@@ -138,7 +138,7 @@ export async function POST(request) {
         // le rendez-vous a été annulé continuait d'afficher « On te les remet à
         // ton rendez-vous » pour un rendez-vous disparu, sans numéro ni geste.
         // Le hint lève l'ambiguïté, les deux tables se pointant l'une l'autre.
-        .select('*, commercant:commercants(nom, type, categorie), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin), commande_articles(quantite, article_nom, options, article:articles(nom)), rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, statut, date_rdv, heure_debut)')
+        .select('*, commercant:commercants(nom, type, categorie), creneau:creneaux(heure_debut, heure_fin), creneau_livraison:livraison_creneaux(heure_debut, heure_fin), commande_articles(quantite, article_nom, options, article:articles!commande_articles_article_id_fkey(nom)), rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, statut, date_rdv, heure_debut)')
         .eq('client_email', yopper.email)
         .order('created_at', { ascending: false })
       if (!data || data.length === 0) return NextResponse.json({ ok: true, commandes: [] })

@@ -307,7 +307,8 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   const r = code('app/api/equipe/commande/catalogue/route.js')
   v('🔴 même garde que l’écriture', /gardeEquipe\(request, admin, commercant_id, 'commandes'\)/.test(r))
   v('🔴 rien de personnel sur les commandes du jour',
-    /select\('statut, date_commande, creneau_id, creneau_livraison_id, commande_articles\(quantite, article:articles\(temps_prepa\)\)'\)/.test(r)
+    // Réorientée le 12/10 : le lien vers les articles est nommé (lecture ambiguë).
+    /select\('statut, date_commande, creneau_id, creneau_livraison_id, commande_articles\(quantite, article:articles!commande_articles_article_id_fkey\(temps_prepa\)\)'\)/.test(r)
     && !/client_nom|client_email|client_telephone/.test(r))
   v('ni prix indicatif ni versions', /filter\(a => !a\.est_vitrine && !a\.gere_variantes\)/.test(r))
   v('🔴 la grille lit les jours de vente et le vendu du jour aux sources de la fiche',

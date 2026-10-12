@@ -181,7 +181,7 @@ export async function POST(request) {
     if (commandeLiee && produits_choix !== 'garde' && produits_choix !== 'rend') {
       const { data: lignes } = await supabase
         .from('commande_articles')
-        .select('quantite, prix_unitaire, article:articles(nom)')
+        .select('quantite, prix_unitaire, article:articles!commande_articles_article_id_fkey(nom)')
         .eq('commande_id', commandeLiee.id)
       return NextResponse.json({
         ok: false,

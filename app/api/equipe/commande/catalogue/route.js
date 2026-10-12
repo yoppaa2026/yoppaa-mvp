@@ -44,7 +44,7 @@ export async function POST(request) {
       admin.from('creneaux').select(COLONNES_CRENEAU).eq('commercant_id', commercant_id).eq('actif', true).order('heure_debut'),
       admin.from('livraison_creneaux').select(COLONNES_CRENEAU).eq('commercant_id', commercant_id).eq('actif', true).order('heure_debut'),
       admin.from('commandes')
-        .select('statut, date_commande, creneau_id, creneau_livraison_id, commande_articles(quantite, article:articles(temps_prepa))')
+        .select('statut, date_commande, creneau_id, creneau_livraison_id, commande_articles(quantite, article:articles!commande_articles_article_id_fkey(temps_prepa))')
         .eq('commercant_id', commercant_id).eq('date_commande', date),
       // Les frais de livraison, dits au téléphone (Alex, 11/10) : les colonnes
       // que la route d'encodage lit pour les calculer.

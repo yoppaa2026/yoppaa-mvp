@@ -139,7 +139,7 @@ const MUTATIONS = [
 
   // ─── LA LECTURE ──────────────────────────────────────────────────────────
   { nom: '🔴 la lecture des commandes du jour laisse sortir le nom des clients',
-    fichier: LECTURE, de: "        .select('statut, date_commande, creneau_id, creneau_livraison_id, commande_articles(quantite, article:articles(temps_prepa))')", vers: "        .select('statut, client_nom, date_commande, creneau_id, creneau_livraison_id, commande_articles(quantite, article:articles(temps_prepa))')" },
+    fichier: LECTURE, de: "        .select('statut, date_commande, creneau_id, creneau_livraison_id, commande_articles(quantite, article:articles!commande_articles_article_id_fkey(temps_prepa))')", vers: "        .select('statut, client_nom, date_commande, creneau_id, creneau_livraison_id, commande_articles(quantite, article:articles!commande_articles_article_id_fkey(temps_prepa))')" },
 
   // ─── LES ÉCRANS ──────────────────────────────────────────────────────────
   { nom: '🔴 un créneau sans limite s affiche « Plein »',

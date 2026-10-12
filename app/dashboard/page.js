@@ -185,7 +185,7 @@ function getNumeroJour(commandes, commandeId) {
 // l'une l'autre (`commandes.rdv_reservation_id` et `rdv_reservations.commande_id`)
 // depuis MIGRATION_RDV_COMMANDE_LIEE : sans lui, PostgREST ne sait pas quelle
 // relation suivre et refuse la requête.
-const SELECT_COMMANDES = `*, creneau:creneaux(*), creneau_livraison:livraison_creneaux(*), commande_articles(*, article:articles(*)), rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, statut, prestation:rdv_prestations(nom), praticien:rdv_praticiens(prenom))`
+const SELECT_COMMANDES = `*, creneau:creneaux(*), creneau_livraison:livraison_creneaux(*), commande_articles(*, article:articles!commande_articles_article_id_fkey(*)), rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, statut, prestation:rdv_prestations(nom), praticien:rdv_praticiens(prenom))`
 
 // Côté rendez-vous, la commande liée vient avec sa RÉFÉRENCE et le détail de ses
 // lignes : c'est ce qui permet au commerçant de retrouver le paquet dans son
@@ -202,7 +202,7 @@ const SELECT_COMMANDES = `*, creneau:creneaux(*), creneau_livraison:livraison_cr
 // l'agenda qu'une réservation est une TABLE, donc qu'elle se range dans le
 // service de la soirée et pas dans un bloc de cours. Sans lui, l'agenda d'un
 // restaurant retombait sur celui d'un studio de yoga, sans aucune erreur.
-const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix, par_couverts), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, bon_cadeau_montant, fidelite_remise, commande_articles(quantite, article_nom, options, article:articles(nom)))`
+const SELECT_RDVS = `*, prestation:rdv_prestations(nom, duree_minutes, prix, par_couverts), praticien:rdv_praticiens(id, prenom, nom, couleur_hex, photo_url), commande:commandes!rdv_reservations_commande_id_fkey(id, numero_commande, numero_prefixe, numero_semaine, total, statut, bon_cadeau_montant, fidelite_remise, commande_articles(quantite, article_nom, options, article:articles!commande_articles_article_id_fkey(nom)))`
 
 // ─── Notifications système ────────────────────────────────────────────────────
 let _notifPermission = 'default'

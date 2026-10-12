@@ -141,7 +141,7 @@ const MUTATIONS = [
     fichier: REGLAGE, de: '    imprimerEtiquette(etiquettesPourSacs(contenuEtiquette(commande, { categorie, commerce }), sacs))', vers: '    imprimerEtiquette(contenuEtiquette(commande, { categorie, commerce }))' },
   { nom: '🔴 le réglage disparaît de l écran des livraisons',
     // ⚠️ Ancre recentrée le 11/10 : `{!modeHistorique && (` tombait sur un AUTRE bloc.
-    fichier: BORD, de: '                    <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom} comptoir={comptoir}/>', vers: "                    {vueMode !== 'livraison' && <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom} comptoir={comptoir}/>}" },
+    fichier: BORD, de: '                    <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom} comptoir={comptoir} brother={brother}/>', vers: "                    {vueMode !== 'livraison' && <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom} comptoir={comptoir} brother={brother}/>}" },
   // ═══ Le pied : le commerce, puis yoppaa (Alex, 01/10) ═══
   { nom: '🔴 le pied ne s imprime pas',
     fichier: IMPRESSION, de: '  lignes.push(pied)', vers: '' },

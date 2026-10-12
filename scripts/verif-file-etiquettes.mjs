@@ -136,7 +136,8 @@ for (const [nom, c] of ROUTES) {
     && /const comptoir = useStationComptoir\(equipe\.commercant_id\)/.test(poste))
   const reglage = code('app/dashboard/ReglageEtiquettes.js')
   v('le crochet lit l’état par la route du serveur, et le relit toutes les 20 s',
-    /postPro\('\/api\/impression\/station', \{ commercant_id: commercantId, action: 'etat' \}\)/.test(reglage) && /setInterval\(relire, 20000\)/.test(reglage))
+    // Réorientée le 12/10 : l'état part avec l'identifiant de l'appareil (« c'est cette tablette »).
+    /postPro\('\/api\/impression\/station', \{ commercant_id: commercantId, action: 'etat', appareil_id: identifiantAppareil\(\) \}\)/.test(reglage) && /setInterval\(relire, 20000\)/.test(reglage))
   v('les boutons de la tablette travaillent visiblement (DotsAttente) et disent le résultat',
     /\{envoi === 'essai' \? <DotsAttente\/> : null\}/.test(reglage) && /setMessage\(r\.ok \? 'Étiquette d’essai envoyée à la tablette\.' : r\.error\)/.test(reglage))
 }
@@ -242,6 +243,60 @@ for (const [nom, c] of ROUTES) {
   const reglage = code('app/dashboard/ReglageEtiquettes.js')
   v('l’aperçu de l’image est dans le réglage (pour juger le rendu sans la tablette)',
     /const canvas = dessinerEtiquette\(document\.createElement\('canvas'\), \{ \.\.\.ETIQUETTE_ESSAI, commerce: commerce \|\| null \}, \{ policeMarque: policeMarqueDeLaPage\(\) \}\)/.test(reglage))
+}
+
+// ═══ 7. LA TABLETTE (12/10) : L'EXTENSION, LA BOUCLE ═════════════════════════
+{
+  const S = await import('../lib/station-comptoir.js')
+  const plugin = { printImage() {}, addListener() {}, search() {} }
+  const fenetre = (o = {}) => ({ Capacitor: { isNativePlatform: () => true, PluginHeaders: [{ name: 'BrotherPrint' }], Plugins: { BrotherPrint: plugin }, ...o } })
+  v('🔴 l’extension Brother n’existe QUE compilée dans l’app (PluginHeaders), jamais dans un navigateur',
+    S.brotherNatif(fenetre()) === plugin && S.brotherNatif({}) === null
+    && S.brotherNatif(fenetre({ isNativePlatform: () => false })) === null
+    && S.brotherNatif(fenetre({ PluginHeaders: [{ name: 'Geolocation' }] })) === null
+    && S.brotherNatif({ get Capacitor() { throw new Error('x') } }) === null)
+
+  const imp = { port: 'wifi', channelInfo: ' 192.168.1.42 ', modelName: 'QL-820NWB' }
+  const o = S.optionsImpression(imp, 'iVBORw0KGgo')
+  v('🔴 impression : QL-820NWB, rouleau continu de 62 mm, coupé après chaque étiquette, une copie, en Wi-Fi',
+    o.modelName === 'QL_820NWB' && o.labelName === 'RollW62' && o.autoCut === true && o.numberOfCopies === 1
+    && o.port === 'wifi' && o.channelInfo === '192.168.1.42' && o.encodedImage === 'iVBORw0KGgo', JSON.stringify(o))
+  const refus = (f) => { try { f(); return false } catch { return true } }
+  v('🔴 impression refusée sans imprimante, ou avec une image mal encodée (en-tête « data: »)',
+    refus(() => S.optionsImpression(null, 'x')) && refus(() => S.optionsImpression({ port: 'bluetooth', channelInfo: 'a' }, 'x'))
+    && refus(() => S.optionsImpression(imp, 'data:image/png;base64,xx')) && refus(() => S.optionsImpression(imp, '')))
+  v('🔴 les erreurs de la Brother deviennent des raisons lisibles',
+    S.raisonDepuisErreur({ message: 'ERROR_PAPER_EMPTY' }) === 'papier'
+    && S.raisonDepuisErreur({ message: 'Cover open' }) === 'couvercle'
+    && S.raisonDepuisErreur({ message: 'Wrong label' }) === 'rouleau'
+    && S.raisonDepuisErreur({ message: 'Timeout' }) === 'injoignable'
+    && S.raisonDepuisErreur({ message: 'xyz' }, { communication: true }) === 'injoignable'
+    && S.raisonDepuisErreur({ message: 'xyz' }) === 'autre' && S.raisonDepuisErreur(null) === 'autre')
+  const memoire = {}
+  const stock = { getItem: k => memoire[k] ?? null, setItem: (k, val) => { memoire[k] = val } }
+  const id1 = S.identifiantAppareil(stock)
+  v('l’identifiant de l’appareil : créé une fois, gardé, au format accepté par le serveur',
+    /^[A-Za-z0-9_-]{8,64}$/.test(id1) && S.identifiantAppareil(stock) === id1 && S.identifiantAppareil(null) !== undefined)
+
+  const sc = code('app/dashboard/StationComptoir.js')
+  v('🔴 la boucle ne tourne QUE sur la tablette déclarée, avec l’extension et une imprimante',
+    /const actif = !!b\?\.brother && imprimanteValide\(b\?\.imprimante\) && !!comptoir\?\.etat\?\.station\?\.cetAppareil/.test(sc)
+    && /if \(!actif \|\| !commercantId\) return/.test(sc))
+  v('🔴 une impression à la fois : un tour ne démarre pas tant que le précédent n’est pas fini',
+    /if \(enCours\.current \|\| arrete\) return/.test(sc) && /finally \{\s*enCours\.current = false\s*\}/.test(sc)
+    && /if \(attente\.current\) \{ rejeter\('autre'\); return \}/.test(sc))
+  v('🔴 chaque sac est dessiné puis imprimé, et on ATTEND la réponse de la Brother avant le suivant',
+    /for \(const contenu of e\.contenus \|\| \[\]\) \{\s*await b\.imprimer\(etiquetteEnBase64\(contenu, \{ policeMarque: policeMarqueDeLaPage\(\) \}\)\)/.test(sc)
+    && /addListener\('onPrint', \(\) => finir\(true\)\)/.test(sc) && /addListener\('onPrintFailedCommunication'/.test(sc))
+  v('🔴 sans réponse de la Brother en 30 s : « injoignable », jamais une attente sans fin',
+    /setTimeout\(\(\) => \{ attente\.current = null; rejeter\('injoignable'\) \}, DELAI_IMPRESSION_MS\)/.test(sc) && S.DELAI_IMPRESSION_MS === 30000)
+  v('🔴 le résultat est renvoyé jusqu’à trois fois (perdu, l’étiquette sortirait deux fois)',
+    /for \(let essai = 0; essai < 3; essai\+\+\)/.test(sc) && /await rendreResultat\(\{ commercant_id: commercantId, appareil_id, id: e\.id, ok: !raison, raison \}\)/.test(sc))
+  v('le réglage de la tablette ne s’affiche que dans l’app', /if \(!b\?\.brother\) return null/.test(sc))
+  const bord = code('app/dashboard/page.js')
+  v('🔴 la boucle est montée à la RACINE du tableau de bord (elle tourne quel que soit l’onglet)',
+    bord.indexOf('<BoucleStation commercantId={commercant?.id} comptoir={comptoir} brother={brother}/>') > -1
+    && bord.indexOf('<BoucleStation') < bord.indexOf('<div className="dash-layout"'))
 }
 
 console.log(`\nFile des étiquettes : ${ok} vérifications`)

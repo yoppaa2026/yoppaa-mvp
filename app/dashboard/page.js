@@ -74,6 +74,7 @@ import BandeauOuMeTrouver from './BandeauOuMeTrouver'
 // Garder son tableau de bord sous la main (30/09) : une fois, à qui en a besoin.
 import AideInstallation from './AideInstallation'
 import ReglageEtiquettes, { useEtiquettesAppareil, BoutonEtiquettes, useStationComptoir } from './ReglageEtiquettes'
+import { useBrother, BoucleStation } from './StationComptoir'
 import { imprimerSiActive } from '@/lib/impression-etiquette'
 import { etiquetteConcernee } from '@/lib/etiquette-commande'
 import { PALETTE_STATUT, COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
@@ -1367,6 +1368,9 @@ export default function Dashboard() {
   // La tablette du comptoir (« Yoppaa Comptoir », 11/10) : avec elle, toutes
   // les étiquettes passent par la file, et le navigateur n'imprime plus.
   const comptoir = useStationComptoir(commercant?.id)
+  // Dans l'app « Yoppaa Comptoir » seulement : l'extension Brother et
+  // l'imprimante retenue par CETTE tablette (`null` partout ailleurs).
+  const brother = useBrother()
   // Verdict d'accès au tableau de bord. `null` tant qu'on n'a rien décidé,
   // sinon `{ raison, motif, nom }` et on montre l'écran d'attente à la place.
   const [refusAcces, setRefusAcces] = useState(null)
@@ -3829,6 +3833,10 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* 🖨️ LA BOUCLE DE LA TABLETTE DU COMPTOIR (12/10) : à la racine, pour
+          tourner quel que soit l'onglet ouvert. Ne rend rien ; ne fait rien
+          hors de l'app « Yoppaa Comptoir » ni sur une autre tablette. */}
+      <BoucleStation commercantId={commercant?.id} comptoir={comptoir} brother={brother}/>
       <div className="dash-layout" style={impersonating ? { marginTop: 42, '--dash-h': 'calc(100dvh - 42px)' } : undefined}>
 
         {/* ── SIDEBAR PC ── */}
@@ -4484,7 +4492,7 @@ export default function Dashboard() {
                     l'appareil, pas une information du travail. */}
                 {!modeHistorique && (
                   <div style={{ marginTop: 16 }}>
-                    <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom} comptoir={comptoir}/>
+                    <ReglageEtiquettes actif={etiquettesIci} onChanger={reglerEtiquettes} commerce={commercant?.nom} comptoir={comptoir} brother={brother}/>
                   </div>
                 )}
               </>

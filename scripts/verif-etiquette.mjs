@@ -371,7 +371,7 @@ const avantPremierAwait = (corps, appel) => {
   v('🔴 le réglage est aussi sur l’écran des livraisons',
     // (11/10) en bas de l'onglet, dans son bloc : un réglage de l'appareil.
     // Réorientée le 11/10 : le réglage et les cartes suivent la tablette du comptoir.
-    /\{!modeHistorique && \(\s*<div style=\{\{ marginTop: 16 \}\}>\s*<ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commercant\?\.nom\} comptoir=\{comptoir\}\/>/.test(bord) && /etiquettes=\{etiquettesIci \|\| comptoir\.aStation\} comptoir=\{comptoir\}/.test(bord))
+    /\{!modeHistorique && \(\s*<div style=\{\{ marginTop: 16 \}\}>\s*<ReglageEtiquettes actif=\{etiquettesIci\} onChanger=\{reglerEtiquettes\} commerce=\{commercant\?\.nom\} comptoir=\{comptoir\} brother=\{brother\}\/>/.test(bord) && /etiquettes=\{etiquettesIci \|\| comptoir\.aStation\} comptoir=\{comptoir\}/.test(bord))
   // 🔴 (11/10) LA CARTE COMPACTE IMPRIME AUSSI AU DÉMARRAGE : elle passe par
   // `changerStatut`, qui lance l'étiquette avant son premier `await`.
   v('🔴 la carte compacte démarre la prépa par LE geste qui imprime',
@@ -407,7 +407,7 @@ const avantPremierAwait = (corps, appel) => {
     && /if \(comptoir\?\.aStation\) \{[\s\S]*?comptoir\.demander\(\{ origine: 'reimpression', commande_id: commande\.id, sacs \}\)[\s\S]*?return\s*\}/.test(corpsImprimer))
   v('🔴 l’étiquette d’essai porte le nom du commerce, comme les vraies',
     /onClick=\{\(\) => imprimerEtiquette\(\{ \.\.\.ETIQUETTE_ESSAI, commerce: commerce \|\| null \}\)\}/.test(reglage)
-    && /export default function ReglageEtiquettes\(\{ actif, onChanger, commerce = null, comptoir = null \}\)/.test(reglage))
+    && /export default function ReglageEtiquettes\(\{ actif, onChanger, commerce = null, comptoir = null, brother = null \}\)/.test(reglage))
   v('le compteur part d’un sac', /const \[sacs, setSacs\] = useState\(1\)/.test(reglage))
 }
 

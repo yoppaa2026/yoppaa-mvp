@@ -14,7 +14,9 @@ import { lireImpressionActive, ecrireImpressionActive, imprimerEtiquette } from 
 import { ETIQUETTE_ESSAI, SACS_MAX, contenuEtiquette, etiquettesPourSacs } from '@/lib/etiquette-commande'
 import { postPro } from '@/lib/fetch-pro'
 import DotsAttente from '@/app/components/DotsAttente'
-import { dessinerEtiquette, POLICE } from '@/lib/etiquette-image'
+import { dessinerEtiquette, policeMarqueDeLaPage } from '@/lib/etiquette-image'
+import { identifiantAppareil } from '@/lib/station-comptoir'
+import { ReglageTablette } from './StationComptoir'
 
 const T = { ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', vert: '#047857', alerte: '#B45309', erreur: '#B91C1C' }
 
@@ -36,7 +38,8 @@ export function useStationComptoir(commercantId) {
   const [etat, setEtat] = useState(undefined) // undefined = pas encore lu ; { station, dernieres }
   const relire = useCallback(async () => {
     if (!commercantId) return
-    const res = await postPro('/api/impression/station', { commercant_id: commercantId, action: 'etat' })
+    // L'identifiant de l'appareil : c'est lui qui dit « c'est cette tablette ».
+    const res = await postPro('/api/impression/station', { commercant_id: commercantId, action: 'etat', appareil_id: identifiantAppareil() })
     const j = typeof res?.json === 'function' ? await res.json().catch(() => null) : null
     if (j?.ok) setEtat({ station: j.station, dernieres: j.dernieres || [] })
   }, [commercantId])
@@ -57,16 +60,7 @@ export function useStationComptoir(commercantId) {
     if (j?.ok) setEtat({ station: j.station, dernieres: j.dernieres || [] })
     return !!j?.ok
   }
-  return { etat, aStation: !!etat?.station, relire, demander, retirer }
-}
-
-// La police du wordmark telle que la page l'a chargée (Jakarta, par next/font),
-// pour que l'image signe « yoppaa » comme le logo. Absente : Arial.
-export function policeMarqueDeLaPage() {
-  try {
-    const v = getComputedStyle(document.body).getPropertyValue('--font-jakarta').trim()
-    return v ? `${v}, ${POLICE}` : POLICE
-  } catch { return POLICE }
+  return { etat, aStation: !!etat?.station, relire, demander, retirer, commercantId }
 }
 
 // 🖨️ L'APERÇU DE L'IMAGE QUE LA TABLETTE ENVERRA À LA BROTHER (12/10) : pour
@@ -216,7 +210,7 @@ export function BoutonEtiquettes({ commande, categorie = null, commerce = null, 
 
 // `commerce` : son nom, imprimé en pied de l'étiquette d'essai comme sur les
 // vraies, pour régler la machine sur ce qui sortira vraiment.
-export default function ReglageEtiquettes({ actif, onChanger, commerce = null, comptoir = null }) {
+export default function ReglageEtiquettes({ actif, onChanger, commerce = null, comptoir = null, brother = null }) {
   const [ouvert, setOuvert] = useState(false)
   const station = comptoir?.etat?.station
   const etatTitre = station
@@ -230,7 +224,7 @@ export default function ReglageEtiquettes({ actif, onChanger, commerce = null, c
         <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800, color: T.ink }}>Étiquettes de commande</span>
         <span style={{ fontSize: 12, fontWeight: 800, color: etatTitre.couleur }}>{etatTitre.texte}</span>
       </button>
-      {ouvert && station && <><EncadreStation comptoir={comptoir}/><ApercuImage commerce={commerce}/></>}
+      {ouvert && station && <><EncadreStation comptoir={comptoir}/><ReglageTablette commercantId={comptoir?.commercantId} comptoir={comptoir} brother={brother}/><ApercuImage commerce={commerce}/></>}
       {ouvert && !station && (
         <div style={{ marginTop: 10 }}>
           <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: T.deep }}>
@@ -247,6 +241,7 @@ export default function ReglageEtiquettes({ actif, onChanger, commerce = null, c
             </button>
           </div>
           <EncadreStation comptoir={comptoir}/>
+          <ReglageTablette commercantId={comptoir?.commercantId} comptoir={comptoir} brother={brother}/>
           <ApercuImage commerce={commerce}/>
         </div>
       )}

@@ -34,18 +34,20 @@ const MUTATIONS = [
     de: '"next": "16.4.0"',
     vers: '"next": "^16.4.0"' },
 
+  // ⚠️ ANCRES SUIVIES LE 12/10 : React monté délibérément en 19.3.0 (PR
+  // Dependabot « montees-mineures », faite à la main). Même règle que Next.
   { nom: '🔴 react passe en plage ~ : deux machines, deux versions',
-    de: '"react": "19.2.4"',
-    vers: '"react": "~19.2.4"' },
+    de: '"react": "19.3.0"',
+    vers: '"react": "~19.3.0"' },
 
   { nom: '🔴 react-dom accepte n importe quelle 19.x',
-    de: '"react-dom": "19.2.4"',
-    vers: '"react-dom": ">=19.2.4"' },
+    de: '"react-dom": "19.3.0"',
+    vers: '"react-dom": ">=19.3.0"' },
 
   // ─── LE DESACCORD ENTRE REACT ET REACT-DOM ──────────────────────────────
   { nom: '🔴 react-dom avance seul : defauts de rendu que rien ne relie a leur cause',
-    de: '"react-dom": "19.2.4"',
-    vers: '"react-dom": "19.3.0"' },
+    de: '"react-dom": "19.3.0"',
+    vers: '"react-dom": "19.3.1"' },
 
   // ─── LE VERROU QUI DIT AUTRE CHOSE QUE LA DECLARATION ───────────────────
   // ⚠️ C EST LE VERROU QUI GAGNE A L INSTALLATION, et personne ne lit un lock.

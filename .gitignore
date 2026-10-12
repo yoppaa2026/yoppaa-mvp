@@ -105,3 +105,6 @@ public/captures/*.jpeg
 public/captures/*.jpg
 public/captures/*.JPG
 public/captures/*.JPEG
+
+# SDK Brother (licence Brother : jamais dans le depot, qui est PUBLIC)
+sdk-brother/

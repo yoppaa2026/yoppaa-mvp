@@ -1613,12 +1613,24 @@ export default function Dashboard() {
       return (a.creneau?.heure_debut || '').localeCompare(b.creneau?.heure_debut || '')
     })
 
+  // 🔴 UNE LECTURE RATÉE N'EST PAS « AUCUNE COMMANDE » (12/10). L'erreur
+  // n'était pas lue : une requête refusée par la base affichait « Rien ici »,
+  // et Alex voyait ses deux commandes payées absentes, sans un mot. On garde
+  // ce qui était affiché, et on DIT pourquoi la liste n'est pas à jour.
+  const [erreurCommandes, setErreurCommandes] = useState(null)
   const chargerCommandes = useCallback(async (id) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('commandes')
       .select(SELECT_COMMANDES)
       .eq('commercant_id', id)
       .order('created_at', { ascending: true })
+    if (error) {
+      console.error('[dashboard] commandes illisibles', error)
+      setErreurCommandes(error.message || 'lecture impossible')
+      setLoading(false)
+      return
+    }
+    setErreurCommandes(null)
     const triees = trierCommandes(data)
     setCommandes(triees)
     dernierNombreRef.current = nombreArriveesEnLigne(triees)
@@ -4273,6 +4285,12 @@ export default function Dashboard() {
             {commercant && (
               <BandeauOuMeTrouver commercant={commercant} onAllerA={ouvrirConfig}
                 cleRafraichir={`${ongletPrincipal}:${configTabUrl}`}/>
+            )}
+            {erreurCommandes && ongletPrincipal === 'commandes' && (
+              <div role="alert" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 12, background: '#FEF2F2', border: '1.5px solid #FCA5A5', color: '#991B1B', fontSize: 13.5, fontWeight: 700 }}>
+                Les commandes n&rsquo;ont pas pu être lues : la liste n&rsquo;est peut-être pas à jour. Recharge la page.
+                <span style={{ display: 'block', fontWeight: 500, fontSize: 12.5, marginTop: 2 }}>Détail : {erreurCommandes}</span>
+              </div>
             )}
             {/* ⚠️ DANS LA ZONE QUI DÉFILE, comme le bandeau de la fiche : jamais
                 un encart fixe sur un téléphone. Rien depuis l'icône installée

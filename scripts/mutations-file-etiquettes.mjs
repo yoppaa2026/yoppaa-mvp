@@ -74,6 +74,8 @@ const MUTATIONS = [
     de: "        elements.push({ type: 'rect', x: d - larg,", vers: "        void ({ type: 'rect', x: d - larg," },
   { nom: '⚠️ le logo perd ses cinq points', fichier: 'lib/etiquette-image.js',
     de: "    elements.push({ type: 'point', x: xp + r, y: yPoints + p.decalage + r, r })", vers: '    void r' },
+  { nom: '🔴 les points du logo retouchent les lettres', fichier: 'lib/etiquette-image.js',
+    de: '  const yPoints = baseMot + corps * 0.22 + prop.wordmarkToDots', vers: '  const yPoints = baseMot + prop.wordmarkToDots * 0.35' },
   { nom: '⚠️ le nom du commerce passe sous le logo', fichier: 'lib/etiquette-image.js',
     de: '    const place = xLogo - g - mm(2)', vers: '    const place = utile' },
   { nom: '⚠️ la dernière ligne gaspille la place avant « … »', fichier: 'lib/etiquette-image.js',

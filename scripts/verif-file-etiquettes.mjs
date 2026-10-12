@@ -188,6 +188,15 @@ for (const [nom, c] of ROUTES) {
   v('🔴 image : rien ne dépasse des marges', dansLaMarge(p))
   v('🔴 image : le logo, cinq points sous « yoppaa », et deux filets (liste, pied)',
     p.elements.filter(e => e.type === 'point').length === 5 && p.elements.filter(e => e.type === 'filet').length === 2)
+  // 🔴 (Alex, 12/10) les points touchaient les « p » : ils commencent sous les
+  // jambes (≈ 22 % du corps) PLUS l'écart de la charte (0,28 du corps).
+  {
+    const mot = p.elements.find(e => e.texte === 'yoppaa')
+    const corpsMot = corpsDe(mot.fonte)
+    const hautPoints = Math.min(...p.elements.filter(e => e.type === 'point').map(e => e.y - e.r))
+    v('🔴 image : les points du logo ne touchent pas les lettres (sous les jambes + 0,28 du corps)',
+      hautPoints - mot.y >= corpsMot * (0.22 + 0.28) - 0.01, `${(hautPoints - mot.y).toFixed(1)} px pour un corps de ${corpsMot.toFixed(1)}`)
+  }
 
   const longue = I.miseEnPageEtiquette({ ...base, lignes: [
     { article: '2 × Pizza quatre fromages avec supplément de mozzarella di bufala', options: 'Base : tomate, Cuisson : bien cuite, Supplément : olives noires' },

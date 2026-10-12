@@ -35,9 +35,9 @@ jobs:
   construire:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: 'npm'
@@ -226,7 +226,7 @@ jobs:
       # de build déjà vu, coupure réseau, clé API révoquée). Le fichier, lui, est
       # bon : le perdre obligerait à racheter dix minutes de Mac pour le refaire.
       - name: Récupérer le paquet
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: yoppaa-ios-${{ inputs.version_nom }}
           path: ios/App/build/ipa/*.ipa

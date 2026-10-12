@@ -28,6 +28,7 @@ import { surveillerCompteur } from '@/lib/sonde-compteur'
 import { bonsLimiter } from '@/lib/ratelimit'
 import { jourBruxelles, jourCivilPlus, brusselsInstant } from '@/lib/timezone'
 import { estHeureDuRecap, lignesRecapCommandes } from '@/lib/recap-commandes'
+import { productionSeparee, articlesDeDuo } from '@/lib/vue-commandes'
 
 export async function GET(request) {
   const refuse = refusCron(gardeCron(request, 'cron/recap-jour-8h'), NextResponse)
@@ -160,11 +161,16 @@ export async function GET(request) {
             // eux, une livraison de 11 h et un retrait de 11 h se lisaient
             // pareil. L'adresse ne sert qu'à en tirer la LOCALITÉ
             // (`lignesRecapCommandes`) : la rue ne part jamais par email.
+            // ⚠️ (12/10) `created_at`, `date_commande` et le détail des lignes :
+            // le récap sépare désormais le commandé À L'AVANCE (à produire en
+            // plus) du commandé le jour même, avec les unités réelles
+            // (`quantite_stock`, second article d'un duo), comme « À préparer ».
             .select(`
               id, numero_commande, numero_prefixe, total, client_nom, mode_retrait, adresse_livraison,
+              created_at, date_commande, statut,
               creneau:creneaux(heure_debut),
               creneau_livraison:livraison_creneaux(heure_debut),
-              commande_articles(quantite)
+              commande_articles(quantite, quantite_stock, article_nom, deal_id, duo_article_id, article:articles!commande_articles_article_id_fkey(nom))
             `)
             .eq('commercant_id', c.id)
             .eq('date_commande', dateJour)
@@ -176,6 +182,18 @@ export async function GET(request) {
           }
 
           const cmdsFlat = lignesRecapCommandes(cmds || [])
+
+          // Le second article d'un duo n'est pas joint (pas de clé étrangère) :
+          // son nom se lit à part, comme dans le tableau de bord.
+          const idsDuo = articlesDeDuo(cmds || [])
+          let nomsArticles = {}
+          if (idsDuo.length > 0) {
+            const { data: duo, error: errDuo } = await supabase.from('articles').select('id, nom').in('id', idsDuo)
+            if (errDuo) console.error('[cron/recap-jour-8h] noms des duos KO', { commercant: c.nom, error: errDuo.message })
+            nomsArticles = Object.fromEntries((duo || []).map(a => [a.id, a.nom]))
+          }
+          // Comme « À préparer » : une commande déjà prête n'est plus à produire.
+          const production = productionSeparee((cmds || []).filter(x => x.statut !== 'pret'), { nomsArticles })
 
           // ⚠️ LES BONS CADEAUX VENDUS LA VEILLE. Un commerçant réglé sur ce
           // récapitulatif ne recevait AUCUN email quand on lui achetait un bon :
@@ -203,6 +221,7 @@ export async function GET(request) {
             commercant_categorie: c.categorie || null,
             date_jour:      dateJour,
             commandes:      cmdsFlat,
+            production,
             bons_vendus:    bonsVeille || [],
             rdvs:           tablesFlat,
           })

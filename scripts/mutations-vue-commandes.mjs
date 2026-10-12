@@ -71,7 +71,8 @@ const MUTATIONS = [
   { nom: '⚠️ une ligne simple prend le nom du catalogue (renommé) au lieu du nom figé', fichier: REGLE,
     de: '  const nom = l.deal_id ? (l.article?.nom || l.article_nom) : (l.article_nom || l.article?.nom)', vers: '  const nom = l.article?.nom || l.article_nom' },
   { nom: '🔴 le PDF recompte les offres', fichier: 'lib/export-commandes-pdf.js',
-    de: '      for (const { nom, quantite } of unitesDeLigne(l, nomsArticles)) production.set(nom, (production.get(nom) || 0) + quantite)', vers: "      production.set(l?.article_nom || '?', (production.get(l?.article_nom || '?') || 0) + (Number(l?.quantite) || 0))" },
+    // ⚠️ ANCRE REPOINTÉE LE 12/10 : la boucle remplit aussi le bloc du moment.
+    de: '      for (const { nom, quantite } of unitesDeLigne(l, nomsArticles)) {', vers: "      for (const { nom, quantite } of [{ nom: l?.article_nom || '?', quantite: Number(l?.quantite) || 0 }]) {" },
   { nom: '⚠️ le panneau ne lit plus le nom du second article', fichier: VUE,
     de: '  const prep = aPreparer(commandesDuJour, { nomsArticles })', vers: '  const prep = aPreparer(commandesDuJour)' },
   // Alex, 11/10 soir.
@@ -85,6 +86,23 @@ const MUTATIONS = [
     de: 'puce(COULEUR_LIVRAISON.pale, COULEUR_LIVRAISON.texte)}>Livraison', vers: "puce('#EEF2FF', '#3730A3')}>Livraison" },
   { nom: '⚠️ la fenêtre d encodage garde le violet pour la livraison', fichier: 'app/dashboard/ModalNouvelleCommande.js',
     de: "background: mode === m ? (m === 'livraison' ? COULEUR_LIVRAISON.pale : T.pale)", vers: 'background: mode === m ? (T.pale)' },
+  // ─── 12/10 : À L'AVANCE / LE JOUR MÊME (« deux blocs, partout ») ────────
+  { nom: '🔴 le jour de création est lu comme une heure locale (23 h 30 la veille passe pour le jour même)', fichier: REGLE,
+    de: '  const passee = jourBelgeDeCreation(c?.created_at)', vers: "  const passee = String(c?.created_at || '').slice(0, 10)" },
+  { nom: '🔴 une commande du jour même passe pour « à l avance »', fichier: REGLE,
+    de: '  return /^\\d{4}-\\d{2}-\\d{2}$/.test(retrait) && !!passee && passee < retrait', vers: '  return /^\\d{4}-\\d{2}-\\d{2}$/.test(retrait) && !!passee && passee <= retrait' },
+  { nom: '🔴 les deux blocs se mélangent', fichier: REGLE,
+    de: '    leJourMeme: quantitesParArticle(liste.filter(c => !commandeALAvance(c)), { nomsArticles }),', vers: '    leJourMeme: quantitesParArticle(liste, { nomsArticles }),' },
+  { nom: '🔴 le PDF du jour perd ses deux blocs', fichier: 'lib/export-commandes-pdf.js',
+    de: "  if ((donnees?.productionALAvance || []).length > 0) {", vers: '  if (false) {' },
+  { nom: '🔴 le récap de 8 h ne reçoit plus la production', fichier: 'app/api/cron/recap-jour-8h/route.js',
+    de: '            production,', vers: '' },
+  { nom: '🔴 le récap compte aussi les commandes déjà prêtes', fichier: 'app/api/cron/recap-jour-8h/route.js',
+    de: "          const production = productionSeparee((cmds || []).filter(x => x.statut !== 'pret'), { nomsArticles })", vers: '          const production = productionSeparee(cmds || [], { nomsArticles })' },
+  { nom: '🔴 l écran ne montre plus le bloc à l avance', fichier: VUE,
+    de: '              <TableArticles articles={prep.aLAvance}/>', vers: '              <TableArticles articles={prep.articles}/>' },
+  { nom: '⚠️ le nom d un article part brut dans l email', fichier: 'lib/resend.js',
+    de: '${echapperHtml(a.nom)}</td>', vers: '${a.nom}</td>' },
 ]
 
 const lancer = () => {

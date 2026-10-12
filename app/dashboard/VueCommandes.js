@@ -278,17 +278,23 @@ export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], j
         <div style={{ borderTop: `1px solid ${T.hairline}`, padding: '10px 12px', display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
           <div>
             <p style={titrePanneau}>Pour la journée</p>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
-              <tbody>
-                {prep.articles.map(a => (
-                  <tr key={a.nom} style={{ borderBottom: `1px solid ${T.hairline}` }}>
-                    <td style={{ padding: '5px 0', fontSize: 14, color: T.ink, fontWeight: 600 }}>{a.nom}</td>
-                    <td style={{ padding: '5px 0', fontSize: 15, color: T.ink, fontWeight: 900, textAlign: 'right' }}>{a.quantite}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <TableArticles articles={prep.articles}/>
           </div>
+          {/* (12/10, Alex au tableau : « deux blocs, partout ») Le commandé à
+              l'avance se produit EN PLUS ; le jour même se prend au comptoir.
+              Sans commande à l'avance, les deux blocs répéteraient le total. */}
+          {prep.totalALAvance > 0 && (
+            <div>
+              <p style={titrePanneau}>Commandé à l’avance · à produire en plus</p>
+              <TableArticles articles={prep.aLAvance}/>
+            </div>
+          )}
+          {prep.totalALAvance > 0 && prep.leJourMeme.length > 0 && (
+            <div>
+              <p style={titrePanneau}>Commandé le jour même</p>
+              <TableArticles articles={prep.leJourMeme}/>
+            </div>
+          )}
           <div>
             <p style={titrePanneau}>Par heure</p>
             {/* (11/10, Alex : « plus clair, séparation par ligne ou par
@@ -310,6 +316,23 @@ export function PanneauAPreparer({ commandesDuJour = [], toutesCommandes = [], j
         </div>
       )}
     </div>
+  )
+}
+
+// Une liste d'articles et leurs quantités : la même pour la journée et pour
+// chacun des deux blocs (à l'avance, le jour même).
+function TableArticles({ articles }) {
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
+      <tbody>
+        {articles.map(a => (
+          <tr key={a.nom} style={{ borderBottom: `1px solid ${T.hairline}` }}>
+            <td style={{ padding: '5px 0', fontSize: 14, color: T.ink, fontWeight: 600 }}>{a.nom}</td>
+            <td style={{ padding: '5px 0', fontSize: 15, color: T.ink, fontWeight: 900, textAlign: 'right' }}>{a.quantite}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 

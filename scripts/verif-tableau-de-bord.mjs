@@ -1837,6 +1837,63 @@ const verifie = (nom, cond, detail = '') => {
   verifie('les lignes courtes disent la quantité, le nom et les options',
     JSON.stringify(V.lignesCourtes(cmd({ commande_articles: [ligne('Pizza', 2, ['Grande', 'Olives'])] }))) === JSON.stringify([{ texte: '2× Pizza', options: 'Grande, Olives' }]))
 
+  // ─── (12/10) À L'AVANCE / LE JOUR MÊME : « deux blocs, partout » (Alex) ───
+  // `created_at` est en UTC SANS fuseau : 22:30 le 10/10 en UTC = 00:30 le 11
+  // à Bruxelles, donc LE JOUR MÊME pour un retrait le 11.
+  verifie('🔴 passée la veille (heure belge) pour aujourd’hui : à l’avance ; passée le jour même : non',
+    V.commandeALAvance(cmd({ created_at: '2026-10-10T15:00:00' })) === true
+    && V.commandeALAvance(cmd({ created_at: '2026-10-11T06:00:00' })) === false
+    && V.commandeALAvance(cmd({ created_at: '2026-10-10T22:30:00' })) === false
+    && V.commandeALAvance(cmd({ created_at: '2026-10-10T21:30:00' })) === true)
+  verifie('⚠️ sans date lisible, on n’affirme pas « à l’avance »',
+    V.commandeALAvance(cmd({ created_at: null })) === false && V.commandeALAvance({ created_at: '2026-10-01T10:00:00' }) === false)
+  const prepAB = V.aPreparer([
+    cmd({ created_at: '2026-10-09T10:00:00', creneau: cr('08:00', '08:15'), commande_articles: [ligne('Croissant', 12), ligne('Pain', 2)] }),
+    cmd({ created_at: '2026-10-11T06:10:00', creneau: cr('09:00', '09:15'), commande_articles: [ligne('Croissant', 3)] }),
+    cmd({ statut: 'pret', created_at: '2026-10-09T10:00:00', commande_articles: [ligne('Croissant', 40)] }),
+  ])
+  verifie('🔴 « À préparer » : le commandé à l’avance à part (12 croissants + 2 pains), le jour même à part (3), le total intact (15 + 2)',
+    JSON.stringify(prepAB.aLAvance) === JSON.stringify([{ nom: 'Croissant', quantite: 12 }, { nom: 'Pain', quantite: 2 }])
+    && JSON.stringify(prepAB.leJourMeme) === JSON.stringify([{ nom: 'Croissant', quantite: 3 }])
+    && prepAB.totalALAvance === 14 && prepAB.total === 17, JSON.stringify(prepAB))
+  {
+    const P1 = await import('../lib/export-commandes-pdf.js')
+    const exAB = P1.donneesExport([
+      cmd({ total: 10, created_at: '2026-10-09T10:00:00', commande_articles: [lotDe4] }),
+      cmd({ total: 5, created_at: '2026-10-11T07:00:00', commande_articles: [ligne('Pain', 1)] }),
+    ], { debut: '2026-10-11', fin: '2026-10-11' })
+    const blocsJour = P1.encadresProduction(exAB, { debut: '2026-10-11', fin: '2026-10-11' })
+    verifie('🔴 le PDF du jour porte les deux blocs dès qu’il y a du commandé à l’avance (unités réelles)',
+      blocsJour.map(b => b.titre).join('|') === 'Commandé à l’avance · à produire en plus|Commandé le jour même'
+      && JSON.stringify(blocsJour[0].articles) === JSON.stringify([{ nom: 'Croissant', quantite: 8 }])
+      && JSON.stringify(blocsJour[1].articles) === JSON.stringify([{ nom: 'Pain', quantite: 1 }]), JSON.stringify(blocsJour))
+    const sansAvance = P1.donneesExport([cmd({ total: 5, created_at: '2026-10-11T07:00:00', commande_articles: [ligne('Pain', 1)] })], { debut: '2026-10-11', fin: '2026-10-11' })
+    verifie('un jour sans commande à l’avance : pas d’encadré (comme avant) ; plusieurs jours : le total de la période',
+      P1.encadresProduction(sansAvance, { debut: '2026-10-11', fin: '2026-10-11' }).length === 0
+      && P1.encadresProduction(sansAvance, { debut: '2026-10-05', fin: '2026-10-11' })[0]?.titre === 'Total par article sur la période')
+    const { emailRecapCommandesJour } = await import('../lib/resend.js')
+    const recap = emailRecapCommandesJour({ nom_commercant: 'Momo', date_jour: '2026-10-11', commandes: [{ heure_debut: '08:00', yopper_prenom: 'Léa', mode_retrait: 'retrait' }], bons_vendus: [],
+      production: V.productionSeparee([
+        cmd({ created_at: '2026-10-09T10:00:00', commande_articles: [ligne('Croissant <b>', 12)] }),
+        cmd({ created_at: '2026-10-11T05:00:00', commande_articles: [ligne('Pain', 1)] }),
+      ]) })
+    verifie('🔴 le récap de 8 h porte les deux blocs, noms échappés',
+      recap.includes('Commandé à l’avance · à produire en plus') && recap.includes('Commandé le jour même')
+      && recap.includes('Croissant &lt;b&gt;') && !recap.includes('Croissant <b>'))
+    const recapSans = emailRecapCommandesJour({ nom_commercant: 'Momo', date_jour: '2026-10-11', commandes: [{ heure_debut: '08:00', yopper_prenom: 'Léa', mode_retrait: 'retrait' }], bons_vendus: [] })
+    verifie('un récap sans production reçue reste tel qu’avant', !recapSans.includes('à produire en plus'))
+    const route = sansProse(readFileSync(new URL('../app/api/cron/recap-jour-8h/route.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'))
+    verifie('🔴 la route du récap lit ce qu’il faut pour séparer (date de création, jour, lignes réelles) et passe la production',
+      /created_at, date_commande, statut,/.test(route)
+      && route.includes('commande_articles(quantite, quantite_stock, article_nom, deal_id, duo_article_id, article:articles!commande_articles_article_id_fkey(nom))')
+      && /const production = productionSeparee\(\(cmds \|\| \[\]\)\.filter\(x => x\.statut !== 'pret'\), \{ nomsArticles \}\)/.test(route)
+      && /^\s*production,$/m.test(route))
+    const ecran = sansProse(readFileSync(new URL('../app/dashboard/VueCommandes.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'))
+    verifie('🔴 l’écran « À préparer » montre les deux blocs quand il y a du commandé à l’avance',
+      /\{prep\.totalALAvance > 0 && \(\s*<div>\s*<p style=\{titrePanneau\}>Commandé à l’avance · à produire en plus<\/p>\s*<TableArticles articles=\{prep\.aLAvance\}\/>/.test(ecran)
+      && /\{prep\.totalALAvance > 0 && prep\.leJourMeme\.length > 0 && \(\s*<div>\s*<p style=\{titrePanneau\}>Commandé le jour même<\/p>\s*<TableArticles articles=\{prep\.leJourMeme\}\/>/.test(ecran))
+  }
+
   verifie('🔴 export : la semaine va du lundi au dimanche (dimanche 11 → 5-11, mercredi 14 → 12-18), le jour reste le jour',
     JSON.stringify(V.periodeExport('2026-10-11', 'semaine')) === JSON.stringify({ debut: '2026-10-05', fin: '2026-10-11' })
     && JSON.stringify(V.periodeExport('2026-10-14', 'semaine')) === JSON.stringify({ debut: '2026-10-12', fin: '2026-10-18' })

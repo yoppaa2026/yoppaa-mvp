@@ -74,6 +74,11 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.etiquettes_impression TO service_
 
 COMMIT;
 
+-- ⚠️ (12/10) TOUS LES PROCESSUS DE L'API RELISENT LA STRUCTURE : sur l'essai,
+-- l'un d'eux avait gardé une ancienne version après une migration, et le
+-- tableau de bord de Chez Momo n'affichait plus aucune commande.
+NOTIFY pgrst, 'reload schema';
+
 -- ─── CONTRÔLE : une ligne par vérification, valeur ET attendu ──────────────
 SELECT * FROM (
   SELECT 1 AS n, 'les deux tables existent'::text AS controle,

@@ -16,6 +16,7 @@ import { construireLignes, csvJournal, csvDetail, journalParJour } from '@/lib/e
 import { normaliser } from '@/lib/tva'
 import { jourBruxelles } from '@/lib/timezone'
 import { adminVerifie } from '@/lib/api-auth'
+import { toutesLesLignes } from '@/lib/toutes-les-lignes'
 
 export async function GET(request) {
   try {
@@ -133,7 +134,13 @@ export async function GET(request) {
     const instant = (col) => plage(col, rembDu, rembAu)
     const jour = (col) => plage(col, du, au)
 
-    const { data: commandesPeriode } = await admin
+    // 🔴 TOUTES LES LIGNES, ET UNE LECTURE RATÉE REFUSE L'EXPORT (12/10).
+    // Supabase rend au plus 1 000 lignes sans le dire : une pizzeria à 50
+    // commandes par jour les dépasse en un mois, et son journal comptable
+    // perdait des ventes en silence. Et l'erreur n'était pas lue : un export
+    // vide passait pour un mois sans vente. Un justificatif incomplet ne sort
+    // JAMAIS ; ordre TOTAL (`id` en dernier) pour que les pages se suivent.
+    const { data: commandesPeriode, error: errCommandes } = await toutesLesLignes(() => admin
       .from('commandes')
       .select(COLS_COMMANDE)
       .eq('commercant_id', commercantId)
@@ -143,8 +150,10 @@ export async function GET(request) {
         jour('date_commande'),      // ni l'un ni l'autre : reste à encaisser
         instant('stripe_refund_date'),
       ].join(','))
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true }))
 
-    const { data: rdvsPeriode } = await admin
+    const { data: rdvsPeriode, error: errRdvs } = await toutesLesLignes(() => admin
       .from('rdv_reservations')
       .select(COLS_RDV)
       .eq('commercant_id', commercantId)
@@ -156,6 +165,13 @@ export async function GET(request) {
         instant('stripe_refund_date'),
       ].join(','))
       .is('deleted_at', null)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true }))
+
+    if (errCommandes || errRdvs) {
+      console.error('[export-comptable] lecture KO', errCommandes || errRdvs)
+      return NextResponse.json({ ok: false, error: 'Les ventes de la période n’ont pas pu être lues : réessaie dans un instant.' }, { status: 500 })
+    }
 
     // ─── ET LES BONS CADEAUX RENDUS, QUI NE SONT DANS AUCUNE COLONNE ───────
     //
@@ -169,7 +185,7 @@ export async function GET(request) {
     // table des mouvements ne porte pas de `commercant_id`, et un bon appartient
     // à un commerce. `!inner` sur `bons_cadeaux` limite la lecture aux bons de
     // CE commerce, en base, avant que la moindre ligne ne remonte.
-    const { data: mouvementsBons } = await admin
+    const { data: mouvementsBons, error: errMouvements } = await admin
       .from('bons_cadeaux_mouvements')
       .select('bon_id, montant, source, commande_id, rdv_id, created_at, bons_cadeaux!inner(commercant_id)')
       .eq('bons_cadeaux.commercant_id', commercantId)
@@ -189,14 +205,19 @@ export async function GET(request) {
     const rdvManquants = [...new Set((mouvementsBons || [])
       .map(m => m.rdv_id).filter(id => id && !dejaLa.has(id)))]
 
-    const { data: commandesBon } = cmdManquantes.length > 0
+    const { data: commandesBon, error: errCommandesBon } = cmdManquantes.length > 0
       ? await admin.from('commandes').select(COLS_COMMANDE)
           .eq('commercant_id', commercantId).in('id', cmdManquantes)
       : { data: [] }
-    const { data: rdvsBon } = rdvManquants.length > 0
+    const { data: rdvsBon, error: errRdvsBon } = rdvManquants.length > 0
       ? await admin.from('rdv_reservations').select(COLS_RDV)
           .eq('commercant_id', commercantId).in('id', rdvManquants).is('deleted_at', null)
       : { data: [] }
+    // Même règle : un bon rendu non lu fausserait le journal, en silence.
+    if (errMouvements || errCommandesBon || errRdvsBon) {
+      console.error('[export-comptable] lecture des bons rendus KO', errMouvements || errCommandesBon || errRdvsBon)
+      return NextResponse.json({ ok: false, error: 'Les bons rendus de la période n’ont pas pu être lus : réessaie dans un instant.' }, { status: 500 })
+    }
 
     // ⚠️ ON FUSIONNE SANS DOUBLER : les plages ci-dessus se recouvrent souvent,
     // et une même vente remontée deux fois s'écrirait deux fois.

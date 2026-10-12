@@ -1176,6 +1176,43 @@ const MUTATIONS = [
     vers: '        const { data } = await (() => supabase',
     garde: 'le solde affiché à l’inscription aussi' },
 
+  // ─── 12/10 : LES COMMANDES, L'EXPORT ET LES STATISTIQUES ───────────────
+  { nom: '🔴 les commandes du tableau de bord repassent a mille lignes',
+    banc: 'verif:logique', fichier: 'app/dashboard/page.js',
+    de: '  return toutesLesLignes(() => {',
+    vers: '  return (() => {',
+    garde: 'les commandes du tableau de bord se lisent toutes, en ordre total' },
+
+  { nom: '⚠️ l ordre des commandes n est plus total',
+    banc: 'verif:logique', fichier: 'app/dashboard/page.js',
+    de: "    return q.order('created_at', { ascending: true }).order('id', { ascending: true })",
+    vers: "    return q.order('created_at', { ascending: true })",
+    garde: 'les commandes du tableau de bord se lisent toutes, en ordre total' },
+
+  { nom: '🔴 le releve des commandes vide la liste sur une erreur',
+    banc: 'verif:logique', fichier: 'app/dashboard/page.js',
+    de: '      const { data, error } = await lireCommandes(commercant.id, { sansPaiementEnAttente: true })',
+    vers: '      const { data } = await lireCommandes(commercant.id, { sansPaiementEnAttente: true }); const error = null',
+    garde: 'le relevé lit son erreur : une lecture refusée ne VIDE plus la liste' },
+
+  { nom: '🔴 l export comptable repasse a mille commandes',
+    banc: 'verif:logique', fichier: 'app/api/dashboard/export-comptable/route.js',
+    de: '    const { data: commandesPeriode, error: errCommandes } = await toutesLesLignes(() => admin',
+    vers: '    const { data: commandesPeriode, error: errCommandes } = await (() => admin',
+    garde: 'l’export comptable lit toutes les commandes et tous les rendez-vous de la période' },
+
+  { nom: '🔴 un export a moitie lu sort quand meme',
+    banc: 'verif:logique', fichier: 'app/api/dashboard/export-comptable/route.js',
+    de: '    if (errCommandes || errRdvs) {',
+    vers: '    if (false) {',
+    garde: 'un export dont une lecture a échoué ne sort pas' },
+
+  { nom: '🔴 les statistiques repassent a mille rendez-vous',
+    banc: 'verif:logique', fichier: 'app/api/dashboard/statistiques/route.js',
+    de: "        toutesLesLignes(() => supabase.from('rdv_reservations')",
+    vers: "        (() => supabase.from('rdv_reservations')",
+    garde: 'les statistiques lisent toutes les commandes et tous les rendez-vous, et refusent une lecture ratée' },
+
   // ─── LOT 2 · LA-08 ET LA-10 ────────────────────────────────────────────
   { nom: '🔴 une fenetre expiree verrouille de nouveau a vie',
     banc: 'verif:attente', fichier: 'lib/attente-rdv-server.js',

@@ -188,6 +188,24 @@ function getNumeroJour(commandes, commandeId) {
 // relation suivre et refuse la requête.
 const SELECT_COMMANDES = `*, creneau:creneaux(*), creneau_livraison:livraison_creneaux(*), commande_articles(*, article:articles!commande_articles_article_id_fkey(*)), rdv:rdv_reservations!commandes_rdv_reservation_id_fkey(id, numero_rdv, numero_prefixe, date_rdv, heure_debut, heure_fin, statut, prestation:rdv_prestations(nom), praticien:rdv_praticiens(prenom))`
 
+// 🔴 TOUTES LES COMMANDES, PAS LES MILLE PREMIÈRES (12/10). Supabase rend au
+// plus 1 000 lignes sans le dire, et la lecture était triée de la plus
+// ANCIENNE : passé 1 000 commandes, c'étaient les PLUS RÉCENTES, celles du
+// jour, qui disparaissaient du tableau de bord. Même remède que l'agenda
+// (B3, 03/10) : `toutesLesLignes`, ordre TOTAL (`id` en dernier).
+// ⚠️ UNE SEULE FONCTION POUR LES DEUX LECTURES (ouverture et relevé), pour la
+// raison dite plus haut : deux lectures recopiées finissent par diverger.
+function lireCommandes(commercantId, { sansPaiementEnAttente = false } = {}) {
+  return toutesLesLignes(() => {
+    let q = supabase
+      .from('commandes')
+      .select(SELECT_COMMANDES)
+      .eq('commercant_id', commercantId)
+    if (sansPaiementEnAttente) q = q.neq('statut', 'paiement_en_attente')
+    return q.order('created_at', { ascending: true }).order('id', { ascending: true })
+  })
+}
+
 // Côté rendez-vous, la commande liée vient avec sa RÉFÉRENCE et le détail de ses
 // lignes : c'est ce qui permet au commerçant de retrouver le paquet dans son
 // onglet Commandes au lieu de le chercher au jugé.
@@ -1623,11 +1641,7 @@ export default function Dashboard() {
   // ce qui était affiché, et on DIT pourquoi la liste n'est pas à jour.
   const [erreurCommandes, setErreurCommandes] = useState(null)
   const chargerCommandes = useCallback(async (id) => {
-    const { data, error } = await supabase
-      .from('commandes')
-      .select(SELECT_COMMANDES)
-      .eq('commercant_id', id)
-      .order('created_at', { ascending: true })
+    const { data, error } = await lireCommandes(id)
     if (error) {
       console.error('[dashboard] commandes illisibles', error)
       setErreurCommandes(error.message || 'lecture impossible')
@@ -1986,15 +2000,19 @@ export default function Dashboard() {
     if (pollingRef.current) clearInterval(pollingRef.current)
 
     pollingRef.current = setInterval(async () => {
-      const { data } = await supabase
-        .from('commandes')
-        .select(SELECT_COMMANDES)
-        .eq('commercant_id', commercant.id)
-        // Exclut 'paiement_en_attente' : commande créée mais Stripe Checkout pas
-        // encore validé. Sinon la notif "Nouvelle commande !" tomberait trop tôt
-        // (dès le clic Payer & confirmer, avant la confirmation paiement).
-        .neq('statut', 'paiement_en_attente')
-        .order('created_at', { ascending: true })
+      // Exclut 'paiement_en_attente' : commande créée mais Stripe Checkout pas
+      // encore validé. Sinon la notif "Nouvelle commande !" tomberait trop tôt
+      // (dès le clic Payer & confirmer, avant la confirmation paiement).
+      const { data, error } = await lireCommandes(commercant.id, { sansPaiementEnAttente: true })
+      // 🔴 L'ERREUR N'ÉTAIT PAS LUE ICI NON PLUS (12/10) : une lecture refusée
+      // rendait `null`, trié en liste VIDE, et le tableau de bord se vidait
+      // toutes les 5 secondes. On garde ce qui est affiché, et on le dit.
+      // ⚠️ SANS `return` : le relevé des rendez-vous, plus bas, continue.
+      if (error) {
+        console.error('[dashboard] relevé des commandes illisible', error)
+        setErreurCommandes(error.message || 'lecture impossible')
+      } else {
+      setErreurCommandes(null)
       const triees = trierCommandes(data)
 
       // Nouvelle commande arrivée. ⚠️ EN LIGNE SEULEMENT (10/10) : une
@@ -2029,6 +2047,7 @@ export default function Dashboard() {
 
       dernierNombreRef.current = arrivees
       setCommandes(triees)
+      } // fin : relevé des commandes lu sans erreur
 
       // Polling RDVs : meme interval pour eviter de multiplier les setInterval.
       // ⚠️ LE RELEVÉ AUSSI LIT TOUT (B3) : sinon il remplaçait toutes les

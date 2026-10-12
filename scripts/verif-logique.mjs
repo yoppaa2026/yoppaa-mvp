@@ -588,8 +588,11 @@ verifier('le bloc du rendez-vous porte la référence de la commande',
 // les cinq secondes : un `select` enrichi d'un côté seulement fait clignoter la
 // donnée, présente au chargement puis disparue au relevé suivant.
 const compter = (src, motif) => (src.match(motif) || []).length
+// ⚠️ RÉORIENTÉE LE 12/10, PAS DÉSARMÉE : les deux lectures passent désormais
+// par UNE fonction (`lireCommandes`), donc un seul `select`, appelé deux fois.
+// La garde compte les deux : la définition unique ET ses deux appels.
 egal('les commandes se lisent partout avec la même définition',
-  compter(srcDashboard, /\.select\(SELECT_COMMANDES\)/g), 2)
+  compter(srcDashboard, /\.select\(SELECT_COMMANDES\)/g) + compter(srcDashboard, /await lireCommandes\(/g), 3)
 egal('les rendez-vous aussi',
   compter(srcDashboard, /\.select\(SELECT_RDVS\)/g), 2)
 verifier('aucune requête de commandes ne reste recopiée à la main',
@@ -4646,6 +4649,29 @@ verifier('les échecs sont comptés, pas alertés douze fois',
   const MODALE = lireSansProse('app/dashboard/ModalNouveauRdv.js')
   verifier('🔴 le solde affiché à l’inscription aussi',
     /toutesLesLignes\(\(\) => supabase\s*\.from\('rdv_reservations'\)\s*\.select\('abonnement_id, date_rdv, statut'\)/.test(MODALE))
+
+  // ── (12/10) LES COMMANDES : passé 1 000, celles du JOUR disparaissaient ──
+  verifier('🔴 les commandes du tableau de bord se lisent toutes, en ordre total',
+    /function lireCommandes\([^)]*\) \{\s*return toutesLesLignes\(\(\) => \{[\s\S]*?\.from\('commandes'\)\s*\.select\(SELECT_COMMANDES\)[\s\S]*?\.order\('created_at', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\)/.test(DASH))
+  verifier('🔴 l’ouverture ET le relevé passent par cette seule lecture (aucun select de commandes recopié)',
+    (DASH.match(/await lireCommandes\(/g) || []).length === 2
+    && (DASH.match(/\.from\('commandes'\)\s*\.select\(SELECT_COMMANDES\)/g) || []).length === 1)
+  verifier('🔴 le relevé lit son erreur : une lecture refusée ne VIDE plus la liste',
+    /const \{ data, error \} = await lireCommandes\(commercant\.id, \{ sansPaiementEnAttente: true \}\)\s*if \(error\) \{[^}]*setErreurCommandes\(/.test(DASH))
+  const EXPORT = lireSansProse('app/api/dashboard/export-comptable/route.js')
+  verifier('🔴 l’export comptable lit toutes les commandes et tous les rendez-vous de la période',
+    /const \{ data: commandesPeriode, error: errCommandes \} = await toutesLesLignes\(\(\) => admin\s*\.from\('commandes'\)/.test(EXPORT)
+    && /const \{ data: rdvsPeriode, error: errRdvs \} = await toutesLesLignes\(\(\) => admin\s*\.from\('rdv_reservations'\)/.test(EXPORT))
+  verifier('🔴 un export dont une lecture a échoué ne sort pas',
+    /if \(errCommandes \|\| errRdvs\) \{\s*console\.error\([^)]*\)\s*return NextResponse\.json\(\{[^}]*\}, \{ status: 500 \}\)/.test(EXPORT)
+    && /if \(errMouvements \|\| errCommandesBon \|\| errRdvsBon\) \{\s*console\.error\([^)]*\)\s*return NextResponse\.json\(\{[^}]*\}, \{ status: 500 \}\)/.test(EXPORT))
+  const STATS = lireSansProse('app/api/dashboard/statistiques/route.js')
+  verifier('🔴 les statistiques lisent toutes les commandes et tous les rendez-vous, et refusent une lecture ratée',
+    /toutesLesLignes\(\(\) => supabase\.from\('commandes'\)/.test(STATS)
+    && /toutesLesLignes\(\(\) => supabase\.from\('rdv_reservations'\)/.test(STATS)
+    && /if \(errCommandes \|\| errRdvs\) \{\s*console\.error\([^)]*\)\s*return NextResponse\.json\(\{[^}]*\}, \{ status: 500 \}\)/.test(STATS))
+  verifier('⚠️ les articles vendus se lisent par paquets, chacun en entier',
+    /for \(let i = 0; i < idsEncaissees\.length; i \+= 150\)[\s\S]*?await toutesLesLignes\(\(\) => supabase\s*\.from\('commande_articles'\)/.test(STATS))
 }
 
 // ─── AUCUN « ENREGISTREMENT… » IMMOBILE (lot 2, 03/10) ──────────────────────

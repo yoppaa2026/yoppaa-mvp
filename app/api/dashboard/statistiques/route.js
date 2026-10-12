@@ -23,6 +23,7 @@ import {
 import { canDo, planEffectif } from '@/lib/plans'
 import { jourBruxelles } from '@/lib/timezone'
 import { adminVerifie } from '@/lib/api-auth'
+import { toutesLesLignes } from '@/lib/toutes-les-lignes'
 
 function admin() {
   return createClient(
@@ -78,9 +79,12 @@ export async function GET(request) {
     // dans `data`, qui vaut null avec head:true. Se tromper ici ferait croire
     // qu'un commerçant n'a aucun article, et lui servirait le mauvais message
     // d'accueil.
-    const [{ data: commandes }, { data: rdvs }, { data: avis }, { data: deals }, { count: nbArticles }, { data: abonnements }] =
+    const [{ data: commandes, error: errCommandes }, { data: rdvs, error: errRdvs }, { data: avis }, { data: deals }, { count: nbArticles }, { data: abonnements }] =
       await Promise.all([
-        supabase.from('commandes')
+        // 🔴 TOUTES LES LIGNES (12/10) : passé 1 000 commandes sur la période,
+        // Supabase coupait sans le dire et le chiffre d'affaires baissait.
+        // Ordre TOTAL pour que les pages se suivent (`lib/toutes-les-lignes.js`).
+        toutesLesLignes(() => supabase.from('commandes')
           // ⚠️ `fidelite_remise` EST INDISPENSABLE : `valeurCommande` la retranche
           // du chiffre d'affaires. Absente du select, elle vaut `undefined`,
           // donc zéro, et la correction du 27/08 serait restée sans effet SANS
@@ -95,7 +99,9 @@ export async function GET(request) {
           // colonnes, la correction resterait sans effet, en silence.
           .select('id, total, fidelite_remise, stripe_refund_amount, paye_en_ligne, bon_cadeau_montant, statut, created_at')
           .eq('commercant_id', commercantId)
-          .gte('created_at', depuis),
+          .gte('created_at', depuis)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })),
         // ⚠️ `prix_estime` est INDISPENSABLE : depuis le 09/08 un rendez-vous
         // compte au tableau de bord pour son prix complet, pas pour son
         // acompte. L'oublier ramènerait le chiffre à ce qui est encaissé en
@@ -108,7 +114,7 @@ export async function GET(request) {
         // ligne sous le chiffre d'affaires annonçait 300 € sur 20 séances là où
         // la réalité était 270 € sur 18 (Alex, 19/08). Septième fois que ce
         // défaut se présente sur ce projet.
-        supabase.from('rdv_reservations')
+        toutesLesLignes(() => supabase.from('rdv_reservations')
           // Même raison : `valeurRdv` retranche la récompense du prix.
           // ⚠️ `acompte_paye_en_ligne` EST LE FRÈRE DE `paye_en_ligne` : un
           // acompte réglé sur place n'a jamais vu Stripe.
@@ -116,7 +122,9 @@ export async function GET(request) {
           // no-show laisse sur un bon vaut zéro, en silence.
           .select('id, statut, acompte_montant, acompte_paye, acompte_paye_en_ligne, prix_estime, fidelite_remise, stripe_refund_amount, bon_cadeau_montant, prestation_id, encaisse_mode, abonnement_id, created_at')
           .eq('commercant_id', commercantId)
-          .gte('created_at', depuis),
+          .gte('created_at', depuis)
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true })),
         supabase.from('avis')
           .select('note, created_at')
           .eq('commercant_id', commercantId),
@@ -140,6 +148,13 @@ export async function GET(request) {
           .eq('commercant_id', commercantId),
       ])
 
+    // Un chiffre d'affaires calculé sur une lecture ratée afficherait zéro
+    // comme si de rien n'était : on refuse, l'écran dit que c'est à refaire.
+    if (errCommandes || errRdvs) {
+      console.error('[statistiques] lecture KO', errCommandes || errRdvs)
+      return NextResponse.json({ ok: false, error: 'Les ventes n’ont pas pu être lues : réessaie dans un instant.' }, { status: 500 })
+    }
+
     const dansPeriode = (l) => new Date(l.created_at) >= f.debut
     const dansPrecedente = (l) => new Date(l.created_at) < f.debut
 
@@ -152,12 +167,21 @@ export async function GET(request) {
     // encaissées de la période, et sans jamais toucher aux coordonnées client.
     const idsEncaissees = cmdActuelles.filter(commandeEncaissee).map(c => c.id)
     let lignes = []
-    if (idsEncaissees.length > 0) {
-      const { data } = await supabase
+    // ⚠️ PAR PAQUETS DE 150 COMMANDES, CHAQUE PAQUET LU EN ENTIER (12/10) : un
+    // `.in()` de mille identifiants fait une adresse trop longue, et les lignes
+    // passaient elles aussi le plafond silencieux des 1 000.
+    for (let i = 0; i < idsEncaissees.length; i += 150) {
+      const paquet = idsEncaissees.slice(i, i + 150)
+      const { data, error } = await toutesLesLignes(() => supabase
         .from('commande_articles')
-        .select('article_nom, quantite, prix_unitaire')
-        .in('commande_id', idsEncaissees)
-      lignes = data || []
+        .select('id, article_nom, quantite, prix_unitaire')
+        .in('commande_id', paquet)
+        .order('id', { ascending: true }))
+      if (error) {
+        console.error('[statistiques] lignes illisibles', error)
+        return NextResponse.json({ ok: false, error: 'Les articles vendus n’ont pas pu être lus : réessaie dans un instant.' }, { status: 500 })
+      }
+      lignes.push(...(data || []))
     }
 
     // Les noms des prestations : le rendez-vous ne porte qu'un identifiant.

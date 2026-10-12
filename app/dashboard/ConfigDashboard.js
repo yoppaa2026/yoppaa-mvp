@@ -15235,7 +15235,10 @@ function TabStatistiques({ commercantId, toast }) {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
       const j = await r.json()
+      // (12/10) Le serveur refuse désormais une lecture ratée au lieu de
+      // rendre des chiffres faux : l'écran garde ses valeurs ET le dit.
       if (j?.ok) setData(j)
+      else if (r.status >= 500) toast(j?.error || 'Statistiques indisponibles pour l’instant.', 'error')
     } catch { /* l'écran garde ses valeurs précédentes */ }
     setLoading(false)
   }

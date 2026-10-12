@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import { carteDeLaTable, prixALaCarte, servieAujourdhui, TITRE_SANS_CATEGORIE } from '../lib/carte-table.js'
 import { lienCarte, lienFiche } from '../lib/lien-fiche.js'
-import { placementsCarteTable, FORMATS_CARTE_TABLE, TEXTES_CARTE_TABLE, TEXTES_AFFICHE, nomFichierCarteTable } from '../lib/affiche-kit.js'
+import { placementsFeuille, traitsDeCoupe, FORMATS_FEUILLE, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE, TEXTES_CARTE_TABLE, TEXTES_AFFICHE, nomFichierCarteTable } from '../lib/affiche-kit.js'
 
 let ok = 0
 const echecs = []
@@ -142,34 +142,55 @@ const EURO = String.fromCharCode(160) + '€'
 // ═══ 6) LE CARTON DE TABLE ══════════════════════════════════════════════════
 {
   // Le placement, exécuté, pour chaque format : rien ne déborde de sa case.
-  const RATIO = 1.65 // une affiche plus haute que large, comme la vraie
-  for (const [format, page] of [['A4-4', [210, 297]], ['A5', [148, 210]]]) {
-    const cases = placementsCarteTable(format, page[0], page[1], RATIO)
-    const g = FORMATS_CARTE_TABLE[format]
-    v(`${format} : autant de cartons que de cases`, cases?.length === g.colonnes * g.lignes, String(cases?.length))
-    v(`🔴 ${format} : chaque carton tient dans sa case`, (cases || []).every((p, i) => {
+  // (12/10, Alex) tout sur A4 : affiche 1, 2 (A5) ou 8 ; cartons 2 (A5), 4 ou 8.
+  const RATIO = 1.616 // les proportions réelles de l'affiche (932 × 1506)
+  const page = (f) => FORMATS_FEUILLE[f].orientation === 'landscape' ? [297, 210] : [210, 297]
+  for (const format of Object.keys(FORMATS_FEUILLE)) {
+    const [W, H] = page(format)
+    const cases = placementsFeuille(format, W, H, RATIO)
+    const g = FORMATS_FEUILLE[format]
+    v(`${format} : autant d'exemplaires que de cases`, cases?.length === g.colonnes * g.lignes, String(cases?.length))
+    v(`🔴 ${format} : chaque exemplaire tient dans sa case, marge comprise`, (cases || []).every((p, i) => {
       const cx = (i % g.colonnes) * p.caseW, cy = Math.floor(i / g.colonnes) * p.caseH
-      return p.x >= cx && p.y >= cy && p.x + p.w <= cx + p.caseW + 1e-9 && p.y + p.h <= cy + p.caseH + 1e-9
+      return p.x >= cx + g.marge - 1e-9 && p.y >= cy + g.marge - 1e-9
+        && p.x + p.w <= cx + p.caseW - g.marge + 1e-9 && p.y + p.h <= cy + p.caseH - g.marge + 1e-9
     }))
-    v(`${format} : le carton garde ses proportions`, (cases || []).every(p => Math.abs(p.h / p.w - RATIO) < 1e-9))
+    v(`${format} : l'exemplaire garde ses proportions`, (cases || []).every(p => Math.abs(p.h / p.w - RATIO) < 1e-9))
+    const traits = traitsDeCoupe(format, W, H)
+    v(`🔴 ${format} : un pointillé par coupe, d'un bord de la page à l'autre (trancheuse)`,
+      traits.length === g.colonnes - 1 + g.lignes - 1
+      && traits.every(t => (t.x1 === t.x2 && t.y1 === 0 && t.y2 === H) || (t.y1 === t.y2 && t.x1 === 0 && t.x2 === W)), JSON.stringify(traits))
   }
-  // ⚠️ Une image très haute est limitée par la hauteur, pas par la largeur.
-  const haute = placementsCarteTable('A4-4', 210, 297, 3)
-  v('🔴 une image très haute reste dans sa case', haute.every(p => p.h <= p.caseH - 20 + 1e-9))
-  v('un format inconnu ne dessine rien', placementsCarteTable('A3', 297, 420, 1.5) === null)
-  v('quatre cartons sur une A4', FORMATS_CARTE_TABLE['A4-4'].colonnes * FORMATS_CARTE_TABLE['A4-4'].lignes === 4)
+  const [W2, H2] = page('A4-2')
+  const deux = placementsFeuille('A4-2', W2, H2, RATIO)
+  v('🔴 deux A5 sur une A4 : l’A4 couchée, chaque moitié est une A5 debout (148,5 × 210)',
+    FORMATS_FEUILLE['A4-2'].orientation === 'landscape' && deux[0].caseW === 148.5 && deux[0].caseH === 210)
+  const plein = placementsFeuille('A4', 210, 297, RATIO)[0]
+  v('🔴 l’A4 pleine page ne déborde plus (elle était posée à 184 mm de large)', plein.y >= 10 && plein.y + plein.h <= 287 + 1e-9, JSON.stringify(plein))
+  // ⚠️ Huit plutôt que six : couchée, la hauteur limite, donc même taille.
+  const huit = placementsFeuille('A4-8', 297, 210, RATIO)[0]
+  v('⚠️ les huit petites font plus de 5 cm de large (QR lisible sur une table)', huit.w > 50, String(huit.w))
+  v('une seule case : aucun pointillé', traitsDeCoupe('A4', 210, 297).length === 0)
+  v('un format inconnu ne dessine rien', placementsFeuille('A3', 297, 420, 1.5) === null && traitsDeCoupe('A3', 297, 420).length === 0)
+  v('🔴 les formats demandés par Alex (12/10)',
+    FORMATS_AFFICHE.join('|') === 'A4|A4-2|A4-8' && FORMATS_CARTE_TABLE.join('|') === 'A4-2|A4-4|A4-8'
+    && FORMATS_AFFICHE.every(f => LIBELLES_AFFICHE[f]) && FORMATS_CARTE_TABLE.every(f => LIBELLES_CARTE_TABLE[f]))
 
   v('le carton dit ce que fait le scan', TEXTES_CARTE_TABLE.accroche === 'SCANNE POUR' && TEXTES_CARTE_TABLE.accrocheSuite === 'VOIR LA CARTE')
   v('🔴 et l\'affiche de vitrine n\'a pas bougé', TEXTES_AFFICHE.accroche === 'TOUS LES COMMERCES DE TA COMMUNE')
   v('le nom du fichier dit le format et le fond', nomFichierCarteTable('x', true, 'A4-4') === 'yoppaa-carte-table-x-A4-4-blanc.pdf'
-    && nomFichierCarteTable('x', false, 'A5') === 'yoppaa-carte-table-x-A5-violet.pdf')
+    && nomFichierCarteTable('x', false, 'A4-8') === 'yoppaa-carte-table-x-A4-8-violet.pdf')
 
   const kit = code('lib/affiche-kit.js')
   v('🔴 le carton porte les textes de table',
     /construireAffiche\(\{ qrDataUrl, nomCommerce, clair, textes: TEXTES_CARTE_TABLE \}\)/.test(kit))
-  v('🔴 et se pose par le placement vérifié',
-    /const cases = placementsCarteTable\(format, W, H, canvas\.height \/ canvas\.width\)/.test(kit)
-    && /for \(const p of cases\) pdf\.addImage\(image, 'PNG', p\.x, p\.y, p\.w, p\.h\)/.test(kit))
+  v('🔴 et se pose par le placement vérifié, dans l’orientation du format',
+    /const cases = placementsFeuille\(format, W, H, canvas\.height \/ canvas\.width\)/.test(kit)
+    && /for \(const p of cases\) pdf\.addImage\(image, 'PNG', p\.x, p\.y, p\.w, p\.h\)/.test(kit)
+    && /new jsPDF\(\{ orientation: gabarit\.orientation, unit: 'mm', format: 'a4' \}\)/.test(kit)
+    && /for \(const t of traits\) pdf\.line\(t\.x1, t\.y1, t\.x2, t\.y2\)/.test(kit))
+  v('🔴 l’affiche ET les cartons passent par la même feuille',
+    (kit.match(/const pdf = await feuillePdf\(canvas, format, clair\)/g) || []).length === 2)
 }
 
 // ═══ 7) LE TABLEAU DE BORD ══════════════════════════════════════════════════
@@ -180,8 +201,17 @@ const EURO = String.fromCharCode(160) + '€'
   v('le bloc des tables existe', bloc.length > 500, String(bloc.length))
   v('🔴 son QR mène à la carte', /const url = lienCarte\(slug\)/.test(bloc) && !/lienFiche\(/.test(bloc))
   v('🔴 et ce QR-là part dans le PDF', /telechargerCarteTablePdf\(\{ qrDataUrl: qr, nomCommerce, clair, slug, format \}\)/.test(bloc))
-  v('les deux formats sont proposés', /telecharger\('A4-4'\)/.test(bloc) && /telecharger\('A5'\)/.test(bloc))
+  v('les trois formats sont proposés, depuis la liste du module',
+    /\{FORMATS_CARTE_TABLE\.map\(f => \(/.test(bloc) && /onClick=\{\(\) => telecharger\(f\)\}/.test(bloc) && /\{LIBELLES_CARTE_TABLE\[f\]\}/.test(bloc))
   v('un double clic ne lance pas deux PDF', /if \(enCours\) return/.test(bloc) && /disabled=\{!qr \|\| !!enCours\}/.test(bloc))
+  const iAff = dash.indexOf('async function downloadPDF(')
+  const blocAff = iAff === -1 ? '' : dash.slice(iAff, iAff + 6000)
+  v('🔴 l’affiche propose ses trois formats, et ses boutons travaillent',
+    /\{FORMATS_AFFICHE\.map\(f => \(/.test(blocAff) && /onClick=\{\(\) => downloadPDF\(f, fondClair\)\}/.test(blocAff)
+    && /if \(pdfEnCours\) return/.test(blocAff) && /disabled=\{!qrDataUrl \|\| !!pdfEnCours\}/.test(blocAff))
+  const pageKit = code('app/kit/[slug]/KitClient.js')
+  v('🔴 la page du kit propose les mêmes formats, avec les mêmes mots',
+    /\{FORMATS_AFFICHE\.map\(f => \(/.test(pageKit) && /LIBELLES_AFFICHE\[f\]/.test(pageKit) && !/telecharger\('A5'\)/.test(pageKit))
   v('le commerçant voit ce que voient ses clients', /href=\{url\}/.test(bloc))
   v('🔴 seulement pour un commerce qui sert à manger', /\{sertAManger\(typeCommerce\) && \(\s*<CarteTableBloc/.test(dash))
   // ⚠️ Une colonne absente d'un select ne lève rien : le bloc disparaîtrait.

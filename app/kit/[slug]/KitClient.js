@@ -5,7 +5,7 @@
 
 import { useState } from 'react'
 import { avantLancement, leJourJ, majuscule } from '@/lib/lancement'
-import { telechargerAffichePng, telechargerAffichePdf } from '@/lib/affiche-kit'
+import { telechargerAffichePng, telechargerAffichePdf, FORMATS_AFFICHE, LIBELLES_AFFICHE } from '@/lib/affiche-kit'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 
@@ -278,15 +278,17 @@ export default function KitClient({ slug, kit, lien, qr, consigne = null }) {
                 style={{ ...btnBase, flex: '1 1 100%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff' }}>
                 {enCours === 'png' ? 'Préparation…' : 'Télécharger en PNG'}
               </button>
-              <button onClick={() => telecharger('A5')} disabled={!!enCours}
-                style={{ ...btnBase, flex: 1, background: 'rgba(255,255,255,0.12)', color: '#fff' }}>
-                {enCours === 'A5' ? '…' : 'PDF A5'}
-              </button>
-              <button onClick={() => telecharger('A4')} disabled={!!enCours}
-                style={{ ...btnBase, flex: 1, background: 'rgba(255,255,255,0.12)', color: '#fff' }}>
-                {enCours === 'A4' ? '…' : 'PDF A4'}
-              </button>
+              {/* (12/10) Les mêmes formats que le tableau de bord, mêmes mots. */}
+              {FORMATS_AFFICHE.map(f => (
+                <button key={f} onClick={() => telecharger(f)} disabled={!!enCours}
+                  style={{ ...btnBase, flex: '1 1 140px', background: 'rgba(255,255,255,0.12)', color: '#fff' }}>
+                  {enCours === f ? 'Préparation…' : LIBELLES_AFFICHE[f]}
+                </button>
+              ))}
             </div>
+            <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
+              Imprime à 100 %. Plusieurs affiches sur une A4 se coupent le long des pointillés.
+            </p>
             {erreurTelechargement && (
               <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: '#FCA5A5', fontWeight: 600 }}>{erreurTelechargement}</p>
             )}

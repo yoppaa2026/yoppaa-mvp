@@ -223,8 +223,10 @@ const egal = (nom, obtenu, attendu) =>
     !/Télécharger le QR/.test(kit) && /Ton affiche de vitrine/.test(kit),
     'le commerçant collerait un carré noir et blanc en vitrine')
   verifie('le kit propose les deux fonds', /setFondClair\(o\.clair\)/.test(kit))
-  verifie('et les trois formats', /telecharger\('png'\)/.test(kit)
-    && /telecharger\('A5'\)/.test(kit) && /telecharger\('A4'\)/.test(kit))
+  // ⚠️ RÉORIENTÉE LE 12/10 : les PDF viennent de la liste du module (A4, deux
+  // A5, huit petites), plus de boutons écrits un par un.
+  verifie('et les formats : le PNG, puis chaque PDF de la liste', /telecharger\('png'\)/.test(kit)
+    && /\{FORMATS_AFFICHE\.map\(f => \(/.test(kit) && /onClick=\{\(\) => telecharger\(f\)\}/.test(kit))
   // ⚠️ UN ÉCHEC SE DIT : un bouton qui ne fait rien laisse cliquer trois fois.
   //
   // ⚠️ ANCRÉE SUR L'AFFICHAGE, PAS SUR LE NOM. Écrite `/erreurTelechargement/`,
@@ -322,8 +324,9 @@ const egal = (nom, obtenu, attendu) =>
   verifie('et elle n\'écrit plus de HTML à la volée', !/document\.write/.test(section))
 
   verifie('le PNG se télécharge', /async function downloadPNG\(clair\)/.test(dash))
-  verifie('le PDF aussi, dans les deux formats',
-    /downloadPDF\('A5', fondClair\)/.test(dash) && /downloadPDF\('A4', fondClair\)/.test(dash))
+  // ⚠️ RÉORIENTÉE LE 12/10 : un bouton par format de `FORMATS_AFFICHE`.
+  verifie('le PDF aussi, dans chaque format de la liste',
+    /\{FORMATS_AFFICHE\.map\(f => \(/.test(dash) && /downloadPDF\(f, fondClair\)/.test(dash))
   // ⚠️ LE NOM DE FICHIER EST DÉSORMAIS COMPOSÉ AU MÊME ENDROIT POUR LES DEUX
   // FORMATS. La garde comptait deux occurrences dans le tableau de bord — une
   // par téléchargement — parce que le PNG et le PDF le composaient chacun de

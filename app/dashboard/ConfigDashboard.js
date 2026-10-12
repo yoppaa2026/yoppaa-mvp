@@ -39,7 +39,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
-import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf } from '@/lib/affiche-kit'
+import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import BlocAide, { EtapeAide, enGras } from './BlocAide'
@@ -9810,18 +9810,17 @@ function CarteTableBloc({ slug, nomCommerce, clair, toast }) {
       <p style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.55, marginBottom: 10 }}>
         Tes suggestions et ton lunch du jour : range-les dans une catégorie que tu places en tête. Un plat que tu désactives certains jours disparaît de la carte ces jours-là.
       </p>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
-          onClick={() => telecharger('A4-4')} disabled={!qr || !!enCours}>
-          <FileText size={13} strokeWidth={1.8}/> {enCours === 'A4-4' ? 'Préparation…' : 'A4, 4 cartons'}
-        </button>
-        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
-          onClick={() => telecharger('A5')} disabled={!qr || !!enCours}>
-          <FileText size={13} strokeWidth={1.8}/> {enCours === 'A5' ? 'Préparation…' : 'A5, 1 carton'}
-        </button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        {FORMATS_CARTE_TABLE.map(f => (
+          <button key={f} style={{ ...s.btn, ...s.btnPrimary, flex: '1 1 140px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            onClick={() => telecharger(f)} disabled={!qr || !!enCours}>
+            <FileText size={13} strokeWidth={1.8}/> {LIBELLES_CARTE_TABLE[f]}
+            {enCours === f && <DotsAttente couleur="#fff" taille={4} label="Préparation du PDF"/>}
+          </button>
+        ))}
       </div>
       <p style={{ fontSize: 10.5, color: T.muted, marginBottom: 10, lineHeight: 1.5 }}>
-        L&rsquo;A4 se coupe en quatre le long des pointillés, chaque carton se glisse dans un chevalet. Le carton dit « {TEXTES_CARTE_TABLE.accroche.toLowerCase()} {TEXTES_CARTE_TABLE.accrocheSuite.toLowerCase()} ».
+        Coupe l&rsquo;A4 le long des pointillés, à la trancheuse ou aux ciseaux, et glisse chaque carton dans un chevalet. Le carton dit « {TEXTES_CARTE_TABLE.accroche.toLowerCase()} {TEXTES_CARTE_TABLE.accrocheSuite.toLowerCase()} ».
       </p>
       <a href={url} target="_blank" rel="noopener noreferrer"
         style={{ ...s.btn, ...s.btnGhost, width: '100%', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', boxSizing: 'border-box' }}>
@@ -9847,6 +9846,9 @@ function QRCodeSection({ commercantId, toast }) {
   // cartouche par affiche et sort strié sur la plupart des imprimantes de
   // commerce ; le violet reste à un clic pour qui fait imprimer en boutique.
   const [fondClair, setFondClair] = useState(true)
+  // Le format en cours de préparation : les points disent le travail, et un
+  // double clic ne lance pas deux PDF.
+  const [pdfEnCours, setPdfEnCours] = useState(null)
 
   async function envoyerKit() {
     if (envoiKit) return
@@ -9948,10 +9950,13 @@ function QRCodeSection({ commercantId, toast }) {
   }
 
   async function downloadPDF(format, clair) {
+    if (pdfEnCours) return
+    setPdfEnCours(format)
     try {
       const fait = await telechargerAffichePdf({ qrDataUrl, nomCommerce, clair, slug, format })
-      toast(fait ? `PDF ${format} téléchargé` : 'QR pas encore prêt', fait ? 'success' : 'error')
+      toast(fait ? `PDF ${LIBELLES_AFFICHE[format]} téléchargé` : 'QR pas encore prêt', fait ? 'success' : 'error')
     } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
+    setPdfEnCours(null)
   }
 
   if (loading) return null
@@ -10042,12 +10047,17 @@ function QRCodeSection({ commercantId, toast }) {
       <button style={{ ...s.btn, ...s.btnGhost, width: '100%', justifyContent: 'center', marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => downloadPNG(fondClair)} disabled={!qrDataUrl}>
         <Download size={14} strokeWidth={1.8}/> PNG (écran, réseaux sociaux)
       </button>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => downloadPDF('A5', fondClair)} disabled={!qrDataUrl}><FileText size={13} strokeWidth={1.8}/> PDF A5</button>
-        <button style={{ ...s.btn, ...s.btnPrimary, flex: 1, justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => downloadPDF('A4', fondClair)} disabled={!qrDataUrl}><FileText size={13} strokeWidth={1.8}/> PDF A4</button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        {FORMATS_AFFICHE.map(f => (
+          <button key={f} style={{ ...s.btn, ...s.btnPrimary, flex: '1 1 140px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            onClick={() => downloadPDF(f, fondClair)} disabled={!qrDataUrl || !!pdfEnCours}>
+            <FileText size={13} strokeWidth={1.8}/> {LIBELLES_AFFICHE[f]}
+            {pdfEnCours === f && <DotsAttente couleur="#fff" taille={4} label="Préparation du PDF"/>}
+          </button>
+        ))}
       </div>
       <p style={{ fontSize: 10.5, color: T.muted, marginBottom: 16, lineHeight: 1.5 }}>
-        Le PDF garde ses dimensions à l&rsquo;impression. Ouvre-le, puis imprime depuis ton lecteur habituel.
+        Le PDF garde ses dimensions à l&rsquo;impression : imprime-le à 100 % depuis ton lecteur habituel. Plusieurs affiches sur une A4 se coupent le long des pointillés, à la trancheuse ou aux ciseaux.
       </p>
 
       {/* ⚠️ LE QR DES TABLES N'EST PAS CELUI DE LA VITRINE (29/09). Il mène à

@@ -117,6 +117,16 @@ for (const [nom, f] of Object.entries(ROUTES)) {
       : /if \(errOptions \|\| errGroupes\) \{[^}]*\}, \{ status: 500 \}\)\s*\}/.test(c))
   v(`🔴 route ${nom} : la ligne enregistre ce qu’elle retire vraiment du stock`,
     c.includes('quantite_stock: l.quantite_stock,') && c.includes('duo_article_id: l.deal_article2_id || null,'))
+  // (12/10) La route des rendez-vous jetait le nom, la version et l'offre.
+  v(`🔴 route ${nom} : la ligne fige le nom vendu`, c.includes('article_nom: l.article_nom,'))
+  if (nom !== 'encodée') {
+    v(`🔴 route ${nom} : la ligne garde sa version et son offre`,
+      c.includes('variante_id: l.variante_id || null,') && c.includes('deal_id: l.deal_id || null,'))
+    v(`🔴 route ${nom} : le plafond des offres est vérifié AVANT de créer la commande`,
+      /const verifOffres = await verifierQuantiteOffres\(\{[\s\S]*?\}\)\s*if \(!verifOffres\.ok\)/.test(c)
+      && c.search(/\.from\('commandes'\)\s*\.insert\(/) > c.indexOf('await verifierQuantiteOffres({')
+      && c.indexOf('await verifierQuantiteOffres({') > 0)
+  }
 }
 v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que le serveur',
   /\.from\('consommation_stock'\)\s*\.select\('article_id, quantite, commande_id'\)/.test(code('app/dashboard/ConfigDashboard.js')))

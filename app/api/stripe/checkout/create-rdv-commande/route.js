@@ -40,7 +40,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { REGIME_EMPORTER } from '@/lib/tva'
-import { construireLignesCommande, verifierStockDisponible, itemsDeReservation, refusDeReservation, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS } from '@/lib/lignes-commande'
+import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
@@ -458,6 +458,20 @@ export async function POST(request) {
     }
     const nomParArticle = verifStock.nomParArticle || {}
 
+    // 🔴 LE PLAFOND DES OFFRES, ABSENT DE CE TUNNEL (12/10). Le tunnel boutique
+    // le vérifie depuis le 04/09 ; ici, une offre de fin de journée vendue avec
+    // un rendez-vous dépassait sa quantité sans que rien ne le dise. Même
+    // fonction, mêmes statuts.
+    const verifOffres = await verifierQuantiteOffres({
+      supabase, lignes, dealsData: dealsData || [], commercantId: commercant.id,
+    })
+    if (!verifOffres.ok) {
+      return NextResponse.json({
+        ok: false, error: verifOffres.error,
+        ...(verifOffres.stock_insuffisant ? { stock_insuffisant: true } : {}),
+      }, { status: verifOffres.status })
+    }
+
     // ─── Commande créée AVANT le paiement ──────────────────────────────────
     // Statut intermédiaire, comme dans le tunnel boutique : le webhook la
     // retrouvera par son identifiant, et le cron d'expiration la libérera si
@@ -542,6 +556,14 @@ export async function POST(request) {
       .insert(lignes.map(l => ({
         commande_id: commande.id,
         article_id: l.article_id,
+        // 🔴 LE NOM, LA VERSION ET L'OFFRE ÉTAIENT JETÉS ICI (12/10), alors que
+        // le tunnel boutique les fige depuis longtemps (voir create-commande) :
+        // un article retiré du catalogue rendait la ligne illisible, une offre
+        // vendue avec un rendez-vous échappait à son plafond, et le stock d'une
+        // version ne pouvait pas être rendu.
+        article_nom: l.article_nom,
+        variante_id: l.variante_id || null,
+        deal_id: l.deal_id || null,
         quantite: l.quantite,
         // Le stock RÉELLEMENT retiré, figé (MIGRATION_LOTS_STOCK_REEL, 11/10).
         quantite_stock: l.quantite_stock,

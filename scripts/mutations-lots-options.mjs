@@ -91,6 +91,13 @@ const MUTATIONS = [
     de: '    IF n <> r.attendu THEN', vers: '    IF false THEN' },
   { nom: '🔴 vendu_par_offre passe aussi par la vue (le plafond compterait des unités)', fichier: SQL,
     de: "       AND p.proname IN ('reserver_stock_atomique', 'stock_commande_par_article', 'ventes_stock_magasin')", vers: "       AND p.proname IN ('reserver_stock_atomique', 'stock_commande_par_article', 'ventes_stock_magasin', 'vendu_par_offre')" },
+  // ─── 12/10 : LA ROUTE DES RENDEZ-VOUS ────────────────────────────────────
+  { nom: '🔴 la route RDV rejette encore le nom vendu', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '        article_nom: l.article_nom,\n        variante_id', vers: '        variante_id' },
+  { nom: '🔴 la route RDV rejette encore l’offre', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '        deal_id: l.deal_id || null,\n        quantite: l.quantite,', vers: '        quantite: l.quantite,' },
+  { nom: '🔴 la route RDV ne vérifie plus le plafond des offres', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '    if (!verifOffres.ok) {', vers: '    if (false) {' },
 ]
 
 const lancer = () => {

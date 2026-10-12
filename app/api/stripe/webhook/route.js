@@ -690,8 +690,8 @@ async function handleAbonnementSucceeded(paymentIntent, supabase, eventAccount =
           // qui y mène puis ramène sur la fiche pour réserver.
           connexion: PHRASE_CONNEXION_ABONNEMENT,
           mes_abonnements_url: com?.slug
-            ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.yoppaa.app'}/commander/auth?redirect=${encodeURIComponent(`/commander/rdv/${com.slug}`)}`
-            : `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.yoppaa.app'}/commander`,
+            ? `${STRIPE_CONFIG.appUrl}/commander/auth?redirect=${encodeURIComponent(`/commander/rdv/${com.slug}`)}`
+            : `${STRIPE_CONFIG.appUrl}/commander`,
           cta_label: com?.slug ? 'Réserver mes séances' : 'Voir mon abonnement',
         }),
       })

@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCustomerPortalSession, synchroniserEmailCustomer } from '@/lib/stripe-billing'
 import { gardeCommercant } from '@/lib/api-auth'
+import { baseDuSite } from '@/lib/stripe-mode'
 
 // 🔴 LA GARDE VIENT DU POINT CENTRAL (22/09). Cette route portait sa PROPRE
 // copie de l'adresse admin et sa propre vérification de propriété, écrites
@@ -96,7 +97,7 @@ export async function POST(req) {
     const demande = typeof body?.retour === 'string' ? body.retour : ''
     const chemin = Object.hasOwn(RETOURS, demande) ? RETOURS[demande] : RETOURS.abonnement
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.yoppaa.app'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || baseDuSite()
     const returnUrl = `${appUrl}${chemin}`
 
     // 🔴 LE DERNIER MOMENT OÙ L'ON PEUT RATTRAPER L'EMAIL AVANT QU'IL LE VOIE.

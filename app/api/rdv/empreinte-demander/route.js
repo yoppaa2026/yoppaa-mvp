@@ -23,6 +23,7 @@ import { envoyerAvecCredit } from '@/lib/fidelite-sms'
 import { emailDemandeEmpreinte, envoyerAuYopper } from '@/lib/resend'
 import { euros, eurosNus } from '@/lib/montants'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import { baseDuSite } from '@/lib/stripe-mode'
 
 const MESSAGES = {
   deja_garantie: 'Cette table est déjà garantie : sa carte est enregistrée.',
@@ -150,7 +151,10 @@ export async function POST(request) {
       }, { status: 409 })
     }
 
-    const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yoppaa.app'
+    // ⚠️ LE SITE QUI CONNAÎT LE JETON (12/10) : `NEXT_PUBLIC_SITE_URL` n'est
+    // déclarée nulle part, et le repli en dur envoyait le client de l'essai
+    // sur la prod, où ce lien n'existe pas.
+    const base = baseDuSite()
     const lien = `${base}/empreinte/${jeton}`
 
     // ⚠️ ON ENVOIE AVANT D'ÉCRIRE ? NON, L'INVERSE : un lien parti sans jeton en

@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCheckoutSession } from '@/lib/stripe-billing'
 import { gardeCommercant } from '@/lib/api-auth'
+import { baseDuSite } from '@/lib/stripe-mode'
 
 // 🔴 LA GARDE VIENT DU POINT CENTRAL (22/09), comme sa jumelle du portail.
 // Les deux routes de l'abonnement portaient chacune sa copie de l'adresse
@@ -76,7 +77,7 @@ export async function POST(req) {
     }
 
     // Construire les URLs de retour
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.yoppaa.app'
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || baseDuSite()
     const returnUrl = `${appUrl}/dashboard/abonnement`
     const cancelUrl = `${appUrl}/dashboard/abonnement`
 

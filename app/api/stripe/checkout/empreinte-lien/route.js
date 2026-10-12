@@ -22,6 +22,7 @@ import { stripe, requireStripe, PAYMENT_KIND, buildPaymentMetadata } from '@/lib
 import { chargerLienEmpreinte } from '@/lib/empreinte-lien-serveur'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
+import { baseDuSite } from '@/lib/stripe-mode'
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -47,7 +48,9 @@ export async function POST(request) {
     }
     const { rdv, commercant, montant } = lien
 
-    const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yoppaa.app'
+    // ⚠️ LE SITE QUI CONNAÎT CE RENDEZ-VOUS (12/10) : `NEXT_PUBLIC_SITE_URL`
+    // n'est déclarée nulle part, et le repli en dur ramenait l'essai sur la prod.
+    const base = baseDuSite()
 
     const client = await stripe.customers.create({
       email: normaliserEmail(rdv.client_email) || undefined,

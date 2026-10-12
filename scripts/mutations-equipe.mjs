@@ -364,6 +364,17 @@ const MUTATIONS = [
     fichier: 'app/equipe/PosteEquipe.js', de: 'Pas encore prête à partir.</p>', vers: 'En préparation : pas encore prête à partir.</p>' },
   { nom: '🔴 le livreur seul perd ses filtres',
     fichier: 'app/equipe/PosteEquipe.js', de: '      <PastillesFiltres filtres={FILTRES_LIVRAISON} liste={livraisons} filtre={filtre} onChoisir={setFiltre}/>', vers: '' },
+  // ─── LES LIENS D'EMAIL SUIVENT LE SITE (12/10) ───────────────────────────
+  { nom: '🔴 le lien de carte retourne sur www en dur',
+    fichier: 'lib/resend.js', de: '    ? site(`/carte/${carte_token}`)', vers: '    ? `https://www.yoppaa.app/carte/${carte_token}`' },
+  { nom: '🔴 `site()` ignore le site qui envoie',
+    fichier: 'lib/resend.js', de: '  return `${baseDuSite()}${chemin}`', vers: '  return `https://www.yoppaa.app${chemin}`' },
+  { nom: '🔴 une fiche www n’est plus ramenée sur le site',
+    fichier: 'lib/resend.js', de: '    ctaUrl: surLeSite(fiche_url),', vers: '    ctaUrl: fiche_url,' },
+  { nom: '🔴 le lien d’empreinte retourne sur www en dur',
+    fichier: 'app/api/rdv/empreinte-demander/route.js', de: '    const base = baseDuSite()', vers: "    const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yoppaa.app'" },
+  { nom: '🔴 le SMS de carte retourne sur www en dur',
+    fichier: 'lib/fidelite-sms.js', de: '  const lien = `${baseDuSite()}/carte/', vers: '  const lien = `https://www.yoppaa.app/carte/' },
 ]
 
 const lancer = (banc) => {

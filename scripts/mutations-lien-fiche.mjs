@@ -116,26 +116,27 @@ const MUTATIONS = [
   // mort chez le client, definitivement.
   { nom: '🔴 l email de validation recompose son adresse a la main',
     fichier: 'lib/resend.js',
-    de: '  const ficheUrl     = lienFiche(slug) || LIEN_ACCUEIL',
-    vers: "  const ficheUrl     = slug ? `https://www.yoppaa.app/commander/${slug}` : LIEN_ACCUEIL" },
+    // ⚠️ ANCRES REPOINTÉES LE 12/10 : l'adresse passe aussi par `surLeSite`.
+    de: '  const ficheUrl     = surLeSite(lienFiche(slug) || LIEN_ACCUEIL)',
+    vers: "  const ficheUrl     = surLeSite(slug ? `https://www.yoppaa.app/commander/${slug}` : LIEN_ACCUEIL)" },
 
   // ⚠️ ET CHAQUE EMAIL DOIT VISER LA BONNE DES DEUX. Un rendez-vous annule ou
   // rappele pointe l AGENDA ; une validation, une commande prete ou un kit
   // pointent la FICHE. Une seule adresse pour les cinq perdrait l intention.
   { nom: '🔴 le rappel de RDV renvoie vers la boutique au lieu de l agenda',
     fichier: 'lib/resend.js',
-    de: '  const ficheUrl = lienFicheRdv(commercant_slug) || LIEN_ACCUEIL',
-    vers: '  const ficheUrl = lienFiche(commercant_slug) || LIEN_ACCUEIL' },
+    de: '  const ficheUrl = surLeSite(lienFicheRdv(commercant_slug) || LIEN_ACCUEIL)',
+    vers: '  const ficheUrl = surLeSite(lienFiche(commercant_slug) || LIEN_ACCUEIL)' },
 
   { nom: '🔴 la commande prete renvoie vers l agenda au lieu de la boutique',
     fichier: 'lib/resend.js',
-    de: '  const ficheUrl = lienFiche(commercant_slug) || LIEN_ACCUEIL',
-    vers: '  const ficheUrl = lienFicheRdv(commercant_slug) || LIEN_ACCUEIL' },
+    de: '  const ficheUrl = surLeSite(lienFiche(commercant_slug) || LIEN_ACCUEIL)',
+    vers: '  const ficheUrl = surLeSite(lienFicheRdv(commercant_slug) || LIEN_ACCUEIL)' },
 
   { nom: '🔴 le kit de bienvenue recompose son adresse a la main',
     fichier: 'lib/resend.js',
-    de: '    : lienFiche(slug)',
-    vers: '    : `https://www.yoppaa.app/commander/${slug}`' },
+    de: '    : surLeSite(lienFiche(slug))',
+    vers: '    : surLeSite(`https://www.yoppaa.app/commander/${slug}`)' },
 
   // 🔴 L AFFICHETTE AMPUTAIT LA BOUTIQUE DES SALONS QUI VENDENT : son QR est
   // IMPRIME et colle en vitrine.

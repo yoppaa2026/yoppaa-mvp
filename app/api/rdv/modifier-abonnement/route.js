@@ -20,6 +20,7 @@ import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { verdictModificationAbonnement, messageRefusModification, PHRASE_CONNEXION_ABONNEMENT } from '@/lib/abonnements'
 import { jourBruxelles } from '@/lib/timezone'
 import { emailAbonnementNouvelleAdresse, envoyerAuYopper } from '@/lib/resend'
+import { baseDuSite } from '@/lib/stripe-mode'
 
 export async function POST(request) {
   try {
@@ -104,7 +105,7 @@ export async function POST(request) {
         connexion: PHRASE_CONNEXION_ABONNEMENT,
         // Le bouton ouvre la connexion et ramène sur la fiche, comme l'email d'achat (Abo-I7).
         connexion_url: slug
-          ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.yoppaa.app'}/commander/auth?redirect=${encodeURIComponent(`/commander/rdv/${slug}`)}`
+          ? `${process.env.NEXT_PUBLIC_APP_URL || baseDuSite()}/commander/auth?redirect=${encodeURIComponent(`/commander/rdv/${slug}`)}`
           : null,
       })
       const envoi = await envoyerAuYopper({ to: regle.nouvelEmail, subject: `Ton abonnement chez ${contrat.commercant?.nom || 'ton commerce'} est relié à cette adresse`, html })

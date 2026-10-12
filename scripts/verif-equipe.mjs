@@ -18,7 +18,7 @@ import {
 } from '../lib/equipe.js'
 import { empreinteJeton, nouveauJeton, adresseMasquee, lienInvitation, COLONNES_MEMBRE } from '../lib/equipe-server.js'
 import { baseDuSite } from '../lib/stripe-mode.js'
-import { layout, emailInvitationEquipe } from '../lib/resend.js'
+import { layout, emailInvitationEquipe, emailFideliteRecompenseDebloquee, emailKitBienvenue, emailAbonnementResilie } from '../lib/resend.js'
 import { PLAN_FEATURES } from '../lib/plans.js'
 
 let ok = 0
@@ -165,6 +165,41 @@ const membre = (o = {}) => ({
     /return `\$\{baseDuSite\(\)\}\/equipe\/rejoindre\?invitation=/.test(readFileSync(new URL('../lib/equipe-server.js', import.meta.url), 'utf8')))
   v('l’adresse se masque', adresseMasquee('julie@exemple.be') === 'j***@exemple.be' && adresseMasquee('') === '')
   v('la date de fin se lit en heure belge', libelleFinAcces('2026-10-04T21:00:00Z') === 'dimanche 4 octobre à 23:00', libelleFinAcces('2026-10-04T21:00:00Z'))
+}
+
+// ═══ 6 bis) LES FRÈRES DE L'INVITATION : TOUS LES LIENS D'EMAIL (12/10) ═════
+// Un email parti de l'essai ouvrait la prod (jeton d'annulation, carte de
+// fidélité, kit…). On EXÉCUTE des gabarits avec une clé de test, puis on vise
+// le code : plus une adresse www écrite en dur dans les emails et le SMS.
+{
+  const avant = process.env.STRIPE_SECRET_KEY
+  process.env.STRIPE_SECRET_KEY = 'sk_test_banc'
+  try {
+    const carte = emailFideliteRecompenseDebloquee({ prenom: 'Léa', commercant_nom: 'Momo', libelle: 'Un café', carte_token: 'jeton123' })
+    v('🔴 la carte de fidélité de l’essai s’ouvre sur l’essai',
+      carte.includes('https://test.yoppaa.app/carte/jeton123') && !carte.includes('https://www.yoppaa.app/carte/'))
+    const kit = emailKitBienvenue({ nom_commercant: 'Momo', slug: 'chez-momo' })
+    v('🔴 le kit de l’essai s’ouvre sur l’essai',
+      kit.includes('https://test.yoppaa.app/kit/chez-momo') && !kit.includes('https://www.yoppaa.app/kit/'))
+    const resilie = emailAbonnementResilie({ yopper_prenom: 'Léa', commercant_nom: 'Respire', formule: 'Yoga', fiche_url: 'https://www.yoppaa.app/commander/rdv/respire' })
+    v('🔴 une fiche fabriquée par `lien-fiche` (www) revient sur le site qui envoie',
+      resilie.includes('https://test.yoppaa.app/commander/rdv/respire') && !resilie.includes('https://www.yoppaa.app/commander/rdv/respire'))
+  } finally {
+    if (avant === undefined) delete process.env.STRIPE_SECRET_KEY
+    else process.env.STRIPE_SECRET_KEY = avant
+  }
+  // Sans clé, la prod reste la prod.
+  v('sans clé, le lien de carte reste sur www',
+    emailFideliteRecompenseDebloquee({ prenom: 'L', commercant_nom: 'M', libelle: 'x', carte_token: 't' }).includes('https://www.yoppaa.app/carte/t'))
+  for (const f of ['lib/resend.js', 'lib/fidelite-sms.js', 'lib/billing-emails.js', 'lib/signaux-email.js',
+    'app/api/rdv/empreinte-demander/route.js', 'app/api/stripe/checkout/empreinte-lien/route.js',
+    'app/api/stripe/checkout/create-rdv-empreinte/route.js', 'app/api/stripe/webhook/route.js',
+    'app/api/rdv/modifier-abonnement/route.js', 'app/api/stripe/billing/portal/route.js',
+    'app/api/stripe/billing/checkout/route.js', 'lib/stripe.js']) {
+    const n = (code(f).match(/https:\/\/www\.yoppaa\.app/g) || []).length
+    v(`🔴 ${f} : aucune adresse www écrite en dur`, n === 0, `${n} trouvée(s)`)
+  }
+  v('🔴 le kit des pré-inscrits suit le site', /href="\$\{baseDuSite\(\)\}\/kit\//.test(code('lib/resend-landing.js')))
 }
 
 // ═══ 7) L'EMAIL ═════════════════════════════════════════════════════════════

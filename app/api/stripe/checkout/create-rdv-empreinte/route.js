@@ -35,6 +35,7 @@ import { estParCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-
 import { estUaApp, urlDeRetour } from '@/lib/retour-vers-app'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
 import { refusAvantPaiement } from '@/lib/refus-reservation'
+import { baseDuSite } from '@/lib/stripe-mode'
 
 export async function POST(request) {
   // ⚠️ LA REQUÊTE VIENT-ELLE DE LA NOUVELLE APP ? Voir lib/retour-vers-app.js.
@@ -181,7 +182,9 @@ export async function POST(request) {
     }
 
     const rdvId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null
-    const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yoppaa.app'
+    // ⚠️ LE SITE QUI CONNAÎT CE RENDEZ-VOUS (12/10) : `NEXT_PUBLIC_SITE_URL`
+    // n'est déclarée nulle part, et le repli en dur ramenait l'essai sur la prod.
+    const base = baseDuSite()
 
     // ⚠️ LE CLIENT STRIPE EST CRÉÉ SUR LE COMPTE DU RESTAURATEUR, sans quoi la
     // carte enregistrée ne serait pas débitable par lui le jour du no-show.

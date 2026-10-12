@@ -159,6 +159,82 @@ for (const [nom, c] of ROUTES) {
     && sql.includes("CHECK (origine = 'essai' OR commande_id IS NOT NULL)"))
 }
 
+// ═══ 6. L'ÉTIQUETTE EN IMAGE (12/10), EXÉCUTÉE ══════════════════════════════
+{
+  const I = await import('../lib/etiquette-image.js')
+  // Une mesure de substitution : 0,55 × le corps par caractère.
+  const corpsDe = (fonte) => Number((String(fonte).match(/ ([\d.]+)px /) || [])[1]) || 10
+  const mesurer = (t, fonte) => String(t).length * corpsDe(fonte) * 0.55
+  const dansLaMarge = (page) => {
+    const g = I.PX_PAR_MM * I.IMAGE_ETIQUETTE.margeCoteMm - 0.5
+    const d = page.largeur - g
+    return page.elements.filter(e => e.type === 'texte').every(e => {
+      // L'espacement du logo (serré, négatif) compte dans la largeur réelle.
+      const w = mesurer(e.texte, e.fonte) + (e.espacement || 0) * String(e.texte).length
+      const x0 = e.aligne === 'droite' ? e.x - w : e.aligne === 'centre' ? e.x - w / 2 : e.x
+      return x0 >= g && x0 + w <= d + 0.5
+    })
+  }
+  const base = {
+    reference: 'CC5', client: 'Alex V.', commerce: 'Boulangerie Dupuis', quand: 'lun. 12 oct. · 07:15 – 07:30',
+    lignes: [{ article: '4 × Croissant', options: null }], articles: '4 articles', paiement: 'Payé en ligne', aEncaisser: false,
+  }
+  const p = I.miseEnPageEtiquette(base, { mesurer })
+  const textes = p.elements.filter(e => e.type === 'texte').map(e => e.texte)
+  v('🔴 image : exactement 696 points de large (300 dpi, zone imprimable du rouleau de 62 mm)',
+    I.IMAGE_ETIQUETTE.largeurPx === 696 && p.largeur === 696 && Math.abs(I.PX_PAR_MM - 300 / 25.4) < 1e-9)
+  v('🔴 image : la référence, le client, le créneau, l’article, le paiement et le commerce y sont',
+    ['CC5', 'Alex V.', 'lun. 12 oct. · 07:15 – 07:30', '4 × Croissant', '4 articles', 'Payé en ligne', 'Boulangerie Dupuis', 'yoppaa'].every(t => textes.includes(t)), JSON.stringify(textes))
+  v('🔴 image : rien ne dépasse des marges', dansLaMarge(p))
+  v('🔴 image : le logo, cinq points sous « yoppaa », et deux filets (liste, pied)',
+    p.elements.filter(e => e.type === 'point').length === 5 && p.elements.filter(e => e.type === 'filet').length === 2)
+
+  const longue = I.miseEnPageEtiquette({ ...base, lignes: [
+    { article: '2 × Pizza quatre fromages avec supplément de mozzarella di bufala', options: 'Base : tomate, Cuisson : bien cuite, Supplément : olives noires' },
+    { article: '1 × Coca', options: null },
+  ] }, { mesurer })
+  const lignesArticle = longue.elements.filter(e => e.type === 'texte' && /Pizza|bufala|mozzarella/.test(e.texte))
+  v('🔴 image : un nom long passe à la ligne au lieu d’être coupé, et l’étiquette s’allonge',
+    lignesArticle.length >= 2 && longue.hauteur > p.hauteur && dansLaMarge(longue), `${lignesArticle.length} lignes, ${longue.hauteur} > ${p.hauteur}`)
+  const opt = longue.elements.find(e => e.type === 'texte' && /^Base/.test(e.texte))
+  v('les options sont en retrait (3 mm)', !!opt && opt.x > I.PX_PAR_MM * 1.5 + I.PX_PAR_MM * 2.9)
+
+  const du = I.miseEnPageEtiquette({ ...base, paiement: 'À payer 5,40 €', aEncaisser: true }, { mesurer })
+  const fond = du.elements.find(e => e.type === 'rect')
+  const blanc = du.elements.find(e => e.type === 'texte' && e.texte === 'À payer 5,40 €')
+  v('🔴 image : « À payer » sur fond noir, en blanc, à droite (ce qui fait encaisser)',
+    !!fond && blanc?.couleur === '#fff' && blanc?.aligne === 'droite' && blanc.x <= fond.x + fond.largeur && dansLaMarge(du))
+
+  const sac = I.miseEnPageEtiquette({ ...base, sac: 'Sac 2/3' }, { mesurer })
+  const eSac = sac.elements.find(e => e.texte === 'Sac 2/3')
+  v('le sac s’écrit à droite de la référence, sur la même ligne',
+    eSac?.aligne === 'droite' && Math.abs(eSac.y - sac.elements.find(e => e.texte === 'CC5').y) < 0.01)
+
+  const commerceLong = I.miseEnPageEtiquette({ ...base, commerce: 'La très grande boulangerie pâtisserie chocolaterie artisanale du centre' }, { mesurer })
+  const eCom = commerceLong.elements.find(e => e.type === 'texte' && e.texte.startsWith('La très'))
+  const eLogo = commerceLong.elements.find(e => e.texte === 'yoppaa')
+  const finCom = eCom ? eCom.x + mesurer(eCom.texte, eCom.fonte) : Infinity
+  const debutLogo = eLogo ? eLogo.x - (mesurer('yoppaa', eLogo.fonte) + eLogo.espacement * 6) / 2 : 0
+  v('🔴 image : un nom de commerce trop long tient sur UNE ligne, finit par « … » et s’arrête AVANT le logo',
+    !!eCom && eCom.texte.endsWith('…') && eCom.texte.length > 'La très grande…'.length
+    && commerceLong.elements.filter(e => e.type === 'texte' && /très|centre|artisanale/.test(e.texte)).length === 1
+    && finCom < debutLogo && dansLaMarge(commerceLong), `${eCom?.texte} ${Math.round(finCom)} < ${Math.round(debutLogo)}`)
+
+  v('couper : mot à mot ; un mot trop long lettre à lettre ; « … » au-delà du maximum',
+    JSON.stringify(I.couperTexte('aa bb cc', 5 * 5.5 + 0.01, mesurer, '800 10px X')) === JSON.stringify(['aa bb', 'cc'])
+    && I.couperTexte('abcdefghij', 3 * 5.5, mesurer, '800 10px X').every(l => l.length <= 3)
+    && I.couperTexte('aa bb cc dd ee ff', 5 * 5.5, mesurer, '800 10px X', 2).at(-1).endsWith('…'))
+  v('🔴 l’essai de la machine passe aussi (mêmes règles que l’étiquette du navigateur)',
+    I.miseEnPageEtiquette({ reference: 'ESSAI', client: 'Marie D.', commerce: 'Chez Momo' }, { mesurer }).hauteur > 0)
+  let sansMesure
+  try { I.miseEnPageEtiquette(base) } catch (e) { sansMesure = e.message }
+  v('sans mesure de texte, la mise en page refuse (jamais une image fausse)', sansMesure === 'mesurer requis')
+
+  const reglage = code('app/dashboard/ReglageEtiquettes.js')
+  v('l’aperçu de l’image est dans le réglage (pour juger le rendu sans la tablette)',
+    /const canvas = dessinerEtiquette\(document\.createElement\('canvas'\), \{ \.\.\.ETIQUETTE_ESSAI, commerce: commerce \|\| null \}, \{ policeMarque: policeMarqueDeLaPage\(\) \}\)/.test(reglage))
+}
+
 console.log(`\nFile des étiquettes : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

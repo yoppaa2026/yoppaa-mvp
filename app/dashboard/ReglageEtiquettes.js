@@ -14,6 +14,7 @@ import { lireImpressionActive, ecrireImpressionActive, imprimerEtiquette } from 
 import { ETIQUETTE_ESSAI, SACS_MAX, contenuEtiquette, etiquettesPourSacs } from '@/lib/etiquette-commande'
 import { postPro } from '@/lib/fetch-pro'
 import DotsAttente from '@/app/components/DotsAttente'
+import { dessinerEtiquette, POLICE } from '@/lib/etiquette-image'
 
 const T = { ink: '#1A0840', deep: '#2D0F6B', main: '#6B35C4', pale: '#EDE0FF', muted: '#6B7280', vert: '#047857', alerte: '#B45309', erreur: '#B91C1C' }
 
@@ -57,6 +58,44 @@ export function useStationComptoir(commercantId) {
     return !!j?.ok
   }
   return { etat, aStation: !!etat?.station, relire, demander, retirer }
+}
+
+// La police du wordmark telle que la page l'a chargée (Jakarta, par next/font),
+// pour que l'image signe « yoppaa » comme le logo. Absente : Arial.
+export function policeMarqueDeLaPage() {
+  try {
+    const v = getComputedStyle(document.body).getPropertyValue('--font-jakarta').trim()
+    return v ? `${v}, ${POLICE}` : POLICE
+  } catch { return POLICE }
+}
+
+// 🖨️ L'APERÇU DE L'IMAGE QUE LA TABLETTE ENVERRA À LA BROTHER (12/10) : pour
+// juger le rendu sur n'importe quel écran, avant même d'avoir la tablette.
+function ApercuImage({ commerce }) {
+  const [src, setSrc] = useState(null)
+  const [erreur, setErreur] = useState(null)
+  function voir() {
+    if (src) { setSrc(null); return }
+    try {
+      const canvas = dessinerEtiquette(document.createElement('canvas'), { ...ETIQUETTE_ESSAI, commerce: commerce || null }, { policeMarque: policeMarqueDeLaPage() })
+      setSrc(canvas.toDataURL('image/png')); setErreur(null)
+    } catch { setErreur('L’aperçu n’a pas pu être dessiné sur cet appareil.') }
+  }
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button type="button" onClick={voir}
+        style={{ padding: '8px 14px', borderRadius: 100, border: `1px solid ${T.pale}`, background: '#fff', color: T.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+        {src ? 'Masquer l’aperçu' : 'Voir l’étiquette de la tablette'}
+      </button>
+      {src && (
+        <div style={{ marginTop: 8 }}>
+          <img decoding="async" loading="lazy" src={src} alt="Aperçu de l’étiquette d’essai imprimée par la tablette du comptoir" style={{ display: 'block', width: '100%', maxWidth: 280, border: `1px solid ${T.pale}`, borderRadius: 6, background: '#fff' }}/>
+          <p style={{ margin: '4px 0 0', fontSize: 12, color: T.muted }}>Largeur réelle : 62 mm. L’étiquette est coupée juste après le logo.</p>
+        </div>
+      )}
+      {erreur && <p role="status" style={{ margin: '6px 0 0', fontSize: 12.5, fontWeight: 700, color: T.erreur }}>{erreur}</p>}
+    </div>
+  )
 }
 
 const LIBELLES_FILE = { en_attente: 'En attente', en_cours: 'En cours', imprimee: 'Imprimée', echec: 'Échec' }
@@ -191,7 +230,7 @@ export default function ReglageEtiquettes({ actif, onChanger, commerce = null, c
         <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800, color: T.ink }}>Étiquettes de commande</span>
         <span style={{ fontSize: 12, fontWeight: 800, color: etatTitre.couleur }}>{etatTitre.texte}</span>
       </button>
-      {ouvert && station && <EncadreStation comptoir={comptoir}/>}
+      {ouvert && station && <><EncadreStation comptoir={comptoir}/><ApercuImage commerce={commerce}/></>}
       {ouvert && !station && (
         <div style={{ marginTop: 10 }}>
           <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: T.deep }}>
@@ -208,6 +247,7 @@ export default function ReglageEtiquettes({ actif, onChanger, commerce = null, c
             </button>
           </div>
           <EncadreStation comptoir={comptoir}/>
+          <ApercuImage commerce={commerce}/>
         </div>
       )}
     </div>

@@ -197,6 +197,30 @@ export function ReglageTablette({ commercantId, comptoir, brother: b }) {
         <p style={{ margin: '8px 0 0', fontSize: 12.5, color: T.muted }}>La Brother doit être allumée et sur le même Wi-Fi que la tablette.</p>
       )}
       {message && <p role="status" style={{ margin: '8px 0 0', fontSize: 12.5, fontWeight: 700, color: T.deep }}>{message}</p>}
+      <APropos/>
+    </div>
+  )
+}
+
+// « À PROPOS » : 🔴 EXIGÉ PAR LA LICENCE BROTHER (lue le 12/10) : reproduire
+// ses mentions de droits, sans les modifier, et dire les conditions qui
+// interdisent de redistribuer le SDK (article 12 des conditions Commerçants).
+function APropos() {
+  const [ouvert, setOuvert] = useState(false)
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button type="button" onClick={() => setOuvert(o => !o)} aria-expanded={ouvert}
+        style={{ background: 'none', border: 'none', padding: 0, color: T.main, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>
+        À propos de Yoppaa Comptoir
+      </button>
+      {ouvert && (
+        <div style={{ marginTop: 6, fontSize: 12.5, lineHeight: 1.5, color: T.deep }}>
+          <p style={{ margin: 0 }}>Yoppaa Comptoir, par Avcotech SRL (Mettet, Belgique).</p>
+          <p style={{ margin: '4px 0 0' }}>Impression : Brother Print SDK. Copyright © Brother Industries, Ltd. Tous droits réservés. Utilisé sous licence.</p>
+          <p style={{ margin: '4px 0 0' }}>Ce composant ne peut être ni copié, ni redistribué, ni décompilé : voir les{' '}
+            <a href="/legal#comptoir" style={{ color: T.main, fontWeight: 700 }}>conditions d&rsquo;utilisation, article 12</a>.</p>
+        </div>
+      )}
     </div>
   )
 }

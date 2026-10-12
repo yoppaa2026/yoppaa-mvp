@@ -99,6 +99,11 @@ const MUTATIONS = [
     de: "    const minuterie = setTimeout(() => { attente.current = null; rejeter('injoignable') }, DELAI_IMPRESSION_MS)", vers: '    const minuterie = null' },
   { nom: '⚠️ la boucle ne tourne que dans l onglet Commandes', fichier: 'app/dashboard/page.js',
     de: '      <BoucleStation commercantId={commercant?.id} comptoir={comptoir} brother={brother}/>\n', vers: '' },
+  // ─── la licence Brother (12/10) ─────────────────────────────────────────
+  { nom: '🔴 la mention de droits de Brother disparaît de l app', fichier: 'app/dashboard/StationComptoir.js',
+    de: '      <APropos/>\n', vers: '' },
+  { nom: '🔴 les conditions n interdisent plus de décompiler le SDK', fichier: 'app/legal/page.js',
+    de: "              'de le décompiler, de le désassembler ou d’en tenter l’ingénierie inverse, sauf dans la mesure où la loi l’autorise expressément ;',", vers: '' },
   // ─── la migration ───────────────────────────────────────────────────────
   { nom: '🔴 les navigateurs lisent la file', fichier: SQL,
     de: 'REVOKE ALL ON public.etiquettes_impression FROM PUBLIC, anon, authenticated;', vers: 'GRANT SELECT ON public.etiquettes_impression TO authenticated;' },

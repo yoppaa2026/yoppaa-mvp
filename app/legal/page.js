@@ -302,7 +302,7 @@ export default function LegalPage() {
             <Ul items={SHOP_PRODUCTS.map(p => `${p.label} : ${prixProduitTexte(p.type)} HTVA. ${p.desc}`)}/>
             <P>L&rsquo;encodage d&rsquo;articles au-delà de ceux compris dans le Success Pack est proposé sur demande et fait l&rsquo;objet d&rsquo;un devis préalable.</P>
 
-            <H4>8.1. Qualité de professionnel</H4>
+            <H4>9.1. Qualité de professionnel</H4>
             {/* ⚠️ LE POINT LE PLUS IMPORTANT DE LA SECTION. Le Commerçant
                 achète pour son activité : il n'est pas un consommateur au
                 sens du Livre VI du CDE. Ni rétractation de 14 jours, ni
@@ -311,19 +311,19 @@ export default function LegalPage() {
                 et il est nettement plus flou. */}
             <P>Le Commerçant achète ces biens et services <strong>pour les besoins de son activité professionnelle</strong>. Il n&rsquo;a donc pas la qualité de consommateur au sens du Livre VI du Code de droit économique belge. En conséquence, <strong>le droit de rétractation de 14 jours ne s&rsquo;applique pas</strong> à ces commandes, et la garantie légale de conformité de deux ans réservée aux consommateurs n&rsquo;est pas due.</P>
 
-            <H4>8.2. Paiement préalable</H4>
+            <H4>9.2. Paiement préalable</H4>
             <P>Le matériel n&rsquo;est expédié et les prestations ne sont exécutées <strong>qu&rsquo;après encaissement intégral</strong>. Aucune commande n&rsquo;est préparée ni aucun rendez-vous confirmé sur la base d&rsquo;une commande non réglée. Le paiement s&rsquo;effectue en ligne via Stripe, aux tarifs HTVA affichés au moment de la commande, la TVA applicable étant ajoutée selon le statut et le pays du Commerçant.</P>
 
-            <H4>8.3. Livraison et transfert des risques</H4>
+            <H4>9.3. Livraison et transfert des risques</H4>
             <P>Les frais de livraison sont compris dans les prix affichés pour une livraison en Belgique. Les délais annoncés sont indicatifs et ne sont pas de rigueur : un retard de livraison n&rsquo;ouvre droit ni à indemnité ni à annulation. <strong>Les risques sont transférés au Commerçant à la remise du colis par le transporteur.</strong> Toute avarie ou manquant doit être signalé à bonjour@yoppaa.app dans les <strong>7 jours calendrier</strong> suivant la réception, photos à l&rsquo;appui.</P>
 
-            <H4>8.4. Garantie du matériel</H4>
+            <H4>9.4. Garantie du matériel</H4>
             {/* ⚠️ Yoppaa REVEND du matériel grand public. Elle n'est ni le
                 fabricant ni l'assureur d'une tablette tombée du comptoir. */}
             <P>Le matériel bénéficie de la <strong>garantie commerciale du fabricant</strong>, dans les conditions et pour la durée fixées par celui-ci ; Yoppaa transmet la demande et accompagne le Commerçant dans ses démarches. Yoppaa n&rsquo;est pas le fabricant et n&rsquo;offre aucune garantie propre au-delà de celle-ci.</P>
             <P>Sont exclus de toute garantie : les dommages résultant d&rsquo;une chute, d&rsquo;un liquide, d&rsquo;une surtension, d&rsquo;un usage non conforme à la notice ou d&rsquo;une intervention par un tiers, ainsi que <strong>l&rsquo;usure normale des consommables</strong>, les rouleaux d&rsquo;étiquettes n&rsquo;étant ni repris ni échangés une fois ouverts.</P>
 
-            <H4>8.5. Compatibilité</H4>
+            <H4>9.5. Compatibilité</H4>
             {/* ⚠️ Deux phrases opposées, toutes deux vraies. La limite est
                 CONTRACTUELLE, pas technique : le mot est « garantie », jamais
                 « compatible ». Voir COMPAT_IMPRESSION, dont ce paragraphe est
@@ -331,7 +331,7 @@ export default function LegalPage() {
             <P>{COMPAT_IMPRESSION}</P>
             <P>Yoppaa <strong>n&rsquo;assure pas la mise en route de matériel acquis auprès d&rsquo;un tiers</strong> et ne garantit aucun résultat d&rsquo;impression avec un appareil qu&rsquo;elle n&rsquo;a pas fourni. La mise en route à distance suppose que le Commerçant dispose d&rsquo;un réseau sans fil auquel les deux appareils peuvent se connecter simultanément ; lorsque la configuration du réseau ne le permet pas, un déplacement est proposé et convenu avec lui avant toute exécution.</P>
 
-            <H4>8.6. Prestations d&rsquo;accompagnement</H4>
+            <H4>9.6. Prestations d&rsquo;accompagnement</H4>
             <P>Le contenu et les limites de chaque prestation sont ceux affichés au moment de la commande : nombre de photos, nombre d&rsquo;articles encodés, durée sur place et rayon géographique. Les prestations sur site s&rsquo;entendent <strong>dans un rayon de 30 km autour de Mettet</strong> ; au-delà, un supplément de déplacement est convenu au préalable.</P>
             <P>Un rendez-vous peut être reporté sans frais jusqu&rsquo;à <strong>48 heures</strong> avant l&rsquo;heure convenue. Passé ce délai, ou en cas d&rsquo;absence du Commerçant au rendez-vous, la prestation est due. Lorsqu&rsquo;une prestation ne peut être exécutée pour une cause imputable à Yoppaa, le Commerçant a le choix entre un report et le remboursement intégral.</P>
             <P>Le Commerçant reste responsable du contenu publié sur sa fiche, y compris des articles encodés avec l&rsquo;aide de Yoppaa : descriptions, prix, allergènes et mentions légales relèvent de sa seule responsabilité.</P>
@@ -357,6 +357,32 @@ export default function LegalPage() {
             <P>Le Commerçant reste <strong>propriétaire</strong> des textes, photographies, logos et autres contenus qu&rsquo;il publie sur sa page Yoppaa. Il <strong>garantit détenir les droits nécessaires</strong> sur chacun d&rsquo;eux, en particulier sur les photographies, et qu&rsquo;ils ne portent atteinte à aucun droit de tiers. Il répond seul des conséquences d&rsquo;une publication faite en méconnaissance de cette garantie.</P>
             <P>Pour que la plateforme puisse faire ce pour quoi le Commerçant s&rsquo;y inscrit, celui-ci concède à Avcotech SRL une <strong>licence non exclusive et gratuite</strong>, valable pour la durée du contrat, l&rsquo;autorisant à reproduire ces contenus, à en adapter le format et à les diffuser <strong>aux seules fins de promouvoir son commerce et la plateforme</strong> : sur sa page publique et dans l&rsquo;application, dans les emails adressés aux habitants dont le Good Morning Yoppers, dans les notifications, sur les visuels de partage vers les réseaux sociaux mis à sa disposition, et par le référencement de sa page dans les moteurs de recherche.</P>
             <P>Le Commerçant peut retirer un contenu de sa page à tout moment : il cesse alors d&rsquo;être diffusé pour l&rsquo;avenir. La licence prend fin avec le contrat, <strong>sous réserve des diffusions déjà effectuées</strong> et des copies conservées par des tiers (moteurs de recherche, réseaux sociaux, boîtes de réception), sur lesquelles ni le Commerçant ni Yoppaa n&rsquo;ont de reprise.</P>
+
+            {/* 🔴 EXIGÉ PAR LA LICENCE BROTHER (lue le 12/10) : l'app intègre le
+                Brother Print SDK, et Avcotech doit imposer à ses utilisateurs
+                l'interdiction de le redistribuer et des règles équivalentes aux
+                articles 3 à 13 de la licence (cession, ingénierie inverse,
+                exportation, aucune garantie ni responsabilité de Brother,
+                support assuré par nous). Les mentions de droits de Brother sont
+                aussi dans l'app (« À propos »). */}
+            <H3 id="comptoir">12. Application Yoppaa Comptoir</H3>
+            <P>Yoppaa Comptoir est une application Android fournie par Avcotech SRL au Commerçant pour la tablette de son comptoir : elle affiche son tableau de bord et imprime les étiquettes de commande sur une imprimante Brother compatible. Elle est remise <strong>pour l&rsquo;usage du Commerçant et de son équipe, dans le cadre de son activité</strong>, et installée par Yoppaa ou sur ses indications.</P>
+
+            <H4>12.1. Composant d&rsquo;impression de Brother</H4>
+            <P>L&rsquo;application intègre le kit de développement <strong>« Brother Print SDK »</strong>, propriété de Brother Industries, Ltd., utilisé sous licence. Le Commerçant s&rsquo;interdit, pour lui-même et pour son équipe :</P>
+            <Ul items={[
+              'de copier, d’extraire, de distribuer, de vendre, de louer, de prêter, de céder ou de transférer de toute autre manière ce composant, en particulier séparément de l’application ;',
+              'de le décompiler, de le désassembler ou d’en tenter l’ingénierie inverse, sauf dans la mesure où la loi l’autorise expressément ;',
+              'de l’exporter ou de le réexporter en violation des lois et réglementations applicables.',
+            ]}/>
+            <P>Le composant peut être mis à jour avec l&rsquo;application ; ces mises à jour sont soumises au présent article. Le Commerçant garde confidentielle toute information que Brother aurait expressément désignée comme telle.</P>
+
+            <H4>12.2. Aucune garantie ni responsabilité de Brother</H4>
+            <P>Brother Industries, Ltd., ses sociétés liées et ses fournisseurs <strong>ne donnent aucune garantie</strong> quant au composant, ni sur sa qualité, ni sur son adéquation à un usage particulier, ni sur son fonctionnement sans erreur ou sans interruption. Dans les limites permises par la loi, ils n&rsquo;encourent <strong>aucune responsabilité</strong> pour une interruption d&rsquo;utilisation, une perte de données, une perte de bénéfice ou un dommage indirect liés au composant. Ils ne sont tenus à aucune assistance envers le Commerçant : <strong>l&rsquo;assistance relative à l&rsquo;application est assurée par Yoppaa</strong>, selon les présentes conditions.</P>
+
+            <H4>12.3. Fin de l&rsquo;utilisation</H4>
+            <P>Le droit d&rsquo;utiliser l&rsquo;application et son composant prend fin avec le contrat, ou dès que le Commerçant manque aux obligations du présent article. Le Commerçant supprime alors l&rsquo;application de ses appareils. Les points 12.1 et 12.2 continuent de s&rsquo;appliquer après cette fin.</P>
+            <P>Brother et les noms de ses produits sont des marques de Brother Industries, Ltd. Leur mention sert uniquement à désigner le matériel compatible.</P>
           </Section>
 
           {/* 4. CONFIDENTIALITÉ */}

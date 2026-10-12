@@ -299,6 +299,29 @@ for (const [nom, c] of ROUTES) {
     && bord.indexOf('<BoucleStation') < bord.indexOf('<div className="dash-layout"'))
 }
 
+// ═══ 8. LA LICENCE BROTHER (lue le 12/10) ════════════════════════════════════
+// Obligations envers nos utilisateurs : les mentions de droits de Brother dans
+// l'app, et des conditions qui interdisent de redistribuer le SDK.
+{
+  const sc = code('app/dashboard/StationComptoir.js')
+  v('🔴 « À propos » : la mention de droits de Brother, sans modification',
+    sc.includes('Impression : Brother Print SDK. Copyright © Brother Industries, Ltd. Tous droits réservés. Utilisé sous licence.')
+    && sc.includes('href="/legal#comptoir"') && /<APropos\/>/.test(sc))
+  const legal = lire('app/legal/page.js')
+  v('🔴 conditions Commerçants, article 12 : interdiction de redistribuer, de décompiler, d’exporter illégalement',
+    legal.includes('<H3 id="comptoir">12. Application Yoppaa Comptoir</H3>')
+    && legal.includes('« Brother Print SDK »</strong>, propriété de Brother Industries, Ltd., utilisé sous licence')
+    && /de copier, d’extraire, de distribuer, de vendre, de louer, de prêter, de céder/.test(legal)
+    && /de le décompiler, de le désassembler ou d’en tenter l’ingénierie inverse/.test(legal)
+    && /de l’exporter ou de le réexporter en violation/.test(legal))
+  v('🔴 article 12 : aucune garantie ni responsabilité de Brother, l’assistance assurée par Yoppaa, et ce qui survit à la fin',
+    /ne donnent aucune garantie<\/strong>/.test(legal) && /aucune responsabilité<\/strong>/.test(legal)
+    && /l&rsquo;assistance relative à l&rsquo;application est assurée par Yoppaa/.test(legal)
+    && /Les points 12\.1 et 12\.2 continuent de s&rsquo;appliquer/.test(legal))
+  v('la numérotation de l’article 9 (Boutique) suit son titre (9.1 à 9.6, plus de 8.x)',
+    ['9.1', '9.2', '9.3', '9.4', '9.5', '9.6'].every(n => legal.includes(`<H4>${n}. `)) && !/<H4>8\.\d\. /.test(legal))
+}
+
 console.log(`\nFile des étiquettes : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

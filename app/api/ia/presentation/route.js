@@ -27,6 +27,7 @@ import { IA_MODELES, getIaFicheConfig, planIa } from '@/lib/plans'
 import { genererTexte, iaDisponible } from '@/lib/anthropic'
 import { aiLimiter, checkLimit } from '@/lib/ratelimit'
 import { lireSiteWeb } from '@/lib/site-web'
+import { gardeCommercant, refus } from '@/lib/api-auth'
 
 // LE QUOTA EST MENSUEL ET DÉPEND DU PALIER (`IA_FICHE_CONFIG`), depuis le
 // 26/08. Il était de 3 À VIE : pensé pour la seule inscription, il rendait le
@@ -132,16 +133,6 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'La rédaction assistée est momentanément indisponible.' }, { status: 503 })
     }
 
-    const token = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-    if (!token) return NextResponse.json({ ok: false, error: 'non authentifié' }, { status: 401 })
-    const authClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    )
-    const { data: { user } } = await authClient.auth.getUser()
-    if (!user) return NextResponse.json({ ok: false, error: 'session invalide' }, { status: 401 })
-
     const body = await request.json().catch(() => ({}))
     const commercantId = body?.commercant_id
     const mots = String(body?.mots || '').trim().slice(0, 600)
@@ -155,7 +146,15 @@ export async function POST(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { persistSession: false } }
     )
-    const { data: com } = await admin
+    // 🔴 LE COMMERÇANT LUI-MÊME, OU L'ADMIN (Alex, 13/10 : bloqué en mode
+    // admin, « je voudrais le faire pour le commerçant »). Même garde que la
+    // lecture du menu : `gardeCommercant` laisse passer l'admin vérifié
+    // (double authentification) et personne d'autre que le propriétaire.
+    const garde = await gardeCommercant(request, admin, commercantId)
+    const refusGarde = refus(garde, NextResponse)
+    if (refusGarde) return refusGarde
+
+    const { data: com, error: errCom } = await admin
       .from('commercants')
       // ⚠️ `plan` EST INDISPENSABLE : c'est lui qui fixe le quota mensuel. Sans
       // cette colonne, `getIaFicheConfig` retomberait sur le palier le plus
@@ -166,9 +165,11 @@ export async function POST(request) {
       .select('id, nom, type, categorie, adresse, site_web, auth_user_id, plan, essai_plan, created_at')
       .eq('id', commercantId)
       .maybeSingle()
-    if (!com || com.auth_user_id !== user.id) {
-      return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
-    }
+    if (errCom) return NextResponse.json({ ok: false, error: 'Lecture du commerce impossible, réessaie.' }, { status: 500 })
+    if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
+    // La garde est passée : si l'appelant n'est pas le propriétaire, c'est
+    // l'admin vérifié.
+    const parAdmin = com.auth_user_id !== garde.user.id
 
     const rl = await checkLimit(aiLimiter, `ia-presentation:${commercantId}`)
     if (!rl.success) {
@@ -182,13 +183,18 @@ export async function POST(request) {
     debutMois.setUTCDate(1); debutMois.setUTCHours(0, 0, 0, 0)
 
     const quotaMois = getIaFicheConfig(planIa(com)).quota_mois
-    const { count } = await admin
+    const { count, error: errCount } = await admin
       .from('ia_generations')
       .select('id', { count: 'exact', head: true })
       .eq('commercant_id', commercantId)
       .eq('type', CHAMPS[champ].log)
       .gte('created_at', debutMois.toISOString())
-    if ((count || 0) >= quotaMois) {
+    // ⚠️ UN COMPTE ILLISIBLE N'EST PAS ZÉRO : il ouvrirait le quota.
+    if (errCount) return NextResponse.json({ ok: false, error: 'Vérification du quota impossible, réessaie.' }, { status: 500 })
+    // ⚠️ L'ADMIN N'EST PAS BORNÉ PAR LE QUOTA DU COMMERCE : ses rédactions
+    // d'onboarding ne doivent pas vider les propositions du commerçant. Il
+    // reste borné par le rate-limit et le cap global.
+    if (!parAdmin && (count || 0) >= quotaMois) {
       return NextResponse.json({
         ok: false,
         error: 'assez_de_propositions',
@@ -238,7 +244,9 @@ export async function POST(request) {
     try {
       await admin.from('ia_generations').insert({
         commercant_id: commercantId,
-        type: CHAMPS[champ].log,
+        // ⚠️ UNE RÉDACTION DE L'ADMIN NE COMPTE PAS DANS LE QUOTA DU COMMERCE :
+        // type distinct (« presentation_admin »). Elle reste dans le cap global.
+        type: parAdmin ? `${CHAMPS[champ].log}_admin` : CHAMPS[champ].log,
         occasion: extraitSite ? 'avec site' : 'sans site',
         modele: 'sonnet',
         tokens_in: out.usage.in,

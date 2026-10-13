@@ -15,6 +15,7 @@
     "mutations:double-auth": "node scripts/mutations-double-auth.mjs",
     "verif:fiche-complete": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-fiche-complete.mjs",
     "mutations:fiche-complete": "node scripts/mutations-fiche-complete.mjs",
+    "mutations:redaction-admin": "node scripts/mutations-redaction-admin.mjs",
     "verif:apercu": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-catalogue-apercu.mjs",
     "mutations:acces-compte": "node scripts/mutations-acces-compte.mjs",
     "mutations:catalogue": "node scripts/mutations-catalogue-copie.mjs",

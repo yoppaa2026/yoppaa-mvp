@@ -193,6 +193,47 @@ function verifie(nom, condition, detail) {
   verifie('le placeholder ne vouvoie plus', !/Décrivez votre commerce/.test(dash))
 }
 
+// ═══ 7. 🔴 L'ADMIN RÉDIGE POUR LE COMMERÇANT (13/10) ══════════════════════
+//
+// Alex, en mode admin sur une fiche : « accès refusé ». Les deux routes de
+// rédaction n'acceptaient que le propriétaire. Elles passent désormais par
+// `gardeCommercant` (propriétaire, ou admin en double authentification), comme
+// la lecture du menu ; l'admin écrit hors du quota du commerce, sous un type
+// à part du journal, et reste dans le cap global.
+{
+  for (const [nom, chemin] of [['la présentation', 'app/api/ia/presentation/route.js'], ['le générateur', 'app/api/ia/generer-post/route.js']]) {
+    const code = lireCode(chemin)
+    verifie(`${nom} passe par la garde commune`,
+      /const garde = await gardeCommercant\(request, admin, commercant_?[iI]d\)/.test(code) && /if \(refusGarde\) return refusGarde/.test(code))
+    // ⚠️ L'ANCIEN TEST D'APPARTENANCE ÉCRIT À LA MAIN NE DOIT PAS REVENIR À
+    // CÔTÉ : il refuserait l'admin que la garde vient de laisser passer.
+    verifie(`${nom} n’a plus de refus du propriétaire écrit à la main`,
+      !/auth_user_id !== user\.id/.test(code))
+    verifie(`${nom} ne dispense du quota que l’admin`,
+      /const parAdmin = com\.auth_user_id !== garde\.user\.id/.test(code) && /if \(!parAdmin && /.test(code))
+    // ⚠️ UN COMPTE ILLISIBLE N'EST PAS ZÉRO.
+    verifie(`${nom} refuse sur un compte illisible`,
+      /if \(errCount\) return NextResponse\.json/.test(code))
+  }
+  const fiche = lireCode('app/api/ia/presentation/route.js')
+  verifie('la rédaction de l’admin a son type à part',
+    /type: parAdmin \? `\$\{CHAMPS\[champ\]\.log\}_admin` : CHAMPS\[champ\]\.log/.test(fiche))
+
+  const posts = lireCode('app/api/ia/generer-post/route.js')
+  verifie('la génération de l’admin a son type à part',
+    /type: parAdmin \? `\$\{surface\}_admin` : surface/.test(posts))
+  // 🔴 LA SURFACE VIENT DU NAVIGATEUR : sans liste fermée, une surface
+  // inventée écrirait une ligne que le quota ne compte pas.
+  verifie('la surface est validée contre une liste connue',
+    /const surface = SURFACES\.includes\(body\?\.surface\) \? body\.surface : 'post'/.test(posts))
+  verifie('et la liste ne contient que les surfaces du générateur',
+    /const SURFACES = \['post', 'deal', 'actu', 'article', 'prestation'\]/.test(posts))
+  // ⚠️ LE QUOTA DES POSTS NE COMPTE QUE LES POSTS : une lecture de menu ou une
+  // présentation rédigée le mangeait.
+  verifie('le quota des posts ne compte que ses propres types',
+    /\.eq\('commercant_id', commercant_id\)\s*\.in\('type', SURFACES\)/.test(posts))
+}
+
 if (echecs.length > 0) {
   console.log(`\n${ok} vérifications passées, ${echecs.length} en échec.\n`)
   console.log('ÉCHECS :')

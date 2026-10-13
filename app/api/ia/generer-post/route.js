@@ -20,6 +20,13 @@ import { getIaConfig, IA_MODELES, planIa } from '@/lib/plans'
 import { genererTexte, iaDisponible } from '@/lib/anthropic'
 import { aiLimiter, checkLimit } from '@/lib/ratelimit'
 import { lienFiche } from '@/lib/lien-fiche'
+import { gardeCommercant, refus } from '@/lib/api-auth'
+
+// ⚠️ LES SURFACES CONNUES, ET RIEN D'AUTRE (13/10). La surface vient du
+// navigateur et devient le type du journal ; le quota ne compte que ces
+// types-là. Une surface inventée aurait donc écrit une ligne que le quota ne
+// voit pas : une génération gratuite à chaque appel.
+const SURFACES = ['post', 'deal', 'actu', 'article', 'prestation']
 
 function construireSysteme(nbVariantes) {
   return `Tu es l'assistant de rédaction de Yoppaa, l'application belge qui met en avant les commerces de quartier. Tu écris pour un commerçant qui veut communiquer avec ses clients.
@@ -125,45 +132,42 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Le générateur est momentanément indisponible.' }, { status: 503 })
     }
 
-    // 1) Auth marchand via le token appelant.
-    const token = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
-    if (!token) return NextResponse.json({ ok: false, error: 'non authentifié' }, { status: 401 })
-    const authClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    )
-    const { data: { user } } = await authClient.auth.getUser()
-    if (!user) return NextResponse.json({ ok: false, error: 'session invalide' }, { status: 401 })
-
-    const body = await request.json()
+    const body = await request.json().catch(() => ({}))
     const {
       commercant_id,
-      surface = 'post',
       occasion = '',
       brief = '',
       ton = '',
       infos = '',
     } = body || {}
+    const surface = SURFACES.includes(body?.surface) ? body.surface : 'post'
     if (!commercant_id) return NextResponse.json({ ok: false, error: 'commercant_id requis' }, { status: 400 })
     if (!String(brief).trim() && !String(occasion).trim()) {
       return NextResponse.json({ ok: false, error: 'Décris ce que tu veux annoncer.' }, { status: 400 })
     }
 
-    // 2) Service_role pour lire le commerçant + vérifier l'appartenance.
+    // 1) Service_role pour lire le commerçant + vérifier l'appartenance.
     const admin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { persistSession: false } }
     )
-    const { data: com } = await admin
+    // 🔴 LE COMMERÇANT LUI-MÊME, OU L'ADMIN VÉRIFIÉ (13/10, Alex bloqué en
+    // mode admin). Même garde que la lecture du menu et la présentation.
+    const garde = await gardeCommercant(request, admin, commercant_id)
+    const refusGarde = refus(garde, NextResponse)
+    if (refusGarde) return refusGarde
+
+    const { data: com, error: errCom } = await admin
       .from('commercants')
       .select('id, nom, type, plan, essai_plan, created_at, categorie, adresse, auth_user_id, slug')
       .eq('id', commercant_id)
       .maybeSingle()
-    if (!com || com.auth_user_id !== user.id) {
-      return NextResponse.json({ ok: false, error: 'accès refusé' }, { status: 403 })
-    }
+    if (errCom) return NextResponse.json({ ok: false, error: 'Lecture du commerce impossible, réessaie.' }, { status: 500 })
+    if (!com) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
+    // La garde est passée : si l'appelant n'est pas le propriétaire, c'est
+    // l'admin vérifié.
+    const parAdmin = com.auth_user_id !== garde.user.id
 
     // 3) Palier -> config IA (lue côté serveur, jamais depuis le client).
     // ⚠️ `planIa`, ni `plan` ni `planEffectif` (Alex, 15/09) : un commerçant en
@@ -183,13 +187,21 @@ export async function POST(request) {
     const debutMois = new Date()
     debutMois.setUTCDate(1); debutMois.setUTCHours(0, 0, 0, 0)
     const debutMoisISO = debutMois.toISOString()
-    const { count } = await admin
+    // ⚠️ SES TYPES SEULEMENT (13/10). Le compte prenait TOUT le journal du
+    // commerce : une lecture de menu ou une présentation rédigée mangeait les
+    // posts du mois, sans que rien ne le dise.
+    const { count, error: errCount } = await admin
       .from('ia_generations')
       .select('id', { count: 'exact', head: true })
       .eq('commercant_id', commercant_id)
+      .in('type', SURFACES)
       .gte('created_at', debutMoisISO)
+    // ⚠️ UN COMPTE ILLISIBLE N'EST PAS ZÉRO : il ouvrirait le quota.
+    if (errCount) return NextResponse.json({ ok: false, error: 'Vérification du quota impossible, réessaie.' }, { status: 500 })
     const utilise = count || 0
-    if (utilise >= cfg.quota_mois) {
+    // L'admin n'est pas borné par le quota du commerce (rate-limit et cap
+    // global restent).
+    if (!parAdmin && utilise >= cfg.quota_mois) {
       return NextResponse.json({ ok: false, error: 'quota_atteint', quota: { utilise, total: cfg.quota_mois, restant: 0 } }, { status: 429 })
     }
 
@@ -235,7 +247,9 @@ export async function POST(request) {
     try {
       await admin.from('ia_generations').insert({
         commercant_id,
-        type: String(surface).slice(0, 20),
+        // Une génération de l'admin a son propre type (« article_admin ») : hors
+        // du quota du commerce, dans le cap global.
+        type: parAdmin ? `${surface}_admin` : surface,
         occasion: String(occasion || '').slice(0, 60),
         modele: cfg.modele,
         tokens_in: out.usage.in,

@@ -9698,10 +9698,9 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
       </div>
       )}
 
-      <div style={{ ...s.card, background: T.pale, boxShadow: 'none', border: 'none' }}>
-        <p style={{ fontSize: 12, color: T.main, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Lightbulb size={13} strokeWidth={1.8}/> URL client : yoppaa.app/commander</p>
-      </div>
-
+      {/* ⚠️ PLUS DE CARTE « URL client » ICI (13/10) : elle affichait une
+          adresse écrite en dur, sans le commerce. Le vrai lien est dans le kit
+          média juste en dessous, calculé par `lienFiche`. */}
       <QRCodeSection commercantId={commercantId} toast={toast} />
     </div>
   )
@@ -10114,7 +10113,10 @@ function QRCodeSection({ commercantId, toast }) {
   if (loading) return null
   if (!slug) return (
     <div style={{ ...s.card, background: '#FEF3C7', border: '1.5px solid #F59E0B33', marginTop: 12 }}>
-      <p style={{ fontSize: 13, color: '#92400E', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><AlertTriangle size={14} strokeWidth={1.8}/> Aucun slug, contacte le support.</p>
+      {/* ⚠️ L'ADRESSE NAÎT À LA VALIDATION DU COMPTE (`/api/admin/valider`),
+          pas à l'inscription. Un commerçant en attente n'a donc rien de cassé :
+          « contacte le support » lui faisait croire à une panne (13/10). */}
+      <p style={{ fontSize: 13, color: '#92400E', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><AlertTriangle size={14} strokeWidth={1.8}/> Ton adresse, ton QR code et ton affiche arrivent dès que ton compte est validé.</p>
     </div>
   )
 

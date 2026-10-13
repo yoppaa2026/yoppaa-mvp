@@ -352,7 +352,11 @@ verifier('le plafond est vérifié avant de générer',
   routeIa.indexOf('>= quotaMois') < routeIa.indexOf('await genererTexte('))
 verifier('le rate-limit est branché', /checkLimit\(aiLimiter/.test(routeIa))
 verifier('le cap global est respecté', /IA_QUOTA_GLOBAL_MOIS/.test(routeIa))
-verifier('la propriété du commerce est vérifiée', /auth_user_id !== user\.id/.test(routeIa))
+// ⚠️ REPOINTÉE LE 13/10, PAS DÉSARMÉE : la propriété se vérifie par
+// `gardeCommercant` (propriétaire, ou admin en double authentification), et
+// son refus doit être rendu. Le détail est mesuré dans `verif:redaction`.
+verifier('la propriété du commerce est vérifiée',
+  /await gardeCommercant\(request, admin, commercantId\)/.test(routeIa) && /if \(refusGarde\) return refusGarde/.test(routeIa))
 verifier('chaque génération est tracée', /ia_generations/.test(routeIa))
 // Une présentation inventée se retourne contre le commerçant : c'est la règle
 // la plus importante du prompt.

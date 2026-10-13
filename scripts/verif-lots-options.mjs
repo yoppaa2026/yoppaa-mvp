@@ -15,7 +15,7 @@
 
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
-import { construireLignesCommande, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS } from '../lib/lignes-commande.js'
+import { construireLignesCommande, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS, SELECT_PRIX_TAILLE, bornesChoix } from '../lib/lignes-commande.js'
 
 const RACINE = new URL('../', import.meta.url)
 const lire = (f) => readFileSync(new URL(f, RACINE), 'utf8')
@@ -80,6 +80,11 @@ const calc = (panier, extra = {}) => construireLignesCommande({
   v('🔴 un choix FACULTATIF ne remplace pas l’obligatoire', !optionnelSeul.ok, JSON.stringify(optionnelSeul))
   const autreArticle = calc([{ id: 'p1', quantite: 1, options: [{ valeur_ids: ['vBeurre'] }] }])
   v('🔴 la valeur d’un AUTRE article ne compte pas', !autreArticle.ok, JSON.stringify(autreArticle))
+  // (13/10) Glissée à côté d'un choix valable, elle ne doit ni apparaître sur
+  // la ligne ni compter : sinon un client choisirait ses options ailleurs.
+  const glissee = calc([{ id: 'p1', quantite: 1, options: [{ valeur_ids: ['vTomate', 'vBeurre'] }] }])
+  v('🔴 une valeur d’un autre article glissée à côté est ignorée (ni sur la ligne, ni comptée)',
+    glissee.ok && !glissee.lignes[0].options.some(o => o.valeur_nom === 'Beurre') && glissee.lignes[0].options.length === 1, JSON.stringify(glissee.lignes?.[0]))
   const avec = calc([{ id: 'p1', quantite: 2, options: [{ valeur_ids: ['vTomate', 'vOlive'] }] }])
   v('avec sa base : acceptée, supplément compté (10 + 1) × 2 = 22 €',
     avec.ok && avec.totalCents === 2200, JSON.stringify(avec))
@@ -90,9 +95,59 @@ const calc = (panier, extra = {}) => construireLignesCommande({
   const sansGroupes = calc([{ id: 'p1', quantite: 1 }], { groupesOptions: null })
   v('sans liste de groupes (calcul du total à l’écran) : aucun contrôle', sansGroupes.ok)
 }
-v('les deux listes de colonnes : valeurs avec leur groupe, groupes avec « obligatoire »',
+v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, type et nombre de choix, prix par taille',
   SELECT_OPTIONS_VALEURS === 'id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'
-  && SELECT_GROUPES_OPTIONS === 'id, article_id, nom, obligatoire')
+  && SELECT_GROUPES_OPTIONS === 'id, article_id, nom, obligatoire, type, choix_min, choix_max'
+  && SELECT_PRIX_TAILLE === 'valeur_id, taille_valeur_id, prix')
+
+// ─── (13/10) LE PRIX SELON LA TAILLE ET LE NOMBRE DE CHOIX ─────────────────
+// Le menu d'une pizzeria : « charcuterie 1,50 € en M, 2 € en L, 3 € en XL » ;
+// « Calzone : base + 3 ingrédients au choix ».
+{
+  const pz = { id: 'pz', nom: 'Reine', prix: 9, actif: true, commercant_id: 'c1', tva_taux: 6, temps_prepa: 5 }
+  const gTaille = { id: 'gT', article_id: 'pz', nom: 'Taille', obligatoire: true, type: 'unique' }
+  const gSupp = { id: 'gS', article_id: 'pz', nom: 'Suppléments', obligatoire: false, type: 'multiple' }
+  const gIngr = { id: 'gI', article_id: 'pz', nom: 'Ingrédients', obligatoire: false, type: 'multiple', choix_min: 3, choix_max: 3 }
+  const gs = [gTaille, gSupp, gIngr]
+  const val = (id, g, nom, prix_supplement = 0) => ({ id, nom, prix_supplement, groupe_id: g.id, article_options_groupes: { article_id: 'pz', nom: g.nom } })
+  const ov = [
+    val('tM', gTaille, 'M'), val('tL', gTaille, 'L', 3), val('tXL', gTaille, 'XL', 6),
+    val('sJambon', gSupp, 'Jambon', 1.5), val('sOeuf', gSupp, 'Œuf', 1),
+    val('i1', gIngr, 'Champignons'), val('i2', gIngr, 'Oignons'), val('i3', gIngr, 'Olives'), val('i4', gIngr, 'Poivrons'),
+  ]
+  const pt = [{ valeur_id: 'sJambon', taille_valeur_id: 'tL', prix: 2 }, { valeur_id: 'sJambon', taille_valeur_id: 'tXL', prix: 3 }]
+  const c = (options, extra = {}) => construireLignesCommande({
+    panier: [{ id: 'pz', quantite: 1, options: [{ valeur_ids: options }] }], articlesData: [pz], optionsValeurs: ov,
+    variantesData: [], dealsData: [], commercant, regime: 'emporter', dateCommande: JOUR, groupesOptions: gs, prixTaille: pt, ...extra,
+  })
+  const trois = ['i1', 'i2', 'i3']
+  const enM = c(['tM', 'sJambon', ...trois])
+  v('🔴 en M, le jambon garde son prix unique (1,50 €) : 9 + 0 + 1,50 = 10,50 €', enM.ok && enM.totalCents === 1050, JSON.stringify(enM))
+  const enL = c(['tL', 'sJambon', ...trois])
+  v('🔴 en L, le jambon coûte 2 € : 9 + 3 + 2 = 14 €, et la ligne le dit', enL.ok && enL.totalCents === 1400
+    && enL.lignes[0].options.find(o => o.valeur_nom === 'Jambon')?.prix_supplement === 2, JSON.stringify(enL))
+  const enXL = c(['tXL', 'sJambon', 'sOeuf', ...trois])
+  v('🔴 en XL, 3 € ; l’œuf sans prix par taille garde le sien : 9 + 6 + 3 + 1 = 19 €', enXL.ok && enXL.totalCents === 1900, JSON.stringify(enXL))
+  const ordre = c(['sJambon', 'tL', ...trois])
+  v('⚠️ l’ordre des choix ne change rien (la taille peut arriver après le supplément)', ordre.ok && ordre.totalCents === 1400, JSON.stringify(ordre))
+  const deuxFois = c(['tM', 'sJambon', 'sJambon', ...trois])
+  v('🔴 une valeur envoyée deux fois ne compte qu’une fois', deuxFois.ok && deuxFois.totalCents === 1050, JSON.stringify(deuxFois))
+  const deux = c(['tM', 'i1', 'i2'])
+  v('🔴 « 3 ingrédients au choix » : deux, c’est refusé, et le message le dit',
+    !deux.ok && deux.option_manquante === true && /Choisis 3 « Ingrédients »/.test(deux.error), JSON.stringify(deux))
+  const quatre = c(['tM', 'i1', 'i2', 'i3', 'i4'])
+  v('🔴 quatre aussi : refusé (3 au maximum)', !quatre.ok && quatre.option_en_trop === true && /3 choix au maximum/.test(quatre.error), JSON.stringify(quatre))
+  const deuxTailles = c(['tM', 'tL', ...trois])
+  v('🔴 un choix « unique » ne se prend qu’une fois (deux tailles : refusé)', !deuxTailles.ok && deuxTailles.option_en_trop === true, JSON.stringify(deuxTailles))
+  const sansTaille = c([...trois])
+  v('la taille obligatoire reste exigée', !sansTaille.ok && /Choisis « Taille »/.test(sansTaille.error), JSON.stringify(sansTaille))
+  const sansPrixTaille = c(['tL', 'sJambon', ...trois], { prixTaille: [] })
+  v('sans prix par taille en base : le prix unique, comme avant (9 + 3 + 1,50)', sansPrixTaille.ok && sansPrixTaille.totalCents === 1350)
+  v('les bornes sans réglage gardent la règle d’avant',
+    JSON.stringify(bornesChoix({ obligatoire: true, type: 'multiple' })) === JSON.stringify({ min: 1, max: Infinity })
+    && JSON.stringify(bornesChoix({ obligatoire: false, type: 'unique' })) === JSON.stringify({ min: 0, max: 1 })
+    && JSON.stringify(bornesChoix({ choix_min: 2, choix_max: 4 })) === JSON.stringify({ min: 2, max: 4 }))
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. LES ROUTES L'APPELLENT ET ENREGISTRENT LA CONSOMMATION
@@ -111,6 +166,12 @@ for (const [nom, f] of Object.entries(ROUTES)) {
   v(`🔴 route ${nom} : elle lit les groupes et les passe à la règle`,
     c.includes(`${client}.from('article_options_groupes').select(SELECT_GROUPES_OPTIONS).in('article_id', articleIds)`)
     && c.includes('groupesOptions: groupesOptions || [],'))
+  // (13/10) Les prix par taille : lus par la fonction partagée, passés à la
+  // règle, et une lecture ratée refuse.
+  v(`🔴 route ${nom} : elle lit les prix par taille, les passe à la règle, et refuse si la lecture échoue`,
+    c.includes(`await lirePrixTaille(${client}, optionsValeurs)`) && c.includes('prixTaille: prixTaille || [],')
+    && (nom === 'encodée' ? /if \(eP\) return non\(/.test(c)
+      : /if \(errPrixTaille\) \{\s*console\.error\([^)]*\)\s*return NextResponse\.json\(\{[^}]*\}, \{ status: 500 \}\)/.test(c)))
   v(`🔴 route ${nom} : une lecture d’options en échec REFUSE (jamais « aucune option »)`,
     nom === 'encodée'
       ? /if \(eA \|\| eO \|\| eV \|\| eD \|\| eG\) return non\(/.test(c)

@@ -26,14 +26,16 @@ const SQL = 'migrations/MIGRATION_LOTS_STOCK_REEL.sql'
 
 const MUTATIONS = [
   // ─── la règle ───────────────────────────────────────────────────────────
+  // ⚠️ ANCRES REPOINTÉES LE 13/10 : l'obligatoire passe désormais par le
+  // nombre de choix (`bornesChoix`, minimum 1), même but, même garde.
   { nom: '🔴 une option obligatoire manquante passe', fichier: REGLE,
-    de: '      if (manquant) return echec(', vers: '      if (false) return echec(' },
+    de: "  const min = Number.isInteger(g?.choix_min) ? g.choix_min : (g?.obligatoire ? 1 : 0)", vers: '  const min = Number.isInteger(g?.choix_min) ? g.choix_min : 0' },
   { nom: '🔴 une valeur facultative suffit à l obligatoire', fichier: REGLE,
-    de: '    if (g?.obligatoire) (obligatoiresParArticle[g.article_id] ||= []).push(g)', vers: '    if (g) (obligatoiresParArticle[g.article_id] ||= []).push(g)' },
-  { nom: '🔴 le choix d un autre groupe compte', fichier: REGLE,
-    de: "      const manquant = (obligatoiresParArticle[article.id] || []).find(g => !groupesChoisis.has(g.id))", vers: "      const manquant = (obligatoiresParArticle[article.id] || []).find(g => groupesChoisis.size === 0)" },
+    de: '      choixParGroupe[v.groupe_id] = (choixParGroupe[v.groupe_id] || 0) + 1', vers: '      for (const gid of Object.keys(groupesParArticle).flatMap(a => groupesParArticle[a].map(x => x.id))) choixParGroupe[gid] = (choixParGroupe[gid] || 0) + 1' },
+  { nom: '🔴 le choix d un autre article compte', fichier: REGLE,
+    de: '          if (!grp || grp.article_id !== article.id) continue', vers: '          if (!grp) continue' },
   { nom: '🔴 une offre (lot) exige aussi les options : les invendus deviennent invendables', fichier: REGLE,
-    de: '    if (!deal && !variante) {', vers: '    if (!variante) {' },
+    de: '    if (!deal && !variante && groupesOptions) {', vers: '    if (!variante && groupesOptions) {' },
   { nom: '🔴 la consommation d un lot redevient le nombre de lots', fichier: REGLE,
     de: '      quantite_stock: quantite * (deal?.unites_par_deal || 1),', vers: '      quantite_stock: quantite,' },
   // ─── les routes ─────────────────────────────────────────────────────────
@@ -98,6 +100,25 @@ const MUTATIONS = [
     de: '        deal_id: l.deal_id || null,\n        quantite: l.quantite,', vers: '        quantite: l.quantite,' },
   { nom: '🔴 la route RDV ne vérifie plus le plafond des offres', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
     de: '    if (!verifOffres.ok) {', vers: '    if (false) {' },
+  // ─── 13/10 : PRIX SELON LA TAILLE ET NOMBRE DE CHOIX ─────────────────────
+  { nom: '🔴 le prix par taille est ignoré (prix unique toujours)', fichier: REGLE,
+    de: '      const prix = taille ? parTaille[taille.id] : Number(v.prix_supplement || 0)', vers: '      const prix = Number(v.prix_supplement || 0)' },
+  { nom: '🔴 une valeur envoyée deux fois est comptée deux fois', fichier: REGLE,
+    de: '          if (vues.has(vid)) continue', vers: '' },
+  { nom: '🔴 le minimum de choix n est plus vérifié', fichier: REGLE,
+    de: '        if (n < min) {', vers: '        if (false) {' },
+  { nom: '🔴 le maximum de choix n est plus vérifié', fichier: REGLE,
+    de: '        if (n > max) {', vers: '        if (false) {' },
+  { nom: '🔴 un choix unique accepte plusieurs valeurs', fichier: REGLE,
+    de: "  const max = Number.isInteger(g?.choix_max) ? g.choix_max : (g?.type === 'unique' ? 1 : Infinity)", vers: '  const max = Number.isInteger(g?.choix_max) ? g.choix_max : Infinity' },
+  { nom: '🔴 la route en ligne ne lit plus les prix par taille', fichier: EN_LIGNE,
+    de: '      prixTaille: prixTaille || [],', vers: '' },
+  { nom: '🔴 une lecture ratée des prix par taille passe en silence (en ligne)', fichier: EN_LIGNE,
+    de: '    if (errPrixTaille) {', vers: '    if (false) {' },
+  { nom: '🔴 la route encodée ne lit plus les prix par taille', fichier: 'app/api/equipe/commande/creer/route.js',
+    de: '      prixTaille: prixTaille || [],', vers: '' },
+  { nom: '🔴 la route RDV ne lit plus les prix par taille', fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
+    de: '      prixTaille: prixTaille || [],', vers: '' },
 ]
 
 const lancer = () => {

@@ -40,7 +40,7 @@ import { createClient } from '@supabase/supabase-js'
 import { stripe, requireStripe, STRIPE_CONFIG, PAYMENT_KIND, buildPaymentMetadata, calculApplicationFee } from '@/lib/stripe'
 import { ordersLimiter, checkLimit, clientIp } from '@/lib/ratelimit'
 import { REGIME_EMPORTER } from '@/lib/tva'
-import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS } from '@/lib/lignes-commande'
+import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS, lirePrixTaille } from '@/lib/lignes-commande'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { appliquerRecompenseAvantBon } from '@/lib/fidelite-recompense'
@@ -321,6 +321,12 @@ export async function POST(request) {
       console.error('[create-rdv-commande] lecture des options KO', errOptions?.message || errGroupes?.message)
       return NextResponse.json({ ok: false, error: 'Impossible de vérifier les options. Réessaie.' }, { status: 500 })
     }
+    // (13/10) Les prix des suppléments selon la taille, même règle.
+    const { data: prixTaille, error: errPrixTaille } = await lirePrixTaille(supabase, optionsValeurs)
+    if (errPrixTaille) {
+      console.error('[create-rdv-commande] lecture des prix par taille KO', errPrixTaille.message)
+      return NextResponse.json({ ok: false, error: 'Impossible de vérifier les options. Réessaie.' }, { status: 500 })
+    }
     if (!articlesData || articlesData.length !== articleIds.length) {
       return NextResponse.json({ ok: false, error: 'Un ou plusieurs articles introuvables.' }, { status: 400 })
     }
@@ -341,6 +347,7 @@ export async function POST(request) {
       panier: articles,
       articlesData, optionsValeurs, variantesData, dealsData,
       groupesOptions: groupesOptions || [],
+      prixTaille: prixTaille || [],
       commercant,
       regime: REGIME_EMPORTER,
       dateCommande: date_rdv,

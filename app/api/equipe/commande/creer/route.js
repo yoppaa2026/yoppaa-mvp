@@ -34,7 +34,7 @@
 import { NextResponse } from 'next/server'
 import { clientAdmin } from '@/lib/api-auth'
 import { gardeEquipe, journaliserGeste } from '@/lib/equipe-server'
-import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS } from '@/lib/lignes-commande'
+import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS, lirePrixTaille } from '@/lib/lignes-commande'
 import { commandeDeborde, capaciteDuCreneau, creneauCommandable } from '@/lib/creneaux'
 import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
@@ -151,6 +151,9 @@ export async function POST(request) {
       admin.from('article_options_groupes').select(SELECT_GROUPES_OPTIONS).in('article_id', articleIds),
     ])
     if (eA || eO || eV || eD || eG) return non('Impossible de lire le catalogue. Réessaie.', 500)
+    // (13/10) Les prix des suppléments selon la taille, même règle.
+    const { data: prixTaille, error: eP } = await lirePrixTaille(admin, optionsValeurs)
+    if (eP) return non('Impossible de lire le catalogue. Réessaie.', 500)
     if (!articlesData || articlesData.length !== articleIds.length) return non('Un ou plusieurs articles sont introuvables.')
     for (const a of articlesData) {
       if (a.commercant_id !== commercant.id) return non(`« ${a.nom} » n’appartient pas à ce commerce.`)
@@ -162,6 +165,7 @@ export async function POST(request) {
     const calcul = construireLignesCommande({
       panier: panierPropre, articlesData, optionsValeurs, variantesData, dealsData,
       groupesOptions: groupesOptions || [],
+      prixTaille: prixTaille || [],
       commercant, regime: REGIME_EMPORTER, dateCommande: date_commande,
       stockVarianteIndicatif: true,
     })

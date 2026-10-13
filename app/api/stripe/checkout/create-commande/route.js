@@ -53,7 +53,7 @@ import { jourPlus } from '@/lib/statut-commerce'
 import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, premierJourPossible, jourEnClair } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
-import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, messageCircuit, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS } from '@/lib/lignes-commande'
+import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, messageCircuit, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS, lirePrixTaille } from '@/lib/lignes-commande'
 import { circuitsDeLArticle, circuitsCommuns } from '@/lib/stock-article'
 import { porteUneFenetre } from '@/lib/anti-gaspi'
 import { normaliserEmail } from '@/lib/email-normalise'
@@ -500,6 +500,13 @@ export async function POST(request) {
       console.error('[create-commande] lecture des options KO', errOptions?.message || errGroupes?.message)
       return NextResponse.json({ ok: false, error: 'Impossible de vérifier les options. Réessaie.' }, { status: 500 })
     }
+    // (13/10) Les prix des suppléments selon la taille : même règle, une
+    // lecture ratée refuse (le supplément serait facturé au mauvais prix).
+    const { data: prixTaille, error: errPrixTaille } = await lirePrixTaille(supabase, optionsValeurs)
+    if (errPrixTaille) {
+      console.error('[create-commande] lecture des prix par taille KO', errPrixTaille.message)
+      return NextResponse.json({ ok: false, error: 'Impossible de vérifier les options. Réessaie.' }, { status: 500 })
+    }
     if (!articlesData || articlesData.length !== articleIds.length) {
       return NextResponse.json({ ok: false, error: 'Un ou plusieurs articles introuvables.' }, { status: 400 })
     }
@@ -531,6 +538,7 @@ export async function POST(request) {
       panier: articles,
       articlesData, optionsValeurs, variantesData, dealsData,
       groupesOptions: groupesOptions || [],
+      prixTaille: prixTaille || [],
       commercant,
       regime: regimeTva,
       dateCommande: date_commande,

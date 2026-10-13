@@ -14,6 +14,15 @@ import {
   CONSIGNE_CORRECTION, CONSIGNE_LECTURE, CORRECTIONS_PAR_LECTURE, REMARQUE_MAX, CONTEXTE_MAX,
 } from '../lib/menu-lu.js'
 import { empreinteDocuments, occasionDeLecture, nouvelleLecture, UUID } from '../lib/menu-lu-server.js'
+import { documentsValides } from '../lib/menu-lu.js'
+import {
+  genreDuFichier, decoderCsv, csvEnTexte, feuillesEnTexte, texteEnBase64, texteDeBase64,
+  TYPE_TABLEAU, TAILLE_MAX_TABLEAU, LIGNES_MAX_TABLEAU,
+} from '../lib/menu-tableau.js'
+// La MÊME bibliothèque que l'écran (version Node), et son outil de zip pour
+// fabriquer un vrai .xlsx.
+import lireExcelNode from 'read-excel-file/node'
+import { zipSync, strToU8 } from 'fflate'
 import {
   pagesAcceptees, etatRelecture, prixDeSaisie, categoriesDeRelecture, articleDeQuestion,
   libelleValeur, resumeGroupe, bilanRelecture, phraseDuBilan, OU_REGLER_INFO,
@@ -330,6 +339,63 @@ function fausseBase({ refuser = () => null } = {}) {
   v('🔴 rien n’est gardé ni créé : une seule écriture, au journal',
     !/\.storage\b/.test(route) && (route.match(/\.insert\(/g) || []).length === 1 && /from\('ia_generations'\)\.insert\(/.test(route) && !/from\('articles'\)/.test(route))
   v('la réponse passe par la remise en ordre', /const correction = normaliserCorrection\(out\.entree\)/.test(route))
+}
+
+// ═══ 5 quater) LE MENU EN TABLEAU : CSV ET EXCEL (13/10, Alex) ═════════════
+{
+  const f = (name, type = '') => ({ name, type })
+  v('🔴 un CSV annoncé « Excel » par Windows reste un CSV (l’extension d’abord)', genreDuFichier(f('carte.csv', 'application/vnd.ms-excel')) === 'csv')
+  v('un .xlsx est un Excel', genreDuFichier(f('Carte.XLSX', '')) === 'excel')
+  v('🔴 un vieux .xls ou un .ods est refusé avec la marche à suivre',
+    /enregistre ce fichier en \.xlsx ou en CSV/.test(genreDuFichier(f('carte.xls', 'application/vnd.ms-excel')).refus) && typeof genreDuFichier(f('c.ods')) === 'object')
+  v('photo et PDF restent reconnus', genreDuFichier(f('a.jpg', 'image/jpeg')) === 'image' && genreDuFichier(f('a.pdf', 'application/pdf')) === 'pdf')
+  v('un type inconnu est refusé en nommant les formats', /tableau \(Excel \.xlsx, CSV\)/.test(genreDuFichier(f('a.html', 'text/html')).refus))
+  v('le tri des fichiers accepte un tableau et refuse un .xls',
+    (() => { const r = pagesAcceptees([f('a.csv', 'text/csv'), f('b.xlsx'), f('c.xls')]); return r.pages.length === 2 && r.refus.length === 1 })())
+
+  // ⚠️ LE CSV D'EXCEL EN BELGIQUE : Windows-1252 et « ; ».
+  const win = new Uint8Array([0x50, 0xE2, 0x74, 0xE9, 0x3B, 0x31, 0x32, 0x2C, 0x35, 0x30]) // « Pâté;12,50 » en Windows-1252
+  v('🔴 un CSV en encodage Windows garde ses accents', decoderCsv(win) === 'Pâté;12,50', decoderCsv(win))
+  v('un CSV en UTF-8 (avec BOM) se lit tel quel', decoderCsv(new TextEncoder().encode('﻿Crème;3')) === 'Crème;3')
+  v('les rangées vides du CSV tombent', csvEnTexte('Nom;Prix\r\n;;\r\nFrites;3\n\n') === 'Nom;Prix\nFrites;3')
+  v('🔴 l’aller-retour en base64 garde les accents', texteDeBase64(texteEnBase64('Pâté « maison » 12,50 €')) === 'Pâté « maison » 12,50 €')
+
+  // UN VRAI FICHIER EXCEL, fabriqué ici, lu par LA bibliothèque de l'écran.
+  const cel = (ref, x) => typeof x === 'number' ? `<c r="${ref}"><v>${x}</v></c>` : `<c r="${ref}" t="inlineStr"><is><t>${x}</t></is></c>`
+  const rang = (n, cs) => `<row r="${n}">${cs.map(([col, x]) => cel(`${col}${n}`, x)).join('')}</row>`
+  const xml = (corps) => strToU8(`<?xml version="1.0" encoding="UTF-8"?>${corps}`)
+  const NS = 'http://schemas.openxmlformats.org'
+  const xlsx = zipSync({
+    '[Content_Types].xml': xml(`<Types xmlns="${NS}/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`),
+    '_rels/.rels': xml(`<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${NS}/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`),
+    'xl/workbook.xml': xml(`<workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${NS}/officeDocument/2006/relationships"><sheets><sheet name="Carte" sheetId="1" r:id="rId1"/></sheets></workbook>`),
+    'xl/_rels/workbook.xml.rels': xml(`<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${NS}/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`),
+    'xl/worksheets/sheet1.xml': xml(`<worksheet xmlns="${NS}/spreadsheetml/2006/main"><sheetData>${[
+      rang(1, [['A', 'Nom'], ['B', 'Prix'], ['C', 'Catégorie']]),
+      rang(2, [['A', 'Margherita'], ['B', 9.5], ['C', 'Pizzas']]),
+      rang(4, [['A', 'Pâtes | carbo'], ['B', 12]]),
+    ].join('')}</sheetData></worksheet>`),
+  })
+  let texteXlsx = ''
+  try { texteXlsx = feuillesEnTexte(await lireExcelNode(Buffer.from(xlsx))) } catch (e) { texteXlsx = `ERREUR ${e?.message}` }
+  v('🔴 un vrai .xlsx lu par la bibliothèque devient un tableau texte (feuille, en-tête, rangées, vides tombés)',
+    texteXlsx === 'Feuille : Carte\nNom | Prix | Catégorie\nMargherita | 9.5 | Pizzas\nPâtes / carbo | 12', texteXlsx)
+  v('les dates et les booléens d’Excel se lisent', feuillesEnTexte([{ sheet: 'A', data: [[new Date('2026-10-13T00:00:00Z'), true, null]] }]) === 'Feuille : A\n2026-10-13 | oui')
+  v(`au plus ${LIGNES_MAX_TABLEAU} rangées par feuille`,
+    feuillesEnTexte([{ sheet: 'A', data: Array.from({ length: LIGNES_MAX_TABLEAU + 50 }, (_, i) => [`x${i}`]) }]).split('\n').length === LIGNES_MAX_TABLEAU + 1)
+
+  // AU SERVEUR : le tableau est un type reçu, borné à part, et part en TEXTE.
+  const page = { type: TYPE_TABLEAU, data: texteEnBase64('Nom;Prix\nFrites;3') }
+  v('🔴 le serveur accepte un tableau', documentsValides([page]).ok === true)
+  v('🔴 un tableau trop long est refusé au serveur', documentsValides([{ type: TYPE_TABLEAU, data: 'A'.repeat(TAILLE_MAX_TABLEAU + 4) }]).ok === false)
+  const anthropic = code('lib/anthropic.js')
+  v('🔴 un tableau part vers Claude en texte, pas en image',
+    /: d\.type === TYPE_TABLEAU\s*\? \{ type: 'text', text: `Tableau du menu \(CSV ou Excel\) :\\n\$\{texteDeBase64\(d\.data\)\}` \}/.test(anthropic))
+  v('la consigne explique comment lire un tableau', /Un tableau \(CSV ou Excel/.test(CONSIGNE_LECTURE) && /Une ligne d'en-tête n'est pas un article/.test(CONSIGNE_LECTURE))
+  const ecran = code('app/dashboard/LectureMenu.js')
+  v('🔴 la bibliothèque Excel ne se charge que pour un .xlsx', /const \{ default: lireExcel \} = await import\('read-excel-file\/browser'\)/.test(ecran) && !/^import .*read-excel-file/m.test(ecran))
+  v('🔴 l’écran vérifie la longueur du tableau avant l’envoi', /d\.type === TYPE_TABLEAU && d\.data\.length > TAILLE_MAX_TABLEAU/.test(ecran))
+  v('le champ de fichier propose les tableaux', /accept="[^"]*\.csv[^"]*\.xlsx/.test(ecran))
 }
 
 // ═══ 6) L'ÉCRAN ═════════════════════════════════════════════════════════════

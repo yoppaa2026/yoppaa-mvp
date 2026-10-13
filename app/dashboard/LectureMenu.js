@@ -21,6 +21,7 @@ import {
   contexteDeCorrection, appliquerCorrection, phraseDeCorrection,
 } from '@/lib/menu-relecture'
 import { REMARQUE_MAX, CORRECTIONS_PAR_LECTURE } from '@/lib/menu-lu'
+import { genreDuFichier, decoderCsv, csvEnTexte, feuillesEnTexte, texteEnBase64, TYPE_TABLEAU, TAILLE_MAX_TABLEAU } from '@/lib/menu-tableau'
 import { demandeLeStock, reglagesCommuns, planCreation, ecrireCreation, phraseDeCreation } from '@/lib/menu-creation'
 import { optionsTaux } from '@/lib/tva-aide'
 
@@ -54,9 +55,25 @@ function chargerImage(fichier) {
   })
 }
 
+/**
+ * Un tableau en texte : le CSV décodé (UTF-8, sinon Windows), ou les feuilles
+ * de l'Excel. ⚠️ La bibliothèque Excel ne se charge QUE si un .xlsx est choisi.
+ */
+async function tableauEnTexte(fichier, genre) {
+  if (genre === 'csv') return csvEnTexte(decoderCsv(new Uint8Array(await fichier.arrayBuffer())))
+  const { default: lireExcel } = await import('read-excel-file/browser')
+  return feuillesEnTexte(await lireExcel(fichier))
+}
+
 /** Une page prête à envoyer : { type, data } (base64 sans en-tête). */
 async function pagePourEnvoi(fichier) {
-  if (fichier.type === 'application/pdf') return { type: 'application/pdf', data: await lireEnBase64(fichier) }
+  const genre = genreDuFichier(fichier)
+  if (genre === 'csv' || genre === 'excel') {
+    const texte = await tableauEnTexte(fichier, genre)
+    if (!texte.trim()) throw new Error('tableau vide')
+    return { type: TYPE_TABLEAU, data: texteEnBase64(texte) }
+  }
+  if (genre === 'pdf') return { type: 'application/pdf', data: await lireEnBase64(fichier) }
   const img = await chargerImage(fichier)
   const echelle = Math.min(1, COTE_MAX_PHOTO / Math.max(img.naturalWidth || 1, img.naturalHeight || 1))
   const canvas = document.createElement('canvas')
@@ -114,7 +131,10 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
     setErreur('')
     const { pages: ok, refus } = pagesAcceptees(liste, pages.length)
     if (refus.length) setErreur(refus.join(' '))
-    setPages(p => [...p, ...ok.map(f => ({ fichier: f, nom: f.name, apercu: f.type.startsWith('image/') ? URL.createObjectURL(f) : null }))])
+    setPages(p => [...p, ...ok.map(f => {
+      const genre = genreDuFichier(f)
+      return { fichier: f, nom: f.name, genre, apercu: genre === 'image' ? URL.createObjectURL(f) : null }
+    })])
   }
 
   function retirerPage(i) {
@@ -135,7 +155,12 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
       try {
         documents = await Promise.all(pages.map(p => pagePourEnvoi(p.fichier)))
       } catch {
-        setErreur('Une des photos n’a pas pu être ouverte. Reprends-la en JPEG, ou fais une capture d’écran.')
+        setErreur('Un des fichiers n’a pas pu être ouvert. Pour une photo, reprends-la en JPEG ; pour un tableau, enregistre-le en .xlsx ou en CSV, avec la carte sur la première feuille.')
+        return
+      }
+      // ⚠️ UN TABLEAU TROP LONG SERAIT REFUSÉ AU SERVEUR : on le dit avant.
+      if (documents.some(d => d.type === TYPE_TABLEAU && d.data.length > TAILLE_MAX_TABLEAU)) {
+        setErreur('Tableau trop long pour un menu : garde seulement la carte (nom, prix, catégorie), puis réessaie.')
         return
       }
       // ⚠️ LE SERVEUR REFUSERAIT DE TOUTE FAÇON : on le dit avant d'envoyer.
@@ -294,15 +319,15 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
         {etape === 'envoi' && (
           <section>
             <p style={{ fontSize: 14, color: T.muted, lineHeight: 1.55, margin: '0 0 14px' }}>
-              Envoie la photo ou le PDF de ton menu ({MENU_MAX.pages} pages au maximum). On en tire tes articles, leurs prix, les tailles et les suppléments.
+              Envoie la photo, le PDF ou le tableau (Excel, CSV) de ton menu ({MENU_MAX.pages} fichiers au maximum). On en tire tes articles, leurs prix, les tailles et les suppléments.
               Tu relis tout avant que quoi que ce soit soit créé, et on ne garde aucune page.
             </p>
 
             <label style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '22px 14px', borderRadius: 14, border: `2px dashed ${T.mid}`, background: T.bg, cursor: occupe ? 'wait' : 'pointer', textAlign: 'center' }}>
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
               <span style={{ fontSize: 15, fontWeight: 800, color: T.deep }}>Ajouter des pages</span>
-              <span style={{ fontSize: 12, color: T.muted }}>Photo bien à plat, avec de la lumière, ou PDF</span>
-              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple disabled={occupe}
+              <span style={{ fontSize: 12, color: T.muted }}>Photo bien à plat, avec de la lumière, PDF, ou tableau Excel (.xlsx) ou CSV</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple disabled={occupe}
                 onChange={e => { ajouterFichiers(e.target.files); e.target.value = '' }}
                 style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}/>
             </label>
@@ -313,7 +338,7 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
                   <li key={`${p.nom}-${i}`} style={{ border: `1.5px solid ${T.hairline}`, borderRadius: 12, padding: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {p.apercu
                       ? <img decoding="async" loading="lazy" src={p.apercu} alt={`Page ${i + 1}`} style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 8 }}/>
-                      : <div style={{ height: 110, borderRadius: 8, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: T.deep }}>PDF</div>}
+                      : <div style={{ height: 110, borderRadius: 8, background: T.pale, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: T.deep }}>{p.genre === 'pdf' ? 'PDF' : p.genre === 'excel' ? 'Excel' : 'CSV'}</div>}
                     <span style={{ fontSize: 11, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nom}</span>
                     <button type="button" onClick={() => retirerPage(i)} disabled={occupe}
                       style={{ fontSize: 12, fontWeight: 700, color: T.erreur, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', fontFamily: 'inherit' }}>Retirer</button>

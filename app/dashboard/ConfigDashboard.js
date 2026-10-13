@@ -2072,7 +2072,7 @@ function TabMenu({ commercantId, commercant, toast }) {
               </div>
               {estAlimentaire && (
                 <p style={{ fontSize: 12, color: T.muted, marginTop: 12, lineHeight: 1.5 }}>
-                  Envoie la photo ou le PDF de ta carte : on en tire tes articles, tu relis, puis tu crées.
+                  Envoie la photo, le PDF ou le tableau Excel de ta carte : on en tire tes articles, tu relis, puis tu crées.
                 </p>
               )}
             </div>

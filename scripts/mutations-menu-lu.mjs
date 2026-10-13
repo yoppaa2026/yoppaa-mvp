@@ -37,7 +37,8 @@ const MUTATIONS = [
   { nom: '🔴 la limite d articles saute', fichier: REGLE,
     de: '      if (total >= MENU_MAX.articles) { tronque = true; break }', vers: '' },
   { nom: '🔴 un type de fichier inconnu passe', fichier: REGLE,
-    de: "    if (!TYPES_DOCUMENT.includes(type)) return { ok: false, error: 'Envoie une photo (JPEG, PNG, WebP) ou un PDF.' }", vers: '' },
+    // ⚠️ ANCRE REPOINTEE LE 13/10 (tableaux acceptes) : la condition, plus le message.
+    de: '    if (!TYPES_DOCUMENT.includes(type)) return', vers: '    if (false) return' },
   { nom: '🔴 le poids n est plus borné au serveur', fichier: REGLE,
     de: '  if (total > TAILLE_MAX_BASE64) return', vers: '  if (false) return' },
   { nom: '🔴 la consigne n interdit plus d inventer', fichier: REGLE,

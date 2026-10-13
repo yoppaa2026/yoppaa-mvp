@@ -26,6 +26,7 @@ const LECTURE = 'lib/menu-lu.js'
 const ECRAN = 'app/dashboard/LectureMenu.js'
 const DASH = 'app/dashboard/ConfigDashboard.js'
 const CORRIGER = 'app/api/ia/menu/corriger/route.js'
+const TABLEAU = 'lib/menu-tableau.js'
 
 const MUTATIONS = [
   // ─── LE PLAN ─────────────────────────────────────────────────────────────
@@ -90,6 +91,20 @@ const MUTATIONS = [
   { nom: '🔴 le catalogue vide propose la lecture hors alimentaire',
     // La ligne est unique dans le fichier (vérifié le 13/10) : c'est celle du bouton.
     fichier: DASH, de: '                {estAlimentaire && (', vers: '                {true && (' },
+
+  // ─── LE TABLEAU : CSV ET EXCEL (13/10, Alex) ─────────────────────────────
+  { nom: '🔴 un CSV annonce « Excel » par Windows est pris pour un vieux .xls',
+    fichier: TABLEAU, de: "  if (ext === 'csv') return 'csv'", vers: '' },
+  { nom: '🔴 un CSV Windows perd ses accents',
+    fichier: TABLEAU, de: "  catch { texte = new TextDecoder('windows-1252').decode(brut) }", vers: "  catch { texte = new TextDecoder('utf-8').decode(brut) }" },
+  { nom: '⚠️ un vieux .xls passe sans la marche a suivre',
+    fichier: TABLEAU, de: "  if (['xls', 'ods', 'numbers', 'xlsm', 'xlsb'].includes(ext)) {", vers: '  if (false) {' },
+  { nom: '⚠️ une barre dans une cellule casse les colonnes',
+    fichier: TABLEAU, de: "  return String(v).replace(/\\s+/g, ' ').replace(/\\|/g, '/').trim()", vers: "  return String(v).replace(/\\s+/g, ' ').trim()" },
+  { nom: '🔴 un tableau geant passe au serveur', banc: BANC,
+    fichier: LECTURE, de: "    if (type === TYPE_TABLEAU && data.length > TAILLE_MAX_TABLEAU) return { ok: false, error: 'Tableau trop long pour un menu : garde seulement la carte.' }", vers: '' },
+  { nom: '🔴 un tableau part vers Claude comme une image',
+    fichier: 'lib/anthropic.js', de: '    : d.type === TYPE_TABLEAU', vers: '    : false' },
 
   // ─── LA CORRECTION (13/10, Alex : « que je puisse lui dire ») ───────────
   { nom: '🔴 une correction passe sans lecture d origine (lecture gratuite)',

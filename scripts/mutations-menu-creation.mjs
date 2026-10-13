@@ -85,6 +85,12 @@ const MUTATIONS = [
   { nom: '🔴 le bouton Lire mon menu s ouvre hors alimentaire',
     fichier: DASH, de: "          {estAlimentaire && subTab === 'articles' && (", vers: "          {subTab === 'articles' && (" },
 
+  { nom: '⚠️ le catalogue vide ne propose plus de lire le menu',
+    fichier: DASH, de: '                  <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => { setLectureMenu(true); setShowCatForm(false) }}>', vers: '                  <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => { setShowCatForm(false) }}>' },
+  { nom: '🔴 le catalogue vide propose la lecture hors alimentaire',
+    // La ligne est unique dans le fichier (vérifié le 13/10) : c'est celle du bouton.
+    fichier: DASH, de: '                {estAlimentaire && (', vers: '                {true && (' },
+
   // ─── LA CORRECTION (13/10, Alex : « que je puisse lui dire ») ───────────
   { nom: '🔴 une correction passe sans lecture d origine (lecture gratuite)',
     fichier: CORRIGER, de: '    if (!lectures?.length) {', vers: '    if (false) {' },

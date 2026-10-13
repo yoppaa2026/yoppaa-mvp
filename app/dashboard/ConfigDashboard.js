@@ -2058,9 +2058,23 @@ function TabMenu({ commercantId, commercant, toast }) {
           {articles.length === 0 && !showForm ? (
             <div style={{ ...s.card, textAlign: 'center', padding: 40 }}>
               <p style={{ color: T.muted, marginBottom: 16 }}>Aucun article pour l&rsquo;instant</p>
-              <button style={{ ...s.btn, ...s.btnPrimary }} onClick={openNew}>
-                <Icon name="plus" size={14}/> Ajouter le premier article
-              </button>
+              {/* ✅ ALEX (13/10) : le catalogue vide est LE moment du menu lu,
+                  à l'onboarding. Alimentaire seulement, comme la route. */}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button style={{ ...s.btn, ...s.btnPrimary }} onClick={openNew}>
+                  <Icon name="plus" size={14}/> Ajouter le premier article
+                </button>
+                {estAlimentaire && (
+                  <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => { setLectureMenu(true); setShowCatForm(false) }}>
+                    <Icon name="sparkles" size={14}/> Lire mon menu
+                  </button>
+                )}
+              </div>
+              {estAlimentaire && (
+                <p style={{ fontSize: 12, color: T.muted, marginTop: 12, lineHeight: 1.5 }}>
+                  Envoie la photo ou le PDF de ta carte : on en tire tes articles, tu relis, puis tu crées.
+                </p>
+              )}
             </div>
           ) : (
             <>

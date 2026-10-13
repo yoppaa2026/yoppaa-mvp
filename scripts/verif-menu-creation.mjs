@@ -357,6 +357,9 @@ function fausseBase({ refuser = () => null } = {}) {
 
   const dash = code('app/dashboard/ConfigDashboard.js')
   v('🔴 le bouton « Lire mon menu » n’existe qu’en alimentaire', /\{estAlimentaire && subTab === 'articles' && \(/.test(dash) && /setLectureMenu\(true\)/.test(dash))
+  // ✅ Alex (13/10) : aussi dans le catalogue VIDE, le moment de l'onboarding.
+  v('le catalogue vide propose aussi « Lire mon menu », en alimentaire seulement',
+    /\{estAlimentaire && \(\s*<button style=\{\{ \.\.\.s\.btn, \.\.\.s\.btnGhost \}\} onClick=\{\(\) => \{ setLectureMenu\(true\); setShowCatForm\(false\) \}\}>/.test(dash))
   v('après la création, la liste, les catégories et les choix se relisent',
     /if \(res\.listeCategories\) setListeCats\(res\.listeCategories\)/.test(dash) && /noterOptionsTouchees\(res\.crees\.map\(c => c\.id\)\)/.test(dash))
 }

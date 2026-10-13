@@ -18,7 +18,7 @@ import {
 } from '../lib/equipe.js'
 import { empreinteJeton, nouveauJeton, adresseMasquee, lienInvitation, COLONNES_MEMBRE } from '../lib/equipe-server.js'
 import { baseDuSite } from '../lib/stripe-mode.js'
-import { layout, emailInvitationEquipe, emailFideliteRecompenseDebloquee, emailKitBienvenue, emailAbonnementResilie } from '../lib/resend.js'
+import { layout, emailInvitationEquipe, emailFideliteRecompenseDebloquee, emailKitBienvenue, emailAbonnementResilie, emailValidationCommercant } from '../lib/resend.js'
 import { PLAN_FEATURES } from '../lib/plans.js'
 
 let ok = 0
@@ -181,6 +181,12 @@ const membre = (o = {}) => ({
     const kit = emailKitBienvenue({ nom_commercant: 'Momo', slug: 'chez-momo' })
     v('🔴 le kit de l’essai s’ouvre sur l’essai',
       kit.includes('https://test.yoppaa.app/kit/chez-momo') && !kit.includes('https://www.yoppaa.app/kit/'))
+    // (13/10, vu par Alex) l'adresse du tableau de bord passait par une
+    // constante en dur : elle suit maintenant le site, lien ET texte.
+    const publiee = emailValidationCommercant({ nom: 'Momo', slug: 'chez-momo' })
+    v('🔴 le tableau de bord de l’essai s’ouvre sur l’essai (lien et texte)',
+      publiee.includes('href="https://test.yoppaa.app/dashboard"') && publiee.includes('>test.yoppaa.app/dashboard<')
+      && !publiee.includes('www.yoppaa.app'), publiee.match(/[a-z.]*yoppaa\.app\/dashboard/g)?.join(' '))
     const resilie = emailAbonnementResilie({ yopper_prenom: 'Léa', commercant_nom: 'Respire', formule: 'Yoga', fiche_url: 'https://www.yoppaa.app/commander/rdv/respire' })
     v('🔴 une fiche fabriquée par `lien-fiche` (www) revient sur le site qui envoie',
       resilie.includes('https://test.yoppaa.app/commander/rdv/respire') && !resilie.includes('https://www.yoppaa.app/commander/rdv/respire'))

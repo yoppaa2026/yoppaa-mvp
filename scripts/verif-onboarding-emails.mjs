@@ -132,18 +132,19 @@ const PHASE = avantLancement()
     titre(val) !== titre(kit), `« ${titre(val)} » vs « ${titre(kit)} »`)
   verifier('la validation annonce la mise en ligne', /en ligne/i.test(titre(val)), titre(val))
 
-  // ⚠️ ET ILS NE SE CONTREDISENT PLUS. L'un annonçait une ouverture à venir
-  // pendant que l'autre déclarait que « tes premiers clients peuvent déjà te
-  // trouver ». La vérité est entre les deux : la page EST en ligne, mais
-  // personne ne parcourt encore Yoppaa, donc elle se trouve par le LIEN.
-  verifier('avant l\'ouverture, la validation situe l\'ouverture publique',
-    val.includes(OUVERTURE))
-  verifier('avant l\'ouverture, la validation ne promet pas une découverte spontanée',
-    !/clients peuvent déjà te trouver/.test(val),
-    'personne ne parcourt encore Yoppaa : on se trouve par le lien')
-  verifier('la validation annonce le second email',
-    /kit de partage/i.test(val),
-    'sinon deux emails d\'un coup ressemblent à un doublon')
+  // ⚠️ RÉORIENTÉES LE 13/10 (Alex : « obsolète, à alléger, ODOO MIND ») :
+  // l'email de publication parle AU PRÉSENT (la fiche prend déjà des
+  // commandes), ne parle plus d'ouverture ni de préinscription, et n'annonce
+  // plus de second email (le kit ne part plus).
+  verifier('🔴 la publication parle au présent : ni ouverture à venir, ni préinscription',
+    !val.includes(OUVERTURE) && !/ouverture|préinscri|\?ref=|très bientôt/i.test(val.replace(/<[^>]+>/g, ' ')), 'discours d’avant l’ouverture')
+  verifier('🔴 la publication dit que les clients peuvent commander maintenant',
+    /peuvent la voir et commander dès maintenant/.test(val))
+  verifier('🔴 elle n’annonce plus de second email', !/second email|kit de partage/i.test(val))
+  verifier('🔴 trois gestes, un bouton « Voir ma fiche » vers la fiche publique',
+    /Partage ton lien/.test(val) && /Imprime ton affiche/.test(val) && /Garde ta fiche vivante/.test(val)
+    && /Voir ma fiche/.test(val) && val.includes('/commander/la-friterie-du-quartier'))
+  verifier('pas d’étape « active tes paiements » (obligatoire pour vendre, déjà fait)', !/paiement/i.test(val.replace(/<[^>]+>/g, ' ')))
 
   const valApres = emailValidationCommercant({ nom: 'Test', slug: 'test', avant_lancement: false })
   verifier('après l\'ouverture, la validation ne parle plus d\'une date à venir',
@@ -289,12 +290,15 @@ const PHASE = avantLancement()
 // 🔴 28/09 : LES DEUX EMAILS ONT DÉMÉNAGÉ, LA GARDE LES SUIT. Valider n'ouvre
 // plus que l'espace ; « ta page est en ligne » et le kit partent au clic
 // « Publier », c'est donc cette route-là qui doit les accorder.
+// ⚠️ RÉORIENTÉE LE 13/10 (décisions d'Alex au tableau) : UN SEUL email à la
+// publication, au présent. Le risque mesuré reste le même : deux emails qui se
+// contrediraient. Il n'en part plus qu'un, et il ne dépend plus d'une phase.
 {
   const route = sansCommentaires(lire('app/api/admin/publier/route.js'))
-  verifier('la route calcule la phase une seule fois',
-    /const phaseAvantLancement = avantLancement\(\)/.test(route))
-  const passages = compter(route, /avant_lancement: phaseAvantLancement/g)
-  verifier('et elle la passe aux DEUX emails', passages === 2, `${passages} passage(s)`)
+  verifier('🔴 la publication envoie UN email, « ta fiche est en ligne », sans phase d’ouverture',
+    compter(route, /envoyerAuCommercant\(/g) === 1 && /html: emailValidationCommercant\(\{ nom: fiche\.nom, slug: fiche\.slug \}\)/.test(route)
+    && !/avantLancement|avant_lancement/.test(route))
+  verifier('🔴 le kit ne part plus derrière (il reste dans le tableau de bord)', !/emailKitBienvenue/.test(route))
 }
 
 // ═══ 7. LE GABARIT SUPABASE SERT LES DEUX PUBLICS ════════════════════════
@@ -510,7 +514,11 @@ const PHASE = avantLancement()
   verifier('🔴 la demande reçue montre les deux temps, le premier chez nous', /1\. Ton espace s’ouvre En cours, chez nous/.test(demande) && /2\. Ta fiche est publiée Ensuite/.test(demande))
   verifier('🔴 l’espace ouvert : le premier temps fait, le second au commerçant', /1\. Ton espace s’ouvre Fait/.test(espace) && /2\. Ta fiche est publiée À toi de jouer/.test(espace))
   verifier('la relance aussi', /2\. Ta fiche est publiée À toi de jouer/.test(relance))
-  verifier('la publication : les deux temps faits', /1\. Ton espace s’ouvre Fait/.test(publiee) && /2\. Ta fiche est publiée Fait/.test(publiee))
+  // ⚠️ RÉORIENTÉE LE 13/10 : la publication ne remontre plus les deux temps
+  // (tous deux faits, « Demander la mise en ligne » s'y lisait encore). Elle
+  // dit qu'ils sont faits en une phrase : la fiche est en ligne.
+  verifier('la publication : plus d’étapes à rejouer, la fiche est en ligne',
+    !/Ton espace s’ouvre/.test(publiee) && !/Demander la mise en ligne/.test(publiee) && /ta fiche Yoppaa est en ligne/.test(publiee))
   verifier('une étape inconnue retombe sur le début, sans planter', /En cours, chez nous/.test(texte(deuxTemps('n’importe'))))
 
   verifier('🔴 à la validation, l’adresse du tableau de bord est ÉCRITE en clair', /www\.yoppaa\.app\/dashboard/.test(espace))

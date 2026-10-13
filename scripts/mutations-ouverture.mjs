@@ -30,8 +30,10 @@ const MUTATIONS = [
     fichier: LIB, de: "  return dateeOuDrapeau(datee) ? `le ${libelleLancement({ avecAnnee })}` : 'très bientôt'", vers: '  return `le ${libelleLancement({ avecAnnee })}`' },
   { nom: '⚠️ « jusqu à l ouverture » disparaît',
     fichier: LIB, de: "  return dateeOuDrapeau(datee) ? `jusqu’au ${libelleLancement()}` : 'jusqu’à l’ouverture'", vers: "  return dateeOuDrapeau(datee) ? `jusqu’au ${libelleLancement()}` : ''" },
-  { nom: '🔴 l email de publication promet le 1er octobre',
-    fichier: 'lib/resend.js', de: '  const jusqua       = jusquALOuverture()', vers: "  const jusqua       = 'jusqu’au 1er octobre'" },
+  // ⚠️ REPOINTÉE LE 13/10 : l'email de publication parle au présent (Alex,
+  // tableau). Le danger mesuré devient le retour du discours d'avant.
+  { nom: '🔴 l email de publication reparle d une ouverture à venir',
+    fichier: 'lib/resend.js', de: 'tes clients peuvent la voir et commander dès maintenant.', vers: 'elle s’ouvre au public très bientôt.' },
   { nom: '🔴 l email du kit promet le 1er octobre',
     fichier: 'lib/resend.js', de: '          ${leJourJ()}, ce sont autant de gens', vers: '          le 1er octobre, ce sont autant de gens' },
   { nom: '🔴 le merci de préinscription promet le 1er octobre',
@@ -57,7 +59,8 @@ const MUTATIONS = [
   { nom: '🔴 la validation ne dit plus où est le tableau de bord', banc: 'verif:emails',
     fichier: 'lib/resend.js', de: '      ${blocAccesTableauDeBord()}', vers: '' },
   { nom: '🔴 l adresse n est plus écrite en clair', banc: 'verif:emails',
-    fichier: 'lib/resend.js', de: '          <a href="https://${ADRESSE_TABLEAU_DE_BORD}" style="color:${C.main};text-decoration:none;">${ADRESSE_TABLEAU_DE_BORD}</a>', vers: '          <a href="https://${ADRESSE_TABLEAU_DE_BORD}" style="color:${C.main};text-decoration:none;">Ouvrir</a>' },
+    // ⚠️ REPOINTÉE LE 13/10 : l'adresse suit le site (`adresseTableauDeBord`).
+    fichier: 'lib/resend.js', de: 'text-decoration:none;">${adresseTableauDeBord().texte}</a>', vers: 'text-decoration:none;">Ouvrir</a>' },
   { nom: '🔴 le geste Android disparaît', banc: 'verif:emails',
     fichier: 'lib/resend.js', de: "          ${ligne('Android',", vers: "          ${false && ligne('Android'," },
   { nom: '⚠️ un dégradé entre dans le bloc d aide', banc: 'verif:emails',

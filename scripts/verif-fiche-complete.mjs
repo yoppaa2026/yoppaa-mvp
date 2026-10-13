@@ -255,8 +255,10 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
   v('Valider : la statut_publication d origine est bien lue',
     // ⚠️ REPOINTÉE LE 06/10 : le select lit aussi `kyb_statut`.
     /\.select\('id, nom, slug, statut_publication, kyb_statut'\)/.test(valider))
-  v('Publier : c est lui qui envoie désormais la page en ligne et le kit',
-    /emailValidationCommercant\(/.test(publier) && /emailKitBienvenue\(/.test(publier))
+  // ⚠️ RÉORIENTÉE LE 13/10 (Alex, tableau) : un seul email à la publication,
+  // le kit reste dans le tableau de bord.
+  v('Publier : c est lui qui envoie « ta fiche est en ligne », et seulement lui',
+    /emailValidationCommercant\(/.test(publier) && !/emailKitBienvenue/.test(publier))
 
   const liste = code('app/api/admin/fiches-a-publier/route.js')
   v('La liste : seul l admin passe', /if \(!\(await adminVerifie\(request, user\)\)\) return/.test(liste))

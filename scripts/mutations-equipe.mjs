@@ -373,6 +373,8 @@ const MUTATIONS = [
     fichier: 'lib/resend.js', de: '    ctaUrl: surLeSite(fiche_url),', vers: '    ctaUrl: fiche_url,' },
   { nom: '🔴 le lien d’empreinte retourne sur www en dur',
     fichier: 'app/api/rdv/empreinte-demander/route.js', de: '    const base = baseDuSite()', vers: "    const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.yoppaa.app'" },
+  { nom: '🔴 l adresse du tableau de bord retourne sur www en dur',
+    fichier: 'lib/resend.js', de: "  const url = site('/dashboard')", vers: "  const url = 'https://www.yoppaa.app/dashboard'" },
   { nom: '🔴 le SMS de carte retourne sur www en dur',
     fichier: 'lib/fidelite-sms.js', de: '  const lien = `${baseDuSite()}/carte/', vers: '  const lien = `https://www.yoppaa.app/carte/' },
 ]

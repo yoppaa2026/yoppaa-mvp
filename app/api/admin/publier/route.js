@@ -21,8 +21,7 @@ import { utilisateurAppelant, adminVerifie, clientAdmin } from '@/lib/api-auth'
 import { bilanDeLaFiche } from '@/lib/fiche-complete-server'
 import { phraseManquants } from '@/lib/fiche-complete'
 import { STATUTS_ACCES_AUTORISE, fichePubliee, refusKyb } from '@/lib/statut-commercant'
-import { envoyerAuCommercant, emailValidationCommercant, emailKitBienvenue } from '@/lib/resend'
-import { avantLancement } from '@/lib/lancement'
+import { envoyerAuCommercant, emailValidationCommercant } from '@/lib/resend'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,24 +82,15 @@ export async function POST(request) {
     const fiche = commercant
     let email = 'pas d’adresse'
     if (fiche?.email) {
-      // ⚠️ UNE SEULE PHASE POUR LES DEUX EMAILS, qui arrivent à la seconde près
-      // dans la même boîte : sinon l'un annonce une ouverture à venir pendant
-      // que l'autre la déclare déjà faite.
-      const phaseAvantLancement = avantLancement()
+      // 🔴 UN SEUL EMAIL, AU PRÉSENT (13/10, décisions d'Alex au tableau) : la
+      // fiche est en ligne et prend des commandes. Le kit complet ne part plus
+      // derrière : il reste dans le tableau de bord, et l'email y mène.
       const envoi = await envoyerAuCommercant({
         to: fiche.email,
-        subject: `Ta page Yoppaa est en ligne, ${fiche.nom}`,
-        html: emailValidationCommercant({ nom: fiche.nom, slug: fiche.slug, avant_lancement: phaseAvantLancement }),
+        subject: `Ta fiche Yoppaa est en ligne, ${fiche.nom}`,
+        html: emailValidationCommercant({ nom: fiche.nom, slug: fiche.slug }),
       })
       email = envoi?.ok ? 'envoyé' : `échec : ${envoi?.error || 'inconnu'}`
-      // Le kit suit : lien, QR code, messages à partager. Il n'avait aucun sens
-      // tant que la page n'était visible par personne.
-      const kit = await envoyerAuCommercant({
-        to: fiche.email,
-        subject: 'Ton kit Yoppaa 🟣',
-        html: emailKitBienvenue({ nom_commercant: fiche.nom, slug: fiche.slug, avant_lancement: phaseAvantLancement }),
-      })
-      if (!kit?.ok) console.error('[admin/publier] kit non envoyé', kit?.error)
     }
 
     return NextResponse.json({ ok: true, email })

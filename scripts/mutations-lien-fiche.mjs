@@ -117,8 +117,9 @@ const MUTATIONS = [
   { nom: '🔴 l email de validation recompose son adresse a la main',
     fichier: 'lib/resend.js',
     // ⚠️ ANCRES REPOINTÉES LE 12/10 : l'adresse passe aussi par `surLeSite`.
-    de: '  const ficheUrl     = surLeSite(lienFiche(slug) || LIEN_ACCUEIL)',
-    vers: "  const ficheUrl     = surLeSite(slug ? `https://www.yoppaa.app/commander/${slug}` : LIEN_ACCUEIL)" },
+    // Et le 13/10 : l'email de publication a été réécrit (alignement simple).
+    de: '  const ficheUrl = surLeSite(lienFiche(slug) || LIEN_ACCUEIL)',
+    vers: "  const ficheUrl = surLeSite(slug ? `https://www.yoppaa.app/commander/${slug}` : LIEN_ACCUEIL)" },
 
   // ⚠️ ET CHAQUE EMAIL DOIT VISER LA BONNE DES DEUX. Un rendez-vous annule ou
   // rappele pointe l AGENDA ; une validation, une commande prete ou un kit

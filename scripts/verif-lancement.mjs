@@ -1275,7 +1275,10 @@ function sansCommentaires(src) {
   // Les emails, RENDUS : aucune date d'ouverture n'y survit.
   const R = await import('../lib/resend.js')
   const validation = R.emailValidationCommercant({ nom: 'Test', slug: 'test', avant_lancement: true })
-  verifier('🔴 l’email de publication ne promet aucune date', !/1er octobre/.test(validation) && /jusqu’à l’ouverture/.test(validation))
+  // ⚠️ RÉORIENTÉE LE 13/10 : l'email de publication parle au présent (Alex,
+  // tableau) ; il ne promet aucune date ET ne parle plus d'ouverture du tout.
+  verifier('🔴 l’email de publication ne promet aucune date, ni ouverture à venir',
+    !/1er octobre/.test(validation) && !/l’ouverture|très bientôt/.test(validation))
   const kit = R.emailKitBienvenue({ nom_commercant: 'Test', slug: 'test', avant_lancement: true })
   verifier('🔴 l’email du kit ne promet aucune date', !/1er octobre/.test(kit) && /(dès|à) l’ouverture|très bientôt/.test(kit))
   const RL = await import('../lib/resend-landing.js')

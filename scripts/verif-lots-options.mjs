@@ -178,6 +178,13 @@ v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, 
   ] : [], 'gS')
   v('🔴 le groupe des tailles est trouvé (un seul choix, nommé « Taille »), pas la sauce', tailleDe?.id === 'gT', JSON.stringify(tailleDe?.id))
   v('un groupe ne se règle pas sur lui-même ; sans tailles, rien', OC.groupeDesTailles([{ ...gTaille, valeurs: [{}, {}] }], 'gT') === null)
+  // (13/10, Alex) La taille d'abord, les autres dans leur ordre.
+  const ordreGroupes = OC.ordonnerGroupes([{ id: 'gI', nom: 'Ingrédients', type: 'multiple', valeurs: [{}, {}] }, { id: 'gS', nom: 'Sauce', type: 'multiple', valeurs: [{}, {}] }, { id: 'gT', nom: 'Taille', type: 'unique', valeurs: [{}, {}, {}] }])
+  v('🔴 le groupe des tailles passe en premier, les autres gardent leur ordre', ordreGroupes.map(g => g.id).join() === 'gT,gI,gS', ordreGroupes.map(g => g.id).join())
+  v('sans groupe de tailles, l’ordre ne bouge pas', OC.ordonnerGroupes([{ id: 'a', type: 'multiple' }, { id: 'b', type: 'multiple' }]).map(g => g.id).join() === 'a,b')
+  v('🔴 la fiche et l’encodage affichent les groupes dans cet ordre',
+    code('app/commander/[slug]/page.js').includes('{ordonnerGroupes(groupes).map(g => {')
+    && code('app/dashboard/ModalNouvelleCommande.js').includes('{ordonnerGroupes(groupes[enOptions.id] || []).map(g => {'))
   v('🔴 un groupe à PLUSIEURS choix n’est jamais le groupe des tailles, même nommé « Taille »',
     OC.groupeDesTailles([{ id: 'gM', nom: 'Tailles', type: 'multiple', valeurs: [{}, {}] }, { id: 'gU', nom: 'Format', type: 'unique', valeurs: [{}, {}] }])?.id === 'gU')
   const lp = OC.lignesPrixTaille('sJambon', { tL: '2', tXL: '3,00', tM: '' })

@@ -84,6 +84,10 @@ const MUTATIONS = [
     de: '  if (actuelles.length >= max) return { selections, plein: true }', vers: '' },
   { nom: '🔴 l écran affiche le prix unique malgré la taille', fichier: 'lib/options-choix.js',
     de: '  return p ? Number(p.prix) : Number(valeur?.prix_supplement || 0)', vers: '  return Number(valeur?.prix_supplement || 0)' },
+  { nom: '⚠️ la taille ne passe plus en premier', fichier: 'lib/options-choix.js',
+    de: '  return tailles ? [tailles, ...liste.filter(g => g !== tailles)] : [...liste]', vers: '  return [...liste]' },
+  { nom: '⚠️ la fiche ignore l ordre des groupes', fichier: FICHE,
+    de: '      {ordonnerGroupes(groupes).map(g => {', vers: '      {groupes.map(g => {' },
   // ─── 13/10 : le réglage du commerçant ────────────────────────────────────
   { nom: '🔴 le réglage accepte un minimum au-dessus du maximum', fichier: 'lib/options-choix.js',
     de: "  if (min !== null && max !== null && min > max) return { ok: false, error: 'Le minimum dépasse le maximum.' }", vers: '' },

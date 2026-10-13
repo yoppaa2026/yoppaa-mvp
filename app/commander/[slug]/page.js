@@ -42,7 +42,7 @@ import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { zoneCouverte, fraisLivraison as regleFraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
-import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur } from '@/lib/options-choix'
+import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes } from '@/lib/options-choix'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
@@ -246,7 +246,8 @@ function OptionsSelector({ article, groupes, onAjouter }) {
       {/* Ni « ton » ni « ta » : le genre de l'article est inconnu (« ton
           Brochette », vu par Alex le 11/10). Libellé choisi par Alex. */}
       <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Ta personnalisation : {article.nom}</p>
-      {groupes.map(g => {
+      {/* (13/10, Alex) La taille d'abord : elle fixe le prix des suppléments. */}
+      {ordonnerGroupes(groupes).map(g => {
         // Le rond (radio) quand on n'en prend qu'un, la case sinon.
         const isUnique = bornesChoix(g).max === 1
         return (

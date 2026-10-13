@@ -23,7 +23,7 @@ import { creneauRetraitHorsHoraires } from '@/lib/ouverture'
 import { COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
-import { prixTailleDesGroupes, prixDeValeur, libelleBornes, refusDuGroupe, basculerValeur } from '@/lib/options-choix'
+import { prixTailleDesGroupes, prixDeValeur, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes } from '@/lib/options-choix'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
 import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
@@ -426,7 +426,7 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
           {enOptions && (
             <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: `1.5px solid ${T.main}`, background: '#FAF7FF' }}>
               <p style={{ fontSize: 15, fontWeight: 800, color: T.ink, margin: '0 0 8px' }}>{enOptions.nom}</p>
-              {(groupes[enOptions.id] || []).map(g => {
+              {ordonnerGroupes(groupes[enOptions.id] || []).map(g => {
                 // (13/10) Nombre de choix et prix selon la taille : mêmes
                 // règles que la fiche et le serveur (`lib/options-choix.js`).
                 const idsChoisis = Object.values(selections).flat().map(x => x.id)

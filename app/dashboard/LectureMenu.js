@@ -18,7 +18,9 @@ import { MENU_MAX, TAILLE_MAX_BASE64 } from '@/lib/menu-lu'
 import {
   COTE_MAX_PHOTO, QUALITE_JPEG, pagesAcceptees, etatRelecture, categoriesDeRelecture,
   articleDeQuestion, resumeGroupe, bilanRelecture, phraseDuBilan, prixDeSaisie, OU_REGLER_INFO,
+  contexteDeCorrection, appliquerCorrection, phraseDeCorrection,
 } from '@/lib/menu-relecture'
+import { REMARQUE_MAX, CORRECTIONS_PAR_LECTURE } from '@/lib/menu-lu'
 import { demandeLeStock, reglagesCommuns, planCreation, ecrireCreation, phraseDeCreation } from '@/lib/menu-creation'
 import { optionsTaux } from '@/lib/tva-aide'
 
@@ -87,6 +89,15 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
     tvaSurPlace: '',
   }))
   const nomsExistants = useMemo(() => articlesExistants.map(a => a.nom), [articlesExistants])
+  // LA CORRECTION (13/10) : les pages déjà préparées et l'identifiant de la
+  // lecture restent en mémoire LE TEMPS DE LA FENÊTRE, pour que l'IA relise
+  // les mêmes pages. Rien n'est gardé ailleurs.
+  const documentsRef = useRef(null)
+  const lectureIdRef = useRef(null)
+  const [remarque, setRemarque] = useState({ cle: null, texte: '' })   // cle : un article, '__menu__', ou null
+  const [correctionEnvoi, setCorrectionEnvoi] = useState(false)
+  const [correctionErreur, setCorrectionErreur] = useState('')
+  const [restantCorrections, setRestantCorrections] = useState(CORRECTIONS_PAR_LECTURE)
   const avecStock = demandeLeStock(commercant)
   const alimentaire = !['detail', 'vitrine'].includes(commercant?.categorie)
 
@@ -97,7 +108,7 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
   pagesRef.current = pages
   useEffect(() => () => pagesRef.current.forEach(p => p.apercu && URL.revokeObjectURL(p.apercu)), [])
 
-  const occupe = lecture || creation
+  const occupe = lecture || creation || correctionEnvoi
 
   function ajouterFichiers(liste) {
     setErreur('')
@@ -146,6 +157,10 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
       }
       setEtat(etatRelecture(j.proposition, nomsExistants))
       setResume(j.proposition.resume)
+      documentsRef.current = documents
+      lectureIdRef.current = j.lecture_id || null
+      setRestantCorrections(CORRECTIONS_PAR_LECTURE)
+      setRemarque({ cle: null, texte: '' })
       setEtape('relecture')
     } finally {
       setLecture(false)
@@ -163,6 +178,70 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
   }))
   const majSupplement = (cle, champs) => setEtat(e => ({ ...e, supplements: e.supplements.map(s => s.cle === cle ? { ...s, ...champs } : s) }))
   const majQuestion = (cle, champs) => setEtat(e => ({ ...e, questions: e.questions.map(q => q.cle === cle ? { ...q, ...champs } : q) }))
+
+  function ouvrirRemarque(cle) {
+    setCorrectionErreur('')
+    setRemarque(r => (r.cle === cle ? { cle: null, texte: '' } : { cle, texte: '' }))
+  }
+
+  async function corriger() {
+    const cle = remarque.cle
+    if (!cle || occupe || !documentsRef.current || !lectureIdRef.current) return
+    const texte = remarque.texte.trim()
+    if (texte.length < 3) { setCorrectionErreur('Écris ce qu’il faut corriger.'); return }
+    setCorrectionEnvoi(true)
+    setCorrectionErreur('')
+    try {
+      const cleCible = cle === '__menu__' ? null : cle
+      const res = await postPro('/api/ia/menu/corriger', {
+        commercant_id: commercantId,
+        lecture_id: lectureIdRef.current,
+        documents: documentsRef.current,
+        remarque: texte,
+        contexte: contexteDeCorrection(etat, cleCible),
+      })
+      if (typeof res?.json !== 'function') {
+        setCorrectionErreur(res?.sansSession ? 'Session expirée, reconnecte-toi.' : 'Connexion perdue, réessaie.')
+        return
+      }
+      const j = await res.json().catch(() => ({}))
+      if (Number.isInteger(j?.restant)) setRestantCorrections(j.restant)
+      if (!res.ok || !j?.ok) {
+        setCorrectionErreur(j?.message || j?.error || 'La correction a échoué, réessaie.')
+        return
+      }
+      // ⚠️ SUR L'ÉTAT DU MOMENT, PAS CELUI DE L'ENVOI : la relecture reste
+      // modifiable pendant la minute de correction, et ces gestes-là ne doivent
+      // pas disparaître. Le premier calcul ne sert qu'au message.
+      const r = appliquerCorrection(etat, j.correction, { cleCible, nomsExistants })
+      setEtat(e => appliquerCorrection(e, j.correction, { cleCible, nomsExistants }).etat)
+      setRemarque({ cle: null, texte: '' })
+      toast?.(phraseDeCorrection(r), 'success')
+    } finally {
+      setCorrectionEnvoi(false)
+    }
+  }
+
+  // Le champ de remarque, le même pour un article et pour tout le menu.
+  const champRemarque = (exemple) => (
+    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <textarea value={remarque.texte} onChange={e => setRemarque(r => ({ ...r, texte: e.target.value.slice(0, REMARQUE_MAX) }))}
+        rows={2} placeholder={exemple} aria-label="Ta remarque pour l’IA" disabled={correctionEnvoi}
+        style={{ ...champ, resize: 'vertical', lineHeight: 1.45 }}/>
+      {correctionErreur && <p role="alert" style={{ fontSize: 12.5, fontWeight: 700, color: T.erreur, margin: 0, lineHeight: 1.45 }}>{correctionErreur}</p>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={corriger} disabled={occupe || remarque.texte.trim().length < 3 || restantCorrections <= 0}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 13, cursor: correctionEnvoi ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: remarque.texte.trim().length < 3 ? 0.5 : 1 }}>
+          {correctionEnvoi ? <><DotsAttente couleur="#fff" taille={3} label="Correction"/> L’IA relit</> : 'Envoyer à l’IA'}
+        </button>
+        <button type="button" onClick={() => setRemarque({ cle: null, texte: '' })} disabled={correctionEnvoi}
+          style={{ fontSize: 13, fontWeight: 700, color: T.muted, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
+        <span style={{ fontSize: 12, color: T.muted }}>
+          {correctionEnvoi ? 'Elle relit tes pages, environ une minute.' : `${restantCorrections} correction${restantCorrections > 1 ? 's' : ''} restante${restantCorrections > 1 ? 's' : ''} pour cette lecture`}
+        </span>
+      </div>
+    </div>
+  )
 
   function voirArticle(cle) {
     document.getElementById(`menu-lu-${cle}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -343,6 +422,21 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
                             </label>
                           </div>
                         )}
+
+                        {a.retireParIA && !a.garder && (
+                          <p style={{ fontSize: 12, fontWeight: 700, color: T.deep, margin: '8px 0 0' }}>L’IA propose de le retirer. Coche-le si tu veux le garder.</p>
+                        )}
+
+                        {/* CORRIGER AVEC L'IA (13/10, Alex) */}
+                        {remarque.cle === a.cle
+                          ? champRemarque('Ex. : les ingrédients au choix sont toutes les garnitures de la carte.')
+                          : (
+                            <button type="button" onClick={() => ouvrirRemarque(a.cle)} disabled={occupe || restantCorrections <= 0}
+                              style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 800, color: T.main, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3z"/></svg>
+                              Corriger avec l’IA
+                            </button>
+                          )}
                       </div>
                     )
                   })}
@@ -357,14 +451,21 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
                 {etat.supplements.map(s => (
                   <div key={s.cle} style={{ borderRadius: 12, padding: 10, border: `1.5px solid ${T.hairline}`, marginBottom: 8 }}>
                     <p style={{ fontSize: 13, color: T.ink, margin: '0 0 8px', lineHeight: 1.45 }}>{resumeGroupe(s)}</p>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: T.deep, flexWrap: 'wrap' }}>
-                      Ajouter aux articles de
-                      <select value={s.appliquerA} onChange={e => majSupplement(s.cle, { appliquerA: e.target.value })} style={{ ...champ, width: 'auto', minWidth: 160 }}>
-                        <option value="">Ne pas ajouter</option>
-                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </label>
-                    {s.pour && !s.appliquerA && <p style={{ fontSize: 12, color: T.muted, margin: '6px 0 0' }}>Le menu les indique pour « {s.pour} ».</p>}
+                    {/* Plusieurs catégories (« toutes les pizzas »), aucune d'office. */}
+                    <p style={{ fontSize: 13, fontWeight: 700, color: T.deep, margin: '0 0 6px' }}>Ajouter aux articles de :</p>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {categories.map(c => {
+                        const coche = s.appliquerA.includes(c)
+                        return (
+                          <button key={c} type="button" aria-pressed={coche}
+                            onClick={() => majSupplement(s.cle, { appliquerA: coche ? s.appliquerA.filter(x => x !== c) : [...s.appliquerA, c] })}
+                            style={{ padding: '5px 11px', borderRadius: 100, border: `1.5px solid ${coche ? T.main : T.hairline}`, background: coche ? T.pale : '#fff', color: T.deep, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            {coche ? '✓ ' : ''}{c}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {s.pour && s.appliquerA.length === 0 && <p style={{ fontSize: 12, color: T.muted, margin: '6px 0 0' }}>Le menu les indique pour « {s.pour} ». Rien n’est ajouté tant que tu ne coches pas.</p>}
                   </div>
                 ))}
               </div>
@@ -381,6 +482,19 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
                 ))}
               </div>
             )}
+
+            {/* UNE REMARQUE SUR TOUT LE MENU (13/10, Alex) */}
+            <div style={{ marginBottom: 16, borderRadius: 12, padding: 12, background: T.bg }}>
+              <p style={titre}>Une remarque sur tout le menu ?</p>
+              {remarque.cle === '__menu__'
+                ? champRemarque('Ex. : la rubrique Suppléments, ce sont des suppléments pour toutes les pizzas, pas des articles.')
+                : (
+                  <button type="button" onClick={() => ouvrirRemarque('__menu__')} disabled={occupe || restantCorrections <= 0}
+                    style={{ fontSize: 13, fontWeight: 800, color: T.main, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', lineHeight: 1.45 }}>
+                    Dis à l’IA ce qui ne va pas sur plusieurs articles : elle relit tes pages et corrige.
+                  </button>
+                )}
+            </div>
 
             {/* POUR TOUS CES ARTICLES : LE STOCK ET LA TVA (Alex, 13/10) */}
             <div style={{ marginBottom: 16, borderRadius: 12, padding: 12, border: `1.5px solid ${T.hairline}` }}>
@@ -437,7 +551,7 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
                   : pret ? `${bilan.aCreer} article${bilan.aCreer > 1 ? 's' : ''} prêt${bilan.aCreer > 1 ? 's' : ''} à créer.`
                   : phraseDuBilan(bilan) || verdictReglages.error}
               </span>
-              <button type="button" onClick={() => { setEtape('envoi'); setEtat(null); setErreur('') }} disabled={occupe}
+              <button type="button" onClick={() => { setEtape('envoi'); setEtat(null); setErreur(''); documentsRef.current = null; lectureIdRef.current = null }} disabled={occupe}
                 style={{ padding: '10px 16px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.deep, fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Relire un autre menu</button>
               <button type="button" onClick={creer} disabled={!pret || occupe}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 100, border: 'none', background: pret ? T.main : T.hairline, color: '#fff', fontWeight: 800, fontSize: 14, cursor: creation ? 'wait' : pret ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>

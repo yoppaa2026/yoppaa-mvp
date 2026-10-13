@@ -23,6 +23,7 @@ import { lireDocuments, iaDisponible } from '@/lib/anthropic'
 import { aiLimiter, checkLimit } from '@/lib/ratelimit'
 import { gardeCommercant, refus } from '@/lib/api-auth'
 import { normaliserLecture, documentsValides, OUTIL_CATALOGUE, CONSIGNE_LECTURE } from '@/lib/menu-lu'
+import { empreinteDocuments, occasionDeLecture, nouvelleLecture } from '@/lib/menu-lu-server'
 
 export async function POST(request) {
   try {
@@ -121,13 +122,18 @@ export async function POST(request) {
 
     // Le journal d'abord : une lecture faite est une lecture comptée, même si
     // elle ne donne rien d'exploitable (elle a coûté).
+    //
+    // 🔴 L'OCCASION PORTE L'IDENTIFIANT DE LA LECTURE ET L'EMPREINTE DE SES
+    // PAGES : c'est elle qui autorise ensuite les corrections (voir
+    // `lib/menu-lu-server.js`), pour CES pages seulement.
+    const lectureId = nouvelleLecture()
     try {
       await admin.from('ia_generations').insert({
         commercant_id: commercantId,
         // ⚠️ UNE LECTURE DE L'ADMIN NE COMPTE PAS DANS LE QUOTA DU COMMERCE :
         // type distinct, « menu_admin ». Elle reste comptée dans le cap global.
         type: parAdmin ? 'menu_admin' : 'menu',
-        occasion: `${docs.documents.length} page${docs.documents.length > 1 ? 's' : ''}`,
+        occasion: occasionDeLecture(lectureId, empreinteDocuments(docs.documents)),
         modele: 'sonnet',
         tokens_in: out.usage.in,
         tokens_out: out.usage.out,
@@ -147,7 +153,7 @@ export async function POST(request) {
     }
     if (out.tronque) proposition.resume.tronque = true
 
-    return NextResponse.json({ ok: true, proposition, restant: Math.max(0, quotaMois - (count || 0) - 1) })
+    return NextResponse.json({ ok: true, proposition, lecture_id: lectureId, restant: Math.max(0, quotaMois - (count || 0) - 1) })
   } catch (e) {
     console.error('[ia/menu]', e?.message)
     return NextResponse.json({ ok: false, error: 'La lecture a échoué, réessaie.' }, { status: 500 })

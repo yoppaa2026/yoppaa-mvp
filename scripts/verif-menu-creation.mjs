@@ -9,10 +9,15 @@
 
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
-import { normaliserLecture, MENU_MAX } from '../lib/menu-lu.js'
+import {
+  normaliserLecture, MENU_MAX, remarqueValide, contexteValide, consigneDeCorrection, normaliserCorrection,
+  CONSIGNE_CORRECTION, CONSIGNE_LECTURE, CORRECTIONS_PAR_LECTURE, REMARQUE_MAX, CONTEXTE_MAX,
+} from '../lib/menu-lu.js'
+import { empreinteDocuments, occasionDeLecture, nouvelleLecture, UUID } from '../lib/menu-lu-server.js'
 import {
   pagesAcceptees, etatRelecture, prixDeSaisie, categoriesDeRelecture, articleDeQuestion,
   libelleValeur, resumeGroupe, bilanRelecture, phraseDuBilan, OU_REGLER_INFO,
+  contexteDeCorrection, appliquerCorrection, phraseDeCorrection,
 } from '../lib/menu-relecture.js'
 import { demandeLeStock, reglagesCommuns, planCreation, ecrireCreation, phraseDeCreation } from '../lib/menu-creation.js'
 
@@ -59,7 +64,7 @@ v('🔴 un article déjà au catalogue arrive DÉCOCHÉ et marqué', art(etat0, 
 v('les autres arrivent cochés', art(etat0, 'Margherita')?.garder === true && art(etat0, 'Calzone').garder === true)
 v('un prix absent reste vide (jamais 0 €)', art(etat0, 'Pizza du chef')?.prixTexte === '')
 v('le prix s’écrit à la belge', art(etat0, 'Margherita')?.prixTexte === '9,00')
-v('🔴 les suppléments communs ne s’appliquent JAMAIS d’office', etat0.supplements.every(s => s.appliquerA === ''))
+v('🔴 les suppléments communs ne s’appliquent JAMAIS d’office', etat0.supplements.length === 1 && etat0.supplements.every(s => Array.isArray(s.appliquerA) && s.appliquerA.length === 0))
 v('la question retrouve son article', articleDeQuestion(etat0.questions[0], etat0.articles)?.nom === 'Pizza du chef')
 v('les catégories suivent le menu', categoriesDeRelecture(etat0).join('|') === 'Pizzas|boissons')
 v('le prix saisi se lit à la belge et se borne',
@@ -102,7 +107,9 @@ v('🔴 hors alimentaire, refusé', reglagesCommuns({ categorie: 'detail' }, { t
 const etatPret = {
   ...etat0,
   articles: etat0.articles.map(a => a.nom === 'Pizza du chef' ? { ...a, prixTexte: '14', verifie: true, description: '  ' } : a),
-  supplements: etat0.supplements.map(s => ({ ...s, appliquerA: 'pizzas' })),
+  // Plusieurs catégories cochables (« toutes les pizzas ») : ici « pizzas »
+  // (écrit autrement que « Pizzas ») et une catégorie absente.
+  supplements: etat0.supplements.map(s => ({ ...s, appliquerA: ['pizzas', 'Desserts'] })),
 }
 {
   // ⚠️ LE DOUTE SEUL, prix rempli : le plan ne croit pas l'écran.
@@ -229,6 +236,102 @@ function fausseBase({ refuser = () => null } = {}) {
   v('🔴 aucun article né : la liste des catégories ne bouge pas', !rien.journal.some(j => j.table === 'commercants') && r2.crees.length === 0)
 }
 
+// ═══ 5 bis) LA CORRECTION (13/10, Alex : « que je puisse lui dire ») ═══════
+{
+  v('une remarque vide ou trop longue est refusée, une vraie passe',
+    remarqueValide('').ok === false && remarqueValide('x'.repeat(REMARQUE_MAX + 1)).ok === false && remarqueValide('  les garnitures  ').remarque === 'les garnitures')
+  v('🔴 l’extrait envoyé doit être un objet, et pas trop gros',
+    contexteValide([]).ok === false && contexteValide(null).ok === false
+    && contexteValide({ carte: [{ nom: 'x'.repeat(CONTEXTE_MAX) }] }).ok === false && contexteValide({ cible: null, carte: [] }).ok === true)
+  const cons = consigneDeCorrection({ com: { nom: 'Pizza test', type: 'pizzeria' }, remarque: 'les garnitures', contexte: { cible: { nom: 'Calzone' }, carte: [] } })
+  v('la consigne porte la remarque et l’article visé', /Remarque du commerçant : les garnitures/.test(cons) && /"nom":"Calzone"/.test(cons))
+  v('sans article visé, la remarque porte sur tout le menu', /tout le menu/.test(consigneDeCorrection({ com: {}, remarque: 'x', contexte: { cible: null, carte: [] } })))
+  v('🔴 la consigne de correction donne la priorité au commerçant sans inventer',
+    /La remarque du commerçant prime/.test(CONSIGNE_CORRECTION) && /Rends SEULEMENT les articles concernés/.test(CONSIGNE_CORRECTION) && /n'invente rien/.test(CONSIGNE_CORRECTION))
+  v('la lecture range les rubriques de suppléments et les « au choix » sans liste',
+    /n'est PAS une liste d'articles/.test(CONSIGNE_LECTURE) && /N ingrédients au choix » sans liste/.test(CONSIGNE_LECTURE))
+  v(`${CORRECTIONS_PAR_LECTURE} corrections par lecture (décision d’Alex)`, CORRECTIONS_PAR_LECTURE === 10)
+
+  const nc = normaliserCorrection({ categories: [{ nom: 'Pizzas calzone', articles: [{ nom: 'Calzone', prix: 12.5, options: [{ nom: 'Ingrédients au choix', choix_min: 3, choix_max: 3, valeurs: [{ nom: 'Aubergine' }, { nom: 'Poivron' }, { nom: 'Oignon' }] }] }] }], retirer: ['  Crudité ', ''] })
+  v('la correction se remet en ordre comme une lecture', nc.categories[0]?.articles[0]?.groupes[0]?.choix_max === 3 && JSON.stringify(nc.retirer) === '["Crudité"]' && nc.vide === false)
+  v('une correction sans rien n’est rien', normaliserCorrection({ categories: [] }).vide === true && normaliserCorrection(null).vide === true)
+
+  // Une relecture où le commerçant a DÉJÀ travaillé.
+  const base = etatRelecture(proposition, [])
+  const avant = {
+    ...base,
+    articles: [
+      ...base.articles.map(a => a.nom === 'Margherita' ? { ...a, prixTexte: '9,50' } : a.nom === 'Pizza du chef' ? { ...a, verifie: true } : a),
+      { cle: 'x1', nom: 'Crudité', categorie: 'Suppléments', prixTexte: '1,50', description: '', groupes: [], doutes: [], verifie: false, deja: false, garder: true },
+    ],
+  }
+  const ctx = contexteDeCorrection(avant, art(avant, 'Calzone').cle)
+  v('l’extrait porte l’article visé en entier et toute la carte en bref',
+    ctx.cible?.nom === 'Calzone' && ctx.cible.prix === 12 && ctx.cible.choix[0]?.choix_max === 3 && ctx.carte.length === avant.articles.length && contexteDeCorrection(avant).cible === null)
+
+  const r = appliquerCorrection(avant, nc, { cleCible: art(avant, 'Calzone').cle })
+  const pos = (e, nom) => e.articles.findIndex(a => a.nom === nom)
+  v('🔴 l’article visé est remplacé À SA PLACE par la correction',
+    pos(r.etat, 'Calzone') === pos(avant, 'Calzone') && art(r.etat, 'Calzone').groupes[0]?.nom === 'Ingrédients au choix' && art(r.etat, 'Calzone').groupes[0].valeurs.length === 3)
+  v('🔴 le reste de la relecture ne bouge pas (prix corrigé, doute vérifié)',
+    art(r.etat, 'Margherita').prixTexte === '9,50' && art(r.etat, 'Pizza du chef').verifie === true && r.etat.articles.length === avant.articles.length)
+  v('🔴 les clés restent uniques après correction', new Set(r.etat.articles.map(a => a.cle)).size === r.etat.articles.length && r.etat.corrections === 1)
+  v('la correction suivante prend d’autres clés',
+    (() => { const r2 = appliquerCorrection(r.etat, nc, { cleCible: art(r.etat, 'Calzone').cle }); return new Set(r2.etat.articles.map(a => a.cle)).size === r2.etat.articles.length && r2.etat.corrections === 2 })())
+  v('🔴 rien de rendu pour l’article visé : il reste (jamais effacé en silence)',
+    art(appliquerCorrection(avant, { categories: [], retirer: [] }, { cleCible: art(avant, 'Calzone').cle }).etat, 'Calzone')?.cle === art(avant, 'Calzone').cle)
+
+  const glob = appliquerCorrection(avant, {
+    categories: [{ nom: 'Pizzas', articles: [{ cle: 'a0', nom: 'Hawaï', categorie: 'Pizzas', prix: 11, groupes: [], doutes: [] }, { cle: 'a1', nom: 'margherita', categorie: 'Pizzas', prix: 10, groupes: [], doutes: [] }] }],
+    supplements: [{ nom: 'Crudités', pour: 'Pizzas', type: 'multiple', obligatoire: false, valeurs: [{ nom: 'Tomate', supplement: 1.5 }] }],
+    questions: [{ question: 'Les crudités valent pour les calzones ?', propositions: [] }],
+    retirer: ['crudité'],
+  }, { nomsExistants: ['Hawaï'] })
+  v('🔴 « retirer » DÉCOCHE et marque, ne supprime pas',
+    art(glob.etat, 'Crudité')?.garder === false && art(glob.etat, 'Crudité').retireParIA === true && glob.retires === 1)
+  v('sur tout le menu, un article du même nom est remplacé', glob.etat.articles.filter(a => /margherita/i.test(a.nom)).length === 1 && art(glob.etat, 'margherita')?.prixTexte === '10,00')
+  v('un nouvel article s’ajoute à la fin de sa catégorie', pos(glob.etat, 'Hawaï') === pos(glob.etat, 'Pizza du chef') + 1)
+  v('🔴 un article déjà au catalogue arrive décoché, même par une correction', art(glob.etat, 'Hawaï')?.deja === true && art(glob.etat, 'Hawaï').garder === false)
+  v('🔴 les suppléments rendus arrivent SANS catégorie choisie', glob.etat.supplements.some(s => s.nom === 'Crudités' && Array.isArray(s.appliquerA) && s.appliquerA.length === 0))
+  v('les nouvelles questions s’ajoutent, clés uniques', glob.etat.questions.length === 2 && new Set(glob.etat.questions.map(q => q.cle)).size === 2)
+  v('le message dit ce qui a changé', phraseDeCorrection(glob) === 'Corrigé : 2 articles revus, 1 décoché (à retirer selon l’IA), 1 groupe de suppléments.', phraseDeCorrection(glob))
+}
+
+// ═══ 5 ter) LA ROUTE DE CORRECTION ET SON LIEN À LA LECTURE ════════════════
+{
+  const a = [{ type: 'image/jpeg', data: 'QUJD' }, { type: 'application/pdf', data: 'REVG' }]
+  v('🔴 l’empreinte des pages : stable, et change avec le contenu ou l’ordre',
+    empreinteDocuments(a) === empreinteDocuments([...a]) && empreinteDocuments(a) !== empreinteDocuments([a[1], a[0]])
+    && empreinteDocuments(a) !== empreinteDocuments([{ type: 'image/jpeg', data: 'QUJE' }, a[1]]) && /^[0-9a-f]{32}$/.test(empreinteDocuments(a)))
+  v('l’occasion porte la lecture et ses pages', occasionDeLecture('id', 'emp') === 'lecture:id:emp' && UUID.test(nouvelleLecture()) && !UUID.test('lecture'))
+
+  const lecture = code('app/api/ia/menu/route.js')
+  v('🔴 la lecture note son identifiant et l’empreinte de ses pages, et rend l’identifiant',
+    /occasion: occasionDeLecture\(lectureId, empreinteDocuments\(docs\.documents\)\),/.test(lecture) && /lecture_id: lectureId,/.test(lecture))
+
+  const route = code('app/api/ia/menu/corriger/route.js')
+  const avantLecture = (motif) => route.indexOf(motif) > 0 && route.indexOf(motif) < route.indexOf('lireDocuments(')
+  v('🔴 le commerçant ou l’admin vérifié, par la garde commune, avant tout',
+    /const garde = await gardeCommercant\(request, admin, commercantId\)/.test(route) && /if \(refusGarde\) return refusGarde/.test(route) && avantLecture('gardeCommercant(request'))
+  v('l’alimentaire d’abord', /if \(!isAlimentaire\(com\)\)/.test(route))
+  v('🔴 remarque, extrait et pages contrôlés avant de lire',
+    avantLecture('remarqueValide(') && avantLecture('contexteValide(') && avantLecture('documentsValides(') && /documents: docs\.documents,/.test(route))
+  v('🔴 une correction exige une VRAIE lecture : ce commerce, ces pages, du jour',
+    /const occasion = occasionDeLecture\(lectureId, empreinteDocuments\(docs\.documents\)\)/.test(route)
+    && /\.in\('type', \['menu', 'menu_admin'\]\)\s*\.eq\('occasion', occasion\)\s*\.gte\('created_at', depuis\)/.test(route)
+    && /if \(!lectures\?\.length\) \{/.test(route) && avantLecture('if (!lectures?.length)'))
+  v('🔴 une lecture illisible au journal REFUSE (elle ne vaut pas « trouvée »)', /if \(errLecture\) return NextResponse\.json\(/.test(route))
+  v('🔴 dix corrections par lecture, un compte illisible refuse',
+    /\.eq\('type', 'menu_correction'\)\s*\.eq\('occasion', occasion\)/.test(route) && /if \(errCount\) return NextResponse\.json\(/.test(route)
+    && /if \(\(count \|\| 0\) >= CORRECTIONS_PAR_LECTURE\) \{/.test(route) && avantLecture('>= CORRECTIONS_PAR_LECTURE'))
+  v('🔴 hors quota des lectures : journal à part, même lecture',
+    /type: 'menu_correction',\s*occasion,/.test(route) && !/getIaMenuConfig/.test(route))
+  v('le rate-limit et le cap global restent', /checkLimit\(aiLimiter, `ia-menu:\$\{commercantId\}`\)/.test(route) && /IA_QUOTA_GLOBAL_MOIS/.test(route))
+  v('🔴 rien n’est gardé ni créé : une seule écriture, au journal',
+    !/\.storage\b/.test(route) && (route.match(/\.insert\(/g) || []).length === 1 && /from\('ia_generations'\)\.insert\(/.test(route) && !/from\('articles'\)/.test(route))
+  v('la réponse passe par la remise en ordre', /const correction = normaliserCorrection\(out\.entree\)/.test(route))
+}
+
 // ═══ 6) L'ÉCRAN ═════════════════════════════════════════════════════════════
 {
   const ecran = code('app/dashboard/LectureMenu.js')
@@ -244,6 +347,13 @@ function fausseBase({ refuser = () => null } = {}) {
   v('la TVA propose les taux du métier et « plus tard »', /optionsTaux\(tvaRefs, commercant\?\.categorie\)/.test(ecran) && /value="plus_tard"/.test(ecran))
   v('la phrase dit que tout se change ensuite, par groupe ou un par un', /actions groupées du catalogue\) ou article par article/.test(readFileSync(new URL('../app/dashboard/LectureMenu.js', import.meta.url), 'utf8')))
   v('🔴 aucune page n’est gardée : ni stockage, ni écriture de fichier', !/\.storage\b/.test(ecran))
+  v('🔴 la correction renvoie les MÊMES pages et l’identifiant de la lecture',
+    /documentsRef\.current = documents/.test(ecran) && /lectureIdRef\.current = j\.lecture_id \|\| null/.test(ecran)
+    && /await postPro\('\/api\/ia\/menu\/corriger', \{/.test(ecran) && /lecture_id: lectureIdRef\.current,/.test(ecran) && /documents: documentsRef\.current,/.test(ecran))
+  v('🔴 la correction s’applique sur l’état DU MOMENT (gestes faits pendant la minute gardés)',
+    /setEtat\(e => appliquerCorrection\(e, j\.correction, \{ cleCible, nomsExistants \}\)\.etat\)/.test(ecran))
+  v('relire un autre menu oublie les pages et la lecture', /documentsRef\.current = null; lectureIdRef\.current = null/.test(ecran))
+  v('chaque article a son « Corriger avec l’IA », et le menu sa remarque', /onClick=\{\(\) => ouvrirRemarque\(a\.cle\)\}/.test(ecran) && /onClick=\{\(\) => ouvrirRemarque\('__menu__'\)\}/.test(ecran))
 
   const dash = code('app/dashboard/ConfigDashboard.js')
   v('🔴 le bouton « Lire mon menu » n’existe qu’en alimentaire', /\{estAlimentaire && subTab === 'articles' && \(/.test(dash) && /setLectureMenu\(true\)/.test(dash))

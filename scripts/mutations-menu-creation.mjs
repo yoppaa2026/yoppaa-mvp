@@ -25,6 +25,7 @@ const RELECTURE = 'lib/menu-relecture.js'
 const LECTURE = 'lib/menu-lu.js'
 const ECRAN = 'app/dashboard/LectureMenu.js'
 const DASH = 'app/dashboard/ConfigDashboard.js'
+const CORRIGER = 'app/api/ia/menu/corriger/route.js'
 
 const MUTATIONS = [
   // ─── LE PLAN ─────────────────────────────────────────────────────────────
@@ -43,7 +44,7 @@ const MUTATIONS = [
   { nom: '⚠️ « pizzas » cree une categorie a cote de « Pizzas »',
     fichier: CREATION, de: '  return existantes.find(c => cleNom(c) === cleNom(n)) || n', vers: '  return n' },
   { nom: '🔴 le supplement commun s applique d office a la categorie du menu',
-    fichier: CREATION, de: '      if (!s.appliquerA || cleNom(s.appliquerA) !== cleCat) continue', vers: "      if (cleNom(s.appliquerA || s.pour || '') !== cleCat) continue" },
+    fichier: CREATION, de: '      if (!(Array.isArray(s.appliquerA) ? s.appliquerA : []).some(c => cleNom(c) === cleCat)) continue', vers: "      if (![...(s.appliquerA || []), s.pour || ''].some(c => cleNom(c) === cleCat)) continue" },
   { nom: '⚠️ une taille inconnue n est plus comptee',
     fichier: CREATION, de: '      if (!t) { compteur.inconnues++; continue }', vers: '      if (!t) { continue }' },
   { nom: '⚠️ un article sans tailles est compte comme une anomalie',
@@ -63,9 +64,10 @@ const MUTATIONS = [
 
   // ─── LA RELECTURE ────────────────────────────────────────────────────────
   { nom: '🔴 un article deja au catalogue arrive coche',
-    fichier: RELECTURE, de: '        garder: !deja,', vers: '        garder: true,' },
+    // ⚠️ ANCRE REPOINTEE LE 13/10 : la ligne vit dans `articleDeRelecture`.
+    fichier: RELECTURE, de: '    garder: !deja,', vers: '    garder: true,' },
   { nom: '🔴 les supplements communs arrivent appliques',
-    fichier: RELECTURE, de: "    supplements: (proposition?.supplements || []).map((s, i) => ({ ...s, cle: `s${i}`, appliquerA: '' })),", vers: "    supplements: (proposition?.supplements || []).map((s, i) => ({ ...s, cle: `s${i}`, appliquerA: s.pour || '' }))," },
+    fichier: RELECTURE, de: 'const supplementDeRelecture = (s, cle) => ({ ...s, cle, appliquerA: [] })', vers: "const supplementDeRelecture = (s, cle) => ({ ...s, cle, appliquerA: s.pour ? [s.pour] : [] })" },
   { nom: '🔴 un doute non verifie ne bloque plus',
     fichier: RELECTURE, de: '    pret: coches.length > 0 && sansPrix === 0 && sansNom === 0 && aVerifier === 0,', vers: '    pret: coches.length > 0 && sansPrix === 0 && sansNom === 0,' },
   { nom: '⚠️ un prix de 0 € est accepte',
@@ -82,6 +84,36 @@ const MUTATIONS = [
     fichier: ECRAN, de: '    if (!plan.ok) { setErreur(plan.error); return }', vers: '' },
   { nom: '🔴 le bouton Lire mon menu s ouvre hors alimentaire',
     fichier: DASH, de: "          {estAlimentaire && subTab === 'articles' && (", vers: "          {subTab === 'articles' && (" },
+
+  // ─── LA CORRECTION (13/10, Alex : « que je puisse lui dire ») ───────────
+  { nom: '🔴 une correction passe sans lecture d origine (lecture gratuite)',
+    fichier: CORRIGER, de: '    if (!lectures?.length) {', vers: '    if (false) {' },
+  { nom: '🔴 une lecture illisible au journal passe pour trouvee',
+    fichier: CORRIGER, de: "    if (errLecture) return NextResponse.json({ ok: false, error: 'Vérification de la lecture impossible, réessaie.' }, { status: 500 })", vers: '' },
+  { nom: '🔴 les pages corrigees ne sont plus celles de la lecture',
+    fichier: CORRIGER, de: '    const occasion = occasionDeLecture(lectureId, empreinteDocuments(docs.documents))', vers: "    const occasion = occasionDeLecture(lectureId, '')" },
+  { nom: '⚠️ une lecture de la semaine passee se corrige encore',
+    fichier: CORRIGER, de: "      .gte('created_at', depuis)", vers: '' },
+  { nom: '🔴 les corrections sont illimitees',
+    fichier: CORRIGER, de: '    if ((count || 0) >= CORRECTIONS_PAR_LECTURE) {', vers: '    if (false) {' },
+  { nom: '🔴 un compte de corrections illisible vaut zero',
+    fichier: CORRIGER, de: "    if (errCount) return NextResponse.json({ ok: false, error: 'Vérification des corrections impossible, réessaie.' }, { status: 500 })", vers: '' },
+  { nom: '🔴 une correction mange le quota des lectures',
+    fichier: CORRIGER, de: "        type: 'menu_correction',", vers: "        type: 'menu'," },
+  { nom: '🔴 la lecture ne rend plus son identifiant',
+    fichier: 'app/api/ia/menu/route.js', de: 'lecture_id: lectureId, ', vers: '' },
+  { nom: '🔴 « retirer » est ignore',
+    fichier: RELECTURE, de: '    if (neufs.has(a.cle) || !aRetirer.has(cleNom(a.nom))) return a', vers: '    if (true) return a' },
+  { nom: '⚠️ l article corrige part en fin de liste',
+    fichier: RELECTURE, de: '    if (i >= 0 && nouveaux.length > 0) liste.splice(i, 1, ...nouveaux)', vers: '    if (i >= 0 && nouveaux.length > 0) { liste.splice(i, 1); liste.push(...nouveaux) }' },
+  { nom: '🔴 une correction vide efface l article vise',
+    fichier: RELECTURE, de: '    if (i >= 0 && nouveaux.length > 0) liste.splice(i, 1, ...nouveaux)', vers: '    if (i >= 0) liste.splice(i, 1, ...nouveaux)' },
+  { nom: '🔴 deux corrections reprennent les memes cles',
+    fichier: RELECTURE, de: '  const numero = (etat?.corrections || 0) + 1', vers: '  const numero = 1' },
+  { nom: '🔴 la correction ecrase les gestes faits pendant la minute',
+    fichier: ECRAN, de: '      setEtat(e => appliquerCorrection(e, j.correction, { cleCible, nomsExistants }).etat)', vers: '      setEtat(r.etat)' },
+  { nom: '⚠️ la consigne ne donne plus la priorite au commercant',
+    fichier: LECTURE, de: '1. La remarque du commerçant prime sur ta première lecture', vers: '1. Ta première lecture prime' },
 
   // ─── LA LECTURE (13/10, session 2) ───────────────────────────────────────
   { nom: '🔴 des bornes impossibles sont devinees', banc: LU,

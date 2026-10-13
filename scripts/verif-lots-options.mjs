@@ -182,6 +182,38 @@ v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, 
   const ordreGroupes = OC.ordonnerGroupes([{ id: 'gI', nom: 'Ingrédients', type: 'multiple', valeurs: [{}, {}] }, { id: 'gS', nom: 'Sauce', type: 'multiple', valeurs: [{}, {}] }, { id: 'gT', nom: 'Taille', type: 'unique', valeurs: [{}, {}, {}] }])
   v('🔴 le groupe des tailles passe en premier, les autres gardent leur ordre', ordreGroupes.map(g => g.id).join() === 'gT,gI,gS', ordreGroupes.map(g => g.id).join())
   v('sans groupe de tailles, l’ordre ne bouge pas', OC.ordonnerGroupes([{ id: 'a', type: 'multiple' }, { id: 'b', type: 'multiple' }]).map(g => g.id).join() === 'a,b')
+
+  // (13/10, Alex) Les OBLIGATOIRES au-dessus, les facultatifs en dessous.
+  const ordre2 = OC.ordonnerGroupes([
+    { id: 'fro', nom: 'Fromage', type: 'unique', valeurs: [{}] },
+    { id: 'cha', nom: 'Charcuterie', type: 'multiple', valeurs: [{}, {}] },
+    { id: 'boi', nom: 'Boisson', type: 'unique', obligatoire: true, valeurs: [{}, {}] },
+    { id: 'tai', nom: 'Taille', type: 'unique', obligatoire: true, valeurs: [{}, {}] },
+    { id: 'ing', nom: 'Ingrédients', type: 'multiple', choix_min: 1, choix_max: 3, valeurs: [{}, {}] },
+  ])
+  v('🔴 la taille, puis les obligatoires, puis les facultatifs (chacun dans son ordre)',
+    ordre2.map(g => g.id).join() === 'tai,boi,ing,fro,cha', ordre2.map(g => g.id).join())
+  const cuisson = OC.ordonnerGroupes([{ id: 'boi', nom: 'Boisson', type: 'multiple', obligatoire: true, valeurs: [{}, {}] }, { id: 'cui', nom: 'Cuisson', type: 'unique', valeurs: [{}, {}] }])
+  v('⚠️ une « Cuisson » facultative (taille de repli) ne passe pas devant la boisson imposée', cuisson.map(g => g.id).join() === 'boi,cui', cuisson.map(g => g.id).join())
+
+  // (13/10, Alex : « pas de choisis-en un, il se sent obligé »)
+  v('🔴 aucune pastille pour un choix unique ni pour des cumulables',
+    OC.pastilleBornes(gTaille) === null && OC.pastilleBornes(gSupp) === null && OC.pastilleBornes({ type: 'multiple', obligatoire: true }) === null)
+  v('🔴 une vraie limite garde sa pastille',
+    OC.pastilleBornes(gIngr) === 'Choisis-en 3' && OC.pastilleBornes({ type: 'multiple', choix_max: 2 }) === 'Jusqu’à 2'
+    && OC.pastilleBornes({ type: 'multiple', choix_min: 1, choix_max: 3 }) === 'Entre 1 et 3' && OC.pastilleBornes({ type: 'multiple', choix_min: 2 }) === 'Au moins 2')
+  v('🔴 une option seule et facultative prend une case, pas un rond',
+    OC.afficheEnRond({ type: 'unique', valeurs: [{}] }) === false && OC.afficheEnRond({ type: 'unique', valeurs: [{}, {}] }) === true
+    && OC.afficheEnRond({ type: 'unique', obligatoire: true, valeurs: [{}] }) === true && OC.afficheEnRond({ type: 'multiple', valeurs: [{}, {}] }) === false)
+  {
+    const fiche = code('app/commander/[slug]/page.js')
+    const encodage = code('app/dashboard/ModalNouvelleCommande.js')
+    v('🔴 la fiche passe par ces deux règles, plus par « Choisis-en un »',
+      /const isUnique = afficheEnRond\(g\)/.test(fiche) && /const pastille = pastilleBornes\(g\)/.test(fiche) && /\{pastille && \(/.test(fiche) && !/\{libelleBornes\(g\)\}/.test(fiche))
+    v('l’encodage n’annonce plus « choisis-en un »', /pastilleBornes\(g\)\?\.toLowerCase\(\)/.test(encodage) && !/libelleBornes/.test(encodage))
+    v('🔴 le réglage du commerçant dit ce que la fiche affiche vraiment',
+      /\{pastilleBornes\(g\) \? <>Le client lit : « \{pastilleBornes\(g\)\} »<\/> : 'Pas de limite : aucune pastille pour le client'\}/.test(code('app/dashboard/ConfigDashboard.js')))
+  }
   v('🔴 la fiche et l’encodage affichent les groupes dans cet ordre',
     code('app/commander/[slug]/page.js').includes('{ordonnerGroupes(groupes).map(g => {')
     && code('app/dashboard/ModalNouvelleCommande.js').includes('{ordonnerGroupes(groupes[enOptions.id] || []).map(g => {'))

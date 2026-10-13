@@ -39,7 +39,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
-import { SELECT_GROUPES_AVEC_VALEURS, libelleBornes, bornesDepuisSaisie, groupeDesTailles, lignesPrixTaille, resumePrixTaille } from '@/lib/options-choix'
+import { SELECT_GROUPES_AVEC_VALEURS, pastilleBornes, bornesDepuisSaisie, groupeDesTailles, lignesPrixTaille, resumePrixTaille } from '@/lib/options-choix'
 import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
@@ -3264,7 +3264,9 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
                   ? <button style={{ ...s.btn, ...s.btnPrimary, padding: '4px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => saveBornes(g)} disabled={reglageEnCours}>
                       Enregistrer{reglageEnCours && <DotsAttente couleur="#fff" taille={4} label="Enregistrement"/>}
                     </button>
-                  : <span style={{ color: T.muted }}>Le client lit : « {libelleBornes(g)} »</span>}
+                  // ⚠️ CE QUE LA FICHE AFFICHE VRAIMENT (13/10) : la pastille
+                  // n'apparaît que pour une vraie limite (`pastilleBornes`).
+                  : <span style={{ color: T.muted }}>{pastilleBornes(g) ? <>Le client lit : « {pastilleBornes(g)} »</> : 'Pas de limite : aucune pastille pour le client'}</span>}
               </div>
             )
           })()}

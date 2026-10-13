@@ -23,7 +23,7 @@ import { creneauRetraitHorsHoraires } from '@/lib/ouverture'
 import { COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
-import { prixTailleDesGroupes, prixDeValeur, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes } from '@/lib/options-choix'
+import { prixTailleDesGroupes, prixDeValeur, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes } from '@/lib/options-choix'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
 import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
@@ -434,7 +434,11 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                 return (
                 <div key={g.id} style={{ marginBottom: 8 }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: T.deep, margin: '0 0 4px' }}>
-                    {g.nom} <span style={{ fontWeight: 600, color: T.muted }}>· {libelleBornes(g).toLowerCase()}{bornesChoix(g).min > 0 ? ', obligatoire' : ''}</span>
+                    {/* (13/10, Alex) Seulement ce qui informe : « obligatoire »
+                        et une vraie limite, comme sur la fiche. */}
+                    {g.nom} {(bornesChoix(g).min > 0 || pastilleBornes(g)) && (
+                      <span style={{ fontWeight: 600, color: T.muted }}>· {[bornesChoix(g).min > 0 ? 'obligatoire' : null, pastilleBornes(g)?.toLowerCase()].filter(Boolean).join(', ')}</span>
+                    )}
                   </p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {(g.valeurs || []).map(v => {

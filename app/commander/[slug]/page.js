@@ -42,7 +42,7 @@ import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { zoneCouverte, fraisLivraison as regleFraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
-import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes } from '@/lib/options-choix'
+import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes, afficheEnRond } from '@/lib/options-choix'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
@@ -246,17 +246,24 @@ function OptionsSelector({ article, groupes, onAjouter }) {
       {/* Ni « ton » ni « ta » : le genre de l'article est inconnu (« ton
           Brochette », vu par Alex le 11/10). Libellé choisi par Alex. */}
       <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Ta personnalisation : {article.nom}</p>
-      {/* (13/10, Alex) La taille d'abord : elle fixe le prix des suppléments. */}
+      {/* (13/10, Alex) La taille d'abord (elle fixe le prix des suppléments),
+          puis les groupes obligatoires, puis les facultatifs. */}
       {ordonnerGroupes(groupes).map(g => {
-        // Le rond (radio) quand on n'en prend qu'un, la case sinon.
-        const isUnique = bornesChoix(g).max === 1
+        // Le rond quand on n'en prend qu'un parmi plusieurs, la case sinon
+        // (une option seule et facultative prend une case : `afficheEnRond`).
+        const isUnique = afficheEnRond(g)
+        // ⚠️ PAS DE « CHOISIS-EN UN » (Alex, 13/10 : « il se sent obligé ») :
+        // la pastille ne dit qu'une vraie limite (`pastilleBornes`).
+        const pastille = pastilleBornes(g)
         return (
           <div key={g.id} style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
               <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.85rem' }}>{g.nom}</p>
-              <span style={{ fontSize: '0.68rem', fontWeight: 800, background: isUnique ? T.deep : T.pale, color: isUnique ? '#fff' : T.deep, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                {libelleBornes(g)}
-              </span>
+              {pastille && (
+                <span style={{ fontSize: '0.68rem', fontWeight: 800, background: T.pale, color: T.deep, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {pastille}
+                </span>
+              )}
               {bornesChoix(g).min > 0 && <span style={{ fontSize: '0.68rem', fontWeight: 800, background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Obligatoire</span>}
             </div>
             {erreurs[g.id] && <p role="alert" style={{ fontSize: '0.72rem', color: '#DC2626', marginBottom: 4, fontWeight: 700 }}>{erreurs[g.id]}</p>}

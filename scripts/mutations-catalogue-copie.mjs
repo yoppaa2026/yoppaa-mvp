@@ -477,6 +477,12 @@ const MUTATIONS = [
     fichier: ECRAN,
     de: '<Copy size={14} strokeWidth={1.8} color={T.bgPanel}/> Dupliquer',
     vers: '<Copy size={14} strokeWidth={1.8} color={T.bgPanel}/>' },
+
+  // ─── 13/10 : le nombre de choix voyage avec le groupe ────────────────────
+  { nom: '🔴 une copie de groupe perd le nombre de choix',
+    fichier: 'lib/catalogue-copie.js',
+    de: '      choix_min: Number.isInteger(groupe.choix_min) ? groupe.choix_min : null,',
+    vers: '      choix_min: null,' },
 ]
 
 const lancer = (banc = BANC) => {

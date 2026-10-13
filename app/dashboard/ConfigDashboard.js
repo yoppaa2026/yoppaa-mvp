@@ -39,6 +39,7 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
+import { SELECT_GROUPES_AVEC_VALEURS, libelleBornes, bornesDepuisSaisie, groupeDesTailles, lignesPrixTaille, resumePrixTaille } from '@/lib/options-choix'
 import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
@@ -2869,9 +2870,56 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
 
   async function fetchGroupes() {
     setLoading(true)
-    const { data: gData } = await supabase.from('article_options_groupes').select('*, valeurs:article_options_valeurs(*)').eq('article_id', articleId).order('created_at')
+    // (13/10) Avec les prix par taille de chaque option, lien nommé.
+    const { data: gData } = await supabase.from('article_options_groupes').select(SELECT_GROUPES_AVEC_VALEURS).eq('article_id', articleId).order('created_at')
     setGroupes(gData || [])
     setLoading(false)
+  }
+
+  // ─── LE NOMBRE DE CHOIX ET LE PRIX PAR TAILLE (13/10) ────────────────────
+  // « Calzone : 3 ingrédients au choix » ; « charcuterie 1,50 € en M, 2 € en
+  // L, 3 € en XL » (menu d'une pizzeria). Les saisies sont contrôlées par les
+  // mêmes bornes que la base (`lib/options-choix.js`).
+  const [bornesForms, setBornesForms] = useState({})
+  const [prixTailleDe, setPrixTailleDe] = useState(null) // id de l'option réglée
+  const [prixTailleForm, setPrixTailleForm] = useState({})
+  const [reglageEnCours, setReglageEnCours] = useState(false)
+
+  async function saveBornes(g) {
+    if (reglageEnCours) return
+    const f = bornesForms[g.id] || {}
+    const r = bornesDepuisSaisie(f.min ?? g.choix_min ?? '', f.max ?? g.choix_max ?? '')
+    if (!r.ok) { toast(r.error, 'error'); return }
+    setReglageEnCours(true)
+    const { error } = await supabase.from('article_options_groupes').update({ choix_min: r.choix_min, choix_max: r.choix_max }).eq('id', g.id)
+    setReglageEnCours(false)
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    setBornesForms(p => ({ ...p, [g.id]: undefined }))
+    toast('Nombre de choix enregistré'); apresEcriture()
+  }
+
+  function ouvrirPrixTaille(v) {
+    if (prixTailleDe === v.id) { setPrixTailleDe(null); return }
+    setPrixTailleDe(v.id)
+    setPrixTailleForm(Object.fromEntries((v.prix_taille || []).map(p => [p.taille_valeur_id, String(p.prix).replace('.', ',')])))
+  }
+
+  // ⚠️ ON REMPLACE LES PRIX DE CETTE OPTION, ET SEULEMENT CEUX-LÀ : les
+  // lignes de l'option sont effacées puis réécrites. Une case vide = le prix
+  // unique s'applique pour cette taille.
+  async function savePrixTaille(v) {
+    if (reglageEnCours) return
+    const r = lignesPrixTaille(v.id, prixTailleForm)
+    if (!r.ok) { toast(r.error, 'error'); return }
+    setReglageEnCours(true)
+    const { error: errDel } = await supabase.from('article_options_prix_taille').delete().eq('valeur_id', v.id)
+    const { error: errIns } = errDel || r.lignes.length === 0
+      ? { error: null }
+      : await supabase.from('article_options_prix_taille').insert(r.lignes)
+    setReglageEnCours(false)
+    if (errDel || errIns) { toast(`Erreur : ${(errDel || errIns).message}`, 'error'); return }
+    setPrixTailleDe(null)
+    toast(r.lignes.length ? 'Prix par taille enregistrés' : 'Prix unique rétabli'); apresEcriture()
   }
 
   // 🔴 LE GROUPE « NE SE RATTACHAIT PAS » À L'ARTICLE (Alex, 10/10). Il était
@@ -3132,15 +3180,89 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
               </div>
             )
           })()}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-            {(g.valeurs || []).map(v => (
-              <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 8px 3px 10px', fontSize: 12 }}>
-                <span style={{ color: T.ink, fontWeight: 600 }}>{v.nom}</span>
-                {v.prix_supplement > 0 && <span style={{ color: T.main, fontSize: 11, fontWeight: 700 }}>+{euros(v.prix_supplement)}</span>}
-                <button onClick={() => deleteValeur(v.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
-              </span>
-            ))}
-          </div>
+          {/* (13/10) LE NOMBRE DE CHOIX, seulement là où il a un sens : un
+              groupe à plusieurs choix (« 3 ingrédients au choix »). */}
+          {g.type !== 'unique' && (() => {
+            const f = bornesForms[g.id] || {}
+            const minVal = f.min ?? (g.choix_min ?? '')
+            const maxVal = f.max ?? (g.choix_max ?? '')
+            const change = f.min !== undefined || f.max !== undefined
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8, fontSize: 12, color: T.ink }}>
+                <span style={{ fontWeight: 700 }}>Nombre de choix :</span>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>au moins
+                  <input type="number" min="0" max="30" value={minVal} aria-label={`Minimum de choix pour ${g.nom}`}
+                    onChange={e => setBornesForms(p => ({ ...p, [g.id]: { ...p[g.id], min: e.target.value } }))}
+                    style={{ ...s.input, width: 52, fontSize: 12, padding: '4px 6px', textAlign: 'center' }}/>
+                </label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>au plus
+                  <input type="number" min="1" max="30" value={maxVal} aria-label={`Maximum de choix pour ${g.nom}`}
+                    onChange={e => setBornesForms(p => ({ ...p, [g.id]: { ...p[g.id], max: e.target.value } }))}
+                    style={{ ...s.input, width: 52, fontSize: 12, padding: '4px 6px', textAlign: 'center' }}/>
+                </label>
+                {change
+                  ? <button style={{ ...s.btn, ...s.btnPrimary, padding: '4px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => saveBornes(g)} disabled={reglageEnCours}>
+                      Enregistrer{reglageEnCours && <DotsAttente couleur="#fff" taille={4} label="Enregistrement"/>}
+                    </button>
+                  : <span style={{ color: T.muted }}>Le client lit : « {libelleBornes(g)} »</span>}
+              </div>
+            )
+          })()}
+          {(() => {
+            // (13/10) LE PRIX PAR TAILLE : seulement s'il existe un AUTRE
+            // groupe de tailles (un seul choix, plusieurs valeurs).
+            const tailles = groupeDesTailles(groupes, g.id)
+            const reglable = !!tailles && g.type !== 'unique'
+            const vEdit = (g.valeurs || []).find(v => v.id === prixTailleDe)
+            return (
+              <>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                  {(g.valeurs || []).map(v => {
+                    const resume = tailles ? resumePrixTaille(v, tailles.valeurs) : null
+                    return (
+                      <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${prixTailleDe === v.id ? T.main : T.hairline}`, borderRadius: 100, padding: '3px 8px 3px 10px', fontSize: 12 }}>
+                        <span style={{ color: T.ink, fontWeight: 600 }}>{v.nom}</span>
+                        {resume
+                          ? <span style={{ color: T.main, fontSize: 11, fontWeight: 700 }}>{resume}</span>
+                          : v.prix_supplement > 0 && <span style={{ color: T.main, fontSize: 11, fontWeight: 700 }}>+{euros(v.prix_supplement)}</span>}
+                        {reglable && (
+                          <button onClick={() => ouvrirPrixTaille(v)} title={`Prix de « ${v.nom} » selon la taille`}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.main, fontSize: 11, fontWeight: 800, padding: '0 2px', fontFamily: 'inherit' }}>
+                            € / {tailles.nom.toLowerCase()}
+                          </button>
+                        )}
+                        <button onClick={() => deleteValeur(v.id)} aria-label={`Supprimer ${v.nom}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
+                      </span>
+                    )
+                  })}
+                </div>
+                {reglable && vEdit && (
+                  <div style={{ background: '#FAFAFA', borderRadius: 10, padding: 10, marginBottom: 8, border: `1.5px solid ${T.main}` }}>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: T.ink, margin: '0 0 6px' }}>
+                      Prix de « {vEdit.nom} » selon {tailles.nom.toLowerCase()} <span style={{ fontWeight: 500, color: T.muted }}>(vide = {euros(Number(vEdit.prix_supplement || 0))}, son prix habituel)</span>
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                      {(tailles.valeurs || []).map(t => (
+                        <label key={t.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: T.ink, fontWeight: 600 }}>
+                          {t.nom}
+                          <input inputMode="decimal" value={prixTailleForm[t.id] ?? ''} placeholder={String(Number(vEdit.prix_supplement || 0).toFixed(2)).replace('.', ',')}
+                            onChange={e => setPrixTailleForm(p => ({ ...p, [t.id]: e.target.value }))}
+                            aria-label={`Prix de ${vEdit.nom} en ${t.nom}`}
+                            style={{ ...s.input, width: 64, fontSize: 12, padding: '4px 6px', textAlign: 'center' }}/> €
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button style={{ ...s.btn, ...s.btnPrimary, padding: '5px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }} onClick={() => savePrixTaille(vEdit)} disabled={reglageEnCours}>
+                        Enregistrer{reglageEnCours && <DotsAttente couleur="#fff" taille={4} label="Enregistrement"/>}
+                      </button>
+                      <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 12px', fontSize: 12 }} onClick={() => setPrixTailleDe(null)}>Annuler</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          })()}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input value={valeursForms[g.id]?.nom || ''} onChange={e => setValeursForms(p => ({ ...p, [g.id]: { ...p[g.id], nom: e.target.value } }))}
               placeholder="Nouvelle option..." onKeyDown={e => e.key === 'Enter' && addValeur(g.id)}

@@ -256,6 +256,10 @@ const v = (nom, cond, detail = '') => {
   v('un type inconnu retombe sur le choix unique',
     copiesDuGroupe({ nom: 'X', type: 'nawak', valeurs: [] }, [2]).groupes[0].type === 'unique')
   v('l’obligation suit', groupes.every(g => g.obligatoire === true))
+  // (13/10) Le nombre de choix suit aussi, dans les deux sens (réglé, vide).
+  const calzone = copiesDuGroupe({ nom: 'Ingrédients', type: 'multiple', choix_min: 3, choix_max: 3, valeurs: [] }, [2]).groupes[0]
+  v('🔴 « 3 ingrédients au choix » reste 3 sur la copie', calzone.choix_min === 3 && calzone.choix_max === 3, JSON.stringify(calzone))
+  v('un groupe sans nombre de choix reste sans limite', groupes.every(g => g.choix_min === null && g.choix_max === null))
   v('aucune copie n’emporte l’identifiant du groupe source',
     groupes.every(g => g.id === undefined))
 

@@ -163,6 +163,30 @@ v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, 
   v('🔴 un groupe plein refuse un choix de plus, et le dit', quatrieme.plein === true && quatrieme.selections.gI.length === 3)
   v('un choix unique remplace le précédent', OC.basculerValeur({ gT: [V.tM] }, gTaille, V.tL).selections.gT.map(x => x.id).join() === 'tL')
   v('décocher libère la place', OC.basculerValeur(sel, gIngr, V.i1).selections.gI.length === 2)
+
+  // ─── LE RÉGLAGE DU COMMERÇANT : mêmes bornes que la base ───────────────
+  const b = OC.bornesDepuisSaisie
+  v('« exactement 3 » : 3 et 3', JSON.stringify(b('3', '3')) === JSON.stringify({ ok: true, choix_min: 3, choix_max: 3 }))
+  v('vide = sans limite ; 0 au minimum = pas de minimum', JSON.stringify(b('', '')) === JSON.stringify({ ok: true, choix_min: null, choix_max: null })
+    && b('0', '2').choix_min === null && b('0', '2').choix_max === 2)
+  v('🔴 refusés comme la base les refuserait : min > max, max à 0, au-delà de 30, pas un entier',
+    !b('4', '3').ok && !b('', '0').ok && !b('31', '').ok && !b('', '31').ok && !b('2,5', '').ok && !b('-1', '').ok)
+  const tailleDe = OC.groupeDesTailles(avecPT.length ? [
+    { ...gTaille, valeurs: avecPT.filter(x => x.groupe_id === 'gT') },
+    { ...gSupp, valeurs: avecPT.filter(x => x.groupe_id === 'gS') },
+    { id: 'gSauce', nom: 'Sauce', type: 'unique', valeurs: [{ id: 'a' }, { id: 'b' }] },
+  ] : [], 'gS')
+  v('🔴 le groupe des tailles est trouvé (un seul choix, nommé « Taille »), pas la sauce', tailleDe?.id === 'gT', JSON.stringify(tailleDe?.id))
+  v('un groupe ne se règle pas sur lui-même ; sans tailles, rien', OC.groupeDesTailles([{ ...gTaille, valeurs: [{}, {}] }], 'gT') === null)
+  v('🔴 un groupe à PLUSIEURS choix n’est jamais le groupe des tailles, même nommé « Taille »',
+    OC.groupeDesTailles([{ id: 'gM', nom: 'Tailles', type: 'multiple', valeurs: [{}, {}] }, { id: 'gU', nom: 'Format', type: 'unique', valeurs: [{}, {}] }])?.id === 'gU')
+  const lp = OC.lignesPrixTaille('sJambon', { tL: '2', tXL: '3,00', tM: '' })
+  v('🔴 les prix saisis deviennent des lignes ; une case vide = prix unique pour cette taille',
+    lp.ok && JSON.stringify(lp.lignes) === JSON.stringify([{ valeur_id: 'sJambon', taille_valeur_id: 'tL', prix: 2 }, { valeur_id: 'sJambon', taille_valeur_id: 'tXL', prix: 3 }]), JSON.stringify(lp))
+  v('🔴 un prix illisible ou absurde est refusé', !OC.lignesPrixTaille('x', { t: 'deux' }).ok && !OC.lignesPrixTaille('x', { t: '600' }).ok && !OC.lignesPrixTaille('x', { t: '1,505' }).ok)
+  v('le résumé dit les prix par taille (le prix unique là où rien n’est réglé)',
+    OC.resumePrixTaille(V.sJambon, [{ id: 'tM', nom: 'M' }, { id: 'tL', nom: 'L' }, { id: 'tXL', nom: 'XL' }]) === 'M 1,50 · L 2,00 · XL 3,00 €'
+    && OC.resumePrixTaille(V.sOeuf, [{ id: 'tM', nom: 'M' }]) === null)
   v('les bornes sans réglage gardent la règle d’avant',
     JSON.stringify(bornesChoix({ obligatoire: true, type: 'multiple' })) === JSON.stringify({ min: 1, max: Infinity })
     && JSON.stringify(bornesChoix({ obligatoire: false, type: 'unique' })) === JSON.stringify({ min: 0, max: 1 })
@@ -249,6 +273,23 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   const catalogue = code('app/api/equipe/commande/catalogue/route.js')
   v('🔴 le catalogue de l’encodage lit le nombre de choix et les prix par taille (lien nommé)',
     catalogue.includes('obligatoire, choix_min, choix_max,') && catalogue.includes('prix_taille:article_options_prix_taille!article_options_prix_taille_valeur_id_fkey(taille_valeur_id, prix)'))
+
+  // (13/10) LE RÉGLAGE DU COMMERÇANT
+  const config = code('app/dashboard/ConfigDashboard.js')
+  const iOA = config.indexOf('function OptionsArticle(')
+  const oa = iOA === -1 ? '' : config.slice(iOA, config.indexOf('\nfunction ', iOA + 10))
+  v('🔴 l’écran des options lit les prix par taille (constante partagée, lien nommé)',
+    /\.from\('article_options_groupes'\)\.select\(SELECT_GROUPES_AVEC_VALEURS\)\.eq\('article_id', articleId\)/.test(oa))
+  v('🔴 le nombre de choix passe par le contrôle partagé avant d’être écrit',
+    /const r = bornesDepuisSaisie\(/.test(oa) && /if \(!r\.ok\) \{ toast\(r\.error, 'error'\); return \}\s*setReglageEnCours\(true\)\s*const \{ error \} = await supabase\.from\('article_options_groupes'\)\.update\(\{ choix_min: r\.choix_min, choix_max: r\.choix_max \}\)/.test(oa))
+  v('🔴 les prix par taille : contrôlés, puis ceux de CETTE option remplacés, et l’erreur se dit',
+    /const r = lignesPrixTaille\(v\.id, prixTailleForm\)/.test(oa)
+    && /\.from\('article_options_prix_taille'\)\.delete\(\)\.eq\('valeur_id', v\.id\)/.test(oa)
+    && /\.from\('article_options_prix_taille'\)\.insert\(r\.lignes\)/.test(oa)
+    && /if \(errDel \|\| errIns\) \{ toast\(/.test(oa))
+  v('le prix par taille ne se propose que s’il existe un groupe de tailles', /const tailles = groupeDesTailles\(groupes, g\.id\)/.test(oa) && /const reglable = !!tailles && g\.type !== 'unique'/.test(oa))
+  v('les boutons d’enregistrement travaillent (points) et ne partent pas deux fois',
+    (oa.match(/disabled=\{reglageEnCours\}/g) || []).length >= 2 && /if \(reglageEnCours\) return/.test(oa))
 
   const rdv = code('app/commander/rdv/[slug]/page.js')
   v('🔴 tunnel rendez-vous : les choix obligatoires (et les nombres minimum) sont lus, et une lecture en échec ferme l’achat de tout',

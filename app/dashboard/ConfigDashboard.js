@@ -3252,10 +3252,13 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
                         {resume
                           ? <span style={{ color: T.main, fontSize: 11, fontWeight: 700 }}>{resume}</span>
                           : v.prix_supplement > 0 && <span style={{ color: T.main, fontSize: 11, fontWeight: 700 }}>+{euros(v.prix_supplement)}</span>}
+                        {/* (13/10, Alex : « je ne comprends pas pour le
+                            groupe taille ») « € / taille » collé au prix se
+                            lisait comme un prix : c'est un BOUTON, il le dit. */}
                         {reglable && (
-                          <button onClick={() => ouvrirPrixTaille(v)} title={`Prix de « ${v.nom} » selon la taille`}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.main, fontSize: 11, fontWeight: 800, padding: '0 2px', fontFamily: 'inherit' }}>
-                            € / {tailles.nom.toLowerCase()}
+                          <button onClick={() => ouvrirPrixTaille(v)} title={`Prix de « ${v.nom} » selon la ${tailles.nom.toLowerCase()}`}
+                            style={{ background: prixTailleDe === v.id ? T.main : T.pale, border: 'none', borderRadius: 100, cursor: 'pointer', color: prixTailleDe === v.id ? '#fff' : T.deep, fontSize: 11, fontWeight: 800, padding: '2px 8px', marginLeft: 2, fontFamily: 'inherit' }}>
+                            Prix par {tailles.nom.toLowerCase()}
                           </button>
                         )}
                         <button onClick={() => deleteValeur(v.id)} aria-label={`Supprimer ${v.nom}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>

@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import {
   lirePrix, cleNom, normaliserLecture, documentsValides, MENU_MAX, PRIX_MAX,
-  TAILLE_MAX_BASE64, OUTIL_CATALOGUE, CONSIGNE_LECTURE,
+  TAILLE_MAX_BASE64, OUTIL_CATALOGUE, CONSIGNE_LECTURE, bornesLues, SUJETS_INFOS,
 } from '../lib/menu-lu.js'
 import { IA_MENU_CONFIG, getIaMenuConfig } from '../lib/plans.js'
 
@@ -93,6 +93,71 @@ v('🔴 chaque article porte une clé unique pour l’écran de relecture',
   new Set(p.categories.flatMap(c => c.articles.map(a => a.cle))).size === p.resume.articles)
 // 5 pizzas (Hawaï rejoint « Pizzas »), 1 menu, 2 boissons ; 3 avec un doute.
 v('le résumé compte les articles et ceux qui ont un doute', p.resume.articles === 8 && p.resume.doutes === 3, JSON.stringify(p.resume))
+
+// ═══ 2 bis) LE FLYER DE LA PIZZERIA (13/10) : CHOIX, TAILLES, COMPRIS ══════
+{
+  const f = normaliserLecture({
+    lisible: true,
+    categories: [{ nom: 'Pizzas', articles: [
+      { nom: 'Margherita', tailles: [{ nom: 'M', prix: 9 }, { nom: 'L', prix: 12 }, { nom: 'XL', prix: 15 }], options: [
+        { nom: 'Suppléments', plusieurs: true, valeurs: [
+          { nom: 'Jambon', prix_par_taille: [{ taille: 'm', prix: 1.5 }, { taille: 'L', prix: '2,50' }, { taille: 'XL', prix: 3.5 }] },
+          { nom: 'Olives', supplement: 1, prix_par_taille: [{ taille: 'XXL', prix: 9 }] },
+        ] },
+      ] },
+      { nom: 'Calzone', prix: 12, options: [
+        { nom: 'Ingrédients compris', choix_min: 1, choix_max: 3, valeurs: [{ nom: 'Jambon' }, { nom: 'Champignons' }, { nom: 'Olives' }, { nom: 'Oignons' }] },
+        { nom: 'Ingrédients en plus', plusieurs: true, valeurs: [{ nom: 'Jambon', supplement: 1 }] },
+        { nom: 'Boisson', obligatoire: true, choix_max: 1, valeurs: [{ nom: 'Coca' }, { nom: 'Eau' }] },
+        { nom: 'Sauce', choix_min: 4, choix_max: 2, valeurs: [{ nom: 'Ail' }] },
+      ] },
+      { nom: 'Focaccia', prix: 6, options: [{ nom: 'Garniture', valeurs: [{ nom: 'Romarin', prix_par_taille: [{ taille: 'L', prix: 1 }] }] }] },
+    ] }],
+    supplements_communs: [{ nom: 'Charcuterie', pour: 'Pizzas', plusieurs: true, valeurs: [{ nom: 'Salami', prix_par_taille: [{ taille: 'M', prix: 1.5 }, { taille: 'L', prix: 2 }] }] }],
+    autres_infos: [{ sujet: 'livraison', texte: 'Livraison gratuite dès 25 €' }, { sujet: 'n_importe_quoi', texte: 'Fermé le lundi' }, { sujet: 'promotion', texte: '   ' }],
+  })
+  const a = (nom) => f.categories[0]?.articles.find(x => x.nom === nom)
+  const supp = a('Margherita')?.groupes.find(g => g.nom === 'Suppléments')
+  const jambon = supp?.valeurs.find(x => x.nom === 'Jambon')
+  v('🔴 un supplément au prix par taille se rattache aux tailles de l’article (nom écrit comme la taille)',
+    JSON.stringify(jambon?.parTaille) === JSON.stringify([{ taille: 'M', prix: 1.5 }, { taille: 'L', prix: 2.5 }, { taille: 'XL', prix: 3.5 }]), JSON.stringify(jambon))
+  v('sans supplément écrit, le prix de la plus petite taille sert de repli', jambon?.supplement === 1.5)
+  const olives = supp?.valeurs.find(x => x.nom === 'Olives')
+  v('🔴 une taille inconnue de l’article est retirée ET signalée',
+    olives && !('parTaille' in olives) && olives.supplement === 1 && a('Margherita').doutes.some(d => /XXL/.test(d)), JSON.stringify(olives))
+  v('🔴 un prix par taille sur un article SANS tailles est retiré et signalé',
+    !('parTaille' in (a('Focaccia')?.groupes[0]?.valeurs[0] || {})) && a('Focaccia').doutes.some(d => /pas de tailles/.test(d)))
+  v('la marque de travail des tailles ne sort pas', !a('Margherita').groupes.some(g => 'estTaille' in g))
+
+  const cal = a('Calzone')
+  const compris = cal?.groupes.find(g => g.nom === 'Ingrédients compris')
+  v('🔴 « entre 1 et 3 » : un choix multiple borné, obligatoire (au moins 1)',
+    compris?.type === 'multiple' && compris.choix_min === 1 && compris.choix_max === 3 && compris.obligatoire === true, JSON.stringify(compris))
+  v('« compris + en plus » : deux groupes distincts gardés',
+    cal?.groupes.some(g => g.nom === 'Ingrédients en plus' && g.type === 'multiple' && g.valeurs[0].supplement === 1))
+  const boisson = cal?.groupes.find(g => g.nom === 'Boisson')
+  v('au plus 1 = un choix unique, sans bornes écrites (comme le formulaire)',
+    boisson?.type === 'unique' && boisson.choix_min === null && boisson.choix_max === null && boisson.obligatoire === true)
+  const sauce = cal?.groupes.find(g => g.nom === 'Sauce')
+  v('🔴 des bornes impossibles (au moins 4, au plus 2) ne sont pas devinées : sans limite, et signalé',
+    sauce?.choix_min === null && sauce.choix_max === null && cal.doutes.some(d => /Nombre de choix illisible pour « Sauce »/.test(d)), JSON.stringify(sauce))
+  v('les bornes se lisent comme la base les accepte',
+    JSON.stringify(bornesLues(0, 3)) === JSON.stringify({ min: null, max: 3 }) && bornesLues(1, 31) === null && bornesLues(2.5, 3) === null && bornesLues('x', 2) === null
+    && JSON.stringify(bornesLues(undefined, undefined)) === JSON.stringify({ min: null, max: null }))
+
+  v('les suppléments communs gardent leurs prix par taille, par NOM (rattachés à la création)',
+    JSON.stringify(f.supplements[0]?.valeurs[0]?.parTaille) === JSON.stringify([{ taille: 'M', prix: 1.5 }, { taille: 'L', prix: 2 }]) && f.supplements[0].type === 'multiple')
+  v('« trouvé aussi sur ton menu » : recopié, sujet inconnu = autre, vide écarté',
+    f.infos.length === 2 && f.infos[0].sujet === 'livraison' && f.infos[1].sujet === 'autre' && SUJETS_INFOS.includes('fidelite'), JSON.stringify(f.infos))
+  v('la consigne dit les deux groupes, le nombre de choix et les prix par taille',
+    /DEUX options, « Ingrédients compris »/.test(CONSIGNE_LECTURE) && /choix_min = 3 et choix_max = 3/.test(CONSIGNE_LECTURE) && /prix_par_taille/.test(CONSIGNE_LECTURE))
+  v('🔴 la consigne interdit de recopier un numéro de téléphone', /Ne recopie jamais un numéro de téléphone/.test(CONSIGNE_LECTURE))
+  const props = OUTIL_CATALOGUE.input_schema.properties
+  const groupeOutil = props.categories.items.properties.articles.items.properties.options.items
+  v('l’outil demande le nombre de choix et les prix par taille',
+    groupeOutil.properties.choix_max?.type === 'integer' && !!groupeOutil.properties.valeurs.items.properties.prix_par_taille
+    && !!props.supplements_communs.items.properties.prix_par_taille === false && !!props.supplements_communs.items.properties.valeurs && !!props.autres_infos)
+}
 
 // ═══ 3) RIEN, OU TROP ═══════════════════════════════════════════════════════
 v('🔴 « lisible » sans un seul article : ce n’est pas lisible', normaliserLecture({ lisible: true, categories: [] }).lisible === false)

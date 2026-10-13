@@ -117,6 +117,7 @@ import { confirme, confirmer } from './PosteConfirmation'
 import { confirmationSimple, confirmationDeuxGestes, confirmationInfo, dureeLecture } from '@/lib/confirmations'
 import SelecteurTypes from '@/app/components/SelecteurTypes'
 import BoutonIaFiche from './BoutonIaFiche'
+import LectureMenu from './LectureMenu'
 import { MIN_DESCRIPTION, descriptionRefusee, jaugeDescription, motsInspirationDescription, MOTS_INSPIRATION_INFOS, astuceRedaction } from '@/lib/fiche-redaction'
 import BandeDefilante from '@/app/components/BandeDefilante'
 // ⚠️ `estFoodTruck` NE SERT PLUS ICI, ET C'EST VOULU. Le métier ne dit pas si
@@ -570,6 +571,7 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showCatForm, setShowCatForm] = useState(false)
+  const [lectureMenu, setLectureMenu] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState({ nom: '', description: '', prix: '', stock_jour: '', actif: true, categorie: '', photo_url: '', vendable: true })
   const [nouvelleCat, setNouvelleCat] = useState('')
@@ -1819,8 +1821,25 @@ function TabMenu({ commercantId, commercant, toast }) {
               <Icon name="plus" size={14}/> {estVitrine ? 'Produit' : 'Article'}
             </button>
           )}
+          {/* LE MENU LU PAR L'IA (13/10) : l'alimentaire d'abord, comme la
+              route ; le commerçant ou l'admin en mode admin. */}
+          {estAlimentaire && subTab === 'articles' && (
+            <button style={{ ...s.btn, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,0.6)' }} onClick={() => { setLectureMenu(true); setShowForm(false); setShowCatForm(false) }}>
+              <Icon name="sparkles" size={14}/> Lire mon menu
+            </button>
+          )}
         </div>
       </div>
+
+      {lectureMenu && (
+        <LectureMenu commercantId={commercantId} commercant={commercant} articlesExistants={articles} categoriesExistantes={categories} tvaRefs={tvaRefs} toast={toast}
+          onFerme={() => setLectureMenu(false)}
+          onCree={(res) => {
+            if (res.listeCategories) setListeCats(res.listeCategories)
+            fetchArticles()
+            noterOptionsTouchees(res.crees.map(c => c.id))
+          }}/>
+      )}
 
       {/* ─── Catalogue en ligne mais rien ne peut être encaissé ───────────────
           Une formule qui ouvre la vente, des produits publiés, et un compte

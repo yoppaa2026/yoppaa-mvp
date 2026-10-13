@@ -22,7 +22,8 @@ import { referenceCommande } from '@/lib/numero-commande'
 import { creneauRetraitHorsHoraires } from '@/lib/ouverture'
 import { COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
-import { construireLignesCommande } from '@/lib/lignes-commande'
+import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
+import { prixTailleDesGroupes, prixDeValeur, libelleBornes, refusDuGroupe, basculerValeur } from '@/lib/options-choix'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
 import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
@@ -111,8 +112,10 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
   const calcul = useMemo(() => panier.length === 0 ? null : construireLignesCommande({
     panier: panier.map(l => ({ id: l.id, quantite: l.quantite, options: l.options })),
     articlesData: articles, optionsValeurs, variantesData: [], dealsData: deals,
+    // (13/10) Le supplément selon la taille, comme au serveur.
+    prixTaille: prixTailleDesGroupes(Object.values(groupes).flat()),
     commercant, regime: REGIME_EMPORTER, dateCommande: date,
-  }), [panier, articles, optionsValeurs, deals, commercant, date])
+  }), [panier, articles, optionsValeurs, deals, commercant, date, groupes])
 
   // ── Les créneaux du jour, avec leur remplissage réel ──────────────────────
   // ⚠️ UN CRÉNEAU TERMINÉ N'EST PAS MONTRÉ (`creneauTermine`), celui en cours
@@ -423,32 +426,40 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
           {enOptions && (
             <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: `1.5px solid ${T.main}`, background: '#FAF7FF' }}>
               <p style={{ fontSize: 15, fontWeight: 800, color: T.ink, margin: '0 0 8px' }}>{enOptions.nom}</p>
-              {(groupes[enOptions.id] || []).map(g => (
+              {(groupes[enOptions.id] || []).map(g => {
+                // (13/10) Nombre de choix et prix selon la taille : mêmes
+                // règles que la fiche et le serveur (`lib/options-choix.js`).
+                const idsChoisis = Object.values(selections).flat().map(x => x.id)
+                const refus = refusDuGroupe(g, (selections[g.id] || []).length)
+                return (
                 <div key={g.id} style={{ marginBottom: 8 }}>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: T.deep, margin: '0 0 4px' }}>{g.nom}{g.obligatoire ? ' (obligatoire)' : ''}</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: T.deep, margin: '0 0 4px' }}>
+                    {g.nom} <span style={{ fontWeight: 600, color: T.muted }}>· {libelleBornes(g).toLowerCase()}{bornesChoix(g).min > 0 ? ', obligatoire' : ''}</span>
+                  </p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {(g.valeurs || []).map(v => {
                       const pris = !!(selections[g.id] || []).find(s => s.id === v.id)
+                      const prix = prixDeValeur(v, idsChoisis)
                       return (
                         <button key={v.id} type="button" aria-pressed={pris}
-                          onClick={() => setSelections(s => {
-                            const cur = s[g.id] || []
-                            if (g.type === 'unique') return { ...s, [g.id]: pris ? [] : [v] }
-                            return { ...s, [g.id]: pris ? cur.filter(x => x.id !== v.id) : [...cur, v] }
-                          })}
+                          onClick={() => setSelections(s => basculerValeur(s, g, v).selections)}
                           style={{ padding: '6px 10px', borderRadius: 100, border: `1.5px solid ${pris ? T.main : T.hairline}`, background: pris ? T.pale : '#fff', color: T.ink, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                          {v.nom}{Number(v.prix_supplement) > 0 ? ` +${euros(Number(v.prix_supplement))}` : ''}
+                          {v.nom}{prix > 0 ? ` +${euros(prix)}` : ''}
                         </button>
                       )
                     })}
                   </div>
+                  {refus && (selections[g.id] || []).length > 0 && (
+                    <p style={{ fontSize: 12, fontWeight: 700, color: '#B45309', margin: '4px 0 0' }}>{refus}</p>
+                  )}
                 </div>
-              ))}
+                )
+              })}
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 <button type="button" onClick={() => setEnOptions(null)}
                   style={{ flex: 1, padding: '8px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
                 <button type="button"
-                  disabled={(groupes[enOptions.id] || []).some(g => g.obligatoire && !(selections[g.id] || []).length)}
+                  disabled={(groupes[enOptions.id] || []).some(g => refusDuGroupe(g, (selections[g.id] || []).length))}
                   onClick={() => {
                     const choix = Object.fromEntries(Object.entries(selections).filter(([, v]) => v.length > 0))
                     ajouter(enOptions, Object.keys(choix).length ? choix : null); setEnOptions(null)

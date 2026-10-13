@@ -81,6 +81,7 @@ import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
 import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
 import ConfirmationAbonnement from './ConfirmationAbonnement'
+import { bornesChoix } from '@/lib/lignes-commande'
 import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, contratQuiVientDEtreAchete,
   abonnementsPourPrestation, expliquerRefusSeance, messageRefusAbonnement, libellePrixSeance,
   trierAbonnementsPourSeance, libelleChoixAbonnement } from '@/lib/abonnements'
@@ -1349,10 +1350,13 @@ export default function CommanderRdvSlug() {
         const ids = (arts || []).map(a => a.id)
         let obligatoires = new Set()
         if (ids.length > 0) {
+          // ⚠️ (13/10) « obligatoire » NE SUFFIT PLUS : un groupe « 3
+          // ingrédients au choix » (`choix_min`) exige aussi un écran
+          // d'options. Même règle que le serveur (`bornesChoix`).
           const { data: grp, error: errGrp } = await supabase
-            .from('article_options_groupes').select('article_id').eq('obligatoire', true).in('article_id', ids)
+            .from('article_options_groupes').select('article_id, obligatoire, type, choix_min, choix_max').in('article_id', ids)
           if (annule) return
-          obligatoires = errGrp ? new Set(ids) : new Set((grp || []).map(g => g.article_id))
+          obligatoires = errGrp ? new Set(ids) : new Set((grp || []).filter(g => bornesChoix(g).min > 0).map(g => g.article_id))
           if (errGrp) console.warn('[rdv fiche] fetch options KO', errGrp.message)
         }
         setProduits((arts || []).map(a => ({ ...a, choix_obligatoire: obligatoires.has(a.id) })))

@@ -16,6 +16,7 @@
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import { construireLignesCommande, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS, SELECT_PRIX_TAILLE, bornesChoix } from '../lib/lignes-commande.js'
+import * as OC from '../lib/options-choix.js'
 
 const RACINE = new URL('../', import.meta.url)
 const lire = (f) => readFileSync(new URL(f, RACINE), 'utf8')
@@ -143,6 +144,25 @@ v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, 
   v('la taille obligatoire reste exigée', !sansTaille.ok && /Choisis « Taille »/.test(sansTaille.error), JSON.stringify(sansTaille))
   const sansPrixTaille = c(['tL', 'sJambon', ...trois], { prixTaille: [] })
   v('sans prix par taille en base : le prix unique, comme avant (9 + 3 + 1,50)', sansPrixTaille.ok && sansPrixTaille.totalCents === 1350)
+  // ─── L'ÉCRAN : mêmes prix, mêmes bornes que le serveur ─────────────────
+  const avecPT = ov.map(x => ({ ...x, prix_taille: pt.filter(p => p.valeur_id === x.id).map(p => ({ taille_valeur_id: p.taille_valeur_id, prix: p.prix })) }))
+  const V = Object.fromEntries(avecPT.map(x => [x.id, x]))
+  v('🔴 l’écran affiche le prix selon la taille déjà choisie (2 € en L, 1,50 € sans taille)',
+    OC.prixDeValeur(V.sJambon, ['tL']) === 2 && OC.prixDeValeur(V.sJambon, ['tXL']) === 3 && OC.prixDeValeur(V.sJambon, []) === 1.5 && OC.prixDeValeur(V.sOeuf, ['tL']) === 1)
+  v('🔴 le supplément affiché = celui du serveur (L : 3 + 2 = 5 €)',
+    OC.supplementDeSelection({ gT: [V.tL], gS: [V.sJambon] }) === 5)
+  v('les prix par taille se remettent à plat depuis les groupes lus',
+    OC.prixTailleDesGroupes([{ valeurs: avecPT }]).length === 2 && OC.prixTailleDesGroupes([{ valeurs: avecPT }])[0].valeur_id === 'sJambon')
+  v('🔴 la pastille dit la règle', OC.libelleBornes(gTaille) === 'Choisis-en un' && OC.libelleBornes(gIngr) === 'Choisis-en 3'
+    && OC.libelleBornes(gSupp) === 'Cumulables' && OC.libelleBornes({ choix_max: 2 }) === 'Jusqu’à 2' && OC.libelleBornes({ choix_min: 1, choix_max: 3 }) === 'Entre 1 et 3')
+  v('🔴 le refus de l’écran = celui du serveur', OC.refusDuGroupe(gIngr, 2) === 'Choisis-en 3 (2 pour l’instant)'
+    && OC.refusDuGroupe(gIngr, 3) === null && OC.refusDuGroupe(gTaille, 0) === 'Choix obligatoire' && OC.refusDuGroupe(gIngr, 4) === '3 au maximum')
+  let sel = {}
+  for (const id of ['i1', 'i2', 'i3']) sel = OC.basculerValeur(sel, gIngr, V[id]).selections
+  const quatrieme = OC.basculerValeur(sel, gIngr, V.i4)
+  v('🔴 un groupe plein refuse un choix de plus, et le dit', quatrieme.plein === true && quatrieme.selections.gI.length === 3)
+  v('un choix unique remplace le précédent', OC.basculerValeur({ gT: [V.tM] }, gTaille, V.tL).selections.gT.map(x => x.id).join() === 'tL')
+  v('décocher libère la place', OC.basculerValeur(sel, gIngr, V.i1).selections.gI.length === 2)
   v('les bornes sans réglage gardent la règle d’avant',
     JSON.stringify(bornesChoix({ obligatoire: true, type: 'multiple' })) === JSON.stringify({ min: 1, max: Infinity })
     && JSON.stringify(bornesChoix({ obligatoire: false, type: 'unique' })) === JSON.stringify({ min: 0, max: 1 })
@@ -203,14 +223,37 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     && fiche.includes('onAjouter={peutCommander ? (a, opts = null) => ajouterAuPanier(a, opts) : null}'))
   v('le titre du choix ne présume pas du genre de l’article (« Ta personnalisation : … », choisi par Alex ; jamais « Personnalise ton »)',
     fiche.includes('>Ta personnalisation : {article.nom}</p>') && !/Personnalise (ton|ta) \{article\.nom\}/.test(fiche))
-  v('🔴 panier venu du rendez-vous : un article à choix obligatoire reste derrière, et le client est prévenu',
-    fiche.includes('if ((optionsParArticle[article.id] || []).some(g => g.obligatoire)) { ignores.push(article.nom); continue }')
+  // ⚠️ RÉORIENTÉES LE 13/10 : « obligatoire » passe par `bornesChoix` (un
+  // nombre de choix minimum compte aussi). Même but, même garde.
+  v('🔴 panier venu du rendez-vous : un article à choix obligatoire (ou à nombre minimum) reste derrière, et le client est prévenu',
+    fiche.includes('if ((optionsParArticle[article.id] || []).some(g => bornesChoix(g).min > 0)) { ignores.push(article.nom); continue }')
     && fiche.includes('setPanierRepris({ repris, ignores })'))
+  // (13/10) La fiche : groupes lus AVEC les prix par taille (lien nommé), le
+  // choix passe par le module partagé, le total aussi.
+  v('🔴 fiche : groupes lus avec leurs prix par taille, par la constante partagée (lien nommé)',
+    (fiche.match(/\.select\(SELECT_GROUPES_AVEC_VALEURS\)/g) || []).length === 2 && !fiche.includes("'*, valeurs:article_options_valeurs(*)'")
+    && OC.SELECT_GROUPES_AVEC_VALEURS.includes('!article_options_prix_taille_valeur_id_fkey('))
+  v('🔴 fiche : le choix suit les bornes du serveur et le prix selon la taille',
+    /const r = basculerValeur\(selections, groupe, valeur\)/.test(fiche)
+    && /const refus = refusDuGroupe\(g, \(selections\[g\.id\] \|\| \[\]\)\.length\)\s*if \(refus\) \{ errs\[g\.id\] = refus; ok = false \}/.test(fiche)
+    && /setErreurs\(errs\)\s*if \(!ok\) return/.test(fiche)
+    && /const supplement = supplementDeSelection\(selections\)/.test(fiche) && /prixDeValeur\(v, idsChoisis\)/.test(fiche))
+  v('🔴 fiche : le total à l’écran reçoit les prix par taille, et plus aucun prix unique additionné à la main',
+    /prixTaille: prixTailleDesGroupes\(Object\.values\(optionsParArticle \|\| \{\}\)\.flat\(\)\),/.test(fiche)
+    && !/prix_supplement\s*\|\|\s*0\), 0\)/.test(fiche) && (fiche.match(/supplementDeSelection\(/g) || []).length >= 4)
+  const modale = code('app/dashboard/ModalNouvelleCommande.js')
+  v('🔴 encodage manuel : mêmes bornes, même prix selon la taille, même total que le serveur',
+    /prixTaille: prixTailleDesGroupes\(Object\.values\(groupes\)\.flat\(\)\),/.test(modale)
+    && /basculerValeur\(s, g, v\)\.selections/.test(modale) && /const prix = prixDeValeur\(v, idsChoisis\)/.test(modale)
+    && /disabled=\{\(groupes\[enOptions\.id\] \|\| \[\]\)\.some\(g => refusDuGroupe\(g, \(selections\[g\.id\] \|\| \[\]\)\.length\)\)\}/.test(modale))
+  const catalogue = code('app/api/equipe/commande/catalogue/route.js')
+  v('🔴 le catalogue de l’encodage lit le nombre de choix et les prix par taille (lien nommé)',
+    catalogue.includes('obligatoire, choix_min, choix_max,') && catalogue.includes('prix_taille:article_options_prix_taille!article_options_prix_taille_valeur_id_fkey(taille_valeur_id, prix)'))
 
   const rdv = code('app/commander/rdv/[slug]/page.js')
-  v('🔴 tunnel rendez-vous : les choix obligatoires sont lus, et une lecture en échec ferme l’achat de tout',
-    rdv.includes(".from('article_options_groupes').select('article_id').eq('obligatoire', true).in('article_id', ids)")
-    && rdv.includes('obligatoires = errGrp ? new Set(ids) : new Set((grp || []).map(g => g.article_id))'))
+  v('🔴 tunnel rendez-vous : les choix obligatoires (et les nombres minimum) sont lus, et une lecture en échec ferme l’achat de tout',
+    rdv.includes(".from('article_options_groupes').select('article_id, obligatoire, type, choix_min, choix_max').in('article_id', ids)")
+    && rdv.includes('obligatoires = errGrp ? new Set(ids) : new Set((grp || []).filter(g => bornesChoix(g).min > 0).map(g => g.article_id))'))
   v('🔴 tunnel rendez-vous : pas d’achat d’un article à choix obligatoire (tuile, ajout, reprise)',
     rdv.includes('const achetable = produitsAchetables && !p.est_vitrine && Number(p.prix) > 0 && !p.choix_obligatoire')
     && rdv.includes('if (article?.choix_obligatoire) return')

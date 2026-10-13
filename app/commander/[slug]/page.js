@@ -41,7 +41,8 @@ import { trierArticles } from '@/lib/ordre-articles'
 import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { zoneCouverte, fraisLivraison as regleFraisLivraison, minimumAtteint } from '@/lib/livraison'
-import { construireLignesCommande } from '@/lib/lignes-commande'
+import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
+import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur } from '@/lib/options-choix'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
@@ -221,42 +222,43 @@ function SkeletonArticle() {
 function OptionsSelector({ article, groupes, onAjouter }) {
   const [selections, setSelections] = useState({})
   const [erreurs, setErreurs] = useState({})
+  // (13/10) Le nombre de choix et le prix selon la taille : la règle vit dans
+  // `lib/options-choix.js`, avec les bornes du serveur (`bornesChoix`).
   function toggleValeur(groupe, valeur) {
-    setSelections(prev => {
-      const current = prev[groupe.id] || []
-      if (groupe.type === 'unique') return { ...prev, [groupe.id]: [valeur] }
-      const exists = current.find(v => v.id === valeur.id)
-      return { ...prev, [groupe.id]: exists ? current.filter(v => v.id !== valeur.id) : [...current, valeur] }
-    })
-    setErreurs(p => ({ ...p, [groupe.id]: false }))
+    const r = basculerValeur(selections, groupe, valeur)
+    setSelections(r.selections)
+    setErreurs(p => ({ ...p, [groupe.id]: r.plein ? libelleBornes(groupe) : null }))
   }
   function valider() {
     const errs = {}; let ok = true
     groupes.forEach(g => {
-      if (g.obligatoire && (!selections[g.id] || selections[g.id].length === 0)) { errs[g.id] = true; ok = false }
+      const refus = refusDuGroupe(g, (selections[g.id] || []).length)
+      if (refus) { errs[g.id] = refus; ok = false }
     })
     setErreurs(errs)
     if (!ok) return
     onAjouter(article, Object.keys(selections).length > 0 ? selections : null)
   }
-  const supplement = Object.values(selections).flat().reduce((acc, v) => acc + (v.prix_supplement||0), 0)
+  const idsChoisis = Object.values(selections).flat().map(v => v.id)
+  const supplement = supplementDeSelection(selections)
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
       {/* Ni « ton » ni « ta » : le genre de l'article est inconnu (« ton
           Brochette », vu par Alex le 11/10). Libellé choisi par Alex. */}
       <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Ta personnalisation : {article.nom}</p>
       {groupes.map(g => {
-        const isUnique = g.type === 'unique'
+        // Le rond (radio) quand on n'en prend qu'un, la case sinon.
+        const isUnique = bornesChoix(g).max === 1
         return (
           <div key={g.id} style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
               <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.85rem' }}>{g.nom}</p>
-              <span style={{ fontSize: '0.6rem', fontWeight: 800, background: isUnique ? T.deep : T.pale, color: isUnique ? '#fff' : T.deep, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                {isUnique ? 'Choisis-en un' : 'Cumulables'}
+              <span style={{ fontSize: '0.68rem', fontWeight: 800, background: isUnique ? T.deep : T.pale, color: isUnique ? '#fff' : T.deep, padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {libelleBornes(g)}
               </span>
-              {g.obligatoire && <span style={{ fontSize: '0.6rem', fontWeight: 800, background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Obligatoire</span>}
+              {bornesChoix(g).min > 0 && <span style={{ fontSize: '0.68rem', fontWeight: 800, background: '#FEE2E2', color: '#DC2626', padding: '2px 8px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Obligatoire</span>}
             </div>
-            {erreurs[g.id] && <p style={{ fontSize: '0.72rem', color: '#DC2626', marginBottom: 4, fontWeight: 700 }}>Choix obligatoire</p>}
+            {erreurs[g.id] && <p role="alert" style={{ fontSize: '0.72rem', color: '#DC2626', marginBottom: 4, fontWeight: 700 }}>{erreurs[g.id]}</p>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {(g.valeurs||[]).map(v => {
                 const selected = !!(selections[g.id]||[]).find(s => s.id === v.id)
@@ -271,8 +273,10 @@ function OptionsSelector({ article, groupes, onAjouter }) {
                       )}
                     </span>
                     <span style={{ flex: 1, fontWeight: selected ? 700 : 600, color: T.ink, fontSize: '0.85rem' }}>{v.nom}</span>
-                    {v.prix_supplement > 0 && (
-                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.78rem' }}>+{euros(Number(v.prix_supplement))}</span>
+                    {/* (13/10) Le prix SELON LA TAILLE déjà choisie : la
+                        charcuterie affiche 2 € dès que « L » est cochée. */}
+                    {prixDeValeur(v, idsChoisis) > 0 && (
+                      <span style={{ fontWeight: 800, color: T.main, fontSize: '0.78rem' }}>+{euros(prixDeValeur(v, idsChoisis))}</span>
                     )}
                   </button>
                 )
@@ -399,7 +403,8 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
       <div style={{ padding: '0.5rem 1.25rem' }}>
         {items.map(([key, item], index) => {
           const opts = item.variante?.label || labelOptions(item.options)
-          const prixUnitaire = item.prix + (item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0)
+          // (13/10) Le supplément selon la taille choisie, même règle que le serveur.
+          const prixUnitaire = item.prix + (item.options ? supplementDeSelection(item.options) : 0)
           // FIX STOCK : vérifier la limite par article dans le panier
           // (item à variante : le stock de LA variante fait foi)
           const stockMax = item.variante ? (item.variante.stock ?? Infinity) : (getStockMax ? getStockMax(item.id, { invendu: porteUneFenetre(item.offre) }) : Infinity)
@@ -2024,7 +2029,7 @@ export default function CommanderSlug() {
     if (artIds.length > 0) {
       const { data: groupesData } = await supabase
         .from('article_options_groupes')
-        .select('*, valeurs:article_options_valeurs(*)')
+        .select(SELECT_GROUPES_AVEC_VALEURS)
         .in('article_id', artIds)
         .order('created_at')
       ;(groupesData||[]).forEach(g => {
@@ -2428,7 +2433,7 @@ export default function CommanderSlug() {
           .in('article_id', artIds),
         supabase
           .from('article_options_groupes')
-          .select('*, valeurs:article_options_valeurs(*)')
+          .select(SELECT_GROUPES_AVEC_VALEURS)
           .in('article_id', artIds)
           .order('created_at'),
       ])
@@ -2701,7 +2706,8 @@ export default function CommanderSlug() {
       // 🔴 (11/10) UN CHOIX OBLIGATOIRE NE SE DEVINE PAS : l'article venu du
       // rendez-vous arrivait sans ses options, et le serveur le refuse
       // désormais. Il reste derrière, et le client est prévenu.
-      if ((optionsParArticle[article.id] || []).some(g => g.obligatoire)) { ignores.push(article.nom); continue }
+      // (13/10) Et un nombre de choix minimum vaut un choix obligatoire.
+      if ((optionsParArticle[article.id] || []).some(g => bornesChoix(g).min > 0)) { ignores.push(article.nom); continue }
       const stockMax = getStockMax(article.id)
       const qte = stockMax === Infinity ? l.quantite : Math.min(l.quantite, stockMax)
       if (qte <= 0) continue
@@ -2813,6 +2819,9 @@ export default function CommanderSlug() {
         panier: items,
         articlesData: articles,
         optionsValeurs,
+        // (13/10) Le prix des suppléments selon la taille : sans lui, l'écran
+        // annoncerait le prix unique et le serveur facturerait l'autre.
+        prixTaille: prixTailleDesGroupes(Object.values(optionsParArticle || {}).flat()),
         variantesData: Object.values(variantesParArticle || {}).flat(),
         dealsData: dealsTous,
         commercant: commercant || {},
@@ -2832,7 +2841,7 @@ export default function CommanderSlug() {
     const r = calculDuServeur()
     if (r) return r.totalCents
     return Object.values(panier).reduce((acc, i) => {
-      const supplement = i.options ? Object.values(i.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
+      const supplement = i.options ? supplementDeSelection(i.options) : 0
       return acc + Math.round((Number(i.prix) + supplement) * 100) * i.quantite
     }, 0)
   }
@@ -2844,7 +2853,7 @@ export default function CommanderSlug() {
     const r = calculDuServeur()
     const ligne = r?.lignes?.[index]
     if (ligne) return Math.round(Number(ligne.prix_unitaire) * 100) * item.quantite / 100
-    const supplement = item.options ? Object.values(item.options).flat().reduce((s, v) => s + (v.prix_supplement||0), 0) : 0
+    const supplement = item.options ? supplementDeSelection(item.options) : 0
     return Math.round((Number(item.prix) + supplement) * 100) * item.quantite / 100
   }
 

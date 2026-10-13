@@ -258,10 +258,13 @@ const MUTATIONS = [
   // dit que c est fait mais on ne le voit pas, on pense que ca n a pas
   // fonctionne. » Un succes invisible fait recopier, et le groupe se retrouve
   // en double.
+  // ⚠️ ANCRE REPOINTEE LE 13/10 : le panneau ne lit plus lui-meme (45
+  // requetes), il suit le parent ; c'est le PARENT qui doit relire apres une
+  // ecriture.
   { nom: '🔴 le panneau ne relit plus ses groupes apres une copie',
     fichier: ECRAN,
-    de: '  useEffect(() => { fetchGroupes() }, [articleId, version])',
-    vers: '  useEffect(() => { fetchGroupes() }, [articleId])' },
+    de: '  }, [cleArticles, totalTouches])',
+    vers: '  }, [cleArticles])' },
 
   { nom: '🔴 la copie ne nomme plus les articles touches',
     fichier: ECRAN,
@@ -407,11 +410,12 @@ const MUTATIONS = [
   { nom: '🔴 une option ajoutée ne prévient plus le parent : vignette et bibliothèque périmées',
     fichier: ECRAN,
     de: "    toast('Option ajoutée'); apresEcriture()",
-    vers: "    toast('Option ajoutée'); fetchGroupes()" },
+    vers: "    toast('Option ajoutée')" },
+  // ⚠️ ANCRE REPOINTEE LE 13/10 : plus de repli local, le parent relit.
   { nom: '🔴 le chemin après écriture ne prévient plus personne',
     fichier: ECRAN,
-    de: '    if (onCopie) onCopie([articleId])',
-    vers: '    if (false) onCopie([articleId])' },
+    de: '    onCopie?.([articleId])',
+    vers: '    void articleId' },
   // ─── L ORDRE DES ARTICLES (Alex, 10/10) ─────────────────────────────────
   { nom: '🔴 les articles non rangés passent devant les rangés',
     fichier: 'lib/ordre-articles.js',

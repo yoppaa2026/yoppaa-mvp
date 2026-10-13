@@ -33,13 +33,16 @@ import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from 
 // « 8.00€ » dans le même produit, sur la même commande. Deux définitions du
 // format vivaient d'ailleurs ici même, justes toutes les deux, pendant que
 // vingt-cinq autres montants formataient à la main. Une seule source.
-import { euros } from '@/lib/montants'
+import { euros, eurosNus } from '@/lib/montants'
 import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
-import { SELECT_GROUPES_AVEC_VALEURS, pastilleBornes, bornesDepuisSaisie, groupeDesTailles, lignesPrixTaille, resumePrixTaille } from '@/lib/options-choix'
+import {
+  SELECT_GROUPES_AVEC_VALEURS, pastilleBornes, bornesDepuisSaisie, groupeDesTailles, lignesPrixTaille, resumePrixTaille,
+  taillesDesCopies, prixTailleParNom, prixParNomDe, prixTailleDeSaisie, lignesPrixTailleDesCopies,
+} from '@/lib/options-choix'
 import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
@@ -622,19 +625,40 @@ function TabMenu({ commercantId, commercant, toast }) {
   // ⚠️ ET C'EST LA MÊME LECTURE QUE CELLE DE LA BIBLIOTHÈQUE, qui la faisait
   // pour son compte : deux chargements de la même chose finissent toujours par
   // ne plus dire la même chose. Le parent lit, les deux consomment.
+  //
+  // 🔴 13/10 (Alex : « temps de chargement très long pour les groupes »).
+  // Chaque panneau d'article relisait AUSSI ses groupes : 45 articles, 45
+  // requêtes à chaque affichage. Les panneaux lisent désormais ICI.
+  //
+  // 🔴 ET CETTE LECTURE OUBLIAIT LE NOMBRE DE CHOIX ET LES PRIX PAR TAILLE :
+  // la bibliothèque s'en sert pour « Modifier sur 45 articles » et pour
+  // « Appliquer à… ». Un formulaire qui ignore une colonne l'EFFACE : renommer
+  // « Ingrédients compris » aurait écrit « sans limite » sur toutes les copies.
+  // On lit la MÊME forme que le panneau d'un article (`SELECT_GROUPES_AVEC_VALEURS`),
+  // par PAGES (la base coupe à 1 000 lignes sans le dire), dans un ordre TOTAL.
   const [tousLesGroupes, setTousLesGroupes] = useState([])
+  const [groupesCharges, setGroupesCharges] = useState(false)
+  const [erreurGroupes, setErreurGroupes] = useState(false)
   const cleArticles = articles.map(a => a.id).join('|')
   const totalTouches = Object.values(optionsTouchees).reduce((t, n) => t + n, 0)
   useEffect(() => {
     let vivant = true
     async function charger() {
       const ids = articles.map(a => a.id)
-      if (ids.length === 0) { setTousLesGroupes([]); return }
-      const { data } = await supabase
+      if (ids.length === 0) { setTousLesGroupes([]); setGroupesCharges(true); return }
+      const { data, error } = await toutesLesLignes(() => supabase
         .from('article_options_groupes')
-        .select('id, article_id, nom, type, obligatoire, valeurs:article_options_valeurs(*)')
+        .select(SELECT_GROUPES_AVEC_VALEURS)
         .in('article_id', ids)
-      if (vivant) setTousLesGroupes(data || [])
+        .order('created_at')
+        .order('id'))
+      if (!vivant) return
+      // ⚠️ UNE LECTURE RATÉE N'EST PAS « AUCUN GROUPE » : on garde ce qu'on
+      // avait, et on le dit (vide, la bibliothèque et les vignettes mentiraient).
+      if (error) { setErreurGroupes(true); setGroupesCharges(true); return }
+      setErreurGroupes(false)
+      setTousLesGroupes(data || [])
+      setGroupesCharges(true)
     }
     charger()
     return () => { vivant = false }
@@ -1780,7 +1804,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // ⚠️ PAS DE FLÈCHES PENDANT UNE RECHERCHE : la liste affichée n'est plus
     // la catégorie, « monter » n'y voudrait rien dire.
     const position = searchQuery.trim() ? null : positionDansCategorie(articles, a.id)
-    return <ArticleCard key={a.id} a={a} position={position} onDeplacer={deplacerArticle} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} versionOptions={optionsTouchees[String(a.id)] || 0} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir} journeeFinie={journeeFinieAuj} deuxCircuits={deuxCircuits} surCommande={commandesSurCommande[a.id] || {}} venduDepuisSaisie={venduDepuisSaisie[a.id] || 0}/>
+    return <ArticleCard key={a.id} a={a} position={position} onDeplacer={deplacerArticle} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir} journeeFinie={journeeFinieAuj} deuxCircuits={deuxCircuits} surCommande={commandesSurCommande[a.id] || {}} venduDepuisSaisie={venduDepuisSaisie[a.id] || 0}/>
   }
 
   return (
@@ -2392,7 +2416,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                   </div>
                   {variantesCategorie
                     ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-                    : <OptionsArticle articleId={a.id} articles={articles} version={optionsTouchees[String(a.id)] || 0} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+                    : <OptionsArticle articleId={a.id} articles={articles} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
                     <button type="button" aria-label={`Refermer ${a.nom}`}
                       onClick={e => e.currentTarget.closest('details')?.removeAttribute('open')}
@@ -2448,7 +2472,7 @@ function marquerRappelCopieVu() {
 // ⚠️ ET SI LES VALEURS ÉCHOUENT, ON LE DIT SANS TOUT DÉFAIRE. Des groupes
 // vides restent visibles et corrigeables ; un effacement silencieux, lui,
 // laisserait le commerçant croire que rien n'a bougé.
-async function ecrireCopiesDeGroupe(groupe, cibleIds) {
+async function ecrireCopiesDeGroupe(groupe, cibleIds, groupesParArticle = null) {
   const { groupes: aEcrire, valeurs } = copiesDuGroupe(groupe, cibleIds)
   if (aEcrire.length === 0) return { ok: false, erreur: 'Rien à copier.' }
 
@@ -2463,16 +2487,32 @@ async function ecrireCopiesDeGroupe(groupe, cibleIds) {
     if (!groupeId) return
     for (const val of valeurs[i]) lignes.push({ groupe_id: groupeId, ...val })
   })
+  let valeursCreees = []
   if (lignes.length > 0) {
-    const { error: errVal } = await supabase.from('article_options_valeurs').insert(lignes)
+    const { data: vals, error: errVal } = await supabase.from('article_options_valeurs').insert(lignes).select('id, groupe_id, nom')
     if (errVal) {
       return {
         ok: false, partiel: true, combien: crees?.length || 0,
         erreur: `Les groupes sont créés mais leurs options n'ont pas pu être écrites : ${errVal.message}`,
       }
     }
+    valeursCreees = vals || []
   }
-  return { ok: true, combien: crees?.length || aEcrire.length }
+
+  // (13/10) LES PRIX PAR TAILLE VOYAGENT AVEC LE GROUPE : la charcuterie copiée
+  // sur une autre pizza garde « M 1,50 · L 2,00 · XL 3,00 », rattachée aux
+  // tailles DE CETTE pizza (par leur nom). Sans tailles là-bas : prix unique.
+  const prixParNom = groupesParArticle && groupe?.article_id != null
+    ? prixTailleParNom(groupe, groupesParArticle[String(groupe.article_id)] || [])
+    : {}
+  let articlesSansTaille = 0
+  if (Object.keys(prixParNom).length > 0) {
+    const copies = (crees || []).map(c => ({ id: c.id, article_id: c.article_id, valeurs: valeursCreees.filter(v => v.groupe_id === c.id) }))
+    const r = await ecrirePrixTailleDesCopies(copies, groupesParArticle, prixParNom, { remplacer: false })
+    if (!r.ok) return { ok: false, partiel: true, combien: crees?.length || 0, erreur: `Groupes copiés, mais ${r.erreur.charAt(0).toLowerCase()}${r.erreur.slice(1)}` }
+    articlesSansTaille = r.articlesSansTaille
+  }
+  return { ok: true, combien: crees?.length || aEcrire.length, articlesSansTaille }
 }
 
 // ─── ÉCRIRE LA MODIFICATION D'UN GROUPE (10/10) ─────────────────────────────
@@ -2505,6 +2545,31 @@ async function ecrireModificationGroupe(plan) {
   return { ok: true }
 }
 
+// ─── LES PRIX PAR TAILLE, SUR TOUTES LES COPIES D'UN GROUPE (13/10, Alex) ───
+//
+// « Trop de perte de temps sur 45 articles. » Les lignes se calculent par
+// `lignesPrixTailleDesCopies` (la taille et l'option du MÊME article, reliées
+// par le nom de la taille). Écrit par paquets : une adresse avec 180
+// identifiants dépasserait ce qu'un serveur accepte.
+//
+// `remplacer` : les anciens prix des options sont d'abord retirés (une case
+// vide redevient le prix unique). Pour une copie toute neuve, rien à retirer.
+async function ecrirePrixTailleDesCopies(copies, groupesParArticle, prixParNom, { remplacer = true } = {}) {
+  const { valeurIds, lignes, articlesSansTaille } = lignesPrixTailleDesCopies({ copies, groupesParArticle, prixParNom })
+  const paquets = (liste, n) => Array.from({ length: Math.ceil(liste.length / n) }, (_, i) => liste.slice(i * n, i * n + n))
+  if (remplacer) {
+    for (const ids of paquets(valeurIds, 100)) {
+      const { error } = await supabase.from('article_options_prix_taille').delete().in('valeur_id', ids)
+      if (error) return { ok: false, erreur: `Les prix par taille n’ont pas pu être remplacés : ${error.message}` }
+    }
+  }
+  for (const paquet of paquets(lignes, 500)) {
+    const { error } = await supabase.from('article_options_prix_taille').insert(paquet)
+    if (error) return { ok: false, erreur: `Les prix par taille n’ont pas pu être écrits : ${error.message}` }
+  }
+  return { ok: true, articlesSansTaille, lignes: lignes.length }
+}
+
 // ─── LE FORMULAIRE D'ÉDITION D'UN GROUPE, PARTAGÉ (10/10) ───────────────────
 //
 // Un seul formulaire pour les deux portées (décision d'Alex) : la bibliothèque
@@ -2531,29 +2596,63 @@ function ChampsNombreDeChoix({ form, setForm, nomGroupe = '' }) {
   )
 }
 
-function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = {}, toast, onFini, onAnnule }) {
+function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = {}, toast, onFini, onAnnule, avecPrixTaille = false }) {
   const depart = modele || copies[0] || {}
+  // (13/10, Alex) LES PRIX PAR TAILLE, DEPUIS LA BIBLIOTHÈQUE : les tailles de
+  // tous les articles du groupe (par leur nom), et les prix actuels du modèle.
+  const tailles = avecPrixTaille ? taillesDesCopies(copies, groupesParArticle) : []
+  const prixDepart = tailles.length > 0 ? prixTailleParNom(depart, groupesParArticle[String(depart.article_id)] || []) : {}
   const [form, setForm] = useState(() => ({
     nom: depart.nom || '', type: depart.type === 'multiple' ? 'multiple' : 'unique', obligatoire: depart.obligatoire === true,
     // ⚠️ LES VALEURS ACTUELLES, TOUJOURS : un champ absent vaudrait « sans
     // limite », et « Enregistrer » effacerait le « 3 au choix » réglé.
     choix_min: Number.isInteger(depart.choix_min) ? String(depart.choix_min) : '',
     choix_max: Number.isInteger(depart.choix_max) ? String(depart.choix_max) : '',
-    options: (depart.valeurs || []).map(v => ({ origine: v.nom, nom: v.nom, prix_supplement: Number(v.prix_supplement) > 0 ? String(v.prix_supplement).replace('.', ',') : '' })),
+    options: (depart.valeurs || []).map(v => ({
+      origine: v.nom, nom: v.nom, prix_supplement: Number(v.prix_supplement) > 0 ? String(v.prix_supplement).replace('.', ',') : '',
+      parTaille: Object.fromEntries(tailles.map(t => {
+        const p = prixParNomDe(prixDepart, v.nom, t)
+        return [t, p === undefined ? '' : eurosNus(p)]
+      })),
+    })),
   }))
+  // ⚠️ LES PRIX PAR TAILLE NE S'ÉCRIVENT QUE SI ON LES A TOUCHÉS : une
+  // modification du nom ne doit pas aligner en silence les prix des 45 pizzas.
+  const [prixTailleTouche, setPrixTailleTouche] = useState(false)
+  const [ouvertTaille, setOuvertTaille] = useState(null) // index de l'option dépliée
   const [envoi, setEnvoi] = useState(false)
   const plan = planModificationGroupe({ copies, edition: form, groupesParArticle })
+  const saisieTaille = prixTailleTouche ? prixTailleDeSaisie(form.options) : { ok: true, prixParNom: {} }
   const majOption = (i, patch) => setForm(f => ({ ...f, options: f.options.map((o, k) => k === i ? { ...o, ...patch } : o) }))
+  const majTaille = (i, t, valeur) => {
+    setPrixTailleTouche(true)
+    setForm(f => ({ ...f, options: f.options.map((o, k) => k === i ? { ...o, parTaille: { ...(o.parTaille || {}), [t]: valeur } } : o) }))
+  }
 
   async function enregistrer() {
     if (envoi) return
     if (!plan.ok) { toast(plan.error, 'error'); return }
-    if (plan.groupes.length + plan.valeurs.length + plan.ajouts.length + plan.suppressions.length === 0) { onAnnule?.(); return }
+    // Contrôlé AVANT toute écriture : jamais un groupe modifié à moitié.
+    if (!saisieTaille.ok) { toast(saisieTaille.error, 'error'); return }
+    const rienAuGroupe = plan.groupes.length + plan.valeurs.length + plan.ajouts.length + plan.suppressions.length === 0
+    if (rienAuGroupe && !prixTailleTouche) { onAnnule?.(); return }
     setEnvoi(true)
-    const r = await ecrireModificationGroupe(plan)
+    const r = rienAuGroupe ? { ok: true } : await ecrireModificationGroupe(plan)
+    if (!r.ok) { setEnvoi(false); toast(r.erreur, 'error'); onFini?.(plan.articles, false); return }
+    let sansTaille = 0
+    if (prixTailleTouche) {
+      // Les copies RELUES : les options ajoutées ont maintenant un identifiant.
+      const { data: relus, error } = await supabase.from('article_options_groupes')
+        .select('id, article_id, valeurs:article_options_valeurs(id, nom)').in('id', copies.map(g => g.id))
+      const rp = error || !relus
+        ? { ok: false, erreur: `Groupe modifié, mais les prix par taille n’ont pas pu être relus : ${error?.message || 'rien rendu'}` }
+        : await ecrirePrixTailleDesCopies(relus, groupesParArticle, saisieTaille.prixParNom)
+      if (!rp.ok) { setEnvoi(false); toast(rp.erreur, 'error'); onFini?.(plan.articles, false); return }
+      sansTaille = rp.articlesSansTaille
+    }
     setEnvoi(false)
-    if (!r.ok) { toast(r.erreur, 'error'); onFini?.(plan.articles, false); return }
     toast(plan.articles.length === 1 ? `« ${plan.groupe.nom} » modifié.` : `« ${plan.groupe.nom} » modifié sur ${plan.articles.length} articles.`)
+    if (sansTaille > 0) toast(`${sansTaille} article${sansTaille > 1 ? 's n’ont' : ' n’a'} pas de tailles : le prix unique s’y applique.`, 'error')
     onFini?.(plan.articles, true)
   }
 
@@ -2575,21 +2674,51 @@ function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = 
         <ChampsNombreDeChoix form={form} setForm={setForm} nomGroupe={form.nom}/>
         <div style={{ display: 'grid', gap: 6 }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, margin: 0 }}>Les options et leur supplément</p>
-          {form.options.map((o, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input value={o.nom} onChange={e => majOption(i, { nom: e.target.value })} aria-label={`Option ${i + 1}`}
-                style={{ ...s.input, flex: 1, fontSize: 13 }}/>
-              <input value={o.prix_supplement} onChange={e => majOption(i, { prix_supplement: e.target.value })} placeholder="+€" inputMode="decimal"
-                aria-label={`Supplément de l’option ${i + 1}`} style={{ ...s.input, width: 80, fontSize: 13, textAlign: 'center' }}/>
-              <button type="button" onClick={() => setForm(f => ({ ...f, options: f.options.filter((_, k) => k !== i) }))} aria-label={`Retirer l’option ${i + 1}`}
-                style={{ ...s.btn, ...s.btnGhost, padding: '6px 9px' }}><Icon name="trash" size={13} color="#DC2626"/></button>
+          {form.options.map((o, i) => {
+            const avecPrix = tailles.some(t => String(o.parTaille?.[t] || '').trim() !== '')
+            return (
+            <div key={i} style={{ display: 'grid', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input value={o.nom} onChange={e => majOption(i, { nom: e.target.value })} aria-label={`Option ${i + 1}`}
+                  style={{ ...s.input, flex: '1 1 180px', fontSize: 13 }}/>
+                <input value={o.prix_supplement} onChange={e => majOption(i, { prix_supplement: e.target.value })} placeholder="+€" inputMode="decimal"
+                  aria-label={`Supplément de l’option ${i + 1}`} style={{ ...s.input, width: 80, fontSize: 13, textAlign: 'center' }}/>
+                {/* (13/10, Alex) Le prix selon la taille, pour toutes les copies. */}
+                {tailles.length > 0 && (
+                  <button type="button" onClick={() => setOuvertTaille(ouvertTaille === i ? null : i)} aria-expanded={ouvertTaille === i}
+                    style={{ padding: '5px 10px', borderRadius: 100, border: `1.5px solid ${avecPrix ? T.bgPanel : T.hairline}`, background: avecPrix ? '#EDE0FF' : '#fff', color: T.bgPanel, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Prix par taille{avecPrix ? ` : ${tailles.map(t => o.parTaille?.[t] || '·').join(' · ')}` : ''}
+                  </button>
+                )}
+                <button type="button" onClick={() => setForm(f => ({ ...f, options: f.options.filter((_, k) => k !== i) }))} aria-label={`Retirer l’option ${i + 1}`}
+                  style={{ ...s.btn, ...s.btnGhost, padding: '6px 9px' }}><Icon name="trash" size={13} color="#DC2626"/></button>
+              </div>
+              {ouvertTaille === i && tailles.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 10px', borderRadius: 10, background: '#F8F6FF', fontSize: 12.5, color: T.ink }}>
+                  {tailles.map(t => (
+                    <label key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
+                      {t}
+                      <input value={o.parTaille?.[t] ?? ''} onChange={e => majTaille(i, t, e.target.value)} inputMode="decimal" placeholder={o.prix_supplement || '0'}
+                        aria-label={`Prix de ${o.nom || 'l’option'} en ${t}`} style={{ ...s.input, width: 64, fontSize: 13, padding: '4px 6px', textAlign: 'center' }}/>
+                      €
+                    </label>
+                  ))}
+                  <span style={{ color: T.muted, fontSize: 12 }}>Case vide : le supplément ci-dessus s’applique.</span>
+                </div>
+              )}
             </div>
-          ))}
-          <button type="button" onClick={() => setForm(f => ({ ...f, options: [...f.options, { origine: null, nom: '', prix_supplement: '' }] }))}
+            )
+          })}
+          <button type="button" onClick={() => setForm(f => ({ ...f, options: [...f.options, { origine: null, nom: '', prix_supplement: '', parTaille: Object.fromEntries(tailles.map(t => [t, ''])) }] }))}
             style={{ ...s.btn, ...s.btnGhost, padding: '6px 12px', fontSize: 12.5, justifySelf: 'start' }}>+ Une option</button>
         </div>
-        <p style={{ fontSize: 12, color: plan.ok ? T.muted : '#B91C1C', fontWeight: plan.ok ? 500 : 700, margin: 0, lineHeight: 1.5 }}>
-          {plan.ok ? resumeModification(plan, { versions }) : plan.error}
+        <p style={{ fontSize: 12, color: plan.ok && saisieTaille.ok ? T.muted : '#B91C1C', fontWeight: plan.ok && saisieTaille.ok ? 500 : 700, margin: 0, lineHeight: 1.5 }}>
+          {!plan.ok ? plan.error : !saisieTaille.ok ? saisieTaille.error
+            : [
+                // Seuls les prix par taille changent : « Rien n'a changé » serait faux.
+                plan.groupes.length + plan.valeurs.length + plan.ajouts.length + plan.suppressions.length === 0 && prixTailleTouche ? null : resumeModification(plan, { versions }),
+                prixTailleTouche ? `Les prix par taille seront les mêmes sur ${plan.articles.length > 1 ? `les ${plan.articles.length} articles` : 'cet article'}, chacun selon ses tailles.` : null,
+              ].filter(Boolean).join(' ')}
         </p>
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" onClick={onAnnule} disabled={envoi}
@@ -2749,9 +2878,10 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
     if (aCopier.length === 0) { toast('Rien à appliquer : ces articles ont déjà ce groupe.', 'error'); return }
 
     setEnvoi(true)
-    const r = await ecrireCopiesDeGroupe(entree.modele, aCopier)
+    const r = await ecrireCopiesDeGroupe(entree.modele, aCopier, groupesParArticle)
     setEnvoi(false)
-    if (!r.ok) { toast(r.erreur, 'error'); return }
+    if (!r.ok) { toast(r.erreur, 'error'); onApplique?.(aCopier); return }
+    if (r.articlesSansTaille > 0) toast(`${r.articlesSansTaille} article${r.articlesSansTaille > 1 ? 's n’ont' : ' n’a'} pas de tailles : le prix unique s’y applique.`, 'error')
 
     setChoisi(null)
     setCibles([])
@@ -2820,7 +2950,7 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
 
               {enEdition === entree.nom && (
                 <EditionGroupe key={entree.nom} copies={entree.copies} modele={entree.modele} versions={entree.versions}
-                  groupesParArticle={groupesParArticle} toast={toast}
+                  groupesParArticle={groupesParArticle} toast={toast} avecPrixTaille
                   onAnnule={() => setEnEdition(null)}
                   onFini={(ids) => { setEnEdition(null); onApplique?.(ids) }}/>
               )}
@@ -2891,9 +3021,12 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
   )
 }
 
-function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie = null, groupesParArticle = {} }) {
-  const [groupes, setGroupes] = useState([])
-  const [loading, setLoading] = useState(true)
+function OptionsArticle({ articleId, toast, articles = [], onCopie = null, groupesParArticle = {}, groupesCharges = true, erreurGroupes = false }) {
+  // 🔴 13/10 : PLUS DE REQUÊTE PAR PANNEAU (45 articles = 45 lectures à chaque
+  // affichage). Le parent lit tous les groupes une fois, ce panneau prend les
+  // siens ; après une écriture, `onCopie` fait relire le parent.
+  const groupes = groupesParArticle[String(articleId)] || []
+  const loading = !groupesCharges
   const [showForm, setShowForm] = useState(false)
   const [formGroupe, setFormGroupe] = useState({ nom: '', type: 'unique', obligatoire: false })
   const [valeursForms, setValeursForms] = useState({})
@@ -2911,30 +3044,11 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
   // seule fois : ce panneau ne fait plus sa propre requête.
   const [copieEnCours, setCopieEnCours] = useState(false)
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
-  // 🔴 ET IL RELIT QUAND ON A ÉCRIT CHEZ LUI (Alex, 25/09 : « il faut
-  // rafraîchir la page pour voir les groupes ajoutés, le message dit que c'est
-  // fait mais on ne le voit pas, on pense que ça n'a pas fonctionné »).
-  //
-  // ⚠️ LE CONTENU D'UN `<details>` EST MONTÉ MÊME FERMÉ : les quarante
-  // panneaux ont donc chargé leurs groupes au premier affichage, et aucun
-  // n'avait de raison de recommencer. Un message de succès qui ne change rien à
-  // l'écran est pire qu'un échec : le commerçant recopie, et se retrouve avec
-  // le groupe en double.
-  //
-  // ⚠️ `version` NE BOUGE QUE POUR LES ARTICLES VRAIMENT TOUCHÉS. Un compteur
-  // global ferait relire quarante panneaux à chaque copie, donc quarante
-  // requêtes pour trois articles concernés.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch piloté par l'id et par le compteur d'écritures
-  useEffect(() => { fetchGroupes() }, [articleId, version])
-
-  async function fetchGroupes() {
-    setLoading(true)
-    // (13/10) Avec les prix par taille de chaque option, lien nommé.
-    const { data: gData } = await supabase.from('article_options_groupes').select(SELECT_GROUPES_AVEC_VALEURS).eq('article_id', articleId).order('created_at')
-    setGroupes(gData || [])
-    setLoading(false)
-  }
+  // 🔴 IL SUIT CE QU'ON A ÉCRIT CHEZ LUI (Alex, 25/09 : « il faut rafraîchir
+  // la page pour voir les groupes ajoutés »). Un message de succès qui ne
+  // change rien à l'écran est pire qu'un échec : le commerçant recopie, et se
+  // retrouve avec le groupe en double. Depuis le 13/10, chaque écriture fait
+  // relire le PARENT (`apresEcriture`), et ce panneau suit ses données.
 
   // ─── LE NOMBRE DE CHOIX ET LE PRIX PAR TAILLE (13/10) ────────────────────
   // « Calzone : 3 ingrédients au choix » ; « charcuterie 1,50 € en M, 2 € en
@@ -2990,8 +3104,7 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
   // duplique le groupe ailleurs. Chaque écriture prévient maintenant le parent,
   // qui relit pour tout le monde (et ce panneau suit par `version`).
   function apresEcriture() {
-    if (onCopie) onCopie([articleId])
-    else fetchGroupes()
+    onCopie?.([articleId])
   }
 
   async function saveGroupe() {
@@ -3055,9 +3168,10 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
     if (aCopier.length === 0) { toast('Rien à copier : ces articles ont déjà ce groupe.', 'error'); return }
 
     setCopieEnCours(true)
-    const r = await ecrireCopiesDeGroupe(copieDe, aCopier)
+    const r = await ecrireCopiesDeGroupe(copieDe, aCopier, groupesParArticle)
     setCopieEnCours(false)
-    if (!r.ok) { toast(r.erreur, 'error'); return }
+    if (!r.ok) { toast(r.erreur, 'error'); onCopie?.(aCopier); return }
+    if (r.articlesSansTaille > 0) toast(`${r.articlesSansTaille} article${r.articlesSansTaille > 1 ? 's n’ont' : ' n’a'} pas de tailles : le prix unique s’y applique.`, 'error')
 
     setCopieDe(null)
     setCibles([])
@@ -3071,6 +3185,7 @@ function OptionsArticle({ articleId, toast, articles = [], version = 0, onCopie 
   }
 
   if (loading) return <p style={{ fontSize: 12, color: T.muted, padding: '8px 0' }}>Chargement des options...</p>
+  if (erreurGroupes && groupes.length === 0) return <p role="alert" style={{ fontSize: 12, color: '#B91C1C', fontWeight: 700, padding: '8px 0' }}>Les options n’ont pas pu être lues. Recharge la page.</p>
 
   return (
     <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.hairline}` }}>
@@ -3646,7 +3761,7 @@ const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 // Le titre d'un bloc de la carte (« Le jour même », « Sur commande, à l'avance »).
 const titreBlocCarte = { fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 4px' }
 
-function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, versionOptions = 0, onCopieOptions = null, groupesParArticle = {}, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, surCommande = {}, venduDepuisSaisie = 0 }) {
+function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, onCopieOptions = null, groupesParArticle = {}, groupesCharges = true, erreurGroupes = false, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, surCommande = {}, venduDepuisSaisie = 0 }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -4066,7 +4181,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
       </div>
       {showOptions && ((estDetail || estVitrine)
         ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-        : <OptionsArticle articleId={a.id} articles={articles} version={versionOptions} onCopie={onCopieOptions} groupesParArticle={groupesParArticle} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
+        : <OptionsArticle articleId={a.id} articles={articles} onCopie={onCopieOptions} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
     </div>
   )
 }

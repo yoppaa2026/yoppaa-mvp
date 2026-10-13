@@ -203,8 +203,12 @@ const v = (nom, cond, detail = '') => {
   // la même chose, et c'est un panneau de copie qui se trompe de conflits.
   v('les groupes ne sont plus lus par article pour un panneau de copie',
     !/\.select\('article_id, nom'\)/.test(config))
+  // ⚠️ REPOINTÉE LE 13/10 : la lecture du parent prend la forme COMPLÈTE
+  // (nombre de choix, prix par taille) ; l'ancienne les oubliait, et la
+  // bibliothèque les effaçait en modifiant.
   v('et le parent les charge pour tout le catalogue',
-    /select\('id, article_id, nom, type, obligatoire, valeurs:article_options_valeurs\(\*\)'\)/.test(config))
+    /\.from\('article_options_groupes'\)\s*\.select\(SELECT_GROUPES_AVEC_VALEURS\)\s*\.in\('article_id', ids\)/.test(config)
+    && !/select\('id, article_id, nom, type, obligatoire, valeurs:article_options_valeurs\(\*\)'\)/.test(config))
   // ⚠️ REPOINTÉE LE 10/10 : CINQ lectures (« + Nouveau groupe » s'ajoute), toutes
   // sur les groupes du parent ; aucune ne lit la base pour son compte.
   v('les conflits se lisent sur les groupes du parent',

@@ -652,8 +652,10 @@ const v = (nom, cond, detail = '') => {
   // verrait pas les conflits qu'on vient de créer, et doublerait les groupes.
   // Depuis le 25/09 c'est le PARENT qui relit — ses groupes servent aussi aux
   // vignettes — et elle se contente de lui nommer les articles touchés.
+  // ⚠️ PRÉCISÉE LE 13/10 : le chemin d'erreur relit aussi ; la garde vise le
+  // chemin RÉUSSI (après la remise à zéro du choix), pas l'autre.
   v('elle fait relire le catalogue après avoir écrit',
-    /onApplique\?\.\(aCopier\)/.test(biblioEcran))
+    /setCibles\(\[\]\)\s*(\/\/[^\n]*\s*)*onApplique\?\.\(aCopier\)/.test(biblioEcran))
   // ⚠️ ELLE NE S'AFFICHE QUE LÀ OÙ LES GROUPES EXISTENT : le détail et la
   // vitrine ont des variantes, un autre modèle entièrement.
   v('elle ne s’affiche pas chez qui n’a pas de groupes',
@@ -674,17 +676,26 @@ const v = (nom, cond, detail = '') => {
   // l'affichage — le contenu d'un `<details>` vit même fermé — et chacun avait
   // chargé ses groupes une fois pour toutes. Un succès invisible fait recopier,
   // et le groupe se retrouve en double.
+  // ⚠️ REPOINTÉE LE 13/10, PAS DÉSARMÉE : le panneau ne lit plus lui-même
+  // (45 requêtes à chaque affichage, Alex : « temps de chargement très
+  // long »). Il prend ses groupes chez le parent, et le parent relit après
+  // chaque écriture (`totalTouches`).
   v('un panneau relit ses groupes quand on a écrit chez lui',
-    /useEffect\(\(\) => \{ fetchGroupes\(\) \}, \[articleId, version\]\)/.test(optionsArticle))
+    /const groupes = groupesParArticle\[String\(articleId\)\] \|\| \[\]/.test(optionsArticle) && /\}, \[cleArticles, totalTouches\]\)/.test(config))
+  // ⚠️ PRÉCISÉE LE 13/10 : le chemin d'ERREUR prévient aussi le parent (une
+  // copie partielle doit se voir) ; la garde vise le chemin RÉUSSI, sinon
+  // l'appel de l'erreur la garderait verte toute seule.
   v('et la copie nomme les articles touchés',
-    /onCopie\?\.\(aCopier\)/.test(optionsArticle))
+    /onCopie\?\.\(aCopier\)\s*toast\(r\.combien === 1/.test(optionsArticle))
   // ⚠️ UN COMPTEUR PAR ARTICLE, PAS UN COMPTEUR GLOBAL : quarante panneaux qui
   // relisent pour trois articles touchés, ce sont trente-sept requêtes de trop.
   v('le compteur est tenu par article',
     /suite\[cle\] = \(suite\[cle\] \|\| 0\) \+ 1/.test(config))
-  v('les deux endroits qui affichent un panneau lui passent son compteur',
-    (config.match(/version=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}|versionOptions=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}/g) || []).length === 2,
-    String((config.match(/version=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}|versionOptions=\{optionsTouchees\[String\(a\.id\)\] \|\| 0\}/g) || []).length))
+  // ⚠️ REPOINTÉE LE 13/10 : plus de compteur par panneau, mais les deux
+  // endroits doivent lui passer les groupes du parent ET leur état de lecture.
+  v('les deux endroits qui affichent un panneau lui passent les groupes du parent',
+    (config.match(/<OptionsArticle [^\n]*groupesParArticle=\{groupesParArticle\} groupesCharges=\{groupesCharges\} erreurGroupes=\{erreurGroupes\}/g) || []).length === 2,
+    String((config.match(/<OptionsArticle [^\n]*groupesParArticle=\{groupesParArticle\} groupesCharges=\{groupesCharges\} erreurGroupes=\{erreurGroupes\}/g) || []).length))
   // 🔴 ET LE FRÈRE, DANS L'AUTRE SENS : copier depuis une pizza laissait la
   // bibliothèque annoncer « sur 3 articles » alors qu'il y en avait quinze.
   //
@@ -820,7 +831,8 @@ const v = (nom, cond, detail = '') => {
   const debut = config.indexOf('function OptionsArticle(')
   const panneau = config.slice(debut, config.indexOf('\nfunction ', debut + 10))
   v('🔴 le panneau a un seul chemin après écriture, qui prévient le parent',
-    /function apresEcriture\(\) \{\s*if \(onCopie\) onCopie\(\[articleId\]\)\s*else fetchGroupes\(\)\s*\}/.test(panneau))
+    // ⚠️ REPOINTÉE LE 13/10 : plus de repli local, le parent relit pour tous.
+    /function apresEcriture\(\) \{\s*onCopie\?\.\(\[articleId\]\)\s*\}/.test(panneau))
   for (const f of ['saveGroupe', 'updateGroupe', 'deleteGroupe', 'addValeur', 'deleteValeur']) {
     const i = panneau.indexOf(`async function ${f}(`)
     const corps = i >= 0 ? panneau.slice(i, panneau.indexOf('\n  }\n', i)) : ''
@@ -981,7 +993,9 @@ const v = (nom, cond, detail = '') => {
     && /\.from\('article_options_valeurs'\)\.delete\(\)\.in\('id', plan\.suppressions\)\.select\('id'\)/.test(config)
     && config.indexOf('.insert(plan.ajouts)') > 0 && config.indexOf('.insert(plan.ajouts)') < config.indexOf('.in(\'id\', plan.suppressions)'))
   v('le formulaire dit le résumé avant d’enregistrer, et le bouton montre qu’il travaille',
-    /\{plan\.ok \? resumeModification\(plan, \{ versions \}\) : plan\.error\}/.test(config) && /\{envoi && <DotsAttente couleur="#fff" taille=\{4\} label="Enregistrement"\/>\}/.test(config))
+    // ⚠️ REPOINTÉE LE 13/10 : le résumé dit aussi les prix par taille.
+    /\{!plan\.ok \? plan\.error : !saisieTaille\.ok \? saisieTaille\.error/.test(config) && /resumeModification\(plan, \{ versions \}\)/.test(config)
+    && /\{envoi && <DotsAttente couleur="#fff" taille=\{4\} label="Enregistrement"\/>\}/.test(config))
 }
 
 console.log(`\nCopier dans le catalogue : ${ok} vérifications`)

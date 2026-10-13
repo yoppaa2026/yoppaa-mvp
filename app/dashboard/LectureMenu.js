@@ -22,7 +22,7 @@ import {
 } from '@/lib/menu-relecture'
 import { REMARQUE_MAX, CORRECTIONS_PAR_LECTURE } from '@/lib/menu-lu'
 import { genreDuFichier, decoderCsv, csvEnTexte, feuillesEnTexte, texteEnBase64, TYPE_TABLEAU, TAILLE_MAX_TABLEAU } from '@/lib/menu-tableau'
-import { demandeLeStock, reglagesCommuns, planCreation, ecrireCreation, phraseDeCreation } from '@/lib/menu-creation'
+import { stockCocheDAvance, reglagesCommuns, planCreation, ecrireCreation, phraseDeCreation } from '@/lib/menu-creation'
 import { optionsTaux } from '@/lib/tva-aide'
 
 const T = {
@@ -101,7 +101,9 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
   // tous les articles, expliquée, modifiable ensuite. La TVA part du taux par
   // défaut du commerce, comme un nouvel article ; sinon elle reste à choisir.
   const [reglages, setReglages] = useState(() => ({
-    stock: '', quantite: '',
+    // 🔴 13/10 : la question du stock est posée à TOUS. « Sans limite » est
+    // coché d'avance chez celui qui sert à manger (`stockCocheDAvance`).
+    stock: stockCocheDAvance(commercant), quantite: '',
     tva: commercant?.tva_taux_defaut === null || commercant?.tva_taux_defaut === undefined ? '' : String(commercant.tva_taux_defaut),
     tvaSurPlace: '',
   }))
@@ -115,7 +117,6 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
   const [correctionEnvoi, setCorrectionEnvoi] = useState(false)
   const [correctionErreur, setCorrectionErreur] = useState('')
   const [restantCorrections, setRestantCorrections] = useState(CORRECTIONS_PAR_LECTURE)
-  const avecStock = demandeLeStock(commercant)
   const alimentaire = !['detail', 'vitrine'].includes(commercant?.categorie)
 
   // Les aperçus sont des adresses locales : on les libère en partant.
@@ -525,12 +526,15 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
             <div style={{ marginBottom: 16, borderRadius: 12, padding: 12, border: `1.5px solid ${T.hairline}` }}>
               <p style={titre}>Pour tous ces articles</p>
 
-              {avecStock && (
+              {/* 🔴 POSÉE À TOUS (13/10, Alex : « tu as oublié la demande pour
+                  les stocks ») ; « Sans limite » coché d'avance chez celui qui
+                  sert à manger. */}
+              {(
                 <fieldset style={{ border: 'none', padding: 0, margin: '0 0 14px' }}>
-                  <legend style={{ fontSize: 14, fontWeight: 800, color: T.ink, marginBottom: 6, padding: 0 }}>Combien en prépares-tu par jour ?</legend>
+                  <legend style={{ fontSize: 14, fontWeight: 800, color: T.ink, marginBottom: 6, padding: 0 }}>Ton stock : combien en prépares-tu par jour ?</legend>
                   <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: T.ink, marginBottom: 6, cursor: 'pointer', lineHeight: 1.45 }}>
                     <input type="radio" name="menu-lu-stock" checked={reglages.stock === 'illimite'} onChange={() => setReglages(r => ({ ...r, stock: 'illimite' }))} style={{ accentColor: T.main, marginTop: 3 }}/>
-                    <span><strong>Sans limite</strong> : tu prépares à la commande, la fiche ne s’arrête jamais d’elle-même.</span>
+                    <span><strong>Sans limite</strong> : tu prépares à la commande, la fiche ne s’arrête jamais d’elle-même. Le plus courant pour une pizzeria ou un snack.</span>
                   </label>
                   <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: T.ink, cursor: 'pointer', lineHeight: 1.45, flexWrap: 'wrap' }}>
                     <input type="radio" name="menu-lu-stock" checked={reglages.stock === 'jour'} onChange={() => setReglages(r => ({ ...r, stock: 'jour' }))} style={{ accentColor: T.main, marginTop: 3 }}/>
@@ -564,7 +568,7 @@ export default function LectureMenu({ commercantId, commercant, articlesExistant
               </div>
               <p style={{ fontSize: 12, color: T.muted, margin: '8px 0 0', lineHeight: 1.5 }}>
                 Le prix lu est le prix payé par le client, TVA comprise. En cas de doute sur le taux, consulte ton comptable ou le SPF Finances.
-                {avecStock ? ' Le stock et la TVA' : ' La TVA'} se changent ensuite pour plusieurs articles d’un coup (actions groupées du catalogue) ou article par article.
+                {' Le stock et la TVA'} se changent ensuite pour plusieurs articles d’un coup (actions groupées du catalogue) ou article par article.
               </p>
             </div>
 

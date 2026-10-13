@@ -196,6 +196,56 @@ v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, 
   const cuisson = OC.ordonnerGroupes([{ id: 'boi', nom: 'Boisson', type: 'multiple', obligatoire: true, valeurs: [{}, {}] }, { id: 'cui', nom: 'Cuisson', type: 'unique', valeurs: [{}, {}] }])
   v('⚠️ une « Cuisson » facultative (taille de repli) ne passe pas devant la boisson imposée', cuisson.map(g => g.id).join() === 'boi,cui', cuisson.map(g => g.id).join())
 
+  // ─── (13/10, Alex) LES PRIX PAR TAILLE DEPUIS LA BIBLIOTHÈQUE ─────────────
+  // « Trop de perte de temps sur 45 articles. » Chaque pizza a SES tailles :
+  // le lien se fait par le NOM de la taille.
+  {
+    const tA = { id: 'tA', article_id: 'A', nom: 'Taille', type: 'unique', obligatoire: true, valeurs: [{ id: 'aM', nom: 'M' }, { id: 'aL', nom: 'L' }, { id: 'aXL', nom: 'XL' }] }
+    const tB = { id: 'tB', article_id: 'B', nom: 'Taille', type: 'unique', obligatoire: true, valeurs: [{ id: 'bM', nom: 'm' }, { id: 'bL', nom: 'L' }] }
+    const chA = { id: 'cA', article_id: 'A', nom: 'Charcuterie', type: 'multiple', valeurs: [
+      { id: 'jA', nom: 'Jambon', prix_supplement: 1.5, prix_taille: [{ taille_valeur_id: 'aM', prix: 1.5 }, { taille_valeur_id: 'aL', prix: 2 }, { taille_valeur_id: 'aXL', prix: 3 }] },
+      { id: 'sA', nom: 'Salami', prix_supplement: 1.5, prix_taille: [] },
+    ] }
+    const chB = { id: 'cB', article_id: 'B', nom: 'Charcuterie', type: 'multiple', valeurs: [{ id: 'jB', nom: 'Jambon' }, { id: 'sB', nom: 'Salami' }] }
+    const chC = { id: 'cC', article_id: 'C', nom: 'Charcuterie', type: 'multiple', valeurs: [{ id: 'jC', nom: 'Jambon' }] }
+    const parArticle = { A: [tA, chA], B: [tB, chB], C: [chC] }
+    v('les tailles de tous les articles du groupe, réunies sans doublon (« m » = « M »)',
+      OC.taillesDesCopies([chA, chB, chC], parArticle).join('|') === 'M|L|XL', OC.taillesDesCopies([chA, chB, chC], parArticle).join('|'))
+    const pn = OC.prixTailleParNom(chA, parArticle.A)
+    v('🔴 les prix actuels se lisent par NOM (pour remplir le formulaire)',
+      OC.prixParNomDe(pn, 'jambon', 'L') === 2 && OC.prixParNomDe(pn, 'Jambon', 'xl') === 3 && OC.prixParNomDe(pn, 'Salami', 'M') === undefined)
+    const s = OC.prixTailleDeSaisie([{ nom: 'Jambon', parTaille: { M: '1,50', L: '2', XL: '' } }, { nom: 'Salami', parTaille: { M: '', L: '' } }])
+    v('la saisie se lit à la belge, une case vide ne compte pas', s.ok && OC.prixParNomDe(s.prixParNom, 'Jambon', 'M') === 1.5 && OC.prixParNomDe(s.prixParNom, 'Jambon', 'XL') === undefined && !s.prixParNom.salami)
+    v('🔴 une saisie illisible ou absurde est refusée', OC.prixTailleDeSaisie([{ nom: 'Jambon', parTaille: { M: 'abc' } }]).ok === false && OC.prixTailleDeSaisie([{ nom: 'Jambon', parTaille: { M: '600' } }]).ok === false)
+    const r = OC.lignesPrixTailleDesCopies({ copies: [chA, chB, chC], groupesParArticle: parArticle, prixParNom: s.prixParNom })
+    v('🔴 chaque prix relie l’option et la taille du MÊME article',
+      JSON.stringify(r.lignes) === JSON.stringify([
+        { valeur_id: 'jA', taille_valeur_id: 'aM', prix: 1.5 }, { valeur_id: 'jA', taille_valeur_id: 'aL', prix: 2 },
+        { valeur_id: 'jB', taille_valeur_id: 'bM', prix: 1.5 }, { valeur_id: 'jB', taille_valeur_id: 'bL', prix: 2 },
+      ]), JSON.stringify(r.lignes))
+    v('🔴 toutes les options des copies sont remplacées (une case vidée redevient le prix unique)', r.valeurIds.join() === 'jA,sA,jB,sB,jC')
+    v('un article sans tailles est compté (il garde le prix unique)', r.articlesSansTaille === 1)
+    v('⚠️ le groupe réglé n’est jamais pris pour les tailles', OC.taillesDesCopies([tA], { A: [tA] }).length === 0)
+
+    const dash = code('app/dashboard/ConfigDashboard.js')
+    v('🔴 le chargement commun lit le nombre de choix et les prix par taille, par pages, dans un ordre total',
+      /await toutesLesLignes\(\(\) => supabase\s*\.from\('article_options_groupes'\)\s*\.select\(SELECT_GROUPES_AVEC_VALEURS\)\s*\.in\('article_id', ids\)\s*\.order\('created_at'\)\s*\.order\('id'\)\)/.test(dash))
+    v('🔴 une lecture ratée garde les groupes et le dit', /if \(error\) \{ setErreurGroupes\(true\); setGroupesCharges\(true\); return \}/.test(dash))
+    v('🔴 plus de requête par panneau d’article (45 lectures à chaque affichage)',
+      /const groupes = groupesParArticle\[String\(articleId\)\] \|\| \[\]/.test(dash) && !/async function fetchGroupes\(\)/.test(dash))
+    v('🔴 la bibliothèque ouvre les prix par taille, l’article garde son propre réglage',
+      /groupesParArticle=\{groupesParArticle\} toast=\{toast\} avecPrixTaille/.test(dash) && (dash.match(/avecPrixTaille\b/g) || []).length >= 3)
+    v('🔴 les prix par taille ne s’écrivent que si on les a touchés, contrôlés avant toute écriture',
+      /const saisieTaille = prixTailleTouche \? prixTailleDeSaisie\(form\.options\)/.test(dash) && /if \(!saisieTaille\.ok\) \{ toast\(saisieTaille\.error, 'error'\); return \}/.test(dash)
+      && dash.indexOf('if (!saisieTaille.ok)') < dash.indexOf('await ecrireModificationGroupe(plan)'))
+    v('🔴 l’écriture relit les copies (les options ajoutées ont un identifiant) puis remplace',
+      /\.select\('id, article_id, valeurs:article_options_valeurs\(id, nom\)'\)\.in\('id', copies\.map\(g => g\.id\)\)/.test(dash) && /await ecrirePrixTailleDesCopies\(relus, groupesParArticle, saisieTaille\.prixParNom\)/.test(dash))
+    v('🔴 « Appliquer à… » et « Copier vers… » emportent les prix par taille',
+      /await ecrireCopiesDeGroupe\(entree\.modele, aCopier, groupesParArticle\)/.test(dash) && /await ecrireCopiesDeGroupe\(copieDe, aCopier, groupesParArticle\)/.test(dash)
+      && /ecrirePrixTailleDesCopies\(copies, groupesParArticle, prixParNom, \{ remplacer: false \}\)/.test(dash))
+    v('les suppressions partent par paquets (adresse bornée)', /for \(const ids of paquets\(valeurIds, 100\)\)/.test(dash))
+  }
+
   // (13/10, Alex : « pas de choisis-en un, il se sent obligé »)
   v('🔴 aucune pastille pour un choix unique ni pour des cumulables',
     OC.pastilleBornes(gTaille) === null && OC.pastilleBornes(gSupp) === null && OC.pastilleBornes({ type: 'multiple', obligatoire: true }) === null)
@@ -317,8 +367,11 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   const config = code('app/dashboard/ConfigDashboard.js')
   const iOA = config.indexOf('function OptionsArticle(')
   const oa = iOA === -1 ? '' : config.slice(iOA, config.indexOf('\nfunction ', iOA + 10))
+  // ⚠️ REPOINTÉE LE 13/10, PAS DÉSARMÉE : le panneau ne lit plus lui-même
+  // (45 requêtes), il prend ce que lit le parent, avec la MÊME constante.
   v('🔴 l’écran des options lit les prix par taille (constante partagée, lien nommé)',
-    /\.from\('article_options_groupes'\)\.select\(SELECT_GROUPES_AVEC_VALEURS\)\.eq\('article_id', articleId\)/.test(oa))
+    /\.from\('article_options_groupes'\)\s*\.select\(SELECT_GROUPES_AVEC_VALEURS\)\s*\.in\('article_id', ids\)/.test(code('app/dashboard/ConfigDashboard.js'))
+    && /const groupes = groupesParArticle\[String\(articleId\)\] \|\| \[\]/.test(oa))
   v('🔴 le nombre de choix passe par le contrôle partagé avant d’être écrit',
     /const r = bornesDepuisSaisie\(/.test(oa) && /if \(!r\.ok\) \{ toast\(r\.error, 'error'\); return \}\s*setReglageEnCours\(true\)\s*const \{ error \} = await supabase\.from\('article_options_groupes'\)\.update\(\{ choix_min: r\.choix_min, choix_max: r\.choix_max \}\)/.test(oa))
   v('🔴 les prix par taille : contrôlés, puis ceux de CETTE option remplacés, et l’erreur se dit',

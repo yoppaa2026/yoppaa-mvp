@@ -91,6 +91,27 @@ const MUTATIONS = [
     de: '    ...reste.filter(g => bornesChoix(g).min >= 1),', vers: '    ...reste.filter(() => false),' },
   { nom: '⚠️ une cuisson facultative passe devant la boisson imposee', fichier: 'lib/options-choix.js',
     de: "  const enTete = tailles && (bornesChoix(tailles).min >= 1 || NOM_DE_TAILLE.test(tailles.nom || '')) ? tailles : null", vers: '  const enTete = tailles' },
+  // ─── 13/10 : les prix par taille depuis la bibliotheque ──────────────────
+  { nom: '🔴 un prix se rattache a la taille d un AUTRE article', fichier: 'lib/options-choix.js',
+    de: "    const t = groupeDesTailles(groupesParArticle[String(g?.article_id)] || [], g?.id)", vers: "    const t = groupeDesTailles(Object.values(groupesParArticle).flat(), g?.id)" },
+  { nom: '⚠️ un article sans tailles n est plus compte', fichier: 'lib/options-choix.js',
+    de: '      if (!t) { sansTaille.add(String(g.article_id)); continue }', vers: '      if (!t) { continue }' },
+  { nom: '🔴 les anciens prix ne sont plus remplaces', fichier: 'lib/options-choix.js',
+    de: '      valeurIds.push(v.id)', vers: '' },
+  { nom: '🔴 une saisie absurde passe', fichier: 'lib/options-choix.js',
+    de: "      if (prix > 500) return { ok: false, error: `« ${o.nom} » en ${taille} : 500 € au maximum.` }", vers: '' },
+  { nom: '⚠️ « m » et « M » font deux tailles', fichier: 'lib/options-choix.js',
+    // Seul `toLowerCase()` du fichier (vérifié le 13/10) ; la ligne porte de
+    // vrais accents combinants, qu'on ne recopie pas dans une ancre.
+    de: ".trim().replace(/\\s+/g, ' ').toLowerCase()", vers: '.trim()' },
+  { nom: '🔴 le chargement commun oublie de nouveau le nombre de choix', fichier: 'app/dashboard/ConfigDashboard.js',
+    // La ligne est unique dans le fichier (vérifié le 13/10).
+    de: '        .select(SELECT_GROUPES_AVEC_VALEURS)', vers: "        .select('id, article_id, nom, type, obligatoire, valeurs:article_options_valeurs(*)')" },
+  { nom: '🔴 la modification ecrit les prix par taille sans controle prealable', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "    if (!saisieTaille.ok) { toast(saisieTaille.error, 'error'); return }", vers: '' },
+  { nom: '🔴 « Appliquer a… » perd les prix par taille', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '    const r = await ecrireCopiesDeGroupe(entree.modele, aCopier, groupesParArticle)', vers: '    const r = await ecrireCopiesDeGroupe(entree.modele, aCopier)' },
+
   { nom: '🔴 « Choisis-en un » revient (le client se sent oblige)', fichier: 'lib/options-choix.js',
     de: '  if (max === 1) return null', vers: '' },
   { nom: '⚠️ « Cumulables » revient', fichier: 'lib/options-choix.js',

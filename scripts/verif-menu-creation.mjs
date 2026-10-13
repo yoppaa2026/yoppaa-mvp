@@ -28,7 +28,7 @@ import {
   libelleValeur, resumeGroupe, bilanRelecture, phraseDuBilan, OU_REGLER_INFO,
   contexteDeCorrection, appliquerCorrection, phraseDeCorrection,
 } from '../lib/menu-relecture.js'
-import { demandeLeStock, reglagesCommuns, planCreation, ecrireCreation, phraseDeCreation } from '../lib/menu-creation.js'
+import { stockCocheDAvance, reglagesCommuns, planCreation, ecrireCreation, phraseDeCreation } from '../lib/menu-creation.js'
 
 let ok = 0
 const echecs = []
@@ -99,17 +99,23 @@ v('« entre 1 et 3 » se lit', /\(entre 1 et 3\)/.test(resumeGroupe(art(etat0, '
 }
 
 // ═══ 3) LES RÉGLAGES COMMUNS (Alex, 13/10) ══════════════════════════════════
-v('la pizzeria ne doit pas répondre au stock, la boulangerie si', demandeLeStock(PIZZERIA) === false && demandeLeStock(BOULANGERIE) === true)
-v('🔴 la pizzeria crée « sans limite »', JSON.stringify(reglagesCommuns(PIZZERIA, { tva: '6' }).stock) === JSON.stringify({ stock_mode: 'illimite', stock_jour: 0 }))
-v('🔴 la boulangerie doit répondre', reglagesCommuns(BOULANGERIE, { tva: '6' }).ok === false)
+// 🔴 13/10 (Alex : « tu as oublié la demande pour les stocks ») : posée à TOUS.
+v('la pizzeria a « Sans limite » coché d’avance, la boulangerie rien', stockCocheDAvance(PIZZERIA) === 'illimite' && stockCocheDAvance(BOULANGERIE) === '')
+v('🔴 la pizzeria crée « sans limite » quand elle le garde',
+  JSON.stringify(reglagesCommuns(PIZZERIA, { tva: '6', stock: 'illimite' }).stock) === JSON.stringify({ stock_mode: 'illimite', stock_jour: 0 }))
+v('🔴 la pizzeria peut aussi choisir une quantité par jour', reglagesCommuns(PIZZERIA, { tva: '6', stock: 'jour', quantite: '30' }).stock?.stock_jour === 30)
+v('🔴 sans réponse, personne ne crée (la pizzeria non plus)', reglagesCommuns(PIZZERIA, { tva: '6' }).ok === false && reglagesCommuns(BOULANGERIE, { tva: '6' }).ok === false)
 v('🔴 « par jour » exige au moins 1, comme le formulaire',
   reglagesCommuns(BOULANGERIE, { tva: '6', stock: 'jour', quantite: '0' }).ok === false && reglagesCommuns(BOULANGERIE, { tva: '6', stock: 'jour', quantite: '' }).ok === false)
 v('« par jour » 20 donne la quantité', reglagesCommuns(BOULANGERIE, { tva: '6', stock: 'jour', quantite: '20' }).stock?.stock_jour === 20)
 v('« sans limite » chez la boulangerie aussi', reglagesCommuns(BOULANGERIE, { tva: '6', stock: 'illimite' }).stock?.stock_mode === 'illimite')
-v('🔴 la TVA se CHOISIT : vide = refus', reglagesCommuns(PIZZERIA, { tva: '' }).ok === false)
-v('« plus tard » est un choix, et écrit null', reglagesCommuns(PIZZERIA, { tva: 'plus_tard' }).ok === true && reglagesCommuns(PIZZERIA, { tva: 'plus_tard' }).tva === null)
-v('le taux sur place vide = même taux (null)', reglagesCommuns(PIZZERIA, { tva: '6', tvaSurPlace: '' }).tvaSurPlace === null && reglagesCommuns(PIZZERIA, { tva: '6', tvaSurPlace: '12' }).tvaSurPlace === 12)
-v('un taux absurde est refusé', reglagesCommuns(PIZZERIA, { tva: '150' }).ok === false)
+// ⚠️ LE STOCK EST RÉPONDU ICI : ces vérifications mesurent la TVA, et un refus
+// pour stock manquant les rendrait vertes pour une mauvaise raison.
+const S = { stock: 'illimite' }
+v('🔴 la TVA se CHOISIT : vide = refus', reglagesCommuns(PIZZERIA, { ...S, tva: '' }).ok === false && /taux de TVA/.test(reglagesCommuns(PIZZERIA, { ...S, tva: '' }).error))
+v('« plus tard » est un choix, et écrit null', reglagesCommuns(PIZZERIA, { ...S, tva: 'plus_tard' }).ok === true && reglagesCommuns(PIZZERIA, { ...S, tva: 'plus_tard' }).tva === null)
+v('le taux sur place vide = même taux (null)', reglagesCommuns(PIZZERIA, { ...S, tva: '6', tvaSurPlace: '' }).tvaSurPlace === null && reglagesCommuns(PIZZERIA, { ...S, tva: '6', tvaSurPlace: '12' }).tvaSurPlace === 12)
+v('un taux absurde est refusé', reglagesCommuns(PIZZERIA, { ...S, tva: '150' }).ok === false && /non valable/.test(reglagesCommuns(PIZZERIA, { ...S, tva: '150' }).error))
 v('🔴 hors alimentaire, refusé', reglagesCommuns({ categorie: 'detail' }, { tva: '21' }).ok === false)
 
 // ═══ 4) LE PLAN ═════════════════════════════════════════════════════════════
@@ -123,14 +129,14 @@ const etatPret = {
 {
   // ⚠️ LE DOUTE SEUL, prix rempli : le plan ne croit pas l'écran.
   const doute = { ...etat0, articles: etat0.articles.map(a => a.nom === 'Pizza du chef' ? { ...a, prixTexte: '14' } : a) }
-  const r = planCreation({ etat: doute, commercant: PIZZERIA, commercantId: 'c1', reglages: { tva: '6' } })
+  const r = planCreation({ etat: doute, commercant: PIZZERIA, commercantId: 'c1', reglages: { tva: '6', stock: 'illimite' } })
   v('🔴 le plan refuse un article dont le doute n’est pas vérifié', r.ok === false && /encore à vérifier/.test(r.error || ''), JSON.stringify(r).slice(0, 200))
 }
 const plan = planCreation({
   etat: etatPret, commercant: PIZZERIA, commercantId: 'c1',
   categoriesExistantes: ['Boissons', 'Pizzas'],
   articlesExistants: [{ nom: 'Coca', categorie: 'Boissons', ordre: 4 }, { nom: 'Regina', categorie: 'Pizzas', ordre: 2 }, { nom: 'X', categorie: 'Pizzas', ordre: null }],
-  reglages: { tva: '6', tvaSurPlace: '12' },
+  reglages: { tva: '6', tvaSurPlace: '12', stock: 'illimite' },
 })
 const pa = (nom) => plan.articles?.find(a => a.nom === nom)
 v('le plan est prêt', plan.ok === true && plan.articles.length === 3, JSON.stringify(plan).slice(0, 300))
@@ -158,16 +164,16 @@ v('un article sans tailles reçoit le supplément commun sans prix par taille',
   pa('Calzone').groupes.some(g => g.groupe.nom === 'Charcuterie' && g.prixTaille.length === 0))
 {
   const avecRetrait = { ...etatPret, articles: etatPret.articles.map(a => a.nom === 'Margherita' ? { ...a, groupes: a.groupes.map(g => g.nom === 'Suppléments' ? { ...g, garder: false } : g) } : a) }
-  const pr = planCreation({ etat: avecRetrait, commercant: PIZZERIA, commercantId: 'c1', reglages: { tva: '6' } })
+  const pr = planCreation({ etat: avecRetrait, commercant: PIZZERIA, commercantId: 'c1', reglages: { tva: '6', stock: 'illimite' } })
   v('un groupe retiré à la relecture n’est pas créé', !pr.articles.find(a => a.nom === 'Margherita').groupes.some(g => g.groupe.nom === 'Suppléments'))
   v('une catégorie nouvelle s’ajoute à la liste', JSON.stringify(pr.categories) === JSON.stringify(['Pizzas']), JSON.stringify(pr.categories))
   // « boissons » lu sur le menu, « Boissons » déjà au catalogue : la même.
   const coca = { ...etatPret, articles: etatPret.articles.map(a => a.nom === 'Coca' ? { ...a, garder: true } : a) }
-  const pc = planCreation({ etat: coca, commercant: PIZZERIA, commercantId: 'c1', categoriesExistantes: ['Boissons', 'Pizzas'], reglages: { tva: '6' } })
+  const pc = planCreation({ etat: coca, commercant: PIZZERIA, commercantId: 'c1', categoriesExistantes: ['Boissons', 'Pizzas'], reglages: { tva: '6', stock: 'illimite' } })
   v('⚠️ « boissons » rejoint « Boissons » au lieu d’en créer une seconde',
     pc.articles?.find(a => a.nom === 'Coca')?.payload.categorie === 'Boissons' && pc.categories === null, JSON.stringify(pc.categories))
   // 🔴 LE MENU DIT « pour les pizzas », LE COMMERÇANT N'A RIEN CHOISI : rien.
-  const sansChoix = planCreation({ etat: { ...etatPret, supplements: etat0.supplements }, commercant: PIZZERIA, commercantId: 'c1', reglages: { tva: '6' } })
+  const sansChoix = planCreation({ etat: { ...etatPret, supplements: etat0.supplements }, commercant: PIZZERIA, commercantId: 'c1', reglages: { tva: '6', stock: 'illimite' } })
   v('🔴 un supplément commun non choisi n’est créé nulle part, même si le menu nomme sa catégorie',
     sansChoix.ok && !sansChoix.articles.some(a => a.groupes.some(g => g.groupe.nom === 'Charcuterie')))
 }
@@ -235,7 +241,7 @@ function fausseBase({ refuser = () => null } = {}) {
     res.crees.length === 3 && res.partiels.length === 3 && /options non créées/.test(res.partiels[0].erreur) && /sans tous leurs choix/.test(phraseDeCreation(res)), JSON.stringify(res.partiels))
 }
 {
-  const pr = planCreation({ etat: etatPret, commercant: PIZZERIA, commercantId: 'c1', reglages: { tva: '6' } })
+  const pr = planCreation({ etat: etatPret, commercant: PIZZERIA, commercantId: 'c1', reglages: { tva: '6', stock: 'illimite' } })
   const base = fausseBase()
   const res = await ecrireCreation(base, pr, { commercantId: 'c1' })
   const maj = base.journal.find(j => j.table === 'commercants')
@@ -409,7 +415,8 @@ function fausseBase({ refuser = () => null } = {}) {
     && /if \(!plan\.ok\) \{ setErreur\(plan\.error\); return \}/.test(ecran) && /await ecrireCreation\(supabase, plan,/.test(ecran))
   v('🔴 le bouton suit le bilan ET les réglages', /const pret = !!bilan\?\.pret && verdictReglages\.ok/.test(ecran) && /disabled=\{!pret \|\| occupe\}/.test(ecran))
   v('🔴 ce qui est créé se décoche (pas de double au second clic)', /creees\.has\(a\.cle\) \? \{ \.\.\.a, garder: false, deja: true \}/.test(ecran))
-  v('la question du stock n’apparaît qu’au commerce qui compte par jour', /\{avecStock && \(/.test(ecran) && /const avecStock = demandeLeStock\(commercant\)/.test(ecran))
+  v('🔴 la question du stock est posée à tous, « Sans limite » coché d’avance chez qui sert à manger',
+    /stock: stockCocheDAvance\(commercant\), quantite: '',/.test(ecran) && /Ton stock : combien en prépares-tu par jour \?/.test(ecran) && !/avecStock/.test(ecran))
   v('la TVA propose les taux du métier et « plus tard »', /optionsTaux\(tvaRefs, commercant\?\.categorie\)/.test(ecran) && /value="plus_tard"/.test(ecran))
   v('la phrase dit que tout se change ensuite, par groupe ou un par un', /actions groupées du catalogue\) ou article par article/.test(readFileSync(new URL('../app/dashboard/LectureMenu.js', import.meta.url), 'utf8')))
   v('🔴 aucune page n’est gardée : ni stockage, ni écriture de fichier', !/\.storage\b/.test(ecran))

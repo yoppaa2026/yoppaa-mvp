@@ -891,6 +891,11 @@ const v = (nom, cond, detail = '') => {
     !nouveauGroupe({ nom: ' ', options: [{ nom: 'A' }] }).ok && !nouveauGroupe({ nom: 'Sauces', options: [{ nom: '' }] }).ok)
   v('un supplément négatif est refusé', !nouveauGroupe({ nom: 'S', options: [{ nom: 'A', prix_supplement: '-1' }] }).ok)
   v('un type inconnu devient « 1 choix »', nouveauGroupe({ nom: 'S', type: 'x', options: [{ nom: 'A' }] }).groupe.type === 'unique')
+  // (13/10) Le nombre de choix, dans le formulaire de création.
+  const calz = nouveauGroupe({ nom: 'Ingrédients (3 inclus)', type: 'multiple', choix_min: '3', choix_max: '3', options: [{ nom: 'Oignons' }] })
+  v('🔴 « 3 ingrédients au choix » se crée avec 3 et 3', calz.ok && calz.groupe.choix_min === 3 && calz.groupe.choix_max === 3, JSON.stringify(calz))
+  v('un groupe à un seul choix ignore les bornes', nouveauGroupe({ nom: 'T', type: 'unique', choix_min: '2', choix_max: '5', options: [{ nom: 'M' }] }).groupe.choix_max === null)
+  v('🔴 des bornes impossibles sont refusées en mots', /^Nombre de choix : /.test(nouveauGroupe({ nom: 'I', type: 'multiple', choix_min: '4', choix_max: '3', options: [{ nom: 'A' }] }).error || ''))
   const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
   const i = config.indexOf('function NouveauGroupe(')
   const bloc = i >= 0 ? config.slice(i, config.indexOf('\nfunction ', i + 10)) : ''
@@ -900,6 +905,14 @@ const v = (nom, cond, detail = '') => {
   v('il est affiché dans Personnalisation, même sans groupe existant',
     /<NouveauGroupe articles=\{articles\} toast=\{toast\} onCree=\{noterOptionsTouchees\}/.test(config))
   v('le bouton montre qu’il travaille', /\{envoi && <DotsAttente/.test(bloc))
+  v('🔴 (13/10) le formulaire de création propose le nombre de choix',
+    /<ChampsNombreDeChoix form=\{form\} setForm=\{setForm\} nomGroupe=\{form\.nom\}\/>/.test(bloc) && /choix_min: '', choix_max: ''/.test(bloc))
+  const iE = config.indexOf('function EditionGroupe(')
+  const blocE = iE >= 0 ? config.slice(iE, config.indexOf('\nfunction ', iE + 10)) : ''
+  v('🔴 (13/10) le formulaire de modification part des bornes ACTUELLES (sinon il les effacerait) et les propose',
+    /choix_min: Number\.isInteger\(depart\.choix_min\) \? String\(depart\.choix_min\) : '',/.test(blocE)
+    && /choix_max: Number\.isInteger\(depart\.choix_max\) \? String\(depart\.choix_max\) : '',/.test(blocE)
+    && /<ChampsNombreDeChoix form=\{form\} setForm=\{setForm\}/.test(blocE))
 }
 
 // ═══ MODIFIER UN GROUPE, PARTOUT OU SUR UN ARTICLE (Alex, 10/10) ════════════
@@ -943,6 +956,15 @@ const v = (nom, cond, detail = '') => {
   const rien = planModificationGroupe({ copies: [copies[0]], edition: { nom: 'Sauces', type: 'multiple', obligatoire: false, options: [
     { origine: 'Ketchup', nom: 'Ketchup' }, { origine: 'Samouraï', nom: 'Samouraï', prix_supplement: '0.5' }] }, groupesParArticle: parArticle })
   v('sans changement : rien à écrire, et c’est dit', rien.ok && resumeModification(rien) === 'Rien n’a changé.')
+  // 🔴 (13/10) MODIFIER NE DOIT PAS EFFACER LE NOMBRE DE CHOIX : l'écran
+  // transmet les valeurs actuelles, la règle les compare et les réécrit.
+  const avecChoix = [{ ...copies[0], choix_min: 3, choix_max: 3 }]
+  const garde = planModificationGroupe({ copies: avecChoix, edition: { nom: 'Sauces', type: 'multiple', obligatoire: false, choix_min: '3', choix_max: '3', options: [
+    { origine: 'Ketchup', nom: 'Ketchup' }, { origine: 'Samouraï', nom: 'Samouraï', prix_supplement: '0.5' }] }, groupesParArticle: parArticle })
+  v('🔴 les mêmes bornes : rien à écrire (le nombre de choix est gardé)', garde.ok && garde.groupes.length === 0, JSON.stringify(garde.groupes))
+  const change = planModificationGroupe({ copies: avecChoix, edition: { nom: 'Sauces', type: 'multiple', obligatoire: false, choix_min: '', choix_max: '2', options: [
+    { origine: 'Ketchup', nom: 'Ketchup' }, { origine: 'Samouraï', nom: 'Samouraï', prix_supplement: '0.5' }] }, groupesParArticle: parArticle })
+  v('🔴 des bornes changées s’écrivent avec le groupe', change.ok && change.groupes[0]?.patch.choix_min === null && change.groupes[0]?.patch.choix_max === 2, JSON.stringify(change.groupes))
   v('🔴 une édition invalide est refusée par la règle de création (sans option, prix négatif)',
     !planModificationGroupe({ copies, edition: { nom: 'Sauces', options: [] } }).ok
     && !planModificationGroupe({ copies, edition: { nom: 'Sauces', options: [{ nom: 'X', prix_supplement: '-1' }] } }).ok)

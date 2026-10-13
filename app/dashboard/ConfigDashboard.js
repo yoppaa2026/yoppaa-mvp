@@ -2477,10 +2477,35 @@ async function ecrireModificationGroupe(plan) {
 // Un seul formulaire pour les deux portées (décision d'Alex) : la bibliothèque
 // lui passe TOUTES les copies du nom, le panneau d'un article la sienne seule.
 // Le plan, le résumé et l'écriture sont les mêmes.
+// (13/10) « Au moins / au plus » : la même paire de champs pour créer un
+// groupe et pour le modifier, seulement sur un groupe à plusieurs choix.
+function ChampsNombreDeChoix({ form, setForm, nomGroupe = '' }) {
+  if (form.type !== 'multiple') return null
+  const champ = { ...s.input, width: 56, fontSize: 13, padding: '5px 6px', textAlign: 'center' }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: T.ink }}>
+      <span style={{ fontWeight: 700 }}>Nombre de choix</span>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>au moins
+        <input type="number" min="0" max="30" value={form.choix_min ?? ''} aria-label={`Minimum de choix${nomGroupe ? ` pour ${nomGroupe}` : ''}`}
+          onChange={e => setForm(f => ({ ...f, choix_min: e.target.value }))} style={champ}/>
+      </label>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>au plus
+        <input type="number" min="1" max="30" value={form.choix_max ?? ''} aria-label={`Maximum de choix${nomGroupe ? ` pour ${nomGroupe}` : ''}`}
+          onChange={e => setForm(f => ({ ...f, choix_max: e.target.value }))} style={champ}/>
+      </label>
+      <span style={{ fontSize: 12, color: T.muted }}>vide = sans limite · ex. Calzone : 3 et 3</span>
+    </div>
+  )
+}
+
 function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = {}, toast, onFini, onAnnule }) {
   const depart = modele || copies[0] || {}
   const [form, setForm] = useState(() => ({
     nom: depart.nom || '', type: depart.type === 'multiple' ? 'multiple' : 'unique', obligatoire: depart.obligatoire === true,
+    // ⚠️ LES VALEURS ACTUELLES, TOUJOURS : un champ absent vaudrait « sans
+    // limite », et « Enregistrer » effacerait le « 3 au choix » réglé.
+    choix_min: Number.isInteger(depart.choix_min) ? String(depart.choix_min) : '',
+    choix_max: Number.isInteger(depart.choix_max) ? String(depart.choix_max) : '',
     options: (depart.valeurs || []).map(v => ({ origine: v.nom, nom: v.nom, prix_supplement: Number(v.prix_supplement) > 0 ? String(v.prix_supplement).replace('.', ',') : '' })),
   }))
   const [envoi, setEnvoi] = useState(false)
@@ -2514,6 +2539,7 @@ function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = 
             Obligatoire
           </label>
         </div>
+        <ChampsNombreDeChoix form={form} setForm={setForm} nomGroupe={form.nom}/>
         <div style={{ display: 'grid', gap: 6 }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, margin: 0 }}>Les options et leur supplément</p>
           {form.options.map((o, i) => (
@@ -2554,7 +2580,7 @@ function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = 
 // « Appliquer à… » (`ecrireCopiesDeGroupe`), les doublons de nom sont écartés
 // de la même façon (`conflitsDeGroupe`), et le parent relit (`onCree`).
 function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} }) {
-  const vide = { nom: '', type: 'unique', obligatoire: false, options: [{ nom: '', prix_supplement: '' }] }
+  const vide = { nom: '', type: 'unique', obligatoire: false, choix_min: '', choix_max: '', options: [{ nom: '', prix_supplement: '' }] }
   const [ouvert, setOuvert] = useState(false)
   const [form, setForm] = useState(vide)
   const [cibles, setCibles] = useState([])
@@ -2610,6 +2636,7 @@ function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} })
             Obligatoire
           </label>
         </div>
+        <ChampsNombreDeChoix form={form} setForm={setForm} nomGroupe={form.nom}/>
         <div style={{ display: 'grid', gap: 6 }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, margin: 0 }}>Les options</p>
           {form.options.map((o, i) => (

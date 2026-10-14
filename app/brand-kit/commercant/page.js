@@ -28,7 +28,7 @@ import { feuilleEnSvg, svgEnPng, feuillesEnPdf, telecharger, DPI_IMPRESSION } fr
 import { getPrixPlan } from '@/lib/plans'
 import { euros } from '@/lib/montants'
 // « le 1er octobre » ou « très bientôt » tant que l'ouverture est à confirmer (30/09).
-import { quandOuverture } from '@/lib/lancement'
+import { quandOuverture, ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
 
 // ⚠️ LA DESTINATION DU QR EST UNE DÉCISION, PAS UN DÉTAIL.
 //
@@ -448,22 +448,21 @@ export default function KitCommercant() {
                       elle est à sa place : c'est le premier mot du bloc de l'offre. */}
                   <p style={{ margin: 0, fontSize: '8.4pt', fontWeight: 800, letterSpacing: '.2em', textTransform: 'uppercase', color: T.light }}>Ouverture {quandOuverture()}</p>
                   <p style={{ margin: '2.5mm 0 0', fontSize: '20pt', fontWeight: 800, letterSpacing: '-.025em', lineHeight: 1.12 }}>
-                    Gratuit jusqu&rsquo;au<br/>8 janvier 2027.
+                    {ESSAI_JOURS_MINIMUM} jours offerts,<br/>dès ton inscription.
                   </p>
 
-                  {/* ══ L'URGENCE, ET ELLE EST VRAIE ══
-                      🔴 VÉRIFIÉE DANS `lib/lancement.js` AVANT D'ÊTRE ÉCRITE, parce
-                      qu'un papier ne se corrige plus. La règle d'Alex du 20/08 est une
-                      CONSTANTE, pas un compteur par commerçant : l'essai finit le
-                      8 janvier 2027 pour tout le monde, avec un plancher de 30 jours.
-                      Donc s'inscrire plus tard donne VRAIMENT moins de jours offerts,
-                      et on n'invente aucune rareté.
-                      ⚠️ Et on n'imprime AUCUN décompte : un nombre de jours serait faux
-                      la semaine suivante. On imprime la RÈGLE, qui reste vraie. */}
+                  {/* ══ LA RÈGLE, ET ELLE NE VIEILLIT PLUS ══
+                      🔴 RÉÉCRIT LE 14/10. Ce papier disait « Gratuit jusqu'au
+                      8 janvier 2027, la même date pour tout le monde, chaque semaine
+                      d'attente est une semaine offerte en moins ». Alex a rendu les
+                      100 jours PERMANENTS, comptés depuis l'inscription : ces trois
+                      phrases sont devenues fausses d'un coup, et un papier ne se
+                      corrige plus. Le nombre vient de `lib/lancement.js`.
+                      ⚠️ Toujours AUCUN décompte imprimé : on imprime la RÈGLE. */}
                   <p style={{ margin: '2.6mm 0 0', fontSize: '9.4pt', lineHeight: 1.4, fontWeight: 600, color: T.light }}>
-                    La même date pour tout le monde, quel que soit le jour où tu t&rsquo;inscris.
-                    <strong style={{ color: '#fff' }}> Chaque semaine d&rsquo;attente est une semaine offerte
-                    en moins.</strong> Sans carte de paiement.
+                    Pour tout le monde, quel que soit le jour où tu t&rsquo;inscris.
+                    <strong style={{ color: '#fff' }}> Tu essaies tout, tu restes si c&rsquo;est utile.</strong> Sans
+                    carte de paiement.
                   </p>
 
                   {/* ══ LES TROIS FORMULES, EN CLAIR ══

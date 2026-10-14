@@ -426,7 +426,9 @@ const manque = (b) => b.manquants.map(k => k.cle).join(',')
 
   const { CGU_COMMERCANT_VERSION, cguAJour } = await import('../lib/cgu.js')
   v('🔴 la version des CGU suit la date de la page légale',
-    /Dernière mise à jour : 6 octobre 2026/.test(lire('app/legal/page.js')) && CGU_COMMERCANT_VERSION === '2026-10-06')
+    // ⚠️ REPOINTÉE LE 14/10 : nouvelle clause d'essai (100 jours dès la
+    // création du compte), nouvelle date, nouvelle version.
+    /Dernière mise à jour : 14 octobre 2026/.test(lire('app/legal/page.js')) && CGU_COMMERCANT_VERSION === '2026-10-14')
   v('🔴 seule la version EN VIGUEUR vaut acceptation',
     cguAJour({ cgu_version: CGU_COMMERCANT_VERSION }) && !cguAJour({ cgu_version: '2026-01-01' }) && !cguAJour({}) && !cguAJour(null))
 

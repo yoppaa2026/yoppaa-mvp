@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import { CAPTURES_YOPPER, CAPTURES_COMMERCANT } from '../lib/captures-landing.js'
 import { recompenseDue, presetFidelite } from '../lib/fidelite.js'
+import { PLAN_FEATURES } from '../lib/plans.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -51,26 +52,25 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
 // seul. Chaque rangée porte une idée, et c'est le titre qui la porte : une
 // rangée sans titre redevient une file d'attente.
 {
-  const rangees = [...LANDING.matchAll(/<RangeeMaquettes\s+titre="([^"]+)"/g)].map(m => m[1])
-  verifier('les maquettes sont réparties en au moins deux rangées',
-    rangees.length >= 2, `${rangees.length} rangée(s)`)
-  verifier('chaque rangée porte un titre non vide',
-    rangees.every(t => t.trim().length >= 8), rangees.join(' | '))
-
-  // ⚠️ ON COMPTE LES MAQUETTES POSÉES, PAS CELLES DÉFINIES. Une maquette
-  // écrite mais jamais placée dans une rangée est un écran que personne ne
-  // verra, et rien ne le signale.
+  // ⚠️ REPOINTÉE LE 14/10 : la landing v2 n'a PLUS AUCUNE MAQUETTE DESSINÉE
+  // (Alex : « trop lourde »). Les sept téléphones dessinés et leurs deux
+  // rangées sont partis ; le haut de page montre une VRAIE capture, et la
+  // preuve tient dans un seul carrousel de captures (section 3). Les gardes
+  // des rangées n'ont plus de sujet. Celle des orphelines GARDE le sien : une
+  // maquette qu'on réécrirait sans la poser serait un écran que personne ne
+  // verra.
   const posees = [...LANDING.matchAll(/<(Mock[A-Za-z]+)\s*\/>/g)].map(m => m[1])
   const definies = [...LANDING.matchAll(/^function (Mock[A-Za-z]+)\(/gm)].map(m => m[1])
   const orphelines = definies.filter(d => !posees.includes(d))
   verifier('aucune maquette définie ne reste hors de la page',
     orphelines.length === 0, orphelines.join(', '))
 
-  // Les deux rangées doivent être NON VIDES : un titre seul ne montre rien.
-  const blocs = LANDING.split('<RangeeMaquettes').slice(1)
-  verifier('chaque rangée contient au moins deux téléphones',
-    blocs.every(b => (b.split('</RangeeMaquettes>')[0].match(/<PhoneFrame/g) || []).length >= 2),
-    blocs.map(b => (b.split('</RangeeMaquettes>')[0].match(/<PhoneFrame/g) || []).length).join(', '))
+  // Le téléphone du haut de page porte une vraie capture, et elle existe.
+  const cleHero = LANDING.match(/const CAPTURE_HERO = CAPTURES_YOPPER\.find\(c => c\.cle === '([^']+)'\)/)?.[1] || ''
+  verifier('le haut de page montre une vraie capture, qui existe',
+    !!cleHero && CAPTURES_YOPPER.some(c => c.cle === cleHero), cleHero || 'introuvable')
+  verifier('et ce téléphone est posé dans le haut de page',
+    /<TelephoneHero\/>/.test(LANDING))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -141,10 +141,26 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
   // orthographiée fait disparaître le visuel de la page d'accueil sans qu'une
   // ligne ne bronche, sans erreur, sans écran blanc. C'est exactement le genre
   // de panne muette que ce banc existe pour attraper.
-  verifier('le bloc de preuve est affiché',
-    /CAPTURES_PREUVE\.map/.test(LANDING))
-  verifier('la capture du tableau de bord est affichée',
-    /CAPTURE_DASHBOARD &&/.test(LANDING) || /capture=\{CAPTURE_DASHBOARD\}/.test(LANDING))
+  // ⚠️ REPOINTÉE LE 14/10 : les deux séries (le bloc de preuve commerçant et
+  // la série Yopper) sont devenues UN carrousel, `CAPTURES_CARROUSEL`, qui
+  // commence par le tableau de bord. Les mêmes pannes muettes restent
+  // possibles, et c'est elles qu'on vise : une clé qui ne trouve rien efface.
+  verifier('le carrousel de preuve est affiché',
+    /CAPTURES_CARROUSEL\.map/.test(LANDING))
+  verifier('la capture du tableau de bord ouvre le carrousel',
+    /const CAPTURES_CARROUSEL = \[CAPTURE_DASHBOARD,/.test(LANDING))
+  {
+    const cles = [...(LANDING.match(/const CLES_CARROUSEL = \[([^\]]*)\]/)?.[1] || '').matchAll(/'([^']+)'/g)].map(m => m[1])
+    verifier('le carrousel nomme ses captures', cles.length >= 3, `${cles.length} clé(s)`)
+    const absentes = cles.filter(k => !CAPTURES_YOPPER.some(c => c.cle === k))
+    verifier('🔴 chaque clé du carrousel existe vraiment (un find vide efface sans rien dire)',
+      absentes.length === 0, absentes.join(', '))
+    verifier('six captures au plus (brief du 14/10)', cles.length + 1 <= 6, `${cles.length + 1}`)
+    // La capture de l'ESSAI affiche l'ancienne fin au 8 janvier : elle ne
+    // doit pas revenir tant qu'elle n'est pas refaite.
+    verifier('la capture qui affiche l’ancienne fin d’essai n’est pas montrée',
+      !cles.includes('dashboard_essai') && !/CAPTURES_PREUVE/.test(LANDING))
+  }
 
   {
     const cleLue = LANDING.match(/const CLE_DASHBOARD = '([^']+)'/)?.[1] || ''
@@ -153,16 +169,20 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
       CAPTURES_COMMERCANT.some(c => c.cle === cleLue),
       `cherchée : « ${cleLue} » · présentes : ${CAPTURES_COMMERCANT.map(c => c.cle).join(', ')}`)
   }
-  verifier('la série Yopper est affichée',
-    /CAPTURES_YOPPER\.map/.test(LANDING))
-
-  // 🔴 UN TITRE BLANC SUR FOND CLAIR NE SE VOIT PAS, ET RIEN NE LE DIT. Les
-  // deux séries passent par le même composant : celle du côté Yopper est posée
-  // sur le fond clair de la page et doit le déclarer, sinon sa légende
-  // disparaît purement et simplement.
-  const blocYopper = LANDING.split('CAPTURES_YOPPER.map')[1]?.slice(0, 220) || ''
-  verifier('la série Yopper déclare son fond clair',
-    /fondClair/.test(blocYopper), blocYopper.slice(0, 90))
+  // 🔴 UN TITRE BLANC SUR FOND CLAIR NE SE VOIT PAS, ET RIEN NE LE DIT.
+  // ⚠️ REPOINTÉE LE 14/10 : le carrousel vit dans une section CLAIRE (pas
+  // `lp-noir`, pas `lp-calc`), et sa légende prend l'encre de la page.
+  {
+    const iCarrousel = LANDING.indexOf('CAPTURES_CARROUSEL.map')
+    const section = LANDING.slice(LANDING.lastIndexOf('<section', iCarrousel), iCarrousel)
+    verifier('le carrousel est posé sur un fond clair',
+      /lp-section-captures/.test(section) && !/lp-noir|lp-calc|lp-habitants/.test(section), section.slice(0, 90))
+    verifier('et sa légende prend l’encre de la page',
+      /\.lp-captures figcaption \{[^}]*color: \$\{T\.ink\}/.test(LANDING))
+    // ⚠️ Une piste qui déborde passe par `BandeDefilante` (règle d'Alex du 15/08).
+    verifier('le carrousel passe par BandeDefilante',
+      /<BandeDefilante libelle="les captures" className="lp-captures">/.test(LANDING))
+  }
 
   verifier('les deux séries sont non vides',
     CAPTURES_YOPPER.length > 0 && CAPTURES_COMMERCANT.length > 0)
@@ -190,10 +210,11 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
     // BLOC qu'il faut accorder à son chapeau, pas le nombre d'entrées de la
     // liste. Compter la liste entière ici rendrait la garde fausse le jour où
     // une troisième capture part à un troisième endroit.
-    const CLE_DASHBOARD = LANDING.match(/const CLE_DASHBOARD = '([^']+)'/)?.[1] || ''
+    // ⚠️ REPOINTÉE LE 14/10 : une seule série, le carrousel, et son nombre
+    // d'images est celui de ses clés plus le tableau de bord.
+    const nbCarrousel = [...(LANDING.match(/const CLES_CARROUSEL = \[([^\]]*)\]/)?.[1] || '').matchAll(/'([^']+)'/g)].length + 1
     const SERIES = [
-      { nom: 'commerçant', cle: 'CAPTURES_PREUVE', liste: CAPTURES_COMMERCANT.filter(c => c.cle !== CLE_DASHBOARD) },
-      { nom: 'Yopper', cle: 'CAPTURES_YOPPER', liste: CAPTURES_YOPPER },
+      { nom: 'du carrousel', cle: 'CAPTURES_CARROUSEL', liste: { length: nbCarrousel } },
     ]
     // ⚠️ LES APOSTROPHES SONT DES ENTITÉS DANS CE JSX (`n&rsquo;est`). Une regex
     // écrite avec une apostrophe ordinaire ne trouverait jamais rien et la garde
@@ -265,62 +286,17 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
 // Les deux maquettes les plus anciennes de la landing, refaites le 13/09 après
 // qu'Alex les a pointées comme « trop éloignées de la vraie app ».
 {
-  const fiche = LANDING.split('function MockFiche()')[1]?.split('\nfunction ')[0] || ''
-  verifier('la fiche existe encore', fiche.length > 400)
-
-  // Les quatre éléments que l'ancienne n'avait pas, et que l'écran a.
-  verifier('la fiche montre ses deux étapes',
-    /Produits/.test(fiche) && /Créneau/.test(fiche))
-  verifier('la fiche a ses onglets de catégories',
-    /Viennoiserie/.test(fiche) && /Pâtisserie/.test(fiche))
-  verifier('chaque article porte une vignette',
-    /<VignetteArticle/.test(fiche))
-  verifier('la disponibilité est dite sur l’article',
-    /Disponible/.test(fiche))
-
-  // 🔴 UNE VIGNETTE PORTE UNE ICÔNE, PAS UN APLAT NU (Alex, 13/09). Un carré de
-  // couleur seul se lit comme une photo qui n'a pas chargé ; l'icône dit que
-  // la photo du commerçant viendra là. Sans cette garde, la prochaine retouche
-  // « simplifierait » en retirant le dessin, et personne ne le verrait.
-  // 🔴 LE DÉCOUPAGE SE FAIT SUR `\nfunction `, PAS SUR UN COMMENTAIRE. La
-  // première version bornait la fonction au commentaire suivant : comme
-  // `sansProse` venait de les supprimer tous, la borne n'existait plus et la
-  // garde lisait TOUT LE RESTE DU FICHIER, où un `<rect>` se trouve forcément.
-  // Elle est restée verte pendant qu'on retirait l'icône. Trouvée par mutation,
-  // jamais par relecture.
-  const vignette = LANDING.split('function VignetteArticle(')[1]?.split('\nfunction ')[0] || ''
-  verifier('la vignette est bien isolée', vignette.length > 100 && vignette.length < 1200,
-    `${vignette.length} caractères découpés`)
-  verifier('la vignette dessine une icône de photo',
-    /<svg/.test(vignette) && /<rect/.test(vignette))
-
-  // ⚠️ ET SES COULEURS D'INVENDUS VIENNENT DU MODULE. Une recopie de la valeur
-  // crème tiendrait jusqu'à la première retouche du module, puis la landing
-  // montrerait un écran qui n'existe plus.
-  verifier('le bloc des invendus prend ses couleurs dans le module',
-    /FOND_ANTI_GASPI/.test(fiche) && /BORD_ANTI_GASPI/.test(fiche))
-  verifier('et ne recopie aucune couleur d’invendus en dur',
-    !/#FBF8F2|#E6DECF/i.test(fiche))
-
-  const fid = LANDING.split('function MockFidelite()')[1]?.split('\nfunction ')[0] || ''
-  verifier('les cartes de fidélité existent encore', fid.length > 400)
-
-  // 🔴 C'EST LA LISTE QUI DÉMONTRE LA PHRASE. Le libellé dit « sans carton à
-  // perdre » : plusieurs commerces visibles d'un coup le prouvent, une carte
-  // unique ne fait que l'illustrer. Repasser à une seule carte reviendrait à
-  // reprendre l'écran précédent.
-  // 🔴 LE MOTIF EST ANCRÉ SUR L'ACCOLADE, ET C'EST TOUTE LA DIFFÉRENCE. La
-  // première version cherchait `n: '…'` et comptait des PROPRIÉTÉS CSS :
-  // `flexDirection: 'column'`, `textAlign: 'center'`, `position: 'absolute'`
-  // se terminent tous par un `n`. La garde annonçait dix commerces là où il y
-  // en avait quatre, et restait verte quand on en retirait deux.
-  const enseignesFid = (fid.match(/\{ n: '/g) || []).length
-  verifier('plusieurs commerces sont montrés à la fois',
-    enseignesFid >= 3, `${enseignesFid} carte(s)`)
-  verifier('au moins une récompense est déjà débloquée',
-    /gagne: true/.test(fid))
-  verifier('le pointage au comptoir est expliqué',
-    /numéro de GSM suffit au comptoir/.test(fid))
+  // ⚠️ REPOINTÉE LE 14/10 : `MockFiche`, `VignetteArticle` et `MockFidelite`
+  // sont partis avec la landing v2. La fiche de commande est montrée par une
+  // CAPTURE (`yopper_options`), qui ne peut pas s'éloigner de l'écran réel.
+  // Ce qui reste à garder, c'est ce que la page DIT de la fidélité : la règle
+  // des deux mécaniques, exécutée, et aucune promesse en euros sur des
+  // passages.
+  verifier('aucune maquette de fiche ni de fidélité n’est redessinée à côté des captures',
+    !/function (MockFiche|MockFidelite|VignetteArticle)\(/.test(LANDING))
+  verifier('la fidélité est dite par le numéro de GSM',
+    /numéro de GSM/.test(LANDING))
+  const fid = LANDING
 
   // 🔴 ET CE QUE CES GARDES NE REGARDAIENT PAS : CE QUE LA CARTE PROMET.
   // Elles comptaient les cartes, cherchaient un `gagne: true` et la phrase du
@@ -339,35 +315,17 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
   verifier('et un MONTANT sur la mécanique à cagnotte',
     dueCagnotte.type === 'remise_montant', dueCagnotte.type)
 
-  const promesses = [...fid.matchAll(/t: '([^']+)'/g)].map(m => m[1])
-  verifier('chaque carte dit ce qu’elle promet', promesses.length >= 3, `${promesses.length} promesse(s)`)
-
-  const enPassages = promesses.filter(t => /passages?/i.test(t))
-  const enCagnotte = promesses.filter(t => /cagnotte/i.test(t))
-
-  // 🔴 LES DEUX MÉCANIQUES SE JUGENT SUR LES CARTES EN COURS, PAS SUR LE LOT.
-  // Mesurée au harnais, la première version restait verte quand la seule
-  // cagnotte de la page passait en passages : une carte DÉJÀ GAGNÉE disait
-  // encore le mot « cagnotte » en annonçant son gain, et ça suffisait. Or ce
-  // qui explique une mécanique, c'est la jauge qui MONTE, pas le gain.
-  const enCours = [...fid.matchAll(/t: '([^']+)', gagne: false }/g)].map(m => m[1])
-  verifier('des cartes en cours de remplissage sont montrées', enCours.length >= 2, `${enCours.length}`)
-  verifier('la mécanique à passages est montrée en cours',
-    enCours.some(t => /passages?/i.test(t)), enCours.join(' | '))
-  verifier('la mécanique à cagnotte est montrée en cours aussi',
-    enCours.some(t => /cagnotte/i.test(t)), enCours.join(' | '))
-
-  // 🔴 LE DÉFAUT LUI-MÊME : un montant en euros sur une carte à passages.
-  verifier('aucune carte à passages ne promet un montant en euros',
-    enPassages.every(t => !/€/.test(t)), enPassages.filter(t => /€/.test(t)).join(' | '))
-  // ⚠️ « every », PAS « some ». Avec « some », une seule carte portante
-  // suffisait : on pouvait vider le pourcentage de toutes les autres sans que
-  // rien ne rougisse. Une carte à passages qui ne dit pas sa remise ne dit
-  // rien du tout.
-  verifier('CHAQUE carte à passages annonce son pourcentage',
-    enPassages.every(t => /%/.test(t)), enPassages.filter(t => !/%/.test(t)).join(' | '))
-  verifier('la carte à cagnotte compte bien en euros',
-    enCagnotte.every(t => /€/.test(t)), enCagnotte.join(' | '))
+  // 🔴 LE DÉFAUT DU 22/09, VISÉ SUR TOUT LE TEXTE DE LA PAGE : un montant en
+  // euros promis sur des PASSAGES, alors que la refonte du 16/09 a supprimé le
+  // montant fixe. Toute phrase de la page et des captures qui parle de
+  // passages ne doit annoncer aucun euro.
+  const TEXTES_FID = [
+    ...[...fid.matchAll(/'([^'\\\n]{3,200})'/g)].map(m => m[1]),
+    ...[...CAPTURES_YOPPER, ...CAPTURES_COMMERCANT].flatMap(c => [c.alt, c.legende, c.titre]).filter(Boolean),
+  ]
+  const enPassages = TEXTES_FID.filter(t => /passages?/i.test(t))
+  verifier('aucune phrase sur des passages ne promet un montant en euros',
+    enPassages.every(t => !/\d\s*€/.test(t)), enPassages.filter(t => /\d\s*€/.test(t)).join(' | '))
 
   // ⚠️ ET LE PASSAGE QUI DÉCLENCHE. `appliquerCredit` débloque sur
   // `passages >= seuil` : c'est le 10e qui remplit la carte. La version
@@ -387,28 +345,21 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
 // lendemain. C'est cette forme de journal qui explique pourquoi on l'ouvre, et
 // aucun de ces éléments n'était là.
 {
-  const gmy = LANDING.split('function MockMorning()')[1]?.split('\nfunction ')[0] || ''
-  verifier('l’édition du matin existe', gmy.length > 400)
-
-  verifier('elle est datée', /DIMANCHE/.test(gmy) && /13 septembre/.test(gmy))
-  verifier('elle porte un numéro d’édition', /N°/.test(gmy))
-  verifier('elle nomme la commune', /Mettet/.test(gmy))
-  verifier('ses deux onglets comptent ce qu’ils contiennent',
-    /t: 'Deals', n: \d/.test(gmy) && /t: 'Actus', n: \d/.test(gmy))
-
-  // ⚠️ ALEX A DEMANDÉ QU'ELLE MONTRE UN DEAL, et ses captures n'en avaient
-  // aucun ce matin-là : l'écran affichait « Pas de deals à Mettet ce matin ».
-  // Une maquette qui montrerait l'état vide raconterait l'inverse du libellé.
-  verifier('un deal y est montré, pas un état vide',
-    /Deal/.test(gmy) && !/Pas de deals/.test(gmy))
-  // Le prix barré et le stock, ensemble : c'est le couple qui fait l'offre.
-  verifier('le deal dit son prix, son prix barré et ce qu’il en reste',
-    /lineThrough|line-through/.test(gmy) && /restants/.test(gmy))
-
-  // 🔴 LE PIED EST CE QUI FAIT REVENIR. Sans le rendez-vous du lendemain, une
-  // édition quotidienne n'est plus qu'une page de plus.
-  verifier('le pied donne rendez-vous au lendemain',
-    /Rendez-vous/.test(gmy) && /07h30/.test(gmy))
+  // ⚠️ REPOINTÉE LE 14/10 : `MockMorning` est parti avec la landing v2. Ce qui
+  // reste à garder est la PROMESSE que la page fait du Good Morning, et c'est
+  // là que la page en ligne mentait (erreur n° 1 du brief, « la plus grave ») :
+  // « chaque matin, ton commerce part dans le Good Morning Yoppers, même en
+  // Exister ». En Exister, c'est une actu par semaine ; chaque matin, c'est
+  // Communiquer. La garde lit la grille ET le texte.
+  verifier('en Exister, la présence au Good Morning passe par une actu, sans actus illimitées',
+    PLAN_FEATURES.exister?.actu_gmy === true && PLAN_FEATURES.exister?.actus_illimitees === false
+    && PLAN_FEATURES.communiquer?.actus_illimitees === true)
+  verifier('🔴 la page ne promet jamais « chaque matin » à Exister',
+    !/Même en Exister|même en Exister/.test(LANDING) && !/chaque matin[^.]{0,80}Exister/.test(LANDING))
+  verifier('la grille dit « chaque semaine » pour Exister',
+    /'Une place chaque semaine dans le Good Morning Yoppers'/.test(LANDING))
+  verifier('et la page dit la différence en une phrase',
+    /chaque semaine en Exister, chaque matin en Communiquer/.test(LANDING))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -495,10 +446,29 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
   verifier('les prix viennent de getPrixPlan',
     /getPrixPlan\(formule\)/.test(calc))
 
-  // ⚠️ LES TROIS MODES, dont celui des abonnements qu'Alex a demandé.
-  for (const m of ['pct', 'fix', 'abo']) {
+  // ⚠️ REPOINTÉE LE 14/10 : DEUX MODES. Le pourcentage et le montant par
+  // commande ne sont plus deux onglets exclusifs (Alex : beaucoup prennent
+  // LES DEUX, « 0,50 par commande » en plus du pourcentage) ; ils s'ajoutent
+  // dans le même onglet. Le mode des abonnements reste.
+  for (const m of ['pct', 'abo']) {
     verifier(`le mode « ${m} » existe`, new RegExp(`'${m}'`).test(calc))
   }
+  verifier('🔴 le pourcentage ET le montant par commande s’additionnent',
+    /paye = v \* p \/ 100 \+ n \* f/.test(calc))
+  // 🔴 L'ERREUR N° 7 DU BRIEF : le champ était prérempli à 14 %. C'est le
+  // chiffre du commerçant, jamais le nôtre : tous les champs partent VIDES,
+  // l'exemple n'est qu'un texte gris.
+  verifier('🔴 les champs du calcul partent vides',
+    ['ventes', 'commandes', 'taux', 'parCommande'].every(c => new RegExp(`const \\[${c}, set\\w+\\] = useState\\(''\\)`).test(calc)))
+  verifier('et l’exemple n’est qu’un texte gris (placeholder)',
+    /placeholder=\{exemple\}/.test(LANDING) && /exemple="14"/.test(calc))
+  verifier('aucun poste d’abonnement n’est coché d’avance',
+    /\{ actif: false, prix: p\.prix \}/.test(calc) && !/defaut: true/.test(LANDING))
+  // Le comparatif PAR JOUR (Alex, 14/10), sur l'année entière.
+  verifier('le résultat se lit aussi par jour, sur l’année entière',
+    /const jourEux = paye \* 12 \/ 365/.test(calc) && /const jourNous = prixFormule \* 12 \/ 365/.test(calc))
+  // « 0,50 » se tape avec une virgule : sans conversion, Number() rend NaN.
+  verifier('une virgule décimale est comprise', /replace\(',', '\.'\)/.test(LANDING))
 
   // 🔴 ET LE VERDICT QUI NOUS DONNE TORT. Un calculateur qui ne peut jamais
   // conclure contre son auteur se repère en trois secondes, et il emporte le
@@ -513,7 +483,9 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
   // FORMULE Exister », le féminin est juste ; quand « Exister » est seul, il se
   // lit comme le nom du forfait et prend le masculin. Laisser « gratuite » sans
   // le mot formule obligeait le lecteur à retrouver un mot absent.
-  const zoneAccord = LANDING.split('const POSTES_CALCUL')[1]?.split('function RangeeMaquettes')[0] || ''
+  // ⚠️ REPOINTÉE LE 14/10 : `RangeeMaquettes` est partie ; la zone du
+  // calculateur se ferme sur le composant qui le suit, `CompteurJours`.
+  const zoneAccord = LANDING.split('const POSTES_CALCUL')[1]?.split('function CompteurJours')[0] || ''
   verifier('Exister employé seul ne prend pas le féminin',
     !/Exister<\/strong>, qui est gratuite|Exister, qui est gratuite/.test(zoneAccord))
 
@@ -542,11 +514,18 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
   // d'eux passait sans rien faire rougir. Trouvé par mutation, comme le
   // découpage de la vignette : borner trop court est aussi faux que ne pas
   // border du tout.
-  const zoneCalc = LANDING.split('const POSTES_CALCUL')[1]?.split('function RangeeMaquettes')[0] || ''
+  const zoneCalc = LANDING.split('const POSTES_CALCUL')[1]?.split('function CompteurJours')[0] || ''
   verifier('la zone du calculateur est bien cadrée',
     zoneCalc.length > 3000 && zoneCalc.length < 40000, `${zoneCalc.length} caractères`)
   for (const marque of ['Uber', 'Deliveroo', 'Takeaway', 'TheFork', 'Planity', 'Salonkee', 'Fidelybox']) {
     verifier(`le calculateur ne nomme pas ${marque}`, !new RegExp(marque, 'i').test(zoneCalc))
+  }
+  // ⚠️ ÉTENDUE LE 14/10 À TOUTE LA PAGE : la v2 pique dans chaque bloc (la
+  // bande des secteurs, « pas pour toi », le titre), et c'est là qu'un nom
+  // glisserait. Décision d'Alex au tableau : piquer SANS NOMMER. Fritzy est
+  // la publicité qu'il a montrée en exemple ce jour-là.
+  for (const marque of ['Uber', 'Deliveroo', 'Takeaway', 'Just Eat', 'TheFork', 'Planity', 'Salonkee', 'Fidelybox', 'Fritzy', 'Treatwell', 'Zenchef']) {
+    verifier(`la page ne nomme pas ${marque}`, !new RegExp(marque, 'i').test(LANDING))
   }
 
   // La newsletter n'est pas ouverte : le calculateur ne la vend pas.

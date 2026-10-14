@@ -46,32 +46,25 @@ const FIDELITE = 'lib/fidelite.js'
 
 const MUTATIONS = [
   // ─── 1. CE QUE LA CARTE DE FIDELITE PROMET ───────────────────────────────
+  // ⚠️ REPOINTEES LE 14/10 : `MockFidelite` est partie avec la landing v2. Le
+  // defaut d origine (un montant en euros promis sur des passages) peut revenir
+  // dans N IMPORTE QUELLE phrase de la page : la garde lit maintenant tout le
+  // texte, et la mutation l y glisse par la grille des formules. Les gardes
+  // « chaque carte annonce son pourcentage » et « la cagnotte est montree en
+  // cours » mesuraient des cartes dessinees qui n existent plus : leurs
+  // mutations sont retirees avec elles.
   {
-    nom: '🔴 LE DEFAUT D ORIGINE : la carte a passages repromet un montant fixe en euros',
+    nom: '🔴 LE DEFAUT D ORIGINE : la page repromet un montant fixe en euros sur des passages',
     fichier: LANDING,
-    de: "t: '9 passages sur 10 · encore 1 et tu reçois -10 %', gagne: false },",
-    vers: "t: '9/10 passages, le 11e te fait gagner 5 €', gagne: false },",
-    garde: 'aucune carte à passages ne promet un montant en euros',
-  },
-  {
-    nom: '🔴 la carte a passages n annonce plus aucun pourcentage',
-    fichier: LANDING,
-    de: "t: '9 passages sur 10 · encore 1 et tu reçois -10 %', gagne: false },",
-    vers: "t: '9 passages sur 10 · encore 1 et ta carte est pleine', gagne: false },",
-    garde: 'CHAQUE carte à passages annonce son pourcentage',
-  },
-  {
-    nom: '🔴 la mecanique a cagnotte disparait de la page',
-    fichier: LANDING,
-    de: "t: 'Ta cagnotte : 4,00 € · encore 6,00 € et tu reçois 10,00 € offerts', gagne: false },",
-    vers: "t: '4 passages sur 10 · encore 6 et tu reçois -10 %', gagne: false },",
-    garde: 'la mécanique à cagnotte est montrée en cours aussi',
+    de: "'Fidélité automatique : chaque commande et chaque rendez-vous remplit la carte, sans rien faire',",
+    vers: "'Fidélité automatique : au dixième passage, 5 € offerts à ton client',",
+    garde: 'aucune phrase sur des passages ne promet un montant en euros',
   },
   {
     nom: '🔴 le passage qui declenche est decale d un cran',
     fichier: LANDING,
-    de: "t: '-50 % débloqués · ta nouvelle carte : 2 passages sur 10', gagne: true },",
-    vers: "t: '-50 % au 11e passage · ta nouvelle carte : 2 passages sur 10', gagne: true },",
+    de: "'Carte de fidélité digitale : le numéro de GSM de ton client suffit, plus aucune carte perdue',",
+    vers: "'Carte de fidélité digitale : la récompense tombe au 11e passage',",
     garde: 'aucune carte ne décale le passage qui déclenche',
   },
 
@@ -140,11 +133,13 @@ const MUTATIONS = [
     vers: 'La carte de La Boutique Témoin, ses vraies heures',
     garde: 'la page n’affiche pas l’enseigne « La Boutique Témoin »',
   },
+  // ⚠️ REPOINTEE LE 14/10 : plus de maquette, le nom glisse dans la liste
+  // des metiers, qui est du texte affiche comme un autre.
   {
-    nom: '🔴 un nom de test dans une maquette, hors de la cle enseigne:',
+    nom: '🔴 un nom de test dans le texte affiche, hors de toute cle enseigne:',
     fichier: LANDING,
-    de: "{ n: 'Maison Léa', i: 'M',",
-    vers: "{ n: 'Maison Témoin', i: 'M',",
+    de: "'Friteries', 'Boulangeries',",
+    vers: "'Friteries de démo', 'Boulangeries',",
     garde: 'rien de ce que la page affiche ne se dit de test',
   },
 
@@ -161,19 +156,28 @@ const MUTATIONS = [
     vers: "const CLE_DASHBOARD = 'dashboard_commande'",
     garde: 'et cette clé existe vraiment dans la liste',
   },
+  // ⚠️ REPOINTEES LE 14/10 : les deux series sont devenues UN carrousel, qui
+  // commence par le tableau de bord. Memes pannes muettes, nouvelles ancres.
   {
-    nom: '🔴 la capture du tableau de bord n est plus rendue du tout',
+    nom: '🔴 la capture du tableau de bord sort du carrousel',
     fichier: LANDING,
-    de: '{CAPTURE_DASHBOARD && <CaptureProduit capture={CAPTURE_DASHBOARD}/>}',
-    vers: '{null}',
-    garde: 'la capture du tableau de bord est affichée',
+    de: 'const CAPTURES_CARROUSEL = [CAPTURE_DASHBOARD, ...CLES_CARROUSEL',
+    vers: 'const CAPTURES_CARROUSEL = [...CLES_CARROUSEL',
+    garde: 'la capture du tableau de bord ouvre le carrousel',
   },
   {
-    nom: '🔴 le bloc de preuve n est plus rendu',
+    nom: '🔴 le carrousel de preuve n est plus rendu',
     fichier: LANDING,
-    de: '{CAPTURES_PREUVE.map(c =>',
+    de: '{CAPTURES_CARROUSEL.map(c =>',
     vers: '{[].map(c =>',
-    garde: 'le bloc de preuve est affiché',
+    garde: 'le carrousel de preuve est affiché',
+  },
+  {
+    nom: '🔴 une cle du carrousel est mal orthographiee : la capture disparait en silence',
+    fichier: LANDING,
+    de: "'yopper_invendus', 'yopper_fidelite']",
+    vers: "'yopper_invendu', 'yopper_fidelite']",
+    garde: '🔴 chaque clé du carrousel existe vraiment',
   },
 
   // ─── 5. L ACCORD ENTRE CE QUI EST DIT ET CE QUI EST MONTRE ───────────────
@@ -182,22 +186,15 @@ const MUTATIONS = [
   // sont pas des maquettes... il y a UNE image en dessous. » Le retrait des deux
   // captures de l inscription avait laisse leur chapeau au PLURIEL au-dessus
   // d une seule figure, et le banc etait vert a 93 verifications dessus.
+  // ⚠️ REPOINTEE LE 14/10 : une seule serie, le carrousel, et elle compte six
+  // images. Le sens « plusieurs annoncees pour une seule » n a plus de bloc a
+  // une image ou se produire : sa mutation part avec le bloc commercant.
   {
-    nom: '🔴 LE DEFAUT D ALEX : le bloc commercant reannonce plusieurs images pour une seule',
-    fichier: LANDING,
-    de: "            <div style={{ marginTop: 44, display: 'flex', flexDirection: 'column', gap: 'clamp(24px, 5vw, 48px)' }}>",
-    vers: "            <div style={{ marginTop: 44, display: 'flex', flexDirection: 'column', gap: 'clamp(24px, 5vw, 48px)' }}>\n              <p>Ce sont les écrans que tu verras, tels quels.</p>",
-    garde: 'la série commerçant n’annonce pas plusieurs images pour une seule',
-  },
-
-  // ⚠️ ET LE SYMETRIQUE, parce qu une garde qui ne surveille qu un sens laisse
-  // passer l autre : neuf captures annoncees au singulier.
-  {
-    nom: '🔴 le bloc Yopper annonce une seule image pour ses neuf captures',
+    nom: '🔴 le carrousel annonce une seule image pour ses six captures',
     fichier: LANDING,
     de: 'Ce sont des captures de l&rsquo;application, prises telles quelles.',
     vers: 'C&rsquo;est l&rsquo;écran que tu verras, tel quel.',
-    garde: 'la série Yopper n’annonce pas une seule image pour',
+    garde: 'la série du carrousel n’annonce pas une seule image pour',
   },
 
   // 🔴 ET LE CADRAGE DE LA GARDE ELLE-MEME. Si les deux reperes qui bornent le
@@ -210,18 +207,55 @@ const MUTATIONS = [
     // ⚠️ ANCRE RECALEE LE 22/09 : la liste rendue ici s appelle CAPTURES_PREUVE
     // depuis que la capture du tableau de bord part ailleurs. L ancienne ancre
     // pointait dans le vide, et le harnais l a dit (« TEXTE INTROUVABLE »).
-    de: '{CAPTURES_PREUVE.map(c =>',
-    vers: '{CAPTURES_PREUVE .map(c =>',
-    garde: 'le chapeau de la série commerçant est cadré',
+    // ⚠️ REPOINTEE LE 14/10 sur le carrousel.
+    de: '{CAPTURES_CARROUSEL.map(c =>',
+    vers: '{CAPTURES_CARROUSEL .map(c =>',
+    garde: 'le chapeau de la série du carrousel est cadré',
   },
 
   // ─── 4. LE DOUBLON LUI-MEME ──────────────────────────────────────────────
   {
     nom: '🔴 un dessin revient doubler la capture du rendez-vous',
     fichier: LANDING,
-    de: 'function MockFidelite() {',
-    vers: 'function MockRdv() { return null }\nfunction MockFidelite() {',
+    // ⚠️ ANCRE RECALEE LE 14/10 : `MockFidelite` est partie.
+    de: 'function CompteurJours({ cible }) {',
+    vers: 'function MockRdv() { return null }\nfunction CompteurJours({ cible }) {',
     garde: 'aucune maquette ne redouble la capture du rendez-vous',
+  },
+
+  // ─── 7. LA LANDING V2 (14/10) ────────────────────────────────────────────
+  // 🔴 L ERREUR N° 1 DU BRIEF, LA PLUS GRAVE : « chaque matin, meme en
+  // Exister ». En Exister, c est une fois par semaine.
+  {
+    nom: '🔴 la grille repromet le Good Morning chaque matin en Exister',
+    fichier: LANDING,
+    de: "'Une place chaque semaine dans le Good Morning Yoppers',",
+    vers: "'Une place chaque matin dans le Good Morning Yoppers, même en Exister',",
+    garde: '🔴 la page ne promet jamais « chaque matin » à Exister',
+  },
+  // 🔴 L ERREUR N° 7 : le calculateur prerempli a 14 %.
+  {
+    nom: '🔴 le pourcentage revient prerempli',
+    fichier: LANDING,
+    de: "  const [taux, setTaux] = useState('')",
+    vers: "  const [taux, setTaux] = useState('14')",
+    garde: '🔴 les champs du calcul partent vides',
+  },
+  // ✅ ALEX, 14/10 : le montant par commande s AJOUTE au pourcentage.
+  {
+    nom: '🔴 le montant par commande ne s ajoute plus au pourcentage',
+    fichier: LANDING,
+    de: '    paye = v * p / 100 + n * f',
+    vers: '    paye = v * p / 100',
+    garde: '🔴 le pourcentage ET le montant par commande s’additionnent',
+  },
+  // ✅ ALEX, 14/10 : piquer SANS NOMMER.
+  {
+    nom: '🔴 une pique nomme une plateforme',
+    fichier: LANDING,
+    de: "t: 'Le commerce local n’a pas besoin d’un péage.' },",
+    vers: "t: 'Le commerce local n’a pas besoin de Fritzy.' },",
+    garde: 'la page ne nomme pas Fritzy',
   },
 ]
 

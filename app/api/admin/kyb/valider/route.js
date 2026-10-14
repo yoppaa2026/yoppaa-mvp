@@ -70,7 +70,9 @@ export async function POST(request) {
         kyb_motif_rejet: null,
       })
       .eq('id', commercant_id)
-      .select('id, nom, email, telephone, adresse, plan, bce, stripe_customer_id, stripe_subscription_id')
+      // ⚠️ `created_at` : la fin d'essai se compte depuis l'inscription
+      // (`trialEndCommercant`), et sans elle la création Stripe refuse.
+      .select('id, nom, email, telephone, adresse, plan, bce, stripe_customer_id, stripe_subscription_id, created_at')
       .single()
     if (errC || !commercant) {
       return NextResponse.json({ ok: false, error: `update echoue : ${errC?.message}` }, { status: 500 })
@@ -92,9 +94,8 @@ export async function POST(request) {
 
     // 3) Offre de lancement : si le commercant est sur un plan payant
     //    (communiquer ou vendre) ET qu'il n'a pas deja une subscription Stripe,
-    //    on la cree maintenant avec trial_end = finEssai(), soit au plus tard
-    //    entre le 8 janvier 2027 et 30 jours apres l'inscription (lib/lancement.js).
-    //    `trialDays: 30` ci-dessous est le PLANCHER, pas la duree.
+    //    on la cree maintenant avec trial_end = finEssai(created_at), soit
+    //    100 jours apres l'inscription (lib/lancement.js, 14/10).
     //    Non bloquant : on log et on continue meme si Stripe rate (Alex
     //    peut reessayer manuellement depuis le dashboard).
     let stripeResult = { ok: false, reason: 'skip (plan gratuit)' }
@@ -104,7 +105,6 @@ export async function POST(request) {
         const { subscription, deferred } = await creerSubscriptionAutomatique({
           commercant,
           targetPlan: commercant.plan,
-          trialDays: 30,
           supabaseAdmin: supabase,
         })
         stripeResult = {

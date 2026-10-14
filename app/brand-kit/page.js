@@ -18,6 +18,7 @@
 
 import { useState, useEffect } from 'react'
 import { Check, AlertTriangle, X } from 'lucide-react'
+import { ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
 
 const T = {
   ink:    '#1A0840',
@@ -626,21 +627,20 @@ export default function BrandKit() {
     {
       // Demandé par Alex le 20/08 : inviter les commerçants et annoncer
       // l'offre de lancement.
-      // ⚠️ Mis à jour le 20/08 : l'offre n'est plus une DURÉE mais une DATE.
-      // On annonce le 8 janvier 2027, parce qu'une date se vérifie sur un
-      // calendrier, ne vieillit pas dans un fil Facebook, et crée d'elle-même
-      // l'urgence : chaque jour d'attente est un jour de gratuité en moins.
+      // 🔴 RÉÉCRIT LE 14/10 : l'offre redevient une DURÉE, et pour toujours.
+      // Alex a rendu les 100 jours permanents, comptés depuis l'inscription :
+      // « Gratuit jusqu'au 8 janvier » serait faux pour qui s'inscrit demain.
       // ⚠️ « quel que soit le forfait » est la promesse exacte : la gratuité
       // vaut sur Communiquer comme sur Vendre, aucun palier n'en est exclu.
       // ⚠️ Et JAMAIS « 100 % te revient » : la formule vraie est qu'il n'y a
       // aucune commission, l'abonnement étant notre seul revenu. Les frais
       // bancaires, eux, restent ceux de la banque.
-      title: 'Post FB · Offert jusqu\'au 8 janvier',
+      title: `Post FB · ${ESSAI_JOURS_MINIMUM} jours offerts`,
       dims: { w: 1080, h: 1080 },
-      filename: 'yoppaa-post-fb-offert-8-janvier-1080',
-      sub: 'offre de lancement · appel aux commerçants',
+      filename: `yoppaa-post-fb-${ESSAI_JOURS_MINIMUM}-jours-offerts-1080`,
+      sub: 'offre permanente · appel aux commerçants',
       options: {
-        titre: 'Gratuit jusqu\'au 8 janvier 2027.',
+        titre: `${ESSAI_JOURS_MINIMUM} jours offerts, dès ton inscription.`,
         // ⚠️ « Yoppaa ne prend » ET PAS « aucune commission » tout court : sans
         // sujet, la phrase se lit « aucun frais du tout », et c'est FAUX, les
         // frais bancaires restent ceux de la banque. Le banc l'a attrapée.

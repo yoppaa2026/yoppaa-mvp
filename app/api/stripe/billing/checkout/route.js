@@ -87,7 +87,6 @@ export async function POST(req) {
       targetPlan,
       returnUrl,
       cancelUrl,
-      trialDays: 30,
       supabaseAdmin: supabase,
     })
 

@@ -40,16 +40,29 @@ const MUTATIONS = [
     fichier: 'lib/resend-landing.js', de: '  const quandOuvre = quandOuverture({ avecAnnee: true })', vers: "  const quandOuvre = 'le 1er octobre 2026'" },
   { nom: '🔴 Google lit une publication au 1er octobre',
     fichier: 'lib/seo-landing.js', de: '        ...(ouvertureDatee() ? { datePublished: LAUNCH_DATE_ISO.slice(0, 10) } : {}),', vers: '        datePublished: LAUNCH_DATE_ISO.slice(0, 10),' },
+  // ⚠️ REPOINTÉES LE 14/10 : la landing v2 n'a plus de compte à rebours ni de
+  // ligne « Lancement officiel ». La mutation les fait REVENIR, et la garde
+  // durcie (« aucun compte à rebours », « aucune ligne Lancement officiel »)
+  // doit rougir.
   { nom: '🔴 le compte à rebours revient sans date',
-    fichier: REVEAL, de: '          {ouvertureDatee() && <CompteurLancement/>}', vers: '          <CompteurLancement/>' },
+    fichier: REVEAL, de: '            <p className="lp-micro">Sans carte de paiement', vers: '            <CompteurLancement/>\n            <p className="lp-micro">Sans carte de paiement' },
   { nom: '🔴 la barre « J-N » revient sans date',
     fichier: REVEAL, de: '  const barreLancement = restant > 0 && ouvertureDatee() ? (', vers: '  const barreLancement = restant > 0 ? (' },
   { nom: '⚠️ « Lancement officiel » garde une date',
-    fichier: REVEAL, de: ': <>Lancement officiel très bientôt</>}', vers: ': <>Lancement officiel le {libelleLancement()}</>}' },
+    fichier: REVEAL, de: '<p className="lp-micro">Sans carte de paiement', vers: '<p className="lp-micro">Lancement officiel le {libelleLancement()} · Sans carte de paiement' },
   { nom: '⚠️ le merci du formulaire redonne rendez-vous au 1er octobre',
     fichier: REVEAL, de: "'Bien reçu 🟣 On te prévient dès l’ouverture. À très vite !'", vers: '`Bien reçu 🟣 Rendez-vous le ${libelleLancement()}. À très vite !`' },
   { nom: '🔴 la meta description donne une date',
     fichier: 'app/page.tsx', de: "0% de commission Yoppaa pour les commerçants. Lancement ${quandOuverture({ avecAnnee: true })}.`,", vers: '0% de commission Yoppaa pour les commerçants. Lancement le 1er octobre 2026.`,' },
+  // ─── L ESSAI DE 100 JOURS, DES L INSCRIPTION (14/10, decision d Alex) ───
+  { nom: '🔴 le plancher retombe a trente jours',
+    fichier: LIB, de: 'export const ESSAI_JOURS_MINIMUM = 100', vers: 'export const ESSAI_JOURS_MINIMUM = 30' },
+  { nom: '🔴 la validation du dossier ne lit plus la date d inscription',
+    fichier: 'app/api/admin/kyb/valider/route.js', de: 'stripe_customer_id, stripe_subscription_id, created_at', vers: 'stripe_customer_id, stripe_subscription_id' },
+  { nom: '🔴 Checkout recompte l essai depuis aujourd hui',
+    fichier: 'lib/stripe-billing.js', de: '  const trialEnd = trialEndCommercant(commercant, { margeMs: MARGE_TRIAL_CHECKOUT_MS })', vers: '  const trialEnd = calculerTrialEnd()' },
+  { nom: '🔴 un appelant reecrit sa duree d essai a la main',
+    fichier: 'app/api/stripe/billing/checkout/route.js', de: '      cancelUrl,', vers: '      cancelUrl,\n      trialDays: 30,' },
   // ─── LES DEUX TEMPS ET L ADRESSE DU TABLEAU DE BORD (banc des emails) ───
   { nom: '🔴 l espace ouvert ne montre plus les deux temps', banc: 'verif:emails',
     // ⚠️ La première occurrence est celle de l'espace ouvert (avant la relance).

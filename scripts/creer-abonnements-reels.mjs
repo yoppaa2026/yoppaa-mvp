@@ -35,7 +35,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { modePlateforme, MODE_LIVE } from '@/lib/stripe-mode'
-import { creerSubscriptionAutomatique, calculerTrialEnd } from '@/lib/stripe-billing'
+import { creerSubscriptionAutomatique, trialEndCommercant } from '@/lib/stripe-billing'
 
 const ECRIRE = process.argv.includes('--ecrire')
 
@@ -69,7 +69,8 @@ const db = createClient(url, cle, { auth: { persistSession: false } })
 // la validation KYB ; ils ne sont jamais affichés.
 const { data: fiches, error } = await db
   .from('commercants')
-  .select('id, nom, plan, statut, billing_exempt, email, telephone, adresse, bce, stripe_customer_id, stripe_subscription_id')
+  // `created_at` : la fin d'essai se compte depuis l'inscription (14/10).
+  .select('id, nom, plan, statut, billing_exempt, email, telephone, adresse, bce, stripe_customer_id, stripe_subscription_id, created_at')
   .in('plan', PAYANTS)
 
 if (error) {
@@ -95,10 +96,13 @@ for (const nom of VRAIS) {
   a_creer.push(f)
 }
 
-const fin = new Date(calculerTrialEnd(30) * 1000)
+// La fin d'essai est celle de CHAQUE fiche, comptée depuis son inscription.
+const finDe = (f) => {
+  const t = trialEndCommercant(f)
+  return t ? new Date(t * 1000).toLocaleDateString('fr-BE', { timeZone: 'Europe/Brussels' }) : 'essai fini, facturé tout de suite'
+}
 console.log('\n─── VRAIS ABONNEMENTS À CRÉER (monde RÉEL) ─────────────────────\n')
-console.log(`Fin d'essai qui sera posée : ${fin.toLocaleDateString('fr-BE', { timeZone: 'Europe/Brussels' })}`)
-for (const f of a_creer) console.log(`   • ${f.nom} · forfait ${f.plan.toUpperCase()}`)
+for (const f of a_creer) console.log(`   • ${f.nom} · forfait ${f.plan.toUpperCase()} · fin d'essai : ${finDe(f)}`)
 for (const f of deja) console.log(`   = ${f.nom} : a déjà son abonnement, ignoré`)
 
 if (problemes.length) {
@@ -125,11 +129,12 @@ for (const f of a_creer) {
     const { subscription } = await creerSubscriptionAutomatique({
       commercant: f,
       targetPlan: f.plan,
-      trialDays: 30,
       supabaseAdmin: db,
     })
     crees++
-    const finEssai = new Date(subscription.trial_end * 1000).toLocaleDateString('fr-BE', { timeZone: 'Europe/Brussels' })
+    const finEssai = subscription.trial_end
+      ? new Date(subscription.trial_end * 1000).toLocaleDateString('fr-BE', { timeZone: 'Europe/Brussels' })
+      : 'aucune (essai fini)'
     console.log(`   ✓ ${f.nom} : abonnement ${subscription.status}, fin d'essai ${finEssai}`)
   } catch (e) {
     rates.push(`${f.nom} : ${e?.message || e}`)

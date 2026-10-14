@@ -1,58 +1,66 @@
 'use client'
-// LandingReveal : landing complète affichée à partir du 1er août 10h (mode
-// 'reveal' de lib/landing-mode.js). Le grand dévoilement : ce qu'est Yoppaa,
-// pour les Yoppers et pour les commerçants, avec mockups fidèles à l'app.
+// LandingReveal : la landing publique (mode 'reveal' de lib/landing-mode.js).
 //
-// V2 (retours Alex 30/07) : mockups à hauteur identique (écran 460px),
-// textes réécrits (français fluide), décors absolute retirés (jank scroll
-// iOS, cf. reference_scroll_jank_ios), section formules détaillée avec
-// Exister et Communiquer mis en avant (signaux des Yoppers, push ciblés)
-// + bloc transparence.
+// 🔥 V2 DU 14/10. Alex : « trop lourde. Je voudrais quelque chose de plus
+// léger, percutant, piquant, provocateur vers les autres plateformes,
+// accrocheur et recruteur. Je ne suis pas là pour me faire aimer des autres
+// acteurs, je viens pour déranger. ODOO MIND. » Brief : BRIEF_LANDING_V2.md.
 //
-// Duplication ASSUMÉE de la logique formulaire de LandingTeasing (Turnstile,
-// stats communes, soumission) : le Teasing disparaît au 1er août, on ne
-// refactore pas une page en prod à J-3. Source : LandingTeasing.js.
+// Ce qui a été tranché au tableau, et que cette page applique :
+//   • le commerçant d'abord, l'habitant ensuite, et chaque idée UNE seule fois ;
+//   • on pique le MODÈLE, jamais une marque : aucune plateforme n'est nommée,
+//     mais chaque secteur prend sa pique (alimentaire, rendez-vous, détail,
+//     table). La loi belge sur la publicité comparative exige des taux exacts
+//     et à jour, et le commerçant qu'on recrute est souvent leur client ;
+//   • le titre dit ce qui nous différencie : les autres prennent des
+//     commandes, Yoppaa amène des clients, et pour tout le monde ;
+//   • 100 jours d'essai EN PERMANENCE, comptés dès l'inscription : la page
+//     n'affiche plus aucune date d'offre (`ESSAI_JOURS_MINIMUM`) ;
+//   • « abonnement » fait penser à « engagement » : la page dit que rien
+//     n'enferme, et que la page reste quand on part. « Yopper un jour, Yopper
+//     toujours. »
+//
+// L'ancienne page (douze blocs, sept maquettes dessinées, deux séries de
+// captures, un compte à rebours, la fenêtre « tribu ») est partie. Les gardes
+// qui la mesuraient sont REPOINTÉES LE 14/10 sur ce qui reste, une par une, et
+// celles qui portaient une règle encore vraie la tiennent toujours.
 
 import { useState, useEffect, useRef } from 'react'
 import Script from 'next/script'
 import Link from 'next/link'
 import { Lock } from 'lucide-react'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
-// ⚠️ LES COULEURS DU MODULE ANTI-GASPI VIENNENT DE SON PROPRE FICHIER. Les
-// recopier ici ferait diverger la landing de l'écran à la première retouche,
-// et c'est le motif le plus tenace de ce projet.
-import IconeAntiGaspi, {
-  ACCENT_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI,
-  ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT,
-} from '@/app/components/IconeAntiGaspi'
+import BandeDefilante from '@/app/components/BandeDefilante'
 import {
-  LAUNCH_DATE_ISO, libelleLancement, libelleDernierJourGratuit,
-  joursOfferts, joursOffertsAuLancement, joursAvance,
+  libelleLancement, ESSAI_JOURS_MINIMUM,
   progressionVersLancement, joursAvantLancement,
-  estRegimeLancement, ESSAI_JOURS_MINIMUM,
-  // L'ouverture à confirmer (Alex, 30/09 au soir) : sans date décidée, ni
-  // date ni compte à rebours, « très bientôt » et « dès l'ouverture ».
-  ouvertureDatee, depuisLOuverture,
+  // L'ouverture à confirmer (Alex, 30/09 au soir) : sans date décidée, ni date
+  // ni compte à rebours, seulement « dès l'ouverture ».
+  ouvertureDatee,
 } from '@/lib/lancement'
-import { FACEBOOK_URL, RESEAUX } from '@/lib/reseaux'
+import { RESEAUX } from '@/lib/reseaux'
 import { getPrixPlan, canDo, PLANS } from '@/lib/plans'
-import { TYPES_ENVIE, libelleEnvie } from '@/lib/signaux'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import { CAPTURES_COMMERCANT, CAPTURES_YOPPER, captureSrc } from '@/lib/captures-landing'
+import { APP_STORE_URL, GOOGLE_PLAY_URL, BADGE_APP_STORE, BADGE_GOOGLE_PLAY, appPubliee } from '@/lib/stores'
+import PartageMobilisation from './PartageMobilisation'
 
-// ⚠️ LES CAPTURES COMMERÇANT NE VONT PAS TOUTES AU MÊME ENDROIT, et c'est pour
-// ça qu'elles sont triées ici plutôt qu'au fil du JSX. Celle du tableau de bord
-// a remplacé une maquette, à la place de cette maquette, à côté des arguments
-// qu'elle illustre. Les autres restent le bloc de preuve, plus bas.
+// ─── Les captures ───────────────────────────────────────────────────────────
 //
-// 🔴 UN `find` QUI NE TROUVE RIEN NE CASSE RIEN, IL EFFACE. Si la clé change,
-// le visuel disparaît de la page sans qu'une ligne ne bronche : c'est le banc
+// 🔴 UN `find` QUI NE TROUVE RIEN NE CASSE RIEN, IL EFFACE. Si une clé change,
+// la capture disparaît de la page sans qu'une ligne ne bronche : c'est le banc
 // qui doit le dire, et il le dit (`verif:vitrine`, section 3).
+//
+// ⚠️ SIX AU PLUS (brief du 14/10), une par geste : le tableau du commerçant,
+// puis ce que l'habitant fait chez lui. `dashboard_essai` n'y est plus : sa
+// capture affiche l'ancienne fin d'essai au 8 janvier, devenue fausse pour qui
+// s'inscrit aujourd'hui.
 const CLE_DASHBOARD = 'dashboard_commandes'
 const CAPTURE_DASHBOARD = CAPTURES_COMMERCANT.find(c => c.cle === CLE_DASHBOARD)
-const CAPTURES_PREUVE = CAPTURES_COMMERCANT.filter(c => c.cle !== CLE_DASHBOARD)
-import PartageMobilisation from './PartageMobilisation'
-import { euros } from '@/lib/montants'
+const CLES_CARROUSEL = ['yopper_options', 'yopper_creneaux', 'yopper_variantes', 'yopper_invendus', 'yopper_fidelite']
+const CAPTURES_CARROUSEL = [CAPTURE_DASHBOARD, ...CLES_CARROUSEL.map(cle => CAPTURES_YOPPER.find(c => c.cle === cle))].filter(Boolean)
+// L'écran du téléphone, en haut de page : la liste du village.
+const CAPTURE_HERO = CAPTURES_YOPPER.find(c => c.cle === 'yopper_liste')
 
 const T = {
   ink:     '#1A0840',
@@ -66,23 +74,35 @@ const T = {
   muted:   '#6B7280',
 }
 
-// ⚠️ La date d'ouverture et l'offre de lancement viennent de lib/lancement.js,
-// et de nulle part ailleurs : une landing qui promet une date et une facture
-// qui en applique une autre, c'est le pire défaut possible.
-const LAUNCH_DATE = new Date(LAUNCH_DATE_ISO)
+// ─── Les métiers qui défilent dans le haut de page ──────────────────────────
+// « Tu tiens une friterie ? » : la question qu'un commerçant se pose sur
+// lui-même, avant toute promesse. L'article fait partie du mot, sinon « un »
+// ou « une » tomberait faux une fois sur deux.
+const METIERS = [
+  'une friterie', 'un salon de coiffure', 'une boulangerie', 'une boutique',
+  'un restaurant', 'un institut de beauté', 'une boucherie', 'un food truck',
+  'une librairie', 'un garage', 'une sandwicherie', 'un magasin de fleurs',
+]
 
-function pad(n) { return String(n).padStart(2, '0') }
+// ─── Les piques, une par secteur ────────────────────────────────────────────
+// ⚠️ ON VISE LE MODÈLE, JAMAIS UN NOM. Chaque commerçant reconnaît sa facture,
+// personne n'est désigné. Et AUCUN CHIFFRE : un seul nombre vit sur cette page
+// hors calculateur et prix, et c'est cent.
+const PIQUES = [
+  { secteur: 'Alimentaire', t: 'Ta pizza, ce n’est pas à nous d’en manger une part.' },
+  { secteur: 'Rendez-vous', t: 'Ton agenda est plein ? Tant mieux. Ça ne nous rapporte pas un centime de plus.' },
+  { secteur: 'Détail', t: 'Ta vitrine, ton stock, ton prix. Pas de commission Yoppaa planquée sur chaque pull.' },
+  { secteur: 'Table', t: 'Chez nous, un couvert réservé ne se paie pas au couvert.' },
+  { secteur: 'Tout le monde', t: 'Le commerce local n’a pas besoin d’un péage.' },
+]
 
-function calculerTemps() {
-  const now = new Date()
-  const diff = Math.max(0, LAUNCH_DATE.getTime() - now.getTime())
-  return {
-    jours:    Math.floor(diff / (1000 * 60 * 60 * 24)),
-    heures:   Math.floor((diff / (1000 * 60 * 60)) % 24),
-    minutes:  Math.floor((diff / (1000 * 60)) % 60),
-    secondes: Math.floor((diff / 1000) % 60),
-  }
-}
+// ─── Tout le monde a sa place ───────────────────────────────────────────────
+const FAMILLES = [
+  'Friteries', 'Boulangeries', 'Boucheries', 'Snacks', 'Restaurants', 'Food trucks',
+  'Coiffeurs', 'Barbiers', 'Instituts de beauté', 'Bien-être', 'Garages',
+  'Boutiques de mode', 'Fleuristes', 'Librairies', 'Décoration', 'Maraîchers',
+  'Apiculteurs', 'L’artisan qui n’ouvre que le samedi',
+]
 
 // ─── Petites briques visuelles ───────────────────────────────────────────────
 
@@ -98,128 +118,55 @@ function DrapeauBelge({ size = 20 }) {
   )
 }
 
-// Bande 3px canonique YOPPAA (signature visuelle de toutes les cards de l'app)
-function Bande3px() {
-  return <div style={{ height: 3, background: `linear-gradient(90deg, ${T.ink} 0%, ${T.main} 60%, ${T.light} 100%)` }}/>
-}
-
 // Icônes SVG inline (charte : jamais d'emoji décoratif)
-function IconFlame({ size = 12, color = '#FB923C' }) {
+function Icone({ d, size = 20, sw = 2 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
-      <path d="M12 2c1 3 3 4 3 7 0 1.5-1 3-3 3s-3-1.5-3-3c0-2 2-3 3-7zm-5 9c-1 0-3 2-3 6 0 4 3 5 8 5s8-1 8-5c0-4-2-6-3-6 0 3-2 5-5 5s-5-2-5-5z"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {d.map((p, i) => <path key={i} d={p}/>)}
     </svg>
   )
 }
-function IconCheck({ size = 14, color = '#10B981', sw = 3 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 12l5 5L20 7"/>
-    </svg>
-  )
-}
-function IconBell({ size = 13, color = T.main }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
-      <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-    </svg>
-  )
-}
-function IconSparkles({ size = 12, color = T.light }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3l1.9 5.8H20l-5 3.6L17 18l-5-3.6L7 18l2-5.6-5-3.6h6.1L12 3z"/>
-    </svg>
-  )
-}
-function IconHeart({ size = 12, color = T.main }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
-    </svg>
-  )
+const I = {
+  check:  ['M5 12.5l4.5 4.5L19 7.5'],
+  pin:    ['M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z', 'M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
+  sac:    ['M5 8h14l-1.2 12H6.2z', 'M9 8V6.5a3 3 0 0 1 6 0V8'],
+  boucle: ['M17 2l3 3-3 3', 'M4 11V9a4 4 0 0 1 4-4h12', 'M7 22l-3-3 3-3', 'M20 13v2a4 4 0 0 1-4 4H4'],
+  feuille:['M5 19c0-8 5-13 14-14-1 9-6 14-14 14z', 'M5 19l7-7'],
+  agenda: ['M4 6.5h16V20H4z', 'M4 10.5h16', 'M8.5 3.5v4', 'M15.5 3.5v4'],
+  table:  ['M4 9h16', 'M7 9v10', 'M17 9v10', 'M9 5h6'],
+  etoile: ['M12 3.5l2.6 5.3 5.9.8-4.3 4.1 1 5.8L12 16.8 6.8 19.5l1-5.8L3.5 9.6l5.9-.8z'],
+  fleche: ['M5 12h14', 'M13 6l6 6-6 6'],
 }
 
-function IconGift({ size = 12, color = T.main }) {
+// ─── Le téléphone du haut de page ───────────────────────────────────────────
+//
+// ⚠️ UNE VRAIE CAPTURE DANS LE CADRE, PAS UN DESSIN : c'est la liste du
+// village telle que l'habitant l'ouvre. Les bulles autour sont des EXEMPLES de
+// ce qui arrive au commerçant, écrits en toutes lettres (aucun chiffre).
+// ⚠️ `loading="eager"` ici seulement : c'est la seule image du premier écran.
+function TelephoneHero() {
+  if (!CAPTURE_HERO) return null
+  const bulles = [
+    { icone: I.sac,    titre: 'Nouvelle commande', texte: 'Deux frites, sauce andalouse' },
+    { icone: I.agenda, titre: 'Rendez-vous demain', texte: 'Coupe et brushing, en matinée' },
+    { icone: I.table,  titre: 'Table réservée ce soir', texte: 'Quatre personnes, en terrasse' },
+    { icone: I.etoile, titre: 'Nouvelle cliente', texte: 'Elle a découvert ton commerce dans l’app' },
+  ]
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/>
-      <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
-    </svg>
-  )
-}
-
-// Trio « rassurance » de la section commerçant (matériel, accompagnement, support)
-function IconDevices({ size = 20, color = T.light }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="2" y="4" width="13" height="9" rx="1.5"/><path d="M5.5 17h6"/><path d="M8.5 13v4"/>
-      <rect x="16.5" y="9" width="5.5" height="11" rx="1.5"/>
-    </svg>
-  )
-}
-function IconLifebuoy({ size = 20, color = T.light }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/>
-      <path d="M5.6 5.6l3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/>
-    </svg>
-  )
-}
-function IconHeadset({ size = 20, color = T.light }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 13v-1a8 8 0 0 1 16 0v1"/>
-      <path d="M4 13h2.5a1 1 0 0 1 1 1v3.5a1 1 0 0 1-1 1H5.5A1.5 1.5 0 0 1 4 17z"/>
-      <path d="M20 13h-2.5a1 1 0 0 0-1 1v3.5a1 1 0 0 0 1 1H18a2 2 0 0 1-2 2h-2.5"/>
-    </svg>
-  )
-}
-
-// Cadre téléphone : écran de l'app reproduit en CSS, HAUTEUR FIXE commune
-// (les 4 mockups font exactement la même taille, demande Alex 30/07)
-const ECRAN_H = 460
-
-// Barre d'état du téléphone : heure, réseau, wifi, batterie. Tous les écrans
-// démarrent par un bandeau sombre, l'encre est donc toujours blanche.
-function StatusBar() {
-  const c = '#fff'
-  return (
-    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 13px', zIndex: 6, pointerEvents: 'none' }}>
-      <span style={{ fontSize: 8.5, fontWeight: 800, color: c, letterSpacing: '0.2px' }}>7:30</span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 3.5 }}>
-        <svg width="11" height="8" viewBox="0 0 12 8" fill={c} aria-hidden="true">
-          <rect y="5.5" width="2" height="2.5" rx="0.6" opacity="0.9"/><rect x="3.2" y="3.8" width="2" height="4.2" rx="0.6" opacity="0.9"/>
-          <rect x="6.4" y="2" width="2" height="6" rx="0.6" opacity="0.9"/><rect x="9.6" y="0" width="2" height="8" rx="0.6" opacity="0.5"/>
-        </svg>
-        <svg width="10" height="8" viewBox="0 0 12 9" fill="none" stroke={c} strokeWidth="1.3" strokeLinecap="round" aria-hidden="true">
-          <path d="M1.2 3.1a7 7 0 0 1 9.6 0"/><path d="M3.2 5.3a4 4 0 0 1 5.6 0"/><circle cx="6" cy="7.5" r="0.85" fill={c} stroke="none"/>
-        </svg>
-        <svg width="16" height="8" viewBox="0 0 18 9" fill="none" aria-hidden="true">
-          <rect x="0.5" y="0.5" width="14" height="8" rx="2.2" stroke={c} strokeOpacity="0.55"/>
-          <rect x="2" y="2" width="9" height="5" rx="1.2" fill={c}/>
-          <path d="M16.2 3.1v2.8a1.6 1.6 0 0 0 0-2.8z" fill={c} fillOpacity="0.55"/>
-        </svg>
-      </span>
-    </div>
-  )
-}
-
-function PhoneFrame({ children, label }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-      {/* Ombre volontairement modérée : les gros blurs (60px) coûtent cher à
-          re-rastériser après une pause de scroll (jank PC constaté) */}
-      <div style={{ width: 264, borderRadius: 32, background: '#0B0318', padding: 9, boxShadow: '0 10px 24px rgba(22,6,54,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ borderRadius: 24, overflow: 'hidden', background: T.bg, position: 'relative', height: ECRAN_H }}>
-          {/* Encoche */}
-          <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', width: 74, height: 16, borderRadius: 100, background: '#0B0318', zIndex: 5 }}/>
-          <StatusBar/>
-          {children}
+    <div className="lp-tel">
+      <div className="lp-tel-cadre">
+        <div className="lp-tel-ecran">
+          <img src={captureSrc(CAPTURE_HERO)} alt={CAPTURE_HERO.alt}
+            width={CAPTURE_HERO.largeur} height={CAPTURE_HERO.hauteur} loading="eager" decoding="async"/>
         </div>
       </div>
-      {label && <p style={{ margin: 0, fontSize: 12.5, fontWeight: 800, color: 'inherit', opacity: 0.85, textAlign: 'center', maxWidth: 250, lineHeight: 1.4 }}>{label}</p>}
+      {bulles.map((b, i) => (
+        <div key={b.titre} className={`lp-bulle lp-bulle-${i + 1}`} aria-hidden="true">
+          <i><Icone d={b.icone} size={16}/></i>
+          <span><strong>{b.titre}</strong>{b.texte}</span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -237,25 +184,28 @@ function PhoneFrame({ children, label }) {
 //
 // 🔴 ET LE CALCULATEUR DIT LA VÉRITÉ QUAND ELLE NOUS DESSERT. À petit volume,
 // une commission coûte moins cher qu'un abonnement : la page l'affiche au lieu
-// de le cacher, et renvoie vers Exister. Un calculateur qui ne peut jamais
-// donner tort à son auteur se repère en trois secondes, et il emporte le reste
-// de la page avec lui.
+// de le cacher, et renvoie vers Exister.
+//
+// ✅ 14/10 (Alex) : beaucoup prennent un pourcentage ET un montant par
+// commande. Les deux s'additionnent maintenant dans le même onglet. Les champs
+// sont VIDES, avec un exemple en gris : c'est le chiffre du commerçant, jamais
+// le nôtre (le 14 % prérempli était l'erreur n° 7 du brief). Et le résultat se
+// lit aussi PAR JOUR, contre le prix fixe de Yoppaa.
 
 // ⚠️ LA FORMULE D'UN POSTE EST LUE DANS LA MATRICE, JAMAIS RECOPIÉE. Le jour où
-// une capacité change de palier, le calculateur suit tout seul. Une table de
-// correspondance écrite ici continuerait d'annoncer l'ancien prix, sans que
-// rien ne casse : c'est le mensonge le plus difficile à voir.
+// une capacité change de palier, le calculateur suit tout seul.
 function formuleMinimale(capacite) {
   return PLANS.find(p => canDo(p, capacite)) || 'vendre'
 }
 
 // Des POSTES, pas des marques : rien à sourcer, rien à maintenir quand un
 // concurrent change son offre, et le commerçant reconnaît quand même sa facture.
-// Les montants sont des exemples, que le visiteur remplace par les siens.
+// Les montants sont des exemples, que le visiteur remplace par les siens, et
+// aucun poste n'est coché d'avance.
 const POSTES_CALCUL = [
   { cle: 'pub',    capacite: 'morning',             nom: 'Visibilité locale, toutes-boîtes',  prix: 45 },
   { cle: 'site',   capacite: 'vitrine',             nom: 'Site ou page vitrine',              prix: 20 },
-  { cle: 'fid',    capacite: 'fidelite',            nom: 'Carte de fidélité au comptoir',     prix: 50, defaut: true },
+  { cle: 'fid',    capacite: 'fidelite',            nom: 'Carte de fidélité au comptoir',     prix: 50 },
   { cle: 'deals',  capacite: 'deals',               nom: 'Promos, deals et mise en avant',    prix: 19 },
   // ⚠️ `push_cibles_favoris` ET NON `newsletter_ciblee` : la newsletter n'est
   // pas ouverte (le consentement explicite manque), et le signup le dit. Ce
@@ -274,210 +224,177 @@ const euro = (n, dec) => n.toLocaleString('fr-BE', {
   minimumFractionDigits: dec ? 2 : 0, maximumFractionDigits: dec ? 2 : 0,
 }) + ' €'
 
+// « 0,50 » se tape avec une virgule en Belgique : `Number('0,50')` vaut NaN.
+function lireNombre(s) {
+  const n = Number(String(s ?? '').replace(/\s/g, '').replace(',', '.'))
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
+function Champ({ id, label, valeur, onChange, unite, exemple }) {
+  return (
+    <div className="lp-champ">
+      <label htmlFor={id}>{label}</label>
+      <div className="lp-champ-saisie">
+        <input id={id} type="text" inputMode="decimal" autoComplete="off" placeholder={exemple}
+          value={valeur} onChange={e => onChange(e.target.value.replace(/[^\d,.\s]/g, '').slice(0, 9))}/>
+        <span>{unite}</span>
+      </div>
+    </div>
+  )
+}
+
 function CalculateurCommission() {
   const [mode, setMode] = useState('pct')
-  const [pctVolume, setPctVolume] = useState(6000)
-  const [pctTaux, setPctTaux] = useState(14)
-  const [fixNb, setFixNb] = useState(400)
-  const [fixMontant, setFixMontant] = useState(2)
+  const [ventes, setVentes] = useState('')
+  const [commandes, setCommandes] = useState('')
+  const [taux, setTaux] = useState('')
+  const [parCommande, setParCommande] = useState('')
   const [abos, setAbos] = useState(() =>
-    Object.fromEntries(POSTES_CALCUL.map(p => [p.cle, { actif: !!p.defaut, prix: p.prix }])))
+    Object.fromEntries(POSTES_CALCUL.map(p => [p.cle, { actif: false, prix: p.prix }])))
 
   const actifs = POSTES_CALCUL.filter(p => abos[p.cle].actif)
   const nb = actifs.length
+  const v = lireNombre(ventes)
+  const n = lireNombre(commandes)
+  const p = lireNombre(taux)
+  const f = lireNombre(parCommande)
 
   let paye, titreEux, formule
+  let manque = null
   if (mode === 'abo') {
-    paye = actifs.reduce((s, p) => s + (Number(abos[p.cle].prix) || 0), 0)
-    formule = actifs.reduce((max, p) => {
-      const f = formuleMinimale(p.capacite)
-      return PLANS.indexOf(f) > PLANS.indexOf(max) ? f : max
+    paye = actifs.reduce((s, q) => s + (Number(abos[q.cle].prix) || 0), 0)
+    formule = actifs.reduce((max, q) => {
+      const fq = formuleMinimale(q.capacite)
+      return PLANS.indexOf(fq) > PLANS.indexOf(max) ? fq : max
     }, PLANS[0])
-    titreEux = nb === 0 ? 'Aucun abonnement coché'
-             : nb === 1 ? 'Avec ton abonnement'
-             : `Avec tes ${nb} abonnements`
-  } else if (mode === 'pct') {
-    paye = pctVolume * pctTaux / 100
-    formule = 'vendre'
-    titreEux = `Avec une commission de ${pctTaux.toLocaleString('fr-BE', { maximumFractionDigits: 1 })} %`
+    titreEux = nb === 1 ? 'Avec ton abonnement' : `Avec tes ${nb} abonnements`
   } else {
-    paye = fixNb * fixMontant
+    paye = v * p / 100 + n * f
     formule = 'vendre'
-    titreEux = `Avec ${euro(fixMontant, fixMontant % 1 !== 0)} par commande`
+    const morceaux = []
+    if (p > 0) morceaux.push(`${p.toLocaleString('fr-BE', { maximumFractionDigits: 2 })} %`)
+    if (f > 0) morceaux.push(`${euro(f, f % 1 !== 0)} par commande`)
+    titreEux = morceaux.length ? `Avec ${morceaux.join(' et ')}` : 'Avec ce qu’on te prend'
+    if (p > 0 && v === 0) manque = 'Mets aussi ce que tu vends en ligne par mois.'
+    else if (f > 0 && n === 0) manque = 'Mets aussi ton nombre de commandes par mois.'
   }
+  const vide = mode === 'abo' ? nb === 0 : paye <= 0
 
   const prixFormule = getPrixPlan(formule)?.mensuel ?? 0
   const nomFormule = formule.charAt(0).toUpperCase() + formule.slice(1)
   const ecart = (paye - prixFormule) * 12
-
-  const carte = { background: 'rgba(255,255,255,0.07)', border: '1.5px solid rgba(255,255,255,0.16)', borderRadius: 18, padding: '22px 20px', textAlign: 'center' }
-  const titreChamp = { display: 'block', fontSize: 12, fontWeight: 900, color: T.light, textTransform: 'uppercase', letterSpacing: '0.9px', marginBottom: 10 }
-  const valeur = { margin: '0 0 8px', fontSize: 26, fontWeight: 900, color: '#fff', letterSpacing: '-0.6px', fontVariantNumeric: 'tabular-nums' }
+  // Par JOUR, sur l'année entière : un mois n'a pas toujours trente jours.
+  const jourEux = paye * 12 / 365
+  const jourNous = prixFormule * 12 / 365
+  const echelle = Math.max(jourEux, jourNous, 0.01)
+  // Le point de bascule n'a de sens que pour UNE mécanique à la fois.
+  const seuil = mode === 'pct' && p > 0 && f === 0 ? { valeur: prixFormule * 100 / p, de: 'ventes' }
+    : mode === 'pct' && f > 0 && p === 0 ? { valeur: prixFormule / f, de: 'commandes' }
+    : null
 
   return (
-    <section style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 0' }}>
-      <div style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 58%, ${T.panel} 100%)`, borderRadius: 26, overflow: 'hidden', color: '#fff', boxShadow: `0 18px 44px ${T.ink}3A` }}>
-        <Bande3px/>
-        <div style={{ padding: 'clamp(26px, 5vw, 46px)' }}>
-          <SectionEyebrow>Le calcul que personne ne te propose</SectionEyebrow>
-          <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.2rem)', fontWeight: 900, letterSpacing: '-1.1px', margin: '0 0 12px', color: '#fff', lineHeight: 1.15 }}>
-            Une commission grandit avec toi.<br/>Un abonnement, non.
-          </h2>
-          <p style={{ margin: '0 0 26px', maxWidth: 640, fontSize: '0.97rem', color: 'rgba(255,255,255,0.9)', fontWeight: 500, lineHeight: 1.65 }}>
-            Tu connais ton pourcentage par cœur, ou le total de tes abonnements. Mets-le ici et regarde
-            ce que ça représente sur une année. On ne te demande pas de nous croire : c&rsquo;est ton
-            chiffre, et c&rsquo;est ta calculette.
-          </p>
-
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
-            {[['pct', 'On me prend un pourcentage'], ['fix', 'On me prend un montant par commande'], ['abo', 'Je paie déjà des abonnements']].map(([m, l]) => (
-              <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={mode === m}
-                style={{
-                  padding: '10px 18px', borderRadius: 100, fontFamily: '"DM Sans", sans-serif',
-                  fontSize: 13.5, fontWeight: 800, cursor: 'pointer',
-                  border: `1.5px solid ${mode === m ? '#fff' : 'rgba(196,160,244,0.4)'}`,
-                  background: mode === m ? '#fff' : 'rgba(255,255,255,0.06)',
-                  color: mode === m ? T.deep : 'rgba(255,255,255,0.92)',
-                }}>{l}</button>
-            ))}
-          </div>
-
-          {mode !== 'abo' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 22, marginBottom: 30 }}>
-              <div>
-                <label style={titreChamp} htmlFor="calc-a">{mode === 'pct' ? 'Ce que je vends en ligne par mois' : 'Commandes ou couverts par mois'}</label>
-                <p style={valeur}>{(mode === 'pct' ? pctVolume : fixNb).toLocaleString('fr-BE')} {mode === 'pct' && <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>€</span>}</p>
-                <input id="calc-a" type="range" style={{ width: '100%', accentColor: T.light, height: 26, cursor: 'pointer' }}
-                  min={mode === 'pct' ? 500 : 20} max={mode === 'pct' ? 30000 : 1500} step={mode === 'pct' ? 250 : 10}
-                  value={mode === 'pct' ? pctVolume : fixNb}
-                  onChange={e => (mode === 'pct' ? setPctVolume : setFixNb)(Number(e.target.value))}/>
-              </div>
-              <div>
-                <label style={titreChamp} htmlFor="calc-b">{mode === 'pct' ? 'Le pourcentage qu’on me prend' : 'Ce qu’on me prend par commande'}</label>
-                <p style={valeur}>
-                  {(mode === 'pct' ? pctTaux : fixMontant).toLocaleString('fr-BE', { maximumFractionDigits: 2 })}
-                  <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}> {mode === 'pct' ? '%' : '€'}</span>
-                </p>
-                <input id="calc-b" type="range" style={{ width: '100%', accentColor: T.light, height: 26, cursor: 'pointer' }}
-                  min={mode === 'pct' ? 1 : 0.5} max={mode === 'pct' ? 35 : 8} step={mode === 'pct' ? 0.5 : 0.25}
-                  value={mode === 'pct' ? pctTaux : fixMontant}
-                  onChange={e => (mode === 'pct' ? setPctTaux : setFixMontant)(Number(e.target.value))}/>
-              </div>
-            </div>
-          ) : (
-            <div style={{ marginBottom: 26 }}>
-              <p style={{ margin: '0 0 14px', fontSize: 13.5, color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
-                Coche ce que tu paies aujourd&rsquo;hui, et mets tes vrais montants mensuels.
-              </p>
-              {POSTES_CALCUL.map(p => {
-                const on = abos[p.cle].actif
-                const f = formuleMinimale(p.capacite)
-                return (
-                  <div key={p.cle} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 12, marginBottom: 8,
-                    background: on ? 'rgba(196,160,244,0.14)' : 'rgba(255,255,255,0.05)',
-                    border: `1px solid ${on ? 'rgba(196,160,244,0.45)' : 'rgba(255,255,255,0.12)'}`,
-                  }}>
-                    <input type="checkbox" id={`poste-${p.cle}`} checked={on}
-                      onChange={e => setAbos(a => ({ ...a, [p.cle]: { ...a[p.cle], actif: e.target.checked } }))}
-                      style={{ width: 19, height: 19, accentColor: T.light, cursor: 'pointer', flexShrink: 0 }}/>
-                    <label htmlFor={`poste-${p.cle}`} style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.92)', cursor: 'pointer' }}>
-                      {p.nom}
-                      <span style={{
-                        display: 'inline-block', marginLeft: 8, padding: '2px 8px', borderRadius: 100,
-                        fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.6px', verticalAlign: 'middle',
-                        background: f === 'vendre' ? 'rgba(110,231,183,0.22)' : f === 'communiquer' ? 'rgba(196,160,244,0.3)' : 'rgba(255,255,255,0.16)',
-                        color: f === 'vendre' ? '#6EE7B7' : '#fff',
-                      }}>{f}</span>
-                    </label>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      <input type="number" min="0" max="500" step="1" value={abos[p.cle].prix} disabled={!on}
-                        aria-label={`Prix mensuel : ${p.nom}`}
-                        onChange={e => setAbos(a => ({ ...a, [p.cle]: { ...a[p.cle], prix: Math.max(0, Number(e.target.value) || 0) } }))}
-                        style={{ width: 74, padding: '7px 9px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.25)', color: '#fff', fontFamily: '"DM Sans", sans-serif', fontSize: 14, fontWeight: 800, textAlign: 'right', opacity: on ? 1 : 0.35 }}/>
-                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>€ / mois</span>
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-            <div style={carte}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 900, color: 'rgba(255,255,255,0.92)', lineHeight: 1.4 }}>{titreEux}</h3>
-              <p style={{ margin: 0, fontSize: 'clamp(1.9rem, 5.4vw, 2.7rem)', fontWeight: 900, letterSpacing: '-1.6px', lineHeight: 1, color: '#F87171', fontVariantNumeric: 'tabular-nums' }}>{euro(paye, paye > 0 && paye < 100)}</p>
-              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>par mois</p>
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.16)', margin: '16px 0' }}/>
-              <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#F87171', fontVariantNumeric: 'tabular-nums' }}>{euro(paye * 12, false)}</p>
-              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>par an</p>
-            </div>
-            <div style={{ ...carte, background: 'rgba(196,160,244,0.14)', border: '1.5px solid rgba(196,160,244,0.5)' }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 900, color: 'rgba(255,255,255,0.92)', lineHeight: 1.4 }}>Avec Yoppaa, formule {nomFormule}</h3>
-              <p style={{ margin: 0, fontSize: 'clamp(1.9rem, 5.4vw, 2.7rem)', fontWeight: 900, letterSpacing: '-1.6px', lineHeight: 1, color: '#6EE7B7', fontVariantNumeric: 'tabular-nums' }}>
-                {prixFormule === 0 ? 'Gratuit' : euro(prixFormule, true)}
-              </p>
-              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>{prixFormule === 0 ? 'pour toujours' : 'par mois, HTVA'}</p>
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.16)', margin: '16px 0' }}/>
-              <p style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#6EE7B7', fontVariantNumeric: 'tabular-nums' }}>{prixFormule === 0 ? '0 €' : euro(prixFormule * 12, true)}</p>
-              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>par an</p>
-            </div>
-          </div>
-
-          <p style={{ margin: '18px auto 0', maxWidth: 620, fontSize: 13.5, color: 'rgba(255,255,255,0.6)', textAlign: 'center', fontWeight: 600, lineHeight: 1.65 }}>
-            Et chaque matin, ton commerce part dans le <strong style={{ color: '#fff' }}>Good Morning Yoppers</strong> de
-            {/* ⚠️ « GRATUIT », AU MASCULIN, ET CE N'EST PAS UNE FAUTE. Ailleurs
-                la page écrit « LA FORMULE Exister est gratuite » : l'accord y est
-                porté par le mot formule. Ici « Exister » est seul, et se lit
-                comme le nom du forfait. Laisser le féminin obligeait le lecteur
-                à retrouver un mot absent. */}
-            ta commune. <strong style={{ color: '#fff' }}>Même en Exister, qui est gratuit pour toujours.</strong> Avec
-            Communiquer, tu y ajoutes tes deals et des actus qui remontent dans la liste.
-          </p>
-
-          <div style={{ marginTop: 30, paddingTop: 26, borderTop: '1px solid rgba(255,255,255,0.16)', textAlign: 'center' }}>
-            <ResultatCalcul mode={mode} ecart={ecart} nb={nb} formule={formule} nomFormule={nomFormule}
-              prixFormule={prixFormule} taux={mode === 'pct' ? pctTaux : fixMontant}/>
-            <Link href="/signup" style={{ display: 'inline-block', marginTop: 24, padding: '15px 32px', borderRadius: 100, background: '#fff', color: T.deep, fontWeight: 900, fontSize: 14.5, letterSpacing: 0.4, textTransform: 'uppercase', textDecoration: 'none', boxShadow: '0 8px 22px rgba(0,0,0,0.28)' }}>
-              J&rsquo;inscris mon commerce
-            </Link>
-            {/* ⚠️ « LA COMMISSION YOPPAA », JAMAIS « AUCUNE COMMISSION » TOUT
-                SEUL : Stripe prélève ses frais, et une promesse sans sujet se
-                retourne au premier versement. */}
-            <p style={{ margin: '14px auto 0', maxWidth: 640, fontSize: 12.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6 }}>
-              {mode === 'abo'
-                ? <>Yoppaa ne remplace pas tout : si ton logiciel tient aussi <strong style={{ color: 'rgba(255,255,255,0.92)' }}>ta caisse, ton stock ou les plannings de ton équipe</strong>, garde-le. Ce calcul ne compte que les postes que Yoppaa couvre vraiment.</>
-                : <>Les frais de ta banque et de ton terminal existent des deux côtés : ils ne sont comptés ni ici, ni là. Ce qui change, c&rsquo;est <strong style={{ color: 'rgba(255,255,255,0.92)' }}>la commission Yoppaa sur tes ventes : il n&rsquo;y en a pas</strong>.</>}
-            </p>
-          </div>
-
-          <div style={{ marginTop: 26, padding: 22, borderRadius: 18, textAlign: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(196,160,244,0.3)' }}>
-            <p style={{ margin: 0, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 'clamp(1.05rem, 3vw, 1.4rem)', lineHeight: 1.4, letterSpacing: '-0.5px', color: '#fff' }}>
-              Les places de marché prennent leur commission.<br/>
-              <span style={{ color: T.light }}>Les places de village, non.</span>
-            </p>
-          </div>
-        </div>
+    <div className="lp-calcul">
+      <div className="lp-onglets" role="group" aria-label="Ce que tu paies aujourd’hui">
+        {[['pct', 'On me prend une part de chaque commande'], ['abo', 'Je paie déjà des abonnements']].map(([m, l]) => (
+          <button key={m} type="button" className="lp-onglet" onClick={() => setMode(m)} aria-pressed={mode === m}>{l}</button>
+        ))}
       </div>
-    </section>
+
+      {mode === 'pct' ? (
+        <>
+          <div className="lp-champs">
+            <Champ id="calc-ventes" label="Ce que je vends en ligne par mois" unite="€" exemple="6 000" valeur={ventes} onChange={setVentes}/>
+            <Champ id="calc-taux" label="Le pourcentage qu’on me prend" unite="%" exemple="14" valeur={taux} onChange={setTaux}/>
+            <Champ id="calc-commandes" label="Mes commandes par mois" unite="commandes" exemple="400" valeur={commandes} onChange={setCommandes}/>
+            <Champ id="calc-fixe" label="Et en plus, par commande" unite="€" exemple="0,50" valeur={parCommande} onChange={setParCommande}/>
+          </div>
+          <p className="lp-calcul-aide">
+            Remplis ce qui te concerne : un pourcentage, un montant par commande, ou les deux.
+            {manque && <strong> {manque}</strong>}
+          </p>
+        </>
+      ) : (
+        <div className="lp-postes">
+          <p className="lp-calcul-aide">Coche ce que tu paies aujourd’hui, et mets tes vrais montants mensuels.</p>
+          {POSTES_CALCUL.map(q => {
+            const on = abos[q.cle].actif
+            const fq = formuleMinimale(q.capacite)
+            return (
+              <div key={q.cle} className="lp-poste" data-actif={on ? 'oui' : 'non'}>
+                <input type="checkbox" id={`poste-${q.cle}`} checked={on}
+                  onChange={e => setAbos(a => ({ ...a, [q.cle]: { ...a[q.cle], actif: e.target.checked } }))}/>
+                <label htmlFor={`poste-${q.cle}`}>
+                  {q.nom} <span className={`lp-palier lp-palier-${fq}`}>{fq}</span>
+                </label>
+                <span className="lp-poste-prix">
+                  <input type="number" min="0" max="500" step="1" value={abos[q.cle].prix} disabled={!on}
+                    aria-label={`Prix mensuel : ${q.nom}`}
+                    onChange={e => setAbos(a => ({ ...a, [q.cle]: { ...a[q.cle], prix: Math.max(0, Number(e.target.value) || 0) } }))}/>
+                  <span>€ / mois</span>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {!vide && (
+        <>
+          <div className="lp-duel">
+            <div className="lp-duel-eux">
+              <h3>{titreEux}</h3>
+              <p className="lp-duel-montant">{euro(paye, paye > 0 && paye < 100)}</p>
+              <p className="lp-duel-unite">par mois · {euro(paye * 12, false)} par an</p>
+            </div>
+            <div className="lp-duel-nous">
+              <h3>Avec Yoppaa, formule {nomFormule}</h3>
+              <p className="lp-duel-montant">{prixFormule === 0 ? 'Gratuit' : euro(prixFormule, true)}</p>
+              <p className="lp-duel-unite">{prixFormule === 0 ? 'pour toujours' : `par mois, HTVA · ${euro(prixFormule * 12, true)} par an`}</p>
+            </div>
+          </div>
+
+          <div className="lp-jour">
+            <p className="lp-jour-titre">Un jour moyen</p>
+            <div className="lp-jour-ligne">
+              <span>{titreEux} : <strong>{euro(jourEux, true)}</strong> par jour</span>
+              <div className="lp-barre"><i className="lp-barre-eux" style={{ width: `${Math.max(2, jourEux / echelle * 100)}%` }}/></div>
+            </div>
+            <div className="lp-jour-ligne">
+              <span>
+                Yoppaa {nomFormule} : <strong>{prixFormule === 0 ? 'rien' : `${euro(jourNous, true)} par jour`}</strong>
+                {prixFormule > 0 && <>, que tu serves trois clients ou trois cents</>}
+              </span>
+              <div className="lp-barre"><i className="lp-barre-nous" style={{ width: `${Math.max(2, jourNous / echelle * 100)}%` }}/></div>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="lp-verdict">
+        <ResultatCalcul mode={mode} vide={vide} ecart={ecart} nb={nb} formule={formule} nomFormule={nomFormule} seuil={seuil}/>
+        <Link href="/signup" className="lp-btn lp-btn-blanc">J&rsquo;inscris mon commerce</Link>
+        {/* ⚠️ « LA COMMISSION YOPPAA », JAMAIS « AUCUNE COMMISSION » TOUT
+            SEUL : Stripe prélève ses frais, et une promesse sans sujet se
+            retourne au premier versement. */}
+        <p className="lp-calcul-note">
+          {mode === 'abo'
+            ? <>Yoppaa ne remplace pas tout : si ton logiciel tient aussi <strong>ta caisse, ton stock ou les plannings de ton équipe</strong>, garde-le. Ce calcul ne compte que les postes que Yoppaa couvre vraiment.</>
+            : <>Les frais de ta banque et du paiement en ligne existent des deux côtés : ils ne sont comptés ni ici, ni là. Ce qui change, c&rsquo;est <strong>la commission Yoppaa sur tes ventes : il n&rsquo;y en a pas</strong>.</>}
+        </p>
+      </div>
+    </div>
   )
 }
 
-// Le verdict, séparé parce qu'il a trois formes, et que la troisième nous
+// Le verdict, séparé parce qu'il a quatre formes, et que la troisième nous
 // donne tort.
-function ResultatCalcul({ mode, ecart, nb, formule, nomFormule, prixFormule, taux }) {
-  const petit = { margin: 0, fontSize: 12.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px' }
-  const phrase = { margin: '18px auto 0', maxWidth: 580, fontSize: 15, color: 'rgba(255,255,255,0.92)', fontWeight: 600 }
-  const fort = { color: '#fff' }
-
-  if (mode === 'abo' && nb === 0) {
+function ResultatCalcul({ mode, vide, ecart, nb, formule, nomFormule, seuil }) {
+  if (vide) {
     return (
       <>
-        <p style={petit}>À toi de jouer</p>
-        <p style={{ margin: 0, fontSize: 'clamp(1.15rem, 3.4vw, 1.65rem)', fontWeight: 900, letterSpacing: '-0.7px', color: T.light }}>
-          Coche ce que tu paies aujourd&rsquo;hui.
-        </p>
-        <p style={phrase}>Et si tu ne paies rien pour l&rsquo;instant, commence par <strong style={fort}>Exister</strong> : c&rsquo;est gratuit, pour toujours.</p>
+        <p className="lp-verdict-sur">À toi de jouer</p>
+        <p className="lp-verdict-titre">{mode === 'abo' ? 'Coche ce que tu paies aujourd’hui.' : 'Mets ton chiffre. Le nôtre, tu le connais déjà.'}</p>
+        <p className="lp-verdict-phrase">Et si tu ne paies rien pour l&rsquo;instant, commence par <strong>Exister</strong> : c&rsquo;est gratuit, pour toujours.</p>
       </>
     )
   }
@@ -486,1034 +403,120 @@ function ResultatCalcul({ mode, ecart, nb, formule, nomFormule, prixFormule, tau
   if (ecart <= 0) {
     return (
       <>
-        <p style={petit}>Et on te le dit quand même</p>
-        <p style={{ margin: 0, fontSize: 'clamp(1.15rem, 3.4vw, 1.65rem)', fontWeight: 900, letterSpacing: '-0.7px', color: T.light }}>
+        <p className="lp-verdict-sur">Et on te le dit quand même</p>
+        <p className="lp-verdict-titre">
           {mode === 'abo' ? `À ce niveau, tu paies moins que la formule ${nomFormule}.` : 'À ce volume, tu paies moins avec la commission.'}
         </p>
-        <p style={phrase}>
-          Commence par <strong style={fort}>Exister</strong>, qui est gratuit à vie : ta fiche, tes horaires,
+        <p className="lp-verdict-phrase">
+          Commence par <strong>Exister</strong>, qui est gratuit à vie : ta page, tes horaires,
           tes infos. Tu monteras de formule le jour où ça vaudra le coup, pas avant.
         </p>
       </>
     )
   }
 
-  const seuil = taux > 0 ? (mode === 'pct' ? prixFormule * 100 / taux : prixFormule / taux) : 0
   return (
     <>
-      <p style={petit}>Ce que tu gardes sur un an</p>
-      <p style={{ margin: 0, fontSize: 'clamp(2.6rem, 9vw, 4.4rem)', fontWeight: 900, letterSpacing: '-2.6px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
-        {euro(ecart, false)}
-      </p>
-      <p style={phrase}>
+      <p className="lp-verdict-sur">Ce que tu gardes sur un an</p>
+      <p className="lp-verdict-montant">{euro(ecart, false)}</p>
+      <p className="lp-verdict-phrase">
         {mode === 'abo' ? (
           formule === 'exister'
-            ? <>Et tout ce que tu as coché tient dans <strong style={fort}>Exister</strong>, qui est gratuit pour toujours. Tu ne nous dois rien.</>
+            ? <>Et tout ce que tu as coché tient dans <strong>Exister</strong>, qui est gratuit pour toujours. Tu ne nous dois rien.</>
             : formule === 'communiquer'
-              ? <>Et tout ce que tu as coché tient dans <strong style={fort}>Communiquer</strong>. Vendre ne te servira que le jour où tu voudras encaisser en ligne.</>
-              : <>Et surtout : <strong style={fort}>{nb} abonnement{nb > 1 ? 's' : ''}, {nb} facture{nb > 1 ? 's' : ''}</strong>, et rien qui se parle. Chez nous, ta fiche, tes rendez-vous et ta fidélité se connaissent.</>
-        ) : mode === 'pct' ? (
-          <>Le point de bascule est à <strong style={fort}>{euro(seuil, false)} de ventes par mois</strong>. Au-dessus, tout ce que tu vends en plus ne te coûte rien de plus.</>
+              ? <>Et tout ce que tu as coché tient dans <strong>Communiquer</strong>. Vendre ne te servira que le jour où tu voudras encaisser en ligne.</>
+              : <>Et surtout : <strong>{nb} abonnement{nb > 1 ? 's' : ''}, {nb} facture{nb > 1 ? 's' : ''}</strong>, et rien qui se parle. Chez nous, ta page, tes rendez-vous et ta fidélité se connaissent.</>
+        ) : seuil?.de === 'ventes' ? (
+          <>Le point de bascule est à <strong>{euro(seuil.valeur, false)} de ventes par mois</strong>. Au-dessus, tout ce que tu vends en plus ne te coûte rien de plus chez nous.</>
+        ) : seuil?.de === 'commandes' ? (
+          <>Le point de bascule est à <strong>{Math.ceil(seuil.valeur)} commandes par mois</strong>. Au-dessus, chaque commande en plus ne te coûte rien de plus chez nous.</>
         ) : (
-          <>Le point de bascule est à <strong style={fort}>{Math.ceil(seuil)} commandes par mois</strong>. Au-dessus, chaque commande supplémentaire ne te coûte rien de plus.</>
+          <>Et chaque commande en plus te coûte deux fois : une part du prix, et le montant fixe. Chez nous, rien ne bouge.</>
         )}
       </p>
     </>
   )
 }
 
-// ─── Une rangée de maquettes, sous son idée ─────────────────────────────────
-//
-// Le titre n'est pas décoratif : c'est lui qui fait qu'une rangée se lit comme
-// un groupe et pas comme une file d'attente. Sans lui, on retombe sur le mur
-// de téléphones que ces deux rangées viennent défaire.
-function RangeeMaquettes({ titre, children }) {
-  return (
-    <div style={{ marginBottom: 44 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, maxWidth: 900, margin: '0 auto 22px' }}>
-        <span style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${T.pale})` }}/>
-        <span style={{ fontSize: 12, fontWeight: 900, color: T.main, textTransform: 'uppercase', letterSpacing: '1.2px', whiteSpace: 'nowrap' }}>{titre}</span>
-        <span style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${T.pale}, transparent)` }}/>
-      </div>
-      <div style={{ display: 'flex', gap: 'clamp(16px, 2.6vw, 28px)', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'flex-start', color: T.deep, maxWidth: 1180, margin: '0 auto' }}>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-// ─── Une vraie capture du produit ───────────────────────────────────────────
-//
-// ⚠️ `width` ET `height` EN ATTRIBUTS, PAS SEULEMENT EN CSS. Le navigateur s'en
-// sert pour réserver la place AVANT que l'image n'arrive : sans eux, la page
-// saute au moment précis où le visiteur commence à lire, et sur un téléphone
-// lent ce saut arrive juste sous son pouce.
-//
-// ⚠️ `loading="lazy"` : ces captures vivent au milieu de la partie commerçant,
-// très bas dans la page. Les charger à l'ouverture ralentirait le hero pour
-// des images que la plupart des visiteurs n'atteindront jamais.
-// ⚠️ DEUX FONDS, UN SEUL COMPOSANT. La série commerçant est posée sur le violet
-// sombre, la série Yopper sur le fond clair de la page. Un titre en blanc sur
-// l'un des deux devient invisible, et c'est le genre de défaut qu'un banc ne
-// voit jamais : rien ne casse, le texte est simplement absent à l'écran.
-// ⚠️ ET UN MODE « EN LIGNE », AJOUTÉ LE 22/09 POUR UNE RAISON DE FOND. Une
-// capture porte DÉJÀ son titre et sa légende ici même : la coiffer d'un titre
-// de section, c'est écrire deux titres pour une image. C'est ce qui rendait la
-// partie commerçant lourde, et ça se voyait d'autant plus qu'il ne restait
-// qu'UNE capture de ce côté. En ligne, l'image et son texte forment une rangée
-// comme les autres, et le titre de section disparaît sans rien emporter.
-function CaptureProduit({ capture, fondClair = false, enLigne = false }) {
-  const encre = fondClair ? T.ink : '#fff'
-  const encreDouce = fondClair ? T.muted : 'rgba(255,255,255,0.86)'
-  return (
-    <figure style={enLigne
-      ? { margin: 0, display: 'flex', gap: 'clamp(24px, 5vw, 56px)', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', width: '100%' }
-      : { margin: 0, flex: '1 1 260px', maxWidth: 400 }}>
-      <img
-        src={captureSrc(capture)} alt={capture.alt}
-        width={capture.largeur} height={capture.hauteur}
-        loading="lazy" decoding="async"
-        style={{
-          width: '100%', height: 'auto', display: 'block', borderRadius: 14, background: '#fff',
-          border: fondClair ? `1px solid ${T.pale}` : '1px solid rgba(255,255,255,0.18)',
-          boxShadow: fondClair ? '0 10px 28px rgba(22,6,54,0.14)' : '0 14px 34px rgba(0,0,0,0.3)',
-          ...(enLigne ? { flex: '0 1 360px', maxWidth: 360 } : null),
-        }}
-      />
-      <figcaption style={enLigne
-        ? { margin: 0, textAlign: 'left', flex: '1 1 300px', maxWidth: 420 }
-        : { marginTop: 12, textAlign: 'left' }}>
-        <p style={{ margin: '0 0 6px', fontWeight: 900, fontSize: enLigne ? 'clamp(1.25rem, 3vw, 1.6rem)' : 15, letterSpacing: enLigne ? '-0.8px' : '-0.2px', lineHeight: enLigne ? 1.15 : 1.3, color: encre }}>{capture.titre}</p>
-        <p style={{ margin: 0, fontSize: enLigne ? '0.95rem' : 13, color: encreDouce, lineHeight: enLigne ? 1.65 : 1.55, fontWeight: 500 }}>{capture.legende}</p>
-      </figcaption>
-    </figure>
-  )
-}
-
-// ─── La vignette d'un article ───────────────────────────────────────────────
-//
-// ⚠️ UN APLAT DE COULEUR SEUL PRÉTEND ÊTRE UNE PHOTO (Alex, 13/09). Sur la
-// vraie fiche, chaque article porte la photo du commerçant : une plaque colorée
-// à sa place fait croire à une image floue ou mal chargée. L'icône dit
-// clairement « ici il y aura ta photo », et le dégradé garde la maquette
-// vivante au lieu d'un carré gris.
-//
-// ⚠️ C'est la même logique que `PhotoVitrine` prise par l'autre bout : là-bas
-// un dégradé sert de REPLI derrière une vraie image, ici il n'y a pas d'image
-// du tout, et le dessin doit le dire.
-function VignetteArticle({ degrade }) {
-  return (
-    <span style={{
-      width: 42, height: 42, borderRadius: 8, flexShrink: 0, background: degrade,
-      border: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9"
-        strokeLinecap="round" strokeLinejoin="round" opacity="0.9" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="2.5"/>
-        <circle cx="8.8" cy="8.8" r="1.9"/>
-        <path d="m21 15.5-4.7-4.7L5.5 21"/>
-      </svg>
-    </span>
-  )
-}
-
-// ─── Mockup 1 : la fiche de commande (côté Yopper) ──────────────────────────
-//
-// ⚠️ REDESSINÉE LE 13/09 D'APRÈS LES CAPTURES, ET L'ANCIENNE NE RESSEMBLAIT
-// PLUS À RIEN. Elle montrait une carte blanche posée sur un hero, des pastilles
-// de jours et des articles sans photo : aucun de ces éléments n'existe encore
-// dans le produit. La vraie fiche a ses deux étapes en haut, ses onglets de
-// catégories, une photo par article et la pastille verte de disponibilité.
-//
-// ⚠️ LE BLOC DES INVENDUS EST DANS LE FLUX, PAS À PART, et c'est ce que montre
-// la capture : « Rien ne se perd » apparaît au milieu des articles, à sa place
-// dans la liste. Le mockup dédié montre l'écran complet ; celui-ci montre que
-// l'offre du soir se commande comme n'importe quel croissant.
-function MockFiche() {
-  const articles = [
-    {
-      nom: 'Croissant', prix: '1,80 €',
-      desc: 'Un classique fait maison, avec des ingrédients locaux.',
-      degrade: 'linear-gradient(135deg, #E8B96A, #C88B3A 60%, #F2D9A8)',
-      dispo: true, jeton: null,
-    },
-    {
-      nom: 'Pain au chocolat', prix: '1,90 €',
-      desc: 'Pâte feuilletée croustillante, chocolat au lait.',
-      degrade: 'linear-gradient(135deg, #6B4A2A, #A9724A 55%, #E2C39A)',
-      dispo: false, jeton: 'Commande 1 jour à l’avance',
-    },
-  ]
-  const plus = (
-    <span style={{ width: 26, height: 26, borderRadius: 8, background: T.main, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 15, flexShrink: 0, alignSelf: 'flex-start' }}>+</span>
-  )
-  return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: T.panel, padding: '24px 9px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
-        <span style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(196,160,244,0.25)', borderRadius: 100, padding: '3px 7px', fontSize: 7.5, fontWeight: 800, color: '#fff', flexShrink: 0 }}>&lsaquo; Retour</span>
-        <span style={{ fontSize: 7.5, fontWeight: 800, color: '#fff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Boulangerie du Centre</span>
-        {[{ n: '1', l: 'Produits', on: true }, { n: '2', l: 'Créneau', on: false }].map(e => (
-          <span key={e.n} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0,
-            borderRadius: 100, padding: '2px 7px 2px 2px', fontSize: 6.5, fontWeight: 800,
-            background: e.on ? T.main : 'rgba(255,255,255,0.08)',
-            color: e.on ? '#fff' : 'rgba(255,255,255,0.55)',
-          }}>
-            <span style={{ width: 11, height: 11, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 6, fontWeight: 900, background: e.on ? '#fff' : 'rgba(255,255,255,0.16)', color: e.on ? T.main : 'rgba(255,255,255,0.7)' }}>{e.n}</span>
-            {e.l}
-          </span>
-        ))}
-      </div>
-
-      {/* Les onglets de catégories : c'est par eux que le client circule dans
-          une carte, et l'ancienne maquette n'en avait aucun. */}
-      <div style={{ display: 'flex', gap: 12, padding: '8px 10px 0', background: '#fff', borderBottom: '1px solid #EFEAF7', flexShrink: 0 }}>
-        {[{ t: 'Viennoiserie', on: true }, { t: 'Pains' }, { t: 'Pâtisserie' }].map(o => (
-          <span key={o.t} style={{ fontSize: 8, fontWeight: 800, color: o.on ? T.ink : '#9AA0AE', paddingBottom: 6, borderBottom: o.on ? `2px solid ${T.main}` : '2px solid transparent', whiteSpace: 'nowrap' }}>{o.t}</span>
-        ))}
-      </div>
-
-      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <p style={{ margin: '0 0 7px', display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 900, color: T.ink, letterSpacing: '-0.3px' }}>Viennoiserie</span>
-          <span style={{ fontSize: 7.5, color: T.muted, fontWeight: 600 }}>3 articles</span>
-        </p>
-
-        {articles.map(a => (
-          <div key={a.nom} style={{ background: '#fff', border: '1px solid #F0ECF8', borderRadius: 12, padding: 8, marginBottom: 7, display: 'flex', gap: 8, boxShadow: '0 2px 8px rgba(26,8,64,0.05)', flexShrink: 0 }}>
-            <VignetteArticle degrade={a.degrade}/>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 10, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>{a.nom}</p>
-              <p style={{ margin: '2px 0 0', fontSize: 7.5, color: T.muted, lineHeight: 1.4, fontWeight: 500 }}>{a.desc}</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 10.5, fontWeight: 900, color: T.main }}>{a.prix}</span>
-                {a.dispo && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#F0FDF4', border: '1px solid #10B98133', borderRadius: 100, padding: '1px 6px', fontSize: 6.5, fontWeight: 800, color: '#10B981' }}>
-                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#10B981' }}/>Disponible
-                  </span>
-                )}
-                {a.jeton && (
-                  <span style={{ background: T.pale, color: T.deep, borderRadius: 100, padding: '1px 6px', fontSize: 6.5, fontWeight: 800 }}>{a.jeton}</span>
-                )}
-              </div>
-            </div>
-            {plus}
-          </div>
-        ))}
-
-        {/* ⚠️ LES COULEURS VIENNENT DU MODULE, JAMAIS D'UNE COPIE : une recopie
-            de `#FBF8F2` tiendrait jusqu'à la première retouche, puis la landing
-            montrerait un écran qui n'existe plus. */}
-        <div style={{ background: FOND_ANTI_GASPI, border: `1.5px solid ${BORD_ANTI_GASPI}`, borderRadius: 12, padding: '8px 9px', marginTop: 'auto', marginBottom: 9, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: NUIT_ANTI_GASPI, color: '#fff', borderRadius: 100, padding: '2px 8px', fontSize: 6.5, fontWeight: 900, letterSpacing: '0.5px' }}>
-              <IconeAntiGaspi taille={8} couleur={MARQUE_SUR_NUIT} epaisseur={2.6}/> RIEN NE SE PERD
-            </span>
-            <p style={{ margin: '5px 0 1px', fontSize: 10, fontWeight: 900, color: ENCRE_ANTI_GASPI }}>Torsade au chocolat</p>
-            <p style={{ margin: 0, fontSize: 7.5, color: ENCRE_DOUCE_ANTI_GASPI, fontWeight: 600 }}>il en reste 5 &middot; jusqu&rsquo;à 18 h</p>
-            <p style={{ margin: '4px 0 0', fontSize: 11, fontWeight: 900, color: ACCENT_ANTI_GASPI }}>
-              1,10 €<s style={{ fontSize: 8, color: '#9C8D78', fontWeight: 700, marginLeft: 5 }}>2,20 €</s>
-            </p>
-          </div>
-          {plus}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Mockup 2 : Good Morning Yoppers (l'édition de 7h30) ────────────────────
-// ⚠️ REDESSINÉE LE 13/09 D'APRÈS LES CAPTURES, ET CE N'ÉTAIT PAS LE MÊME ÉCRAN.
-// L'ancienne montrait un simple bandeau violet suivi de trois cartes empilées.
-// Le vrai Good Morning Yoppers est une ÉDITION : une carte qui s'ouvre par
-// dessus l'application, datée, numérotée, avec le nom de la commune, deux
-// onglets qui comptent ce qu'il y a dedans, et un pied qui donne rendez-vous au
-// lendemain. Ce n'est pas un fil d'actualité, c'est un journal du matin, et
-// c'est cette forme-là qui explique pourquoi on l'ouvre.
-//
-// ⚠️ LA CARTE DU DEAL SUIT LE GABARIT DE `DealCard` (app/commander/morning) :
-// en-tête façon post, visuel, titre, puis la ligne remise / prix / prix barré /
-// stock / « J'en profite ». Les captures d'Alex ne montraient aucun deal ce
-// matin-là : plutôt que d'inventer la carte, elle a été relevée dans le code
-// qui la rend.
-function MockMorning() {
-  return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: '#F2EFFA', height: '100%', display: 'flex', flexDirection: 'column', padding: '26px 8px 8px' }}>
-      <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 10px 26px rgba(22,6,54,0.18)', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ height: 2.5, background: `linear-gradient(90deg, ${T.panel}, ${T.main} 55%, ${T.light})`, flexShrink: 0 }}/>
-
-        <div style={{ padding: '8px 10px 0', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <p style={{ margin: 0, fontSize: 7 }}>
-              <span style={{ fontWeight: 900, color: T.ink, letterSpacing: '0.7px' }}>DIMANCHE</span>
-              <span style={{ fontWeight: 700, color: T.main, marginLeft: 4 }}>13 septembre</span>
-            </p>
-            <p style={{ margin: 0, fontSize: 7, fontWeight: 700, color: T.main }}>
-              <span style={{ opacity: 0.6 }}>N°</span> 256
-            </p>
-          </div>
-
-          {/* Le titre est ÉNORME sur l'écran, et c'est ce qui fait l'édition :
-              réduit à la taille d'une ligne de liste, ce ne serait plus un
-              journal. Le mot « Yoppers » porte le dégradé du wordmark. */}
-          <p style={{ margin: '6px 0 0', fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 19, lineHeight: 1.02, letterSpacing: '-1px', color: T.ink }}>
-            Good Morning<br/>
-            <span style={{ color: T.ink }}>Yo</span><span style={{ color: T.main }}>pp</span><span style={{ color: T.mid }}>ers</span>
-          </p>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3, margin: '5px 0 0' }}>
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.6"/>
-            </svg>
-            <span style={{ fontSize: 8.5, fontWeight: 800, color: T.ink }}>Mettet</span>
-            <span style={{ fontSize: 7, color: T.ink }}>⌄</span>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 14, padding: '7px 10px 0', borderBottom: '1px solid #EFEAF7', flexShrink: 0 }}>
-          {[{ t: 'Deals', n: 1, on: true }, { t: 'Actus', n: 2, on: false }].map(o => (
-            <span key={o.t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, paddingBottom: 6, borderBottom: o.on ? `2px solid ${T.ink}` : '2px solid transparent' }}>
-              {o.on ? <IconFlame size={8} color={T.main}/> : <IconBell size={8}/>}
-              <span style={{ fontSize: 8.5, fontWeight: 800, color: o.on ? T.ink : T.muted }}>{o.t}</span>
-              <span style={{ fontSize: 6.5, fontWeight: 800, minWidth: 11, textAlign: 'center', borderRadius: 100, padding: '1px 4px', background: o.on ? T.pale : '#EFEFF3', color: o.on ? T.deep : T.muted }}>{o.n}</span>
-            </span>
-          ))}
-        </div>
-
-        <div style={{ padding: '8px 10px 0', flex: 1, minHeight: 0 }}>
-          <div style={{ border: `1px solid ${T.pale}`, borderRadius: 12, padding: '8px 9px', background: '#fff' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
-              <span style={{ width: 21, height: 21, borderRadius: '50%', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 9, flexShrink: 0 }}>B</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 9, fontWeight: 800, color: T.ink, letterSpacing: '-0.2px' }}>Boulangerie du Centre</p>
-                <p style={{ margin: 0, fontSize: 6.5, color: T.main, fontWeight: 600 }}>Boulangerie &middot; aujourd&rsquo;hui</p>
-              </div>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 100, background: T.pale, color: T.deep, fontSize: 6, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.6px', flexShrink: 0 }}>
-                <IconFlame size={7} color={T.main}/> Deal
-              </span>
-            </div>
-            <div style={{ borderRadius: 8, overflow: 'hidden', marginBottom: 7, height: 52, background: 'linear-gradient(135deg, #E8B96A, #C88B3A 60%, #F2D9A8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" aria-hidden="true">
-                <rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.8" cy="8.8" r="1.9"/><path d="m21 15.5-4.7-4.7L5.5 21"/>
-              </svg>
-            </div>
-            <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 700, color: T.ink, lineHeight: 1.3 }}>3 croissants + 1 offert</p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 7.5, fontWeight: 900, padding: '2px 7px', borderRadius: 100, background: T.pale, color: T.deep }}>&minus;25%</span>
-              <span style={{ fontSize: 13, fontWeight: 800, color: T.ink }}>5,40€</span>
-              <span style={{ fontSize: 8, color: T.mid, textDecoration: 'line-through' }}>7,20€</span>
-              <span style={{ fontSize: 6.5, fontWeight: 700, padding: '2px 6px', borderRadius: 20, background: '#FEF2F2', color: '#DC2626' }}>5 restants</span>
-              <span style={{ marginLeft: 'auto', fontSize: 6.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>J&rsquo;en profite ›</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Le pied donne rendez-vous au lendemain : c'est lui qui fait revenir,
-            et l'ancienne maquette n'en avait pas. */}
-        <div style={{ background: T.panel, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
-          <span style={{ width: 20, height: 20, borderRadius: 6, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>
-            </svg>
-          </span>
-          <p style={{ margin: 0, flex: 1, fontSize: 7, color: 'rgba(255,255,255,0.85)', fontWeight: 600, lineHeight: 1.4 }}>
-            Rendez-vous <strong style={{ color: '#fff' }}>lundi 14 septembre</strong> à <strong style={{ color: '#fff' }}>07h30</strong> pour de nouveaux deals.
-          </p>
-          <span style={{ background: T.light, color: T.ink, borderRadius: 100, padding: '4px 9px', fontSize: 7, fontWeight: 800, flexShrink: 0 }}>Explorer</span>
-        </div>
-        <div style={{ background: T.ink, padding: '4px 0', textAlign: 'center', flexShrink: 0 }}>
-          <span style={{ fontSize: 5.5, fontWeight: 800, color: 'rgba(255,255,255,0.45)', letterSpacing: '1.2px' }}>PROPULSÉ PAR </span>
-          <span style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 7.5, letterSpacing: '-0.04em' }}>
-            <span style={{ color: '#fff' }}>yo</span><span style={{ color: T.light }}>pp</span><span style={{ color: T.mid }}>aa</span>
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── LA MAQUETTE DU RENDEZ-VOUS EST PARTIE LE 22/09, ET C'EST LA RÈGLE DE CE
-// FICHIER QUI L'A DÉCIDÉ ────────────────────────────────────────────────────
-//
-// « Une maquette porte un geste, une capture porte la preuve. » Tant qu'aucune
-// capture ne montrait la prise de rendez-vous, le dessin faisait le travail des
-// deux. Depuis le 22/09, la capture `yopper_creneaux` montre EXACTEMENT le même
-// écran, en vrai : la prestation choisie, « Avec qui », le carrousel des jours,
-// puis la grille des créneaux. Garder les deux, c'est montrer deux fois le même
-// geste dans la même page, et affaiblir la capture en la doublant d'un dessin.
-//
-// ⚠️ CE QUE LE DESSIN DISAIT DE PLUS N'A PAS ÉTÉ PERDU. Son étiquette était la
-// SEULE ligne de toute la landing à annoncer le rappel ; elle est passée dans
-// la légende de la capture. Le délai a été revérifié dans le code avant le
-// déplacement : `RAPPEL_RDV_MIN = 60` (`lib/rappels.js`), donc « une heure
-// avant » est juste. L'email de confirmation, lui, porte un rappel à 24 h.
-//
-// ⚠️ ET ELLE PORTAIT UNE DATE QUI VIEILLISSAIT TOUTE SEULE : « AUJ » sur le
-// dimanche 13, « Créneaux lundi 14 sep ». Neuf jours plus tard, la page
-// d'accueil proposait des créneaux passés. Une capture ne promet pas un jour
-// précis ; un dessin daté, si.
-
-// ─── Mockups 7 et 8 : le restaurant ─────────────────────────────────────────
-//
-// ⚠️ AUCUNE DES SIX PREMIÈRES NE MONTRAIT UN RESTAURANT (Alex, 13/09 : « on a
-// un super module restaurant, ils doivent le voir et le comprendre »). Il en
-// faut DEUX, et elles ne disent pas la même chose :
-//   • MockTableChoix montre ce qu'AUCUNE autre ne raconte, la double nature
-//     d'un restaurant : réserver une table ET commander à emporter, sur la même
-//     fiche. C'est l'argument du module, lisible en une seconde.
-//   • MockTableCreneaux montre le parcours lui-même, et surtout qu'il tient en
-//     trois étapes affichées en haut.
-//
-// ⚠️ DESSINÉES D'APRÈS LES CAPTURES D'ALEX, pas d'après le code. Trois détails
-// avaient été inventés à la première tentative : les étapes n'apparaissaient
-// pas, la borne était à huit personnes au lieu de six, et la phrase des grandes
-// tablées ne donnait pas le numéro de téléphone. Une maquette qui ment sur le
-// produit est pire qu'une maquette absente.
-
-// Les photos du commerce de démo. Elles sont posées EN FOND, par-dessus un
-// dégradé : si un fichier manque, il reste une plaque de couleur crédible au
-// lieu d'une image cassée sur la page d'accueil.
-function PhotoVitrine({ src, degrade }) {
-  return (
-    <span style={{
-      flex: 1, height: 54, borderRadius: 9,
-      background: `url(${src}) center/cover, ${degrade}`,
-      border: '1px solid rgba(255,255,255,0.5)',
-    }}/>
-  )
-}
-
-function MockTableChoix() {
-  return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: T.panel, padding: '24px 9px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(196,160,244,0.25)', borderRadius: 100, padding: '3px 7px', fontSize: 7.5, fontWeight: 800, color: '#fff', flexShrink: 0 }}>‹ Retour</span>
-        <span style={{ fontSize: 8, fontWeight: 800, color: '#fff' }}>La Table d&rsquo;Essai</span>
-      </div>
-      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <p style={{ margin: '0 0 5px', fontSize: 6.5, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Mon commerce en images</p>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          <PhotoVitrine src="/captures/resto-facade.webp" degrade="linear-gradient(135deg, #3F3A36, #6B5E52 60%, #A08E7A)"/>
-          <PhotoVitrine src="/captures/resto-salle.webp" degrade="linear-gradient(135deg, #5C4A3A, #B99B76 55%, #E4CDAA)"/>
-        </div>
-
-        <div style={{ background: '#fff', borderRadius: 12, padding: 11, border: `1px solid ${T.pale}`, boxShadow: '0 2px 10px rgba(26,8,64,0.06)' }}>
-          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 900, color: T.deep, letterSpacing: '-0.2px' }}>Que veux-tu faire&nbsp;?</p>
-          <p style={{ margin: '3px 0 9px', fontSize: 8, color: T.muted, fontWeight: 600, lineHeight: 1.45 }}>La carte est juste en dessous, tu peux la lire avant de choisir.</p>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <span style={{ flex: 1, borderRadius: 10, padding: '9px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: `linear-gradient(135deg, ${T.ink}, ${T.main})` }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
-              <span style={{ fontSize: 8.5, fontWeight: 800, color: '#fff', lineHeight: 1.3, textAlign: 'center' }}>Réserver<br/>une table</span>
-            </span>
-            <span style={{ flex: 1, borderRadius: 10, padding: '9px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: '#fff', border: `1.4px solid ${T.main}` }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9 4 5h16l1 4v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/><path d="M5 11v10h14V11"/></svg>
-              <span style={{ fontSize: 8.5, fontWeight: 800, color: T.main, lineHeight: 1.3, textAlign: 'center' }}>Commander<br/>à emporter</span>
-            </span>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 'auto', paddingBottom: 10 }}>
-          <div style={{ background: T.pale, border: '1px solid rgba(196,160,244,0.6)', borderRadius: 9, padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-            {/* ⚠️ L'ACOMPTE A DISPARU D'ICI LE 14/09, ET CE N'EST PAS UN
-                RACCOURCI DE RÉDACTION : il ne sera pas construit. Un acompte
-                encaissé est un produit à déclarer, avec TVA et caisse
-                certifiée ; une empreinte non capturée n'est rien. Décision
-                d'Alex du 14/09.
-                🔴 ET ON NE DIT JAMAIS QU'UNE SOMME EST BLOQUÉE. Le chemin
-                Stripe est un `SetupIntent` : la carte est enregistrée, rien
-                n'est retenu sur le compte du client. Écrire « on bloque 120 € »
-                serait faux, et c'est exactement ce qu'il vérifierait. */}
-            <p style={{ margin: 0, fontSize: 7, fontWeight: 700, color: T.deep, lineHeight: 1.4 }}>Sur une grande table, le restaurant peut demander une <b>empreinte bancaire</b> : rien n’est débité si tu viens.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MockTableCreneaux() {
-  const jours = [
-    { j: 'Dim', n: '13', ferme: false, actif: false },
-    { j: 'Lun', n: '14', ferme: true, actif: false },
-    { j: 'Mar', n: '15', ferme: false, actif: true },
-    { j: 'Mer', n: '16', ferme: false, actif: false },
-    { j: 'Jeu', n: '17', ferme: false, actif: false },
-  ]
-  const creneaux = ['12:00', '12:15', '12:30', '12:45', '13:00', '13:15', '13:30', '13:45', '18:00', '18:15', '18:30', '18:45', '19:00', '19:15', '19:30', '20:00']
-  return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: T.panel, padding: '24px 9px 8px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(196,160,244,0.25)', borderRadius: 100, padding: '3px 7px', fontSize: 7.5, fontWeight: 800, color: '#fff', flexShrink: 0 }}>‹ Retour</span>
-        <span style={{ fontSize: 8, fontWeight: 800, color: '#fff', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>La Table d&rsquo;Essai</span>
-        {/* Les trois étapes : c'est elles qui disent « c'est court ». */}
-        <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-          {[{ t: '✓', fait: true }, { t: '2', actif: true }, { t: '3' }].map((e, i) => (
-            <span key={i} style={{
-              width: 15, height: 15, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 7, fontWeight: 900,
-              background: e.fait ? 'rgba(16,185,129,0.15)' : e.actif ? T.main : 'rgba(255,255,255,0.08)',
-              border: `1px solid ${e.fait ? '#10B981' : e.actif ? T.light : 'rgba(196,160,244,0.3)'}`,
-              color: e.fait ? '#10B981' : e.actif ? '#fff' : 'rgba(255,255,255,0.6)',
-            }}>{e.t}</span>
-          ))}
-        </span>
-      </div>
-      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ background: '#fff', borderRadius: 10, padding: '7px 9px', marginBottom: 9, border: `1px solid ${T.pale}`, boxShadow: '0 2px 8px rgba(26,8,64,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${T.ink}, ${T.main} 60%, ${T.mid})` }}/>
-          <div>
-            <p style={{ margin: 0, fontSize: 6.5, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Prestation choisie</p>
-            <p style={{ margin: '2px 0 0', fontSize: 10.5, fontWeight: 900, color: T.ink }}>Table de 4 personnes</p>
-            <p style={{ margin: '1px 0 0', fontSize: 7.5, color: T.muted, fontWeight: 600 }}>2h</p>
-          </div>
-          <span style={{ flexShrink: 0, border: `1.2px solid ${T.main}`, borderRadius: 100, padding: '3px 8px', fontSize: 7.5, fontWeight: 800, color: T.main }}>Changer</span>
-        </div>
-
-        <p style={{ margin: '0 0 5px', fontSize: 7, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Je viens le</p>
-        <div style={{ display: 'flex', gap: 4, marginBottom: 9 }}>
-          {jours.map(d => (
-            <span key={d.n} style={{ flex: 1, borderRadius: 8, border: `1px solid ${d.actif ? T.main : T.pale}`, background: d.actif ? T.main : '#fff', padding: '4px 0', textAlign: 'center', opacity: d.ferme ? 0.38 : 1 }}>
-              <span style={{ display: 'block', fontSize: 6.5, fontWeight: 700, color: d.actif ? '#fff' : T.muted }}>{d.j}</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 900, color: d.actif ? '#fff' : T.ink, lineHeight: 1.1 }}>{d.n}</span>
-              <span style={{ display: 'block', fontSize: 6.5, fontWeight: 700, color: d.actif ? '#fff' : T.muted }}>sep</span>
-            </span>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '0 0 5px' }}>
-          <span style={{ fontSize: 7, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Créneaux mardi 15 sep</span>
-          <span style={{ flex: 1, height: 1, background: T.pale }}/>
-          <span style={{ fontSize: 7, fontWeight: 700, color: T.muted }}>22 libres</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
-          {creneaux.map(h => (
-            <span key={h} style={{
-              padding: '5px 0', borderRadius: 7, fontSize: 8, fontWeight: 800, textAlign: 'center',
-              background: h === '19:15' ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
-              color: h === '19:15' ? '#fff' : T.ink,
-              border: h === '19:15' ? 'none' : `1px solid ${T.pale}`,
-            }}>{h}</span>
-          ))}
-        </div>
-
-        <div style={{ marginTop: 'auto', paddingBottom: 10 }}>
-          <div style={{ background: T.pale, border: '1px solid rgba(196,160,244,0.6)', borderRadius: 9, padding: '5px 8px', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.deep} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-            <p style={{ margin: 0, fontSize: 7, fontWeight: 700, color: T.deep, lineHeight: 1.4 }}>Ta carte est <b>simplement enregistrée</b>. Rien n&rsquo;est débité si tu viens.</p>
-          </div>
-          <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '7px 14px', textAlign: 'center' }}>
-            <span style={{ fontSize: 9, fontWeight: 800, color: '#fff' }}>Confirmer ma table</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Mockup 9 : ce qui reste avant la fermeture ─────────────────────────────
-//
-// ⚠️ LA LANDING EN PARLAIT À QUATRE ENDROITS SANS JAMAIS LE MONTRER (Alex,
-// 13/09). Le bloc « Ce qui reste ne part plus à la poubelle », la pastille
-// « Rien ne se perd », la ligne de la formule Vendre et le détail des tarifs :
-// quatre fois du texte, zéro image. Même défaut que le restaurant la veille.
-//
-// ⚠️ LES COULEURS VIENNENT DU MODULE, PAS D'ICI. `IconeAntiGaspi` exporte le
-// crème, son bord, la nuit et l'accent : les recopier ferait diverger la
-// landing de l'écran dès la première retouche, et c'est le motif le plus tenace
-// de ce projet.
-//
-// ⚠️ CE QUI FAIT L'ARGUMENT, C'EST LE COUPLE TEMPS + QUANTITÉ. « encore 3 h 09 »
-// et « il en reste 3 » disent ensemble qu'il faut y aller maintenant ; le prix
-// barré seul ne serait qu'une promotion de plus.
-function MockAntiGaspi() {
-  const offres = [
-    // 🔴 LES ENSEIGNES DE DÉMONSTRATION N'ONT RIEN À FAIRE ICI, et celles-ci y
-    // sont restées en production. « La mie de test » affichait le mot TEST sur
-    // la page qui recrute les commerçants, et les deux autres noms désignent
-    // des commerces qui existent vraiment en base : leur prêter une fausse
-    // offre du soir sur une page publique, c'est écrire à leur place.
-    // Les enseignes de cette landing sont inventées, et le restent.
-    { enseigne: 'Boulangerie du Centre', titre: 'Torsade au chocolat', prix: '1,10 €', avant: '2,20 €', reste: 'il en reste 5', loin: '1.3 km' },
-    { enseigne: 'Friterie du Parc', titre: 'Fondant au chocolat', prix: '2,50 €', avant: '5,00 €', reste: 'il en reste 3', loin: '3.7 km' },
-  ]
-  const pastille = {
-    display: 'inline-flex', alignItems: 'center', gap: 3,
-    background: '#fff', border: `1px solid ${BORD_ANTI_GASPI}`, borderRadius: 100,
-    padding: '2px 6px', fontSize: 7, fontWeight: 800, color: ENCRE_DOUCE_ANTI_GASPI,
-    whiteSpace: 'nowrap',
-  }
-  return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: NUIT_ANTI_GASPI, padding: '24px 12px 12px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 9, padding: '3px 7px', fontSize: 9, fontWeight: 800, color: '#fff' }}>‹</span>
-          <IconeAntiGaspi taille={13} couleur={MARQUE_SUR_NUIT} epaisseur={2.4}/>
-          <span style={{ fontSize: 12.5, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>Rien ne se perd</span>
-        </div>
-        <p style={{ margin: '4px 0 0 25px', fontSize: 8, color: MARQUE_SUR_NUIT, fontWeight: 700 }}>Les derniers du jour, avant la fermeture.</p>
-      </div>
-      <div style={{ padding: '10px 10px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <p style={{ margin: '0 0 7px', fontSize: 7, fontWeight: 800, color: ENCRE_DOUCE_ANTI_GASPI, textTransform: 'uppercase', letterSpacing: '0.7px' }}>2 offres près de toi</p>
-        {offres.map(o => (
-          <div key={o.titre} style={{ position: 'relative', background: FOND_ANTI_GASPI, border: `1.5px solid ${BORD_ANTI_GASPI}`, borderRadius: 11, padding: '8px 9px', marginBottom: 7 }}>
-            <span style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(26,8,64,0.14)' }}>
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={ACCENT_ANTI_GASPI} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
-              </svg>
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2, paddingRight: 20 }}>
-              <IconeAntiGaspi taille={9} epaisseur={2.6}/>
-              <span style={{ fontSize: 7, fontWeight: 900, color: ACCENT_ANTI_GASPI, textTransform: 'uppercase', letterSpacing: '0.6px' }}>{o.enseigne}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 6, marginBottom: 6 }}>
-              <span style={{ fontSize: 10.5, fontWeight: 900, color: ENCRE_ANTI_GASPI, lineHeight: 1.2 }}>{o.titre}</span>
-              <span style={{ textAlign: 'right', flexShrink: 0 }}>
-                <span style={{ display: 'block', fontSize: 12, fontWeight: 900, color: ACCENT_ANTI_GASPI, lineHeight: 1 }}>{o.prix}</span>
-                <span style={{ display: 'block', fontSize: 7, fontWeight: 700, color: ENCRE_DOUCE_ANTI_GASPI, marginTop: 2 }}>
-                  <s>{o.avant}</s> · &minus;50 %
-                </span>
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <span style={pastille}>
-                <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke={ENCRE_DOUCE_ANTI_GASPI} strokeWidth="2.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-                encore 3 h 09
-              </span>
-              <span style={pastille}>{o.reste}</span>
-              <span style={pastille}>{o.loin}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── LA MAQUETTE DU TABLEAU DE BORD EST PARTIE LE 22/09 ─────────────────────
-//
-// Alex : « remplace ce visuel par la capture jointe ». C'est le PREMIER endroit
-// de cette landing où une capture prend la PLACE d'un dessin au lieu de
-// s'ajouter à côté, et ça vaut d'être expliqué, parce que la règle du fichier
-// des captures dit l'inverse par défaut : une maquette porte un geste, une
-// capture porte la preuve, l'une ne remplace pas l'autre.
-//
-// Ici le geste était devenu une évidence. « Voilà ton écran d'accueil, avec tes
-// commandes » ne demande plus à être simplifié pour être compris : ce qui
-// convainc, c'est de voir la VRAIE liste, avec ses vrais compteurs et une vraie
-// commande dedans. Le dessin ne pouvait pas montrer qu'une commande peut être
-// LIÉE À UN RENDEZ-VOUS et se remettre pendant la prestation : il aurait fallu
-// l'inventer, et une maquette qui invente finit toujours par mentir.
-//
-// ⚠️ LA FONCTION EST SUPPRIMÉE, PAS LAISSÉE DE CÔTÉ. Une maquette définie et
-// jamais posée est un écran que personne ne verra, et le banc le dit (« aucune
-// maquette définie ne reste hors de la page »). La laisser « au cas où » aurait
-// fait rougir la vitrine sans qu'aucun défaut n'existe.
-//
-// ⚠️ ET LA CAPTURE PORTAIT DES DONNÉES PERSONNELLES. Voir le masquage dans
-// scripts/extraire-ecran-visuel.mjs : un numéro de GSM et une adresse email,
-// en route pour la page d'accueil publique.
-
-function MockFidelite() {
-  // 🔴 CETTE MAQUETTE VENDAIT UNE MÉCANIQUE SUPPRIMÉE LE 16/09 (corrigé le
-  // 22/09). Elle annonçait « 9/10 passages → le 11e te fait gagner 5 € », or
-  // `lib/fidelite.js` l'écrit noir sur blanc : « Le montant fixe en euros
-  // n'existe plus. C'était lui, le défaut. » Un commerçant ne PEUT plus régler
-  // ça, et le client ne le verra jamais : la page d'accueil promettait donc
-  // quelque chose que le produit refuse de faire.
-  //
-  // ⚠️ DEUX MÉCANIQUES, ET CHACUNE GARDE SON UNITÉ (`recompenseDue`) :
-  //   • PASSAGES → un POURCENTAGE de remise, parce qu'il suit le prix pratiqué.
-  //   • CAGNOTTE → la récompense EST la cagnotte : seuil à 10 €, 10 € rendus.
-  // Les deux sont montrées, sinon la landing n'en raconte qu'une moitié.
-  //
-  // ⚠️ ET C'EST LE 10e PASSAGE, PAS LE 11e. `appliquerCredit` déclenche sur
-  // `passages >= seuil` : la carte se remplit au 10e, et la remise se dépense
-  // sur la commande suivante. « Le 11e » décalait la promesse d'un passage.
-  //
-  // ⚠️ LES DEUX CARTES GAGNÉES NE SONT PAS PLEINES, et c'est le détail qui
-  // prouve que la maquette a été relevée sur le produit : au débloquage, le
-  // seuil est RETIRÉ et la carte repart. L'écran réel le dit lui-même (« Ta
-  // nouvelle carte a déjà 2 passages sur 10 »), une barre figée à 100 % non.
-  const cartes = [
-    { n: 'Salon Camille', i: 'C', fond: `linear-gradient(135deg, ${T.deep}, ${T.main})`, pct: 20,
-      t: '-50 % débloqués · ta nouvelle carte : 2 passages sur 10', gagne: true },
-    { n: 'Friterie du Parc', i: 'F', fond: 'linear-gradient(135deg, #7A1F1F, #C0392B)', pct: 90,
-      t: '9 passages sur 10 · encore 1 et tu reçois -10 %', gagne: false },
-    { n: 'Boulangerie du Centre', i: 'B', fond: `linear-gradient(135deg, ${T.main}, ${T.light})`, pct: 40,
-      t: 'Ta cagnotte : 4,00 € · encore 6,00 € et tu reçois 10,00 € offerts', gagne: false },
-    { n: 'Maison Léa', i: 'M', fond: 'linear-gradient(135deg, #B45309, #F59E0B)', pct: 15,
-      t: '10,00 € offerts débloqués · ta cagnotte repart à 1,50 €', gagne: true },
-  ]
-  return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: T.panel, padding: '22px 12px 10px', flexShrink: 0 }}>
-        <p style={{ margin: 0, fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: 15, letterSpacing: '-0.05em', lineHeight: 1 }}>
-          <span style={{ color: '#fff' }}>yo</span><span style={{ color: T.light }}>pp</span><span style={{ color: T.mid }}>aa</span>
-        </p>
-        <p style={{ margin: '10px 0 0', fontSize: 13, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>Mes cartes de fidélité</p>
-        <p style={{ margin: '2px 0 0', fontSize: 8, color: T.light, fontWeight: 700 }}>Elles se remplissent toutes seules</p>
-      </div>
-
-      <div style={{ padding: '9px 10px 0', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexShrink: 0 }}>
-          <span style={{ fontSize: 7.5, fontWeight: 900, color: T.main, textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap' }}>Mes cartes</span>
-          <span style={{ flex: 1, height: 1, background: T.pale }}/>
-          <span style={{ fontSize: 8, color: T.muted, fontWeight: 800 }}>8</span>
-        </div>
-
-        {cartes.map(c => (
-          <div key={c.n} style={{
-            background: c.gagne ? '#F0FDF4' : '#fff',
-            border: `1px solid ${c.gagne ? '#10B98144' : '#F0ECF8'}`,
-            borderRadius: 12, padding: 9, marginBottom: 7, display: 'flex', gap: 8, alignItems: 'center',
-            boxShadow: '0 2px 8px rgba(26,8,64,0.05)', flexShrink: 0,
-          }}>
-            <span style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: c.fond, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, color: '#fff' }}>{c.i}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: 9.5, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>{c.n}</p>
-              <div style={{ height: 5, borderRadius: 100, background: T.pale, overflow: 'hidden', margin: '5px 0 4px' }}>
-                <span style={{ display: 'block', height: '100%', width: `${c.pct}%`, borderRadius: 100, background: c.gagne ? '#10B981' : `linear-gradient(90deg, ${T.main}, ${T.mid})` }}/>
-              </div>
-              <p style={{ margin: 0, fontSize: 7.5, color: c.gagne ? '#047857' : T.muted, fontWeight: c.gagne ? 800 : 600, lineHeight: 1.4 }}>{c.t}</p>
-            </div>
-            <span style={{ color: T.muted, fontSize: 11, flexShrink: 0 }}>&rsaquo;</span>
-          </div>
-        ))}
-
-        <p style={{ margin: 'auto 0 10px', fontSize: 7.5, color: T.muted, textAlign: 'center', fontWeight: 600, lineHeight: 1.5 }}>
-          Plus de carton au fond du sac : ton numéro de GSM suffit au comptoir.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// ─── Mockup 6 : inscription commerçant (étape 5, score de complétude) ───────
-function MockOnboarding() {
-  return (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', background: T.bg, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: `linear-gradient(135deg, ${T.panel}, ${T.deep})`, padding: '25px 11px 11px', flexShrink: 0 }}>
-        <p style={{ margin: 0, fontSize: 6.5, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px' }}>Créer mon commerce</p>
-        {/* 🔴 TROIS ÉTAPES DEPUIS LE 06/10 (décision d'Alex : alléger
-            l'inscription). La maquette montrait encore « 5 sur 5 », les
-            visuels, les horaires et le score de 60 : une capture fausse est
-            une promesse fausse. */}
-        <p style={{ margin: '2px 0 0', fontWeight: 900, fontSize: 12, color: '#fff', letterSpacing: '-0.3px' }}>Étape 3 sur 3 · Vérification</p>
-        {/* Fil des étapes */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 9 }}>
-          {['Compte', 'L’essentiel', 'Vérification'].map((e, i) => (
-            <div key={e} style={{ flex: 1, textAlign: 'center' }}>
-              <div style={{ height: 3, borderRadius: 100, background: i <= 2 ? T.light : 'rgba(255,255,255,0.18)' }}/>
-              <p style={{ margin: '3px 0 0', fontSize: 5.5, fontWeight: 800, color: i === 2 ? '#fff' : 'rgba(255,255,255,0.6)', letterSpacing: '0.2px' }}>{e}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Ce qui est déjà fait : l'essentiel, puis la vérification */}
-      <div style={{ margin: '9px 10px 0', background: '#fff', borderRadius: 11, border: `1px solid ${T.pale}`, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
-        {[
-          'Nom, type, adresse et téléphone',
-          'Numéro d’entreprise (BCE)',
-          'Représentant légal',
-          'Conditions et déclaration acceptées',
-        ].map(l => (
-          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IconCheck size={9}/>
-            <span style={{ fontSize: 8, fontWeight: 700, color: T.ink }}>{l}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Boutique Yoppaa : l'accompagnement se choisit ici */}
-      <div style={{ margin: '8px 10px 0', background: '#fff', borderRadius: 11, border: `1.5px solid ${T.main}`, padding: '8px 10px', flexShrink: 0, boxShadow: `0 4px 14px ${T.main}1F` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-          <span style={{ width: 13, height: 13, borderRadius: 4, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <IconCheck size={8} color="#fff" sw={3.4}/>
-          </span>
-          <p style={{ margin: 0, fontSize: 8.5, fontWeight: 900, color: T.ink }}>Success Pack on-site</p>
-          <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 900, color: T.main }}>199€</span>
-        </div>
-        <p style={{ margin: 0, fontSize: 7, color: T.muted, fontWeight: 600, lineHeight: 1.45 }}>On vient chez toi : photos, installation complète de ton catalogue, formation, suivi à J+30. Optionnel.</p>
-      </div>
-
-      {/* Soumission */}
-      <div style={{ margin: 'auto 10px 10px' }}>
-        <div style={{ background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, borderRadius: 100, padding: '8px 12px', textAlign: 'center' }}>
-          <span style={{ fontSize: 9, fontWeight: 800, color: '#fff' }}>Envoyer mon dossier</span>
-        </div>
-        <p style={{ margin: '6px 0 0', textAlign: 'center', fontSize: 6.5, color: T.muted, fontWeight: 600, lineHeight: 1.4 }}>Réponse sous 48 h ouvrables. Ta page part en ligne dès qu’elle est complète.</p>
-      </div>
-    </div>
-  )
-}
-
-// ─── Compteur vers l'ouverture publique (isolé : tick sans re-render la page) ─
-// Perf scroll : le repaint du tick chaque seconde est CONFINÉ à sa propre boîte
-// (contain layout/paint) pour que la reprise du scroll ne le paie jamais, le
-// tick est suspendu quand l'onglet est caché, et pas de text-shadow (coûteux à
-// re-rastériser après une pause).
-function CompteurLancement() {
-  const [t, setT] = useState(calculerTemps)
+// ─── Le compteur qui monte jusqu'à cent ─────────────────────────────────────
+// ⚠️ AU REPOS, IL AFFICHE LE BON NOMBRE. L'animation ne part que si la section
+// entre à l'écran ; sans observateur, sans mouvement autorisé, ou sur une
+// capture d'aperçu, on lit directement le nombre, jamais un zéro.
+function CompteurJours({ cible }) {
+  const [valeur, setValeur] = useState(cible)
+  const ref = useRef(null)
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    const id = setInterval(() => {
-      if (!document.hidden) setT(calculerTemps())
-    }, 1000)
-    return () => clearInterval(id)
-  }, [])
-  return (
-    <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 22px)', justifyContent: 'center', flexWrap: 'wrap', contain: 'layout paint', willChange: 'contents' }}>
-      {[
-        { val: t.jours, label: 'jours' },
-        { val: t.heures, label: 'heures' },
-        { val: t.minutes, label: 'minutes' },
-        { val: t.secondes, label: 'secondes' },
-      ].map(({ val, label }) => (
-        <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 58 }}>
-          <span style={{ fontSize: 'clamp(2rem, 6vw, 3.2rem)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
-            {pad(val)}
-          </span>
-          <span style={{ fontSize: 10.5, fontWeight: 800, color: 'rgba(255,255,255,0.85)', textTransform: 'uppercase', letterSpacing: 1.2, marginTop: 4 }}>{label}</span>
-        </div>
-      ))}
-    </div>
-  )
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    let cadre = 0
+    const obs = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return
+      obs.disconnect()
+      const debut = performance.now()
+      const pas = (t) => {
+        const k = Math.min(1, (t - debut) / 1100)
+        setValeur(Math.round(cible * (1 - Math.pow(1 - k, 3))))
+        if (k < 1) cadre = requestAnimationFrame(pas)
+      }
+      cadre = requestAnimationFrame(pas)
+    }, { threshold: 0.5 })
+    obs.observe(el)
+    return () => { obs.disconnect(); cancelAnimationFrame(cadre) }
+  }, [cible])
+  return <span ref={ref} className="lp-cent">{valeur}</span>
 }
 
-// ─── L'OFFRE DE LANCEMENT, en grand ─────────────────────────────────────────
-// ⚠️ Elle vivait en petit texte gris sous les formules, et personne ne la
-// voyait : une offre qu'il faut chercher n'est pas une offre.
-//
-// Elle dit maintenant sa MÉCANIQUE plutôt que de crier fort. La date de fin ne
-// bouge pas, donc attendre coûte des jours, et ce coût SE CHIFFRE : c'est bien
-// plus convaincant qu'un « dépêche-toi ». Les deux nombres sont calculés, pas
-// écrits : ils fondent tout seuls, jour après jour.
-//
-// ⚠️ Et elle corrige un contresens : le 1er octobre est la date du lancement
-// OFFICIEL, pas celle du départ. Un commerçant peut être en ligne bien avant,
-// et c'est même tout son intérêt.
-function EncartOffreLancement({ onRejoindre }) {
-  if (!estRegimeLancement()) return null
-  const garantis = joursOffertsAuLancement()   // 100, calculés depuis les deux dates
-  const avance = joursAvance()                  // ce que l'avance ajoute, et qui fond
-
-  return (
-    <div style={{
-      background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 58%, ${T.main} 130%)`,
-      borderRadius: 24, overflow: 'hidden', color: '#fff',
-      boxShadow: `0 14px 34px ${T.ink}3A`, margin: '0 0 40px',
-    }}>
-      <Bande3px/>
-      <div style={{ padding: 'clamp(24px, 5vw, 38px)', display: 'flex', gap: 'clamp(20px, 4vw, 44px)', flexWrap: 'wrap', alignItems: 'center' }}>
-
-        {/* ⚠️ UN SEUL CHIFFRE SUR TOUTE LA PAGE : 100.
-            Décision d'Alex, 20/08 : « je ne veux pas qu'on annonce un chiffre
-            en plus des 100 jours, tu es là plus tôt, génial et c'est bonus ».
-            Un deuxième nombre oblige à expliquer une addition, et une offre
-            qu'il faut expliquer se fait relire de travers. L'avance est donc
-            dite en toutes lettres, jamais chiffrée. Ce qui est reçu reste
-            évidemment plus généreux que ce qui est promis. */}
-        <div style={{ flex: '1 1 240px', minWidth: 220 }}>
-          <p style={{ margin: '0 0 10px', fontSize: 11.5, fontWeight: 900, color: T.light, textTransform: 'uppercase', letterSpacing: '1.4px' }}>
-            Offre de lancement
-          </p>
-          <p style={{ margin: 0, fontSize: 'clamp(2.6rem, 8vw, 4rem)', fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 1, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
-            {garantis} jours
-          </p>
-          <p style={{ margin: '2px 0 0', fontSize: 'clamp(1.3rem, 4vw, 1.8rem)', fontWeight: 900, letterSpacing: '-1px', color: T.light }}>
-            offerts.
-          </p>
-          <p style={{ margin: '10px 0 0', fontSize: 13.5, fontWeight: 700, lineHeight: 1.5, color: 'rgba(255,255,255,0.86)' }}>
-            {ouvertureDatee() ? <>À partir du {libelleLancement()}.</> : <>Dès l&rsquo;ouverture.</>}
-          </p>
-        </div>
-
-        {/* Ce que ça veut dire, concrètement */}
-        <div style={{ flex: '1 1 340px', minWidth: 280 }}>
-          <p style={{ margin: '0 0 14px', fontSize: '1.02rem', fontWeight: 700, lineHeight: 1.6, color: '#fff' }}>
-            <strong style={{ color: T.light }}>Communiquer</strong> et <strong style={{ color: T.light }}>Vendre</strong> te
-            sont offertes jusqu&rsquo;au <strong style={{ color: T.light }}>{libelleDernierJourGratuit()}</strong> inclus,
-            quel que soit le forfait que tu choisis.
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            {['Zéro contrat', 'Zéro engagement', 'Sans carte de paiement', 'Résiliable en deux clics'].map(m => (
-              <span key={m} style={{ fontSize: 11.5, fontWeight: 800, padding: '5px 11px', borderRadius: 100, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.22)', color: '#fff' }}>
-                {m}
-              </span>
-            ))}
-          </div>
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.16)', margin: '0 0 16px' }}/>
-
-          {/* 🔴 CE PARAGRAPHE PROMETTAIT QUELQUE CHOSE QUI N'ARRIVE PAS (Alex,
-              13/09). Il disait « ta page part en ligne dès qu'elle est validée
-              et tes premiers clients commandent avant tout le monde », puis
-              présentait l'attente comme un BONUS qui « ne compte pas dans tes
-              100 jours ». Or rien ne s'ouvre avant le lancement : ni
-              l'application, ni les commerces. Personne ne commande, et un temps
-              où l'on ne peut pas vendre n'est pas un cadeau.
-              ⚠️ LA RAISON DE S'INSCRIRE TÔT RESTE ENTIÈRE, mais ce n'est pas
-              celle qu'on annonçait : on ne gagne pas des jours, on gagne le
-              temps de PRÉPARER. Une promesse invérifiable se retourne au
-              premier commerçant qui attend ses clients de septembre ; une
-              promesse de préparation, elle, se tient le jour J.
-              ⚠️ L'avance reste dite en toutes lettres, jamais chiffrée : un
-              second nombre obligerait à poser une addition, et une offre qu'il
-              faut expliquer se fait relire de travers. */}
-          <p style={{ margin: '0 0 18px', fontSize: 14, fontWeight: 600, lineHeight: 1.65, color: 'rgba(255,255,255,0.92)' }}>
-            {ouvertureDatee() ? <>Le {libelleLancement()} est</> : <>L&rsquo;ouverture est</>} le jour où tout s&rsquo;allume : l&rsquo;application,
-            les commerces, les commandes.
-            {(avance > 0 || !ouvertureDatee()) && <> D&rsquo;ici là, tu prépares ta page, ton catalogue et tes
-              créneaux tranquillement. <strong style={{ color: '#fff' }}>Le jour J, tu ouvres
-              avec tout en place, et tu ne perds aucun de tes {garantis} jours.</strong></>}
-          </p>
-          {/* ⚠️ Style écrit ici, PAS `btnPrimaire` : celui-ci vit DANS le
-              composant principal, donc l'appeler d'ici serait une variable
-              libre. Aucune erreur au lint ni au build, et un écran blanc à
-              l'exécution. Voir reference_eslint_no_undef_eteint. */}
-          <button onClick={onRejoindre} style={{
-            display: 'inline-block', padding: '15px 32px', borderRadius: 100, border: 'none',
-            background: '#fff', color: T.deep,
-            fontWeight: 900, fontSize: 14.5, letterSpacing: 0.4, textTransform: 'uppercase',
-            cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
-            boxShadow: '0 8px 22px rgba(0,0,0,0.28)',
-          }}>
-            Je prends mes {garantis} jours
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── LA FENÊTRE « TRIBU » ────────────────────────────────────────────────────
-// Demandée par Alex le 20/08. Elle répond aux trois objections d'un commerçant
-// qui hésite, dans l'ordre où elles lui viennent :
-//   1. « combien ça me coûte pour essayer »  → 100 jours offerts
-//   2. « et après, je suis coincé »          → zéro contrat, zéro engagement
-//   3. « et si je veux juste être visible »  → Exister, gratuit à vie
-//
-// ⚠️ Alex avait d'abord demandé une fenêtre « un peu fake » annonçant X
-// commerçants préinscrits aujourd'hui. Refusé : un chiffre fabriqué montré à
-// quelqu'un qui décide de s'abonner est une affirmation fausse sur un fait
-// vérifiable, et la page promet trois écrans plus haut que tout est écrit noir
-// sur blanc. Le chiffre affiché ici est donc le VRAI, et c'est le seul de la
-// page : 100.
-//
-// ⚠️ Trois précautions apprises à nos dépens :
-//   • aucun `blur` ni ombre animée : ils font geler le défilement sur iPhone
-//     (voir reference_scroll_jank_ios) ;
-//   • une VRAIE croix de fermeture, et le refus est retenu pour la session :
-//     une fenêtre qui revient à chaque écran se fait fermer sans être lue ;
-//   • `dvh` jamais `vh`, et un décalage bas généreux pour ne pas couvrir les
-//     boutons sur mobile.
-function FenetreTribu({ onRejoindre, masquer }) {
-  const [visible, setVisible] = useState(false)
-  const [ferme, setFerme] = useState(false)
-
+// ─── Une section qui se marque « vue » ──────────────────────────────────────
+// Sert aux barres du bloc « pas pour toi » : le texte est lisible AVANT, la
+// rature arrive par-dessus quand on y arrive.
+function useVu() {
+  const ref = useRef(null)
+  const [vu, setVu] = useState(false)
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    try { if (sessionStorage.getItem('yoppaa_tribu_fermee')) return } catch { /* mode privé */ }
-    // Elle attend que la personne ait vraiment commencé à lire : surgir à la
-    // première seconde, c'est se faire fermer avant d'être lue.
-    const id = setTimeout(() => setVisible(true), 9000)
-    return () => clearTimeout(id)
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVu(true); obs.disconnect() } }, { threshold: 0.35 })
+    obs.observe(el)
+    return () => obs.disconnect()
   }, [])
+  return [ref, vu]
+}
 
-  const fermer = () => {
-    setFerme(true)
-    try { sessionStorage.setItem('yoppaa_tribu_fermee', '1') } catch { /* mode privé */ }
-  }
-
-  if (!visible || ferme || masquer) return null
-
+// ─── Les badges des stores ──────────────────────────────────────────────────
+// ⚠️ Tant que l'app n'est pas publiée (`lib/stores.js`), les badges restent
+// visibles mais ne mènent nulle part : un lien vers une fiche non publiée
+// ouvre une page « introuvable ».
+function BadgesStores() {
+  const badges = [
+    { url: APP_STORE_URL, b: BADGE_APP_STORE, hauteur: 46 },
+    { url: GOOGLE_PLAY_URL, b: BADGE_GOOGLE_PLAY, hauteur: 68 },
+  ]
   return (
-    <div style={{
-      position: 'fixed', zIndex: 60,
-      left: 'max(12px, env(safe-area-inset-left))',
-      right: 'max(12px, env(safe-area-inset-right))',
-      bottom: 'calc(16px + env(safe-area-inset-bottom))',
-      maxWidth: 380, marginLeft: 'auto',
-      background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`,
-      color: '#fff', borderRadius: 20, overflow: 'hidden',
-      border: '1px solid rgba(196,160,244,0.35)',
-      boxShadow: '0 16px 40px rgba(22,6,54,0.45)',
-    }}>
-      <Bande3px/>
-      <div style={{ padding: '16px 18px 18px', position: 'relative' }}>
-        <button onClick={fermer} aria-label="Fermer"
-          style={{
-            position: 'absolute', top: 10, right: 10, width: 30, height: 30,
-            borderRadius: 100, border: '1px solid rgba(255,255,255,0.22)',
-            background: 'rgba(255,255,255,0.08)', color: '#fff',
-            fontSize: 15, lineHeight: 1, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
-          }}>
-          ✕
-        </button>
-
-        {estRegimeLancement() && (
-          <p style={{ margin: '0 0 6px', fontSize: 'clamp(1.35rem, 5vw, 1.65rem)', fontWeight: 900, letterSpacing: '-1px', lineHeight: 1.1, color: '#fff', paddingRight: 34 }}>
-            {joursOffertsAuLancement()} jours offerts.
-          </p>
-        )}
-        <p style={{ margin: '0 0 12px', fontSize: 15.5, fontWeight: 800, color: T.light, lineHeight: 1.35, paddingRight: 34 }}>
-          Tu rejoins la tribu ?
-        </p>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-          {[
-            'Zéro contrat, zéro engagement',
-            'Sans carte de paiement',
-            'Et si tu veux juste rester visible, Exister est gratuit à vie',
-          ].map(l => (
-            <div key={l} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              <span style={{ marginTop: 3, flexShrink: 0, color: T.light }}><IconCheck size={12}/></span>
-              <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.45, color: 'rgba(255,255,255,0.92)' }}>{l}</span>
-            </div>
-          ))}
-        </div>
-
-        <button onClick={() => { fermer(); onRejoindre() }} style={{
-          width: '100%', padding: '13px', borderRadius: 100, border: 'none',
-          background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: T.ink,
-          fontWeight: 900, fontSize: 14, letterSpacing: 0.3, textTransform: 'uppercase',
-          cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
-        }}>
-          Je rejoins la tribu
-        </button>
+    <div className="lp-stores">
+      <div className="lp-stores-badges">
+        {badges.map(({ url, b, hauteur }) => {
+          const img = <img src={b.src} alt={b.alt} width={Math.round(b.largeur * hauteur / b.hauteur)} height={hauteur} loading="lazy" decoding="async"/>
+          return url
+            ? <a key={b.src} href={url} target="_blank" rel="noopener noreferrer">{img}</a>
+            : <span key={b.src} className="lp-store-bientot">{img}</span>
+        })}
       </div>
+      {!appPubliee() && <p className="lp-stores-note">Bientôt disponible sur l&rsquo;App Store et Google Play.</p>}
     </div>
   )
 }
 
-// Incitant mobilisation (repris de LandingTeasing, mêmes règles)
-// ⚠️ RÉÉCRIT LE 20/08 : IL N'Y A PLUS DE SEUIL DE DÉBLOCAGE.
-//
-// Ce bloc affichait une jauge « 3 commerçants sur 10 pour activer Mettet », et
-// tout le discours de la landing en découlait. La Wallonie est ouverte : cette
-// jauge ne mesure plus rien, et laisser une barre de progression à l'écran
-// ferait croire à une attente qui n'existe plus.
-//
-// Ce qui reste vrai et utile, c'est le NOMBRE. Il ne conditionne rien, il
-// rassure : on ne rejoint pas une place vide. Un chiffre trop petit se tait de
-// lui-même plutôt que d'annoncer « 1 commerçant », qui découragerait.
+// Incitant mobilisation
+// La Wallonie est ouverte : cette jauge ne conditionne plus rien. Ce qui reste
+// vrai et utile, c'est la commune : on ne rejoint pas une place vide.
 function IncitantMobilisation({ communeStats, globalStats }) {
   const boxSt = { margin: '0 0 14px', padding: '12px 14px', borderRadius: 12, background: 'rgba(150,96,224,0.14)', border: '1px solid rgba(196,160,244,0.35)' }
   const ligneSt = { margin: 0, fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }
   const sousSt = { margin: 0, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.92)' }
 
-  // ⚠️ PLUS AUCUN COMPTE AFFICHÉ (décision Alex, 20/08).
-  // « 3 commerçants, 11 curieux » décourage au lieu d'entraîner : de petits
-  // nombres racontent un démarrage, pas un mouvement. Mais retirer le chiffre
-  // sans rien mettre à la place laisse un bloc mort.
-  //
-  // La barre montre donc le chemin parcouru entre l'annonce publique et
-  // l'ouverture. Elle avance toute seule chaque jour, elle donne le sentiment
-  // que ça bouge, et surtout ELLE NE MENT PAS : elle mesure du temps réel, que
-  // n'importe qui peut recompter sur un calendrier. Une jauge de
-  // « préparation » inventée aurait été un mensonge déguisé en pourcentage.
+  // La barre montre le chemin parcouru entre l'annonce publique et
+  // l'ouverture : du temps réel, que n'importe qui peut recompter.
   const pct = progressionVersLancement()
   const restant = joursAvantLancement()
   // ⚠️ SANS DATE DÉCIDÉE, NI BARRE NI « J-N » (30/09) : un compte à rebours
@@ -1541,7 +544,7 @@ function IncitantMobilisation({ communeStats, globalStats }) {
     return (
       <div style={boxSt}>
         <p style={ligneSt}>Yoppaa est ouvert à <strong>{communeStats.nom}</strong> 🟣</p>
-        {barreLancement || <p style={{ ...sousSt, marginTop: 6 }}>Ta page peut être en ligne cette semaine.</p>}
+        {barreLancement || <p style={{ ...sousSt, marginTop: 6 }}>Tes commerçants peuvent déjà y ouvrir leur page.</p>}
       </div>
     )
   }
@@ -1570,201 +573,14 @@ const inputStyle = {
   boxSizing: 'border-box',
 }
 
-// ─── Titre de section réutilisable ──────────────────────────────────────────
-// ─── LA TOTALE ───────────────────────────────────────────────────────────
-//
-// Le résumé-choc de l'offre, demandé par Alex le 26/08 : « il me faut une
-// communication percutante ». Il ouvre la partie commerçant, AVANT les
-// mockups et les cartes de formules, pour une raison de conversion : c'est le
-// premier endroit où le commerçant sait que la page lui parle. Celui qui est
-// déjà convaincu s'inscrit là, sans traverser six sections. Celui qui hésite
-// continue à défiler, et tout le reste est fait pour lui.
-//
-// ⚠️ TROIS « TU VEUX… ? », TROIS RÉPONSES. Un commerçant ne lit pas une grille
-// de comparaison, il cherche sa situation. Le gratuit passe en premier parce
-// qu'il désarme l'objection avant qu'elle n'arrive.
-//
-// ⚠️ AUCUN PRIX, AUCUN NOMBRE DE JOURS ÉCRIT À LA MAIN : ils viennent de
-// `lib/plans.js` et `lib/lancement.js`. Le jour où 19,90 bouge, ce bloc suit.
-//
-// ⚠️ ET RIEN QUE CE QUI EXISTE. La réservation de table est ABSENTE malgré son
-// drapeau à `true` dans `lib/plans.js` : le module n'est pas écrit. Une liste
-// « la totale » qui promet une fonctionnalité fantôme se retourne au premier
-// restaurateur qui signe.
-function LaTotale() {
-  const prix = p => getPrixPlan(p)?.mensuel
-  // ⚠️ `euros()` PLUTÔT QU'UNE COPIE : celle-ci posait une espace ordinaire, et
-  // le « € » pouvait tomber seul en fin de ligne sur la landing.
-  const eur = euros
-
-  // ⚠️ ALEX, 26/08 : « il ne faut plus broder, il faut être percutant et oser
-  // s'affirmer ». Les descriptions sont donc des ÉNUMÉRATIONS, pas des
-  // phrases : le commerçant scanne, il ne lit pas. Chaque mot de liaison retiré
-  // est un nom de plus qu'il voit.
-  const NIVEAUX = [
-    {
-      question: 'Être vu ?',
-      reponse: 'Gratuit. À vie.',
-      quoi: 'Ta page, tes photos, tes horaires, Google, tes statistiques, le Good Morning Yoppers.',
-      // ⚠️ L'ARGUMENT LE PLUS FORT DE LA PAGE, et il est gratuit. C'est ce que
-      // le module des signaux a été écrit pour porter : ce ne sont pas des
-      // clients qu'il a déjà, ce sont des clients qu'il perd.
-      signaux: true,
-      prix: '0 €, pour toujours, sans carte.',
-      vedette: true,
-    },
-    {
-      question: 'Être entendu ?',
-      reponse: `${eur(prix('communiquer'))}/mois.`,
-      quoi: 'Actus, deals, bonnes affaires, notifications push à tes favoris, carte de fidélité, IA qui rédige tes textes.',
-    },
-    {
-      question: 'Vendre ?',
-      reponse: `${eur(prix('vendre'))}/mois.`,
-      quoi: 'Click and Collect, livraison, rendez-vous en ligne, réservation de table avec empreinte bancaire, multi-praticiens, abonnements, paiement en ligne ou au comptoir, bons cadeaux, fidélité automatique, invendus du soir à prix réduit.',
-    },
-  ]
-
-  return (
-    <div style={{ maxWidth: 780, margin: '0 auto 48px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 24, overflow: 'hidden' }}>
-      <div style={{ padding: 'clamp(24px, 5vw, 34px)' }}>
-        {/* ⚠️ LE TITRE EST D'ALEX, mot pour mot. Le mien disait « tout ce qu'un
-            commerce de quartier peut faire en ligne » : correct, tiède, et
-            long. Le sien nomme le lecteur et revendique la place. */}
-        <h3 style={{ margin: '0 0 6px', fontSize: 'clamp(1.35rem, 3.8vw, 1.9rem)', fontWeight: 900, letterSpacing: '-0.9px', lineHeight: 1.15, color: '#fff', textAlign: 'center' }}>
-          Les outils du commerçant de proximité.
-        </h3>
-        <p style={{ margin: '0 0 24px', fontSize: 14.5, fontWeight: 700, color: T.light, textAlign: 'center' }}>
-          {/* ⚠️ « Zéro commission » TOUT COURT est interdit, et le banc m'a
-              arrêté ici. Le commerçant paie quand même les frais de son
-              prestataire de paiement : sans le sujet, la phrase promet une
-              gratuité qui n'existe pas. Règle d'Alex, gardée depuis des mois. */}
-          Tout, dans une seule app. Zéro commission Yoppaa.
-        </p>
-
-        <div style={{ display: 'grid', gap: 16 }}>
-          {NIVEAUX.map(n => (
-            <div key={n.question} style={{ background: n.vedette ? 'rgba(196,160,244,0.13)' : 'rgba(255,255,255,0.04)', border: `1px solid ${n.vedette ? 'rgba(196,160,244,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 16, padding: '18px 18px 16px' }}>
-              <p style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>
-                {n.question} <span style={{ color: T.light }}>{n.reponse}</span>
-              </p>
-              <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, fontWeight: 500 }}>
-                {n.quoi}
-              </p>
-              {n.signaux && (
-                <>
-                  <p style={{ margin: '12px 0 0', fontSize: 13.5, color: '#fff', lineHeight: 1.6, fontWeight: 700 }}>
-                    Et tes Yoppers te disent ce qu’ils attendent de toi.
-                  </p>
-                  <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, fontWeight: 500 }}>
-                    {/* ⚠️ LES CINQ ENVIES VIENNENT DU MODULE, pas d'une liste
-                        recopiée : ajouter un signal doit suffire à l'annoncer
-                        ici. Le sixième, la carte de fidélité, est arrivé le
-                        26/08 et cette phrase l'a pris toute seule. */}
-                    {TYPES_ENVIE.map(t => libelleEnvie(t).court.toLowerCase()).join(', ')}. Tu vois combien
-                    ils sont, et combien ont demandé <strong style={{ color: '#fff' }}>le soir ou le week-end,
-                    quand ta boutique était fermée et que personne ne pouvait t’appeler.</strong>
-                  </p>
-                  <p style={{ margin: '10px 0 0', fontSize: 13.5, color: T.light, fontWeight: 800, lineHeight: 1.6 }}>
-                    Ça ne s’achète nulle part. Et chez nous, c’est gratuit.
-                  </p>
-                </>
-              )}
-              {n.prix && (
-                <p style={{ margin: '10px 0 0', fontSize: 13, fontWeight: 800, color: T.light }}>{n.prix}</p>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: 22, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.12)', textAlign: 'center' }}>
-          {estRegimeLancement() && (
-            <p style={{ margin: '0 0 6px', fontSize: 14.5, fontWeight: 800, color: '#fff', lineHeight: 1.55 }}>
-              {ouvertureDatee()
-                ? <>{joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},</>
-                : <>{joursOffertsAuLancement()} jours offerts dès l&rsquo;ouverture,</>}
-              et le temps d’ici là pour tout préparer.
-            </p>
-          )}
-          <p style={{ margin: '0 0 4px', fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: 600, lineHeight: 1.6 }}>
-            Sans carte de paiement. Sans engagement. Tarifs affichés, aucune surprise.
-          </p>
-          {/* ⚠️ « Yoppaa ne prend aucune commission », JAMAIS « tout te
-              revient » : le commerçant paie quand même les frais de son
-              prestataire de paiement, et la formule sans sujet est un mensonge
-              par omission. Règle posée par Alex de longue date. */}
-          <p style={{ margin: '0 0 22px', fontSize: 13, color: '#fff', fontWeight: 800 }}>
-            Yoppaa ne prend aucune commission sur tes ventes.
-          </p>
-
-          {/* ⚠️ ALEX, 26/08 : « il faut faire comprendre aux commerçants qu'ils
-              n'ont RIEN À PERDRE mais tout à gagner. »
-
-              Le reste du bloc dit ce qu'il gagne. Celui-ci répond à la question
-              qu'il se pose vraiment avant de cliquer : qu'est-ce que ça
-              m'engage ? Chaque ligne est VÉRIFIABLE dans le produit, aucune
-              n'est une figure de style :
-                • Exister est à 0 € et son libellé de plan dit « Gratuit à vie » ;
-                • les deux formules payantes portent « sans engagement » ;
-                • aucun Checkout n'est ouvert à l'inscription (option B, 24/08) ;
-                • Yoppaa ne prélève rien sur les ventes ;
-                • et surtout, RIEN À REMPLACER : c'est écrit noir sur blanc dans
-                  `lib/signaux.js`, un commerçant peut être là gratuitement même
-                  s'il a déjà un logiciel de rendez-vous. C'est la réponse à la
-                  seule vraie objection, « j'ai déjà un système ». */}
-          <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: 16, padding: '16px 18px', marginBottom: 22, textAlign: 'left' }}>
-            <p style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 900, color: '#A7F3D0', letterSpacing: '-0.3px' }}>
-              Ce que ça t’engage : rien.
-            </p>
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 6 }}>
-              {[
-                'Tu ne donnes aucune carte de paiement pour t’inscrire.',
-                'Tu ne remplaces rien : garde ton logiciel, ta caisse, tes habitudes.',
-                'Tu restes libre de partir quand tu veux, sans préavis.',
-                'Et si tu n’en fais rien, ta page reste en ligne gratuitement. À vie.',
-              ].map(l => (
-                <li key={l} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: 'rgba(255,255,255,0.92)', lineHeight: 1.55, fontWeight: 600 }}>
-                  <span style={{ flexShrink: 0, marginTop: 2, color: '#6EE7B7' }}><IconCheck size={12}/></span>
-                  <span>{l}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <p style={{ margin: '0 0 4px', fontSize: 'clamp(1.05rem, 2.6vw, 1.3rem)', fontWeight: 900, color: '#fff', letterSpacing: '-0.4px', lineHeight: 1.3 }}>
-            C’est le rendez-vous des Yoppers de ton quartier.
-          </p>
-          <p style={{ margin: '0 0 16px', fontSize: 'clamp(1.05rem, 2.6vw, 1.3rem)', fontWeight: 900, color: T.light, letterSpacing: '-0.4px', lineHeight: 1.3 }}>
-            Tu ne peux pas ne pas y être.
-          </p>
-          <p style={{ margin: '0 0 20px', fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500, lineHeight: 1.6 }}>
-            Et si tu décides de ne pas venir, dis-le-nous : on veut comprendre pourquoi.
-          </p>
-
-          <Link href="/signup"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '15px 32px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 15.5, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 8px 22px rgba(150,96,224,0.35)' }}>
-            J&rsquo;inscris mon commerce
-          </Link>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SectionEyebrow({ children, dark = false }) {
-  return (
-    <p style={{ margin: '0 0 10px', fontSize: 12.5, fontWeight: 800, color: dark ? T.light : T.main, textTransform: 'uppercase', letterSpacing: '1.6px' }}>
-      {children}
-    </p>
-  )
-}
-
 // ─── Données des 3 formules (section tarifs) ────────────────────────────────
+// ⚠️ LES PRIX NE SONT PLUS ÉCRITS ICI : ils viennent de `getPrixPlan`. La
+// grille écrivait « 19,90€ » à la main, collé à son symbole (coquille du
+// brief), et aurait continué de l'annoncer le jour d'un changement de tarif.
 const FORMULES = [
   {
     nom: 'Exister',
-    prix: 'Gratuit',
-    sousPrix: 'pour toujours',
+    plan: 'exister',
     badge: 'Gratuit à vie',
     accroche: 'Ton commerce existe en ligne, sans rien débourser.',
     points: [
@@ -1776,10 +592,9 @@ const FORMULES = [
   },
   {
     nom: 'Communiquer',
-    prix: '19,90€',
-    sousPrix: 'HTVA par mois',
+    plan: 'communiquer',
     badge: 'Pour être vu chaque jour',
-    accroche: 'Communique de façon ciblée : ta commune entend parler de toi chaque matin.',
+    accroche: 'Ta commune entend parler de toi chaque matin.',
     points: [
       'Tout Exister, plus :',
       'Deals du jour et actualités illimités',
@@ -1791,55 +606,42 @@ const FORMULES = [
   },
   {
     nom: 'Vendre',
-    prix: '49,90€',
-    sousPrix: 'HTVA par mois',
+    plan: 'vendre',
     badge: 'La totale · recommandée',
-    accroche: 'Tu vends en ligne et tu gardes chaque euro de tes ventes.',
+    // 🔴 14/10 : « tu gardes chaque euro de tes ventes » était l'erreur n° 2
+    // du brief, la variante interdite de « 100 % te revient ». Les frais de
+    // paiement existent. La phrase dit ce qui est vrai : aucune part pour nous.
+    accroche: 'Tu vends en ligne, et Yoppaa ne prend aucune part de tes ventes.',
     vedette: true,
     points: [
       'Tout Communiquer, plus :',
       'Click & Collect avec paiement en ligne',
       'Rendez-vous en ligne, réservables 24h/24',
-      // ⚠️ LE MODULE EXISTAIT DEPUIS DES SEMAINES ET N'ÉTAIT NOMMÉ QU'UNE FOIS,
-      // au milieu d'une énumération du détail des tarifs. Un centre de yoga
-      // lisait toute la page sans savoir qu'il pouvait vendre ses abonnements.
-      // Troisième fois après le restaurant et l'anti-gaspi : un module qu'on ne
-      // montre pas n'existe pas, même s'il est fini.
+      // ⚠️ UN MODULE QU'ON NE MONTRE PAS N'EXISTE PAS, même s'il est fini.
       'Abonnements et cartes de séances : ton élève achète, réserve ses cours lui-même, et son solde se décompte tout seul',
-      // ⚠️ CE QUE LE RESTAURATEUR CHERCHE, DIT COMME IL LE PENSE. « Capacité
-      // par service » est le mot du logiciel ; lui compte des couverts et des
-      // tables. Et c'est sa salle qui attribue la table, jamais le client :
-      // c'est la décision qui fait tout le module.
+      // ⚠️ C'est sa salle qui attribue la table, jamais le client.
       'Réservation de table : le client dit combien ils sont, ta salle attribue la table',
-      // ⚠️ L'EMPREINTE SEULE, ET CE QU'ELLE FAIT VRAIMENT. « Acompte ou
-      // empreinte au choix » promettait un encaissement qui ne sera pas
-      // construit (TVA, caisse certifiée), et le mot « empreinte » tout seul
-      // laisse croire à une somme bloquée : avec un `SetupIntent`, rien n'est
-      // retenu sur le compte du client. La phrase dit donc la mécanique.
+      // ⚠️ L'EMPREINTE SEULE, ET CE QU'ELLE FAIT VRAIMENT : avec un
+      // `SetupIntent`, rien n'est retenu sur le compte du client.
       'Empreinte bancaire sur les grandes tables : la carte est enregistrée, rien n’est débité si le client vient',
-      // ⚠️ DEUX MÉCANIQUES, UN SEUL BESOIN, ET C'EST LE BESOIN QU'ON ÉCRIT.
-      // La capacité `livraison` de lib/plans.js est bien réservée à
-      // l'alimentaire, mais elle ne désigne que LA TOURNÉE : un commerce de
-      // détail sert lui aussi ses clients à domicile, en EXPÉDIANT
-      // (`boutique_mode_vente`). Écrire « livraison pour l'alimentaire »
-      // revenait à faire lire le nom de notre mécanique au lieu du service
-      // rendu, et à faire croire à une boutique qu'elle n'y a pas droit.
-      // C'est la décision d'Alex du 27/08, déjà écrite dans lib/signaux.js :
-      // « un habitant veut être servi chez lui, il se moque de savoir si c'est
-      // une camionnette ou bpost ».
+      // ⚠️ LE BESOIN, PAS NOTRE MÉCANIQUE (décision d'Alex du 27/08).
       'Livraison à domicile : ta tournée en alimentaire, l\'expédition pour une boutique',
       'Boutique en ligne : tes articles, avec leurs tailles et leurs couleurs',
       'Fidélité automatique : chaque commande et chaque rendez-vous remplit la carte, sans rien faire',
       'Bons cadeaux à offrir : tes clients font découvrir ton commerce à leurs proches',
-      // ⚠️ AUCUN CHIFFRE DANS CETTE LIGNE, et c'est une règle de la landing :
-      // un seul nombre y vit, et c'est cent. « Trois tartes », « -50 % » ou
-      // « 17 h » y seraient des chiffres de plus.
       'Avant la fermeture : ce qu\'il te reste ce soir repart à prix réduit, au lieu d\'être jeté',
       'Assistant IA complet : rédaction avancée pour tes articles, tes deals et tes actus, avec un usage étendu',
       '0% de commission Yoppaa sur tes ventes',
     ],
   },
 ]
+// Au-delà, la liste se replie : une carte de vingt lignes ne se lit pas.
+const POINTS_VISIBLES = 6
+
+function affichagePrix(plan) {
+  const m = getPrixPlan(plan)?.mensuel ?? 0
+  return m === 0 ? { prix: 'Gratuit', sous: 'pour toujours' } : { prix: euro(m, true), sous: 'HTVA par mois' }
+}
 
 // ─── Composant principal ────────────────────────────────────────────────────
 export default function LandingReveal({ referent = null }) {
@@ -1853,8 +655,22 @@ export default function LandingReveal({ referent = null }) {
   const [turnstileToken, setTurnstileToken] = useState(null)
   const [communeStats, setCommuneStats] = useState(null)
   const [globalStats, setGlobalStats] = useState(null)
+  const [iMetier, setIMetier] = useState(0)
   const turnstileRef = useRef(null)
   const attributionRef = useRef({ ref_commercant: null, utm_source: null, utm_medium: null, utm_campaign: null })
+  const [refBarres, barresVues] = useVu()
+
+  // Les métiers qui tournent. ⚠️ À L'ARRÊT quand l'onglet est caché (règle du
+  // dépôt pour tout intervalle rapide), et jamais pour qui a demandé moins de
+  // mouvement : le premier métier reste alors affiché.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    const t = setInterval(() => {
+      if (!document.hidden) setIMetier(i => (i + 1) % METIERS.length)
+    }, 2400)
+    return () => clearInterval(t)
+  }, [])
 
   // Totaux globaux de mobilisation
   useEffect(() => {
@@ -1936,8 +752,7 @@ export default function LandingReveal({ referent = null }) {
 
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
   // Consentement OBLIGATOIRE (décision Alex 31/07 soir) : la case décrit la
-  // finalité même du formulaire (être prévenu du lancement + actualités),
-  // jamais pré-cochée, mais requise pour s'inscrire.
+  // finalité même du formulaire, jamais pré-cochée, mais requise.
   const formValide = form.email.trim() && /^\d{4}$/.test(form.code_postal.trim())
     && (form.type_utilisateur !== 'commercant' || !!form.commercant_nom.trim())
     && form.consentement_marketing
@@ -1966,51 +781,34 @@ export default function LandingReveal({ referent = null }) {
     rendre()
   }
 
-  // 🔴 L'INSCRIPTION, PAS LA LISTE D'ATTENTE (Alex, 26/08 : « objectif
-  // INSCRIPTION »). CINQ boutons de cette page portaient le mot commerçant, et
-  // les cinq faisaient DÉFILER vers le formulaire d'email : le bouton du hero,
-  // celui de la carte matériel, celui de chaque formule, l'encart de l'offre
-  // et le pavé flottant « Je rejoins la tribu ». Aucun n'inscrivait.
-  //
-  // ⚠️ Deux d'entre eux sont des composants qui reçoivent une fonction : ils ne
-  // peuvent pas être un `Link`, d'où ce petit navigateur. Les trois autres sont
-  // devenus de vrais liens, qui s'ouvrent dans un nouvel onglet au clic milieu
-  // et se copient au clic droit, comme tout lien doit pouvoir le faire.
-  const allerAuSignup = () => {
-    if (typeof window !== 'undefined') window.location.href = '/signup'
-  }
-
+  // 🔴 L'INSCRIPTION, PAS LA LISTE D'ATTENTE (Alex, 26/08). Tout bouton qui
+  // parle au commerçant est un vrai lien vers /signup. Le seul qui fait défiler
+  // est celui de l'habitant, vers SON formulaire.
   const allerAuForm = (typeUtilisateur) => {
-    // ⚠️ LE FORMULAIRE EST CELUI DES HABITANTS, ET LUI SEUL. Un appelant qui
-    // demanderait « commercant » le rendrait invalide sans rien afficher : le
-    // champ du nom de commerce n'est plus obligatoire ni annoncé comme tel, et
-    // le visiteur resterait bloqué sur un bouton d'envoi sans savoir pourquoi.
-    // Le commerçant a son propre bouton, qui l'inscrit vraiment.
+    // ⚠️ LE FORMULAIRE EST CELUI DES HABITANTS, ET LUI SEUL.
     if (typeUtilisateur === 'yopper') setForm(p => ({ ...p, type_utilisateur: 'yopper' }))
     if (typeof document !== 'undefined') {
       document.getElementById('preinscription')?.scrollIntoView({ behavior: 'smooth' })
     }
   }
 
-  const btnPrimaire = {
-    display: 'inline-block', padding: '15px 32px', borderRadius: 100, border: 'none',
-    background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: T.ink,
-    fontWeight: 900, fontSize: 14.5, letterSpacing: 0.4, textTransform: 'uppercase',
-    cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 10px 30px rgba(150,96,224,0.45)',
-  }
+  const piqueListe = (cache) => (
+    <div className={`lp-bande-piste-moitie${cache ? ' lp-bande-double' : ''}`} aria-hidden={cache || undefined}>
+      {PIQUES.map(q => (
+        <span key={q.secteur} className="lp-pique"><em>{q.secteur}</em>{q.t}</span>
+      ))}
+    </div>
+  )
 
   return (
     // Pas d'overflowX hidden ici : avec overflow-y visible, il transformait ce
-    // div en zone de scroll imbriquée (scroll qui « accroche » sur PC). Plus
-    // rien ne déborde horizontalement depuis le retrait des décors absolute.
-    <main style={{ background: T.bg, color: T.ink, fontFamily: '"DM Sans", sans-serif' }}>
+    // main en zone de scroll imbriquée (scroll qui « accroche » sur PC).
+    <main className="lp">
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
       <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" async defer/>
 
       {/* Données structurées : sans elles Google n'a aucun moyen de relier le
-          nom « Yoppaa » à une organisation, ce qui laisse les homonymes
-          occuper la requête de marque. Rendu en JSON-LD dans le corps, ce que
-          Google lit aussi bien que dans le head. */}
+          nom « Yoppaa » à une organisation. */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify({
@@ -2047,792 +845,718 @@ export default function LandingReveal({ referent = null }) {
         }) }}
       />
 
-      {/* ═══ 1. HERO REVEAL (fond sombre) ═══ */}
-      <section style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff' }}>
-        <div style={{ maxWidth: 860, margin: '0 auto', padding: '56px 20px 64px', textAlign: 'center' }}>
-          {referent && (
-            <div style={{ display: 'inline-block', marginBottom: 24, padding: '10px 18px', borderRadius: 100, background: 'rgba(196,160,244,0.16)', border: '1px solid rgba(196,160,244,0.4)', fontSize: 13.5, fontWeight: 700, color: '#fff', lineHeight: 1.45 }}>
-              <strong style={{ color: T.light }}>{referent}</strong> t&rsquo;invite à rejoindre Yoppaa 🟣
-            </div>
-          )}
-          <div style={{ marginBottom: 36 }}>
-            <YoppaaLogo size={58} mode="dark"/>
-          </div>
-          {/* ⚠️ LE HERO PARLE AUX COMMERÇANTS D'ABORD (décision Alex, 20/08).
-              Les habitants, eux, arrivent par leur commerçant : c'est lui qu'il
-              faut convaincre en trois secondes. Le titre garde la mélodie de la
-              marque, « ton quartier dans ta poche », mais la retourne de son
-              côté à lui. Le versant Yopper reste entier plus bas, section 3. */}
-          <h1 style={{ fontSize: 'clamp(2.1rem, 6vw, 3.5rem)', fontWeight: 900, letterSpacing: '-2px', lineHeight: 1.06, margin: '0 auto 18px', maxWidth: 760, color: '#fff' }}>
-            Ton commerce,<br/>dans la poche de ton quartier.
-          </h1>
-          <p style={{ fontSize: 'clamp(1.02rem, 2.6vw, 1.2rem)', color: 'rgba(255,255,255,0.92)', lineHeight: 1.65, maxWidth: 620, margin: '0 auto 24px', fontWeight: 500 }}>
-            Yoppaa est l&rsquo;app belge <DrapeauBelge/> qui met ton commerce dans le téléphone des
-            habitants de ta commune. Commandes à emporter, rendez-vous en ligne, deals du jour,
-            carte de fidélité : les outils des grandes enseignes.
-            {/* ⚠️ « Yoppaa ne prend » ET PAS « aucune commission » tout court :
-                sans sujet, la phrase se lit « aucun frais du tout », et c'est
-                FAUX, les frais bancaires restent ceux de la banque. Le banc l'a
-                attrapée ici même, sur ma propre réécriture du hero. */}
-            {' '}Et <strong style={{ color: '#fff' }}>Yoppaa ne prend aucune commission sur tes ventes</strong>.
-          </p>
-
-          {/* L'offre, dès la première seconde et pas en petit gris tout en bas. */}
-          {estRegimeLancement() && (
-            <div style={{
-              display: 'inline-flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', justifyContent: 'center',
-              padding: '12px 22px', borderRadius: 100, marginBottom: 26,
-              background: 'rgba(196,160,244,0.16)', border: '1.5px solid rgba(196,160,244,0.45)',
-            }}>
-              {/* ⚠️ UN SEUL CHIFFRE, ET C'EST 100.
-                  J'avais retiré le total mais laissé « + 42 jours d'avance » :
-                  c'était toujours un second nombre, et Alex l'a vu à l'écran
-                  avant moi. L'avance se dit en mots, jamais en chiffres. */}
-              <span style={{ fontSize: 'clamp(1.15rem, 3.4vw, 1.5rem)', fontWeight: 900, letterSpacing: '-0.8px', color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
-                {joursOffertsAuLancement()} jours offerts
-              </span>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: T.light }}>
-                {ouvertureDatee() ? <>à partir du {libelleLancement()}</> : <>dès l&rsquo;ouverture</>}, quel que soit le forfait
-                {/* ⚠️ VIRGULE, PAS POINT MÉDIAN. Le point médian sépare des
-                    éléments distincts (les réseaux, les arguments d'une liste).
-                    Ici « et tout le temps d'ici là » est coordonné à la même
-                    phrase : c'est une virgule, comme dans « La totale » et
-                    dans le signup, qui portent déjà la phrase. */}
-                {(joursAvance() > 0 || !ouvertureDatee()) && ', et le temps d’ici là sert à te préparer'}
-              </span>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 40 }}>
-            {/* ⚠️ LE TROISIÈME CHEMIN, trouvé par la mutation du banc et pas
-                par la relecture. Ce bouton d'en-tête FAISAIT DÉFILER vers le
-                formulaire de préinscription : le commerçant qui cliquait dès
-                l'arrivée, c'est-à-dire le plus décidé de tous, atterrissait
-                dans le formulaire des habitants. Il mène maintenant là où il
-                dit qu'il mène. */}
-            <Link href="/signup" style={{ ...btnPrimaire, display: 'inline-block', textDecoration: 'none', textAlign: 'center' }}>
-              {LIBELLE_COMMERCANT}
-            </Link>
-            <button onClick={() => allerAuForm('yopper')}
-              style={{ ...btnPrimaire, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,0.4)', boxShadow: 'none' }}>
-              {LIBELLE_HABITANT}
-            </button>
-          </div>
-
-          {/* ⚠️ « OFFICIEL », et la phrase qui suit, parce que le compteur seul
-              disait exactement le contraire de la vérité : il laissait croire
-              qu'il ne se passe rien avant, alors qu'arriver tôt est justement
-              tout l'intérêt. */}
-          <p style={{ margin: '0 0 14px', fontSize: 12, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.6px' }}>
-            {ouvertureDatee() ? <>Lancement officiel le {libelleLancement()}</> : <>Lancement officiel très bientôt</>}
-          </p>
-          {/* ⚠️ PAS DE COMPTE À REBOURS SANS DATE DÉCIDÉE (30/09). */}
-          {ouvertureDatee() && <CompteurLancement/>}
-          <p style={{ margin: '18px auto 0', maxWidth: 520, fontSize: 14, fontWeight: 600, lineHeight: 1.6, color: 'rgba(255,255,255,0.82)' }}>
-            Inscris-toi maintenant : tu prépares ta page, ton catalogue et tes créneaux
-            sans te presser, et le jour J tu ouvres avec tout en place, sans perdre un seul jour.
-          </p>
-          {/* ⚠️ ALEX, 26/08 : « rends-les plus visibles, je recrute pour les
-              réseaux ». Une ligne soulignée en petit sous un compte à rebours
-              ne se voit pas : elle avait le poids d'une note de bas de page
-              alors qu'elle porte un objectif.
-
-              ⚠️ ET LA LISTE VIENT DE `lib/reseaux`, jamais nommée ici. C'est ce
-              qui a fait qu'Instagram est apparu partout d'un coup, et c'est ce
-              qui fera apparaître le suivant sans toucher à cette ligne. */}
-          <div style={{ marginTop: 24, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {RESEAUX.map(r => (
-              <a key={r.nom} href={r.url} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '11px 20px', borderRadius: 100, background: 'rgba(255,255,255,0.1)', border: '1.5px solid rgba(196,160,244,0.5)', color: '#fff', fontWeight: 800, fontSize: 13.5, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}>
-                Suis-nous sur {r.nom}
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ 2. MANIFESTO (clair, court) ═══ */}
-      <section style={{ maxWidth: 760, margin: '0 auto', padding: '64px 20px 8px', textAlign: 'center' }}>
-        <SectionEyebrow>Pourquoi Yoppaa</SectionEyebrow>
-        {/* Le titre affirme d'abord ce que personne d'autre ne peut dire (tous
-            les secteurs réunis) : le « 0% de commission » est devenu un ticket
-            d'entrée dans le secteur, il rassure mais ne positionne plus.
-            Les trois métiers cités annoncent exactement les trois familles de
-            la grille ci-dessous (alimentaire, services, détail). */}
-        <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.3rem)', fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1.15, margin: '0 0 16px', color: T.ink }}>
-          Tous les commerces de ta commune, dans une seule app.<br/>
-          <span style={{ color: T.main }}>Nous, on a choisi le camp du quartier.<br/>Celui du boulanger, de la coiffeuse et de la boutique de vêtements qui te connaissent par ton prénom.</span>
-        </h2>
-        <p style={{ fontSize: '1.02rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto 28px', fontWeight: 500 }}>
-          Pas une app par commerce, pas une app par secteur : une seule, pour tout ton quartier.
-          Tu commandes, tu réserves et tu cumules tes points en quelques secondes. Tes commerçants,
-          eux, ne reversent aucune commission à Yoppaa sur ce que tu leur achètes, et ta commune
-          reste vivante.
-        </p>
-        {/* Les familles de commerçants (taxonomie produit : alimentaire /
-            services / détail, plus tous ceux qui n'entrent dans aucune case).
-            La grille déborde volontairement de la colonne de texte (760px) pour
-            tenir les 4 cartes sur une seule ligne : `marginLeft: 50%` +
-            `translateX(-50%)` recentre un enfant plus large que son parent. */}
-        <style>{`
-          .familles-grid { display: grid; gap: 14px; grid-template-columns: 1fr; text-align: left; }
-          @media (min-width: 560px) { .familles-grid { grid-template-columns: repeat(2, 1fr); } }
-          @media (min-width: 920px) { .familles-grid { grid-template-columns: repeat(4, 1fr); } }
-        `}</style>
-        <div className="familles-grid" style={{ width: 'min(1040px, calc(100vw - 40px))', marginLeft: '50%', transform: 'translateX(-50%)' }}>
-          {[
-            { titre: 'Alimentaire', exemples: 'Boulangeries, boucheries, snacks, friteries, sandwicheries, restaurants, food trucks et plein d’autres.' },
-            { titre: 'Services', exemples: 'Coiffeurs, barbiers, instituts de beauté, bien-être, garages et tous les métiers sur rendez-vous.' },
-            { titre: 'Détail', exemples: 'Boutiques de mode, fleuristes, librairies, décoration et tout le commerce de proximité.' },
-            { titre: 'Et tous les autres', exemples: 'Un distributeur automatique à la ferme, un apiculteur, un maraîcher, un artisan qui n’ouvre que le samedi. Savoir ce qui est disponible aujourd’hui, annoncer une nouveauté : ça compte tout autant.' },
-          ].map(s => (
-            <div key={s.titre} style={{ background: '#fff', borderRadius: 16, padding: '16px 18px', border: `1px solid ${T.pale}`, boxShadow: '0 4px 14px rgba(22,6,54,0.05)' }}>
-              <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 900, color: T.main, textTransform: 'uppercase', letterSpacing: '0.8px' }}>{s.titre}</p>
-              <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: T.deep, lineHeight: 1.55 }}>{s.exemples}</p>
-            </div>
-          ))}
-        </div>
-        {/* Le corollaire du zéro prélèvement Yoppaa : un modèle qui ne vit pas
-            des ventes n'a aucune raison d'exclure les tout petits, contrairement
-            aux places de marché qui doivent rentabiliser chaque vendeur. */}
-        <p style={{ fontSize: '0.98rem', color: T.deep, lineHeight: 1.7, maxWidth: 640, margin: '22px auto 0', fontWeight: 600 }}>
-          Personne n&rsquo;est trop petit pour Yoppaa. La formule Exister est gratuite, pour toujours :
-          que tu travailles en solo ou en équipe, que tu ouvres tous les jours ou juste le samedi, tu as ta
-          place ici. 🟣
-        </p>
-      </section>
-
-      {/* ═══ 3. CÔTÉ YOPPERS : mockups ═══ */}
-      {/* Section volontairement plus large que les autres : quatre téléphones
-          côte à côte sur grand écran, sinon le 4e retombe seul à la ligne. */}
-      <section style={{ maxWidth: 1220, margin: '0 auto', padding: '56px 20px 24px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <SectionEyebrow>Pour toi, Yopper</SectionEyebrow>
-          <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', margin: '0 0 12px', color: T.ink }}>
-            Tes commerces préférés, à portée de main.
-          </h2>
-          <p style={{ fontSize: '1rem', color: T.muted, maxWidth: 560, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
-            Fini la file du samedi matin et le répondeur du coiffeur. Tu commandes à l&rsquo;avance,
-            tu réserves quand ça t&rsquo;arrange, tes cartes de fidélité se remplissent toutes seules
-            au lieu de traîner au fond du portefeuille, et chaque matin l&rsquo;app te souffle les bons
-            plans du jour près de chez toi.
-          </p>
-        </div>
-        {/* ⚠️ DEUX RANGÉES, PARCE QU'À SEPT PLUS PERSONNE N'EN REGARDE AUCUNE.
-            Les maquettes se sont accumulées au fil des modules : six en août,
-            sept le 13/09 avec l'anti-gaspi. Alignées, elles passaient à la
-            ligne toutes seules et faisaient un mur de téléphones sans ordre.
-            Chaque rangée porte maintenant UNE idée, et il y a de la place pour
-            en ajouter sans refaire ce mur. */}
-        <RangeeMaquettes titre="Commander, réserver, retirer">
-          <PhoneFrame label="Commande à l'avance et passe la prendre sans faire la file">
-            <MockFiche/>
-          </PhoneFrame>
-          <PhoneFrame label="Réserve ta table ou commande à emporter, depuis la même fiche">
-            <MockTableChoix/>
-          </PhoneFrame>
-          <PhoneFrame label="Dis combien vous êtes, choisis ton heure : la table est retenue en trois étapes">
-            <MockTableCreneaux/>
-          </PhoneFrame>
-        </RangeeMaquettes>
-        <RangeeMaquettes titre="Et ce qui te fait revenir">
-          <PhoneFrame label="Chaque matin à 7h30, les bons plans de ta commune arrivent tout seuls">
-            <MockMorning/>
-          </PhoneFrame>
-          <PhoneFrame label="Ce qui reste avant la fermeture, à prix réduit, à deux pas de chez toi">
-            <MockAntiGaspi/>
-          </PhoneFrame>
-          <PhoneFrame label="Ta carte de fidélité se remplit toute seule, sans carton à perdre">
-            <MockFidelite/>
-          </PhoneFrame>
-        </RangeeMaquettes>
-
-        {/* ⚠️ LES MAQUETTES CI-DESSUS RESTENT, ET CELLES-CI NE LES REMPLACENT
-            PAS. Une maquette porte un geste : elle simplifie, elle enlève le
-            bruit, elle montre l'intention. Une capture porte la preuve : la
-            vraie liste de sauces, les vraies tailles, le vrai nombre de
-            créneaux. Demander à l'une de faire le travail de l'autre, c'est
-            perdre les deux. */}
-        {CAPTURES_YOPPER.length > 0 && (
-          <div style={{ marginTop: 52 }}>
-            <p style={{ textAlign: 'center', margin: '0 0 6px', fontSize: 'clamp(1.15rem, 2.6vw, 1.4rem)', fontWeight: 900, letterSpacing: '-0.5px', color: T.ink }}>
-              Et ça, ce n&rsquo;est pas dessiné.
-            </p>
-            <p style={{ textAlign: 'center', margin: '0 auto 26px', maxWidth: 560, fontSize: 14, color: T.muted, lineHeight: 1.6, fontWeight: 500 }}>
-              Ce sont des captures de l&rsquo;application, prises telles quelles.
-            </p>
-            <div style={{ display: 'flex', gap: 'clamp(20px, 4vw, 40px)', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              {CAPTURES_YOPPER.map(c => <CaptureProduit key={c.cle} capture={c} fondClair/>)}
-            </div>
-          </div>
-        )}
-        {/* Bénéfices en pastilles */}
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginTop: 40 }}>
-          {[
-            'Click & Collect', 'Rendez-vous en ligne', 'Réserver une table', 'Good Morning Yoppers',
-            // ⚠️ « ET SÉANCES », PAS « ABONNEMENTS » TOUT SEUL. Sur cette page,
-            // le mot abonnement désigne déjà nos formules : employé nu dans une
-            // liste destinée aux habitants, il ferait lire « je dois m'abonner
-            // à Yoppaa ». Le second mot dit de quoi il s'agit.
-            'Abonnements et séances',
-            'Deals du jour', 'Cartes de fidélité', 'Bons cadeaux', 'Livraison locale', 'Suivi de commande',
-            // ⚠️ ICI C'EST LE NOM CÔTÉ YOPPER : ces pastilles s'adressent aux
-            // habitants, pas aux commerçants. « Avant la fermeture » est le nom
-            // de la fonction dans le tableau de bord, il n'a rien à faire ici.
-            'Boutiques de détail', 'Rien ne se perd',
-          ].map(b => (
-            <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 100, background: '#fff', border: `1.5px solid ${T.pale}`, fontSize: 13, fontWeight: 800, color: T.deep, boxShadow: '0 2px 10px rgba(22,6,54,0.05)' }}>
-              <IconCheck size={12}/> {b}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      {/* ═══ 4. CÔTÉ COMMERÇANTS (sombre, punch) ═══ */}
-      {/* Voir le composant LaTotale, juste sous l'accroche. */}
-      {/* ⚠️ `id` POSÉ LE 29/08 POUR LE PAPIER LAISSÉ EN BOUTIQUE. Le QR de l'A4
-          commerçant vise `/?via=kit#commercants` et non la racine : cette page
-          s'ouvre sur le Yopper, et un commerçant qui doit traverser tout le
-          contenu qui ne le concerne pas referme avant d'arriver ici.
-          ⚠️ ET SURTOUT PAS VERS `/pro` : cette route n'est pas une page, c'est
-          un `redirect` vers le formulaire d'inscription. Un commerçant qui
-          scanne entre deux clients veut REGARDER, pas saisir ses coordonnées.
-          `/pro` reste l'adresse ÉCRITE, courte et dictable, pour celui qui se
-          décide plus tard et la tape lui-même. */}
-      <section id="commercants" style={{ background: `linear-gradient(135deg, ${T.panel} 0%, ${T.ink} 100%)`, color: '#fff', marginTop: 48, scrollMarginTop: 12 }}>
-        <Bande3px/>
-        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 72px' }}>
-          <div style={{ textAlign: 'center', marginBottom: 44 }}>
-            <SectionEyebrow dark>Pour les commerçants</SectionEyebrow>
-            <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.3rem)', fontWeight: 900, letterSpacing: '-1.2px', lineHeight: 1.12, margin: '0 0 14px', color: '#fff' }}>
-              Les outils des grandes enseignes.<br/>Sans toucher à tes marges.
-            </h2>
-            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.88)', maxWidth: 620, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
-              La première place de marché du commerce local qui va de la visibilité au marketing,
-              et du marketing à la vente. Tout est pensé pour te faire gagner du temps, et Yoppaa
-              ne prélève jamais rien sur tes ventes.
-            </p>
-          </div>
-
-          <LaTotale />
-
-          {/* Chiffres punch */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14, maxWidth: 760, margin: '0 auto 48px' }}>
-            {[
-              { chiffre: '0%', label: 'de commission Yoppaa sur tes ventes' },
-              estRegimeLancement()
-                ? { chiffre: `${joursOffertsAuLancement()} jours`, label: `offerts ${depuisLOuverture()}, sans carte de paiement` }
-                : { chiffre: `${ESSAI_JOURS_MINIMUM} jours`, label: "d'essai gratuit, sans carte de paiement" },
-              { chiffre: '10 min', label: 'pour mettre ta page en ligne' },
-              { chiffre: '0€', label: 'la formule Exister, pour toujours' },
-            ].map(s => (
-              <div key={s.label} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 18, padding: '20px 14px', textAlign: 'center' }}>
-                <p style={{ margin: 0, fontSize: 'clamp(1.6rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', color: T.light }}>{s.chiffre}</p>
-                <p style={{ margin: '6px 0 0', fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.85)', lineHeight: 1.4 }}>{s.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Dashboard mockup + arguments */}
-          <div style={{ display: 'flex', gap: 'clamp(24px, 5vw, 56px)', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* 🔴 ICI VIVAIT `MockDashboard`, UNE MAQUETTE DESSINÉE, JUSQU'AU 22/09.
-                Alex : « remplace ce visuel par la capture jointe ». C'est le
-                premier endroit de la landing où une capture prend la place d'un
-                dessin plutôt que de s'ajouter à côté, et la règle du fichier des
-                captures le justifie : le dessin portait le geste, mais ce geste
-                est devenu une évidence, et la vraie liste de commandes prouve
-                davantage qu'une liste inventée. La maquette a été SUPPRIMÉE,
-                pas laissée de côté : une maquette définie et non posée est un
-                écran que personne ne verra jamais. */}
-            {CAPTURE_DASHBOARD && <CaptureProduit capture={CAPTURE_DASHBOARD}/>}
-            <div style={{ flex: '1 1 340px', maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {[
-                { titre: 'Ton quartier te parle', texte: 'Les habitants te disent ce qu’ils attendent de toi : du Click & Collect, de la livraison, des bonnes affaires, un produit que tu ne proposes pas encore. Et ton tableau de bord traduit tout ça en chiffres : ce qui part, à quelle heure, ce qui revient le plus souvent dans les demandes.' },
-                { titre: 'Tes clients, ta relation', texte: 'Le client qui commande chez toi reste ton client, pas celui d’une plateforme qui te le reloue. Tu vois ce qu’il te faut pour préparer sa commande et l’accueillir, et tu parles aux habitants par des notifications ciblées que Yoppaa envoie pour toi, sans jamais avoir à manipuler de fichier de contacts. Leurs coordonnées restent protégées et ne sont revendues à personne. Nos tarifs, nos frais et nos règles sont écrits noir sur blanc : la transparence est partout.' },
-                { titre: 'Des notifications qui touchent leur cible', texte: 'Ton deal du matin part en notification push vers les habitants de ta commune, pas dans le vide. Le bon message, aux bonnes personnes, au bon moment.' },
-                { titre: 'Ils reviennent, sans que tu y penses', texte: 'La carte de fidélité se remplit toute seule, au comptoir comme en ligne, et le client reçoit un SMS quand sa récompense tombe. Tes bons cadeaux se vendent en ligne et se dépensent chez toi.' },
-                // ⚠️ LE BÉNÉFICE, PAS LE NOM DE LA FONCTION. « Avant la
-                // fermeture » ne dit rien à quelqu'un qui découvre Yoppaa ; ce
-                // qui lui parle, c'est ce qu'il jette chaque soir.
-                //
-                // ⚠️ ET SÛREMENT PAS UNE LEÇON D'ÉCOLOGIE. L'argument est
-                // comptable : une recette de plus au lieu d'une perte sèche.
-                // Le geste dit l'anti-gaspi tout seul, le discours le
-                // rangerait au rayon des applications qui font la morale.
-                //
-                // ⚠️ AUCUN CHIFFRE ÉCRIT EN FIGURES : un seul nombre vit sur
-                // cette page, et c'est cent. Les nombres se disent en toutes
-                // lettres, comme partout ailleurs ici.
-                { titre: 'Ce qui reste ne part plus à la poubelle', texte: 'À l’heure de fermer, tu republies ce qu’il te reste à prix réduit, en trois gestes : ce qui reste, à quel prix, jusqu’à quand. Les habitants le voient apparaître sur leur accueil et viennent le chercher avant que tu ne baisses le rideau. Une recette de plus au lieu d’une perte sèche, et souvent un client qui pousse ta porte pour la première fois.' },
-                { titre: 'Une gestion sans prise de tête', texte: 'Stock du jour, commandes, rendez-vous, tout se pilote en quelques clics depuis ton téléphone. Et quand une commande est prête, le client est prévenu automatiquement.' },
-              ].map(a => (
-                <div key={a.titre} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 18, padding: '16px 18px', textAlign: 'left' }}>
-                  <p style={{ margin: '0 0 6px', fontWeight: 900, fontSize: 15.5, color: '#fff', letterSpacing: '-0.3px' }}>{a.titre}</p>
-                  <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, fontWeight: 500 }}>{a.texte}</p>
-                </div>
-              ))}
-              {/* ⚠️ « Préinscrire », c'était le mot du problème : ce bouton
-                  descendait vers un formulaire d'email. L'objectif est
-                  l'INSCRIPTION, pas la liste d'attente. */}
-              <Link href="/signup" style={{ ...btnPrimaire, marginTop: 6, width: '100%', display: 'block', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
-                J&rsquo;inscris mon commerce
-              </Link>
-            </div>
-          </div>
-
-          {/* L'inscription, montrée telle qu'elle est : trois étapes guidées
-              (depuis le 06/10), pour désamorcer la peur du dossier. */}
-          <div style={{ display: 'flex', gap: 'clamp(24px, 5vw, 56px)', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', marginTop: 52 }}>
-            <div style={{ flex: '1 1 320px', maxWidth: 440, textAlign: 'left' }}>
-              <SectionEyebrow dark>Ton inscription</SectionEyebrow>
-              <h3 style={{ fontSize: 'clamp(1.25rem, 3vw, 1.6rem)', fontWeight: 900, letterSpacing: '-0.8px', lineHeight: 1.15, margin: '0 0 12px', color: '#fff' }}>
-                {/* 🔴 29/09 : « ET TA PAGE PART EN LIGNE » ÉTAIT DEVENU FAUX.
-                    Valider ouvre l'espace ; la page part quand elle est
-                    complète (lib/fiche-complete.js). Titre changé à la
-                    demande d'Alex. */}
-                Trois étapes, et ton espace s&rsquo;ouvre.
-              </h3>
-              <p style={{ fontSize: '0.95rem', color: 'rgba(255,255,255,0.88)', lineHeight: 1.65, fontWeight: 500, margin: 0 }}>
-                Ton compte, l&rsquo;essentiel sur ton commerce, la vérification de ton entreprise, et
-                c&rsquo;est envoyé. Nous validons ton dossier et ton tableau de bord s&rsquo;ouvre : tu y
-                ajoutes ta présentation, tes photos, tes horaires et ton catalogue, avec une liste qui
-                te guide point par point, puis ta page part en ligne et ton kit de bienvenue arrive dans
-                ta boîte mail.
-              </p>
-              {/* Même avertissement qu'en tête de l'inscription : le contrôle
-                  de l'entreprise arrive à la dernière étape, et c'est là qu'on
-                  abandonne quand on n'a pas son numéro. ⚠️ 09/10 : plus de
-                  carte d'identité, le dire rassure ceux qu'elle faisait fuir. */}
-              <p style={{ fontSize: '0.88rem', color: '#fff', lineHeight: 1.6, fontWeight: 600, margin: '14px 0 0', padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.22)' }}>
-                Avant de commencer, garde sous la main ton numéro d&rsquo;entreprise (BCE, qui
-                est aussi ton numéro de TVA) : il est demandé pour envoyer ton dossier. Aucune
-                pièce d&rsquo;identité n&rsquo;est demandée.
-              </p>
-            </div>
-            <PhoneFrame label="La dernière étape : tu relis ton dossier, puis tu l'envoies">
-              <MockOnboarding/>
-            </PhoneFrame>
-          </div>
-
-          {/* ⚠️ CE N'EST PAS UNE MAQUETTE, ET C'EST TOUT L'INTÉRÊT.
-              Idée d'Alex, 26/08 : « on montre la réalité ». Ce qui précède est
-              dessiné à la main en JSX, léger, net, toujours à jour. Ceci est une
-              vraie capture. Un dessin dit « voilà à quoi ça pourrait
-              ressembler » ; une capture dit « voilà ce que tu auras », et c'est
-              ce qui décide un commerçant qui hésite.
-
-              🔴 CE COMMENTAIRE A ÉTÉ FAUX PENDANT UNE JOURNÉE, ET C'EST ALEX QUI
-              L'A VU À L'ÉCRAN. Il annonçait « ces DEUX images-ci sont de vraies
-              captures de L'INSCRIPTION » alors que le retrait du 22/09 n'en avait
-              laissé qu'UNE, et qu'elle montre le TABLEAU DE BORD. Le texte visible
-              avait vieilli de la même façon : un titre et un sous-titre au pluriel
-              au-dessus d'une seule image. **Quand on retire un élément d'une liste,
-              ce qui le DÉCRIVAIT reste en place et devient faux sans rien casser.**
-
-              ⚠️ LES DEUX TITRES CENTRÉS SONT PARTIS, ET PAS SEULEMENT PARCE QU'ILS
-              ÉTAIENT AU PLURIEL. Le composant CaptureProduit porte DÉJÀ le titre et la légende
-              de la capture : les coiffer d'un titre de section faisait deux titres
-              pour une image. La capture se pose maintenant en rangée, image à
-              gauche et texte à droite, en miroir du bloc de l'inscription juste
-              au-dessus. Rien n'est perdu : le titre qu'on lit est celui que porte
-              la capture dans lib/captures-landing.js.
-
-              ⚠️ Le mockup au-dessus RESTE. Il porte le geste et le mouvement, elle
-              porte la preuve : ce n'est pas la même chose, et l'un ne remplace pas
-              l'autre. */}
-          {CAPTURES_PREUVE.length > 0 && (
-            <div style={{ marginTop: 44, display: 'flex', flexDirection: 'column', gap: 'clamp(24px, 5vw, 48px)' }}>
-              {CAPTURES_PREUVE.map(c => <CaptureProduit key={c.cle} capture={c} enLigne/>)}
-            </div>
-          )}
-
-          {/* Trio « rassurance » : les 3 objections qu'on entend au comptoir
-              (matériel à acheter, peur de l'installation, personne au bout du fil) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, maxWidth: 900, margin: '48px auto 0' }}>
-            {[
-              {
-                icone: <IconDevices/>,
-                titre: 'Aucun matériel à acheter',
-                texte: 'Yoppaa tourne sur ce que tu as déjà : ton téléphone, ta tablette ou ton ordinateur. Pas de caisse imposée, pas de terminal à louer. Et si tu veux un écran dédié au comptoir, on peut t’équiper à prix raisonnable, jamais en obligation.',
-              },
-              {
-                icone: <IconLifebuoy/>,
-                titre: 'Et si tu préfères, on passe',
-                texte: 'L’accompagnement sur place se choisit au moment de ton inscription, ou plus tard depuis ton tableau de bord : on vient chez toi, on installe ton catalogue et on te forme. Jamais une obligation, jamais un abonnement de plus.',
-              },
-              {
-                icone: <IconHeadset/>,
-                titre: 'Un humain au bout du fil',
-                texte: 'Par email, en visio ou au téléphone, une vraie personne te répond et connaît ton dossier. Pas de robot, pas de ticket qui traîne trois jours.',
-              },
-            ].map(r => (
-              <div key={r.titre} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 18, padding: '20px 18px', textAlign: 'left' }}>
-                <div style={{ marginBottom: 10 }}>{r.icone}</div>
-                <p style={{ margin: '0 0 6px', fontWeight: 900, fontSize: 15.5, color: '#fff', letterSpacing: '-0.3px' }}>{r.titre}</p>
-                <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, fontWeight: 500 }}>{r.texte}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ 4 bis. CE QUE LA COMMISSION COÛTE ═══ */}
-      <CalculateurCommission/>
-
-      {/* ═══ 5. LES FORMULES (clair, détaillé, transparence) ═══ */}
-      <section style={{ maxWidth: 1080, margin: '0 auto', padding: '64px 20px 8px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <SectionEyebrow>Les formules</SectionEyebrow>
-          <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', margin: '0 0 12px', color: T.ink }}>
-            Simples, transparentes, sans engagement.
-          </h2>
-          <p style={{ fontSize: '1rem', color: T.muted, maxWidth: 600, margin: '0 auto', lineHeight: 1.65, fontWeight: 500 }}>
-            Chez Yoppaa, pas d&rsquo;abonnement contraignant ni de frais cachés : tu viens parce que
-            c&rsquo;est sympa, tu restes parce que c&rsquo;est utile. Chaque formule est mensuelle,
-            sans engagement, et résiliable en deux clics.
-          </p>
-        </div>
-        {/* L'offre de lancement, en grand, AVANT les cartes : c'est elle qui
-            fait lire la grille tarifaire, pas l'inverse. */}
-        <EncartOffreLancement onRejoindre={allerAuSignup}/>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: 18, alignItems: 'stretch' }}>
-          {FORMULES.map(f => (
-            <div key={f.nom} style={{
-              background: '#fff', borderRadius: 22, overflow: 'hidden', display: 'flex', flexDirection: 'column',
-              /* Vendre = la vedette : bordure violette, ombre plus marquée */
-              border: f.vedette ? `2px solid ${T.main}` : `1px solid ${T.pale}`,
-              boxShadow: f.vedette ? `0 10px 26px ${T.main}2E` : '0 6px 18px rgba(22,6,54,0.08)',
-            }}>
-              <Bande3px/>
-              <div style={{ padding: '22px 22px 24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                <span style={{
-                  alignSelf: 'flex-start', fontSize: 10.5, fontWeight: 900, padding: '4px 12px', borderRadius: 100,
-                  textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 12,
-                  color: f.vedette ? '#fff' : T.deep,
-                  background: f.vedette ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : T.pale,
-                }}>
-                  {f.badge}
-                </span>
-                <p style={{ margin: 0, fontWeight: 900, fontSize: 22, color: T.ink, letterSpacing: '-0.5px' }}>{f.nom}</p>
-                <p style={{ margin: '6px 0 2px', fontWeight: 900, fontSize: 30, color: T.main, letterSpacing: '-1px' }}>
-                  {f.prix}
-                  <span style={{ fontSize: 13, fontWeight: 700, color: T.muted, letterSpacing: 0, marginLeft: 6 }}>{f.sousPrix}</span>
-                </p>
-                <p style={{ margin: '10px 0 16px', fontSize: 14, fontWeight: 700, color: T.deep, lineHeight: 1.5 }}>{f.accroche}</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 20 }}>
-                  {f.points.map(pt => (
-                    <div key={pt} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                      <span style={{ marginTop: 2, flexShrink: 0 }}><IconCheck size={13}/></span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: pt.startsWith('Tout ') ? T.main : T.ink, lineHeight: 1.5 }}>{pt}</span>
-                    </div>
-                  ))}
-                </div>
-                {/* ⚠️ « Je me préinscris » sur une carte de FORMULE était le
-                    plus trompeur des cinq : le commerçant vient de choisir son
-                    prix, il clique, et il atterrit dans un formulaire d'email
-                    qui ne retient même pas la formule qu'il a choisie. */}
-                <Link href="/signup"
-                  style={{
-                    marginTop: 'auto', width: '100%', padding: '13px', borderRadius: 100,
-                    fontWeight: 900, fontSize: 13.5, letterSpacing: 0.4, textTransform: 'uppercase',
-                    cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
-                    display: 'block', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box',
-                    /* CTA plein pour la vedette, contour pour les accroches */
-                    border: f.vedette ? 'none' : `1.5px solid ${T.main}`,
-                    background: f.vedette ? `linear-gradient(135deg, ${T.main}, ${T.mid})` : '#fff',
-                    color: f.vedette ? '#fff' : T.main,
-                    boxShadow: f.vedette ? `0 6px 20px ${T.main}55` : 'none',
-                  }}>
-                  Je m&rsquo;inscris
-                </Link>
-              </div>
-            </div>
-          ))}
-        </div>
-        <p style={{ margin: '22px auto 0', fontSize: 13, fontWeight: 700, color: T.muted, textAlign: 'center', maxWidth: 560, lineHeight: 1.6 }}>
-          {/* L'offre est dite en grand juste au-dessus : ici on ne répète pas,
-              on répond à la question suivante, « et après, ça se passe
-              comment ». Voir feedback_information_complete. */}
-          {!estRegimeLancement() && <>{ESSAI_JOURS_MINIMUM} jours d&rsquo;essai gratuit sur les formules payantes, sans carte de paiement. </>}
-          Ensuite, paiement mensuel par Bancontact ou carte, aucune augmentation en cours d&rsquo;année,
-          et tu restes libre de partir quand tu veux.
-        </p>
-        {/* ⚠️ ICI AUSSI, ET PAS SEULEMENT EN BAS DE PAGE. C'est le moment où le
-            commerçant vient de lire les prix : c'est là qu'il décide. L'envoyer
-            chercher un bouton six sections plus bas, c'est le perdre. */}
-        <div style={{ textAlign: 'center', marginTop: 26 }}>
-          <Link href="/signup"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '14px 28px', borderRadius: 100, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 900, fontSize: 15, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif', boxShadow: '0 8px 20px rgba(107,53,196,0.28)' }}>
-            J&rsquo;inscris mon commerce
-          </Link>
-          <p style={{ margin: '10px 0 0', fontSize: 12.5, color: T.muted, fontWeight: 600 }}>
-            Ta page peut être en ligne cette semaine. Sans carte de paiement.
-          </p>
-        </div>
-      </section>
-
-      {/* ═══ 6. LA ZONE : commune par commune ═══ */}
-      <section style={{ maxWidth: 760, margin: '0 auto', padding: '64px 20px 8px', textAlign: 'center' }}>
-        {/* ⚠️ Réécrit le 20/08 : il n'y a PLUS de seuil de déblocage et plus
-            d'activation commune par commune. Toute la Wallonie est ouverte.
-            L'ancien discours demandait au commerçant d'attendre ses voisins
-            pour exister, ce qui est devenu faux, et décourageant pour rien. */}
-        <SectionEyebrow>Où ça se passe</SectionEyebrow>
-        <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 2.1rem)', fontWeight: 900, letterSpacing: '-1px', margin: '0 0 14px', color: T.ink }}>
-          Toute la Wallonie, dès aujourd&rsquo;hui.
-        </h2>
-        <p style={{ fontSize: '1rem', color: T.muted, lineHeight: 1.7, maxWidth: 620, margin: '0 auto 18px', fontWeight: 500 }}>
-          Pas de liste d&rsquo;attente, pas de seuil à atteindre, pas de commune à débloquer :
-          où que soit ton commerce en Wallonie, tu peux ouvrir ta page maintenant et prendre
-          tes premières commandes.
-        </p>
-        <p style={{ fontSize: '0.95rem', fontWeight: 800, color: T.main, margin: 0 }}>
-          Et plus vous êtes nombreux dans une commune, plus ses habitants ont de raisons
-          d&rsquo;ouvrir l&rsquo;app chaque matin.
-        </p>
-      </section>
-
-      {/* ═══ 7. L'HISTOIRE ═══ */}
-      <section style={{ maxWidth: 680, margin: '0 auto', padding: '56px 20px 8px' }}>
-        <div style={{ background: '#fff', borderRadius: 22, overflow: 'hidden', border: `1px solid ${T.pale}`, boxShadow: '0 6px 18px rgba(22,6,54,0.08)' }}>
-          <Bande3px/>
-          <div style={{ padding: 'clamp(22px, 5vw, 34px)' }}>
-            <SectionEyebrow>Un projet belge indépendant</SectionEyebrow>
-            <p style={{ margin: '0 0 12px', fontSize: '1.02rem', color: T.ink, lineHeight: 1.7, fontWeight: 600 }}>
-              Yoppaa n&rsquo;appartient à aucun grand groupe. C&rsquo;est un projet wallon <DrapeauBelge/>,
-              construit sans levée de fonds, avec une conviction simple : le digital doit servir les
-              commerces de quartier, pas se servir sur leur dos.
-            </p>
-            <p style={{ margin: 0, fontSize: '0.95rem', color: T.muted, lineHeight: 1.7, fontWeight: 500 }}>
-              Ici, pas de commission Yoppaa sur les ventes, pas de revente de données, pas d&rsquo;algorithme qui
-              cache tes commerçants derrière des annonces sponsorisées. Une app, ton quartier, et c&rsquo;est tout. 🟣
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ 8. PRÉINSCRIPTION (sombre) ═══ */}
-      <section id="preinscription" style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)`, color: '#fff', marginTop: 64 }}>
-        <Bande3px/>
-        <div style={{ maxWidth: 560, margin: '0 auto', padding: '60px 20px 64px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-          <h2 style={{ fontSize: 'clamp(1.6rem, 4.5vw, 2.2rem)', fontWeight: 900, letterSpacing: '-1.2px', margin: '0 0 10px', color: '#fff' }}>
-            {/* ⚠️ « Rendez-vous le 1er octobre » disait exactement le contraire
-                du reste de la page : c'était une invitation à attendre. */}
-            {estRegimeLancement()
-              ? (ouvertureDatee() ? <>N&rsquo;attends pas le {libelleLancement()}.</> : <>N&rsquo;attends pas l&rsquo;ouverture.</>)
-              : <>Rejoins ton quartier.</>}
-          </h2>
-          <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.9)', margin: '0 0 32px', lineHeight: 1.65, fontWeight: 500, maxWidth: 460 }}>
-            {/* ⚠️ Plus d'« activation de commune » : la Wallonie est ouverte,
-                et faire dépendre l'inscription d'un seuil serait faux. */}
-            Deux publics, deux gestes différents. Prends celui qui te ressemble.
-          </p>
-
-          {/* 🔴 LE COMMERÇANT N'AVAIT AUCUN MOYEN DE S'INSCRIRE (Alex, 26/08).
-              Toute cette page lui parle : les mockups de son tableau de bord,
-              les formules, la réponse à ses trois objections, et jusqu'au texte
-              juste au-dessus qui lui promet ses jours offerts. Puis il arrivait
-              ici, et le seul geste disponible était de laisser son email dans
-              une liste d'attente destinée aux HABITANTS.
-
-              Aucun lien vers /signup n'existait nulle part sur la landing. Ce
-              n'était pas les publications qui manquaient de force : elles
-              menaient à un cul-de-sac. */}
-          {/* ⚠️ UN BLOC PAR PUBLIC, ET UN SEUL GESTE DANS CHACUN (Alex, 26/08).
-              Le bouton du commerçant et le formulaire des habitants se
-              suivaient dans la même colonne, et le formulaire proposait EN PLUS
-              un choix « Je suis commerçant » : deux chemins pour le même
-              visiteur, dont un qui ne l'inscrivait pas. « Le commerçant ne sait
-              pas où il doit s'inscrire », et il avait raison de ne pas savoir.
-
-              Le formulaire est désormais celui des HABITANTS, sans sélecteur :
-              un champ qui demande qui tu es, juste après un bouton qui te l'a
-              demandé, est une question de trop. */}
-          <div style={{ width: '100%', maxWidth: 460, background: 'rgba(196,160,244,0.12)', border: '1.5px solid rgba(196,160,244,0.45)', borderRadius: 18, padding: '22px 20px', marginBottom: 18 }}>
-            <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.9px' }}>
-              {LIBELLE_COMMERCANT}
-            </p>
-            <p style={{ margin: '0 0 16px', fontSize: 14.5, color: '#fff', fontWeight: 600, lineHeight: 1.6 }}>
-              {/* ⚠️ LA NUANCE EXACTE, ET ELLE A DEMANDÉ DEUX ALLERS-RETOURS.
-                  Ta page part bien en ligne dès sa validation : c'est un vrai
-                  argument de rapidité, et le retirer aurait appauvri la page
-                  pour rien. Ce qui était faux, c'est ce qu'on en concluait :
-                  « tes premiers clients commandent avant tout le monde ». Le
-                  public n'arrive qu'au lancement. Une page en ligne n'est pas
-                  une page fréquentée, et c'est toute la différence.
-                  🔴 28/09 : « DÈS SA VALIDATION » EST DEVENU FAUX. Valider
-                  ouvre désormais l'espace, et la page part en ligne quand
-                  elle est complète (lib/fiche-complete.js). L'argument de
-                  rapidité reste : c'est le commerçant qui décide du rythme. */}
-              Ta commune est déjà ouverte et ta page part en ligne dès qu&rsquo;elle est complète.
-              {ouvertureDatee() ? <>Le public, lui, arrive le {libelleLancement()}</> : <>Le public, lui, arrive très bientôt</>} : d&rsquo;ici là, tu prépares tout
-              tranquillement.
-            </p>
-            <Link href="/signup"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '15px 30px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 15.5, letterSpacing: 0.2, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif', marginBottom: 10, boxShadow: '0 8px 22px rgba(150,96,224,0.35)' }}>
-              J&rsquo;inscris mon commerce
-            </Link>
-          {/* ⚠️ LE COMPTE VIENT DE `lib/lancement.js`, JAMAIS ÉCRIT EN DUR :
-              « 100 » est calculé depuis les deux dates, et un 100 tapé à la
-              main deviendrait un mensonge daté.
-              ⚠️ ET UN SEUL CHIFFRE SUR LA PAGE, décision d'Alex du 20/08. Un
-              second nombre, même exact, « peut être interprété comme
-              mensonger » : une offre qu'on soupçonne ne convainc personne.
-              L'avance se dit donc EN MOTS, comme dans le hero. Le banc l'avait
-              gardé, et il m'a arrêté ici. */}
-            {estRegimeLancement() && (
-              <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: T.light, lineHeight: 1.55 }}>
-                {ouvertureDatee()
-                  ? <>{joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()},</>
-                  : <>{joursOffertsAuLancement()} jours offerts dès l&rsquo;ouverture,</>}
-                et le temps d&rsquo;ici là pour tout préparer. Sans carte de paiement.
-              </p>
+      {/* ═══ 1. HAUT DE PAGE (commerçant) ═══ */}
+      {/* ⚠️ `id="commercants"` : le QR des A4 laissés en boutique vise
+          `/?via=kit#commercants`. La page s'ouvre maintenant sur le commerçant,
+          l'ancre tombe donc en haut, et elle doit rester. */}
+      <section id="commercants" style={{ background: `linear-gradient(135deg, ${T.panel} 0%, ${T.ink} 100%)`, color: '#fff', scrollMarginTop: 12 }} className="lp-hero">
+        <div className="lp-wrap lp-hero-grille">
+          <div className="lp-hero-texte">
+            {referent && (
+              <p className="lp-referent"><strong>{referent}</strong> t&rsquo;invite à rejoindre Yoppaa 🟣</p>
             )}
-          </div>
-
-          {/* Le second public, et son seul geste à lui : laisser son email. */}
-          <div style={{ width: '100%', maxWidth: 460, textAlign: 'left', marginBottom: 10 }}>
-            <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '0.9px' }}>
-              {LIBELLE_HABITANT}
+            <YoppaaLogo size={46} mode="dark"/>
+            <p className="lp-sur lp-sur-clair lp-hero-sur">Pour les commerçants · Tous les commerces de ta commune, dans une seule app</p>
+            <p className="lp-kicker" aria-live="off">
+              Tu tiens <span key={iMetier} className="lp-mot">{METIERS[iMetier]}</span>&nbsp;?
             </p>
-            {/* ⚠️ ALEX, 26/08 : « simplifier la communication côté Yopper.
-                Inscris-toi et on te tient au courant quand les premiers
-                commerçants sont en ligne et pour télécharger l'app. Simple et
-                clair. »
-
-                L'ancienne phrase promettait d'être « parmi les premiers à
-                télécharger », ce qui ne dit ni quand, ni pourquoi s'inscrire
-                maintenant. Les deux nouvelles raisons sont concrètes et
-                datées par des évènements réels : les commerces qui ouvrent, et
-                l'app qui sort. */}
-            <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.9)', fontWeight: 500, lineHeight: 1.6 }}>
-              Inscris-toi : on te prévient dès que ça démarre, pour que tu puisses télécharger
-              l&rsquo;app et enfin voir, commander et réserver chez tes commerçants préférés.
+            {/* ✅ Le titre validé par Alex le 14/10 : « en gros ils prennent
+                des commandes ». Blanc uni, comme tout titre sur fond sombre. */}
+            <h1 className="lp-h1">Les autres prennent tes commandes. Yoppaa t&rsquo;amène des clients.</h1>
+            {/* ⚠️ « Yoppaa ne prend » ET PAS « aucune commission » tout court :
+                sans sujet, la phrase se lit « aucun frais du tout ». */}
+            <p className="lp-lead">
+              Resto, salon, boutique, artisan : tout le monde a sa place, sans exception. Les habitants
+              ouvrent l&rsquo;app de leur commune et tombent sur ceux qu&rsquo;ils ne connaissaient pas
+              encore. Et <strong>Yoppaa ne prend aucune commission sur tes ventes</strong>.
             </p>
+            <div className="lp-ctas">
+              <Link href="/signup" className="lp-btn lp-btn-main">
+                J&rsquo;essaie {ESSAI_JOURS_MINIMUM} jours, c&rsquo;est gratuit <Icone d={I.fleche} size={18} sw={2.4}/>
+              </Link>
+              <button type="button" onClick={() => allerAuForm('yopper')} className="lp-btn lp-btn-fantome">
+                {LIBELLE_HABITANT}
+              </button>
+            </div>
+            <p className="lp-micro">Sans carte de paiement · Sans engagement · Ta page reste gratuite à vie</p>
           </div>
+          <TelephoneHero/>
+        </div>
+      </section>
 
-          {statut.envoi === 'ok' ? (
-            <div style={{ maxWidth: 460, width: '100%' }}>
-              <div style={{ background: 'rgba(16,185,129,0.15)', border: '1.5px solid #10B98166', borderRadius: 18, padding: '24px 22px' }}>
-                <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#A7F3D0' }}>
-                  ✓ {statut.message}
-                </p>
+      {/* ═══ 2. LA BANDE QUI PIQUE ═══ */}
+      {/* Une animation, pas une piste qu'on fait défiler au doigt : rien n'y est
+          caché, la même liste repasse. La seconde copie est muette pour les
+          lecteurs d'écran. */}
+      <div className="lp-bande" aria-label="Ce que Yoppaa ne te prend pas">
+        <div className="lp-bande-piste">
+          {piqueListe(false)}
+          {piqueListe(true)}
+        </div>
+      </div>
+
+      {/* ═══ 3. LE CALCUL ═══ */}
+      <section className="lp-calc" id="calcul">
+        <div className="lp-wrap">
+          <p className="lp-sur lp-sur-clair">Le calcul que personne ne te propose</p>
+          <h2 className="lp-h2 lp-h2-clair">Une commission, c&rsquo;est un associé qui n&rsquo;ouvre jamais le magasin.</h2>
+          <p className="lp-texte lp-texte-clair">
+            « Pas d&rsquo;abonnement ! » Tu l&rsquo;as déjà lu. Alors qui paie ? Toi, à chaque commande,
+            et plus tu vends, plus tu paies. Mets tes chiffres ici, pas les nôtres : c&rsquo;est ta calculette.
+          </p>
+          <CalculateurCommission/>
+          <p className="lp-chute">Ton chiffre d&rsquo;affaires ne nous regarde pas.</p>
+        </div>
+      </section>
+
+      {/* ═══ 4. CE QUE ÇA CHANGE ═══ */}
+      <section className="lp-section">
+        <div className="lp-wrap">
+          <p className="lp-sur lp-sur-encre">Ce que Yoppaa change</p>
+          <h2 className="lp-h2 lp-h2-encre">Une caisse enregistre les clients déjà entrés. Yoppaa les fait entrer.</h2>
+          <div className="lp-atouts">
+            {[
+              { icone: I.pin, titre: 'Ils te trouvent.', texte: 'Ton prochain client habite à deux pas, et il ne te connaît pas encore. Ta page vit dans l’app de ta commune et sur Google, et ta place t’attend dans le Good Morning Yoppers, la gazette du matin : chaque semaine en Exister, chaque matin en Communiquer.' },
+              { icone: I.sac, titre: 'Ils commandent sans t’appeler.', texte: 'Click & Collect, rendez-vous, réservation de table avec empreinte bancaire, livraison. La commande arrive écrite, avec l’heure. Fini le téléphone coincé contre l’épaule en plein coup de feu.' },
+              { icone: I.boucle, titre: 'Ils reviennent.', texte: 'Fidélité liée au numéro de GSM, notifications, bons cadeaux. Entre deux visites, tu restes dans leur poche.' },
+              { icone: I.feuille, titre: 'Rien ne se perd.', texte: 'À la fermeture, ce qu’il te reste repart à prix réduit au lieu d’être jeté. Une recette de plus, et souvent un client qui pousse ta porte pour la première fois.' },
+            ].map(a => (
+              <div key={a.titre} className="lp-atout">
+                <span className="lp-atout-icone"><Icone d={a.icone} size={22}/></span>
+                <h3>{a.titre}</h3>
+                <p>{a.texte}</p>
               </div>
-              {kitSlug && (
-                <div style={{ marginTop: 16, padding: '18px 16px', borderRadius: 16, background: 'rgba(150,96,224,0.16)', border: '1px solid rgba(196,160,244,0.4)', textAlign: 'center' }}>
-                  <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: '#fff' }}>Ton kit de partage est prêt 🟣</p>
-                  <p style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
-                    Un lien perso et un QR code à partager. Chaque inscription via ton lien t&rsquo;est attribuée.
-                  </p>
-                  <Link href={`/kit/${kitSlug}`} style={{ display: 'inline-block', padding: '12px 26px', borderRadius: 100, background: 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: '#1A0840', fontWeight: 900, fontSize: 13.5, letterSpacing: 0.3, textDecoration: 'none', fontFamily: '"DM Sans", sans-serif' }}>
-                    Ouvrir mon kit de partage
+            ))}
+          </div>
+
+          <div className="lp-tous">
+            <h3 className="lp-h3">Tout le monde a sa place. Sans exception.</h3>
+            <div className="lp-metiers">
+              {FAMILLES.map(m => <span key={m}>{m}</span>)}
+            </div>
+            {/* Le corollaire du zéro prélèvement Yoppaa : un modèle qui ne vit
+                pas des ventes n'a aucune raison d'exclure les tout petits. */}
+            <p className="lp-texte">
+              Personne n&rsquo;est trop petit pour Yoppaa : la formule Exister est gratuite, pour toujours,
+              que tu travailles seul ou en équipe, tous les jours ou juste le samedi.
+            </p>
+          </div>
+
+          <p className="lp-citation">Le client qui commande chez toi reste ton client. Personne ne te le reloue.</p>
+        </div>
+      </section>
+
+      {/* ═══ 5. LA PREUVE EN CAPTURES ═══ */}
+      {/* ⚠️ CE NE SONT PAS DES MAQUETTES, ET C'EST TOUT L'INTÉRÊT (Alex, 26/08 :
+          « on montre la réalité »). Les commerces affichés servent de
+          démonstration, et la page le dit (erreur n° 4 du brief). */}
+      <section className="lp-section lp-section-captures">
+        <div className="lp-wrap">
+          <h2 className="lp-h2 lp-h2-encre">Ce n&rsquo;est pas dessiné.</h2>
+          {CAPTURES_CARROUSEL.length > 0 && (
+            <p className="lp-texte">
+              Ce sont des captures de l&rsquo;application, prises telles quelles. Les commerces affichés
+              servent de démonstration.
+            </p>
+          )}
+        </div>
+        {CAPTURES_CARROUSEL.length > 0 && (
+          <BandeDefilante libelle="les captures" className="lp-captures">
+            {CAPTURES_CARROUSEL.map(c => (
+              <figure key={c.cle}>
+                <img src={captureSrc(c)} alt={c.alt} width={c.largeur} height={c.hauteur} loading="lazy" decoding="async"/>
+                <figcaption>{c.titre}</figcaption>
+              </figure>
+            ))}
+          </BandeDefilante>
+        )}
+      </section>
+
+      {/* ═══ 6. LE BLOC QUI PIQUE ═══ */}
+      <section className={`lp-noir${barresVues ? ' lp-vu' : ''}`} ref={refBarres}>
+        <div className="lp-wrap">
+          <h2 className="lp-h2 lp-h2-clair">Yoppaa n&rsquo;est pas pour toi.</h2>
+          {/* ⚠️ PAS DE « payer pour passer devant ton voisin » : avec
+              Communiquer, les actus remontent dans la liste. On ne pique pas
+              les autres sur ce qu'on fait nous-mêmes. */}
+          <ul className="lp-ratures">
+            <li>Si tu aimes payer un peu plus à chaque vente.</li>
+            <li>Si tu aimes les contrats dont on ne sort pas.</li>
+            <li>Si tu aimes expliquer ton problème à quelqu&rsquo;un qui ne connaît pas ton commerce.</li>
+            <li>Si tu as déjà tous les clients qu&rsquo;il te faut.</li>
+          </ul>
+          <p className="lp-pour-autres">
+            Pour tous les autres : {ESSAI_JOURS_MINIMUM} jours pour tout essayer. Et ta page reste gratuite à vie.
+          </p>
+        </div>
+      </section>
+
+      {/* ═══ 7. L'OFFRE ET LES FORMULES ═══ */}
+      <section className="lp-section" id="formules">
+        <div className="lp-wrap">
+          <div className="lp-offre">
+            <div className="lp-offre-nombre">
+              <CompteurJours cible={ESSAI_JOURS_MINIMUM}/>
+              <span className="lp-points" aria-hidden="true"><i/><i/><i/></span>
+            </div>
+            <div>
+              {/* ✅ 14/10, Alex : les 100 jours EN PERMANENCE, la marque de
+                  fabrique. Le nombre vient de `lib/lancement.js`, comme la
+                  facture : ils ne peuvent pas diverger. */}
+              <h2 className="lp-h2 lp-h2-encre">jours offerts, dès ton inscription. Pour tout le monde. Tout le temps.</h2>
+              <p className="lp-texte">
+                Tu viens parce que c&rsquo;est gratuit et sans contrainte. Tu restes parce que c&rsquo;est utile.
+                Pendant ces jours-là, tu essaies tout, les trois formules, sans carte de paiement : rien ne se
+                déclenche dans ton dos.
+              </p>
+            </div>
+          </div>
+
+          <div className="lp-formules">
+            {FORMULES.map(fo => {
+              const { prix, sous } = affichagePrix(fo.plan)
+              const visibles = fo.points.slice(0, POINTS_VISIBLES)
+              const reste = fo.points.slice(POINTS_VISIBLES)
+              const ligne = pt => (
+                <li key={pt} className={pt.startsWith('Tout ') ? 'lp-tout' : undefined}>
+                  <Icone d={I.check} size={14} sw={3}/><span>{pt}</span>
+                </li>
+              )
+              return (
+                <div key={fo.nom} className={`lp-formule${fo.vedette ? ' lp-formule-vedette' : ''}`}>
+                  <span className="lp-formule-badge">{fo.badge}</span>
+                  <p className="lp-formule-nom">{fo.nom}</p>
+                  <p className="lp-formule-prix">{prix} <span>{sous}</span></p>
+                  <p className="lp-formule-accroche">{fo.accroche}</p>
+                  <ul>{visibles.map(ligne)}</ul>
+                  {reste.length > 0 && (
+                    <details className="lp-formule-plus">
+                      <summary>Et {reste.length} autres choses</summary>
+                      <ul>{reste.map(ligne)}</ul>
+                    </details>
+                  )}
+                  {/* ⚠️ Chaque carte INSCRIT : le commerçant vient de choisir
+                      son prix, on ne l'envoie pas dans un formulaire d'email. */}
+                  <Link href="/signup" className={`lp-btn ${fo.vedette ? 'lp-btn-violet' : 'lp-btn-contour'} lp-formule-cta`}>
+                    Je m&rsquo;inscris
                   </Link>
                 </div>
-              )}
-              <div style={{ marginTop: 16, textAlign: 'left' }}>
-                <IncitantMobilisation communeStats={communeStats} globalStats={globalStats}/>
-              </div>
-              <PartageMobilisation/>
+              )
+            })}
+          </div>
+          <p className="lp-sous-formules">
+            Yoppaa ne prend aucune commission sur tes ventes : la formule au mois est notre seul revenu.
+            Paiement par Bancontact ou carte, aucune augmentation en cours d&rsquo;année.
+          </p>
+
+          {/* ✅ 14/10, Alex : « quand on dit abonnement, les gens pensent à
+              engagement. Je veux qu'on sache qu'ici rien n'est bloquant : tu
+              aimes, tu restes ; ce n'est plus utile, tu pars, mais on te garde
+              ta page pour que tu restes visible. Finalement on reste toujours
+              un peu un Yopper. » Vérifié dans le code : une résiliation
+              (`customer.subscription.deleted`) repasse le commerce en Exister,
+              sa page reste en ligne. */}
+          <div className="lp-liberte">
+            <p className="lp-sur lp-sur-clair">Et si tu arrêtes ?</p>
+            <h3 className="lp-liberte-titre">Ici, l&rsquo;abonnement n&rsquo;enferme personne.</h3>
+            <p>
+              Tu aimes, tu restes. Ça ne te sert plus, tu arrêtes quand tu veux, sans préavis. Et ta page
+              reste en ligne, gratuitement : tes clients te trouvent toujours. On ne sort personne du quartier.
+            </p>
+            <p className="lp-signature">Yopper un jour, Yopper toujours.</p>
+            <Link href="/signup" className="lp-btn lp-btn-main lp-liberte-cta">
+              J&rsquo;essaie {ESSAI_JOURS_MINIMUM} jours, c&rsquo;est gratuit <Icone d={I.fleche} size={18} sw={2.4}/>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ 8. CE QUE ÇA T'ENGAGE, ET LES QUESTIONS ═══ */}
+      <section className="lp-section lp-section-blanche">
+        <div className="lp-wrap lp-engage-grille">
+          <div>
+            <p className="lp-sur lp-sur-encre">Ce que ça t&rsquo;engage</p>
+            <h2 className="lp-h2 lp-h2-encre">Rien.</h2>
+            <ul className="lp-engage">
+              <li><Icone d={I.check} size={16} sw={3}/><span>Tu ne donnes aucune carte de paiement pour t&rsquo;inscrire.</span></li>
+              <li><Icone d={I.check} size={16} sw={3}/><span>Tu ne remplaces rien : garde ta caisse, ton logiciel, tes habitudes.</span></li>
+              <li><Icone d={I.check} size={16} sw={3}/><span>Tu pars quand tu veux, sans préavis.</span></li>
+              <li><Icone d={I.check} size={16} sw={3}/><span>Si tu n&rsquo;en fais rien, ta page reste en ligne. Gratuitement. À vie.</span></li>
+            </ul>
+            <div className="lp-humains">
+              <p><strong>Et si tu préfères, on passe.</strong> On vient chez toi, on installe ton catalogue et on te forme. Jamais une obligation.</p>
+              <p><strong>Un humain au bout du fil.</strong> Par email, en visio ou au téléphone, une vraie personne qui connaît ton dossier.</p>
             </div>
-          ) : (
-            <form onSubmit={soumettre} style={{ background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: 18, padding: '24px 22px', maxWidth: 460, width: '100%', textAlign: 'left' }}>
-              <input type="email" required placeholder="Ton email" onFocus={lancerChallenge}
-                value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                style={inputStyle}/>
-              <input type="text" required inputMode="numeric" pattern="\d{4}" maxLength={4} placeholder="Ton code postal (4 chiffres)" onFocus={lancerChallenge}
-                value={form.code_postal} onChange={e => setForm(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))}
-                style={inputStyle}/>
-
-              <IncitantMobilisation communeStats={communeStats} globalStats={globalStats}/>
-
-              {/* ⚠️ LE SÉLECTEUR « habitant / commerçant » A ÉTÉ RETIRÉ le 26/08.
-                  Il ouvrait un SECOND chemin au commerçant, celui qui ne
-                  l'inscrit pas : il cochait « Je suis commerçant », laissait
-                  son email, et repartait sans compte en croyant s'être
-                  inscrit. Le bouton juste au-dessus est son chemin, celui-ci
-                  est celui des habitants. Redemander qui tu es, juste après un
-                  bouton qui te l'a demandé, est une question de trop. */}
-
-              <input type="text"
-                maxLength={160}
-                placeholder="Un commerce que tu aimerais voir ? (optionnel)"
-                value={form.commercant_nom}
-                onChange={e => setForm(p => ({ ...p, commercant_nom: e.target.value }))}
-                style={inputStyle}/>
-
-              <textarea placeholder="Un message ? (optionnel)" rows={2}
-                value={form.message} onChange={e => setForm(p => ({ ...p, message: e.target.value.slice(0, 500) }))}
-                style={{ ...inputStyle, resize: 'vertical', minHeight: 50 }}/>
-
-              {/* Consentement RGPD : case visible, jamais pré-cochée, OBLIGATOIRE
-                  (elle décrit la finalité même de l'inscription) */}
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginBottom: 14, cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.consentement_marketing}
-                  onChange={e => setForm(p => ({ ...p, consentement_marketing: e.target.checked }))}
-                  style={{ marginTop: 2, width: 15, height: 15, accentColor: '#9660E0', flexShrink: 0, cursor: 'pointer' }}/>
-                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, fontWeight: 600 }}>
-                  J&rsquo;accepte de recevoir l&rsquo;annonce du lancement et les actualités de Yoppaa. <span style={{ color: '#C4A0F4' }}>*</span>
-                </span>
-              </label>
-
-              {siteKey && <div ref={turnstileRef} />}
-
-              <button type="submit" disabled={statut.envoi === 'envoi' || !formValide}
-                style={{ width: '100%', padding: '14px', borderRadius: 100, border: 'none', background: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.12)' : 'linear-gradient(135deg, #C4A0F4, #9660E0)', color: !formValide || statut.envoi === 'envoi' ? 'rgba(255,255,255,0.5)' : '#1A0840', fontWeight: 900, fontSize: 14, letterSpacing: 0.5, textTransform: 'uppercase', cursor: !formValide || statut.envoi === 'envoi' ? 'not-allowed' : 'pointer', fontFamily: '"DM Sans", sans-serif', transition: 'all 0.15s', marginTop: 4 }}>
-                {statut.envoi === 'envoi' ? 'Envoi…' : 'Me prévenir du lancement'}
-              </button>
-
-              {statut.envoi === 'ko' && statut.message && (
-                <p style={{ margin: '12px 0 0', fontSize: 12, color: '#FCA5A5', fontWeight: 700, textAlign: 'center' }}>
-                  ⚠ {statut.message}
-                </p>
-              )}
-
-              <p style={{ margin: '14px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 1.5 }}>
-                <Lock size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aucun spam.{' '}
-                <Link href="/legal" style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.35)' }}>Données protégées</Link>.
+          </div>
+          <div className="lp-faq">
+            <p className="lp-sur lp-sur-encre">Les questions qu&rsquo;on nous pose</p>
+            <details>
+              <summary>Je suis déjà sur une plateforme de commande.</summary>
+              <p>Garde-la si tu veux : Yoppaa ne demande aucune exclusivité. Ouvre ta page à côté, et regarde d&rsquo;où viennent tes nouveaux clients.</p>
+            </details>
+            <details>
+              <summary>Je n&rsquo;ai pas le temps.</summary>
+              <p>
+                Ton inscription prend quelques minutes, puis une liste te guide point par point. Tu tiens un
+                resto ou un snack ? Prends ta carte en photo : l&rsquo;IA la lit et prépare tes articles, tu
+                n&rsquo;as plus qu&rsquo;à relire. Et si tu préfères, on passe le faire avec toi.
               </p>
-            </form>
-          )}
+            </details>
+            <details>
+              <summary>Il me faut du matériel ?</summary>
+              <p>Non. Ton téléphone, ta tablette ou ton ordinateur suffisent. Pas de caisse imposée, pas de terminal à louer.</p>
+            </details>
+            <details>
+              <summary>Que faut-il pour s&rsquo;inscrire ?</summary>
+              {/* 🔴 29/09 : la page part quand elle est complète, pas à la
+                  validation (lib/fiche-complete.js). */}
+              <p>
+                Trois étapes, et ton espace s&rsquo;ouvre.
+              </p>
+              <ol className="lp-etapes">
+          {['Compte', 'L’essentiel', 'Vérification'].map((e, i) => (
+                  <li key={e}><span>{i + 1}</span>{e}</li>
+                ))}
+              </ol>
+              {/* ⚠️ 09/10 : plus de carte d'identité, le dire rassure ceux
+                  qu'elle faisait fuir. */}
+              <p>
+                Avant de commencer, garde sous la main ton numéro d&rsquo;entreprise (BCE, qui est aussi ton
+                numéro de TVA). Aucune pièce d&rsquo;identité, aucune carte de paiement. Une vraie personne
+                relit ton dossier et te répond sous deux jours ouvrables.
+              </p>
+            </details>
+            <details>
+              <summary>Où ça marche ?</summary>
+              <p>
+                Toute la Wallonie, dès aujourd&rsquo;hui. Pas de liste d&rsquo;attente, pas de seuil à atteindre.
+                Ta commune est déjà ouverte et ta page part en ligne dès qu&rsquo;elle est complète. Et plus vous
+                êtes nombreux dans une commune, plus ses habitants ont de raisons d&rsquo;ouvrir l&rsquo;app
+                chaque matin.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
 
-          {/* Footer */}
-          <footer style={{ marginTop: 52, fontSize: 11, color: 'rgba(255,255,255,0.62)', lineHeight: 1.7 }}>
-            <div style={{ marginBottom: 14 }}>
-              <YoppaaLogo size={26} mode="dark"/>
+      {/* ═══ 9. POUR LES HABITANTS ═══ */}
+      <section id="preinscription" className="lp-habitants" style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)` }}>
+        <div className="lp-wrap lp-habitants-grille">
+          <div>
+            <p className="lp-sur lp-sur-clair">{LIBELLE_HABITANT}</p>
+            <h2 className="lp-h2 lp-h2-clair">Tes commerces préférés, dans ta poche.</h2>
+            <p className="lp-texte lp-texte-clair">
+              Fini la file du samedi matin et le répondeur du coiffeur. Tu commandes à l&rsquo;avance, tu
+              réserves quand ça t&rsquo;arrange, ta fidélité se remplit toute seule, et chaque matin les
+              bons plans de ta commune arrivent tout seuls. Gratuit, pour toujours.
+            </p>
+            <div className="lp-pastilles">
+              {[
+                'Click & Collect', 'Rendez-vous en ligne', 'Réserver une table', 'Good Morning Yoppers',
+                // ⚠️ « ET SÉANCES », PAS « ABONNEMENTS » TOUT SEUL : sur cette
+                // page, le mot désigne déjà nos formules.
+                'Abonnements et séances',
+                'Deals du jour', 'Cartes de fidélité', 'Bons cadeaux', 'Livraison locale',
+                'Boutiques de détail', 'Rien ne se perd',
+              ].map(b => (
+                <span key={b}><Icone d={I.check} size={12} sw={3}/> {b}</span>
+              ))}
             </div>
-            <p style={{ margin: 0, fontWeight: 700, color: 'rgba(255,255,255,0.78)' }}>Un projet belge indépendant 🟣</p>
-            <p style={{ margin: '6px 0 0' }}>
-              <a href="mailto:hello@yoppaa.app" style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.25)' }}>hello@yoppaa.app</a>
+            {/* ✅ 14/10, Alex : « ajoute les logos App Store et Play Store, en
+                plus d'une inscription si tu penses qu'elle est encore
+                nécessaire ». Elle l'est : tant que l'app n'est pas publiée
+                (`lib/stores.js`), l'email est le seul moyen de prévenir
+                l'habitant. */}
+            <BadgesStores/>
+          </div>
+
+          <div className="lp-habitants-form">
+            {/* ⚠️ ALEX, 26/08 : « simple et clair ». Deux raisons concrètes de
+                s'inscrire : les commerces qui ouvrent, et l'app qui sort. */}
+            <p className="lp-habitants-phrase">
+              {appPubliee()
+                ? <>L&rsquo;app est là. Laisse ton email et on te prévient quand tes commerçants y arrivent.</>
+                : <>Inscris-toi : on te prévient dès que ça démarre, pour que tu puisses télécharger l&rsquo;app et enfin voir, commander et réserver chez tes commerçants préférés.</>}
+            </p>
+
+            {statut.envoi === 'ok' ? (
+              <div>
+                <div style={{ background: 'rgba(16,185,129,0.15)', border: '1.5px solid #10B98166', borderRadius: 18, padding: '24px 22px' }}>
+                  <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#A7F3D0' }}>
+                    ✓ {statut.message}
+                  </p>
+                </div>
+                {kitSlug && (
+                  <div style={{ marginTop: 16, padding: '18px 16px', borderRadius: 16, background: 'rgba(150,96,224,0.16)', border: '1px solid rgba(196,160,244,0.4)', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 800, color: '#fff' }}>Ton kit de partage est prêt 🟣</p>
+                    <p style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
+                      Un lien perso et un QR code à partager. Chaque inscription via ton lien t&rsquo;est attribuée.
+                    </p>
+                    <Link href={`/kit/${kitSlug}`} className="lp-btn lp-btn-main" style={{ padding: '12px 26px', fontSize: 13.5 }}>
+                      Ouvrir mon kit de partage
+                    </Link>
+                  </div>
+                )}
+                <div style={{ marginTop: 16, textAlign: 'left' }}>
+                  <IncitantMobilisation communeStats={communeStats} globalStats={globalStats}/>
+                </div>
+                <PartageMobilisation/>
+              </div>
+            ) : (
+              <form onSubmit={soumettre} className="lp-form">
+                <input type="email" required placeholder="Ton email" onFocus={lancerChallenge}
+                  value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                  style={inputStyle}/>
+                <input type="text" required inputMode="numeric" pattern="\d{4}" maxLength={4} placeholder="Ton code postal (4 chiffres)" onFocus={lancerChallenge}
+                  value={form.code_postal} onChange={e => setForm(p => ({ ...p, code_postal: e.target.value.replace(/\D/g, '').slice(0,4) }))}
+                  style={inputStyle}/>
+
+                <IncitantMobilisation communeStats={communeStats} globalStats={globalStats}/>
+
+                {/* ⚠️ LE SÉLECTEUR « habitant / commerçant » A ÉTÉ RETIRÉ le
+                    26/08 : il ouvrait au commerçant un chemin qui ne
+                    l'inscrivait pas. Le sien est un vrai lien vers /signup. */}
+                <input type="text"
+                  maxLength={160}
+                  placeholder="Un commerce que tu aimerais voir ? (optionnel)"
+                  value={form.commercant_nom}
+                  onChange={e => setForm(p => ({ ...p, commercant_nom: e.target.value }))}
+                  style={inputStyle}/>
+
+                {/* Consentement RGPD : case visible, jamais pré-cochée,
+                    OBLIGATOIRE (elle décrit la finalité même de l'inscription) */}
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginBottom: 14, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.consentement_marketing}
+                    onChange={e => setForm(p => ({ ...p, consentement_marketing: e.target.checked }))}
+                    style={{ marginTop: 2, width: 15, height: 15, accentColor: '#9660E0', flexShrink: 0, cursor: 'pointer' }}/>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, fontWeight: 600 }}>
+                    J&rsquo;accepte de recevoir l&rsquo;annonce du lancement et les actualités de Yoppaa. <span style={{ color: '#C4A0F4' }}>*</span>
+                  </span>
+                </label>
+
+                {siteKey && <div ref={turnstileRef} />}
+
+                <button type="submit" disabled={statut.envoi === 'envoi' || !formValide} className="lp-form-envoi">
+                  {statut.envoi === 'envoi' ? 'Envoi…' : 'Me prévenir du lancement'}
+                </button>
+
+                {statut.envoi === 'ko' && statut.message && (
+                  <p style={{ margin: '12px 0 0', fontSize: 12, color: '#FCA5A5', fontWeight: 700, textAlign: 'center' }}>
+                    ⚠ {statut.message}
+                  </p>
+                )}
+
+                <p style={{ margin: '14px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 1.5 }}>
+                  <Lock size={11} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/> Aucun spam.{' '}
+                  <Link href="/legal" style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.35)' }}>Données protégées</Link>.
+                </p>
+              </form>
+            )}
+          </div>
+        </div>
+
+        {/* ═══ 10. FIN DE PAGE ═══ */}
+        <div className="lp-wrap lp-fin">
+          <p className="lp-sur lp-sur-clair">Un projet belge indépendant <DrapeauBelge/></p>
+          <p className="lp-fin-texte">
+            Yoppaa n&rsquo;appartient à aucun grand groupe. Construit en Wallonie, sans levée de fonds, avec une
+            conviction : le digital doit servir les commerces de quartier, pas se servir sur leur dos. Pas de
+            revente de données, pas d&rsquo;annonces sponsorisées devant tes commerçants.
+          </p>
+          <div className="lp-fin-cta">
+            <p className="lp-sur lp-sur-clair">{LIBELLE_COMMERCANT}</p>
+            <Link href="/signup" className="lp-btn lp-btn-main">J&rsquo;inscris mon commerce</Link>
+          </div>
+          {/* ⚠️ La liste vient de `lib/reseaux`, jamais nommée ici. */}
+          <div className="lp-reseaux">
+            {RESEAUX.map(r => (
+              <a key={r.nom} href={r.url} target="_blank" rel="noopener noreferrer">Suis-nous sur {r.nom}</a>
+            ))}
+          </div>
+
+          <footer className="lp-pied">
+            <YoppaaLogo size={26} mode="dark"/>
+            <p>
+              Yoppaa est un produit et une marque d&rsquo;Avcotech SRL · BCE 0731.637.148 · Rue de Prée 9 G, 5640 Mettet
+            </p>
+            <p>
+              <a href="mailto:hello@yoppaa.app">hello@yoppaa.app</a>
               {' · '}
-              {/* ⚠️ La liste vient de lib/reseaux : ajouter Instagram ou LinkedIn
-                  là-bas les fera apparaître ici ET dans le balisage Google. */}
               {RESEAUX.map(r => (
                 <span key={r.nom}>
-                  <a href={r.url} target="_blank" rel="noopener noreferrer"
-                    style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.25)' }}>{r.nom}</a>
+                  <a href={r.url} target="_blank" rel="noopener noreferrer">{r.nom}</a>
                   {' · '}
                 </span>
               ))}
-              <Link href="/legal" style={{ color: 'inherit', textDecoration: 'none', borderBottom: '1px solid rgba(255,255,255,0.25)' }}>Mentions légales</Link>
+              <Link href="/legal">Mentions légales, CGU et confidentialité</Link>
             </p>
           </footer>
         </div>
       </section>
 
-      {/* ⚠️ `masquer` quand le formulaire est déjà envoyé : proposer de
-          rejoindre la tribu à quelqu'un qui vient de le faire, c'est lui dire
-          qu'on ne l'a pas vu. */}
-      <FenetreTribu
-        masquer={statut.envoi === 'ok'}
-        onRejoindre={allerAuSignup}
-      />
-
-      <style>{`
-        @media (prefers-reduced-motion: reduce) {
-          * { animation-duration: 0.01ms !important; }
-        }
-      `}</style>
+      <style>{CSS_LANDING}</style>
     </main>
   )
 }
+
+// ─── La feuille de style de la page ─────────────────────────────────────────
+// 🔴 AUCUN COMMENTAIRE DANS CE CSS : un accent grave dans un commentaire CSS a
+// déjà cassé le build (reference_vide_sous_la_page). Les explications vivent
+// ici, au-dessus.
+// ⚠️ Aucun `filter` ni `backdrop-filter` (gel du défilement sur iPhone), aucune
+// hauteur en `vh`. Les animations ne touchent que `transform` et `opacity`, et
+// toutes s'éteignent avec `prefers-reduced-motion`.
+const CSS_LANDING = `
+.lp { background: ${T.bg}; color: ${T.ink}; font-family: "DM Sans", system-ui, sans-serif; }
+.lp *, .lp *::before, .lp *::after { box-sizing: border-box; }
+.lp-wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+.lp-h1, .lp-h2, .lp-h3, .lp-chute, .lp-citation, .lp-cent, .lp-pour-autres, .lp-signature, .lp-liberte-titre, .lp-verdict-montant, .lp-formule-nom {
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", "DM Sans", system-ui, sans-serif;
+}
+.lp-sur { margin: 0 0 14px; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.lp-sur-clair { color: ${T.light}; }
+.lp-sur-encre { color: ${T.main}; }
+.lp-h2 { margin: 0 0 16px; font-size: clamp(1.9rem, 5vw, 3.1rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.06; text-wrap: balance; max-width: 22em; }
+.lp-h2-clair { color: #fff; }
+.lp-h2-encre { color: ${T.ink}; }
+.lp-h3 { margin: 0 0 14px; font-size: clamp(1.3rem, 3vw, 1.7rem); font-weight: 800; letter-spacing: -0.02em; color: ${T.ink}; }
+.lp-texte { margin: 0; max-width: 40em; font-size: 1.03rem; line-height: 1.7; font-weight: 500; color: ${T.deep}; }
+.lp-texte-clair { color: rgba(255,255,255,0.88); }
+.lp-section { padding: clamp(64px, 9vw, 104px) 0; }
+.lp-section-blanche { background: #fff; }
+
+.lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 16px 28px; border-radius: 100px; border: 0; font-family: inherit; font-size: 15px; font-weight: 900; letter-spacing: .01em; text-decoration: none; cursor: pointer; text-align: center; transition: transform .16s ease, box-shadow .16s ease; }
+.lp-btn:hover { transform: translateY(-2px); }
+.lp-btn:focus-visible, .lp-onglet:focus-visible, .lp summary:focus-visible { outline: 3px solid ${T.light}; outline-offset: 3px; }
+.lp-btn-main { background: linear-gradient(135deg, ${T.light}, ${T.mid}); color: ${T.ink}; box-shadow: 0 10px 30px rgba(150,96,224,0.45); animation: lp-pouls 2.8s ease-in-out infinite; }
+.lp-btn-fantome { background: transparent; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.45); }
+.lp-btn-blanc { background: #fff; color: ${T.deep}; box-shadow: 0 8px 22px rgba(0,0,0,0.28); }
+.lp-btn-violet { background: linear-gradient(135deg, ${T.main}, ${T.mid}); color: #fff; box-shadow: 0 8px 22px rgba(107,53,196,0.3); }
+.lp-btn-contour { background: #fff; color: ${T.main}; box-shadow: inset 0 0 0 1.5px ${T.main}; }
+@keyframes lp-pouls { 0%, 100% { box-shadow: 0 10px 30px rgba(150,96,224,0.45); } 50% { box-shadow: 0 10px 46px rgba(196,160,244,0.8); } }
+
+.lp-hero { position: relative; overflow: hidden; }
+.lp-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 78% 35%, rgba(150,96,224,0.35), transparent 40%), radial-gradient(circle at 5% 100%, rgba(107,53,196,0.35), transparent 38%); }
+.lp-hero-grille { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 48px; align-items: center; padding-top: 48px; padding-bottom: 72px; }
+.lp-referent { display: inline-block; margin: 0 0 22px; padding: 10px 18px; border-radius: 100px; background: rgba(196,160,244,0.16); border: 1px solid rgba(196,160,244,0.4); font-size: 13.5px; font-weight: 700; line-height: 1.45; }
+.lp-referent strong { color: ${T.light}; }
+.lp-hero-sur { margin-top: 26px; }
+.lp-kicker { margin: 0 0 14px; font-size: clamp(1.2rem, 3.4vw, 1.7rem); font-weight: 800; color: rgba(255,255,255,0.92); line-height: 1.5; }
+.lp-mot { display: inline-block; padding: 1px 12px 3px; border-radius: 12px; background: #fff; color: ${T.ink}; animation: lp-mot .55s cubic-bezier(.2,.9,.3,1.25) both; }
+@keyframes lp-mot { from { opacity: 0; transform: translateY(55%) rotate(-4deg); } to { opacity: 1; transform: none; } }
+.lp-h1 { margin: 0 0 22px; font-size: clamp(2.35rem, 6.6vw, 4.5rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1.02; color: #fff; text-wrap: balance; }
+.lp-lead { margin: 0 0 30px; max-width: 34em; font-size: clamp(1.02rem, 2.3vw, 1.18rem); line-height: 1.65; font-weight: 500; color: rgba(255,255,255,0.9); }
+.lp-lead strong { color: #fff; }
+.lp-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+.lp-micro { margin: 18px 0 0; font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.75); }
+
+.lp-tel { position: relative; width: min(290px, 74vw); margin: 0 auto; }
+.lp-tel-cadre { padding: 10px; border-radius: 40px; background: #0B0318; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 30px 60px rgba(0,0,0,0.45); transform: rotate(-3deg); }
+.lp-tel-ecran { aspect-ratio: 9 / 18.5; overflow: hidden; border-radius: 31px; background: #fff; }
+.lp-tel-ecran img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.lp-bulle { position: absolute; display: flex; align-items: center; gap: 10px; max-width: 230px; padding: 10px 14px; border-radius: 16px; background: #fff; color: ${T.ink}; box-shadow: 0 14px 30px rgba(10,2,30,0.35); font-size: 12.5px; line-height: 1.3; font-weight: 600; animation: lp-bulle 12s ease-in-out infinite both; }
+.lp-bulle i { flex-shrink: 0; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: ${T.pale}; color: ${T.main}; }
+.lp-bulle strong { display: block; font-size: 13px; font-weight: 900; }
+.lp-bulle-1 { top: 8%; left: -22%; }
+.lp-bulle-2 { top: 33%; right: -24%; animation-delay: 3s; }
+.lp-bulle-3 { top: 58%; left: -24%; animation-delay: 6s; }
+.lp-bulle-4 { bottom: 8%; right: -18%; animation-delay: 9s; }
+@keyframes lp-bulle { 0% { opacity: 0; transform: translateY(14px) scale(.9); } 4%, 30% { opacity: 1; transform: none; } 36%, 100% { opacity: 0; transform: translateY(-8px) scale(.96); } }
+
+.lp-bande { overflow: hidden; padding: 17px 0; background: ${T.main}; color: #fff;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent); }
+.lp-bande-piste { display: flex; width: max-content; animation: lp-defile 70s linear infinite; }
+.lp-bande:hover .lp-bande-piste { animation-play-state: paused; }
+.lp-bande-piste-moitie { display: flex; }
+.lp-pique { display: inline-flex; align-items: center; gap: 12px; padding: 0 30px; white-space: nowrap; font-size: 15.5px; font-weight: 800; }
+.lp-pique em { font-style: normal; padding: 4px 10px; border-radius: 100px; background: rgba(255,255,255,0.18); font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.lp-pique::after { content: ""; width: 8px; height: 8px; margin-left: 30px; border-radius: 50%; background: ${T.light}; }
+@keyframes lp-defile { to { transform: translateX(-50%); } }
+
+.lp-calc { padding: clamp(64px, 9vw, 104px) 0; background: linear-gradient(160deg, ${T.ink} 0%, ${T.deep} 100%); color: #fff; }
+.lp-calcul { margin-top: 34px; padding: clamp(22px, 4vw, 38px); border-radius: 26px; background: rgba(255,255,255,0.06); border: 1px solid rgba(196,160,244,0.25); }
+.lp-onglets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+.lp-onglet { padding: 11px 18px; border-radius: 100px; border: 1.5px solid rgba(196,160,244,0.4); background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.92); font-family: inherit; font-size: 13.5px; font-weight: 800; cursor: pointer; }
+.lp-onglet[aria-pressed="true"] { background: #fff; border-color: #fff; color: ${T.deep}; }
+.lp-champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.lp-champ label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: ${T.light}; }
+.lp-champ-saisie { display: flex; align-items: center; gap: 8px; padding: 0 16px; border-radius: 14px; background: rgba(0,0,0,0.25); border: 1.5px solid rgba(255,255,255,0.22); }
+.lp-champ-saisie:focus-within { border-color: ${T.light}; }
+.lp-champ input { flex: 1; min-width: 0; padding: 14px 0; border: 0; outline: 0; background: transparent; color: #fff; font-family: inherit; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.lp-champ input::placeholder { color: rgba(255,255,255,0.3); }
+.lp-champ-saisie span { color: rgba(255,255,255,0.6); font-size: 14px; font-weight: 800; }
+.lp-calcul-aide { margin: 14px 0 0; font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,0.65); }
+.lp-calcul-aide strong { color: #FCD34D; }
+.lp-postes { display: grid; gap: 8px; }
+.lp-postes .lp-calcul-aide { margin: 0 0 6px; }
+.lp-poste { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); }
+.lp-poste[data-actif="oui"] { background: rgba(196,160,244,0.14); border-color: rgba(196,160,244,0.45); }
+.lp-poste > input { width: 19px; height: 19px; flex-shrink: 0; accent-color: ${T.light}; cursor: pointer; }
+.lp-poste label { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.92); cursor: pointer; }
+.lp-palier { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 100px; background: rgba(255,255,255,0.16); color: #fff; font-size: 10px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; vertical-align: middle; }
+.lp-palier-vendre { background: rgba(110,231,183,0.22); color: #6EE7B7; }
+.lp-palier-communiquer { background: rgba(196,160,244,0.3); }
+.lp-poste-prix { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.lp-poste-prix input { width: 74px; padding: 7px 9px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.25); background: rgba(0,0,0,0.25); color: #fff; font-family: inherit; font-size: 14px; font-weight: 800; text-align: right; }
+.lp-poste-prix input:disabled { opacity: .35; }
+.lp-poste-prix span { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.6); white-space: nowrap; }
+.lp-duel { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 28px; }
+.lp-duel > div { padding: 22px 20px; border-radius: 18px; text-align: center; }
+.lp-duel-eux { background: rgba(248,113,113,0.1); border: 1.5px solid rgba(248,113,113,0.4); }
+.lp-duel-nous { background: rgba(110,231,183,0.1); border: 1.5px solid rgba(110,231,183,0.45); }
+.lp-duel h3 { margin: 0 0 12px; font-size: 13px; font-weight: 900; line-height: 1.4; color: rgba(255,255,255,0.92); }
+.lp-duel-montant { margin: 0; font-size: clamp(2rem, 5.6vw, 2.8rem); font-weight: 900; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.lp-duel-eux .lp-duel-montant { color: #F87171; }
+.lp-duel-nous .lp-duel-montant { color: #6EE7B7; }
+.lp-duel-unite { margin: 8px 0 0; font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.62); }
+.lp-jour { display: grid; gap: 14px; margin-top: 22px; padding: 20px; border-radius: 18px; background: rgba(0,0,0,0.18); }
+.lp-jour-titre { margin: 0; font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; color: ${T.light}; }
+.lp-jour-ligne { display: grid; gap: 7px; font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.88); }
+.lp-jour-ligne strong { color: #fff; font-variant-numeric: tabular-nums; }
+.lp-barre { height: 14px; overflow: hidden; border-radius: 100px; background: rgba(255,255,255,0.1); }
+.lp-barre i { display: block; height: 100%; border-radius: inherit; transition: width .5s cubic-bezier(.2,.8,.2,1); }
+.lp-barre-eux { background: linear-gradient(90deg, #FCA5A5, #F87171); }
+.lp-barre-nous { background: linear-gradient(90deg, #A7F3D0, #6EE7B7); }
+.lp-verdict { margin-top: 30px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.16); text-align: center; }
+.lp-verdict-sur { margin: 0 0 6px; font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: ${T.light}; }
+.lp-verdict-titre { margin: 0; font-size: clamp(1.2rem, 3.4vw, 1.7rem); font-weight: 900; letter-spacing: -0.02em; color: #fff; text-wrap: balance; }
+.lp-verdict-montant { margin: 0; font-size: clamp(2.8rem, 10vw, 5rem); font-weight: 800; letter-spacing: -0.05em; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
+.lp-verdict-phrase { margin: 16px auto 22px; max-width: 36em; font-size: 15px; font-weight: 600; line-height: 1.6; color: rgba(255,255,255,0.9); }
+.lp-verdict-phrase strong { color: #fff; }
+.lp-calcul-note { margin: 16px auto 0; max-width: 40em; font-size: 12.5px; line-height: 1.6; color: rgba(255,255,255,0.62); }
+.lp-calcul-note strong { color: rgba(255,255,255,0.92); }
+.lp-chute { margin: 56px 0 0; font-size: clamp(1.8rem, 5.4vw, 3.2rem); font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; text-align: center; color: #fff; text-wrap: balance; }
+
+.lp-atouts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 36px; }
+.lp-atout { padding: 26px 24px; border-radius: 22px; background: #fff; border: 1px solid ${T.pale}; transition: transform .2s ease, box-shadow .2s ease; }
+.lp-atout:hover { transform: translateY(-3px); box-shadow: 0 16px 34px rgba(22,6,54,0.1); }
+.lp-atout-icone { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(135deg, ${T.main}, ${T.mid}); color: #fff; }
+.lp-atout h3 { margin: 16px 0 8px; font-family: var(--font-jakarta), "Plus Jakarta Sans", "DM Sans", system-ui, sans-serif; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; color: ${T.ink}; }
+.lp-atout p { margin: 0; font-size: .98rem; line-height: 1.65; font-weight: 500; color: ${T.deep}; }
+.lp-tous { margin-top: 56px; }
+.lp-metiers { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.lp-metiers span { padding: 8px 14px; border-radius: 100px; background: #fff; border: 1.5px solid ${T.pale}; font-size: 13.5px; font-weight: 800; color: ${T.deep}; }
+.lp-citation { max-width: 22em; margin: 64px auto 0; font-size: clamp(1.5rem, 4.2vw, 2.4rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; text-align: center; color: ${T.ink}; text-wrap: balance; }
+
+.lp-section-captures { padding-bottom: clamp(40px, 6vw, 72px); }
+.lp-captures { display: flex; gap: 22px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 32px 20px 24px; }
+.lp-captures::-webkit-scrollbar { display: none; }
+.lp-captures > :first-child { margin-left: auto; }
+.lp-captures > :last-child { margin-right: auto; }
+.lp-captures figure { flex: 0 0 auto; width: min(236px, 64vw); margin: 0; scroll-snap-align: center; }
+.lp-captures img { display: block; width: 100%; height: auto; border-radius: 18px; background: #fff; border: 1px solid ${T.pale}; box-shadow: 0 14px 30px rgba(22,6,54,0.14); }
+.lp-captures figcaption { margin-top: 12px; font-size: 14px; font-weight: 800; line-height: 1.35; color: ${T.ink}; }
+
+.lp-noir { padding: clamp(64px, 9vw, 104px) 0; background: ${T.ink}; color: #fff; }
+.lp-ratures { display: grid; gap: 16px; margin: 30px 0 0; padding: 0; list-style: none; }
+.lp-ratures li { width: fit-content; font-size: clamp(1.15rem, 3.4vw, 1.65rem); font-weight: 800; line-height: 1.3; color: rgba(255,255,255,0.9);
+  text-decoration-line: line-through; text-decoration-color: transparent; text-decoration-thickness: 4px; transition: text-decoration-color .45s ease, color .45s ease; }
+.lp-vu .lp-ratures li { text-decoration-color: #F87171; color: rgba(255,255,255,0.55); }
+.lp-vu .lp-ratures li:nth-child(2) { transition-delay: .25s; }
+.lp-vu .lp-ratures li:nth-child(3) { transition-delay: .5s; }
+.lp-vu .lp-ratures li:nth-child(4) { transition-delay: .75s; }
+.lp-pour-autres { max-width: 20em; margin: 44px 0 0; font-size: clamp(1.7rem, 5vw, 2.9rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: #fff; text-wrap: balance; }
+
+.lp-offre { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: center; }
+.lp-offre-nombre { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.lp-cent { font-size: clamp(7rem, 24vw, 14rem); font-weight: 800; letter-spacing: -0.07em; line-height: .82; font-variant-numeric: tabular-nums;
+  background: linear-gradient(135deg, ${T.ink} 0%, ${T.main} 55%, ${T.mid} 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lp-points { display: flex; gap: 10px; padding-left: 8px; }
+.lp-points i { width: 14px; height: 14px; border-radius: 50%; animation: lp-saut 1.6s ease-in-out infinite; }
+.lp-points i:nth-child(1) { background: ${T.ink}; }
+.lp-points i:nth-child(2) { background: ${T.main}; animation-delay: .18s; }
+.lp-points i:nth-child(3) { background: ${T.mid}; animation-delay: .36s; }
+@keyframes lp-saut { 0%, 60%, 100% { transform: none; } 30% { transform: translateY(-10px); } }
+.lp-formules { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 48px; align-items: start; }
+.lp-formule { display: flex; flex-direction: column; gap: 8px; padding: 24px; border-radius: 22px; background: #fff; border: 1px solid ${T.pale}; }
+.lp-formule-vedette { border: 2px solid ${T.main}; box-shadow: 0 18px 40px rgba(107,53,196,0.18); }
+.lp-formule-badge { align-self: flex-start; padding: 4px 12px; border-radius: 100px; background: ${T.pale}; color: ${T.deep}; font-size: 10.5px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.lp-formule-vedette .lp-formule-badge { background: linear-gradient(135deg, ${T.main}, ${T.mid}); color: #fff; }
+.lp-formule-nom { margin: 6px 0 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; color: ${T.ink}; }
+.lp-formule-prix { margin: 0; font-size: 1.9rem; font-weight: 900; letter-spacing: -0.03em; color: ${T.main}; font-variant-numeric: tabular-nums; }
+.lp-formule-prix span { margin-left: 4px; font-size: 13px; font-weight: 700; letter-spacing: 0; color: ${T.muted}; }
+.lp-formule-accroche { margin: 2px 0 6px; font-size: 14px; font-weight: 700; line-height: 1.5; color: ${T.deep}; }
+.lp-formule ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.lp-formule li { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; font-weight: 600; line-height: 1.5; color: ${T.ink}; }
+.lp-formule li svg { flex-shrink: 0; margin-top: 3px; color: #10B981; }
+.lp-formule li.lp-tout { color: ${T.main}; }
+.lp-formule-plus summary { margin: 4px 0 8px; font-size: 13.5px; font-weight: 900; color: ${T.main}; cursor: pointer; }
+.lp-formule-cta { margin-top: 14px; padding: 13px; font-size: 13.5px; text-transform: uppercase; letter-spacing: .04em; }
+.lp-sous-formules { max-width: 44em; margin: 24px auto 0; text-align: center; font-size: 13.5px; font-weight: 700; line-height: 1.6; color: ${T.muted}; }
+.lp-liberte { display: grid; gap: 14px; margin-top: 56px; padding: clamp(28px, 5vw, 52px); border-radius: 28px; background: linear-gradient(135deg, ${T.deep} 0%, ${T.main} 100%); color: #fff; }
+.lp-liberte .lp-sur { margin: 0; }
+.lp-liberte-titre { margin: 0; font-size: clamp(1.6rem, 4.4vw, 2.5rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: #fff; }
+.lp-liberte p { margin: 0; max-width: 40em; font-size: 1.03rem; line-height: 1.7; font-weight: 500; color: rgba(255,255,255,0.92); }
+.lp-liberte .lp-signature { margin-top: 10px; font-size: clamp(2rem, 6.4vw, 3.6rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: #fff; }
+.lp-liberte-cta { justify-self: start; margin-top: 10px; }
+
+.lp-engage-grille { display: grid; grid-template-columns: minmax(0, 1fr); gap: 56px; }
+.lp-engage { display: grid; gap: 12px; margin: 22px 0 0; padding: 0; list-style: none; }
+.lp-engage li { display: flex; align-items: flex-start; gap: 10px; font-size: 1.02rem; font-weight: 700; line-height: 1.5; color: ${T.ink}; }
+.lp-engage li svg { flex-shrink: 0; margin-top: 4px; color: #10B981; }
+.lp-humains { display: grid; gap: 12px; margin-top: 28px; }
+.lp-humains p { margin: 0; padding: 16px 18px; border-radius: 16px; background: ${T.bg}; font-size: .97rem; line-height: 1.6; color: ${T.deep}; }
+.lp-humains strong { color: ${T.ink}; }
+.lp-faq details { padding: 18px 0; border-bottom: 1px solid ${T.pale}; }
+.lp-faq summary { display: flex; justify-content: space-between; gap: 16px; font-size: 1.06rem; font-weight: 900; color: ${T.ink}; cursor: pointer; list-style: none; }
+.lp-faq summary::-webkit-details-marker { display: none; }
+.lp-faq summary::after { content: "+"; flex-shrink: 0; font-size: 1.5rem; line-height: 1; color: ${T.main}; transition: transform .2s ease; }
+.lp-faq details[open] summary::after { transform: rotate(45deg); }
+.lp-faq details p { margin: 10px 0 0; font-size: .98rem; line-height: 1.7; font-weight: 500; color: ${T.deep}; }
+.lp-etapes { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.lp-etapes li { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 100px; background: ${T.pale}; font-size: 13.5px; font-weight: 800; color: ${T.deep}; }
+.lp-etapes span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: ${T.main}; color: #fff; font-size: 12px; }
+
+.lp-habitants { color: #fff; padding: clamp(64px, 9vw, 104px) 0 0; }
+.lp-habitants-grille { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: start; }
+.lp-pastilles { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0 0; }
+.lp-pastilles span { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 100px; background: rgba(255,255,255,0.08); border: 1px solid rgba(196,160,244,0.3); font-size: 12.5px; font-weight: 800; color: #fff; }
+.lp-pastilles svg { color: #6EE7B7; }
+.lp-stores { margin-top: 28px; }
+.lp-stores-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.lp-stores-badges img { display: block; height: auto; }
+.lp-stores-badges a { display: inline-block; transition: transform .16s ease; }
+.lp-stores-badges a:hover { transform: translateY(-2px); }
+.lp-store-bientot { display: inline-block; opacity: .55; }
+.lp-stores-note { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.75); }
+.lp-habitants-form { padding: 26px 22px; border-radius: 22px; background: rgba(255,255,255,0.06); border: 1.5px solid rgba(255,255,255,0.12); }
+.lp-habitants-phrase { margin: 0 0 18px; font-size: 15px; font-weight: 600; line-height: 1.6; color: rgba(255,255,255,0.92); }
+.lp-form { margin: 0; }
+.lp-form-envoi { width: 100%; margin-top: 4px; padding: 14px; border: 0; border-radius: 100px; background: linear-gradient(135deg, ${T.light}, ${T.mid}); color: ${T.ink}; font-family: inherit; font-size: 14px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; transition: opacity .15s ease; }
+.lp-form-envoi:disabled { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.5); cursor: not-allowed; }
+.lp-fin { padding-top: clamp(64px, 9vw, 96px); padding-bottom: 40px; text-align: center; }
+.lp-fin-texte { max-width: 40em; margin: 0 auto; font-size: 1.03rem; line-height: 1.7; font-weight: 500; color: rgba(255,255,255,0.88); }
+.lp-fin-cta { margin: 40px 0 0; }
+.lp-reseaux { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 30px; }
+.lp-reseaux a { padding: 11px 20px; border-radius: 100px; background: rgba(255,255,255,0.1); border: 1.5px solid rgba(196,160,244,0.5); color: #fff; font-size: 13.5px; font-weight: 800; text-decoration: none; }
+.lp-pied { margin-top: 52px; font-size: 11.5px; line-height: 1.7; color: rgba(255,255,255,0.62); }
+.lp-pied p { margin: 8px 0 0; }
+.lp-pied a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.25); }
+
+@media (max-width: 560px) {
+  .lp-bulle { max-width: 190px; padding: 8px 11px; font-size: 11.5px; }
+  .lp-bulle i { width: 28px; height: 28px; }
+  .lp-bulle-1, .lp-bulle-3 { left: -10%; }
+  .lp-bulle-2, .lp-bulle-4 { right: -10%; }
+  .lp-btn { width: 100%; }
+  .lp-liberte-cta { justify-self: stretch; }
+}
+@media (min-width: 720px) {
+  .lp-atouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 900px) {
+  .lp-hero-grille { grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); padding-top: 72px; padding-bottom: 96px; }
+  .lp-formules { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lp-offre { grid-template-columns: auto minmax(0, 1fr); gap: 40px; }
+  .lp-engage-grille { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 72px; }
+  .lp-habitants-grille { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 64px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp *, .lp *::before, .lp *::after { animation: none !important; transition: none !important; }
+  .lp-bande-piste { flex-wrap: wrap; width: auto; justify-content: center; row-gap: 12px; }
+  .lp-bande-piste-moitie { flex-wrap: wrap; justify-content: center; row-gap: 12px; }
+  .lp-bande-double { display: none; }
+  .lp-pique { white-space: normal; }
+}
+`

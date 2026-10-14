@@ -3015,20 +3015,20 @@ egal('la réservation d’un restaurant s’atteint quand même',
 {
   const LANDING = readFileSync(new URL('../app/components/LandingReveal.js', import.meta.url), 'utf8')
 
-  verifier('la landing montre le choix entre table et emporter',
-    /<MockTableChoix\/>/.test(LANDING))
-  verifier('et le parcours de réservation',
-    /<MockTableCreneaux\/>/.test(LANDING))
-  // ⚠️ LES CHIFFRES DE LA MAQUETTE VIENNENT DES CAPTURES, PAS DE MON IMAGINATION.
-  // Trois détails avaient été inventés au premier essai. Celui-ci les fige :
-  // la borne du restaurant de démo est à SIX, et les étapes sont au nombre de
-  // trois. Une maquette qui ment sur le produit est pire qu'une absente.
-  verifier('la maquette affiche bien les trois étapes du vrai tunnel',
-    /\{ t: '✓', fait: true \}, \{ t: '2', actif: true \}, \{ t: '3' \}/.test(LANDING))
-  // Les photos sont posées EN FOND par-dessus un dégradé : un fichier manquant
-  // laisse une plaque de couleur, jamais une image cassée sur la page d'accueil.
-  verifier('une photo absente ne casse pas la page d’accueil',
-    /background: `url\(\$\{src\}\) center\/cover, \$\{degrade\}`/.test(LANDING))
+  // ⚠️ REPOINTÉE LE 14/10 : les deux maquettes de table (`MockTableChoix`,
+  // `MockTableCreneaux`) sont parties avec la landing v2, qui ne dessine plus
+  // aucun écran. Le défaut que cette section empêche reste entier : le
+  // restaurant ne doit pas redevenir le seul métier qu'un visiteur ne voit
+  // jamais. Il est montré à TROIS endroits, et la garde les exige tous : une
+  // bulle du haut de page, la pique de son secteur, et sa ligne dans Vendre.
+  verifier('le haut de page montre une table réservée',
+    /titre: 'Table réservée ce soir'/.test(LANDING))
+  verifier('la bande des secteurs pique la table',
+    /\{ secteur: 'Table', t: '[^']+' \}/.test(LANDING))
+  verifier('Vendre nomme la réservation de table et ce que fait la salle',
+    /'Réservation de table : le client dit combien ils sont, ta salle attribue la table'/.test(LANDING))
+  verifier('et aucune maquette de table n’est redessinée à côté',
+    !/function MockTable(Choix|Creneaux)\(/.test(LANDING))
 
   // ⚠️ ET ELLES RESTENT LÉGÈRES. Les deux originales pesaient 976 Ko et 1638 Ko
   // pour s'afficher sur CINQUANTE-QUATRE PIXELS de haut. La landing est la

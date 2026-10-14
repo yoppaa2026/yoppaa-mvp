@@ -28,6 +28,7 @@ import {
 import { readFileSync } from 'node:fs'
 import { verifierQuantiteOffres, SELECT_DEALS } from '../lib/lignes-commande.js'
 import { sansProse } from './lire-code.mjs'
+import { CAPTURES_YOPPER } from '../lib/captures-landing.js'
 
 let ok = 0, ko = 0
 const echecs = []
@@ -1300,26 +1301,24 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   // vert du projet, après l'import et le jumeau (reference_tests_faussement_verts).
   const LANDING = sansProse(readFileSync(new URL('../app/components/LandingReveal.js', import.meta.url), 'utf8'))
 
-  verifier('la landing montre l’offre de fin de journée',
-    /<MockAntiGaspi\/>/.test(LANDING))
-
-  // 🔴 ET ELLE PREND SES COULEURS DANS LE MODULE, PAS DANS SA PROPRE PALETTE.
-  // Une copie locale de `#FBF8F2` aurait tenu jusqu'à la première retouche du
-  // crème, puis la landing aurait montré un écran qui n'existe plus. C'est le
-  // motif le plus tenace de ce projet, et la seule réponse est de n'avoir
-  // qu'un seul endroit à corriger.
-  verifier('et ses couleurs viennent du module, pas d’une copie',
-    /from '@\/app\/components\/IconeAntiGaspi'/.test(LANDING)
-    && /background: FOND_ANTI_GASPI/.test(LANDING)
-    && /background: NUIT_ANTI_GASPI/.test(LANDING))
+  // ⚠️ REPOINTÉE LE 14/10 : `MockAntiGaspi` est partie avec la landing v2, qui
+  // ne dessine plus aucun écran. L'offre de fin de journée est montrée par la
+  // VRAIE capture `yopper_invendus`, dans le carrousel, et nommée dans le bloc
+  // « Rien ne se perd ». Une capture ne peut pas recopier une couleur de
+  // travers : la garde des couleurs n'a plus d'objet, sauf l'interdit, gardé.
+  const cles = [...(LANDING.match(/const CLES_CARROUSEL = \[([^\]]*)\]/)?.[1] || '').matchAll(/'([^']+)'/g)].map(m => m[1])
+  const capture = CAPTURES_YOPPER.find(c => c.cle === 'yopper_invendus')
+  verifier('la landing montre l’offre de fin de journée, en vraie capture',
+    cles.includes('yopper_invendus') && !!capture, cles.join(', '))
+  verifier('et la nomme dans ce qu’elle change pour le commerçant',
+    /titre: 'Rien ne se perd\.'/.test(LANDING))
   verifier('aucune couleur du module n’est recopiée en dur dans la landing',
     !/#FBF8F2/.test(LANDING) && !/#E6DECF/.test(LANDING))
 
-  // ⚠️ CE QUI FAIT L'ARGUMENT, C'EST LE COUPLE TEMPS + QUANTITÉ. Le prix barré
-  // seul ne serait qu'une promotion de plus ; « encore 3 h 09 » et « il en
-  // reste 3 » disent ensemble qu'il faut y aller maintenant.
-  verifier('la maquette garde le temps ET la quantité restants',
-    /encore 3 h 09/.test(LANDING) && /il en reste 3/.test(LANDING))
+  // ⚠️ CE QUI FAIT L'ARGUMENT, C'EST LE COUPLE TEMPS + QUANTITÉ. La capture
+  // le porte à l'image ; sa légende doit le dire pour qui ne la voit pas.
+  verifier('la capture dit le temps ET la quantité restants',
+    /reste/i.test(capture?.legende || '') && /heure/i.test(capture?.legende || ''), capture?.legende || '')
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

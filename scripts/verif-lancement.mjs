@@ -28,7 +28,7 @@ import {
   progressionVersLancement,
   LAUNCH_DATE_ISO, FIN_ESSAI_LANCEMENT_ISO, ESSAI_JOURS_MINIMUM,
 } from '../lib/lancement.js'
-import { calculerTrialEnd, isTrialDiffereActif, getStripeTaxRateId } from '../lib/stripe-billing.js'
+import { calculerTrialEnd, trialEndCommercant, isTrialDiffereActif, getStripeTaxRateId } from '../lib/stripe-billing.js'
 import { sansProse } from './lire-code.mjs'
 import { jsonLdLanding, jsonLdLandingString, echapperJsonLd, SITE_URL } from '../lib/seo-landing.js'
 import { getPrixPlan, prixTTC, TVA_ABONNEMENT_POURCENT } from '../lib/plans.js'
@@ -64,12 +64,19 @@ function sansCommentaires(src) {
   const jour = (iso) => new Date(iso)
 
   // Le tableau qu'Alex a validé, cas par cas, et rien d'autre.
+  // ⚠️ REPOINTÉE LE 14/10 : le plancher est passé de 30 à 100 jours (Alex, au
+  // tableau : « 100 jours en permanence, dès l'inscription »). Les comptes
+  // d'avant l'ouverture gardent leur 8 janvier ; tous les autres ont 100
+  // journées pile, et la date de fin glisse avec l'inscription.
+  verifier('le plancher est de 100 jours (décision d’Alex du 14/10)',
+    ESSAI_JOURS_MINIMUM === 100, `${ESSAI_JOURS_MINIMUM}`)
   const TABLE = [
     { nom: 'inscrit en août 2026',   le: '2026-08-20T10:00:00+02:00', fin: '2027-01-09', jours: 142, lancement: true },
-    { nom: "inscrit le jour de l'ouverture", le: '2026-10-01T10:00:00+02:00', fin: '2027-01-09', jours: 100, lancement: true },
-    { nom: 'inscrit le 1er nov.',    le: '2026-11-01T14:00:00+01:00', fin: '2027-01-09', jours: 69,  lancement: true },
-    { nom: 'inscrit le 20 déc.',     le: '2026-12-20T09:00:00+01:00', fin: '2027-01-19', jours: 30,  lancement: false },
-    { nom: 'inscrit le 15 mars 27',  le: '2027-03-15T09:00:00+01:00', fin: '2027-04-14', jours: 30,  lancement: false },
+    { nom: "inscrit la veille de l'ouverture", le: '2026-09-30T12:00:00+02:00', fin: '2027-01-09', jours: 101, lancement: true },
+    { nom: "inscrit le jour de l'ouverture", le: '2026-10-01T10:00:00+02:00', fin: '2027-01-09', jours: 100, lancement: false },
+    { nom: 'inscrit le 1er nov.',    le: '2026-11-01T14:00:00+01:00', fin: '2027-02-09', jours: 100, lancement: false },
+    { nom: 'inscrit le 20 déc.',     le: '2026-12-20T09:00:00+01:00', fin: '2027-03-30', jours: 100, lancement: false },
+    { nom: 'inscrit le 15 mars 27',  le: '2027-03-15T09:00:00+01:00', fin: '2027-06-23', jours: 100, lancement: false },
   ]
 
   for (const cas of TABLE) {
@@ -95,13 +102,14 @@ function sansCommentaires(src) {
       `rendu ${joursOfferts(jour(iso))} jours`)
   }
 
-  // La bascule doit GLISSER, pas tomber d'une falaise : autour du 9 décembre,
-  // la constante cède au plancher sans qu'aucune journée ne soit perdue. C'est
-  // ce qui permet à la règle de se périmer toute seule, sans une ligne à
-  // écrire le 9 janvier.
-  const veille = joursOfferts(jour('2026-12-08T12:00:00+01:00'))
-  const bascule = joursOfferts(jour('2026-12-09T12:00:00+01:00'))
-  const apres = joursOfferts(jour('2026-12-10T12:00:00+01:00'))
+  // La bascule doit GLISSER, pas tomber d'une falaise : la constante cède au
+  // plancher sans qu'aucune journée ne soit perdue.
+  // ⚠️ REPOINTÉE LE 14/10 : avec 100 jours de plancher, la bascule n'est plus
+  // autour du 9 décembre mais du jour de l'ouverture (1er octobre + 100 jours
+  // tombe sur le 9 janvier).
+  const veille = joursOfferts(jour('2026-09-30T12:00:00+02:00'))
+  const bascule = joursOfferts(jour('2026-10-01T12:00:00+02:00'))
+  const apres = joursOfferts(jour('2026-10-02T12:00:00+02:00'))
   verifier('la bascule glisse, sans marche',
     veille >= bascule && bascule >= apres && veille - apres <= 2,
     `${veille} puis ${bascule} puis ${apres}`)
@@ -133,7 +141,7 @@ function sansCommentaires(src) {
   verifier('et ne chiffre jamais le total avec l\'avance',
     !/14[0-9] jours/.test(phraseEssai(jour('2026-08-20T10:00:00+02:00'))))
   verifier("et hors régime de lancement elle retombe sur l'essai normal",
-    phraseEssai(jour('2027-06-01T10:00:00+02:00')) === "30 jours d'essai gratuit",
+    phraseEssai(jour('2027-06-01T10:00:00+02:00')) === "100 jours d'essai gratuit",
     phraseEssai(jour('2027-06-01T10:00:00+02:00')))
 
   // Les deux constantes elles-mêmes.
@@ -170,12 +178,53 @@ function sansCommentaires(src) {
 // de LA MÊME fonction. Un `calculerTrialEnd` qui recalculerait de son côté est
 // exactement le défaut que ce banc existe pour empêcher.
 {
+  // ⚠️ REPOINTÉE LE 14/10 : Stripe ne reçoit plus `calculerTrialEnd(30, maintenant)`
+  // mais `trialEndCommercant(commercant)`, comptée depuis SON inscription. Les
+  // deux voies de création passaient « 30 » en dur et comptaient depuis le jour
+  // de la validation : invisible tant que le 8 janvier gagnait, faux dès le
+  // plancher à 100 jours (le tableau de bord compte depuis `created_at`).
   for (const iso of ['2026-08-20T10:00:00+02:00', '2026-11-01T14:00:00+01:00', '2026-12-20T09:00:00+01:00']) {
     const d = new Date(iso)
     const attendu = Math.floor(finEssai(d).getTime() / 1000)
+    const recu = trialEndCommercant({ created_at: iso }, { maintenant: d })
     verifier(`Stripe reçoit la fin d'essai de la règle (${iso.slice(0, 10)})`,
-      calculerTrialEnd(30, d) === attendu,
-      `Stripe ${calculerTrialEnd(30, d)}, règle ${attendu}`)
+      recu === attendu, `Stripe ${recu}, règle ${attendu}`)
+  }
+  {
+    // Validé QUATRE JOURS après l'inscription : la fin ne bouge pas d'un jour.
+    const inscrit = '2026-11-01T14:00:00+01:00'
+    const valide = new Date('2026-11-05T09:00:00+01:00')
+    verifier('🔴 la fin d’essai Stripe se compte depuis l’inscription, pas depuis la validation',
+      trialEndCommercant({ created_at: inscrit }, { maintenant: valide }) === Math.floor(finEssai(new Date(inscrit)).getTime() / 1000))
+    // Essai fini : plus de trial, il paie.
+    verifier('un passage en formule payante après l’essai n’a plus de trial',
+      trialEndCommercant({ created_at: inscrit }, { maintenant: new Date('2027-03-01T09:00:00+01:00') }) === null)
+    // Checkout refuse un trial_end à moins de 48 heures : la marge l'écarte.
+    verifier('à moins de 48 heures de la fin, Checkout ne reçoit pas de trial',
+      trialEndCommercant({ created_at: inscrit }, { maintenant: new Date('2027-02-08T09:00:00+01:00'), margeMs: 48 * 3600 * 1000 }) === null)
+    let refuse = false
+    try { trialEndCommercant({ id: 'x' }) } catch { refuse = true }
+    verifier('sans date d’inscription, la fin d’essai refuse au lieu d’inventer', refuse)
+  }
+  // Et aucune voie ne choisit plus sa durée : « trialDays: 30 » chez un
+  // appelant, c'était le chiffre écrit à la main qui contournait la règle.
+  for (const chemin of ['app/api/admin/kyb/valider/route.js', 'app/api/stripe/billing/checkout/route.js', 'lib/stripe-billing.js']) {
+    const code = sansProse(lire(chemin).replace(/\r\n/g, '\n'))
+    verifier(`${chemin} ne passe plus de durée d’essai écrite à la main`,
+      !/trialDays\s*[:=]\s*\d/.test(code))
+  }
+  {
+    const codeKyb = sansProse(lire('app/api/admin/kyb/valider/route.js').replace(/\r\n/g, '\n'))
+    const select = codeKyb.match(/\.select\('([^']*stripe_subscription_id[^']*)'\)/)?.[1] || ''
+    verifier('la validation du dossier lit la date d’inscription qu’elle envoie à Stripe',
+      /\bcreated_at\b/.test(select), `select : ${select || 'introuvable'}`)
+    const codeB = sansProse(lire('lib/stripe-billing.js').replace(/\r\n/g, '\n'))
+    const iC = codeB.indexOf('export async function createCheckoutSession')
+    const iK = codeB.indexOf('export async function creerSubscriptionAutomatique')
+    verifier('la voie Checkout calcule la fin depuis l’inscription',
+      /trialEndCommercant\(commercant/.test(codeB.slice(iC, iK)))
+    verifier('la voie du KYB calcule la fin depuis l’inscription',
+      /trialEndCommercant\(commercant/.test(codeB.slice(iK)))
   }
 
   // Un timestamp Stripe est en SECONDES. Rendre des millisecondes donnerait un
@@ -518,15 +567,26 @@ function sansCommentaires(src) {
       /from '@\/lib\/lancement'/.test(lire(chemin)))
   }
 
-  // La landing doit dire la date de fin de gratuité : c'est l'argument.
+  // ⚠️ REPOINTÉE LE 14/10 : la landing disait la DATE de fin de gratuité (le
+  // 8 janvier), parce que c'était l'argument d'une offre de lancement. Les
+  // 100 jours sont devenus permanents et comptés DÈS L'INSCRIPTION (Alex, au
+  // tableau) : le 8 janvier est faux pour quiconque s'inscrit aujourd'hui.
+  // L'argument est maintenant la DURÉE, et elle vient de la règle.
   const reveal = sansCommentaires(lire('app/components/LandingReveal.js'))
-  verifier('la landing annonce le dernier jour gratuit',
-    /libelleDernierJourGratuit\(\)/.test(reveal))
-  verifier("la landing n'annonce PAS la date de facturation comme une gratuité",
-    !/offertes? jusqu&rsquo;au \{libelleFinEssaiLancement/.test(reveal),
-    'ce serait faux d\'une journée')
-  verifier("la landing annonce la date d'ouverture",
-    /libelleLancement\(\)/.test(reveal))
+  verifier('la landing annonce la durée de l’essai, lue dans la règle',
+    (reveal.match(/\{ESSAI_JOURS_MINIMUM\} jours/g) || []).length >= 3,
+    `${(reveal.match(/\{ESSAI_JOURS_MINIMUM\} jours/g) || []).length} endroit(s)`)
+  verifier('🔴 la landing n’écrit jamais « 100 jours » à la main',
+    !/\b100 jours\b/.test(reveal))
+  verifier('🔴 la landing ne promet plus une date de fin de gratuité',
+    !/libelleDernierJourGratuit\(\)|libelleFinEssaiLancement\(\)|8 janvier|9 janvier/.test(reveal),
+    'les 100 jours se comptent dès l’inscription : une date commune serait fausse')
+  verifier('et elle dit d’où partent les jours',
+    /dès ton inscription/.test(reveal))
+  // La date d'ouverture ne s'écrit plus que dans les branches « datée » des
+  // habitants (le message d'envoi, la barre de la commune).
+  verifier("la landing ne dit la date d'ouverture que si elle est décidée",
+    !/libelleLancement\(\)/.test(reveal) || /ouvertureDatee\(\)/.test(reveal))
 
   // L'inscription doit dire le NOMBRE de jours restants : c'est ce qui crée
   // l'urgence sans qu'on ait à l'expliquer.
@@ -557,9 +617,16 @@ function sansCommentaires(src) {
   // générale et le cas de celui qui arrive après l'ouverture. N'en contrôler
   // qu'une laissait l'autre virer au 9 janvier sans que rien ne bouge.
   // Mesurée par mutation : MUETTE.
+  // ⚠️ REPOINTÉE LE 14/10 : le 8 janvier ne concerne plus que les comptes
+  // d'avant l'ouverture, et les CGU ne le nomment plus qu'à cet endroit. La
+  // règle générale, elle, se dit en jours depuis la création du compte.
   const finsGratuites = (cgu.match(/8 janvier 2027 inclus/g) || []).length
-  verifier('les CGU nomment le dernier jour gratuit aux deux endroits',
-    finsGratuites >= 2, `${finsGratuites} mention(s)`)
+  verifier('les CGU nomment le dernier jour gratuit des comptes d’avant l’ouverture',
+    finsGratuites >= 1, `${finsGratuites} mention(s)`)
+  verifier('les CGU comptent les cent jours depuis la création du compte',
+    /cent \(100\) jours à compter de la création du compte/.test(cgu))
+  verifier('les CGU disent qu’un passage tardif en formule payante est facturé tout de suite',
+    /facturé dès la souscription/.test(cgu))
   verifier("les CGU ne présentent jamais le 9 janvier comme un jour gratuit",
     !/gratuité jusqu&rsquo;au 9 janvier|offert jusqu&rsquo;au 9 janvier/.test(cgu))
   verifier('les CGU nomment la date de la première facture',
@@ -571,13 +638,17 @@ function sansCommentaires(src) {
     "sans ça, « 100 jours » et « 142 jours » se contredisent noir sur blanc")
   verifier('les CGU énoncent la règle des deux dates',
     /plus tardive/.test(cgu))
-  verifier('les CGU nomment le plancher de trente jours',
-    /trente \(30\) jours/.test(cgu))
+  // ⚠️ REPOINTÉE LE 14/10 : le plancher est de cent jours, et le trente ne
+  // doit plus apparaître comme durée d'essai.
+  verifier('les CGU nomment le plancher de cent jours',
+    /cent \(100\) jours après la création du compte/.test(cgu))
+  verifier('les CGU ne promettent plus un plancher de trente jours',
+    !/trente \(30\) jours après la création/.test(cgu))
   verifier('les CGU disent la convention de décompte',
     /veille de la date de fin/.test(cgu),
     'sans elle, 68 ou 69 jours est indécidable et le contrat est muet')
   verifier('les CGU donnent un exemple chiffré vérifiable',
-    /69 journées/.test(cgu))
+    /100 journées gratuites et reçoit sa première facture le 9 février 2027/.test(cgu))
   verifier("les CGU ne promettent plus un essai qui démarre au 1er septembre",
     !/1er septembre 2026/.test(cgu))
   verifier("les CGU disent qu'aucune carte n'est exigée",
@@ -737,15 +808,18 @@ function sansCommentaires(src) {
   // la satisfaire. Chercher au bon endroit, pas seulement chercher.
   // Le découpage se fait sur le SOURCE BRUT : les repères de section sont des
   // commentaires JSX, que `sansCommentaires` efface.
+  // ⚠️ REPOINTÉE LE 14/10 : les repères de la landing v2.
   const hero = sansCommentaires(
-    brut.slice(brut.indexOf('1. HERO REVEAL'), brut.indexOf('2. MANIFESTO')))
+    brut.slice(brut.indexOf('1. HAUT DE PAGE'), brut.indexOf('2. LA BANDE QUI PIQUE')))
   verifier('le repère du hero est bien trouvé dans le source',
-    hero.length > 500, `${hero.length} caractères découpés`)
+    hero.length > 500 && hero.length < 6000, `${hero.length} caractères découpés`)
 
   // a) Le hero parle aux COMMERÇANTS. Les habitants arrivent par leur
   //    commerçant : c'est lui qu'il faut accrocher en trois secondes.
+  // ⚠️ REPOINTÉE LE 14/10 sur le titre validé par Alex au tableau : « les
+  //    autres prennent des commandes », Yoppaa amène des clients.
   verifier('le titre du hero s\'adresse au commerçant',
-    /Ton commerce,<br\/>dans la poche de ton quartier/.test(reveal),
+    /<h1 className="lp-h1">Les autres prennent tes commandes\. Yoppaa t&rsquo;amène des clients\.<\/h1>/.test(hero),
     'il disait « Ton quartier dans ta poche », donc il parlait à l\'habitant')
   // ⚠️ CETTE GARDE COMPARAIT DEUX `allerAuForm`, et le bouton du commerçant a
   // cessé d'en être un le 26/08 : il mène désormais au signup. On compare donc
@@ -755,43 +829,29 @@ function sansCommentaires(src) {
     reveal.indexOf('href="/signup"') < reveal.indexOf("allerAuForm('yopper')"),
     'le bouton Yopper passait devant')
 
-  // b) ⚠️ LE CONTRESENS LE PLUS COÛTEUX : la page invitait à ATTENDRE le
-  //    1er octobre, alors qu'arriver tôt est tout l'intérêt de l'offre.
-  verifier('le hero dit que le lancement est OFFICIEL, pas le départ',
-    /Lancement officiel le \{libelleLancement\(\)\}/.test(reveal))
-  // 🔴 CE QUE CETTE GARDE MESURE A CHANGÉ LE 13/09, ET C'EST UNE CORRECTION DE
-  // FOND. Elle exigeait « Pas besoin de l'attendre pour commencer » : la page
-  // promettait des ventes avant l'ouverture, alors que rien ne s'allume avant
-  // le lancement. La raison de s'inscrire tôt reste entière, mais ce n'est pas
-  // de gagner des jours de vente : c'est d'avoir le temps de tout préparer, et
-  // d'ouvrir prêt le jour J.
-  // ⚠️ REPOINTÉE LE 04/10 (D2) : « tu ouvres prêt » supposait un homme.
-  verifier("le hero dit à quoi sert le temps d'ici l'ouverture",
-    /tu ouvres\s+avec tout en place/.test(reveal))
-  verifier("l'appel final n'invite plus à attendre",
-    !/Rendez-vous le \{libelleLancement\(\)\}\./.test(reveal),
+  // b) ⚠️ REPOINTÉE LE 14/10. Ces gardes tenaient le discours de l'offre de
+  //    LANCEMENT : « lancement officiel le … », « le temps d'ici là sert à te
+  //    préparer », « tu ouvres avec tout en place ». Avec 100 jours comptés
+  //    dès l'inscription, ce discours est devenu faux : il n'y a plus d'avance
+  //    à raconter, et attendre ne fait plus rien gagner. Ce qui reste vrai, et
+  //    qu'on garde : la page n'invite JAMAIS à attendre.
+  verifier("la page n'invite plus à attendre l'ouverture",
+    !/Rendez-vous le \{libelleLancement\(\)\}\./.test(reveal.replace(/setStatut\(\{ envoi: 'ok'[^\n]*/g, ''))
+    && !/N&rsquo;attends pas|Lancement officiel le/.test(reveal),
     '« Rendez-vous le 1er octobre » disait le contraire de tout le reste')
 
-  // c) L'offre est VISIBLE : un bloc à elle, et monté pour de bon. Écrire un
-  //    composant que personne n'affiche est le défaut de l'onboarding, vivant
-  //    et jamais vu par quiconque.
-  verifier("l'offre a son propre bloc",
-    /function EncartOffreLancement/.test(reveal))
-  // ⚠️ `[\s/>]` et pas seulement le nom : sans la frontière, un composant
-  // renommé « EncartOffreLancementAutreChose » satisfaisait la garde.
-  verifier("et ce bloc est MONTÉ dans la page",
-    /<EncartOffreLancement[\s/>]/.test(reveal),
+  // c) L'offre est VISIBLE, et DÈS LE HAUT DE PAGE : le bouton principal la
+  //    porte. ⚠️ REPOINTÉE LE 14/10 : `EncartOffreLancement` est parti, l'offre
+  //    a sa section (le grand « 100 » qui monte) et son nombre vient de la règle.
+  verifier("le bouton du hero porte l'offre, lue dans la règle",
+    /J&rsquo;essaie \{ESSAI_JOURS_MINIMUM\} jours, c&rsquo;est gratuit/.test(hero))
+  verifier("l'offre a sa section, et son compteur est MONTÉ",
+    /function CompteurJours\(/.test(reveal) && /<CompteurJours cible=\{ESSAI_JOURS_MINIMUM\}\/>/.test(reveal),
     'un composant jamais monté est du code mort qui a l\'air vivant')
-  // ⚠️ LE HERO ANNONCE D'ABORD LES 100 JOURS, la promesse publique, et l'avance
-  // ensuite comme un supplément. L'inverse ferait lire « 142 » comme une
-  // exagération, ce qu'Alex a signalé le 20/08 : « ça peut être interprété
-  // comme mensonger ». Une offre qu'on soupçonne ne convainc personne.
-  verifier("le hero annonce les 100 jours garantis, pas le total brut",
-    /\{joursOffertsAuLancement\(\)\} jours offerts/.test(hero))
-  verifier("le hero rattache les 100 jours à la date d'ouverture",
-    /à partir du \{libelleLancement\(\)\}/.test(hero))
-  verifier("le hero dit que le temps d'ici là sert à préparer, en mots",
-    /sert à te préparer/.test(hero))
+  // ⚠️ AU REPOS, LE COMPTEUR AFFICHE LE NOMBRE : il part de la cible, et ne
+  // descend à zéro que pour monter sous les yeux de qui le regarde.
+  verifier('au repos, le compteur affiche cent, jamais zéro',
+    /const \[valeur, setValeur\] = useState\(cible\)/.test(reveal))
   verifier("le hero ne chiffre PAS le total avec l'avance",
     !/\{joursOfferts\(\)\}/.test(hero),
     'un seul chiffre sur la page : 100')
@@ -823,8 +883,10 @@ function sansCommentaires(src) {
       !motif.test(reveal),
       'un seul chiffre sur la page, et c\'est 100')
   }
-  verifier("mais l'avance reste dite en toutes lettres",
-    /le temps d’ici là/.test(reveal))
+  // ⚠️ REPOINTÉE LE 14/10 : il n'y a plus d'avance à dire (100 jours dès
+  // l'inscription). La garde interdit maintenant d'en parler encore.
+  verifier("et l'avance n'est plus racontée, puisqu'elle n'existe plus",
+    !/le temps d’ici là|le temps d&rsquo;ici là/.test(reveal))
 
   // 🔴 RIEN NE S'OUVRE AVANT LE LANCEMENT, ET AUCUNE PAGE NE DOIT LE PROMETTRE.
   // Jusqu'au 13/09 la landing annonçait « tes premiers clients commandent avant
@@ -884,8 +946,12 @@ function sansCommentaires(src) {
     /part en ligne dès qu&rsquo;elle est complète/.test(reveal))
   verifier('la landing ne promet plus la mise en ligne dès la validation',
     !/part en ligne dès (sa|la) validation/.test(reveal))
-  verifier('et dit que le public arrive au lancement',
-    /Le public, lui, arrive le \{libelleLancement\(\)\}/.test(reveal))
+  // ⚠️ REPOINTÉE LE 14/10 : « le public, lui, arrive le … » racontait
+  // l'attente d'une offre de lancement. La page dit maintenant que la commune
+  // est ouverte et que la page part quand elle est complète : la garde tient
+  // la moitié qui reste vraie, et interdit toute date de public inventée.
+  verifier('et ne promet aucune date d’arrivée du public sans date décidée',
+    !/Le public, lui, arrive/.test(reveal) || /ouvertureDatee\(\)/.test(reveal))
 
   // ⚠️ LES DEUX PUBLICS, NOMMÉS D'UNE SEULE FAÇON.
   // La même personne était appelée « Devenir Yopper », « Je suis habitant » et
@@ -921,11 +987,12 @@ function sansCommentaires(src) {
   // Sans ce découpage, la garde trouvait `joursOffertsAuLancement()` ailleurs
   // dans le fichier et restait verte alors que l'addition avait disparu du
   // bloc. Mesurée par mutation : MUETTE.
-  const encart = brut.slice(brut.indexOf('function EncartOffreLancement'),
-    brut.indexOf('// Incitant mobilisation'))
-  verifier("le bloc de l'offre est bien découpé", encart.length > 800, `${encart.length} caractères`)
-  verifier("le bloc pose les 100 jours garantis",
-    /joursOffertsAuLancement\(\)/.test(encart))
+  // ⚠️ REPOINTÉE LE 14/10 : le bloc de l'offre est la section 7 de la v2.
+  const encart = sansCommentaires(brut.slice(brut.indexOf('7. L\'OFFRE ET LES FORMULES'),
+    brut.indexOf('8. CE QUE ÇA T\'ENGAGE')))
+  verifier("le bloc de l'offre est bien découpé", encart.length > 800 && encart.length < 12000, `${encart.length} caractères`)
+  verifier("le bloc pose les 100 jours, lus dans la règle",
+    /<CompteurJours cible=\{ESSAI_JOURS_MINIMUM\}\/>/.test(encart))
 
   // ⚠️ UN SEUL CHIFFRE SUR TOUTE LA PAGE (décision Alex, 20/08) :
   // « je ne veux pas qu'on annonce un chiffre en plus des 100 jours, tu es là
@@ -938,10 +1005,26 @@ function sansCommentaires(src) {
   verifier("le bloc ne chiffre PAS le total avec l'avance",
     !/joursOfferts\(\)/.test(encart),
     'le bonus se raconte, il ne se compte pas')
-  verifier("le bloc dit à quoi sert le temps d'ici l'ouverture",
-    /tu prépares ta page/.test(encart))
-  verifier("et promet d'ouvrir prêt sans perdre un jour",
-    /tu ne perds aucun de tes/.test(encart))
+  // ⚠️ REPOINTÉE LE 14/10 : plus de « temps d'ici l'ouverture » (voir plus
+  // haut). Ce que le bloc doit dire maintenant, c'est la RÈGLE nouvelle : pour
+  // tout le monde, dès l'inscription, sans carte.
+  verifier("le bloc dit d'où partent les jours, et pour qui",
+    /dès ton inscription\. Pour tout le monde\. Tout le temps\./.test(encart))
+  verifier("et qu'aucune carte n'est demandée",
+    /sans carte de paiement/.test(encart))
+  // ✅ ALEX, 14/10 : « abonnement » fait penser à engagement. Le bloc dit
+  // qu'on part quand on veut et que la page RESTE, ce que le webhook fait
+  // (`customer.subscription.deleted` → Exister).
+  verifier("le bloc dit qu'on part sans préavis et que la page reste",
+    /l&rsquo;abonnement n&rsquo;enferme personne/.test(encart) && /sans préavis/.test(encart) && /ta page\s+reste en ligne/.test(encart))
+  verifier('et signe « Yopper un jour, Yopper toujours »',
+    /Yopper un jour, Yopper toujours\./.test(encart))
+  {
+    const webhook = sansCommentaires(lire('app/api/stripe/billing/webhook/route.js'))
+    verifier('🔴 la promesse « ta page reste » est tenue par le code : une résiliation repasse en Exister',
+      /case 'customer\.subscription\.deleted'/.test(webhook)
+      && /async function handleSubscriptionDeleted[\s\S]{0,1500}updates\.plan = 'exister'/.test(webhook))
+  }
 
   // La comparaison, EXÉCUTÉE. C'est elle qui porte l'urgence.
   // ⚠️ À UN INSTANT FIXE AVANT L'OUVERTURE, JAMAIS À L'HORLOGE. Lue « aujourd'hui »,
@@ -1005,37 +1088,23 @@ function sansCommentaires(src) {
   // Elle répond aux trois objections d'un commerçant qui hésite. Écrite mais
   // jamais montée, elle serait exactement le défaut de l'onboarding : du code
   // vivant que personne ne voit.
-  const tribu = brut.slice(brut.indexOf('function FenetreTribu'),
-    brut.indexOf('// Incitant mobilisation'))
-  verifier('la fenêtre tribu est bien découpée', tribu.length > 800, `${tribu.length} caractères`)
-  verifier('la fenêtre tribu est MONTÉE dans la page',
-    /<FenetreTribu[\s/>]/.test(reveal))
-  verifier("elle pose la question de la tribu",
-    /Tu rejoins la tribu \?/.test(tribu))
-  verifier("elle annonce les 100 jours, et pas un autre chiffre",
-    /\{joursOffertsAuLancement\(\)\} jours offerts/.test(tribu) && !/joursOfferts\(\)/.test(tribu))
-  verifier('elle répond « zéro contrat, zéro engagement »',
-    /Zéro contrat, zéro engagement/.test(tribu))
-  verifier("elle rappelle qu'Exister est gratuit à vie",
-    /Exister est gratuit à vie/.test(tribu),
+  // ⚠️ REPOINTÉE LE 14/10 : la fenêtre « tribu » est PARTIE avec la landing v2
+  // (Alex : « trop lourde »). Ses trois réponses vivent maintenant dans la
+  // page elle-même : « Ce que ça t'engage : rien », la page qui reste quand on
+  // part, Exister gratuit à vie. Ce qu'on garde de ses gardes, c'est ce qui
+  // vaut pour toute la page : aucun flou (gel du défilement iPhone), aucune
+  // hauteur en `vh`, et aucun pavé qui surgit par-dessus le texte.
+  verifier("la page ne fait plus surgir de fenêtre par-dessus le texte",
+    !/function FenetreTribu|<FenetreTribu[\s/>]/.test(reveal))
+  verifier("ses réponses vivent dans la page : rien n'engage",
+    /Ce que ça t&rsquo;engage/.test(reveal) && /Tu pars quand tu veux, sans préavis\./.test(reveal))
+  verifier("et Exister reste gratuit à vie, dit en toutes lettres",
+    /Ta page reste gratuite à vie|ta page reste gratuite à vie/.test(reveal),
     "c'est la réponse à « et si je veux juste rester visible »")
-  verifier("elle a une VRAIE croix de fermeture",
-    /aria-label="Fermer"/.test(tribu))
-  verifier('et le refus est retenu pour la session',
-    /sessionStorage\.setItem\('yoppaa_tribu_fermee'/.test(tribu),
-    'une fenêtre qui revient à chaque écran se fait fermer sans être lue')
-  verifier("le drapeau écrit est bien celui qui est LU",
-    /sessionStorage\.getItem\('yoppaa_tribu_fermee'\)/.test(tribu),
-    'écrire une valeur que personne ne relit est du code mort qui a l\'air vivant')
-  verifier("elle ne surgit pas dès la première seconde",
-    /setTimeout\(\(\) => setVisible\(true\), 9000\)/.test(tribu))
-  verifier("elle se tait quand le formulaire est déjà envoyé",
-    /masquer=\{statut\.envoi === 'ok'\}/.test(reveal),
-    'la proposer à quelqu\'un qui vient de s\'inscrire, c\'est lui dire qu\'on ne l\'a pas vu')
-  verifier("elle n'utilise aucun flou, qui gèle le défilement iPhone",
-    !/blur\(/.test(tribu))
-  verifier("elle mesure en dvh, jamais en vh",
-    !/[^d]vh\b/.test(tribu))
+  verifier("la page n'utilise aucun flou, qui gèle le défilement iPhone",
+    !/blur\(/.test(reveal))
+  verifier("la page ne mesure rien en vh",
+    !/[^d]vh\b/.test(reveal))
 
   // d) Les réseaux sociaux, une seule source pour trois surfaces.
   verifier("l'adresse Facebook est celle de la page Yoppaa",
@@ -1117,7 +1186,10 @@ function sansCommentaires(src) {
   // interdit DÉJÀ `{joursAvance()}` partout dans la landing, ce qui est la
   // vraie règle d'Alex (un seul chiffre sur la page). Deux gardes pour une
   // règle, dont une fragile, c'est une de trop.
-  const blocsJours = reveal.split('{joursOffertsAuLancement()} jours offerts à partir du {libelleLancement()}').length - 1
+  // ⚠️ REPOINTÉE LE 14/10 : la phrase n'est plus « {joursOffertsAuLancement()}
+  // jours offerts à partir du {libelleLancement()} » mais la durée de l'essai,
+  // lue dans `ESSAI_JOURS_MINIMUM`, qui pilote aussi la facture.
+  const blocsJours = reveal.split('{ESSAI_JOURS_MINIMUM} jours').length - 1
   verifier('les jours offerts restent calculés partout où ils sont dits',
     blocsJours >= 2, `${blocsJours} bloc(s)`)
 
@@ -1288,9 +1360,13 @@ function sansCommentaires(src) {
 
   // Les écrans : chaque date a sa branche « à confirmer ».
   const rv = sansProse(lire('app/components/LandingReveal.js'))
-  verifier('🔴 pas de compte à rebours sans date décidée', /\{ouvertureDatee\(\) && <CompteurLancement\/>\}/.test(rv))
+  // ⚠️ REPOINTÉE LE 14/10 : la landing v2 n'a plus de compte à rebours ni de
+  // ligne « Lancement officiel » (aucune date d'offre, 100 jours dès
+  // l'inscription). La garde se durcit au lieu de disparaître : plus AUCUN
+  // compte à rebours, daté ou non.
+  verifier('🔴 pas de compte à rebours sur la landing', !/CompteurLancement|calculerTemps/.test(rv))
   verifier('🔴 ni de barre « J-N »', /const barreLancement = restant > 0 && ouvertureDatee\(\) \? \(/.test(rv))
-  verifier('« Lancement officiel très bientôt »', /: <>Lancement officiel très bientôt<\/>\}/.test(rv))
+  verifier('et aucune ligne « Lancement officiel » sans date décidée', !/Lancement officiel/.test(rv))
   verifier('le merci du formulaire ne donne pas rendez-vous à une date', /'Bien reçu 🟣 On te prévient dès l’ouverture\. À très vite !'/.test(lire('app/components/LandingReveal.js')))
   const nbDates = (rv.match(/\{libelleLancement\(\)\}|\$\{libelleLancement\(\)\}/g) || []).length
   const nbBranches = (rv.match(/ouvertureDatee\(\)/g) || []).length

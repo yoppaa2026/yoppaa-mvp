@@ -93,7 +93,8 @@ const METIERS = [
   { metier: 'un garage', objet: 'rendez-vous' },
   { metier: 'un food truck', objet: 'commandes' },
   { metier: 'une boucherie', objet: 'commandes' },
-  { metier: 'un barbier', objet: 'rendez-vous' },
+  // ✅ Alex : on « tient » un barbershop, pas un barbier.
+  { metier: 'un barbershop', objet: 'rendez-vous' },
   { metier: 'une sandwicherie', objet: 'commandes' },
   { metier: 'un magasin de fleurs', objet: 'commandes' },
 ]
@@ -305,6 +306,13 @@ function CalculateurCommission() {
   const seuil = mode === 'pct' && p > 0 && f === 0 ? { valeur: prixFormule * 100 / p, de: 'ventes' }
     : mode === 'pct' && f > 0 && p === 0 ? { valeur: prixFormule / f, de: 'commandes' }
     : null
+  // ✅ LE TICKET QU'ILS NE T'IMPRIMENT JAMAIS (Alex, 14/10). Une commande
+  // moyenne, calculée sur SES chiffres (ses ventes divisées par ses commandes),
+  // et ce qu'il en reste. Il n'existe que si les deux sont saisis : sans eux,
+  // un panier inventé serait notre chiffre, pas le sien.
+  const panier = mode === 'pct' && v > 0 && n > 0 ? v / n : 0
+  const partPanier = panier * p / 100
+  const prisParCommande = partPanier + f
 
   return (
     <div className="lp-calcul">
@@ -384,6 +392,29 @@ function CalculateurCommission() {
               <div className="lp-barre"><i className="lp-barre-nous" style={{ width: `${Math.max(2, jourNous / echelle * 100)}%` }}/></div>
             </div>
           </div>
+
+          {panier > 0 && prisParCommande > 0 && (
+            <div className="lp-tickets">
+              <div className="lp-ticket lp-ticket-eux">
+                <p className="lp-ticket-tete">Le ticket qu&rsquo;on ne t&rsquo;imprime jamais</p>
+                <p className="lp-ticket-ligne"><span>Commande moyenne</span><span>{euro(panier, true)}</span></p>
+                {p > 0 && <p className="lp-ticket-ligne lp-ticket-moins"><span>Commission {p.toLocaleString('fr-BE', { maximumFractionDigits: 2 })}&nbsp;%</span><span>−{euro(partPanier, true)}</span></p>}
+                {f > 0 && <p className="lp-ticket-ligne lp-ticket-moins"><span>Par commande</span><span>−{euro(f, true)}</span></p>}
+                <p className="lp-ticket-total"><span>Il te reste</span><span>{euro(Math.max(0, panier - prisParCommande), true)}</span></p>
+              </div>
+              <div className="lp-ticket lp-ticket-nous">
+                <p className="lp-ticket-tete">Le ticket Yoppaa</p>
+                <p className="lp-ticket-ligne"><span>Commande moyenne</span><span>{euro(panier, true)}</span></p>
+                <p className="lp-ticket-ligne"><span>Commission Yoppaa</span><span>{euro(0, true)}</span></p>
+                <p className="lp-ticket-total"><span>Il te reste</span><span>{euro(panier, true)}</span></p>
+              </div>
+              <p className="lp-ticket-note">
+                Tes chiffres, pas les nôtres. Les frais de paiement en ligne existent des deux côtés et ne sont
+                comptés ni ici, ni là. Chez Yoppaa, la formule au mois se paie à part, une fois par mois, quel que
+                soit le nombre de commandes.
+              </p>
+            </div>
+          )}
         </>
       )}
 
@@ -917,7 +948,12 @@ export default function LandingReveal({ referent = null }) {
       <section className="lp-calc" id="calcul">
         <div className="lp-wrap">
           <p className="lp-sur lp-sur-clair">Le calcul que personne ne te propose</p>
-          <h2 className="lp-h2 lp-h2-clair">Une commission, c&rsquo;est un associé qui n&rsquo;ouvre jamais le magasin.</h2>
+          {/* ✅ Alex, 14/10 : « provoc et percutant, faut arrêter de prendre
+              les commerçants pour des imbéciles ». Ils appellent leurs
+              commerçants des partenaires : chacun le sait, personne n'est
+              nommé. */}
+          <h2 className="lp-h2 lp-h2-clair">Ils t&rsquo;appellent «&nbsp;partenaire&nbsp;». Ils se paient comme un associé.</h2>
+          <p className="lp-sous-titre">Une commission, c&rsquo;est un associé qui n&rsquo;ouvre jamais le magasin.</p>
           <p className="lp-texte lp-texte-clair">
             «&nbsp;Pas d&rsquo;abonnement&nbsp;!&nbsp;» Tu l&rsquo;as déjà lu. Alors qui paie&nbsp;? Toi, à chaque commande,
             et plus tu vends, plus tu paies. Mets tes chiffres ici, pas les nôtres&nbsp;: c&rsquo;est ta calculette.
@@ -934,8 +970,8 @@ export default function LandingReveal({ referent = null }) {
           <h2 className="lp-h2 lp-h2-encre">Une caisse enregistre les clients déjà entrés. Yoppaa les fait entrer.</h2>
           <div className="lp-atouts">
             {[
-              { icone: I.pin, titre: 'Ils te trouvent.', texte: 'Ton prochain client habite à deux pas, et il ne te connaît pas encore. Ta page vit dans l’app de ta commune et sur Google, et ta place t’attend dans le Good Morning Yoppers, la gazette du matin : chaque semaine en Exister, chaque matin en Communiquer.' },
-              { icone: I.sac, titre: 'Ils commandent sans t’appeler.', texte: 'Click & Collect, rendez-vous, réservation de table avec empreinte bancaire, livraison. La commande arrive écrite, avec l’heure. Fini le téléphone coincé contre l’épaule en plein coup de feu.' },
+              { icone: I.pin, titre: 'Ils te trouvent.', texte: 'Sur leur app, tu es un resto parmi mille. Sur Yoppaa, tu es celui d’à côté. Ton prochain client habite à deux pas, et il ne te connaît pas encore. Ta page vit dans l’app de ta commune et sur Google, et ta place t’attend dans le Good Morning Yoppers, la gazette du matin : chaque semaine en Exister, chaque matin en Communiquer.' },
+              { icone: I.sac, titre: 'Ils commandent sans t’appeler.', texte: 'Click & Collect, rendez-vous, réservation de table avec empreinte bancaire, livraison. La commande arrive écrite, avec l’heure. Fini le téléphone coincé contre l’épaule : un appel en plein coup de feu, c’est une frite qui brûle.' },
               { icone: I.boucle, titre: 'Ils reviennent.', texte: 'Fidélité liée au numéro de GSM, notifications, bons cadeaux. Entre deux visites, tu restes dans leur poche.' },
               { icone: I.feuille, titre: 'Rien ne se perd.', texte: 'À la fermeture, ce qu’il te reste repart à prix réduit au lieu d’être jeté. Une recette de plus, et souvent un client qui pousse ta porte pour la première fois.' },
             ].map(a => (
@@ -1019,6 +1055,9 @@ export default function LandingReveal({ referent = null }) {
             ))}
           </ul>
           <p className="lp-pour-autres">
+            Tu n&rsquo;as pas ouvert ton commerce pour bosser pour quelqu&rsquo;un d&rsquo;autre.
+          </p>
+          <p className="lp-convaincre">
             Et pour t&rsquo;en convaincre&nbsp;: {ESSAI_JOURS_MINIMUM}&nbsp;jours pour tout essayer, sans carte. Ta page, elle, reste gratuite à vie.
           </p>
         </div>
@@ -1308,6 +1347,8 @@ export default function LandingReveal({ referent = null }) {
           </p>
           <div className="lp-fin-cta">
             <p className="lp-sur lp-sur-clair">{LIBELLE_COMMERCANT}</p>
+            {/* ✅ Alex, 14/10 : le dernier mot de la page. */}
+            <p className="lp-reprends">Reprends tes clients.</p>
             <Link href="/signup" className="lp-btn lp-btn-main">J&rsquo;inscris mon commerce</Link>
           </div>
           {/* ⚠️ La liste vient de `lib/reseaux`, jamais nommée ici. */}
@@ -1464,6 +1505,23 @@ const CSS_LANDING = `
 .lp-barre i { display: block; height: 100%; border-radius: inherit; transition: width .5s cubic-bezier(.2,.8,.2,1); }
 .lp-barre-eux { background: linear-gradient(90deg, #FCA5A5, #F87171); }
 .lp-barre-nous { background: linear-gradient(90deg, #A7F3D0, #6EE7B7); }
+.lp-tickets { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px 28px; max-width: 760px; margin: 26px auto 0; }
+@media (min-width: 640px) { .lp-tickets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.lp-ticket { padding: 20px 20px 28px; border-radius: 3px 3px 0 0; background: #FFFDF6; color: ${T.ink}; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Courier New", monospace; font-size: 13.5px; line-height: 1.4; transform: rotate(-1.2deg);
+  -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat, radial-gradient(circle at 50% 100%, transparent 6px, #000 6.5px) bottom / 14px 7px repeat-x;
+  mask: linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat, radial-gradient(circle at 50% 100%, transparent 6px, #000 6.5px) bottom / 14px 7px repeat-x; }
+.lp-ticket-nous { background: #F1FFF7; transform: rotate(1deg); }
+.lp-ticket p { margin: 0; }
+.lp-ticket-tete { margin-bottom: 12px !important; padding-bottom: 10px; border-bottom: 1.5px dashed rgba(26,8,64,0.35); text-align: center; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.lp-ticket-ligne, .lp-ticket-total { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-variant-numeric: tabular-nums; }
+.lp-ticket-moins span:last-child { color: #DC2626; font-weight: 800; }
+.lp-ticket-total { margin-top: 10px; padding-top: 10px; border-top: 1.5px dashed rgba(26,8,64,0.35); font-size: 15px; font-weight: 800; }
+.lp-ticket-eux .lp-ticket-total span:last-child { color: #DC2626; }
+.lp-ticket-nous .lp-ticket-total span:last-child { color: #047857; }
+.lp-ticket-note { grid-column: 1 / -1; margin: 0; text-align: center; font-size: 12.5px; line-height: 1.6; color: rgba(255,255,255,0.62); }
+.lp-sous-titre { margin: 0 0 16px; font-family: var(--font-jakarta), "Plus Jakarta Sans", "DM Sans", system-ui, sans-serif; font-size: clamp(1.15rem, 3vw, 1.55rem); font-weight: 800; letter-spacing: -0.015em; word-spacing: .06em; line-height: 1.25; color: ${T.light}; text-wrap: balance; }
+.lp-convaincre { max-width: 36em; margin: 22px 0 0; font-size: clamp(1.05rem, 2.6vw, 1.3rem); font-weight: 700; line-height: 1.5; color: rgba(255,255,255,0.85); }
+.lp-reprends { margin: 0 0 24px; font-family: var(--font-jakarta), "Plus Jakarta Sans", "DM Sans", system-ui, sans-serif; font-size: clamp(2.3rem, 7.5vw, 4.2rem); font-weight: 800; letter-spacing: -0.03em; word-spacing: .08em; line-height: 1; color: #fff; }
 .lp-verdict { margin-top: 30px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.16); text-align: center; }
 .lp-verdict-sur { margin: 0 0 6px; font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: ${T.light}; }
 .lp-verdict-titre { margin: 0; font-size: clamp(1.2rem, 3.4vw, 1.7rem); font-weight: 900; letter-spacing: -0.02em; color: #fff; text-wrap: balance; }

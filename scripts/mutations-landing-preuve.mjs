@@ -249,6 +249,14 @@ const MUTATIONS = [
     vers: '    paye = v * p / 100',
     garde: '🔴 le pourcentage ET le montant par commande s’additionnent',
   },
+  // ✅ ALEX, 14/10 : le ticket calcule sur SES chiffres.
+  {
+    nom: '🔴 le ticket invente un panier quand le commercant n a rien saisi',
+    fichier: LANDING,
+    de: "  const panier = mode === 'pct' && v > 0 && n > 0 ? v / n : 0",
+    vers: "  const panier = mode === 'pct' && v > 0 && n > 0 ? v / n : 25",
+    garde: '🔴 le panier du ticket vient de ses chiffres',
+  },
   // ✅ ALEX, 14/10 : piquer SANS NOMMER.
   {
     nom: '🔴 une pique nomme une plateforme',

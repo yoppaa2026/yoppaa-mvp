@@ -467,6 +467,15 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
   // Le comparatif PAR JOUR (Alex, 14/10), sur l'année entière.
   verifier('le résultat se lit aussi par jour, sur l’année entière',
     /const jourEux = paye \* 12 \/ 365/.test(calc) && /const jourNous = prixFormule \* 12 \/ 365/.test(calc))
+  // ✅ LE TICKET (Alex, 14/10) : une commande moyenne tirée de SES chiffres.
+  // 🔴 Un panier par défaut serait NOTRE chiffre déguisé en le sien : le
+  // ticket n'existe que si ses ventes ET ses commandes sont saisies.
+  verifier('🔴 le panier du ticket vient de ses chiffres, jamais d’une valeur par défaut',
+    /const panier = mode === 'pct' && v > 0 && n > 0 \? v \/ n : 0\n/.test(calc))
+  verifier('le ticket ne s’affiche que s’il a un panier et une part prise',
+    /\{panier > 0 && prisParCommande > 0 && \(/.test(calc))
+  verifier('le ticket Yoppaa nomme sa commission avec son sujet',
+    /<span>Commission Yoppaa<\/span><span>\{euro\(0, true\)\}<\/span>/.test(calc))
   // « 0,50 » se tape avec une virgule : sans conversion, Number() rend NaN.
   verifier('une virgule décimale est comprise', /replace\(',', '\.'\)/.test(LANDING))
 

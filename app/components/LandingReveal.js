@@ -78,10 +78,24 @@ const T = {
 // « Tu tiens une friterie ? » : la question qu'un commerçant se pose sur
 // lui-même, avant toute promesse. L'article fait partie du mot, sinon « un »
 // ou « une » tomberait faux une fois sur deux.
+//
+// ✅ 14/10, Alex : « Les autres prennent tes commandes OU TES RENDEZ-VOUS ? »
+// En titre fixe, la phrase s'allonge et perd son contraste. Le mot suit donc
+// le métier : la friterie lit « commandes », le salon « rendez-vous », le
+// restaurant « réservations ». Le premier est celui que Google lit.
 const METIERS = [
-  'une friterie', 'un salon de coiffure', 'une boulangerie', 'une boutique',
-  'un restaurant', 'un institut de beauté', 'une boucherie', 'un food truck',
-  'une librairie', 'un garage', 'une sandwicherie', 'un magasin de fleurs',
+  { metier: 'une friterie', objet: 'commandes' },
+  { metier: 'un salon de coiffure', objet: 'rendez-vous' },
+  { metier: 'un restaurant', objet: 'réservations' },
+  { metier: 'une boutique', objet: 'commandes' },
+  { metier: 'un institut de beauté', objet: 'rendez-vous' },
+  { metier: 'une boulangerie', objet: 'commandes' },
+  { metier: 'un garage', objet: 'rendez-vous' },
+  { metier: 'un food truck', objet: 'commandes' },
+  { metier: 'une boucherie', objet: 'commandes' },
+  { metier: 'un barbier', objet: 'rendez-vous' },
+  { metier: 'une sandwicherie', objet: 'commandes' },
+  { metier: 'un magasin de fleurs', objet: 'commandes' },
 ]
 
 // ─── Les piques, une par secteur ────────────────────────────────────────────
@@ -91,7 +105,7 @@ const METIERS = [
 const PIQUES = [
   { secteur: 'Alimentaire', t: 'Ta pizza, ce n’est pas à nous d’en manger une part.' },
   { secteur: 'Rendez-vous', t: 'Ton agenda est plein ? Tant mieux. Ça ne nous rapporte pas un centime de plus.' },
-  { secteur: 'Détail', t: 'Ta vitrine, ton stock, ton prix. Pas de commission Yoppaa planquée sur chaque pull.' },
+  { secteur: 'Détail', t: 'Ta vitrine, ton stock, ton prix. Pas de commission Yoppaa planquée sous chaque pull.' },
   { secteur: 'Table', t: 'Chez nous, un couvert réservé ne se paie pas au couvert.' },
   { secteur: 'Tout le monde', t: 'Le commerce local n’a pas besoin d’un péage.' },
 ]
@@ -303,10 +317,13 @@ function CalculateurCommission() {
       {mode === 'pct' ? (
         <>
           <div className="lp-champs">
-            <Champ id="calc-ventes" label="Ce que je vends en ligne par mois" unite="€" exemple="6 000" valeur={ventes} onChange={setVentes}/>
+            {/* ✅ Alex, 14/10 : « Un montant par commande », pas « Et en plus ».
+                Les libellés tiennent sur une ligne, sinon le champ d'à côté
+                se décale. */}
+            <Champ id="calc-ventes" label="Mes ventes en ligne par mois" unite="€" exemple="6 000" valeur={ventes} onChange={setVentes}/>
             <Champ id="calc-taux" label="Le pourcentage qu’on me prend" unite="%" exemple="14" valeur={taux} onChange={setTaux}/>
-            <Champ id="calc-commandes" label="Mes commandes par mois" unite="commandes" exemple="400" valeur={commandes} onChange={setCommandes}/>
-            <Champ id="calc-fixe" label="Et en plus, par commande" unite="€" exemple="0,50" valeur={parCommande} onChange={setParCommande}/>
+            <Champ id="calc-commandes" label="Mes commandes par mois" unite="cmd" exemple="400" valeur={commandes} onChange={setCommandes}/>
+            <Champ id="calc-fixe" label="Un montant par commande" unite="€" exemple="0,50" valeur={parCommande} onChange={setParCommande}/>
           </div>
           <p className="lp-calcul-aide">
             Remplis ce qui te concerne : un pourcentage, un montant par commande, ou les deux.
@@ -858,15 +875,16 @@ export default function LandingReveal({ referent = null }) {
             <YoppaaLogo size={46} mode="dark"/>
             <p className="lp-sur lp-sur-clair lp-hero-sur">Pour les commerçants · Tous les commerces de ta commune, dans une seule app</p>
             <p className="lp-kicker" aria-live="off">
-              Tu tiens <span key={iMetier} className="lp-mot">{METIERS[iMetier]}</span>&nbsp;?
+              Tu tiens <span key={iMetier} className="lp-mot">{METIERS[iMetier].metier}</span>&nbsp;?
             </p>
             {/* ✅ Le titre validé par Alex le 14/10 : « en gros ils prennent
-                des commandes ». Blanc uni, comme tout titre sur fond sombre. */}
-            <h1 className="lp-h1">Les autres prennent tes commandes. Yoppaa t&rsquo;amène des clients.</h1>
+                des commandes ». Blanc uni, comme tout titre sur fond sombre :
+                le mot qui change bouge, il ne change pas de couleur. */}
+            <h1 className="lp-h1">Les autres prennent tes <span key={iMetier} className="lp-objet">{METIERS[iMetier].objet}.</span> Yoppaa t&rsquo;amène des clients.</h1>
             {/* ⚠️ « Yoppaa ne prend » ET PAS « aucune commission » tout court :
                 sans sujet, la phrase se lit « aucun frais du tout ». */}
             <p className="lp-lead">
-              Resto, salon, boutique, artisan : tout le monde a sa place, sans exception. Les habitants
+              Resto, salon, boutique, artisan&nbsp;: tout le monde a sa place, sans exception. Les habitants
               ouvrent l&rsquo;app de leur commune et tombent sur ceux qu&rsquo;ils ne connaissaient pas
               encore. Et <strong>Yoppaa ne prend aucune commission sur tes ventes</strong>.
             </p>
@@ -901,8 +919,8 @@ export default function LandingReveal({ referent = null }) {
           <p className="lp-sur lp-sur-clair">Le calcul que personne ne te propose</p>
           <h2 className="lp-h2 lp-h2-clair">Une commission, c&rsquo;est un associé qui n&rsquo;ouvre jamais le magasin.</h2>
           <p className="lp-texte lp-texte-clair">
-            « Pas d&rsquo;abonnement ! » Tu l&rsquo;as déjà lu. Alors qui paie ? Toi, à chaque commande,
-            et plus tu vends, plus tu paies. Mets tes chiffres ici, pas les nôtres : c&rsquo;est ta calculette.
+            «&nbsp;Pas d&rsquo;abonnement&nbsp;!&nbsp;» Tu l&rsquo;as déjà lu. Alors qui paie&nbsp;? Toi, à chaque commande,
+            et plus tu vends, plus tu paies. Mets tes chiffres ici, pas les nôtres&nbsp;: c&rsquo;est ta calculette.
           </p>
           <CalculateurCommission/>
           <p className="lp-chute">Ton chiffre d&rsquo;affaires ne nous regarde pas.</p>
@@ -924,7 +942,7 @@ export default function LandingReveal({ referent = null }) {
               <div key={a.titre} className="lp-atout">
                 <span className="lp-atout-icone"><Icone d={a.icone} size={22}/></span>
                 <h3>{a.titre}</h3>
-                <p>{a.texte}</p>
+                <p>{a.texte.replace(/ ([:;?!])/g, ' $1')}</p>
               </div>
             ))}
           </div>
@@ -937,7 +955,7 @@ export default function LandingReveal({ referent = null }) {
             {/* Le corollaire du zéro prélèvement Yoppaa : un modèle qui ne vit
                 pas des ventes n'a aucune raison d'exclure les tout petits. */}
             <p className="lp-texte">
-              Personne n&rsquo;est trop petit pour Yoppaa : la formule Exister est gratuite, pour toujours,
+              Personne n&rsquo;est trop petit pour Yoppaa&nbsp;: la formule Exister est gratuite, pour toujours,
               que tu travailles seul ou en équipe, tous les jours ou juste le samedi.
             </p>
           </div>
@@ -975,18 +993,33 @@ export default function LandingReveal({ referent = null }) {
       {/* ═══ 6. LE BLOC QUI PIQUE ═══ */}
       <section className={`lp-noir${barresVues ? ' lp-vu' : ''}`} ref={refBarres}>
         <div className="lp-wrap">
-          <h2 className="lp-h2 lp-h2-clair">Yoppaa n&rsquo;est pas pour toi.</h2>
-          {/* ⚠️ PAS DE « payer pour passer devant ton voisin » : avec
-              Communiquer, les actus remontent dans la liste. On ne pique pas
-              les autres sur ce qu'on fait nous-mêmes. */}
+          {/* 🔴 14/10, ALEX SUR LA PREMIÈRE VERSION : « tu as barré, c'est
+              normal ? Quel message doit passer ? » Des phrases « Si tu aimes… »
+              rayées sans rien à côté ne disaient pas QUI on raye ni POURQUOI.
+              La rature a maintenant un sens : on raye l'ANCIENNE FAÇON DE
+              FAIRE, et notre réponse s'écrit à côté. On raye un modèle, jamais
+              un nom.
+              ⚠️ PAS DE « payer pour être vu » : avec Communiquer, les actus
+              remontent dans la liste. On ne pique pas les autres sur ce qu'on
+              fait nous-mêmes. */}
+          <p className="lp-sur lp-sur-clair">Le commerce en ligne, version quartier</p>
+          <h2 className="lp-h2 lp-h2-clair">On a rayé ce qui te coûte.</h2>
           <ul className="lp-ratures">
-            <li>Si tu aimes payer un peu plus à chaque vente.</li>
-            <li>Si tu aimes les contrats dont on ne sort pas.</li>
-            <li>Si tu aimes expliquer ton problème à quelqu&rsquo;un qui ne connaît pas ton commerce.</li>
-            <li>Si tu as déjà tous les clients qu&rsquo;il te faut.</li>
+            {[
+              ['Une part de chaque vente.', 'Un prix fixe, même pour ton meilleur samedi.'],
+              ['Un contrat dont on ne sort pas.', 'Tu pars quand tu veux, et ta page reste.'],
+              ['Des clients qui appartiennent à la plateforme.', 'Tes clients restent les tiens.'],
+              ['Un service client qui ne connaît pas ton commerce.', 'Une vraie personne qui connaît ton dossier.'],
+              ['Un logiciel de plus à apprendre.', 'Ton téléphone suffit.'],
+            ].map(([avant, ici]) => (
+              <li key={avant}>
+                <s>{avant}</s>
+                <span><Icone d={I.check} size={18} sw={3}/>{ici}</span>
+              </li>
+            ))}
           </ul>
           <p className="lp-pour-autres">
-            Pour tous les autres : {ESSAI_JOURS_MINIMUM} jours pour tout essayer. Et ta page reste gratuite à vie.
+            Et pour t&rsquo;en convaincre&nbsp;: {ESSAI_JOURS_MINIMUM}&nbsp;jours pour tout essayer, sans carte. Ta page, elle, reste gratuite à vie.
           </p>
         </div>
       </section>
@@ -1006,7 +1039,7 @@ export default function LandingReveal({ referent = null }) {
               <h2 className="lp-h2 lp-h2-encre">jours offerts, dès ton inscription. Pour tout le monde. Tout le temps.</h2>
               <p className="lp-texte">
                 Tu viens parce que c&rsquo;est gratuit et sans contrainte. Tu restes parce que c&rsquo;est utile.
-                Pendant ces jours-là, tu essaies tout, les trois formules, sans carte de paiement : rien ne se
+                Pendant ces jours-là, tu essaies tout, les trois formules, sans carte de paiement&nbsp;: rien ne se
                 déclenche dans ton dos.
               </p>
             </div>
@@ -1019,7 +1052,10 @@ export default function LandingReveal({ referent = null }) {
               const reste = fo.points.slice(POINTS_VISIBLES)
               const ligne = pt => (
                 <li key={pt} className={pt.startsWith('Tout ') ? 'lp-tout' : undefined}>
-                  <Icone d={I.check} size={14} sw={3}/><span>{pt}</span>
+                  {/* L'espace avant « : ? ! » devient insécable à l'affichage :
+                      le texte reste celui que les bancs lisent, et la
+                      ponctuation ne commence jamais une ligne. */}
+                  <Icone d={I.check} size={14} sw={3}/><span>{pt.replace(/ ([:;?!])/g, ' $1')}</span>
                 </li>
               )
               return (
@@ -1031,7 +1067,14 @@ export default function LandingReveal({ referent = null }) {
                   <ul>{visibles.map(ligne)}</ul>
                   {reste.length > 0 && (
                     <details className="lp-formule-plus">
-                      <summary>Et {reste.length} autres choses</summary>
+                      {/* ✅ Alex, 14/10 : « doit donner envie qu'on y clique ».
+                          Un vrai bouton, le nombre en avant, et ce qu'on gagne
+                          à ouvrir : la suite de l'arsenal. */}
+                      <summary>
+                        <span className="lp-plus-nb">+{reste.length}</span>
+                        <span>Et ce n&rsquo;est pas tout&nbsp;: voir ce que {fo.nom} fait encore</span>
+                        <Icone d={['M6 9l6 6 6-6']} size={16} sw={2.6}/>
+                      </summary>
                       <ul>{reste.map(ligne)}</ul>
                     </details>
                   )}
@@ -1045,7 +1088,7 @@ export default function LandingReveal({ referent = null }) {
             })}
           </div>
           <p className="lp-sous-formules">
-            Yoppaa ne prend aucune commission sur tes ventes : la formule au mois est notre seul revenu.
+            Yoppaa ne prend aucune commission sur tes ventes&nbsp;: la formule au mois est notre seul revenu.
             Paiement par Bancontact ou carte, aucune augmentation en cours d&rsquo;année.
           </p>
 
@@ -1057,11 +1100,11 @@ export default function LandingReveal({ referent = null }) {
               (`customer.subscription.deleted`) repasse le commerce en Exister,
               sa page reste en ligne. */}
           <div className="lp-liberte">
-            <p className="lp-sur lp-sur-clair">Et si tu arrêtes ?</p>
+            <p className="lp-sur lp-sur-clair">Et si tu arrêtes&nbsp;?</p>
             <h3 className="lp-liberte-titre">Ici, l&rsquo;abonnement n&rsquo;enferme personne.</h3>
             <p>
               Tu aimes, tu restes. Ça ne te sert plus, tu arrêtes quand tu veux, sans préavis. Et ta page
-              reste en ligne, gratuitement : tes clients te trouvent toujours. On ne sort personne du quartier.
+              reste en ligne, gratuitement&nbsp;: tes clients te trouvent toujours. On ne sort personne du quartier.
             </p>
             <p className="lp-signature">Yopper un jour, Yopper toujours.</p>
             <Link href="/signup" className="lp-btn lp-btn-main lp-liberte-cta">
@@ -1079,7 +1122,7 @@ export default function LandingReveal({ referent = null }) {
             <h2 className="lp-h2 lp-h2-encre">Rien.</h2>
             <ul className="lp-engage">
               <li><Icone d={I.check} size={16} sw={3}/><span>Tu ne donnes aucune carte de paiement pour t&rsquo;inscrire.</span></li>
-              <li><Icone d={I.check} size={16} sw={3}/><span>Tu ne remplaces rien : garde ta caisse, ton logiciel, tes habitudes.</span></li>
+              <li><Icone d={I.check} size={16} sw={3}/><span>Tu ne remplaces rien&nbsp;: garde ta caisse, ton logiciel, tes habitudes.</span></li>
               <li><Icone d={I.check} size={16} sw={3}/><span>Tu pars quand tu veux, sans préavis.</span></li>
               <li><Icone d={I.check} size={16} sw={3}/><span>Si tu n&rsquo;en fais rien, ta page reste en ligne. Gratuitement. À vie.</span></li>
             </ul>
@@ -1092,22 +1135,22 @@ export default function LandingReveal({ referent = null }) {
             <p className="lp-sur lp-sur-encre">Les questions qu&rsquo;on nous pose</p>
             <details>
               <summary>Je suis déjà sur une plateforme de commande.</summary>
-              <p>Garde-la si tu veux : Yoppaa ne demande aucune exclusivité. Ouvre ta page à côté, et regarde d&rsquo;où viennent tes nouveaux clients.</p>
+              <p>Garde-la si tu veux&nbsp;: Yoppaa ne demande aucune exclusivité. Ouvre ta page à côté, et regarde d&rsquo;où viennent tes nouveaux clients.</p>
             </details>
             <details>
               <summary>Je n&rsquo;ai pas le temps.</summary>
               <p>
                 Ton inscription prend quelques minutes, puis une liste te guide point par point. Tu tiens un
-                resto ou un snack ? Prends ta carte en photo : l&rsquo;IA la lit et prépare tes articles, tu
+                resto ou un snack&nbsp;? Prends ta carte en photo&nbsp;: l&rsquo;IA la lit et prépare tes articles, tu
                 n&rsquo;as plus qu&rsquo;à relire. Et si tu préfères, on passe le faire avec toi.
               </p>
             </details>
             <details>
-              <summary>Il me faut du matériel ?</summary>
+              <summary>Il me faut du matériel&nbsp;?</summary>
               <p>Non. Ton téléphone, ta tablette ou ton ordinateur suffisent. Pas de caisse imposée, pas de terminal à louer.</p>
             </details>
             <details>
-              <summary>Que faut-il pour s&rsquo;inscrire ?</summary>
+              <summary>Que faut-il pour s&rsquo;inscrire&nbsp;?</summary>
               {/* 🔴 29/09 : la page part quand elle est complète, pas à la
                   validation (lib/fiche-complete.js). */}
               <p>
@@ -1127,7 +1170,7 @@ export default function LandingReveal({ referent = null }) {
               </p>
             </details>
             <details>
-              <summary>Où ça marche ?</summary>
+              <summary>Où ça marche&nbsp;?</summary>
               <p>
                 Toute la Wallonie, dès aujourd&rsquo;hui. Pas de liste d&rsquo;attente, pas de seuil à atteindre.
                 Ta commune est déjà ouverte et ta page part en ligne dès qu&rsquo;elle est complète. Et plus vous
@@ -1176,7 +1219,7 @@ export default function LandingReveal({ referent = null }) {
             <p className="lp-habitants-phrase">
               {appPubliee()
                 ? <>L&rsquo;app est là. Laisse ton email et on te prévient quand tes commerçants y arrivent.</>
-                : <>Inscris-toi : on te prévient dès que ça démarre, pour que tu puisses télécharger l&rsquo;app et enfin voir, commander et réserver chez tes commerçants préférés.</>}
+                : <>Inscris-toi&nbsp;: on te prévient dès que ça démarre, pour que tu puisses télécharger l&rsquo;app et enfin voir, commander et réserver chez tes commerçants préférés.</>}
             </p>
 
             {statut.envoi === 'ok' ? (
@@ -1312,6 +1355,7 @@ const CSS_LANDING = `
 .lp-wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
 .lp-h1, .lp-h2, .lp-h3, .lp-chute, .lp-citation, .lp-cent, .lp-pour-autres, .lp-signature, .lp-liberte-titre, .lp-verdict-montant, .lp-formule-nom {
   font-family: var(--font-jakarta), "Plus Jakarta Sans", "DM Sans", system-ui, sans-serif;
+  word-spacing: .08em;
 }
 .lp-sur { margin: 0 0 14px; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .lp-sur-clair { color: ${T.light}; }
@@ -1345,7 +1389,9 @@ const CSS_LANDING = `
 .lp-kicker { margin: 0 0 14px; font-size: clamp(1.2rem, 3.4vw, 1.7rem); font-weight: 800; color: rgba(255,255,255,0.92); line-height: 1.5; }
 .lp-mot { display: inline-block; padding: 1px 12px 3px; border-radius: 12px; background: #fff; color: ${T.ink}; animation: lp-mot .55s cubic-bezier(.2,.9,.3,1.25) both; }
 @keyframes lp-mot { from { opacity: 0; transform: translateY(55%) rotate(-4deg); } to { opacity: 1; transform: none; } }
-.lp-h1 { margin: 0 0 22px; font-size: clamp(2.35rem, 6.6vw, 4.5rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1.02; color: #fff; text-wrap: balance; }
+.lp-objet { display: inline-block; animation: lp-objet .5s cubic-bezier(.2,.9,.3,1.2) both; }
+@keyframes lp-objet { from { opacity: 0; transform: translateY(30%); } to { opacity: 1; transform: none; } }
+.lp-h1 { margin: 0 0 22px; font-size: clamp(2.2rem, 6.2vw, 4.2rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.04; color: #fff; text-wrap: balance; }
 .lp-lead { margin: 0 0 30px; max-width: 34em; font-size: clamp(1.02rem, 2.3vw, 1.18rem); line-height: 1.65; font-weight: 500; color: rgba(255,255,255,0.9); }
 .lp-lead strong { color: #fff; }
 .lp-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -1379,7 +1425,7 @@ const CSS_LANDING = `
 .lp-onglets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
 .lp-onglet { padding: 11px 18px; border-radius: 100px; border: 1.5px solid rgba(196,160,244,0.4); background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.92); font-family: inherit; font-size: 13.5px; font-weight: 800; cursor: pointer; }
 .lp-onglet[aria-pressed="true"] { background: #fff; border-color: #fff; color: ${T.deep}; }
-.lp-champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.lp-champs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; align-items: end; }
 .lp-champ label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: ${T.light}; }
 .lp-champ-saisie { display: flex; align-items: center; gap: 8px; padding: 0 16px; border-radius: 14px; background: rgba(0,0,0,0.25); border: 1.5px solid rgba(255,255,255,0.22); }
 .lp-champ-saisie:focus-within { border-color: ${T.light}; }
@@ -1449,18 +1495,22 @@ const CSS_LANDING = `
 .lp-captures figcaption { margin-top: 12px; font-size: 14px; font-weight: 800; line-height: 1.35; color: ${T.ink}; }
 
 .lp-noir { padding: clamp(64px, 9vw, 104px) 0; background: ${T.ink}; color: #fff; }
-.lp-ratures { display: grid; gap: 16px; margin: 30px 0 0; padding: 0; list-style: none; }
-.lp-ratures li { width: fit-content; font-size: clamp(1.15rem, 3.4vw, 1.65rem); font-weight: 800; line-height: 1.3; color: rgba(255,255,255,0.9);
-  text-decoration-line: line-through; text-decoration-color: transparent; text-decoration-thickness: 4px; transition: text-decoration-color .45s ease, color .45s ease; }
-.lp-vu .lp-ratures li { text-decoration-color: #F87171; color: rgba(255,255,255,0.55); }
-.lp-vu .lp-ratures li:nth-child(2) { transition-delay: .25s; }
-.lp-vu .lp-ratures li:nth-child(3) { transition-delay: .5s; }
-.lp-vu .lp-ratures li:nth-child(4) { transition-delay: .75s; }
+.lp-ratures { display: grid; gap: 0; margin: 34px 0 0; padding: 0; list-style: none; border-top: 1px solid rgba(255,255,255,0.12); }
+.lp-ratures li { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.lp-ratures s { justify-self: start; font-size: clamp(1rem, 2.6vw, 1.25rem); font-weight: 700; line-height: 1.35; color: rgba(255,255,255,0.5);
+  text-decoration-line: line-through; text-decoration-thickness: 3px; text-decoration-color: rgba(248,113,113,0.35); transition: text-decoration-color .45s ease; }
+.lp-ratures span { display: flex; align-items: flex-start; gap: 10px; font-family: var(--font-jakarta), "Plus Jakarta Sans", "DM Sans", system-ui, sans-serif; font-size: clamp(1.25rem, 3.4vw, 1.75rem); font-weight: 800; letter-spacing: -0.02em; word-spacing: .06em; line-height: 1.25; color: #fff; }
+.lp-ratures span svg { flex-shrink: 0; margin-top: .25em; color: #6EE7B7; }
+.lp-vu .lp-ratures s { text-decoration-color: #F87171; }
+.lp-vu .lp-ratures li:nth-child(2) s { transition-delay: .2s; }
+.lp-vu .lp-ratures li:nth-child(3) s { transition-delay: .4s; }
+.lp-vu .lp-ratures li:nth-child(4) s { transition-delay: .6s; }
+.lp-vu .lp-ratures li:nth-child(5) s { transition-delay: .8s; }
 .lp-pour-autres { max-width: 20em; margin: 44px 0 0; font-size: clamp(1.7rem, 5vw, 2.9rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: #fff; text-wrap: balance; }
 
 .lp-offre { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: center; }
 .lp-offre-nombre { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.lp-cent { font-size: clamp(7rem, 24vw, 14rem); font-weight: 800; letter-spacing: -0.07em; line-height: .82; font-variant-numeric: tabular-nums;
+.lp-cent { display: inline-block; padding: .06em .08em 0 .04em; font-size: clamp(7rem, 24vw, 14rem); font-weight: 800; letter-spacing: -0.05em; line-height: 1; font-variant-numeric: tabular-nums;
   background: linear-gradient(135deg, ${T.ink} 0%, ${T.main} 55%, ${T.mid} 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .lp-points { display: flex; gap: 10px; padding-left: 8px; }
 .lp-points i { width: 14px; height: 14px; border-radius: 50%; animation: lp-saut 1.6s ease-in-out infinite; }
@@ -1481,14 +1531,20 @@ const CSS_LANDING = `
 .lp-formule li { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; font-weight: 600; line-height: 1.5; color: ${T.ink}; }
 .lp-formule li svg { flex-shrink: 0; margin-top: 3px; color: #10B981; }
 .lp-formule li.lp-tout { color: ${T.main}; }
-.lp-formule-plus summary { margin: 4px 0 8px; font-size: 13.5px; font-weight: 900; color: ${T.main}; cursor: pointer; }
+.lp-formule-plus summary { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; padding: 10px 12px; border-radius: 14px; background: ${T.pale}; color: ${T.deep}; font-size: 13.5px; font-weight: 800; line-height: 1.35; cursor: pointer; list-style: none; transition: background .16s ease, transform .16s ease; }
+.lp-formule-plus summary::-webkit-details-marker { display: none; }
+.lp-formule-plus summary:hover { background: #E2D2FF; transform: translateY(-1px); }
+.lp-formule-plus summary > span:nth-child(2) { flex: 1; }
+.lp-formule-plus summary svg { flex-shrink: 0; color: ${T.main}; transition: transform .2s ease; }
+.lp-formule-plus[open] summary svg { transform: rotate(180deg); }
+.lp-plus-nb { flex-shrink: 0; display: grid; place-items: center; min-width: 38px; height: 30px; padding: 0 8px; border-radius: 100px; background: linear-gradient(135deg, ${T.main}, ${T.mid}); color: #fff; font-size: 13px; font-weight: 900; }
 .lp-formule-cta { margin-top: 14px; padding: 13px; font-size: 13.5px; text-transform: uppercase; letter-spacing: .04em; }
 .lp-sous-formules { max-width: 44em; margin: 24px auto 0; text-align: center; font-size: 13.5px; font-weight: 700; line-height: 1.6; color: ${T.muted}; }
 .lp-liberte { display: grid; gap: 14px; margin-top: 56px; padding: clamp(28px, 5vw, 52px); border-radius: 28px; background: linear-gradient(135deg, ${T.deep} 0%, ${T.main} 100%); color: #fff; }
 .lp-liberte .lp-sur { margin: 0; }
 .lp-liberte-titre { margin: 0; font-size: clamp(1.6rem, 4.4vw, 2.5rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: #fff; }
 .lp-liberte p { margin: 0; max-width: 40em; font-size: 1.03rem; line-height: 1.7; font-weight: 500; color: rgba(255,255,255,0.92); }
-.lp-liberte .lp-signature { margin-top: 10px; font-size: clamp(2rem, 6.4vw, 3.6rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: #fff; }
+.lp-liberte .lp-signature { margin-top: 10px; font-size: clamp(2rem, 6.4vw, 3.6rem); font-weight: 800; letter-spacing: -0.02em; word-spacing: .18em; line-height: 1.05; color: #fff; }
 .lp-liberte-cta { justify-self: start; margin-top: 10px; }
 
 .lp-engage-grille { display: grid; grid-template-columns: minmax(0, 1fr); gap: 56px; }
@@ -1534,13 +1590,34 @@ const CSS_LANDING = `
 .lp-pied p { margin: 8px 0 0; }
 .lp-pied a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.25); }
 
+@media (max-width: 1180px) {
+  .lp-bulle-1, .lp-bulle-3 { left: -12%; }
+  .lp-bulle-2, .lp-bulle-4 { right: -12%; }
+}
 @media (max-width: 560px) {
   .lp-bulle { max-width: 190px; padding: 8px 11px; font-size: 11.5px; }
   .lp-bulle i { width: 28px; height: 28px; }
   .lp-bulle-1, .lp-bulle-3 { left: -10%; }
   .lp-bulle-2, .lp-bulle-4 { right: -10%; }
-  .lp-btn { width: 100%; }
+  .lp-btn { width: 100%; padding: 15px 18px; font-size: 14.5px; }
   .lp-liberte-cta { justify-self: stretch; }
+  .lp-onglets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-onglet { padding: 10px 12px; font-size: 12.5px; line-height: 1.3; }
+  .lp-champs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .lp-champ, .lp-champ-saisie { min-width: 0; }
+  .lp-champ input { width: 100%; }
+  .lp-champ label { font-size: 10.5px; letter-spacing: .05em; }
+  .lp-champ-saisie { padding: 0 12px; }
+  .lp-champ input { padding: 12px 0; font-size: 19px; }
+  .lp-champ-saisie span { font-size: 12.5px; }
+  .lp-calcul { padding: 18px 16px; }
+  .lp-atout { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: center; padding: 20px 18px; }
+  .lp-atout-icone { width: 40px; height: 40px; border-radius: 12px; }
+  .lp-atout h3 { margin: 0; font-size: 1.22rem; }
+  .lp-atout p { grid-column: 1 / -1; margin-top: 10px; }
+  .lp-metiers span { padding: 6px 11px; font-size: 12.5px; }
+  .lp-pour-autres { font-size: 1.6rem; }
+  .lp-ratures li { padding: 14px 0; }
 }
 @media (min-width: 720px) {
   .lp-atouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1551,6 +1628,7 @@ const CSS_LANDING = `
   .lp-offre { grid-template-columns: auto minmax(0, 1fr); gap: 40px; }
   .lp-engage-grille { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 72px; }
   .lp-habitants-grille { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 64px; }
+  .lp-ratures li { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); align-items: center; gap: 32px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lp *, .lp *::before, .lp *::after { animation: none !important; transition: none !important; }

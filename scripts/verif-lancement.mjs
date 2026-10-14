@@ -573,9 +573,11 @@ function sansCommentaires(src) {
   // tableau) : le 8 janvier est faux pour quiconque s'inscrit aujourd'hui.
   // L'argument est maintenant la DURÉE, et elle vient de la règle.
   const reveal = sansCommentaires(lire('app/components/LandingReveal.js'))
+  // (L'espace peut être insécable, `&nbsp;`, pour que « 100 » ne reste pas
+  // seul en fin de ligne.)
   verifier('la landing annonce la durée de l’essai, lue dans la règle',
-    (reveal.match(/\{ESSAI_JOURS_MINIMUM\} jours/g) || []).length >= 3,
-    `${(reveal.match(/\{ESSAI_JOURS_MINIMUM\} jours/g) || []).length} endroit(s)`)
+    (reveal.match(/\{ESSAI_JOURS_MINIMUM\}(?: |&nbsp;)jours/g) || []).length >= 3,
+    `${(reveal.match(/\{ESSAI_JOURS_MINIMUM\}(?: |&nbsp;)jours/g) || []).length} endroit(s)`)
   verifier('🔴 la landing n’écrit jamais « 100 jours » à la main',
     !/\b100 jours\b/.test(reveal))
   verifier('🔴 la landing ne promet plus une date de fin de gratuité',
@@ -818,9 +820,18 @@ function sansCommentaires(src) {
   //    commerçant : c'est lui qu'il faut accrocher en trois secondes.
   // ⚠️ REPOINTÉE LE 14/10 sur le titre validé par Alex au tableau : « les
   //    autres prennent des commandes », Yoppaa amène des clients.
+  // ⚠️ REPOINTÉE LE 14/10 (après-midi) : Alex, « ou tes rendez-vous ? ». Le
+  //    mot suit le métier qui défile (commandes, rendez-vous, réservations),
+  //    et le PREMIER, celui que Google lit au rendu serveur, est « commandes ».
   verifier('le titre du hero s\'adresse au commerçant',
-    /<h1 className="lp-h1">Les autres prennent tes commandes\. Yoppaa t&rsquo;amène des clients\.<\/h1>/.test(hero),
+    /<h1 className="lp-h1">Les autres prennent tes <span key=\{iMetier\} className="lp-objet">\{METIERS\[iMetier\]\.objet\}\.<\/span> Yoppaa t&rsquo;amène des clients\.<\/h1>/.test(hero),
     'il disait « Ton quartier dans ta poche », donc il parlait à l\'habitant')
+  {
+    const metiers = [...reveal.matchAll(/\{ metier: '([^']+)', objet: '([^']+)' \}/g)].map(m => m[2])
+    verifier('le premier mot du titre, celui que Google lit, est « commandes »', metiers[0] === 'commandes', metiers[0] || 'aucun')
+    verifier('chaque métier porte son mot, et les rendez-vous ont le leur',
+      metiers.length >= 6 && metiers.includes('rendez-vous') && metiers.includes('réservations'), metiers.join(', '))
+  }
   // ⚠️ CETTE GARDE COMPARAIT DEUX `allerAuForm`, et le bouton du commerçant a
   // cessé d'en être un le 26/08 : il mène désormais au signup. On compare donc
   // le PREMIER lien d'inscription au bouton habitant, ce qui est la même

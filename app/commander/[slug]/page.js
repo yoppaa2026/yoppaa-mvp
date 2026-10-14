@@ -8,7 +8,7 @@ import { fetchYopper, fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
 import { poserIdentiteLocale } from '@/lib/identite-locale'
 import { calculerRemiseRecompense, libelleRemiseRecompense, libelleOffreRecompense, libelleRecompenseUtilisee, libelleAutresRecompenses, libellePerteRecompense } from '@/lib/fidelite-recompense'
 import { modesPaiementOuverts, modePaiementEffectif } from '@/lib/modes-paiement'
-import { canDo, isVitrine, isAlimentaire, planEffectif, commandeAllumee } from '@/lib/plans'
+import { canDo, isVitrine, isAlimentaire, planEffectif, commandeAllumee, commandeRealisable } from '@/lib/plans'
 import { reservationActive, motReservation } from '@/lib/reservation-metier'
 import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { nomDeLaCarte } from '@/lib/types-commerce'
@@ -3848,11 +3848,46 @@ export default function CommanderSlug() {
   // soit : le panier voyage avec le client, et c'est voulu. Au restaurant, on
   // emporte OU on s'assoit ; réserver une table ne veut pas dire payer ses
   // plats à l'avance.
-  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire(commercant)
+  //
+  // 🔴 15/10 (Alex, le Bistrologue) : « Commander à emporter » s'affichait chez
+  // un restaurant SANS créneau de retrait et aux articles en vitrine : un
+  // panier qui ne menait nulle part. `commandeRealisable` dit si la commande
+  // peut aller jusqu'au bout ; sinon, ni choix, ni bouton « + » : la carte se
+  // lit, et « Réserver une table » reste seul.
+  const emporterPossible = commerceAccepteCommandes && commandeRealisable({
+    alimentaire: isAlimentaire(commercant), articles, creneaux, livraisonDispo,
+  })
+  const choisitSonParcours = emporterPossible && peutPrendreRdv && isAlimentaire(commercant)
   // `peutCommander` garde son nom et son sens pour tout l'écran : « le client
   // peut mettre des choses au panier MAINTENANT ». Tant qu'il n'a pas dit ce
   // qu'il vient faire, la carte se lit, elle ne se remplit pas.
-  const peutCommander = commerceAccepteCommandes && (!choisitSonParcours || intentionResto === 'emporter')
+  const peutCommander = emporterPossible && (!choisitSonParcours || intentionResto === 'emporter')
+
+  // 🔴 15/10 (Alex) : après « Commander à emporter », la ligne « Tu commandes à
+  // emporter · Je préfère réserver une table » SORTAIT DE L'ÉCRAN. Le grand
+  // bloc du choix est remplacé par une ligne courte, et le navigateur, pour
+  // garder la carte immobile, remonte tout ce qui est au-dessus : la seule
+  // porte pour changer d'avis partait hors de vue. On la ramène à l'écran une
+  // fois la page redessinée (deux images : le bloc doit avoir disparu).
+  const bandeauEmporterRef = useRef(null)
+  function choisirEmporter() {
+    setIntentionResto('emporter')
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = bandeauEmporterRef.current
+      const scroll = scrollRef.current
+      if (!el || !scroll) return
+      const top = defilementVersCategorie({
+        positionContenu: positionDansContenu({
+          scrollTop: scroll.scrollTop,
+          hautElement: el.getBoundingClientRect().top,
+          hautConteneur: scroll.getBoundingClientRect().top,
+        }),
+        hauteurBarre: 12,
+      })
+      // Seulement si elle est cachée au-dessus : sinon on ne bouge rien.
+      if (top !== null && top < scroll.scrollTop) scroll.scrollTo({ top, behavior: 'smooth' })
+    }))
+  }
 
   // ═══════════════════════════════════════════════════════════════════════
   // 🔴 CET EFFET EST ICI, ET SA PLACE EST LE CORRECTIF (29/08).
@@ -4245,6 +4280,14 @@ export default function CommanderSlug() {
               // fiche RDV. Sortir vers l'accueil donnait l'impression que « la
               // page s'affiche différemment » : on revient sur sa fiche.
               if (etape === 3) { allerEtape(2); setCreneauChoisi(null); setErreurCommande(null); setAjustementStock(null) }
+              // 🔴 15/10 (Alex, le Bistrologue) : « quand tu es sur commande à
+              // emporter, pas de croix pour sortir ». Le Retour ramène d'abord
+              // au CHOIX (réserver une table ou emporter), comme partout le
+              // Retour ramène à l'étape d'avant, au lieu de quitter la fiche.
+              else if (etape === 2 && choisitSonParcours && intentionResto === 'emporter') {
+                setIntentionResto(null)
+                scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+              }
               else if (vitrine && commercant?.slug) { router.push(`/commander/rdv/${commercant.slug}`) }
               else { router.push('/commander') }
             }}
@@ -4769,7 +4812,7 @@ export default function CommanderSlug() {
                         </svg>
                         Réserver une table
                       </a>
-                      <button onClick={() => setIntentionResto('emporter')}
+                      <button onClick={choisirEmporter}
                         style={{ flex: '1 1 150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px 16px', borderRadius: 12, background: '#fff', border: `1.5px solid ${T.main}`, color: T.main, fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                           <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>
@@ -4783,7 +4826,7 @@ export default function CommanderSlug() {
                 {/* Il a choisi d'emporter : on le lui rappelle, et on lui laisse
                     la porte pour changer d'avis sans repartir de zéro. */}
                 {choisitSonParcours && intentionResto === 'emporter' && (
-                  <div style={{ margin: '0 12px 12px', padding: '10px 14px', borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div ref={bandeauEmporterRef} style={{ margin: '0 12px 12px', padding: '10px 14px', borderRadius: 12, background: T.pale, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '0.82rem', fontWeight: 800, color: T.deep, flex: 1, minWidth: 0 }}>Tu commandes à emporter</span>
                     <a href={`/commander/rdv/${commercant.slug}`}
                       style={{ fontSize: '0.78rem', fontWeight: 800, color: T.main, textDecoration: 'underline' }}>

@@ -245,15 +245,17 @@ const MUTATIONS = [
   // reserver une table croirait devoir composer son repas.
   { nom: '🔴 la carte se remplit avant que le client ait choisi',
     fichier: 'app/commander/[slug]/page.js',
-    de: "  const peutCommander = commerceAccepteCommandes && (!choisitSonParcours || intentionResto === 'emporter')",
-    vers: '  const peutCommander = commerceAccepteCommandes' },
+    // ⚠️ ANCRE RECALÉE LE 15/10 : `emporterPossible` (commande réalisable).
+    de: "  const peutCommander = emporterPossible && (!choisitSonParcours || intentionResto === 'emporter')",
+    vers: '  const peutCommander = emporterPossible' },
 
   // ⚠️ ET LE CHOIX NE S IMPOSE PAS HORS DU RESTAURANT : chez un salon, acheter
   // son shampoing en prenant son rendez-vous est le geste le plus naturel.
   { nom: '⚠️ le choix s impose aussi aux salons',
     fichier: 'app/commander/[slug]/page.js',
-    de: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire(commercant)',
-    vers: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv' },
+    // ⚠️ ANCRE RECALÉE LE 15/10.
+    de: '  const choisitSonParcours = emporterPossible && peutPrendreRdv && isAlimentaire(commercant)',
+    vers: '  const choisitSonParcours = emporterPossible && peutPrendreRdv' },
 
   // ⚠️ CE QUI DECRIT LE COMMERCE NE SUIT PAS L INTENTION DU CLIENT.
   { nom: '🔴 on reclame l activation de la commande a qui l a activee',
@@ -782,8 +784,33 @@ const MUTATIONS = [
 
   { nom: '⚠️ la fiche du restaurant emporte le panier vers la table',
     fichier: 'app/commander/[slug]/page.js',
-    de: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire(commercant)',
-    vers: '  const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && false' },
+    // ⚠️ ANCRE RECALÉE LE 15/10.
+    de: '  const choisitSonParcours = emporterPossible && peutPrendreRdv && isAlimentaire(commercant)',
+    vers: '  const choisitSonParcours = emporterPossible && peutPrendreRdv && false' },
+
+  // ═══ 🔴 « COMMANDER À EMPORTER » SANS RIEN À COMMANDER (Alex, 15/10) ═══════
+  { nom: '🔴 le Bistrologue sans creneau propose encore « Commander a emporter »',
+    fichier: 'lib/plans.js',
+    de: '  return (Array.isArray(creneaux) && creneaux.length > 0) || livraisonDispo === true',
+    vers: '  return true' },
+  { nom: '🔴 une carte toute en vitrine propose encore d emporter',
+    fichier: 'lib/plans.js',
+    de: '.some(a => a && a.actif !== false && a.est_vitrine !== true && Number(a.prix) > 0)',
+    vers: '.some(a => a && a.actif !== false && Number(a.prix) > 0)' },
+  { nom: '⚠️ la boutique se met a exiger des creneaux',
+    fichier: 'lib/plans.js',
+    de: '  if (!alimentaire) return true\n', vers: '' },
+  { nom: '🔴 la fiche ignore la regle et propose d emporter quand meme',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '  const emporterPossible = commerceAccepteCommandes && commandeRealisable({',
+    vers: '  const emporterPossible = commerceAccepteCommandes || commandeRealisable({' },
+  { nom: '🔴 en mode a emporter, Retour quitte la fiche au lieu de ramener au choix',
+    fichier: 'app/commander/[slug]/page.js',
+    de: "              else if (etape === 2 && choisitSonParcours && intentionResto === 'emporter') {",
+    vers: "              else if (false) {" },
+  { nom: '🔴 la ligne « Je prefere reserver une table » reste hors de l ecran',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '<button onClick={choisirEmporter}', vers: "<button onClick={() => setIntentionResto('emporter')}" },
 
   // ═══ « LA CARTE » OU « PRODUITS » (decision d Alex, 10/09 au soir) ═══════
   { nom: '🔴 un metier tape a la main n a plus de carte',

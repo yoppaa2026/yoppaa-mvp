@@ -187,13 +187,41 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // 🔴 Chez un restaurant qui fait les deux, le client venu réserver une table
   // arrivait sur une carte couverte de boutons « ajouter » : il croyait devoir
   // composer son repas pour obtenir une table.
+  // ⚠️ REPOINTÉES LE 15/10 : le choix et le panier passent par
+  // `emporterPossible` (forfait + interrupteur + commande RÉALISABLE).
   verifier('🔴 un restaurant qui fait les deux demande ce qu’on vient faire',
-    /const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire\(commercant\)/.test(FICHE)
+    /const choisitSonParcours = emporterPossible && peutPrendreRdv && isAlimentaire\(commercant\)/.test(FICHE)
     && /Que veux-tu faire/.test(FICHE))
   // 🔴 ET LA CARTE NE SE REMPLIT PAS TANT QU'IL N'A PAS DIT. C'est le cœur de
   // la correction : sans ça, le choix ne serait qu'un bandeau de plus.
   verifier('🔴 et la carte se lit sans se remplir avant le choix',
-    /const peutCommander = commerceAccepteCommandes && \(!choisitSonParcours \|\| intentionResto === 'emporter'\)/.test(FICHE))
+    /const peutCommander = emporterPossible && \(!choisitSonParcours \|\| intentionResto === 'emporter'\)/.test(FICHE))
+
+  // ── 🔴 « COMMANDER À EMPORTER » SANS RIEN À COMMANDER (Alex, 15/10) ──────
+  //
+  // Le Bistrologue : aucun créneau de retrait, des articles en vitrine, et
+  // pourtant le bouton s'affichait. On EXÉCUTE la règle.
+  const { commandeRealisable } = await import('../lib/plans.js')
+  const art = (x = {}) => ({ actif: true, est_vitrine: false, prix: 12, ...x })
+  egal('un restaurant avec un article en ligne et un créneau peut faire emporter',
+    commandeRealisable({ alimentaire: true, articles: [art()], creneaux: [{ id: 1 }] }), true)
+  egal('🔴 sans créneau de retrait ni livraison, NON (le Bistrologue)',
+    commandeRealisable({ alimentaire: true, articles: [art()], creneaux: [] }), false)
+  egal('la livraison seule suffit', commandeRealisable({ alimentaire: true, articles: [art()], creneaux: [], livraisonDispo: true }), true)
+  egal('🔴 tout en vitrine, NON', commandeRealisable({ alimentaire: true, articles: [art({ est_vitrine: true })], creneaux: [{ id: 1 }] }), false)
+  egal('tout masqué, NON', commandeRealisable({ alimentaire: true, articles: [art({ actif: false })], creneaux: [{ id: 1 }] }), false)
+  egal('un article sans prix ne compte pas', commandeRealisable({ alimentaire: true, articles: [art({ prix: 0 })], creneaux: [{ id: 1 }] }), false)
+  egal('⚠️ hors alimentaire, la boutique n’a pas besoin de créneaux',
+    commandeRealisable({ alimentaire: false, articles: [art()], creneaux: [] }), true)
+  egal('une carte vide, NON', commandeRealisable({ alimentaire: true, articles: [], creneaux: [{ id: 1 }] }), false)
+  verifier('🔴 la fiche lit la règle, avec ses articles, ses créneaux et sa livraison',
+    /const emporterPossible = commerceAccepteCommandes && commandeRealisable\(\{\s*alimentaire: isAlimentaire\(commercant\), articles, creneaux, livraisonDispo,\s*\}\)/.test(FICHE))
+  // 🔴 « Pas de croix pour sortir » : le Retour ramène au CHOIX d'abord.
+  verifier('🔴 en mode « à emporter », Retour ramène au choix au lieu de quitter la fiche',
+    /else if \(etape === 2 && choisitSonParcours && intentionResto === 'emporter'\) \{\s*setIntentionResto\(null\)/.test(FICHE))
+  verifier('🔴 après le choix, la ligne « Je préfère réserver une table » revient à l’écran',
+    /<button onClick=\{choisirEmporter\}/.test(FICHE) && /<div ref=\{bandeauEmporterRef\}/.test(FICHE)
+      && /function choisirEmporter\(\) \{\s*setIntentionResto\('emporter'\)\s*requestAnimationFrame/.test(FICHE))
   // ⚠️ CE QUI DÉCRIT LE COMMERCE NE DOIT PAS SUIVRE L'INTENTION DU CLIENT :
   // réclamer l'activation de la commande à qui vient de l'activer ferait douter
   // de tout le reste de l'écran.
@@ -2270,7 +2298,9 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('⚠️ témoin : chez un restaurant, « Réserver une table » n’emporte pas le panier',
     (FICHE_R.match(/deposerPanierPourRdv\(/g) || []).length === 1
     && /\{peutPrendreRdv && !choisitSonParcours && \(\(\) => \{[\s\S]{0,2000}?deposerPanierPourRdv\(commercant\.slug, panier\)/.test(FICHE_R)
-    && /const choisitSonParcours = commerceAccepteCommandes && peutPrendreRdv && isAlimentaire\(commercant\)/.test(FICHE_R),
+    // ⚠️ REPOINTÉE LE 15/10 : `emporterPossible`. Un restaurant qui ne peut pas
+    // faire emporter n'a aucun panier : le lien seul y dépose un panier vide.
+    && /const choisitSonParcours = emporterPossible && peutPrendreRdv && isAlimentaire\(commercant\)/.test(FICHE_R),
     `${(FICHE_R.match(/deposerPanierPourRdv\(/g) || []).length} dépôt(s)`)
 }
 

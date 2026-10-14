@@ -154,6 +154,9 @@ const I = {
   etoile: ['M12 3.5l2.6 5.3 5.9.8-4.3 4.1 1 5.8L12 16.8 6.8 19.5l1-5.8L3.5 9.6l5.9-.8z'],
   fleche: ['M5 12h14', 'M13 6l6 6-6 6'],
   tel:    ['M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z'],
+  maison: ['M3.5 11L12 4l8.5 7', 'M6 9.5V20h12V9.5', 'M10 20v-5h4v5'],
+  groupe: ['M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z', 'M2.5 20a6.5 6.5 0 0 1 13 0', 'M16 4.5a3.5 3.5 0 0 1 0 6.5', 'M21.5 20a6.5 6.5 0 0 0-4-6'],
+  profil: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4 21a8 8 0 0 1 16 0'],
 }
 
 // ─── Le téléphone du haut de page ───────────────────────────────────────────
@@ -173,9 +176,22 @@ function TelephoneHero() {
   return (
     <div className="lp-tel">
       <div className="lp-tel-cadre">
+        {/* ⚠️ LA CAPTURE SOURCE COUPE SA BARRE D'ICÔNES EN DEUX (Alex, 14/10 :
+            « icônes coupées, bande blanche en bas »). Des pixels absents ne se
+            rattrapent pas : on recadre la capture JUSTE AU-DESSUS de la barre
+            (`.lp-tel-vue`), et la barre est redessinée en dessous, entière, avec
+            les quatre onglets de l'app. */}
         <div className="lp-tel-ecran">
-          <img src={captureSrc(CAPTURE_HERO)} alt={CAPTURE_HERO.alt}
-            width={CAPTURE_HERO.largeur} height={CAPTURE_HERO.hauteur} loading="eager" decoding="async"/>
+          <div className="lp-tel-vue">
+            <img src={captureSrc(CAPTURE_HERO)} alt={CAPTURE_HERO.alt}
+              width={CAPTURE_HERO.largeur} height={CAPTURE_HERO.hauteur} loading="eager" decoding="async"/>
+          </div>
+          <div className="lp-tel-nav" aria-hidden="true">
+            <span className="lp-tel-nav-actif"><Icone d={I.maison} size={20}/></span>
+            <span className="lp-tel-nav-agenda"><Icone d={I.agenda} size={20}/></span>
+            <span><Icone d={I.groupe} size={20}/></span>
+            <span><Icone d={I.profil} size={20}/></span>
+          </div>
         </div>
       </div>
       {bulles.map((b, i) => (
@@ -1650,8 +1666,14 @@ const CSS_LANDING = `
 .lp-tel { position: relative; width: min(290px, 72vw); margin: 0 auto; }
 @media (min-width: 900px) { .lp-tel { width: 320px; } }
 .lp-tel-cadre { padding: 10px; border-radius: 42px; background: #0B0318; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 30px 60px rgba(0,0,0,0.45); }
-.lp-tel-ecran { overflow: hidden; border-radius: 32px; background: #fff; padding-bottom: 14px; }
-.lp-tel-ecran img { display: block; width: 100%; height: auto; }
+.lp-tel-ecran { overflow: hidden; border-radius: 32px; background: ${T.ink}; }
+.lp-tel-vue { aspect-ratio: 760 / 1466; overflow: hidden; background: #fff; }
+.lp-tel-vue img { display: block; width: 100%; height: auto; }
+.lp-tel-nav { position: relative; display: flex; justify-content: space-around; align-items: center; padding: 10px 14px 20px; background: ${T.ink}; color: rgba(255,255,255,0.62); }
+.lp-tel-nav-actif { color: #fff; }
+.lp-tel-nav-agenda { position: relative; }
+.lp-tel-nav-agenda::after { content: ""; position: absolute; top: -3px; right: -4px; width: 8px; height: 8px; border-radius: 50%; background: ${T.light}; }
+.lp-tel-nav::after { content: ""; position: absolute; left: 50%; bottom: 7px; width: 34%; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.5); transform: translateX(-50%); }
 .lp-bulle { position: absolute; display: flex; align-items: center; gap: 10px; max-width: 230px; padding: 10px 14px; border-radius: 16px; background: #fff; color: ${T.ink}; box-shadow: 0 14px 30px rgba(10,2,30,0.35); font-size: 12.5px; line-height: 1.3; font-weight: 600; animation: lp-bulle 12s ease-in-out infinite both; }
 .lp-bulle i { flex-shrink: 0; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: ${T.pale}; color: ${T.main}; }
 .lp-bulle strong { display: block; font-size: 13px; font-weight: 900; }

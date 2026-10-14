@@ -542,6 +542,41 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
     !/capacite: 'newsletter_ciblee'/.test(LANDING))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. « ON T'APPELLE » : UN CONTACT, JAMAIS UN RELAIS DE COURRIER (14/10)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Alex : « un contact s'ils ont des questions ? Tu veux une démo ? ». Un
+// formulaire public qui envoie des emails est exactement la forme du défaut
+// le plus grave de l'audit du 21/08 (`notify-yoppaa`, relais ouvert). Les
+// verrous se gardent un par un.
+{
+  const ROUTE = sansProse(readFileSync(new URL('../app/api/contact-pro/route.js', import.meta.url), 'utf8'))
+  verifier('🔴 la demande part vers Yoppaa seul, jamais vers une adresse du corps',
+    /await envoyerAuAdmin\(\{/.test(ROUTE) && !/\bto\s*:/.test(ROUTE) && !/envoyerAuCommercant|envoyerAuYopper/.test(ROUTE))
+  verifier('🔴 tout ce que l’appelant écrit est échappé avant d’entrer dans l’email',
+    /\$\{echapperHtml\(v\)\}/.test(ROUTE) && /\$\{nomCommerce\.slice\(0, 60\)\}/.test(ROUTE))
+  verifier('le motif vient d’une liste fermée',
+    /motifsActifs\(\)\.find\(m => m\.cle === motif\)/.test(ROUTE))
+  verifier('🔴 sur un site déployé, sans clé anti-robot, on refuse',
+    /if \(verdict\.skipped && deploye\)/.test(ROUTE) && /status: 503/.test(ROUTE))
+  verifier('un envoi qui échoue est dit au commerçant',
+    /if \(envoi && envoi\.ok === false\)/.test(ROUTE))
+  verifier('le GSM est validé par la règle commune',
+    /if \(!telephoneValide\(gsm\)\)/.test(ROUTE))
+
+  verifier('le bloc « On t’appelle » est monté sur la page',
+    /<OnTeRappelle siteKey=\{siteKey\}\/>/.test(LANDING))
+  verifier('il a son propre anti-robot, pas celui des habitants',
+    /callback: \(t\) => setJeton\(t\)/.test(LANDING))
+  verifier('WhatsApp passe par lib/contact, aucun numéro recopié',
+    /href=\{lienWhatsApp\(\)\}/.test(LANDING) && !/wa\.me/.test(LANDING))
+  verifier('l’encodage offert suit son drapeau, partout où il est dit',
+    (LANDING.match(/\{ENCODAGE_OFFERT && /g) || []).length >= 3)
+  verifier('la barre du pouce est montée, et respecte le bas de l’iPhone',
+    /<BarrePouce visible=\{barrePouce\}\/>/.test(LANDING) && /env\(safe-area-inset-bottom\)/.test(LANDING))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

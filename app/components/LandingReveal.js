@@ -43,6 +43,7 @@ import { getPrixPlan, canDo, PLANS } from '@/lib/plans'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import { CAPTURES_COMMERCANT, CAPTURES_YOPPER, captureSrc } from '@/lib/captures-landing'
 import { APP_STORE_URL, GOOGLE_PLAY_URL, BADGE_APP_STORE, BADGE_GOOGLE_PLAY, appPubliee } from '@/lib/stores'
+import { lienWhatsApp, TELEPHONE_AFFICHE, ENCODAGE_OFFERT, motifsActifs } from '@/lib/contact'
 import PartageMobilisation from './PartageMobilisation'
 
 // ─── Les captures ───────────────────────────────────────────────────────────
@@ -607,6 +608,156 @@ function IncitantMobilisation({ communeStats, globalStats }) {
   return null
 }
 
+// ─── « ON T'APPELLE » (Alex, 14/10) ─────────────────────────────────────────
+//
+// « Est-ce qu'on ne devrait pas ajouter un contact s'ils ont des questions ?
+// Tu veux une démo ? » Un commerçant qui hésite ne s'inscrit pas : il pose une
+// question, ou il veut voir. Deux chemins, « toujours très punchy » : un
+// formulaire qui part chez Yoppaa (`/api/contact-pro`, rien n'est stocké) et
+// WhatsApp, direct.
+//
+// ⚠️ SON PROPRE WIDGET TURNSTILE. Celui des habitants passe par des rappels
+// globaux (`window.onTurnstileSuccess`) : les partager mélangerait les jetons
+// des deux formulaires, et l'un consommerait celui de l'autre.
+function OnTeRappelle({ siteKey }) {
+  const [champs, setChamps] = useState({ commerce: '', prenom: '', gsm: '', motif: 'demo', message: '' })
+  const [etat, setEtat] = useState({ envoi: 'idle', message: null })
+  const [jeton, setJeton] = useState(null)
+  const refWidget = useRef(null)
+  const rendu = useRef(false)
+  const motifs = motifsActifs()
+
+  const lancer = () => {
+    if (rendu.current || typeof window === 'undefined' || !siteKey) return
+    let essais = 0
+    const rendre = () => {
+      if (rendu.current) return
+      if (window.turnstile && refWidget.current) {
+        rendu.current = true
+        try {
+          window.turnstile.render(refWidget.current, {
+            sitekey: siteKey, size: 'invisible',
+            callback: (t) => setJeton(t),
+            'expired-callback': () => setJeton(null),
+            'error-callback': () => setJeton(null),
+          })
+        } catch (e) { /* ignore */ }
+      } else if (essais++ < 25) {
+        setTimeout(rendre, 150)
+      }
+    }
+    rendre()
+  }
+
+  const valide = champs.commerce.trim() && champs.gsm.replace(/\D/g, '').length >= 8 && champs.motif
+
+  async function envoyer(e) {
+    e.preventDefault()
+    if (etat.envoi === 'envoi' || !valide) return
+    setEtat({ envoi: 'envoi', message: null })
+    try {
+      const r = await fetch('/api/contact-pro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...champs, turnstile_token: jeton }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || !j.ok) {
+        setEtat({ envoi: 'ko', message: j.error || 'Une erreur est survenue, réessaie.' })
+        return
+      }
+      setEtat({ envoi: 'ok', message: null })
+    } catch {
+      setEtat({ envoi: 'ko', message: 'Erreur réseau, réessaie ou écris-nous sur WhatsApp.' })
+    }
+  }
+
+  const maj = (cle) => (e) => setChamps(c => ({ ...c, [cle]: e.target.value }))
+
+  return (
+    <section id="rappel" className="lp-rappel">
+      <div className="lp-wrap lp-rappel-grille">
+        <div>
+          <p className="lp-sur lp-sur-clair">Tu hésites encore&nbsp;?</p>
+          <h2 className="lp-h2 lp-h2-clair">Une question&nbsp;? Envie de voir&nbsp;? On t&rsquo;appelle.</h2>
+          <p className="lp-texte lp-texte-clair">
+            Pas de robot, pas de centre d&rsquo;appel. Une vraie personne de chez Yoppaa te rappelle, te montre
+            l&rsquo;app sur ton commerce à toi, et répond à tout. Même aux questions qui fâchent.
+          </p>
+          {ENCODAGE_OFFERT && (
+            <p className="lp-rappel-offre">
+              <strong>En ce moment&nbsp;:</strong> on encode ta carte, ton menu ou ton catalogue pour toi. Gratuitement.
+            </p>
+          )}
+          <a href={lienWhatsApp()} target="_blank" rel="noopener noreferrer" className="lp-btn lp-btn-whatsapp">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.3 2.2 2.2 0 0 0 .2-1.3c-.1-.1-.3-.2-.5-.3z"/>
+            </svg>
+            Écris-nous sur WhatsApp
+          </a>
+          <p className="lp-rappel-tel">ou appelle le <a href={`tel:${TELEPHONE_AFFICHE.replace(/\s/g, '')}`}>{TELEPHONE_AFFICHE}</a></p>
+        </div>
+
+        <div className="lp-rappel-carte">
+          {etat.envoi === 'ok' ? (
+            <div className="lp-rappel-merci">
+              <p className="lp-rappel-merci-titre">C&rsquo;est noté 🟣</p>
+              <p>On te rappelle très vite au numéro que tu nous as donné. Pendant ce temps, rien ne t&rsquo;empêche d&rsquo;ouvrir ta page&nbsp;: c&rsquo;est gratuit.</p>
+              <Link href="/signup" className="lp-btn lp-btn-main">J&rsquo;essaie {ESSAI_JOURS_MINIMUM}&nbsp;jours, c&rsquo;est gratuit</Link>
+            </div>
+          ) : (
+            <form onSubmit={envoyer}>
+              <p className="lp-rappel-quoi">Tu veux…</p>
+              <div className="lp-rappel-motifs" role="radiogroup" aria-label="Ce que tu veux">
+                {motifs.map(m => (
+                  <button key={m.cle} type="button" role="radio" aria-checked={champs.motif === m.cle}
+                    className="lp-rappel-motif" onClick={() => setChamps(c => ({ ...c, motif: m.cle }))}>
+                    {m.libelle}
+                  </button>
+                ))}
+              </div>
+              <input type="text" required maxLength={120} placeholder="Le nom de ton commerce" onFocus={lancer}
+                value={champs.commerce} onChange={maj('commerce')} style={inputStyle} autoComplete="organization"/>
+              <div className="lp-rappel-duo">
+                <input type="text" maxLength={60} placeholder="Ton prénom" onFocus={lancer}
+                  value={champs.prenom} onChange={maj('prenom')} style={inputStyle} autoComplete="given-name"/>
+                <input type="tel" required inputMode="tel" maxLength={20} placeholder="Ton GSM" onFocus={lancer}
+                  value={champs.gsm} onChange={maj('gsm')} style={inputStyle} autoComplete="tel"/>
+              </div>
+              <textarea rows={2} maxLength={600} placeholder="Ta question, ou le meilleur moment pour t’appeler (optionnel)"
+                value={champs.message} onChange={maj('message')} style={{ ...inputStyle, resize: 'vertical', minHeight: 56 }}/>
+              {siteKey && <div ref={refWidget}/>}
+              <button type="submit" className="lp-form-envoi" disabled={!valide || etat.envoi === 'envoi'}>
+                {etat.envoi === 'envoi' ? 'Envoi…' : 'Rappelez-moi'}
+              </button>
+              {etat.envoi === 'ko' && etat.message && <p className="lp-rappel-erreur">⚠ {etat.message}</p>}
+              <p className="lp-rappel-rgpd">
+                Ton numéro ne sert qu&rsquo;à te rappeler. Il n&rsquo;est ni stocké, ni partagé.
+              </p>
+            </form>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ─── La barre du pouce, sur GSM (Alex, 14/10) ───────────────────────────────
+// Sous le haut de page, le commerçant défile un écran entier sans un bouton à
+// portée de pouce. Elle apparaît quand le haut de page est passé, et se retire
+// devant les deux formulaires (on ne cache pas ce qu'on est en train de
+// remplir). Sur ordinateur, elle n'existe pas (CSS).
+function BarrePouce({ visible }) {
+  return (
+    <div className={`lp-pouce${visible ? ' lp-pouce-on' : ''}`} aria-hidden={!visible}>
+      <Link href="/signup" className="lp-pouce-principal" tabIndex={visible ? 0 : -1}>
+        J&rsquo;essaie {ESSAI_JOURS_MINIMUM}&nbsp;jours
+      </Link>
+      <a href="#rappel" className="lp-pouce-secondaire" tabIndex={visible ? 0 : -1}>On m&rsquo;appelle</a>
+    </div>
+  )
+}
+
 const inputStyle = {
   width: '100%',
   padding: '12px 14px',
@@ -707,6 +858,23 @@ export default function LandingReveal({ referent = null }) {
   const turnstileRef = useRef(null)
   const attributionRef = useRef({ ref_commercant: null, utm_source: null, utm_medium: null, utm_campaign: null })
   const [refBarres, barresVues] = useVu()
+  // La barre du pouce : visible quand le haut de page est passé, retirée
+  // devant les deux formulaires.
+  const [vus, setVus] = useState({ commercants: true, rappel: false, preinscription: false })
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(entrees => setVus(v => {
+      const n = { ...v }
+      for (const e of entrees) n[e.target.id] = e.isIntersecting
+      return n
+    }), { threshold: 0.05 })
+    for (const id of ['commercants', 'rappel', 'preinscription']) {
+      const el = document.getElementById(id)
+      if (el) obs.observe(el)
+    }
+    return () => obs.disconnect()
+  }, [])
+  const barrePouce = !vus.commercants && !vus.rappel && !vus.preinscription
 
   // Les métiers qui tournent. ⚠️ À L'ARRÊT quand l'onglet est caché (règle du
   // dépôt pour tout intervalle rapide), et jamais pour qui a demandé moins de
@@ -919,6 +1087,14 @@ export default function LandingReveal({ referent = null }) {
               ouvrent l&rsquo;app de leur commune et tombent sur ceux qu&rsquo;ils ne connaissaient pas
               encore. Et <strong>Yoppaa ne prend aucune commission sur tes ventes</strong>.
             </p>
+            {/* ✅ Alex, 14/10 : l'encodage offert, affiché comme OFFRE DU
+                MOMENT. Un seul drapeau le retire (`ENCODAGE_OFFERT`). */}
+            {ENCODAGE_OFFERT && (
+              <p className="lp-hero-offre">
+                <span>En ce moment</span>
+                On encode ta carte, ton menu ou ton catalogue pour toi. Gratuitement.
+              </p>
+            )}
             <div className="lp-ctas">
               <Link href="/signup" className="lp-btn lp-btn-main">
                 J&rsquo;essaie {ESSAI_JOURS_MINIMUM} jours, c&rsquo;est gratuit <Icone d={I.fleche} size={18} sw={2.4}/>
@@ -1181,7 +1357,9 @@ export default function LandingReveal({ referent = null }) {
               <p>
                 Ton inscription prend quelques minutes, puis une liste te guide point par point. Tu tiens un
                 resto ou un snack&nbsp;? Prends ta carte en photo&nbsp;: l&rsquo;IA la lit et prépare tes articles, tu
-                n&rsquo;as plus qu&rsquo;à relire. Et si tu préfères, on passe le faire avec toi.
+                n&rsquo;as plus qu&rsquo;à relire.
+                {ENCODAGE_OFFERT && <> Et en ce moment, on encode même ta carte, ton menu ou ton catalogue pour toi, gratuitement&nbsp;: <a href="#rappel">demande-le ici</a>.</>}
+                {' '}Et si tu préfères, on passe le faire avec toi.
               </p>
             </details>
             <details>
@@ -1220,6 +1398,9 @@ export default function LandingReveal({ referent = null }) {
           </div>
         </div>
       </section>
+
+      {/* ═══ 8 bis. ON T'APPELLE ═══ */}
+      <OnTeRappelle siteKey={siteKey}/>
 
       {/* ═══ 9. POUR LES HABITANTS ═══ */}
       <section id="preinscription" className="lp-habitants" style={{ background: `linear-gradient(135deg, ${T.ink} 0%, ${T.deep} 60%, ${T.panel} 100%)` }}>
@@ -1377,6 +1558,8 @@ export default function LandingReveal({ referent = null }) {
           </footer>
         </div>
       </section>
+
+      <BarrePouce visible={barrePouce}/>
 
       <style>{CSS_LANDING}</style>
     </main>
@@ -1648,6 +1831,32 @@ const CSS_LANDING = `
 .lp-pied p { margin: 8px 0 0; }
 .lp-pied a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.25); }
 
+.lp-hero-offre { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; max-width: 34em; margin: -12px 0 26px; padding: 10px 14px; border-radius: 14px; background: rgba(110,231,183,0.12); border: 1px solid rgba(110,231,183,0.4); font-size: 14px; font-weight: 700; line-height: 1.45; color: #fff; }
+.lp-hero-offre span { padding: 3px 9px; border-radius: 100px; background: #6EE7B7; color: #064E3B; font-size: 10.5px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+
+.lp-rappel { padding: clamp(64px, 9vw, 104px) 0; background: linear-gradient(135deg, ${T.deep} 0%, ${T.main} 70%, ${T.mid} 100%); color: #fff; }
+.lp-rappel-grille { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: center; }
+.lp-rappel-offre { max-width: 34em; margin: 22px 0 0; padding: 12px 16px; border-radius: 14px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25); font-size: .98rem; font-weight: 600; line-height: 1.5; }
+.lp-rappel-offre strong { color: #6EE7B7; }
+.lp-btn-whatsapp { margin-top: 26px; background: #25D366; color: #063B1F; box-shadow: 0 10px 26px rgba(37,211,102,0.35); }
+.lp-rappel-tel { margin: 12px 0 0; font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.8); }
+.lp-rappel-tel a { color: #fff; text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.4); }
+.lp-rappel-carte { padding: 26px 22px; border-radius: 24px; background: rgba(22,6,54,0.55); border: 1.5px solid rgba(255,255,255,0.18); }
+.lp-rappel-carte form { margin: 0; }
+.lp-rappel-quoi { margin: 0 0 10px; font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; color: ${T.light}; }
+.lp-rappel-motifs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.lp-rappel-motif { padding: 10px 14px; border-radius: 100px; border: 1.5px solid rgba(196,160,244,0.5); background: rgba(255,255,255,0.06); color: #fff; font-family: inherit; font-size: 13.5px; font-weight: 800; cursor: pointer; transition: background .15s ease; }
+.lp-rappel-motif[aria-checked="true"] { background: #fff; border-color: #fff; color: ${T.deep}; }
+.lp-rappel-motif:focus-visible { outline: 3px solid ${T.light}; outline-offset: 2px; }
+.lp-rappel-duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+.lp-rappel-erreur { margin: 12px 0 0; text-align: center; font-size: 12.5px; font-weight: 700; color: #FCA5A5; }
+.lp-rappel-rgpd { margin: 12px 0 0; text-align: center; font-size: 11.5px; color: rgba(255,255,255,0.7); }
+.lp-rappel-merci { display: grid; gap: 14px; text-align: center; }
+.lp-rappel-merci p { margin: 0; color: rgba(255,255,255,0.9); line-height: 1.6; }
+.lp-rappel-merci .lp-rappel-merci-titre { font-family: var(--font-jakarta), "Plus Jakarta Sans", "DM Sans", system-ui, sans-serif; font-size: 1.7rem; font-weight: 800; color: #fff; }
+
+.lp-pouce { display: none; }
+
 @media (max-width: 1180px) {
   .lp-bulle-1, .lp-bulle-3 { left: -12%; }
   .lp-bulle-2, .lp-bulle-4 { right: -12%; }
@@ -1677,6 +1886,14 @@ const CSS_LANDING = `
   .lp-pour-autres { font-size: 1.6rem; }
   .lp-ratures li { padding: 14px 0; }
 }
+@media (max-width: 760px) {
+  .lp-pouce { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: rgba(22,6,54,0.96); border-top: 1px solid rgba(196,160,244,0.3); box-shadow: 0 -10px 24px rgba(10,2,30,0.35); transform: translateY(110%); transition: transform .3s ease; }
+  .lp-pouce-on { transform: none; }
+  .lp-pouce a { display: flex; flex: 1; align-items: center; justify-content: center; padding: 13px 10px; border-radius: 100px; font-size: 14px; font-weight: 900; text-align: center; text-decoration: none; }
+  .lp-pouce .lp-pouce-principal { flex: 1.35; background: linear-gradient(135deg, ${T.light}, ${T.mid}); color: ${T.ink}; }
+  .lp-pouce .lp-pouce-secondaire { color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.45); }
+  .lp-fin { padding-bottom: 110px; }
+}
 @media (min-width: 720px) {
   .lp-atouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1687,6 +1904,7 @@ const CSS_LANDING = `
   .lp-engage-grille { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 72px; }
   .lp-habitants-grille { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 64px; }
   .lp-ratures li { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); align-items: center; gap: 32px; }
+  .lp-rappel-grille { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 64px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lp *, .lp *::before, .lp *::after { animation: none !important; transition: none !important; }

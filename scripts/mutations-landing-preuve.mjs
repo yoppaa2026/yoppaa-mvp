@@ -257,6 +257,28 @@ const MUTATIONS = [
     vers: "  const panier = mode === 'pct' && v > 0 && n > 0 ? v / n : 25",
     garde: '🔴 le panier du ticket vient de ses chiffres',
   },
+  // ✅ ALEX, 14/10 : « On t appelle », sans devenir un relais de courrier.
+  {
+    nom: '🔴 le formulaire de rappel n echappe plus ce qu on lui ecrit',
+    fichier: 'app/api/contact-pro/route.js',
+    de: '${echapperHtml(v)}',
+    vers: '${v}',
+    garde: '🔴 tout ce que l’appelant écrit est échappé',
+  },
+  {
+    nom: '🔴 sans cle anti-robot, le site deploye envoie quand meme',
+    fichier: 'app/api/contact-pro/route.js',
+    de: '    if (verdict.skipped && deploye) {',
+    vers: '    if (false) {',
+    garde: '🔴 sur un site déployé, sans clé anti-robot, on refuse',
+  },
+  {
+    nom: '🔴 le motif n est plus controle',
+    fichier: 'app/api/contact-pro/route.js',
+    de: '    const motifRetenu = motifsActifs().find(m => m.cle === motif)',
+    vers: "    const motifRetenu = { cle: motif, libelle: String(motif) }",
+    garde: 'le motif vient d’une liste fermée',
+  },
   // ✅ ALEX, 14/10 : piquer SANS NOMMER.
   {
     nom: '🔴 une pique nomme une plateforme',

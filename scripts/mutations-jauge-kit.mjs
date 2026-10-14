@@ -279,7 +279,8 @@ const MUTATIONS = [
 
   { nom: '🔴 les badges sont chargés mais jamais dessinés',
     banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
-    de: '      ctx.drawImage(b.img, bx,', vers: '      void (b.img, bx,' },
+    // ⚠️ ANCRE RECALÉE LE 14/10 : le dessin rogne la marge transparente.
+    de: '      ctx.drawImage(b.img,\n', vers: '      void (b.img,\n' },
 
   { nom: '🔴 un badge absent laisse un trou au milieu du papier',
     banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
@@ -287,8 +288,19 @@ const MUTATIONS = [
     vers: '  const yPied       = yBadges + hauteurBadges + 48' },
 
   { nom: '⚠️ le badge Google repasse à la hauteur d’Apple et paraît plus petit',
+    // ⚠️ ANCRE RECALÉE LE 14/10 : on aligne la partie OPAQUE (Alex : « même
+    // taille, surtout en hauteur »). Sans le recadrage, Google redevient petit.
+    banc: 'verif:kit', fichier: 'lib/stores.js',
+    de: "visible: { y: 29, hauteur: 192 } }", vers: "visible: { y: 0, hauteur: 250 } }" },
+
+  { nom: '🔴 le dessin reprend le fichier entier, marge transparente comprise',
     banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
-    de: '{ ...BADGE_GOOGLE_PLAY, hauteurPx: 136 }', vers: '{ ...BADGE_GOOGLE_PLAY, hauteurPx: 92 }' },
+    de: '0, b.badge.visible.y * k, b.img.naturalWidth, b.badge.visible.hauteur * k,',
+    vers: '0, 0, b.img.naturalWidth, b.img.naturalHeight,' },
+
+  { nom: '🔴 la landing revient à la correction à l’œil (46 / 68)',
+    banc: 'verif:kit', fichier: 'app/components/LandingReveal.js',
+    de: "style={{ width: Math.round(t.largeur), height: t.hauteur, objectFit: 'cover' }}", vers: '' },
 
   // ══ LE DÉPOUILLEUR PARTAGÉ ══
   //

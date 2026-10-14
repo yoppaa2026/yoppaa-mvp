@@ -14,6 +14,7 @@ import { policesEmbarquees, feuilleEnSvg, _oublierPolices } from '../lib/export-
 import { getPrixPlan } from '../lib/plans.js'
 import { accrocheKit, METIER_LIBRE_MAX } from '../lib/kit-accroche.js'
 import { couperEnDeux, BADGES_AFFICHE } from '../lib/affiche-kit.js'
+import { tailleBadge, BADGE_APP_STORE, BADGE_GOOGLE_PLAY } from '../lib/stores.js'
 import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -227,12 +228,28 @@ const egal = (nom, obtenu, attendu) =>
     verifie('🔴 les badges sont ceux de lib/stores.js',
       BADGES_AFFICHE.length === 2 && BADGES_AFFICHE[0].src === '/store/badge-app-store-fr.svg' && BADGES_AFFICHE[1].src === '/store/badge-google-play-fr.png',
       BADGES_AFFICHE.map(b => b.src).join(', '))
-    verifie('le rapport des hauteurs est celui de la landing (46 / 68)',
-      Math.abs(BADGES_AFFICHE[1].hauteurPx / BADGES_AFFICHE[0].hauteurPx - 68 / 46) < 0.02)
-    verifie('🔴 les badges sont réellement dessinés, sous l’accroche',
-      /ctx\.drawImage\(b\.img, bx,/.test(bloc) && /const yBadges\s+= yAccroche2 \+/.test(bloc))
+    // ⚠️ REPOINTÉE LE 14/10 : le rapport « 46 / 68 » corrigeait la marge du
+    // badge Google à l'œil, et Alex a vu que les deux n'avaient pas la même
+    // hauteur. On aligne désormais la partie OPAQUE, mesurée pixel par pixel.
+    for (const h of [46, 92]) {
+      const [a, g] = BADGES_AFFICHE.map(b => tailleBadge(b, h))
+      verifie(`🔴 à ${h} px, les deux badges ont la même hauteur VISIBLE`, a.hauteur === h && g.hauteur === h, `${a.hauteur} / ${g.hauteur}`)
+    }
+    const g = BADGE_GOOGLE_PLAY.visible
+    verifie('la partie opaque du badge Google est celle mesurée (y 29, 192 px sur 250)',
+      g.y === 29 && g.hauteur === 192, JSON.stringify(g))
+    verifie('et elle est centrée : la même marge en haut et en bas',
+      g.y === BADGE_GOOGLE_PLAY.hauteur - g.y - g.hauteur)
+    verifie('le badge Apple n’a pas de marge à rogner',
+      BADGE_APP_STORE.visible.y === 0 && BADGE_APP_STORE.visible.hauteur === BADGE_APP_STORE.hauteur)
+    verifie('🔴 les badges sont réellement dessinés, sous l’accroche, rognés à leur partie visible',
+      /ctx\.drawImage\(b\.img,\s*0, b\.badge\.visible\.y \* k, b\.img\.naturalWidth, b\.badge\.visible\.hauteur \* k,\s*bx, yBadges, b\.w, HAUTEUR_BADGES\)/.test(bloc)
+      && /const yBadges\s+= yAccroche2 \+/.test(bloc))
     verifie('🔴 et la rangée tient dans la largeur utile',
-      BADGES_AFFICHE.reduce((w, b) => w + b.hauteurPx * b.largeur / b.hauteur, 0) + 14 < 820)
+      BADGES_AFFICHE.reduce((w, b) => w + tailleBadge(b, 92).largeur, 0) + 14 < 820)
+    const landing = lireCode('app/components/LandingReveal.js')
+    verifie('🔴 la landing aligne aussi la partie visible (même règle)',
+      /const t = tailleBadge\(b, 46\)/.test(landing) && /objectFit: 'cover'/.test(landing) && !/hauteur: 68/.test(landing))
     verifie('🔴 un badge absent ne laisse pas un trou au milieu du papier',
       /const badges = imagesBadges\.every\(Boolean\)/.test(bloc) && /const yPied\s+= badges \?/.test(bloc))
   }

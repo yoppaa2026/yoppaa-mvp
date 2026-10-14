@@ -42,7 +42,7 @@ import { RESEAUX } from '@/lib/reseaux'
 import { getPrixPlan, canDo, PLANS } from '@/lib/plans'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import { CAPTURES_COMMERCANT, CAPTURES_YOPPER, captureSrc } from '@/lib/captures-landing'
-import { APP_STORE_URL, GOOGLE_PLAY_URL, BADGE_APP_STORE, BADGE_GOOGLE_PLAY, appPubliee } from '@/lib/stores'
+import { APP_STORE_URL, GOOGLE_PLAY_URL, BADGE_APP_STORE, BADGE_GOOGLE_PLAY, appPubliee, tailleBadge } from '@/lib/stores'
 import { lienWhatsApp, TELEPHONE_AFFICHE, ENCODAGE_OFFERT, motifsActifs } from '@/lib/contact'
 import PartageMobilisation from './PartageMobilisation'
 
@@ -553,16 +553,21 @@ function useVu() {
 // ⚠️ Tant que l'app n'est pas publiée (`lib/stores.js`), les badges restent
 // visibles mais ne mènent nulle part : un lien vers une fiche non publiée
 // ouvre une page « introuvable ».
+// ✅ MÊME HAUTEUR VISIBLE POUR LES DEUX (Alex, 14/10) : la boîte de l'image
+// est la partie OPAQUE du badge (`tailleBadge`), et `object-fit: cover` rogne
+// la marge transparente du fichier Google, centrée en haut et en bas.
 function BadgesStores() {
   const badges = [
-    { url: APP_STORE_URL, b: BADGE_APP_STORE, hauteur: 46 },
-    { url: GOOGLE_PLAY_URL, b: BADGE_GOOGLE_PLAY, hauteur: 68 },
+    { url: APP_STORE_URL, b: BADGE_APP_STORE },
+    { url: GOOGLE_PLAY_URL, b: BADGE_GOOGLE_PLAY },
   ]
   return (
     <div className="lp-stores">
       <div className="lp-stores-badges">
-        {badges.map(({ url, b, hauteur }) => {
-          const img = <img src={b.src} alt={b.alt} width={Math.round(b.largeur * hauteur / b.hauteur)} height={hauteur} loading="lazy" decoding="async"/>
+        {badges.map(({ url, b }) => {
+          const t = tailleBadge(b, 46)
+          const img = <img src={b.src} alt={b.alt} width={Math.round(t.largeur)} height={t.hauteur} loading="lazy" decoding="async"
+            style={{ width: Math.round(t.largeur), height: t.hauteur, objectFit: 'cover' }}/>
           return url
             ? <a key={b.src} href={url} target="_blank" rel="noopener noreferrer">{img}</a>
             : <span key={b.src} className="lp-store-bientot">{img}</span>

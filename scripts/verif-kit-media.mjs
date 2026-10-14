@@ -1075,6 +1075,28 @@ const egal = (nom, obtenu, attendu) =>
       /<Qr src=\{qrCarte\} taille="22mm"\/>[\s\S]{0,700}Scanne pour découvrir/.test(kit))
   }
 
+  // ══ 🔴 LES DÉMOS DES RELECTEURS N'ONT NI KIT NI INVITATION PUBLICS (14/10) ══
+  //
+  // Check de lancement : `/?ref=chez-momo` affichait « Chez Momo t'invite à
+  // rejoindre Yoppaa », et `/kit/chez-momo` son nom, à n'importe qui, alors
+  // que la fiche n'est visible que des comptes de relecture. ⚠️ Les autres
+  // états restent servis : préinscrits et commerces en préparation partagent
+  // leur lien AVANT d'être publiés (règle du 03/10).
+  {
+    const resolve = lireCode('lib/kit-resolve.js')
+    verifie('🔴 ?ref= lit l’état de publication de la fiche',
+      /\.select\('nom, statut_publication'\)/.test(resolve))
+    verifie('🔴 et n’invite pas au nom d’une démo des relecteurs',
+      /if \(com && ficheEnRelecture\(com\)\) return null/.test(resolve))
+    verifie('⚠️ mais sert toujours les commerces en préparation (pas de fichePubliee)',
+      !/fichePubliee/.test(resolve))
+    const pageKit = lireCode('app/kit/[slug]/page.js')
+    verifie('🔴 /kit/ lit l’état de publication de la fiche',
+      /categorie, statut_publication'\)\.eq\('slug', slug\)/.test(pageKit))
+    verifie('🔴 et ne montre pas le kit d’une démo des relecteurs',
+      /if \(com && ficheEnRelecture\(com\)\) return null/.test(pageKit) && !/fichePubliee/.test(pageKit))
+  }
+
   const page = lire('app/brand-kit/commercant/page.js')
   // 🔴 L'ORDRE DES FACES. Inversé, il ne se voit qu'une fois la pile sortie.
   verifie('🔴 le PDF assemble le recto PUIS le verso',

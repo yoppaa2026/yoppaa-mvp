@@ -302,6 +302,15 @@ const MUTATIONS = [
     banc: 'verif:kit', fichier: 'app/components/LandingReveal.js',
     de: "style={{ width: Math.round(t.largeur), height: t.hauteur, objectFit: 'cover' }}", vers: '' },
 
+  // ══ 🔴 LES DÉMOS DES RELECTEURS N'ONT NI KIT NI INVITATION PUBLICS (14/10) ══
+  { nom: '🔴 ?ref=chez-momo invite de nouveau au nom d une démo',
+    banc: 'verif:kit', fichier: 'lib/kit-resolve.js',
+    de: '  if (com && ficheEnRelecture(com)) return null\n', vers: '' },
+
+  { nom: '🔴 /kit/chez-momo montre de nouveau la démo',
+    banc: 'verif:kit', fichier: 'app/kit/[slug]/page.js',
+    de: '  if (com && ficheEnRelecture(com)) return null\n', vers: '' },
+
   // ══ LE DÉPOUILLEUR PARTAGÉ ══
   //
   // 🔴 CELLE-CI PROUVE QUE LE BANC VOIT SA PROPRE CÉCITÉ. Sans la

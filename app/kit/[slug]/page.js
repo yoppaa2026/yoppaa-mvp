@@ -9,6 +9,7 @@ import KitClient from './KitClient'
 import { avantLancement } from '@/lib/lancement'
 import { consigneGoogle } from '@/lib/action-google'
 import { lienFiche } from '@/lib/lien-fiche'
+import { ficheEnRelecture } from '@/lib/statut-commercant'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,12 @@ async function getKit(slug) {
   let consigne = null
 
   // 1) Commerçant onboardé (commercants.slug) — cas au lancement + tests (ex. kebabistro).
-  const { data: com } = await supabase.from('commercants').select('nom, slug, plan, essai_plan, created_at, categorie').eq('slug', slug).maybeSingle()
+  const { data: com } = await supabase.from('commercants').select('nom, slug, plan, essai_plan, created_at, categorie, statut_publication').eq('slug', slug).maybeSingle()
+  // 🔴 UNE DÉMO DES RELECTEURS N'A PAS DE KIT PUBLIC (14/10, check de
+  // lancement) : `/kit/chez-momo` affichait « Chez Momo » à n'importe qui,
+  // alors que la fiche n'est visible que des comptes de relecture. La page dit
+  // ce qu'elle dit d'un slug inconnu.
+  if (com && ficheEnRelecture(com)) return null
   if (com) {
     nom = com.nom
     consigne = consigneGoogle(com)

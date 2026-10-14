@@ -461,7 +461,9 @@ for (const r of ROUTES) {
       ['charge l’essai', /longitude, plan, essai_plan, created_at'/],
     ] },
     { nom: 'la consigne Google du kit', chemin: 'app/kit/[slug]/page.js', regles: [
-      ['charge l’essai', /'nom, slug, plan, essai_plan, created_at, categorie'/],
+      // ⚠️ Ancre repointée le 14/10 : la requête lit aussi `statut_publication`
+      // (kit fermé aux démos des relecteurs, surveillé par `verif:kit`).
+      ['charge l’essai', /'nom, slug, plan, essai_plan, created_at, categorie, statut_publication'/],
     ] },
     { nom: 'le tableau de bord', chemin: 'app/dashboard/ConfigDashboard.js', regles: [
       // ⚠️ Ancre repointée le 29/09 : la requête lit aussi `type` (cartons de table).

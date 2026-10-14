@@ -37,6 +37,9 @@ import {
   // L'ouverture à confirmer (Alex, 30/09 au soir) : sans date décidée, ni date
   // ni compte à rebours, seulement « dès l'ouverture ».
   ouvertureDatee,
+  // ✅ Après l'ouverture (14/10) : le formulaire des habitants ne promet plus
+  // « le lancement », il prévient de l'arrivée de leurs commerçants.
+  avantLancement,
 } from '@/lib/lancement'
 import { RESEAUX } from '@/lib/reseaux'
 import { getPrixPlan, canDo, PLANS } from '@/lib/plans'
@@ -978,7 +981,9 @@ export default function LandingReveal({ referent = null }) {
         setStatut({ envoi: 'ko', message: j.error || 'Une erreur est survenue, réessaie' })
         return
       }
-      setStatut({ envoi: 'ok', message: ouvertureDatee() ? `Bien reçu 🟣 Rendez-vous le ${libelleLancement()}. À très vite !` : 'Bien reçu 🟣 On te prévient dès l’ouverture. À très vite !' })
+      setStatut({ envoi: 'ok', message: !avantLancement()
+        ? 'Bien reçu 🟣 On te prévient dès que tes commerçants arrivent sur Yoppaa. À très vite !'
+        : ouvertureDatee() ? `Bien reçu 🟣 Rendez-vous le ${libelleLancement()}. À très vite !` : 'Bien reçu 🟣 On te prévient dès l’ouverture. À très vite !' })
       if (j.slug_kit) setKitSlug(j.slug_kit)
       if (typeof window !== 'undefined' && window.turnstile && turnstileRef.current) {
         try { window.turnstile.reset(turnstileRef.current) } catch (_) {}
@@ -1538,14 +1543,17 @@ export default function LandingReveal({ referent = null }) {
                     onChange={e => setForm(p => ({ ...p, consentement_marketing: e.target.checked }))}
                     style={{ marginTop: 2, width: 15, height: 15, accentColor: '#9660E0', flexShrink: 0, cursor: 'pointer' }}/>
                   <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, fontWeight: 600 }}>
-                    J&rsquo;accepte de recevoir l&rsquo;annonce du lancement et les actualités de Yoppaa. <span style={{ color: '#C4A0F4' }}>*</span>
+                    {avantLancement()
+                      ? <>J&rsquo;accepte de recevoir l&rsquo;annonce du lancement et les actualités de Yoppaa.</>
+                      : <>J&rsquo;accepte d&rsquo;être prévenu de l&rsquo;arrivée de mes commerçants et de recevoir les actualités de Yoppaa.</>}
+                    {' '}<span style={{ color: '#C4A0F4' }}>*</span>
                   </span>
                 </label>
 
                 {siteKey && <div ref={turnstileRef} />}
 
                 <button type="submit" disabled={statut.envoi === 'envoi' || !formValide} className="lp-form-envoi">
-                  {statut.envoi === 'envoi' ? 'Envoi…' : 'Me prévenir du lancement'}
+                  {statut.envoi === 'envoi' ? 'Envoi…' : avantLancement() ? 'Me prévenir du lancement' : 'Me prévenir'}
                 </button>
 
                 {statut.envoi === 'ko' && statut.message && (

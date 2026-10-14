@@ -351,7 +351,9 @@ const egal = (nom, obtenu, attendu) =>
   // bloc des cartons de table (`verif:carte-table` le surveille de son côté).
   verifie('le tableau de bord rapatrie plan, essai et catégorie',
     /\.select\('slug, nom, plan, essai_plan, created_at, categorie, type'\)/.test(bord))
-  verifie('la page de kit aussi', /\.select\('nom, slug, plan, essai_plan, created_at, categorie'\)/.test(kitPage))
+  // ⚠️ ANCRE REPOINTÉE LE 14/10 : la requête lit aussi `statut_publication`,
+  // pour fermer le kit des démos des relecteurs (`verif:kit` le surveille).
+  verifie('la page de kit aussi', /\.select\('nom, slug, plan, essai_plan, created_at, categorie, statut_publication'\)/.test(kitPage))
 
   // ⚠️ LE LIEN DONNÉ AU COMMERÇANT EST CELUI QUE LE QR IMPRIME. Trois formes
   // du même lien (QR, partage, Google), c'est trois règles à corriger le jour

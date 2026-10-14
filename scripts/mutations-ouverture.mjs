@@ -20,8 +20,10 @@ const LIB = 'lib/lancement.js'
 const REVEAL = 'app/components/LandingReveal.js'
 
 const MUTATIONS = [
-  { nom: '🔴 l ouverture redevient datée en silence',
-    fichier: LIB, de: 'export const OUVERTURE_A_CONFIRMER = true', vers: 'export const OUVERTURE_A_CONFIRMER = false' },
+  // ⚠️ REPOINTÉES LE 14/10 : Alex a basculé l'ouverture (« tout ce soir »).
+  // Le danger mesuré s'inverse : un texte d'AVANT qui survit une fois ouvert.
+  { nom: '🔴 l ouverture redevient « à confirmer » en silence',
+    fichier: LIB, de: 'export const OUVERTURE_A_CONFIRMER = false', vers: 'export const OUVERTURE_A_CONFIRMER = true' },
   { nom: '🔴 sans date, la date du 1er octobre reprend la main',
     fichier: LIB, de: '  if (!datee) return true', vers: '' },
   { nom: '🔴 les phrases ignorent le drapeau',
@@ -34,12 +36,12 @@ const MUTATIONS = [
   // tableau). Le danger mesuré devient le retour du discours d'avant.
   { nom: '🔴 l email de publication reparle d une ouverture à venir',
     fichier: 'lib/resend.js', de: 'tes clients peuvent la voir et commander dès maintenant.', vers: 'elle s’ouvre au public très bientôt.' },
-  { nom: '🔴 l email du kit promet le 1er octobre',
-    fichier: 'lib/resend.js', de: '          ${leJourJ()}, ce sont autant de gens', vers: '          le 1er octobre, ce sont autant de gens' },
-  { nom: '🔴 le merci de préinscription promet le 1er octobre',
-    fichier: 'lib/resend-landing.js', de: '  const quandOuvre = quandOuverture({ avecAnnee: true })', vers: "  const quandOuvre = 'le 1er octobre 2026'" },
+  { nom: '🔴 l email du kit d après annonce une ouverture à venir',
+    fichier: 'lib/resend.js', de: ', ta page est en ligne. Voici ton kit de démarrage', vers: ', ta page s’ouvre au public très bientôt. Voici ton kit de démarrage' },
+  { nom: '🔴 le merci de préinscription promet encore « tu recevras un email ce jour-là »',
+    fichier: 'lib/resend-landing.js', de: '  const ouvert = !avantLancement()', vers: '  const ouvert = false' },
   { nom: '🔴 Google lit une publication au 1er octobre',
-    fichier: 'lib/seo-landing.js', de: '        ...(ouvertureDatee() ? { datePublished: LAUNCH_DATE_ISO.slice(0, 10) } : {}),', vers: '        datePublished: LAUNCH_DATE_ISO.slice(0, 10),' },
+    fichier: 'lib/seo-landing.js', de: '{ datePublished: LAUNCH_DATE_ISO.slice(0, 10) }', vers: "{ datePublished: '2026-10-01' }" },
   // ⚠️ REPOINTÉES LE 14/10 : la landing v2 n'a plus de compte à rebours ni de
   // ligne « Lancement officiel ». La mutation les fait REVENIR, et la garde
   // durcie (« aucun compte à rebours », « aucune ligne Lancement officiel »)
@@ -52,8 +54,12 @@ const MUTATIONS = [
     fichier: REVEAL, de: '<p className="lp-micro">Sans carte de paiement', vers: '<p className="lp-micro">Lancement officiel le {libelleLancement()} · Sans carte de paiement' },
   { nom: '⚠️ le merci du formulaire redonne rendez-vous au 1er octobre',
     fichier: REVEAL, de: "'Bien reçu 🟣 On te prévient dès l’ouverture. À très vite !'", vers: '`Bien reçu 🟣 Rendez-vous le ${libelleLancement()}. À très vite !`' },
-  { nom: '🔴 la meta description donne une date',
-    fichier: 'app/page.tsx', de: "0% de commission Yoppaa pour les commerçants. Lancement ${quandOuverture({ avecAnnee: true })}.`,", vers: '0% de commission Yoppaa pour les commerçants. Lancement le 1er octobre 2026.`,' },
+  { nom: '🔴 la meta description dit encore « Lancement … » une fois ouvert',
+    fichier: 'app/page.tsx', de: 'pour les commerçants. ${finDescription()}`,', vers: 'pour les commerçants. Lancement ${quandOuverture({ avecAnnee: true })}.`,' },
+  { nom: '🔴 le bouton des habitants promet encore « le lancement »',
+    fichier: REVEAL, de: "avantLancement() ? 'Me prévenir du lancement' : 'Me prévenir'", vers: "'Me prévenir du lancement'" },
+  { nom: '🔴 le merci du formulaire n annonce plus l arrivée des commerçants',
+    fichier: REVEAL, de: "'Bien reçu 🟣 On te prévient dès que tes commerçants arrivent sur Yoppaa. À très vite !'", vers: "'Bien reçu 🟣 On te prévient dès l’ouverture. À très vite !'" },
   // ─── L ESSAI DE 100 JOURS, DES L INSCRIPTION (14/10, decision d Alex) ───
   { nom: '🔴 le plancher retombe a trente jours',
     fichier: LIB, de: 'export const ESSAI_JOURS_MINIMUM = 100', vers: 'export const ESSAI_JOURS_MINIMUM = 30' },

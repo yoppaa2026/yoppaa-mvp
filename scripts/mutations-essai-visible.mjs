@@ -185,8 +185,9 @@ const MUTATIONS = [
 
   { nom: '🔴 le kit ne charge plus l’essai',
     fichier: KIT,
-    de: "'nom, slug, plan, essai_plan, created_at, categorie'",
-    vers: "'nom, slug, plan, categorie'" },
+    // ⚠️ ANCRE RECALÉE LE 14/10 : la requête lit aussi `statut_publication`.
+    de: "'nom, slug, plan, essai_plan, created_at, categorie, statut_publication'",
+    vers: "'nom, slug, plan, categorie, statut_publication'" },
 
   { nom: '🔴 la consigne Google du tableau de bord ne charge plus l’essai',
     fichier: BORD,

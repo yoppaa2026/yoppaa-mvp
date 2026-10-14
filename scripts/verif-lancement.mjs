@@ -124,20 +124,25 @@ function sansCommentaires(src) {
     !Number.isNaN(finEssai(new Date('pas une date')).getTime()))
 
   // Les libellés, RENDUS et relus. Ils partent dans des textes contractuels.
-  verifier("le libellé de lancement dit « 1er octobre 2026 »",
-    libelleLancement({ avecAnnee: true }) === '1er octobre 2026',
+  // ⚠️ REPOINTÉE LE 14/10 : l'ouverture publique est fixée au 14 octobre
+  // (Alex, « tout ce soir », apps publiées).
+  verifier("le libellé de lancement dit « 14 octobre 2026 »",
+    libelleLancement({ avecAnnee: true }) === '14 octobre 2026',
     libelleLancement({ avecAnnee: true }))
   verifier("le libellé de facturation dit « 9 janvier 2027 »",
     libelleFinEssaiLancement() === '9 janvier 2027',
     libelleFinEssaiLancement())
   // ⚠️ RÉORIENTÉE LE 30/09 : l'ouverture est À CONFIRMER (Alex). La phrase
   // datée se vérifie avec `datee: true` ; la phrase d'aujourd'hui, sans date.
+  // ⚠️ REPOINTÉES LE 14/10 : la date est décidée (14 octobre) ; la forme sans
+  // date se vérifie désormais avec `datee: false`.
   verifier('la phrase de vente annonce les 100 jours et leur point de départ (date décidée)',
-    phraseEssai(jour('2026-08-20T10:00:00+02:00'), { datee: true }) === '100 jours offerts à partir du 1er octobre',
+    phraseEssai(jour('2026-08-20T10:00:00+02:00'), { datee: true }) === '100 jours offerts à partir du 14 octobre'
+      && phraseEssai(jour('2026-08-20T10:00:00+02:00')) === '100 jours offerts à partir du 14 octobre',
     phraseEssai(jour('2026-08-20T10:00:00+02:00'), { datee: true }))
-  verifier('🔴 ouverture à confirmer : les 100 jours comptent dès l’ouverture, SANS date',
-    phraseEssai(jour('2026-08-20T10:00:00+02:00')) === '100 jours offerts dès l’ouverture',
-    phraseEssai(jour('2026-08-20T10:00:00+02:00')))
+  verifier('🔴 sans date décidée, les 100 jours comptent dès l’ouverture',
+    phraseEssai(jour('2026-08-20T10:00:00+02:00'), { datee: false }) === '100 jours offerts dès l’ouverture',
+    phraseEssai(jour('2026-08-20T10:00:00+02:00'), { datee: false }))
   verifier('et ne chiffre jamais le total avec l\'avance',
     !/14[0-9] jours/.test(phraseEssai(jour('2026-08-20T10:00:00+02:00'))))
   verifier("et hors régime de lancement elle retombe sur l'essai normal",
@@ -145,8 +150,8 @@ function sansCommentaires(src) {
     phraseEssai(jour('2027-06-01T10:00:00+02:00')))
 
   // Les deux constantes elles-mêmes.
-  verifier("l'ouverture publique est bien au 1er octobre 2026",
-    LAUNCH_DATE_ISO.startsWith('2026-10-01'), LAUNCH_DATE_ISO)
+  verifier("l'ouverture publique est bien au 14 octobre 2026",
+    LAUNCH_DATE_ISO.startsWith('2026-10-14'), LAUNCH_DATE_ISO)
   verifier('la première facture de lancement tombe bien le 9 janvier 2027',
     FIN_ESSAI_LANCEMENT_ISO.startsWith('2027-01-09'), FIN_ESSAI_LANCEMENT_ISO)
 
@@ -164,9 +169,14 @@ function sansCommentaires(src) {
 
   // L'avance, et l'addition qui la rend crédible : 42 + 100 = 142.
   const aout = jour('2026-08-20T10:00:00+02:00')
-  verifier("l'avance plus les 100 jours donne bien le total annoncé",
-    joursAvance(aout) + joursOffertsAuLancement() === joursOfferts(aout),
-    `${joursAvance(aout)} + ${joursOffertsAuLancement()} ≠ ${joursOfferts(aout)}`)
+  // ⚠️ REPOINTÉE LE 14/10 : l'égalité « avance + 100 = total » ne tenait que
+  // pour une ouverture au 1er octobre. La promesse faite aux inscrits d'avant
+  // était « 100 jours à partir du 1er octobre », donc offert jusqu'au
+  // 8 janvier : c'est ELLE qu'on vérifie, l'ouverture ayant glissé au 14/10.
+  verifier("🔴 l'inscrit d'août garde sa promesse : offert jusqu'au 8 janvier, facturé le 9",
+    finEssai(aout).toISOString() === new Date('2027-01-09T00:00:00+01:00').toISOString()
+      && joursOfferts(aout) === 142,
+    `${finEssai(aout).toISOString()} · ${joursOfferts(aout)} jours`)
   verifier("l'avance est nulle une fois l'ouverture passée",
     joursAvance(jour('2026-11-01T14:00:00+01:00')) === 0)
   verifier("l'avance ne compte pas les jours d'une date invalide",
@@ -1332,27 +1342,32 @@ function sansCommentaires(src) {
 // que le drapeau est levé.
 {
   const L = await import('../lib/lancement.js')
-  verifier('🔴 l’ouverture est À CONFIRMER (décision d’Alex du 30/09)', L.OUVERTURE_A_CONFIRMER === true && L.ouvertureDatee() === false)
-  verifier('🔴 sans date décidée, on reste AVANT l’ouverture, même en 2027',
-    L.avantLancement(new Date('2027-03-01T12:00:00Z')) === true)
+  // ⚠️ REPOINTÉES LE 14/10 : Alex a basculé l'ouverture (« tout ce soir »,
+  // apps publiées). La date est décidée, au 14 octobre ; la forme sans date
+  // reste vérifiée avec `datee: false`, pour le jour où on en aurait besoin.
+  verifier('🔴 l’ouverture est DÉCIDÉE (Alex, 14/10)', L.OUVERTURE_A_CONFIRMER === false && L.ouvertureDatee() === true)
+  verifier('🔴 sans date décidée, on resterait AVANT l’ouverture, même en 2027',
+    L.avantLancement(new Date('2027-03-01T12:00:00Z'), { datee: false }) === true)
   verifier('avec une date décidée, la date reprend la main',
-    L.avantLancement(new Date('2026-10-02T12:00:00Z'), { datee: true }) === false
-      && L.avantLancement(new Date('2026-09-30T12:00:00Z'), { datee: true }) === true)
+    L.avantLancement(new Date('2026-10-14T12:00:00Z'), { datee: true }) === false
+      && L.avantLancement(new Date('2026-10-13T12:00:00Z'), { datee: true }) === true)
+  verifier('🔴 et à la mise en ligne, on est APRÈS l’ouverture (aucun texte d’avant ne survit)',
+    L.avantLancement(new Date('2026-10-15T08:00:00+02:00')) === false && L.avantLancement() === false)
   const paires = [
-    ['quandOuverture', 'le 1er octobre', 'très bientôt'],
-    ['depuisLOuverture', 'à partir du 1er octobre', 'dès l’ouverture'],
-    ['desLOuverture', 'dès le 1er octobre', 'dès l’ouverture'],
-    ['jusquALOuverture', 'jusqu’au 1er octobre', 'jusqu’à l’ouverture'],
-    ['aLOuverture', 'le 1er octobre', 'à l’ouverture'],
-    ['lOuverture', 'le 1er octobre', 'l’ouverture'],
-    ['leJourJ', 'le 1er octobre', 'le jour de l’ouverture'],
+    ['quandOuverture', 'le 14 octobre', 'très bientôt'],
+    ['depuisLOuverture', 'à partir du 14 octobre', 'dès l’ouverture'],
+    ['desLOuverture', 'dès le 14 octobre', 'dès l’ouverture'],
+    ['jusquALOuverture', 'jusqu’au 14 octobre', 'jusqu’à l’ouverture'],
+    ['aLOuverture', 'le 14 octobre', 'à l’ouverture'],
+    ['lOuverture', 'le 14 octobre', 'l’ouverture'],
+    ['leJourJ', 'le 14 octobre', 'le jour de l’ouverture'],
   ]
   for (const [f, datee, sansDate] of paires) {
     verifier(`${f} : datée « ${datee} », sinon « ${sansDate} »`,
-      L[f]({ datee: true }) === datee && L[f]({ datee: false }) === sansDate && L[f]() === sansDate,
+      L[f]({ datee: true }) === datee && L[f]({ datee: false }) === sansDate && L[f]() === datee,
       `${L[f]({ datee: true })} / ${L[f]({ datee: false })} / ${L[f]()}`)
   }
-  verifier('la date d’avec l’année, quand elle est décidée', L.quandOuverture({ avecAnnee: true, datee: true }) === 'le 1er octobre 2026')
+  verifier('la date d’avec l’année, quand elle est décidée', L.quandOuverture({ avecAnnee: true, datee: true }) === 'le 14 octobre 2026')
   verifier('une capitale en début de phrase', L.majuscule('le jour de l’ouverture') === 'Le jour de l’ouverture' && L.majuscule('') === '')
 
   // Les emails, RENDUS : aucune date d'ouverture n'y survit.
@@ -1363,11 +1378,42 @@ function sansCommentaires(src) {
   verifier('🔴 l’email de publication ne promet aucune date, ni ouverture à venir',
     !/1er octobre/.test(validation) && !/l’ouverture|très bientôt/.test(validation))
   const kit = R.emailKitBienvenue({ nom_commercant: 'Test', slug: 'test', avant_lancement: true })
-  verifier('🔴 l’email du kit ne promet aucune date', !/1er octobre/.test(kit) && /(dès|à) l’ouverture|très bientôt/.test(kit))
+  // ⚠️ REPOINTÉES LE 14/10 (ouverture basculée). Le kit d'AVANT n'est plus
+  // envoyé (`avant_lancement` vaut `avantLancement()`, faux désormais) : on
+  // vérifie celui d'APRÈS, qui ne doit promettre aucune ouverture à venir.
+  verifier('🔴 l’appelant du kit lit la règle d’ouverture',
+    /avant_lancement: avantLancement\(\)/.test(lire('app/api/kit/envoyer/route.js')))
+  const kitApres = R.emailKitBienvenue({ nom_commercant: 'Test', slug: 'test', avant_lancement: false })
+  verifier('🔴 l’email du kit d’après ne promet aucune ouverture à venir',
+    !/1er octobre|très bientôt|l’ouverture|préinscription/i.test(kitApres) && /ta page est en ligne/.test(kitApres))
+  void kit
   const RL = await import('../lib/resend-landing.js')
-  const merci = RL.emailMerciPreinscription({ mode_landing: 'reveal', type_utilisateur: 'commercant' })
-  verifier('🔴 le merci de préinscription dit « très bientôt »', !/1er octobre/.test(merci) && /très bientôt/.test(merci))
-  verifier('🔴 le balisage Google ne publie aucune date', !/datePublished/.test(jsonLdLandingString()))
+  // 🔴 Le merci de préinscription, APRÈS : il disait « l'app ouvre … : tu
+  // recevras un email ce jour-là », une promesse déjà dépassée pour qui
+  // s'inscrit après l'ouverture.
+  for (const type of ['commercant', 'yopper']) {
+    const merci = RL.emailMerciPreinscription({ mode_landing: 'reveal', type_utilisateur: type })
+    verifier(`🔴 le merci de préinscription (${type}) dit que c’est OUVERT`,
+      /Yoppaa est ouvert/.test(merci) && !/très bientôt|ce jour-là|L'app ouvre|rapproche la tienne de son ouverture/.test(merci),
+      type)
+  }
+  verifier('🔴 le merci commerçant mène à l’inscription', /www\.yoppaa\.app\/signup/.test(RL.emailMerciPreinscription({ mode_landing: 'reveal', type_utilisateur: 'commercant' })))
+  verifier('🔴 le merci habitant mène à l’app', /www\.yoppaa\.app\/commander/.test(RL.emailMerciPreinscription({ mode_landing: 'reveal', type_utilisateur: 'yopper' })))
+  // La date est décidée : le balisage Google la publie, et c'est la bonne.
+  verifier('🔴 le balisage Google publie la VRAIE date d’ouverture',
+    jsonLdLandingString().includes('"datePublished":"2026-10-14"'))
+  // La description Google de la landing : plus de « Lancement le … ».
+  const pageAccueil = sansProse(lire('app/page.tsx'))
+  verifier('🔴 la description Google ne dit plus « Lancement » une fois ouvert',
+    /avantLancement\(\)\s*\?\s*`Lancement \$\{quandOuverture/.test(pageAccueil)
+      && (pageAccueil.match(/\$\{finDescription\(\)\}/g) || []).length === 2
+      && !/Lancement \$\{quandOuverture\(\{ avecAnnee: true \}\)\}\.`,\n/.test(pageAccueil))
+  // Le formulaire des habitants : plus de « Me prévenir du lancement ».
+  const rvForm = sansProse(lire('app/components/LandingReveal.js'))
+  verifier('🔴 le formulaire des habitants ne promet plus « le lancement » une fois ouvert',
+    /avantLancement\(\) \? 'Me prévenir du lancement' : 'Me prévenir'/.test(rvForm)
+      && /On te prévient dès que tes commerçants arrivent sur Yoppaa/.test(rvForm)
+      && /être prévenu de l&rsquo;arrivée de mes commerçants/.test(rvForm))
 
   // Les écrans : chaque date a sa branche « à confirmer ».
   const rv = sansProse(lire('app/components/LandingReveal.js'))
@@ -1382,8 +1428,12 @@ function sansCommentaires(src) {
   const nbDates = (rv.match(/\{libelleLancement\(\)\}|\$\{libelleLancement\(\)\}/g) || []).length
   const nbBranches = (rv.match(/ouvertureDatee\(\)/g) || []).length
   verifier('🔴 chaque date de la landing a sa branche « à confirmer »', nbBranches >= nbDates, `${nbDates} dates, ${nbBranches} branches`)
+  // ⚠️ REPOINTÉE LE 14/10 : les deux descriptions passent par
+  // `finDescription()`, qui ne dit « Lancement … » qu'avant l'ouverture.
   verifier('🔴 les DEUX meta descriptions ne donnent aucune date brute',
-    (lire('app/page.tsx').match(/Lancement \$\{quandOuverture\(\{ avecAnnee: true \}\)\}\./g) || []).length === 2 && !/libelleLancement|1er octobre/.test(sansProse(lire('app/page.tsx'))))
+    (lire('app/page.tsx').match(/\$\{finDescription\(\)\}/g) || []).length === 2
+      && (lire('app/page.tsx').match(/Lancement \$\{quandOuverture\(\{ avecAnnee: true \}\)\}\./g) || []).length === 1
+      && !/libelleLancement|1er octobre/.test(sansProse(lire('app/page.tsx'))))
   for (const [nom, f] of [['l’affichette', 'app/affichette/[slug]/page.js'], ['l’inscription', 'app/signup/page.js'], ['le kit', 'app/kit/[slug]/KitClient.js'], ['le brand-kit', 'app/brand-kit/commercant/page.js'], ['les emails', 'lib/resend.js'], ['l’email de merci', 'lib/resend-landing.js']]) {
     verifier(`🔴 ${nom} ne lit plus la date brute`, !/libelleLancement\(/.test(sansProse(lire(f))))
   }

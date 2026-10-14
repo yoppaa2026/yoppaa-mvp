@@ -583,7 +583,11 @@ export default function KitCommercant() {
                     {ESSAI_JOURS_MINIMUM} jours offerts, dès ton inscription.
                   </p>
                   <p style={{ margin: '1.8mm 0 0', fontSize: '9.6pt', lineHeight: 1.4, fontWeight: 600, color: T.light }}>
-                    Sans carte de paiement, sans engagement. <strong style={{ color: '#fff' }}>Retourne la feuille&nbsp;: comment ça marche.</strong>
+                    {/* ✅ Alex, 14/10 : la phrase entière plutôt que « Retourne la
+                        feuille : comment ça marche », et sur sa propre ligne pour
+                        qu'aucun mot ne reste seul en dessous. */}
+                    Sans carte de paiement, sans engagement.<br/>
+                    <strong style={{ color: '#fff' }}>Retourne la feuille pour savoir comment ça fonctionne.</strong>
                   </p>
                 </div>
                 <div>

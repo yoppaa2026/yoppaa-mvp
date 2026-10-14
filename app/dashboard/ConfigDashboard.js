@@ -170,7 +170,12 @@ import {
 // commerçant lit avant de valider. Le prix ne se défait pas, la règle non plus.
 import {
   articlesDuLot, patchsDuLot, resumeDuLot, refusDuLot, TVA_INCHANGEE, grillesARemplacer,
+  ecartsDuLot, VENTE_EN_LIGNE, VENTE_VITRINE, DELAI_JOURS_MAX,
 } from '@/lib/catalogue-lot'
+
+// Les actions groupées qui ont un refus à elles (`refusDuLot`), vérifié avant
+// d'écrire et affiché en rouge. Les autres n'ont rien à saisir.
+const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande']
 import OrdreCategories from '@/app/dashboard/OrdreCategories'
 import TabEquipe from '@/app/dashboard/TabEquipe'
 import { EQUIPE_DANS_LA_BARRE } from '@/lib/equipe'
@@ -597,6 +602,12 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [lotStock, setLotStock] = useState({ mode: 'jour', quantite: '' })
   const [lotTva, setLotTva] = useState({ emporter: TVA_INCHANGEE, surPlace: TVA_INCHANGEE })
   const [lotTemps, setLotTemps] = useState('')
+  // ✅ 15/10 (Alex) : la façon de vendre, d'un coup. Rien n'est choisi
+  // d'avance : un lot qui partirait sur un choix par défaut écrirait ce que le
+  // commerçant n'a pas décidé.
+  const [lotVente, setLotVente] = useState(null)        // VENTE_EN_LIGNE | VENTE_VITRINE
+  const [lotJourMeme, setLotJourMeme] = useState(null)  // true | false
+  const [lotCommande, setLotCommande] = useState({ actif: null, delaiJours: '1', max: '' })
   // La valeur que l'action choisie applique : une seule source pour l'aperçu,
   // le refus et l'écriture.
   const valeurDuLot = (action) => action === 'prix' ? lotValeur
@@ -604,6 +615,9 @@ function TabMenu({ commercantId, commercant, toast }) {
     : action === 'stock' ? lotStock
     : action === 'tva' ? lotTva
     : action === 'temps_prepa' ? lotTemps
+    : action === 'vente' ? lotVente
+    : action === 'jour_meme' ? lotJourMeme
+    : action === 'sur_commande' ? lotCommande
     : null
   // ─── QUI DOIT RELIRE SES GROUPES (Alex, 25/09) ───────────────────────────
   //
@@ -1078,16 +1092,18 @@ function TabMenu({ commercantId, commercant, toast }) {
     // ⚠️ 10/10 : le stock, la TVA et le temps de préparation ont leur refus
     // aussi (`refusDuLot`), avec les mots du formulaire d'un article.
     const valeur = valeurDuLot(lotAction)
-    if (['prix', 'stock', 'tva', 'temps_prepa'].includes(lotAction)) {
+    if (ACTIONS_AVEC_REFUS.includes(lotAction)) {
       const refus = refusDuLot({ action: lotAction, articles: vises, valeur })
       if (refus) { toast(refus, 'error'); return }
     }
 
-    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur })
+    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
+    // ✅ 15/10 : les articles qu'une règle refuse sont nommés, pas écrits.
+    const ecarts = ecartsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
     // 🔴 « 15 par jour » remplace aussi la grille jour par jour (Alex, 10/10).
     const grilles = lotAction === 'stock' ? grillesARemplacer({ articles: vises, valeur, grilles: stockParJourMap }) : null
     const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String)])
-    if (touches.size === 0) { toast(resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles }), 'error'); return }
+    if (touches.size === 0) { toast(resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts }), 'error'); return }
 
     if (lotAction === 'prix') {
       // ⚠️ LE VERDICT PORTE UN NOM À LUI, et ce n'est pas un détail de style :
@@ -1134,7 +1150,9 @@ function TabMenu({ commercantId, commercant, toast }) {
     }
     setLotIds([])
     setLotAction(null)
-    toast(touches.size === 1 ? '1 article modifié.' : `${touches.size} articles modifiés.`)
+    // Les articles laissés de côté se redisent : la phrase lue avant de valider
+    // a disparu avec le panneau.
+    toast(`${touches.size === 1 ? '1 article modifié.' : `${touches.size} articles modifiés.`}${ecarts.length ? ` ${ecarts.length === 1 ? '1 laissé' : `${ecarts.length} laissés`} de côté : ${ecarts.map(e => e.nom).join(', ')}.` : ''}`)
   }
 
   // ─── RANGER UN ARTICLE DANS SA CATÉGORIE (Alex, 10/10) ───────────────────
@@ -1962,10 +1980,17 @@ function TabMenu({ commercantId, commercant, toast }) {
 
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: lotAction ? 10 : 0 }}>
                     {[
-                      { val: 'disponible', label: 'Rendre disponibles' },
-                      { val: 'indisponible', label: 'Rendre indisponibles' },
+                      // ✅ 15/10 : les mots de la fiche article (« Sur ta fiche » / « Masqué »).
+                      { val: 'disponible', label: 'Mettre sur ta fiche' },
+                      { val: 'indisponible', label: 'Masquer' },
                       { val: 'categorie', label: 'Changer de catégorie' },
                       { val: 'prix', label: 'Ajuster les prix' },
+                      // ✅ 15/10 (Alex) : la façon de vendre, d'un coup.
+                      { val: 'vente', label: 'En ligne ou vitrine' },
+                      ...(deuxCircuits ? [
+                        { val: 'jour_meme', label: 'Le jour même' },
+                        { val: 'sur_commande', label: 'Sur commande' },
+                      ] : []),
                       { val: 'stock', label: 'Stock et quantités' },
                       { val: 'tva', label: 'Taux de TVA' },
                       { val: 'temps_prepa', label: 'Temps de préparation' },
@@ -2039,6 +2064,45 @@ function TabMenu({ commercantId, commercant, toast }) {
                     </div>
                   )}
 
+                  {/* ✅ 15/10 (Alex) : les mêmes cartes que la fiche article,
+                      pour que le lot dise exactement la même chose. */}
+                  {lotAction === 'vente' && (
+                    <div style={{ marginBottom: 10 }}>
+                      <ChoixCartes label="Comment le client l’achète ?" choix={choixDeVente(commercant)}
+                        estChoisi={c => lotVente === (c.vendable ? VENTE_EN_LIGNE : VENTE_VITRINE)}
+                        onChoisir={c => setLotVente(c.vendable ? VENTE_EN_LIGNE : VENTE_VITRINE)}/>
+                    </div>
+                  )}
+
+                  {lotAction === 'jour_meme' && (
+                    <div style={{ marginBottom: 10 }}>
+                      <ChoixCartes label="Se vend-il le jour même ?" choix={CHOIX_JOUR_MEME}
+                        estChoisi={c => lotJourMeme === c.vente_jour}
+                        onChoisir={c => setLotJourMeme(c.vente_jour)}/>
+                    </div>
+                  )}
+
+                  {lotAction === 'sur_commande' && (
+                    <div style={{ marginBottom: 10 }}>
+                      <ChoixCartes label="Se prend-il sur commande ?" choix={CHOIX_SUR_COMMANDE}
+                        estChoisi={c => lotCommande.actif === c.commande_active}
+                        onChoisir={c => setLotCommande(p => ({ ...p, actif: c.commande_active }))}/>
+                      {lotCommande.actif === true && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                          <span style={{ fontSize: 12.5, color: T.ink, fontWeight: 700 }}>Commandé au moins</span>
+                          <input type="number" min="1" max={DELAI_JOURS_MAX} step="1" value={lotCommande.delaiJours}
+                            onChange={e => setLotCommande(p => ({ ...p, delaiJours: e.target.value }))}
+                            aria-label="Délai en jours" style={{ ...s.input, width: 70, fontSize: 13, textAlign: 'center' }}/>
+                          <span style={{ fontSize: 12.5, color: T.muted }}>jour(s) avant</span>
+                          <span style={{ fontSize: 12.5, color: T.ink, fontWeight: 700, marginLeft: 8 }}>Maximum par jour</span>
+                          <input type="number" min="1" step="1" value={lotCommande.max}
+                            onChange={e => setLotCommande(p => ({ ...p, max: e.target.value }))}
+                            aria-label="Maximum par jour" placeholder="sans limite" style={{ ...s.input, width: 110, fontSize: 13, textAlign: 'center' }}/>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {lotAction === 'temps_prepa' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                       <input type="number" min="0" step="1" value={lotTemps} onChange={e => setLotTemps(e.target.value)}
@@ -2050,22 +2114,26 @@ function TabMenu({ commercantId, commercant, toast }) {
                   {lotAction && (() => {
                     const vises = articlesDuLot(articles, lotIds)
                     const valeur = valeurDuLot(lotAction)
-                    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur })
+                    const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
+                    const ecarts = ecartsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
                     const grilles = lotAction === 'stock' ? grillesARemplacer({ articles: vises, valeur, grilles: stockParJourMap }) : null
                     const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String)])
                     // 🔴 LE REFUS SE LIT AVANT TOUT (Alex, 10/10 : « 0 : pas de
                     // message, rien ne se passe ») : il disait « déjà ce stock ».
-                    const refus = ['prix', 'stock', 'tva', 'temps_prepa'].includes(lotAction) && lotIds.length > 0
+                    const refus = ACTIONS_AVEC_REFUS.includes(lotAction) && lotIds.length > 0
                       ? refusDuLot({ action: lotAction, articles: vises, valeur }) : null
                     // Rien de saisi : la consigne en gris, pas une erreur en rouge.
                     const rienSaisi = (lotAction === 'stock' && lotStock.mode !== 'illimite' && String(lotStock.quantite ?? '').trim() === '')
                       || (lotAction === 'prix' && String(lotValeur ?? '').trim() === '')
                       || (lotAction === 'temps_prepa' && String(lotTemps ?? '').trim() === '')
+                      || (lotAction === 'vente' && lotVente === null)
+                      || (lotAction === 'jour_meme' && lotJourMeme === null)
+                      || (lotAction === 'sur_commande' && lotCommande.actif === null)
                     const rouge = !!refus && !rienSaisi
                     return (
                       <>
                         <p style={{ fontSize: 11.5, color: rouge ? '#B91C1C' : T.muted, fontWeight: rouge ? 700 : 400, margin: '0 0 10px', lineHeight: 1.5 }}>
-                          {refus || resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles })}
+                          {refus || resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts })}
                         </p>
                         <button style={{ ...s.btn, ...s.btnPrimary, padding: '7px 14px', fontSize: 12 }}
                           onClick={appliquerLot} disabled={lotEnCours || !!refus || touches.size === 0}>

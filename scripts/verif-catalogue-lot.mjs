@@ -32,8 +32,9 @@ const CATALOGUE = [
 // ═══ 1) QUI EST VISÉ ══════════════════════════════════════════════════════
 {
   // ⚠️ REPOINTÉE LE 10/10 : sept actions (stock, TVA, temps de préparation).
-  v('les sept actions sont nommées',
-    ACTIONS_LOT.join(',') === 'disponible,indisponible,categorie,prix,stock,tva,temps_prepa', ACTIONS_LOT.join(','))
+  // ⚠️ REPOINTÉE LE 15/10 : dix (en ligne ou vitrine, le jour même, sur commande).
+  v('les dix actions sont nommées',
+    ACTIONS_LOT.join(',') === 'disponible,indisponible,categorie,prix,stock,tva,temps_prepa,vente,jour_meme,sur_commande', ACTIONS_LOT.join(','))
 
   v('la sélection retrouve ses articles',
     articlesDuLot(CATALOGUE, [1, 3]).map(a => a.nom).join(',') === 'Margherita,Tiramisu',
@@ -145,9 +146,12 @@ const CATALOGUE = [
   v('le résumé annonce ce qui bouge, pas ce qui est coché',
     /1 article deviendront|1 article/.test(phrase) && !/4 articles/.test(phrase), phrase)
 
+  // ⚠️ REPOINTÉE LE 15/10 : accordée au nombre (« il disparaîtra » pour un).
   v('rendre indisponible dit la conséquence visible',
-    /disparaîtront de ta fiche/.test(resumeDuLot({
+    /disparaîtra de ta fiche/.test(resumeDuLot({
       action: 'indisponible', patchs: [{ id: 1 }], coches: 1,
+    })) && /disparaîtront de ta fiche/.test(resumeDuLot({
+      action: 'indisponible', patchs: [{ id: 1 }, { id: 2 }], coches: 2,
     })))
 
   // 🔴 LE PRIX NE SE DÉFAIT PAS, et ça se dit au moment où ça compte.
@@ -158,8 +162,9 @@ const CATALOGUE = [
     /anciens prix ne sont pas conservés/.test(prixPhrase), prixPhrase)
 
   // ⚠️ « RIEN À FAIRE » DOIT SE LIRE COMME TEL, pas comme un succès à zéro.
+  // ⚠️ REPOINTÉE LE 15/10 : les mots de la fiche article (« sur ta fiche »).
   v('rien à changer se dit',
-    /déjà disponibles/.test(resumeDuLot({ action: 'disponible', patchs: [], coches: 3 })))
+    /déjà sur ta fiche/.test(resumeDuLot({ action: 'disponible', patchs: [], coches: 3 })))
   v('aucune case cochée se dit',
     /Coche des articles/.test(resumeDuLot({ action: 'disponible', patchs: [], coches: 0 })))
 }
@@ -234,7 +239,9 @@ const CATALOGUE = [
   // ⚠️ REPOINTÉE LE 10/10 : le refus passe par `refusDuLot`, qui garde celui du
   // prix (`refusDAjustement`) et ajoute ceux du stock, de la TVA et du temps.
   v('le refus est consulté AVANT de calculer et d’écrire, pour le prix comme pour le reste',
-    /if \(\['prix', 'stock', 'tva', 'temps_prepa'\]\.includes\(lotAction\)\) \{\s*const refus = refusDuLot\(\{ action: lotAction, articles: vises, valeur \}\)\s*if \(refus\) \{ toast\(refus, 'error'\); return \}/.test(bloc)
+    // ⚠️ REPOINTÉE LE 15/10 : la liste des actions qui ont un refus est nommée
+    // (`ACTIONS_AVEC_REFUS`), partagée par l'aperçu et l'écriture.
+    /if \(ACTIONS_AVEC_REFUS\.includes\(lotAction\)\) \{\s*const refus = refusDuLot\(\{ action: lotAction, articles: vises, valeur \}\)\s*if \(refus\) \{ toast\(refus, 'error'\); return \}/.test(bloc)
     && bloc.indexOf('refusDuLot(') < bloc.indexOf('patchsDuLot('))
   v('le résumé affiché vient du module', /resumeDuLot\(/.test(config))
   v('🔴 la grille est remplacée par le geste « Revenir à la quantité par défaut » (jours fermés gardés), relu',
@@ -243,7 +250,8 @@ const CATALOGUE = [
   v('🔴 le compte annoncé = articles ou grilles touchés',
     /const touches = new Set\(\[\.\.\.patchs\.map\(p => String\(p\.id\)\), \.\.\.\(grilles\?\.articleIds \|\| \[\]\)\.map\(String\)\]\)/.test(bloc))
   v('🔴 L’ÉCRAN DIT LE REFUS AVANT TOUT (le 0 disait « déjà ce stock » et le bouton ne faisait rien)',
-    /\{refus \|\| resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles \}\)\}/.test(config)
+    // ⚠️ REPOINTÉE LE 15/10 : le résumé reçoit aussi les articles écartés.
+    /\{refus \|\| resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles, ecarts \}\)\}/.test(config)
     && /disabled=\{lotEnCours \|\| !!refus \|\| touches\.size === 0\}/.test(config))
   v('une croix referme l’article ouvert dans Personnalisation (en haut et en bas)',
     (config.match(/onClick=\{e => e\.currentTarget\.closest\('details'\)\?\.removeAttribute\('open'\)\}/g) || []).length === 2)
@@ -261,6 +269,96 @@ const CATALOGUE = [
   // le 25/09 parce que le harnais l'a montrée manquante.
   v('un refus arrête l’écriture',
     /const okPrix = await confirme\([\s\S]{0,400}if \(!okPrix\) return/.test(bloc))
+}
+
+// ═══ 7) LA FAÇON DE VENDRE, D'UN COUP (Alex, 15/10), EXÉCUTÉE ═══════════════
+//
+// En ligne ou vitrine, le jour même, sur commande. 🔴 LE DANGER : un lot qui
+// rendrait un article invendable (« non » au jour même sans commande à
+// l'avance), ou le remettrait en ligne avec « 0 par jour » (épuisé). Ces
+// articles-là sont LAISSÉS DE CÔTÉ ET NOMMÉS, jamais écrits.
+{
+  const L = await import('../lib/catalogue-lot.js')
+  const A = { id: 1, nom: 'Croissant', est_vitrine: false, vente_jour: true, commande_active: false, delai_minutes: 0, stock_mode: 'jour', stock_jour: 30 }
+  const B = { id: 2, nom: 'Gâteau', est_vitrine: false, vente_jour: true, commande_active: true, delai_minutes: 2880, commande_max_jour: 5, stock_mode: 'jour', stock_jour: 4 }
+  const V0 = { id: 3, nom: 'Tarte', est_vitrine: true, vente_jour: true, commande_active: false, stock_mode: 'jour', stock_jour: 0 }
+  const V = { id: 4, nom: 'Pizza', est_vitrine: true, vente_jour: true, commande_active: false, stock_mode: 'illimite', stock_jour: 0 }
+  const SC = { id: 5, nom: 'Pièce montée', est_vitrine: false, vente_jour: false, commande_active: true, delai_minutes: 4320, stock_mode: 'jour', stock_jour: 0 }
+  const MAG = { id: 6, nom: 'Confiture', est_vitrine: false, vente_jour: true, commande_active: false, stock_mode: 'magasin', stock_jour: 12 }
+  const tous = [A, B, V0, V, SC, MAG]
+  const ids = (ps) => ps.map(p => p.id).join(',')
+
+  // ── En ligne ou vitrine ──
+  const vitrine = L.patchsDuLot({ action: 'vente', articles: tous, valeur: L.VENTE_VITRINE })
+  v('en vitrine : seuls ceux vendus en ligne changent', ids(vitrine) === '1,2,5,6', ids(vitrine))
+  v('🔴 en vitrine, SEUL est_vitrine change (stock et délai gardés pour le retour)',
+    vitrine.every(p => JSON.stringify(p.patch) === '{"est_vitrine":true}'), JSON.stringify(vitrine[0]?.patch))
+  const enLigne = L.patchsDuLot({ action: 'vente', articles: tous, valeur: L.VENTE_EN_LIGNE })
+  v('🔴 en ligne : la pizza sans limite repasse, la tarte à « 0 par jour » NON', ids(enLigne) === '4', ids(enLigne))
+  const ecartsLigne = L.ecartsDuLot({ action: 'vente', articles: tous, valeur: L.VENTE_EN_LIGNE })
+  v('🔴 et la tarte est NOMMÉE avec sa raison', ecartsLigne.length === 1 && ecartsLigne[0].nom === 'Tarte' && /quantité valable/.test(ecartsLigne[0].raison), JSON.stringify(ecartsLigne))
+  v('hors alimentaire, seul le stock compte pour repasser en ligne',
+    ids(L.patchsDuLot({ action: 'vente', articles: [V0, V], valeur: L.VENTE_EN_LIGNE, deuxCircuits: false })) === '4')
+
+  // ── Le jour même ──
+  const nonJour = L.patchsDuLot({ action: 'jour_meme', articles: tous, valeur: false })
+  v('🔴 « non » au jour même : seul le gâteau (aussi sur commande) passe', ids(nonJour) === '2', ids(nonJour))
+  const ecartsNon = L.ecartsDuLot({ action: 'jour_meme', articles: tous, valeur: false })
+  v('🔴 le croissant et la confiture sont nommés : ils ne seraient plus vendus du tout',
+    ['Croissant', 'Confiture'].every(n => ecartsNon.some(e => e.nom === n && /plus vendu du tout/.test(e.raison))), JSON.stringify(ecartsNon))
+  v('les articles en vitrine sont nommés aussi', ecartsNon.some(e => e.nom === 'Pizza' && /vitrine/.test(e.raison)))
+  v('le patch ne touche QUE vente_jour', JSON.stringify(nonJour[0]?.patch) === '{"vente_jour":false}', JSON.stringify(nonJour[0]?.patch))
+  const ouiJour = L.patchsDuLot({ action: 'jour_meme', articles: tous, valeur: true })
+  v('🔴 « oui » au jour même : la pièce montée à « 0 par jour » ne repasse pas', ids(ouiJour) === '', ids(ouiJour))
+  v('et elle est nommée', L.ecartsDuLot({ action: 'jour_meme', articles: [SC], valeur: true })[0]?.raison?.includes('quantité valable'))
+
+  // ── Sur commande ──
+  v('le délai commence à 1 jour', /1 jour/.test(L.refusDuLot({ action: 'sur_commande', articles: tous, valeur: { actif: true, delaiJours: '0', max: '' } }) || ''))
+  v('un maximum par jour commence à 1', /commence à 1/.test(L.refusDuLot({ action: 'sur_commande', articles: tous, valeur: { actif: true, delaiJours: '1', max: '0' } }) || ''))
+  v('il faut choisir oui ou non', /Choisis/.test(L.refusDuLot({ action: 'sur_commande', articles: tous, valeur: { actif: null } }) || ''))
+  const surCmd = L.patchsDuLot({ action: 'sur_commande', articles: tous, valeur: { actif: true, delaiJours: '1', max: '' } })
+  v('🔴 « oui » sur commande : la confiture au stock qui baisse est écartée', !ids(surCmd).split(',').includes('6'), ids(surCmd))
+  v('le croissant passe sur commande, à 1 jour, sans maximum',
+    JSON.stringify(surCmd.find(p => p.id === 1)?.patch) === JSON.stringify({ vente_jour: true, commande_active: true, delai_minutes: 1440, commande_max_jour: null, horizon_jours: null }),
+    JSON.stringify(surCmd.find(p => p.id === 1)?.patch))
+  v('le gâteau change de délai (2 jours → 1 jour)', surCmd.some(p => p.id === 2 && p.patch.delai_minutes === 1440))
+  v('rien ne s’écrit pour un article déjà réglé pareil',
+    L.patchsDuLot({ action: 'sur_commande', articles: [B], valeur: { actif: true, delaiJours: '2', max: '5' } }).length === 0)
+  const sansCmd = L.patchsDuLot({ action: 'sur_commande', articles: tous, valeur: { actif: false } })
+  v('🔴 « non » sur commande : la pièce montée (que sur commande) est écartée', ids(sansCmd) === '2', ids(sansCmd))
+  v('et le gâteau perd délai et maximum, comme la fiche article',
+    JSON.stringify(sansCmd[0]?.patch) === JSON.stringify({ vente_jour: true, commande_active: false, delai_minutes: 0, commande_max_jour: null, horizon_jours: null }),
+    JSON.stringify(sansCmd[0]?.patch))
+  v('🔴 hors alimentaire, le jour même et la commande ne s’écrivent jamais',
+    L.patchsDuLot({ action: 'jour_meme', articles: tous, valeur: false, deuxCircuits: false }).length === 0
+      && L.patchsDuLot({ action: 'sur_commande', articles: tous, valeur: { actif: false }, deuxCircuits: false }).length === 0)
+
+  // ── Ce que le commerçant lit ──
+  const phrase = L.resumeDuLot({ action: 'jour_meme', patchs: nonJour, coches: 6, valeur: false, ecarts: ecartsNon })
+  v('🔴 le résumé dit ce qui change PUIS les articles laissés de côté, avec leur raison',
+    /^1 article ne se commandera plus qu’à l’avance/.test(phrase) && /laissés de côté : .*Croissant \(il ne se vend pas sur commande/.test(phrase), phrase)
+  v('l’accord du verbe suit le nombre',
+    /2 articles seront vendus en ligne/.test(L.resumeDuLot({ action: 'vente', patchs: [{ id: 1 }, { id: 2 }], coches: 2, valeur: L.VENTE_EN_LIGNE })))
+  v('« masqué » dit qu’il reste ici, au singulier comme au pluriel',
+    /1 article sera masqué : il disparaîtra/.test(L.resumeDuLot({ action: 'indisponible', patchs: [{ id: 1 }], coches: 1 }))
+      && /2 articles seront masqués : ils disparaîtront/.test(L.resumeDuLot({ action: 'indisponible', patchs: [{ id: 1 }, { id: 2 }], coches: 2 })))
+
+  // ── L'écran ──
+  const ecran = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  v('🔴 l’écran passe `deuxCircuits` au lot, à l’aperçu ET à l’écriture',
+    (ecran.match(/patchsDuLot\(\{ action: lotAction, articles: vises, valeur, deuxCircuits \}\)/g) || []).length === 2
+      && (ecran.match(/ecartsDuLot\(\{ action: lotAction, articles: vises, valeur, deuxCircuits \}\)/g) || []).length === 2)
+  v('🔴 le résumé reçoit les articles écartés', (ecran.match(/resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles, ecarts \}\)/g) || []).length === 2)
+  v('🔴 le jour même et la commande ne sont proposés qu’à l’alimentaire',
+    /\.\.\.\(deuxCircuits \? \[\s*\{ val: 'jour_meme'/.test(ecran))
+  v('les cartes du lot sont celles de la fiche article',
+    /choix=\{choixDeVente\(commercant\)\}\s*estChoisi=\{c => lotVente ===/.test(ecran)
+      && /choix=\{CHOIX_JOUR_MEME\}\s*estChoisi=\{c => lotJourMeme ===/.test(ecran)
+      && /choix=\{CHOIX_SUR_COMMANDE\}\s*estChoisi=\{c => lotCommande\.actif ===/.test(ecran))
+  v('rien n’est choisi d’avance', /useState\(null\)\s*\/\/ VENTE_EN_LIGNE|const \[lotVente, setLotVente\] = useState\(null\)/.test(ecran)
+    && /const \[lotJourMeme, setLotJourMeme\] = useState\(null\)/.test(ecran) && /useState\(\{ actif: null, delaiJours: '1', max: '' \}\)/.test(ecran))
+  v('les refus des nouvelles actions sont vérifiés avant d’écrire',
+    /const ACTIONS_AVEC_REFUS = \['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande'\]/.test(ecran))
 }
 
 console.log(`\nAgir en lot sur le catalogue : ${ok} vérifications`)

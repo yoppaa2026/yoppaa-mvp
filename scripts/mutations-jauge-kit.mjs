@@ -147,10 +147,21 @@ const MUTATIONS = [
     de: '    if (i > 0) doc.addPage([largeurMm, hauteurMm], \'portrait\')',
     vers: '    doc.addPage([largeurMm, hauteurMm], \'portrait\')' },
 
+  // ══ LE KIT PAR SEGMENT (14/10) ══ Les erreurs de l'ancien papier ne
+  // reviennent pas : un papier plastifié ne se corrige plus.
+  { nom: '🔴 la carte de visite repromet le 8 janvier',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: "{ESSAI_JOURS_MINIMUM} jours offerts, dès l&rsquo;inscription</p>",
+    vers: "Gratuit jusqu&rsquo;au 8 janvier 2027</p>" },
+  { nom: '🔴 « la place de marché » revient dans le descripteur',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: '<p style={S.descripteur}>{seg.pour}</p>',
+    vers: '<p style={S.descripteur}>La place de marché du commerce local belge</p>' },
   { nom: '🔴 les deux faces partent dans le mauvais ordre',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
-    de: '<TelechargementCombine pages={[recto, verso]}/>',
-    vers: '<TelechargementCombine pages={[verso, recto]}/>' },
+    // ⚠️ ANCRE RECALÉE LE 14/10 : la balise porte maintenant le nom du segment.
+    de: '<TelechargementCombine pages={[recto, verso]}',
+    vers: '<TelechargementCombine pages={[verso, recto]}' },
 
   { nom: '🔴 jspdf repart dans le bundle de tout le monde',
     banc: 'verif:kit', fichier: 'lib/export-feuille.js',
@@ -172,20 +183,24 @@ const MUTATIONS = [
   // tarifs sont paramétrables par variable d'environnement dans `lib/plans.js`.
   { nom: '🔴 un tarif est écrit en dur sur le papier au lieu d’être lu dans lib/plans.js',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
-    de: "{euros(getPrixPlan('communiquer').mensuel)}", vers: '19,90 €' },
+    // ⚠️ ANCRE RECALÉE LE 14/10 : les formules sont un tableau au verso.
+    de: "prix: euros(getPrixPlan('communiquer').mensuel)", vers: "prix: '19,90 €'" },
 
   { nom: '🔴 le HTVA disparaît : un prix TTC sous-entendu chez un professionnel',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
-    de: '{euros(getPrixPlan(\'vendre\').mensuel)}, HTVA par mois.',
-    vers: '{euros(getPrixPlan(\'vendre\').mensuel)} par mois.' },
+    // ⚠️ ANCRE RECALÉE LE 14/10 (formules au verso).
+    de: "prix: euros(getPrixPlan('vendre').mensuel), sous: 'HTVA par mois'",
+    vers: "prix: euros(getPrixPlan('vendre').mensuel), sous: 'par mois'" },
 
   // ══ LES APLATS PÂLES (29/08) ══
   //
   // 🔴 CE DÉFAUT NE SE VOIT NULLE PART À L'ÉCRAN. Le violet très clair ressort
   // BLEU CIEL au tirage, et ça coûte une feuille pour l'apprendre.
+  // ⚠️ ANCRE RECALÉE LE 14/10 : le « closer » est devenu le bloc « l'abonnement
+  // n'enferme personne », tenu par le même filet violet.
   { nom: '🔴 un aplat pâle revient sur le closer : il ressortira bleu à l’impression',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
-    de: "<div style={{ margin: '5mm 0 0', background: '#fff', border: `1.4pt solid ${T.main}`",
+    de: "<div style={{ margin: '5mm 0 0', border: `1.4pt solid ${T.main}`",
     vers: "<div style={{ margin: '5mm 0 0', background: T.bg, border: `1.4pt solid ${T.main}`" },
 
   { nom: '🔴 le logo du bandeau repasse en clair et disparaît sur le fond foncé',

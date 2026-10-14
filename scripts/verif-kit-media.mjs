@@ -870,7 +870,9 @@ const egal = (nom, obtenu, attendu) =>
     // mises en un seul paragraphe. Une garde qui recopie un format rougit sur
     // une amélioration légitime, et on finit par la desserrer au lieu de
     // l'écouter. On mesure : les deux prix et le HTVA voyagent ENSEMBLE.
-    const i = kit.indexOf('Ensuite, tu choisis')
+    // ⚠️ REPOINTÉE LE 14/10 : les trois formules ont quitté le socle du recto
+    // pour leur propre bloc au verso (kit par segment, base commune).
+    const i = kit.indexOf("{ nom: 'Exister', prix: 'Gratuit'")
     const socle = i === -1 ? '' : kit.slice(i, i + 900)
     verifie('le bloc des formules existe', socle.length > 200, String(socle.length))
     // ⚠️ HTVA DANS LE MÊME BLOC QUE LES PRIX. On s'adresse à des professionnels :
@@ -905,8 +907,11 @@ const egal = (nom, obtenu, attendu) =>
     }
     // ⚠️ La bordure, elle, reste permise : un filet de 1,2pt ne montre pas de
     // dominante. C'est l'APLAT qui trahit, pas le trait.
+    // ⚠️ REPOINTÉE LE 14/10 : les cartes de signaux (bord `T.light`) sont
+    // parties ; les blocs clairs de la v2 sont le bloc « l'abonnement n'enferme
+    // personne » et le ticket à remplir, tenus par un filet.
     verifie('les blocs clairs tiennent par leur bordure',
-      /border: `1\.2pt solid \$\{T\.light\}`/.test(kit) && /border: `1\.4pt solid \$\{T\.main\}`/.test(kit))
+      /border: `1\.4pt solid \$\{T\.main\}`/.test(kit) && /border: `1pt dashed \$\{T\.ink\}`/.test(kit))
     // Le bandeau du verso est foncé, et son logo est passé en conséquence :
     // un logo sombre sur fond sombre serait invisible, et ne se verrait qu'au
     // tirage puisque le composant ne lève pas.
@@ -915,10 +920,45 @@ const egal = (nom, obtenu, attendu) =>
       /<YoppaaLogo size=\{22\} mode="dark"\/>/.test(kit))
   }
 
+  // ══ 🔥 LE KIT PAR SEGMENT, SUR LA BASE DE LA LANDING V2 (14/10) ══
+  //
+  // Décision d'Alex : une base commune + un recto par segment. Et les erreurs
+  // relevées sur l'ancien papier ne doivent pas revenir : un papier plastifié
+  // ne se corrige plus.
+  {
+    const kit = lireCode('app/brand-kit/commercant/page.js')
+    for (const cle of ['alimentaire', 'restaurant', 'services', 'detail']) {
+      verifie(`le segment « ${cle} » a son recto`, new RegExp(`cle: '${cle}',`).test(kit))
+    }
+    verifie('🔴 le QR porte le segment de la feuille',
+      /useQr\(urlQr\(`kit-\$\{seg\.cle\}`\)\)/.test(kit) && /#commercants`/.test(kit))
+    verifie('🔴 plus de « place de marché » (formule abandonnée)',
+      !/place de march|places de march/i.test(kit))
+    verifie('🔴 aucune date de fin de gratuité imprimée, ni sur l’A4 ni sur la carte',
+      !/8 janvier|9 janvier|jusqu&rsquo;au|Gratuit jusqu/.test(kit))
+    verifie('🔴 les jours offerts viennent de la règle, partout où ils sont dits',
+      (kit.match(/\{ESSAI_JOURS_MINIMUM\} jours offerts/g) || []).length >= 3)
+    verifie('🔴 plus de délai inventé (« cinq minutes »)', !/cinq minutes/.test(kit))
+    verifie('🔴 le Good Morning se dit avec sa cadence : chaque semaine en Exister',
+      /'Ta place chaque semaine dans le Good Morning Yoppers'/.test(kit)
+      && /'Ta place chaque matin dans le Good Morning Yoppers'/.test(kit))
+    verifie('🔴 aucun compte d’habitants inventé', !/\d+ habitants? (ont|aimeraient)/.test(kit))
+    verifie('le ticket à remplir n’imprime aucun taux côté « eux »',
+      /<LigneAVide libelle="Ce qu’on me prend" unite="%"\/>/.test(kit))
+    verifie('le téléphone vient de lib/contact, comme WhatsApp sur la landing',
+      /from '@\/lib\/contact'/.test(kit) && /tel: TELEPHONE_AFFICHE/.test(kit))
+    verifie('l’encodage offert suit son drapeau', /\{ENCODAGE_OFFERT && \(/.test(kit))
+    for (const marque of ['Uber', 'Deliveroo', 'Takeaway', 'Just Eat', 'TheFork', 'Planity', 'Salonkee', 'Treatwell', 'Fritzy', 'Zenchef']) {
+      verifie(`le kit ne nomme pas ${marque}`, !new RegExp(marque, 'i').test(kit))
+    }
+  }
+
   const page = lire('app/brand-kit/commercant/page.js')
   // 🔴 L'ORDRE DES FACES. Inversé, il ne se voit qu'une fois la pile sortie.
   verifie('🔴 le PDF assemble le recto PUIS le verso',
-    /<TelechargementCombine pages=\{\[recto, verso\]\}\/>/.test(page))
+    // ⚠️ REPOINTÉE LE 14/10 : le PDF porte maintenant le segment dans son nom
+    // (quatre rectos), l'ordre des faces reste le même.
+    /<TelechargementCombine pages=\{\[recto, verso\]\}( nom=\{`[^`]+`\})?\/>/.test(page))
   verifie('le bouton combiné existe et dit ce qu’il produit',
     /PDF recto\/verso · les 2 pages A4/.test(page))
   verifie('🔴 les boutons sont masqués à l\'impression',

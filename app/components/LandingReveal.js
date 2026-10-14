@@ -1647,17 +1647,18 @@ const CSS_LANDING = `
 .lp-ctas { display: flex; flex-wrap: wrap; gap: 12px; }
 .lp-micro { margin: 18px 0 0; font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.75); }
 
-.lp-tel { position: relative; width: min(290px, 74vw); margin: 0 auto; }
-.lp-tel-cadre { padding: 10px; border-radius: 40px; background: #0B0318; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 30px 60px rgba(0,0,0,0.45); transform: rotate(-3deg); }
-.lp-tel-ecran { aspect-ratio: 9 / 18.5; overflow: hidden; border-radius: 31px; background: #fff; }
-.lp-tel-ecran img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.lp-tel { position: relative; width: min(290px, 72vw); margin: 0 auto; }
+@media (min-width: 900px) { .lp-tel { width: 320px; } }
+.lp-tel-cadre { padding: 10px; border-radius: 42px; background: #0B0318; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 30px 60px rgba(0,0,0,0.45); }
+.lp-tel-ecran { overflow: hidden; border-radius: 32px; background: #fff; padding-bottom: 14px; }
+.lp-tel-ecran img { display: block; width: 100%; height: auto; }
 .lp-bulle { position: absolute; display: flex; align-items: center; gap: 10px; max-width: 230px; padding: 10px 14px; border-radius: 16px; background: #fff; color: ${T.ink}; box-shadow: 0 14px 30px rgba(10,2,30,0.35); font-size: 12.5px; line-height: 1.3; font-weight: 600; animation: lp-bulle 12s ease-in-out infinite both; }
 .lp-bulle i { flex-shrink: 0; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: ${T.pale}; color: ${T.main}; }
 .lp-bulle strong { display: block; font-size: 13px; font-weight: 900; }
-.lp-bulle-1 { top: 8%; left: -22%; }
-.lp-bulle-2 { top: 33%; right: -24%; animation-delay: 3s; }
-.lp-bulle-3 { top: 58%; left: -24%; animation-delay: 6s; }
-.lp-bulle-4 { bottom: 8%; right: -18%; animation-delay: 9s; }
+.lp-bulle-1 { top: 20%; left: -20%; }
+.lp-bulle-2 { top: 38%; right: -20%; animation-delay: 3s; }
+.lp-bulle-3 { top: 56%; left: -20%; animation-delay: 6s; }
+.lp-bulle-4 { top: 74%; right: -20%; animation-delay: 9s; }
 @keyframes lp-bulle { 0% { opacity: 0; transform: translateY(14px) scale(.9); } 4%, 30% { opacity: 1; transform: none; } 36%, 100% { opacity: 0; transform: translateY(-8px) scale(.96); } }
 
 .lp-bande { overflow: hidden; padding: 17px 0; background: ${T.main}; color: #fff;
@@ -1716,10 +1717,8 @@ const CSS_LANDING = `
 .lp-barre-nous { background: linear-gradient(90deg, #A7F3D0, #6EE7B7); }
 .lp-tickets { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px 28px; max-width: 760px; margin: 26px auto 0; }
 @media (min-width: 640px) { .lp-tickets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.lp-ticket { padding: 20px 20px 28px; border-radius: 3px 3px 0 0; background: #FFFDF6; color: ${T.ink}; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Courier New", monospace; font-size: 13.5px; line-height: 1.4; transform: rotate(-1.2deg);
-  -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat, radial-gradient(circle at 50% 100%, transparent 6px, #000 6.5px) bottom / 14px 7px repeat-x;
-  mask: linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat, radial-gradient(circle at 50% 100%, transparent 6px, #000 6.5px) bottom / 14px 7px repeat-x; }
-.lp-ticket-nous { background: #F1FFF7; transform: rotate(1deg); }
+.lp-ticket { padding: 18px 20px 20px; border-radius: 16px; background: #FFFDF6; border-top: 5px solid #F87171; color: ${T.ink}; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Courier New", monospace; font-size: 13.5px; line-height: 1.4; box-shadow: 0 12px 26px rgba(0,0,0,0.25); }
+.lp-ticket-nous { background: #F1FFF7; border-top-color: #6EE7B7; }
 .lp-ticket p { margin: 0; }
 .lp-ticket-tete { margin-bottom: 12px !important; padding-bottom: 10px; border-bottom: 1.5px dashed rgba(26,8,64,0.35); text-align: center; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .lp-ticket-ligne, .lp-ticket-total { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-variant-numeric: tabular-nums; }

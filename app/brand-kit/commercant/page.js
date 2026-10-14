@@ -62,6 +62,7 @@ import { ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
 // Le téléphone de l'entreprise (appel et WhatsApp) et l'encodage offert : la
 // même source que la landing.
 import { TELEPHONE_AFFICHE, ENCODAGE_OFFERT } from '@/lib/contact'
+import { accrocheKit, METIER_LIBRE_MAX } from '@/lib/kit-accroche'
 
 // ⚠️ LA DESTINATION DES QR EST UNE DÉCISION, PAS UN DÉTAIL.
 //
@@ -120,25 +121,34 @@ const I = {
 // ⚠️ TROIS ATOUTS, PAS CINQ : « ils te trouvent, ils viennent sans
 // t'appeler, ils reviennent ». C'est la structure de la landing, et trois
 // blocs se lisent d'un regard là où cinq puces se survolent.
+//
+// 🔴 AUCUN MÉTIER EN EXEMPLE DANS CE TEXTE (Alex, 14/10, option 1). « Tu tiens
+// une friterie ? » et le « cornet de frites » vexaient la sandwicherie et la
+// boulangerie d'à côté, qui ont presque les mêmes besoins ; « chaque pull »
+// laissait le fleuriste dehors. La feuille est GÉNÉRALISTE : la pastille
+// (`accroche`, voir `lib/kit-accroche.js`), la ligne du haut (`facons`, des
+// MANIÈRES de vendre et pas une liste de métiers, qui en oublierait toujours
+// un) et les textes valent pour tout le segment. Le métier précis ne vit que
+// dans la pastille, et seulement quand on le TAPE dans l'atelier.
 const SEGMENTS = [
   {
     cle: 'alimentaire',
     onglet: 'Alimentaire à emporter',
-    pour: 'Friteries, snacks, boulangeries, boucheries, traiteurs, food trucks',
-    metier: 'une friterie',
+    facons: 'Au comptoir, à emporter, en livraison',
+    accroche: { verbe: 'Tu tiens', pastille: 'un commerce de bouche' },
     titre: ['Les autres prennent tes commandes.', 'Yoppaa t’amène des clients.'],
-    pique: 'Ton cornet de frites, ce n’est pas à nous d’en manger une part.',
+    pique: 'Ce que tu vends, ce n’est pas à nous d’en manger une part.',
     atouts: [
       { icone: I.pin, titre: 'Ils te trouvent.', texte: 'À l’heure de manger, ils ouvrent l’app de leur commune : qui est ouvert, ce qu’il reste. Toi, à deux pas.' },
-      { icone: I.sac, titre: 'Ils commandent sans t’appeler.', texte: 'Sauces, tailles, heure de retrait : tout arrive écrit. Un appel en plein coup de feu, c’est une frite qui brûle.' },
+      { icone: I.sac, titre: 'Ils commandent sans t’appeler.', texte: 'Options, quantités, heure de retrait : tout arrive écrit. Un appel en plein coup de feu, c’est une commande qui attend.' },
       { icone: I.boucle, titre: 'Ils reviennent.', texte: 'Fidélité au numéro de GSM, et ce qu’il te reste le soir repart à prix réduit au lieu d’être jeté.' },
     ],
   },
   {
     cle: 'restaurant',
     onglet: 'Restaurant',
-    pour: 'Restaurants, brasseries, pizzerias, tavernes',
-    metier: 'un restaurant',
+    facons: 'En salle, en terrasse, à emporter',
+    accroche: { verbe: 'Tu tiens', pastille: 'un restaurant' },
     titre: ['Les autres prennent tes réservations.', 'Yoppaa t’amène des clients.'],
     pique: 'Chez nous, un couvert réservé ne se paie pas au couvert.',
     atouts: [
@@ -150,12 +160,12 @@ const SEGMENTS = [
   {
     cle: 'services',
     onglet: 'Services sur rendez-vous',
-    pour: 'Coiffeurs, barbershops, instituts, bien-être, garages',
-    metier: 'un salon',
+    facons: 'En salon, en cabinet, à domicile',
+    accroche: { verbe: 'Tu travailles', pastille: 'sur rendez-vous' },
     titre: ['Les autres prennent tes rendez-vous.', 'Yoppaa t’amène des clients.'],
     pique: 'Ton agenda est plein ? Tant mieux. Ça ne nous rapporte pas un centime de plus.',
     atouts: [
-      { icone: I.pin, titre: 'Ils te trouvent.', texte: 'Le dimanche soir, ils cherchent un créneau près de chez eux. Ton salon est fermé, ton agenda ne l’est pas.' },
+      { icone: I.pin, titre: 'Ils te trouvent.', texte: 'Le dimanche soir, ils cherchent un créneau près de chez eux. Tu es fermé, ton agenda ne l’est pas.' },
       { icone: I.agenda, titre: 'Ils réservent sans t’appeler.', texte: 'Prestation, personne, heure : plus de répondeur. Le rappel part tout seul une heure avant.' },
       { icone: I.boucle, titre: 'Ils reviennent.', texte: 'Abonnements, cartes de séances, bons cadeaux : le client revient sans que tu le relances.' },
     ],
@@ -163,13 +173,13 @@ const SEGMENTS = [
   {
     cle: 'detail',
     onglet: 'Détail et boutiques',
-    pour: 'Mode, fleuristes, librairies, décoration, épiceries fines',
-    metier: 'une boutique',
-    titre: ['Les autres prennent une part de chaque pull.', 'Yoppaa t’amène des clients.'],
-    pique: 'Ta vitrine, ton stock, ton prix. Pas de commission Yoppaa planquée sous chaque pull.',
+    facons: 'En vitrine, en rayon, à retirer sur place',
+    accroche: { verbe: 'Tu tiens', pastille: 'une boutique' },
+    titre: ['Les autres prennent une part de chaque vente.', 'Yoppaa t’amène des clients.'],
+    pique: 'Ta vitrine, ton stock, ton prix. Pas de commission Yoppaa planquée dans ton ticket de caisse.',
     atouts: [
       { icone: I.pin, titre: 'Ils te trouvent.', texte: 'Ils veulent acheter près de chez eux, sans attendre un colis. Ta vitrine est dans leur poche.' },
-      { icone: I.vitrine, titre: 'Ils achètent sans t’appeler.', texte: 'Tailles, couleurs, stock : ils choisissent et passent prendre. Ils entrent, et ils voient le reste.' },
+      { icone: I.vitrine, titre: 'Ils achètent sans t’appeler.', texte: 'Ils voient ce qui est en stock, choisissent et passent prendre. Ils entrent, et ils voient le reste.' },
       { icone: I.boucle, titre: 'Ils reviennent.', texte: 'Tes nouveautés en notification, la fidélité, les bons cadeaux : le client qu’on t’offre devient le tien.' },
     ],
   },
@@ -388,11 +398,19 @@ export default function KitCommercant() {
   // Le segment vient de l'adresse (`?segment=restaurant`) pour qu'un lien
   // ouvre directement la bonne feuille, puis des onglets de l'atelier.
   const [cleSegment, setCleSegment] = useState('alimentaire')
+  // Le métier tapé pour une tournée ciblée (« une poissonnerie »). Vide, la
+  // pastille généraliste du segment reste : voir `lib/kit-accroche.js`.
+  const [metierLibre, setMetierLibre] = useState('')
   useEffect(() => {
-    const voulu = new URLSearchParams(window.location.search).get('segment')
+    const params = new URLSearchParams(window.location.search)
+    const voulu = params.get('segment')
     if (SEGMENTS.some(s => s.cle === voulu)) setCleSegment(voulu)
+    // `?metier=une%20poissonnerie` : un lien envoyé ouvre la feuille prête.
+    const metier = params.get('metier')
+    if (metier) setMetierLibre(metier.slice(0, METIER_LIBRE_MAX))
   }, [])
   const seg = SEGMENTS.find(s => s.cle === cleSegment) || SEGMENTS[0]
+  const accroche = accrocheKit(seg.accroche, metierLibre)
   const qr = useQr(urlQr(`kit-${seg.cle}`))
   const qrInscription = useQr(urlInscription(`kit-${seg.cle}`))
   // La carte de visite sert à tous les segments : son QR ne porte que « carte ».
@@ -402,7 +420,9 @@ export default function KitCommercant() {
   const recto = useRef(null), rectoCorps = useRef(null), rectoPied = useRef(null)
   const verso = useRef(null), versoCorps = useRef(null), versoPied = useRef(null)
   const carteTexte = useRef(null), carteQr = useRef(null)
-  const debRecto = useAjustement(recto, rectoCorps, rectoPied, seg.cle)
+  // ⚠️ La pastille change la hauteur du recto : un métier long passe sur deux
+  // lignes. La jauge doit remesurer à chaque lettre, pas seulement au segment.
+  const debRecto = useAjustement(recto, rectoCorps, rectoPied, `${seg.cle}|${accroche.pastille}`)
   const debVerso = useAjustement(verso, versoCorps, versoPied, seg.cle)
 
   const feuille = {
@@ -448,6 +468,24 @@ export default function KitCommercant() {
               </button>
             ))}
           </div>
+          {/* ✅ Option 1 d'Alex (14/10) : généraliste par défaut, le métier en
+              option, tapé librement (« on n'a jamais tous les métiers »). */}
+          <label style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 10px', margin: '0 0 14px', fontSize: 14, fontWeight: 700, color: T.ink }}>
+            Métier visé (facultatif)&nbsp;:
+            <input type="text" value={metierLibre} maxLength={METIER_LIBRE_MAX}
+              onChange={e => setMetierLibre(e.target.value)}
+              placeholder={`vide = « ${seg.accroche.verbe} ${seg.accroche.pastille} ? »`}
+              style={{ flex: '1 1 260px', maxWidth: 420, padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${FILET}`, fontSize: 14, fontFamily: 'inherit', color: T.ink }}/>
+            {metierLibre.trim() && (
+              <button type="button" onClick={() => setMetierLibre('')}
+                style={{ padding: '8px 14px', borderRadius: 100, border: `1.5px solid ${FILET}`, background: '#fff', color: T.deep, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Revenir à la feuille générale
+              </button>
+            )}
+            <span style={{ flexBasis: '100%', fontSize: 12.5, fontWeight: 600, color: '#3F3355' }}>
+              Avec l&rsquo;article, comme il se lira&nbsp;: «&nbsp;une poissonnerie&nbsp;», «&nbsp;un salon de coiffure&nbsp;». La pastille devient «&nbsp;Tu tiens une poissonnerie&nbsp;?&nbsp;», le reste de la feuille ne change pas.
+            </span>
+          </label>
           <p style={{ margin: '0 0 8px', fontSize: 14, lineHeight: 1.6, color: '#3F3355' }}>
             <strong>Impression :</strong> Ctrl+P, format A4 portrait, marges nulles, « graphiques d&rsquo;arrière-plan » coché.
             Deux pages, puis les cartes de visite.
@@ -480,11 +518,11 @@ export default function KitCommercant() {
                 <div style={{ background: `linear-gradient(140deg, ${T.panel} 0%, ${T.ink} 55%, ${T.deep} 100%)`, color: '#fff', padding: '11mm 17mm 9mm' }}>
                   <YoppaaLogo size={30} mode="dark"/>
                   <p style={{ margin: '4.5mm 0 0', fontSize: '8.4pt', fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase', color: T.light }}>
-                    {seg.pour}
+                    {seg.facons}
                   </p>
                   <p style={{ margin: '4mm 0 0', fontSize: '15pt', fontWeight: 800, color: 'rgba(255,255,255,.92)' }}>
-                    Tu tiens{' '}
-                    <span style={{ display: 'inline-block', padding: '.4mm 3.2mm 1mm', borderRadius: '2.4mm', background: '#fff', color: T.ink }}>{seg.metier}</span>&nbsp;?
+                    {accroche.verbe}{' '}
+                    <span style={{ display: 'inline-block', padding: '.4mm 3.2mm 1mm', borderRadius: '2.4mm', background: '#fff', color: T.ink }}>{accroche.pastille}</span>&nbsp;?
                   </p>
                   <h1 style={{ margin: '3.5mm 0 0', fontSize: '32pt', lineHeight: 1.04, letterSpacing: '-.03em', wordSpacing: '.06em', fontWeight: 800, color: '#fff', textWrap: 'balance' }}>
                     {seg.titre[0]} {seg.titre[1]}
@@ -553,8 +591,10 @@ export default function KitCommercant() {
                   <div style={{ background: '#fff', borderRadius: '3.5mm', padding: '3mm' }}>
                     <Qr src={qr} taille="28mm"/>
                   </div>
-                  <p style={{ margin: '2.6mm 0 0', fontSize: '8.2pt', lineHeight: 1.3, fontWeight: 800, color: '#fff', textAlign: 'center' }}>
-                    Scanne et regarde
+                  {/* ✅ Alex, 14/10 : « ils doivent savoir qu'il y a une
+                      différence » entre les deux QR. Chacun DIT où il mène. */}
+                  <p style={{ margin: '2.6mm 0 0', fontSize: '8.6pt', lineHeight: 1.3, fontWeight: 800, color: '#fff', textAlign: 'center' }}>
+                    Scanne pour découvrir
                   </p>
                 </div>
               </div>
@@ -660,7 +700,7 @@ export default function KitCommercant() {
               </div>
 
               {/* ══ L'APPEL À L'ACTION : le QR pour AGIR, et un humain ══ */}
-              <div ref={versoPied} style={{ marginTop: 'auto', background: T.panel, color: '#fff', padding: '6mm 17mm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '7mm' }}>
+              <div ref={versoPied} style={{ marginTop: 'auto', background: T.panel, color: '#fff', padding: '4.5mm 17mm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '7mm' }}>
                 <div>
                   <p style={{ margin: 0, fontSize: '22pt', fontWeight: 800, letterSpacing: '-.025em', wordSpacing: '.06em', lineHeight: 1.05 }}>
                     Prêt&nbsp;? Inscris-toi.
@@ -678,10 +718,14 @@ export default function KitCommercant() {
                 </div>
                 {/* ⚠️ UN QR DES DEUX CÔTÉS : un A4 posé sur un comptoir ne montre
                     qu'une face. Celui-ci mène à l'INSCRIPTION (face de la décision). */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2.6mm', flexShrink: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.8mm', flexShrink: 0 }}>
                   <div style={{ background: '#fff', borderRadius: '3mm', padding: '2.6mm' }}>
                     <Qr src={qrInscription} taille="26mm"/>
                   </div>
+                  {/* Le pendant de « Scanne pour découvrir » au recto. */}
+                  <p style={{ margin: 0, fontSize: '8.6pt', lineHeight: 1.3, fontWeight: 800, color: '#fff', textAlign: 'center' }}>
+                    Scanne pour t&rsquo;inscrire
+                  </p>
                   <YoppaaLogo size={22} mode="dark"/>
                 </div>
               </div>
@@ -732,6 +776,10 @@ export default function KitCommercant() {
               </p>
               <p style={{ margin: '2.4mm 0 0', fontSize: '7.2pt', lineHeight: 1.5, fontWeight: 600, color: T.grey }}>
                 Yoppaa ne prend aucune<br/>commission sur tes ventes.
+              </p>
+              {/* Son QR mène à la landing, comme celui du recto de l'A4. */}
+              <p style={{ margin: '2mm 0 0', fontSize: '7.6pt', fontWeight: 800, color: T.main }}>
+                Scanne pour découvrir
               </p>
             </div>
           </div>

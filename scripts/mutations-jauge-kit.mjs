@@ -156,7 +156,9 @@ const MUTATIONS = [
   { nom: '🔴 « la place de marché » revient dans le descripteur',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
     // ⚠️ ANCRE RECALÉE LE 14/10 (version tunnel) : la ligne des métiers.
-    de: '                    {seg.pour}',
+    // ⚠️ RECALÉE UNE 2e FOIS LE 14/10 (option 1) : la liste de métiers est
+    // devenue les manières de vendre (`facons`).
+    de: '                    {seg.facons}',
     vers: '                    La place de marché du commerce local belge' },
   { nom: '🔴 les deux faces partent dans le mauvais ordre',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
@@ -209,6 +211,54 @@ const MUTATIONS = [
   { nom: '🔴 le logo du bandeau repasse en clair et disparaît sur le fond foncé',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
     de: '<YoppaaLogo size={22} mode="dark"/>', vers: '<YoppaaLogo size={22} mode="light"/>' },
+
+  // ══ ✅ LA FEUILLE GÉNÉRALISTE, LE MÉTIER EN OPTION (Alex, 14/10, option 1) ══
+  { nom: '🔴 un métier tapé fait d’espaces vide la pastille',
+    banc: 'verif:kit', fichier: 'lib/kit-accroche.js',
+    de: '  if (libre) return', vers: '  if (metierLibre != null) return' },
+
+  { nom: '🔴 le métier tapé est ignoré, la feuille reste générale',
+    banc: 'verif:kit', fichier: 'lib/kit-accroche.js',
+    de: "return { verbe: 'Tu tiens', pastille: libre }", vers: 'return { verbe: accroche.verbe, pastille: accroche.pastille }' },
+
+  { nom: '⚠️ un métier tapé n’est plus nettoyé de ses espaces',
+    banc: 'verif:kit', fichier: 'lib/kit-accroche.js',
+    de: ".replace(/\\s+/g, ' ').trim()", vers: '' },
+
+  { nom: '⚠️ un métier tapé n’est plus borné en longueur',
+    banc: 'verif:kit', fichier: 'lib/kit-accroche.js',
+    de: '.slice(0, METIER_LIBRE_MAX)', vers: '' },
+
+  { nom: '🔴 le cornet de frites revient et vexe la sandwicherie',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: "pique: 'Ce que tu vends, ce n’est pas à nous d’en manger une part.'",
+    vers: "pique: 'Ton cornet de frites, ce n’est pas à nous d’en manger une part.'" },
+
+  { nom: '🔴 la ligne du haut redevient une liste de métiers',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: "facons: 'En vitrine, en rayon, à retirer sur place'",
+    vers: "facons: 'Mode, fleuristes, librairies, décoration'" },
+
+  { nom: '🔴 la pastille généraliste redevient un métier en exemple',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: "pastille: 'un commerce de bouche'", vers: "pastille: 'une friterie'" },
+
+  { nom: '🔴 la pastille ignore le champ de l’atelier',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: 'accrocheKit(seg.accroche, metierLibre)', vers: "accrocheKit(seg.accroche, '')" },
+
+  { nom: '🔴 la jauge du recto ne remesure plus quand on tape un métier',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: 'useAjustement(recto, rectoCorps, rectoPied, `${seg.cle}|${accroche.pastille}`)',
+    vers: 'useAjustement(recto, rectoCorps, rectoPied, seg.cle)' },
+
+  { nom: '🔴 le QR du recto ne dit plus où il mène',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: '                    Scanne pour découvrir\n                  </p>', vers: '                    Scanne et regarde\n                  </p>' },
+
+  { nom: '🔴 le QR du verso ne dit plus qu’il inscrit',
+    banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
+    de: 'Scanne pour t&rsquo;inscrire', vers: 'Scanne-moi' },
 
   // ══ LE DÉPOUILLEUR PARTAGÉ ══
   //

@@ -12,6 +12,7 @@ import { LOGO, proportionsLogo, pointsLogo, largeurPoints } from '../lib/logo.js
 import { verdictJauge } from '../lib/jauge-page.js'
 import { policesEmbarquees, feuilleEnSvg, _oublierPolices } from '../lib/export-feuille.js'
 import { getPrixPlan } from '../lib/plans.js'
+import { accrocheKit, METIER_LIBRE_MAX } from '../lib/kit-accroche.js'
 import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -968,6 +969,57 @@ const egal = (nom, obtenu, attendu) =>
     for (const marque of ['Uber', 'Deliveroo', 'Takeaway', 'Just Eat', 'TheFork', 'Planity', 'Salonkee', 'Treatwell', 'Fritzy', 'Zenchef']) {
       verifie(`le kit ne nomme pas ${marque}`, !new RegExp(marque, 'i').test(kit))
     }
+  }
+
+  // ══ ✅ LA FEUILLE GÉNÉRALISTE, LE MÉTIER EN OPTION (Alex, 14/10, option 1) ══
+  //
+  // « Tu tiens une friterie ? » vexait la sandwicherie et la boulangerie, qui
+  // ont presque les mêmes besoins ; « chaque pull » laissait le fleuriste
+  // dehors. Et « on n'a jamais tous les métiers » : une feuille par métier en
+  // oublierait toujours un. D'où une pastille GÉNÉRALISTE par segment, et un
+  // métier TAPÉ librement dans l'atelier pour une tournée ciblée.
+  {
+    // On EXÉCUTE la règle de la pastille, on ne cherche pas un mot.
+    const base = { verbe: 'Tu travailles', pastille: 'sur rendez-vous' }
+    for (const [vide, nom] of [['', 'une chaîne vide'], ['   \t ', 'des espaces'], [null, 'null'], [undefined, 'rien']]) {
+      const a = accrocheKit(base, vide)
+      verifie(`🔴 sans métier tapé (${nom}), la pastille généraliste reste`,
+        a.verbe === 'Tu travailles' && a.pastille === 'sur rendez-vous', JSON.stringify(a))
+    }
+    const tape = accrocheKit(base, '  une   poissonnerie ')
+    verifie('🔴 un métier tapé remplace la pastille, avec « Tu tiens »',
+      tape.verbe === 'Tu tiens' && tape.pastille === 'une poissonnerie', JSON.stringify(tape))
+    const long = accrocheKit(base, 'x'.repeat(200))
+    verifie('un métier trop long est coupé à la longueur permise',
+      long.pastille.length === METIER_LIBRE_MAX, String(long.pastille.length))
+    verifie('la pastille de base n’est pas modifiée par l’appel', base.pastille === 'sur rendez-vous')
+
+    const kit = lireCode('app/brand-kit/commercant/page.js')
+    const accroches = [...kit.matchAll(/accroche: \{ verbe: '([^']+)', pastille: '([^']+)' \}/g)].map(m => `${m[1]} ${m[2]}`)
+    verifie('🔴 les quatre pastilles validées par Alex, dans l’ordre des segments',
+      JSON.stringify(accroches) === JSON.stringify(['Tu tiens un commerce de bouche', 'Tu tiens un restaurant', 'Tu travailles sur rendez-vous', 'Tu tiens une boutique']),
+      accroches.join(' | '))
+    // 🔴 Le texte commun ne nomme AUCUN métier en exemple. Ancré sur le bloc
+    // des segments : la carte, les formules et l'atelier ne comptent pas.
+    const i = kit.indexOf('const SEGMENTS = [')
+    const j = kit.indexOf('const BANDE')
+    const segments = i === -1 || j <= i ? '' : kit.slice(i, j)
+    verifie('le bloc des segments est trouvé', segments.length > 2000, String(segments.length))
+    const vexants = segments.match(/friter|frites?\b|cornet|sandwich|boulang|boucher|traiteur|snack|food truck|pizzer|brasser|tavern|coiffeu|barb|institut|garage|fleur|librair|épicer|\bpulls?\b|un salon\b/gi) || []
+    verifie('🔴 aucun métier pris en exemple dans le texte d’un segment', vexants.length === 0, vexants.join(', '))
+    verifie('🔴 la pastille affiche l’accroche calculée, plus un métier figé',
+      /\{accroche\.verbe\}\{' '\}/.test(kit) && /\{accroche\.pastille\}<\/span>&nbsp;\?/.test(kit) && !/seg\.metier|seg\.pour/.test(kit))
+    verifie('🔴 le métier se tape dans l’atelier, et passe par la règle',
+      /accrocheKit\(seg\.accroche, metierLibre\)/.test(kit) && /onChange=\{e => setMetierLibre\(e\.target\.value\)\}/.test(kit))
+    verifie('🔴 la jauge du recto remesure quand la pastille change',
+      /useAjustement\(recto, rectoCorps, rectoPied, `\$\{seg\.cle\}\|\$\{accroche\.pastille\}`\)/.test(kit))
+    // ✅ Alex, 14/10 : « ils doivent savoir qu'il y a une différence ».
+    verifie('🔴 le QR du recto dit qu’il fait découvrir',
+      /<Qr src=\{qr\} taille="28mm"\/>[\s\S]{0,400}Scanne pour découvrir/.test(kit) && !/Scanne et regarde/.test(kit))
+    verifie('🔴 le QR du verso dit qu’il fait s’inscrire',
+      /<Qr src=\{qrInscription\} taille="26mm"\/>[\s\S]{0,400}Scanne pour t&rsquo;inscrire/.test(kit))
+    verifie('le QR de la carte (vers la landing) dit aussi qu’il fait découvrir',
+      /<Qr src=\{qrCarte\} taille="22mm"\/>[\s\S]{0,700}Scanne pour découvrir/.test(kit))
   }
 
   const page = lire('app/brand-kit/commercant/page.js')

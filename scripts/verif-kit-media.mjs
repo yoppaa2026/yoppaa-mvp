@@ -13,6 +13,7 @@ import { verdictJauge } from '../lib/jauge-page.js'
 import { policesEmbarquees, feuilleEnSvg, _oublierPolices } from '../lib/export-feuille.js'
 import { getPrixPlan } from '../lib/plans.js'
 import { accrocheKit, METIER_LIBRE_MAX } from '../lib/kit-accroche.js'
+import { couperEnDeux, BADGES_AFFICHE } from '../lib/affiche-kit.js'
 import { sansProse } from './lire-code.mjs'
 
 const lire = (chemin) => readFileSync(new URL(`../${chemin}`, import.meta.url), 'utf8')
@@ -165,7 +166,10 @@ const egal = (nom, obtenu, attendu) =>
   // nom du commerce était le plus exposé : « La Boulangerie du Coin de la Rue »
   // aurait été tronquée sur l'affiche collée en vitrine.
   for (const [quoi, motif] of [
-    ['le nom du commerce', /taillePourTenir\(nomCommerce, 42, 700\)/],
+    // ⚠️ REPOINTÉE LE 14/10 : le nom est passé en GRAND (84 px au plus, Alex),
+    // sur une ligne ou deux ; chaque ligne reste contrainte à la largeur.
+    ['le nom du commerce', /taillePourTenir\(lignesNom\[0\], NOM_MAX, 800/],
+    ['chaque ligne du nom coupé en deux', /deux\.map\(l => taillePourTenir\(l, NOM_MAX, 800/],
     // ⚠️ ANCRES REPOINTÉES LE 29/09 : les textes sont devenus un PARAMÈTRE
     // (`textes`), pour que le carton de table réutilise le même dessin. La
     // garde mesure toujours la même chose : chaque texte tient dans la page.
@@ -200,6 +204,38 @@ const egal = (nom, obtenu, attendu) =>
   verifie('aucun corps fixe ne subsiste sur les textes de l\'affiche',
     !/ctx\.font = '\d00 \d+px "DM Sans"/.test(bloc),
     'un corps écrit en dur ne s\'adapte à aucun texte')
+
+  // ══ ✅ LE NOM EN GRAND, LE LOGO RÉDUIT, LES BADGES DESSOUS (Alex, 14/10) ══
+  //
+  // Sur le carton de table ET l'affiche de vitrine (un seul dessin, choix
+  // d'Alex au tableau). On EXÉCUTE la coupe du nom, on ne cherche pas un mot.
+  {
+    const egalJson = (nom, a, b) => verifie(nom, JSON.stringify(a) === JSON.stringify(b), JSON.stringify(a))
+    egalJson('un nom d’un mot ne se coupe pas', couperEnDeux('Bistrologue'), ['Bistrologue'])
+    egalJson('🔴 un long nom se coupe en deux moitiés équilibrées',
+      couperEnDeux('La Boulangerie du Coin de la Rue'), ['La Boulangerie', 'du Coin de la Rue'])
+    egalJson('la coupe vise le milieu, pas le premier espace',
+      couperEnDeux('Chez Marco et Fils Traiteur'), ['Chez Marco et', 'Fils Traiteur'])
+    egalJson('les espaces en trop ne créent pas de ligne vide', couperEnDeux('  Chez   Marco  '), ['Chez', 'Marco'])
+    egalJson('un nom vide reste une ligne vide, sans planter', couperEnDeux(''), [''])
+    verifie('🔴 le logo est réduit : il signe, il ne titre plus', /const WM = 72\b/.test(bloc))
+    verifie('🔴 le nom est dessiné à SA taille, sur ses lignes',
+      /ctx\.font = police\(800, tailleNom\)/.test(bloc) && /lignesNom\.forEach\(\(ligne, i\) => ctx\.fillText\(ligne, W \/ 2, yNoms\[i\]\)\)/.test(bloc))
+    verifie('🔴 et il passe sur deux lignes plutôt que de rapetisser',
+      /if \(tailleNom < NOM_MINI_UNE_LIGNE\)/.test(bloc) && /const NOM_MAX = 84\b/.test(bloc))
+    // Les badges : les fichiers OFFICIELS de lib/stores.js, jamais redessinés.
+    verifie('🔴 les badges sont ceux de lib/stores.js',
+      BADGES_AFFICHE.length === 2 && BADGES_AFFICHE[0].src === '/store/badge-app-store-fr.svg' && BADGES_AFFICHE[1].src === '/store/badge-google-play-fr.png',
+      BADGES_AFFICHE.map(b => b.src).join(', '))
+    verifie('le rapport des hauteurs est celui de la landing (46 / 68)',
+      Math.abs(BADGES_AFFICHE[1].hauteurPx / BADGES_AFFICHE[0].hauteurPx - 68 / 46) < 0.02)
+    verifie('🔴 les badges sont réellement dessinés, sous l’accroche',
+      /ctx\.drawImage\(b\.img, bx,/.test(bloc) && /const yBadges\s+= yAccroche2 \+/.test(bloc))
+    verifie('🔴 et la rangée tient dans la largeur utile',
+      BADGES_AFFICHE.reduce((w, b) => w + b.hauteurPx * b.largeur / b.hauteur, 0) + 14 < 820)
+    verifie('🔴 un badge absent ne laisse pas un trou au milieu du papier',
+      /const badges = imagesBadges\.every\(Boolean\)/.test(bloc) && /const yPied\s+= badges \?/.test(bloc))
+  }
 
   // Deux fonds, et le clair doit exister : c'est celui qu'on imprime chez soi.
   verifie('deux palettes de fond existent', /export function paletteAffiche\(clair\)/.test(bloc))

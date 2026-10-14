@@ -260,6 +260,36 @@ const MUTATIONS = [
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
     de: 'Scanne pour t&rsquo;inscrire', vers: 'Scanne-moi' },
 
+  // ══ ✅ L'AFFICHE ET LE CARTON : LE NOM EN GRAND, LES BADGES (Alex, 14/10) ══
+  { nom: '🔴 le logo reprend toute la place du nom',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '  const WM = 72', vers: '  const WM = 110' },
+
+  { nom: '🔴 un long nom se coupe au premier espace, une ligne d’un mot puis le reste',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: 'if (!meilleure || ecart < meilleure.ecart) meilleure', vers: 'if (!meilleure) meilleure' },
+
+  { nom: '🔴 le nom est dessiné petit, la taille calculée part à la poubelle',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '  ctx.font = police(800, tailleNom)', vers: '  ctx.font = police(800, 42)' },
+
+  { nom: '🔴 un long nom rapetisse au lieu de passer sur deux lignes',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '  if (tailleNom < NOM_MINI_UNE_LIGNE) {', vers: '  if (false) {' },
+
+  { nom: '🔴 les badges sont chargés mais jamais dessinés',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '      ctx.drawImage(b.img, bx,', vers: '      void (b.img, bx,' },
+
+  { nom: '🔴 un badge absent laisse un trou au milieu du papier',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '  const yPied       = badges ? yBadges + hauteurBadges + 48 : yAccroche2 + 54',
+    vers: '  const yPied       = yBadges + hauteurBadges + 48' },
+
+  { nom: '⚠️ le badge Google repasse à la hauteur d’Apple et paraît plus petit',
+    banc: 'verif:kit', fichier: 'lib/affiche-kit.js',
+    de: '{ ...BADGE_GOOGLE_PLAY, hauteurPx: 136 }', vers: '{ ...BADGE_GOOGLE_PLAY, hauteurPx: 92 }' },
+
   // ══ LE DÉPOUILLEUR PARTAGÉ ══
   //
   // 🔴 CELLE-CI PROUVE QUE LE BANC VOIT SA PROPRE CÉCITÉ. Sans la

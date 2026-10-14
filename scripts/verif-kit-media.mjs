@@ -955,6 +955,10 @@ const egal = (nom, obtenu, attendu) =>
       /useQr\(urlInscription\(`kit-\$\{seg\.cle\}`\)\)/.test(kit) && /<Qr src=\{qrInscription\}/.test(kit) && /<Qr src=\{qr\} taille="28mm"\/>/.test(kit))
     verifie('le verso se termine par UN appel à l’action',
       /Prêt&nbsp;\? Inscris-toi\./.test(kit))
+    verifie('l’accroche est celle de la landing, sur la feuille et la carte',
+      (kit.match(/Remplis ton commerce,<br\/>pas leurs poches\.|Remplis ton<br\/>commerce, pas<br\/>leurs poches\./g) || []).length === 2 && !/Reprends tes clients/.test(kit))
+    verifie('🔴 le verso dit que le téléphone s’ajoute dans Yoppaa (pensé pour le commerçant)',
+      /Une commande, un rendez-vous ou une table pris au téléphone/.test(kit))
     verifie('trois atouts par métier, pas une liste',
       (kit.match(/atouts: \[/g) || []).length === 4)
     verifie('le téléphone vient de lib/contact, comme WhatsApp sur la landing',

@@ -577,6 +577,24 @@ const CADRAGES = sansProse(readFileSync(new URL('./preparer-captures-landing.mjs
     /<BarrePouce visible=\{barrePouce\}\/>/.test(LANDING) && /env\(safe-area-inset-bottom\)/.test(LANDING))
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. PENSÉ POUR LE COMMERÇANT, ET L'ACCROCHE DE FIN (Alex, 14/10 soir)
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  verifier('l’accroche de fin est « Remplis ton commerce, pas leurs poches. »',
+    /<p className="lp-reprends">Remplis ton commerce, pas leurs poches\.<\/p>/.test(LANDING) && !/Reprends tes clients/.test(LANDING))
+  verifier('🔴 la page dit que les commandes, rendez-vous et tables du téléphone s’ajoutent',
+    /Une commande, un rendez-vous ou une table pris au téléphone/.test(LANDING))
+  // La promesse doit rester VRAIE : les deux fenêtres existent.
+  for (const [quoi, fichier, preuve] of [
+    ['une commande', '../app/dashboard/ModalNouvelleCommande.js', /Encoder une commande/],
+    ['un rendez-vous ou une table', '../app/dashboard/ModalNouveauRdv.js', /UNE_TABLE/],
+  ]) {
+    verifier(`🔴 le commerçant peut vraiment encoder ${quoi} reçu au téléphone`,
+      preuve.test(readFileSync(new URL(fichier, import.meta.url), 'utf8')))
+  }
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

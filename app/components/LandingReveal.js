@@ -153,6 +153,7 @@ const I = {
   table:  ['M4 9h16', 'M7 9v10', 'M17 9v10', 'M9 5h6'],
   etoile: ['M12 3.5l2.6 5.3 5.9.8-4.3 4.1 1 5.8L12 16.8 6.8 19.5l1-5.8L3.5 9.6l5.9-.8z'],
   fleche: ['M5 12h14', 'M13 6l6 6-6 6'],
+  tel:    ['M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z'],
 }
 
 // ─── Le téléphone du haut de page ───────────────────────────────────────────
@@ -1172,6 +1173,29 @@ export default function LandingReveal({ referent = null }) {
             </p>
           </div>
 
+          {/* ✅ PENSÉ POUR LE COMMERÇANT (Alex, 14/10) : « Yoppaa permet
+              d'ajouter les rendez-vous qui arrivent par téléphone, ce que les
+              autres ne peuvent pas faire vu qu'ils n'y gagnent rien ». Vérifié :
+              « Encoder une commande » (`ModalNouvelleCommande`) et « Nouveau
+              rendez-vous » (`ModalNouveauRdv`, qui pose aussi les tables).
+              ⚠️ ON N'AFFIRME RIEN SUR UN CONCURRENT PRÉCIS : on énonce la
+              logique du modèle (ce qui ne passe pas chez eux ne leur rapporte
+              rien), que chaque commerçant vérifie lui-même. Une pizzeria a quitté
+              son système pour ça (project_commande_encodee_main). */}
+          <div className="lp-telephone">
+            <span className="lp-telephone-icone"><Icone d={I.tel} size={26}/></span>
+            <div>
+              <p className="lp-sur lp-sur-encre">Pensé pour le commerçant, pas pour la plateforme</p>
+              <h3 className="lp-h3">Le téléphone sonne encore&nbsp;? Tant mieux.</h3>
+              <p className="lp-texte">
+                Une commande, un rendez-vous ou une table pris au téléphone&nbsp;: tu l&rsquo;ajoutes dans Yoppaa en
+                quelques gestes, et tout est au même endroit, avec le reste. Ceux qui se paient à la commission
+                n&rsquo;y gagnent rien, alors ils s&rsquo;en moquent&nbsp;: ce qui ne passe pas chez eux ne leur rapporte rien.
+                <strong> Chez nous, ça ne change rien, alors on te laisse faire.</strong>
+              </p>
+            </div>
+          </div>
+
           <p className="lp-citation">Le client qui commande chez toi reste ton client. Personne ne te le reloue.</p>
         </div>
       </section>
@@ -1528,8 +1552,10 @@ export default function LandingReveal({ referent = null }) {
           </p>
           <div className="lp-fin-cta">
             <p className="lp-sur lp-sur-clair">{LIBELLE_COMMERCANT}</p>
-            {/* ✅ Alex, 14/10 : le dernier mot de la page. */}
-            <p className="lp-reprends">Reprends tes clients.</p>
+            {/* ✅ Alex, 14/10 : le dernier mot de la page. « Reprends tes
+                clients » ne l'accrochait pas (« pas certain qu'elle interpelle
+                les commerçants ») : la promesse et la pique en une phrase. */}
+            <p className="lp-reprends">Remplis ton commerce, pas leurs poches.</p>
             <Link href="/signup" className="lp-btn lp-btn-main">J&rsquo;inscris mon commerce</Link>
           </div>
           {/* ⚠️ La liste vient de `lib/reseaux`, jamais nommée ici. */}
@@ -1724,6 +1750,12 @@ const CSS_LANDING = `
 .lp-tous { margin-top: 56px; }
 .lp-metiers { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .lp-metiers span { padding: 8px 14px; border-radius: 100px; background: #fff; border: 1.5px solid ${T.pale}; font-size: 13.5px; font-weight: 800; color: ${T.deep}; }
+.lp-telephone { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; margin-top: 40px; padding: clamp(22px, 4vw, 34px); border-radius: 24px; background: #fff; border: 2px solid ${T.main}; box-shadow: 0 18px 40px rgba(107,53,196,0.14); }
+.lp-telephone .lp-sur { margin-bottom: 8px; }
+.lp-telephone .lp-h3 { margin-bottom: 10px; }
+.lp-telephone strong { color: ${T.ink}; }
+.lp-telephone-icone { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: linear-gradient(135deg, ${T.main}, ${T.mid}); color: #fff; }
+@media (max-width: 560px) { .lp-telephone { grid-template-columns: minmax(0, 1fr); } }
 .lp-citation { max-width: 22em; margin: 64px auto 0; font-size: clamp(1.5rem, 4.2vw, 2.4rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; text-align: center; color: ${T.ink}; text-wrap: balance; }
 
 .lp-section-captures { padding-bottom: clamp(40px, 6vw, 72px); }

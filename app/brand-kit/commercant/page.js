@@ -30,7 +30,8 @@
 //    bloc, dans l'ordre où on lit :
 //      RECTO, le choc et la promesse : le métier, le titre de la landing, la
 //        pique, une bande qui tranche, trois choses qui changent pour LUI,
-//        puis « Reprends tes clients » et un QR pour REGARDER (la landing).
+//        puis « Remplis ton commerce, pas leurs poches » et un QR pour
+//        REGARDER (la landing).
 //      VERSO, la décision : comment ça marche en trois étapes, l'offre, les
 //        formules, la liberté, puis UN appel à l'action et un QR pour AGIR
 //        (l'inscription).
@@ -272,7 +273,7 @@ function Qr({ src, taille }) {
 
 const S = {
   eyebrow: { fontSize: '8.6pt', fontWeight: 800, letterSpacing: '.2em', textTransform: 'uppercase', color: T.main, margin: 0 },
-  h2: { fontSize: '25pt', lineHeight: 1.06, letterSpacing: '-.03em', wordSpacing: '.05em', fontWeight: 800, margin: '2.5mm 0 0', textWrap: 'balance', color: T.ink },
+  h2: { fontSize: '22pt', lineHeight: 1.06, letterSpacing: '-.03em', wordSpacing: '.05em', fontWeight: 800, margin: '2.5mm 0 0', textWrap: 'balance', color: T.ink },
 }
 
 // ─── Les boutons de téléchargement ──────────────────────────────────────────
@@ -531,12 +532,13 @@ export default function KitCommercant() {
                 </div>
               </div>
 
-              {/* ══ LE SOCLE : « Reprends tes clients » et le QR pour REGARDER ══ */}
+              {/* ══ LE SOCLE : l'accroche de la landing et le QR pour REGARDER ══ */}
               <div ref={rectoPied} style={{ marginTop: 'auto', background: T.panel, color: '#fff', padding: '7.5mm 17mm', display: 'flex', alignItems: 'center', gap: '8mm' }}>
                 <div style={{ flex: 1 }}>
-                  {/* ✅ Le dernier mot de la landing (Alex, 14/10). */}
-                  <p style={{ margin: 0, fontSize: '26pt', fontWeight: 800, letterSpacing: '-.025em', wordSpacing: '.06em', lineHeight: 1.05 }}>
-                    Reprends tes clients.
+                  {/* ✅ Le dernier mot de la landing (Alex, 14/10), qui a remplacé
+                      « Reprends tes clients » : « pas certain qu'elle interpelle ». */}
+                  <p style={{ margin: 0, fontSize: '23pt', fontWeight: 800, letterSpacing: '-.025em', wordSpacing: '.06em', lineHeight: 1.05 }}>
+                    Remplis ton commerce,<br/>pas leurs poches.
                   </p>
                   {/* ⚠️ LA RÈGLE, PAS UNE DATE : lue dans `lib/lancement.js`. */}
                   <p style={{ margin: '3mm 0 0', fontSize: '13pt', fontWeight: 800, letterSpacing: '-.015em', lineHeight: 1.2, color: MENTHE }}>
@@ -570,26 +572,41 @@ export default function KitCommercant() {
                 <h2 style={S.h2}>Trois étapes. Zéro risque.</h2>
                 <div style={{ margin: '5mm 0 0', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '5mm' }}>
                   {[
-                    { titre: 'Tu t’inscris.', texte: <>Ton numéro d&rsquo;entreprise suffit. Pas de carte de paiement, pas de contrat. Tes {ESSAI_JOURS_MINIMUM} jours offerts commencent.</> },
+                    { titre: 'Tu t’inscris.', texte: <>Ton numéro d&rsquo;entreprise suffit, sans carte ni contrat. Tes {ESSAI_JOURS_MINIMUM} jours offerts commencent.</> },
                     // ⚠️ L'ENCODAGE OFFERT SUIT SON DRAPEAU, COMME LA LANDING. Mais
                     // un papier ne s'efface pas : tiré pendant l'offre, il la
                     // promet encore après. D'où « en ce moment ».
                     ENCODAGE_OFFERT
-                      ? { titre: 'On remplit ta page avec toi.', texte: <>En ce moment, on encode ta carte, ton menu ou ton catalogue pour toi. Gratuitement.</> }
+                      ? { titre: 'On remplit ta page.', texte: <>En ce moment, on encode ta carte, ton menu ou ton catalogue pour toi. Gratuitement.</> }
                       : { titre: 'Tu remplis ta page.', texte: <>Une liste te guide point par point. Ta carte en photo&nbsp;? L&rsquo;IA la lit pour toi.</> },
                     { titre: 'Ta commune te trouve.', texte: <>Ta page part en ligne dès qu&rsquo;elle est complète, dans l&rsquo;app de ta commune et sur Google.</> },
                   ].map((e, i) => (
                     <div key={e.titre}>
                       <span style={{ width: '10mm', height: '10mm', borderRadius: '50%', background: T.main, color: '#fff', display: 'grid', placeItems: 'center', fontSize: '14pt', fontWeight: 800 }}>{i + 1}</span>
                       <p style={{ margin: '2.6mm 0 0', fontSize: '12.5pt', lineHeight: 1.18, fontWeight: 800, letterSpacing: '-.015em', color: T.ink }}>{e.titre}</p>
-                      <p style={{ margin: '1.4mm 0 0', fontSize: '9.8pt', lineHeight: 1.4, fontWeight: 600, color: T.deep }}>{e.texte}</p>
+                      <p style={{ margin: '1.4mm 0 0', fontSize: '9.4pt', lineHeight: 1.38, fontWeight: 600, color: T.deep }}>{e.texte}</p>
                     </div>
                   ))}
                 </div>
 
+                {/* ══ PENSÉ POUR LE COMMERÇANT (Alex, 14/10) ══ Les commandes,
+                    rendez-vous et tables pris AU TÉLÉPHONE s'ajoutent dans Yoppaa
+                    (`ModalNouvelleCommande`, `ModalNouveauRdv`). ⚠️ On énonce la
+                    logique du modèle, on n'affirme rien d'un concurrent précis. */}
+                <div style={{ margin: '5mm 0 0', borderLeft: `1.5mm solid ${T.main}`, paddingLeft: '5mm' }}>
+                  <p style={{ margin: 0, fontSize: '14pt', lineHeight: 1.15, fontWeight: 800, letterSpacing: '-.02em', color: T.ink }}>
+                    Le téléphone sonne encore&nbsp;? Tant mieux.
+                  </p>
+                  <p style={{ margin: '1.4mm 0 0', fontSize: '9.8pt', lineHeight: 1.4, fontWeight: 600, color: T.deep }}>
+                    Une commande, un rendez-vous ou une table pris au téléphone&nbsp;: tu l&rsquo;ajoutes dans Yoppaa.
+                    Ceux qui se paient à la commission n&rsquo;y gagnent rien, alors ils s&rsquo;en moquent.
+                    <strong style={{ color: T.ink }}> Yoppaa est pensé pour le commerçant&nbsp;: on te laisse faire.</strong>
+                  </p>
+                </div>
+
                 {/* ══ L'OFFRE, EN GRAND ══ Le « 100 » de la landing. */}
-                <div style={{ margin: '7mm 0 0', background: T.ink, color: '#fff', borderRadius: '4.5mm', padding: '6mm 7mm', display: 'flex', alignItems: 'center', gap: '6mm' }}>
-                  <span style={{ fontSize: '62pt', lineHeight: .9, fontWeight: 800, letterSpacing: '-.05em', color: T.light, flexShrink: 0 }}>{ESSAI_JOURS_MINIMUM}</span>
+                <div style={{ margin: '5mm 0 0', background: T.ink, color: '#fff', borderRadius: '4.5mm', padding: '4mm 7mm', display: 'flex', alignItems: 'center', gap: '6mm' }}>
+                  <span style={{ fontSize: '52pt', lineHeight: .9, fontWeight: 800, letterSpacing: '-.05em', color: T.light, flexShrink: 0 }}>{ESSAI_JOURS_MINIMUM}</span>
                   <div>
                     <p style={{ margin: 0, fontSize: '17pt', lineHeight: 1.12, fontWeight: 800, letterSpacing: '-.02em', wordSpacing: '.05em' }}>
                       jours pour tout essayer. Pour tout le monde. Tout le temps.
@@ -606,7 +623,7 @@ export default function KitCommercant() {
                     🔴 LE GOOD MORNING SE DIT AVEC SA CADENCE (erreur n° 1 du brief
                     de la landing) : chaque SEMAINE en Exister, chaque MATIN en
                     Communiquer. */}
-                <p style={{ ...S.eyebrow, marginTop: '6.5mm' }}>Ensuite, tu choisis</p>
+                <p style={{ ...S.eyebrow, marginTop: '5mm' }}>Ensuite, tu choisis</p>
                 <div style={{ margin: '2.6mm 0 0', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '3.5mm' }}>
                   {[
                     { nom: 'Exister', prix: 'Gratuit', sous: 'à vie', lignes: ['Ta page, dans l’app et sur Google', 'Ta place chaque semaine dans le Good Morning Yoppers', 'Les envies du quartier'] },
@@ -619,7 +636,7 @@ export default function KitCommercant() {
                         {f.prix} <span style={{ fontSize: '7.6pt', fontWeight: 700, color: T.grey }}>{f.sous}</span>
                       </p>
                       <ul style={{ listStyle: 'none', margin: '2mm 0 0', padding: 0, display: 'grid', gap: '1.3mm' }}>
-                        {f.lignes.map(l => <li key={l} style={{ fontSize: '9.4pt', lineHeight: 1.3, fontWeight: 600, color: T.deep }}>· {l}</li>)}
+                        {f.lignes.map(l => <li key={l} style={{ fontSize: '8.9pt', lineHeight: 1.28, fontWeight: 600, color: T.deep }}>· {l}</li>)}
                       </ul>
                     </div>
                   ))}
@@ -628,13 +645,13 @@ export default function KitCommercant() {
                 {/* ══ L'ABONNEMENT N'ENFERME PERSONNE ══ (Alex, 14/10 : « quand on
                     dit abonnement, les gens pensent engagement »). Tenu par le
                     code : une résiliation repasse le commerce en Exister. */}
-                <div style={{ margin: '6mm 0 0', background: `linear-gradient(135deg, ${T.deep} 0%, ${T.main} 100%)`, color: '#fff', borderRadius: '4.5mm', padding: '5mm 7mm' }}>
+                <div style={{ margin: '5mm 0 0', background: `linear-gradient(135deg, ${T.deep} 0%, ${T.main} 100%)`, color: '#fff', borderRadius: '4.5mm', padding: '4mm 7mm' }}>
                   <p style={{ margin: 0, fontSize: '14pt', lineHeight: 1.16, fontWeight: 800, letterSpacing: '-.02em' }}>
                     Ici, l&rsquo;abonnement n&rsquo;enferme personne.
                   </p>
                   <p style={{ margin: '2mm 0 0', fontSize: '10pt', lineHeight: 1.42, fontWeight: 600, color: 'rgba(255,255,255,.9)' }}>
                     Tu aimes, tu restes. Ça ne te sert plus, tu arrêtes quand tu veux, sans préavis, et ta page reste
-                    en ligne, gratuitement. Tu ne remplaces rien&nbsp;: garde ta caisse et tes habitudes.
+                    en ligne, gratuitement.
                   </p>
                   <p style={{ margin: '2.6mm 0 0', fontSize: '17pt', fontWeight: 800, letterSpacing: '-.02em', wordSpacing: '.14em' }}>
                     Yopper un jour, Yopper toujours.
@@ -643,7 +660,7 @@ export default function KitCommercant() {
               </div>
 
               {/* ══ L'APPEL À L'ACTION : le QR pour AGIR, et un humain ══ */}
-              <div ref={versoPied} style={{ marginTop: 'auto', background: T.panel, color: '#fff', padding: '7mm 17mm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '7mm' }}>
+              <div ref={versoPied} style={{ marginTop: 'auto', background: T.panel, color: '#fff', padding: '6mm 17mm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '7mm' }}>
                 <div>
                   <p style={{ margin: 0, fontSize: '22pt', fontWeight: 800, letterSpacing: '-.025em', wordSpacing: '.06em', lineHeight: 1.05 }}>
                     Prêt&nbsp;? Inscris-toi.
@@ -653,10 +670,10 @@ export default function KitCommercant() {
                   </p>
                   {/* ✅ « On t'appelle » (Alex, 14/10) : le deuxième chemin. */}
                   <p style={{ margin: '3.2mm 0 0', fontSize: '9.6pt', lineHeight: 1.45, fontWeight: 600, color: T.light }}>
-                    Une question&nbsp;? Envie de voir&nbsp;? <strong style={{ color: '#fff' }}>{CONTACT.nom} · {CONTACT.tel}</strong>, appel ou WhatsApp · {CONTACT.email}<br/>
+                    Une question&nbsp;? <strong style={{ color: '#fff' }}>{CONTACT.nom} · {CONTACT.tel}</strong> (appel ou WhatsApp)<br/>
                     {/* ⚠️ L'IDENTITÉ LÉGALE (`project_avcotech_identite_legale`), et
                         260, JAMAIS 262 : c'est le nombre de communes wallonnes. */}
-                    Yoppaa est une marque d&rsquo;Avcotech SRL, 5640 Mettet · 260 communes ouvertes en Wallonie.
+                    {CONTACT.email} · Une marque d&rsquo;Avcotech SRL, 5640 Mettet · 260 communes en Wallonie
                   </p>
                 </div>
                 {/* ⚠️ UN QR DES DEUX CÔTÉS : un A4 posé sur un comptoir ne montre
@@ -711,7 +728,7 @@ export default function KitCommercant() {
             <Qr src={qrCarte} taille="22mm"/>
             <div>
               <p style={{ margin: 0, fontSize: '10pt', fontWeight: 800, lineHeight: 1.22, letterSpacing: '-.02em' }}>
-                Scanne.<br/>Reprends<br/>tes clients.
+                Remplis ton<br/>commerce, pas<br/>leurs poches.
               </p>
               <p style={{ margin: '2.4mm 0 0', fontSize: '7.2pt', lineHeight: 1.5, fontWeight: 600, color: T.grey }}>
                 Yoppaa ne prend aucune<br/>commission sur tes ventes.

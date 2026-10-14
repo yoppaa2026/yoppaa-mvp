@@ -834,6 +834,42 @@ egal('plus aucune hauteur d’écran en vh dans app/', enVh, [])
   egal('tout en bas, la plus BASSE, pas la dernière du tableau',
     categorieAtteinte({ scrollTop: 99999, hauteurEntete: entete, ancres: melangees }), 'Desserts')
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔴 « JE SUIS AU-DESSUS DE LA CATÉGORIE » (Alex, 15/10, « Plats » chez le
+  // Bistrologue). Le saut retirait la hauteur de l'EN-TÊTE, qui a pourtant
+  // quitté l'écran : seule la barre collée couvre le haut. On EXÉCUTE la
+  // règle, puis on vise l'écran.
+  // ═══════════════════════════════════════════════════════════════════════
+  const { defilementVersCategorie, positionDansContenu } = await import('../lib/responsive.js')
+  const barre = 46
+  // Une fiche : en-tête de 420 px, la barre, puis « Plats » à 1 300 px du
+  // haut du contenu. On est déjà descendu de 200 px.
+  const pos = positionDansContenu({ scrollTop: 200, hautElement: 1100 + 60, hautConteneur: 60 })
+  egal('la position se lit dans le repère du contenu (scroll + écart des rectangles)', pos, 1300)
+  const vise = defilementVersCategorie({ positionContenu: pos, hauteurBarre: barre })
+  egal('🔴 le titre arrive JUSTE SOUS la barre collée', vise, 1300 - barre)
+  verifier('🔴 et l’en-tête n’est PAS retiré (il a quitté l’écran)', vise !== 1300 - 420 - barre - 56, String(vise))
+  egal('jamais au-dessus du haut de la page', defilementVersCategorie({ positionContenu: 10, hauteurBarre: barre }), 0)
+  egal('une position inconnue ne fait pas sauter', defilementVersCategorie({ positionContenu: null, hauteurBarre: barre }), null)
+  egal('sans barre mesurée, on vise le titre lui-même', defilementVersCategorie({ positionContenu: 1300 }), 1300)
+  egal('une position illisible ne vaut pas zéro', positionDansContenu({ scrollTop: 0, hautElement: undefined, hautConteneur: 0 }), null)
+  // Le clic et l'onglet allumé disent la même chose : après le saut, c'est
+  // bien « Plats » qui s'allume, même si la catégorie est courte.
+  const ancresPage = [{ cat: 'Entrées', offsetTop: 700 }, { cat: 'Plats', offsetTop: 1300 }, { cat: 'Desserts', offsetTop: 1450 }]
+  egal('🔴 après le saut, l’onglet allumé est celui qu’on a touché',
+    categorieAtteinte({ scrollTop: vise, hauteurEntete: barre, ancres: ancresPage }), 'Plats')
+
+  const { sansProse } = await import('./lire-code.mjs')
+  const fiche = sansProse(lire('app/commander/[slug]/page.js'))
+  verifier('🔴 le saut passe par la règle, mesurée sur la BARRE collée',
+    /defilementVersCategorie\(\{\s*positionContenu: positionDansContenu\(/.test(fiche)
+      && /hauteurBarre: barreRef\.current\?\.offsetHeight \|\| 0/.test(fiche)
+      && !/header\.offsetHeight - 56/.test(fiche))
+  verifier('🔴 l’onglet allumé lit le même repère que le saut',
+    /setActive\(categorieAtteinte\(\{ scrollTop, hauteurEntete: barreRef\.current\?\.offsetHeight \|\| 0, ancres \}\)\)/.test(fiche)
+      && /offsetTop: noeud \? positionDansContenu\(/.test(fiche))
+  verifier('la barre collée porte bien le repère mesuré', /<div ref=\{barreRef\} style=\{\{ position: 'sticky', top: 0/.test(fiche))
+
   // Le cas exact de la capture : l'ordre d'insertion place « Frites » après
   // « Desserts » alors que sa section est PLUS BAS dans la page.
   const commeChezMomo = [

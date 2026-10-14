@@ -29,7 +29,7 @@ import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
 import { joursRetraitBoutique, creneauRetraitHorsHoraires, estOuvertCeJour } from '@/lib/ouverture'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
-import { categorieAtteinte, barreDetachee } from '@/lib/responsive'
+import { categorieAtteinte, barreDetachee, defilementVersCategorie, positionDansContenu } from '@/lib/responsive'
 // ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
 // pas si un commerce bouge. C'est `estItinerant`, qui lit les lieux déclarés,
 // qui décide, et une professeure de yoga en profite comme un food truck.
@@ -1171,7 +1171,7 @@ function ArticleDetailModal({ article, variantes, groupes = [], photosActives, c
 //
 // Elle reçoit les repères du parent : le conteneur qui défile, l'en-tête dont
 // la hauteur sert d'origine, et le carnet d'ancres des catégories.
-function BarreCategories({ categories, scrollRef, headerRef, catRefs, onChoisir }) {
+function BarreCategories({ categories, scrollRef, headerRef, barreRef, catRefs, onChoisir }) {
   const [active, setActive] = useState(null)
   const [ombre, setOmbre] = useState(false)
 
@@ -1182,18 +1182,23 @@ function BarreCategories({ categories, scrollRef, headerRef, catRefs, onChoisir 
       if (!headerRef.current) return
       const scrollTop = el.scrollTop
       const hauteurEntete = headerRef.current.offsetHeight
+      // 🔴 15/10 : MÊME REPÈRE QUE LE SAUT (`scrollToCategorie`). Les ancres
+      // sont lues dans le contenu qui défile, et la ligne de lecture part du
+      // bas de la BARRE collée, pas de l'en-tête qui a quitté l'écran. Sans
+      // cela, l'onglet visé par un clic et l'onglet allumé divergeraient.
+      const hautConteneur = el.getBoundingClientRect().top
       const ancres = Object.entries(catRefs.current)
-        .map(([cat, noeud]) => ({ cat, offsetTop: noeud ? noeud.offsetTop : null }))
+        .map(([cat, noeud]) => ({ cat, offsetTop: noeud ? positionDansContenu({ scrollTop, hautElement: noeud.getBoundingClientRect().top, hautConteneur }) : null }))
       setOmbre(barreDetachee({ scrollTop, hauteurEntete }))
-      setActive(categorieAtteinte({ scrollTop, hauteurEntete, ancres }))
+      setActive(categorieAtteinte({ scrollTop, hauteurEntete: barreRef.current?.offsetHeight || 0, ancres }))
     }
     auDefilement()
     el.addEventListener('scroll', auDefilement, { passive: true })
     return () => el.removeEventListener('scroll', auDefilement)
-  }, [scrollRef, headerRef, catRefs])
+  }, [scrollRef, headerRef, barreRef, catRefs])
 
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 20, boxShadow: ombre ? '0 2px 12px rgba(0,0,0,0.08)' : 'none' }}>
+    <div ref={barreRef} style={{ position: 'sticky', top: 0, zIndex: 20, boxShadow: ombre ? '0 2px 12px rgba(0,0,0,0.08)' : 'none' }}>
       <div className="cat-bar">
         {categories.map(cat => (
           <button key={cat} className={`cat-pill ${active === cat ? 'active' : ''}`} onClick={() => onChoisir(cat)}>
@@ -1631,6 +1636,9 @@ export default function CommanderSlug() {
   const catRefs = useRef({})
   const headerRef = useRef(null)
   const scrollRef = useRef(null)
+  // La barre des catégories, COLLÉE en haut : c'est elle, et pas l'en-tête,
+  // qui couvre le haut de l'écran quand on lit une catégorie (15/10).
+  const barreRef = useRef(null)
   const recapPanierRef = useRef(null)   // cible du bouton panier flottant (scroll vers le récap)
 
   // ⚠️ LE BOUTON FLOTTANT S'EFFACE QUAND SA CIBLE EST À L'ÉCRAN (Alex, 28/08).
@@ -2531,12 +2539,24 @@ export default function CommanderSlug() {
   // ⚠️ CE GESTE-CI RESTE, parce qu'il ne vient pas du défilement : un clic sur
   // une offre saute vers sa catégorie. Il ne touche aucun état, seulement des
   // repères ; la barre reconnaîtra l'endroit toute seule en voyant défiler.
+  //
+  // 🔴 15/10 (Alex, « Plats » chez le Bistrologue) : on arrivait AU-DESSUS de
+  // la catégorie. Le calcul retirait la hauteur de l'en-tête, qui a pourtant
+  // quitté l'écran ; seule la barre collée couvre le haut. Voir
+  // `defilementVersCategorie` dans lib/responsive.js.
   function scrollToCategorie(cat) {
     const el = catRefs.current[cat]
     const scroll = scrollRef.current
-    const header = headerRef.current
-    if (!el || !scroll || !header) return
-    scroll.scrollTo({ top: el.offsetTop - header.offsetHeight - 56, behavior: 'smooth' })
+    if (!el || !scroll) return
+    const top = defilementVersCategorie({
+      positionContenu: positionDansContenu({
+        scrollTop: scroll.scrollTop,
+        hautElement: el.getBoundingClientRect().top,
+        hautConteneur: scroll.getBoundingClientRect().top,
+      }),
+      hauteurBarre: barreRef.current?.offsetHeight || 0,
+    })
+    if (top !== null) scroll.scrollTo({ top, behavior: 'smooth' })
   }
 
   function ajouterAuPanier(article, options = null, variante = null) {
@@ -4926,7 +4946,7 @@ export default function CommanderSlug() {
 
               {toutesLesCats.length > 1 && (
                 <BarreCategories categories={toutesLesCats} scrollRef={scrollRef}
-                  headerRef={headerRef} catRefs={catRefs} onChoisir={scrollToCategorie}/>
+                  headerRef={headerRef} barreRef={barreRef} catRefs={catRefs} onChoisir={scrollToCategorie}/>
               )}
 
               <div style={{ padding: '0.875rem 1rem 0' }}>

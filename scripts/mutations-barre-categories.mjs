@@ -49,6 +49,28 @@ const MUTATIONS = [
     fichier: RESP,
     de: '  let courante = placees[0].cat',
     vers: '  let courante = placees[placees.length - 1].cat' },
+
+  // ══ 🔴 « JE SUIS AU-DESSUS DE LA CATÉGORIE » (Alex, 15/10) ══
+  { nom: '🔴 le saut retire de nouveau la hauteur de l en-tete',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '      hauteurBarre: barreRef.current?.offsetHeight || 0,',
+    vers: '      hauteurBarre: (barreRef.current?.offsetHeight || 0) + (headerRef.current?.offsetHeight || 0) + 56,' },
+  { nom: '🔴 la regle ne retire plus la barre : le titre passe dessous',
+    fichier: RESP,
+    de: '  return Math.max(0, Math.round(positionContenu - (Number.isFinite(hauteurBarre) ? hauteurBarre : 0)))',
+    vers: '  return Math.max(0, Math.round(positionContenu))' },
+  { nom: '🔴 la position ignore le defilement deja fait',
+    fichier: RESP,
+    de: '  return scrollTop + (hautElement - hautConteneur)',
+    vers: '  return hautElement - hautConteneur' },
+  { nom: '⚠️ un saut peut viser au-dessus du haut de la page',
+    fichier: RESP,
+    de: '  return Math.max(0, Math.round(positionContenu - ',
+    vers: '  return (Math.round(positionContenu - ' },
+  { nom: '🔴 l onglet allume reprend l en-tete comme origine (diverge du clic)',
+    fichier: 'app/commander/[slug]/page.js',
+    de: 'setActive(categorieAtteinte({ scrollTop, hauteurEntete: barreRef.current?.offsetHeight || 0, ancres }))',
+    vers: 'setActive(categorieAtteinte({ scrollTop, hauteurEntete, ancres }))' },
 ]
 
 const lancer = () => {

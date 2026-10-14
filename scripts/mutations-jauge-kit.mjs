@@ -155,8 +155,9 @@ const MUTATIONS = [
     vers: "Gratuit jusqu&rsquo;au 8 janvier 2027</p>" },
   { nom: '🔴 « la place de marché » revient dans le descripteur',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
-    de: '<p style={S.descripteur}>{seg.pour}</p>',
-    vers: '<p style={S.descripteur}>La place de marché du commerce local belge</p>' },
+    // ⚠️ ANCRE RECALÉE LE 14/10 (version tunnel) : la ligne des métiers.
+    de: '                    {seg.pour}',
+    vers: '                    La place de marché du commerce local belge' },
   { nom: '🔴 les deux faces partent dans le mauvais ordre',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
     // ⚠️ ANCRE RECALÉE LE 14/10 : la balise porte maintenant le nom du segment.
@@ -200,8 +201,10 @@ const MUTATIONS = [
   // n'enferme personne », tenu par le même filet violet.
   { nom: '🔴 un aplat pâle revient sur le closer : il ressortira bleu à l’impression',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',
-    de: "<div style={{ margin: '5mm 0 0', border: `1.4pt solid ${T.main}`",
-    vers: "<div style={{ margin: '5mm 0 0', background: T.bg, border: `1.4pt solid ${T.main}`" },
+    // ⚠️ ANCRE RECALÉE LE 14/10 (version tunnel) : les blocs clairs sont les
+    // trois atouts du recto, tenus par un filet.
+    de: "border: `0.9pt solid ${FILET}`, borderRadius: '3.5mm'",
+    vers: "background: T.bg, border: `0.9pt solid ${FILET}`, borderRadius: '3.5mm'" },
 
   { nom: '🔴 le logo du bandeau repasse en clair et disparaît sur le fond foncé',
     banc: 'verif:kit', fichier: 'app/brand-kit/commercant/page.js',

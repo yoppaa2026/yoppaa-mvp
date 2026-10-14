@@ -2,7 +2,7 @@
 // ════════════════════════════════════════════════════════════════════
 // LE KIT COMMERÇANT — A4 recto/verso à plastifier, et la carte de visite.
 //
-// URL : yoppaa.app/brand-kit/commercant
+// URL : yoppaa.app/brand-kit/commercant   (?segment=alimentaire|restaurant|services|detail)
 //
 // ⚠️ POURQUOI DANS L'APP ET PLUS DANS UNE MAQUETTE À CÔTÉ. La maquette
 // s'affichait dans une police de SUBSTITUTION, Plus Jakarta Sans n'étant pas
@@ -12,28 +12,40 @@
 // est produit par la même bibliothèque que celui du tableau de bord.
 //
 // ⚠️ ET LE LOGO N'EST PAS REDESSINÉ : `<YoppaaLogo>` porte les proportions de
-// `lib/logo.js`. Le recopier ici aurait donné un troisième jeu de mesures,
-// exactement le défaut que ce fichier a fini par régler.
+// `lib/logo.js`. Le recopier ici aurait donné un troisième jeu de mesures.
 //
 // IMPRESSION : Ctrl+P, A4 portrait, marges nulles, arrière-plans cochés.
 //
-// 🔥 REFONTE DU 14/10, SUR LA BASE DE LA LANDING V2. Décision d'Alex au
-// tableau : UNE BASE COMMUNE + UN RECTO PAR SEGMENT (alimentaire à emporter,
-// restaurant, services sur rendez-vous, détail). Le recto parle le métier de
-// celui devant qui Alex se tient ; le verso (offre, formules, engagement, « On
-// t'appelle ») est le même pour tous. Une seule page, un réglage de segment :
-// une correction de la base vaut pour les quatre feuilles, aucune copie ne
-// diverge. Le QR porte le segment (`?via=kit-…`) : on saura quelle feuille
-// convertit.
+// 🔥 REFONTE DU 14/10, EN DEUX TEMPS.
 //
-// 🔴 CE QUI A ÉTÉ RETIRÉ, ET POURQUOI. « La place de marché du commerce local
-// belge » (formule abandonnée, erreur n° 3 du brief de la landing) ; « la
-// gazette chaque matin » sans dire qu'en Exister c'est chaque semaine (erreur
-// n° 1) ; « ta fiche est prête en cinq minutes » (un délai de plus, qu'aucun
-// écran ne tient) ; des comptes d'habitants (« 3 habitants ont voulu… ») qui
-// n'étaient pas présentés comme des exemples ; et sur la CARTE DE VISITE,
-// « Gratuit jusqu'au 8 janvier 2027 », faux depuis les 100 jours permanents
-// et oublié le matin même (frère non traité).
+// 1) Décision d'Alex au tableau : UNE BASE COMMUNE + UN RECTO PAR SEGMENT
+//    (alimentaire à emporter, restaurant, services sur rendez-vous, détail).
+//    Une seule page, un réglage de segment : une correction de la base vaut
+//    pour les quatre feuilles.
+//
+// 2) Son retour sur la première version : « tu peux faire bien mieux, TROP
+//    MÉLANGÉ, PAS ASSEZ TUNNEL DE VENTE. Le ticket à compléter sur un flyer
+//    plastifié, pas utile et pas pertinent. Il faut structurer et moderniser
+//    comme la landing, DU PEPS, ODOO MIND. » D'où un vrai TUNNEL, une idée par
+//    bloc, dans l'ordre où on lit :
+//      RECTO, le choc et la promesse : le métier, le titre de la landing, la
+//        pique, une bande qui tranche, trois choses qui changent pour LUI,
+//        puis « Reprends tes clients » et un QR pour REGARDER (la landing).
+//      VERSO, la décision : comment ça marche en trois étapes, l'offre, les
+//        formules, la liberté, puis UN appel à l'action et un QR pour AGIR
+//        (l'inscription).
+//    Le ticket à remplir est parti : un papier plastifié ne se remplit pas.
+//
+// 🔴 CE QUI A ÉTÉ RETIRÉ DE L'ANCIEN PAPIER. « La place de marché du commerce
+// local belge » (formule abandonnée) ; « la gazette chaque matin » sans dire
+// qu'en Exister c'est chaque semaine ; « ta fiche est prête en cinq minutes »
+// (un délai qu'aucun écran ne tient) ; des comptes d'habitants non présentés
+// comme des exemples ; et sur la CARTE DE VISITE, « Gratuit jusqu'au 8 janvier
+// 2027 », faux depuis les 100 jours permanents.
+//
+// ⚠️ SUR PAPIER, UN FOND EST BLANC OU FRANCHEMENT FONCÉ (29/08) : les violets
+// très clairs ressortent bleu ciel au tirage. Les aplats de cette page sont
+// donc `T.ink`, `T.panel`, `T.deep` ou `T.main`, jamais `T.bg` ni `T.pale`.
 // ════════════════════════════════════════════════════════════════════
 
 import { useEffect, useRef, useState } from 'react'
@@ -46,111 +58,29 @@ import { feuilleEnSvg, svgEnPng, feuillesEnPdf, telecharger, DPI_IMPRESSION } fr
 import { getPrixPlan } from '@/lib/plans'
 import { euros } from '@/lib/montants'
 import { ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
-// WhatsApp, le téléphone de l'entreprise et l'encodage offert : la même source
-// que la landing (`lib/contact.js`).
+// Le téléphone de l'entreprise (appel et WhatsApp) et l'encodage offert : la
+// même source que la landing.
 import { TELEPHONE_AFFICHE, ENCODAGE_OFFERT } from '@/lib/contact'
 
-// ⚠️ LA DESTINATION DU QR EST UNE DÉCISION, PAS UN DÉTAIL.
+// ⚠️ LA DESTINATION DES QR EST UNE DÉCISION, PAS UN DÉTAIL.
 //
-// Pas `/pro` : cette route n'est pas une page, c'est un `redirect` vers le
-// formulaire d'inscription. Un commerçant qui scanne entre deux clients veut
-// REGARDER, pas saisir ses coordonnées. `/pro` reste l'adresse ÉCRITE sur la
-// carte, courte et dictable, pour celui qui se décide plus tard et la tape.
-//
-// L'ancre `#commercants`, gardée par `verif:lancement`, est le haut de la
-// landing v2, qui parle au commerçant. ⚠️ 14/10 : le `via` porte le SEGMENT de
-// la feuille, pour savoir laquelle fait venir.
+// RECTO → la landing, ancre `#commercants` (gardée par `verif:lancement`) : un
+// commerçant qui scanne entre deux clients veut d'abord REGARDER.
+// VERSO → l'inscription : c'est la face de la décision, sous un « Inscris-toi ».
+// ⚠️ 14/10 : c'est une entorse VOULUE à la règle d'août (« jamais `/pro` »),
+// pour la seule face qui demande d'agir ; le recto garde la règle.
+// Les deux portent le SEGMENT (`via=kit-…`) : on saura quelle feuille fait
+// venir, et laquelle fait s'inscrire.
 const urlQr = (via) => `https://www.yoppaa.app/?via=${via}#commercants`
-
-// ─── LES QUATRE RECTOS (Alex, 14/10) ─────────────────────────────────────────
-//
-// ⚠️ ON PIQUE LE MODÈLE, JAMAIS UN NOM (décision d'Alex, comme la landing).
-// ⚠️ AUCUN CHIFFRE INVENTÉ : ce papier reste des mois sur un comptoir. Les
-// seuls nombres viennent de `lib/plans.js` et de `lib/lancement.js`.
-// ⚠️ CHAQUE PROMESSE EXISTE DANS L'APP : le rappel une heure avant
-// (`lib/rappels.js`), l'empreinte sans débit (`SetupIntent`), les invendus,
-// l'équipe, la lecture de carte par l'IA.
-const SEGMENTS = [
-  {
-    cle: 'alimentaire',
-    onglet: 'Alimentaire à emporter',
-    pour: 'Friteries, snacks, boulangeries, boucheries, traiteurs, food trucks',
-    titre: ['Les autres prennent tes commandes.', 'Yoppaa t’amène des clients.'],
-    chapo: 'À l’heure de manger, les habitants de ta commune ouvrent Yoppaa : qui est ouvert, ce qu’il reste, où commander sans faire la file. Et ils tombent sur toi, à deux pas.',
-    pique: 'Ton cornet de frites, ce n’est pas à nous d’en manger une part.',
-    unite: 'commande',
-    points: [
-      <>Ils commandent à l&rsquo;avance, avec l&rsquo;heure de retrait. <b>Un appel en plein coup de feu, c&rsquo;est une frite qui brûle.</b></>,
-      <>Sauces, suppléments, tailles : <b>ils commandent comme au comptoir</b>, et ta cuisine reçoit la commande écrite.</>,
-      <>À la fermeture, <b>ce qu&rsquo;il te reste repart à prix réduit</b> au lieu d&rsquo;être jeté.</>,
-      <>Leur <b>carte de fidélité</b> se remplit toute seule : le numéro de GSM suffit, plus de carton à tamponner.</>,
-      <>Pas le temps d&rsquo;encoder ? <b>Prends ta carte en photo</b> : l&rsquo;IA la lit et prépare tes articles.</>,
-    ],
-  },
-  {
-    cle: 'restaurant',
-    onglet: 'Restaurant',
-    pour: 'Restaurants, brasseries, pizzerias, tavernes',
-    titre: ['Les autres prennent tes réservations.', 'Yoppaa t’amène des clients.'],
-    chapo: 'Le vendredi soir, les habitants de ta commune cherchent une table à deux pas. Sur Yoppaa, ils la trouvent chez toi, sans passer par un annuaire qui facture chaque couvert.',
-    pique: 'Chez nous, un couvert réservé ne se paie pas au couvert.',
-    unite: 'couvert',
-    points: [
-      <>Ils réservent à toute heure : combien ils sont, à quelle heure. <b>C&rsquo;est ta salle qui attribue la table</b>, pas un algorithme.</>,
-      <>Sur les grandes tables, <b>une empreinte bancaire</b> : la carte est enregistrée, rien n&rsquo;est débité si le client vient.</>,
-      <>Ils commandent aussi <b>à emporter</b>, depuis la même page, sans que le téléphone sonne pendant le service.</>,
-      <><b>Bons cadeaux et fidélité</b> : ils reviennent, et ils font venir les autres.</>,
-      <>Pas le temps d&rsquo;encoder ? <b>Prends ta carte en photo</b> : l&rsquo;IA la lit et prépare tes plats.</>,
-    ],
-  },
-  {
-    cle: 'services',
-    onglet: 'Services sur rendez-vous',
-    pour: 'Coiffeurs, barbershops, instituts, bien-être, garages',
-    titre: ['Les autres prennent tes rendez-vous.', 'Yoppaa t’amène des clients.'],
-    chapo: 'Ton salon est fermé, ton agenda ne l’est pas. Le dimanche soir, les habitants de ta commune réservent leur créneau, et découvrent que tu es à deux pas.',
-    pique: 'Ton agenda est plein ? Tant mieux. Ça ne nous rapporte pas un centime de plus.',
-    unite: 'rendez-vous',
-    points: [
-      <>Ils choisissent la prestation, la personne et l&rsquo;heure. <b>Plus de répondeur, plus de rappel à passer.</b></>,
-      <>Le <b>rappel part tout seul une heure avant</b> : moins de rendez-vous oubliés.</>,
-      <><b>Abonnements et cartes de séances</b> : ton client achète, réserve lui-même, et son solde se décompte tout seul.</>,
-      <><b>Bons cadeaux à offrir</b>, fidélité liée au GSM : ils reviennent, et ils en parlent.</>,
-      <>Tu as une équipe ? <b>Chacun son agenda</b>, ses prestations et ses horaires.</>,
-    ],
-  },
-  {
-    cle: 'detail',
-    onglet: 'Détail et boutiques',
-    pour: 'Mode, fleuristes, librairies, décoration, épiceries fines',
-    titre: ['Les autres prennent une part de chaque pull.', 'Yoppaa t’amène des clients.'],
-    chapo: 'Les habitants de ta commune veulent acheter près de chez eux, sans attendre un colis. Sur Yoppaa, ils voient ta vitrine, choisissent, et passent la prendre.',
-    pique: 'Ta vitrine, ton stock, ton prix. Pas de commission Yoppaa planquée sous chaque pull.',
-    unite: 'vente',
-    points: [
-      <><b>Ta boutique en ligne</b> : tes articles avec leurs tailles et leurs couleurs, et le stock qui suit.</>,
-      <>Ils réservent ou achètent, puis passent en boutique. <b>Ils entrent, et ils voient le reste.</b></>,
-      <>Tu expédies aussi, si tu veux : <b>la livraison à domicile</b>, par la poste.</>,
-      <>Tes <b>nouveautés et tes promos</b> arrivent sur le téléphone de ceux qui t&rsquo;ont mis en favori.</>,
-      <><b>Bons cadeaux et fidélité</b> : le client qu&rsquo;on t&rsquo;offre devient ton client.</>,
-    ],
-  },
-]
-
-// Le verso, commun : ce qu'on raye, mot pour mot celui de la landing.
-const RATURES = [
-  ['Une part de chaque vente.', 'Un prix fixe, même pour ton meilleur samedi.'],
-  ['Un contrat dont on ne sort pas.', 'Tu pars quand tu veux, et ta page reste.'],
-  ['Des clients qui appartiennent à la plateforme.', 'Tes clients restent les tiens.'],
-  ['Un service client qui ne connaît pas ton commerce.', 'Une vraie personne qui connaît ton dossier.'],
-  ['Un logiciel de plus à apprendre.', 'Ton téléphone suffit.'],
-]
+const urlInscription = (via) => `https://www.yoppaa.app/signup?via=${via}`
 
 const T = {
   ink: '#1A0840', panel: '#160636', deep: '#2D0F6B',
   main: '#6B35C4', mid: '#9660E0', light: '#C4A0F4',
   pale: '#EDE0FF', bg: '#F8F6FF', grey: '#6B7280',
 }
+const MENTHE = '#6EE7B7'
+const FILET = '#D9CCF2'
 
 const CONTACT = {
   nom: 'Alexandre Verstappen',
@@ -160,26 +90,108 @@ const CONTACT = {
   email: 'hello@yoppaa.app',
 }
 
+// ─── Les icônes (charte : SVG, jamais d'emoji) ──────────────────────────────
+function Icone({ d, taille = '6mm', couleur = '#fff' }) {
+  return (
+    <svg width={taille} height={taille} viewBox="0 0 24 24" fill="none" stroke={couleur} strokeWidth="2.2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {d.map((p, i) => <path key={i} d={p}/>)}
+    </svg>
+  )
+}
+const I = {
+  pin:    ['M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z', 'M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
+  sac:    ['M5 8h14l-1.2 12H6.2z', 'M9 8V6.5a3 3 0 0 1 6 0V8'],
+  boucle: ['M17 2l3 3-3 3', 'M4 11V9a4 4 0 0 1 4-4h12', 'M7 22l-3-3 3-3', 'M20 13v2a4 4 0 0 1-4 4H4'],
+  agenda: ['M4 6.5h16V20H4z', 'M4 10.5h16', 'M8.5 3.5v4', 'M15.5 3.5v4'],
+  table:  ['M4 9h16', 'M7 9v10', 'M17 9v10', 'M9 5h6'],
+  vitrine:['M4 9h16l-1.5-4.5h-13z', 'M5 9v11h14V9', 'M10 20v-6h4v6'],
+}
+
+// ─── LES QUATRE RECTOS (Alex, 14/10) ─────────────────────────────────────────
+//
+// ⚠️ ON PIQUE LE MODÈLE, JAMAIS UN NOM (décision d'Alex, comme la landing).
+// ⚠️ AUCUN CHIFFRE INVENTÉ : ce papier reste des mois sur un comptoir. Les
+// seuls nombres viennent de `lib/plans.js` et de `lib/lancement.js`.
+// ⚠️ CHAQUE PROMESSE EXISTE DANS L'APP : le rappel une heure avant
+// (`lib/rappels.js`), l'empreinte sans débit (`SetupIntent`), les invendus,
+// les cartes de séances, la lecture de carte par l'IA.
+// ⚠️ TROIS ATOUTS, PAS CINQ : « ils te trouvent, ils viennent sans
+// t'appeler, ils reviennent ». C'est la structure de la landing, et trois
+// blocs se lisent d'un regard là où cinq puces se survolent.
+const SEGMENTS = [
+  {
+    cle: 'alimentaire',
+    onglet: 'Alimentaire à emporter',
+    pour: 'Friteries, snacks, boulangeries, boucheries, traiteurs, food trucks',
+    metier: 'une friterie',
+    titre: ['Les autres prennent tes commandes.', 'Yoppaa t’amène des clients.'],
+    pique: 'Ton cornet de frites, ce n’est pas à nous d’en manger une part.',
+    atouts: [
+      { icone: I.pin, titre: 'Ils te trouvent.', texte: 'À l’heure de manger, ils ouvrent l’app de leur commune : qui est ouvert, ce qu’il reste. Toi, à deux pas.' },
+      { icone: I.sac, titre: 'Ils commandent sans t’appeler.', texte: 'Sauces, tailles, heure de retrait : tout arrive écrit. Un appel en plein coup de feu, c’est une frite qui brûle.' },
+      { icone: I.boucle, titre: 'Ils reviennent.', texte: 'Fidélité au numéro de GSM, et ce qu’il te reste le soir repart à prix réduit au lieu d’être jeté.' },
+    ],
+  },
+  {
+    cle: 'restaurant',
+    onglet: 'Restaurant',
+    pour: 'Restaurants, brasseries, pizzerias, tavernes',
+    metier: 'un restaurant',
+    titre: ['Les autres prennent tes réservations.', 'Yoppaa t’amène des clients.'],
+    pique: 'Chez nous, un couvert réservé ne se paie pas au couvert.',
+    atouts: [
+      { icone: I.pin, titre: 'Ils te trouvent.', texte: 'Le vendredi soir, ils cherchent une table à deux pas. Dans l’app de leur commune, elle est chez toi.' },
+      { icone: I.table, titre: 'Ils réservent sans t’appeler.', texte: 'Combien, à quelle heure : c’est ta salle qui attribue la table. Sur les grandes tables, une empreinte bancaire, rien n’est débité si le client vient.' },
+      { icone: I.boucle, titre: 'Ils reviennent.', texte: 'Bons cadeaux, fidélité au GSM, plats à emporter depuis la même page : ils reviennent, et ils amènent les autres.' },
+    ],
+  },
+  {
+    cle: 'services',
+    onglet: 'Services sur rendez-vous',
+    pour: 'Coiffeurs, barbershops, instituts, bien-être, garages',
+    metier: 'un salon',
+    titre: ['Les autres prennent tes rendez-vous.', 'Yoppaa t’amène des clients.'],
+    pique: 'Ton agenda est plein ? Tant mieux. Ça ne nous rapporte pas un centime de plus.',
+    atouts: [
+      { icone: I.pin, titre: 'Ils te trouvent.', texte: 'Le dimanche soir, ils cherchent un créneau près de chez eux. Ton salon est fermé, ton agenda ne l’est pas.' },
+      { icone: I.agenda, titre: 'Ils réservent sans t’appeler.', texte: 'Prestation, personne, heure : plus de répondeur. Le rappel part tout seul une heure avant.' },
+      { icone: I.boucle, titre: 'Ils reviennent.', texte: 'Abonnements, cartes de séances, bons cadeaux : le client revient sans que tu le relances.' },
+    ],
+  },
+  {
+    cle: 'detail',
+    onglet: 'Détail et boutiques',
+    pour: 'Mode, fleuristes, librairies, décoration, épiceries fines',
+    metier: 'une boutique',
+    titre: ['Les autres prennent une part de chaque pull.', 'Yoppaa t’amène des clients.'],
+    pique: 'Ta vitrine, ton stock, ton prix. Pas de commission Yoppaa planquée sous chaque pull.',
+    atouts: [
+      { icone: I.pin, titre: 'Ils te trouvent.', texte: 'Ils veulent acheter près de chez eux, sans attendre un colis. Ta vitrine est dans leur poche.' },
+      { icone: I.vitrine, titre: 'Ils achètent sans t’appeler.', texte: 'Tailles, couleurs, stock : ils choisissent et passent prendre. Ils entrent, et ils voient le reste.' },
+      { icone: I.boucle, titre: 'Ils reviennent.', texte: 'Tes nouveautés en notification, la fidélité, les bons cadeaux : le client qu’on t’offre devient le tien.' },
+    ],
+  },
+]
+
+// La bande qui tranche, sous le titre : trois vérités, aucune promesse vague.
+const BANDE = ['0 % de commission Yoppaa', 'Prix fixe, même ton meilleur samedi', 'Tu pars quand tu veux']
+
 // ─── La jauge de débordement ────────────────────────────────────────────────
 //
 // ⚠️ ELLE EXISTE PARCE QUE LE DÉFAUT EST INVISIBLE. Une feuille A4 a une
 // hauteur fixe : ce qui dépasse est simplement coupé, sans erreur, sans
-// avertissement, et on ne s'en aperçoit qu'à l'impression. Trois allers-retours
-// ont été perdus à deviner « ça déborde ? ». On mesure, et on l'affiche.
+// avertissement, et on ne s'en aperçoit qu'à l'impression. On mesure, et on
+// l'affiche.
 //
-// ⚠️ ELLE MESURE DANS LES DEUX SENS, et c'est le point (29/08). Une jauge qui
-// dit seulement « ça déborde » ne renseigne que la moitié du temps : une fois
-// au vert, on ne sait plus si la page tient de justesse ou si on a tellement
-// raccourci qu'elle est devenue vide. Il faudrait un aller-retour de plus pour
-// l'apprendre, et c'est exactement l'aller-retour que cette jauge existe pour
-// supprimer. Elle rend donc un nombre SIGNÉ : ce qui est coupé, ou ce qui reste.
+// ⚠️ ELLE MESURE DANS LES DEUX SENS (29/08) : un nombre SIGNÉ, ce qui est
+// coupé, ou ce qui reste.
 //
 // ⚠️ LE VERDICT VIT DANS `lib/jauge-page.js` ET PAS ICI : il est exécuté par
-// `verif:kit`. Une jauge qui se trompe de verdict donne une confiance fausse
-// sur un support qu'on ne peut plus corriger une fois imprimé.
+// `verif:kit`.
 //
 // ⚠️ ÉCRAN SEULEMENT : `.jauge` est masquée à l'impression.
-function useAjustement(feuille, contenu, pied) {
+function useAjustement(feuille, contenu, pied, cle) {
   const [mm, setMm] = useState(null)
   useEffect(() => {
     const f = feuille.current
@@ -203,7 +215,8 @@ function useAjustement(feuille, contenu, pied) {
     const obs = new ResizeObserver(mesurer)
     obs.observe(f)
     return () => obs.disconnect()
-  }, [feuille, contenu, pied])
+    // ⚠️ `cle` : changer de segment change le texte, donc la hauteur.
+  }, [feuille, contenu, pied, cle])
   return mm
 }
 
@@ -250,23 +263,16 @@ function Qr({ src, taille }) {
   // Une `<img>` nue et non `next/image` : la source est une donnée `data:`
   // produite dans le navigateur, il n'y a aucun fichier à optimiser.
   //
-  // ⚠️ `loading="eager"` ET PAS `lazy`, contrairement au reste de l'app. La
-  // garde de `verif:slots` réclame les deux attributs à cause du gel de
-  // défilement iOS, mais ici la page est faite pour être IMPRIMÉE : une image
-  // différée peut ne pas être décodée au moment du tirage, et le QR sortirait
-  // en carré blanc sur du papier qu'on ne peut plus corriger.
+  // ⚠️ `loading="eager"` ET PAS `lazy` : la page est faite pour être IMPRIMÉE,
+  // une image différée peut ne pas être décodée au moment du tirage, et le QR
+  // sortirait en carré blanc sur du papier qu'on ne peut plus corriger.
   return <img src={src} alt="" decoding="async" loading="eager"
     style={{ width: taille, height: taille, display: 'block' }}/>
 }
 
 const S = {
-  descripteur: { fontSize: '9.4pt', fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase', color: T.main, margin: '5mm 0 0', lineHeight: 1.5 },
   eyebrow: { fontSize: '8.6pt', fontWeight: 800, letterSpacing: '.2em', textTransform: 'uppercase', color: T.main, margin: 0 },
-  // ⚠️ 27pt (et non plus 31) depuis le 14/10 : le titre de la v2 tient en deux
-  // phrases, et le recto débordait de 2,4 mm (mesuré par la jauge).
-  h1: { fontSize: '27pt', lineHeight: 1.06, letterSpacing: '-.025em', wordSpacing: '.05em', fontWeight: 800, margin: '5mm 0 0', textWrap: 'balance' },
-  h2: { fontSize: '19pt', lineHeight: 1.13, letterSpacing: '-.025em', fontWeight: 800, margin: '3mm 0 0', textWrap: 'balance' },
-  chapo: { fontSize: '12pt', lineHeight: 1.45, margin: '4.5mm 0 0', color: T.deep, fontWeight: 500 },
+  h2: { fontSize: '25pt', lineHeight: 1.06, letterSpacing: '-.03em', wordSpacing: '.05em', fontWeight: 800, margin: '2.5mm 0 0', textWrap: 'balance', color: T.ink },
 }
 
 // ─── Les boutons de téléchargement ──────────────────────────────────────────
@@ -299,8 +305,7 @@ function Telechargements({ cible, largeurMm, hauteurMm, nom }) {
 
   // ⚠️ MÊME HABILLAGE QUE LES BOUTONS DU BRAND KIT (`app/brand-kit/page.js`) :
   // violet pour le SVG, violet foncé pour le PNG, et la largeur en pixels dans
-  // le libellé. Deux jeux de boutons différents pour le même geste, sur deux
-  // pages voisines, feraient hésiter à chaque visite.
+  // le libellé.
   const largeurPng = Math.round((largeurMm / 25.4) * DPI_IMPRESSION)
   const bouton = {
     flex: 1, padding: '8px 12px', color: '#fff', border: 'none', borderRadius: 8,
@@ -334,9 +339,7 @@ function Telechargements({ cible, largeurMm, hauteurMm, nom }) {
 // ─── Les deux faces en un seul PDF ──────────────────────────────────────────
 //
 // ⚠️ C'EST LE FICHIER QU'ON DONNE À UN IMPRIMEUR. Deux pages A4 dans l'ordre,
-// un seul fichier à déposer, et son pilote sait faire le retournement. Les
-// téléchargements par face restent : ils servent à autre chose, se relire une
-// seule page ou l'envoyer par message.
+// un seul fichier à déposer, et son pilote sait faire le retournement.
 function TelechargementCombine({ pages, nom = 'yoppaa-kit-commercant' }) {
   const [enCours, setEnCours] = useState(false)
   const [erreur, setErreur] = useState(null)
@@ -380,32 +383,6 @@ function TelechargementCombine({ pages, nom = 'yoppaa-kit-commercant' }) {
   )
 }
 
-function Puce() {
-  return <span style={{ flex: '0 0 auto', width: '2.8mm', height: '2.8mm', borderRadius: '50%', background: T.main, marginTop: '1.9mm' }}/>
-}
-
-function Point({ children }) {
-  return (
-    // ⚠️ LE CORPS RESTE À 11pt. C'est un papier lu de l'autre côté d'un
-    // comptoir, souvent debout : on resserre l'interligne, jamais la taille.
-    <li style={{ display: 'flex', gap: '3.2mm', alignItems: 'flex-start', fontSize: '11pt', lineHeight: 1.3 }}>
-      <Puce/><span>{children}</span>
-    </li>
-  )
-}
-
-// Le ticket à remplir au stylo : le calculateur de la landing, en papier. Le
-// commerçant écrit SES chiffres sur la ligne, jamais les nôtres.
-function LigneAVide({ libelle, unite }) {
-  return (
-    <p style={{ margin: 0, display: 'flex', alignItems: 'flex-end', gap: '2mm', padding: '1.3mm 0' }}>
-      <span style={{ flex: '0 0 auto' }}>{libelle}</span>
-      <span style={{ flex: 1, borderBottom: `0.8pt dotted ${T.ink}`, transform: 'translateY(-1mm)' }}/>
-      <span style={{ flex: '0 0 auto', fontWeight: 800 }}>{unite}</span>
-    </p>
-  )
-}
-
 export default function KitCommercant() {
   // Le segment vient de l'adresse (`?segment=restaurant`) pour qu'un lien
   // ouvre directement la bonne feuille, puis des onglets de l'atelier.
@@ -416,15 +393,16 @@ export default function KitCommercant() {
   }, [])
   const seg = SEGMENTS.find(s => s.cle === cleSegment) || SEGMENTS[0]
   const qr = useQr(urlQr(`kit-${seg.cle}`))
-  // La carte de visite sert à tous les segments : son QR ne porte que « kit ».
+  const qrInscription = useQr(urlInscription(`kit-${seg.cle}`))
+  // La carte de visite sert à tous les segments : son QR ne porte que « carte ».
   const qrCarte = useQr(urlQr('kit-carte'))
   // Trois repères par feuille : la page, son corps, et son bandeau du bas.
   // Les deux derniers servent à mesurer le blanc quand la page tient.
   const recto = useRef(null), rectoCorps = useRef(null), rectoPied = useRef(null)
   const verso = useRef(null), versoCorps = useRef(null), versoPied = useRef(null)
   const carteTexte = useRef(null), carteQr = useRef(null)
-  const debRecto = useAjustement(recto, rectoCorps, rectoPied)
-  const debVerso = useAjustement(verso, versoCorps, versoPied)
+  const debRecto = useAjustement(recto, rectoCorps, rectoPied, seg.cle)
+  const debVerso = useAjustement(verso, versoCorps, versoPied, seg.cle)
 
   const feuille = {
     width: '210mm', height: '297mm', overflow: 'hidden', background: '#fff',
@@ -432,11 +410,8 @@ export default function KitCommercant() {
     fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif',
     color: T.ink, boxShadow: '0 10px 40px rgba(26,8,64,.22)',
   }
-  const pad = { padding: '15mm 17mm 0' }
-  // ⚠️ LE VERSO A SA PROPRE MARGE HAUTE. Il porte sept points, le bloc
-  // communautaire et le closer en deux temps : c'est la page la plus chargée
-  // des deux, et elle débordait de 11,4 mm (mesuré par la jauge, 29/08). Le
-  // recto, lui, tient et n'a aucune raison d'être resserré avec lui.
+  // ⚠️ LE VERSO A SA PROPRE MARGE HAUTE : c'est la page la plus chargée des
+  // deux (mesuré par la jauge, 29/08). Le recto, lui, ouvre sur un aplat.
   const padVerso = { padding: '13mm 17mm 0' }
 
   return (
@@ -464,7 +439,7 @@ export default function KitCommercant() {
                 style={{
                   padding: '9px 16px', borderRadius: 100, cursor: 'pointer', fontFamily: 'inherit',
                   fontSize: 13.5, fontWeight: 800,
-                  border: `1.5px solid ${s.cle === seg.cle ? T.main : '#D9CCF2'}`,
+                  border: `1.5px solid ${s.cle === seg.cle ? T.main : FILET}`,
                   background: s.cle === seg.cle ? T.main : '#fff',
                   color: s.cle === seg.cle ? '#fff' : T.deep,
                 }}>
@@ -478,107 +453,106 @@ export default function KitCommercant() {
           </p>
           <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: '#3F3355' }}>
             La <strong>jauge</strong> sous chaque page mesure <strong>dans les deux sens</strong> : ce qui est
-            coupé quand ça déborde, et le blanc qui reste en bas quand ça tient. Une feuille A4 a une hauteur
-            fixe : ce qui dépasse disparaît sans erreur ni avertissement, et ne se voit qu&rsquo;une fois
-            imprimé. En vert avec la marge, la page est bonne à tirer. Elle est masquée à l&rsquo;impression.
+            coupé quand ça déborde, et le blanc qui reste en bas quand ça tient. En vert avec la marge, la page
+            est bonne à tirer. Elle est masquée à l&rsquo;impression.
           </p>
           {/* ⚠️ DIRE À QUOI SERT CHAQUE FICHIER. Le SVG est vectoriel mais son
               contenu est de l'HTML embarqué : les navigateurs le rendent, pas
-              Illustrator ni Inkscape. Le taire ferait envoyer chez l'imprimeur
-              un fichier qui s'y ouvrirait vide. */}
+              Illustrator ni Inkscape. */}
           <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: 1.6, color: '#3F3355' }}>
             <strong>Les fichiers :</strong> le <strong>PNG en {DPI_IMPRESSION} dpi</strong> est celui à envoyer
             à un imprimeur, il s&rsquo;ouvre partout. Le <strong>SVG</strong> reste vectoriel et se rouvre
             dans un navigateur, mais pas dans Illustrator ni Inkscape, qui ignorent l&rsquo;HTML qu&rsquo;il
-            embarque. Dans les deux cas la police est <strong>incorporée au fichier</strong> : s&rsquo;il n&rsquo;y
-            arrive pas, le téléchargement est refusé plutôt que rendu dans une autre police.
+            embarque. Dans les deux cas la police est <strong>incorporée au fichier</strong>.
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap' }}>
 
-          {/* ══════════════ RECTO ══════════════ */}
+          {/* ══════════════ RECTO : LE CHOC ET LA PROMESSE ══════════════ */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div className="feuille" ref={recto} style={feuille}>
-              <div ref={rectoCorps} style={pad}>
-                <YoppaaLogo size={40} mode="light"/>
-                {/* Le descripteur nomme les MÉTIERS du segment : celui qui tient
-                    la feuille doit s'y reconnaître avant de lire le titre. */}
-                <p style={S.descripteur}>{seg.pour}</p>
-
-                {/* ✅ Le titre de la landing v2 (Alex, 14/10), au métier du segment. */}
-                <h1 style={S.h1}>{seg.titre[0]}<br/><span style={{ color: T.main }}>{seg.titre[1]}</span></h1>
-                <p style={S.chapo}>{seg.chapo}</p>
-
-                {/* ⚠️ « Yoppaa ne prend » ET PAS « aucune commission » tout court :
-                    les frais de paiement existent, et une promesse sans sujet se
-                    retourne au premier versement. */}
-                <div style={{ margin: '5mm 0 0', borderLeft: `1.5mm solid ${T.main}`, paddingLeft: '6mm' }}>
-                  <p style={{ margin: 0, fontSize: '14.5pt', lineHeight: 1.25, fontWeight: 800, letterSpacing: '-.02em', color: T.ink }}>
-                    Ils t&rsquo;appellent «&nbsp;partenaire&nbsp;».<br/>
-                    <span style={{ color: T.main }}>Ils se paient comme un associé.</span>
+              <div ref={rectoCorps}>
+                {/* ══ LE HAUT, COMME LA LANDING ══ Aplat foncé, le métier dans
+                    une pastille blanche, le titre en blanc uni (règle des titres
+                    sur fond sombre). */}
+                <div style={{ background: `linear-gradient(140deg, ${T.panel} 0%, ${T.ink} 55%, ${T.deep} 100%)`, color: '#fff', padding: '11mm 17mm 9mm' }}>
+                  <YoppaaLogo size={30} mode="dark"/>
+                  <p style={{ margin: '4.5mm 0 0', fontSize: '8.4pt', fontWeight: 800, letterSpacing: '.18em', textTransform: 'uppercase', color: T.light }}>
+                    {seg.pour}
                   </p>
-                  <p style={{ margin: '2.4mm 0 0', fontSize: '11pt', lineHeight: 1.35, fontWeight: 800, color: T.ink }}>{seg.pique}</p>
-                  <span style={{ display: 'block', marginTop: '2mm', fontSize: '10pt', lineHeight: 1.42, fontWeight: 600, color: T.deep }}>
-                    Yoppaa ne prend aucune commission sur tes ventes&nbsp;: la formule au mois est notre seul
-                    revenu. Les frais de paiement, eux, restent ceux de ta banque, comme au comptoir.
-                  </span>
+                  <p style={{ margin: '4mm 0 0', fontSize: '15pt', fontWeight: 800, color: 'rgba(255,255,255,.92)' }}>
+                    Tu tiens{' '}
+                    <span style={{ display: 'inline-block', padding: '.4mm 3.2mm 1mm', borderRadius: '2.4mm', background: '#fff', color: T.ink }}>{seg.metier}</span>&nbsp;?
+                  </p>
+                  <h1 style={{ margin: '3.5mm 0 0', fontSize: '32pt', lineHeight: 1.04, letterSpacing: '-.03em', wordSpacing: '.06em', fontWeight: 800, color: '#fff', textWrap: 'balance' }}>
+                    {seg.titre[0]} {seg.titre[1]}
+                  </h1>
+                  <p style={{ margin: '4mm 0 0', fontSize: '13pt', lineHeight: 1.3, fontWeight: 800, letterSpacing: '-.01em', color: T.light }}>
+                    Ils t&rsquo;appellent «&nbsp;partenaire&nbsp;». Ils se paient comme un associé.
+                  </p>
                 </div>
 
-                <ul style={{ listStyle: 'none', margin: '5mm 0 0', padding: 0, display: 'grid', gap: '2.4mm' }}>
-                  {seg.points.map((p, i) => <Point key={i}>{p}</Point>)}
-                </ul>
+                {/* ══ LA BANDE QUI TRANCHE ══ (la bande défilante de la landing,
+                    à plat). ⚠️ « 0 % de commission YOPPAA » : jamais sans sujet. */}
+                <div style={{ background: T.main, color: '#fff', padding: '3.4mm 17mm', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1.5mm 3.5mm', fontSize: '10.2pt', fontWeight: 800 }}>
+                  {BANDE.map((b, i) => (
+                    <span key={b} style={{ display: 'inline-flex', alignItems: 'center', gap: '3.5mm' }}>
+                      {i > 0 && <span style={{ width: '1.8mm', height: '1.8mm', borderRadius: '50%', background: T.light }}/>}
+                      {b}
+                    </span>
+                  ))}
+                </div>
 
-                {/* ══ LE TICKET QU'ON NE T'IMPRIME JAMAIS, À REMPLIR AU STYLO ══
-                    ✅ L'idée validée par Alex le 14/10 pour la landing, en papier.
-                    ⚠️ AUCUN CHIFFRE PRÉIMPRIMÉ CÔTÉ « EUX » : sur une feuille qui
-                    reste des mois au comptoir, un taux écrit par nous serait NOTRE
-                    chiffre, et il vieillirait. Les lignes sont vides : c'est le
-                    commerçant qui écrit le sien. */}
-                <div style={{ margin: '5mm 0 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5mm', fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, Consolas, "Courier New", monospace', fontSize: '9.4pt', color: T.ink }}>
-                  <div style={{ border: `1pt dashed ${T.ink}`, borderRadius: '2mm', padding: '3mm 4mm' }}>
-                    <p style={{ margin: '0 0 1.5mm', fontWeight: 800, fontSize: '8.4pt', letterSpacing: '.06em', textTransform: 'uppercase', textAlign: 'center' }}>Le ticket qu&rsquo;on ne t&rsquo;imprime jamais</p>
-                    <LigneAVide libelle="Ce qu’on me prend" unite="%"/>
-                    <LigneAVide libelle={`Par ${seg.unite}`} unite="€"/>
-                    <LigneAVide libelle="Sur un an" unite="€"/>
+                {/* ══ TROIS CHOSES QUI CHANGENT, POUR LUI ══ */}
+                <div style={{ padding: '6.5mm 17mm 0' }}>
+                  <p style={S.eyebrow}>Ce que Yoppaa change pour toi</p>
+                  <div style={{ margin: '3mm 0 0', display: 'grid', gap: '2.4mm' }}>
+                    {seg.atouts.map(a => (
+                      <div key={a.titre} style={{ display: 'grid', gridTemplateColumns: '11mm 1fr', columnGap: '4.5mm', alignItems: 'start', border: `0.9pt solid ${FILET}`, borderRadius: '3.5mm', padding: '3.4mm 4.5mm' }}>
+                        <span style={{ width: '11mm', height: '11mm', borderRadius: '3mm', background: T.main, display: 'grid', placeItems: 'center' }}>
+                          <Icone d={a.icone}/>
+                        </span>
+                        <div>
+                          <p style={{ margin: 0, fontSize: '13.5pt', fontWeight: 800, letterSpacing: '-.02em', color: T.ink }}>{a.titre}</p>
+                          <p style={{ margin: '1mm 0 0', fontSize: '10.2pt', lineHeight: 1.38, fontWeight: 600, color: T.deep }}>{a.texte}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ border: `1pt solid ${T.main}`, borderRadius: '2mm', padding: '3mm 4mm' }}>
-                    <p style={{ margin: '0 0 1.5mm', fontWeight: 800, fontSize: '8.4pt', letterSpacing: '.06em', textTransform: 'uppercase', textAlign: 'center', color: T.main }}>Le ticket Yoppaa</p>
-                    <p style={{ margin: 0, display: 'flex', justifyContent: 'space-between', padding: '1.3mm 0' }}><span>Commission Yoppaa</span><b>0,00 €</b></p>
-                    <p style={{ margin: 0, display: 'flex', justifyContent: 'space-between', padding: '1.3mm 0' }}><span>Par {seg.unite}</span><b>0,00 €</b></p>
-                    <p style={{ margin: 0, display: 'flex', justifyContent: 'space-between', padding: '1.3mm 0' }}><span>La formule</span><b>au mois</b></p>
+
+                  {/* ══ LA PIQUE DU MÉTIER ══ */}
+                  <div style={{ margin: '4.5mm 0 0', borderLeft: `1.5mm solid ${T.main}`, paddingLeft: '5mm' }}>
+                    <p style={{ margin: 0, fontSize: '14pt', lineHeight: 1.25, fontWeight: 800, letterSpacing: '-.02em', color: T.ink }}>{seg.pique}</p>
+                    <p style={{ margin: '1.6mm 0 0', fontSize: '9.6pt', lineHeight: 1.4, fontWeight: 600, color: T.deep }}>
+                      Yoppaa ne prend aucune commission sur tes ventes&nbsp;: la formule au mois est notre seul revenu.
+                    </p>
                   </div>
                 </div>
-                <p style={{ margin: '2mm 0 0', fontSize: '9pt', lineHeight: 1.35, fontWeight: 600, color: T.grey }}>
-                  Fais le calcul avec ton stylo. Ou scanne&nbsp;: le calculateur le fait avec tes chiffres.
-                </p>
               </div>
 
-              {/* ══ LE SOCLE : l'offre et le QR, sur le seul bloc violet ══ */}
+              {/* ══ LE SOCLE : « Reprends tes clients » et le QR pour REGARDER ══ */}
               <div ref={rectoPied} style={{ marginTop: 'auto', background: T.panel, color: '#fff', padding: '7.5mm 17mm', display: 'flex', alignItems: 'center', gap: '8mm' }}>
                 <div style={{ flex: 1 }}>
-                  {/* ✅ Le dernier mot de la landing (Alex, 14/10), en tête du socle. */}
-                  <p style={{ margin: 0, fontSize: '24pt', fontWeight: 800, letterSpacing: '-.025em', lineHeight: 1.05 }}>
+                  {/* ✅ Le dernier mot de la landing (Alex, 14/10). */}
+                  <p style={{ margin: 0, fontSize: '26pt', fontWeight: 800, letterSpacing: '-.025em', wordSpacing: '.06em', lineHeight: 1.05 }}>
                     Reprends tes clients.
                   </p>
-                  {/* ⚠️ LA RÈGLE, PAS UNE DATE : 100 jours depuis l'inscription,
-                      lus dans `lib/lancement.js`. Un papier ne se corrige plus. */}
-                  <p style={{ margin: '3mm 0 0', fontSize: '13pt', fontWeight: 800, letterSpacing: '-.015em', lineHeight: 1.2, color: T.light }}>
+                  {/* ⚠️ LA RÈGLE, PAS UNE DATE : lue dans `lib/lancement.js`. */}
+                  <p style={{ margin: '3mm 0 0', fontSize: '13pt', fontWeight: 800, letterSpacing: '-.015em', lineHeight: 1.2, color: MENTHE }}>
                     {ESSAI_JOURS_MINIMUM} jours offerts, dès ton inscription.
                   </p>
-                  <p style={{ margin: '2mm 0 0', fontSize: '9.6pt', lineHeight: 1.4, fontWeight: 600, color: T.light }}>
-                    Pour tout le monde, quel que soit le jour où tu t&rsquo;inscris.
-                    <strong style={{ color: '#fff' }}> Tu essaies tout, tu restes si c&rsquo;est utile.</strong> Sans
-                    carte de paiement. Les formules et ce que ça t&rsquo;engage&nbsp;: au verso.
+                  <p style={{ margin: '1.8mm 0 0', fontSize: '9.6pt', lineHeight: 1.4, fontWeight: 600, color: T.light }}>
+                    Sans carte de paiement, sans engagement. <strong style={{ color: '#fff' }}>Retourne la feuille&nbsp;: comment ça marche.</strong>
                   </p>
                 </div>
                 <div>
                   {/* Le QR reste sur BLANC : un code violet sur violet ne se lit pas. */}
                   <div style={{ background: '#fff', borderRadius: '3.5mm', padding: '3mm' }}>
-                    <Qr src={qr} taille="30mm"/>
+                    <Qr src={qr} taille="28mm"/>
                   </div>
-                  <p style={{ margin: '3mm 0 0', fontSize: '8.2pt', lineHeight: 1.3, fontWeight: 800, color: '#fff', textAlign: 'center' }}>
-                    Scanne et fais<br/>le calcul
+                  <p style={{ margin: '2.6mm 0 0', fontSize: '8.2pt', lineHeight: 1.3, fontWeight: 800, color: '#fff', textAlign: 'center' }}>
+                    Scanne et regarde
                   </p>
                 </div>
               </div>
@@ -587,54 +561,65 @@ export default function KitCommercant() {
             <Telechargements cible={recto} largeurMm={210} hauteurMm={297} nom={`yoppaa-kit-${seg.cle}-recto`}/>
           </div>
 
-          {/* ══════════════ VERSO ══════════════ */}
+          {/* ══════════════ VERSO : LA DÉCISION (commun à tous) ══════════════ */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div className="feuille" ref={verso} style={feuille}>
               <div ref={versoCorps} style={padVerso}>
-                {/* ══ L'OFFRE, LA RÈGLE ET PAS UNE DATE ══ */}
-                <p style={S.eyebrow}>Ce que ça t&rsquo;engage&nbsp;: rien</p>
-                <h2 style={S.h2}>
-                  {ESSAI_JOURS_MINIMUM} jours offerts, dès ton inscription.
-                  <br/><span style={{ color: T.main }}>Pour tout le monde. Tout le temps.</span>
-                </h2>
-                <p style={{ ...S.chapo, marginTop: '2.6mm', fontSize: '10.6pt' }}>
-                  Tu essaies tout, les trois formules, sans carte de paiement&nbsp;: rien ne se déclenche dans
-                  ton dos. Tu viens parce que c&rsquo;est gratuit, tu restes parce que c&rsquo;est utile.
-                </p>
-
-                {/* ══ CE QU'ON RAYE ══ La rature a un sens : on raye l'ANCIENNE
-                    façon de faire, et notre réponse s'écrit à côté (Alex, 14/10,
-                    sur la landing : « tu as barré, quel message doit passer ? »). */}
-                <p style={{ ...S.eyebrow, marginTop: '5mm' }}>On a rayé ce qui te coûte</p>
-                <div style={{ margin: '2mm 0 0', borderTop: `0.8pt solid #D9CCF2` }}>
-                  {RATURES.map(([avant, ici]) => (
-                    <div key={avant} style={{ display: 'grid', gridTemplateColumns: '0.95fr 1.05fr', gap: '5mm', alignItems: 'center', padding: '2.2mm 0', borderBottom: `0.8pt solid #D9CCF2` }}>
-                      <s style={{ fontSize: '10pt', lineHeight: 1.3, fontWeight: 600, color: T.grey, textDecorationColor: '#DC2626', textDecorationThickness: '1.2pt' }}>{avant}</s>
-                      <span style={{ fontSize: '11pt', lineHeight: 1.3, fontWeight: 800, color: T.ink }}>✓ {ici}</span>
+                {/* ══ COMMENT ÇA MARCHE ══ Une vraie suite, donc des numéros. */}
+                <p style={S.eyebrow}>Comment ça marche</p>
+                <h2 style={S.h2}>Trois étapes. Zéro risque.</h2>
+                <div style={{ margin: '5mm 0 0', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '5mm' }}>
+                  {[
+                    { titre: 'Tu t’inscris.', texte: <>Ton numéro d&rsquo;entreprise suffit. Pas de carte de paiement, pas de contrat. Tes {ESSAI_JOURS_MINIMUM} jours offerts commencent.</> },
+                    // ⚠️ L'ENCODAGE OFFERT SUIT SON DRAPEAU, COMME LA LANDING. Mais
+                    // un papier ne s'efface pas : tiré pendant l'offre, il la
+                    // promet encore après. D'où « en ce moment ».
+                    ENCODAGE_OFFERT
+                      ? { titre: 'On remplit ta page avec toi.', texte: <>En ce moment, on encode ta carte, ton menu ou ton catalogue pour toi. Gratuitement.</> }
+                      : { titre: 'Tu remplis ta page.', texte: <>Une liste te guide point par point. Ta carte en photo&nbsp;? L&rsquo;IA la lit pour toi.</> },
+                    { titre: 'Ta commune te trouve.', texte: <>Ta page part en ligne dès qu&rsquo;elle est complète, dans l&rsquo;app de ta commune et sur Google.</> },
+                  ].map((e, i) => (
+                    <div key={e.titre}>
+                      <span style={{ width: '10mm', height: '10mm', borderRadius: '50%', background: T.main, color: '#fff', display: 'grid', placeItems: 'center', fontSize: '14pt', fontWeight: 800 }}>{i + 1}</span>
+                      <p style={{ margin: '2.6mm 0 0', fontSize: '12.5pt', lineHeight: 1.18, fontWeight: 800, letterSpacing: '-.015em', color: T.ink }}>{e.titre}</p>
+                      <p style={{ margin: '1.4mm 0 0', fontSize: '9.8pt', lineHeight: 1.4, fontWeight: 600, color: T.deep }}>{e.texte}</p>
                     </div>
                   ))}
                 </div>
 
+                {/* ══ L'OFFRE, EN GRAND ══ Le « 100 » de la landing. */}
+                <div style={{ margin: '7mm 0 0', background: T.ink, color: '#fff', borderRadius: '4.5mm', padding: '6mm 7mm', display: 'flex', alignItems: 'center', gap: '6mm' }}>
+                  <span style={{ fontSize: '62pt', lineHeight: .9, fontWeight: 800, letterSpacing: '-.05em', color: T.light, flexShrink: 0 }}>{ESSAI_JOURS_MINIMUM}</span>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '17pt', lineHeight: 1.12, fontWeight: 800, letterSpacing: '-.02em', wordSpacing: '.05em' }}>
+                      jours pour tout essayer. Pour tout le monde. Tout le temps.
+                    </p>
+                    <p style={{ margin: '2mm 0 0', fontSize: '9.8pt', lineHeight: 1.4, fontWeight: 600, color: T.light }}>
+                      Les trois formules, dès ton inscription, sans carte de paiement&nbsp;: rien ne se déclenche dans ton dos.
+                    </p>
+                  </div>
+                </div>
+
                 {/* ══ LES TROIS FORMULES ══
                     ⚠️ LES MONTANTS VIENNENT DE `lib/plans.js`, ILS NE SONT PAS
-                    RECOPIÉS : un prix écrit en dur divergerait de l'application au
-                    premier changement de tarif, et sur du papier ça ne se rattrape
-                    plus. HTVA, comme partout : on s'adresse à des professionnels.
-                    🔴 LE GOOD MORNING SE DIT AVEC SA CADENCE (erreur n° 1 du brief) :
-                    chaque SEMAINE en Exister, chaque MATIN en Communiquer. */}
-                <div style={{ margin: '5mm 0 0', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '3.5mm' }}>
+                    RECOPIÉS. HTVA, comme partout : on s'adresse à des pros.
+                    🔴 LE GOOD MORNING SE DIT AVEC SA CADENCE (erreur n° 1 du brief
+                    de la landing) : chaque SEMAINE en Exister, chaque MATIN en
+                    Communiquer. */}
+                <p style={{ ...S.eyebrow, marginTop: '6.5mm' }}>Ensuite, tu choisis</p>
+                <div style={{ margin: '2.6mm 0 0', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '3.5mm' }}>
                   {[
                     { nom: 'Exister', prix: 'Gratuit', sous: 'à vie', lignes: ['Ta page, dans l’app et sur Google', 'Ta place chaque semaine dans le Good Morning Yoppers', 'Les envies du quartier'] },
                     { nom: 'Communiquer', prix: euros(getPrixPlan('communiquer').mensuel), sous: 'HTVA par mois', lignes: ['Deals, actus et notifications', 'Ta place chaque matin dans le Good Morning Yoppers', 'Fidélité par GSM, bons cadeaux'] },
                     { nom: 'Vendre', prix: euros(getPrixPlan('vendre').mensuel), sous: 'HTVA par mois', vedette: true, lignes: ['Commandes, rendez-vous, tables, boutique', 'Paiement en ligne ou au comptoir', 'Aucune commission Yoppaa sur tes ventes'] },
                   ].map(f => (
-                    <div key={f.nom} style={{ border: `${f.vedette ? '1.6pt' : '0.9pt'} solid ${f.vedette ? T.main : '#D9CCF2'}`, borderRadius: '3mm', padding: '3.4mm 3.6mm' }}>
+                    <div key={f.nom} style={{ border: `${f.vedette ? '1.6pt' : '0.9pt'} solid ${f.vedette ? T.main : FILET}`, borderRadius: '3mm', padding: '3.4mm 3.6mm' }}>
                       <p style={{ margin: 0, fontSize: '12pt', fontWeight: 800, letterSpacing: '-.02em', color: T.ink }}>{f.nom}</p>
                       <p style={{ margin: '1mm 0 0', fontSize: '13pt', fontWeight: 800, color: T.main, lineHeight: 1.1 }}>
                         {f.prix} <span style={{ fontSize: '7.6pt', fontWeight: 700, color: T.grey }}>{f.sous}</span>
                       </p>
                       <ul style={{ listStyle: 'none', margin: '2mm 0 0', padding: 0, display: 'grid', gap: '1.3mm' }}>
-                        {f.lignes.map(l => <li key={l} style={{ fontSize: '9.6pt', lineHeight: 1.32, fontWeight: 600, color: T.deep }}>· {l}</li>)}
+                        {f.lignes.map(l => <li key={l} style={{ fontSize: '9.4pt', lineHeight: 1.3, fontWeight: 600, color: T.deep }}>· {l}</li>)}
                       </ul>
                     </div>
                   ))}
@@ -643,59 +628,42 @@ export default function KitCommercant() {
                 {/* ══ L'ABONNEMENT N'ENFERME PERSONNE ══ (Alex, 14/10 : « quand on
                     dit abonnement, les gens pensent engagement »). Tenu par le
                     code : une résiliation repasse le commerce en Exister. */}
-                <div style={{ margin: '5mm 0 0', border: `1.4pt solid ${T.main}`, borderRadius: '4mm', padding: '4.4mm 6mm' }}>
-                  <p style={{ margin: 0, fontSize: '14pt', lineHeight: 1.16, fontWeight: 800, letterSpacing: '-.02em', color: T.ink }}>
+                <div style={{ margin: '6mm 0 0', background: `linear-gradient(135deg, ${T.deep} 0%, ${T.main} 100%)`, color: '#fff', borderRadius: '4.5mm', padding: '5mm 7mm' }}>
+                  <p style={{ margin: 0, fontSize: '14pt', lineHeight: 1.16, fontWeight: 800, letterSpacing: '-.02em' }}>
                     Ici, l&rsquo;abonnement n&rsquo;enferme personne.
                   </p>
-                  <p style={{ margin: '2.2mm 0 0', fontSize: '10.2pt', lineHeight: 1.42, fontWeight: 600, color: T.deep }}>
-                    Tu aimes, tu restes. Ça ne te sert plus, tu arrêtes quand tu veux, sans préavis. Et ta page
-                    reste en ligne, gratuitement&nbsp;: tes clients te trouvent toujours. Tu ne remplaces rien&nbsp;:
-                    garde ta caisse, ton logiciel, tes habitudes.
+                  <p style={{ margin: '2mm 0 0', fontSize: '10pt', lineHeight: 1.42, fontWeight: 600, color: 'rgba(255,255,255,.9)' }}>
+                    Tu aimes, tu restes. Ça ne te sert plus, tu arrêtes quand tu veux, sans préavis, et ta page reste
+                    en ligne, gratuitement. Tu ne remplaces rien&nbsp;: garde ta caisse et tes habitudes.
                   </p>
-                  <p style={{ margin: '2.6mm 0 0', fontSize: '15pt', fontWeight: 800, letterSpacing: '-.02em', wordSpacing: '.12em', color: T.main }}>
+                  <p style={{ margin: '2.6mm 0 0', fontSize: '17pt', fontWeight: 800, letterSpacing: '-.02em', wordSpacing: '.14em' }}>
                     Yopper un jour, Yopper toujours.
                   </p>
                 </div>
-
-                {/* ⚠️ L'ENCODAGE OFFERT SUIT SON DRAPEAU, COMME SUR LA LANDING. Mais
-                    un papier ne s'efface pas : une feuille tirée pendant l'offre la
-                    promet encore le jour où le drapeau tombe. D'où « en ce moment ». */}
-                {ENCODAGE_OFFERT && (
-                  <p style={{ margin: '4mm 0 0', fontSize: '10.4pt', lineHeight: 1.4, fontWeight: 700, color: T.ink }}>
-                    <span style={{ color: '#047857', fontWeight: 800 }}>En ce moment&nbsp;:</span> on encode ta carte, ton menu
-                    ou ton catalogue pour toi. Gratuitement. Demande&#8209;le.
-                  </p>
-                )}
               </div>
 
-              <div ref={versoPied} style={{ marginTop: 'auto', background: T.panel, color: '#fff', padding: '6mm 17mm', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '6mm' }}>
+              {/* ══ L'APPEL À L'ACTION : le QR pour AGIR, et un humain ══ */}
+              <div ref={versoPied} style={{ marginTop: 'auto', background: T.panel, color: '#fff', padding: '7mm 17mm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '7mm' }}>
                 <div>
-                  {/* ✅ « On t'appelle » (Alex, 14/10) : le deuxième chemin de la
-                      landing, sur le papier. Le numéro vient de `lib/contact.js`. */}
-                  <p style={{ margin: 0, fontSize: '13pt', fontWeight: 800, letterSpacing: '-.02em', color: '#fff', lineHeight: 1.2 }}>
-                    Une question&nbsp;? Envie de voir&nbsp;?<br/><span style={{ color: T.light }}>On t&rsquo;appelle. Ou écris-nous sur WhatsApp.</span>
+                  <p style={{ margin: 0, fontSize: '22pt', fontWeight: 800, letterSpacing: '-.025em', wordSpacing: '.06em', lineHeight: 1.05 }}>
+                    Prêt&nbsp;? Inscris-toi.
                   </p>
-                  <p style={{ margin: '3mm 0 0', fontSize: '9.4pt', lineHeight: 1.42, fontWeight: 600, color: T.light }}>
-                    {/* ⚠️ LE CONTACT TIENT SUR UNE SEULE LIGNE, ET C'EST CE QUI PAIE
-                        LA MENTION LÉGALE. Le verso n'avait que 5,9 mm de marge :
-                        ajouter une ligne sans en reprendre une l'aurait fait passer
-                        en « de justesse ». Trois lignes avant, trois lignes après. */}
-                    {CONTACT.nom} · <strong style={{ color: '#fff' }}>{CONTACT.tel}</strong> (appel ou WhatsApp) · {CONTACT.email}<br/>
-                    {/* ⚠️ L'IDENTITÉ LÉGALE EST CELLE DE `project_avcotech_identite_legale` :
-                        Avcotech SRL, BCE 0731.637.148, Rue de Prée 9G, 5640 Mettet.
-                        La rue est volontairement omise : ce papier n'est pas un document
-                        commercial, il rassure sur QUI est derrière la marque.
-                        ⚠️ ET 260, JAMAIS 262 : c'est le nombre de communes wallonnes. */}
-                    Yoppaa est une marque d&rsquo;Avcotech SRL, 5640 Mettet.<br/>
-                    260 communes ouvertes en Wallonie.
+                  <p style={{ margin: '2mm 0 0', fontSize: '11pt', fontWeight: 700, color: MENTHE }}>
+                    Scanne le code, ou tape yoppaa.app/pro
+                  </p>
+                  {/* ✅ « On t'appelle » (Alex, 14/10) : le deuxième chemin. */}
+                  <p style={{ margin: '3.2mm 0 0', fontSize: '9.6pt', lineHeight: 1.45, fontWeight: 600, color: T.light }}>
+                    Une question&nbsp;? Envie de voir&nbsp;? <strong style={{ color: '#fff' }}>{CONTACT.nom} · {CONTACT.tel}</strong>, appel ou WhatsApp · {CONTACT.email}<br/>
+                    {/* ⚠️ L'IDENTITÉ LÉGALE (`project_avcotech_identite_legale`), et
+                        260, JAMAIS 262 : c'est le nombre de communes wallonnes. */}
+                    Yoppaa est une marque d&rsquo;Avcotech SRL, 5640 Mettet · 260 communes ouvertes en Wallonie.
                   </p>
                 </div>
-                {/* ⚠️ UN QR DES DEUX CÔTÉS. Un A4 plastifié posé sur un comptoir
-                    ne montre qu'une face, et rarement celle qu'on avait choisie.
-                    Sans lui, la moitié des exemplaires laissés sont muets. */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3mm' }}>
-                  <div style={{ background: '#fff', borderRadius: '2.4mm', padding: '2.2mm' }}>
-                    <Qr src={qr} taille="21mm"/>
+                {/* ⚠️ UN QR DES DEUX CÔTÉS : un A4 posé sur un comptoir ne montre
+                    qu'une face. Celui-ci mène à l'INSCRIPTION (face de la décision). */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2.6mm', flexShrink: 0 }}>
+                  <div style={{ background: '#fff', borderRadius: '3mm', padding: '2.6mm' }}>
+                    <Qr src={qrInscription} taille="26mm"/>
                   </div>
                   <YoppaaLogo size={22} mode="dark"/>
                 </div>
@@ -706,8 +674,7 @@ export default function KitCommercant() {
           </div>
         </div>
 
-        {/* ⚠️ L'ORDRE EST CELUI DE L'IMPRESSION : recto d'abord. Un PDF dont les
-            faces sont inversées ne se voit qu'une fois la pile sortie. */}
+        {/* ⚠️ L'ORDRE EST CELUI DE L'IMPRESSION : recto d'abord. */}
         <TelechargementCombine pages={[recto, verso]} nom={`yoppaa-kit-${seg.cle}`}/>
 
         {/* ══════════════ CARTE DE VISITE ══════════════ */}
@@ -731,8 +698,7 @@ export default function KitCommercant() {
             </div>
             <div style={{ background: T.panel, color: '#fff', padding: '3.2mm 6mm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '3mm' }}>
               {/* 🔴 14/10 : « Gratuit jusqu'au 8 janvier 2027 » était FAUX depuis
-                  les 100 jours permanents, et oublié le matin même. La règle,
-                  lue dans `lib/lancement.js`, jamais une date. */}
+                  les 100 jours permanents. La règle, jamais une date. */}
               <p style={{ margin: 0, fontSize: '8pt', fontWeight: 800, letterSpacing: '-.01em' }}>{ESSAI_JOURS_MINIMUM} jours offerts, dès l&rsquo;inscription</p>
               <span style={{ fontSize: '7pt', fontWeight: 700, color: T.light }}>yoppaa.app/pro</span>
             </div>
@@ -745,7 +711,7 @@ export default function KitCommercant() {
             <Qr src={qrCarte} taille="22mm"/>
             <div>
               <p style={{ margin: 0, fontSize: '10pt', fontWeight: 800, lineHeight: 1.22, letterSpacing: '-.02em' }}>
-                Scanne.<br/>Fais le calcul<br/>avec tes chiffres.
+                Scanne.<br/>Reprends<br/>tes clients.
               </p>
               <p style={{ margin: '2.4mm 0 0', fontSize: '7.2pt', lineHeight: 1.5, fontWeight: 600, color: T.grey }}>
                 Yoppaa ne prend aucune<br/>commission sur tes ventes.

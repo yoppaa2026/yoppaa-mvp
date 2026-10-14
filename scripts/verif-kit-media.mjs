@@ -910,8 +910,11 @@ const egal = (nom, obtenu, attendu) =>
     // ⚠️ REPOINTÉE LE 14/10 : les cartes de signaux (bord `T.light`) sont
     // parties ; les blocs clairs de la v2 sont le bloc « l'abonnement n'enferme
     // personne » et le ticket à remplir, tenus par un filet.
+    // ⚠️ REPOINTÉE UNE 2e FOIS LE 14/10 (version tunnel) : les blocs clairs
+    // sont les trois atouts du recto et les cartes de formules ; les autres
+    // aplats sont franchement foncés.
     verifie('les blocs clairs tiennent par leur bordure',
-      /border: `1\.4pt solid \$\{T\.main\}`/.test(kit) && /border: `1pt dashed \$\{T\.ink\}`/.test(kit))
+      /border: `0\.9pt solid \$\{FILET\}`, borderRadius: '3\.5mm'/.test(kit) && /solid \$\{f\.vedette \? T\.main : FILET\}`/.test(kit))
     // Le bandeau du verso est foncé, et son logo est passé en conséquence :
     // un logo sombre sur fond sombre serait invisible, et ne se verrait qu'au
     // tirage puisque le composant ne lève pas.
@@ -943,11 +946,21 @@ const egal = (nom, obtenu, attendu) =>
       /'Ta place chaque semaine dans le Good Morning Yoppers'/.test(kit)
       && /'Ta place chaque matin dans le Good Morning Yoppers'/.test(kit))
     verifie('🔴 aucun compte d’habitants inventé', !/\d+ habitants? (ont|aimeraient)/.test(kit))
-    verifie('le ticket à remplir n’imprime aucun taux côté « eux »',
-      /<LigneAVide libelle="Ce qu’on me prend" unite="%"\/>/.test(kit))
+    // 🔴 Alex, 14/10 : « le ticket à compléter sur un flyer plastifié, pas
+    // utile et pas pertinent ». Un papier plastifié ne se REMPLIT pas.
+    verifie('aucun champ à remplir au stylo sur un papier plastifié',
+      !/LigneAVide|à remplir|_{4,}/.test(kit))
+    // ✅ Le tunnel : le recto fait REGARDER, le verso fait AGIR.
+    verifie('🔴 le QR du verso mène à l’inscription, celui du recto à la landing',
+      /useQr\(urlInscription\(`kit-\$\{seg\.cle\}`\)\)/.test(kit) && /<Qr src=\{qrInscription\}/.test(kit) && /<Qr src=\{qr\} taille="28mm"\/>/.test(kit))
+    verifie('le verso se termine par UN appel à l’action',
+      /Prêt&nbsp;\? Inscris-toi\./.test(kit))
+    verifie('trois atouts par métier, pas une liste',
+      (kit.match(/atouts: \[/g) || []).length === 4)
     verifie('le téléphone vient de lib/contact, comme WhatsApp sur la landing',
       /from '@\/lib\/contact'/.test(kit) && /tel: TELEPHONE_AFFICHE/.test(kit))
-    verifie('l’encodage offert suit son drapeau', /\{ENCODAGE_OFFERT && \(/.test(kit))
+    // (Version tunnel : le drapeau choisit le texte de l'étape 2.)
+    verifie('l’encodage offert suit son drapeau', /\{ENCODAGE_OFFERT && \(|ENCODAGE_OFFERT\s*\?/.test(kit) && !/encode ta carte[^']*Gratuitement/.test(kit.replace(/ENCODAGE_OFFERT\s*\?[\s\S]{0,400}/, '')))
     for (const marque of ['Uber', 'Deliveroo', 'Takeaway', 'Just Eat', 'TheFork', 'Planity', 'Salonkee', 'Treatwell', 'Fritzy', 'Zenchef']) {
       verifie(`le kit ne nomme pas ${marque}`, !new RegExp(marque, 'i').test(kit))
     }

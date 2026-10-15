@@ -466,6 +466,19 @@ const MUTATIONS = [
     fichier: RESERVER,
     de: '        .select(`id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, duree_paliers, ${COLONNES_COUVERTS}`)',
     vers: "        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max, duree_paliers')" },
+
+  // ══ 🔴 « PLUS DE CRÉNEAUX AUJOURD'HUI » SUR LE BISTROLOGUE (15/10) ══
+  { nom: '🔴 la pastille de retrait revient chez qui a decoche la commande',
+    fichier: 'lib/statut-commerce.js',
+    de: '  return forfaitPermet === true && commandeAllumee === true && Array.isArray(creneaux) && creneaux.length > 0',
+    vers: '  return forfaitPermet === true && Array.isArray(creneaux) && creneaux.length > 0' },
+  { nom: '🔴 la pastille de retrait revient chez qui n a aucun creneau (« complet » invente)',
+    fichier: 'lib/statut-commerce.js',
+    de: '  return forfaitPermet === true && commandeAllumee === true && Array.isArray(creneaux) && creneaux.length > 0',
+    vers: '  return forfaitPermet === true && commandeAllumee === true' },
+  { nom: '🔴 la carte de la liste ignore de nouveau l interrupteur',
+    fichier: 'app/commander/page.js',
+    de: '    commandeAllumee: commandeAllumee(c),', vers: '    commandeAllumee: true,' },
 ]
 
 const lancer = () => {

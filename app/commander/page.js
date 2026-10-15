@@ -22,7 +22,7 @@ import { envoyerSignal } from '@/lib/signaux'
 import IconeRetrait from '@/app/components/IconeRetrait'
 // ⚠️ `planEffectif` ET NON `c.plan` : sans lui, un commerçant en essai de
 // Vendre restait « vitrine » dans la liste des commerces (26/08).
-import { canDo, bandeauCategorie, planEffectif } from '@/lib/plans'
+import { canDo, bandeauCategorie, planEffectif, commandeAllumee } from '@/lib/plans'
 import { lieuDeCarte } from '@/lib/adresse-localite'
 // Les mots du métier : « Annuler cette réservation » chez un restaurant.
 import { motsReservation, intituleReservation } from '@/lib/reservation-metier'
@@ -30,7 +30,7 @@ import { motsReservation, intituleReservation } from '@/lib/reservation-metier'
 // comme un zéro. La règle vit en fonction pure et testée.
 import { resumeAvis } from '@/lib/avis-affichage'
 import { STATUTS_OCCUPENT_CRENEAU } from '@/lib/creneaux'
-import { statutCreneaux, pastilleCreneaux, jourPlus } from '@/lib/statut-commerce'
+import { statutCreneaux, pastilleCreneaux, jourPlus, pastilleDeCommandePertinente } from '@/lib/statut-commerce'
 // ⚠️ La règle de minuit vit en UN exemplaire dans le moteur de créneaux : une
 // brasserie ouverte jusqu'à 02:00 n'est pas fermée, et six endroits le
 // calculaient chacun à leur façon.
@@ -1190,7 +1190,13 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
     formatDistance,
   })
   // Pas de reservation si le plan ne permet pas la commande (palier Exister)
-  const peutCommander = canDo(planEffectif(c), 'commande')
+  // 🔴 15/10 (le Bistrologue) : ET le commerçant accepte les commandes, ET il a
+  // une grille de retrait. Voir `pastilleDeCommandePertinente`.
+  const peutCommander = pastilleDeCommandePertinente({
+    forfaitPermet: canDo(planEffectif(c), 'commande'),
+    commandeAllumee: commandeAllumee(c),
+    creneaux: info?.creneaux || [],
+  })
   const resa = peutCommander ? getStatutResa(physique) : null
 
   return (

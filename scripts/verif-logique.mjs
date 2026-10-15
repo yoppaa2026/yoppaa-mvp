@@ -2706,6 +2706,26 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
   egal('et rien à écrire quand il n\'y a pas de statut',
     pastilleCreneaux({ statut: null, creneaux: [], jour: LUNDI }), null)
 
+  // 🔴 15/10 (le Bistrologue, jour de sa publication) : « Plus de créneaux
+  // aujourd'hui » sur sa carte alors que ses tables étaient libres le soir. La
+  // pastille parle du RETRAIT : elle ne vaut que pour qui prend des commandes.
+  const { pastilleDeCommandePertinente: P } = await import('../lib/statut-commerce.js')
+  const grilleUne = [{ id: 'k', jour_semaine: 'lundi', heure_debut: '11:00' }]
+  egal('un commerce qui prend des commandes a sa pastille',
+    P({ forfaitPermet: true, commandeAllumee: true, creneaux: grilleUne }), true)
+  egal('🔴 commande décochée : pas de pastille (le Bistrologue)',
+    P({ forfaitPermet: true, commandeAllumee: false, creneaux: grilleUne }), false)
+  egal('🔴 aucun créneau de retrait : pas de pastille, pas de « complet » inventé',
+    P({ forfaitPermet: true, commandeAllumee: true, creneaux: [] }), false)
+  egal('forfait sans commande : pas de pastille',
+    P({ forfaitPermet: false, commandeAllumee: true, creneaux: grilleUne }), false)
+  egal('rien de connu : pas de pastille', P(), false)
+  {
+    const accueil = readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8')
+    verifier('🔴 la carte de la liste lit la règle, avec l’interrupteur et la grille',
+      /const peutCommander = pastilleDeCommandePertinente\(\{\s*forfaitPermet: canDo\(planEffectif\(c\), 'commande'\),\s*commandeAllumee: commandeAllumee\(c\),\s*creneaux: info\?\.creneaux \|\| \[\],\s*\}\)/.test(accueil))
+  }
+
   // ⚠️ 2. LES CRÉNEAUX DE TOUTE LA SEMAINE ÉTAIENT PRIS POUR CEUX D'AUJOURD'HUI.
   // La requête ne demandait pas `jour_semaine` : la grille arrivait en bloc.
   const grille = [

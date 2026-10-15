@@ -93,7 +93,10 @@ const egal = (nom, obtenu, attendu) =>
 {
   const fiche = lireCode('app/commander/[slug]/page.js')
   const accueil = lireCode('app/commander/page.js')
-  const layout = lireCode('app/commander/[slug]/layout.js')
+  // ⚠️ REPOINTÉE LE 15/10 : la lecture des avis pour Google a quitté le layout
+  // de la fiche pour `lib/fiche-seo-server.js`, partagée avec la fiche
+  // rendez-vous. Le seuil se surveille là où il vit.
+  const layout = lireCode('lib/fiche-seo-server.js')
 
   verifie('🔴 la FICHE importe la règle', /import \{[^}]*resumeAvis[^}]*\} from '@\/lib\/avis-affichage'/.test(fiche))
   verifie('🔴 la fiche l\'APPELLE vraiment', /resumeAvis\(notesInfo\)/.test(fiche))
@@ -318,13 +321,27 @@ const egal = (nom, obtenu, attendu) =>
   verifie('🔴 rien à déclarer rend un objet VIDE, étalable', Object.keys(vide).length === 0)
 
   // ⚠️ ET C'EST BRANCHÉ ? (le défaut du 23/08, encore et toujours)
-  const layout = lireCode('app/commander/[slug]/layout.js')
-  verifie('🔴 le layout appelle le balisage', /\.\.\.potentialActionJsonLd\(c\)/.test(layout))
+  // ⚠️ REPOINTÉE LE 15/10 : le balisage s'écrit dans `lib/fiche-seo.js` et se
+  // lit dans `lib/fiche-seo-server.js`, pour les DEUX fiches. On vérifie qu'il
+  // y appelle le geste, que la lecture rapatrie le forfait, et que les deux
+  // layouts l'appellent vraiment (le défaut du 23/08 : une règle juste que
+  // personne n'appelle).
+  const seo = lireCode('lib/fiche-seo.js')
+  const lecture = lireCode('lib/fiche-seo-server.js')
+  verifie('🔴 le balisage appelle le geste', /\.\.\.potentialActionJsonLd\(c\)/.test(seo))
   // ⚠️ PRÉCISÉE LE 15/09, PAS DÉSARMÉE : le balisage suit désormais le forfait
   // EFFECTIF, il lui faut aussi `essai_plan` et `created_at`. La garde exige
   // les quatre, `plan` compris.
   verifie('🔴 et il rapatrie `plan` et l’essai, sans quoi tout serait muet',
-    /\.select\('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan, essai_plan, created_at'\)/.test(layout))
+    /\.select\('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan, essai_plan, created_at'\)/.test(lecture))
+  for (const [nom, chemin, page] of [
+    ['la fiche boutique', 'app/commander/[slug]/layout.js', 'PAGE_BOUTIQUE'],
+    ['la fiche rendez-vous', 'app/commander/rdv/[slug]/layout.js', 'PAGE_RDV'],
+  ]) {
+    const l = lireCode(chemin)
+    verifie(`🔴 ${nom} pose le balisage`, new RegExp(`jsonLdFiche\\(c, ${page}, avis\\)`).test(l))
+    verifie(`🔴 ${nom} pose ses métadonnées`, new RegExp(`metadataFiche\\(await getCommercantPublic\\(slug\\), ${page}\\)`).test(l))
+  }
 
   // La consigne du kit
   const consigne = consigneGoogle({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux' })

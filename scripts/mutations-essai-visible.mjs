@@ -38,7 +38,9 @@ const RECAP = 'app/api/cron/recap-jour-8h/route.js'
 // ⚠️ 03/10 : la page et la pastille lisent le commerce dans la vue publique,
 // par UNE fonction partagée. C'est elle qui porte désormais les colonnes.
 const GMY_COMMERCE = 'lib/morning-contenu.js'
-const BALISAGE = 'app/commander/[slug]/layout.js'
+// ⚠️ REPOINTÉE LE 15/10 : la lecture du balisage vit dans un module partagé
+// par la fiche boutique et la fiche rendez-vous.
+const BALISAGE = 'lib/fiche-seo-server.js'
 const KIT = 'app/kit/[slug]/page.js'
 const BORD = 'app/dashboard/ConfigDashboard.js'
 const IA_POSTS = 'app/api/ia/generer-post/route.js'

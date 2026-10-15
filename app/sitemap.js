@@ -3,6 +3,7 @@
 // Revalidé toutes les heures pour que les nouvelles fiches apparaissent sans build.
 
 import { createClient } from '@supabase/supabase-js'
+import { adresseCanonique } from '@/lib/fiche-seo'
 
 const BASE_URL = 'https://www.yoppaa.app'
 const SEO_INDEX = process.env.NEXT_PUBLIC_SEO_INDEX === 'true'
@@ -39,11 +40,14 @@ export default async function sitemap() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       { auth: { persistSession: false } }
     )
-    const { data } = await supabase.from('commercants_public').select('slug, created_at')
+    // ⚠️ `categorie` : un salon s'annonce par sa fiche rendez-vous, la page que
+    // Google doit retenir (lib/fiche-seo.js, Alex 15/10). Annoncer la boutique
+    // d'un salon, c'est annoncer une page qui redirige ou qui renvoie ailleurs.
+    const { data } = await supabase.from('commercants_public').select('slug, categorie, created_at')
     fiches = (data || [])
       .filter(c => c.slug)
       .map(c => ({
-        url: `${BASE_URL}/commander/${c.slug}`,
+        url: adresseCanonique(c),
         lastModified: c.created_at ? new Date(c.created_at) : now,
         changeFrequency: 'daily',
         priority: 0.8,

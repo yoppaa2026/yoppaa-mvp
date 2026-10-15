@@ -376,6 +376,13 @@ const PHASE = avantLancement()
   verifier('et plus aucun JSON.stringify nu dans un script injecté',
     !/dangerouslySetInnerHTML=\{\{ __html: JSON\.stringify/.test(layout),
     'le remède existait déjà dans le dépôt, il n\'était pas posé ici')
+  // ⚠️ LE FRÈRE, 15/10 : la fiche rendez-vous pose désormais le même balisage,
+  // avec les mêmes textes saisis par le commerçant.
+  const layoutRdv = sansCommentaires(lire('app/commander/rdv/[slug]/layout.js'))
+  verifier('la fiche rendez-vous échappe son balisage',
+    /echapperJsonLd\(jsonLd\)/.test(layoutRdv))
+  verifier('et sans JSON.stringify nu non plus',
+    !/dangerouslySetInnerHTML=\{\{ __html: JSON\.stringify/.test(layoutRdv))
 
   // c) LE RELAIS DE COURRIER OUVERT. `/api/notify-yoppaa` n'avait AUCUNE
   // authentification, et l'appelant choisissait le destinataire ET le texte.

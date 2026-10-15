@@ -55,6 +55,10 @@ export default function robots() {
         '/signup',
         '/onboarding',
         '/commander/auth',
+        // Les pages d'annulation, ouvertes depuis un email avec un jeton : rien
+        // à y trouver pour un moteur (15/10).
+        '/commander/cancel',
+        '/commander/rdv/cancel',
         '/auth/',
       ],
     },

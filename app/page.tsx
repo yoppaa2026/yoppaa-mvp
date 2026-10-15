@@ -28,7 +28,8 @@ export async function generateMetadata() {
   const mode = getLandingMode()
   if (mode === 'reveal') {
     return {
-      title: 'Yoppaa — Ton quartier dans ta poche',
+      // Sans tiret cadratin (règle d'écriture d'Alex), comme le reste du site.
+      title: 'Yoppaa, ton quartier dans ta poche',
       // ✅ APRÈS L'OUVERTURE (14/10) : « Lancement le … » serait resté dans
       // Google des semaines après la date. La page est dynamique, la phrase
       // bascule d'elle-même.
@@ -41,7 +42,7 @@ export async function generateMetadata() {
       robots: { index: true, follow: true },
       alternates: { canonical: 'https://www.yoppaa.app' },
       openGraph: {
-        title: 'Yoppaa — Ton quartier dans ta poche',
+        title: 'Yoppaa, ton quartier dans ta poche',
         description: `L'app belge des commerces de quartier. 0% de commission Yoppaa pour les commerçants. ${finDescription()}`,
         type: 'website',
         locale: 'fr_BE',

@@ -457,7 +457,9 @@ for (const r of ROUTES) {
     // colonnes. La règle reste la même, elle vise l'endroit où elle vit.
     { nom: 'le commerce du Good Morning', chemin: 'lib/morning-contenu.js', regles: [],
       selects: [/adresse, plan, essai_plan, created_at, statut_publication,/g, 1] },
-    { nom: 'le balisage Google de la fiche', chemin: 'app/commander/[slug]/layout.js', regles: [
+    // ⚠️ REPOINTÉE LE 15/10 : la lecture vit dans `lib/fiche-seo-server.js`,
+    // partagée par la fiche boutique et la fiche rendez-vous.
+    { nom: 'le balisage Google de la fiche', chemin: 'lib/fiche-seo-server.js', regles: [
       ['charge l’essai', /longitude, plan, essai_plan, created_at'/],
     ] },
     { nom: 'la consigne Google du kit', chemin: 'app/kit/[slug]/page.js', regles: [

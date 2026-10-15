@@ -258,6 +258,25 @@ const MUTATIONS = [
     vers: '  const choisitSonParcours = emporterPossible && peutPrendreRdv' },
 
   // ⚠️ CE QUI DECRIT LE COMMERCE NE SUIT PAS L INTENTION DU CLIENT.
+  // ══ ✅ « TABLE POUR 2 DÈS 19:00 » SUR LA CARTE (Alex, 15/10) ══
+  { nom: '🔴 le badge annonce la premiere heure meme si elle est PRISE',
+    fichier: 'lib/tables-du-jour.js',
+    de: '  const libre = (slots || []).find(s => s && !s.pris)', vers: '  const libre = (slots || [])[0]' },
+  // ⚠️ RECALÉE LE 15/10 : le jour fermé se juge par `plagesOuvertes` (un
+  // second contrôle faisait double emploi, la mutation restait verte).
+  { nom: '🔴 le badge ignore une fermeture de la maison',
+    fichier: 'lib/tables-du-jour.js',
+    de: '    creneaux: plagesOuvertes(creneaux || [], fermetures, dateStr),', vers: '    creneaux: creneaux || [],' },
+  { nom: '🔴 le badge oublie les tables deja reservees',
+    fichier: 'lib/tables-du-jour.js',
+    de: '  const resas = filtrerReservationsPourSlots(reservations || [], null, [], {})', vers: '  const resas = []' },
+  { nom: '🔴 une lecture ratee des reservations donne quand meme un badge',
+    fichier: 'app/commander/page.js',
+    de: '        if (error) return [c.id, null]\n', vers: '' },
+  { nom: '⚠️ la pastille de retrait passe devant la table libre',
+    fichier: 'app/commander/page.js',
+    de: '  const resa = tableLibre\n', vers: '  const resa = false\n' },
+
   // ══ 🔴 SUR UNE CARTE À LIRE, RIEN NE S'AJOUTE (Alex, 15/10) ══
   { nom: '🔴 « Compose » rouvre le choix avec « Ajouter » sur une carte a lire',
     fichier: 'app/commander/[slug]/page.js',

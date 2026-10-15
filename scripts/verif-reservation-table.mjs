@@ -3098,6 +3098,54 @@ egal('la réservation d’un restaurant s’atteint quand même',
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ✅ « TABLE POUR 2 DÈS 19:00 » SUR LA CARTE DE LA LISTE (Alex, 15/10)
+//
+// Le calcul de la fiche de réservation, et lui seul. On l'EXÉCUTE : salle
+// libre, salle pleine, jour fermé, pas de table, horaires d'ouverture.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const { tableLibreDuJour, libelleTableLibre, tableDeReference, COUVERTS_BADGE } = await import('../lib/tables-du-jour.js')
+  const { isoDate } = await import('../lib/rdv-slots.js')
+  const mardi = jourFutur('mardi')
+  const dateStr = isoDate(mardi)
+  const TABLE = { id: 't', par_couverts: true, capacite: 24, couverts_min: 1, couverts_max: 8, duree_minutes: 90, actif: true }
+  const SOIR = [{ id: 'soir', jour_semaine: 'mardi', date_specifique: null, heure_debut: '18:30', heure_fin: '20:45', pas_minutes: 15, actif: true }]
+  const RESTO = { horaires_detail: { mardi: { ouvert: true, debut: '18:00', fin: '23:00' } } }
+  const base = { jour: mardi, dateStr, commercant: RESTO, prestations: [TABLE], creneaux: SOIR, liaisons: [], fermetures: [], reservations: [] }
+
+  egal('le badge regarde une table pour 2', COUVERTS_BADGE, 2)
+  egal('🔴 salle libre : la première arrivée du service', tableLibreDuJour(base), { heure: '18:30', couverts: 2 })
+  egal('le badge le dit en clair', libelleTableLibre({ heure: '18:30', couverts: 2 }), 'Table pour 2 dès 18:30')
+  // 🔴 Salle pleine de 18:30 à 20:00 (24 couverts) : la première heure LIBRE
+  // est celle où une table de 90 min tient sans chevaucher (20:00).
+  const pleine = [{ heure_debut: '18:30:00', heure_fin: '20:00:00', prestation_id: 't', couverts: 24, place_no: 1 }]
+  egal('🔴 salle pleine au début du service : l’heure qui se libère, pas 18:30',
+    tableLibreDuJour({ ...base, reservations: pleine })?.heure, '20:00')
+  const toutPlein = [{ heure_debut: '18:00:00', heure_fin: '23:00:00', prestation_id: 't', couverts: 24, place_no: 1 }]
+  egal('🔴 plus rien de libre : PAS de badge (jamais « complet »)', tableLibreDuJour({ ...base, reservations: toutPlein }), null)
+  egal('🔴 fermeture de la maison ce jour-là : pas de badge',
+    tableLibreDuJour({ ...base, fermetures: [{ date_debut: dateStr, date_fin: dateStr, praticien_id: null, prestation_id: null, heure_debut: null }] }), null)
+  egal('pas de prestation de table : pas de badge', tableLibreDuJour({ ...base, prestations: [{ id: 'x', par_couverts: false, actif: true }] }), null)
+  egal('table éteinte : pas de badge', tableDeReference([{ ...TABLE, actif: false }]), null)
+  egal('une table qui n’accepte pas 2 personnes ne sert pas de référence', tableDeReference([{ ...TABLE, couverts_min: 4 }]), null)
+  egal('l’arrivée reste dans les horaires (ouverture à 19:00)',
+    tableLibreDuJour({ ...base, commercant: { horaires_detail: { mardi: { ouvert: true, debut: '19:00', fin: '23:00' } } } })?.heure, '19:00')
+  egal('sans date, rien', tableLibreDuJour({ ...base, jour: null }), null)
+  egal('rien à écrire sans table', libelleTableLibre(null), null)
+
+  const ACC = sansProse(readFileSync(new URL('../app/commander/page.js', import.meta.url), 'utf8'))
+  verifier('🔴 la liste ne charge que les restaurants qui prennent des réservations',
+    /const restos = commercantsData\.filter\(c => isAlimentaire\(c\) && reservationActive\(c\)\)/.test(ACC))
+  verifier('🔴 elle lit les tables prises par la même fonction que la fiche (rdv_slots_busy)',
+    /supabase\.rpc\('rdv_slots_busy', \{ p_commercant_id: c\.id, p_date: dateStr \}\)/.test(ACC))
+  verifier('🔴 une lecture en échec rend « pas de badge », jamais un badge sur des données partielles',
+    /if \(e1 \|\| e2 \|\| e3\) \{ setTablesDuJour\(\{\}\); return \}/.test(ACC) && /if \(error\) return \[c\.id, null\]/.test(ACC))
+  verifier('🔴 la carte affiche la table libre AVANT la pastille de retrait',
+    /const tableLibre = libelleTableLibre\(tablesDuJour\?\.\[c\.id\]\)\s*const resa = tableLibre\s*\?/.test(ACC))
+  verifier('les deux listes de cartes reçoivent les tables du jour', (ACC.match(/tablesDuJour=\{tablesDuJour\}/g) || []).length === 2)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

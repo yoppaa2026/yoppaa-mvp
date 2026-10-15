@@ -22,10 +22,11 @@ import { envoyerSignal } from '@/lib/signaux'
 import IconeRetrait from '@/app/components/IconeRetrait'
 // ⚠️ `planEffectif` ET NON `c.plan` : sans lui, un commerçant en essai de
 // Vendre restait « vitrine » dans la liste des commerces (26/08).
-import { canDo, bandeauCategorie, planEffectif, commandeAllumee } from '@/lib/plans'
+import { canDo, bandeauCategorie, planEffectif, commandeAllumee, isAlimentaire } from '@/lib/plans'
 import { lieuDeCarte } from '@/lib/adresse-localite'
 // Les mots du métier : « Annuler cette réservation » chez un restaurant.
-import { motsReservation, intituleReservation } from '@/lib/reservation-metier'
+import { motsReservation, intituleReservation, reservationActive } from '@/lib/reservation-metier'
+import { tableLibreDuJour, libelleTableLibre } from '@/lib/tables-du-jour'
 // Une note sans son nombre d'avis ne dit rien, et cinq étoiles vides se lisent
 // comme un zéro. La règle vit en fonction pure et testée.
 import { resumeAvis } from '@/lib/avis-affichage'
@@ -1052,7 +1053,7 @@ function CarteInvendu({ offre, commerce, restant, remise, reste, distance, onOuv
   )
 }
 
-function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetures, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori, onPartager }) {
+function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDuJour, fermetures, dealsActifs, actusActives, bonnesAffairesActives, onSelect, onToggleFavori, onPartager }) {
   const estFavori = favoris.includes(c.id)
   const noteInfo = notesParCommerce[c.id]
   // ⚠️ Sous 3 avis on ne montre PAS de moyenne : « 5,0 » sur un seul avis se lit
@@ -1197,7 +1198,14 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, fermetur
     commandeAllumee: commandeAllumee(c),
     creneaux: info?.creneaux || [],
   })
-  const resa = peutCommander ? getStatutResa(physique) : null
+  // ✅ 15/10 (Alex) : un restaurant qui prend des réservations annonce sa
+  // première table libre aujourd'hui (`tableLibreDuJour`), et elle passe AVANT
+  // la pastille de retrait : c'est ce que le client vient chercher chez lui.
+  // Rien de libre aujourd'hui : pas de badge, jamais « complet ».
+  const tableLibre = libelleTableLibre(tablesDuJour?.[c.id])
+  const resa = tableLibre
+    ? { dot: '#10B981', label: tableLibre, color: '#10B981', bg: '#F0FDF4' }
+    : peutCommander ? getStatutResa(physique) : null
 
   return (
     <div onClick={() => onSelect(c)}
@@ -1881,6 +1889,8 @@ export default function Commander() {
   // prudente : on ne parle d'expiration qu'une fois la preuve lue.
   const [dejaVenuIci, setDejaVenuIci] = useState(false)
   const [statutsCommerce, setStatutsCommerce] = useState({})
+  // « Table pour 2 dès 19:00 » par restaurant (15/10) : { [id]: { heure, couverts } }.
+  const [tablesDuJour, setTablesDuJour] = useState({})
   // Fermetures exceptionnelles, par commerçant. La carte les ignorait : un
   // commerce en congé s'affichait « Ouvert » en vert sur l'accueil.
   const [fermetures, setFermetures] = useState({})
@@ -2850,6 +2860,56 @@ export default function Commander() {
       parCommerce[f.commercant_id].push(f)
     })
     setFermetures(parCommerce)
+    // ✅ 15/10 : les restaurants qui prennent des réservations, à part. Une
+    // panne ici ne touche RIEN d'autre : pas de badge, c'est tout.
+    chargerTablesDuJour(commercantsData.filter(c => ids.includes(c.id)))
+  }
+
+  // ─── « TABLE POUR 2 DÈS 19:00 » (Alex, 15/10) ────────────────────────────
+  //
+  // Le calcul est celui de la fiche de réservation (`tableLibreDuJour`, dans
+  // lib/tables-du-jour.js). On ne charge que les restaurants qui prennent des
+  // réservations : un salon ou une boulangerie n'a pas de table à annoncer.
+  // ⚠️ TOUT ÉCHEC REND « PAS DE BADGE », jamais un badge sur des données
+  // partielles : une table annoncée libre alors que la lecture des
+  // réservations a échoué serait une promesse fausse.
+  async function chargerTablesDuJour(commercantsData = []) {
+    const restos = commercantsData.filter(c => isAlimentaire(c) && reservationActive(c))
+    if (restos.length === 0) { setTablesDuJour({}); return }
+    const ids = restos.map(c => c.id)
+    const maintenant = new Date()
+    const dateStr = jourLocalISO(maintenant)
+    try {
+      const [{ data: prest, error: e1 }, { data: cren, error: e2 }, { data: ferm, error: e3 }] = await Promise.all([
+        supabase.from('rdv_prestations').select('*').in('commercant_id', ids).eq('actif', true).is('deleted_at', null),
+        supabase.from('rdv_creneaux').select('*').in('commercant_id', ids).eq('actif', true).is('deleted_at', null),
+        supabase.from('rdv_fermetures').select('commercant_id, date_debut, date_fin, praticien_id, prestation_id, heure_debut')
+          .in('commercant_id', ids).is('deleted_at', null).gte('date_fin', dateStr),
+      ])
+      if (e1 || e2 || e3) { setTablesDuJour({}); return }
+      const idsCreneaux = (cren || []).map(c => c.id)
+      const { data: liaisons, error: e4 } = idsCreneaux.length > 0
+        ? await supabase.from('rdv_creneau_prestations').select('creneau_id, prestation_id').in('creneau_id', idsCreneaux)
+        : { data: [], error: null }
+      if (e4) { setTablesDuJour({}); return }
+      const resultats = await Promise.all(restos.map(async (c) => {
+        const { data: busy, error } = await supabase.rpc('rdv_slots_busy', { p_commercant_id: c.id, p_date: dateStr })
+        if (error) return [c.id, null]
+        const sesCreneaux = (cren || []).filter(x => x.commercant_id === c.id)
+        const sesIds = new Set(sesCreneaux.map(x => String(x.id)))
+        return [c.id, tableLibreDuJour({
+          jour: maintenant, dateStr, commercant: c,
+          prestations: (prest || []).filter(p => p.commercant_id === c.id),
+          creneaux: sesCreneaux,
+          liaisons: (liaisons || []).filter(l => sesIds.has(String(l.creneau_id))),
+          fermetures: (ferm || []).filter(f => f.commercant_id === c.id),
+          reservations: busy || [],
+        })]
+      }))
+      setTablesDuJour(Object.fromEntries(resultats.filter(([, t]) => t)))
+    } catch {
+      setTablesDuJour({})
+    }
   }
 
   // Les favoris passent par une route serveur : la table n'est plus lisible ni
@@ -4180,7 +4240,7 @@ export default function Commander() {
                 </div>
               ) : (
                 <div className="commerces-grid">
-                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
+                  {commercantsFiltres.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} tablesDuJour={tablesDuJour} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
                 </div>
               )}
 
@@ -5225,7 +5285,7 @@ export default function Commander() {
                       </p>
                     ) : (
                       <div className="commerces-grid" style={{ marginTop: 4 }}>
-                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
+                        {commercantsFavoris.map(c => <CarteCommerce key={c.id} c={c} favoris={favoris} notesParCommerce={notesParCommerce} statutsCommerce={statutsCommerce} tablesDuJour={tablesDuJour} fermetures={fermetures} dealsActifs={dealsActifs} actusActives={actusActives} bonnesAffairesActives={bonnesAffairesActives} onSelect={selectionnerCommercant} onToggleFavori={toggleFavori} onPartager={partagerCommerce}/>)}
                       </div>
                     )}
                   </div>

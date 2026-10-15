@@ -1234,10 +1234,21 @@ for (const chemin of ['lib/empreinte-table.js', 'lib/rdv-delai-annulation.js']) 
     // ⚠️ ON VISE L'INTERPOLATION, PAS LE NOM. Chercher `COLONNES_COUVERTS` tout
     // court, c'est trouver la ligne d'import et rester vert alors que le select
     // a été recopié à la main juste en dessous. Le piège de l'import, encore.
+    // ⚠️ REPOINTÉE LE 15/10 : la garde vise ceux qui CHARGENT. Un module pur
+    // (`lib/tables-du-jour.js`) reçoit ses prestations de son appelant et ne
+    // lit aucune base : c'est la lecture de l'appelant qu'on vérifie, juste
+    // en dessous. Un module qui se met à lire (`.from(`) retombe sous la règle.
     for (const f of appliquent) {
+      const code = sansProse(lire(f))
+      if (!/\.from\(/.test(code)) continue
       verifie(`🔴 ${f} charge les colonnes DÉCLARÉES par la règle`,
-        /\$\{COLONNES_COUVERTS\}/.test(sansProse(lire(f))), 'liste recopiée à la main')
+        /\$\{COLONNES_COUVERTS\}/.test(code), 'liste recopiée à la main')
     }
+    // Le badge « Table pour 2 dès 19:00 » : la liste charge les prestations de
+    // table EN ENTIER (`*`), donc avec `capacite` et les couverts.
+    verifie('🔴 la liste charge les prestations de table en entier pour le badge',
+      /supabase\.from\('rdv_prestations'\)\.select\('\*'\)\.in\('commercant_id', ids\)/.test(sansProse(lire('app/commander/page.js'))))
+    verifie('et le module du badge ne lit aucune base lui-même', !/\.from\(/.test(sansProse(lire('lib/tables-du-jour.js'))))
   }
   const iGarde = RESERVER.indexOf('empreinteRequise(commercant, prestation, couvertsTable)')
   verifie('🔴 et le fait AVANT de créer la table',

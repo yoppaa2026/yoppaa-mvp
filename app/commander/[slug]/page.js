@@ -795,17 +795,24 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
           </div>
         )}
       </div>
-      {showOptions && hasOptions && (
+      {/* 🔴 15/10 (Alex) : SUR UNE CARTE À LIRE, rien ne s'ajoute. Un article
+          en vitrine OU une fiche où l'on ne peut pas commander (`modeVitrine`,
+          un restaurant sans emporté) montre ses options et ses versions sans
+          bouton « Ajouter à ma commande ». */}
+      {showOptions && hasOptions && !article.est_vitrine && !modeVitrine && (
         <OptionsSelector article={article} groupes={groupes} onAjouter={(a, opts) => { ajouterAuPanier(a, opts); setShowOptions(false) }}/>
+      )}
+      {showOptions && hasOptions && (article.est_vitrine || modeVitrine) && (
+        <OptionsVitrine groupes={groupes}/>
       )}
       {/* ⚠️ EN VITRINE, LES VERSIONS SE LISENT, ELLES NE S'ACHÈTENT PAS : le
           sélecteur d'achat y proposait « Ajouter » sur un article que le
           serveur refuse (30/09). */}
-      {showOptions && hasVariantes && !article.est_vitrine && (
+      {showOptions && hasVariantes && !article.est_vitrine && !modeVitrine && (
         <VariantesSelector article={article} variantes={variantes}
           onAjouter={(a, variante) => { ajouterAuPanier(a, null, variante); setShowOptions(false) }}/>
       )}
-      {showOptions && hasVariantes && article.est_vitrine && (
+      {showOptions && hasVariantes && (article.est_vitrine || modeVitrine) && (
         <VariantesVitrine article={article} variantes={variantes}/>
       )}
     </div>
@@ -815,6 +822,37 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
 // ─── LES VERSIONS D'UN ARTICLE EN VITRINE, À LIRE (30/09) ────────────────────
 // Les tailles et couleurs proposées en boutique, sans stock ni bouton : la
 // commerçante ne suit pas ce stock-là dans l'application.
+// ─── LES OPTIONS D'UN ARTICLE QUI NE SE COMMANDE PAS ICI, À LIRE (15/10) ──────
+//
+// 🔴 ALEX, 15/10 (le Bistrologue) : sur la carte d'un restaurant qui ne fait
+// pas d'emporté, « Compose +2 » ouvrait le choix des options avec « Ajouter à
+// ma commande ». Une carte à lire montre ce qu'on peut choisir et ce que ça
+// coûte, sans rien pour ajouter. Même ordre que le sélecteur d'achat
+// (`ordonnerGroupes`) : la taille d'abord.
+function OptionsVitrine({ groupes }) {
+  const visibles = ordonnerGroupes(groupes || []).filter(g => (g.valeurs || []).length > 0)
+  if (visibles.length === 0) return null
+  return (
+    <div style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
+      {visibles.map(g => (
+        <div key={g.id} style={{ marginBottom: 10 }}>
+          <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem', margin: '0 0 6px' }}>{g.nom}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {g.valeurs.map(v => {
+              const prix = prixDeValeur(v, [])
+              return (
+                <span key={v.id} style={{ padding: '5px 11px', borderRadius: 100, border: `1.5px solid ${T.pale}`, color: T.ink, fontSize: '0.8rem', fontWeight: 700 }}>
+                  {v.nom}{prix > 0 && <span style={{ color: T.main, fontWeight: 800 }}> +{euros(prix)}</span>}
+                </span>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function VariantesVitrine({ article, variantes }) {
   const actives = (variantes || []).filter(v => v.actif !== false)
   const axes = [
@@ -4880,18 +4918,13 @@ export default function CommanderSlug() {
                     les emplacements avait pris du retard. */}
                 {commercant.horaires_detail && !commerceItinerant && <HorairesSection horaires={commercant.horaires_detail}/>}
 
-                {/* Mention discrete + signal Yopper si le plan/feature n'est pas active */}
-                {/* ⚠️ `commerceAccepteCommandes` ET NON `peutCommander` (09/09) :
-                    le second dit « le client peut remplir son panier
-                    maintenant », et il est faux tant qu'un client de restaurant
-                    n'a pas dit ce qu'il venait faire. Réclamer l'activation de
-                    la commande à un commerçant qui vient de l'activer serait le
-                    genre de message qui fait douter de tout le reste. */}
-                {!commerceAccepteCommandes && !vitrine && (
-                  <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
-                    Envie de commander à l&rsquo;avance&nbsp;? Demandez à <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> d&rsquo;activer Yoppaa Click &amp; Collect.
-                  </div>
-                )}
+                {/* 🔴 LE BANDEAU « ENVIE DE COMMANDER À L'AVANCE ? DEMANDEZ À X
+                    D'ACTIVER YOPPAA CLICK & COLLECT » EST RETIRÉ (Alex, 15/10,
+                    au tableau : « ne plus jamais l'afficher »). Chez le
+                    Bistrologue, qui a décoché la commande parce qu'il ne fait
+                    pas d'emporté, il poussait ses clients à lui réclamer ce qu'il
+                    a choisi de ne pas faire. Le souhait du client reste possible
+                    dans les envies (`SignauxYopper`, plus bas), sans bandeau. */}
                 {vitrine && !peutPrendreRdv && !commerceAccepteCommandes && (
                   <div style={{ background: T.pale, borderTop: `1px solid ${T.main}22`, borderBottom: `1px solid ${T.main}22`, padding: '10px 16px', fontSize: 12, color: T.deep, fontWeight: 600, lineHeight: 1.5 }}>
                     Passe directement à la boutique ou appelle <strong style={{ color: T.bgPanel, fontWeight: 800 }}>{commercant.nom}</strong> pour plus d&rsquo;infos. Tu peux aussi signaler que tu aimerais prendre RDV en ligne.

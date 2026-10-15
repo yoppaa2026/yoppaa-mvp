@@ -117,7 +117,8 @@ const MUTATIONS = [
   { nom: '🔴 le « dès » revient sur la fiche',
     fichier: FICHE, de: "                  <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}>{euros(Number(article.prix))}</p>", vers: "                  <p style={{ fontSize: '1rem', color: T.main, fontWeight: 900, letterSpacing: '-0.3px' }}><span>dès</span> {euros(Number(article.prix))}</p>" },
   { nom: '🔴 en vitrine, les versions s achètent',
-    fichier: FICHE, de: '      {showOptions && hasVariantes && !article.est_vitrine && (', vers: '      {showOptions && hasVariantes && (' },
+    // ⚠️ ANCRE RECALÉE LE 15/10 : la carte à lire (`modeVitrine`) suit la même règle.
+    fichier: FICHE, de: '      {showOptions && hasVariantes && !article.est_vitrine && !modeVitrine && (', vers: '      {showOptions && hasVariantes && !modeVitrine && (' },
   { nom: '⚠️ en vitrine, une pastille « Épuisé » s affiche',
     // ⚠️ Ancre reorientee le 07/10 : `!etatJour` suit (l article hors du jour choisi).
     fichier: FICHE, de: '          {!hasVariantes && stockGere && !article.est_vitrine && !etatJour && (() => {', vers: '          {!hasVariantes && stockGere && !etatJour && (() => {' },

@@ -258,10 +258,25 @@ const MUTATIONS = [
     vers: '  const choisitSonParcours = emporterPossible && peutPrendreRdv' },
 
   // ⚠️ CE QUI DECRIT LE COMMERCE NE SUIT PAS L INTENTION DU CLIENT.
-  { nom: '🔴 on reclame l activation de la commande a qui l a activee',
+  // ══ 🔴 SUR UNE CARTE À LIRE, RIEN NE S'AJOUTE (Alex, 15/10) ══
+  { nom: '🔴 « Compose » rouvre le choix avec « Ajouter » sur une carte a lire',
     fichier: 'app/commander/[slug]/page.js',
-    de: '                {!commerceAccepteCommandes && !vitrine && (',
-    vers: '                {!peutCommander && !vitrine && (' },
+    de: '      {showOptions && hasOptions && !article.est_vitrine && !modeVitrine && (',
+    vers: '      {showOptions && hasOptions && (' },
+  { nom: '🔴 les versions s achetent de nouveau sur une carte a lire',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '      {showOptions && hasVariantes && !article.est_vitrine && !modeVitrine && (',
+    vers: '      {showOptions && hasVariantes && !article.est_vitrine && (' },
+  { nom: '⚠️ sur une carte a lire, les options ne se montrent plus du tout',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '        <OptionsVitrine groupes={groupes}/>', vers: '        null' },
+
+  // ⚠️ RECALÉE LE 15/10 : le bandeau est retiré (Alex) ; la mutation le fait
+  // revenir, et la garde doit rougir.
+  { nom: '🔴 le bandeau « demandez-lui d activer » revient',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '                {vitrine && !peutPrendreRdv && !commerceAccepteCommandes && (',
+    vers: '                {!commerceAccepteCommandes && <div>Envie de commander à l&rsquo;avance&nbsp;? Demandez d&rsquo;activer Yoppaa Click &amp; Collect.</div>}\n                {vitrine && !peutPrendreRdv && !commerceAccepteCommandes && (' },
 
   { nom: '🔴 le bouton qui transporte le panier reapparait au restaurant',
     fichier: 'app/commander/[slug]/page.js',

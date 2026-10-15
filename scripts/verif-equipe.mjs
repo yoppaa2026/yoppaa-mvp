@@ -1302,6 +1302,27 @@ const membre = (o = {}) => ({
     /postPro\('\/api\/commande\/encaisser', \{ commande_id: c\.id, encaissement: choix \}\)/.test(poste) && /postPro\('\/api\/commande\/retour-arriere', \{ commande_id: c\.id \}\)/.test(poste))
 }
 
+// ═══ ✅ LA CONNEXION DE L'ÉQUIPE (Alex, 15/10) ════════════════════════════════
+//
+// « Espace commerçant », l'onglet « Mot de passe » et « Découvrir Yoppaa Pro »
+// embrouillaient le personnel arrivé depuis `/equipe`. Un membre de l'équipe
+// n'a pas de mot de passe : son compte naît du lien reçu par email.
+{
+  const login = sansProse(lire('app/login/page.js'))
+  v('🔴 la connexion reconnaît qu’on vient de l’espace équipe (et de l’invitation)',
+    /const modeEquipe = nextPath === '\/equipe' \|\| nextPath\.startsWith\('\/equipe\/'\)/.test(login))
+  v('🔴 elle se présente comme l’espace équipe',
+    /modeEquipe \? 'Espace équipe' : 'Espace commerçant'/.test(login) && /modeEquipe \? 'Connexion équipe' : 'Connexion'/.test(login))
+  v('🔴 pas d’onglet « Mot de passe » pour l’équipe', /\{!modeEquipe && \(\s*<div style=\{\{ display: 'flex', gap: 0, marginBottom: '1\.5rem'/.test(login))
+  v('🔴 et la phrase dit pourquoi', /Pas de mot de passe pour l&rsquo;équipe\./.test(login))
+  v('🔴 pas d’inscription commerçant proposée à l’équipe', /\{!modeAdmin && !modeEquipe && \(/.test(login))
+  v('le patron retrouve son espace commerçant', /Ton espace commerçant →/.test(login))
+  v('le lien magique reste le mode par défaut', /const \[mode, setMode\] = useState\('magic'\)/.test(login))
+  // Les entrées de l'espace équipe mènent bien ici, avec `/equipe`.
+  v('l’espace équipe renvoie vers la connexion avec son adresse',
+    /\/login\?next=\$\{encodeURIComponent\('\/equipe'\)\}/.test(lire('app/equipe/page.js')))
+}
+
 console.log(`\nÉquipe : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

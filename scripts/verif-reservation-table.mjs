@@ -225,8 +225,24 @@ egal('la réservation d’un restaurant s’atteint quand même',
   // ⚠️ CE QUI DÉCRIT LE COMMERCE NE DOIT PAS SUIVRE L'INTENTION DU CLIENT :
   // réclamer l'activation de la commande à qui vient de l'activer ferait douter
   // de tout le reste de l'écran.
-  verifier('⚠️ le message « demandez-lui d’activer » lit le COMMERCE',
-    /\{!commerceAccepteCommandes && !vitrine && \(/.test(FICHE))
+  // ⚠️ REPOINTÉE LE 15/10 : le bandeau « demandez-lui d'activer » est RETIRÉ
+  // (Alex, au tableau : « ne plus jamais l'afficher »). On garde qu'il ne
+  // revient pas, sous aucune condition.
+  verifier('🔴 le bandeau « Demandez à X d’activer Yoppaa Click & Collect » ne revient pas',
+    !/d&rsquo;activer Yoppaa Click|d’activer Yoppaa Click|Envie de commander à l&rsquo;avance/.test(FICHE))
+  // 🔴 15/10 (Alex, le Bistrologue) : SUR UNE CARTE À LIRE, RIEN NE S'AJOUTE.
+  // « Compose +2 » ouvrait le choix des options avec « Ajouter à ma commande ».
+  verifier('🔴 le sélecteur d’achat des options ne s’ouvre que là où l’on commande',
+    /\{showOptions && hasOptions && !article\.est_vitrine && !modeVitrine && \(\s*<OptionsSelector/.test(FICHE))
+  verifier('🔴 ailleurs, les options se LISENT (taille, sauces, prix), sans bouton',
+    /\{showOptions && hasOptions && \(article\.est_vitrine \|\| modeVitrine\) && \(\s*<OptionsVitrine groupes=\{groupes\}\/>/.test(FICHE)
+      && /function OptionsVitrine\(\{ groupes \}\)/.test(FICHE)
+      && !/function OptionsVitrine[\s\S]{0,1500}Ajouter à ma commande[\s\S]{0,200}function VariantesVitrine/.test(FICHE))
+  verifier('🔴 même chose pour les versions d’un article',
+    /\{showOptions && hasVariantes && !article\.est_vitrine && !modeVitrine && \(\s*<VariantesSelector/.test(FICHE)
+      && /\{showOptions && hasVariantes && \(article\.est_vitrine \|\| modeVitrine\) && \(\s*<VariantesVitrine/.test(FICHE))
+  verifier('et la fiche dit à chaque carte quand on ne peut pas commander',
+    (FICHE.match(/modeVitrine=\{!peutCommander\}/g) || []).length === 2)
   verifier('⚠️ et le signal Yopper aussi',
     /peutCommander: commerceAccepteCommandes,/.test(FICHE))
   // ⚠️ CHEZ UN SALON, RIEN NE CHANGE : le panier voyage avec le client vers son

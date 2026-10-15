@@ -48,6 +48,12 @@ function Login() {
   const searchParams = useSearchParams()
   const nextPath = cheminInterne(searchParams?.get('next'), '/dashboard')
   const modeAdmin = nextPath === '/admin'
+  // ✅ L'ESPACE ÉQUIPE (Alex, 15/10) : « Espace commerçant », l'onglet « Mot de
+  // passe » et « Découvrir Yoppaa Pro » embrouillaient le serveur ou la
+  // vendeuse arrivés depuis `/equipe`. Un membre de l'équipe n'a PAS de mot de
+  // passe : son compte naît du lien reçu par email. Il ne voit donc que le
+  // lien magique, et des mots qui le concernent.
+  const modeEquipe = nextPath === '/equipe' || nextPath.startsWith('/equipe/')
   const turnstileRef = useRef(null)
 
   // 🔴 CE BLOC A ENFERMÉ ALEX SUR SON TÉLÉPHONE LE 14/09, ET IL AURAIT ENFERMÉ
@@ -205,7 +211,7 @@ function Login() {
           </div>
           <p style={{ fontFamily: 'var(--font-jakarta), "Plus Jakarta Sans", system-ui, sans-serif', fontWeight: 800, fontSize: '2.5rem', letterSpacing: '-0.05em', color: '#fff', lineHeight: 1, marginBottom: 6 }}>yoppaa</p>
           <p style={{ color: T.light, fontSize: '0.8rem', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase' }}>
-            {modeAdmin ? <><Lock size={14} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Espace admin</> : 'Espace commerçant'}
+            {modeAdmin ? <><Lock size={14} strokeWidth={1.8} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }}/>Espace admin</> : modeEquipe ? 'Espace équipe' : 'Espace commerçant'}
           </p>
         </div>
 
@@ -215,10 +221,18 @@ function Login() {
           {!sent ? (
             <>
               <h1 style={{ fontWeight: 800, fontSize: '1.25rem', color: '#fff', marginBottom: '1.25rem', letterSpacing: '-0.5px' }}>
-                {modeAdmin ? 'Console admin' : 'Connexion'}
+                {modeAdmin ? 'Console admin' : modeEquipe ? 'Connexion équipe' : 'Connexion'}
               </h1>
 
+              {/* L'équipe : le lien magique seul, et la phrase qui dit pourquoi. */}
+              {modeEquipe && (
+                <p style={{ fontSize: '0.85rem', color: T.light, lineHeight: 1.55, margin: '-0.5rem 0 1.25rem' }}>
+                  Entre l&rsquo;adresse à laquelle tu as reçu ton invitation&nbsp;: on t&rsquo;envoie un lien de connexion. Pas de mot de passe pour l&rsquo;équipe.
+                </p>
+              )}
+
               {/* Tabs */}
+              {!modeEquipe && (
               <div style={{ display: 'flex', gap: 0, marginBottom: '1.5rem', background: 'rgba(255,255,255,0.06)', borderRadius: 12, padding: 4 }}>
                 {[
                   { key: 'magic', label: '✉️ Lien magique' },
@@ -246,6 +260,7 @@ function Login() {
                   </button>
                 ))}
               </div>
+              )}
 
               {/* Email field — commun aux deux modes */}
               <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: T.light, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
@@ -333,11 +348,23 @@ function Login() {
               <p style={{ fontSize: '0.72rem', color: `${T.light}66`, textAlign: 'center', marginTop: '1rem', lineHeight: 1.5 }}>
                 {modeAdmin
                   ? 'Accès réservé à l\'équipe Yoppaa.'
-                  : 'Accès réservé aux commerçants partenaires Yoppaa.'}
+                  : modeEquipe
+                    ? 'Accès réservé aux membres de l’équipe d’un commerce Yoppaa.'
+                    : 'Accès réservé aux commerçants partenaires Yoppaa.'}
               </p>
 
-              {/* Lien acquisition : masqué en mode admin */}
-              {!modeAdmin && (
+              {/* L'équipe : pas d'inscription commerçant, mais le chemin du patron. */}
+              {modeEquipe && (
+                <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
+                  <a href="/login"
+                    style={{ display: 'inline-block', color: T.light, fontSize: '0.85rem', fontWeight: 700, textDecoration: 'none', padding: '8px 4px', letterSpacing: '-0.2px' }}>
+                    Tu es le commerçant&nbsp;? <span style={{ color: '#fff', textDecoration: 'underline' }}>Ton espace commerçant →</span>
+                  </a>
+                </div>
+              )}
+
+              {/* Lien acquisition : masqué en mode admin et pour l'équipe */}
+              {!modeAdmin && !modeEquipe && (
                 <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
                   <a href="/signup"
                     style={{ display: 'inline-block', color: T.light, fontSize: '0.85rem', fontWeight: 700, textDecoration: 'none', padding: '8px 4px', letterSpacing: '-0.2px' }}>
@@ -356,7 +383,7 @@ function Login() {
               <p style={{ fontSize: '0.875rem', color: T.light, lineHeight: 1.6, marginBottom: '1.5rem' }}>
                 On vient d&apos;envoyer un lien de connexion à<br/>
                 <strong style={{ color: '#fff' }}>{email}</strong><br/>
-                Clique sur le lien pour accéder à ton dashboard.
+                {modeEquipe ? 'Clique sur le lien pour ouvrir ton espace équipe.' : 'Clique sur le lien pour accéder à ton dashboard.'}
               </p>
               <p style={{ fontSize: '0.75rem', color: `${T.light}88` }}>
                 Le lien expire dans 1 heure.<br/>

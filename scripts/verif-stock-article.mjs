@@ -199,8 +199,10 @@ const code = (f) => sansProse(lire(f))
     /const revient = revientUnAutreJour\(article\) && \(circuit === null \|\| article\.commande_active === true\)/.test(fiche)
     && /const prochain = epuiseAujourdhui && revient \? prochainJourDispo\(\) : null/.test(fiche))
   v('🔴 plus de « dès » ni de « Prix sur demande » sur la fiche', !/>\s*dès\s*</.test(fiche) && !/Prix sur demande/.test(fiche))
-  v('🔴 en vitrine, le sélecteur d’ACHAT des versions ne s’ouvre pas', /\{showOptions && hasVariantes && !article\.est_vitrine && \(\s*<VariantesSelector/.test(fiche))
-  v('en vitrine, les versions se lisent', /\{showOptions && hasVariantes && article\.est_vitrine && \(\s*<VariantesVitrine/.test(fiche) && /function VariantesVitrine\(/.test(fiche))
+  // ⚠️ REPOINTÉES LE 15/10 : la carte à lire d'un commerce où l'on ne commande
+  // pas (`modeVitrine`, Alex, le Bistrologue) suit la même règle que la vitrine.
+  v('🔴 en vitrine, le sélecteur d’ACHAT des versions ne s’ouvre pas', /\{showOptions && hasVariantes && !article\.est_vitrine && !modeVitrine && \(\s*<VariantesSelector/.test(fiche))
+  v('en vitrine, les versions se lisent', /\{showOptions && hasVariantes && \(article\.est_vitrine \|\| modeVitrine\) && \(\s*<VariantesVitrine/.test(fiche) && /function VariantesVitrine\(/.test(fiche))
   // ⚠️ RÉORIENTÉE LE 07/10 : `!etatJour` suit sur les deux pastilles (l'article
   // hors du jour choisi a sa propre ligne). La condition vitrine reste visée.
   v('🔴 en vitrine, aucune pastille de stock', /\{hasVariantes && !article\.est_vitrine && !etatJour \? \(\(\) => \{/.test(fiche) && /\{!hasVariantes && stockGere && !article\.est_vitrine && !etatJour && \(\(\) => \{/.test(fiche))

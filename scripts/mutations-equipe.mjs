@@ -377,6 +377,18 @@ const MUTATIONS = [
     fichier: 'lib/resend.js', de: "  const url = site('/dashboard')", vers: "  const url = 'https://www.yoppaa.app/dashboard'" },
   { nom: '🔴 le SMS de carte retourne sur www en dur',
     fichier: 'lib/fidelite-sms.js', de: '  const lien = `${baseDuSite()}/carte/', vers: '  const lien = `https://www.yoppaa.app/carte/' },
+
+  // ══ ✅ LA CONNEXION DE L'ÉQUIPE (Alex, 15/10) ══
+  { nom: '🔴 la connexion ne reconnait plus l espace equipe',
+    fichier: 'app/login/page.js', de: "  const modeEquipe = nextPath === '/equipe' || nextPath.startsWith('/equipe/')", vers: '  const modeEquipe = false' },
+  { nom: '🔴 l invitation (/equipe/rejoindre) retombe sur l espace commercant',
+    fichier: 'app/login/page.js', de: " || nextPath.startsWith('/equipe/')", vers: '' },
+  { nom: '🔴 l onglet « Mot de passe » revient pour l equipe',
+    fichier: 'app/login/page.js', de: '              {!modeEquipe && (\n              <div style', vers: '              {(\n              <div style' },
+  { nom: '🔴 l equipe se voit proposer l inscription commercant',
+    fichier: 'app/login/page.js', de: '              {!modeAdmin && !modeEquipe && (', vers: '              {!modeAdmin && (' },
+  { nom: '⚠️ l ecran redit « Espace commercant » a l equipe',
+    fichier: 'app/login/page.js', de: "modeEquipe ? 'Espace équipe' : 'Espace commerçant'", vers: "'Espace commerçant'" },
 ]
 
 const lancer = (banc) => {

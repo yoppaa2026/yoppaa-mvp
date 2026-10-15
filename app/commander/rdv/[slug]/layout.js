@@ -12,19 +12,22 @@
 
 import { echapperJsonLd } from '@/lib/seo-landing'
 import { metadataFiche, jsonLdFiche, PAGE_RDV } from '@/lib/fiche-seo'
-import { getCommercantPublic, getAvisAgregat } from '@/lib/fiche-seo-server'
+import { getCommercantPublic, getAvisAgregat, getCommandeRealisable } from '@/lib/fiche-seo-server'
 
 export async function generateMetadata({ params }) {
   const { slug } = await params
-  return metadataFiche(await getCommercantPublic(slug), PAGE_RDV)
+  const c = await getCommercantPublic(slug)
+  const commandeRealisable = c ? await getCommandeRealisable(c) : false
+  return metadataFiche(c, PAGE_RDV, { commandeRealisable })
 }
 
 export default async function FicheRdvLayout({ children, params }) {
   const { slug } = await params
   const c = await getCommercantPublic(slug)
   const avis = c ? await getAvisAgregat(c.id) : null
+  const commandeRealisable = c ? await getCommandeRealisable(c) : false
   // `null` chez un restaurant : son balisage vit sur sa fiche boutique.
-  const jsonLd = jsonLdFiche(c, PAGE_RDV, avis)
+  const jsonLd = jsonLdFiche(c, PAGE_RDV, avis, { commandeRealisable })
   return (
     <>
       {children}

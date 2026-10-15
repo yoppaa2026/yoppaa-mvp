@@ -11,20 +11,24 @@
 
 import { echapperJsonLd } from '@/lib/seo-landing'
 import { metadataFiche, jsonLdFiche, PAGE_BOUTIQUE } from '@/lib/fiche-seo'
-import { getCommercantPublic, getAvisAgregat } from '@/lib/fiche-seo-server'
+import { getCommercantPublic, getAvisAgregat, getCommandeRealisable } from '@/lib/fiche-seo-server'
 
 export async function generateMetadata({ params }) {
   const { slug } = await params
-  return metadataFiche(await getCommercantPublic(slug), PAGE_BOUTIQUE)
+  const c = await getCommercantPublic(slug)
+  // Le titre ne dit « Commander » que si une commande peut aller au bout.
+  const commandeRealisable = c ? await getCommandeRealisable(c) : false
+  return metadataFiche(c, PAGE_BOUTIQUE, { commandeRealisable })
 }
 
 export default async function CommercantLayout({ children, params }) {
   const { slug } = await params
   const c = await getCommercantPublic(slug)
   const avis = c ? await getAvisAgregat(c.id) : null
+  const commandeRealisable = c ? await getCommandeRealisable(c) : false
   // `null` aussi quand Google doit retenir l'agenda (un salon) : le balisage
   // vit alors sur la fiche rendez-vous.
-  const jsonLd = jsonLdFiche(c, PAGE_BOUTIQUE, avis)
+  const jsonLd = jsonLdFiche(c, PAGE_BOUTIQUE, avis, { commandeRealisable })
   return (
     <>
       {children}

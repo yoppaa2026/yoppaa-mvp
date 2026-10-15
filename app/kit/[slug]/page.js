@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import KitClient from './KitClient'
 import { avantLancement } from '@/lib/lancement'
 import { consigneGoogle } from '@/lib/action-google'
+import { lireCommandeRealisable } from '@/lib/commande-realisable-lecture'
 import { lienFiche } from '@/lib/lien-fiche'
 import { ficheEnRelecture } from '@/lib/statut-commercant'
 
@@ -37,7 +38,9 @@ async function getKit(slug) {
   let consigne = null
 
   // 1) Commerçant onboardé (commercants.slug) — cas au lancement + tests (ex. kebabistro).
-  const { data: com } = await supabase.from('commercants').select('nom, slug, plan, essai_plan, created_at, categorie, statut_publication').eq('slug', slug).maybeSingle()
+  // ⚠️ `id` ET LES TROIS INTERRUPTEURS (15/10) : la consigne ne donne plus un
+  // lien que pour ce qui est vraiment ouvert (réservation, commande).
+  const { data: com } = await supabase.from('commercants').select('id, rdv_actif, commande_actif, livraison_actif, nom, slug, plan, essai_plan, created_at, categorie, statut_publication').eq('slug', slug).maybeSingle()
   // 🔴 UNE DÉMO DES RELECTEURS N'A PAS DE KIT PUBLIC (14/10, check de
   // lancement) : `/kit/chez-momo` affichait « Chez Momo » à n'importe qui,
   // alors que la fiche n'est visible que des comptes de relecture. La page dit
@@ -45,7 +48,7 @@ async function getKit(slug) {
   if (com && ficheEnRelecture(com)) return null
   if (com) {
     nom = com.nom
-    consigne = consigneGoogle(com)
+    consigne = consigneGoogle(com, { commandeRealisable: await lireCommandeRealisable(supabase, com) })
   } else {
     // 2) Commerçant préinscrit (pre_inscriptions.slug_kit) — phase teasing.
     const { data: pi } = await supabase

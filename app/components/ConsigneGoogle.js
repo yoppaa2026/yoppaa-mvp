@@ -13,6 +13,11 @@
 //
 // Le contenu vient de `lib/action-google.js` : le lien affiché ici est le MÊME
 // que celui que le QR imprime, et que la fiche déclare aux moteurs.
+//
+// 🔴 15/10 (Alex, le Bistrologue) : UN LIEN PAR GESTE OUVERT, CHACUN AVEC SON
+// CHAMP. Un restaurant qui prend des tables reçoit son lien de réservation
+// (champ « Réservations »), et celui de commande s'il en prend aussi. Avant,
+// il ne recevait que « Commander en ligne », même sans aucune commande.
 
 import { useState } from 'react'
 
@@ -26,14 +31,17 @@ const T = {
 }
 
 export default function ConsigneGoogle({ consigne, sombre = false }) {
-  const [copie, setCopie] = useState(false)
+  // L'adresse du lien qui vient d'être copié : chaque bouton dit le sien.
+  const [copie, setCopie] = useState(null)
   if (!consigne) return null
+  const liens = Array.isArray(consigne.liens) ? consigne.liens : []
+  const plusieurs = liens.length > 1
 
-  async function copier() {
+  async function copier(url) {
     try {
-      await navigator.clipboard.writeText(consigne.url)
-      setCopie(true)
-      setTimeout(() => setCopie(false), 2000)
+      await navigator.clipboard.writeText(url)
+      setCopie(url)
+      setTimeout(() => setCopie(null), 2000)
     } catch { /* copie refusée par le navigateur : le lien reste lisible et sélectionnable */ }
   }
 
@@ -55,27 +63,41 @@ export default function ConsigneGoogle({ consigne, sombre = false }) {
         {consigne.etapes.map((e, i) => <li key={i}>{e}</li>)}
       </ol>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-        <code style={{
-          flex: 1, minWidth: 200, fontSize: 12, fontWeight: 700,
-          color: sombre ? '#fff' : T.deep,
-          background: sombre ? 'rgba(0,0,0,0.22)' : '#F8F6FF',
-          border: `1px solid ${bord}`, borderRadius: 8, padding: '8px 10px',
-          overflowX: 'auto', whiteSpace: 'nowrap', display: 'block',
-        }}>
-          {consigne.url}
-        </code>
-        <button onClick={copier}
-          style={{
-            flexShrink: 0, padding: '8px 14px', borderRadius: 100, cursor: 'pointer',
-            border: `1.5px solid ${sombre ? '#fff' : T.main}`,
-            background: copie ? (sombre ? '#fff' : T.main) : 'transparent',
-            color: copie ? (sombre ? T.ink : '#fff') : (sombre ? '#fff' : T.main),
-            fontWeight: 800, fontSize: 12, fontFamily: '"DM Sans", sans-serif',
-          }}>
-          {copie ? 'Lien copié !' : 'Copier le lien'}
-        </button>
-      </div>
+      {liens.map(l => {
+        const copiee = copie === l.url
+        return (
+          <div key={l.url} style={{ marginTop: 10 }}>
+            {/* Avec deux liens, chacun dit son champ : coller la commande dans
+                « Réservations » enverrait le client au mauvais endroit. */}
+            {plusieurs && (
+              <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 800, color: couleurTitre }}>
+                Champ « {l.champ} »
+              </p>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <code style={{
+                flex: 1, minWidth: 200, fontSize: 12, fontWeight: 700,
+                color: sombre ? '#fff' : T.deep,
+                background: sombre ? 'rgba(0,0,0,0.22)' : '#F8F6FF',
+                border: `1px solid ${bord}`, borderRadius: 8, padding: '8px 10px',
+                overflowX: 'auto', whiteSpace: 'nowrap', display: 'block',
+              }}>
+                {l.url}
+              </code>
+              <button onClick={() => copier(l.url)}
+                style={{
+                  flexShrink: 0, padding: '8px 14px', borderRadius: 100, cursor: 'pointer',
+                  border: `1.5px solid ${sombre ? '#fff' : T.main}`,
+                  background: copiee ? (sombre ? '#fff' : T.main) : 'transparent',
+                  color: copiee ? (sombre ? T.ink : '#fff') : (sombre ? '#fff' : T.main),
+                  fontWeight: 800, fontSize: 12, fontFamily: '"DM Sans", sans-serif',
+                }}>
+                {copiee ? 'Lien copié !' : 'Copier le lien'}
+              </button>
+            </div>
+          </div>
+        )
+      })}
 
       <p style={{ margin: '10px 0 0', fontSize: 11, color: couleurTexte, fontWeight: 600, lineHeight: 1.5 }}>
         {consigne.note}

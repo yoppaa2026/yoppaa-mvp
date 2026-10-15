@@ -10,7 +10,7 @@
 
 import { readFileSync } from 'node:fs'
 import { AVIS_MINIMUM_POUR_MOYENNE, resumeAvis, libelleBascule } from '../lib/avis-affichage.js'
-import { actionCommerce, potentialActionJsonLd, consigneGoogle } from '../lib/action-google.js'
+import { actionCommerce, actionsCommerce, potentialActionJsonLd, consigneGoogle } from '../lib/action-google.js'
 import { pointsLogo } from '../lib/logo.js'
 import { sansProse } from './lire-code.mjs'
 
@@ -37,6 +37,11 @@ const verifie = (nom, cond, detail = '') => {
 }
 const egal = (nom, obtenu, attendu) =>
   verifie(nom, obtenu === attendu, `« ${obtenu} » au lieu de « ${attendu} »`)
+// Pour les listes et les objets (15/10) : `===` compare des RÉFÉRENCES, et deux
+// listes identiques n'y sont jamais égales.
+const egalJson = (nom, obtenu, attendu) =>
+  verifie(nom, JSON.stringify(obtenu) === JSON.stringify(attendu),
+    `« ${JSON.stringify(obtenu)} » au lieu de « ${JSON.stringify(attendu)} »`)
 
 // ═══ 1) LA RÈGLE DES AVIS, EXÉCUTÉE ═══════════════════════════════════════
 {
@@ -291,10 +296,17 @@ const egal = (nom, obtenu, attendu) =>
   // ⚠️ ON NE DÉCLARE QUE CE QUE LE COMMERÇANT PEUT HONORER. Annoncer « on
   // commande ici » pour un palier Exister enverrait le client sur une fiche
   // sans panier, et c'est Google qui répéterait la promesse.
-  const exister = actionCommerce({ plan: 'exister', categorie: 'alimentaire', slug: 'la-mie' })
+  //
+  // ⚠️ REPOINTÉE LE 15/10 (Alex, le Bistrologue) : la règle ne regarde plus
+  // seulement le forfait. La commande n'est déclarée qu'avec la PREUVE qu'elle
+  // peut aller jusqu'au bout (`commandeRealisable`, lue par l'appelant), la
+  // réservation que si son interrupteur est allumé. Les cas ci-dessous la
+  // donnent ; les cas du Bistrologue, plus bas, la retirent.
+  const OUVERTE = { commandeRealisable: true }
+  const exister = actionCommerce({ plan: 'exister', categorie: 'alimentaire', slug: 'la-mie' }, OUVERTE)
   verifie('🔴 palier Exister : AUCUNE action déclarée', exister === null)
 
-  const alim = actionCommerce({ plan: 'vendre', categorie: 'alimentaire', slug: 'la-mie' })
+  const alim = actionCommerce({ plan: 'vendre', categorie: 'alimentaire', slug: 'la-mie' }, OUVERTE)
   verifie('une boulangerie Vendre se commande', alim?.type === 'commander')
   egal('et le type schema.org est OrderAction', alim?.schemaType, 'OrderAction')
   egal('vers sa fiche de commande', alim?.url, 'https://www.yoppaa.app/commander/la-mie')
@@ -302,19 +314,55 @@ const egal = (nom, obtenu, attendu) =>
   // ⚠️ UN COMMERCE VITRINE NE SE COMMANDE PAS, IL SE RÉSERVE — et sa fiche vit
   // sur une AUTRE route. Se tromper, c'est envoyer le client de Google sur une
   // page qui le redirige aussitôt.
-  const coiffeur = actionCommerce({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux' })
+  const coiffeur = actionCommerce({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux', rdv_actif: true })
   verifie('🔴 un coiffeur Vendre se RÉSERVE', coiffeur?.type === 'reserver')
   egal('et le type est ReserveAction', coiffeur?.schemaType, 'ReserveAction')
   egal('🔴 vers la route RDV', coiffeur?.url, 'https://www.yoppaa.app/commander/rdv/ciseaux')
+  egal('sous le nom de son métier', coiffeur?.libelle, 'Prendre rendez-vous')
+  verifie('🔴 un coiffeur qui a ÉTEINT ses rendez-vous ne déclare rien',
+    actionCommerce({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux', rdv_actif: false }, OUVERTE) === null)
+  verifie('🔴 et un coiffeur ne se commande jamais, même boutique ouverte',
+    actionsCommerce({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux', rdv_actif: true }, OUVERTE)
+      .every(a => a.type !== 'commander'))
 
-  const boutique = actionCommerce({ plan: 'vendre', categorie: 'detail', slug: 'temoin' })
+  const boutique = actionCommerce({ plan: 'vendre', categorie: 'detail', slug: 'temoin' }, OUVERTE)
   verifie('une boutique de détail se commande aussi', boutique?.type === 'commander')
 
-  verifie('sans slug, rien du tout', actionCommerce({ plan: 'vendre', categorie: 'detail' }) === null)
+  verifie('sans slug, rien du tout', actionCommerce({ plan: 'vendre', categorie: 'detail' }, OUVERTE) === null)
   verifie('sans rien du tout, rien non plus', actionCommerce() === null)
 
+  // 🔴 LE BISTROLOGUE (Alex, 15/10) : des tables en ligne, pas encore de
+  // commande à emporter. Il annonçait « Commander en ligne » à Google et le
+  // kit ne lui donnait aucun lien de réservation.
+  const BISTRO = { plan: 'vendre', categorie: 'alimentaire', slug: 'le-bistro', rdv_actif: true }
+  const bistro = actionsCommerce(BISTRO, { commandeRealisable: false })
+  egalJson('🔴 un restaurant sans commande possible ne déclare QUE la réservation',
+    bistro.map(a => a.type), ['reserver'])
+  egal('🔴 « Réserver une table », pas « Prendre rendez-vous »', bistro[0]?.libelle, 'Réserver une table')
+  egal('dans le champ « Réservations » de sa fiche Google', bistro[0]?.champGoogle, 'Réservations')
+  egal('🔴 vers sa page de réservation', bistro[0]?.url, 'https://www.yoppaa.app/commander/rdv/le-bistro')
+  egalJson('🔴 sans preuve, la commande se tait (rien passé = rien déclaré)',
+    actionsCommerce(BISTRO).map(a => a.type), ['reserver'])
+  egalJson('🔴 commande éteinte : rien, même « réalisable »',
+    actionsCommerce({ ...BISTRO, commande_actif: false }, OUVERTE).map(a => a.type), ['reserver'])
+  egalJson('🔴 le jour où il prend des commandes : les deux gestes',
+    actionsCommerce(BISTRO, OUVERTE).map(a => a.type), ['commander', 'reserver'])
+  const deux = potentialActionJsonLd(BISTRO, OUVERTE)
+  verifie('🔴 et le balisage les déclare TOUS LES DEUX',
+    Array.isArray(deux.potentialAction) && deux.potentialAction.length === 2
+      && deux.potentialAction.map(p => p['@type']).join() === 'OrderAction,ReserveAction')
+  const consigneBistro = consigneGoogle(BISTRO, { commandeRealisable: false })
+  egalJson('🔴 le kit lui donne son lien de réservation', consigneBistro?.liens, [
+    { champ: 'Réservations', url: 'https://www.yoppaa.app/commander/rdv/le-bistro', libelle: 'Réserver une table' },
+  ])
+  verifie('et lui dit où le coller', consigneBistro?.etapes?.[2]?.includes('« Réservations »'))
+  verifie('la note parle de sa réservation de table', consigneBistro?.note?.includes('ta réservation de table'))
+  const consigneDeux = consigneGoogle(BISTRO, OUVERTE)
+  egalJson('🔴 deux gestes, deux liens, chacun son champ', consigneDeux?.liens?.map(l => l.champ), ['Commander en ligne', 'Réservations'])
+  verifie('au pluriel', consigneDeux?.titre === 'Ajoute ces liens à ta fiche Google')
+
   // Le bloc JSON-LD lui-même
-  const bloc = potentialActionJsonLd({ plan: 'vendre', categorie: 'alimentaire', slug: 'la-mie' })
+  const bloc = potentialActionJsonLd({ plan: 'vendre', categorie: 'alimentaire', slug: 'la-mie' }, OUVERTE)
   verifie('le balisage porte une EntryPoint', bloc?.potentialAction?.target?.['@type'] === 'EntryPoint')
   verifie('avec les trois plateformes', (bloc?.potentialAction?.target?.actionPlatform || []).length === 3)
   const vide = potentialActionJsonLd({ plan: 'exister', categorie: 'alimentaire', slug: 'la-mie' })
@@ -328,28 +376,40 @@ const egal = (nom, obtenu, attendu) =>
   // personne n'appelle).
   const seo = lireCode('lib/fiche-seo.js')
   const lecture = lireCode('lib/fiche-seo-server.js')
-  verifie('🔴 le balisage appelle le geste', /\.\.\.potentialActionJsonLd\(c\)/.test(seo))
+  // ⚠️ REPOINTÉE LE 15/10 (2e fois) : le geste reçoit la preuve de commande.
+  verifie('🔴 le balisage appelle le geste', /\.\.\.potentialActionJsonLd\(c, options\)/.test(seo))
   // ⚠️ PRÉCISÉE LE 15/09, PAS DÉSARMÉE : le balisage suit désormais le forfait
   // EFFECTIF, il lui faut aussi `essai_plan` et `created_at`. La garde exige
-  // les quatre, `plan` compris.
-  verifie('🔴 et il rapatrie `plan` et l’essai, sans quoi tout serait muet',
-    /\.select\('id, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan, essai_plan, created_at'\)/.test(lecture))
+  // les quatre, `plan` compris. ⚠️ ET LES TROIS INTERRUPTEURS DEPUIS LE 15/10 :
+  // sans `rdv_actif`, plus aucune réservation ne serait déclarée.
+  verifie('🔴 et il rapatrie `plan`, l’essai et les interrupteurs, sans quoi tout serait muet',
+    /\.select\('id, rdv_actif, commande_actif, livraison_actif, nom, description, logo_url, adresse, slug, type, categorie, telephone, latitude, longitude, plan, essai_plan, created_at'\)/.test(lecture))
+  verifie('🔴 la preuve de commande se lit par la règle partagée',
+    /lireCommandeRealisable\(client\(\), commercant\)/.test(lecture))
   for (const [nom, chemin, page] of [
     ['la fiche boutique', 'app/commander/[slug]/layout.js', 'PAGE_BOUTIQUE'],
     ['la fiche rendez-vous', 'app/commander/rdv/[slug]/layout.js', 'PAGE_RDV'],
   ]) {
     const l = lireCode(chemin)
-    verifie(`🔴 ${nom} pose le balisage`, new RegExp(`jsonLdFiche\\(c, ${page}, avis\\)`).test(l))
-    verifie(`🔴 ${nom} pose ses métadonnées`, new RegExp(`metadataFiche\\(await getCommercantPublic\\(slug\\), ${page}\\)`).test(l))
+    verifie(`🔴 ${nom} pose le balisage, avec la preuve de commande`,
+      new RegExp(`jsonLdFiche\\(c, ${page}, avis, \\{ commandeRealisable \\}\\)`).test(l)
+        // ⚠️ ON COMPTE : la preuve se lit DEUX fois par layout (le titre, le
+        // balisage). En chercher une seule laissait l'autre se taire sans bruit
+        // (vu par mutation le 15/10).
+        && (l.match(/const commandeRealisable = c \? await getCommandeRealisable\(c\) : false/g) || []).length === 2)
+    // ⚠️ REPOINTÉE LE 15/10 : le titre reçoit lui aussi la preuve de commande.
+    verifie(`🔴 ${nom} pose ses métadonnées`, new RegExp(`metadataFiche\\(c, ${page}, \\{ commandeRealisable \\}\\)`).test(l))
   }
 
   // La consigne du kit
-  const consigne = consigneGoogle({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux' })
+  // ⚠️ REPOINTÉE LE 15/10 : un lien par geste (`liens`), et le coiffeur doit
+  // avoir ALLUMÉ ses rendez-vous pour en recevoir un.
+  const consigne = consigneGoogle({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux', rdv_actif: true })
   verifie('la consigne existe pour un commerce qui réserve', !!consigne)
-  egal('elle nomme le champ Google', consigne?.champ, 'Prendre rendez-vous')
+  egal('elle nomme le champ Google', consigne?.liens?.[0]?.champ, 'Prendre rendez-vous')
   verifie('elle donne trois étapes', consigne?.etapes?.length === 3)
   verifie('🔴 aucune consigne pour un palier Exister',
-    consigneGoogle({ plan: 'exister', categorie: 'vitrine', slug: 'ciseaux' }) === null)
+    consigneGoogle({ plan: 'exister', categorie: 'vitrine', slug: 'ciseaux', rdv_actif: true }) === null)
 
   const compo = lireCode('app/components/ConsigneGoogle.js')
   // ⚠️ ON NE PROMET PAS LE BOUTON : Google décide. Une promesse qu'on ne
@@ -366,17 +426,25 @@ const egal = (nom, obtenu, attendu) =>
   // requêtes chargent aussi `essai_plan` et `created_at`.
   // ⚠️ ANCRE REPOINTÉE LE 29/09 : la même requête lit aussi `type`, pour le
   // bloc des cartons de table (`verif:carte-table` le surveille de son côté).
-  verifie('le tableau de bord rapatrie plan, essai et catégorie',
-    /\.select\('slug, nom, plan, essai_plan, created_at, categorie, type'\)/.test(bord))
+  // ⚠️ ANCRES REPOINTÉES LE 15/10 : `id` et les trois interrupteurs, et la
+  // preuve de commande lue par la règle partagée, sur les DEUX pages.
+  verifie('le tableau de bord rapatrie plan, essai, catégorie et interrupteurs',
+    /\.select\('id, rdv_actif, commande_actif, livraison_actif, slug, nom, plan, essai_plan, created_at, categorie, type'\)/.test(bord))
+  verifie('🔴 et lui passe la preuve de commande',
+    /consigneGoogle\(data, \{ commandeRealisable: await lireCommandeRealisable\(supabase, data\) \}\)/.test(bord))
   // ⚠️ ANCRE REPOINTÉE LE 14/10 : la requête lit aussi `statut_publication`,
   // pour fermer le kit des démos des relecteurs (`verif:kit` le surveille).
-  verifie('la page de kit aussi', /\.select\('nom, slug, plan, essai_plan, created_at, categorie, statut_publication'\)/.test(kitPage))
+  verifie('la page de kit aussi', /\.select\('id, rdv_actif, commande_actif, livraison_actif, nom, slug, plan, essai_plan, created_at, categorie, statut_publication'\)/.test(kitPage))
+  verifie('🔴 la page de kit aussi passe la preuve',
+    /consigneGoogle\(com, \{ commandeRealisable: await lireCommandeRealisable\(supabase, com\) \}\)/.test(kitPage))
+  verifie('🔴 le bloc montre CHAQUE lien, avec son champ quand il y en a deux',
+    /liens\.map\(l =>/.test(compo) && /Champ « \{l\.champ\} »/.test(compo))
 
   // ⚠️ LE LIEN DONNÉ AU COMMERÇANT EST CELUI QUE LE QR IMPRIME. Trois formes
   // du même lien (QR, partage, Google), c'est trois règles à corriger le jour
   // où la route change.
   verifie('la consigne emploie la forme canonique',
-    consigneGoogle({ plan: 'vendre', categorie: 'alimentaire', slug: 'la-mie' })?.url
+    consigneGoogle({ plan: 'vendre', categorie: 'alimentaire', slug: 'la-mie' }, OUVERTE)?.liens?.[0]?.url
       === 'https://www.yoppaa.app/commander/la-mie')
 }
 

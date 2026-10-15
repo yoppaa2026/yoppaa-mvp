@@ -30,8 +30,12 @@ const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b
   `obtenu ${JSON.stringify(a)}, attendu ${JSON.stringify(b)}`)
 
 const ADRESSE = 'Place Joseph Meunier 1, 5640 Mettet, Belgique'
-const RESTO = { id: 'r', nom: 'Le Témoin', slug: 'le-temoin', categorie: 'alimentaire', type: 'restaurant', adresse: ADRESSE, plan: 'vendre' }
-const SALON = { id: 's', nom: 'Salon Ciseaux', slug: 'ciseaux', categorie: 'vitrine', type: 'coiffeur', adresse: ADRESSE, plan: 'vendre' }
+const RESTO = { id: 'r', nom: 'Le Témoin', slug: 'le-temoin', categorie: 'alimentaire', type: 'restaurant', adresse: ADRESSE, plan: 'vendre', rdv_actif: true }
+// La preuve qu'une commande peut aller au bout, donnée par les layouts.
+const OUVERTE = { commandeRealisable: true }
+// ⚠️ `rdv_actif` (15/10) : un salon qui n'a pas allumé ses rendez-vous ne
+// déclare plus rien à Google, et le banc l'a dit le jour même.
+const SALON = { id: 's', nom: 'Salon Ciseaux', slug: 'ciseaux', categorie: 'vitrine', type: 'coiffeur', adresse: ADRESSE, plan: 'vendre', rdv_actif: true }
 const BOUTIQUE = { id: 'b', nom: 'La Boutique', slug: 'boutique', categorie: 'detail', type: 'fleuriste', adresse: ADRESSE, plan: 'vendre' }
 const SITE = 'https://www.yoppaa.app'
 
@@ -72,9 +76,19 @@ const SITE = 'https://www.yoppaa.app'
   const boutiqueSalon = metadataFiche(SALON, PAGE_BOUTIQUE)
   egal('🔴 la boutique d’un salon renvoie vers son agenda', boutiqueSalon.alternates?.canonical, `${SITE}/commander/rdv/ciseaux`)
 
-  const resto = metadataFiche(RESTO, PAGE_BOUTIQUE)
-  egal('la fiche d’un restaurant garde son titre', resto.title, 'Le Témoin à Mettet · Commander sur Yoppaa')
+  const resto = metadataFiche(RESTO, PAGE_BOUTIQUE, OUVERTE)
+  egal('la fiche d’un restaurant qui prend des commandes garde son titre', resto.title, 'Le Témoin à Mettet · Commander sur Yoppaa')
   egal('et se déclare elle-même', resto.alternates?.canonical, `${SITE}/commander/le-temoin`)
+
+  // 🔴 LE BISTROLOGUE (15/10) : des tables, pas encore de commande. Son titre
+  // Google disait « Commander sur Yoppaa ».
+  const bistro = metadataFiche(RESTO, PAGE_BOUTIQUE)
+  egal('🔴 sans commande possible, le titre ne promet pas « Commander »', bistro.title, 'Le Témoin à Mettet · Yoppaa')
+  egal('🔴 et la description parle de sa réservation de table', bistro.description,
+    'Découvre Le Témoin à Mettet sur Yoppaa : infos, horaires et réserver une table en ligne.')
+  const ferme = metadataFiche({ ...SALON, rdv_actif: false }, PAGE_RDV)
+  egal('🔴 un salon aux rendez-vous éteints ne promet pas « Prendre rendez-vous »', ferme.title, 'Salon Ciseaux à Mettet · Yoppaa')
+  egal('ni dans sa description', ferme.description, 'Découvre Salon Ciseaux à Mettet sur Yoppaa : infos et horaires.')
 
   const decrit = metadataFiche({ ...SALON, description: '  Le salon du village.  ' }, PAGE_RDV)
   egal('la description du commerçant passe, nettoyée', decrit.description, 'Le salon du village.')
@@ -124,7 +138,57 @@ const SITE = 'https://www.yoppaa.app'
     !ferme.some(d => d === '/commander/rdv' || d === '/commander/rdv/'))
 }
 
-// ═══ 5. C'EST BRANCHÉ ? ══════════════════════════════════════════════════
+// ═══ 5. LA PREUVE DE COMMANDE (15/10, le Bistrologue) ════════════════════
+//
+// 🔴 Le Bistrologue annonçait « Commander en ligne » à Google : interrupteur
+// des commandes allumé, mais aucun créneau de retrait et ses articles en
+// vitrine. La lecture s'exécute ici sur une fausse base qui répond comme
+// Supabase.
+{
+  const { lireCommandeRealisable } = await import('../lib/commande-realisable-lecture.js')
+  const { livraisonDisponible } = await import('../lib/zone-etoile.js')
+  const base = (tables, erreurs = {}) => ({
+    from(t) {
+      const rep = () => Promise.resolve({ data: tables[t] ?? null, error: erreurs[t] || null })
+      const b = { select: () => b, eq: () => b, limit: () => b, maybeSingle: rep, then: (ok, ko) => rep().then(ok, ko) }
+      return b
+    },
+  })
+  const EN_LIGNE = [{ actif: true, est_vitrine: false, prix: 3.5 }]
+  const EN_VITRINE = [{ actif: true, est_vitrine: true, prix: 3.5 }]
+  const RESTO_ID = { id: 'r', categorie: 'alimentaire' }
+
+  verifier('un article en ligne et un créneau de retrait : la commande va au bout',
+    await lireCommandeRealisable(base({ articles: EN_LIGNE, creneaux: [{ id: 1 }] }), RESTO_ID))
+  verifier('🔴 le Bistrologue : articles en vitrine, pas de commande',
+    !(await lireCommandeRealisable(base({ articles: EN_VITRINE, creneaux: [{ id: 1 }] }), RESTO_ID)))
+  verifier('🔴 un article en ligne sans créneau ni livraison : pas de commande',
+    !(await lireCommandeRealisable(base({ articles: EN_LIGNE, creneaux: [] }), RESTO_ID)))
+  verifier('sans créneau, la livraison suffit',
+    await lireCommandeRealisable(base({ articles: EN_LIGNE, creneaux: [], livraison_config: { codes_postaux: ['5640'] } }),
+      { ...RESTO_ID, livraison_actif: true }))
+  verifier('🔴 une livraison éteinte ne compte pas, même configurée',
+    !(await lireCommandeRealisable(base({ articles: EN_LIGNE, creneaux: [], livraison_config: { codes_postaux: ['5640'] } }),
+      { ...RESTO_ID, livraison_actif: false })))
+  verifier('une boutique de détail n’a pas besoin de créneau',
+    await lireCommandeRealisable(base({ articles: EN_LIGNE, creneaux: [] }), { id: 'b', categorie: 'detail' }))
+  verifier('🔴 une lecture en erreur FERME (on parle à Google)',
+    !(await lireCommandeRealisable(base({ articles: EN_LIGNE, creneaux: [{ id: 1 }] }, { creneaux: { message: 'x' } }), RESTO_ID)))
+  verifier('sans commerce, rien', !(await lireCommandeRealisable(base({}), null)))
+  verifier('sans client, rien', !(await lireCommandeRealisable(null, RESTO_ID)))
+
+  verifier('la livraison se propose avec des codes postaux',
+    livraisonDisponible({ livraison_actif: true }, { codes_postaux: ['5640'] }))
+  verifier('🔴 pas sans zone', !livraisonDisponible({ livraison_actif: true }, { codes_postaux: [], zone_rayons_m: null }))
+  verifier('🔴 pas éteinte', !livraisonDisponible({ livraison_actif: false }, { codes_postaux: ['5640'] }))
+  verifier('pas sans configuration', !livraisonDisponible({ livraison_actif: true }, null))
+
+  const fiche = lireCode('app/commander/[slug]/page.js')
+  verifier('🔴 la fiche lit la livraison par la même règle',
+    /const livraisonDispo = livraisonDisponible\(commercant, livraisonConfig\)/.test(fiche))
+}
+
+// ═══ 6. C'EST BRANCHÉ ? ══════════════════════════════════════════════════
 {
   const sitemap = lireCode('app/sitemap.js')
   verifier('🔴 le sitemap annonce la page retenue', /url: adresseCanonique\(c\)/.test(sitemap))

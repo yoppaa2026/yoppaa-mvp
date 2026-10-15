@@ -25,6 +25,8 @@ const MODULE = 'lib/fiche-seo.js'
 const LAYOUT_RDV = 'app/commander/rdv/[slug]/layout.js'
 const LAYOUT_FICHE = 'app/commander/[slug]/layout.js'
 const SITEMAP = 'app/sitemap.js'
+const GOOGLE = 'lib/action-google.js'
+const LECTURE = 'lib/commande-realisable-lecture.js'
 
 const MUTATIONS = [
   // ─── LA PAGE RETENUE ────────────────────────────────────────────────────
@@ -49,6 +51,19 @@ const MUTATIONS = [
     de: '    descParDefaut = `Découvre ${c.nom}${ou} sur Yoppaa : infos, horaires et ${action.toLowerCase()} en ligne.`',
     vers: '    descParDefaut = `Découvre ${c.nom}${ou} sur Yoppaa : infos, horaires et commande en ligne sans faire la file.`' },
 
+  { nom: '🔴 le titre promet « Commander » sans commande (« le titre ne promet pas Commander »)',
+    de: '  } else if (page === PAGE_BOUTIQUE && commande) {',
+    vers: '  } else if (page === PAGE_BOUTIQUE) {' },
+
+  { nom: '🔴 le titre promet un rendez-vous éteint (« un salon aux rendez-vous éteints »)',
+    de: '  if (page === PAGE_RDV && reservation) {',
+    vers: '  if (page === PAGE_RDV) {' },
+
+  { nom: '🔴 le titre ignore la preuve de commande (verif:avis « pose ses métadonnées »)',
+    fichier: LAYOUT_FICHE,
+    de: '  return metadataFiche(c, PAGE_BOUTIQUE, { commandeRealisable })',
+    vers: '  return metadataFiche(c, PAGE_BOUTIQUE)' },
+
   { nom: '🔴 une fiche non publiée devient indexable (« jamais indexée »)',
     de: '      robots: { index: false, follow: false },',
     vers: '      robots: { index: true, follow: true },' },
@@ -65,18 +80,112 @@ const MUTATIONS = [
   // ─── LES LAYOUTS L'APPELLENT ────────────────────────────────────────────
   { nom: '🔴 la fiche rendez-vous se prend pour la boutique (verif:avis « la fiche rendez-vous pose ses métadonnées »)',
     fichier: LAYOUT_RDV,
-    de: '  return metadataFiche(await getCommercantPublic(slug), PAGE_RDV)',
-    vers: '  return metadataFiche(await getCommercantPublic(slug), PAGE_BOUTIQUE)' },
+    // ⚠️ ANCRE RECALÉE LE 15/10 : le titre reçoit la preuve de commande.
+    de: '  return metadataFiche(c, PAGE_RDV, { commandeRealisable })',
+    vers: '  return metadataFiche(c, PAGE_BOUTIQUE, { commandeRealisable })' },
 
   { nom: '🔴 la fiche rendez-vous perd son balisage (verif:avis « pose le balisage »)',
     fichier: LAYOUT_RDV,
-    de: '  const jsonLd = jsonLdFiche(c, PAGE_RDV, avis)',
+    // ⚠️ ANCRE RECALÉE LE 15/10 : le balisage reçoit la preuve de commande.
+    de: '  const jsonLd = jsonLdFiche(c, PAGE_RDV, avis, { commandeRealisable })',
     vers: '  const jsonLd = null' },
 
   { nom: '🔴 la fiche boutique perd son balisage (verif:avis « la fiche boutique pose le balisage »)',
     fichier: LAYOUT_FICHE,
-    de: '  const jsonLd = jsonLdFiche(c, PAGE_BOUTIQUE, avis)',
+    de: '  const jsonLd = jsonLdFiche(c, PAGE_BOUTIQUE, avis, { commandeRealisable })',
     vers: '  const jsonLd = null' },
+
+  // ─── LA PREUVE DE COMMANDE (15/10, le Bistrologue) ─────────────────────
+  { nom: '🔴 la fiche boutique ne passe plus la preuve : la commande se tait toujours (verif:avis « avec la preuve de commande »)',
+    fichier: LAYOUT_FICHE,
+    de: '  const commandeRealisable = c ? await getCommandeRealisable(c) : false',
+    vers: '  const commandeRealisable = false' },
+
+  { nom: '🔴 le balisage oublie la preuve et redevient muet sur la commande (verif:avis « le balisage appelle le geste »)',
+    de: '    ...potentialActionJsonLd(c, options),',
+    vers: '    ...potentialActionJsonLd(c),' },
+
+  // ─── LES GESTES DÉCLARÉS À GOOGLE (15/10, le Bistrologue) ──────────────
+  { nom: '🔴 la commande se déclare sans preuve (verif:avis « ne déclare QUE la réservation »)',
+    fichier: GOOGLE,
+    de: "&& canDo(plan, 'commande') && commandeAllumee(commercant) && commandeRealisable === true) {",
+    vers: "&& canDo(plan, 'commande') && commandeAllumee(commercant)) {" },
+
+  { nom: '🔴 une commande éteinte se déclare (« commande éteinte : rien »)',
+    fichier: GOOGLE,
+    de: "&& canDo(plan, 'commande') && commandeAllumee(commercant) && commandeRealisable === true) {",
+    vers: "&& canDo(plan, 'commande') && commandeRealisable === true) {" },
+
+  { nom: '🔴 la réservation se déclare sur le seul forfait (« un coiffeur qui a ÉTEINT ses rendez-vous »)',
+    fichier: GOOGLE,
+    de: '  if (reservationActive(commercant, maintenant)) {',
+    vers: "  if (canDo(plan, 'rdv')) {" },
+
+  { nom: '🔴 le restaurant « prend rendez-vous » (« Réserver une table »)',
+    fichier: GOOGLE,
+    de: '      libelle: motsReservation(commercant).action,',
+    vers: "      libelle: 'Prendre rendez-vous'," },
+
+  { nom: '🔴 le lien de table part dans le mauvais champ (« champ Réservations »)',
+    fichier: GOOGLE,
+    de: "      champGoogle: table ? 'Réservations' : 'Prendre rendez-vous',",
+    vers: "      champGoogle: 'Prendre rendez-vous'," },
+
+  { nom: '🔴 un coiffeur se commande (« un coiffeur ne se commande jamais »)',
+    fichier: GOOGLE,
+    de: "  if (commercant.categorie !== 'vitrine'",
+    vers: '  if (true' },
+
+  { nom: '🔴 le balisage ne garde qu’un geste sur deux (« les déclare TOUS LES DEUX »)',
+    fichier: GOOGLE,
+    de: '  return { potentialAction: blocs.length === 1 ? blocs[0] : blocs }',
+    vers: '  return { potentialAction: blocs[0] }' },
+
+  { nom: '🔴 le kit ne donne qu’un lien sur deux (« deux gestes, deux liens »)',
+    fichier: GOOGLE,
+    de: '    liens: actions.map(a => ({ champ: a.champGoogle, url: a.url, libelle: a.libelle })),',
+    vers: '    liens: actions.slice(0, 1).map(a => ({ champ: a.champGoogle, url: a.url, libelle: a.libelle })),' },
+
+  // ─── LA LECTURE DE LA PREUVE ────────────────────────────────────────────
+  { nom: '🔴 une lecture en erreur ouvre (verif:fiche-seo « une lecture en erreur FERME »)',
+    fichier: LECTURE,
+    de: '    if (art.error || cre.error || liv.error) return false',
+    vers: '    if (art.error) return false' },
+
+  { nom: '🔴 la livraison ne compte plus (« sans créneau, la livraison suffit »)',
+    fichier: LECTURE,
+    de: '      livraisonDispo: livraisonDisponible(commercant, liv.data),',
+    vers: '      livraisonDispo: false,' },
+
+  { nom: '🔴 une boutique de détail exige un créneau (« pas besoin de créneau »)',
+    fichier: LECTURE,
+    de: '      alimentaire: isAlimentaire(commercant),',
+    vers: '      alimentaire: true,' },
+
+  { nom: '🔴 une livraison éteinte compte (« pas éteinte »)',
+    fichier: 'lib/zone-etoile.js',
+    de: '  return !!(commercant?.livraison_actif && config',
+    vers: '  return !!(config' },
+
+  { nom: '🔴 la lecture publique perd les interrupteurs (verif:avis « rapatrie … les interrupteurs »)',
+    fichier: 'lib/fiche-seo-server.js',
+    de: "'id, rdv_actif, commande_actif, livraison_actif, nom, description",
+    vers: "'id, nom, description" },
+
+  { nom: '🔴 le kit ne passe plus la preuve (verif:avis « la page de kit aussi passe la preuve »)',
+    fichier: 'app/kit/[slug]/page.js',
+    de: '    consigne = consigneGoogle(com, { commandeRealisable: await lireCommandeRealisable(supabase, com) })',
+    vers: '    consigne = consigneGoogle(com)' },
+
+  { nom: '🔴 le tableau de bord ne passe plus la preuve (« et lui passe la preuve »)',
+    fichier: 'app/dashboard/ConfigDashboard.js',
+    de: '        setConsigneG(consigneGoogle(data, { commandeRealisable: await lireCommandeRealisable(supabase, data) }))',
+    vers: '        setConsigneG(consigneGoogle(data))' },
+
+  { nom: '🔴 la fiche recalcule la livraison à sa façon (« la fiche lit la livraison par la même règle »)',
+    fichier: 'app/commander/[slug]/page.js',
+    de: '  const livraisonDispo = livraisonDisponible(commercant, livraisonConfig)',
+    vers: '  const livraisonDispo = !!commercant?.livraison_actif' },
 
   // ─── LE SITEMAP, /commander, LE ROBOTS ──────────────────────────────────
   { nom: '🔴 le sitemap annonce la boutique d’un salon (« le sitemap annonce la page retenue »)',

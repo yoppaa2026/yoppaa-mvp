@@ -215,7 +215,9 @@ const EURO = String.fromCharCode(160) + '€'
   v('le commerçant voit ce que voient ses clients', /href=\{url\}/.test(bloc))
   v('🔴 seulement pour un commerce qui sert à manger', /\{sertAManger\(typeCommerce\) && \(\s*<CarteTableBloc/.test(dash))
   // ⚠️ Une colonne absente d'un select ne lève rien : le bloc disparaîtrait.
-  v('🔴 le type du commerce est lu', /select\('slug, nom, plan, essai_plan, created_at, categorie, type'\)/.test(dash)
+  // ⚠️ REPOINTÉE LE 15/10 : la requête commence par `id` et les trois
+  // interrupteurs (consigne Google) ; `type` reste en fin de liste.
+  v('🔴 le type du commerce est lu', /select\('id, rdv_actif, commande_actif, livraison_actif, slug, nom, plan, essai_plan, created_at, categorie, type'\)/.test(dash)
     && /setTypeCommerce\(data\.type \|\| null\)/.test(dash))
 }
 

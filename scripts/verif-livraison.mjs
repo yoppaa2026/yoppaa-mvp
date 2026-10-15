@@ -35,7 +35,7 @@ import { estFermeExceptionnellement } from '../lib/ouverture.js'
 import {
   distanceMetres, capDegres, pointA, cercle, limiteDansDirection, dansEtoile, zoneValide,
   contourEtoile, phraseHorsZone, NB_POIGNEES, PAS_DEGRES, RAYON_DEFAUT_M, RAYON_MAX_M,
-  centreDeLaZone,
+  centreDeLaZone, livraisonDisponible,
 } from '../lib/zone-etoile.js'
 import {
   COLONNES_BEST, decouperLigneCsv, indexColonnes, adresseDeLigne,
@@ -471,8 +471,12 @@ verifier('le minimum porte sur le total des articles',
   verifier('étoile : la fiche juge comme le serveur',
     /const cpDansZone = avecEtoile\s*\?\s*verdictEtoile\?\.dedans === true\s*:\s*zoneCouverte\(livraisonConfig\?\.codes_postaux, adresseLivraison\.code_postal\)/.test(ficheEtoile))
   verifier('étoile : la fiche ne juge qu\'une maison TROUVÉE', /const verdictEtoile = avecEtoile && adresseLivraison\.situee === true/.test(ficheEtoile))
+  // ⚠️ REPOINTÉE LE 15/10 : la règle vit dans `livraisonDisponible`
+  // (lib/zone-etoile.js), partagée avec la règle Google. On l'EXÉCUTE, et on
+  // vérifie que la fiche l'appelle.
   verifier('🔴 étoile : une étoile dessinée suffit à proposer la livraison',
-    /livraisonConfig\.codes_postaux\?\.length > 0 \|\| zoneValide\(livraisonConfig\.zone_rayons_m\)/.test(ficheEtoile))
+    livraisonDisponible({ livraison_actif: true }, { codes_postaux: [], zone_rayons_m: Array(NB_POIGNEES).fill(RAYON_DEFAUT_M) })
+      && /const livraisonDispo = livraisonDisponible\(commercant, livraisonConfig\)/.test(ficheEtoile))
   verifier('🔴 étoile : AUCUNE carte dans la fiche client (décision du 25/09)',
     !/CarteZoneEtoile|from 'leaflet'|import\('leaflet'\)|tile\.openstreetmap/.test(ficheEtoile))
 
@@ -1050,8 +1054,13 @@ const fiche = lire('app/commander/[slug]/page.js')
 // configuré. Un commerce sans zone ne doit pas proposer un choix qui échouera.
 // ⚠️ REPOINTÉE LE 05/10 (étoile) : la configuration, c'est des codes postaux
 // OU une étoile dessinée. La règle reste : activation ET une zone.
+// ⚠️ REPOINTÉE LE 15/10 : la règle vit dans `livraisonDisponible`, exécutée ici.
 verifier('la livraison client exige activation ET configuration',
-  /livraison_actif && livraisonConfig\s*&& \(livraisonConfig\.codes_postaux\?\.length > 0 \|\| zoneValide\(livraisonConfig\.zone_rayons_m\)\)/.test(fiche))
+  livraisonDisponible({ livraison_actif: true }, { codes_postaux: ['5640'] })
+    && !livraisonDisponible({ livraison_actif: false }, { codes_postaux: ['5640'] })
+    && !livraisonDisponible({ livraison_actif: true }, null)
+    && !livraisonDisponible({ livraison_actif: true }, { codes_postaux: [], zone_rayons_m: null })
+    && /const livraisonDispo = livraisonDisponible\(commercant, livraisonConfig\)/.test(fiche))
 // Les créneaux ne se mélangent jamais : deux tables, deux états, deux
 // calendriers.
 verifier('les créneaux de livraison sont un état séparé', /joursDisposLivraison/.test(fiche))

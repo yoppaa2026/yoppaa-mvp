@@ -188,13 +188,15 @@ const MUTATIONS = [
   { nom: '🔴 le kit ne charge plus l’essai',
     fichier: KIT,
     // ⚠️ ANCRE RECALÉE LE 14/10 : la requête lit aussi `statut_publication`.
-    de: "'nom, slug, plan, essai_plan, created_at, categorie, statut_publication'",
-    vers: "'nom, slug, plan, categorie, statut_publication'" },
+    // ⚠️ ET LE 15/10 : elle commence par `id` et les trois interrupteurs.
+    de: "livraison_actif, nom, slug, plan, essai_plan, created_at, categorie, statut_publication'",
+    vers: "livraison_actif, nom, slug, plan, categorie, statut_publication'" },
 
   { nom: '🔴 la consigne Google du tableau de bord ne charge plus l’essai',
     fichier: BORD,
-    de: "'slug, nom, plan, essai_plan, created_at, categorie, type'",
-    vers: "'slug, nom, plan, categorie, type'" },
+    // ⚠️ ANCRE RECALÉE LE 15/10 : la requête commence par `id` et les trois interrupteurs.
+    de: "livraison_actif, slug, nom, plan, essai_plan, created_at, categorie, type'",
+    vers: "livraison_actif, slug, nom, plan, categorie, type'" },
 
   { nom: '🔴 la limite d’actus relit le forfait choisi',
     fichier: BORD,

@@ -183,12 +183,17 @@ const egal = (nom, a, b) => verifier(nom, JSON.stringify(a) === JSON.stringify(b
   // ⚠️ CE N'EST PAS DE LA DETTE. Une `ReserveAction` doit mener à l'agenda et
   // une `OrderAction` à la boutique : c'est le seul endroit du projet où viser
   // l'agenda est délibéré ET annoncé à un tiers.
+  // ⚠️ REPOINTÉE LE 15/10 : un geste n'est déclaré que s'il est OUVERT (les
+  // rendez-vous allumés, la commande prouvée réalisable).
   egal('🔴 Google envoie un coiffeur vers son agenda',
-    actionCommerce({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux' })?.url,
+    actionCommerce({ plan: 'vendre', categorie: 'vitrine', slug: 'ciseaux', rdv_actif: true })?.url,
     lienFicheRdv('ciseaux'))
   egal('et une boulangerie vers sa boutique',
-    actionCommerce({ plan: 'vendre', categorie: 'alimentaire', slug: 'la-mie' })?.url,
+    actionCommerce({ plan: 'vendre', categorie: 'alimentaire', slug: 'la-mie' }, { commandeRealisable: true })?.url,
     lienFiche('la-mie'))
+  egal('🔴 et la réservation de table d’un restaurant vers son agenda',
+    actionCommerce({ plan: 'vendre', categorie: 'alimentaire', slug: 'le-bistro', rdv_actif: true })?.url,
+    lienFicheRdv('le-bistro'))
 
   // ── L'EMAIL S'EXÉCUTE, on ne cherche pas un mot dans le fichier ──────────
   //

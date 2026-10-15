@@ -43,7 +43,7 @@ import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { zoneCouverte, fraisLivraison as regleFraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
 import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes, afficheEnRond } from '@/lib/options-choix'
-import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zone-etoile'
+import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone, livraisonDisponible } from '@/lib/zone-etoile'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
 import GalerieCommerce from '@/app/components/GalerieCommerce'
@@ -3457,10 +3457,9 @@ export default function CommanderSlug() {
 
   // Livraison : dispo si le commerce l'active + zone configurée. Slots aplatis
   // (tournées à venir tous jours confondus). Vérif CP dans la zone.
-  // ⚠️ UNE ÉTOILE DESSINÉE SUFFIT (chantier zone, 05/10) : un commerce qui ne
-  // garde aucun code postal ne doit pas perdre sa livraison pour autant.
-  const livraisonDispo = !!(commercant?.livraison_actif && livraisonConfig
-    && (livraisonConfig.codes_postaux?.length > 0 || zoneValide(livraisonConfig.zone_rayons_m)))
+  // ⚠️ UNE ÉTOILE DESSINÉE SUFFIT (chantier zone, 05/10). La règle vit dans
+  // `livraisonDisponible` depuis le 15/10 : Google la lit aussi.
+  const livraisonDispo = livraisonDisponible(commercant, livraisonConfig)
 
   // ─── Persistance localStorage (mode + adresse de livraison) ────────────────
   // 1) Au montage : pré-remplit l'adresse et charge la préférence de mode.

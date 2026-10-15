@@ -388,10 +388,13 @@ for (const r of ROUTES) {
   verifier('sans essai demandé, la pastille reste absente',
     !pastilles({ ...enEssai, essai_plan: null }, PENDANT_ESSAI).includes('bons'))
 
+  // ⚠️ REPOINTÉE LE 15/10 : le second argument est un objet d'options. Passer
+  // la date nue la ferait IGNORER (la règle compterait à partir d'aujourd'hui)
+  // et la commande exige sa preuve, `commandeRealisable`.
   verifier('🔴 Google apprend qu’un commerçant en essai prend des commandes',
-    actionCommerce(enEssai, PENDANT_ESSAI)?.type === 'commander')
+    actionCommerce(enEssai, { commandeRealisable: true, maintenant: PENDANT_ESSAI })?.type === 'commander')
   verifier('et ne le déclare plus après l’essai',
-    actionCommerce(enEssai, APRES_ESSAI) === null)
+    actionCommerce(enEssai, { commandeRealisable: true, maintenant: APRES_ESSAI }) === null)
 
   const mettet = new Set(['5640'])
   verifier('🔴 le deal d’un commerçant en essai entre dans le Good Morning',
@@ -465,11 +468,14 @@ for (const r of ROUTES) {
     { nom: 'la consigne Google du kit', chemin: 'app/kit/[slug]/page.js', regles: [
       // ⚠️ Ancre repointée le 14/10 : la requête lit aussi `statut_publication`
       // (kit fermé aux démos des relecteurs, surveillé par `verif:kit`).
-      ['charge l’essai', /'nom, slug, plan, essai_plan, created_at, categorie, statut_publication'/],
+      // ⚠️ REPOINTÉE LE 15/10 : la requête commence par `id` et les trois
+      // interrupteurs (la consigne ne donne que les liens ouverts).
+      ['charge l’essai', /nom, slug, plan, essai_plan, created_at, categorie, statut_publication'/],
     ] },
     { nom: 'le tableau de bord', chemin: 'app/dashboard/ConfigDashboard.js', regles: [
       // ⚠️ Ancre repointée le 29/09 : la requête lit aussi `type` (cartons de table).
-      ['la consigne Google charge l’essai', /'slug, nom, plan, essai_plan, created_at, categorie, type'/],
+      // ⚠️ REPOINTÉE LE 15/10 : la requête commence par `id` et les trois interrupteurs.
+      ['la consigne Google charge l’essai', /slug, nom, plan, essai_plan, created_at, categorie, type'/],
       ['la limite d’actus lit le forfait effectif', /const planResolu = planEffectif\(commercant\)/],
     ] },
   ]

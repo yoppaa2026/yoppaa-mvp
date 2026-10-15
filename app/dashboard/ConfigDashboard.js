@@ -45,6 +45,7 @@ import {
 } from '@/lib/options-choix'
 import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
+import { lireCommandeRealisable } from '@/lib/commande-realisable-lecture'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import BlocAide, { EtapeAide, enGras } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
@@ -10347,8 +10348,16 @@ function QRCodeSection({ commercantId, toast }) {
       //
       // ⚠️ `type` AUSSI, depuis le 29/09 : sans lui, le bloc des cartons de table
       // disparaîtrait chez tous les restaurants, sans un mot.
-      const { data } = await supabase.from('commercants').select('slug, nom, plan, essai_plan, created_at, categorie, type').eq('id', commercantId).single()
-      if (data) { setSlug(data.slug); setNomCommerce(data.nom || ''); setConsigneG(consigneGoogle(data)); setTypeCommerce(data.type || null) }
+      //
+      // ⚠️ `id` ET LES TROIS INTERRUPTEURS DEPUIS LE 15/10 : la consigne ne
+      // donne un lien que pour ce qui est vraiment ouvert. Le Bistrologue, qui
+      // ne prend que des tables, recevait « Commander en ligne » et aucun lien
+      // de réservation.
+      const { data } = await supabase.from('commercants').select('id, rdv_actif, commande_actif, livraison_actif, slug, nom, plan, essai_plan, created_at, categorie, type').eq('id', commercantId).single()
+      if (data) {
+        setSlug(data.slug); setNomCommerce(data.nom || ''); setTypeCommerce(data.type || null)
+        setConsigneG(consigneGoogle(data, { commandeRealisable: await lireCommandeRealisable(supabase, data) }))
+      }
       setLoading(false)
     }
     fetchSlug()

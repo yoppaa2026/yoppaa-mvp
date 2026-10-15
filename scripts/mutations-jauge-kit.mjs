@@ -323,7 +323,8 @@ const MUTATIONS = [
     de: '<a href="/download"', vers: '<a href="https://yoppaa.app/download"' },
   { nom: '⚠️ la phrase des badges redit « Bientot » pour les deux stores',
     banc: 'verif:kit', fichier: 'lib/stores.js',
-    de: "  return !APP_STORE_URL ? 'Bientôt disponible sur l’App Store.' : 'Bientôt disponible sur Google Play.'",
+    // ⚠️ ANCRE RECALÉE LE 15/10 : les liens passent en paramètres (`apple`, `google`).
+    de: "  return !apple ? 'Bientôt disponible sur l’App Store.' : 'Bientôt disponible sur Google Play.'",
     vers: "  return 'Bientôt disponible sur l’App Store et Google Play.'" },
 
   // ══ LE DÉPOUILLEUR PARTAGÉ ══

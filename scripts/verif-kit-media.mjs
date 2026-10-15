@@ -1103,8 +1103,14 @@ const egal = (nom, obtenu, attendu) =>
     verifie('🔴 le lien Google Play est celui de l’identifiant Capacitor',
       S.GOOGLE_PLAY_URL === 'https://play.google.com/store/apps/details?id=app.yoppaa.client', String(S.GOOGLE_PLAY_URL))
     verifie('l’app compte comme publiée', S.appPubliee() === true)
-    verifie('🔴 la phrase sous les badges nomme ce qui manque encore (App Store seul)',
-      S.APP_STORE_URL ? S.noteStores() === null : S.noteStores() === 'Bientôt disponible sur l’App Store.', String(S.noteStores()))
+    verifie('🔴 le lien App Store est celui de la fiche belge (id 6813182627)',
+      S.APP_STORE_URL === 'https://apps.apple.com/be/app/yoppaa/id6813182627', String(S.APP_STORE_URL))
+    // La phrase sous les badges, dans TOUTES les combinaisons (pas seulement celle du jour).
+    verifie('🔴 les deux en ligne : plus de « Bientôt »', S.noteStores() === null && S.noteStores({ apple: 'a', google: 'g' }) === null)
+    verifie('🔴 une seule en ligne : la phrase nomme celle qui manque',
+      S.noteStores({ apple: null, google: 'g' }) === 'Bientôt disponible sur l’App Store.'
+        && S.noteStores({ apple: 'a', google: null }) === 'Bientôt disponible sur Google Play.')
+    verifie('aucune en ligne : les deux', S.noteStores({ apple: null, google: null }) === 'Bientôt disponible sur l’App Store et Google Play.')
     const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36'
     const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'
     const pc = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36'

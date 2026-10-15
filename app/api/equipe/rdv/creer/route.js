@@ -142,6 +142,8 @@ export async function POST(request) {
     const plage = plageQuiAccueille(creneauxDuJour(creneaux.data || [], { dateStr: date, jour }), {
       prestationId: presta.id, debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMinutes,
       praticienId,
+      // Une table se juge à son arrivée (15/10, `finAContenir`).
+      parCouverts: estParCouverts(presta),
     })
 
     const res = await creerReservationRdv(admin, {

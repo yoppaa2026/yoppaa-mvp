@@ -14800,17 +14800,22 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
               </>
             )}
 
-            {/* Horaires début/fin */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            {/* Horaires début/fin. ✅ 15/10 (Alex) : pour un restaurant, la
+                fenêtre d'ARRIVÉE (« Première / Dernière arrivée »), et la phrase
+                qui dit que la table peut rester au-delà. */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: mots.aidePlage ? 6 : 10 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Début</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>{mots.debutPlage}</label>
                 <Input type="time" value={form.heure_debut} onChange={e => setForm({ ...form, heure_debut: e.target.value })}/>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Fin</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>{mots.finPlage}</label>
                 <Input type="time" value={form.heure_fin} onChange={e => setForm({ ...form, heure_fin: e.target.value })}/>
               </div>
             </div>
+            {mots.aidePlage && (
+              <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>{mots.aidePlage}</p>
+            )}
 
             {/* ── SUR QUELLE BASE IL CONFIGURE (18/09, demandé par Alex) ──────
                 🔴 LE DÉFAUT LE PLUS SILENCIEUX DE CET ÉCRAN, et il n'était

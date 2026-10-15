@@ -370,6 +370,8 @@ export default function ModalDeplacerRdv({
         prestationId: rdv.prestation_id ?? null,
         debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMinutes,
         praticienId: rdv.praticien_id || null,
+        // Une table se juge à son arrivée (15/10, `finAContenir`).
+        parCouverts: estTable,
       })
       const lieu = await champsLieuPour(supabase, commercant, { jour: date, heure, lieuId: plage?.lieu_id || null })
 

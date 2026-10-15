@@ -2986,7 +2986,9 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   const MOTEUR = lire('lib/rdv-slots.js')
   verifier('⚠️ et c’est vrai parce que le moteur écrête',
     /if \(shopOpen     !== null\) debut = Math\.max\(debut, shopOpen\)/.test(MOTEUR)
-    && /if \(shopRanges\.length > 1 && !shopRanges\.some\(\(\[a, b\]\) => t >= a && slotEnd <= b\)\) continue/.test(MOTEUR))
+    // ⚠️ REPOINTÉE LE 15/10 : une table s'y juge à son ARRIVÉE (`finAContenir`),
+    // le reste toujours sur toute sa durée.
+    && /if \(shopRanges\.length > 1 && !shopRanges\.some\(\(\[a, b\]\) => t >= a && \(finJugee === t \? t <= b : slotEnd <= b\)\)\) continue/.test(MOTEUR))
 
   // ═════════════════════════════════════════════════════════════════════════
   // 🔴 UN ONGLET VIDE N'EST PAS UNE RÉPONSE (Alex, 08/09 : « onglet livraison
@@ -3974,6 +3976,69 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   }
   verifier('🔴 le serveur lit le pas de la plage (sinon il retombe sur 15)',
     /lieu_id, pas_minutes'\)/.test(sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ UNE TABLE SE RÉSERVE À SON ARRIVÉE (Alex, 15/10, le Bistrologue)
+//
+// « Cuisine ouverte de 12h00 à 14h00, pas de 15 minutes : je mets 12h00 à
+// 13h45, ma dernière table arrive à 13h45. » Le moteur exigeait que la table
+// FINISSE dans le service (Mathilde prolongée à 16h). Pour une table, le service
+// est la fenêtre d'ARRIVÉE ; la durée ne sert qu'à compter la salle. Les salons
+// et les cours ne changent pas. On EXÉCUTE le moteur, l'écran comme le serveur.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const { finAContenir, prestationAutoriseeSurCreneaux, plageQuiAccueille } = await import('../lib/rdv-slots.js')
+  const { sansProse } = await import('./lire-code.mjs')
+  const midi = { id: 'midi', jour_semaine: 'mercredi', heure_debut: '12:00', heure_fin: '13:45', pas_minutes: 15, actif: true }
+  // Le Bistrologue : ouvert 12:00-14:30 puis 18:30-22:00.
+  const bistro = { mercredi: { ouvert: true, debut: '12:00', fin: '14:30', debut2: '18:30', fin2: '22:00' } }
+  const table90 = genererSlots({ dateChoisie: mercredi, dureeMinutes: 90, creneaux: [midi], reservations: [], horairesDetail: bistro, parCouverts: true, capacite: 24, couvertsDemandes: 4 })
+  const h = table90.filter(s => !s.pris).map(s => s.heure)
+  egal('🔴 une table de 90 min s’accueille de 12h00 à 13h45, tous les quarts d’heure',
+    h, ['12:00', '12:15', '12:30', '12:45', '13:00', '13:15', '13:30', '13:45'])
+  verifier('🔴 la dernière table arrive à 13h45 même si elle reste jusqu’à 15h15, après la fermeture de 14h30', h.includes('13:45'))
+  verifier('rien après la dernière arrivée', !h.includes('14:00'))
+  const table120 = genererSlots({ dateChoisie: mercredi, dureeMinutes: 120, creneaux: [midi], reservations: [], horairesDetail: { mercredi: { ouvert: true, debut: '12:00', fin: '14:00' } }, parCouverts: true, capacite: 24, couvertsDemandes: 6 })
+  verifier('une table de 2 h à 13h45 passe aussi avec une fermeture à 14h00 (une seule plage d’ouverture)',
+    table120.some(s => s.heure === '13:45' && !s.pris), table120.map(s => s.heure).join(' '))
+  // ⚠️ LE SALON NE CHANGE PAS : une prestation de 90 min doit FINIR dans la plage.
+  const salon = genererSlots({ dateChoisie: mercredi, dureeMinutes: 90, creneaux: [midi], reservations: [], horairesDetail: bistro })
+  egal('⚠️ hors table, rien ne change : la prestation finit dans la plage', salon.map(s => s.heure), ['12:00', '12:15'])
+  // Une arrivée PILE au début d'une pause est dans la pause.
+  const avecPause = { ...midi, heure_fin: '15:00', pause_debut: '13:00', pause_fin: '13:30' }
+  const hp = genererSlots({ dateChoisie: mercredi, dureeMinutes: 90, creneaux: [avecPause], reservations: [], horairesDetail: bistro, parCouverts: true, capacite: 24, couvertsDemandes: 2 }).map(s => s.heure)
+  verifier('une table n’arrive pas pendant la pause du service (13h00 et 13h15 exclues, 12h45 et 13h30 gardées)',
+    !hp.includes('13:00') && !hp.includes('13:15') && hp.includes('12:45') && hp.includes('13:30'), hp.join(' '))
+  // L'arrivée doit tomber dans les horaires d'ouverture.
+  const soir = { id: 'soir', jour_semaine: 'mercredi', heure_debut: '18:00', heure_fin: '21:30', pas_minutes: 15, actif: true }
+  const hs = genererSlots({ dateChoisie: mercredi, dureeMinutes: 120, creneaux: [soir], reservations: [], horairesDetail: bistro, parCouverts: true, capacite: 24, couvertsDemandes: 2 }).map(s => s.heure)
+  verifier('l’arrivée reste dans les horaires : pas de table à 18h00 si on ouvre à 18h30', !hs.includes('18:00') && hs[0] === '18:30', hs.join(' '))
+  verifier('et la dernière arrivée de 21h30 passe, même si la table finit à 23h30', hs.includes('21:30'))
+
+  // ── LE SERVEUR JUGE PAREIL ──
+  egal('finAContenir : l’arrivée seule pour une table', finAContenir({ debutMin: 825, finMin: 915, parCouverts: true }), 825)
+  egal('finAContenir : toute la durée sinon', finAContenir({ debutMin: 825, finMin: 915 }), 915)
+  const liaisons = [{ creneau_id: 'midi', prestation_id: 'table' }]
+  const juge = (debut, fin, parCouverts) => prestationAutoriseeSurCreneaux({ creneaux: [midi], liaisons, prestationId: 'table', jour: 'mercredi', debutMin: debut, finMin: fin, parCouverts })
+  verifier('🔴 le serveur accepte la table de 13h45 à 15h15', juge(825, 915, true) === true)
+  verifier('🔴 il refuse une arrivée à 14h00, après la dernière arrivée', juge(840, 930, true) === false)
+  verifier('⚠️ et il refuse toujours un soin de 13h45 à 15h15 (hors table)', juge(825, 915, false) === false)
+  verifier('🔴 le lieu se trouve pour la table de 13h45 (plage qui l’accueille)',
+    plageQuiAccueille([midi], { prestationId: 'table', liaisons, debutMin: 825, finMin: 915, parCouverts: true })?.id === 'midi')
+  verifier('⚠️ mais pas pour un soin qui déborde', plageQuiAccueille([midi], { prestationId: 'table', liaisons, debutMin: 825, finMin: 915 }) === null)
+
+  // ── ET CHAQUE APPELANT PASSE L'INFORMATION ──
+  const lu = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
+  const serveur = lu('lib/rdv-creation-server.js')
+  verifier('🔴 le serveur dit au moteur que c’est une table (règle ET lieu)',
+    (serveur.match(/parCouverts: estParCouverts\(prestation\),/g) || []).length === 2)
+  for (const [f, motif] of [
+    ['app/api/equipe/rdv/creer/route.js', /parCouverts: estParCouverts\(presta\),/],
+    ['app/dashboard/ModalDeplacerRdv.js', /parCouverts: estTable,/],
+    ['lib/rdv-deplacement-server.js', /parCouverts: estTable,/],
+    ['app/dashboard/ModalNouveauRdv.js', /parCouverts: estParCouverts\(presta\),[\s\S]*parCouverts: estParCouverts\(presta\),/],
+  ]) verifier(`🔴 ${f} dit au moteur que c’est une table`, motif.test(lu(f)))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

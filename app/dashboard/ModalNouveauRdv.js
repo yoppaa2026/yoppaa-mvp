@@ -491,6 +491,8 @@ export default function ModalNouveauRdv({
   // La plage qui accueille l'heure tel jour : son praticien dit qui serait absent.
   const plageCeJour = (d) => plageQuiAccueille(creneauxDuJour(creneaux, { dateStr: d, jour: jourKey }), {
     prestationId: presta?.id, debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMin,
+    // Une table se juge à son arrivée (15/10, `finAContenir`).
+    parCouverts: estParCouverts(presta),
   })
 
   // Les dates que le bouton « répéter » poserait vraiment, bornes comprises.
@@ -835,6 +837,7 @@ export default function ModalNouveauRdv({
       // Chaque semaine répétée cherche la sienne, ce jour-là.
       const lieuDeLaPlage = (d) => plageQuiAccueille(creneauxDuJour(creneaux, { dateStr: d, jour: jourKey }), {
         prestationId: presta.id, debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMin,
+        parCouverts: estParCouverts(presta),
       })?.lieu_id || null
       Object.assign(payload, await champsLieuPour(supabase, commercant, { jour: dateStr, heure, lieuId: lieuDeLaPlage(dateStr) }))
 

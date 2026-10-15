@@ -529,8 +529,11 @@ egal('la réservation d’un restaurant s’atteint quand même',
     parCouverts: true, couvertsDemandes: 2,
   })
   verifier('🔴 un bar qui ferme à minuit propose enfin ses créneaux', slotsMardi.length > 0)
-  egal('et la dernière arrivée tombe à 21:00',
-    slotsMardi.filter(s => !s.pris).map(s => s.heure).pop(), '21:00')
+  // ⚠️ REPOINTÉE LE 15/10 (Alex : le service est la FENÊTRE D'ARRIVÉE d'une
+  // table, voir `finAContenir`). Le service 18:00-23:00 dit « dernière arrivée
+  // 23:00 » ; la table de deux heures reste jusqu'à 01:00, avant la fermeture.
+  egal('et la dernière arrivée tombe à 23:00, l’heure de fin du service',
+    slotsMardi.filter(s => !s.pris).map(s => s.heure).pop(), '23:00')
 
   const PLAGE_SAM = [{ ...PLAGE_SOIR[0], id: 'k-sam', jour_semaine: 'samedi', heure_fin: '23:30' }]
   const slotsSamedi = genererSlots({

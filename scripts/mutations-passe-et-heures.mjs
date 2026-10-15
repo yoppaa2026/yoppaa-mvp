@@ -209,6 +209,25 @@ const MUTATIONS = [
   { nom: '⚠️ le webhook redit « Ton RDV » à un restaurant', banc: 'verif:table', fichier: 'app/api/stripe/webhook/route.js',
     de: '      subject: `${mots.sujetChez} ${rdv.commercant.nom} est ${mots.participeConfirme}`,',
     vers: '      subject: `Ton RDV chez ${rdv.commercant.nom} est confirmé`,' },
+
+  // ══ ✅ UNE TABLE SE RÉSERVE À SON ARRIVÉE (Alex, 15/10, le Bistrologue) ══
+  { nom: '🔴 la table doit de nouveau finir dans le service (dernière table à 12h15)', banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '    const aContenir = parCouverts === true ? 0 : dureeMinutes', vers: '    const aContenir = dureeMinutes' },
+  { nom: '🔴 la règle traite la table comme un soin (toute la durée à contenir)', banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '  return parCouverts === true ? debutMin : finMin', vers: '  return finMin' },
+  { nom: '🔴 le salon se met lui aussi à déborder de sa plage', banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '  return parCouverts === true ? debutMin : finMin', vers: '  return debutMin' },
+  { nom: '⚠️ une table arrive pile au début de la pause du service', banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '          && (finJugee === t ? t >= pauseDebut && t < pauseFin : t < pauseFin && slotEnd > pauseDebut)) continue',
+    vers: '          && t < pauseFin && slotEnd > pauseDebut) continue' },
+  { nom: '🔴 le serveur ne sait plus que c est une table (il refuse ce que l ecran propose)', banc: 'verif:slots', fichier: 'lib/rdv-creation-server.js',
+    de: '      parCouverts: estParCouverts(prestation),\n    })\n    if (!autorise)', vers: '    })\n    if (!autorise)' },
+  { nom: '🔴 la regle du serveur ignore le drapeau table', banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '  const finMin = finAContenir({ debutMin, finMin: finRecue, parCouverts })', vers: '  const finMin = finRecue' },
+  { nom: '⚠️ le lieu ne se trouve plus pour une table qui depasse le service', banc: 'verif:slots', fichier: 'lib/rdv-slots.js',
+    de: '  const d = Number(debutMin), f = Number(finAContenir({ debutMin, finMin, parCouverts }))', vers: '  const d = Number(debutMin), f = Number(finMin)' },
+  { nom: '⚠️ la saisie au telephone oublie que c est une table', banc: 'verif:slots', fichier: 'app/api/equipe/rdv/creer/route.js',
+    de: '      parCouverts: estParCouverts(presta),\n    })', vers: '    })' },
 ]
 
 const lancer = (banc) => {

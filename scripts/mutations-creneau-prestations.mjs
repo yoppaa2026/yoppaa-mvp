@@ -261,7 +261,8 @@ const MUTATIONS = [
 
   { nom: '🔴 la garde serveur ignore la pause',
     // ⚠️ REPOINTÉE LE 03/10, même raison.
-    de: '  if (pd !== null && pf !== null && d < pf && f > pd) return false',
+    // ⚠️ RECALÉE LE 15/10 : une arrivée de table s'y juge comme un instant.
+    de: '  if (pd !== null && pf !== null && (d === f ? d >= pd && d < pf : d < pf && f > pd)) return false',
     vers: '  if (false) return false' },
 
   // ⚠️ LES DEUX SORTIES QUI PROTEGENT L EXISTANT. Les casser refuserait des
@@ -323,7 +324,8 @@ const MUTATIONS = [
   // d aller ailleurs sans reserver son heure ne corrigeait RIEN : le premier
   // client a prendre un soin a 10h fermait le cours pour tout le monde.
   { nom: '🔴 l heure du cours redevient ouverte aux autres prestations',
-    de: '      if (tombeDansUneTrancheReservee(t, slotEnd, reservees)) continue',
+    // ⚠️ RECALÉE LE 15/10 : la fin jugée (`finJugee`) remplace la fin du soin.
+    de: '      if (tombeDansUneTrancheReservee(t, finJugee, reservees)) continue',
     vers: '      if (false) continue' },
 
   // ⚠️ ANCRE REPOSEE LE 18/09. La correction de « sans preference » a sorti le

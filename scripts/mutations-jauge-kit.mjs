@@ -311,6 +311,21 @@ const MUTATIONS = [
     banc: 'verif:kit', fichier: 'app/kit/[slug]/page.js',
     de: '  if (com && ficheEnRelecture(com)) return null\n', vers: '' },
 
+  // ══ ✅ GOOGLE PLAY EN LIGNE, « TÉLÉCHARGER » RÉPARÉ (15/10) ══
+  { nom: '🔴 un Android ne part plus sur Google Play',
+    banc: 'verif:kit', fichier: 'lib/stores.js',
+    de: '  if (/Android/i.test(ua)) return GOOGLE_PLAY_URL || REPLI_TELECHARGEMENT', vers: '' },
+  { nom: '🔴 la page /download ne redirige plus (page introuvable)',
+    banc: 'verif:kit', fichier: 'app/download/page.js',
+    de: '  redirect(cibleTelechargement(ua))', vers: '  return null' },
+  { nom: '🔴 le bouton « Telecharger » retourne vers une adresse absolue',
+    banc: 'verif:kit', fichier: 'app/commander/[slug]/page.js',
+    de: '<a href="/download"', vers: '<a href="https://yoppaa.app/download"' },
+  { nom: '⚠️ la phrase des badges redit « Bientot » pour les deux stores',
+    banc: 'verif:kit', fichier: 'lib/stores.js',
+    de: "  return !APP_STORE_URL ? 'Bientôt disponible sur l’App Store.' : 'Bientôt disponible sur Google Play.'",
+    vers: "  return 'Bientôt disponible sur l’App Store et Google Play.'" },
+
   // ══ LE DÉPOUILLEUR PARTAGÉ ══
   //
   // 🔴 CELLE-CI PROUVE QUE LE BANC VOIT SA PROPRE CÉCITÉ. Sans la

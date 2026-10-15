@@ -45,7 +45,7 @@ import { RESEAUX } from '@/lib/reseaux'
 import { getPrixPlan, canDo, PLANS } from '@/lib/plans'
 import { LIBELLE_COMMERCANT, LIBELLE_HABITANT } from '@/lib/libelles-audience'
 import { CAPTURES_COMMERCANT, CAPTURES_YOPPER, captureSrc } from '@/lib/captures-landing'
-import { APP_STORE_URL, GOOGLE_PLAY_URL, BADGE_APP_STORE, BADGE_GOOGLE_PLAY, appPubliee, tailleBadge } from '@/lib/stores'
+import { APP_STORE_URL, GOOGLE_PLAY_URL, BADGE_APP_STORE, BADGE_GOOGLE_PLAY, appPubliee, tailleBadge, noteStores } from '@/lib/stores'
 import { lienWhatsApp, TELEPHONE_AFFICHE, ENCODAGE_OFFERT, motifsActifs } from '@/lib/contact'
 import PartageMobilisation from './PartageMobilisation'
 
@@ -576,7 +576,9 @@ function BadgesStores() {
             : <span key={b.src} className="lp-store-bientot">{img}</span>
         })}
       </div>
-      {!appPubliee() && <p className="lp-stores-note">Bientôt disponible sur l&rsquo;App Store et Google Play.</p>}
+      {/* 15/10 : Google Play en ligne avant l'App Store. La phrase nomme ce
+          qui manque encore (`noteStores`), le badge grisé n'est jamais muet. */}
+      {noteStores() && <p className="lp-stores-note">{noteStores()}</p>}
     </div>
   )
 }

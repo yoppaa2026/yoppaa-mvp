@@ -6105,7 +6105,11 @@ export default function CommanderSlug() {
                       : <>Tu as commandé depuis ton PC. Pour utiliser l&apos;écran de retrait prioritaire Yoppaa chez le commerçant, télécharge l&apos;app sur ton téléphone.<br/></>}
                     <strong style={{ color: T.light }}>Tes identifiants restent les mêmes.</strong>
                   </p>
-                  <a href="https://yoppaa.app/download"
+                  {/* 🔴 15/10 : `/download` répondait « introuvable ». La page
+                      existe et choisit le store selon le téléphone
+                      (`cibleTelechargement`). Relatif : le site d'essai garde
+                      le sien, et le détour par l'apex disparaît. */}
+                  <a href="/download"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', borderRadius: 100, padding: '10px 24px', fontSize: '0.875rem', fontWeight: 800, textDecoration: 'none', boxShadow: `0 4px 16px ${T.main}55` }}>
                     Télécharger Yoppaa
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

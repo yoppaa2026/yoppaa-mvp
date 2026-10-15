@@ -1097,6 +1097,32 @@ const egal = (nom, obtenu, attendu) =>
       /if \(com && ficheEnRelecture\(com\)\) return null/.test(pageKit) && !/fichePubliee/.test(pageKit))
   }
 
+  // ══ ✅ GOOGLE PLAY EN LIGNE, LE BOUTON « TÉLÉCHARGER » RÉPARÉ (15/10) ══
+  {
+    const S = await import('../lib/stores.js')
+    verifie('🔴 le lien Google Play est celui de l’identifiant Capacitor',
+      S.GOOGLE_PLAY_URL === 'https://play.google.com/store/apps/details?id=app.yoppaa.client', String(S.GOOGLE_PLAY_URL))
+    verifie('l’app compte comme publiée', S.appPubliee() === true)
+    verifie('🔴 la phrase sous les badges nomme ce qui manque encore (App Store seul)',
+      S.APP_STORE_URL ? S.noteStores() === null : S.noteStores() === 'Bientôt disponible sur l’App Store.', String(S.noteStores()))
+    const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36'
+    const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'
+    const pc = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36'
+    verifie('🔴 un Android part sur Google Play', S.cibleTelechargement(android) === S.GOOGLE_PLAY_URL)
+    verifie('🔴 un iPhone part sur l’App Store, ou sur la landing tant qu’il n’est pas publié',
+      S.cibleTelechargement(iphone) === (S.APP_STORE_URL || S.REPLI_TELECHARGEMENT))
+    verifie('un PC part sur la section des habitants, et ses badges', S.cibleTelechargement(pc) === '/#preinscription')
+    verifie('sans navigateur reconnu, le repli', S.cibleTelechargement('') === '/#preinscription' && S.cibleTelechargement(null) === '/#preinscription')
+    const dl = lireCode('app/download/page.js')
+    verifie('🔴 la page /download existe et redirige par la règle',
+      /redirect\(cibleTelechargement\(ua\)\)/.test(dl) && /\(await headers\(\)\)\.get\('user-agent'\)/.test(dl))
+    verifie('🔴 le bouton « Télécharger Yoppaa » y mène, en relatif',
+      /<a href="\/download"/.test(lireCode('app/commander/[slug]/page.js')) && !/yoppaa\.app\/download/.test(lireCode('app/commander/[slug]/page.js')))
+    verifie('la section des habitants porte bien l’ancre du repli', /<section id="preinscription"/.test(lireCode('app/components/LandingReveal.js')))
+    verifie('🔴 la landing lit la phrase des badges dans la règle',
+      /\{noteStores\(\) && <p className="lp-stores-note">\{noteStores\(\)\}<\/p>\}/.test(lireCode('app/components/LandingReveal.js')))
+  }
+
   const page = lire('app/brand-kit/commercant/page.js')
   // 🔴 L'ORDRE DES FACES. Inversé, il ne se voit qu'une fois la pile sortie.
   verifie('🔴 le PDF assemble le recto PUIS le verso',

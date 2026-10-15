@@ -164,6 +164,7 @@ import {
   copieDePrestation, aVerifierApresCopie, lignesDeFenetre,
   doitOuvrirFenetre, resumeCourt, nouveauGroupe,
   planModificationGroupe, resumeModification,
+  planDuGroupe, resumeDuPlan,
 } from '@/lib/catalogue-copie'
 // ⚠️ ET CE QUI S'APPLIQUE À PLUSIEURS ARTICLES SE DÉCIDE AUSSI DANS UN MODULE :
 // ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
@@ -2939,16 +2940,55 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
 
   const biblio = bibliothequeDeGroupes(tousLesGroupes)
 
+  // Les articles qu'on peut cocher : la vitrine ne prend pas de commande, elle
+  // n'a pas d'options à composer.
+  const listeCibles = articles.filter(a => a.est_vitrine !== true)
+
+  // ✅ 15/10 (Alex) : la liste s'ouvre avec les articles qui ONT le groupe déjà
+  // cochés ; cocher pose, décocher retire (`planDuGroupe`).
+  function ouvrir(entree) {
+    const poses = new Set(entree.articles.map(String))
+    setCibles(listeCibles.filter(a => poses.has(String(a.id))).map(a => a.id))
+    setChoisi(entree.nom)
+    setEnEdition(null)
+  }
+
+  // Retirer des copies de groupe : la même écriture que le panneau d'un
+  // article (`deleteGroupe`), relue, car la RLS refuse en rendant zéro ligne.
+  async function retirerCopies(ids) {
+    if (ids.length === 0) return { ok: true, combien: 0 }
+    const { data, error } = await supabase.from('article_options_groupes').delete().in('id', ids).select('id')
+    if (error) return { ok: false, erreur: `Retrait impossible : ${error.message}` }
+    if (!data || data.length === 0) return { ok: false, erreur: 'Retrait refusé par les permissions (aucune ligne retirée).' }
+    return { ok: true, combien: data.length, partiel: data.length < ids.length }
+  }
+
   async function appliquer(entree) {
     if (envoi) return
-    const conflits = conflitsDeGroupe(entree.nom, cibles, groupesParArticle)
-    const { aCopier } = repartirCibles(cibles, conflits)
-    if (aCopier.length === 0) { toast('Rien à appliquer : ces articles ont déjà ce groupe.', 'error'); return }
+    const plan = planDuGroupe({ entree, coches: cibles, articlesVisibles: listeCibles })
+    const conflits = conflitsDeGroupe(entree.nom, plan.aPoser, groupesParArticle)
+    const { aCopier } = repartirCibles(plan.aPoser, conflits)
+    if (aCopier.length === 0 && plan.aRetirer.length === 0) { toast('Rien à changer : coche ou décoche des articles.', 'error'); return }
+
+    // 🔴 RETIRER EFFACE LES OPTIONS DE CES ARTICLES : on le fait confirmer, en
+    // disant combien. Poser seul ne demande rien, comme avant.
+    if (plan.aRetirer.length > 0) {
+      const n = plan.articlesRetires.length
+      const okRetrait = await confirme(confirmationSimple({
+        titre: `Retirer « ${entree.nom} » de ${n === 1 ? '1 article' : `${n} articles`} ?`,
+        message: `${resumeDuPlan({ nomGroupe: entree.nom, aPoser: aCopier.length, retires: n })} Les commandes déjà passées ne changent pas.`,
+        action: 'Oui, enregistrer',
+      }))
+      if (!okRetrait) return
+    }
 
     setEnvoi(true)
-    const r = await ecrireCopiesDeGroupe(entree.modele, aCopier, groupesParArticle)
+    const r = aCopier.length > 0 ? await ecrireCopiesDeGroupe(entree.modele, aCopier, groupesParArticle) : { ok: true, combien: 0 }
+    const rr = r.ok ? await retirerCopies(plan.aRetirer) : { ok: true, combien: 0 }
     setEnvoi(false)
-    if (!r.ok) { toast(r.erreur, 'error'); onApplique?.(aCopier); return }
+    const touches = [...aCopier, ...plan.articlesRetires]
+    if (!r.ok) { toast(r.erreur, 'error'); onApplique?.(touches); return }
+    if (!rr.ok) { toast(rr.erreur, 'error'); onApplique?.(touches); return }
     if (r.articlesSansTaille > 0) toast(`${r.articlesSansTaille} article${r.articlesSansTaille > 1 ? 's n’ont' : ' n’a'} pas de tailles : le prix unique s’y applique.`, 'error')
 
     setChoisi(null)
@@ -2958,10 +2998,34 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
     // jour partout d'un coup. Sans ce rechargement, réappliquer le même groupe
     // ne verrait pas les conflits qu'on vient de créer, et le commerçant
     // doublerait ses groupes.
-    onApplique?.(aCopier)
-    toast(r.combien === 1
-      ? `« ${entree.nom} » appliqué à 1 article.`
-      : `« ${entree.nom} » appliqué à ${r.combien} articles.`)
+    onApplique?.(touches)
+    const morceaux = []
+    if (r.combien > 0) morceaux.push(`ajouté à ${r.combien === 1 ? '1 article' : `${r.combien} articles`}`)
+    if (plan.articlesRetires.length > 0) morceaux.push(`retiré de ${plan.articlesRetires.length === 1 ? '1 article' : `${plan.articlesRetires.length} articles`}`)
+    toast(`« ${entree.nom} » ${morceaux.join(', ')}.`)
+  }
+
+  // ✅ 15/10 (Alex) : « pouvoir supprimer un groupe ». Toutes ses copies, sur
+  // tous les articles (vitrine comprise), après une confirmation qui le dit.
+  async function supprimerPartout(entree) {
+    if (envoi) return
+    const ids = (entree.copies || []).map(g => g?.id).filter(id => id != null)
+    const n = entree.articles.length
+    const ok = await confirme(confirmationSimple({
+      titre: `Supprimer « ${entree.nom} » ?`,
+      message: `Le groupe et ses ${entree.valeurs.length === 1 ? 'option' : `${entree.valeurs.length} options`} disparaissent de ${n === 1 ? '1 article' : `${n} articles`}. Les commandes déjà passées ne changent pas.`,
+      action: 'Oui, supprimer le groupe',
+    }))
+    if (!ok) return
+    setEnvoi(true)
+    const rr = await retirerCopies(ids)
+    setEnvoi(false)
+    onApplique?.(entree.articles)
+    if (!rr.ok) { toast(rr.erreur, 'error'); return }
+    setChoisi(null); setEnEdition(null); setCibles([])
+    toast(rr.partiel
+      ? `« ${entree.nom} » supprimé de ${rr.combien} copie(s) sur ${ids.length} : vérifie les articles restants.`
+      : `« ${entree.nom} » supprimé de ${n === 1 ? '1 article' : `${n} articles`}.`, rr.partiel ? 'error' : 'success')
   }
 
   // ⚠️ RIEN À MONTRER, RIEN À DIRE : un bloc vide en tête de page ferait douter
@@ -2980,11 +3044,11 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
       <div style={{ display: 'grid', gap: 8 }}>
         {biblio.map(entree => {
           const ouvert = choisi === entree.nom
-          const listeCibles = articles.filter(a => a.est_vitrine !== true)
-          const conflits = conflitsDeGroupe(entree.nom, cibles, groupesParArticle)
-          const bloques = new Set(conflits.map(String))
           const dejaPosesIds = new Set(entree.articles.map(String))
           const tousCoches = listeCibles.length > 0 && listeCibles.every(a => cibles.some(id => String(id) === String(a.id)))
+          // ✅ 15/10 : ce que l'enregistrement fera, poser ET retirer.
+          const plan = planDuGroupe({ entree, coches: cibles, articlesVisibles: listeCibles })
+          const aPoser = repartirCibles(plan.aPoser, conflitsDeGroupe(entree.nom, plan.aPoser, groupesParArticle)).aCopier
 
           return (
             <div key={entree.nom} style={{ border: `1px solid ${ouvert ? T.bgPanel : T.hairline}`, borderRadius: 10, padding: 10, background: '#fff' }}>
@@ -3010,8 +3074,13 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
                     <Icon name="edit" size={13} color={T.bgPanel}/> {enEdition === entree.nom ? 'Fermer' : 'Modifier'}
                   </button>
                   <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
-                    onClick={() => { setChoisi(ouvert ? null : entree.nom); setCibles([]); setEnEdition(null) }}>
-                    <Copy size={13} strokeWidth={1.8}/> {ouvert ? 'Fermer' : 'Appliquer à…'}
+                    onClick={() => { if (ouvert) { setChoisi(null); setCibles([]) } else ouvrir(entree) }}>
+                    <Copy size={13} strokeWidth={1.8}/> {ouvert ? 'Fermer' : 'Appliquer / retirer…'}
+                  </button>
+                  {/* ✅ 15/10 (Alex) : supprimer le groupe de tous les articles. */}
+                  <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11, color: '#DC2626' }}
+                    onClick={() => supprimerPartout(entree)} disabled={envoi} aria-label={`Supprimer le groupe ${entree.nom}`}>
+                    <Icon name="trash" size={13} color="#DC2626"/> Supprimer
                   </button>
                 </div>
               </div>
@@ -3035,7 +3104,7 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 11.5, fontWeight: 700, color: T.ink }}>Poser sur :</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: T.ink }}>Coche pour poser, décoche pour retirer :</span>
                     <button style={{ ...s.btn, ...s.btnGhost, padding: '4px 10px', fontSize: 11 }}
                       onClick={() => setCibles(tousCoches ? [] : listeCibles.map(a => a.id))}>
                       {tousCoches ? 'Tout décocher' : 'Tout cocher'}
@@ -3045,12 +3114,11 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
                   <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 2, marginBottom: 8 }}>
                     {listeCibles.map(a => {
                       const coche = cibles.some(id => String(id) === String(a.id))
-                      // ⚠️ DEUX RAISONS DE NE RIEN ÉCRIRE, DEUX MOTS DIFFÉRENTS :
-                      // « c'est déjà posé ici » n'est pas « tu viens de le cocher
-                      // alors qu'il y est déjà ». Le second n'apparaît qu'une fois
-                      // coché, le premier se lit tout de suite.
+                      // ✅ 15/10 : ce que la case fera, dit à côté du nom :
+                      // « déjà posé » (coché, rien ne change), « sera retiré »
+                      // (décoché alors qu'il l'avait), « sera ajouté ».
                       const dejaPose = dejaPosesIds.has(String(a.id))
-                      const ignore = bloques.has(String(a.id))
+                      const etiquette = dejaPose ? (coche ? 'déjà posé' : 'sera retiré') : (coche ? 'sera ajouté' : null)
                       return (
                         <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: coche ? T.pale : 'transparent' }}>
                           <input type="checkbox" checked={coche} style={{ cursor: 'pointer', width: 15, height: 15 }}
@@ -3060,9 +3128,9 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
                                 : [...prev, a.id]
                             ))}/>
                           <span style={{ fontSize: 12, color: T.ink, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
-                          {(dejaPose || ignore) && (
-                            <span style={{ fontSize: 10, fontWeight: 800, color: T.muted, background: '#F3F4F6', borderRadius: 100, padding: '2px 7px', flexShrink: 0 }}>
-                              {ignore ? 'a déjà ce groupe' : 'déjà posé'}
+                          {etiquette && (
+                            <span style={{ fontSize: 10, fontWeight: 800, color: etiquette === 'sera retiré' ? '#DC2626' : T.muted, background: etiquette === 'sera retiré' ? '#FEE2E2' : '#F3F4F6', borderRadius: 100, padding: '2px 7px', flexShrink: 0 }}>
+                              {etiquette}
                             </span>
                           )}
                         </label>
@@ -3071,13 +3139,14 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
                   </div>
 
                   <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
-                    {resumeDeCopie({ nomGroupe: entree.nom, cibles: cibles.length, conflits: conflits.length })}
+                    {resumeDuPlan({ nomGroupe: entree.nom, aPoser: aPoser.length, retires: plan.articlesRetires.length })}
                   </p>
 
-                  <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12 }}
+                  <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     onClick={() => appliquer(entree)}
-                    disabled={envoi || cibles.length - conflits.length <= 0}>
-                    <Copy size={13} strokeWidth={1.8}/> {envoi ? 'Application…' : 'Appliquer'}
+                    disabled={envoi || (aPoser.length === 0 && plan.aRetirer.length === 0)}>
+                    <Copy size={13} strokeWidth={1.8}/> Enregistrer
+                    {envoi && <DotsAttente couleur="#fff" taille={4} label="Enregistrement"/>}
                   </button>
                 </>
               )}

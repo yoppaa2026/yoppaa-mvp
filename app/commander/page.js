@@ -4141,6 +4141,29 @@ export default function Commander() {
                     Réessayer
                   </button>
                 </div>
+              ) : commercants.length === 0 ? (
+                /* ✅ 15/10 (Alex, le jour où les apps sortent) : AUCUN COMMERCE
+                   PUBLIÉ AUTOUR, ce n'est pas une recherche ratée. « Aucun
+                   résultat · Essaie une autre catégorie » faisait croire au
+                   Yopper qu'il avait mal cherché, alors que sa commune démarre.
+                   On le dit, et on lui donne le geste utile : suggérer le
+                   commerce qu'il voudrait retrouver (onglet Tribu). Le cas
+                   « un filtre ne trouve rien » garde son message juste dessous. */
+                <div style={{ textAlign: 'center', padding: '3rem 1.25rem' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: 18, background: T.pale, marginBottom: 14 }}>
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M3 21h18"/><path d="M5 21V9l7-5 7 5v12"/><path d="M10 21v-6h4v6"/>
+                    </svg>
+                  </div>
+                  <p style={{ fontWeight: 800, color: T.ink, marginBottom: 4, letterSpacing: '-0.2px' }}>Ta commune démarre</p>
+                  <p style={{ fontSize: '0.875rem', color: T.muted, marginBottom: 16, lineHeight: 1.5, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto' }}>
+                    Les premiers commerces s&rsquo;inscrivent en ce moment. Dis-nous lequel tu aimerais retrouver ici&nbsp;: on va le chercher.
+                  </p>
+                  <button onClick={() => setOnglet('tribu')}
+                    style={{ padding: '0.7rem 1.5rem', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: `0 4px 16px ${T.main}44` }}>
+                    Suggérer un commerce
+                  </button>
+                </div>
               ) : commercantsFiltres.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 72, height: 72, borderRadius: 18, background: T.pale, marginBottom: 14 }}>

@@ -110,7 +110,8 @@ const MUTATIONS = [
   { nom: '🔴 la modification ecrit les prix par taille sans controle prealable', fichier: 'app/dashboard/ConfigDashboard.js',
     de: "    if (!saisieTaille.ok) { toast(saisieTaille.error, 'error'); return }", vers: '' },
   { nom: '🔴 « Appliquer a… » perd les prix par taille', fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '    const r = await ecrireCopiesDeGroupe(entree.modele, aCopier, groupesParArticle)', vers: '    const r = await ecrireCopiesDeGroupe(entree.modele, aCopier)' },
+    // ⚠️ ANCRE RECALÉE LE 15/10 : « Appliquer / retirer… » n'écrit que s'il y a à poser.
+    de: 'await ecrireCopiesDeGroupe(entree.modele, aCopier, groupesParArticle) : { ok: true, combien: 0 }', vers: 'await ecrireCopiesDeGroupe(entree.modele, aCopier) : { ok: true, combien: 0 }' },
 
   { nom: '🔴 « Choisis-en un » revient (le client se sent oblige)', fichier: 'lib/options-choix.js',
     de: '  if (max === 1) return null', vers: '' },

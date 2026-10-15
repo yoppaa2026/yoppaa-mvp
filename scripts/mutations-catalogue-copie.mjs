@@ -512,6 +512,27 @@ const MUTATIONS = [
     de: "    choix_min: Number.isInteger(depart.choix_min) ? String(depart.choix_min) : '',",
     vers: "    choix_min: ''," },
 
+  // ══ ✅ POSER ET RETIRER UN GROUPE, ET LE SUPPRIMER (Alex, 15/10) ══
+  { nom: '🔴 tout decocher retire aussi la copie d un article en vitrine (hors liste)',
+    fichier: 'lib/catalogue-copie.js', banc: 'verif:copie',
+    de: '    && visibles.has(String(g.article_id)) && !coche.has(String(g.article_id)))',
+    vers: '    && !coche.has(String(g.article_id)))' },
+  { nom: '🔴 decocher ne retire plus rien',
+    fichier: 'lib/catalogue-copie.js', banc: 'verif:copie',
+    de: '    aRetirer: retirees.map(g => g.id),', vers: '    aRetirer: [],' },
+  { nom: '🔴 la liste s ouvre vide : enregistrer retirerait le groupe de partout',
+    fichier: ECRAN, banc: 'verif:copie',
+    de: '    setCibles(listeCibles.filter(a => poses.has(String(a.id))).map(a => a.id))', vers: '    setCibles([])' },
+  { nom: '🔴 le retrait part sans confirmation',
+    fichier: ECRAN, banc: 'verif:copie',
+    de: '      if (!okRetrait) return\n', vers: '' },
+  { nom: '🔴 « Supprimer » part sans confirmation',
+    fichier: ECRAN, banc: 'verif:copie',
+    de: "      action: 'Oui, supprimer le groupe',\n    }))\n    if (!ok) return\n", vers: "      action: 'Oui, supprimer le groupe',\n    }))\n" },
+  { nom: '🔴 un retrait refuse par la RLS passe pour un succes',
+    fichier: ECRAN, banc: 'verif:copie',
+    de: "    if (!data || data.length === 0) return { ok: false, erreur: 'Retrait refusé par les permissions (aucune ligne retirée).' }\n", vers: '' },
+
   // ══ ✅ LA FAÇON DE VENDRE, D'UN COUP (Alex, 15/10) ══
   { nom: '🔴 un article sans commande a l avance passe a « non » au jour meme (plus vendu du tout)',
     fichier: LOT, banc: 'verif:lot',

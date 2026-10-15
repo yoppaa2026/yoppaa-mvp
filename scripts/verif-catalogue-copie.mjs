@@ -640,7 +640,10 @@ const v = (nom, cond, detail = '') => {
   // ⚠️ ELLE AUSSI ÉCARTE LES CONFLITS PAR LA RÈGLE, et pas à sa façon. Manque
   // vu par le harnais le 25/09 : la garde ne surveillait que le panneau d'un
   // article, donc muter le tri de la bibliothèque ne faisait rougir personne.
-  for (const fn of ['conflitsDeGroupe', 'repartirCibles', 'resumeDeCopie']) {
+  // ⚠️ REPOINTÉE LE 15/10 : la bibliothèque pose ET retire ; son résumé est
+  // `resumeDuPlan`, sa règle `planDuGroupe` (le panneau d'un article garde
+  // `resumeDeCopie`, vérifié plus haut).
+  for (const fn of ['conflitsDeGroupe', 'repartirCibles', 'resumeDuPlan', 'planDuGroupe']) {
     v(`la bibliothèque appelle ${fn} au lieu de refaire la règle`,
       new RegExp(`${fn}\\(`).test(biblioEcran), fn)
   }
@@ -654,8 +657,11 @@ const v = (nom, cond, detail = '') => {
   // vignettes — et elle se contente de lui nommer les articles touchés.
   // ⚠️ PRÉCISÉE LE 13/10 : le chemin d'erreur relit aussi ; la garde vise le
   // chemin RÉUSSI (après la remise à zéro du choix), pas l'autre.
+  // ⚠️ REPOINTÉE LE 15/10 : les articles touchés sont ceux qui ont reçu le
+  // groupe ET ceux qui l'ont perdu (`touches`).
   v('elle fait relire le catalogue après avoir écrit',
-    /setCibles\(\[\]\)\s*(\/\/[^\n]*\s*)*onApplique\?\.\(aCopier\)/.test(biblioEcran))
+    /setCibles\(\[\]\)\s*(\/\/[^\n]*\s*)*onApplique\?\.\(touches\)/.test(biblioEcran)
+      && /const touches = \[\.\.\.aCopier, \.\.\.plan\.articlesRetires\]/.test(biblioEcran))
   // ⚠️ ELLE NE S'AFFICHE QUE LÀ OÙ LES GROUPES EXISTENT : le détail et la
   // vitrine ont des variantes, un autre modèle entièrement.
   v('elle ne s’affiche pas chez qui n’a pas de groupes',
@@ -996,6 +1002,54 @@ const v = (nom, cond, detail = '') => {
     // ⚠️ REPOINTÉE LE 13/10 : le résumé dit aussi les prix par taille.
     /\{!plan\.ok \? plan\.error : !saisieTaille\.ok \? saisieTaille\.error/.test(config) && /resumeModification\(plan, \{ versions \}\)/.test(config)
     && /\{envoi && <DotsAttente couleur="#fff" taille=\{4\} label="Enregistrement"\/>\}/.test(config))
+}
+
+// ═══ ✅ POSER ET RETIRER UN GROUPE, ET LE SUPPRIMER (Alex, 15/10) ═══════════
+//
+// « J'aimerais pouvoir supprimer un groupe et avoir le bouton "appliquer à…
+// et décocher sur…" ». On EXÉCUTE la règle, puis on vise l'écran.
+{
+  const { planDuGroupe, resumeDuPlan } = await import('../lib/catalogue-copie.js')
+  const articles = [{ id: 1, nom: 'Pinot' }, { id: 2, nom: 'Riesling' }, { id: 3, nom: 'Merlot' }, { id: 4, nom: 'Planche' }]
+  const entree = {
+    nom: 'Taille', articles: ['1', '2', '9'],
+    copies: [{ id: 'g1', article_id: 1 }, { id: 'g2', article_id: 2 }, { id: 'g9', article_id: 9 }],   // 9 : en vitrine, hors liste
+  }
+  // Ouvert tel quel (1 et 2 cochés) : rien à faire.
+  const rien = planDuGroupe({ entree, coches: [1, 2], articlesVisibles: articles })
+  v('ouvert tel quel, rien ne change', rien.aPoser.length === 0 && rien.aRetirer.length === 0, JSON.stringify(rien))
+  // Décocher 2, cocher 3 et 4.
+  const p = planDuGroupe({ entree, coches: [1, 3, 4], articlesVisibles: articles })
+  v('🔴 cocher pose : 3 et 4', JSON.stringify(p.aPoser) === '[3,4]', JSON.stringify(p.aPoser))
+  v('🔴 décocher retire : la copie de 2, et seulement elle', JSON.stringify(p.aRetirer) === '["g2"]', JSON.stringify(p.aRetirer))
+  v('l’article retiré est nommé', JSON.stringify(p.articlesRetires) === '["2"]')
+  // 🔴 L'ARTICLE HORS DE LA LISTE (vitrine) N'EST JAMAIS RETIRÉ PAR MÉGARDE.
+  const tout = planDuGroupe({ entree, coches: [], articlesVisibles: articles })
+  v('🔴 tout décocher ne retire que ce que la liste montre (la vitrine garde sa copie)',
+    JSON.stringify(tout.aRetirer) === '["g1","g2"]', JSON.stringify(tout.aRetirer))
+  v('les identifiants en texte valent les nombres', planDuGroupe({ entree, coches: ['1', '2'], articlesVisibles: articles }).aRetirer.length === 0)
+  v('une entrée vide ne casse rien', planDuGroupe({}).aPoser.length === 0 && planDuGroupe({}).aRetirer.length === 0)
+  // Ce que le commerçant lit.
+  v('🔴 le résumé dit ce qui s’ajoute ET ce qui part',
+    resumeDuPlan({ nomGroupe: 'Taille', aPoser: 2, retires: 1 }) === '« Taille » sera ajouté à 2 articles et retiré de 1 article, avec ses options.',
+    resumeDuPlan({ nomGroupe: 'Taille', aPoser: 2, retires: 1 }))
+  v('retirer seul se dit', resumeDuPlan({ nomGroupe: 'Taille', retires: 3 }) === '« Taille » sera retiré de 3 articles, avec ses options.')
+  v('rien à faire se dit comme une consigne', /Coche pour poser/.test(resumeDuPlan({ nomGroupe: 'Taille' })))
+
+  const ecran = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  v('🔴 la liste s’ouvre avec les articles qui ont le groupe déjà cochés',
+    /function ouvrir\(entree\) \{\s*const poses = new Set\(entree\.articles\.map\(String\)\)\s*setCibles\(listeCibles\.filter\(a => poses\.has\(String\(a\.id\)\)\)\.map\(a => a\.id\)\)/.test(ecran))
+  v('🔴 l’enregistrement passe par la règle (poser ET retirer)',
+    /const plan = planDuGroupe\(\{ entree, coches: cibles, articlesVisibles: listeCibles \}\)/.test(ecran)
+      && /const rr = r\.ok \? await retirerCopies\(plan\.aRetirer\)/.test(ecran))
+  v('🔴 retirer se fait confirmer, en disant combien',
+    /if \(plan\.aRetirer\.length > 0\) \{[\s\S]{0,200}const okRetrait = await confirme\(confirmationSimple\(\{[\s\S]{0,500}if \(!okRetrait\) return/.test(ecran))
+  v('🔴 « Supprimer » retire toutes les copies, après confirmation',
+    /async function supprimerPartout\(entree\) \{[\s\S]{0,300}const ok = await confirme\([\s\S]{0,600}if \(!ok\) return[\s\S]{0,200}await retirerCopies\(ids\)/.test(ecran))
+  v('🔴 un retrait refusé par la RLS se dit (zéro ligne n’est pas un succès)',
+    /if \(!data \|\| data\.length === 0\) return \{ ok: false, erreur: 'Retrait refusé par les permissions/.test(ecran))
+  v('le bouton dit le geste', /'Appliquer \/ retirer…'/.test(ecran) && /Supprimer\s*<\/button>/.test(ecran))
+  v('chaque case dit ce qu’elle fera', /dejaPose \? \(coche \? 'déjà posé' : 'sera retiré'\) : \(coche \? 'sera ajouté' : null\)/.test(ecran))
 }
 
 console.log(`\nCopier dans le catalogue : ${ok} vérifications`)

@@ -1439,6 +1439,23 @@ function sansCommentaires(src) {
   }
 }
 
+// ═══ ✅ « TA COMMUNE DÉMARRE » (Alex, 15/10, le jour où les apps sortent) ═════
+//
+// Sans aucun commerce publié autour, le Yopper lisait « Aucun résultat ·
+// Essaie une autre catégorie ou recherche » : il croyait avoir mal cherché.
+{
+  const accueil = sansProse(lire('app/commander/page.js'))
+  verifier('🔴 une liste vide SANS filtre dit que la commune démarre',
+    /\) : commercants\.length === 0 \? \([\s\S]{0,2500}Ta commune démarre/.test(accueil))
+  verifier('🔴 et propose de suggérer un commerce (onglet Tribu)',
+    /Ta commune démarre[\s\S]{0,900}<button onClick=\{\(\) => setOnglet\('tribu'\)\}[\s\S]{0,400}Suggérer un commerce/.test(accueil))
+  verifier('⚠️ un filtre qui ne trouve rien garde « Aucun résultat »',
+    /\) : commercantsFiltres\.length === 0 \? \([\s\S]{0,700}Aucun résultat/.test(accueil))
+  verifier('⚠️ et le chargement passe avant (pas de « Ta commune démarre » pendant qu’on charge)',
+    accueil.indexOf('commercesEnChargement && commercants.length === 0 ?') > -1
+      && accueil.indexOf('commercesEnChargement && commercants.length === 0 ?') < accueil.indexOf('Ta commune démarre'))
+}
+
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)
 if (ko > 0) {
   console.log('\nÉCHECS :')

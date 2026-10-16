@@ -1109,7 +1109,11 @@ for (const jargon of ['Mes lieux fixes', 'Ma tournée habituelle', 'Emplacements
 // deux. Le bloc ne s'affiche plus pour un commerce qui bouge, donc sa phrase
 // n'a plus à exister. Restent les deux durées qui ne se marchent pas dessus :
 // ce qui se répète, et ce qui ne vaut qu'un jour.
-verifier('la section porte un titre qui parle', /Où me trouver/.test(configSrc))
+// ⚠️ REPOINTÉE LE 16/10 : les onglets disent leur contenu (Alex, tableau).
+// L'onglet s'appelle « Adresse et horaires », la section de qui bouge « Mes
+// emplacements ». On vise les DEUX endroits, pas un mot n'importe où.
+verifier('la section porte un titre qui parle',
+  /\{ id: 'lieux',\s*label: 'Adresse et horaires' \}/.test(configSrc) && />Mes emplacements<\/p>/.test(configSrc))
 for (const duree of ['Se répète chaque semaine', 'Remplace ton planning un jour donné']) {
   verifier(`un bloc dit sa durée : « ${duree} »`, configSrc.includes(duree))
 }

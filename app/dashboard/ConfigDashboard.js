@@ -6959,8 +6959,8 @@ function TabLivraison({ commercantId, categorie, toast, surModifications, onAlle
             </p>
             {pointDepart && (
               <p style={{ margin: '0 0 10px', fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
-                Ton point de départ des livraisons : <strong style={{ color: T.ink }}>{pointDepart.adresse || 'ton adresse dans « Où me trouver »'}</strong>.
-                Il se change dans « Où me trouver ».
+                Ton point de départ des livraisons : <strong style={{ color: T.ink }}>{pointDepart.adresse || 'ton adresse dans « Adresse et horaires »'}</strong>.
+                Il se change dans « Adresse et horaires ».
               </p>
             )}
             {pointDepart ? (
@@ -6975,12 +6975,12 @@ function TabLivraison({ commercantId, categorie, toast, surModifications, onAlle
                   Tes livraisons sont suspendues : ton point de départ n&rsquo;est plus défini.
                 </p>
                 <p style={{ fontSize: 12, color: '#7F1D1D', fontWeight: 600, margin: '3px 0 0', lineHeight: 1.5 }}>
-                  Il faut l&rsquo;adresse de ton commerce dans « Où me trouver ». Tant qu&rsquo;elle manque, tes clients ne peuvent commander qu&rsquo;en retrait.
+                  Il faut l&rsquo;adresse de ton commerce dans « Adresse et horaires ». Tant qu&rsquo;elle manque, tes clients ne peuvent commander qu&rsquo;en retrait.
                 </p>
                 {onAllerOuMeTrouver && (
                   <button type="button" onClick={onAllerOuMeTrouver}
                     style={{ marginTop: 8, padding: '8px 12px', borderRadius: 10, border: 'none', background: '#B91C1C', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
-                    Ajouter mon adresse dans « Où me trouver »
+                    Ajouter mon adresse dans « Adresse et horaires »
                   </button>
                 )}
               </div>
@@ -7025,7 +7025,7 @@ function TabLivraison({ commercantId, categorie, toast, surModifications, onAlle
         </button>
         {!pointDepart && (
           <p style={{ fontSize: 12, color: T.muted, margin: '-6px 0 12px', lineHeight: 1.5 }}>
-            Pour dessiner ta zone, ajoute d&rsquo;abord l&rsquo;adresse de ton commerce dans « Où me trouver » : c&rsquo;est ton point de départ des livraisons.
+            Pour dessiner ta zone, ajoute d&rsquo;abord l&rsquo;adresse de ton commerce dans « Adresse et horaires » : c&rsquo;est ton point de départ des livraisons.
             {onAllerOuMeTrouver && (
               <>{' '}<button type="button" onClick={onAllerOuMeTrouver}
                 style={{ background: 'none', border: 'none', padding: 0, color: T.main, fontWeight: 800, fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}>
@@ -8328,7 +8328,7 @@ function SectionLieux({ commercantId, toast, mobile = false }) {
       ? { background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 14, padding: 16, marginTop: 16, scrollMarginTop: 90 }
       : { margin: '0 0 18px', scrollMarginTop: 90 }}>
       {mobile && (<>
-      <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Où me trouver</p>
+      <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Mes emplacements</p>
       <p style={{ margin: '0 0 14px', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
         Tu as répondu que tu changes d’endroit : c’est donc ton planning qui dit
         où tu es, jour par jour. Ta fiche annonce l’endroit du jour, et un
@@ -8849,11 +8849,16 @@ function AvertissementTaille({ dims, quoi = 'photo' }) {
   )
 }
 
+// ✅ ALEX, 16/10 soir (tableau) : « pas très cohérent ». Chaque onglet dit ce
+// qu'il contient. L'ADRESSE avait deux places sans nom : celle des clients
+// (« Adresse et horaires ») et celle du dossier, devenue « administrative »
+// dans « Contact ». Les identifiants ne changent pas : les liens qui mènent
+// ici (`ou-me-trouver`, `activer-livraison`) restent bons.
 const SOUS_ONGLETS_PROFIL = [
-  { id: 'fiche',    label: 'Ma fiche' },
-  { id: 'contact',  label: 'Mes coordonnées' },
-  { id: 'lieux',    label: 'Où me trouver' },
-  { id: 'reglages', label: 'Réglages' },
+  { id: 'fiche',    label: 'Présentation' },
+  { id: 'lieux',    label: 'Adresse et horaires' },
+  { id: 'contact',  label: 'Contact' },
+  { id: 'reglages', label: 'Services en ligne' },
 ]
 
 function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = null, surAncreLue = null, onAllerA = null }) {
@@ -9506,7 +9511,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
           {[
             { label: 'Email', key: 'email', placeholder: '', type: 'email', disabled: true, hint: 'Non modifiable, contact support' },
             { label: 'Téléphone', key: 'telephone', placeholder: '+32 470 00 00 00', type: 'tel' },
-            { label: 'Adresse', key: 'adresse', placeholder: 'Rue de la Paix 12, 1000 Bruxelles' },
+            { label: 'Adresse administrative', key: 'adresse', placeholder: 'Rue de la Paix 12, 1000 Bruxelles', hint: 'Celle de ton dossier. L’adresse que voient tes clients se règle dans « Adresse et horaires ».' },
             // Le site est demandé à l'inscription, mais un commerçant déjà
             // inscrit ne repasse jamais par là : sans ce champ, il n'aurait
             // aucun moyen de le renseigner.

@@ -68,14 +68,14 @@ export default function BandeauOuMeTrouver({ commercant, onAllerA, cleRafraichir
         </p>
         <p style={{ margin: '3px 0 0', fontSize: '0.78rem', fontWeight: 600, color: rouge ? '#7F1D1D' : '#92400E', lineHeight: 1.45 }}>
           {rouge
-            ? 'Ton point de départ des livraisons n’est plus défini : il faut l’adresse de ton commerce dans « Où me trouver ». En attendant, tes clients ne peuvent commander qu’en retrait.'
-            : 'Ta fiche n’affiche aucune adresse et aucune distance. Ajoute l’adresse de ton commerce, ou tes emplacements si tu bouges, dans « Où me trouver ». L’adresse de ton inscription ne sert qu’à valider ton dossier.'}
+            ? 'Ton point de départ des livraisons n’est plus défini : il faut l’adresse de ton commerce dans « Adresse et horaires ». En attendant, tes clients ne peuvent commander qu’en retrait.'
+            : 'Ta fiche n’affiche aucune adresse et aucune distance. Ajoute l’adresse de ton commerce, ou tes emplacements si tu bouges, dans « Adresse et horaires ». L’adresse de ton inscription ne sert qu’à valider ton dossier.'}
         </p>
       </div>
       {onAllerA && (
         <button type="button" onClick={allerOuMeTrouver}
           style={{ background: rouge ? '#B91C1C' : '#B45309', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 12px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', flexShrink: 0 }}>
-          Compléter « Où me trouver »
+          Compléter mon adresse
         </button>
       )}
     </div>

@@ -120,7 +120,7 @@ import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
 import { resumeAvis } from '@/lib/avis-affichage'
 import BlocAvis, { Etoiles } from '../BlocAvis'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
-import { Star, Flame, Calendar, Store, Check, Phone, Heart, Share2 } from 'lucide-react'
+import { Star, Flame, Calendar, Store, Check, Phone, Heart, Share2, SlidersHorizontal } from 'lucide-react'
 import { chezLeCommerce } from '@/lib/nom-commerce'
 
 const T = {
@@ -618,14 +618,16 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
             })()}
             {hasOptions && (
               <button onClick={e => { e.stopPropagation(); setShowOptions(v => !v) }}
-                aria-label="Composer cet article"
+                aria-label="Personnaliser cet article"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.65rem', fontWeight: 800, color: T.main, background: T.pale, padding: '3px 9px 3px 7px', borderRadius: 100, border: `1px solid ${T.main}22`, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', letterSpacing: '-0.1px', transition: 'all 0.15s' }}
                 onMouseOver={e => { e.currentTarget.style.background = `${T.main}1f`; e.currentTarget.style.borderColor = `${T.main}55` }}
                 onMouseOut={e => { e.currentTarget.style.background = T.pale; e.currentTarget.style.borderColor = `${T.main}22` }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 3l1.9 5.8H20l-5 3.6L17 18l-5-3.6L7 18l2-5.6-5-3.6h6.1L12 3z"/>
-                </svg>
-                Compose +{groupes.length}
+                {/* ✅ ALEX, 16/10 : « Compose +2 » pour choisir un pain, « bof ».
+                    Le mot dit le geste, le même que la fiche qui s'ouvre (« Ta
+                    personnalisation »). Les curseurs, pas l'engrenage (« ça fait
+                    mécanique »). Le « +2 » comptait des groupes : rien pour le client. */}
+                <SlidersHorizontal size={11} strokeWidth={2.5} color={T.main}/>
+                Personnalise
               </button>
             )}
             {hasVariantes && (
@@ -751,7 +753,7 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
                   </div>
                 )}
                 <button onClick={() => setShowOptions(v => !v)} disabled={stockAtteint}
-                  aria-label="Composer cet article"
+                  aria-label="Personnaliser cet article"
                   style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: stockAtteint ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: stockAtteint ? '#9CA3AF' : '#fff', fontWeight: 900, cursor: stockAtteint ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: stockAtteint ? 'none' : `0 4px 14px ${T.main}55`, transition: 'all 0.15s' }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 5v14"/>

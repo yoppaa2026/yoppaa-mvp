@@ -18,7 +18,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import DotsAttente from '@/app/components/DotsAttente'
-import { COLONNES_EXCEPTIONS, phraseException } from '@/lib/horaires-du-jour'
+import { CalendarX2 } from 'lucide-react'
+import { COLONNES_EXCEPTIONS, phraseException, estFermetureComplete } from '@/lib/horaires-du-jour'
 import { commandesTouchees, rdvsTouches, erreurException, ligneException, bilanAnnulationFermeture } from '@/lib/fermetures-touches'
 import { referenceCommande } from '@/lib/numero-commande'
 import { jourBruxelles } from '@/lib/timezone'
@@ -385,22 +386,45 @@ export function RappelExceptions({ commercantId, toast, exceptions = null, onCha
   }, [commercantId, aujourdhui])
   useEffect(() => { if (exceptions === null) relire() }, [exceptions, relire])
   const aVenir = (exceptions ?? lues ?? []).filter(e => String(e.date_fin).slice(0, 10) >= aujourdhui)
+  // ✅ ALEX, 16/10 soir : « pas très visible ». L'encart prend la couleur de
+  // ce qui est prévu : orange s'il y a une fermeture, violet pour des horaires
+  // adaptés seulement, neutre s'il n'y a rien. Le bouton est plein.
+  const avecFermeture = aVenir.some(e => estFermetureComplete(e))
+  const teinte = aVenir.length === 0
+    ? { fond: '#fff', filet: T.filet, icone: T.main, texte: T.deep }
+    : avecFermeture
+      ? { fond: T.alerteFond, filet: T.alerteFilet, icone: T.alerte, texte: '#78350F' }
+      : { fond: T.fond, filet: '#C4B5FD', icone: T.main, texte: T.deep }
   return (
-    <div style={{ background: T.fond, border: `1.5px solid ${T.pale}`, borderRadius: 14, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <p style={{ margin: 0, fontSize: 13.5, fontWeight: 900, color: T.ink }}>Fermetures et horaires exceptionnels</p>
+    <div style={{ background: teinte.fond, border: `1.5px solid ${teinte.filet}`, borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: '#fff', border: `1.5px solid ${teinte.filet}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <CalendarX2 size={16} strokeWidth={2.2} color={teinte.icone}/>
+        </span>
+        <p style={{ margin: 0, fontSize: 15, fontWeight: 900, color: T.ink }}>Fermetures et horaires exceptionnels</p>
+      </div>
       {aVenir.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 12.5, color: T.muted }}>Rien de prévu : tes horaires habituels s’appliquent.</p>
+        <p style={{ margin: 0, fontSize: 13, color: T.muted }}>Rien de prévu : tes horaires habituels s’appliquent.</p>
       ) : (
-        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: T.deep, lineHeight: 1.6 }}>
-          {aVenir.slice(0, 5).map(e => <li key={e.id || `${e.date_debut}-${e.date_fin}`}>{phraseException(e)}</li>)}
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {aVenir.slice(0, 5).map(e => (
+            <li key={e.id || `${e.date_debut}-${e.date_fin}`} style={{ fontSize: 13.5, fontWeight: 800, color: teinte.texte, lineHeight: 1.5 }}>
+              {phraseException(e)}
+            </li>
+          ))}
+          {aVenir.length > 5 && (
+            <li style={{ fontSize: 12, color: T.muted }}>Et {aVenir.length - 5} de plus dans la liste.</li>
+          )}
         </ul>
       )}
-      <p style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
-        Une seule liste pour tout ton commerce. Elle se trouve aussi dans Profil général, sous tes horaires d’ouverture.
-      </p>
-      <button type="button" style={{ ...bouton(false), alignSelf: 'flex-start', padding: '7px 12px', fontSize: 12.5 }} onClick={() => setOuverte(true)}>
-        Fermer ou changer les horaires
-      </button>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+        <button type="button" style={{ ...bouton(true), padding: '9px 14px', fontSize: 13 }} onClick={() => setOuverte(true)}>
+          Fermer ou changer les horaires
+        </button>
+        <span style={{ fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+          Une seule liste pour tout ton commerce, aussi dans Profil, onglet « Adresse et horaires ».
+        </span>
+      </div>
       {ouverte && (
         <ModaleFermetures commercantId={commercantId} toast={toast} onClose={() => { setOuverte(false); relire() }}
           onChange={() => { relire(); onChange?.() }} />

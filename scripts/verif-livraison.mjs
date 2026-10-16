@@ -930,8 +930,9 @@ verifier('un départ sans position n\'est pas lu comme 0,0',
   /const depart = centreDeLaZone\([^)]*\)\s*\n(?:\s*const lieuDepart = [^\n]*\n)?\s*if \(!depart\) \{/.test(tourneeCode))
 // Et le message d'erreur envoie au bon endroit : « Profil », section des lieux,
 // et non plus vers une adresse que le commerçant ne peut pas corriger là.
+// ⚠️ REPOINTÉE LE 16/10 : l'onglet s'appelle « Adresse et horaires » (Alex).
 verifier('un lieu non géolocalisable renvoie vers la bonne section',
-  /Où me trouver/.test(tourneeCode))
+  /error: '[^']*onglet « Adresse et horaires »/.test(tourneeCode))
 
 // Une commande déjà livrée n'a rien à faire dans une tournée.
 //

@@ -257,7 +257,7 @@ export async function POST(request) {
     if (!depart) {
       return NextResponse.json({
         ok: false,
-        error: 'Le lieu d’où part ta tournée n’est pas géolocalisable. Vérifie-le dans Profil, section « Où me trouver ».',
+        error: 'Le lieu d’où part ta tournée n’est pas géolocalisable. Vérifie-le dans Profil, onglet « Adresse et horaires ».',
       }, { status: 422 })
     }
 

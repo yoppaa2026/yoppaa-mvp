@@ -51,7 +51,7 @@ import { estRefusDeRegle, refusAvantPaiement } from '@/lib/refus-reservation'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { creneauxDuJour } from '@/lib/ouverture'
 import { jourSemaineDe } from '@/lib/creneaux'
-import { COLONNES_EXCEPTIONS, exceptionDuJour } from '@/lib/horaires-du-jour'
+import { COLONNES_EXCEPTIONS, exceptionDuJour, exceptionsPour } from '@/lib/horaires-du-jour'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { timeToMinutes, minutesToTime, finApresMinuit } from '@/lib/rdv-slots'
 import { dureeSelonCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-collectifs'
@@ -241,7 +241,9 @@ export async function POST(request) {
     if (errExceptions) {
       return NextResponse.json({ ok: false, error: 'Impossible de vérifier les jours d\'ouverture. Réessaie dans un instant.' }, { status: 500 })
     }
-    const jourExceptionnel = Boolean(exceptionDuJour(exceptionsLues || [], date_rdv))
+    // ✅ 16/10 soir : seulement ce qui touche les RENDEZ-VOUS. Des commandes
+    // fermées laissent la grille de la semaine s'appliquer.
+    const jourExceptionnel = Boolean(exceptionDuJour(exceptionsPour(exceptionsLues, 'rdv'), date_rdv))
     if (!jourExceptionnel && horaires && Object.keys(horaires).length > 0 && horaires.always_open !== true) {
       const plages = creneauxDuJour(horaires[jourSem])
       if (horaires[jourSem] !== undefined && horaires[jourSem] !== null) {

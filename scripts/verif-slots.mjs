@@ -807,11 +807,14 @@ verifier('🔴 le déplacement donne l’heure qu’il est à la règle',
   const srcSrvDepl = sansCommentaires(readFileSync(new URL('../lib/rdv-deplacement-server.js', import.meta.url), 'utf8'))
   // ⚠️ REPOINTÉE LE 16/10 : les fermetures passent par `fermeturesAgenda`, qui
   // y ajoute la liste unique « Fermetures et horaires exceptionnels ».
+  // ⚠️ REPOINTÉES LE 16/10 soir : seulement ce qui ferme les rendez-vous
+  // (`exceptionsRdv`), une fermeture des seules commandes ne ferme pas l'agenda.
   verifier('🔴 le serveur du déplacement passe la praticienne et les fermetures',
-    /praticienId: rdv\.praticien_id \?\? null,\s*fermetures: fermeturesAgenda\(fermetures\.data \|\| \[\], exceptions\.data \|\| \[\]\),/.test(srcSrvDepl))
+    /praticienId: rdv\.praticien_id \?\? null,\s*fermetures: fermeturesAgenda\(fermetures\.data \|\| \[\], exceptionsRdv\),/.test(srcSrvDepl)
+      && /const exceptionsRdv = exceptionsPour\(exceptions\.data, 'rdv'\)/.test(srcSrvDepl))
   verifier('🔴 et il lit la liste unique, plages comprises, et l’horaire du jour',
     /from\('fermetures_exceptionnelles'\)\.select\(COLONNES_EXCEPTIONS\)/.test(srcSrvDepl)
-      && /horaireJour: horaireDuJour\(commerce\.data\.horaires_detail, date, exceptions\.data \|\| \[\]\) \|\| null,/.test(srcSrvDepl))
+      && /horaireJour: horaireDuJour\(commerce\.data\.horaires_detail, date, exceptionsRdv\) \|\| null,/.test(srcSrvDepl))
   verifier('🔴 et il lit les fermetures du jour, séance comprise',
     /from\('rdv_fermetures'\)\.select\('date_debut, date_fin, praticien_id, prestation_id, heure_debut'\)/.test(srcSrvDepl))
   verifier('🔴 et la praticienne des rendez-vous du jour',
@@ -819,7 +822,8 @@ verifier('🔴 le déplacement donne l’heure qu’il est à la règle',
   const srcBordDepl = sansCommentaires(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
   // ⚠️ REPOINTÉE LE 16/10 : celles de l'agenda ET la liste unique.
   verifier('🔴 le tableau de bord donne ses fermetures à la fenêtre de déplacement',
-    /<ModalDeplacerRdv[\s\S]{0,400}fermetures=\{fermeturesAgendaTout\} exceptions=\{exceptionsCommerce\}/.test(srcBordDepl))
+    // ⚠️ REPOINTÉE LE 16/10 soir : seulement ce qui ferme les rendez-vous.
+    /<ModalDeplacerRdv[\s\S]{0,400}fermetures=\{fermeturesAgendaTout\} exceptions=\{exceptionsRdv\}/.test(srcBordDepl))
 }
 verifier('🔴 et la relit au clic, avant d’écrire quoi que ce soit',
   /async function valider\(\) \{\s*if \(!peutValider\) return\s*const verdictAuClic = creneauAcceptable\(\{ \.\.\.contexte, heureDebut: heure, maintenant: new Date\(\) \}\)\s*if \(!verdictAuClic\.ok\) \{/.test(srcDeplacer))

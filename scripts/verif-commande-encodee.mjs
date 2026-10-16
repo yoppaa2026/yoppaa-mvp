@@ -360,8 +360,9 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     && m.indexOf('const [autreDate, setAutreDate] = useState(false)') < m.indexOf('const creneaux = useMemo(')
     && /const horaires = mode === 'retrait' \? donnees\.commercant\?\.horaires_detail : null/.test(m)
     && /aujourdhuiOuvert, horairesDetail: horaires \}\)/.test(m))
+  // ⚠️ REPOINTÉE LE 16/10 soir : seulement ce qui ferme les commandes.
   v('🔴 horaires : la bande du tableau de bord cache les créneaux de retrait hors horaires',
-    /\.filter\(\(\{ creneau \}\) => !creneauRetraitHorsHoraires\(\{ creneau, dateStr: jourActif, horairesDetail: commercant\?\.horaires_detail, fermetures: exceptionsCommerce, seulementException: vueMode === 'livraison' \}\)\)/.test(code('app/dashboard/page.js')))
+    /\.filter\(\(\{ creneau \}\) => !creneauRetraitHorsHoraires\(\{ creneau, dateStr: jourActif, horairesDetail: commercant\?\.horaires_detail, fermetures: exceptionsCommandes, seulementException: vueMode === 'livraison' \}\)\)/.test(code('app/dashboard/page.js')))
   v('🔴 un jour hors des pastilles retombe sur le premier jour, sauf « Autre date »',
     /if \(!autreDate && jours\.length > 0 && !jours\.includes\(date\)\) setDate\(jours\[0\]\)/.test(m))
   // Réorientée le 11/10 (soir) : la mention seule est devenue l'encadré

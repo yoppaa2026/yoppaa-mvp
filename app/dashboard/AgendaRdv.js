@@ -83,7 +83,10 @@ function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 // La logique est sortie d'ici pour être testable : le calcul du contraste du
 // texte, en particulier, décide de la lisibilité de tout l'écran.
 
-export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions = [], attentes = null, praticiens = [], prestations = null, horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onPrevenirFile, onListerFile = null, onFenetreChange }) {
+// ⚠️ `onFermerJour(iso)` (16/10 soir, Alex : « fermer tous les rdvs d'un jour
+// sans que le commerce soit fermé ») : chaque jour à venir encore ouvert porte
+// « Fermer ce jour », qui ouvre la liste unique déjà remplie.
+export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions = [], attentes = null, praticiens = [], prestations = null, horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onPrevenirFile, onListerFile = null, onFenetreChange, onFermerJour = null }) {
   // ⚠️ `commercant` FACULTATIF : sans lui, le vocabulaire du rendez-vous, donc
   // l'agenda d'un salon ne bouge pas d'un mot.
   const mots = motsReservation(commercant)
@@ -545,11 +548,20 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
                 // ✅ 16/10 : un jour d'horaires adaptés se nomme aussi.
                 if (ferm.length === 0) {
                   const h = horaireDuJour(horairesDetail, j.iso, exceptions)
-                  if (!h?.exceptionnel || !h.ouvert) return null
+                  const fermerJour = onFermerJour && j.date.getTime() >= today.getTime() && (
+                    <button type="button" onClick={() => onFermerJour(j.iso)} title={`Fermer les ${mots.nomPluriel} de ce jour`}
+                      style={{ marginTop: 3, border: 'none', background: 'none', padding: 0, fontSize: 9.5, fontWeight: 800, color: T.muted, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      Fermer ce jour
+                    </button>
+                  )
+                  if (!h?.exceptionnel || !h.ouvert) return fermerJour || null
                   return (
-                    <div title={h.motif || undefined} style={{ marginTop: 3, fontSize: 9, fontWeight: 800, color: '#B45309' }}>
-                      {`${h.debut}–${h.fin}${h.debut2 ? ` · ${h.debut2}–${h.fin2}` : ''}`}
-                    </div>
+                    <>
+                      <div title={h.motif || undefined} style={{ marginTop: 3, fontSize: 9, fontWeight: 800, color: '#B45309' }}>
+                        {`${h.debut}–${h.fin}${h.debut2 ? ` · ${h.debut2}–${h.fin2}` : ''}`}
+                      </div>
+                      {fermerJour || null}
+                    </>
                   )
                 }
                 const texte = ferm.some(f => f.praticien_id == null)

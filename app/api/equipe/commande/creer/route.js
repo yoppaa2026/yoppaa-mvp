@@ -40,7 +40,7 @@ import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles } from '@/lib/timezone'
 import { estFermeExceptionnellement, creneauRetraitHorsHoraires, messageHorsHoraires } from '@/lib/ouverture'
-import { COLONNES_EXCEPTIONS } from '@/lib/horaires-du-jour'
+import { COLONNES_EXCEPTIONS, exceptionsPour } from '@/lib/horaires-du-jour'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { zoneValide, dansEtoile, centreDeLaZone } from '@/lib/zone-etoile'
 import { situerMaison } from '@/lib/best-adresse-serveur'
@@ -109,10 +109,12 @@ export async function POST(request) {
     if (moment.refus) return non(moment.refus)
     if (moment.avertissement) avertissements.push(moment.avertissement)
 
-    const { data: fermetures, error: errF } = await admin
+    const { data: fermeturesLues, error: errF } = await admin
       // ⚠️ AVEC LES PLAGES (16/10) : un jour d'horaires adaptés n'est pas fermé.
       .from('fermetures_exceptionnelles').select(COLONNES_EXCEPTIONS).eq('commercant_id', commercant.id)
     if (errF) return non('Impossible de vérifier les fermetures. Réessaie.', 500)
+    // ✅ 16/10 soir : seulement ce qui ferme les COMMANDES (pas les rendez-vous).
+    const fermetures = exceptionsPour(fermeturesLues, 'commandes')
     if (estFermeExceptionnellement(fermetures || [], date_commande)) avertissements.push(avertissement('jour_ferme'))
     // 🔴 (11/10) LES HORAIRES, POUR LE RETRAIT : la règle de la fiche et du
     // serveur en ligne, en AVERTISSEMENT ici (« Autre date » reste possible).

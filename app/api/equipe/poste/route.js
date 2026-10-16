@@ -21,7 +21,7 @@ import {
   COLONNES_COMMERCE_POSTE, COLONNES_COMPTOIR_POSTE, fenetres, livraisonPourLeLivreur, livraisonDuJour, trierLivraisons,
 } from '@/lib/equipe-poste'
 import { STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
-import { COLONNES_EXCEPTIONS, fermeturesAgenda } from '@/lib/horaires-du-jour'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda, exceptionsPour } from '@/lib/horaires-du-jour'
 
 export const dynamic = 'force-dynamic'
 
@@ -95,7 +95,8 @@ export async function POST(request) {
           .eq('commercant_id', commercant_id).is('deleted_at', null),
         admin.from('fermetures_exceptionnelles').select(COLONNES_EXCEPTIONS).eq('commercant_id', commercant_id),
       ])
-      reponse.agenda.exceptions = fe.error ? [] : (fe.data || [])
+      // ✅ 16/10 soir : l'agenda ne lit que ce qui ferme les RENDEZ-VOUS.
+      reponse.agenda.exceptions = fe.error ? [] : exceptionsPour(fe.data, 'rdv')
       reponse.agenda.fermetures = fermeturesAgenda(rf.error ? [] : (rf.data || []), reponse.agenda.exceptions)
     }
 

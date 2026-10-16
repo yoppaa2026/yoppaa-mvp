@@ -19,8 +19,9 @@ import { supabase } from '@/lib/supabase'
 import { postPro, prevenirClient } from '@/lib/fetch-pro'
 import DotsAttente from '@/app/components/DotsAttente'
 import { CalendarX2 } from 'lucide-react'
-import { COLONNES_EXCEPTIONS, phraseException, estFermetureComplete } from '@/lib/horaires-du-jour'
-import { commandesTouchees, rdvsTouches, erreurException, ligneException, bilanAnnulationFermeture } from '@/lib/fermetures-touches'
+import { COLONNES_EXCEPTIONS, phraseException, estFermetureComplete, porteeDe } from '@/lib/horaires-du-jour'
+import { motReservation } from '@/lib/reservation-metier'
+import { commandesTouchees, rdvsTouches, erreurException, ligneException, bilanAnnulationFermeture, porteesProposees } from '@/lib/fermetures-touches'
 import { referenceCommande } from '@/lib/numero-commande'
 import { jourBruxelles } from '@/lib/timezone'
 
@@ -39,22 +40,47 @@ const bouton = (plein) => ({
 
 const STATUTS_A_SERVIR = ['en_attente', 'en_preparation', 'pret']
 
-function formulaireVide(jour) {
-  return { id: null, adaptes: false, date_debut: jour, date_fin: jour, plage1_debut: '09:00', plage1_fin: '13:00', avecPlage2: false, plage2_debut: '14:00', plage2_fin: '18:00', motif: '' }
+function formulaireVide(jour, portee = 'tout') {
+  return { id: null, adaptes: false, portee, date_debut: jour, date_fin: jour, plage1_debut: '09:00', plage1_fin: '13:00', avecPlage2: false, plage2_debut: '14:00', plage2_fin: '18:00', motif: '' }
+}
+
+// ─── CE QU'UNE FERMETURE PEUT FERMER (16/10 soir) ──────────────────────────
+// La règle (`porteesProposees`) vit dans lib/fermetures-touches.js.
+function libellePortee(portee, commercant) {
+  if (portee === 'commandes') return 'Seulement les commandes'
+  if (portee === 'rdv') return `Seulement les ${motReservation(commercant, 'nomPluriel') || 'rendez-vous'}`
+  return 'Tout le commerce'
+}
+function aidePortee(portee, commercant) {
+  if (portee === 'commandes') return 'Ton commerce reste ouvert : seules les commandes en ligne (retrait et livraison) sont fermées ces jours-là.'
+  if (portee === 'rdv') return `Ton commerce reste ouvert : seuls les ${motReservation(commercant, 'nomPluriel') || 'rendez-vous'} en ligne sont fermés ces jours-là.`
+  return 'Ta fiche affiche « Fermé », et plus rien ne se commande ni ne se réserve ces jours-là.'
 }
 
 /**
  * @param commercantId
  * @param toast            (message, type?) => void
  * @param formulaireOuvert ouvrir directement l'ajout (le bouton du haut)
+ * @param initial          { date, portee } : le formulaire s'ouvre déjà rempli
+ *                         (le bouton de la barre des créneaux, 16/10 soir)
  * @param onChange         appelé après chaque écriture (pour recharger l'agenda)
  * @param onFermer         le bouton du haut referme sa fenêtre
  */
-export default function FermeturesExceptionnelles({ commercantId, toast = () => {}, formulaireOuvert = false, onChange, onFermer }) {
+export default function FermeturesExceptionnelles({ commercantId, toast = () => {}, formulaireOuvert = false, initial = null, onChange, onFermer }) {
   const aujourdhui = jourBruxelles()
   const [liste, setListe] = useState([])
   const [chargement, setChargement] = useState(true)
-  const [form, setForm] = useState(formulaireOuvert ? formulaireVide(aujourdhui) : null)
+  const [form, setForm] = useState(formulaireOuvert || initial ? formulaireVide(initial?.date || aujourdhui, initial?.portee || 'tout') : null)
+  // Ce que le commerce fait (pour ne proposer que les portées qui ont un sens).
+  const [commerce, setCommerce] = useState(null)
+  useEffect(() => {
+    if (!commercantId) return
+    let vivant = true
+    supabase.from('commercants').select('categorie, commande_actif, rdv_actif').eq('id', commercantId).maybeSingle()
+      .then(({ data }) => { if (vivant) setCommerce(data || null) })
+    return () => { vivant = false }
+  }, [commercantId])
+  const portees = porteesProposees(commerce)
   const [ecriture, setEcriture] = useState(false)
   const [aSupprimer, setASupprimer] = useState(null)
   // Ce que la ligne en cours de saisie rattrape, puis, une fois écrite, ce
@@ -83,7 +109,7 @@ export default function FermeturesExceptionnelles({ commercantId, toast = () => 
   // ⚠️ L'APERÇU NE SE RELIT QUE QUAND LES DATES OU LES HEURES CHANGENT : le
   // motif n'y change rien, et quatre lectures par lettre tapée, c'est trop.
   const cleApercu = candidate
-    ? [candidate.date_debut, candidate.date_fin, candidate.plage1_debut, candidate.plage1_fin, candidate.plage2_debut, candidate.plage2_fin].join('|')
+    ? [candidate.date_debut, candidate.date_fin, candidate.plage1_debut, candidate.plage1_fin, candidate.plage2_debut, candidate.plage2_fin, candidate.portee].join('|')
     : ''
 
   // ⚠️ L'APERÇU SE CALCULE PENDANT LA SAISIE, par la règle du serveur : le
@@ -125,11 +151,14 @@ export default function FermeturesExceptionnelles({ commercantId, toast = () => 
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     // 🔴 LES FILES D'ATTENTE D'UN JOUR FERMÉ SE VIDENT (comme depuis l'agenda,
     // 04/10). AU MIEUX : la fermeture est posée, une panne ici ne la défait pas.
-    if (ecrite?.id && !form.adaptes) {
+    if (ecrite?.id && !form.adaptes && ligne.portee !== 'commandes') {
       postPro('/api/rdv/fermeture-file', { exception_id: ecrite.id })
         .catch(e => console.warn('[fermetures] listes d’attente non vidées', e))
     }
-    toast(form.adaptes ? 'Horaires adaptés enregistrés' : 'Fermeture enregistrée')
+    toast(form.adaptes ? 'Horaires adaptés enregistrés'
+      : ligne.portee === 'commandes' ? 'Commandes fermées ces jours-là'
+      : ligne.portee === 'rdv' ? (motReservation(commerce, 'nomPluriel') === 'réservations' ? 'Réservations fermées ces jours-là' : 'Rendez-vous fermés ces jours-là')
+      : 'Fermeture enregistrée')
     onChange?.()
     const restent = touchees
     setForm(null)
@@ -243,6 +272,21 @@ export default function FermeturesExceptionnelles({ commercantId, toast = () => 
                 onChange={e => setForm(f => ({ ...f, date_fin: e.target.value }))} />
             </label>
           </div>
+          {!form.adaptes && portees.length > 1 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={etiquette}>Ce qui ferme</span>
+              <div role="radiogroup" aria-label="Ce qui ferme" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {portees.map(p => (
+                  <button key={p} type="button" role="radio" aria-checked={form.portee === p}
+                    onClick={() => setForm(f => ({ ...f, portee: p }))}
+                    style={{ ...bouton(form.portee === p), padding: '7px 12px', fontSize: 12.5, background: form.portee === p ? T.deep : '#fff', color: form.portee === p ? '#fff' : T.ink }}>
+                    {libellePortee(p, commerce)}
+                  </button>
+                ))}
+              </div>
+              <p style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>{aidePortee(form.portee, commerce)}</p>
+            </div>
+          )}
           {form.adaptes && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={etiquette}>Ouvert ces jours-là</span>
@@ -269,7 +313,7 @@ export default function FermeturesExceptionnelles({ commercantId, toast = () => 
           </label>
           {candidate && (
             <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: T.deep, background: T.fond, borderRadius: 9, padding: '8px 10px' }}>
-              Les clients liront : « {phraseException(candidate)} »
+              Les clients liront : « {phraseException(candidate, { table: motReservation(commerce, 'nomPluriel') === 'réservations' })} »
             </p>
           )}
           {erreur && <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: T.rouge }}>{erreur}</p>}
@@ -306,12 +350,12 @@ export default function FermeturesExceptionnelles({ commercantId, toast = () => 
           {liste.map(e => (
             <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${T.filet}`, background: '#fff' }}>
               <div style={{ flex: '1 1 220px', minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: T.ink }}>{phraseException(e)}</p>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: T.ink }}>{phraseException(e, { table: motReservation(commerce, 'nomPluriel') === 'réservations' })}</p>
                 {e.motif && <p style={{ margin: '2px 0 0', fontSize: 12, color: T.muted }}>{e.motif}</p>}
               </div>
               <button type="button" style={{ ...bouton(false), padding: '6px 10px', fontSize: 12 }}
                 onClick={() => setForm({
-                  id: e.id, adaptes: Boolean(e.plage1_debut), date_debut: String(e.date_debut).slice(0, 10), date_fin: String(e.date_fin).slice(0, 10),
+                  id: e.id, adaptes: Boolean(e.plage1_debut), portee: porteeDe(e), date_debut: String(e.date_debut).slice(0, 10), date_fin: String(e.date_fin).slice(0, 10),
                   plage1_debut: String(e.plage1_debut || '09:00').slice(0, 5), plage1_fin: String(e.plage1_fin || '13:00').slice(0, 5),
                   avecPlage2: Boolean(e.plage2_debut), plage2_debut: String(e.plage2_debut || '14:00').slice(0, 5), plage2_fin: String(e.plage2_fin || '18:00').slice(0, 5),
                   motif: e.motif || '',
@@ -333,7 +377,7 @@ export default function FermeturesExceptionnelles({ commercantId, toast = () => 
 // ✅ Alex, 16/10 : « un bouton de raccourci dans le haut du tableau de bord,
 // accessible rapidement ». Le jour où le boulanger est malade, il ferme en
 // deux gestes : le formulaire s'ouvre directement, la liste est dessous.
-export function ModaleFermetures({ commercantId, toast, onClose, onChange }) {
+export function ModaleFermetures({ commercantId, toast, onClose, onChange, initial = null }) {
   // ⚠️ LE TABLEAU DE BORD N'A PAS DE « TOAST » HORS DES PARAMÈTRES : sans
   // appelant qui en fournit un, la fenêtre dit elle-même ce qui s'est passé.
   const [message, setMessage] = useState(null)
@@ -352,7 +396,7 @@ export function ModaleFermetures({ commercantId, toast, onClose, onChange }) {
           <div>
             <p style={{ margin: 0, fontSize: 16, fontWeight: 900, color: T.ink }}>Fermer ou changer les horaires</p>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
-              Pour tout ton commerce : commandes, livraison, rendez-vous et tables.
+              Pour tout ton commerce, ou seulement tes commandes ou tes rendez-vous.
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Fermer la fenêtre"
@@ -364,7 +408,7 @@ export function ModaleFermetures({ commercantId, toast, onClose, onChange }) {
             {message.msg}
           </p>
         )}
-        <FermeturesExceptionnelles commercantId={commercantId} toast={dire} formulaireOuvert onChange={onChange} onFermer={onClose} />
+        <FermeturesExceptionnelles commercantId={commercantId} toast={dire} formulaireOuvert initial={initial} onChange={onChange} onFermer={onClose} />
       </div>
     </div>
   )

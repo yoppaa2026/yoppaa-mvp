@@ -17,7 +17,7 @@ import { createClient } from '@supabase/supabase-js'
 import { refus } from '@/lib/api-auth'
 import { gardeLigneEquipe } from '@/lib/equipe-server'
 import { fermerLesFiles } from '@/lib/attente-rdv-server'
-import { COLONNES_EXCEPTIONS, fermeturesAgenda } from '@/lib/horaires-du-jour'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda, exceptionsPour } from '@/lib/horaires-du-jour'
 
 export async function POST(request) {
   try {
@@ -41,7 +41,8 @@ export async function POST(request) {
       const { data: exception, error: errE } = await supabase
         .from('fermetures_exceptionnelles').select(`${COLONNES_EXCEPTIONS}`).eq('id', exception_id).maybeSingle()
       if (errE) return NextResponse.json({ ok: false, error: 'Lecture de la fermeture impossible.' }, { status: 500 })
-      const [traduite] = exception ? fermeturesAgenda([], [exception]) : []
+      // ✅ 16/10 soir : des commandes fermées ne vident aucune file d'attente.
+      const [traduite] = exception ? fermeturesAgenda([], exceptionsPour([exception], 'rdv')) : []
       if (!traduite) return NextResponse.json({ ok: true, retires: 0, prevenus: 0 })
       const resE = await fermerLesFiles(supabase, { ...traduite, commercant_id: exception.commercant_id })
       if (!resE.ok) {

@@ -16,6 +16,7 @@ import {
   horaireDuJour, horairesPourDate, fermeturesAgenda, phraseException,
   exceptionsAAnnoncer, dateLisible,
 } from '../lib/horaires-du-jour.js'
+// ⚠️ porteeDe, porteesQuiFerment, exceptionsPour : importés dans la section 7.
 import {
   estFermeExceptionnellement, ouvertLe, creneauRetraitHorsHoraires,
   joursRetraitBoutique, calculerStatutOuverture,
@@ -237,26 +238,41 @@ const LUNDI_OUVERT = { id: 'a3', date_debut: '2026-10-19', date_fin: '2026-10-19
   const { sansProse } = await import('./lire-code.mjs')
   const lu = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
   const fiche = lu('app/commander/[slug]/page.js')
-  verifier('🔴 fiche : la pastille reçoit la liste unique', /<PillStatutOuverture horaires=\{commercant\.horaires_detail\} fermetures=\{fermetures\}\/>/.test(fiche))
-  verifier('🔴 fiche : les exceptions à venir sont annoncées', /<AnnoncesExceptions exceptions=\{fermetures\}\/>/.test(fiche))
+  // ⚠️ REPOINTÉES LE 16/10 soir : une fermeture dit ce qu'elle ferme. La porte
+  // ne lit que « tout le commerce », les annonces lisent tout.
+  verifier('🔴 fiche : la pastille reçoit la liste unique (la porte seulement)', /<PillStatutOuverture horaires=\{commercant\.horaires_detail\} fermetures=\{exceptionsPour\(fermetures, 'commerce'\)\}\/>/.test(fiche))
+  verifier('🔴 fiche : les exceptions à venir sont annoncées', /<AnnoncesExceptions exceptions=\{fermetures\} table=\{isAlimentaire\(commercant\)\}\/>/.test(fiche))
   verifier('🔴 fiche : un jour se compare à un jour (plus à un instant)',
     /from\('fermetures_exceptionnelles'\)\.select\('\*'\)\.eq\('commercant_id', c\.id\)\.gte\('date_fin', jourCivilPlus\(jourLocalISO\(new Date\(\)\), -1\)\)/.test(fiche))
   const rdvFiche = lu('app/commander/rdv/[slug]/page.js')
   verifier('🔴 fiche rendez-vous : la liste unique, plages comprises',
     /\.from\('fermetures_exceptionnelles'\)\s*\.select\(COLONNES_EXCEPTIONS\)/.test(rdvFiche))
-  verifier('🔴 fiche rendez-vous : l’agenda reçoit la fermeture traduite', /setFermetures\(fermeturesAgenda\(ferm \|\| \[\], exceptionsLues \|\| \[\]\)\)/.test(rdvFiche))
+  // ⚠️ REPOINTÉE LE 16/10 soir : seulement ce qui ferme les rendez-vous.
+  verifier('🔴 fiche rendez-vous : l’agenda reçoit la fermeture traduite', /setFermetures\(fermeturesAgenda\(ferm \|\| \[\], exceptionsPour\(exceptionsLues, 'rdv'\)\)\)/.test(rdvFiche))
   verifier('🔴 fiche rendez-vous : la grille et le calendrier suivent l’horaire du jour',
     (rdvFiche.match(/horairesDetail: horairesPourDate\(/g) || []).length === 2
       && /creneaux: creneauxFiltres, exceptions \}\)/.test(rdvFiche)
       && /const horaireJour = horaireDuJour\(commercant\.horaires_detail, dateStr, exceptions\)/.test(rdvFiche))
-  verifier('fiche rendez-vous : pastille et annonce', /fermetures=\{exceptions\}/.test(rdvFiche) && /<AnnoncesExceptions exceptions=\{exceptions\} variant="card"\/>/.test(rdvFiche))
+  // ⚠️ REPOINTÉE LE 16/10 soir : la porte lit « tout le commerce », l'annonce
+  // lit tout, l'agenda (`exceptions`) ce qui ferme les rendez-vous.
+  verifier('fiche rendez-vous : pastille et annonce',
+    /fermetures=\{exceptionsPour\(exceptionsToutes, 'commerce'\)\}/.test(rdvFiche)
+      && /<AnnoncesExceptions exceptions=\{exceptionsToutes\} variant="card" table=\{isAlimentaire\(commercant\)\}\/>/.test(rdvFiche)
+      && /const exceptions = exceptionsPour\(exceptionsToutes, 'rdv'\)/.test(rdvFiche))
 
   const accueil = lu('app/commander/page.js')
   verifier('🔴 liste : les fermetures se lisent AVEC leurs plages', /from\('fermetures_exceptionnelles'\)\.select\(COLONNES_EXCEPTIONS\)/.test(accueil))
   verifier('🔴 liste : chaque jour de la carte passe par l’horaire du jour',
-    /const jourDe = \(offset\) => horaireDuJour\(c\.horaires_detail, jourCivilPlus\(dateAuj, offset\), fermeturesDuCommerce\)/.test(accueil))
+    /const jourDe = \(offset\) => horaireDuJour\(c\.horaires_detail, jourCivilPlus\(dateAuj, offset\), fermeturesPorte\)/.test(accueil))
+  // ⚠️ REPOINTÉES LE 16/10 soir : la porte lit « tout le commerce », la
+  // pastille et le statut des créneaux ce qui ferme les commandes, le badge des
+  // tables ce qui ferme les rendez-vous.
   verifier('🔴 liste : la pastille et le statut reçoivent la liste',
-    /exceptions: fermeturesDuCommerce,/.test(accueil) && /exceptions: \(fermeturesData \|\| \[\]\)\.filter\(f => f\.commercant_id === id\),/.test(accueil))
+    /const fermeturesPorte = exceptionsPour\(fermetures\?\.\[c\.id\], 'commerce'\)/.test(accueil)
+      && /const fermeturesCommandes = exceptionsPour\(fermetures\?\.\[c\.id\], 'commandes'\)/.test(accueil)
+      && /exceptions: fermeturesCommandes,/.test(accueil)
+      && /exceptions: exceptionsPour\(\(fermeturesData \|\| \[\]\)\.filter\(f => f\.commercant_id === id\), 'commandes'\),/.test(accueil))
+  verifier('🔴 liste : le badge des tables ne lit que ce qui ferme les tables', /exceptions: exceptionsPour\(exceptionsParCommerce\[c\.id\], 'rdv'\),/.test(accueil))
   verifier('liste : le badge des tables reçoit la liste', /chargerTablesDuJour\(commercantsData\.filter\(c => ids\.includes\(c\.id\)\), parCommerce\)/.test(accueil))
 
   const agenda = lu('app/dashboard/AgendaRdv.js')
@@ -268,7 +284,8 @@ const LUNDI_OUVERT = { id: 'a3', date_debut: '2026-10-19', date_fin: '2026-10-19
 
   const reserver = lu('app/api/rdv/reserver/route.js')
   verifier('🔴 réserver : un jour exceptionnel ne se juge plus sur la grille de la semaine',
-    /const jourExceptionnel = Boolean\(exceptionDuJour\(exceptionsLues \|\| \[\], date_rdv\)\)/.test(reserver) && /if \(!jourExceptionnel && horaires/.test(reserver))
+    // ⚠️ REPOINTÉE LE 16/10 soir : seulement ce qui touche les rendez-vous.
+    /const jourExceptionnel = Boolean\(exceptionDuJour\(exceptionsPour\(exceptionsLues, 'rdv'\), date_rdv\)\)/.test(reserver) && /if \(!jourExceptionnel && horaires/.test(reserver))
   for (const [nom, f] of [
     ['les commandes encodées', 'app/api/equipe/commande/creer/route.js'],
     ['le calendrier de l’encodage', 'lib/calendrier-commande-server.js'],
@@ -299,6 +316,147 @@ const LUNDI_OUVERT = { id: 'a3', date_debut: '2026-10-19', date_fin: '2026-10-19
   const file = lu('app/api/rdv/fermeture-file/route.js')
   verifier('🔴 une fermeture de la liste vide les files d’attente, avec la même garde',
     /gardeLigneEquipe\(request, supabase, 'fermetures_exceptionnelles', exception_id, 'agenda'\)/.test(file) && /fermerLesFiles\(supabase, \{ \.\.\.traduite, commercant_id: exception\.commercant_id \}\)/.test(file))
+}
+
+// ═══ 7. CE QU'UNE FERMETURE FERME (16/10 soir) ═══════════════════════════
+//
+// ✅ ALEX, 16/10 soir (tableau) : fermer les commandes, ou les rendez-vous,
+// sans fermer le commerce (Aux Délices des 7 Abbayes publient vendredi soir,
+// commandes dès lundi). TOUT S'EXÉCUTE : la règle, puis ce que chaque geste en
+// voit, avec les vraies fonctions de la fiche, du serveur et de l'agenda.
+{
+  const { porteeDe, porteesQuiFerment, exceptionsPour } = await import('../lib/horaires-du-jour.js')
+  const { commandesTouchees, rdvsTouches, ligneException } = await import('../lib/fermetures-touches.js')
+  const CMD_20 = { ...FERME_20, id: 'p1', portee: 'commandes' }
+  const RDV_20 = { ...FERME_20, id: 'p2', portee: 'rdv' }
+  const TOUT_20 = { ...FERME_20, id: 'p3', portee: 'tout' }
+  const liste = [CMD_20, RDV_20, TOUT_20, NOEL]
+
+  egal('une ancienne ligne sans portée ferme tout', porteeDe(FERME_20), 'tout')
+  egal('une portée inconnue ferme tout', porteeDe({ portee: 'nimporte' }), 'tout')
+  egal('la porte ne lit que « tout »', porteesQuiFerment('commerce'), ['tout'])
+  egal('les commandes lisent « tout » et « commandes »', porteesQuiFerment('commandes'), ['tout', 'commandes'])
+  egal('les rendez-vous lisent « tout » et « rdv »', porteesQuiFerment('rdv'), ['tout', 'rdv'])
+  egal('la porte', exceptionsPour(liste, 'commerce').map(e => e.id), ['p3', 'a1'])
+  egal('les commandes', exceptionsPour(liste, 'commandes').map(e => e.id), ['p1', 'p3', 'a1'])
+  egal('les rendez-vous', exceptionsPour(liste, 'rdv').map(e => e.id), ['p2', 'p3', 'a1'])
+  egal('une liste absente', exceptionsPour(null, 'rdv'), [])
+
+  // Le mardi 20/10, commandes fermées, boutique ouverte.
+  const mardi10h = new Date('2026-10-20T08:00:00Z')
+  egal('🔴 commandes fermées : la porte reste « Ouvert »',
+    calculerStatutOuverture(SEMAINE, mardi10h, exceptionsPour([CMD_20], 'commerce')).label, 'Ouvert')
+  verifier('🔴 commandes fermées : plus de retrait ce jour-là',
+    !ouvertLe({ horairesDetail: SEMAINE, fermetures: exceptionsPour([CMD_20], 'commandes'), dateStr: '2026-10-20' }))
+  verifier('🔴 commandes fermées : le serveur refuse le jour', estFermeExceptionnellement(exceptionsPour([CMD_20], 'commandes'), '2026-10-20'))
+  // ⚠️ AVEC SON TÉMOIN : sans fermeture, le mardi est proposé. Sans lui, un
+  // résultat vide passerait pour un refus.
+  const joursBoutique = (fermetures) => joursRetraitBoutique({ horairesDetail: SEMAINE, fermetures, depuis: '2026-10-19', maintenant: 0, delaiHeures: 0, horizon: 3 }).map(j => j.jour)
+  egal('témoin : sans fermeture, la boutique propose mardi et mercredi', joursBoutique([]), ['2026-10-20', '2026-10-21'])
+  egal('🔴 commandes fermées : la boutique ne propose plus ce jour', joursBoutique(exceptionsPour([CMD_20], 'commandes')), ['2026-10-21'])
+  egal('🔴 rendez-vous fermés : la boutique propose toujours ce jour', joursBoutique(exceptionsPour([RDV_20], 'commandes')), ['2026-10-20', '2026-10-21'])
+  const agendaCmd = fermeturesAgenda([], exceptionsPour([CMD_20], 'rdv'))
+  verifier('🔴 commandes fermées : l’agenda reste ouvert', !fermetureQuiBloque(agendaCmd, { dateStr: '2026-10-20', praticienId: null }))
+  const plage = [{ id: 'cr1', jour_semaine: 'mardi', heure_debut: '09:00', heure_fin: '12:00', actif: true }]
+  verifier('🔴 commandes fermées : les créneaux de rendez-vous restent',
+    plagesOuvertes(plage, agendaCmd, '2026-10-20').length === 1)
+
+  // Le mardi 20/10, rendez-vous fermés, commandes ouvertes.
+  const agendaRdv = fermeturesAgenda([], exceptionsPour([RDV_20], 'rdv'))
+  verifier('🔴 rendez-vous fermés : l’agenda est fermé', Boolean(fermetureQuiBloque(agendaRdv, { dateStr: '2026-10-20', praticienId: null })))
+  verifier('🔴 rendez-vous fermés : le retrait reste ouvert',
+    ouvertLe({ horairesDetail: SEMAINE, fermetures: exceptionsPour([RDV_20], 'commandes'), dateStr: '2026-10-20' }))
+  egal('rendez-vous fermés : la porte reste « Ouvert »',
+    calculerStatutOuverture(SEMAINE, mardi10h, exceptionsPour([RDV_20], 'commerce')).label, 'Ouvert')
+
+  // Ce que le client lit.
+  egal('la phrase des commandes fermées', phraseException(CMD_20), 'Commandes en ligne fermées le 20 octobre.')
+  egal('la phrase des rendez-vous fermés', phraseException(RDV_20), 'Rendez-vous en ligne fermés le 20 octobre.')
+  egal('la phrase d’un restaurant', phraseException(RDV_20, { table: true }), 'Réservations en ligne fermées le 20 octobre.')
+  const ABBAYES = { date_debut: '2026-10-16', date_fin: '2026-10-18', portee: 'commandes' }
+  egal('🔴 les 7 Abbayes, vendredi soir : la fiche dit quand ça reprend',
+    phraseException(ABBAYES, { aujourdhui: '2026-10-16' }), 'Commandes en ligne à partir du lundi 19 octobre.')
+  egal('la veille de la période : la période', phraseException(ABBAYES, { aujourdhui: '2026-10-15' }), 'Commandes en ligne fermées du 16 octobre au 18 octobre.')
+  egal('une fermeture complète ne change pas de phrase', phraseException(TOUT_20, { aujourdhui: '2026-10-20' }), 'Fermé exceptionnellement le 20 octobre.')
+
+  // Ce que l'écran rattrape et ce qu'il écrit.
+  const commandes = [{ id: 'k', date_commande: '2026-10-20', statut: 'en_attente', creneau: { heure_debut: '10:00', heure_fin: '10:15' } }]
+  const rdvs = [{ id: 'r', date_rdv: '2026-10-20', heure_debut: '10:00', heure_fin: '10:30', statut: 'confirme', deleted_at: null, praticien_id: null, prestation: { par_couverts: false } }]
+  egal('🔴 commandes fermées : la commande est montrée', commandesTouchees(commandes, CMD_20).map(c => c.id), ['k'])
+  egal('🔴 commandes fermées : le rendez-vous ne l’est pas', rdvsTouches(rdvs, CMD_20), [])
+  egal('🔴 rendez-vous fermés : la commande ne l’est pas', commandesTouchees(commandes, RDV_20), [])
+  egal('🔴 rendez-vous fermés : le rendez-vous est montré', rdvsTouches(rdvs, RDV_20).map(r => r.id), ['r'])
+  const base = { commercantId: 'c1', date_debut: '2026-10-20', date_fin: '2026-10-20', plage1_debut: '09:00', plage1_fin: '13:00', avecPlage2: false }
+  egal('la fermeture garde sa portée', ligneException({ ...base, adaptes: false, portee: 'commandes' }).portee, 'commandes')
+  egal('🔴 des horaires adaptés valent pour tout le commerce', ligneException({ ...base, adaptes: true, portee: 'commandes' }).portee, 'tout')
+  egal('sans portée : tout', ligneException({ ...base, adaptes: false }).portee, 'tout')
+}
+
+// ═══ 8. CHAQUE LECTEUR NE GARDE QUE CE QUI FERME SON GESTE ═══════════════
+//
+// 🔴 UN LECTEUR OUBLIÉ FERME TROP (la liste non filtrée ferme tout) : une
+// boutique aux commandes fermées s'afficherait « Fermé exceptionnellement ».
+// Chaque lecture de la liste est donc nommée ici avec le geste qu'elle sert,
+// et un NOUVEAU lecteur fait rougir le banc tant qu'il n'y est pas.
+{
+  const { readFileSync, readdirSync, statSync } = await import('node:fs')
+  const { sansProse } = await import('./lire-code.mjs')
+  const lu = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
+  const LECTEURS = {
+    'app/api/equipe/commande/creer/route.js': [/const fermetures = exceptionsPour\(fermeturesLues, 'commandes'\)/],
+    'app/api/equipe/poste/route.js': [/exceptionsPour\(fe\.data, 'rdv'\)/],
+    'app/api/equipe/rdv/creer/route.js': [/exceptionsPour\(exceptionsLues\.data, 'rdv'\)/],
+    'app/api/rdv/fermeture-file/route.js': [/fermeturesAgenda\(\[\], exceptionsPour\(\[exception\], 'rdv'\)\)/],
+    'app/api/rdv/reconfirmer/route.js': [/fermeturesAgenda\(fermeturesLues \|\| \[\], exceptionsPour\(exceptions, 'rdv'\)\)/],
+    'app/api/rdv/reserver/route.js': [/exceptionsPour\(exceptionsLues, 'rdv'\)/],
+    'app/api/stripe/checkout/create-commande/route.js': [/fermeturesCommercant = exceptionsPour\(lues, 'commandes'\)/],
+    'lib/attente-rdv-server.js': [/fermeturesAgenda\(fermeturesLues \|\| \[\], exceptionsPour\(exceptions, 'rdv'\)\)/],
+    'lib/calendrier-commande-server.js': [/fermetures: exceptionsPour\(fermetures, 'commandes'\)/],
+    'lib/rdv-creation-server.js': [/const exceptionsRdv = exceptionsPour\(exceptions, 'rdv'\)/, /exceptions: exceptionsRdv, dateStr: dateRdv/],
+    'lib/rdv-deplacement-server.js': [/const exceptionsRdv = exceptionsPour\(exceptions\.data, 'rdv'\)/, /fermetures: fermeturesAgenda\(fermetures\.data \|\| \[\], exceptionsRdv\)/],
+    'app/commander/page.js': [/'commerce'\)/, /'commandes'\)/, /exceptionsPour\(exceptionsParCommerce\[c\.id\], 'rdv'\)/],
+    'app/commander/[slug]/page.js': [/const fermeturesData = exceptionsPour\(fermeturesLues, 'commandes'\)/, /fermetures: exceptionsPour\(fermetures, 'commandes'\),/, /fermetures=\{exceptionsPour\(fermetures, 'commerce'\)\}/],
+    'app/commander/rdv/[slug]/page.js': [/const exceptions = exceptionsPour\(exceptionsToutes, 'rdv'\)/],
+    'app/dashboard/page.js': [/const exceptionsRdv = exceptionsPour\(exceptionsCommerce, 'rdv'\)/, /const exceptionsCommandes = exceptionsPour\(exceptionsCommerce, 'commandes'\)/, /fermetures: exceptionsCommandes, seulementException/, /fermeturesAgenda\(fermeturesRdv, exceptionsRdv\)/],
+    'app/dashboard/ConfigDashboard.js': [/setFermeturesExcept\(exceptionsPour\(data, 'commandes'\)\.filter\(estFermetureComplete\)\)/],
+  }
+  // Ceux qui MONTRENT ou ÉCRIVENT la liste entière (chaque phrase dit ce
+  // qu'elle ferme), et l'effacement d'un compte.
+  const SANS_FILTRE = new Set(['app/dashboard/FermeturesExceptionnelles.js', 'app/api/admin/commercants/route.js'])
+  for (const [f, attendus] of Object.entries(LECTEURS)) {
+    const src = lu(f)
+    attendus.forEach((re, i) => verifier(`🔴 ${f} ne garde que ce qui ferme son geste (${i + 1})`, re.test(src), String(re)))
+  }
+  const fichiers = []
+  const parcourir = (dossier) => {
+    for (const nom of readdirSync(new URL(`../${dossier}`, import.meta.url))) {
+      const chemin = `${dossier}/${nom}`
+      if (statSync(new URL(`../${chemin}`, import.meta.url)).isDirectory()) parcourir(chemin)
+      else if (/\.(js|jsx|tsx)$/.test(nom)) fichiers.push(chemin)
+    }
+  }
+  parcourir('app'); parcourir('lib')
+  const lecteurs = fichiers.filter(f => /from\('fermetures_exceptionnelles'\)/.test(lu(f)))
+  const inconnus = lecteurs.filter(f => !LECTEURS[f] && !SANS_FILTRE.has(f))
+  egal('🔴 aucun lecteur de la liste n’échappe au tri par geste', inconnus, [])
+  verifier('la liste des lecteurs se trouve (garde vivante)', lecteurs.length >= 15, String(lecteurs.length))
+
+  const bord = lu('app/dashboard/page.js')
+  verifier('🔴 la barre des créneaux ferme les commandes du jour (Alex, 16/10 soir)',
+    /setFermeturesOuvertes\(\{ date: jourActif, portee: 'commandes' \}\)/.test(bord)
+      && /initial=\{typeof fermeturesOuvertes === 'object' \? fermeturesOuvertes : null\}/.test(bord))
+  verifier('🔴 l’agenda ferme les rendez-vous du jour', /onFermerJour=\{\(iso\) => setFermeturesOuvertes\(\{ date: iso, portee: 'rdv' \}\)\}/.test(bord)
+    && /onClick=\{\(\) => onFermerJour\(j\.iso\)\}/.test(lu('app/dashboard/AgendaRdv.js')))
+  const ecran = lu('app/dashboard/FermeturesExceptionnelles.js')
+  verifier('🔴 le formulaire s’ouvre rempli', /formulaireVide\(initial\?\.date \|\| aujourdhui, initial\?\.portee \|\| 'tout'\)/.test(ecran))
+  verifier('🔴 l’aperçu se relit quand la portée change', /candidate\.plage2_fin, candidate\.portee\]\.join\('\|'\)/.test(ecran))
+  verifier('🔴 des commandes fermées ne vident aucune file d’attente', /if \(ecrite\?\.id && !form\.adaptes && ligne\.portee !== 'commandes'\) \{/.test(ecran))
+  const { porteesProposees } = await import('../lib/fermetures-touches.js')
+  egal('une boulangerie : tout ou les commandes', porteesProposees({ categorie: 'alimentaire', commande_actif: true, rdv_actif: false }), ['tout', 'commandes'])
+  egal('un salon : tout ou les rendez-vous', porteesProposees({ categorie: 'vitrine', rdv_actif: true }), ['tout', 'rdv'])
+  egal('un restaurant : les trois', porteesProposees({ categorie: 'alimentaire', rdv_actif: true }), ['tout', 'commandes', 'rdv'])
+  egal('sans commerce lu : tout', porteesProposees(null), ['tout'])
+  verifier('🔴 l’écran propose par la règle partagée', /const portees = porteesProposees\(commerce\)/.test(ecran))
 }
 
 console.log(`\n${ok} vérifications passées, ${ko} en échec.`)

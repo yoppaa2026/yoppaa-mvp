@@ -37,7 +37,7 @@ import { statutCreneaux, pastilleCreneaux, jourPlus, pastilleDeCommandePertinent
 // calculaient chacun à leur façon.
 import { finApresMinuit } from '@/lib/rdv-slots'
 import { jourLocalISO, jourBruxelles, jourCivilPlus } from '@/lib/timezone'
-import { horaireDuJour, COLONNES_EXCEPTIONS } from '@/lib/horaires-du-jour'
+import { horaireDuJour, COLONNES_EXCEPTIONS, exceptionsPour } from '@/lib/horaires-du-jour'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
@@ -1062,7 +1062,11 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDu
   // de « Pas encore d'avis » se lisaient comme un ZÉRO pour un commerce neuf.
   const resumeNote = resumeAvis(noteInfo || {})
   const info = statutsCommerce[c.id]
-  const fermeturesDuCommerce = fermetures?.[c.id] || []
+  // ✅ 16/10 soir : une fermeture dit ce qu'elle ferme. La porte (Ouvert /
+  // Fermé) ne lit que les fermetures de tout le commerce ; la pastille des
+  // créneaux, tout ce qui ferme les commandes.
+  const fermeturesPorte = exceptionsPour(fermetures?.[c.id], 'commerce')
+  const fermeturesCommandes = exceptionsPour(fermetures?.[c.id], 'commandes')
   const bonneAffaire = bonnesAffairesActives?.has(c.id) || false
 
   function getStatutPhysique() {
@@ -1081,7 +1085,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDu
     // et le jour de réouverture. Un 24 décembre ouvert de 8 h à 13 h dit
     // « Ouvert · 08:00–13:00 », pas l'horaire d'un jeudi ordinaire.
     const dateAuj = jourLocalISO(nowDate)
-    const jourDe = (offset) => horaireDuJour(c.horaires_detail, jourCivilPlus(dateAuj, offset), fermeturesDuCommerce)
+    const jourDe = (offset) => horaireDuJour(c.horaires_detail, jourCivilPlus(dateAuj, offset), fermeturesPorte)
     const h = jourDe(0)
     // 🔴 « FERMÉ EXCEPTIONNELLEMENT » DIT AUSSI QUAND ÇA ROUVRE (16/10). Sans
     // `quand`, la pastille de créneaux juste dessous affichait « Créneaux
@@ -1154,7 +1158,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDu
       return { dot: '#9CA3AF', label: `Fermé · ouvre à ${plages[0][0].slice(0,5)}`, color: '#6B7280', bg: '#F9FAFB', pulse: false }
     }
 
-    if (c.horaires_detail || fermeturesDuCommerce.length > 0) {
+    if (c.horaires_detail || fermeturesPorte.length > 0) {
       const p = prochaineOuverture()
       if (p) {
         const label = `Fermé · ouvre ${p.quand} à ${p.debut}`
@@ -1181,7 +1185,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDu
       horizon: info?.horizon,
       fermeAujourdhui: !!physiqueEtat?.ferme,
       quandOuvre: physiqueEtat?.quand || null,
-      exceptions: fermeturesDuCommerce,
+      exceptions: fermeturesCommandes,
     })
     if (!p) return null
     if (p.cle === 'ouvert')    return { dot: '#10B981', label: p.label, color: '#10B981', bg: '#F0FDF4' }
@@ -2863,7 +2867,8 @@ export default function Commander() {
           categorie: commercant?.categorie,
           // ✅ 16/10 : la liste unique (fermé, ou horaires adaptés aujourd'hui).
           horairesDetail: commercant?.horaires_detail,
-          exceptions: (fermeturesData || []).filter(f => f.commercant_id === id),
+          // ✅ 16/10 soir : seulement ce qui ferme les COMMANDES.
+          exceptions: exceptionsPour((fermeturesData || []).filter(f => f.commercant_id === id), 'commandes'),
         }),
         creneaux,
         jour,
@@ -2922,7 +2927,8 @@ export default function Commander() {
           creneaux: sesCreneaux,
           liaisons: (liaisons || []).filter(l => sesIds.has(String(l.creneau_id))),
           fermetures: (ferm || []).filter(f => f.commercant_id === c.id),
-          exceptions: exceptionsParCommerce[c.id] || [],
+          // ✅ 16/10 soir : seulement ce qui ferme les TABLES.
+          exceptions: exceptionsPour(exceptionsParCommerce[c.id], 'rdv'),
           reservations: busy || [],
         })]
       }))

@@ -19,7 +19,7 @@ import { refus } from '@/lib/api-auth'
 import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { refusRemiseEnConfirme } from '@/lib/rdv-reconfirmation'
 import { fermetureQuiBloque, estFermetureDeSeance } from '@/lib/fermetures-rdv'
-import { COLONNES_EXCEPTIONS, fermeturesAgenda } from '@/lib/horaires-du-jour'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda, exceptionsPour } from '@/lib/horaires-du-jour'
 import { programmerRappelRdv } from '@/lib/rappels'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { envoyerAuYopper, emailRdvRetabli } from '@/lib/resend'
@@ -95,7 +95,8 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, error: 'Impossible de vérifier ce qui a été rendu à cette personne. Réessaie dans un instant.' }, { status: 500 })
     }
     const [mvts, recompense, commande, abonnement, fermeturesLues, exceptions] = lectures.map(l => l.data)
-    const fermetures = fermeturesAgenda(fermeturesLues || [], exceptions || [])
+    // ✅ 16/10 soir : seulement ce qui ferme les RENDEZ-VOUS.
+    const fermetures = fermeturesAgenda(fermeturesLues || [], exceptionsPour(exceptions, 'rdv'))
     const fermeture = fermetureQuiBloque(fermetures, {
       dateStr: rdv.date_rdv,
       praticienId: rdv.praticien_id || null,

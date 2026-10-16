@@ -51,6 +51,7 @@ import BlocAide, { EtapeAide, enGras } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
 import FermeturesExceptionnelles, { RappelExceptions } from './FermeturesExceptionnelles'
+import { COLONNES_EXCEPTIONS, exceptionsPour, estFermetureComplete } from '@/lib/horaires-du-jour'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
@@ -510,11 +511,15 @@ function TabMenu({ commercantId, commercant, toast }) {
   useEffect(() => {
     const d = new Date()
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    // 🔴 (16/10 soir) CETTE LECTURE OUBLIAIT LES PLAGES : un jour d'horaires
+    // adaptés s'affichait ici « fermeture exceptionnelle, les clients ne
+    // pourront pas commander ». Ne comptent que les fermetures COMPLÈTES qui
+    // ferment les commandes.
     supabase.from('fermetures_exceptionnelles')
-      .select('date_debut, date_fin, motif')
+      .select(COLONNES_EXCEPTIONS)
       .eq('commercant_id', commercantId)
       .gte('date_fin', iso)
-      .then(({ data }) => setFermeturesExcept(data || []))
+      .then(({ data }) => setFermeturesExcept(exceptionsPour(data, 'commandes').filter(estFermetureComplete)))
   }, [commercantId])
   const fermeturesSemaine = (() => {
     const map = {}

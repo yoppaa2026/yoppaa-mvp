@@ -49,7 +49,7 @@ import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
 import { joursRetraitBoutique, estFermeExceptionnellement, creneauRetraitHorsHoraires, messageHorsHoraires } from '@/lib/ouverture'
-import { COLONNES_EXCEPTIONS } from '@/lib/horaires-du-jour'
+import { COLONNES_EXCEPTIONS, exceptionsPour } from '@/lib/horaires-du-jour'
 import { jourPlus } from '@/lib/statut-commerce'
 import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, premierJourPossible, jourEnClair } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
@@ -259,7 +259,8 @@ export async function POST(request) {
         console.error('[create-commande] lecture fermetures KO', errFerm)
         return NextResponse.json({ ok: false, error: 'Impossible de vérifier les jours d\'ouverture. Réessaie dans un instant.' }, { status: 500 })
       }
-      fermeturesCommercant = lues || []
+      // ✅ 16/10 soir : seulement ce qui ferme les COMMANDES.
+      fermeturesCommercant = exceptionsPour(lues, 'commandes')
     }
 
     if (estBoutique) {

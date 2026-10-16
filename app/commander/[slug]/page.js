@@ -114,6 +114,7 @@ import SignauxYopper from '../SignauxYopper'
 import { enviesProposables } from '@/lib/signaux'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection, { AnnoncesExceptions } from '../HorairesSection'
+import { exceptionsPour } from '@/lib/horaires-du-jour'
 import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
 // ⚠️ DEMANDE D'ALEX : les avis se consultent, ils ne s'imposent pas. Une note
 // globale, et le Yopper choisit s'il veut lire. La règle vit en fonction pure.
@@ -1653,7 +1654,8 @@ export default function CommanderSlug() {
   const joursBoutique = estDetail
     ? joursRetraitBoutique({
         horairesDetail: commercant?.horaires_detail,
-        fermetures,
+        // ✅ 16/10 soir : seulement ce qui ferme les COMMANDES.
+        fermetures: exceptionsPour(fermetures, 'commandes'),
         depuis: jourLocalISO(new Date()),
         maintenant: maintenantMinutes,
         delaiHeures: commercant?.boutique_delai_heures,
@@ -2235,7 +2237,10 @@ export default function CommanderSlug() {
   // horaires disparaît et un créneau hors des heures d'ouverture n'est pas
   // proposé (`creneauRetraitHorsHoraires`, la règle du serveur). Les tournées
   // de livraison passent `false` : elles roulent boutique fermée.
-  function construireJoursDispos(c, creneauxAvecCount, fermeturesData, chargeParJour = {}, blocagesCren = [], longueur = null, horaires = true) {
+  function construireJoursDispos(c, creneauxAvecCount, fermeturesLues, chargeParJour = {}, blocagesCren = [], longueur = null, horaires = true) {
+    // ✅ 16/10 soir : seulement ce qui ferme les COMMANDES. Des rendez-vous
+    // fermés laissent le retrait et la livraison ouverts.
+    const fermeturesData = exceptionsPour(fermeturesLues, 'commandes')
     const horizonBrut = Number(c.horizon_commande)
     // 🔴 LE CALENDRIER S'ALLONGE AVEC LE CATALOGUE (Alex, 07/10) : un article à
     // délai ou vendu certains jours ouvre une semaine après son délai. La
@@ -4620,8 +4625,11 @@ export default function CommanderSlug() {
                     </div>
                     {/* Statut d'ouverture en TEMPS RÉEL (même logique que les cards
                         d'accueil) : Ouvert/Ferme à X, Ouvre/Ferme bientôt, pauses */}
-                    {(commercant.horaires_detail || fermetures.length > 0) && (
-                      <PillStatutOuverture horaires={commercant.horaires_detail} fermetures={fermetures}/>
+                    {/* ✅ 16/10 soir : la porte ne lit que les fermetures de
+                        TOUT le commerce. Des commandes fermées ne ferment pas
+                        la boutique. */}
+                    {(commercant.horaires_detail || exceptionsPour(fermetures, 'commerce').length > 0) && (
+                      <PillStatutOuverture horaires={commercant.horaires_detail} fermetures={exceptionsPour(fermetures, 'commerce')}/>
                     )}
                   </div>
 
@@ -4928,7 +4936,7 @@ export default function CommanderSlug() {
                     information, et la contredisait dès que la déduction depuis
                     les emplacements avait pris du retard. */}
                 {/* ✅ 16/10 : fermetures et horaires adaptés à venir, ANNONCÉS (Alex). */}
-                <AnnoncesExceptions exceptions={fermetures}/>
+                <AnnoncesExceptions exceptions={fermetures} table={isAlimentaire(commercant)}/>
                 {commercant.horaires_detail && !commerceItinerant && <HorairesSection horaires={commercant.horaires_detail}/>}
 
                 {/* 🔴 LE BANDEAU « ENVIE DE COMMANDER À L'AVANCE ? DEMANDEZ À X

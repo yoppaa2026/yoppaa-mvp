@@ -30,7 +30,7 @@ import { capacitePrestation, estParCouverts, bornesCouverts, couvertsValides, CO
 import { enModeInventaire, formatPourAffichage, dureeDuGroupe } from '@/lib/inventaire-salle'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
 import { COLONNES_PRESTATION_SANS_COUVERTS, COLONNES_CRENEAU_RDV_EQUIPE } from '@/lib/equipe-poste'
-import { COLONNES_EXCEPTIONS, horaireDuJour } from '@/lib/horaires-du-jour'
+import { COLONNES_EXCEPTIONS, horaireDuJour, exceptionsPour } from '@/lib/horaires-du-jour'
 
 export const dynamic = 'force-dynamic'
 
@@ -129,7 +129,8 @@ export async function POST(request) {
       // ✅ 16/10 : l'horaire du JOUR (la liste unique). L'équipe suit déjà les
       // horaires de la semaine ; un jour fermé ou à horaires adaptés, elle suit
       // celui-là. Le patron, lui, garde sa liberté dans sa propre fenêtre.
-      horaireJour: horaireDuJour(commerce.data?.horaires_detail, date, exceptionsLues.data || []) || null,
+      // ✅ 16/10 soir : seulement ce qui ferme les RENDEZ-VOUS.
+      horaireJour: horaireDuJour(commerce.data?.horaires_detail, date, exceptionsPour(exceptionsLues.data, 'rdv')) || null,
       creneauxJour: creneauxDuJour(creneaux.data || [], { dateStr: date, jour }),
       rdvsExistants: rdvsDuJour.data || [],
       capacite: capacitePrestation(presta), prestationId: presta.id, prestations: formats,

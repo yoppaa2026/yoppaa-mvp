@@ -29,7 +29,7 @@ import { supabase } from '@/lib/supabase'
 // voyait son tableau de bord s'ouvrir et sa fiche publique continuer de refuser
 // (26/08). ⚠️ Et `canDo` SANS catégorie, jamais `peut()` : la matrice réserve
 // `commande` à l'alimentaire alors que cette fiche sert les vitrines.
-import { isVitrine, canDo, planEffectif } from '@/lib/plans'
+import { isVitrine, isAlimentaire, canDo, planEffectif } from '@/lib/plans'
 import { reservationActive, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { ficheRendueParLaVue } from '@/lib/statut-commercant'
 import { dealActifCeJour, remiseSurArticle, remiseSurPrestation, prixEffectifPrestation } from '@/lib/deals'
@@ -75,7 +75,7 @@ import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { referenceRdv } from '@/lib/numero-commande'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
 import HorairesSection, { AnnoncesExceptions } from '../../HorairesSection'
-import { COLONNES_EXCEPTIONS, fermeturesAgenda, horairesPourDate, horaireDuJour } from '@/lib/horaires-du-jour'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda, horairesPourDate, horaireDuJour, exceptionsPour } from '@/lib/horaires-du-jour'
 import CarteFideliteFiche from '../../CarteFideliteFiche'
 import BonCadeauModal from '../../BonCadeauModal'
 import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
@@ -293,7 +293,11 @@ export default function CommanderRdvSlug() {
   const [junctionMap, setJunctionMap] = useState({})        // { prestation_id: [praticien_id, ...] }
   const [fermetures, setFermetures] = useState([])          // Sess 6 : rdv_fermetures futures (date_fin >= today)
   // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
-  const [exceptions, setExceptions] = useState([])
+  // ✅ 16/10 soir : l'agenda ne lit que ce qui ferme les RENDEZ-VOUS
+  // (`exceptions`) ; la porte, que ce qui ferme tout le commerce ; les annonces,
+  // tout (chaque phrase dit ce qu'elle ferme).
+  const [exceptionsToutes, setExceptions] = useState([])
+  const exceptions = exceptionsPour(exceptionsToutes, 'rdv')
   // TUNNEL UNIQUE (04/08) : les produits du salon s'ajoutent ici même, et
   // partent dans LE MÊME paiement que l'acompte du rendez-vous. Avant, il
   // fallait deux parcours et deux paiements pour repartir avec son shampoing.
@@ -1548,7 +1552,7 @@ export default function CommanderRdvSlug() {
       }
       // ✅ 16/10 : les absences et cours annulés de l'agenda, plus la liste
       // unique traduite pour l'agenda (`fermeturesAgenda`).
-      setFermetures(fermeturesAgenda(ferm || [], exceptionsLues || []))
+      setFermetures(fermeturesAgenda(ferm || [], exceptionsPour(exceptionsLues, 'rdv')))
       setLoading(false)
     })()
     return () => { annule = true }
@@ -2989,9 +2993,9 @@ export default function CommanderRdvSlug() {
 
                 {/* Statut d'ouverture en TEMPS RÉEL (même logique que les cards
                     d'accueil) : Ouvert/Ferme à X, Ouvre/Ferme bientôt, pauses */}
-                {(commercant.horaires_detail || exceptions.length > 0) && (
+                {(commercant.horaires_detail || exceptionsPour(exceptionsToutes, 'commerce').length > 0) && (
                   <div style={{ marginTop: 10 }}>
-                    <PillStatutOuverture horaires={commercant.horaires_detail} fermetures={exceptions}/>
+                    <PillStatutOuverture horaires={commercant.horaires_detail} fermetures={exceptionsPour(exceptionsToutes, 'commerce')}/>
                   </div>
                 )}
 
@@ -3178,9 +3182,9 @@ export default function CommanderRdvSlug() {
                     contredire dès que la déduction avait pris du retard.
                     Une vérité, un seul endroit où on la lit. */}
                 {/* ✅ 16/10 : fermetures et horaires adaptés à venir, ANNONCÉS (Alex). */}
-                {exceptions.length > 0 && (
+                {exceptionsToutes.length > 0 && (
                   <div style={{ marginTop: 12 }}>
-                    <AnnoncesExceptions exceptions={exceptions} variant="card"/>
+                    <AnnoncesExceptions exceptions={exceptionsToutes} variant="card" table={isAlimentaire(commercant)}/>
                   </div>
                 )}
                 {!commerceItinerant && (

@@ -13,7 +13,7 @@ import { peutReserver, motReservation, motsReservation } from '@/lib/reservation
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
-import { COLONNES_EXCEPTIONS, fermeturesAgenda } from '@/lib/horaires-du-jour'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda, exceptionsPour, exceptionDuJour, estFermetureComplete, porteeDe } from '@/lib/horaires-du-jour'
 import { ModaleFermetures } from './FermeturesExceptionnelles'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import ModalNouvelleCommande from './ModalNouvelleCommande'
@@ -1325,6 +1325,8 @@ export default function Dashboard() {
   // `fermeturesAgenda`) et borne ses heures un jour d'horaires adaptés.
   const [exceptionsCommerce, setExceptionsCommerce] = useState([])
   // La fenêtre du bouton « Fermer ou changer les horaires » (raccourcis du haut).
+  // `true`, ou `{ date, portee }` quand elle s'ouvre déjà remplie (le bouton de
+  // la barre des créneaux et celui de l'agenda, 16/10 soir).
   const [fermeturesOuvertes, setFermeturesOuvertes] = useState(false)
   const [attentesRdv, setAttentesRdv] = useState(null)    // { seances, fenetres } : combien attendent, jamais qui
   // Grilles de créneaux alimentaires (retrait + tournées), pour AFFICHER LE
@@ -1586,7 +1588,11 @@ export default function Dashboard() {
     setExceptionsCommerce(data || [])
   }, [])
   useEffect(() => { chargerExceptions(commercant?.id) }, [commercant?.id, chargerExceptions])
-  const fermeturesAgendaTout = fermeturesAgenda(fermeturesRdv, exceptionsCommerce)
+  // ✅ 16/10 soir : une fermeture dit ce qu'elle ferme. L'agenda ne lit que ce
+  // qui ferme les rendez-vous, la barre des créneaux ce qui ferme les commandes.
+  const exceptionsRdv = exceptionsPour(exceptionsCommerce, 'rdv')
+  const exceptionsCommandes = exceptionsPour(exceptionsCommerce, 'commandes')
+  const fermeturesAgendaTout = fermeturesAgenda(fermeturesRdv, exceptionsRdv)
   const [filtreStatut, setFiltreStatut] = useState('actives')
   const [vueMode, setVueMode] = useState('retrait')  // vue Commandes : 'retrait' | 'livraison'
   // Créneaux fermés à la volée par le commerçant débordé. Table `creneaux_blocages`.
@@ -3258,7 +3264,7 @@ export default function Dashboard() {
     // personne, il n'a rien à remplir (ses éventuelles commandes restent listées).
     // ✅ 16/10 : l'horaire du JOUR (la liste unique) ; la tournée ne le suit
     // qu'un jour d'horaires adaptés.
-    .filter(({ creneau }) => !creneauRetraitHorsHoraires({ creneau, dateStr: jourActif, horairesDetail: commercant?.horaires_detail, fermetures: exceptionsCommerce, seulementException: vueMode === 'livraison' }))
+    .filter(({ creneau }) => !creneauRetraitHorsHoraires({ creneau, dateStr: jourActif, horairesDetail: commercant?.horaires_detail, fermetures: exceptionsCommandes, seulementException: vueMode === 'livraison' }))
     .map(c => ({ ...c, ...appliquerBlocage(c, blocagesDuJour.has(c.creneau?.id)) }))
 
   const stats = {
@@ -4404,6 +4410,38 @@ export default function Dashboard() {
                     ⚠️ « FERMÉ » GARDE SA PROPRE COULEUR, distincte de
                     « COMPLET » : complet, ses clients ont rempli ; fermé, il a
                     fermé lui-même. */}
+                {/* ✅ ALEX, 16/10 soir : « un bouton qui permet de fermer toutes
+                    les commandes du jour, sans que le commerce soit fermé ».
+                    Il ouvre la liste unique déjà remplie (ce jour, « Seulement
+                    les commandes ») : une seule règle, un seul endroit pour
+                    rouvrir. Un jour déjà fermé le dit, au lieu de montrer une
+                    barre vide. */}
+                {!modeHistorique && (() => {
+                  const fermeture = exceptionDuJour(exceptionsCommandes, jourActif)
+                  const fermeCeJour = fermeture && estFermetureComplete(fermeture)
+                  if (fermeCeJour) {
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: 12, padding: '9px 12px', marginBottom: 12 }}>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: '#92400E' }}>
+                          {porteeDe(fermeture) === 'commandes' ? 'Commandes en ligne fermées ce jour-là.' : 'Commerce fermé ce jour-là.'}
+                        </span>
+                        <button type="button" onClick={() => setFermeturesOuvertes(true)}
+                          style={{ padding: '6px 12px', borderRadius: 9, border: '1.5px solid #FDE68A', background: '#fff', color: T.ink, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          Rouvrir ou modifier
+                        </button>
+                      </div>
+                    )
+                  }
+                  if (creneauxRemplis.length === 0) return null
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+                      <button type="button" onClick={() => setFermeturesOuvertes({ date: jourActif, portee: 'commandes' })}
+                        style={{ padding: '5px 11px', borderRadius: 9, border: '1.5px solid #E5E7EB', background: '#fff', color: T.ink, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Fermer les commandes de ce jour
+                      </button>
+                    </div>
+                  )
+                })()}
                 {!modeHistorique && (
                   <BandeCreneaux creneauxRemplis={creneauxRemplis} estTournee={vueMode === 'livraison'} etatCreneau={etatCreneau}
                     couleurDe={(r) => r.bloque ? '#6B7280' : r.complet ? T.rouge.badge : r.bientot ? T.orange.badge : r.presque ? '#CA8A04' : T.vert.badge}
@@ -4583,7 +4621,8 @@ export default function Dashboard() {
                     prestations={prestationsRdv}
                     creneaux={creneauxRdv}
                     fermetures={fermeturesAgendaTout}
-                    exceptions={exceptionsCommerce}
+                    exceptions={exceptionsRdv}
+                    onFermerJour={(iso) => setFermeturesOuvertes({ date: iso, portee: 'rdv' })}
                     attentes={attentesRdv}
                     onPrevenirFile={prevenirFileSeance}
                     onListerFile={listerFileSeance}
@@ -4699,6 +4738,7 @@ export default function Dashboard() {
           créneaux de cet écran suivent tout de suite. */}
       {fermeturesOuvertes && commercant && (
         <ModaleFermetures commercantId={commercant.id}
+          initial={typeof fermeturesOuvertes === 'object' ? fermeturesOuvertes : null}
           onClose={() => setFermeturesOuvertes(false)}
           onChange={() => chargerExceptions(commercant.id)} />
       )}
@@ -4711,7 +4751,7 @@ export default function Dashboard() {
           prestations={prestationsRdv}
           creneaux={creneauxRdv}
           liaisons={liaisonsRdv}
-          rdvsExistants={rdvs} fermetures={fermeturesAgendaTout} exceptions={exceptionsCommerce}
+          rdvsExistants={rdvs} fermetures={fermeturesAgendaTout} exceptions={exceptionsRdv}
           onClose={() => setRdvADeplacer(null)}
           onDeplace={() => {
             // Le déplacement se confirme comme le reste : la modale se ferme,

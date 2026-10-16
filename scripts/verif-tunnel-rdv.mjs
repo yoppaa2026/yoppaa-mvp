@@ -1159,8 +1159,11 @@ for (const chemin of [
     // les horaires adaptés.
     verifie('🔴 le tableau de bord charge les fermetures et les passe à l’agenda',
       /\.from\('rdv_fermetures'\)/.test(BORD) && /\.from\('fermetures_exceptionnelles'\)\.select\(COLONNES_EXCEPTIONS\)/.test(BORD)
-        && /const fermeturesAgendaTout = fermeturesAgenda\(fermeturesRdv, exceptionsCommerce\)/.test(BORD)
-        && /<AgendaRdv\s+rdvs=\{rdvs\}[^>]*?\sfermetures=\{fermeturesAgendaTout\}\s+exceptions=\{exceptionsCommerce\}/.test(BORD))
+        // ⚠️ REPOINTÉE LE 16/10 soir : l'agenda ne lit que ce qui ferme les
+        // rendez-vous (`exceptionsRdv`).
+        && /const exceptionsRdv = exceptionsPour\(exceptionsCommerce, 'rdv'\)/.test(BORD)
+        && /const fermeturesAgendaTout = fermeturesAgenda\(fermeturesRdv, exceptionsRdv\)/.test(BORD)
+        && /<AgendaRdv\s+rdvs=\{rdvs\}[^>]*?\sfermetures=\{fermeturesAgendaTout\}\s+exceptions=\{exceptionsRdv\}/.test(BORD))
     verifie('🔴 chaque inscrite passe par l’annulation unitaire, en série',
       /for \(const rdv of seanceAAnnuler\) \{\s*const ok = await changerStatutRdv\(rdv\.id, 'annule_commercant', 'commercant', \{/.test(BORD))
     const CONF = sansProse(lire('app/dashboard/ConfigDashboard.js'))

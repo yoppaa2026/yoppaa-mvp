@@ -15,8 +15,13 @@ import { jourLocalISO } from '@/lib/timezone'
 // est fermé le 1er novembre, ou ouvert de 8 h à 13 h le 24 décembre, AVANT de
 // se déplacer. Les 30 prochains jours, par date. Affiché même pour un commerce
 // itinérant, dont la grille de la semaine est cachée.
-export function AnnoncesExceptions({ exceptions = [], variant = 'border' }) {
-  const annonces = exceptionsAAnnoncer(exceptions, jourLocalISO(new Date()), 30)
+//
+// ✅ 16/10 soir : une fermeture des seules commandes (ou des seuls rendez-vous)
+// se dit comme telle, et, déjà en cours, par sa fin : « Commandes en ligne à
+// partir du lundi 19 octobre. » `table` : un restaurant dit « Réservations ».
+export function AnnoncesExceptions({ exceptions = [], variant = 'border', table = false }) {
+  const aujourdhui = jourLocalISO(new Date())
+  const annonces = exceptionsAAnnoncer(exceptions, aujourdhui, 30)
   if (annonces.length === 0) return null
   const wrapStyle = variant === 'card'
     ? { background: '#FFFBEB', borderRadius: 12, border: '1px solid #FDE68A', padding: '0.625rem 1rem' }
@@ -25,7 +30,7 @@ export function AnnoncesExceptions({ exceptions = [], variant = 'border' }) {
     <div style={wrapStyle} role="note">
       {annonces.map(e => (
         <p key={e.id || `${e.date_debut}-${e.date_fin}`} style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: '#92400E', lineHeight: 1.5 }}>
-          {phraseException(e)}
+          {phraseException(e, { aujourdhui, table })}
         </p>
       ))}
     </div>

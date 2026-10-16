@@ -195,7 +195,8 @@ egal('le 11/08/2026 est un mardi', jourSemaineDe('2026-08-11'), 'mardi')
 egal('le 13/08/2026 est un jeudi', jourSemaineDe('2026-08-13'), 'jeudi')
 egal('une date invalide ne rend aucun jour', jourSemaineDe('pas une date'), null)
 
-const creneauMardi = { jour_semaine: 'mardi', heure_debut: '18:00', cutoff_heures: 2 }
+// ⚠️ REPOINTÉE LE 16/10 : la clôture se lit en MINUTES (`cutoff_minutes`).
+const creneauMardi = { jour_semaine: 'mardi', heure_debut: '18:00', cutoff_minutes: 120 }
 verifier('un créneau du mardi accepte un mardi',
   creneauCommandable(creneauMardi, {
     dateStr: '2026-08-11', maintenant: new Date('2026-08-11T08:00:00Z'), instantDebut: brusselsInstant,
@@ -209,7 +210,7 @@ egal('un créneau du mardi refuse un jeudi',
 verifier('un créneau sans jour ne bloque pas',
   creneauCommandable({ heure_debut: '18:00' }, { dateStr: '2026-08-13' }).ok)
 
-// ⚠️ LE DÉLAI LIMITE. `cutoff_heures` est réglé par le commerçant et n'était
+// ⚠️ LE DÉLAI LIMITE (en minutes depuis le 16/10, `cutoff_minutes`). Il est réglé par le commerçant et n'était
 // lu NULLE PART : le réglage était parfaitement inerte, on pouvait commander
 // une livraison pour un créneau démarrant dans dix minutes.
 //
@@ -245,8 +246,8 @@ egal('en hiver aussi, trop tard reste trop tard',
 // depuis le matin faisait tomber à 15h une commande pour le créneau de 11h15,
 // que le commerçant découvrait déjà en retard.
 //
-// Les créneaux C&C n'ont pas de colonne `cutoff_heures` : c'est donc le début
-// du créneau lui-même qui fait limite. 18h belge = 16h UTC en août.
+// Sans clôture réglée (`cutoff_minutes` absent ou 0), c'est le début du
+// créneau lui-même qui fait limite. 18h belge = 16h UTC en août.
 const creneauSansDelai = { jour_semaine: 'mardi', heure_debut: '18:00' }
 verifier('sans délai réglé, on peut commander avant le début',
   creneauCommandable(creneauSansDelai, {

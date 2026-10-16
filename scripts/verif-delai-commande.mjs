@@ -305,9 +305,10 @@ egal('un délai illisible ne décale rien',
   // 🔴 LA CLÔTURE DU CRÉNEAU EST UNE BORNE INDÉPENDANTE DU DÉLAI, et c'est
   // `creneauCommandable` — la fonction du serveur — qui la lit. Deux calculs
   // auraient divergé, et le client se serait fait refuser au paiement.
+  // ⚠️ REPOINTÉE LE 16/10 : la clôture se lit en MINUTES (`cutoff_minutes`).
   {
     const avecCloture = [
-      { jour: MARDI, creneaux: [cr('tot', '11:00', '11:30', { cutoff_heures: 3 }), cr('tard', '17:00', '17:30')] },
+      { jour: MARDI, creneaux: [cr('tot', '11:00', '11:30', { cutoff_minutes: 180 }), cr('tard', '17:00', '17:30')] },
     ]
     const r = premierCreneauPossible({
       minutes: 0, maintenant: le(MARDI, '10:00'), jours: avecCloture, instantDebut: brusselsInstant,
@@ -317,7 +318,7 @@ egal('un délai illisible ne décale rien',
   // La même grille une heure plus tôt : la clôture n'est pas encore passée.
   {
     const avecCloture = [
-      { jour: MARDI, creneaux: [cr('tot', '11:00', '11:30', { cutoff_heures: 3 })] },
+      { jour: MARDI, creneaux: [cr('tot', '11:00', '11:30', { cutoff_minutes: 180 })] },
     ]
     const r = premierCreneauPossible({
       minutes: 0, maintenant: le(MARDI, '07:30'), jours: avecCloture, instantDebut: brusselsInstant,

@@ -95,7 +95,7 @@ import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
 import { choixDeDelai, libelleChoixDelai, HORIZONS_ARTICLE, libelleHorizonArticle } from '@/lib/delai-commande'
 import { categoriesDuCommerce, listeApresAjout, renommage, listeApresSuppression, parentDe, feuilleDe } from '@/lib/categories-catalogue'
 import { trierArticles, positionDansCategorie, deplacementDansCategorie } from '@/lib/ordre-articles'
-import { jourSemaineDe } from '@/lib/creneaux'
+import { jourSemaineDe, CLOTURES_PROPOSEES, libelleDuree, phraseCloture, minutesDeCloture } from '@/lib/creneaux'
 import { FILTRE_STATUTS_INACTIFS, FILTRE_STATUTS_TERMINES } from '@/lib/statuts-commande'
 import {
   NOM_FONCTION_COMMERCANT, TITRE_YOPPER, CONSEIL_REMISE, MINUTES_UTILES_MINIMUM,
@@ -4406,7 +4406,7 @@ function AvantLaFermeture({ commercantId, commercant, articles, toast, onPublie 
 
   const recharger = useCallback(async () => {
     const [{ data: cr }, { data: inv }] = await Promise.all([
-      supabase.from('creneaux').select('id, jour_semaine, heure_debut, heure_fin, cutoff_heures, actif')
+      supabase.from('creneaux').select('id, jour_semaine, heure_debut, heure_fin, cutoff_minutes, actif')
         .eq('commercant_id', commercantId).eq('actif', true),
       supabase.from('yoppaa_deals')
         .select('id, titre, prix_deal, prix_original, quantite, heure_debut, heure_fin, actif')
@@ -5963,11 +5963,34 @@ function TabCreneaux({ commercantId, toast }) {
   // 6h58 pour le créneau de 7h00, sans laisser au boulanger la moindre chance.
   // Zéro reste le défaut, c'est-à-dire le comportement d'avant : personne ne se
   // voit imposer un délai qu'il n'a pas choisi.
+  //
+  // ✅ EN MINUTES DEPUIS LE 16/10 (Alex, rendez-vous d'Aux Délices des 7
+  // Abbayes) : 10, 15, 30 min… au lieu d'heures entières. 🔴 Et l'erreur se
+  // lit : l'ancien réglage affichait la nouvelle valeur même quand la base
+  // l'avait refusée.
   async function updateCutoff(id, val) {
     const n = parseInt(val, 10)
     if (isNaN(n) || n < 0) return
-    await supabase.from('creneaux').update({ cutoff_heures: n }).eq('id', id)
-    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, cutoff_heures: n } : c))
+    const { error } = await supabase.from('creneaux').update({ cutoff_minutes: n }).eq('id', id)
+    if (error) { toast('Erreur : ' + error.message, 'error'); return }
+    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, cutoff_minutes: n } : c))
+  }
+
+  // « APPLIQUER À TOUS LES CRÉNEAUX » (Alex, 16/10). Une boulangerie a plus de
+  // quarante créneaux : les régler un par un, c'est quarante gestes pour dire
+  // une seule chose.
+  const [clotureCommune, setClotureCommune] = useState(15)
+  const [clotureEnCours, setClotureEnCours] = useState(false)
+  async function appliquerClotureATous() {
+    if (clotureEnCours) return
+    setClotureEnCours(true)
+    const { error } = await supabase.from('creneaux').update({ cutoff_minutes: clotureCommune }).eq('commercant_id', commercantId)
+    setClotureEnCours(false)
+    if (error) { toast('Erreur : ' + error.message, 'error'); return }
+    setCreneaux(prev => prev.map(c => ({ ...c, cutoff_minutes: clotureCommune })))
+    toast(clotureCommune === 0
+      ? 'Tous les créneaux acceptent les commandes jusqu’à leur début.'
+      : `Tous les créneaux ferment leurs commandes ${libelleDuree(clotureCommune)} avant.`)
   }
 
   async function toggleCreneau(c) {
@@ -6242,6 +6265,9 @@ function TabCreneaux({ commercantId, toast }) {
             max_commandes: c.max_commandes,
             actif: c.actif,
             capacite_temps: c.capacite_temps || 30,
+            // 🔴 LA COPIE PERDAIT LA CLÔTURE (relevé du 16/10) : le créneau
+            // copié repartait sans délai, sans un mot.
+            cutoff_minutes: minutesDeCloture(c),
           })
         }
       }
@@ -6661,6 +6687,27 @@ function TabCreneaux({ commercantId, toast }) {
             </div>
           )}
 
+          {/* « APPLIQUER À TOUS LES CRÉNEAUX » (Alex, 16/10) : tous les jours
+              de la semaine en un geste. Le réglage par créneau reste en dessous
+              pour les exceptions. */}
+          {creneaux.length > 0 && (
+            <div style={{ ...s.card, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '12px 14px', marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>Clôture de tous les créneaux</span>
+              <select value={clotureCommune} onChange={e => setClotureCommune(Number(e.target.value))}
+                aria-label="Clôture appliquée à tous les créneaux"
+                style={{ ...s.input, width: 'auto', padding: '6px 10px', fontSize: 13, fontWeight: 700 }}>
+                {CLOTURES_PROPOSEES.map(m => <option key={m} value={m}>{m === 0 ? 'Aucune' : `${libelleDuree(m)} avant`}</option>)}
+              </select>
+              <button style={{ ...s.btn, ...s.btnPrimary, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                onClick={appliquerClotureATous} disabled={clotureEnCours}>
+                {clotureEnCours ? <DotsAttente /> : `Appliquer aux ${creneaux.length} créneaux`}
+              </button>
+              <span style={{ fontSize: 11, color: T.muted, flexBasis: '100%' }}>
+                Tous les jours de la semaine. Tu peux ensuite ajuster un créneau en particulier.
+              </span>
+            </div>
+          )}
+
           {/* Liste créneaux du jour */}
           {crensJourActif.length === 0 && !showForm ? (
             <div style={{ ...s.card, textAlign: 'center', padding: 32 }}>
@@ -6737,11 +6784,7 @@ function TabCreneaux({ commercantId, toast }) {
                             48 h, le sandwich à côté n'en demande qu'une. */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                           <span style={{ fontSize: 11, color: T.muted }}>Clôture :</span>
-                          <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateCutoff(c.id, Math.max(0, (c.cutoff_heures || 0) - 1))}>−</button>
-                          <input type="number" value={c.cutoff_heures || 0} min={0} onChange={e => updateCutoff(c.id, e.target.value)}
-                            style={{ ...s.input, width: 44, textAlign: 'center', padding: '2px 4px', fontSize: 13, fontWeight: 700 }} />
-                          <button style={{ ...s.btn, ...s.btnGhost, padding: '2px 6px', fontSize: 12 }} onClick={() => updateCutoff(c.id, (c.cutoff_heures || 0) + 1)}>+</button>
-                          <span style={{ fontSize: 10, color: T.muted }}>h avant</span>
+                          <SelectCloture valeur={minutesDeCloture(c)} onChange={m => updateCutoff(c.id, m)} />
                         </div>
                         {/* ⚠️ « CLÔTURE : 0 H AVANT » NE SE DEVINE PAS (Alex,
                             08/09). Le chiffre dit combien d'heures avant le
@@ -6750,9 +6793,7 @@ function TabCreneaux({ commercantId, toast }) {
                             « aucune clôture réglée », c'est « ouvert jusqu'à
                             la dernière minute ». */}
                         <p style={{ fontSize: 10, color: T.muted, lineHeight: 1.45, marginTop: 3 }}>
-                          {(c.cutoff_heures || 0) === 0
-                            ? `Commandes acceptées jusqu’à ${String(c.heure_debut).slice(0,5)}.`
-                            : `Commandes fermées ${c.cutoff_heures} h avant, soit ${heureCloture(c.heure_debut, c.cutoff_heures)}.`}
+                          {phraseCloture(c.heure_debut, minutesDeCloture(c))}
                         </p>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
@@ -7137,26 +7178,33 @@ function TabLivraison({ commercantId, categorie, toast, surModifications, onAlle
 const JOURS_LIV = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
 const JOURS_LIV_LABELS = { lundi: 'Lundi', mardi: 'Mardi', mercredi: 'Mercredi', jeudi: 'Jeudi', vendredi: 'Vendredi', samedi: 'Samedi', dimanche: 'Dimanche' }
 
-// Gestion des créneaux de livraison (tournées). Calqué sur le principe du C&C :
-// L'heure à laquelle les commandes se ferment, dite en clair. Un délai plus
-// grand que l'heure de début renvoie à la veille : le dire vaut mieux que
-// d'afficher une heure négative.
+// LE CHOIX DE LA CLÔTURE, EN MINUTES (Alex, 16/10).
 //
-// ⚠️ AU NIVEAU DU MODULE, PAS DANS UN ONGLET : la même phrase sert aux créneaux
-// de retrait et aux tournées de livraison. Deux écritures auraient divergé, et
-// c'est exactement ce qui vient de coûter une journée sur les heures
-// d'ouverture, lues à quatre endroits différents.
-function heureCloture(heureDebut, heures) {
-  const total = timeToMinutes(heureDebut) - (Number(heures) || 0) * 60
-  if (total < 0) return `la veille à ${minutesToTime(((total % 1440) + 1440) % 1440)}`
-  return `à ${minutesToTime(total)}`
+// ⚠️ AU NIVEAU DU MODULE, PAS DANS UN ONGLET : le même choix sert aux créneaux
+// de retrait et aux tournées de livraison. La phrase qui l'accompagne
+// (`phraseCloture`) et l'heure de fermeture (`heureCloture`) vivent dans
+// lib/creneaux.js, avec la règle que le serveur applique.
+//
+// Une valeur réglée hors de la liste (une ancienne clôture de 5 h, par
+// exemple) reste affichée et choisie : on ne la remplace pas en silence.
+function SelectCloture({ valeur, onChange, style }) {
+  const v = Math.max(0, Math.floor(Number(valeur) || 0))
+  const options = CLOTURES_PROPOSEES.includes(v) ? CLOTURES_PROPOSEES : [...CLOTURES_PROPOSEES, v].sort((a, b) => a - b)
+  return (
+    <select value={v} onChange={e => onChange(Number(e.target.value))} aria-label="Clôture des commandes"
+      style={{ padding: '3px 6px', borderRadius: 8, border: '1.5px solid #E5E7EB', fontSize: 12.5, fontWeight: 700, color: T.ink, background: '#fff', ...style }}>
+      {options.map(m => <option key={m} value={m}>{m === 0 ? 'Aucune' : `${libelleDuree(m)} avant`}</option>)}
+    </select>
+  )
 }
+
+// Gestion des créneaux de livraison (tournées). Calqué sur le principe du C&C.
 
 // capacité = nb de commandes par tournée (max_commandes). Table livraison_creneaux.
 function SectionCreneauxLivraison({ commercantId, toast }) {
   const [creneaux, setCreneaux] = useState([])
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ jour_semaine: 'mardi', heure_debut: '18:00', heure_fin: '19:00', max_commandes: 10, cutoff_heures: 2 })
+  const [form, setForm] = useState({ jour_semaine: 'mardi', heure_debut: '18:00', heure_fin: '19:00', max_commandes: 10, cutoff_minutes: 120 })
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { charger() }, [commercantId])
@@ -7186,7 +7234,7 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
       heure_debut: form.heure_debut,
       heure_fin: form.heure_fin,
       max_commandes: Math.max(1, Number(form.max_commandes) || 1),
-      cutoff_heures: Math.max(0, Number(form.cutoff_heures) || 0),
+      cutoff_minutes: Math.max(0, Math.floor(Number(form.cutoff_minutes) || 0)),
       mode_capacite: 'commandes',
     })
     if (error) { toast('Erreur : ' + error.message, 'error'); return }
@@ -7240,10 +7288,11 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
   // l'heure à laquelle les commandes de la tournée se ferment : la corriger
   // demandait de supprimer la tournée et de la refaire.
   async function majCutoff(id, val) {
+    // ⚠️ EN MINUTES DEPUIS LE 16/10.
     const n = Math.max(0, parseInt(val, 10) || 0)
-    const { error } = await supabase.from('livraison_creneaux').update({ cutoff_heures: n }).eq('id', id)
+    const { error } = await supabase.from('livraison_creneaux').update({ cutoff_minutes: n }).eq('id', id)
     if (error) { toast('Erreur : ' + error.message, 'error'); return }
-    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, cutoff_heures: n } : c))
+    setCreneaux(prev => prev.map(c => c.id === id ? { ...c, cutoff_minutes: n } : c))
   }
 
   const tries = [...creneaux].sort((a, b) => {
@@ -7285,8 +7334,8 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
           <input type="number" min="1" value={form.max_commandes} onChange={e => setForm(p => ({ ...p, max_commandes: e.target.value }))} style={field} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '1 1 90px' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Limite (h avant)</span>
-          <input type="number" min="0" value={form.cutoff_heures} onChange={e => setForm(p => ({ ...p, cutoff_heures: e.target.value }))} style={field} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>Limite</span>
+          <SelectCloture valeur={form.cutoff_minutes} onChange={m => setForm(p => ({ ...p, cutoff_minutes: m }))} style={{ padding: '8px 10px', fontSize: 13 }} />
         </label>
         <button onClick={ajouter} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>
           Ajouter
@@ -7310,13 +7359,10 @@ function SectionCreneauxLivraison({ commercantId, toast }) {
                     heure de fermeture. */}
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: T.muted, flexShrink: 0 }}>
                   limite
-                  <input type="number" min="0" value={c.cutoff_heures ?? 0} onChange={e => majCutoff(c.id, e.target.value)} style={{ ...field, width: 52, padding: '4px 6px' }} />
-                  h
+                  <SelectCloture valeur={minutesDeCloture(c)} onChange={m => majCutoff(c.id, m)} />
                 </span>
                 <span style={{ fontSize: 10.5, color: T.muted, flexBasis: '100%', lineHeight: 1.45 }}>
-                  {(c.cutoff_heures || 0) === 0
-                    ? `Commandes acceptées jusqu’au départ, à ${(c.heure_debut || '').slice(0,5)}.`
-                    : `Commandes fermées ${c.cutoff_heures} h avant le départ, soit ${heureCloture(c.heure_debut, c.cutoff_heures)}.`}
+                  {phraseCloture(c.heure_debut, minutesDeCloture(c), { livraison: true })}
                 </span>
                 <div style={{ flex: 1 }} />
                 <button onClick={() => toggleActif(c)} title={c.actif ? 'Désactiver' : 'Activer'} style={{ width: 34, height: 19, borderRadius: 100, background: c.actif ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>

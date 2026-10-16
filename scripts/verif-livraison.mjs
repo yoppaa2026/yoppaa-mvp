@@ -2000,10 +2000,15 @@ verifier('et range la commande du bon côté',
   const iInter = cc.indexOf("if (commercant.livraison_actif !== true)")
   verifier('🔴 C4 une livraison éteinte est refusée, dans le bloc livraison',
     iInter > cc.indexOf("verdictForfait(commercant, 'livraison')") && iInter < cc.indexOf('fermeturesCommercant = []'))
+  // ⚠️ REPOINTÉES LE 16/10 : la clôture se lit en MINUTES (`cutoff_minutes`).
   verifier('🔴 C5 le créneau de livraison est lu avec son délai',
-    /\.from\('livraison_creneaux'\)\s*\.select\('[^']*\bcutoff_heures\b[^']*'\)/.test(cc))
+    /\.from\('livraison_creneaux'\)\s*\.select\('[^']*\bcutoff_minutes\b[^']*'\)/.test(cc))
   verifier('🔴 C5 le créneau de retrait est lu avec son délai',
-    /\.from\('creneaux'\)\s*\.select\('[^']*\bcutoff_heures\b[^']*'\)/.test(cc))
+    /\.from\('creneaux'\)\s*\.select\('[^']*\bcutoff_minutes\b[^']*'\)/.test(cc))
+  // 🔴 LE REFUS DIT LA CLÔTURE EN CLAIR (16/10) : « au moins 15 min », plus
+  // « au moins 0.25 h ».
+  verifier('🔴 le refus du serveur dit la clôture comme le commerçant l’a réglée',
+    /demande de commander au moins \$\{libelleDuree\(etatCreneau\.minutes\)\} à l'avance/.test(cc))
 
   // C5 (écran) : les tournées passent par la même règle que le serveur.
   const fiche = sansProse(lire('app/commander/[slug]/page.js'))

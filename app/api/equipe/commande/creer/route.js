@@ -93,7 +93,7 @@ export async function POST(request) {
     const table = estLivraison ? 'livraison_creneaux' : 'creneaux'
     const { data: creneau, error: errCr } = await admin
       .from(table)
-      .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_heures')
+      .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_minutes')
       .eq('id', creneau_id)
       .maybeSingle()
     if (errCr) return non('Impossible de lire ce créneau. Réessaie.', 500)

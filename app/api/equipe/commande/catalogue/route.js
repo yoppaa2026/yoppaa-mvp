@@ -25,7 +25,7 @@ import { calendrierDuCommerce } from '@/lib/calendrier-commande-server'
 export const dynamic = 'force-dynamic'
 
 // Ce que lisent `remplissageCreneaux` et `calculerCapaciteCreneau`, et rien d'autre.
-const COLONNES_CRENEAU = 'id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_heures'
+const COLONNES_CRENEAU = 'id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_minutes'
 
 export async function POST(request) {
   try {

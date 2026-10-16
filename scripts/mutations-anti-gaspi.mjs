@@ -230,9 +230,13 @@ const MUTATIONS = [
     de: '    return apres >= margeDeCloture(c)',
     vers: '    return true' },
 
-  { nom: '🔴 la cloture se compte en MINUTES au lieu d’heures',
-    de: "  return (Number.isFinite(h) && h > 0) ? h * 60 : 0",
-    vers: "  return (Number.isFinite(h) && h > 0) ? h : 0" },
+  // ⚠️ REPOINTÉE LE 16/10 : la clôture est stockée en MINUTES et se lit dans
+  // lib/creneaux.js (`minutesDeCloture`). L'erreur d'unité qu'on surveille
+  // désormais : la relire comme des heures.
+  { nom: '🔴 la cloture (en minutes) se relit comme des heures',
+    fichier: 'lib/creneaux.js',
+    de: "  return (Number.isFinite(m) && m > 0) ? Math.floor(m) : 0",
+    vers: "  return (Number.isFinite(m) && m > 0) ? Math.floor(m) * 60 : 0" },
 
   // ⚠️ La friterie ouverte de 22 h à 1 h : comparer deux heures de pendule à
   // la soustraction se trompe d'une journée entière.

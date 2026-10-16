@@ -131,7 +131,8 @@
     "mutations:equipe": "node scripts/mutations-equipe.mjs",
     "verif:casquettes": "node --no-warnings --experimental-loader ./scripts/alias-loader.mjs scripts/verif-casquettes.mjs",
     "mutations:casquettes": "node scripts/mutations-casquettes.mjs",
-    "mutations:fiche-seo": "node scripts/mutations-fiche-seo.mjs"
+    "mutations:fiche-seo": "node scripts/mutations-fiche-seo.mjs",
+    "mutations:cloture-minutes": "node scripts/mutations-cloture-minutes.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

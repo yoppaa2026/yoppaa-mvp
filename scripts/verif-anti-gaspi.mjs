@@ -337,21 +337,22 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   // créneau de 18 h dont la clôture est réglée à 48 h passait toutes les
   // vérifications, s'affichait, et n'était réservable par personne : sa porte
   // s'était fermée l'avant-veille.
+  // ⚠️ REPOINTÉE LE 16/10 : la clôture se lit en MINUTES (`cutoff_minutes`).
   egal('🔴 une clôture de 48 h rend le créneau inutilisable',
-    ids(creneauxUtilisables(F, [{ id: 'ferme', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 48 }])), [])
+    ids(creneauxUtilisables(F, [{ id: 'ferme', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_minutes: 2880 }])), [])
   egal('une clôture d’une heure laisse commander dès l’ouverture',
-    ids(creneauxUtilisables(F, [{ id: 'ok1h', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 1 }])), ['ok1h'])
+    ids(creneauxUtilisables(F, [{ id: 'ok1h', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_minutes: 60 }])), ['ok1h'])
   // La borne exacte : le créneau ferme à l'instant où l'offre ouvre. Il reste
   // un moment pour commander, et `creneauCommandable` accepte l'égalité.
   egal('la clôture qui tombe PILE à l’ouverture laisse passer',
-    ids(creneauxUtilisables(F, [{ id: 'pile', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 1 }])), ['pile'])
+    ids(creneauxUtilisables(F, [{ id: 'pile', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_minutes: 60 }])), ['pile'])
   egal('une minute de plus, et c’est fermé',
-    ids(creneauxUtilisables(F, [{ id: 'trop', heure_debut: '17:59:00', heure_fin: '18:30:00', cutoff_heures: 1 }])), [])
+    ids(creneauxUtilisables(F, [{ id: 'trop', heure_debut: '17:59:00', heure_fin: '18:30:00', cutoff_minutes: 60 }])), [])
   // ⚠️ ZÉRO N'EST PAS UNE CLÔTURE, et une valeur absurde non plus.
   egal('une clôture à zéro ne change rien',
-    ids(creneauxUtilisables(F, [{ id: 'z', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 0 }])), ['z'])
+    ids(creneauxUtilisables(F, [{ id: 'z', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_minutes: 0 }])), ['z'])
   egal('une clôture illisible ne ferme rien',
-    ids(creneauxUtilisables(F, [{ id: 'n', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 'deux' }])), ['n'])
+    ids(creneauxUtilisables(F, [{ id: 'n', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_minutes: 'deux' }])), ['n'])
   egal('un créneau sans heure de fin ne sert à rien',
     ids(creneauxUtilisables(F, [{ id: 'moitie', heure_debut: '18:00:00' }])), [])
   // ⚠️ ET LE PASSAGE DE MINUIT VAUT AUSSI ICI. La friterie de 22 h à 1 h.
@@ -404,7 +405,7 @@ egal('le bouton dit le geste', LIBELLE_BOUTON, 'Je le prends')
   // commerçant en créerait un second, aussi inutilisable que le premier, et
   // conclurait que la fonction ne marche pas.
   const refusCloture = refusDePublication(F,
-    [{ id: 'x', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_heures: 48 }])
+    [{ id: 'x', heure_debut: '18:00:00', heure_fin: '18:30:00', cutoff_minutes: 2880 }])
   verifier('🔴 un créneau dont la clôture est passée fait refuser aussi',
     refusCloture !== null, String(refusCloture))
   verifier('🔴 et le message parle de la CLÔTURE',

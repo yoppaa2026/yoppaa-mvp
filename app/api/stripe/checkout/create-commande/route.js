@@ -44,7 +44,7 @@ import { modesPaiementOuverts } from '@/lib/modes-paiement'
 import { chargerRecompensePourYopper, consommerRecompense, rendreRecompense } from '@/lib/fidelite-recompense-server'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { tauxFraisLivraison, REGIME_EMPORTER } from '@/lib/tva'
-import { commandeDeborde, capaciteDuCreneau, creneauCommandable } from '@/lib/creneaux'
+import { commandeDeborde, capaciteDuCreneau, creneauCommandable, libelleDuree } from '@/lib/creneaux'
 import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
@@ -357,7 +357,8 @@ export async function POST(request) {
         // exactement ce défaut-là : `creneauCommandable` plus bas lisait
         // `undefined`, donc « pas de délai ». Le « commandes fermées 2 h avant »
         // réglé par le commerçant ne fermait rien côté serveur.
-        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_heures')
+        // ⚠️ EN MINUTES DEPUIS LE 16/10 : `cutoff_minutes` (lib/creneaux.js).
+        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_minutes')
         .eq('id', creneau_livraison_id)
         .single()
       if (errCL || !cl || cl.commercant_id !== commercant.id || !cl.actif) {
@@ -454,7 +455,7 @@ export async function POST(request) {
         // Mêmes colonnes de capacité que la livraison : les deux partagent le
         // modèle de lib/creneaux.js, elles doivent se lire pareil. Le délai
         // limite compris : il est réglable sur un créneau de retrait aussi.
-        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_heures')
+        .select('id, heure_debut, heure_fin, jour_semaine, actif, commercant_id, max_commandes, capacite_temps, mode_capacite, cutoff_minutes')
         .eq('id', creneau_id)
         .single()
       if (errCre || !cr || cr.commercant_id !== commercant.id || !cr.actif) {
@@ -770,7 +771,7 @@ export async function POST(request) {
           ? 'Ce créneau n\'est pas proposé ce jour-là. Choisis-en un autre.'
           : etatCreneau.raison === 'passe'
             ? 'Ce créneau est déjà passé. Choisis-en un autre.'
-            : `Il est trop tard pour ce créneau : ${commercant.nom} demande de commander au moins ${etatCreneau.heures} h à l'avance. Choisis un créneau plus tardif.`
+            : `Il est trop tard pour ce créneau : ${commercant.nom} demande de commander au moins ${libelleDuree(etatCreneau.minutes)} à l'avance. Choisis un créneau plus tardif.`
         return NextResponse.json({ ok: false, error: message, creneau_indisponible: true }, { status: 409 })
       }
       // 🔴 I7 : LE CONGÉ, côté serveur. La boutique a sa propre borne

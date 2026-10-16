@@ -2899,7 +2899,11 @@ verifier('alors qu\'un rendez-vous à venir l\'est',
     /creneauxProposables\(\)\.length === 0/.test(fiche))
 
   const config = sansCommentaires(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
-  verifier('le commerçant peut régler la clôture de ses créneaux', /cutoff_heures: n/.test(config))
+  // ⚠️ REPOINTÉE LE 16/10 : en minutes.
+  // ⚠️ ON VISE LA TABLE : la tournée de livraison écrit la même chose sur une
+  // autre table, et une garde sans table restait verte (vu par mutation).
+  verifier('le commerçant peut régler la clôture de ses créneaux',
+    /\.from\('creneaux'\)\.update\(\{ cutoff_minutes: n \}\)\.eq\('id', id\)/.test(config))
   verifier('le champ « ouverture des réservations » a disparu du profil',
     !/heure_ouverture_resa/.test(config),
     (config.match(/.*heure_ouverture_resa.*/) || [])[0])

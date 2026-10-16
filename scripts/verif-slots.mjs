@@ -15,6 +15,7 @@ import {
   horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV, ajusterPlagePourJour, plageQuiAccueille,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
+import { phraseCloture, heureCloture as heureClotureLib, libelleDuree, CLOTURES_PROPOSEES } from '../lib/creneaux.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
 import { nomClient, quandRdv, questionRdv, confirmationRdv, statutDepuisChoix } from '../lib/confirmation-rdv.js'
 import { capacitePrestation, blocsAgenda, regrouperEnSeances, coursAPlace } from '../lib/cours-collectifs.js'
@@ -2970,11 +2971,31 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
 
   // 🔴 « CLÔTURE : 0 H AVANT » NE SE DEVINE PAS. Et le sens change à zéro :
   // ce n'est pas « rien de réglé », c'est « jusqu'à la dernière minute ».
+  //
+  // ⚠️ REPOINTÉES LE 16/10 : la clôture se règle en MINUTES (Alex), et la
+  // phrase vit dans lib/creneaux.js (`phraseCloture`). On l'EXÉCUTE, et on
+  // vérifie que l'écran l'appelle.
   verifier('🔴 la clôture d’un créneau se lit en clair sous le champ',
-    /Commandes acceptées jusqu’à \$\{String\(c\.heure_debut\)\.slice\(0,5\)\}/.test(CONFIG)
-    && /Commandes fermées \$\{c\.cutoff_heures\} h avant, soit \$\{heureCloture\(c\.heure_debut, c\.cutoff_heures\)\}/.test(CONFIG))
+    phraseCloture('10:00:00', 0) === 'Commandes acceptées jusqu’à 10:00.'
+    && phraseCloture('10:00:00', 15) === 'Commandes fermées 15 min avant, soit à 09:45.'
+    && phraseCloture('10:00:00', 90) === 'Commandes fermées 1 h 30 avant, soit à 08:30.'
+    && /\{phraseCloture\(c\.heure_debut, minutesDeCloture\(c\)\)\}/.test(CONFIG))
   verifier('⚠️ et une clôture plus longue que la matinée renvoie à la veille',
-    /if \(total < 0\) return `la veille à \$\{minutesToTime\(\(\(total % 1440\) \+ 1440\) % 1440\)\}`/.test(CONFIG))
+    heureClotureLib('07:00', 120) === 'à 05:00'
+    && heureClotureLib('01:00', 120) === 'la veille à 23:00'
+    // 🔴 « LA VEILLE » ÉTAIT FAUX AU-DELÀ D'UN JOUR (relevé du 16/10).
+    && heureClotureLib('09:00', 2880) === '2 jours avant à 09:00'
+    && heureClotureLib('09:00', 1440) === 'la veille à 09:00')
+  verifier('la durée se dit comme on la lit',
+    libelleDuree(10) === '10 min' && libelleDuree(60) === '1 h' && libelleDuree(90) === '1 h 30' && libelleDuree(1440) === '24 h')
+  verifier('🔴 le choix descend jusqu’à 10 minutes (Alex, 16/10)',
+    CLOTURES_PROPOSEES[0] === 0 && CLOTURES_PROPOSEES.includes(10) && CLOTURES_PROPOSEES.includes(15)
+      && /<SelectCloture valeur=\{minutesDeCloture\(c\)\} onChange=\{m => updateCutoff\(c\.id, m\)\} \/>/.test(CONFIG))
+  verifier('🔴 « appliquer à tous » touche TOUS les créneaux du commerce, et lit l’erreur',
+    /\.from\('creneaux'\)\.update\(\{ cutoff_minutes: clotureCommune \}\)\.eq\('commercant_id', commercantId\)/.test(CONFIG)
+      && /async function appliquerClotureATous\(\) \{[\s\S]{0,400}if \(error\) \{ toast\(/.test(CONFIG))
+  verifier('🔴 une copie de créneau garde sa clôture',
+    /cutoff_minutes: minutesDeCloture\(c\),/.test(CONFIG))
   verifier('🔴 le découpage crée un créneau par morceau',
     /await supabase\.from\('creneaux'\)\.insert\(aCreer\.map\(n => \(\{/.test(CONFIG))
   verifier('⚠️ et chaque morceau est vérifié contre les créneaux existants',
@@ -3036,15 +3057,21 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
     && /const \{ error \} = await supabase\.from\('livraison_creneaux'\)\.update\(\{ actif: !c\.actif \}\)/.test(CONFIG)
     && /const \{ error \} = await supabase\.from\('livraison_creneaux'\)\.update\(\{ max_commandes: n \}\)/.test(CONFIG))
   // 🔴 LA LIMITE SE RÉGLAIT À LA CRÉATION ET PLUS JAMAIS.
+  // ⚠️ REPOINTÉES LE 16/10 : en minutes, par le même choix que les créneaux.
   verifier('🔴 la limite d’une tournée se corrige après coup',
     /async function majCutoff\(id, val\) \{/.test(CONFIG)
-    && /onChange=\{e => majCutoff\(c\.id, e\.target\.value\)\}/.test(CONFIG))
+    && /onChange=\{m => majCutoff\(c\.id, m\)\}/.test(CONFIG)
+    // ⚠️ ON VISE LA TABLE (vu par mutation : sans elle, la garde restait verte).
+    && /\.from\('livraison_creneaux'\)\.update\(\{ cutoff_minutes: n \}\)/.test(CONFIG))
   verifier('⚠️ et elle se lit en clair, comme celle des créneaux de retrait',
-    /Commandes fermées \$\{c\.cutoff_heures\} h avant le départ, soit \$\{heureCloture\(c\.heure_debut, c\.cutoff_heures\)\}/.test(CONFIG))
-  // ⚠️ UNE SEULE ÉCRITURE DE LA PHRASE, AU NIVEAU DU MODULE. Deux copies
-  // auraient divergé, comme les heures d'ouverture lues à quatre endroits.
+    phraseCloture('18:00', 120, { livraison: true }) === 'Commandes fermées 2 h avant le départ, soit à 16:00.'
+    && phraseCloture('18:00', 0, { livraison: true }) === 'Commandes acceptées jusqu’au départ, à 18:00.'
+    && /\{phraseCloture\(c\.heure_debut, minutesDeCloture\(c\), \{ livraison: true \}\)\}/.test(CONFIG))
+  // ⚠️ UNE SEULE ÉCRITURE DE LA PHRASE. Deux copies auraient divergé, comme
+  // les heures d'ouverture lues à quatre endroits. Depuis le 16/10 elle vit
+  // dans lib/creneaux.js : l'écran n'en garde AUCUNE copie.
   verifier('⚠️ la phrase de clôture n’existe qu’en un exemplaire',
-    (CONFIG.match(/function heureCloture\(heureDebut, heures\)/g) || []).length === 1)
+    !/function heureCloture\(/.test(CONFIG) && !/Commandes fermées \$\{/.test(CONFIG))
 
   // 🔴 QUAND IL N'Y A RIEN À DÉCIDER, UN SEUL BOUTON. « J'ai compris » et
   // « Ne rien faire » côte à côte pour le même effet, vus sur la capture.

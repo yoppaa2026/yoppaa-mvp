@@ -6,6 +6,31 @@
 // indexe ses constantes JOURS internes. Évite les bugs de mapping incoherent entre fiches.
 
 import { useState } from 'react'
+import { exceptionsAAnnoncer, phraseException } from '@/lib/horaires-du-jour'
+import { jourLocalISO } from '@/lib/timezone'
+
+// ─── LES FERMETURES ET HORAIRES ADAPTÉS À VENIR (Alex, 16/10) ─────────────
+//
+// ✅ « Oui, annoncés » (tableau) : le client qui ouvre la fiche apprend qu'on
+// est fermé le 1er novembre, ou ouvert de 8 h à 13 h le 24 décembre, AVANT de
+// se déplacer. Les 30 prochains jours, par date. Affiché même pour un commerce
+// itinérant, dont la grille de la semaine est cachée.
+export function AnnoncesExceptions({ exceptions = [], variant = 'border' }) {
+  const annonces = exceptionsAAnnoncer(exceptions, jourLocalISO(new Date()), 30)
+  if (annonces.length === 0) return null
+  const wrapStyle = variant === 'card'
+    ? { background: '#FFFBEB', borderRadius: 12, border: '1px solid #FDE68A', padding: '0.625rem 1rem' }
+    : { background: '#FFFBEB', borderBottom: '1px solid #FDE68A', padding: '0.625rem 1rem' }
+  return (
+    <div style={wrapStyle} role="note">
+      {annonces.map(e => (
+        <p key={e.id || `${e.date_debut}-${e.date_fin}`} style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: '#92400E', lineHeight: 1.5 }}>
+          {phraseException(e)}
+        </p>
+      ))}
+    </div>
+  )
+}
 
 const T = {
   main:  '#6B35C4',

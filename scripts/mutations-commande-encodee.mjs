@@ -105,7 +105,8 @@ const MUTATIONS = [
   { nom: '⚠️ l encodage ne prévient plus d un retrait hors horaires', fichier: ROUTE,
     de: "      if (hors) avertissements.push(avertissement('hors_horaires', messageHorsHoraires(hors, date_commande, { pourCommercant: true })))", vers: '' },
   { nom: '⚠️ les pastilles proposent le jour fermé', fichier: REGLE,
-    de: '    if (horairesDetail && !estOuvertCeJour(horairesDetail, jourSemaineDe(j))) continue', vers: '' },
+    // ⚠️ ANCRE RECALÉE LE 16/10 : l'horaire du JOUR (`ouvertLe`, la liste unique).
+    de: '    if (horairesDetail && !ouvertLe({ horairesDetail, fermetures, dateStr: j })) continue', vers: '' },
   { nom: '🔴 le nom n est plus obligatoire',
     fichier: REGLE, de: "  if (n.length < 2) return { ok: false, error: 'Indique au moins le nom du client.' }", vers: '' },
   { nom: '🔴 la saisie du commerçant fait sonner son propre écran',

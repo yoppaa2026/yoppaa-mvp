@@ -30,6 +30,7 @@ import { capacitePrestation, estParCouverts, bornesCouverts, couvertsValides, CO
 import { enModeInventaire, formatPourAffichage, dureeDuGroupe } from '@/lib/inventaire-salle'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
 import { COLONNES_PRESTATION_SANS_COUVERTS, COLONNES_CRENEAU_RDV_EQUIPE } from '@/lib/equipe-poste'
+import { COLONNES_EXCEPTIONS, horaireDuJour } from '@/lib/horaires-du-jour'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,7 +73,7 @@ export async function POST(request) {
     }
 
     // ── Ce que la fenêtre avait sous les yeux, relu en base ─────────────────
-    const [commerce, prestations, creneaux, rdvsDuJour] = await Promise.all([
+    const [commerce, prestations, creneaux, rdvsDuJour, exceptionsLues] = await Promise.all([
       admin.from('commercants').select('id, horaires_detail, rdv_acompte_global').eq('id', commercant_id).maybeSingle(),
       admin.from('rdv_prestations').select(`${COLONNES_PRESTATION_SANS_COUVERTS}, ${COLONNES_COUVERTS}`)
         .eq('commercant_id', commercant_id).eq('actif', true).is('deleted_at', null),
@@ -80,8 +81,10 @@ export async function POST(request) {
         .eq('commercant_id', commercant_id).eq('actif', true).is('deleted_at', null),
       admin.from('rdv_reservations').select('id, date_rdv, statut, prestation_id, praticien_id, heure_debut, heure_fin')
         .eq('commercant_id', commercant_id).eq('date_rdv', date).is('deleted_at', null),
+      // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
+      admin.from('fermetures_exceptionnelles').select(COLONNES_EXCEPTIONS).eq('commercant_id', commercant_id),
     ])
-    for (const [quoi, r] of [['commerce', commerce], ['prestations', prestations], ['créneaux', creneaux], ['réservations', rdvsDuJour]]) {
+    for (const [quoi, r] of [['commerce', commerce], ['prestations', prestations], ['créneaux', creneaux], ['réservations', rdvsDuJour], ['fermetures et horaires exceptionnels', exceptionsLues]]) {
       if (r.error) throw new Error(`lecture des ${quoi} : ${r.error.message}`)
     }
     if (!commerce.data) return NextResponse.json({ ok: false, error: 'commerce introuvable' }, { status: 404 })
@@ -123,7 +126,10 @@ export async function POST(request) {
     const jour = jourDe(date)
     const verdict = creneauAcceptable({
       dateStr: date, heureDebut: heure, dureeMinutes,
-      horaireJour: commerce.data?.horaires_detail?.[jour] || null,
+      // ✅ 16/10 : l'horaire du JOUR (la liste unique). L'équipe suit déjà les
+      // horaires de la semaine ; un jour fermé ou à horaires adaptés, elle suit
+      // celui-là. Le patron, lui, garde sa liberté dans sa propre fenêtre.
+      horaireJour: horaireDuJour(commerce.data?.horaires_detail, date, exceptionsLues.data || []) || null,
       creneauxJour: creneauxDuJour(creneaux.data || [], { dateStr: date, jour }),
       rdvsExistants: rdvsDuJour.data || [],
       capacite: capacitePrestation(presta), prestationId: presta.id, prestations: formats,

@@ -74,7 +74,8 @@ import { redirectTop } from '@/lib/redirect-top'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { referenceRdv } from '@/lib/numero-commande'
 import { promptPushOneSignal } from '@/app/components/OneSignalInit'
-import HorairesSection from '../../HorairesSection'
+import HorairesSection, { AnnoncesExceptions } from '../../HorairesSection'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda, horairesPourDate, horaireDuJour } from '@/lib/horaires-du-jour'
 import CarteFideliteFiche from '../../CarteFideliteFiche'
 import BonCadeauModal from '../../BonCadeauModal'
 import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
@@ -89,7 +90,7 @@ import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { fermetureQuiBloque, plagesOuvertes, seanceFermee } from '@/lib/fermetures-rdv'
 import { toutesLesLignes } from '@/lib/toutes-les-lignes'
 import { libelleApporteUnLieu } from '@/lib/adresse-localite'
-import { jourLocalISO, jourBruxelles, rappelDeLaVeillePartira } from '@/lib/timezone'
+import { jourLocalISO, jourBruxelles, rappelDeLaVeillePartira, jourCivilPlus } from '@/lib/timezone'
 // ⚠️ LA MÊME RÈGLE QUE LE SERVEUR, et le serveur la rejoue : cet écran décide
 // seulement d'afficher, jamais de demander.
 import { empreinteRequise, montantEmpreinte } from '@/lib/empreinte-table'
@@ -291,6 +292,8 @@ export default function CommanderRdvSlug() {
   const [praticiens, setPraticiens] = useState([])          // rdv_praticiens actifs
   const [junctionMap, setJunctionMap] = useState({})        // { prestation_id: [praticien_id, ...] }
   const [fermetures, setFermetures] = useState([])          // Sess 6 : rdv_fermetures futures (date_fin >= today)
+  // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
+  const [exceptions, setExceptions] = useState([])
   // TUNNEL UNIQUE (04/08) : les produits du salon s'ajoutent ici même, et
   // partent dans LE MÊME paiement que l'acompte du rendez-vous. Avant, il
   // fallait deux parcours et deux paiements pour repartir avec son shampoing.
@@ -1398,7 +1401,7 @@ export default function CommanderRdvSlug() {
 
       // 2. Fetch prestations + créneaux config + praticiens + junction + fermetures en parallèle
       const todayISO = jourBruxelles()
-      const [{ data: prest }, { data: cren }, { data: prat }, { data: ferm }, { data: photosData }] = await Promise.all([
+      const [{ data: prest }, { data: cren }, { data: prat }, { data: ferm }, { data: photosData }, { data: exceptionsLues }] = await Promise.all([
         supabase
           .from('rdv_prestations')
           .select('*')
@@ -1446,10 +1449,20 @@ export default function CommanderRdvSlug() {
           .select('*')
           .eq('commercant_id', c.id)
           .order('ordre'),
+        // ✅ 16/10 : LA LISTE UNIQUE « Fermetures et horaires exceptionnels ».
+        // Depuis hier : la nuit d'hier qui court après minuit compte pour la
+        // pastille. ⚠️ AVEC LES PLAGES : sans elles, un horaire adapté se
+        // lirait comme une fermeture complète.
+        supabase
+          .from('fermetures_exceptionnelles')
+          .select(COLONNES_EXCEPTIONS)
+          .eq('commercant_id', c.id)
+          .gte('date_fin', jourCivilPlus(todayISO, -1)),
       ])
 
       if (annule) return
       setPhotos(photosData || [])
+      setExceptions(exceptionsLues || [])
       // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir), et c'est appliqué ICI,
       // à l'arrivée des données : un prix ou un acompte restés en base sur une
       // table ne s'affichent plus nulle part dans cette page, et ne se calculent
@@ -1533,7 +1546,9 @@ export default function CommanderRdvSlug() {
       } else {
         setJunctionMap({})
       }
-      setFermetures(ferm || [])
+      // ✅ 16/10 : les absences et cours annulés de l'agenda, plus la liste
+      // unique traduite pour l'agenda (`fermeturesAgenda`).
+      setFermetures(fermeturesAgenda(ferm || [], exceptionsLues || []))
       setLoading(false)
     })()
     return () => { annule = true }
@@ -1593,7 +1608,8 @@ export default function CommanderRdvSlug() {
         // serveur le refuse désormais : l'écran doit lire la même chose.
         creneaux: plagesOuvertes(creneauxFiltres, fermetures, dateStr),
         reservations: reservationsFiltrees,
-        horairesDetail: commercant.horaires_detail,
+        // ✅ 16/10 : l'horaire du JOUR (fermé, ou horaires adaptés).
+        horairesDetail: horairesPourDate(commercant.horaires_detail, dateStr, exceptions),
         // ⚠️ La capacité fait la différence entre « ce créneau est pris » et
         // « il reste des places ». Sans elle, un cours de dix se fermerait dès
         // le premier inscrit. Elle vient de `regleOccupation`, avec les
@@ -1698,7 +1714,7 @@ export default function CommanderRdvSlug() {
   // Sess 6 : filtre les fermetures exceptionnelles (marque ouvert:false pour ces jours).
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   const joursDispos = commercant && creneauxFiltres.length > 0
-    ? genererJoursDispos({ nbJours: horizonRdv(commercant), horairesDetail: commercant.horaires_detail, creneaux: creneauxFiltres })
+    ? genererJoursDispos({ nbJours: horizonRdv(commercant), horairesDetail: commercant.horaires_detail, creneaux: creneauxFiltres, exceptions })
         .map(j => estFerme(j.iso) ? { ...j, ouvert: false, motifFerme: 'Fermeture' } : j)
     : []
 
@@ -1719,7 +1735,7 @@ export default function CommanderRdvSlug() {
       dureeMinutes: dureeRetenue,
       creneaux: plagesOuvertes(creneauxFiltres, fermetures, j.iso),
       reservations: resaFiltree,
-      horairesDetail: commercant?.horaires_detail,
+      horairesDetail: horairesPourDate(commercant?.horaires_detail, j.iso, exceptions),
       // Le mini-calendrier doit compter pareil : sans la capacité, un jour de
       // cours apparaîtrait complet alors qu'il reste neuf places. Et une salle
       // se remplit en tables : ce que le client demande décide de ce qui lui
@@ -1860,7 +1876,8 @@ export default function CommanderRdvSlug() {
       // ou horaires absents) REFUSE le RDV. Mieux vaut un faux negatif (RDV refuse
       // alors qu'il etait OK) qu'un faux positif (RDV cree alors qu'il chevauche).
       const jourSem = jourSemaineDate(dateChoisie)
-      const horaireJour = commercant.horaires_detail?.[jourSem]
+      // ✅ 16/10 : l'horaire du JOUR (la liste unique), comme la grille.
+      const horaireJour = horaireDuJour(commercant.horaires_detail, dateStr, exceptions)
       console.info('[rdv] validation pre-insert', {
         date: dateStr, jour: jourSem, debutMin, finMin,
         heure: heureChoisie, heureFin,
@@ -2972,9 +2989,9 @@ export default function CommanderRdvSlug() {
 
                 {/* Statut d'ouverture en TEMPS RÉEL (même logique que les cards
                     d'accueil) : Ouvert/Ferme à X, Ouvre/Ferme bientôt, pauses */}
-                {commercant.horaires_detail && (
+                {(commercant.horaires_detail || exceptions.length > 0) && (
                   <div style={{ marginTop: 10 }}>
-                    <PillStatutOuverture horaires={commercant.horaires_detail}/>
+                    <PillStatutOuverture horaires={commercant.horaires_detail} fermetures={exceptions}/>
                   </div>
                 )}
 
@@ -3160,6 +3177,12 @@ export default function CommanderRdvSlug() {
                     les deux, c'était afficher deux fois la même chose, et se
                     contredire dès que la déduction avait pris du retard.
                     Une vérité, un seul endroit où on la lit. */}
+                {/* ✅ 16/10 : fermetures et horaires adaptés à venir, ANNONCÉS (Alex). */}
+                {exceptions.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <AnnoncesExceptions exceptions={exceptions} variant="card"/>
+                  </div>
+                )}
                 {!commerceItinerant && (
                   <div style={{ marginTop: 12 }}>
                     <HorairesSection horaires={commercant.horaires_detail} variant="card"/>

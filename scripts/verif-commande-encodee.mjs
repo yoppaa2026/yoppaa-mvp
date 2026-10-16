@@ -271,20 +271,24 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     /termine: creneauTermine\(creneau, \{ dateStr: date_commande, instant: brusselsInstant \}\),/.test(r)
     && avant(r, 'termine: creneauTermine(', 'if (moment.refus) return non(moment.refus)'))
   v('🔴 l’article est lu EN BASE, jamais dans le corps', /const art = articlesData\.find\(a => String\(a\.id\) === id\)/.test(r))
+  // ⚠️ REPOINTÉES LE 16/10 (liste unique « Fermetures et horaires
+  // exceptionnels ») : l'horaire du JOUR, et la tournée ne le suit qu'un jour
+  // d'horaires adaptés (`seulementException`). Le sens est le même.
   v('🔴 horaires : l’encodage d’un retrait hors horaires prévient (avertissement), la tournée non',
-    /if \(!estLivraison\) \{\s*const hors = creneauRetraitHorsHoraires\(\{ creneau, dateStr: date_commande, horairesDetail: commercant\.horaires_detail \}\)\s*if \(hors\) avertissements\.push\(avertissement\('hors_horaires', messageHorsHoraires\(hors, date_commande, \{ pourCommercant: true \}\)\)\)/.test(r)
+    /const hors = creneauRetraitHorsHoraires\(\{\s*creneau, dateStr: date_commande, horairesDetail: commercant\.horaires_detail,\s*fermetures: fermetures \|\| \[\], seulementException: estLivraison,\s*\}\)\s*if \(hors\) avertissements\.push\(avertissement\('hors_horaires', messageHorsHoraires\(hors, date_commande, \{ pourCommercant: true \}\)\)\)/.test(r)
     && /created_at, horizon_commande, horaires_detail'\)/.test(r))
 
   // Les autres portes : la fiche, le serveur en ligne, la bande du tableau de bord.
   const fiche = code('app/commander/[slug]/page.js')
   v('🔴 horaires : la fiche saute un jour fermé et cache un créneau hors horaires (retrait), pas la tournée',
-    /\.filter\(cr => !horaires \|\| !creneauRetraitHorsHoraires\(\{ creneau: cr, dateStr: jourISO, horairesDetail: c\.horaires_detail \}\)\)/.test(fiche)
-    && /const fermeCeJour = \(date\) => estEnFermeture\(date\) \|\| \(horaires && !estOuvertCeJour\(c\.horaires_detail, JOURS\[jourIdx\(date\)\]\)\)/.test(fiche)
+    /\.filter\(cr => !creneauRetraitHorsHoraires\(\{ creneau: cr, dateStr: jourISO, horairesDetail: c\.horaires_detail, fermetures: fermeturesData \|\| \[\], seulementException: !horaires \}\)\)/.test(fiche)
+    && /const fermeCeJour = \(date\) => estEnFermeture\(date\) \|\| \(horaires && !ouvertLe\(\{ horairesDetail: c\.horaires_detail, fermetures: fermeturesData \|\| \[\], dateStr: jourLocalISO\(date\) \}\)\)/.test(fiche)
     && /if \(!fermeCeJour\(today\)\)/.test(fiche) && /if \(fermeCeJour\(d\)\) continue/.test(fiche)
     && /data\.blocagesLivraison \|\| \[\], longueurCal, false\)\)/.test(fiche))
   const enLigne = code('app/api/stripe/checkout/create-commande/route.js')
   v('🔴 horaires : le serveur en ligne REFUSE un retrait hors horaires (409), pas la tournée',
-    /if \(!estLivraison\) \{\s*const hors = creneauRetraitHorsHoraires\(\{ creneau, dateStr: date_commande, horairesDetail: commercant\.horaires_detail \}\)\s*if \(hors\) \{\s*return NextResponse\.json\(\{ ok: false, error: messageHorsHoraires\(hors, date_commande\), creneau_indisponible: true \}, \{ status: 409 \}\)/.test(enLigne)
+    /const hors = creneauRetraitHorsHoraires\(\{\s*creneau, dateStr: date_commande, horairesDetail: commercant\.horaires_detail,\s*fermetures: fermeturesCommercant, seulementException: estLivraison,\s*\}\)\s*if \(hors\) \{\s*return NextResponse\.json\(\{ ok: false, error: messageHorsHoraires\(hors, date_commande\), creneau_indisponible: true \}, \{ status: 409 \}\)/.test(enLigne)
+    && /\.select\(COLONNES_EXCEPTIONS\)/.test(enLigne)
     && /horaires_detail, boutique_delai_heures/.test(enLigne))
   v('🔴 au-delà du calendrier de la fiche : avertissement, et une lecture ratée est une erreur',
     /const calendrier = await calendrierDuCommerce\(\{ supabase: admin, commercant \}\)/.test(r)
@@ -345,19 +349,19 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     && /\{tuile\.hors \? \(/.test(m) && /\{epuise \? 'Épuisé ce jour' : `Reste \$\{tuile\.dispo\}`\}/.test(m))
   v('🔴 les pastilles sont les jours du calendrier de la fiche ; « Aujourd’hui » seulement s’il reste un créneau',
     /return joursDuCalendrier\(\{ aujourdhui, longueur: donnees\.calendrier\.longueur, fermetures: donnees\.calendrier\.fermetures, aujourdhuiOuvert, horairesDetail: horaires \}\)/.test(m)
-    && /&& !creneauTermine\(c, \{ dateStr: aujourdhui, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\s*&& !\(horaires && creneauRetraitHorsHoraires\(\{ creneau: c, dateStr: aujourdhui, horairesDetail: horaires \}\)\)\)/.test(m)
+    && /&& !creneauTermine\(c, \{ dateStr: aujourdhui, maintenant: new Date\(minute\), instant: brusselsInstant \}\)\s*&& !creneauRetraitHorsHoraires\(\{ creneau: c, dateStr: aujourdhui, horairesDetail: donnees\.commercant\?\.horaires_detail, fermetures: donnees\.calendrier\.fermetures \|\| \[\], seulementException: !horaires \}\)\)/.test(m)
     && /\{jours\.map\(d => \{/.test(m))
   // Réorientée le 11/10 (soir) : le filtre est devenu un marquage, puis un
   // filtre levé par « Autre date » seulement (un mardi fermé restait muet).
   v('🔴 horaires : la fenêtre cache les créneaux de retrait hors horaires et les jours fermés (pas en livraison) ; « Autre date » les montre, marqués',
-    /\.map\(r => \(\{ \.\.\.r, horsHoraires: mode === 'retrait' && !!creneauRetraitHorsHoraires\(\{ creneau: r\.creneau, dateStr: date, horairesDetail: donnees\?\.commercant\?\.horaires_detail \}\) \}\)\)\s*\.filter\(r => autreDate \|\| !r\.horsHoraires\)/.test(m)
+    /\.map\(r => \(\{ \.\.\.r, horsHoraires: !!creneauRetraitHorsHoraires\(\{ creneau: r\.creneau, dateStr: date, horairesDetail: donnees\?\.commercant\?\.horaires_detail, fermetures: donnees\?\.calendrier\?\.fermetures \|\| \[\], seulementException: mode !== 'retrait' \}\) \}\)\)\s*\.filter\(r => autreDate \|\| !r\.horsHoraires\)/.test(m)
     && /\{horsHoraires && <span[^>]*>hors horaires<\/span>\}/.test(m)
     && m.indexOf('const [autreDate, setAutreDate] = useState(false)') > -1
     && m.indexOf('const [autreDate, setAutreDate] = useState(false)') < m.indexOf('const creneaux = useMemo(')
     && /const horaires = mode === 'retrait' \? donnees\.commercant\?\.horaires_detail : null/.test(m)
     && /aujourdhuiOuvert, horairesDetail: horaires \}\)/.test(m))
   v('🔴 horaires : la bande du tableau de bord cache les créneaux de retrait hors horaires',
-    /\.filter\(\(\{ creneau \}\) => vueMode === 'livraison' \|\| !creneauRetraitHorsHoraires\(\{ creneau, dateStr: jourActif, horairesDetail: commercant\?\.horaires_detail \}\)\)/.test(code('app/dashboard/page.js')))
+    /\.filter\(\(\{ creneau \}\) => !creneauRetraitHorsHoraires\(\{ creneau, dateStr: jourActif, horairesDetail: commercant\?\.horaires_detail, fermetures: exceptionsCommerce, seulementException: vueMode === 'livraison' \}\)\)/.test(code('app/dashboard/page.js')))
   v('🔴 un jour hors des pastilles retombe sur le premier jour, sauf « Autre date »',
     /if \(!autreDate && jours\.length > 0 && !jours\.includes\(date\)\) setDate\(jours\[0\]\)/.test(m))
   // Réorientée le 11/10 (soir) : la mention seule est devenue l'encadré

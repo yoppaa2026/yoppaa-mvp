@@ -51,6 +51,7 @@ import { estRefusDeRegle, refusAvantPaiement } from '@/lib/refus-reservation'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { creneauxDuJour } from '@/lib/ouverture'
 import { jourSemaineDe } from '@/lib/creneaux'
+import { COLONNES_EXCEPTIONS, exceptionDuJour } from '@/lib/horaires-du-jour'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { timeToMinutes, minutesToTime, finApresMinuit } from '@/lib/rdv-slots'
 import { dureeSelonCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-collectifs'
@@ -231,7 +232,17 @@ export async function POST(request) {
     // prudence. Même arbitrage que `estOuvertCeJour`.
     const jourSem = jourSemaineDe(date_rdv)
     const horaires = commercant.horaires_detail || null
-    if (horaires && Object.keys(horaires).length > 0 && horaires.always_open !== true) {
+    // ✅ 16/10 : UN JOUR COUVERT PAR LA LISTE UNIQUE se juge sur l'horaire DU
+    // JOUR, dans `creerReservationRdv` (fermé : `jour_ferme` ; horaires
+    // adaptés : `hors_horaires_adaptes`). La grille de la semaine ne s'applique
+    // plus ce jour-là : un lundi habituellement fermé peut ouvrir par exception.
+    const { data: exceptionsLues, error: errExceptions } = await db
+      .from('fermetures_exceptionnelles').select(COLONNES_EXCEPTIONS).eq('commercant_id', commercant.id)
+    if (errExceptions) {
+      return NextResponse.json({ ok: false, error: 'Impossible de vérifier les jours d\'ouverture. Réessaie dans un instant.' }, { status: 500 })
+    }
+    const jourExceptionnel = Boolean(exceptionDuJour(exceptionsLues || [], date_rdv))
+    if (!jourExceptionnel && horaires && Object.keys(horaires).length > 0 && horaires.always_open !== true) {
       const plages = creneauxDuJour(horaires[jourSem])
       if (horaires[jourSem] !== undefined && horaires[jourSem] !== null) {
         if (plages.length === 0) {

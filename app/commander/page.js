@@ -36,7 +36,8 @@ import { statutCreneaux, pastilleCreneaux, jourPlus, pastilleDeCommandePertinent
 // brasserie ouverte jusqu'à 02:00 n'est pas fermée, et six endroits le
 // calculaient chacun à leur façon.
 import { finApresMinuit } from '@/lib/rdv-slots'
-import { jourLocalISO, jourBruxelles } from '@/lib/timezone'
+import { jourLocalISO, jourBruxelles, jourCivilPlus } from '@/lib/timezone'
+import { horaireDuJour, COLONNES_EXCEPTIONS } from '@/lib/horaires-du-jour'
 import { lieuxDuJour } from '@/lib/lieux-activite'
 import { morningADuContenu } from '@/lib/morning-contenu'
 import { libellePrixSeance } from '@/lib/abonnements'
@@ -1065,25 +1066,39 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDu
   const bonneAffaire = bonnesAffairesActives?.has(c.id) || false
 
   function getStatutPhysique() {
-    const JOURS_MAP = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
     const JOURS_LABELS = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi']
     const nowDate = new Date()
     const nowMin = nowDate.getHours() * 60 + nowDate.getMinutes()
     const todayIdx = nowDate.getDay()
-    const j = JOURS_MAP[todayIdx]
-    const h = c.horaires_detail?.[j]
 
     // ⚠️ LES CONGÉS ÉTAIENT IGNORÉS ICI. La carte ne lisait que les horaires
     // hebdomadaires : un commerce en fermeture exceptionnelle s'affichait
     // « Ouvert · 07:00-14:00 » en vert, alors que sa fiche, elle, le savait
     // fermé. Le Yopper se déplaçait pour rien.
-    const enFermeture = (date) => fermeturesDuCommerce.some(f => {
-      const debut = new Date(f.date_debut); debut.setHours(0,0,0,0)
-      const fin = new Date(f.date_fin); fin.setHours(23,59,59,999)
-      return date >= debut && date <= fin
-    })
-    if (enFermeture(nowDate)) {
-      return { dot: '#9CA3AF', label: 'Fermé exceptionnellement', color: '#6B7280', bg: '#F9FAFB', pulse: false, ferme: true, quand: null }
+    //
+    // ✅ 16/10 : CHAQUE JOUR SE LIT PAR `horaireDuJour` (la liste unique
+    // « Fermetures et horaires exceptionnels ») : aujourd'hui, la nuit d'hier
+    // et le jour de réouverture. Un 24 décembre ouvert de 8 h à 13 h dit
+    // « Ouvert · 08:00–13:00 », pas l'horaire d'un jeudi ordinaire.
+    const dateAuj = jourLocalISO(nowDate)
+    const jourDe = (offset) => horaireDuJour(c.horaires_detail, jourCivilPlus(dateAuj, offset), fermeturesDuCommerce)
+    const h = jourDe(0)
+    // 🔴 « FERMÉ EXCEPTIONNELLEMENT » DIT AUSSI QUAND ÇA ROUVRE (16/10). Sans
+    // `quand`, la pastille de créneaux juste dessous affichait « Créneaux
+    // disponibles » en vert sous la fermeture.
+    const prochaineOuverture = () => {
+      for (let i = 1; i <= 14; i++) {
+        const nextH = jourDe(i)
+        if (nextH?.ouvert && nextH.debut) {
+          const nextIdx = (todayIdx + i) % 7
+          return { quand: i === 1 ? 'demain' : i < 7 ? JOURS_LABELS[nextIdx] : `${JOURS_LABELS[nextIdx]} prochain`, debut: nextH.debut.slice(0, 5) }
+        }
+      }
+      return null
+    }
+    if (h?.exceptionnel && h.ouvert === false) {
+      const p = prochaineOuverture()
+      return { dot: '#9CA3AF', label: 'Fermé exceptionnellement', color: '#6B7280', bg: '#F9FAFB', pulse: false, ferme: true, quand: p?.quand || null }
     }
 
     // Plages du jour : 1 ou 2 (horaires à pause, ex. restauration 11-14 / 18-22)
@@ -1120,7 +1135,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDu
     // afficherait « fermé » devant une salle pleine, au moment précis où
     // quelqu'un cherche où finir sa soirée.
     {
-      const hier = c.horaires_detail?.[JOURS_MAP[(todayIdx + 6) % 7]]
+      const hier = jourDe(-1)
       for (const [d, f] of plagesJour(hier)) {
         const fin = finMin(d, f)
         if (fin > 1440 && nowMin + 1440 < fin) {
@@ -1139,19 +1154,14 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDu
       return { dot: '#9CA3AF', label: `Fermé · ouvre à ${plages[0][0].slice(0,5)}`, color: '#6B7280', bg: '#F9FAFB', pulse: false }
     }
 
-    if (c.horaires_detail) {
-      for (let i = 1; i <= 7; i++) {
-        const nextIdx = (todayIdx + i) % 7
-        const nextJour = JOURS_MAP[nextIdx]
-        const nextH = c.horaires_detail[nextJour]
-        if (nextH?.ouvert && nextH.debut) {
-          const quand = i === 1 ? 'demain' : JOURS_LABELS[nextIdx]
-          const label = `Fermé · ouvre ${quand} à ${nextH.debut.slice(0,5)}`
-          // `ferme` et `quand` servent à la pastille de créneaux juste en dessous :
-          // annoncer « Créneaux disponibles » en vert sous un « Fermé » gris se
-          // lit comme une contradiction, même si les deux sont exacts.
-          return { dot: '#9CA3AF', label, color: '#6B7280', bg: '#F9FAFB', pulse: false, ferme: true, quand }
-        }
+    if (c.horaires_detail || fermeturesDuCommerce.length > 0) {
+      const p = prochaineOuverture()
+      if (p) {
+        const label = `Fermé · ouvre ${p.quand} à ${p.debut}`
+        // `ferme` et `quand` servent à la pastille de créneaux juste en dessous :
+        // annoncer « Créneaux disponibles » en vert sous un « Fermé » gris se
+        // lit comme une contradiction, même si les deux sont exacts.
+        return { dot: '#9CA3AF', label, color: '#6B7280', bg: '#F9FAFB', pulse: false, ferme: true, quand: p.quand }
       }
     }
 
@@ -1171,6 +1181,7 @@ function CarteCommerce({ c, favoris, notesParCommerce, statutsCommerce, tablesDu
       horizon: info?.horizon,
       fermeAujourdhui: !!physiqueEtat?.ferme,
       quandOuvre: physiqueEtat?.quand || null,
+      exceptions: fermeturesDuCommerce,
     })
     if (!p) return null
     if (p.cle === 'ouvert')    return { dot: '#10B981', label: p.label, color: '#10B981', bg: '#F0FDF4' }
@@ -2825,7 +2836,10 @@ export default function Commander() {
         .in('statut', STATUTS_OCCUPENT_CRENEAU)
         .gte('date_commande', jour)
         .lte('date_commande', finFenetre),
-      supabase.from('fermetures_exceptionnelles').select('commercant_id, date_debut, date_fin').in('commercant_id', ids),
+      // ⚠️ LES PLAGES SONT INDISPENSABLES (16/10) : sans elles, chaque
+      // « horaires adaptés » serait lu comme une fermeture complète, et le
+      // commerce ouvert de 8 h à 13 h le 24 décembre s'afficherait fermé.
+      supabase.from('fermetures_exceptionnelles').select(COLONNES_EXCEPTIONS).in('commercant_id', ids),
     ])
     const notes = {}
     ids.forEach(id => {
@@ -2847,6 +2861,9 @@ export default function Commander() {
           jour,
           nowMin,
           categorie: commercant?.categorie,
+          // ✅ 16/10 : la liste unique (fermé, ou horaires adaptés aujourd'hui).
+          horairesDetail: commercant?.horaires_detail,
+          exceptions: (fermeturesData || []).filter(f => f.commercant_id === id),
         }),
         creneaux,
         jour,
@@ -2862,7 +2879,9 @@ export default function Commander() {
     setFermetures(parCommerce)
     // ✅ 15/10 : les restaurants qui prennent des réservations, à part. Une
     // panne ici ne touche RIEN d'autre : pas de badge, c'est tout.
-    chargerTablesDuJour(commercantsData.filter(c => ids.includes(c.id)))
+    // ⚠️ AVEC LA LISTE UNIQUE (16/10) : un restaurant fermé ou à horaires
+    // adaptés aujourd'hui ne doit pas annoncer « Table pour 2 dès 19:00 ».
+    chargerTablesDuJour(commercantsData.filter(c => ids.includes(c.id)), parCommerce)
   }
 
   // ─── « TABLE POUR 2 DÈS 19:00 » (Alex, 15/10) ────────────────────────────
@@ -2873,7 +2892,7 @@ export default function Commander() {
   // ⚠️ TOUT ÉCHEC REND « PAS DE BADGE », jamais un badge sur des données
   // partielles : une table annoncée libre alors que la lecture des
   // réservations a échoué serait une promesse fausse.
-  async function chargerTablesDuJour(commercantsData = []) {
+  async function chargerTablesDuJour(commercantsData = [], exceptionsParCommerce = {}) {
     const restos = commercantsData.filter(c => isAlimentaire(c) && reservationActive(c))
     if (restos.length === 0) { setTablesDuJour({}); return }
     const ids = restos.map(c => c.id)
@@ -2903,6 +2922,7 @@ export default function Commander() {
           creneaux: sesCreneaux,
           liaisons: (liaisons || []).filter(l => sesIds.has(String(l.creneau_id))),
           fermetures: (ferm || []).filter(f => f.commercant_id === c.id),
+          exceptions: exceptionsParCommerce[c.id] || [],
           reservations: busy || [],
         })]
       }))

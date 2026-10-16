@@ -646,6 +646,8 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
       pause_debut: null, pause_fin: null, actif: true, deleted_at: null, praticien_id: null, lieu_id: null }],
     rdv_creneau_prestations: [{ creneau_id: 'cr-yoga', prestation_id: 'yoga' }],
     rdv_fermetures: [], commercant_lieux: [], rdv_attente: [],
+    // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
+    fermetures_exceptionnelles: [],
     clients: [{ id: 'cl-sophie', email: 'sophie@exemple.be' }, { id: 'cl-marc', email: 'marc@exemple.be' }],
     rdv_reservations: inscrits,
   })
@@ -903,7 +905,9 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
       const publie = { nom: 'Centre', slug: 'centre', statut_publication: 'publie' }
       const t = base()
       t.rdv_prestations[0].commercant = publie
-      t.rdv_fermetures.push({ commercant_id: 'c1', date_debut: D, date_fin: D, praticien_id: null, deleted_at: null })
+      // ⚠️ REPOINTÉE LE 16/10 : la fermeture du commerce vit dans la liste
+      // unique ; celle « tout le commerce » de l'agenda est ignorée (recopiée).
+      t.fermetures_exceptionnelles.push({ id: 'e1', commercant_id: 'c1', date_debut: D, date_fin: D })
       t.rdv_attente.push(ligne('a'))
       const r = await S.prevenirLaFile(fauxDb(t), { prestationId: 'yoga', dateRdv: D, heureDebut: '18:00' })
       verifier('🔴 un jour fermé ne fait prévenir personne', r.ok === true && r.file === 0 && r.raison === 'jour_ferme', JSON.stringify(r))

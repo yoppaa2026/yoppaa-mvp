@@ -27,13 +27,13 @@ import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurA
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
-import { joursRetraitBoutique, creneauRetraitHorsHoraires, estOuvertCeJour } from '@/lib/ouverture'
+import { joursRetraitBoutique, creneauRetraitHorsHoraires, estFermeExceptionnellement, ouvertLe } from '@/lib/ouverture'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import { categorieAtteinte, barreDetachee, defilementVersCategorie, positionDansContenu } from '@/lib/responsive'
 // ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
 // pas si un commerce bouge. C'est `estItinerant`, qui lit les lieux déclarés,
 // qui décide, et une professeure de yoga en profite comme un food truck.
-import { jourLocalISO, jourBruxelles, brusselsInstant } from '@/lib/timezone'
+import { jourLocalISO, jourBruxelles, brusselsInstant, jourCivilPlus } from '@/lib/timezone'
 import { contexteRetrait, textesConfirmation } from '@/lib/ecran-retrait'
 import { lieuxDuJour, estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
@@ -113,7 +113,7 @@ import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import SignauxYopper from '../SignauxYopper'
 import { enviesProposables } from '@/lib/signaux'
 import ModalSignalement from '../ModalSignalement'
-import HorairesSection from '../HorairesSection'
+import HorairesSection, { AnnoncesExceptions } from '../HorairesSection'
 import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
 // ⚠️ DEMANDE D'ALEX : les avis se consultent, ils ne s'imposent pas. Une note
 // globale, et le Yopper choisit s'il veut lire. La règle vit en fonction pure.
@@ -1937,7 +1937,7 @@ export default function CommanderSlug() {
     // Un cache d'avant le 06/10 n'a que les deals du jour : on s'en contente
     // jusqu'au prochain chargement, le serveur reste juge du prix.
     setDealsTous(data.dealsTous || data.dealsActifs || [])
-    setFermetures(data.fermetures)
+    setFermetures(data.fermetures || [])
     // Un cache écrit avant le 10/08 ne porte pas la charge : on retombe sur un
     // objet vide, les créneaux s'affichent libres, et le prochain chargement
     // rétablit les compteurs. Le serveur, lui, refuse de toute façon un
@@ -2018,7 +2018,11 @@ export default function CommanderSlug() {
       supabase.rpc('charge_creneaux_par_jour', { p_commercant_id: c.id }),
       supabase.from('commercant_photos').select('*').eq('commercant_id', c.id).order('ordre'),
       supabase.from('yoppaa_deals').select('*').eq('commercant_id', c.id).eq('actif', true),
-      supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', new Date().toISOString()),
+      // 🔴 UN JOUR SE COMPARE À UN JOUR (16/10). `date_fin >= maintenant` (un
+      // instant) écartait la fermeture qui se termine AUJOURD'HUI dès minuit
+      // passé : le commerce fermé ce jour-là redevenait commandable. Depuis
+      // hier, pour la nuit d'hier qui court après minuit.
+      supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', c.id).gte('date_fin', jourCivilPlus(jourLocalISO(new Date()), -1)),
       supabase.from('actualites').select('*').eq('commercant_id', c.id).eq('actif', true).order('created_at', { ascending: false }),
       supabase.from('livraison_config').select('*').eq('commercant_id', c.id).maybeSingle(),
       supabase.from('livraison_creneaux').select('*').eq('commercant_id', c.id).eq('actif', true).order('heure_debut'),
@@ -2241,12 +2245,14 @@ export default function CommanderSlug() {
     const joursDispos = []
     const today = new Date(); today.setHours(0,0,0,0)
 
+    // ✅ 16/10 : LA LISTE UNIQUE « Fermetures et horaires exceptionnels ».
+    // Une fermeture complète saute le jour ; un horaire adapté le garde, et
+    // seuls les créneaux qui y tiennent entiers restent (plus bas). La règle
+    // est celle du serveur (`estFermeExceptionnellement`, `ouvertLe`,
+    // `creneauRetraitHorsHoraires`), et elle compare des JOURS écrits, plus des
+    // dates reconstruites à minuit.
     function estEnFermeture(date) {
-      return (fermeturesData||[]).some(f => {
-        const debut = new Date(f.date_debut); debut.setHours(0,0,0,0)
-        const fin = new Date(f.date_fin); fin.setHours(23,59,59,999)
-        return date >= debut && date <= fin
-      })
+      return estFermeExceptionnellement(fermeturesData || [], jourLocalISO(date))
     }
 
     // ⚠️ LA CHARGE SE LIT AU JOUR AFFICHÉ, plus « tout ou rien ».
@@ -2282,7 +2288,9 @@ export default function CommanderSlug() {
       )
       return creneauxAvecCount
         .filter(cr => cr.jour_semaine === nomJour || cr.jour_semaine === null)
-        .filter(cr => !horaires || !creneauRetraitHorsHoraires({ creneau: cr, dateStr: jourISO, horairesDetail: c.horaires_detail }))
+        // Les tournées (`horaires` faux) ne suivent l'horaire qu'un jour
+        // d'horaires adaptés (Alex, 16/10) ; le retrait, tous les jours.
+        .filter(cr => !creneauRetraitHorsHoraires({ creneau: cr, dateStr: jourISO, horairesDetail: c.horaires_detail, fermetures: fermeturesData || [], seulementException: !horaires }))
         .map(cr => ({
           ...cr,
           // Lu par `calculerCapaciteCreneau`, qui met la capacité restante à
@@ -2294,7 +2302,9 @@ export default function CommanderSlug() {
     }
 
     // Un jour FERMÉ dans les horaires se saute, comme une fermeture (retrait).
-    const fermeCeJour = (date) => estEnFermeture(date) || (horaires && !estOuvertCeJour(c.horaires_detail, JOURS[jourIdx(date)]))
+    // ⚠️ `ouvertLe` (16/10) : un lundi habituellement fermé mais ouvert par
+    // exception s'ouvre, un jour d'horaires adaptés reste ouvert.
+    const fermeCeJour = (date) => estEnFermeture(date) || (horaires && !ouvertLe({ horairesDetail: c.horaires_detail, fermetures: fermeturesData || [], dateStr: jourLocalISO(date) }))
 
     if (!fermeCeJour(today)) {
       const crensAujourdhui = creneauxPourDate(today).filter(cr => heureEnMinutes(cr.heure_debut) > now)
@@ -4608,8 +4618,8 @@ export default function CommanderSlug() {
                     </div>
                     {/* Statut d'ouverture en TEMPS RÉEL (même logique que les cards
                         d'accueil) : Ouvert/Ferme à X, Ouvre/Ferme bientôt, pauses */}
-                    {commercant.horaires_detail && (
-                      <PillStatutOuverture horaires={commercant.horaires_detail}/>
+                    {(commercant.horaires_detail || fermetures.length > 0) && (
+                      <PillStatutOuverture horaires={commercant.horaires_detail} fermetures={fermetures}/>
                     )}
                   </div>
 
@@ -4915,6 +4925,8 @@ export default function CommanderSlug() {
                     jour, l'endroit et l'heure : la grille répétait la même
                     information, et la contredisait dès que la déduction depuis
                     les emplacements avait pris du retard. */}
+                {/* ✅ 16/10 : fermetures et horaires adaptés à venir, ANNONCÉS (Alex). */}
+                <AnnoncesExceptions exceptions={fermetures}/>
                 {commercant.horaires_detail && !commerceItinerant && <HorairesSection horaires={commercant.horaires_detail}/>}
 
                 {/* 🔴 LE BANDEAU « ENVIE DE COMMANDER À L'AVANCE ? DEMANDEZ À X

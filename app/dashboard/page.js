@@ -13,6 +13,8 @@ import { peutReserver, motReservation, motsReservation } from '@/lib/reservation
 import { useRouter } from 'next/navigation'
 import ConfigDashboard from './ConfigDashboard'
 import AgendaRdv from './AgendaRdv'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda } from '@/lib/horaires-du-jour'
+import { ModaleFermetures } from './FermeturesExceptionnelles'
 import ModalNouveauRdv from './ModalNouveauRdv'
 import ModalNouvelleCommande from './ModalNouvelleCommande'
 import ModaleConfirmation from './ModaleConfirmation'
@@ -1318,6 +1320,12 @@ export default function Dashboard() {
   // ne proposent qu'une séance de cours (04/10). `null` = non lues.
   const [liaisonsRdv, setLiaisonsRdv] = useState(null)
   const [fermeturesRdv, setFermeturesRdv] = useState([])  // rdv_fermetures : congés, absences, que l'agenda grise
+  // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels »
+  // (`fermetures_exceptionnelles`). Elle ferme l'agenda (traduite par
+  // `fermeturesAgenda`) et borne ses heures un jour d'horaires adaptés.
+  const [exceptionsCommerce, setExceptionsCommerce] = useState([])
+  // La fenêtre du bouton « Fermer ou changer les horaires » (raccourcis du haut).
+  const [fermeturesOuvertes, setFermeturesOuvertes] = useState(false)
   const [attentesRdv, setAttentesRdv] = useState(null)    // { seances, fenetres } : combien attendent, jamais qui
   // Grilles de créneaux alimentaires (retrait + tournées), pour AFFICHER LE
   // REMPLISSAGE au commerçant. Chargées une seule fois par commerce : une grille
@@ -1567,6 +1575,18 @@ export default function Dashboard() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commercant?.id])
+
+  // ✅ 16/10 : la liste unique, relue à l'ouverture et après chaque
+  // changement (le bouton « Fermer ou changer les horaires » la recharge).
+  // Silencieuse en cas d'échec : l'agenda garde ses rendez-vous, il perd
+  // seulement le gris des fermetures, comme pour celles de l'agenda.
+  const chargerExceptions = useCallback(async (id) => {
+    if (!id) return
+    const { data } = await supabase.from('fermetures_exceptionnelles').select(COLONNES_EXCEPTIONS).eq('commercant_id', id)
+    setExceptionsCommerce(data || [])
+  }, [])
+  useEffect(() => { chargerExceptions(commercant?.id) }, [commercant?.id, chargerExceptions])
+  const fermeturesAgendaTout = fermeturesAgenda(fermeturesRdv, exceptionsCommerce)
   const [filtreStatut, setFiltreStatut] = useState('actives')
   const [vueMode, setVueMode] = useState('retrait')  // vue Commandes : 'retrait' | 'livraison'
   // Créneaux fermés à la volée par le commerçant débordé. Table `creneaux_blocages`.
@@ -3236,7 +3256,9 @@ export default function Dashboard() {
   })).filter(({ creneau }) => !creneauTermine(creneau, { dateStr: jourActif, maintenant: new Date(minuteBande), instant: brusselsInstant }))
     // 🔴 (11/10) Retrait : un créneau hors des horaires n'est proposé à
     // personne, il n'a rien à remplir (ses éventuelles commandes restent listées).
-    .filter(({ creneau }) => vueMode === 'livraison' || !creneauRetraitHorsHoraires({ creneau, dateStr: jourActif, horairesDetail: commercant?.horaires_detail }))
+    // ✅ 16/10 : l'horaire du JOUR (la liste unique) ; la tournée ne le suit
+    // qu'un jour d'horaires adaptés.
+    .filter(({ creneau }) => !creneauRetraitHorsHoraires({ creneau, dateStr: jourActif, horairesDetail: commercant?.horaires_detail, fermetures: exceptionsCommerce, seulementException: vueMode === 'livraison' }))
     .map(c => ({ ...c, ...appliquerBlocage(c, blocagesDuJour.has(c.creneau?.id)) }))
 
   const stats = {
@@ -3287,6 +3309,17 @@ export default function Dashboard() {
   // rangée dans l'onglet Rendez-vous, en icônes dans la barre fixe des
   // Commandes (Alex, 11/10).
   const raccourcisComptoir = commercant ? [
+    // ✅ 16/10 (Alex : « un bouton de raccourci dans le haut du tableau de
+    // bord, accessible rapidement ») : la liste unique « Fermetures et
+    // horaires exceptionnels » s'ouvre directement sur l'ajout. Pour TOUS les
+    // commerces : un jour de congé n'est pas une fonction de forfait.
+    {
+      key: 'fermetures',
+      label: 'Fermer ou changer les horaires',
+      aide: 'Congé, jour férié, heures réduites',
+      action: () => setFermeturesOuvertes(true),
+      icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M10 14l4 4M14 14l-4 4"/></svg>,
+    },
     canDo(planEffectif(commercant), 'fidelite') && {
       key: 'fidelite',
       label: commercant.fidelite_actif ? 'Carte de fidélité' : 'Activer la fidélité',
@@ -4122,7 +4155,7 @@ export default function Dashboard() {
             return (
               <BandeDefilante libelle="les raccourcis" style={{ display: 'flex', gap: 8, padding: '0 1rem', marginBottom: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
                 {actions.map(a => (
-                  <button key={a.key} onClick={() => ouvrirConfig(a.key)}
+                  <button key={a.key} onClick={() => (a.action ? a.action() : ouvrirConfig(a.key))}
                     style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 9, padding: '9px 14px', borderRadius: 12, border: `1.5px solid ${T.pale}`, background: '#fff', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', textAlign: 'left', boxShadow: '0 1px 6px rgba(22,6,54,0.05)' }}>
                     <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 9, background: T.pale, flexShrink: 0 }}>{a.icone}</span>
                     <span style={{ minWidth: 0 }}>
@@ -4188,7 +4221,7 @@ export default function Dashboard() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                   {raccourcisComptoir.map(a => (
-                    <button key={a.key} type="button" onClick={() => ouvrirConfig(a.key)} title={`${a.label} · ${a.aide}`} aria-label={a.label}
+                    <button key={a.key} type="button" onClick={() => (a.action ? a.action() : ouvrirConfig(a.key))} title={`${a.label} · ${a.aide}`} aria-label={a.label}
                       style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 11, border: `1.5px solid ${T.pale}`, background: '#fff', cursor: 'pointer' }}>
                       {a.icone}
                     </button>
@@ -4549,7 +4582,8 @@ export default function Dashboard() {
                     rdvs={rdvs}
                     prestations={prestationsRdv}
                     creneaux={creneauxRdv}
-                    fermetures={fermeturesRdv}
+                    fermetures={fermeturesAgendaTout}
+                    exceptions={exceptionsCommerce}
                     attentes={attentesRdv}
                     onPrevenirFile={prevenirFileSeance}
                     onListerFile={listerFileSeance}
@@ -4660,6 +4694,15 @@ export default function Dashboard() {
         )
       })()}
 
+      {/* ─── « Fermer ou changer les horaires » (Alex, 16/10) ──────────────
+          Après chaque écriture, la liste unique est relue : l'agenda et les
+          créneaux de cet écran suivent tout de suite. */}
+      {fermeturesOuvertes && commercant && (
+        <ModaleFermetures commercantId={commercant.id}
+          onClose={() => setFermeturesOuvertes(false)}
+          onChange={() => chargerExceptions(commercant.id)} />
+      )}
+
       {/* ─── Modale « Déplacer ce RDV » ────────────────────────────────────── */}
       {rdvADeplacer && commercant && (
         <ModalDeplacerRdv
@@ -4668,7 +4711,7 @@ export default function Dashboard() {
           prestations={prestationsRdv}
           creneaux={creneauxRdv}
           liaisons={liaisonsRdv}
-          rdvsExistants={rdvs} fermetures={fermeturesRdv}
+          rdvsExistants={rdvs} fermetures={fermeturesAgendaTout} exceptions={exceptionsCommerce}
           onClose={() => setRdvADeplacer(null)}
           onDeplace={() => {
             // Le déplacement se confirme comme le reste : la modale se ferme,

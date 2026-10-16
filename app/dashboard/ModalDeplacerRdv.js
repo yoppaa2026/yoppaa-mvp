@@ -32,6 +32,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { champsLieuPour } from '@/lib/lieu-fige'
 import { plageQuiAccueille, seancesDuCoursPour } from '@/lib/rdv-slots'
+import { horaireDuJour } from '@/lib/horaires-du-jour'
 import { capacitePrestation, premierePlaceLibre, rangLibre, estParCouverts, couvertsDe, coursAPlace } from '@/lib/cours-collectifs'
 import {
   creneauAcceptable, creneauxDuJour, deplacementUtile, champsDuDeplacement,
@@ -66,6 +67,9 @@ export default function ModalDeplacerRdv({
   // Les fermetures du commerce (Annul-I6, 04/10). `null` : non lues, la règle
   // ne les regarde pas (le serveur de l'équipe les relit de son côté).
   fermetures = null,
+  // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels », pour
+  // borner les heures un jour d'horaires adaptés (`horaireDuJour`).
+  exceptions = [],
   onClose, onDeplace,
   // Le Poste équipe : { lireSalle(date), deplacer(corps) }. Absent chez le patron.
   serveur = null,
@@ -164,7 +168,7 @@ export default function ModalDeplacerRdv({
   const jour = useMemo(() => (
     /^\d{4}-\d{2}-\d{2}$/.test(date) ? jourCle(new Date(`${date}T12:00:00`)) : null
   ), [date])
-  const horaireJour = jour ? commercant?.horaires_detail?.[jour] : null
+  const horaireJour = jour ? (horaireDuJour(commercant?.horaires_detail, date, exceptions) ?? null) : null
   const creneauxJour = useMemo(() => creneauxDuJour(creneaux, { dateStr: date, jour }), [creneaux, date, jour])
 
   const contexte = {

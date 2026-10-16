@@ -138,7 +138,9 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
     // est montré, marqué « hors horaires », et le serveur fait confirmer
     // (`hors_horaires`). Sans cela, un mardi fermé ne donnait que « Aucun
     // créneau ce jour-là », sans un mot ni un moyen (Alex, 11/10).
-    .map(r => ({ ...r, horsHoraires: mode === 'retrait' && !!creneauRetraitHorsHoraires({ creneau: r.creneau, dateStr: date, horairesDetail: donnees?.commercant?.horaires_detail }) }))
+    // ✅ 16/10 : l'horaire du JOUR (la liste unique), et la tournée un jour
+    // d'horaires adaptés, comme le serveur.
+    .map(r => ({ ...r, horsHoraires: !!creneauRetraitHorsHoraires({ creneau: r.creneau, dateStr: date, horairesDetail: donnees?.commercant?.horaires_detail, fermetures: donnees?.calendrier?.fermetures || [], seulementException: mode !== 'retrait' }) }))
     .filter(r => autreDate || !r.horsHoraires),
   [mode, date, donnees, minute, autreDate])
   useEffect(() => { setCreneauId(null) }, [mode, date])
@@ -153,7 +155,7 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
     const horaires = mode === 'retrait' ? donnees.commercant?.horaires_detail : null
     const aujourdhuiOuvert = source.some(c => (!c.jour_semaine || c.jour_semaine === nomDuJour)
       && !creneauTermine(c, { dateStr: aujourdhui, maintenant: new Date(minute), instant: brusselsInstant })
-      && !(horaires && creneauRetraitHorsHoraires({ creneau: c, dateStr: aujourdhui, horairesDetail: horaires })))
+      && !creneauRetraitHorsHoraires({ creneau: c, dateStr: aujourdhui, horairesDetail: donnees.commercant?.horaires_detail, fermetures: donnees.calendrier.fermetures || [], seulementException: !horaires }))
     return joursDuCalendrier({ aujourdhui, longueur: donnees.calendrier.longueur, fermetures: donnees.calendrier.fermetures, aujourdhuiOuvert, horairesDetail: horaires })
   }, [donnees, mode, aujourdhui, minute])
   // Ce que ce jour a d'exceptionnel, dit AVANT le choix du créneau.

@@ -686,7 +686,9 @@ for (const chemin of [
 
   function baseSimulee({ prestation, lieux = [], placesPrises = [], erreurInsert = null,
                          creneaux = [], liaisons = [], erreurPlaces = null,
-                         fermetures = [], erreurFermetures = null, commercant = null }) {
+                         fermetures = [], erreurFermetures = null, commercant = null,
+                         // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
+                         exceptions = [], erreurExceptions = null }) {
     const vu = { payload: null, filtresPlaces: {} }
     // 🔴 LES PLAGES SONT RENDUES À TRAVERS LEUR SELECT (03/10). Le lieu de la
     // réservation vient désormais de `rdv_creneaux.lieu_id` : si la colonne
@@ -731,6 +733,9 @@ for (const chemin of [
           // ⚠️ À TRAVERS LE SELECT (04/10) : sans `prestation_id, heure_debut`,
           // la fermeture d'une séance se lirait comme une journée entière.
           : nom === 'rdv_fermetures' ? { data: erreurFermetures ? null : projeter(fermetures, colonnes), error: erreurFermetures }
+          // ⚠️ À TRAVERS LE SELECT AUSSI (16/10) : sans les plages, un horaire
+          // adapté se lirait comme une fermeture complète.
+          : nom === 'fermetures_exceptionnelles' ? { data: erreurExceptions ? null : projeter(exceptions, colonnes), error: erreurExceptions }
           : nom === 'rdv_reservations' ? (vu.filtresPlaces = filtres, erreurPlaces
             ? { data: null, error: erreurPlaces }
             // ⚠️ À TRAVERS LE SELECT (04/10) : une inscription peut porter son
@@ -939,14 +944,34 @@ for (const chemin of [
   // congé, mais une fiche restée ouverte, une requête forgée ou le webhook d'un
   // acompte posaient un rendez-vous en plein congé.
   {
-    const CONGES = [{ date_debut: '2026-09-07', date_fin: '2026-09-11', praticien_id: null }]
+    // ⚠️ REPOINTÉ LE 16/10 : la fermeture DU COMMERCE vit dans la liste unique
+    // « Fermetures et horaires exceptionnels » (`exceptions`). Les congés de
+    // l'agenda « tout le commerce » sont ignorés : la migration du 16/10 les a
+    // recopiés, et les relire empêcherait de les rouvrir depuis la liste.
+    const CONGES = [{ id: 'e1', date_debut: '2026-09-07', date_fin: '2026-09-11' }]
     const RESA = { commercantId: 'c1', prestationId: 'p1', dateRdv: '2026-09-07', heureDebut: '10:00' }
-    const ferme = baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES })
+    const ferme = baseSimulee({ prestation: PRESTA_SOLO, exceptions: CONGES })
     const r1 = await creerReservationRdv(ferme, { ...RESA, champs: {} })
     verifie('🔴 un jour de congé refuse la réservation, et n’écrit rien',
       r1.ok === false && r1.code === 'jour_ferme' && ferme._vu.payload === null, JSON.stringify(r1))
+    const ancien = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: [{ date_debut: '2026-09-07', date_fin: '2026-09-11', praticien_id: null }] }), { ...RESA, champs: {} })
+    verifie('l’ancien congé « tout le commerce » de l’agenda ne compte plus (recopié dans la liste)', ancien.ok === true, JSON.stringify(ancien))
+    // 🔴 UN JOUR D'HORAIRES ADAPTÉS (16/10) : tous les canaux passent ici.
+    const ADAPTE = [{ id: 'e2', date_debut: '2026-09-07', date_fin: '2026-09-07', plage1_debut: '14:00:00', plage1_fin: '18:00:00' }]
+    const hors = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, exceptions: ADAPTE }), { ...RESA, champs: {} })
+    verifie('🔴 hors de l’horaire adapté : refusé, avec son motif', hors.ok === false && hors.code === 'hors_horaires_adaptes', JSON.stringify(hors))
+    const dedans = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, exceptions: ADAPTE }), { ...RESA, heureDebut: '15:00', champs: {} })
+    verifie('dans l’horaire adapté : accepté', dedans.ok === true, JSON.stringify(dedans))
+    const deborde = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, exceptions: ADAPTE }), { ...RESA, heureDebut: '17:30', champs: {} })
+    verifie('🔴 un rendez-vous qui DÉBORDE de l’horaire adapté est refusé', deborde.ok === false && deborde.code === 'hors_horaires_adaptes', JSON.stringify(deborde))
+    const patron = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, exceptions: ADAPTE }), { ...RESA, champs: { source: 'commercant' } })
+    verifie('⚠️ le commerçant, lui, garde sa liberté dans son agenda', patron.ok === true, JSON.stringify(patron))
+    const panneListe = baseSimulee({ prestation: PRESTA_SOLO, erreurExceptions: { message: 'délai dépassé' } })
+    const rp = await creerReservationRdv(panneListe, { ...RESA, champs: {} })
+    verifie('⚠️ une lecture de la liste unique en échec refuse, sans écrire',
+      rp.ok === false && rp.code === 'ecriture_impossible' && panneListe._vu.payload === null, JSON.stringify(rp))
     // ⚠️ ET AVANT LE PAIEMENT : les routes d'acompte vérifient par ce chemin-là.
-    const sim = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, champs: {}, simulation: true })
+    const sim = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, exceptions: CONGES }), { ...RESA, champs: {}, simulation: true })
     verifie('🔴 la vérification avant paiement le refuse aussi', sim.ok === false && sim.code === 'jour_ferme', JSON.stringify(sim))
     // 🔴 UN COURS ANNULÉ (question 1, 04/10) : cette séance seulement.
     const COURS_ANNULE = [{ date_debut: '2026-09-07', date_fin: '2026-09-07', praticien_id: null, prestation_id: 'p2', heure_debut: '18:00:00' }]
@@ -959,11 +984,11 @@ for (const chemin of [
     verifie('⚠️ le même cours, à une autre heure du même jour, se réserve', r10.ok === true, JSON.stringify(r10))
     const r11 = await creerReservationRdv(baseSimulee({ prestation: PRESTA_COURS, fermetures: COURS_ANNULE }), { ...SEANCE, champs: { source: 'commercant' } })
     verifie('⚠️ la commerçante, elle, peut encore y inscrire quelqu’un au comptoir', r11.ok === true, JSON.stringify(r11))
-    const dernierJour = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, dateRdv: '2026-09-11', champs: {} })
+    const dernierJour = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, exceptions: CONGES }), { ...RESA, dateRdv: '2026-09-11', champs: {} })
     verifie('⚠️ le dernier jour de la fermeture est fermé aussi', dernierJour.ok === false && dernierJour.code === 'jour_ferme')
-    const lendemain = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, dateRdv: '2026-09-12', champs: {} })
+    const lendemain = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, exceptions: CONGES }), { ...RESA, dateRdv: '2026-09-12', champs: {} })
     verifie('le lendemain de la fermeture se réserve', lendemain.ok === true, JSON.stringify(lendemain))
-    const comptoir = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, fermetures: CONGES }), { ...RESA, champs: { source: 'commercant' } })
+    const comptoir = await creerReservationRdv(baseSimulee({ prestation: PRESTA_SOLO, exceptions: CONGES }), { ...RESA, champs: { source: 'commercant' } })
     verifie('⚠️ le commerçant, lui, pose ce qu’il veut dans son agenda', comptoir.ok === true, JSON.stringify(comptoir))
     const panne = baseSimulee({ prestation: PRESTA_SOLO, erreurFermetures: { message: 'délai dépassé' } })
     const r2 = await creerReservationRdv(panne, { ...RESA, champs: {} })
@@ -1129,8 +1154,13 @@ for (const chemin of [
     // ⚠️ VISÉE SUR L'AGENDA LE 04/10 : depuis Annul-I6, la fenêtre de
     // déplacement reçoit aussi `fermetures={fermeturesRdv}`, et la garde la
     // trouvait là quand l'agenda l'avait perdue (piège du jumeau).
+    // ⚠️ REPOINTÉE LE 16/10 : l'agenda reçoit celles de l'agenda ET la liste
+    // unique, traduites (`fermeturesAgendaTout`), plus la liste elle-même pour
+    // les horaires adaptés.
     verifie('🔴 le tableau de bord charge les fermetures et les passe à l’agenda',
-      /\.from\('rdv_fermetures'\)/.test(BORD) && /<AgendaRdv\s+rdvs=\{rdvs\}[^>]*?\sfermetures=\{fermeturesRdv\}/.test(BORD))
+      /\.from\('rdv_fermetures'\)/.test(BORD) && /\.from\('fermetures_exceptionnelles'\)\.select\(COLONNES_EXCEPTIONS\)/.test(BORD)
+        && /const fermeturesAgendaTout = fermeturesAgenda\(fermeturesRdv, exceptionsCommerce\)/.test(BORD)
+        && /<AgendaRdv\s+rdvs=\{rdvs\}[^>]*?\sfermetures=\{fermeturesAgendaTout\}\s+exceptions=\{exceptionsCommerce\}/.test(BORD))
     verifie('🔴 chaque inscrite passe par l’annulation unitaire, en série',
       /for \(const rdv of seanceAAnnuler\) \{\s*const ok = await changerStatutRdv\(rdv\.id, 'annule_commercant', 'commercant', \{/.test(BORD))
     const CONF = sansProse(lire('app/dashboard/ConfigDashboard.js'))

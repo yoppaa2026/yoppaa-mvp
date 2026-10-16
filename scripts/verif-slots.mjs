@@ -805,15 +805,21 @@ verifier('🔴 le déplacement donne l’heure qu’il est à la règle',
   // 🔴 ANNUL-I6 (04/10) : le serveur de l'équipe et le tableau de bord donnent
   // à la règle la praticienne et les fermetures, et le serveur les LIT.
   const srcSrvDepl = sansCommentaires(readFileSync(new URL('../lib/rdv-deplacement-server.js', import.meta.url), 'utf8'))
+  // ⚠️ REPOINTÉE LE 16/10 : les fermetures passent par `fermeturesAgenda`, qui
+  // y ajoute la liste unique « Fermetures et horaires exceptionnels ».
   verifier('🔴 le serveur du déplacement passe la praticienne et les fermetures',
-    /praticienId: rdv\.praticien_id \?\? null,\s*fermetures: fermetures\.data \|\| \[\],/.test(srcSrvDepl))
+    /praticienId: rdv\.praticien_id \?\? null,\s*fermetures: fermeturesAgenda\(fermetures\.data \|\| \[\], exceptions\.data \|\| \[\]\),/.test(srcSrvDepl))
+  verifier('🔴 et il lit la liste unique, plages comprises, et l’horaire du jour',
+    /from\('fermetures_exceptionnelles'\)\.select\(COLONNES_EXCEPTIONS\)/.test(srcSrvDepl)
+      && /horaireJour: horaireDuJour\(commerce\.data\.horaires_detail, date, exceptions\.data \|\| \[\]\) \|\| null,/.test(srcSrvDepl))
   verifier('🔴 et il lit les fermetures du jour, séance comprise',
     /from\('rdv_fermetures'\)\.select\('date_debut, date_fin, praticien_id, prestation_id, heure_debut'\)/.test(srcSrvDepl))
   verifier('🔴 et la praticienne des rendez-vous du jour',
     /from\('rdv_reservations'\)\.select\('id, date_rdv, statut, prestation_id, praticien_id, heure_debut, heure_fin'\)/.test(srcSrvDepl))
   const srcBordDepl = sansCommentaires(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+  // ⚠️ REPOINTÉE LE 16/10 : celles de l'agenda ET la liste unique.
   verifier('🔴 le tableau de bord donne ses fermetures à la fenêtre de déplacement',
-    /<ModalDeplacerRdv[\s\S]{0,400}fermetures=\{fermeturesRdv\}/.test(srcBordDepl))
+    /<ModalDeplacerRdv[\s\S]{0,400}fermetures=\{fermeturesAgendaTout\} exceptions=\{exceptionsCommerce\}/.test(srcBordDepl))
 }
 verifier('🔴 et la relit au clic, avant d’écrire quoi que ce soit',
   /async function valider\(\) \{\s*if \(!peutValider\) return\s*const verdictAuClic = creneauAcceptable\(\{ \.\.\.contexte, heureDebut: heure, maintenant: new Date\(\) \}\)\s*if \(!verdictAuClic\.ok\) \{/.test(srcDeplacer))
@@ -4058,8 +4064,11 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   // ── ET CHAQUE APPELANT PASSE L'INFORMATION ──
   const lu = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8'))
   const serveur = lu('lib/rdv-creation-server.js')
+  // ⚠️ REPOINTÉE LE 16/10 : TROIS endroits, plus deux. Le troisième est le
+  // contrôle d'un jour d'horaires adaptés (`horsHoraireAdapte`) : une table
+  // n'y est jugée qu'à son arrivée, comme ailleurs.
   verifier('🔴 le serveur dit au moteur que c’est une table (règle ET lieu)',
-    (serveur.match(/parCouverts: estParCouverts\(prestation\),/g) || []).length === 2)
+    (serveur.match(/parCouverts: estParCouverts\(prestation\),/g) || []).length === 3)
   for (const [f, motif] of [
     ['app/api/equipe/rdv/creer/route.js', /parCouverts: estParCouverts\(presta\),/],
     ['app/dashboard/ModalDeplacerRdv.js', /parCouverts: estTable,/],

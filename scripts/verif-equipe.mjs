@@ -453,7 +453,10 @@ const membre = (o = {}) => ({
   v('🔴 le livreur ne reçoit que sa vue réduite', /if \(permis\.livraisons\) reponse\.livraisons = trierLivraisons\(lues\.filter\(c => livraisonDuJour\(c, aujourdhui\)\)\.map\(livraisonPourLeLivreur\)\)/.test(route))
   v('🔴 une commande pas encore payée n’existe pas pour le comptoir', /\.neq\('statut', 'paiement_en_attente'\)/.test(route))
   // ⚠️ CINQ depuis l'étape 3b (les prestations, pour la fenêtre de saisie).
-  v('🔴 chaque lecture est bornée à CE commerce', (route.match(/\.eq\('commercant_id', commercant_id\)/g) || []).length === 5)
+  // ⚠️ SEPT depuis le 16/10 : les fermetures de l'agenda et la liste unique
+  // « Fermetures et horaires exceptionnels », pour que l'agenda de l'équipe
+  // les grise (il n'en voyait aucune).
+  v('🔴 chaque lecture est bornée à CE commerce', (route.match(/\.eq\('commercant_id', commercant_id\)/g) || []).length === 7)
   v('🔴 chaque lecture nomme ses colonnes', !/\.select\('\*'\)/.test(route) && /select\(COLONNES_RDV_EQUIPE\)/.test(route) && /select\(COLONNES_COMMANDE_EQUIPE\)/.test(route))
   v('🔴 une lecture ratée lève (pas d’agenda vide sur une panne)', /if \(error\) throw new Error\(`\$\{quoi\} : \$\{error\.message\}`\)/.test(route))
   v('le jour est le jour belge', /const aujourdhui = jourBruxelles\(\)/.test(route))

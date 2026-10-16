@@ -49,6 +49,7 @@ import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
 import { joursRetraitBoutique, estFermeExceptionnellement, creneauRetraitHorsHoraires, messageHorsHoraires } from '@/lib/ouverture'
+import { COLONNES_EXCEPTIONS } from '@/lib/horaires-du-jour'
 import { jourPlus } from '@/lib/statut-commerce'
 import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, premierJourPossible, jourEnClair } from '@/lib/delai-commande'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
@@ -250,7 +251,9 @@ export async function POST(request) {
     if (!estExpedition) {
       const { data: lues, error: errFerm } = await supabase
         .from('fermetures_exceptionnelles')
-        .select('date_debut, date_fin')
+        // ⚠️ AVEC LES PLAGES (16/10) : sans elles, un jour d'horaires adaptés
+        // serait lu comme une fermeture, et toute commande refusée.
+        .select(COLONNES_EXCEPTIONS)
         .eq('commercant_id', commercant.id)
       if (errFerm) {
         console.error('[create-commande] lecture fermetures KO', errFerm)
@@ -788,8 +791,15 @@ export async function POST(request) {
       // le créneau 15:00-18:00 d'un jour qui ferme à 15:00 passaient. La règle
       // de la fiche (`creneauRetraitHorsHoraires`). La tournée roule boutique
       // fermée : elle n'y passe pas.
-      if (!estLivraison) {
-        const hors = creneauRetraitHorsHoraires({ creneau, dateStr: date_commande, horairesDetail: commercant.horaires_detail })
+      //
+      // ✅ 16/10 : L'HORAIRE DU JOUR (la liste unique). Un jour d'horaires
+      // adaptés, le créneau doit y tenir ENTIER ; la tournée de livraison
+      // aussi, ce jour-là seulement (Alex : « comme le retrait »).
+      {
+        const hors = creneauRetraitHorsHoraires({
+          creneau, dateStr: date_commande, horairesDetail: commercant.horaires_detail,
+          fermetures: fermeturesCommercant, seulementException: estLivraison,
+        })
         if (hors) {
           return NextResponse.json({ ok: false, error: messageHorsHoraires(hors, date_commande), creneau_indisponible: true }, { status: 409 })
         }

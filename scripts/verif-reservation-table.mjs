@@ -3123,8 +3123,16 @@ egal('la réservation d’un restaurant s’atteint quand même',
     tableLibreDuJour({ ...base, reservations: pleine })?.heure, '20:00')
   const toutPlein = [{ heure_debut: '18:00:00', heure_fin: '23:00:00', prestation_id: 't', couverts: 24, place_no: 1 }]
   egal('🔴 plus rien de libre : PAS de badge (jamais « complet »)', tableLibreDuJour({ ...base, reservations: toutPlein }), null)
+  // ⚠️ REPOINTÉE LE 16/10 : la fermeture de la maison vit dans la liste unique
+  // « Fermetures et horaires exceptionnels » (`exceptions`). L'ancienne
+  // fermeture « tout le commerce » de l'agenda est IGNORÉE : la migration du
+  // 16/10 l'a recopiée, et la relire empêcherait de la rouvrir.
   egal('🔴 fermeture de la maison ce jour-là : pas de badge',
-    tableLibreDuJour({ ...base, fermetures: [{ date_debut: dateStr, date_fin: dateStr, praticien_id: null, prestation_id: null, heure_debut: null }] }), null)
+    tableLibreDuJour({ ...base, exceptions: [{ date_debut: dateStr, date_fin: dateStr }] }), null)
+  egal('l’ancienne fermeture « tout le commerce » de l’agenda ne compte plus',
+    tableLibreDuJour({ ...base, fermetures: [{ date_debut: dateStr, date_fin: dateStr, praticien_id: null, prestation_id: null, heure_debut: null }] })?.heure, '18:30')
+  egal('🔴 horaires adaptés ce jour-là : la première arrivée suit l’horaire',
+    tableLibreDuJour({ ...base, exceptions: [{ date_debut: dateStr, date_fin: dateStr, plage1_debut: '20:00', plage1_fin: '23:00' }] })?.heure, '20:00')
   egal('pas de prestation de table : pas de badge', tableLibreDuJour({ ...base, prestations: [{ id: 'x', par_couverts: false, actif: true }] }), null)
   egal('table éteinte : pas de badge', tableDeReference([{ ...TABLE, actif: false }]), null)
   egal('une table qui n’accepte pas 2 personnes ne sert pas de référence', tableDeReference([{ ...TABLE, couverts_min: 4 }]), null)

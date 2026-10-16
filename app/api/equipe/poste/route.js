@@ -21,6 +21,7 @@ import {
   COLONNES_COMMERCE_POSTE, COLONNES_COMPTOIR_POSTE, fenetres, livraisonPourLeLivreur, livraisonDuJour, trierLivraisons,
 } from '@/lib/equipe-poste'
 import { STATUTS_COMMANDE_EN_COURS } from '@/lib/statuts-commande'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda } from '@/lib/horaires-du-jour'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,6 +85,18 @@ export async function POST(request) {
         ? await admin.from('rdv_prestation_praticiens').select('prestation_id, praticien_id').in('prestation_id', idsPrestations)
         : { data: [], error: null }
       reponse.agenda.liensPraticiens = liensPrat.error ? null : (liensPrat.data || [])
+      // 🔴 L'AGENDA DE L'ÉQUIPE NE VOYAIT AUCUNE FERMETURE (relevé du 16/10) :
+      // un jour de congé s'y affichait ouvert, cases cliquables comprises.
+      // ✅ Les absences et cours annulés de l'agenda, plus la liste unique
+      // « Fermetures et horaires exceptionnels », traduits pour l'agenda.
+      // ⚠️ Ratées, des listes vides : le poste reste ouvert, il perd le gris.
+      const [rf, fe] = await Promise.all([
+        admin.from('rdv_fermetures').select('id, date_debut, date_fin, praticien_id, motif, prestation_id, heure_debut')
+          .eq('commercant_id', commercant_id).is('deleted_at', null),
+        admin.from('fermetures_exceptionnelles').select(COLONNES_EXCEPTIONS).eq('commercant_id', commercant_id),
+      ])
+      reponse.agenda.exceptions = fe.error ? [] : (fe.data || [])
+      reponse.agenda.fermetures = fermeturesAgenda(rf.error ? [] : (rf.data || []), reponse.agenda.exceptions)
     }
 
     // Le comptoir (étape 5) : la règle de la carte et l'état des bons, pour

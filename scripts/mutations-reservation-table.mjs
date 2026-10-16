@@ -266,7 +266,12 @@ const MUTATIONS = [
   // second contrôle faisait double emploi, la mutation restait verte).
   { nom: '🔴 le badge ignore une fermeture de la maison',
     fichier: 'lib/tables-du-jour.js',
-    de: '    creneaux: plagesOuvertes(creneaux || [], fermetures, dateStr),', vers: '    creneaux: creneaux || [],' },
+    // ⚠️ RECALÉE LE 16/10 : la fermeture de la maison (et l'horaire adapté)
+    // passe par la grille du jour, un seul chemin.
+    de: '    horairesDetail: horairesPourDate(commercant?.horaires_detail, dateStr, exceptions),', vers: '    horairesDetail: commercant?.horaires_detail,' },
+  { nom: '🔴 le badge relit l ancienne fermeture « tout le commerce » de l agenda',
+    fichier: 'lib/tables-du-jour.js',
+    de: '    creneaux: plagesOuvertes(creneaux || [], fermeturesAgenda(fermetures, []), dateStr),', vers: '    creneaux: plagesOuvertes(creneaux || [], fermetures, dateStr),' },
   { nom: '🔴 le badge oublie les tables deja reservees',
     fichier: 'lib/tables-du-jour.js',
     de: '  const resas = filtrerReservationsPourSlots(reservations || [], null, [], {})', vers: '  const resas = []' },

@@ -27,6 +27,7 @@ import { statutRdv, resumeSeance, texteResumeSeance, estAClore, compterAClore } 
 import { etatPaiementRdv, couleurPaiement } from '@/lib/rdv-paiement'
 import { motsReservation } from '@/lib/reservation-metier'
 import { fermetureQuiBloque, fermeturesDuJour } from '@/lib/fermetures-rdv'
+import { horaireDuJour } from '@/lib/horaires-du-jour'
 import { cleSeance } from '@/lib/attente-rdv'
 
 const T = {
@@ -82,7 +83,7 @@ function jourIdxLun(d) { return (d.getDay() + 6) % 7 }
 // La logique est sortie d'ici pour être testable : le calcul du contraste du
 // texte, en particulier, décide de la lisibilité de tout l'écran.
 
-export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = null, praticiens = [], prestations = null, horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onPrevenirFile, onListerFile = null, onFenetreChange }) {
+export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions = [], attentes = null, praticiens = [], prestations = null, horairesDetail, commercant = null, onSelectRdv, onNouveauRdv, onHonorerSeance, onAnnulerSeance, onPrevenirFile, onListerFile = null, onFenetreChange }) {
   // ⚠️ `commercant` FACULTATIF : sans lui, le vocabulaire du rendez-vous, donc
   // l'agenda d'un salon ne bouge pas d'un mot.
   const mots = motsReservation(commercant)
@@ -154,7 +155,8 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = 
   const { heureMin, heureMax } = useMemo(() => {
     let min = 24 * 60, max = 0
     joursAffiches.forEach(j => {
-      const h = horairesDetail?.[j.keyJour]
+      // ✅ 16/10 : l'horaire du JOUR (la liste unique).
+      const h = horaireDuJour(horairesDetail, j.iso, exceptions)
       if (h?.ouvert && h?.debut && h?.fin) {
         // 🔴 UNE FERMETURE APRÈS MINUIT (09/09) : sans elle, un bar ouvert de
         // 14:00 à 02:00 bornait sa grille à 02:00 du matin, et le commerçant
@@ -173,7 +175,7 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = 
     min = Math.floor(min / PAS_MINUTES) * PAS_MINUTES
     max = Math.ceil(max / PAS_MINUTES) * PAS_MINUTES
     return { heureMin: min, heureMax: max }
-  }, [joursAffiches, horairesDetail])
+  }, [joursAffiches, horairesDetail, exceptions])
 
   // ⚠️ L'AGENDA ANNONCE CE QU'IL MONTRE (défaut trouvé par Alex le 16/08).
   // Les compteurs du tableau de bord lisaient la date d'un sélecteur de jours
@@ -210,7 +212,8 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = 
     // les fermetures du commerce grisent ; l'absence d'une praticienne grise
     // quand on regarde SON agenda, et l'en-tête du jour la nomme toujours.
     if (fermetureQuiBloque(fermetures, { dateStr: jour.iso, praticienId: praticienFiltre === 'all' ? null : praticienFiltre })) return 'conge'
-    const h = horairesDetail?.[jour.keyJour]
+    // ✅ 16/10 : un jour d'horaires adaptés, la grille suit l'horaire du jour.
+    const h = horaireDuJour(horairesDetail, jour.iso, exceptions)
     if (!h?.ouvert || !h?.debut || !h?.fin) return 'ferme'
     // Plages du jour (1 ou 2 avec les horaires à pause debut2/fin2)
     const a1 = timeToMinutes(h.debut)
@@ -539,7 +542,16 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], attentes = 
                   (vue « tous » et absence d'une seule praticienne). */}
               {(() => {
                 const ferm = fermeturesDuJour(fermetures, j.iso)
-                if (ferm.length === 0) return null
+                // ✅ 16/10 : un jour d'horaires adaptés se nomme aussi.
+                if (ferm.length === 0) {
+                  const h = horaireDuJour(horairesDetail, j.iso, exceptions)
+                  if (!h?.exceptionnel || !h.ouvert) return null
+                  return (
+                    <div title={h.motif || undefined} style={{ marginTop: 3, fontSize: 9, fontWeight: 800, color: '#B45309' }}>
+                      {`${h.debut}–${h.fin}${h.debut2 ? ` · ${h.debut2}–${h.fin2}` : ''}`}
+                    </div>
+                  )
+                }
                 const texte = ferm.some(f => f.praticien_id == null)
                   ? 'Fermé'
                   : `Absence : ${ferm.map(f => praticiens.find(p => String(p.id) === String(f.praticien_id))?.prenom || '?').join(', ')}`

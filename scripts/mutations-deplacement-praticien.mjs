@@ -75,7 +75,8 @@ const MUTATIONS = [
 
   { nom: '🔴 la fenêtre du patron ne reçoit plus les fermetures',
     banc: BANC, fichier: 'app/dashboard/page.js',
-    de: '          rdvsExistants={rdvs} fermetures={fermeturesRdv}',
+    // ⚠️ ANCRE RECALÉE LE 16/10 : la fenêtre reçoit aussi la liste unique.
+    de: '          rdvsExistants={rdvs} fermetures={fermeturesAgendaTout} exceptions={exceptionsCommerce}',
     vers: '          rdvsExistants={rdvs}',
     garde: '🔴 le tableau de bord donne ses fermetures à la fenêtre de déplacement' },
 

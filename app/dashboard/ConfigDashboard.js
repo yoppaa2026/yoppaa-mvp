@@ -49,6 +49,8 @@ import { lireCommandeRealisable } from '@/lib/commande-realisable-lecture'
 import { prestationSansCreneauDedie, prestationSansPraticienDit, coursDejaCoche, ecartPlageCours, creneauHorsOuverture, ajusterPlagePourJour, timeToMinutes, minutesToTime, HORIZON_RDV_DEFAUT, HORIZONS_RDV } from '@/lib/rdv-slots'
 import BlocAide, { EtapeAide, enGras } from './BlocAide'
 import ConsigneGoogle from '@/app/components/ConsigneGoogle'
+// ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
+import FermeturesExceptionnelles, { RappelExceptions } from './FermeturesExceptionnelles'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
@@ -5829,15 +5831,12 @@ function TabCreneaux({ commercantId, toast }) {
   const [loading, setLoading] = useState(true)
   const [jourActif, setJourActif] = useState('lundi')
   const [showForm, setShowForm] = useState(false)
-  const [showFermetureForm, setShowFermetureForm] = useState(false)
   const [form, setForm] = useState({ heure_debut: '', heure_fin: '', max_commandes: 5, actif: true, capacite_temps: 30, lieu_id: '' })
-  const [fermetureForm, setFermetureForm] = useState({ date_debut: '', date_fin: '', motif: '' })
   // Le planning par emplacement, et les emplacements eux-mêmes. Décoché par
   // défaut : l'immense majorité des commerces ne bouge pas.
   const [parLieu, setParLieu] = useState(false)
   const [lieux, setLieux] = useState([])
   const [saving, setSaving] = useState(false)
-  const [savingFermeture, setSavingFermeture] = useState(false)
   const [showCopier, setShowCopier] = useState(false)
   const [joursCibles, setJoursCibles] = useState([])
 
@@ -6364,26 +6363,8 @@ function TabCreneaux({ commercantId, toast }) {
   }
 
   // ─── Fermetures exceptionnelles ───────────────────────────────────────────
-  async function saveFermeture() {
-    if (!fermetureForm.date_debut || !fermetureForm.date_fin) return toast('Dates obligatoires', 'error')
-    if (fermetureForm.date_fin < fermetureForm.date_debut) return toast('Date de fin invalide', 'error')
-    setSavingFermeture(true)
-    const { error } = await supabase.from('fermetures_exceptionnelles').insert({
-      commercant_id: commercantId,
-      date_debut: fermetureForm.date_debut,
-      date_fin: fermetureForm.date_fin,
-      motif: fermetureForm.motif.trim() || null
-    })
-    if (error) { toast('Erreur : ' + error.message, 'error'); setSavingFermeture(false); return }
-    toast('Fermeture ajoutée'); setSavingFermeture(false); setShowFermetureForm(false)
-    setFermetureForm({ date_debut: '', date_fin: '', motif: '' }); fetchAll()
-  }
-
-  async function deleteFermeture(id) {
-    if (!await confirme(confirmationSimple({ titre: 'Supprimer cette fermeture ?', message: 'Ce jour redeviendra ouvert à la réservation.', action: 'Oui, supprimer la fermeture' }))) return
-    await supabase.from('fermetures_exceptionnelles').delete().eq('id', id)
-    toast('Fermeture supprimée'); fetchAll()
-  }
+  // ✅ 16/10 : elles s'écrivent dans la liste unique (FermeturesExceptionnelles.js),
+  // plus ici. Cet onglet en montre le rappel.
 
   if (loading) return <p style={{ color: T.muted, textAlign: 'center', padding: 40 }}>Chargement...</p>
 
@@ -6809,55 +6790,13 @@ function TabCreneaux({ commercantId, toast }) {
         </>
       )}
 
-      {/* ─── Fermetures exceptionnelles ─── */}
+      {/* ─── Fermetures et horaires exceptionnels : le RAPPEL (16/10) ───
+          ✅ Alex (tableau) : UNE liste pour tout le commerce, sous les horaires
+          d'ouverture. Elle vivait ici, pour les seules commandes, pendant que
+          l'agenda tenait la sienne : un restaurant fermé ici restait
+          réservable en table. Ici, un rappel et un accès direct. */}
       <div style={{ marginTop: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ ...s.h2, margin: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Lock size={16} strokeWidth={1.8}/> Fermetures exceptionnelles</h2>
-          <button style={{ ...s.btn, ...s.btnGhost, fontSize: 12, padding: '6px 12px' }} onClick={() => setShowFermetureForm(v => !v)}>+ Ajouter</button>
-        </div>
-
-        {showFermetureForm && (
-          <div style={{ ...s.cardActive, marginBottom: 12 }}>
-            <h3 style={{ ...s.h3, marginBottom: 14 }}>Nouvelle fermeture</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-              <div style={{ minWidth: 0 }}><label style={s.label}>Date début *</label><Input type="date" value={fermetureForm.date_debut} style={{ width: '100%', boxSizing: 'border-box' }} onChange={e => setFermetureForm(p => ({ ...p, date_debut: e.target.value }))} /></div>
-              <div style={{ minWidth: 0 }}><label style={s.label}>Date fin *</label><Input type="date" value={fermetureForm.date_fin} style={{ width: '100%', boxSizing: 'border-box' }} onChange={e => setFermetureForm(p => ({ ...p, date_fin: e.target.value }))} /></div>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={s.label}>Motif (optionnel)</label>
-              <Input value={fermetureForm.motif} onChange={e => setFermetureForm(p => ({ ...p, motif: e.target.value }))} placeholder="Ex: Congés annuels, Jour férié, Formation..." />
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button style={{ ...s.btn, ...s.btnPrimary }} onClick={saveFermeture} disabled={savingFermeture}>{savingFermeture ? 'Enregistrement...' : 'Enregistrer'}</button>
-              <button style={{ ...s.btn, ...s.btnGhost }} onClick={() => setShowFermetureForm(false)}>Annuler</button>
-            </div>
-          </div>
-        )}
-
-        {fermetures.length === 0 ? (
-          <div style={{ ...s.card, textAlign: 'center', padding: 24 }}>
-            <p style={{ color: T.muted, fontSize: 13 }}>Aucune fermeture exceptionnelle planifiée</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {fermetures.map(f => {
-              const debut = new Date(f.date_debut).toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', year: 'numeric' })
-              const fin   = new Date(f.date_fin).toLocaleDateString('fr-BE', { day: 'numeric', month: 'long', year: 'numeric' })
-              const memeJour = f.date_debut === f.date_fin
-              return (
-                <div key={f.id} style={{ ...s.card, marginBottom: 0, borderLeft: '4px solid #DC2626', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                  <div>
-                    <p style={{ fontWeight: 700, color: T.ink, fontSize: 14 }}>
-                      {memeJour ? debut : `${debut} → ${fin}`}
-                    </p>
-                    {f.motif && <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{f.motif}</p>}
-                  </div>
-                  <button style={{ ...s.btn, ...s.btnDanger, padding: '4px 10px', fontSize: 12, flexShrink: 0, display: 'inline-flex', alignItems: 'center' }} onClick={() => deleteFermeture(f.id)} aria-label="Supprimer"><Trash2 size={13} strokeWidth={1.8}/></button>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <RappelExceptions commercantId={commercantId} toast={toast} exceptions={fermetures} onChange={fetchAll} />
       </div>
     </div>
   )
@@ -9706,6 +9645,18 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
               l'onglet Créneaux. La colonne reste en base, plus rien ne la lit. */}
         </div>
         )}
+      </div>
+
+      {/* ─── FERMETURES ET HORAIRES EXCEPTIONNELS (Alex, 16/10) ───────────
+          ✅ Au tableau : la liste unique vit SOUS les horaires d'ouverture.
+          ⚠️ HORS de la condition `siegeEstLeLieu` : un commerce qui bouge
+          (food truck, cours dans deux salles) ferme aussi un jour férié. */}
+      <div style={{ ...s.card, marginTop: 12 }}>
+        <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 900, color: T.ink }}>Fermetures et horaires exceptionnels</p>
+        <p style={{ margin: '0 0 12px', fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
+          Un jour de congé, un jour férié, des heures réduites : une seule liste pour tout ton commerce, commandes, livraison, rendez-vous et tables. Ces jours-là, elle remplace tes horaires habituels.
+        </p>
+        <FermeturesExceptionnelles commercantId={commercantId} toast={toast} />
       </div>
 
         {/* ─── MES LIEUX : plus réservé aux food trucks ─────────────────────
@@ -15297,7 +15248,10 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
   const today = jourBruxelles()
-  const initialForm = { praticien_id: 'tous', date_debut: today, date_fin: today, motif: '' }
+  // ✅ 16/10 : CET ONGLET NE GÈRE PLUS QUE LES ABSENCES DE L'ÉQUIPE. La
+  // fermeture de tout le commerce vit dans la liste unique « Fermetures et
+  // horaires exceptionnels » (Alex, tableau) : une personne est obligatoire.
+  const initialForm = { praticien_id: '', date_debut: today, date_fin: today, motif: '' }
   const [form, setForm] = useState(initialForm)
 
   // 🔴 UNE FERMETURE N'ANNULAIT RIEN, ET NE LE DISAIT PAS (B2, 03/10). Elle
@@ -15313,9 +15267,9 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
   const [bilanAnnulation, setBilanAnnulation] = useState(null)
   const datesValides = Boolean(form.date_debut && form.date_fin && form.date_fin >= form.date_debut)
   useEffect(() => {
-    if (!showForm || !datesValides) return
+    if (!showForm || !datesValides || !form.praticien_id) return
     let vivant = true
-    const ferm = { date_debut: form.date_debut, date_fin: form.date_fin, praticien_id: form.praticien_id === 'tous' ? null : form.praticien_id }
+    const ferm = { date_debut: form.date_debut, date_fin: form.date_fin, praticien_id: form.praticien_id }
     supabase.from('rdv_reservations')
       .select('id, date_rdv, heure_debut, client_prenom, client_nom, praticien_id, statut, deleted_at, prestation:rdv_prestations(nom)')
       .eq('commercant_id', commercantId)
@@ -15328,7 +15282,7 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
       .then(({ data }) => { if (vivant) setTouches(rdvsSousLaFermeture(data || [], ferm)) })
     return () => { vivant = false }
   }, [showForm, datesValides, form.date_debut, form.date_fin, form.praticien_id, commercantId])
-  const touchesAffichees = showForm && datesValides ? touches : []
+  const touchesAffichees = showForm && datesValides && form.praticien_id ? touches : []
 
   // ⚠️ LE MÊME CHEMIN QUE L'ANNULATION D'UN SEUL RENDEZ-VOUS : la route
   // rembourse, rend et recrédite, puis l'email part avec ce qu'elle a rendu.
@@ -15378,16 +15332,19 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
       supabase.from('rdv_praticiens').select('id, prenom, nom, couleur_hex, photo_url, actif').eq('commercant_id', commercantId).eq('actif', true).is('deleted_at', null).order('ordre', { ascending: true }),
       supabase.from('rdv_prestations').select('id, nom').eq('commercant_id', commercantId),
     ])
-    setFermetures(fer || [])
+    // ⚠️ SANS LES ANCIENNES FERMETURES « TOUT LE COMMERCE » (16/10) : la
+    // migration les a recopiées dans la liste unique, et plus rien ne les lit.
+    // Les montrer ici ferait croire qu'on peut encore les modifier ici.
+    setFermetures((fer || []).filter(f => f.praticien_id != null || estFermetureDeSeance(f)))
     setPraticiens(prat || [])
     setNomsCours(Object.fromEntries((presta || []).map(p => [p.id, p.nom])))
     setLoading(false)
   }
 
-  function openNew() { setForm(initialForm); setEditId(null); setShowForm(true) }
+  function openNew() { setForm({ ...initialForm, praticien_id: praticiens.length === 1 ? praticiens[0].id : '' }); setEditId(null); setShowForm(true) }
   function openEdit(f) {
     setForm({
-      praticien_id: f.praticien_id || 'tous',
+      praticien_id: f.praticien_id || '',
       date_debut: f.date_debut,
       date_fin: f.date_fin,
       motif: f.motif || '',
@@ -15396,11 +15353,12 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
   }
 
   async function save() {
+    if (!form.praticien_id) return toast('Choisis la personne absente. Pour fermer tout le commerce, utilise « Fermer ou changer les horaires ».', 'error')
     if (!form.date_debut || !form.date_fin) return toast('Dates obligatoires', 'error')
     if (form.date_fin < form.date_debut) return toast('La date de fin doit être après la date de début', 'error')
     const payload = {
       commercant_id: commercantId,
-      praticien_id: form.praticien_id === 'tous' ? null : form.praticien_id,
+      praticien_id: form.praticien_id,
       date_debut: form.date_debut,
       date_fin: form.date_fin,
       motif: form.motif.trim() || null,
@@ -15418,7 +15376,7 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
       postPro('/api/rdv/fermeture-file', { fermeture_id: ecrite.id })
         .catch(e => console.warn('[fermetures] listes d’attente non vidées', e))
     }
-    toast(editId ? 'Fermeture mise à jour' : 'Fermeture enregistrée')
+    toast(editId ? 'Absence mise à jour' : 'Absence enregistrée')
     // ⚠️ DES RENDEZ-VOUS TOMBENT PENDANT LA FERMETURE : la fenêtre reste
     // ouverte et demande ce qu'on en fait, au lieu de se refermer en silence.
     const restent = touchesAffichees
@@ -15466,21 +15424,33 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+      {/* ✅ 16/10 : la fermeture de TOUT le commerce vit dans la liste unique
+          (Alex, tableau) ; ici, son rappel et un accès direct. */}
+      <div style={{ marginBottom: 16 }}>
+        <RappelExceptions commercantId={commercantId} toast={toast} />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 10, flexWrap: 'wrap' }}>
         <div>
-          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Fermetures exceptionnelles</p>
-          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{mots.fermetureResume}</p>
+          <p style={{ fontSize: 15, fontWeight: 900, color: T.ink, letterSpacing: '-0.2px' }}>Absences de l’équipe</p>
+          <p style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>Une personne absente : ses {mots.nomPluriel} ne se prennent plus ces jours-là, le reste de l’équipe continue.</p>
         </div>
-        <button onClick={openNew}
-          style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
-          + Ajouter une fermeture
-        </button>
+        {praticiens.length > 0 && (
+          <button onClick={openNew}
+            style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
+            + Ajouter une absence
+          </button>
+        )}
       </div>
 
       {fermetures.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: 14, padding: 28, textAlign: 'center', border: `1px solid ${T.hairline}` }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune fermeture prévue</p>
-          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{mots.fermetureAide}</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: T.ink, marginBottom: 6 }}>Aucune absence prévue</p>
+          <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
+            {praticiens.length > 0
+              ? 'Note ici les congés d’une personne de l’équipe. Pour fermer tout le commerce, utilise « Fermer ou changer les horaires » ci-dessus.'
+              : 'Aucune équipe enregistrée : pour fermer ou changer tes horaires, utilise « Fermer ou changer les horaires » ci-dessus.'}
+          </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -15525,15 +15495,15 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
       {showForm && apres && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div role="dialog" aria-modal="true" style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90svh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
-            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 6 }}>Fermeture enregistrée</p>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 6 }}>Absence enregistrée</p>
             {bilanAnnulation ? (
               <p style={{ fontSize: 13, color: T.deep, lineHeight: 1.55, marginBottom: 16 }}>{bilanAnnulation}</p>
             ) : (
               <>
                 <p style={{ fontSize: 13, color: T.deep, lineHeight: 1.55, marginBottom: 10 }}>
                   {apres.touches.length === 1
-                    ? 'Un rendez-vous reste prévu pendant cette fermeture. Personne ne peut plus réserver ces jours-là, mais celui-ci tient toujours.'
-                    : `${apres.touches.length} rendez-vous restent prévus pendant cette fermeture. Personne ne peut plus réserver ces jours-là, mais ceux-ci tiennent toujours.`}
+                    ? 'Un rendez-vous reste prévu pendant cette absence. Personne ne peut plus le réserver avec cette personne ces jours-là, mais celui-ci tient toujours.'
+                    : `${apres.touches.length} rendez-vous restent prévus pendant cette absence. Personne ne peut plus réserver avec cette personne ces jours-là, mais ceux-ci tiennent toujours.`}
                 </p>
                 <ListeRdvTouches rdvs={apres.touches} formatDateLabel={formatDateLabel} />
                 <p style={{ fontSize: 12, color: T.muted, lineHeight: 1.5, margin: '10px 0 14px' }}>
@@ -15563,12 +15533,12 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
         <div onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(22,6,54,0.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ background: '#fff', borderRadius: 18, padding: 22, maxWidth: 460, width: '100%', maxHeight: '90svh', overflowY: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}>
-            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier la fermeture' : 'Nouvelle fermeture'}</p>
+            <p style={{ fontSize: 16, fontWeight: 900, color: T.ink, marginBottom: 14 }}>{editId ? 'Modifier l’absence' : 'Nouvelle absence'}</p>
 
             <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Pour qui ?</label>
             <select value={form.praticien_id} onChange={e => setForm({ ...form, praticien_id: e.target.value })}
               style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${T.hairline}`, borderRadius: 8, fontSize: 14, fontFamily: '"DM Sans", sans-serif', marginBottom: 10, background: '#fff' }}>
-              <option value="tous">Tous les praticiens (fermeture complète)</option>
+              <option value="" disabled>Choisis la personne absente</option>
               {praticiens.map(p => (
                 <option key={p.id} value={p.id}>{p.prenom}{p.nom ? ' ' + p.nom : ''}</option>
               ))}

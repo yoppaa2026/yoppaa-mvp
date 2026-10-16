@@ -40,6 +40,7 @@ import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles } from '@/lib/timezone'
 import { estFermeExceptionnellement, creneauRetraitHorsHoraires, messageHorsHoraires } from '@/lib/ouverture'
+import { COLONNES_EXCEPTIONS } from '@/lib/horaires-du-jour'
 import { zoneCouverte, fraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { zoneValide, dansEtoile, centreDeLaZone } from '@/lib/zone-etoile'
 import { situerMaison } from '@/lib/best-adresse-serveur'
@@ -109,13 +110,18 @@ export async function POST(request) {
     if (moment.avertissement) avertissements.push(moment.avertissement)
 
     const { data: fermetures, error: errF } = await admin
-      .from('fermetures_exceptionnelles').select('date_debut, date_fin').eq('commercant_id', commercant.id)
+      // ⚠️ AVEC LES PLAGES (16/10) : un jour d'horaires adaptés n'est pas fermé.
+      .from('fermetures_exceptionnelles').select(COLONNES_EXCEPTIONS).eq('commercant_id', commercant.id)
     if (errF) return non('Impossible de vérifier les fermetures. Réessaie.', 500)
     if (estFermeExceptionnellement(fermetures || [], date_commande)) avertissements.push(avertissement('jour_ferme'))
     // 🔴 (11/10) LES HORAIRES, POUR LE RETRAIT : la règle de la fiche et du
     // serveur en ligne, en AVERTISSEMENT ici (« Autre date » reste possible).
-    if (!estLivraison) {
-      const hors = creneauRetraitHorsHoraires({ creneau, dateStr: date_commande, horairesDetail: commercant.horaires_detail })
+    // ✅ 16/10 : l'horaire du JOUR, et la tournée un jour d'horaires adaptés.
+    {
+      const hors = creneauRetraitHorsHoraires({
+        creneau, dateStr: date_commande, horairesDetail: commercant.horaires_detail,
+        fermetures: fermetures || [], seulementException: estLivraison,
+      })
       if (hors) avertissements.push(avertissement('hors_horaires', messageHorsHoraires(hors, date_commande, { pourCommercant: true })))
     }
     // L'exception « Autre date » (Alex, 10/10) : au-delà du calendrier de la

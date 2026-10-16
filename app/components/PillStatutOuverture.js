@@ -47,14 +47,17 @@ const SEM_DOT = {
   always: '#C4A0F4',  // light Yoppaa (24h/24 = neutre)
 }
 
-export default function PillStatutOuverture({ horaires, compact = false, dark = false }) {
+// ⚠️ `fermetures` (16/10) : la liste unique « Fermetures et horaires
+// exceptionnels ». Sans elle, la pastille disait « Ouvert » un jour de
+// fermeture, et « Ferme à 18:00 » un 24 décembre qui ferme à 13:00.
+export default function PillStatutOuverture({ horaires, fermetures = [], compact = false, dark = false }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000)
     return () => clearInterval(timer)
   }, [])
 
-  const statut = calculerStatutOuverture(horaires, now)
+  const statut = calculerStatutOuverture(horaires, now, fermetures)
   if (!statut) return null
 
   // Glass translucide : blanc sur fond fonce, ink sur fond clair.

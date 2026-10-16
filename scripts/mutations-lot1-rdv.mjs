@@ -196,9 +196,22 @@ const MUTATIONS = [
 
   { nom: '🔴 une lecture des fermetures en panne laisse passer',
     banc: 'verif:tunnel-rdv', fichier: CREATION,
-    de: "    if (errFermetures) return { ok: false, code: 'ecriture_impossible', error: errFermetures }",
-    vers: "    if (false) return { ok: false, code: 'ecriture_impossible', error: errFermetures }",
+    // ⚠️ ANCRE RECALÉE LE 16/10 : la lecture couvre aussi la liste unique.
+    de: "    if (errFermetures || errExceptions) return { ok: false, code: 'ecriture_impossible', error: errFermetures || errExceptions }",
+    vers: "    if (errExceptions) return { ok: false, code: 'ecriture_impossible', error: errFermetures || errExceptions }",
     garde: 'une lecture des fermetures en échec refuse, sans écrire' },
+
+  { nom: '🔴 une lecture de la liste unique en panne laisse passer',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "    if (errFermetures || errExceptions) return { ok: false, code: 'ecriture_impossible', error: errFermetures || errExceptions }",
+    vers: "    if (errFermetures) return { ok: false, code: 'ecriture_impossible', error: errFermetures || errExceptions }",
+    garde: 'une lecture de la liste unique en échec refuse, sans écrire' },
+
+  { nom: '🔴 un jour d horaires adaptés ne borne plus les rendez-vous',
+    banc: 'verif:tunnel-rdv', fichier: CREATION,
+    de: "    })) return { ok: false, code: 'hors_horaires_adaptes' }",
+    vers: "    }) && false) return { ok: false, code: 'hors_horaires_adaptes' }",
+    garde: 'hors de l’horaire adapté : refusé, avec son motif' },
 
   { nom: '🔴 sans preference, le cours de l absente se reserve de nouveau',
     banc: 'verif:tunnel-rdv', fichier: CREATION,
@@ -991,7 +1004,8 @@ const MUTATIONS = [
 
   { nom: '🔴 le tableau de bord ne passe plus les fermetures a l agenda',
     banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/page.js',
-    de: '                    fermetures={fermeturesRdv}',
+    // ⚠️ ANCRE RECALÉE LE 16/10 : celles de l'agenda ET la liste unique.
+    de: '                    fermetures={fermeturesAgendaTout}',
     vers: '',
     garde: 'le tableau de bord charge les fermetures' },
 

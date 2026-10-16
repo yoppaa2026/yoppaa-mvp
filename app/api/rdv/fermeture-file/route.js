@@ -17,17 +17,39 @@ import { createClient } from '@supabase/supabase-js'
 import { refus } from '@/lib/api-auth'
 import { gardeLigneEquipe } from '@/lib/equipe-server'
 import { fermerLesFiles } from '@/lib/attente-rdv-server'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda } from '@/lib/horaires-du-jour'
 
 export async function POST(request) {
   try {
-    const { fermeture_id } = await request.json().catch(() => ({}))
-    if (!fermeture_id) return NextResponse.json({ ok: false, error: 'fermeture_id requis.' }, { status: 400 })
+    const { fermeture_id, exception_id } = await request.json().catch(() => ({}))
+    if (!fermeture_id && !exception_id) return NextResponse.json({ ok: false, error: 'fermeture_id requis.' }, { status: 400 })
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { persistSession: false } }
     )
+
+    // ✅ 16/10 : UNE FERMETURE DE LA LISTE UNIQUE (« Fermetures et horaires
+    // exceptionnels »). Même garde, même règle : relue ici, traduite pour
+    // l'agenda (`fermeturesAgenda`), et seulement si elle ferme TOUTE la
+    // journée (un horaire adapté ne supprime pas une séance entière).
+    if (exception_id) {
+      const verdictE = await gardeLigneEquipe(request, supabase, 'fermetures_exceptionnelles', exception_id, 'agenda')
+      const refusE = refus(verdictE, NextResponse)
+      if (refusE) return refusE
+      const { data: exception, error: errE } = await supabase
+        .from('fermetures_exceptionnelles').select(`${COLONNES_EXCEPTIONS}`).eq('id', exception_id).maybeSingle()
+      if (errE) return NextResponse.json({ ok: false, error: 'Lecture de la fermeture impossible.' }, { status: 500 })
+      const [traduite] = exception ? fermeturesAgenda([], [exception]) : []
+      if (!traduite) return NextResponse.json({ ok: true, retires: 0, prevenus: 0 })
+      const resE = await fermerLesFiles(supabase, { ...traduite, commercant_id: exception.commercant_id })
+      if (!resE.ok) {
+        console.error('[rdv/fermeture-file] file non vidée', resE.error)
+        return NextResponse.json({ ok: false, error: 'La liste d’attente n’a pas pu être vidée.' }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true, retires: resE.retires, prevenus: resE.prevenus })
+    }
 
     const verdict = await gardeLigneEquipe(request, supabase, 'rdv_fermetures', fermeture_id, 'agenda')
     const nonAutorise = refus(verdict, NextResponse)

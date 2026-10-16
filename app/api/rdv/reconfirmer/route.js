@@ -19,6 +19,7 @@ import { refus } from '@/lib/api-auth'
 import { gardeLigneEquipe, journaliserGeste } from '@/lib/equipe-server'
 import { refusRemiseEnConfirme } from '@/lib/rdv-reconfirmation'
 import { fermetureQuiBloque, estFermetureDeSeance } from '@/lib/fermetures-rdv'
+import { COLONNES_EXCEPTIONS, fermeturesAgenda } from '@/lib/horaires-du-jour'
 import { programmerRappelRdv } from '@/lib/rappels'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { envoyerAuYopper, emailRdvRetabli } from '@/lib/resend'
@@ -79,6 +80,13 @@ export async function POST(request) {
       supabase.from('rdv_fermetures')
         .select('date_debut, date_fin, praticien_id, prestation_id, heure_debut')
         .eq('commercant_id', rdv.commercant_id)
+        // 🔴 UNE FERMETURE SUPPRIMÉE BLOQUAIT ENCORE (relevé du 16/10) : sans
+        // ce filtre, une absence rouverte empêchait de remettre le rendez-vous.
+        .is('deleted_at', null)
+        .lte('date_debut', rdv.date_rdv).gte('date_fin', rdv.date_rdv),
+      // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
+      supabase.from('fermetures_exceptionnelles').select(COLONNES_EXCEPTIONS)
+        .eq('commercant_id', rdv.commercant_id)
         .lte('date_debut', rdv.date_rdv).gte('date_fin', rdv.date_rdv),
     ])
     const echec = lectures.find(l => l?.error)
@@ -86,8 +94,9 @@ export async function POST(request) {
       console.error('[rdv/reconfirmer] lecture de l’état KO', echec.error)
       return NextResponse.json({ ok: false, error: 'Impossible de vérifier ce qui a été rendu à cette personne. Réessaie dans un instant.' }, { status: 500 })
     }
-    const [mvts, recompense, commande, abonnement, fermetures] = lectures.map(l => l.data)
-    const fermeture = fermetureQuiBloque(fermetures || [], {
+    const [mvts, recompense, commande, abonnement, fermeturesLues, exceptions] = lectures.map(l => l.data)
+    const fermetures = fermeturesAgenda(fermeturesLues || [], exceptions || [])
+    const fermeture = fermetureQuiBloque(fermetures, {
       dateStr: rdv.date_rdv,
       praticienId: rdv.praticien_id || null,
       prestationId: rdv.prestation_id,

@@ -115,6 +115,8 @@ import { enviesProposables } from '@/lib/signaux'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection, { AnnoncesExceptions } from '../HorairesSection'
 import { exceptionsPour } from '@/lib/horaires-du-jour'
+import { lienPartageArticle } from '@/lib/partage-article'
+import { compteurAffiche, coupsDeCoeur, mesCoupsDeCoeur } from '@/lib/coups-de-coeur'
 import BandeAutourDeToi from '@/app/components/BandeAutourDeToi'
 // ⚠️ DEMANDE D'ALEX : les avis se consultent, ils ne s'imposent pas. Une note
 // globale, et le Yopper choisit s'il veut lire. La règle vit en fonction pure.
@@ -485,7 +487,7 @@ function RecapPanier({ panier, onRetirer, onAjouter, total, onValider, getStockM
 // `jourRetrait` ('YYYY-MM-DD' ou null) : le jour SOUHAITÉ en boutique. Quand il
 // est fourni, il prime sur `joursDispos[jourSelectionne]`, qui est le sélecteur
 // de l'alimentaire et ne concerne pas une boutique.
-function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = null, relais = null, onCommanderAutreJour = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place' }) {
+function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = null, relais = null, onCommanderAutreJour = null, optionsParArticle, ajouterAuPanier, retirerDuPanier, qteTotaleArticle, stocksJour, jourSelectionne, joursDispos, jourRetrait = null, commandesParArticleJour, modeVitrine = false, masquerPrix = false, photoUrl = null, variantes = [], onOpenDetail = null, remise = null, mentionVitrineTexte = 'Disponible sur place', coupDeCoeur = false }) {
   const groupes = optionsParArticle[article.id] || []
   // Variantes (Module 2 boutique) : priment sur les options si les deux existent
   const hasVariantes = !!article.gere_variantes && variantes.length > 0
@@ -617,6 +619,14 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
                 </span>
               )
             })()}
+            {/* ✅ 16/10 soir (Alex, tableau) : l'article le plus aimé du
+                commerce, à partir de 3 cœurs (lib/coups-de-coeur.js). */}
+            {coupDeCoeur && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.65rem', fontWeight: 800, color: '#BE185D', background: '#FDF2F8', padding: '3px 9px 3px 7px', borderRadius: 100, border: '1px solid #FBCFE8' }}>
+                <Heart size={11} strokeWidth={2.5} fill="#BE185D" color="#BE185D"/>
+                Coup de cœur
+              </span>
+            )}
             {hasOptions && (
               <button onClick={e => { e.stopPropagation(); setShowOptions(v => !v) }}
                 aria-label="Personnaliser cet article"
@@ -1111,13 +1121,21 @@ function ArticleDetailModal({ article, variantes, groupes = [], photosActives, c
             <button onClick={onToggleLike} aria-label="J'aime cet article"
               style={{ ...pillSocial, ...(social?.liked ? { borderColor: T.main, background: T.pale, color: T.main } : {}) }}>
               <Heart size={15} strokeWidth={2.4} fill={social?.liked ? T.main : 'none'} color={social?.liked ? T.main : T.deep}/>
-              {social?.count > 0 ? social.count : 'J’aime'}
+              {/* ✅ 16/10 soir : le compteur à partir de 3 (« 1 » fait vide). */}
+              {compteurAffiche(social?.count) ?? 'J’aime'}
             </button>
             <button onClick={onPartager} aria-label="Partager cet article" style={pillSocial}>
               <Share2 size={15} strokeWidth={2.4}/>
               {partageEtat === 'copie' ? 'Lien copié !' : 'Partager'}
             </button>
           </div>
+          {/* ✅ 16/10 soir (Alex : « comment les Yoppers vont le comprendre ») :
+              le cœur dit ce qu'il fait, au moment où on le touche. */}
+          {social?.liked && (
+            <p style={{ margin: '-6px 0 14px', fontSize: '0.78rem', fontWeight: 700, color: '#BE185D' }}>
+              Dans tes coups de cœur, en tête de la carte de {commercant?.nom || 'ce commerce'}.
+            </p>
+          )}
 
           {/* ✅ EN VITRINE (30/09) : prix ferme plus haut, la mention du métier,
               et les versions à lire. Rien ne s'y achète en ligne. */}
@@ -1488,6 +1506,18 @@ export default function CommanderSlug() {
   // Fiche « façon post » (30/07) : cœurs + partage. Les cœurs sont anonymes
   // par appareil (device_id localStorage), tout passe par /api/articles/like.
   const [articleSocial, setArticleSocial] = useState(null)  // { count, liked } de l'article ouvert
+  // ✅ 16/10 soir (Alex, tableau) : les cœurs de toute la carte, pour le badge
+  // « Coup de cœur » et « Tes coups de cœur ». Une panne : rien ne s'affiche.
+  const [coeurs, setCoeurs] = useState({ compteurs: {}, aimes: [] })
+  useEffect(() => {
+    if (!commercant?.id) return
+    let vivant = true
+    fetch(`/api/articles/coups-de-coeur?commercant_id=${commercant.id}&device_id=${encodeURIComponent(getDeviceId())}`)
+      .then(r => r.json())
+      .then(j => { if (vivant && j?.ok) setCoeurs({ compteurs: j.compteurs || {}, aimes: j.aimes || [] }) })
+      .catch(() => {})
+    return () => { vivant = false }
+  }, [commercant?.id])
   const [partageEtat, setPartageEtat] = useState(null)      // 'copie' pendant 2s après copie du lien
   // Modale detail actu enrichie (photo + contenu long + date)
   const [actuDetailOuverte, setActuDetailOuverte] = useState(null)
@@ -1591,7 +1621,14 @@ export default function CommanderSlug() {
         body: JSON.stringify({ article_id: id, device_id: getDeviceId() }),
       })
       const j = await res.json()
-      if (j?.ok) setArticleSocial({ count: j.count, liked: j.liked })
+      if (j?.ok) {
+        setArticleSocial({ count: j.count, liked: j.liked })
+        // Le badge et « Tes coups de cœur » suivent tout de suite.
+        setCoeurs(c => ({
+          compteurs: { ...c.compteurs, [id]: j.count },
+          aimes: j.liked ? [...c.aimes.filter(x => String(x) !== String(id)), id] : c.aimes.filter(x => String(x) !== String(id)),
+        }))
+      }
       else setArticleSocial(avant)
     } catch (e) {
       setArticleSocial(avant)
@@ -1601,7 +1638,9 @@ export default function CommanderSlug() {
   async function partagerArticle() {
     const a = articleDetail
     if (!a || typeof window === 'undefined') return
-    const url = `${window.location.origin}/commander/${commercant?.slug || slug}?article=${a.id}`
+    // ✅ 16/10 soir (Alex, tableau) : le lien porte l'APERÇU de l'article (photo,
+    // nom, prix) au lieu de celui du commerce, puis ouvre la fiche sur lui.
+    const url = lienPartageArticle(commercant?.slug || slug, a.id, window.location.origin)
     const texte = `${a.nom} ${chezLeCommerce(commercant?.nom || 'un commerçant Yoppaa')} 🟣`
     if (navigator.share) {
       try { await navigator.share({ title: a.nom, text: texte, url }) } catch (e) { /* partage annulé */ }
@@ -3771,6 +3810,9 @@ export default function CommanderSlug() {
   // L'ordre voulu par le commerçant passe devant ; le reste suit dans l'ordre
   // d'apparition des articles, comme avant lui. Un commerçant qui n'a rien
   // rangé voit donc sa fiche inchangée (`lib/categories-catalogue.js`).
+  // ✅ 16/10 soir : le badge « Coup de cœur » et « Tes coups de cœur ».
+  const badgesCoeur = coupsDeCoeur(coeurs.compteurs)
+  const mesCoeurs = mesCoupsDeCoeur(articles, coeurs.aimes)
   const categories = categoriesOrdonnees(
     [...new Set(articles.map(a => a.categorie).filter(Boolean))],
     commercant?.ordre_categories,
@@ -5047,6 +5089,35 @@ export default function CommanderSlug() {
               )}
 
               <div style={{ padding: '0.875rem 1rem 0' }}>
+                {/* ✅ 16/10 soir (Alex, tableau) : « Mes coups de cœur » du
+                    Yopper. Ce qu'il a aimé ici, en tête de la carte, pour
+                    recommander en un geste. Lié à ce téléphone. */}
+                {mesCoeurs.length > 0 && (
+                  <div style={{ marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12, paddingBottom: 10 }}>
+                      <Heart size={15} strokeWidth={2.4} fill="#BE185D" color="#BE185D"/>
+                      <span style={{ fontWeight: 900, fontSize: '1rem', color: T.ink, letterSpacing: '-0.3px' }}>Tes coups de cœur</span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 600, color: T.muted }}>{mesCoeurs.length} article{mesCoeurs.length > 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="articles-grid">
+                      {mesCoeurs.map(a => (
+                        <div key={`coeur-${a.id}`}>
+                          <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
+                            ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
+                            stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
+                            onCommanderDemain={commanderPourJour} circuit={circuitAffiche} relais={relaisAutreJour(a)} onCommanderAutreJour={commanderUnAutreJour}
+                            getStockMax={getStockMax} commandesParArticleJour={commandesParArticleJour} modeVitrine={!peutCommander} masquerPrix={!canDo(planEffectif(commercant), 'prix_affiches')}
+                            photoUrl={commercant?.photos_catalogue_actif === false ? null : (a.photo_url || null)}
+                            variantes={variantesParArticle[a.id] || []}
+                            remise={remiseSurArticle(a, dealsActifs)}
+                            onOpenDetail={() => setArticleDetail(a)}
+                            mentionVitrineTexte={mentionVitrine(commercant)}
+                            coupDeCoeur={badgesCoeur.has(String(a.id))}/>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {categories.map((cat, catIdx) => {
                   const artsDecat = articles.filter(a => a.categorie === cat)
                   if (!artsDecat.length) return null
@@ -5082,7 +5153,8 @@ export default function CommanderSlug() {
                               variantes={variantesParArticle[a.id] || []}
                               remise={remiseSurArticle(a, dealsActifs)}
                               onOpenDetail={() => setArticleDetail(a)}
-                              mentionVitrineTexte={mentionVitrine(commercant)}/>
+                              mentionVitrineTexte={mentionVitrine(commercant)}
+                              coupDeCoeur={badgesCoeur.has(String(a.id))}/>
                             {/* Lots et duos seulement : une remise vit sur la carte de l'article */}
                             {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
                               <DealOfferCard key={dl.id} deal={dl}
@@ -5116,7 +5188,8 @@ export default function CommanderSlug() {
                             variantes={variantesParArticle[a.id] || []}
                             remise={remiseSurArticle(a, dealsActifs)}
                             onOpenDetail={() => setArticleDetail(a)}
-                              mentionVitrineTexte={mentionVitrine(commercant)}/>
+                              mentionVitrineTexte={mentionVitrine(commercant)}
+                              coupDeCoeur={badgesCoeur.has(String(a.id))}/>
                           {peutCommander && offresSepareesPourArticle(a, dealsActifs).filter(dl => dl.prix_deal != null).map(dl => (
                             <DealOfferCard key={dl.id} deal={dl}
                               reste={resteDeLOffre(dl)}

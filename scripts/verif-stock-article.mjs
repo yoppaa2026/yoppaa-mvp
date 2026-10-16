@@ -206,7 +206,9 @@ const code = (f) => sansProse(lire(f))
   // ⚠️ RÉORIENTÉE LE 07/10 : `!etatJour` suit sur les deux pastilles (l'article
   // hors du jour choisi a sa propre ligne). La condition vitrine reste visée.
   v('🔴 en vitrine, aucune pastille de stock', /\{hasVariantes && !article\.est_vitrine && !etatJour \? \(\(\) => \{/.test(fiche) && /\{!hasVariantes && stockGere && !article\.est_vitrine && !etatJour && \(\(\) => \{/.test(fiche))
-  v('la mention du métier arrive aux deux cartes', (fiche.match(/mentionVitrineTexte=\{mentionVitrine\(commercant\)\}/g) || []).length === 2)
+  // ⚠️ REPOINTÉE LE 16/10 soir : trois listes de cartes (« Tes coups de cœur »).
+  v('la mention du métier arrive à toutes les cartes', (fiche.match(/mentionVitrineTexte=\{mentionVitrine\(commercant\)\}/g) || []).length === 3
+    && (fiche.match(/<ArticleRow /g) || []).length === 3)
   v('la fenêtre de l’article dit la mention et montre les versions', /\{mentionVitrine\(commercant\)\}/.test(fiche) && /\{hasVar && <VariantesVitrine article=\{article\} variantes=\{variantes\}\/>\}/.test(fiche))
   v('🔴 rien ne s’achète en vitrine depuis la fenêtre de l’article', /\{hasVar && onAjouterVariante && !article\.est_vitrine \? \(/.test(fiche) && /\(!hasVar && onAjouter && !article\.est_vitrine\) \? \(/.test(fiche))
 
@@ -543,7 +545,8 @@ const code = (f) => sansProse(lire(f))
     /const article = articles\.find\(a => a\.id === ligne\?\.id\) \|\| ligne/.test(fiche)
     && /return \{ delaiJours: delaiEnJours\(ligne\), indispo, circuits, invendu: porteUneFenetre\(ligne\?\.offre\) \}/.test(fiche))
   v('🔴 fiche : les cartes reçoivent le circuit du jour, calculé par la règle partagée',
-    (fiche.match(/circuit=\{circuitAffiche\}/g) || []).length === 2
+    // ⚠️ REPOINTÉE LE 16/10 soir : trois listes de cartes (« Tes coups de cœur »).
+    (fiche.match(/circuit=\{circuitAffiche\}/g) || []).length === 3
     && /const circuitAffiche = circuitDuJour\(\{ commercant, jour: jourDuPanier\(\), aujourdhui: aujourdhuiISO\(\) \}\)/.test(fiche))
   v('🔴 fiche : la règle du jour part des circuits de l’article',
     /let circuits = circuitsDeLArticle\(article, commercant\)/.test(fiche)
@@ -552,7 +555,8 @@ const code = (f) => sansProse(lire(f))
   v('🔴 fiche : épuisé aujourd’hui + premier autre jour, seulement en A et pour un article sur commande',
     /if \(circuitAffiche !== 'A' \|\| article\?\.commande_active !== true \|\| article\.est_vitrine\) return null/.test(fiche)
     && /const jour = joursDuCalendrier\(\)\.find\(j => j > auj && !refusDuJour\(\{ \.\.\.r, jour: j, aujourdhui: auj \}\)\) \|\| null/.test(fiche)
-    && (fiche.match(/relais=\{relaisAutreJour\(a\)\} onCommanderAutreJour=\{commanderUnAutreJour\}/g) || []).length === 2)
+    // ⚠️ REPOINTÉE LE 16/10 soir : trois listes de cartes (« Tes coups de cœur »).
+    && (fiche.match(/relais=\{relaisAutreJour\(a\)\} onCommanderAutreJour=\{commanderUnAutreJour\}/g) || []).length === 3)
   v('🔴 fiche : le bouton passe par la fenêtre habituelle (panier jamais vidé)',
     /jours: joursDuCalendrier\(\)\.filter\(j => j > auj\), regle: regleArticle,/.test(fiche)
     && /setPropositionJour\(\{ \.\.\.p, nomArticle: article\?\.nom \|\| 'Cet article', rejouer: ajout \? \{ article \} : null \}\)/.test(fiche)

@@ -76,6 +76,10 @@ const PUBLIQUES_ASSUMEES = {
   'app/api/fiche/vue/route.js': 'incrément d\'un compteur de vues, aucune lecture',
   'app/api/deals/track/route.js': 'incrément d\'un compteur, colonne choisie dans une liste blanche',
   'app/api/articles/like/route.js': 'compteur public de likes',
+  // 16/10 soir : des NOMBRES par article d'un commerce publié, plus les
+  // articles aimés par l'appareil qui demande (son propre identifiant). Aucun
+  // identifiant d'appareil ne sort (banc verif:coeur).
+  'app/api/articles/coups-de-coeur/route.js': 'compteurs publics des cœurs d\'une carte publiée, jamais un identifiant d\'appareil',
   'app/api/bons-cadeaux/config/route.js': 'affichage des montants proposés sur une fiche publique',
   'app/api/bons-cadeaux/verifier/route.js': 'vérification d\'un code au comptoir, le code EST le secret',
 

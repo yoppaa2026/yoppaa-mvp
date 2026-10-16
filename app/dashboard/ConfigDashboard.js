@@ -52,6 +52,7 @@ import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 // ✅ 16/10 : la liste unique « Fermetures et horaires exceptionnels ».
 import FermeturesExceptionnelles, { RappelExceptions } from './FermeturesExceptionnelles'
 import { COLONNES_EXCEPTIONS, exceptionsPour, estFermetureComplete } from '@/lib/horaires-du-jour'
+import { plusAimes } from '@/lib/coups-de-coeur'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
@@ -15713,6 +15714,21 @@ function TabStatistiques({ commercantId, toast }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [jours, setJours] = useState(30)
+  // ✅ 16/10 soir (Alex, tableau) : « Les plus aimés ». Les cœurs des clients
+  // sur la fiche : ce qui plaît, avant même que ça se vende. Une panne : le
+  // bloc ne s'affiche pas, le reste des statistiques ne bouge pas.
+  const [aimes, setAimes] = useState([])
+  useEffect(() => {
+    if (!commercantId) return
+    let vivant = true
+    Promise.all([
+      fetch(`/api/articles/coups-de-coeur?commercant_id=${commercantId}`).then(r => r.json()),
+      supabase.from('articles').select('id, nom').eq('commercant_id', commercantId).eq('actif', true),
+    ]).then(([j, { data: arts }]) => {
+      if (vivant && j?.ok) setAimes(plusAimes(j.compteurs, arts || []))
+    }).catch(() => {})
+    return () => { vivant = false }
+  }, [commercantId])
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { charger() }, [commercantId, jours])
@@ -15961,6 +15977,26 @@ function TabStatistiques({ commercantId, toast }) {
             }/>
           )}
         </>
+      )}
+
+      {/* ─── Les plus aimés (16/10 soir) ──────────────────────────────────── */}
+      {aimes.length > 0 && (
+        <Bloc titre="Les plus aimés" enfants={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {aimes.map((art, i) => (
+              <div key={art.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 20, fontSize: 12, fontWeight: 800, color: T.muted }}>{i + 1}</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{art.nom}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 800, color: '#BE185D' }}>
+                  <Heart size={12} strokeWidth={2.4} fill="#BE185D" color="#BE185D"/>{art.n}
+                </span>
+              </div>
+            ))}
+            <p style={{ margin: '4px 0 0', fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>
+              Les cœurs de tes clients sur ta fiche. Dès 3 cœurs, ton article le plus aimé porte le badge « Coup de cœur ».
+            </p>
+          </div>
+        }/>
       )}
 
       {/* ─── Qui te suit ─────────────────────────────────────────────────────

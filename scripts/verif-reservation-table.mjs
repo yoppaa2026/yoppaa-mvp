@@ -241,8 +241,11 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 même chose pour les versions d’un article',
     /\{showOptions && hasVariantes && !article\.est_vitrine && !modeVitrine && \(\s*<VariantesSelector/.test(FICHE)
       && /\{showOptions && hasVariantes && \(article\.est_vitrine \|\| modeVitrine\) && \(\s*<VariantesVitrine/.test(FICHE))
+  // ⚠️ REPOINTÉE LE 16/10 soir : « Tes coups de cœur » est une troisième liste
+  // de cartes. CHAQUE liste, comptée contre le nombre de listes.
   verifier('et la fiche dit à chaque carte quand on ne peut pas commander',
-    (FICHE.match(/modeVitrine=\{!peutCommander\}/g) || []).length === 2)
+    (FICHE.match(/modeVitrine=\{!peutCommander\}/g) || []).length === 3
+      && (FICHE.match(/<ArticleRow /g) || []).length === 3)
   verifier('⚠️ et le signal Yopper aussi',
     /peutCommander: commerceAccepteCommandes,/.test(FICHE))
   // ⚠️ CHEZ UN SALON, RIEN NE CHANGE : le panier voyage avec le client vers son

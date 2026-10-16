@@ -553,8 +553,11 @@ egal('sans nom d’article, la phrase tient debout',
   // ⚠️ RIEN EN VITRINE : rien ne s'y commande, donc rien n'y attend.
   verifier('et pas en vitrine',
     /if \(article\.est_vitrine \|\| modeVitrine\) return null\s*const mention = mentionDispo/.test(FICHE))
-  verifier('🔴 les deux listes d’articles passent la mention ET l’état du jour',
-    (FICHE.match(/mentionDispo=\{mentionDisponibilite\(regleArticle\(a\)\)\} etatJour=\{etatJourArticle\(a\)\}/g) || []).length === 2)
+  // ⚠️ REPOINTÉE LE 16/10 soir : une troisième liste, « Tes coups de cœur »
+  // (Alex, tableau), passe les mêmes. Toutes les listes, pas « au moins deux ».
+  verifier('🔴 les trois listes d’articles passent la mention ET l’état du jour',
+    (FICHE.match(/mentionDispo=\{mentionDisponibilite\(regleArticle\(a\)\)\} etatJour=\{etatJourArticle\(a\)\}/g) || []).length === 3
+      && (FICHE.match(/<ArticleRow /g) || []).length === 3)
 
   // 🔴 LE JOUR CHOISI EST L'ACCORD DU CLIENT (Alex, 07/10).
   verifier('🔴 l’ajout d’un article passe par le jour choisi, avant la variante',

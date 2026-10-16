@@ -53,6 +53,7 @@ import ConsigneGoogle from '@/app/components/ConsigneGoogle'
 import FermeturesExceptionnelles, { RappelExceptions } from './FermeturesExceptionnelles'
 import { COLONNES_EXCEPTIONS, exceptionsPour, estFermetureComplete } from '@/lib/horaires-du-jour'
 import { plusAimes } from '@/lib/coups-de-coeur'
+import { SENS_RETRAIT, SENS_PAR_DEFAUT, PHRASE_MAX, FORMATS_RETRAIT, LIBELLES_RETRAIT, pointsFlecheTournes, construireAfficheRetrait, telechargerAfficheRetraitPdf } from '@/lib/affiche-retrait'
 import { classerProduitsParCategorie, produitParType } from '@/lib/produits-boutique'
 import { useResetAuRetourDePaiement } from '@/lib/retour-paiement'
 import { lieuEnConflit, horairesDepuisLieux } from '@/lib/lieux-activite'
@@ -10277,6 +10278,84 @@ function CarteTableBloc({ slug, nomCommerce, clair, toast }) {
   )
 }
 
+// ─── L'affiche du point de retrait (16/10 soir) ──────────────────────────────
+//
+// ✅ ALEX, 16/10 soir : « une fiche A4 et A5 × 2 qui indique le pick up point
+// des commandes Yoppaa, genre la gauche du comptoir, qui se démarque des QR ».
+// Le bandeau aux points Yoppaa (lib/affiche-retrait.js). Le commerçant règle le
+// sens de la flèche et sa phrase, VOIT l'affiche, puis télécharge.
+function AfficheRetraitBloc({ slug, nomCommerce, clair, toast }) {
+  const [sens, setSens] = useState(SENS_PAR_DEFAUT)
+  const [phrase, setPhrase] = useState('')
+  const [apercu, setApercu] = useState(null)
+  const [enCours, setEnCours] = useState(null)
+
+  // L'aperçu se redessine quand un réglage change, un instant après la frappe.
+  useEffect(() => {
+    let actif = true
+    const minuteur = setTimeout(() => {
+      construireAfficheRetrait({ sens, phrase, clair, nomCommerce })
+        .then(c => { if (actif && c) setApercu(c.toDataURL('image/png')) })
+        .catch(() => {})
+    }, 250)
+    return () => { actif = false; clearTimeout(minuteur) }
+  }, [sens, phrase, clair, nomCommerce])
+
+  async function telecharger(format) {
+    if (enCours || !slug) return
+    setEnCours(format)
+    try {
+      const fait = await telechargerAfficheRetraitPdf({ sens, phrase, clair, nomCommerce, slug, format })
+      toast(fait ? 'Affiche du point de retrait téléchargée' : 'Affiche pas encore prête, réessaie', fait ? 'success' : 'error')
+    } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
+    setEnCours(null)
+  }
+
+  if (!slug) return null
+  return (
+    <div style={{ borderTop: `1px solid ${T.hairline}`, paddingTop: 16, marginBottom: 16 }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ton point de retrait</p>
+      <p style={{ fontSize: 12, color: T.ink, lineHeight: 1.55, marginBottom: 12 }}>
+        Une affiche qui montre à tes clients <strong>où récupérer leur commande Yoppaa</strong>. Choisis le sens de la flèche et écris où c&rsquo;est.
+      </p>
+      <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6 }}>Sens de la flèche</p>
+      <div role="group" aria-label="Sens de la flèche" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        {SENS_RETRAIT.map(o => (
+          <button key={o.id} type="button" aria-pressed={sens === o.id} onClick={() => setSens(o.id)}
+            style={{ ...s.btn, ...(sens === o.id ? s.btnPrimary : s.btnGhost), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <svg width="16" height="16" viewBox="0 0 100 100" aria-hidden="true">
+              {pointsFlecheTournes(o.angle, 0, 0, 100).map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={p.r * 1.3} fill="currentColor"/>)}
+            </svg>
+            {o.libelle}
+          </button>
+        ))}
+      </div>
+      <label htmlFor="phrase-retrait" style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6 }}>
+        Où c&rsquo;est (facultatif)
+      </label>
+      <Input id="phrase-retrait" value={phrase} maxLength={PHRASE_MAX} onChange={e => setPhrase(e.target.value)} placeholder="Ex. : À gauche du comptoir"/>
+      <p style={{ fontSize: 10.5, color: T.muted, margin: '4px 0 12px' }}>{PHRASE_MAX} caractères au plus.</p>
+      <div style={{ background: T.pale, borderRadius: 12, padding: 10, marginBottom: 10 }}>
+        {apercu
+          ? <img decoding="async" loading="lazy" src={apercu} alt="Aperçu de l’affiche du point de retrait" style={{ width: '100%', display: 'block', borderRadius: 4, boxShadow: '0 6px 18px rgba(26,8,64,0.15)' }}/>
+          : <div style={{ aspectRatio: '297 / 210', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><DotsAttente taille={6} label="Préparation de l’aperçu"/></div>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+        {FORMATS_RETRAIT.map(f => (
+          <button key={f} type="button" style={{ ...s.btn, ...s.btnPrimary, flex: '1 1 140px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            onClick={() => telecharger(f)} disabled={!!enCours}>
+            <FileText size={13} strokeWidth={1.8}/> {LIBELLES_RETRAIT[f]}
+            {enCours === f && <DotsAttente couleur="#fff" taille={4} label="Préparation du PDF"/>}
+          </button>
+        ))}
+      </div>
+      <p style={{ fontSize: 10.5, color: T.muted, lineHeight: 1.5 }}>
+        Le fond suit ton choix plus haut (blanc ou violet). En A5 : coupe la feuille le long des pointillés.
+      </p>
+    </div>
+  )
+}
+
 // ─── Composant QR Code imprimable ─────────────────────────────────────────────
 function QRCodeSection({ commercantId, toast }) {
   const [slug, setSlug]           = useState(null)
@@ -10524,6 +10603,9 @@ function QRCodeSection({ commercantId, toast }) {
       {sertAManger(typeCommerce) && (
         <CarteTableBloc slug={slug} nomCommerce={nomCommerce} clair={fondClair} toast={toast}/>
       )}
+
+      {/* ✅ 16/10 soir : l'affiche du point de retrait (Alex). */}
+      <AfficheRetraitBloc slug={slug} nomCommerce={nomCommerce} clair={fondClair} toast={toast}/>
 
       {/* ─── LA FICHE GOOGLE ──────────────────────────────────────
           ⚠️ DEMANDE D'ALEX (24/08). L'affiche touche ceux qui passent devant la

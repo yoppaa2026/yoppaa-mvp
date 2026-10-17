@@ -84,7 +84,7 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         const qrs = ops.filter(o => o.type === 'qr')
         const q = qrs[0]
         const zone = plan.zoneTexte
-        const filet = ops.find(o => o.type === 'trait')
+        const filet = ops.find(o => o.role === 'filet-pied')
         verifier(`🔴 ${cas} : jamais de QR dans le bandeau (Alex)`, qrs.length === 1 && (q.x >= bloc.x + bloc.largeur || q.x + q.cote <= bloc.x))
         verifier(`🔴 ${cas} : le QR en bas à droite du côté texte, sous le filet`,
           Math.abs(q.x + q.cote - (zone.x + zone.largeur)) < 0.01 && q.y > filet.y1 && q.y + q.cote <= 205, `${q.x},${q.y}`)
@@ -103,11 +103,20 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         const logo = logos[0]
         verifier(`🔴 ${cas} : un seul logo, centré en bas du bandeau`,
           logos.length === 1 && logo.xCentre === bloc.x + bloc.largeur / 2 && logo.y >= 185 && logo.corps === 8, JSON.stringify(logo))
-        verifier(`🔴 ${cas} : le logo se lit sur le bloc (couleurs de la flèche)`, JSON.stringify(logo.couleurs) === JSON.stringify(paletteRetrait(clair).blocWm))
+        // ⚠️ REPOINTÉE LE 17/10 (quater) : plus de bloc plein, logo et flèche
+        // dans les couleurs du logo, sur le fond.
+        verifier(`🔴 ${cas} : le logo dans les couleurs du logo, comme la flèche`, JSON.stringify(logo.couleurs) === JSON.stringify(paletteRetrait(clair).wm))
         verifier(`${cas} : le logo ne touche pas la flèche`, logo.y - logo.corps > Math.max(...ops.filter(o => o.type === 'point').map(p => p.y + p.r)) + 10)
         const commerce = ops.find(o => o.role === 'commerce')
         verifier(`${cas} : le nom du commerce en tête`, commerce && commerce.y < Math.min(...ops.filter(o => o.role === 'intitule').map(o => o.y)) - 8)
-        verifier(`🔴 ${cas} : la flèche reste dans son bloc`, ops.filter(o => o.type === 'point').every(p => p.x - p.r >= bloc.x && p.x + p.r <= bloc.x + bloc.largeur))
+        // 🔴 PLUS DE BANDEAU PLEIN (Alex, 17/10 : le vinyle autocollant). Aucun
+        // aplat hors du fond ; un filet vertical sépare la flèche du texte.
+        verifier(`🔴 ${cas} : aucun aplat de couleur hors du fond (vinyle)`,
+          ops.filter(o => o.type === 'rect').length === 1 && ops.find(o => o.type === 'rect').couleur === paletteRetrait(clair).fond)
+        const sep = ops.find(o => o.role === 'separation')
+        verifier(`🔴 ${cas} : un filet vertical entre la flèche et le texte`,
+          sep && sep.x1 === sep.x2 && (s.id === 'droite' ? sep.x1 === bloc.x : sep.x1 === bloc.x + bloc.largeur) && sep.y2 - sep.y1 > 150)
+        verifier(`🔴 ${cas} : la flèche reste dans sa zone`, ops.filter(o => o.type === 'point').every(p => p.x - p.r >= bloc.x && p.x + p.r <= bloc.x + bloc.largeur))
         // 🔴 LE SENS CHOISI EST CELUI DESSINÉ : la pointe (le plus gros point)
         // part du bon côté du centre de la flèche.
         const pts = ops.filter(o => o.type === 'point')
@@ -115,7 +124,7 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         const tip = pts.reduce((a, b) => (b.r > a.r ? b : a))
         const bonSens = { gauche: tip.x < cx - 10, droite: tip.x > cx + 10, ici: tip.y > cy + 10, droit: tip.y < cy - 10 }[s.id]
         verifier(`🔴 ${cas} : « ${s.libelle} » dessine la flèche dans ce sens`, bonSens, `${tip.x.toFixed(1)},${tip.y.toFixed(1)} / ${cx.toFixed(1)},${cy.toFixed(1)}`)
-        verifier(`${cas} : la flèche a la couleur du bloc en contraste`, ops.filter(o => o.type === 'point').every(p => paletteRetrait(clair).blocWm.includes(p.couleur)))
+        verifier(`${cas} : la flèche dans les couleurs du logo`, ops.filter(o => o.type === 'point').every(p => paletteRetrait(clair).wm.includes(p.couleur)))
         // ⚠️ REPOINTÉES LE 17/10 (bis) : la légende du QR vit côté texte, elle
         // aussi ne déborde pas et ne touche jamais le bloc.
         const textes = ops.filter(o => o.type === 'texte')
@@ -130,7 +139,7 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         egal(`${cas} : le titre suit la flèche`, textes.filter(t => t.role === 'titre').map(t => t.texte), s.titre)
         egal(`🔴 ${cas} : la consigne est entière`, textes.filter(t => t.role === 'consigne').map(t => t.texte).join(' '), TEXTES_RETRAIT.consigne)
         const derniereConsigne = Math.max(...textes.filter(t => t.role === 'consigne').map(t => t.y))
-        verifier(`🔴 ${cas} : la consigne passe au-dessus du filet`, derniereConsigne <= ops.find(o => o.type === 'trait').y1 - 3, String(derniereConsigne))
+        verifier(`🔴 ${cas} : la consigne passe au-dessus du filet`, derniereConsigne <= ops.find(o => o.role === 'filet-pied').y1 - 3, String(derniereConsigne))
         verifier(`${cas} : le titre ne remonte pas dans l’intitulé`, textes.find(t => t.role === 'titre').y - textes.find(t => t.role === 'titre').taille * 0.75 > Math.max(...intitule.map(t => t.y)))
         verifier(`🔴 ${cas} : la phrase tient en deux lignes au plus`, textes.filter(t => t.role === 'phrase').length <= 2)
         egal(`${cas} : la phrase, telle qu’écrite`, textes.filter(t => t.role === 'phrase').map(t => t.texte).join(' '), nettoyerPhrase(phrase))

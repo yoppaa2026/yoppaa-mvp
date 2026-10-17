@@ -10289,23 +10289,40 @@ function AfficheRetraitBloc({ slug, nomCommerce, clair, toast }) {
   const [phrase, setPhrase] = useState('')
   const [apercu, setApercu] = useState(null)
   const [enCours, setEnCours] = useState(null)
+  // ✅ 17/10 (Alex, tableau : « QR + logos des stores ») : le QR de la FICHE de
+  // ce commerce, la même adresse que l'affiche de vitrine. La file d'attente
+  // scanne et commande ici la prochaine fois.
+  const urlFiche = lienFiche(slug)
+  const [qr, setQr] = useState(null)
+  useEffect(() => {
+    if (!urlFiche) return
+    let actif = true
+    import('qrcode').then(m => m.default.toDataURL(urlFiche, {
+      width: 900, margin: 1,
+      color: { dark: '#1A0840', light: '#FFFFFF' },
+      errorCorrectionLevel: 'H',
+    })).then(d => { if (actif) setQr(d) })
+      .catch(() => toast('Erreur génération du QR de l’affiche', 'error'))
+    return () => { actif = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- le QR ne dépend que de l'adresse
+  }, [urlFiche])
 
   // L'aperçu se redessine quand un réglage change, un instant après la frappe.
   useEffect(() => {
     let actif = true
     const minuteur = setTimeout(() => {
-      construireAfficheRetrait({ sens, phrase, clair, nomCommerce })
+      construireAfficheRetrait({ sens, phrase, clair, nomCommerce, qrDataUrl: qr })
         .then(c => { if (actif && c) setApercu(c.toDataURL('image/png')) })
         .catch(() => {})
     }, 250)
     return () => { actif = false; clearTimeout(minuteur) }
-  }, [sens, phrase, clair, nomCommerce])
+  }, [sens, phrase, clair, nomCommerce, qr])
 
   async function telecharger(format) {
     if (enCours || !slug) return
     setEnCours(format)
     try {
-      const fait = await telechargerAfficheRetraitPdf({ sens, phrase, clair, nomCommerce, slug, format })
+      const fait = await telechargerAfficheRetraitPdf({ sens, phrase, clair, nomCommerce, slug, format, qrDataUrl: qr })
       toast(fait ? 'Affiche du point de retrait téléchargée' : 'Affiche pas encore prête, réessaie', fait ? 'success' : 'error')
     } catch (e) { console.error(e); toast('Erreur PDF', 'error') }
     setEnCours(null)
@@ -10317,6 +10334,7 @@ function AfficheRetraitBloc({ slug, nomCommerce, clair, toast }) {
       <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ton point de retrait</p>
       <p style={{ fontSize: 12, color: T.ink, lineHeight: 1.55, marginBottom: 12 }}>
         Une affiche qui montre à tes clients <strong>où récupérer leur commande Yoppaa</strong>. Choisis le sens de la flèche et écris où c&rsquo;est.
+        Ceux qui font la file trouvent dessous le QR de ta fiche, pour commander chez toi la prochaine fois sans attendre.
       </p>
       <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6 }}>Sens de la flèche</p>
       <div role="group" aria-label="Sens de la flèche" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -10343,7 +10361,7 @@ function AfficheRetraitBloc({ slug, nomCommerce, clair, toast }) {
       <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
         {FORMATS_RETRAIT.map(f => (
           <button key={f} type="button" style={{ ...s.btn, ...s.btnPrimary, flex: '1 1 140px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: 5 }}
-            onClick={() => telecharger(f)} disabled={!!enCours}>
+            onClick={() => telecharger(f)} disabled={!!enCours || !qr}>
             <FileText size={13} strokeWidth={1.8}/> {LIBELLES_RETRAIT[f]}
             {enCours === f && <DotsAttente couleur="#fff" taille={4} label="Préparation du PDF"/>}
           </button>

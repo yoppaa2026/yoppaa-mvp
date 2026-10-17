@@ -74,8 +74,27 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         const plan = planAfficheRetrait({ sens: s.id, phrase, clair, nomCommerce: 'La Boulangerie du Coin de la Grand-Place', mesurer })
         const ops = plan.operations
         const bloc = plan.bloc
+        // Le bord gauche d'un texte, qu'il soit aligné à gauche ou centré.
+        const gauche = (t) => (t.aligne === 'center' ? t.x - mesurer(t.texte, t.taille, t.poids) / 2 : t.x)
         verifier(`🔴 ${cas} : le bloc est du côté de la flèche`, s.id === 'droite' ? bloc.x === W - bloc.largeur : bloc.x === 0)
-        verifier(`🔴 ${cas} : pas de QR`, !ops.some(o => /qr|image/i.test(o.type)))
+        // ⚠️ REPOINTÉE LE 17/10 : « QR + logos des stores » (Alex, tableau). Un
+        // seul QR, DANS le bloc, assez grand pour être scanné de la file, sous
+        // la flèche sans la toucher ; les badges dessous, rien sous 205 mm.
+        const qrs = ops.filter(o => o.type === 'qr')
+        const q = qrs[0]
+        verifier(`🔴 ${cas} : un seul QR, dans le bloc`, qrs.length === 1 && q.x >= bloc.x && q.x + q.cote <= bloc.x + bloc.largeur)
+        verifier(`🔴 ${cas} : le QR se scanne de la file (≥ 40 mm de code)`, q.cote - q.marge * 2 >= 40, String(q.cote - q.marge * 2))
+        const basFleche = Math.max(...ops.filter(o => o.type === 'point').map(p => p.y + p.r))
+        const legende = ops.find(o => o.role === 'legende-qr')
+        verifier(`🔴 ${cas} : la flèche ne touche ni la légende ni le QR`, basFleche < legende.y - legende.taille - 2 && legende.y < q.y, `${basFleche.toFixed(1)} / ${legende.y}`)
+        egal(`${cas} : la légende du QR`, legende.texte, 'Pas encore sur Yoppaa ?')
+        verifier(`🔴 ${cas} : la légende tient dans le bloc, à 6 mm de ses bords`,
+          legende.aligne === 'center' && gauche(legende) >= bloc.x + 6 && gauche(legende) + mesurer(legende.texte, legende.taille, legende.poids) <= bloc.x + bloc.largeur - 6)
+        const rangee = ops.find(o => o.type === 'badges')
+        verifier(`🔴 ${cas} : les deux badges officiels, dans le bloc, sous le QR`,
+          rangee && rangee.badges.length === 2 && rangee.y >= q.y + q.cote + 3 && rangee.y + rangee.hauteur <= 205
+            && rangee.badges.every(b => b.x >= bloc.x + 4 && b.x + b.largeur <= bloc.x + bloc.largeur - 4))
+        verifier(`🔴 ${cas} : jamais de QR côté texte`, !ops.some(o => o.type === 'qr' && o.x < bloc.x))
         verifier(`🔴 ${cas} : la flèche reste dans son bloc`, ops.filter(o => o.type === 'point').every(p => p.x - p.r >= bloc.x && p.x + p.r <= bloc.x + bloc.largeur))
         // 🔴 LE SENS CHOISI EST CELUI DESSINÉ : la pointe (le plus gros point)
         // part du bon côté du centre de la flèche.
@@ -85,10 +104,13 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         const bonSens = { gauche: tip.x < cx - 10, droite: tip.x > cx + 10, ici: tip.y > cy + 10, droit: tip.y < cy - 10 }[s.id]
         verifier(`🔴 ${cas} : « ${s.libelle} » dessine la flèche dans ce sens`, bonSens, `${tip.x.toFixed(1)},${tip.y.toFixed(1)} / ${cx.toFixed(1)},${cy.toFixed(1)}`)
         verifier(`${cas} : la flèche a la couleur du bloc en contraste`, ops.filter(o => o.type === 'point').every(p => paletteRetrait(clair).blocWm.includes(p.couleur)))
+        // ⚠️ REPOINTÉES LE 17/10 : la légende du QR vit DANS le bloc, centrée
+        // (vérifiée à part plus haut). Le côté texte, lui, ne touche jamais le bloc.
         const textes = ops.filter(o => o.type === 'texte')
-        const deborde = textes.filter(t => t.x + mesurer(t.texte, t.taille, t.poids) > W - 15 || t.x < 15)
+        const cote = textes.filter(t => t.role !== 'legende-qr')
+        const deborde = cote.filter(t => gauche(t) + mesurer(t.texte, t.taille, t.poids) > W - 15 || gauche(t) < 15)
         egal(`🔴 ${cas} : aucun texte ne déborde`, deborde.map(t => t.texte), [])
-        const surLeBloc = textes.filter(t => t.x < bloc.x + bloc.largeur && t.x + mesurer(t.texte, t.taille, t.poids) > bloc.x)
+        const surLeBloc = cote.filter(t => t.x < bloc.x + bloc.largeur && t.x + mesurer(t.texte, t.taille, t.poids) > bloc.x)
         egal(`🔴 ${cas} : aucun texte sur le bloc`, surLeBloc.map(t => t.texte), [])
         verifier(`🔴 ${cas} : rien sous 205 mm (marge d’imprimante)`, textes.every(t => t.y <= 200) && ops.filter(o => o.type === 'logo').every(l => l.y + l.corps * 0.95 <= 205))
         const intitule = textes.filter(t => t.role === 'intitule')
@@ -127,14 +149,21 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
   verifier('🔴 le canvas exécute le plan (une seule mise en page)', /const \{ operations \} = planAfficheRetrait\(\{ sens, phrase, clair, nomCommerce, mesurer \}\)/.test(lib))
   verifier('🔴 les polices avant le dessin', /document\.fonts\?\.load\('900 100px "DM Sans"'\)/.test(lib) && lib.indexOf("document.fonts?.load('900") < lib.indexOf('planAfficheRetrait({ sens, phrase, clair, nomCommerce, mesurer })'))
   verifier('🔴 le logo suit la règle de l’affiche QR', /const yDots = o\.y \* k \+ descente \+ L\.wordmarkToDots/.test(lib) && /pointsLogo\(corps\)/.test(lib))
-  verifier('🔴 aucun QR dans ce fichier', !/qrcode|qrDataUrl/.test(lib))
+  // ⚠️ REPOINTÉE LE 17/10 : le QR existe (Alex), mais ce fichier ne le
+  // fabrique pas : il reçoit celui de la fiche, généré par le tableau de bord.
+  verifier('🔴 le module ne fabrique aucun QR lui-même', !/from 'qrcode'|import\('qrcode'\)/.test(lib))
+  verifier('🔴 pas de PDF sans QR (une carte blanche vide imprimée)', /if \(!gabarit \|\| !qrDataUrl\) return false/.test(lib))
+  verifier('🔴 les badges : seulement la partie opaque, les deux ou aucun', /if \(!badgesPrets\) continue/.test(lib) && /b\.badge\.visible\.y \* echelle/.test(lib))
 
   const conf = lu('app/dashboard/ConfigDashboard.js')
   // Pour TOUS les commerces : hors de la condition des cartons de table.
   verifier('🔴 le bloc est dans le kit, pour tous les commerces',
     /<CarteTableBloc slug=\{slug\} nomCommerce=\{nomCommerce\} clair=\{fondClair\} toast=\{toast\}\/>\s*\)\}[^<]{0,120}<AfficheRetraitBloc slug=\{slug\} nomCommerce=\{nomCommerce\} clair=\{fondClair\} toast=\{toast\}\/>/.test(conf))
-  verifier('🔴 le téléchargement passe le sens et la phrase', /telechargerAfficheRetraitPdf\(\{ sens, phrase, clair, nomCommerce, slug, format \}\)/.test(conf))
-  verifier('🔴 l’aperçu est le vrai dessin', /construireAfficheRetrait\(\{ sens, phrase, clair, nomCommerce \}\)/.test(conf))
+  // ⚠️ REPOINTÉES LE 17/10 : avec le QR de la fiche.
+  verifier('🔴 le téléchargement passe le sens, la phrase et le QR', /telechargerAfficheRetraitPdf\(\{ sens, phrase, clair, nomCommerce, slug, format, qrDataUrl: qr \}\)/.test(conf))
+  verifier('🔴 l’aperçu est le vrai dessin', /construireAfficheRetrait\(\{ sens, phrase, clair, nomCommerce, qrDataUrl: qr \}\)/.test(conf))
+  verifier('🔴 le QR ouvre la FICHE de ce commerce (comme l’affiche de vitrine)',
+    /const urlFiche = lienFiche\(slug\)/.test(conf) && /m\.default\.toDataURL\(urlFiche, \{/.test(conf))
   verifier('la phrase est bornée à la saisie', /maxLength=\{PHRASE_MAX\}/.test(conf))
   verifier('les quatre sens sont proposés', /\{SENS_RETRAIT\.map\(o => \(/.test(conf) && /onClick=\{\(\) => setSens\(o\.id\)\}/.test(conf))
 }

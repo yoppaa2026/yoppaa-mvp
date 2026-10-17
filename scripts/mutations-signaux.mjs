@@ -29,6 +29,7 @@ const chemin = (f) => `${RACINE}/${f}`
 const BANC = 'verif:signaux'
 const MODULE = 'lib/signaux.js'
 const FICHE = 'app/commander/[slug]/page.js'
+const BLOC = 'app/commander/SignauxYopper.js'
 
 const MUTATIONS = [
   // ─── ON NE DEMANDE PAS CE QUI SE FAIT DÉJÀ ──────────────────────────────
@@ -46,15 +47,101 @@ const MUTATIONS = [
     de: '  if (isAlimentaire(commercant) && !proposeDesInvendus) sorties.push(\'invendus\')',
     vers: '  if (!proposeDesInvendus) sorties.push(\'invendus\')' },
 
+  // REPOINTÉE LE 17/10 : l'appel à `enviesProposables` est sorti du JSX pour
+  // être calculé une fois (la ligne, la bulle et le bloc lisent la même liste).
+  // Même ligne, autre indentation.
   { nom: '🔴 la fiche cesse de dire s il publie deja ses invendus',
     fichier: FICHE,
-    de: '                    proposeDesInvendus: (dealsActifs || []).some(porteUneFenetre),',
-    vers: '                    proposeDesInvendus: false,' },
+    de: '    proposeDesInvendus: (dealsActifs || []).some(porteUneFenetre),',
+    vers: '    proposeDesInvendus: false,' },
 
   // ⚠️ LE MOT DE L'HABITANT, PAS LE NÔTRE. Il ne réclame pas « l'anti-gaspi ».
   { nom: '🔴 le signal reprend notre vocabulaire au lieu de celui du Yopper',
     de: "  invendus:  'anti_gaspi',",
     vers: "  invendus:  'invendus'," },
+
+  // ─── LA LIVRAISON SANS COMMANDE, ET CE QUI AMÈNE AUX ENVIES (17/10) ─────
+  //
+  // ✅ ALEX, 17/10 (Carolifrit', friterie en Exister) : « c'est mon moteur pour
+  // faire monter les Exister en formule payante ».
+  { nom: '🔴 la livraison redisparait chez qui ne prend pas encore de commande',
+    de: "  if ((peutCommander || !vitrine) && !sertADomicile) sorties.push('livraison')",
+    vers: "  if (peutCommander && !sertADomicile) sorties.push('livraison')" },
+  { nom: '🔴 on propose la livraison a un coiffeur',
+    de: "  if ((peutCommander || !vitrine) && !sertADomicile) sorties.push('livraison')",
+    vers: "  if (!sertADomicile) sorties.push('livraison')" },
+  // 🔴 JAMAIS CHEZ UN PAYANT (bandeau Bistrologue retiré le 15/10).
+  { nom: '🔴 un payant se fait interpeller en tete de carte',
+    de: "  return planEffectif(commercant, maintenant) === 'exister'",
+    vers: '  return true' },
+  { nom: '🔴 le forfait lu n est plus celui en vigueur (essai)',
+    de: "  return planEffectif(commercant, maintenant) === 'exister'",
+    vers: "  return (commercant.plan || 'exister') === 'exister'" },
+  { nom: '🔴 une fiche sans envie a proposer invite quand meme',
+    de: '  if (!commercant || !(types || []).length) return false',
+    vers: '  if (!commercant) return false' },
+  { nom: '🔴 la ligne propose n importe quelle envie',
+    de: '  return ENVIES_EN_TETE.find(t => types.includes(t)) || null',
+    vers: '  return types[types.length - 1] || null' },
+  // LA BULLE : jamais avec la ligne, plus une fois le bloc vu, refusée ou
+  // une envie partie.
+  { nom: '🔴 la bulle se montre avec la ligne a l ecran',
+    de: '  return invite && carteDepassee && !blocVu && !fermee && !dejaRepondu',
+    vers: '  return invite && !blocVu && !fermee && !dejaRepondu' },
+  { nom: '🔴 la bulle revient une fois le bloc vu',
+    de: '  return invite && carteDepassee && !blocVu && !fermee && !dejaRepondu',
+    vers: '  return invite && carteDepassee && !fermee && !dejaRepondu' },
+  { nom: '🔴 la bulle revient apres un non merci',
+    de: '  return invite && carteDepassee && !blocVu && !fermee && !dejaRepondu',
+    vers: '  return invite && carteDepassee && !blocVu && !dejaRepondu' },
+  { nom: '🔴 la bulle insiste apres une envie envoyee',
+    de: '  return invite && carteDepassee && !blocVu && !fermee && !dejaRepondu',
+    vers: '  return invite && carteDepassee && !blocVu && !fermee' },
+  { nom: '🔴 la bulle se montre chez un payant',
+    de: '  return invite && carteDepassee && !blocVu && !fermee && !dejaRepondu',
+    vers: '  return carteDepassee && !blocVu && !fermee && !dejaRepondu' },
+  // L'ÉCRAN.
+  { nom: '🔴 la fiche oublie qu une envie est deja partie',
+    fichier: FICHE,
+    de: '    dejaRepondu: etatEnvies.envoyes.length > 0,',
+    vers: '    dejaRepondu: false,' },
+  { nom: '🔴 le bloc vu ne se constate plus',
+    fichier: FICHE,
+    de: '    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setBlocEnviesVu(true) },',
+    vers: '    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setBlocEnviesVu(false) },',
+  },
+  { nom: '🔴 la tete de carte compte comme depassee des qu elle sort par le bas',
+    fichier: FICHE,
+    de: '      setCarteDepassee(!e.isIntersecting && e.boundingClientRect.bottom <= haut)',
+    vers: '      setCarteDepassee(!e.isIntersecting)' },
+  { nom: '🔴 la ligne a son propre etat, le bloc ne sait pas qu elle a envoye',
+    fichier: FICHE,
+    de: '                  <SignauxYopper types={typesEnvies} commercant={commercant} etat={etatEnvies} eclaire={eclaireEnvies}/>',
+    vers: '                  <SignauxYopper types={typesEnvies} commercant={commercant} eclaire={eclaireEnvies}/>' },
+  { nom: '🔴 la ligne s affiche chez tout le monde',
+    fichier: FICHE,
+    de: '              {inviteAuxEnvies && (',
+    vers: '              {true && (' },
+  { nom: '🔴 la bulle ne passe plus par le module',
+    fichier: FICHE,
+    de: '        {montrerBulleEnvies && (',
+    vers: '        {inviteAuxEnvies && (' },
+  { nom: '🔴 le lien redit « D autres idees »',
+    fichier: BLOC,
+    de: '          D&rsquo;autres envies&nbsp;?',
+    vers: '          D&rsquo;autres idées&nbsp;?' },
+  { nom: '🔴 le bouton de la ligne n envoie rien',
+    fichier: BLOC,
+    de: '          <button type="button" onClick={() => envoyer(type)} disabled={!!enCours}',
+    vers: '          <button type="button" onClick={() => {}} disabled={!!enCours}' },
+  { nom: '🔴 la ligne dit « chez Chez Momo »',
+    fichier: BLOC,
+    de: '{PHRASE_EN_TETE[type]} {chezLeCommerce(commercant.nom)}.',
+    vers: '{PHRASE_EN_TETE[type]} chez {commercant.nom}.' },
+  { nom: '🔴 le bloc ignore l etat de la fiche',
+    fichier: BLOC,
+    de: '  const { envoyes, enCours, envoyer } = etat || local',
+    vers: '  const { envoyes, enCours, envoyer } = local' },
 ]
 
 const lancer = () => {

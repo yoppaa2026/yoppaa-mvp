@@ -14,7 +14,7 @@ import {
   MOTIFS_FICHE, TYPES_MOTIF_FICHE, motifFicheConnu, MOTIFS_FICHE_GRAVES,
   envoyerSignal, messageEchecSignal, MESSAGE_SIGNAL_RESEAU,
   ENVIE_VERS_FONCTION, fonctionDeLEnvie, envieDeLaFonction, phraseEnvieFonction,
-  enviesProposables,
+  enviesProposables, ficheQuiInvite, envieEnTeteDeCarte, bulleEnviesVisible,
 } from '../lib/signaux.js'
 import { PLAN_FEATURES } from '../lib/plans.js'
 import { emailSuggestionCommerce, emailSignalementFiche } from '../lib/resend.js'
@@ -184,10 +184,23 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
   const listeBoulanger = enviesProposables(boulangerExister, { peutCommander: false })
   verifier('un boulanger sans commande se voit proposer « commander ici »',
     listeBoulanger.includes('commande'))
-  // ⚠️ ON NE PROPOSE PAS LA LIVRAISON LÀ OÙ ON NE PEUT RIEN COMMANDER : ce
-  // serait réclamer la suite d'une chose qui n'existe pas.
-  verifier('et jamais la livraison tant que commander est impossible',
-    !listeBoulanger.includes('livraison'))
+  // REPOINTÉE LE 17/10. Elle exigeait l'inverse : « jamais la livraison tant
+  // que commander est impossible ». Alex, sur Carolifrit' (friterie en
+  // Exister) : ces signaux sont le moteur du passage au payant, et la livraison
+  // demandée par ses habitants est l'argument le plus fort. La règle a changé,
+  // la garde vise la nouvelle.
+  verifier('un boulanger sans commande peut aussi demander la livraison',
+    listeBoulanger.includes('livraison'))
+  verifier('une boutique de détail sans commande aussi',
+    enviesProposables({ categorie: 'detail', plan: 'exister' }, { peutCommander: false }).includes('livraison'))
+  // ⚠️ MÊME EXCEPTION QUE « COMMANDE EN LIGNE » : un coiffeur ne livre pas un
+  // créneau.
+  verifier('mais jamais chez un prestataire sans commande',
+    !enviesProposables({ categorie: 'vitrine', plan: 'exister' }, { peutCommander: false }).includes('livraison'))
+  // Et l'ordre de l'évidence tient : commander, puis se faire livrer.
+  verifier('la livraison suit la commande dans la liste',
+    listeBoulanger.indexOf('commande') === 0 && listeBoulanger.indexOf('livraison') === 1,
+    listeBoulanger.join(', '))
   // ⚠️ ET JAMAIS LE RENDEZ-VOUS CHEZ UN BOULANGER. Même règle que les onglets
   // du tableau de bord : ce qui est SANS OBJET pour la catégorie ne se montre
   // pas, même en gris, même en question.
@@ -272,6 +285,88 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
     !/formule|abonnement|débloquer|upgrade|Vendre|Communiquer|Exister/.test(
       bloc.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')))
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// AMENER LE YOPPER JUSQU'AUX ENVIES, SUR UNE FICHE EXISTER (Alex, 17/10)
+// ═══════════════════════════════════════════════════════════════════════════
+// « C'est mon moteur pour faire monter les Exister en formule payante. » Chez
+// Carolifrit', tout le menu passe avant le bloc : une ligne en tête de carte
+// et une bulle flottante y mènent.
+{
+  const AUJ = new Date('2026-10-17T12:00:00Z')
+  const friterie = { categorie: 'alimentaire', plan: 'exister', created_at: '2026-01-01T00:00:00Z' }
+  const typesFriterie = enviesProposables(friterie, { peutCommander: false })
+  verifier('une fiche Exister invite', ficheQuiInvite(friterie, typesFriterie, AUJ))
+  // 🔴 JAMAIS CHEZ UN PAYANT. Le bandeau « Envie de commander à l'avance ? »
+  // a été retiré pour toujours le 15/10 : chez le Bistrologue, qui paie et ne
+  // fait pas d'emporté, il poussait à réclamer ce qu'il refuse.
+  for (const plan of ['communiquer', 'vendre']) {
+    const c = { ...friterie, plan }
+    verifier(`une fiche ${plan} n'invite pas`,
+      !ficheQuiInvite(c, enviesProposables(c, { peutCommander: false }), AUJ))
+  }
+  // ⚠️ LE FORFAIT EN VIGUEUR : un Exister en essai de Vendre goûte la commande.
+  const enEssai = { ...friterie, essai_plan: 'vendre', created_at: '2026-10-10T00:00:00Z' }
+  verifier('un Exister en essai n\'invite pas',
+    !ficheQuiInvite(enEssai, typesFriterie, AUJ))
+  verifier('rien à demander, rien à montrer', !ficheQuiInvite(friterie, [], AUJ))
+  verifier('sans commerçant, rien', !ficheQuiInvite(null, typesFriterie, AUJ))
+
+  egal('la ligne d\'une friterie propose la commande en ligne',
+    envieEnTeteDeCarte(friterie, typesFriterie, AUJ), 'commande')
+  const salonExister = { categorie: 'vitrine', plan: 'exister', created_at: '2026-01-01T00:00:00Z' }
+  egal('celle d\'un salon, le rendez-vous',
+    envieEnTeteDeCarte(salonExister, enviesProposables(salonExister, { peutCommander: false }), AUJ), 'rdv')
+  // ⚠️ LA LIGNE NE REMPLACE PAS LE BLOC, ELLE Y MÈNE : seulement la commande
+  // ou le rendez-vous, jamais la fidélité ni les invendus en tête de carte.
+  verifier('la ligne ne propose ni fidélité ni invendus',
+    envieEnTeteDeCarte(friterie, ['fidelite', 'invendus', 'deals'], AUJ) === null)
+  verifier('et rien chez un payant',
+    envieEnTeteDeCarte({ ...friterie, plan: 'vendre' }, ['commande'], AUJ) === null)
+
+  // LA BULLE. Alex : « bulle + ligne = trop ? » → jamais ensemble.
+  const base = { invite: true, carteDepassee: true, blocVu: false, fermee: false, dejaRepondu: false }
+  verifier('la bulle se montre une fois la tête de carte passée', bulleEnviesVisible(base))
+  verifier('pas avant : la ligne est encore à l\'écran',
+    !bulleEnviesVisible({ ...base, carteDepassee: false }))
+  verifier('plus une fois le bloc vu', !bulleEnviesVisible({ ...base, blocVu: true }))
+  verifier('plus après un « non merci »', !bulleEnviesVisible({ ...base, fermee: true }))
+  verifier('plus après une envie envoyée', !bulleEnviesVisible({ ...base, dejaRepondu: true }))
+  verifier('jamais sur une fiche qui n\'invite pas', !bulleEnviesVisible({ ...base, invite: false }))
+  verifier('et rien sans renseignement', !bulleEnviesVisible())
+
+  // L'ÉCRAN : un seul état pour les trois, et la règle lue du module.
+  const fiche = readFileSync(new URL('../app/commander/[slug]/page.js', import.meta.url), 'utf8')
+  const code = fiche.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
+  verifier('la fiche tient UN état des envies, passé au bloc et à la ligne',
+    (code.match(/useEnviesYopper\(/g) || []).length === 1
+    && /<SignauxYopper[^>]*etat=\{etatEnvies\}/.test(code)
+    && /<AppelEnvieCarte[^>]*etat=\{etatEnvies\}/.test(code))
+  verifier('la ligne n\'existe que sur une fiche qui invite',
+    /\{inviteAuxEnvies && \(\s*<div ref=\{teteCarteRef\}>/.test(code))
+  verifier('la ligne vient AVANT la carte, le bloc APRÈS',
+    code.indexOf('<AppelEnvieCarte') > 0
+    && code.indexOf('<AppelEnvieCarte') < code.indexOf('<BarreCategories categories')
+    && code.indexOf('<BarreCategories categories') < code.indexOf('<SignauxYopper'))
+  verifier('la bulle n\'obéit qu\'au module',
+    /\{montrerBulleEnvies && \(\s*<BulleEnvies/.test(code)
+    && /const montrerBulleEnvies = bulleEnviesVisible\(\{/.test(code))
+  verifier('« dejaRepondu » lit les envies vraiment envoyées',
+    /dejaRepondu: etatEnvies\.envoyes\.length > 0/.test(code))
+  verifier('le bloc vu se constate à l\'écran, pas au défilement',
+    /if \(e\.isIntersecting\) setBlocEnviesVu\(true\)/.test(code))
+  verifier('la tête de carte « dépassée » est AU-DESSUS de l\'écran',
+    /setCarteDepassee\(!e\.isIntersecting && e\.boundingClientRect\.bottom <= haut\)/.test(code))
+
+  const bloc = readFileSync(new URL('../app/commander/SignauxYopper.js', import.meta.url), 'utf8')
+  const blocCode = bloc.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
+  // Le mot d'Alex, pas « D'autres idées ».
+  verifier('le lien dit « D\'autres envies ? »', /D&rsquo;autres envies&nbsp;\?/.test(blocCode))
+  verifier('le bouton de la ligne envoie l\'envie', /onClick=\{\(\) => envoyer\(type\)\}[^>]*>\s*\{attend \? 'Envoi…' : 'Oui, dis-le-lui'\}/.test(blocCode))
+  verifier('la ligne ne double pas « chez »', /\{chezLeCommerce\(commercant\.nom\)\}/.test(blocCode))
+  verifier('le bloc prend l\'état de la fiche quand elle le donne',
+    /const \{ envoyes, enCours, envoyer \} = etat \|\| local/.test(blocCode))
+}
+
 verifier('un type inconnu ne casse rien', typeof libelleEnvie('zzz').phrase(2) === 'string')
 
 egal('singulier', libelleEnvie('rdv').phrase(1), '1 habitant a voulu prendre rendez-vous chez toi')

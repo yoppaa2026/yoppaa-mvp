@@ -20,7 +20,7 @@
 
 import { useState } from 'react'
 import { fetchAvecPreuveSiConnecte } from '@/lib/fetch-yopper'
-import { nomPorteChez } from '@/lib/nom-commerce'
+import { nomPorteChez, chezLeCommerce } from '@/lib/nom-commerce'
 
 const T = {
   bgPanel: '#160636',
@@ -55,18 +55,21 @@ const BOUTONS = {
   invendus:  'Invendus de fin de journée',
 }
 
-export default function SignauxYopper({ types = [], commercant }) {
+// ─── L'ÉTAT DES ENVIES, PARTAGÉ PAR LA LIGNE, LA BULLE ET LE BLOC ──────────
+//
+// ✅ 17/10 : la ligne en tête de carte envoie la même envie que le bloc d'en
+// bas. Si chacun gardait sa propre trace, le Yopper qui a dit « oui » en haut
+// retrouverait en bas le même bouton, intact, comme si rien n'était parti. La
+// fiche tient donc UN état et le passe aux trois.
+export function useEnviesYopper(commercant) {
   // ⚠️ UN ENVOI PAR TYPE, ET ON GARDE LA TRACE. Sans ça, cliquer sur « Être
   // livré » ferait passer les six boutons en « transmis » : le Yopper croirait
   // avoir demandé six choses qu'il n'a pas demandées.
   const [envoyes, setEnvoyes] = useState([])
   const [enCours, setEnCours] = useState(null)
 
-  const proposables = (types || []).filter(t => BOUTONS[t])
-  if (!commercant || proposables.length === 0) return null
-
   async function envoyer(type) {
-    if (enCours || envoyes.includes(type)) return
+    if (!commercant || enCours || envoyes.includes(type)) return
     setEnCours(type)
     try {
       // L'anti-spam d'une envie par semaine vit côté serveur : il était dans le
@@ -87,11 +90,26 @@ export default function SignauxYopper({ types = [], commercant }) {
     setEnvoyes(prev => [...prev, type])
   }
 
+  return { envoyes, enCours, envoyer }
+}
+
+// `eclaire` est un COMPTEUR : chaque passage par la ligne ou la bulle remonte
+// le cadre (clé changée), et l'éclat rejoue même au deuxième appui.
+export default function SignauxYopper({ types = [], commercant, etat, eclaire = 0 }) {
+  const local = useEnviesYopper(commercant)
+  const { envoyes, enCours, envoyer } = etat || local
+
+  const proposables = (types || []).filter(t => BOUTONS[t])
+  if (!commercant || proposables.length === 0) return null
+
   const tousEnvoyes = proposables.every(t => envoyes.includes(t))
 
   return (
     <div style={{ padding: '0 12px', marginTop: 24 }}>
-      <div style={{ background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 100%)`, borderRadius: 16, padding: '16px 18px', position: 'relative', overflow: 'hidden', fontFamily: '"DM Sans", sans-serif' }}>
+      {/* ⚠️ LE BLOC S'ALLUME UN INSTANT quand la ligne ou la bulle y amène :
+          arrivé au bas d'une longue fiche, l'œil doit savoir où se poser. */}
+      <style>{`@keyframes enviesEclat { 0% { box-shadow: 0 0 0 0 ${T.main}00 } 30% { box-shadow: 0 0 0 6px ${T.light} } 100% { box-shadow: 0 0 0 0 ${T.main}00 } } @media (prefers-reduced-motion: reduce) { .envies-eclat { animation: none !important } }`}</style>
+      <div key={eclaire} className={eclaire ? 'envies-eclat' : undefined} style={{ background: `linear-gradient(135deg, ${T.bgPanel} 0%, ${T.deep} 100%)`, borderRadius: 16, padding: '16px 18px', position: 'relative', overflow: 'hidden', fontFamily: '"DM Sans", sans-serif', animation: eclaire ? 'enviesEclat 1.4s ease-out 2' : undefined }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(circle at 90% 20%, ${T.main}44 0%, transparent 55%)`, pointerEvents: 'none' }}/>
         <div style={{ position: 'relative' }}>
           <p style={{ fontSize: '0.6rem', fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 6px', opacity: 0.85 }}>
@@ -112,7 +130,7 @@ export default function SignauxYopper({ types = [], commercant }) {
           <p style={{ fontSize: 14.5, fontWeight: 700, color: '#fff', lineHeight: 1.45, margin: '0 0 4px', letterSpacing: '-0.2px' }}>
             {tousEnvoyes
               ? <>C&rsquo;est transmis à <strong>{commercant.nom}</strong> 🟣</>
-              : <>Tu aimerais un service en plus {nomPorteChez(commercant.nom) ? '' : 'chez '}<strong>{commercant.nom}</strong> ?</>}
+              : <>Tu aimerais un service en plus {nomPorteChez(commercant.nom) ? '' : 'chez '}<strong>{commercant.nom}</strong>&nbsp;?</>}
           </p>
           <p style={{ fontSize: 12.5, fontWeight: 600, color: T.light, lineHeight: 1.5, margin: '0 0 12px', opacity: 0.9 }}>
             {tousEnvoyes
@@ -154,6 +172,77 @@ export default function SignauxYopper({ types = [], commercant }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── LA LIGNE EN TÊTE DE CARTE ──────────────────────────────────────────────
+//
+// ✅ ALEX, 17/10 (tableau) : là où l'envie naît, en lisant un menu qu'on ne
+// peut pas commander. Une phrase, un bouton qui envoie l'envie en un clic, et
+// « D'autres envies ? » (son mot) qui descend au bloc.
+// ⚠️ CLAIRE, JAMAIS UN PANNEAU SOMBRE : le 26/08, Alex a retiré les bandeaux
+// noirs du haut de la fiche. Celle-ci informe d'abord (pas de commande en
+// ligne ici) et ne demande qu'ensuite.
+const PHRASE_EN_TETE = {
+  commande: 'Pas encore de commande en ligne',
+  rdv:      'Pas encore de rendez-vous en ligne',
+}
+
+export function AppelEnvieCarte({ type, commercant, etat, onAutresEnvies }) {
+  if (!commercant || !PHRASE_EN_TETE[type]) return null
+  const { envoyes, enCours, envoyer } = etat
+  const fait = envoyes.includes(type)
+  const attend = enCours === type
+  return (
+    <div style={{ margin: '12px 12px 0', padding: '12px 14px', borderRadius: 14, background: '#F5EEFF', border: `1px solid ${T.main}26`, fontFamily: '"DM Sans", sans-serif' }}>
+      <p style={{ margin: '0 0 10px', fontSize: 13.5, fontWeight: 700, color: T.bgPanel, lineHeight: 1.45 }}>
+        {fait
+          ? <>C&rsquo;est transmis à <strong>{commercant.nom}</strong> 🟣</>
+          : <>{PHRASE_EN_TETE[type]} {chezLeCommerce(commercant.nom)}. Tu aimerais&nbsp;?</>}
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+        {!fait && (
+          <button type="button" onClick={() => envoyer(type)} disabled={!!enCours}
+            style={{ padding: '8px 16px', borderRadius: 100, border: 'none', background: `linear-gradient(135deg, ${T.main}, #9660E0)`, color: '#fff', fontWeight: 800, fontSize: 12.5, fontFamily: '"DM Sans", sans-serif', cursor: enCours ? 'default' : 'pointer', opacity: attend ? 0.6 : 1 }}>
+            {attend ? 'Envoi…' : 'Oui, dis-le-lui'}
+          </button>
+        )}
+        <button type="button" onClick={onAutresEnvies}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 2px', border: 'none', background: 'none', color: T.main, fontWeight: 800, fontSize: 12.5, fontFamily: '"DM Sans", sans-serif', cursor: 'pointer' }}>
+          D&rsquo;autres envies&nbsp;?
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── LA BULLE FLOTTANTE ─────────────────────────────────────────────────────
+//
+// ✅ ALEX, 17/10 (tableau). Quand elle se montre, c'est `bulleEnviesVisible`
+// qui le dit (lib/signaux.js) : jamais en même temps que la ligne, plus du tout
+// une fois le bloc vu, refusée ou une envie partie.
+export function BulleEnvies({ commercant, onOuvrir, onFermer }) {
+  if (!commercant) return null
+  return (
+    <div role="complementary" aria-label="Tes envies pour ce commerce"
+      style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(18px + env(safe-area-inset-bottom, 0px))', zIndex: 55, width: 'calc(100% - 32px)', maxWidth: 380, display: 'flex', alignItems: 'center', gap: 4, padding: 4, borderRadius: 100, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, boxShadow: `0 10px 30px ${T.bgPanel}66`, fontFamily: '"DM Sans", sans-serif', animation: 'bulleEnviesIn 0.25s ease-out' }}>
+      <style>{`@keyframes bulleEnviesIn { from { opacity: 0; transform: translateX(-50%) translateY(14px) } to { opacity: 1; transform: translateX(-50%) translateY(0) } } @media (prefers-reduced-motion: reduce) { [aria-label="Tes envies pour ce commerce"] { animation: none !important } }`}</style>
+      <button type="button" onClick={onOuvrir}
+        style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px 8px 14px', border: 'none', background: 'none', color: '#fff', fontFamily: '"DM Sans", sans-serif', cursor: 'pointer', textAlign: 'left' }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.light} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+          <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.6-4.4A8.4 8.4 0 0 1 3 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/>
+        </svg>
+        <span style={{ flex: 1, minWidth: 0, fontWeight: 800, fontSize: 13.5, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          Une envie pour {commercant.nom}&nbsp;?
+        </span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+      </button>
+      <button type="button" onClick={onFermer} aria-label="Fermer"
+        style={{ flexShrink: 0, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 100, border: 'none', background: 'rgba(255,255,255,0.1)', cursor: 'pointer' }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
   )
 }

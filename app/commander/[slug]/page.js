@@ -110,8 +110,8 @@ import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 // ⚠️ `CTAUpgrade` A DISPARU DE CETTE FICHE (26/08). Il rendait UN bandeau par
 // envie, et cette page en posait quatre à des hauteurs différentes. Les envies
 // tiennent maintenant dans un seul bloc en bas : `SignauxYopper`.
-import SignauxYopper from '../SignauxYopper'
-import { enviesProposables } from '@/lib/signaux'
+import SignauxYopper, { useEnviesYopper, AppelEnvieCarte, BulleEnvies } from '../SignauxYopper'
+import { enviesProposables, ficheQuiInvite, envieEnTeteDeCarte, bulleEnviesVisible } from '@/lib/signaux'
 import ModalSignalement from '../ModalSignalement'
 import HorairesSection, { AnnoncesExceptions } from '../HorairesSection'
 import { exceptionsPour } from '@/lib/horaires-du-jour'
@@ -4026,6 +4026,68 @@ export default function CommanderSlug() {
     // sur un `null` au premier rendu et ne se reposerait jamais.
   }, [etape, peutCommander, panier])
 
+  // ─── LES ENVIES, ET CE QUI Y AMÈNE SUR UNE FICHE EXISTER ────────────────
+  //
+  // ✅ ALEX, 17/10 : « c'est mon moteur pour faire monter les Exister en
+  // formule payante », et chez Carolifrit' tout le menu passe avant le bloc.
+  // Une ligne en tête de carte et une bulle flottante y mènent ; la règle de
+  // qui les voit, et quand, vit dans `lib/signaux.js`.
+  // ⚠️ ICI, SOUS `commerceAccepteCommandes` : les dépendances des effets se
+  // lisent pendant le rendu (zone morte, voir plus haut).
+  const typesEnvies = enviesProposables(commercant, {
+    // ⚠️ CE QUE LE COMMERCE ACCEPTE, pas ce que le client est en train de
+    // faire : sinon on proposerait de réclamer la commande en ligne à
+    // quelqu'un qui la propose déjà.
+    peutCommander: commerceAccepteCommandes,
+    proposeDesInvendus: (dealsActifs || []).some(porteUneFenetre),
+  })
+  const etatEnvies = useEnviesYopper(commercant)
+  const inviteAuxEnvies = ficheQuiInvite(commercant, typesEnvies)
+  const envieEnTete = envieEnTeteDeCarte(commercant, typesEnvies)
+  const teteCarteRef = useRef(null)
+  const blocEnviesRef = useRef(null)
+  const [carteDepassee, setCarteDepassee] = useState(false)
+  const [blocEnviesVu, setBlocEnviesVu] = useState(false)
+  const [bulleFermee, setBulleFermee] = useState(false)
+  const [eclaireEnvies, setEclaireEnvies] = useState(0)
+  // Même méthode que le panier flottant : on OBSERVE, on n'écoute pas le
+  // défilement, et le `root` est le conteneur qui défile.
+  // ⚠️ « DÉPASSÉE » = AU-DESSUS de l'écran, pas seulement hors de l'écran : à
+  // l'arrivée, la tête de carte est plus bas, et la bulle ne doit pas
+  // apparaître avant que le Yopper ait commencé à lire le menu.
+  useEffect(() => {
+    const cible = teteCarteRef.current
+    const conteneur = scrollRef.current
+    if (!inviteAuxEnvies || !cible || !conteneur || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(([e]) => {
+      const haut = e.rootBounds ? e.rootBounds.top : 0
+      setCarteDepassee(!e.isIntersecting && e.boundingClientRect.bottom <= haut)
+    }, { root: conteneur, threshold: [0] })
+    obs.observe(cible)
+    return () => obs.disconnect()
+  }, [inviteAuxEnvies, loading])
+  useEffect(() => {
+    const cible = blocEnviesRef.current
+    const conteneur = scrollRef.current
+    if (!inviteAuxEnvies || blocEnviesVu || !cible || !conteneur || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setBlocEnviesVu(true) },
+      { root: conteneur, threshold: [0.3] })
+    obs.observe(cible)
+    return () => obs.disconnect()
+  }, [inviteAuxEnvies, blocEnviesVu, loading])
+  const montrerBulleEnvies = bulleEnviesVisible({
+    invite: inviteAuxEnvies,
+    carteDepassee,
+    blocVu: blocEnviesVu,
+    fermee: bulleFermee,
+    dejaRepondu: etatEnvies.envoyes.length > 0,
+  })
+  function allerAuxEnvies() {
+    blocEnviesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // Un compteur et pas un booléen : chaque appui relance l'éclat.
+    setEclaireEnvies(n => n + 1)
+  }
+
   return (
     <>
       <style>{`
@@ -4531,6 +4593,12 @@ export default function CommanderSlug() {
             <span style={{ fontWeight: 800, fontSize: '0.95rem', flex: 1, textAlign: 'left' }}>Voir ma commande</span>
             <span style={{ fontWeight: 900, fontSize: '1rem', whiteSpace: 'nowrap' }}>{euros(totalPanier())}</span>
           </button>
+        )}
+
+        {/* ✅ 17/10 (Alex) : la bulle qui amène aux envies, sur une fiche
+            Exister. Quand elle se montre : `bulleEnviesVisible`. */}
+        {montrerBulleEnvies && (
+          <BulleEnvies commercant={commercant} onOuvrir={allerAuxEnvies} onFermer={() => setBulleFermee(true)}/>
         )}
 
         {/* ── SCROLL BODY ── */}
@@ -5083,6 +5151,18 @@ export default function CommanderSlug() {
                 </div>
               )}
 
+              {/* ─── EN TÊTE DE CARTE, SUR UNE FICHE EXISTER (Alex, 17/10) ──
+                  Là où l'envie naît : en lisant un menu qu'on ne peut pas
+                  commander. Le repère sert aussi la bulle, qui n'apparaît
+                  qu'une fois cette tête de carte passée. */}
+              {inviteAuxEnvies && (
+                <div ref={teteCarteRef}>
+                  {envieEnTete && toutesLesCats.length > 0 && (
+                    <AppelEnvieCarte type={envieEnTete} commercant={commercant} etat={etatEnvies} onAutresEnvies={allerAuxEnvies}/>
+                  )}
+                </div>
+              )}
+
               {toutesLesCats.length > 1 && (
                 <BarreCategories categories={toutesLesCats} scrollRef={scrollRef}
                   headerRef={headerRef} barreRef={barreRef} catRefs={catRefs} onChoisir={scrollToCategorie}/>
@@ -5285,16 +5365,12 @@ export default function CommanderSlug() {
                     alimentaires, y compris ceux qui publient leurs restes tous
                     les soirs. Inviter un boulanger à faire ce qu'il fait déjà,
                     c'est lui dire qu'on ne le connaît pas. */}
-                <SignauxYopper
-                  types={enviesProposables(commercant, {
-                    // ⚠️ CE QUE LE COMMERCE ACCEPTE, pas ce que le client est en
-                    // train de faire : sinon on proposerait de réclamer la
-                    // commande en ligne à quelqu'un qui la propose déjà.
-                    peutCommander: commerceAccepteCommandes,
-                    proposeDesInvendus: (dealsActifs || []).some(porteUneFenetre),
-                  })}
-                  commercant={commercant}
-                />
+                {/* La liste vient de `enviesProposables`, calculée une fois
+                    plus haut : la ligne en tête de carte et la bulle lisent la
+                    même (17/10). */}
+                <div ref={blocEnviesRef}>
+                  <SignauxYopper types={typesEnvies} commercant={commercant} etat={etatEnvies} eclaire={eclaireEnvies}/>
+                </div>
 
                 {/* ─── « Tous les commerces autour de toi » ──────────────────
                     Beaucoup de Yoppers arrivent ici SANS passer par l'accueil :

@@ -188,6 +188,14 @@ const MUTATIONS = [
     vers: '  const livraisonDispo = !!commercant?.livraison_actif' },
 
   // ─── LE SITEMAP, /commander, LE ROBOTS ──────────────────────────────────
+  { nom: '🔴 le concours redevient indexable (Alex, 17/10)',
+    fichier: 'app/concours/page.js',
+    de: '  robots: { index: false, follow: true },',
+    vers: '  robots: { index: true, follow: true },' },
+  { nom: '🔴 le concours revient dans le plan du site (17/10)',
+    fichier: SITEMAP,
+    de: '    // ⚠️ PAS /concours : en noindex pour le moment (Alex, 17/10). Annoncer une',
+    vers: '    { url: `${BASE_URL}/concours` }, // ⚠️ PAS /concours : en noindex pour le moment (Alex, 17/10). Annoncer une' },
   { nom: '🔴 le plan annonce « modifiée à l’instant » (17/10)',
     fichier: SITEMAP,
     de: "    { url: `${BASE_URL}/commander`, ...(liste ? { lastModified: liste } : {}), changeFrequency: 'daily', priority: 0.9 },",

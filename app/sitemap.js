@@ -30,7 +30,6 @@ export default async function sitemap() {
     return [
       { url: BASE_URL, changeFrequency: 'daily', priority: 1 },
       { url: `${BASE_URL}/legal`, changeFrequency: 'monthly', priority: 0.3 },
-      { url: `${BASE_URL}/concours`, changeFrequency: 'weekly', priority: 0.5 },
     ]
   }
 
@@ -56,7 +55,8 @@ export default async function sitemap() {
     { url: `${BASE_URL}/commander`, ...(liste ? { lastModified: liste } : {}), changeFrequency: 'daily', priority: 0.9 },
     { url: `${BASE_URL}/classement`, changeFrequency: 'daily', priority: 0.7 },
     { url: `${BASE_URL}/legal`, changeFrequency: 'monthly', priority: 0.3 },
-    { url: `${BASE_URL}/concours`, changeFrequency: 'weekly', priority: 0.5 },
+    // ⚠️ PAS /concours : en noindex pour le moment (Alex, 17/10). Annoncer une
+    // page qu'on interdit d'indexer, la Search Console le signale en erreur.
   ]
   const fiches = publies.map(c => ({
     url: adresseCanonique(c),

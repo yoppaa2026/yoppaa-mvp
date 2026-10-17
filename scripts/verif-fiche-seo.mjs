@@ -199,6 +199,15 @@ const SITE = 'https://www.yoppaa.app'
   verifier('🔴 le plan n’annonce plus « modifiée à l’instant »', !/new Date\(\)/.test(sitemap) && !/lastModified: now/.test(sitemap))
   verifier('🔴 /commander porte la date du commerce le plus récent',
     /const liste = plusRecente\(publies\)/.test(sitemap) && /url: `\$\{BASE_URL\}\/commander`, \.\.\.\(liste \? \{ lastModified: liste \} : \{\}\)/.test(sitemap))
+  // ✅ ALEX, 17/10 : le concours en noindex, LISIBLE par les robots (sinon le
+  // noindex n'est jamais vu), et hors du plan du site.
+  const concours = lireCode('app/concours/page.js')
+  verifier('🔴 le concours est en noindex', /robots: \{ index: false, follow: true \}/.test(concours))
+  verifier('🔴 et il n’est plus annoncé dans le plan du site', !/\/concours/.test(sitemap))
+  // ⚠️ LA LISTE ENTIÈRE DES INTERDICTIONS, pas la seule première ligne.
+  const interdits = (lireCode('app/robots.js').match(/disallow:\s*(\[[\s\S]*?\]|'[^']*')/g) || []).join(' ')
+  verifier('🔴 mais les robots peuvent toujours le lire (sinon le noindex n’est jamais vu)',
+    interdits.includes('/dashboard') && !interdits.includes('/concours'), interdits.slice(0, 120))
   const { plusRecente } = await import('../lib/plan-du-site.js')
   egal('la plus récente des dates', plusRecente([{ created_at: '2026-09-09T10:00:00Z' }, { created_at: '2026-10-16T08:00:00Z' }, { created_at: null }])?.toISOString(), '2026-10-16T08:00:00.000Z')
   egal('🔴 aucune date : aucune date (jamais « maintenant »)', plusRecente([]), undefined)

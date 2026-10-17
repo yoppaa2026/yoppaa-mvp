@@ -53,7 +53,11 @@ export const metadata = {
   title: 'Règlement du concours de lancement · Yoppaa',
   description:
     "Règlement du concours de lancement Yoppaa sur Facebook : conditions de participation, question subsidiaire, dotation et attribution des bons.",
-  robots: { index: true, follow: true },
+  // ✅ ALEX, 17/10 : « le concours en noindex pour le moment ». La page reste
+  // OUVERTE aux robots (robots.txt) : Google doit la lire pour voir le
+  // noindex, et l'aperçu du lien partagé sur Facebook en a besoin. Elle sort
+  // aussi du plan du site (app/sitemap.js).
+  robots: { index: false, follow: true },
   alternates: { canonical: 'https://www.yoppaa.app/concours' },
 }
 

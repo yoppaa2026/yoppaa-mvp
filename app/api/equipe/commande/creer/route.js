@@ -34,6 +34,7 @@
 import { NextResponse } from 'next/server'
 import { clientAdmin } from '@/lib/api-auth'
 import { gardeEquipe, journaliserGeste } from '@/lib/equipe-server'
+import { verdictForfait } from '@/lib/garde-forfait'
 import { construireLignesCommande, verifierStockDisponible, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS, lirePrixTaille } from '@/lib/lignes-commande'
 import { commandeDeborde, capaciteDuCreneau, creneauCommandable } from '@/lib/creneaux'
 import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
@@ -84,6 +85,12 @@ export async function POST(request) {
       .eq('id', commercant_id)
       .maybeSingle()
     if (errC || !commercant) return non('Commerce introuvable.', 404)
+    // 🔴 ENCODER, C'EST CRÉER (audit du 17/10, décision d'Alex au tableau). La
+    // garde d'équipe laisse toujours passer le patron, et rien ne lisait la
+    // formule : hors Vendre, il encodait encore des commandes que ses clients
+    // ne pouvaient plus passer. Ce qui existe reste à honorer ; le neuf, non.
+    const forfait = verdictForfait(commercant, 'commande')
+    if (!forfait.ok) return non(forfait.message, forfait.statut, { code: forfait.code, plan_requis: forfait.plan_requis })
     // Les créneaux et la livraison n'existent qu'en alimentaire : le détail n'a
     // aucune heure promise (CATEGORIES_SANS_CRENEAU).
     if (commercant.categorie !== 'alimentaire') return non('La commande encodée est réservée aux commerces alimentaires.')

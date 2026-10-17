@@ -24,6 +24,8 @@
 import { NextResponse } from 'next/server'
 import { clientAdmin } from '@/lib/api-auth'
 import { gardeEquipe, journaliserGeste } from '@/lib/equipe-server'
+import { verdictForfait } from '@/lib/garde-forfait'
+import { fonctionReservation } from '@/lib/reservation-metier'
 import { creneauAcceptable, creneauxDuJour, minutesDeLHeure } from '@/lib/deplacement-rdv'
 import { plageQuiAccueille, praticiensPourLaSaisie, choixPraticienSaisie } from '@/lib/rdv-slots'
 import { capacitePrestation, estParCouverts, bornesCouverts, couvertsValides, COLONNES_COUVERTS } from '@/lib/cours-collectifs'
@@ -74,7 +76,9 @@ export async function POST(request) {
 
     // ── Ce que la fenêtre avait sous les yeux, relu en base ─────────────────
     const [commerce, prestations, creneaux, rdvsDuJour, exceptionsLues] = await Promise.all([
-      admin.from('commercants').select('id, horaires_detail, rdv_acompte_global').eq('id', commercant_id).maybeSingle(),
+      // ⚠️ `categorie`, `plan`, `essai_plan`, `created_at` : la garde de
+      // formule juste en dessous en dépend (17/10).
+      admin.from('commercants').select('id, horaires_detail, rdv_acompte_global, categorie, plan, essai_plan, created_at').eq('id', commercant_id).maybeSingle(),
       admin.from('rdv_prestations').select(`${COLONNES_PRESTATION_SANS_COUVERTS}, ${COLONNES_COUVERTS}`)
         .eq('commercant_id', commercant_id).eq('actif', true).is('deleted_at', null),
       admin.from('rdv_creneaux').select(COLONNES_CRENEAU_RDV_EQUIPE)
@@ -88,6 +92,12 @@ export async function POST(request) {
       if (r.error) throw new Error(`lecture des ${quoi} : ${r.error.message}`)
     }
     if (!commerce.data) return NextResponse.json({ ok: false, error: 'commerce introuvable' }, { status: 404 })
+    // 🔴 POSER UN RENDEZ-VOUS, C'EST CRÉER (audit du 17/10, décision d'Alex au
+    // tableau) : hors formule, l'agenda s'honore mais ne se remplit plus, ni
+    // par ses clients ni de l'intérieur. La fonction suit le métier : tables
+    // au restaurant, rendez-vous ailleurs.
+    const forfait = verdictForfait(commerce.data, fonctionReservation(commerce.data))
+    if (!forfait.ok) return NextResponse.json({ ok: false, error: forfait.message, code: forfait.code, plan_requis: forfait.plan_requis }, { status: forfait.statut })
     const formats = prestations.data || []
     const presta = formats.find(p => String(p.id) === String(prestation_id))
     if (!presta) return NextResponse.json({ ok: false, error: 'Cette prestation n’est plus disponible.' }, { status: 404 })

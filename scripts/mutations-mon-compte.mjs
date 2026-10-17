@@ -330,8 +330,10 @@ const MUTATIONS = [
     garde: 'l’écran du compte refuse de deviner une formule sans dossier' },
 
   { nom: '🔴 le chargement et la panne redonnent le meme ecran',
-    de: 'function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) {',
-    vers: 'function TabMonCompte({ commercant, toast, onSaved = null }) {\n  const illisible = false',
+    // REPOINTÉE LE 17/10 : la signature porte aussi `onRevenir` (revenir à sa
+    // formule pendant l'essai).
+    de: 'function TabMonCompte({ commercant, toast, onSaved = null, illisible = false, onRevenir = null }) {',
+    vers: 'function TabMonCompte({ commercant, toast, onSaved = null, onRevenir = null }) {\n  const illisible = false',
     garde: 'et il distingue le chargement de la panne' },
 
   // ─── 22/09 : UN RECHARGEMENT RATE N EFFACE PAS LE COMMERCANT ────────────
@@ -408,8 +410,12 @@ const MUTATIONS = [
   // etre uniquement proche des alertes. » Ce qu on mesure s est donc INVERSE,
   // et les ancres qui visaient l onglet ne pointaient plus sur rien.
   { nom: '🔴 LE DEFAUT DU 22/09 : l onglet revient dans la barre, en double du bouton du pied',
-    de: '  ].filter(Boolean)',
-    vers: "    { id: 'compte', label: 'Mon compte', icon: 'user' } ].filter(Boolean)",
+    // REPOINTÉE LE 17/10 : `  ].filter(Boolean)` tombait d'abord sur une autre
+    // ligne du fichier (vers la 2800, un `].filter(Boolean).join(' ')` de JSX),
+    // jamais sur la barre d'onglets : la mutation y était muette, trouvée en
+    // relançant ce harnais. Elle vise maintenant une ligne UNIQUE de la liste.
+    de: "    { id: 'accompagnement', label: 'Accompagnement', icon: 'box' },",
+    vers: "    { id: 'accompagnement', label: 'Accompagnement', icon: 'box' }, { id: 'compte', label: 'Mon compte', icon: 'user' },",
     garde: '« Mon compte » n’est pas un onglet de cette barre' },
 
   // 🔴 ET LE BOUTON DU PIED DISPARAIT D UNE DES DEUX BARRES. La barre laterale
@@ -449,20 +455,23 @@ const MUTATIONS = [
     vers: "  const surCompte = ongletPrincipal === 'config' && configTab === 'compte'",
     garde: 'et il lit l’onglet courant, pas la clé de montage' },
 
+  // REPOINTÉES LE 17/10 : l'appel porte aussi `onRevenir`.
   { nom: '🔴 l onglet existe mais n affiche plus rien',
-    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} />}",
+    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} onRevenir={revenirASaFormule} />}",
     vers: '' },
 
   { nom: '🔴 le contenu se cache derriere le forfait, en plus de la barre',
-    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} />}",
+    de: "      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} onRevenir={revenirASaFormule} />}",
     vers: "      {tab === 'compte' && peut(commercant, 'export_comptable') && <TabMonCompte commercant={commercant} toast={showToast} />}" },
 
   // ─── CE QUE L ECRAN DIT ─────────────────────────────────────────────────
   // 🔴 LA LECON DE L OFFRE DE LANCEMENT : un texte qui devine sa date finit par
   // contredire la facture. La date affichee doit etre le miroir de Stripe.
   { nom: '🔴 la date de fin d essai se calcule en local au lieu de venir de Stripe',
-    de: "  const finEssai = dateLongue(commercant?.subscription_trial_end)",
-    vers: "  const finEssai = dateLongue(commercant?.essai_demande_le)" },
+    // REPOINTÉE LE 17/10 : la date reste celle de Stripe, lue comme dernier
+    // jour offert (`dernierJourAvant`, Alex : « 8 » et « 9 janvier »).
+    de: "  const finEssai = dateLongue(dernierJourAvant(commercant?.subscription_trial_end))",
+    vers: "  const finEssai = dateLongue(dernierJourAvant(commercant?.essai_demande_le))" },
 
   { nom: '⚠️ le montant TVA comprise disparait : il ne voit plus ce qui sera debite',
     de: "              prix?.mensuel ? `${euros(prix.mensuel)} HTVA par mois, soit ${euros(ttc)} TVA comprise` : 'Gratuit à vie'",

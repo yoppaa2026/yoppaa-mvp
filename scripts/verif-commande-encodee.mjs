@@ -387,8 +387,10 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('🔴 la sonnerie ne compte que les arrivées en ligne (trois endroits)',
     (bord.match(/nombreArriveesEnLigne\(triees\)/g) || []).length === 2 && /dernierNombreRef\.current = arrivees/.test(bord)
     && !/triees\.length > dernierNombreRef\.current/.test(bord))
-  v('le bouton n’apparaît qu’en alimentaire avec des créneaux',
-    /commercant\?\.categorie === 'alimentaire' && \(creneauxRetrait\.length > 0 \|\| creneauxLivraison\.length > 0\)/.test(bord))
+  // REPOINTÉE LE 17/10 : et avec la formule (encoder, c'est créer ; décision
+  // d'Alex au tableau). La route le refuse aussi (`verif:honorer`).
+  v('le bouton n’apparaît qu’en alimentaire avec des créneaux, et la formule',
+    /commercant\?\.categorie === 'alimentaire' && canDo\(planEffectif\(commercant\), 'commande'\) && \(creneauxRetrait\.length > 0 \|\| creneauxLivraison\.length > 0\)/.test(bord))
   v('la carte dit qu’une commande est encodée', /commande\.origine === ORIGINE_COMMERCANT/.test(bord))
   v('🔴 la bande de remplissage cache les créneaux terminés, à l’heure relue chaque minute',
     /\}\)\)\.filter\(\(\{ creneau \}\) => !creneauTermine\(creneau, \{ dateStr: jourActif, maintenant: new Date\(minuteBande\), instant: brusselsInstant \}\)\)/.test(bord)

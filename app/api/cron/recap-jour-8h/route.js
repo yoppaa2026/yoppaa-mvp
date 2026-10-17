@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { envoyerAuCommercant, emailRecapRdvJour, emailRecapCommandesJour } from '@/lib/resend'
 import { planEffectif } from '@/lib/plans'
+import { recapDuJourAEnvoyer } from '@/lib/honorer'
 import { referenceRdv } from '@/lib/numero-commande'
 import { motsReservation, reservationActive } from '@/lib/reservation-metier'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
@@ -91,12 +92,19 @@ export async function GET(request) {
       // allumé chez qui n'a plus le forfait remplirait la section de tables que
       // personne ne peut plus réserver.
       const aUneSalle = !estVitrine && reservationActive(c)
+      // 🔴 HONORER (17/10, audit) : ce cron se taisait pour qui avait perdu
+      // Vendre, même un matin de retrait de commandes prises pendant l'essai,
+      // et les tables déjà réservées disparaissaient du récap. Le commerce à
+      // commandes reste concerné ; s'il n'a rien à honorer aujourd'hui,
+      // `recapDuJourAEnvoyer` le laisse en paix.
+      const commerceACommandes = c.categorie === 'alimentaire' || c.categorie === 'detail'
+      const tablesAHonorer = !estVitrine && !aUneSalle && c.rdv_actif === true
 
       if (estVitrine && !c.rdv_actif) {
         continue  // pas concerne
       }
-      if (!estVitrine && !estAlim) {
-        continue  // ni RDV vitrine, ni C&C alim FULL
+      if (!estVitrine && !commerceACommandes) {
+        continue  // ni RDV vitrine, ni commerce à commandes
       }
 
       // ⚠️ UNE SEULE LECTURE, DEUX USAGES. La vitrine en fait son email entier,
@@ -211,9 +219,20 @@ export async function GET(request) {
           // gabarit distingue « pas concerné » (aucune section) de « concerné,
           // mais rien aujourd'hui » (une section qui le dit). Une boulangerie
           // ne doit pas lire « Aucune table réservée ».
-          const tablesFlat = aUneSalle ? await lireTablesDuJour() : null
+          let tablesFlat = aUneSalle ? await lireTablesDuJour() : null
+          // Hors forfait : la section n'existe que s'il y a des tables déjà
+          // prises, jamais « Aucune table réservée » chez qui ne peut plus en
+          // recevoir.
+          if (tablesAHonorer) {
+            const prises = await lireTablesDuJour()
+            tablesFlat = prises.length > 0 ? prises : null
+          }
           const couverts = (tablesFlat || []).reduce(
             (s, r) => s + (Number(r?.couverts) > 0 ? Number(r.couverts) : 1), 0)
+
+          if (!recapDuJourAEnvoyer({ forfaitOuvert: estAlim, nbCommandes: cmdsFlat.length, nbTables: (tablesFlat || []).length })) {
+            continue
+          }
 
           total = cmdsFlat.length
           html = emailRecapCommandesJour({
@@ -236,7 +255,7 @@ export async function GET(request) {
 
         await envoyerAuCommercant({ to: c.email, subject, html })
         sent++
-        const typeEnvoye = estVitrine ? 'rdv' : aUneSalle ? 'commande+tables' : 'commande'
+        const typeEnvoye = estVitrine ? 'rdv' : (aUneSalle || tablesAHonorer) ? 'commande+tables' : 'commande'
         details.push({ commercant: c.nom, type: typeEnvoye, total })
       } catch (e) {
         console.error('[cron/recap-jour-8h] envoi KO', { commercant: c.nom, error: e?.message })

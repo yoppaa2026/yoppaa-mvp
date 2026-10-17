@@ -19,7 +19,7 @@ import { lireImpersonation, verifierImpersonation, effacerImpersonation, message
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PLAN_LABEL, prixTTC, TVA_ABONNEMENT_POURCENT } from '@/lib/plans'
 import { euros } from '@/lib/montants'
-import { estRegimeLancement, libelleDernierJourGratuit, ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
+import { estRegimeLancement, libelleDernierJourGratuit, dernierJourAvant, ESSAI_JOURS_MINIMUM } from '@/lib/lancement'
 import { estAdresseAdmin } from '@/lib/admin-identite'
 
 const T = {
@@ -304,8 +304,12 @@ export default function AbonnementPage() {
               {commercant.subscription_status === 'trialing' && libelleFinEssaiReelle(commercant.subscription_trial_end) && (
                 <div style={{ background: T.pale, borderRadius: 10, padding: '14px 16px', marginTop: 14, marginBottom: 14, borderLeft: `3px solid ${T.main}` }}>
                   <p style={{ fontSize: 13, color: T.deep, margin: 0, lineHeight: 1.55, fontWeight: 600 }}>
-                    C&rsquo;est offert jusqu&rsquo;au <strong>{libelleFinEssaiReelle(commercant.subscription_trial_end)}</strong>.
-                    Ta première facture sera émise ce jour-là, et pas avant. 🟣
+                    {/* 🔴 DEUX DATES, PAS UNE (17/10). « Offert jusqu'au 9 janvier »
+                        contredisait le « 8 janvier inclus » du tableau de bord :
+                        Stripe renvoie l'instant de la facture, le dernier jour
+                        offert est la veille. */}
+                    C&rsquo;est offert jusqu&rsquo;au <strong>{libelleFinEssaiReelle(dernierJourAvant(commercant.subscription_trial_end))}</strong> inclus.
+                    Ta première facture sera émise le {libelleFinEssaiReelle(commercant.subscription_trial_end)}, et pas avant. 🟣
                   </p>
                   <p style={{ fontSize: 12.5, color: T.muted, margin: '6px 0 0', lineHeight: 1.5 }}>
                     Aucune carte n&rsquo;est demandée d&rsquo;ici là, et tu peux partir quand tu veux.

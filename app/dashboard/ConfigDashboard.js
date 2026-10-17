@@ -17,8 +17,11 @@ import {
   // Là où l'historique appelait `canDo(plan, …)` sans catégorie, on garde
   // exactement cette portée et on n'ajoute QUE l'essai.
   peut, planEffectif, planIa, statutFonction, planPourGarder, planEnEssai, essaiProposable,
+  formuleDOrigine, peutRevenirASaFormule,
   FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
 } from '@/lib/plans'
+import { TRACES_PAR_FONCTION, fonctionsAHonorer, PHRASE_HONORER } from '@/lib/honorer'
+import { useTracesAHonorer } from './useTracesAHonorer'
 import { peutReserver, motReservation, motsReservation, fonctionReservation } from '@/lib/reservation-metier'
 import { nomDeLaCarte, sertAManger } from '@/lib/types-commerce'
 // Le stock en trois choix et la vitrine au prix ferme (30/09, décisions d'Alex).
@@ -36,7 +39,7 @@ import { normaliserCodeBon, libelleBon, BON_MONTANT_MIN, BON_MONTANT_MAX } from 
 import { euros, eurosNus } from '@/lib/montants'
 import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT_PRESTATIONS } from '@/lib/deals'
 import { PACKS_SMS } from '@/lib/packs-sms'
-import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, estRegimeLancement } from '@/lib/lancement'
+import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, dernierJourAvant, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
 import {
@@ -7345,7 +7348,7 @@ function configFidelite(commercant) {
 // LE GSM = LA CARTE : le commerçant tape le numéro du client, la carte se crée
 // à la volée. Communiquer = ce pointage comptoir ; Vendre = + crédit AUTO sur
 // les transactions Yoppaa (branché étape 4). SMS Brevo branchés à l'étape 6.
-function TabFidelite({ commercantId, commercant, toast, onSaved, surModifications }) {
+function TabFidelite({ commercantId, commercant, toast, onSaved, surModifications, modeHonorer = false }) {
   const actif = commercant?.fidelite_actif === true
   const peutAuto = peut(commercant, 'fidelite_auto')
   const [saving, setSaving] = useState(false)
@@ -7621,8 +7624,14 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
+      {/* 🔴 HONORER (17/10) : la fidélité n'est plus dans sa formule. Les
+          cartes que ses clients ont remplies restent à pointer et leurs
+          récompenses à donner ; il n'ouvre plus de carte ni ne règle le
+          programme. */}
+      {modeHonorer && <BandeauHonorer />}
+
       {/* ─── Activation / configuration ─── */}
-      <div style={card}>
+      {!modeHonorer && <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Programme de fidélité</p>
           {actif && (
@@ -7767,10 +7776,10 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
             <button style={{ ...btnGhost, color: '#DC2626', borderColor: '#FEE2E2' }} onClick={desactiver}>Désactiver</button>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ─── Pointage comptoir ─── */}
-      {actif && (
+      {(actif || modeHonorer) && (
         <div style={card}>
           <p style={{ margin: '0 0 4px', fontSize: 13, fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.6px' }}>Pointage comptoir</p>
           <p style={{ margin: '0 0 12px', fontSize: 12.5, color: T.muted, lineHeight: 1.55 }}>
@@ -7795,7 +7804,9 @@ function TabFidelite({ commercantId, commercant, toast, onSaved, surModification
                   ? <>C&rsquo;est le numéro de <strong style={{ color: T.main }}>{[clientTrouve.prenom, clientTrouve.nom].filter(Boolean).join(' ')}</strong>, qui a déjà un compte Yoppaa : sa carte y sera reliée.</>
                   : 'Ce numéro n’a pas encore de compte Yoppaa : la carte fonctionnera quand même, elle rejoindra son compte dès l’inscription.'}
               </p>
-              <button style={btnPlein} disabled={busy} onClick={creerCarte}>Créer sa carte 🟣</button>
+              {modeHonorer
+                ? <p style={{ margin: 0, fontSize: 11.5, color: T.muted, lineHeight: 1.5 }}>Hors de ta formule, on n&rsquo;ouvre plus de nouvelle carte.</p>
+                : <button style={btnPlein} disabled={busy} onClick={creerCarte}>Créer sa carte 🟣</button>}
             </div>
           )}
 
@@ -10686,7 +10697,7 @@ const SIGN_TYPE_ICON = {
 // débit d'un montant) + derniers bons vendus. Le commerçant ne voit que SES
 // bons (RLS ownership) ; l'achat et l'activation passent par les API
 // service_role (Stripe Checkout + webhook).
-function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModifications }) {
+function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModifications, modeHonorer = false }) {
   // Le nom du bon suit le métier : « bons gourmands » chez un frituriste,
   // « bons cadeaux » chez un coiffeur. C'est le COMMERÇANT que ce mot doit
   // atteindre en premier, sur son propre tableau de bord.
@@ -10835,8 +10846,13 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
         </ul>
       </div>
 
+      {/* 🔴 HONORER (17/10) : les bons ne sont plus dans sa formule. Il encaisse
+          au comptoir ceux qu'il a vendus ; il n'en propose plus de nouveaux,
+          donc pas de réglage de vente. */}
+      {modeHonorer && <BandeauHonorer />}
+
       {/* Configuration */}
-      <div style={{ ...s.card, marginBottom: 14 }}>
+      {!modeHonorer && <div style={{ ...s.card, marginBottom: 14 }}>
         <Toggle value={actif} onChange={setActif} label={`Proposer les ${nomBons} sur ma fiche`}/>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 12 }}>
           <div style={{ flex: '0 0 140px' }}>
@@ -10848,7 +10864,7 @@ function TabBonsCadeaux({ commercantId, commercant, toast, onSaved, surModificat
         <button style={{ ...s.btn, ...s.btnPrimary, marginTop: 8 }} onClick={saveCfg} disabled={savingCfg}>
           <Icon name="check" size={14}/> {savingCfg ? <EnCours /> : 'Enregistrer'}
         </button>
-      </div>
+      </div>}
 
       {/* Pointage comptoir */}
       <div style={{ ...s.card, marginBottom: 14 }}>
@@ -12697,7 +12713,10 @@ function dureeParlante(jours) {
 // ⚠️ L'heure de fin d'une séance se calculait ici pour générer la série. Plus
 // aucune séance ne naît dans cet écran : la fonction est partie avec elle.
 
-function TabRdvAbonnements({ commercantId, toast }) {
+// `modeHonorer` (17/10) : le rendez-vous n'est plus dans sa formule. Il suit,
+// encaisse, modifie, résilie et rembourse ce qui est vendu ; il ne crée ni
+// formule ni inscription nouvelle.
+function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
   const [formules, setFormules] = useState([])
   const [prestations, setPrestations] = useState([])
   const [abonnes, setAbonnes] = useState([])
@@ -13158,10 +13177,12 @@ function TabRdvAbonnements({ commercantId, toast }) {
             {formules.length === 0 ? 'Aucune formule' : `${formules.length} formule${formules.length > 1 ? 's' : ''}`}
           </p>
         </div>
-        <button onClick={openNew}
-          style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
-          + Ajouter une formule
-        </button>
+        {!modeHonorer && (
+          <button onClick={openNew}
+            style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
+            + Ajouter une formule
+          </button>
+        )}
       </div>
 
       {formules.length === 0 && !showForm && (
@@ -13484,10 +13505,12 @@ function TabRdvAbonnements({ commercantId, toast }) {
                 {abonnes.length === 0 ? 'Personne pour l’instant' : `${abonnes.length} personne${abonnes.length > 1 ? 's' : ''}`}
               </p>
             </div>
-            <button onClick={() => { setInsc(initialInscription); setShowInscription(true) }}
-              style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
-              + Inscrire quelqu’un
-            </button>
+            {!modeHonorer && (
+              <button onClick={() => { setInsc(initialInscription); setShowInscription(true) }}
+                style={{ padding: '10px 16px', borderRadius: 100, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: '#fff', fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 13, boxShadow: `0 4px 14px ${T.main}55` }}>
+                + Inscrire quelqu’un
+              </button>
+            )}
           </div>
 
           {showInscription && (
@@ -16979,12 +17002,15 @@ function TabComptabilite({ commercantId, categorie, toast }) {
 // ⚠️ ON CORRIGE DONC LE MOT, ET ON MONTRE LA PORTE. Un titre juste mais muet
 // laisserait le commerçant chercher ses prestations : il vient de lire qu'elles
 // ne sont pas là, il ne sait toujours pas où elles sont.
-function TabCatalogue({ commercantId, commercant, toast, onAllerA = null }) {
+function TabCatalogue({ commercantId, commercant, toast, onAllerA = null, honorerAbonnements = false }) {
   // ⚠️ PREMIER NIVEAU de l'onglet « Carte » : `TabMenu`, à l'intérieur, tient
   // le second avec sa propre clé d'adresse.
   const [sousOnglet, setSousOnglet] = useSousOnglet(['produits', 'abonnements'], 'produits')
   const estVitrine = commercant?.categorie === 'vitrine'
-  const peutAbonnements = peut(commercant, 'rdv')
+  // 🔴 HONORER (17/10) : des cartes de séances vendues restent à résilier, à
+  // rembourser, à suivre, même quand le rendez-vous n'est plus dans sa formule.
+  const modeHonorerAbonnements = !peut(commercant, 'rdv') && honorerAbonnements
+  const peutAbonnements = peut(commercant, 'rdv') || modeHonorerAbonnements
 
   // Sans abonnements, aucune barre : une barre à un seul onglet n'apprend rien
   // et vole de la hauteur d'écran à un téléphone.
@@ -17042,7 +17068,19 @@ function TabCatalogue({ commercantId, commercant, toast, onAllerA = null }) {
       {/* ⚠️ `commercant` n'est plus passé : il ne servait qu'à résoudre le lieu
           des séances générées d'avance, et cette génération a disparu avec le
           jour fixe le 18/08. */}
-      {sousOnglet === 'abonnements' && <TabRdvAbonnements commercantId={commercantId} toast={toast} />}
+      {sousOnglet === 'abonnements' && modeHonorerAbonnements && <BandeauHonorer />}
+      {sousOnglet === 'abonnements' && <TabRdvAbonnements commercantId={commercantId} toast={toast} modeHonorer={modeHonorerAbonnements} />}
+    </div>
+  )
+}
+
+// La phrase en tête d'un onglet rouvert pour honorer (17/10). Une seule,
+// partout : `PHRASE_HONORER` vit dans `lib/honorer.js`.
+function BandeauHonorer() {
+  return (
+    <div role="note" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#F8F6FF', border: `1px solid ${T.pale}`, borderRadius: 12, padding: '11px 13px', marginBottom: 14 }}>
+      <Lock size={15} strokeWidth={2.2} color={T.main} style={{ flexShrink: 0, marginTop: 2 }}/>
+      <p style={{ margin: 0, fontSize: 12.5, color: T.ink, lineHeight: 1.55, fontWeight: 600 }}>{PHRASE_HONORER}</p>
     </div>
   )
 }
@@ -17060,7 +17098,7 @@ function TabCatalogue({ commercantId, commercant, toast, onAllerA = null }) {
 // s'inscrira en mars aura trente jours. Et c'est le DERNIER JOUR GRATUIT qu'on
 // annonce, pas la fin d'essai : « offert jusqu'au 9 janvier » serait faux d'une
 // journée, distinction que le banc du lancement garde depuis le 20/08.
-function BandeauEssai({ commercant, onEssayer }) {
+function BandeauEssai({ commercant, onEssayer, onRevenir = null }) {
   if (!commercant) return null
   if (!degustationEnCours(commercant.created_at)) return null
 
@@ -17082,10 +17120,21 @@ function BandeauEssai({ commercant, onEssayer }) {
           Tu essaies <strong style={{ color: T.main }}>{getPlanLabel(enEssai)}</strong>, offert jusqu&rsquo;au {jusquAu} inclus.{' '}
           Ensuite, ces fonctions demandent {getPlanLabel(enEssai)} : sans lui, tu les perdras.
         </p>
-        <a href="/dashboard/abonnement"
-          style={{ background: T.main, color: '#fff', textDecoration: 'none', fontWeight: 800, fontSize: 12.5, padding: '9px 16px', borderRadius: 100, whiteSpace: 'nowrap' }}>
-          Je le garde
-        </a>
+        {/* ✅ ALEX, 17/10 : le commerçant qui hésite peut revenir à sa
+            formule d'origine, ici même. Le geste le plus fréquent reste en
+            avant ; l'autre est là, sans crier. */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {onRevenir && (
+            <button type="button" onClick={onRevenir}
+              style={{ background: 'none', border: 'none', padding: '9px 4px', color: T.main, fontFamily: '"DM Sans", sans-serif', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              Revenir à {getPlanLabel(formuleDOrigine(commercant))}
+            </button>
+          )}
+          <a href="/dashboard/abonnement"
+            style={{ background: T.main, color: '#fff', textDecoration: 'none', fontWeight: 800, fontSize: 12.5, padding: '9px 16px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+            Je le garde
+          </a>
+        </span>
       </div>
     )
   }
@@ -17658,7 +17707,7 @@ function BlocAcces({ commercant, toast }) {
   )
 }
 
-function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) {
+function TabMonCompte({ commercant, toast, onSaved = null, illisible = false, onRevenir = null }) {
   const [portail, setPortail] = useState(false)
 
   // 🔴 SANS DOSSIER, CET ÉCRAN AFFIRMAIT « EXISTER, GRATUIT À VIE » (22/09).
@@ -17685,7 +17734,11 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
   // ⚠️ LA DATE VIENT DE STRIPE, JAMAIS D'UN CALCUL LOCAL. `subscription_trial_end`
   // est le miroir de ce que Stripe prélèvera : un texte qui devine sa date finit
   // toujours par contredire la facture. C'est la leçon de l'offre de lancement.
-  const finEssai = dateLongue(commercant?.subscription_trial_end)
+  // 🔴 ET C'EST LE DERNIER JOUR OFFERT, PAS L'INSTANT DE LA FACTURE (Alex,
+  // 17/10 : « 8 janvier » et « 9 janvier inclus » dans la même carte). Stripe
+  // renvoie l'instant où il facturera ; l'écrire suivi de « inclus » donnait
+  // une journée de trop. Même règle que la dégustation juste en dessous.
+  const finEssai = dateLongue(dernierJourAvant(commercant?.subscription_trial_end))
   const prochain = dateLongue(commercant?.subscription_current_period_end)
 
   // 🔴 LA DÉGUSTATION N'EXISTAIT PAS DANS CET ÉCRAN (Alex, 22/09 : « normal
@@ -17756,8 +17809,12 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
           <span style={{ fontSize: 26, fontWeight: 900, color: T.ink, letterSpacing: '-0.5px' }}>{getPlanLabel(plan)}</span>
           {exempt && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Partenariat</span>}
-          {!exempt && enEssai && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Essai en cours</span>}
-          {!exempt && degustation && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Dégustation en cours</span>}
+          {/* 🔴 UNE SEULE PASTILLE (Alex, 17/10 : « supprimer dégustation en
+              cours, je ne sais pas à quoi il sert à côté d'essai en cours »).
+              Deux mécaniques derrière (l'essai Stripe de sa formule, l'essai
+              de la formule au-dessus), un seul fait pour lui : il est en
+              essai. Les lignes en dessous disent lequel et jusqu'à quand. */}
+          {!exempt && (enEssai || degustation) && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Essai en cours</span>}
           {ouvertSansFacture && <span style={{ ...s.tag, background: T.pale, color: T.deep }}>Ouvert par Yoppaa</span>}
           {!exempt && statut === 'active' && <span style={{ ...s.tag, background: '#ECFDF5', color: '#065F46' }}>Actif</span>}
           {!exempt && enRetard && <span style={{ ...s.tag, background: '#FEF2F2', color: '#B91C1C' }}>Paiement en attente</span>}
@@ -17801,7 +17858,8 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
           quand il lit son compte. */}
       {degustation && (
         <div style={{ ...s.card, background: '#F8F6FF', border: `1px solid ${T.pale}` }}>
-          <h2 style={{ ...s.h2, marginBottom: 8 }}>Ta dégustation de {getPlanLabel(degustation)}</h2>
+          {/* « Dégustation » est notre mot de travail, pas le sien (17/10). */}
+          <h2 style={{ ...s.h2, marginBottom: 8 }}>Ton essai de {getPlanLabel(degustation)}</h2>
           <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, margin: '0 0 14px' }}>
             Tu as toutes les fonctions de {getPlanLabel(degustation)}
             {finDeg ? <> jusqu’au <strong style={{ color: T.ink }}>{finDeg}</strong> inclus</> : null}, sans rien payer
@@ -17809,9 +17867,18 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
             tu gardes ta fiche et tes clients, tu perds les fonctions de {getPlanLabel(degustation)}.
             Rien ne se déclenche dans ton dos.
           </p>
-          <a href="/dashboard/abonnement" style={{ ...s.btn, ...s.btnPrimary, textDecoration: 'none' }}>
-            Garder {getPlanLabel(degustation)}
-          </a>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+            <a href="/dashboard/abonnement" style={{ ...s.btn, ...s.btnPrimary, textDecoration: 'none' }}>
+              Garder {getPlanLabel(degustation)}
+            </a>
+            {/* ✅ ALEX, 17/10 : revenir à sa formule d'origine, sans attendre
+                la fin de l'essai. */}
+            {onRevenir && (
+              <button type="button" onClick={onRevenir} style={{ ...s.btn, ...s.btnGhost }}>
+                Revenir à {getPlanLabel(formuleDOrigine(commercant))}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -17856,7 +17923,7 @@ function TabMonCompte({ commercant, toast, onSaved = null, illisible = false }) 
         <div style={{ ...s.card, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
           <h2 style={{ ...s.h2, color: '#92400E', marginBottom: 8 }}>Pense à ton moyen de paiement</h2>
           <p style={{ fontSize: 13, color: '#78350F', lineHeight: 1.6, margin: '0 0 14px' }}>
-            Ton essai se termine le <strong>{finEssai}</strong>. Sans moyen de paiement enregistré d&rsquo;ici là,
+            Ton essai est offert jusqu&rsquo;au <strong>{finEssai}</strong> inclus. Sans moyen de paiement enregistré d&rsquo;ici là,
             le premier prélèvement de {euros(ttc)} échouera et tu repasseras en Exister : tu garderais ta fiche,
             mais tu perdrais les fonctions de {getPlanLabel(plan)}.
           </p>
@@ -17993,7 +18060,9 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // dessous, et c'est le seul endroit à intercepter, puisque toute la barre
     // passe par ici.
     const cible = tabs.find(t => t.id === id)
-    if (cible && cible.etat !== FONCTION_INCLUSE && cible.etat !== FONCTION_EN_ESSAI) {
+    // ⚠️ SAUF S'IL Y A QUELQUE CHOSE À HONORER (17/10) : l'onglet s'ouvre alors,
+    // en mode « honorer ».
+    if (cible && cible.etat !== FONCTION_INCLUSE && cible.etat !== FONCTION_EN_ESSAI && !cible.honore) {
       proposerFonction(cible)
       return
     }
@@ -18057,6 +18126,34 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     if (error) { showToast(`L'essai n'a pas pu démarrer : ${error.message}`, 'error'); return }
     await rechargerCommercant()
     showToast(`Tu essaies ${getPlanLabel(forfait)} jusqu'au ${libelleDernierJourGratuit()} inclus.`, 'success')
+  }
+
+  // ✅ ALEX, 17/10 : revenir à sa formule d'origine pendant l'essai. Deux
+  // portes (le bandeau du haut, « Mon compte »), UNE action. La règle de qui
+  // peut revenir et vers quoi vit dans `lib/plans.js`.
+  // ⚠️ CONFIRMÉ, parce que l'effet est immédiat pour ses clients ; jamais
+  // définitif, parce que l'essai lui reste proposé tant que la période court.
+  async function revenirASaFormule() {
+    if (!peutRevenirASaFormule(commercant)) return
+    const essai = getPlanLabel(planEnEssai(commercant))
+    const origine = getPlanLabel(formuleDOrigine(commercant))
+    const choix = await confirmer({
+      titre: `Revenir à ${origine} ?`,
+      message: `Tu arrêtes l’essai de ${essai} maintenant : ses fonctions se ferment tout de suite, pour toi et pour tes clients. Ce qu’ils ont déjà commandé, réservé ou acheté chez toi reste à honorer, et tu le retrouves comme avant.`,
+      details: `Tu pourras réessayer ${essai} jusqu’au ${libelleDernierJourGratuit()} inclus. Ta formule ${origine} ne change pas.`,
+      actions: [
+        { valeur: 'revenir', label: `Revenir à ${origine}`, ton: 'principal' },
+        { valeur: 'rien', label: `Garder l’essai`, ton: 'neutre' },
+      ],
+    })
+    if (choix !== 'revenir') return
+    const { error } = await supabase
+      .from('commercants')
+      .update({ essai_plan: null })
+      .eq('id', commercantId)
+    if (error) { showToast(`Le retour à ${origine} n'a pas pu se faire : ${error.message}`, 'error'); return }
+    await rechargerCommercant()
+    showToast(`C’est fait, tu es en ${origine}.`, 'success')
   }
 
   async function enregistrerPuisContinuer() {
@@ -18144,6 +18241,18 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
   // pas une question d'argent et que la lui montrer serait lui promettre ce qui
   // n'arrivera jamais.
   const etatDe = (feature) => statutFonction(commercant, feature)
+  // 🔴 HONORER CE QUI EXISTE (Alex, 17/10, au tableau). Un onglet hors de sa
+  // formule se rouvre s'il y reste quelque chose à honorer (bons vendus, compte
+  // Stripe, cartes de séances, ventes à déclarer, cartes de fidélité) ; la
+  // création y reste fermée. La règle : `lib/honorer.js`.
+  // ⚠️ `commande` N'EST PAS DEMANDÉE ICI : ce qui reste à honorer d'une
+  // commande vit dans l'onglet Commandes du tableau de bord, pas dans
+  // « Créneaux », qui ne sert qu'à en recevoir de nouvelles.
+  const aLuiFonction = (f) => { const e = etatDe(f); return e === FONCTION_INCLUSE || e === FONCTION_EN_ESSAI }
+  const fonctionsManquantes = Object.keys(TRACES_PAR_FONCTION)
+    .filter(f => f !== 'commande' && etatDe(f) !== null && !aLuiFonction(f))
+  const tracesAHonorer = useTracesAHonorer(commercantId, commercant, fonctionsManquantes)
+  const aHonorer = fonctionsAHonorer(tracesAHonorer, aLuiFonction)
   const iaActif = getIaConfig(planIa(commercant)).actif   // Générateur IA : même palier que le serveur (Alex, 15/09)
   const estVitrine = commercant?.categorie === 'vitrine'
 
@@ -18322,6 +18431,8 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // montre « Prise de RDV » grisée croira pouvoir l'acheter.
     .map(t => ({ ...t, etat: t.feature ? etatDe(t.feature) : FONCTION_INCLUSE }))
     .filter(t => t.etat !== null)
+    // 🔴 HONORER (17/10) : hors formule, mais il y reste quelque chose à lui.
+    .map(t => ({ ...t, honore: !!t.feature && aHonorer.has(t.feature) }))
 
   return (
     // ⚠️ La barre est en `fixed` : sans cette marge, elle recouvrirait le bas de
@@ -18329,7 +18440,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
     // historique. On ne protège pas le travail en cachant l'endroit où on le
     // saisit.
     <div style={{ fontFamily: '"DM Sans", sans-serif', paddingBottom: modifs.modifie ? 104 : 24 }}>
-      <BandeauEssai commercant={commercant} onEssayer={demarrerEssai} />
+      <BandeauEssai commercant={commercant} onEssayer={demarrerEssai} onRevenir={revenirASaFormule} />
       {/* Barre d'onglets : UNE ligne défilable horizontalement (sur mobile les
           9+ onglets s'empilaient sur 3 lignes, layout ODOO = compact + scroll). */}
       <style>{`.cfg-tabs::-webkit-scrollbar { display: none }`}</style>
@@ -18342,8 +18453,10 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
           // C'est la leçon des pastilles grises retirées de la fiche publique
           // le 03/08 : ce qui est gris ne se lit pas comme un tarif, ça se lit
           // comme un jugement.
-          const aLui = t.etat === FONCTION_INCLUSE || t.etat === FONCTION_EN_ESSAI
-          const ferme = t.etat === FONCTION_FERMEE
+          // ⚠️ UN ONGLET À HONORER SE LIT COMME LES SIENS (17/10) : pas de
+          // cadenas, pas de gris. Il y a du travail dedans, pour de vrai.
+          const aLui = t.etat === FONCTION_INCLUSE || t.etat === FONCTION_EN_ESSAI || t.honore
+          const ferme = t.etat === FONCTION_FERMEE && !t.honore
           const actif = tab === t.id
           const couleur = actif ? '#fff' : T.muted
           // Le point violet des signaux : ce sont ses habitants qui réclament
@@ -18382,7 +18495,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
       </BandeDefilante>
 
       {tab === 'stats'    && <TabStatistiques commercantId={commercantId} toast={showToast} />}
-      {tab === 'menu'     && <TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />}
+      {tab === 'menu'     && <TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} honorerAbonnements={aHonorer.has('rdv')} />}
       {/* ⚠️ LE SECOND CONTRÔLE, ET IL RESTE. La barre grise un onglet, mais un
           `tab` peut aussi venir d'ailleurs (un raccourci, une URL, un état
           resté en mémoire). Une garde d'écran n'est jamais une réponse à elle
@@ -18412,17 +18525,22 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
         />
       )}
       {tab === 'rdv'      && peutRdv && <TabRdv commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} />}
-      {tab === 'fidelite' && peut(commercant, 'fidelite') && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
-      {tab === 'bons' && peut(commercant, 'bons_cadeaux') && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} />}
-      {tab === 'paiements' && peutPaiements && <TabPaiements commercantId={commercantId} toast={showToast} />}
-      {tab === 'comptabilite' && peut(commercant, 'export_comptable') && <TabComptabilite commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} />}
+      {/* 🔴 HONORER (17/10) : chacun de ces quatre onglets s'ouvre AUSSI hors
+          formule s'il y reste quelque chose à honorer, avec la création
+          fermée (`modeHonorer`). */}
+      {tab === 'fidelite' && (peut(commercant, 'fidelite') || aHonorer.has('fidelite')) && <TabFidelite commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} modeHonorer={!peut(commercant, 'fidelite')} />}
+      {tab === 'bons' && (peut(commercant, 'bons_cadeaux') || aHonorer.has('bons_cadeaux')) && <TabBonsCadeaux commercantId={commercantId} commercant={commercant} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} modeHonorer={!peut(commercant, 'bons_cadeaux')} />}
+      {tab === 'paiements' && !peutPaiements && aHonorer.has('paiement_ligne') && <BandeauHonorer />}
+      {tab === 'paiements' && (peutPaiements || aHonorer.has('paiement_ligne')) && <TabPaiements commercantId={commercantId} toast={showToast} />}
+      {tab === 'comptabilite' && !peut(commercant, 'export_comptable') && aHonorer.has('export_comptable') && <BandeauHonorer />}
+      {tab === 'comptabilite' && (peut(commercant, 'export_comptable') || aHonorer.has('export_comptable')) && <TabComptabilite commercantId={commercantId} categorie={commercant?.categorie} toast={showToast} />}
       {tab === 'profil'   && <TabProfil   commercantId={commercantId} toast={showToast} onSaved={rechargerCommercant} surModifications={declarerModifications} ancre={ancreProfil} surAncreLue={oublierAncre} onAllerA={changerOnglet} />}
       {tab === 'equipe' && <TabEquipe commercantId={commercantId} toast={showToast} />}
       {tab === 'accompagnement' && <TabAccompagnement commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {/* ⚠️ AUCUNE CONDITION DE FORFAIT ICI, contrairement aux onglets
           au-dessus. Celui qui est en Exister doit pouvoir lire qu'il ne paie
           rien, et celui dont l'essai se termine doit pouvoir lire la date. */}
-      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} />}
+      {tab === 'compte' && <TabMonCompte commercant={commercant} toast={showToast} onSaved={rechargerCommercant} illisible={commercantIllisible} onRevenir={revenirASaFormule} />}
       {tab === 'avis'     && <TabAvis     commercantId={commercantId} toast={showToast} />}
       {tab === 'signaux' && <TabSignaux commercantId={commercantId} toast={showToast} signalementsEnAttente={signalementsEnAttente} />}
 
@@ -18434,7 +18552,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
       {(() => {
         const cible = tabs.find(t => t.id === tab)
         if (!cible || !cible.feature) return null
-        if (cible.etat === FONCTION_INCLUSE || cible.etat === FONCTION_EN_ESSAI) return null
+        if (cible.etat === FONCTION_INCLUSE || cible.etat === FONCTION_EN_ESSAI || cible.honore) return null
         return (
           <OngletAEteFerme
             titre={`« ${cible.label} » ne fait pas partie de ta formule`}

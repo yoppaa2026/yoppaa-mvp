@@ -39,6 +39,8 @@ import { Reply, ClipboardList } from 'lucide-react'
 // vraiment en vigueur. ⚠️ Cette fonction a besoin de `created_at` : le
 // chargement de cet écran fait bien `select('*')`.
 import { canDo, planEffectif } from '@/lib/plans'
+import { fonctionsAHonorer } from '@/lib/honorer'
+import { useTracesAHonorer } from './useTracesAHonorer'
 import { commerceAUneEquipe } from '@/lib/equipe'
 import { libelleBon } from '@/lib/bons-cadeaux'
 import { remplissageCreneaux } from '@/lib/creneaux'
@@ -1521,13 +1523,26 @@ export default function Dashboard() {
   // onglet est une intention explicite ; et rejouer ce choix à chaque
   // rechargement du commerçant ramènerait l'écran sous les doigts de celui qui
   // vient d'en changer.
+  // 🔴 HONORER CE QUI EXISTE (Alex, 17/10, au tableau). Un commerçant qui a
+  // perdu Vendre garde l'accès à ce qu'il a déjà vendu : les commandes en
+  // cours d'un salon (vitrine), les bons à encaisser, les cartes de fidélité
+  // à pointer. La règle : `lib/honorer.js` ; ici, les seules fonctions qu'il
+  // n'a plus sont comptées.
+  const forfaitEnVigueur = commercant ? planEffectif(commercant) : null
+  const fonctionsManquantesBord = !commercant ? [] : ['commande', 'bons_cadeaux', 'fidelite']
+    .filter(f => !canDo(forfaitEnVigueur, f))
+    // Les commandes ne se cachent qu'au salon : ailleurs l'onglet est toujours là.
+    .filter(f => f !== 'commande' || commercant.categorie === 'vitrine')
+  const tracesBord = useTracesAHonorer(commercant?.id, commercant, fonctionsManquantesBord)
+  const aHonorerBord = fonctionsAHonorer(tracesBord, f => canDo(forfaitEnVigueur, f))
+  const commandesVisibles = commercant?.categorie !== 'vitrine'
+    || canDo(forfaitEnVigueur, 'commande') || aHonorerBord.has('commande')
+
   const ouvertureFaite = useRef(false)
   useEffect(() => {
     if (!commercant || !pretUrl || ouvertureFaite.current) return
     ouvertureFaite.current = true
     if (ongletDeLArrivee.current) return
-    const commandesVisibles = commercant.categorie !== 'vitrine'
-      || canDo(planEffectif(commercant), 'commande')
     const cible = ongletDouverture(commercant, { commandesVisibles })
     if (cible !== ongletPrincipal) setOngletPrincipal(cible)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule fois, à l'arrivée du commerce
@@ -1571,12 +1586,14 @@ export default function Dashboard() {
   // Pour les commerces vitrine SANS vente en ligne (plan < Vendre), on bascule
   // auto sur l'onglet RDV. Une vitrine Vendre vend ses produits au salon (31/07)
   // et garde donc l'onglet Commandes.
+  // 🔴 SAUF S'IL A DES COMMANDES À HONORER (17/10) : un salon qui a vendu des
+  // produits pendant son essai de Vendre doit encore les remettre.
   useEffect(() => {
-    if (commercant?.categorie === 'vitrine' && !canDo(planEffectif(commercant), 'commande') && ongletPrincipal === 'commandes') {
+    if (commercant?.categorie === 'vitrine' && !commandesVisibles && ongletPrincipal === 'commandes') {
       setOngletPrincipal('rdv')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commercant?.id])
+  }, [commercant?.id, commandesVisibles])
 
   // ✅ 16/10 : la liste unique, relue à l'ouverture et après chaque
   // changement (le bouton « Fermer ou changer les horaires » la recharge).
@@ -3326,13 +3343,15 @@ export default function Dashboard() {
       action: () => setFermeturesOuvertes(true),
       icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M10 14l4 4M14 14l-4 4"/></svg>,
     },
-    canDo(planEffectif(commercant), 'fidelite') && {
+    // 🔴 HONORER (17/10) : ces deux raccourcis restent là quand il y a des
+    // cartes à pointer ou des bons à encaisser, même hors formule.
+    (canDo(planEffectif(commercant), 'fidelite') || aHonorerBord.has('fidelite')) && {
       key: 'fidelite',
       label: commercant.fidelite_actif ? 'Carte de fidélité' : 'Activer la fidélité',
       aide: commercant.fidelite_actif ? 'Pointer un client au comptoir' : 'Programme en 2 minutes',
       icone: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={T.main} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7z"/></svg>,
     },
-    canDo(planEffectif(commercant), 'bons_cadeaux') && commercant.bons_cadeaux_actif && {
+    ((canDo(planEffectif(commercant), 'bons_cadeaux') && commercant.bons_cadeaux_actif) || aHonorerBord.has('bons_cadeaux')) && {
       key: 'bons',
       label: libelleBon(commercant?.categorie, { majuscule: true }),
       aide: 'Encaisser un code',
@@ -3918,7 +3937,7 @@ export default function Dashboard() {
 
           <nav style={{ flex: 1 }}>
             {[
-              { key: 'commandes', label: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(planEffectif(commercant), 'commande') },
+              { key: 'commandes', label: 'Commandes',   Icon: IconCommandes, visible: commandesVisibles },
               // Services : l'onglet Rendez-vous reste visible même module non
               // activé (l'agenda explique alors comment l'activer), sinon un
               // salon qui vend aussi des produits ne voyait que Commandes.
@@ -4059,7 +4078,7 @@ export default function Dashboard() {
                   reste nommée pour les lecteurs d'écran et au survol. */}
               <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 3, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
                 {[
-                  { key: 'commandes', label: 'Cmd',    titre: 'Commandes',   Icon: IconCommandes, visible: commercant?.categorie !== 'vitrine' || canDo(planEffectif(commercant), 'commande') },
+                  { key: 'commandes', label: 'Cmd',    titre: 'Commandes',   Icon: IconCommandes, visible: commandesVisibles },
                   { key: 'rdv',       label: motReservation(commercant, 'ongletCourt'),    titre: motReservation(commercant, 'onglet'), Icon: IconRdv,       visible: !!commercant?.rdv_actif || peutReserver(commercant) },
                   { key: 'config',    label: 'Config', titre: 'Paramètres',  Icon: IconConfig,    visible: true },
                 ].filter(t => t.visible).map(({ key, label, titre, Icon }) => {
@@ -4233,7 +4252,10 @@ export default function Dashboard() {
                     </button>
                   ))}
                   {/* LA COMMANDE DU TÉLÉPHONE (10/10) : alimentaire avec créneaux. */}
-                  {commercant?.categorie === 'alimentaire' && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (
+                  {/* 🔴 ET LA FORMULE (Alex, 17/10) : encoder, c'est créer une
+                      commande ; hors Vendre, le patron honore les siennes sans
+                      en poser de nouvelles. Le serveur refuse aussi. */}
+                  {commercant?.categorie === 'alimentaire' && canDo(planEffectif(commercant), 'commande') && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (
                     <button type="button" onClick={() => setEncoderOuvert(true)}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 16px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg, ${T.deep}, ${T.main})`, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -4630,7 +4652,10 @@ export default function Dashboard() {
                     horairesDetail={commercant?.horaires_detail}
                     commercant={commercant}
                     onSelectRdv={(r) => setRdvSelectionne(r)}
-                    onNouveauRdv={(date, heure, prestationId = null) => setNouveauRdvSlot({ date, heure, prestationId })}
+                    // 🔴 CRÉER, C'EST LA FORMULE (Alex, 17/10, au tableau) : hors
+                    // formule, le patron ne pose plus de rendez-vous, comme ses
+                    // clients ; ceux qui existent restent à honorer.
+                    onNouveauRdv={peutReserver(commercant) ? (date, heure, prestationId = null) => setNouveauRdvSlot({ date, heure, prestationId }) : null}
                     onHonorerSeance={(inscrits) => setSeanceAHonorer(inscrits)}
                     onAnnulerSeance={(inscrits) => setSeanceAAnnuler(inscrits)}
                     onFenetreChange={majFenetreAgenda}

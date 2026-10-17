@@ -17,7 +17,9 @@ import {
   PLAN_FEATURES, canDo, canDoAvecCategorie, resolvePlan, getPillsStatut,
   planEffectif, peut, statutFonction, planPourGarder, essaiProposable,
   FONCTION_INCLUSE, FONCTION_ESSAI_POSSIBLE, FONCTION_EN_ESSAI, FONCTION_FERMEE,
+  formuleDOrigine, peutRevenirASaFormule,
 } from '../lib/plans.js'
+import { dernierJourAvant, dernierJourGratuit } from '../lib/lancement.js'
 
 const racine = process.cwd()
 const DOSSIERS = ['app', 'lib']
@@ -566,6 +568,71 @@ verifier('le RDV passe chez une vitrine', canDoAvecCategorie('vendre', 'rdv', 'v
         `signup seul : ${manquantes.length} · tableau de bord seul : ${enTrop.length} · ${[...manquantes, ...enTrop][0] || ''}`)
     }
   }
+}
+
+// ─── REVENIR À SA FORMULE PENDANT L'ESSAI (Alex, 17/10) ────────────────────
+// « Celui-ci est venu en Communiquer, il a essayé Vendre, mais il veut rester
+// en Communiquer, il ne sait pas. »
+{
+  const AUJ = new Date('2026-10-17T12:00:00Z')
+  // Inscrit en septembre : sa période finit avec celle du lancement, le
+  // 9 janvier à minuit (après le 30/09, les 100 jours la dépassent).
+  const iconic = { plan: 'communiquer', essai_plan: 'vendre', created_at: '2026-09-20T10:00:00Z' }
+  verifier('en essai de Vendre, il peut revenir', peutRevenirASaFormule(iconic, AUJ))
+  verifier('vers SA formule, Communiquer', formuleDOrigine(iconic) === 'communiquer')
+  verifier('un Exister revient à Exister', formuleDOrigine({ plan: 'exister', essai_plan: 'vendre' }) === 'exister')
+  verifier('sans formule lisible, Exister', formuleDOrigine({}) === 'exister' && formuleDOrigine(null) === 'exister')
+  // Revenir = écrire `essai_plan` à null : son forfait effectif redevient le sien.
+  const revenu = { ...iconic, essai_plan: null }
+  verifier('une fois revenu, le forfait en vigueur est le sien', planEffectif(revenu, AUJ) === 'communiquer')
+  verifier('il n\'a plus rien à quitter', !peutRevenirASaFormule(revenu, AUJ))
+  // ⚠️ ET CE N'EST PAS DÉFINITIF : l'essai lui reste proposé.
+  verifier('et l\'essai lui est de nouveau proposé', essaiProposable(revenu, AUJ))
+  verifier('rien à quitter sans essai en cours',
+    !peutRevenirASaFormule({ plan: 'vendre', created_at: iconic.created_at }, AUJ)
+    && !peutRevenirASaFormule(null, AUJ))
+  // Un essai « vers le bas » n'est pas un essai (rangPlan) : rien à quitter.
+  verifier('un Vendre avec un essai_plan inférieur n\'a rien à quitter',
+    !peutRevenirASaFormule({ plan: 'vendre', essai_plan: 'communiquer', created_at: iconic.created_at }, AUJ))
+  // Période passée : l'essai s'est éteint tout seul, plus de bouton.
+  verifier('après la période, plus de bouton',
+    !peutRevenirASaFormule(iconic, new Date('2027-03-01T12:00:00Z')))
+
+  // LA DATE (Alex, 17/10 : « 8 janvier » et « 9 janvier inclus » sur le même écran).
+  const fmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', timeZone: 'Europe/Brussels' })
+  verifier('la facture du 9 janvier à minuit laisse le 8 comme dernier jour offert',
+    fmt.format(dernierJourAvant('2027-01-08T23:00:00Z')) === '8 janvier')
+  verifier('et le même jour que la dégustation de ce commerçant',
+    fmt.format(dernierJourAvant('2027-01-08T23:00:00Z')) === fmt.format(dernierJourGratuit(iconic.created_at)))
+  verifier('une date illisible ne s\'invente pas', dernierJourAvant('n importe quoi') === null && dernierJourAvant(null) === null)
+
+  // L'ÉCRAN.
+  const sans = (src) => src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
+  const bord = sans(readFileSync('app/dashboard/ConfigDashboard.js', 'utf8'))
+  verifier('« Dégustation en cours » a disparu', !/Dégustation en cours/.test(bord))
+  verifier('une seule pastille « Essai en cours », pour les deux essais',
+    (bord.match(/>Essai en cours</g) || []).length === 1
+    && /\(enEssai \|\| degustation\) && <span[^>]*>Essai en cours</.test(bord))
+  verifier('« dégustation » n\'est plus un mot du commerçant', !/>Ta dégustation/.test(bord))
+  verifier('la ligne Stripe dit le dernier jour offert, pas l\'instant de facture',
+    /const finEssai = dateLongue\(dernierJourAvant\(commercant\?\.subscription_trial_end\)\)/.test(bord))
+  // Le retour : confirmé, n'écrit QUE `essai_plan`, jamais `plan`.
+  const i = bord.indexOf('async function revenirASaFormule()')
+  const corps = i >= 0 ? bord.slice(i, bord.indexOf('async function enregistrerPuisContinuer', i)) : ''
+  verifier('le retour existe', i >= 0)
+  verifier('il demande confirmation avant d\'agir',
+    corps.indexOf('await confirmer(') > 0 && corps.indexOf('await confirmer(') < corps.indexOf(".update({ essai_plan: null })")
+    && /if \(choix !== 'revenir'\) return/.test(corps))
+  verifier('il n\'écrit que essai_plan, jamais le forfait facturé',
+    /\.update\(\{ essai_plan: null \}\)/.test(corps) && !/plan:/.test(corps.replace(/essai_plan:/g, '')))
+  verifier('il lit sa garde dans le module', /if \(!peutRevenirASaFormule\(commercant\)\) return/.test(corps))
+  verifier('il dit l\'échec au lieu de l\'avaler', /if \(error\) \{ showToast\(/.test(corps))
+  verifier('les deux portes mènent à la même action',
+    /<BandeauEssai [^>]*onRevenir=\{revenirASaFormule\}/.test(bord)
+    && /<TabMonCompte [^>]*onRevenir=\{revenirASaFormule\}/.test(bord))
+  const abo = sans(readFileSync('app/dashboard/abonnement/page.js', 'utf8'))
+  verifier('la page d\'abonnement dit aussi le dernier jour offert',
+    /libelleFinEssaiReelle\(dernierJourAvant\(commercant\.subscription_trial_end\)\)\}<\/strong> inclus/.test(abo))
 }
 
 if (clesDynamiques.length > 0) {

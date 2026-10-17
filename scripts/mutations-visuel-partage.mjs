@@ -419,8 +419,9 @@ const MUTATIONS = [
 
   { nom: '🔴 le catalogue court-circuite la porte de la barre d onglets',
     fichier: 'app/dashboard/ConfigDashboard.js',
-    de: "<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />",
-    vers: "<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={setTab} />" },
+    // REPOINTÉE LE 17/10 : l'appel porte aussi `honorerAbonnements`.
+    de: "<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} honorerAbonnements=",
+    vers: "<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={setTab} honorerAbonnements=" },
 ]
 
 const lancer = () => {

@@ -48,7 +48,8 @@ const MUTATIONS = [
     de: '  return COLONNES.map(col => ({ ...col, commandes: trierParHeure(liste.filter(c => c?.statut === col.statut)) }))',
     vers: '  return COLONNES.map(col => ({ ...col, commandes: liste.filter(c => c?.statut === col.statut) }))' },
   { nom: '🔴 « Encoder une commande » disparaît de la barre fixe', fichier: BORD,
-    de: "                  {commercant?.categorie === 'alimentaire' && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (",
+    // REPOINTÉE LE 17/10 : la condition lit aussi la formule (encoder, c'est créer).
+    de: "                  {commercant?.categorie === 'alimentaire' && canDo(planEffectif(commercant), 'commande') && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (",
     vers: "                  {false && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (" },
   { nom: '🔴 la carte compacte avance par un autre chemin que `changerStatut` (plus d étiquette)', fichier: BORD,
     de: '                    onAvancer={(c, statut) => changerStatut(c.id, statut)}', vers: '                    onAvancer={(c, statut) => changerStatutLivraison(c.id, statut)}' },

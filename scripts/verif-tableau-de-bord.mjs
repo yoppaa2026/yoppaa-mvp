@@ -1927,7 +1927,10 @@ const verifie = (nom, cond, detail = '') => {
   const iBarre = page.indexOf("{ongletPrincipal === 'commandes' && (\n            <div className=\"sticky-header\">")
   const iZone = page.indexOf('<div className="scroll-zone">')
   const iEncoder = page.indexOf('onClick={() => setEncoderOuvert(true)}')
-  const iCondition = page.indexOf("{commercant?.categorie === 'alimentaire' && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (\n                    <button type=\"button\" onClick={() => setEncoderOuvert(true)}")
+  // REPOINTÉE LE 17/10 : la condition lit aussi la formule (encoder, c'est
+  // créer ; décision d'Alex au tableau). Même bouton, même place, une condition
+  // de plus, gardée par `verif:honorer`.
+  const iCondition = page.indexOf("{commercant?.categorie === 'alimentaire' && canDo(planEffectif(commercant), 'commande') && (creneauxRetrait.length > 0 || creneauxLivraison.length > 0) && (\n                    <button type=\"button\" onClick={() => setEncoderOuvert(true)}")
   verifie('🔴 « Encoder une commande » vit dans la BARRE FIXE des commandes (plus dans ce qui défile), une seule fois, avec SA condition',
     iBarre > 0 && iZone > iBarre && iEncoder > iBarre && iEncoder < iZone && page.split('onClick={() => setEncoderOuvert(true)}').length === 2
     && iCondition > iBarre && iCondition < iZone)

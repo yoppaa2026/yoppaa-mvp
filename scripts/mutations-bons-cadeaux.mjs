@@ -1420,8 +1420,10 @@ const MUTATIONS = [
 
   { nom: '🔴 le renvoi du catalogue court-circuite la porte des onglets',
     banc: 'verif:bord', fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} />',
-    vers: '<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={setTab} />' },
+    // REPOINTÉE LE 17/10 : l'appel porte aussi `honorerAbonnements` (cartes de
+    // séances à honorer hors formule). Même renvoi, même porte.
+    de: '<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={changerOnglet} honorerAbonnements=',
+    vers: '<TabCatalogue commercantId={commercantId} commercant={commercant} toast={showToast} onAllerA={setTab} honorerAbonnements=' },
 
   // ─── LE LIBELLE DE LA CIBLE D UN DEAL (Alex, 06/09) ─────────────────────
   //

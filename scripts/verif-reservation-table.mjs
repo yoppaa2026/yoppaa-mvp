@@ -1433,8 +1433,11 @@ egal('la réservation d’un restaurant s’atteint quand même',
   verifier('🔴 et il lit la colonne « couverts »', /numero_prefixe, couverts,/.test(CRON))
   verifier('⚠️ une seule lecture des tables, partagée par les deux emails',
     (CRON.match(/from\('rdv_reservations'\)/g) || []).length === 1)
+  // REPOINTÉE LE 17/10 : `let`, parce que les tables DÉJÀ PRISES chez qui a
+  // perdu la formule s'y ajoutent (audit « honorer ») ; et là aussi, `null`
+  // quand il n'y en a aucune (`verif:honorer` garde cette seconde moitié).
   verifier('⚠️ et `null` quand il n’y a pas de salle, jamais un tableau vide',
-    /const tablesFlat = aUneSalle \? await lireTablesDuJour\(\) : null/.test(CRON))
+    /let tablesFlat = aUneSalle \? await lireTablesDuJour\(\) : null/.test(CRON))
 
   // La notification du tableau de bord, celle que le restaurateur entend.
   verifier('🔴 l’alerte du tableau de bord suit le métier',

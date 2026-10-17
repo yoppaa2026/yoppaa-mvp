@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { canDo, planEffectif } from '@/lib/plans'
+import { exportComptableAutorise } from '@/lib/honorer'
 import { construireLignes, csvJournal, csvDetail, journalParJour } from '@/lib/export-comptable'
 import { normaliser } from '@/lib/tva'
 import { jourBruxelles } from '@/lib/timezone'
@@ -66,9 +67,12 @@ export async function GET(request) {
     }
     // 🔴 FORFAIT EFFECTIF (15/09) : un commerçant en essai de Vendre vend en
     // ligne, il doit pouvoir sortir ce qu'il a vendu.
-    if (!canDo(planEffectif(commercant), 'export_comptable')) {
-      return NextResponse.json({ ok: false, error: 'export réservé à la formule Vendre' }, { status: 402 })
-    }
+    // 🔴 ET APRÈS L'ESSAI AUSSI (17/10, audit « honorer ») : la garde refusait
+    // l'export à qui avait perdu Vendre, quelle que soit la période. Son
+    // comptable avait besoin du journal de décembre, et il était introuvable.
+    // La décision tombe donc APRÈS le calcul des lignes : le forfait l'ouvre,
+    // ou des lignes à déclarer l'ouvrent (`exportComptableAutorise`).
+    const forfaitLePermet = canDo(planEffectif(commercant), 'export_comptable')
 
     // ⚠️ LES BORNES SUR LES INSTANTS SONT ÉLARGIES D'UN JOUR DE CHAQUE CÔTÉ, ET
     // C'EST VOLONTAIRE. Le jour comptable se décide en heure belge : minuit à
@@ -309,6 +313,10 @@ export async function GET(request) {
       bons: bons || [],
       periode: { du, au },
     })
+
+    if (!exportComptableAutorise({ forfaitLePermet, nbLignes: lignes.length })) {
+      return NextResponse.json({ ok: false, error: 'export réservé à la formule Vendre' }, { status: 402 })
+    }
 
     // Signale honnêtement que certaines lignes reposent sur le taux actuel.
     const avertissementTaux = commandes.some(c =>

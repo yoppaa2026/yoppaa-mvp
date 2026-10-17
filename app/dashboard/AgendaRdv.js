@@ -616,7 +616,9 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
                   return debut < slotMin && fin > slotMin
                 })
 
-                const peutCreer = state === 'libre' && !couvert && debutsIci.length === 0
+                // ⚠️ SANS `onNouveauRdv`, RIEN À CRÉER (17/10) : hors formule, le
+                // patron honore son agenda mais n'y pose plus de rendez-vous.
+                const peutCreer = !!onNouveauRdv && state === 'libre' && !couvert && debutsIci.length === 0
 
                 // ⚠️ DEUX BLOCS À LA MÊME HEURE SE CACHAIENT L'UN L'AUTRE (trouvé
                 // par Alex le 16/08). Le regroupement des cours réglait le cas de

@@ -97,9 +97,14 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         const finBadges = Math.max(...rangee.badges.map(b => b.x + b.largeur))
         verifier(`🔴 ${cas} : les deux badges officiels, sous la légende, à gauche du QR`,
           rangee.badges.length === 2 && rangee.y > legende.y && rangee.y + rangee.hauteur <= 205 && finBadges <= q.x - 4 && rangee.badges[0].x >= zone.x)
-        const logo = ops.find(o => o.type === 'logo')
-        verifier(`🔴 ${cas} : le logo entre les badges et le QR, sans les toucher`,
-          logo.xFin <= q.x - 4 && logo.xFin - logo.corps * 3.2 >= finBadges + 2, `${logo.xFin} / ${finBadges}`)
+        // ⚠️ REPOINTÉE LE 17/10 (ter) : le logo en bas du BANDEAU, centré, même
+        // taille (Alex), dans les couleurs de la flèche ; plus à côté du QR.
+        const logos = ops.filter(o => o.type === 'logo')
+        const logo = logos[0]
+        verifier(`🔴 ${cas} : un seul logo, centré en bas du bandeau`,
+          logos.length === 1 && logo.xCentre === bloc.x + bloc.largeur / 2 && logo.y >= 185 && logo.corps === 8, JSON.stringify(logo))
+        verifier(`🔴 ${cas} : le logo se lit sur le bloc (couleurs de la flèche)`, JSON.stringify(logo.couleurs) === JSON.stringify(paletteRetrait(clair).blocWm))
+        verifier(`${cas} : le logo ne touche pas la flèche`, logo.y - logo.corps > Math.max(...ops.filter(o => o.type === 'point').map(p => p.y + p.r)) + 10)
         const commerce = ops.find(o => o.role === 'commerce')
         verifier(`${cas} : le nom du commerce en tête`, commerce && commerce.y < Math.min(...ops.filter(o => o.role === 'intitule').map(o => o.y)) - 8)
         verifier(`🔴 ${cas} : la flèche reste dans son bloc`, ops.filter(o => o.type === 'point').every(p => p.x - p.r >= bloc.x && p.x + p.r <= bloc.x + bloc.largeur))

@@ -28,6 +28,7 @@ import { gardeSurLigne, refus } from '@/lib/api-auth'
 import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo, planEffectif } from '@/lib/plans'
 import { fichePubliee } from '@/lib/statut-commercant'
+import { conflitSemaineGmy } from '@/lib/actu-gmy'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -59,7 +60,7 @@ export async function POST(req) {
   const { data: actu, error: actuErr } = await supabase
     .from('actualites')
     .select(`
-      id, titre, contenu, type, actif, inclus_gmy,
+      id, titre, contenu, type, actif, inclus_gmy, date_debut, created_at,
       commercant:commercants(id, nom, slug, plan, essai_plan, created_at, statut_publication)
     `)
     .eq('id', actu_id)
@@ -87,6 +88,18 @@ export async function POST(req) {
   const peutActuGmy = canDo(planVivant, 'actu_gmy') && actu.inclus_gmy
   if (!peutActusIllimitees && !peutActuGmy) {
     return NextResponse.json({ status: 'skipped', reason: 'plan_sans_push' })
+  }
+  // 🔴 UNE PAR SEMAINE, TENUE ICI AUSSI (17/10). La règle n'était tenue que
+  // par l'écran : une écriture directe faisait prévenir les favoris à chaque
+  // actu. Même règle que le cron (lib/actu-gmy.js), la première créée passe.
+  // ⚠️ Lecture ratée : on n'envoie pas (pas de push sur une règle non vérifiée).
+  if (!peutActusIllimitees) {
+    const { data: gmy, error: errGmy } = await supabase.from('actualites')
+      .select('id, date_debut, created_at').eq('commercant_id', c.id).eq('inclus_gmy', true)
+    if (errGmy) return NextResponse.json({ status: 'skipped', reason: 'lecture_ko' }, { status: 500 })
+    if (conflitSemaineGmy(actu, gmy || [])) {
+      return NextResponse.json({ status: 'skipped', reason: 'une_actu_par_semaine' })
+    }
   }
 
   const isAlerte = actu.type === 'alerte'

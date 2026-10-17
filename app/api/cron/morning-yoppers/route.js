@@ -28,6 +28,7 @@ import { envoyerPushParExternalIds } from '@/lib/onesignal'
 import { canDo, planEffectif } from '@/lib/plans'
 import { fusionnerIds } from '@/lib/morning-eligibilite'
 import { fichePubliee } from '@/lib/statut-commercant'
+import { actusGmyRetenues } from '@/lib/actu-gmy'
 import { jourBruxelles } from '@/lib/timezone'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
 import { horsDeSonHeure } from '@/lib/heure-cron'
@@ -77,7 +78,7 @@ async function handle(req) {
   const { data: actusGmy, error: actusErr } = await supabase
     .from('actualites')
     .select(`
-      id, titre, commercant_id,
+      id, titre, commercant_id, date_debut, created_at,
       commercant:commercants (id, nom, adresse, plan, essai_plan, created_at, statut_publication)
     `)
     .not('commercant_id', 'is', null)
@@ -132,12 +133,33 @@ async function handle(req) {
     tousDealIds.push(d.id)
   }
 
+  // 🔴 UNE PAR SEMAINE POUR EXISTER, TENUE ICI (17/10). Ce cron l'écrivait :
+  // « déjà validé côté saveActu, pas ici ». Une garde d'écran n'est pas une
+  // règle : une écriture directe faisait entrer chaque actu dans l'édition.
+  // On relit les actus GMY de ces commerces pour voir la semaine ENTIÈRE.
+  const limites = new Set((actusGmy || [])
+    .filter(a => a.commercant && !canDo(planEffectif(a.commercant), 'actus_illimitees'))
+    .map(a => a.commercant_id))
+  let gmySemaine = []
+  if (limites.size > 0) {
+    const { data: lues, error: errLues } = await supabase.from('actualites')
+      .select('id, commercant_id, date_debut, created_at')
+      .in('commercant_id', [...limites]).eq('inclus_gmy', true)
+    if (errLues) {
+      console.error('[cron/morning-yoppers] lecture des actus de la semaine échouée', errLues)
+      return NextResponse.json({ error: errLues.message }, { status: 500 })
+    }
+    gmySemaine = lues || []
+  }
+  const retenues = new Set(actusGmyRetenues(actusGmy || [], gmySemaine, id => limites.has(id)).map(a => a.id))
+
   for (const a of actusGmy || []) {
     const c = a.commercant
     if (!fichePubliee(c)) continue
-    // Actus GMY autorisées à tous les plans commerçant (Exister limité à
-    // 1/semaine mais c'est déjà validé côté saveActu, pas ici)
+    // Actus GMY autorisées à tous les plans commerçant ; Exister, une par
+    // semaine (`actusGmyRetenues`, lib/actu-gmy.js).
     if (!canDo(planEffectif(c), 'actu_gmy')) continue
+    if (!retenues.has(a.id)) continue
     const commune = communeDuCp(extraireCodePostal(c.adresse))
     if (!commune) continue
     ajouter(commune, 'actuIds', a.id, c.id)

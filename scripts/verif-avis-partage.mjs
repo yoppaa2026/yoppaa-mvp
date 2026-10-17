@@ -268,8 +268,10 @@ const egalJson = (nom, obtenu, attendu) =>
   // déjà leur `article_id: form.article_id || null`, à 500 lignes d'ici. Sans
   // ancre, la garde restait verte en ne voyant QUE celui des deals — mesuré à
   // la mutation le 24/08. Une garde qui confond deux formulaires ne garde rien.
+  // ⚠️ REPOINTÉE LE 17/10 : `inclus_gmy` passe par `inclusGmy` (Exister paraît
+  // d'office dans le Good Morning). L'ancre reste le formulaire des actus.
   verifie('🔴 « aucun article » part en null, pas en chaîne vide',
-    /inclus_gmy: !!form\.inclus_gmy,\s+article_id: form\.article_id \|\| null/.test(bord))
+    /inclus_gmy: inclusGmy,\s+article_id: form\.article_id \|\| null/.test(bord))
   verifie('le formulaire porte le champ', /article_id: a\.article_id \|\| ''/.test(bord))
   verifie('🔴 on ne propose QUE ses propres articles',
     /from\('articles'\)[\s\S]{0,200}\.eq\('commercant_id', commercantId\)/.test(bord))

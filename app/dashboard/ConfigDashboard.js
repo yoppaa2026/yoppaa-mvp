@@ -134,7 +134,8 @@ import BandeDefilante from '@/app/components/BandeDefilante'
 // et un food truck n'ont pas le même métier et ont le même besoin. Cette
 // section a cessé d'être conditionnée au métier le 12/08, et son dernier usage,
 // un titre qui changeait selon la catégorie, est parti le 13/08.
-import { jourLocalISO, jourSemaineLocal, jourBruxelles, creneauDejaCommence, minutesBruxelles } from '@/lib/timezone'
+import { jourLocalISO, jourSemaineLocal, jourBruxelles, creneauDejaCommence, minutesBruxelles, jourCivilPlus } from '@/lib/timezone'
+import { lundiDeLaSemaine, conflitSemaineGmy, erreurActuGmy } from '@/lib/actu-gmy'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import TabPaiements from './TabPaiements'
 import { compresserImage, preparerPhotoArticle } from '@/lib/compress-image'
@@ -5450,15 +5451,6 @@ function TabActus({ commercantId, commercant, toast }) {
   const planResolu = planEffectif(commercant)
   const estExister = planResolu === 'exister'
 
-  // Retourne le lundi 00:00 de la semaine calendaire d'une date (locale Brussels).
-  function lundiSemaineFR(d) {
-    const dt = new Date(d)
-    const jour = dt.getDay()  // 0=dim, 1=lundi...
-    const offset = jour === 0 ? -6 : 1 - jour
-    dt.setDate(dt.getDate() + offset)
-    dt.setHours(0, 0, 0, 0)
-    return dt
-  }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- deps volontairement réduites (fetch-on-mount piloté par l'id), décision lint 31/07
   useEffect(() => { fetchActus() }, [commercantId])
@@ -5531,27 +5523,28 @@ function TabActus({ commercantId, commercant, toast }) {
 
   async function saveActu() {
     if (!form.titre.trim()) return toast('Titre obligatoire', 'error')
+    // ✅ 17/10 : pour Exister, l'actu PARAÎT dans le Good Morning, d'office (sa
+    // fiche n'a pas de page d'actus : non cochée, elle ne paraissait nulle part).
+    const inclusGmy = estExister ? true : !!form.inclus_gmy
+    const erreurGmy = erreurActuGmy({ inclus_gmy: inclusGmy, date_debut: form.date_debut, date_fin: form.date_fin })
+    if (erreurGmy) return toast(erreurGmy, 'error')
 
     // Validation Exister : 1 apparition GMY par semaine calendaire (lundi-dim).
-    // On check les actus existantes du commercant avec inclus_gmy=true dont
-    // la date_debut est dans la meme semaine que la date_debut de la nouvelle.
-    if (estExister && form.inclus_gmy) {
-      const dateRef = form.date_debut ? new Date(form.date_debut + 'T00:00:00') : new Date()
-      const lundi = lundiSemaineFR(dateRef)
-      const dimanche = new Date(lundi)
-      dimanche.setDate(dimanche.getDate() + 6)
-      dimanche.setHours(23, 59, 59, 999)
-
-      const { data: dejaGmy } = await supabase.from('actualites')
-        .select('id, titre, date_debut')
+    // ⚠️ LA RÈGLE PARTAGÉE (lib/actu-gmy.js) : le serveur et le cron appliquent
+    // la même, l'écran ne fait que la dire plus tôt.
+    if (estExister) {
+      const lundi = lundiDeLaSemaine(form.date_debut || today)
+      const { data: dejaGmy, error: errGmy } = await supabase.from('actualites')
+        .select('id, titre, date_debut, created_at')
         .eq('commercant_id', commercantId)
         .eq('inclus_gmy', true)
-        .gte('date_debut', jourBruxelles(lundi))
-        .lte('date_debut', jourBruxelles(dimanche))
-
-      const conflit = (dejaGmy || []).find(a => a.id !== editId)
+        .gte('date_debut', lundi)
+        .lte('date_debut', jourCivilPlus(lundi, 6))
+      if (errGmy) return toast('Impossible de vérifier tes actus de la semaine. Réessaie.', 'error')
+      const enCours = editId ? actus.find(a => a.id === editId) : null
+      const conflit = conflitSemaineGmy({ id: editId, date_debut: form.date_debut || today, created_at: enCours?.created_at }, dejaGmy || [])
       if (conflit) {
-        toast(`Palier Exister : une seule apparition GMY par semaine (déjà : « ${conflit.titre} »). Passe à Communiquer pour publier plus.`, 'error')
+        toast(`Palier Exister : une seule actu par semaine dans le Good Morning (déjà : « ${conflit.titre} »). Passe à Communiquer pour publier plus.`, 'error')
         return
       }
     }
@@ -5567,7 +5560,7 @@ function TabActus({ commercantId, commercant, toast }) {
       date_fin: form.date_fin || null,
       actif: !!form.actif,
       photo_url: form.photo_url || null,
-      inclus_gmy: !!form.inclus_gmy,
+      inclus_gmy: inclusGmy,
       // Chaine vide = AUCUN article. ⚠️ Une chaine vide n'est PAS null pour
       // Postgres : envoyee telle quelle sur une colonne uuid, elle leve une
       // erreur de syntaxe. Les deux formes de l'absence, encore.
@@ -5735,13 +5728,16 @@ function TabActus({ commercantId, commercant, toast }) {
 
             {/* Inclure dans Good Morning Yoppers. Exister limite a 1/semaine
                 calendaire. Communiquer / Vendre : illimite cote UI. */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: form.inclus_gmy ? '#FFF7ED' : '#FAFAFA', border: `1.5px solid ${form.inclus_gmy ? '#EA580C' : T.hairline}`, borderRadius: 10, cursor: 'pointer' }}>
-              <input type="checkbox" checked={form.inclus_gmy} onChange={e => setForm(p => ({ ...p, inclus_gmy: e.target.checked }))} style={{ width: 18, height: 18, cursor: 'pointer' }}/>
+            {/* ✅ 17/10 : pour Exister, la case est cochée d'office et figée :
+                sa fiche n'a pas de page d'actus, le Good Morning est le seul
+                endroit où son actu paraît. */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: (estExister || form.inclus_gmy) ? '#FFF7ED' : '#FAFAFA', border: `1.5px solid ${(estExister || form.inclus_gmy) ? '#EA580C' : T.hairline}`, borderRadius: 10, cursor: estExister ? 'default' : 'pointer' }}>
+              <input type="checkbox" checked={estExister || form.inclus_gmy} disabled={estExister} onChange={e => setForm(p => ({ ...p, inclus_gmy: e.target.checked }))} style={{ width: 18, height: 18, cursor: estExister ? 'default' : 'pointer' }}/>
               <div style={{ flex: 1 }}>
                 <span style={{ fontSize: 13, color: T.ink, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Sun size={14} strokeWidth={1.8} color="#EA580C"/> Inclure dans Le Good Morning Yoppers</span>
                 <span style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>
                   {estExister
-                    ? `Palier Exister : 1 apparition GMY par semaine calendaire (lundi-dimanche). Enregistre avant ${heureLimiteGmy} la veille : ton actu entre dans le Good Morning du lendemain (édition + push aux Yoppers de ta commune) et y reste pendant sa période.`
+                    ? `Palier Exister : ton actu paraît dans le Good Morning, une par semaine (lundi-dimanche). Indique une date de fin. Enregistre avant ${heureLimiteGmy} la veille : elle entre dans le Good Morning du lendemain (édition + push aux Yoppers de ta commune) et y reste pendant sa période.`
                     : `Enregistre avant ${heureLimiteGmy} la veille : ton actu entre dans le Good Morning du lendemain (édition + push aux Yoppers de ta commune) et y reste pendant sa période. Publiée plus tard, elle vit sur ta fiche (pastille ACTU) et entrera dans le Morning suivant.`}
                 </span>
               </div>
@@ -18265,7 +18261,9 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
 
     // ── FAIRE VENIR ──────────────────────────────────────────────────────
     { id: 'deals', label: 'Deals', icon: 'tag', feature: 'deals' },
-    { id: 'actus', label: 'Actus', icon: 'sliders', feature: 'actus_illimitees' },
+    // ✅ 17/10 (Alex) : Exister publie une actu par semaine dans le Good
+    // Morning (`actu_gmy`). L'onglet était fermé derrière `actus_illimitees`.
+    { id: 'actus', label: 'Actus', icon: 'sliders', feature: 'actu_gmy' },
     // Le générateur travaille SUR le catalogue et les deals : il n'a rien à
     // dire tant qu'ils sont vides.
     iaActif && { id: 'ia', label: 'Générateur', icon: 'sparkles' },
@@ -18391,7 +18389,7 @@ export default function ConfigDashboard({ commercantId, tabInitial = 'menu', onO
           seule : ces conditions sont ce qui empêche vraiment le contenu de
           s'afficher, et elles lisent `peut()`, donc l'essai en cours. */}
       {tab === 'deals'    && peut(commercant, 'deals') && <TabDeals commercantId={commercantId} commercant={commercant} toast={showToast} />}
-      {tab === 'actus'    && peut(commercant, 'actus_illimitees') && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
+      {tab === 'actus'    && peut(commercant, 'actu_gmy') && <TabActus commercantId={commercantId} commercant={commercant} toast={showToast} />}
       {/* ⚠️ LE RENVOI PASSE PAR `changerOnglet`, PAS PAR `setTab`. C'est la
           porte de la barre d'onglets : elle refuse un onglet hors forfait en
           ouvrant la proposition, et elle retient un formulaire non enregistré.

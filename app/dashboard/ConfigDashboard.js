@@ -10334,7 +10334,7 @@ function AfficheRetraitBloc({ slug, nomCommerce, clair, toast }) {
       <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ton point de retrait</p>
       <p style={{ fontSize: 12, color: T.ink, lineHeight: 1.55, marginBottom: 12 }}>
         Une affiche qui montre à tes clients <strong>où récupérer leur commande Yoppaa</strong>. Choisis le sens de la flèche et écris où c&rsquo;est.
-        Ceux qui font la file trouvent dessous le QR de ta fiche, pour commander chez toi la prochaine fois sans attendre.
+        Ceux qui font la file trouvent en bas le QR de ta fiche, pour commander chez toi la prochaine fois sans attendre.
       </p>
       <p style={{ fontSize: 11, fontWeight: 700, color: T.muted, marginBottom: 6 }}>Sens de la flèche</p>
       <div role="group" aria-label="Sens de la flèche" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>

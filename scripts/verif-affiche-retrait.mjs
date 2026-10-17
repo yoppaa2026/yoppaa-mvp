@@ -77,24 +77,31 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         // Le bord gauche d'un texte, qu'il soit aligné à gauche ou centré.
         const gauche = (t) => (t.aligne === 'center' ? t.x - mesurer(t.texte, t.taille, t.poids) / 2 : t.x)
         verifier(`🔴 ${cas} : le bloc est du côté de la flèche`, s.id === 'droite' ? bloc.x === W - bloc.largeur : bloc.x === 0)
-        // ⚠️ REPOINTÉE LE 17/10 : « QR + logos des stores » (Alex, tableau). Un
-        // seul QR, DANS le bloc, assez grand pour être scanné de la file, sous
-        // la flèche sans la toucher ; les badges dessous, rien sous 205 mm.
+        // ⚠️ REPOINTÉES LE 17/10 (bis) : « QR + logos des stores », PAS dans
+        // le bandeau (Alex), dans le PIED (« 2 »). Un seul QR, en bas à droite
+        // du côté texte, sous le filet ; légende, badges et logo à sa gauche,
+        // sans se toucher ; rien sous 205 mm.
         const qrs = ops.filter(o => o.type === 'qr')
         const q = qrs[0]
-        verifier(`🔴 ${cas} : un seul QR, dans le bloc`, qrs.length === 1 && q.x >= bloc.x && q.x + q.cote <= bloc.x + bloc.largeur)
-        verifier(`🔴 ${cas} : le QR se scanne de la file (≥ 40 mm de code)`, q.cote - q.marge * 2 >= 40, String(q.cote - q.marge * 2))
-        const basFleche = Math.max(...ops.filter(o => o.type === 'point').map(p => p.y + p.r))
+        const zone = plan.zoneTexte
+        const filet = ops.find(o => o.type === 'trait')
+        verifier(`🔴 ${cas} : jamais de QR dans le bandeau (Alex)`, qrs.length === 1 && (q.x >= bloc.x + bloc.largeur || q.x + q.cote <= bloc.x))
+        verifier(`🔴 ${cas} : le QR en bas à droite du côté texte, sous le filet`,
+          Math.abs(q.x + q.cote - (zone.x + zone.largeur)) < 0.01 && q.y > filet.y1 && q.y + q.cote <= 205, `${q.x},${q.y}`)
+        verifier(`🔴 ${cas} : le QR se scanne de près (≥ 30 mm de code)`, q.cote - q.marge * 2 >= 30, String(q.cote - q.marge * 2))
         const legende = ops.find(o => o.role === 'legende-qr')
-        verifier(`🔴 ${cas} : la flèche ne touche ni la légende ni le QR`, basFleche < legende.y - legende.taille - 2 && legende.y < q.y, `${basFleche.toFixed(1)} / ${legende.y}`)
         egal(`${cas} : la légende du QR`, legende.texte, 'Pas encore sur Yoppaa ?')
-        verifier(`🔴 ${cas} : la légende tient dans le bloc, à 6 mm de ses bords`,
-          legende.aligne === 'center' && gauche(legende) >= bloc.x + 6 && gauche(legende) + mesurer(legende.texte, legende.taille, legende.poids) <= bloc.x + bloc.largeur - 6)
+        verifier(`🔴 ${cas} : la légende à gauche du QR, sous le filet`,
+          legende.y - legende.taille > filet.y1 && legende.x + mesurer(legende.texte, legende.taille, legende.poids) <= q.x - 4)
         const rangee = ops.find(o => o.type === 'badges')
-        verifier(`🔴 ${cas} : les deux badges officiels, dans le bloc, sous le QR`,
-          rangee && rangee.badges.length === 2 && rangee.y >= q.y + q.cote + 3 && rangee.y + rangee.hauteur <= 205
-            && rangee.badges.every(b => b.x >= bloc.x + 4 && b.x + b.largeur <= bloc.x + bloc.largeur - 4))
-        verifier(`🔴 ${cas} : jamais de QR côté texte`, !ops.some(o => o.type === 'qr' && o.x < bloc.x))
+        const finBadges = Math.max(...rangee.badges.map(b => b.x + b.largeur))
+        verifier(`🔴 ${cas} : les deux badges officiels, sous la légende, à gauche du QR`,
+          rangee.badges.length === 2 && rangee.y > legende.y && rangee.y + rangee.hauteur <= 205 && finBadges <= q.x - 4 && rangee.badges[0].x >= zone.x)
+        const logo = ops.find(o => o.type === 'logo')
+        verifier(`🔴 ${cas} : le logo entre les badges et le QR, sans les toucher`,
+          logo.xFin <= q.x - 4 && logo.xFin - logo.corps * 3.2 >= finBadges + 2, `${logo.xFin} / ${finBadges}`)
+        const commerce = ops.find(o => o.role === 'commerce')
+        verifier(`${cas} : le nom du commerce en tête`, commerce && commerce.y < Math.min(...ops.filter(o => o.role === 'intitule').map(o => o.y)) - 8)
         verifier(`🔴 ${cas} : la flèche reste dans son bloc`, ops.filter(o => o.type === 'point').every(p => p.x - p.r >= bloc.x && p.x + p.r <= bloc.x + bloc.largeur))
         // 🔴 LE SENS CHOISI EST CELUI DESSINÉ : la pointe (le plus gros point)
         // part du bon côté du centre de la flèche.
@@ -104,10 +111,10 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         const bonSens = { gauche: tip.x < cx - 10, droite: tip.x > cx + 10, ici: tip.y > cy + 10, droit: tip.y < cy - 10 }[s.id]
         verifier(`🔴 ${cas} : « ${s.libelle} » dessine la flèche dans ce sens`, bonSens, `${tip.x.toFixed(1)},${tip.y.toFixed(1)} / ${cx.toFixed(1)},${cy.toFixed(1)}`)
         verifier(`${cas} : la flèche a la couleur du bloc en contraste`, ops.filter(o => o.type === 'point').every(p => paletteRetrait(clair).blocWm.includes(p.couleur)))
-        // ⚠️ REPOINTÉES LE 17/10 : la légende du QR vit DANS le bloc, centrée
-        // (vérifiée à part plus haut). Le côté texte, lui, ne touche jamais le bloc.
+        // ⚠️ REPOINTÉES LE 17/10 (bis) : la légende du QR vit côté texte, elle
+        // aussi ne déborde pas et ne touche jamais le bloc.
         const textes = ops.filter(o => o.type === 'texte')
-        const cote = textes.filter(t => t.role !== 'legende-qr')
+        const cote = textes
         const deborde = cote.filter(t => gauche(t) + mesurer(t.texte, t.taille, t.poids) > W - 15 || gauche(t) < 15)
         egal(`🔴 ${cas} : aucun texte ne déborde`, deborde.map(t => t.texte), [])
         const surLeBloc = cote.filter(t => t.x < bloc.x + bloc.largeur && t.x + mesurer(t.texte, t.taille, t.poids) > bloc.x)
@@ -120,6 +127,7 @@ const mesurer = (t, taille, poids) => String(t).length * taille * (poids >= 900 
         const derniereConsigne = Math.max(...textes.filter(t => t.role === 'consigne').map(t => t.y))
         verifier(`🔴 ${cas} : la consigne passe au-dessus du filet`, derniereConsigne <= ops.find(o => o.type === 'trait').y1 - 3, String(derniereConsigne))
         verifier(`${cas} : le titre ne remonte pas dans l’intitulé`, textes.find(t => t.role === 'titre').y - textes.find(t => t.role === 'titre').taille * 0.75 > Math.max(...intitule.map(t => t.y)))
+        verifier(`🔴 ${cas} : la phrase tient en deux lignes au plus`, textes.filter(t => t.role === 'phrase').length <= 2)
         egal(`${cas} : la phrase, telle qu’écrite`, textes.filter(t => t.role === 'phrase').map(t => t.texte).join(' '), nettoyerPhrase(phrase))
         verifier(`${cas} : une pastille, un logo`, ops.filter(o => o.type === 'pastille').length === 1 && ops.filter(o => o.type === 'logo').length === 1)
       }

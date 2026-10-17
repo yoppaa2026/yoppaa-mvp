@@ -4672,6 +4672,10 @@ export default function Dashboard() {
                     dateInit={nouveauRdvSlot.date}
                     heureInit={nouveauRdvSlot.heure}
                     prestationInit={nouveauRdvSlot.prestationId || null}
+                    // 🔴 LA SÉRIE D'UNE ABONNÉE JUGE LES FERMETURES DU 16/10
+                    // (audit du 17/10) : la liste unique, traduite pour
+                    // l'agenda, et les horaires exceptionnels du geste « rdv ».
+                    fermetures={fermeturesAgendaTout} exceptions={exceptionsRdv}
                     onClose={() => setNouveauRdvSlot(null)}
                     onCreated={() => chargerRdvs(commercant.id)}
                   />

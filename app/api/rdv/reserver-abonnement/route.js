@@ -25,6 +25,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { identiteProuvee } from '@/lib/yopper-auth'
 import { peutReserverSurAbonnement, seancesConsommees, datesConsommees } from '@/lib/abonnements'
+import { confirmerApresReponse } from '@/lib/rdv-apres-reservation-server'
 import { creerReservationRdv } from '@/lib/rdv-creation-server'
 import { estRefusDeRegle, refusAvantPaiement } from '@/lib/refus-reservation'
 import { creneauDejaCommence } from '@/lib/timezone'
@@ -100,10 +101,17 @@ export async function POST(request) {
   // Le repli sur la formule couvre les contrats vendus en ligne avant le
   // 16/08 : leur colonne est vide, celle de leur formule ne l'a jamais été.
   let prestationId = contrat.prestation_id
-  if (!prestationId && contrat.formule_id) {
-    const { data: formule } = await db
-      .from('abonnement_formules').select('prestation_id').eq('id', contrat.formule_id).maybeSingle()
-    prestationId = formule?.prestation_id || null
+  // 🔴 LA FORMULE EST LUE AUSSI POUR SES CONGÉS (audit du 17/10) : le contrat
+  // ne les copie pas, et sans eux une abonnée réservait en pleine Toussaint.
+  // ⚠️ UNE LECTURE RATÉE REFUSE : réserver un jour de congé faute d'avoir pu le
+  // lire serait le pire des deux choix.
+  let periodesExclues = []
+  if (contrat.formule_id) {
+    const { data: formule, error: errFormule } = await db
+      .from('abonnement_formules').select('prestation_id, periodes_exclues').eq('id', contrat.formule_id).maybeSingle()
+    if (errFormule) return NextResponse.json({ ok: false, error: 'lecture_impossible' }, { status: 500 })
+    if (!prestationId) prestationId = formule?.prestation_id || null
+    periodesExclues = Array.isArray(formule?.periodes_exclues) ? formule.periodes_exclues : []
   }
   if (!prestationId) {
     return NextResponse.json({ ok: false, error: 'abonnement_sans_cours' }, { status: 409 })
@@ -135,6 +143,7 @@ export async function POST(request) {
     date: dateRdv,
     seancesUtilisees: seancesConsommees(posees || [], { abonnementId: contrat.id }),
     datesDejaPrises: datesConsommees(posees || [], { abonnementId: contrat.id }),
+    periodesExclues,
   })
   // ⚠️ ON REND LA RAISON, jamais un refus muet : « ton abonnement a expiré » et
   // « tu as déjà ta séance cette semaine » n'appellent pas la même réaction, et
@@ -203,6 +212,9 @@ export async function POST(request) {
     console.error('[rdv/reserver-abonnement] insert', res.error)
     return NextResponse.json({ ok: false, error: 'ecriture_impossible' }, { status: 500 })
   }
+
+  // 🔴 L'EMAIL ET LE RAPPEL PARTENT DU SERVEUR (audit du 17/10, Audit 2 I13).
+  confirmerApresReponse(db, res.rdv?.id)
 
   return NextResponse.json({
     ok: true,

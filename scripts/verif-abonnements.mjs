@@ -2281,9 +2281,23 @@ verifier('la sortie « hors abonnement » existe et est écrite',
   const modale = sansProse(srcModale)
   verifier('🔴 la modale charge les congés de la formule',
     /formule:abonnement_formules\(libelle, periodes_exclues\)/.test(modale))
+  // REPOINTÉE LE 17/10 (audit avant Centre Respire) : la série lit la liste que
+  // la page lui donne (`fermeturesSerie`, fermetures du 16/10 comprises), juge
+  // le cours et l'heure (séance annulée), et saute les horaires adaptés.
   verifier('🔴 la série saute les congés et les fermetures',
     /periodesExclues: aboChoisi\.contrat\.formule\?\.periodes_exclues \|\| \[\],/.test(modale)
-    && /estFermee: \(d\) => !!fermetureQuiBloque\(fermeturesAgenda \|\| \[\], \{ dateStr: d,/.test(modale))
+    && /estFermee: \(d\) => !!fermetureQuiBloque\(fermeturesSerie, \{\s*dateStr: d,/.test(modale))
+  verifier('🔴 la série lit les fermetures du 16/10 que la page lui donne',
+    /const fermeturesSerie = Array\.isArray\(fermetures\) \? fermetures : \(fermeturesAgenda \|\| \[\]\)/.test(modale)
+    && /prestationId: presta\?\.id \?\? null, heure,/.test(modale)
+    && /\|\| horsHoraireAdapte\(\{\s*exceptions: exceptionsSerie, dateStr: d,/.test(modale))
+  {
+    const bord = sansProse(readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8'))
+    const i = bord.indexOf('<ModalNouveauRdv')
+    const bloc = i >= 0 ? bord.slice(i, bord.indexOf('/>', i)) : ''
+    verifier('🔴 la page donne à la fenêtre les fermetures unifiées et les horaires exceptionnels',
+      /fermetures=\{fermeturesAgendaTout\}/.test(bloc) && /exceptions=\{exceptionsRdv\}/.test(bloc))
+  }
   verifier('🔴 chaque semaine répétée est jugée au clic, sur l’agenda relu',
     /repeteesJugees = datesRepetees\.filter\(d => \{\s*const v = creneauAcceptable\(\{/.test(modale)
     && /if \(!v\.ok\) nonPosees\.push\(/.test(modale) && /return v\.ok/.test(modale))

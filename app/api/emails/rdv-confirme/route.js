@@ -5,7 +5,11 @@
 //   2. emailNouveauRdvCommercant → au commercant si notif_mode='chaque'
 //
 // Appele par :
-//   • Frontend /commander/rdv/[slug] apres insert direct RDV (sans acompte)
+//   • Le SERVEUR après une réservation sans paiement (17/10, audit avant
+//     Centre Respire) : `confirmerApresReponse` (lib/rdv-apres-reservation-server)
+//     dans /api/rdv/reserver, /api/rdv/reserver-abonnement et
+//     create-rdv-commande quand des bons couvrent tout. La fiche ne l'appelle
+//     plus : l'email dépendait d'un onglet resté ouvert.
 //   • Frontend /dashboard ModalNouveauRdv apres insert RDV manuel
 //   (Le webhook Stripe envoie les emails directement, pas via cette route)
 //

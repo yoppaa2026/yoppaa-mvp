@@ -980,8 +980,10 @@ const MUTATIONS = [
   { nom: '🔴 l absence d une praticienne rattrape les rendez-vous de toutes',
     banc: 'verif:tunnel-rdv', fichier: 'lib/fermetures-rdv.js',
     // ⚠️ ANCRE REPOINTÉE LE 04/10 : la séance fermée a sa propre branche.
-    de: '      : (fermeture.praticien_id == null || (r.praticien_id != null && String(r.praticien_id) === String(fermeture.praticien_id)))))',
-    vers: '      : true))',
+    // ⚠️ REPOINTÉE LE 17/10 : la branche de l'absence s'étale sur trois lignes
+    // (les inscrits sans prof y entrent par les plages). On vise sa tête.
+    de: '      : (fermeture.praticien_id == null',
+    vers: '      : (true',
     garde: 'l’absence d’une praticienne ne rattrape que les siens' },
 
   { nom: '⚠️ une fermeture rattrape aussi les annules et les honores',
@@ -1023,8 +1025,10 @@ const MUTATIONS = [
 
   { nom: '⚠️ la fermeture liste des rendez-vous qu elle ne touche pas',
     banc: 'verif:tunnel-rdv', fichier: 'app/dashboard/ConfigDashboard.js',
-    de: '      .then(({ data }) => { if (vivant) setTouches(rdvsSousLaFermeture(data || [], ferm)) })',
-    vers: '      .then(({ data }) => { if (vivant) setTouches(data || []) })',
+    // REPOINTÉE LE 17/10 : la règle reçoit aussi les plages (inscrits d'un
+    // cours sans prof désignée).
+    de: '      if (vivant) setTouches(rdvsSousLaFermeture(data || [], ferm, { plages: plages || [] }))',
+    vers: '      if (vivant) setTouches(data || [])',
     garde: 'la fermeture montre les rendez-vous qu’elle rattrape' },
 
   // ⚠️ REPOINTÉE LE 04/10 (question 1) : le cours se ferme désormais.

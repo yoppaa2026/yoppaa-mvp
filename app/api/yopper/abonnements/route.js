@@ -87,7 +87,9 @@ export async function GET(request) {
     // Le nom de la formule est ce que la cliente a lu au moment de payer. C'est
     // sous ce nom-là qu'elle reconnaît son contrat, pas sous « 36 séances ».
     formuleIds.length
-      ? db.from('abonnement_formules').select('id, libelle, prestation_id').in('id', formuleIds)
+      // `periodes_exclues` (17/10) : les congés de la formule, pour que la
+      // fiche refuse un jour de congé AVANT l'envoi, comme le serveur.
+      ? db.from('abonnement_formules').select('id, libelle, prestation_id, periodes_exclues').in('id', formuleIds)
       : Promise.resolve({ data: [] }),
   ])
 
@@ -109,6 +111,7 @@ export async function GET(request) {
       // contrats déjà vendus.
       prestationId: contrat.prestation_id ?? formule?.prestation_id ?? null,
       formule: formule ? { id: formule.id, libelle: formule.libelle } : null,
+      periodesExclues: Array.isArray(formule?.periodes_exclues) ? formule.periodes_exclues : [],
       acheteLe: contrat.created_at ?? null,
       commercant: commercant
         ? { id: commercant.id, nom: commercant.nom, slug: commercant.slug, logo_url: commercant.logo_url }

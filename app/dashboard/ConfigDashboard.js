@@ -84,7 +84,7 @@ import { optionsTaux, CAT_SERVICE } from '@/lib/tva-aide'
 // ne pose plus une seule séance, il crée le contrat. Le placement d'une série et
 // la gravure du lieu n'ont pas été supprimés du projet, c'est le geste d'agenda
 // qui les reprend.
-import { exclusionsQuiSeChevauchent, seancesDeLaFormule, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, verdictReprise, messageRefusReprise, verdictModificationAbonnement, messageRefusModification, partNonUtilisee, verdictRemboursementAbonnement, messageRefusRemboursement, libelleRemboursement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
+import { exclusionsQuiSeChevauchent, seancesDeLaFormule, phraseApercuFormule, expliquerApercuFormule, soldeAbonnement, seancesConsommees, MOYENS_ENCAISSEMENT, libelleMoyenEncaissement, verdictReprise, messageRefusReprise, termesInscriptionComptoir, verdictModificationAbonnement, messageRefusModification, partNonUtilisee, verdictRemboursementAbonnement, messageRefusRemboursement, libelleRemboursement, offreAuJour, jourExempleEnCours, formatDateCourte as dateCourteAbo, PRIX_EN_COURS_PRORATA, PRIX_EN_COURS_FIXE } from '@/lib/abonnements'
 // 🔴 Le référentiel officiel, plus Nominatim (Alex, 05/10) : voir le composant.
 import ChampAdresseOfficielle from '@/app/components/ChampAdresseOfficielle'
 import YoppaaLogo from '@/app/components/YoppaaLogo'
@@ -12876,6 +12876,13 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
     })
     if (!reprise.ok) return toast(messageRefusReprise(reprise.code, reprise), 'error')
     const fenetre = reprise.fenetre
+    // 🔴 UNE NOUVELLE INSCRIPTION SUIT L'OFFRE DU JOUR (audit du 17/10) : une
+    // période déjà commencée se vend au prorata, comme en ligne. Une reprise
+    // garde son contrat entier. Voir `termesInscriptionComptoir`.
+    // ⚠️ LA CASE « REPRISE » DÉCIDE, comme dans l'aperçu : deux conditions
+    // différentes annonceraient un prix et en écriraient un autre.
+    const termes = termesInscriptionComptoir(formule, { reprise: !!insc.reprise || reprise.reprise, fenetre, aujourdhui })
+    if (!termes || termes.seances_total <= 0) return toast('Cette formule n’a plus de séance à vendre : sa période est passée', 'error')
 
     const contrat = {
       commercant_id: commercantId,
@@ -12893,10 +12900,10 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
       // colonne, et plus aucun jour.
       mode: 'credit',
       type: formule.type,
-      date_debut: fenetre.debut,
+      date_debut: termes.date_debut || fenetre.debut,
       date_fin: fenetre.fin,
-      prix: Number(formule.prix) || 0,
-      seances_total: total,
+      prix: termes.prix,
+      seances_total: termes.seances_total,
       seances_par_semaine: formule.seances_par_semaine || 1,
       statut: 'actif',
       paye: !!insc.paye,
@@ -13618,12 +13625,22 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
               {(() => {
                 const f = formules.find(x => x.id === insc.formule_id)
                 if (!f) return null
-                const n = seancesDeLaFormule(f)
+                // 🔴 L'APERÇU DIT CE QUE L'ENREGISTREMENT ÉCRIRA (17/10) : une
+                // nouvelle inscription en cours de période au prorata, une
+                // reprise au compte plein. Le même calcul, `termesInscriptionComptoir`.
+                const termes = termesInscriptionComptoir(f, { reprise: !!insc.reprise, aujourdhui: jourBruxelles() })
+                const n = termes ? termes.seances_total : seancesDeLaFormule(f)
+                const auProrata = !!termes && !insc.reprise && f.type !== 'carnet' && termes.prix !== (Number(f.prix) || 0)
                 return (
                   <div style={{ background: `${T.main}0D`, border: `1px solid ${T.main}33`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
                     <p style={{ fontSize: 13, fontWeight: 800, color: T.main, margin: 0 }}>
                       {n} séance{n > 1 ? 's' : ''} à poser, à n’importe quel jour de la semaine.
                     </p>
+                    {auProrata && (
+                      <p style={{ fontSize: 12, color: T.ink, margin: '4px 0 0', lineHeight: 1.5, fontWeight: 600 }}>
+                        La période a commencé : {euros(termes.prix)} au lieu de {euros(Number(f.prix) || 0)}, pour les semaines qui restent, comme en ligne.
+                      </p>
+                    )}
                     {/* ⚠️ ON DIT OÙ SE FAIT LE GESTE SUIVANT. Sans cette ligne,
                         la commerçante enregistre et cherche un planning qui
                         n'arrivera pas : c'est elle qui pose les séances
@@ -15400,16 +15417,28 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
     if (!showForm || !datesValides || !form.praticien_id) return
     let vivant = true
     const ferm = { date_debut: form.date_debut, date_fin: form.date_fin, praticien_id: form.praticien_id }
-    supabase.from('rdv_reservations')
-      .select('id, date_rdv, heure_debut, client_prenom, client_nom, praticien_id, statut, deleted_at, prestation:rdv_prestations(nom)')
-      .eq('commercant_id', commercantId)
-      .eq('statut', 'confirme')
-      .is('deleted_at', null)
-      .gte('date_rdv', form.date_debut)
-      .lte('date_rdv', form.date_fin)
-      .order('date_rdv', { ascending: true })
-      .order('heure_debut', { ascending: true })
-      .then(({ data }) => { if (vivant) setTouches(rdvsSousLaFermeture(data || [], ferm)) })
+    // 🔴 LES PLAGES AUSSI (audit du 17/10) : les inscrits d'un cours ne portent
+    // pas de professeur, seule sa plage dit qu'il est le sien. Sans elles,
+    // l'absence d'Emily annonçait « aucun rendez-vous touché » devant ses
+    // douze élèves. Voir `rdvsSousLaFermeture`.
+    Promise.all([
+      toutesLesLignes(() => supabase.from('rdv_reservations')
+        .select('id, date_rdv, heure_debut, client_prenom, client_nom, praticien_id, statut, deleted_at, prestation:rdv_prestations(nom)')
+        .eq('commercant_id', commercantId)
+        .eq('statut', 'confirme')
+        .is('deleted_at', null)
+        .gte('date_rdv', form.date_debut)
+        .lte('date_rdv', form.date_fin)
+        .order('date_rdv', { ascending: true })
+        .order('heure_debut', { ascending: true })
+        .order('id', { ascending: true })),
+      supabase.from('rdv_creneaux')
+        .select('praticien_id, jour_semaine, date_specifique, heure_debut, heure_fin, actif, deleted_at')
+        .eq('commercant_id', commercantId)
+        .is('deleted_at', null),
+    ]).then(([{ data }, { data: plages }]) => {
+      if (vivant) setTouches(rdvsSousLaFermeture(data || [], ferm, { plages: plages || [] }))
+    })
     return () => { vivant = false }
   }, [showForm, datesValides, form.date_debut, form.date_fin, form.praticien_id, commercantId])
   const touchesAffichees = showForm && datesValides && form.praticien_id ? touches : []

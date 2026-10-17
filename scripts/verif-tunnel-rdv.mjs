@@ -1167,8 +1167,11 @@ for (const chemin of [
     verifie('🔴 chaque inscrite passe par l’annulation unitaire, en série',
       /for \(const rdv of seanceAAnnuler\) \{\s*const ok = await changerStatutRdv\(rdv\.id, 'annule_commercant', 'commercant', \{/.test(BORD))
     const CONF = sansProse(lire('app/dashboard/ConfigDashboard.js'))
+    // REPOINTÉE LE 17/10 (audit avant Centre Respire) : la règle reçoit aussi
+    // les plages, pour rattraper les inscrits d'un cours sans prof désignée
+    // (`verif:respire` l'exécute).
     verifie('🔴 la fermeture montre les rendez-vous qu’elle rattrape, avec la même règle',
-      /setTouches\(rdvsSousLaFermeture\(data \|\| \[\], ferm\)\)/.test(CONF))
+      /setTouches\(rdvsSousLaFermeture\(data \|\| \[\], ferm, \{ plages: plages \|\| \[\] \}\)\)/.test(CONF))
     verifie('🔴 la suppression d’une plage compte ses rendez-vous avant de demander',
       /const poses = rdvsSurLaPlage\(avenir \|\| \[\], c, \{ aujourdhui: jourBruxelles\(\) \}\)/.test(CONF)
       && /message: `Tes clients ne pourront plus réserver sur cette plage\.\$\{avertissement\}`/.test(CONF))

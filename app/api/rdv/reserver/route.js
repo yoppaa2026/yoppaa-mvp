@@ -47,6 +47,7 @@ import { chargerBonsValides } from '@/lib/bons-cadeaux-server'
 import { repartirBonsRdv } from '@/lib/bons-cadeaux'
 import { ventilerTunnelRdv } from '@/lib/tunnel-rdv-montants'
 import { creerReservationRdv, appliquerAvantagesRdv } from '@/lib/rdv-creation-server'
+import { confirmerApresReponse } from '@/lib/rdv-apres-reservation-server'
 import { estRefusDeRegle, refusAvantPaiement } from '@/lib/refus-reservation'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { creneauxDuJour } from '@/lib/ouverture'
@@ -535,6 +536,10 @@ export async function POST(request) {
       recompenseId: recompense?.id || null,
       bonsUtilises,
     })
+
+    // 🔴 L'EMAIL ET LE RAPPEL PARTENT DU SERVEUR (audit du 17/10, Audit 2 I13) :
+    // ils dépendaient du navigateur. Après la réponse, pour ne rien ralentir.
+    confirmerApresReponse(db, res.rdv.id)
 
     return NextResponse.json({
       ok: true,

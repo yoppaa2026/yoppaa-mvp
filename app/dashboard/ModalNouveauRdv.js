@@ -32,6 +32,7 @@ import {
   serieDeSeances, raisonSemaineEcartee, expliquerRefusCommercant, formatDateCourte,
 } from '@/lib/abonnements'
 import { fermetureQuiBloque } from '@/lib/fermetures-rdv'
+import { horsHoraireAdapte } from '@/lib/horaires-du-jour'
 import { toutesLesLignes } from '@/lib/toutes-les-lignes'
 
 const T = {
@@ -100,6 +101,13 @@ export default function ModalNouveauRdv({
   // route (`liensPraticiens`), faute d'accès à la base.
   praticiens = null,
   liensPraticiens = null,
+  // 🔴 LES FERMETURES ET HORAIRES EXCEPTIONNELS, DONNÉS PAR LA PAGE (17/10).
+  // `fermetures` : la liste de l'agenda déjà traduite (`fermeturesAgenda` :
+  // absences, cours annulés ET fermetures du commerce de la liste unique).
+  // `exceptions` : les horaires exceptionnels filtrés pour le geste « rdv ».
+  // Absents (Poste équipe), la fenêtre relit l'ancienne table comme avant.
+  fermetures = null,
+  exceptions = null,
 }) {
   // 🔴 LE TÉLÉPHONE EST LE PREMIER CANAL D'UN RESTAURANT, ET CETTE MODALE
   // COMPTAIT CHAQUE APPEL POUR UNE PERSONNE. Une table de six prise de vive
@@ -185,6 +193,10 @@ export default function ModalNouveauRdv({
   // séances en plein congé : rien ne les lisait ici. `null` = lecture en échec,
   // et l'aperçu le DIT au lieu de faire comme s'il n'y en avait aucune.
   const [fermeturesAgenda, setFermeturesAgenda] = useState([])
+  // Ce que la série juge (17/10) : la liste de la page quand elle la donne,
+  // sinon l'ancienne table relue ici.
+  const fermeturesSerie = Array.isArray(fermetures) ? fermetures : (fermeturesAgenda || [])
+  const exceptionsSerie = Array.isArray(exceptions) ? exceptions : []
   // Ce qui a été posé, et ce qui ne l'a pas été, quand une série est incomplète.
   // ⚠️ LA FENÊTRE RESTE OUVERTE pour le dire : le message partait juste avant sa
   // fermeture, et la commerçante ne le lisait jamais.
@@ -484,6 +496,9 @@ export default function ModalNouveauRdv({
         date: dateChoisie,
         seancesUtilisees: aboChoisi.consommees,
         datesDejaPrises: aboChoisi.datesPrises,
+        // Les congés de la formule (17/10) : la même règle qu'en ligne. Le
+        // patron garde « hors abonnement » s'il veut quand même la poser.
+        periodesExclues: aboChoisi.contrat.formule?.periodes_exclues || [],
       })
     : null
   const surAbonnement = !!(aboChoisi && verdictAbo?.ok)
@@ -506,7 +521,21 @@ export default function ModalNouveauRdv({
         // ⚠️ Moins un : la séance du jour consomme déjà une unité du solde.
         soldeRestant: aboChoisi.solde === null ? null : Math.max(0, aboChoisi.solde - 1),
         periodesExclues: aboChoisi.contrat.formule?.periodes_exclues || [],
-        estFermee: (d) => !!fermetureQuiBloque(fermeturesAgenda || [], { dateStr: d, praticienId: plageCeJour(d)?.praticien_id ?? null }),
+        // 🔴 LES FERMETURES DU 16/10 ÉCHAPPAIENT À LA SÉRIE (audit du 17/10,
+        // avant Centre Respire, trouvé par trois auditeurs). Depuis la liste
+        // unique, une fermeture du commerce ne vit plus dans `rdv_fermetures` :
+        // « +8 semaines » posait des séances sur Noël, un email pour chacune.
+        // La série lit maintenant la liste que la page donne, déjà traduite
+        // (`fermeturesAgenda`), juge AUSSI ce cours-là à cette heure-là (une
+        // séance annulée), et saute un jour d'horaires adaptés qui le coupe.
+        estFermee: (d) => !!fermetureQuiBloque(fermeturesSerie, {
+          dateStr: d, praticienId: plageCeJour(d)?.praticien_id ?? null,
+          prestationId: presta?.id ?? null, heure,
+        }) || horsHoraireAdapte({
+          exceptions: exceptionsSerie, dateStr: d,
+          debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMin,
+          parCouverts: estParCouverts(presta),
+        }),
       })
     : { dates: [], ecartees: [] }
   const datesRepetees = serie.dates
@@ -1218,6 +1247,7 @@ export default function ModalNouveauRdv({
                     date: dateChoisie,
                     seancesUtilisees: a.consommees,
                     datesDejaPrises: a.datesPrises,
+                    periodesExclues: a.contrat.formule?.periodes_exclues || [],
                   })
                   const nomComplet = `${a.contrat.client_prenom || ''} ${a.contrat.client_nom || ''}`.trim()
                   return (

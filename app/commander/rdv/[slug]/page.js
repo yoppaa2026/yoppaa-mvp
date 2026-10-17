@@ -2139,13 +2139,11 @@ export default function CommanderRdvSlug() {
             return
           }
 
-          // Le même chemin que le tunnel ordinaire ensuite : le rappel, l'écran,
-          // puis l'email. Un rendez-vous d'abonnement est un rendez-vous.
+          // ⚠️ LE RAPPEL ET L'EMAIL PARTENT DU SERVEUR (audit du 17/10, Audit 2
+          // I13) : `reserver-abonnement` s'en charge après sa réponse. Les
+          // demander ici les ferait dépendre d'un onglet resté ouvert, et
+          // enverrait l'email deux fois.
           const rdv = j.rdv || {}
-          fetch('/api/rdv/schedule-rappel', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rdv_id: rdv.id }),
-          }).catch(e => console.warn('[rdv abo] schedule-rappel KO', e?.message))
 
           setRdvCree({
             ...rdv,
@@ -2159,11 +2157,6 @@ export default function CommanderRdvSlug() {
           setEtape(4)
           setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
           promptPushOneSignal()
-
-          fetch('/api/emails/rdv-confirme', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rdv_id: rdv.id }),
-          }).catch(e => console.warn('[rdv abo] email KO', e?.message))
 
           // Le solde a bougé : on le relit, sinon la fiche continuerait
           // d'annoncer le nombre de séances d'avant la réservation.
@@ -2292,16 +2285,8 @@ export default function CommanderRdvSlug() {
             setEtape(4)
             setTimeout(() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 80)
             promptPushOneSignal()
-            if (j.rdv_id) {
-              fetch('/api/rdv/schedule-rappel', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rdv_id: j.rdv_id }),
-              }).catch(e => console.warn('[rdv] schedule-rappel KO', e?.message))
-              fetch('/api/emails/rdv-confirme', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rdv_id: j.rdv_id }),
-              }).catch(e => console.warn('[rdv] email KO', e?.message))
-            }
+            // ⚠️ LE RAPPEL ET L'EMAIL PARTENT DU SERVEUR (audit du 17/10) :
+            // `create-rdv-commande` s'en charge quand les bons couvrent tout.
             return
           }
 
@@ -2566,15 +2551,8 @@ export default function CommanderRdvSlug() {
       const rdvId = j.rdv?.id || null
       console.info('[rdv] réservation serveur OK', { id: rdvId, numero: j.rdv?.numero_rdv })
 
-      // Rappel push 1h avant le RDV. Fire-and-forget, non bloquant : le chemin
-      // avec acompte le programme via le webhook.
-      if (rdvId) {
-        fetch('/api/rdv/schedule-rappel', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rdv_id: rdvId }),
-        }).catch(e => console.warn('[rdv] schedule-rappel KO', e?.message))
-      }
+      // ⚠️ LE RAPPEL 1 H AVANT ET L'EMAIL PARTENT DU SERVEUR (audit du 17/10,
+      // Audit 2 I13) : `/api/rdv/reserver` s'en charge après sa réponse.
 
       // État final pour écran confirmation (étape 4). ⚠️ IL VIENT DU SERVEUR,
       // et c'est ce qui permet enfin d'y annoncer ce que le bon et la récompense
@@ -2586,15 +2564,6 @@ export default function CommanderRdvSlug() {
       // Invite aux push (rappel de RDV) au moment de plus forte intention.
       promptPushOneSignal()
       console.info('[rdv] success, etape=4')
-
-      // Envoi emails post-confirmation (non-bloquant, fire-and-forget)
-      if (rdvId) {
-        fetch('/api/emails/rdv-confirme', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rdv_id: rdvId }),
-        }).catch(e => console.warn('[rdv] emails fire-and-forget KO', e))
-      }
 
     } catch (e) {
       // Filet de sécurité : toute exception non gérée tombe ici

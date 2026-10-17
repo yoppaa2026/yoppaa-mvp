@@ -57,6 +57,7 @@ import { fichePubliee } from '@/lib/statut-commercant'
 import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { verdictForfait } from '@/lib/garde-forfait'
 import { jourLisible } from '@/lib/attente-rdv'
+import { confirmerApresReponse } from '@/lib/rdv-apres-reservation-server'
 
 const arrondiEuros = (n) => Math.round(Number(n || 0) * 100) / 100
 
@@ -723,6 +724,9 @@ export async function POST(request) {
       // unique (`sansEmails: true`) : les produits sont retirés le jour du
       // rendez-vous, c'est l'email du rendez-vous qui les annonce. Deux emails
       // pour un seul geste feraient croire à deux ventes.
+      // 🔴 L'EMAIL DU RENDEZ-VOUS ET LE RAPPEL PARTENT DU SERVEUR (audit du
+      // 17/10, Audit 2 I13) : ils dépendaient du navigateur.
+      confirmerApresReponse(supabase, idRdv)
       return NextResponse.json({
         ok: true,
         bon_total: true,

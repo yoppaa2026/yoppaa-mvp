@@ -235,7 +235,9 @@ export function BulleEnvies({ commercant, onOuvrir, onFermer }) {
           <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.6-4.4A8.4 8.4 0 0 1 3 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/>
         </svg>
         <span style={{ flex: 1, minWidth: 0, fontWeight: 800, fontSize: 13.5, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          Une envie pour {commercant.nom}&nbsp;?
+          {/* ✅ ALEX, 17/10 : le titre du bloc où elle mène. « Une envie
+              pour X ? » se lisait « tu as faim ? » dans une friterie. */}
+          Un service en plus {chezLeCommerce(commercant.nom)}&nbsp;?
         </span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><path d="M12 5v14M6 13l6 6 6-6"/></svg>
       </button>

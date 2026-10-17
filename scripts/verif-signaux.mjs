@@ -296,18 +296,32 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
   const friterie = { categorie: 'alimentaire', plan: 'exister', created_at: '2026-01-01T00:00:00Z' }
   const typesFriterie = enviesProposables(friterie, { peutCommander: false })
   verifier('une fiche Exister invite', ficheQuiInvite(friterie, typesFriterie, AUJ))
-  // 🔴 JAMAIS CHEZ UN PAYANT. Le bandeau « Envie de commander à l'avance ? »
-  // a été retiré pour toujours le 15/10 : chez le Bistrologue, qui paie et ne
-  // fait pas d'emporté, il poussait à réclamer ce qu'il refuse.
-  for (const plan of ['communiquer', 'vendre']) {
-    const c = { ...friterie, plan }
-    verifier(`une fiche ${plan} n'invite pas`,
-      !ficheQuiInvite(c, enviesProposables(c, { peutCommander: false }), AUJ))
-  }
+  // REPOINTÉE LE 17/10 : elle exigeait que Communiquer n'invite pas. Alex,
+  // après la mise en prod : Communiquer aussi (la commande et la livraison n'y
+  // sont pas, et la fidélité qu'il a déjà se décide sur un mot de client).
+  const communiquer = { ...friterie, plan: 'communiquer' }
+  verifier('une fiche Communiquer invite aussi',
+    ficheQuiInvite(communiquer, enviesProposables(communiquer, { peutCommander: false }), AUJ))
+  // 🔴 JAMAIS VENDRE. Le bandeau « Envie de commander à l'avance ? » a été
+  // retiré pour toujours le 15/10 : chez le Bistrologue, qui paie et ne fait
+  // pas d'emporté, il poussait à réclamer ce qu'il refuse.
+  const vendre = { ...friterie, plan: 'vendre' }
+  verifier('une fiche Vendre n\'invite pas',
+    !ficheQuiInvite(vendre, enviesProposables(vendre, { peutCommander: false }), AUJ))
   // ⚠️ LE FORFAIT EN VIGUEUR : un Exister en essai de Vendre goûte la commande.
   const enEssai = { ...friterie, essai_plan: 'vendre', created_at: '2026-10-10T00:00:00Z' }
   verifier('un Exister en essai n\'invite pas',
     !ficheQuiInvite(enEssai, typesFriterie, AUJ))
+  verifier('un Communiquer en essai de Vendre non plus',
+    !ficheQuiInvite({ ...enEssai, plan: 'communiquer' }, typesFriterie, AUJ))
+  // 🔴 LA PRÉCAUTION DU BISTROLOGUE (Alex, 17/10) : celui qui a COUPÉ la
+  // commande ne se la fait pas réclamer en tête de carte.
+  verifier('la ligne ne réclame pas la commande à qui l\'a coupée',
+    envieEnTeteDeCarte({ ...communiquer, commande_actif: false }, typesFriterie, AUJ) === null)
+  egal('mais une colonne absente ne vaut pas un refus',
+    envieEnTeteDeCarte({ ...communiquer, commande_actif: undefined }, typesFriterie, AUJ), 'commande')
+  egal('et chez un salon, le rendez-vous reste proposé',
+    envieEnTeteDeCarte({ categorie: 'vitrine', plan: 'communiquer', commande_actif: false, created_at: '2026-01-01T00:00:00Z' }, ['rdv', 'fidelite'], AUJ), 'rdv')
   verifier('rien à demander, rien à montrer', !ficheQuiInvite(friterie, [], AUJ))
   verifier('sans commerçant, rien', !ficheQuiInvite(null, typesFriterie, AUJ))
 
@@ -361,8 +375,17 @@ verifier('une envie vide ne passe pas', !envieConnue('') && !envieConnue(null))
   const blocCode = bloc.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ')
   // Le mot d'Alex, pas « D'autres idées ».
   verifier('le lien dit « D\'autres envies ? »', /D&rsquo;autres envies&nbsp;\?/.test(blocCode))
+  // ✅ Alex, 17/10 : la bulle reprend le titre du bloc où elle mène.
+  // « Une envie pour X ? » se lisait « tu as faim ? » dans une friterie.
+  verifier('la bulle dit « Un service en plus chez X ? »',
+    /Un service en plus \{chezLeCommerce\(commercant\.nom\)\}&nbsp;\?/.test(blocCode)
+    && !/Une envie pour/.test(blocCode))
   verifier('le bouton de la ligne envoie l\'envie', /onClick=\{\(\) => envoyer\(type\)\}[^>]*>\s*\{attend \? 'Envoi…' : 'Oui, dis-le-lui'\}/.test(blocCode))
-  verifier('la ligne ne double pas « chez »', /\{chezLeCommerce\(commercant\.nom\)\}/.test(blocCode))
+  // REPOINTÉE LE 17/10 : elle cherchait `chezLeCommerce` n'importe où, et la
+  // bulle s'en sert maintenant aussi. La garde restait verte si la ligne seule
+  // redisait « chez Chez Momo » (mutation manquée). Elle vise SA phrase.
+  verifier('la ligne ne double pas « chez »',
+    /\{PHRASE_EN_TETE\[type\]\} \{chezLeCommerce\(commercant\.nom\)\}\./.test(blocCode))
   verifier('le bloc prend l\'état de la fiche quand elle le donne',
     /const \{ envoyes, enCours, envoyer \} = etat \|\| local/.test(blocCode))
 }

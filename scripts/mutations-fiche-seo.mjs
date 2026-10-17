@@ -188,10 +188,19 @@ const MUTATIONS = [
     vers: '  const livraisonDispo = !!commercant?.livraison_actif' },
 
   // ─── LE SITEMAP, /commander, LE ROBOTS ──────────────────────────────────
+  { nom: '🔴 le plan annonce « modifiée à l’instant » (17/10)',
+    fichier: SITEMAP,
+    de: "    { url: `${BASE_URL}/commander`, ...(liste ? { lastModified: liste } : {}), changeFrequency: 'daily', priority: 0.9 },",
+    vers: "    { url: `${BASE_URL}/commander`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 }," },
+  { nom: '🔴 la date du plan : la plus ANCIENNE au lieu de la plus récente (17/10)',
+    fichier: 'lib/plan-du-site.js',
+    de: '  return temps.length ? new Date(Math.max(...temps)) : undefined',
+    vers: '  return temps.length ? new Date(Math.min(...temps)) : undefined' },
   { nom: '🔴 le sitemap annonce la boutique d’un salon (« le sitemap annonce la page retenue »)',
     fichier: SITEMAP,
-    de: '        url: adresseCanonique(c),',
-    vers: '        url: `${BASE_URL}/commander/${c.slug}`,' },
+    // ⚠️ ANCRE RECALÉE LE 17/10 : le plan du site a perdu un niveau de retrait.
+    de: '    url: adresseCanonique(c),',
+    vers: '    url: `${BASE_URL}/commander/${c.slug}`,' },
 
   { nom: '🔴 le sitemap ne lit plus la catégorie (« il lit la catégorie »)',
     fichier: SITEMAP,

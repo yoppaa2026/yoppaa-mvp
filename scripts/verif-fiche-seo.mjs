@@ -194,6 +194,14 @@ const SITE = 'https://www.yoppaa.app'
   verifier('🔴 le sitemap annonce la page retenue', /url: adresseCanonique\(c\)/.test(sitemap))
   verifier('🔴 et il lit la catégorie, sans quoi un salon serait annoncé par sa boutique',
     /\.select\('slug, categorie, created_at'\)/.test(sitemap))
+  // 🔴 DES DATES VRAIES, OU PAS DE DATE (17/10) : « modifiée à l'instant » à
+  // chaque lecture apprend à Google à ignorer le plan.
+  verifier('🔴 le plan n’annonce plus « modifiée à l’instant »', !/new Date\(\)/.test(sitemap) && !/lastModified: now/.test(sitemap))
+  verifier('🔴 /commander porte la date du commerce le plus récent',
+    /const liste = plusRecente\(publies\)/.test(sitemap) && /url: `\$\{BASE_URL\}\/commander`, \.\.\.\(liste \? \{ lastModified: liste \} : \{\}\)/.test(sitemap))
+  const { plusRecente } = await import('../lib/plan-du-site.js')
+  egal('la plus récente des dates', plusRecente([{ created_at: '2026-09-09T10:00:00Z' }, { created_at: '2026-10-16T08:00:00Z' }, { created_at: null }])?.toISOString(), '2026-10-16T08:00:00.000Z')
+  egal('🔴 aucune date : aucune date (jamais « maintenant »)', plusRecente([]), undefined)
   const landing = lireCode('app/page.tsx')
   // ⚠️ Le titre AFFICHÉ (phase dévoilée). Celui de la phase « mystère »
   // d'avant le 1er août dort dans le même fichier et ne sort plus.

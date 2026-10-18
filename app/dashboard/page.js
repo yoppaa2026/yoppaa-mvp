@@ -1211,6 +1211,13 @@ function CarteRdv({ rdv, onChangerStatut, onDemanderAction = null, onDeplacer = 
           </div>
         )}
 
+        {/* ✅ 18/10 : pris au tarif découverte (une première fois). */}
+        {rdv.tarif_decouverte === true && (
+          <p style={{ display: 'inline-block', fontSize: '0.7rem', fontWeight: 800, color: '#065F46', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 100, padding: '2px 9px', margin: '0 0 8px' }}>
+            Découverte · première fois
+          </p>
+        )}
+
         {/* Notes client si presentes */}
         {rdv.notes_client && (
           <div style={{ background: '#FFFBEB', borderRadius: 8, padding: '0.5rem 0.75rem', marginBottom: 8, border: '1px solid #FDE68A' }}>

@@ -120,8 +120,9 @@ const MUTATIONS = [
   { nom: '🔴 lieu_id quitte le select des plages : undefined partout, en silence',
     banc: 'verif:tunnel-rdv', fichier: CREATION,
     // ⚠️ ANCRE REPOINTÉE LE 04/10 : `pas_minutes` suit `lieu_id`.
-    de: "      .select('id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id, lieu_id, pas_minutes')",
-    vers: "      .select('id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id, pas_minutes')",
+    // ⚠️ REPOINTÉE LE 18/10 : la fréquence suit (`COLONNES_FREQUENCE`).
+    de: "      .select(`id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id, lieu_id, pas_minutes, ${COLONNES_FREQUENCE}`)",
+    vers: "      .select(`id, jour_semaine, date_specifique, heure_debut, heure_fin, pause_debut, pause_fin, actif, praticien_id, pas_minutes, ${COLONNES_FREQUENCE}`)",
     garde: 'le lieu de la plage validée l’emporte sur l’heure' },
 
   { nom: '🔴 la plage se cherche de nouveau parmi tous les jours',
@@ -463,8 +464,9 @@ const MUTATIONS = [
   // ─── QUI PEUT PRENDRE UNE FORMULE (trois réponses) ──────────────────────
   { nom: '🔴 plus proposee remet la formule en vente',
     banc: 'verif:abonnements', fichier: 'app/dashboard/ConfigDashboard.js',
-    de: "            const choisir = (v) => setForm({ ...form, actif: v !== 'retiree', vente_en_ligne: v === 'en_ligne' })",
-    vers: "            const choisir = (v) => setForm({ ...form, actif: v !== 'retiree', vente_en_ligne: v !== 'a_la_main' })",
+    // REPOINTÉE LE 18/10 : la ligne écrit aussi `affichee_fiche` (4e choix).
+    de: "            const choisir = (v) => setForm({ ...form, actif: v !== 'retiree', vente_en_ligne: v === 'en_ligne', affichee_fiche: v === 'affichee' })",
+    vers: "            const choisir = (v) => setForm({ ...form, actif: v !== 'retiree', vente_en_ligne: v !== 'a_la_main', affichee_fiche: v === 'affichee' })",
     garde: 'chaque réponse écrit les deux colonnes ensemble' },
 
   { nom: '🔴 la combinaison trompeuse s enregistre de nouveau',
@@ -603,8 +605,9 @@ const MUTATIONS = [
   // ─── LOT 3 · AUDIT 3 I8 : PAS DE VENTE SANS COMPTE QUI ENCAISSE ─────────
   { nom: '🔴 la fiche propose d acheter un abonnement que le serveur refusera',
     banc: 'verif:abonnements', fichier: 'app/commander/rdv/[slug]/page.js',
-    de: '              {etape === 1 && formulesAbo.length > 0 && commercant?.stripe_account_charges_enabled === true && (',
-    vers: '              {etape === 1 && formulesAbo.length > 0 && (',
+    // REPOINTÉE LE 18/10 : la condition est passée dans le bloc (`venteEnLigne`).
+    de: '                  venteEnLigne={commercant?.stripe_account_charges_enabled === true}/>',
+    vers: '                  venteEnLigne={true}/>',
     garde: 'la fiche ne propose l’achat que si le compte encaisse' },
 
   // ─── LOT 3 · AUDIT 2 C1 : UN PAIEMENT QUI NE DÉMARRE PAS ────────────────
@@ -739,8 +742,9 @@ const MUTATIONS = [
 
   { nom: '🔴 le pas de la plage quitte le select du serveur',
     banc: 'verif:slots', fichier: CREATION,
-    de: "pause_debut, pause_fin, actif, praticien_id, lieu_id, pas_minutes')",
-    vers: "pause_debut, pause_fin, actif, praticien_id, lieu_id')",
+    // REPOINTÉE LE 18/10 : la fréquence suit (`COLONNES_FREQUENCE`).
+    de: "pause_debut, pause_fin, actif, praticien_id, lieu_id, pas_minutes, ${COLONNES_FREQUENCE}`)",
+    vers: "pause_debut, pause_fin, actif, praticien_id, lieu_id, ${COLONNES_FREQUENCE}`)",
     garde: 'le serveur lit le pas de la plage' },
 
   // ─── LOT 3 · AUDIT 1 I15 : SUPPRIMER UNE PLAGE QUI PORTE DES RDV ────────
@@ -947,8 +951,11 @@ const MUTATIONS = [
 
   { nom: '🔴 le prenom tape par la cliente part en HTML',
     banc: 'verif:abonnements', fichier: 'lib/resend.js',
-    de: "    intro: `${yopper_prenom ? `${echapperHtml(yopper_prenom)}, ton` : 'Ton'} abonnement${formule",
-    vers: "    intro: `${yopper_prenom ? `${yopper_prenom}, ton` : 'Ton'} abonnement${formule",
+    // REPOINTÉE LE 18/10 : l'ancre était NON UNIQUE (l'email « nouvelle
+    // adresse » commence pareil) et la mutation cassait le mauvais email. On
+    // vise la ligne entière de la résiliation.
+    de: "    intro: `${yopper_prenom ? `${echapperHtml(yopper_prenom)}, ton` : 'Ton'} abonnement${formule ? ` « ${echapperHtml(formule)} »` : ''} chez <strong>${echapperHtml(commercant_nom)}</strong> vient d’être résilié par le commerce.`,",
+    vers: "    intro: `${yopper_prenom ? `${yopper_prenom}, ton` : 'Ton'} abonnement${formule ? ` « ${echapperHtml(formule)} »` : ''} chez <strong>${echapperHtml(commercant_nom)}</strong> vient d’être résilié par le commerce.`,",
     garde: 'ce qu’elle a tapé ne devient jamais du HTML' },
 
   { nom: '🔴 le tableau de bord resilie de nouveau lui-meme',

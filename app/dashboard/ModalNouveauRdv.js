@@ -536,6 +536,11 @@ export default function ModalNouveauRdv({
           debutMin: minutesDeLHeure(heure), finMin: minutesDeLHeure(heure) + dureeMin,
           parCouverts: estParCouverts(presta),
         }),
+        // ✅ 18/10 : LA FRÉQUENCE DU CRÉNEAU. Un cours « 1er dimanche du mois »
+        // n'a pas lieu les autres dimanches : la série les saute et le dit.
+        // ⚠️ SEULEMENT SI LA PREMIÈRE SÉANCE EST SUR UNE PLAGE : posée hors
+        // plage (son droit), la série reste celle d'avant.
+        aLieu: plageCeJour(dateChoisie) ? (d) => !!plageCeJour(d) : null,
       })
     : { dates: [], ecartees: [] }
   const datesRepetees = serie.dates

@@ -712,18 +712,21 @@ const MUTATIONS = [
 
   { nom: '🔴 le serveur va relire le prix d une table',
     fichier: 'lib/prix-prestation-server.js',
-    de: '  if (estParCouverts(prestation)) return { prix: null, remise: null, deals: [] }',
+    // REPOINTÉE LE 18/10 : la sortie porte `decouverte: false`.
+    de: '  if (estParCouverts(prestation)) return { prix: null, remise: null, deals: [], decouverte: false }',
     vers: '' },
 
   { nom: '🔴 la route d acompte oublie par_couverts',
     fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
-    de: "select('id, nom, prix, acompte_pourcent, duree_minutes, par_couverts')",
-    vers: "select('id, nom, prix, acompte_pourcent, duree_minutes')" },
+    // REPOINTÉE LE 18/10 : le select porte aussi `prix_decouverte`.
+    de: "select('id, nom, prix, prix_decouverte, acompte_pourcent, duree_minutes, par_couverts')",
+    vers: "select('id, nom, prix, prix_decouverte, acompte_pourcent, duree_minutes')" },
 
   { nom: '🔴 la route du tunnel unique oublie par_couverts',
     fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: ".select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, par_couverts')",
-    vers: ".select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id')" },
+    // REPOINTÉE LE 18/10 : le select porte aussi `prix_decouverte`.
+    de: ".select('id, nom, prix, prix_decouverte, acompte_pourcent, duree_minutes, commercant_id, par_couverts')",
+    vers: ".select('id, nom, prix, prix_decouverte, acompte_pourcent, duree_minutes, commercant_id')" },
 
   { nom: '🔴 une table reclame de nouveau « A payer »',
     fichier: 'lib/rdv-paiement.js',

@@ -108,7 +108,8 @@ export async function POST(request) {
       // ⚠️ `par_couverts` (10/09 au soir) : une table n'a pas de prix, et
       // `prixPrestationServeur` ne le sait que si la colonne arrive jusqu'à lui.
       // Sans elle, le prix resté en base sur une table partait en acompte.
-      supabase.from('rdv_prestations').select('id, nom, prix, acompte_pourcent, duree_minutes, par_couverts').eq('id', prestation_id).single(),
+      // ⚠️ `prix_decouverte` (18/10) : sans elle, pas de tarif découverte.
+      supabase.from('rdv_prestations').select('id, nom, prix, prix_decouverte, acompte_pourcent, duree_minutes, par_couverts').eq('id', prestation_id).single(),
     ])
 
     if (!commercant) return NextResponse.json({ ok: false, error: 'commerçant introuvable' }, { status: 404 })
@@ -172,7 +173,10 @@ export async function POST(request) {
     // prix, le bon cadeau paie ce prix, et l'acompte en prend son pourcentage.
     // Un acompte assis sur le prix plein d'une prestation remisée ferait avancer
     // au client plus que sa part.
-    const { prix: prixBase } = await prixPrestationServeur(supabase, prestation)
+    // ✅ 18/10 : ET LE TARIF DÉCOUVERTE, si ce client n'a jamais suivi ce cours.
+    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, undefined, {
+      client: { email: normaliserEmail(client_email), telephone: client_telephone },
+    })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
     if (!prixBase || acomptePct <= 0) {
       return NextResponse.json({ ok: false, error: 'cette prestation ne demande pas d\'acompte en ligne' }, { status: 400 })
@@ -364,6 +368,8 @@ export async function POST(request) {
             // affiché, et une remise ne réécrit pas un tarif. La remise voyage
             // à côté, et tous les calculs de solde la retranchent.
             prix_estime: String(prixBase),
+            // ✅ 18/10 : le tarif découverte voyage avec, pour le badge.
+            ...(decouverte ? { tarif_decouverte: '1' } : {}),
             acompte_montant: String(acompteMontant),
             // ⚠️ ET CE QUI ÉTAIT DÛ VOYAGE AVEC, sans quoi le webhook créerait un
             // rendez-vous incapable de dire ce que le bon garantissait.

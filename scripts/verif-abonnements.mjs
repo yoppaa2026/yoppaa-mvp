@@ -626,8 +626,10 @@ egal('il reste 180 jours', etatAchat.joursRestants, 180)
 // défaut qui a coûté les cours collectifs quelques heures plus tôt.
 const srcFiche = readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8')
 verifier('la fiche demande la colonne de mise en vente', /vente_en_ligne/.test(srcFiche))
+// REPOINTÉE LE 18/10 : la fiche charge aussi les formules AFFICHÉES (à prendre
+// chez le commerçant), et rien d'autre. « Seulement par toi » reste dehors.
 verifier('et ne charge que ce qui est réellement en vente',
-  /\.eq\('vente_en_ligne', true\)/.test(srcFiche))
+  /\.or\('vente_en_ligne\.eq\.true,affichee_fiche\.eq\.true'\)/.test(srcFiche))
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LE CHEMIN DE PAIEMENT — le seul endroit où un défaut se paie en euros
@@ -1385,8 +1387,9 @@ verifier('l’email dit qu’il est la preuve d’achat',
 // ═══════════════════════════════════════════════════════════════════════════
 const srcBlocAbo = sansCommentaires(readFileSync(new URL('../app/commander/rdv/[slug]/BlocAbonnements.js', import.meta.url), 'utf8'))
 // ⚠️ RÉORIENTÉE LE 04/10 (Abo-I7) : la signature reçoit aussi `sansCompte`.
+// REPOINTÉE LE 18/10 : la signature reçoit aussi `venteEnLigne`.
 verifier('le bloc d’achat reçoit l’identité du client',
-  /client = null, sansCompte = false \}\) \{/.test(srcBlocAbo))
+  /client = null, sansCompte = false, venteEnLigne = false \}\) \{/.test(srcBlocAbo))
 verifier('et il préremplit ce qu’on connaît déjà',
   /email: p\.email \|\| client\.email \|\| ''/.test(srcBlocAbo))
 // ⚠️ ON NE PIÉTINE PAS UNE SAISIE EN COURS. Garder ce que le client a commencé
@@ -2189,8 +2192,10 @@ egal('un nombre négatif non plus', semainesSuivantes('2026-09-07', { nombre: -3
   const FICHE = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
   verifier('🔴 la fiche lit le choix de la commerçante',
     /\.from\('abonnement_formules'\)\s*\.select\('[^']*\bprix_en_cours\b[^']*'\)/.test(FICHE))
+  // REPOINTÉE LE 18/10 : une formule affichée suit la même borne
+  // (`formuleAfficheeSurFiche` passe par `formuleVendableEnLigne`).
   verifier('🔴 et n’affiche plus une période finie',
-    /\.filter\(f => formuleVendableEnLigne\(f, \{ aujourdhui: auj \}\)\)/.test(FICHE))
+    /\.filter\(f => formuleVendableEnLigne\(f, \{ aujourdhui: auj \}\) \|\| formuleAfficheeSurFiche\(f, \{ aujourdhui: auj \}\)\)/.test(FICHE))
   const BLOC = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/BlocAbonnements.js', import.meta.url), 'utf8'))
   verifier('🔴 la vitrine de la fiche annonce l’offre du jour',
     (BLOC.match(/resumeFormulePublique\((f|choisie), \{ achatLe: jourBruxelles\(\) \}\)/g) || []).length === 2
@@ -2209,9 +2214,11 @@ egal('un nombre négatif non plus', semainesSuivantes('2026-09-07', { nombre: -3
   verifier('🔴 une seule question, trois réponses',
     /name="disponibilite_formule"/.test(DASH)
     && ['En vente sur ta fiche', 'Seulement par toi', 'Plus proposée'].every(t => DASH.includes(`'${t}'`)))
+  // REPOINTÉE LE 18/10 : quatre réponses, TROIS colonnes écrites ensemble
+  // (`affichee_fiche`, le 4e choix « Sur ta fiche, à prendre chez toi »).
   verifier('🔴 chaque réponse écrit les deux colonnes ensemble',
-    /const choisir = \(v\) => setForm\(\{ \.\.\.form, actif: v !== 'retiree', vente_en_ligne: v === 'en_ligne' \}\)/.test(DASH)
-    && /const dispo = !form\.actif \? 'retiree' : form\.vente_en_ligne \? 'en_ligne' : 'a_la_main'/.test(DASH))
+    /const choisir = \(v\) => setForm\(\{ \.\.\.form, actif: v !== 'retiree', vente_en_ligne: v === 'en_ligne', affichee_fiche: v === 'affichee' \}\)/.test(DASH)
+    && /const dispo = !form\.actif \? 'retiree' : form\.vente_en_ligne \? 'en_ligne' : form\.affichee_fiche \? 'affichee' : 'a_la_main'/.test(DASH))
   verifier('🔴 une formule plus proposée ne s’enregistre jamais « en vente »',
     /vente_en_ligne: !!form\.actif && !!form\.vente_en_ligne,/.test(DASH))
   verifier('⚠️ la carte de la liste dit le même état',
@@ -2471,8 +2478,12 @@ verifier('la sortie « hors abonnement » existe et est écrite',
 {
   const FICHE_V = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/page.js', import.meta.url), 'utf8'))
   const ROUTE_V = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-abonnement/route.js', import.meta.url), 'utf8'))
+  // REPOINTÉE LE 18/10 : la condition est passée DANS le bloc, qui montre aussi
+  // les formules affichées (sans achat, donc sans compte qui encaisse).
+  const BLOC_V = sansProse(readFileSync(new URL('../app/commander/rdv/[slug]/BlocAbonnements.js', import.meta.url), 'utf8'))
   verifier('🔴 la fiche ne propose l’achat que si le compte encaisse, comme le serveur l’exige',
-    /formulesAbo\.length > 0 && commercant\?\.stripe_account_charges_enabled === true && \(/.test(FICHE_V)
+    /venteEnLigne=\{commercant\?\.stripe_account_charges_enabled === true\}/.test(FICHE_V)
+    && /f\?\.vente_en_ligne === true \? venteEnLigne : f\?\.affichee_fiche === true/.test(BLOC_V)
     && /!commercant\.stripe_account_charges_enabled/.test(ROUTE_V))
 }
 

@@ -193,6 +193,8 @@ import { EQUIPE_DANS_LA_BARRE } from '@/lib/equipe'
 import { cheminImage, objetDepuisUrl } from '@/lib/stockage-images'
 import { propositionsLogo } from '@/lib/logo-provisoire'
 import { logoProvisoirePng } from '@/lib/logo-provisoire-image'
+import { COLONNES_FREQUENCE, champsFrequence, libelleFrequence } from '@/lib/frequence-creneau'
+import ChoixFrequence from './ChoixFrequence'
 // Icônes Lucide React (alignées sur la charte canonique Yoppaa).
 // Aucun emoji dans l'UI sauf exceptions ☀️ (soleil GMY) et 🟣 (signature identitaire).
 import {
@@ -11497,7 +11499,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
   // pas une jointure : c'est ce qui dit au formulaire de quoi il parle.
   // ⚠️ `attente_max` À 3 PAR DÉFAUT, comme la colonne en base : une prestation
   // créée ici a la même liste d'attente que si elle l'avait été ailleurs.
-  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [], quantite: '', jointure_de: '', jointure_tables: '', attente_max: '3' }
+  const initialForm = { nom: '', description: '', duree_minutes: '30', prix: '', prix_decouverte: '', acompte_pourcent: '0', actif: true, tva_taux: '', capacite: '1', par_couverts: false, couverts_min: '', couverts_max: '', duree_paliers: [], quantite: '', jointure_de: '', jointure_tables: '', attente_max: '3' }
   const [form, setForm] = useState(initialForm)
   // ✅ UNE TABLE N'A PAS DE PRIX (Alex, 10/09 au soir) : « la seule qu'on va
   // faire payer, c'est un montant forfaitaire par personne à partir d'un
@@ -11627,6 +11629,7 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       description: p.description || '',
       duree_minutes: String(p.duree_minutes || 30),
       prix: p.prix != null ? String(p.prix) : '',
+      prix_decouverte: p.prix_decouverte != null ? String(p.prix_decouverte) : '',
       acompte_pourcent: String(p.acompte_pourcent ?? 0),
       actif: p.actif !== false,
       tva_taux: p.tva_taux ?? '',
@@ -11677,6 +11680,14 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
     if (!formEstTable && String(form.prix ?? '').trim() === '') {
       return toast('Indique le prix de la prestation (0 si elle est gratuite) : il s’affiche tel quel sur ta fiche.', 'error')
     }
+    // ✅ 18/10 : LE TARIF DÉCOUVERTE est plus bas que le prix, et pas gratuit
+    // (le serveur l'ignore sinon : `tarifDecouverte`).
+    if (!formEstTable && String(form.prix_decouverte ?? '').trim() !== '') {
+      const d = Number(String(form.prix_decouverte).replace(',', '.'))
+      if (!(d > 0) || !(d < Number(form.prix))) {
+        return toast('Le tarif découverte doit être plus bas que le prix normal, et plus que 0 €.', 'error')
+      }
+    }
     // ─── LES TABLES JOINTES (lot 3) ──────────────────────────────────────────
     // ⚠️ LA RÈGLE DU MODULE, AVANT LA BASE : elle refuse aussi, mais en message
     // brut. Une jointure dont la table a disparu ne se corrige pas, elle se
@@ -11710,6 +11721,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
       // ✅ UNE TABLE N'A PAS DE PRIX : vide d'office, quoi que contienne le
       // formulaire, y compris la valeur d'avant la décision du 10/09.
       prix: formEstTable ? null : form.prix ? Number(form.prix) : null,
+      // ✅ 18/10 : vide = pas de tarif découverte.
+      prix_decouverte: formEstTable || String(form.prix_decouverte ?? '').trim() === ''
+        ? null : Number(String(form.prix_decouverte).replace(',', '.')),
       acompte_pourcent: formEstTable ? 0 : Math.max(0, Math.min(100, parseInt(form.acompte_pourcent, 10) || 0)),
       actif: !!form.actif,
       // Vide = pas renseigné : null, jamais 0, sinon la prestation passerait
@@ -12106,6 +12120,9 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                         « Prix sur demande », ni acompte en pourcentage sur sa
                         carte, même si un ancien réglage en garde un en base. */}
                     {p.par_couverts !== true && <span><strong style={{ color: T.main }}>{prixLabel}</strong></span>}
+                    {p.par_couverts !== true && p.prix_decouverte != null && (
+                      <span>Découverte <strong style={{ color: '#065F46' }}>{euros(p.prix_decouverte)}</strong></span>
+                    )}
                     {p.par_couverts !== true && p.acompte_pourcent > 0 && <span>Acompte <strong style={{ color: T.ink }}>{p.acompte_pourcent}%</strong>{!acompteEnLigneActif && <span style={{ color: '#B45309', fontWeight: 700 }}> · pas encore demandé</span>}</span>}
                     {/* 🔴 LA CARTE DISAIT LA CAPACITÉ DE SALLE, PAS LA TABLE. Une
                         table de quatre s'annonçait « jusqu'à 6 couverts », parce
@@ -12389,6 +12406,19 @@ function TabRdvPrestations({ commercantId, commercant, toast }) {
                   ? 'Ton client paie cet acompte en ligne au moment de réserver. Il le récupère s’il annule dans les délais.'
                   : 'Cet acompte n’est pas encore demandé : active « Acompte en ligne » dans l’onglet Paiements, avec ton compte Stripe actif. En attendant, ton client ne voit aucun acompte et paie tout sur place.'}
               </p>
+            )}
+            {/* ✅ 18/10 (Alex, tableau, demande d'Emily) : LE TARIF DÉCOUVERTE,
+                sur la prestation elle-même. Même séance, mêmes places : seul
+                le prix change, pour une première fois. */}
+            {!formEstTable && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: T.muted, marginBottom: 4 }}>Tarif découverte (€, optionnel)</label>
+                <Input type="number" min="0" step="0.5" value={form.prix_decouverte} placeholder="Vide : pas de tarif découverte"
+                  onChange={e => setForm({ ...form, prix_decouverte: e.target.value })}/>
+                <p style={{ fontSize: 11, color: T.muted, lineHeight: 1.5, margin: '4px 0 0' }}>
+                  Le prix de la toute première fois : un client qui n’a jamais réservé cette prestation paie ce tarif, une seule fois. Il est reconnu par son email ou son téléphone, et le rendez-vous porte la mention « Découverte » dans ton agenda.
+                </p>
+              </div>
             )}
 
             {/* ⚠️ COMBIEN DE PERSONNES SUR UN MÊME CRÉNEAU. Yoppaa ne
@@ -12749,6 +12779,9 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
     // commerçant le dise : un brouillon ou un tarif négocié pour une cliente
     // en particulier n'a rien à faire sur la fiche publique.
     vente_en_ligne: false,
+    // ✅ 18/10 : affichée sur la fiche, à prendre chez le commerçant. Faux par
+    // défaut, pour la même raison.
+    affichee_fiche: false,
     periodes_exclues: [],
     // Le prix d'une période déjà commencée : au prorata par défaut, comme en base.
     prix_en_cours: PRIX_EN_COURS_PRORATA,
@@ -13071,6 +13104,7 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
       seances_par_semaine: String(f.seances_par_semaine ?? 1),
       actif: f.actif !== false,
       vente_en_ligne: f.vente_en_ligne === true,
+      affichee_fiche: f.affichee_fiche === true,
       periodes_exclues: Array.isArray(f.periodes_exclues) ? f.periodes_exclues : [],
       prix_en_cours: f.prix_en_cours === PRIX_EN_COURS_FIXE ? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,
     })
@@ -13150,6 +13184,8 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
       // ⚠️ UNE FORMULE PLUS PROPOSÉE N'EST JAMAIS « EN VENTE » : les formules
       // enregistrées avant le 03/10 pouvaient porter les deux à la fois.
       vente_en_ligne: !!form.actif && !!form.vente_en_ligne,
+      // ✅ 18/10 : affichée, jamais en même temps qu'en vente (la base le refuse).
+      affichee_fiche: !!form.actif && !form.vente_en_ligne && !!form.affichee_fiche,
       // Un carnet n'est jamais « entamé » : il garde le défaut.
       prix_en_cours: form.type === 'periode' && form.prix_en_cours === PRIX_EN_COURS_FIXE ? PRIX_EN_COURS_FIXE : PRIX_EN_COURS_PRORATA,
     }
@@ -13371,8 +13407,11 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
               ⚠️ « Seulement par toi » reste le défaut d'une formule neuve :
               rien ne se publie tout seul, comme la colonne le veut en base. */}
           {(() => {
-            const dispo = !form.actif ? 'retiree' : form.vente_en_ligne ? 'en_ligne' : 'a_la_main'
-            const choisir = (v) => setForm({ ...form, actif: v !== 'retiree', vente_en_ligne: v === 'en_ligne' })
+            // ✅ 18/10 : un quatrième choix, « Sur ta fiche, à prendre chez
+            // toi » (Alex, tableau, demande d'Emily). « Seulement par toi »
+            // garde son sens : invisible, pour un tarif négocié.
+            const dispo = !form.actif ? 'retiree' : form.vente_en_ligne ? 'en_ligne' : form.affichee_fiche ? 'affichee' : 'a_la_main'
+            const choisir = (v) => setForm({ ...form, actif: v !== 'retiree', vente_en_ligne: v === 'en_ligne', affichee_fiche: v === 'affichee' })
             const option = (valeur, titre, texte) => (
               <label key={valeur} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 10, border: `1.5px solid ${dispo === valeur ? T.main : T.border}`, background: dispo === valeur ? '#fff' : 'transparent', cursor: 'pointer', marginTop: 6 }}>
                 <input type="radio" name="disponibilite_formule" checked={dispo === valeur} onChange={() => choisir(valeur)} style={{ marginTop: 2, flexShrink: 0 }}/>
@@ -13386,6 +13425,7 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
           <div style={{ marginBottom: 14, background: T.bg, borderRadius: 10, padding: '10px 12px', border: `1px solid ${T.border}` }}>
             <p style={{ fontSize: 12.5, fontWeight: 800, color: T.ink, margin: 0 }}>Qui peut prendre cette formule ?</p>
             {option('en_ligne', 'En vente sur ta fiche', <>Tes clients l&rsquo;achètent en ligne, en une fois, par Bancontact ou par carte, et <strong>l&rsquo;argent arrive directement sur ton compte</strong>. Ils réservent ensuite leurs séances eux-mêmes, dans la limite que tu as fixée par semaine. Tu peux aussi inscrire quelqu&rsquo;un toi-même.</>)}
+            {option('affichee', 'Sur ta fiche, à prendre chez toi', 'Tes clients la voient sur ta fiche, avec son prix, mais ne l’achètent pas en ligne : ils viennent te la demander, tu les inscris et tu encaisses comme tu veux.')}
             {option('a_la_main', 'Seulement par toi', 'Elle n’apparaît pas sur ta fiche : tu inscris tes clients toi-même et tu encaisses comme tu veux, pour un tarif négocié ou un paiement au comptoir.')}
             {option('retiree', 'Plus proposée', 'Plus personne ne peut la prendre. Tes abonnés en cours gardent leur abonnement jusqu’à la fin.')}
             {form.vente_en_ligne && !(Number(form.prix) > 0) && (
@@ -13470,6 +13510,8 @@ function TabRdvAbonnements({ commercantId, toast, modeHonorer = false }) {
                       {(() => {
                         const etiquette = f.actif === false
                           ? { texte: 'Plus proposée', encre: T.muted, fond: '#F3F4F6', bord: '#E5E7EB' }
+                          : !f.vente_en_ligne && f.affichee_fiche
+                          ? { texte: 'Sur ta fiche, chez toi', encre: '#1E40AF', fond: '#EFF6FF', bord: '#BFDBFE' }
                           : !f.vente_en_ligne
                           ? { texte: 'Seulement par toi', encre: T.deep, fond: '#F5F3FF', bord: '#DDD6FE' }
                           : offreAuJour(f, { aujourdhui: jourBruxelles() })?.vendable === false
@@ -14181,6 +14223,11 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     // ⚠️ LE MODE EST EXPLICITE : « toutes » par défaut, comme le comportement
     // historique. On ne déduit plus l'intention d'une liste vide.
     toutesPrestations: true,
+    // ✅ 18/10 : la fréquence (`lib/frequence-creneau.js`), chaque semaine par défaut.
+    frequence: 'hebdo',
+    date_depart: '',
+    rang_mois: null,
+    dates_choisies: [],
   }
   const [form, setForm] = useState(initialForm)
 
@@ -14321,6 +14368,10 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       actif: c.actif !== false,
       prestations: liaisons.filter(l => l.creneau_id === c.id).map(l => l.prestation_id),
       toutesPrestations: liaisons.filter(l => l.creneau_id === c.id).length === 0,
+      frequence: c.frequence || 'hebdo',
+      date_depart: c.date_depart ? String(c.date_depart).slice(0, 10) : '',
+      rang_mois: c.rang_mois ?? null,
+      dates_choisies: (c.dates_choisies || []).map(d => String(d).slice(0, 10)),
     })
     setEditId(c.id); setShowForm(true)
   }
@@ -14334,6 +14385,9 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
     if (!form.toutesPrestations && (form.prestations || []).length === 0) {
       return toast('Choisis au moins une prestation, ou reviens à « Toutes mes prestations ».', 'error')
     }
+    // ✅ 18/10 : la fréquence, nettoyée et complète, ou on le dit.
+    const freq = champsFrequence(form, form.jour_semaine)
+    if (!freq.ok) return toast(freq.erreur, 'error')
     // Jour fermé au Profil : le créneau ne servira à rien tant que les horaires
     // ne sont pas ouverts (le moteur de slots croise les deux). On prévient.
     if (joursFermesProfil.includes(form.jour_semaine) &&
@@ -14375,6 +14429,29 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
       pause_debut: form.avec_pause ? form.pause_debut + ':00' : null,
       pause_fin:   form.avec_pause ? form.pause_fin + ':00'   : null,
       actif: !!form.actif,
+      ...freq.champs,
+    }
+    // ⚠️ CHANGER LA FRÉQUENCE N'ANNULE RIEN (18/10), comme supprimer une plage
+    // (Audit 1 I15). Un cours passé de « chaque semaine » à « 1er dimanche du
+    // mois » laisse prévus les rendez-vous des autres dimanches : on les compte
+    // et on le dit AVANT. Une lecture ratée ne bloque rien.
+    const ancienne = editId ? creneaux.find(x => x.id === editId) : null
+    if (ancienne) {
+      const { data: avenir } = await toutesLesLignes(() => supabase.from('rdv_reservations')
+        .select('id, date_rdv, heure_debut, praticien_id, statut, deleted_at')
+        .eq('commercant_id', commercantId).eq('statut', 'confirme').is('deleted_at', null)
+        .gte('date_rdv', jourBruxelles())
+        .order('id', { ascending: true }))
+      const ceJour = jourBruxelles()
+      const gardes = new Set(rdvsSurLaPlage(avenir || [], { ...ancienne, ...payload }, { aujourdhui: ceJour }).map(r => r.id))
+      const perdus = rdvsSurLaPlage(avenir || [], ancienne, { aujourdhui: ceJour }).filter(r => !gardes.has(r.id))
+      if (perdus.length > 0 && !await confirme(confirmationSimple({
+        titre: perdus.length === 1 ? '1 rendez-vous ne tombe plus sur ce créneau' : `${perdus.length} rendez-vous ne tombent plus sur ce créneau`,
+        message: 'Ils restent prévus : annule-les ou déplace-les depuis l’agenda si ces séances n’ont plus lieu.',
+        details: perdus.slice(0, 8).map(r => `${dateCourteAbo(String(r.date_rdv).slice(0, 10))} à ${String(r.heure_debut).slice(0, 5)}`),
+        action: 'Enregistrer quand même',
+        ton: 'principal',
+      }))) return
     }
     setSaving(true)
     // ⚠️ ON RÉCUPÈRE L'IDENTIFIANT, MÊME À LA CRÉATION. Sans `.select().single()`
@@ -14548,6 +14625,14 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
         // raccourcie, plus aucune clé ne correspondait et la copie perdait ce
         // qu'elle accepte, EN SILENCE. C'est le défaut que la correction du
         // 07/09 croyait fermer, rouvert par l'ajustement écrit le même jour.
+        // ✅ 18/10 : LA FRÉQUENCE SUIT LA COPIE. Sans elle, un cours « 1er
+        // dimanche du mois » copié au samedi devenait un cours CHAQUE samedi.
+        // ⚠️ SAUF LES DATES CHOISIES : ce sont des dimanches précis, elles ne
+        // veulent rien dire un samedi. On le dit au lieu de deviner.
+        if ((c.frequence || 'hebdo') === 'dates') {
+          ignorees.push(`${j} ${String(c.heure_debut).slice(0,5)}–${String(c.heure_fin).slice(0,5)} : dates choisies, à cocher sur ce jour-là`)
+          continue
+        }
         const prestasSource = liaisons.filter(l => l.creneau_id === c.id).map(l => l.prestation_id)
         for (const m of morceaux) {
           const ligne = {
@@ -14561,6 +14646,10 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
             pause_debut: c.pause_debut,
             pause_fin: c.pause_fin,
             actif: c.actif,
+            frequence: c.frequence || 'hebdo',
+            date_depart: c.date_depart || null,
+            rang_mois: c.rang_mois ?? null,
+            dates_choisies: null,
           }
           lignes.push(ligne)
           if (prestasSource.length > 0) {
@@ -14924,6 +15013,9 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                     {c.pause_debut && c.pause_fin && (
                       <span>Pause {c.pause_debut.slice(0,5)} – {c.pause_fin.slice(0,5)}</span>
                     )}
+                    {(c.frequence || 'hebdo') !== 'hebdo' && (
+                      <span style={{ color: T.main, fontWeight: 700 }}>{libelleFrequence(c)}</span>
+                    )}
                     {/* L'emplacement de cette plage, quand le commerçant en
                         tient plusieurs. Sans lui, deux plages identiques à deux
                         adresses différentes seraient indiscernables. */}
@@ -15158,6 +15250,9 @@ function TabRdvCreneaux({ commercantId, commercant, toast }) {
                 </div>
               </>
             )}
+
+            {/* ✅ 18/10 : la fréquence (chaque semaine, une sur deux, mensuelle, dates). */}
+            <ChoixFrequence form={form} onChange={patch => setForm(f => ({ ...f, ...patch }))} T={T}/>
 
             {/* Pause optionnelle */}
             <div style={{ marginBottom: 10, padding: 10, background: T.bg, borderRadius: 10 }}>
@@ -15433,7 +15528,7 @@ function TabRdvFermetures({ commercantId, commercant, toast }) {
         .order('heure_debut', { ascending: true })
         .order('id', { ascending: true })),
       supabase.from('rdv_creneaux')
-        .select('praticien_id, jour_semaine, date_specifique, heure_debut, heure_fin, actif, deleted_at')
+        .select(`praticien_id, jour_semaine, date_specifique, heure_debut, heure_fin, actif, deleted_at, ${COLONNES_FREQUENCE}`)
         .eq('commercant_id', commercantId)
         .is('deleted_at', null),
     ]).then(([{ data }, { data: plages }]) => {

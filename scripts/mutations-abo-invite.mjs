@@ -94,8 +94,9 @@ const MUTATIONS = [
 
   { nom: '⚠️ le bloc d’achat ne prévient plus l’invité',
     banc: BANC, fichier: FICHE,
-    de: 'client={client} sansCompte={sessionProuvee === false}/>',
-    vers: 'client={client} sansCompte={false}/>',
+    // REPOINTÉE LE 18/10 : la balise continue sur la ligne suivante (`venteEnLigne`).
+    de: 'client={client} sansCompte={sessionProuvee === false}',
+    vers: 'client={client} sansCompte={false}',
     garde: 'le bloc d’achat sait si la personne est connectée' },
 ]
 

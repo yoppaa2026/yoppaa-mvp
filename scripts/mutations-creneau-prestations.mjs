@@ -102,8 +102,9 @@ const MUTATIONS = [
     // ⚠️ REPOINTÉE LE 03/10 : le select porte aussi `lieu_id` (le lieu de la
     // plage validée). La mutation retire toujours `praticien_id`, et lui seul.
     // ⚠️ REPOINTÉE LE 04/10 : `pas_minutes` suit (séances d'un cours bout à bout).
-    de: ", actif, praticien_id, lieu_id, pas_minutes')",
-    vers: ", actif, lieu_id, pas_minutes')" },
+    // ⚠️ REPOINTÉE LE 18/10 : la fréquence suit (`COLONNES_FREQUENCE`).
+    de: ", actif, praticien_id, lieu_id, pas_minutes, ${COLONNES_FREQUENCE}`)",
+    vers: ", actif, lieu_id, pas_minutes, ${COLONNES_FREQUENCE}`)" },
 
   // ⚠️ ET LA REGLE DOIT S APPELER PAREIL DES DEUX COTES.
   { nom: '🔴 la garde du serveur cesse de passer estCours',

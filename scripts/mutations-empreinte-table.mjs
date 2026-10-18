@@ -464,8 +464,9 @@ const MUTATIONS = [
 
   { nom: '🔴 la route gratuite recopie sa liste de colonnes a la main',
     fichier: RESERVER,
-    de: '        .select(`id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, duree_paliers, ${COLONNES_COUVERTS}`)',
-    vers: "        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max, duree_paliers')" },
+    // REPOINTÉE LE 18/10 : le select porte aussi `prix_decouverte`.
+    de: '        .select(`id, nom, prix, prix_decouverte, acompte_pourcent, duree_minutes, commercant_id, duree_paliers, ${COLONNES_COUVERTS}`)',
+    vers: "        .select('id, nom, prix, prix_decouverte, acompte_pourcent, duree_minutes, commercant_id, par_couverts, couverts_min, couverts_max, duree_paliers')" },
 
   // ══ 🔴 « PLUS DE CRÉNEAUX AUJOURD'HUI » SUR LE BISTROLOGUE (15/10) ══
   { nom: '🔴 la pastille de retrait revient chez qui a decoche la commande',

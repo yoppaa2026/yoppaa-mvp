@@ -135,7 +135,8 @@ export async function POST(request) {
       supabase.from('rdv_prestations')
         // ⚠️ `par_couverts` (10/09 au soir) : une table n'a pas de prix, et
         // `prixPrestationServeur` ne le sait que si la colonne arrive jusqu'à lui.
-        .select('id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, par_couverts')
+        // ⚠️ `prix_decouverte` (18/10) : sans elle, pas de tarif découverte.
+        .select('id, nom, prix, prix_decouverte, acompte_pourcent, duree_minutes, commercant_id, par_couverts')
         .eq('id', prestation_id).single(),
     ])
 
@@ -218,7 +219,10 @@ export async function POST(request) {
     // prix, le bon cadeau paie ce prix, et l'acompte en prend son pourcentage.
     // Un acompte assis sur le prix plein d'une prestation remisée ferait avancer
     // au client plus que sa part.
-    const { prix: prixBase } = await prixPrestationServeur(supabase, prestation)
+    // ✅ 18/10 : ET LE TARIF DÉCOUVERTE, si ce client n'a jamais suivi ce cours.
+    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, undefined, {
+      client: { email: normaliserEmail(client_email), telephone: client_telephone },
+    })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
 
     // ─── RÉCOMPENSE DE FIDÉLITÉ ────────────────────────────────────────────
@@ -623,6 +627,7 @@ export async function POST(request) {
           heure_fin: String(heure_fin).slice(0, 5),
           duree_minutes: Number(duree_minutes || prestation.duree_minutes) || null,
           prix_estime: prixBase,
+          tarif_decouverte: decouverte === true,
           // Aucun acompte n'a été encaissé : il n'y avait rien à encaisser.
           acompte_montant: null,
           // ⚠️ MAIS QUELQUE CHOSE ÉTAIT DÛ, et c'est le bon qui l'a couvert. Sans
@@ -830,6 +835,8 @@ export async function POST(request) {
             heure_fin: String(heure_fin).slice(0, 5),
             duree_minutes: String(duree_minutes || prestation.duree_minutes),
             prix_estime: String(prixBase ?? ''),
+            // ✅ 18/10 : le tarif découverte voyage avec, pour le badge.
+            ...(decouverte ? { tarif_decouverte: '1' } : {}),
             acompte_montant: String(acompteMontant),
             // ⚠️ ET CE QUI ÉTAIT DÛ VOYAGE AVEC. Le webhook crée le rendez-vous
             // depuis ces métadonnées : absent ici, l'acompte dû serait perdu

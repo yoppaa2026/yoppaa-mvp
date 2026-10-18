@@ -15,6 +15,7 @@ import {
   horizonRdv, HORIZON_RDV_DEFAUT, HORIZONS_RDV, ajusterPlagePourJour, plageQuiAccueille,
 } from '../lib/rdv-slots.js'
 import { horairesDepuisLieux } from '../lib/lieux-activite.js'
+import { COLONNES_FREQUENCE } from '../lib/frequence-creneau.js'
 import { phraseCloture, heureCloture as heureClotureLib, libelleDuree, CLOTURES_PROPOSEES } from '../lib/creneaux.js'
 import { peutActiverRdv, messageActivationRdv, etatActivationRdv } from '../lib/activation-rdv.js'
 import { nomClient, quandRdv, questionRdv, confirmationRdv, statutDepuisChoix } from '../lib/confirmation-rdv.js'
@@ -3594,12 +3595,18 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
   {
     const srcServeur = sansCommentaires(
       readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))
-    const bloc = (srcServeur.match(/from\('rdv_creneaux'\)[\s\S]{0,400}?\.select\('([^']+)'\)/) || [])[1] || ''
+    // REPOINTÉE LE 18/10 : le select est devenu un gabarit (`${COLONNES_FREQUENCE}`).
+    // On lit les deux formes, et on déroule la constante avec SA valeur réelle,
+    // importée du module : jamais une copie qui pourrait diverger.
+    const bloc = ((srcServeur.match(/from\('rdv_creneaux'\)[\s\S]{0,700}?\.select\(['`]([^'`]+)['`]\)/) || [])[1] || '')
+      .replace('${COLONNES_FREQUENCE}', COLONNES_FREQUENCE)
     const demandees = bloc.split(',').map(s => s.trim()).filter(Boolean)
     // Les colonnes que `creneauxDuJour`, `creneauAccepte` et `tranchesReservees`
     // lisent réellement. Toute nouvelle lecture doit venir s'ajouter ici.
+    // ✅ 18/10 : ET LA FRÉQUENCE, que `creneauxDuJour` lit désormais.
     const LUES = ['id', 'jour_semaine', 'date_specifique', 'heure_debut', 'heure_fin',
-      'pause_debut', 'pause_fin', 'actif', 'praticien_id']
+      'pause_debut', 'pause_fin', 'actif', 'praticien_id',
+      'frequence', 'date_depart', 'rang_mois', 'dates_choisies']
     const manquantes = LUES.filter(col => !demandees.includes(col))
     egal('🔴 le serveur charge CHAQUE colonne que la règle des créneaux lit', manquantes, [])
 
@@ -4011,8 +4018,9 @@ egal('une fenêtre d’un seul jour garde son nom de jour',
       /reponse\.agenda\.liaisons = liens\.error \? null : \(liens\.data \|\| \[\]\)/.test(POSTE)
       && (POSTE_ECRAN.match(/liaisons=\{etat\.agenda\.liaisons \?\? null\}/g) || []).length === 2)
   }
+  // REPOINTÉE LE 18/10 : la liste continue après le pas (la fréquence).
   verifier('🔴 le serveur lit le pas de la plage (sinon il retombe sur 15)',
-    /lieu_id, pas_minutes'\)/.test(sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))))
+    /lieu_id, pas_minutes, \$\{COLONNES_FREQUENCE\}`\)/.test(sansProse(readFileSync(new URL('../lib/rdv-creation-server.js', import.meta.url), 'utf8'))))
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

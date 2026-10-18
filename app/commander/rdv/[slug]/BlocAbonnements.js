@@ -36,7 +36,11 @@ const T = {
 // son propriétaire : avec un autre, l'abonnement existe, le commerçant le voit,
 // et l'acheteur ne le retrouvera jamais dans son espace. Alex l'a vécu, et le
 // commentaire posé sous ce champ disait déjà que cet email était la clé.
-export default function BlocAbonnements({ commercant, formules = [], prestations = [], client = null, sansCompte = false }) {
+export default function BlocAbonnements({ commercant, formules: toutes = [], prestations = [], client = null, sansCompte = false, venteEnLigne = false }) {
+  // 🔴 PAS DE VENTE EN LIGNE SANS COMPTE QUI ENCAISSE (Audit 3 I8, 03/10) ;
+  // ✅ une formule AFFICHÉE (18/10) se montre toujours : elle se prend au
+  // comptoir, sans paiement en ligne.
+  const formules = toutes.filter(f => f?.vente_en_ligne === true ? venteEnLigne : f?.affichee_fiche === true)
   const [choisie, setChoisie] = useState(null)
   const [form, setForm] = useState({ prenom: '', nom: '', email: '', telephone: '' })
   // Zéro friction : ce qu'on connaît déjà, on ne le redemande pas. Et ce qu'on
@@ -178,6 +182,13 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                 {r.reservation}
               </p>
 
+              {/* ✅ 18/10 : AFFICHÉE, À PRENDRE CHEZ LE COMMERÇANT. Pas de
+                  bouton : on dit où et comment la prendre. */}
+              {f.vente_en_ligne !== true ? (
+                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: T.deep, background: '#F5F3FF', border: `1px solid ${T.pale}`, borderRadius: 10, padding: '0.6rem 0.8rem', margin: '10px 0 0', lineHeight: 1.5, textAlign: 'center' }}>
+                  À prendre {chezLeCommerce(commercant?.nom)}, sur place ou par téléphone.
+                </p>
+              ) : (
               <button onClick={() => { setChoisie(f); setErreur(null) }}
                 style={{
                   width: '100%', marginTop: 10, padding: '0.65rem', borderRadius: 100, border: 'none',
@@ -187,6 +198,7 @@ export default function BlocAbonnements({ commercant, formules = [], prestations
                 }}>
                 Prendre cet abonnement
               </button>
+              )}
             </div>
           )
         })}

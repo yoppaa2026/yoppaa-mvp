@@ -52,6 +52,7 @@ import { estRefusDeRegle, refusAvantPaiement } from '@/lib/refus-reservation'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { creneauxDuJour } from '@/lib/ouverture'
 import { jourSemaineDe } from '@/lib/creneaux'
+import { creneauTombeLe, COLONNES_FREQUENCE } from '@/lib/frequence-creneau'
 import { COLONNES_EXCEPTIONS, exceptionDuJour, exceptionsPour } from '@/lib/horaires-du-jour'
 import { creneauDejaCommence } from '@/lib/timezone'
 import { timeToMinutes, minutesToTime, finApresMinuit } from '@/lib/rdv-slots'
@@ -139,7 +140,9 @@ export async function POST(request) {
         // `null` sur toute table, et la garde de l'empreinte juste en dessous
         // était DÉSARMÉE : une table de six se réservait sans qu'aucune carte
         // soit demandée. La règle déclare maintenant ses colonnes elle-même.
-        .select(`id, nom, prix, acompte_pourcent, duree_minutes, commercant_id, duree_paliers, ${COLONNES_COUVERTS}`)
+        // ⚠️ `prix_decouverte` (18/10) : absente, le tarif découverte ne
+        // s'appliquerait jamais (`tarifDecouverte`).
+        .select(`id, nom, prix, prix_decouverte, acompte_pourcent, duree_minutes, commercant_id, duree_paliers, ${COLONNES_COUVERTS}`)
         .eq('id', prestation_id).maybeSingle(),
     ])
 
@@ -275,13 +278,15 @@ export async function POST(request) {
     // rendez-vous chez sa collègue.
     const { data: creneauxJour } = await db
       .from('rdv_creneaux')
-      .select('praticien_id, jour_semaine, date_specifique, pause_debut, pause_fin, actif, deleted_at')
+      // ⚠️ `COLONNES_FREQUENCE` (18/10) : sans elles, la pause d'un créneau
+      // mensuel s'appliquerait aussi aux autres semaines.
+      .select(`praticien_id, jour_semaine, date_specifique, pause_debut, pause_fin, actif, deleted_at, ${COLONNES_FREQUENCE}`)
       .eq('commercant_id', commercant.id)
       .eq('actif', true)
       .is('deleted_at', null)
     const enPause = (creneauxJour || []).some(c => {
       if (!c.pause_debut || !c.pause_fin) return false
-      const bonJour = c.date_specifique === date_rdv || (!c.date_specifique && c.jour_semaine === jourSem)
+      const bonJour = creneauTombeLe(c, date_rdv, jourSem)
       if (!bonJour) return false
       if (c.praticien_id && praticien_id && String(c.praticien_id) !== String(praticien_id)) return false
       // Bornes exclusives des deux côtés : une pause qui finit à 13h00 laisse le
@@ -344,7 +349,10 @@ export async function POST(request) {
     // prix, le bon cadeau paie ce prix, et l'acompte en prend son pourcentage.
     // Un acompte assis sur le prix plein d'une prestation remisée ferait avancer
     // au client plus que sa part.
-    const { prix: prixBase } = await prixPrestationServeur(db, prestation)
+    // ✅ 18/10 : ET LE TARIF DÉCOUVERTE, si ce client n'a jamais suivi ce cours.
+    const { prix: prixBase, decouverte } = await prixPrestationServeur(db, prestation, undefined, {
+      client: { email, telephone: client_telephone },
+    })
     const acomptePct = prestation.acompte_pourcent || commercant.rdv_acompte_global || 0
     const acompteEnLigne = !!(commercant.rdv_acompte_en_ligne_actif && commercant.stripe_account_charges_enabled)
     const remiseRecompenseEUR = (recompense && prixBase != null)
@@ -427,6 +435,8 @@ export async function POST(request) {
         // ⚠️ LE TARIF RESTE LE BRUT, et la remise voyage à côté : une remise ne
         // réécrit pas un tarif, et tous les calculs de solde la retranchent.
         prix_estime: prixBase,
+        // ✅ 18/10 : pris au tarif découverte (badge dans l'agenda).
+        tarif_decouverte: decouverte === true,
         // ⚠️ `null` ET NON `0` quand il n'y a pas d'acompte : l'écran de
         // confirmation teste la présence de ce champ, et « 0,00 € payé en
         // ligne » se lit comme une erreur de caisse.

@@ -623,18 +623,20 @@ const MUTATIONS = [
   // une remise affichee mais non debitee SURFACTURE le client.
   { nom: '🔴 reserver repart du prix PLEIN de la prestation',
     fichier: 'app/api/rdv/reserver/route.js',
-    de: '    const { prix: prixBase } = await prixPrestationServeur(db, prestation)',
-    vers: '    const prixBase = prestation.prix != null ? Number(prestation.prix) : null' },
+    // REPOINTÉES LE 18/10 (les trois) : l'appel rend aussi `decouverte` et
+    // passe le client sur les lignes suivantes, que le mutant garde lisibles.
+    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(db, prestation, undefined, {',
+    vers: '    const decouverte = false, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
 
   { nom: '🔴 l acompte est calcule sur le prix PLEIN',
     fichier: 'app/api/stripe/checkout/create-rdv-acompte/route.js',
-    de: '    const { prix: prixBase } = await prixPrestationServeur(supabase, prestation)',
-    vers: '    const prixBase = prestation.prix != null ? Number(prestation.prix) : null' },
+    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, undefined, {',
+    vers: '    const decouverte = false, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
 
   { nom: '🔴 le tunnel complet repart du prix PLEIN',
     fichier: 'app/api/stripe/checkout/create-rdv-commande/route.js',
-    de: '    const { prix: prixBase } = await prixPrestationServeur(supabase, prestation)',
-    vers: '    const prixBase = prestation.prix != null ? Number(prestation.prix) : null' },
+    de: '    const { prix: prixBase, decouverte } = await prixPrestationServeur(supabase, prestation, undefined, {',
+    vers: '    const decouverte = false, prixBase = prestation.prix != null ? Number(prestation.prix) : null; void ({' },
 
   // 🔴 UNE LECTURE EN ECHEC NE DOIT RIEN BRADER : mieux vaut ne pas appliquer
   // une remise que la deviner.

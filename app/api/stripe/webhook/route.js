@@ -276,6 +276,8 @@ async function handlePaymentIntentSucceeded(paymentIntent, supabase, eventAccoun
       // la salle : ce qui arrive des métadonnées n'autorise rien.
       ...(Number(meta.couverts) ? { couverts: Number(meta.couverts) } : {}),
       prix_estime: Number(meta.prix_estime) || null,
+      // ✅ 18/10 : pris au tarif découverte (décidé par la route, avant Stripe).
+      tarif_decouverte: meta.tarif_decouverte === '1',
       // ⚠️ LA REMISE EST FIGÉE SUR LE RENDEZ-VOUS, comme sur une commande.
       // `prix_estime` garde le tarif de la prestation ; c'est `fidelite_remise`
       // qui dit ce que le commerçant a offert, et tous les calculs de solde et

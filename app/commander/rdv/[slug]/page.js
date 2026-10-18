@@ -83,7 +83,7 @@ import PillStatutOuverture from '@/app/components/PillStatutOuverture'
 import BlocAbonnements from './BlocAbonnements'
 import ConfirmationAbonnement from './ConfirmationAbonnement'
 import { bornesChoix } from '@/lib/lignes-commande'
-import { formuleVendableEnLigne, messageRetourAbonnement, cleAchatAbonnement, contratQuiVientDEtreAchete,
+import { formuleVendableEnLigne, formuleAfficheeSurFiche, messageRetourAbonnement, cleAchatAbonnement, contratQuiVientDEtreAchete,
   abonnementsPourPrestation, expliquerRefusSeance, messageRefusAbonnement, libellePrixSeance,
   trierAbonnementsPourSeance, libelleChoixAbonnement } from '@/lib/abonnements'
 import { estItinerant, lieuAAfficher } from '@/lib/lieux-activite'
@@ -143,7 +143,19 @@ function formatPrix(prestation, deals = []) {
   return null
 }
 
+// ✅ 18/10 : le tarif découverte annoncé sur la fiche, s'il fait mieux que le
+// prix du jour (deal compris). Même règle que `tarifDecouverte` côté serveur,
+// qui seul décide si CE client y a droit (une première fois à ce cours).
+function tarifDecouverteAffiche(prestation, deals = []) {
+  if (estParCouverts(prestation) || prestation?.prix_decouverte == null) return null
+  const decouverte = Number(prestation.prix_decouverte)
+  const prix = prixEffectifPrestation(prestation, deals)
+  if (!(decouverte > 0) || prix == null || !(decouverte < prix)) return null
+  return decouverte
+}
+
 import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit, praticiensQuiAssurent } from '@/lib/rdv-slots'
+import { creneauxDuJour } from '@/lib/deplacement-rdv'
 import { chezLeCommerce } from '@/lib/nom-commerce'
 // La mention d'un produit en vitrine, au mot du métier (30/09).
 import { mentionVitrine } from '@/lib/stock-article'
@@ -1479,9 +1491,11 @@ export default function CommanderRdvSlug() {
       // quelque chose à vendre.
       supabase
         .from('abonnement_formules')
-        .select('id, commercant_id, prestation_id, libelle, type, date_debut, date_fin, seances_carnet, validite_jours, periodes_exclues, prix, prix_en_cours, seances_par_semaine, actif, vente_en_ligne, deleted_at, ordre')
+        // ✅ 18/10 : ET LES FORMULES AFFICHÉES, à prendre chez le commerçant
+        // (`affichee_fiche`, sans bouton d'achat). La base ne rend rien d'autre.
+        .select('id, commercant_id, prestation_id, libelle, type, date_debut, date_fin, seances_carnet, validite_jours, periodes_exclues, prix, prix_en_cours, seances_par_semaine, actif, vente_en_ligne, affichee_fiche, deleted_at, ordre')
         .eq('commercant_id', c.id)
-        .eq('vente_en_ligne', true)
+        .or('vente_en_ligne.eq.true,affichee_fiche.eq.true')
         .eq('actif', true)
         .is('deleted_at', null)
         .order('ordre', { ascending: true })
@@ -1491,7 +1505,7 @@ export default function CommanderRdvSlug() {
           // 🔴 AU JOUR DE BRUXELLES (03/10) : une période finie ne s'affiche plus, et
           // une période entamée s'annonce pour ce qu'il en reste.
           const auj = jourBruxelles()
-          setFormulesAbo((data || []).filter(f => formuleVendableEnLigne(f, { aujourdhui: auj })))
+          setFormulesAbo((data || []).filter(f => formuleVendableEnLigne(f, { aujourdhui: auj }) || formuleAfficheeSurFiche(f, { aujourdhui: auj })))
         })
       setCreneauxConfig(cren || [])
 
@@ -1985,10 +1999,8 @@ export default function CommanderRdvSlug() {
       //
       // On réutilise exactement la même liste que le générateur : un créneau
       // du praticien choisi, ou un créneau commun à tout le salon.
-      const creneauxJourCheck = (creneauxFiltres || []).filter(c =>
-        c.actif !== false
-        && (c.date_specifique === dateStr || (!c.date_specifique && c.jour_semaine === jourSem))
-      )
+      // ✅ 18/10 : la règle commune, fréquence comprise.
+      const creneauxJourCheck = creneauxDuJour(creneauxFiltres, { dateStr, jour: jourSem })
       const pauseConflict = creneauxJourCheck.some(c => {
         if (!c.pause_debut || !c.pause_fin) return false
         const pStart = timeToMinutes(c.pause_debut), pEnd = timeToMinutes(c.pause_fin)
@@ -3296,6 +3308,15 @@ export default function CommanderRdvSlug() {
                                 {p.description}
                               </p>
                             )}
+                            {/* ✅ 18/10 : LE TARIF DÉCOUVERTE SE DIT AVANT. Le
+                                serveur l'applique seul à une première fois ; sans
+                                cette ligne, la cliente paierait moins que la fiche
+                                annonce sans savoir pourquoi. */}
+                            {tarifDecouverteAffiche(p, deals) != null && (
+                              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#065F46', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '5px 9px', margin: '0 0 8px', display: 'inline-block' }}>
+                                Première fois : {euros(tarifDecouverteAffiche(p, deals))}
+                              </p>
+                            )}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6 }}>
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ fontSize: '1.05rem', fontWeight: 900, color: T.main, letterSpacing: '-0.3px' }}>{formatPrix(p, deals)}</span>
@@ -3382,8 +3403,13 @@ export default function CommanderRdvSlug() {
                   après le clic : la bascule de Stripe en réel a remis à zéro
                   les comptes connectés, et un commerce peut vendre au comptoir
                   sans encaisser en ligne. Même règle que le serveur. */}
-              {etape === 1 && formulesAbo.length > 0 && commercant?.stripe_account_charges_enabled === true && (
-                <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations} client={client} sansCompte={sessionProuvee === false}/>
+              {/* ✅ 18/10 : UNE FORMULE AFFICHÉE NE DEMANDE AUCUN COMPTE QUI
+                  ENCAISSE (rien ne se paie en ligne). Le tri se fait dans le
+                  bloc : les formules en vente seulement si Stripe encaisse,
+                  les formules affichées toujours. */}
+              {etape === 1 && formulesAbo.length > 0 && (
+                <BlocAbonnements commercant={commercant} formules={formulesAbo} prestations={prestations} client={client} sansCompte={sessionProuvee === false}
+                  venteEnLigne={commercant?.stripe_account_charges_enabled === true}/>
               )}
 
               {/* ✅ PAS DE PRODUITS SUR UNE RÉSERVATION DE TABLE (Alex, 10/09) :

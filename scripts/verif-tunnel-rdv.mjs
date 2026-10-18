@@ -2551,8 +2551,9 @@ for (const chemin of [
   ]
   for (const r of ROUTES) {
     const src = lireCode(r)
+    // REPOINTÉE LE 18/10 : l'appel rend aussi `decouverte` (tarif découverte).
     verifie(`🔴 ${r.split('/').slice(-2)[0]} part du prix REMISÉ`,
-      /const \{ prix: prixBase \} = await prixPrestationServeur\(/.test(src),
+      /const \{ prix: prixBase, decouverte \} = await prixPrestationServeur\(/.test(src),
       'la carte serait débitée du tarif plein sur une prestation en promotion')
     // 🔴 ET PLUS AUCUNE LECTURE DU PRIX PLEIN À CÔTÉ. Une ligne oubliée juste
     // en dessous rendrait la garde ci-dessus décorative.
@@ -2599,7 +2600,8 @@ for (const chemin of [
   // version cherchait le repli « à moins de deux cents caractères du `if
   // (error)` » : une ligne glissée entre les deux l'aurait laissée verte, et ce
   // projet vient de s'y faire prendre le matin même sur le renvoi du catalogue.
-  const replis = MOD.match(/return \{ prix: plein, remise: null, deals: \[\] \}/g) || []
+  // REPOINTÉE LE 18/10 : la sortie « sans prix connu » porte `decouverte: false`.
+  const replis = MOD.match(/return \{ prix: plein, remise: null, deals: \[\](, decouverte: false)? \}/g) || []
   verifie('🔴 les DEUX sorties rendent le prix PLEIN', replis.length === 2,
     `${replis.length} repli(s) au lieu de 2 : sans prix connu ou base muette`)
   // ✅ SAUF UNE TABLE (décision d'Alex, 10/09 au soir) : elle n'a pas de prix,
@@ -2608,7 +2610,8 @@ for (const chemin of [
   // AVANT toute lecture des remises. Une base muette, elle, rend toujours le
   // prix plein, et le compte des deux replis juste au-dessus le vérifie encore.
   const sortiesNulles = MOD.match(/return \{ prix: null/g) || []
-  const iTable = MOD.indexOf('if (estParCouverts(prestation)) return { prix: null, remise: null, deals: [] }')
+  // REPOINTÉE LE 18/10 : la sortie d'une table porte `decouverte: false`.
+  const iTable = MOD.indexOf('if (estParCouverts(prestation)) return { prix: null, remise: null, deals: [], decouverte: false }')
   const iLecture = MOD.indexOf(".from('yoppaa_deals')")
   verifie('🔴 et aucune sortie ne rend un prix nul, sauf celle d’une table, avant toute lecture',
     sortiesNulles.length === 1 && iTable !== -1 && iLecture !== -1 && iTable < iLecture,
@@ -2623,6 +2626,12 @@ for (const chemin of [
   verifie('le module lit exactement une table', tables.length === 1, `${tables.length} lecture(s)`)
   verifie('🔴 et c’est yoppaa_deals, aucune donnée personnelle',
     tables.length === 1 && tables[0] === ".from('yoppaa_deals')", tables.join(', '))
+  // ✅ 18/10 : LE TARIF DÉCOUVERTE pose UNE question à la base, par une
+  // fonction réservée au serveur qui ne rend qu'un oui ou un non
+  // (`rdv_cours_deja_suivi`) : aucune ligne de rendez-vous ne remonte ici.
+  const rpcs = MOD.match(/\.rpc\('([a-z_]+)'/g) || []
+  verifie('🔴 le tarif découverte ne pose qu’une question oui/non à la base',
+    rpcs.length === 1 && rpcs[0] === ".rpc('rdv_cours_deja_suivi'", rpcs.join(', '))
 
   // ── L'ÉCRAN AFFICHE CE QUE LE SERVEUR VA DÉBITER ────────────────────────
   //

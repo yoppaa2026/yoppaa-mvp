@@ -22,6 +22,7 @@ import { blocsAgenda, servicesDeSalle, estReservationDeTable, caseDeDepart, couv
 // ⚠️ Ce fichier a sa PROPRE copie de `timeToMinutes` (plus bas). On n'importe
 // donc que la règle de minuit, qui elle ne doit exister qu'en un exemplaire.
 import { finApresMinuit } from '@/lib/rdv-slots'
+import { creneauxDuJour } from '@/lib/deplacement-rdv'
 import { contenuBlocRdv } from '@/lib/agenda-bloc'
 import { statutRdv, resumeSeance, texteResumeSeance, estAClore, compterAClore } from '@/lib/rdv-statut'
 import { etatPaiementRdv, couleurPaiement } from '@/lib/rdv-paiement'
@@ -229,10 +230,8 @@ export default function AgendaRdv({ rdvs, creneaux, fermetures = [], exceptions 
       // Entre deux plages shop → affiché comme pause (plutôt que fermé)
       return plages.length > 1 && slotMin >= plages[0][1] && slotMin < plages[1][0] ? 'pause' : 'ferme'
     }
-    const creneauxJour = (creneaux || []).filter(c =>
-      c.actif !== false
-      && (c.date_specifique === jour.iso || (!c.date_specifique && c.jour_semaine === jour.keyJour))
-    )
+    // ✅ 18/10 : la règle commune, fréquence comprise.
+    const creneauxJour = creneauxDuJour(creneaux, { dateStr: jour.iso, jour: jour.keyJour })
     for (const cr of creneauxJour) {
       if (cr.pause_debut && cr.pause_fin) {
         const pDebut = timeToMinutes(cr.pause_debut)

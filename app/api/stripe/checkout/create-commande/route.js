@@ -59,7 +59,7 @@ import { circuitsDeLArticle, circuitsCommuns } from '@/lib/stock-article'
 import { porteUneFenetre } from '@/lib/anti-gaspi'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { refusCoordonnees } from '@/lib/coordonnees-client'
-import { verdictForfait } from '@/lib/garde-forfait'
+import { verdictForfait, forfaitOuvre } from '@/lib/garde-forfait'
 import { fichePubliee } from '@/lib/statut-commercant'
 import { relectureAutorisee, compteDeLaRequete } from '@/lib/relecture-serveur'
 import { commandeAllumee } from '@/lib/plans'
@@ -328,11 +328,22 @@ export async function POST(request) {
     // ⚠️ MÊME RÈGLE QUE L'ÉCRAN, LUE AU MÊME ENDROIT (`lib/modes-paiement.js`).
     // Elle était réécrite ici dans d'autres mots, et une TROISIÈME fois dans le
     // tunnel : trois copies d'une règle qui décide qui encaisse.
-    const { stripeOK: enLigneAutorise, cashOK: cashAutorise } = modesPaiementOuverts({
+    const modesOuverts = modesPaiementOuverts({
       commercant,
       estDetail: estBoutique,
       modeBoutique: estExpedition ? 'expedition' : 'retrait',
     })
+    // 🔴 LE PAIEMENT EN LIGNE EST UN DROIT DU FORFAIT, PAS SEULEMENT UN COMPTE
+    // STRIPE (19/10). Les trois routes de RDV payant gardent `paiement_ligne`
+    // depuis longtemps ; celle-ci passait par Stripe dès qu'un compte Connect
+    // existait. Un commerçant qui a branché Stripe pendant son essai puis gardé
+    // la commande sans le paiement en ligne aurait continué d'encaisser en
+    // ligne. Aujourd'hui `commande` implique `paiement_ligne` dans la matrice :
+    // la règle devient écrite au lieu d'être une coïncidence.
+    // ⚠️ LE COMPTE RESTE OUVERT : rembourser et encaisser ce qui est déjà vendu
+    // ne passent pas par ici (créer, jamais consommer).
+    const enLigneAutorise = modesOuverts.stripeOK && forfaitOuvre(commercant, 'paiement_ligne')
+    const cashAutorise = modesOuverts.cashOK
     // 🔴 LES TROIS GARDES DE MOYEN DE PAIEMENT ONT DÉMÉNAGÉ PLUS BAS (28/08).
     //
     // Elles tombaient ICI, plus de deux cents lignes AVANT que le serveur sache

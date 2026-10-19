@@ -159,6 +159,13 @@ for (const r of ROUTES) {
   // couperait la boutique de tout commerce de détail en Vendre. Passé à deux
   // doigts le 26/08.
   verifier('create-commande n\'applique pas la catégorie', !/\bpeut\(/.test(src))
+  // 🔴 LE PAIEMENT EN LIGNE EST UN DROIT (19/10). Sans cette ligne, un compte
+  // Connect suffisait à encaisser en ligne, quel que soit le forfait.
+  verifier('🔴 create-commande exige le droit au paiement en ligne',
+    /const enLigneAutorise = modesOuverts\.stripeOK && forfaitOuvre\(commercant, 'paiement_ligne'\)/.test(src))
+  verifier('et c\'est ce drapeau qui décide du paiement en ligne',
+    /if \(!surPlace && !enLigneAutorise\)/.test(src)
+    && /enLigneAutorise: enLigneAutorise && !!commercant\.stripe_account_id/.test(src))
 }
 
 // ─── stripe/connect : LE PIÈGE DU REMBOURSEMENT ─────────────────────────────

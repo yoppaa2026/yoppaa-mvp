@@ -126,7 +126,9 @@ export default function ChoixFrequence({ form, onChange, T }) {
       {frequence !== 'hebdo' && (
         <p style={{ fontSize: 12, color: apercu.length ? T.ink : '#B91C1C', fontWeight: 600, margin: '10px 0 0' }}>
           {apercu.length
-            ? <>Prochaines fois : {apercu.map(d => dateCourte(d, jour)).join(', ')}.</>
+            // ⚠️ Pas de point final : la dernière date finit déjà par « déc. »
+            // (« 1er déc.. », vu par Alex le 19/10).
+            ? <>Prochaines fois : {apercu.map(d => dateCourte(d, jour)).join(', ')}</>
             : 'Aucune date à venir avec ce réglage.'}
         </p>
       )}

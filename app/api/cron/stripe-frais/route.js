@@ -20,6 +20,7 @@ import { createClient } from '@supabase/supabase-js'
 import { recupererFraisStripe, ventilerFrais, sessionBonCadeau } from '@/lib/stripe-frais'
 import { regimeBonPourCommerce } from '@/lib/bons-cadeaux-server'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
+import { noterPassageCron } from '@/lib/journal-technique'
 
 // Chaque ligne coûte un appel API à Stripe : on borne pour ne pas dépasser la
 // durée d'exécution, le reliquat passe la nuit suivante.
@@ -36,6 +37,7 @@ function admin() {
 async function handle(req) {
   const refuse = refusCron(gardeCron(req, 'cron/stripe-frais'), NextResponse)
   if (refuse) return refuse
+  await noterPassageCron('/api/cron/stripe-frais')
 
   const supabase = admin()
   const stats = { commandes: 0, rdvs: 0, bons: 0, indisponibles: 0, sans_compte: 0 }

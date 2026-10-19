@@ -32,6 +32,7 @@ import { actusGmyRetenues } from '@/lib/actu-gmy'
 import { jourBruxelles } from '@/lib/timezone'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
 import { horsDeSonHeure } from '@/lib/heure-cron'
+import { noterPassageCron } from '@/lib/journal-technique'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -53,6 +54,7 @@ async function handle(req) {
   if (refuse) return refuse
   // 🔴 7 H 30 À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
   if (horsDeSonHeure(req, '/api/cron/morning-yoppers')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
+  await noterPassageCron('/api/cron/morning-yoppers')
 
   const supabase = getSupabaseAdmin()
   const today = jourBruxelles()

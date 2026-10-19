@@ -20,6 +20,7 @@ import { soldeRdv } from '@/lib/rdv-paiement'
 import { motsReservation } from '@/lib/reservation-metier'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
 import { horsDeSonHeure } from '@/lib/heure-cron'
+import { noterPassageCron } from '@/lib/journal-technique'
 import { delaiAnnulationHeures } from '@/lib/rdv-delai-annulation'
 
 export async function GET(request) {
@@ -28,6 +29,7 @@ export async function GET(request) {
   if (refuse) return refuse
   // 🔴 9 H À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
   if (horsDeSonHeure(request, '/api/cron/rdv-reminder-9h')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
+  await noterPassageCron('/api/cron/rdv-reminder-9h')
 
   try {
     const supabase = createClient(

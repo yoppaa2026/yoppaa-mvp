@@ -45,12 +45,14 @@ import { adresseRendezVous } from '@/lib/lieu-fige'
 import { prenomClient } from '@/lib/nom-client'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
 import { horsDeSonHeure } from '@/lib/heure-cron'
+import { noterPassageCron } from '@/lib/journal-technique'
 
 export async function GET(request) {
   const refuse = refusCron(gardeCron(request, 'cron/rappels-retrait'), NextResponse)
   if (refuse) return refuse
   // 🔴 11 H À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
   if (horsDeSonHeure(request, '/api/cron/rappels-retrait')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
+  await noterPassageCron('/api/cron/rappels-retrait')
 
   try {
     const supabase = createClient(

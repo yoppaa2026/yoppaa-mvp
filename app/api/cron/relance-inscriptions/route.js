@@ -34,6 +34,7 @@ import { envoyerAuCommercant, emailRelanceInscription } from '@/lib/resend'
 import { libelleEtape } from '@/lib/etapes-inscription'
 import { PUBLICATION_BROUILLON } from '@/lib/statut-commercant'
 import { trierPourRelance, COLONNES_RELANCE, LIMITE_RELANCE_JOURS } from '@/lib/relance-inscription'
+import { noterPassageCron } from '@/lib/journal-technique'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +51,7 @@ export async function GET(request) {
   if (refus) return refus
   // 🔴 10 H À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
   if (horsDeSonHeure(request, '/api/cron/relance-inscriptions')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
+  await noterPassageCron('/api/cron/relance-inscriptions')
 
   const db = admin()
   const maintenant = new Date()

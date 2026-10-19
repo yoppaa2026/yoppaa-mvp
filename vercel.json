@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/purge-adresses-livraison",
       "schedule": "0 3 1 * *"
+    },
+    {
+      "path": "/api/cron/pilotage-matin",
+      "schedule": "0 5,6 * * *"
     }
   ]
 }

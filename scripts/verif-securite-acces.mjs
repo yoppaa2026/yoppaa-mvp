@@ -167,7 +167,10 @@ const routesCron = readdirSync(new URL('../' + DOSSIER_CRON, import.meta.url), {
 // ⚠️ DOUZE DEPUIS LE 06/10 : `purge-adresses-livraison` (mensuelle, décision
 // d'Alex). Elle n'envoie rien à personne : elle efface l'adresse, la position
 // et la note de livraison des commandes de plus de 6 mois.
-verifier('les tâches planifiées sont bien au nombre de douze', routesCron.length === 12,
+// REPOINTÉE LE 19/10 : TREIZE, avec `pilotage-matin` (chaque jour à 7h00,
+// décision d'Alex au tableau). Elle n'écrit qu'à l'admin (`envoyerAuAdmin`),
+// ne lit que des agrégats, et purge le journal technique au-delà de 90 jours.
+verifier('les tâches planifiées sont bien au nombre de treize', routesCron.length === 13,
   `trouvé ${routesCron.length}`)
 
 for (const chemin of routesCron) {

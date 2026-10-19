@@ -29,6 +29,7 @@ import { surveillerCompteur } from '@/lib/sonde-compteur'
 import { bonsLimiter } from '@/lib/ratelimit'
 import { jourBruxelles, jourCivilPlus, brusselsInstant } from '@/lib/timezone'
 import { estHeureDuRecap, lignesRecapCommandes } from '@/lib/recap-commandes'
+import { noterPassageCron } from '@/lib/journal-technique'
 import { productionSeparee, articlesDeDuo } from '@/lib/vue-commandes'
 
 export async function GET(request) {
@@ -43,6 +44,7 @@ export async function GET(request) {
     console.log('[cron] /api/cron/recap-jour-8h : pas son heure, rien envoyé')
     return NextResponse.json({ ok: true, ignore: 'pas_8h_a_bruxelles' })
   }
+  await noterPassageCron('/api/cron/recap-jour-8h')
 
   try {
     const supabase = createClient(

@@ -18,6 +18,7 @@ import SectionDiagnosticBrevo from './SectionDiagnosticBrevo'
 import SectionCommunes from './SectionCommunes'
 import SectionSuggestions from './SectionSuggestions'
 import SectionDiagnosticRatelimit from './SectionDiagnosticRatelimit'
+import SectionPilotage from './SectionPilotage'
 import { Sparkles, Store, Scissors, Croissant, ShoppingBag, Phone, Lock, AlertTriangle } from 'lucide-react'
 import { TAILLE_CONSEILLEE, avertissementTaille, bilanTaillesImages } from '@/lib/image-qualite'
 import { estAdresseAdmin } from '@/lib/admin-identite'
@@ -361,6 +362,11 @@ export default function AdminPage() {
             l'espace : c'est ici qu'Alex relance ceux qui n'avancent pas et
             publie ceux qui sont prêts. */}
         <SectionFichesAPublier toast={(msg, type) => setToast({ msg, type })} />
+
+        {/* 📊 LE PILOTAGE (Alex, 19/10) : croissance, revenu, activité, santé
+            technique. Juste sous les trois blocs d'action : on agit d'abord,
+            on pilote ensuite. L'email de 7h00 pointe ici (#pilotage). */}
+        <SectionPilotage />
 
         {/* Tous les commerçants (édition + impersonation) */}
         <SectionTousCommercants toast={(msg, type) => setToast({ msg, type })} />

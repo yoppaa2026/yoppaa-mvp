@@ -16,6 +16,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
+import { noterPassageCron } from '@/lib/journal-technique'
 import { dateLimitePurge, effacement } from '@/lib/purge-livraison'
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +32,7 @@ function admin() {
 async function handle(req) {
   const refuse = refusCron(gardeCron(req, 'cron/purge-adresses-livraison'), NextResponse)
   if (refuse) return refuse
+  await noterPassageCron('/api/cron/purge-adresses-livraison')
 
   const limite = dateLimitePurge(new Date())
   if (!limite) return NextResponse.json({ ok: false, error: 'date limite incalculable' }, { status: 500 })

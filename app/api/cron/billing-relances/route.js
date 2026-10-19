@@ -25,6 +25,7 @@ import { sendBillingRelance } from '@/lib/billing-emails'
 import { getPrixPlan } from '@/lib/plans'
 import { gardeCron, refusCron } from '@/lib/cron-auth'
 import { horsDeSonHeure } from '@/lib/heure-cron'
+import { noterPassageCron } from '@/lib/journal-technique'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -190,6 +191,7 @@ async function handler(req) {
   if (refuse) return refuse
   // 🔴 10 H À BRUXELLES, ÉTÉ COMME HIVER (06/10) : `lib/heure-cron.js`.
   if (horsDeSonHeure(req, '/api/cron/billing-relances')) return NextResponse.json({ ok: true, ignore: 'pas_son_heure' })
+  await noterPassageCron('/api/cron/billing-relances')
 
   const supabase = getSupabaseAdmin()
 

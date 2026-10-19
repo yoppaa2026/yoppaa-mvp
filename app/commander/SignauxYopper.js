@@ -223,11 +223,13 @@ export function AppelEnvieCarte({ type, commercant, etat, onAutresEnvies }) {
 // ✅ ALEX, 17/10 (tableau). Quand elle se montre, c'est `bulleEnviesVisible`
 // qui le dit (lib/signaux.js) : jamais en même temps que la ligne, plus du tout
 // une fois le bloc vu, refusée ou une envie partie.
-export function BulleEnvies({ commercant, onOuvrir, onFermer }) {
+// ⚠️ `auDessus` (19/10) : la hauteur de la barre Yopper quand la fiche la
+// montre, sinon la bulle s'y poserait dessus.
+export function BulleEnvies({ commercant, onOuvrir, onFermer, auDessus = 0 }) {
   if (!commercant) return null
   return (
     <div role="complementary" aria-label="Tes envies pour ce commerce"
-      style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(18px + env(safe-area-inset-bottom, 0px))', zIndex: 55, width: 'calc(100% - 32px)', maxWidth: 380, display: 'flex', alignItems: 'center', gap: 4, padding: 4, borderRadius: 100, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, boxShadow: `0 10px 30px ${T.bgPanel}66`, fontFamily: '"DM Sans", sans-serif', animation: 'bulleEnviesIn 0.25s ease-out' }}>
+      style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: `calc(${18 + (Number(auDessus) || 0)}px + env(safe-area-inset-bottom, 0px))`, zIndex: 55, width: 'calc(100% - 32px)', maxWidth: 380, display: 'flex', alignItems: 'center', gap: 4, padding: 4, borderRadius: 100, background: `linear-gradient(135deg, ${T.bgPanel}, ${T.deep})`, boxShadow: `0 10px 30px ${T.bgPanel}66`, fontFamily: '"DM Sans", sans-serif', animation: 'bulleEnviesIn 0.25s ease-out' }}>
       <style>{`@keyframes bulleEnviesIn { from { opacity: 0; transform: translateX(-50%) translateY(14px) } to { opacity: 1; transform: translateX(-50%) translateY(0) } } @media (prefers-reduced-motion: reduce) { [aria-label="Tes envies pour ce commerce"] { animation: none !important } }`}</style>
       <button type="button" onClick={onOuvrir}
         style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px 8px 14px', border: 'none', background: 'none', color: '#fff', fontFamily: '"DM Sans", sans-serif', cursor: 'pointer', textAlign: 'left' }}>

@@ -1627,18 +1627,24 @@ verifier('la croix vide la recherche et replie le champ',
 // attend le Yopper : commande prête à retirer, livraison à réceptionner. Un
 // rendez-vous dans trois semaines ne fait pas clignoter une barre pendant
 // vingt jours.
+// REPOINTÉES LE 19/10 (les trois) : la barre est un composant partagé avec les
+// fiches (`app/commander/BarreYopper.js`). L'écran principal lui passe ce qui
+// attend une action ; on vérifie les DEUX moitiés.
+const srcBarreYopper = sansCommentaires(readFileSync(new URL('../app/commander/BarreYopper.js', import.meta.url), 'utf8'))
 verifier('le point du bas ne pulse que si une action attend le Yopper',
-  /animation: item\.badgeCmdUrgent \? 'navPillPulse/.test(srcEcranClient))
+  /animation: item\.badgeCmdUrgent \? 'navPillPulse/.test(srcBarreYopper)
+  && /badgeCmdUrgent: !!urgent/.test(srcBarreYopper)
+  && /urgent=\{\(commandesASwiper\.length \+ commandesEnLivraison\.length\) > 0\}/.test(srcEcranClient))
 // ⚠️ ET IL RESTE ANNONCÉ AUX LECTEURS D'ÉCRAN. Un point purement visuel
 // supprimerait l'information pour ceux qui ne le voient pas.
 verifier('et il reste annoncé aux lecteurs d’écran',
-  /aria-label=\{item\.badge > 0 \?/.test(srcEcranClient))
+  /aria-label=\{item\.badge > 0 \?/.test(srcBarreYopper))
 // ⚠️ LE POINT DIT « IL SE PASSE QUELQUE CHOSE », LE LIBELLÉ DIT COMBIEN (Alex,
 // 13/09). Toute tentative de mettre le compte SUR l'icône ramène une pastille
 // par-dessus le calendrier, c'est-à-dire le défaut qu'on venait de corriger.
 // Le mot, lui, a déjà la place.
 verifier('le compte se range dans le libellé de la barre du bas',
-  /\$\{item\.label\} · \$\{item\.badge > 9 \? '9\+' : item\.badge\}/.test(srcEcranClient))
+  /\$\{item\.label\} · \$\{item\.badge > 9 \? '9\+' : item\.badge\}/.test(srcBarreYopper))
 
 // ─── UNE TABLE SE DIT EN PERSONNES, JAMAIS AU NOM DE SON FORMAT ───────────
 // 🔴 CE QUE LISAIT UN YOPPER QUI AVAIT RÉSERVÉ POUR QUATRE : « Table 6

@@ -125,6 +125,8 @@ import BlocAvis, { Etoiles } from '../BlocAvis'
 // Icônes Lucide React (charte Yoppaa, pas d'emoji décoratif)
 import { Star, Flame, Calendar, Store, Check, Phone, Heart, Share2, SlidersHorizontal } from 'lucide-react'
 import { chezLeCommerce } from '@/lib/nom-commerce'
+import BarreYopper from '../BarreYopper'
+import { barreSurLaFiche, HAUTEUR_BARRE_YOPPER } from '@/lib/barre-yopper'
 
 const T = {
   bg:      '#F8F6FF',
@@ -4075,6 +4077,8 @@ export default function CommanderSlug() {
     obs.observe(cible)
     return () => obs.disconnect()
   }, [inviteAuxEnvies, blocEnviesVu, loading])
+  // ✅ 19/10 : la barre Yopper, quand on parcourt (`lib/barre-yopper.js`).
+  const barreYopper = barreSurLaFiche({ type: 'commande', etape, panierVide: nbArticlesPanier() === 0 })
   const montrerBulleEnvies = bulleEnviesVisible({
     invite: inviteAuxEnvies,
     carteDepassee,
@@ -4598,7 +4602,8 @@ export default function CommanderSlug() {
         {/* ✅ 17/10 (Alex) : la bulle qui amène aux envies, sur une fiche
             Exister. Quand elle se montre : `bulleEnviesVisible`. */}
         {montrerBulleEnvies && (
-          <BulleEnvies commercant={commercant} onOuvrir={allerAuxEnvies} onFermer={() => setBulleFermee(true)}/>
+          <BulleEnvies commercant={commercant} onOuvrir={allerAuxEnvies} onFermer={() => setBulleFermee(true)}
+            auDessus={barreYopper ? HAUTEUR_BARRE_YOPPER : 0}/>
         )}
 
         {/* ── SCROLL BODY ── */}
@@ -6369,6 +6374,8 @@ export default function CommanderSlug() {
             </div>
           )}
         </div>
+        {/* ✅ 19/10 : la barre Yopper sous la fiche, hors du tunnel. */}
+        {barreYopper && <BarreYopper/>}
       </div>
 
       {/* Modale signalement (déclenchée depuis le lien en bas de fiche) */}
@@ -6384,7 +6391,8 @@ export default function CommanderSlug() {
       {/* Toast de confirmation (favoris ajouté/retiré, lien copié) */}
       {toastMessage && (
         <div style={{
-          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          // Au-dessus de la barre Yopper quand elle est là (19/10).
+          position: 'fixed', bottom: barreYopper ? 28 + HAUTEUR_BARRE_YOPPER : 28, left: '50%', transform: 'translateX(-50%)',
           background: T.ink, color: '#fff', padding: '12px 22px', borderRadius: 100,
           fontSize: 13, fontWeight: 700, zIndex: 1000,
           boxShadow: '0 10px 30px rgba(26,8,64,0.45)',

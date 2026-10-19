@@ -156,6 +156,8 @@ function tarifDecouverteAffiche(prestation, deals = []) {
 
 import { JOURS_LONGS, JOURS_COURTS, MOIS_COURTS, MOIS_LONGS, timeToMinutes, minutesToTime, jourSemaineDate, isoDate, filtrerReservationsPourSlots, genererSlots, genererJoursDispos, conflitReservation, horizonRdv, coursSansHoraire, finApresMinuit, praticiensQuiAssurent } from '@/lib/rdv-slots'
 import { creneauxDuJour } from '@/lib/deplacement-rdv'
+import BarreYopper from '../../BarreYopper'
+import { barreSurLaFiche, HAUTEUR_BARRE_YOPPER } from '@/lib/barre-yopper'
 import { chezLeCommerce } from '@/lib/nom-commerce'
 // La mention d'un produit en vitrine, au mot du métier (30/09).
 import { mentionVitrine } from '@/lib/stock-article'
@@ -834,6 +836,12 @@ export default function CommanderRdvSlug() {
   // « This page couldn't load ». Ni le build ni le lint ne le voient, et un
   // banc qui lit le texte du fichier ne le verra jamais non plus.
   const barrePanierVisible = etape === 1 && produitsAchetables && lignesPanier.length > 0
+  // ✅ 19/10 : la barre Yopper, quand on parcourt (`lib/barre-yopper.js`) ; la
+  // confirmation d'un rendez-vous (4) ou d'un abonnement acheté (5) la remontre.
+  const barreYopper = barreSurLaFiche({
+    type: 'rdv', etape, panierVide: !barrePanierVisible,
+    confirme: (etape === 4 && !!rdvCree) || etape === 5,
+  })
 
   // L'acompte n'est réellement prélevé que si le commerçant l'a activé ET que
   // son compte Stripe fonctionne. Partout où un acompte est annoncé, c'est
@@ -5193,6 +5201,8 @@ export default function CommanderRdvSlug() {
             </>
           )}
         </div>
+        {/* ✅ 19/10 : la barre Yopper sous la fiche, hors du tunnel. */}
+        {barreYopper && <BarreYopper/>}
       </div>
 
       {/* ─── MODALE ACHAT BON CADEAU ─── */}
@@ -5327,7 +5337,7 @@ export default function CommanderRdvSlug() {
 
       {/* Retour visuel du partage et du favori */}
       {toastPartage && (
-        <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 10001, background: T.ink, color: '#fff', padding: '0.75rem 1.25rem', borderRadius: 100, fontSize: '0.85rem', fontWeight: 700, boxShadow: '0 8px 28px rgba(0,0,0,0.35)', maxWidth: '90vw', textAlign: 'center' }}>
+        <div style={{ position: 'fixed', bottom: barreYopper ? `calc(${28 + HAUTEUR_BARRE_YOPPER}px + env(safe-area-inset-bottom, 0px))` : 90, left: '50%', transform: 'translateX(-50%)', zIndex: 10001, background: T.ink, color: '#fff', padding: '0.75rem 1.25rem', borderRadius: 100, fontSize: '0.85rem', fontWeight: 700, boxShadow: '0 8px 28px rgba(0,0,0,0.35)', maxWidth: '90vw', textAlign: 'center' }}>
           {toastPartage}
         </div>
       )}

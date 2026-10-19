@@ -74,6 +74,7 @@ import { arrondirPosition, libellePastille, filtrerLocalites } from '@/lib/local
 import { useLocalitesBest } from '@/app/components/useLocalitesBest'
 import { useAppNative } from '@/lib/use-app-native'
 import { PUBLICATIONS_DE_LA_VUE } from '@/lib/statut-commercant'
+import BarreYopper from './BarreYopper'
 import IconeAntiGaspi, { COULEUR_ANTI_GASPI, FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 
 const T = {
@@ -3820,20 +3821,9 @@ export default function Commander() {
         /* Footer nav : padding horizontal généreux pour ne pas toucher les courbes
            des angles iPhone + safe area iOS. Les onglets utilisent flex:1 mais
            restent à l'intérieur de cette zone safe. */
-        /* Navbar : alignee sur la largeur des cards (760px page-wrap). Pas de full-width viewport. */
-        .navbar {
-          flex-shrink: 0;
-          background: ${T.bgPanel};
-          border-top: 1px solid ${T.main}33;
-          padding-bottom: env(safe-area-inset-bottom, 0px);
-        }
-        .navbar-tabs {
-          display: flex;
-          width: 100%;
-          padding-left: max(env(safe-area-inset-left, 0px), 16px);
-          padding-right: max(env(safe-area-inset-right, 0px), 16px);
-          box-sizing: border-box;
-        }
+        /* Navbar : alignee sur la largeur des cards (760px page-wrap). Pas de full-width viewport.
+           ✅ 19/10 : son style (.navbar, .navbar-tabs, navPillPulse) vit dans
+           BarreYopper.js, partagé avec les fiches. */
         /* Les deux boutons d'action d'une carte. Le dessin fait 28, la zone qui
            répond au doigt en fait 40 : voir le commentaire de la rangée du bas. */
         .action-carte {
@@ -3852,13 +3842,9 @@ export default function Commander() {
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         input, textarea, button, select { font-family: "DM Sans", sans-serif; }
         @keyframes tribu-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.7; transform:scale(1.15); } }
-        /* Le point de la barre du bas. Amplitude relevée depuis qu'il a
-           remplacé deux pastilles larges : sur 10 pixels, un scale de 1,14 ne
-           se remarquait pas. */
-        @keyframes navPillPulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.35); opacity:0.72; } }
-        @media (prefers-reduced-motion: reduce) {
-          @keyframes navPillPulse { 0%,100% { transform:none; opacity:1; } }
-        }
+        /* Le point de la barre du bas (amplitude relevée : sur 10 pixels, un
+           scale de 1,14 ne se remarquait pas) : navPillPulse vit dans
+           BarreYopper.js depuis le 19/10. */
         @keyframes tribu-pulse2 { 0%,100% { opacity:0.85; transform:scale(1); } 50% { opacity:0.5; transform:scale(1.1); } }
         @keyframes tribu-pulse3 { 0%,100% { opacity:0.6; transform:scale(1); } 50% { opacity:0.3; transform:scale(1.05); } }
         @keyframes dot-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.4); opacity:0.7; } }
@@ -5498,122 +5484,11 @@ export default function Commander() {
           </div>
         )}
 
-        {/* ── NAV BAR ── */}
-        <nav className="navbar hero-fullwidth">
-        <div className="navbar-tabs">
-          {[
-            { key: 'accueil',   label: 'Accueil',   badge: 0 },
-            // Onglet 'commandes' : pas de label (label vide) + icône plus grande pour compenser,
-            // 2 pastilles distinctes (violette = commandes en cours, verte = RDVs a venir).
-            // Pills légendées (icône + chiffre) : violette = commandes, verte = RDV.
-            // La violette PULSE quand une action attend le Yopper (commande prête
-            // à retirer, ou livraison en route à réceptionner).
-            { key: 'commandes', label: 'Suivi', badgeCmd: commandesASwiper.length + commandesEnLivraison.length + commandesEnCours.length, badgeRdv: rdvsAVenir.length, badgeCmdUrgent: (commandesASwiper.length + commandesEnLivraison.length) > 0, badge: badgeCommandes },
-            { key: 'tribu',     label: 'Tribu',     badge: 0 },
-            { key: 'profil',    label: 'Profil',    badge: 0 },
-          ].map(item => {
-            const actif = onglet === item.key
-            const op = actif ? 1 : 0.5
-            const stroke = '#ffffff'
-            return (
-              <button key={item.key} onClick={() => setOnglet(item.key)}
-                /* Le point est décoratif pour l'œil, mais il porte une
-                   information : sans ce libellé, un lecteur d'écran annoncerait
-                   « Suivi » sans jamais dire qu'il s'y passe quelque chose. */
-                aria-label={item.badge > 0 ? `${item.label}, ${item.badge} en cours` : undefined}
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '0.625rem 0 0.5rem', border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative' }}>
-
-                {item.key === 'accueil' && (
-                  /* Maison (remplace les 3 dots horizontaux, trop proches du
-                     glyphe « plus d'options » ⋯ — décision Alex 23/07). */
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
-                    <path d="M3 11 L12 3.5 L21 11" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                    <path d="M5.5 9.5 L5.5 20 L18.5 20 L18.5 9.5" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                    <path d="M10 20 L10 14.5 L14 14.5 L14 20" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity={op}/>
-                  </svg>
-                )}
-                {item.key === 'commandes' && (
-                  /* Icone v4 : agrandie 36px + decalee vers le bas (marginTop 6) pour
-                     laisser de la place aux pastilles qui descendent aussi (top 6).
-                     Sans ce decalage, pastilles + icone faisaient effet 'oreilles de Mickey'. */
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision" style={{ marginTop: 2 }}>
-                    {/* Cadre calendrier */}
-                    <rect x="3" y="5" width="18" height="16" rx="2.5" stroke={stroke} strokeWidth="2" strokeLinejoin="round" opacity={op}/>
-                    {/* Barre header */}
-                    <path d="M3,9.5 L21,9.5" stroke={stroke} strokeWidth="2" opacity={op}/>
-                    {/* Anneaux du haut */}
-                    <path d="M8,3 L8,7 M16,3 L16,7" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
-                    {/* 3 traits 'items de la liste' a l'interieur */}
-                    <path d="M7,13   L17,13"   stroke={stroke} strokeWidth="1.8" strokeLinecap="round" opacity={op * 0.85}/>
-                    <path d="M7,16   L15,16"   stroke={stroke} strokeWidth="1.8" strokeLinecap="round" opacity={op * 0.85}/>
-                    <path d="M7,19   L13,19"   stroke={stroke} strokeWidth="1.8" strokeLinecap="round" opacity={op * 0.85}/>
-                  </svg>
-                )}
-                {item.key === 'tribu' && (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
-                    <circle cx="5" cy="8" r="2.5" stroke={stroke} strokeWidth="2" opacity={op * 0.75}/>
-                    <path d="M1.5,17.5 Q1.5,14 5,14 Q8.5,14 8.5,17.5" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op * 0.75}/>
-                    <circle cx="19" cy="8" r="2.5" stroke={stroke} strokeWidth="2" opacity={op * 0.75}/>
-                    <path d="M15.5,17.5 Q15.5,14 19,14 Q22.5,14 22.5,17.5" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op * 0.75}/>
-                    <circle cx="12" cy="6" r="3.5" stroke={stroke} strokeWidth="2" opacity={op}/>
-                    <path d="M5.5,20 Q5.5,15 12,15 Q18.5,15 18.5,20" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
-                  </svg>
-                )}
-                {item.key === 'profil' && (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="geometricPrecision">
-                    <circle cx="12" cy="8" r="4.5" stroke={stroke} strokeWidth="2" opacity={op}/>
-                    <path d="M3,21 Q3,16 12,16 Q21,16 21,21" stroke={stroke} strokeWidth="2" strokeLinecap="round" opacity={op}/>
-                  </svg>
-                )}
-
-                {/* UN POINT, ET IL NE CLIGNOTE QUE QUAND ÇA T'ATTEND (Alex, 12/09).
-                    🔴 IL Y AVAIT DEUX PASTILLES, ET ELLES RECOUVRAIENT L'ICÔNE
-                    QU'ELLES DÉCORAIENT. Chacune faisait 24 pixels de haut avec
-                    sa bordure, posées de part et d'autre d'un calendrier qui en
-                    fait 26 : sur la capture d'Alex, on ne voyait plus le
-                    calendrier. La verte était `#10B981`, c'est-à-dire
-                    exactement le vert qui dit « ouvert » sur les fiches, et les
-                    deux chiffres identiques se lisaient comme un doublon plutôt
-                    que comme deux comptes différents.
-
-                    Le détail commandes / rendez-vous existe déjà À L'INTÉRIEUR
-                    de l'onglet Suivi, qui a son propre sélecteur avec ses
-                    compteurs. Le répéter ici coûtait une icône illisible pour
-                    une information qui est à un doigt.
-
-                    ⚠️ LA PULSATION EST RÉSERVÉE À CE QUI ATTEND UNE ACTION :
-                    une commande prête à retirer, une livraison à réceptionner.
-                    Un point qui pulserait parce qu'un rendez-vous existe dans
-                    trois semaines clignoterait des jours entiers, et une alarme
-                    qui sonne tout le temps ne protège plus rien. */}
-                {item.key === 'commandes' && item.badge > 0 && (
-                  <span aria-hidden="true" style={{
-                    position: 'absolute', top: 6, left: 'calc(50% + 7px)',
-                    width: 10, height: 10, borderRadius: '50%',
-                    background: T.mid, border: '2px solid #fff',
-                    boxShadow: `0 1px 5px ${T.mid}cc`,
-                    animation: item.badgeCmdUrgent ? 'navPillPulse 1.5s ease-in-out infinite' : 'none',
-                  }}/>
-                )}
-
-                {item.label && (
-                  /* ⚠️ LE COMPTE SE RANGE DANS LE LIBELLÉ (Alex, 13/09). Le
-                     point seul disait qu'il se passait quelque chose, jamais
-                     COMBIEN, et toute tentative de le dire ramenait une
-                     pastille sur l'icône, c'est-à-dire le défaut qu'on venait
-                     de corriger. Le mot, lui, a déjà la place.
-                     Deux signaux, deux rôles : le libellé compte, le point
-                     appelle. */
-                  <span style={{ fontSize: '0.62rem', fontWeight: 700, color: actif ? '#fff' : '#6B7280', letterSpacing: '0.2px', fontFamily: '"DM Sans", sans-serif' }}>
-                    {item.badge > 0 ? `${item.label} · ${item.badge > 9 ? '9+' : item.badge}` : item.label}
-                  </span>
-                )}
-                {actif && <div style={{ position: 'absolute', bottom: 5, left: '50%', transform: 'translateX(-50%)', width: 22, height: 3, borderRadius: 3, background: T.light, boxShadow: `0 0 6px ${T.light}66` }}/>}
-              </button>
-            )
-          })}
-        </div>
-        </nav>
+        {/* ── NAV BAR ── ✅ 19/10 : un composant partagé avec les fiches
+            (`BarreYopper`), qui la montrent quand on parcourt. */}
+        <BarreYopper className="navbar hero-fullwidth" actif={onglet} onChoisir={setOnglet}
+          badge={badgeCommandes}
+          urgent={(commandesASwiper.length + commandesEnLivraison.length) > 0}/>
       </div>
     </>
   )

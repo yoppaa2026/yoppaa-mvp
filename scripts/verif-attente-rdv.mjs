@@ -1131,8 +1131,11 @@ const SOLO  = { id: 'p-solo',  commercant_id: 'c1', capacite: 1,  attente_max: 3
   // qu'il nomme existent, et s'ouvrent depuis l'adresse.
   verifier('🔴 le bloc dit où retrouver l’attente',
     /const LIEN_MES_ATTENTES = '\/commander\?onglet=commandes&tab=rdvs'/.test(BLOC) && /href=\{LIEN_MES_ATTENTES\}/.test(BLOC))
+  // REPOINTÉE LE 19/10 : l'onglet « Suivi » vit dans la barre partagée
+  // (`app/commander/BarreYopper.js`), l'écran principal lit toujours `tab`.
+  const BARRE = sansProse(readFileSync(new URL('../app/commander/BarreYopper.js', import.meta.url), 'utf8'))
   verifier('⚠️ et cet endroit existe sous le nom qu’il lui donne',
-    /key: 'commandes', label: 'Suivi'/.test(ESPACE) && /tabFromUrl === 'rdvs'/.test(ESPACE)
+    /key: 'commandes', label: 'Suivi'/.test(BARRE) && /tabFromUrl === 'rdvs'/.test(ESPACE)
     && /Suivi, onglet Rendez-vous/.test(BLOC))
 }
 

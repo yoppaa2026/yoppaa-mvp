@@ -4248,6 +4248,20 @@ export default function CommanderRdvSlug() {
                     // Rien à régler sur place sur une séance d'abonnement : le
                     // prix vit sur le contrat, pas sur la séance.
                     const surPlace = seanceSurAbo ? null : vent.soldeSurPlace
+                    // ✅ 19/10 (Alex, tableau : « annoncer les deux montants »).
+                    // Les montants SI c'est une séance découverte, par le MÊME
+                    // calcul. L'écran ne sait pas si c'est la première fois :
+                    // il annonce, et la page de paiement dit le montant exact.
+                    const prixDecouverte = seanceSurAbo ? null : tarifDecouverteAffiche(prestationChoisie, deals)
+                    const ventDeco = prixDecouverte != null ? ventilerTunnelRdv({
+                      prixPrestation: prixDecouverte,
+                      acomptePourcent: prestationChoisie?.acompte_pourcent || 0,
+                      acompteEnLigne,
+                      totalProduits,
+                      remiseRecompense: remiseFid,
+                      soldeBon: soldeBonsRetenus,
+                    }) : null
+                    const decoChangeLePaiement = !!ventDeco && aPayerMaintenant > 0 && ventDeco.aPayerMaintenant !== aPayerMaintenant
                     return (
                       <>
                         {/* ─── Récompense de fidélité ─────────────────────
@@ -4674,7 +4688,14 @@ export default function CommanderRdvSlug() {
                           {aPayerMaintenant > 0 ? (
                             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 14px', background: T.pale }}>
                               <span style={{ fontSize: '0.85rem', color: T.deep, fontWeight: 800 }}>Tu paies maintenant</span>
-                              <span style={{ fontSize: '1rem', fontWeight: 900, color: T.main }}>{euros(aPayerMaintenant)}</span>
+                              <span style={{ fontSize: '1rem', fontWeight: 900, color: T.main, textAlign: 'right' }}>
+                                {euros(aPayerMaintenant)}
+                                {decoChangeLePaiement && (
+                                  <span style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#065F46' }}>
+                                    {euros(ventDeco.aPayerMaintenant)} si séance découverte
+                                  </span>
+                                )}
+                              </span>
                             </div>
                           ) : montantEmpreinte(commercant, prestationChoisie, couverts) > 0 ? (
                             // 🔴 UNE TABLE GARANTIE N'A QU'UN SEUL MESSAGE (Alex,
@@ -4734,7 +4755,9 @@ export default function CommanderRdvSlug() {
                           {!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, deals) != null && (
                             <div style={{ padding: '9px 14px', background: '#ECFDF5', borderTop: '1px solid #10B98122' }}>
                               <span style={{ fontSize: '0.78rem', color: '#065F46', fontWeight: 700, lineHeight: 1.45 }}>
-                                Première fois à ce cours ? C’est une séance découverte : tu paies {euros(tarifDecouverteAffiche(prestationChoisie, deals))} au lieu de {euros(prixEffectifPrestation(prestationChoisie, deals))}, appliqué automatiquement à la confirmation.
+                                {decoChangeLePaiement
+                                  ? `Première fois à ce cours ? Séance découverte à ${euros(prixDecouverte)} au lieu de ${euros(prixEffectifPrestation(prestationChoisie, deals))} : tu paies ${euros(ventDeco.aPayerMaintenant)} maintenant${ventDeco.soldeSurPlace > 0 ? ` et ${euros(ventDeco.soldeSurPlace)} sur place` : ''}. Le montant exact s’affiche sur la page de paiement.`
+                                  : `Première fois à ce cours ? C’est une séance découverte : tu paies ${euros(tarifDecouverteAffiche(prestationChoisie, deals))} au lieu de ${euros(prixEffectifPrestation(prestationChoisie, deals))}, appliqué automatiquement à la confirmation.`}
                               </span>
                             </div>
                           )}
@@ -4780,7 +4803,11 @@ export default function CommanderRdvSlug() {
                           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '1rem', border: 'none', borderRadius: 100, background: (!formValide || submitting) ? '#E5E7EB' : `linear-gradient(135deg, ${T.main}, ${T.mid})`, color: (!formValide || submitting) ? '#9CA3AF' : '#fff', fontWeight: 800, fontSize: '1rem', cursor: (!formValide || submitting) ? 'default' : 'pointer', fontFamily: '"DM Sans", sans-serif', boxShadow: (!formValide || submitting) ? 'none' : `0 6px 24px ${T.main}55`, opacity: (!formValide || submitting) ? 0.6 : 1, transition: 'all 0.2s' }}>
                           {submitting ? 'Réservation en cours…' : (
                             <>
-                              {aPayerMaintenant > 0
+                              {/* ✅ 19/10 : sans montant quand la séance
+                                  découverte peut le changer (Alex, tableau). */}
+                              {aPayerMaintenant > 0 && decoChangeLePaiement
+                                ? 'Payer l’acompte et confirmer'
+                                : aPayerMaintenant > 0
                                 ? `Payer ${euros(aPayerMaintenant)} et confirmer`
                                 : montantEmpreinte(commercant, prestationChoisie, couverts) > 0
                                   ? 'Enregistrer ma carte et réserver'

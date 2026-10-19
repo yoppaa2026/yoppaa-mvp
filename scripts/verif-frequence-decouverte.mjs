@@ -256,6 +256,16 @@ const code = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 
   verifier('la pastille dit « Séance découverte »', ficheD.includes('Séance découverte : {euros(tarifDecouverteAffiche(p, deals))}'))
   verifier('le récapitulatif annonce la séance découverte avant de confirmer',
     ficheD.includes('{!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, deals) != null && ('))
+  // ✅ 19/10 (tableau : « annoncer les deux montants ») : avec un acompte, le
+  // montant découverte vient du MÊME calcul, et le bouton ne promet aucun montant.
+  verifier('les montants découverte viennent du même calcul que l’acompte',
+    /const ventDeco = prixDecouverte != null \? ventilerTunnelRdv\(\{\s*prixPrestation: prixDecouverte,/.test(ficheD))
+  verifier('l’annonce s’allume dès que la découverte change ce qui se paie maintenant',
+    ficheD.includes('const decoChangeLePaiement = !!ventDeco && aPayerMaintenant > 0 && ventDeco.aPayerMaintenant !== aPayerMaintenant'))
+  verifier('« Tu paies maintenant » annonce le montant découverte', ficheD.includes('{euros(ventDeco.aPayerMaintenant)} si séance découverte'))
+  verifier('le bouton ne promet pas un montant que Stripe ne prendra pas',
+    ficheD.includes("{aPayerMaintenant > 0 && decoChangeLePaiement\n                                ? 'Payer l’acompte et confirmer'")
+    || /aPayerMaintenant > 0 && decoChangeLePaiement\s*\? 'Payer l’acompte et confirmer'/.test(ficheD))
   verifier('la confirmation dit le prix retenu par le serveur',
     ficheD.includes('rdvCree.tarif_decouverte === true && rdvCree.prix_estime != null'))
   verifier('la route gratuite renvoie le drapeau à l’écran',

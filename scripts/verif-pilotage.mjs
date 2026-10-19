@@ -177,6 +177,17 @@ verifier('pas encore en ligne : en attente et relecture, ni publiée ni suspendu
 // Les alertes.
 verifier('✅ alerte verte : un commerce gratuit a reçu un signal hier',
   p.alertes.some(a => a.niveau === 'vert' && a.texte.includes('Friterie')))
+// 🔴 « SIGNALAUX » (Alex, 19/10) : le pluriel de « signal » est « signaux ».
+// On le vérifie au rendu (alerte, email) ET dans le code des trois fichiers.
+{
+  const deux = calculerPilotage(donnees({ signaux: [...signaux, { commercant_id: 'friterie', type: 'fidelite', created_at: '2026-10-19T19:00:00Z' }] }), MAINTENANT)
+  verifier('🔴 au pluriel, l’alerte dit « 2 signaux »', deux.alertes.some(a => a.texte.includes('a reçu 2 signaux hier')))
+  verifier('au singulier, « 1 signal »', p.alertes.some(a => a.texte.includes('a reçu 1 signal hier')))
+  verifier('🔴 l’email dit « 3 signaux sur 30 jours »', emailPilotage(deux).html.includes('3 signaux sur 30 jours'))
+  for (const f of ['lib/pilotage.js', 'lib/pilotage-email.js', 'app/admin/SectionPilotage.js']) {
+    verifier(`🔴 ${f} : jamais « signalaux »`, !/signalaux|signal\$\{[^}]*'aux'/i.test(brut(f)))
+  }
+}
 verifier('pas d’alerte verte pour un commerce qui paie Vendre',
   !p.alertes.some(a => a.niveau === 'vert' && a.texte.includes('Les Abbayes')))
 verifier('alerte orange : inscrit depuis plus de 7 jours, fiche pas en ligne',

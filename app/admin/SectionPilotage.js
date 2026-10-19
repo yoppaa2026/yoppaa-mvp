@@ -243,7 +243,7 @@ export default function SectionPilotage() {
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginTop: 14 }}>
                 <ListeNommee titre="À démarcher (signaux, pas en Vendre)" vide="Personne pour l’instant."
-                  items={p.revenu.aDemarcher.map(l => `${l.nom} · ${PLAN_LABEL[l.formule] || l.formule} · ${l.signaux30} signal${l.signaux30 > 1 ? 'aux' : ''} (${l.types.map(t => libelleEnvie(t).court).join(', ')})`)}/>
+                  items={p.revenu.aDemarcher.map(l => `${l.nom} · ${PLAN_LABEL[l.formule] || l.formule} · ${l.signaux30} ${l.signaux30 > 1 ? 'signaux' : 'signal'} (${l.types.map(t => libelleEnvie(t).court).join(', ')})`)}/>
                 <ListeNommee titre="Pas encore en ligne" vide="Toutes les fiches sont en ligne."
                   items={p.commerces.pasEnLigne.map(l => `${l.nom} · ${l.statutFiche || '?'} · inscrit il y a ${l.jours ?? '?'} j`)}/>
                 <ListeNommee titre="Formule payante sans abonnement Stripe" vide="Aucune."

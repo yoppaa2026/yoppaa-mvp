@@ -251,6 +251,18 @@ const code = (f) => sansProse(readFileSync(new URL(`../${f}`, import.meta.url), 
   verifier('le webhook le relit', code('app/api/stripe/webhook/route.js').includes("tarif_decouverte: meta.tarif_decouverte === '1'"))
   verifier('l’agenda montre la mention', code('app/dashboard/page.js').includes('rdv.tarif_decouverte === true'))
   verifier('la fiche l’annonce', code('app/commander/rdv/[slug]/page.js').includes('tarifDecouverteAffiche(p, deals) != null'))
+  // ✅ 19/10 (Alex : « pas d'indication de la réduc sauf dans le mail »).
+  const ficheD = code('app/commander/rdv/[slug]/page.js')
+  verifier('la pastille dit « Séance découverte »', ficheD.includes('Séance découverte : {euros(tarifDecouverteAffiche(p, deals))}'))
+  verifier('le récapitulatif annonce la séance découverte avant de confirmer',
+    ficheD.includes('{!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, deals) != null && ('))
+  verifier('la confirmation dit le prix retenu par le serveur',
+    ficheD.includes('rdvCree.tarif_decouverte === true && rdvCree.prix_estime != null'))
+  verifier('la route gratuite renvoie le drapeau à l’écran',
+    code('app/api/rdv/reserver/route.js').includes('tarif_decouverte: !!decouverte,'))
+  verifier('après un acompte, le drapeau et le prix remontent',
+    /select\('[^']*prix_estime, tarif_decouverte'\)/.test(code('app/api/rdv/from-session/route.js'))
+    && ficheD.includes('tarif_decouverte: j.rdv.tarif_decouverte === true'))
   verifier('l’éditeur refuse un tarif découverte qui n’est pas plus bas', code('app/dashboard/ConfigDashboard.js').includes('!(d > 0) || !(d < Number(form.prix))'))
   verifier('la copie d’une prestation emporte son tarif découverte',
     copieDePrestation({ nom: 'Pilates', prix: 15, prix_decouverte: 10 }, { commercantId: 'c' })?.prix_decouverte === 10)

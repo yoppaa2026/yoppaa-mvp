@@ -33,7 +33,9 @@ export async function GET(request) {
 
     const { data: rdv } = await supabase
       .from('rdv_reservations')
-      .select('id, numero_rdv, numero_prefixe, statut, acompte_montant, acompte_paye_en_ligne, date_rdv, heure_debut, heure_fin')
+      // ✅ 19/10 : `prix_estime` et `tarif_decouverte`, pour que l'écran de
+      // confirmation dise « Séance découverte » après un acompte.
+      .select('id, numero_rdv, numero_prefixe, statut, acompte_montant, acompte_paye_en_ligne, date_rdv, heure_debut, heure_fin, prix_estime, tarif_decouverte')
       .eq('stripe_checkout_session_id', sessionId)
       .maybeSingle()
 

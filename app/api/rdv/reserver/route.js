@@ -563,6 +563,8 @@ export async function POST(request) {
         heure_fin: heureFin,
         duree_minutes: dureeMinutes,
         prix_estime: prixBase,
+        // ✅ 19/10 : l'écran de confirmation dit « Séance découverte ».
+        tarif_decouverte: !!decouverte,
         acompte_montant: vent.acompte > 0 ? vent.acompte : null,
         acompte_du: vent.acompteDu,
         acompte_paye: false,

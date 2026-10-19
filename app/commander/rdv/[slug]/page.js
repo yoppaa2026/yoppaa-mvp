@@ -1209,7 +1209,9 @@ export default function CommanderRdvSlug() {
               const j = await res.json()
               console.info('[rdv stripe] poll response', j)
               if (j.ok && j.rdv) {
-                setRdvCree(p => ({ ...(p || {}), _attenteConfirmation: false, id: j.rdv.id, numero_rdv: j.rdv.numero_rdv, numero_prefixe: j.rdv.numero_prefixe, acompte_montant: j.rdv.acompte_montant ?? p?.acompte_montant }))
+                setRdvCree(p => ({ ...(p || {}), _attenteConfirmation: false, id: j.rdv.id, numero_rdv: j.rdv.numero_rdv, numero_prefixe: j.rdv.numero_prefixe, acompte_montant: j.rdv.acompte_montant ?? p?.acompte_montant,
+                  // ✅ 19/10 : le prix retenu par le serveur (séance découverte).
+                  prix_estime: j.rdv.prix_estime ?? p?.prix_estime, tarif_decouverte: j.rdv.tarif_decouverte === true }))
                 clearInterval(pollInterval)
                 console.info('[rdv stripe] numero recupere', j.rdv.numero_rdv)
               } else if (j.refuse) {
@@ -3314,7 +3316,7 @@ export default function CommanderRdvSlug() {
                                 annonce sans savoir pourquoi. */}
                             {tarifDecouverteAffiche(p, deals) != null && (
                               <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#065F46', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '5px 9px', margin: '0 0 8px', display: 'inline-block' }}>
-                                Première fois : {euros(tarifDecouverteAffiche(p, deals))}
+                                Séance découverte : {euros(tarifDecouverteAffiche(p, deals))}
                               </p>
                             )}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6 }}>
@@ -4722,6 +4724,20 @@ export default function CommanderRdvSlug() {
                               <span style={{ fontSize: '0.82rem', fontWeight: 800, color: T.deep }}>{euros(surPlace)}</span>
                             </div>
                           )}
+                          {/* ✅ LA SÉANCE DÉCOUVERTE SE DIT AVANT DE CONFIRMER
+                              (Alex, 19/10 : « pas d'indication de la réduc sauf
+                              dans le mail »). L'écran ne sait pas si c'est sa
+                              première fois : seul le serveur le sait, et on ne
+                              le lui demande pas (ce serait dire à n'importe qui
+                              si une adresse fréquente ce centre). On annonce
+                              donc la règle, et la confirmation dit le prix retenu. */}
+                          {!seanceSurAbo && tarifDecouverteAffiche(prestationChoisie, deals) != null && (
+                            <div style={{ padding: '9px 14px', background: '#ECFDF5', borderTop: '1px solid #10B98122' }}>
+                              <span style={{ fontSize: '0.78rem', color: '#065F46', fontWeight: 700, lineHeight: 1.45 }}>
+                                Première fois à ce cours ? C’est une séance découverte : tu paies {euros(tarifDecouverteAffiche(prestationChoisie, deals))} au lieu de {euros(prixEffectifPrestation(prestationChoisie, deals))}, appliqué automatiquement à la confirmation.
+                              </span>
+                            </div>
+                          )}
                           {/* ⚠️ ET LE TOTAL ÉCONOMISÉ, EN UNE LIGNE. C'est la
                               seule chose que le porteur d'un bon veut vérifier
                               avant de payer, et elle demandait jusqu'ici de
@@ -5001,7 +5017,11 @@ export default function CommanderRdvSlug() {
                         {rdvCree.abonnement_id ? 'Paiement' : 'Prix'}
                       </span>
                       <span style={{ fontSize: rdvCree.abonnement_id ? '0.8rem' : '0.95rem', fontWeight: rdvCree.abonnement_id ? 800 : 900, color: T.main, textAlign: 'right' }}>
-                        {libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, deals)}
+                        {/* ✅ 19/10 : LE PRIX RETENU PAR LE SERVEUR quand c'est une
+                            séance découverte, pas celui de la carte. */}
+                        {rdvCree.tarif_decouverte === true && rdvCree.prix_estime != null
+                          ? `Séance découverte · ${euros(rdvCree.prix_estime)}`
+                          : (libellePrixSeance(rdvCree) || formatPrix(prestationChoisie, deals))}
                       </span>
                     </div>
                     )}

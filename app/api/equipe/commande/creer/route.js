@@ -52,6 +52,7 @@ import { eurosNus } from '@/lib/montants'
 import {
   ORIGINE_COMMERCANT, MODES_ENCODEE, clientEncode, champsPaiementEncodee,
   avertissement, confirmationRequise, jugementMoment, creneauTermine, articleHorsJour, horsCalendrier,
+  avertissementsPlage,
 } from '@/lib/commande-encodee'
 import { calendrierDuCommerce } from '@/lib/calendrier-commande-server'
 import { joursIndisponibles } from '@/lib/delai-commande'
@@ -189,6 +190,9 @@ export async function POST(request) {
     for (const v of calcul.stocksVariantesCourts || []) {
       avertissements.push(avertissement(`stock:${v.article_id}`, `${v.nom} : il en reste ${v.disponible}.`))
     }
+    // ✅ (19/10) LA PLAGE DE RETRAIT DES ARTICLES : en ligne le serveur refuse,
+    // ici on prévient (« Encoder quand même »), comme tout le reste du moment.
+    avertissements.push(...avertissementsPlage(lignes, creneau))
 
     // ── La livraison : adresse, zone, minimum, frais ──────────────────────
     let fraisLivraisonCents = 0

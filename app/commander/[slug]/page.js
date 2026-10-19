@@ -22,6 +22,7 @@ import { refusDeMelange, libelleMoment, delaiDeLOffre, delaiEnJours, joursIndisp
 // fonction du module : recopier le test ici ferait passer chaque bonne affaire
 // de la semaine pour un invendu de fin de journée.
 import { porteUneFenetre, plafondDeLOffre, resteSurOffre, libelleReste, libelleFenetre, TITRE_YOPPER, PARAM_OFFRE } from '@/lib/anti-gaspi'
+import { plageDeLaLigne, plageCommune, creneauDansPlage, refusDePlageALAjout, raisonDeLaPlage, libellePlage, plageDeLArticle } from '@/lib/plage-retrait'
 import IconeAntiGaspi, { FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
@@ -2454,7 +2455,10 @@ export default function CommanderSlug() {
     // ⚠️ LE DÉLAI DES ARTICLES NE FILTRE PLUS LES HEURES (07/10) : il se
     // compte en JOURS, et le jour est déjà choisi. Un panier qui ne va pas
     // avec ce jour est arrêté au panier (`refusPanierCeJour`).
-    return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok)
+    // ✅ 19/10 : et la PLAGE DE RETRAIT du panier (créneaux communs). Vide =
+    // aucun filtre, l'ancien comportement.
+    const plage = plagePanierCourante()
+    return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok && creneauDansPlage(cr, plage))
   }
 
   useEffect(() => {
@@ -2660,6 +2664,7 @@ export default function CommanderSlug() {
     // jours et ses jours de vente. Sinon, la fenêtre propose son premier jour.
     // Placé AVANT la variante et les options, qui passent toutes par ici.
     if (refuseParDelai(article, { article, options, variante })) return
+    if (refuseParPlage(article)) return
     if (variante) {
       // Item à variante : le stock de LA variante fait foi (modèle détail)
       const key = `${article.id}_v${variante.id}`
@@ -2710,6 +2715,7 @@ export default function CommanderSlug() {
     if (plafond !== null && (panier[key]?.quantite || 0) + 1 > plafond) return
     const delaiOffre = delaiDuDeal(deal, article)
     if (refuseParDelai({ id: article.id, nom: deal.titre, delai_minutes: delaiOffre, offre: { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin } }, { deal, article })) return
+    if (refuseParPlage({ id: article.id, nom: deal.titre, deal_id: deal.id, offre: { heure_debut: deal.heure_debut, heure_fin: deal.heure_fin } })) return
     const prixDeal = Number(deal.prix_deal)
     const prixAvant = deal.prix_original != null ? Number(deal.prix_original) : null
     setPanier(prev => ({ ...prev, [key]: {
@@ -3566,6 +3572,8 @@ export default function CommanderSlug() {
       if (!slot._date) return false
       const dateStr = jourLocalISO(slot._date)
       if (!creneauCommandable(slot, { dateStr, instantDebut: brusselsInstant }).ok) return false
+      // ✅ 19/10 : la plage de retrait vaut aussi pour la livraison.
+      if (!creneauDansPlage(slot, plagePanierCourante())) return false
       return panierVaCeJour(dateStr)
     })
   // 🔴 UNE SEULE RÈGLE À LA FOIS, LA MÊME QUE LE SERVEUR (Alex, 05/10) :
@@ -3652,6 +3660,51 @@ export default function CommanderSlug() {
   function panierVaCeJour(jour) {
     return Object.values(panier).every(l => !refusDuJour({ ...regleArticle(l), jour, aujourdhui: aujourdhuiISO() }))
   }
+  // ✅ LA PLAGE DE RETRAIT (19/10, 7 Abbayes : « les sandwichs jusqu'à 15 h »).
+  // Elle se lit sur l'article du CATALOGUE, comme les circuits : une ligne
+  // revenue du cache n'a pas forcément les colonnes. Un duo n'a que la plage
+  // commune à ses deux articles ; un invendu garde sa propre fenêtre.
+  // ⚠️ SANS PLAGE RÉGLÉE, RIEN NE CHANGE : la plage commune est vide et
+  // `creneauDansPlage` accepte tout.
+  // 🔴 RIEN ICI N'EST UNE PROTECTION : `create-commande` refait le compte.
+  function plageLigne(ligne) {
+    const article = articles.find(a => a.id === ligne?.id) || ligne
+    const deal = ligne?.deal_id ? (dealsActifs || []).find(d => d.id === ligne.deal_id) : null
+    const second = deal?.deal_type === 'bundle' && deal.article2_id ? articles.find(a => a.id === deal.article2_id) : null
+    return plageDeLaLigne(ligne, article, second)
+  }
+  function entreesPlagePanier() {
+    return Object.values(panier).map(l => ({ nom: l.nom, plage: plageLigne(l) }))
+  }
+  function plagePanierCourante() {
+    const c = plageCommune(entreesPlagePanier())
+    return { de: c.de, a: c.a }
+  }
+  // La mention de la carte : les jours et le délai, puis la plage de retrait
+  // (« Retrait jusqu'à 15 h »). Une seule pastille, comme avant.
+  function mentionCarte(a) {
+    return [mentionDisponibilite(regleArticle(a)), libellePlage(plageDeLArticle(a))].filter(Boolean).join(' · ') || null
+  }
+  // ⚠️ `creneauChoisi` EST UN IDENTIFIANT, pas un créneau : on retrouve le
+  // créneau du jour affiché. Introuvable = on ne juge pas (l'ancien
+  // comportement) ; le serveur refait le compte de toute façon.
+  function creneauChoisiDansPlage() {
+    const plage = plagePanierCourante()
+    if (!plage.de && !plage.a) return true
+    const cr = (joursDispos[jourSelectionne]?.creneaux || creneaux).find(c => c.id === creneauChoisi)
+    return !cr || creneauDansPlage(cr, plage)
+  }
+  // Refus à l'ajout quand l'article n'a AUCUN moment de retrait en commun avec
+  // le panier (décision d'Alex, comme pour les délais le 10/09). Le message
+  // nomme les deux articles et le geste.
+  function refuseParPlage(ligne) {
+    const message = refusDePlageALAjout({ nom: ligne?.nom || 'Cet article', plage: plageLigne(ligne) }, entreesPlagePanier())
+    if (!message) return false
+    setToastMessage(message)
+    setTimeout(() => setToastMessage(null), 7000)
+    return true
+  }
+
   // `rejouer` : de quoi refaire l'ajout une fois le jour changé.
   function refuseParDelai(ligne, rejouer) {
     const jour = jourDuPanier()
@@ -3778,7 +3831,10 @@ export default function CommanderSlug() {
     // soit le jour. Sans jour ouvert dans les deux semaines, le commerce est en
     // congés et on ne prend pas la commande plutôt que de promettre une date.
     ? (modeBoutiqueEff === 'expedition' ? expeFormOk : !!jourRetraitBoutique)
-    : (modeCommande === 'livraison' ? livraisonFormOk : !!creneauChoisi)
+    // ✅ 19/10 : un créneau choisi AVANT qu'un sandwich « jusqu'à 15 h » entre
+    // au panier ne compte plus s'il sort de la plage (la liste ne le montre
+    // plus) ; le serveur le refuserait de toute façon.
+    : (modeCommande === 'livraison' ? livraisonFormOk : (!!creneauChoisi && creneauChoisiDansPlage()))
   // Mode de la commande qui vient d'être passée (pour l'écran de confirmation étape 4).
   // On lit derniereCommande en priorité (source de vérité) avec repli sur l'état courant.
   const estLivraisonConfirmee = (derniereCommande?.mode_retrait || modeCommande) === 'livraison'
@@ -5187,7 +5243,7 @@ export default function CommanderSlug() {
                     <div className="articles-grid">
                       {mesCoeurs.map(a => (
                         <div key={`coeur-${a.id}`}>
-                          <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
+                          <ArticleRow article={a} panier={panier} mentionDispo={mentionCarte(a)} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
                             onCommanderDemain={commanderPourJour} circuit={circuitAffiche} relais={relaisAutreJour(a)} onCommanderAutreJour={commanderUnAutreJour}
@@ -5229,7 +5285,7 @@ export default function CommanderSlug() {
                       <div className="articles-grid">
                         {artsDecat.map(a => (
                           <div key={a.id}>
-                            <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
+                            <ArticleRow article={a} panier={panier} mentionDispo={mentionCarte(a)} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
                               ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                               stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
                               onCommanderDemain={commanderPourJour} circuit={circuitAffiche} relais={relaisAutreJour(a)} onCommanderAutreJour={commanderUnAutreJour}
@@ -5264,7 +5320,7 @@ export default function CommanderSlug() {
                     <div className="articles-grid">
                       {sansCat.map(a => (
                         <div key={a.id}>
-                          <ArticleRow article={a} panier={panier} mentionDispo={mentionDisponibilite(regleArticle(a))} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
+                          <ArticleRow article={a} panier={panier} mentionDispo={mentionCarte(a)} etatJour={etatJourArticle(a)} optionsParArticle={optionsParArticle}
                             ajouterAuPanier={ajouterAuPanier} retirerDuPanier={retirerDuPanier} qteTotaleArticle={qteTotaleArticle}
                             stocksJour={stocksJour} jourSelectionne={jourSelectionne} joursDispos={joursDispos} jourRetrait={estDetail ? jourRetraitBoutique : null}
                             onCommanderDemain={commanderPourJour} circuit={circuitAffiche} relais={relaisAutreJour(a)} onCommanderAutreJour={commanderUnAutreJour}
@@ -5698,6 +5754,15 @@ export default function CommanderSlug() {
                   </p>
                 )}
 
+                {/* ✅ 19/10 : LA PLAGE DE RETRAIT SE DIT, elle ne se devine pas.
+                    Sans elle, le client chercherait pourquoi les créneaux de
+                    l'après-midi ont disparu. */}
+                {raisonDeLaPlage(entreesPlagePanier()) && (
+                  <p style={{ fontSize: '0.8rem', fontWeight: 700, color: T.deep, background: T.pale, border: `1.5px solid ${T.light}`, borderRadius: 12, padding: '0.625rem 0.75rem', margin: '0 0 0.875rem' }}>
+                    {raisonDeLaPlage(entreesPlagePanier())}
+                  </p>
+                )}
+
                 <div className="grid3" style={{ marginBottom: '1.5rem' }}>
                   {[...new Map(
                     creneauxProposables()
@@ -5767,7 +5832,9 @@ export default function CommanderSlug() {
                       créneaux du jour avant filtrage. */}
                   {creneauxProposables().length === 0 && (
                     <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '1.5rem', color: T.muted, fontSize: '0.875rem', fontWeight: 600 }}>
-                      Aucun créneau disponible ce jour.
+                      {raisonDeLaPlage(entreesPlagePanier())
+                        ? 'Aucun créneau de ce jour ne tient dans les heures de retrait de ton panier. Choisis un autre jour.'
+                        : 'Aucun créneau disponible ce jour.'}
                     </div>
                   )}
                 </div>
@@ -5780,8 +5847,13 @@ export default function CommanderSlug() {
                       <span style={{ fontSize: '0.68rem', fontWeight: 800, color: T.main, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Créneaux de livraison</span>
                       <div style={{ flex: 1, height: 1, background: T.pale }}/>
                     </div>
+                    {raisonDeLaPlage(entreesPlagePanier()) && (
+                      <p style={{ fontSize: '0.8rem', fontWeight: 700, color: T.deep, background: T.pale, border: `1.5px solid ${T.light}`, borderRadius: 12, padding: '0.625rem 0.75rem', margin: '0 0 0.75rem' }}>
+                        {raisonDeLaPlage(entreesPlagePanier())}
+                      </p>
+                    )}
                     {slotsLivraison.length === 0
-                      ? <p style={{ textAlign: 'center', padding: '1.5rem', color: T.muted, fontSize: '0.875rem', fontWeight: 600 }}>Aucune tournée disponible pour le moment.</p>
+                      ? <p style={{ textAlign: 'center', padding: '1.5rem', color: T.muted, fontSize: '0.875rem', fontWeight: 600 }}>{raisonDeLaPlage(entreesPlagePanier()) ? 'Aucune tournée ne tient dans les heures de retrait de ton panier.' : 'Aucune tournée disponible pour le moment.'}</p>
                       : <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {slotsLivraison.map(slot => {
                             const { complet } = calculerCapaciteCreneau(slot, { modeCapaciteDefaut: commercant?.mode_capacite })

@@ -33,8 +33,10 @@ const CATALOGUE = [
 {
   // ⚠️ REPOINTÉE LE 10/10 : sept actions (stock, TVA, temps de préparation).
   // ⚠️ REPOINTÉE LE 15/10 : dix (en ligne ou vitrine, le jour même, sur commande).
-  v('les dix actions sont nommées',
-    ACTIONS_LOT.join(',') === 'disponible,indisponible,categorie,prix,stock,tva,temps_prepa,vente,jour_meme,sur_commande', ACTIONS_LOT.join(','))
+  // REPOINTÉE LE 19/10 : onze actions, avec `plage` (heures de retrait,
+  // décision d'Alex au tableau).
+  v('les onze actions sont nommées',
+    ACTIONS_LOT.join(',') === 'disponible,indisponible,categorie,prix,stock,tva,temps_prepa,vente,jour_meme,sur_commande,plage', ACTIONS_LOT.join(','))
 
   v('la sélection retrouve ses articles',
     articlesDuLot(CATALOGUE, [1, 3]).map(a => a.nom).join(',') === 'Margherita,Tiramisu',
@@ -358,7 +360,8 @@ const CATALOGUE = [
   v('rien n’est choisi d’avance', /useState\(null\)\s*\/\/ VENTE_EN_LIGNE|const \[lotVente, setLotVente\] = useState\(null\)/.test(ecran)
     && /const \[lotJourMeme, setLotJourMeme\] = useState\(null\)/.test(ecran) && /useState\(\{ actif: null, delaiJours: '1', max: '' \}\)/.test(ecran))
   v('les refus des nouvelles actions sont vérifiés avant d’écrire',
-    /const ACTIONS_AVEC_REFUS = \['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande'\]/.test(ecran))
+    // REPOINTÉE LE 19/10 : avec `plage`.
+    /const ACTIONS_AVEC_REFUS = \['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage'\]/.test(ecran))
 }
 
 console.log(`\nAgir en lot sur le catalogue : ${ok} vérifications`)

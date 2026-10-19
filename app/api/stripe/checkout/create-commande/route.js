@@ -57,6 +57,7 @@ import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone } from '@/lib/zo
 import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffres, itemsDeReservation, refusDeReservation, messageCircuit, SELECT_ARTICLES, SELECT_DEALS, SELECT_OPTIONS_VALEURS, SELECT_GROUPES_OPTIONS, lirePrixTaille } from '@/lib/lignes-commande'
 import { circuitsDeLArticle, circuitsCommuns } from '@/lib/stock-article'
 import { porteUneFenetre } from '@/lib/anti-gaspi'
+import { plageDeLaLigne, refusDePlageAuCreneau } from '@/lib/plage-retrait'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { refusCoordonnees } from '@/lib/coordonnees-client'
 import { verdictForfait, forfaitOuvre } from '@/lib/garde-forfait'
@@ -846,7 +847,7 @@ export async function POST(request) {
       const seconds = [...new Set(lignes.map(l => l.deal_article2_id).filter(Boolean))]
       if (seconds.length > 0) {
         const { data: arts2, error: errArts2 } = await supabase
-          .from('articles').select('id, delai_minutes, vente_jour, commande_active, stock_mode')
+          .from('articles').select('id, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des, retrait_jusqua')
           .in('id', seconds).eq('commercant_id', commercant.id)
         // ⚠️ UNE LECTURE EN ÉCHEC N'EST PAS « AUCUN DÉLAI » : on refuse plutôt
         // que de vendre pour aujourd'hui une tarte qui en demande deux.
@@ -870,6 +871,23 @@ export async function POST(request) {
       const refusMelange = refusDeMelange(lignes)
       if (refusMelange) {
         return NextResponse.json({ ok: false, error: refusMelange }, { status: 409 })
+      }
+
+      // ✅ LA PLAGE DE RETRAIT DE CHAQUE ARTICLE (19/10, 7 Abbayes : « les
+      // sandwichs jusqu'à 15 h »). Le créneau choisi doit tenir ENTIER dans la
+      // plage de chaque ligne, lue en base (un duo : la plage commune à ses
+      // deux articles ; un invendu : sa propre fenêtre). Retrait ET livraison.
+      // ⚠️ SANS PLAGE RÉGLÉE, RIEN NE CHANGE : `refusDePlageAuCreneau` rend
+      // null pour un article qui n'en a pas.
+      if (creneau && !estBoutique) {
+        const entreesPlage = lignes.map(l => ({
+          nom: l.article_nom,
+          plage: plageDeLaLigne(l, l, l.deal_article2_id ? secondDuDuoParId[String(l.deal_article2_id)] || null : null),
+        }))
+        const refusPlage = refusDePlageAuCreneau(entreesPlage, creneau)
+        if (refusPlage) {
+          return NextResponse.json({ ok: false, error: refusPlage, creneau_indisponible: true }, { status: 409 })
+        }
       }
 
       // 🔴 LE DÉLAI EN JOURS DE CALENDRIER, ARTICLE PAR ARTICLE (Alex, 07/10).

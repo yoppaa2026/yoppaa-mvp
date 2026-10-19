@@ -313,12 +313,15 @@ const MUTATIONS = [
   // ⚠️ Ancre reorientee le 07/10 : le filtre tient desormais en une ligne.
   { nom: '🔴 le selecteur cesse d’appliquer la cloture du creneau',
     fichier: FICHE,
-    de: '    return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok)',
-    vers: '    return liste' },
+    // REPOINTÉE LE 19/10 : la plage de retrait filtre sur la même ligne ; la
+    // mutation retire la CLÔTURE et garde la plage.
+    de: '    return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok && creneauDansPlage(cr, plage))',
+    vers: '    return liste.filter(cr => creneauDansPlage(cr, plage))' },
   { nom: '🔴 le selecteur repasse en heure MACHINE',
     fichier: FICHE,
-    de: '    return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok)',
-    vers: '    return liste.filter(cr => creneauCommandable(cr, { dateStr }).ok)' },
+    // REPOINTÉE LE 19/10 (même ligne, voir au-dessus).
+    de: '    return liste.filter(cr => creneauCommandable(cr, { dateStr, instantDebut: brusselsInstant }).ok && creneauDansPlage(cr, plage))',
+    vers: '    return liste.filter(cr => creneauCommandable(cr, { dateStr }).ok && creneauDansPlage(cr, plage))' },
 
 
   { nom: '🔴 le refus de melange ne s’affiche plus',
@@ -404,8 +407,9 @@ const MUTATIONS = [
   { nom: '🔴 le select des articles ne demande plus le delai',
     fichier: LIGNES,
     // ⚠️ Ancre reorientee le 08/10 : les circuits suivent le delai (temps 3).
-    de: 'tva_taux, tva_taux_sur_place, delai_minutes, vente_jour, commande_active, stock_mode\'',
-    vers: 'tva_taux, tva_taux_sur_place, vente_jour, commande_active, stock_mode\'' },
+    // REPOINTÉE LE 19/10 : le select finit par la plage de retrait.
+    de: 'tva_taux, tva_taux_sur_place, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des',
+    vers: 'tva_taux, tva_taux_sur_place, vente_jour, commande_active, stock_mode, retrait_des' },
 
   { nom: '🔴 le select des deals ne demande plus la fenetre',
     fichier: LIGNES,

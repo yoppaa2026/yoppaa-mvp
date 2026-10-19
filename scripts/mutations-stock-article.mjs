@@ -232,10 +232,11 @@ const MUTATIONS = [
     fichier: BORD, de: '    const refusB = avecCircuits ? refusCircuits(form) : null', vers: '    const refusB = null' },
   { nom: '🔴 le comptoir du jour liste les articles sur commande seulement',
     fichier: BORD, de: "    return articles.filter(a => a.actif !== false && a.est_vitrine !== true && modeStockDe(a) === 'jour' && (!deuxCircuits || a.vente_jour !== false))", vers: "    return articles.filter(a => a.actif !== false && a.est_vitrine !== true && modeStockDe(a) === 'jour')" },
+  // REPOINTÉES LE 19/10 : le select finit par la plage de retrait.
   { nom: '🔴 SELECT_ARTICLES oublie les circuits (tout autre jour refuse)',
-    fichier: 'lib/lignes-commande.js', de: 'tva_taux_sur_place, delai_minutes, vente_jour, commande_active, stock_mode\'', vers: 'tva_taux_sur_place, delai_minutes, stock_mode\'' },
+    fichier: 'lib/lignes-commande.js', de: 'tva_taux_sur_place, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des', vers: 'tva_taux_sur_place, delai_minutes, stock_mode, retrait_des' },
   { nom: '🔴 SELECT_ARTICLES oublie le mode (le pot refuse samedi)',
-    fichier: 'lib/lignes-commande.js', de: 'tva_taux_sur_place, delai_minutes, vente_jour, commande_active, stock_mode\'', vers: 'tva_taux_sur_place, delai_minutes, vente_jour, commande_active\'' },
+    fichier: 'lib/lignes-commande.js', de: 'tva_taux_sur_place, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des', vers: 'tva_taux_sur_place, delai_minutes, vente_jour, commande_active, retrait_des' },
   { nom: '🔴 la copie oublie les circuits',
     fichier: 'lib/catalogue-copie.js', de: "  'vente_jour', 'commande_active', 'commande_max_jour',", vers: '' },
 ]

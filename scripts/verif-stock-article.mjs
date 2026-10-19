@@ -532,7 +532,8 @@ const code = (f) => sansProse(lire(f))
     && /circuits = circuitsCommuns\(circuits, circuitsDeLArticle\(secondDuDuoParId\[String\(l\.deal_article2_id\)\], commercant\)\)/.test(cc)
     && /if \(refus\?\.raison === 'aujourdhui_seulement'\)/.test(cc))
   v('🔴 create-commande : le second article d’un duo est lu AVEC ses circuits',
-    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active, stock_mode'\)/.test(cc))
+    // REPOINTÉE LE 19/10 : la plage de retrait est lue avec les circuits.
+    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des, retrait_jusqua'\)/.test(cc))
   v('🔴 create-commande : l’horizon lit les circuits du catalogue',
     /\.select\('id, delai_minutes, horizon_jours, vente_jour, commande_active, stock_mode'\)/.test(cc) && /horizonJours: a\.horizon_jours, circuits: circuitsDeLArticle\(a, commercant\)/.test(cc))
   const rdv = code('app/api/stripe/checkout/create-rdv-commande/route.js')

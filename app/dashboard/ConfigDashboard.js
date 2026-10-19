@@ -101,6 +101,7 @@ import BoutonIaInline from './BoutonIaInline'
 import { champsModifies } from '@/lib/formulaire-modifie'
 import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
 import { choixDeDelai, libelleChoixDelai, HORIZONS_ARTICLE, libelleHorizonArticle } from '@/lib/delai-commande'
+import { heureDePlage, refusDeSaisiePlage, plageSansCreneau, libellePlage } from '@/lib/plage-retrait'
 import { categoriesDuCommerce, listeApresAjout, renommage, listeApresSuppression, parentDe, feuilleDe } from '@/lib/categories-catalogue'
 import { trierArticles, positionDansCategorie, deplacementDansCategorie } from '@/lib/ordre-articles'
 import { jourSemaineDe, CLOTURES_PROPOSEES, libelleDuree, phraseCloture, minutesDeCloture } from '@/lib/creneaux'
@@ -186,7 +187,7 @@ import {
 
 // Les actions groupées qui ont un refus à elles (`refusDuLot`), vérifié avant
 // d'écrire et affiché en rouge. Les autres n'ont rien à saisir.
-const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande']
+const ACTIONS_AVEC_REFUS = ['prix', 'stock', 'tva', 'temps_prepa', 'vente', 'jour_meme', 'sur_commande', 'plage']
 import OrdreCategories from '@/app/dashboard/OrdreCategories'
 import TabEquipe from '@/app/dashboard/TabEquipe'
 import { EQUIPE_DANS_LA_BARRE } from '@/lib/equipe'
@@ -625,6 +626,9 @@ function TabMenu({ commercantId, commercant, toast }) {
   const [lotVente, setLotVente] = useState(null)        // VENTE_EN_LIGNE | VENTE_VITRINE
   const [lotJourMeme, setLotJourMeme] = useState(null)  // true | false
   const [lotCommande, setLotCommande] = useState({ actif: null, delaiJours: '1', max: '' })
+  // ✅ 19/10 : les heures de retrait, d'un coup (« Sandwichs : jusqu'à 15 h »).
+  // Les deux vides = « tous les créneaux », pour retirer une plage.
+  const [lotPlage, setLotPlage] = useState({ de: '', a: '' })
   // La valeur que l'action choisie applique : une seule source pour l'aperçu,
   // le refus et l'écriture.
   const valeurDuLot = (action) => action === 'prix' ? lotValeur
@@ -635,6 +639,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     : action === 'vente' ? lotVente
     : action === 'jour_meme' ? lotJourMeme
     : action === 'sur_commande' ? lotCommande
+    : action === 'plage' ? lotPlage
     : null
   // ─── QUI DOIT RELIRE SES GROUPES (Alex, 25/09) ───────────────────────────
   //
@@ -918,14 +923,14 @@ function TabMenu({ commercantId, commercant, toast }) {
     // jours (le défaut). C'est ce que faisait tout article avant les deux
     // circuits, et ce que la migration a donné à l'existant (Alex, 08/10).
     const demainCommandable = deuxCircuits && (Number(commercant?.horizon_commande) || 2) >= 2
-    setForm({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '' })
+    setForm({ nom: '', description: '', prix: '', stock_jour: '', stock_mode: modeStockParDefaut(commercant), actif: true, categorie: catActive !== 'Tous' && catActive !== 'Sans catégorie' ? catActive : '', temps_prepa: '', delai_minutes: demainCommandable ? 1440 : 0, horizon_jours: '', photo_url: '', vendable: true, tva_taux: commercant?.tva_taux_defaut ?? '', tva_taux_sur_place: '', vente_jour: true, commande_active: demainCommandable, commande_max_jour: '', retrait_des: '', retrait_jusqua: '' })
     setGalerie([]); setPropsIa([])
     setEditId(null); setShowForm(true)
   }
   function openEdit(a) {
     // ⚠️ « Sans limite » n'a pas de quantité : le champ repart vide si l'on
     // change d'avis, au lieu d'afficher le 0 technique qui la représente.
-    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '' })
+    setForm({ nom: a.nom, description: a.description || '', prix: String(a.prix), stock_jour: modeStockDe(a) === 'illimite' ? '' : String(a.stock_jour ?? ''), stock_mode: modeStockDe(a), actif: a.actif, categorie: a.categorie || '', temps_prepa: String(a.temps_prepa ?? ''), delai_minutes: a.delai_minutes ?? 0, horizon_jours: a.horizon_jours ?? '', photo_url: a.photo_url || '', vendable: !a.est_vitrine, tva_taux: a.tva_taux ?? '', tva_taux_sur_place: a.tva_taux_sur_place ?? '', vente_jour: a.vente_jour !== false, commande_active: a.commande_active === true, commande_max_jour: a.commande_max_jour ?? '', retrait_des: heureDePlage(a.retrait_des) || '', retrait_jusqua: heureDePlage(a.retrait_jusqua) || '' })
     setGalerie([]); setPropsIa([])
     fetchGalerie(a.id)
     setEditId(a.id); setShowForm(true)
@@ -945,6 +950,12 @@ function TabMenu({ commercantId, commercant, toast }) {
     // Un article vendu en ligne dit comment se compte son stock.
     const refusStock = form.vendable && venteJour ? refusQuantite(form.stock_mode, form.stock_jour) : null
     if (refusStock) return toast(refusStock, 'error')
+    // ✅ LA PLAGE DE RETRAIT (19/10) : en alimentaire seulement (les créneaux),
+    // et sur un article vendu en ligne. Ailleurs on écrit `null`, jamais une
+    // plage oubliée qui agirait en silence.
+    const avecPlage = estAlimentaire && form.vendable
+    const refusPlage = avecPlage ? refusDeSaisiePlage(form.retrait_des, form.retrait_jusqua) : null
+    if (refusPlage) return toast(refusPlage, 'error')
     setSaving(true)
     const avant = editId ? articles.find(x => String(x.id) === String(editId)) : null
     const modeValide = MODES_STOCK.includes(form.stock_mode) ? form.stock_mode : modeStockParDefaut(commercant)
@@ -989,11 +1000,27 @@ function TabMenu({ commercantId, commercant, toast }) {
       // l'article passerait pour exonéré alors qu'il n'a simplement pas été réglé.
       tva_taux: form.tva_taux === '' || form.tva_taux == null ? null : Number(form.tva_taux),
       tva_taux_sur_place: form.tva_taux_sur_place === '' || form.tva_taux_sur_place == null ? null : Number(form.tva_taux_sur_place),
+      // ✅ 19/10 : la plage de retrait, vide = aucune limite.
+      retrait_des: avecPlage ? heureDePlage(form.retrait_des) : null,
+      retrait_jusqua: avecPlage ? heureDePlage(form.retrait_jusqua) : null,
     }
     const { error } = editId
       ? await supabase.from('articles').update(payload).eq('id', editId)
       : await supabase.from('articles').insert(payload)
     if (error) { setSaving(false); toast(`Erreur : ${error.message}`, 'error'); return }
+    // ⚠️ UNE PLAGE QUI NE TOMBE SUR AUCUN CRÉNEAU rendrait l'article
+    // commandable par personne, sans qu'aucun écran ne le dise. On l'enregistre
+    // (il va peut-être ajouter le créneau), mais on le prévient tout de suite.
+    const plageReglee = { de: payload.retrait_des, a: payload.retrait_jusqua }
+    if (plageReglee.de || plageReglee.a) {
+      const { data: crs } = await supabase.from('creneaux').select('heure_debut, heure_fin, actif').eq('commercant_id', commercantId)
+      if (plageSansCreneau(plageReglee, crs || [])) {
+        setSaving(false)
+        toast(`Enregistré, mais aucun de tes créneaux ne tient dans « ${libellePlage(plageReglee).toLowerCase()} » : cet article ne pourra pas être commandé. Ajoute un créneau dans cette plage, ou élargis-la.`, 'error')
+        setShowForm(false); fetchArticles(); chargerVentesMagasin()
+        return
+      }
+    }
     // 🔴 « SANS LIMITE » RETIRE LES QUANTITÉS PAR JOUR. Le serveur les lit encore
     // avant tout le reste : une quantité de lundi restée là plafonnerait un
     // article déclaré sans limite. Les jours rendus INDISPONIBLES restent : ce
@@ -1706,6 +1733,31 @@ function TabMenu({ commercantId, commercant, toast }) {
             </SectionFormulaire>
           )}
 
+          {/* ✅ LA PLAGE DE RETRAIT (19/10, 7 Abbayes : « les sandwichs jusqu'à
+              15 h, le pain jusqu'à la fin des créneaux »). En alimentaire, sur
+              un article vendu en ligne. Vide = tous les créneaux, comme avant.
+              Pour toute une catégorie d'un coup : la sélection groupée. */}
+          {estAlimentaire && form.vendable && (
+            <SectionFormulaire titre="Heures de retrait" phrase="Si cet article ne se retire qu’à certaines heures : des sandwichs jusqu’à 15 h, un plat du soir à partir de 17 h. Laisse vide pour tous tes créneaux.">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+                <ChampFormulaire label="À partir de" aide="Vide = dès ton premier créneau.">
+                  <Input type="time" step="300" value={form.retrait_des || ''} onChange={e => setForm(p => ({ ...p, retrait_des: e.target.value }))}/>
+                </ChampFormulaire>
+                <ChampFormulaire label="Jusqu’à" aide="Un créneau doit finir au plus tard à cette heure. Vide = jusqu’à ton dernier créneau.">
+                  <Input type="time" step="300" value={form.retrait_jusqua || ''} onChange={e => setForm(p => ({ ...p, retrait_jusqua: e.target.value }))}/>
+                </ChampFormulaire>
+              </div>
+              {(form.retrait_des || form.retrait_jusqua) && !refusDeSaisiePlage(form.retrait_des, form.retrait_jusqua) && (
+                <p style={{ margin: '10px 0 0', fontSize: 13, color: '#3F3A4F' }}>
+                  Tes clients verront : <strong>{libellePlage({ de: heureDePlage(form.retrait_des), a: heureDePlage(form.retrait_jusqua) })}</strong>. Seuls les créneaux qui tiennent dans cette plage leur seront proposés.
+                </p>
+              )}
+              {refusDeSaisiePlage(form.retrait_des, form.retrait_jusqua) && (
+                <p style={{ margin: '10px 0 0', fontSize: 13, color: '#B91C1C', fontWeight: 700 }}>{refusDeSaisiePlage(form.retrait_des, form.retrait_jusqua)}</p>
+              )}
+            </SectionFormulaire>
+          )}
+
           {/* ⚠️ LE DÉLAI N'EST PAS LE TEMPS DE PRÉPARATION. Le DÉLAI dit à
               partir de QUAND l'article peut être retiré. Pas en vitrine : rien
               ne s'y commande. */}
@@ -2007,6 +2059,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                       ...(deuxCircuits ? [
                         { val: 'jour_meme', label: 'Le jour même' },
                         { val: 'sur_commande', label: 'Sur commande' },
+                        { val: 'plage', label: 'Heures de retrait' },
                       ] : []),
                       { val: 'stock', label: 'Stock et quantités' },
                       { val: 'tva', label: 'Taux de TVA' },
@@ -2117,6 +2170,18 @@ function TabMenu({ commercantId, commercant, toast }) {
                             aria-label="Maximum par jour" placeholder="sans limite" style={{ ...s.input, width: 110, fontSize: 13, textAlign: 'center' }}/>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {lotAction === 'plage' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12.5, color: T.muted }}>Retrait à partir de</span>
+                      <input type="time" step="300" value={lotPlage.de} onChange={e => setLotPlage(p => ({ ...p, de: e.target.value }))}
+                        aria-label="Retrait à partir de" style={{ ...s.input, width: 110, fontSize: 13, textAlign: 'center' }}/>
+                      <span style={{ fontSize: 12.5, color: T.muted }}>jusqu’à</span>
+                      <input type="time" step="300" value={lotPlage.a} onChange={e => setLotPlage(p => ({ ...p, a: e.target.value }))}
+                        aria-label="Retrait jusqu’à" style={{ ...s.input, width: 110, fontSize: 13, textAlign: 'center' }}/>
+                      <span style={{ fontSize: 12, color: T.muted }}>Laisse vide pour « dès le premier » ou « jusqu’au dernier » créneau.</span>
                     </div>
                   )}
 

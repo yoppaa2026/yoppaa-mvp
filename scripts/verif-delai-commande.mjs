@@ -548,20 +548,28 @@ egal('sans nom d’article, la phrase tient debout',
 
   // 🔴 LA MENTION SUR LA CARTE : les jours de vente et la date limite
   // (07/10), calculées par la fiche et passées à la carte.
+  // REPOINTÉE LE 19/10 : la mention passe par `mentionCarte`, qui y ajoute la
+  // plage de retrait (lib/plage-retrait.js). La règle reste : les jours et la
+  // date limite viennent de `mentionDisponibilite(regleArticle(a))`.
   verifier('🔴 la carte affiche la mention des jours et de la date limite',
-    /mentionDispo=\{mentionDisponibilite\(regleArticle\(a\)\)\}/.test(FICHE) && /const mention = mentionDispo/.test(FICHE) && /\{mention\}/.test(FICHE))
+    /mentionDispo=\{mentionCarte\(a\)\}/.test(FICHE)
+    && /function mentionCarte\(a\) \{\s*return \[mentionDisponibilite\(regleArticle\(a\)\), libellePlage\(plageDeLArticle\(a\)\)\]\.filter\(Boolean\)\.join\(' · '\) \|\| null/.test(FICHE)
+    && /const mention = mentionDispo/.test(FICHE) && /\{mention\}/.test(FICHE))
   // ⚠️ RIEN EN VITRINE : rien ne s'y commande, donc rien n'y attend.
   verifier('et pas en vitrine',
     /if \(article\.est_vitrine \|\| modeVitrine\) return null\s*const mention = mentionDispo/.test(FICHE))
   // ⚠️ REPOINTÉE LE 16/10 soir : une troisième liste, « Tes coups de cœur »
   // (Alex, tableau), passe les mêmes. Toutes les listes, pas « au moins deux ».
   verifier('🔴 les trois listes d’articles passent la mention ET l’état du jour',
-    (FICHE.match(/mentionDispo=\{mentionDisponibilite\(regleArticle\(a\)\)\} etatJour=\{etatJourArticle\(a\)\}/g) || []).length === 3
+    // REPOINTÉE LE 19/10 : `mentionCarte(a)` (voir la garde au-dessus).
+    (FICHE.match(/mentionDispo=\{mentionCarte\(a\)\} etatJour=\{etatJourArticle\(a\)\}/g) || []).length === 3
       && (FICHE.match(/<ArticleRow /g) || []).length === 3)
 
   // 🔴 LE JOUR CHOISI EST L'ACCORD DU CLIENT (Alex, 07/10).
   verifier('🔴 l’ajout d’un article passe par le jour choisi, avant la variante',
-    /function ajouterAuPanier\(article, options = null, variante = null\) \{\s*if \(refuseParDelai\(article, \{ article, options, variante \}\)\) return\s*if \(variante\)/.test(FICHE))
+    // REPOINTÉE LE 19/10 : le refus de PLAGE (lib/plage-retrait.js) suit celui
+    // du jour, et les deux restent AVANT la variante.
+    /function ajouterAuPanier\(article, options = null, variante = null\) \{\s*if \(refuseParDelai\(article, \{ article, options, variante \}\)\) return\s*if \(refuseParPlage\(article\)\) return\s*if \(variante\)/.test(FICHE))
   verifier('🔴 l’ajout d’un lot ou d’un duo aussi, avec l’article pour ses jours de vente',
     /const delaiOffre = delaiDuDeal\(deal, article\)\s*if \(refuseParDelai\(\{ id: article\.id, nom: deal\.titre, delai_minutes: delaiOffre,/.test(FICHE))
   verifier('la proposition se calcule sur le panier, le jour choisi et le calendrier',
@@ -585,7 +593,8 @@ egal('sans nom d’article, la phrase tient debout',
   verifier('et ramène au panier s’il arrive à l’étape du retrait',
     /if \(etape === 3 && blocagePanier\) allerEtape\(2\)/.test(FICHE))
   verifier('🔴 les tournées ne sont proposées que si tout le panier va ce jour-là',
-    /if \(!creneauCommandable\(slot, \{ dateStr, instantDebut: brusselsInstant \}\)\.ok\) return false\s*return panierVaCeJour\(dateStr\)/.test(FICHE))
+    // REPOINTÉE LE 19/10 : la plage de retrait du panier filtre entre les deux.
+    /if \(!creneauCommandable\(slot, \{ dateStr, instantDebut: brusselsInstant \}\)\.ok\) return false\s*if \(!creneauDansPlage\(slot, plagePanierCourante\(\)\)\) return false\s*return panierVaCeJour\(dateStr\)/.test(FICHE))
 
   // 🔴 LE CALENDRIER S'ALLONGE AVEC LE CATALOGUE, lu sur TOUT le catalogue.
   verifier('🔴 le calendrier de retrait et de livraison prend la longueur du catalogue',
@@ -802,7 +811,9 @@ egal('sans nom d’article, la phrase tient debout',
   verifier('🔴 plus de refus « deux délais » ni de compte en minutes',
     !/refusDelaisMelanges|debutCreneau\.getTime\(\) < pret\.getTime\(\)|premierJourBoutique\(/.test(ROUTE))
   verifier('🔴 elle lit le délai du second article d’un duo, sur CE commerce',
-    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active, stock_mode'\)\s*\.in\('id', seconds\)\.eq\('commercant_id', commercant\.id\)/.test(ROUTE)
+    // REPOINTÉE LE 19/10 : la plage de retrait (`retrait_des`, `retrait_jusqua`)
+    // est lue avec le délai.
+    /\.from\('articles'\)\.select\('id, delai_minutes, vente_jour, commande_active, stock_mode, retrait_des, retrait_jusqua'\)\s*\.in\('id', seconds\)\.eq\('commercant_id', commercant\.id\)/.test(ROUTE)
     && /l\.delai_minutes = delaiDeLOffre\(\{ delai_minutes: l\.delai_minutes \}, parId\[String\(l\.deal_article2_id\)\]\)/.test(ROUTE))
   verifier('🔴 et une lecture en échec refuse au lieu de vendre pour aujourd’hui',
     /if \(errArts2\) \{\s*return NextResponse\.json/.test(ROUTE))

@@ -17,12 +17,13 @@ import { nomDeLaCarte } from '@/lib/types-commerce'
 import { etatStock, revientUnAutreJour, mentionVitrine, circuitsDeLArticle, circuitsCommuns, circuitDuJour, modeStockDe, dejaCommandePourStock } from '@/lib/stock-article'
 import { normaliserCodeBon, libelleResteBon, libelleBon, repartirBons, BONS_MAX_PAR_COMMANDE } from '@/lib/bons-cadeaux'
 import { calculerCapaciteCreneau, creneauCommandable, jourSemaineDe } from '@/lib/creneaux'
-import { refusDeMelange, libelleMoment, delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier, mentionDisponibilite, propositionPourArticle } from '@/lib/delai-commande'
+import { refusDeMelange, libelleMoment, delaiDeLOffre, delaiEnJours, joursIndisponibles, refusDuJour, longueurCalendrier, mentionDisponibilite, propositionPourArticle, delaiSurCommande } from '@/lib/delai-commande'
 // ⚠️ C'EST LA PRÉSENCE DE LA FENÊTRE QUI FAIT L'INVENDU, et on la lit avec la
 // fonction du module : recopier le test ici ferait passer chaque bonne affaire
 // de la semaine pour un invendu de fin de journée.
 import { porteUneFenetre, plafondDeLOffre, resteSurOffre, libelleReste, libelleFenetre, TITRE_YOPPER, PARAM_OFFRE } from '@/lib/anti-gaspi'
 import { plageDeLaLigne, plageCommune, creneauDansPlage, refusDePlageALAjout, raisonDeLaPlage, libellePlage, plageDeLArticle } from '@/lib/plage-retrait'
+import { delaiEnClair, phraseLimiteFiche, limiteDeLaVeille } from '@/lib/heure-veille'
 import IconeAntiGaspi, { FOND_ANTI_GASPI, BORD_ANTI_GASPI, ENCRE_ANTI_GASPI, ENCRE_DOUCE_ANTI_GASPI, ACCENT_ANTI_GASPI, NUIT_ANTI_GASPI, MARQUE_SUR_NUIT } from '@/app/components/IconeAntiGaspi'
 import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurArticle, prixEffectif, prixEffectifVariante } from '@/lib/deals'
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
@@ -671,7 +672,10 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
                   ? `Pas le ${etatJour.jourSemaine}`
                   : etatJour.raison === 'aujourdhui_seulement'
                     ? 'Le jour même seulement'
-                    : `À commander ${etatJour.delaiJours} jour${etatJour.delaiJours > 1 ? 's' : ''} avant`}
+                    // ✅ 20/10 : passé l'heure limite, c'est elle qui bloque demain.
+                    : etatJour.limite
+                      ? `À commander ${delaiEnClair(etatJour.delaiJours, etatJour.limite)}`
+                      : `À commander ${etatJour.delaiJours} jour${etatJour.delaiJours > 1 ? 's' : ''} avant`}
               </span>
               {etatJour.premierLibelle && (
                 <button onClick={e => { e.stopPropagation(); if (hasOptions || hasVariantes) setShowOptions(true); else ajouterAuPanier(article) }}
@@ -3653,6 +3657,22 @@ export default function CommanderSlug() {
     }
     return { delaiJours: delaiEnJours(ligne), indispo, circuits, invendu: porteUneFenetre(ligne?.offre) }
   }
+  // ✅ L'HEURE LIMITE DE LA VEILLE (20/10, 7 Abbayes) : la phrase du
+  // calendrier, lue sur TOUT le catalogue (comme sa longueur), jamais sur le
+  // panier. `null` sans heure réglée ou sans article sur commande.
+  function phraseHeureLimite() {
+    if (!limiteDeLaVeille(commercant)) return null
+    let limite = null, apresLimite = false, demain = false
+    for (const a of articles) {
+      if (!a || a.actif === false || a.est_vitrine) continue
+      const c = circuitsDeLArticle(a, commercant)
+      if (!c?.surCommande || !c.limite) continue
+      limite = c.limite
+      apresLimite = c.apresLimite
+      if (delaiSurCommande(delaiEnJours(a)) === 1) demain = true
+    }
+    return phraseLimiteFiche({ limite, apresLimite, surCommande: !!limite, demain })
+  }
   // Le circuit du jour affiché : les cartes comptent A aujourd'hui, B ensuite.
   const circuitAffiche = circuitDuJour({ commercant, jour: jourDuPanier(), aujourdhui: aujourdhuiISO() })
   // Le jour de retrait du panier. `null` en expédition : pas de jour, donc
@@ -3769,6 +3789,8 @@ export default function CommanderSlug() {
       raison: refus.raison,
       // ⚠️ `refus.jours` : en B, un article réglé sans délai compte 1 jour.
       delaiJours: refus.jours ?? r.delaiJours,
+      // ✅ 20/10 : l'heure limite de la veille, quand c'est elle qui recule le jour.
+      limite: refus.limite || null,
       jourSemaine: jourSemaineDe(jour),
       // ⚠️ `libelleMoment` rend VIDE pour aujourd'hui sans heure : le sandwich
       // vendu le jour même seulement doit pouvoir dire « aujourd'hui ».
@@ -3819,6 +3841,10 @@ export default function CommanderSlug() {
       }
       const quand = libelleMoment({ jour, aujourdhui: auj }) || 'aujourd’hui'
       const n = refus.jours ?? r.delaiJours
+      // ✅ 20/10 : passé l'heure limite de la veille, c'est elle qui bloque.
+      if (refus.limite) {
+        return `« ${l.nom} » se commande ${delaiEnClair(n, refus.limite)} : trop tard pour ${quand}. Retire-le de ton panier, ou choisis un autre jour en haut de la page.`
+      }
       return `« ${l.nom} » se commande ${n} jour${n > 1 ? 's' : ''} à l'avance, pas pour ${quand}. Retire-le de ton panier, ou choisis un autre jour en haut de la page.`
     }
     return null
@@ -5188,6 +5214,15 @@ export default function CommanderSlug() {
                       )
                     })}
                   </div>
+                  {/* ✅ L'HEURE LIMITE DE LA VEILLE (20/10, 7 Abbayes) : UNE
+                      phrase sous le calendrier, jamais sur chaque baguette
+                      (règle du 04/09). Rien sans heure réglée. */}
+                  {(() => {
+                    const phrase = phraseHeureLimite()
+                    return phrase ? (
+                      <p style={{ margin: '4px 0 0', fontSize: '0.72rem', fontWeight: 600, color: T.muted, lineHeight: 1.4 }}>{phrase}</p>
+                    ) : null
+                  })()}
                 </div>
               )}
 

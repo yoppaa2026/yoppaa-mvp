@@ -82,7 +82,9 @@ export async function POST(request) {
     // ── Le commerce, relu en base ─────────────────────────────────────────
     const { data: commercant, error: errC } = await admin
       .from('commercants')
-      .select('id, nom, categorie, tva_taux_defaut, mode_capacite, plan, essai_plan, created_at, horizon_commande, horaires_detail')
+      // ⚠️ `commande_veille_avant` (20/10) : l'heure limite de la veille, que
+      // `articleHorsJour` et `calendrierDuCommerce` lisent sur ce commerce.
+      .select('id, nom, categorie, tva_taux_defaut, mode_capacite, plan, essai_plan, created_at, horizon_commande, horaires_detail, commande_veille_avant')
       .eq('id', commercant_id)
       .maybeSingle()
     if (errC || !commercant) return non('Commerce introuvable.', 404)

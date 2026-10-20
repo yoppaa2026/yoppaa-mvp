@@ -807,7 +807,10 @@ egal('sans nom d’article, la phrase tient debout',
     && /\.from\('article_stock_jour'\)\.select\('article_id, jour_semaine, actif'\)\s*\.in\('article_id', \[\.\.\.new Set\(lignes\.map\(l => l\.article_id\)\)\]\)\.eq\('actif', false\)/.test(ROUTE)
     && /if \(errOffLignes\) \{\s*return NextResponse\.json\(\{ ok: false/.test(ROUTE)
     && /const premier = premierJourPossible\(\{ regle: \{ delaiJours: n, indispo, circuits \}, aujourdhui \}\) \|\| refus\.plancher/.test(ROUTE)
-    && /se commande \$\{j\} jour\$\{j > 1 \? 's' : ''\} à l'avance : le premier jour possible, c'est \$\{jourEnClair\(premier, aujourdhui\)\}/.test(ROUTE))
+    // REPOINTÉE LE 20/10 (heure limite de la veille) : la durée passe par
+    // `delaiEnClair(j, refus.limite)`, qui rend MOT POUR MOT « 1 jour à
+    // l'avance » sans heure réglée (verif:heure-veille le vérifie en l'exécutant).
+    && /se commande \$\{delaiEnClair\(j, refus\.limite \|\| null\)\} : le premier jour possible, c'est \$\{jourEnClair\(premier, aujourdhui\)\}/.test(ROUTE))
   verifier('🔴 plus de refus « deux délais » ni de compte en minutes',
     !/refusDelaisMelanges|debutCreneau\.getTime\(\) < pret\.getTime\(\)|premierJourBoutique\(/.test(ROUTE))
   verifier('🔴 elle lit le délai du second article d’un duo, sur CE commerce',

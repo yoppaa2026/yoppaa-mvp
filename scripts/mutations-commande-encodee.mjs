@@ -54,7 +54,8 @@ const MUTATIONS = [
   { nom: '🔴 la tarte à J+2 s encode pour demain sans un mot (règles de l article ignorées)',
     fichier: REGLE, de: '  const refus = refusDuJour({ ...regle, jour, aujourdhui })', vers: '  const refus = null' },
   { nom: '⚠️ les règles lues sans les circuits : l article sur commande seul passe pour J+0',
-    fichier: REGLE, de: '    indispo, circuits: circuitsDeLArticle(article, commercant),', vers: '    indispo, circuits: null,' },
+    // REPOINTÉE LE 20/10 : l'heure limite de la veille se lit à `maintenant`.
+    fichier: REGLE, de: '    indispo, circuits: circuitsDeLArticle(article, commercant, maintenant),', vers: '    indispo, circuits: null,' },
   { nom: '🔴 « dès lundi » revient : le premier jour ignore les jours de vente',
     fichier: REGLE, de: '  const premier = premierJourPossible({ regle, aujourdhui })', vers: "  const premier = refus.plancher || null" },
   { nom: '🔴 la tuile parle de stock pour un article hors jour',

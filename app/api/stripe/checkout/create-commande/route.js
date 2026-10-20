@@ -58,6 +58,7 @@ import { construireLignesCommande, verifierStockDisponible, verifierQuantiteOffr
 import { circuitsDeLArticle, circuitsCommuns } from '@/lib/stock-article'
 import { porteUneFenetre } from '@/lib/anti-gaspi'
 import { plageDeLaLigne, refusDePlageAuCreneau } from '@/lib/plage-retrait'
+import { delaiEnClair } from '@/lib/heure-veille'
 import { normaliserEmail } from '@/lib/email-normalise'
 import { refusCoordonnees } from '@/lib/coordonnees-client'
 import { verdictForfait, forfaitOuvre } from '@/lib/garde-forfait'
@@ -168,7 +169,10 @@ export async function POST(request) {
       // ⚠️ `livraison_actif` : l'interrupteur de la livraison, lu plus bas.
       // ⚠️ `latitude`, `longitude` : le centre de l'étoile. Absentes, `dansEtoile`
       // rendrait `null` et TOUTE livraison serait refusée chez qui a dessiné.
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, paiement_sur_place_max, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif')
+      // ⚠️ `commande_veille_avant` (20/10) : l'heure limite de la veille. Absente
+      // du select, `circuitsDeLArticle` ne la verrait pas et le serveur
+      // accepterait pour demain ce que la fiche refuse après 18 h.
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, paiement_sur_place_max, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif, commande_veille_avant')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -931,9 +935,11 @@ export async function POST(request) {
             const j = refus.jours ?? n
             const indispo = (offLignes || []).filter(o => String(o.article_id) === String(l.article_id)).map(o => o.jour_semaine)
             const premier = premierJourPossible({ regle: { delaiJours: n, indispo, circuits }, aujourdhui }) || refus.plancher
+            // ✅ 20/10 : passé l'heure limite de la veille, le message la nomme
+            // (« se commande la veille avant 18 h »). Sans heure, la phrase d'avant.
             return NextResponse.json({
               ok: false,
-              error: `« ${l.article_nom || 'Un article'} » se commande ${j} jour${j > 1 ? 's' : ''} à l'avance : le premier jour possible, c'est ${jourEnClair(premier, aujourdhui)}. Choisis un autre jour.`,
+              error: `« ${l.article_nom || 'Un article'} » se commande ${delaiEnClair(j, refus.limite || null)} : le premier jour possible, c'est ${jourEnClair(premier, aujourdhui)}. Choisis un autre jour.`,
               creneau_indisponible: true,
             }, { status: 409 })
           }

@@ -102,6 +102,7 @@ import { champsModifies } from '@/lib/formulaire-modifie'
 import { peutActiverRdv, etatActivationRdv } from '@/lib/activation-rdv'
 import { choixDeDelai, libelleChoixDelai, HORIZONS_ARTICLE, libelleHorizonArticle } from '@/lib/delai-commande'
 import { heureDePlage, refusDeSaisiePlage, plageSansCreneau, libellePlage } from '@/lib/plage-retrait'
+import { heureLimite, refusDeSaisieLimite } from '@/lib/heure-veille'
 import { categoriesDuCommerce, listeApresAjout, renommage, listeApresSuppression, parentDe, feuilleDe } from '@/lib/categories-catalogue'
 import { trierArticles, positionDansCategorie, deplacementDansCategorie } from '@/lib/ordre-articles'
 import { jourSemaineDe, CLOTURES_PROPOSEES, libelleDuree, phraseCloture, minutesDeCloture } from '@/lib/creneaux'
@@ -5915,6 +5916,10 @@ function TabCreneaux({ commercantId, toast }) {
 
   const [horizon, setHorizon] = useState(1)
   const [savingHorizon, setSavingHorizon] = useState(false)
+  // L'heure limite de la veille (20/10) : la saisie, et ce qui est en base.
+  const [heureVeille, setHeureVeille] = useState('')
+  const [heureVeilleEnBase, setHeureVeilleEnBase] = useState('')
+  const [savingVeille, setSavingVeille] = useState(false)
   const [modeGlobal, setModeGlobal] = useState('commandes')
   const [savingMode, setSavingMode] = useState(false)
 
@@ -5925,13 +5930,15 @@ function TabCreneaux({ commercantId, toast }) {
     setLoading(true)
     const [{ data: cren }, { data: comm }, { data: ferm }, { data: lieux }] = await Promise.all([
       supabase.from('creneaux').select('*').eq('commercant_id', commercantId).order('heure_debut'),
-      supabase.from('commercants').select('horizon_commande, mode_capacite, horaires_detail, planning_par_lieu').eq('id', commercantId).single(),
+      supabase.from('commercants').select('horizon_commande, mode_capacite, horaires_detail, planning_par_lieu, commande_veille_avant').eq('id', commercantId).single(),
       supabase.from('fermetures_exceptionnelles').select('*').eq('commercant_id', commercantId).order('date_debut'),
       supabase.from('commercant_lieux').select('id, type, jour_semaine, date_jour, libelle, heure_debut, heure_fin, actif')
         .eq('commercant_id', commercantId).eq('actif', true),
     ])
     setCreneaux(cren || [])
     setHorizon(comm?.horizon_commande || 1)
+    setHeureVeille(heureLimite(comm?.commande_veille_avant) || '')
+    setHeureVeilleEnBase(heureLimite(comm?.commande_veille_avant) || '')
     setModeGlobal(comm?.mode_capacite || 'commandes')
     setHoraires(comm?.horaires_detail || null)
     setFermetures(ferm || [])
@@ -6005,6 +6012,21 @@ function TabCreneaux({ commercantId, toast }) {
     await supabase.from('commercants').update({ horizon_commande: val }).eq('id', commercantId)
     setHorizon(val); setSavingHorizon(false)
     toast('Horizon mis à jour')
+  }
+
+  // ✅ L'heure limite de la veille (20/10). Vide = minuit (aucune limite).
+  // ⚠️ L'ERREUR SE DIT : un toast « enregistré » sur une écriture refusée
+  // laisserait croire que demain est fermé après 18 h.
+  async function saveHeureVeille(val) {
+    const refus = refusDeSaisieLimite(val)
+    if (refus) { toast(refus, 'error'); return }
+    const valeur = heureLimite(val)
+    setSavingVeille(true)
+    const { error } = await supabase.from('commercants').update({ commande_veille_avant: valeur }).eq('id', commercantId)
+    setSavingVeille(false)
+    if (error) { toast('L’heure limite n’a pas été enregistrée. Réessaie dans un instant.', 'error'); return }
+    setHeureVeille(valeur || ''); setHeureVeilleEnBase(valeur || '')
+    toast(valeur ? `Heure limite enregistrée : ${libelleHeure(valeur)}` : 'Heure limite retirée')
   }
 
   async function saveModeGlobal(val) {
@@ -6568,6 +6590,37 @@ function TabCreneaux({ commercantId, toast }) {
               <p style={{ fontSize: 11, color: horizon === h.val ? 'rgba(255,255,255,0.8)' : T.muted }}>{h.desc}</p>
             </button>
           ))}
+        </div>
+
+        {/* ✅ L'HEURE LIMITE DE LA VEILLE (20/10, 7 Abbayes : « je commande
+            chez mon fournisseur à 18 h »). Un réglage pour tout le commerce
+            (Alex, tableau), à côté de l'horizon. Vide = minuit, la règle
+            d'avant. Seuls les articles « sur commande » sont concernés. */}
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.main}22` }}>
+          <p style={{ fontWeight: 800, fontSize: 13, color: T.deep, marginBottom: 4 }}>Heure limite la veille</p>
+          <p style={{ fontSize: 12, color: '#3F3A4F', marginBottom: 8, lineHeight: 1.5 }}>
+            Tu commandes chez ton fournisseur à heure fixe ? Après cette heure, une commande à l&rsquo;avance pour demain part pour après-demain. Les articles du jour même ne changent pas.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <label htmlFor="heure-veille" style={{ fontSize: 13, color: T.ink, fontWeight: 600 }}>Les commandes à l&rsquo;avance se ferment la veille à</label>
+            <input id="heure-veille" type="time" value={heureVeille} onChange={e => setHeureVeille(e.target.value)}
+              style={{ padding: '6px 8px', borderRadius: 8, border: `1.5px solid ${T.pale}`, fontSize: 13, fontFamily: '"DM Sans", sans-serif', background: '#fff' }}/>
+            <button onClick={() => saveHeureVeille(heureVeille)} disabled={savingVeille || (heureLimite(heureVeille) || '') === (heureLimite(heureVeilleEnBase) || '')}
+              style={{ padding: '7px 14px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif', opacity: savingVeille || (heureLimite(heureVeille) || '') === (heureLimite(heureVeilleEnBase) || '') ? 0.5 : 1 }}>
+              Enregistrer l&rsquo;heure
+            </button>
+            {heureLimite(heureVeilleEnBase) && (
+              <button onClick={() => saveHeureVeille('')} disabled={savingVeille}
+                style={{ padding: '7px 14px', borderRadius: 100, border: `1.5px solid ${T.pale}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                Retirer l&rsquo;heure limite
+              </button>
+            )}
+          </div>
+          <p style={{ fontSize: 11.5, color: T.muted, marginTop: 6, lineHeight: 1.5 }}>
+            {heureLimite(heureVeilleEnBase)
+              ? `Réglée : avant ${libelleHeure(heureLimite(heureVeilleEnBase))}, tes clients commandent pour demain ; après, pour après-demain.`
+              : 'Aucune heure réglée : on peut commander pour demain jusqu’à minuit.'}
+          </p>
         </div>
       </div>
 

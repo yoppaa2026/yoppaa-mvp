@@ -373,7 +373,9 @@ verifier('le minimum porte sur le total des articles',
   // garde suivante ; ici on vérifie qu'elle n'est plus chargée du tout.
   verifier('🔴 étoile : le serveur lit l\'étoile, et plus la position de la fiche',
     /\.select\('codes_postaux, frais_fixe, gratuit_des, minimum_commande, actif, zone_rayons_m'\)/.test(routeCode)
-      && /horizon_commande, plan, essai_plan, created_at, livraison_actif'\)/.test(routeCode)
+      // REPOINTÉE LE 20/10 : le select finit par l'heure limite de la veille ;
+      // toujours ni latitude ni longitude dedans.
+      && /horizon_commande, plan, essai_plan, created_at, livraison_actif, commande_veille_avant'\)/.test(routeCode)
       && !/commercant\.(latitude|longitude)\b/.test(routeCode))
   verifier('🔴 étoile : avec une étoile, le code postal ne décide plus',
     /const avecEtoile = zoneValide\(cfg\.zone_rayons_m\)/.test(routeCode) && /if \(!avecEtoile && !zoneCouverte\(cfg\.codes_postaux, code_postal_livraison\)\)/.test(routeCode))

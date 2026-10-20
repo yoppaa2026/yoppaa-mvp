@@ -1717,6 +1717,14 @@ export default function CommanderSlug() {
   const [estFavori, setEstFavori] = useState(false)
   const [favoriLoading, setFavoriLoading] = useState(false)
   const [toastMessage, setToastMessage] = useState(null)
+  // ✅ 20/10 : le refus d'un ajout (plage de retrait), dans un encadré qui se
+  // lit, et se ferme d'un geste (« Compris ») ou tout seul après 12 s.
+  const [refusAjout, setRefusAjout] = useState(null)
+  useEffect(() => {
+    if (!refusAjout) return
+    const t = setTimeout(() => setRefusAjout(null), 12000)
+    return () => clearTimeout(t)
+  }, [refusAjout])
   const catRefs = useRef({})
   const headerRef = useRef(null)
   const scrollRef = useRef(null)
@@ -3697,11 +3705,14 @@ export default function CommanderSlug() {
   // Refus à l'ajout quand l'article n'a AUCUN moment de retrait en commun avec
   // le panier (décision d'Alex, comme pour les délais le 10/09). Le message
   // nomme les deux articles et le geste.
+  // ⚠️ UN ENCADRÉ, PAS LA BULLE (Alex, 20/10 au test : « il me faut quelque
+  // chose de rectangulaire, la visibilité est mauvaise »). La bulle ronde des
+  // favoris ne tient pas trois lignes. Et le TITRE dit ce qui s'est passé :
+  // l'article n'est pas entré, rien n'a été retiré du panier.
   function refuseParPlage(ligne) {
     const message = refusDePlageALAjout({ nom: ligne?.nom || 'Cet article', plage: plageLigne(ligne) }, entreesPlagePanier())
     if (!message) return false
-    setToastMessage(message)
-    setTimeout(() => setToastMessage(null), 7000)
+    setRefusAjout({ titre: `« ${ligne?.nom || 'Cet article'} » n’est pas ajouté à ton panier`, message })
     return true
   }
 
@@ -6473,6 +6484,22 @@ export default function CommanderSlug() {
         }}>
           {toastMessage}
           <style>{`@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 10px) } to { opacity: 1; transform: translate(-50%, 0) } }`}</style>
+        </div>
+      )}
+      {refusAjout && (
+        <div role="alert" style={{
+          position: 'fixed', left: 16, right: 16, bottom: barreYopper ? 20 + HAUTEUR_BARRE_YOPPER : 20,
+          margin: '0 auto', maxWidth: 520, zIndex: 1001,
+          background: '#fff', border: '1.5px solid #FCA5A5', borderLeft: '6px solid #DC2626', borderRadius: 14,
+          padding: '14px 16px', boxShadow: '0 12px 32px rgba(26,8,64,0.28)',
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#991B1B', lineHeight: 1.35 }}>{refusAjout.titre}</p>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: T.ink, lineHeight: 1.5 }}>{refusAjout.message}</p>
+          <button onClick={() => setRefusAjout(null)}
+            style={{ alignSelf: 'flex-end', marginTop: 4, background: T.ink, color: '#fff', border: 'none', borderRadius: 10, padding: '9px 18px', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+            Compris
+          </button>
         </div>
       )}
     </>

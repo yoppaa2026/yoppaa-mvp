@@ -72,7 +72,16 @@ verifier('✅ pain + sandwich : ils vont ensemble (créneaux communs)', refusDeP
 {
   const m = refusDePlageALAjout({ nom: 'Plat du soir', plage: { de: '17:00', a: null } }, [{ nom: 'Sandwich', plage: SANDWICH }])
   verifier('🔴 aucun moment commun : refus à l’ajout', !!m)
-  verifier('🔴 et le message nomme les DEUX articles et le geste', !!m && m.includes('« Plat du soir »') && m.includes('« Sandwich »') && /deux commandes/.test(m), m)
+  verifier('🔴 et le message nomme les DEUX articles et le geste', !!m && m.includes('« Plat du soir »') && m.includes('« Sandwich »') && /commande à part/.test(m), m)
+  verifier('⚠️ il ne laisse pas croire qu’un article a été retiré (Alex, 20/10)', !!m && !/retire l’un des deux/.test(m) && /déjà dans ton panier/.test(m))
+}
+{
+  const F = code('app/commander/[slug]/page.js')
+  verifier('🔴 le refus s’affiche dans un ENCADRÉ, pas dans la bulle (Alex, 20/10)',
+    F.includes("setRefusAjout({ titre: `« ${ligne?.nom || 'Cet article'} » n’est pas ajouté à ton panier`, message })")
+    && !/function refuseParPlage[\s\S]{0,400}setToastMessage/.test(F))
+  verifier('l’encadré est rectangulaire et se ferme d’un geste',
+    F.includes("borderLeft: '6px solid #DC2626', borderRadius: 14,") && F.includes('<button onClick={() => setRefusAjout(null)}'))
 }
 verifier('deux sandwichs : pas de refus', refusDePlageALAjout({ nom: 'Sandwich 2', plage: SANDWICH }, [{ nom: 'Sandwich', plage: SANDWICH }]) === null)
 

@@ -663,6 +663,74 @@ const code = (f) => sansProse(lire(f))
     /const stockGere = etat\.gere && !hasVariantes/.test(fiche))
 }
 
+// ═══ (21/10, Alex) LOT B : LA GRILLE DES TAILLES, PLUS VITE ═════════════════
+{
+  const G = await import('../lib/variantes-grille.js')
+  const L = await import('../lib/catalogue-lot.js')
+  const bord = code('app/dashboard/ConfigDashboard.js')
+  // Ranger et renommer.
+  v('ranger : une valeur avance d’un cran, la liste d’origine ne bouge pas',
+    G.deplacerValeur(['S', 'M', 'L'], 'L', -1).join() === 'S,L,M' && G.deplacerValeur(['S', 'M'], 'S', -1).join() === 'S,M')
+  const ren = G.renommerValeur(['S', 'M', '85a'], '85a', '  XL ')
+  v('🔴 renommer garde la place de la valeur, et refuse un doublon',
+    ren.ok && ren.liste.join() === 'S,M,XL' && !G.renommerValeur(['S', 'M'], 'S', 'm').ok && !G.renommerValeur(['S'], 'S', '  ').ok)
+  const vars = [
+    { id: 'a', axe1_valeur: 'L', axe2_valeur: 'Bleu', ordre: 0, stock: 2 },
+    { id: 'b', axe1_valeur: 'S', axe2_valeur: 'Rose', ordre: 1, stock: 0 },
+    { id: 'c', axe1_valeur: 'S', axe2_valeur: 'Bleu', ordre: 2, stock: 5 },
+  ]
+  const ord = G.ordreDesVariantes(vars, ['S', 'L'], ['Bleu', 'Rose'])
+  v('🔴 l’ordre des combinaisons suit les valeurs (taille, puis couleur), seulement ce qui change',
+    JSON.stringify(ord) === JSON.stringify([{ id: 'c', ordre: 0 }, { id: 'a', ordre: 2 }]), JSON.stringify(ord))
+  v('🔴 retirer une valeur nomme ses combinaisons et leur stock',
+    G.variantesDeLaValeur(vars, 1, 'S').map(x => x.id).join() === 'b,c'
+    && /supprime ses 2 combinaisons \(stock : 5\)/.test(G.phraseRetraitValeur('S', G.variantesDeLaValeur(vars, 1, 'S'))))
+  // En masse.
+  v('🔴 en masse : toutes, ou une valeur d’un axe',
+    G.variantesVisees(vars, '').length === 3 && G.variantesVisees(vars, '2|Bleu').map(x => x.id).join() === 'a,c'
+    && G.ciblesDeMasse({ axe1Nom: 'Taille', axe1Valeurs: ['S'], axe2Nom: 'Couleur', axe2Valeurs: ['Bleu'] }).map(c => c.cle).join() === ',1|S,2|Bleu')
+  v('🔴 en masse : un stock est un entier ≥ 0, un prix vide = le prix de l’article',
+    G.quantiteSaisie('3') === 3 && G.quantiteSaisie('0') === 0 && G.quantiteSaisie('-1') === null && G.quantiteSaisie('2,5') === null
+    && G.prixSaisiMasse('').prix === null && G.prixSaisiMasse('29,90').prix === 29.9 && !G.prixSaisiMasse('abc').ok && !G.prixSaisiMasse('0').ok)
+  // La carte par couleur.
+  const lignes = G.lignesDeStock([...vars, { id: 'd', axe1_valeur: 'M', axe2_valeur: 'Bleu', stock: 1, actif: false }])
+  v('🔴 la carte à deux axes : une ligne par couleur, sans les combinaisons inactives',
+    lignes.map(g => `${g.titre}:${g.items.map(i => `${i.libelle}=${i.stock}`).join('/')}`).join(' ') === 'Bleu:L=2/S=5 Rose:S=0', JSON.stringify(lignes))
+  v('un seul axe : un groupe sans titre', G.lignesDeStock([{ id: 'x', axe1_valeur: 'S', stock: 1 }])[0].titre === null)
+  // L'action groupée « Stock N » sur les articles à tailles.
+  const arts = [{ id: 1, gere_variantes: true, stock_mode: 'magasin' }, { id: 2, gere_variantes: false, stock_mode: 'magasin' }]
+  const vl = L.variantesDuLot({ action: 'stock', articles: arts, valeur: { mode: 'magasin', quantite: '4' } })
+  v('🔴 « Stock 4 » en lot pose 4 sur chaque taille des articles à tailles',
+    vl.ids.join() === '1' && vl.quantite === 4 && /chaque taille passera à 4/.test(L.phraseVariantesDuLot(vl)))
+  v('« Sans limite » ou une autre action ne touche aucune taille',
+    L.variantesDuLot({ action: 'stock', articles: arts, valeur: { mode: 'illimite' } }).ids.length === 0
+    && L.variantesDuLot({ action: 'prix', articles: arts, valeur: 5 }).ids.length === 0)
+  // L'écran branche ces règles.
+  v('🔴 l’action groupée écrit le stock des tailles, relu',
+    /\.from\('article_variantes'\)\s*\.update\(\{ stock: varLot\.quantite \}\)\.in\('article_id', varLot\.ids\)\.select\('id'\)/.test(bord))
+  v('🔴 retirer une valeur supprime ses combinaisons après confirmation',
+    /const combos = variantesDeLaValeur\(variantes, axe, val\)\s*if \(combos\.length > 0\) \{\s*const okRetrait = await confirme\(/.test(bord)
+    && /\.from\('article_variantes'\)\.delete\(\)\.in\('id', combos\.map\(v => v\.id\)\)\.select\('id'\)/.test(bord))
+  v('🔴 renommer met à jour les combinaisons (stock gardé), pas de recréation',
+    /\.from\('article_variantes'\)\.update\(\{ \[col\]: r\.nom \}\)\.in\('id', combos\.map\(v => v\.id\)\)\.select\('id'\)/.test(bord))
+  v('🔴 en masse : écrit sur les combinaisons visées, et vérifie le compte',
+    /const visees = variantesVisees\(variantes, masseCible\)/.test(bord)
+    && /\.from\('article_variantes'\)\.update\(patch\)\.in\('id', visees\.map\(v => v\.id\)\)\.select\('id'\)/.test(bord)
+    && /\(data\?\.length \|\| 0\) !== visees\.length/.test(bord))
+  v('🔴 remplacer une grille : décoché par défaut, confirmé, anciennes combinaisons retirées avant la copie',
+    /const \[remplacerGrilles, setRemplacerGrilles\] = useState\(false\)/.test(bord)
+    && /const aRemplacer = remplacerGrilles \? ciblesVar\.filter\(/.test(bord)
+    && bord.indexOf(".from('article_variantes').delete().in('article_id', aRemplacer)") > -1
+    && bord.indexOf(".from('article_variantes').delete().in('article_id', aRemplacer)") < bord.indexOf('const lignes = aCopier.flatMap(id => copiesDeVariantes(variantes, id))'))
+  v('🔴 la carte de la liste lit les lignes par couleur', /\{lignesDeStock\(variantes\)\.map\(groupe => \(/.test(bord))
+  // La galerie d'un nouvel article (tous les métiers).
+  v('🔴 la galerie s’ouvre dès la création : la photo attend l’article, puis s’y rattache',
+    !/\{editId && \(\s*<ChampFormulaire label=\{`Galerie/.test(bord)
+    && /if \(!articleId\) \{\s*setGalerie\(prev => \[\.\.\.prev, \{ id: `attente-\$\{Date\.now\(\)\}`, url: urlData\.publicUrl, enAttente: true \}\]\)/.test(bord)
+    && /const enAttente = galerie\.filter\(p => p\.enAttente\)\s*if \(!editId && enAttente\.length > 0 && cree\?\.id\) \{/.test(bord)
+    && /: await supabase\.from\('articles'\)\.insert\(payload\)\.select\('id'\)\.single\(\)/.test(bord))
+}
+
 console.log(`\nStock et vitrine : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

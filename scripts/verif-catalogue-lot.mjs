@@ -249,11 +249,14 @@ const CATALOGUE = [
   v('🔴 la grille est remplacée par le geste « Revenir à la quantité par défaut » (jours fermés gardés), relu',
     /\.from\('article_stock_jour'\)\s*\.delete\(\)\.in\('article_id', grilles\.articleIds\)\.eq\('actif', true\)\.select\('id'\)/.test(bloc)
     && /if \(errGrille \|\| !effaces\?\.length\) grilleRatee = true/.test(bloc))
-  v('🔴 le compte annoncé = articles ou grilles touchés',
-    /const touches = new Set\(\[\.\.\.patchs\.map\(p => String\(p\.id\)\), \.\.\.\(grilles\?\.articleIds \|\| \[\]\)\.map\(String\)\]\)/.test(bloc))
+  // ⚠️ REPOINTÉE LE 21/10 : + les articles à tailles (« Stock N » pose N sur
+  // chaque taille, `variantesDuLot`).
+  v('🔴 le compte annoncé = articles, grilles ou articles à tailles touchés',
+    /const touches = new Set\(\[\.\.\.patchs\.map\(p => String\(p\.id\)\), \.\.\.\(grilles\?\.articleIds \|\| \[\]\)\.map\(String\), \.\.\.varLot\.ids\.map\(String\)\]\)/.test(bloc))
   v('🔴 L’ÉCRAN DIT LE REFUS AVANT TOUT (le 0 disait « déjà ce stock » et le bouton ne faisait rien)',
     // ⚠️ REPOINTÉE LE 15/10 : le résumé reçoit aussi les articles écartés.
-    /\{refus \|\| resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles, ecarts \}\)\}/.test(config)
+    // ⚠️ REPOINTÉE LE 21/10 : + la phrase des articles à tailles.
+    /\{refus \|\| \[\s*patchs\.length > 0 \|\| \(grilles\?\.articleIds \|\| \[\]\)\.length > 0 \|\| varLot\.ids\.length === 0\s*\? resumeDuLot\(\{ action: lotAction, patchs, coches: lotIds\.length, valeur, grilles, ecarts \}\) : '',\s*phraseVariantesDuLot\(varLot\),\s*\]\.filter\(Boolean\)\.join\(' '\)\}/.test(config)
     && /disabled=\{lotEnCours \|\| !!refus \|\| touches\.size === 0\}/.test(config))
   v('une croix referme l’article ouvert dans Personnalisation (en haut et en bas)',
     (config.match(/onClick=\{e => e\.currentTarget\.closest\('details'\)\?\.removeAttribute\('open'\)\}/g) || []).length === 2)

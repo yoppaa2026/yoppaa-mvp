@@ -334,7 +334,8 @@ const MUTATIONS = [
   { nom: '🔴 l écran retombe sur « déjà ce stock » au lieu du refus',
     fichier: ECRAN, banc: 'verif:lot',
     // ⚠️ ANCRE RECALÉE LE 15/10 : le résumé reçoit aussi les articles écartés.
-    de: '                          {refus || resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts })}', vers: '                          {resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts })}' },
+    // ⚠️ ANCRE RECALÉE LE 21/10 : + la phrase des articles à tailles.
+    de: '                          {refus || [', vers: '                          {[' },
 
   { nom: '🔴 l ajustement de prix repart des euros et derive d un centime',
     fichier: LOT,

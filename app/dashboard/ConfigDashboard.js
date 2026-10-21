@@ -42,6 +42,10 @@ import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, dernierJourAvant, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
 import { HORIZONS_BOUTIQUE, horizonBoutique } from '@/lib/ouverture'
+import {
+  deplacerValeur, renommerValeur, ordreDesVariantes, variantesDeLaValeur, phraseRetraitValeur,
+  ciblesDeMasse, variantesVisees, quantiteSaisie, prixSaisiMasse, lignesDeStock,
+} from '@/lib/variantes-grille'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
 import {
   SELECT_GROUPES_AVEC_VALEURS, pastilleBornes, bornesDepuisSaisie, groupeDesTailles, lignesPrixTaille, resumePrixTaille,
@@ -187,6 +191,7 @@ import {
 import {
   articlesDuLot, patchsDuLot, resumeDuLot, refusDuLot, TVA_INCHANGEE, grillesARemplacer,
   ecartsDuLot, VENTE_EN_LIGNE, VENTE_VITRINE, DELAI_JOURS_MAX,
+  variantesDuLot, phraseVariantesDuLot,
 } from '@/lib/catalogue-lot'
 
 // Les actions groupées qui ont un refus à elles (`refusDuLot`), vérifié avant
@@ -1028,10 +1033,18 @@ function TabMenu({ commercantId, commercant, toast }) {
       retrait_des: avecPlage ? heureDePlage(form.retrait_des) : null,
       retrait_jusqua: avecPlage ? heureDePlage(form.retrait_jusqua) : null,
     }
-    const { error } = editId
-      ? await supabase.from('articles').update(payload).eq('id', editId)
-      : await supabase.from('articles').insert(payload)
+    const { data: cree, error } = editId
+      ? await supabase.from('articles').update(payload).eq('id', editId).select('id').maybeSingle()
+      : await supabase.from('articles').insert(payload).select('id').single()
     if (error) { setSaving(false); toast(`Erreur : ${error.message}`, 'error'); return }
+    // (21/10) LES PHOTOS DE GALERIE ajoutées avant le premier enregistrement
+    // se rattachent maintenant au nouvel article, dans leur ordre.
+    const enAttente = galerie.filter(p => p.enAttente)
+    if (!editId && enAttente.length > 0 && cree?.id) {
+      const { error: errGal } = await supabase.from('article_photos')
+        .insert(enAttente.map((p, i) => ({ article_id: cree.id, url: p.url, ordre: i })))
+      if (errGal) toast(`Article ajouté, mais sa galerie n’a pas pu être enregistrée : ${errGal.message}`, 'error')
+    }
     // ⚠️ UNE PLAGE QUI NE TOMBE SUR AUCUN CRÉNEAU rendrait l'article
     // commandable par personne, sans qu'aucun écran ne le dise. On l'enregistre
     // (il va peut-être ajouter le créneau), mais on le prévient tout de suite.
@@ -1170,7 +1183,9 @@ function TabMenu({ commercantId, commercant, toast }) {
     const ecarts = ecartsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
     // 🔴 « 15 par jour » remplace aussi la grille jour par jour (Alex, 10/10).
     const grilles = lotAction === 'stock' ? grillesARemplacer({ articles: vises, valeur, grilles: stockParJourMap }) : null
-    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String)])
+    // (21/10) « Stock N » pose aussi N sur chaque taille des articles à tailles.
+    const varLot = variantesDuLot({ action: lotAction, articles: vises, valeur })
+    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String), ...varLot.ids.map(String)])
     if (touches.size === 0) { toast(resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts }), 'error'); return }
 
     if (lotAction === 'prix') {
@@ -1205,6 +1220,12 @@ function TabMenu({ commercantId, commercant, toast }) {
       const { data: effaces, error: errGrille } = await supabase.from('article_stock_jour')
         .delete().in('article_id', grilles.articleIds).eq('actif', true).select('id')
       if (errGrille || !effaces?.length) grilleRatee = true
+    }
+    // Chaque taille des articles à tailles. Relu : la RLS refuse en silence.
+    if (varLot.ids.length > 0) {
+      const { data: tailles, error: errTailles } = await supabase.from('article_variantes')
+        .update({ stock: varLot.quantite }).in('article_id', varLot.ids).select('id')
+      if (errTailles || !tailles?.length) rates += varLot.ids.length
     }
     setLotEnCours(false)
     fetchArticles()
@@ -1520,17 +1541,27 @@ function TabMenu({ commercantId, commercant, toast }) {
     setGalerie(data || [])
   }
 
+  // 🔴 (21/10, Alex) LA GALERIE D'UN NOUVEL ARTICLE : elle n'apparaissait
+  // qu'après un premier enregistrement (il fallait enregistrer, rouvrir, puis
+  // ajouter). La photo part maintenant tout de suite dans le stockage ; sans
+  // article encore, elle attend à l'écran (`enAttente`) et se rattache à
+  // l'enregistrement (`saveArticle`). Tous les métiers.
   async function uploadGaleriePhoto(file, articleId) {
-    if (!file || !articleId) return
+    if (!file) return
     if (!file.type.startsWith('image/')) { toast('Format invalide', 'error'); return }
     if (file.size > 15 * 1024 * 1024) { toast('Photo trop lourde (max 15 Mo brut)', 'error'); return }
     setUploadingGalerie(true)
     // Même pipeline 4:5 + filigrane que la photo de couverture
     const compressed = await preparerPhotoArticle(file)
-    const fileName = cheminImage(commercantId, `article-gal-${articleId}-${Date.now()}.jpg`)
+    const fileName = cheminImage(commercantId, `article-gal-${articleId || 'nouveau'}-${Date.now()}.jpg`)
     const { error: upErr } = await supabase.storage.from('logos').upload(fileName, compressed, { upsert: true, contentType: 'image/jpeg' })
     if (upErr) { toast('Erreur upload photo', 'error'); setUploadingGalerie(false); return }
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName)
+    if (!articleId) {
+      setGalerie(prev => [...prev, { id: `attente-${Date.now()}`, url: urlData.publicUrl, enAttente: true }])
+      setUploadingGalerie(false)
+      return
+    }
     const { data, error } = await supabase.from('article_photos').insert({ article_id: articleId, url: urlData.publicUrl, ordre: galerie.length }).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); setUploadingGalerie(false); return }
     if (data && data[0]) setGalerie(prev => [...prev, data[0]])
@@ -1538,6 +1569,8 @@ function TabMenu({ commercantId, commercant, toast }) {
   }
 
   async function deleteGaleriePhoto(id) {
+    // Une photo en attente n'est pas encore en base : elle quitte l'écran.
+    if (galerie.some(p => p.id === id && p.enAttente)) { setGalerie(prev => prev.filter(p => p.id !== id)); return }
     const { error } = await supabase.from('article_photos').delete().eq('id', id)
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     setGalerie(prev => prev.filter(p => p.id !== id))
@@ -1897,9 +1930,10 @@ function TabMenu({ commercantId, commercant, toast }) {
                 </label>
               </div>
             </ChampFormulaire>
-            {/* Galerie (article existant uniquement) */}
-            {editId && (
-              <ChampFormulaire label={`Galerie (${galerie.length})`} aide="Photos supplémentaires montrées sur ta fiche.">
+            {/* Galerie : dès la création (21/10, Alex), les photos d'un nouvel
+                article attendent l'enregistrement. */}
+            {(
+              <ChampFormulaire label={`Galerie (${galerie.length})`} aide={editId ? 'Photos supplémentaires montrées sur ta fiche.' : 'Photos supplémentaires montrées sur ta fiche. Elles s’enregistrent avec l’article.'}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {galerie.map(p => (
                     <div key={p.id} style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', position: 'relative', border: `1px solid ${T.hairline}` }}>
@@ -2246,7 +2280,8 @@ function TabMenu({ commercantId, commercant, toast }) {
                     const patchs = patchsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
                     const ecarts = ecartsDuLot({ action: lotAction, articles: vises, valeur, deuxCircuits })
                     const grilles = lotAction === 'stock' ? grillesARemplacer({ articles: vises, valeur, grilles: stockParJourMap }) : null
-                    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String)])
+                    const varLot = variantesDuLot({ action: lotAction, articles: vises, valeur })
+                    const touches = new Set([...patchs.map(p => String(p.id)), ...(grilles?.articleIds || []).map(String), ...varLot.ids.map(String)])
                     // 🔴 LE REFUS SE LIT AVANT TOUT (Alex, 10/10 : « 0 : pas de
                     // message, rien ne se passe ») : il disait « déjà ce stock ».
                     const refus = ACTIONS_AVEC_REFUS.includes(lotAction) && lotIds.length > 0
@@ -2262,7 +2297,12 @@ function TabMenu({ commercantId, commercant, toast }) {
                     return (
                       <>
                         <p style={{ fontSize: 11.5, color: rouge ? '#B91C1C' : T.muted, fontWeight: rouge ? 700 : 400, margin: '0 0 10px', lineHeight: 1.5 }}>
-                          {refus || resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts })}
+                          {/* (21/10) Que des articles à tailles : seule leur phrase, jamais « déjà ce stock » à côté. */}
+                          {refus || [
+                            patchs.length > 0 || (grilles?.articleIds || []).length > 0 || varLot.ids.length === 0
+                              ? resumeDuLot({ action: lotAction, patchs, coches: lotIds.length, valeur, grilles, ecarts }) : '',
+                            phraseVariantesDuLot(varLot),
+                          ].filter(Boolean).join(' ')}
                         </p>
                         <button style={{ ...s.btn, ...s.btnPrimary, padding: '7px 14px', fontSize: 12 }}
                           onClick={appliquerLot} disabled={lotEnCours || !!refus || touches.size === 0}>
@@ -3852,6 +3892,9 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
   const [copieOuverte, setCopieOuverte] = useState(false)
   const [ciblesVar, setCiblesVar] = useState([])
   const [envoiVar, setEnvoiVar] = useState(false)
+  // (21/10, Alex) Remplacer la grille d'articles DÉJÀ équipés : décoché par
+  // défaut, et confirmé (leurs tailles, prix et stocks actuels partent).
+  const [remplacerGrilles, setRemplacerGrilles] = useState(false)
   const [axe1Nom, setAxe1Nom] = useState(article.axe1_nom || 'Taille')
   const [axe2Nom, setAxe2Nom] = useState(article.axe2_nom || '')
   const [axe1Valeurs, setAxe1Valeurs] = useState(Array.isArray(article.axe1_valeurs) ? article.axe1_valeurs : [])
@@ -3904,11 +3947,100 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
     else { setAxe2Valeurs(next); setInput2(''); saveAxes({ axe2_valeurs: next }) }
   }
 
-  function removeValeur(axe, val) {
+  // 🔴 (21/10, Alex, Caprice de Magali) RETIRER UNE VALEUR EMPORTE SES
+  // COMBINAISONS. Avant, seul l'axe changeait : les lignes « 85a » restaient,
+  // vendues sur la fiche, et il fallait les supprimer une par une. On dit
+  // combien partent, et leur stock, avant.
+  async function removeValeur(axe, val) {
     const list = axe === 1 ? axe1Valeurs : axe2Valeurs
     const next = list.filter(x => x !== val)
-    if (axe === 1) { setAxe1Valeurs(next); saveAxes({ axe1_valeurs: next }) }
-    else { setAxe2Valeurs(next); saveAxes({ axe2_valeurs: next }) }
+    const combos = variantesDeLaValeur(variantes, axe, val)
+    if (combos.length > 0) {
+      const okRetrait = await confirme(confirmationSimple({
+        titre: `Retirer « ${val} » ?`, message: phraseRetraitValeur(val, combos), action: 'Oui, retirer',
+      }))
+      if (!okRetrait) return
+      const { data, error } = await supabase.from('article_variantes').delete().in('id', combos.map(v => v.id)).select('id')
+      if (error || (data?.length || 0) !== combos.length) { toast(`Retrait incomplet : ${error?.message || 'refusé par les permissions'}. Recharge la page.`, 'error'); fetchVariantes(); return }
+    }
+    if (axe === 1) { setAxe1Valeurs(next); await saveAxes({ axe1_valeurs: next }) }
+    else { setAxe2Valeurs(next); await saveAxes({ axe2_valeurs: next }) }
+    if (combos.length > 0) { setVariantes(prev => prev.filter(v => !combos.some(c => c.id === v.id))); onChange?.() }
+  }
+
+  // (21/10) Ranger les valeurs : l'ordre des combinaisons (et de la fiche)
+  // suit, taille d'abord, puis couleur.
+  async function bougerValeur(axe, val, sens) {
+    const list = axe === 1 ? axe1Valeurs : axe2Valeurs
+    const next = deplacerValeur(list, val, sens)
+    if (next === list) return
+    if (axe === 1) setAxe1Valeurs(next); else setAxe2Valeurs(next)
+    await saveAxes(axe === 1 ? { axe1_valeurs: next } : { axe2_valeurs: next })
+    await rangerVariantes(axe === 1 ? next : axe1Valeurs, axe === 2 ? next : axe2Valeurs)
+  }
+
+  async function rangerVariantes(a1, a2) {
+    const changes = ordreDesVariantes(variantes, a1, a2)
+    for (const { id, ordre } of changes) {
+      const { error } = await supabase.from('article_variantes').update({ ordre }).eq('id', id)
+      if (error) { toast(`L’ordre n’a pas pu être enregistré : ${error.message}`, 'error'); break }
+    }
+    if (changes.length > 0) { fetchVariantes(); onChange?.() }
+  }
+
+  // (21/10) Renommer une valeur SANS perdre son stock : l'axe ET ses
+  // combinaisons changent de nom, rien n'est recréé.
+  async function renommerUneValeur(axe, val) {
+    const saisie = window.prompt(`Nouveau nom pour « ${val} » :`, val)
+    if (saisie === null) return
+    const list = axe === 1 ? axe1Valeurs : axe2Valeurs
+    const r = renommerValeur(list, val, saisie)
+    if (!r.ok) { toast(r.error, 'error'); return }
+    if (r.nom === val) return
+    const col = axe === 1 ? 'axe1_valeur' : 'axe2_valeur'
+    const combos = variantesDeLaValeur(variantes, axe, val)
+    if (combos.length > 0) {
+      const { data, error } = await supabase.from('article_variantes').update({ [col]: r.nom }).in('id', combos.map(v => v.id)).select('id')
+      if (error || (data?.length || 0) !== combos.length) { toast(`Renommage incomplet : ${error?.message || 'refusé par les permissions'}. Recharge la page.`, 'error'); fetchVariantes(); return }
+    }
+    if (axe === 1) setAxe1Valeurs(r.liste); else setAxe2Valeurs(r.liste)
+    await saveAxes(axe === 1 ? { axe1_valeurs: r.liste } : { axe2_valeurs: r.liste })
+    setVariantes(prev => prev.map(v => (v[col] === val ? { ...v, [col]: r.nom } : v)))
+    onChange?.()
+    toast(`« ${val} » renommé en « ${r.nom} »${combos.length ? ', stock gardé' : ''}.`)
+  }
+
+  // (21/10) EN MASSE : le même stock ou le même prix sur toutes les
+  // combinaisons, ou sur une valeur (« toutes les M », « tous les Bleu »).
+  const [masseCible, setMasseCible] = useState('')
+  const [masseStock, setMasseStock] = useState('')
+  const [massePrix, setMassePrix] = useState('')
+  const [masseEnvoi, setMasseEnvoi] = useState(false)
+  async function appliquerMasse(quoi) {
+    if (masseEnvoi) return
+    const visees = variantesVisees(variantes, masseCible)
+    if (visees.length === 0) { toast('Aucune combinaison pour ce choix.', 'error'); return }
+    let patch
+    if (quoi === 'stock') {
+      const q = quantiteSaisie(masseStock)
+      if (q === null) { toast('Indique un stock : un nombre entier, 0 ou plus.', 'error'); return }
+      patch = { stock: q }
+    } else {
+      const p = prixSaisiMasse(massePrix)
+      if (!p.ok) { toast(p.error, 'error'); return }
+      patch = { prix: p.prix }
+    }
+    setMasseEnvoi(true)
+    const { data, error } = await supabase.from('article_variantes').update(patch).in('id', visees.map(v => v.id)).select('id')
+    setMasseEnvoi(false)
+    if (error || (data?.length || 0) !== visees.length) { toast(`Enregistrement incomplet : ${error?.message || 'refusé par les permissions'}. Recharge la page.`, 'error'); fetchVariantes(); return }
+    const ids = new Set(visees.map(v => v.id))
+    setVariantes(prev => prev.map(v => (ids.has(v.id) ? { ...v, ...patch } : v)))
+    onChange?.()
+    const n = visees.length
+    toast(quoi === 'stock'
+      ? `Stock ${patch.stock} posé sur ${n === 1 ? '1 combinaison' : `${n} combinaisons`}.`
+      : patch.prix === null ? `Prix de l’article rétabli sur ${n === 1 ? '1 combinaison' : `${n} combinaisons`}.` : `Prix ${euros(patch.prix)} posé sur ${n === 1 ? '1 combinaison' : `${n} combinaisons`}.`)
   }
 
   async function saveNom(axe) {
@@ -3998,10 +4130,18 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
           <input value={nom} onChange={e => setNom(e.target.value)} onBlur={() => saveNom(n)} placeholder={n === 1 ? 'Taille' : 'Couleur'} style={{ ...s.input, fontSize: 12, padding: '5px 8px', width: 130 }}/>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-          {valeurs.map(val => (
-            <span key={val} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 6px 3px 10px', fontSize: 12 }}>
-              <span style={{ color: T.ink, fontWeight: 600 }}>{val}</span>
-              <button onClick={() => removeValeur(n, val)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
+          {/* (21/10) Ranger (‹ ›), renommer (✎) sans perdre le stock, retirer
+              (×, ses combinaisons partent après confirmation). */}
+          {valeurs.map((val, i) => (
+            <span key={val} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, background: '#fff', border: `1px solid ${T.hairline}`, borderRadius: 100, padding: '3px 6px 3px 6px', fontSize: 12 }}>
+              <button type="button" onClick={() => bougerValeur(n, val, -1)} disabled={i === 0} aria-label={`Avancer ${val}`} title="Avancer"
+                style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? T.hairline : T.muted, fontSize: 12, padding: '0 2px', lineHeight: 1 }}>‹</button>
+              <span style={{ color: T.ink, fontWeight: 600, padding: '0 2px' }}>{val}</span>
+              <button type="button" onClick={() => bougerValeur(n, val, 1)} disabled={i === valeurs.length - 1} aria-label={`Reculer ${val}`} title="Reculer"
+                style={{ background: 'none', border: 'none', cursor: i === valeurs.length - 1 ? 'default' : 'pointer', color: i === valeurs.length - 1 ? T.hairline : T.muted, fontSize: 12, padding: '0 2px', lineHeight: 1 }}>›</button>
+              <button type="button" onClick={() => renommerUneValeur(n, val)} aria-label={`Renommer ${val}`} title="Renommer"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.muted, fontSize: 11, padding: '0 2px', lineHeight: 1 }}>✎</button>
+              <button type="button" onClick={() => removeValeur(n, val)} aria-label={`Retirer ${val}`} title="Retirer" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>×</button>
             </span>
           ))}
         </div>
@@ -4026,10 +4166,25 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
   async function copierVariantes() {
     if (envoiVar) return
     const conflits = conflitsDeVariantes(ciblesVar, articles)
-    const { aCopier } = repartirCibles(ciblesVar, conflits)
-    if (aCopier.length === 0) { toast('Rien à copier : ces articles ont déjà leurs variantes.', 'error'); return }
+    const { aCopier: libres } = repartirCibles(ciblesVar, conflits)
+    const aRemplacer = remplacerGrilles ? ciblesVar.filter(id => conflits.some(c => String(c) === String(id))) : []
+    const aCopier = [...libres, ...aRemplacer]
+    if (aCopier.length === 0) { toast('Rien à copier : ces articles ont déjà leurs variantes. Coche « Remplacer leur grille » pour l’écraser.', 'error'); return }
+    if (aRemplacer.length > 0) {
+      const n = aRemplacer.length
+      const okRemplacer = await confirme(confirmationSimple({
+        titre: `Remplacer la grille de ${n === 1 ? '1 article' : `${n} articles`} ?`,
+        message: `Leurs tailles, leurs prix par taille et leurs stocks actuels sont supprimés, puis remplacés par cette grille, à stock zéro. Les commandes déjà passées ne changent pas.`,
+        action: 'Oui, remplacer',
+      }))
+      if (!okRemplacer) return
+    }
 
     setEnvoiVar(true)
+    if (aRemplacer.length > 0) {
+      const { error: errSup } = await supabase.from('article_variantes').delete().in('article_id', aRemplacer)
+      if (errSup) { setEnvoiVar(false); toast(`Les anciennes grilles n’ont pas pu être retirées : ${errSup.message}`, 'error'); return }
+    }
     const axes = axesDeLArticle({ gere_variantes: true, axe1_nom: axe1Nom, axe1_valeurs: axe1Valeurs, axe2_nom: axe2Nom, axe2_valeurs: axe2Valeurs })
     const { error } = await supabase.from('articles').update(axes).in('id', aCopier)
     if (error) { setEnvoiVar(false); toast(`Erreur : ${error.message}`, 'error'); return }
@@ -4046,6 +4201,8 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
     setEnvoiVar(false)
     setCopieOuverte(false)
     setCiblesVar([])
+    setRemplacerGrilles(false)
+    onChange?.({ articles: true })
     toast(aCopier.length === 1
       ? 'Variantes copiées sur 1 article, à stock zéro.'
       : `Variantes copiées sur ${aCopier.length} articles, à stock zéro.`)
@@ -4106,12 +4263,20 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
                     )
                   })}
                 </div>
+                {conflits.length > 0 && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.ink, margin: '0 0 6px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={remplacerGrilles} onChange={e => setRemplacerGrilles(e.target.checked)} style={{ width: 15, height: 15 }}/>
+                    Remplacer leur grille ({conflits.length === 1 ? '1 article déjà équipé' : `${conflits.length} articles déjà équipés`}, à stock zéro)
+                  </label>
+                )}
                 <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
-                  {resumeDeVariantes({ cibles: ciblesVar.length, conflits: conflits.length })}
+                  {remplacerGrilles && conflits.length > 0
+                    ? `La grille sera posée sur ${ciblesVar.length === 1 ? '1 article' : `${ciblesVar.length} articles`}, dont ${conflits.length === 1 ? '1 remplacée' : `${conflits.length} remplacées`}, à stock zéro.`
+                    : resumeDeVariantes({ cibles: ciblesVar.length, conflits: conflits.length })}
                 </p>
                 <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12 }}
                   onClick={copierVariantes}
-                  disabled={envoiVar || ciblesVar.length - conflits.length <= 0}>
+                  disabled={envoiVar || (remplacerGrilles ? ciblesVar.length : ciblesVar.length - conflits.length) <= 0}>
                   <Copy size={13} strokeWidth={1.8}/> {envoiVar ? 'Copie en cours…' : 'Copier'}
                 </button>
               </div>
@@ -4128,6 +4293,29 @@ function VariantesArticle({ article, toast, articles = [], onChange = null }) {
           <button style={{ ...s.btn, ...s.btnPrimary, padding: '7px 12px', fontSize: 12, marginBottom: 12 }} onClick={genererCombinaisons}>
             <Icon name="plus" size={13}/> Générer les combinaisons
           </button>
+
+          {/* ─── EN MASSE (21/10, Alex) : un stock ou un prix posé d'un coup,
+              sur toutes les combinaisons ou sur une valeur. */}
+          {variantes.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: '#F8F6FF', borderRadius: 10, padding: '8px 10px', marginBottom: 8, fontSize: 12, color: T.ink }}>
+              <span style={{ fontWeight: 800 }}>En une fois</span>
+              <select value={masseCible} onChange={e => setMasseCible(e.target.value)} aria-label="Combinaisons visées"
+                style={{ ...s.input, width: 'auto', fontSize: 12, padding: '5px 8px' }}>
+                {ciblesDeMasse({ axe1Nom, axe1Valeurs, axe2Nom, axe2Valeurs }).map(c => <option key={c.cle} value={c.cle}>{c.libelle}</option>)}
+              </select>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <input type="number" min="0" value={masseStock} onChange={e => setMasseStock(e.target.value)} placeholder="Stock" aria-label="Stock à poser"
+                  style={{ ...s.input, width: 64, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
+                <button type="button" onClick={() => appliquerMasse('stock')} disabled={masseEnvoi} style={{ ...s.btn, ...s.btnPrimary, padding: '5px 10px', fontSize: 12 }}>Mettre ce stock</button>
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <input inputMode="decimal" value={massePrix} onChange={e => setMassePrix(e.target.value)} placeholder={Number(article.prix || 0).toFixed(2).replace('.', ',')} aria-label="Prix à poser"
+                  style={{ ...s.input, width: 72, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
+                <button type="button" onClick={() => appliquerMasse('prix')} disabled={masseEnvoi} style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 12 }}>Mettre ce prix</button>
+              </span>
+              <span style={{ fontSize: 11, color: T.muted }}>Prix vide = le prix de l&rsquo;article.</span>
+            </div>
+          )}
 
           {variantes.length === 0 ? (
             <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Définis tes axes puis clique sur «&nbsp;Générer les combinaisons&nbsp;».</p>
@@ -4355,18 +4543,22 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
             {/* 🔴 (21/10, Alex, Caprice de Magali) UN ARTICLE À VARIANTES : le
                 stock de CHAQUE taille, pas le stock général (que la fiche et le
                 serveur ignorent pour lui). Rouge = épuisé, orange = 1 ou 2. */}
+            {/* (21/10, Alex) Deux axes : une ligne par couleur (« Bleu  36 : 5 ·
+                38 : 5 »), au lieu de quinze pastilles à la suite (`lignesDeStock`). */}
             {vendable && a.gere_variantes && variantes.length > 0 && (
-              <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }} aria-label="Stock par variante">
-                {variantes.filter(v => v.actif !== false).map(v => {
-                  const st = Math.max(0, Number(v.stock) || 0)
-                  return (
-                    <span key={v.id} style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 100,
-                      color: st === 0 ? '#DC2626' : st <= 2 ? '#EA580C' : '#10B981', background: st === 0 ? '#FEE2E2' : st <= 2 ? '#FFF7ED' : '#F0FDF4' }}>
-                      {/* (21/10, Alex) « 36 : 3 », pas « 36 3 » : la taille et la quantité se confondaient. */}
-                      {[v.axe1_valeur, v.axe2_valeur].filter(Boolean).join(' · ')}{' '}: {st}
-                    </span>
-                  )
-                })}
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 4, flexBasis: '100%' }} aria-label="Stock par variante">
+                {lignesDeStock(variantes).map(groupe => (
+                  <span key={groupe.titre || '·'} style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                    {groupe.titre && <span style={{ fontSize: 12, fontWeight: 800, color: T.ink, minWidth: 70 }}>{groupe.titre}</span>}
+                    {groupe.items.map(it => (
+                      <span key={it.id} style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 100,
+                        color: it.stock === 0 ? '#DC2626' : it.stock <= 2 ? '#EA580C' : '#10B981', background: it.stock === 0 ? '#FEE2E2' : it.stock <= 2 ? '#FFF7ED' : '#F0FDF4' }}>
+                        {/* (21/10, Alex) « 36 : 3 », pas « 36 3 » : la taille et la quantité se confondaient. */}
+                        {it.libelle}{' '}: {it.stock}
+                      </span>
+                    ))}
+                  </span>
+                ))}
               </span>
             )}
             {vendable && mode === 'magasin' && !a.gere_variantes && (() => {

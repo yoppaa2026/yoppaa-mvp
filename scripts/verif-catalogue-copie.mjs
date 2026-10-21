@@ -93,7 +93,9 @@ const v = (nom, cond, detail = '') => {
   // réglage, sans que personne ne le voie. On compare les deux listes.
   const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
   const i = config.indexOf('async function saveArticle()')
-  const bloc = i >= 0 ? config.slice(i, config.indexOf('const { error } = editId', i)) : ''
+  // ⚠️ REPOINTÉE LE 21/10 : l'enregistrement relit l'id créé (galerie d'un
+  // nouvel article), `const { data: cree, error } = editId`.
+  const bloc = i >= 0 ? config.slice(i, config.indexOf('const { data: cree, error } = editId', i)) : ''
   v('le formulaire d’enregistrement a bien été retrouvé', bloc.length > 200, String(bloc.length))
   // ⚠️ RÉORIENTÉE LE 30/09 : le stock arrive dans le formulaire par `...stock`,
   // construit par `champsStock` (lib/stock-article.js). On EXÉCUTE la fonction

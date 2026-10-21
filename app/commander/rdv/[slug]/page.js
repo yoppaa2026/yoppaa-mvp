@@ -1383,9 +1383,12 @@ export default function CommanderRdvSlug() {
           // ingrédients au choix » (`choix_min`) exige aussi un écran
           // d'options. Même règle que le serveur (`bornesChoix`).
           const { data: grp, error: errGrp } = await supabase
-            .from('article_options_groupes').select('article_id, obligatoire, type, choix_min, choix_max').in('article_id', ids)
+            .from('article_options_groupes').select('article_id, obligatoire, type, choix_min, choix_max, depend_de_valeur_id').in('article_id', ids)
           if (annule) return
-          obligatoires = errGrp ? new Set(ids) : new Set((grp || []).filter(g => bornesChoix(g).min > 0).map(g => g.article_id))
+          // (21/10) Un groupe dépendant (« Choix de crudités » si « Avec
+          // crudités ») n'est exigé que si son option est cochée : il ne rend
+          // pas l'article « à choix obligatoire » à lui seul.
+          obligatoires = errGrp ? new Set(ids) : new Set((grp || []).filter(g => !g.depend_de_valeur_id && bornesChoix(g).min > 0).map(g => g.article_id))
           if (errGrp) console.warn('[rdv fiche] fetch options KO', errGrp.message)
         }
         setProduits((arts || []).map(a => ({ ...a, choix_obligatoire: obligatoires.has(a.id) })))

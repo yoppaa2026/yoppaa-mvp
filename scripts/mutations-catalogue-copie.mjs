@@ -26,6 +26,27 @@ const LOT = 'lib/catalogue-lot.js'
 const ECRAN = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── LE GROUPE DÉPENDANT (21/10) ─────────────────────────────────────────
+  { nom: '🔴 un article sans l’option parente reçoit un groupe toujours affiché',
+    fichier: COPIE, de: '      if (!lien) { sansParent.push(id); continue }', vers: '      if (!lien) { sansParent.push(id) }' },
+  { nom: '🔴 le parent se retrouve sans le nom de son groupe (le « Avec » d’un autre groupe)',
+    fichier: COPIE, de: "    && !x.depend_de_valeur_id && cleNom(x.nom) === cleNom(parent.groupe_nom))", vers: "    && !x.depend_de_valeur_id)" },
+  { nom: '🔴 deux niveaux de dépendance acceptés',
+    fichier: COPIE, de: '      if (fils.length > 0) {', vers: '      if (false) {' },
+  { nom: '🔴 une copie sans l’option garde la condition demandée en silence',
+    fichier: COPIE, de: '      if (!lien) { sansParent.push(String(g.article_id)); lien = undefined }', vers: '      if (!lien) { lien = undefined }' },
+  { nom: '🔴 « Toujours affiché » ne retire plus la condition',
+    fichier: COPIE, de: '      lien = null', vers: '      lien = undefined' },
+  { nom: '🔴 retirer l’option parente ne dit plus le groupe emporté',
+    fichier: COPIE, de: '    for (const f of enfantsDe(restantes.map(r => r?.id), groupesArticle)) enfantsEmportes.push(f.nom)', vers: '' },
+  { nom: '🔴 les versions ignorent la condition d’affichage',
+    fichier: COPIE, de: "      .join('|') + `>si:${cleParent(parentDe(g))}`", vers: "      .join('|')" },
+  { nom: '🔴 la copie d’écran pose le modèle dépendant sans résoudre son parent',
+    fichier: ECRAN, de: '    parentVoulu ? { parent: parentVoulu, groupesParArticle: groupesParArticle || {} } : {})', vers: '    {})' },
+  { nom: '🔴 la duplication écrit les groupes dans l’ordre d’origine (enfant avant parent)',
+    fichier: ECRAN, de: '    const ordre = [...source.filter(g => !g.depend_de_valeur_id), ...source.filter(g => g.depend_de_valeur_id)]', vers: '    const ordre = source' },
+  { nom: '🔴 supprimer une option parente ne prévient plus',
+    fichier: ECRAN, de: '    const fils = enfantsDe([id], groupes)', vers: '    const fils = []' },
   // ─── MODIFIER UN GROUPE (10/10) ──────────────────────────────────────────
   { nom: '🔴 une option modifiée est recréée (le panier en cours la perd)',
     fichier: COPIE, de: '      let k = origines[i] ? restantes.findIndex(x => cleNom(x?.nom) === origines[i]) : -1', vers: '      let k = -2' },
@@ -37,7 +58,9 @@ const MUTATIONS = [
     fichier: COPIE, de: '  if (plan.suppressions.length > 0) {', vers: '  if (false) {' },
   { nom: '⚠️ « obligatoire » n est plus porté par la modification',
     // ⚠️ ANCRE REPOINTÉE LE 13/10 : le patch porte aussi le nombre de choix.
-    fichier: COPIE, de: 'patch: { nom: cible.nom, type: cible.type, obligatoire: cible.obligatoire, choix_min:', vers: 'patch: { nom: cible.nom, type: cible.type, choix_min:' },
+    // ⚠️ REPOINTÉE LE 21/10 : le patch se compose (`Object.assign`), la
+    // condition d'affichage s'y ajoute à part.
+    fichier: COPIE, de: 'Object.assign(patch, { nom: cible.nom, type: cible.type, obligatoire: cible.obligatoire, choix_min:', vers: 'Object.assign(patch, { nom: cible.nom, type: cible.type, choix_min:' },
   { nom: '🔴 la bibliothèque ne modifie qu une copie',
     fichier: ECRAN, de: '<EditionGroupe key={entree.nom} copies={entree.copies}', vers: '<EditionGroupe key={entree.nom} copies={[entree.modele]}' },
   { nom: '🔴 la modification d une option ne relit plus ce qu elle a touché (refus RLS muet)',
@@ -502,8 +525,9 @@ const MUTATIONS = [
     vers: '' },
   { nom: '🔴 modifier un groupe n écrit plus ses bornes',
     fichier: 'lib/catalogue-copie.js',
-    de: '      groupes.push({ id: g.id, patch: { nom: cible.nom, type: cible.type, obligatoire: cible.obligatoire, choix_min: cible.choix_min, choix_max: cible.choix_max } })',
-    vers: '      groupes.push({ id: g.id, patch: { nom: cible.nom, type: cible.type, obligatoire: cible.obligatoire } })' },
+    // ⚠️ ANCRE REPOINTÉE LE 21/10 (patch composé, groupe dépendant).
+    de: '      Object.assign(patch, { nom: cible.nom, type: cible.type, obligatoire: cible.obligatoire, choix_min: cible.choix_min, choix_max: cible.choix_max })',
+    vers: '      Object.assign(patch, { nom: cible.nom, type: cible.type, obligatoire: cible.obligatoire })' },
   { nom: '🔴 la modification ignore un changement de bornes',
     fichier: 'lib/catalogue-copie.js',
     de: '    const memesChoix = (g.choix_min ?? null) === cible.choix_min && (g.choix_max ?? null) === cible.choix_max',

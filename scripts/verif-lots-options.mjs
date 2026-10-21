@@ -98,7 +98,7 @@ const calc = (panier, extra = {}) => construireLignesCommande({
 }
 v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, type et nombre de choix, prix par taille',
   SELECT_OPTIONS_VALEURS === 'id, nom, prix_supplement, groupe_id, article_options_groupes!article_options_valeurs_groupe_id_fkey!inner(article_id, nom)'
-  && SELECT_GROUPES_OPTIONS === 'id, article_id, nom, obligatoire, type, choix_min, choix_max'
+  && SELECT_GROUPES_OPTIONS === 'id, article_id, nom, obligatoire, type, choix_min, choix_max, depend_de_valeur_id'
   && SELECT_PRIX_TAILLE === 'valeur_id, taille_valeur_id, prix')
 
 // ─── (13/10) LE PRIX SELON LA TAILLE ET LE NOMBRE DE CHOIX ─────────────────
@@ -264,9 +264,11 @@ v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, 
     v('🔴 le réglage du commerçant dit ce que la fiche affiche vraiment',
       /\{pastilleBornes\(g\) \? <>Le client lit : « \{pastilleBornes\(g\)\} »<\/> : 'Pas de limite : aucune pastille pour le client'\}/.test(code('app/dashboard/ConfigDashboard.js')))
   }
-  v('🔴 la fiche et l’encodage affichent les groupes dans cet ordre',
-    code('app/commander/[slug]/page.js').includes('{ordonnerGroupes(groupes).map(g => {')
-    && code('app/dashboard/ModalNouvelleCommande.js').includes('{ordonnerGroupes(groupes[enOptions.id] || []).map(g => {'))
+  // ⚠️ REPOINTÉE LE 21/10, PAS DÉSARMÉE : même ordre, et seuls les groupes
+  // ACTIFS s'affichent (un groupe dépendant n'apparaît qu'avec son option).
+  v('🔴 la fiche et l’encodage affichent les groupes dans cet ordre, sans les groupes dépendants dont l’option n’est pas cochée',
+    code('app/commander/[slug]/page.js').includes('{ordonnerGroupes(groupes).filter(g => groupeActif(g, selections)).map(g => {')
+    && code('app/dashboard/ModalNouvelleCommande.js').includes('{ordonnerGroupes(groupes[enOptions.id] || []).filter(g => groupeActif(g, selections)).map(g => {'))
   v('🔴 un groupe à PLUSIEURS choix n’est jamais le groupe des tailles, même nommé « Taille »',
     OC.groupeDesTailles([{ id: 'gM', nom: 'Tailles', type: 'multiple', valeurs: [{}, {}] }, { id: 'gU', nom: 'Format', type: 'unique', valeurs: [{}, {}] }])?.id === 'gU')
   const lp = OC.lignesPrixTaille('sJambon', { tL: '2', tXL: '3,00', tM: '' })
@@ -338,8 +340,11 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     fiche.includes('>Ta personnalisation : {article.nom}</p>') && !/Personnalise (ton|ta) \{article\.nom\}/.test(fiche))
   // ⚠️ RÉORIENTÉES LE 13/10 : « obligatoire » passe par `bornesChoix` (un
   // nombre de choix minimum compte aussi). Même but, même garde.
+  // ⚠️ REPOINTÉE LE 21/10 : seuls les groupes TOUJOURS affichés comptent
+  // (`groupesActifs` sur une sélection vide) ; un groupe dépendant obligatoire
+  // n'est exigé qu'avec son option.
   v('🔴 panier venu du rendez-vous : un article à choix obligatoire (ou à nombre minimum) reste derrière, et le client est prévenu',
-    fiche.includes('if ((optionsParArticle[article.id] || []).some(g => bornesChoix(g).min > 0)) { ignores.push(article.nom); continue }')
+    fiche.includes('if (groupesActifs(optionsParArticle[article.id] || [], {}).some(g => bornesChoix(g).min > 0)) { ignores.push(article.nom); continue }')
     && fiche.includes('setPanierRepris({ repris, ignores })'))
   // (13/10) La fiche : groupes lus AVEC les prix par taille (lien nommé), le
   // choix passe par le module partagé, le total aussi.
@@ -347,19 +352,24 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     (fiche.match(/\.select\(SELECT_GROUPES_AVEC_VALEURS\)/g) || []).length === 2 && !fiche.includes("'*, valeurs:article_options_valeurs(*)'")
     && OC.SELECT_GROUPES_AVEC_VALEURS.includes('!article_options_prix_taille_valeur_id_fkey(')
     && OC.SELECT_GROUPES_AVEC_VALEURS.includes('valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey('))
+  // ⚠️ REPOINTÉE LE 21/10 : la bascule reçoit tous les groupes (purge des
+  // groupes dépendants), seuls les groupes actifs sont exigés, et ce qui part
+  // au panier est purgé ; le total ne compte que les groupes actifs.
   v('🔴 fiche : le choix suit les bornes du serveur et le prix selon la taille',
-    /const r = basculerValeur\(selections, groupe, valeur\)/.test(fiche)
-    && /const refus = refusDuGroupe\(g, \(selections\[g\.id\] \|\| \[\]\)\.length\)\s*if \(refus\) \{ errs\[g\.id\] = refus; ok = false \}/.test(fiche)
-    && /setErreurs\(errs\)\s*if \(!ok\) return/.test(fiche)
-    && /const supplement = supplementDeSelection\(selections\)/.test(fiche) && /prixDeValeur\(v, idsChoisis\)/.test(fiche))
+    /const r = basculerValeur\(selections, groupe, valeur, groupes\)/.test(fiche)
+    && /groupesActifs\(groupes, selections\)\.forEach\(g => \{\s*const refus = refusDuGroupe\(g, \(selections\[g\.id\] \|\| \[\]\)\.length\)\s*if \(refus\) \{ errs\[g\.id\] = refus; ok = false \}/.test(fiche)
+    && /setErreurs\(errs\)\s*if \(!ok\) return\s*const choix = purgerInactifs\(selections, groupes\)\s*onAjouter\(article, Object\.keys\(choix\)\.length > 0 \? choix : null\)/.test(fiche)
+    && /const supplement = supplementDeSelection\(selections, groupes\)/.test(fiche) && /prixDeValeur\(v, idsChoisis\)/.test(fiche))
   v('🔴 fiche : le total à l’écran reçoit les prix par taille, et plus aucun prix unique additionné à la main',
     /prixTaille: prixTailleDesGroupes\(Object\.values\(optionsParArticle \|\| \{\}\)\.flat\(\)\),/.test(fiche)
     && !/prix_supplement\s*\|\|\s*0\), 0\)/.test(fiche) && (fiche.match(/supplementDeSelection\(/g) || []).length >= 4)
   const modale = code('app/dashboard/ModalNouvelleCommande.js')
   v('🔴 encodage manuel : mêmes bornes, même prix selon la taille, même total que le serveur',
     /prixTaille: prixTailleDesGroupes\(Object\.values\(groupes\)\.flat\(\)\),/.test(modale)
-    && /basculerValeur\(s, g, v\)\.selections/.test(modale) && /const prix = prixDeValeur\(v, idsChoisis\)/.test(modale)
-    && /disabled=\{\(groupes\[enOptions\.id\] \|\| \[\]\)\.some\(g => refusDuGroupe\(g, \(selections\[g\.id\] \|\| \[\]\)\.length\)\)\}/.test(modale))
+    // ⚠️ REPOINTÉE LE 21/10 : mêmes règles du groupe dépendant que la fiche.
+    && /basculerValeur\(s, g, v, groupes\[enOptions\.id\] \|\| \[\]\)\.selections/.test(modale) && /const prix = prixDeValeur\(v, idsChoisis\)/.test(modale)
+    && /disabled=\{groupesActifs\(groupes\[enOptions\.id\] \|\| \[\], selections\)\.some\(g => refusDuGroupe\(g, \(selections\[g\.id\] \|\| \[\]\)\.length\)\)\}/.test(modale)
+    && /Object\.entries\(purgerInactifs\(selections, groupes\[enOptions\.id\] \|\| \[\]\)\)/.test(modale))
   const catalogue = code('app/api/equipe/commande/catalogue/route.js')
   v('🔴 le catalogue de l’encodage lit le nombre de choix et les prix par taille (lien nommé)',
     catalogue.includes('obligatoire, choix_min, choix_max,')
@@ -388,8 +398,10 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
 
   const rdv = code('app/commander/rdv/[slug]/page.js')
   v('🔴 tunnel rendez-vous : les choix obligatoires (et les nombres minimum) sont lus, et une lecture en échec ferme l’achat de tout',
-    rdv.includes(".from('article_options_groupes').select('article_id, obligatoire, type, choix_min, choix_max').in('article_id', ids)")
-    && rdv.includes('obligatoires = errGrp ? new Set(ids) : new Set((grp || []).filter(g => bornesChoix(g).min > 0).map(g => g.article_id))'))
+    // ⚠️ REPOINTÉE LE 21/10 : un groupe dépendant ne rend pas l'article « à
+    // choix obligatoire » à lui seul.
+    rdv.includes(".from('article_options_groupes').select('article_id, obligatoire, type, choix_min, choix_max, depend_de_valeur_id').in('article_id', ids)")
+    && rdv.includes('obligatoires = errGrp ? new Set(ids) : new Set((grp || []).filter(g => !g.depend_de_valeur_id && bornesChoix(g).min > 0).map(g => g.article_id))'))
   v('🔴 tunnel rendez-vous : pas d’achat d’un article à choix obligatoire (tuile, ajout, reprise)',
     rdv.includes('const achetable = produitsAchetables && !p.est_vitrine && Number(p.prix) > 0 && !p.choix_obligatoire')
     && rdv.includes('if (article?.choix_obligatoire) return')
@@ -463,6 +475,83 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   const nommes = tous.reduce((n, f) => n + (code(f).match(/article_options_(valeurs|groupes)!article_options_valeurs_groupe_id_fkey/g) || []).length, 0)
   v('les 5 lectures jointes nomment le lien (fiche et tableau de bord, paiement, duplication, relecture des copies, encodage)',
     nommes === 5, `${nommes} trouvées`)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. LE GROUPE DÉPENDANT (21/10, Alex, 7 Abbayes) : « Choix de crudités »
+//    n'apparaît, et n'est exigé, que si « Avec crudités +0,50 € » est cochée.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const sw = { id: 's1', nom: 'Jambon-fromage', prix: 4, actif: true, commercant_id: 'c1', tva_taux: 6, temps_prepa: 2 }
+  const gC = { id: 'gC', article_id: 's1', nom: 'Crudités', obligatoire: true, type: 'unique', depend_de_valeur_id: null }
+  const gL = { id: 'gL', article_id: 's1', nom: 'Choix de crudités', obligatoire: true, type: 'multiple', depend_de_valeur_id: 'vAvec' }
+  // Sur le croissant vendu en LOT : un groupe dépendant aussi.
+  const gK = { id: 'gK', article_id: 'k1', nom: 'Extra', obligatoire: false, type: 'unique', depend_de_valeur_id: null }
+  const gKd = { id: 'gKd', article_id: 'k1', nom: 'Choix extra', obligatoire: false, type: 'multiple', depend_de_valeur_id: 'vKAvec' }
+  const gs = [gC, gL, gK, gKd]
+  const val = (id, g, nom, prix = 0) => ({ id, nom, prix_supplement: prix, groupe_id: g.id, article_options_groupes: { article_id: g.article_id, nom: g.nom } })
+  const vals = [val('vAvec', gC, 'Avec crudités', 0.5), val('vSans', gC, 'Sans crudités'), val('vSalade', gL, 'Salade'), val('vTomates', gL, 'Tomates'),
+    val('vKAvec', gK, 'Avec extra', 0.3), val('vKChoco', gKd, 'Chocolat', 0.4)]
+  const c2 = (panier, extra = {}) => construireLignesCommande({
+    panier, articlesData: [sw, croissant], optionsValeurs: vals, variantesData: [], dealsData: [lot],
+    commercant, regime: 'emporter', dateCommande: JOUR, groupesOptions: gs, ...extra,
+  })
+  const ok1 = c2([{ id: 's1', quantite: 1, options: [{ valeur_ids: ['vTomates', 'vAvec', 'vSalade'] }] }])
+  v('🔴 avec crudités + salade + tomates : 4 + 0,50 = 4,50 €, une seule fois quel que soit le nombre',
+    ok1.ok && ok1.totalCents === 450, JSON.stringify(ok1))
+  v('🔴 le ticket met l’option parente AVANT ses crudités, jamais l’ordre des clics',
+    ok1.ok && ok1.lignes[0].options.map(o => o.valeur_nom).join(',') === 'Avec crudités,Tomates,Salade', JSON.stringify(ok1.lignes?.[0]?.options))
+  const gratuit = c2([{ id: 's1', quantite: 1, options: [{ valeur_ids: ['vSans', 'vTomates'] }] }])
+  v('🔴 « Sans crudités » + tomates : REFUSÉ (plus de crudités gratuites)',
+    !gratuit.ok && gratuit.option_en_trop === true && /Tomates/.test(gratuit.error), JSON.stringify(gratuit))
+  const seul = c2([{ id: 's1', quantite: 1, options: [{ valeur_ids: ['vTomates'] }] }])
+  v('🔴 des crudités sans aucune option parente : REFUSÉ', !seul.ok && seul.option_en_trop === true, JSON.stringify(seul))
+  const sans = c2([{ id: 's1', quantite: 1, options: [{ valeur_ids: ['vSans'] }] }])
+  v('🔴 « Sans crudités » seul : accepté, le groupe dépendant obligatoire n’est PAS exigé', sans.ok && sans.totalCents === 400, JSON.stringify(sans))
+  const avecRien = c2([{ id: 's1', quantite: 1, options: [{ valeur_ids: ['vAvec'] }] }])
+  v('🔴 « Avec crudités » sans en choisir : le groupe dépendant obligatoire EST exigé',
+    !avecRien.ok && avecRien.option_manquante === true && /Choix de crudités/.test(avecRien.error), JSON.stringify(avecRien))
+  const lotGlisse = c2([{ id: 'k1', quantite: 1, deal_id: 'dLot', options: [{ valeur_ids: ['vKChoco'] }] }])
+  v('🔴 sur une OFFRE aussi : un choix dépendant sans son option est refusé (les suppléments y sont comptés)',
+    !lotGlisse.ok && lotGlisse.option_en_trop === true, JSON.stringify(lotGlisse))
+  const ecran = c2([{ id: 's1', quantite: 1, options: [{ valeur_ids: ['vSans', 'vTomates'] }] }], { groupesOptions: null })
+  v('sans liste de groupes (total à l’écran) : aucun contrôle, l’écran purge lui-même', ecran.ok)
+
+  // L'écran : mêmes règles, par le module partagé.
+  const gsArticle = [{ ...gC, valeurs: vals.filter(x => x.groupe_id === 'gC') }, { ...gL, valeurs: vals.filter(x => x.groupe_id === 'gL') }]
+  const [GC, GL] = gsArticle
+  const avecSel = { gC: [GC.valeurs[0]], gL: [GL.valeurs[0], GL.valeurs[1]] }
+  v('🔴 groupe actif seulement si son option est cochée',
+    OC.groupeActif(GL, avecSel) && !OC.groupeActif(GL, { gC: [GC.valeurs[1]] }) && OC.groupeActif(GC, {}))
+  const bascule = OC.basculerValeur(avecSel, GC, GC.valeurs[1], gsArticle)
+  v('🔴 passer à « Sans crudités » VIDE les crudités cochées',
+    !bascule.selections.gL && bascule.selections.gC[0].id === 'vSans', JSON.stringify(bascule.selections))
+  const decoche = OC.basculerValeur({ gC: [GC.valeurs[0]], gL: [GL.valeurs[0]] }, { ...GC, type: 'multiple', obligatoire: false }, GC.valeurs[0], gsArticle)
+  v('🔴 décocher l’option parente vide aussi le groupe dépendant', !decoche.selections.gL, JSON.stringify(decoche.selections))
+  v('🔴 le total à l’écran ne compte pas les choix d’un groupe caché',
+    OC.supplementDeSelection({ gC: [GC.valeurs[1]], gL: [{ id: 'vX', prix_supplement: 2 }] }, gsArticle) === 0
+    && OC.supplementDeSelection(avecSel, gsArticle) === 0.5)
+  v('🔴 un groupe caché n’est jamais exigé (seuls les groupes actifs le sont)',
+    OC.groupesActifs(gsArticle, { gC: [GC.valeurs[1]] }).map(g => g.id).join() === 'gC')
+  // « Menu +3 € » facultatif, « Boisson du menu » obligatoire qui en dépend.
+  const gMenu = { id: 'gM', nom: 'Menu', type: 'unique', obligatoire: false, valeurs: [{ id: 'vMenu' }] }
+  const gBoisson = { id: 'gB', nom: 'Boisson du menu', type: 'unique', obligatoire: true, depend_de_valeur_id: 'vMenu', valeurs: [{ id: 'b1' }, { id: 'b2' }] }
+  const gSauce = { id: 'gS', nom: 'Sauce', type: 'unique', obligatoire: true, valeurs: [{ id: 's1' }, { id: 's2' }] }
+  v('🔴 l’ordre : chaque groupe dépendant juste sous son parent, même obligatoire sous un parent facultatif',
+    OC.ordonnerGroupes([gBoisson, gMenu, gSauce]).map(g => g.id).join() === 'gS,gM,gB', OC.ordonnerGroupes([gBoisson, gMenu, gSauce]).map(g => g.id).join())
+  v('🔴 un groupe dépendant à choix unique n’est JAMAIS pris pour le groupe des tailles',
+    OC.groupeDesTailles([gMenu, gBoisson]) === null)
+  v('la liste du commerçant : ordre de création, chaque enfant sous son parent',
+    OC.parentsPuisEnfants([gBoisson, gSauce, gMenu]).map(g => g.id).join() === 'gS,gM,gB')
+  v('l’option qui fait apparaître un groupe se retrouve (pour « avec « Menu » »)',
+    OC.optionParente(gBoisson, [gMenu, gBoisson])?.valeur?.id === 'vMenu' && OC.optionParente(gMenu, [gMenu]) === null)
+
+  // Les écrans branchent ces règles.
+  const fiche = code('app/commander/[slug]/page.js')
+  v('🔴 fiche : un groupe dépendant s’affiche en retrait, la carte à lire dit « avec … »',
+    /const sousGroupe = estDependant\(g\)/.test(fiche) && /optionParente\(g, groupes\) && <span/.test(fiche))
+  v('🔴 le catalogue de l’encodage lit la condition d’affichage',
+    code('app/api/equipe/commande/catalogue/route.js').includes('choix_max, depend_de_valeur_id, created_at'))
 }
 
 console.log(`\nLots et options : ${ok} vérifications`)

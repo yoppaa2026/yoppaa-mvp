@@ -20,6 +20,7 @@ import {
   CHAMPS_PRESTATION, copieDePrestation,
   aVerifierApresCopie, lignesDeFenetre, doitOuvrirFenetre, resumeCourt,
   planModificationGroupe, resumeModification,
+  resumeDuPlan, parentParNom, resoudreParent, choixDeParent, enfantsDe, phraseEnfantsEmportes,
 } from '../lib/catalogue-copie.js'
 
 let ok = 0
@@ -917,8 +918,10 @@ const v = (nom, cond, detail = '') => {
   const config = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
   const i = config.indexOf('function NouveauGroupe(')
   const bloc = i >= 0 ? config.slice(i, config.indexOf('\nfunction ', i + 10)) : ''
+  // ⚠️ REPOINTÉE LE 21/10, PAS DÉSARMÉE : même chemin, il passe maintenant
+  // les groupes du commerce et l'option parente choisie (groupe dépendant).
   v('🔴 il écrit par le chemin de « Appliquer à… », sans doublon de nom, et le parent relit',
-    /const r = await ecrireCopiesDeGroupe\(v\.groupe, aCopier\)/.test(bloc) && /repartirCibles\(cibles, conflits\)/.test(bloc)
+    /const r = await ecrireCopiesDeGroupe\(v\.groupe, aCopier, groupesParArticle, \{ parent: form\.parent \|\| null \}\)/.test(bloc) && /repartirCibles\(cibles, conflits\)/.test(bloc)
     && /onCree\?\.\(aCopier\)/.test(bloc))
   v('il est affiché dans Personnalisation, même sans groupe existant',
     /<NouveauGroupe articles=\{articles\} toast=\{toast\} onCree=\{noterOptionsTouchees\}/.test(config))
@@ -1049,7 +1052,112 @@ const v = (nom, cond, detail = '') => {
   v('🔴 un retrait refusé par la RLS se dit (zéro ligne n’est pas un succès)',
     /if \(!data \|\| data\.length === 0\) return \{ ok: false, erreur: 'Retrait refusé par les permissions/.test(ecran))
   v('le bouton dit le geste', /'Appliquer \/ retirer…'/.test(ecran) && /Supprimer\s*<\/button>/.test(ecran))
-  v('chaque case dit ce qu’elle fera', /dejaPose \? \(coche \? 'déjà posé' : 'sera retiré'\) : \(coche \? 'sera ajouté' : null\)/.test(ecran))
+  // ⚠️ REPOINTÉE LE 21/10 : une case dit aussi « sans « Avec crudités » »
+  // quand l'article n'a pas l'option parente (il sera écarté).
+  v('chaque case dit ce qu’elle fera', /const etiquette = dejaPose \? \(coche \? 'déjà posé' : 'sera retiré'\)\s*: sansParent \? `sans « \$\{entree\.parent\.option_nom\} »` : \(coche \? 'sera ajouté' : null\)/.test(ecran))
+}
+
+// ═══ LE GROUPE DÉPENDANT, D'UN ARTICLE À L'AUTRE (21/10, Alex) ══════════════
+// « Choix de crudités » n'apparaît que si « Avec crudités » est cochée. Chaque
+// article a ses propres identifiants : le lien voyage par NOMS.
+{
+  const crud = (art, avec, sans) => ({ id: `gC-${art}`, article_id: art, nom: 'Crudités', type: 'unique', valeurs: [{ id: avec, nom: 'Avec crudités', prix_supplement: 0.5 }, { id: sans, nom: 'Sans crudités' }] })
+  const choix = (art, dep) => ({ id: `gL-${art}`, article_id: art, nom: 'Choix de crudités', type: 'multiple', depend_de_valeur_id: dep, valeurs: [{ id: `sal-${art}`, nom: 'Salade' }, { id: `tom-${art}`, nom: 'Tomates' }] })
+  const parArticle = {
+    a1: [crud('a1', 'avec-a1', 'sans-a1'), choix('a1', 'avec-a1')],
+    a2: [crud('a2', 'avec-a2', 'sans-a2')],
+    a3: [{ id: 'gX-a3', article_id: 'a3', nom: 'Sauce', type: 'unique', valeurs: [{ id: 'k-a3', nom: 'Ketchup' }] }],
+  }
+  const modele = parArticle.a1[1]
+  const parent = parentParNom(modele, parArticle.a1)
+  v('🔴 l’option parente se lit en NOMS sur l’article du modèle',
+    parent?.groupe_nom === 'Crudités' && parent?.option_nom === 'Avec crudités', JSON.stringify(parent))
+  v('🔴 elle se retrouve sur un autre article par son nom (son propre identifiant)',
+    resoudreParent(parent, parArticle.a2) === 'avec-a2' && resoudreParent(parent, parArticle.a3) === null)
+  // Deux groupes portent chacun une option « Avec » : c'est le NOM DU GROUPE
+  // qui départage, jamais le premier venu.
+  const deuxAvec = [{ id: 'gF', nom: 'Fromage', valeurs: [{ id: 'avec-fromage', nom: 'Avec' }] }, { id: 'gCr', nom: 'Crudités', valeurs: [{ id: 'avec-crudites', nom: 'Avec' }] }]
+  v('🔴 l’option se retrouve DANS SON GROUPE : le « Avec » des crudités, pas celui du fromage',
+    resoudreParent({ groupe_nom: 'Crudités', option_nom: 'Avec' }, deuxAvec) === 'avec-crudites')
+  v('🔴 jamais dans un groupe lui-même dépendant (un seul niveau), ni dans le groupe exclu',
+    resoudreParent({ groupe_nom: 'Choix de crudités', option_nom: 'Salade' }, parArticle.a1) === null
+    && resoudreParent(parent, parArticle.a1, 'gC-a1') === null)
+  const cp = copiesDuGroupe(modele, ['a2', 'a3'], { parent, groupesParArticle: parArticle })
+  v('🔴 la copie dépend de l’option DE SON ARTICLE ; l’article sans l’option est ÉCARTÉ et rendu',
+    cp.groupes.length === 1 && cp.groupes[0].article_id === 'a2' && cp.groupes[0].depend_de_valeur_id === 'avec-a2'
+    && cp.sansParent.join() === 'a3' && cp.valeurs.length === 1, JSON.stringify(cp))
+  const cpSimple = copiesDuGroupe(parArticle.a2[0], ['a3'])
+  v('sans condition demandée : la copie reste un groupe toujours affiché (rien d’ajouté)',
+    cpSimple.groupes.length === 1 && !('depend_de_valeur_id' in cpSimple.groupes[0]) && cpSimple.sansParent.length === 0)
+
+  // Le menu « N'apparaît que si ».
+  const ch = choixDeParent(modele, parArticle.a1)
+  v('🔴 le menu propose les options des AUTRES groupes toujours affichés, pas les siennes',
+    ch.map(c => c.libelle).join(' / ') === 'Crudités › Avec crudités / Crudités › Sans crudités', ch.map(c => c.libelle).join(' / '))
+  v('sur tout le commerce, un nom n’y figure qu’une fois',
+    choixDeParent(null, [...parArticle.a1, ...parArticle.a2]).filter(c => c.option_nom === 'Avec crudités').length === 1)
+
+  // La modification, partout ou sur un article.
+  const edition = (p) => ({ nom: 'Choix de crudités', type: 'multiple', obligatoire: false, parent: p,
+    options: [{ origine: 'Salade', nom: 'Salade' }, { origine: 'Tomates', nom: 'Tomates' }] })
+  const libre = { ...choix('a2', null), id: 'gL-a2' }
+  const libre3 = { ...choix('a3', null), id: 'gL-a3' }
+  const pa = { ...parArticle, a2: [...parArticle.a2, libre], a3: [...parArticle.a3, libre3] }
+  const plan = planModificationGroupe({ copies: [libre, libre3], edition: edition(parent), groupesParArticle: pa })
+  v('🔴 poser la condition : chaque copie reçoit l’option de SON article ; celle qui ne l’a pas est dite et gardée',
+    plan.ok && plan.groupes.length === 1 && plan.groupes[0].id === 'gL-a2' && plan.groupes[0].patch.depend_de_valeur_id === 'avec-a2'
+    && plan.sansParent.join() === 'a3', JSON.stringify(plan))
+  v('🔴 le résumé le dit avant d’enregistrer', /1 article n’a pas l’option choisie/.test(resumeModification(plan)), resumeModification(plan))
+  const retour = planModificationGroupe({ copies: [modele], edition: edition(null), groupesParArticle: parArticle })
+  v('🔴 « Toujours affiché » retire la condition', retour.ok && retour.groupes[0]?.patch.depend_de_valeur_id === null, JSON.stringify(retour.groupes))
+  const sansCle = planModificationGroupe({ copies: [modele], edition: (({ parent: _p, ...e }) => e)(edition(parent)), groupesParArticle: parArticle })
+  v('un formulaire sans champ « parent » ne touche pas à la condition', sansCle.ok && sansCle.groupes.length === 0, JSON.stringify(sansCle.groupes))
+  const meme = planModificationGroupe({ copies: [modele], edition: edition(parent), groupesParArticle: parArticle })
+  v('la même condition déjà posée : rien à écrire', meme.ok && meme.groupes.length === 0 && meme.sansParent.length === 0, JSON.stringify(meme))
+  const deuxNiveaux = planModificationGroupe({ copies: [parArticle.a1[0]],
+    edition: { nom: 'Crudités', type: 'unique', obligatoire: false, parent: { groupe_nom: 'Sauce', option_nom: 'Ketchup' },
+      options: [{ origine: 'Avec crudités', nom: 'Avec crudités', prix_supplement: '0,5' }, { origine: 'Sans crudités', nom: 'Sans crudités' }] },
+    groupesParArticle: { a1: [...parArticle.a1, { id: 'gX-a1', nom: 'Sauce', valeurs: [{ id: 'k-a1', nom: 'Ketchup' }] }] } })
+  v('🔴 un seul niveau : un groupe qui fait apparaître un autre groupe ne peut pas dépendre d’une option',
+    !deuxNiveaux.ok && /un seul niveau/.test(deuxNiveaux.error), JSON.stringify(deuxNiveaux))
+  const retireAvec = planModificationGroupe({ copies: [parArticle.a1[0]],
+    edition: { nom: 'Crudités', type: 'unique', obligatoire: false, options: [{ origine: 'Sans crudités', nom: 'Sans crudités' }] },
+    groupesParArticle: parArticle })
+  v('🔴 retirer l’option parente : le groupe qu’elle fait apparaître est NOMMÉ avant (il partira avec)',
+    retireAvec.ok && retireAvec.enfantsEmportes.join() === 'Choix de crudités' && /« Choix de crudités », qui en dépend, partira avec/.test(resumeModification(retireAvec)),
+    resumeModification(retireAvec))
+
+  // La bibliothèque.
+  const tous = [...parArticle.a1, ...parArticle.a2, libre]
+  const biblio = bibliothequeDeGroupes(tous)
+  const eL = biblio.find(e => e.nom === 'Choix de crudités')
+  const eC = biblio.find(e => e.nom === 'Crudités')
+  v('🔴 dépendant sur un article, toujours affiché sur l’autre : deux versions',
+    eL.versions === 2, JSON.stringify(eL.versions))
+  v('🔴 la bibliothèque dit la condition, et les groupes qu’un parent emporterait',
+    eL.parent?.option_nom === 'Avec crudités' && /seulement si « Avec crudités »/.test(phraseDeBibliotheque(eL)) && eC.enfants.join() === 'Choix de crudités',
+    `${phraseDeBibliotheque(eL)} / ${JSON.stringify(eC.enfants)}`)
+  v('🔴 retirer un groupe parent le dit : ses groupes dépendants partent avec',
+    /partira avec/.test(resumeDuPlan({ nomGroupe: 'Crudités', retires: 1, enfants: ['Choix de crudités'] }))
+    && !/partira/.test(resumeDuPlan({ nomGroupe: 'Crudités', aPoser: 1, enfants: ['Choix de crudités'] })))
+  v('les enfants d’une option se trouvent', enfantsDe(['avec-a1'], parArticle.a1).map(g => g.id).join() === 'gL-a1' && phraseEnfantsEmportes([]) === '')
+
+  // L'écran branche ces règles.
+  const ecr = sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))
+  v('🔴 l’écriture des copies lit l’option parente du modèle, la retrouve par nom, et refuse plutôt que poser un groupe toujours affiché',
+    /parentParNom\(groupe, groupesParArticle\?\.\[String\(groupe\.article_id\)\] \|\| \[\]\)/.test(ecr)
+    && /if \(groupe\?\.depend_de_valeur_id && parent === undefined && !parentVoulu\) \{/.test(ecr)
+    && /copiesDuGroupe\(groupe, cibleIds,\s*parentVoulu \? \{ parent: parentVoulu, groupesParArticle: groupesParArticle \|\| \{\} \} : \{\}\)/.test(ecr))
+  v('🔴 les articles écartés sont dits, aux trois portes (nouveau groupe, appliquer, copier vers)',
+    (ecr.match(/direSansParent\(toast, r, articles\)/g) || []).length === 3)
+  v('🔴 dupliquer un article garde la condition, rattachée à l’option de la COPIE',
+    /const ordre = \[\.\.\.source\.filter\(g => !g\.depend_de_valeur_id\), \.\.\.source\.filter\(g => g\.depend_de_valeur_id\)\]/.test(ecr)
+    && /parent \? \{ parent, groupesParArticle: \{ \[cree\.id\]: groupesCopie \} \} : \{\}/.test(ecr))
+  v('🔴 supprimer une option ou un groupe parent le dit avant (cascade)',
+    /const fils = enfantsDe\(\[id\], groupes\)/.test(ecr) && /enfantsDe\(\(g\?\.valeurs \|\| \[\]\)\.map\(v => v\.id\), groupes\)/.test(ecr)
+    && /const emportes = phraseEnfantsEmportes\(enfantsDesCopies\(entree\.copies \|\| \[\]\)\)/.test(ecr))
+  v('🔴 le formulaire propose « N’apparaît que si », à la création et à la modification',
+    (ecr.match(/<ChampParent /g) || []).length === 2 && /parent: parentParNom\(depart, groupesDuModele\),/.test(ecr))
 }
 
 console.log(`\nCopier dans le catalogue : ${ok} vérifications`)

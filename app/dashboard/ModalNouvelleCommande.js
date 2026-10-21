@@ -23,7 +23,7 @@ import { creneauRetraitHorsHoraires } from '@/lib/ouverture'
 import { COULEUR_LIVRAISON } from '@/lib/couleurs-statut-commande'
 import { categoriesOrdonnees } from '@/lib/categories-catalogue'
 import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
-import { prixTailleDesGroupes, prixDeValeur, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes } from '@/lib/options-choix'
+import { prixTailleDesGroupes, prixDeValeur, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes, estDependant, groupeActif, groupesActifs, purgerInactifs } from '@/lib/options-choix'
 import { REGIME_EMPORTER } from '@/lib/tva'
 import { euros } from '@/lib/montants'
 import { jourBruxelles, brusselsInstant } from '@/lib/timezone'
@@ -428,13 +428,15 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
           {enOptions && (
             <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: `1.5px solid ${T.main}`, background: '#FAF7FF' }}>
               <p style={{ fontSize: 15, fontWeight: 800, color: T.ink, margin: '0 0 8px' }}>{enOptions.nom}</p>
-              {ordonnerGroupes(groupes[enOptions.id] || []).map(g => {
+              {/* (21/10) Un groupe dépendant n'apparaît que si son option est
+                  cochée, en retrait sous son groupe parent, comme sur la fiche. */}
+              {ordonnerGroupes(groupes[enOptions.id] || []).filter(g => groupeActif(g, selections)).map(g => {
                 // (13/10) Nombre de choix et prix selon la taille : mêmes
                 // règles que la fiche et le serveur (`lib/options-choix.js`).
                 const idsChoisis = Object.values(selections).flat().map(x => x.id)
                 const refus = refusDuGroupe(g, (selections[g.id] || []).length)
                 return (
-                <div key={g.id} style={{ marginBottom: 8 }}>
+                <div key={g.id} style={estDependant(g) ? { margin: '0 0 8px 10px', paddingLeft: 10, borderLeft: `3px solid ${T.pale}` } : { marginBottom: 8 }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: T.deep, margin: '0 0 4px' }}>
                     {/* (13/10, Alex) Seulement ce qui informe : « obligatoire »
                         et une vraie limite, comme sur la fiche. */}
@@ -448,7 +450,7 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                       const prix = prixDeValeur(v, idsChoisis)
                       return (
                         <button key={v.id} type="button" aria-pressed={pris}
-                          onClick={() => setSelections(s => basculerValeur(s, g, v).selections)}
+                          onClick={() => setSelections(s => basculerValeur(s, g, v, groupes[enOptions.id] || []).selections)}
                           style={{ padding: '6px 10px', borderRadius: 100, border: `1.5px solid ${pris ? T.main : T.hairline}`, background: pris ? T.pale : '#fff', color: T.ink, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                           {v.nom}{prix > 0 ? ` +${euros(prix)}` : ''}
                         </button>
@@ -465,9 +467,9 @@ export default function ModalNouvelleCommande({ commercantId, jourInitial, onFer
                 <button type="button" onClick={() => setEnOptions(null)}
                   style={{ flex: 1, padding: '8px', borderRadius: 100, border: `1.5px solid ${T.hairline}`, background: '#fff', color: T.muted, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Annuler</button>
                 <button type="button"
-                  disabled={(groupes[enOptions.id] || []).some(g => refusDuGroupe(g, (selections[g.id] || []).length))}
+                  disabled={groupesActifs(groupes[enOptions.id] || [], selections).some(g => refusDuGroupe(g, (selections[g.id] || []).length))}
                   onClick={() => {
-                    const choix = Object.fromEntries(Object.entries(selections).filter(([, v]) => v.length > 0))
+                    const choix = Object.fromEntries(Object.entries(purgerInactifs(selections, groupes[enOptions.id] || [])).filter(([, v]) => v.length > 0))
                     ajouter(enOptions, Object.keys(choix).length ? choix : null); setEnOptions(null)
                   }}
                   style={{ flex: 2, padding: '8px', borderRadius: 100, border: 'none', background: T.main, color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>Ajouter</button>

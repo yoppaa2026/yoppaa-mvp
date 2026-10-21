@@ -45,6 +45,7 @@ import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@
 import {
   SELECT_GROUPES_AVEC_VALEURS, pastilleBornes, bornesDepuisSaisie, groupeDesTailles, lignesPrixTaille, resumePrixTaille,
   taillesDesCopies, prixTailleParNom, prixParNomDe, prixTailleDeSaisie, lignesPrixTailleDesCopies,
+  parentsPuisEnfants, optionParente,
 } from '@/lib/options-choix'
 import { TEXTES_AFFICHE, TEXTES_CARTE_TABLE, telechargerAffichePng, telechargerAffichePdf, telechargerCarteTablePdf, FORMATS_AFFICHE, FORMATS_CARTE_TABLE, LIBELLES_AFFICHE, LIBELLES_CARTE_TABLE } from '@/lib/affiche-kit'
 import { consigneGoogle } from '@/lib/action-google'
@@ -177,6 +178,7 @@ import {
   doitOuvrirFenetre, resumeCourt, nouveauGroupe,
   planModificationGroupe, resumeModification,
   planDuGroupe, resumeDuPlan,
+  parentParNom, resoudreParent, cleParent, choixDeParent, enfantsDe, phraseEnfantsEmportes,
 } from '@/lib/catalogue-copie'
 // ⚠️ ET CE QUI S'APPLIQUE À PLUSIEURS ARTICLES SE DÉCIDE AUSSI DANS UN MODULE :
 // ce qui bouge vraiment, ce qu'on refuse d'écrire, et la phrase que le
@@ -1270,16 +1272,29 @@ function TabMenu({ commercantId, commercant, toast }) {
         if (errVar) optionsRatees = true
       }
     }
-    for (const g of groupesSource || []) {
-      const { groupes: [copie], valeurs: [valeursCopie] } = copiesDuGroupe(g, [cree.id])
+    // (21/10) LE GROUPE DÉPENDANT SUIT : les groupes toujours affichés
+    // d'abord, puis ceux qui dépendent d'une option, rattachés à l'option de
+    // même nom sur la COPIE (relue au fil de l'écriture). Jamais l'identifiant
+    // de l'original : il pointerait vers l'autre article.
+    const source = groupesSource || []
+    const ordre = [...source.filter(g => !g.depend_de_valeur_id), ...source.filter(g => g.depend_de_valeur_id)]
+    const groupesCopie = []
+    for (const g of ordre) {
+      const parent = g.depend_de_valeur_id ? parentParNom(g, source) : null
+      const { groupes: [copie], valeurs: [valeursCopie] } = copiesDuGroupe(g, [cree.id],
+        parent ? { parent, groupesParArticle: { [cree.id]: groupesCopie } } : {})
+      if (!copie) { optionsRatees = true; continue }
       const { data: gCree, error: errG } = await supabase
         .from('article_options_groupes').insert(copie).select('id').single()
       if (errG || !gCree) { optionsRatees = true; continue }
+      let valeursCreees = []
       if (valeursCopie.length > 0) {
-        const { error: errV } = await supabase.from('article_options_valeurs')
-          .insert(valeursCopie.map(v => ({ groupe_id: gCree.id, ...v })))
+        const { data: vals, error: errV } = await supabase.from('article_options_valeurs')
+          .insert(valeursCopie.map(v => ({ groupe_id: gCree.id, ...v }))).select('id, nom')
         if (errV) optionsRatees = true
+        valeursCreees = vals || []
       }
+      groupesCopie.push({ id: gCree.id, nom: copie.nom, depend_de_valeur_id: copie.depend_de_valeur_id || null, valeurs: valeursCreees })
     }
 
     fetchArticles()
@@ -2623,9 +2638,26 @@ function marquerRappelCopieVu() {
 // ⚠️ ET SI LES VALEURS ÉCHOUENT, ON LE DIT SANS TOUT DÉFAIRE. Des groupes
 // vides restent visibles et corrigeables ; un effacement silencieux, lui,
 // laisserait le commerçant croire que rien n'a bougé.
-async function ecrireCopiesDeGroupe(groupe, cibleIds, groupesParArticle = null) {
-  const { groupes: aEcrire, valeurs } = copiesDuGroupe(groupe, cibleIds)
-  if (aEcrire.length === 0) return { ok: false, erreur: 'Rien à copier.' }
+//
+// 🔴 (21/10) LE GROUPE DÉPENDANT VOYAGE PAR NOMS : « Choix de crudités »
+// copié sur le pistolet dépend de « Avec crudités » DU PISTOLET. Un article
+// qui ne l'a pas est écarté et rendu dans `sansParent` (décision d'Alex :
+// écarter et le dire). `parent` : imposé (nouveau groupe), sinon lu sur le
+// modèle ; un modèle dépendant dont l'option est introuvable ne copie rien
+// plutôt que de poser un groupe toujours affiché.
+async function ecrireCopiesDeGroupe(groupe, cibleIds, groupesParArticle = null, { parent } = {}) {
+  const parentVoulu = parent !== undefined ? parent
+    : (groupe?.depend_de_valeur_id ? parentParNom(groupe, groupesParArticle?.[String(groupe.article_id)] || []) : null)
+  if (groupe?.depend_de_valeur_id && parent === undefined && !parentVoulu) {
+    return { ok: false, erreur: 'L’option qui fait apparaître ce groupe est introuvable. Recharge la page.' }
+  }
+  const { groupes: aEcrire, valeurs, sansParent } = copiesDuGroupe(groupe, cibleIds,
+    parentVoulu ? { parent: parentVoulu, groupesParArticle: groupesParArticle || {} } : {})
+  if (aEcrire.length === 0) {
+    return { ok: false, sansParent, erreur: sansParent.length > 0
+      ? `Rien n’est posé : ${sansParent.length === 1 ? 'cet article n’a' : 'ces articles n’ont'} pas l’option « ${parentVoulu.option_nom} » (${parentVoulu.groupe_nom}).`
+      : 'Rien à copier.' }
+  }
 
   const { data: crees, error } = await supabase
     .from('article_options_groupes').insert(aEcrire).select('id, article_id')
@@ -2663,7 +2695,17 @@ async function ecrireCopiesDeGroupe(groupe, cibleIds, groupesParArticle = null) 
     if (!r.ok) return { ok: false, partiel: true, combien: crees?.length || 0, erreur: `Groupes copiés, mais ${r.erreur.charAt(0).toLowerCase()}${r.erreur.slice(1)}` }
     articlesSansTaille = r.articlesSansTaille
   }
-  return { ok: true, combien: crees?.length || aEcrire.length, articlesSansTaille }
+  return { ok: true, combien: crees?.length || aEcrire.length, articlesSansTaille, sansParent, parent: parentVoulu }
+}
+
+// (21/10) « Pas posé sur Pistolet : l'option « Avec crudités » n'y existe
+// pas. » Les articles écartés, nommés (décision d'Alex : écarter et le dire).
+function direSansParent(toast, r, articles = []) {
+  const ids = r?.sansParent || []
+  if (ids.length === 0 || !r?.parent) return
+  const noms = ids.map(id => articles.find(a => String(a.id) === String(id))?.nom).filter(Boolean)
+  const qui = noms.length > 0 && noms.length <= 4 ? noms.join(', ') : `${ids.length} article${ids.length > 1 ? 's' : ''}`
+  toast(`Pas posé sur ${qui} : l’option « ${r.parent.option_nom} » (${r.parent.groupe_nom}) n’y existe pas.`, 'error')
 }
 
 // ─── ÉCRIRE LA MODIFICATION D'UN GROUPE (10/10) ─────────────────────────────
@@ -2747,14 +2789,51 @@ function ChampsNombreDeChoix({ form, setForm, nomGroupe = '' }) {
   )
 }
 
+// (21/10, Alex) « N'apparaît que si » : « Toujours affiché » par défaut, puis
+// les options des autres groupes (« Crudités › Avec crudités »). Le même champ
+// pour créer un groupe et pour le modifier.
+function ChampParent({ valeur = null, choix = [], verrou = false, onChange }) {
+  if (choix.length === 0 && !valeur) return null
+  const cle = cleParent(valeur)
+  const inconnu = valeur && !choix.some(c => c.cle === cle)
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: T.ink }}>
+      <span style={{ fontWeight: 700 }}>N&rsquo;apparaît que si&nbsp;:</span>
+      <select value={cle} disabled={verrou}
+        onChange={e => {
+          const c = choix.find(x => x.cle === e.target.value)
+          onChange(c ? { groupe_nom: c.groupe_nom, option_nom: c.option_nom } : (e.target.value === cle ? valeur : null))
+        }}
+        style={{ ...s.input, width: 'auto', minWidth: 220, maxWidth: '100%', fontSize: 13, padding: '5px 8px' }}>
+        <option value="">Toujours affiché</option>
+        {choix.map(c => <option key={c.cle} value={c.cle}>{c.libelle}</option>)}
+        {inconnu && <option value={cle}>{valeur.groupe_nom} › {valeur.option_nom}</option>}
+      </select>
+      <span style={{ fontSize: 12, color: T.muted }}>
+        {verrou
+          ? 'Ce groupe fait déjà apparaître un autre groupe : il reste toujours affiché.'
+          : 'ex. « Choix de crudités » seulement si « Avec crudités »'}
+      </span>
+    </label>
+  )
+}
+
 function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = {}, toast, onFini, onAnnule, avecPrixTaille = false }) {
   const depart = modele || copies[0] || {}
   // (13/10, Alex) LES PRIX PAR TAILLE, DEPUIS LA BIBLIOTHÈQUE : les tailles de
   // tous les articles du groupe (par leur nom), et les prix actuels du modèle.
   const tailles = avecPrixTaille ? taillesDesCopies(copies, groupesParArticle) : []
   const prixDepart = tailles.length > 0 ? prixTailleParNom(depart, groupesParArticle[String(depart.article_id)] || []) : {}
+  // (21/10, Alex) « N'APPARAÎT QUE SI » : les options des autres groupes de
+  // l'article du modèle, en noms (retrouvées sur l'article de chaque copie).
+  // Un groupe qui fait déjà apparaître un autre groupe reste toujours affiché
+  // (un seul niveau).
+  const groupesDuModele = groupesParArticle[String(depart.article_id)] || []
+  const choixParent = choixDeParent(depart, groupesDuModele)
+  const estParent = copies.some(c => enfantsDe((c.valeurs || []).map(v => v.id), groupesParArticle[String(c.article_id)] || []).length > 0)
   const [form, setForm] = useState(() => ({
     nom: depart.nom || '', type: depart.type === 'multiple' ? 'multiple' : 'unique', obligatoire: depart.obligatoire === true,
+    parent: parentParNom(depart, groupesDuModele),
     // ⚠️ LES VALEURS ACTUELLES, TOUJOURS : un champ absent vaudrait « sans
     // limite », et « Enregistrer » effacerait le « 3 au choix » réglé.
     choix_min: Number.isInteger(depart.choix_min) ? String(depart.choix_min) : '',
@@ -2803,6 +2882,9 @@ function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = 
     }
     setEnvoi(false)
     toast(plan.articles.length === 1 ? `« ${plan.groupe.nom} » modifié.` : `« ${plan.groupe.nom} » modifié sur ${plan.articles.length} articles.`)
+    if (plan.sansParent.length > 0 && form.parent) {
+      toast(`Condition non posée sur ${plan.sansParent.length === 1 ? '1 article' : `${plan.sansParent.length} articles`} : l’option « ${form.parent.option_nom} » n’y existe pas.`, 'error')
+    }
     if (sansTaille > 0) toast(`${sansTaille} article${sansTaille > 1 ? 's n’ont' : ' n’a'} pas de tailles : le prix unique s’y applique.`, 'error')
     onFini?.(plan.articles, true)
   }
@@ -2823,6 +2905,8 @@ function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = 
           </label>
         </div>
         <ChampsNombreDeChoix form={form} setForm={setForm} nomGroupe={form.nom}/>
+        <ChampParent valeur={form.parent} choix={choixParent} verrou={estParent}
+          onChange={parent => setForm(f => ({ ...f, parent }))}/>
         <div style={{ display: 'grid', gap: 6 }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, margin: 0 }}>Les options et leur supplément</p>
           {form.options.map((o, i) => {
@@ -2893,7 +2977,7 @@ function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = 
 // « Appliquer à… » (`ecrireCopiesDeGroupe`), les doublons de nom sont écartés
 // de la même façon (`conflitsDeGroupe`), et le parent relit (`onCree`).
 function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} }) {
-  const vide = { nom: '', type: 'unique', obligatoire: false, choix_min: '', choix_max: '', options: [{ nom: '', prix_supplement: '' }] }
+  const vide = { nom: '', type: 'unique', obligatoire: false, choix_min: '', choix_max: '', parent: null, options: [{ nom: '', prix_supplement: '' }] }
   const [ouvert, setOuvert] = useState(false)
   const [form, setForm] = useState(vide)
   const [cibles, setCibles] = useState([])
@@ -2901,6 +2985,10 @@ function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} })
   const listeCibles = articles.filter(a => a.est_vitrine !== true)
   const tousCoches = listeCibles.length > 0 && listeCibles.every(a => cibles.some(id => String(id) === String(a.id)))
   const conflits = conflitsDeGroupe(form.nom, cibles, groupesParArticle)
+  // (21/10) « N'apparaît que si » : les options de tous les groupes du
+  // commerce, en noms ; chaque article coché doit avoir la sienne.
+  const choixParent = choixDeParent(form.nom.trim() ? { nom: form.nom } : null, Object.values(groupesParArticle).flat())
+  const sansLeParent = (id) => !!form.parent && !resoudreParent(form.parent, groupesParArticle[String(id)] || [])
 
   const majOption = (i, patch) => setForm(f => ({ ...f, options: f.options.map((o, k) => k === i ? { ...o, ...patch } : o) }))
 
@@ -2914,11 +3002,12 @@ function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} })
       return
     }
     setEnvoi(true)
-    const r = await ecrireCopiesDeGroupe(v.groupe, aCopier)
+    const r = await ecrireCopiesDeGroupe(v.groupe, aCopier, groupesParArticle, { parent: form.parent || null })
     setEnvoi(false)
     if (!r.ok) { toast(r.erreur, 'error'); if (r.partiel) onCree?.(aCopier); return }
     onCree?.(aCopier)
     toast(`« ${v.groupe.nom} » créé sur ${r.combien === 1 ? '1 article' : `${r.combien} articles`}${ignores.length ? ` (${ignores.length} l’avaient déjà)` : ''}.`)
+    direSansParent(toast, r, articles)
     setForm(vide); setCibles([]); setOuvert(false)
   }
 
@@ -2950,6 +3039,7 @@ function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} })
           </label>
         </div>
         <ChampsNombreDeChoix form={form} setForm={setForm} nomGroupe={form.nom}/>
+        <ChampParent valeur={form.parent} choix={choixParent} onChange={parent => setForm(f => ({ ...f, parent }))}/>
         <div style={{ display: 'grid', gap: 6 }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, color: T.ink, margin: 0 }}>Les options</p>
           {form.options.map((o, i) => (
@@ -2977,10 +3067,12 @@ function NouveauGroupe({ articles = [], toast, onCree, groupesParArticle = {} })
             {listeCibles.map(a => {
               const coche = cibles.some(id => String(id) === String(a.id))
               const deja = conflits.some(id => String(id) === String(a.id))
+              // (21/10) Dit AVANT le clic : cet article sera écarté.
+              const sansParent = !deja && sansLeParent(a.id)
               return (
-                <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: deja ? T.muted : T.ink, cursor: 'pointer', padding: '3px 0' }}>
+                <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: deja || sansParent ? T.muted : T.ink, cursor: 'pointer', padding: '3px 0' }}>
                   <input type="checkbox" checked={coche} onChange={() => setCibles(c => coche ? c.filter(id => String(id) !== String(a.id)) : [...c, a.id])} style={{ width: 16, height: 16 }}/>
-                  <span>{a.nom}{deja ? ' (a déjà ce groupe)' : ''}</span>
+                  <span>{a.nom}{deja ? ' (a déjà ce groupe)' : sansParent ? ` (sans « ${form.parent.option_nom} »)` : ''}</span>
                 </label>
               )
             })}
@@ -3045,6 +3137,11 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
     return { ok: true, combien: data.length, partiel: data.length < ids.length }
   }
 
+  // (21/10) Les groupes dépendants qu'emporteraient ces copies retirées (la
+  // base supprime en cascade) : nommés avant de confirmer.
+  const enfantsDesCopies = (copies = []) => copies.flatMap(g =>
+    enfantsDe((g?.valeurs || []).map(v => v.id), groupesParArticle[String(g?.article_id)] || []).map(f => f.nom))
+
   async function appliquer(entree) {
     if (envoi) return
     const plan = planDuGroupe({ entree, coches: cibles, articlesVisibles: listeCibles })
@@ -3056,9 +3153,10 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
     // disant combien. Poser seul ne demande rien, comme avant.
     if (plan.aRetirer.length > 0) {
       const n = plan.articlesRetires.length
+      const enfants = enfantsDesCopies((entree.copies || []).filter(g => plan.aRetirer.includes(g.id)))
       const okRetrait = await confirme(confirmationSimple({
         titre: `Retirer « ${entree.nom} » de ${n === 1 ? '1 article' : `${n} articles`} ?`,
-        message: `${resumeDuPlan({ nomGroupe: entree.nom, aPoser: aCopier.length, retires: n })} Les commandes déjà passées ne changent pas.`,
+        message: `${resumeDuPlan({ nomGroupe: entree.nom, aPoser: aCopier.length, retires: n, enfants })} Les commandes déjà passées ne changent pas.`,
         action: 'Oui, enregistrer',
       }))
       if (!okRetrait) return
@@ -3072,6 +3170,7 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
     if (!r.ok) { toast(r.erreur, 'error'); onApplique?.(touches); return }
     if (!rr.ok) { toast(rr.erreur, 'error'); onApplique?.(touches); return }
     if (r.articlesSansTaille > 0) toast(`${r.articlesSansTaille} article${r.articlesSansTaille > 1 ? 's n’ont' : ' n’a'} pas de tailles : le prix unique s’y applique.`, 'error')
+    direSansParent(toast, r, articles)
 
     setChoisi(null)
     setCibles([])
@@ -3093,9 +3192,10 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
     if (envoi) return
     const ids = (entree.copies || []).map(g => g?.id).filter(id => id != null)
     const n = entree.articles.length
+    const emportes = phraseEnfantsEmportes(enfantsDesCopies(entree.copies || []))
     const ok = await confirme(confirmationSimple({
       titre: `Supprimer « ${entree.nom} » ?`,
-      message: `Le groupe et ses ${entree.valeurs.length === 1 ? 'option' : `${entree.valeurs.length} options`} disparaissent de ${n === 1 ? '1 article' : `${n} articles`}. Les commandes déjà passées ne changent pas.`,
+      message: `Le groupe et ses ${entree.valeurs.length === 1 ? 'option' : `${entree.valeurs.length} options`} disparaissent de ${n === 1 ? '1 article' : `${n} articles`}.${emportes ? ` ${emportes}` : ''} Les commandes déjà passées ne changent pas.`,
       action: 'Oui, supprimer le groupe',
     }))
     if (!ok) return
@@ -3130,7 +3230,10 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
           const tousCoches = listeCibles.length > 0 && listeCibles.every(a => cibles.some(id => String(id) === String(a.id)))
           // ✅ 15/10 : ce que l'enregistrement fera, poser ET retirer.
           const plan = planDuGroupe({ entree, coches: cibles, articlesVisibles: listeCibles })
+          // (21/10) Sans l'option parente, l'article sera écarté : il ne compte
+          // pas dans « sera ajouté à N articles ».
           const aPoser = repartirCibles(plan.aPoser, conflitsDeGroupe(entree.nom, plan.aPoser, groupesParArticle)).aCopier
+            .filter(id => !entree.parent || !!resoudreParent(entree.parent, groupesParArticle[String(id)] || []))
 
           return (
             <div key={entree.nom} style={{ border: `1px solid ${ouvert ? T.bgPanel : T.hairline}`, borderRadius: 10, padding: 10, background: '#fff' }}>
@@ -3200,7 +3303,11 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
                       // « déjà posé » (coché, rien ne change), « sera retiré »
                       // (décoché alors qu'il l'avait), « sera ajouté ».
                       const dejaPose = dejaPosesIds.has(String(a.id))
-                      const etiquette = dejaPose ? (coche ? 'déjà posé' : 'sera retiré') : (coche ? 'sera ajouté' : null)
+                      // (21/10) Un groupe dépendant ne se pose que là où
+                      // l'option parente existe : dit avant le clic.
+                      const sansParent = !dejaPose && !!entree.parent && !resoudreParent(entree.parent, groupesParArticle[String(a.id)] || [])
+                      const etiquette = dejaPose ? (coche ? 'déjà posé' : 'sera retiré')
+                        : sansParent ? `sans « ${entree.parent.option_nom} »` : (coche ? 'sera ajouté' : null)
                       return (
                         <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: 'pointer', background: coche ? T.pale : 'transparent' }}>
                           <input type="checkbox" checked={coche} style={{ cursor: 'pointer', width: 15, height: 15 }}
@@ -3221,7 +3328,8 @@ function BibliothequeGroupes({ articles = [], toast, onApplique, tousLesGroupes 
                   </div>
 
                   <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
-                    {resumeDuPlan({ nomGroupe: entree.nom, aPoser: aPoser.length, retires: plan.articlesRetires.length })}
+                    {resumeDuPlan({ nomGroupe: entree.nom, aPoser: aPoser.length, retires: plan.articlesRetires.length,
+                      enfants: enfantsDesCopies((entree.copies || []).filter(g => plan.aRetirer.includes(g.id))) })}
                   </p>
 
                   <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
@@ -3342,8 +3450,12 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
     apresEcriture()
   }
 
+  // (21/10) Un groupe parent ou une option parente emporte les groupes qui en
+  // dépendent (la base supprime en cascade) : on les nomme avant.
   async function deleteGroupe(id) {
-    if (!await confirme(confirmationSimple({ titre: 'Supprimer ce groupe ?', message: 'Toutes ses options disparaissent avec lui.', action: 'Oui, supprimer le groupe' }))) return
+    const g = groupes.find(x => x.id === id)
+    const emportes = phraseEnfantsEmportes(enfantsDe((g?.valeurs || []).map(v => v.id), groupes).map(f => f.nom))
+    if (!await confirme(confirmationSimple({ titre: 'Supprimer ce groupe ?', message: `Toutes ses options disparaissent avec lui.${emportes ? ` ${emportes}` : ''}`, action: 'Oui, supprimer le groupe' }))) return
     const { data, error } = await supabase.from('article_options_groupes').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
@@ -3360,6 +3472,15 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
   }
 
   async function deleteValeur(id) {
+    const fils = enfantsDe([id], groupes)
+    if (fils.length > 0) {
+      const v = groupes.flatMap(g => g.valeurs || []).find(x => x.id === id)
+      if (!await confirme(confirmationSimple({
+        titre: `Supprimer « ${v?.nom || 'cette option'} » ?`,
+        message: phraseEnfantsEmportes(fils.map(f => f.nom)),
+        action: 'Oui, supprimer',
+      }))) return
+    }
     const { data, error } = await supabase.from('article_options_valeurs').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || data.length === 0) { toast('Suppression refusée par les permissions Supabase (RLS)', 'error'); return }
@@ -3391,6 +3512,7 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
     setCopieEnCours(false)
     if (!r.ok) { toast(r.erreur, 'error'); onCopie?.(aCopier); return }
     if (r.articlesSansTaille > 0) toast(`${r.articlesSansTaille} article${r.articlesSansTaille > 1 ? 's n’ont' : ' n’a'} pas de tailles : le prix unique s’y applique.`, 'error')
+    direSansParent(toast, r, articles)
 
     setCopieDe(null)
     setCibles([])
@@ -3463,11 +3585,18 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
         <p style={{ fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>Aucune option, clique sur «&nbsp;+ Groupe&nbsp;» pour en ajouter.</p>
       )}
 
-      {groupes.map(g => (
-        <div key={g.id} style={{ background: '#fff', borderRadius: 10, padding: 10, marginBottom: 8, border: `1px solid ${T.hairline}` }}>
+      {/* (21/10) Chaque groupe dépendant juste sous son groupe parent, en
+          retrait, avec l'option qui le fait apparaître. */}
+      {parentsPuisEnfants(groupes).map(g => (
+        <div key={g.id} style={{ background: '#fff', borderRadius: 10, padding: 10, marginBottom: 8, border: `1px solid ${T.hairline}`, ...(g.depend_de_valeur_id ? { marginLeft: 18, borderLeft: `3px solid ${T.bgPanel}` } : {}) }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 800, fontSize: 13, color: T.ink }}>{g.nom}</span>
+              <span style={{ fontWeight: 800, fontSize: 13, color: T.ink }}>{g.depend_de_valeur_id ? '↳ ' : ''}{g.nom}</span>
+              {optionParente(g, groupes) && (
+                <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 100, background: T.pale, color: T.deep }}>
+                  si « {optionParente(g, groupes).valeur.nom} »
+                </span>
+              )}
               {/* Badge type cliquable pour basculer unique <-> multiple */}
               <button onClick={() => updateGroupe(g.id, { type: g.type === 'unique' ? 'multiple' : 'unique' })}
                 title="Cliquer pour basculer"

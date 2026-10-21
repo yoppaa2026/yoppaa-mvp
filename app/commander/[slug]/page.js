@@ -44,7 +44,7 @@ import { champsAdressePourAPI, NOTE_MAX } from '@/lib/adresse-livraison'
 import ChampAdresseLivraison from '@/app/components/ChampAdresseLivraison'
 import { zoneCouverte, fraisLivraison as regleFraisLivraison, minimumAtteint } from '@/lib/livraison'
 import { construireLignesCommande, bornesChoix } from '@/lib/lignes-commande'
-import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes, afficheEnRond } from '@/lib/options-choix'
+import { SELECT_GROUPES_AVEC_VALEURS, prixTailleDesGroupes, prixDeValeur, supplementDeSelection, libelleBornes, refusDuGroupe, basculerValeur, ordonnerGroupes, pastilleBornes, afficheEnRond, estDependant, groupeActif, groupesActifs, purgerInactifs, optionParente } from '@/lib/options-choix'
 import { zoneValide, dansEtoile, phraseHorsZone, centreDeLaZone, livraisonDisponible } from '@/lib/zone-etoile'
 import IconeRetrait from '@/app/components/IconeRetrait'
 import BanniereCommerce from '@/app/components/BanniereCommerce'
@@ -231,23 +231,28 @@ function OptionsSelector({ article, groupes, onAjouter }) {
   const [erreurs, setErreurs] = useState({})
   // (13/10) Le nombre de choix et le prix selon la taille : la règle vit dans
   // `lib/options-choix.js`, avec les bornes du serveur (`bornesChoix`).
+  // (21/10) Avec TOUS les groupes de l'article : décocher « Avec crudités »
+  // vide « Choix de crudités ».
   function toggleValeur(groupe, valeur) {
-    const r = basculerValeur(selections, groupe, valeur)
+    const r = basculerValeur(selections, groupe, valeur, groupes)
     setSelections(r.selections)
     setErreurs(p => ({ ...p, [groupe.id]: r.plein ? libelleBornes(groupe) : null }))
   }
   function valider() {
     const errs = {}; let ok = true
-    groupes.forEach(g => {
+    // (21/10) Seuls les groupes affichés sont exigés : un groupe dépendant
+    // caché ne bloque jamais « Ajouter ».
+    groupesActifs(groupes, selections).forEach(g => {
       const refus = refusDuGroupe(g, (selections[g.id] || []).length)
       if (refus) { errs[g.id] = refus; ok = false }
     })
     setErreurs(errs)
     if (!ok) return
-    onAjouter(article, Object.keys(selections).length > 0 ? selections : null)
+    const choix = purgerInactifs(selections, groupes)
+    onAjouter(article, Object.keys(choix).length > 0 ? choix : null)
   }
   const idsChoisis = Object.values(selections).flat().map(v => v.id)
-  const supplement = supplementDeSelection(selections)
+  const supplement = supplementDeSelection(selections, groupes)
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
       {/* Ni « ton » ni « ta » : le genre de l'article est inconnu (« ton
@@ -255,15 +260,20 @@ function OptionsSelector({ article, groupes, onAjouter }) {
       <p style={{ fontWeight: 800, color: T.deep, marginBottom: 12, fontSize: '0.9rem' }}>Ta personnalisation : {article.nom}</p>
       {/* (13/10, Alex) La taille d'abord (elle fixe le prix des suppléments),
           puis les groupes obligatoires, puis les facultatifs. */}
-      {ordonnerGroupes(groupes).map(g => {
+      {/* (21/10) Un groupe dépendant n'apparaît que si son option est
+          cochée, en retrait juste sous son groupe parent. */}
+      {ordonnerGroupes(groupes).filter(g => groupeActif(g, selections)).map(g => {
         // Le rond quand on n'en prend qu'un parmi plusieurs, la case sinon
         // (une option seule et facultative prend une case : `afficheEnRond`).
         const isUnique = afficheEnRond(g)
         // ⚠️ PAS DE « CHOISIS-EN UN » (Alex, 13/10 : « il se sent obligé ») :
         // la pastille ne dit qu'une vraie limite (`pastilleBornes`).
         const pastille = pastilleBornes(g)
+        const sousGroupe = estDependant(g)
         return (
-          <div key={g.id} style={{ marginBottom: 14 }}>
+          <div key={g.id} style={sousGroupe
+            ? { margin: '-6px 0 14px 12px', paddingLeft: 12, borderLeft: `3px solid ${T.pale}` }
+            : { marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
               <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.85rem' }}>{g.nom}</p>
               {pastille && (
@@ -852,11 +862,16 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
 function OptionsVitrine({ groupes }) {
   const visibles = ordonnerGroupes(groupes || []).filter(g => (g.valeurs || []).length > 0)
   if (visibles.length === 0) return null
+  // (21/10) Un groupe dépendant se lit « avec Menu : … », en retrait : sans
+  // cela on croirait la boisson comprise dans tous les cas.
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '0.875rem 1rem', marginTop: 8, border: `1.5px solid ${T.pale}` }}>
       {visibles.map(g => (
-        <div key={g.id} style={{ marginBottom: 10 }}>
-          <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem', margin: '0 0 6px' }}>{g.nom}</p>
+        <div key={g.id} style={estDependant(g) ? { margin: '-4px 0 10px 12px', paddingLeft: 10, borderLeft: `3px solid ${T.pale}` } : { marginBottom: 10 }}>
+          <p style={{ fontWeight: 800, color: T.ink, fontSize: '0.82rem', margin: '0 0 6px' }}>
+            {g.nom}
+            {optionParente(g, groupes) && <span style={{ fontWeight: 600, color: T.muted }}> · avec « {optionParente(g, groupes).valeur.nom} »</span>}
+          </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {g.valeurs.map(v => {
               const prix = prixDeValeur(v, [])
@@ -2849,7 +2864,9 @@ export default function CommanderSlug() {
       // rendez-vous arrivait sans ses options, et le serveur le refuse
       // désormais. Il reste derrière, et le client est prévenu.
       // (13/10) Et un nombre de choix minimum vaut un choix obligatoire.
-      if ((optionsParArticle[article.id] || []).some(g => bornesChoix(g).min > 0)) { ignores.push(article.nom); continue }
+      // (21/10) Sans aucun choix, un groupe dépendant n'apparaît pas : seuls
+      // les groupes toujours affichés comptent (`groupesActifs` sur rien).
+      if (groupesActifs(optionsParArticle[article.id] || [], {}).some(g => bornesChoix(g).min > 0)) { ignores.push(article.nom); continue }
       const stockMax = getStockMax(article.id)
       const qte = stockMax === Infinity ? l.quantite : Math.min(l.quantite, stockMax)
       if (qte <= 0) continue

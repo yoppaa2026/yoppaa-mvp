@@ -4351,7 +4351,8 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
                   return (
                     <span key={v.id} style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 100,
                       color: st === 0 ? '#DC2626' : st <= 2 ? '#EA580C' : '#10B981', background: st === 0 ? '#FEE2E2' : st <= 2 ? '#FFF7ED' : '#F0FDF4' }}>
-                      {[v.axe1_valeur, v.axe2_valeur].filter(Boolean).join(' · ')} {st}
+                      {/* (21/10, Alex) « 36 : 3 », pas « 36 3 » : la taille et la quantité se confondaient. */}
+                      {[v.axe1_valeur, v.axe2_valeur].filter(Boolean).join(' · ')}{' '}: {st}
                     </span>
                   )
                 })}

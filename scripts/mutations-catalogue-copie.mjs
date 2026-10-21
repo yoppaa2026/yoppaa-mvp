@@ -26,6 +26,11 @@ const LOT = 'lib/catalogue-lot.js'
 const ECRAN = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── (21/10, lot C) LES OPTIONS AUSSI EN DÉTAIL ──────────────────────────
+  { nom: '🔴 le détail perd les options d un article sans tailles',
+    fichier: ECRAN, de: '{(!variantesCategorie || !a.gere_variantes) && <OptionsArticle ', vers: '{!variantesCategorie && <OptionsArticle ' },
+  { nom: '🔴 le détail perd la bibliothèque de grilles',
+    fichier: ECRAN, de: '<BibliothequeGrilles articles={articles} toast={toast} onApplique={() => chargerVariantes({ articles: true })}/>', vers: '' },
   // ─── LE GROUPE DÉPENDANT (21/10) ─────────────────────────────────────────
   { nom: '🔴 un article sans l’option parente reçoit un groupe toujours affiché',
     fichier: COPIE, de: '      if (!lien) { sansParent.push(id); continue }', vers: '      if (!lien) { sansParent.push(id) }' },

@@ -665,10 +665,16 @@ const v = (nom, cond, detail = '') => {
   v('elle fait relire le catalogue après avoir écrit',
     /setCibles\(\[\]\)\s*(\/\/[^\n]*\s*)*onApplique\?\.\(touches\)/.test(biblioEcran)
       && /const touches = \[\.\.\.aCopier, \.\.\.plan\.articlesRetires\]/.test(biblioEcran))
-  // ⚠️ ELLE NE S'AFFICHE QUE LÀ OÙ LES GROUPES EXISTENT : le détail et la
-  // vitrine ont des variantes, un autre modèle entièrement.
-  v('elle ne s’affiche pas chez qui n’a pas de groupes',
-    /!variantesCategorie && articles\.length > 0 && \([\s\S]{0,120}<BibliothequeGroupes/.test(config))
+  // ⚠️ REPOINTÉE LE 21/10, DÉCISION D'ALEX (tableau, lot C) : les groupes
+  // d'options s'ouvrent AUSSI au détail et à la vitrine (articles sans
+  // tailles : emballage cadeau…), et le détail a en plus SA bibliothèque de
+  // grilles de tailles. Sur un article à tailles, le panneau ne montre pas
+  // d'options (la fiche ne les montrerait pas : les tailles priment).
+  v('la bibliothèque des groupes s’affiche pour tous les métiers, les grilles de tailles pour le détail et la vitrine',
+    /\{articles\.length > 0 && \(\s*<BibliothequeGroupes/.test(config) && !/!variantesCategorie && articles\.length > 0 && \([\s\S]{0,120}<BibliothequeGroupes/.test(config)
+    && /\{variantesCategorie && articles\.length > 0 && \(\s*<BibliothequeGrilles articles=\{articles\} toast=\{toast\} onApplique=\{\(\) => chargerVariantes\(\{ articles: true \}\)\}\/>/.test(config)
+    && /\{\(!variantesCategorie \|\| !a\.gere_variantes\) && <OptionsArticle /.test(config)
+    && /\{showOptions && \(!\(estDetail \|\| estVitrine\) \|\| !a\.gere_variantes\) && <OptionsArticle /.test(config))
   // ⚠️ RIEN À MONTRER, RIEN À DIRE : un bloc vide ferait douter de l'écran.
   v('elle se tait quand aucun groupe n’existe encore',
     /if \(biblio\.length === 0\) return null/.test(biblioEcran))

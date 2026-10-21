@@ -45,6 +45,7 @@ import { HORIZONS_BOUTIQUE, horizonBoutique } from '@/lib/ouverture'
 import {
   deplacerValeur, renommerValeur, ordreDesVariantes, variantesDeLaValeur, phraseRetraitValeur,
   ciblesDeMasse, variantesVisees, quantiteSaisie, prixSaisiMasse, lignesDeStock,
+  bibliothequeDeGrilles, libelleDeGrille, axesDeGrille, combinaisonsDeGrille, repartirGrille,
 } from '@/lib/variantes-grille'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
 import {
@@ -2586,21 +2587,27 @@ function TabMenu({ commercantId, commercant, toast }) {
       {subTab === 'personnalisation' && (
         <>
           <div style={{ background: T.bgPanel, borderRadius: 14, padding: '14px 16px', marginBottom: 14, color: '#fff' }}>
-            <p style={{ fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 4 }}>{variantesCategorie ? 'Variantes par article' : 'Personnalisation par article'}</p>
+            <p style={{ fontSize: 11, fontWeight: 800, color: T.light, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 4 }}>{variantesCategorie ? 'Variantes et options par article' : 'Personnalisation par article'}</p>
             <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, margin: 0 }}>
               {variantesCategorie
-                ? 'Décline chaque produit (taille, couleur…) avec un stock, un prix et une photo par combinaison. Clique pour gérer.'
+                ? 'Décline chaque produit (taille, couleur…) avec un stock, un prix et une photo par combinaison. Un article sans tailles peut aussi avoir des options (emballage cadeau…). Clique pour gérer.'
                 : 'Configure les groupes d’options de chaque article (sauces obligatoires, suppléments payants…). Clique pour gérer.'}
             </p>
           </div>
+          {/* ✅ (21/10, Alex, lot C) LES GRILLES DE TAILLES RÉUTILISABLES, en
+              tête du détail et de la vitrine, comme la bibliothèque des
+              groupes en alimentaire. */}
+          {variantesCategorie && articles.length > 0 && (
+            <BibliothequeGrilles articles={articles} toast={toast} onApplique={() => chargerVariantes({ articles: true })}/>
+          )}
           {/* ⚠️ LA BIBLIOTHÈQUE PASSE DEVANT LA LISTE (Alex, 25/09) : le
               commerçant pense « mes garnitures », pas « les garnitures de la
-              margherita ». Elle ne s'affiche que là où les groupes existent :
-              le détail et la vitrine ont des variantes, un autre modèle. */}
-          {!variantesCategorie && articles.length > 0 && (
+              margherita ». ✅ (21/10, lot C) Ouverte aussi au détail et à la
+              vitrine, pour les articles SANS tailles (emballage cadeau…). */}
+          {articles.length > 0 && (
             <NouveauGroupe articles={articles} toast={toast} onCree={noterOptionsTouchees} groupesParArticle={groupesParArticle}/>
           )}
-          {!variantesCategorie && articles.length > 0 && (
+          {articles.length > 0 && (
             <BibliothequeGroupes articles={articles} toast={toast} onApplique={noterOptionsTouchees}
               tousLesGroupes={tousLesGroupes} groupesParArticle={groupesParArticle}/>
           )}
@@ -2651,9 +2658,11 @@ function TabMenu({ commercantId, commercant, toast }) {
                       <Icon name="x" size={13} color={T.ink}/> Fermer
                     </button>
                   </div>
-                  {variantesCategorie
-                    ? <VariantesArticle article={a} articles={articles} onChange={chargerVariantes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-                    : <OptionsArticle articleId={a.id} articles={articles} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+                  {variantesCategorie && <VariantesArticle article={a} articles={articles} onChange={chargerVariantes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+                  {/* (21/10, lot C) En détail, les options pour un article SANS
+                      tailles : la fiche ne montre pas d'options à côté des
+                      tailles (les tailles priment). */}
+                  {(!variantesCategorie || !a.gere_variantes) && <OptionsArticle articleId={a.id} articles={articles} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
                     <button type="button" aria-label={`Refermer ${a.nom}`}
                       onClick={e => e.currentTarget.closest('details')?.removeAttribute('open')}
@@ -2667,6 +2676,125 @@ function TabMenu({ commercantId, commercant, toast }) {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+// ─── LES GRILLES DE TAILLES RÉUTILISABLES (21/10, Alex, lot C) ──────────────
+//
+// Comme « Tes groupes d'options » de l'alimentaire : une grille (« Taille :
+// XS · S · M · L · XL ») posée une fois, puis appliquée à N articles. Sans
+// nouvelle table : ce sont les grilles que portent déjà les articles
+// (`bibliothequeDeGrilles`). Les combinaisons naissent à stock 0, au prix de
+// l'article. Un article qui porte une AUTRE grille n'est remplacé que sur
+// demande, confirmée.
+function BibliothequeGrilles({ articles = [], toast, onApplique }) {
+  const [choisie, setChoisie] = useState(null)
+  const [cibles, setCibles] = useState([])
+  const [remplacer, setRemplacer] = useState(false)
+  const [envoi, setEnvoi] = useState(false)
+  const grilles = bibliothequeDeGrilles(articles)
+  const listeCibles = articles.filter(a => a.est_vitrine !== true)
+  if (grilles.length === 0) return null
+
+  async function appliquer(g) {
+    if (envoi) return
+    const { aPoser, aRemplacer, ignores } = repartirGrille({ grille: g, cibles, articles, remplacer })
+    const tous = [...aPoser, ...aRemplacer]
+    if (tous.length === 0) {
+      toast(ignores.length ? 'Ces articles ont déjà une autre grille : coche « Remplacer leur grille » pour l’écraser.' : 'Coche au moins un article.', 'error')
+      return
+    }
+    if (aRemplacer.length > 0) {
+      const n = aRemplacer.length
+      const okGrille = await confirme(confirmationSimple({
+        titre: `Remplacer la grille de ${n === 1 ? '1 article' : `${n} articles`} ?`,
+        message: 'Leurs tailles, leurs prix par taille et leurs stocks actuels sont supprimés, puis remplacés par cette grille, à stock zéro. Les commandes déjà passées ne changent pas.',
+        action: 'Oui, remplacer',
+      }))
+      if (!okGrille) return
+    }
+    setEnvoi(true)
+    // Les combinaisons d'avant partent (celles d'une grille remplacée, et les
+    // restes invisibles d'un article dont les variantes étaient coupées) :
+    // une combinaison n'existe qu'une fois par article.
+    const { error: errSup } = await supabase.from('article_variantes').delete().in('article_id', tous)
+    if (errSup) { setEnvoi(false); toast(`Les anciennes combinaisons n’ont pas pu être retirées : ${errSup.message}`, 'error'); return }
+    const { error: errAxes } = await supabase.from('articles').update(axesDeGrille(g)).in('id', tous)
+    if (errAxes) { setEnvoi(false); toast(`La grille n’a pas pu être posée : ${errAxes.message}`, 'error'); onApplique?.(); return }
+    const lignes = tous.flatMap(id => combinaisonsDeGrille(g, id))
+    const { error: errComb } = await supabase.from('article_variantes').insert(lignes)
+    setEnvoi(false)
+    onApplique?.()
+    if (errComb) { toast(`La grille est posée mais ses combinaisons n’ont pas pu être créées : ${errComb.message}`, 'error'); return }
+    setChoisie(null); setCibles([]); setRemplacer(false)
+    toast(`Grille posée sur ${tous.length === 1 ? '1 article' : `${tous.length} articles`}, à stock zéro${ignores.length ? ` (${ignores.length} ignoré${ignores.length > 1 ? 's' : ''} : autre grille)` : ''}.`)
+  }
+
+  return (
+    <div style={{ ...s.card, padding: 14, marginBottom: 16 }}>
+      <p style={{ fontSize: 11, fontWeight: 800, color: T.bgPanel, textTransform: 'uppercase', letterSpacing: '1.2px', margin: '0 0 4px' }}>Tes grilles de tailles</p>
+      <p style={{ fontSize: 12, color: T.muted, margin: '0 0 12px', lineHeight: 1.5 }}>
+        Pose une grille déjà utilisée sur d&rsquo;autres articles, sans la réécrire. Les tailles naissent à stock zéro.
+      </p>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {grilles.map(g => {
+          const ouverte = choisie === g.cle
+          const rep = repartirGrille({ grille: g, cibles, articles, remplacer })
+          const porte = new Set(g.articles.map(String))
+          return (
+            <div key={g.cle} style={{ border: `1px solid ${ouverte ? T.bgPanel : T.hairline}`, borderRadius: 10, padding: 10, background: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <p style={{ fontWeight: 800, fontSize: 13, color: T.ink, margin: 0 }}>{libelleDeGrille(g)}</p>
+                  <p style={{ fontSize: 11.5, color: T.muted, margin: '3px 0 0' }}>{g.articles.length === 1 ? 'sur 1 article' : `sur ${g.articles.length} articles`}</p>
+                </div>
+                <button style={{ ...s.btn, ...s.btnGhost, padding: '5px 10px', fontSize: 11 }}
+                  onClick={() => { setChoisie(ouverte ? null : g.cle); setCibles([]); setRemplacer(false) }}>
+                  <Copy size={13} strokeWidth={1.8}/> {ouverte ? 'Fermer' : 'Appliquer à…'}
+                </button>
+              </div>
+              {ouverte && (
+                <>
+                  <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gap: 2, margin: '10px 0 8px' }}>
+                    {listeCibles.map(a => {
+                      const coche = cibles.some(id => String(id) === String(a.id))
+                      const deja = porte.has(String(a.id))
+                      const autre = !deja && a.gere_variantes && (a.axe1_valeurs || []).length > 0
+                      return (
+                        <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 8, cursor: deja ? 'default' : 'pointer', background: coche ? T.pale : 'transparent', opacity: deja ? 0.6 : 1 }}>
+                          <input type="checkbox" checked={coche || deja} disabled={deja} style={{ width: 15, height: 15 }}
+                            onChange={() => setCibles(prev => (coche ? prev.filter(id => String(id) !== String(a.id)) : [...prev, a.id]))}/>
+                          <span style={{ fontSize: 12, color: T.ink, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nom}</span>
+                          {(deja || autre) && (
+                            <span style={{ fontSize: 10, fontWeight: 800, color: T.muted, background: '#F3F4F6', borderRadius: 100, padding: '2px 7px', flexShrink: 0 }}>{deja ? 'a déjà cette grille' : 'autre grille'}</span>
+                          )}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  {rep.ignores.length + rep.aRemplacer.length > 0 && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.ink, margin: '0 0 6px', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={remplacer} onChange={e => setRemplacer(e.target.checked)} style={{ width: 15, height: 15 }}/>
+                      Remplacer leur grille ({rep.ignores.length + rep.aRemplacer.length} article{rep.ignores.length + rep.aRemplacer.length > 1 ? 's' : ''} avec une autre grille, à stock zéro)
+                    </label>
+                  )}
+                  <p style={{ fontSize: 11.5, color: T.muted, margin: '0 0 10px', lineHeight: 1.5 }}>
+                    {rep.aPoser.length + rep.aRemplacer.length === 0
+                      ? (rep.ignores.length ? 'Ces articles ont déjà une autre grille.' : 'Coche les articles qui reçoivent cette grille.')
+                      : `La grille sera posée sur ${rep.aPoser.length + rep.aRemplacer.length === 1 ? '1 article' : `${rep.aPoser.length + rep.aRemplacer.length} articles`}${rep.aRemplacer.length ? `, dont ${rep.aRemplacer.length} remplacée${rep.aRemplacer.length > 1 ? 's' : ''}` : ''}, à stock zéro${rep.ignores.length ? `. ${rep.ignores.length} ignoré${rep.ignores.length > 1 ? 's' : ''} (autre grille)` : ''}.`}
+                  </p>
+                  <button style={{ ...s.btn, ...s.btnPrimary, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => appliquer(g)} disabled={envoi || rep.aPoser.length + rep.aRemplacer.length === 0}>
+                    <Copy size={13} strokeWidth={1.8}/> Poser la grille
+                    {envoi && <DotsAttente couleur="#fff" taille={4} label="Enregistrement"/>}
+                  </button>
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -4803,9 +4931,9 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
           </button>
         </div>
       </div>
-      {showOptions && ((estDetail || estVitrine)
-        ? <VariantesArticle article={a} articles={articles} onChange={onVariantesChange} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
-        : <OptionsArticle articleId={a.id} articles={articles} onCopie={onCopieOptions} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
+      {showOptions && (estDetail || estVitrine) && <VariantesArticle article={a} articles={articles} onChange={onVariantesChange} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
+      {/* (21/10, lot C) Les options aussi en détail, pour un article SANS tailles. */}
+      {showOptions && (!(estDetail || estVitrine) || !a.gere_variantes) && <OptionsArticle articleId={a.id} articles={articles} onCopie={onCopieOptions} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
     </div>
   )
 }

@@ -50,6 +50,15 @@ const MUTATIONS = [
     de: '    const enAttente = galerie.filter(p => p.enAttente)', vers: '    const enAttente = []' },
   { nom: '🔴 remplacer une grille ne retire plus les anciennes combinaisons', fichier: BORD,
     de: "      const { error: errSup } = await supabase.from('article_variantes').delete().in('article_id', aRemplacer)", vers: '      const errSup = null' },
+  // ─── (21/10) LOT C : LES GRILLES RÉUTILISABLES, LES OPTIONS EN DÉTAIL ────
+  { nom: '🔴 une grille remplace une autre sans qu on l ait demandé', fichier: 'lib/variantes-grille.js',
+    de: '    else if (remplacer) aRemplacer.push(a.id)', vers: '    else if (true) aRemplacer.push(a.id)' },
+  { nom: '🔴 la même grille est reposée (stocks remis à zéro)', fichier: 'lib/variantes-grille.js',
+    de: '    if (equipe && signatureDeGrille(a) === grille?.cle) continue', vers: '' },
+  { nom: '🔴 une grille posée naît avec du stock', fichier: 'lib/variantes-grille.js',
+    de: '    lignes.push({ article_id: articleId, axe1_valeur: v1, axe2_valeur: v2, stock: 0, actif: true, ordre: lignes.length })', vers: '    lignes.push({ article_id: articleId, axe1_valeur: v1, axe2_valeur: v2, stock: 1, actif: true, ordre: lignes.length })' },
+  { nom: '🔴 remplacer une grille ne se fait plus confirmer', fichier: BORD,
+    de: '      const okGrille = await confirme(confirmationSimple({', vers: '      const okGrille = true; void (({' },
   // ─── LA RÈGLE ────────────────────────────────────────────────────────────
   { nom: '🔴 une valeur inconnue devient « sans limite »',
     fichier: LIB, de: "  return MODES_STOCK.includes(article?.stock_mode) ? article.stock_mode : 'jour'", vers: "  return MODES_STOCK.includes(article?.stock_mode) ? article.stock_mode : 'illimite'" },

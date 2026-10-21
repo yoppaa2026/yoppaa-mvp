@@ -723,6 +723,29 @@ const code = (f) => sansProse(lire(f))
     && bord.indexOf(".from('article_variantes').delete().in('article_id', aRemplacer)") > -1
     && bord.indexOf(".from('article_variantes').delete().in('article_id', aRemplacer)") < bord.indexOf('const lignes = aCopier.flatMap(id => copiesDeVariantes(variantes, id))'))
   v('🔴 la carte de la liste lit les lignes par couleur', /\{lignesDeStock\(variantes\)\.map\(groupe => \(/.test(bord))
+  // LOT C : les grilles de tailles réutilisables.
+  const arts2 = [
+    { id: 1, gere_variantes: true, axe1_nom: 'Taille', axe1_valeurs: ['S', 'M'], axe2_valeurs: [] },
+    { id: 2, gere_variantes: true, axe1_nom: 'taille', axe1_valeurs: ['S', 'M'], axe2_valeurs: [] },
+    { id: 3, gere_variantes: true, axe1_nom: 'Bonnet', axe1_valeurs: ['85A'], axe2_nom: 'Couleur', axe2_valeurs: ['Noir', 'Rose'] },
+    { id: 4, gere_variantes: false, axe1_valeurs: [] },
+    { id: 5, gere_variantes: false, axe1_valeurs: ['S'] },
+  ]
+  const bib = G.bibliothequeDeGrilles(arts2)
+  v('🔴 les grilles se regroupent à l’identique (nom sans majuscule), la plus portée d’abord ; sans tailles actives, pas de grille',
+    bib.length === 2 && bib[0].articles.join() === '1,2' && bib[1].articles.join() === '3' && G.libelleDeGrille(bib[1]) === 'Bonnet : 85A — Couleur : Noir · Rose')
+  const comb = G.combinaisonsDeGrille(bib[1], 9)
+  v('🔴 une grille posée : toutes les combinaisons, à stock 0, dans l’ordre',
+    comb.length === 2 && comb.every(c => c.stock === 0 && c.article_id === 9 && c.actif === true) && comb.map(c => `${c.axe1_valeur}/${c.axe2_valeur}/${c.ordre}`).join() === '85A/Noir/0,85A/Rose/1')
+  const repSans = G.repartirGrille({ grille: bib[0], cibles: [1, 3, 4, 5], articles: arts2 })
+  const repAvec = G.repartirGrille({ grille: bib[0], cibles: [1, 3, 4, 5], articles: arts2, remplacer: true })
+  v('🔴 une autre grille n’est remplacée que sur demande ; la même grille ne bouge pas',
+    repSans.aPoser.join() === '4,5' && repSans.ignores.join() === '3' && repSans.aRemplacer.length === 0
+    && repAvec.aRemplacer.join() === '3' && repAvec.ignores.length === 0)
+  v('🔴 l’écran des grilles retire les anciennes combinaisons avant d’écrire, et fait confirmer un remplacement',
+    /if \(aRemplacer\.length > 0\) \{\s*const n = aRemplacer\.length\s*const okGrille = await confirme\(/.test(bord)
+    && bord.indexOf(".from('article_variantes').delete().in('article_id', tous)") > -1
+    && bord.indexOf(".from('article_variantes').delete().in('article_id', tous)") < bord.indexOf('const lignes = tous.flatMap(id => combinaisonsDeGrille(g, id))'))
   // La galerie d'un nouvel article (tous les métiers).
   v('🔴 la galerie s’ouvre dès la création : la photo attend l’article, puis s’y rattache',
     !/\{editId && \(\s*<ChampFormulaire label=\{`Galerie/.test(bord)

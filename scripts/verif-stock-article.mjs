@@ -633,6 +633,36 @@ const code = (f) => sansProse(lire(f))
     && /\{parJours && venteJour && \(congeAuj \?/.test(bord) && /surCommande=\{commandesSurCommande\[a\.id\] \|\| \{\}\}/.test(bord))
 }
 
+// ═══ (21/10, Alex, Caprice de Magali) LE STOCK DES ARTICLES À VARIANTES ═════
+{
+  const bord = code('app/dashboard/ConfigDashboard.js')
+  const fiche = code('app/commander/[slug]/page.js')
+  // 1. Les flèches du champ enregistrent (plus seulement la sortie du champ).
+  v('🔴 le stock d’une variante part en base à chaque changement (flèches comprises), après une courte pause',
+    /onChange=\{e => \{ setVarLocal\(v\.id, \{ stock: e\.target\.value \}\); planifierVar\(v\.id, \{ stock: stockSaisi\(e\.target\.value\) \}\) \}\}\s*onBlur=\{\(\) => viderVar\(v\.id\)\}/.test(bord))
+  v('🔴 le prix d’une variante aussi',
+    /onChange=\{e => \{ setVarLocal\(v\.id, \{ prix: e\.target\.value \}\); planifierVar\(v\.id, \{ prix: prixSaisi\(e\.target\.value\) \}\) \}\} onBlur=\{\(\) => viderVar\(v\.id\)\}/.test(bord))
+  v('🔴 ce qui attend part à la fermeture du panneau',
+    /useEffect\(\(\) => \(\) => \{ for \(const id of Object\.keys\(varEnAttente\.current\)\) viderVar\(id\) \}, \[\]\)/.test(bord)
+    && /e\.minuterie = setTimeout\(\(\) => viderVar\(id\), 500\)/.test(bord))
+  v('🔴 plus aucun stock ni prix de variante écrit SEULEMENT à la sortie du champ',
+    !/onBlur=\{e => persistVar\(v\.id, \{ (stock|prix):/.test(bord))
+  v('🔴 le frère : le seuil « À partir de combien de demandes » part aussi sans quitter le champ',
+    /planifierSeuil\(ev\.target\.value\)/.test(bord) && /onBlur=\{viderSeuil\}/.test(bord) && !/onBlur=\{ev => sauverReglages\(\{ seuil/.test(bord))
+  // 2. La carte de la liste : le stock de chaque variante, pas le stock général.
+  v('🔴 la carte d’un article à variantes montre le stock de CHAQUE variante, plus « Stock : N »',
+    /\{vendable && a\.gere_variantes && variantes\.length > 0 && \(/.test(bord)
+    && /\{vendable && mode === 'magasin' && !a\.gere_variantes && \(\(\) => \{/.test(bord)
+    && /variantes=\{variantesParArticle\[a\.id\] \|\| \[\]\} onVariantesChange=\{chargerVariantes\}/.test(bord))
+  v('🔴 les variantes de la liste se lisent par pages et se relisent après chaque écriture du panneau',
+    /await toutesLesLignes\(\(\) => supabase\.from\('article_variantes'\)/.test(bord)
+    && /if \(error\) \{ toast\(`Erreur : \$\{error\.message\}`, 'error'\); return \}\s*onChange\?\.\(\)/.test(bord)
+    && (bord.match(/<VariantesArticle article=\{a\} articles=\{articles\} onChange=/g) || []).length === 2)
+  // 3. La fiche : le stock général ne limite plus un article à variantes.
+  v('🔴 fiche : un article à variantes n’est plus limité ni caché par son stock général',
+    /const stockGere = etat\.gere && !hasVariantes/.test(fiche))
+}
+
 console.log(`\nStock et vitrine : ${ok} vérifications`)
 if (echecs.length > 0) {
   console.log(`\n✕ ${echecs.length} ÉCHEC(S) :`)

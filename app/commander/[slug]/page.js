@@ -529,7 +529,12 @@ function ArticleRow({ article, mentionDispo = null, etatJour = null, circuit = n
   // samedi, les 40 sur commande. Calculé par la fiche (`circuitDuJour`).
   const etat = etatStock({ article, entreeJour: entryDay, dejaCommande, jour: jourLocalISO(jourDateSelectionne), circuit })
   const actifCeJour = etat.actif
-  const stockGere = etat.gere
+  // 🔴 (21/10, Caprice de Magali) UN ARTICLE À VARIANTES N'A PAS DE STOCK
+  // GÉNÉRAL : c'est chaque taille qui a le sien (sélecteur, panier, serveur).
+  // Le stock général à 1 empêchait de prendre deux tailles, à 0 il cachait le
+  // « + » alors que les tailles étaient en stock. Le serveur l'ignore déjà
+  // (`lib/lignes-commande.js`, articles `gere_variantes`).
+  const stockGere = etat.gere && !hasVariantes
   const stockAujourdhui = stockGere ? etat.dispo : 0
   const epuiseAujourdhui = stockGere && stockAujourdhui === 0
 

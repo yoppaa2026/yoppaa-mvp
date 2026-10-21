@@ -803,8 +803,10 @@ const v = (nom, cond, detail = '') => {
   v('un échec partiel est annoncé', /n'ont pas pu être créées/.test(copVar))
   // ⚠️ LE STOCK À ZÉRO SE DIT AUSSI, sinon il vend des tailles qui n'existent pas.
   v('le message annonce le stock à zéro', /à stock zéro/.test(copVar))
+  // ⚠️ REPOINTÉE LE 21/10 : il reçoit aussi `onChange` (la liste relit le
+  // stock par variante).
   v('l’écran des variantes reçoit le catalogue',
-    /function VariantesArticle\(\{ article, toast, articles = \[\] \}\)/.test(config))
+    /function VariantesArticle\(\{ article, toast, articles = \[\], onChange = null \}\)/.test(config))
 
   // ─── LA DUPLICATION D'UNE PRESTATION ─────────────────────────────────────
   const iDupP = config.indexOf('async function dupliquerPrestation(')

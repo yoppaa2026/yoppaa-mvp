@@ -22,6 +22,17 @@ const RDV = 'app/commander/rdv/[slug]/page.js'
 const BORD = 'app/dashboard/ConfigDashboard.js'
 
 const MUTATIONS = [
+  // ─── (21/10, Caprice de Magali) LE STOCK DES ARTICLES À VARIANTES ────────
+  { nom: '🔴 les flèches du stock d une variante n enregistrent plus',
+    fichier: BORD, de: 'planifierVar(v.id, { stock: stockSaisi(e.target.value) }) }}', vers: '}}' },
+  { nom: '🔴 la fermeture du panneau perd ce qui attend',
+    fichier: BORD, de: '  useEffect(() => () => { for (const id of Object.keys(varEnAttente.current)) viderVar(id) }, [])', vers: '' },
+  { nom: '🔴 la carte montre de nouveau le stock général d un article à variantes',
+    fichier: BORD, de: "            {vendable && mode === 'magasin' && !a.gere_variantes && (() => {", vers: "            {vendable && mode === 'magasin' && (() => {" },
+  { nom: '🔴 la carte ne relit plus le stock des variantes après une écriture du panneau',
+    fichier: BORD, de: '<VariantesArticle article={a} articles={articles} onChange={onVariantesChange} toast=', vers: '<VariantesArticle article={a} articles={articles} toast=' },
+  { nom: '🔴 la fiche limite de nouveau un article à variantes par son stock général',
+    fichier: FICHE, de: '  const stockGere = etat.gere && !hasVariantes', vers: '  const stockGere = etat.gere' },
   // ─── LA RÈGLE ────────────────────────────────────────────────────────────
   { nom: '🔴 une valeur inconnue devient « sans limite »',
     fichier: LIB, de: "  return MODES_STOCK.includes(article?.stock_mode) ? article.stock_mode : 'jour'", vers: "  return MODES_STOCK.includes(article?.stock_mode) ? article.stock_mode : 'illimite'" },

@@ -748,6 +748,24 @@ function TabMenu({ commercantId, commercant, toast }) {
   const memoireCommandesB = useRef(null)
   // STOCK PAR JOUR : { articleId: { lundi: { stock, actif }, mardi: ... } }
   const [stockParJourMap, setStockParJourMap] = useState({})
+  // 🔴 (21/10, Alex, Caprice de Magali) LE STOCK PAR VARIANTE SUR LA CARTE :
+  // « S 1 · M 1 · L 0 » au lieu d'un stock général sans objet. Lu par pages
+  // (une boutique dépasse vite 1 000 combinaisons), relu après chaque écriture
+  // du panneau des variantes (`onChange`).
+  const [variantesParArticle, setVariantesParArticle] = useState({})
+  const idsAVariantes = useRef([])
+  async function chargerVariantes(opts = null) {
+    if (opts?.articles) { fetchArticles(); return }
+    const ids = idsAVariantes.current
+    if (ids.length === 0) { setVariantesParArticle({}); return }
+    const { data, error } = await toutesLesLignes(() => supabase.from('article_variantes')
+      .select('id, article_id, axe1_valeur, axe2_valeur, stock, actif, ordre')
+      .in('article_id', ids).order('article_id').order('ordre').order('id'))
+    if (error) return
+    const map = {}
+    for (const v of data || []) (map[v.article_id] ||= []).push(v)
+    setVariantesParArticle(map)
+  }
 
   // 1er fetch = affiche "Chargement…". Les re-fetch (apres save/delete)
   // ne toggle pas loading pour ne pas demonter la liste et perdre le scroll.
@@ -767,6 +785,8 @@ function TabMenu({ commercantId, commercant, toast }) {
       setLoading(false)
       firstLoadRef.current = false
     }
+    idsAVariantes.current = (data || []).filter(a => a.gere_variantes).map(a => a.id)
+    chargerVariantes()
     // Charger les stocks par jour
     const artIds = (data || []).map(a => a.id)
     if (artIds.length > 0) {
@@ -1907,7 +1927,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // ⚠️ PAS DE FLÈCHES PENDANT UNE RECHERCHE : la liste affichée n'est plus
     // la catégorie, « monter » n'y voudrait rien dire.
     const position = searchQuery.trim() ? null : positionDansCategorie(articles, a.id)
-    return <ArticleCard key={a.id} a={a} position={position} onDeplacer={deplacerArticle} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir} journeeFinie={journeeFinieAuj} deuxCircuits={deuxCircuits} surCommande={commandesSurCommande[a.id] || {}} venduDepuisSaisie={venduDepuisSaisie[a.id] || 0}/>
+    return <ArticleCard key={a.id} a={a} position={position} onDeplacer={deplacerArticle} estVitrine={estVitrine} estDetail={estDetail} mentionVitrineTexte={mentionVitrine(commercant)} onRouvrirJour={rouvrirJour} joursFermes={joursFermes} fermeturesSemaine={fermeturesSemaine} onEdit={openEdit} onToggle={toggleActif} onUpdateStock={updateStock} onDelete={deleteArticle} onDupliquer={dupliquerArticle} articles={articles} enLot={enLot} coche={lotIds.some(id => String(id) === String(a.id))} onCocher={basculerLot} onCopieOptions={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} s={s} consoParJour={commandesParArticleJour[a.id] || {}} stockParJour={stockParJourMap[a.id] || {}} onSetStockJour={setStockJour} onSetStockTousJours={setStockTousJours} onSetComptoir={setComptoir} journeeFinie={journeeFinieAuj} deuxCircuits={deuxCircuits} surCommande={commandesSurCommande[a.id] || {}} venduDepuisSaisie={venduDepuisSaisie[a.id] || 0} variantes={variantesParArticle[a.id] || []} onVariantesChange={chargerVariantes}/>
   }
 
   return (
@@ -2581,7 +2601,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                     </button>
                   </div>
                   {variantesCategorie
-                    ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
+                    ? <VariantesArticle article={a} articles={articles} onChange={chargerVariantes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
                     : <OptionsArticle articleId={a.id} articles={articles} onCopie={noterOptionsTouchees} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
                     <button type="button" aria-label={`Refermer ${a.nom}`}
@@ -3808,7 +3828,9 @@ function OptionsArticle({ articleId, toast, articles = [], onCopie = null, group
 // ─── Gestionnaire de variantes pour un article (détail / service) ────────────
 // Axes (Taille, Couleur…) stockés sur l'article + une ligne article_variantes
 // par combinaison (stock/prix/photo). Sauvegarde directe, comme OptionsArticle.
-function VariantesArticle({ article, toast, articles = [] }) {
+// (21/10) `onChange` : prévient la liste, qui relit le stock par variante de
+// ses cartes après chaque écriture.
+function VariantesArticle({ article, toast, articles = [], onChange = null }) {
   const [gere, setGere] = useState(!!article.gere_variantes)
   // ─── COPIER SA MATRICE SUR D'AUTRES ARTICLES (Alex, 25/09) ───────────────
   //
@@ -3857,7 +3879,9 @@ function VariantesArticle({ article, toast, articles = [] }) {
     if (error) toast(`Erreur : ${error.message}`, 'error')
   }
 
-  async function toggleGere(v) { setGere(v); await saveAxes({ gere_variantes: v }) }
+  // (21/10) Le parent relit ses articles : la carte passe du stock général au
+  // stock par variante (et inversement).
+  async function toggleGere(v) { setGere(v); await saveAxes({ gere_variantes: v }); onChange?.({ articles: true }) }
 
   function addValeur(axe) {
     const raw = (axe === 1 ? input1 : input2).trim()
@@ -3895,20 +3919,50 @@ function VariantesArticle({ article, toast, articles = [] }) {
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     toast(`${toInsert.length} combinaison${toInsert.length > 1 ? 's' : ''} ajoutée${toInsert.length > 1 ? 's' : ''}`)
     fetchVariantes()
+    onChange?.()
   }
 
   function setVarLocal(id, patch) { setVariantes(prev => prev.map(v => v.id === id ? { ...v, ...patch } : v)) }
 
   async function persistVar(id, patch) {
     const { error } = await supabase.from('article_variantes').update(patch).eq('id', id)
-    if (error) toast(`Erreur : ${error.message}`, 'error')
+    if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
+    onChange?.()
   }
+
+  // 🔴 LES FLÈCHES DU CHAMP N'ENREGISTRAIENT RIEN (Alex, 21/10, Caprice de
+  // Magali) : le stock et le prix ne partaient en base qu'en QUITTANT le
+  // champ. Un clic sur les flèches ne donne pas toujours le focus (Safari,
+  // l'app iPhone), et fermer le panneau ne le fait pas quitter : l'écran
+  // montrait 2, la base gardait 1. Chaque changement part maintenant tout seul
+  // après une courte pause, et ce qui attend part à la sortie du champ ou à la
+  // fermeture du panneau.
+  const varEnAttente = useRef({})
+  function planifierVar(id, patch) {
+    const e = varEnAttente.current[id] || { patch: {} }
+    clearTimeout(e.minuterie)
+    e.patch = { ...e.patch, ...patch }
+    e.minuterie = setTimeout(() => viderVar(id), 500)
+    varEnAttente.current[id] = e
+  }
+  function viderVar(id) {
+    const e = varEnAttente.current[id]
+    if (!e) return
+    clearTimeout(e.minuterie)
+    delete varEnAttente.current[id]
+    persistVar(id, e.patch)
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- à la fermeture seulement : ce qui attend part
+  useEffect(() => () => { for (const id of Object.keys(varEnAttente.current)) viderVar(id) }, [])
+  const stockSaisi = (txt) => Math.max(0, parseInt(txt, 10) || 0)
+  const prixSaisi = (txt) => (String(txt).trim() === '' ? null : Math.max(0, parseFloat(String(txt).replace(',', '.')) || 0))
 
   async function deleteVariante(id) {
     const { data, error } = await supabase.from('article_variantes').delete().eq('id', id).select()
     if (error) { toast(`Erreur : ${error.message}`, 'error'); return }
     if (!data || !data.length) { toast('Suppression refusée (RLS)', 'error'); return }
     setVariantes(prev => prev.filter(v => v.id !== id))
+    onChange?.()
   }
 
   async function uploadVariantePhoto(file, id) {
@@ -4079,11 +4133,13 @@ function VariantesArticle({ article, toast, articles = [] }) {
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ fontSize: 10, color: T.muted, fontWeight: 700 }}>Stock</span>
-                    <input type="number" min="0" value={v.stock ?? 0} onChange={e => setVarLocal(v.id, { stock: e.target.value })} onBlur={e => persistVar(v.id, { stock: parseInt(e.target.value) || 0 })} style={{ ...s.input, width: 54, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
+                    <input type="number" min="0" value={v.stock ?? 0} aria-label={`Stock ${v.axe1_valeur || ''}${v.axe2_valeur ? ` ${v.axe2_valeur}` : ''}`}
+                      onChange={e => { setVarLocal(v.id, { stock: e.target.value }); planifierVar(v.id, { stock: stockSaisi(e.target.value) }) }}
+                      onBlur={() => viderVar(v.id)} style={{ ...s.input, width: 54, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ fontSize: 10, color: T.muted, fontWeight: 700 }}>Prix</span>
-                    <input type="number" min="0" step="0.10" value={v.prix ?? ''} placeholder={Number(article.prix || 0).toFixed(2)} onChange={e => setVarLocal(v.id, { prix: e.target.value })} onBlur={e => persistVar(v.id, { prix: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...s.input, width: 62, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
+                    <input type="number" min="0" step="0.10" value={v.prix ?? ''} placeholder={Number(article.prix || 0).toFixed(2)} onChange={e => { setVarLocal(v.id, { prix: e.target.value }); planifierVar(v.id, { prix: prixSaisi(e.target.value) }) }} onBlur={() => viderVar(v.id)} style={{ ...s.input, width: 62, fontSize: 12, padding: '5px 6px', textAlign: 'center' }}/>
                   </div>
                   <button onClick={() => { const nv = !v.actif; setVarLocal(v.id, { actif: nv }); persistVar(v.id, { actif: nv }) }} title="Actif / inactif"
                     style={{ width: 34, height: 20, borderRadius: 100, background: v.actif ? T.main : '#D1D5DB', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
@@ -4109,7 +4165,7 @@ const JOURS_LABELS_COURT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 // Le titre d'un bloc de la carte (« Le jour même », « Sur commande, à l'avance »).
 const titreBlocCarte = { fontSize: 11, fontWeight: 800, color: T.muted, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 4px' }
 
-function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, onCopieOptions = null, groupesParArticle = {}, groupesCharges = true, erreurGroupes = false, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, surCommande = {}, venduDepuisSaisie = 0 }) {
+function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false, estDetail = false, mentionVitrineTexte = 'Disponible sur place', onRouvrirJour = null, joursFermes = [], fermeturesSemaine = {}, onEdit, onToggle, onUpdateStock, onDelete, onDupliquer = null, articles = [], enLot = false, coche = false, onCocher = null, onCopieOptions = null, groupesParArticle = {}, groupesCharges = true, erreurGroupes = false, s, consoParJour = {}, stockParJour = {}, onSetStockJour, onSetStockTousJours, onSetComptoir = null, journeeFinie = false, deuxCircuits = false, surCommande = {}, venduDepuisSaisie = 0, variantes = [], onVariantesChange = null }) {
   const [showOptions, setShowOptions] = useState(false)
   const [jourEdite, setJourEdite] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -4285,7 +4341,23 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
             {/* 🔴 LE STOCK QUI BAISSE (08/10) : le RESTE (saisi − vendu depuis la
                 saisie, tous jours), pas le chiffre saisi. Corriger le stock
                 repart de ce qu'il compte en rayon : une nouvelle saisie. */}
-            {vendable && mode === 'magasin' && (() => {
+            {/* 🔴 (21/10, Alex, Caprice de Magali) UN ARTICLE À VARIANTES : le
+                stock de CHAQUE taille, pas le stock général (que la fiche et le
+                serveur ignorent pour lui). Rouge = épuisé, orange = 1 ou 2. */}
+            {vendable && a.gere_variantes && variantes.length > 0 && (
+              <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }} aria-label="Stock par variante">
+                {variantes.filter(v => v.actif !== false).map(v => {
+                  const st = Math.max(0, Number(v.stock) || 0)
+                  return (
+                    <span key={v.id} style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 100,
+                      color: st === 0 ? '#DC2626' : st <= 2 ? '#EA580C' : '#10B981', background: st === 0 ? '#FEE2E2' : st <= 2 ? '#FFF7ED' : '#F0FDF4' }}>
+                      {[v.axe1_valeur, v.axe2_valeur].filter(Boolean).join(' · ')} {st}
+                    </span>
+                  )
+                })}
+              </span>
+            )}
+            {vendable && mode === 'magasin' && !a.gere_variantes && (() => {
               const st = Math.max(0, (a.stock_jour || 0) - venduDepuisSaisie)
               return (
                 <button type="button" title="Corriger le stock (ce que tu as en rayon maintenant)"
@@ -4528,7 +4600,7 @@ function ArticleCard({ a, position = null, onDeplacer = null, estVitrine = false
         </div>
       </div>
       {showOptions && ((estDetail || estVitrine)
-        ? <VariantesArticle article={a} articles={articles} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
+        ? <VariantesArticle article={a} articles={articles} onChange={onVariantesChange} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>
         : <OptionsArticle articleId={a.id} articles={articles} onCopie={onCopieOptions} groupesParArticle={groupesParArticle} groupesCharges={groupesCharges} erreurGroupes={erreurGroupes} toast={(msg, type) => { const ev = new CustomEvent('yoppaa-toast', {detail:{msg,type}}); window.dispatchEvent(ev) }}/>)}
     </div>
   )
@@ -16606,6 +16678,22 @@ function TabEnvies({ commercantId, toast }) {
     setTimeout(() => setEnregistre(false), 2000)
   }
 
+  // 🔴 (21/10) MÊME DÉFAUT QUE LE STOCK DES VARIANTES : le seuil ne partait
+  // qu'en quittant le champ, les flèches ne l'enregistraient pas toujours.
+  // Il part maintenant après une courte pause, et à la sortie du champ.
+  const seuilEnAttente = useRef(null)
+  function planifierSeuil(valeur) {
+    clearTimeout(seuilEnAttente.current?.minuterie)
+    seuilEnAttente.current = { valeur, minuterie: setTimeout(viderSeuil, 600) }
+  }
+  function viderSeuil() {
+    const e = seuilEnAttente.current
+    if (!e) return
+    clearTimeout(e.minuterie)
+    seuilEnAttente.current = null
+    sauverReglages({ seuil: e.valeur })
+  }
+
   const total30 = envies.reduce((n, e) => n + Number(e.trente_jours || 0), 0)
   const soir30 = envies.reduce((n, e) => n + Number(e.soir_30j || 0), 0)
   const weekend30 = envies.reduce((n, e) => n + Number(e.weekend_30j || 0), 0)
@@ -16709,8 +16797,8 @@ function TabEnvies({ commercantId, toast }) {
                 <label style={s.label}>À partir de combien de demandes</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Input type="number" min={0} max={100} value={reglages.seuil ?? 5}
-                    onChange={ev => setReglages({ ...reglages, seuil: ev.target.value })}
-                    onBlur={ev => sauverReglages({ seuil: ev.target.value })}
+                    onChange={ev => { setReglages({ ...reglages, seuil: ev.target.value }); planifierSeuil(ev.target.value) }}
+                    onBlur={viderSeuil}
                     style={{ width: 90 }} />
                   <span style={{ fontSize: 12.5, color: T.muted, lineHeight: 1.5 }}>
                     En dessous, on te laisse tranquille. Mets 0 pour ne jamais recevoir d&rsquo;email.

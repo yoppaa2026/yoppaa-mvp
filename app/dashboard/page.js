@@ -3163,10 +3163,24 @@ export default function Dashboard() {
   // court), RDVs vitrines = J+14 (les clients reservent souvent 1-2 semaines a l'avance).
   // De plus, pour RDV on n'affiche que les jours qui ont au moins 1 RDV (sinon le selecteur
   // est pollue de 14 jours vides). Aujourd'hui et demain restent toujours visibles.
-  const _joursBase = ongletPrincipal === 'rdv' ? getJoursDispos(14) : getJoursDispos(commercant?.horizon_commande || 1)
+  // 🔴 (21/10, Alex) UNE BOUTIQUE (détail, vitrine) A SON HORIZON, jusqu'à 30
+  // jours (Profil). Les onglets suivaient celui de l'alimentaire (J+2) : une
+  // commande pour dans dix jours n'était dans AUCUN onglet et tombait dans
+  // l'Historique, hors du bureau. Comme pour les RDV : aujourd'hui et demain
+  // toujours, puis chaque jour à venir qui porte au moins une commande, même
+  // au-delà de l'horizon (réglé plus court après coup) : rien ne se perd.
+  const estBoutique = commercant?.categorie === 'detail' || commercant?.categorie === 'vitrine'
+  const joursCommandesAVenir = estBoutique
+    ? [...new Set(commandes.map(c => dateKey(c.date_commande || c.created_at)).filter(j => j > todayKey))]
+    : []
+  const _joursBase = ongletPrincipal === 'rdv' ? getJoursDispos(14)
+    : estBoutique ? getJoursDispos(1)
+    : getJoursDispos(commercant?.horizon_commande || 1)
   const joursDispos = ongletPrincipal === 'rdv'
     ? _joursBase.filter((j, idx) => idx < 2 || rdvs.some(r => r.date_rdv === j))
-    : _joursBase
+    : estBoutique
+      ? [...new Set([..._joursBase, ...joursCommandesAVenir])].sort()
+      : _joursBase
 
   // Si aucun jour sélectionné ou jour inexistant → aujourd'hui
   const jourActif = (jourSelectionne && joursDispos.includes(jourSelectionne)) ? jourSelectionne : todayKey

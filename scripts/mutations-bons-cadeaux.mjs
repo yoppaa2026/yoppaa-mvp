@@ -17,6 +17,13 @@ const RACINE = 'c:/Users/HP/yoppaa-mvp'
 const chemin = (f) => `${RACINE}/${f}`
 
 const MUTATIONS = [
+  // ─── (21/10) LES COMMANDES À VENIR D'UNE BOUTIQUE ───────────────────────
+  { nom: '🔴 une commande dans dix jours remonte « en retard » sur aujourd hui',
+    banc: 'verif:logique', fichier: 'lib/commandes-vue.js',
+    de: '  if (aujourdhui && jourDeLaCommande > aujourdhui) return false', vers: '' },
+  { nom: '🔴 le tableau de bord d une boutique n ouvre plus d onglet pour les jours à venir',
+    banc: 'verif:logique', fichier: 'app/dashboard/page.js',
+    de: '      ? [...new Set([..._joursBase, ...joursCommandesAVenir])].sort()', vers: '      ? _joursBase' },
   // ─── (21/10, Caprice de Magali) PAIEMENT « LES DEUX, LE CLIENT CHOISIT » ──
   { nom: '🔴 « les deux » n ouvre plus le comptoir',
     banc: 'verif:recompense', fichier: 'lib/modes-paiement.js',

@@ -3360,6 +3360,24 @@ verifier('et l\'insertion l\'écrit en base',
   })
   egal('une commande en retard ne remonte que sur aujourd\'hui', ids(vueDemain.duJour), ['demain'])
 
+  // 🔴 (21/10, Alex) UNE COMMANDE D'UN JOUR À VENIR N'EST JAMAIS EN RETARD. Une
+  // boutique prend des commandes jusqu'à 30 jours : celle du 21 août, hors des
+  // onglets, remontait « En retard » sur aujourd'hui.
+  const futur = [...lot, cmdV('dans-dix-jours', '2026-08-21', 'en_attente')]
+  const vueFutur = partagerCommandes({
+    commandes: futur, categorie: 'detail', joursDispos: JOURS_VUE, jourActif: AUJ, aujourdhui: AUJ, jourDe,
+  })
+  verifier('🔴 en boutique, une commande dans dix jours ne remonte pas « en retard » sur aujourd’hui',
+    !vueFutur.duJour.some(c => c.id === 'dans-dix-jours'))
+  const vueFuturOnglet = partagerCommandes({
+    commandes: futur, categorie: 'detail', joursDispos: [...JOURS_VUE, '2026-08-21'], jourActif: '2026-08-21', aujourdhui: AUJ, jourDe,
+  })
+  verifier('et sur son propre onglet, elle est là', ids(vueFuturOnglet.duJour).join() === 'dans-dix-jours')
+  const BORD_CMD = readFileSync(new URL('../app/dashboard/page.js', import.meta.url), 'utf8')
+  verifier('🔴 le tableau de bord d’une boutique ouvre un onglet pour chaque jour à venir qui porte une commande',
+    /\? \[\.\.\.new Set\(commandes\.map\(c => dateKey\(c\.date_commande \|\| c\.created_at\)\)\.filter\(j => j > todayKey\)\)\]/.test(BORD_CMD)
+    && /\? \[\.\.\.new Set\(\[\.\.\._joursBase, \.\.\.joursCommandesAVenir\]\)\]\.sort\(\)/.test(BORD_CMD))
+
   // ⚠️ L'ALIMENTAIRE NE CHANGE PAS. Une commande du samedi non retirée doit
   // finir en « non retiré », pas remonter indéfiniment sur le jour courant et
   // saturer l'écran du boulanger.

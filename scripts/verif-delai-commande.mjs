@@ -28,6 +28,7 @@ import {
 } from '../lib/delai-commande.js'
 import { jourPlus as jourPlusBanc } from '../lib/statut-commerce.js'
 import { brusselsInstant } from '../lib/timezone.js'
+import { horizonBoutique } from '../lib/ouverture.js'
 import { readFileSync } from 'node:fs'
 import { sansProse } from './lire-code.mjs'
 import { construireLignesCommande, SELECT_ARTICLES, SELECT_DEALS } from '../lib/lignes-commande.js'
@@ -601,7 +602,24 @@ egal('sans nom d’article, la phrase tient debout',
     /const longueurCal = longueurDuCatalogue\(data\.commercant, data\.articles, data\.stocksJour\)/.test(FICHE)
     // (11/10) la tournée reçoit en plus `false` (pas jugée sur les horaires).
     && /data\.blocagesCreneaux \|\| \[\], longueurCal\)/.test(FICHE) && /data\.blocagesLivraison \|\| \[\], longueurCal, false\)/.test(FICHE))
-  verifier('et la boutique aussi', /horizon: Math\.max\(7, longueurDuCatalogue\(commercant, articles, stocksJour\)\)/.test(FICHE))
+  // ⚠️ REPOINTÉE LE 21/10, PAS DÉSARMÉE (décision d'Alex, Caprice de Magali) :
+  // la boutique a SON horizon (Profil, 7 à 30 jours, vide = 14), le même pour
+  // la fiche, le serveur et l'encodage. La fiche proposait jusqu'à 31 jours
+  // (catalogue) quand le serveur refusait au-delà de 14.
+  const ROUTE_CMD = sansProse(readFileSync(new URL('../app/api/stripe/checkout/create-commande/route.js', import.meta.url), 'utf8'))
+  const CAL = sansProse(readFileSync(new URL('../lib/calendrier-commande-server.js', import.meta.url), 'utf8'))
+  verifier('et la boutique aussi : un seul horizon, le sien, pour la fiche, le serveur et l’encodage',
+    /horizon: horizonBoutique\(commercant\),/.test(FICHE) && !/horizon: Math\.max\(7, longueurDuCatalogue/.test(FICHE)
+    && /horizon: horizonBoutique\(commercant\),/.test(ROUTE_CMD) && !/horizon: 14,/.test(ROUTE_CMD)
+    && /boutique_delai_heures, boutique_horizon_jours, horizon_commande,/.test(ROUTE_CMD)
+    && /if \(commercant\.categorie === 'detail' \|\| commercant\.categorie === 'vitrine'\) \{\s*return \{ ok: true, longueur: horizonBoutique\(commercant\), fermetures:/.test(CAL)
+    && CAL.indexOf("commercant.categorie === 'detail'") < CAL.indexOf('longueurCalendrier({'))
+  verifier('🔴 l’horizon de la boutique : 7, 14, 21 ou 30 jours ; vide ou autre chose = 14',
+    horizonBoutique({ boutique_horizon_jours: 30 }) === 30 && horizonBoutique({ boutique_horizon_jours: 7 }) === 7
+    && horizonBoutique({ boutique_horizon_jours: null }) === 14 && horizonBoutique({}) === 14 && horizonBoutique({ boutique_horizon_jours: 99 }) === 14
+    && horizonBoutique(null) === 14)
+  verifier('🔴 le réglage s’enregistre dans le profil, seulement une valeur permise',
+    /boutique_horizon_jours: HORIZONS_BOUTIQUE\.includes\(Number\(form\.boutique_horizon_jours\)\) \? Number\(form\.boutique_horizon_jours\) : null/.test(sansProse(readFileSync(new URL('../app/dashboard/ConfigDashboard.js', import.meta.url), 'utf8'))))
   // 🔴 TEMPS 2 (07/10) : « Réservable jusqu'à » entre dans le calcul de la
   // fiche, et le formulaire l'enregistre (vide = automatique).
   verifier('🔴 la fiche passe « Réservable jusqu’à » au calcul du calendrier',

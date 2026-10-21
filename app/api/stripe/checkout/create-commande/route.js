@@ -48,7 +48,7 @@ import { commandeDeborde, capaciteDuCreneau, creneauCommandable, libelleDuree } 
 import { occupationDuCreneau } from '@/lib/occupation-creneau-server'
 import { preleverStockVariantes } from '@/lib/stock-variantes-server'
 import { brusselsInstant, jourBruxelles, minutesBruxelles } from '@/lib/timezone'
-import { joursRetraitBoutique, estFermeExceptionnellement, creneauRetraitHorsHoraires, messageHorsHoraires } from '@/lib/ouverture'
+import { joursRetraitBoutique, estFermeExceptionnellement, creneauRetraitHorsHoraires, messageHorsHoraires, horizonBoutique } from '@/lib/ouverture'
 import { COLONNES_EXCEPTIONS, exceptionsPour } from '@/lib/horaires-du-jour'
 import { jourPlus } from '@/lib/statut-commerce'
 import { refusDeMelange, delaiDeLOffre, delaiEnJours, refusDuJour, longueurCalendrier, premierJourPossible, jourEnClair } from '@/lib/delai-commande'
@@ -172,7 +172,7 @@ export async function POST(request) {
       // ⚠️ `commande_veille_avant` (20/10) : l'heure limite de la veille. Absente
       // du select, `circuitsDeLArticle` ne la verrait pas et le serveur
       // accepterait pour demain ce que la fiche refuse après 18 h.
-      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, paiement_sur_place_max, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, horizon_commande, plan, essai_plan, created_at, livraison_actif, commande_veille_avant')
+      .select('id, nom, slug, stripe_account_id, stripe_account_charges_enabled, statut_publication, accepte_paiement_cash, paiement_sur_place_max, categorie, boutique_mode_vente, boutique_retrait_paiement, boutique_frais_port, boutique_gratuit_des, boutique_expedition_cp, tva_taux_defaut, mode_capacite, horaires_detail, boutique_delai_heures, boutique_horizon_jours, horizon_commande, plan, essai_plan, created_at, livraison_actif, commande_veille_avant')
       .eq('id', commercant_id)
       .single()
     if (errC || !commercant) {
@@ -310,7 +310,8 @@ export async function POST(request) {
           depuis: jourBruxelles(),
           maintenant: minutesBruxelles(),
           delaiHeures: commercant.boutique_delai_heures,
-          horizon: 14,
+          // (21/10) L'horizon réglé par la boutique, le même que la fiche.
+          horizon: horizonBoutique(commercant),
         })
         if (!joursOk.some(j => j.jour === date_commande)) {
           return NextResponse.json({

@@ -37,7 +37,7 @@ export async function POST(request) {
 
     const [commerce, articles, deals, retrait, livraison, jour, configLivraison] = await Promise.all([
       // ⚠️ `commande_veille_avant` (20/10) : l'heure limite de la veille (tuiles et calendrier).
-      admin.from('commercants').select('id, nom, categorie, mode_capacite, tva_taux_defaut, ordre_categories, horizon_commande, horaires_detail, commande_veille_avant').eq('id', commercant_id).maybeSingle(),
+      admin.from('commercants').select('id, nom, categorie, mode_capacite, tva_taux_defaut, ordre_categories, horizon_commande, horaires_detail, commande_veille_avant, boutique_horizon_jours').eq('id', commercant_id).maybeSingle(),
       // ⚠️ Les colonnes du stock : celles que `etatStock` lit (comptoir, maximum
       // sur commande, stock qui baisse), comme `verifierStockDisponible`.
       admin.from('articles').select(`${SELECT_ARTICLES}, gere_variantes, ordre, stock_jour, stock_comptoir, stock_comptoir_le, commande_max_jour, stock_maj_le`).eq('commercant_id', commercant_id).eq('actif', true).order('categorie').order('nom'),

@@ -277,7 +277,8 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('🔴 horaires : l’encodage d’un retrait hors horaires prévient (avertissement), la tournée non',
     /const hors = creneauRetraitHorsHoraires\(\{\s*creneau, dateStr: date_commande, horairesDetail: commercant\.horaires_detail,\s*fermetures: fermetures \|\| \[\], seulementException: estLivraison,\s*\}\)\s*if \(hors\) avertissements\.push\(avertissement\('hors_horaires', messageHorsHoraires\(hors, date_commande, \{ pourCommercant: true \}\)\)\)/.test(r)
     // REPOINTÉE LE 20/10 : le select finit désormais par l'heure limite de la veille.
-    && /created_at, horizon_commande, horaires_detail, commande_veille_avant'\)/.test(r))
+    // REPOINTÉE LE 21/10 : + l'horizon de la boutique, que le calendrier lit.
+    && /created_at, horizon_commande, horaires_detail, commande_veille_avant, boutique_horizon_jours'\)/.test(r))
 
   // Les autres portes : la fiche, le serveur en ligne, la bande du tableau de bord.
   const fiche = code('app/commander/[slug]/page.js')
@@ -296,7 +297,8 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
     && /if \(!calendrier\.ok\) return non\(/.test(r)
     && /if \(horsCalendrier\(\{ jour: date_commande, aujourdhui: jourBruxelles\(\), longueur: calendrier\.longueur \}\)\) \{\s*avertissements\.push\(avertissement\('hors_calendrier'\)\)/.test(r)
     // REPOINTÉE LE 20/10 : + l'heure limite de la veille, que le calendrier lit.
-    && /horizon_commande, horaires_detail, commande_veille_avant'\)/.test(r))
+    // REPOINTÉE LE 21/10 : + l'horizon de la boutique, que le calendrier lit.
+    && /horizon_commande, horaires_detail, commande_veille_avant, boutique_horizon_jours'\)/.test(r))
 
   // Le module qui lit le calendrier : la longueur de la fiche, sur tout le catalogue.
   const cs = code('lib/calendrier-commande-server.js')
@@ -324,13 +326,15 @@ const MAINTENANT = new Date('2026-10-10T09:30:00Z')
   v('🔴 un vendu illisible reste null (jamais « rien vendu »)',
     /let dejaCommande = null/.test(r) && /if \(vendu\.error \|\| magasin\.error\) \{/.test(r))
   // REPOINTÉE LE 20/10 : le select finit désormais par l'heure limite de la veille.
-  v('🔴 horaires : la grille reçoit les horaires', /ordre_categories, horizon_commande, horaires_detail, commande_veille_avant'\)/.test(r))
+  // REPOINTÉE LE 21/10 : + l'horizon de la boutique.
+  v('🔴 horaires : la grille reçoit les horaires', /ordre_categories, horizon_commande, horaires_detail, commande_veille_avant, boutique_horizon_jours'\)/.test(r))
   v('🔴 la fenêtre reçoit le calendrier de la fiche, et une lecture ratée est une erreur',
     /const calendrier = commerce\.data \? await calendrierDuCommerce\(\{ supabase: admin, commercant: commerce\.data \}\) : \{ ok: false \}/.test(r)
     && /if \(!calendrier\.ok\) return NextResponse\.json\(\{ ok: false/.test(r)
     && /calendrier: \{ longueur: calendrier\.longueur, fermetures: calendrier\.fermetures \}/.test(r)
     // REPOINTÉE LE 20/10 : + l'heure limite de la veille (tuiles et calendrier).
-    && /ordre_categories, horizon_commande, horaires_detail, commande_veille_avant'\)/.test(r))
+    // REPOINTÉE LE 21/10 : + l'horizon de la boutique (calendrier d'une boutique).
+    && /ordre_categories, horizon_commande, horaires_detail, commande_veille_avant, boutique_horizon_jours'\)/.test(r))
   v('les colonnes que `etatStock` lit sont lues',
     /stock_jour, stock_comptoir, stock_comptoir_le, commande_max_jour, stock_maj_le/.test(r))
 }

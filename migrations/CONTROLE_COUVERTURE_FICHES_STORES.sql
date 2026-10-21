@@ -152,8 +152,9 @@ SELECT '🔴 M. PIEGE : expedition SANS compte qui encaisse'::text,
                     AND stripe_account_charges_enabled IS NOT TRUE), '(aucune)'),
        '(aucune) : sinon passer ces fiches en retrait, ou les depublier'::text
 UNION ALL
--- 🔴 LE DETAIL EN RETRAIT TRANCHE, ET C EST EXCLUSIF : tant que le choix est
--- « en_ligne » sans compte Stripe, aucun moyen de paiement n est ouvert.
+-- 🔴 LE DETAIL EN RETRAIT TRANCHE : tant que le choix est « en_ligne » sans
+-- compte Stripe, aucun moyen de paiement n est ouvert. (21/10) « les_deux »
+-- sans compte Stripe garde le comptoir ouvert : il n est pas un piege ici.
 SELECT '🔴 N. PIEGE : detail « paiement en ligne » sans compte qui encaisse'::text,
        coalesce((SELECT string_agg(nom, ' · ' ORDER BY nom) FROM pub
                   WHERE coalesce(categorie, 'alimentaire') = 'detail'

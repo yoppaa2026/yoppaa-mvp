@@ -1043,6 +1043,23 @@ const POURCENT = { type: 'remise_pct', valeur: 20 }
   })
   verifie('l\'alimentaire garde ses deux moyens', alim.stripeOK === true && alim.cashOK === true)
 
+  // (21/10, Alex, Caprice de Magali) « LES DEUX, LE CLIENT CHOISIT ».
+  const lesDeux = modesPaiementOuverts({ commercant: { ...comptoir, boutique_retrait_paiement: 'les_deux' }, estDetail: true, modeBoutique: 'retrait' })
+  verifie('🔴 « les deux » ouvre le paiement en ligne ET le comptoir', lesDeux.stripeOK === true && lesDeux.cashOK === true)
+  const lesDeuxSansStripe = modesPaiementOuverts({ commercant: { ...comptoir, boutique_retrait_paiement: 'les_deux', stripe_account_charges_enabled: false }, estDetail: true, modeBoutique: 'retrait' })
+  verifie('🔴 « les deux » sans compte Stripe actif : seul le comptoir', lesDeuxSansStripe.stripeOK === false && lesDeuxSansStripe.cashOK === true)
+  const lesDeuxColis = modesPaiementOuverts({ commercant: { ...comptoir, boutique_retrait_paiement: 'les_deux' }, estDetail: true, modeBoutique: 'expedition' })
+  verifie('🔴 « les deux » ne fait jamais payer un colis au comptoir', lesDeuxColis.cashOK === false && lesDeuxColis.stripeOK === true)
+  const enLigne = modesPaiementOuverts({ commercant: { ...comptoir, boutique_retrait_paiement: 'en_ligne' }, estDetail: true, modeBoutique: 'retrait' })
+  verifie('« en ligne » reste exclusif', enLigne.stripeOK === true && enLigne.cashOK === false)
+  const inconnu = modesPaiementOuverts({ commercant: { ...comptoir, boutique_retrait_paiement: 'autre' }, estDetail: true, modeBoutique: 'retrait' })
+  verifie('🔴 une valeur inconnue vaut « en ligne », jamais « ni l’un ni l’autre »', inconnu.stripeOK === true && inconnu.cashOK === false)
+  verifie('« les deux » : le choix du client est respecté, sans choix le paiement en ligne passe devant',
+    modePaiementEffectif({ choix: 'sur_place', ...lesDeux }) === 'sur_place' && modePaiementEffectif({ choix: null, ...lesDeux }) === 'en_ligne')
+  const bordPaie = lireCode('app/dashboard/ConfigDashboard.js')
+  verifie('🔴 le réglage propose le 3e bouton « Les deux, le client choisit »',
+    bordPaie.includes("{ val: 'les_deux', label: 'Les deux, le client choisit' }"))
+
   // ⚠️ UN CHOIX FERMÉ NE SE RESPECTE PAS : c'est tout le défaut d'Alex. L'écran
   // avait « en_ligne » en mémoire, le commerçant ne l'accepte pas.
   verifie('un choix devenu impossible retombe sur ce qui existe',

@@ -59,9 +59,10 @@ const MUTATIONS = [
   { nom: 'le message du serveur ne nomme plus l’heure', fichier: ROUTE,
     de: 'se commande ${delaiEnClair(j, refus.limite || null)} : le premier', vers: 'se commande ${j} jours à l\'avance : le premier' },
   { nom: 'l’encodage (création) ne lit plus l’heure', fichier: 'app/api/equipe/commande/creer/route.js',
-    de: "horaires_detail, commande_veille_avant')", vers: "horaires_detail')" },
+    // ⚠️ ANCRES REPOINTÉES LE 21/10 : `boutique_horizon_jours` suit la colonne.
+    de: "horaires_detail, commande_veille_avant, boutique_horizon_jours')", vers: "horaires_detail, boutique_horizon_jours')" },
   { nom: 'la grille de l’encodage ne lit plus l’heure', fichier: 'app/api/equipe/commande/catalogue/route.js',
-    de: "horaires_detail, commande_veille_avant').eq(", vers: "horaires_detail').eq(" },
+    de: "horaires_detail, commande_veille_avant, boutique_horizon_jours').eq(", vers: "horaires_detail, boutique_horizon_jours').eq(" },
   { nom: 'l’avertissement de l’encodage ne nomme plus l’heure', fichier: 'lib/commande-encodee.js',
     de: '  if (refus.limite) {\n    return {', vers: '  if (false) {\n    return {' },
   { nom: 'la fiche ne dit plus la phrase', fichier: FICHE,

@@ -190,8 +190,9 @@ verifier('la saisie du commerçant', refusDeSaisieLimite('') === null && refusDe
 {
   const E = code('app/api/equipe/commande/creer/route.js')
   const K = code('app/api/equipe/commande/catalogue/route.js')
-  verifier('l’encodage lit l’heure (création)', /horizon_commande, horaires_detail, commande_veille_avant'\)/.test(E))
-  verifier('l’encodage lit l’heure (grille et calendrier)', /ordre_categories, horizon_commande, horaires_detail, commande_veille_avant'\)/.test(K))
+  // REPOINTÉES LE 21/10 : `boutique_horizon_jours` suit l'heure dans le select.
+  verifier('l’encodage lit l’heure (création)', /horizon_commande, horaires_detail, commande_veille_avant, boutique_horizon_jours'\)/.test(E))
+  verifier('l’encodage lit l’heure (grille et calendrier)', /ordre_categories, horizon_commande, horaires_detail, commande_veille_avant, boutique_horizon_jours'\)/.test(K))
   verifier('🔴 l’encodage prévient, il ne refuse pas', /const hors = articleHorsJour\(/.test(E) && !/articleHorsJour[\s\S]{0,300}return non\(/.test(E))
   const S = code('lib/calendrier-commande-server.js')
   verifier('le calendrier de l’encodage passe le commerce entier', S.includes('circuits: circuitsDeLArticle(a, commercant)'))

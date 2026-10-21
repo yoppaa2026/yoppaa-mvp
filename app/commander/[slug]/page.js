@@ -29,7 +29,7 @@ import { dealActifCeJour, estOffreSeparee, offresSepareesPourArticle, remiseSurA
 import { deposerPanierPourRdv, reprendrePanierPourBoutique } from '@/lib/panier-partage'
 import { messagePanierRepris } from '@/lib/panier-repris-message'
 import { compterVueFiche } from '@/lib/vue-fiche'
-import { joursRetraitBoutique, creneauRetraitHorsHoraires, estFermeExceptionnellement, ouvertLe } from '@/lib/ouverture'
+import { joursRetraitBoutique, creneauRetraitHorsHoraires, estFermeExceptionnellement, ouvertLe, horizonBoutique } from '@/lib/ouverture'
 import { poserSiChange, ecranRegarde } from '@/lib/rafraichissement'
 import { categorieAtteinte, barreDetachee, defilementVersCategorie, positionDansContenu } from '@/lib/responsive'
 // ⚠️ `estFoodTruck` n'est plus importé ici depuis le 12/08 : le MÉTIER ne dit
@@ -1725,8 +1725,10 @@ export default function CommanderSlug() {
         depuis: jourLocalISO(new Date()),
         maintenant: maintenantMinutes,
         delaiHeures: commercant?.boutique_delai_heures,
-        // ⚠️ UNE SEMAINE, OU PLUS si un article à délai l'ouvre (07/10).
-        horizon: Math.max(7, longueurDuCatalogue(commercant, articles, stocksJour)),
+        // 🔴 (21/10) L'HORIZON RÉGLÉ PAR LA BOUTIQUE, le même que le serveur
+        // (`horizonBoutique`) : la fiche proposait jusqu'à 31 jours quand le
+        // serveur refusait tout au-delà de 14.
+        horizon: horizonBoutique(commercant),
       })
     : []
   // Le jour retenu : celui que le client a choisi, à défaut le premier proposé.
@@ -5689,7 +5691,9 @@ export default function CommanderSlug() {
                               : `Retrait souhaité ${dateLisibleFr(jourRetraitBoutique)}`}
                           </strong>{' '}
                           {vitrine ? 'sur place' : 'en boutique'}, aux heures d&rsquo;ouverture.
-                          {commercant?.boutique_retrait_paiement === 'magasin' ? ' Tu paies au comptoir, au retrait.' : ''}
+                          {/* (21/10) « Les deux » sans compte Stripe actif : seul le comptoir est ouvert, la phrase le dit. */}
+                          {commercant?.boutique_retrait_paiement === 'magasin' || (commercant?.boutique_retrait_paiement === 'les_deux' && !commercant?.stripe_account_charges_enabled) ? ' Tu paies au comptoir, au retrait.'
+                            : commercant?.boutique_retrait_paiement === 'les_deux' ? ' Tu paies en ligne ou au comptoir, au retrait : à toi de choisir.' : ''}
                         </p>
                         <p style={{ fontSize: '0.78rem', color: T.muted, fontWeight: 600, lineHeight: 1.45, margin: '6px 0 0' }}>
                           {commercant?.nom} prépare ta commande et te prévient dès qu&rsquo;elle t&rsquo;attend. <strong style={{ color: T.deep }}>Ne te déplace pas avant.</strong>

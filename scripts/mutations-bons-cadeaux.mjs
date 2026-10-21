@@ -17,6 +17,22 @@ const RACINE = 'c:/Users/HP/yoppaa-mvp'
 const chemin = (f) => `${RACINE}/${f}`
 
 const MUTATIONS = [
+  // ─── (21/10, Caprice de Magali) PAIEMENT « LES DEUX, LE CLIENT CHOISIT » ──
+  { nom: '🔴 « les deux » n ouvre plus le comptoir',
+    banc: 'verif:recompense', fichier: 'lib/modes-paiement.js',
+    de: "      cashOK = choix === 'magasin' || choix === 'les_deux'", vers: "      cashOK = choix === 'magasin'" },
+  { nom: '🔴 « les deux » n ouvre plus le paiement en ligne',
+    banc: 'verif:recompense', fichier: 'lib/modes-paiement.js',
+    de: "      stripeOK = stripeOK && (choix === 'en_ligne' || choix === 'les_deux')", vers: "      stripeOK = stripeOK && choix === 'en_ligne'" },
+  { nom: '🔴 « les deux » ouvre le paiement en ligne sans compte Stripe',
+    banc: 'verif:recompense', fichier: 'lib/modes-paiement.js',
+    de: "      stripeOK = stripeOK && (choix === 'en_ligne' || choix === 'les_deux')", vers: "      stripeOK = choix === 'en_ligne' || choix === 'les_deux'" },
+  { nom: '🔴 une valeur inconnue ferme les deux moyens',
+    banc: 'verif:recompense', fichier: 'lib/modes-paiement.js',
+    de: "        ? commercant.boutique_retrait_paiement : 'en_ligne'", vers: "        ? commercant.boutique_retrait_paiement : 'aucun'" },
+  { nom: '🔴 le réglage perd son 3e bouton',
+    banc: 'verif:recompense', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: ", { val: 'les_deux', label: 'Les deux, le client choisit' }]", vers: ']' },
   { nom: '🔴 le montant repasse au point décimal',
     banc: 'verif:bons', fichier: 'lib/montants.js',
     // ⚠️ L'ESPACE EST INSÉCABLE DANS LE FICHIER, et une espace ordinaire écrite

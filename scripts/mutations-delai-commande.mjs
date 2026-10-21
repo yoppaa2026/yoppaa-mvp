@@ -32,6 +32,17 @@ const LIGNES = 'lib/lignes-commande.js'
 const ROUTE = 'app/api/stripe/checkout/create-commande/route.js'
 
 const MUTATIONS = [
+  // ─── (21/10) L'HORIZON DE LA BOUTIQUE ────────────────────────────────────
+  { nom: '🔴 le serveur revient à 14 jours en dur', fichier: ROUTE,
+    de: '          horizon: horizonBoutique(commercant),', vers: '          horizon: 14,' },
+  { nom: '🔴 la fiche revient à la longueur du catalogue', fichier: FICHE,
+    de: '        horizon: horizonBoutique(commercant),', vers: '        horizon: Math.max(7, longueurDuCatalogue(commercant, articles, stocksJour)),' },
+  { nom: '🔴 l encodage d une boutique suit les créneaux de l alimentaire', fichier: 'lib/calendrier-commande-server.js',
+    de: "  if (commercant.categorie === 'detail' || commercant.categorie === 'vitrine') {", vers: '  if (false) {' },
+  { nom: '🔴 une valeur hors liste devient l horizon', fichier: 'lib/ouverture.js',
+    de: '  return HORIZONS_BOUTIQUE.includes(n) ? n : HORIZON_BOUTIQUE_DEFAUT', vers: '  return n || HORIZON_BOUTIQUE_DEFAUT' },
+  { nom: '🔴 le serveur ne lit plus la colonne de l horizon', fichier: ROUTE,
+    de: 'boutique_delai_heures, boutique_horizon_jours, horizon_commande,', vers: 'boutique_delai_heures, horizon_commande,' },
   // ─── LE DÉLAI D'UNE LIGNE ───────────────────────────────────────────────
   //
   // 🔴 LE CAS QU'ALEX A CONSTRUIT EN AVOCAT DU DIABLE. La tarte qui reste à
@@ -486,8 +497,9 @@ const MUTATIONS = [
     // ⚠️ REPOINTÉE DEUX FOIS LE 05/10 : le select s'allonge à chaque chantier
     // (`livraison_actif`, puis `latitude, longitude` pour l'étoile). L'ancre
     // vise désormais le voisinage de `horizon_commande`, plus la fin de ligne.
-    de: 'boutique_delai_heures, horizon_commande, plan, essai_plan,',
-    vers: 'boutique_delai_heures, plan, essai_plan,' },
+    // ⚠️ REPOINTÉE LE 21/10 : `boutique_horizon_jours` s'est glissé devant.
+    de: 'boutique_horizon_jours, horizon_commande, plan, essai_plan,',
+    vers: 'boutique_horizon_jours, plan, essai_plan,' },
 
   { nom: '🔴 les fermetures ne sont plus partagees entre les deux controles',
     fichier: ROUTE,

@@ -84,7 +84,7 @@ export async function POST(request) {
       .from('commercants')
       // ⚠️ `commande_veille_avant` (20/10) : l'heure limite de la veille, que
       // `articleHorsJour` et `calendrierDuCommerce` lisent sur ce commerce.
-      .select('id, nom, categorie, tva_taux_defaut, mode_capacite, plan, essai_plan, created_at, horizon_commande, horaires_detail, commande_veille_avant')
+      .select('id, nom, categorie, tva_taux_defaut, mode_capacite, plan, essai_plan, created_at, horizon_commande, horaires_detail, commande_veille_avant, boutique_horizon_jours')
       .eq('id', commercant_id)
       .maybeSingle()
     if (errC || !commercant) return non('Commerce introuvable.', 404)

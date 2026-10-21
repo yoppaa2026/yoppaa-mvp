@@ -41,6 +41,7 @@ import { estRemiseSurProduit, libelleCibleDeal, TYPE_REMISE, TOUT_PRODUITS, TOUT
 import { PACKS_SMS } from '@/lib/packs-sms'
 import { avantLancement, libelleLancement, degustationEnCours, libelleDernierJourGratuit, dernierJourGratuit, dernierJourAvant, estRegimeLancement } from '@/lib/lancement'
 import { formaterBCECompact } from '@/lib/kyb'
+import { HORIZONS_BOUTIQUE, horizonBoutique } from '@/lib/ouverture'
 import { messageAuth, emailPlausible, memeEmail, mdpAssezLong, MDP_MIN } from '@/lib/messages-auth'
 import {
   SELECT_GROUPES_AVEC_VALEURS, pastilleBornes, bornesDepuisSaisie, groupeDesTailles, lignesPrixTaille, resumePrixTaille,
@@ -1821,6 +1822,15 @@ function TabMenu({ commercantId, commercant, toast }) {
               {/* ✅ 07/10 (Alex, tableau) : ce réglage et l'HORIZON du commerce
                   se nomment l'un l'autre, avec le vrai chiffre. Le délai est un
                   PLANCHER, l'horizon et « Réservable jusqu'à » des PLAFONDS. */}
+              {/* 🔴 (21/10) PAS EN BOUTIQUE : son horizon est UN réglage, dans
+                  Profil › Boutique, lu par la fiche et par le serveur. Ce champ
+                  y renvoyait à un onglet Créneaux qu'une boutique n'a pas, et le
+                  serveur l'ignorait (14 jours en dur). */}
+              {estDetail ? (
+                <p style={{ fontSize: 12, color: T.muted, margin: 0, lineHeight: 1.5 }}>
+                  Tes clients choisissent leur jour de retrait jusqu&rsquo;à {horizonBoutique(commercant)} jours à l&rsquo;avance, pour tout ton catalogue. Ça se règle dans Profil général, sous « Horizon de retrait ».
+                </p>
+              ) : (
               <ChampFormulaire label="Réservable jusqu’à"
                 aide={`Jusqu’à quand tes clients peuvent le commander à l’avance (un gâteau de communion, un buffet). Ton horizon de réservation (onglet Créneaux) est de ${Number(commercant?.horizon_commande) >= 1 ? Math.floor(Number(commercant.horizon_commande)) : 2} jour${Number(commercant?.horizon_commande) > 1 || !(Number(commercant?.horizon_commande) >= 1) ? 's' : ''} pour tout ton catalogue : ce réglage ne sert qu’à aller plus loin pour cet article, et les autres articles deviennent commandables ces jours-là aussi.`}>
                 <select
@@ -1833,6 +1843,7 @@ function TabMenu({ commercantId, commercant, toast }) {
                   ))}
                 </select>
               </ChampFormulaire>
+              )}
             </SectionFormulaire>
           )}
 
@@ -9416,7 +9427,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
         // vers leur onglet pour les régler. Les remettre dans l'enregistrement
         // du profil recréerait l'écrasement qui a fait retirer la fidélité de
         // cet écran le 31/07.
-        bons_cadeaux_actif: !!data.bons_cadeaux_actif, plan: data.plan || 'exister', created_at: data.created_at, notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2 }
+        bons_cadeaux_actif: !!data.bons_cadeaux_actif, plan: data.plan || 'exister', created_at: data.created_at, notif_mode: data.notif_mode || 'recap_jour', rdv_actif: !!data.rdv_actif, photos_catalogue_actif: data.photos_catalogue_actif !== false, boutique_mode_vente: data.boutique_mode_vente || 'retrait', boutique_retrait_paiement: data.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: data.boutique_frais_port ?? '', boutique_gratuit_des: data.boutique_gratuit_des ?? '', boutique_delai_heures: data.boutique_delai_heures ?? 2, boutique_horizon_jours: data.boutique_horizon_jours ?? null }
       setForm(profil)
       // ⚠️ LE MÊME OBJET DANS LES DEUX ÉTATS, ET C'EST VOULU. `setForm` ne
       // modifie jamais en place (toujours `{ ...p, … }`), donc la référence
@@ -9496,7 +9507,7 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
       return false
     }
     setSaving(true)
-    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, rdv_actif: !!form.rdv_actif, commande_actif: form.commande_actif !== false, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des), boutique_delai_heures: Math.max(0, parseInt(form.boutique_delai_heures, 10) || 0) }).eq('id', commercantId)
+    const { error } = await supabase.from('commercants').update({ nom: form.nom.trim(), type: form.type.trim(), telephone: form.telephone.trim() || null, adresse: form.adresse.trim() || null, site_web: (form.site_web || '').trim() || null, description: form.description.trim() || null, infos_pratiques: (form.infos_pratiques || '').trim() || null, horaires: form.horaires.trim() || null, horaires_detail: form.horaires_detail, livraison_actif: !!form.livraison_actif, rdv_actif: !!form.rdv_actif, commande_actif: form.commande_actif !== false, notif_mode: form.notif_mode || 'recap_jour', photos_catalogue_actif: !!form.photos_catalogue_actif, boutique_mode_vente: form.boutique_mode_vente || 'retrait', boutique_retrait_paiement: form.boutique_retrait_paiement || 'en_ligne', boutique_frais_port: parseFloat(form.boutique_frais_port) || 0, boutique_gratuit_des: (form.boutique_gratuit_des === '' || form.boutique_gratuit_des == null) ? null : parseFloat(form.boutique_gratuit_des), boutique_delai_heures: Math.max(0, parseInt(form.boutique_delai_heures, 10) || 0), boutique_horizon_jours: HORIZONS_BOUTIQUE.includes(Number(form.boutique_horizon_jours)) ? Number(form.boutique_horizon_jours) : null }).eq('id', commercantId)
     setSaving(false)
     if (error) {
       console.error('[ConfigDashboard.saveProfil]', error)
@@ -10237,13 +10248,44 @@ function TabProfil({ commercantId, toast, onSaved, surModifications, ancre = nul
                   Comment tes clients paient quand ils viennent chercher leur commande.
                   {form.boutique_mode_vente === 'les_deux' ? " L'expédition, elle, est toujours payée en ligne à la commande." : ''}
                 </p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[{ val: 'en_ligne', label: 'En ligne, à la commande' }, { val: 'magasin', label: 'Au comptoir, au retrait' }].map(opt => {
+                {/* (21/10, Alex, Caprice de Magali) 3e possibilité : les deux,
+                    le client choisit au moment de commander. */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {[{ val: 'en_ligne', label: 'En ligne, à la commande' }, { val: 'magasin', label: 'Au comptoir, au retrait' }, { val: 'les_deux', label: 'Les deux, le client choisit' }].map(opt => {
                     const sel = form.boutique_retrait_paiement === opt.val
                     return (
                       <button key={opt.val} type="button" onClick={() => setForm(p => ({ ...p, boutique_retrait_paiement: opt.val }))}
-                        style={{ flex: 1, padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${sel ? T.main : T.hairline}`, background: sel ? T.main : '#fff', color: sel ? '#fff' : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        style={{ flex: '1 1 150px', padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${sel ? T.main : T.hairline}`, background: sel ? T.main : '#fff', color: sel ? '#fff' : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
                         {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {form.boutique_retrait_paiement === 'les_deux' && (
+                  <p style={{ fontSize: 11, color: T.main, marginTop: 6, fontWeight: 600, lineHeight: 1.5 }}>
+                    Le client voit « Payer en ligne » et « Payer sur place », et choisit. Le paiement en ligne demande ton compte Stripe actif ; sans lui, seul le comptoir est proposé.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* ─── Horizon de retrait (21/10, Alex, Caprice de Magali) ─────
+                Jusqu'à combien de jours à l'avance un client choisit son jour
+                de retrait. Vide = 14 jours. La fiche ET le serveur lisent la
+                même valeur (`horizonBoutique`, lib/ouverture.js). */}
+            {(form.boutique_mode_vente === 'retrait' || form.boutique_mode_vente === 'les_deux') && (
+              <div style={{ marginBottom: 12 }}>
+                <p style={{ ...s.label, marginBottom: 4 }}>Horizon de retrait</p>
+                <p style={{ fontSize: 11, color: T.muted, marginBottom: 8, lineHeight: 1.5 }}>
+                  Jusqu&rsquo;à combien de jours à l&rsquo;avance tes clients peuvent choisir leur jour de retrait.
+                </p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {HORIZONS_BOUTIQUE.map(j => {
+                    const sel = horizonBoutique({ boutique_horizon_jours: form.boutique_horizon_jours }) === j
+                    return (
+                      <button key={j} type="button" aria-pressed={sel} onClick={() => setForm(p => ({ ...p, boutique_horizon_jours: j }))}
+                        style={{ flex: '1 1 70px', padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${sel ? T.main : T.hairline}`, background: sel ? T.main : '#fff', color: sel ? '#fff' : T.muted, fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: '"DM Sans", sans-serif' }}>
+                        {j} jours
                       </button>
                     )
                   })}

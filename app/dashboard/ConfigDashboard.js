@@ -1250,7 +1250,7 @@ function TabMenu({ commercantId, commercant, toast }) {
     // justement la liste des garnitures qu'on ne veut plus réécrire.
     const { data: groupesSource } = await supabase
       .from('article_options_groupes')
-      .select('*, valeurs:article_options_valeurs(*)')
+      .select('*, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(*)')
       .eq('article_id', a.id)
 
     let optionsRatees = false
@@ -2794,7 +2794,7 @@ function EditionGroupe({ copies = [], modele, versions = 1, groupesParArticle = 
     if (prixTailleTouche) {
       // Les copies RELUES : les options ajoutées ont maintenant un identifiant.
       const { data: relus, error } = await supabase.from('article_options_groupes')
-        .select('id, article_id, valeurs:article_options_valeurs(id, nom)').in('id', copies.map(g => g.id))
+        .select('id, article_id, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(id, nom)').in('id', copies.map(g => g.id))
       const rp = error || !relus
         ? { ok: false, erreur: `Groupe modifié, mais les prix par taille n’ont pas pu être relus : ${error?.message || 'rien rendu'}` }
         : await ecrirePrixTailleDesCopies(relus, groupesParArticle, saisieTaille.prixParNom)

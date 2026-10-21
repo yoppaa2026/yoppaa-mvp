@@ -77,8 +77,9 @@ export async function POST(request) {
       const [opts, grille, vendu, magasin] = await Promise.all([
         admin.from('article_options_groupes')
           // (13/10) Le nombre de choix et le prix selon la taille, lien NOMMÉ
-          // (la table des prix pointe deux fois vers les valeurs).
-          .select('id, article_id, nom, type, obligatoire, choix_min, choix_max, created_at, valeurs:article_options_valeurs(id, nom, prix_supplement, groupe_id, prix_taille:article_options_prix_taille!article_options_prix_taille_valeur_id_fkey(taille_valeur_id, prix))')
+          // (la table des prix pointe deux fois vers les valeurs). (21/10) Le
+          // lien groupe → valeurs aussi : un groupe peut dépendre d'une option.
+          .select('id, article_id, nom, type, obligatoire, choix_min, choix_max, created_at, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(id, nom, prix_supplement, groupe_id, prix_taille:article_options_prix_taille!article_options_prix_taille_valeur_id_fkey(taille_valeur_id, prix))')
           .in('article_id', ids).order('created_at'),
         admin.from('article_stock_jour').select('article_id, jour_semaine, stock, actif').in('article_id', ids),
         admin.rpc('stock_commande_par_article', { p_commercant_id: commercant_id, p_date: date }),

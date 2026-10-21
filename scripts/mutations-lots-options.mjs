@@ -38,6 +38,13 @@ const MUTATIONS = [
     de: '    if (!deal && !variante && groupesOptions) {', vers: '    if (!variante && groupesOptions) {' },
   { nom: '🔴 la consommation d un lot redevient le nombre de lots', fichier: REGLE,
     de: '      quantite_stock: quantite * (deal?.unites_par_deal || 1),', vers: '      quantite_stock: quantite,' },
+  // ─── (21/10) le lien groupes ↔ valeurs, nommé avant le groupe dépendant ──
+  { nom: '🔴 la duplication d article relit les options par un lien anonyme', fichier: 'app/dashboard/ConfigDashboard.js',
+    de: "      .select('*, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(*)')", vers: "      .select('*, valeurs:article_options_valeurs(*)')" },
+  { nom: '🔴 le paiement lit les valeurs avec un groupe anonyme', fichier: REGLE,
+    de: "groupe_id, article_options_groupes!article_options_valeurs_groupe_id_fkey!inner(article_id, nom)'", vers: "groupe_id, article_options_groupes!inner(article_id, nom)'" },
+  { nom: '🔴 l encodage lit les valeurs par un lien anonyme', fichier: 'app/api/equipe/commande/catalogue/route.js',
+    de: 'created_at, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(id,', vers: 'created_at, valeurs:article_options_valeurs(id,' },
   // ─── les routes ─────────────────────────────────────────────────────────
   { nom: '🔴 la route en ligne ne passe pas les groupes à la règle', fichier: EN_LIGNE,
     de: '      groupesOptions: groupesOptions || [],', vers: '' },

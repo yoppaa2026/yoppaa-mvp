@@ -97,7 +97,7 @@ const calc = (panier, extra = {}) => construireLignesCommande({
   v('sans liste de groupes (calcul du total à l’écran) : aucun contrôle', sansGroupes.ok)
 }
 v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, type et nombre de choix, prix par taille',
-  SELECT_OPTIONS_VALEURS === 'id, nom, prix_supplement, groupe_id, article_options_groupes!inner(article_id, nom)'
+  SELECT_OPTIONS_VALEURS === 'id, nom, prix_supplement, groupe_id, article_options_groupes!article_options_valeurs_groupe_id_fkey!inner(article_id, nom)'
   && SELECT_GROUPES_OPTIONS === 'id, article_id, nom, obligatoire, type, choix_min, choix_max'
   && SELECT_PRIX_TAILLE === 'valeur_id, taille_valeur_id, prix')
 
@@ -239,7 +239,7 @@ v('les listes de colonnes : valeurs avec leur groupe, groupes avec obligatoire, 
       /const saisieTaille = prixTailleTouche \? prixTailleDeSaisie\(form\.options\)/.test(dash) && /if \(!saisieTaille\.ok\) \{ toast\(saisieTaille\.error, 'error'\); return \}/.test(dash)
       && dash.indexOf('if (!saisieTaille.ok)') < dash.indexOf('await ecrireModificationGroupe(plan)'))
     v('🔴 l’écriture relit les copies (les options ajoutées ont un identifiant) puis remplace',
-      /\.select\('id, article_id, valeurs:article_options_valeurs\(id, nom\)'\)\.in\('id', copies\.map\(g => g\.id\)\)/.test(dash) && /await ecrirePrixTailleDesCopies\(relus, groupesParArticle, saisieTaille\.prixParNom\)/.test(dash))
+      /\.select\('id, article_id, valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey\(id, nom\)'\)\.in\('id', copies\.map\(g => g\.id\)\)/.test(dash) && /await ecrirePrixTailleDesCopies\(relus, groupesParArticle, saisieTaille\.prixParNom\)/.test(dash))
     v('🔴 « Appliquer à… » et « Copier vers… » emportent les prix par taille',
       /await ecrireCopiesDeGroupe\(entree\.modele, aCopier, groupesParArticle\)/.test(dash) && /await ecrireCopiesDeGroupe\(copieDe, aCopier, groupesParArticle\)/.test(dash)
       && /ecrirePrixTailleDesCopies\(copies, groupesParArticle, prixParNom, \{ remplacer: false \}\)/.test(dash))
@@ -345,7 +345,8 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   // choix passe par le module partagé, le total aussi.
   v('🔴 fiche : groupes lus avec leurs prix par taille, par la constante partagée (lien nommé)',
     (fiche.match(/\.select\(SELECT_GROUPES_AVEC_VALEURS\)/g) || []).length === 2 && !fiche.includes("'*, valeurs:article_options_valeurs(*)'")
-    && OC.SELECT_GROUPES_AVEC_VALEURS.includes('!article_options_prix_taille_valeur_id_fkey('))
+    && OC.SELECT_GROUPES_AVEC_VALEURS.includes('!article_options_prix_taille_valeur_id_fkey(')
+    && OC.SELECT_GROUPES_AVEC_VALEURS.includes('valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey('))
   v('🔴 fiche : le choix suit les bornes du serveur et le prix selon la taille',
     /const r = basculerValeur\(selections, groupe, valeur\)/.test(fiche)
     && /const refus = refusDuGroupe\(g, \(selections\[g\.id\] \|\| \[\]\)\.length\)\s*if \(refus\) \{ errs\[g\.id\] = refus; ok = false \}/.test(fiche)
@@ -361,7 +362,9 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
     && /disabled=\{\(groupes\[enOptions\.id\] \|\| \[\]\)\.some\(g => refusDuGroupe\(g, \(selections\[g\.id\] \|\| \[\]\)\.length\)\)\}/.test(modale))
   const catalogue = code('app/api/equipe/commande/catalogue/route.js')
   v('🔴 le catalogue de l’encodage lit le nombre de choix et les prix par taille (lien nommé)',
-    catalogue.includes('obligatoire, choix_min, choix_max,') && catalogue.includes('prix_taille:article_options_prix_taille!article_options_prix_taille_valeur_id_fkey(taille_valeur_id, prix)'))
+    catalogue.includes('obligatoire, choix_min, choix_max,')
+    && catalogue.includes('valeurs:article_options_valeurs!article_options_valeurs_groupe_id_fkey(id, nom, prix_supplement, groupe_id,')
+    && catalogue.includes('prix_taille:article_options_prix_taille!article_options_prix_taille_valeur_id_fkey(taille_valeur_id, prix)'))
 
   // (13/10) LE RÉGLAGE DU COMMERÇANT
   const config = code('app/dashboard/ConfigDashboard.js')
@@ -450,6 +453,16 @@ v('🔴 le tableau de bord compte le « déjà commandé » par la même vue que
   v('🔴 aucune lecture `article:articles(…)` sans le lien nommé (`!commande_articles_article_id_fkey`)', nus.length === 0, nus.join(', '))
   v('le tableau de bord nomme le lien dans ses deux lectures de commandes',
     (code('app/dashboard/page.js').match(/article:articles!commande_articles_article_id_fkey\(/g) || []).length === 2)
+
+  // (21/10) LE GROUPE DÉPENDANT : `article_options_groupes.depend_de_valeur_id`
+  // est un SECOND chemin entre groupes et valeurs. Toute lecture jointe entre
+  // les deux nomme `article_options_valeurs_groupe_id_fkey`, AVANT la migration :
+  // sinon la fiche, le paiement et le tableau de bord tombent ensemble.
+  const anonymes = tous.filter(f => /article_options_valeurs\(|article_options_groupes\(|article_options_groupes!inner/.test(code(f)))
+  v('🔴 aucune lecture jointe groupes ↔ valeurs d’options sans le lien nommé', anonymes.length === 0, anonymes.join(', '))
+  const nommes = tous.reduce((n, f) => n + (code(f).match(/article_options_(valeurs|groupes)!article_options_valeurs_groupe_id_fkey/g) || []).length, 0)
+  v('les 5 lectures jointes nomment le lien (fiche et tableau de bord, paiement, duplication, relecture des copies, encodage)',
+    nommes === 5, `${nommes} trouvées`)
 }
 
 console.log(`\nLots et options : ${ok} vérifications`)
